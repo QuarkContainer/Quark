@@ -1,0 +1,7 @@
+{
+  "runtimes": {
+    "quark": {
+      "path": "/usr/local/bin/quark"
+    }
+  }
+}
