@@ -14,9 +14,10 @@ date +%s%N; docker run --runtime=runsc  --rm -it ubuntu /bin/date +%s%N
 date +%s%N; docker run --runtime=kata-runtime --rm -it ubuntu /bin/date +%s%N
 ```
 
-Runtime     | Runc      |   Quark       |   Runsc   |   Kata
-____________|___________|_______________|___________|________
-Startup (ms)| 607       |  625          |  708      |   1747
+
+| Runtime      | Runc | Quark | Runsc | Kata |
+|--------------|------|-------|-------|------|
+| Startup (ms) | 607  | 625   | 708   | 1747 |
 
 
 2. Memory usage overhead:
