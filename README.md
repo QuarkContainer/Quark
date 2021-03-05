@@ -1,2 +1,2 @@
 # Quark
-A secure container can run with OCI interface
+A secure container can run with OCI interface.
