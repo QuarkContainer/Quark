@@ -1,0 +1,7 @@
+{
+  "DebugLevel"    : "Debug",
+  "KernelMemSize" : 16,
+  "SlowPrint"     : false,
+  "LogLevel"      : "Simple",
+  "TcpBuffIO"     : true
+}

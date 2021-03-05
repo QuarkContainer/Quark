@@ -1,0 +1,54 @@
+[package]
+name = "qkernel"
+version = "0.6.0"
+authors = ["Yulin Sun <yulin.sun@quarksoft.io>"]
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+bit_field = "0.10.1"
+bitflags = "1.2.1"
+rusty-asm = "0.2.1"
+x86_64 = "0.12.3"
+backtracer = {git = "https://github.com/gz/backtracer.git" }
+
+#linked_list_allocator = "0.8.6"
+buddy_system_allocator = "0.6.0"
+#linked_list_allocator = {path = "/home/brad/rust/linked_list_allocator"}
+
+spin = "0.7.1"
+pic8259_simple = "0.2.0"
+#xmas-elf = { git = "https://github.com/gz/xmas-elf.git" }
+xmas-elf = "0.7.0"
+serde = { version = "1.0", default-features = false, features = ["alloc"] }
+serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
+serde_derive = { version = "1.0.106", default-features = false}
+scopeguard = { version = "^1.1.0", default-features = false }
+ringbuf = { version = "0.2.3", default-features = false}
+
+[dependencies.x86]
+default-features = false
+version = "0.34.0"
+
+[package.metadata.cargo-xbuild]
+sysroot_path = "../target/sysroot"
+
+[dependencies.lazy_static]
+version = "1.0"
+features = ["spin_no_std"]
+
+[profile.dev]
+panic = "abort"
+debug = 0
+lto = true
+
+[profile.release]
+panic = "abort"
+#opt-level = 0
+opt-level = 3
+debug = 0
+overflow-checks = false
+lto = true
+codegen-units = 1
+debug-assertions = false
