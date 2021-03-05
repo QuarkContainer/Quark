@@ -37,17 +37,40 @@ Quark builds on X86-64 only. Other architecture will be available in the future.
 Quark is developed with Rust language. The build OS needs to install Rust nightly. 
 
 ### Build
-    git clone git@github.com:QuarkContainer/Quark.git
-    cd Quark
-    make
-    make install
+```sh
+git clone git@github.com:QuarkContainer/Quark.git
+cd Quark
+make
+make install
+```
 
 ### Install / Setup / Configuration
 1. Install binary: Quark has 2 binaries: "quark" and "qkernel.bin". Both of them was copied to /usr/local/bin/ folder when running "make install". "quark" contains QVisor code and it also implement the OCI interface.
-2. Setup Docker: To enable Docker to run container will Quark Container running, "/etc/docker/daemon.json" needs to be updated. Example is as ![daemon.json](doc/daemon.json)
-3. Restart Docker: Docker daemon restart is need to enable the configuration change
-    sudo systemctl restart docker
+2. Setup Docker: To enable Docker to run container with Quark Container, "/etc/docker/daemon.json" needs to be updated. Example is as [daemon.json](doc/daemon.json)
+3. Restart Docker: After the "/etc/docker/daemon.json" is updated, The Docker daemon restart is need to enable the configuration change
+```sh
+sudo systemctl restart docker
+```
 
-### Helloworld
-The helloworld docker sample application can be executed as below.
-    docker run --rm --runtime=quark hello-world
+### Helloworld: 
+
+The helloworld docker sample application can be executed as below:
+```sh
+sudo systemctl restart docker
+docker run --rm --runtime=quark hello-world
+```      
+    
+## Configuration
+Quark Container's configuration file is at [/etc/quark/config.json](configure.json). Configuration detail is TBD...
+
+## Debug and Log
+Quark Container's debug log is put in /var/log/quark/quark.log. It could enable or disable by "DebugLevel" of [/etc/quark/config.json](configure.json). There are 5 possible value of "DebugLevel" as below.
+
+    Off,
+    Error,
+    Warn,
+    Info,
+    Debug,
+    Trace,
+    
+When log is enabled, e.g. Debug. After run a docker image with Quark Container, the logs will be generated in the [log file](/var/log/quark/quark.log)
