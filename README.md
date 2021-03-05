@@ -45,7 +45,7 @@ make install
 ```
 
 ### Install / Setup / Configuration
-1. Install binary: Quark has 2 binaries: "quark" and "qkernel.bin". Both of them was copied to /usr/local/bin/ folder when running "make install". "quark" contains QVisor code and it also implement the OCI interface.
+1. Install binary: Quark has 2 binaries: "quark" and "qkernel.bin". Both of them was copied to /usr/local/bin/ folder when running `make install`. "quark" contains QVisor code and it also implement the OCI interface.
 2. Setup Docker: To enable Docker to run container with Quark Container, "/etc/docker/daemon.json" needs to be updated. Example is as [daemon.json](doc/daemon.json)
 3. Restart Docker: After the "/etc/docker/daemon.json" is updated, The Docker daemon restart is need to enable the configuration change
 ```sh
@@ -61,10 +61,10 @@ docker run --rm --runtime=quark hello-world
 ```      
     
 ## Configuration
-Quark Container's configuration file is at [/etc/quark/config.json](configure.json). Configuration detail is TBD...
+Quark Container's configuration file is at [/etc/quark/config.json](config.json). Configuration detail is TBD...
 
 ## Debug and Log
-Quark Container's debug log is put in /var/log/quark/quark.log. It could enable or disable by "DebugLevel" of [/etc/quark/config.json](configure.json). There are 5 possible value of "DebugLevel" as below.
+Quark Container's debug log is put in /var/log/quark/quark.log. It could enable or disable by "DebugLevel" of [/etc/quark/config.json](config.json). There are 5 possible value of "DebugLevel" as below.
 
     Off,
     Error,
@@ -73,4 +73,7 @@ Quark Container's debug log is put in /var/log/quark/quark.log. It could enable 
     Debug,
     Trace,
     
-When log is enabled, e.g. Debug. After run a docker image with Quark Container, the logs will be generated in the [log file](/var/log/quark/quark.log)
+When log is enabled, e.g. Debug. After run a docker image with Quark Container, the logs will be generated in the /var/log/quark/quark.log.
+doc
+## Performance test result
+result is [here](doc/perf_test.md)
