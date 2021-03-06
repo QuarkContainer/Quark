@@ -143,7 +143,7 @@ fn FutexLockPI(task: &mut Task, ts: Option<Timespec>, addr: u64, private: bool) 
 fn TryLockPid(task: &mut Task, addr: u64, private: bool) -> Result<()> {
     let waitEntry = task.blocker.generalEntry.clone();
     let tid = task.Thread().ThreadID();
-    let locked = task.futexMgr.LockPI(&waitEntry, task, addr, tid as u32, private, false)?;
+    let locked = task.futexMgr.LockPI(&waitEntry, task, addr, tid as u32, private, true)?;
     if !locked {
         task.futexMgr.WaitComplete(&waitEntry);
         return Err(Error::SysError(SysErr::EWOULDBLOCK));

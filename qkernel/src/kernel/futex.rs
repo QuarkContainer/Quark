@@ -19,7 +19,6 @@ use alloc::collections::btree_map::BTreeMap;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU8, AtomicU32, Ordering};
 use lazy_static::lazy_static;
-use core::mem;
 
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
@@ -96,21 +95,18 @@ pub trait Target {
 
 impl Target for Task {
     fn SwapU32(&self, addr: u64, new: u32) -> Result<u32> {
-        let mut new = new;
-        let val = self.GetTypeMut::<u32>(addr)?;
+        let val = self.GetTypeMut::<AtomicU32>(addr)?;
 
-        mem::swap(val, &mut new);
+        val.swap(new, Ordering::SeqCst);
         return Ok(new)
     }
 
     fn CompareAndSwapU32(&self, addr: u64, old: u32, new: u32) -> Result<u32> {
-        let pval = self.GetTypeMut::<u32>(addr)?;
-        let current = unsafe {
-            &*(pval as *mut u32 as * const AtomicU32)
-        };
-
-        let ret = current.compare_and_swap(old, new, Ordering::SeqCst);
-        return Ok(ret);
+        let pval = self.GetTypeMut::<AtomicU32>(addr)?;
+        match pval.compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst) {
+            Ok(v) => return Ok(v),
+            Err(v) => return Ok(v),
+        }
     }
 
     fn LoadU32(&self, addr: u64) -> Result<u32> {
@@ -603,7 +599,7 @@ impl FutexMgr {
     // FUTEX_OWNER_DIED is only set by the Linux when robust lists are in use (see
     // exit_robust_list()). Given we don't support robust lists, although handled
     // below, it's never set.
-    pub fn LockPI(&self, w: &WaitEntry, t: &Target, addr: u64, tid: u32, private: bool, retry: bool) -> Result<bool> {
+    pub fn LockPI(&self, w: &WaitEntry, t: &Target, addr: u64, tid: u32, private: bool, try: bool) -> Result<bool> {
         let k = Getkey(t, addr, private)?;
 
         w.Clear();
@@ -613,7 +609,7 @@ impl FutexMgr {
 
         let q = self.lockQueueWithCreate(&k);
 
-        let success = match self.lockPILocked(w, t, addr, tid, &q, retry) {
+        let success = match self.lockPILocked(w, t, addr, tid, &q, try) {
             Err(e) => {
                 self.unlock(&k);
                 return Err(e)
@@ -625,7 +621,7 @@ impl FutexMgr {
         return Ok(success)
     }
 
-    fn lockPILocked(&self, w: &WaitEntry, t: &Target, addr: u64, tid: u32, q: &Queue, retry: bool) -> Result<bool> {
+    fn lockPILocked(&self, w: &WaitEntry, t: &Target, addr: u64, tid: u32, q: &Queue, try: bool) -> Result<bool> {
         loop {
             let cur = t.LoadU32(addr)?;
 
@@ -654,7 +650,7 @@ impl FutexMgr {
             }
 
             // Futex is already owned, prepare to wait.
-            if retry {
+            if try {
                 // Caller doesn't want to wait.
                 return Ok(false)
             }
