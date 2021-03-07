@@ -42,6 +42,7 @@ use super::super::syscalls::sys_aio::*;
 use super::super::syscalls::sys_capability::*;
 use super::super::syscalls::sys_membarrier::*;
 use super::super::syscalls::sys_splice::*;
+use super::super::syscalls::sys_timer::*;
 
 use super::super::task::*;
 use super::super::qlib::SysCallID;
@@ -129,9 +130,9 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysDup2, //sys_dup2,
     SysPause, //sys_pause,
     SysNanoSleep, //sys_nanosleep,
-    NotImplementSyscall, //sys_getitimer,
+    SysGetitimer, //sys_getitimer,
     NotImplementSyscall, //sys_alarm,
-    NotImplementSyscall, //sys_setitimer,
+    SysSetitimer, //sys_setitimer,
     SysGetPid, //sys_getpid,
     SysSendfile, //sys_sendfile,   //40
     SysSocket, //sys_socket,

@@ -19,6 +19,8 @@ use core::ops::Deref;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::linux::time::*;
+use super::super::super::SignalDef::*;
+use super::super::super::threadmgr::thread_group::*;
 use super::super::waiter::*;
 use super::super::timer::raw_timer::*;
 use super::super::time::*;
@@ -476,6 +478,19 @@ impl WaitEntryListener {
 impl TimerListener for WaitEntryListener {
     fn Notify(&self, _exp: u64) {
         self.entry.Timeout();
+    }
+
+    fn Destroy(&self) {}
+}
+
+pub struct ITimerRealListener {
+    pub tg: ThreadGroupWeak,
+}
+
+impl TimerListener for ITimerRealListener {
+    fn Notify(&self, _exp: u64) {
+        let tg = self.tg.Upgrade().expect("TimerListener::Notify upgrade fail");
+        tg.SendSignal(&SignalInfoPriv(Signal::SIGALRM)).expect("TimerListener::Notify fail")
     }
 
     fn Destroy(&self) {}
