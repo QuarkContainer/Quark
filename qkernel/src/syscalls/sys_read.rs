@@ -46,6 +46,10 @@ pub fn Read(task: &Task, fd: i32, addr: u64, size: i64) -> Result<i64> {
         return Err(Error::SysError(SysErr::EINVAL))
     }
 
+    if size == 0 {
+        return Ok(0)
+    }
+
     let iov = IoVec::NewFromAddr(addr, size as usize);
 
     let mut iovs: [IoVec; 1] = [iov];
@@ -93,6 +97,10 @@ pub fn Pread64(task: &Task, fd: i32, addr: u64, size: i64, offset: i64) -> Resul
 
     if size < 0 {
         return Err(Error::SysError(SysErr::EINVAL))
+    }
+
+    if size == 0 {
+        return Ok(0)
     }
 
     let iov = IoVec::NewFromAddr(addr, size as usize);
@@ -154,6 +162,10 @@ pub fn Preadv(task: &Task, fd: i32, addr: u64, iovcnt: i32, offset: i64) -> Resu
 
     if iovcnt < 0 {
         return Err(Error::SysError(SysErr::EINVAL))
+    }
+
+    if iovcnt == 0 {
+        return Ok(0)
     }
 
     let dsts = task.IovsFromAddr(addr, iovcnt as usize)?;

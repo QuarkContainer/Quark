@@ -611,7 +611,7 @@ impl Thread {
         }
 
         let pidns = targetTg.PIDNamespace();
-        let pid = pidns.IDOfTask(target);
+        let pid = pidns.IDOfTaskLocked(target);
 
         let creds = target.Credentials();
         let userns = self.UserNamespace();

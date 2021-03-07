@@ -1,5 +1,5 @@
 {
-  "DebugLevel"    : "Debug",
+  "DebugLevel"    : "Error",
   "KernelMemSize" : 16,
   "SlowPrint"     : false,
   "LogLevel"      : "Complex",
