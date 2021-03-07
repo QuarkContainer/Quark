@@ -49,7 +49,7 @@ impl Thread {
             // We traverse to the next element of the list before we
             // actually wake anything. This prevents the race where waking
             // this futex causes a modification of the list.
-            let thisLockAddr = next + rl.FutexOffset;
+            let thisLockAddr = (next as i64 + rl.FutexOffset as i64) as u64;
 
             // Try to decode the next element in the list before waking the
             // current futex. But don't check the error until after we've
