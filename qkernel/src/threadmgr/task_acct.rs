@@ -14,24 +14,70 @@
 
 use alloc::string::String;
 use alloc::string::ToString;
+use alloc::sync::Arc;
 
+use super::super::kernel::timer::timer::*;
+use super::super::qlib::linux::time::*;
+use super::super::qlib::common::*;
+use super::super::qlib::linux_def::*;
 use super::super::threadmgr::thread::*;
 use super::super::threadmgr::thread_group::*;
 use super::super::qlib::usage::io::*;
 use super::super::qlib::linux::rusage::*;
 
 impl Thread {
-    /*pub fn Getitimer(&self, id: i32) -> ItimerVal {
+    pub fn Getitimer(&self, id: i32) -> Result<ItimerVal> {
         let tg = self.lock().tg.clone();
-        let (tm, s) = match id {
+        let (tm, olds) = match id {
             ITIMER_REAL => {
-                tg.lock().itimerRealTimer.Get();
+                tg.lock().itimerRealTimer.Get()
             }
             ITIMER_VIRTUAL => {
-                tm =
+                panic!("Getitimer doesn't implement ITIMER_VIRTUAL");
             }
-        }
-    }*/
+            ITIMER_PROF => {
+                panic!("Getitimer doesn't implement ITIMER_VIRTUAL");
+            }
+            _ => {
+                return Err(Error::SysError(SysErr::EINVAL))
+            }
+        };
+
+        let (oldval, oldiv) = SpecFromSetting(tm, olds);
+
+        return Ok(ItimerVal {
+            Value: Timeval::FromNs(oldval),
+            Interval: Timeval::FromNs(oldiv)
+        })
+    }
+
+    pub fn Setitimer(&self, id: i32, newitv: &ItimerVal) -> Result<ItimerVal> {
+        let (tm, olds) = match id {
+            ITIMER_REAL => {
+                let tg = self.ThreadGroup();
+                let timer = tg.lock().itimerRealTimer.clone();
+                let news = Setting::FromSpec(newitv.Value.ToDuration(), newitv.Interval.ToDuration(), &Arc::new(timer.Clock()))?;
+                let (tm, olds) = timer.Swap(&news);
+                (tm, olds)
+            }
+            ITIMER_VIRTUAL => {
+                panic!("Setitimer doesn't implement ITIMER_VIRTUAL");
+            }
+            ITIMER_PROF => {
+                panic!("Setitimer doesn't implement ITIMER_VIRTUAL");
+            }
+            _ => {
+                return Err(Error::SysError(SysErr::EINVAL))
+            }
+        };
+
+        let (oldval, oldiv) = SpecFromSetting(tm, olds);
+
+        return Ok(ItimerVal {
+            Value: Timeval::FromNs(oldval),
+            Interval: Timeval::FromNs(oldiv)
+        })
+    }
 
     pub fn Name(&self) -> String {
         return self.lock().name.to_string();

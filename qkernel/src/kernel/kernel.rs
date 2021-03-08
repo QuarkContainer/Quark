@@ -144,10 +144,19 @@ impl KernelInternal {
             ..Default::default()
         };
 
-        return ThreadGroup {
+        let tg = ThreadGroup {
             uid: NewUID(),
             data: Arc::new(Mutex::new(internal))
-        }
+        };
+
+        let listener = ITimerRealListener {
+            tg: tg.Downgrade(),
+        };
+
+        let itimer = Timer::New(MONOTONIC, &MONOTONIC_CLOCK, &Arc::new(listener));
+        tg.lock().itimerRealTimer = itimer;
+
+        return tg
     }
 }
 

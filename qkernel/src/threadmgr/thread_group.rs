@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
+use alloc::sync::Weak;
 use spin::Mutex;
 use core::ops::Deref;
 use alloc::collections::btree_map::BTreeMap;
@@ -278,6 +279,26 @@ pub struct ThreadGroupInternal {
     //pub tty: Option<TTY>
 }
 
+#[derive(Default)]
+pub struct ThreadGroupWeak {
+    pub uid: UniqueID,
+    pub data: Weak<Mutex<ThreadGroupInternal>>,
+}
+
+impl ThreadGroupWeak {
+    pub fn Upgrade(&self) -> Option<ThreadGroup> {
+        let t = match self.data.upgrade() {
+            None => return None,
+            Some(t) => t,
+        };
+
+        return Some(ThreadGroup {
+            uid: self.uid,
+            data: t,
+        })
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct ThreadGroup {
     pub uid: UniqueID,
@@ -324,6 +345,13 @@ impl Eq for ThreadGroup {}
 }*/
 
 impl ThreadGroup {
+    pub fn Downgrade(&self) -> ThreadGroupWeak {
+        return ThreadGroupWeak {
+            uid: self.uid,
+            data: Arc::downgrade(&self.data),
+        }
+    }
+
     pub fn PIDNamespace(&self) -> PIDNamespace {
         return self.lock().pidns.clone();
     }

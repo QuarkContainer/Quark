@@ -44,3 +44,4 @@ pub mod sys_aio;
 pub mod sys_capability;
 pub mod sys_membarrier;
 pub mod sys_splice;
+pub mod sys_timer;
