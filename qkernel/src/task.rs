@@ -45,6 +45,7 @@ use super::threadmgr::task_sched::*;
 use super::threadmgr::thread::*;
 use super::kernel::waiter::*;
 use super::kernel::futex::*;
+use super::kernel::kernel::GetKernelOption;
 use super::memmgr::mm::*;
 use super::perflog::*;
 
@@ -261,27 +262,31 @@ impl Task {
             return
         }
 
-        let now = Rdtsc() as u64;
+        let kernel = match GetKernelOption() {
+            None => return, //kernel is not initialized
+            Some(k) => k,
+        };
+
+        let now = kernel.CPUClockNow();
         let mut t = self.sched.lock();
         //info!("AccountTaskEnter[{:x}] current state is {:?} -> {:?}, address is {:x}",
         //    self.taskId, t.State, state, &t.State as * const _ as u64);
-        if t.State == SchedState::RunningSys {
-            t.SysTicks += now - t.Timestamp;
-            t.Timestamp = now;
-            t.State = state;
-            return
-        } else if t.State == SchedState::Nonexistent { //init state
-            t.Timestamp = now;
-            t.State = state;
-            return
-        } else if t.State == SchedState::Stopped { // execv state
-            t.Timestamp = now;
-            t.State = state;
-            return
+        let current = t.State;
+
+        match current {
+            SchedState::RunningSys => {
+                t.SysTicks += now - t.Timestamp;
+            }
+            SchedState::Nonexistent => {}
+            SchedState::Stopped => {}
+            _ => {
+                panic!("AccountTaskEnter: Task[{:x}] switching from state {:?} (expected {:?}) to {:?}",
+                       self.taskId, t.State, SchedState::RunningSys, state)
+            }
         }
 
-        panic!("AccountTaskEnter: Task[{:x}] switching from state {:?} (expected {:?}) to {:?}",
-           self.taskId, t.State, SchedState::RunningSys, state)
+        t.Timestamp = now;
+        t.State = state;
     }
 
     pub fn AccountTaskLeave(&self, state: SchedState) {
@@ -290,7 +295,12 @@ impl Task {
             return
         }
 
-        let now = Rdtsc() as u64;
+        let kernel = match GetKernelOption() {
+            None => return, //kernel is not initialized
+            Some(k) => k,
+        };
+
+        let now = kernel.CPUClockNow();
         let mut t = self.sched.lock();
         //info!("AccountTaskLeave[{:x}] current state is {:?} -> {:?}, address is {:x}",
         //    self.taskId, t.State, SchedState::RunningSys, &t.State as * const _ as u64);
@@ -322,9 +332,9 @@ impl Task {
         }
 
         let stopCount = thread.lock().stopCount.clone();
-        //self.AccountTaskEnter(SchedState::Stopped);
+        self.AccountTaskEnter(SchedState::Stopped);
         self.blocker.WaitGroupWait(self, &stopCount);
-        //self.AccountTaskLeave(SchedState::Stopped)
+        self.AccountTaskLeave(SchedState::Stopped)
     }
 
     pub fn SetSyscallRestartBlock(&mut self, b: Box<SyscallRestartBlock>) {

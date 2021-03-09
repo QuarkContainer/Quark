@@ -37,7 +37,7 @@ use super::super::threadmgr::thread::*;
 use super::super::threadmgr::task_exit::*;
 use super::super::threadmgr::task_exec::*;
 use super::super::threadmgr::task_clone::*;
-//use super::super::threadmgr::task_sched::*;
+use super::super::threadmgr::task_sched::*;
 use super::super::memmgr::mm::*;
 
 #[derive(Default, Debug)]
@@ -284,7 +284,7 @@ pub fn SysExecve(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     };
 
     //need to clean object on stack before enter_user as the stack will be destroyed
-    //task.AccountTaskEnter(SchedState::RunningApp);
+    task.AccountTaskEnter(SchedState::RunningApp);
 
     EnterUser(entry, usersp, kernelsp);
 

@@ -17,6 +17,7 @@ use spin::RwLock;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::sync::atomic::AtomicU64;
+use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 use alloc::string::String;
 use alloc::string::ToString;
@@ -33,12 +34,14 @@ use super::super::qlib::cpuid::*;
 use super::super::qlib::auth::userns::*;
 use super::super::qlib::auth::*;
 use super::super::qlib::limits::*;
+use super::super::qlib::linux::time::*;
 use super::super::qlib::path::*;
 use super::super::loader::loader::*;
 use super::super::SignalDef::*;
 use super::super::threadmgr::pid_namespace::*;
 use super::super::threadmgr::thread::*;
 use super::super::threadmgr::threads::*;
+use super::super::threadmgr::task_sched::*;
 use super::super::threadmgr::thread_group::*;
 use super::super::fs::mount::*;
 use super::super::fs::dirent::*;
@@ -61,6 +64,11 @@ lazy_static! {
 #[inline]
 pub fn GetKernel() -> Kernel {
     return KERNEL.lock().clone().unwrap();
+}
+
+#[inline]
+pub fn GetKernelOption() -> Option<Kernel> {
+    return KERNEL.lock().clone();
 }
 
 #[derive(Default)]
@@ -124,9 +132,10 @@ pub struct KernelInternal {
 
     pub staticInfo: Mutex<StaticInfo>,
 
-    pub cpuClockTicker: Option<Timer>,
+    pub cpuClockTicker: Timer,
 
     pub startTime: Time,
+    pub started: AtomicBool,
 
     pub platform: DefaultPlatform,
 }
@@ -189,12 +198,34 @@ impl Kernel {
                 useHostCores: false,
                 cpu: 0,
             }),
-            cpuClockTicker: None,
+            cpuClockTicker: Timer::New(MONOTONIC, &MONOTONIC_CLOCK, &Arc::new(KernelCPUClockTicker::New())),
             startTime: Task::RealTimeNow(),
+            started: AtomicBool::new(false),
             platform: DefaultPlatform::default(),
         };
 
         return Self(Arc::new(internal))
+    }
+
+    pub fn Start(&self) -> Result<()> {
+        let _l = self.extMu.lock();
+
+        if self.globalInit.lock().is_none() {
+            return Err(Error::Common(format!("kernel contains no tasks")))
+        }
+
+        if self.started.load(Ordering::SeqCst) {
+            return Err(Error::Common(format!("kernel already started")))
+        }
+
+        self.started.store(true, Ordering::SeqCst);
+        self.cpuClockTicker.Swap(&Setting {
+            Enabled: true,
+            Period: CLOCK_TICK,
+            Next: Time(0),
+        });
+
+        return Ok(())
     }
 
     pub fn ApplicationCores(&self) -> u32 {

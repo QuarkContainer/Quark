@@ -30,6 +30,7 @@ use super::super::task::*;
 use super::super::kernel::timer::timer::*;
 use super::super::kernel::time::*;
 use super::super::kernel::kernel::*;
+use super::super::kernel::waiter::*;
 use super::super::kernel::cpuset::*;
 use super::task_exit::*;
 use super::task_stop::*;
@@ -108,7 +109,11 @@ impl TaskSchedInfoInternal {
     // change to t.gosched can cause userTicksAt to adjust stats by too much,
     // making the observed stats non-monotonic.
     pub fn userTicksAt(&self, now: u64) -> u64 {
-        return self.UserTicks + now - self.Timestamp;
+        if self.Timestamp < now && self.State == SchedState::RunningApp {
+            return self.UserTicks + now - self.Timestamp;
+        }
+
+        return self.UserTicks
     }
 
     // sysTicksAt returns the extrapolated value of ts.SysTicks after
@@ -116,7 +121,11 @@ impl TaskSchedInfoInternal {
     //
     // Preconditions: As for userTicksAt.
     pub fn sysTicksAt(&self, now: u64) -> u64 {
-        return self.SysTicks + now - self.Timestamp;
+        if self.Timestamp < now && self.State == SchedState::RunningSys {
+            return self.UserTicks + now - self.Timestamp;
+        }
+
+        return self.SysTicks;
     }
 }
 
@@ -138,36 +147,20 @@ impl ThreadInternal {
 
     pub fn cpuStatsAt(&self, now: u64) -> CPUStats {
         let tsched = self.TaskSchedInfo();
-        let freq = self.k.TimeKeeper().read().MonotonicFrequency();
 
-        if freq == 0 {
-            return CPUStats {
-                UserTime: 0,
-                SysTime: 0,
-                VoluntarySwitches: tsched.YieldCount
-            }
-        }
-
-        let (UserTime, uok) = muldiv64(tsched.userTicksAt(now) as u64, SECOND as u64, freq);
-        let (SysTime, sok) = muldiv64(tsched.sysTicksAt(now) as u64, SECOND as u64, freq);
+        let userTime = tsched.userTicksAt(now) as i64;
+        let sysTime = tsched.sysTicksAt(now) as i64;
 
         return CPUStats {
-            UserTime: if uok {
-                UserTime as i64
-            } else {
-                0
-            },
-            SysTime: if sok {
-                SysTime as i64
-            } else {
-                0
-            },
+            UserTime: userTime * CLOCK_TICK,
+            SysTime: sysTime * CLOCK_TICK,
             VoluntarySwitches: tsched.YieldCount,
         }
     }
 
     pub fn CPUStats(&self) -> CPUStats {
-        return self.cpuStatsAt(Rdtsc() as u64)
+        let now = GetKernel().CPUClockNow();
+        return self.cpuStatsAt(now)
     }
 
     // StateStatus returns a string representation of the task's current state,
@@ -234,7 +227,7 @@ impl Thread {
     pub fn NotifyRlimitCPUUpdated(&self) {
         //todo: fix this.
         info!("NotifyRlimitCPUUpdated: no more ticket, need fix");
-        let ticker = self.lock().k.cpuClockTicker.clone().unwrap();
+        let ticker = self.lock().k.cpuClockTicker.clone();
         ticker.Atomically(|| {
             let tg = self.lock().tg.clone();
             let pidns = tg.PIDNamespace();
@@ -376,7 +369,6 @@ impl Task {
     }
 }
 
-
 impl ThreadGroupInternal {
     // Preconditions: As for TaskGoroutineSchedInfo.userTicksAt. The TaskSet mutex
     // must be locked.
@@ -418,7 +410,7 @@ impl ThreadGroup {
             None => return CPUStats::default(),
             Some(ref _leader) => {
                 //let now = leader.lock().k.CPUClockNow();
-                let now = Rdtsc() as u64;
+                let now = GetKernel().CPUClockNow();
                 return tg.cpuStatsAtLocked(now)
             }
         }
@@ -444,6 +436,12 @@ pub struct TaskClock {
     pub includeSys: bool,
 }
 
+impl Waitable for TaskClock {
+    fn Readiness(&self, _task: &Task, _mask: EventMask) -> EventMask {
+        return 0
+    }
+}
+
 impl Clock for TaskClock {
     fn Now(&self) -> Time {
         let stats = self.t.CPUStats();
@@ -456,6 +454,66 @@ impl Clock for TaskClock {
 
     fn WallTimeUntil(&self, t: Time, now: Time) -> Duration {
         return t.Sub(now)
+    }
+}
+
+pub struct ThreadGroupClock {
+    pub tg: ThreadGroup,
+    pub includeSys: bool,
+    pub queue: Queue,
+}
+
+impl Waitable for ThreadGroupClock {
+    fn Readiness(&self, _task: &Task, _mask: EventMask) -> EventMask {
+        return 0
+    }
+
+    fn EventRegister(&self, task: &Task, e: &WaitEntry, mask: EventMask) {
+        return self.queue.EventRegister(task, e, mask)
+    }
+
+    fn EventUnregister(&self, task: &Task, e: &WaitEntry) {
+        return self.queue.EventUnregister(task, e)
+    }
+}
+
+impl Clock for ThreadGroupClock {
+    fn Now(&self) -> Time {
+        let stats = self.tg.CPUStats();
+        if self.includeSys {
+            //error!("ThreadGroupClock usertime is {:x}, SysTime is {:x}", stats.UserTime, stats.SysTime);
+            return Time::FromNs(stats.UserTime + stats.SysTime)
+        }
+
+        return Time::FromNs(stats.UserTime)
+    }
+
+    fn WallTimeUntil(&self, t: Time, now: Time) -> Duration {
+        let ts = self.tg.TaskSet();
+        let n = {
+            let _r = ts.ReadLock();
+            self.tg.lock().liveTasks as i64
+        } ;
+
+        if n == 0 {
+            if t.Before(now) {
+                return 0
+            }
+
+            // The timer tick raced with thread group exit, after which no more
+            // tasks can enter the thread group. So tgc.Now() will never advance
+            // again. Return a large delay; the timer should be stopped long before
+            // it comes again anyway.
+            return HOUR
+        }
+
+        // This is a lower bound on the amount of time that can elapse before an
+        // associated timer expires, so returning this value tends to result in a
+        // sequence of closely-spaced ticks just before timer expiry. To avoid
+        // this, round up to the nearest ClockTick; CPU usage measurements are
+        // limited to this resolution anyway.
+        let remaining = t.Sub(now) / n;
+        return ((remaining + CLOCK_TICK - NANOSECOND) / CLOCK_TICK) * CLOCK_TICK
     }
 }
 
@@ -475,57 +533,12 @@ impl Thread {
     }
 }
 
-pub struct ThreadGroupClock {
-    pub tg: ThreadGroup,
-
-    pub includeSys: bool,
-}
-
-impl Clock for ThreadGroupClock {
-    fn Now(&self) -> Time {
-        let stats = self.tg.CPUStats();
-        if self.includeSys {
-            return Time::FromNs(stats.UserTime + stats.SysTime)
-        }
-
-        return Time::FromNs(stats.UserTime)
-    }
-
-    fn WallTimeUntil(&self, t: Time, now: Time) -> Duration {
-        let pidns = self.tg.PIDNamespace();
-        let owner = pidns.lock().owner.clone();
-        let n = {
-            let _r = owner.read();
-            self.tg.lock().liveTasks
-        };
-
-        if n == 0 {
-            if t.Before(now) {
-                return 0
-            }
-
-            // The timer tick raced with thread group exit, after which no more
-            // tasks can enter the thread group. So tgc.Now() will never advance
-            // again. Return a large delay; the timer should be stopped long before
-            // it comes again anyway.
-            return HOUR
-        }
-
-        // This is a lower bound on the amount of time that can elapse before an
-        // associated timer expires, so returning this value tends to result in a
-        // sequence of closely-spaced ticks just before timer expiry. To avoid
-        // this, round up to the nearest ClockTick; CPU usage measurements are
-        // limited to this resolution anyway.
-        let remaining = t.Sub(now) / n as i64;
-        return (remaining + (CLOCK_TICK - NANOSECOND)) / CLOCK_TICK * CLOCK_TICK;
-    }
-}
-
 impl ThreadGroup {
     pub fn UserCPUClock(&self) -> ThreadGroupClock {
         return ThreadGroupClock {
             tg: self.clone(),
             includeSys: false,
+            queue: Queue::default(),
         }
     }
 
@@ -533,19 +546,16 @@ impl ThreadGroup {
         return ThreadGroupClock {
             tg: self.clone(),
             includeSys: true,
+            queue: Queue::default(),
         }
     }
 }
 
-pub struct KernelCPUClockTicker {
-    pub k: Kernel,
-}
+pub struct KernelCPUClockTicker {}
 
 impl KernelCPUClockTicker {
-    pub fn New(k: &Kernel) -> Self {
-        return Self {
-            k: k.clone(),
-        }
+    pub fn New() -> Self {
+        return Self {}
     }
 }
 
@@ -558,8 +568,9 @@ impl TimerListener for KernelCPUClockTicker {
         // presumably task goroutines as well, from executing for a long period of
         // time. It's also necessary to prevent CPU clocks from seeing large
         // discontinuous jumps.
-        let now = self.k.cpuClock.fetch_add(1, Ordering::SeqCst);
-        let tasks = self.k.tasks.clone();
+        let kernel = GetKernel();
+        let now = kernel.cpuClock.fetch_add(1, Ordering::SeqCst);
+        let tasks = kernel.tasks.clone();
         let root = tasks.Root();
         let tgs = root.ThreadGroups();
 
@@ -627,7 +638,9 @@ impl TimerListener for KernelCPUClockTicker {
 
             if profReceiver.is_some() {
                 // ITIMER_PROF
-                let (newItimerProfSetting, exp) = tg.lock().itimerVirtSetting.At(tgProfNow);
+                let (newItimerProfSetting, exp) = tg.lock().itimerProfSetting.At(tgProfNow);
+                //error!("profReceiver2 is some .... tgProfNow is {:?}, newItimerProfSetting is {:?}, exp is {}",
+                //    tgProfNow, &newItimerProfSetting, exp);
                 tg.lock().itimerProfSetting = newItimerProfSetting;
                 if exp != 0 {
                     profReceiver.clone().unwrap().sendSignalLocked(&SignalInfo::SignalInfoPriv(Signal(Signal::SIGPROF)), true).unwrap();

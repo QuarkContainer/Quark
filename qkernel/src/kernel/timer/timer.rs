@@ -20,6 +20,7 @@ use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::linux::time::*;
 use super::super::super::SignalDef::*;
+use super::super::super::task::*;
 use super::super::super::threadmgr::thread_group::*;
 use super::super::waiter::*;
 use super::super::timer::raw_timer::*;
@@ -55,6 +56,16 @@ pub trait Clock: Sync + Send {
     // result in late expirations. Implementations should usually err on the
     // side of underestimating.
     fn WallTimeUntil(&self, t: Time, now: Time) -> Duration;
+}
+
+pub struct ClockEventsQueue {
+    pub queue: Queue,
+}
+
+impl Waitable for ClockEventsQueue {
+    fn Readiness(&self, _task: &Task, _mask: EventMask) -> EventMask {
+        return 0
+    }
 }
 
 pub trait TimerListener: Sync + Send {
