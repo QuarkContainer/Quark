@@ -21,7 +21,7 @@ use super::super::qlib::range::*;
 //use super::PageTable::PageTables;
 
 
-fn ZeroPage(pageStart: u64) {
+pub fn ZeroPage(pageStart: u64) {
     use alloc::slice;
     unsafe {
         let arr = slice::from_raw_parts_mut(pageStart as *mut u64, 512);

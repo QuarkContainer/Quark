@@ -158,7 +158,13 @@ impl ProcessGroup {
         };
 
         if ok {
-            self.lock().ancestors -= 1;
+            // if this pg was parentPg. But after reparent become non-parentpg. the ancestor will be sub to negtive
+            // todo: this is bug. fix it.
+
+            let ancestors = self.lock().ancestors;
+            if ancestors > 0 {
+                self.lock().ancestors = ancestors - 1;
+            }
         }
 
         let mut alive = true;

@@ -15,6 +15,7 @@
 use core::sync::atomic::Ordering;
 use spin::Mutex;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::ops::Deref;
 
 use super::super::asm::*;
@@ -594,7 +595,8 @@ impl TimerListener for KernelCPUClockTicker {
 
             let mut tgUserTime = tg.lock().exitedCPUStats.UserTime;
             let mut tgSysTime = tg.lock().exitedCPUStats.SysTime;
-            for t in &tg.lock().tasks {
+            let tasks : Vec<Thread> = tg.lock().tasks.iter().cloned().collect();
+            for t in &tasks {
                 let tsched = t.lock().TaskSchedInfo();
                 tgUserTime += tsched.userTicksAt(now) as i64 * CLOCK_TICK;
                 tgSysTime += tsched.sysTicksAt(now) as i64 * CLOCK_TICK;
@@ -643,7 +645,8 @@ impl TimerListener for KernelCPUClockTicker {
                 //    tgProfNow, &newItimerProfSetting, exp);
                 tg.lock().itimerProfSetting = newItimerProfSetting;
                 if exp != 0 {
-                    profReceiver.clone().unwrap().sendSignalLocked(&SignalInfo::SignalInfoPriv(Signal(Signal::SIGPROF)), true).unwrap();
+                    let receiver = profReceiver.clone().unwrap();
+                    receiver.sendSignalLocked(&SignalInfo::SignalInfoPriv(Signal(Signal::SIGPROF)), true).unwrap();
                 }
 
                 // RLIMIT_CPU soft limit
