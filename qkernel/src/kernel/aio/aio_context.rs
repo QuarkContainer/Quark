@@ -187,15 +187,60 @@ impl MemoryManager {
     }
 }
 
-#[derive(Default)]
-pub struct IOResult {
 
+// I/O commands.
+pub const IOCB_CMD_PREAD   : i32 = 0;
+pub const IOCB_CMD_PWRITE  : i32 = 1;
+pub const IOCB_CMD_FSYNC   : i32 = 2;
+pub const IOCB_CMD_FDSYNC  : i32 = 3;
+pub const IOCB_CMD_NOOP    : i32 = 6;
+pub const IOCB_CMD_PREADV  : i32 = 7;
+pub const IOCB_CMD_PWRITEV : i32 = 8;
+
+// I/O flags.
+pub const IOCB_FLAG_RESFD : i32 = 1;
+
+// ioCallback describes an I/O request.
+//
+// The priority field is currently ignored in the implementation below.
+#[repr(C)]
+#[derive(Default)]
+pub struct IOCallback {
+    pub data: u64,
+    pub key: u32,
+    pub rw_flags: i32,
+
+    pub opcode: u16,
+    pub reqprio: i16,
+    pub fd: u32,
+
+    pub buf: u64,
+    pub bytes: u64,
+    pub offset: i64,
+
+    pub reserved2: u64,
+    pub flags: u32,
+
+    // eventfd to signal if IOCB_FLAG_RESFD is set in flags.
+    pub resfd: u32,
 }
+
+// ioEvent describes an I/O result.
+#[repr(C)]
+#[derive(Default)]
+pub struct IOEvent {
+    pub data    : u64,
+    pub obj     : u64,
+    pub result  : i64,
+    pub result2 : i64,
+}
+
+pub const IOEVENT_SIZE : u64 = 32; // sizeof(IOEvent)
 
 #[derive(Default)]
 pub struct AIOContextIntern {
     // results is the set of completed requests.
-    pub results: VecDeque<IOResult>,
+    pub results: VecDeque<IOEvent>,
 
     // maxOutstanding is the maximum number of outstanding entries; this value
     // is immutable.
@@ -279,7 +324,7 @@ impl AIOContext {
 
     // PopRequest pops a completed request if available, this function does not do
     // any blocking. Returns false if no request is available.
-    pub fn PopRequest(&self) -> Option<IOResult> {
+    pub fn PopRequest(&self) -> Option<IOEvent> {
         let mut aio = self.lock();
         let ret = aio.results.pop_front();
         if aio.results.len() == 0 && aio.dead {
@@ -291,7 +336,7 @@ impl AIOContext {
 
     // FinishRequest finishes a pending request. It queues up the data
     // and notifies listeners.
-    pub fn FinishRequest(&self, data: IOResult) {
+    pub fn FinishRequest(&self, data: IOEvent) {
         let mut aio = self.lock();
 
         aio.results.push_back(data);
