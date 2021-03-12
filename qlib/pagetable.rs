@@ -805,6 +805,7 @@ impl PageTablesInternal {
         let currAddr = entry.addr().as_u64();
         pagePool.Deref(currAddr)?;
         entry.set_unused();
+        Invlpg(currAddr);
         return Ok(true)
     }
 
@@ -879,7 +880,7 @@ impl PageTablesInternal {
 
                             //info!("set addr: vaddr is {:x}, paddr is {:x}, flags is {:b}", curAddr.0, phyAddr.0, flags.bits());
                             pteEntry.set_addr(PhysAddr::new(newAddr), flags);
-                            //Invlpg(curAddr.0);
+                            Invlpg(curAddr.0);
                             curAddr = curAddr.AddLen(MemoryDef::PAGE_SIZE_4K)?;
 
                             if p1Idx == PageTableIndex::new(MemoryDef::ENTRY_COUNT - 1) {

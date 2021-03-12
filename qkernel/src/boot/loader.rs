@@ -215,6 +215,8 @@ impl Loader {
             task.NewStdFds(&procArgs.Stdiofds[..], false).expect("Task: create std fds");
         }
 
+        GetKernel().Start()?;
+
         //task.NewStdFds(&procArgs.Stdiofds[..], procArgs.Terminal).expect("Task: create std fds");
 
         let execProc = ExecProcess {

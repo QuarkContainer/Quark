@@ -119,7 +119,7 @@ use self::asm::*;
 use self::kernel::timer::*;
 use self::boot::controller::*;
 use self::task::*;
-//use self::threadmgr::task_sched::*;
+use self::threadmgr::task_sched::*;
 use self::qlib::perf_tunning::*;
 use self::memmgr::buf_allocator::*;
 use self::quring::*;
@@ -170,7 +170,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
 
     currTask.PerfGoto(PerfType::Kernel);
 
-    //currTask.AccountTaskLeave(SchedState::RunningApp);
+    currTask.AccountTaskLeave(SchedState::RunningApp);
     currTask.GetPtRegs().rsp = CPULocal::UserStack(); //set the user sp to ptRegs
 
     //info!("nr is {}, orig_rax = {:?}", nr, currTask.GetPtRegs());
@@ -305,7 +305,7 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
     CPULocal::SetUserStack(pt.rsp);
     CPULocal::SetKernelStack(currTask.GetKernelSp());
 
-    //currTask.AccountTaskEnter(SchedState::RunningApp);
+    currTask.AccountTaskEnter(SchedState::RunningApp);
     PerfGofrom(PerfType::KernelHandling);
 }
 
@@ -420,8 +420,8 @@ fn StartExecProcess(msgId: u64, process: Process) {
 
     ControlMsgRet(msgId, &UCallResp::ExecProcessResp(tid));
 
-    //let currTask = Task::Current();
-    //currTask.AccountTaskEnter(SchedState::RunningApp);
+    let currTask = Task::Current();
+    currTask.AccountTaskEnter(SchedState::RunningApp);
 
     EnterUser(entry, userStackAddr, kernelStackAddr);
 }
@@ -489,8 +489,8 @@ fn StartRootContainer(_para: *const u8) {
     };
 
     //CreateTask(StartExecProcess, ptr::null());
-    //let currTask = Task::Current();
-    //currTask.AccountTaskEnter(SchedState::RunningApp);
+    let currTask = Task::Current();
+    currTask.AccountTaskEnter(SchedState::RunningApp);
     EnterUser(entry, userStackAddr, kernelStackAddr);
 
     //can't reach this

@@ -17,6 +17,7 @@ use alloc::string::ToString;
 use alloc::sync::Arc;
 
 use super::super::kernel::timer::timer::*;
+use super::super::kernel::kernel::*;
 use super::super::qlib::linux::time::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
@@ -33,10 +34,18 @@ impl Thread {
                 tg.lock().itimerRealTimer.Get()
             }
             ITIMER_VIRTUAL => {
-                panic!("Getitimer doesn't implement ITIMER_VIRTUAL");
+                let tm = tg.UserCPUClock().Now();
+                let lock = tg.lock().signalLock.clone();
+                let _sl = lock.lock();
+                let (s, _) = tg.lock().itimerVirtSetting.At(tm);
+                (tm, s)
             }
             ITIMER_PROF => {
-                panic!("Getitimer doesn't implement ITIMER_VIRTUAL");
+                let tm = tg.CPUClock().Now();
+                let lock = tg.lock().signalLock.clone();
+                let _sl = lock.lock();
+                let (s, _) = tg.lock().itimerProfSetting.At(tm);
+                (tm, s)
             }
             _ => {
                 return Err(Error::SysError(SysErr::EINVAL))
@@ -52,19 +61,74 @@ impl Thread {
     }
 
     pub fn Setitimer(&self, id: i32, newitv: &ItimerVal) -> Result<ItimerVal> {
+        let tg = self.ThreadGroup();
         let (tm, olds) = match id {
             ITIMER_REAL => {
-                let tg = self.ThreadGroup();
                 let timer = tg.lock().itimerRealTimer.clone();
                 let news = Setting::FromSpec(newitv.Value.ToDuration(), newitv.Interval.ToDuration(), &Arc::new(timer.Clock()))?;
                 let (tm, olds) = timer.Swap(&news);
                 (tm, olds)
             }
             ITIMER_VIRTUAL => {
-                panic!("Setitimer doesn't implement ITIMER_VIRTUAL");
+                let c = tg.UserCPUClock();
+                let kernel = GetKernel();
+                let ticker = kernel.cpuClockTicker.clone();
+                let tm = c.Now();
+                let mut olds = Setting::default();
+                let mut err = None;
+                ticker.Atomically(|| {
+                    let news = match Setting::FromSpecAt(newitv.Value.ToDuration(), newitv.Interval.ToDuration(), tm) {
+                        Ok(n) => n,
+                        Err(e) => {
+                            err = Some(Err(e));
+                            return
+                        },
+                    };
+                    let lock = tg.lock().signalLock.clone();
+                    let _s = lock.lock();
+                    olds = tg.lock().itimerVirtSetting;
+                    tg.lock().itimerVirtSetting = news;
+                    tg.lock().updateCPUTimersEnabledLocked();
+
+                });
+
+                match err {
+                    None => (),
+                    Some(e) => return e,
+                }
+
+                (tm, olds)
             }
             ITIMER_PROF => {
-                panic!("Setitimer doesn't implement ITIMER_VIRTUAL");
+                let c = tg.CPUClock();
+                let kernel = GetKernel();
+                let ticker = kernel.cpuClockTicker.clone();
+                let tm = c.Now();
+                let mut olds = Setting::default();
+                let mut err = None;
+                ticker.Atomically(|| {
+                    let news = match Setting::FromSpecAt(newitv.Value.ToDuration(), newitv.Interval.ToDuration(), tm) {
+                        Ok(n) => n,
+                        Err(e) => {
+                            err = Some(Err(e));
+                            return
+                        },
+                    };
+                    let lock = tg.lock().signalLock.clone();
+                    let _s = lock.lock();
+                    olds = tg.lock().itimerProfSetting;
+                    tg.lock().itimerProfSetting = news;
+                    tg.lock().updateCPUTimersEnabledLocked();
+
+                    //error!("itimerProfSetting(uid is {})  is {:?}", tg.uid, tg.lock().itimerProfSetting);
+                });
+
+                match err {
+                    None => (),
+                    Some(e) => return e,
+                }
+
+                (tm, olds)
             }
             _ => {
                 return Err(Error::SysError(SysErr::EINVAL))

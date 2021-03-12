@@ -21,7 +21,7 @@ use super::qlib::addr::*;
 use super::task::*;
 use super::qlib::common::*;
 use super::qlib::linux_def::*;
-//use super::threadmgr::task_sched::*;
+use super::threadmgr::task_sched::*;
 use super::SignalDef::*;
 use super::MainRun;
 use super::asm::*;
@@ -141,7 +141,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, _errorC
 
     // is this call from user
     if sf.ss & 0x3 != 0 {
-        //currTask.AccountTaskLeave(SchedState::RunningApp);
+        currTask.AccountTaskLeave(SchedState::RunningApp);
         PerfGofrom(PerfType::User);
         SwapGs();
     }
@@ -268,7 +268,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, _errorC
     }
 
     MainRun(currTask, TaskRunState::RunApp);
-    //currTask.AccountTaskEnter(SchedState::RunningApp);
+    currTask.AccountTaskEnter(SchedState::RunningApp);
 }
 
 #[no_mangle]
@@ -367,7 +367,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     let fromUser = if sf.ss & 0x3 != 0 {
         SwapGs();
         PerfGofrom(PerfType::User);
-        //currTask.AccountTaskLeave(SchedState::RunningApp);
+        currTask.AccountTaskLeave(SchedState::RunningApp);
         true
     } else {
         false
@@ -456,7 +456,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
         if fromUser {
             PerfGoto(PerfType::User);
             SwapGs();
-            //currTask.AccountTaskEnter(SchedState::RunningApp);
+            currTask.AccountTaskEnter(SchedState::RunningApp);
         }
     } else {
         HandleFault(currTask, fromUser, errorCode, cr2, sf);

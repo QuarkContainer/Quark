@@ -25,8 +25,6 @@ use super::super::qlib::range::*;
 use super::super::qlib::linux::limits::*;
 use super::*;
 
-impl MemoryManagerInternal {}
-
 impl MemoryManager {
     // MMap establishes a memory mapping.
     pub fn MMap(&self, task: &Task, opts: &mut MMapOpts) -> Result<u64> {

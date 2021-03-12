@@ -20,6 +20,7 @@ use super::qlib::task_mgr::*;
 use super::Kernel::HostSpace;
 use super::qlib::perf_tunning::*;
 use super::qlib::vcpu_mgr::*;
+use super::threadmgr::task_sched::*;
 use super::PAGE_ALLOCATOR;
 use super::memmgr::pma::*;
 use super::quring::uring_mgr::*;
@@ -58,7 +59,7 @@ extern "C" {
 #[inline]
 fn switch(from: TaskId, to: TaskId) {
     Task::Current().PerfGoto(PerfType::Blocked);
-    //Task::Current().AccountTaskEnter(SchedState::Blocked);
+    Task::Current().AccountTaskEnter(SchedState::Blocked);
 
     CPULocal::SetCurrentTask(to.Addr());
     let fromCtx = from.GetTask();
@@ -71,11 +72,11 @@ fn switch(from: TaskId, to: TaskId) {
     }
 
     Task::Current().PerfGofrom(PerfType::Blocked);
-    //Task::Current().AccountTaskLeave(SchedState::Blocked);
+    Task::Current().AccountTaskLeave(SchedState::Blocked);
 }
 
 fn switch_to(to: TaskId) {
-    //to.GetTask().AccountTaskLeave(SchedState::Blocked);
+    to.GetTask().AccountTaskLeave(SchedState::Blocked);
 
     CPULocal::SetCurrentTask(to.Addr());
     let toCtx = to.GetTask();

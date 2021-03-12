@@ -683,7 +683,7 @@ impl Thread {
             let tg = t.lock().tg.clone();
             let leader = tg.lock().leader.Upgrade();
 
-            if leader.is_some() && t != leader.unwrap() {
+            if Some(t.clone()) != leader {
                 t.lock().exitParentNotified = true;
                 t.lock().exitParentAcked = true;
             } else if tg.lock().tasksCount == 1 {
@@ -765,7 +765,7 @@ impl Thread {
                 pidns.lock().tasks.remove(&tid);
                 pidns.lock().tids.remove(&t);
                 let leader = tg.lock().leader.Upgrade();
-                if leader.is_some() && t == leader.clone().unwrap() {
+                if Some(t.clone()) == leader {
                     pidns.lock().tgids.remove(&tg);
                 }
 

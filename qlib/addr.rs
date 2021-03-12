@@ -249,11 +249,11 @@ impl Addr {
         }
     }
 
-    pub fn RoundDown(&self) -> Result<Addr> {
+    pub const fn RoundDown(&self) -> Result<Addr> {
         return Ok(Addr(self.0 & !(PAGE_SIZE - 1)))
     }
 
-    pub fn RoundUp(&self) -> Result<Addr> {
+    pub const fn RoundUp(&self) -> Result<Addr> {
         if u64::MAX - PAGE_SIZE + 1 < self.0 {
             return Err(Error::SysError(SysErr::EINVAL))
         }
