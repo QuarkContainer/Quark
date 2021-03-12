@@ -40,6 +40,7 @@ use super::super::qlib::mem::stackvec::*;
 use super::super::qlib::pagetable::*;
 use super::super::qlib::limits::*;
 use super::super::qlib::perf_tunning::*;
+use super::super::kernel::aio::aio_context::*;
 use super::super::fs::dirent::*;
 use super::super::mm::*;
 use super::super::qlib::mem::areaset::*;
@@ -80,6 +81,8 @@ pub struct MemoryManagerInternal {
     // dumpability is protected by metadataMu.
     pub dumpability: Dumpability,
     pub lock: Arc<Mutex<()>>,
+
+    pub aioManager: AIOManager,
 }
 
 impl Default for MemoryManagerInternal {
@@ -102,6 +105,7 @@ impl Default for MemoryManagerInternal {
             executable: None,
             dumpability: NOT_DUMPABLE,
             lock: Arc::new(Mutex::new(())),
+            aioManager: AIOManager::default(),
         }
     }
 }
@@ -152,6 +156,7 @@ impl MemoryManagerInternal {
             executable: None,
             dumpability: NOT_DUMPABLE,
             lock: Arc::new(Mutex::new(())),
+            aioManager: AIOManager::default(),
         }
     }
 
