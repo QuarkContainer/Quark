@@ -69,6 +69,7 @@ pub fn NewEventfd(task: &Task, initVal: u64, semMode: bool) -> File {
     }, ops);
 }
 
+#[derive(Clone)]
 pub struct EventOperations(Arc<Mutex<EventOperationsInternal>>);
 
 impl Deref for EventOperations {

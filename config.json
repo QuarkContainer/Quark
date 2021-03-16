@@ -3,5 +3,6 @@
   "KernelMemSize" : 16,
   "SlowPrint"     : false,
   "LogLevel"      : "Complex",
-  "TcpBuffIO"     : true
+  "TcpBuffIO"     : true,
+  "EnableAIO"     : false
 }

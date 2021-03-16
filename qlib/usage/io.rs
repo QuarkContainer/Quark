@@ -61,6 +61,10 @@ impl IO {
         }
     }
 
+    pub fn WriteSyscallAddr(&self) -> u64 {
+        return &self.WriteSyscalls as * const _ as u64;
+    }
+
     pub fn AccountWriteSyscall(&self, bytes: i64) {
         self.WriteSyscalls.fetch_add(1, Ordering::SeqCst);
         if bytes > 0 {

@@ -20,6 +20,7 @@ pub struct Config {
     pub SlowPrint: bool,
     pub LogLevel: LogLevel,
     pub TcpBuffIO: bool,
+    pub EnableAIO: bool,
 }
 
 impl Config {}
@@ -32,6 +33,7 @@ impl Default for Config {
             SlowPrint: false,
             LogLevel: LogLevel::Simple,
             TcpBuffIO: true,
+            EnableAIO: false,
         }
     }
 }

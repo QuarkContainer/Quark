@@ -141,7 +141,7 @@ impl MemoryManager {
         };
 
         let id = addr;
-        let ret = !self.write().aioManager.NewAIOContext(events, id);
+        let ret = self.write().aioManager.NewAIOContext(events, id);
         if !ret {
             self.MUnmap(task, addr, AIOContext::AIO_RINGBUF_SIZE)?;
             return Err(Error::SysError(SysErr::EINVAL))
@@ -189,13 +189,13 @@ impl MemoryManager {
 
 
 // I/O commands.
-pub const IOCB_CMD_PREAD   : i32 = 0;
-pub const IOCB_CMD_PWRITE  : i32 = 1;
-pub const IOCB_CMD_FSYNC   : i32 = 2;
-pub const IOCB_CMD_FDSYNC  : i32 = 3;
-pub const IOCB_CMD_NOOP    : i32 = 6;
-pub const IOCB_CMD_PREADV  : i32 = 7;
-pub const IOCB_CMD_PWRITEV : i32 = 8;
+pub const IOCB_CMD_PREAD   : u16 = 0;
+pub const IOCB_CMD_PWRITE  : u16 = 1;
+pub const IOCB_CMD_FSYNC   : u16 = 2;
+pub const IOCB_CMD_FDSYNC  : u16 = 3;
+pub const IOCB_CMD_NOOP    : u16 = 6;
+pub const IOCB_CMD_PREADV  : u16 = 7;
+pub const IOCB_CMD_PWRITEV : u16 = 8;
 
 // I/O flags.
 pub const IOCB_FLAG_RESFD : i32 = 1;
@@ -204,7 +204,7 @@ pub const IOCB_FLAG_RESFD : i32 = 1;
 //
 // The priority field is currently ignored in the implementation below.
 #[repr(C)]
-#[derive(Default)]
+#[derive(Default, Debug, Clone, Copy)]
 pub struct IOCallback {
     pub data: u64,
     pub key: u32,
@@ -227,7 +227,7 @@ pub struct IOCallback {
 
 // ioEvent describes an I/O result.
 #[repr(C)]
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct IOEvent {
     pub data    : u64,
     pub obj     : u64,
@@ -245,6 +245,8 @@ pub struct AIOContextIntern {
     // maxOutstanding is the maximum number of outstanding entries; this value
     // is immutable.
     pub maxOutstanding: usize,
+
+    pub outstanding: usize,
 
     // dead is set when the context is destroyed.
     pub dead: bool,
@@ -313,10 +315,12 @@ impl AIOContext {
     // Prepare reserves space for a new request, returning true if available.
     // Returns false if the context is busy.
     pub fn Prepare(&self) -> bool {
-        let aio = self.lock();
-        if aio.results.len() > aio.maxOutstanding {
+        let mut aio = self.lock();
+        if aio.outstanding >= aio.maxOutstanding {
             return false;
         }
+
+        aio.outstanding += 1;
 
         return true
     }
@@ -331,6 +335,10 @@ impl AIOContext {
             aio.queue.Notify(EVENT_HUP);
         }
 
+        if ret.is_some() {
+            aio.outstanding -= 1;
+        }
+
         return ret;
     }
 
@@ -338,10 +346,14 @@ impl AIOContext {
     // and notifies listeners.
     pub fn FinishRequest(&self, data: IOEvent) {
         let mut aio = self.lock();
-
         aio.results.push_back(data);
+
+        use alloc::vec::Vec;
+        let mut v = Vec::new();
+        for r in &aio.results {
+            v.push(r.obj);
+        }
+
         aio.queue.Notify(EVENT_IN);
     }
-
-
 }

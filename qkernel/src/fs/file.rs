@@ -169,7 +169,7 @@ pub trait SpliceOperations {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum FileOpsType {
     OverlayFileOperations,
     MockFileOperations,
