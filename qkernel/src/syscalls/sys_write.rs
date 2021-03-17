@@ -59,10 +59,27 @@ pub fn Write(task: &Task, fd: i32, addr: u64, size: i64) -> Result<i64> {
         return Ok(0)
     }
 
-    let iov = IoVec::NewFromAddr(addr, size as usize);
-    let iovs: [IoVec; 1] = [iov];
+    let mut count = 0;
 
-    return writev(task, &file, &iovs);
+    while count < size as i64 {
+        let iov = IoVec::NewFromAddr(addr + count as u64, (size - count) as usize);
+        let iovs: [IoVec; 1] = [iov];
+
+        match writev(task, &file, &iovs) {
+            Ok(cnt) => {
+                count += cnt;
+            },
+            Err(e) => {
+                if count > 0 {
+                    return Ok(count as i64)
+                }
+
+                return Err(e)
+            }
+        }
+    }
+
+    return Ok(count)
 }
 
 pub fn SysPwrite64(task: &mut Task, args: &SyscallArguments) -> Result<i64> {

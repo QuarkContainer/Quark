@@ -14,10 +14,305 @@
 
 
 use super::super::task::*;
+use super::super::kernel::aio::aio_context::*;
+use super::super::kernel::eventfd::*;
+use super::super::kernel::waiter::*;
+use super::super::fs::file::*;
+use super::super::fs::host::hostinodeop::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
+use super::super::qlib::linux::time::*;
 use super::super::syscalls::syscalls::*;
+use super::super::quring::async::*;
+use super::super::IOURING;
+use super::super::SHARESPACE;
+use super::sys_poll::*;
 
-pub fn SysIoSetup(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
+// IoSetup implements linux syscall io_setup(2).
+pub fn SysIoSetup(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let enableAIO = SHARESPACE.config.EnableAIO;
+
+    if !enableAIO {
+        return Err(Error::SysError(SysErr::ENOSYS))
+    }
+
+    let nrEvents = args.arg0 as i32;
+    let idAddr = args.arg1 as u64;
+
+    // Linux uses the native long as the aio ID.
+    //
+    // The context pointer _must_ be zero initially.
+    let idPtr = task.GetTypeMut(idAddr)?;
+    let idIn : u64 = *idPtr;
+    if idIn != 0 {
+        return Err(Error::SysError(SysErr::EINVAL))
+    }
+
+    let id = task.mm.NewAIOContext(task, nrEvents as usize)?;
+    *idPtr = id;
+    return Ok(0)
+}
+
+// IoDestroy implements linux syscall io_destroy(2).
+pub fn SysIoDestroy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let id = args.arg0 as u64;
+
+    if !task.mm.DestroyAIOContext(task, id) {
+        return Err(Error::SysError(SysErr::EINVAL))
+    }
+
+    // Fixme: Linux blocks until all AIO to the destroyed context is done.
+    return Ok(0)
+}
+
+// IoGetevents implements linux syscall io_getevents(2).
+pub fn SysIoGetevents(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let id = args.arg0 as u64;
+    let minEvents = args.arg1 as i32;
+    let events = args.arg2 as i32 as usize;
+    let mut eventsAddr = args.arg3 as u64;
+    let timespecAddr = args.arg4 as u64;
+
+    // Sanity check arguments.
+    if minEvents < 0 || minEvents > events as i32 {
+        return Err(Error::SysError(SysErr::EINVAL))
+    }
+
+    let ctx = match task.mm.LookupAIOContext(task, id) {
+        None => return Err(Error::SysError(SysErr::EINVAL)),
+        Some(c) => c
+    };
+
+    let timeout = CopyTimespecIntoDuration(task, timespecAddr)?;
+
+    let timeout = if timeout == -1 {
+        None
+    } else {
+        Some(timeout)
+    };
+
+    for count in 0..events {
+        let event;
+        if count >= minEvents as usize {
+            match ctx.PopRequest() {
+                None => return Ok(count as i64),
+                Some(v) => event = v,
+            }
+         } else {
+            match WaitForRequest(&ctx, task, timeout) {
+                Err(e) => {
+                    if count > 0 || e == Error::SysError(SysErr::ETIMEDOUT){
+                        return Ok(count as i64)
+                    }
+
+                    return Err(e)
+                }
+                Ok(v) => event = v,
+            }
+        }
+
+        let eventPtr = match task.GetTypeMut(eventsAddr) {
+            Err(e) => {
+                if count > 0 {
+                    return Ok(count as i64)
+                }
+
+                return Err(e)
+            }
+            Ok(e) => e,
+        };
+
+        *eventPtr = event;
+        eventsAddr += IOEVENT_SIZE;
+    }
+
+    return Ok(events as i64)
+}
+
+pub fn WaitForRequest(ctx: &AIOContext, task: &Task, timeout: Option<Duration>) -> Result<IOEvent> {
+    match ctx.PopRequest() {
+        None => (),
+        Some(v) => return Ok(v)
+    }
+
+    let general = task.blocker.generalEntry.clone();
+    ctx.EventRegister(task, &general, EVENT_IN | EVENT_HUP);
+    defer!(ctx.EventUnregister(task, &general));
+
+    let mut timeout = timeout;
+    loop {
+        match ctx.PopRequest() {
+            None => (),
+            Some(v) => return Ok(v)
+        }
+
+        let (remain, err) = task.blocker.BlockWithMonoTimeout(true, timeout);
+        match err {
+            Ok(()) => {
+                timeout = Some(remain);
+            }
+            Err(e) => {
+                return Err(e)
+            }
+        }
+    }
+}
+
+pub fn SysIOSubmit(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let id = args.arg0 as u64;
+    let nrEvents = args.arg1 as i32;
+    let mut addr = args.arg2 as u64;
+
+    // Sanity check arguments.
+    if nrEvents < 0 {
+        return Err(Error::SysError(SysErr::EINVAL))
+    }
+
+    for i in 0..nrEvents as usize {
+        let cbAddr : u64 = *match task.GetType(addr) {
+            Err(e) => {
+                if i > 0 {
+                    // Some successful.
+                    return Ok(i as i64)
+                }
+
+                return Err(e)
+            }
+            Ok(ptr) => ptr,
+        };
+
+        // Copy in this callback.
+        let cb : IOCallback = *match task.GetType(cbAddr) {
+            Err(e) => {
+                if i > 0 {
+                    // Some successful.
+                    return Ok(i as i64)
+                }
+                return Err(e)
+            }
+            Ok(c) => c,
+        };
+
+        match SubmitCallback(task, id, &cb, cbAddr) {
+            Err(e) => {
+                if i > 0 {
+                    // Partial success.
+                    return Ok(i as i64)
+                }
+
+                return Err(e)
+            }
+            Ok(()) => ()
+        }
+
+        addr += 8;
+    }
+
+    return Ok(nrEvents as i64)
+}
+
+pub fn SubmitCallback(task: &Task, id: u64, cb: &IOCallback, cbAddr: u64) -> Result<()> {
+    let file = task.GetFile(cb.fd as i32)?;
+
+    let eventfops = if cb.flags & IOCB_FLAG_RESFD as u32 != 0 {
+        let eventFile = task.GetFile(cb.resfd as i32)?;
+
+        let eventfops = match eventFile.FileOp.as_any().downcast_ref::<EventOperations>() {
+            None => {
+                return Err(Error::SysError(SysErr::EINVAL))
+            }
+            Some(e) => {
+                e.clone()
+            }
+        };
+
+        Some(eventfops)
+    } else {
+        None
+    };
+
+    match cb.opcode {
+        IOCB_CMD_PREAD |
+        IOCB_CMD_PWRITE |
+        IOCB_CMD_PREADV |
+        IOCB_CMD_PWRITEV => {
+            if cb.offset < 0 {
+                return Err(Error::SysError(SysErr::EINVAL))
+            }
+        }
+        _ => ()
+    }
+
+    let ctx = match task.mm.LookupAIOContext(task, id) {
+        Some(ctx) => ctx,
+        None => {
+            return Err(Error::SysError(SysErr::EINVAL))
+        }
+    };
+
+    if !ctx.Prepare() {
+        // Context is busy.
+        return Err(Error::SysError(SysErr::EAGAIN))
+    }
+
+    return PerformanceCallback(task, &file, cbAddr, cb, &ctx, eventfops)
+}
+
+pub fn PerformanceCallback(task: &Task, file: &File, cbAddr: u64, cb: &IOCallback, ctx: &AIOContext, eventfops: Option<EventOperations>) -> Result<()> {
+    let inode = file.Dirent.Inode();
+    let iops = inode.lock().InodeOp.clone();
+    let iops = match iops.as_any().downcast_ref::<HostInodeOp>() {
+        None => {
+            error!("can't do aio on file type {:?}", file.FileType());
+            return Err(Error::SysError(SysErr::EINVAL))
+        }
+        Some(e) => {
+            e.clone()
+        }
+    };
+
+    let fd = iops.HostFd();
+    let mut cb = *cb;
+    cb.fd = fd as u32;
+
+    match cb.opcode {
+        IOCB_CMD_PREAD => {
+            let ops = AIORead::NewRead(task, ctx.clone(), &cb, cbAddr, eventfops)?;
+            IOURING.AUCall(AsyncOps::AIORead(ops));
+        }
+        IOCB_CMD_PREADV => {
+            let ops = AIORead::NewReadv(task, ctx.clone(), &cb, cbAddr, eventfops)?;
+            IOURING.AUCall(AsyncOps::AIORead(ops));
+        }
+        IOCB_CMD_PWRITE => {
+            let ops = AIOWrite::NewWrite(task, ctx.clone(), &cb, cbAddr, eventfops)?;
+            IOURING.AUCall(AsyncOps::AIOWrite(ops));
+        }
+        IOCB_CMD_PWRITEV => {
+            let ops = AIOWrite::NewWritev(task, ctx.clone(), &cb, cbAddr, eventfops)?;
+            IOURING.AUCall(AsyncOps::AIOWrite(ops));
+        }
+        IOCB_CMD_FSYNC => {
+            let ops = AIOFsync::New(task, ctx.clone(), &cb, cbAddr, eventfops, false)?;
+            IOURING.AUCall(AsyncOps::AIOFsync(ops));
+        }
+        IOCB_CMD_FDSYNC => {
+            let ops = AIOFsync::New(task, ctx.clone(), &cb, cbAddr, eventfops, true)?;
+            IOURING.AUCall(AsyncOps::AIOFsync(ops));
+        }
+        _ => {
+            panic!("PerformanceCallback get unsupported aio {}", cb.opcode)
+            //return Err(Error::SysError(SysErr::EINVAL))
+        }
+    }
+
+    return Ok(())
+}
+
+// IoCancel implements linux syscall io_cancel(2).
+//
+// It is not presently supported (ENOSYS indicates no support on this
+// architecture).
+pub fn SysIOCancel(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
     return Err(Error::SysError(SysErr::ENOSYS))
 }

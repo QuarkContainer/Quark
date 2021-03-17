@@ -12,31 +12,41 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use lazy_static::lazy_static;
+//use lazy_static::lazy_static;
 
 use super::super::super::qlib::mem::seq::*;
-use super::super::super::qlib::mem::pool::*;
+//use super::super::super::qlib::mem::pool::*;
 use super::super::super::qlib::common::*;
 
 pub const BUF_SIZE : usize = 32;
 
-lazy_static! {
+/*lazy_static! {
     pub static ref BUF_POOL : Pool<Buffer> = Pool::New(BUF_SIZE);
-}
+}*/
 
 pub fn NewBuff() -> Buffer {
+    // BUF_POOL usage leads to memory disorder. todo: root cause this.
+    /*info!("NewBuff1 .... {:x}", task.ioUsage.WriteSyscallAddr());
     match BUF_POOL.Pop() {
-        None => return Buffer::default(),
+        None => {
+            info!("NewBuff2 .... {:x}", task.ioUsage.WriteSyscallAddr());
+            let ret = Buffer::default();
+            info!("NewBuff3 .... {:x}", task.ioUsage.WriteSyscallAddr());
+            return ret;
+        },
         Some(mut b) => {
+            info!("NewBuff4 .... {:x}", task.ioUsage.WriteSyscallAddr());
             b.read = 0;
             b.write = 0;
             return b
         },
-    }
+    }*/
+
+    return Buffer::default();
 }
 
-pub fn ReturnBuff(buf: Buffer) {
-    BUF_POOL.Push(buf)
+pub fn ReturnBuff(_buf: Buffer) {
+    //BUF_POOL.Push(buf)
 }
 
 // buffer encapsulates a queueable byte buffer.

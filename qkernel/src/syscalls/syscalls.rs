@@ -301,10 +301,10 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysSchedGetaffinity, //sys_sched_getaffinity,
     NotImplementSyscall, //sys_set_thread_area,
     SysIoSetup, //sys_io_setup,
-    NotImplementSyscall, //sys_io_destroy,
-    NotImplementSyscall, //sys_io_getevents,
-    NotImplementSyscall, //sys_io_submit,
-    NotImplementSyscall, //sys_io_cancel,    //210
+    SysIoDestroy, //sys_io_destroy,
+    SysIoGetevents, //sys_io_getevents,
+    SysIOSubmit, //sys_io_submit,
+    SysIOCancel, //sys_io_cancel,    //210
     NotImplementSyscall, //sys_get_thread_area,
     NotImplementSyscall, //sys_lookup_dcookie,
     SysEpollCreate, //sys_epoll_create,

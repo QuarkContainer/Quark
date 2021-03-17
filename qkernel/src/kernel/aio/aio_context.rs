@@ -141,7 +141,7 @@ impl MemoryManager {
         };
 
         let id = addr;
-        let ret = !self.write().aioManager.NewAIOContext(events, id);
+        let ret = self.write().aioManager.NewAIOContext(events, id);
         if !ret {
             self.MUnmap(task, addr, AIOContext::AIO_RINGBUF_SIZE)?;
             return Err(Error::SysError(SysErr::EINVAL))
@@ -187,19 +187,66 @@ impl MemoryManager {
     }
 }
 
-#[derive(Default)]
-pub struct IOResult {
 
+// I/O commands.
+pub const IOCB_CMD_PREAD   : u16 = 0;
+pub const IOCB_CMD_PWRITE  : u16 = 1;
+pub const IOCB_CMD_FSYNC   : u16 = 2;
+pub const IOCB_CMD_FDSYNC  : u16 = 3;
+pub const IOCB_CMD_NOOP    : u16 = 6;
+pub const IOCB_CMD_PREADV  : u16 = 7;
+pub const IOCB_CMD_PWRITEV : u16 = 8;
+
+// I/O flags.
+pub const IOCB_FLAG_RESFD : i32 = 1;
+
+// ioCallback describes an I/O request.
+//
+// The priority field is currently ignored in the implementation below.
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy)]
+pub struct IOCallback {
+    pub data: u64,
+    pub key: u32,
+    pub rw_flags: i32,
+
+    pub opcode: u16,
+    pub reqprio: i16,
+    pub fd: u32,
+
+    pub buf: u64,
+    pub bytes: u64,
+    pub offset: i64,
+
+    pub reserved2: u64,
+    pub flags: u32,
+
+    // eventfd to signal if IOCB_FLAG_RESFD is set in flags.
+    pub resfd: u32,
 }
+
+// ioEvent describes an I/O result.
+#[repr(C)]
+#[derive(Default, Debug)]
+pub struct IOEvent {
+    pub data    : u64,
+    pub obj     : u64,
+    pub result  : i64,
+    pub result2 : i64,
+}
+
+pub const IOEVENT_SIZE : u64 = 32; // sizeof(IOEvent)
 
 #[derive(Default)]
 pub struct AIOContextIntern {
     // results is the set of completed requests.
-    pub results: VecDeque<IOResult>,
+    pub results: VecDeque<IOEvent>,
 
     // maxOutstanding is the maximum number of outstanding entries; this value
     // is immutable.
     pub maxOutstanding: usize,
+
+    pub outstanding: usize,
 
     // dead is set when the context is destroyed.
     pub dead: bool,
@@ -268,10 +315,12 @@ impl AIOContext {
     // Prepare reserves space for a new request, returning true if available.
     // Returns false if the context is busy.
     pub fn Prepare(&self) -> bool {
-        let aio = self.lock();
-        if aio.results.len() > aio.maxOutstanding {
+        let mut aio = self.lock();
+        if aio.outstanding >= aio.maxOutstanding {
             return false;
         }
+
+        aio.outstanding += 1;
 
         return true
     }
@@ -279,11 +328,15 @@ impl AIOContext {
 
     // PopRequest pops a completed request if available, this function does not do
     // any blocking. Returns false if no request is available.
-    pub fn PopRequest(&self) -> Option<IOResult> {
+    pub fn PopRequest(&self) -> Option<IOEvent> {
         let mut aio = self.lock();
         let ret = aio.results.pop_front();
         if aio.results.len() == 0 && aio.dead {
             aio.queue.Notify(EVENT_HUP);
+        }
+
+        if ret.is_some() {
+            aio.outstanding -= 1;
         }
 
         return ret;
@@ -291,12 +344,16 @@ impl AIOContext {
 
     // FinishRequest finishes a pending request. It queues up the data
     // and notifies listeners.
-    pub fn FinishRequest(&self, data: IOResult) {
+    pub fn FinishRequest(&self, data: IOEvent) {
         let mut aio = self.lock();
-
         aio.results.push_back(data);
+
+        use alloc::vec::Vec;
+        let mut v = Vec::new();
+        for r in &aio.results {
+            v.push(r.obj);
+        }
+
         aio.queue.Notify(EVENT_IN);
     }
-
-
 }

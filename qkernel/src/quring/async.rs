@@ -19,10 +19,14 @@ use spin::Mutex;
 use core::ops::Deref;
 
 use super::super::qlib::linux_def::*;
-use super::super::fs::file::*;
+use super::super::qlib::common::*;
 use super::super::qlib::uring::squeue;
 use super::super::qlib::uring::opcode::*;
 use super::super::qlib::uring::opcode;
+use super::super::fs::file::*;
+use super::super::task::*;
+use super::super::kernel::aio::aio_context::*;
+use super::super::kernel::eventfd::*;
 use super::super::BUF_MGR;
 use super::super::socket::hostinet::socket::*;
 use super::super::IOURING;
@@ -38,6 +42,9 @@ pub enum AsyncOps {
     AsycnRecvMsg(AsycnRecvMsg),
     AsyncSocketSend(AsyncSocketSend),
     AsyncSocketRecv(AsyncSocketRecv),
+    AIOWrite(AIOWrite),
+    AIORead(AIORead),
+    AIOFsync(AIOFsync),
     None,
 }
 
@@ -52,6 +59,9 @@ impl AsyncOps {
             AsyncOps::AsycnRecvMsg(ref msg) => return msg.SEntry(),
             AsyncOps::AsyncSocketSend(ref msg) => return msg.SEntry(),
             AsyncOps::AsyncSocketRecv(ref msg) => return msg.SEntry(),
+            AsyncOps::AIOWrite(ref msg) => return msg.SEntry(),
+            AsyncOps::AIORead(ref msg) => return msg.SEntry(),
+            AsyncOps::AIOFsync(ref msg) => return msg.SEntry(),
             AsyncOps::None => ()
         };
 
@@ -68,6 +78,9 @@ impl AsyncOps {
             AsyncOps::AsycnRecvMsg(ref mut msg) => msg.Process(result),
             AsyncOps::AsyncSocketSend(ref mut msg) => msg.Process(result),
             AsyncOps::AsyncSocketRecv(ref mut msg) => msg.Process(result),
+            AsyncOps::AIOWrite(ref mut msg) => msg.Process(result),
+            AsyncOps::AIORead(ref mut msg) => msg.Process(result),
+            AsyncOps::AIOFsync(ref mut msg) => msg.Process(result),
             AsyncOps::None => panic!("AsyncOps::None SEntry fail"),
         };
 
@@ -86,6 +99,9 @@ impl AsyncOps {
             AsyncOps::AsycnRecvMsg(_) => return 6,
             AsyncOps::AsyncSocketSend(_) => return 7,
             AsyncOps::AsyncSocketRecv(_) => return 8,
+            AsyncOps::AIOWrite(_) => return 9,
+            AsyncOps::AIORead(_) => return 10,
+            AsyncOps::AIOFsync(_) => return 11,
             AsyncOps::None => ()
         };
 
@@ -528,5 +544,224 @@ impl AsycnRecvMsgIntern {
         self.msg.iovLen = cnt;
         self.msg.msgName =  &self.remoteAddr[0] as * const _ as u64;
         self.msg.nameLen =  self.remoteAddr.len() as u32;
+    }
+}
+
+pub struct AIOWrite {
+    pub fd: i32,
+    pub iovs: Vec<IoVec>,
+    pub offset: i64,
+
+    pub cbAddr: u64,
+    pub cbData: u64,
+    pub ctx: AIOContext,
+    pub eventfops: Option<EventOperations>,
+}
+
+impl AIOWrite {
+    pub fn NewWrite(task: &Task, ctx: AIOContext, cb: &IOCallback, cbAddr: u64, eventfops: Option<EventOperations>) -> Result<Self> {
+        let iov = IoVec::NewFromAddr(cb.buf, cb.bytes as usize);
+
+        let srcs : [IoVec; 1] = [iov];
+        let mut iovs = Vec::new();
+        task.V2PIovs(&srcs, false, &mut iovs)?;
+
+        return Ok(Self {
+            fd: cb.fd as i32,
+            iovs: iovs,
+            offset: cb.offset,
+            cbAddr: cbAddr,
+            cbData: cb.data,
+            ctx: ctx,
+            eventfops: eventfops,
+        })
+    }
+
+    pub fn NewWritev(task: &Task, ctx: AIOContext, cb: &IOCallback, cbAddr: u64, eventfops: Option<EventOperations>) -> Result<Self> {
+        let srcs = task.IovsFromAddr(cb.buf, cb.bytes as usize)?;
+
+        let mut iovs = Vec::new();
+        task.V2PIovs(&srcs, false, &mut iovs)?;
+
+        return Ok(Self {
+            fd: cb.fd as i32,
+            iovs: iovs,
+            offset: cb.offset,
+            cbAddr: cbAddr,
+            cbData: cb.data,
+            ctx: ctx,
+            eventfops: eventfops,
+        })
+    }
+
+    pub fn SEntry(&self) -> squeue::Entry {
+        let op = Writev::new(types::Fd(self.fd), &self.iovs[0] as * const _ as * const u64, self.iovs.len() as u32)
+                    .offset(self.offset);
+
+        return op.build()
+            .flags(squeue::Flags::FIXED_FILE);
+    }
+
+    pub fn Process(&mut self, result: i32) -> bool {
+        let ev = IOEvent {
+            data: self.cbData,
+            obj: self.cbAddr,
+            result: result as i64,
+            result2: 0,
+        };
+
+        // Queue the result for delivery.
+        self.ctx.FinishRequest(ev);
+
+        // Notify the event file if one was specified. This needs to happen
+        // *after* queueing the result to avoid racing with the thread we may
+        // wake up.
+        match &self.eventfops {
+            None => (),
+            Some(ref eventfops) => {
+                eventfops.Signal(1).expect("AIOWrite eventfops signal fail");
+            }
+        }
+
+        return false
+    }
+}
+
+pub struct AIORead {
+    pub fd: i32,
+    pub iovs: Vec<IoVec>,
+    pub offset: i64,
+
+    pub cbAddr: u64,
+    pub cbData: u64,
+    pub ctx: AIOContext,
+    pub eventfops: Option<EventOperations>,
+}
+
+impl AIORead {
+    pub fn NewRead(task: &Task, ctx: AIOContext, cb: &IOCallback, cbAddr: u64, eventfops: Option<EventOperations>) -> Result<Self> {
+        let iov = IoVec::NewFromAddr(cb.buf, cb.bytes as usize);
+
+        let dsts : [IoVec; 1] = [iov];
+        let mut iovs = Vec::new();
+        task.V2PIovs(&dsts, true, &mut iovs)?;
+
+        return Ok(Self {
+            fd: cb.fd as i32,
+            iovs: iovs,
+            offset: cb.offset,
+            cbAddr: cbAddr,
+            cbData: cb.data,
+            ctx: ctx,
+            eventfops: eventfops,
+        })
+    }
+
+    pub fn NewReadv(task: &Task, ctx: AIOContext, cb: &IOCallback, cbAddr: u64, eventfops: Option<EventOperations>) -> Result<Self> {
+        let dsts = task.IovsFromAddr(cb.buf, cb.bytes as usize)?;
+        let mut iovs = Vec::new();
+        task.V2PIovs(&dsts, true, &mut iovs)?;
+
+        return Ok(Self {
+            fd: cb.fd as i32,
+            iovs: iovs,
+            offset: cb.offset,
+            cbAddr: cbAddr,
+            cbData: cb.data,
+            ctx: ctx,
+            eventfops: eventfops,
+        })
+    }
+
+    pub fn SEntry(&self) -> squeue::Entry {
+        let op = Readv::new(types::Fd(self.fd), &self.iovs[0] as * const _ as * const u64, self.iovs.len() as u32)
+            .offset(self.offset);
+
+
+        return op.build()
+            .flags(squeue::Flags::FIXED_FILE);
+    }
+
+    pub fn Process(&mut self, result: i32) -> bool {
+        let ev = IOEvent {
+            data: self.cbData,
+            obj: self.cbAddr,
+            result: result as i64,
+            result2: 0,
+        };
+
+        // Queue the result for delivery.
+        self.ctx.FinishRequest(ev);
+
+        // Notify the event file if one was specified. This needs to happen
+        // *after* queueing the result to avoid racing with the thread we may
+        // wake up.
+        match &self.eventfops {
+            None => (),
+            Some(ref eventfops) => {
+                eventfops.Signal(1).expect("AIOWrite eventfops signal fail");
+            }
+        }
+
+        return false
+    }
+}
+
+pub struct AIOFsync {
+    pub fd: i32,
+    pub dataSyncOnly: bool,
+
+    pub cbAddr: u64,
+    pub cbData: u64,
+    pub ctx: AIOContext,
+    pub eventfops: Option<EventOperations>,
+}
+
+impl AIOFsync {
+    pub fn New(_task: &Task, ctx: AIOContext, cb: &IOCallback, cbAddr: u64, eventfops: Option<EventOperations>, dataSyncOnly: bool) -> Result<Self> {
+        return Ok(Self {
+            fd: cb.fd as i32,
+            dataSyncOnly: dataSyncOnly,
+            cbAddr: cbAddr,
+            cbData: cb.data,
+            ctx: ctx,
+            eventfops: eventfops,
+        })
+    }
+
+    pub fn SEntry(&self) -> squeue::Entry {
+        let op = if self.dataSyncOnly {
+            Fsync::new(types::Fd(self.fd))
+                .flags(types::FsyncFlags::DATASYNC)
+        } else {
+            Fsync::new(types::Fd(self.fd))
+        };
+
+        return op.build()
+            .flags(squeue::Flags::FIXED_FILE);
+    }
+
+    pub fn Process(&mut self, result: i32) -> bool {
+        let ev = IOEvent {
+            data: self.cbData,
+            obj: self.cbAddr,
+            result: result as i64,
+            result2: 0,
+        };
+
+        // Queue the result for delivery.
+        self.ctx.FinishRequest(ev);
+
+        // Notify the event file if one was specified. This needs to happen
+        // *after* queueing the result to avoid racing with the thread we may
+        // wake up.
+        match &self.eventfops {
+            None => (),
+            Some(ref eventfops) => {
+                eventfops.Signal(1).expect("AIOWrite eventfops signal fail");
+            }
+        }
+
+        return false
     }
 }

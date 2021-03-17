@@ -86,7 +86,6 @@ impl FileOperations for Writer {
     fn WriteAt(&self, task: &Task, _f: &File, srcs: &[IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
         let srcs = BlockSeq::NewFromSlice(srcs);
 
-        //info!("Pipe::WriteAt 1....");
         let n = match self.pipe.Write(task, srcs) {
             Err(e) => {
                 //info!("Pipe::WriteAt 2.... e is {:?}", e);
