@@ -266,7 +266,7 @@ impl Pipe {
                 dst = dst.DropFirst(n as u64);
 
                 // Empty buffer?
-                if first.Empty() {
+                if first.borrow().Empty() {
                     needPop = true;
                 }
             }
@@ -314,7 +314,7 @@ impl Pipe {
         let mut done = 0;
         while src.NumBytes() > 0 {
             // Need a new buffer?
-            if p.data.back().is_none() || p.data.back().as_ref().unwrap().Full() {
+            if p.data.back().is_none() || p.data.back().as_ref().unwrap().borrow().Full() {
                 p.data.push_back(NewBuff());
             }
 

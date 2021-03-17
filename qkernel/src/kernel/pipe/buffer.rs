@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//use lazy_static::lazy_static;
+use alloc::boxed::Box;
+use core::cell::RefCell;
+use core::ops::Deref;
 
 use super::super::super::qlib::mem::seq::*;
-//use super::super::super::qlib::mem::pool::*;
 use super::super::super::qlib::common::*;
 
 pub const BUF_SIZE : usize = 32;
@@ -25,28 +26,10 @@ pub const BUF_SIZE : usize = 32;
 }*/
 
 pub fn NewBuff() -> Buffer {
-    // BUF_POOL usage leads to memory disorder. todo: root cause this.
-    /*info!("NewBuff1 .... {:x}", task.ioUsage.WriteSyscallAddr());
-    match BUF_POOL.Pop() {
-        None => {
-            info!("NewBuff2 .... {:x}", task.ioUsage.WriteSyscallAddr());
-            let ret = Buffer::default();
-            info!("NewBuff3 .... {:x}", task.ioUsage.WriteSyscallAddr());
-            return ret;
-        },
-        Some(mut b) => {
-            info!("NewBuff4 .... {:x}", task.ioUsage.WriteSyscallAddr());
-            b.read = 0;
-            b.write = 0;
-            return b
-        },
-    }*/
-
     return Buffer::default();
 }
 
 pub fn ReturnBuff(_buf: Buffer) {
-    //BUF_POOL.Push(buf)
 }
 
 // buffer encapsulates a queueable byte buffer.
@@ -59,15 +42,26 @@ pub fn ReturnBuff(_buf: Buffer) {
 // to limit excessive segmentation.
 //
 
+#[derive(Default)]
+pub struct Buffer(pub Box<RefCell<BufferIntern>>);
+
+impl Deref for Buffer {
+    type Target = Box<RefCell<BufferIntern>>;
+
+    fn deref(&self) -> &Box<RefCell<BufferIntern>> {
+        &self.0
+    }
+}
+
 #[repr(C)]
-pub struct Buffer {
+pub struct BufferIntern {
     pub data: [u8; 8144],
     pub read: usize,
     pub write: usize,
 }
 
 
-impl Default for Buffer {
+impl Default for BufferIntern {
     fn default() -> Self {
         return Self {
             data: [0; 8144],
@@ -77,7 +71,7 @@ impl Default for Buffer {
     }
 }
 
-impl Buffer {
+impl BufferIntern {
     // Reset resets internal data.
     //
     // This must be called before use.
@@ -106,7 +100,7 @@ impl Buffer {
 
 impl BlockSeqReader for Buffer {
     fn ReadToBlocks(&mut self, dsts: BlockSeq) -> Result<usize> {
-        let b = self;
+        let mut b = self.borrow_mut();
         let n = dsts.CopyOut(&b.data[b.read..b.write]);
         b.read += n;
         return Ok(n)
@@ -115,7 +109,7 @@ impl BlockSeqReader for Buffer {
 
 impl BlockSeqWriter for Buffer {
     fn WriteFromBlocks(&mut self, srcs: BlockSeq) -> Result<usize> {
-        let mut b = self;
+        let mut b = self.borrow_mut();
         let write = b.write;
         let n = srcs.CopyIn(&mut b.data[write..]);
         b.write += n;
