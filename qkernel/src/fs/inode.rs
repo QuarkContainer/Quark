@@ -196,6 +196,10 @@ impl Inode {
         return Self(Arc::new(Mutex::new(inodeInternal)))
     }
 
+    pub fn WouldBlock(&self) -> bool {
+        return self.lock().InodeOp.WouldBlock();
+    }
+
     pub fn NewHostInode(msrc: &Arc<Mutex<MountSource>>, fd: i32, fstat: &LibcStat, writeable: bool) -> Result<Self> {
         //info!("after fstat: {:?}", fstat.StableAttr());
 

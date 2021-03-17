@@ -365,6 +365,10 @@ impl Mapping for File {
 }
 
 impl File {
+    pub fn WouldBlock(&self) -> bool {
+        return self.Dirent.Inode().WouldBlock()
+    }
+
     pub fn FileType(&self) -> InodeFileType {
         let d = self.Dirent.clone();
         let inode = d.Inode();

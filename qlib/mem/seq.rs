@@ -96,7 +96,7 @@ impl BlockSeq {
 
         while !bs.IsEmpty() {
             let first = bs.Head();
-            bs = bs.DropFirst(first.Len() as u64);
+            bs = bs.Tail();
             ret.push(first);
         }
 
@@ -302,12 +302,9 @@ pub fn BlockSeqToIoVecs(bs: BlockSeq) -> Vec<IoVec> {
 
     let mut bs = bs;
     while !bs.IsEmpty() {
-        let b = bs.Head();
+        let iov = bs.Head();
 
-        iovs.push(IoVec {
-            start: &b.ToSlice()[0] as *const _ as u64,
-            len: b.len,
-        });
+        iovs.push(iov);
 
         bs = bs.Tail();
     }
