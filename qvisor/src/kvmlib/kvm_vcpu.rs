@@ -161,7 +161,7 @@ impl KVMVcpu {
         unsafe {
             (*tssSegment).interrupt_stack_table[0] = stack_end;
             (*tssSegment).iomap_base = -1 as i16 as u16;
-            info!("the tssSegment stack is {:x}", self.tssIntStackStart + MemoryDef::INTERRUPT_STACK_PAGES * MemoryDef::PAGE_SIZE);
+            info!("[{}] the tssSegment stack is {:x}", self.id, self.tssIntStackStart + MemoryDef::INTERRUPT_STACK_PAGES * MemoryDef::PAGE_SIZE);
             let (tssLow, tssHigh, limit) = Self::TSStoDescriptor(&(*tssSegment));
 
             gdtTbl[5] = tssLow;
@@ -264,7 +264,7 @@ impl KVMVcpu {
 
         //let mut localStr: Vec<u8> = Vec::new();
 
-        info!("start enter guest: entry is {:x}, stack is {:x}", self.entry, self.topStackAddr);
+        info!("start enter guest[{}]: entry is {:x}, stack is {:x}", self.id, self.entry, self.topStackAddr);
         loop {
             match self.vcpu.run().expect("kvm virtual cpu run failed") {
                 VcpuExit::IoIn(addr, data) => {

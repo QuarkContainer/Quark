@@ -16,12 +16,12 @@
 use super::super::task::*;
 use super::super::kernel::aio::aio_context::*;
 use super::super::kernel::eventfd::*;
+use super::super::kernel::time::*;
 use super::super::kernel::waiter::*;
 use super::super::fs::file::*;
 use super::super::fs::host::hostinodeop::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
-use super::super::qlib::linux::time::*;
 use super::super::syscalls::syscalls::*;
 use super::super::quring::async::*;
 use super::super::IOURING;
@@ -85,10 +85,10 @@ pub fn SysIoGetevents(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let timeout = CopyTimespecIntoDuration(task, timespecAddr)?;
 
-    let timeout = if timeout == -1 {
+    let deadline = if timeout == -1 {
         None
     } else {
-        Some(timeout)
+        Some(Task::MonoTimeNow().Add(timeout))
     };
 
     for count in 0..events {
@@ -99,7 +99,7 @@ pub fn SysIoGetevents(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 Some(v) => event = v,
             }
          } else {
-            match WaitForRequest(&ctx, task, timeout) {
+            match WaitForRequest(&ctx, task, deadline) {
                 Err(e) => {
                     if count > 0 || e == Error::SysError(SysErr::ETIMEDOUT){
                         return Ok(count as i64)
@@ -129,7 +129,7 @@ pub fn SysIoGetevents(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     return Ok(events as i64)
 }
 
-pub fn WaitForRequest(ctx: &AIOContext, task: &Task, timeout: Option<Duration>) -> Result<IOEvent> {
+pub fn WaitForRequest(ctx: &AIOContext, task: &Task, dealine: Option<Time>) -> Result<IOEvent> {
     match ctx.PopRequest() {
         None => (),
         Some(v) => return Ok(v)
@@ -139,18 +139,15 @@ pub fn WaitForRequest(ctx: &AIOContext, task: &Task, timeout: Option<Duration>) 
     ctx.EventRegister(task, &general, EVENT_IN | EVENT_HUP);
     defer!(ctx.EventUnregister(task, &general));
 
-    let mut timeout = timeout;
     loop {
         match ctx.PopRequest() {
             None => (),
             Some(v) => return Ok(v)
         }
 
-        let (remain, err) = task.blocker.BlockWithMonoTimeout(true, timeout);
+        let err = task.blocker.BlockWithMonoTimer(true, dealine);
         match err {
-            Ok(()) => {
-                timeout = Some(remain);
-            }
+            Ok(()) => (),
             Err(e) => {
                 return Err(e)
             }

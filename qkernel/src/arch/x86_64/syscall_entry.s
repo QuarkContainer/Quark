@@ -164,6 +164,7 @@ context_swap_to:
     push r10
     push r11
 
+    // switch to task kernel stack
     mov rdi, rsp
     // cs of call, if it from user, last 3 bit is 0b11
     mov rsi, [rsp + 11*8]
@@ -172,7 +173,7 @@ context_swap_to:
     jz 1f
     //load kernel rsp
     swapgs
-    mov rsi, gs:0
+    mov rsp, gs:0
     swapgs
     jmp 2f
     1:
@@ -181,9 +182,8 @@ context_swap_to:
     2:
     sub rsi, 15 * 8
     mov rdx, 15
+    mov rsi, rsp
     call CopyData
-    //switch to kernel stack
-    mov rsp, rsi
 
     push rbx
     push rbp
@@ -315,7 +315,6 @@ context_swap_to:
     mov rsi, [rsp + 11*8]
     //caused in user mode?
     and rsi, 0b11
-
     jz 1f
     //load kernel rsp
     swapgs

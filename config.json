@@ -4,5 +4,5 @@
   "SlowPrint"     : false,
   "LogLevel"      : "Complex",
   "TcpBuffIO"     : true,
-  "EnableAIO"     : false
+  "EnableAIO"     : true
 }

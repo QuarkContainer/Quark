@@ -93,7 +93,7 @@ lazy_static! {
         idt.set_handler(3, breakpoint_handler).set_stack_index(0).set_privilege_level(3);
         idt.set_handler(4, overflow_handler).set_stack_index(0);
         idt.set_handler(5, bound_range_handler).set_stack_index(0);
-        idt.set_handler(6, invalid_op_handler).set_stack_index(0);
+        idt.set_handler(6, invalid_op_handler).set_stack_index(0).set_privilege_level(3);
         idt.set_handler(7, device_not_available_handler).set_stack_index(0);
         idt.set_handler(8, double_fault_handler).set_stack_index(0);
 
@@ -141,13 +141,14 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, _errorC
 
     // is this call from user
     if sf.ss & 0x3 != 0 {
-        currTask.AccountTaskLeave(SchedState::RunningApp);
-        PerfGofrom(PerfType::User);
         SwapGs();
-    }
+        PerfGofrom(PerfType::User);
+        currTask.AccountTaskLeave(SchedState::RunningApp);
+    } else {
+        panic!("get non page fault exception from kernel ...")
+    };
 
-    //info!("ExceptionHandler ev is {:?}, sf is {:?}, errorCode is {:x}", ev, sf, errorCode);
-
+    //error!("ExceptionHandler  .... ev is {:?}, sf is {:x?}", ev, sf);
     match ev {
         ExceptionStackVec::DivideByZero => {
             let info = SignalInfo {
@@ -247,7 +248,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, _errorC
             sigfault.addr = sf.ip;
             let thread = currTask.Thread();
             thread.forceSignal(Signal(info.Signo), false);
-            thread.SendSignal(&info).expect("DivByZeroHandler send signal fail");
+            thread.SendSignal(&info).expect("InvalidOpcode send signal fail");
         }
         ExceptionStackVec::AlignmentCheck => {
             let info = SignalInfo {
@@ -268,7 +269,12 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, _errorC
     }
 
     MainRun(currTask, TaskRunState::RunApp);
-    currTask.AccountTaskEnter(SchedState::RunningApp);
+
+    /*if fromUser {
+        PerfGoto(PerfType::User);
+        SwapGs();
+        currTask.AccountTaskEnter(SchedState::RunningApp);
+    }*/
 }
 
 #[no_mangle]
