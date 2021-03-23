@@ -686,13 +686,19 @@ impl MemoryManager {
 
         let pt = self.read().pt.clone();
 
+        let len = if ar.Len() > oldar.Len() {
+            oldar.Len()
+        } else {
+            ar.Len()
+        };
+
         match vma.mappable {
             None => {
-                pt.write().RemapAna(task, ar, oldar.Start(), &perms, true)?;
+                pt.write().RemapAna(task, &Range::New(ar.Start(), len), oldar.Start(), &perms, true)?;
             }
             Some(mappable) => {
                 //host file mapping
-                pt.RemapFile(task, ar.Start(), &mappable, &Range::New(vma.offset + ar.Start() - segAr.Start(), ar.Len()), oldar, &perms, precommit)?;
+                pt.RemapFile(task, ar.Start(), &mappable, &Range::New(vma.offset + ar.Start() - segAr.Start(), len), oldar, &perms, precommit)?;
                 self.write().AddRssLock(ar);
             }
         }

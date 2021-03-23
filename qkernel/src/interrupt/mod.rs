@@ -136,6 +136,8 @@ impl fmt::Debug for ExceptionStackFrame {
     }
 }
 
+pub const PRINT_EXECPTION : bool = true;
+
 pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, _errorCode: u64) {
     let currTask = Task::Current();
 
@@ -148,7 +150,10 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, _errorC
         panic!("get non page fault exception from kernel ...")
     };
 
-    //error!("ExceptionHandler  .... ev is {:?}, sf is {:x?}", ev, sf);
+    if PRINT_EXECPTION {
+        error!("ExceptionHandler  .... ev is {:?}, sf is {:x?}", ev, sf);
+    }
+
     match ev {
         ExceptionStackVec::DivideByZero => {
             let info = SignalInfo {
@@ -238,6 +243,14 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, _errorC
             thread.SendSignal(&info).expect("DivByZeroHandler send signal fail");
         }
         ExceptionStackVec::InvalidOpcode => {
+            let map =  currTask.mm.GetSnapshot(currTask, false);
+            let data = unsafe {
+                *(sf.ip as * const u64)
+            };
+
+            print!("InvalidOpcode: data is {:x}, phyAddr is {:x?}, the map is {}",
+                   data, currTask.CheckedV2P(sf.ip), &map);
+
             let info = SignalInfo {
                 Signo: Signal::SIGILL,
                 Code: 1,
@@ -382,7 +395,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     currTask.PerfGoto(PerfType::PageFault);
     defer!(Task::Current().PerfGofrom(PerfType::PageFault));
 
-    if false {
+    if PRINT_EXECPTION {
         error!("in PageFaultHandler, cr2: {:x}, cr3: {:x}, isuser = {}, error is {:b}, ss is {:x}, cs == {:x}, eflags = {:x}, new ss is {}",
             cr2,
             cr3,
@@ -453,7 +466,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     let writeProtectBits = PageFaultErrorCode::PROTECTION_VIOLATION | PageFaultErrorCode::CAUSED_BY_WRITE;
 
     if (errbits & writeProtectBits) == writeProtectBits {
-        if !vma.effectivePerms.Write() {
+        if !vma.effectivePerms.Write() && fromUser {
             HandleFault(currTask, fromUser, errorCode, cr2, sf);
             return
         }
