@@ -376,4 +376,16 @@ impl Task {
 
         return Ok(())
     }
+
+    pub fn V2PBlockSeq(&self, bs: BlockSeq, output: &mut Vec<IoVec>, writable: bool) -> Result<()> {
+        let mut bs = bs;
+        while !bs.IsEmpty() {
+            let iov = bs.Head();
+            self.V2PIov(&iov, output, writable)?;
+
+            bs = bs.Tail();
+        }
+
+        return Ok(())
+    }
 }

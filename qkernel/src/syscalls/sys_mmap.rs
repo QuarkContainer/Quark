@@ -93,7 +93,9 @@ pub fn SysMmap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     }
 
     match task.mm.MMap(task, &mut opts) {
-        Ok(addr) => Ok(addr as i64),
+        Ok(addr) => {
+            Ok(addr as i64)
+        },
         Err(e) => Err(e),
     }
 }
@@ -181,6 +183,8 @@ pub fn SysMadvise(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
 // Mremap implements linux syscall mremap(2).
 pub fn SysMremap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    //return Err(Error::SysError(SysErr::ENODATA));
+
     let oldAddr = args.arg0 as u64;
     let oldSize = args.arg1 as u64;
     let newSize = args.arg2 as u64;

@@ -152,7 +152,7 @@ pub fn ControlMsgCall() -> Result<ControlMsg> {
         let addr = &mut buf[0] as * mut _ as u64;
         let size = Kernel::HostSpace::ControlMsgCall(addr, buf.len()) as usize;
 
-        let msg : ControlMsg = serde_json::from_slice(&buf[0..size]).expect("LoadProcessKernel des fail");
+        let msg : ControlMsg = serde_json::from_slice(&buf[0..size]).expect(&format!("LoadProcessKernel des fail size is {}", size));
         msg
     };
 

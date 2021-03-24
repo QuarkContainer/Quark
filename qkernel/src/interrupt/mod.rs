@@ -93,7 +93,7 @@ lazy_static! {
         idt.set_handler(3, breakpoint_handler).set_stack_index(0).set_privilege_level(3);
         idt.set_handler(4, overflow_handler).set_stack_index(0);
         idt.set_handler(5, bound_range_handler).set_stack_index(0);
-        idt.set_handler(6, invalid_op_handler).set_stack_index(0);
+        idt.set_handler(6, invalid_op_handler).set_stack_index(0).set_privilege_level(3);
         idt.set_handler(7, device_not_available_handler).set_stack_index(0);
         idt.set_handler(8, double_fault_handler).set_stack_index(0);
 
@@ -136,17 +136,23 @@ impl fmt::Debug for ExceptionStackFrame {
     }
 }
 
+pub const PRINT_EXECPTION : bool = false;
+
 pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, _errorCode: u64) {
     let currTask = Task::Current();
 
     // is this call from user
     if sf.ss & 0x3 != 0 {
-        currTask.AccountTaskLeave(SchedState::RunningApp);
-        PerfGofrom(PerfType::User);
         SwapGs();
-    }
+        PerfGofrom(PerfType::User);
+        currTask.AccountTaskLeave(SchedState::RunningApp);
+    } else {
+        panic!("get non page fault exception from kernel ...")
+    };
 
-    //info!("ExceptionHandler ev is {:?}, sf is {:?}, errorCode is {:x}", ev, sf, errorCode);
+    if PRINT_EXECPTION {
+        error!("ExceptionHandler  .... ev is {:?}, sf is {:x?}", ev, sf);
+    }
 
     match ev {
         ExceptionStackVec::DivideByZero => {
@@ -237,6 +243,14 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, _errorC
             thread.SendSignal(&info).expect("DivByZeroHandler send signal fail");
         }
         ExceptionStackVec::InvalidOpcode => {
+            let map =  currTask.mm.GetSnapshot(currTask, false);
+            let data = unsafe {
+                *(sf.ip as * const u64)
+            };
+
+            print!("InvalidOpcode: data is {:x}, phyAddr is {:x?}, the map is {}",
+                   data, currTask.CheckedV2P(sf.ip), &map);
+
             let info = SignalInfo {
                 Signo: Signal::SIGILL,
                 Code: 1,
@@ -247,7 +261,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, _errorC
             sigfault.addr = sf.ip;
             let thread = currTask.Thread();
             thread.forceSignal(Signal(info.Signo), false);
-            thread.SendSignal(&info).expect("DivByZeroHandler send signal fail");
+            thread.SendSignal(&info).expect("InvalidOpcode send signal fail");
         }
         ExceptionStackVec::AlignmentCheck => {
             let info = SignalInfo {
@@ -268,7 +282,12 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, _errorC
     }
 
     MainRun(currTask, TaskRunState::RunApp);
-    currTask.AccountTaskEnter(SchedState::RunningApp);
+
+    /*if fromUser {
+        PerfGoto(PerfType::User);
+        SwapGs();
+        currTask.AccountTaskEnter(SchedState::RunningApp);
+    }*/
 }
 
 #[no_mangle]
@@ -376,7 +395,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     currTask.PerfGoto(PerfType::PageFault);
     defer!(Task::Current().PerfGofrom(PerfType::PageFault));
 
-    if false {
+    if PRINT_EXECPTION {
         error!("in PageFaultHandler, cr2: {:x}, cr3: {:x}, isuser = {}, error is {:b}, ss is {:x}, cs == {:x}, eflags = {:x}, new ss is {}",
             cr2,
             cr3,
@@ -388,6 +407,8 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
             ss
         );
     }
+
+    //defer!(print!("end of in PageFaultHandler ..."));
 
     let lock = currTask.mm.Lock();
     let _l = lock.lock();
@@ -447,7 +468,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     let writeProtectBits = PageFaultErrorCode::PROTECTION_VIOLATION | PageFaultErrorCode::CAUSED_BY_WRITE;
 
     if (errbits & writeProtectBits) == writeProtectBits {
-        if !vma.effectivePerms.Write() {
+        if !vma.effectivePerms.Write() && fromUser {
             HandleFault(currTask, fromUser, errorCode, cr2, sf);
             return
         }

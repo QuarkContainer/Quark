@@ -575,6 +575,7 @@ impl MemoryManager {
 }
 
 // MRemapOpts specifies options to MRemap.
+#[derive(Debug)]
 pub struct MRemapOpts {
     // Move controls whether MRemap moves the remapped mapping to a new address.
     pub Move: MRemapMoveMode,

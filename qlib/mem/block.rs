@@ -13,8 +13,43 @@
 // limitations under the License.
 
 use alloc::slice;
+use alloc::vec::Vec;
 
 use super::super::linux_def::IoVec;
+
+pub struct Iovs<'a>(pub &'a [IoVec]);
+
+impl <'a> Iovs <'a> {
+    pub fn Count(&self) -> usize {
+        let mut count = 0;
+        for iov in self.0 {
+            count += iov.Len();
+        }
+
+        return count;
+    }
+
+    pub fn DropFirst(&self, n: usize) -> Vec<IoVec> {
+        let mut n = n;
+        let mut res = Vec::new();
+
+        for i in 0..self.0.len() {
+            let src = self.0[i];
+            if src.Len() < n {
+                n -= self.0[i].Len()
+            } else {
+                if n > 0 {
+                    res.push(IoVec::NewFromAddr(src.Start() + n as u64, src.Len() - n));
+                    n = 0;
+                } else {
+                    res.push(src);
+                }
+            }
+        }
+
+        return res;
+    }
+}
 
 impl IoVec {
     pub fn New(buf: &[u8]) -> Self {

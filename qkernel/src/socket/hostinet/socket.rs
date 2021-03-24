@@ -591,10 +591,6 @@ impl SockOperations for SocketOperations {
         }
 
         //todo: we don't support MSG_ERRQUEUE
-        if controlDataLen > 0 {
-            panic!("hostinet RecvMsg doesn't support controlDataLen {}", controlDataLen);
-        }
-
         if flags & !(MsgType::MSG_DONTWAIT | MsgType::MSG_PEEK | MsgType::MSG_TRUNC) != 0 {
             return Err(Error::SysError(SysErr::EINVAL))
         }

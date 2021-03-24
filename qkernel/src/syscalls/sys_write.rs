@@ -20,6 +20,7 @@ use super::super::fs::file::*;
 use super::super::task::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
+use super::super::qlib::mem::block::*;
 use super::super::syscalls::syscalls::*;
 use super::super::perflog::*;
 
@@ -59,27 +60,10 @@ pub fn Write(task: &Task, fd: i32, addr: u64, size: i64) -> Result<i64> {
         return Ok(0)
     }
 
-    let mut count = 0;
+    let iov = IoVec::NewFromAddr(addr, size as usize);
+    let iovs: [IoVec; 1] = [iov];
 
-    while count < size as i64 {
-        let iov = IoVec::NewFromAddr(addr + count as u64, (size - count) as usize);
-        let iovs: [IoVec; 1] = [iov];
-
-        match writev(task, &file, &iovs) {
-            Ok(cnt) => {
-                count += cnt;
-            },
-            Err(e) => {
-                if count > 0 {
-                    return Ok(count as i64)
-                }
-
-                return Err(e)
-            }
-        }
-    }
-
-    return Ok(count)
+    return writev(task, &file, &iovs);
 }
 
 pub fn SysPwrite64(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -205,8 +189,41 @@ pub fn Pwritev(task: &Task, fd: i32, addr: u64, iovcnt: i32, offset: i64) -> Res
     return pwritev(task, &file, srcs, offset);
 }
 
+fn RepWritev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
+    let len = Iovs(srcs).Count();
+    let mut count = 0;
+    let mut srcs = srcs;
+    let mut tmp;
+
+    loop {
+        match f.Writev(task, srcs) {
+            Err(e) => {
+                if count > 0 {
+                    return Ok(count)
+                }
+
+                return Err(e)
+            }
+            Ok(n) => {
+                count += n;
+                if count == len as i64 {
+                    return Ok(count)
+                }
+
+                tmp = Iovs(srcs).DropFirst(n as usize);
+                srcs = &tmp;
+            }
+        }
+    }
+}
+
 fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
     task.CheckIOVecPermission(srcs, false)?;
+    let wouldBlock = f.WouldBlock();
+    if !wouldBlock {
+        return RepWritev(task, f, srcs)
+    }
+
     match f.Writev(task, srcs) {
         Err(e) => {
             if e != Error::SysError(SysErr::EWOULDBLOCK) || f.Flags().NonBlocking {
@@ -247,6 +264,9 @@ fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
         }
 
         match task.blocker.BlockWithMonoTimer(true, deadline) {
+            Err(Error::SysError(SysErr::ETIMEDOUT)) => {
+                return Err(Error::SysError(SysErr::EWOULDBLOCK));
+            }
             Err(e) => {
                 return Err(e);
             }
@@ -255,8 +275,42 @@ fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
     }
 }
 
+fn RepPwritev(task: &Task, f: &File, srcs: &[IoVec], offset: i64) -> Result<i64> {
+    let len = Iovs(srcs).Count();
+    let mut count = 0;
+    let mut srcs = srcs;
+    let mut tmp;
+
+    loop {
+        match f.Pwritev(task, srcs, offset + count) {
+            Err(e) => {
+                if count > 0 {
+                    return Ok(count)
+                }
+
+                return Err(e)
+            }
+            Ok(n) => {
+                count += n;
+                if count == len as i64 {
+                    return Ok(count)
+                }
+
+                tmp = Iovs(srcs).DropFirst(n as usize);
+                srcs = &tmp;
+            }
+        }
+    }
+}
+
 fn pwritev(task: &Task, f: &File, srcs: &[IoVec], offset: i64) -> Result<i64> {
     task.CheckIOVecPermission(srcs, false)?;
+
+    let wouldBlock = f.WouldBlock();
+    if !wouldBlock {
+        return RepPwritev(task, f, srcs, offset)
+    }
+
     match f.Pwritev(task, srcs, offset) {
         Err(e) => {
             if e != Error::SysError(SysErr::EWOULDBLOCK) || f.Flags().NonBlocking {

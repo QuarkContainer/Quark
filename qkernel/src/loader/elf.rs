@@ -131,6 +131,25 @@ pub fn ParseHeader(task: &Task, file: &File) -> Result<ElfHeadersInfo>  {
     })
 }
 
+pub fn PHFlagsAsPerms(header: &ProgramHeader64) -> AccessType {
+    let flags = header.flags;
+    let mut perms = 0;
+
+    if flags.is_execute() {
+        perms |= MmapProt::PROT_EXEC;
+    }
+
+    if flags.is_write() {
+        perms |= MmapProt::PROT_WRITE;
+    }
+
+    if flags.is_read() {
+        perms |= MmapProt::PROT_READ;
+    }
+
+    return AccessType(perms)
+}
+
 pub fn MapSegment(task: &Task, file: &File, header: &ProgramHeader64, offset: u64, filesize: i64) -> Result<()> {
     let size = header.file_size;
     let startMem = Addr(header.virtual_addr).RoundDown()?;
@@ -151,7 +170,7 @@ pub fn MapSegment(task: &Task, file: &File, header: &ProgramHeader64, offset: u6
         moptions.Length = endMem.0 - startMem.0;
         moptions.Addr = offset + startMem.0;
         moptions.Fixed = true;
-        moptions.Perms = AccessType::AnyAccess();
+        moptions.Perms = PHFlagsAsPerms(header);
         moptions.MaxPerms = AccessType::AnyAccess();
         moptions.Private = true;
         moptions.Offset = fileOffset.0;

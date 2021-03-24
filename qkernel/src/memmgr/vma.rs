@@ -455,7 +455,7 @@ pub fn MaxKey() -> u64 {
 impl AreaValue for VMA {
     fn Merge(&self, r1: &Range, _r2: &Range, vma2: &VMA) -> Option<VMA> {
         let vma1 = self;
-        if vma1.offset + r1.Len() != vma2.offset {
+        if vma1.mappable.is_some() && vma1.offset + r1.Len() != vma2.offset {
             return None;
         }
 
@@ -466,7 +466,6 @@ impl AreaValue for VMA {
             vma1.private != vma2.private ||
             vma1.growsDown != vma2.growsDown ||
             vma1.kernel != vma2.kernel ||
-            vma1.fixed != vma2.fixed ||
             vma1.hint != vma2.hint {
             return None;
         }
