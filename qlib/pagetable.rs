@@ -307,6 +307,8 @@ impl PageTablesInternal {
             let pteEntry = &mut (*pteTbl)[p1Idx];
             assert!(pteEntry.is_unused());
             pteEntry.set_addr(PhysAddr::new(phyAddrs[0]), PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE);
+
+            Invlpg(vaddr);
         }
     }
 
@@ -369,6 +371,7 @@ impl PageTablesInternal {
             }
 
             pteEntry.set_addr(PhysAddr::new(phyAddr.0), flags);
+            Invlpg(vaddr.0);
         }
 
         return Ok(res);
@@ -564,6 +567,8 @@ impl PageTablesInternal {
                                 }
                                 Ok(_) => (),
                             }
+
+                            Invlpg(start);
                             start += MemoryDef::PAGE_SIZE;
                             p1Idx += 1;
                         }
@@ -805,7 +810,7 @@ impl PageTablesInternal {
         let currAddr = entry.addr().as_u64();
         pagePool.Deref(currAddr)?;
         entry.set_unused();
-        Invlpg(currAddr);
+        //Invlpg(currAddr);
         return Ok(true)
     }
 

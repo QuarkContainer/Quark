@@ -136,7 +136,7 @@ impl fmt::Debug for ExceptionStackFrame {
     }
 }
 
-pub const PRINT_EXECPTION : bool = true;
+pub const PRINT_EXECPTION : bool = false;
 
 pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, _errorCode: u64) {
     let currTask = Task::Current();
@@ -407,6 +407,8 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
             ss
         );
     }
+
+    //defer!(print!("end of in PageFaultHandler ..."));
 
     let lock = currTask.mm.Lock();
     let _l = lock.lock();
