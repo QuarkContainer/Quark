@@ -182,7 +182,7 @@ impl VirtualMachine {
 
         let entry = elf.LoadKernel()?;
         //let vdsoMap = VDSOMemMap::Init(&"/home/brad/rust/quark/vdso/vdso.so".to_string()).unwrap();
-        elf.LoadVDSO(&"/home/brad/rust/quark/vdso/vdso.so".to_string())?;
+        elf.LoadVDSO(&"/usr/local/bin/vdso.so".to_string())?;
         VMS.lock().vdsoAddr = elf.vdsoStart;
 
         let p = entry as *const u8;
