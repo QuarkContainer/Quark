@@ -147,7 +147,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, _errorC
         PerfGofrom(PerfType::User);
         currTask.AccountTaskLeave(SchedState::RunningApp);
     } else {
-        panic!("get non page fault exception from kernel ...")
+        panic!("get non page fault exception from kernel ...ev is {:?}, sf is {:x?}", ev, sf)
     };
 
     if PRINT_EXECPTION {
