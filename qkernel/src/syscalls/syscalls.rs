@@ -152,7 +152,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysGetSockOpt, //sys_getsockopt,
     SysClone, //sys_clone,
     SysFork, //sys_fork,
-    NotImplementSyscall, //sys_vfork,
+    SysVfork, //sys_vfork,
     SysExecve, //sys_execve,
     SysExit, //sys_exit,    //60
     SysWait4, //sys_wait4,

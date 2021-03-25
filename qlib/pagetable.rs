@@ -761,29 +761,6 @@ impl PageTablesInternal {
         }, failFast)
     }
 
-    /*pub fn Unmap(&mut self, start: Addr, end: Addr, pagePool: &Allocator, failFast: bool) -> Result<()> {
-        //this is workaround for page zero at zero virtual address
-        //todo: fix
-        let start = if start.0 == 0 {
-            Addr(start.0 + MemoryDef::PAGE_SIZE)
-        } else {
-            start
-        };
-
-        return self.Traverse(start, end, |entry, _virtualAddr| {
-            /*let addr = entry.addr().as_u64();
-            let bit9 = entry.flags() & PageTableFlags::BIT_9 == PageTableFlags::BIT_9;
-
-            if !bit9 {
-                pagePool.Deref(addr).unwrap();
-                entry.set_flags(PageTableFlags::PRESENT | PageTableFlags::BIT_9);
-            }*/
-
-            Self::freeEntry(entry, pagePool).unwrap();
-
-        }, failFast)
-    }*/
-
     //get the list for page phyaddress for a virtual address range
     pub fn GetAddresses(&mut self, start: Addr, end: Addr, vec: &mut StackVec<u64>) -> Result<()> {
         self.Traverse(start, end, |entry, _virtualAddr| {
@@ -795,22 +772,9 @@ impl PageTablesInternal {
     }
 
     fn freeEntry(entry: &mut PageTableEntry,  pagePool: &Allocator) -> Result<bool> {
-        /*let bit9 = entry.flags() & PageTableFlags::BIT_9 == PageTableFlags::BIT_9;
-
-        if !bit9 {
-            let currAddr = entry.addr().as_u64();
-            pagePool.Deref(currAddr)?;
-            entry.set_unused();
-
-            //entry.set_flags(PageTableFlags::PRESENT | PageTableFlags::BIT_9);
-            return Ok(true);
-        }
-
-        return Ok(false)*/
         let currAddr = entry.addr().as_u64();
         pagePool.Deref(currAddr)?;
         entry.set_unused();
-        //Invlpg(currAddr);
         return Ok(true)
     }
 

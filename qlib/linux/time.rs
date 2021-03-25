@@ -200,6 +200,7 @@ pub fn ClockTFromDuration(d: Duration) -> ClockT {
 }
 
 // Tms represents struct tms, used by times(2).
+#[derive(Debug)]
 pub struct Tms {
     pub UTime: ClockT,
     pub STime: ClockT,

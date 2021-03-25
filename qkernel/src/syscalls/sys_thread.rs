@@ -332,6 +332,11 @@ pub fn SysFork(task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
     return Ok(pid as i64)
 }
 
+pub fn SysVfork(task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
+    let pid = task.Clone(LibcConst::CLONE_VM | LibcConst::CLONE_VFORK |Signal::SIGCHLD as u64, 0, 0, 0, 0)?;
+    return Ok(pid as i64)
+}
+
 // Wait4 implements linux syscall wait4(2).
 pub fn SysWait4(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let pid = args.arg0;
