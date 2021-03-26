@@ -887,7 +887,7 @@ impl PageTablesInternal {
 pub struct GuestPagePool {}
 
 impl GuestPagePool {
-    pub fn new() -> Self {
+    pub fn New() -> Self {
         return GuestPagePool {}
     }
 

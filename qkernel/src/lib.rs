@@ -331,11 +331,7 @@ pub extern fn rust_main(pageAllocatorBaseAddr: u64, pageAllocatorOrd: u64, id: u
 
         //info!("vcpu {} enter guest, vdso addr is {:x}", id, vdsoParamAddr);
 
-        let pagePoolOrd = 30; // 1GB
-        let pagePoolStart = (*PAGE_ALLOCATOR).lock().Alloc(1 << (pagePoolOrd - 12)).unwrap();
-        let pagePoolCount = 1 << (pagePoolOrd - 12);
-
-        PAGE_MGR.lock().Init(&Range::New(pageAllocatorBaseAddr, 1<<(pageAllocatorOrd + 12)), pagePoolStart, pagePoolCount);
+        PAGE_MGR.lock().Init();
 
         {
             //to initial the SHARESPACE

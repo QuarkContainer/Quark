@@ -267,16 +267,17 @@ impl FileOperations for RandomFileOperations {
     }
 
     fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
-        let blocks = BlockSeq::ToBlocks(dsts);
-        let blocks = task.BlocksV2P(&blocks[..])?;
-        let dsts = BlockSeq::NewFromSlice(&blocks);
+        task.V2PIovs(dsts, true, &mut task.GetMut().iovs)?;
+        defer!(task.GetMut().iovs.clear());
+        let iovs = &mut task.GetMut().iovs;
 
         let mut ioReader = RandomReader {};
         let mut reader = FromIOReader {
             reader: &mut ioReader,
         };
 
-        return reader.ReadToBlocks(dsts);
+        let ret = reader.ReadToBlocks(BlockSeq::NewFromSlice(&iovs));
+        return ret;
     }
 
     fn WriteAt(&self, _task: &Task, _f: &File, srcs: &[IoVec], _offset: i64, _blocking: bool) -> Result<i64> {

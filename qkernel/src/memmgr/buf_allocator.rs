@@ -254,7 +254,7 @@ pub struct StackHeapInternal {
     pub buf9    : SliceStack32,
     pub buf10   : SliceStack32,
     pub buf11   : SliceStack16,
-    pub buf12   : SliceStack16,
+    pub buf12   : SliceStack128,
     pub buf13   : SliceStack16,
 
     pub heap    : Heap,
@@ -285,7 +285,7 @@ impl StackHeap {
             buf9: SliceStack32::New(),
             buf10: SliceStack32::New(),
             buf11: SliceStack16::New(),
-            buf12: SliceStack16::New(),
+            buf12: SliceStack128::New(),
             buf13: SliceStack16::New(),
 
             heap: Heap::empty(),

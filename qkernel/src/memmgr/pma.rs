@@ -145,8 +145,8 @@ impl PageMgrInternal {
         }
     }
 
-    pub fn Init(&mut self, pageAllocatorRange: &Range, baseAddr: u64, pageCount: u32) {
-        self.allocator.lock().Init(pageAllocatorRange, baseAddr, pageCount);
+    pub fn Init(&mut self) {
+        self.allocator.lock().Init();
     }
 
     fn PagePool(&self) -> Arc<Mutex<PagePool>> {

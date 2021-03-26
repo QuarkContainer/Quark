@@ -42,6 +42,24 @@ pub const MPOL_F_STATIC_NODES   : u32 = 1 << 15;
 
 pub const MPOL_MODE_FLAGS       : u32 = MPOL_F_STATIC_NODES | MPOL_F_RELATIVE_NODES;
 
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
+pub struct LibcSysinfo {
+    pub uptime: i64,
+    pub loads: [u64; 3],
+    pub totalram: u64,
+    pub freeram: u64,
+    pub sharedram: u64,
+    pub bufferram: u64,
+    pub totalswap: u64,
+    pub freeswap: u64,
+    pub procs: u16,
+    pub pad: u16,
+    pub totalhigh: u64,
+    pub freehigh: u64,
+    pub mem_unit: u32,
+    pub _f: [i8; 0],
+}
 
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]
