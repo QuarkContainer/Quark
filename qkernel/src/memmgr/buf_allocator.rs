@@ -389,7 +389,9 @@ unsafe impl GlobalAlloc for StackHeap {
                     .map_or(0 as *mut u8, |allocation| allocation.as_ptr()) as u64;
 
                 if ret == 0 {
-                    panic!("GlobalAlloc::alloc OOM")
+                    super::super::Kernel::HostSpace::KernelMsg(ret);
+                    super::super::Kernel::HostSpace::KernelOOM();
+                    loop {}
                 }
                 ret
             }

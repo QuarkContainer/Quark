@@ -14,7 +14,6 @@
 
 use kvm_bindings::kvm_sregs;
 use kvm_bindings::kvm_regs;
-use kvm_bindings::kvm_dtable;
 use kvm_ioctls::VcpuExit;
 use core::mem::size_of;
 use libc::*;
@@ -281,7 +280,7 @@ impl KVMVcpu {
                     }
                 }
                 VcpuExit::IoOut(addr, data) => {
-                    let mut vcpu_sregs = self.vcpu.get_sregs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                    let vcpu_sregs = self.vcpu.get_sregs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                     if vcpu_sregs.cs.dpl != 0x0 { // call from user space
                         panic!("Get VcpuExit::IoOut from guest user space, Abort, vcpu_sregs is {:#x?}", vcpu_sregs)
                     }
@@ -422,19 +421,6 @@ impl KVMVcpu {
                             SyncMgr::WakeVcpu(vcpuId);
                         }
 
-                        qlib::HYPERCALL_LOADIDT => {
-                            let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                            let idt = regs.rcx;
-
-                            vcpu_sregs.idt = kvm_dtable {
-                                base: idt,
-                                limit: 4095,
-                                padding: [0; 3]
-                            };
-                            info!("start to set idt {:x}", idt);
-                            self.vcpu.set_sregs(&vcpu_sregs).map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                        }
-
                         qlib::HYPERCALL_PRINT => {
                             let vcpu_regs = self.vcpu.get_regs().unwrap();
                             let addr = vcpu_regs.rbx;
@@ -455,7 +441,13 @@ impl KVMVcpu {
                         qlib::HYPERCALL_MSG => {
                             let vcpu_regs = self.vcpu.get_regs().unwrap();
                             let data = vcpu_regs.rbx;
-                            info!("get kernel msg: {:?}", data);
+                            info!("get kernel msg: {:x?}", data);
+                        }
+
+                        qlib::HYPERCALL_OOM => {
+                            error!("OOM!!! cpu [{}]", self.id);
+                            eprintln!("OOM!!! cpu [{}]", self.id);
+                            ::std::process::exit(1);
                         }
 
                         qlib::HYPERCALL_EXIT => {

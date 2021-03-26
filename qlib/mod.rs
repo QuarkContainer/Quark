@@ -64,7 +64,7 @@ use self::config::*;
 
 pub const HYPERCALL_INIT: u16 = 1;
 pub const HYPERCALL_PANIC: u16 = 2;
-pub const HYPERCALL_LOADIDT: u16 = 4;
+pub const HYPERCALL_OOM: u16 = 4;
 pub const HYPERCALL_MSG: u16 = 5;
 pub const HYPERCALL_U64: u16 = 6;
 pub const HYPERCALL_PRINT: u16 = 8;
