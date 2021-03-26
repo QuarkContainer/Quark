@@ -21,11 +21,12 @@ use super::super::Kernel;
 pub fn SysInfo(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg0 as u64;
 
-    let info = if let Ok(info) = task.CheckedV2P(addr) {
-        info
-    } else {
-        return Ok(-SysErr::EFAULT as i64)
-    };
+    let mut sysInfo: &mut LibcSysinfo = task.GetTypeMut(addr)?;
 
-    return Ok(Kernel::HostSpace::Sysinfo(info))
+    let ret = Kernel::HostSpace::Sysinfo(&mut sysInfo as * mut _ as u64);
+    if ret < 0 {
+        return Err(Error::SysError(-ret as i32))
+    }
+
+    return Ok(ret)
 }
