@@ -304,7 +304,7 @@ impl StackHeap {
         }
     }
 
-    pub fn Init(&self, start: usize, size: usize) {
+    pub fn Add(&self, start: usize, size: usize) {
         self.AddToHead(start, start + size)
     }
 
