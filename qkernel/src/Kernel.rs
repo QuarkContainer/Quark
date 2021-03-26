@@ -1510,8 +1510,11 @@ impl HostSpace {
     pub fn KernelMsg(id: u64) {
         HyperCall64(HYPERCALL_MSG, id)
     }
-}
 
+    pub fn KernelOOM() {
+        HyperCall(HYPERCALL_OOM, 0)
+    }
+}
 
 pub fn GetSockOptI32(sockfd: i32, level: i32, optname: i32) -> Result<i32> {
     let mut val: i32 = 0;

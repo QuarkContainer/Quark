@@ -322,7 +322,11 @@ pub extern fn rust_main(pageAllocatorBaseAddr: u64, pageAllocatorOrd: u64, id: u
         let heapOrd = 30; // 1GB
         let heapStart = (*PAGE_ALLOCATOR).lock().Alloc(1 << (heapOrd - 12)).unwrap();
         let heapSize = 1 << heapOrd;
-        ALLOCATOR.Init(heapStart as usize, heapSize as usize);
+        ALLOCATOR.Add(heapStart as usize, heapSize as usize);
+        let heapStart = (*PAGE_ALLOCATOR).lock().Alloc(1 << (heapOrd - 12)).unwrap();
+        ALLOCATOR.Add(heapStart as usize, heapSize as usize);
+        let heapStart = (*PAGE_ALLOCATOR).lock().Alloc(1 << (heapOrd - 12)).unwrap();
+        ALLOCATOR.Add(heapStart as usize, heapSize as usize);
 
         let heapOrd = 23; // 8 mb
         let heapStart = (*PAGE_ALLOCATOR).lock().Alloc(1 << (heapOrd - 12)).unwrap();
