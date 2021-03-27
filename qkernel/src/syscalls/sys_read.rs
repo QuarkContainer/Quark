@@ -18,6 +18,7 @@ use super::super::kernel::time::*;
 use super::super::fs::file::*;
 use super::super::task::*;
 use super::super::qlib::common::*;
+use super::super::qlib::mem::block::*;
 use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
 use super::super::perflog::*;
@@ -172,8 +173,45 @@ pub fn Preadv(task: &Task, fd: i32, addr: u64, iovcnt: i32, offset: i64) -> Resu
     return preadv(task, &file, dsts, offset);
 }
 
+fn RepReadv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
+    let len = Iovs(dsts).Count();
+    let mut count = 0;
+    let mut dsts = dsts;
+    let mut tmp;
+
+    loop {
+        match f.Readv(task, dsts) {
+            Err(e) => {
+                if count > 0 {
+                    return Ok(count)
+                }
+
+                return Err(e)
+            }
+            Ok(n) => {
+                if n == 0 {
+                    return Ok(count);
+                }
+
+                count += n;
+                if count == len as i64 {
+                    return Ok(count)
+                }
+
+                tmp = Iovs(dsts).DropFirst(n as usize);
+                dsts = &mut tmp;
+            }
+        }
+    }
+}
+
 fn readv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
     task.CheckIOVecPermission(dsts, true)?;
+
+    let wouldBlock = f.WouldBlock();
+    if !wouldBlock {
+        return RepReadv(task, f, dsts)
+    }
 
     match f.Readv(task, dsts) {
         Err(e) => {
