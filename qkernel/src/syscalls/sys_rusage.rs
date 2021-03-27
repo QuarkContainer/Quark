@@ -94,8 +94,9 @@ pub fn SysTimes(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Ok(0)
     }
 
-    let cs1 = task.Thread().ThreadGroup().CPUStats();
-    let cs2 = task.Thread().ThreadGroup().JoinedChildCPUStats();
+    let tg = task.Thread().ThreadGroup();
+    let cs1 = tg.CPUStats();
+    let cs2 = tg.JoinedChildCPUStats();
 
     let r = Tms {
         UTime: ClockTFromDuration(cs1.UserTime),

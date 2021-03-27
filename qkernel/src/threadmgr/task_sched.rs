@@ -247,7 +247,7 @@ impl Thread {
             if rlimitCPU.Max != INFINITY {
                 // Check if tg is already over the hard limit.
                 let now = self.lock().k.CPUClockNow();
-                let tgcpu = tg.lock().cpuStatsAtLocked(now);
+                let tgcpu = tg.cpuStatsAtLocked(now);
                 let tgProfNow = Time::FromNs(tgcpu.UserTime + tgcpu.SysTime);
                 if !tgProfNow.Before(Time::FromNs(rlimitCPU.Max as i64)) {
                     self.sendSignalLocked(&SignalInfo::SignalInfoPriv(Signal(Signal::SIGKILL)), true).unwrap();
@@ -371,18 +371,6 @@ impl Task {
 }
 
 impl ThreadGroupInternal {
-    // Preconditions: As for TaskGoroutineSchedInfo.userTicksAt. The TaskSet mutex
-    // must be locked.
-    pub fn cpuStatsAtLocked(&self, now: u64) -> CPUStats {
-        let mut stats = self.exitedCPUStats;
-        // Account for live tasks.
-        for t in &self.tasks {
-            stats.Accumulate(&t.lock().cpuStatsAt(now))
-        }
-
-        return stats;
-    }
-
     // Preconditions: The signal mutex must be locked.
     pub fn updateCPUTimersEnabledLocked(&mut self) {
         let rlimitCPU = self.limits.Get(LimitType::CPU);
@@ -398,21 +386,37 @@ impl ThreadGroupInternal {
 }
 
 impl ThreadGroup {
-    // CPUStats returns the combined CPU usage statistics of all past and present
+    // Preconditions: As for TaskGoroutineSchedInfo.userTicksAt. The TaskSet mutex
+    // must be locked.
+    pub fn cpuStatsAtLocked(&self, now: u64) -> CPUStats {
+        let mut stats = self.lock().exitedCPUStats;
+        // Account for live tasks.
+        let threads : Vec<Thread> = self.lock().tasks.iter().cloned().collect();
+        for t in threads {
+            stats.Accumulate(&t.lock().cpuStatsAt(now))
+        }
+
+        return stats;
+    }
+
+    /// CPUStats returns the combined CPU usage statistics of all past and present
     // threads in tg.
     pub fn CPUStats(&self) -> CPUStats {
-        let tg = self.lock();
-        let pidns = tg.pidns.clone();
+        let pidns = self.lock().pidns.clone();
         let owner = pidns.lock().owner.clone();
 
         let _r = owner.read();
 
-        match &tg.leader.Upgrade() {
-            None => return CPUStats::default(),
+        let lead = self.lock().leader.Upgrade();
+        match &lead {
+            None => {
+                return CPUStats::default()
+            },
             Some(ref _leader) => {
                 //let now = leader.lock().k.CPUClockNow();
                 let now = GetKernel().CPUClockNow();
-                return tg.cpuStatsAtLocked(now)
+                let ret = self.cpuStatsAtLocked(now);
+                return ret;
             }
         }
     }
