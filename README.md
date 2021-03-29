@@ -9,7 +9,7 @@ This repository is the home of Quark Containers code.
 Quark Container is high performance secure container runtime with following features: 
 1. OCI compatible: Quark Container includes an Open Container Initiative (OCI) interface. Common Docker container image can run in Quark Container.
 2. Secure: It provides Virtual Machine level workload isolation and security.
-3. High Performance: Quark Container is born for container workload execution with high performance. It developed with Rust language. 
+3. High Performance: Quark Container is born for container workload execution with high performance. It is developed with Rust language. 
 
 
 ## Performance test 
