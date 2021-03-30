@@ -330,6 +330,11 @@ impl BufMgr {
         self.lock().Init(start, len);
     }
 
+    pub fn New() -> Self {
+        let intern = BufMgrIntern::New();
+        return Self(Mutex::new(intern))
+    }
+
     pub fn Alloc(&self, len: u64) -> Result<u64> {
         return self.lock().Alloc(len);
     }
@@ -343,12 +348,30 @@ impl BufMgr {
 pub struct BufMgrIntern {
     pub next: u64,
     pub gapMgr: GapMgr,
+    pub buf: Vec<u8>,
 }
 
 impl BufMgrIntern {
     pub fn Init(&mut self, start: u64, len: u64) {
         self.next = start;
         self.gapMgr.Init(start, len);
+    }
+
+    pub fn New() -> Self {
+        let memoryOrd = 23; // 8 mb
+        let size = 1 << memoryOrd;
+        let mut buf = Vec::with_capacity(size);
+        unsafe {
+            buf.set_len(size);
+        }
+
+        let start = &buf[0] as * const _ as u64;
+
+        return Self {
+            next: start,
+            gapMgr: GapMgr::New(start, size as u64),
+            buf: buf,
+        }
     }
 
     pub fn Alloc(&mut self, len: u64) -> Result<u64> {

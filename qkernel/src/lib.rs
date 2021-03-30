@@ -143,7 +143,7 @@ lazy_static! {
     pub static ref PAGE_MGR: PageMgr = PageMgr::New();
     pub static ref LOADER: Loader = Loader::default();
     //pub static ref BUF_MGR: Mutex<BufMgr> = Mutex::new(BufMgr::default());
-    pub static ref BUF_MGR: BufMgr = BufMgr::default();
+    pub static ref BUF_MGR: BufMgr = BufMgr::New();
     pub static ref IOURING: QUring = QUring::New(1024);
 }
 
@@ -327,13 +327,6 @@ pub extern fn rust_main(pageAllocatorBaseAddr: u64, pageAllocatorOrd: u64, id: u
         ALLOCATOR.Add(heapStart as usize, heapSize as usize);
         let heapStart = (*PAGE_ALLOCATOR).lock().Alloc(1 << (heapOrd - 12)).unwrap();
         ALLOCATOR.Add(heapStart as usize, heapSize as usize);
-
-        let heapOrd = 23; // 8 mb
-        let heapStart = (*PAGE_ALLOCATOR).lock().Alloc(1 << (heapOrd - 12)).unwrap();
-        let heapSize = 1 << heapOrd;
-        BUF_MGR.Init(heapStart, heapSize);
-
-        //info!("vcpu {} enter guest, vdso addr is {:x}", id, vdsoParamAddr);
 
         PAGE_MGR.lock().Init();
 
