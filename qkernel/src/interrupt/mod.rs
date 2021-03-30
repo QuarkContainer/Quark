@@ -249,7 +249,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, _errorC
             };
 
             print!("InvalidOpcode: data is {:x}, phyAddr is {:x?}, the map is {}",
-                   data, currTask.CheckedV2P(sf.ip), &map);
+                   data, currTask.VirtualToPhy(sf.ip), &map);
 
             let info = SignalInfo {
                 Signo: Signal::SIGILL,

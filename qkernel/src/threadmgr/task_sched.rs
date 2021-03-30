@@ -27,6 +27,7 @@ use super::super::qlib::linux::time::*;
 use super::super::SignalDef::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
+use super::super::qlib::vcpu_mgr::*;
 use super::super::task::*;
 use super::super::kernel::timer::timer::*;
 use super::super::kernel::time::*;
@@ -360,13 +361,15 @@ fn assignCPU(allowed: &CPUSet, tid: ThreadID) -> i32 {
 
 impl Task {
     pub fn CPU(&self) -> i32 {
-        let k = self.Thread().lock().k.clone();
+        /*let k = self.Thread().lock().k.clone();
         let useHostCores = k.staticInfo.lock().useHostCores; //always false, "rdtscp" is not available in guest kernel
         if useHostCores {
             return GetCpu() as i32;
         }
 
-        return k.staticInfo.lock().cpu;
+        return k.staticInfo.lock().cpu;*/
+        let cpuid = CPULocal::CpuId();
+        return cpuid as i32;
     }
 }
 

@@ -231,6 +231,12 @@ impl FileOperations for HostFileOp {
                 // todo: handle tmp file elegant
             }
 
+            let offset = if self.InodeOp.InodeType() == InodeType::CharacterDevice {
+                -1
+            } else {
+                offset
+            };
+
             let mut ioReader = FdReadWriter::New(hostIops.HostFd());
             return ioReader.IOReadAt(&mut task.GetMut().iovs, offset as u64);
         }
@@ -291,6 +297,12 @@ impl FileOperations for HostFileOp {
 
             task.V2PIovs(srcs, false, &mut task.GetMut().iovs)?;
             defer!(task.GetMut().iovs.clear());
+
+            let offset = if self.InodeOp.InodeType() == InodeType::CharacterDevice {
+                -1
+            } else {
+                offset
+            };
 
             let mut ioWriter = FdReadWriter::New(hostIops.HostFd());
             return ioWriter.IOWriteAt(&task.GetMut().iovs, offset as u64);

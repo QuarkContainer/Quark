@@ -678,12 +678,12 @@ pub fn SysGetcpu(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     if cpu != 0 {
         let id = task.CPU();
-        task.CopyOutObj(&id, cpu)?;
+        *task.GetTypeMut(cpu)? = id;
     }
 
     if node != 0 {
         let val: u32 = 0;
-        task.CopyOutObj(&val, node)?;
+        *task.GetTypeMut(node)? = val;
     }
 
     return Ok(0);

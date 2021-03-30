@@ -547,6 +547,8 @@ impl File {
         let fops = self.FileOp.clone();
         let seekable = fops.Seekable();
 
+        //let inode = self.Dirent.Inode();
+        //error!("Readv inodetype is {:?}, fopstype is {:?}", inode.InodeType(), fops.FopsType());
         if seekable {
             let mut offsetLock = self.offset.Lock(task)?;
 
@@ -596,6 +598,9 @@ impl File {
     pub fn Writev(&self, task: &Task, srcs: &[IoVec]) -> Result<i64> {
         let fops = self.FileOp.clone();
         let seekable = fops.Seekable();
+
+        //let inode = self.Dirent.Inode();
+        //error!("writev inodetype is {:?}, fopstype is {:?}", inode.InodeType(), fops.FopsType());
 
         if seekable {
             let mut offsetLock = self.offset.Lock(task)?;
