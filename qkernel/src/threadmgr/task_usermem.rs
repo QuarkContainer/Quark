@@ -238,64 +238,13 @@ impl Task {
         return Ok(addr);
     }
 
-    pub fn BlocksV2P(&self, blocks: &[IoVec]) -> Result<Vec<IoVec>> {
-        let mut ret = Vec::with_capacity(blocks.len());
-        for b in blocks {
-            let (start, _) = self.mm.VirtualToPhy(b.start)?;
-            ret.push(IoVec::NewFromAddr(start, b.len))
-        }
-
-        return Ok(ret)
-    }
-
     #[cfg(test)]
     pub fn VirtualToPhy(&self, vAddr: u64) -> Result<u64> {
         return Ok(vAddr)
     }
 
-    pub fn CheckedV2P(&self, vAddr: u64) -> Result<u64> {
-        if vAddr == 0 {
-            return Ok(0)
-        }
-
-        let (addr, _) = self.mm.VirtualToPhy(vAddr)?;
-        return Ok(addr)
-    }
-
-    pub fn ToBlock(&self, v_addr: u64, len: usize) -> Result<IoVec> {
-        match self.VirtualToPhy(v_addr) {
-            Err(e) => {
-                info!("convert to phyaddress fail, addr = {:x} e={:?}", v_addr, e);
-                return Err(Error::SysError(SysErr::EFAULT))
-            }
-            Ok(pAddr) => {
-                return Ok(IoVec {
-                    start: pAddr,
-                    len: len,
-                })
-            }
-        }
-    }
-
     pub fn IovsFromAddr(&self, iovs: u64, iovsnum: usize) -> Result<&mut [IoVec]> {
         return self.GetSliceMut::<IoVec>(iovs, iovsnum);
-    }
-
-    pub fn IovsToBlocks(&self, iovs: u64, iovsnum: usize) -> Result<Vec<IoVec>> {
-        let mut res = Vec::with_capacity(iovsnum);
-        let slice = self.GetSliceMut::<IoVec>(iovs, iovsnum)?;
-
-        for i in 0..iovsnum {
-            let block = self.ToBlock(slice[i].start, slice[i].len)?;
-            res.push(block);
-        }
-
-        return Ok(res)
-    }
-
-    pub fn NewBlockSeq(&self, buf: u64, count: usize) -> Result<BlockSeq> {
-        let b = self.ToBlock(buf, count)?;
-        return Ok(BlockSeq::NewFromBlock(b));
     }
 
     pub fn V2P(&self, start: u64, len: u64, output: &mut Vec<IoVec>, writable: bool) -> Result<()> {

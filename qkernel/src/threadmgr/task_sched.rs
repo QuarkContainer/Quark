@@ -27,6 +27,7 @@ use super::super::qlib::linux::time::*;
 use super::super::SignalDef::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
+use super::super::qlib::vcpu_mgr::*;
 use super::super::task::*;
 use super::super::kernel::timer::timer::*;
 use super::super::kernel::time::*;
@@ -247,7 +248,7 @@ impl Thread {
             if rlimitCPU.Max != INFINITY {
                 // Check if tg is already over the hard limit.
                 let now = self.lock().k.CPUClockNow();
-                let tgcpu = tg.lock().cpuStatsAtLocked(now);
+                let tgcpu = tg.cpuStatsAtLocked(now);
                 let tgProfNow = Time::FromNs(tgcpu.UserTime + tgcpu.SysTime);
                 if !tgProfNow.Before(Time::FromNs(rlimitCPU.Max as i64)) {
                     self.sendSignalLocked(&SignalInfo::SignalInfoPriv(Signal(Signal::SIGKILL)), true).unwrap();
@@ -360,29 +361,19 @@ fn assignCPU(allowed: &CPUSet, tid: ThreadID) -> i32 {
 
 impl Task {
     pub fn CPU(&self) -> i32 {
-        let k = self.Thread().lock().k.clone();
+        /*let k = self.Thread().lock().k.clone();
         let useHostCores = k.staticInfo.lock().useHostCores; //always false, "rdtscp" is not available in guest kernel
         if useHostCores {
             return GetCpu() as i32;
         }
 
-        return k.staticInfo.lock().cpu;
+        return k.staticInfo.lock().cpu;*/
+        let cpuid = CPULocal::CpuId();
+        return cpuid as i32;
     }
 }
 
 impl ThreadGroupInternal {
-    // Preconditions: As for TaskGoroutineSchedInfo.userTicksAt. The TaskSet mutex
-    // must be locked.
-    pub fn cpuStatsAtLocked(&self, now: u64) -> CPUStats {
-        let mut stats = self.exitedCPUStats;
-        // Account for live tasks.
-        for t in &self.tasks {
-            stats.Accumulate(&t.lock().cpuStatsAt(now))
-        }
-
-        return stats;
-    }
-
     // Preconditions: The signal mutex must be locked.
     pub fn updateCPUTimersEnabledLocked(&mut self) {
         let rlimitCPU = self.limits.Get(LimitType::CPU);
@@ -398,21 +389,37 @@ impl ThreadGroupInternal {
 }
 
 impl ThreadGroup {
-    // CPUStats returns the combined CPU usage statistics of all past and present
+    // Preconditions: As for TaskGoroutineSchedInfo.userTicksAt. The TaskSet mutex
+    // must be locked.
+    pub fn cpuStatsAtLocked(&self, now: u64) -> CPUStats {
+        let mut stats = self.lock().exitedCPUStats;
+        // Account for live tasks.
+        let threads : Vec<Thread> = self.lock().tasks.iter().cloned().collect();
+        for t in threads {
+            stats.Accumulate(&t.lock().cpuStatsAt(now))
+        }
+
+        return stats;
+    }
+
+    /// CPUStats returns the combined CPU usage statistics of all past and present
     // threads in tg.
     pub fn CPUStats(&self) -> CPUStats {
-        let tg = self.lock();
-        let pidns = tg.pidns.clone();
+        let pidns = self.lock().pidns.clone();
         let owner = pidns.lock().owner.clone();
 
         let _r = owner.read();
 
-        match &tg.leader.Upgrade() {
-            None => return CPUStats::default(),
+        let lead = self.lock().leader.Upgrade();
+        match &lead {
+            None => {
+                return CPUStats::default()
+            },
             Some(ref _leader) => {
                 //let now = leader.lock().k.CPUClockNow();
                 let now = GetKernel().CPUClockNow();
-                return tg.cpuStatsAtLocked(now)
+                let ret = self.cpuStatsAtLocked(now);
+                return ret;
             }
         }
     }

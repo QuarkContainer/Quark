@@ -101,8 +101,12 @@ impl FdInfo {
     pub fn IOReadAt(&self, _taskId: u64, iovs: u64, iovcnt: i32, offset: u64) -> i64 {
         let osfd = self.lock().osfd;
 
-        let ret = unsafe{
-            preadv(osfd as c_int, iovs as *const iovec, iovcnt, offset as i64) as i64
+        let ret = unsafe {
+            if offset as i64 == -1 {
+                readv(osfd as c_int, iovs as *const iovec, iovcnt) as i64
+            } else {
+                preadv(osfd as c_int, iovs as *const iovec, iovcnt, offset as i64) as i64
+            }
         };
 
         return SysRet(ret as i64)
@@ -112,7 +116,11 @@ impl FdInfo {
         let osfd = self.lock().osfd;
 
         let ret = unsafe{
-            pwritev(osfd as c_int, iovs as *const iovec, iovcnt, offset as i64) as i64
+            if offset as i64 == -1 {
+                writev(osfd as c_int, iovs as *const iovec, iovcnt) as i64
+            } else {
+                pwritev(osfd as c_int, iovs as *const iovec, iovcnt, offset as i64) as i64
+            }
         };
 
         return SysRet(ret as i64)
