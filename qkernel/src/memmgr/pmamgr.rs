@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use alloc::collections::btree_map::BTreeMap;
-use alloc::alloc::{Layout, alloc, dealloc};
 
 use super::super::qlib::linux_def::*;
 use super::super::qlib::common::*;
