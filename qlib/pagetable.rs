@@ -884,30 +884,36 @@ impl PageTablesInternal {
     }
 }
 
-pub struct GuestPagePool {}
+pub struct AlignedAllocator {
+    pub size: usize,
+    pub align: usize,
+}
 
-impl GuestPagePool {
-    pub fn New() -> Self {
-        return GuestPagePool {}
+impl AlignedAllocator {
+    pub fn New(size: usize, align: usize) -> Self {
+        return Self {
+            size: size,
+            align: align,
+        }
     }
 
-    pub fn Allocate(&mut self) -> Result<Addr> {
-        let layout = Layout::from_size_align(4096, 4096);
+    pub fn Allocate(&mut self) -> Result<u64> {
+        let layout = Layout::from_size_align(self.size, self.align);
         match layout {
             Err(_e) => Err(Error::UnallignedAddress),
             Ok(l) => unsafe {
                 let addr = alloc(l);
-                Ok(Addr(addr as u64))
+                Ok(addr as u64)
             }
         }
     }
 
-    pub fn Free(&mut self, addr: Addr) -> Result<()> {
-        let layout = Layout::from_size_align(4096, 4096);
+    pub fn Free(&mut self, addr: u64) -> Result<()> {
+        let layout = Layout::from_size_align(self.size, self.align);
         match layout {
             Err(_e) => Err(Error::UnallignedAddress),
             Ok(l) => unsafe {
-                dealloc(addr.0 as *mut u8, l);
+                dealloc(addr as *mut u8, l);
                 Ok(())
             }
         }
