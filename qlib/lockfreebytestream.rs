@@ -15,8 +15,8 @@
 use core::sync::atomic;
 use alloc::slice;
 
-use super::super::*;
 use super::linux_def::*;
+use super::pagetable::*;
 
 // the lockfree bytestream for single writer and single read
 pub struct LFByteStream {
@@ -25,6 +25,7 @@ pub struct LFByteStream {
     pub tail: atomic::AtomicUsize,
     pub capacity: usize,
     pub ringMask: usize,
+    pub allocator: AlignedAllocator,
 }
 
 impl Drop for LFByteStream {
@@ -32,29 +33,27 @@ impl Drop for LFByteStream {
         let (addr, size) = self.GetRawBuf();
         let size = size as u64;
         assert!(size & MemoryDef::PAGE_MASK == 0);
-        (*PAGE_ALLOCATOR).Free(addr, size >> 12).expect("ByteStream:: free memory fail");
+        self.allocator.Free(addr).expect("LFByteStream::drop fail");
     }
 }
 
 impl LFByteStream {
     // allocate 1<<ord bytes buffer
     pub fn Init(ord: usize) -> Self {
-        assert!(ord >= 12, "LFByteStream init ord should be larger than 12");
-
-        let addr = (*PAGE_ALLOCATOR).Alloc((ord >> 12) as u64).expect("ByteStream can't allocate memory");
-        return Self::New(addr, (1 << ord) as usize);
-    }
-
-    pub fn New(addr: u64, len: usize) -> Self {
+        assert!(ord > 12, "LFByteStream ord must be large than 12, i.e. one 4KB Page");
+        let size = 1 << ord;
+        let allocator = AlignedAllocator::New(size as usize, MemoryDef::PAGE_SIZE as usize);
+        let addr = allocator.Allocate().expect("ByteStream can't allocate memory");
         let ptr = addr as *mut u8;
-        let buf = unsafe { slice::from_raw_parts_mut(ptr, len) };
+        let buf = unsafe { slice::from_raw_parts_mut(ptr, size as usize) };
 
         return Self {
             buf: buf,
             head: atomic::AtomicUsize::new(0),
             tail: atomic::AtomicUsize::new(0),
-            capacity: len,
-            ringMask: len - 1,
+            capacity: size,
+            ringMask: size - 1,
+            allocator: allocator
         }
     }
 

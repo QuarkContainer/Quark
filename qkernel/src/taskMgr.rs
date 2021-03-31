@@ -21,7 +21,7 @@ use super::Kernel::HostSpace;
 use super::qlib::perf_tunning::*;
 use super::qlib::vcpu_mgr::*;
 use super::threadmgr::task_sched::*;
-use super::PAGE_ALLOCATOR;
+use super::KERNEL_STACK_ALLOCATOR;
 use super::memmgr::pma::*;
 use super::quring::uring_mgr::*;
 use super::asm::*;
@@ -47,7 +47,7 @@ pub fn Current() -> TaskId {
 }
 
 pub fn CreateTask(runFn: TaskFn, para: *const u8) {
-    let taskId = { TaskStore::CreateTask(runFn, para, &*PAGE_ALLOCATOR) };
+    let taskId = { TaskStore::CreateTask(runFn, para) };
     SHARESPACE.scheduler.NewTask(taskId);
 }
 
@@ -143,7 +143,8 @@ pub fn WaitFn() {
                 CPULocal::SetCPUState(VcpuState::Searching);
                 let pendingFreeStack = CPULocal::PendingFreeStack();
                 if pendingFreeStack != 0 {
-                    (*PAGE_ALLOCATOR).Free(pendingFreeStack, DEFAULT_STACK_PAGES).unwrap();
+                    //(*PAGE_ALLOCATOR).Free(pendingFreeStack, DEFAULT_STACK_PAGES).unwrap();
+                    KERNEL_STACK_ALLOCATOR.Free(pendingFreeStack).unwrap();
                     CPULocal::SetPendingFreeStack(0);
                 }
 

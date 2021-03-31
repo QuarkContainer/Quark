@@ -145,6 +145,7 @@ lazy_static! {
     //pub static ref BUF_MGR: Mutex<BufMgr> = Mutex::new(BufMgr::default());
     pub static ref BUF_MGR: BufMgr = BufMgr::New();
     pub static ref IOURING: QUring = QUring::New(1024);
+    pub static ref KERNEL_STACK_ALLOCATOR : AlignedAllocator = AlignedAllocator::New(DEFAULT_STACK_SIZE, DEFAULT_STACK_SIZE);
 }
 
 extern "C" {

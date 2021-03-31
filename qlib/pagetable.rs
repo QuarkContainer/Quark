@@ -897,7 +897,7 @@ impl AlignedAllocator {
         }
     }
 
-    pub fn Allocate(&mut self) -> Result<u64> {
+    pub fn Allocate(&self) -> Result<u64> {
         let layout = Layout::from_size_align(self.size, self.align);
         match layout {
             Err(_e) => Err(Error::UnallignedAddress),
@@ -908,7 +908,7 @@ impl AlignedAllocator {
         }
     }
 
-    pub fn Free(&mut self, addr: u64) -> Result<()> {
+    pub fn Free(&self, addr: u64) -> Result<()> {
         let layout = Layout::from_size_align(self.size, self.align);
         match layout {
             Err(_e) => Err(Error::UnallignedAddress),
