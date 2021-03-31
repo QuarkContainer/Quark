@@ -13,10 +13,10 @@
 // limitations under the License.
 
 use alloc::collections::btree_map::BTreeMap;
-use alloc::alloc::{Layout, alloc, dealloc};
 
 use super::super::qlib::linux_def::*;
 use super::super::qlib::common::*;
+use super::super::qlib::pagetable::*;
 
 pub fn ZeroPage(pageStart: u64) {
     use alloc::slice;
@@ -48,6 +48,8 @@ pub struct PagePool {
 
     //the zeroed paged which will be readyonly, e.g. page for Virtual Address 0
     pub zeroPage: u64,
+
+    pub allocator: AlignedAllocator,
 }
 
 impl PagePool {
@@ -120,6 +122,7 @@ impl PagePool {
             zeroPage: 0,
             //the PagePool won't be free. fake a always nonzero refcount
             refCount: 1,
+            allocator: AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize),
         };
     }
 
@@ -135,26 +138,13 @@ impl PagePool {
     }
 
     pub fn Allocate(&mut self) -> Result<u64> {
-        let layout = Layout::from_size_align(4096, 4096);
-        match layout {
-            Err(_e) => Err(Error::UnallignedAddress),
-            Ok(l) => unsafe {
-                let addr = alloc(l);
-                ZeroPage(addr as u64);
-                Ok(addr as u64)
-            }
-        }
+        let addr = self.allocator.Allocate()?;
+        ZeroPage(addr as u64);
+        return Ok(addr as u64)
     }
 
     pub fn Free(&mut self, addr: u64) -> Result<()> {
-        let layout = Layout::from_size_align(4096, 4096);
-        match layout {
-            Err(_e) => Err(Error::UnallignedAddress),
-            Ok(l) => unsafe {
-                dealloc(addr as *mut u8, l);
-                Ok(())
-            }
-        }
+        return self.allocator.Free(addr);
     }
 }
 
