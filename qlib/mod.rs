@@ -34,7 +34,7 @@ pub mod auth;
 pub mod control_msg;
 pub mod perf_tunning;
 pub mod uring;
-// Copyright (c) 2021 QuarkSoft LLC
+// Copyright (c) 2021 Quark Container Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
