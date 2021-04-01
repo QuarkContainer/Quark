@@ -430,7 +430,7 @@ impl Task {
         //let pid = self.GetProcessId();
         let cPid;
 
-        let s_ptr = (*PAGE_ALLOCATOR).Alloc(DEFAULT_STACK_PAGES).unwrap() as *mut u8; //16*4KB = 64KB
+        let s_ptr = KERNEL_STACK_ALLOCATOR.Allocate().unwrap() as *mut u8;
         let taskPtr = s_ptr as *mut Self;
 
         let task = Task::Current();

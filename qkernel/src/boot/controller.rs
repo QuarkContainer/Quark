@@ -23,7 +23,7 @@ use super::super::Kernel;
 use super::super::taskMgr;
 use super::super::task::*;
 use super::super::{StartRootContainer, StartExecProcess};
-use super::super::{LOADER, PAGE_ALLOCATOR};
+use super::super::{LOADER, KERNEL_STACK_ALLOCATOR};
 use super::process::*;
 
 lazy_static! {
@@ -142,7 +142,8 @@ pub fn ControlMsgHandler(_para: *const u8) {
 
 
     let taskId = Task::Current().taskId;
-    (*PAGE_ALLOCATOR).Free(taskId, DEFAULT_STACK_PAGES).unwrap();
+    KERNEL_STACK_ALLOCATOR.Free(taskId).unwrap();
+    //(*PAGE_ALLOCATOR).Free(taskId, DEFAULT_STACK_PAGES).unwrap();
     taskMgr::Wait();
 }
 

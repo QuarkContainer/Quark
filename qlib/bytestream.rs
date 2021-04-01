@@ -15,7 +15,7 @@
 use alloc::slice;
 
 use super::common::*;
-use super::super::*;
+use super::pagetable::AlignedAllocator;
 use super::linux_def::*;
 use super::mem::io::*;
 
@@ -38,6 +38,7 @@ pub struct ByteStream {
     pub readpos: usize,
     pub dataIovs: SocketBufIovs,
     pub spaceiovs: SocketBufIovs,
+    pub allocator: AlignedAllocator,
 }
 
 impl Drop for ByteStream {
@@ -45,7 +46,7 @@ impl Drop for ByteStream {
         let (addr, size) = self.GetRawBuf();
         let size = size as u64;
         assert!(size & MemoryDef::PAGE_MASK == 0);
-        (*PAGE_ALLOCATOR).Free(addr, size >> 12).expect("ByteStream:: free memory fail");
+        self.allocator.Free(addr).expect("ByteStream::drop fail");
     }
 }
 
@@ -64,9 +65,13 @@ impl IOWriter for ByteStream {
 }
 
 impl ByteStream {
-    pub fn New(addr: u64, len: usize) -> Self {
+    //allocate page from heap
+    pub fn Init(pageCount: u64) -> Self {
+        let size = pageCount * MemoryDef::PAGE_SIZE;
+        let allocator = AlignedAllocator::New(size as usize, MemoryDef::PAGE_SIZE as usize);
+        let addr = allocator.Allocate().expect("ByteStream can't allocate memory");
         let ptr = addr as *mut u8;
-        let buf = unsafe { slice::from_raw_parts_mut(ptr, len) };
+        let buf = unsafe { slice::from_raw_parts_mut(ptr, size as usize) };
 
         return Self {
             buf: buf,
@@ -74,13 +79,8 @@ impl ByteStream {
             readpos: 0,
             dataIovs: SocketBufIovs::default(),
             spaceiovs: SocketBufIovs::default(),
+            allocator: allocator,
         }
-    }
-
-    //allocate page from memory allocator
-    pub fn Init(pageCount: u64) -> Self {
-        let addr = (*PAGE_ALLOCATOR).Alloc(pageCount).expect("ByteStream can't allocate memory");
-        return Self::New(addr, (pageCount << 12) as usize);
     }
 
     //return (bufAddr, bufSize)

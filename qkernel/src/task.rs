@@ -21,7 +21,6 @@ use core::mem;
 use alloc::boxed::Box;
 use lazy_static::lazy_static;
 
-use super::qlib::buddyallocator::MemAllocator;
 use super::qlib::linux_def::*;
 use super::qlib::common::*;
 use super::SignalDef::*;
@@ -71,8 +70,8 @@ impl TaskStore {
         return TaskStore {}
     }
 
-    pub fn CreateTask(runFn: TaskFn, para: *const u8, pa: &MemAllocator) -> TaskId {
-        let t = Task::Create(runFn, para, pa);
+    pub fn CreateTask(runFn: TaskFn, para: *const u8) -> TaskId {
+        let t = Task::Create(runFn, para);
         return TaskId::New(t.taskId);
     }
 
@@ -81,13 +80,7 @@ impl TaskStore {
 
         return TaskId::New(t.taskId);
     }
-
-    pub fn FreeTask(taskId: TaskId, pa: &mut MemAllocator) {
-        let task = taskId.GetTask();
-        task.Free(pa);
-    }
 }
-
 
 impl TaskId {
     #[inline]
@@ -573,12 +566,9 @@ impl Task {
         return TaskIdQ::New(self.taskId, self.queueId as u64)
     }
 
-    pub fn Create(runFn: TaskFn, para: *const u8, pa: &MemAllocator) -> &'static mut Self {
-        //let s_ptr = super::super::PAGE_ALLOCATOR.lock().Alloc(DEFAULT_STACK_PAGES).unwrap() as *mut u8; //16*4KB = 64KB
-
-        let s_ptr = pa.Alloc(DEFAULT_STACK_PAGES).unwrap() as *mut u8;
-
-        //let s_ptr = super::super::STACK_MGR.lock().Alloc(mm) as *mut u8;
+    pub fn Create(runFn: TaskFn, para: *const u8) -> &'static mut Self {
+        //let s_ptr = pa.Alloc(DEFAULT_STACK_PAGES).unwrap() as *mut u8;
+        let s_ptr = KERNEL_STACK_ALLOCATOR.Allocate().unwrap() as *mut u8;
 
         let size = DEFAULT_STACK_SIZE;
 
@@ -752,11 +742,6 @@ impl Task {
     #[inline]
     pub fn GetContext(&self) -> u64 {
         return (&self.context as *const Context) as u64;
-    }
-
-    pub fn Free(&mut self, pa: &MemAllocator) {
-        //super::super::PAGE_ALLOCATOR.lock().Free(self.taskId, DEFAULT_STACK_PAGES).unwrap();
-        pa.Free(self.taskId, DEFAULT_STACK_PAGES).unwrap();
     }
 
     //todo: remove this

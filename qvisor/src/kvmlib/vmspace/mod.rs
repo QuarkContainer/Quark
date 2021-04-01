@@ -51,8 +51,6 @@ use super::qlib::linux_def::*;
 use super::qlib::pagetable::{PageTables};
 use super::qlib::addr::{Addr};
 use super::qlib::control_msg::*;
-use super::qlib::buddyallocator::MemAllocator;
-//use super::qlib::boot::loader;
 use super::qlib::qmsg::*;
 use super::qlib::cstring::*;
 use super::qlib::perf_tunning::*;
@@ -67,6 +65,7 @@ use self::time::*;
 use self::random::*;
 use self::limits::*;
 use super::runc::runtime::signal_handle::*;
+use super::kvm_vcpu::SimplePageAllocator;
 
 const ARCH_SET_GS:u64 = 0x1001;
 const ARCH_SET_FS:u64 = 0x1002;
@@ -95,7 +94,7 @@ pub struct WaitingMsgCall {
 
 pub struct VMSpace {
     pub pageTables : PageTables,
-    pub allocator: Option<MemAllocator>,
+    pub allocator: Option<SimplePageAllocator>,
     pub hostAddrTop: u64,
     pub sharedLoasdOffset: u64,
     pub vdsoAddr: u64,

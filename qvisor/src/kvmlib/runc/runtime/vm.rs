@@ -29,7 +29,6 @@ use super::super::super::qlib::ShareSpace;
 use super::super::super::qlib::addr::AccessType;
 use super::super::super::qlib::addr;
 use super::super::super::qlib::config::*;
-use super::super::super::qlib::buddyallocator::MemAllocator;
 use super::super::super::qlib::perf_tunning::*;
 use super::super::super::qlib::task_mgr::*;
 use super::super::super::qlib::qmsg::*;
@@ -58,6 +57,37 @@ pub fn SetExitStatus(status: i32) {
 
 pub fn GetExitStatus() -> i32 {
     return EXIT_STATUS.load(Ordering::Acquire)
+}
+
+pub struct BootStrapMem {
+    pub startAddr: u64,
+    pub vcpuCount: usize,
+}
+
+impl BootStrapMem {
+    pub const PAGE_POOL_SIZE : usize = 1 << 24; // 2MB PagePool
+
+    pub fn New(startAddr: u64, vcpuCount: usize) -> Self {
+        return Self {
+            startAddr: startAddr,
+            vcpuCount: vcpuCount,
+        }
+    }
+
+    pub fn Size(&self) -> usize {
+        let size = self.vcpuCount * VcpuBootstrapMem::AlignedSize() + Self::PAGE_POOL_SIZE;
+        return size;
+    }
+
+    pub fn VcpuBootstrapMem(&self, idx: usize) -> &'static VcpuBootstrapMem {
+        let addr = self.startAddr + (idx * VcpuBootstrapMem::AlignedSize()) as u64;
+        return VcpuBootstrapMem::FromAddr(addr);
+    }
+
+    pub fn SimplePageAllocator(&self) -> SimplePageAllocator {
+        let addr = self.startAddr + (self.vcpuCount * VcpuBootstrapMem::AlignedSize()) as u64;
+        return SimplePageAllocator::New(addr, Self::PAGE_POOL_SIZE)
+    }
 }
 
 pub struct VirtualMachine {
@@ -145,10 +175,10 @@ impl VirtualMachine {
 
         info!("set map region start={:x}, end={:x}", MemoryDef::PHY_LOWER_ADDR, MemoryDef::PHY_LOWER_ADDR + 16 * MemoryDef::ONE_GB);
 
-        let pageAlloc;
         let pageAllocatorBaseAddr;
         let pageAllocatorOrd;
         let autoStart;
+        let bootstrapMem;
 
         {
             let memOrd = 32; // 4GB
@@ -164,8 +194,8 @@ impl VirtualMachine {
 
             //pageAlloc = PageAllocator::Init(pageMmap.as_ptr() as u64, memOrd - 12 /*1GB*/);
             pageAllocatorOrd = memOrd - 12 /*1GB*/;
-            pageAlloc = MemAllocator::Init(pageAllocatorBaseAddr, pageAllocatorOrd /*1GB*/);
-            vms.allocator = Some(pageAlloc);
+            bootstrapMem = BootStrapMem::New(pageAllocatorBaseAddr, cpuCount);
+            vms.allocator = Some(bootstrapMem.SimplePageAllocator());
 
             vms.hostAddrTop = MemoryDef::PHY_LOWER_ADDR + 64 * MemoryDef::ONE_MB + 2 * MemoryDef::ONE_GB;
             vms.pageTables = PageTables::New(vms.allocator.as_ref().unwrap())?;
@@ -201,7 +231,7 @@ impl VirtualMachine {
             let vcpu = Arc::new(Mutex::new(KVMVcpu::Init(i as usize,
                                                          cpuCount,
                                                          &vm_fd,
-                                                         VMS.lock().allocator.as_ref().unwrap(),
+                                                         &bootstrapMem,
                                                          entry, pageAllocatorBaseAddr,
                                                          pageAllocatorOrd,
                                                          eventfd,
