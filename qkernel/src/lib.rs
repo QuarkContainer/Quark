@@ -316,18 +316,9 @@ fn InitGs(id: u64) {
 }
 
 #[no_mangle]
-pub extern fn rust_main(pageAllocatorBaseAddr: u64, pageAllocatorOrd: u64, id: u64, vdsoParamAddr: u64, vcpuCnt: u64, autoStart: bool) {
+pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u64, vcpuCnt: u64, autoStart: bool) {
     if id == 0 {
-        (*PAGE_ALLOCATOR).Load(pageAllocatorBaseAddr, pageAllocatorOrd);
-
-        let heapOrd = 30; // 1GB
-        let heapStart = (*PAGE_ALLOCATOR).lock().Alloc(1 << (heapOrd - 12)).unwrap();
-        let heapSize = 1 << heapOrd;
-        ALLOCATOR.Add(heapStart as usize, heapSize as usize);
-        let heapStart = (*PAGE_ALLOCATOR).lock().Alloc(1 << (heapOrd - 12)).unwrap();
-        ALLOCATOR.Add(heapStart as usize, heapSize as usize);
-        let heapStart = (*PAGE_ALLOCATOR).lock().Alloc(1 << (heapOrd - 12)).unwrap();
-        ALLOCATOR.Add(heapStart as usize, heapSize as usize);
+        ALLOCATOR.Add(heapStart as usize, heapLen as usize);
 
         PAGE_MGR.lock().Init();
 

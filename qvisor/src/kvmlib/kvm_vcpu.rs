@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use core::sync::atomic::AtomicU64;
+use core::sync::atomic::Ordering;
 use kvm_bindings::kvm_sregs;
 use kvm_bindings::kvm_regs;
 use kvm_ioctls::VcpuExit;
 use core::mem::size_of;
 use libc::*;
-use core::sync::atomic::Ordering;
 
 use super::*;
 use super::syncmgr::*;
@@ -35,6 +36,115 @@ use super::amd64_def::*;
 use super::URING_MGR;
 use super::runc::runtime::vm::*;
 
+// bootstrap memory for vcpu
+#[repr(C)]
+pub struct VcpuBootstrapMem {
+    pub stack: [u8; MemoryDef::DEFAULT_STACK_SIZE as usize], //kernel stack
+    pub gdt: [u8; MemoryDef::PAGE_SIZE as usize], // gdt: one page
+    pub idt: [u8; MemoryDef::PAGE_SIZE as usize], // idt: one page
+    pub tssIntStack: [u8; (MemoryDef::INTERRUPT_STACK_PAGES * MemoryDef::PAGE_SIZE) as usize],
+    pub tss: [u8; MemoryDef::PAGE_SIZE as usize], // tss: one page
+}
+
+impl VcpuBootstrapMem {
+    pub fn FromAddr(addr: u64) -> &'static VcpuBootstrapMem {
+        return unsafe {
+            &*(addr as * const VcpuBootstrapMem)
+        }
+    }
+
+    pub fn StackAddr(&self) -> u64 {
+        let addr = &self.stack[0] as * const _ as u64;
+        assert!(addr & (MemoryDef::DEFAULT_STACK_PAGES - 1) == 0, "VcpuBootstrapMem stack is not aligned");
+        return addr;
+    }
+
+    pub fn GdtAddr(&self) -> u64 {
+        let addr = &self.gdt[0] as * const _ as u64;
+        assert!(addr & (MemoryDef::PAGE_SIZE - 1) == 0, "VcpuBootstrapMem stack is not aligned");
+        return addr;
+    }
+
+    pub fn IdtAddr(&self) -> u64 {
+        let addr = &self.idt[0] as * const _ as u64;
+        assert!(addr & (MemoryDef::PAGE_SIZE - 1) == 0, "VcpuBootstrapMem stack is not aligned");
+        return addr;
+    }
+
+    pub fn TssIntStackAddr(&self) -> u64 {
+        let addr = &self.tssIntStack[0] as * const _ as u64;
+        assert!(addr & (MemoryDef::PAGE_SIZE - 1) == 0, "VcpuBootstrapMem stack is not aligned");
+        return addr;
+    }
+
+    pub fn TssAddr(&self) -> u64 {
+        let addr = &self.tss[0] as * const _ as u64;
+        assert!(addr & (MemoryDef::PAGE_SIZE - 1) == 0, "VcpuBootstrapMem stack is not aligned");
+        return addr;
+    }
+
+    pub fn Size() -> usize {
+        return core::mem::size_of::<Self>()
+    }
+
+    pub fn AlignedSize() -> usize {
+        let size = 2 * MemoryDef::DEFAULT_STACK_SIZE as usize;
+        assert!(Self::Size() < size);
+        return size;
+    }
+}
+
+pub struct SimplePageAllocator {
+    pub next: AtomicU64,
+    pub end: u64,
+}
+
+impl SimplePageAllocator {
+    pub fn New(start: u64, len: usize) -> Self {
+        assert!(start & (MemoryDef::PAGE_SIZE - 1)  == 0);
+        assert!(len as u64 & (MemoryDef::PAGE_SIZE - 1) == 0);
+
+        return Self {
+            next: AtomicU64::new(start),
+            end: start + len as u64,
+        }
+    }
+}
+
+impl Allocator for SimplePageAllocator {
+    fn AllocPage(&self, _incrRef: bool) -> Result<u64> {
+        let current = self.next.load(Ordering::SeqCst);
+        if current == self.end {
+            panic!("SimplePageAllocator Out Of Memory")
+        }
+
+        self.next.fetch_add(MemoryDef::PAGE_SIZE, Ordering::SeqCst);
+        return Ok(current)
+    }
+
+    fn FreePage(&self, _addr: u64) -> Result<()> {
+        panic!("SimplePageAllocator doesn't support FreePage");
+    }
+
+    fn ZeroPage(&self) -> u64 {
+        panic!("SimplePageAllocator doesn't support ZeroPage");
+    }
+}
+
+impl RefMgr for SimplePageAllocator {
+    fn Ref(&self, _addr: u64) -> Result<u64> {
+        panic!("SimplePageAllocator doesn't support Ref");
+    }
+
+    fn Deref(&self, _addr: u64) -> Result<u64> {
+        panic!("SimplePageAllocator doesn't support Deref");
+    }
+
+    fn GetRef(&self, _addr: u64) -> Result<u64> {
+        panic!("SimplePageAllocator doesn't support GetRef");
+    }
+}
+
 pub struct KVMVcpu {
     pub id: usize,
     pub vcpuCnt: usize,
@@ -49,8 +159,8 @@ pub struct KVMVcpu {
     pub tssIntStackStart: u64,
     pub tssAddr: u64,
 
-    pub pageAllocatorBaseAddr: u64,
-    pub pageAllocatorOrd: u64,
+    pub heapStartAddr: u64,
+    pub heapLen: u64,
 
     pub shareSpace: &'static ShareSpace,
 
@@ -66,25 +176,27 @@ impl KVMVcpu {
     pub fn Init(id: usize,
                 vcpuCnt: usize,
                 vm_fd: &kvm_ioctls::VmFd,
-                pageAlloc: &MemAllocator,
+                boostrapMem: &BootStrapMem,
                 entry: u64,
                 pageAllocatorBaseAddr: u64,
                 pageAllocatorOrd: u64,
                 eventfd: i32,
                 autoStart: bool) -> Result<Self> {
         const DEFAULT_STACK_PAGES: u64 = qlib::linux_def::MemoryDef::DEFAULT_STACK_PAGES; //64KB
-        let stackAddr = pageAlloc.Alloc(DEFAULT_STACK_PAGES)?;
+        //let stackAddr = pageAlloc.Alloc(DEFAULT_STACK_PAGES)?;
+        let vcpuBoostrapMem = boostrapMem.VcpuBootstrapMem(id);
+        let stackAddr = vcpuBoostrapMem.StackAddr();
         let topStackAddr = stackAddr + (DEFAULT_STACK_PAGES << 12);
 
-        info!("the stack addr is {:x}, topstack address is {:x}", stackAddr, topStackAddr);
+        //info!("the stack addr is {:x}, topstack address is {:x}", stackAddr, topStackAddr);
 
-        let gdtAddr = pageAlloc.Alloc(1)?;
-        let idtAddr = pageAlloc.Alloc(1)?;
+        let gdtAddr = vcpuBoostrapMem.GdtAddr();
+        let idtAddr = vcpuBoostrapMem.IdtAddr();
 
-        let tssIntStackStart = pageAlloc.Alloc(MemoryDef::INTERRUPT_STACK_PAGES)?;
-        let tssAddr = pageAlloc.Alloc(1)?;
+        let tssIntStackStart = vcpuBoostrapMem.TssIntStackAddr();
+        let tssAddr = vcpuBoostrapMem.TssAddr();
 
-        info!("the tssIntStackStart is {:x}, tssAddr address is {:x}", tssIntStackStart, tssAddr);
+        //info!("the tssIntStackStart is {:x}, tssAddr address is {:x}", tssIntStackStart, tssAddr);
 
         let vcpu = vm_fd.create_vcpu(id as u8).map_err(|e| Error::IOError(format!("io::error is {:?}", e))).expect("create vcpu fail");
 
@@ -98,8 +210,8 @@ impl KVMVcpu {
             idtAddr: idtAddr,
             tssIntStackStart: tssIntStackStart,
             tssAddr: tssAddr,
-            pageAllocatorBaseAddr: pageAllocatorBaseAddr,
-            pageAllocatorOrd: pageAllocatorOrd,
+            heapStartAddr: pageAllocatorBaseAddr + boostrapMem.Size() as u64,
+            heapLen: (1 << (pageAllocatorOrd + 12)) - boostrapMem.Size() as u64,
             shareSpace: unsafe {
                 &*(0 as *const ShareSpace)
             },
@@ -234,9 +346,9 @@ impl KVMVcpu {
             rax: 0x11,
             rbx: 0xdd,
             //arg0
-            rdi: self.pageAllocatorBaseAddr,
+            rdi: self.heapStartAddr, // self.pageAllocatorBaseAddr + self.,
             //arg1
-            rsi: self.pageAllocatorOrd,
+            rsi: self.heapLen,
             //arg2
             rdx: self.id as u64,
             //arg3
