@@ -237,9 +237,18 @@ impl Default for TimerInternal {
 
 
 impl TimerInternal {
-    fn resetKickerLocked(&mut self) {
+    fn NextExpire(&mut self) -> i64 {
         if self.setting.Enabled {
-            self.Kicker().Reset(self.setting.Next);
+            let now = self.clock.Now();
+            let expire = self.setting.Next;
+            let mut delta = expire.0 - now.0 ;
+            if delta <= 0 {
+                delta = 0;
+            }
+
+            return delta
+        } else {
+            return 0
         }
     }
 
@@ -260,12 +269,12 @@ impl Deref for Timer {
 }
 
 impl Notifier for Timer {
-    fn Timeout(&self) {
+    fn Timeout(&self) -> i64 {
         let mut t = self.lock();
 
         let now = t.clock.Now();
         if t.paused {
-            return
+            return 0;
         }
 
         let (s, exp) = t.setting.At(now);
@@ -274,7 +283,7 @@ impl Notifier for Timer {
             t.listener.Notify(exp)
         }
 
-        t.resetKickerLocked();
+        return t.NextExpire();
     }
 
     fn Reset(&self) {}
@@ -349,7 +358,7 @@ impl Timer {
         }
 
         t.kicker = Some(NewRawTimer(t.clockId, self));
-        t.Kicker().Reset(Time(0));
+        t.Kicker().Reset(0);
         t.Kicker().lock().Timer = self.clone();
     }
 
@@ -380,7 +389,8 @@ impl Timer {
         }
 
         t.paused = false;
-        t.Kicker().Reset(Time(0));
+        let delta = t.NextExpire();
+        t.Kicker().Reset(delta);
     }
 
     pub fn Cancel(&self) {
@@ -407,7 +417,8 @@ impl Timer {
             t.listener.Notify(exp)
         }
 
-        t.resetKickerLocked();
+        let delta = t.NextExpire();
+        t.Kicker().Reset(delta);
         return (now, s)
     }
 
@@ -454,7 +465,8 @@ impl Timer {
             t.listener.Notify(newExp);
         }
 
-        t.resetKickerLocked();
+        let delta = t.NextExpire();
+        t.Kicker().Reset(delta);
         return (now, oldS)
     }
 

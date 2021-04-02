@@ -16,7 +16,6 @@ use alloc::sync::Arc;
 use spin::Mutex;
 use core::ops::Deref;
 
-use super::super::super::qlib::linux::time::*;
 use super::super::super::kernel::time::*;
 use super::super::super::kernel::timer::*;
 use super::super::super::IOURING;
@@ -24,17 +23,8 @@ use super::super::super::task::*;
 use super::timermgr::*;
 
 pub trait Notifier: Sync + Send {
-    fn Timeout(&self);
+    fn Timeout(&self) -> i64;
     fn Reset(&self);
-}
-
-#[derive(Clone)]
-pub struct DummyNotifier {}
-
-impl Notifier for DummyNotifier {
-    fn Timeout(&self) {}
-
-    fn Reset(&self) {}
 }
 
 #[derive(Eq, PartialEq, Clone, Copy)]
@@ -59,6 +49,37 @@ pub struct RawTimerInternal {
     pub SeqNo: u64,
     pub TM: TimerMgr,
     pub userData: u64,
+}
+
+impl RawTimerInternal {
+    pub fn Reset(&mut self, delta: i64) -> bool {
+        assert!(delta >= 0, "Timer::Reset get negtive delta");
+        let mut t = self;
+
+        let task = Task::Current();
+
+        if delta == 0 { // cancel the timer
+            if t.State != TimerState::Running {
+                return false; //one out of data fire.
+            }
+
+            t.SeqNo += 1;
+
+            //HostSpace::StopTimer(t.ClockId, t.Id);
+
+            IOURING.TimerRemove(task, t.userData);
+            return true;
+        }
+
+        t.Timer.Reset();
+        t.Expire = Time(delta);
+        t.State = TimerState::Running;
+        t.SeqNo += 1;
+
+        let userData = IOURING.Timeout(task, t.Id, t.SeqNo, delta) as u64;
+        t.userData = userData;
+        return false;
+    }
 }
 
 #[derive(Clone)]
@@ -121,44 +142,8 @@ impl RawTimer {
     // Reset changes the timer to expire after duration d.
     // It returns true if the timer had been active, false if the timer had
     // expired or been stopped.
-    pub fn Reset(&self, expire: Time) -> bool {
-        assert!(expire.0 >= 0, "Timer::Reset get negtive expire");
-        let mut t = self.lock();
-
-        let task = Task::Current();
-
-        if expire.0 == 0 { // cancel the timer
-            if t.State != TimerState::Running {
-                return false; //one out of data fire.
-            }
-
-            t.SeqNo += 1;
-
-            //HostSpace::StopTimer(t.ClockId, t.Id);
-
-            IOURING.TimerRemove(task, t.userData);
-            return true;
-        }
-
-        let now = if t.ClockId == CLOCK_MONOTONIC {
-            MonotonicNow()
-        } else {
-            RealNow()
-        };
-
-        let mut delta = expire.0 - now ;
-        if delta <= 0 {
-            delta = 0;
-        }
-
-        t.Timer.Reset();
-        t.Expire = Time(delta);
-        t.State = TimerState::Running;
-        t.SeqNo += 1;
-
-        let userData = IOURING.Timeout(task, t.Id, t.SeqNo, delta) as u64;
-        t.userData = userData;
-        return false;
+    pub fn Reset(&self, delta: i64) -> bool {
+        return self.lock().Reset(delta)
     }
 
     pub fn Fire(&self, SeqNo: u64) {
@@ -173,7 +158,10 @@ impl RawTimer {
         };
 
         //t.WaitEntry.Notify(1);
-        timer.Timeout();
+        let delta = timer.Timeout();
+        if delta > 0 {
+            self.Reset(delta);
+        }
     }
 
     pub fn Drop(&mut self) {
