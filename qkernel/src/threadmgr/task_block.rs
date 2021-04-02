@@ -202,8 +202,6 @@ impl Blocker {
 
         let err = self.block(clockId, waitGeneral, true);
 
-        timer.Cancel();
-
         self.timerEntry.Clear();
         return err;
     }

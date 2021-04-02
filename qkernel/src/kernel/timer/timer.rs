@@ -241,9 +241,13 @@ impl TimerInternal {
         if self.setting.Enabled {
             let now = self.clock.Now();
             let expire = self.setting.Next;
-            let mut delta = expire.0 - now.0 ;
-            if delta <= 0 {
-                delta = 0;
+            let mut delta = self.clock.WallTimeUntil(expire, now);
+
+            if delta < 0 {
+                // need to trigger timeout immediately. Add 1000 to trigger the uring timeout
+                // this is workaround
+                // Todo: fix it
+                delta = 10;
             }
 
             return delta
@@ -277,7 +281,8 @@ impl Notifier for Timer {
             return 0;
         }
 
-        let (s, exp) = t.setting.At(now);
+        // +2000ns as process time
+        let (s, exp) = t.setting.At(Time(now.0 + 2000));
         t.setting = s;
         if exp > 0 {
             t.listener.Notify(exp)
@@ -395,8 +400,9 @@ impl Timer {
 
     pub fn Cancel(&self) {
         //cancel current runtimer to stop it for unexpired fire
-        self.lock().paused = true;
-        self.lock().Kicker().Stop();
+        let mut t = self.lock();
+        t.paused = true;
+        t.Kicker().Stop();
     }
 
     // Get returns a snapshot of the Timer's current Setting and the time
@@ -411,7 +417,7 @@ impl Timer {
             panic!("Timer.Get called on paused Timer")
         }
 
-        let (s, exp) = t.setting.At(now);
+        let (s, exp) = t.setting.At(Time(now.0 + 2000));
         t.setting = s;
         if exp > 0 {
             t.listener.Notify(exp)
@@ -442,6 +448,7 @@ impl Timer {
     pub fn SwapAnd(&self, s: &Setting, mut f: impl FnMut()) -> (Time, Setting) {
         let mut t = self.lock();
         let now = t.clock.Now();
+        let now = Time(now.0 + 3000);
 
         let oldS = if !t.paused {
             let (oldS, oldExp) = t.setting.At(now);
