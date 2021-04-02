@@ -712,7 +712,7 @@ impl Task {
                 fsContext: FSContext::default(),
 
                 fdTbl: FDTable::default(),
-                blocker: Blocker::New1(baseStackAddr),
+                blocker: Blocker::New(baseStackAddr),
                 thread: None,
                 haveSyscallReturn: false,
                 syscallRestartBlock: None,

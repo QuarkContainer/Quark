@@ -50,6 +50,8 @@ pub struct Blocker {
 
     pub timerEntry: WaitEntry,
     pub timerListner: WaitEntryListener,
+    pub realBlockTimer: Timer,
+    pub monoBlockTimer: Timer,
 
     pub interruptEntry: WaitEntry,
     pub generalEntry: WaitEntry,
@@ -67,10 +69,19 @@ impl Default for Blocker {
         let interruptEntry = waiter.NewWaitEntry(Waiter::INTERRUPT_WAITID, 1);
         let generalEntry = waiter.NewWaitEntry(Waiter::GENERAL_WAITID, 0);
 
+        let monoClock = MONOTONIC_CLOCK.clone();
+        let monoTimer = Timer::New(CLOCK_MONOTONIC, &monoClock, &Arc::new(listener.clone()));
+
+        let realClock = REALTIME_CLOCK.clone();
+        let realTimer = Timer::New(CLOCK_REALTIME, &realClock, &Arc::new(listener.clone()));
+
+
         return Self {
             waiter: waiter,
             timerEntry: timerEntry,
             timerListner: listener,
+            realBlockTimer: realTimer,
+            monoBlockTimer: monoTimer,
             interruptEntry: interruptEntry,
             generalEntry: generalEntry,
         }
@@ -79,7 +90,7 @@ impl Default for Blocker {
 
 impl Blocker {
     pub fn Drop(&mut self) {
-        //self.monoBlockTimer.Destroy();
+        self.monoBlockTimer.Destroy();
     }
 
     pub fn New(taskId: u64) -> Self {
@@ -91,42 +102,21 @@ impl Blocker {
         let interruptEntry = waiter.NewWaitEntry(Waiter::INTERRUPT_WAITID, 1);
         let generalEntry = waiter.NewWaitEntry(Waiter::GENERAL_WAITID, 0);
 
-        return Self {
-            waiter: waiter,
-            timerEntry: timerEntry,
-            timerListner: listener,
-            interruptEntry: interruptEntry,
-            generalEntry: generalEntry,
-        }
-    }
+        let monoClock = MONOTONIC_CLOCK.clone();
+        let monoTimer = Timer::New(CLOCK_MONOTONIC, &monoClock, &Arc::new(listener.clone()));
 
-    //New1 and New is identical. But without New1 runing in Task::CreateThread, the execution will crash
-    //todo: fix this
-    pub fn New1(taskId: u64) -> Self {
-        let waiter = Waiter::New(taskId);
-
-        let timerEntry = waiter.NewWaitEntry(Waiter::TIMER_WAITID, 1);
-        let listener = WaitEntryListener::New(&timerEntry);
-        let interruptEntry = waiter.NewWaitEntry(Waiter::INTERRUPT_WAITID, 1);
-        let generalEntry = waiter.NewWaitEntry(Waiter::GENERAL_WAITID, 0);
-
-        return Self {
-            waiter: waiter,
-            timerEntry: timerEntry,
-            timerListner: listener,
-            interruptEntry: interruptEntry,
-            generalEntry: generalEntry,
-        }
-    }
-
-    pub fn RealTimer(&self) -> Timer {
         let realClock = REALTIME_CLOCK.clone();
-        return Timer::New(CLOCK_REALTIME, &realClock, &Arc::new(self.timerListner.clone()));
-    }
+        let realTimer = Timer::New(CLOCK_REALTIME, &realClock, &Arc::new(listener.clone()));
 
-    pub fn MonoTimer(&self) -> Timer {
-        let clock = MONOTONIC_CLOCK.clone();
-        return Timer::New(CLOCK_REALTIME, &clock, &Arc::new(self.timerListner.clone()));
+        return Self {
+            waiter: waiter,
+            timerEntry: timerEntry,
+            timerListner: listener,
+            realBlockTimer: realTimer,
+            monoBlockTimer: monoTimer,
+            interruptEntry: interruptEntry,
+            generalEntry: generalEntry,
+        }
     }
 
     pub fn BlockWithRealTimeout(&self, waitGeneral: bool, timeout: Option<Duration>) -> (Duration, Result<()>) {
@@ -201,11 +191,7 @@ impl Blocker {
             return self.block(clockId, waitGeneral, false);
         }
 
-        let timer = match clockId {
-            CLOCK_REALTIME => self.RealTimer(),
-            CLOCK_MONOTONIC => self.MonoTimer(),
-            _ => panic!("BlockWithTimer invalid clockid {}", clockId)
-        };
+        let timer = self.GetTimer(clockId);
 
         let deadline = deadline.unwrap();
         timer.Swap(&Setting {
@@ -229,6 +215,14 @@ impl Blocker {
         return Err(Error::SysError(SysErr::ERESTARTNOHAND));
     }
 
+    pub fn GetTimer(&self, clockId: i32) -> Timer {
+        return match clockId {
+            CLOCK_REALTIME => self.realBlockTimer.clone(),
+            CLOCK_MONOTONIC => self.monoBlockTimer.clone(),
+            _ => panic!("BlockWithTimer invalid clockid {}", clockId)
+        }
+    }
+
     pub fn block(&self, clockId: i32, waitGeneral: bool, waitTimer: bool) -> Result<()> {
         if waitGeneral && self.waiter.TryWait(&self.generalEntry) {
             return Ok(())
@@ -246,11 +240,7 @@ impl Blocker {
             [None, None, Some(self.interruptEntry.clone())]
         };
 
-        let timer = match clockId {
-            CLOCK_REALTIME => self.RealTimer(),
-            CLOCK_MONOTONIC => self.MonoTimer(),
-            _ => panic!("BlockWithTimer invalid clockid {}", clockId)
-        };
+        let timer = self.GetTimer(clockId);
 
         let entry = self.waiter.Wait(&entries);
         Task::Current().DoStop();
