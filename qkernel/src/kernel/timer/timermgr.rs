@@ -17,8 +17,8 @@ use spin::Mutex;
 use core::ops::Deref;
 use alloc::collections::btree_map::BTreeMap;
 
-use super::super::super::qlib::linux::time::*;
 use super::raw_timer::*;
+use super::timer::*;
 
 pub struct TimerMgrInternal {
     pub nextId: u64,
@@ -47,17 +47,12 @@ impl Deref for TimerMgr {
 }
 
 impl TimerMgr {
-    pub fn DummyTimer(&self) -> RawTimer {
-        let timer = RawTimer::New(CLOCK_MONOTONIC, 0, self, &DummyNotifier {});
-        return timer;
-    }
-
-    pub fn NewTimer<T: Notifier + Clone + 'static>(&self, clockId: i32, notifier: &T) -> RawTimer {
+    pub fn NewTimer(&self, clockId: i32, timer: &Timer) -> RawTimer {
         let mut tm = self.lock();
         let id = tm.nextId;
         tm.nextId += 1;
 
-        let timer = RawTimer::New(clockId, id, self, notifier);
+        let timer = RawTimer::New(clockId, id, self, timer);
 
         tm.timers.insert(id, timer.clone());
         return timer;

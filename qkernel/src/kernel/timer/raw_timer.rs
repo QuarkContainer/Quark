@@ -54,7 +54,7 @@ pub struct RawTimerInternal {
     pub Id: u64,
     pub ClockId: i32,
     pub Expire: Time,
-    pub Notifier: Arc<Notifier>,
+    pub Timer: Timer,
     pub State: TimerState,
     pub SeqNo: u64,
     pub TM: TimerMgr,
@@ -63,6 +63,14 @@ pub struct RawTimerInternal {
 
 #[derive(Clone)]
 pub struct RawTimer(Arc<Mutex<RawTimerInternal>>);
+
+impl Drop for RawTimer {
+    fn drop(&mut self) {
+        if Arc::strong_count(&self.0) == 1 {
+            self.Drop();
+        }
+    }
+}
 
 impl Deref for RawTimer {
     type Target = Arc<Mutex<RawTimerInternal>>;
@@ -73,12 +81,12 @@ impl Deref for RawTimer {
 }
 
 impl RawTimer {
-    pub fn New<T: Notifier + Clone + 'static>(clockId: i32, id: u64, tm: &TimerMgr, notifier: &T) -> Self {
+    pub fn New(clockId: i32, id: u64, tm: &TimerMgr, timer: &Timer) -> Self {
         let internal = RawTimerInternal {
             Id: id,
             ClockId: clockId,
             Expire: Time(0),
-            Notifier: Arc::new(notifier.clone()),
+            Timer: timer.clone(),
             State: TimerState::default(),
             SeqNo: 0,
             TM: tm.clone(),
@@ -119,7 +127,7 @@ impl RawTimer {
 
         let task = Task::Current();
 
-        if expire.0 == 0 {
+        if expire.0 == 0 { // cancel the timer
             if t.State != TimerState::Running {
                 return false; //one out of data fire.
             }
@@ -143,7 +151,7 @@ impl RawTimer {
             delta = 0;
         }
 
-        t.Notifier.Reset();
+        t.Timer.Reset();
         t.Expire = Time(delta);
         t.State = TimerState::Running;
         t.SeqNo += 1;
@@ -154,18 +162,18 @@ impl RawTimer {
     }
 
     pub fn Fire(&self, SeqNo: u64) {
-        let notifier = {
+        let timer = {
             let mut t = self.lock();
             if SeqNo != t.SeqNo || t.State != TimerState::Running {
                 return; //one out of data fire.
             }
 
             t.State = TimerState::Expired;
-            t.Notifier.clone()
+            t.Timer.clone()
         };
 
         //t.WaitEntry.Notify(1);
-        notifier.Timeout();
+        timer.Timeout();
     }
 
     pub fn Drop(&mut self) {

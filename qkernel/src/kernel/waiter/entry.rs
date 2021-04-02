@@ -17,7 +17,6 @@ use spin::Mutex;
 use core::ops::Deref;
 use core::cell::*;
 
-use super::super::timer::raw_timer::*;
 use super::super::futex::*;
 use super::super::epoll::epoll_entry::*;
 use super::super::fasync::*;
@@ -99,16 +98,6 @@ impl Deref for WaitEntry {
     }
 }
 
-impl Notifier for WaitEntry {
-    fn Timeout(&self) {
-        self.Notify(1);
-    }
-
-    fn Reset(&self) {
-        self.Clear();
-    }
-}
-
 impl PartialEq for WaitEntry {
     fn eq(&self, other: &Self) -> bool {
         return Arc::ptr_eq(&self.0, &other.0)
@@ -127,6 +116,10 @@ impl WaitEntry {
         };
 
         return Self(Arc::new(Mutex::new(internal)))
+    }
+
+    pub fn Timeout(&self) {
+        self.Notify(1);
     }
 
     pub fn NewThreadContext(waiter: &Waiter, waiterId: WaiterID, mask: EventMask) -> Self {

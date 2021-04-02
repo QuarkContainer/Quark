@@ -350,7 +350,7 @@ impl Timer {
 
         t.kicker = Some(NewRawTimer(t.clockId, self));
         t.Kicker().Reset(Time(0));
-        t.Kicker().lock().Notifier = Arc::new(self.clone());
+        t.Kicker().lock().Timer = self.clone();
     }
 
     pub fn Destroy(&self) {
