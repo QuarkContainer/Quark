@@ -15,6 +15,7 @@
 
 use x86_64::structures::DescriptorTablePointer;
 use x86_64::instructions::tables::lidt;
+use x86_64::addr::VirtAddr;
 
 #[allow(missing_debug_implementations)]
 #[derive(Clone)]
@@ -37,7 +38,7 @@ impl Idt {
         use core::mem::size_of;
 
         let ptr = DescriptorTablePointer {
-            base: self as *const _ as u64,
+            base: VirtAddr::new(self as *const _ as u64),
             limit: (size_of::<Self>() - 1) as u16,
         };
 
