@@ -39,7 +39,7 @@ Quark Container's high level design is as below. It handles Container Applicatio
 ### Requirement 
 Quark builds on X86-64 only. Other architecture will be available in the future.
 
-Quark is developed with Rust language. The build OS needs to install Rust nightly. 
+Quark is developed with Rust language. The build needs to install Rust nightly. 
 
 ### Build
 ```sh
