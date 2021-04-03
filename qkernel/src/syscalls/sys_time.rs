@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use alloc::boxed::Box;
-use alloc::sync::Arc;
 
 use super::super::Kernel::HostSpace;
 use super::super::task::*;
@@ -66,7 +65,7 @@ pub fn TargetThread(task: &Task, c: i32) -> Option<Thread> {
     return task.Thread().PIDNamespace().TaskWithID(pid)
 }
 
-pub fn GetClock(task: &Task, clockId: i32) -> Result<Arc<Clock>> {
+pub fn GetClock(task: &Task, clockId: i32) -> Result<Clock> {
     if clockId < 0 {
         if !IsValidCPUClock(clockId) {
             return Err(Error::SysError(SysErr::EINVAL));
@@ -80,21 +79,21 @@ pub fn GetClock(task: &Task, clockId: i32) -> Result<Arc<Clock>> {
         if IsCPUClockPerThread(clockId) {
             let target = targetThread;
             match WhichCPUClock(clockId) {
-                CPUCLOCK_VIRT => return Ok(Arc::new(target.UserCPUClock())),
+                CPUCLOCK_VIRT => return Ok(target.UserCPUClock()),
                 CPUCLOCK_PROF | CPUCLOCK_SCHED => {
                     // CPUCLOCK_SCHED is approximated by CPUCLOCK_PROF.
-                    return Ok(Arc::new(target.CPUClock()));
+                    return Ok(target.CPUClock());
                 }
                 _ => return Err(Error::SysError(SysErr::EINVAL))
             }
         } else {
             let target = targetThread.ThreadGroup();
             match WhichCPUClock(clockId) {
-                CPUCLOCK_VIRT => return Ok(Arc::new(target.UserCPUClock())),
+                CPUCLOCK_VIRT => return Ok(target.UserCPUClock()),
                 CPUCLOCK_PROF |
                 CPUCLOCK_SCHED => {
                     // CPUCLOCK_SCHED is approximated by CPUCLOCK_PROF.
-                    return Ok(Arc::new(target.CPUClock()));
+                    return Ok(target.CPUClock());
                 }
                 _ => return Err(Error::SysError(SysErr::EINVAL))
             }
@@ -111,8 +110,8 @@ pub fn GetClock(task: &Task, clockId: i32) -> Result<Arc<Clock>> {
         CLOCK_MONOTONIC_RAW |
         CLOCK_BOOTTIME => return Ok(MONOTONIC_CLOCK.clone()),
 
-        CLOCK_PROCESS_CPUTIME_ID => return Ok(Arc::new(task.Thread().ThreadGroup().CPUClock())),
-        CLOCK_THREAD_CPUTIME_ID => return Ok(Arc::new(task.Thread().CPUClock())),
+        CLOCK_PROCESS_CPUTIME_ID => return Ok(task.Thread().ThreadGroup().CPUClock()),
+        CLOCK_THREAD_CPUTIME_ID => return Ok(task.Thread().CPUClock()),
         _ => return Err(Error::SysError(SysErr::EINVAL)),
     }
 }

@@ -22,9 +22,11 @@ use super::super::super::qlib::linux::time::*;
 use super::super::super::SignalDef::*;
 use super::super::super::task::*;
 use super::super::super::threadmgr::thread_group::*;
+use super::super::super::threadmgr::task_sched::*;
 use super::super::waiter::*;
-use super::super::timer::raw_timer::*;
 use super::super::time::*;
+use super::timekeeper::*;
+use super::raw_timer::*;
 use super::*;
 
 // ClockEventSet occurs when a Clock undergoes a discontinuous change.
@@ -36,9 +38,22 @@ pub const CLOCK_EVENT_SET: EventMask = 1 << 0;
 pub const CLOCK_EVENT_RATE_INCREASE: EventMask = 1 << 0;
 pub const TIMER_TICK_EVENTS: EventMask = CLOCK_EVENT_SET | CLOCK_EVENT_RATE_INCREASE;
 
-pub trait Clock: Sync + Send {
+#[derive(Clone)]
+pub enum Clock {
+    TimeKeeperClock(TimeKeeperClock),
+    TaskClock(TaskClock),
+    ThreadGroupClock(ThreadGroupClock),
+}
+
+impl Clock {
     // Now returns the current time in nanoseconds according to the Clock.
-    fn Now(&self) -> Time;
+    pub fn Now(&self) -> Time {
+        match self {
+            Self::TimeKeeperClock(ref c) => c.Now(),
+            Self::TaskClock(ref c) => c.Now(),
+            Self::ThreadGroupClock(ref c) => c.Now(),
+        }
+    }
 
     // WallTimeUntil returns the estimated wall time until Now will return a
     // value greater than or equal to t, given that a recent call to Now
@@ -55,7 +70,13 @@ pub trait Clock: Sync + Send {
     // spurious Timer goroutine wakeups, while returning too large a value may
     // result in late expirations. Implementations should usually err on the
     // side of underestimating.
-    fn WallTimeUntil(&self, t: Time, now: Time) -> Duration;
+    pub fn WallTimeUntil(&self, t: Time, now: Time) -> Duration {
+        match self {
+            Self::TimeKeeperClock(ref c) => c.WallTimeUntil(t, now),
+            Self::TaskClock(ref c) => c.WallTimeUntil(t, now),
+            Self::ThreadGroupClock(ref c) => c.WallTimeUntil(t, now),
+        }
+    }
 }
 
 pub struct ClockEventsQueue {
@@ -105,7 +126,7 @@ pub struct Setting {
 }
 
 impl Setting {
-    pub fn FromSpec(value: Duration, interval: Duration, c: &Arc<Clock>) -> Result<Self> {
+    pub fn FromSpec(value: Duration, interval: Duration, c: &Clock) -> Result<Self> {
         return Self::FromSpecAt(value, interval, c.Now())
     }
 
@@ -149,7 +170,7 @@ impl Setting {
         })
     }
 
-    pub fn FromItimerspec(its: &Itimerspec, abs: bool, c: &Arc<Clock>) -> Result<Self> {
+    pub fn FromItimerspec(its: &Itimerspec, abs: bool, c: &Clock) -> Result<Self> {
         if abs {
             return Self::FromAbsSpec(Time::FromTimespec(&its.Value), its.Interval.ToDuration()?);
         }
@@ -209,7 +230,7 @@ pub fn ItimerspecFromSetting(now: Time, s: Setting) -> Itimerspec {
 pub struct TimerInternal {
     pub clockId: i32,
     // clock is the time source. clock is immutable.
-    pub clock: Arc<Clock>,
+    pub clock: Clock,
 
     // listener is notified of expirations. listener is immutable.
     pub listener: Arc<TimerListener>,
@@ -295,7 +316,7 @@ impl Notifier for Timer {
 }
 
 impl Timer {
-    pub fn New<C: Clock + 'static, L: TimerListener + 'static>(clockId: i32, clock: &Arc<C>, listener: &Arc<L>) -> Self {
+    pub fn New<L: TimerListener + 'static>(clockId: i32, clock: &Clock, listener: &Arc<L>) -> Self {
         let internal = TimerInternal {
             clockId: clockId,
             clock: clock.clone(),
@@ -310,7 +331,7 @@ impl Timer {
         return res;
     }
 
-    pub fn Period<C: Clock + 'static, L: TimerListener + 'static>(clockId: i32, clock: &Arc<C>, listener: &Arc<L>, duration: Duration) -> Self {
+    pub fn Period<L: TimerListener + 'static>(clockId: i32, clock: &Clock, listener: &Arc<L>, duration: Duration) -> Self {
         let internal = TimerInternal {
             clockId: clockId,
             clock: clock.clone(),
@@ -333,7 +354,7 @@ impl Timer {
         return res;
     }
 
-    pub fn After<C: Clock + 'static, L: TimerListener + 'static>(clockId: i32, clock: &Arc<C>, listener: &Arc<L>, duration: Duration) -> Self {
+    pub fn After<L: TimerListener + 'static>(clockId: i32, clock: &Clock, listener: &Arc<L>, duration: Duration) -> Self {
         let internal = TimerInternal {
             clockId: clockId,
             clock: clock.clone(),
@@ -487,7 +508,7 @@ impl Timer {
         f();
     }
 
-    pub fn Clock(&self) -> Arc<Clock> {
+    pub fn Clock(&self) -> Clock {
         return self.lock().clock.clone();
     }
 }

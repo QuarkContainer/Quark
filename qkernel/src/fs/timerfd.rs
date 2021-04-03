@@ -121,7 +121,7 @@ impl TimerOperations {
     }
 
     // Clock returns the associated Timer's Clock.
-    pub fn Clock(&self) -> Arc<Clock> {
+    pub fn Clock(&self) -> Clock {
         return self.timer.Clock();
     }
 

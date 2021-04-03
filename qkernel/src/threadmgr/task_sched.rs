@@ -439,6 +439,7 @@ impl ThreadGroup {
 
 // taskClock is a ktime.Clock that measures the time that a task has spent
 // executing. taskClock is primarily used to implement CLOCK_THREAD_CPUTIME_ID.
+#[derive(Clone)]
 pub struct TaskClock {
     pub t: Thread,
     pub includeSys: bool,
@@ -450,8 +451,8 @@ impl Waitable for TaskClock {
     }
 }
 
-impl Clock for TaskClock {
-    fn Now(&self) -> Time {
+impl TaskClock {
+    pub fn Now(&self) -> Time {
         let stats = self.t.CPUStats();
         if self.includeSys {
             return Time::FromNs(stats.UserTime + stats.SysTime)
@@ -460,11 +461,12 @@ impl Clock for TaskClock {
         return Time::FromNs(stats.UserTime)
     }
 
-    fn WallTimeUntil(&self, t: Time, now: Time) -> Duration {
+    pub fn WallTimeUntil(&self, t: Time, now: Time) -> Duration {
         return t.Sub(now)
     }
 }
 
+#[derive(Clone)]
 pub struct ThreadGroupClock {
     pub tg: ThreadGroup,
     pub includeSys: bool,
@@ -485,8 +487,8 @@ impl Waitable for ThreadGroupClock {
     }
 }
 
-impl Clock for ThreadGroupClock {
-    fn Now(&self) -> Time {
+impl ThreadGroupClock {
+    pub fn Now(&self) -> Time {
         let stats = self.tg.CPUStats();
         if self.includeSys {
             //error!("ThreadGroupClock usertime is {:x}, SysTime is {:x}", stats.UserTime, stats.SysTime);
@@ -496,7 +498,7 @@ impl Clock for ThreadGroupClock {
         return Time::FromNs(stats.UserTime)
     }
 
-    fn WallTimeUntil(&self, t: Time, now: Time) -> Duration {
+    pub fn WallTimeUntil(&self, t: Time, now: Time) -> Duration {
         let ts = self.tg.TaskSet();
         let n = {
             let _r = ts.ReadLock();
@@ -526,36 +528,44 @@ impl Clock for ThreadGroupClock {
 }
 
 impl Thread {
-    pub fn UserCPUClock(&self) -> TaskClock {
-        return TaskClock {
+    pub fn UserCPUClock(&self) -> Clock {
+        let c = TaskClock {
             t: self.clone(),
             includeSys: false,
-        }
+        };
+
+        return Clock::TaskClock(c)
     }
 
-    pub fn CPUClock(&self) -> TaskClock {
-        return TaskClock {
+    pub fn CPUClock(&self) -> Clock {
+        let c = TaskClock {
             t: self.clone(),
             includeSys: true,
-        }
+        };
+
+        return Clock::TaskClock(c)
     }
 }
 
 impl ThreadGroup {
-    pub fn UserCPUClock(&self) -> ThreadGroupClock {
-        return ThreadGroupClock {
+    pub fn UserCPUClock(&self) -> Clock {
+        let c = ThreadGroupClock {
             tg: self.clone(),
             includeSys: false,
             queue: Queue::default(),
-        }
+        };
+
+        return Clock::ThreadGroupClock(c);
     }
 
-    pub fn CPUClock(&self) -> ThreadGroupClock {
-        return ThreadGroupClock {
+    pub fn CPUClock(&self) -> Clock {
+        let c = ThreadGroupClock {
             tg: self.clone(),
             includeSys: true,
             queue: Queue::default(),
-        }
+        };
+
+        return Clock::ThreadGroupClock(c);
     }
 }
 

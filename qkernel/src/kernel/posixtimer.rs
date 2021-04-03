@@ -22,6 +22,7 @@ use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::linux::time::*;
 use super::super::threadmgr::thread::*;
+use super::timer::timer::Clock;
 use super::timer::timer;
 
 #[derive(Default)]
@@ -219,7 +220,7 @@ fn saturateI32FromU64(x: u64) -> i32 {
 }
 
 impl Thread {
-    pub fn IntervalTimerCreate<C: timer::Clock + 'static>(&self, c: &Arc<C>, sigev: &mut Sigevent) -> Result<TimerID> {
+    pub fn IntervalTimerCreate(&self, c: &Clock, sigev: &mut Sigevent) -> Result<TimerID> {
         let tg = self.lock().tg.clone();
         let mut tg = tg.lock();
 

@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
-
 pub mod raw_timer;
 pub mod timermgr;
 pub mod sampler;
@@ -33,8 +31,8 @@ use self::timer::*;
 lazy_static! {
     static ref TIMER_MGR: TimerMgr = TimerMgr::default();
     pub static ref TIME_KEEPER: TimeKeeper = TimeKeeper::default();
-    pub static ref REALTIME_CLOCK: Arc<TimeKeeperClock> = Arc::new(TIME_KEEPER.NewClock(REALTIME));
-    pub static ref MONOTONIC_CLOCK: Arc<TimeKeeperClock> = Arc::new(TIME_KEEPER.NewClock(MONOTONIC));
+    pub static ref REALTIME_CLOCK: Clock = TIME_KEEPER.NewClock(REALTIME);
+    pub static ref MONOTONIC_CLOCK: Clock = TIME_KEEPER.NewClock(MONOTONIC);
 }
 
 pub struct TimerUpdater {}

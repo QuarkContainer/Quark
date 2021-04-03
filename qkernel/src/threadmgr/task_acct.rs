@@ -14,7 +14,6 @@
 
 use alloc::string::String;
 use alloc::string::ToString;
-use alloc::sync::Arc;
 
 use super::super::kernel::timer::timer::*;
 use super::super::kernel::kernel::*;
@@ -65,7 +64,7 @@ impl Thread {
         let (tm, olds) = match id {
             ITIMER_REAL => {
                 let timer = tg.lock().itimerRealTimer.clone();
-                let news = Setting::FromSpec(newitv.Value.ToDuration(), newitv.Interval.ToDuration(), &Arc::new(timer.Clock()))?;
+                let news = Setting::FromSpec(newitv.Value.ToDuration(), newitv.Interval.ToDuration(), &timer.Clock())?;
                 let (tm, olds) = timer.Swap(&news);
                 (tm, olds)
             }

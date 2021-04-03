@@ -36,7 +36,6 @@ use super::fs::dirent::*;
 use super::kernel::uts_namespace::*;
 use super::kernel::ipc_namespace::*;
 use super::kernel::fd_table::*;
-use super::kernel::timer::timer::*;
 use super::threadmgr::task_exit::*;
 use super::threadmgr::task_block::*;
 use super::threadmgr::task_syscall::*;
