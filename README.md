@@ -80,3 +80,6 @@ Quark Container's debug log is put in /var/log/quark/quark.log. It could enable 
     
 When log is enabled, e.g. Debug. After run a docker image with Quark Container, the logs will be generated in the /var/log/quark/quark.log.
 doc
+
+## Communications
+Slack: https://bit.ly/3fGgNGH
