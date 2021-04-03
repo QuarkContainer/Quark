@@ -47,12 +47,12 @@ impl Deref for TimerMgr {
 }
 
 impl TimerMgr {
-    pub fn NewTimer(&self, clockId: i32, timer: &Timer) -> RawTimer {
+    pub fn NewTimer(&self, timer: &Timer) -> RawTimer {
         let mut tm = self.lock();
         let id = tm.nextId;
         tm.nextId += 1;
 
-        let timer = RawTimer::New(clockId, id, self, timer);
+        let timer = RawTimer::New(id, self, timer);
 
         tm.timers.insert(id, timer.clone());
         return timer;

@@ -63,8 +63,8 @@ pub fn MonotonicNow() -> i64 {
     return TIME_KEEPER.GetTime(MONOTONIC).expect("MonotonicNow fail");
 }
 
-pub fn NewRawTimer(clockId: i32, notifier: &Timer) -> RawTimer {
-    return TIMER_MGR.NewTimer(clockId, notifier);
+pub fn NewRawTimer(notifier: &Timer) -> RawTimer {
+    return TIMER_MGR.NewTimer(notifier);
 }
 
 pub fn RemoveTimer(timer: &RawTimer) {

@@ -16,7 +16,6 @@ use alloc::sync::Arc;
 use spin::Mutex;
 use core::ops::Deref;
 
-use super::super::super::kernel::time::*;
 use super::super::super::kernel::timer::*;
 use super::super::super::IOURING;
 use super::super::super::task::*;
@@ -42,8 +41,6 @@ impl Default for TimerState {
 
 pub struct RawTimerInternal {
     pub Id: u64,
-    pub ClockId: i32,
-    pub Expire: Time,
     pub Timer: Timer,
     pub State: TimerState,
     pub SeqNo: u64,
@@ -72,7 +69,6 @@ impl RawTimerInternal {
         }
 
         t.Timer.Reset();
-        t.Expire = Time(delta);
         t.State = TimerState::Running;
         t.SeqNo += 1;
 
@@ -102,11 +98,9 @@ impl Deref for RawTimer {
 }
 
 impl RawTimer {
-    pub fn New(clockId: i32, id: u64, tm: &TimerMgr, timer: &Timer) -> Self {
+    pub fn New(id: u64, tm: &TimerMgr, timer: &Timer) -> Self {
         let internal = RawTimerInternal {
             Id: id,
-            ClockId: clockId,
-            Expire: Time(0),
             Timer: timer.clone(),
             State: TimerState::default(),
             SeqNo: 0,

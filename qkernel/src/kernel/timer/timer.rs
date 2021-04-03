@@ -362,7 +362,7 @@ impl Timer {
             return
         }
 
-        t.kicker = Some(NewRawTimer(t.clockId, self));
+        t.kicker = Some(NewRawTimer(self));
         t.Kicker().Reset(0);
         t.Kicker().lock().Timer = self.clone();
     }
