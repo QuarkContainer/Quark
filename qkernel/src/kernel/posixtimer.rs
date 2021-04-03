@@ -286,7 +286,7 @@ impl Thread {
             }
         }
 
-        it.lock().timer = Some(timer::Timer::New(CLOCK_MONOTONIC, c, &Arc::new(it.clone())));
+        it.lock().timer = Some(timer::Timer::New(c, &Arc::new(it.clone())));
         tg.timers.insert(id, it);
         return Ok(id)
     }

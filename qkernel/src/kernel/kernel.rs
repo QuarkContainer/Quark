@@ -162,7 +162,7 @@ impl KernelInternal {
             tg: tg.Downgrade(),
         };
 
-        let itimer = Timer::New(MONOTONIC, &MONOTONIC_CLOCK, &Arc::new(listener));
+        let itimer = Timer::New(&MONOTONIC_CLOCK, &Arc::new(listener));
         tg.lock().itimerRealTimer = itimer;
 
         return tg
@@ -198,7 +198,7 @@ impl Kernel {
                 useHostCores: false,
                 cpu: 0,
             }),
-            cpuClockTicker: Timer::New(MONOTONIC, &MONOTONIC_CLOCK, &Arc::new(KernelCPUClockTicker::New())),
+            cpuClockTicker: Timer::New(&MONOTONIC_CLOCK, &Arc::new(KernelCPUClockTicker::New())),
             startTime: Task::RealTimeNow(),
             started: AtomicBool::new(false),
             platform: DefaultPlatform::default(),

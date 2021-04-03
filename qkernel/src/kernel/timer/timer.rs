@@ -228,7 +228,6 @@ pub fn ItimerspecFromSetting(now: Time, s: Setting) -> Itimerspec {
 // Timers should be created using NewTimer and must be cleaned up by calling
 // Timer.Destroy when no longer used.
 pub struct TimerInternal {
-    pub clockId: i32,
     // clock is the time source. clock is immutable.
     pub clock: Clock,
 
@@ -246,7 +245,6 @@ pub struct TimerInternal {
 impl Default for TimerInternal {
     fn default() -> Self {
         return Self {
-            clockId: CLOCK_REALTIME,
             clock: REALTIME_CLOCK.clone(),
             listener: Arc::new(DummyTimerListener {}),
             setting: Setting::default(),
@@ -303,7 +301,7 @@ impl Notifier for Timer {
         }
 
         // +2000ns as process time
-        let (s, exp) = t.setting.At(Time(now.0 + 2000));
+        let (s, exp) = t.setting.At(Time(now.0 + 20000));
         t.setting = s;
         if exp > 0 {
             t.listener.Notify(exp)
@@ -316,9 +314,8 @@ impl Notifier for Timer {
 }
 
 impl Timer {
-    pub fn New<L: TimerListener + 'static>(clockId: i32, clock: &Clock, listener: &Arc<L>) -> Self {
+    pub fn New<L: TimerListener + 'static>(clock: &Clock, listener: &Arc<L>) -> Self {
         let internal = TimerInternal {
-            clockId: clockId,
             clock: clock.clone(),
             listener: listener.clone(),
             setting: Setting::default(),
@@ -331,9 +328,8 @@ impl Timer {
         return res;
     }
 
-    pub fn Period<L: TimerListener + 'static>(clockId: i32, clock: &Clock, listener: &Arc<L>, duration: Duration) -> Self {
+    pub fn Period<L: TimerListener + 'static>(clock: &Clock, listener: &Arc<L>, duration: Duration) -> Self {
         let internal = TimerInternal {
-            clockId: clockId,
             clock: clock.clone(),
             listener: listener.clone(),
             setting: Setting::default(),
@@ -354,9 +350,8 @@ impl Timer {
         return res;
     }
 
-    pub fn After<L: TimerListener + 'static>(clockId: i32, clock: &Clock, listener: &Arc<L>, duration: Duration) -> Self {
+    pub fn After<L: TimerListener + 'static>(clock: &Clock, listener: &Arc<L>, duration: Duration) -> Self {
         let internal = TimerInternal {
-            clockId: clockId,
             clock: clock.clone(),
             listener: listener.clone(),
             setting: Setting::default(),
@@ -438,7 +433,7 @@ impl Timer {
             panic!("Timer.Get called on paused Timer")
         }
 
-        let (s, exp) = t.setting.At(Time(now.0 + 2000));
+        let (s, exp) = t.setting.At(Time(now.0 + 20000));
         t.setting = s;
         if exp > 0 {
             t.listener.Notify(exp)
@@ -469,7 +464,7 @@ impl Timer {
     pub fn SwapAnd(&self, s: &Setting, mut f: impl FnMut()) -> (Time, Setting) {
         let mut t = self.lock();
         let now = t.clock.Now();
-        let now = Time(now.0 + 3000);
+        let now = Time(now.0 + 30000);
 
         let oldS = if !t.paused {
             let (oldS, oldExp) = t.setting.At(now);

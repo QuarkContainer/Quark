@@ -179,7 +179,9 @@ pub fn SysNanoSleep(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let dur = ts.ToNs()?;
 
-    return NansleepFor(task, CLOCK_MONOTONIC, dur, rem)
+    let timer = task.blocker.GetTimer(CLOCK_MONOTONIC);
+
+    return NansleepFor(task, timer, dur, rem)
 }
 
 // SysClockNanosleep implements linux syscall clock_nanosleep(2).
@@ -206,25 +208,20 @@ pub fn SysClockNanosleep(task: &mut Task, args: &SyscallArguments) -> Result<i64
         }
     }
 
-    if flags & TIMER_ABSTIME != 0 {
-        let now = match clockID {
-            CLOCK_REALTIME => RealNow(),
-            CLOCK_MONOTONIC => MonotonicNow(),
-            _ => return Err(Error::SysError(SysErr::EINVAL)),
-        };
+    let clock = GetClock(task, clockID)?;
 
-        dur = dur - now;
+
+    if flags & TIMER_ABSTIME != 0 {
+        let now = clock.Now();
+        dur = dur - now.0;
     }
 
-    return NansleepFor(task, clockID, dur, rem)
+    let timer = task.blocker.GetTimerWithClock(&clock);
+    return NansleepFor(task, timer, dur, rem)
 }
 
-pub fn NansleepFor(task: &mut Task, clockId: i32, dur: i64, rem: u64) -> Result<i64> {
-    let (remaining, res) = match clockId {
-        CLOCK_REALTIME => task.blocker.BlockWithRealTimeout(false, Some(dur)),
-        CLOCK_MONOTONIC => task.blocker.BlockWithMonoTimeout(false, Some(dur)),
-        _ => return Err(Error::SysError(SysErr::EINVAL))
-    };
+pub fn NansleepFor(task: &mut Task, timer: Timer, dur: i64, rem: u64) -> Result<i64> {
+    let (remaining, res) = task.blocker.BlockWithTimeout(timer, false, Some(dur));
 
     if rem != 0 && remaining != 0 {
         let timeleft = Timespec::FromNs(remaining);

@@ -18,7 +18,7 @@ use super::super::kernel::waiter::*;
 use super::super::kernel::timer::*;
 use super::super::kernel::timer::timer::Setting;
 use super::super::kernel::timer::timer::Timer;
-//use super::super::kernel::timer::timer::Clock;
+use super::super::kernel::timer::timer::Clock;
 use super::super::kernel::timer::timer::WaitEntryListener;
 use super::super::threadmgr::thread::*;
 use super::super::qlib::linux::time::*;
@@ -71,10 +71,10 @@ impl Default for Blocker {
         let generalEntry = waiter.NewWaitEntry(Waiter::GENERAL_WAITID, 0);
 
         let monoClock = MONOTONIC_CLOCK.clone();
-        let monoTimer = Timer::New(CLOCK_MONOTONIC, &monoClock, &Arc::new(listener.clone()));
+        let monoTimer = Timer::New(&monoClock, &Arc::new(listener.clone()));
 
         let realClock = REALTIME_CLOCK.clone();
-        let realTimer = Timer::New(CLOCK_REALTIME, &realClock, &Arc::new(listener.clone()));
+        let realTimer = Timer::New(&realClock, &Arc::new(listener.clone()));
 
 
         return Self {
@@ -104,10 +104,10 @@ impl Blocker {
         let generalEntry = waiter.NewWaitEntry(Waiter::GENERAL_WAITID, 0);
 
         let monoClock = MONOTONIC_CLOCK.clone();
-        let monoTimer = Timer::New(CLOCK_MONOTONIC, &monoClock, &Arc::new(listener.clone()));
+        let monoTimer = Timer::New(&monoClock, &Arc::new(listener.clone()));
 
         let realClock = REALTIME_CLOCK.clone();
-        let realTimer = Timer::New(CLOCK_REALTIME, &realClock, &Arc::new(listener.clone()));
+        let realTimer = Timer::New(&realClock, &Arc::new(listener.clone()));
 
         return Self {
             waiter: waiter,
@@ -150,63 +150,9 @@ impl Blocker {
         return (remain, res)
     }
 
-    pub fn BlockWithRealTimeout(&self, waitGeneral: bool, timeout: Option<Duration>) -> (Duration, Result<()>) {
-        if timeout.is_none() {
-            return (0, self.block(waitGeneral, None));
-        }
-
-        let adjustTimeout = timeout.unwrap() - 30_000; // 30 us is process time.
-
-        if adjustTimeout <= 0 { // if timeout < 30 us, just timeout immediately as 30 us is process time.
-            return (0, Err(Error::SysError(SysErr::ETIMEDOUT)))
-        }
-
-        let start = RealNow();
-        let deadline = Time(start + adjustTimeout);
-
-        let res = self.BlockWithRealTimer(waitGeneral, Some(deadline));
-        match res {
-            Err(Error::SysError(SysErr::ETIMEDOUT)) => return (0, Err(Error::SysError(SysErr::ETIMEDOUT))),
-            _ => (),
-        }
-
-        let end = RealNow();
-        let remain = adjustTimeout - (end - start);
-        if remain < 0 {
-            return (0, res)
-        }
-
-        return (remain, res)
-    }
-
     pub fn BlockWithMonoTimeout(&self, waitGeneral: bool, timeout: Option<Duration>) -> (Duration, Result<()>) {
-        if timeout.is_none() {
-            return (0, self.block(waitGeneral, None));
-        }
-
-        let adjustTimeout = timeout.unwrap() - 30_000; // 30 us is process time.
-
-        if adjustTimeout <= 0 { // if timeout < 30 us, just timeout immediately as 30 us is process time.
-            return (0, Err(Error::SysError(SysErr::ETIMEDOUT)))
-        }
-
-        let start = MonotonicNow();
-
-        let deadline = Time(start).Add(adjustTimeout);
-
-        let res = self.BlockWithMonoTimer(waitGeneral, Some(deadline));
-        match res {
-            Err(Error::SysError(SysErr::ETIMEDOUT)) => return (0, Err(Error::SysError(SysErr::ETIMEDOUT))),
-            _ => (),
-        }
-
-        let end = MonotonicNow();
-        let remain = adjustTimeout - (end - start);
-        if remain <= 0 {
-            return (0, Err(Error::SysError(SysErr::ETIMEDOUT)))
-        }
-
-        return (remain, res)
+        let timer = self.GetTimer(MONOTONIC);
+        return self.BlockWithTimeout(timer, waitGeneral, timeout)
     }
 
     pub fn BlockWithRealTimer(&self, waitGeneral: bool, deadline: Option<Time>) -> Result<()> {
@@ -242,6 +188,10 @@ impl Blocker {
         let _entry = self.waiter.Wait(&entries);
         self.SleepFinish(false);
         return Err(Error::SysError(SysErr::ERESTARTNOHAND));
+    }
+
+    pub fn GetTimerWithClock(&self, clock: &Clock) -> Timer {
+        return Timer::New(clock, &Arc::new(self.timerListner.clone()));
     }
 
     pub fn GetTimer(&self, clockId: i32) -> Timer {

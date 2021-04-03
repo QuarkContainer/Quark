@@ -44,8 +44,7 @@ impl TimeKeeper {
             internal.Init(vdsoParamPageAddr);
         }
 
-        //let timer = Timer::Period(CLOCK_REALTIME, &REALTIME_CLOCK, &Arc::new(TimerUpdater {}), SECOND);
-        let timer = Timer::Period(CLOCK_MONOTONIC, &MONOTONIC_CLOCK, &Arc::new(TimerUpdater {}), SECOND);
+        let timer = Timer::Period(&MONOTONIC_CLOCK, &Arc::new(TimerUpdater {}), SECOND);
 
         {
             let mut internal = self.write();
