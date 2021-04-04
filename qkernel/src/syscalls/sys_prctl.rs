@@ -193,7 +193,7 @@ pub fn SysPrctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 USER_DUMPABLE => return Ok(SUID_DUMP_USER as i64),
                 ROOT_DUMPABLE => return Ok(SUID_DUMP_ROOT as i64),
                  _ => {
-                     panic!(&format!("Unknown dumpability {}", d))
+                     panic!("Unknown dumpability {}", d)
                  }
             }
         }

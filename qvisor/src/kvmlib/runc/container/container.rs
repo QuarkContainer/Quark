@@ -771,7 +771,7 @@ impl Container {
                 libc::getpid()
             };
 
-            assert!(currPid>0, format!("Container execute get current pid fail with error {}", errno::errno().0));
+            assert!(currPid>0, "Container execute get current pid fail with error {}", errno::errno().0);
             let currPidStr = format!("{}", currPid);
             Self::WriteStr(&execCmd.pid, &currPidStr)?;
         }
