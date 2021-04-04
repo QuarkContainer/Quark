@@ -24,6 +24,7 @@ use super::super::threadmgr::task_syscall::*;
 use super::super::threadmgr::thread::*;
 use super::super::kernel::timer::timer::*;
 use super::super::kernel::timer::*;
+use super::sys_poll::TIMEOUT_PROCESS_TIME;
 
 // The most significant 29 bits hold either a pid or a file descriptor.
 pub fn PidOfClockID(c: i32) -> i32 {
@@ -179,6 +180,10 @@ pub fn SysNanoSleep(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let dur = ts.ToNs()?;
 
+    if dur < TIMEOUT_PROCESS_TIME {
+        return Ok(0)
+    }
+
     let timer = task.blocker.GetTimer(CLOCK_MONOTONIC);
 
     return NansleepFor(task, timer, dur, rem)
@@ -210,10 +215,13 @@ pub fn SysClockNanosleep(task: &mut Task, args: &SyscallArguments) -> Result<i64
 
     let clock = GetClock(task, clockID)?;
 
-
     if flags & TIMER_ABSTIME != 0 {
         let now = clock.Now();
         dur = dur - now.0;
+    }
+
+    if dur < TIMEOUT_PROCESS_TIME {
+        return Ok(0)
     }
 
     let timer = task.blocker.GetTimerWithClock(&clock);
