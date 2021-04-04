@@ -121,7 +121,7 @@ impl Blocker {
     }
 
     pub fn BlockWithTimeout(&self, timer: Timer, waitGeneral: bool, timeout: Option<Duration>) -> (Duration, Result<()>) {
-        if timeout.is_none() {
+        if timeout.is_none() || timeout.unwrap() == core::i64::MAX {
             return (0, self.block(waitGeneral, None));
         }
 
@@ -133,7 +133,12 @@ impl Blocker {
 
         let clock = timer.Clock();
         let start = clock.Now().0;
-        let deadline = Time(start + adjustTimeout);
+
+        let deadline = if core::i64::MAX - adjustTimeout > start { // avoid overflow
+            Time(start + adjustTimeout)
+        } else {
+            Time(core::i64::MAX)
+        };
 
         let res = self.BlockWithTimer(timer, waitGeneral, Some(deadline));
         match res {
@@ -210,13 +215,13 @@ impl Blocker {
         self.SleepStart();
 
         let entries = if waitGeneral && waitTimer.is_some() {
-            [Some(self.generalEntry.clone()), Some(self.timerEntry.clone()), Some(self.interruptEntry.clone())]
+            [Some(self.timerEntry.clone()), Some(self.interruptEntry.clone()), Some(self.generalEntry.clone())]
         } else if waitGeneral {
-            [Some(self.generalEntry.clone()), None, Some(self.interruptEntry.clone())]
+            [None, Some(self.interruptEntry.clone()), Some(self.generalEntry.clone())]
         } else if waitTimer.is_some() {
-            [None, Some(self.timerEntry.clone()), Some(self.interruptEntry.clone())]
+            [Some(self.timerEntry.clone()), Some(self.interruptEntry.clone()), None]
         } else {
-            [None, None, Some(self.interruptEntry.clone())]
+            [None, Some(self.interruptEntry.clone()), None]
         };
 
         let entry = self.waiter.Wait(&entries);

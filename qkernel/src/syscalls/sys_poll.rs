@@ -223,6 +223,24 @@ pub fn DoSelect(task: &Task, nfds: i32, readfds: u64, writefds: u64, exceptfds: 
 
 
 pub fn PollBlock(task: &Task, pfd: &mut [PollFd], timeout: i64) -> (Duration, Result<usize>) {
+    // no fd to wait, just a nansleep
+    if pfd.len() == 0 {
+        if timeout == 0 {
+            return (0, Ok(0))
+        }
+
+        let (remain, res) = task.blocker.BlockWithMonoTimeout(false, Some(timeout));
+        match res {
+            Err(Error::SysError(SysErr::ETIMEDOUT)) => {
+                return (0, Ok(0))
+            }
+            Err(e) => {
+                return (remain, Err(e))
+            }
+            Ok(()) => return (remain, Ok(0))
+        };
+    }
+
     let mut timeout = timeout;
     let general = task.blocker.generalEntry.clone();
 

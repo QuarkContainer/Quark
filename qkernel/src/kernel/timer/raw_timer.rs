@@ -26,7 +26,7 @@ pub trait Notifier: Sync + Send {
     fn Reset(&self);
 }
 
-#[derive(Eq, PartialEq, Clone, Copy)]
+#[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum TimerState {
     Expired,
     Running,
@@ -68,7 +68,7 @@ impl RawTimerInternal {
             return true;
         }
 
-        t.Timer.Reset();
+
         t.State = TimerState::Running;
         t.SeqNo += 1;
 

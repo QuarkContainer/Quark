@@ -37,11 +37,15 @@ func main() {
 		}
 
 		str := fullstr[13:]
-		if !strings.HasPrefix(str, "[ INFO] [") {
+		substr := "";
+		if strings.HasPrefix(str, "[ERROR] [") {
+			substr = strings.TrimPrefix(str, "[ERROR] [")
+		} else if strings.HasPrefix(str, "[ INFO] [") {
+			substr = strings.TrimPrefix(str, "[ INFO] [")
+		} else {
 			continue
 		}
 
-		substr := strings.TrimPrefix(str, "[ INFO] [");
 		first := strings.Index(substr, "]")
 		left := strings.Index(substr, "(")
 		right := strings.Index(substr, ")")
