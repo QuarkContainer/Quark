@@ -55,7 +55,7 @@ impl TaskSetInternal {
         struct AllocatedTID {
             ns: PIDNamespace,
             tid: ThreadID,
-        };
+        }
 
         let tg = t.lock().tg.clone();
         let mut pidns = tg.PIDNamespace();

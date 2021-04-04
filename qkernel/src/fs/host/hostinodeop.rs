@@ -116,7 +116,7 @@ impl Mappable {
 }
 
 pub fn PagesInChunk(r: &Range, chunkStart: u64) -> i32 {
-    assert!(chunkStart & CHUNK_MASK == 0, &format!("chunkStart is {:x}", chunkStart));
+    assert!(chunkStart & CHUNK_MASK == 0, "chunkStart is {:x}", chunkStart);
     let chunkRange = Range::New(chunkStart, CHUNK_SIZE);
     return (r.Intersect(&chunkRange).Len() / MemoryDef::PAGE_SIZE) as i32;
 }

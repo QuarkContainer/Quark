@@ -235,8 +235,8 @@ impl Default for SpinLock {
 impl SpinLock {
     pub fn Lock(&self) {
         loop {
-            let old = self.lock.compare_and_swap(0, 1, Ordering::SeqCst);
-            if old == 0 {
+            let old = self.lock.compare_exchange(0, 1, Ordering::SeqCst, Ordering::SeqCst);
+            if old == Ok(0) {
                 break;
             }
         }
