@@ -25,7 +25,7 @@ use super::*;
 
 pub type WaiterID = u32;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct WaiterInternal {
     pub bitmap: u64,
     pub mask: u64,

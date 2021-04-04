@@ -59,7 +59,7 @@ impl Cond {
             return Ok(());
         }
 
-        let res = task.blocker.block(0, true, false);
+        let res = task.blocker.block(true, None);
         self.lock().queue.EventUnregister(task, &e);
 
         return res;

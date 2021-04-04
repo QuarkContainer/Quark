@@ -87,7 +87,7 @@ pub fn NewTimerfd(task: &Task, clockId: i32) -> Result<File> {
         _ => return Err(Error::SysError(SysErr::EINVAL))
     };
 
-    let timer = Timer::New(clockId, &clock, &internal);
+    let timer = Timer::New(&clock, &internal);
 
     let tops = TimerOperations {
         ops: internal,
@@ -121,7 +121,7 @@ impl TimerOperations {
     }
 
     // Clock returns the associated Timer's Clock.
-    pub fn Clock(&self) -> Arc<Clock> {
+    pub fn Clock(&self) -> Clock {
         return self.timer.Clock();
     }
 

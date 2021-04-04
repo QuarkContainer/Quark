@@ -172,7 +172,7 @@ pub fn SysRtSigsuspend(task: &mut Task, args: &SyscallArguments) -> Result<i64> 
     thread.SetSignalMask(mask);
     thread.SetSavedSignalMask(oldmask);
 
-    match task.blocker.block(0, false, false) {
+    match task.blocker.block(false, None) {
         Ok(_) => Ok(0),
         Err(_) => Err(Error::SysError(SysErr::EINTR))
     }

@@ -84,7 +84,7 @@ pub fn Init() {
     //self::fs::Init();
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct WaitingMsgCall {
     pub taskId: TaskIdQ,
     pub addr: u64,
@@ -307,7 +307,7 @@ impl VMSpace {
     }
 
     pub fn SendControlMsg(&mut self, usock: USocket, msg: ControlMsg) -> Result<()> {
-        let waitMsg = match self.waitingMsgCall {
+        let waitMsg = match self.waitingMsgCall.take() {
             None => {
                 self.controlMsgQueue.push_front(Box::new((usock, msg)));
                 return Ok(());

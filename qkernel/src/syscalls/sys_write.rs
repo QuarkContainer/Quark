@@ -38,13 +38,13 @@ pub fn Write(task: &Task, fd: i32, addr: u64, size: i64) -> Result<i64> {
     //task.PerfGoto(PerfType::Write);
     //defer!(task.PerfGofrom(PerfType::Write));
 
-    if fd == 2  {
+    /*if fd == 2  {
          use alloc::string::ToString;
          use super::super::util::cstring::*;
 
          let str = CString::ToStringWithLen(task, addr, size as usize)?.to_string();
          error!("(Data) Write: {}", str);
-    }
+    }*/
 
     let file = task.GetFile(fd)?;
 

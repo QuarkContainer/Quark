@@ -22,9 +22,11 @@ use super::super::super::qlib::linux::time::*;
 use super::super::super::SignalDef::*;
 use super::super::super::task::*;
 use super::super::super::threadmgr::thread_group::*;
+use super::super::super::threadmgr::task_sched::*;
 use super::super::waiter::*;
-use super::super::timer::raw_timer::*;
 use super::super::time::*;
+use super::timekeeper::*;
+use super::raw_timer::*;
 use super::*;
 
 // ClockEventSet occurs when a Clock undergoes a discontinuous change.
@@ -36,9 +38,22 @@ pub const CLOCK_EVENT_SET: EventMask = 1 << 0;
 pub const CLOCK_EVENT_RATE_INCREASE: EventMask = 1 << 0;
 pub const TIMER_TICK_EVENTS: EventMask = CLOCK_EVENT_SET | CLOCK_EVENT_RATE_INCREASE;
 
-pub trait Clock: Sync + Send {
+#[derive(Clone)]
+pub enum Clock {
+    TimeKeeperClock(TimeKeeperClock),
+    TaskClock(TaskClock),
+    ThreadGroupClock(ThreadGroupClock),
+}
+
+impl Clock {
     // Now returns the current time in nanoseconds according to the Clock.
-    fn Now(&self) -> Time;
+    pub fn Now(&self) -> Time {
+        match self {
+            Self::TimeKeeperClock(ref c) => c.Now(),
+            Self::TaskClock(ref c) => c.Now(),
+            Self::ThreadGroupClock(ref c) => c.Now(),
+        }
+    }
 
     // WallTimeUntil returns the estimated wall time until Now will return a
     // value greater than or equal to t, given that a recent call to Now
@@ -55,7 +70,13 @@ pub trait Clock: Sync + Send {
     // spurious Timer goroutine wakeups, while returning too large a value may
     // result in late expirations. Implementations should usually err on the
     // side of underestimating.
-    fn WallTimeUntil(&self, t: Time, now: Time) -> Duration;
+    pub fn WallTimeUntil(&self, t: Time, now: Time) -> Duration {
+        match self {
+            Self::TimeKeeperClock(ref c) => c.WallTimeUntil(t, now),
+            Self::TaskClock(ref c) => c.WallTimeUntil(t, now),
+            Self::ThreadGroupClock(ref c) => c.WallTimeUntil(t, now),
+        }
+    }
 }
 
 pub struct ClockEventsQueue {
@@ -105,7 +126,7 @@ pub struct Setting {
 }
 
 impl Setting {
-    pub fn FromSpec(value: Duration, interval: Duration, c: &Arc<Clock>) -> Result<Self> {
+    pub fn FromSpec(value: Duration, interval: Duration, c: &Clock) -> Result<Self> {
         return Self::FromSpecAt(value, interval, c.Now())
     }
 
@@ -149,7 +170,7 @@ impl Setting {
         })
     }
 
-    pub fn FromItimerspec(its: &Itimerspec, abs: bool, c: &Arc<Clock>) -> Result<Self> {
+    pub fn FromItimerspec(its: &Itimerspec, abs: bool, c: &Clock) -> Result<Self> {
         if abs {
             return Self::FromAbsSpec(Time::FromTimespec(&its.Value), its.Interval.ToDuration()?);
         }
@@ -207,9 +228,8 @@ pub fn ItimerspecFromSetting(now: Time, s: Setting) -> Itimerspec {
 // Timers should be created using NewTimer and must be cleaned up by calling
 // Timer.Destroy when no longer used.
 pub struct TimerInternal {
-    pub clockId: i32,
     // clock is the time source. clock is immutable.
-    pub clock: Arc<Clock>,
+    pub clock: Clock,
 
     // listener is notified of expirations. listener is immutable.
     pub listener: Arc<TimerListener>,
@@ -225,7 +245,6 @@ pub struct TimerInternal {
 impl Default for TimerInternal {
     fn default() -> Self {
         return Self {
-            clockId: CLOCK_REALTIME,
             clock: REALTIME_CLOCK.clone(),
             listener: Arc::new(DummyTimerListener {}),
             setting: Setting::default(),
@@ -237,9 +256,22 @@ impl Default for TimerInternal {
 
 
 impl TimerInternal {
-    fn resetKickerLocked(&mut self) {
+    fn NextExpire(&mut self) -> i64 {
         if self.setting.Enabled {
-            self.Kicker().Reset(self.setting.Next);
+            let now = self.clock.Now();
+            let expire = self.setting.Next;
+            let mut delta = self.clock.WallTimeUntil(expire, now);
+
+            if delta < 0 {
+                // need to trigger timeout immediately. Add 1000 to trigger the uring timeout
+                // this is workaround
+                // Todo: fix it
+                delta = 10;
+            }
+
+            return delta
+        } else {
+            return 0
         }
     }
 
@@ -260,30 +292,30 @@ impl Deref for Timer {
 }
 
 impl Notifier for Timer {
-    fn Timeout(&self) {
+    fn Timeout(&self) -> i64 {
         let mut t = self.lock();
 
         let now = t.clock.Now();
         if t.paused {
-            return
+            return 0;
         }
 
-        let (s, exp) = t.setting.At(now);
+        // +2000ns as process time
+        let (s, exp) = t.setting.At(Time(now.0 + 20000));
         t.setting = s;
         if exp > 0 {
             t.listener.Notify(exp)
         }
 
-        t.resetKickerLocked();
+        return t.NextExpire();
     }
 
     fn Reset(&self) {}
 }
 
 impl Timer {
-    pub fn New<C: Clock + 'static, L: TimerListener + 'static>(clockId: i32, clock: &Arc<C>, listener: &Arc<L>) -> Self {
+    pub fn New<L: TimerListener + 'static>(clock: &Clock, listener: &Arc<L>) -> Self {
         let internal = TimerInternal {
-            clockId: clockId,
             clock: clock.clone(),
             listener: listener.clone(),
             setting: Setting::default(),
@@ -296,9 +328,8 @@ impl Timer {
         return res;
     }
 
-    pub fn Period<C: Clock + 'static, L: TimerListener + 'static>(clockId: i32, clock: &Arc<C>, listener: &Arc<L>, duration: Duration) -> Self {
+    pub fn Period<L: TimerListener + 'static>(clock: &Clock, listener: &Arc<L>, duration: Duration) -> Self {
         let internal = TimerInternal {
-            clockId: clockId,
             clock: clock.clone(),
             listener: listener.clone(),
             setting: Setting::default(),
@@ -319,9 +350,8 @@ impl Timer {
         return res;
     }
 
-    pub fn After<C: Clock + 'static, L: TimerListener + 'static>(clockId: i32, clock: &Arc<C>, listener: &Arc<L>, duration: Duration) -> Self {
+    pub fn After<L: TimerListener + 'static>(clock: &Clock, listener: &Arc<L>, duration: Duration) -> Self {
         let internal = TimerInternal {
-            clockId: clockId,
             clock: clock.clone(),
             listener: listener.clone(),
             setting: Setting::default(),
@@ -348,9 +378,9 @@ impl Timer {
             return
         }
 
-        t.kicker = Some(NewRawTimer(t.clockId, self));
-        t.Kicker().Reset(Time(0));
-        t.Kicker().lock().Notifier = Arc::new(self.clone());
+        t.kicker = Some(NewRawTimer(self));
+        t.Kicker().Reset(0);
+        t.Kicker().lock().Timer = self.clone();
     }
 
     pub fn Destroy(&self) {
@@ -380,13 +410,15 @@ impl Timer {
         }
 
         t.paused = false;
-        t.Kicker().Reset(Time(0));
+        let delta = t.NextExpire();
+        t.Kicker().Reset(delta);
     }
 
     pub fn Cancel(&self) {
         //cancel current runtimer to stop it for unexpired fire
-        self.lock().paused = true;
-        self.lock().Kicker().Stop();
+        let mut t = self.lock();
+        t.paused = true;
+        t.Kicker().Stop();
     }
 
     // Get returns a snapshot of the Timer's current Setting and the time
@@ -401,13 +433,14 @@ impl Timer {
             panic!("Timer.Get called on paused Timer")
         }
 
-        let (s, exp) = t.setting.At(now);
+        let (s, exp) = t.setting.At(Time(now.0 + 20000));
         t.setting = s;
         if exp > 0 {
             t.listener.Notify(exp)
         }
 
-        t.resetKickerLocked();
+        let delta = t.NextExpire();
+        t.Kicker().Reset(delta);
         return (now, s)
     }
 
@@ -431,6 +464,7 @@ impl Timer {
     pub fn SwapAnd(&self, s: &Setting, mut f: impl FnMut()) -> (Time, Setting) {
         let mut t = self.lock();
         let now = t.clock.Now();
+        let now = Time(now.0 + 30000);
 
         let oldS = if !t.paused {
             let (oldS, oldExp) = t.setting.At(now);
@@ -454,7 +488,8 @@ impl Timer {
             t.listener.Notify(newExp);
         }
 
-        t.resetKickerLocked();
+        let delta = t.NextExpire();
+        t.Kicker().Reset(delta);
         return (now, oldS)
     }
 
@@ -468,7 +503,7 @@ impl Timer {
         f();
     }
 
-    pub fn Clock(&self) -> Arc<Clock> {
+    pub fn Clock(&self) -> Clock {
         return self.lock().clock.clone();
     }
 }

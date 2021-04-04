@@ -42,7 +42,22 @@ pub const SELECT_WRITE_EVENTS : i16 = (LibcConst::EPOLLOUT | LibcConst::EPOLLERR
 // fs/select.c:POLLEX_SET.
 pub const SELECT_EXCEPT_EVENTS : i16 = (LibcConst::EPOLLPRI) as i16;
 
+pub const TIMEOUT_PROCESS_TIME : i64 = 30_000;
+
 pub fn DoSelect(task: &Task, nfds: i32, readfds: u64, writefds: u64, exceptfds: u64, timeout: i64) -> Result<i64> {
+    if nfds == 0 {
+        let (_remain, res) = task.blocker.BlockWithMonoTimeout(false, Some(timeout));
+        match res {
+            Err(Error::SysError(SysErr::ETIMEDOUT)) => {
+                return Ok(0)
+            }
+            Err(e) => {
+                return Err(e)
+            }
+            Ok(()) => return Ok(0)
+        };
+    }
+
     if nfds < 0 || nfds > FILE_CAP {
         return Err(Error::SysError(SysErr::EINVAL))
     }
@@ -223,6 +238,24 @@ pub fn DoSelect(task: &Task, nfds: i32, readfds: u64, writefds: u64, exceptfds: 
 
 
 pub fn PollBlock(task: &Task, pfd: &mut [PollFd], timeout: i64) -> (Duration, Result<usize>) {
+    // no fd to wait, just a nansleep
+    if pfd.len() == 0 {
+        if timeout == 0 {
+            return (0, Ok(0))
+        }
+
+        let (remain, res) = task.blocker.BlockWithMonoTimeout(false, Some(timeout));
+        match res {
+            Err(Error::SysError(SysErr::ETIMEDOUT)) => {
+                return (0, Ok(0))
+            }
+            Err(e) => {
+                return (remain, Err(e))
+            }
+            Ok(()) => return (remain, Ok(0))
+        };
+    }
+
     let mut timeout = timeout;
     let general = task.blocker.generalEntry.clone();
 
@@ -360,6 +393,9 @@ pub fn SysSelect(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
 
         timeout = timeval.ToDuration();
+        if timeout <= TIMEOUT_PROCESS_TIME {
+            timeout = -1;
+        }
     }
 
     let startNs = MonotonicNow();
@@ -582,6 +618,9 @@ pub fn CopyTimespecIntoDuration(task: &Task, timespecAddr: u64) -> Result<Durati
         }
 
         timeout = timespec.ToDuration()?;
+        if timeout <= TIMEOUT_PROCESS_TIME {
+            timeout = -1;
+        }
     }
 
     return Ok(timeout);

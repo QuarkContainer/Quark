@@ -16,28 +16,17 @@ use alloc::sync::Arc;
 use spin::Mutex;
 use core::ops::Deref;
 
-use super::super::super::qlib::linux::time::*;
-use super::super::super::kernel::time::*;
 use super::super::super::kernel::timer::*;
 use super::super::super::IOURING;
 use super::super::super::task::*;
 use super::timermgr::*;
 
 pub trait Notifier: Sync + Send {
-    fn Timeout(&self);
+    fn Timeout(&self) -> i64;
     fn Reset(&self);
 }
 
-#[derive(Clone)]
-pub struct DummyNotifier {}
-
-impl Notifier for DummyNotifier {
-    fn Timeout(&self) {}
-
-    fn Reset(&self) {}
-}
-
-#[derive(Eq, PartialEq, Clone, Copy)]
+#[derive(Eq, PartialEq, Clone, Copy, Debug)]
 pub enum TimerState {
     Expired,
     Running,
@@ -52,17 +41,53 @@ impl Default for TimerState {
 
 pub struct RawTimerInternal {
     pub Id: u64,
-    pub ClockId: i32,
-    pub Expire: Time,
-    pub Notifier: Arc<Notifier>,
+    pub Timer: Timer,
     pub State: TimerState,
     pub SeqNo: u64,
     pub TM: TimerMgr,
     pub userData: u64,
 }
 
+impl RawTimerInternal {
+    pub fn Reset(&mut self, delta: i64) -> bool {
+        assert!(delta >= 0, "Timer::Reset get negtive delta");
+        let mut t = self;
+
+        let task = Task::Current();
+
+        if delta == 0 { // cancel the timer
+            if t.State != TimerState::Running {
+                return false; //one out of data fire.
+            }
+
+            t.SeqNo += 1;
+
+            //HostSpace::StopTimer(t.ClockId, t.Id);
+
+            IOURING.TimerRemove(task, t.userData);
+            return true;
+        }
+
+
+        t.State = TimerState::Running;
+        t.SeqNo += 1;
+
+        let userData = IOURING.Timeout(task, t.Id, t.SeqNo, delta) as u64;
+        t.userData = userData;
+        return false;
+    }
+}
+
 #[derive(Clone)]
 pub struct RawTimer(Arc<Mutex<RawTimerInternal>>);
+
+impl Drop for RawTimer {
+    fn drop(&mut self) {
+        if Arc::strong_count(&self.0) == 1 {
+            self.Drop();
+        }
+    }
+}
 
 impl Deref for RawTimer {
     type Target = Arc<Mutex<RawTimerInternal>>;
@@ -73,12 +98,10 @@ impl Deref for RawTimer {
 }
 
 impl RawTimer {
-    pub fn New<T: Notifier + Clone + 'static>(clockId: i32, id: u64, tm: &TimerMgr, notifier: &T) -> Self {
+    pub fn New(id: u64, tm: &TimerMgr, timer: &Timer) -> Self {
         let internal = RawTimerInternal {
             Id: id,
-            ClockId: clockId,
-            Expire: Time(0),
-            Notifier: Arc::new(notifier.clone()),
+            Timer: timer.clone(),
             State: TimerState::default(),
             SeqNo: 0,
             TM: tm.clone(),
@@ -113,59 +136,26 @@ impl RawTimer {
     // Reset changes the timer to expire after duration d.
     // It returns true if the timer had been active, false if the timer had
     // expired or been stopped.
-    pub fn Reset(&self, expire: Time) -> bool {
-        assert!(expire.0 >= 0, "Timer::Reset get negtive expire");
-        let mut t = self.lock();
-
-        let task = Task::Current();
-
-        if expire.0 == 0 {
-            if t.State != TimerState::Running {
-                return false; //one out of data fire.
-            }
-
-            t.SeqNo += 1;
-
-            //HostSpace::StopTimer(t.ClockId, t.Id);
-
-            IOURING.TimerRemove(task, t.userData);
-            return true;
-        }
-
-        let now = if t.ClockId == CLOCK_MONOTONIC {
-            MonotonicNow()
-        } else {
-            RealNow()
-        };
-
-        let mut delta = expire.0 - now ;
-        if delta <= 0 {
-            delta = 0;
-        }
-
-        t.Notifier.Reset();
-        t.Expire = Time(delta);
-        t.State = TimerState::Running;
-        t.SeqNo += 1;
-
-        let userData = IOURING.Timeout(task, t.Id, t.SeqNo, delta) as u64;
-        t.userData = userData;
-        return false;
+    pub fn Reset(&self, delta: i64) -> bool {
+        return self.lock().Reset(delta)
     }
 
     pub fn Fire(&self, SeqNo: u64) {
-        let notifier = {
+        let timer = {
             let mut t = self.lock();
             if SeqNo != t.SeqNo || t.State != TimerState::Running {
                 return; //one out of data fire.
             }
 
             t.State = TimerState::Expired;
-            t.Notifier.clone()
+            t.Timer.clone()
         };
 
         //t.WaitEntry.Notify(1);
-        notifier.Timeout();
+        let delta = timer.Timeout();
+        if delta > 0 {
+            self.Reset(delta);
+        }
     }
 
     pub fn Drop(&mut self) {

@@ -44,8 +44,7 @@ impl TimeKeeper {
             internal.Init(vdsoParamPageAddr);
         }
 
-        //let timer = Timer::Period(CLOCK_REALTIME, &REALTIME_CLOCK, &Arc::new(TimerUpdater {}), SECOND);
-        let timer = Timer::Period(CLOCK_MONOTONIC, &MONOTONIC_CLOCK, &Arc::new(TimerUpdater {}), SECOND);
+        let timer = Timer::Period(&MONOTONIC_CLOCK, &Arc::new(TimerUpdater {}), SECOND);
 
         {
             let mut internal = self.write();
@@ -53,11 +52,13 @@ impl TimeKeeper {
         }
     }
 
-    pub fn NewClock(&self, clockId: ClockID) -> TimeKeeperClock {
-        return TimeKeeperClock {
+    pub fn NewClock(&self, clockId: ClockID) -> Clock {
+        let c = TimeKeeperClock {
             tk: self.clone(),
             c: clockId,
-        }
+        };
+
+        return Clock::TimeKeeperClock(c);
     }
 
     pub fn Update(&self) {
@@ -186,18 +187,19 @@ impl TimeKeeperInternal {
     }
 }
 
+#[derive(Clone)]
 pub struct TimeKeeperClock {
     pub tk: TimeKeeper,
     pub c: ClockID,
 }
 
-impl Clock for TimeKeeperClock {
-    fn Now(&self) -> Time {
+impl TimeKeeperClock {
+    pub fn Now(&self) -> Time {
         let now = self.tk.GetTime(self.c).expect("timekeeperClock Now fail");
         return Time::FromNs(now);
     }
 
-    fn WallTimeUntil(&self, t: Time, now: Time) -> Duration {
+    pub fn WallTimeUntil(&self, t: Time, now: Time) -> Duration {
         return t.Sub(now)
     }
 }

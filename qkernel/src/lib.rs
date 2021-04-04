@@ -123,6 +123,7 @@ use self::threadmgr::task_sched::*;
 use self::qlib::perf_tunning::*;
 use self::memmgr::buf_allocator::*;
 use self::quring::*;
+use self::print::SCALE;
 
 pub const HEAP_START: usize = 0x70_2000_0000;
 pub const HEAP_SIZE: usize = 0x1000_0000;
@@ -226,7 +227,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     if llevel == LogLevel::Simple || llevel == LogLevel::Complex {
         let gap = Rdtsc() - startTime;
         info!("({}/{})------Return[{}] res is {:x}: call id {:?} ",
-        tid, pid, gap / 1_000, res, callId);
+        tid, pid, gap / SCALE, res, callId);
     }
 
     let kernalRsp = currTask.GetPtRegs() as *const _ as u64;
