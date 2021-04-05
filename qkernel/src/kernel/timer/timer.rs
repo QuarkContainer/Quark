@@ -40,7 +40,7 @@ pub const TIMER_TICK_EVENTS: EventMask = CLOCK_EVENT_SET | CLOCK_EVENT_RATE_INCR
 
 #[derive(Clone)]
 pub enum Clock {
-    TimeKeeperClock(TimeKeeperClock),
+    TimeKeeperClock(Arc<TimeKeeperClock>),
     TaskClock(TaskClock),
     ThreadGroupClock(ThreadGroupClock),
 }
