@@ -146,7 +146,7 @@ pub fn openAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
 
     let (path, dirPath) = copyInPath(task,  addr, false)?;
 
-    info!("openat path is {:?}, the perm is {:?}", &path, &PermMask::FromFlags(flags));
+    info!("openat path is {}, the perm is {:?}", &path, &PermMask::FromFlags(flags));
 
     let resolve = (flags & Flags::O_NOFOLLOW as u32) == 0;
     let mut fd = -1;

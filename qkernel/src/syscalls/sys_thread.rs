@@ -142,7 +142,7 @@ pub fn SysExecve(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     //todo: handle SysExecve gracelly
     info!("SysExecve workaround, will handle gracefully");
-    info!("in the execve: the filename is {}, argv is {:?}, envv is {:?}", &fileName, &argv, &envv);
+    //info!("in the execve: the filename is {}, argv is {:?}, envv is {:?}", &fileName, &argv, &envv);
 
     let fileName = {
         let fscontex = task.fsContext.clone();
