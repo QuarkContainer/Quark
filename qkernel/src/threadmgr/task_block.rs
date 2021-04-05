@@ -189,7 +189,7 @@ impl Blocker {
     }
 
     pub fn BlockInterrupt(&self) -> Result<()> {
-        let entries = [None, None, Some(self.interruptEntry.clone())];
+        let entries = [None, Some(self.interruptEntry.clone()), None];
         let _entry = self.waiter.Wait(&entries);
         self.SleepFinish(false);
         return Err(Error::SysError(SysErr::ERESTARTNOHAND));
@@ -255,7 +255,7 @@ impl Blocker {
 
     // block on both generalentry and interrupt
     pub fn BlockGeneral(&self) -> Result<()> {
-        let entries = [Some(self.generalEntry.clone()), None, Some(self.interruptEntry.clone())];
+        let entries = [None, Some(self.interruptEntry.clone()), Some(self.generalEntry.clone())];
         let entry = self.waiter.Wait(&entries);
 
         if entry == self.generalEntry.clone() {
@@ -269,7 +269,7 @@ impl Blocker {
 
     // block on general entry
     pub fn BlockGeneralOnly(&self) {
-        let entries = [Some(self.generalEntry.clone()), None, None];
+        let entries = [None, None, Some(self.generalEntry.clone())];
         let _entry = self.waiter.Wait(&entries);
 
         return
