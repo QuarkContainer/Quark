@@ -102,11 +102,11 @@ impl Waiter {
     pub fn Wait(&self, entries: &[Option<WaitEntry>]) -> WaitEntry {
         let mut mask = 0;
 
-        for e in entries {
-            match e {
+        for i in 0..entries.len() {
+            match &entries[i] {
                 None => continue,
-                Some(e) => {
-                    mask |= 1 << e.lock().context.ThreadContext().waiterID;
+                Some(_) => {
+                    mask |= 1 << i;
                 }
             }
         }
@@ -116,24 +116,23 @@ impl Waiter {
                 'r: loop {
                     let mut b = self.lock();
 
-                    for e in entries {
-                        match e {
-                            None => continue,
-                            Some(e) => {
-                                if let Some(elock) = e.try_lock() {
-                                    let waiterID = elock.context.ThreadContext().waiterID;
-                                    //let mut b = self.lock();
-
-                                    if b.bitmap & (1 << waiterID) != 0 {
-                                        b.bitmap &= !(1 << waiterID); //clear the bit
-                                        b.state = WaitState::Running;
-                                        core::mem::drop(elock);
-                                        return e.clone()
+                    if b.bitmap & mask != 0 {
+                        for i in 0..entries.len() {
+                            match &entries[i] {
+                                None => continue,
+                                Some(ref e) => {
+                                    if let Some(elock) = e.try_lock() {
+                                        if b.bitmap & (1 << i) != 0 {
+                                            b.bitmap &= !(1 << i); //clear the bit
+                                            b.state = WaitState::Running;
+                                            core::mem::drop(elock);
+                                            return e.clone()
+                                        }
+                                    } else {
+                                        continue 'r;
                                     }
-                                } else {
-                                    continue 'r;
-                                }
 
+                                }
                             }
                         }
                     }
