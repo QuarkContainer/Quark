@@ -484,8 +484,10 @@ fn StartRootContainer(_para: *const u8) {
 }
 
 #[panic_handler]
-fn panic(info: &PanicInfo) -> ! {
-    print!("get panic: {:?}", info);
+fn panic(_info: &PanicInfo) -> ! {
+    // bug https://github.com/QuarkContainer/Quark/issues/26.
+    // todo: enable this after the issue is fixed
+    //print!("get panic: {:?}", info);
 
     /*backtracer::trace(|frame| {
         print!("panic frame is {:#x?}", frame);
@@ -496,7 +498,8 @@ fn panic(info: &PanicInfo) -> ! {
         error!("CPU#{} is {:#x?}", i, CPU_LOCAL[i]);
     }*/
 
-    self::Kernel::HostSpace::Panic(&format!("get panic: {:?}", info));
+    //self::Kernel::HostSpace::Panic(&format!("get panic: {:?}", info));
+    self::Kernel::HostSpace::Panic("get panic ...");
     loop {}
 }
 
