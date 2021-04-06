@@ -229,7 +229,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysCapet, //sys_capset,
     NotImplementSyscall, //sys_rt_sigpending,
     SysRtSigtimedwait, //sys_rt_sigtimedwait,
-    NotImplementSyscall, //sys_rt_sigqueueinfo,
+    SysRtSigqueueinfo, //sys_rt_sigqueueinfo,
     SysRtSigsuspend, //sys_rt_sigsuspend,  //130
     SysSigaltstack, //sys_sigaltstack,
     SysUtime, //sys_utime,
@@ -397,7 +397,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     NotImplementSyscall, //sys_inotify_init1,
     SysPreadv, //sys_preadv,
     SysPwritev, //sys_pwritev,
-    NotImplementSyscall, //sys_rt_tgsigqueueinfo,
+    SysRtTgsigqueueinfo, //sys_rt_tgsigqueueinfo,
     NotImplementSyscall, //sys_perf_event_open,
     SysRecvMMsg, //sys_recvmmsg,
     NotImplementSyscall, //sys_fanotify_init,  //300

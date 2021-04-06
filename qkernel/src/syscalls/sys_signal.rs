@@ -207,6 +207,105 @@ pub fn SysRtSigtimedwait(task: &mut Task, args: &SyscallArguments) -> Result<i64
     return Ok(si.Signo as i64)
 }
 
+// RtSigqueueinfo implements linux syscall rt_sigqueueinfo(2).
+pub fn SysRtSigqueueinfo(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let pid = args.arg0 as i32;
+    let sig = args.arg1 as i32;
+    let infoAddr = args.arg2 as u64;
+
+    // Copy in the info.
+    //
+    // We must ensure that the Signo is set (Linux overrides this in the
+    // same way), and that the code is in the allowed set. This same logic
+    // appears below in RtSigtgqueueinfo and should be kept in sync.
+    let mut info : SignalInfo = *task.GetType(infoAddr)?;
+    info.Signo = sig;
+
+    let t = task.Thread();
+    let pidns = t.PIDNamespace();
+    // This must loop to handle the race with execve described in Kill.
+    loop {
+        // Deliver to the given task's thread group.
+        let target = match pidns.TaskWithID(pid) {
+            None => return Err(Error::SysError(SysErr::ESRCH)),
+            Some(t) => t
+        };
+
+        // If the sender is not the receiver, it can't use si_codes used by the
+        // kernel or SI_TKILL.
+        if (info.Code >= 0 || info.Code == SignalInfo::SIGNAL_INFO_TKILL) && target != t {
+            return Err(Error::SysError(SysErr::EPERM))
+        }
+
+        if !mayKill(&t, &target, Signal(sig)) {
+            return Err(Error::SysError(SysErr::EPERM))
+        }
+
+        match target.SendGroupSignal(&info) {
+            Err(Error::SysError(SysErr::ESRCH)) => {
+                continue
+            }
+            Err(e) => {
+                return Err(e)
+            }
+            Ok(_) => return Ok(0)
+        }
+    }
+}
+
+// RtTgsigqueueinfo implements linux syscall rt_tgsigqueueinfo(2).
+pub fn SysRtTgsigqueueinfo(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let tgid = args.arg0 as i32;
+    let tid = args.arg1 as i32;
+    let sig = args.arg2 as i32;
+    let infoAddr = args.arg3 as u64;
+
+    // N.B. Inconsistent with man page, linux actually rejects calls with
+    // tgid/tid <=0 by EINVAL. This isn't the same for all signal calls.
+    if tgid <=0 || tid <= 0 {
+        return Err(Error::SysError(SysErr::EINVAL))
+    }
+
+    // Copy in the info.
+    //
+    // We must ensure that the Signo is set (Linux overrides this in the
+    // same way), and that the code is in the allowed set. This same logic
+    // appears below in RtSigtgqueueinfo and should be kept in sync.
+    let mut info : SignalInfo = *task.GetType(infoAddr)?;
+    info.Signo = sig;
+
+    let t = task.Thread();
+    let pidns = t.PIDNamespace();
+
+    // Deliver to the given task.
+    let targetTG = match pidns.ThreadGroupWithID(tgid) {
+        None => return Err(Error::SysError(SysErr::ESRCH)),
+        Some(tg) => tg
+    };
+
+    let target = match pidns.TaskWithID(tid) {
+        None => return Err(Error::SysError(SysErr::ESRCH)),
+        Some(t) => t
+    };
+
+    if target.ThreadGroup() != targetTG {
+        return Err(Error::SysError(SysErr::ESRCH))
+    }
+
+    // If the sender is not the receiver, it can't use si_codes used by the
+    // kernel or SI_TKILL.
+    if (info.Code >= 0 || info.Code == SignalInfo::SIGNAL_INFO_TKILL) && target != t {
+        return Err(Error::SysError(SysErr::EPERM))
+    }
+
+    if !mayKill(&t, &target, Signal(sig)) {
+        return Err(Error::SysError(SysErr::EPERM))
+    }
+
+    target.SendSignal(&info)?;
+    return Ok(0)
+}
+
 pub fn SysKill(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let pid = args.arg0 as i32;
     let sig = args.arg1 as i32;
