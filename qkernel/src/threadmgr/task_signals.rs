@@ -23,6 +23,7 @@ use super::super::task::*;
 use super::super::qlib::stack::*;
 use super::super::qlib::linux::time::*;
 use super::super::kernel::posixtimer::*;
+use super::super::kernel::waiter::*;
 use super::super::threadmgr::thread::*;
 use super::super::threadmgr::thread_group::*;
 use super::super::SignalDef::*;
@@ -177,6 +178,8 @@ impl ThreadInternal {
     //
     // Preconditions: The signal mutex must be locked.
     pub fn canReceiveSignalLocked(&self, sig: Signal) -> bool {
+        self.SignalQueue.Notify(SignalSet::MakeSignalSet(&[sig]).0  as EventMask);
+
         // - Do not choose tasks that are blocking the signal.
         if SignalSet::New(sig).0 & self.signalMask.0 != 0 {
             return false;
@@ -596,6 +599,22 @@ impl Thread {
 
         t.savedSignalMask = mask;
         t.haveSavedSignalMask = true;
+    }
+
+    pub fn SignalRegister(&self, task: &Task, e: &WaitEntry, mask: EventMask) {
+        let tg = self.ThreadGroup();
+        let lock = tg.lock().signalLock.clone();
+        let _s = lock.lock();
+
+        self.lock().SignalQueue.EventRegister(task, e, mask)
+    }
+
+    pub fn SignalUnregister(&self, task: &Task, e: &WaitEntry) {
+        let tg = self.ThreadGroup();
+        let lock = tg.lock().signalLock.clone();
+        let _s = lock.lock();
+
+        self.lock().SignalQueue.EventUnregister(task, e)
     }
 }
 

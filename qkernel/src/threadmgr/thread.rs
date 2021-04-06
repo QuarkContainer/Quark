@@ -31,6 +31,7 @@ use super::super::kernel::fs_context::*;
 use super::super::kernel::fd_table::*;
 use super::super::kernel::uts_namespace::*;
 use super::super::kernel::ipc_namespace::*;
+use super::super::kernel::waiter::queue::*;
 use super::super::threadmgr::task_stop::*;
 use super::super::threadmgr::task_exit::*;
 use super::super::threadmgr::task_block::*;
@@ -81,6 +82,8 @@ pub struct ThreadInternal {
     pub utsns: UTSNamespace,
     pub ipcns: IPCNamespace,
     pub SignalStack: SignalStack,
+
+    pub SignalQueue: Queue,
 
     // tg is the thread group that this task belongs to. The tg pointer is
     // immutable.

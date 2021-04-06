@@ -108,7 +108,6 @@ impl FileOperations for Reader {
     fn UnstableAttr(&self, task: &Task, f: &File) -> Result<UnstableAttr> {
         let inode = f.Dirent.Inode();
         return inode.UnstableAttr(task);
-
     }
 
     fn Ioctl(&self, task: &Task, _f: &File, _fd: i32, request: u64, val: u64) -> Result<()> {
