@@ -202,6 +202,7 @@ pub enum FileOpsType {
     UnixSocketOperations,
     ReadonlyFileOperations,
     DynamicDirFileOperations,
+    SignalOperation,
 }
 
 pub trait FileOperations: Sync + Send + Waitable + SockOperations + SpliceOperations {

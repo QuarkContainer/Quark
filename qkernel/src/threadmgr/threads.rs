@@ -27,6 +27,7 @@ use super::super::qlib::auth::userns::*;
 use super::super::qlib::usage::io::*;
 use super::super::kernel::time::*;
 use super::super::kernel::waiter::waitgroup::*;
+use super::super::kernel::waiter::queue::*;
 use super::super::threadmgr::task_start::*;
 use super::super::kernel::kernel::*;
 use super::super::qlib::common::*;
@@ -183,6 +184,7 @@ impl TaskSet {
             utsns: cfg.UTSNamespace.clone(),
             ipcns: cfg.IPCNamespace.clone(),
             SignalStack: SignalStack::default(),
+            SignalQueue: Queue::default(),
             tg: tg.clone(),
             parent: cfg.Parent.clone(),
             children: BTreeSet::new(),

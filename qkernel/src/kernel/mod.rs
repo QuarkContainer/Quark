@@ -35,3 +35,4 @@ pub mod pipe;
 pub mod fasync;
 pub mod platform;
 pub mod aio;
+pub mod signalfd;

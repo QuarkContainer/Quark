@@ -15,9 +15,12 @@
 use super::super::task::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
+use super::super::fs::flags::*;
 use super::super::syscalls::syscalls::*;
 use super::super::threadmgr::thread::*;
 use super::super::threadmgr::threads::*;
+use super::super::kernel::fd_table::*;
+use super::super::kernel::signalfd::*;
 use super::super::SignalDef::*;
 use super::sys_poll::*;
 
@@ -471,4 +474,59 @@ pub fn SysRestartSyscall(task: &mut Task, _args: &SyscallArguments) -> Result<i6
             return r.Restart(task);
         }
     }
+}
+
+pub fn SharedSignalfd(task: &Task, fd: i32, sigset: u64, signsetsize: u32, flags: i32) -> Result<i64> {
+    // Copy in the signal mask.
+    let mask = CopyInSigSet(task, sigset, signsetsize as usize)?;
+
+    // Always check for valid flags, even if not creating.
+    if flags & !(SFD_NONBLOCK | SFD_CLOEXEC) != 0 {
+        return Err(Error::SysError(SysErr::EINVAL))
+    }
+
+    // Is this a change to an existing signalfd?
+    //
+    // The spec indicates that this should adjust the mask.
+    if fd != -1 {
+        let file = task.GetFile(fd)?;
+        let fops = file.FileOp.clone();
+        match fops.as_any().downcast_ref::<SignalOperation>() {
+            None => return Err(Error::SysError(SysErr::EINVAL)),
+            Some(fops) => {
+                fops.SetMask(mask);
+                return Ok(0)
+            }
+        }
+    }
+
+    // Create a new file.
+    let file = SignalOperation::NewSignalFile(task, mask);
+    file.SetFlags(task, SettableFileFlags{
+        NonBlocking: flags & SFD_NONBLOCK != 0,
+        ..Default::default()
+    });
+
+    let fd = task.NewFDFrom(0, &file, &FDFlags {
+        CloseOnExec: flags & SFD_CLOEXEC != 0,
+    })?;
+
+    return Ok(fd as i64)
+}
+
+pub fn SysSignalfd(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let fd = args.arg0 as i32;
+    let sigset = args.arg1 as u64;
+    let sigsetsize = args.arg2 as u32;
+
+    return SharedSignalfd(task, fd, sigset, sigsetsize, 0);
+}
+
+pub fn SysSignalfd4(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let fd = args.arg0 as i32;
+    let sigset = args.arg1 as u64;
+    let sigsetsize = args.arg2 as u32;
+    let flags = args.arg3 as i32;
+
+    return SharedSignalfd(task, fd, sigset, sigsetsize, flags);
 }

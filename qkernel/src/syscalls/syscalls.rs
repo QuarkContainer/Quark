@@ -376,14 +376,14 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     NotImplementSyscall, //sys_move_pages,
     SysUtimensat, //sys_utimensat,    //280
     SysPwait, //sys_epoll_pwait,
-    NotImplementSyscall, //sys_signalfd,
+    SysSignalfd, //sys_signalfd,
     SysTimerfdCreateSysRead, //sys_timerfd_create,
     SysEventfd, //sys_eventfd,
     SysFallocate, //sys_fallocate,
     SysTimerfdSettime, //sys_timerfd_settime,
     SysTimerfdGettime, //sys_timerfd_gettime,
     SysAccept4, //sys_accept4,
-    NotImplementSyscall, //sys_signalfd4,
+    SysSignalfd4, //sys_signalfd4,
     SysEventfd2, //sys_eventfd2,    //290
     SysEpollCreate1, //sys_epoll_create1,
     SysDup3, //sys_dup3,
