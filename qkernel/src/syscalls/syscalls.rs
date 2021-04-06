@@ -81,8 +81,14 @@ pub fn SysCall(task: &mut Task, nr: u64, args: &SyscallArguments) -> TaskRunStat
             return TaskRunState::RunApp
         }
         Err(Error::SysCallNotImplement) => {
+            // bug https://github.com/QuarkContainer/Quark/issues/26.
+            // todo: enable this after the issue is fixed
             let callId: SysCallID = unsafe { core::mem::transmute(nr as u64) };
-            panic!("Sycall not implement syscall is {:?}", callId);
+            error!("Sycall not implement syscall is {:?}", callId);
+            panic!("");
+
+            //let callId: SysCallID = unsafe { core::mem::transmute(nr as u64) };
+            //panic!("Sycall not implement syscall is {:?}", callId);
         }
         Err(e) => {
             info!("Syscall[{}]: get unexpected error {:x?}", nr, e);
