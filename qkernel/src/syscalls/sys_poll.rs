@@ -244,6 +244,12 @@ pub fn PollBlock(task: &Task, pfd: &mut [PollFd], timeout: i64) -> (Duration, Re
             return (0, Ok(0))
         }
 
+        let timeout = if timeout >= 0 {
+            timeout
+        } else {
+            core::i64::MAX //if pfd is empty, timeout < 0, needs to wait forever
+        };
+
         let (remain, res) = task.blocker.BlockWithMonoTimeout(false, Some(timeout));
         match res {
             Err(Error::SysError(SysErr::ETIMEDOUT)) => {
