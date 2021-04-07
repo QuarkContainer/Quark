@@ -225,6 +225,10 @@ impl Task {
     // 2. Whether the read/write permission meet requirement
     // 3. if need cow, fix the page.
     pub fn CheckPermission(&self, vAddr: u64, len: u64, writeReq: bool, allowPartial: bool) -> Result<u64> {
+        if len == 0 {
+            return Ok(0)
+        }
+
         if vAddr == 0 {
             return Err(Error::SysError(SysErr::EFAULT))
         }

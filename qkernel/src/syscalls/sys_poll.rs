@@ -543,10 +543,15 @@ pub fn DoPoll(task: &Task, addr: u64, nfds: u32, timeout: Duration) -> (Duration
 
     let mut pfd : Vec<PollFd> = if addr != 0 {
         match task.CopyIn(addr, nfds as usize) {
-            Err(e) => return (timeout, Err(e)),
+            Err(e) => {
+                return (timeout, Err(e))
+            },
             Ok(pfd) => pfd,
         }
     } else {
+        if nfds > 0 {
+            return (timeout, Err(Error::SysError(SysErr::EFAULT)))
+        }
         Vec::new()
     };
 
@@ -625,7 +630,7 @@ pub fn CopyTimespecIntoDuration(task: &Task, timespecAddr: u64) -> Result<Durati
 
         timeout = timespec.ToDuration()?;
         if timeout <= TIMEOUT_PROCESS_TIME {
-            timeout = -1;
+            timeout = 0;
         }
     }
 
