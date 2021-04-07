@@ -166,7 +166,7 @@ pub fn SysStatfs(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 pub fn Statfs(task: &Task, addr: u64, statfsAddr: u64) -> Result<u64> {
     let (path, _dirPath) = copyInPath(task,  addr, false)?;
 
-    info!("Statfs path is {:?}", &path);
+    info!("Statfs path is {}", &path);
     fileOpOn(task, ATType::AT_FDCWD, &path, true, &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
         return statfsImpl(task, d, statfsAddr)
     })?;
