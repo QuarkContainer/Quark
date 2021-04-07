@@ -43,6 +43,7 @@ use super::super::syscalls::sys_capability::*;
 use super::super::syscalls::sys_membarrier::*;
 use super::super::syscalls::sys_splice::*;
 use super::super::syscalls::sys_timer::*;
+use super::super::syscalls::sys_mempolicy::*;
 
 use super::super::task::*;
 use super::super::qlib::SysCallID;

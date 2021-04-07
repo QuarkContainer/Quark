@@ -125,6 +125,8 @@ impl MemoryManagerInternal {
             kernel: true,
             hint: String::from("Kernel Space"),
             id: None,
+            numaPolicy: 0,
+            numaNodemask: 0,
         };
 
         let gap = vmas.FindGap(MemoryDef::PHY_LOWER_ADDR);
@@ -266,9 +268,7 @@ impl Drop for MemoryManager {
         }
 
         if Arc::strong_count(&self.data) == 1 {
-            //error!("MemoryManager::drop start to clear");
             self.Clear().expect("MemoryManager::Drop fail");
-            //error!("MemoryManager::drop after to clear");
         }
     }
 }
