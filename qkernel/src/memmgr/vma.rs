@@ -113,6 +113,8 @@ impl MemoryManagerInternal {
             kernel: opts.Kernel,
             hint: opts.Hint.to_string(),
             id: opts.Mapping.clone(),
+            numaPolicy: 0,
+            numaNodemask: 0,
         };
 
         self.usageAS += opts.Length;
@@ -329,6 +331,12 @@ pub struct VMA {
     pub kernel: bool,
     pub hint: String,
     pub id: Option<Arc<Mapping>>,
+
+    // numaPolicy is the NUMA policy for this vma set by mbind().
+    pub numaPolicy: i32,
+
+    // numaNodemask is the NUMA nodemask for this vma set by mbind().
+    pub numaNodemask: u64,
 }
 
 impl fmt::Debug for VMA {
@@ -360,6 +368,8 @@ impl VMA {
             kernel: self.kernel,
             hint: self.hint.to_string(),
             id: self.id.clone(),
+            numaPolicy: 0,
+            numaNodemask: 0,
         };
 
         return copy
@@ -466,6 +476,8 @@ impl AreaValue for VMA {
             vma1.private != vma2.private ||
             vma1.growsDown != vma2.growsDown ||
             vma1.kernel != vma2.kernel ||
+            vma1.numaPolicy != vma2.numaPolicy ||
+            vma1.numaNodemask != vma2.numaNodemask ||
             vma1.hint != vma2.hint {
             return None;
         }

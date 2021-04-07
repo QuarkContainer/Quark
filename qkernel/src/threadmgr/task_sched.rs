@@ -328,13 +328,13 @@ impl Thread {
     }
 
     // NumaPolicy returns t's current numa policy.
-    pub fn NumaPolicy(&self) -> (i32, u32) {
+    pub fn NumaPolicy(&self) -> (i32, u64) {
         let t = self.lock();
         return (t.numaPolicy, t.numaNodeMask)
     }
 
     // SetNumaPolicy sets t's numa policy.
-    pub fn SetNumaPolicy(&self, policy: i32, nodeMask: u32) {
+    pub fn SetNumaPolicy(&self, policy: i32, nodeMask: u64) {
         let mut t = self.lock();
         t.numaPolicy = policy;
         t.numaNodeMask = nodeMask;

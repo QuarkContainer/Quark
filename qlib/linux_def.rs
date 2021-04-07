@@ -24,23 +24,29 @@ pub const _GRND_NONBLOCK    : i32 = 0x1;
 pub const _GRND_RANDOM      : i32 = 0x2;
 
 // Policies for get_mempolicy(2)/set_mempolicy(2).
-pub const MPOL_DEFAULT    : u32 = 0;
-pub const MPOL_PREFERRED  : u32 = 1;
-pub const MPOL_BIND       : u32 = 2;
-pub const MPOL_INTERLEAVE : u32 = 3;
-pub const MPOL_LOCAL      : u32 = 4;
-pub const MPOL_MAX        : u32 = 5;
+pub const MPOL_DEFAULT    : i32 = 0;
+pub const MPOL_PREFERRED  : i32 = 1;
+pub const MPOL_BIND       : i32 = 2;
+pub const MPOL_INTERLEAVE : i32 = 3;
+pub const MPOL_LOCAL      : i32 = 4;
+pub const MPOL_MAX        : i32 = 5;
 
 // Flags for get_mempolicy(2).
-pub const MPOL_F_NODE           : u32 = 1 << 0;
-pub const MPOL_F_ADDR           : u32 = 1 << 1;
-pub const MPOL_F_MEMS_ALLOWED   : u32 = 1 << 2;
+pub const MPOL_F_NODE           : i32 = 1 << 0;
+pub const MPOL_F_ADDR           : i32 = 1 << 1;
+pub const MPOL_F_MEMS_ALLOWED   : i32 = 1 << 2;
 
 // Flags for set_mempolicy(2).
-pub const MPOL_F_RELATIVE_NODES : u32 = 1 << 14;
-pub const MPOL_F_STATIC_NODES   : u32 = 1 << 15;
+pub const MPOL_F_RELATIVE_NODES : i32 = 1 << 14;
+pub const MPOL_F_STATIC_NODES   : i32 = 1 << 15;
 
-pub const MPOL_MODE_FLAGS       : u32 = MPOL_F_STATIC_NODES | MPOL_F_RELATIVE_NODES;
+pub const MPOL_MODE_FLAGS       : i32 = MPOL_F_STATIC_NODES | MPOL_F_RELATIVE_NODES;
+
+// Flags for mbind(2).
+pub const MPOL_MF_STRICT    : i32 = 1 << 0;
+pub const MPOL_MF_MOVE      : i32 = 1 << 1;
+pub const MPOL_MF_MOVE_ALL  : i32 = 1 << 2;
+pub const MPOL_MF_VALID     : i32 = MPOL_MF_STRICT | MPOL_MF_MOVE | MPOL_MF_MOVE_ALL;
 
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]

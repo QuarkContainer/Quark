@@ -240,7 +240,7 @@ pub struct ThreadInternal {
     //
     // numaPolicy and numaNodeMask are protected by mu.
     pub numaPolicy: i32,
-    pub numaNodeMask: u32,
+    pub numaNodeMask: u64,
 
     // If netns is true, the task is in a non-root network namespace. Network
     // namespaces aren't currently implemented in full; being in a network

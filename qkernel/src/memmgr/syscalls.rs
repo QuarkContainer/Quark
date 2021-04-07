@@ -461,6 +461,56 @@ impl MemoryManager {
         return Ok(())
     }
 
+    pub fn NumaPolicy(&self, addr: u64) -> Result<(i32, u64)> {
+        let mm = self.read();
+        let vseg = mm.vmas.FindSeg(addr);
+        if !vseg.Ok() {
+            return Err(Error::SysError(SysErr::EFAULT));
+        }
+
+        let vma = vseg.Value();
+        return Ok((vma.numaPolicy, vma.numaNodemask))
+    }
+
+    pub fn SetNumaPolicy(&self, addr: u64, len: u64, policy: i32, nodemask: u64) -> Result<()> {
+        if !Addr(addr).IsPageAligned() {
+            return Err(Error::SysError(SysErr::EINVAL))
+        }
+
+        // Linux allows this to overflow.
+        let la = Addr(len).RoundUp()?.0;
+        let ar = Range::New(addr, la);
+
+        if ar.Len() == 0 {
+            return Ok(())
+        }
+
+        let mut mm = self.write();
+        let mut vseg = mm.vmas.LowerBoundSeg(ar.Start());
+        let mut lastEnd = ar.Start();
+
+        loop {
+            if !vseg.Ok() || lastEnd < vseg.Range().Start() {
+                // "EFAULT: ... there was an unmapped hole in the specified memory
+                // range specified [sic] by addr and len." - mbind(2)
+                return Err(Error::SysError(SysErr::EFAULT))
+            }
+            vseg = mm.vmas.Isolate(&vseg, &ar);
+            let mut vma = vseg.Value();
+            vma.numaPolicy = policy;
+            vma.numaNodemask = nodemask;
+            vseg.SetValue(vma);
+            lastEnd = vseg.Range().End();
+            if ar.End() <= lastEnd {
+                mm.vmas.MergeRange(&ar);
+                mm.vmas.MergeAdjacent(&ar);
+                return Ok(())
+            }
+            let (tmpVseg, _) = vseg.NextNonEmpty();
+            vseg = tmpVseg;
+        }
+    }
+
     // BrkSetup sets mm's brk address to addr and its brk size to 0.
     pub fn BrkSetup(&self, addr: u64) {
         let mut mm = self.write();
