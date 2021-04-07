@@ -46,6 +46,10 @@ pub const TIMEOUT_PROCESS_TIME : i64 = 30_000;
 
 pub fn DoSelect(task: &Task, nfds: i32, readfds: u64, writefds: u64, exceptfds: u64, timeout: i64) -> Result<i64> {
     if nfds == 0 {
+        if timeout == 0 {
+            return Ok(0)
+        }
+
         let (_remain, res) = task.blocker.BlockWithMonoTimeout(false, Some(timeout));
         match res {
             Err(Error::SysError(SysErr::ETIMEDOUT)) => {
@@ -400,7 +404,7 @@ pub fn SysSelect(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
         timeout = timeval.ToDuration();
         if timeout <= TIMEOUT_PROCESS_TIME {
-            timeout = -1;
+            timeout = 0;
         }
     }
 

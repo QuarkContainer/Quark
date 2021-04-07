@@ -135,7 +135,8 @@ impl HostFileOp {
 
 impl Waitable for HostFileOp {
     fn Readiness(&self, _task: &Task,mask: EventMask) -> EventMask {
-        assert!(self.InodeOp.lock().WouldBlock, "HostFileOp::EventRegister is not supported");
+        // somehow, a normal host file could also be polled.
+        //assert!(self.InodeOp.lock().WouldBlock, "HostFileOp::EventRegister is not supported");
 
         let fd = self.InodeOp.FD();
         return NonBlockingPoll(fd, mask);
