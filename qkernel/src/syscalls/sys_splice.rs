@@ -95,35 +95,26 @@ pub fn Splice(task: &Task, dst: &File, src: &File, opts: &mut SpliceOpts) -> Res
         }
     }
 
-    let newopts = SpliceOpts {
-        Length: opts.Length,
-        SrcStart: opts.SrcStart,
-        SrcOffset: !srcPipe,
-        Dup: opts.Dup,
-        DstStart: opts.DstStart,
-        DstOffset: !dstPipe,
-    };
-
-    let n = match src.FileOp.WriteTo(task, src, dst, &newopts) {
-        Err(_) => {
+    let n = match src.FileOp.WriteTo(task, src, dst, &opts) {
+        Err(Error::SysError(SysErr::ENOSYS)) => {
             // Attempt as a ReadFrom. If a WriteTo, a ReadFrom may also
             // be more efficient than a copy if buffers are cached or readily
             // available. (It's unlikely that they can actually be donate
-            match dst.FileOp.ReadFrom(task, dst, src, &newopts) {
-                Err(_) => {
+            match dst.FileOp.ReadFrom(task, dst, src, &opts) {
+                Err(Error::SysError(SysErr::ENOSYS)) => {
                     // If we've failed up to here, and at least one of the sources
                     // is a pipe or socket, then we can't properly support dup.
                     // Return an error indicating that this operation is not
                     // supported.
-                    if (srcPipe || dstPipe) && newopts.Dup {
+                    if (srcPipe && dstPipe) || opts.Dup {
                         return Err(Error::SysError(SysErr::EINVAL))
                     }
 
                     // We failed to splice the files. But that's fine; we just fall
                     // back to a slow path in this case. This copies without doing
                     // any mode changes, so should still be more efficient.
-                    let mut buf : Vec<u8> = Vec::with_capacity(32 * 1024); //todo: create a buffer pool
-                    buf.resize(32 * 1024, 0);
+                    let mut buf : Vec<u8> = Vec::with_capacity(opts.Length as usize); //todo: create a buffer pool
+                    buf.resize(opts.Length as usize, 0);
                     let iov = IoVec::New(&buf);
                     let mut iovs: [IoVec; 1] = [iov];
 
@@ -151,10 +142,16 @@ pub fn Splice(task: &Task, dst: &File, src: &File, opts: &mut SpliceOpts) -> Res
                         0 //EOF
                     }
                 }
+                Err(e) => {
+                    return Err(e)
+                }
                 Ok(n) => {
                     n
                 }
             }
+        }
+        Err(e) => {
+            return Err(e)
         }
         Ok(n) => {
             n
@@ -184,8 +181,12 @@ pub fn DoSplice(task: &Task, dstFile: &File, srcFile: &File, opts: &mut SpliceOp
     loop {
         match Splice(task, dstFile, srcFile, opts) {
             Err(e) => {
-                if e != Error::SysError(SysErr::EWOULDBLOCK) || !nonBlocking {
+                if e != Error::SysError(SysErr::EWOULDBLOCK) {
                     return Err(e);
+                }
+
+                if e == Error::SysError(SysErr::EWOULDBLOCK) && nonBlocking {
+                    return Err(e)
                 }
             }
             Ok(n) => {
@@ -275,13 +276,13 @@ pub fn SysSplice(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
         if outOffset != 0 {
             let offset : i64 = if outOffset != 0 {
+                opts.DstOffset = true;
                 *task.GetType(outOffset)?
             } else {
                 0
             };
 
             // Use the destination offset.
-            opts.DstOffset = true;
             opts.DstStart = offset;
         }
     } else if !srcPipe && dstPipe {
@@ -289,17 +290,17 @@ pub fn SysSplice(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Err(Error::SysError(SysErr::ESPIPE));
         }
 
-        let offset : i64 = if outOffset != 0 {
-            *task.GetType(outOffset)?
+        let offset : i64 = if inOffset != 0 {
+            opts.SrcOffset = true;
+            *task.GetType(inOffset)?
         } else {
             0
         };
 
         // Use the source offset.
-        opts.SrcOffset = true;
         opts.SrcStart = offset;
     } else if srcPipe && dstPipe {
-        if inOffset != 0 && outOffset != 0 {
+        if inOffset != 0 || outOffset != 0 {
             return Err(Error::SysError(SysErr::ESPIPE));
         }
     } else {

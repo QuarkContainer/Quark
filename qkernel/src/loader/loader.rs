@@ -173,7 +173,7 @@ pub fn LoadExecutable(task: &mut Task, filename: &str, argv: &mut Vec<String>) -
             filename = newpath;
             argv = newargv;
 
-            info!("load script filename is {} argv is {:?}", &filename, &argv);
+            //info!("load script filename is {} argv is {:?}", &filename, &argv);
 
         } else {
             info!("unknow majac: {:?}", hdr);

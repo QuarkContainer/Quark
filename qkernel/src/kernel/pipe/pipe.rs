@@ -15,6 +15,7 @@
 use core::sync::atomic::AtomicI64;
 use core::sync::atomic::Ordering;
 use alloc::collections::linked_list::LinkedList;
+use alloc::vec::Vec;
 use spin::Mutex;
 use spin::MutexGuard;
 use alloc::sync::Arc;
@@ -47,6 +48,11 @@ pub const DEFAULT_PIPE_SIZE : usize = MINIMUM_PIPE_SIZE;
 
 // MaximumPipeSize is a hard limit on the maximum size of a pipe.
 pub const MAXIMUM_PIPE_SIZE : usize = 8 << 20;
+
+// atomicIOBytes is the maximum number of bytes that the pipe will
+// guarantee atomic reads or writes atomically.
+// It corresponds to limits.h:PIPE_BUF.
+pub const ATOMIC_IO_BYTES : usize = 4096;
 
 // NewConnectedPipe initializes a pipe and returns a pair of objects
 // representing the read and write ends of the pipe.
@@ -85,6 +91,55 @@ pub struct PipeInternal {
     //
     // This value is immutable.
     pub dirent: Option<Dirent>,
+}
+
+impl PipeInternal {
+    pub fn Available(&self) -> usize {
+        return (self.max - self.size) as usize;
+    }
+
+    pub fn Write(&mut self, _task: &Task, src: BlockSeq, _atomicIOBytes: usize) -> Result<usize> {
+        let mut p = self;
+
+        let mut src = src;
+
+        // POSIX requires that a write smaller than atomicIOBytes (PIPE_BUF) be
+        // atomic, but requires no atomicity for writes larger than this.
+        let wanted = src.NumBytes() as usize;
+        let avail = p.Available();
+        //info!("pipe::write id is {} wanted is {}, avail is {}, atomicIOBytes is {}", p.id, wanted, avail, self.atomicIOBytes);
+        if wanted > avail {
+            // Is this needed? todo: confirm this
+            // if this is must, Pipe::Readfrom needs redesign
+            /*if wanted <= atomicIOBytes {
+                return Err(Error::SysError(SysErr::EAGAIN))
+            }*/
+
+            // Limit to the available capacity.
+            src = src.TakeFirst(avail as u64);
+        }
+
+        let mut done = 0;
+        while src.NumBytes() > 0 {
+            // Need a new buffer?
+            if p.data.back().is_none() || p.data.back().as_ref().unwrap().borrow().Full() {
+                p.data.push_back(NewBuff());
+            }
+
+            // Copy user data.
+            let n = src.CopyInTo(*p.data.back_mut().as_mut().unwrap())?;
+            done += n;
+            p.size += n;
+            src = src.DropFirst(n as u64);
+        }
+
+        if wanted > done {
+            // Partial write due to full pipe.
+            return Ok(done)
+        }
+
+        return Ok(done)
+    }
 }
 
 pub struct PipeIn {
@@ -282,55 +337,69 @@ impl Pipe {
         return Ok(done)
     }
 
+    pub fn ReadFrom(&self, task: &Task, src: &File, opts: &SpliceOpts) -> Result<usize> {
+        if opts.DstOffset {
+            return Err(Error::SysError(SysErr::EINVAL))
+        }
+
+        if opts.SrcOffset && !src.FileOp.Seekable() {
+            return Err(Error::SysError(SysErr::EINVAL))
+        }
+
+        let len = {
+            let p = self.intern.lock();
+            // Can't write to a pipe with no readers.
+            if !self.HasReaders() {
+                return Err(Error::SysError(SysErr::EPIPE))
+            }
+
+            let mut len = p.Available() as usize;
+
+            if len == 0 {
+                return Err(Error::SysError(SysErr::EAGAIN))
+            }
+
+            if len > opts.Length as usize {
+                len = opts.Length as usize
+            }
+
+            len
+        };
+
+
+        let mut buf = Vec::with_capacity(len);
+        buf.resize(len, 0);
+        let dst = IoVec::New(&buf);
+        let mut iovs = [dst];
+        //let src = BlockSeq::New(&buf);
+
+        let readCount = if opts.SrcOffset {
+            src.Preadv(task, &mut iovs, opts.SrcStart)?
+        } else {
+            src.Readv(task, &mut iovs)?
+        };
+
+        let src = BlockSeq::New(&buf[0..readCount as usize]);
+        let writeCount = self.intern.lock().Write(task, src, self.atomicIOBytes)? as usize;
+
+        assert!(readCount as usize == writeCount);
+        return Ok(writeCount)
+    }
+
     // write writes data from sv into the pipe and returns the number of bytes
     // written. If no bytes are written because the pipe is full (or has less than
     // atomicIOBytes free capacity), write returns ErrWouldBlock.
     //
     // Precondition: this pipe must have writers.
-    pub fn Write(&self, _task: &Task, src: BlockSeq) -> Result<usize> {
+    pub fn Write(&self, task: &Task, src: BlockSeq) -> Result<usize> {
         let mut p = self.intern.lock();
-
-        let mut src = src;
 
         // Can't write to a pipe with no readers.
         if !self.HasReaders() {
             return Err(Error::SysError(SysErr::EPIPE))
         }
 
-        // POSIX requires that a write smaller than atomicIOBytes (PIPE_BUF) be
-        // atomic, but requires no atomicity for writes larger than this.
-        let wanted = src.NumBytes() as usize;
-        let avail = p.max - p.size;
-        //info!("pipe::write id is {} wanted is {}, avail is {}, atomicIOBytes is {}", p.id, wanted, avail, self.atomicIOBytes);
-        if wanted > avail {
-            if wanted <= self.atomicIOBytes {
-                return Err(Error::SysError(SysErr::EAGAIN))
-            }
-
-            // Limit to the available capacity.
-            src = src.TakeFirst(avail as u64);
-        }
-
-        let mut done = 0;
-        while src.NumBytes() > 0 {
-            // Need a new buffer?
-            if p.data.back().is_none() || p.data.back().as_ref().unwrap().borrow().Full() {
-                p.data.push_back(NewBuff());
-            }
-
-            // Copy user data.
-            let n = src.CopyInTo(*p.data.back_mut().as_mut().unwrap())?;
-            done += n;
-            p.size += n;
-            src = src.DropFirst(n as u64);
-        }
-
-        if wanted > done {
-            // Partial write due to full pipe.
-            return Ok(done)
-        }
-
-        return Ok(done)
+        return p.Write(task, src, self.atomicIOBytes)
     }
 
     // rOpen signals a new reader of the pipe.

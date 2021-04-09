@@ -50,7 +50,16 @@ impl Drop for ReaderWriter{
     }
 }
 
-impl SpliceOperations for ReaderWriter {}
+impl SpliceOperations for ReaderWriter {
+    /*fn ReadFrom(&self, task: &Task, _file: &File, src: &File, opts: &SpliceOpts) -> Result<i64> {
+        let n = self.pipe.ReadFrom(task, src, opts)?;
+        if n > 0 {
+            self.pipe.Notify(EVENT_IN)
+        }
+
+        return Ok(n as i64)
+    }*/
+}
 
 impl FileOperations for ReaderWriter {
     fn as_any(&self) -> &Any {

@@ -54,7 +54,7 @@ lazy_static! {
 }
 
 // SpliceOpts define how a splice works.
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, Debug)]
 pub struct SpliceOpts {
     // Length is the length of the splice operation.
     pub Length: i64,
@@ -160,11 +160,27 @@ pub trait SockOperations: Sync + Send {
 }
 
 pub trait SpliceOperations {
-    fn WriteTo(&self, _task: &Task, _file: &File, _dst: &File, _opts: &SpliceOpts) -> Result<i64> {
+    fn WriteTo(&self, _task: &Task, file: &File, dst: &File, opts: &SpliceOpts) -> Result<i64> {
+        if opts.SrcOffset && !file.FileOp.Seekable() {
+            return Err(Error::SysError(SysErr::EINVAL))
+        }
+
+        if opts.DstOffset && !dst.FileOp.Seekable() {
+            return Err(Error::SysError(SysErr::EINVAL))
+        }
+
         return Err(Error::SysError(SysErr::ENOSYS))
     }
 
-    fn ReadFrom(&self, _task: &Task, _file: &File, _dst: &File, _opts: &SpliceOpts) -> Result<i64> {
+    fn ReadFrom(&self, _task: &Task, file: &File, src: &File, opts: &SpliceOpts) -> Result<i64> {
+        if opts.DstOffset && !file.FileOp.Seekable() {
+            return Err(Error::SysError(SysErr::EINVAL))
+        }
+
+        if opts.SrcOffset && !src.FileOp.Seekable() {
+            return Err(Error::SysError(SysErr::EINVAL))
+        }
+
         return Err(Error::SysError(SysErr::ENOSYS))
     }
 }
