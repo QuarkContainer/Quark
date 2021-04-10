@@ -28,6 +28,7 @@
 #![feature(core_intrinsics)]
 #![feature(llvm_asm, naked_functions)]
 #![feature(maybe_uninit_uninit_array)]
+#![feature(panic_info_message)]
 
 #[macro_use]
 extern crate serde_derive;
@@ -484,7 +485,7 @@ fn StartRootContainer(_para: *const u8) {
 }
 
 #[panic_handler]
-fn panic(_info: &PanicInfo) -> ! {
+fn panic(info: &PanicInfo) -> ! {
     // bug https://github.com/QuarkContainer/Quark/issues/26.
     // todo: enable this after the issue is fixed
     //print!("get panic: {:?}", info);
@@ -497,6 +498,8 @@ fn panic(_info: &PanicInfo) -> ! {
     for i in 0..CPU_LOCAL.len() {
         error!("CPU#{} is {:#x?}", i, CPU_LOCAL[i]);
     }*/
+
+    print!("get panic : {:?}", info.message());
 
     //self::Kernel::HostSpace::Panic(&format!("get panic: {:?}", info));
     self::Kernel::HostSpace::Panic("get panic ...");
