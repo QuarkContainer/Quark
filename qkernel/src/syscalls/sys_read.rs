@@ -254,7 +254,7 @@ fn readv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
 
         match task.blocker.BlockWithMonoTimer(true, deadline) {
             Err(Error::ErrInterrupted) => {
-                return Err(Error::SysError(SysErr::ERESTARTNOINTR));
+                return Err(Error::SysError(SysErr::ERESTARTSYS));
             }
             Err(Error::SysError(SysErr::ETIMEDOUT)) => {
                 return Err(Error::SysError(SysErr::EAGAIN));

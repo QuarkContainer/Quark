@@ -45,6 +45,7 @@ pub fn CopyItimerValOut(task: &mut Task, addr: u64, itv: &ItimerVal) -> Result<(
     return Ok(())
 }
 
+// Getitimer implements linux syscall getitimer(2).
 pub fn SysGetitimer(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let timerID = args.arg0 as i32;
     let val = args.arg1 as u64;
@@ -56,6 +57,7 @@ pub fn SysGetitimer(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     return Ok(0)
 }
 
+// Setitimer implements linux syscall setitimer(2).
 pub fn SysSetitimer(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let timerID = args.arg0 as i32;
     let newVal = args.arg1 as u64;
@@ -68,4 +70,23 @@ pub fn SysSetitimer(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     CopyItimerValOut(task, oldVal, &olditv)?;
     return Ok(0)
+}
+
+// Alarm implements linux syscall alarm(2).
+pub fn SysAlarm(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let duration = args.arg0 as u32 as i64 * SECOND;
+
+    let olditv = task.Thread().Setitimer(ITIMER_REAL, &ItimerVal{
+        Interval: Timeval::default(),
+        Value: Timeval::FromNs(duration),
+    })?;
+
+    let olddur = olditv.Value.ToDuration();
+    let mut secs = olddur / SECOND;
+    if secs == 0 && olddur != 0 {
+        // We can't return 0 if an alarm was previously scheduled.
+        secs = 1;
+    }
+
+    return Ok(secs)
 }

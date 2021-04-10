@@ -846,9 +846,13 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
         Cmd::F_SETLK | Cmd::F_SETLKW => {
             let inode = file.Dirent.Inode();
-            /*if !inode.StableAttr().IsFile() && !inode.StableAttr().IsDir() {
+            // In Linux the file system can choose to provide lock operations for an inode.
+            // Normally pipe and socket types lack lock operations. We diverge and use a heavy
+            // hammer by only allowing locks on files and directories.
+            //todo: fix this. We can handle if the file is a symbol link fix this
+            if !inode.StableAttr().IsFile() && !inode.StableAttr().IsDir() {
                 return Err(Error::SysError(SysErr::EBADF))
-            }*/
+            }
 
             let flockAddr = val;
             let flock : &FlockStruct = task.GetType(flockAddr)?;

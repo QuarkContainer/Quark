@@ -138,7 +138,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysPause, //sys_pause,
     SysNanoSleep, //sys_nanosleep,
     SysGetitimer, //sys_getitimer,
-    NotImplementSyscall, //sys_alarm,
+    SysAlarm, //sys_alarm,
     SysSetitimer, //sys_setitimer,
     SysGetPid, //sys_getpid,
     SysSendfile, //sys_sendfile,   //40
