@@ -210,6 +210,10 @@ pub fn Dir(path: &str) -> String {
 }
 
 pub fn TrimTrailingSlashes<'a>(dir: &'a str) -> (&'a str, bool) {
+    if dir.len() == 0 {
+        return (dir, false)
+    }
+
     let s = &dir.as_bytes()[..];
     let mut changed = false;
 
