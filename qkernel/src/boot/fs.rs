@@ -143,7 +143,6 @@ pub fn BootInitRootFs(task: &mut Task, root: &str) -> Result<MountNs> {
 pub fn SetupRootContainerFS(task: &mut Task, spec: &oci::Spec, conf: &config::Config) -> Result<MountNs> {
     let mounts = CompileMounts(spec);
 
-    info!("SetupRootContainerFS 1 {:?}", &mounts.len());
     // after enable following error output, the qkernel will crash.
     // This issue appears after upgrade rust nightly version to 1.53.0-nightly
     // Todo: fix this
@@ -155,7 +154,6 @@ pub fn SetupRootContainerFS(task: &mut Task, spec: &oci::Spec, conf: &config::Co
 
     let root = mns.Root();
 
-    info!("SetupRootContainerFS 2 {:?}", &mounts.len());
     MountSubmounts(task, conf, &mns, &root, &mounts)?;
     return Ok(mns);
 }
