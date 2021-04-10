@@ -271,8 +271,8 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     NotImplementSyscall, //sys_swapon,
     NotImplementSyscall, //sys_swapoff,
     NotImplementSyscall, //sys_reboot,
-    NotImplementSyscall, //sys_sethostname,    //160
-    NotImplementSyscall, //sys_setdomainname,
+    SysSethostname, //sys_sethostname,    //160
+    SysSetdomainname, //sys_setdomainname,
     NotImplementSyscall, //sys_iopl,
     NotImplementSyscall, //sys_ioperm,
     NotImplementSyscall, //sys_create_module,
