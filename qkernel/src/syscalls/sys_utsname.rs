@@ -16,6 +16,7 @@ use alloc::string::String;
 
 use super::super::task::*;
 use super::super::qlib::common::*;
+use super::super::qlib::linux_def::*;
 use super::super::version::*;
 use super::super::syscalls::syscalls::*;
 
@@ -98,4 +99,60 @@ pub fn SysUname(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     info!("Domainname is {}", UtsNameString(&va.Domainname));*/
 
     return Ok(0);
+}
+
+// Setdomainname implements Linux syscall setdomainname.
+pub fn SysSetdomainname(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let nameAddr = args.arg0 as u64;
+    let size = args.arg1 as i32;
+
+    let utsns = task.Thread().UTSNamespace();
+    {
+        let creds = task.Creds();
+        let userNS = creds.lock().UserNamespace.clone();
+        if !creds.HasCapabilityIn(Capability::CAP_SYS_ADMIN, &userNS) {
+            return Err(Error::SysError(SysErr::EPERM))
+        }
+    }
+
+    if size < 0 || size > UTS_LEN as i32 {
+        return Err(Error::SysError(SysErr::EINVAL))
+    }
+
+    let (name, err) = task.CopyInString(nameAddr, UTS_LEN - 1);
+    match err {
+        Ok(()) => (),
+        Err(e) => return Err(e)
+    };
+
+    utsns.SetDomainName(name);
+    return Ok(0)
+}
+
+// Sethostname implements Linux syscall sethostname.
+pub fn SysSethostname(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let nameAddr = args.arg0 as u64;
+    let size = args.arg1 as i32;
+
+    let utsns = task.Thread().UTSNamespace();
+    {
+        let creds = task.Creds();
+        let userNS = creds.lock().UserNamespace.clone();
+        if !creds.HasCapabilityIn(Capability::CAP_SYS_ADMIN, &userNS) {
+            return Err(Error::SysError(SysErr::EPERM))
+        }
+    }
+
+    if size < 0 || size > UTS_LEN as i32 {
+        return Err(Error::SysError(SysErr::EINVAL))
+    }
+
+    let (name, err) = task.CopyInString(nameAddr, UTS_LEN - 1);
+    match err {
+        Ok(()) => (),
+        Err(e) => return Err(e)
+    };
+
+    utsns.SetHostName(name);
+    return Ok(0)
 }
