@@ -319,7 +319,7 @@ impl Timer {
             clock: clock.clone(),
             listener: listener.clone(),
             setting: Setting::default(),
-            paused: true,
+            paused: false,
             kicker: None,
         };
 

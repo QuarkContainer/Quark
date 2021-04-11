@@ -275,6 +275,7 @@ pub struct ThreadGroupInternal {
 
     pub containerID: String,
 
+    pub timerMu: Arc<Mutex<()>>,
     // todo: handle tty
     //pub tty: Option<TTY>
 }
@@ -294,7 +295,7 @@ impl ThreadGroupWeak {
 
         return Some(ThreadGroup {
             uid: self.uid,
-            data: t,
+            data: t
         })
     }
 }
@@ -302,7 +303,7 @@ impl ThreadGroupWeak {
 #[derive(Clone, Default)]
 pub struct ThreadGroup {
     pub uid: UniqueID,
-    pub data: Arc<Mutex<ThreadGroupInternal>>,
+    pub data: Arc<Mutex<ThreadGroupInternal>>
 }
 
 impl Deref for ThreadGroup {
@@ -350,6 +351,10 @@ impl ThreadGroup {
             uid: self.uid,
             data: Arc::downgrade(&self.data),
         }
+    }
+
+    pub fn TimerMu(&self) -> Arc<Mutex<()>> {
+        return self.lock().timerMu.clone();
     }
 
     pub fn PIDNamespace(&self) -> PIDNamespace {

@@ -662,7 +662,15 @@ impl PendingSignals {
             self.pendingSet.0 &= !(1 << lastOne);
             let ps = self.stdSignals[lastOne].take();
             if let Some(ps) = ps {
-                return Some(ps.sigInfo);
+                let mut sigInfo = ps.sigInfo;
+                match ps.timer {
+                    None => (),
+                    Some(timer) => {
+                        timer.lock().updateDequeuedSignalLocked(&mut sigInfo)
+                    }
+                }
+
+                return Some(sigInfo);
             } else {
                 return None;
             }
@@ -674,7 +682,15 @@ impl PendingSignals {
 
         let ps = self.rtSignals[lastOne + 1 - RT_SIGNAL_START].Deque();
         if let Some(ps) = ps {
-            return Some(ps.sigInfo);
+            let mut sigInfo = ps.sigInfo;
+            match ps.timer {
+                None => (),
+                Some(timer) => {
+                    timer.lock().updateDequeuedSignalLocked(&mut sigInfo)
+                }
+            }
+
+            return Some(sigInfo);
         } else {
             return None;
         }
@@ -761,6 +777,7 @@ pub fn SignalInfoPriv(sig: i32) -> SignalInfo {
 
 // Sigevent represents struct sigevent.
 #[repr(C)]
+#[derive(Default, Copy, Clone)]
 pub struct Sigevent {
     pub Value: u64,
     pub Signo: i32,
@@ -769,7 +786,8 @@ pub struct Sigevent {
 
     // struct sigevent here contains 48-byte union _sigev_un. However, only
     // member _tid is significant to the kernel.
-    pub UnRemainder: [u8; 44],
+    pub UnRemainder1: [u8; 32],
+    pub UnRemainder: [u8; 12],
 }
 
 pub const SIGEV_SIGNAL: i32 = 0;
