@@ -172,7 +172,11 @@ impl timer::TimerListener for IntervalTimer {
         timer.sigval = it.sigval;
 
         // si_overrun is set when the signal is dequeued.
-        let err = it.Target().sendSignalTimerLocked(&si, it.group, Some(self.clone()));
+        let target = it.Target();
+        let group = it.group;
+        core::mem::drop(it);
+        let err = target.sendSignalTimerLocked(&si, group, Some(self.clone()));
+        let mut it = self.lock();
         match err {
             Err(_) => {
                 it.signalRejectedLocked();
@@ -222,11 +226,13 @@ fn saturateI32FromU64(x: u64) -> i32 {
 impl Thread {
     pub fn IntervalTimerCreate(&self, c: &Clock, sigev: &mut Sigevent) -> Result<TimerID> {
         let tg = self.lock().tg.clone();
-        let mut tg = tg.lock();
+        let timerMu = tg.TimerMu();
+        let _tm = timerMu.lock();
 
         let mut id: TimerID;
-        let end = tg.nextTimerID;
+        let end = tg.lock().nextTimerID;
         loop {
+            let mut tg = tg.lock();
             id = tg.nextTimerID;
             let ok = tg.timers.contains_key(&id);
             tg.nextTimerID += 1;
@@ -260,11 +266,11 @@ impl Thread {
         match sigev.Notify {
             SIGEV_NONE => (),
             SIGEV_SIGNAL | SIGEV_THREAD => {
-                it.lock().target = tg.leader.Upgrade();
+                it.lock().target = tg.lock().leader.Upgrade();
                 it.lock().group = true;
             }
             SIGEV_THREAD_ID => {
-                let pidns = tg.pidns.clone();
+                let pidns = tg.lock().pidns.clone();
 
                 {
                     let owner = pidns.lock().owner.clone();
@@ -272,7 +278,13 @@ impl Thread {
 
                     match pidns.lock().tasks.get(&sigev.Tid).clone() {
                         None => return Err(Error::SysError(SysErr::EINVAL)),
-                        Some(t) => it.lock().target = Some(t.clone()),
+                        Some(t) => {
+                            let targettg = t.ThreadGroup();
+                            if targettg != tg {
+                                return Err(Error::SysError(SysErr::EINVAL))
+                            }
+                            it.lock().target = Some(t.clone())
+                        },
                     }
                 };
             }
@@ -287,16 +299,17 @@ impl Thread {
         }
 
         it.lock().timer = Some(timer::Timer::New(c, &Arc::new(it.clone())));
-        tg.timers.insert(id, it);
+        tg.lock().timers.insert(id, it);
         return Ok(id)
     }
 
     // IntervalTimerDelete implements timer_delete(2).
     pub fn IntervalTimerDelete(&self, id: TimerID) -> Result<()> {
         let tg = self.lock().tg.clone();
-        let mut tg = tg.lock();
+        let timerMu = tg.TimerMu();
+        let _tm = timerMu.lock();
 
-        let it = match tg.timers.remove(&id) {
+        let it = match tg.lock().timers.remove(&id) {
             None => {
                 return Err(Error::SysError(SysErr::EINVAL));
             }
@@ -310,11 +323,12 @@ impl Thread {
     // IntervalTimerSettime implements timer_settime(2).
     pub fn IntervalTimerSettime(&self, id: TimerID, its: &Itimerspec, abs: bool) -> Result<Itimerspec> {
         let tg = self.lock().tg.clone();
-        let tg = tg.lock();
+        let timerMu = tg.TimerMu();
+        let _tm = timerMu.lock();
 
-        let it = match tg.timers.get(&id) {
+        let it = match tg.lock().timers.get(&id).clone() {
             None => return Err(Error::SysError(SysErr::EINVAL)),
-            Some(ref it) => it.clone(),
+            Some(it) => it.clone(),
         };
 
         let timer = it.lock().timer.clone().unwrap();
@@ -322,7 +336,7 @@ impl Thread {
         let newS = timer::Setting::FromItimerspec(its, abs, &clock)?;
 
         let (tm, oldS) = timer.SwapAnd(&newS, || {
-            it.lock().timerSettingChanged()
+             it.lock().timerSettingChanged();
         });
         let its = timer::ItimerspecFromSetting(tm, oldS);
         return Ok(its)
@@ -331,18 +345,17 @@ impl Thread {
     // IntervalTimerGettime implements timer_gettime(2).
     pub fn IntervalTimerGettime(&self, id: TimerID) -> Result<Itimerspec> {
         let tg = self.lock().tg.clone();
-        let tg = tg.lock();
+        let timerMu = tg.TimerMu();
+        let _tm = timerMu.lock();
 
-        match tg.timers.get(&id) {
-            None => {
-                return Err(Error::SysError(SysErr::EINVAL));
-            }
-            Some(ref it) => {
-                let (tm, s) = it.lock().timer.clone().unwrap().Get();
-                let its = timer::ItimerspecFromSetting(tm, s);
-                return Ok(its)
-            }
-        }
+        let it = match tg.lock().timers.get(&id).clone() {
+            None => return Err(Error::SysError(SysErr::EINVAL)),
+            Some(it) => it.clone(),
+        };
+
+        let (tm, s) = it.lock().timer.clone().unwrap().Get();
+        let its = timer::ItimerspecFromSetting(tm, s);
+        return Ok(its)
     }
 
     // IntervalTimerGetoverrun implements timer_getoverrun(2).
@@ -353,14 +366,15 @@ impl Thread {
         let lock = tg.lock().signalLock.clone();
         let _s = lock.lock();
 
-        let tglock = tg.lock();
-        match tglock.timers.get(&id).clone() {
-            None => {
-                return Err(Error::SysError(SysErr::EINVAL));
-            }
-            Some(it) => {
-                return Ok(saturateI32FromU64(it.lock().overrunLast))
-            }
-        }
+        let timerMu = tg.TimerMu();
+        let _tm = timerMu.lock();
+
+        let it = match tg.lock().timers.get(&id).clone() {
+            None => return Err(Error::SysError(SysErr::EINVAL)),
+            Some(it) => it.clone(),
+        };
+
+        let overrunLast = it.lock().overrunLast;
+        return Ok(saturateI32FromU64(overrunLast))
     }
 }

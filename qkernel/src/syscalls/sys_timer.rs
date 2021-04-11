@@ -14,8 +14,10 @@
 
 use super::super::task::*;
 use super::super::qlib::common::*;
-use super::super::syscalls::syscalls::*;
 use super::super::qlib::linux::time::*;
+use super::super::syscalls::syscalls::*;
+use super::super::SignalDef::*;
+use super::sys_time::*;
 
 // copyItimerValIn copies an ItimerVal from the untrusted app range to the
 // kernel.  The ItimerVal may be either 32 or 64 bits.
@@ -89,4 +91,69 @@ pub fn SysAlarm(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     }
 
     return Ok(secs)
+}
+
+// TimerCreate implements linux syscall timer_create(2).
+pub fn SysTimerCreate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let clockID = args.arg0 as i32;
+    let sevp = args.arg1 as u64;
+    let timerIDp = args.arg2 as u64;
+
+    let c = GetClock(task, clockID)?;
+
+    let mut sev = Sigevent::default();
+    if sevp != 0 {
+        sev = *task.GetType(sevp)?;
+    }
+
+    let timerID = task.GetTypeMut(timerIDp)?;
+
+    let id = task.Thread().IntervalTimerCreate(&c, &mut sev)?;
+
+    *timerID = id;
+    return Ok(0)
+}
+
+// TimerSettime implements linux syscall timer_settime(2).
+pub fn SysTimerSettime(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let timerID = args.arg0 as i32;
+    let flags = args.arg1 as i32;
+    let newValAddr = args.arg2 as u64;
+    let oldValAddr = args.arg3 as u64;
+
+    let newVal : Itimerspec = *task.GetType(newValAddr)?;
+
+    let oldVal = task.Thread().IntervalTimerSettime(timerID, &newVal, flags & TIMER_ABSTIME != 0)?;
+    if oldValAddr != 0 {
+        *task.GetTypeMut(oldValAddr)? = oldVal;
+    }
+
+    return Ok(0)
+}
+
+// TimerGettime implements linux syscall timer_gettime(2).
+pub fn SysTimerGettime(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let timerID = args.arg0 as i32;
+    let curValAddr = args.arg1 as u64;
+
+    let curVal = task.Thread().IntervalTimerGettime(timerID)?;
+    *task.GetTypeMut(curValAddr)? = curVal;
+    return Ok(0)
+}
+
+// TimerGetoverrun implements linux syscall timer_getoverrun(2).
+pub fn SysTimerGetoverrun(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let timerID = args.arg0 as i32;
+
+    let o = task.Thread().IntervalTimerGetoverrun(timerID)?;
+
+    return Ok(o as i64)
+}
+
+// TimerDelete implements linux syscall timer_delete(2).
+pub fn SysTimerDelete(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let timerID = args.arg0 as i32;
+
+    task.Thread().IntervalTimerDelete(timerID)?;
+    return Ok(0)
 }
