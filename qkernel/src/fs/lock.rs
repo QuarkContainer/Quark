@@ -410,8 +410,13 @@ impl Locks {
                 l.queue.EventRegister(task, &task.blocker.generalEntry, EVENTMASK_ALL);
                 core::mem::drop(l);
 
-                task.blocker.BlockGeneral()?;
-                self.lock().queue.EventUnregister(task, &task.blocker.generalEntry);
+                defer!(self.lock().queue.EventUnregister(task, &task.blocker.generalEntry));
+
+                match task.blocker.BlockGeneral() {
+                    Err(Error::ErrInterrupted) => return Err(Error::SysError(SysErr::ERESTARTSYS)),
+                    Err(e) => return Err(e),
+                    Ok(()) => (),
+                }
                 // Try again now that someone has unlocked.
                 continue;
             }

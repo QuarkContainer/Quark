@@ -1857,7 +1857,6 @@ pub fn SysFallocate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     Ok(0)
 }
 
-
 pub fn SysFlock(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let fd = args.arg0 as i32;
     let mut operation = args.arg1 as i32;
