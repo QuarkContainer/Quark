@@ -588,6 +588,7 @@ pub fn SysUnshare(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     if opts.NewUserNamespace {
         opts.NewThreadGroup = true;
         opts.NewFSContext = true;
+        panic!("Doesn't support create new usernamespace...");
     }
 
     task.Unshare(&opts)?;

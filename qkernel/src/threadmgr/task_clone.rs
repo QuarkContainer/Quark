@@ -173,6 +173,10 @@ impl CloneOptions {
             InheritTracer: flags & CloneOp::CLONE_PTRACE != 0,
         };
 
+        if opts.sharingOption.NewUserNamespace {
+            panic!("doesn't support new usernamespace ...");
+        }
+
         // Since signal actions may refer to application signal handlers by virtual
         // address, any set of signal handlers must refer to the same address
         // space.

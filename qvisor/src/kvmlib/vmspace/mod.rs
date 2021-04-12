@@ -419,6 +419,36 @@ impl VMSpace {
         return vec.len() as i64
     }
 
+    pub fn CreateMemfd(_taskId: u64, len: i64) -> i64 {
+        let uid = NewUID();
+        let path = format!("/tmp/memfd_{}", uid);
+        let cstr = CString::New(&path);
+
+        let nr = SysCallID::sys_memfd_create as usize;
+        let fd = unsafe {
+            syscall2(nr, cstr.Ptr() as *const c_char as usize, 0) as i32
+        };
+
+        if fd < 0 {
+            return Self::GetRet(fd as i64)
+        }
+
+        let ret = unsafe {
+            ftruncate(fd, len)
+        };
+
+        if ret < 0 {
+            unsafe {
+                libc::close(fd);
+            }
+            return Self::GetRet(ret as i64)
+        }
+
+        let hostfd = IO_MGR.lock().AddFd(fd, true);
+        FD_NOTIFIER.AddFd(fd, Box::new(GuestFd{hostfd: hostfd}));
+        return hostfd as i64
+    }
+
     pub fn Pipe2(_taskId: u64, fds: u64, flags: i32) -> i64 {
         unsafe {
             let ret = pipe2(fds as *mut c_int, flags | O_NONBLOCK);

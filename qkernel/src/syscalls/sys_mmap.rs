@@ -22,6 +22,7 @@ use super::super::memmgr::syscalls::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::addr::*;
 use super::super::syscalls::syscalls::*;
+use super::super::fs::host::hostinodeop::*;
 
 pub fn SysMmap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg0 as u64;
@@ -90,6 +91,9 @@ pub fn SysMmap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             Err(e) => return Err(e),
             Ok(m) => opts.Mappable = Some(m)
         }
+    } else if shared {
+        let memfdIops = HostInodeOp::NewMemfdIops(len as i64)?;
+        opts.Mappable = Some(memfdIops);
     }
 
     match task.mm.MMap(task, &mut opts) {
