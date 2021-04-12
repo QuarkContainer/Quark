@@ -64,6 +64,14 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
+    pub fn CreateMemfd(len: i64) -> i64 {
+        let mut msg = Msg::CreateMemfd(CreateMemfd {
+            len: len,
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
     pub fn ControlMsgCall(addr: u64, len: usize) -> i64 {
         let mut msg = Msg::ControlMsgCall(ControlMsgCall {
             addr: addr,

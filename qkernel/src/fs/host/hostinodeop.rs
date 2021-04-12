@@ -47,6 +47,8 @@ use super::super::file::*;
 use super::super::inode::*;
 use super::super::dirent::*;
 use super::super::flags::*;
+use super::super::filesystems::*;
+use super::fs::*;
 
 pub struct Mappable {
     //need acquire when read/write f2p and p2m mapps as they
@@ -340,6 +342,26 @@ impl HostInodeOp {
         let ret = Self(intern);
         AddFD(fd, &ret);
         return ret
+    }
+
+    pub fn NewMemfdIops(len: i64) -> Result<Self> {
+        let fd = HostSpace::CreateMemfd(len) as i32;
+        if fd < 0 {
+            return Err(Error::SysError(-fd as i32))
+        }
+
+        let mut fstat = LibcStat::default();
+
+        let ret = Fstat(fd, &mut fstat) as i32;
+        if ret < 0 {
+            return Err(Error::SysError(-ret as i32))
+        }
+
+        let msrc = MountSource::NewHostMountSource(&"/".to_string(), &ROOT_OWNER, &WhitelistFileSystem::New(), &MountSourceFlags::default(), false);
+        let intern = Arc::new(Mutex::new(HostInodeOpIntern::New(&msrc.MountSourceOperations.clone(), fd, false, &fstat, true)));
+
+        let ret = Self(intern);
+        return Ok(ret)
     }
 
     pub fn Downgrade(&self) -> HostInodeOpWeak {

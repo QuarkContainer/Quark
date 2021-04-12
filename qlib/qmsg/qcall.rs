@@ -32,6 +32,7 @@ pub enum Msg {
     WriteBuffTrigger(WriteBuffTrigger),
     ReadBuffTrigger(ReadBuffTrigger),
     GetStdfds(GetStdfds),
+    CreateMemfd(CreateMemfd),
 
     //Syscall
     Fallocate(Fallocate),
@@ -268,6 +269,11 @@ pub struct Fallocate {
     pub fd: i32,
     pub mode: i32,
     pub offset: i64,
+    pub len: i64,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct CreateMemfd {
     pub len: i64,
 }
 
