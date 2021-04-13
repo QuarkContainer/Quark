@@ -82,4 +82,4 @@ When log is enabled, e.g. Debug. After run a docker image with Quark Container, 
 doc
 
 ## Communications
-Slack: https://bit.ly/3fGgNGH
+Slack: https://join.slack.com/t/quarksoftgroup/shared_invite/zt-oj7dgqet-6iUXmOnMbqHj4g_XAd_3Mg
