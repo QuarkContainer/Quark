@@ -568,13 +568,13 @@ impl Thread {
                 // Update t's child max resident set size. The size will be the maximum
                 // of this thread's size and all its childrens' sizes.
                 let maxRSS = tglock.maxRSS;
-                if maxRSS < targettglock.childMaxRSS {
-                    tglock.childMaxRSS = maxRSS;
+                if maxRSS < targettglock.maxRSS {
+                    tglock.childMaxRSS = targettglock.maxRSS;
                 }
 
                 let childMaxRSS = tglock.childMaxRSS;
                 if childMaxRSS < targettglock.childMaxRSS {
-                    tglock.childMaxRSS = childMaxRSS;
+                    tglock.childMaxRSS = targettglock.childMaxRSS;
                 }
             }
         }
