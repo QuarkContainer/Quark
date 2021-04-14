@@ -38,6 +38,7 @@ use super::super::super::kernel::time::*;
 use super::super::super::qlib::common::*;
 use super::super::super::task::*;
 use super::super::super::qlib::mem::io::*;
+use super::super::super::qlib::linux::netdevice::*;
 use super::super::super::Kernel;
 use super::super::super::IOURING;
 use super::super::super::Kernel::HostSpace;
@@ -184,6 +185,46 @@ impl Waitable for SocketOperations {
     }
 }
 
+// pass the ioctl to the shadow hostfd
+pub fn HostIoctlIFReq(task: &Task, hostfd: i32, request: u64, addr: u64) -> Result<()> {
+    let mut ifr : IFReq = *task.GetType(addr)?;
+    let res = HostSpace::IoCtl(hostfd, request, &mut ifr as *const _ as u64);
+    if res < 0 {
+        return Err(Error::SysError(-res as i32))
+    }
+
+    *task.GetTypeMut(addr)? = ifr;
+    return Ok(())
+}
+
+pub fn HostIoctlIFConf(task: &Task, hostfd: i32, request: u64, addr: u64) -> Result<()> {
+    let mut ifc : IFConf = *task.GetType(addr)?;
+    let count = ifc.Len as usize / SIZE_OF_IFREQ;
+
+    let ifrs :&mut [IFReq] = task.GetSliceMut(ifc.Ptr, count)?;
+    let mut ifrvec = Vec::with_capacity(count);
+    for i in 0..count {
+        ifrvec.push(ifrs[i]);
+    }
+
+    if ifc.Ptr != 0 && count > 0 {
+        ifc.Ptr = &ifrvec[0] as * const _ as u64;
+    }
+
+    let res = HostSpace::IoCtl(hostfd, request, &mut ifc as *const _ as u64);
+    if res < 0 {
+        return Err(Error::SysError(-res as i32))
+    }
+
+    let ifrPtr : &mut IFConf = task.GetTypeMut(addr)?;
+    ifrPtr.Len = ifc.Len;
+    for i in 0..count {
+        ifrs[i] = ifrvec[i];
+    }
+
+    return Ok(())
+}
+
 impl SpliceOperations for SocketOperations {}
 
 impl FileOperations for SocketOperations {
@@ -255,19 +296,44 @@ impl FileOperations for SocketOperations {
     }
 
     fn Ioctl(&self, task: &Task, _f: &File, _fd: i32, request: u64, val: u64) -> Result<()> {
-        if true { //request == IoCtlCmd::TIOCINQ || request == IoCtlCmd::TIOCOUTQ {
-            let tmp: i32 = 0;
-            let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64);
-            if res < 0 {
-                return Err(Error::SysError(-res as i32))
+        let flags = request as i32;
+
+        let hostfd = self.fd;
+        match flags as u64 {
+            LibcConst::SIOCGIFFLAGS |
+            LibcConst::SIOCGIFBRDADDR |
+            LibcConst::SIOCGIFDSTADDR |
+            LibcConst::SIOCGIFHWADDR |
+            LibcConst::SIOCGIFINDEX |
+            LibcConst::SIOCGIFMAP |
+            LibcConst::SIOCGIFMETRIC |
+            LibcConst::SIOCGIFMTU |
+            LibcConst::SIOCGIFNAME |
+            LibcConst::SIOCGIFNETMASK |
+            LibcConst::SIOCGIFTXQLEN => {
+                let addr = val;
+                HostIoctlIFReq(task, hostfd, request, addr)?;
+
+                return Ok(())
             }
+            LibcConst::SIOCGIFCONF => {
+                let addr = val;
+                HostIoctlIFConf(task, hostfd, request, addr)?;
 
-            let v: &mut i32 = task.GetTypeMut(val)?;
-            *v = tmp;
-            return Ok(())
+                return Ok(())
+            }
+            _ => {
+                let tmp: i32 = 0;
+                let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64);
+                if res < 0 {
+                    return Err(Error::SysError(-res as i32))
+                }
+
+                let v: &mut i32 = task.GetTypeMut(val)?;
+                *v = tmp;
+                return Ok(())
+            }
         }
-
-        return Err(Error::SysError(SysErr::ENOTTY))
     }
 
     fn IterateDir(&self, _task: &Task, _d: &Dirent, _dirCtx: &mut DirCtx, _offset: i32) -> (i32, Result<i64>) {
