@@ -17,6 +17,7 @@ use alloc::sync::Weak;
 use core::ops::Deref;
 use alloc::string::ToString;
 use core::any::Any;
+use spin::Mutex;
 
 use super::super::super::super::kernel::waiter::*;
 use super::super::super::super::tcpip::tcpip::*;
@@ -36,7 +37,7 @@ use super::connectioned::*;
 // socketpair(2).
 
 #[derive(Clone)]
-pub struct ConnectionLessEndPointWeak(Weak<BaseEndpoint>);
+pub struct ConnectionLessEndPointWeak(Weak<Mutex<BaseEndpointInternal>>);
 
 impl ConnectionLessEndPointWeak {
     pub fn Upgrade(&self) -> Option<ConnectionLessEndPoint> {
@@ -45,18 +46,18 @@ impl ConnectionLessEndPointWeak {
             Some(c) => c,
         };
 
-        return Some(ConnectionLessEndPoint(c))
+        return Some(ConnectionLessEndPoint(BaseEndpoint(c)))
     }
 }
 
 impl ConnectionLessEndPoint {
     pub fn Downgrade(&self) -> ConnectionLessEndPointWeak {
-        return ConnectionLessEndPointWeak(Arc::downgrade(&self.0));
+        return ConnectionLessEndPointWeak(Arc::downgrade(&(self.0).0));
     }
 }
 
 #[derive(Clone)]
-pub struct ConnectionLessEndPoint(Arc<BaseEndpoint>);
+pub struct ConnectionLessEndPoint(BaseEndpoint);
 
 impl Deref for ConnectionLessEndPoint {
     type Target = BaseEndpoint;
@@ -67,12 +68,12 @@ impl Deref for ConnectionLessEndPoint {
 }
 
 impl ConnectionLessEndPoint {
-    pub fn New() -> Self {
-        let bep = BaseEndpoint::default();
+    pub fn New(hostfd: i32) -> Self {
+        let bep = BaseEndpoint::NewWithHostfd(hostfd);
         let queue = bep.lock().queue.clone();
         let queueReceiver = QueueReceiver::New(MsgQueue::New(queue, Queue::default(), INITIAL_LIMIT));
         bep.lock().receiver = Some(Arc::new(queueReceiver));
-        return Self(Arc::new(bep))
+        return Self(bep)
     }
 
     pub fn IsBound(&self) -> bool {

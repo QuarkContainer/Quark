@@ -28,6 +28,7 @@ use super::super::super::super::uid::*;
 use super::super::super::super::task::*;
 use super::super::super::buffer::view::*;
 use super::super::super::control::*;
+use super::super::super::hostinet::socket::*;
 use super::queue::*;
 use super::connectioned::*;
 use super::connectionless::*;
@@ -254,6 +255,17 @@ impl BoundEndpoint {
             }
             BoundEndpoint::ConnectLess(ref c) => {
                 return c.UnidirectionalConnect()
+            }
+        }
+    }
+
+    pub fn BaseEndpoint(&self) -> BaseEndpoint {
+        match self {
+            BoundEndpoint::Connected(ref c) => {
+                return c.lock().baseEndpoint.clone()
+            }
+            BoundEndpoint::ConnectLess(ref c) => {
+                return BaseEndpoint(c.0.clone())
             }
         }
     }
@@ -992,6 +1004,9 @@ pub struct BaseEndpointInternal {
 
     // linger is used for SO_LINGER socket option.
     //pub linger: LingerOption,
+
+    // an virutal host fd to handle IOCTL: SIOCGIFCONF call
+    pub hostfd: i32,
 }
 
 impl Default for BaseEndpointInternal {
@@ -1003,6 +1018,7 @@ impl Default for BaseEndpointInternal {
             receiver: None,
             connected: None,
             path: String::default(),
+            hostfd: 0,
         }
     }
 }
@@ -1013,13 +1029,13 @@ impl BaseEndpointInternal {
     }
 }
 
-#[derive(Default)]
-pub struct BaseEndpoint(Mutex<BaseEndpointInternal>);
+#[derive(Default, Clone)]
+pub struct BaseEndpoint(pub Arc<Mutex<BaseEndpointInternal>>);
 
 impl Deref for BaseEndpoint {
-    type Target = Mutex<BaseEndpointInternal>;
+    type Target = Arc<Mutex<BaseEndpointInternal>>;
 
-    fn deref(&self) -> &Mutex<BaseEndpointInternal> {
+    fn deref(&self) -> &Arc<Mutex<BaseEndpointInternal>> {
         &self.0
     }
 }
@@ -1087,7 +1103,27 @@ impl BaseEndpoint {
             ..Default::default()
         };
 
-        return Self(Mutex::new(internal))
+        return Self(Arc::new(Mutex::new(internal)))
+    }
+
+    pub fn NewWithHostfd(hostfd: i32) -> Self {
+        let internal = BaseEndpointInternal {
+            hostfd: hostfd,
+            ..Default::default()
+        };
+
+        return Self(Arc::new(Mutex::new(internal)))
+    }
+
+    // pass the ioctl to the shadow hostfd
+    pub fn HostIoctlIFReq(&self, task: &Task, request: u64, addr: u64) -> Result<()> {
+        let hostfd = self.lock().hostfd;
+        return HostIoctlIFReq(task, hostfd, request, addr);
+    }
+
+    pub fn HostIoctlIFConf(&self, task: &Task, request: u64, addr: u64) -> Result<()> {
+        let hostfd = self.lock().hostfd;
+        return HostIoctlIFConf(task, hostfd, request, addr);
     }
 
     pub fn IsBound(&self) -> bool {

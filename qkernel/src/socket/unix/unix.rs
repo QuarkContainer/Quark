@@ -826,17 +826,17 @@ impl Provider for UnixSocketProvider {
         // Create the endpoint and socket.
         match stype {
             SockType::SOCK_DGRAM => {
-                let ep = ConnectionLessEndPoint::New();
+                let ep = ConnectionLessEndPoint::New(fd);
                 let ep = BoundEndpoint::ConnectLess(ep);
                 return Ok(Some(Arc::new(NewUnixSocket(task, ep, stype, fd)?)))
             }
             SockType::SOCK_SEQPACKET => {
-                let ep = ConnectionedEndPoint::New(stype);
+                let ep = ConnectionedEndPoint::New(stype, fd);
                 let ep = BoundEndpoint::Connected(ep);
                 return Ok(Some(Arc::new(NewUnixSocket(task, ep, stype, fd)?)))
             }
             SockType::SOCK_STREAM => {
-                let ep = ConnectionedEndPoint::New(stype);
+                let ep = ConnectionedEndPoint::New(stype, fd);
                 let ep = BoundEndpoint::Connected(ep);
                 return Ok(Some(Arc::new(NewUnixSocket(task, ep, stype, fd)?)))
             }
@@ -866,7 +866,7 @@ impl Provider for UnixSocketProvider {
         }
 
         // Create the endpoints and sockets.
-        let (ep1, ep2) = ConnectionedEndPoint::NewPair(stype);
+        let (ep1, ep2) = ConnectionedEndPoint::NewPair(stype, fd1, fd2);
         let ep1 = BoundEndpoint::Connected(ep1);
         let ep2 = BoundEndpoint::Connected(ep2);
         let s1 = NewUnixSocket(task, ep1, stype, fd1)?;

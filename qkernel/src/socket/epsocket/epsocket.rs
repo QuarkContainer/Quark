@@ -4,7 +4,6 @@ use super::super::super::task::*;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::linux::time::*;
-use super::super::super::qlib::linux::netdevice::*;
 use super::super::super::qlib::linux::socket::*;
 use super::super::super::tcpip::tcpip::*;
 use super::super::unix::transport::unix::*;
@@ -25,11 +24,17 @@ pub fn Ioctl(task: &Task, ep: &BoundEndpoint, _fd: i32, request: u64, val: u64) 
         LibcConst::SIOCGIFNETMASK |
         LibcConst::SIOCGIFTXQLEN => {
             let addr = val;
-            let _ifr : IFReq = *task.GetType(addr)?;
-            return Err(Error::SysError(SysErr::EOPNOTSUPP))
+            let bep = ep.BaseEndpoint();
+            bep.HostIoctlIFReq(task, request, addr)?;
+
+            return Ok(())
         }
         LibcConst::SIOCGIFCONF => {
-            return Err(Error::SysError(SysErr::EOPNOTSUPP))
+            let addr = val;
+            let bep = ep.BaseEndpoint();
+            bep.HostIoctlIFConf(task, request, addr)?;
+
+            return Ok(())
         }
         LibcConst::TIOCINQ => {
             let mut v = SockOpt::ReceiveQueueSizeOption(0);
