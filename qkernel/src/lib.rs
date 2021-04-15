@@ -191,8 +191,8 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     if llevel == LogLevel::Complex {
         tid = currTask.Thread().lock().id;
         pid = currTask.Thread().ThreadGroup().ID();
-        info!("({}/{})------get call id {:?} arg0:{:x}, arg1:{:x}, arg2:{:x}, arg3:{:x}, arg4:{:x}, arg5:{:x}, userstack is {:x}, return address is {:x}, kernelsp is {:x}",
-            tid, pid, callId, arg0, arg1, arg2, arg3, arg4, arg5, currTask.GetPtRegs().rsp, currTask.GetPtRegs().rcx, currTask.GetKernelSp());
+        info!("({}/{})------get call id {:?} arg0:{:x}, arg1:{:x}, arg2:{:x}, arg3:{:x}, arg4:{:x}, arg5:{:x}, userstack:{:x}, return address:{:x}, fs:{:x}",
+            tid, pid, callId, arg0, arg1, arg2, arg3, arg4, arg5, currTask.GetPtRegs().rsp, currTask.GetPtRegs().rcx, GetFs());
     } else if llevel == LogLevel::Simple {
         tid = currTask.Thread().lock().id;
         pid = currTask.Thread().ThreadGroup().ID();
@@ -500,6 +500,14 @@ fn panic(info: &PanicInfo) -> ! {
     }*/
 
     print!("get panic : {:?}", info.message());
+    if let Some(location) = info.location() {
+        print!("panic occurred in file '{}' at line {}",
+                 location.file(),
+                 location.line(),
+        );
+    } else {
+        print!("panic occurred but can't get location information...");
+    }
 
     //self::Kernel::HostSpace::Panic(&format!("get panic: {:?}", info));
     self::Kernel::HostSpace::Panic("get panic ...");

@@ -29,7 +29,10 @@ pub fn SysArchPrctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let code = args.arg0;
     let addr = args.arg1 as u64;
 
-    if code != 0x1001 && code != 0x1002 && code != 0x1003 && code != 0x1004 {
+    if code != PrCtlEnum::ARCH_SET_GS as u64 &&
+        code != PrCtlEnum::ARCH_SET_FS as u64 &&
+        code != PrCtlEnum::ARCH_GET_FS as u64 &&
+        code != PrCtlEnum::ARCH_GET_GS as u64 {
         return Err(Error::SysError(SysErr::EINVAL));
     }
 

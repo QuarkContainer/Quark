@@ -99,7 +99,7 @@ pub fn SeekWithDirCursor(task: &Task, f: &File, whence: i32, current: i64, offse
             InodeType::RegularFile | InodeType::BlockDevice => {
                 let sz = inode.UnstableAttr(task).unwrap().Size;
 
-                if sz + offset < 0 {
+                if core::i64::MAX - sz < offset {
                     return Err(Error::SysError(SysErr::EINVAL))
                 }
 
