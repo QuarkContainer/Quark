@@ -60,11 +60,11 @@ pub struct LibcSysinfo {
     pub totalswap: u64,
     pub freeswap: u64,
     pub procs: u16,
-    pub pad: u16,
+    pub pad: [u8; 6],
     pub totalhigh: u64,
     pub freehigh: u64,
     pub mem_unit: u32,
-    pub _f: [i8; 0],
+    //pub _f: [i8; 0],
 }
 
 #[repr(C)]

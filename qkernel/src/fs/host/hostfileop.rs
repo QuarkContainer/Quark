@@ -163,7 +163,6 @@ impl Waitable for HostFileOp {
 
 impl SpliceOperations for HostFileOp {}
 
-const BUF_WRITE : bool = false;
 const URING_ENABLE: bool = true;
 
 impl FileOperations for HostFileOp {
