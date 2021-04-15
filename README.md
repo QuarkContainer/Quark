@@ -41,9 +41,13 @@ Quark builds on X86-64 only. Other architecture will be available in the future.
 
 Quark is developed with Rust language. The build needs to install Rust nightly. 
 
-After install both Rust and Rust nightly. Please also install "cargo-xbuild" as below.
+After installing both Rust and Rust nightly. Please also install "cargo-xbuild" as below.
 ```sh
 cargo install cargo-xbuild
+```
+And also add the rust-src component to the current toolchain:
+```sh
+rustup component add rust-src
 ```
 
 ### Build
