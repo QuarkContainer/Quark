@@ -80,9 +80,9 @@ impl Task {
     // would exceed maxlen, CopyStringIn returns the string truncated to maxlen and
     // ENAMETOOLONG.
     pub fn CopyInString(&self, addr: u64, maxlen: usize) -> (String, Result<()>) {
-        let maxlen = match self.MaxMappedAddr(addr, maxlen as u64) {
+        let maxlen = match self.CheckPermission(addr, maxlen as u64, false, true) {
             Err(e) => return ("".to_string(), Err(e)),
-            Ok(l) => l
+            Ok(l) => l as usize
         };
 
         let slice = match self.GetSlice::<u8>(addr, maxlen) {
@@ -156,7 +156,7 @@ impl Task {
 
     pub fn GetSlice<T: Sized>(&self, vAddr: u64, count: usize) -> Result<&[T]> {
         let recordLen = core::mem::size_of::<T>();
-        let len = self.CheckPermission(vAddr, count as u64 * recordLen as u64, false, true)?;
+        let len = self.CheckPermission(vAddr, count as u64 * recordLen as u64, false, false)?;
 
         let t: *const T = vAddr as *const T;
         let slice = unsafe { slice::from_raw_parts(t, (len as usize) / recordLen) };
@@ -166,7 +166,7 @@ impl Task {
     pub fn GetSliceMut<T: Sized>(&self, vAddr: u64, count: usize) -> Result<&mut [T]> {
         let recordLen = core::mem::size_of::<T>();
         // only check whether the address is valid, if readonly, will cow
-        let len = self.CheckPermission(vAddr, count as u64 * recordLen as u64, true, true)?;
+        let len = self.CheckPermission(vAddr, count as u64 * recordLen as u64, true, false)?;
 
         let t: *mut T = vAddr as *mut T;
         let slice = unsafe { slice::from_raw_parts_mut(t, (len as usize) / recordLen) };
