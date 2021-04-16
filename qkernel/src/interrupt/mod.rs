@@ -396,7 +396,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     defer!(Task::Current().PerfGofrom(PerfType::PageFault));
 
     if PRINT_EXECPTION {
-        error!("in PageFaultHandler, cr2: {:x}, cr3: {:x}, isuser = {}, error is {:b}, ss is {:x}, cs == {:x}, eflags = {:x}, new ss is {}",
+        error!("in PageFaultHandler, cr2: {:x}, cr3: {:x}, isuser = {}, error is {:b}, ss is {:x}, cs == {:x}, eflags = {:x}, new ss is {}, pageaddr is {:x}",
             cr2,
             cr3,
             PageFaultErrorCode::from_bits(errorCode).unwrap() & PageFaultErrorCode::USER_MODE == PageFaultErrorCode::USER_MODE,
@@ -404,7 +404,8 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
             sf.ss,
             sf.cs,
             sf.eflags,
-            ss
+            ss,
+            Addr(cr2).RoundDown().unwrap().0
         );
     }
 

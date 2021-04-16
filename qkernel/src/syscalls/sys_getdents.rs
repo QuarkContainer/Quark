@@ -65,6 +65,8 @@ const WIDTH: u32 = 8;
 fn getDents(task: &Task, fd: i32, addr: u64, size: i32, f: fn(&Task, &Dirent, &mut IOWriter) -> Result<i32>) -> Result<i64> {
     let dir = task.GetFile(fd)?;
 
+    task.CheckPermission(addr, size as u64, true, false)?;
+
     let mut writer = MemBuf::NewFromAddr(task, addr, size as usize)?;
     let len = writer.Len() as i32;
     let mut ds = HostDirentSerializer::New(f, &mut writer, WIDTH, len);

@@ -51,6 +51,7 @@ use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 
 //#[repr(align(128))]
+#[derive(Debug)]
 pub struct SyscallArguments {
     pub arg0: u64,
     pub arg1: u64,

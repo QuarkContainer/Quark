@@ -146,7 +146,8 @@ pub fn openAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
 
     let (path, dirPath) = copyInPath(task,  addr, false)?;
 
-    info!("openat path is {}, the perm is {:?}", &path, &PermMask::FromFlags(flags));
+    info!("openat path is {}, the perm is {:?}, , current is {}",
+        &path, &PermMask::FromFlags(flags), task.fsContext.WorkDirectory().MyFullName());
 
     let resolve = (flags & Flags::O_NOFOLLOW as u32) == 0;
     let mut fd = -1;
@@ -271,7 +272,7 @@ pub fn mknodeAt(task: &Task, dirFd: i32, addr: u64, mode: FileMode) -> Result<()
 pub fn createAt(task: &Task, dirFd: i32, addr: u64, flags: u32, mode: FileMode) -> Result<i32> {
     let (path, dirPath) = copyInPath(task,  addr, false)?;
 
-    info!("createAt path is {}", &path);
+    info!("createAt path is {}, current is {}", &path, task.fsContext.WorkDirectory().MyFullName());
     if dirPath {
         return Err(Error::SysError(SysErr::EISDIR))
     }

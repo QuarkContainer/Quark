@@ -55,7 +55,7 @@ impl CString {
     }
 
     pub fn ToStringWithLen<'b>(task: &'b Task, addr: u64, len: usize) -> Result<&'b str> {
-        let len = task.MaxMappedAddr(addr, len as u64)?;
+        let len = task.CheckPermission(addr, len as u64, false, true)? as usize;
 
         let slice = task.GetSlice::<u8>(addr, len)?;
 

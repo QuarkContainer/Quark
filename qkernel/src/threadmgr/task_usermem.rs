@@ -118,7 +118,7 @@ impl Task {
 
         let mut maxTotalSize = maxTotalSize;
 
-        let maxlen = self.MaxMappedAddr(addr, maxElemSize as u64 * 8)?;
+        let maxlen = self.CheckPermission(addr, maxElemSize as u64* 8, false, true)? as usize;
         let addresses = self.GetSlice::<u64>(addr, maxlen/8)?;
 
         let mut v = Vec::new();
@@ -139,7 +139,7 @@ impl Task {
                 thisMax = maxTotalSize as usize;
             }
 
-            let maxlen = self.MaxMappedAddr(ptr, thisMax as u64)?;
+            let maxlen = self.CheckPermission(ptr, thisMax as u64, false, true)? as usize;
             let (str, err) = self.CopyInString(ptr, maxlen);
             match err {
                 Err(e) => return Err(e),
@@ -198,26 +198,6 @@ impl Task {
         let t: *mut T = vAddr as *mut T;
 
         return Ok(unsafe { &mut (*t) })
-    }
-
-    pub fn MaxMappedAddr(&self, vAddr: u64, len: u64) -> Result<usize> {
-        let mut addr = Addr(vAddr).RoundDown()?.0;
-        while addr <= vAddr + len {
-            let (_, _) = match self.mm.VirtualToPhy(addr) {
-                Err(_) => {
-                    if addr < vAddr {
-                        return Err(Error::SysError(SysErr::EFAULT))
-                    } else {
-                        return Ok((addr - vAddr) as usize);
-                    }
-                }
-                Ok((a, w)) => (a, w)
-            };
-
-            addr += MemoryDef::PAGE_SIZE;
-        }
-
-        return Ok(len as usize)
     }
 
     // check whether the address range is legal.
