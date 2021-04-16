@@ -64,7 +64,8 @@ pub fn StartLog(log: &str, level: LevelFilter) {
     //let termLog = TermLogger::new(LevelFilter::Error, Config::default(), TerminalMode::Mixed).unwrap();
 
     let mut build = ConfigBuilder::new();
-    build.set_time_format_str("%H:%M:%S%.3f");
+    //build.set_time_format_str("%H:%M:%S%.3f");
+    build.set_time_format_str("");
     let config = build.build();
 
     let commonLogfile = OpenOptions::new()

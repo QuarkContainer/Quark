@@ -398,6 +398,9 @@ impl MemoryManager {
 
     //remove all the user vmas, used for execve
     pub fn Clear(&self) -> Result<()> {
+        let lock = self.Lock();
+        let _l = lock.lock();
+
         // if we are clearing memory manager in current pagetable,
         // need to switch to kernel pagetable to avoid system crash
         let isCurrent = self.read().pt.IsActivePagetable();
@@ -547,7 +550,15 @@ impl MemoryManager {
         while addr <= vAddr + len - 1 {
             let (_, writable) = match self.VirtualToPhy(addr) {
                 Err(Error::AddressNotMap(_)) => {
-                    self.InstallPageWithAddr(task, addr)?;
+                    match self.InstallPageWithAddr(task, addr) {
+                        Err(_) => {
+                            if !allowPartial && addr < vAddr {
+                                return Err(Error::SysError(SysErr::EFAULT))
+                            }
+                            return Ok(addr - vAddr)
+                        }
+                        Ok(()) => (),
+                    }
                     self.VirtualToPhy(addr)?
                 }
                 Err(e) => {
@@ -558,7 +569,7 @@ impl MemoryManager {
             if writeReq && !writable {
                 let vma = match self.GetVma(addr) {
                     None => {
-                        if allowPartial && addr < vAddr {
+                        if !allowPartial && addr < vAddr {
                             return Err(Error::SysError(SysErr::EFAULT))
                         }
 
@@ -568,8 +579,7 @@ impl MemoryManager {
                 };
 
                 if !vma.effectivePerms.Write() {
-                    info!("CheckPermission: fail writeReq is {}, writeable is {}", writeReq, writable);
-                    if allowPartial && addr < vAddr {
+                    if !allowPartial && addr < vAddr {
                         return Err(Error::SysError(SysErr::EFAULT))
                     }
 
@@ -649,6 +659,7 @@ impl MemoryManager {
 
         let pt = self.read().pt.clone();
 
+        pt.write().MUnmap(ar.Start(), ar.Len())?;
         let segAr = vmaSeg.Range();
         match vma.mappable {
             None => {
