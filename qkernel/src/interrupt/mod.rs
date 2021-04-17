@@ -432,6 +432,11 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
         return
     }
 
+    if !vma.effectivePerms.Read() { // has no read permission
+        HandleFault(currTask, fromUser, errorCode, cr2, sf);
+        return
+    }
+
     let pageAddr = Addr(cr2).RoundDown().unwrap().0;
     assert!(range.Contains(pageAddr), "PageFaultHandler vaddr is not in the Vma range");
 

@@ -64,7 +64,7 @@ impl PartialOrd for MappingOfRange {
 
 impl MappingOfRange {
     pub fn invalidate(&self, task: &Task, invalidatePrivate: bool) {
-        self.MappingSpace.Upgrade().RetsetFileMapping(task, &self.AddrRange, invalidatePrivate);
+        self.MappingSpace.Upgrade().ResetFileMapping(task, &self.AddrRange, invalidatePrivate);
     }
 }
 

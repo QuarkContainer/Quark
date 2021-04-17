@@ -789,7 +789,8 @@ impl MemoryManager {
     }
 
     //used by file truncate, remove the cow related mapping
-    pub fn RetsetFileMapping(&self, task: &Task, ar: &Range, _invalidatePrivate: bool) {
+    pub fn ResetFileMapping(&self, task: &Task, ar: &Range, _invalidatePrivate: bool) {
+        //return self.MUnmap(task, ar.Start(), ar.Len()).unwrap();
         let mm = self.read();
 
         let vseg = mm.vmas.FindSeg(ar.Start());
