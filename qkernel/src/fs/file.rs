@@ -300,7 +300,7 @@ impl Drop for File {
             let inode = self.Dirent.Inode();
             let lockCtx = inode.lock().LockCtx.clone();
             let task = Task::Current();
-            let lockUniqueID = self.UniqueId();
+            let lockUniqueID = task.fdTbl.ID();
             lockCtx.BSD.UnlockRegion(task, lockUniqueID, &Range::Max());
             lockCtx.Posix.UnlockRegion(task, lockUniqueID, &Range::Max());
 
