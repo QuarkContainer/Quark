@@ -121,6 +121,8 @@ pub fn CaptureAddress(task: &Task, addr: u64, addrlen: u32) -> Result<Vec<u8>> {
         return Err(Error::SysError(SysErr::EINVAL))
     }
 
+    task.CheckPermission(addr, addrlen as u64, false, false)?;
+
     return task.CopyIn(addr, addrlen as usize);
 }
 
@@ -806,6 +808,7 @@ pub fn SysSendTo(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Err(Error::SysError(-SysErr::EINVAL))
     }
 
+    task.CheckPermission(bufPtr, buflen as u64, false, false)?;
     let iov = IoVec::NewFromAddr(bufPtr, buflen as usize);
     let iovs: [IoVec; 1] = [iov];
 
