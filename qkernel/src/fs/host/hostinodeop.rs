@@ -20,7 +20,6 @@ use alloc::string::String;
 use core::any::Any;
 use core::ops::Deref;
 use alloc::vec::Vec;
-use alloc::boxed::Box;
 
 use socket::unix::transport::unix::BoundEndpoint;
 use super::super::super::guestfdnotifier::*;
@@ -50,11 +49,7 @@ use super::super::flags::*;
 use super::super::filesystems::*;
 use super::fs::*;
 
-pub struct Mappable {
-    //need acquire when read/write f2p and p2m mapps as they
-    //pub lock: QLock,
-    pub lock: Arc<Mutex<()>>,
-
+pub struct MappableInternal {
     //addr mapping from file offset to physical address
     pub f2pmap: BTreeMap<u64, u64>,
 
@@ -65,7 +60,7 @@ pub struct Mappable {
     pub chunkrefs: BTreeMap<u64, i32>,
 }
 
-impl Mappable {
+impl MappableInternal {
     pub fn IncrRefOn(&mut self, fr: &Range) {
         let mut chunkStart = fr.Start() & !CHUNK_MASK;
         while chunkStart < fr.End() {
@@ -123,15 +118,25 @@ pub fn PagesInChunk(r: &Range, chunkStart: u64) -> i32 {
     return (r.Intersect(&chunkRange).Len() / MemoryDef::PAGE_SIZE) as i32;
 }
 
-impl Default for Mappable {
+impl Default for MappableInternal {
     fn default() -> Self {
         return Self {
-            lock: Arc::new(Mutex::new(())),
             //lock: QLock::default(),
             f2pmap: BTreeMap::new(),
             mapping: AreaSet::New(0, core::u64::MAX),
             chunkrefs: BTreeMap::new(),
         }
+    }
+}
+
+#[derive(Default, Clone)]
+pub struct Mappable(Arc<Mutex<MappableInternal>>);
+
+impl Deref for Mappable {
+    type Target = Arc<Mutex<MappableInternal>>;
+
+    fn deref(&self) -> &Arc<Mutex<MappableInternal>> {
+        &self.0
     }
 }
 
@@ -145,7 +150,7 @@ pub struct HostInodeOpIntern {
     pub queue: Queue,
     pub errorcode: i64,
 
-    pub mappable: Option<Box<Mappable>>,
+    pub mappable: Option<Mappable>,
 }
 
 impl Default for HostInodeOpIntern {
@@ -189,31 +194,36 @@ impl HostInodeOpIntern {
         };
 
         if ret.CanMap() {
-            ret.mappable = Some(Box::new(Mappable::default()));
+            ret.mappable = Some(Mappable::default());
         }
 
         return ret;
     }
 
     /*********************************start of mappable****************************************************************/
-    fn Mappable(&mut self) -> &mut Mappable {
-        return self.mappable.as_deref_mut().unwrap();
+    fn Mappable(&mut self) -> Mappable {
+        return self.mappable.clone().unwrap();
     }
 
     //add mapping between physical address and file offset, offset must be hugepage aligned
     pub fn AddPhyMapping(&mut self, phyAddr: u64, offset: u64) {
         assert!(offset & CHUNK_MASK == 0, "HostMappable::AddPhysicalMap offset should be hugepage aligned");
 
-        let h = self;
-        h.Mappable().f2pmap.insert(offset, phyAddr);
+        let mappable = self.Mappable();
+        let mut mappableLock = mappable.lock();
+        mappableLock.f2pmap.insert(offset, phyAddr);
     }
 
     pub fn IncrRefOn(&mut self, fr: &Range) {
-        return self.Mappable().IncrRefOn(fr);
+        let mappable = self.Mappable();
+        let mut mappableLock = mappable.lock();
+        return mappableLock.IncrRefOn(fr);
     }
 
     pub fn DecrRefOn(&mut self, fr: &Range, ) {
-        return self.Mappable().DecrRefOn(fr);
+        let mappable = self.Mappable();
+        let mut mappableLock = mappable.lock();
+        return mappableLock.DecrRefOn(fr);
     }
 
     /*********************************end of mappable****************************************************************/
@@ -405,18 +415,20 @@ impl HostInodeOp {
 
     //add mapping between file offset and the <MappingSpace(i.e. memorymanager), Virtual Address>
     pub fn AddMapping(&self, ms: &MemoryManager, ar: &Range, offset: u64, writeable: bool) -> Result<()> {
-        let mut h = self.lock();
+        let mappable = self.lock().Mappable();
+        let mut mappableLock = mappable.lock();
 
-        h.Mappable().mapping.AddMapping(ms, ar, offset, writeable);
-        h.Mappable().IncrRefOn(&Range::New(offset, ar.Len()));
+        mappableLock.mapping.AddMapping(ms, ar, offset, writeable);
+        mappableLock.IncrRefOn(&Range::New(offset, ar.Len()));
         return Ok(())
     }
 
     pub fn RemoveMapping(&self, ms: &MemoryManager, ar: &Range, offset: u64, writeable: bool) -> Result<()> {
-        let mut h = self.lock();
+        let mappable = self.lock().Mappable();
+        let mut mappableLock = mappable.lock();
 
-        h.Mappable().mapping.RemoveMapping(ms, ar, offset, writeable);
-        h.Mappable().DecrRefOn(&Range::New(offset, ar.Len()));
+        mappableLock.mapping.RemoveMapping(ms, ar, offset, writeable);
+        mappableLock.DecrRefOn(&Range::New(offset, ar.Len()));
         return Ok(())
     }
 
@@ -436,9 +448,11 @@ impl HostInodeOp {
         self.Fill(task, chunkStart, fr.End())?;
         let mut res = Vec::new();
 
-        let mut h = self.lock();
+        let mappable = self.lock().Mappable();
+        let mappableLock = mappable.lock();
+
         while chunkStart < fr.End() {
-            let phyAddr = h.Mappable().f2pmap.get(&chunkStart).unwrap();
+            let phyAddr = mappableLock.f2pmap.get(&chunkStart).unwrap();
             let mut startOffset = 0;
             if chunkStart < fr.Start() {
                 startOffset = fr.Start() - chunkStart;
@@ -460,8 +474,11 @@ impl HostInodeOp {
     pub fn MapFilePage(&self, task: &Task, fileOffset: u64) -> Result<u64> {
         let chunkStart = fileOffset & !HUGE_PAGE_MASK;
         self.Fill(task, chunkStart, fileOffset + PAGE_SIZE)?;
-        let mut h = self.lock();
-        let phyAddr = h.Mappable().f2pmap.get(&chunkStart).unwrap();
+
+        let mappable = self.lock().Mappable();
+        let mappableLock = mappable.lock();
+
+        let phyAddr = mappableLock.f2pmap.get(&chunkStart).unwrap();
         return Ok(phyAddr + (fileOffset - chunkStart))
     }
 
@@ -469,9 +486,11 @@ impl HostInodeOp {
         let mut chunkStart = fr.Start() & !HUGE_PAGE_MASK;
         let mut rs = Vec::new();
 
-        let mut h = self.lock();
+        let mappable = self.lock().Mappable();
+        let mappableLock = mappable.lock();
+
         while chunkStart < fr.End() {
-            match h.Mappable().f2pmap.get(&chunkStart) {
+            match mappableLock.f2pmap.get(&chunkStart) {
                 None => (),
                 Some(phyAddr) => {
                     rs.push(Range::New(*phyAddr, HUGE_PAGE_SIZE));
@@ -515,16 +534,14 @@ impl HostInodeOp {
     //fill the holes for the file range by mmap
     //start must be Hugepage aligned
     fn Fill(&self, _task: &Task, start: u64, end: u64) -> Result<()> {
-        let lock = self.lock().Mappable().lock.clone();
-        let _l = lock.lock();
-        //task.blocker.Qlock(task, &lock)?;
+        let mappable = self.lock().Mappable();
 
         let mut start = start;
 
         let mut holes = Vec::new();
 
         while start < end {
-            match self.lock().Mappable().f2pmap.get(&start) {
+            match mappable.lock().f2pmap.get(&start) {
                 None => holes.push(start),
                 Some(_) => (),
             }
@@ -767,7 +784,23 @@ impl InodeOperations for HostInodeOp {
         return Ok(())
     }
 
-    fn Truncate(&self, _task: &Task, _dir: &mut Inode, size: i64) -> Result<()> {
+    fn Truncate(&self, task: &Task, dir: &mut Inode, size: i64) -> Result<()> {
+        let uattr = self.UnstableAttr(task, dir)?;
+        let oldSize = uattr.Size;
+        if size == oldSize {
+            return Ok(())
+        }
+
+        if self.lock().CanMap() {
+            if size < oldSize {
+                let mappable = self.Mappable()?.lock().Mappable();
+                let ranges = mappable.lock().mapping.InvalidateRanges(task, &Range::New(size as u64, oldSize as u64 - size as u64), true);
+                for r in &ranges {
+                    r.invalidate(task, true);
+                }
+            }
+        }
+
         let ret = Ftruncate(self.HostFd(), size);
 
         if ret < 0 {

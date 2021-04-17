@@ -63,8 +63,9 @@ impl PartialOrd for MappingOfRange {
 }
 
 impl MappingOfRange {
-    pub fn invalidate(&self, task: &Task, invalidatePrivate: bool) {
-        self.MappingSpace.Upgrade().ResetFileMapping(task, &self.AddrRange, invalidatePrivate);
+    pub fn invalidate(&self, task: &Task, _invalidatePrivate: bool) {
+        //self.MappingSpace.Upgrade().ResetFileMapping(task, &self.AddrRange, invalidatePrivate);
+        self.MappingSpace.Upgrade().MUnmap(task, self.AddrRange.Start(), self.AddrRange.Len()).unwrap();
     }
 }
 
@@ -256,7 +257,7 @@ impl AreaSet<MappingsOfRange> {
     }
 
     // Invalidate calls MappingSpace.Invalidate for all mappings of offsets in mr.
-    pub fn Invalidate(&mut self, task: &Task, mr: &Range, invalidatePrivate: bool) {
+    pub fn Invalidate1(&mut self, task: &Task, mr: &Range, invalidatePrivate: bool) {
         let mut seg = self.LowerBoundSeg(mr.Start());
         while seg.Ok() && seg.Range().Start() < mr.End() {
             let segMR = seg.Range();
@@ -267,6 +268,23 @@ impl AreaSet<MappingsOfRange> {
 
             seg = seg.NextSeg();
         }
+    }
+
+    // Invalidate calls MappingSpace.Invalidate for all mappings of offsets in mr.
+    pub fn InvalidateRanges(&mut self, _task: &Task, mr: &Range, _invalidatePrivate: bool) -> Vec<MappingOfRange> {
+        let mut ranges = Vec::new();
+        let mut seg = self.LowerBoundSeg(mr.Start());
+        while seg.Ok() && seg.Range().Start() < mr.End() {
+            let segMR = seg.Range();
+            for m in seg.Value().lock().iter() {
+                let region = SubsetMapping(&segMR, &segMR.Intersect(mr), &m.MappingSpace, m.AddrRange.Start(), m.Writeable);
+                ranges.push(region);
+            }
+
+            seg = seg.NextSeg();
+        }
+
+        return ranges;
     }
 
     // InvalidateAll calls MappingSpace.Invalidate for all mappings of s.

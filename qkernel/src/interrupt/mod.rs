@@ -501,7 +501,7 @@ pub fn HandleFault(task: &mut Task, user: bool, errorCode: u64, cr2: u64, sf: &m
     }
 
     let mut info = SignalInfo {
-        Signo: Signal::SIGSEGV,
+        Signo: Signal::SIGBUS,
         ..Default::default()
     };
 
