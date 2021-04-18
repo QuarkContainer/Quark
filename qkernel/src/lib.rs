@@ -339,7 +339,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
         }
 
         SHARESPACE.scheduler.SetVcpuCnt(vcpuCnt as usize);
-        HyperCall(qlib::HYPERCALL_INIT, (&(*SHARESPACE) as *const ShareSpace) as u64);
+        HyperCall64(qlib::HYPERCALL_INIT, (&(*SHARESPACE) as *const ShareSpace) as u64, 0);
 
         {
             let root = {
@@ -347,11 +347,14 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
                 unsafe { llvm_asm!("mov %cr3, $0" : "=r" (cr3) ) };
                 cr3
             };
-            KERNEL_PAGETABLE.write().SetRoot(root);
+            let mut kpt = KERNEL_PAGETABLE.write();
+            kpt.SetRoot(root);
 
             let mut lock = PAGE_MGR.lock();
             let vsyscallPages = lock.VsyscallPages();
-            KERNEL_PAGETABLE.write().InitVsyscall(vsyscallPages);
+
+            kpt.InitVsyscall(vsyscallPages);
+            Kernel::HostSpace::KernelMsg(0x104, 0);
         }
 
         SetVCPCount(vcpuCnt as usize);

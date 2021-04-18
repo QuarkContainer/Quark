@@ -417,7 +417,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     let (vma, range) = match currTask.mm.GetVmaAndRange(cr2) {
         //vmas.lock().Get(cr2) {
         None => {
-            HandleFault(currTask, fromUser, errorCode, cr2, sf);
+            HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGBUS);
             return
         }
         Some(vma) => vma.clone(),
@@ -428,12 +428,12 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
         let map =  currTask.mm.GetSnapshot(currTask, false);
         print!("the map is {}", &map);
 
-        HandleFault(currTask, fromUser, errorCode, cr2, sf);
+        HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
         return
     }
 
     if !vma.effectivePerms.Read() { // has no read permission
-        HandleFault(currTask, fromUser, errorCode, cr2, sf);
+        HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
         return
     }
 
@@ -467,7 +467,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     }
 
     if vma.private == false {
-        HandleFault(currTask, fromUser, errorCode, cr2, sf);
+        HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
         return
     }
 
@@ -475,7 +475,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
 
     if (errbits & writeProtectBits) == writeProtectBits {
         if !vma.effectivePerms.Write() && fromUser {
-            HandleFault(currTask, fromUser, errorCode, cr2, sf);
+            HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
             return
         }
 
@@ -486,11 +486,11 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
             currTask.AccountTaskEnter(SchedState::RunningApp);
         }
     } else {
-        HandleFault(currTask, fromUser, errorCode, cr2, sf);
+        HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
     }
 }
 
-pub fn HandleFault(task: &mut Task, user: bool, errorCode: u64, cr2: u64, sf: &mut ExceptionStackFrame) {
+pub fn HandleFault(task: &mut Task, user: bool, errorCode: u64, cr2: u64, sf: &mut ExceptionStackFrame, signal: i32) {
     if !user {
         let map =  task.mm.GetSnapshot(task, false);
         //println!("the cr2 is {:x}", cr2);
@@ -501,7 +501,7 @@ pub fn HandleFault(task: &mut Task, user: bool, errorCode: u64, cr2: u64, sf: &m
     }
 
     let mut info = SignalInfo {
-        Signo: Signal::SIGBUS,
+        Signo: signal, //Signal::SIGBUS,
         ..Default::default()
     };
 

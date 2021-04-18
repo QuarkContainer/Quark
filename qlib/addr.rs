@@ -161,6 +161,22 @@ pub struct PageOpts(PageTableFlags);
 
 impl PageOpts {
     //const Empty : PageTableFlags = PageTableFlags::PRESENT & PageTableFlags::WRITABLE; //set 0
+    pub fn New(user: bool, write: bool, exec: bool) -> Self {
+        let mut flags = PageTableFlags::PRESENT;
+        if write {
+            flags |= PageTableFlags::WRITABLE;
+        }
+
+        if user {
+            flags |= PageTableFlags::USER_ACCESSIBLE;
+        }
+
+        if !exec {
+            flags |= PageTableFlags::NO_EXECUTE;
+        }
+
+        return Self(flags)
+    }
 
     pub fn All() -> Self {
         return PageOpts(PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE);

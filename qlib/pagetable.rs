@@ -81,7 +81,7 @@ pub struct PageTablesInternal {
 impl PageTablesInternal {
     pub fn New(pagePool: &Allocator) -> Result<Self> {
         let root = pagePool.AllocPage(true)?;
-
+        pagePool.Ref(root).unwrap();
         Ok(Self {
             //pagePool : pagePool.clone(),
             root: Addr(root),
@@ -274,44 +274,6 @@ impl PageTablesInternal {
         }
     }
 
-    pub fn InitVsyscall(&mut self, phyAddrs: &[u64]/*4 pages*/) {
-        let vaddr = 0xffffffffff600000;
-        let pt: *mut PageTable = self.root.0 as *mut PageTable;
-        unsafe {
-            let p4Idx = VirtAddr::new(vaddr).p4_index();
-            let p3Idx = VirtAddr::new(vaddr).p3_index();
-            let p2Idx = VirtAddr::new(vaddr).p2_index();
-            let p1Idx = VirtAddr::new(vaddr).p1_index();
-
-            let pgdEntry = &mut (*pt)[p4Idx];
-            let pudTbl: *mut PageTable;
-
-            assert!(pgdEntry.is_unused());
-            pudTbl = phyAddrs[3] as *mut PageTable;
-            pgdEntry.set_addr(PhysAddr::new(pudTbl as u64), PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE);
-
-            let pudEntry = &mut (*pudTbl)[p3Idx];
-            let pmdTbl: *mut PageTable;
-
-            assert!(pudEntry.is_unused());
-            pmdTbl = phyAddrs[2] as *mut PageTable;
-            pudEntry.set_addr(PhysAddr::new(pmdTbl as u64), PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE);
-
-            let pmdEntry = &mut (*pmdTbl)[p2Idx];
-            let pteTbl: *mut PageTable;
-
-            assert!(pmdEntry.is_unused());
-            pteTbl = phyAddrs[1] as *mut PageTable;
-            pmdEntry.set_addr(PhysAddr::new(pteTbl as u64), PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE);
-
-            let pteEntry = &mut (*pteTbl)[p1Idx];
-            assert!(pteEntry.is_unused());
-            pteEntry.set_addr(PhysAddr::new(phyAddrs[0]), PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE);
-
-            Invlpg(vaddr);
-        }
-    }
-
     pub fn MapPage(&mut self, vaddr: Addr, phyAddr: Addr, flags: PageTableFlags, pagePool: &Allocator) -> Result<bool> {
         let mut res = false;
 
@@ -327,6 +289,7 @@ impl PageTablesInternal {
 
             if pgdEntry.is_unused() {
                 pudTbl = pagePool.AllocPage(true)? as *mut PageTable;
+                pagePool.Ref(pudTbl as u64).unwrap();
                 (*pudTbl).zero();
                 pgdEntry.set_addr(PhysAddr::new(pudTbl as u64), PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE);
             } else {
@@ -338,6 +301,7 @@ impl PageTablesInternal {
 
             if pudEntry.is_unused() {
                 pmdTbl = pagePool.AllocPage(true)? as *mut PageTable;
+                pagePool.Ref(pmdTbl as u64).unwrap();
                 (*pmdTbl).zero();
                 pudEntry.set_addr(PhysAddr::new(pmdTbl as u64), PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE);
             } else {
@@ -349,6 +313,7 @@ impl PageTablesInternal {
 
             if pmdEntry.is_unused() {
                 pteTbl = pagePool.AllocPage(true)? as *mut PageTable;
+                pagePool.Ref(pteTbl as u64).unwrap();
                 (*pteTbl).zero();
                 pmdEntry.set_addr(PhysAddr::new(pteTbl as u64), PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE);
             } else {

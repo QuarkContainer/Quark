@@ -53,6 +53,10 @@ pub struct PagePool {
 }
 
 impl PagePool {
+    pub fn Print(&self) {
+        error!("PagePool left is {:x?}", self.refs);
+    }
+
     pub fn Ref(&mut self, addr: u64) -> Result<u64> {
         assert!(addr & (MemoryDef::PAGE_SIZE-1) == 0);
         let refcount = match self.refs.get_mut(&addr) {
@@ -69,7 +73,6 @@ impl PagePool {
         return Ok(refcount as u64)
     }
 
-    //todo: add ability to punch hole to save memory
     pub fn Deref(&mut self, addr: u64) -> Result<u64> {
         assert!(addr & (MemoryDef::PAGE_SIZE-1) == 0);
         let refcount = match self.refs.get_mut(&addr) {
@@ -106,8 +109,9 @@ impl PagePool {
     pub fn AllocPage(&mut self, incrRef: bool) -> Result<u64> {
         let addr = self.Allocate()?;
         if incrRef {
-            self.Ref(addr)?;
+            self.refs.insert(addr, 0);
         }
+
         return Ok(addr)
     }
 
@@ -127,7 +131,7 @@ impl PagePool {
     }
 
     pub fn Init(&mut self) {
-        self.zeroPage = self.Allocate().unwrap();
+        self.zeroPage = self.AllocPage(true).unwrap();
         self.Ref(self.zeroPage).unwrap();
     }
 

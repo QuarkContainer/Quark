@@ -17,7 +17,7 @@ use alloc::string::ToString;
 
 use super::super::super::asm::*;
 use super::super::super::qlib::common::*;
-use super::super::super::qlib::*;
+use super::super::super::Kernel::HostSpace;
 
 use super::*;
 
@@ -53,7 +53,7 @@ pub fn Magnitude(r: ReferenceNS) -> ReferenceNS {
 pub fn Sample(c: ClockID) -> Result<Sample> {
     let before = Rdtsc();
 
-    let time = KernelGetTime(c)?;
+    let time = HostSpace::KernelGetTime(c)?;
 
     if time < 0 {
         return Err(Error::SysError(-time as i32));
