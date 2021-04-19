@@ -943,6 +943,7 @@ impl Thread {
             super::super::AllocatorPrint();
             core::mem::drop(ownerlock);
             let exitStatus = tg.ExitStatus();
+            super::super::PAGE_MGR.PrintRefs();
             super::super::Kernel::HostSpace::ExitVM(exitStatus.ShellExitCode());
         }
 

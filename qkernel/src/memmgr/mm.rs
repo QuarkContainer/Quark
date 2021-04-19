@@ -493,6 +493,7 @@ impl MemoryManager {
             Ok(_) => return Ok(())
         }
 
+        let exec = vma.effectivePerms.Exec();
         match &vma.mappable {
             Some(ref mappable) => {
                 let vmaOffset = pageAddr - range.Start();
@@ -502,13 +503,13 @@ impl MemoryManager {
                  //      vma.mappable.is_some(), pageAddr, phyAddr);
 
                 if vma.private {
-                    self.MapPageRead(pageAddr, phyAddr);
+                    self.MapPageRead(pageAddr, phyAddr, exec);
                 } else {
                     let writeable = vma.effectivePerms.Write();
                     if writeable {
-                        self.MapPageWrite(pageAddr, phyAddr);
+                        self.MapPageWrite(pageAddr, phyAddr, exec);
                     } else {
-                        self.MapPageRead(pageAddr, phyAddr);
+                        self.MapPageRead(pageAddr, phyAddr, exec);
                     }
                 }
 
@@ -518,15 +519,15 @@ impl MemoryManager {
                 //let vmaOffset = pageAddr - range.Start();
                 //let phyAddr = vmaOffset + vma.offset; // offset in the phyAddr
 
-                let phyAddr = super::super::PAGE_MGR.AllocPage(false).unwrap();
+                let phyAddr = super::super::PAGE_MGR.AllocPage(true).unwrap();
                 if vma.private {
-                    self.MapPageRead(pageAddr, phyAddr);
+                    self.MapPageRead(pageAddr, phyAddr, exec);
                 } else {
                     let writeable = vma.effectivePerms.Write();
                     if writeable {
-                        self.MapPageWrite(pageAddr, phyAddr);
+                        self.MapPageWrite(pageAddr, phyAddr, exec);
                     } else {
-                        self.MapPageRead(pageAddr, phyAddr);
+                        self.MapPageRead(pageAddr, phyAddr, exec);
                     }
                 }
 
@@ -606,14 +607,15 @@ impl MemoryManager {
         let refCount = super::super::PAGE_MGR.GetRef(phyAddr)
             .expect(&format!("CopyOnWrite PAGE_MGR GetRef addr {:x} fail", phyAddr));
 
+        let exec = vma.effectivePerms.Exec();
         if refCount == 1 && vma.mappable.is_none() {
             //print!("CopyOnWriteLocked enable write ... pageaddr is {:x}", pageAddr);
-            self.EnableWrite(pageAddr);
+            self.EnableWrite(pageAddr, exec);
         } else {
             // Copy On Write
-            let page = { super::super::PAGE_MGR.AllocPage(false).unwrap() };
+            let page = { super::super::PAGE_MGR.AllocPage(true).unwrap() };
             CopyPage(pageAddr, page);
-            self.MapPageWrite(pageAddr, page);
+            self.MapPageWrite(pageAddr, page, exec);
         }
 
         unsafe { llvm_asm!("invlpg ($0)" :: "r" (pageAddr): "memory" ) };
@@ -628,23 +630,23 @@ impl MemoryManager {
         PerfGofrom(PerfType::PageFault);
     }
 
-    pub fn EnableWrite(&self, addr: u64) {
+    pub fn EnableWrite(&self, addr: u64, exec: bool) {
         let pt = self.read().pt.clone();
         let mut pt = pt.write();
 
-        pt.SetPageFlags(Addr(addr), PageOpts::UserReadWrite().Val());
+        pt.SetPageFlags(Addr(addr), PageOpts::New(true, true, exec).Val());
     }
 
-    pub fn MapPageWrite(&self, vAddr: u64, pAddr: u64) {
+    pub fn MapPageWrite(&self, vAddr: u64, pAddr: u64, exec: bool) {
         let pt = self.read().pt.clone();
         let mut pt = pt.write();
-        pt.MapPage(Addr(vAddr), Addr(pAddr), PageOpts::UserReadWrite().Val(), &*PAGE_MGR).unwrap();
+        pt.MapPage(Addr(vAddr), Addr(pAddr), PageOpts::New(true, true, exec).Val(), &*PAGE_MGR).unwrap();
     }
 
-    pub fn MapPageRead(&self, vAddr: u64, pAddr: u64) {
+    pub fn MapPageRead(&self, vAddr: u64, pAddr: u64, exec: bool) {
         let pt = self.read().pt.clone();
         let mut pt = pt.write();
-        pt.MapPage(Addr(vAddr), Addr(pAddr), PageOpts::UserReadOnly().Val(), &*PAGE_MGR).unwrap();
+        pt.MapPage(Addr(vAddr), Addr(pAddr), PageOpts::New(true, false, exec).Val(), &*PAGE_MGR).unwrap();
     }
 
     pub fn PopulateVMA(&self, task: &Task, vmaSeg: &AreaSeg<VMA>, ar: &Range, precommit: bool, vdso: bool) -> Result<()> {

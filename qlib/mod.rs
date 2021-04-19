@@ -56,7 +56,6 @@ use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 
 use super::asm::*;
-use self::common::{Result};
 use self::task_mgr::*;
 use self::qmsg::*;
 use self::ringbuf::*;
@@ -459,33 +458,6 @@ pub enum SysCallID {
     //qcall
     q_malloc,
     //malloc guest phyaddr arg0: size, ret: i64, <0:fail, >0: phyaddr
-}
-
-pub fn KernelMsg(id: u64) {
-    HyperCall(HYPERCALL_MSG, id)
-}
-
-pub fn KernelPanic(id: u64) {
-    HyperCall(HYPERCALL_PANIC, id >> 32);
-    HyperCall(HYPERCALL_PANIC, id);
-}
-
-pub fn KernelGetTime(clockId: i32) -> Result<i64> {
-    let call = GetTimeCall {
-        clockId,
-        ..Default::default()
-    };
-
-    let addr = &call as *const _ as u64;
-    HyperCall(HYPERCALL_GETTIME, addr);
-
-    use self::common::*;
-
-    if call.res < 0 {
-        return Err(Error::SysError(-call.res as i32))
-    }
-
-    return Ok(call.res);
 }
 
 #[derive(Clone, Default, Debug, Copy)]

@@ -36,23 +36,23 @@ pub struct HostSpace {}
 
 impl HostSpace {
     pub fn Wakeup() {
-        HyperCall64(HYPERCALL_WAKEUP, 0);
+        HyperCall64(HYPERCALL_WAKEUP, 0, 0);
     }
 
     pub fn WakeupVcpu(vcpuId: u64) {
-        HyperCall64(HYPERCALL_WAKEUP_VCPU, vcpuId);
+        HyperCall64(HYPERCALL_WAKEUP_VCPU, vcpuId, 0);
     }
 
     pub fn IOWait() {
-        HyperCall64(HYPERCALL_IOWAIT, 0);
+        HyperCall64(HYPERCALL_IOWAIT, 0, 0);
     }
 
     pub fn Hlt() {
-        HyperCall64(HYPERCALL_HLT, 0);
+        HyperCall64(HYPERCALL_HLT, 0, 0);
     }
 
     pub fn UringWake() {
-        HyperCall64(HYPERCALL_URING_WAKE, 0);
+        HyperCall64(HYPERCALL_URING_WAKE, 0, 0);
     }
 
     pub fn LoadProcessKernel(processAddr: u64, len: usize) -> i64 {
@@ -404,7 +404,7 @@ impl HostSpace {
     }
 
     pub fn Exit() {
-        HyperCall(HYPERCALL_EXIT, 0)
+        HyperCall64(HYPERCALL_EXIT, 0, 0)
         //let mut exit = qlib::Msg::Exit;
         //Kernel::Call(&mut exit);
     }
@@ -982,7 +982,7 @@ impl HostSpace {
     }
 
     pub fn ExitVM(exitCode: i32) {
-        HyperCall64(HYPERCALL_EXIT_VM, exitCode as u64);
+        HyperCall64(HYPERCALL_EXIT_VM, exitCode as u64, 0);
         //Self::AQCall(qmsg::HostOutputMsg::ExitVM(exitCode));
     }
 
@@ -992,7 +992,7 @@ impl HostSpace {
             str: str,
         };
 
-        HyperCall64(HYPERCALL_PANIC, &msg as *const _ as u64);
+        HyperCall64(HYPERCALL_PANIC, &msg as *const _ as u64, 0);
     }
 
     pub fn ForkFdTbl(pTgid: i32, tgid: i32) -> i64 {
@@ -1457,7 +1457,7 @@ impl HostSpace {
             msg: msg
         };
 
-        HyperCall(HYPERCALL_HCALL, &mut event as * const _ as u64);
+        HyperCall64(HYPERCALL_HCALL, &mut event as * const _ as u64, 0);
 
         return event.ret;
     }
@@ -1479,7 +1479,7 @@ impl HostSpace {
             str,
         };
 
-        HyperCall64(HYPERCALL_PRINT, &msg as *const _ as u64);
+        HyperCall64(HYPERCALL_PRINT, &msg as *const _ as u64, 0);
     }
 
     pub fn Kprint(level: DebugLevel, str: &str) {
@@ -1491,7 +1491,7 @@ impl HostSpace {
                 str,
             };
 
-            HyperCall64(HYPERCALL_PRINT, &msg as *const _ as u64);
+            HyperCall64(HYPERCALL_PRINT, &msg as *const _ as u64, 0);
         } else {
             let bytes = str.as_bytes();
             match super::BUF_MGR.Alloc(bytes.len() as u64) {
@@ -1501,7 +1501,7 @@ impl HostSpace {
                         str,
                     };
 
-                    HyperCall64(HYPERCALL_PRINT, &msg as *const _ as u64);
+                    HyperCall64(HYPERCALL_PRINT, &msg as *const _ as u64, 0);
                 }
                 Ok(addr) => {
                     IoVec::NewFromAddr(addr, bytes.len()).ToSliceMut().copy_from_slice(bytes);
@@ -1512,15 +1512,33 @@ impl HostSpace {
     }
 
     pub fn PrintState() {
-        HyperCall64(HYPERCALL_PRINTSTATE, 0);
+        HyperCall64(HYPERCALL_PRINTSTATE, 0, 0);
     }
 
-    pub fn KernelMsg(id: u64) {
-        HyperCall64(HYPERCALL_MSG, id)
+    pub fn KernelMsg(id: u64, val: u64) {
+        HyperCall64(HYPERCALL_MSG, id, val)
     }
 
     pub fn KernelOOM() {
-        HyperCall(HYPERCALL_OOM, 0)
+        HyperCall64(HYPERCALL_OOM, 0, 0)
+    }
+
+    pub fn KernelGetTime(clockId: i32) -> Result<i64> {
+        let call = GetTimeCall {
+            clockId,
+            ..Default::default()
+        };
+
+        let addr = &call as *const _ as u64;
+        HyperCall64(HYPERCALL_GETTIME, addr, 0);
+
+        use self::common::*;
+
+        if call.res < 0 {
+            return Err(Error::SysError(-call.res as i32))
+        }
+
+        return Ok(call.res);
     }
 }
 

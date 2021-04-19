@@ -18,9 +18,13 @@ use spin::RwLock;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use x86_64::structures::paging::{PageTable};
+use x86_64::structures::paging::PageTableFlags;
+use x86_64::PhysAddr;
+use x86_64::VirtAddr;
 
 use super::super::task::*;
 use super::super::PAGE_MGR;
+use super::super::asm::*;
 use super::super::qlib::addr::*;
 use super::super::qlib::range::*;
 use super::super::qlib::common::*;
@@ -67,6 +71,14 @@ impl FreePageTables {
         pagePool.Deref(pudTblAddr).expect("PageTable::Drop fail");
 
         pagePool.Deref(root).expect("PageTable::Drop fail");
+
+        /*let mut pt = PageTablesInternal {
+            root: Addr(root),
+        };
+
+        pt.MUnmap(0, 4096).unwrap();
+        pagePool.Deref(root).expect("PageTable::Drop fail");
+        //pt.UnmapAll().unwrap();*/
     }
 }
 
@@ -82,11 +94,13 @@ impl Deref for PageMgr {
 
 impl RefMgr for PageMgr {
     fn Ref(&self, addr: u64) -> Result<u64> {
-        return self.RefIntern(addr);
+        let me = self.lock();
+        return me.PagePool().lock().Ref(addr);
     }
 
     fn Deref(&self, addr: u64) -> Result<u64> {
-        return self.DerefIntern(addr);
+        let me = self.lock();
+        return me.PagePool().lock().Deref(addr);
     }
 
     fn GetRef(&self, addr: u64) -> Result<u64> {
@@ -97,8 +111,9 @@ impl RefMgr for PageMgr {
 
 impl Allocator for PageMgr {
     fn AllocPage(&self, incrRef: bool) -> Result<u64> {
-        let ret = self.lock().allocator.lock().AllocPage(incrRef)?;
-        return Ok(ret);
+        let addr = self.lock().allocator.lock().AllocPage(incrRef)?;
+        //error!("PageMgr allocpage ... incrRef is {}, addr is {:x}", incrRef, addr);
+        return Ok(addr);
     }
 
     fn FreePage(&self, addr: u64) -> Result<()> {
@@ -119,14 +134,8 @@ impl PageMgr {
         return Self(Mutex::new(PageMgrInternal::New()))
     }
 
-    fn RefIntern(&self, addr: u64) -> Result<u64> {
-        let me = self.lock();
-        return me.PagePool().lock().Ref(addr);
-    }
-
-    fn DerefIntern(&self, addr: u64) -> Result<u64> {
-        let me = self.lock();
-        return me.PagePool().lock().Deref(addr);
+    pub fn PrintRefs(&self) {
+        self.lock().allocator.lock().Print();
     }
 }
 
@@ -155,10 +164,10 @@ impl PageMgrInternal {
 
     pub fn ZeroPage(&mut self) -> u64 {
         if self.zeroPage == 0 {
-            self.zeroPage = self.allocator.lock().AllocPage(false).unwrap();
-            self.allocator.lock().Ref(self.zeroPage).unwrap();
+            self.zeroPage = self.allocator.lock().AllocPage(true).unwrap();
         }
 
+        self.allocator.lock().Ref(self.zeroPage).unwrap();
         return self.zeroPage;
     }
 
@@ -206,6 +215,46 @@ impl PageTables {
 }
 
 impl PageTablesInternal {
+    pub fn InitVsyscall(&mut self, phyAddrs: &[u64]/*4 pages*/) {
+        super::super::Kernel::HostSpace::KernelMsg(0x201, 0);
+        let vaddr = 0xffffffffff600000;
+        let pt: *mut PageTable = self.root.0 as *mut PageTable;
+        super::super::Kernel::HostSpace::KernelMsg(0x202, 0);
+        unsafe {
+            let p4Idx = VirtAddr::new(vaddr).p4_index();
+            let p3Idx = VirtAddr::new(vaddr).p3_index();
+            let p2Idx = VirtAddr::new(vaddr).p2_index();
+            let p1Idx = VirtAddr::new(vaddr).p1_index();
+
+            let pgdEntry = &mut (*pt)[p4Idx];
+            let pudTbl: *mut PageTable;
+
+            assert!(pgdEntry.is_unused());
+            pudTbl = phyAddrs[3] as *mut PageTable;
+            pgdEntry.set_addr(PhysAddr::new(pudTbl as u64), PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE);
+
+            let pudEntry = &mut (*pudTbl)[p3Idx];
+            let pmdTbl: *mut PageTable;
+
+            assert!(pudEntry.is_unused());
+            pmdTbl = phyAddrs[2] as *mut PageTable;
+            pudEntry.set_addr(PhysAddr::new(pmdTbl as u64), PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE);
+
+            let pmdEntry = &mut (*pmdTbl)[p2Idx];
+            let pteTbl: *mut PageTable;
+
+            assert!(pmdEntry.is_unused());
+            pteTbl = phyAddrs[1] as *mut PageTable;
+            pmdEntry.set_addr(PhysAddr::new(pteTbl as u64), PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE);
+
+            let pteEntry = &mut (*pteTbl)[p1Idx];
+            assert!(pteEntry.is_unused());
+            pteEntry.set_addr(PhysAddr::new(phyAddrs[0]), PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE);
+
+            Invlpg(vaddr);
+        }
+    }
+
     // There are following pages need allocated:
     // 1: root page
     // 2: p3 page for 0GB to 512G
@@ -321,6 +370,12 @@ impl PageTablesInternal {
 
         self.Map(Addr(addr), Addr(addr + phyRange.Len() as u64), Addr(phyRange.Start()), pageOpts, &*PAGE_MGR, !user)?;
 
+        return Ok(())
+    }
+
+    pub fn UnmapAll(&mut self) -> Result<()> {
+        self.Unmap(0, core::u64::MAX, &*PAGE_MGR)?;
+        PAGE_MGR.Deref(self.root.0)?;
         return Ok(())
     }
 

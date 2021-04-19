@@ -15,8 +15,8 @@
 use core::mem;
 
 use super::super::asm::*;
-use super::super::qlib::KernelGetTime;
 use super::super::qlib::common::*;
+use super::super::Kernel::HostSpace;
 use super::timer::*;
 
 #[repr(C)]
@@ -58,7 +58,7 @@ impl VdsoParams {
         };
 
         if ready == 0 {
-            return KernelGetTime(REALTIME);
+            return HostSpace::KernelGetTime(REALTIME);
         }
 
         let delta = if now < baseCycle {
@@ -94,7 +94,7 @@ impl VdsoParams {
         };
 
         if ready == 0 {
-            return KernelGetTime(MONOTONIC);
+            return HostSpace::KernelGetTime(MONOTONIC);
         }
 
         let delta = if now < baseCycle {

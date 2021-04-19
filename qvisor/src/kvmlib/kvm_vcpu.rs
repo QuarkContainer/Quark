@@ -133,7 +133,8 @@ impl Allocator for SimplePageAllocator {
 
 impl RefMgr for SimplePageAllocator {
     fn Ref(&self, _addr: u64) -> Result<u64> {
-        panic!("SimplePageAllocator doesn't support Ref");
+        //panic!("SimplePageAllocator doesn't support Ref");
+        return Ok(1)
     }
 
     fn Deref(&self, _addr: u64) -> Result<u64> {
@@ -377,7 +378,7 @@ impl KVMVcpu {
 
         info!("start enter guest[{}]: entry is {:x}, stack is {:x}", self.id, self.entry, self.topStackAddr);
         loop {
-            match self.vcpu.run().expect("kvm virtual cpu run failed") {
+            match self.vcpu.run().expect(&format!("kvm virtual cpu[{}] run failed", self.id)) {
                 VcpuExit::IoIn(addr, data) => {
                     info!(
                     "[{}]Received an I/O in exit. Address: {:#x}. Data: {:#x}",
@@ -473,7 +474,7 @@ impl KVMVcpu {
                             let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                             let mut vms = VMS.lock();
                             let sharespace = unsafe {
-                                &mut *(regs.rcx as * mut ShareSpace)
+                                &mut *(regs.rbx as * mut ShareSpace)
                             };
 
                             sharespace.Init();
@@ -552,8 +553,9 @@ impl KVMVcpu {
 
                         qlib::HYPERCALL_MSG => {
                             let vcpu_regs = self.vcpu.get_regs().unwrap();
-                            let data = vcpu_regs.rbx;
-                            info!("get kernel msg: {:x?}", data);
+                            let data1 = vcpu_regs.rbx;
+                            let data2 = vcpu_regs.rcx;
+                            info!("[{}] get kernel msg: {:x}, {:x}", self.id, data1, data2);
                         }
 
                         qlib::HYPERCALL_OOM => {
@@ -582,7 +584,7 @@ impl KVMVcpu {
 
                         qlib::HYPERCALL_GETTIME => {
                             let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                            let data = regs.rcx;
+                            let data = regs.rbx;
 
                             unsafe {
                                 let call = &mut *(data as *mut GetTimeCall);
@@ -602,7 +604,7 @@ impl KVMVcpu {
 
                         qlib::HYPERCALL_HCALL => {
                             let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                            let addr = regs.rcx;
+                            let addr = regs.rbx;
 
                             let eventAddr = addr as *mut Event; // as &mut qlib::Event;
                             let event = unsafe {

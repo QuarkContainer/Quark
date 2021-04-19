@@ -694,12 +694,12 @@ impl Task {
             //let root = super::KERNEL_PAGETABLE.read().GetRoot();
             let creds = Credentials::default();
             let userns = creds.lock().UserNamespace.clone();
-
+            let dummyTask = DUMMY_TASK.read();
             ptr::write(taskPtr, Task {
                 context: Context::New(),
                 taskId: baseStackAddr,
                 queueId: 0,
-                mm: MemoryManager::Init(),
+                mm: MemoryManager::Init(), //mm: dummyTask.mm.clone(),
                 tidInfo: Default::default(),
                 isWaitThread: true,
                 signalStack: Default::default(),
@@ -716,7 +716,7 @@ impl Task {
                 haveSyscallReturn: false,
                 syscallRestartBlock: None,
                 futexMgr: FUTEX_MGR.clone(),
-                ioUsage: DUMMY_TASK.read().ioUsage.clone(),
+                ioUsage: dummyTask.ioUsage.clone(),
                 sched: TaskSchedInfo::default(),
                 iovs: Vec::new(),
                 perfcounters: None,
