@@ -21,6 +21,7 @@ use core::ops::Deref;
 
 use super::super::qlib::mem::areaset::*;
 use super::super::memmgr::mm::*;
+use super::super::qlib::addr::*;
 use super::super::qlib::range::*;
 use super::super::task::*;
 
@@ -65,7 +66,12 @@ impl PartialOrd for MappingOfRange {
 impl MappingOfRange {
     pub fn invalidate(&self, task: &Task, _invalidatePrivate: bool) {
         //self.MappingSpace.Upgrade().ResetFileMapping(task, &self.AddrRange, invalidatePrivate);
-        self.MappingSpace.Upgrade().MUnmap(task, self.AddrRange.Start(), self.AddrRange.Len()).unwrap();
+        let start = Addr(self.AddrRange.Start()).RoundUp().unwrap().0;
+        let end = Addr(self.AddrRange.End()).RoundUp().unwrap().0;
+        if start >= end {
+            return
+        }
+        self.MappingSpace.Upgrade().MUnmap(task, start, end - start).unwrap();
     }
 }
 
