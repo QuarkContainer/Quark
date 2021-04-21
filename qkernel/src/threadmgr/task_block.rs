@@ -209,6 +209,12 @@ impl Blocker {
 
     pub fn block(&self, waitGeneral: bool, waitTimer: Option<Timer>) -> Result<()> {
         if waitGeneral && self.waiter.TryWait(&self.generalEntry) {
+            match waitTimer {
+                Some(timer) => {
+                    timer.Cancel();
+                }
+                _ => (),
+            }
             return Ok(())
         }
 
