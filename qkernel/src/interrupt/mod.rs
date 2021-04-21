@@ -417,6 +417,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     let (vma, range) = match currTask.mm.GetVmaAndRange(cr2) {
         //vmas.lock().Get(cr2) {
         None => {
+            //todo: when to send sigbus/SIGSEGV
             HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGBUS);
             return
         }
@@ -459,11 +460,13 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
             }
         }
 
-        if fromUser {
-            PerfGoto(PerfType::User);
-            SwapGs();
+        if !vma.private || (errbits & PageFaultErrorCode::CAUSED_BY_WRITE) != PageFaultErrorCode::CAUSED_BY_WRITE {
+            if fromUser {
+                PerfGoto(PerfType::User);
+                SwapGs();
+            }
+            return
         }
-        return
     }
 
     if vma.private == false {
@@ -471,9 +474,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
         return
     }
 
-    let writeProtectBits = PageFaultErrorCode::PROTECTION_VIOLATION | PageFaultErrorCode::CAUSED_BY_WRITE;
-
-    if (errbits & writeProtectBits) == writeProtectBits {
+    if (errbits & PageFaultErrorCode::CAUSED_BY_WRITE) == PageFaultErrorCode::CAUSED_BY_WRITE {
         if !vma.effectivePerms.Write() && fromUser {
             HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
             return
