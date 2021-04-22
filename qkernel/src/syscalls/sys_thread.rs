@@ -641,7 +641,7 @@ pub fn SysSchedGetaffinity(task: &mut Task, args: &SyscallArguments) -> Result<i
     // This limitation is because linux stores the cpumask
     // in an array of "unsigned long" so the buffer needs to
     // be a multiple of the word size.
-    if size & (8 - 1) > 8 {
+    if size & (8 - 1) > 0 {
         return Err(Error::SysError(SysErr::EINVAL));
     }
 
