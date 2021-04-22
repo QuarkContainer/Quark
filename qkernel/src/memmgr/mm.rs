@@ -476,9 +476,6 @@ impl MemoryManager {
     }
 
     pub fn InstallPageWithAddr(&self, task: &Task, pageAddr: u64) -> Result<()> {
-        let lock = self.Lock();
-        let _l = lock.lock();
-
         let (vma, range) = match task.mm.GetVmaAndRange(pageAddr) {
             None => return Err(Error::SysError(SysErr::EFAULT)),
             Some(data) => data
@@ -546,6 +543,10 @@ impl MemoryManager {
             return Err(Error::SysError(SysErr::EFAULT))
         }
 
+        // todo: use read/write lock to improve performance.
+        let lock = self.Lock();
+        let _l = lock.lock();
+
         let mut addr = Addr(vAddr).RoundDown()?.0;
         //error!("FixPermission vaddr {:x} addr {:x} len is {:x}", vAddr, addr, len);
         while addr <= vAddr + len - 1 {
@@ -553,7 +554,7 @@ impl MemoryManager {
                 Err(Error::AddressNotMap(_)) => {
                     match self.InstallPageWithAddr(task, addr) {
                         Err(_) => {
-                            if !allowPartial && addr < vAddr {
+                            if !allowPartial || addr < vAddr {
                                 return Err(Error::SysError(SysErr::EFAULT))
                             }
                             return Ok(addr - vAddr)
@@ -570,7 +571,7 @@ impl MemoryManager {
             if writeReq && !writable {
                 let vma = match self.GetVma(addr) {
                     None => {
-                        if !allowPartial && addr < vAddr {
+                        if !allowPartial || addr < vAddr {
                             return Err(Error::SysError(SysErr::EFAULT))
                         }
 
@@ -580,14 +581,14 @@ impl MemoryManager {
                 };
 
                 if !vma.effectivePerms.Write() {
-                    if !allowPartial && addr < vAddr {
+                    if !allowPartial || addr < vAddr {
                         return Err(Error::SysError(SysErr::EFAULT))
                     }
 
                     return Ok(addr - vAddr)
                 }
 
-                self.CopyOnWrite(addr, &vma);
+                self.CopyOnWriteLocked(addr, &vma);
             }
 
             addr += MemoryDef::PAGE_SIZE;
