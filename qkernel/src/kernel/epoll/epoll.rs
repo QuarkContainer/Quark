@@ -140,8 +140,8 @@ impl EventPoll {
         }
 
         for (file, readyState) in map.iter_mut() {
-            let ready = file.Readiness(task, readyState.mask);
-            readyState.mask = ready;
+            let ready = file.Readiness(task, readyState.mask as u64);
+            readyState.mask = ready as u32;
         }
 
         return map;
@@ -220,7 +220,7 @@ impl EventPoll {
 
             // Add event to the array that will be returned to caller.
             ret.push(Event {
-                Events: ready,
+                Events: ready as u32,
                 Data: entry.lock().userData,
             });
 

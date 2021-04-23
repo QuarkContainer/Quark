@@ -76,7 +76,7 @@ impl FdNotifierInternal {
         }
 
         let mut ev = epoll_event {
-            events: mask | EPOLLET as u32,
+            events: mask as u32 | EPOLLET as u32,
             u64: fd as u64
         };
 
@@ -165,7 +165,7 @@ impl HostFdNotifier {
         };
 
         internal.AddFd(eventfd, Box::new(EventHandler {}));
-        internal.WaitFd(eventfd, (EPOLLIN | EPOLLOUT | EPOLLHUP | EPOLLPRI | EPOLLERR | EPOLLHUP | EPOLLET) as u32).unwrap();
+        internal.WaitFd(eventfd, (EPOLLIN | EPOLLOUT | EPOLLHUP | EPOLLPRI | EPOLLERR | EPOLLHUP | EPOLLET) as EventMask).unwrap();
 
         return Self(RwLock::new(internal))
     }
@@ -247,7 +247,7 @@ impl HostFdNotifier {
             let n = self.read();
             let fd = events[i].u64 as i32;
             let fi = n.fdMap.get(&fd).expect("WaitAndNotify get none");
-            fi.handler.Process(shareSpace, events[i].events);
+            fi.handler.Process(shareSpace, events[i].events as EventMask);
         }
 
         return Ok(nfds)

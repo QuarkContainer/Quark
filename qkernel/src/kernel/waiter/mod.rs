@@ -33,7 +33,7 @@ pub use self::queue::*;
 // EventMaskFromLinux returns an EventMask representing the supported events
 // from the Linux events e, which is in the format used by poll(2).
 pub fn EventMaskFromLinux(e: u32) -> EventMask {
-    return e as EventMask & ALL_EVENTS;
+    return e as u64 & ALL_EVENTS;
 }
 
 // ToLinux returns e in the format used by Linux poll(2).

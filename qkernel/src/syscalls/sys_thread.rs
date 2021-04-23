@@ -372,7 +372,7 @@ pub fn SysWaitid(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     }
 
     let mut wopts = WaitOptions {
-        Events: TaskEvent::TRACE_STOP,
+        Events: TaskEvent::TRACE_STOP as EventMask,
         ConsumeEvent: options & WaitOption::WNOWAIT == 0,
         ..Default::default()
     };
@@ -475,7 +475,7 @@ pub fn wait4(task: &Task, pid: i32, statusAddr: u64, options: u32, _rusage: u64)
     }
 
     let mut wopts = WaitOptions {
-        Events: TaskEvent::EXIT | TaskEvent::TRACE_STOP,
+        Events: (TaskEvent::EXIT | TaskEvent::TRACE_STOP) as u64,
         ConsumeEvent: true,
         ..Default::default()
     };
@@ -537,7 +537,7 @@ pub fn parseCommonWaitOptions(wopts: &mut WaitOptions, options: u32) -> Result<(
     }
 
     if options & WaitOption::WCONTINUED != 0 {
-        wopts.Events |= TaskEvent::GROUP_CONTINUE;
+        wopts.Events |= TaskEvent::GROUP_CONTINUE as u64;
     }
 
     if options & WaitOption::WNOHANG == 0 {

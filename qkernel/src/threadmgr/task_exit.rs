@@ -302,7 +302,7 @@ impl Thread {
             let parent = leader.lock().parent.clone().unwrap();
             parent.signalStop(self, SignalInfo::CLD_STOPPED, sig.0);
             let tgOfParent = parent.lock().tg.clone();
-            tgOfParent.lock().eventQueue.Notify(EVENT_CHILD_GROUP_STOP as u32);
+            tgOfParent.lock().eventQueue.Notify(EVENT_CHILD_GROUP_STOP);
         }
 
         return last

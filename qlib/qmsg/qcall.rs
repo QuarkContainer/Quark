@@ -1069,7 +1069,7 @@ pub struct WaitFD {
 #[derive(Clone, Default, Debug)]
 pub struct NonBlockingPoll {
     pub fd: i32,
-    pub mask: u32,
+    pub mask: EventMask,
 }
 
 #[derive(Clone, Debug, Copy)]

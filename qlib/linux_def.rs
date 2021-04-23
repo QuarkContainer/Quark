@@ -154,7 +154,7 @@ impl Signal {
 }
 
 // EventMask represents io events as used in the poll() syscall.
-pub type EventMask = u32;
+pub type EventMask = u64;
 
 pub const EVENTMASK_ALL: EventMask = 0xFFFF;
 

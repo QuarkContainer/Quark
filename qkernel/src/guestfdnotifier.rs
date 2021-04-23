@@ -155,7 +155,7 @@ impl Notifier {
         match n.fdMap.get(&fd) {
             None => (),
             Some(fi) => {
-                fi.queue.Notify(EventMaskFromLinux(mask));
+                fi.queue.Notify(EventMaskFromLinux(mask as u32));
             }
         }
     }
