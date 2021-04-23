@@ -15,12 +15,11 @@
 use core::u64;
 use alloc::string::String;
 use alloc::string::ToString;
+use x86_64::structures::paging::PageTableFlags;
 
 use super::common::*;
 use super::linux_def::*;
 use super::range::*;
-
-use x86_64::structures::paging::PageTableFlags;
 
 pub const PAGE_SHIFT: u64 = 12;
 pub const PAGE_SIZE: u64 = 1 << PAGE_SHIFT;
@@ -44,8 +43,36 @@ pub const CHUNK_PAGE_COUNT: u64 = CHUNK_SIZE / MemoryDef::PAGE_SIZE;
 pub struct AccessType(pub u64);
 
 impl AccessType {
-    pub fn New() -> Self {
+    pub fn Default() -> Self {
         return AccessType(0)
+    }
+
+    pub fn NewFromPageFlags(flags: PageTableFlags) -> Self {
+        let present = flags & PageTableFlags::PRESENT == PageTableFlags::PRESENT;
+        if !present {
+            return Self::New(false, false, false)
+        }
+
+        let write = flags & PageTableFlags::WRITABLE == PageTableFlags::WRITABLE;
+        let exec = flags & PageTableFlags::NO_EXECUTE != PageTableFlags::NO_EXECUTE;
+        return Self::New(present, write, exec)
+    }
+
+    pub fn New(read: bool, write: bool, exec: bool) -> Self {
+        let mut prot = 0;
+        if read {
+            prot |= MmapProt::PROT_READ;
+        }
+
+        if write {
+            prot |= MmapProt::PROT_WRITE;
+        }
+
+        if exec {
+            prot |= MmapProt::PROT_EXEC;
+        }
+
+        return Self(prot)
     }
 
     pub fn String(&self) -> String {

@@ -1170,7 +1170,7 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn NonBlockingPoll(fd: i32, mask: u32) -> i64 {
+    pub fn NonBlockingPoll(fd: i32, mask: EventMask) -> i64 {
         let mut msg = Msg::NonBlockingPoll(NonBlockingPoll {
             fd,
             mask,
@@ -1466,7 +1466,7 @@ impl HostSpace {
         super::SHARESPACE.AQHostOutputCall(msg);
     }
 
-    pub fn WaitFD(fd: i32, mask: u32) {
+    pub fn WaitFD(fd: i32, mask: EventMask) {
         Self::AQCall(qmsg::HostOutputMsg::WaitFD(qmsg::WaitFD {
             fd,
             mask,

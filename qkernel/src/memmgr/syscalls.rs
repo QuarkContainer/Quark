@@ -617,7 +617,7 @@ impl MemoryManager {
             })
         }
 
-        let (phyAddr, _ ) = mm.VirtualToPhy(addr)?;
+        let (phyAddr, _) = mm.VirtualToPhy(addr)?;
 
         return Ok(Key {
             Kind: KeyKind::KindSharedMappable,

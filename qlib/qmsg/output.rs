@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::super::config::*;
+use super::super::linux_def::*;
 
 // kernel to host
 #[derive(Debug, Copy, Clone)]
@@ -32,7 +33,7 @@ pub enum HostOutputMsg {
 #[derive(Clone, Default, Debug, Copy)]
 pub struct WaitFD {
     pub fd: i32,
-    pub mask: u32,
+    pub mask: EventMask,
 }
 
 #[derive(Clone, Default, Debug, Copy)]

@@ -25,7 +25,7 @@ use alloc::alloc::{Layout, alloc, dealloc};
 use alloc::vec::Vec;
 
 use super::common::{Error, Result, Allocator};
-use super::addr::{Addr, PageOpts};
+use super::addr::*;
 use super::linux_def::*;
 use super::mem::stackvec::*;
 use super::super::asm::*;
@@ -236,7 +236,7 @@ impl PageTablesInternal {
     }
 
     //return (phyaddress, writeable)
-    pub fn VirtualToPhy(&self, vaddr: u64) -> Result<(u64, bool)> {
+    pub fn VirtualToPhy(&self, vaddr: u64) -> Result<(u64, AccessType)> {
         let pteEntry = self.VirtualToEntry(vaddr)?;
         if pteEntry.is_unused() {
             return Err(Error::AddressNotMap(vaddr))
@@ -245,9 +245,9 @@ impl PageTablesInternal {
         let vaddr = VirtAddr::new(vaddr);
         let pageAddr: u64 = vaddr.page_offset().into();
         let phyAddr = pteEntry.addr().as_u64() + pageAddr;
-        let writeable = pteEntry.flags() & PageTableFlags::WRITABLE == PageTableFlags::WRITABLE;
+        let permission = AccessType::NewFromPageFlags(pteEntry.flags());
 
-        return Ok((phyAddr, writeable))
+        return Ok((phyAddr, permission))
     }
 
     pub fn PrintPageFlags(&self, vaddr: u64) -> Result<()> {

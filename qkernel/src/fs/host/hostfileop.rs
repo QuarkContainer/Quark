@@ -212,6 +212,9 @@ impl FileOperations for HostFileOp {
         } else {
             if URING_ENABLE {
                 let iovs = &mut task.GetMut().iovs;
+                if iovs.len() == 0 {
+                    return Ok(0)
+                }
                 let ret = IOURING.Read(task,
                                         hostIops.HostFd(),
                                         &mut iovs[0] as * mut _ as u64,

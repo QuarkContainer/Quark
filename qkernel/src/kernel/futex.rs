@@ -437,7 +437,7 @@ impl FutexMgr {
         let res = match temp {
             None => Ok(0),
             Some(q) => {
-                let res = q.write().WakeLocked(bitmask, n);
+                let res = q.write().WakeLocked(bitmask as u64, n);
                 if q.read().Empty() {
                     self.removeQueue(&k);
                 }
@@ -542,7 +542,7 @@ impl FutexMgr {
         let k = Getkey(t, addr, private)?;
 
         w.Clear();
-        w.SetMask(bitmask);
+        w.SetMask(bitmask as u64);
         w.SetKey(&k);
 
         let q = self.lockQueueWithCreate(&k);

@@ -210,7 +210,7 @@ impl FileOperations for SignalOperation {
 }
 
 impl Waitable for SignalOperation {
-    fn Readiness(&self, _task: &Task,mask: EventMask) -> EventMask {
+    fn Readiness(&self, _task: &Task, mask: EventMask) -> EventMask {
         if mask & EVENT_IN != 0 && self.target.PendingSignals().0 & self.Mask().0 != 0 {
             return EVENT_IN
         }
@@ -218,8 +218,8 @@ impl Waitable for SignalOperation {
         return 0
     }
 
-    fn EventRegister(&self, task: &Task, e: &WaitEntry, mask: EventMask) {
-        self.target.SignalRegister(task, e, mask)
+    fn EventRegister(&self, task: &Task, e: &WaitEntry, _mask: EventMask) {
+        self.target.SignalRegister(task, e, self.mask.lock().0)
     }
 
     fn EventUnregister(&self, task: &Task,e: &WaitEntry) {

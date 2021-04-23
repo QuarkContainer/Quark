@@ -25,8 +25,8 @@ use alloc::string::ToString;
 use alloc::slice;
 use x86_64::structures::paging::PageTableFlags;
 use alloc::vec::Vec;
-
 use super::super::arch::x86_64::context::*;
+
 use super::super::PAGE_MGR;
 use super::super::KERNEL_PAGETABLE;
 use super::super::qlib::common::*;
@@ -167,7 +167,7 @@ impl MemoryManagerInternal {
     }
 
     //return: (phyaddr, iswriteable)
-    pub fn VirtualToPhy(&self, vAddr: u64) -> Result<(u64, bool)> {
+    pub fn VirtualToPhy(&self, vAddr: u64) -> Result<(u64, AccessType)> {
         return self.pt.read().VirtualToPhy(vAddr);
     }
 
@@ -466,7 +466,7 @@ impl MemoryManager {
         return pt.write().MapPage(vaddr, phyAddr, flags, &*PAGE_MGR);
     }
 
-    pub fn VirtualToPhy(&self, vAddr: u64) -> Result<(u64, bool)> {
+    pub fn VirtualToPhy(&self, vAddr: u64) -> Result<(u64, AccessType)> {
         if vAddr == 0 {
             return Err(Error::SysError(SysErr::EFAULT))
         }
@@ -488,6 +488,10 @@ impl MemoryManager {
         match task.VirtualToPhy(pageAddr) {
             Err(_) => (),
             Ok(_) => return Ok(())
+        }
+
+        if !vma.effectivePerms.Any() {
+            return Err(Error::SysError(SysErr::EFAULT))
         }
 
         let exec = vma.effectivePerms.Exec();
@@ -550,7 +554,7 @@ impl MemoryManager {
         let mut addr = Addr(vAddr).RoundDown()?.0;
         //error!("FixPermission vaddr {:x} addr {:x} len is {:x}", vAddr, addr, len);
         while addr <= vAddr + len - 1 {
-            let (_, writable) = match self.VirtualToPhy(addr) {
+            let (_, permission) = match self.VirtualToPhy(addr) {
                 Err(Error::AddressNotMap(_)) => {
                     match self.InstallPageWithAddr(task, addr) {
                         Err(_) => {
@@ -568,7 +572,7 @@ impl MemoryManager {
                 }
                 Ok(ret) => ret,
             };
-            if writeReq && !writable {
+            if writeReq && !permission.Write() {
                 let vma = match self.GetVma(addr) {
                     None => {
                         if !allowPartial || addr < vAddr {
@@ -598,9 +602,9 @@ impl MemoryManager {
     }
 
     pub fn CopyOnWriteLocked(&self, pageAddr: u64, vma: &VMA) {
-        let (phyAddr, writable) = self.VirtualToPhy(pageAddr).expect(&format!("addr is {:x}", pageAddr));
+        let (phyAddr, permission) = self.VirtualToPhy(pageAddr).expect(&format!("addr is {:x}", pageAddr));
 
-        if writable {
+        if permission.Write() {
             // another thread has cow, return
             return;
         }

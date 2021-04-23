@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::super::linux_def::*;
+
 #[derive(Debug, Copy, Clone)]
 #[repr(align(128))]
 pub enum HostInputMsg {
@@ -33,7 +35,7 @@ pub struct FireTimer {
 #[derive(Debug, Default, Copy, Clone)]
 pub struct FdNotify {
     pub fd: i32,
-    pub mask: u32,
+    pub mask: EventMask,
 }
 
 

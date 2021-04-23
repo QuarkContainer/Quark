@@ -1616,7 +1616,7 @@ impl VMSpace {
         return Self::GetRet(ret as i64)
     }
 
-    pub fn WaitFD(fd: i32, mask: u32) -> i64 {
+    pub fn WaitFD(fd: i32, mask: EventMask) -> i64 {
         let osfd = match Self::GetOsfd(fd) {
             Some(fd) => fd,
             None => return -SysErr::EBADF as i64,
@@ -1631,7 +1631,7 @@ impl VMSpace {
         }
     }
 
-    pub fn NonBlockingPoll(_taskId: u64, fd: i32, mask: u32) -> i64 {
+    pub fn NonBlockingPoll(_taskId: u64, fd: i32, mask: EventMask) -> i64 {
         let fd = match Self::GetOsfd(fd) {
             Some(fd) => fd,
             None => return -SysErr::EBADF as i64,
@@ -1875,7 +1875,7 @@ impl VMSpace {
         return &self.shareSpace
     }
 
-    pub fn FdNotify(&self, fd: i32, mask: u32) {
+    pub fn FdNotify(&self, fd: i32, mask: EventMask) {
         self.shareSpace.AQHostInputCall(HostInputMsg::FdNotify(FdNotify{
             fd: fd,
             mask: mask,

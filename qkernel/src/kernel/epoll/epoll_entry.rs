@@ -109,7 +109,7 @@ impl PollEntry {
         let e = self.lock();
         return ReadyState {
             readyTimeStamp: e.readyTimeStamp,
-            mask: e.mask,
+            mask: e.mask as u32,
         }
     }
 

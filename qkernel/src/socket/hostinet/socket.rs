@@ -53,7 +53,7 @@ fn newSocketFile(task: &Task, family: i32, fd: i32, stype: i32, nonblock: bool, 
     let inode = dirent.Inode();
     let iops = inode.lock().InodeOp.clone();
     let hostiops = iops.as_any().downcast_ref::<HostInodeOp>().unwrap();
-    let s = SocketOperations::New(family, fd, stype, hostiops.Queue(), enableBuf, addr);
+    let s = SocketOperations::New(family, fd, stype, hostiops.Queue(), enableBuf, addr)?;
 
     Ok(File::New(&dirent,
               &FileFlags { NonBlocking: nonblock, Read: true, Write: true, ..Default::default() },
@@ -79,11 +79,15 @@ pub struct SocketOperations(Arc<SocketOperationsIntern>);
 pub const DEFAULT_BUF_PAGE_COUNT : u64 = 16;
 
 impl SocketOperations {
-    pub fn New(family: i32, fd: i32, stype: i32, queue: Queue, enableSocketBuf: bool, addr: Option<Vec<u8>>) -> Self {
+    pub fn New(family: i32, fd: i32, stype: i32, queue: Queue, enableSocketBuf: bool, addr: Option<Vec<u8>>) -> Result<Self> {
         let addr = match addr {
             None => None,
             Some(v) => {
-                Some(GetAddr(v[0] as i16, &v[0..v.len()]).unwrap())
+                if v.len() == 0 {
+                    None
+                } else {
+                    Some(GetAddr(v[0] as i16, &v[0..v.len()]).unwrap())
+                }
             }
         };
 
@@ -106,7 +110,7 @@ impl SocketOperations {
         }
 
        //AddFD(fd, &ret.queue);
-        return ret
+        return Ok(ret)
     }
 
     pub fn SocketBufEnabled(&self) -> bool {
@@ -123,7 +127,7 @@ impl SocketOperations {
     }
 
     pub fn Notify(&self, mask: EventMask) {
-        self.queue.Notify(EventMaskFromLinux(mask));
+        self.queue.Notify(EventMaskFromLinux(mask as u32));
     }
 }
 
