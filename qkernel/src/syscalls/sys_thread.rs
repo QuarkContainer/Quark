@@ -470,7 +470,7 @@ pub fn SysWaitid(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 }
 
 pub fn wait4(task: &Task, pid: i32, statusAddr: u64, options: u32, _rusage: u64) -> Result<i64> {
-    if options & !(WaitOption::WNOHANG | WaitOption::WUNTRACED | WaitOption::WCONTINUED | WaitOption::WNOTHREAD | WaitOption::WALL) != 0 {
+    if options & !(WaitOption::WNOHANG | WaitOption::WUNTRACED | WaitOption::WCONTINUED | WaitOption::WNOTHREAD | WaitOption::WALL | WaitOption::WCLONE) != 0 {
         return Err(Error::SysError(SysErr::EINVAL))
     }
 
