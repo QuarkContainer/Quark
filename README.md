@@ -61,7 +61,11 @@ make install
 ### Install / Setup / Configuration
 1. Install binary: Quark has 2 binaries: "quark" and "qkernel.bin". Both of them was copied to /usr/local/bin/ folder when running `make install`. "quark" contains QVisor code and it also implement the OCI interface.
 2. Setup Docker: To enable Docker to run container with Quark Container, "/etc/docker/daemon.json" needs to be updated. Example is as [daemon.json](doc/daemon.json)
-3. Restart Docker: After the "/etc/docker/daemon.json" is updated, The Docker daemon restart is need to enable the configuration change
+3. Create log folder
+```sh
+sudo mkdir /var/log/quark
+```
+5. Restart Docker: After the "/etc/docker/daemon.json" is updated, The Docker daemon restart is need to enable the configuration change
 ```sh
 sudo systemctl restart docker
 ```
