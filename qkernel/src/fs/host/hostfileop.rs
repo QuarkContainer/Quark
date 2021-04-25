@@ -290,6 +290,7 @@ impl FileOperations for HostFileOp {
                         return Err(Error::SysError(-ret as i32))
                     }
                 } else if ret >= 0 {
+                    hostIops.UpdateMaxLen(offset + ret);
                     return Ok(ret as i64)
                 }
 
@@ -308,7 +309,14 @@ impl FileOperations for HostFileOp {
             };
 
             let mut ioWriter = FdReadWriter::New(hostIops.HostFd());
-            return ioWriter.IOWriteAt(&task.GetMut().iovs, offset as u64);
+            match ioWriter.IOWriteAt(&task.GetMut().iovs, offset as u64) {
+                Err(e) => return Err(e),
+                Ok(ret) => {
+                    hostIops.UpdateMaxLen(offset + ret);
+                    return Ok(ret)
+                }
+            }
+
         }
     }
 

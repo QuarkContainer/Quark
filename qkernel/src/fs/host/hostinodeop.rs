@@ -150,6 +150,11 @@ pub struct HostInodeOpIntern {
     pub queue: Queue,
     pub errorcode: i64,
 
+    // this Size is only used for mmap len check. It might not be consistent with host file size.
+    // when write to the file, the size is not updated.
+    // todo: fix this
+    pub size: i64,
+
     pub mappable: Option<Mappable>,
 }
 
@@ -164,6 +169,7 @@ impl Default for HostInodeOpIntern {
             queue: Queue::default(),
             errorcode: 0,
             mappable: None,
+            size: 0,
         }
     }
 }
@@ -191,6 +197,7 @@ impl HostInodeOpIntern {
             queue: Queue::default(),
             errorcode: 0,
             mappable: None,
+            size: fstat.st_size,
         };
 
         if ret.CanMap() {
@@ -382,6 +389,13 @@ impl HostInodeOp {
         return self.lock().HostFd
     }
 
+    pub fn UpdateMaxLen(&self, size: i64) {
+        let mut h = self.lock();
+        if h.size < size {
+            h.size = size;
+        }
+    }
+
     pub fn StableAttr(&self) -> StableAttr {
         return self.lock().sattr;
     }
@@ -472,6 +486,11 @@ impl HostInodeOp {
 
     // map one page from file offsetFile to phyAddr
     pub fn MapFilePage(&self, task: &Task, fileOffset: u64) -> Result<u64> {
+        let filesize = self.lock().size as u64;
+        if filesize <= fileOffset {
+            return Err(Error::FileMapError)
+        }
+
         let chunkStart = fileOffset & !HUGE_PAGE_MASK;
         self.Fill(task, chunkStart, fileOffset + PAGE_SIZE)?;
 
@@ -806,6 +825,8 @@ impl InodeOperations for HostInodeOp {
         if ret < 0 {
             return Err(Error::SysError(-ret as i32))
         }
+
+        self.lock().size = size;
 
         return Ok(())
     }

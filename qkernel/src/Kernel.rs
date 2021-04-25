@@ -1423,7 +1423,6 @@ impl HostSpace {
     fn Call(msg: &mut Msg, mustAsync: bool) -> u64 {
         super::SHARESPACE.hostMsgCount.fetch_add(1, Ordering::SeqCst);
         if super::SHARESPACE.Notify() && !mustAsync  {
-            //error!("Hypercall msg is {:?}", msg);
             super::SHARESPACE.hostMsgCount.fetch_sub(1, Ordering::SeqCst);
             return Self::HCall(msg) as u64
         }
