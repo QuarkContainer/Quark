@@ -141,7 +141,11 @@ pub fn WaitForRequest(ctx: &AIOContext, task: &Task, dealine: Option<Time>) -> R
 
     loop {
         match ctx.PopRequest() {
-            None => (),
+            None => {
+                if ctx.lock().dead {
+                    return Err(Error::SysError(SysErr::EINVAL))
+                }
+            },
             Some(v) => return Ok(v)
         }
 
