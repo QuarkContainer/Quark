@@ -121,7 +121,7 @@ impl Target for Task {
             None => return Err(Error::SysError(SysErr::EFAULT)),
             Some(v) => v.clone(),
         };*/
-        let vma = match self.mm.GetVma(addr) {
+        let (vma, _) = match self.mm.GetVmaAndRange(addr) {
             None => return Err(Error::SysError(SysErr::EFAULT)),
             Some(v) => v.clone(),
         };

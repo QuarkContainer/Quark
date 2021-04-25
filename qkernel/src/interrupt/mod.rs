@@ -445,7 +445,16 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     if errbits & PageFaultErrorCode::PROTECTION_VIOLATION !=  PageFaultErrorCode::PROTECTION_VIOLATION {
         //error!("InstallPage 1, range is {:x?}, address is {:x}, vma.growsDown is {}",
         //    &range, pageAddr, vma.growsDown);
-        currTask.mm.InstallPage(currTask, &vma, pageAddr, &range).unwrap();
+        match currTask.mm.InstallPage(currTask, &vma, pageAddr, &range) {
+            Err(Error::FileMapError) => {
+                HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGBUS);
+                //return
+            }
+            Err(e) => {
+                panic!("PageFaultHandler error is {:?}", e)
+            }
+            _ => ()
+        };
 
         for i in 1..8 {
             let addr = if vma.growsDown {
@@ -454,7 +463,12 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
                 pageAddr + i * PAGE_SIZE
             };
             if range.Contains(addr) {
-                currTask.mm.InstallPage(currTask, &vma, addr, &range).unwrap();
+                match currTask.mm.InstallPage(currTask, &vma, pageAddr, &range) {
+                    Err(_) => {
+                        break;
+                    }
+                    _ => ()
+                };
             } else {
                 break;
             }

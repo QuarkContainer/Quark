@@ -443,15 +443,6 @@ impl MemoryManager {
         return self.read().pt.read().GetRoot()
     }
 
-    pub fn GetVma(&self, addr: u64) -> Option<VMA> {
-        let vseg = self.read().vmas.FindSeg(addr);
-        if !vseg.Ok() {
-            return None;
-        }
-
-        return Some(vseg.Value())
-    }
-
     pub fn GetVmaAndRange(&self, addr: u64) -> Option<(VMA, Range)> {
         let vseg = self.read().vmas.FindSeg(addr);
         if !vseg.Ok() {
@@ -573,7 +564,7 @@ impl MemoryManager {
                 Ok(ret) => ret,
             };
             if writeReq && !permission.Write() {
-                let vma = match self.GetVma(addr) {
+                let (vma, _) = match self.GetVmaAndRange(addr) {
                     None => {
                         if !allowPartial || addr < vAddr {
                             return Err(Error::SysError(SysErr::EFAULT))
@@ -693,8 +684,8 @@ impl MemoryManager {
         return Ok(())
     }
 
-    pub fn PopulateVMARemap(&self, task: &Task, vmaSeg: &AreaSeg<VMA>, ar: &Range, oldar: &Range, precommit: bool) -> Result<()> {
-        let segAr = vmaSeg.Range();
+    pub fn PopulateVMARemap(&self, task: &Task, vmaSeg: &AreaSeg<VMA>, ar: &Range, oldar: &Range, _precommit: bool) -> Result<()> {
+        //let segAr = vmaSeg.Range();
         let vma = vmaSeg.Value();
         let mut perms = vma.effectivePerms;
 
@@ -710,16 +701,8 @@ impl MemoryManager {
             ar.Len()
         };
 
-        match vma.mappable {
-            None => {
-                pt.write().RemapAna(task, &Range::New(ar.Start(), len), oldar.Start(), &perms, true)?;
-            }
-            Some(mappable) => {
-                //host file mapping
-                pt.RemapFile(task, ar.Start(), &mappable, &Range::New(vma.offset + ar.Start() - segAr.Start(), len), oldar, &perms, precommit)?;
-                self.write().AddRssLock(ar);
-            }
-        }
+        // todo: change the name to pt.Remap
+        pt.write().RemapAna(task, &Range::New(ar.Start(), len), oldar.Start(), &perms, true)?;
 
         return Ok(())
     }

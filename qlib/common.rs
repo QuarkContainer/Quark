@@ -202,6 +202,7 @@ pub enum Error {
     Signal,
     Exit,
     SysError(i32),
+    FileMapError,
     NoEnoughData,
     EOF,
     ChanClose,
