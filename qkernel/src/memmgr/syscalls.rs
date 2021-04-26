@@ -25,6 +25,14 @@ use super::super::qlib::range::*;
 use super::super::qlib::linux::limits::*;
 use super::*;
 
+pub struct MSyncOpts {
+    // Sync has the semantics of MS_SYNC.
+    pub Sync: bool,
+
+    // Invalidate has the semantics of MS_INVALIDATE.
+    pub Invalidate: bool,
+}
+
 impl MemoryManager {
     // MMap establishes a memory mapping.
     pub fn MMap(&self, task: &Task, opts: &mut MMapOpts) -> Result<u64> {

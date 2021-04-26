@@ -187,8 +187,6 @@ pub fn SysMadvise(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
 // Mremap implements linux syscall mremap(2).
 pub fn SysMremap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
-    //return Err(Error::SysError(SysErr::ENODATA));
-
     let oldAddr = args.arg0 as u64;
     let oldSize = args.arg1 as u64;
     let newSize = args.arg2 as u64;
@@ -222,4 +220,33 @@ pub fn SysMremap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         Ok(addr) => Ok(addr as i64),
         Err(e) => Err(e),
     }
+}
+
+// Msync implements Linux syscall msync(2).
+pub fn SysMsync(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let addr = args.arg0 as u64;
+    let length = args.arg1 as u64;
+    let flags = args.arg2 as i32;
+
+    // "The flags argument should specify exactly one of MS_ASYNC and MS_SYNC,
+    // and may additionally include the MS_INVALIDATE bit. ... However, Linux
+    // permits a call to msync() that specifies neither of these flags, with
+    // semantics that are (currently) equivalent to specifying MS_ASYNC." -
+    // msync(2)
+    if flags & !(LibcConst::MS_ASYNC | LibcConst::MS_SYNC | LibcConst::MS_INVALIDATE) as i32 != 0 {
+        return Err(Error::SysError(SysErr::EINVAL))
+    }
+
+    let sync = flags & LibcConst::MS_SYNC as i32 != 0;
+    let async = flags & LibcConst::MS_ASYNC as i32 != 0;
+    if sync && async {
+        return Err(Error::SysError(SysErr::EINVAL))
+    }
+
+    task.mm.MSync(task, addr, length, &MSyncOpts {
+        Sync: sync,
+        Invalidate: flags & LibcConst::MS_INVALIDATE as i32 != 0,
+    })?;
+
+    return Ok(0)
 }

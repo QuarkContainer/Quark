@@ -47,6 +47,8 @@ use super::super::qlib::mem::areaset::*;
 use super::arch::*;
 use super::vma::*;
 use super::metadata::*;
+use super::syscalls::*;
+use super::*;
 
 
 #[derive(Clone)]
@@ -122,6 +124,7 @@ impl MemoryManagerInternal {
             maxPerms: AccessType::ReadWrite(),
             private: true,
             growsDown: false,
+            mlockMode: MLOCK_NONE,
             kernel: true,
             hint: String::from("Kernel Space"),
             id: None,
@@ -428,6 +431,84 @@ impl MemoryManager {
             mm.pt.write().MUnmap(r.Start(), r.Len())?;
             let vgap = mm.vmas.Remove(&vseg);
             vseg = vgap.NextSeg();
+        }
+
+        return Ok(())
+    }
+
+    pub fn MSync(&self, _task: &Task, addr: u64, length: u64, opts: &MSyncOpts) -> Result<()> {
+        if addr != Addr(addr).RoundDown()?.0 {
+            return Err(Error::SysError(SysErr::EINVAL))
+        }
+
+        if length == 0 {
+            return Ok(())
+        }
+
+        let la = match Addr(length).RoundUp() {
+            Err(_) => return Err(Error::SysError(SysErr::ENOMEM)),
+            Ok(l) => l.0
+        };
+
+        let ar = Range::New(addr, la);
+
+        let lock = self.Lock();
+        let mut l = lock.lock();
+
+        let mut vseg = self.read().vmas.LowerBoundSeg(ar.Start());
+        let mut unmaped = false;
+        let mut lastEnd = ar.Start();
+        loop {
+            if !vseg.Ok() {
+                core::mem::drop(l);
+                unmaped = true;
+                break;
+            }
+
+            if lastEnd < vseg.Range().Start() {
+                unmaped = true;
+            }
+
+            lastEnd = vseg.Range().End();
+            let vma = vseg.Value();
+            if opts.Invalidate && vma.mlockMode != MLOCK_NONE {
+                return Err(Error::SysError(SysErr::EBUSY))
+            }
+
+            // It's only possible to have dirtied the Mappable through a shared
+            // mapping. Don't check if the mapping is writable, because mprotect
+            // may have changed this, and also because Linux doesn't.
+            if vma.mappable.is_some() && !vma.private {
+                let msyncType = if opts.Sync {
+                    MSyncType::MsSync
+                } else {
+                    MSyncType::MsAsync
+                };
+
+                let fops = vma.mappable.clone().unwrap();
+
+                let mr = ar.Intersect(&vseg.Range());
+                core::mem::drop(l);
+
+                let fstart = mr.Start() - vseg.Range().Start() + vma.offset;
+                fops.MSync(&Range::New(fstart, mr.Len()), msyncType)?;
+
+                if lastEnd >= ar.End() {
+                    break;
+                }
+
+                l = lock.lock();
+                vseg = self.read().vmas.LowerBoundSeg(lastEnd)
+            } else {
+                if lastEnd >= ar.End() {
+                    break;
+                }
+                vseg = vseg.NextSeg();
+            }
+        }
+
+        if unmaped {
+            return Err(Error::SysError(SysErr::ENOMEM))
         }
 
         return Ok(())

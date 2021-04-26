@@ -301,6 +301,9 @@ impl Addr {
             return Err(Error::SysError(SysErr::EINVAL))
         }
 
+        if self.0 == 0 {
+            return Ok(Addr(0));
+        }
         let addr = self.0 - 1 + PAGE_SIZE;
         return Addr(addr).RoundDown()
     }

@@ -501,6 +501,18 @@ impl HostInodeOp {
         return Ok(phyAddr + (fileOffset - chunkStart))
     }
 
+    pub fn MSync(&self, fr: &Range, msyncType: MSyncType) -> Result<()> {
+        let ranges = self.GetPhyRanges(fr);
+        for r in &ranges {
+            let ret = HostSpace::MSync(r.Start(), r.Len() as usize, msyncType.MSyncFlags());
+            if ret < 0 {
+                return Err(Error::SysError(ret as i32))
+            }
+        }
+
+        return Ok(())
+    }
+
     pub fn GetPhyRanges(&self, fr: &Range) -> Vec<Range> {
         let mut chunkStart = fr.Start() & !HUGE_PAGE_MASK;
         let mut rs = Vec::new();
@@ -512,7 +524,19 @@ impl HostInodeOp {
             match mappableLock.f2pmap.get(&chunkStart) {
                 None => (),
                 Some(phyAddr) => {
-                    rs.push(Range::New(*phyAddr, HUGE_PAGE_SIZE));
+                    let fChunckRange = Range::New(chunkStart, HUGE_PAGE_SIZE);
+                    let startOffset = if fChunckRange.Contains(fr.Start()) {
+                        fr.Start() - fChunckRange.Start()
+                    } else {
+                        0
+                    };
+
+                    let len = if fChunckRange.Contains(fr.End()) {
+                        fr.End() - fChunckRange.Start()
+                    } else {
+                        HUGE_PAGE_SIZE
+                    };
+                    rs.push(Range::New(*phyAddr + startOffset, len));
                 }
             }
 
