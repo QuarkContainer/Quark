@@ -456,6 +456,11 @@ impl MemoryManager {
         let mut l = lock.lock();
 
         let mut vseg = self.read().vmas.LowerBoundSeg(ar.Start());
+
+        if !vseg.Range().Contains(ar.Start()) {
+            return Err(Error::SysError(SysErr::ENOMEM))
+        }
+
         let mut unmaped = false;
         let mut lastEnd = ar.Start();
         loop {
