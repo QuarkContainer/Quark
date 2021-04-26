@@ -655,7 +655,11 @@ impl VMSpace {
             return (ret, true);
         }
 
-        // when the file is unix socket file, needs to return SysErr::ENXIO
+        let err = Self::GetRet(ret as i64) as i32;
+        if err == -SysErr::ENXIO {
+            return (-SysErr::ENXIO, false)
+        }
+
         let ret = libc::openat(dirfd, name as *const c_char, flags as i32 | Flags::O_PATH, 0);
         if ret > 0 {
             return (ret, false);
