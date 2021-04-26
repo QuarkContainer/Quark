@@ -128,7 +128,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysSelect, //sys_select,
     SysScheduleYield, //sys_sched_yield,
     SysMremap, //sys_mremap,
-    NotImplementSyscall, //sys_msync,
+    SysMsync, //sys_msync,
     NotImplementSyscall, //sys_mincore,
     SysMadvise, //sys_madvise,
     NotImplementSyscall, //sys_shmget,

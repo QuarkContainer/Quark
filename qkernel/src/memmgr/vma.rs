@@ -82,7 +82,7 @@ impl MemoryManagerInternal {
         let ar = Range::New(addr, opts.Length);
 
         // todo: Check against RLIMIT_AS.
-        /* let mut newUsageAS = self.usageAS + opts.Length;
+        /*let mut newUsageAS = self.usageAS + opts.Length;
         if opts.Unmap {
             newUsageAS -= self.vmas.SpanRange(&ar);
         }*/
@@ -110,6 +110,7 @@ impl MemoryManagerInternal {
             maxPerms: opts.MaxPerms,
             private: opts.Private,
             growsDown: opts.GrowsDown,
+            mlockMode: opts.MLockMode,
             kernel: opts.Kernel,
             hint: opts.Hint.to_string(),
             id: opts.Mapping.clone(),
@@ -328,6 +329,9 @@ pub struct VMA {
     // architectures that can have VM_GROWSUP mappings are ia64, parisc, and
     // metag, none of which we currently support.
     pub growsDown: bool,
+
+    pub mlockMode: MLockMode,
+
     pub kernel: bool,
     pub hint: String,
     pub id: Option<Arc<Mapping>>,
@@ -365,6 +369,7 @@ impl VMA {
             maxPerms: self.maxPerms,
             private: self.private,
             growsDown: self.growsDown,
+            mlockMode: self.mlockMode,
             kernel: self.kernel,
             hint: self.hint.to_string(),
             id: self.id.clone(),
@@ -475,6 +480,7 @@ impl AreaValue for VMA {
             vma1.effectivePerms != vma2.effectivePerms ||
             vma1.private != vma2.private ||
             vma1.growsDown != vma2.growsDown ||
+            vma1.mlockMode != vma2.mlockMode ||
             vma1.kernel != vma2.kernel ||
             vma1.numaPolicy != vma2.numaPolicy ||
             vma1.numaNodemask != vma2.numaNodemask ||

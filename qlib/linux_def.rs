@@ -665,6 +665,21 @@ impl FilePermissions {
     }
 }
 
+pub enum MSyncType {
+    MsAsync,
+    MsSync,
+    MsInvalidate,
+}
+
+impl MSyncType {
+    pub fn MSyncFlags(&self) -> i32 {
+        match self {
+            Self::MsAsync => return LibcConst::MS_ASYNC as i32,
+            Self::MsSync => return LibcConst::MS_SYNC as i32,
+            Self::MsInvalidate => return LibcConst::MS_INVALIDATE as i32,
+        }
+    }
+}
 
 pub struct LibcConst {}
 
