@@ -250,6 +250,7 @@ pub fn SysExecve(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 tg.lock().signalHandlers = sh.CopyForExec();
                 // "Any alternate signal stack is not preserved (sigaltstack(2))." - execve(2)
                 t.lock().signalStack = SignalStack::default();
+                task.signalStack = SignalStack::default();
                 // "The termination signal is reset to SIGCHLD (see clone(2))."
                 tg.lock().terminationSignal = Signal(Signal::SIGCHLD);
                 // execed indicates that the process can no longer join a process group

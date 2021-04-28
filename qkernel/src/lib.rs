@@ -176,8 +176,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     currTask.AccountTaskLeave(SchedState::RunningApp);
     currTask.GetPtRegs().rsp = CPULocal::UserStack(); //set the user sp to ptRegs
 
-    //info!("nr is {}, orig_rax = {:?}", nr, currTask.GetPtRegs());
-    assert!(nr == currTask.GetPtRegs().orig_rax);
+    assert!(nr < SysCallID::maxsupport as u64, "get supported syscall id {}", nr);
 
     //SHARESPACE.SetValue(CPULocal::CpuId(), 0, nr);
     let callId: SysCallID = unsafe { mem::transmute(nr as u64) };

@@ -81,7 +81,6 @@ pub struct ThreadInternal {
 
     pub utsns: UTSNamespace,
     pub ipcns: IPCNamespace,
-    pub SignalStack: SignalStack,
 
     pub SignalQueue: Queue,
 

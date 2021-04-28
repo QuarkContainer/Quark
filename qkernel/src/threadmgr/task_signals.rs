@@ -1028,7 +1028,7 @@ impl Task {
         if sigAct.flags.IsOnStack() && self.signalStack.IsEnable() {
             self.signalStack.SetOnStack();
             if !self.signalStack.Contains(pt.rsp) {
-                userStack = Stack::New(self.signalStack.Top());
+                userStack = Stack::New(self.signalStack.Top() );
             }
         }
 

@@ -454,10 +454,7 @@ pub enum SysCallID {
     pkey_free,
     statx,
 
-    q_callStart = 1001,
-    //qcall
-    q_malloc,
-    //malloc guest phyaddr arg0: size, ret: i64, <0:fail, >0: phyaddr
+    maxsupport,
 }
 
 #[derive(Clone, Default, Debug, Copy)]

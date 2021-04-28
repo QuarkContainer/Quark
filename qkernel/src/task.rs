@@ -763,7 +763,7 @@ impl Task {
     }
 
     pub fn OnSignalStack(&self, alt: &SignalStack) -> bool {
-        let sp = self.context.rsp;
+        let sp = self.GetPtRegs().rsp;
         return alt.Contains(sp)
     }
 

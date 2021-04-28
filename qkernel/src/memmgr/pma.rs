@@ -264,8 +264,9 @@ impl PageTablesInternal {
     pub fn NewWithKernelPageTables(&self, pagePool: &PageMgr) -> Result<Self> {
         let mut ret = Self::New(pagePool)?;
 
+        //todo: do we still need zero page at address 0?
         let zeroPage = pagePool.ZeroPage();
-        ret.MapPage(Addr(0), Addr(zeroPage), PageOpts::UserReadOnly().Val(), pagePool)?;
+        ret.MapPage(Addr(0), Addr(zeroPage), PageOpts::UserNonAccessable().Val(), pagePool)?;
 
         {
             let mut lock = pagePool.lock();
