@@ -412,13 +412,14 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     //defer!(print!("end of in PageFaultHandler ..."));
 
     let lock = currTask.mm.Lock();
-    let _l = lock.lock();
+    let l = lock.lock();
 
     let (vma, range) = match currTask.mm.GetVmaAndRange(cr2) {
         //vmas.lock().Get(cr2) {
         None => {
             //todo: when to send sigbus/SIGSEGV
-            HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGBUS);
+            core::mem::drop(l);
+            HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
             return
         }
         Some(vma) => vma.clone(),
@@ -429,11 +430,13 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
         let map =  currTask.mm.GetSnapshot(currTask, false);
         print!("the map is {}", &map);
 
+        core::mem::drop(l);
         HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
         return
     }
 
     if !vma.effectivePerms.Read() { // has no read permission
+        core::mem::drop(l);
         HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
         return
     }
@@ -447,8 +450,9 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
         //    &range, pageAddr, vma.growsDown);
         match currTask.mm.InstallPage(currTask, &vma, pageAddr, &range) {
             Err(Error::FileMapError) => {
+                core::mem::drop(l);
                 HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGBUS);
-                //return
+                return
             }
             Err(e) => {
                 panic!("PageFaultHandler error is {:?}", e)
@@ -484,12 +488,14 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     }
 
     if vma.private == false {
+        core::mem::drop(l);
         HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
         return
     }
 
     if (errbits & PageFaultErrorCode::CAUSED_BY_WRITE) == PageFaultErrorCode::CAUSED_BY_WRITE {
         if !vma.effectivePerms.Write() && fromUser {
+            core::mem::drop(l);
             HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
             return
         }
@@ -501,6 +507,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
             currTask.AccountTaskEnter(SchedState::RunningApp);
         }
     } else {
+        core::mem::drop(l);
         HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
     }
 }
@@ -540,6 +547,11 @@ pub fn HandleFault(task: &mut Task, user: bool, errorCode: u64, cr2: u64, sf: &m
     thread.forceSignal(Signal(Signal::SIGSEGV), false);
     thread.SendSignal(&info).expect("PageFaultHandler send signal fail");
     MainRun(task, TaskRunState::RunApp);
+
+    let kernalRsp = task.GetPtRegs() as *const _ as u64;
+
+    //SHARESPACE.SetValue(CPULocal::CpuId(), 0, 0);
+    SyscallRet(kernalRsp);
 }
 
 // x87 Floating-Point Exception

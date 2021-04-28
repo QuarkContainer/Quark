@@ -183,7 +183,6 @@ impl TaskSet {
             creds: cfg.Credentials.clone(),
             utsns: cfg.UTSNamespace.clone(),
             ipcns: cfg.IPCNamespace.clone(),
-            SignalStack: SignalStack::default(),
             SignalQueue: Queue::default(),
             tg: tg.clone(),
             parent: cfg.Parent.clone(),
