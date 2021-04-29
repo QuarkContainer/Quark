@@ -89,19 +89,19 @@ syscall_entry:
 
 .balign 4096, 0xcc
 __vsyscall_page:
-    //gettimeofday
+    //sys_gettimeofday
     mov rax, 96
     syscall
     ret
 
     .balign 1024, 0xcc
-    //time
-    mov rax, 100
+    //sys_time
+    mov rax, 201
     syscall
     ret
 
     .balign 1024, 0xcc
-    //getcpu
+    //sys_getcpu
     mov rax, 309
     syscall
     ret
