@@ -1,4 +1,4 @@
-all: std server client unixcli unixsrv socketpair stat dev fork signal futex multithread epoll mkdir fifo timerfd eventfd seek
+all: std server client unixcli unixsrv socketpair stat dev fork signal futex multithread epoll mkdir fifo timerfd eventfd seek gettimeofday
 
 std: std.c
 	gcc -o std std.c
@@ -36,5 +36,7 @@ eventfd: eventfd.c
 	gcc -o eventfd eventfd.c -lpthread
 seek: seek.c
 	gcc -o seek seek.c
+gettimeofday: gettimeofday.c
+	gcc -o gettimeofday gettimeofday.c
 clean:
-	rm std server client unixcli unixsrv socketpair stat dev fork signal futex multithread epoll mkdir fifo timerfd eventfd seek
+	rm std server client unixcli unixsrv socketpair stat dev fork signal futex multithread epoll mkdir fifo timerfd eventfd seek gettimeofday
