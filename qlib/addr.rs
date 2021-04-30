@@ -284,12 +284,11 @@ pub struct Addr(pub u64);
 
 impl Addr {
     pub fn AddLen(&self, len: u64) -> Result<Addr> {
-        let end = self.0 + len;
-        if end < self.0 {
-            Err(Error::SysError(SysErr::EFAULT))
-        } else {
-            Ok(Addr(end))
+        if core::u64::MAX - self.0 < len {
+            return Err(Error::SysError(SysErr::EFAULT))
         }
+        let end = self.0 + len;
+        return Ok(Addr(end))
     }
 
     pub const fn RoundDown(&self) -> Result<Addr> {

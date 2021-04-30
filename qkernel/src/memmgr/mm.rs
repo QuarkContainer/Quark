@@ -436,6 +436,23 @@ impl MemoryManager {
         return Ok(())
     }
 
+    pub fn MinCore(&self, _task: &Task, r: &Range) -> Vec<u8> {
+        let lock = self.Lock();
+        let _l = lock.lock();
+
+        let mut res = Vec::with_capacity((r.Len() / MemoryDef::PAGE_SIZE) as usize);
+        let mut addr = r.Start();
+        while addr < r.End() {
+            match self.VirtualToPhy(addr) {
+                Ok(_) => res.push(1),
+                Err(_) => res.push(0),
+            }
+            addr += MemoryDef::PAGE_SIZE;
+        }
+
+        return res;
+    }
+
     pub fn MSync(&self, _task: &Task, addr: u64, length: u64, opts: &MSyncOpts) -> Result<()> {
         if addr != Addr(addr).RoundDown()?.0 {
             return Err(Error::SysError(SysErr::EINVAL))
@@ -794,6 +811,9 @@ impl MemoryManager {
     }
 
     pub fn Fork(&self) -> Result<Self> {
+        let lock = self.Lock();
+        let _l = lock.lock();
+
         let mm2 = Self::Empty();
         {
             let mm = self.read();

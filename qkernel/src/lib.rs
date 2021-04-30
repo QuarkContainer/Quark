@@ -353,7 +353,6 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
             let vsyscallPages = lock.VsyscallPages();
 
             kpt.InitVsyscall(vsyscallPages);
-            Kernel::HostSpace::KernelMsg(0x104, 0);
         }
 
         SetVCPCount(vcpuCnt as usize);

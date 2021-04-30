@@ -129,7 +129,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysScheduleYield, //sys_sched_yield,
     SysMremap, //sys_mremap,
     SysMsync, //sys_msync,
-    NotImplementSyscall, //sys_mincore,
+    SysMincore, //sys_mincore,
     SysMadvise, //sys_madvise,
     NotImplementSyscall, //sys_shmget,
     NotImplementSyscall, //sys_shmat,   //30
@@ -385,7 +385,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysUtimensat, //sys_utimensat,    //280
     SysPwait, //sys_epoll_pwait,
     SysSignalfd, //sys_signalfd,
-    SysTimerfdCreateSysRead, //sys_timerfd_create,
+    SysTimerfdCreate, //sys_timerfd_create,
     SysEventfd, //sys_eventfd,
     SysFallocate, //sys_fallocate,
     SysTimerfdSettime, //sys_timerfd_settime,
