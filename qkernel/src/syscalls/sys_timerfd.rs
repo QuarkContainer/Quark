@@ -24,7 +24,7 @@ use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
 
 // TimerfdCreate implements Linux syscall timerfd_create(2).
-pub fn SysTimerfdCreateSysRead(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+pub fn SysTimerfdCreate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let clockID = args.arg0 as i32;
     let flags = args.arg1 as i32;
 

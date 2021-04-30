@@ -216,10 +216,8 @@ impl PageTables {
 
 impl PageTablesInternal {
     pub fn InitVsyscall(&mut self, phyAddrs: &[u64]/*4 pages*/) {
-        super::super::Kernel::HostSpace::KernelMsg(0x201, 0);
         let vaddr = 0xffffffffff600000;
         let pt: *mut PageTable = self.root.0 as *mut PageTable;
-        super::super::Kernel::HostSpace::KernelMsg(0x202, 0);
         unsafe {
             let p4Idx = VirtAddr::new(vaddr).p4_index();
             let p3Idx = VirtAddr::new(vaddr).p3_index();

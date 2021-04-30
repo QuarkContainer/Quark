@@ -250,3 +250,37 @@ pub fn SysMsync(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     return Ok(0)
 }
+
+// Mincore implements the syscall mincore(2).
+pub fn SysMincore(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let addr = args.arg0 as u64;
+    let length = args.arg1 as i64;
+    let vec = args.arg2 as u64;
+
+    if addr != Addr(addr).RoundDown().unwrap().0 {
+        return Err(Error::SysError(SysErr::EINVAL))
+    }
+
+    if length < 0 {
+        return Err(Error::SysError(SysErr::ENOMEM))
+    }
+
+    let length = length as u64;
+
+    // "The length argument need not be a multiple of the page size, but since
+    // residency information is returned for whole pages, length is effectively
+    // rounded up to the next multiple of the page size." - mincore(2)
+    let la = match Addr(length).RoundUp() {
+        Ok(l) => l.0,
+        Err(_) => return Err(Error::SysError(SysErr::ENOMEM))
+    };
+
+    let range = match Addr(addr).ToRange(la) {
+        Err(_) => return Err(Error::SysError(SysErr::ENOMEM)),
+        Ok(r) => r
+    };
+
+    let output = task.mm.MinCore(task, &range);
+    task.CopyOutSlice(&output, vec, output.len())?;
+    return Ok(0)
+}

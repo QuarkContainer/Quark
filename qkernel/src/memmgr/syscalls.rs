@@ -96,6 +96,9 @@ impl MemoryManager {
 
     // MapStack allocates the initial process stack.
     pub fn MapStack(&self, task: &Task) -> Result<Range> {
+        let lock = self.Lock();
+        let _l = lock.lock();
+
         // maxStackSize is the maximum supported process stack size in bytes.
         //
         // This limit exists because stack growing isn't implemented, so the entire
@@ -605,6 +608,9 @@ impl MemoryManager {
     }
 
     pub fn GetSharedFutexKey(&self, _task: &Task, addr: u64) -> Result<Key> {
+        let lock = self.Lock();
+        let _l = lock.lock();
+
         let ar = match Addr(addr).ToRange(4) {
             Ok(r) => r,
             Err(_) => return Err(Error::SysError(SysErr::EFAULT)),
