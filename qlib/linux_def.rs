@@ -14,6 +14,8 @@
 
 use alloc::slice;
 
+pub const MLOCK_ONFAULT : u32 = 0x01;
+
 pub const SIOCGIFMEM    : u64 = 0x891f;
 pub const SIOCGIFPFLAGS : u64 = 0x8935;
 pub const SIOCGMIIPHY   : u64 = 0x8947;
@@ -1214,6 +1216,7 @@ impl LibcConst {
     pub const MAP_TYPE: u64 = 0xf;
     pub const MCL_CURRENT: u64 = 0x1;
     pub const MCL_FUTURE: u64 = 0x2;
+    pub const MCL_ONFAULT: u64 = 0x4;
     pub const MNT_DETACH: u64 = 0x2;
     pub const MNT_EXPIRE: u64 = 0x4;
     pub const MNT_FORCE: u64 = 0x1;

@@ -65,6 +65,10 @@ pub struct MemoryManagerInternal {
     // usageAS is vmas.Span(), cached to accelerate RLIMIT_AS checks.
     pub usageAS: u64,
 
+    // lockedAS is the combined size in bytes of all vmas with vma.mlockMode !=
+    // memmap.MLockNone.
+    pub lockedAS: u64,
+
     // layout is the memory layout.
     pub layout: MmapLayout,
 
@@ -97,6 +101,7 @@ impl Default for MemoryManagerInternal {
             vmas: vmas,
             brkInfo: BrkInfointernal::default(),
             usageAS: 0,
+            lockedAS: 0,
             layout: MmapLayout::default(),
             curRSS: 0,
             maxRSS: 0,
@@ -124,7 +129,7 @@ impl MemoryManagerInternal {
             maxPerms: AccessType::ReadWrite(),
             private: true,
             growsDown: false,
-            mlockMode: MLOCK_NONE,
+            mlockMode: MLockMode::MlockNone,
             kernel: true,
             hint: String::from("Kernel Space"),
             id: None,
@@ -151,6 +156,7 @@ impl MemoryManagerInternal {
             vmas: vmas,
             brkInfo: BrkInfointernal::default(),
             usageAS: 0,
+            lockedAS: 0,
             layout: layout,
             curRSS: 0,
             maxRSS: 0,
@@ -453,6 +459,125 @@ impl MemoryManager {
         return res;
     }
 
+    // MLock implements the semantics of Linux's mlock()/mlock2()/munlock(),
+    // depending on mode.
+    pub fn Mlock(&self, _task: &Task, addr: u64, len: u64, mode: MLockMode) -> Result<()> {
+        let la = match Addr(len + Addr(addr).PageOffset()).RoundUp() {
+            Ok(l) => l.0,
+            Err(_) => return Err(Error::SysError(SysErr::EINVAL))
+        };
+
+        let ar = match Addr(addr).RoundDown().unwrap().ToRange(la) {
+            Ok(r) => r,
+            Err(_) => return Err(Error::SysError(SysErr::EINVAL))
+        };
+
+        let lock = self.Lock();
+        let _l = lock.lock();
+
+        if ar.Len() == 0 {
+            return Ok(())
+        }
+
+        let mut unmapped = false;
+
+        let mut vseg = self.read().vmas.FindSeg(ar.Start());
+        loop {
+            if !vseg.Ok() {
+                unmapped = true;
+                break;
+            }
+
+            vseg = self.write().vmas.Isolate(&vseg, &ar);
+            let mut vma = vseg.Value();
+            let prevMode = vma.mlockMode;
+            vma.mlockMode = mode;
+            vseg.SetValue(vma);
+            if mode != MLockMode::MlockNone && prevMode == MLockMode::MlockNone {
+                self.write().lockedAS += vseg.Range().Len();
+            } else if mode == MLockMode::MlockNone && prevMode != MLockMode::MlockNone {
+                self.write().lockedAS -= vseg.Range().Len();
+            }
+
+            if ar.End() <= vseg.Range().End() {
+                break;
+            }
+            let (vsegTmp, _) = vseg.NextNonEmpty();
+            vseg = vsegTmp;
+        }
+
+        self.write().vmas.MergeRange(&ar);
+        self.write().vmas.MergeAdjacent(&ar);
+        if unmapped {
+            return Err(Error::SysError(SysErr::ENOMEM))
+        }
+
+        // todo: populate the pagetable
+        // if mode == MLockMode::MlockEager {}
+
+        let mut vseg = self.read().vmas.FindSeg(ar.Start());
+        while vseg.Ok() && vseg.Range().Start() < ar.End() {
+            let vma = vseg.Value();
+            // Linux: mm/gup.c:__get_user_pages() returns EFAULT in this
+            // case, which is converted to ENOMEM by mlock.
+            if !vma.effectivePerms.Any() {
+                return Err(Error::SysError(SysErr::ENOMEM))
+            }
+
+            if let Some(iops) = vma.mappable.clone() {
+                let mr = ar.Intersect(&vseg.Range());
+                let fstart = mr.Start() - vseg.Range().Start() + vma.offset;
+
+                // todo: fix the Munlock, when there are multiple process lock/unlock a memory range.
+                // with current implementation, the first unlock will work.
+                iops.Mlock(fstart, mr.Len(), mode)?;
+            }
+
+            vseg = vseg.NextSeg()
+        }
+
+        return Ok(())
+    }
+
+    // MLockAll implements the semantics of Linux's mlockall()/munlockall(),
+    // depending on opts.
+    pub fn MlockAll(&self, _task: &Task, opts: &MLockAllOpts) -> Result<()> {
+        if !opts.Current && !opts.Future {
+            return Err(Error::SysError(SysErr::EINVAL))
+        }
+
+         // todo: fully support opts.Current and opts.Future
+        // it is not supported now
+        let mode = opts.Mode;
+        let lock = self.Lock();
+        let _l = lock.lock();
+
+        let mut vseg = self.read().vmas.FirstSeg();
+        while vseg.Ok() {
+            let mut vma = vseg.Value();
+            vma.mlockMode = mode;
+            vseg.SetValue(vma.clone());
+
+            if !vma.effectivePerms.Any() {
+                vseg = vseg.NextSeg();
+                continue;
+            }
+
+            if let Some(iops) = vma.mappable.clone() {
+                let mr = vseg.Range();
+                let fstart = mr.Start() - vseg.Range().Start() + vma.offset;
+
+                // todo: fix the Munlock, when there are multiple process lock/unlock a memory range.
+                // with current implementation, the first unlock will work.
+                iops.Mlock(fstart, mr.Len(), mode)?;
+            }
+
+            vseg = vseg.NextSeg();
+        }
+
+        return Ok(())
+    }
+
     pub fn MSync(&self, _task: &Task, addr: u64, length: u64, opts: &MSyncOpts) -> Result<()> {
         if addr != Addr(addr).RoundDown()?.0 {
             return Err(Error::SysError(SysErr::EINVAL))
@@ -470,7 +595,7 @@ impl MemoryManager {
         let ar = Range::New(addr, la);
 
         let lock = self.Lock();
-        let mut l = lock.lock();
+        let _l = lock.lock();
 
         let mut vseg = self.read().vmas.LowerBoundSeg(ar.Start());
 
@@ -482,7 +607,6 @@ impl MemoryManager {
         let mut lastEnd = ar.Start();
         loop {
             if !vseg.Ok() {
-                core::mem::drop(l);
                 unmaped = true;
                 break;
             }
@@ -493,7 +617,7 @@ impl MemoryManager {
 
             lastEnd = vseg.Range().End();
             let vma = vseg.Value();
-            if opts.Invalidate && vma.mlockMode != MLOCK_NONE {
+            if opts.Invalidate && vma.mlockMode != MLockMode::MlockNone {
                 return Err(Error::SysError(SysErr::EBUSY))
             }
 
@@ -510,7 +634,6 @@ impl MemoryManager {
                 let fops = vma.mappable.clone().unwrap();
 
                 let mr = ar.Intersect(&vseg.Range());
-                core::mem::drop(l);
 
                 let fstart = mr.Start() - vseg.Range().Start() + vma.offset;
                 fops.MSync(&Range::New(fstart, mr.Len()), msyncType)?;
@@ -519,7 +642,6 @@ impl MemoryManager {
                     break;
                 }
 
-                l = lock.lock();
                 vseg = self.read().vmas.LowerBoundSeg(lastEnd)
             } else {
                 if lastEnd >= ar.End() {
@@ -848,7 +970,7 @@ impl MemoryManager {
             let mut dstPt = dstPt.write();
 
             while srcvseg.Ok() {
-                let vma = srcvseg.Value();
+                let mut vma = srcvseg.Value();
                 let vmaAR = srcvseg.Range();
 
                 if vma.mappable.is_some() {
@@ -863,6 +985,8 @@ impl MemoryManager {
                         _ => (),
                     }
                 }
+
+                vma.mlockMode = MLockMode::MlockNone;
 
                 if vma.kernel == false {
                     //info!("vma kernel is {}, private is {}, hint is {}", vma.kernel, vma.private, vma.hint);
@@ -1015,6 +1139,16 @@ pub fn ToBlocks(bs: &mut StackVec<IoVec>, arr: &[u64]) {
     }
 
     bs.Push(IoVec::NewFromAddr(begin, (expect - begin) as usize));
+}
+
+// MLockAllOpts holds options to MLockAll.
+pub struct MLockAllOpts {
+    // If Current is true, change the memory-locking behavior of all mappings
+    // to Mode. If Future is true, upgrade the memory-locking behavior of all
+    // future mappings to Mode. At least one of Current or Future must be true.
+    pub Current: bool,
+    pub Future: bool,
+    pub Mode: MLockMode
 }
 
 #[cfg(test)]

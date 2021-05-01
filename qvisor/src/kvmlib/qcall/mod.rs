@@ -227,6 +227,9 @@ pub fn qCall(eventAddr: u64, event: &'static mut Event) -> QcallRet {
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::MSync(msg) } => {
             *ret = super::VMSpace::MSync(taskId.Addr(), msg.addr, msg.len, msg.flags) as u64;
         }
+        Event { taskId, interrupted: _, ref mut ret, msg: Msg::MAdvise(msg) } => {
+            *ret = super::VMSpace::MAdvise(taskId.Addr(), msg.addr, msg.len, msg.advise) as u64;
+        }
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::FDataSync(msg) } => {
             *ret = super::VMSpace::FDataSync(taskId.Addr(), msg.fd) as u64;
         }
@@ -354,8 +357,8 @@ pub fn qCall(eventAddr: u64, event: &'static mut Event) -> QcallRet {
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::Prctl(msg) } => {
             *ret = super::VMSpace::Prctl(taskId.Addr(), msg.option, msg.arg2, msg.arg3, msg.arg4, msg.arg5) as u64;
         }
-        Event { taskId, interrupted: _, ref mut ret, msg: Msg::Mlock(msg) } => {
-            *ret = super::VMSpace::Mlock(taskId.Addr(), msg.addr, msg.len) as u64;
+        Event { taskId, interrupted: _, ref mut ret, msg: Msg::Mlock2(msg) } => {
+            *ret = super::VMSpace::Mlock2(taskId.Addr(), msg.addr, msg.len, msg.flags) as u64;
         }
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::MUnlock(msg) } => {
             *ret = super::VMSpace::MUnlock(taskId.Addr(), msg.addr, msg.len) as u64;

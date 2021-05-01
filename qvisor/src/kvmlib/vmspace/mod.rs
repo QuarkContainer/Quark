@@ -1181,6 +1181,14 @@ impl VMSpace {
         return Self::GetRet(ret as i64);
     }
 
+    pub fn MAdvise(_taskId: u64, addr: u64, len: usize, advise: i32) -> i64 {
+        let ret = unsafe{
+            madvise(addr as *mut c_void, len, advise)
+        };
+
+        return Self::GetRet(ret as i64);
+    }
+
     pub fn Uname(_taskId: u64, buff: u64) -> i64 {
         let ret = unsafe{
             uname(buff as *mut utsname)
@@ -1500,9 +1508,10 @@ impl VMSpace {
         return Self::GetRet(ret as i64)
     }
 
-    pub fn Mlock(_taskId: u64, addr: u64, len: u64) -> i64 {
+    pub fn Mlock2(_taskId: u64, addr: u64, len: u64, flags: u32) -> i64 {
+        let nr = SysCallID::sys_mlock2 as usize;
         let ret = unsafe {
-            mlock(addr as *const c_void, len as size_t)
+            syscall3(nr, addr as usize, len as usize, flags as usize) as i64
         };
 
         return Self::GetRet(ret as i64)

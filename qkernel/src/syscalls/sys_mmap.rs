@@ -18,6 +18,7 @@ use alloc::sync::Arc;
 use super::super::task::*;
 use super::super::qlib::common::*;
 use super::super::memmgr::*;
+use super::super::memmgr::mm::*;
 use super::super::memmgr::syscalls::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::addr::*;
@@ -56,7 +57,7 @@ pub fn SysMmap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         MaxPerms: AccessType::AnyAccess(),
         GrowsDown: flags & MmapFlags::MAP_GROWSDOWN != 0,
         Precommit: flags & MmapFlags::MAP_POPULATE != 0,
-        MLockMode: 0,
+        MLockMode: MLockMode::default(),
         Kernel: false,
         Mapping: None,
         Mappable: None,
@@ -64,7 +65,7 @@ pub fn SysMmap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     };
 
     if flags & MmapFlags::MAP_LOCKED != 0 {
-        opts.MLockMode = MLOCK_EAGER;
+        opts.MLockMode = MLockMode::MlockEager;
     }
 
     if !anon {
@@ -138,7 +139,7 @@ pub fn SysBrk(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 }
 
 // Madvise implements linux syscall madvise(2).
-pub fn SysMadvise(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+pub fn SysMadvise(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg0 as u64;
     let length = args.arg1 as u64;
     let adv = args.arg2 as i32;
@@ -157,20 +158,19 @@ pub fn SysMadvise(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     match adv {
         MAdviseOp::MADV_DONTNEED => {
-            //todo: DeCommit the memory
-            return Ok(0)
+            task.mm.MAdvise(addr, length, adv)?;
         }
         MAdviseOp::MADV_HUGEPAGE | MAdviseOp::MADV_NOHUGEPAGE => {
-            return Ok(0)
+            task.mm.MAdvise(addr, length, adv)?;
         }
         MAdviseOp::MADV_MERGEABLE | MAdviseOp::MADV_UNMERGEABLE => {
-            return Ok(0)
+            task.mm.MAdvise(addr, length, adv)?;
         }
         MAdviseOp::MADV_DONTDUMP | MAdviseOp::MADV_DODUMP => {
-            return Ok(0)
+            task.mm.MAdvise(addr, length, adv)?;
         }
         MAdviseOp::MADV_NORMAL | MAdviseOp::MADV_RANDOM | MAdviseOp::MADV_SEQUENTIAL | MAdviseOp::MADV_WILLNEED => {
-            return Ok(0)
+            task.mm.MAdvise(addr, length, adv)?;
         }
         MAdviseOp::MADV_REMOVE | MAdviseOp::MADV_DOFORK | MAdviseOp::MADV_DONTFORK => {
             return Err(Error::SysError(SysErr::ENOSYS));
@@ -183,6 +183,8 @@ pub fn SysMadvise(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Err(Error::SysError(SysErr::EINVAL));
         }
     }
+
+    return Ok(0)
 }
 
 // Mremap implements linux syscall mremap(2).
@@ -220,6 +222,85 @@ pub fn SysMremap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         Ok(addr) => Ok(addr as i64),
         Err(e) => Err(e),
     }
+}
+
+// Mlock implements linux syscall mlock(2).
+pub fn SysMlock(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let addr = args.arg0 as u64;
+    let length = args.arg1 as i64;
+    if length < 0 {
+        return Err(Error::SysError(SysErr::EINVAL))
+    }
+
+    task.mm.Mlock(task, addr, length as u64, MLockMode::MlockEager)?;
+    return Ok(0)
+}
+
+// Mlock2 implements linux syscall mlock2(2).
+pub fn SysMlock2(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let addr = args.arg0 as u64;
+    let length = args.arg1 as i64;
+    let flags = args.arg2 as u32;
+
+    if length < 0 {
+        return Err(Error::SysError(SysErr::EINVAL))
+    }
+
+    if flags & !MLOCK_ONFAULT != 0 {
+        return Err(Error::SysError(SysErr::EINVAL))
+    }
+
+    let mut mode = MLockMode::MlockEager;
+    if flags & MLOCK_ONFAULT != 0 {
+        mode = MLockMode::MlockLazy;
+    }
+
+    task.mm.Mlock(task, addr, length as u64, mode)?;
+    return Ok(0)
+}
+
+// Munlock implements linux syscall munlock(2).
+pub fn SysMunlock(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let addr = args.arg0 as u64;
+    let length = args.arg1 as i64;
+
+    if length < 0 {
+        return Err(Error::SysError(SysErr::EINVAL))
+    }
+
+    task.mm.Mlock(task, addr, length as u64, MLockMode::MlockNone)?;
+    return Ok(0)
+}
+
+pub fn SysMlockall(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let flags = args.arg0 as u32;
+
+    if flags & !(LibcConst::MCL_CURRENT | LibcConst::MCL_FUTURE | LibcConst::MCL_ONFAULT) as u32 != 0 {
+        return Err(Error::SysError(SysErr::EINVAL))
+    }
+
+    let mut mode = MLockMode::MlockEager;
+    if flags & MLOCK_ONFAULT != 0 {
+        mode = MLockMode::MlockLazy;
+    }
+
+    task.mm.MlockAll(task, &MLockAllOpts {
+        Current: flags & LibcConst::MCL_CURRENT as u32 != 0,
+        Future: flags & LibcConst::MCL_FUTURE as u32 != 0,
+        Mode: mode,
+    })?;
+
+    return Ok(0)
+}
+
+pub fn SysMunlockall(task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
+    task.mm.MlockAll(task, &MLockAllOpts {
+        Current: true,
+        Future: true,
+        Mode: MLockMode::MlockNone,
+    })?;
+
+    return Ok(0)
 }
 
 // Msync implements Linux syscall msync(2).

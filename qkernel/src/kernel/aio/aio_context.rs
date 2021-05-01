@@ -128,7 +128,7 @@ impl MemoryManager {
             MaxPerms: AccessType::ReadOnly(),
             GrowsDown: false,
             Precommit: false,
-            MLockMode: 0,
+            MLockMode: MLockMode::default(),
             Kernel: false,
             Mapping: Some(Arc::new(AIOMapping{})),
             Mappable: None,

@@ -251,10 +251,10 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     NotImplementSyscall, //sys_sched_get_priority_max,
     NotImplementSyscall, //sys_sched_get_priority_min,
     NotImplementSyscall, //sys_sched_rr_get_interval,
-    NotImplementSyscall, //sys_mlock,
-    NotImplementSyscall, //sys_munlock,    //150
-    NotImplementSyscall, //sys_mlockall,
-    NotImplementSyscall, //sys_munlockall,
+    SysMlock, //sys_mlock,
+    SysMunlock, //sys_munlock,    //150
+    SysMlockall, //sys_mlockall,
+    SysMunlockall, //sys_munlockall,
     NotImplementSyscall, //sys_vhangup,
     NotImplementSyscall, //sys_modify_ldt,
     NotImplementSyscall, //sys_pivot_root,
@@ -427,7 +427,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     NotImplementSyscall, //stub_execveat,
     NotImplementSyscall, //userfaultfd,
     SysMembarrier, //membarrier,
-    NotImplementSyscall, //mlock2,
+    SysMlock2, //mlock2,
     NotImplementSyscall, //copy_file_range,
     NotImplementSyscall, //preadv2,
     NotImplementSyscall, //pwritev2,

@@ -610,7 +610,17 @@ impl HostSpace {
             flags,
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        return HostSpace::HCall(&mut msg) as i64;
+    }
+
+    pub fn Madvise(addr: u64, len: usize, advise: i32) -> i64 {
+        let mut msg = Msg::MAdvise(MAdvise {
+            addr,
+            len,
+            advise,
+        });
+
+        return HostSpace::HCall(&mut msg) as i64;
     }
 
     pub fn FDataSync(fd: i32) -> i64 {
@@ -1135,13 +1145,14 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn Mlock(addr: u64, len: u64) -> i64 {
-        let mut msg = Msg::Mlock(Mlock {
+    pub fn Mlock2(addr: u64, len: u64, flags: u32) -> i64 {
+        let mut msg = Msg::Mlock2(Mlock2 {
             addr,
             len,
+            flags,
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        return HostSpace::HCall(&mut msg) as i64;
     }
 
     pub fn MUnlock(addr: u64, len: u64) -> i64 {
@@ -1150,7 +1161,7 @@ impl HostSpace {
             len,
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        return HostSpace::HCall(&mut msg) as i64;
     }
 
     pub fn Rename(oldpath: u64, newpath: u64) -> i64 {
