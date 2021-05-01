@@ -81,6 +81,9 @@ pub enum Msg {
     Unlinkat(Unlinkat),
     Mkdir(Mkdir),
     Mkdirat(Mkdirat),
+    SysSync(SysSync),
+    SyncFs(SyncFs),
+    SyncFileRange(SyncFileRange),
     FSync(FSync),
     MSync(MSync),
     MAdvise(MAdvise),
@@ -577,6 +580,22 @@ pub struct Mkdirat {
     pub mode_: u32,
     pub uid: u32,
     pub gid: u32,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct SysSync {}
+
+#[derive(Clone, Default, Debug)]
+pub struct SyncFs {
+    pub fd: i32,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct SyncFileRange {
+    pub fd: i32,
+    pub offset: i64,
+    pub nbytes: i64,
+    pub flags: u32,
 }
 
 #[derive(Clone, Default, Debug)]

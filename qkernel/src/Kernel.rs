@@ -595,6 +595,31 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
+    pub fn SysSync() -> i64 {
+        let mut msg = Msg::SysSync(SysSync {});
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
+    pub fn SyncFs(fd: i32) -> i64 {
+        let mut msg = Msg::SyncFs(SyncFs {
+            fd,
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
+    pub fn SyncFileRange(fd: i32, offset: i64, nbytes: i64, flags: u32) -> i64 {
+        let mut msg = Msg::SyncFileRange(SyncFileRange {
+            fd,
+            offset,
+            nbytes,
+            flags,
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
     pub fn FSync(fd: i32) -> i64 {
         let mut msg = Msg::FSync(FSync {
             fd,

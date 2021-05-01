@@ -262,9 +262,9 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysPrctl, //sys_prctl,
     SysArchPrctl, //sys_arch_prctl,
     NotImplementSyscall, //sys_adjtimex,
-    SysSetrlimit, //sys_setrlimit,
+    SysSetrlimit, //sys_setrlimit, // 160
     NotImplementSyscall, //sys_chroot,
-    NotImplementSyscall, //sys_sync,
+    SysSync, //sys_sync,
     NotImplementSyscall, //sys_acct,
     NotImplementSyscall, //sys_settimeofday,
     NotImplementSyscall, //sys_mount,
@@ -272,7 +272,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     NotImplementSyscall, //sys_swapon,
     NotImplementSyscall, //sys_swapoff,
     NotImplementSyscall, //sys_reboot,
-    SysSethostname, //sys_sethostname,    //160
+    SysSethostname, //sys_sethostname,    //170
     SysSetdomainname, //sys_setdomainname,
     NotImplementSyscall, //sys_iopl,
     NotImplementSyscall, //sys_ioperm,
@@ -379,7 +379,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysGetRobustList, //sys_get_robust_list,
     SysSplice, //sys_splice,
     NotImplementSyscall, //sys_tee,
-    NotImplementSyscall, //sys_sync_file_range,
+    SysSyncFileRange, //sys_sync_file_range,
     NotImplementSyscall, //sys_vmsplice,
     NotImplementSyscall, //sys_move_pages,
     SysUtimensat, //sys_utimensat,    //280
@@ -408,7 +408,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     NotImplementSyscall, //sys_name_to_handle_at,
     NotImplementSyscall, //sys_open_by_handle_at,
     NotImplementSyscall, //sys_clock_adjtime,
-    NotImplementSyscall, //sys_syncfs,
+    SysSyncFs, //sys_syncfs,
     SysSendMMsg, //sys_sendmmsg,
     NotImplementSyscall, //sys_setns,
     SysGetcpu, //sys_getcpu,
