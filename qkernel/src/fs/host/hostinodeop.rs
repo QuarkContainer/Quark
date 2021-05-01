@@ -393,6 +393,17 @@ impl HostInodeOp {
         return Ok(())
     }
 
+    pub fn SyncFileRange(&self, offset: i64, nbytes: i64, flags: u32) -> Result<()> {
+        let fd = self.HostFd();
+
+        let ret = HostSpace::SyncFileRange(fd, offset, nbytes, flags);
+        if ret < 0 {
+            return Err(Error::SysError(-ret as i32))
+        }
+
+        return Ok(())
+    }
+
     pub fn Downgrade(&self) -> HostInodeOpWeak {
         return HostInodeOpWeak(Arc::downgrade(&self.0))
     }

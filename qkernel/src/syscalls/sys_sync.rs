@@ -27,7 +27,7 @@ pub fn SysSync(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
 }
 
 // Syncfs implements linux system call syncfs(2).
-pub fn SyncFs(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+pub fn SysSyncFs(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let fd = args.arg0 as i32;
 
     let file = task.GetFile(fd)?;
@@ -39,6 +39,27 @@ pub fn SyncFs(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         },
         Some(h) => {
             h.SyncFs()?;
+            return Ok(0)
+        }
+    }
+}
+
+// SyncFileRange implements linux syscall sync_file_rage(2)
+pub fn SysSyncFileRange(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let fd = args.arg0 as i32;
+    let offset = args.arg1 as i64;
+    let nbytes = args.arg2 as i64;
+    let uflags = args.arg3 as u32;
+
+    let file = task.GetFile(fd)?;
+    let inode = file.Dirent.Inode();
+    let iops = inode.lock().InodeOp.clone();
+    match iops.as_any().downcast_ref::<HostInodeOp>() {
+        None => {
+            return Ok(0)
+        },
+        Some(h) => {
+            h.SyncFileRange(offset, nbytes, uflags)?;
             return Ok(0)
         }
     }

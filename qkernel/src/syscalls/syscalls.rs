@@ -379,7 +379,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysGetRobustList, //sys_get_robust_list,
     SysSplice, //sys_splice,
     NotImplementSyscall, //sys_tee,
-    NotImplementSyscall, //sys_sync_file_range,
+    SysSyncFileRange, //sys_sync_file_range,
     NotImplementSyscall, //sys_vmsplice,
     NotImplementSyscall, //sys_move_pages,
     SysUtimensat, //sys_utimensat,    //280
@@ -408,7 +408,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     NotImplementSyscall, //sys_name_to_handle_at,
     NotImplementSyscall, //sys_open_by_handle_at,
     NotImplementSyscall, //sys_clock_adjtime,
-    SyncFs, //sys_syncfs,
+    SysSyncFs, //sys_syncfs,
     SysSendMMsg, //sys_sendmmsg,
     NotImplementSyscall, //sys_setns,
     SysGetcpu, //sys_getcpu,

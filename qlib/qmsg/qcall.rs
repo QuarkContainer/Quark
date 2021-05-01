@@ -83,6 +83,7 @@ pub enum Msg {
     Mkdirat(Mkdirat),
     SysSync(SysSync),
     SyncFs(SyncFs),
+    SyncFileRange(SyncFileRange),
     FSync(FSync),
     MSync(MSync),
     MAdvise(MAdvise),
@@ -587,6 +588,14 @@ pub struct SysSync {}
 #[derive(Clone, Default, Debug)]
 pub struct SyncFs {
     pub fd: i32,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct SyncFileRange {
+    pub fd: i32,
+    pub offset: i64,
+    pub nbytes: i64,
+    pub flags: u32,
 }
 
 #[derive(Clone, Default, Debug)]
