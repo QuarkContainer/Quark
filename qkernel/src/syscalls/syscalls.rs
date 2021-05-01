@@ -424,17 +424,17 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     NotImplementSyscall, //sys_memfd_create,
     NotImplementSyscall, //sys_kexec_file_load,//320
     NotImplementSyscall, //sys_bpf,
-    NotImplementSyscall, //stub_execveat,
-    NotImplementSyscall, //userfaultfd,
-    SysMembarrier, //membarrier,
+    NotImplementSyscall, //sys_stub_execveat,
+    NotImplementSyscall, //sys_userfaultfd,
+    SysMembarrier, //sys_membarrier,
     SysMlock2, //mlock2,
-    NotImplementSyscall, //copy_file_range,
-    NotImplementSyscall, //preadv2,
-    NotImplementSyscall, //pwritev2,
-    NotImplementSyscall, //pkey_mprotect,
-    NotImplementSyscall, //pkey_alloc,//330
-    NotImplementSyscall, //pkey_free,
-    SysStatx, //statx,
+    NotImplementSyscall, //sys_copy_file_range,
+    NotImplementSyscall, //sys_preadv2,
+    NotImplementSyscall, //sys_pwritev2,
+    NotImplementSyscall, //sys_pkey_mprotect,
+    NotImplementSyscall, //sys_pkey_alloc,//330
+    NotImplementSyscall, //sys_pkey_free,
+    SysStatx, //sys_statx,
 ];
 
 pub fn NotImplementSyscall(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
