@@ -382,6 +382,17 @@ impl HostInodeOp {
         return Ok(ret)
     }
 
+    pub fn SyncFs(&self) -> Result<()> {
+        let fd = self.HostFd();
+
+        let ret = HostSpace::SyncFs(fd);
+        if ret < 0 {
+            return Err(Error::SysError(-ret as i32))
+        }
+
+        return Ok(())
+    }
+
     pub fn Downgrade(&self) -> HostInodeOpWeak {
         return HostInodeOpWeak(Arc::downgrade(&self.0))
     }

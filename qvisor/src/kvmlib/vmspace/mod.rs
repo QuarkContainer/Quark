@@ -880,6 +880,29 @@ impl VMSpace {
         return fdInfo.IoCtl(taskId, cmd, argp)
     }
 
+    pub fn SysSync(_taskId: u64) -> i64 {
+        // as quark running inside container, assume sys_sync only works for the current fs namespace
+        // todo: confirm this
+        unsafe {
+            libc::sync()
+        };
+
+        return 0;
+    }
+
+    pub fn SyncFs(_taskId: u64, fd: i32) -> i64 {
+        let osfd = match Self::GetOsfd(fd) {
+            Some(fd) => fd,
+            None => return -SysErr::EBADF as i64,
+        };
+
+        let ret = unsafe {
+            libc::syncfs(osfd) as i64
+        };
+
+        return Self::GetRet(ret);
+    }
+
     pub fn FSync(taskId: u64, fd: i32) -> i64 {
         let fdInfo = match Self::GetFdInfo(fd) {
             Some(fdInfo) => fdInfo,
