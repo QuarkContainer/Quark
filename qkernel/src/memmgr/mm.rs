@@ -129,6 +129,7 @@ impl MemoryManagerInternal {
             maxPerms: AccessType::ReadWrite(),
             private: true,
             growsDown: false,
+            dontfork: false,
             mlockMode: MLockMode::MlockNone,
             kernel: true,
             hint: String::from("Kernel Space"),
@@ -971,6 +972,14 @@ impl MemoryManager {
 
             while srcvseg.Ok() {
                 let mut vma = srcvseg.Value();
+
+                if vma.dontfork {
+                    mmIntern2.usageAS -= srcvseg.Range().Len();
+                    let tmp = srcvseg.NextSeg();
+                    srcvseg = tmp;
+                    continue;
+                }
+
                 let vmaAR = srcvseg.Range();
 
                 if vma.mappable.is_some() {

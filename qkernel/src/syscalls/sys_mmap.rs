@@ -141,7 +141,7 @@ pub fn SysBrk(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 // Madvise implements linux syscall madvise(2).
 pub fn SysMadvise(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg0 as u64;
-    let length = args.arg1 as u64;
+    let length = args.arg1 as i64;
     let adv = args.arg2 as i32;
 
     // "The Linux implementation requires that the address addr be
@@ -154,7 +154,14 @@ pub fn SysMadvise(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Ok(0)
     }
 
-    //let length = Addr(length).RoundUp()?.0;
+    if length < 0 {
+        return Err(Error::SysError(SysErr::EINVAL))
+    }
+
+    let length = match Addr(length as u64).RoundUp() {
+        Err(_) => return Err(Error::SysError(SysErr::EINVAL)),
+        Ok(l) => l.0,
+    };
 
     match adv {
         MAdviseOp::MADV_DONTNEED => {
@@ -167,12 +174,20 @@ pub fn SysMadvise(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             task.mm.MAdvise(task, addr, length, adv)?;
         }
         MAdviseOp::MADV_DONTDUMP | MAdviseOp::MADV_DODUMP => {
-            task.mm.MAdvise(task, addr, length, adv)?;
+            // Core dumping isn't implemented, so do nothing
         }
         MAdviseOp::MADV_NORMAL | MAdviseOp::MADV_RANDOM | MAdviseOp::MADV_SEQUENTIAL | MAdviseOp::MADV_WILLNEED => {
             task.mm.MAdvise(task, addr, length, adv)?;
         }
-        MAdviseOp::MADV_REMOVE | MAdviseOp::MADV_DOFORK | MAdviseOp::MADV_DONTFORK => {
+        MAdviseOp::MADV_DONTFORK => {
+            task.mm.SetDontFork(task, addr, length, true)?;
+        }
+        MAdviseOp::MADV_DOFORK => {
+            task.mm.SetDontFork(task, addr, length, false)?;
+        }
+        MAdviseOp::MADV_REMOVE => {
+            // These "suggestions" have application-visible side effects, so we
+            // have to indicate that we don't support them.
             return Err(Error::SysError(SysErr::ENOSYS));
         }
         MAdviseOp::MADV_HWPOISON => {
