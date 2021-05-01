@@ -110,6 +110,7 @@ impl MemoryManagerInternal {
             maxPerms: opts.MaxPerms,
             private: opts.Private,
             growsDown: opts.GrowsDown,
+            dontfork: false,
             mlockMode: opts.MLockMode,
             kernel: opts.Kernel,
             hint: opts.Hint.to_string(),
@@ -330,6 +331,9 @@ pub struct VMA {
     // metag, none of which we currently support.
     pub growsDown: bool,
 
+    // dontfork is the MADV_DONTFORK setting for this vma configured by madvise().
+    pub dontfork: bool,
+
     pub mlockMode: MLockMode,
 
     pub kernel: bool,
@@ -369,6 +373,7 @@ impl VMA {
             maxPerms: self.maxPerms,
             private: self.private,
             growsDown: self.growsDown,
+            dontfork: self.dontfork,
             mlockMode: self.mlockMode,
             kernel: self.kernel,
             hint: self.hint.to_string(),
@@ -480,6 +485,7 @@ impl AreaValue for VMA {
             vma1.effectivePerms != vma2.effectivePerms ||
             vma1.private != vma2.private ||
             vma1.growsDown != vma2.growsDown ||
+            vma1.dontfork != vma2.dontfork ||
             vma1.mlockMode != vma2.mlockMode ||
             vma1.kernel != vma2.kernel ||
             vma1.numaPolicy != vma2.numaPolicy ||

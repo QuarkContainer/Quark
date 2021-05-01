@@ -672,6 +672,35 @@ impl MemoryManager {
         return Ok(())
     }
 
+    pub fn SetDontFork(&self, _task: &Task, addr: u64, length: u64, dontfork: bool) -> Result<()> {
+        let ar = match Addr(addr).ToRange(length) {
+            Err(_) => return Err(Error::SysError(SysErr::EINVAL)),
+            Ok(r) => r
+        };
+
+        let lock = self.Lock();
+        let _l = lock.lock();
+
+        let mut vseg = self.read().vmas.LowerBoundSeg(ar.Start());
+        while vseg.Ok() && vseg.Range().Start() < ar.End() {
+            vseg = self.write().vmas.Isolate(&vseg, &ar);
+            let mut vma = vseg.Value();
+            vma.dontfork = dontfork;
+            vseg.SetValue(vma);
+
+            vseg = vseg.NextSeg();
+        }
+
+        self.write().vmas.MergeRange(&ar);
+        self.write().vmas.MergeAdjacent(&ar);
+
+        if self.read().vmas.SpanRange(&ar) != ar.Len() {
+            return Err(Error::SysError(SysErr::ENOMEM))
+        }
+
+        return Ok(())
+    }
+
     pub fn VirtualMemorySizeRange(&self, ar: &Range) -> u64 {
         return self.read().vmas.SpanRange(&ar);
     }
