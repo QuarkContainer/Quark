@@ -37,6 +37,7 @@ use super::super::super::qlib::addr::*;
 use super::super::super::kernel::waiter::queue::*;
 use super::super::super::Kernel::HostSpace;
 use super::super::super::IOURING;
+use super::super::super::memmgr::*;
 
 use super::super::attr::*;
 use super::*;
@@ -507,6 +508,48 @@ impl HostInodeOp {
             let ret = HostSpace::MSync(r.Start(), r.Len() as usize, msyncType.MSyncFlags());
             if ret < 0 {
                 return Err(Error::SysError(ret as i32))
+            }
+        }
+
+        return Ok(())
+    }
+
+    pub fn MAdvise(&self, start: u64, len: u64, advise: i32) -> Result<()> {
+        let ranges = self.GetPhyRanges(&Range::New(start, len));
+        for r in &ranges {
+            let ret = HostSpace::Madvise(r.Start(), r.Len() as usize, advise);
+            if ret < 0 {
+                return Err(Error::SysError(ret as i32))
+            }
+        }
+
+        return Ok(())
+    }
+
+    pub fn Mlock(&self, start: u64, len: u64, mode: MLockMode) -> Result<()> {
+        let ranges = self.GetPhyRanges(&Range::New(start, len));
+        for r in &ranges {
+            match mode {
+                MLockMode::MlockNone => {
+                    let ret = HostSpace::MUnlock(r.Start(), r.Len());
+                    if ret < 0 {
+                        return Err(Error::SysError(ret as i32))
+                    }
+                }
+                MLockMode::MlockEager => {
+                    let flags = 0;
+                    let ret = HostSpace::Mlock2(r.Start(), r.Len(), flags);
+                    if ret < 0 {
+                        return Err(Error::SysError(ret as i32))
+                    }
+                }
+                MLockMode::MlockLazy => {
+                    let flags = MLOCK_ONFAULT;
+                    let ret = HostSpace::Mlock2(r.Start(), r.Len(), flags);
+                    if ret < 0 {
+                        return Err(Error::SysError(ret as i32))
+                    }
+                }
             }
         }
 

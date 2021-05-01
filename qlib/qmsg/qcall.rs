@@ -83,6 +83,7 @@ pub enum Msg {
     Mkdirat(Mkdirat),
     FSync(FSync),
     MSync(MSync),
+    MAdvise(MAdvise),
     FDataSync(FDataSync),
     Uname(Uname),
     Umask(Umask),
@@ -131,7 +132,7 @@ pub enum Msg {
     Fchdir(Fchdir),
     Fadvise(Fadvise),
     Prctl(Prctl),
-    Mlock(Mlock),
+    Mlock2(Mlock2),
     MUnlock(MUnlock),
     IOSetup(IOSetup),
     IOSubmit(IOSubmit),
@@ -591,6 +592,13 @@ pub struct MSync {
 }
 
 #[derive(Clone, Default, Debug)]
+pub struct MAdvise {
+    pub addr: u64,
+    pub len: usize,
+    pub advise: i32,
+}
+
+#[derive(Clone, Default, Debug)]
 pub struct FDataSync {
     pub fd: i32,
 }
@@ -859,9 +867,10 @@ pub struct Prctl {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct Mlock {
+pub struct Mlock2 {
     pub addr: u64,
     pub len: u64,
+    pub flags: u32,
 }
 
 #[derive(Clone, Default, Debug)]

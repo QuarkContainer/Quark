@@ -25,6 +25,7 @@ use super::super::qlib::range::*;
 use super::super::qlib::linux::limits::*;
 use super::*;
 
+#[derive(Debug)]
 pub struct MSyncOpts {
     // Sync has the semantics of MS_SYNC.
     pub Sync: bool,
@@ -130,7 +131,7 @@ impl MemoryManager {
             VDSO: false,
             GrowsDown: true,
             Precommit: false,
-            MLockMode: MLOCK_NONE,
+            MLockMode: MLockMode::default(),
             Kernel: false,
             Mapping: None,
             Mappable: None,
@@ -245,8 +246,7 @@ impl MemoryManager {
                 VDSO: false,
                 GrowsDown: vma.growsDown,
                 Precommit: false,
-                MLockMode: 0,
-                //vma.MLockMode,
+                MLockMode: MLockMode::default(),
                 Kernel: false,
                 Mapping: vma.id.clone(),
                 Mappable: vma.mappable.clone(),
@@ -587,7 +587,7 @@ impl MemoryManager {
                 VDSO: false,
                 GrowsDown: false,
                 Precommit: false,
-                MLockMode: 0,
+                MLockMode: MLockMode::default(),
                 Kernel: false,
                 Mapping: None,
                 Mappable: None,
@@ -637,6 +637,37 @@ impl MemoryManager {
             Kind: KeyKind::KindSharedMappable,
             Addr: phyAddr,
         })
+    }
+
+    pub fn MAdvise(&self, addr: u64, length: u64, advise: i32) -> Result<()> {
+        let ar = match Addr(addr).ToRange(length) {
+            Err(_) => return Err(Error::SysError(SysErr::EINVAL)),
+            Ok(r) => r
+        };
+
+        let lock = self.Lock();
+        let _l = lock.lock();
+
+        let mut vseg = self.read().vmas.LowerBoundSeg(ar.Start());
+        while vseg.Ok() && vseg.Range().Start() < ar.End() {
+            let vma = vseg.Value();
+            if vma.mlockMode != MLockMode::MlockNone && advise == MAdviseOp::MADV_DONTNEED {
+                return Err(Error::SysError(SysErr::EINVAL))
+            }
+
+            if let Some(iops) = vma.mappable.clone() {
+                let mr = ar.Intersect(&vseg.Range());
+                let fstart = mr.Start() - vseg.Range().Start() + vma.offset;
+
+                // todo: fix the Madvise/MADV_DONTNEED, when there are multiple process MAdviseOp::MADV_DONTNEED
+                // with current implementation, the first Madvise/MADV_DONTNEED will work.
+                iops.MAdvise(fstart, mr.Len(), advise)?;
+            }
+
+            vseg = vseg.NextSeg();
+        }
+
+        return Ok(())
     }
 
     pub fn VirtualMemorySizeRange(&self, ar: &Range) -> u64 {

@@ -36,30 +36,37 @@ use super::task::*;
 use super::fs::file::*;
 use self::mapping::*;
 
-pub type MLockMode = i32;
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub enum MLockMode {
+    // MLockNone specifies that a mapping has no memory locking behavior.
+    //
+    // This must be the zero value for MLockMode.
+    MlockNone,
 
-// MLockNone specifies that a mapping has no memory locking behavior.
-//
-// This must be the zero value for MLockMode.
-pub const MLOCK_NONE: MLockMode = 0;
+    // MLockEager specifies that a mapping is memory-locked, as by mlock() or
+    // similar. Pages in the mapping should be made, and kept, resident in
+    // physical memory as soon as possible.
+    //
+    // MLockEager is analogous to Linux's VM_LOCKED.
+    MlockEager,
 
-// MLockEager specifies that a mapping is memory-locked, as by mlock() or
-// similar. Pages in the mapping should be made, and kept, resident in
-// physical memory as soon as possible.
-//
-// MLockEager is analogous to Linux's VM_LOCKED.
-pub const MLOCK_EAGER: MLockMode = 1;
+    // MLockLazy specifies that a mapping is memory-locked, as by mlock() or
+    // similar. Pages in the mapping should be kept resident in physical memory
+    // once they have been made resident due to e.g. a page fault.
+    //
+    // As of this writing, MLockLazy does not cause memory-locking to be
+    // requested from the host; in fact, it has virtually no effect, except for
+    // interactions between mlocked pages and other syscalls.
+    //
+    // MLockLazy is analogous to Linux's VM_LOCKED | VM_LOCKONFAULT.
+    MlockLazy,
+}
 
-// MLockLazy specifies that a mapping is memory-locked, as by mlock() or
-// similar. Pages in the mapping should be kept resident in physical memory
-// once they have been made resident due to e.g. a page fault.
-//
-// As of this writing, MLockLazy does not cause memory-locking to be
-// requested from the host; in fact, it has virtually no effect, except for
-// interactions between mlocked pages and other syscalls.
-//
-// MLockLazy is analogous to Linux's VM_LOCKED | VM_LOCKONFAULT.
-pub const MLOCK_LAZY: MLockMode = 2;
+impl Default for MLockMode {
+    fn default() -> Self {
+        return Self::MlockNone
+    }
+}
 
 // MappingIdentity controls the lifetime of a Mappable, and provides
 // information about the Mappable for /proc/[pid]/maps. It is distinct from
