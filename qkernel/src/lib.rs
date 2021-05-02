@@ -181,6 +181,11 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     //SHARESPACE.SetValue(CPULocal::CpuId(), 0, nr);
     let callId: SysCallID = unsafe { mem::transmute(nr as u64) };
 
+    let mut rflags = GetRflags();
+    rflags &= !KERNEL_FLAGS_CLEAR;
+    rflags |= KERNEL_FLAGS_SET;
+    SetRflags(rflags);
+
     //let tid = currTask.Thread().lock().id;
     let mut tid = 0;
     let mut pid = 0;
@@ -235,6 +240,11 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     PerfGoto(PerfType::User);
     currTask.PerfGofrom(PerfType::Kernel);
     currTask.PerfGoto(PerfType::User);
+
+    let mut rflags = currTask.GetPtRegs().r11;
+    rflags &= !USER_FLAGS_CLEAR;
+    rflags |= USER_FLAGS_SET;
+    SetRflags(rflags);
 
     //SHARESPACE.SetValue(CPULocal::CpuId(), 0, 0);
     SyscallRet(kernalRsp);

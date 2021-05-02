@@ -803,3 +803,29 @@ pub fn GetCpu() -> u32 {
 
     return (rcx & 0xfff) as u32;
 }
+
+#[inline(always)]
+pub fn GetRflags() -> u64 {
+    let rax: u64;
+    unsafe {
+        llvm_asm!("\
+            pushfq                  # push eflags into stack
+            pop rax                 # pop it into rax
+        " : "={rax}"(rax)
+        : : : "intel", "volatile")
+    };
+
+    return rax;
+}
+
+#[inline(always)]
+pub fn SetRflags(val: u64) {
+    let rax = val;
+    unsafe {
+        llvm_asm!("\
+            push rax
+            popfq
+        " : : "{rax}"(rax)
+        : : "intel", "volatile")
+    };
+}

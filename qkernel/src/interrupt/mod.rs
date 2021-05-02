@@ -154,6 +154,20 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, _errorC
         error!("ExceptionHandler  .... ev is {:?}, sf is {:x?}", ev, sf);
     }
 
+    let mut rflags = GetRflags();
+    rflags &= !KERNEL_FLAGS_CLEAR;
+    rflags |= KERNEL_FLAGS_SET;
+    SetRflags(rflags);
+
+    let regs = currTask.GetPtRegs();
+
+    defer!({
+        let mut rflags = regs.eflags;
+        rflags &= !USER_FLAGS_CLEAR;
+        rflags |= USER_FLAGS_SET;
+        SetRflags(rflags);
+    });
+
     match ev {
         ExceptionStackVec::DivideByZero => {
             let info = SignalInfo {
@@ -394,6 +408,23 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
 
     currTask.PerfGoto(PerfType::PageFault);
     defer!(Task::Current().PerfGofrom(PerfType::PageFault));
+
+    if fromUser {
+        let mut rflags = GetRflags();
+        rflags &= !KERNEL_FLAGS_CLEAR;
+        rflags |= KERNEL_FLAGS_SET;
+        SetRflags(rflags);
+    }
+
+    let regs = currTask.GetPtRegs();
+    defer!({
+        if fromUser {
+            let mut eflags = regs.eflags;
+            eflags &= !USER_FLAGS_CLEAR;
+            eflags |= USER_FLAGS_SET;
+            SetRflags(eflags);
+        }
+    });
 
     if PRINT_EXECPTION {
         error!("in PageFaultHandler, cr2: {:x}, cr3: {:x}, isuser = {}, error is {:b}, ss is {:x}, cs == {:x}, eflags = {:x}, new ss is {}, pageaddr is {:x}",
