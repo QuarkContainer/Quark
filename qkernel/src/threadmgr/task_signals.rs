@@ -27,6 +27,7 @@ use super::super::kernel::waiter::*;
 use super::super::threadmgr::thread::*;
 use super::super::threadmgr::thread_group::*;
 use super::super::SignalDef::*;
+use super::super::arch::x86_64::arch_x86::*;
 //use super::super::eventchannel::*;
 use super::task_exit::*;
 use super::task_stop::*;
@@ -1032,6 +1033,10 @@ impl Task {
             }
         }
 
+        // create new X86fpstate state
+        self.context.sigFPState.push(Box::new(self.context.X86fpstate.Fork()));
+        self.context.X86fpstate = Box::new(X86fpstate::default());
+
         let t = self.Thread();
         let mut mask = t.lock().signalMask;
         let haveSavedSignalMask = t.lock().haveSavedSignalMask;
@@ -1089,6 +1094,16 @@ impl Task {
         let nEflags = uc.MContext.eflags;
 
         pt.Set(&uc.MContext);
+        pt.eflags = (pt.eflags & !EFLAGS_RESTORABLE) | (uc.MContext.eflags & EFLAGS_RESTORABLE);
+        pt.orig_rax = core::u64::MAX;
+
+        if self.context.sigFPState.len() > 0 {
+            // restore X86fpstate state
+            let X86fpstate = self.context.sigFPState.pop().unwrap();
+            self.context.X86fpstate = X86fpstate;
+        } else {
+            error!("SignalReturn can't restore X86fpstate");
+        }
 
         let oldMask = uc.MContext.oldmask & !(UNBLOCKED_SIGNALS.0);
         self.Thread().SetSignalMask(SignalSet(oldMask));

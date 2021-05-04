@@ -1,5 +1,5 @@
 .globl syscall_entry, kernel_stack,
-.globl context_swap, context_swap_to, signal_call, __vsyscall_page, rdtsc,
+.globl context_swap, context_swap_to, signal_call, __vsyscall_page, rdtsc, initX86FPState
 
 .globl div_zero_handler
 .globl debug_handler
@@ -428,4 +428,153 @@ virtualization_handler:
 
 security_handler:
     HandlerWithoutErrorCode SecurityHandler
+
+initX86FPState:
+    // Save MXCSR (callee-save)
+    STMXCSR     [rsp - 8]
+
+    // Save x87 CW (callee-save)
+    FSTCW       [rsp - 16]
+
+    // Do we use xsave?
+    MOV         rax, rsi
+    TESTQ       rax, rax
+    JZ          no_xsave1
+
+    // Use XRSTOR to clear all FP state to an initial state.
+    //
+    // The fpState XSAVE area is zeroed on function entry, meaning
+    // XSTATE_BV is zero.
+    //
+    // "If RFBM[i] = 1 and bit i is clear in the XSTATE_BV field in the
+    // XSAVE header, XRSTOR initializes state component i."
+    //
+    // Initialization is defined in SDM Vol 1, Chapter 13.3. It puts all
+    // the registers in a reasonable initial state, except MXCSR:
+    //
+    // "The MXCSR register is part of state component 1, SSE state (see
+    // Section 13.5.2). However, the standard form of XRSTOR loads the
+    // MXCSR register from memory whenever the RFBM[1] (SSE) or RFBM[2]
+    // (AVX) is set, regardless of the values of XSTATE_BV[1] and
+    // XSTATE_BV[2]."
+
+    // Set MXCSR to the default value.
+    MOV         eax,  0x1f80
+    MOV         [rdi + 24], eax
+
+    // Initialize registers with XRSTOR.
+    MOV         eax, 0xffffffff
+    MOV         edx, 0xffffffff
+    XRSTOR64    [rdi + 0]
+
+    // Now that all the state has been reset, write it back out to the
+    // XSAVE area.
+    //XSAVE64   [rdi + 0]
+no_xsave1:
+    ret
+
+initX86FPState1:
+    // Save MXCSR (callee-save)
+    STMXCSR     [rsp - 8]
+
+    // Save x87 CW (callee-save)
+    FSTCW       [rsp - 16]
+
+    // Do we use xsave?
+    MOV         rax, rsi
+    TESTQ       rax, rax
+    JZ          no_xsave
+
+    // Use XRSTOR to clear all FP state to an initial state.
+    //
+    // The fpState XSAVE area is zeroed on function entry, meaning
+    // XSTATE_BV is zero.
+    //
+    // "If RFBM[i] = 1 and bit i is clear in the XSTATE_BV field in the
+    // XSAVE header, XRSTOR initializes state component i."
+    //
+    // Initialization is defined in SDM Vol 1, Chapter 13.3. It puts all
+    // the registers in a reasonable initial state, except MXCSR:
+    //
+    // "The MXCSR register is part of state component 1, SSE state (see
+    // Section 13.5.2). However, the standard form of XRSTOR loads the
+    // MXCSR register from memory whenever the RFBM[1] (SSE) or RFBM[2]
+    // (AVX) is set, regardless of the values of XSTATE_BV[1] and
+    // XSTATE_BV[2]."
+
+    // Set MXCSR to the default value.
+    MOV         eax,  0x1f80
+    MOV         [rdi + 24], eax
+
+    // Initialize registers with XRSTOR.
+    MOV         eax, 0xffffffff
+    MOV         edx, 0xffffffff
+    XRSTOR64    [rdi + 0]
+
+    // Now that all the state has been reset, write it back out to the
+    // XSAVE area.
+    XSAVE64     [rdi + 0]
+
+    JMP         out
+
+no_xsave:
+    // Clear out existing X values.
+    PXOR        xmm0, xmm0
+    MOVDQA      xmm1, xmm0
+    MOVDQA      xmm2, xmm0
+    MOVDQA      xmm3, xmm0
+    MOVDQA      xmm4, xmm0
+    MOVDQA      xmm5, xmm0
+    MOVDQA      xmm6, xmm0
+    MOVDQA      xmm7, xmm0
+    MOVDQA      xmm8, xmm0
+    MOVDQA      xmm9, xmm0
+    MOVDQA      xmm10, xmm0
+    MOVDQA      xmm11, xmm0
+    MOVDQA      xmm12, xmm0
+    MOVDQA      xmm13, xmm0
+    MOVDQA      xmm14, xmm0
+    MOVDQA      xmm15, xmm0
+
+	// Zero out %rax and store into MMX registers. MMX registers are
+	// an alias of 8x64 bits of the 8x80 bits used for the original
+	// x87 registers. Storing zero into them will reset the FPU registers
+	// to bits [63:0] = 0, [79:64] = 1. But the contents aren't too
+	// important, just the fact that we have reset them to a known value.
+	XOR         rax, rax
+    MOVQ        mm0, rax
+    MOVQ        mm1, rax
+    MOVQ        mm2, rax
+    MOVQ        mm3, rax
+    MOVQ        mm4, rax
+    MOVQ        mm5, rax
+    MOVQ        mm6, rax
+    MOVQ        mm7, rax
+
+    // The Go assembler doesn't support FNINIT, so we use BYTE.
+    // This will:
+    //  - Reset FPU control word to 0x037f
+    //  - Clear FPU status word
+    //  - Reset FPU tag word to 0xffff
+    //  - Clear FPU data pointer
+    //  - Clear FPU instruction pointer
+    FNINIT
+
+    // Reset MXCSR.
+    MOV         eax, 0x1f80
+    MOV         [rsp - 24], eax
+    LDMXCSR     [rsp - 24]
+
+    // Save the floating point state with fxsave.
+    FXSAVE64    [rdi + 0]
+
+out:
+    // Restore MXCSR.
+	LDMXCSR     [rsp - 8]
+
+	// Restore x87 CW.
+    FLDCW       [rsp - 16]
+
+    RET
+
 

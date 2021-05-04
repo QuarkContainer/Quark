@@ -175,7 +175,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
 
     currTask.AccountTaskLeave(SchedState::RunningApp);
     currTask.GetPtRegs().rsp = CPULocal::UserStack(); //set the user sp to ptRegs
-
+    currTask.GetPtRegs().eflags = currTask.GetPtRegs().r11;
     assert!(nr < SysCallID::maxsupport as u64, "get supported syscall id {}", nr);
 
     //SHARESPACE.SetValue(CPULocal::CpuId(), 0, nr);
@@ -185,6 +185,8 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     rflags &= !KERNEL_FLAGS_CLEAR;
     rflags |= KERNEL_FLAGS_SET;
     SetRflags(rflags);
+
+    currTask.SaveFp();
 
     //let tid = currTask.Thread().lock().id;
     let mut tid = 0;
@@ -241,10 +243,11 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     currTask.PerfGofrom(PerfType::Kernel);
     currTask.PerfGoto(PerfType::User);
 
-    let mut rflags = currTask.GetPtRegs().r11;
+    let mut rflags = currTask.GetPtRegs().eflags;
     rflags &= !USER_FLAGS_CLEAR;
     rflags |= USER_FLAGS_SET;
     SetRflags(rflags);
+    currTask.RestoreFp();
 
     //SHARESPACE.SetValue(CPULocal::CpuId(), 0, 0);
     SyscallRet(kernalRsp);

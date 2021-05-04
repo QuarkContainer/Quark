@@ -541,8 +541,12 @@ pub fn SyscallRet(kernelRsp: u64) -> ! {
 
 #[inline]
 pub fn child_clone(userSp: u64) {
+    let negtive1 : u64 = 0xffffffff;
     unsafe {
         llvm_asm!("\
+            mov rbx, [rsp - 16]
+            fxrstor64 [rbx + 0]
+
             mov gs:8, rdi
 
             pop r15
@@ -574,7 +578,7 @@ pub fn child_clone(userSp: u64) {
             .byte 0x48
             sysret
         ":
-             : "{rdi}"(userSp)
+             : "{rdi}"(userSp), "{rax}"(negtive1), "{rdx}"(negtive1)
              :: "intel", "volatile");
     }
 }
@@ -820,12 +824,50 @@ pub fn GetRflags() -> u64 {
 
 #[inline(always)]
 pub fn SetRflags(val: u64) {
-    let rax = val;
     unsafe {
         llvm_asm!("\
             push rax
             popfq
-        " : : "{rax}"(rax)
+        " : : "{rax}"(val)
+        : : "intel", "volatile")
+    };
+}
+
+pub fn SaveFloatingPoint(addr: u64) {
+    fxsave(addr);
+    //xsaveopt(addr);
+}
+
+pub fn xsaveopt(addr: u64) {
+    let negtive1 : u64 = 0xffffffff;
+    unsafe {
+        llvm_asm!("\
+            xsaveopt [rdi + 0]
+        " : : "{rdi}"(addr), "{rax}"(negtive1), "{rdx}"(negtive1)
+        : : "intel", "volatile")
+    };
+}
+
+pub fn fxsave(addr: u64) {
+    let negtive1 : u64 = 0xffffffff;
+    unsafe {
+        llvm_asm!("\
+            fxsave64 [rbx + 0]
+        " : : "{rbx}"(addr), "{rax}"(negtive1), "{rdx}"(negtive1)
+        : : "intel", "volatile")
+    };
+}
+
+pub fn LoadFloatingPoint(addr: u64) {
+    fxrstor(addr);
+}
+
+pub fn fxrstor(addr: u64) {
+    let negtive1 : u64 = 0xffffffff;
+    unsafe {
+        llvm_asm!("\
+            fxrstor64 [rbx + 0]
+        " : : "{rbx}"(addr), "{rax}"(negtive1), "{rdx}"(negtive1)
         : : "intel", "volatile")
     };
 }

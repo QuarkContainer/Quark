@@ -16,8 +16,22 @@ pub fn LoadCr3(_cr3: u64) {}
 pub fn ReadCr3() -> u64 { 0 }
 pub fn HyperCall(_type_: u16, _para1: u64) {}
 pub fn Invlpg(_addr: u64) {}
-pub fn AsmHostID(_axArg: u32, _cxArg: u32) -> (u32, u32, u32, u32) {
-    (0,0,0,0)
+pub fn AsmHostID(axArg: u32, cxArg: u32) -> (u32, u32, u32, u32) {
+    let ax: u32;
+    let bx: u32;
+    let cx: u32;
+    let dx: u32;
+    unsafe {
+        llvm_asm!("
+              CPUID
+            "
+            : "={eax}"(ax), "={ebx}"(bx), "={ecx}"(cx), "={edx}"(dx)
+            : "{eax}"(axArg), "{ecx}"(cxArg)
+            :
+            : );
+    }
+
+    return (ax, bx, cx, dx)
 }
 
 #[inline(always)]
