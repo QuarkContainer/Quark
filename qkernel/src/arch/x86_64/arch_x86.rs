@@ -17,6 +17,7 @@ use spin::Mutex;
 
 use super::super::super::qlib::cpuid::*;
 use super::super::super::SignalDef::*;
+use super::super::super::asm::*;
 
 // System-related constants for x86.
 
@@ -86,102 +87,29 @@ pub const USER_DS: u64 = 0x2b; // guest ring 3 data selector
 pub const FS_TLS_SEL: u64 = 0x63; // Linux FS thread-local storage selector
 pub const GS_TLS_SEL: u64 = 0x6b; // Linux GS thread-local storage selector
 
-pub fn initX86FPState(data: u64, useXsave: bool) {
+extern "C" {
+    pub fn initX86FPState(data: u64, useXsave: bool);
+}
+
+pub fn InitX86FPState(data: u64, useXsave: bool) {
     unsafe {
-        llvm_asm!("
-            // Save MXCSR (callee-save)
-            STMXCSR	-0x08(%rsp)
-
-            // Save x87 CW (callee-save)
-	        FSTCW -0x10(%rsp)
-
-	        MOVBQZX $1, %rax
-	        TESTQ   %rax, %rax
-	        JZ      1f
-
-	        // Set MXCSR to the default value.
-	        MOVL    $$0x1f80, 24(%rdi)
-
-	        // Initialize registers with XRSTOR.
-	        MOVL	$$0xffffffff, %rax
-	        MOVL	$$0xffffffff, %rdi
-	        XRSTOR64 0(%rdi)
-
-	        // Now that all the state has been reset, write it back out to the
-	        // XSAVE area.
-	        XSAVE64 0(%rdi)
-
-	        JMP     2f
-	        1:
-	        // Clear out existing X values.
-	        PXOR    %x0
-	        MOVQ    %x0, %x1
-	        MOVQ    %x0, %x2
-	        MOVQ    %x0, %x3
-	        MOVQ    %x0, %x4
-	        MOVQ    %x0, %x5
-	        MOVQ    %x0, %x6
-	        MOVQ    %x0, %x7
-	        MOVQ    %x0, %x8
-	        MOVQ    %x0, %x9
-	        MOVQ    %x0, %x10
-	        MOVQ    %x0, %x11
-	        MOVQ    %x0, %x12
-	        MOVQ    %x0, %x13
-	        MOVQ    %x0, %x14
-	        MOVQ    %x0, %x15
-
-	        // Zero out %rax and store into MMX registers. MMX registers are
-            // an alias of 8x64 bits of the 8x80 bits used for the original
-            // x87 registers. Storing zero into them will reset the FPU registers
-            // to bits [63:0] = 0, [79:64] = 1. But the contents aren't too
-            // important, just the fact that we have reset them to a known value.
-	        XORQ    %rax
-	        MOVQ    %rax, %m0
-	        MOVQ    %rax, %m1
-	        MOVQ    %rax, %m2
-	        MOVQ    %rax, %m3
-	        MOVQ    %rax, %m4
-	        MOVQ    %rax, %m5
-	        MOVQ    %rax, %m6
-	        MOVQ    %rax, %m7
-
-            //  - Reset FPU control word to 0x037f
-            //  - Clear FPU status word
-            //  - Reset FPU tag word to 0xffff
-            //  - Clear FPU data pointer
-            //  - Clear FPU instruction pointer
-            FNINIT
-
-            // Reset MXCSR.
-            MOVL    $$0x1f80, -24(%rsp)
-            LDMXCSR -24(%rsp)
-
-            // Save the floating point state with fxsave.
-            FXSAVE64 0(%rdi)
-
-	        2:
-	        // Restore MXCSR.
-	        LDMXCSR -8(%rsp)
-
-	        // Restore x87 CW.
-	        FLDCW   -16(%rsp)
-
-            RET
-            "
-        :
-        : "rdi"(data), "r"(useXsave)
-        :
-        :
-        );
+        initX86FPState(data, useXsave)
     }
 }
 
 // x86FPState is x86 floating point state.
 #[repr(align(4096))]
+#[repr(C)]
+#[derive(Debug)]
 pub struct X86fpstate {
     pub data: [u8; 4096],
     pub size: usize,
+}
+
+impl Default for X86fpstate {
+    fn default() -> Self {
+        return Self::NewX86FPState();
+    }
 }
 
 impl X86fpstate {
@@ -201,7 +129,7 @@ impl X86fpstate {
     pub fn NewX86FPState() -> Self {
         let f = Self::New();
 
-        initX86FPState(f.FloatingPointData(), HostFeatureSet().UseXsave());
+        InitX86FPState(f.FloatingPointData(), HostFeatureSet().UseXsave());
         return f;
     }
 
@@ -217,6 +145,14 @@ impl X86fpstate {
 
     pub fn FloatingPointData(&self) -> u64 {
         return &self.data[0] as *const _ as u64;
+    }
+
+    pub fn SaveFp(&self) {
+        SaveFloatingPoint(self.FloatingPointData());
+    }
+
+    pub fn RestoreFp(&self) {
+        LoadFloatingPoint(self.FloatingPointData())
     }
 }
 

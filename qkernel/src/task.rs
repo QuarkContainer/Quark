@@ -21,6 +21,7 @@ use core::mem;
 use alloc::boxed::Box;
 use lazy_static::lazy_static;
 
+use super::arch::x86_64::arch_x86::*;
 use super::qlib::linux_def::*;
 use super::qlib::common::*;
 use super::SignalDef::*;
@@ -88,7 +89,7 @@ impl TaskId {
     }
 }
 
-#[derive(Debug, Default, Copy, Clone)]
+#[derive(Debug, Default)]
 #[repr(C)]
 pub struct Context {
     pub rsp: u64,
@@ -104,6 +105,8 @@ pub struct Context {
 
     pub fs: u64,
     pub gs: u64,
+    pub X86fpstate: Box<X86fpstate>,
+    pub sigFPState: Vec<Box<X86fpstate>>,
 }
 
 impl Context {
@@ -212,6 +215,14 @@ impl Task {
         self.futexMgr = dummyTask.futexMgr.clone();
         self.perfcounters = None;
         self.ioUsage = dummyTask.ioUsage.clone();
+    }
+
+    pub fn SaveFp(&self) {
+        self.context.X86fpstate.SaveFp();
+    }
+
+    pub fn RestoreFp(&self) {
+        self.context.X86fpstate.RestoreFp();
     }
 
     pub fn DummyTask() -> Self {

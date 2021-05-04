@@ -204,6 +204,13 @@ impl Kernel {
             platform: DefaultPlatform::default(),
         };
 
+        //error!("hasXSAVEOPT is {}", internal.featureSet.lock().UseXsaveopt());
+        //error!("hasXSAVE is {}", internal.featureSet.lock().UseXsave());
+        //error!("hasFSGSBASE is {}", internal.featureSet.lock().HasFeature(Feature(X86Feature::X86FeatureFSGSBase as i32)));
+        //error!("X86FeatureXSAVEOPT is {}", internal.featureSet.lock().HasFeature(Feature(X86Feature::X86FeatureXSAVEOPT as i32)));
+        //error!("X86FeatureXSAVE is {}", internal.featureSet.lock().HasFeature(Feature(X86Feature::X86FeatureXSAVE as i32)));
+        //error!("X86FeatureOSXSAVE is {}", internal.featureSet.lock().HasFeature(Feature(X86Feature::X86FeatureOSXSAVE as i32)));
+
         return Self(Arc::new(internal))
     }
 
