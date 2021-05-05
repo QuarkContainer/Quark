@@ -429,7 +429,7 @@ impl PageTables {
         let bs = f.MapInternal(task, fr)?;
         let mut addr = addr;
 
-        let mut pt = self.write();
+        let pt = self;
         for b in &bs {
             //todo: handle precommit
             /*if precommit {
@@ -452,7 +452,7 @@ impl PageTables {
         let bs = f.MapInternal(task, fr)?;
         let mut addr = addr;
 
-        let mut pt = self.write();
+        let pt = self;
         for b in &bs {
             //todo: handle precommit
             /*if precommit {
@@ -471,3 +471,4 @@ impl PageTables {
         return Ok(());
     }
 }
+
