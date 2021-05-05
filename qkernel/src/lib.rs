@@ -359,7 +359,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
                 unsafe { llvm_asm!("mov %cr3, $0" : "=r" (cr3) ) };
                 cr3
             };
-            let mut kpt = KERNEL_PAGETABLE.write();
+            let kpt = &KERNEL_PAGETABLE;
             kpt.SetRoot(root);
 
             let mut lock = PAGE_MGR.lock();

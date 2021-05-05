@@ -1876,7 +1876,7 @@ impl VMSpace {
     //map kernel table
     pub fn KernelMap(&mut self, start: Addr, end: Addr, physical: Addr, flags: PageTableFlags) -> Result<bool> {
         error!("KernelMap start is {:x}, end is {:x}", start.0, end.0);
-        return self.pageTables.write().Map(start, end, physical, flags, self.allocator.as_mut().unwrap(), true);
+        return self.pageTables.Map(start, end, physical, flags, self.allocator.as_mut().unwrap(), true);
     }
 
     pub fn PrintStr(phAddr: u64) {

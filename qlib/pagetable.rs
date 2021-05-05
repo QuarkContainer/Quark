@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
-use spin::RwLock;
-use core::ops::Deref;
 use x86_64::structures::paging::{PageTable};
 use x86_64::structures::paging::page_table::PageTableEntry;
 use x86_64::structures::paging::page_table::PageTableIndex;
@@ -23,6 +20,8 @@ use x86_64::VirtAddr;
 use x86_64::structures::paging::PageTableFlags;
 use alloc::alloc::{Layout, alloc, dealloc};
 use alloc::vec::Vec;
+use core::sync::atomic::AtomicU64;
+use core::sync::atomic::Ordering;
 
 use super::common::{Error, Result, Allocator};
 use super::addr::*;
@@ -30,34 +29,35 @@ use super::linux_def::*;
 use super::mem::stackvec::*;
 use super::super::asm::*;
 
-#[derive(Clone, Default, Debug)]
-pub struct PageTables(pub Arc<RwLock<PageTablesInternal>>);
-
-impl Deref for PageTables {
-    type Target = Arc<RwLock<PageTablesInternal>>;
-
-    fn deref(&self) -> &Arc<RwLock<PageTablesInternal>> {
-        &self.0
-    }
+#[derive(Default)]
+pub struct PageTables {
+    //Root page guest physical address
+    pub root: AtomicU64,
 }
 
 impl PageTables {
     pub fn New(pagePool: &Allocator) -> Result<Self> {
-        let internal = PageTablesInternal::New(pagePool)?;
-        return Ok(PageTables(Arc::new(RwLock::new(internal))))
+        let root = pagePool.AllocPage(true)?;
+        pagePool.Ref(root).unwrap();
+        Ok(Self {
+            //pagePool : pagePool.clone(),
+            root: AtomicU64::new(root)
+        })
     }
 
     pub fn Init(root: u64) -> Self {
-        return PageTables(Arc::new(RwLock::new(PageTablesInternal::Init(root))))
+        return Self {
+            root: AtomicU64::new(root)
+        }
     }
 
     pub fn SwitchTo(&self) {
-        let addr = self.read().root;
-        Self::Switch(addr.0);
+        let addr = self.GetRoot();
+        Self::Switch(addr);
     }
 
     pub fn IsActivePagetable(&self) -> bool {
-        let root = self.read().root.0;
+        let root = self.GetRoot();
         return root == Self::CurrentCr3()
     }
 
@@ -70,36 +70,13 @@ impl PageTables {
         //unsafe { llvm_asm!("mov $0, %cr3" : : "r" (cr3) ) };
         LoadCr3(cr3)
     }
-}
 
-#[derive(Clone, Default, Debug)]
-pub struct PageTablesInternal {
-    //Root page guest physical address
-    pub root: Addr,
-}
-
-impl PageTablesInternal {
-    pub fn New(pagePool: &Allocator) -> Result<Self> {
-        let root = pagePool.AllocPage(true)?;
-        pagePool.Ref(root).unwrap();
-        Ok(Self {
-            //pagePool : pagePool.clone(),
-            root: Addr(root),
-        })
-    }
-
-    pub fn Init(root: u64) -> Self {
-        return Self {
-            root: Addr(root),
-        }
-    }
-
-    pub fn SetRoot(&mut self, root: u64) {
-        self.root = Addr(root);
+    pub fn SetRoot(&self, root: u64) {
+        self.root.store(root, Ordering::Release)
     }
 
     pub fn GetRoot(&self) -> u64 {
-        return self.root.0;
+        return self.root.load(Ordering::Acquire)
     }
 
     pub fn Print(&self) {
@@ -107,10 +84,10 @@ impl PageTablesInternal {
         //unsafe { llvm_asm!("mov %cr3, $0" : "=r" (cr3) ) };
         let cr3 = ReadCr3();
 
-        info!("the page root is {:x}, the cr3 is {:x}", self.root.0, cr3);
+        info!("the page root is {:x}, the cr3 is {:x}", self.GetRoot(), cr3);
     }
 
-    pub fn CopyRange(&mut self, to: &mut Self, start: u64, len: u64, pagePool: &Allocator) -> Result<()> {
+    pub fn CopyRange(&self, to: &Self, start: u64, len: u64, pagePool: &Allocator) -> Result<()> {
         if start & MemoryDef::PAGE_MASK != 0 || len & MemoryDef::PAGE_MASK != 0 {
             return Err(Error::UnallignedAddress);
         }
@@ -132,7 +109,7 @@ impl PageTablesInternal {
 
     // Copy the range and make the range readonly for from and to pagetable. It is used for VirtualArea private area.
     // The Copy On Write will be done when write to the page
-    pub fn ForkRange(&mut self, to: &mut Self, start: u64, len: u64, pagePool: &Allocator) -> Result<()> {
+    pub fn ForkRange(&self, to: &Self, start: u64, len: u64, pagePool: &Allocator) -> Result<()> {
         if start & MemoryDef::PAGE_MASK != 0 || len & MemoryDef::PAGE_MASK != 0 {
             return Err(Error::UnallignedAddress);
         }
@@ -164,10 +141,10 @@ impl PageTablesInternal {
         let p2Idx = vaddr.p2_index();
         let p1Idx = vaddr.p1_index();
 
-        let pt: *mut PageTable = self.root.0 as *mut PageTable;
+        let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
 
         unsafe {
-            info!("pt1: {:x}", self.root.0);
+            info!("pt1: {:x}", self.GetRoot());
             let pgdEntry = &(*pt)[p4Idx];
             if pgdEntry.is_unused() {
                 return;
@@ -206,7 +183,7 @@ impl PageTablesInternal {
         let p2Idx = vaddr.p2_index();
         let p1Idx = vaddr.p1_index();
 
-        let pt: *mut PageTable = self.root.0 as *mut PageTable;
+        let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
 
         unsafe {
             let pgdEntry = &(*pt)[p4Idx];
@@ -235,7 +212,6 @@ impl PageTablesInternal {
         }
     }
 
-    //return (phyaddress, writeable)
     pub fn VirtualToPhy(&self, vaddr: u64) -> Result<(u64, AccessType)> {
         let pteEntry = self.VirtualToEntry(vaddr)?;
         if pteEntry.is_unused() {
@@ -260,9 +236,9 @@ impl PageTablesInternal {
         return Ok(())
     }
 
-    pub fn MapVsyscall(&mut self, phyAddrs: &[u64]/*4 pages*/) {
+    pub fn MapVsyscall(&self, phyAddrs: &[u64]/*4 pages*/) {
         let vaddr = 0xffffffffff600000;
-        let pt: *mut PageTable = self.root.0 as *mut PageTable;
+        let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
         unsafe {
             let p4Idx = VirtAddr::new(vaddr).p4_index();
             let pgdEntry = &mut (*pt)[p4Idx];
@@ -274,10 +250,10 @@ impl PageTablesInternal {
         }
     }
 
-    pub fn MapPage(&mut self, vaddr: Addr, phyAddr: Addr, flags: PageTableFlags, pagePool: &Allocator) -> Result<bool> {
+    pub fn MapPage(&self, vaddr: Addr, phyAddr: Addr, flags: PageTableFlags, pagePool: &Allocator) -> Result<bool> {
         let mut res = false;
 
-        let pt: *mut PageTable = self.root.0 as *mut PageTable;
+        let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
         unsafe {
             let p4Idx = VirtAddr::new(vaddr.0).p4_index();
             let p3Idx = VirtAddr::new(vaddr.0).p3_index();
@@ -342,7 +318,7 @@ impl PageTablesInternal {
         return Ok(res);
     }
 
-    pub fn Remap(&mut self, start: Addr, end: Addr, oldStart: Addr, flags: PageTableFlags, pagePool: &Allocator) -> Result<bool> {
+    pub fn Remap(&self, start: Addr, end: Addr, oldStart: Addr, flags: PageTableFlags, pagePool: &Allocator) -> Result<bool> {
         start.PageAligned()?;
         oldStart.PageAligned()?;
         if end.0 < start.0 {
@@ -385,7 +361,7 @@ impl PageTablesInternal {
         return Ok(false)
     }
 
-    pub fn RemapForFile(&mut self, start: Addr, end: Addr, physical: Addr, oldStart: Addr, oldEnd: Addr, flags: PageTableFlags, pagePool: &Allocator) -> Result<bool> {
+    pub fn RemapForFile(&self, start: Addr, end: Addr, physical: Addr, oldStart: Addr, oldEnd: Addr, flags: PageTableFlags, pagePool: &Allocator) -> Result<bool> {
         start.PageAligned()?;
         oldStart.PageAligned()?;
         if end.0 < start.0 {
@@ -438,7 +414,7 @@ impl PageTablesInternal {
     }
 
     //return true when there is previous mapping in the range
-    pub fn Map(&mut self, start: Addr, end: Addr, physical: Addr, flags: PageTableFlags, pagePool: &Allocator, kernel: bool) -> Result<bool> {
+    pub fn Map(&self, start: Addr, end: Addr, physical: Addr, flags: PageTableFlags, pagePool: &Allocator, kernel: bool) -> Result<bool> {
         start.PageAligned()?;
         if end.0 < start.0 {
             return Err(Error::AddressNotInRange);
@@ -473,9 +449,9 @@ impl PageTablesInternal {
         return start;
     }
 
-    pub fn Unmap(&mut self, start: u64, end: u64, pagePool: &Allocator) -> Result<()> {
+    pub fn Unmap(&self, start: u64, end: u64, pagePool: &Allocator) -> Result<()> {
         let mut start = start;
-        let pt: *mut PageTable = self.root.0 as *mut PageTable;
+        let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
         unsafe {
             let mut p4Idx : u16 = VirtAddr::new(start).p4_index().into();
             while start < end && p4Idx < MemoryDef::ENTRY_COUNT {
@@ -585,9 +561,9 @@ impl PageTablesInternal {
         return Addr(addr)
     }
 
-    pub fn Traverse(&mut self, start: Addr, end: Addr, mut f: impl FnMut(&mut PageTableEntry, u64), failFast: bool) -> Result<()> {
+    pub fn Traverse(&self, start: Addr, end: Addr, mut f: impl FnMut(&mut PageTableEntry, u64), failFast: bool) -> Result<()> {
         //let mut curAddr = start;
-        let pt: *mut PageTable = self.root.0 as *mut PageTable;
+        let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
         unsafe {
             let mut p4Idx = VirtAddr::new(start.0).p4_index();
             let mut p3Idx = VirtAddr::new(start.0).p3_index();
@@ -676,7 +652,7 @@ impl PageTablesInternal {
                                 p1Idx = PageTableIndex::new(u16::from(p1Idx) + 1);
                             }
 
-                         }
+                        }
 
                         if p2Idx == PageTableIndex::new(MemoryDef::ENTRY_COUNT - 1) {
                             p2Idx = PageTableIndex::new(0);
@@ -701,7 +677,7 @@ impl PageTablesInternal {
         return Ok(());
     }
 
-    pub fn SetPageFlags(&mut self, addr: Addr, flags: PageTableFlags) {
+    pub fn SetPageFlags(&self, addr: Addr, flags: PageTableFlags) {
         //self.MProtect(addr, addr.AddLen(4096).unwrap(), PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE, false).unwrap();
         self.MProtect(addr, addr.AddLen(MemoryDef::PAGE_SIZE).unwrap(), flags, true).unwrap();
     }
@@ -718,7 +694,7 @@ impl PageTablesInternal {
         }
     }
 
-    pub fn MProtect(&mut self, start: Addr, end: Addr, flags: PageTableFlags, failFast: bool) -> Result<()> {
+    pub fn MProtect(&self, start: Addr, end: Addr, flags: PageTableFlags, failFast: bool) -> Result<()> {
         //info!("MProtoc: start={:x}, end={:x}, flag = {:?}", start.0, end.0, flags);
         return self.Traverse(start, end, |entry, virtualAddr| {
             entry.set_flags(flags);
@@ -727,7 +703,7 @@ impl PageTablesInternal {
     }
 
     //get the list for page phyaddress for a virtual address range
-    pub fn GetAddresses(&mut self, start: Addr, end: Addr, vec: &mut StackVec<u64>) -> Result<()> {
+    pub fn GetAddresses(&self, start: Addr, end: Addr, vec: &mut StackVec<u64>) -> Result<()> {
         self.Traverse(start, end, |entry, _virtualAddr| {
             let addr = entry.addr().as_u64();
             vec.Push(addr);
@@ -749,7 +725,7 @@ impl PageTablesInternal {
 
         //info!("mapCanonical virtual start is {:x}, len is {:x}, phystart is {:x}", start.0, end.0 - start.0, phyAddr.0);
         let mut curAddr = start;
-        let pt: *mut PageTable = self.root.0 as *mut PageTable;
+        let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
         unsafe {
             let mut p4Idx = VirtAddr::new(curAddr.0).p4_index();
             let mut p3Idx = VirtAddr::new(curAddr.0).p3_index();

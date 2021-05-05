@@ -60,19 +60,8 @@ impl Activity {
 }
 
 #[derive(Clone, Default, Debug, Copy)]
-pub struct BrkInfointernal {
+pub struct BrkInfo {
     pub brkStart: u64,
     pub brkEnd: u64,
     pub brkMemEnd: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct BrkInfo(pub Arc<Mutex<BrkInfointernal>>);
-
-impl Deref for BrkInfo {
-    type Target = Arc<Mutex<BrkInfointernal>>;
-
-    fn deref(&self) -> &Arc<Mutex<BrkInfointernal>> {
-        &self.0
-    }
 }

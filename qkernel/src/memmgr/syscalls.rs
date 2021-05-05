@@ -466,7 +466,7 @@ impl MemoryManager {
                 end = ar.End();
             }
 
-            mm.pt.write().MProtect(Addr(range.Start()), Addr(end), pageopts, false)?;
+            mm.pt.MProtect(Addr(range.Start()), Addr(end), pageopts, false)?;
             if ar.End() <= range.End() {
                 break;
             }
@@ -656,7 +656,7 @@ impl MemoryManager {
             }
 
             let mr = ar.Intersect(&vseg.Range());
-            self.write().pt.write().MUnmap(mr.Start(), mr.Len())?;
+            self.write().pt.MUnmap(mr.Start(), mr.Len())?;
 
             if let Some(iops) = vma.mappable.clone() {
                 let fstart = mr.Start() - vseg.Range().Start() + vma.offset;

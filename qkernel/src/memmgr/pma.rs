@@ -14,7 +14,6 @@
 
 use core::ops::Deref;
 use spin::Mutex;
-use spin::RwLock;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use x86_64::structures::paging::{PageTable};
@@ -33,8 +32,9 @@ use super::super::qlib::pagetable::*;
 use super::super::qlib::vcpu_mgr::*;
 use super::pmamgr::*;
 
-pub fn AddFreePageTables(pt: &PageTablesInternal) {
-    CPULocal::SetPendingFreePagetable(pt.root.0);
+
+pub fn AddFreePageTables(pt: &PageTables) {
+    CPULocal::SetPendingFreePagetable(pt.GetRoot());
 }
 
 #[inline]
@@ -189,16 +189,16 @@ impl PageMgrInternal {
     }
 }
 
-impl Drop for PageTablesInternal {
-    fn drop(&mut self) {
-        //pagetables can't be free from current kernel thread, need to be free async
-        AddFreePageTables(self);
-    }
-}
-
 impl Drop for FreePageTables {
     fn drop(&mut self) {
         self.Drop(&*PAGE_MGR);
+    }
+}
+
+impl Drop for PageTables {
+    fn drop(&mut self) {
+        //pagetables can't be free from current kernel thread, need to be free async
+        AddFreePageTables(self);
     }
 }
 
@@ -208,16 +208,13 @@ impl PageTables {
     // 2. Kernel takes the address space from 256GB ~ 512GB
     // 3. pages for ffffffffff600000
     pub fn Fork(&self, pagePool: &PageMgr) -> Result<Self> {
-        let internal = self.read();
-        let ptInternal = internal.NewWithKernelPageTables(pagePool)?;
-        return Ok(Self(Arc::new(RwLock::new(ptInternal))));
+        let pt = self.NewWithKernelPageTables(pagePool)?;
+        return Ok(pt)
     }
-}
 
-impl PageTablesInternal {
-    pub fn InitVsyscall(&mut self, phyAddrs: &[u64]/*4 pages*/) {
+    pub fn InitVsyscall(&self, phyAddrs: &[u64]/*4 pages*/) {
         let vaddr = 0xffffffffff600000;
-        let pt: *mut PageTable = self.root.0 as *mut PageTable;
+        let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
         unsafe {
             let p4Idx = VirtAddr::new(vaddr).p4_index();
             let p3Idx = VirtAddr::new(vaddr).p3_index();
@@ -260,7 +257,7 @@ impl PageTablesInternal {
 
     //  zero page, p3, p2, p1, p0 for ffffffffff600000 will be reused
     pub fn NewWithKernelPageTables(&self, pagePool: &PageMgr) -> Result<Self> {
-        let mut ret = Self::New(pagePool)?;
+        let ret = Self::New(pagePool)?;
 
         //todo: do we still need zero page at address 0?
         let zeroPage = pagePool.ZeroPage();
@@ -273,7 +270,7 @@ impl PageTablesInternal {
         }
 
         unsafe {
-            let pt: *mut PageTable = self.root.0 as *mut PageTable;
+            let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
             let pgdEntry = &(*pt)[0];
             if pgdEntry.is_unused() {
                 return Err(Error::AddressNotMap(0))
@@ -281,7 +278,7 @@ impl PageTablesInternal {
             let pudTbl = pgdEntry.addr().as_u64() as *const PageTable;
 
 
-            let nPt: *mut PageTable = ret.root.0 as *mut PageTable;
+            let nPt: *mut PageTable = ret.GetRoot() as *mut PageTable;
             let nPgdEntry = &mut (*nPt)[0];
             let nPudTbl = nPgdEntry.addr().as_u64() as *mut PageTable;
 
@@ -296,7 +293,7 @@ impl PageTablesInternal {
         return Ok(ret)
     }
 
-    pub fn RemapAna(&mut self, _task: &Task, newAddrRange: &Range, oldStart: u64, at: &AccessType, user: bool) -> Result<()> {
+    pub fn RemapAna(&self, _task: &Task, newAddrRange: &Range, oldStart: u64, at: &AccessType, user: bool) -> Result<()> {
         let pageOpts = if user {
             if at.Write() {
                 PageOpts::UserReadWrite().Val()
@@ -314,15 +311,15 @@ impl PageTablesInternal {
         };
 
         self.Remap(Addr(newAddrRange.Start()),
-                          Addr(newAddrRange.End()),
-                          Addr(oldStart),
-                          pageOpts,
-                          &*PAGE_MGR)?;
+                   Addr(newAddrRange.End()),
+                   Addr(oldStart),
+                   pageOpts,
+                   &*PAGE_MGR)?;
 
         return Ok(())
     }
 
-    pub fn RemapHost(&mut self, _task: &Task, addr: u64, phyRange: &IoVec, oldar: &Range, at: &AccessType, user: bool) -> Result<()> {
+    pub fn RemapHost(&self, _task: &Task, addr: u64, phyRange: &IoVec, oldar: &Range, at: &AccessType, user: bool) -> Result<()> {
         let pageOpts = if user {
             if at.Write() {
                 PageOpts::UserReadWrite().Val()
@@ -350,7 +347,7 @@ impl PageTablesInternal {
         return Ok(())
     }
 
-    pub fn MapHost(&mut self, _task: &Task, addr: u64, phyRange: &IoVec, at: &AccessType, user: bool) -> Result<()> {
+    pub fn MapHost(&self, _task: &Task, addr: u64, phyRange: &IoVec, at: &AccessType, user: bool) -> Result<()> {
         let pageOpts = if user {
             if at.Write() {
                 PageOpts::UserReadWrite().Val()
@@ -374,7 +371,7 @@ impl PageTablesInternal {
 
     pub fn UnmapAll(&mut self) -> Result<()> {
         self.Unmap(0, core::u64::MAX, &*PAGE_MGR)?;
-        PAGE_MGR.Deref(self.root.0)?;
+        PAGE_MGR.Deref(self.GetRoot())?;
         return Ok(())
     }
 
