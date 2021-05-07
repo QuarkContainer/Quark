@@ -30,6 +30,7 @@ pub struct FileFlags {
     pub LargeFile: bool,
     pub NonSeekable: bool,
     pub Truncate: bool,
+    pub Path: bool,
 }
 
 impl FileFlags {
@@ -46,6 +47,7 @@ impl FileFlags {
             Async: mask & Flags::O_ASYNC as u32 != 0,
             LargeFile: mask & Flags::O_LARGEFILE as u32 != 0,
             Truncate: mask & Flags::O_TRUNC as u32 != 0,
+            Path: mask & Flags::O_PATH as u32 != 0,
             ..Default::default()
         }
     }

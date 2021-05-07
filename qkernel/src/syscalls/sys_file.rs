@@ -177,6 +177,14 @@ pub fn openAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
             }
         }
 
+        if inode.StableAttr().IsSocket() {
+            if !fileFlags.Path {
+                return Err(Error::SysError(SysErr::ENXIO))
+            } else if fileFlags.Read || fileFlags.Write {
+                return Err(Error::SysError(SysErr::ENXIO))
+            }
+        }
+
         if flags & Flags::O_TRUNC as u32 != 0 {
             if inode.StableAttr().IsDir() {
                 return Err(Error::SysError(SysErr::EISDIR))

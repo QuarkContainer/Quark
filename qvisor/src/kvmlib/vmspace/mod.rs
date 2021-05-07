@@ -641,8 +641,8 @@ impl VMSpace {
         }
 
         let err = Self::GetRet(ret as i64) as i32;
-        if err == ENOENT {
-            return (-ENOENT, false)
+        if err == -SysErr::ENOENT {
+            return (-SysErr::ENOENT, false)
         }
 
         let ret = libc::openat(dirfd, name as *const c_char, (flags | Flags::O_RDONLY) as i32, 0);
@@ -653,11 +653,6 @@ impl VMSpace {
         let ret = libc::openat(dirfd, name as *const c_char, (flags | Flags::O_WRONLY) as i32, 0);
         if ret > 0 {
             return (ret, true);
-        }
-
-        let err = Self::GetRet(ret as i64) as i32;
-        if err == -SysErr::ENXIO {
-            return (-SysErr::ENXIO, false)
         }
 
         let ret = libc::openat(dirfd, name as *const c_char, flags as i32 | Flags::O_PATH, 0);
