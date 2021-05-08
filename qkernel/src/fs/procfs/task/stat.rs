@@ -113,7 +113,9 @@ impl StatData {
         let (vss, rss) = {
             let t = self.t.lock();
             let mm = t.memoryMgr.clone();
-            (mm.VirtualMemorySize(), mm.ResidentSetSize())
+            let ml = mm.MappingLock();
+            let _ml = ml.read();
+            (mm.VirtualMemorySizeLocked(), mm.ResidentSetSizeLocked())
         };
         output += &format!("{} {} ", vss, rss/MemoryDef::PAGE_SIZE);
 

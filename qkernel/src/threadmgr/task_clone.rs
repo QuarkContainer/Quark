@@ -419,6 +419,8 @@ impl Task {
         }
 
         if opts.ChildSetTID == true {
+            // todo: remove CopyOutObj and use GetTypeMut
+            //*Task::GetTask(cTask.taskId).GetTypeMut(cTid)? = pid;
             cTask.mm.CopyOutObj(self, &pid, cTid)?;
         }
 

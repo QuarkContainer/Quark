@@ -37,8 +37,8 @@ pub struct MSyncOpts {
 impl MemoryManager {
     // MMap establishes a memory mapping.
     pub fn MMap(&self, task: &Task, opts: &mut MMapOpts) -> Result<u64> {
-        let lock = self.Lock();
-        let _l = lock.lock();
+        let ml = self.MappingLock();
+        let _ml = ml.write();
 
         if opts.Length == 0 {
             return Err(Error::SysError(SysErr::EINVAL));
@@ -87,18 +87,17 @@ impl MemoryManager {
             return Err(Error::SysError(SysErr::EINVAL));
         }
 
-        let mm = self;
-        let (vseg, ar) = mm.write().CreateVMAlocked(task, opts, self)?;
+        let (vseg, ar) = self.CreateVMAlocked(task, opts)?;
 
-        mm.PopulateVMA(task, &vseg, &ar, opts.Precommit, opts.VDSO)?;
+        self.PopulateVMALocked(task, &vseg, &ar, opts.Precommit, opts.VDSO)?;
 
         return Ok(ar.Start());
     }
 
     // MapStack allocates the initial process stack.
     pub fn MapStack(&self, task: &Task) -> Result<Range> {
-        let lock = self.Lock();
-        let _l = lock.lock();
+        let ml = self.MappingLock();
+        let _ml = ml.write();
 
         // maxStackSize is the maximum supported process stack size in bytes.
         //
@@ -108,17 +107,16 @@ impl MemoryManager {
 
         let sz = DEFAULT_STACK_SOFT_LIMIT;
 
-        let mm = self;
         //todo: add random
         // stackEnd := mm.layout.MaxAddr - usermem.Addr(mrand.Int63n(int64(mm.layout.MaxStackRand))).RoundDown()
-        let stackEnd = mm.write().layout.MaxAddr;
+        let stackEnd = self.layout.lock().MaxAddr;
 
         if stackEnd < sz {
             return Err(Error::SysError(SysErr::ENOMEM));
         }
 
         let stackStart = stackEnd - sz;
-        let (vseg, ar) = mm.write().CreateVMAlocked(task, &MMapOpts {
+        let (vseg, ar) = self.CreateVMAlocked(task, &MMapOpts {
             Length: sz,
             Addr: stackStart,
             Offset: 0,
@@ -136,17 +134,17 @@ impl MemoryManager {
             Mapping: None,
             Mappable: None,
             Hint: "[stack]".to_string(),
-        }, self)?;
+        })?;
 
-        mm.PopulateVMA(task, &vseg, &ar, false, false)?;
+        self.PopulateVMALocked(task, &vseg, &ar, false, false)?;
 
         return Ok(ar)
     }
 
     // MUnmap implements the semantics of Linux's munmap(2).
     pub fn MUnmap(&self, _task: &Task, addr: u64, length: u64) -> Result<()> {
-        let lock = self.Lock();
-        let _l = lock.lock();
+        let ml = self.MappingLock();
+        let _ml = ml.write();
 
         if addr != Addr(addr).RoundDown()?.0 {
             return Err(Error::SysError(SysErr::EINVAL));
@@ -161,13 +159,13 @@ impl MemoryManager {
 
         let ar = Addr(addr).ToRange(length)?;
 
-        return self.write().RemoveVMAsLocked(self, &ar);
+        return self.RemoveVMAsLocked(&ar);
     }
 
     // MRemap implements the semantics of Linux's mremap(2).
     pub fn MRemap(&self, task: &Task, oldAddr: u64, oldSize: u64, newSize: u64, opts: &MRemapOpts) -> Result<u64> {
-        let lock = self.Lock();
-        let _l = lock.lock();
+        let ml = self.MappingLock();
+        let _ml = ml.write();
 
         // "Note that old_address has to be page aligned." - mremap(2)
         if oldAddr != Addr(oldAddr).RoundDown()?.0 {
@@ -184,9 +182,8 @@ impl MemoryManager {
 
         let mut oldEnd = Addr(oldAddr).AddLen(oldSize)?.0;
 
-        let mut mm = self.write();
         // All cases require that a vma exists at oldAddr.
-        let mut vseg = mm.vmas.FindSeg(oldAddr);
+        let mut vseg = self.mapping.lock().vmas.FindSeg(oldAddr);
         if !vseg.Ok() {
             return Err(Error::SysError(SysErr::EFAULT));
         }
@@ -213,7 +210,7 @@ impl MemoryManager {
                     // If oldAddr+oldSize didn't overflow, oldAddr+newSize can't
                     // either.
                     let newEnd = oldAddr + newSize;
-                    mm.RemoveVMAsLocked(self, &Range::New(newEnd, oldSize - newSize))?;
+                    self.RemoveVMAsLocked(&Range::New(newEnd, oldSize - newSize))?;
                 }
 
                 return Ok(oldAddr)
@@ -233,7 +230,7 @@ impl MemoryManager {
                 newOffset = vseg.MappableRange().End();
             }
 
-            match mm.CreateVMAlocked(task, &MMapOpts {
+            match self.CreateVMAlocked(task, &MMapOpts {
                 Length: newSize - oldSize,
                 Addr: oldEnd,
                 Offset: newOffset,
@@ -251,10 +248,9 @@ impl MemoryManager {
                 Mapping: vma.id.clone(),
                 Mappable: vma.mappable.clone(),
                 Hint: vma.hint.to_string(),
-            }, self) {
+            }) {
                 Ok((vseg, ar)) => {
-                    core::mem::drop(mm);
-                    self.PopulateVMA(task, &vseg, &ar, false, false)?;//to true?
+                    self.PopulateVMALocked(task, &vseg, &ar, false, false)?;//to true?
                     return Ok(oldAddr);
                 }
                 Err(e) => {
@@ -271,7 +267,7 @@ impl MemoryManager {
         let newAR;
         match opts.Move {
             MREMAP_MAY_MOVE => {
-                let newAddr = mm.FindAvailableLocked(newSize, &mut FindAvailableOpts::default())?;
+                let newAddr = self.FindAvailableLocked(newSize, &mut FindAvailableOpts::default())?;
                 newAR = Range::New(newAddr, newSize);
             }
             MREMAP_MUST_MOVE => {
@@ -290,7 +286,7 @@ impl MemoryManager {
                 }
 
                 // Unmap any mappings at the destination.
-                mm.RemoveVMAsLocked(self, &newAR)?;
+                self.RemoveVMAsLocked(&newAR)?;
 
                 // If the sizes specify shrinking, unmap everything between the new and
                 // old sizes at the source. Unmapping before the following checks is
@@ -298,12 +294,12 @@ impl MemoryManager {
                 // vma_to_resize().
                 if newSize < oldSize {
                     let oldNewEnd = oldAddr + newSize;
-                    mm.RemoveVMAsLocked(self, &Range::New(oldNewEnd, oldEnd - oldNewEnd))?;
+                    self.RemoveVMAsLocked(&Range::New(oldNewEnd, oldEnd - oldNewEnd))?;
                     oldEnd = oldNewEnd;
                 }
 
                 // unmapLocked may have invalidated vseg; look it up again.
-                vseg = mm.vmas.FindSeg(oldAddr);
+                vseg = self.mapping.lock().vmas.FindSeg(oldAddr);
             }
             _ => {
                 //unreachable
@@ -342,11 +338,10 @@ impl MemoryManager {
                 vma.offset = vseg.MappableOffsetAt(oldAR.Start());
             }
 
-            let gap = mm.vmas.FindGap(newAR.Start());
-            let vseg = mm.vmas.Insert(&gap, &newAR, vma);
-            mm.usageAS += newAR.Len();
-            core::mem::drop(mm);
-            self.PopulateVMA(task, &vseg, &newAR, false, false)?;
+            let gap = self.mapping.lock().vmas.FindGap(newAR.Start());
+            let vseg = self.mapping.lock().vmas.Insert(&gap, &newAR, vma);
+            self.mapping.lock().usageAS += newAR.Len();
+            self.PopulateVMALocked(task, &vseg, &newAR, false, false)?;
             return Ok(newAR.Start())
         }
 
@@ -365,13 +360,14 @@ impl MemoryManager {
         //
         // Call vseg.Value() (rather than vseg.ValuePtr()) to make a copy of the
         // vma.
-        let vseg = mm.vmas.Isolate(&vseg, &oldAR);
+        let vseg = self.mapping.lock().vmas.Isolate(&vseg, &oldAR);
         let vma = vseg.Value();
-        mm.vmas.Remove(&vseg);
-        let gap = mm.vmas.FindGap(newAR.Start());
-        let vseg = mm.vmas.Insert(&gap, &newAR, vma.clone());
+        self.mapping.lock().vmas.Remove(&vseg);
+        let gap = self.mapping.lock().vmas.FindGap(newAR.Start());
+        let vseg = self.mapping.lock().vmas.Insert(&gap, &newAR, vma.clone());
 
-        mm.usageAS = mm.usageAS - oldAR.Len() + newAR.Len();
+        let usageAS = self.mapping.lock().usageAS;
+        self.mapping.lock().usageAS = usageAS - oldAR.Len() + newAR.Len();
 
         // Now that pmas have been moved to newAR, we can notify vma.mappable that
         // oldAR is no longer mapped.
@@ -380,15 +376,14 @@ impl MemoryManager {
             mappable.RemoveMapping(self, &oldAR, vma.offset, vma.CanWriteMappableLocked())?;
         }
 
-        core::mem::drop(mm);
-        self.PopulateVMARemap(task, &vseg, &newAR, &Range::New(oldAddr, oldSize), true)?;
+        self.PopulateVMARemapLocked(task, &vseg, &newAR, &Range::New(oldAddr, oldSize), true)?;
 
         return Ok(newAR.Start())
     }
 
     pub fn MProtect(&self, addr: u64, len: u64, realPerms: &AccessType, growsDown: bool) -> Result<()> {
-        let lock = self.Lock();
-        let _l = lock.lock();
+        let ml = self.MappingLock();
+        let _ml = ml.write();
 
         if Addr(addr).RoundDown()?.0 != addr {
             return Err(Error::SysError(SysErr::EINVAL));
@@ -407,13 +402,13 @@ impl MemoryManager {
 
         let effectivePerms = realPerms.Effective();
 
-        let mut mm = self.write();
         // Non-growsDown mprotect requires that all of ar is mapped, and stops at
         // the first non-empty gap. growsDown mprotect requires that the first vma
         // be growsDown, but does not require it to extend all the way to ar.Start;
         // vmas after the first must be contiguous but need not be growsDown, like
         // the non-growsDown case.
-        let vseg = mm.vmas.LowerBoundSeg(ar.Start());
+        let mut mapping = self.mapping.lock();
+        let vseg = mapping.vmas.LowerBoundSeg(ar.Start());
         if !vseg.Ok() {
             return Err(Error::SysError(SysErr::ENOMEM));
         }
@@ -443,7 +438,7 @@ impl MemoryManager {
 
             //error!("MProtect: vseg range is {:x?}, vma.mappable.is_some() is {}", vseg.Range(), vma.mappable.is_some());
 
-            vseg = mm.vmas.Isolate(&vseg, &ar);
+            vseg = mapping.vmas.Isolate(&vseg, &ar);
             // Update vma permissions.
             let mut vma = vseg.Value();
             vma.realPerms = *realPerms;
@@ -466,7 +461,7 @@ impl MemoryManager {
                 end = ar.End();
             }
 
-            mm.pt.MProtect(Addr(range.Start()), Addr(end), pageopts, false)?;
+            self.pagetable.write().pt.MProtect(Addr(range.Start()), Addr(end), pageopts, false)?;
             if ar.End() <= range.End() {
                 break;
             }
@@ -478,15 +473,20 @@ impl MemoryManager {
             }
         }
 
-        mm.vmas.MergeRange(&ar);
-        mm.vmas.MergeAdjacent(&ar);
+        mapping.vmas.MergeRange(&ar);
+        mapping.vmas.MergeAdjacent(&ar);
 
         return Ok(())
     }
 
     pub fn NumaPolicy(&self, addr: u64) -> Result<(i32, u64)> {
-        let mm = self.read();
-        let vseg = mm.vmas.FindSeg(addr);
+        let ml = self.MappingLock();
+        let _ml = ml.write();
+        return self.NumaPolicyLocked(addr);
+    }
+
+    pub fn NumaPolicyLocked(&self, addr: u64) -> Result<(i32, u64)> {
+        let vseg = self.mapping.lock().vmas.FindSeg(addr);
         if !vseg.Ok() {
             return Err(Error::SysError(SysErr::EFAULT));
         }
@@ -496,8 +496,8 @@ impl MemoryManager {
     }
 
     pub fn SetNumaPolicy(&self, addr: u64, len: u64, policy: i32, nodemask: u64) -> Result<()> {
-        let lock = self.Lock();
-        let _l = lock.lock();
+        let ml = self.MappingLock();
+        let _ml = ml.write();
 
         if !Addr(addr).IsPageAligned() {
             return Err(Error::SysError(SysErr::EINVAL))
@@ -511,8 +511,8 @@ impl MemoryManager {
             return Ok(())
         }
 
-        let mut mm = self.write();
-        let mut vseg = mm.vmas.LowerBoundSeg(ar.Start());
+        let mut mapping = self.mapping.lock();
+        let mut vseg = mapping.vmas.LowerBoundSeg(ar.Start());
         let mut lastEnd = ar.Start();
 
         loop {
@@ -521,15 +521,15 @@ impl MemoryManager {
                 // range specified [sic] by addr and len." - mbind(2)
                 return Err(Error::SysError(SysErr::EFAULT))
             }
-            vseg = mm.vmas.Isolate(&vseg, &ar);
+            vseg = mapping.vmas.Isolate(&vseg, &ar);
             let mut vma = vseg.Value();
             vma.numaPolicy = policy;
             vma.numaNodemask = nodemask;
             vseg.SetValue(vma);
             lastEnd = vseg.Range().End();
             if ar.End() <= lastEnd {
-                mm.vmas.MergeRange(&ar);
-                mm.vmas.MergeAdjacent(&ar);
+                mapping.vmas.MergeRange(&ar);
+                mapping.vmas.MergeAdjacent(&ar);
                 return Ok(())
             }
             let (tmpVseg, _) = vseg.NextNonEmpty();
@@ -538,35 +538,33 @@ impl MemoryManager {
     }
 
     // BrkSetup sets mm's brk address to addr and its brk size to 0.
-    pub fn BrkSetup(&self, addr: u64) {
-        let mut mm = self.write();
+    pub fn BrkSetupLocked(&self, addr: u64) {
+        let mut mapping = self.mapping.lock();
 
-        if mm.brkInfo.brkStart != mm.brkInfo.brkEnd {
+        if mapping.brkInfo.brkStart != mapping.brkInfo.brkEnd {
             panic!("BrkSetup get nonempty brk");
         }
 
-        mm.brkInfo.brkStart = addr;
-        mm.brkInfo.brkEnd = addr;
-        mm.brkInfo.brkMemEnd = addr;
+        mapping.brkInfo.brkStart = addr;
+        mapping.brkInfo.brkEnd = addr;
+        mapping.brkInfo.brkMemEnd = addr;
     }
 
     // Brk implements the semantics of Linux's brk(2), except that it returns an
     // error on failure.
     pub fn Brk(&self, task: &Task, addr: u64) -> Result<u64> {
-        let lock = self.Lock();
-        let _l = lock.lock();
-
-        let mm = self;
+        let ml = self.MappingLock();
+        let _ml = ml.write();
 
         if addr == 0 || addr == -1 as i64 as u64 {
-            return Ok(mm.read().brkInfo.brkEnd);
+            return Ok(self.mapping.lock().brkInfo.brkEnd);
         }
 
-        if addr < mm.read().brkInfo.brkStart {
+        if addr < self.mapping.lock().brkInfo.brkStart {
             return Err(Error::SysError(SysErr::EINVAL));
         }
 
-        let oldbrkpg = Addr(mm.write().brkInfo.brkEnd).RoundUp()?.0;
+        let oldbrkpg = Addr(self.mapping.lock().brkInfo.brkEnd).RoundUp()?.0;
 
         let newbrkpg = match Addr(addr).RoundUp() {
             Err(_e) => return Err(Error::SysError(SysErr::EFAULT)),
@@ -574,7 +572,7 @@ impl MemoryManager {
         };
 
         if oldbrkpg < newbrkpg {
-            let (vseg, ar) = mm.write().CreateVMAlocked(task, &MMapOpts {
+            let (vseg, ar) = self.CreateVMAlocked(task, &MMapOpts {
                 Length: newbrkpg - oldbrkpg,
                 Addr: oldbrkpg,
                 Offset: 0,
@@ -592,32 +590,31 @@ impl MemoryManager {
                 Mapping: None,
                 Mappable: None,
                 Hint: "[Heap]".to_string(),
-            }, self)?;
+            })?;
 
-            mm.PopulateVMA(task, &vseg, &ar, false, false)?;
-            mm.write().brkInfo.brkEnd = addr;
+            self.PopulateVMALocked(task, &vseg, &ar, false, false)?;
+            self.mapping.lock().brkInfo.brkEnd = addr;
         } else {
             if newbrkpg < oldbrkpg {
-                mm.write().RemoveVMAsLocked(self, &Range::New(newbrkpg, oldbrkpg - newbrkpg))?;
+                self.RemoveVMAsLocked(&Range::New(newbrkpg, oldbrkpg - newbrkpg))?;
             }
 
-            mm.write().brkInfo.brkEnd = addr;
+            self.mapping.lock().brkInfo.brkEnd = addr;
         }
 
         return Ok(addr);
     }
 
     pub fn GetSharedFutexKey(&self, _task: &Task, addr: u64) -> Result<Key> {
-        let lock = self.Lock();
-        let _l = lock.lock();
+        let ml = self.MappingLock();
+        let _ml = ml.read();
 
         let ar = match Addr(addr).ToRange(4) {
             Ok(r) => r,
             Err(_) => return Err(Error::SysError(SysErr::EFAULT)),
         };
 
-        let mm = self.read();
-        let (vseg, _, err) = mm.GetVMAsLocked(&ar, &AccessType::ReadOnly(), false);
+        let (vseg, _, err) = self.GetVMAsLocked(&ar, &AccessType::ReadOnly(), false);
         match err {
             Ok(()) => (),
             Err(e) => return Err(e),
@@ -631,7 +628,7 @@ impl MemoryManager {
             })
         }
 
-        let (phyAddr, _) = mm.VirtualToPhy(addr)?;
+        let (phyAddr, _) = self.VirtualToPhyLocked(addr)?;
 
         return Ok(Key {
             Kind: KeyKind::KindSharedMappable,
@@ -645,10 +642,11 @@ impl MemoryManager {
             Ok(r) => r
         };
 
-        let lock = self.Lock();
-        let _l = lock.lock();
+        let ml = self.MappingLock();
+        let _ml = ml.read();
 
-        let mut vseg = self.read().vmas.LowerBoundSeg(ar.Start());
+        let mapping = self.mapping.lock();
+        let mut vseg = mapping.vmas.LowerBoundSeg(ar.Start());
         while vseg.Ok() && vseg.Range().Start() < ar.End() {
             let vma = vseg.Value();
             if vma.mlockMode != MLockMode::MlockNone && advise == MAdviseOp::MADV_DONTNEED {
@@ -656,7 +654,7 @@ impl MemoryManager {
             }
 
             let mr = ar.Intersect(&vseg.Range());
-            self.write().pt.MUnmap(mr.Start(), mr.Len())?;
+            self.pagetable.write().pt.MUnmap(mr.Start(), mr.Len())?;
 
             if let Some(iops) = vma.mappable.clone() {
                 let fstart = mr.Start() - vseg.Range().Start() + vma.offset;
@@ -678,12 +676,13 @@ impl MemoryManager {
             Ok(r) => r
         };
 
-        let lock = self.Lock();
-        let _l = lock.lock();
+        let ml = self.MappingLock();
+        let _ml = ml.write();
 
-        let mut vseg = self.read().vmas.LowerBoundSeg(ar.Start());
+        let mut mapping = self.mapping.lock();
+        let mut vseg = mapping.vmas.LowerBoundSeg(ar.Start());
         while vseg.Ok() && vseg.Range().Start() < ar.End() {
-            vseg = self.write().vmas.Isolate(&vseg, &ar);
+            vseg = mapping.vmas.Isolate(&vseg, &ar);
             let mut vma = vseg.Value();
             vma.dontfork = dontfork;
             vseg.SetValue(vma);
@@ -691,30 +690,54 @@ impl MemoryManager {
             vseg = vseg.NextSeg();
         }
 
-        self.write().vmas.MergeRange(&ar);
-        self.write().vmas.MergeAdjacent(&ar);
+        mapping.vmas.MergeRange(&ar);
+        mapping.vmas.MergeAdjacent(&ar);
 
-        if self.read().vmas.SpanRange(&ar) != ar.Len() {
+        if mapping.vmas.SpanRange(&ar) != ar.Len() {
             return Err(Error::SysError(SysErr::ENOMEM))
         }
 
         return Ok(())
     }
 
+    pub fn VirtualMemorySizeRangeLocked(&self, ar: &Range) -> u64 {
+        return self.mapping.lock().vmas.SpanRange(&ar);
+    }
+
     pub fn VirtualMemorySizeRange(&self, ar: &Range) -> u64 {
-        return self.read().vmas.SpanRange(&ar);
+        let ml = self.MappingLock();
+        let _ml = ml.read();
+        return self.VirtualMemorySizeRangeLocked(ar);
+    }
+
+    pub fn VirtualMemorySizeLocked(&self) -> u64 {
+        return self.mapping.lock().usageAS;
     }
 
     pub fn VirtualMemorySize(&self) -> u64 {
-        return self.read().usageAS;
+        let ml = self.MappingLock();
+        let _ml = ml.read();
+        return self.VirtualMemorySizeLocked();
+    }
+
+    pub fn ResidentSetSizeLocked(&self) -> u64 {
+        return self.pagetable.read().curRSS;
     }
 
     pub fn ResidentSetSize(&self) -> u64 {
-        return self.read().curRSS;
+        let ml = self.MappingLock();
+        let _ml = ml.read();
+        return self.ResidentSetSize();
+    }
+
+    pub fn MaxResidentSetSizeLocked(&self) -> u64 {
+        return self.pagetable.read().maxRSS;
     }
 
     pub fn MaxResidentSetSize(&self) -> u64 {
-        return self.read().maxRSS;
+        let ml = self.MappingLock();
+        let _ml = ml.read();
+        return self.MaxResidentSetSizeLocked();
     }
 }
 

@@ -141,7 +141,7 @@ impl MemoryManager {
         };
 
         let id = addr;
-        let ret = self.write().aioManager.NewAIOContext(events, id);
+        let ret = self.aioManager.NewAIOContext(events, id);
         if !ret {
             self.MUnmap(task, addr, AIOContext::AIO_RINGBUF_SIZE)?;
             return Err(Error::SysError(SysErr::EINVAL))
@@ -167,11 +167,11 @@ impl MemoryManager {
         // semantics in case anyone relies on it.
 
         self.MUnmap(task, id, AIOContext::AIO_RINGBUF_SIZE).ok();
-        return self.read().aioManager.DestroyAIOContext(id);
+        return self.aioManager.DestroyAIOContext(id);
     }
 
     pub fn LookupAIOContext(&self, task: &Task, id: u64) -> Option<AIOContext> {
-        let aioCtx = match self.read().aioManager.LookupAIOContext(id) {
+        let aioCtx = match self.aioManager.LookupAIOContext(id) {
             None => return None,
             Some(c) => c,
         };
@@ -186,7 +186,6 @@ impl MemoryManager {
         return Some(aioCtx)
     }
 }
-
 
 // I/O commands.
 pub const IOCB_CMD_PREAD   : u16 = 0;

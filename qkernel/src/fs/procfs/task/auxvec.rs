@@ -80,7 +80,8 @@ impl ReadonlyFileNode for AUXVecReadonlyFileNode {
         }
 
         let mm = self.thread.lock().memoryMgr.clone();
-        let auxvlen = mm.read().auxv.len();
+        let metadata = mm.metadata.lock();
+        let auxvlen = metadata.auxv.len();
 
         // Space for buffer with AT_NULL (0) terminator at the end.
         let size = (auxvlen + 1) * 16 - 16;
@@ -90,7 +91,7 @@ impl ReadonlyFileNode for AUXVecReadonlyFileNode {
 
         let mut buf : Vec<u64> = Vec::with_capacity(auxvlen + 1);
         for i in 1..auxvlen {
-            let e = &mm.read().auxv[i];
+            let e = &metadata.auxv[i];
             buf.push(e.Key as u64);
             buf.push(e.Val);
         }

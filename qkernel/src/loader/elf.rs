@@ -364,7 +364,7 @@ pub fn LoadParseElf(task: &mut Task, file: &File, info: &mut ElfHeadersInfo, sha
             Ok(s) => s.0,
         };
 
-        offset = match task.mm.write().FindAvailableSeg(task, sharedLoadOffset, totalSize) {
+        offset = match task.mm.FindAvailableSeg(task, sharedLoadOffset, totalSize) {
             Err(e) => {
                 info!("Error allocating address space for shared object: {:?}", e);
                 return Err(Error::SysError(SysErr::ENOEXEC));
@@ -425,7 +425,7 @@ pub fn LoadInitalElf(task: &mut Task, file: &File) -> Result<LoadedElf> {
     let mut info = ParseHeader(task, file)?;
 
     let l = task.mm.SetMmapLayout(MIN_USER_ADDR, MAX_USER_ADDR, &LimitSet::default())?;
-    task.mm.write().layout = l;
+    *task.mm.layout.lock() = l;
 
     let loadAddr = Context64::PIELoadAddress(&l)?;
 

@@ -53,7 +53,7 @@ pub fn SliceCompare(left: &[u8], right: &[u8]) -> bool {
 }
 
 pub fn LoadVDSO(task: &mut Task) -> Result<u64> {
-    let vAddr = task.mm.write().FindAvailableSeg(task, 0, 3 * MemoryDef::PAGE_SIZE)?;
+    let vAddr = task.mm.FindAvailableSeg(task, 0, 3 * MemoryDef::PAGE_SIZE)?;
 
     let vdsoParamPageAddr = GetVDSOParamPageAddr();
     let paramVAddr = MapVDSOParamPage(task, vAddr, vdsoParamPageAddr)?;
@@ -189,7 +189,7 @@ pub const DEFAULT_STACK_SOFT_LIMIT : u64 = 8 *1024 *1024;
 pub fn CreateStack(task: &Task) -> Result<Range> {
     let stackSize = DEFAULT_STACK_SOFT_LIMIT;
 
-    let stackEnd = task.mm.read().MapStackAddr();
+    let stackEnd = task.mm.MapStackAddr();
     let stackStart = stackEnd - stackSize;
 
     let mut moptions = MMapOpts::NewAnonOptions("[stack]".to_string())?;
@@ -219,7 +219,7 @@ pub fn Load(task: &mut Task, filename: &str, argv: &mut Vec<String>, envv: &[Str
 
     let e = Addr(loaded.end).RoundUp()?.0;
 
-    task.mm.write().BrkSetup(e);
+    task.mm.BrkSetup(e);
     task.mm.SetExecutable(&executable);
 
     let mut name = Base(&filename);
@@ -287,12 +287,14 @@ pub fn SetupUserStack(mm: &MemoryManager,
 
     let l = stack.LoadEnv(envv, argv, &auxv);
 
-    {
+    /*{
         let mut mmlock = mm.write();
         mmlock.auxv.append(&mut auxv);
         mmlock.argv = Range::New(l.ArgvStart, l.ArgvEnd - l.ArgvStart);
         mmlock.envv = Range::New(l.EnvvStart, l.EvvvEnd - l.EnvvStart)
-    }
+    }*/
+
+    mm.SetupStack(&l, extraAuxv);
 
     return stack.sp;
 }

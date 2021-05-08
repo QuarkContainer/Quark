@@ -88,8 +88,11 @@ impl StatusData {
         ret += &format!("FDSize:\t{}\n", fds);
 
         let mm = self.thread.lock().memoryMgr.clone();
-        let vss = mm.VirtualMemorySize();
-        let rss = mm.ResidentSetSize();
+
+        let ml = mm.MappingLock();
+        let _ml = ml.read();
+        let vss = mm.VirtualMemorySizeLocked();
+        let rss = mm.ResidentSetSizeLocked();
         ret += &format!("VmSize:\t{} kB\n", vss>>10);
         ret += &format!("VmRSS:\t{} kB\n", rss>>10);
         ret += &format!("Threads:\t{}\n", tg.Count());

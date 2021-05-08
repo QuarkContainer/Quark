@@ -121,7 +121,10 @@ impl Target for Task {
             None => return Err(Error::SysError(SysErr::EFAULT)),
             Some(v) => v.clone(),
         };*/
-        let (vma, _) = match self.mm.GetVmaAndRange(addr) {
+        let ml = self.mm.MappingLock();
+        let _ml = ml.write();
+
+        let (vma, _) = match self.mm.GetVmaAndRangeLocked(addr) {
             None => return Err(Error::SysError(SysErr::EFAULT)),
             Some(v) => v.clone(),
         };
@@ -134,7 +137,7 @@ impl Target for Task {
             })
         }
 
-        let phyAdr = self.VirtualToPhy(addr)?;
+        let (phyAdr, _) = self.mm.VirtualToPhyLocked(addr)?;
 
         return Ok(Key {
             Kind: KeyKind::KindSharedMappable,

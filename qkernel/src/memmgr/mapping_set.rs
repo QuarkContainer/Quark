@@ -263,20 +263,6 @@ impl AreaSet<MappingsOfRange> {
     }
 
     // Invalidate calls MappingSpace.Invalidate for all mappings of offsets in mr.
-    pub fn Invalidate1(&mut self, task: &Task, mr: &Range, invalidatePrivate: bool) {
-        let mut seg = self.LowerBoundSeg(mr.Start());
-        while seg.Ok() && seg.Range().Start() < mr.End() {
-            let segMR = seg.Range();
-            for m in seg.Value().lock().iter() {
-                let region = SubsetMapping(&segMR, &segMR.Intersect(mr), &m.MappingSpace, m.AddrRange.Start(), m.Writeable);
-                region.invalidate(task, invalidatePrivate);
-            }
-
-            seg = seg.NextSeg();
-        }
-    }
-
-    // Invalidate calls MappingSpace.Invalidate for all mappings of offsets in mr.
     pub fn InvalidateRanges(&mut self, _task: &Task, mr: &Range, _invalidatePrivate: bool) -> Vec<MappingOfRange> {
         let mut ranges = Vec::new();
         let mut seg = self.LowerBoundSeg(mr.Start());

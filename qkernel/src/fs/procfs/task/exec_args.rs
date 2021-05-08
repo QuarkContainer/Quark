@@ -94,10 +94,10 @@ impl ReadonlyFileNode for ExecArgReadonlyFileNode {
 
         let range = match self.typ {
             ExecArgType::CmdlineExecArg => {
-                mm.read().argv
+                mm.metadata.lock().argv
             }
             ExecArgType::EnvironExecArg => {
-                mm.read().envv
+                mm.metadata.lock().envv
             }
         };
 
@@ -142,7 +142,7 @@ impl ReadonlyFileNode for ExecArgReadonlyFileNode {
             if copyN < buf.len() {
                 buf = &buf[..copyN]
             } else {
-                let envv = mm.read().envv;
+                let envv = mm.metadata.lock().envv;
                 let mut lengthEnvv = envv.Len() as usize;
 
                 if lengthEnvv > MemoryDef::PAGE_SIZE as usize - buf.len() {

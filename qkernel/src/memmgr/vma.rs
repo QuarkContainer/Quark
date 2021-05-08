@@ -49,147 +49,10 @@ pub struct FindAvailableOpts {
     pub Kernel: bool,
 }
 
-impl MemoryManagerInternal {
-    //find free seg with enough len
-    pub fn FindAvailableSeg(&mut self, _task: &Task, offset: u64, len: u64) -> Result<u64> {
-        let mut findopts = FindAvailableOpts {
-            Addr: offset,
-            Fixed: false,
-            Unmap: false,
-            Map32Bit: false,
-            Kernel: false,
-        };
-
-        let addr = self.FindAvailableLocked(len, &mut findopts)?;
-        return Ok(addr);
-    }
-
-    pub fn CreateVMAlocked(&mut self, _task: &Task, opts: &MMapOpts, mm: &MemoryManager) -> Result<(AreaSeg<VMA>, Range)> {
-        if opts.MaxPerms != opts.MaxPerms.Effective() {
-            panic!("Non-effective MaxPerms {:?} cannot be enforced", opts.MaxPerms);
-        }
-
-        // Find a useable range.
-        let mut findopts = FindAvailableOpts {
-            Addr: opts.Addr,
-            Fixed: opts.Fixed,
-            Unmap: opts.Unmap,
-            Map32Bit: opts.Map32Bit,
-            Kernel: opts.Kernel,
-        };
-        let addr = self.FindAvailableLocked(opts.Length, &mut findopts)?;
-
-        let ar = Range::New(addr, opts.Length);
-
-        // todo: Check against RLIMIT_AS.
-        /*let mut newUsageAS = self.usageAS + opts.Length;
-        if opts.Unmap {
-            newUsageAS -= self.vmas.SpanRange(&ar);
-        }*/
-
-        // Remove overwritten mappings. This ordering is consistent with Linux:
-        // compare Linux's mm/mmap.c:mmap_region() => do_munmap(),
-        // file->f_op->mmap().
-        if opts.Unmap {
-            self.RemoveVMAsLocked(mm, &ar)?;
-        }
-
-        let gap = self.vmas.FindGap(ar.Start());
-
-        if opts.Mappable.is_some() {
-            let mappable = opts.Mappable.clone().unwrap();
-            mappable.AddMapping(mm, &ar, opts.Offset, !opts.Private && opts.MaxPerms.Write())?;
-        }
-
-        let vma = VMA {
-            mappable: opts.Mappable.clone(),
-            offset: opts.Offset,
-            fixed: opts.Fixed,
-            realPerms: opts.Perms,
-            effectivePerms: opts.Perms.Effective(),
-            maxPerms: opts.MaxPerms,
-            private: opts.Private,
-            growsDown: opts.GrowsDown,
-            dontfork: false,
-            mlockMode: opts.MLockMode,
-            kernel: opts.Kernel,
-            hint: opts.Hint.to_string(),
-            id: opts.Mapping.clone(),
-            numaPolicy: 0,
-            numaNodemask: 0,
-        };
-
-        self.usageAS += opts.Length;
-
-        let vseg = self.vmas.Insert(&gap, &ar, vma);
-        let nextvseg = vseg.NextSeg();
-        assert!(vseg.Range().End() <= nextvseg.Range().Start(), "vseg end < vseg.next.start");
-        return Ok((vseg, ar))
-    }
-
-    pub fn FindAvailableLocked(&mut self, length: u64, opts: &mut FindAvailableOpts) -> Result<u64> {
-        if opts.Fixed {
-            opts.Map32Bit = false;
-        }
-
-        let mut allowedRange = if opts.Kernel {
-            Range::New(0, !0)
-        } else {
-            self.ApplicationAddrRange()
-        };
-
-        if opts.Map32Bit {
-            allowedRange = allowedRange.Intersect(&Range::New(MAP32_START, MAP32_END - MAP32_START));
-        }
-
-        // Does the provided suggestion work?
-        match Addr(opts.Addr).ToRange(length) {
-            Ok(r) => {
-                if allowedRange.IsSupersetOf(&r) {
-                    if opts.Unmap {
-                        return Ok(r.Start());
-                    }
-
-                    let vgap = self.vmas.FindGap(r.Start());
-                    if vgap.Ok() && vgap.AvailableRange().IsSupersetOf(&r) {
-                        return Ok(r.Start())
-                    }
-                }
-            }
-            Err(_) => ()
-        }
-
-        // Fixed mappings accept only the requested address.
-        if opts.Fixed {
-            return Err(Error::SysError(SysErr::ENOMEM))
-        }
-
-        // Prefer hugepage alignment if a hugepage or more is requested.
-        let mut alignment = MemoryDef::PAGE_SIZE;
-        if length > MemoryDef::HUGE_PAGE_SIZE {
-            alignment = MemoryDef::HUGE_PAGE_SIZE;
-        }
-
-        if opts.Map32Bit {
-            return self.FindLowestAvailableLocked(length, alignment, &allowedRange);
-        }
-
-        if self.layout.DefaultDirection == MMAP_BOTTOM_UP {
-            return self.FindLowestAvailableLocked(length, alignment,
-                                                  &Range::New(self.layout.BottomUpBase, self.layout.MaxAddr - self.layout.BottomUpBase));
-        }
-
-        return self.FindHighestAvailableLocked(length, alignment,
-                                               &Range::New(self.layout.MinAddr, self.layout.TopDownBase - self.layout.MinAddr));
-    }
-
-    pub fn ApplicationAddrRange(&self) -> Range {
-        let mm = self;
-        return Range::New(mm.layout.MinAddr, mm.layout.MaxAddr - mm.layout.MinAddr);
-    }
-
+impl MemoryManager {
     pub fn FindLowestAvailableLocked(&self, length: u64, alignment: u64, bounds: &Range) -> Result<u64> {
-        let mut gap = self.vmas.LowerBoundGap(bounds.Start());
+        let mapping = self.mapping.lock();
+        let mut gap = mapping.vmas.LowerBoundGap(bounds.Start());
 
         while gap.Ok() && gap.Range().Start() < bounds.End() {
             let gr = gap.Range().Intersect(bounds);
@@ -214,7 +77,8 @@ impl MemoryManagerInternal {
     }
 
     pub fn FindHighestAvailableLocked(&self, length: u64, alignment: u64, bounds: &Range) -> Result<u64> {
-        let mut gap = self.vmas.UpperBoundGap(bounds.End());
+        let mapping = self.mapping.lock();
+        let mut gap = mapping.vmas.UpperBoundGap(bounds.End());
 
         while gap.Ok() && gap.Range().End() > bounds.Start() {
             let gr = gap.Range().Intersect(bounds);
@@ -254,7 +118,8 @@ impl MemoryManagerInternal {
     // Preconditions: mm.mappingMu must be locked for reading; it may be
     // temporarily unlocked. ar.Length() != 0.
     pub fn GetVMAsLocked(&self, r: &Range, at: &AccessType, ignorePermissions: bool) -> (AreaSeg<VMA>, AreaGap<VMA>, Result<()>) {
-        let (mut vbegin, mut vgap) = self.vmas.Find(r.Start());
+        let mapping = self.mapping.lock();
+        let (mut vbegin, mut vgap) = mapping.vmas.Find(r.Start());
 
         if !vbegin.Ok() {
             vbegin = vgap.NextSeg()
@@ -297,6 +162,145 @@ impl MemoryManagerInternal {
         // Ran out of vmas before ar.End.
         return (vbegin, vgap, Err(Error::SysError(SysErr::EFAULT)));
     }
+
+    pub fn FindAvailableLocked(&self, length: u64, opts: &mut FindAvailableOpts) -> Result<u64> {
+        if opts.Fixed {
+            opts.Map32Bit = false;
+        }
+
+        let mut allowedRange = if opts.Kernel {
+            Range::New(0, !0)
+        } else {
+            self.ApplicationAddrRange()
+        };
+
+        if opts.Map32Bit {
+            allowedRange = allowedRange.Intersect(&Range::New(MAP32_START, MAP32_END - MAP32_START));
+        }
+
+        // Does the provided suggestion work?
+        match Addr(opts.Addr).ToRange(length) {
+            Ok(r) => {
+                if allowedRange.IsSupersetOf(&r) {
+                    if opts.Unmap {
+                        return Ok(r.Start());
+                    }
+
+                    let vgap = self.mapping.lock().vmas.FindGap(r.Start());
+                    if vgap.Ok() && vgap.AvailableRange().IsSupersetOf(&r) {
+                        return Ok(r.Start())
+                    }
+                }
+            }
+            Err(_) => ()
+        }
+
+        // Fixed mappings accept only the requested address.
+        if opts.Fixed {
+            return Err(Error::SysError(SysErr::ENOMEM))
+        }
+
+        // Prefer hugepage alignment if a hugepage or more is requested.
+        let mut alignment = MemoryDef::PAGE_SIZE;
+        if length > MemoryDef::HUGE_PAGE_SIZE {
+            alignment = MemoryDef::HUGE_PAGE_SIZE;
+        }
+
+        if opts.Map32Bit {
+            return self.FindLowestAvailableLocked(length, alignment, &allowedRange);
+        }
+
+        let layout = *self.layout.lock();
+        if layout.DefaultDirection == MMAP_BOTTOM_UP {
+            return self.FindLowestAvailableLocked(length, alignment,
+                                                  &Range::New(layout.BottomUpBase, layout.MaxAddr - layout.BottomUpBase));
+        }
+
+        return self.FindHighestAvailableLocked(length, alignment,
+                                               &Range::New(layout.MinAddr, layout.TopDownBase - layout.MinAddr));
+    }
+
+    pub fn CreateVMAlocked(&self, _task: &Task, opts: &MMapOpts) -> Result<(AreaSeg<VMA>, Range)> {
+        if opts.MaxPerms != opts.MaxPerms.Effective() {
+            panic!("Non-effective MaxPerms {:?} cannot be enforced", opts.MaxPerms);
+        }
+
+        // Find a useable range.
+        let mut findopts = FindAvailableOpts {
+            Addr: opts.Addr,
+            Fixed: opts.Fixed,
+            Unmap: opts.Unmap,
+            Map32Bit: opts.Map32Bit,
+            Kernel: opts.Kernel,
+        };
+        let addr = self.FindAvailableLocked(opts.Length, &mut findopts)?;
+
+        let ar = Range::New(addr, opts.Length);
+
+        // todo: Check against RLIMIT_AS.
+        /*let mut newUsageAS = self.usageAS + opts.Length;
+        if opts.Unmap {
+            newUsageAS -= self.vmas.SpanRange(&ar);
+        }*/
+
+        // Remove overwritten mappings. This ordering is consistent with Linux:
+        // compare Linux's mm/mmap.c:mmap_region() => do_munmap(),
+        // file->f_op->mmap().
+        if opts.Unmap {
+            self.RemoveVMAsLocked(&ar)?;
+        }
+
+        let mut mapping = self.mapping.lock();
+        let gap = mapping.vmas.FindGap(ar.Start());
+
+        if opts.Mappable.is_some() {
+            let mappable = opts.Mappable.clone().unwrap();
+            mappable.AddMapping(self, &ar, opts.Offset, !opts.Private && opts.MaxPerms.Write())?;
+        }
+
+        let vma = VMA {
+            mappable: opts.Mappable.clone(),
+            offset: opts.Offset,
+            fixed: opts.Fixed,
+            realPerms: opts.Perms,
+            effectivePerms: opts.Perms.Effective(),
+            maxPerms: opts.MaxPerms,
+            private: opts.Private,
+            growsDown: opts.GrowsDown,
+            dontfork: false,
+            mlockMode: opts.MLockMode,
+            kernel: opts.Kernel,
+            hint: opts.Hint.to_string(),
+            id: opts.Mapping.clone(),
+            numaPolicy: 0,
+            numaNodemask: 0,
+        };
+
+        mapping.usageAS += opts.Length;
+
+        let vseg = mapping.vmas.Insert(&gap, &ar, vma);
+        let nextvseg = vseg.NextSeg();
+        assert!(vseg.Range().End() <= nextvseg.Range().Start(), "vseg end < vseg.next.start");
+        return Ok((vseg, ar))
+    }
+
+    //find free seg with enough len
+    pub fn FindAvailableSeg(&self, _task: &Task, offset: u64, len: u64) -> Result<u64> {
+        let ml = self.MappingLock();
+        let _ml = ml.write();
+
+        let mut findopts = FindAvailableOpts {
+            Addr: offset,
+            Fixed: false,
+            Unmap: false,
+            Map32Bit: false,
+            Kernel: false,
+        };
+
+        let addr = self.FindAvailableLocked(len, &mut findopts)?;
+        return Ok(addr);
+    }
+
 }
 
 #[derive(Clone, Default)]

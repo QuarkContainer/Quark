@@ -30,10 +30,10 @@ pub const ROOT_DUMPABLE : Dumpability = 2;
 
 impl MemoryManager {
     pub fn Dumpability(&self) -> Dumpability {
-        return self.read().dumpability;
+        return self.metadata.lock().dumpability;
     }
 
     pub fn SetDumpability(&self, d: Dumpability) {
-        self.write().dumpability = d;
+        self.metadata.lock().dumpability = d;
     }
 }
