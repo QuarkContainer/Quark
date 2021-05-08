@@ -57,6 +57,7 @@ pub struct MappableInternal {
     // mappings tracks mappings of the cached file object into
     // memmap.MappingSpaces.
     pub mapping: AreaSet<MappingsOfRange>,
+    pub mapping2: AreaSet<MappingsOfRange2>,
 
     pub chunkrefs: BTreeMap<u64, i32>,
 }
@@ -125,6 +126,7 @@ impl Default for MappableInternal {
             //lock: QLock::default(),
             f2pmap: BTreeMap::new(),
             mapping: AreaSet::New(0, core::u64::MAX),
+            mapping2: AreaSet::New(0, core::u64::MAX),
             chunkrefs: BTreeMap::new(),
         }
     }
@@ -451,7 +453,7 @@ impl HostInodeOp {
     /*********************************start of mappable****************************************************************/
 
     //add mapping between file offset and the <MappingSpace(i.e. memorymanager), Virtual Address>
-    pub fn AddMapping(&self, ms: &MemoryManager, ar: &Range, offset: u64, writeable: bool) -> Result<()> {
+    pub fn AddMapping(&self, ms: &MemoryManager1, ar: &Range, offset: u64, writeable: bool) -> Result<()> {
         let mappable = self.lock().Mappable();
         let mut mappableLock = mappable.lock();
 
@@ -460,7 +462,16 @@ impl HostInodeOp {
         return Ok(())
     }
 
-    pub fn RemoveMapping(&self, ms: &MemoryManager, ar: &Range, offset: u64, writeable: bool) -> Result<()> {
+    pub fn AddMapping2(&self, ms: &MemoryManager, ar: &Range, offset: u64, writeable: bool) -> Result<()> {
+        let mappable = self.lock().Mappable();
+        let mut mappableLock = mappable.lock();
+
+        mappableLock.mapping2.AddMapping(ms, ar, offset, writeable);
+        mappableLock.IncrRefOn(&Range::New(offset, ar.Len()));
+        return Ok(())
+    }
+
+    pub fn RemoveMapping(&self, ms: &MemoryManager1, ar: &Range, offset: u64, writeable: bool) -> Result<()> {
         let mappable = self.lock().Mappable();
         let mut mappableLock = mappable.lock();
 
@@ -469,8 +480,21 @@ impl HostInodeOp {
         return Ok(())
     }
 
-    pub fn CopyMapping(&self, ms: &MemoryManager, _srcAr: &Range, dstAR: &Range, offset: u64, writeable: bool) -> Result<()> {
+    pub fn RemoveMapping2(&self, ms: &MemoryManager, ar: &Range, offset: u64, writeable: bool) -> Result<()> {
+        let mappable = self.lock().Mappable();
+        let mut mappableLock = mappable.lock();
+
+        mappableLock.mapping2.RemoveMapping(ms, ar, offset, writeable);
+        mappableLock.DecrRefOn(&Range::New(offset, ar.Len()));
+        return Ok(())
+    }
+
+    pub fn CopyMapping(&self, ms: &MemoryManager1, _srcAr: &Range, dstAR: &Range, offset: u64, writeable: bool) -> Result<()> {
         return self.AddMapping(ms, dstAR, offset, writeable);
+    }
+
+    pub fn CopyMapping2(&self, ms: &MemoryManager, _srcAr: &Range, dstAR: &Range, offset: u64, writeable: bool) -> Result<()> {
+        return self.AddMapping2(ms, dstAR, offset, writeable);
     }
 
     pub fn FD(&self) -> i32 {

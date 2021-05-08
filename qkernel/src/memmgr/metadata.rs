@@ -28,12 +28,22 @@ pub const USER_DUMPABLE : Dumpability = 1;
 // root.
 pub const ROOT_DUMPABLE : Dumpability = 2;
 
-impl MemoryManager {
+impl MemoryManager1 {
     pub fn Dumpability(&self) -> Dumpability {
         return self.read().dumpability;
     }
 
     pub fn SetDumpability(&self, d: Dumpability) {
         self.write().dumpability = d;
+    }
+}
+
+impl MemoryManager {
+    pub fn Dumpability(&self) -> Dumpability {
+        return self.metadata.lock().dumpability;
+    }
+
+    pub fn SetDumpability(&self, d: Dumpability) {
+        self.metadata.lock().dumpability = d;
     }
 }

@@ -141,6 +141,83 @@ impl MemoryManager {
         };
 
         let id = addr;
+        let ret = self.aioManager.NewAIOContext(events, id);
+        if !ret {
+            self.MUnmap(task, addr, AIOContext::AIO_RINGBUF_SIZE)?;
+            return Err(Error::SysError(SysErr::EINVAL))
+        }
+
+        return Ok(id)
+    }
+
+    // DestroyAIOContext destroys an asynchronous I/O context. It returns false if
+    // the context does not exist.
+    pub fn DestroyAIOContext(&self, task: &Task, id: u64) -> bool {
+        let _aioCtx = match self.LookupAIOContext(task, id) {
+            None => return false,
+            Some(c) => c,
+        };
+
+        // Only unmaps after it assured that the address is a valid aio context to
+        // prevent random memory from been unmapped.
+        //
+        // Note: It's possible to unmap this address and map something else into
+        // the same address. Then it would be unmapping memory that it doesn't own.
+        // This is, however, the way Linux implements AIO. Keeps the same [weird]
+        // semantics in case anyone relies on it.
+
+        self.MUnmap(task, id, AIOContext::AIO_RINGBUF_SIZE).ok();
+        return self.aioManager.DestroyAIOContext(id);
+    }
+
+    pub fn LookupAIOContext(&self, task: &Task, id: u64) -> Option<AIOContext> {
+        let aioCtx = match self.aioManager.LookupAIOContext(id) {
+            None => return None,
+            Some(c) => c,
+        };
+
+        // Protect against 'ids' that are inaccessible (Linux also reads 4 bytes
+        // from id).
+        let _buf : [u8; 4] = *match task.GetType(id) {
+            Err(_) => return None,
+            Ok(t) => t,
+        };
+
+        return Some(aioCtx)
+    }
+}
+
+impl MemoryManager1 {
+    // NewAIOContext creates a new context for asynchronous I/O.
+    //
+    // NewAIOContext is analogous to Linux's fs/aio.c:ioctx_alloc().
+    pub fn NewAIOContext(&self, task: &Task, events: usize) -> Result<u64> {
+        let mut opts = MMapOpts {
+            Length: AIOContext::AIO_RINGBUF_SIZE,
+            Addr: 0,
+            Offset: 0,
+            Fixed: false,
+            Unmap: false,
+            Map32Bit: false,
+            Private: true,
+            VDSO: false,
+            Perms: AccessType::ReadOnly(),
+            MaxPerms: AccessType::ReadOnly(),
+            GrowsDown: false,
+            Precommit: false,
+            MLockMode: MLockMode::default(),
+            Kernel: false,
+            Mapping: Some(Arc::new(AIOMapping{})),
+            Mappable: None,
+            Hint: "".to_string(),
+        };
+
+        let addr = match self.MMap(task, &mut opts) {
+            Ok(addr) => addr,
+            Err(e) => return Err(e),
+        };
+
+        let id = addr;
         let ret = self.write().aioManager.NewAIOContext(events, id);
         if !ret {
             self.MUnmap(task, addr, AIOContext::AIO_RINGBUF_SIZE)?;

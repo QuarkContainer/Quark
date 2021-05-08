@@ -33,7 +33,7 @@ pub struct ExeNode {
 impl ExeNode {
     pub fn Executable(&self) -> Result<Dirent> {
         let mm = self.thread.lock().memoryMgr.clone();
-        let ret = mm.read().executable.clone();
+        let ret = mm.metadata.lock().executable.clone();
         match ret {
             None => return Err(Error::SysError(SysErr::ENOENT)),
             Some(d) => Ok(d)

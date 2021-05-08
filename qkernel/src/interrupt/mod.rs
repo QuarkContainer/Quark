@@ -136,7 +136,7 @@ impl fmt::Debug for ExceptionStackFrame {
     }
 }
 
-pub const PRINT_EXECPTION : bool = false;
+pub const PRINT_EXECPTION : bool = true;
 
 pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, _errorCode: u64) {
     let currTask = Task::Current();
@@ -259,13 +259,15 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, _errorC
             thread.SendSignal(&info).expect("DivByZeroHandler send signal fail");
         }
         ExceptionStackVec::InvalidOpcode => {
-            let map =  currTask.mm.GetSnapshot(currTask, false);
+            let ml = currTask.mm.MappingLock();
+            let _ml = ml.write();
+            let map =  currTask.mm.GetSnapshotLocked(currTask, false);
             let data = unsafe {
                 *(sf.ip as * const u64)
             };
 
             print!("InvalidOpcode: data is {:x}, phyAddr is {:x?}, the map is {}",
-                   data, currTask.VirtualToPhy(sf.ip), &map);
+                   data, currTask.mm.VirtualToPhyLocked(sf.ip), &map);
 
             let info = SignalInfo {
                 Signo: Signal::SIGILL,
@@ -446,14 +448,13 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
 
     //defer!(print!("end of in PageFaultHandler ..."));
 
-    let lock = currTask.mm.Lock();
-    let l = lock.lock();
+    let ml = currTask.mm.MappingLock();
+    let _ml = ml.write();
 
-    let (vma, range) = match currTask.mm.GetVmaAndRange(cr2) {
+    let (vma, range) = match currTask.mm.GetVmaAndRangeLocked(cr2) {
         //vmas.lock().Get(cr2) {
         None => {
             //todo: when to send sigbus/SIGSEGV
-            core::mem::drop(l);
             HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
             return
         }
@@ -462,16 +463,14 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
 
     let errbits = PageFaultErrorCode::from_bits(errorCode).unwrap();
     if vma.kernel == true {
-        let map =  currTask.mm.GetSnapshot(currTask, false);
+        let map =  currTask.mm.GetSnapshotLocked(currTask, false);
         print!("the map is {}", &map);
 
-        core::mem::drop(l);
         HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
         return
     }
 
     if !vma.effectivePerms.Read() { // has no read permission
-        core::mem::drop(l);
         HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
         return
     }
@@ -483,9 +482,8 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     if errbits & PageFaultErrorCode::PROTECTION_VIOLATION !=  PageFaultErrorCode::PROTECTION_VIOLATION {
         //error!("InstallPage 1, range is {:x?}, address is {:x}, vma.growsDown is {}",
         //    &range, pageAddr, vma.growsDown);
-        match currTask.mm.InstallPage(currTask, &vma, pageAddr, &range) {
+        match currTask.mm.InstallPageLocked(currTask, &vma, pageAddr, &range) {
             Err(Error::FileMapError) => {
-                core::mem::drop(l);
                 HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGBUS);
                 return
             }
@@ -502,7 +500,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
                 pageAddr + i * PAGE_SIZE
             };
             if range.Contains(addr) {
-                match currTask.mm.InstallPage(currTask, &vma, pageAddr, &range) {
+                match currTask.mm.InstallPageLocked(currTask, &vma, pageAddr, &range) {
                     Err(_) => {
                         break;
                     }
@@ -523,14 +521,12 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     }
 
     if vma.private == false {
-        core::mem::drop(l);
         HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
         return
     }
 
     if (errbits & PageFaultErrorCode::CAUSED_BY_WRITE) == PageFaultErrorCode::CAUSED_BY_WRITE {
         if !vma.effectivePerms.Write() && fromUser {
-            core::mem::drop(l);
             HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
             return
         }
@@ -542,14 +538,13 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
             currTask.AccountTaskEnter(SchedState::RunningApp);
         }
     } else {
-        core::mem::drop(l);
         HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
     }
 }
 
 pub fn HandleFault(task: &mut Task, user: bool, errorCode: u64, cr2: u64, sf: &mut ExceptionStackFrame, signal: i32) {
-    if !user {
-        let map =  task.mm.GetSnapshot(task, false);
+    if true || !user {
+        let map =  task.mm.GetSnapshotLocked(task, false);
         //println!("the cr2 is {:x}", cr2);
         print!("unhandle EXCEPTION: page_fault FAULT\n{:#?}, error code is {:?}, cr2 is {:x}, registers is {:#x?}",
                sf, errorCode, cr2, task.GetPtRegs());
