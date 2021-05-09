@@ -42,14 +42,6 @@ use super::super::fs::mount::*;
 use super::super::kernel::waiter::qlock::*;
 use super::fs::*;
 
-pub fn InitRef1<T>() -> &'static T {
-    let ptr = unsafe {
-        &*(0 as *const T)
-    };
-
-    return ptr;
-}
-
 impl Process {
     pub fn TaskCaps(&self) -> TaskCaps {
         return TaskCaps {

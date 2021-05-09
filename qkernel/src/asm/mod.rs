@@ -78,13 +78,6 @@ pub fn CurrentCr3() -> u64 {
 }
 
 #[inline]
-pub fn ReadCr3() -> u64 {
-    let cr3: u64;
-    unsafe { llvm_asm!("mov %cr3, $0" : "=r" (cr3) ) };
-    return cr3;
-}
-
-#[inline]
 pub fn EnterUser(entry: u64, userStackAddr: u64, kernelStackAddr: u64) {
     PerfGoto(PerfType::User);
     unsafe {
@@ -644,41 +637,6 @@ pub fn GetRsp() -> u64 {
 pub fn Invlpg(addr: u64) {
     unsafe { llvm_asm!("invlpg ($0)" :: "r" (addr): "memory" ) };
 }
-
-/*
-#[naked]
-#[inline(never)]
-pub fn ContextSwap(_fromCxt: u64, _toCtx: u64, _one: u64, _zero: u64) {
-    unsafe {
-        llvm_asm!("
-            mov     %rsp, 0x00(%rdi)
-            mov     %r15, 0x08(%rdi)
-            mov     %r14, 0x10(%rdi)
-            mov     %r13, 0x18(%rdi)
-            mov     %r12, 0x20(%rdi)
-            mov     %rbx, 0x28(%rdi)
-            mov     %rbp, 0x30(%rdi)
-
-            mov     %rdx, 0x40(%rdi)
-
-            mov     0x00(%rsi), %rsp
-            mov     0x08(%rsi), %r15
-            mov     0x10(%rsi), %r14
-            mov     0x18(%rsi), %r13
-            mov     0x20(%rsi), %r12
-            mov     0x28(%rsi), %rbx
-            mov     0x30(%rsi), %rbp
-            mov     0x38(%rsi), %rdi
-            mov     %rcx, 0x40(%rsi)
-            ret
-            "
-        :
-        :
-        :
-        : "volatile", "alignstack"
-        );
-    }
-}*/
 
 // muldiv64 multiplies two 64-bit numbers, then divides the result by another
 // 64-bit number.

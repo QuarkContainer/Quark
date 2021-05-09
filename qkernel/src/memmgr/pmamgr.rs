@@ -109,7 +109,8 @@ impl PagePool {
     pub fn AllocPage(&mut self, incrRef: bool) -> Result<u64> {
         let addr = self.Allocate()?;
         if incrRef {
-            self.refs.insert(addr, 0);
+            self.refs.insert(addr, 1);
+            self.refCount += 1;
         }
 
         return Ok(addr)
