@@ -419,9 +419,10 @@ impl Task {
         }
 
         if opts.ChildSetTID == true {
-            // todo: remove CopyOutObj and use GetTypeMut
+            // can't use the GetTypeMut as it is used with current pagetable.
             //*Task::GetTask(cTask.taskId).GetTypeMut(cTid)? = pid;
-            cTask.mm.CopyOutObj(self, &pid, cTid)?;
+
+            cTask.mm.CopyOutObj(Task::GetTask(cTask.taskId), &pid, cTid)?;
         }
 
         if opts.SetTLS {

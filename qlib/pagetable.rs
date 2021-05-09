@@ -82,7 +82,7 @@ impl PageTables {
     pub fn Print(&self) {
         //let cr3 : u64;
         //unsafe { llvm_asm!("mov %cr3, $0" : "=r" (cr3) ) };
-        let cr3 = ReadCr3();
+        let cr3 = CurrentCr3();
 
         info!("the page root is {:x}, the cr3 is {:x}", self.GetRoot(), cr3);
     }
@@ -247,6 +247,7 @@ impl PageTables {
             assert!(pgdEntry.is_unused());
             pudTbl = phyAddrs[3] as *mut PageTable;
             pgdEntry.set_addr(PhysAddr::new(pudTbl as u64), PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE);
+            Invlpg(vaddr);
         }
     }
 
@@ -265,7 +266,7 @@ impl PageTables {
 
             if pgdEntry.is_unused() {
                 pudTbl = pagePool.AllocPage(true)? as *mut PageTable;
-                pagePool.Ref(pudTbl as u64).unwrap();
+                //pagePool.Ref(pudTbl as u64).unwrap();
                 (*pudTbl).zero();
                 pgdEntry.set_addr(PhysAddr::new(pudTbl as u64), PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE);
             } else {
@@ -277,7 +278,7 @@ impl PageTables {
 
             if pudEntry.is_unused() {
                 pmdTbl = pagePool.AllocPage(true)? as *mut PageTable;
-                pagePool.Ref(pmdTbl as u64).unwrap();
+                //pagePool.Ref(pmdTbl as u64).unwrap();
                 (*pmdTbl).zero();
                 pudEntry.set_addr(PhysAddr::new(pmdTbl as u64), PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE);
             } else {
@@ -289,7 +290,7 @@ impl PageTables {
 
             if pmdEntry.is_unused() {
                 pteTbl = pagePool.AllocPage(true)? as *mut PageTable;
-                pagePool.Ref(pteTbl as u64).unwrap();
+                //pagePool.Ref(pteTbl as u64).unwrap();
                 (*pteTbl).zero();
                 pmdEntry.set_addr(PhysAddr::new(pteTbl as u64), PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE);
             } else {
@@ -309,6 +310,7 @@ impl PageTables {
                     pagePool.Deref(addr).unwrap();
                 }*/
                 res = true;
+                Invlpg(vaddr.0);
             }
 
             pteEntry.set_addr(PhysAddr::new(phyAddr.0), flags);
@@ -786,6 +788,7 @@ impl PageTables {
                                     pteEntry.set_flags(PageTableFlags::PRESENT | PageTableFlags::BIT_9);
                                 }*/
                                 res = Self::freeEntry(pteEntry, pagePool)?;
+                                Invlpg(curAddr.0);
                             }
 
                             //info!("set addr: vaddr is {:x}, paddr is {:x}, flags is {:b}", curAddr.0, phyAddr.0, flags.bits());
