@@ -136,13 +136,6 @@ pub fn Readv(task: &Task, fd: i32, addr: u64, iovcnt: i32) -> Result<i64> {
 }
 
 pub fn SysPreadv(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
-    // While the syscall is
-    // preadv2(int fd, struct iovec* iov, int iov_cnt, off_t offset, int flags)
-    // the linux internal call
-    // (https://elixir.bootlin.com/linux/v4.18/source/fs/read_write.c#L1248)
-    // splits the offset argument into a high/low value for compatibility with
-    // 32-bit architectures. The flags argument is the 5th argument.
-
     let fd = args.arg0 as i32;
     let addr = args.arg1 as u64;
     let iovcnt = args.arg2 as i32;
@@ -154,6 +147,13 @@ pub fn SysPreadv(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 }
 
 pub fn SysPreadv2(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    // While the syscall is
+    // preadv2(int fd, struct iovec* iov, int iov_cnt, off_t offset, int flags)
+    // the linux internal call
+    // (https://elixir.bootlin.com/linux/v4.18/source/fs/read_write.c#L1248)
+    // splits the offset argument into a high/low value for compatibility with
+    // 32-bit architectures. The flags argument is the 5th argument.
+
     let fd = args.arg0 as i32;
     let addr = args.arg1 as u64;
     let iovcnt = args.arg2 as i32;
