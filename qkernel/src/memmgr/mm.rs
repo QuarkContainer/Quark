@@ -36,7 +36,6 @@ use super::super::qlib::addr::*;
 use super::super::qlib::stack::*;
 use super::super::qlib::mem::seq::*;
 use super::super::task::*;
-use super::super::qlib::mem::stackvec::*;
 use super::super::qlib::pagetable::*;
 use super::super::qlib::limits::*;
 use super::super::qlib::perf_tunning::*;
@@ -44,6 +43,7 @@ use super::super::kernel::aio::aio_context::*;
 use super::super::fs::dirent::*;
 use super::super::mm::*;
 use super::super::qlib::mem::areaset::*;
+use super::super::asm::*;
 use super::arch::*;
 use super::vma::*;
 use super::metadata::*;
@@ -826,7 +826,7 @@ impl MemoryManager {
             self.MapPageWriteLocked(pageAddr, page, exec);
         }
 
-        unsafe { llvm_asm!("invlpg ($0)" :: "r" (pageAddr): "memory" ) };
+        Invlpg(pageAddr);
     }
 
     pub fn CopyOnWrite(&self, pageAddr: u64, vma: &VMA) {
@@ -1200,22 +1200,6 @@ pub fn NewUID() -> u64 {
     return UID.fetch_add(1, atomic::Ordering::SeqCst);
 }
 
-pub fn ToBlocks(bs: &mut StackVec<IoVec>, arr: &[u64]) {
-    let mut begin = arr[0];
-    let mut expect = begin + MemoryDef::PAGE_SIZE;
-    for i in 1..arr.len() {
-        if arr[i] == expect {
-            expect += MemoryDef::PAGE_SIZE;
-        } else {
-            bs.Push(IoVec::NewFromAddr(begin, (expect - begin) as usize));
-            begin = arr[i];
-            expect = begin + MemoryDef::PAGE_SIZE;
-        }
-    }
-
-    bs.Push(IoVec::NewFromAddr(begin, (expect - begin) as usize));
-}
-
 // MLockAllOpts holds options to MLockAll.
 pub struct MLockAllOpts {
     // If Current is true, change the memory-locking behavior of all mappings
@@ -1224,22 +1208,4 @@ pub struct MLockAllOpts {
     pub Current: bool,
     pub Future: bool,
     pub Mode: MLockMode
-}
-
-#[cfg(test)]
-mod tests {
-    // Note this useful idiom: importing names from outer (for mod tests) scope.
-    use super::*;
-
-    #[test]
-    fn TestToBlocks() {
-        let mut bs = StackVec::New(100);
-
-        let arr = [MemoryDef::PAGE_SIZE, 2 * MemoryDef::PAGE_SIZE, 3 * MemoryDef::PAGE_SIZE, 5 * MemoryDef::PAGE_SIZE];
-        ToBlocks(&mut bs, &arr);
-
-        let slice = bs.Slice();
-        assert_eq!(slice[0], Block::NewFromAddr(MemoryDef::PAGE_SIZE, 3 * MemoryDef::PAGE_SIZE as usize));
-        assert_eq!(slice[1], Block::NewFromAddr(5 * MemoryDef::PAGE_SIZE, MemoryDef::PAGE_SIZE as usize));
-    }
 }

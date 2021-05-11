@@ -53,7 +53,7 @@ impl TaskIdQ {
     #[inline]
     // the last 12 bits of addr should be zero and queue < 4096
     pub fn New(addr: u64, queue: u64) -> Self {
-        assert!((addr & 0xfff) ==0 && queue < 4096);
+        assert!((addr & 0xfff) ==0 && queue < 4096, "TaskIdQ::New addr is {:x}", addr);
         return Self {
             data: addr | queue
         }

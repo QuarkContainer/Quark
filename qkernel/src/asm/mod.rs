@@ -635,7 +635,7 @@ pub fn GetRsp() -> u64 {
 
 #[inline]
 pub fn Invlpg(addr: u64) {
-    unsafe { llvm_asm!("invlpg ($0)" :: "r" (addr): "memory" ) };
+    unsafe { llvm_asm!("invlpg ($0)" :: "r" (addr): "memory" : "volatile" ) };
 }
 
 // muldiv64 multiplies two 64-bit numbers, then divides the result by another

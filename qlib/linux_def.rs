@@ -2019,6 +2019,8 @@ impl Flags {
     /* per-IO O_APPEND */
     pub const RWF_APPEND	:i32 = 0x00000010;
 
+    pub const RWF_VALID     :i32 = Self::RWF_HIPRI | Self::RWF_DSYNC | Self::RWF_SYNC;
+
     //pub fn Direct(&self) -> bool {
     //    return self.0 & Self::O_DIRECT != 0;
     //}
