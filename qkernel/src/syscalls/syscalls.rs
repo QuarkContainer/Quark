@@ -429,8 +429,8 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysMembarrier, //sys_membarrier,
     SysMlock2, //mlock2,
     NotImplementSyscall, //sys_copy_file_range,
-    NotImplementSyscall, //sys_preadv2,
-    NotImplementSyscall, //sys_pwritev2,
+    SysPreadv2, //sys_preadv2,
+    SysPWritev2, //sys_pwritev2,
     NotImplementSyscall, //sys_pkey_mprotect,
     NotImplementSyscall, //sys_pkey_alloc,//330
     NotImplementSyscall, //sys_pkey_free,

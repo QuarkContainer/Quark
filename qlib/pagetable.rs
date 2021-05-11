@@ -38,9 +38,7 @@ pub struct PageTables {
 impl PageTables {
     pub fn New(pagePool: &Allocator) -> Result<Self> {
         let root = pagePool.AllocPage(true)?;
-        pagePool.Ref(root).unwrap();
         Ok(Self {
-            //pagePool : pagePool.clone(),
             root: AtomicU64::new(root)
         })
     }
@@ -266,8 +264,6 @@ impl PageTables {
 
             if pgdEntry.is_unused() {
                 pudTbl = pagePool.AllocPage(true)? as *mut PageTable;
-                //pagePool.Ref(pudTbl as u64).unwrap();
-                (*pudTbl).zero();
                 pgdEntry.set_addr(PhysAddr::new(pudTbl as u64), PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE);
             } else {
                 pudTbl = pgdEntry.addr().as_u64() as *mut PageTable;
@@ -278,8 +274,6 @@ impl PageTables {
 
             if pudEntry.is_unused() {
                 pmdTbl = pagePool.AllocPage(true)? as *mut PageTable;
-                //pagePool.Ref(pmdTbl as u64).unwrap();
-                (*pmdTbl).zero();
                 pudEntry.set_addr(PhysAddr::new(pmdTbl as u64), PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE);
             } else {
                 pmdTbl = pudEntry.addr().as_u64() as *mut PageTable;
@@ -290,8 +284,6 @@ impl PageTables {
 
             if pmdEntry.is_unused() {
                 pteTbl = pagePool.AllocPage(true)? as *mut PageTable;
-                //pagePool.Ref(pteTbl as u64).unwrap();
-                (*pteTbl).zero();
                 pmdEntry.set_addr(PhysAddr::new(pteTbl as u64), PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE);
             } else {
                 pteTbl = pmdEntry.addr().as_u64() as *mut PageTable;
@@ -740,7 +732,6 @@ impl PageTables {
 
                 if pgdEntry.is_unused() {
                     pudTbl = pagePool.AllocPage(true)? as *mut PageTable;
-                    (*pudTbl).zero();
                     pgdEntry.set_addr(PhysAddr::new(pudTbl as u64), PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE);
                 } else {
                     pudTbl = pgdEntry.addr().as_u64() as *mut PageTable;
@@ -752,7 +743,6 @@ impl PageTables {
 
                     if pudEntry.is_unused() {
                         pmdTbl = pagePool.AllocPage(true)? as *mut PageTable;
-                        (*pmdTbl).zero();
                         pudEntry.set_addr(PhysAddr::new(pmdTbl as u64), PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE);
                     } else {
                         pmdTbl = pudEntry.addr().as_u64() as *mut PageTable;
@@ -764,7 +754,6 @@ impl PageTables {
 
                         if pmdEntry.is_unused() {
                             pteTbl = pagePool.AllocPage(true)? as *mut PageTable;
-                            (*pteTbl).zero();
                             pmdEntry.set_addr(PhysAddr::new(pteTbl as u64), PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE);
                         } else {
                             pteTbl = pmdEntry.addr().as_u64() as *mut PageTable;
