@@ -202,6 +202,16 @@ pub struct ControlMessageCredentials {
     pub GID: u32,
 }
 
+impl ControlMessageCredentials {
+    pub fn Empty() -> ControlMessageCredentials {
+        ControlMessageCredentials {
+            PID: 0,
+            UID: NOBODY_KUID.0,
+            GID: NOBODY_KGID.0,
+        }
+    }
+}
+
 impl ControlMessage for ControlMessageCredentials {
     fn CMsgLevel(&self) -> i32 {
         return SOL_SOCKET
@@ -458,7 +468,7 @@ impl ControlMessages {
 
         let creds = match self.Credentials {
             None => {
-                MakeCreds(task, cred)
+                None
             },
             Some(ref creds) => {
                 Some(ScmCredentials::New(task, &creds)?)
@@ -565,6 +575,7 @@ pub fn Parse(buf : &[u8]) -> Result<ControlMessages> {
 }
 
 pub fn MakeCreds(task: &Task, _cred: Option<BoundEndpoint>) -> Option<ScmCredentials> {
+    //TODO: this is duplicating the function of scmCredentials::new, refactoring this
     /*let cr = match cred {
         None => return None,
         Some(cr) => cr,
