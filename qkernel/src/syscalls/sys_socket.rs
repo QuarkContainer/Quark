@@ -404,7 +404,7 @@ fn recvSingleMsg(task: &Task, sock: &Arc<FileOperations>, msgPtr: u64, flags: i3
     if msg.iovLen > UIO_MAXIOV {
         return Err(Error::SysError(SysErr::EMSGSIZE))
     }
-
+    
     if msg.msgControl == 0 {
         msg.msgControlLen = 0;
     }
@@ -451,7 +451,12 @@ fn recvSingleMsg(task: &Task, sock: &Arc<FileOperations>, msgPtr: u64, flags: i3
     let controlData = if let Ok(_) = sock.GetSockOpt(task, SOL_SOCKET, LibcConst::SO_PASSCRED as i32, &mut credType) {
         if credType[0] != 0 {
             match cms.Credentials {
-                None => controlData,
+                // Edge case: user set SO_PASSCRED but the sender didn't set it in control massage
+                None => {
+                    let (data, flags) = ControlMessageCredentials::Empty().EncodeInto(controlData, mflags);
+                    mflags = flags;
+                    data
+                }
                 Some(ref creds) => {
                     let (data, flags) = creds.Credentials().EncodeInto(controlData, mflags);
                     mflags = flags;
