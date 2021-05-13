@@ -399,14 +399,12 @@ pub fn SysGetPeerName(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 }
 
 fn recvSingleMsg(task: &Task, sock: &Arc<FileOperations>, msgPtr: u64, flags: i32, deadline: Option<Time>) -> Result<i64> {
-    //TODO: look into and understand this function.
     let msg = task.GetTypeMut::<MsgHdr>(msgPtr)?;
 
     if msg.iovLen > UIO_MAXIOV {
         return Err(Error::SysError(SysErr::EMSGSIZE))
     }
-    //msgControlLen is specified by user before calling recvmsg
-    // msgcontrol is a to-be-used buffer through malloc
+    
     if msg.msgControl == 0 {
         msg.msgControlLen = 0;
     }
