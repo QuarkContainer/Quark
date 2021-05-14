@@ -61,7 +61,7 @@ pub const FUTEX_BITSET_MATCH_ANY : u32 = 0xffffffff;
 pub const ROBUST_LIST_LIMIT : u32 = 2048;
 
 // RobustListHead corresponds to Linux's struct robust_list_head.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[repr(C)]
 pub struct RobustListHead  {
     pub List          : u64,

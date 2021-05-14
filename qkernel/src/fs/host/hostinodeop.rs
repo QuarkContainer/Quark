@@ -92,7 +92,8 @@ impl MappableInternal {
                     None => {
                         info!("HostMappable::RemovePhysicalMapping fileOffset {:x} doesn't exist", chunkStart);
                         //for kernel pma registation, tehre is no phymapping,
-                        return;
+                        chunkStart += CHUNK_SIZE;
+                        continue;
                     }
                     Some(offset) => *offset,
                 };

@@ -147,6 +147,7 @@ impl Signal {
     }
 
     pub fn Index(&self) -> usize {
+        info!("Signal::Index self.0 is {}", self.0);
         return (self.0 - 1) as usize;
     }
 

@@ -105,15 +105,6 @@ impl PhyAddrMgr {
         })
     }
 
-    //rely on host OS to manage the range
-    //return guest phyical start address
-    pub fn AllocAnan1(&mut self, len: u64, hugePage: bool) -> Result<Addr> {
-        let region = Box::new(PhyRegion::InitAnan(self.hostBaseAddr, self.hostAddrLimit, len, hugePage)?);
-        let ret = region.PhyStartAddr();
-        self.regions.insert(ret.0, region);
-        Ok(ret)
-    }
-
     pub fn PhyToHostAddr(&mut self, phyStartAddr: Addr) -> Result<Addr> {
         if let Some(region) = self.regions.get(&phyStartAddr.0) {
             return Ok(region.HostStartAddr());

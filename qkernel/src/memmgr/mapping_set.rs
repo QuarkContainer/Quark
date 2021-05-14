@@ -199,7 +199,7 @@ fn SubsetMapping(wholeRange: &Range, subsetRange: &Range, ms: &MemoryManagerWeak
 }
 
 impl AreaSet<MappingsOfRange> {
-    // AddMapping adds the given mapping and returns the set of MappableRanges that
+    // AddMapping adds the given mapping and returns the set of Range that
     // previously had no mappings.
     //
     // Preconditions: As for Mappable.AddMapping.

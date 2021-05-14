@@ -24,6 +24,7 @@ use super::syncmgr::*;
 use super::*;
 
 pub fn AQHostCall(msg: HostOutputMsg, shareSpace: &ShareSpace) {
+    let _l = super::GLOCK.lock();
     match msg {
         HostOutputMsg::QCall(_addr) => {
             panic!("AQHostCall Process get Qcall msg...");
@@ -95,6 +96,7 @@ pub enum QcallRet {
 
 //return : true(push the result back), false(block wait)
 pub fn qCall(eventAddr: u64, event: &'static mut Event) -> QcallRet {
+    let _l = super::GLOCK.lock();
     match event {
         Event { taskId: _taskId, interrupted: _, ret: _, msg: Msg::Print(_level, str) } => {
             info!("{}", str);

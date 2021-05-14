@@ -358,16 +358,6 @@ impl HostSpace {
         }));
     }
 
-    pub fn MMapAnon(len: u64, prot: i32) -> i64 {
-        let mut msg = Msg::MMapAnon(MMapAnon {
-            len,
-            prot,
-        });
-
-        let res = HostSpace::Call(&mut msg, false) as i64;
-        return res;
-    }
-
     pub fn MMapFile(len: u64, fd: i32, offset: u64, prot: i32) -> i64 {
         let mut msg = Msg::MMapFile(MMapFile {
             len,
