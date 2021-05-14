@@ -449,12 +449,13 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     //defer!(print!("end of in PageFaultHandler ..."));
 
     let ml = currTask.mm.MappingLock();
-    let _ml = ml.write();
+    let ml = ml.write();
 
     let (vma, range) = match currTask.mm.GetVmaAndRangeLocked(cr2) {
         //vmas.lock().Get(cr2) {
         None => {
             //todo: when to send sigbus/SIGSEGV
+            core::mem::drop(ml);
             HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
             return
         }
@@ -466,11 +467,13 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
         let map =  currTask.mm.GetSnapshotLocked(currTask, false);
         print!("the map is {}", &map);
 
+        core::mem::drop(ml);
         HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
         return
     }
 
     if !vma.effectivePerms.Read() { // has no read permission
+        core::mem::drop(ml);
         HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
         return
     }
@@ -484,6 +487,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
         //    &range, pageAddr, vma.growsDown);
         match currTask.mm.InstallPageLocked(currTask, &vma, pageAddr, &range) {
             Err(Error::FileMapError) => {
+                core::mem::drop(ml);
                 HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGBUS);
                 return
             }
@@ -521,12 +525,14 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     }
 
     if vma.private == false {
+        core::mem::drop(ml);
         HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
         return
     }
 
     if (errbits & PageFaultErrorCode::CAUSED_BY_WRITE) == PageFaultErrorCode::CAUSED_BY_WRITE {
         if !vma.effectivePerms.Write() && fromUser {
+            core::mem::drop(ml);
             HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
             return
         }
@@ -538,6 +544,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
             currTask.AccountTaskEnter(SchedState::RunningApp);
         }
     } else {
+        core::mem::drop(ml);
         HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
     }
 }
