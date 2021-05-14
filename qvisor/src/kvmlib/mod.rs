@@ -68,4 +68,5 @@ lazy_static! {
     pub static ref PMA_KEEPER: HostPMAKeeper = HostPMAKeeper::New();
     pub static ref URING_MGR: Mutex<UringMgr> = Mutex::new(UringMgr::New(1024));
     pub static ref KERNEL_IO_THREAD: KIOThread = KIOThread::New();
+    pub static ref GLOCK: Mutex<()> = Mutex::new(());
 }

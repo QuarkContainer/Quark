@@ -22,7 +22,7 @@ use super::super::syscalls::syscalls::*;
 // Membarrier implements syscall membarrier(2).
 pub fn SysMembarrier(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let cmd = args.arg0 as i32;
-    let flags = args.arg0 as u32;
+    let flags = args.arg1 as u32;
 
     match cmd {
         MEMBARRIER_CMD_QUERY => {

@@ -543,9 +543,8 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
 }
 
 pub fn HandleFault(task: &mut Task, user: bool, errorCode: u64, cr2: u64, sf: &mut ExceptionStackFrame, signal: i32) {
-    if true || !user {
+    if !user {
         let map =  task.mm.GetSnapshotLocked(task, false);
-        //println!("the cr2 is {:x}", cr2);
         print!("unhandle EXCEPTION: page_fault FAULT\n{:#?}, error code is {:?}, cr2 is {:x}, registers is {:#x?}",
                sf, errorCode, cr2, task.GetPtRegs());
         print!("the map is {}", &map);
