@@ -533,6 +533,40 @@ pub fn SyscallRet(kernelRsp: u64) -> ! {
 }
 
 #[inline]
+pub fn IRet(kernelRsp: u64) -> ! {
+    unsafe {
+        llvm_asm!("
+            //we have to store callee save registers for signal handling
+            pop r15
+            pop r14
+            pop r13
+            pop r12
+            pop rbp
+            pop rbx
+
+            pop r11
+            pop r10
+            pop r9
+            pop r8
+
+            pop rax
+            pop rcx
+            pop rdx
+            pop rsi
+            pop rdi
+
+            add rsp, 8
+            swapgs
+            iretq
+              "
+              :
+              : "{rsp}"(kernelRsp)
+              :: "intel");
+        ::core::intrinsics::unreachable();
+    }
+}
+
+#[inline]
 pub fn child_clone(userSp: u64) {
     let negtive1 : u64 = 0xffffffff;
     unsafe {
