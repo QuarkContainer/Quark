@@ -26,6 +26,7 @@ use super::SignalDef::*;
 use super::MainRun;
 use super::asm::*;
 use super::qlib::perf_tunning::*;
+use super::SHARESPACE;
 
 #[derive(Clone, Copy, Debug)]
 pub enum ExceptionStackVec {
@@ -136,9 +137,9 @@ impl fmt::Debug for ExceptionStackFrame {
     }
 }
 
-pub const PRINT_EXECPTION : bool = false;
-
 pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, _errorCode: u64) {
+    let PRINT_EXECPTION : bool = SHARESPACE.config.PrintException;
+
     let currTask = Task::Current();
 
     // is this call from user
@@ -301,6 +302,9 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, _errorC
 
     MainRun(currTask, TaskRunState::RunApp);
 
+    let kernalRsp = currTask.GetPtRegs() as *const _ as u64;
+    SyscallRet(kernalRsp);
+
     /*if fromUser {
         PerfGoto(PerfType::User);
         SwapGs();
@@ -432,6 +436,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
         }
     });
 
+    let PRINT_EXECPTION : bool = SHARESPACE.config.PrintException;
     if PRINT_EXECPTION {
         error!("in PageFaultHandler, cr2: {:x}, cr3: {:x}, isuser = {}, error is {:b}, ss is {:x}, cs == {:x}, eflags = {:x}, new ss is {}, pageaddr is {:x}",
             cr2,

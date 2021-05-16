@@ -400,7 +400,7 @@ invalid_tss_handler:
     HandlerWithErrorCode InvalidTSSHandler
 
 segment_not_present_handler:
-    HandlerWithoutErrorCode SegmentNotPresentHandler
+    HandlerWithErrorCode SegmentNotPresentHandler
 
 stack_segment_handler:
     HandlerWithErrorCode StackSegmentHandler
@@ -415,7 +415,7 @@ x87_fp_handler:
     HandlerWithoutErrorCode X87FPHandler
 
 alignment_check_handler:
-    HandlerWithoutErrorCode AlignmentCheckHandler
+    HandlerWithErrorCode AlignmentCheckHandler
 
 machine_check_handler:
     HandlerWithoutErrorCode MachineCheckHandler

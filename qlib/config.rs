@@ -21,6 +21,7 @@ pub struct Config {
     pub LogLevel: LogLevel,
     pub TcpBuffIO: bool,
     pub EnableAIO: bool,
+    pub PrintException: bool,
 }
 
 impl Config {}
@@ -34,6 +35,7 @@ impl Default for Config {
             LogLevel: LogLevel::Simple,
             TcpBuffIO: true,
             EnableAIO: false,
+            PrintException: false,
         }
     }
 }
