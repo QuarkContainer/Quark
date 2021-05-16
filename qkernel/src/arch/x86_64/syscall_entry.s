@@ -61,8 +61,13 @@ syscall_entry:
 
       //reserve the space for exception stack frame
       sub rsp, 1 * 8
+
+      // guest app rsp
       push gs:8
-      sub rsp, 3 * 8
+      // eflags
+      push r11
+      // cs
+      sub rsp, 2 * 8
       push rax
 
       push rdi
