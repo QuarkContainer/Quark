@@ -302,14 +302,18 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, _errorC
 
     MainRun(currTask, TaskRunState::RunApp);
 
-    let kernalRsp = currTask.GetPtRegs() as *const _ as u64;
-    SyscallRet(kernalRsp);
+    ReturnToApp(currTask);
+}
 
-    /*if fromUser {
-        PerfGoto(PerfType::User);
-        SwapGs();
-        currTask.AccountTaskEnter(SchedState::RunningApp);
-    }*/
+pub fn ReturnToApp(task: &Task) -> ! {
+    let pt = task.GetPtRegs();
+    let kernalRsp = pt as *const _ as u64;
+    let mut rflags = pt.eflags;
+    rflags &= !USER_FLAGS_CLEAR;
+    rflags |= USER_FLAGS_SET;
+    SetRflags(rflags);
+
+    SyscallRet(kernalRsp);
 }
 
 #[no_mangle]
@@ -583,10 +587,7 @@ pub fn HandleFault(task: &mut Task, user: bool, errorCode: u64, cr2: u64, sf: &m
     thread.SendSignal(&info).expect("PageFaultHandler send signal fail");
     MainRun(task, TaskRunState::RunApp);
 
-    let kernalRsp = task.GetPtRegs() as *const _ as u64;
-
-    //SHARESPACE.SetValue(CPULocal::CpuId(), 0, 0);
-    SyscallRet(kernalRsp);
+    ReturnToApp(task);
 }
 
 // x87 Floating-Point Exception

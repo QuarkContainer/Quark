@@ -161,11 +161,6 @@ pub fn Init() {
 
 #[no_mangle]
 pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: u64, arg5: u64) -> ! {
-    let mut nr: u64;
-    unsafe {
-        llvm_asm!("": "={eax}"(nr) : : "memory" : "volatile" )
-    }
-
     PerfGofrom(PerfType::User);
 
     let currTask = task::Task::Current();
@@ -174,10 +169,11 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     currTask.PerfGoto(PerfType::Kernel);
 
     currTask.AccountTaskLeave(SchedState::RunningApp);
-    currTask.GetPtRegs().rsp = CPULocal::UserStack(); //set the user sp to ptRegs
-    currTask.GetPtRegs().eflags = currTask.GetPtRegs().r11;
-    currTask.GetPtRegs().rip = 0; // set rip as 0 as the syscall will set cs as ret ipaddr
-    assert!(nr < SysCallID::maxsupport as u64, "get supported syscall id {}", nr);
+    let pt = currTask.GetPtRegs();
+    pt.rip = 0; // set rip as 0 as the syscall will set cs as ret ipaddr
+
+    let nr = pt.orig_rax;
+    assert!(nr < SysCallID::maxsupport as u64, "get supported syscall id {:x}", nr);
 
     //SHARESPACE.SetValue(CPULocal::CpuId(), 0, nr);
     let callId: SysCallID = unsafe { mem::transmute(nr as u64) };
@@ -232,7 +228,6 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     MainRun(currTask, state);
     //currTask.PerfGofrom(PerfType::KernelHandling);
 
-    let pt = currTask.GetPtRegs();
     if llevel == LogLevel::Simple || llevel == LogLevel::Complex {
         let gap = Rdtsc() - startTime;
         info!("({}/{})------Return[{}] res is {:x}: call id {:?} ",
@@ -245,7 +240,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     currTask.PerfGofrom(PerfType::Kernel);
     currTask.PerfGoto(PerfType::User);
 
-    let mut rflags = currTask.GetPtRegs().eflags;
+    let mut rflags = pt.eflags;
     rflags &= !USER_FLAGS_CLEAR;
     rflags |= USER_FLAGS_SET;
     SetRflags(rflags);
@@ -253,6 +248,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
 
     //SHARESPACE.SetValue(CPULocal::CpuId(), 0, 0);
     if pt.rip != 0 { // if it is from signal trigger from kernel, e.g. page fault
+        pt.eflags = rflags;
         IRet(kernalRsp)
     } else {
         SyscallRet(kernalRsp)
