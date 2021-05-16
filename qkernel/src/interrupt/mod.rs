@@ -462,7 +462,6 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
             //todo: when to send sigbus/SIGSEGV
             core::mem::drop(ml);
             HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
-            return
         }
         Some(vma) => vma.clone(),
     };
@@ -474,13 +473,11 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
 
         core::mem::drop(ml);
         HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
-        return
     }
 
     if !vma.effectivePerms.Read() { // has no read permission
         core::mem::drop(ml);
         HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
-        return
     }
 
     let pageAddr = Addr(cr2).RoundDown().unwrap().0;
@@ -494,7 +491,6 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
             Err(Error::FileMapError) => {
                 core::mem::drop(ml);
                 HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGBUS);
-                return
             }
             Err(e) => {
                 panic!("PageFaultHandler error is {:?}", e)
@@ -532,14 +528,12 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     if vma.private == false {
         core::mem::drop(ml);
         HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
-        return
     }
 
     if (errbits & PageFaultErrorCode::CAUSED_BY_WRITE) == PageFaultErrorCode::CAUSED_BY_WRITE {
         if !vma.effectivePerms.Write() && fromUser {
             core::mem::drop(ml);
             HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
-            return
         }
 
         currTask.mm.CopyOnWriteLocked(pageAddr, &vma);
@@ -554,7 +548,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     }
 }
 
-pub fn HandleFault(task: &mut Task, user: bool, errorCode: u64, cr2: u64, sf: &mut ExceptionStackFrame, signal: i32) {
+pub fn HandleFault(task: &mut Task, user: bool, errorCode: u64, cr2: u64, sf: &mut ExceptionStackFrame, signal: i32) -> ! {
     if !user {
         let map =  task.mm.GetSnapshotLocked(task, false);
         print!("unhandle EXCEPTION: page_fault FAULT\n{:#?}, error code is {:?}, cr2 is {:x}, registers is {:#x?}",
