@@ -202,7 +202,7 @@ impl ByteStream {
         return self.spaceiovs.Address()
     }
 
-    pub fn GetDataBuf(&mut self) -> (u64, usize) {
+    pub fn GetDataBuf(&self) -> (u64, usize) {
         let left = self.available;
 
         if self.available == 0 {

@@ -161,7 +161,7 @@ pub fn Init() {
 
 #[no_mangle]
 pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: u64, arg5: u64) -> ! {
-    PerfGofrom(PerfType::User);
+    //PerfGofrom(PerfType::User);
 
     let currTask = task::Task::Current();
     currTask.PerfGofrom(PerfType::User);
@@ -194,7 +194,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     if llevel == LogLevel::Complex {
         tid = currTask.Thread().lock().id;
         pid = currTask.Thread().ThreadGroup().ID();
-        info!("({}/{})------get call id {:?} arg0:{:x}, arg1:{:x}, arg2:{:x}, arg3:{:x}, arg4:{:x}, arg5:{:x}, userstack:{:x}, return address:{:x}, fs:{:x}",
+        info!("({}/{})------get call id {:?} arg0:{:x}, 1:{:x}, 2:{:x}, 3:{:x}, 4:{:x}, 5:{:x}, userstack:{:x}, return address:{:x}, fs:{:x}",
             tid, pid, callId, arg0, arg1, arg2, arg3, arg4, arg5, currTask.GetPtRegs().rsp, currTask.GetPtRegs().rcx, GetFs());
     } else if llevel == LogLevel::Simple {
         tid = currTask.Thread().lock().id;
@@ -236,7 +236,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
 
     let kernalRsp = pt as *const _ as u64;
 
-    PerfGoto(PerfType::User);
+    //PerfGoto(PerfType::User);
     currTask.PerfGofrom(PerfType::Kernel);
     currTask.PerfGoto(PerfType::User);
 
@@ -257,7 +257,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
 
 #[inline]
 pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
-    PerfGoto(PerfType::KernelHandling);
+    //PerfGoto(PerfType::KernelHandling);
     loop {
         state = match state {
             TaskRunState::RunApp => currTask.RunApp(),
@@ -323,7 +323,7 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
     CPULocal::SetKernelStack(currTask.GetKernelSp());
 
     currTask.AccountTaskEnter(SchedState::RunningApp);
-    PerfGofrom(PerfType::KernelHandling);
+    //PerfGofrom(PerfType::KernelHandling);
 }
 
 fn InitGs(id: u64) {
@@ -345,7 +345,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
 
         // InitGS rely on SHARESPACE
         InitGs(id);
-        PerfGoto(PerfType::Kernel);
+        //PerfGoto(PerfType::Kernel);
 
         {
             // init the IOURING
@@ -375,7 +375,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
         VDSO.Init(vdsoParamAddr);
     } else {
         InitGs(id);
-        PerfGoto(PerfType::Kernel);
+        //PerfGoto(PerfType::Kernel);
     }
 
     taskMgr::AddNewCpu();
