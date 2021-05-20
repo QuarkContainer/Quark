@@ -305,7 +305,18 @@ impl StackHeap {
     }
 
     pub fn Add(&self, start: usize, size: usize) {
-        self.AddToHead(start, start + size)
+        let mut start = start;
+        let end = start + size;
+        let size = 1 << 30; // 1GB
+        // note: we can't add full range (>4GB) to the buddyallocator
+        while start + size < end {
+            self.AddToHead(start, start + size);
+            start  += size;
+        }
+
+        if start < end {
+            self.AddToHead(start, end)
+        }
     }
 
     pub fn Print(&self) {

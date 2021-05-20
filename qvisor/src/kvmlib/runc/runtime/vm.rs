@@ -65,7 +65,7 @@ pub struct BootStrapMem {
 }
 
 impl BootStrapMem {
-    pub const PAGE_POOL_SIZE : usize = 1 << 24; // 2MB PagePool
+    pub const PAGE_POOL_SIZE : usize = 1 << 25; // 4MB PagePool
 
     pub fn New(startAddr: u64, vcpuCount: usize) -> Self {
         return Self {
@@ -192,7 +192,7 @@ impl VirtualMachine {
         let bootstrapMem;
 
         {
-            let memOrd = 32; // 4GB
+            let memOrd = 33; // 8GB
             let kernelMemSize = 1 << memOrd;
             //pageMmap = KVMMachine::initKernelMem(&vm_fd, MemoryDef::PHY_LOWER_ADDR  + 64 * MemoryDef::ONE_MB, kernelMemSize)?;
             //pageAllocatorBaseAddr = pageMmap.as_ptr() as u64;
