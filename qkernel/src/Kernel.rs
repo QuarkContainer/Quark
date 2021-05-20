@@ -21,7 +21,7 @@ use super::qlib::config::*;
 use super::qlib::qmsg::*;
 use super::qlib::task_mgr::*;
 use super::qlib::linux_def::*;
-use super::qlib::perf_tunning::*;
+//use super::qlib::perf_tunning::*;
 use super::qlib::vcpu_mgr::*;
 use super::task::*;
 use super::asm::*;
@@ -1463,10 +1463,10 @@ impl HostSpace {
             msg: msg
         };
 
-        PerfGoto(PerfType::QCall);
+        //PerfGoto(PerfType::QCall);
         //error!("Qcall event is {:x?}", event);
         super::SHARESPACE.QCall(&mut event);
-        PerfGofrom(PerfType::QCall);
+        //PerfGofrom(PerfType::QCall);
 
         taskMgr::Wait();
         return event.ret;

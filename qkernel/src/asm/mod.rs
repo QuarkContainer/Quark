@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::qlib::perf_tunning::*;
+//use super::qlib::perf_tunning::*;
 
 #[inline]
 pub fn WriteMsr(msr: u32, value: u64) {
@@ -79,7 +79,7 @@ pub fn CurrentCr3() -> u64 {
 
 #[inline]
 pub fn EnterUser(entry: u64, userStackAddr: u64, kernelStackAddr: u64) {
-    PerfGoto(PerfType::User);
+    //PerfGoto(PerfType::User);
     unsafe {
         llvm_asm!("
             //mov gs:0, rsp

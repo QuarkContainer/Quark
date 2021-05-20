@@ -145,7 +145,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, _errorC
     // is this call from user
     if sf.ss & 0x3 != 0 {
         SwapGs();
-        PerfGofrom(PerfType::User);
+        //PerfGofrom(PerfType::User);
         currTask.AccountTaskLeave(SchedState::RunningApp);
     } else {
         panic!("get non page fault exception from kernel ...ev is {:?}, sf is {:x?}", ev, sf)
@@ -411,7 +411,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     // is this call from user
     let fromUser = if sf.ss & 0x3 != 0 {
         SwapGs();
-        PerfGofrom(PerfType::User);
+        //PerfGofrom(PerfType::User);
         currTask.AccountTaskLeave(SchedState::RunningApp);
         true
     } else {
@@ -522,7 +522,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
 
         if !vma.private || (errbits & PageFaultErrorCode::CAUSED_BY_WRITE) != PageFaultErrorCode::CAUSED_BY_WRITE {
             if fromUser {
-                PerfGoto(PerfType::User);
+                //PerfGoto(PerfType::User);
                 SwapGs();
             }
             return
@@ -542,7 +542,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
 
         currTask.mm.CopyOnWriteLocked(pageAddr, &vma);
         if fromUser {
-            PerfGoto(PerfType::User);
+            //PerfGoto(PerfType::User);
             SwapGs();
             currTask.AccountTaskEnter(SchedState::RunningApp);
         }

@@ -288,6 +288,9 @@ impl FdInfoIntern {
         let _ioMgr = IO_MGR.lock(); //global lock
         if self.osfd >= 0 {
             unsafe {
+                // shutdown for socket, without shutdown, it the uring read won't be wake up
+                // todo: handle this elegant
+                shutdown(self.osfd, 2);
                 return close(self.osfd)
             }
         }

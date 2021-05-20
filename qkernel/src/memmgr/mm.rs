@@ -38,7 +38,7 @@ use super::super::qlib::mem::seq::*;
 use super::super::task::*;
 use super::super::qlib::pagetable::*;
 use super::super::qlib::limits::*;
-use super::super::qlib::perf_tunning::*;
+//use super::super::qlib::perf_tunning::*;
 use super::super::kernel::aio::aio_context::*;
 use super::super::fs::dirent::*;
 use super::super::mm::*;
@@ -833,9 +833,9 @@ impl MemoryManager {
         let ml = self.MappingLock();
         let _ml = ml.write();
 
-        PerfGoto(PerfType::PageFault);
+        //PerfGoto(PerfType::PageFault);
         self.CopyOnWriteLocked(pageAddr, vma);
-        PerfGofrom(PerfType::PageFault);
+        //PerfGofrom(PerfType::PageFault);
     }
 
     // check whether the address range is legal.

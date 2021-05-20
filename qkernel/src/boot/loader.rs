@@ -289,7 +289,9 @@ impl LoaderInternal {
         let rootMounts = BootInitRootFs(Task::Current(), &process.Root).expect("in loader::New, InitRootfs fail");
         *kernel.mounts.write() = Some(rootMounts);
 
+        info!("after BootInitRootFs");
         let processArgs = NewProcess(process, &creds, &kernel);
+        info!("after NewProcess");
         self.kernel = kernel;
         self.console = console;
         self.sandboxID = sandboxID;
