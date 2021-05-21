@@ -728,13 +728,14 @@ impl SockOperations for UnixSocketOperations {
         };
 
         let ctrlMsg = if controlVec.len() > 0 {
-            let ctrlMsg = Parse(&controlVec)?;
-            ctrlMsg.ToSCMUnix(task, Some(self.ep.clone()))?
+             Parse(&controlVec)?
         } else {
-            ControlMessages::default().ToSCMUnix(task, Some(self.ep.clone()))?
+            ControlMessages::default()
         };
 
-        let n = match self.ep.SendMsg(srcs, &ctrlMsg, &toEp) {
+        let scmCtrlMsg = ctrlMsg.ToSCMUnix(task, &toEp)?;
+
+        let n = match self.ep.SendMsg(srcs, &scmCtrlMsg, &toEp) {
             Err(Error::SysError(SysErr::EAGAIN)) => {
                 if flags & MsgType::MSG_DONTWAIT != 0 {
                     return Err(Error::SysError(SysErr::EAGAIN))
@@ -763,7 +764,7 @@ impl SockOperations for UnixSocketOperations {
         while total < totalLen {
             let left = bs.DropFirst(total as u64);
             let srcs = left.ToIoVecs();
-            let n = match self.ep.SendMsg(&srcs, &ctrlMsg, &toEp) {
+            let n = match self.ep.SendMsg(&srcs, &scmCtrlMsg, &toEp) {
                 Err(Error::SysError(SysErr::EAGAIN)) => {
                     0
                 }
