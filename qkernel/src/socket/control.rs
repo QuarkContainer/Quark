@@ -458,7 +458,7 @@ impl ControlMessages {
         return self.Rights.is_none() && self.Credentials.is_none() && self.Timestamps.is_none()
     }
 
-    pub fn ToSCMUnix(&self, task: &Task, cred: Option<BoundEndpoint>) -> Result<SCMControlMessages> {
+    pub fn ToSCMUnix(&self, task: &Task, toEp: &Option<BoundEndpoint>) -> Result<SCMControlMessages> {
         let rights = match self.Rights {
             None => None,
             Some(ref rights) => {
@@ -468,7 +468,16 @@ impl ControlMessages {
 
         let creds = match self.Credentials {
             None => {
-                None
+                match toEp {
+                    Some(ep)=> {
+                        if ep.Passcred() {
+                            MakeCreds(task, None)
+                        } else {
+                            None
+                        }
+                    }
+                    None => None
+                }
             },
             Some(ref creds) => {
                 Some(ScmCredentials::New(task, &creds)?)
