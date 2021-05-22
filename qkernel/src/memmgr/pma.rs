@@ -53,13 +53,19 @@ pub struct FreePageTables {
 }
 
 impl FreePageTables {
-    pub fn Drop(&mut self, pagePool: &Allocator) {
+    pub fn Drop(&mut self, _pagePool: &Allocator) {
         let root = self.root.0;
         if root == 0 {
             return;
         }
 
-        let pt: *mut PageTable = self.root.0 as *mut PageTable;
+        let pagetables = PageTables::Init(self.root.0);
+        pagetables.UnmapAll().expect("FreePageTables::Drop fail at UnmapAll");
+        pagetables.SetRoot(0);
+        //todo: the pgdEntry of address (0) is not deref. need debug
+
+        /*let pt: *mut PageTable = self.root.0 as *mut PageTable;
+
         let pgdEntry = unsafe {
             &(*pt)[0]
         };
@@ -70,15 +76,8 @@ impl FreePageTables {
         let pudTblAddr = pgdEntry.addr().as_u64();
         pagePool.Deref(pudTblAddr).expect("PageTable::Drop fail");
 
-        pagePool.Deref(root).expect("PageTable::Drop fail");
+        pagePool.Deref(root).expect("PageTable::Drop fail");*/
 
-        /*let mut pt = PageTablesInternal {
-            root: Addr(root),
-        };
-
-        pt.MUnmap(0, 4096).unwrap();
-        pagePool.Deref(root).expect("PageTable::Drop fail");
-        //pt.UnmapAll().unwrap();*/
     }
 }
 
@@ -164,7 +163,7 @@ impl PageMgrInternal {
 
     pub fn ZeroPage(&mut self) -> u64 {
         if self.zeroPage == 0 {
-            self.zeroPage = self.allocator.lock().AllocPage(true).unwrap();
+            self.zeroPage = self.allocator.lock().AllocPage(false).unwrap();
         }
 
         self.allocator.lock().Ref(self.zeroPage).unwrap();
@@ -370,8 +369,9 @@ impl PageTables {
         return Ok(())
     }
 
-    pub fn UnmapAll(&mut self) -> Result<()> {
-        self.Unmap(0, core::u64::MAX, &*PAGE_MGR)?;
+    pub fn UnmapAll(&self) -> Result<()> {
+        self.Unmap(0, MemoryDef::PHY_LOWER_ADDR, &*PAGE_MGR)?;
+        self.Unmap(MemoryDef::PHY_UPPER_ADDR , core::u64::MAX, &*PAGE_MGR)?;
         PAGE_MGR.Deref(self.GetRoot())?;
         return Ok(())
     }

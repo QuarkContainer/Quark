@@ -488,8 +488,8 @@ impl PageTables {
 
                         while p1Idx < MemoryDef::ENTRY_COUNT && start < end {
                             let pteEntry : &mut PageTableEntry = &mut (*pteTbl)[PageTableIndex::new(p1Idx)];
+                            clearPTEEntries += 1;
                             if pteEntry.is_unused() {
-                                clearPTEEntries += 1;
                                 start += MemoryDef::PAGE_SIZE;
                                 p1Idx += 1;
                                 continue;
@@ -510,7 +510,7 @@ impl PageTables {
 
                         if clearPTEEntries == MemoryDef::ENTRY_COUNT {
                             let currAddr = pmdEntry.addr().as_u64();
-                            pagePool.Deref(currAddr)?;
+                            let _refCnt = pagePool.Deref(currAddr)?;
                             pmdEntry.set_unused();
                             clearPMDEntries += 1;
 
