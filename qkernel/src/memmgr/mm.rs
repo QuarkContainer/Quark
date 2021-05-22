@@ -772,7 +772,7 @@ impl MemoryManager {
                 //let vmaOffset = pageAddr - range.Start();
                 //let phyAddr = vmaOffset + vma.offset; // offset in the phyAddr
 
-                let phyAddr = super::super::PAGE_MGR.AllocPage(true).unwrap();
+                let phyAddr = super::super::PAGE_MGR.AllocPage(false).unwrap();
                 if vma.private {
                     self.MapPageReadLocked(pageAddr, phyAddr, exec);
                 } else {
@@ -821,7 +821,7 @@ impl MemoryManager {
             self.EnableWriteLocked(pageAddr, exec);
         } else {
             // Copy On Write
-            let page = { super::super::PAGE_MGR.AllocPage(true).unwrap() };
+            let page = { super::super::PAGE_MGR.AllocPage(false).unwrap() };
             CopyPage(pageAddr, page);
             self.MapPageWriteLocked(pageAddr, page, exec);
         }

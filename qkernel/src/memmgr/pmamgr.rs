@@ -111,6 +111,8 @@ impl PagePool {
         if incrRef {
             self.refs.insert(addr, 1);
             self.refCount += 1;
+        } else {
+            self.refs.insert(addr, 0);
         }
 
         return Ok(addr)
