@@ -546,9 +546,9 @@ impl MountSource {
 
     pub fn NewCachingMountSource(filesystem: &Filesystem, flags: &MountSourceFlags) -> Self {
         let mops = Arc::new(Mutex::new(SimpleMountSourceOperations {
-            keep: true,
+            keep: false,
             revalidate: false,
-            cacheReaddir: true,
+            cacheReaddir: false,
         }));
 
         let fsType = filesystem.Name();

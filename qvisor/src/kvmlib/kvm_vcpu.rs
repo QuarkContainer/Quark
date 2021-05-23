@@ -559,8 +559,11 @@ impl KVMVcpu {
                         }
 
                         qlib::HYPERCALL_OOM => {
-                            error!("OOM!!! cpu [{}]", self.id);
-                            eprintln!("OOM!!! cpu [{}]", self.id);
+                            let vcpu_regs = self.vcpu.get_regs().unwrap();
+                            let data1 = vcpu_regs.rbx;
+                            let data2 = vcpu_regs.rcx;
+                            error!("OOM!!! cpu [{}], size is {:x}, alignment is {:x}", self.id, data1, data2);
+                            eprintln!("OOM!!! cpu [{}], size is {:x}, alignment is {:x}", self.id, data1, data2);
                             ::std::process::exit(1);
                         }
 
