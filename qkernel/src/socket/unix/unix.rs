@@ -246,7 +246,11 @@ impl FileOperations for UnixSocketOperations {
     }
 
     fn WriteAt(&self, task: &Task, _f: &File, srcs: &[IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
-        let ctrl = NewControlMessage(task, Some(self.ep.clone()), None);
+        let ctrl = if self.ep.ConnectedPasscred() || self.ep.Passcred() {
+            NewControlMessage(task, Some(self.ep.clone()), None)
+        } else {
+            SCMControlMessages::default()
+        };
 
         let count = {
             let srcs = BlockSeq::NewFromSlice(srcs);
@@ -733,7 +737,7 @@ impl SockOperations for UnixSocketOperations {
             ControlMessages::default()
         };
 
-        let scmCtrlMsg = ctrlMsg.ToSCMUnix(task, &toEp)?;
+        let scmCtrlMsg = ctrlMsg.ToSCMUnix(task, &self.ep, &toEp)?;
 
         let n = match self.ep.SendMsg(srcs, &scmCtrlMsg, &toEp) {
             Err(Error::SysError(SysErr::EAGAIN)) => {
