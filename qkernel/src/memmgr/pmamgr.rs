@@ -41,9 +41,8 @@ pub fn CheckZeroPage(pageStart: u64) {
 }
 
 pub struct PagePool {
-    pub refCount: u64,
     //refCount for whole pma
-
+    pub refCount: u64,
     pub refs: BTreeMap<u64, u32>,
 
     //the zeroed paged which will be readyonly, e.g. page for Virtual Address 0
@@ -53,7 +52,7 @@ pub struct PagePool {
 }
 
 impl PagePool {
-    pub fn Print(&self) {
+    pub fn PrintRefs(&self) {
         error!("PagePool left is {:x?}", self.refs);
     }
 

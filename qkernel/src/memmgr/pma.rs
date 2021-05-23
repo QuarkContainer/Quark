@@ -60,9 +60,7 @@ impl FreePageTables {
         }
 
         let pagetables = PageTables::Init(self.root.0);
-        pagetables.UnmapAll().expect("FreePageTables::Drop fail at UnmapAll");
-        pagetables.SetRoot(0);
-        //todo: the pgdEntry of address (0) is not deref. need debug
+        pagetables.Drop();
 
         /*let pt: *mut PageTable = self.root.0 as *mut PageTable;
 
@@ -134,7 +132,7 @@ impl PageMgr {
     }
 
     pub fn PrintRefs(&self) {
-        self.lock().allocator.lock().Print();
+        self.lock().allocator.lock().PrintRefs();
     }
 }
 
@@ -196,12 +194,25 @@ impl Drop for FreePageTables {
 
 impl Drop for PageTables {
     fn drop(&mut self) {
+        if self.GetRoot() == 0 {
+            return;
+        }
+
+        if CurrentCr3() != self.GetRoot() {
+            self.Drop()
+        }
+
         //pagetables can't be free from current kernel thread, need to be free async
         AddFreePageTables(self);
     }
 }
 
 impl PageTables {
+    pub fn Drop(&self) {
+        self.UnmapAll().expect("FreePageTables::Drop fail at UnmapAll");
+        self.SetRoot(0);
+    }
+
     // create a new PageTable by clone the kernel pages.
     // 1. Empty page is cloned
     // 2. Kernel takes the address space from 256GB ~ 512GB
@@ -369,9 +380,66 @@ impl PageTables {
         return Ok(())
     }
 
+    pub fn PrintZero(&self) {
+        let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
+
+        let pgdEntry = unsafe {
+            &(*pt)[0]
+        };
+
+        assert!(!pgdEntry.is_unused(), "pagetable::Drop page is not mapped");
+
+        let pudTblAddr = pgdEntry.addr().as_u64();
+        let pudTbl = pudTblAddr as *mut PageTable;
+        let pudEntry = unsafe {
+            &(*pudTbl)[0]
+        };
+        //assert!(!pudEntry.is_unused(), "pagetable::Drop page is not mapped");
+
+        let pmdTblAddr = pudEntry.addr().as_u64();
+        let pmdTbl = pmdTblAddr as *mut PageTable;
+        let pmdEntry = unsafe {
+            &(*pmdTbl)[0]
+        };
+        //assert!(!pmdEntry.is_unused(), "pagetable::Drop page is not mapped");
+
+        let pteTblAddr = pmdEntry.addr().as_u64();
+
+        error!("PrintZero pudTblAddr is {:x}, pmdTblAddr is {:x}, pteTblAddr is {:x}",
+            pudTblAddr, pmdTblAddr, pteTblAddr);
+    }
+
     pub fn UnmapAll(&self) -> Result<()> {
-        self.Unmap(0, MemoryDef::PHY_LOWER_ADDR, &*PAGE_MGR)?;
-        self.Unmap(MemoryDef::PHY_UPPER_ADDR , core::u64::MAX, &*PAGE_MGR)?;
+        self.Unmap(MemoryDef::PAGE_SIZE, MemoryDef::PHY_LOWER_ADDR, &*PAGE_MGR)?;
+        self.Unmap(MemoryDef::PHY_UPPER_ADDR , MemoryDef::LOWER_TOP, &*PAGE_MGR)?;
+
+        let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
+
+        let pgdEntry = unsafe {
+            &(*pt)[0]
+        };
+
+        assert!(!pgdEntry.is_unused(), "pagetable::Drop page is not mapped");
+
+        let pudTblAddr = pgdEntry.addr().as_u64();
+        let pudTbl = pudTblAddr as *mut PageTable;
+        let pudEntry = unsafe {
+            &(*pudTbl)[0]
+        };
+        assert!(!pudEntry.is_unused(), "pagetable::Drop page is not mapped");
+
+        let pmdTblAddr = pudEntry.addr().as_u64();
+        let pmdTbl = pmdTblAddr as *mut PageTable;
+        let pmdEntry = unsafe {
+            &(*pmdTbl)[0]
+        };
+        assert!(!pmdEntry.is_unused(), "pagetable::Drop page is not mapped");
+
+        let pteTblAddr = pmdEntry.addr().as_u64();
+
+        PAGE_MGR.Deref(pteTblAddr).expect("PageTable::Drop fail");
+        PAGE_MGR.Deref(pmdTblAddr).expect("PageTable::Drop fail");
+        PAGE_MGR.Deref(pudTblAddr).expect("PageTable::Drop fail");
         PAGE_MGR.Deref(self.GetRoot())?;
         return Ok(())
     }

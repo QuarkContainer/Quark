@@ -1544,8 +1544,8 @@ impl HostSpace {
         HyperCall64(HYPERCALL_MSG, id, val)
     }
 
-    pub fn KernelOOM() {
-        HyperCall64(HYPERCALL_OOM, 0, 0)
+    pub fn KernelOOM(size: u64, alignment: u64) {
+        HyperCall64(HYPERCALL_OOM, size, alignment)
     }
 
     pub fn KernelGetTime(clockId: i32) -> Result<i64> {

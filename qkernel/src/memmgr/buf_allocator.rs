@@ -401,7 +401,7 @@ unsafe impl GlobalAlloc for StackHeap {
 
                 if ret == 0 {
                     super::super::Kernel::HostSpace::KernelMsg(ret, 0);
-                    super::super::Kernel::HostSpace::KernelOOM();
+                    super::super::Kernel::HostSpace::KernelOOM(size as u64, layout.align() as u64);
                     loop {}
                 }
                 ret
