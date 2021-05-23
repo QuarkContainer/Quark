@@ -640,14 +640,24 @@ impl SockOperations for SocketOperations {
             self.EventRegister(task, &general, EVENT_READ);
             defer!(self.EventUnregister(task, &general));
 
-            match task.blocker.BlockWithMonoTimer(true, deadline) {
-                Err(e) => {
-                    return Err(e);
-                }
-                _ => ()
-            }
+            let res;
+            loop {
+                match IOURING.BufSockRead(task, self, dsts) {
+                    Err(Error::SysError(SysErr::EWOULDBLOCK)) => (),
+                    Err(e) => return Err(e),
+                    Ok(r) => {
+                        res = r;
+                        break;
+                    }
+                };
 
-            let res = IOURING.BufSockRead(task, self, dsts)?;
+                match task.blocker.BlockWithMonoTimer(true, deadline) {
+                    Err(e) => {
+                        return Err(e);
+                    }
+                    _ => ()
+                }
+            }
 
             let senderAddr = if senderRequested {
                 let addr = self.remoteAddr.lock().as_ref().unwrap().clone();
