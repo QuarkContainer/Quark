@@ -631,8 +631,8 @@ impl KVMVcpu {
                 }
                 VcpuExit::MmioRead(addr, _data) => {
                     info!(
-                    "Received an MMIO Read Request for the address {:#x}.",
-                    addr,
+                    "CPU[{}] Received an MMIO Read Request for the address {:#x}.",
+                    self.id, addr,
                     );
                 }
                 VcpuExit::MmioWrite(addr, _data) => {

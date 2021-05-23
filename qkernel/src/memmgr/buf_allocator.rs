@@ -261,6 +261,9 @@ pub struct StackHeapInternal {
     pub count   : i64,
     pub hit     : i64,
     pub time    : i64,
+
+    pub total   : usize,
+    pub free    : usize,
 }
 
 pub struct StackHeap(Mutex<StackHeapInternal>);
@@ -292,6 +295,8 @@ impl StackHeap {
             count: 0,
             hit: 0,
             time: 0,
+            total: 0,
+            free: 0,
         };
 
         return Self(Mutex::new(internal))
@@ -302,6 +307,10 @@ impl StackHeap {
         unsafe {
             intern.heap.add_to_heap(start, end);
         }
+
+        let size = end - start;
+        intern.total += size;
+        intern.free += size;
     }
 
     pub fn Add(&self, start: usize, size: usize) {
@@ -317,6 +326,14 @@ impl StackHeap {
         if start < end {
             self.AddToHead(start, end)
         }
+    }
+
+    pub fn Total(&self) -> usize {
+        return self.lock().total;
+    }
+
+    pub fn Free(&self) -> usize {
+        return self.lock().free;
     }
 
     pub fn Print(&self) {
@@ -412,6 +429,7 @@ unsafe impl GlobalAlloc for StackHeap {
         intern.time += current - start;
         intern.count += 1;
         intern.hit += hit;
+        intern.free -= size;
 
         return addr as *mut u8;
     }
@@ -458,6 +476,7 @@ unsafe impl GlobalAlloc for StackHeap {
         intern.time += current - start;
         intern.count += 1;
         intern.hit += hit;
+        intern.free += size;
     }
 }
 

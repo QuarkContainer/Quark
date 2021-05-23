@@ -16,20 +16,30 @@ use super::super::task::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
-use super::super::Kernel;
+//use super::super::Kernel;
 
 pub fn SysInfo(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg0 as u64;
 
     let mut info : LibcSysinfo = LibcSysinfo::default();
 
-    let ret = Kernel::HostSpace::Sysinfo(&mut info as * mut _ as u64);
+    /*let ret = Kernel::HostSpace::Sysinfo(&mut info as * mut _ as u64);
     if ret < 0 {
         return Err(Error::SysError(-ret as i32))
-    }
+    }*/
 
     let sysInfo: &mut LibcSysinfo = task.GetTypeMut(addr)?;
+    info.procs = task.Thread().PIDNamespace().Tasks().len() as u16;
+    info.uptime = Task::MonoTimeNow().Seconds() as i64;
+    info.totalram = super::super::ALLOCATOR.Total() as u64;
+    info.freeram = super::super::ALLOCATOR.Free() as u64;
+    info.mem_unit = 1;
+
     *sysInfo = info;
 
-    return Ok(ret)
+    error!("SysInfo output is {:?}", &info);
+
+    //return Ok(ret)
+
+    return Ok(0)
 }
