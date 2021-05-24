@@ -37,7 +37,7 @@ pub fn SysInfo(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     *sysInfo = info;
 
-    error!("SysInfo output is {:?}", &info);
+    //error!("SysInfo output is {:?}", &info);
 
     //return Ok(ret)
 
