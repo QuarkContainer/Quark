@@ -458,6 +458,9 @@ pub fn qCall(eventAddr: u64, event: &'static mut Event) -> QcallRet {
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::OpenFifo(msg) } => {
             *ret = super::VMSpace::OpenFifo(taskId.Addr(), msg.UID, msg.flags) as u64;
         }
+        Event { taskId, interrupted: _, ref mut ret, msg: Msg::Statm(msg) } => {
+            *ret = super::VMSpace::Statm(taskId.Addr(), msg.buf) as u64;
+        }
         Event { taskId: _, interrupted: _, ref mut ret, msg: Msg::IoUringSetup(msg) } => {
             *ret = match URING_MGR.lock().Setup(msg.submission, msg.completion) {
                 Ok(v) => v as u64,
