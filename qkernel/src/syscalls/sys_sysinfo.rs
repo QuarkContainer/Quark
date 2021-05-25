@@ -15,8 +15,10 @@
 use super::super::task::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
+use super::super::qlib::qmsg::qcall::StatmInfo;
+use super::super::qlib::usage::memory::*;
 use super::super::syscalls::syscalls::*;
-//use super::super::Kernel;
+use super::super::Kernel;
 
 pub fn SysInfo(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg0 as u64;
@@ -28,11 +30,17 @@ pub fn SysInfo(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Err(Error::SysError(-ret as i32))
     }*/
 
+    let mut statm : StatmInfo = StatmInfo::default();
+    Kernel::HostSpace::Statm(&mut statm);
+
+    let totalUsage = statm.rss;
+    let totalSize = TotalMemory(0, totalUsage);
+
     let sysInfo: &mut LibcSysinfo = task.GetTypeMut(addr)?;
     info.procs = task.Thread().PIDNamespace().Tasks().len() as u16;
     info.uptime = Task::MonoTimeNow().Seconds() as i64;
-    info.totalram = super::super::ALLOCATOR.Total() as u64;
-    info.freeram = super::super::ALLOCATOR.Free() as u64;
+    info.totalram = totalSize; //super::super::ALLOCATOR.Total() as u64;
+    info.freeram = totalSize - totalUsage; // super::super::ALLOCATOR.Free() as u64;
     info.mem_unit = 1;
 
     *sysInfo = info;

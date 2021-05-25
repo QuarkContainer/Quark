@@ -172,6 +172,7 @@ pub enum Msg {
     IoUringSetup(IoUringSetup),
     IoUringRegister(IoUringRegister),
     IoUringEnter(IoUringEnter),
+    Statm(Statm),
 }
 
 #[derive(Clone, Default, Debug)]
@@ -274,6 +275,18 @@ pub struct Fallocate {
     pub mode: i32,
     pub offset: i64,
     pub len: i64,
+}
+
+// get vss/rss from /proc/self/statm
+#[derive(Clone, Default, Debug)]
+pub struct StatmInfo {
+    pub vss: u64,
+    pub rss: u64,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct Statm {
+    pub buf: u64,
 }
 
 #[derive(Clone, Default, Debug)]

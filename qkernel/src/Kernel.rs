@@ -808,6 +808,14 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
+    pub fn Statm(statm: &mut StatmInfo) -> i64 {
+        let mut msg = Msg::Statm(Statm {
+            buf: statm as * const _ as u64
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
     pub fn GetCwd(buf: u64, size: u64) -> i64 {
         let mut msg = Msg::GetCwd(GetCwd {
             buf,
