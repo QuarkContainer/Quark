@@ -27,6 +27,7 @@ pub mod kernel_io_thread;
 
 use std::str;
 use std::slice;
+use std::fs;
 use libc::*;
 use std::time::Duration;
 use std::marker::Send;
@@ -74,6 +75,13 @@ const ARCH_GET_GS:u64 = 0x1004;
 
 lazy_static! {
     static ref UID: AtomicU64 = AtomicU64::new(1);
+}
+
+macro_rules! scan {
+    ( $string:expr, $sep:expr, $( $x:ty ),+ ) => {{
+        let mut iter = $string.split($sep);
+        ($(iter.next().and_then(|word| word.parse::<$x>().ok()),)*)
+    }}
 }
 
 pub fn NewUID() -> u64 {
@@ -1803,6 +1811,21 @@ impl VMSpace {
         FD_NOTIFIER.AddFd(osfd, Box::new(GuestFd{hostfd: hostfd}));
 
         return hostfd as i64;
+    }
+
+    pub fn Statm(_taskId: u64, buf: u64) -> i64 {
+        const STATM : &str = "/proc/self/statm";
+        let contents = fs::read_to_string(STATM)
+            .expect("Something went wrong reading the file");
+
+        let output = scan!(&contents, char::is_whitespace, u64, u64);
+        let mut statm = unsafe {
+            &mut *(buf as * mut StatmInfo)
+        };
+
+        statm.vss = output.0.unwrap();
+        statm.rss = output.1.unwrap();
+        return 0;
     }
 
     pub fn HostID(axArg: u32, cxArg: u32) -> (u32, u32, u32, u32) {
