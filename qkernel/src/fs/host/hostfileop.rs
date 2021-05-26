@@ -35,7 +35,7 @@ use super::super::super::Kernel::HostSpace;
 use super::super::super::task::*;
 use super::super::super::fd::*;
 use super::super::super::IOURING;
-use super::super::super::BUF_MGR;
+//use super::super::super::BUF_MGR;
 
 use super::super::file::*;
 use super::super::fsutil::file::*;
@@ -245,7 +245,7 @@ impl FileOperations for HostFileOp {
         }
     }
 
-    fn WriteAt(&self, task: &Task, f: &File, srcs: &[IoVec], offset: i64, _blocking: bool) -> Result<i64> {
+    fn WriteAt(&self, task: &Task, _f: &File, srcs: &[IoVec], offset: i64, _blocking: bool) -> Result<i64> {
         let hostIops = self.InodeOp.clone();
 
         if self.InodeOp.InodeType() != InodeType::RegularFile && self.InodeOp.InodeType() != InodeType::CharacterDevice {
@@ -256,7 +256,7 @@ impl FileOperations for HostFileOp {
             return ioWriter.IOWrite(&task.GetMut().iovs);
         } else {
             if URING_ENABLE {
-                // the IOURING.BufWrite doesn't work for InodeType::CharacterDevice 
+                // the IOURING.BufWrite doesn't work for InodeType::CharacterDevice
 
                 /*if self.InodeOp.InodeType() == InodeType::CharacterDevice { //BUF_WRITE {
                     let size = IoVec::Size(srcs);
