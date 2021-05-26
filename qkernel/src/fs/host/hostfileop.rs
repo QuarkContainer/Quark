@@ -256,7 +256,9 @@ impl FileOperations for HostFileOp {
             return ioWriter.IOWrite(&task.GetMut().iovs);
         } else {
             if URING_ENABLE {
-                if self.InodeOp.InodeType() == InodeType::CharacterDevice { //BUF_WRITE {
+                // the IOURING.BufWrite doesn't work for InodeType::CharacterDevice 
+
+                /*if self.InodeOp.InodeType() == InodeType::CharacterDevice { //BUF_WRITE {
                     let size = IoVec::Size(srcs);
                     let buf = BUF_MGR.Alloc(size as u64);
                     if let Ok(addr) = buf {
@@ -273,7 +275,7 @@ impl FileOperations for HostFileOp {
 
                         return Ok(ret as i64)
                     }
-                };
+                };*/
 
                 task.V2PIovs(srcs, false, &mut task.GetMut().iovs)?;
                 defer!(task.GetMut().iovs.clear());
