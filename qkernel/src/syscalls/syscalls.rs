@@ -263,7 +263,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysArchPrctl, //sys_arch_prctl,
     NotImplementSyscall, //sys_adjtimex,
     SysSetrlimit, //sys_setrlimit, // 160
-    NotImplementSyscall, //sys_chroot,
+    SysChroot, //sys_chroot,
     SysSync, //sys_sync,
     NotImplementSyscall, //sys_acct,
     NotImplementSyscall, //sys_settimeofday,

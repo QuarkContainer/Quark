@@ -573,7 +573,9 @@ pub fn SysGetcwd(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     return Ok(s.len() as i64 + 1)
 }
 
-pub fn chroot(task: &mut Task, addr: u64) -> Result<()> {
+pub fn SysChroot(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let addr = args.arg0 as u64;
+
     if task.Creds().HasCapability(Capability::CAP_SYS_CHROOT) {
         return Err(Error::SysError(SysErr::EPERM))
     }
@@ -598,10 +600,10 @@ pub fn chroot(task: &mut Task, addr: u64) -> Result<()> {
     });
 
     match res {
-        Err(e) => Err(e),
+        Err(e) => return Err(e),
         Ok(_) => {
             task.fsContext.SetRootDirectory(&dir);
-            Ok(())
+            return Ok(0)
         }
     }
 }
