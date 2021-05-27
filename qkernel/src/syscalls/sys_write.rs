@@ -56,9 +56,12 @@ pub fn Write(task: &Task, fd: i32, addr: u64, size: i64) -> Result<i64> {
         return Err(Error::SysError(SysErr::EINVAL))
     }
 
+    /*
+    unix socket allows sending 0-sized empty packet. 
     if size == 0 {
         return Ok(0)
     }
+    */
 
     let iov = IoVec::NewFromAddr(addr, size as usize);
     let iovs: [IoVec; 1] = [iov];

@@ -350,6 +350,26 @@ pub fn GetSockOptSocket(task: &Task,
                 _ => ()
             }
         }
+        LibcConst::SO_ACCEPTCONN => {
+            if outlen < SIZEOF_I32 {
+                return Err(Error::SysError(SysErr::EINVAL))
+            }
+            // This flag is only viable for TCP endpoints
+            return Ok(SockOptResult::I32(0))
+        }
+        LibcConst::SO_DOMAIN => {
+            if outlen < SIZEOF_I32 {
+                return Err(Error::SysError(SysErr::EINVAL))
+            }
+            return Ok(SockOptResult::I32(AFType::AF_UNIX))
+        }
+        LibcConst::SO_PROTOCOL => {
+            if outlen < SIZEOF_I32 {
+                return Err(Error::SysError(SysErr::EINVAL))
+            }
+            // there is only one supported protocol for UNIX socket
+            return Ok(SockOptResult::I32(0))
+        }
         _ => ()
     }
 
