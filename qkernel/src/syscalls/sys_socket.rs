@@ -333,7 +333,9 @@ pub fn SysSetSockOpt(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let sock = file.FileOp.clone();
 
-    if optLen <= 0 || optLen > MAX_OPT_LEN as i32 {
+    // Linux allows optlen = 0, which is equivalent to optval = 0, 
+    // see `do_ip_setsockopt` in linux/source/net/ipv4/ip_sockglue.c
+    if optLen < 0 || optLen > MAX_OPT_LEN as i32 {
         return Err(Error::SysError(SysErr::EINVAL))
     }
 

@@ -19,6 +19,7 @@ use core::any::Any;
 use core::sync::atomic::AtomicI64;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
+use core::ptr;
 use core::ops::Deref;
 use spin::Mutex;
 
@@ -501,10 +502,12 @@ impl SockOperations for SocketOperations {
     }
 
     fn GetSockOpt(&self, _task: &Task, level: i32, name: i32, opt: &mut [u8]) -> Result<i64> {
+        /*
         let optlen = match level as u64 {
             LibcConst::SOL_IPV6 => {
                 match name as u64 {
                     LibcConst::IPV6_V6ONLY => SocketSize::SIZEOF_INT32,
+                    LibcConst::IPV6_TCLASS => SocketSize::SIZEOF_INT32,
                     _ => 0,
                 }
             }
@@ -527,6 +530,13 @@ impl SockOperations for SocketOperations {
                     _ => 0,
                 }
             }
+            LibcConst::SOL_IP => {
+                match name as u64 {
+                    LibcConst::IP_TTL => SocketSize::SIZEOF_INT32,
+                    LibcConst::IP_TOS => SocketSize::SIZEOF_INT32,
+                    _ => 0,
+                }
+            }
             _ => 0,
         };
 
@@ -534,15 +544,44 @@ impl SockOperations for SocketOperations {
             return Err(Error::SysError(SysErr::ENOPROTOOPT))
         }
 
-        if opt.len() < optlen {
-            return Err(Error::SysError(SysErr::EINVAL))
-        }
+        let bufferSize = opt.len();
+
+        if bufferSize < optlen {
+            // provide special handling for options like IP_TOS, which allow inadequate buffer for optval
+            match name as u64 {
+                LibcConst::IP_TOS => {
+                    let res = if bufferSize == 0 {
+                        // dirty, any better way?
+                        Kernel::HostSpace::GetSockOpt(self.fd, level, name, &bufferSize as *const _ as u64, &bufferSize as *const _ as u64)
+                    } else {
+                        Kernel::HostSpace::GetSockOpt(self.fd, level, name, &opt[0] as *const _ as u64, &bufferSize as *const _ as u64)
+                    };
+                    if res < 0 {
+                        return Err(Error::SysError(-res as i32))
+                    }
+                    // if optlen < sizeof(i32), the return of getsockopt will be of sizeof(i8)
+                    return Ok(bufferSize as i64)
+                },
+                _ => return Err(Error::SysError(SysErr::EINVAL))
+            };
+        };
 
         let opt = &opt[..optlen];
-
-        let optLen = opt.len() as i32;
-
         let res = Kernel::HostSpace::GetSockOpt(self.fd, level, name, &opt[0] as *const _ as u64, &optlen as *const _ as u64);
+        if res < 0 {
+            return Err(Error::SysError(-res as i32))
+        }
+
+        return Ok(optlen as i64)
+        */
+
+        let optLen = opt.len();
+        let res = if optLen == 0 {
+            Kernel::HostSpace::GetSockOpt(self.fd, level, name, ptr::null::<u8>() as u64, &optLen as *const _ as u64)
+        } else {
+            Kernel::HostSpace::GetSockOpt(self.fd, level, name, &opt[0] as *const _ as u64, &optLen as *const _ as u64)
+        };
+
         if res < 0 {
             return Err(Error::SysError(-res as i32))
         }
@@ -586,8 +625,13 @@ impl SockOperations for SocketOperations {
         }
 
         let opt = &opt[..optlen];*/
+        let optLen = opt.len();
+        let res = if optLen == 0 {
+            Kernel::HostSpace::SetSockOpt(self.fd, level, name, ptr::null::<u8> as u64, optLen as u32)
+        } else {
+            Kernel::HostSpace::SetSockOpt(self.fd, level, name, &opt[0] as *const _ as u64, optLen as u32)
+        };
 
-        let res = Kernel::HostSpace::SetSockOpt(self.fd, level, name, &opt[0] as *const _ as u64, opt.len() as u32);
         if res < 0 {
             return Err(Error::SysError(-res as i32))
         }

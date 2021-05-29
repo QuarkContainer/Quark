@@ -1686,6 +1686,8 @@ impl LibcConst {
     pub const SOCK_RDM: u64 = 0x4;
     pub const SOCK_SEQPACKET: u64 = 0x5;
     pub const SOCK_STREAM: u64 = 0x1;
+
+    // socket option level constants
     pub const SOL_AAL: u64 = 0x109;
     pub const SOL_ATM: u64 = 0x108;
     pub const SOL_DECNET: u64 = 0x105;
@@ -1698,6 +1700,7 @@ impl LibcConst {
     pub const SOL_SOCKET: u64 = 0x1;
     pub const SOL_TCP: u64 = 0x6;
     pub const SOL_X25: u64 = 0x106;
+
     pub const SOMAXCONN: u64 = 0x80;
     pub const SO_ACCEPTCONN: u64 = 0x1e;
     pub const SO_ATTACH_FILTER: u64 = 0x1a;
