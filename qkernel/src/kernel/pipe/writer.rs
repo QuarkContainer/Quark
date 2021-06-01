@@ -44,7 +44,7 @@ impl Drop for Writer {
     fn drop(&mut self) {
         self.pipe.WClose();
 
-        // Wake up readers and writers.
+        // Wake up readers.
         self.pipe.Notify(EVENT_HUP)
     }
 }
@@ -82,6 +82,7 @@ impl FileOperations for Writer {
     }
 
     fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
+        //error!("pipe writer readat id {}, reader is {}", self.pipe.Uid(), self.pipe.Readers());
         let dsts = BlockSeq::NewFromSlice(dsts);
         let n = self.pipe.Read(task, dsts)?;
         if n > 0 {
@@ -93,6 +94,7 @@ impl FileOperations for Writer {
     }
 
     fn WriteAt(&self, task: &Task, _f: &File, srcs: &[IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
+        //error!("pipe writer WriteAt id {}, writers is {}", self.pipe.Uid(), self.pipe.Writers());
         let srcs = BlockSeq::NewFromSlice(srcs);
 
         let n = match self.pipe.Write(task, srcs) {

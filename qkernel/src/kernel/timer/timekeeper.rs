@@ -137,7 +137,7 @@ impl TimeKeeperInternal {
     pub fn Update(&mut self) {
         //PerfPrint();
         //super::super::super::perflog::THREAD_COUNTS.lock().Print(true);
-        super::super::super::AllocatorPrint();
+        //super::super::super::AllocatorPrint();
 
         assert!(self.inited, "TimeKeeper not inited");
         let (monotonicParams, monotonicOk, realtimeParams, realtimeOk) = self.clocks.Update();

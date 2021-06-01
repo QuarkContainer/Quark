@@ -250,6 +250,18 @@ impl Pipe {
         self.queue.Notify(mask)
     }
 
+    pub fn Uid(&self) -> u64 {
+        return self.intern.lock().id;
+    }
+
+    pub fn Readers(&self) -> i64 {
+        self.readers.load(Ordering::SeqCst)
+    }
+
+    pub fn Writers(&self) -> i64 {
+        self.writers.load(Ordering::SeqCst)
+    }
+
     // Open opens the pipe and returns a new file.
     //
     // Precondition: at least one of flags.Read or flags.Write must be set.
@@ -289,7 +301,7 @@ impl Pipe {
         let mut p = self.intern.lock();
         let mut dst = dst;
         // Is the pipe empty?
-        //info!("[{:x}] pipe::read id is {} p.size is {}", task.taskId, p.id, p.size);
+        //info!("pipe::read id is {} p.size is {}, writers is {}", p.id, p.size, self.Writers());
         if p.size == 0 {
             if !self.HasWriters() {
                 // There are no writers, return EOF.
@@ -416,6 +428,8 @@ impl Pipe {
     // rClose signals that a reader has closed their end of the pipe.
     pub fn RClose(&self) {
         let readers = self.readers.fetch_sub(1, Ordering::SeqCst);
+        //error!("pipe [{}] rclose readers is {}", self.Uid(), readers);
+
         if readers <= 0 {
             panic!("Refcounting bug, pipe has negative readers: {}", readers-1)
         }
@@ -428,6 +442,7 @@ impl Pipe {
     // wClose signals that a writer has closed their end of the pipe.
     pub fn WClose(&self) {
         let writers = self.writers.fetch_sub(1, Ordering::SeqCst);
+        //error!("pipe [{}] WClose readers is {}", self.Uid(), writers);
         if writers <= 0 {
             panic!("Refcounting bug, pipe has negative writers: {}", writers-1)
         }
