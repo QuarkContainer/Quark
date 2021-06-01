@@ -39,11 +39,14 @@ pub fn Write(task: &Task, fd: i32, addr: u64, size: i64) -> Result<i64> {
     //defer!(task.PerfGofrom(PerfType::Write));
 
     /*if fd <= 2  {
-         use alloc::string::ToString;
          use super::super::util::cstring::*;
 
-         let str = CString::ToStringWithLen(task, addr, size as usize)?.to_string();
-         error!("(Data) Write: {}", str);
+         match CString::ToStringWithLen(task, addr, size as usize) {
+             Ok(str) => {
+                 error!("(Data) Write: {}", str);
+             }
+             Err(_) => ()
+         }
     }*/
 
     let file = task.GetFile(fd)?;

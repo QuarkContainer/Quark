@@ -389,7 +389,8 @@ impl Kernel {
         let root = tasks.root.as_ref().unwrap().clone();
         let mut lastErr = Ok(());
 
-        for (tg, _) in &root.lock().tgids {
+        let tgs : Vec<_> = root.lock().tgids.keys().cloned().collect();
+        for tg in &tgs {
             let lock = tg.lock().signalLock.clone();
             let _l = lock.lock();
             let leader = tg.lock().leader.Upgrade();

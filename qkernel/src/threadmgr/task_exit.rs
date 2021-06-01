@@ -940,7 +940,7 @@ impl Thread {
             //PerfStop();
             PerfPrint();
             super::super::perflog::THREAD_COUNTS.lock().Print(false);
-            super::super::AllocatorPrint();
+            //super::super::AllocatorPrint();
             core::mem::drop(ownerlock);
             let exitStatus = tg.ExitStatus();
             super::super::PAGE_MGR.PrintRefs();

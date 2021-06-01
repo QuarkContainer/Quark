@@ -31,33 +31,6 @@ pub const FIRST_RTSIGNAL: i32 = 32;
 // LastRTSignal is the highest real-time signal number.
 pub const LAST_RTSIGNAL: i32 = 64;
 
-/*
-#[derive(Copy, Clone, Default)]
-pub struct Signal(pub i32);
-
-impl Signal {
-    pub fn IsValid(&self) -> bool {
-        return self.0 > 0 && self.0 <= SIGNAL_MAXIMUM;
-    }
-
-    pub fn IsStandard(&self) -> bool {
-        return self.0 <= LAST_STD_SIGNAL;
-    }
-
-    pub fn IsRealTime(&self) -> bool {
-        return self.0 >= FIRST_RTSIGNAL;
-    }
-
-    pub fn Index(&self) -> usize {
-        return (self.0 - 1) as usize;
-    }
-
-    pub fn Mask(&self) -> u64 {
-        1 << self.Index()
-    }
-}
-*/
-
 pub const SIGHUP: Signal = Signal(1);
 pub const SIGINT: Signal = Signal(2);
 pub const SIGQUIT: Signal = Signal(3);

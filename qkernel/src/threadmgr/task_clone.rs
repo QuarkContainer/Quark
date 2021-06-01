@@ -210,8 +210,11 @@ impl CloneOptions {
 
 impl Thread {
     pub fn Clone(&self, opts: &CloneOptions, stackAddr: u64) -> Result<Self> {
-        let t = self.lock();
+        let pidns = self.PIDNamespace();
+        let ts = pidns.Owner();
+        let _wl = ts.WriteLock();
 
+        let t = self.lock();
         let creds = t.creds.clone();
         let mut userns = creds.lock().UserNamespace.clone();
 
@@ -343,8 +346,8 @@ impl Thread {
 
     pub fn MaybeBeginVforkStop(&self, child: &Thread) {
         let tg = self.ThreadGroup();
-        let owner = tg.PIDNamespace().Owner();
-        let _r = owner.ReadLock();
+        let _owner = tg.PIDNamespace().Owner();
+        //let _r = owner.ReadLock();
 
         let lock = tg.lock().signalLock.clone();
         let _s = lock.lock();
