@@ -205,16 +205,16 @@ impl FileOperations for HostFileOp {
 
         defer!(task.GetMut().iovs.clear());
         task.V2PIovs(dsts, true, &mut task.GetMut().iovs)?;
+        let iovs = &mut task.GetMut().iovs;
+        if iovs.len() == 0 {
+            iovs.push(IoVec::NewFromAddr(0, 0));
+        }
 
         if self.InodeOp.InodeType() != InodeType::RegularFile {
             let mut ioReader = FdReadWriter::New(hostIops.HostFd());
-            return ioReader.IORead(&mut task.GetMut().iovs);
+            return ioReader.IORead(iovs);
         } else {
             if URING_ENABLE {
-                let iovs = &mut task.GetMut().iovs;
-                if iovs.len() == 0 {
-                    return Ok(0)
-                }
                 let ret = IOURING.Read(task,
                                         hostIops.HostFd(),
                                         &mut iovs[0] as * mut _ as u64,
@@ -241,19 +241,25 @@ impl FileOperations for HostFileOp {
             };
 
             let mut ioReader = FdReadWriter::New(hostIops.HostFd());
-            return ioReader.IOReadAt(&mut task.GetMut().iovs, offset as u64);
+            return ioReader.IOReadAt(iovs, offset as u64);
         }
     }
 
     fn WriteAt(&self, task: &Task, _f: &File, srcs: &[IoVec], offset: i64, _blocking: bool) -> Result<i64> {
         let hostIops = self.InodeOp.clone();
 
-        if self.InodeOp.InodeType() != InodeType::RegularFile && self.InodeOp.InodeType() != InodeType::CharacterDevice {
-            task.V2PIovs(srcs, false, &mut task.GetMut().iovs)?;
-            defer!(task.GetMut().iovs.clear());
+        task.V2PIovs(srcs, false, &mut task.GetMut().iovs)?;
+        defer!(task.GetMut().iovs.clear());
 
+        let iovs = &mut task.GetMut().iovs;
+        if iovs.len() == 0 {
+            iovs.push(IoVec::NewFromAddr(0, 0));
+        }
+
+
+        if self.InodeOp.InodeType() != InodeType::RegularFile && self.InodeOp.InodeType() != InodeType::CharacterDevice {
             let mut ioWriter = FdReadWriter::New(hostIops.HostFd());
-            return ioWriter.IOWrite(&task.GetMut().iovs);
+            return ioWriter.IOWrite(iovs);
         } else {
             if URING_ENABLE {
                 // the IOURING.BufWrite doesn't work for InodeType::CharacterDevice
@@ -277,10 +283,6 @@ impl FileOperations for HostFileOp {
                     }
                 };*/
 
-                task.V2PIovs(srcs, false, &mut task.GetMut().iovs)?;
-                defer!(task.GetMut().iovs.clear());
-
-                let iovs = &mut task.GetMut().iovs;
                 let ret = IOURING.Write(task,
                               hostIops.HostFd(),
                               &iovs[0] as * const _ as u64,
@@ -301,9 +303,6 @@ impl FileOperations for HostFileOp {
                 // todo: handle tmp file elegant
             }
 
-            task.V2PIovs(srcs, false, &mut task.GetMut().iovs)?;
-            defer!(task.GetMut().iovs.clear());
-
             let offset = if self.InodeOp.InodeType() == InodeType::CharacterDevice {
                 -1
             } else {
@@ -311,7 +310,7 @@ impl FileOperations for HostFileOp {
             };
 
             let mut ioWriter = FdReadWriter::New(hostIops.HostFd());
-            match ioWriter.IOWriteAt(&task.GetMut().iovs, offset as u64) {
+            match ioWriter.IOWriteAt(iovs, offset as u64) {
                 Err(e) => return Err(e),
                 Ok(ret) => {
                     hostIops.UpdateMaxLen(offset + ret);
