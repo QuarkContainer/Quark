@@ -41,13 +41,14 @@ use super::reader::*;
 use super::writer::*;
 
 // MinimumPipeSize is a hard limit of the minimum size of a pipe.
-pub const MINIMUM_PIPE_SIZE : usize = 64 << 10;
+pub const MINIMUM_PIPE_SIZE : usize = MemoryDef::PAGE_SIZE as usize;
 
 // DefaultPipeSize is the system-wide default size of a pipe in bytes.
-pub const DEFAULT_PIPE_SIZE : usize = MINIMUM_PIPE_SIZE;
+pub const DEFAULT_PIPE_SIZE : usize = 16 * MemoryDef::PAGE_SIZE as usize;
 
 // MaximumPipeSize is a hard limit on the maximum size of a pipe.
-pub const MAXIMUM_PIPE_SIZE : usize = 8 << 20;
+// It corresponds to fs/pipe.c:pipe_max_size.
+pub const MAXIMUM_PIPE_SIZE : usize = 1048576;
 
 // atomicIOBytes is the maximum number of bytes that the pipe will
 // guarantee atomic reads or writes atomically.

@@ -35,6 +35,7 @@ use super::super::kernel::timer;
 #[repr(align(128))]
 pub enum AsyncOps {
     AsyncTimeout(AsyncTimeout),
+    AsyncTimerRemove(AsyncTimerRemove),
     AsyncTTTYWrite(AsyncTTTYWrite),
     AsyncWrite(AsyncWritev),
     AsyncEventfdWrite(AsyncEventfdWrite),
@@ -52,6 +53,7 @@ impl AsyncOps {
     pub fn SEntry(&self) -> squeue::Entry {
         match self {
             AsyncOps::AsyncTimeout(ref msg) => return msg.SEntry(),
+            AsyncOps::AsyncTimerRemove(ref msg) => return msg.SEntry(),
             AsyncOps::AsyncTTTYWrite(ref msg) => return msg.SEntry(),
             AsyncOps::AsyncWrite(ref msg) => return msg.SEntry(),
             AsyncOps::AsyncEventfdWrite(ref msg) => return msg.SEntry(),
@@ -71,6 +73,7 @@ impl AsyncOps {
     pub fn Process(mut self, result: i32) {
         let ret = match &mut self {
             AsyncOps::AsyncTimeout(ref mut msg) => msg.Process(result),
+            AsyncOps::AsyncTimerRemove(ref mut msg) => msg.Process(result),
             AsyncOps::AsyncTTTYWrite(ref mut msg) => msg.Process(result),
             AsyncOps::AsyncWrite(ref mut msg) => msg.Process(result),
             AsyncOps::AsyncEventfdWrite(ref mut msg) => msg.Process(result),
@@ -92,16 +95,17 @@ impl AsyncOps {
     pub fn Type(&self) -> usize {
         match self {
             AsyncOps::AsyncTimeout(_) => return 1,
-            AsyncOps::AsyncTTTYWrite(_) => return 2,
-            AsyncOps::AsyncWrite(_) => return 3,
-            AsyncOps::AsyncEventfdWrite(_) => return 4,
-            AsyncOps::AsycnSendMsg(_) => return 5,
-            AsyncOps::AsycnRecvMsg(_) => return 6,
-            AsyncOps::AsyncSocketSend(_) => return 7,
-            AsyncOps::AsyncSocketRecv(_) => return 8,
-            AsyncOps::AIOWrite(_) => return 9,
-            AsyncOps::AIORead(_) => return 10,
-            AsyncOps::AIOFsync(_) => return 11,
+            AsyncOps::AsyncTimerRemove(_) => return 2,
+            AsyncOps::AsyncTTTYWrite(_) => return 3,
+            AsyncOps::AsyncWrite(_) => return 4,
+            AsyncOps::AsyncEventfdWrite(_) => return 5,
+            AsyncOps::AsycnSendMsg(_) => return 6,
+            AsyncOps::AsycnRecvMsg(_) => return 7,
+            AsyncOps::AsyncSocketSend(_) => return 8,
+            AsyncOps::AsyncSocketRecv(_) => return 9,
+            AsyncOps::AIOWrite(_) => return 10,
+            AsyncOps::AIORead(_) => return 11,
+            AsyncOps::AIOFsync(_) => return 12,
             AsyncOps::None => ()
         };
 
@@ -207,6 +211,28 @@ impl AsyncTimeout {
             timer::FireTimer(self.timerId, self.seqNo);
         }
 
+        return false
+    }
+}
+
+pub struct AsyncTimerRemove {
+    pub userData: u64
+}
+
+impl AsyncTimerRemove {
+    pub fn New(userData: u64) -> Self {
+        return Self {
+            userData: userData
+        }
+    }
+
+    pub fn SEntry(&self) -> squeue::Entry {
+        let op = TimeoutRemove::new(self.userData);
+
+        return op.build();
+    }
+
+    pub fn Process(&mut self, _result: i32) -> bool {
         return false
     }
 }

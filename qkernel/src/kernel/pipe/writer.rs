@@ -90,6 +90,10 @@ impl FileOperations for Writer {
             return Ok(n as i64)
         }
 
+        if dsts.NumBytes() == 0 {
+            return Ok(0)
+        }
+
         return Err(Error::SysError(SysErr::EAGAIN));
     }
 
@@ -108,6 +112,10 @@ impl FileOperations for Writer {
         if n > 0 {
             self.pipe.Notify(EVENT_IN);
             return Ok(n as i64)
+        }
+
+        if srcs.NumBytes() == 0 {
+            return Ok(0)
         }
 
         return Err(Error::SysError(SysErr::EAGAIN));
