@@ -575,11 +575,11 @@ impl SockOperations for SocketOperations {
         return Ok(optlen as i64)
         */
 
-        let optLen = opt.len();
+        let mut optLen = opt.len();
         let res = if optLen == 0 {
-            Kernel::HostSpace::GetSockOpt(self.fd, level, name, ptr::null::<u8>() as u64, &optLen as *const _ as u64)
+            Kernel::HostSpace::GetSockOpt(self.fd, level, name, ptr::null::<u8>() as u64, &mut optLen as *mut _ as u64)
         } else {
-            Kernel::HostSpace::GetSockOpt(self.fd, level, name, &opt[0] as *const _ as u64, &optLen as *const _ as u64)
+            Kernel::HostSpace::GetSockOpt(self.fd, level, name, &mut opt[0] as *mut _ as u64, &mut optLen as *mut _ as u64)
         };
 
         if res < 0 {
@@ -715,7 +715,7 @@ impl SockOperations for SocketOperations {
         }
 
         //todo: we don't support MSG_ERRQUEUE
-        if flags & !(MsgType::MSG_DONTWAIT | MsgType::MSG_PEEK | MsgType::MSG_TRUNC) != 0 {
+        if flags & !(MsgType::MSG_DONTWAIT | MsgType::MSG_PEEK | MsgType::MSG_TRUNC | MsgType::MSG_CTRUNC) != 0 {
             return Err(Error::SysError(SysErr::EINVAL))
         }
 
