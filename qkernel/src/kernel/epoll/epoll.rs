@@ -218,6 +218,8 @@ impl EventPoll {
                 continue;
             }
 
+            //let mask = entry.lock().mask;
+            //error!("ReadEvents event fd is {}, ready is {:x}, mask is {:x}", entry.lock().id.Fd, ready, mask);
             // Add event to the array that will be returned to caller.
             ret.push(Event {
                 Events: ready as u32,

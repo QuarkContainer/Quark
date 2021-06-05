@@ -525,6 +525,11 @@ fn panic(info: &PanicInfo) -> ! {
         print!("panic occurred but can't get location information...");
     }
 
+    backtracer::trace(|frame| {
+        print!("panic frame is {:#x?}", frame);
+        true
+    });
+
     //self::Kernel::HostSpace::Panic(&format!("get panic: {:?}", info));
     self::Kernel::HostSpace::Panic("get panic ...");
     loop {}

@@ -53,9 +53,11 @@ impl Deref for Buffer {
     }
 }
 
+pub const PIPE_BUF_SIZE : usize = 8144;
+
 #[repr(C)]
 pub struct BufferIntern {
-    pub data: [u8; 8144],
+    pub data: [u8; PIPE_BUF_SIZE],
     pub read: usize,
     pub write: usize,
 }
@@ -64,7 +66,7 @@ pub struct BufferIntern {
 impl Default for BufferIntern {
     fn default() -> Self {
         return Self {
-            data: [0; 8144],
+            data: [0; PIPE_BUF_SIZE],
             read: 0,
             write: 0,
         }

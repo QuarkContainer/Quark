@@ -127,7 +127,8 @@ impl RawTimer {
         // we need to call the TimerRemove out of lock to avoid deadlock
         if state == TimerState::Running {
             let task = Task::Current();
-            IOURING.TimerRemove(task, userData);
+            //IOURING.TimerRemove(task, userData);
+            IOURING.AsyncTimerRemove(task, userData);
         }
 
         return false;
