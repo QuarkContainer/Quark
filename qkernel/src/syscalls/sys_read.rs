@@ -276,14 +276,38 @@ fn readv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
     f.EventRegister(task, &general, EVENT_READ);
     defer!(f.EventUnregister(task, &general));
 
+    let len = Iovs(dsts).Count();
+    let mut count = 0;
+    let mut dsts = dsts;
+    let mut tmp;
     loop {
-        match f.Readv(task, dsts) {
-            Err(Error::SysError(SysErr::EWOULDBLOCK)) => (),
-            Err(e) => {
-                return Err(e);
-            }
-            Ok(n) => {
-                return Ok(n);
+        loop {
+            match f.Readv(task, dsts) {
+                Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
+                    if count > 0 {
+                        return Ok(count)
+                    }
+                    break;
+                },
+                Err(e) => {
+                    if count > 0 {
+                        return Ok(count)
+                    }
+                    return Err(e);
+                }
+                Ok(n) => {
+                    if n == 0 {
+                        return Ok(count);
+                    }
+
+                    count += n;
+                    if count == len as i64 {
+                        return Ok(count)
+                    }
+
+                    tmp = Iovs(dsts).DropFirst(n as usize);
+                    dsts = &mut tmp;
+                }
             }
         }
 

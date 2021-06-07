@@ -39,6 +39,7 @@ use super::super::super::kernel::time::*;
 use super::super::super::qlib::common::*;
 use super::super::super::task::*;
 use super::super::super::qlib::mem::io::*;
+use super::super::super::qlib::mem::block::*;
 use super::super::super::qlib::linux::netdevice::*;
 use super::super::super::Kernel;
 use super::super::super::IOURING;
@@ -668,15 +669,43 @@ impl SockOperations for SocketOperations {
                 panic!("Hostnet RecvMsg Socketbuf doesn't support control data");
             }
 
-            match IOURING.BufSockRead(task, self, dsts) {
-                Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
-                    if flags & MsgType::MSG_DONTWAIT != 0 {
-                        return Err(Error::SysError(SysErr::EWOULDBLOCK))
+            let len = Iovs(dsts).Count();
+            let mut count = 0;
+            let mut dsts = dsts;
+            let mut tmp;
+            let mut res = 0;
+
+            loop {
+                match IOURING.BufSockRead(task, self, dsts) {
+                    Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
+                        if flags & MsgType::MSG_DONTWAIT != 0 {
+                            if count > 0 {
+                                return Ok((count as i64, 0, None, SCMControlMessages::default()))
+                            }
+                            return Err(Error::SysError(SysErr::EWOULDBLOCK))
+                        }
+
+                        break;
                     }
-                }
-                Err(e) => return Err(e),
-                Ok(res) => return {
-                    Ok((res as i64, 0, None, SCMControlMessages::default()))
+                    Err(e) => {
+                        if count > 0 {
+                            return Ok((count as i64, 0, None, SCMControlMessages::default()))
+                        }
+                        return Err(e)
+                    },
+                    Ok(n) => {
+                        if n == 0 {
+                            return Ok((count, 0, None, SCMControlMessages::default()))
+                        }
+
+                        count += n;
+                        if count == len as i64 {
+                            return Ok((count as i64, 0, None, SCMControlMessages::default()))
+                        }
+
+                        tmp = Iovs(dsts).DropFirst(n as usize);
+                        dsts = &mut tmp;
+                    }
                 }
             }
 
@@ -684,19 +713,47 @@ impl SockOperations for SocketOperations {
             self.EventRegister(task, &general, EVENT_READ);
             defer!(self.EventUnregister(task, &general));
 
-            let res;
-            loop {
-                match IOURING.BufSockRead(task, self, dsts) {
-                    Err(Error::SysError(SysErr::EWOULDBLOCK)) => (),
-                    Err(e) => return Err(e),
-                    Ok(r) => {
-                        res = r;
-                        break;
-                    }
-                };
+            'main: loop {
+                loop {
+                    match IOURING.BufSockRead(task, self, dsts) {
+                        Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
+                            if count > 0 {
+                                res = count;
+                                break 'main;
+                            }
+                            break;
+                        },
+                        Err(e) => {
+                            if count > 0 {
+                                res = count;
+                                break 'main;
+                            }
+                            return Err(e);
+                        }
+                        Ok(n) => {
+                            if n == 0 {
+                                break 'main;
+                            }
+
+                            count += n;
+                            if count == len as i64 {
+                                res = count;
+                                break 'main;
+                            }
+
+                            tmp = Iovs(dsts).DropFirst(n as usize);
+                            dsts = &mut tmp;
+                        }
+                    };
+                }
+
 
                 match task.blocker.BlockWithMonoTimer(true, deadline) {
                     Err(e) => {
+                        if count > 0 {
+                            res = count;
+                            break 'main;
+                        }
                         return Err(e);
                     }
                     _ => ()
@@ -738,19 +795,18 @@ impl SockOperations for SocketOperations {
         }
 
         let mut res = Kernel::HostSpace::IORecvMsg(self.fd, &msgHdr as *const _ as u64, flags | MsgType::MSG_DONTWAIT, false) as i32;
-        if res == -SysErr::EWOULDBLOCK && flags & MsgType::MSG_DONTWAIT == 0 {
+        while res == -SysErr::EWOULDBLOCK && flags & MsgType::MSG_DONTWAIT == 0 {
             let general = task.blocker.generalEntry.clone();
 
             self.EventRegister(task, &general, EVENT_READ);
+            defer!(self.EventUnregister(task, &general));
             match task.blocker.BlockWithMonoTimer(true, deadline) {
                 Err(e) => {
-                    self.EventUnregister(task, &general);
                     return Err(e);
                 }
                 _ => ()
             }
 
-            self.EventUnregister(task, &general);
             res = Kernel::HostSpace::IORecvMsg(self.fd, &msgHdr as *const _ as u64, flags | MsgType::MSG_DONTWAIT, false) as i32;
         }
 
@@ -779,21 +835,64 @@ impl SockOperations for SocketOperations {
                 panic!("Hostnet Socketbuf doesn't supprot MsgHdr");
             }
 
-            match IOURING.BufSockWrite(task, self, srcs) {
-                Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
-                    if flags & MsgType::MSG_DONTWAIT != 0 {
-                        return Err(Error::SysError(SysErr::EWOULDBLOCK))
+            let len = Iovs(srcs).Count();
+            let mut count = 0;
+            let mut srcs = srcs;
+            let mut tmp;
+
+            loop {
+                loop {
+                    match IOURING.BufSockWrite(task, self, srcs) {
+                        Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
+                            if count > 0 {
+                                return Ok(count)
+                            }
+
+                            if flags & MsgType::MSG_DONTWAIT != 0 {
+                                return Err(Error::SysError(SysErr::EWOULDBLOCK))
+                            }
+
+                            break;
+                        }
+                        Err(e) => {
+                            if count > 0 {
+                                return Ok(count)
+                            }
+
+                            return Err(e)
+                        },
+                        Ok(n) => {
+                            count += n;
+                            if count == len as i64 {
+                                return Ok(count)
+                            }
+                            tmp = Iovs(srcs).DropFirst(n as usize);
+                            srcs = &mut tmp;
+                        },
                     }
                 }
-                Err(e) => return Err(e),
-                Ok(r) => return Ok(r),
+
+                let general = task.blocker.generalEntry.clone();
+                self.EventRegister(task, &general, EVENT_WRITE);
+                defer!(self.EventUnregister(task, &general));
+
+                match task.blocker.BlockWithMonoTimer(true, deadline) {
+                    Err(Error::SysError(SysErr::ETIMEDOUT)) => {
+                        if count > 0 {
+                            return Ok(count)
+                        }
+                        return Err(Error::SysError(SysErr::EWOULDBLOCK));
+                    }
+                    Err(e) => {
+                        if count > 0 {
+                            return Ok(count)
+                        }
+                        return Err(e);
+                    }
+                    _ => ()
+                }
             }
 
-            let general = task.blocker.generalEntry.clone();
-            self.EventRegister(task, &general, EVENT_WRITE);
-            defer!(self.EventUnregister(task, &general));
-
-            return IOURING.BufSockWrite(task, self, srcs)
         }
 
         if flags & !(MsgType::MSG_DONTWAIT | MsgType::MSG_EOR | MsgType::MSG_FASTOPEN | MsgType::MSG_MORE | MsgType::MSG_NOSIGNAL) != 0 {
@@ -813,7 +912,7 @@ impl SockOperations for SocketOperations {
         msgHdr.msgFlags = 0;
 
         let mut res = Kernel::HostSpace::IOSendMsg(self.fd, msgHdr as *const _ as u64, flags | MsgType::MSG_DONTWAIT, false) as i32;
-        if res == -SysErr::EWOULDBLOCK && flags & MsgType::MSG_DONTWAIT == 0 {
+        while res == -SysErr::EWOULDBLOCK && flags & MsgType::MSG_DONTWAIT == 0 {
             let general = task.blocker.generalEntry.clone();
 
             self.EventRegister(task, &general, EVENT_WRITE);

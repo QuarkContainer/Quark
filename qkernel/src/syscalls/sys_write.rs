@@ -299,14 +299,28 @@ fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
     f.EventRegister(task, &general, EVENT_WRITE);
     defer!(f.EventUnregister(task, &general));
 
+    let len = Iovs(srcs).Count();
+    let mut count = 0;
+    let mut srcs = srcs;
+    let mut tmp;
     loop {
         match f.Writev(task, srcs) {
             Err(Error::SysError(SysErr::EWOULDBLOCK)) => (),
             Err(e) => {
+                if count > 0 {
+                    return Ok(count)
+                }
+
                 return Err(e);
             }
             Ok(n) => {
-                return Ok(n);
+                count += n;
+                if count == len as i64 {
+                    return Ok(count)
+                }
+
+                tmp = Iovs(srcs).DropFirst(n as usize);
+                srcs = &tmp;
             }
         }
 

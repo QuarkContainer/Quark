@@ -633,7 +633,10 @@ impl Task {
     }
 
     pub fn Thread(&self) -> Thread {
-        return self.thread.clone().unwrap();
+        match self.thread.clone() {
+            None => panic!("Task::Thread panic..."),
+            Some(t) => t,
+        }
     }
 
     // Wait waits for an event from a thread group that is a child of t's thread
