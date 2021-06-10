@@ -96,8 +96,6 @@ pub enum QcallRet {
 
 //return : true(push the result back), false(block wait)
 pub fn qCall(eventAddr: u64, event: &'static mut Event) -> QcallRet {
-    error!("qCall 1 event {:x?}", &event);
-    defer!(error!("qCall 2"));
     let _l = super::GLOCK.lock();
     match event {
         Event { taskId: _taskId, interrupted: _, ret: _, msg: Msg::Print(_level, str) } => {
