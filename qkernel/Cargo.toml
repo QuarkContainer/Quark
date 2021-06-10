@@ -18,7 +18,7 @@ buddy_system_allocator = "0.6.0"
 #linked_list_allocator = {path = "/home/brad/rust/linked_list_allocator"}
 
 spin = "0.7.1"
-pic8259_simple = "0.2.0"
+#pic8259_simple = "0.2.0"
 #xmas-elf = { git = "https://github.com/gz/xmas-elf.git" }
 xmas-elf = "0.7.0"
 serde = { version = "1.0", default-features = false, features = ["alloc"] }
