@@ -22,7 +22,7 @@
 #![allow(non_snake_case)]
 #![allow(bare_trait_objects)]
 //#![feature(const_raw_ptr_to_usize_cast)]
-#![feature(const_fn)]
+//#![feature(const_fn)]
 #![feature(allocator_api)]
 #![feature(associated_type_bounds)]
 #![feature(core_intrinsics)]
@@ -45,7 +45,7 @@ extern crate scopeguard;
 extern crate spin;
 extern crate lazy_static;
 extern crate x86_64;
-extern crate pic8259_simple;
+//extern crate pic8259_simple;
 extern crate xmas_elf;
 extern crate bit_field;
 //extern crate linked_list_allocator;
