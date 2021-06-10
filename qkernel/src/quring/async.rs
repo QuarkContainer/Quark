@@ -136,6 +136,19 @@ impl UringAsyncMgr {
         }
     }
 
+    pub fn Print(&self) {
+        let mut vec = Vec::new();
+        for op in &self.ops {
+            match op {
+                None => (),
+                Some(ref v) => {
+                    vec.push(v.Type());
+                }
+            }
+        }
+        error!("UringAsyncMgr Print {:?}", vec);
+    }
+
     pub fn AllocSlot(&mut self) -> Option<usize> {
         match self.ids.pop_front() {
             None => None,

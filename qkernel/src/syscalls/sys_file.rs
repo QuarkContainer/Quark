@@ -1350,6 +1350,7 @@ fn readlinkAt(task: &Task, dirFd: i32, addr: u64, bufAddr: u64, size: u32) -> Re
         return Err(Error::SysError(SysErr::ENOENT))
     }
 
+    info!("readlinkAt path is {}", &path);
     let mut copied = 0;
     let size = size as usize;
 

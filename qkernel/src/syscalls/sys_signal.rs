@@ -117,7 +117,6 @@ pub fn SysRtSigProcMask(task: &mut Task, args: &SyscallArguments) -> Result<i64>
     let oldMask = t.SignalMask().0;
     if setaddr != 0 {
         let mut mask: u64 = 0;
-        //task.CopyInObject(&mut mask as * mut u64 as u64, setaddr, 8)?;
         task.CopyInObj(setaddr, &mut mask)?;
 
         match how {

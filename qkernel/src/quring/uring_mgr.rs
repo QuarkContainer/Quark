@@ -301,6 +301,7 @@ impl QUring {
             let ops = self.asyncMgr.lock().GetOps(idx);
             //error!("uring process: async is {:?}", &ops.Type());
             ops.Process(ret);
+            //error!("uring process 2");
         }
     }
 
@@ -326,6 +327,7 @@ impl QUring {
         loop {
             match self.asyncMgr.lock().AllocSlot() {
                 None => {
+                    self.asyncMgr.lock().Print();
                     error!("AUCall async slots usage up...");
                 },
                 Some(idx) => {
