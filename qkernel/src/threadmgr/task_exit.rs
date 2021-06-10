@@ -258,7 +258,8 @@ impl Thread {
         tg.lock().exiting = true;
         tg.lock().exitStatus = es;
         t.exitStatus = es;
-        for sibling in &tg.lock().tasks {
+        let tasks : Vec<Thread> = tg.lock().tasks.iter().cloned().collect();
+        for sibling in &tasks {
             if *sibling != *self {
                 sibling.lock().killLocked();
             }
