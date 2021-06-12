@@ -75,8 +75,10 @@ pub fn Run() -> Result<()> {
                     }
                     SignalDeliveryMode::DeliverToForegroundProcessGroup => {
                         match LOADER.Lock(task).unwrap().SignalForegroundProcessGroup(signalArgs.PID, signalArgs.Signo) {
-                            Err(e) => {
-                                info!("signal DeliverToForegroundProcessGroup fail with error {:?}", e);
+                            Err(_e) => {
+                                info!("signal DeliverToForegroundProcessGroup fail with error");
+                                //todo: enable the error when ready
+                                //info!("signal DeliverToForegroundProcessGroup fail with error {:?}", e);
                             }
                             Ok(())=> ()
                         }

@@ -235,22 +235,26 @@ impl TaskSet {
             task.ioUsage = ioUsage;
         }
 
-        let lock = tg.lock().signalLock.clone();
-        let _s = lock.lock();
-
         {
-            let tglock = tg.lock();
-            if tglock.exiting || tglock.execing.Upgrade().is_some() {
-                // If the caller is in the same thread group, then what we return
-                // doesn't matter too much since the caller will exit before it returns
-                // to userspace. If the caller isn't in the same thread group, then
-                // we're in uncharted territory and can return whatever we want.
-                return Err(Error::SysError(SysErr::EINTR))
-            }
-        }
+            let mut tslock = self.write();
 
-        self.write().AssignTids(&t)?;
-        self.write().IncrTaskCount();
+            let lock = tg.lock().signalLock.clone();
+            let _s = lock.lock();
+
+            {
+                let tglock = tg.lock();
+                if tglock.exiting || tglock.execing.Upgrade().is_some() {
+                    // If the caller is in the same thread group, then what we return
+                    // doesn't matter too much since the caller will exit before it returns
+                    // to userspace. If the caller isn't in the same thread group, then
+                    // we're in uncharted territory and can return whatever we want.
+                    return Err(Error::SysError(SysErr::EINTR))
+                }
+            }
+
+            tslock.AssignTids(&t)?;
+            tslock.IncrTaskCount();
+        }
 
         if cfg.InheritParent.is_some() {
             t.lock().parent = cfg.InheritParent.clone().unwrap().lock().parent.clone();
