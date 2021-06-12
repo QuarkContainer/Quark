@@ -233,8 +233,7 @@ impl Thread {
     //
     // Preconditions: The caller must be running on the task goroutine.
     pub fn PrepareGroupExit(&self, es: ExitStatus) {
-        let mut t = self.lock();
-        let tg = t.tg.clone();
+        let tg = self.lock().tg.clone();
         let lock = tg.lock().signalLock.clone();
         let _s = lock.lock();
 
@@ -251,13 +250,13 @@ impl Thread {
             // kernel/signal.c:zap_other_threads() and
             // kernel/exit.c:do_group_exit() =>
             // include/linux/sched.h:signal_group_exit()).
-            t.exitStatus = tg.lock().exitStatus;
+            self.lock().exitStatus = tg.lock().exitStatus;
             return
         }
 
         tg.lock().exiting = true;
         tg.lock().exitStatus = es;
-        t.exitStatus = es;
+        self.lock().exitStatus = es;
         let tasks : Vec<Thread> = tg.lock().tasks.iter().cloned().collect();
         for sibling in &tasks {
             if *sibling != *self {

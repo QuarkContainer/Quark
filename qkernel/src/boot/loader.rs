@@ -310,7 +310,9 @@ impl LoaderInternal {
     pub fn SignalForegroundProcessGroup(&self, tgid: ThreadID, signo: i32) -> Result<()> {
         let (tg, tty) = match self.ThreadGroupFromID(tgid) {
             None => {
-                return Err(Error::Common(format!("no thread group found for {}", tgid)))
+                info!("SignalForegroundProcessGroup: no thread group found for {}", tgid);
+                let err = Err(Error::Common(format!("no thread group found for {}", tgid)));
+                return err
             }
             Some(r) => r,
         };
