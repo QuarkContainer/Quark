@@ -90,7 +90,7 @@ impl ProcNode {
             dir: Dir::New(task, contents, &ROOT_OWNER, &FilePermissions::FromMode(FileMode(0o0555))),
             data: TaskDirNode {
                 pidns: None,
-                thread: task.Thread(),
+                thread: thread.clone(),
             }
         };
 

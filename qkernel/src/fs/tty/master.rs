@@ -114,7 +114,7 @@ impl InodeOperations for MasterInodeOperations {
     }
 
     fn WouldBlock(&self) -> bool {
-        return false;
+        return true;
     }
 
     fn Check(&self, task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {

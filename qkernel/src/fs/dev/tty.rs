@@ -77,7 +77,7 @@ impl InodeOperations for TTYDevice {
     }
 
     fn WouldBlock(&self) -> bool {
-        return false;
+        return true;
     }
 
     fn Lookup(&self, _task: &Task, _dir: &Inode, _name: &str) -> Result<Dirent> {
