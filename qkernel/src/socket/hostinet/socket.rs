@@ -49,6 +49,7 @@ use super::super::super::fd::*;
 use super::super::super::tcpip::tcpip::*;
 use super::super::super::SHARESPACE;
 use super::socket_buf::*;
+use super::super::super::qlib::linux::time::Timeval;
 
 fn newSocketFile(task: &Task, family: i32, fd: i32, stype: i32, nonblock: bool, enableBuf: bool, addr: Option<Vec<u8>>) -> Result<File> {
     let dirent = NewSocketDirent(task, SOCKET_DEVICE.clone(), fd)?;
@@ -590,7 +591,7 @@ impl SockOperations for SocketOperations {
         return Ok(optLen as i64)
     }
 
-    fn SetSockOpt(&self, _task: &Task, level: i32, name: i32, opt: &[u8]) -> Result<i64> {
+    fn SetSockOpt(&self, task: &Task, level: i32, name: i32, opt: &[u8]) -> Result<i64> {
         /*let optlen = match level as u64 {
             LibcConst::SOL_IPV6 => {
                 match name as u64 {
@@ -626,6 +627,18 @@ impl SockOperations for SocketOperations {
         }
 
         let opt = &opt[..optlen];*/
+
+        if (level as u64) == LibcConst::SOL_SOCKET &&
+            (name as u64) == LibcConst::SO_RCVTIMEO {
+                if opt.len() == SocketSize::SIZEOF_TIMEVAL {
+                    let timeVal = task.GetType::<Timeval>(&opt[0] as *const _ as u64)?;
+                    self.SetRecvTimeout(timeVal.ToDuration() as i64);
+                } else {
+                    //TODO: to be aligned with Linux, Linux allows shorter length for this flag.
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+            }
+
         let optLen = opt.len();
         let res = if optLen == 0 {
             Kernel::HostSpace::SetSockOpt(self.fd, level, name, ptr::null::<u8> as u64, optLen as u32)
@@ -801,6 +814,12 @@ impl SockOperations for SocketOperations {
             self.EventRegister(task, &general, EVENT_READ);
             defer!(self.EventUnregister(task, &general));
             match task.blocker.BlockWithMonoTimer(true, deadline) {
+                Err(Error::ErrInterrupted) => {
+                    return Err(Error::SysError(SysErr::ERESTARTSYS));
+                }
+                Err(Error::SysError(SysErr::ETIMEDOUT)) => {
+                    return Err(Error::SysError(SysErr::EAGAIN));
+                }
                 Err(e) => {
                     return Err(e);
                 }

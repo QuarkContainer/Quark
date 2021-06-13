@@ -195,6 +195,7 @@ impl SocketSize {
     pub const SIZEOF_ICMPV6_FILTER: usize = 0x20;
     pub const SIZEOF_UCRED: usize = 0xc;
     pub const SIZEOF_TCPINFO: usize = 0x68;
+    pub const SIZEOF_TIMEVAL: usize = 0x10;
 }
 
 pub struct StatxFlags {}
