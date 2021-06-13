@@ -83,7 +83,7 @@ impl InodeOperations for FullDevice {
     }
 
     fn WouldBlock(&self) -> bool {
-        return false;
+        return true;
     }
 
     fn Lookup(&self, _task: &Task, _dir: &Inode, _name: &str) -> Result<Dirent> {
@@ -228,16 +228,14 @@ impl InodeOperations for FullDevice {
 pub struct FullFileOperations {}
 
 impl Waitable for FullFileOperations {
-    fn Readiness(&self, _task: &Task,_mask: EventMask) -> EventMask {
-        panic!("FullFileOperations doesn't support Waitable::Readiness");
+    fn Readiness(&self, _task: &Task, mask: EventMask) -> EventMask {
+        return mask;
     }
 
     fn EventRegister(&self, _task: &Task,_e: &WaitEntry, _mask: EventMask) {
-        panic!("FullFileOperations doesn't support Waitable::EventRegister");
     }
 
     fn EventUnregister(&self, _task: &Task,_e: &WaitEntry) {
-        panic!("FullFileOperations doesn't support Waitable::EventUnregister");
     }
 }
 

@@ -82,7 +82,7 @@ impl InodeOperations for NullDevice {
     }
 
     fn WouldBlock(&self) -> bool {
-        return false;
+        return true;
     }
 
     fn Lookup(&self, _task: &Task, _dir: &Inode, _name: &str) -> Result<Dirent> {
@@ -227,16 +227,14 @@ impl InodeOperations for NullDevice {
 pub struct NullFileOperations {}
 
 impl Waitable for NullFileOperations {
-    fn Readiness(&self, _task: &Task,_mask: EventMask) -> EventMask {
-        panic!("NullFileOperations doesn't support Waitable::Readiness");
+    fn Readiness(&self, _task: &Task, mask: EventMask) -> EventMask {
+        return mask;
     }
 
     fn EventRegister(&self, _task: &Task,_e: &WaitEntry, _mask: EventMask) {
-        panic!("NullFileOperations doesn't support Waitable::EventRegister");
     }
 
     fn EventUnregister(&self, _task: &Task,_e: &WaitEntry) {
-        panic!("NullFileOperations doesn't support Waitable::EventUnregister");
     }
 }
 
