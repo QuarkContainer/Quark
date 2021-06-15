@@ -15,6 +15,7 @@
 
 #![allow(dead_code)]
 #![allow(non_snake_case)]
+#![allow(deref_nullptr)]
 #![feature(proc_macro_hygiene, asm)]
 #![feature(naked_functions)]
 #![allow(bare_trait_objects)]
