@@ -35,7 +35,7 @@ impl <'a> Iovs <'a> {
 
         for i in 0..self.0.len() {
             let src = self.0[i];
-            if src.Len() < n {
+            if src.Len() <= n {
                 n -= self.0[i].Len()
             } else {
                 if n > 0 {
