@@ -19,6 +19,7 @@
 #![feature(alloc_error_handler)]
 #![feature(abi_x86_interrupt)]
 #![allow(dead_code)]
+#![allow(deref_nullptr)]
 #![allow(non_snake_case)]
 #![allow(bare_trait_objects)]
 //#![feature(const_raw_ptr_to_usize_cast)]
