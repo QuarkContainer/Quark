@@ -10,7 +10,7 @@ crate-type = ["staticlib"]
 bit_field = "0.10.1"
 bitflags = "1.2.1"
 rusty-asm = "0.2.1"
-x86_64 = "0.13.5"
+x86_64 = "0.14.3"
 backtracer = {git = "https://github.com/gz/backtracer.git" }
 
 #linked_list_allocator = "0.8.6"
@@ -18,7 +18,7 @@ buddy_system_allocator = "0.6.0"
 #linked_list_allocator = {path = "/home/brad/rust/linked_list_allocator"}
 
 spin = "0.7.1"
-pic8259_simple = "0.2.0"
+#pic8259_simple = "0.2.0"
 #xmas-elf = { git = "https://github.com/gz/xmas-elf.git" }
 xmas-elf = "0.7.0"
 serde = { version = "1.0", default-features = false, features = ["alloc"] }
