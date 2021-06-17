@@ -87,8 +87,9 @@ impl Waiter {
     }
 
     pub fn Trigger(&self, id: WaiterID) {
-        //info!("Waiter::trigger 1 id is {}", id);
         let mut b = self.lock();
+        //info!("Waiter::trigger 1 taskid is {:x?}, stat is {:?}, id is {}, mask is {:x}",
+        //   b.taskId, b.state, id, b.mask);
         assert!(id <= Self::GENERAL_WAITID, "Waiter out of range");
 
         b.bitmap |= 1 << id as usize;

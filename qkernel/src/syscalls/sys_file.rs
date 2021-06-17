@@ -1367,6 +1367,7 @@ fn readlinkAt(task: &Task, dirFd: i32, addr: u64, bufAddr: u64, size: u32) -> Re
             Ok(s) => s,
         };
 
+        info!("readlinkAt 1 path is {}, target is {}", &path, &s);
         let mut buffer = s.as_bytes();
         if buffer.len() > size {
             buffer = &buffer[..size]

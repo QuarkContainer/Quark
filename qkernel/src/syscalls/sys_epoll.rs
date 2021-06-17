@@ -49,13 +49,15 @@ pub fn AddEpoll(task: &Task, epfd: i32, fd: i32, flags: EntryFlags, mask: EventM
     // Get the target file id.
     let file = task.GetFile(fd)?;
 
-    let inode = file.Dirent.Inode();
+    /*llet inode = file.Dirent.Inode();
 
     //the fd doesn't support epoll
-    let inodeOp = inode.lock().InodeOp.clone();
+    et inodeOp = inode.lock().InodeOp.clone();
+
     if !inodeOp.WouldBlock() {
+        error!("AddEpoll 1.1 inodetype is {:?}, fopstype is {:?}", inode.InodeType(), fops.FopsType());
         return Err(Error::SysError(SysErr::EINVAL))
-    }
+    }*/
 
     let fops = epollfile.FileOp.clone();
     let ep = match fops.as_any().downcast_ref::<EventPoll>() {
@@ -77,13 +79,13 @@ pub fn UpdateEpoll(task: &Task, epfd: i32, fd: i32, flags: EntryFlags, mask: Eve
     // Get the target file id.
     let file = task.GetFile(fd)?;
 
-    let inode = file.Dirent.Inode();
+    /*let inode = file.Dirent.Inode();
 
     //the fd doesn't support epoll
     let inodeOp = inode.lock().InodeOp.clone();
     if !inodeOp.WouldBlock() {
         return Err(Error::SysError(SysErr::EINVAL))
-    }
+    }*/
 
     let fops = epollfile.FileOp.clone();
     let ep = match fops.as_any().downcast_ref::<EventPoll>() {
@@ -104,13 +106,13 @@ pub fn RemoveEpoll(task: &Task, epfd: i32, fd: i32) -> Result<()> {
     // Get the target file id.
     let file = task.GetFile(fd)?;
 
-    let inode = file.Dirent.Inode();
+    /*let inode = file.Dirent.Inode();
 
     //the fd doesn't support epoll
     let inodeOp = inode.lock().InodeOp.clone();
     if !inodeOp.WouldBlock() {
         return Err(Error::SysError(SysErr::EINVAL))
-    }
+    }*/
 
     let fops = epollfile.FileOp.clone();
     let ep = match fops.as_any().downcast_ref::<EventPoll>() {

@@ -559,7 +559,7 @@ pub fn DoPoll(task: &Task, addr: u64, nfds: u32, timeout: Duration) -> (Duration
         Vec::new()
     };
 
-    info!("DoPoll pfd is {:?}", pfd);
+    //info!("DoPoll pfd is {:?}", pfd);
 
     // Compatibility warning: Linux adds POLLHUP and POLLERR just before
     // polling, in fs/select.c:do_pollfd(). Since pfd is copied out after

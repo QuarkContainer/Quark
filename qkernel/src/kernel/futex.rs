@@ -341,7 +341,7 @@ impl FutexMgr {
     pub fn Fork(&self) -> Self {
         let internal = FutexMgrInternal {
             shared: self.shared.clone(),
-            ..Default::default()
+            private: Bucket::default()
         };
 
         return Self(Arc::new(internal))

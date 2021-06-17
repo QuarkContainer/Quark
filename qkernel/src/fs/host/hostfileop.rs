@@ -137,13 +137,20 @@ impl Waitable for HostFileOp {
     fn Readiness(&self, _task: &Task,mask: EventMask) -> EventMask {
         // somehow, a normal host file could also be polled.
         //assert!(self.InodeOp.lock().WouldBlock, "HostFileOp::EventRegister is not supported");
+        /*if !self.InodeOp.lock().WouldBlock {
+            return mask
+        }*/
 
         let fd = self.InodeOp.FD();
         return NonBlockingPoll(fd, mask);
     }
 
     fn EventRegister(&self, task: &Task,e: &WaitEntry, mask: EventMask) {
-        assert!(self.InodeOp.lock().WouldBlock, "HostFileOp::EventRegister is not supported");
+        //assert!(self.InodeOp.lock().WouldBlock, "HostFileOp::EventRegister is not supported");
+
+        if !self.InodeOp.lock().WouldBlock {
+            return
+        }
 
         let queue = self.InodeOp.Queue();
         queue.EventRegister(task, e, mask);
@@ -152,7 +159,10 @@ impl Waitable for HostFileOp {
     }
 
     fn EventUnregister(&self, task: &Task,e: &WaitEntry) {
-        assert!(self.InodeOp.lock().WouldBlock, "HostFileOp::EventRegister is not supported");
+        //assert!(self.InodeOp.lock().WouldBlock, "HostFileOp::EventRegister is not supported");
+        if !self.InodeOp.lock().WouldBlock {
+            return
+        }
 
         let queue = self.InodeOp.Queue();
         queue.EventUnregister(task, e);

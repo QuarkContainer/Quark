@@ -234,6 +234,10 @@ fn RepReadv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
                 }
 
                 tmp = Iovs(dsts).DropFirst(n as usize);
+
+                if tmp.len() == 0 {
+                    return Ok(count)
+                }
                 dsts = &mut tmp;
             }
         }
