@@ -295,6 +295,7 @@ pub struct File(pub Arc<FileInternal>);
 
 impl Drop for File {
     fn drop(&mut self) {
+        //error!("File::Drop {}", Arc::strong_count(&self.0));
         if Arc::strong_count(&self.0) == 1 {
             // Drop BSD style locks.
             let inode = self.Dirent.Inode();

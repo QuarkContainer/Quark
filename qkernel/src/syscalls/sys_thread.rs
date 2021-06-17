@@ -142,7 +142,12 @@ pub fn SysExecve(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     //todo: handle SysExecve gracelly
     info!("SysExecve workaround, will handle gracefully");
-    //info!("in the execve: the filename is {}, argv is {:?}, envv is {:?}", &fileName, &argv, &envv);
+    /*let mut cmd = format!("");
+    for arg in &argv {
+        cmd += &arg;
+        cmd += " ";
+    }
+    info!("in the execve: the cmd is {}, envv is {:?}", &cmd, &envv);*/
 
     let fileName = {
         let fscontex = task.fsContext.clone();
@@ -274,6 +279,7 @@ pub fn SysExecve(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             let newMM = MemoryManager::Init();
             let oldMM = task.mm.clone();
             task.mm = newMM.clone();
+            task.futexMgr = task.futexMgr.Fork();
             task.Thread().lock().memoryMgr = newMM;
             task.SwitchPageTable();
 
