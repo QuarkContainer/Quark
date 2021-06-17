@@ -73,7 +73,7 @@ impl UringMgr {
     }
 
     pub fn Wake(&self) -> Result<()> {
-        let ret = IOUringEnter(self.fd, 0, 0, IORING_ENTER_SQ_WAKEUP);
+        let ret = IOUringEnter(self.fd, 1, 0, IORING_ENTER_SQ_WAKEUP);
         if ret < 0 {
             return Err(Error::SysError(-ret as i32))
         }
