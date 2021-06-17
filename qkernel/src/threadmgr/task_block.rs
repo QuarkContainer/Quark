@@ -122,7 +122,7 @@ impl Blocker {
 
     pub fn BlockWithTimeout(&self, timer: Timer, waitGeneral: bool, timeout: Option<Duration>) -> (Duration, Result<()>) {
         if timeout.is_none() || timeout.unwrap() == core::i64::MAX {
-            return (0, self.block(waitGeneral, None));
+            return (-1, self.block(waitGeneral, None));
         }
 
         let adjustTimeout = timeout.unwrap() - 30_000; // 30 us is process time.
