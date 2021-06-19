@@ -630,7 +630,7 @@ impl SockOperations for SocketOperations {
 
         if (level as u64) == LibcConst::SOL_SOCKET &&
             (name as u64) == LibcConst::SO_RCVTIMEO {
-                if opt.len() == SocketSize::SIZEOF_TIMEVAL {
+                if opt.len() >= SocketSize::SIZEOF_TIMEVAL {
                     let timeVal = task.GetType::<Timeval>(&opt[0] as *const _ as u64)?;
                     self.SetRecvTimeout(timeVal.ToDuration() as i64);
                 } else {
@@ -641,7 +641,7 @@ impl SockOperations for SocketOperations {
 
         let optLen = opt.len();
         let res = if optLen == 0 {
-            Kernel::HostSpace::SetSockOpt(self.fd, level, name, ptr::null::<u8> as u64, optLen as u32)
+            Kernel::HostSpace::SetSockOpt(self.fd, level, name, ptr::null::<u8>() as u64, optLen as u32)
         } else {
             Kernel::HostSpace::SetSockOpt(self.fd, level, name, &opt[0] as *const _ as u64, optLen as u32)
         };
@@ -785,20 +785,27 @@ impl SockOperations for SocketOperations {
         }
 
         //todo: we don't support MSG_ERRQUEUE
-        if flags & !(MsgType::MSG_DONTWAIT | MsgType::MSG_PEEK | MsgType::MSG_TRUNC | MsgType::MSG_CTRUNC) != 0 {
+        if flags & !(MsgType::MSG_DONTWAIT | MsgType::MSG_PEEK | MsgType::MSG_TRUNC | MsgType::MSG_CTRUNC | MsgType::MSG_WAITALL) != 0 {
             return Err(Error::SysError(SysErr::EINVAL))
         }
 
+        /* 
         if IoVec::NumBytes(dsts) == 0 {
             return Ok((0, 0, None, SCMControlMessages::default()))
         }
+        */
 
         defer!(task.GetMut().iovs.clear());
         task.V2PIovs(dsts, true, &mut task.GetMut().iovs)?;
         let iovs = &mut task.GetMut().iovs;
 
         let mut msgHdr = MsgHdr::default();
-        msgHdr.iov = &iovs[0] as *const _ as u64;
+        if IoVec::NumBytes(dsts) != 0 {
+            msgHdr.iov = &iovs[0] as *const _ as u64;
+        } else {
+            msgHdr.iov = ptr::null::<IoVec>() as u64;
+        }
+        
         msgHdr.iovLen = iovs.len();
 
         let mut addr : [u8; SIZEOF_SOCKADDR] = [0; SIZEOF_SOCKADDR];
@@ -917,16 +924,16 @@ impl SockOperations for SocketOperations {
         if flags & !(MsgType::MSG_DONTWAIT | MsgType::MSG_EOR | MsgType::MSG_FASTOPEN | MsgType::MSG_MORE | MsgType::MSG_NOSIGNAL) != 0 {
             return Err(Error::SysError(SysErr::EINVAL))
         }
-
-        if IoVec::NumBytes(srcs) == 0 {
-            return Ok(0)
-        }
-
+        
         defer!(task.GetMut().iovs.clear());
         task.V2PIovs(srcs, false, &mut task.GetMut().iovs)?;
         let iovs = &task.GetMut().iovs;
 
-        msgHdr.iov = &iovs[0] as *const _ as u64;
+        if IoVec::NumBytes(srcs) != 0 {
+            msgHdr.iov = &iovs[0] as *const _ as u64;
+        } else {
+            msgHdr.iov = ptr::null::<IoVec>() as u64;
+        }
         msgHdr.iovLen = iovs.len();
         msgHdr.msgFlags = 0;
 
