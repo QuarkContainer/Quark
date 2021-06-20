@@ -145,7 +145,7 @@ impl ThreadInternal {
     }
 
     pub fn killedLocked(&self) -> bool {
-        return self.pendingSignals.pendingSet.0 & Signal::SIGKILL as u64 != 0
+        return self.pendingSignals.pendingSet.0 & SignalSet::New(Signal(Signal::SIGKILL)).0 != 0
     }
 
     // advanceExitStateLocked checks that t's current exit state is oldExit, then

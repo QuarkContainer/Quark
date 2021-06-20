@@ -197,7 +197,7 @@ impl ThreadInternal {
 
         // - Do not choose tasks that have already been interrupted, as they may be
         // busy handling another signal.
-        if self.blocker.Interrupted() {
+        if self.Interrupted() {
             return false;
         }
 
@@ -1052,7 +1052,13 @@ impl Task {
         }
         t.SetSignalMask(newMask);
 
-        let ctx = UContext::New(pt, mask.0, 0, 0, &self.signalStack);
+        let mut cr2 = 0;
+        if info.Signo == Signal::SIGBUS || info.Signo == Signal::SIGSEGV {
+            let fault = info.SigFault();
+            cr2 = fault.addr;
+        }
+
+        let ctx = UContext::New(pt, mask.0, cr2, 0, &self.signalStack);
 
         let sigInfoAddr = userStack.PushType::<SignalInfo>(info);
         let sigCtxAddr = userStack.PushType::<UContext>(&ctx);
@@ -1106,9 +1112,14 @@ impl Task {
         }
 
         let oldMask = uc.MContext.oldmask & !(UNBLOCKED_SIGNALS.0);
-        self.Thread().SetSignalMask(SignalSet(oldMask));
+        let t = self.Thread();
+        t.SetSignalMask(SignalSet(oldMask));
 
         pt.eflags = (cEflags & !EflagsDef::EFLAGS_RESTOREABLE) | (nEflags & EflagsDef::EFLAGS_RESTOREABLE);
+
+        if t.lock().HasSignal() {
+            t.lock().interruptSelf();
+        }
 
         return Err(Error::SysCallRetCtrl(TaskRunState::RunApp))
 
