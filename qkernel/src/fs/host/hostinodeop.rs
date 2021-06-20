@@ -510,10 +510,11 @@ impl HostInodeOp {
 
     // map one page from file offsetFile to phyAddr
     pub fn MapFilePage(&self, task: &Task, fileOffset: u64) -> Result<u64> {
-        let filesize = self.lock().size as u64;
+        // todo: handle the file range. The file size could be changed by write, fallcoate, ftruncate
+        /*let filesize = self.lock().size as u64;
         if filesize <= fileOffset {
             return Err(Error::FileMapError)
-        }
+        }*/
 
         let chunkStart = fileOffset & !HUGE_PAGE_MASK;
         self.Fill(task, chunkStart, fileOffset + PAGE_SIZE)?;

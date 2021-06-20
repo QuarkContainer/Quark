@@ -36,6 +36,10 @@ impl ThreadInternal {
         return self.blocker.Interrupted();
     }
 
+    pub fn HasSignal(&self) -> bool {
+        return self.pendingSignals.HasSignal(self.signalMask);
+    }
+
     pub fn interrupt(&self) {
         self.interruptSelf();
     }

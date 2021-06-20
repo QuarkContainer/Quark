@@ -238,6 +238,7 @@ fn copyOutStat(task: &Task, statAddr: u64, sattr: &StableAttr, uattr: &UnstableA
     s.st_ctime = ctime.tv_sec;
     s.st_ctime_nsec = ctime.tv_nsec;
 
+    // error!("copyOutStat stat is {:x?}", s);
     return Ok(())
 }
 

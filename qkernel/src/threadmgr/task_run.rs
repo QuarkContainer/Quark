@@ -31,7 +31,7 @@ impl Task {
         let t = self.Thread();
 
         //if the task has been interrupted
-        if self.blocker.Interrupted() {
+        if t.lock().Interrupted() {
             // Checkpointing instructs tasks to stop by sending an interrupt, so we
             // must check for stops before entering runInterrupt (instead of
             // tail-calling it).
@@ -62,7 +62,7 @@ impl Task {
         if haveSavedSignalMask {
             let savedSignalMask = t.lock().savedSignalMask;
             t.SetSignalMask(savedSignalMask);
-            if self.blocker.Interrupted() {
+            if t.lock().Interrupted() {
                 return TaskRunState::RunInterrupt;
             }
         }
