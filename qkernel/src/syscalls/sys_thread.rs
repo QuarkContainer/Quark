@@ -142,7 +142,7 @@ pub fn SysExecve(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     //todo: handle SysExecve gracelly
     info!("SysExecve workaround, will handle gracefully");
-    /*let mut cmd = format!("");
+    let mut cmd = format!("");
     for arg in &argv {
         cmd += &arg;
         cmd += " ";
@@ -153,7 +153,7 @@ pub fn SysExecve(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         envs += &env;
         envs += " ";
     }
-    info!("in the execve: the cmd is {} \n envs is {:?}", &cmd, &envs);*/
+    info!("in the execve: the cmd is {} \n envs is {:?}", &cmd, &envs);
 
     let fileName = {
         let fscontex = task.fsContext.clone();

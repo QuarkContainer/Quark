@@ -26,7 +26,7 @@ use super::flags::*;
 use super::file_overlay::*;
 
 pub fn copyUp(task: &Task, d: &Dirent) -> Result<()> {
-    RENAME.read();
+    let _a = RENAME.read();
 
     return CopyUpLockedForRename(task, d)
 }

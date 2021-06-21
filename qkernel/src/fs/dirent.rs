@@ -109,7 +109,7 @@ impl Dirent {
     }
 
     pub fn MyFullName(&self) -> String {
-        RENAME.read();
+        let _a = RENAME.read();
 
         return self.myFullName();
     }
@@ -157,7 +157,7 @@ impl Dirent {
     }
 
     pub fn FullName(&self, root: &Dirent) -> (String, bool) {
-        RENAME.read();
+        let _a = RENAME.read();
 
         return self.fullName(root)
     }
@@ -184,7 +184,7 @@ impl Dirent {
     }
 
     pub fn MountRoot(&self) -> Self {
-        RENAME.read();
+        let _a = RENAME.write();
 
         let mut mountRoot = self.clone();
         loop {
@@ -338,7 +338,7 @@ impl Dirent {
     }
 
     pub fn Walk(&self, task: &Task, root: &Dirent, name: &str) -> Result<Dirent> {
-        RENAME.read();
+        let _a = RENAME.read();
 
         return self.walk(task, root, name)
     }
@@ -367,7 +367,7 @@ impl Dirent {
     }
 
     pub fn Create(&self, task: &Task, root: &Dirent, name: &str, flags: &FileFlags, perms: &FilePermissions) -> Result<File> {
-        let _a = RENAME.read();
+        let _a = RENAME.write();
 
         if self.exists(task, root, name) {
             return Err(Error::SysError(SysErr::EEXIST))
@@ -391,7 +391,7 @@ impl Dirent {
     }
 
     fn genericCreate(&self, task: &Task, root: &Dirent, name: &str, create: &mut FnMut() -> Result<()>) -> Result<()> {
-        let _a = RENAME.read();
+        let _a = RENAME.write();
 
         if self.exists(task, root, name) {
             return Err(Error::SysError(SysErr::EEXIST))
@@ -653,7 +653,7 @@ impl Dirent {
     }
 
     pub fn Rename(task: &Task, root: &Dirent, oldParent: &Dirent, oldName: &str, newParent: &Dirent, newName: &str) -> Result<()> {
-        RENAME.write();
+        let _a = RENAME.write();
 
         if Arc::ptr_eq(oldParent, newParent) {
             if oldName == newName {

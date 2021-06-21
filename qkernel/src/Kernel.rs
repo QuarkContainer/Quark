@@ -546,14 +546,6 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn Unlink(pathname: u64) -> i64 {
-        let mut msg = Msg::Unlink(Unlink {
-            pathname,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
     pub fn Unlinkat(dirfd: i32, pathname: u64, flags: i32) -> i64 {
         let mut msg = Msg::Unlinkat(Unlinkat {
             dirfd,
@@ -561,16 +553,7 @@ impl HostSpace {
             flags
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn Mkdir(pathname: u64, mode_: u32) -> i64 {
-        let mut msg = Msg::Mkdir(Mkdir {
-            pathname,
-            mode_,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
+        return HostSpace::HCall(&mut msg) as i64;
     }
 
     pub fn Mkdirat(dirfd: i32, pathname: u64, mode_: u32, uid: u32, gid: u32) -> i64 {
@@ -582,7 +565,7 @@ impl HostSpace {
             gid,
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        return HostSpace::HCall(&mut msg) as i64;
     }
 
     pub fn SysSync() -> i64 {
@@ -727,7 +710,7 @@ impl HostSpace {
             count,
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        return HostSpace::HCall(&mut msg) as i64;
     }
 
     pub fn GetDents64(fd: i32, dirp: u64, count: u32) -> i64 {
@@ -737,7 +720,7 @@ impl HostSpace {
             count,
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        return HostSpace::HCall(&mut msg) as i64;
     }
 
     pub fn GetUid() -> i64 {
@@ -1046,17 +1029,6 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn OpenAt(dirfd: i32, pathName: u64, flags: i32, mode: i32) -> i64 {
-        let mut msg = Msg::OpenAt(OpenAt {
-            dirfd,
-            pathName,
-            flags,
-            mode,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
     pub fn TryOpenAt(dirfd: i32, name: u64, addr: u64) -> i64 {
         let mut msg = Msg::TryOpenAt(TryOpenAt {
             dirfd: dirfd,
@@ -1080,7 +1052,7 @@ impl HostSpace {
             fstatAddr
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        return HostSpace::HCall(&mut msg) as i64;
     }
 
     pub fn SchedGetAffinity(pid: i32, cpuSetSize: u64, mask: u64) -> i64 {
@@ -1193,7 +1165,7 @@ impl HostSpace {
             newpath,
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        return HostSpace::HCall(&mut msg) as i64;
     }
 
     pub fn Rmdir(pathname: u64) -> i64 {
@@ -1369,7 +1341,7 @@ impl HostSpace {
             newpath
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        return HostSpace::HCall(&mut msg) as i64;
     }
 
     pub fn Futimens(fd: i32, times: u64) -> i64 {

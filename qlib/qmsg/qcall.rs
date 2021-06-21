@@ -74,12 +74,9 @@ pub enum Msg {
     GetDents64(GetDents64),
 
     ForkFdTbl(ForkFdTbl),
-    OpenAt(OpenAt),
     TryOpenAt(TryOpenAt),
     CreateAt(CreateAt),
-    Unlink(Unlink),
     Unlinkat(Unlinkat),
-    Mkdir(Mkdir),
     Mkdirat(Mkdirat),
     SysSync(SysSync),
     SyncFs(SyncFs),
@@ -569,21 +566,10 @@ pub struct ForkFdTbl {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct Unlink {
-    pub pathname: u64,
-}
-
-#[derive(Clone, Default, Debug)]
 pub struct Unlinkat {
     pub dirfd: i32,
     pub pathname: u64,
     pub flags: i32,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Mkdir {
-    pub pathname: u64,
-    pub mode_: u32,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -645,14 +631,6 @@ pub struct TryOpenAt {
     pub dirfd: i32,
     pub name: u64,
     pub addr: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct OpenAt {
-    pub dirfd: i32,
-    pub pathName: u64,
-    pub flags: i32,
-    pub mode: i32,
 }
 
 #[derive(Clone, Default, Debug)]
