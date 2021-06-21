@@ -129,7 +129,7 @@ impl HostSpace {
             newpath,
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        return HostSpace::HCall(&mut msg) as i64;
     }
 
     pub fn Truncate(path: u64, len: i64) -> i64 {
