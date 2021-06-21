@@ -346,12 +346,6 @@ pub fn Open(path: &str, openmode: i32, perm: u32) -> i64 {
     return HostSpace::Open(cstr.Ptr(), openmode | LibcConst::O_LARGEFILE as i32, perm as i32)
 }
 
-pub fn openAt(dirfd: i32, name: &str, flags: i32, perm: u32) -> i32 {
-    let cstr = CString::New(name);
-
-    return HostSpace::OpenAt(dirfd, cstr.Ptr(), flags, perm as i32) as i32
-}
-
 pub fn createAt(dirfd: i32, name: &str, flags: i32, perm: u32, uid: u32, gid: u32) -> Result<(i32, LibcStat)> {
     let cstr = CString::New(name);
     let mut fstat = LibcStat::default();

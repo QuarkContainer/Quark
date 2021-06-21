@@ -83,14 +83,8 @@ pub fn SysCall(task: &mut Task, nr: u64, args: &SyscallArguments) -> TaskRunStat
             return TaskRunState::RunApp
         }
         Err(Error::SysCallNotImplement) => {
-            // bug https://github.com/QuarkContainer/Quark/issues/26.
-            // todo: enable this after the issue is fixed
             let callId: SysCallID = unsafe { core::mem::transmute(nr as u64) };
-            error!("Sycall not implement syscall is {:?}", callId);
-            panic!("");
-
-            //let callId: SysCallID = unsafe { core::mem::transmute(nr as u64) };
-            //panic!("Sycall not implement syscall is {:?}", callId);
+            panic!("Sycall not implement syscall is {:?}", callId);
         }
         Err(e) => {
             info!("Syscall[{}]: get unexpected error {:x?}", nr, e);
@@ -428,7 +422,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     NotImplementSyscall, //sys_userfaultfd,
     SysMembarrier, //sys_membarrier,
     SysMlock2, //mlock2,
-    NotImplementSyscall, //sys_copy_file_range,
+    SysNoSys, //sys_copy_file_range,
     SysPreadv2, //sys_preadv2,
     SysPWritev2, //sys_pwritev2,
     NotImplementSyscall, //sys_pkey_mprotect,
@@ -449,4 +443,8 @@ pub fn SysNoSupport(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
 pub fn SysObsolete(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
     return Err(Error::SysError(SysErr::ENOSYS));
     //return Err(Error::SysError(SysErr::ENOTSUP));
+}
+
+pub fn SysNoSys(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
+    return Err(Error::SysError(SysErr::ENOSYS));
 }

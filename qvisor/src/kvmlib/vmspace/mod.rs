@@ -618,29 +618,6 @@ impl VMSpace {
         return (len+1) as i64
     }
 
-    pub fn OpenAt(_taskId: u64, dirfd: i32, fileName: u64, flags: i32, mode: i32) -> i32 {
-        info!("Openat: the filename is {}, flag is {:x}, the mode is {:b}, dirfd is {}", Self::GetStr(fileName), flags, mode, dirfd);
-
-        let dirfd = if dirfd < 0 {
-            dirfd
-        } else {
-            match Self::GetOsfd(dirfd) {
-                Some(fd) => fd,
-                None => return -SysErr::EBADF as i32,
-            }
-        };
-
-        unsafe {
-            let osfd = libc::openat(dirfd, fileName as *const c_char, flags as c_int, mode as c_int);
-            if osfd <= 0 {
-                return Self::GetRet(osfd as i64) as i32
-            }
-
-            let hostfd = IO_MGR.lock().AddFd(osfd, false);
-            return hostfd
-        }
-    }
-
     pub unsafe fn TryOpenHelper(dirfd: i32, name: u64) -> (i32, bool) {
         let flags = Flags::O_NOFOLLOW;
         let ret = libc::openat(dirfd, name as *const c_char, (flags | Flags::O_RDWR) as i32, 0);
@@ -1145,15 +1122,6 @@ impl VMSpace {
         return Self::GetRet(ret as i64);
     }
 
-    pub fn Unlink(_taskId: u64, pathname: u64) -> i64 {
-        info!("Unlink: the pathname is {}", Self::GetStr(pathname));
-        let ret = unsafe {
-            unlink(pathname as *const c_char)
-        };
-
-        return Self::GetRet(ret as i64);
-    }
-
     pub fn Unlinkat(_taskId: u64, dirfd: i32, pathname: u64, flags: i32) -> i64 {
         info!("Unlinkat: the pathname is {}", Self::GetStr(pathname));
         let dirfd = {
@@ -1169,16 +1137,6 @@ impl VMSpace {
 
         let ret = unsafe {
             unlinkat(dirfd, pathname as *const c_char, flags)
-        };
-
-        return Self::GetRet(ret as i64);
-    }
-
-    pub fn Mkdir(_taskId: u64, pathname: u64, mode_ : u32) -> i64 {
-        info!("Mkdir: the pathname is {}", Self::GetStr(pathname));
-
-        let ret = unsafe {
-            mkdir(pathname as *const c_char, mode_ as mode_t)
         };
 
         return Self::GetRet(ret as i64);
