@@ -150,18 +150,6 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn Open(fileName: u64, flags: i32, mode: i32) -> i64 {
-        let mut msg = Msg::Open(Open {
-            fileName,
-            flags,
-            mode,
-        });
-
-        let ret = HostSpace::Call(&mut msg, false) as i64;
-
-        return ret;
-    }
-
     pub fn Lseek(fd: i32, offset: i64, whence: i32) -> i64 {
         let mut msg = Msg::Seek(Seek {
             fd,
@@ -476,15 +464,6 @@ impl HostSpace {
 
     pub fn Stat(pathName: u64, statBuff: u64) -> i64 {
         let mut msg = Msg::Stat(Stat {
-            pathName,
-            statBuff,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn Lstat(pathName: u64, statBuff: u64) -> i64 {
-        let mut msg = Msg::Lstat(Lstat {
             pathName,
             statBuff,
         });
@@ -1166,14 +1145,6 @@ impl HostSpace {
         });
 
         return HostSpace::HCall(&mut msg) as i64;
-    }
-
-    pub fn Rmdir(pathname: u64) -> i64 {
-        let mut msg = Msg::Rmdir(Rmdir {
-            pathname,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn NonBlockingPoll(fd: i32, mask: EventMask) -> i64 {

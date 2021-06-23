@@ -545,21 +545,6 @@ impl VMSpace {
         return Self::GetRet(ret as i64)
     }
 
-    pub fn Open(_taskId: u64, fileName: u64, flags: i32, mode: i32) -> i64 {
-        info!("Open: the filename is {}, flag is {:b}, the mode is {:b}", Self::GetStr(fileName), flags, mode);
-
-        unsafe {
-            let fd = open(fileName as *const c_char, flags as c_int, mode as c_int);
-            if fd < 0 {
-                return Self::GetRet(fd as i64)
-            }
-
-            let guestfd = IO_MGR.lock().AddFd(fd, false);
-
-            return guestfd as i64
-        }
-    }
-
     pub fn Eventfd(_taskId: u64, initval: u32, flags: i32) -> i64 {
         unsafe {
             let fd = eventfd(initval, flags);
@@ -1001,16 +986,6 @@ impl VMSpace {
         info!("Stat: the filename is {}", Self::GetStr(pathName));
         let ret = unsafe{
             stat(pathName as *const c_char, statBuff as *mut stat)
-        };
-
-        return Self::GetRet(ret as i64);
-    }
-
-    pub fn Lstat(pathName: u64, statBuff: u64) -> i64 {
-        //info!("Lstat: the filename is {}", Self::GetStr(pathName));
-
-        let ret = unsafe{
-            lstat(pathName as *const c_char, statBuff as *mut stat)
         };
 
         return Self::GetRet(ret as i64);
@@ -1529,14 +1504,6 @@ impl VMSpace {
     pub fn Rename(_taskId: u64, oldpath: u64, newpath: u64) -> i64 {
         let ret = unsafe {
             rename(oldpath as *const c_char, newpath as *const c_char)
-        };
-
-        return Self::GetRet(ret as i64)
-    }
-
-    pub fn Rmdir(_taskId: u64, pathname: u64) -> i64 {
-        let ret = unsafe {
-            rmdir(pathname as *const c_char)
         };
 
         return Self::GetRet(ret as i64)

@@ -827,7 +827,6 @@ impl InodeOperations for HostInodeOp {
         } else {
             let mut s: Statx = Default::default();
             let hostfd = self.lock().HostFd;
-            print!("UnstableAttr  .... fd is {}", hostfd);
             let addr : i8 = 0;
             let ret = IOURING.Statx(task,
                                     hostfd,
@@ -835,7 +834,6 @@ impl InodeOperations for HostInodeOp {
                                     &mut s as * mut _ as u64,
                                     ATType::AT_EMPTY_PATH,
                                     StatxMask::STATX_BASIC_STATS);
-            print!("UnstableAttr fd is {} ret is {}....", hostfd, ret);
             if ret < 0 {
                 return Err(Error::SysError(-ret as i32))
             }

@@ -1445,7 +1445,6 @@ pub fn SysUnlinkat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return rmdirAt(task, dirfd, addr)
     }
 
-    info!("SysUnlinkat unlinkAt");
     return unlinkAt(task, dirfd, addr)
 }
 

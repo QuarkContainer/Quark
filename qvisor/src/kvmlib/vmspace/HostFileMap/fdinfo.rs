@@ -71,6 +71,37 @@ impl FdInfo {
     pub fn IOAppend(&self, _taskId: u64, iovs: u64, iovcnt: i32, fileLenAddr: u64) -> i64 {
         let osfd = self.lock().osfd;
 
+        //let nr = SysCallID::pwritev2 as usize;
+
+        let end = unsafe {
+            lseek(osfd as c_int, 0, libc::SEEK_END)
+        };
+
+        if end < 0 {
+            panic!("IOAppend lseek1 fail")
+        }
+
+        let size = unsafe{
+            //todo: don't know why RWF_APPEND doesn't work. need to fix.
+            //syscall5(nr, osfd as usize, iovs as usize, iovcnt as usize, -1 as i32 as usize, Flags::RWF_APPEND as usize) as i64
+            pwritev(osfd as c_int, iovs as *const iovec, iovcnt, end as i64) as i64
+        };
+
+        //error!("IOAppend: end is {:x}, size is {:x}, new end is {:x}", end, size, end + size);
+        if size < 0 {
+            return SysRet(size as i64)
+        }
+
+        unsafe {
+            *(fileLenAddr as * mut i64) = (end + size) as i64
+        }
+
+        return size;
+
+        // the pwritev2 doesn't work. It will bread the bazel build.
+        // Todo: root cause this.
+        /*let osfd = self.lock().osfd;
+
         let size = unsafe{
             pwritev2(osfd as c_int, iovs as *const iovec, iovcnt, -1, Flags::RWF_APPEND) as i64
         };
@@ -87,7 +118,7 @@ impl FdInfo {
             *(fileLenAddr as * mut i64) = end as i64
         }
 
-        return size as i64
+        return size as i64*/
     }
 
     pub fn IOReadAt(&self, _taskId: u64, iovs: u64, iovcnt: i32, offset: u64) -> i64 {

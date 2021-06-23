@@ -39,7 +39,6 @@ pub enum Msg {
     RenameAt(RenameAt),
     Truncate(Truncate),
     Ftruncate(Ftruncate),
-    Open(Open),
     Eventfd(Eventfd),
     Seek(Seek),
     ReadLink(ReadLink),
@@ -62,7 +61,6 @@ pub enum Msg {
     Lgetxattr(Lgetxattr),
     Fgetxattr(Fgetxattr),
     Stat(Stat),
-    Lstat(Lstat),
     Fstat(Fstat),
     Fstatat(Fstatat),
     Statfs(Statfs),
@@ -137,7 +135,6 @@ pub enum Msg {
     IOSetup(IOSetup),
     IOSubmit(IOSubmit),
     Rename(Rename),
-    Rmdir(Rmdir),
     Chown(Chown),
     FChown(FChown),
     TimerFdCreate(TimerFdCreate),
@@ -312,13 +309,6 @@ pub struct Ftruncate {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct Open {
-    pub fileName: u64,
-    pub flags: i32,
-    pub mode: i32,
-}
-
-#[derive(Clone, Default, Debug)]
 pub struct Seek {
     pub fd: i32,
     pub offset: i64,
@@ -452,12 +442,6 @@ pub struct Fstatfs {
 
 #[derive(Clone, Default, Debug)]
 pub struct Stat {
-    pub pathName: u64,
-    pub statBuff: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Lstat {
     pub pathName: u64,
     pub statBuff: u64,
 }
@@ -906,11 +890,6 @@ pub struct IOSubmit {
 pub struct Rename {
     pub oldpath: u64,
     pub newpath: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Rmdir {
-    pub pathname: u64,
 }
 
 #[derive(Clone, Default, Debug)]
