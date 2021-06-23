@@ -144,9 +144,6 @@ pub fn qCall(eventAddr: u64, event: &'static mut Event) -> QcallRet {
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::Ftruncate(msg) } => {
             *ret = super::VMSpace::Ftruncate(taskId.Addr(), msg.fd, msg.len) as u64;
         }
-        Event { taskId, interrupted: _, ref mut ret, msg: Msg::Open(msg) } => {
-            *ret = super::VMSpace::Open(taskId.Addr(), msg.fileName, msg.flags, msg.mode) as u64;
-        }
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::Eventfd(msg) } => {
             *ret = super::VMSpace::Eventfd(taskId.Addr(), msg.initval, msg.flags) as u64;
         }
@@ -197,9 +194,6 @@ pub fn qCall(eventAddr: u64, event: &'static mut Event) -> QcallRet {
         }
         Event { taskId: _, interrupted: _, ref mut ret, msg: Msg::Stat(msg) } => {
             *ret = super::VMSpace::Stat(msg.pathName, msg.statBuff) as u64;
-        }
-        Event { taskId: _, interrupted: _, ref mut ret, msg: Msg::Lstat(msg) } => {
-            *ret = super::VMSpace::Lstat(msg.pathName, msg.statBuff) as u64;
         }
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::Fstat(msg) } => {
             *ret = super::VMSpace::Fstat(taskId.Addr(), msg.fd, msg.buff) as u64;
@@ -375,9 +369,6 @@ pub fn qCall(eventAddr: u64, event: &'static mut Event) -> QcallRet {
         }
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::Rename(msg) } => {
             *ret = super::VMSpace::Rename(taskId.Addr(), msg.oldpath, msg.newpath) as u64;
-        }
-        Event { taskId, interrupted: _, ref mut ret, msg: Msg::Rmdir(msg) } => {
-            *ret = super::VMSpace::Rmdir(taskId.Addr(), msg.pathname) as u64;
         }
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::Chown(msg) } => {
             *ret = super::VMSpace::Chown(taskId.Addr(), msg.pathname, msg.owner, msg.group) as u64;

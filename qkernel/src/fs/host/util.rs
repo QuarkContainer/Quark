@@ -340,12 +340,6 @@ pub fn Dup(fd: i32) -> i64 {
     return HostSpace::Dup(fd)
 }
 
-pub fn Open(path: &str, openmode: i32, perm: u32) -> i64 {
-    let cstr = CString::New(path);
-
-    return HostSpace::Open(cstr.Ptr(), openmode | LibcConst::O_LARGEFILE as i32, perm as i32)
-}
-
 pub fn createAt(dirfd: i32, name: &str, flags: i32, perm: u32, uid: u32, gid: u32) -> Result<(i32, LibcStat)> {
     let cstr = CString::New(name);
     let mut fstat = LibcStat::default();
