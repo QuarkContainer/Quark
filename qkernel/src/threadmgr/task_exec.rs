@@ -48,6 +48,9 @@ impl Thread {
         loop {
             let oldTID = *pidns.lock().tids.get(&t).unwrap();
             let leaderTID = *pidns.lock().tids.get(&oldLeader).unwrap();
+            //error!("AssignTids add tid {}", oldTID);
+            //error!("AssignTids add tid {}", leaderTID);
+
             pidns.lock().tids.insert(oldLeader.clone(), oldTID);
             pidns.lock().tids.insert(t.clone(), leaderTID);
             pidns.lock().tasks.insert(oldTID, oldLeader.clone());

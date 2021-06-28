@@ -28,12 +28,8 @@ use super::super::qlib::linux_def::*;
 use super::super::task::*;
 
 impl ThreadInternal {
-    pub fn TryWaitInterrupt(&mut self) -> bool {
-        return self.blocker.TryWaitInterrupt();
-    }
-
-    pub fn Interrupted(&self) -> bool {
-        return self.blocker.Interrupted();
+    pub fn Interrupted(&self, clear: bool) -> bool {
+        return self.blocker.Interrupted(clear)
     }
 
     pub fn HasSignal(&self) -> bool {
@@ -212,7 +208,7 @@ impl Blocker {
     }
 
     pub fn block(&self, waitGeneral: bool, waitTimer: Option<Timer>) -> Result<()> {
-        if waitGeneral && self.waiter.TryWait(&self.generalEntry) {
+        if waitGeneral && self.waiter.TryWait(&self.generalEntry, true) {
             match waitTimer {
                 Some(timer) => {
                     timer.Cancel();
@@ -293,12 +289,8 @@ impl Blocker {
         }
     }
 
-    pub fn Interrupted(&self) -> bool {
-        return self.waiter.TryWait(&self.interruptEntry)
-    }
-
-    pub fn TryWaitInterrupt(&self) -> bool {
-        return self.waiter.TryWait(&self.interruptEntry)
+    pub fn Interrupted(&self, clear: bool) -> bool {
+        return self.waiter.TryWait(&self.interruptEntry, clear)
     }
 
     pub fn interruptSelf(&self) {

@@ -461,7 +461,7 @@ impl Thread {
             let childtg = child.lock().tg.clone();
             let childleader = childtg.lock().leader.Upgrade();
             if opts.Events & EVENT_EXIT != 0 &&
-                childleader.is_some() && child == childleader.unwrap() &&
+                Some(child.clone()) == childleader &&
                 !child.lock().exitParentAcked {
                 anyWaitableTasks = true;
                 let wr = self.waitCollectZombieLocked(&child, opts);
@@ -1071,8 +1071,18 @@ pub struct WaitOptions {
 impl WaitOptions {
     // Preconditions: The TaskSet mutex must be locked (for reading or writing).
     pub fn matchesTask(&self, t: &Thread, pidns: &PIDNamespace) -> bool {
-        if self.SpecificTID != 0 && self.SpecificTID != *pidns.lock().tids.get(t).unwrap() {
-            return false;
+        if self.SpecificTID != 0 { // && self.SpecificTID != *pidns.lock().tids.get(t).unwrap() {
+            let id = match pidns.lock().tids.get(t) {
+                None => {
+                    panic!("thread id {} doesn't exist", t.lock().id)
+                    //return false
+                }
+                Some(id) => *id
+            };
+
+            if id != self.SpecificTID {
+                return false
+            }
         }
 
         let tg = t.lock().tg.clone();
@@ -1082,7 +1092,7 @@ impl WaitOptions {
         }
 
         let leader = tg.lock().leader.Upgrade();
-        if leader.is_some() && *t == leader.unwrap() && tg.lock().terminationSignal.0 == Signal::SIGCHLD {
+        if Some(t.clone()) == leader && tg.lock().terminationSignal.0 == Signal::SIGCHLD {
             return self.NonCloneTasks
         }
 
