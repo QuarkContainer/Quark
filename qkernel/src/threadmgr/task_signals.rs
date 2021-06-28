@@ -197,7 +197,7 @@ impl ThreadInternal {
 
         // - Do not choose tasks that have already been interrupted, as they may be
         // busy handling another signal.
-        if self.Interrupted() {
+        if self.Interrupted(false) {
             return false;
         }
 
@@ -250,7 +250,7 @@ impl Thread {
         let blocked = mask.0 & !oldMask.0;
         let tg = self.ThreadGroup();
         let blockedGroupPending = SignalSet(blocked & tg.lock().pendingSignals.pendingSet.0);
-        if blockedGroupPending.0 != 0 && self.lock().Interrupted() {
+        if blockedGroupPending.0 != 0 && self.lock().Interrupted(true) {
             blockedGroupPending.ForEachSignal(|sig| {
                 let nt = tg.lock().findSignalReceiverLocked(sig);
                 if nt.is_some() {

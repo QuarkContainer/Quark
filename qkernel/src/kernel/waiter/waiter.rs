@@ -88,14 +88,16 @@ impl Waiter {
 
     pub fn Trigger(&self, id: WaiterID) {
         let mut b = self.lock();
-        //info!("Waiter::trigger 1 taskid is {:x?}, stat is {:?}, id is {}, mask is {:x}",
-        //   b.taskId, b.state, id, b.mask);
         assert!(id <= Self::GENERAL_WAITID, "Waiter out of range");
 
         b.bitmap |= 1 << id as usize;
 
+        //info!("Waiter::trigger 1 taskid is {:x?}, stat is {:?}, id is {}, mask is {:x}",
+        //    b.taskId, b.state, id, b.mask);
         if b.state == WaitState::Waiting && (b.bitmap & b.mask) != 0 {
             b.state = WaitState::Running;
+            //info!("Waiter::trigger 2 taskid is {:x?}, stat is {:?}, id is {}, bitmap is {:x}",
+            //    b.taskId, b.state, id, b.bitmap);
             SHARESPACE.scheduler.Schedule(b.taskId);
         }
     }
@@ -163,12 +165,15 @@ impl Waiter {
         return false;
     }
 
-    pub fn TryWait(&self, entry: &WaitEntry) -> bool {
+    pub fn TryWait(&self, entry: &WaitEntry, clear: bool) -> bool {
         let id = entry.lock().context.ThreadContext().waiterID;
         let mut w = self.lock();
         let bitmap = 1 << id;
         if w.bitmap & bitmap != 0 {
-            w.bitmap &= !bitmap; //clear
+            if clear {
+                w.bitmap &= !bitmap; //clear
+            }
+
             return true;
         }
 

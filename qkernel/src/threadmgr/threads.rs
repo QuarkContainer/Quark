@@ -69,6 +69,7 @@ impl TaskSetInternal {
                     for a in allocatedTIDs {
                         let tns = a.ns.clone();
                         tns.lock().tasks.remove(&a.tid);
+                        //error!("AssignTids remove tid {}", a.tid);
                         tns.lock().tids.remove(&t);
                         if tg.lock().leader.Upgrade().is_none() {
                             pidns.lock().tgids.remove(&tg);
@@ -81,6 +82,7 @@ impl TaskSetInternal {
             };
 
             t.lock().id = tid;
+            //error!("AssignTids add tid {}", tid);
             pidns.lock().tasks.insert(tid, t.clone());
             pidns.lock().tids.insert(t.clone(), tid);
             if tg.lock().leader.Upgrade().is_none() {

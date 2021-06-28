@@ -16,6 +16,8 @@ use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
 use spin::Mutex;
 
+use super::common::*;
+
 struct LinkEntry<T: Clone> {
     pub key: u64,
     pub val: Option<T>,
@@ -43,13 +45,21 @@ impl<T: Clone> LinkEntry<T> {
         }
     }
 
-    pub fn Remove(&mut self) {
-        let prev = self.prev.take().expect("prev is null");
-        let next = self.next.take().expect("next is null");
+    pub fn Remove(&mut self) -> Result<()> {
+        let prev = match self.prev.take() {
+            Some(v) => v,
+            None => return Err(Error::Common(format!("prev is null, key is {}", self.key)))
+        };
 
+        let next = match self.next.take() {
+            Some(v) => v,
+            None => return Err(Error::Common(format!("prev is null, key is {}", self.key)))
+        };
 
         (*prev).lock().next = Some(next.clone());
         (*next).lock().prev = Some(prev.clone());
+
+        return Ok(())
     }
 
     pub fn GetKey(&self) -> u64 {
@@ -99,7 +109,10 @@ impl<T: Clone> LinkedList<T> {
         self.count -= 1;
 
         let ret = self.head.lock().next.as_ref().unwrap().clone();
-        (*ret).lock().Remove();
+        match (*ret).lock().Remove() {
+            Err(e) => panic!("PopBack fail, {:?}", e),
+            Ok(_) => (),
+        }
 
         return Some(ret);
     }
@@ -121,10 +134,13 @@ impl<T: Clone> LinkedList<T> {
             return None;
         }
 
-        self.count -= 1;
-
         let ret = self.tail.lock().prev.as_ref().unwrap().clone();
-        (*ret).lock().Remove();
+        match (*ret).lock().Remove() {
+            Err(e) => panic!("PopBack fail count is {}, {:?}", self.count, e),
+            Ok(_) => (),
+        }
+
+        self.count -= 1;
 
         return Some(ret);
     }
@@ -156,6 +172,8 @@ impl<T: Clone> LruCache<T> {
         let exist = if !self.map.contains_key(&key) {
             if self.currentSize >= self.maxSize {
                 //remove the last one
+                //error!("LruCache pop self.currentSize is {} self.maxSize is {}",
+                //    self.currentSize, self.maxSize);
                 let remove = self.list.PopBack();
                 let remove = match remove {
                     None => panic!("get zero size"),
@@ -181,7 +199,10 @@ impl<T: Clone> LruCache<T> {
         };
 
         if exist {
-            entry.lock().Remove();
+            match entry.lock().Remove() {
+                Err(e) => panic!("Add fail, {:?}", e),
+                Ok(_) => (),
+            }
             self.list.PushFront(entry);
             return;
         }
@@ -194,11 +215,15 @@ impl<T: Clone> LruCache<T> {
     pub fn Remove(&mut self, key: u64) -> bool {
         match self.map.remove(&key) {
             Some(e) => {
-                e.lock().Remove();
+                match e.lock().Remove()  {
+                    Err(e) => panic!("Remove fail, {:?}", e),
+                    Ok(_) => (),
+                }
                 return true
             }
-            None => return false,
+            None => ()
         };
+        return false
     }
 
     pub fn Get(&self, key: u64) -> Option<T> {
