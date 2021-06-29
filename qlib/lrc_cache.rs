@@ -89,6 +89,10 @@ impl<T: Clone> Default for LinkedList<T> {
 }
 
 impl<T: Clone> LinkedList<T> {
+    pub fn Decrease(&mut self) {
+        self.count -= 1;
+    }
+
     pub fn PushFront(&mut self, entry: &Arc<Mutex<LinkEntry<T>>>) {
         let next = self.head.lock().next.take().unwrap();
 
@@ -169,6 +173,9 @@ impl<T: Clone> LruCache<T> {
     }
 
     pub fn Add(&mut self, key: u64, d: T) {
+        assert!(self.currentSize == self.list.count, "LruCache add mismatch, self.currentSize is {}, self.list.count is {}, map",
+            self.currentSize, self.list.count);
+
         let exist = if !self.map.contains_key(&key) {
             if self.currentSize >= self.maxSize {
                 //remove the last one
@@ -201,7 +208,9 @@ impl<T: Clone> LruCache<T> {
         if exist {
             match entry.lock().Remove() {
                 Err(e) => panic!("Add fail, {:?}", e),
-                Ok(_) => (),
+                Ok(_) => {
+                    self.list.Decrease();
+                },
             }
             self.list.PushFront(entry);
             return;
@@ -213,12 +222,17 @@ impl<T: Clone> LruCache<T> {
 
     //ret: true- exit the item, false-not exist
     pub fn Remove(&mut self, key: u64) -> bool {
+        assert!(self.currentSize == self.list.count, "LruCache add mismatch, self.currentSize is {}, self.list.count is {}",
+               self.currentSize, self.list.count);
         match self.map.remove(&key) {
             Some(e) => {
                 match e.lock().Remove()  {
                     Err(e) => panic!("Remove fail, {:?}", e),
-                    Ok(_) => (),
+                    Ok(_) => {
+                        self.list.Decrease();
+                    },
                 }
+                self.currentSize -= 1;
                 return true
             }
             None => ()
@@ -241,6 +255,7 @@ impl<T: Clone> LruCache<T> {
             }
         }
 
+        self.currentSize = 0;
         self.map.clear();
     }
 
