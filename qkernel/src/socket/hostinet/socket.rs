@@ -675,7 +675,7 @@ impl SockOperations for SocketOperations {
     }
 
     fn RecvMsg(&self, task: &Task, dsts: &mut [IoVec], flags: i32, deadline: Option<Time>, senderRequested: bool, controlDataLen: usize)
-        -> Result<(i64, i32, Option<(SockAddr, usize)>, SCMControlMessages)>  {
+        -> Result<(i64, i32, Option<(SockAddr, usize)>, Vec<u8>)>  {
 
         if self.SocketBufEnabled() {
             if controlDataLen != 0 {
@@ -693,7 +693,7 @@ impl SockOperations for SocketOperations {
                     Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
                         if flags & MsgType::MSG_DONTWAIT != 0 {
                             if count > 0 {
-                                return Ok((count as i64, 0, None, SCMControlMessages::default()))
+                                return Ok((count as i64, 0, None, Vec::new()))
                             }
                             return Err(Error::SysError(SysErr::EWOULDBLOCK))
                         }
@@ -702,18 +702,18 @@ impl SockOperations for SocketOperations {
                     }
                     Err(e) => {
                         if count > 0 {
-                            return Ok((count as i64, 0, None, SCMControlMessages::default()))
+                            return Ok((count as i64, 0, None, Vec::new()))
                         }
                         return Err(e)
                     },
                     Ok(n) => {
                         if n == 0 {
-                            return Ok((count, 0, None, SCMControlMessages::default()))
+                            return Ok((count, 0, None, Vec::new()))
                         }
 
                         count += n;
                         if count == len as i64 {
-                            return Ok((count as i64, 0, None, SCMControlMessages::default()))
+                            return Ok((count as i64, 0, None, Vec::new()))
                         }
 
                         tmp = Iovs(dsts).DropFirst(n as usize);
@@ -781,7 +781,7 @@ impl SockOperations for SocketOperations {
                 None
             };
 
-            return Ok((res as i64, 0, senderAddr, SCMControlMessages::default()))
+            return Ok((res as i64, 0, senderAddr, Vec::new()))
         }
 
         //todo: we don't support MSG_ERRQUEUE
@@ -814,7 +814,15 @@ impl SockOperations for SocketOperations {
             msgHdr.nameLen = SIZEOF_SOCKADDR as u32;
         }
 
-        let mut res = Kernel::HostSpace::IORecvMsg(self.fd, &msgHdr as *const _ as u64, flags | MsgType::MSG_DONTWAIT, false) as i32;
+        let mut controlVec: Vec<u8> = vec![0; controlDataLen];
+        msgHdr.msgControlLen = controlDataLen;
+        if msgHdr.msgControlLen != 0 {
+            msgHdr.msgControl = &mut controlVec[0] as *mut _ as u64;
+        } else {
+            msgHdr.msgControl = ptr::null::<u8>() as u64;
+        }
+
+        let mut res = Kernel::HostSpace::IORecvMsg(self.fd, &mut msgHdr as *mut _ as u64, flags | MsgType::MSG_DONTWAIT, false) as i32;
         while res == -SysErr::EWOULDBLOCK && flags & MsgType::MSG_DONTWAIT == 0 {
             let general = task.blocker.generalEntry.clone();
 
@@ -833,7 +841,7 @@ impl SockOperations for SocketOperations {
                 _ => ()
             }
 
-            res = Kernel::HostSpace::IORecvMsg(self.fd, &msgHdr as *const _ as u64, flags | MsgType::MSG_DONTWAIT, false) as i32;
+            res = Kernel::HostSpace::IORecvMsg(self.fd, &mut msgHdr as *mut _ as u64, flags | MsgType::MSG_DONTWAIT, false) as i32;
         }
 
         if res < 0 {
@@ -852,7 +860,9 @@ impl SockOperations for SocketOperations {
             None
         };
 
-        return Ok((res as i64, msgFlags, senderAddr, SCMControlMessages::default()))
+        controlVec.resize(msgHdr.msgControlLen, 0);
+
+        return Ok((res as i64, msgFlags, senderAddr, controlVec))
     }
 
     fn SendMsg(&self, task: &Task, srcs: &[IoVec], flags: i32, msgHdr: &mut MsgHdr, deadline: Option<Time>) -> Result<i64> {
