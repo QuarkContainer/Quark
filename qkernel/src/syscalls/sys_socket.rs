@@ -19,15 +19,15 @@ use super::super::task::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::socket::socket::*;
-use super::super::socket::control::*;
-use super::super::socket::control::ControlMessage;
+//use super::super::socket::control::*;
+//use super::super::socket::control::ControlMessage;
 use super::super::fs::flags::*;
 use super::super::fs::file::*;
 use super::super::kernel::fd_table::*;
 use super::super::syscalls::syscalls::*;
 use super::super::kernel::time::*;
 use super::super::qlib::linux::time::*;
-use super::super::qlib::linux::socket::*;
+//use super::super::qlib::linux::socket::*;
 use super::super::kernel::timer::*;
 
 // minListenBacklog is the minimum reasonable backlog for listening sockets.
@@ -424,9 +424,9 @@ fn recvSingleMsg(task: &Task, sock: &Arc<FileOperations>, msgPtr: u64, flags: i3
 
     // Fast path when no control message nor name buffers are provided.
     if msg.msgControlLen == 0 && msg.nameLen == 0 {
-        let (n, mut mflags, _ , cms) = sock.RecvMsg(task, &mut dst, flags, deadline, false, 0)?;
+        let (n, mut mflags, _ , controlMessageBuffer) = sock.RecvMsg(task, &mut dst, flags, deadline, false, 0)?;
 
-        if !cms.Empty() {
+        if controlMessageBuffer.len() != 0{
             mflags |= MsgType::MSG_CTRUNC;
         }
 
@@ -438,14 +438,15 @@ fn recvSingleMsg(task: &Task, sock: &Arc<FileOperations>, msgPtr: u64, flags: i3
         return Err(Error::SysError(SysErr::ENOBUFS))
     }
 
-    let mut pMsg = *msg;
 
     let mut addressVec: Vec<u8> = vec![0; msg.nameLen as usize];
-    let mut controlVec: Vec<u8> = vec![0; msg.msgControlLen as usize];
+    //let mut controlVec: Vec<u8> = vec![0; msg.msgControlLen as usize];
 
-    let (n, mut mflags, sender, mut cms) = sock.RecvMsg(task, &mut dst, flags, deadline, msg.nameLen!=0, msg.msgControlLen)?;
 
-    let controlData = &mut controlVec[..];
+    let (n, mflags, sender, controlMessageBuffer) = sock.RecvMsg(task, &mut dst, flags, deadline, msg.nameLen!=0, msg.msgControlLen)?;
+
+    /* 
+     let controlData = &mut controlVec[..];
 
     //todo: handle Timestamp ControlMessage
 
@@ -490,7 +491,9 @@ fn recvSingleMsg(task: &Task, sock: &Arc<FileOperations>, msgPtr: u64, flags: i3
         },
     };
 
-    pMsg.msgControlLen = pMsg.msgControlLen - controlData.len();
+    msg.msgControlLen = msg.msgControlLen - controlData.len();
+    */
+    msg.msgControlLen = controlMessageBuffer.len();
 
     if msg.nameLen != 0 && msg.msgName != 0 && sender.is_some() {
         let (sender, senderLen) = sender.unwrap();
@@ -501,10 +504,8 @@ fn recvSingleMsg(task: &Task, sock: &Arc<FileOperations>, msgPtr: u64, flags: i3
         task.CopyOutSlice(&addressVec[0..senderLen], msg.msgName, msg.nameLen as usize)?;
         msg.nameLen = senderLen as u32;
     }
-
-    if msg.msgControl!=0 && msg.msgControlLen!=0 && pMsg.msgControlLen != 0 {
-        task.CopyOutSlice(&controlVec[0..pMsg.msgControlLen as usize], msg.msgControl, pMsg.msgControlLen)?;
-        msg.msgControlLen = pMsg.msgControlLen;
+    if msg.msgControl!=0 && msg.msgControlLen!=0 {
+        task.CopyOutSlice(&controlMessageBuffer[0..msg.msgControlLen as usize], msg.msgControl, msg.msgControlLen)?;
     } else {
         msg.msgControlLen = 0;
     }
