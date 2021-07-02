@@ -77,6 +77,10 @@ impl PageTables {
         return self.root.load(Ordering::Acquire)
     }
 
+    pub fn SwapZero(&self) -> u64 {
+        return self.root.swap(0, Ordering::Acquire)
+    }
+
     pub fn Print(&self) {
         //let cr3 : u64;
         //unsafe { llvm_asm!("mov %cr3, $0" : "=r" (cr3) ) };

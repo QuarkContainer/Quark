@@ -33,8 +33,8 @@ use super::super::qlib::vcpu_mgr::*;
 use super::pmamgr::*;
 
 
-pub fn AddFreePageTables(pt: &PageTables) {
-    CPULocal::SetPendingFreePagetable(pt.GetRoot());
+pub fn AddFreePageTables(root: u64) {
+    CPULocal::SetPendingFreePagetable(root);
 }
 
 #[inline]
@@ -194,16 +194,13 @@ impl Drop for FreePageTables {
 
 impl Drop for PageTables {
     fn drop(&mut self) {
-        if self.GetRoot() == 0 {
+        let addr = self.SwapZero();
+        if addr == 0 {
             return;
         }
 
-        if CurrentCr3() != self.GetRoot() {
-            self.Drop()
-        }
-
         //pagetables can't be free from current kernel thread, need to be free async
-        AddFreePageTables(self);
+        AddFreePageTables(addr);
     }
 }
 

@@ -1097,6 +1097,7 @@ pub fn SysFadvise64(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
 fn mkdirAt(task: &Task, dirFd: i32, addr: u64, mode: FileMode) -> Result<i64> {
     let (path, _) = copyInPath(task,  addr, false)?;
+    info!("mkdirAt path is {}", &path);
 
     fileOpAt(task, dirFd, &path.to_string(), &mut |root: &Dirent, d: &Dirent, name: &str, _remainingTraversals: u32| -> Result<()> {
         let inode = d.Inode();
@@ -1146,6 +1147,7 @@ pub fn SysMkdirat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
 fn rmdirAt(task: &Task, dirFd: i32, addr: u64) -> Result<i64> {
     let (path, _) = copyInPath(task,  addr, false)?;
+    info!("rmdirAt path is {}", &path);
 
     if path.as_str() == "/" {
         return Err(Error::SysError(SysErr::EBUSY))
