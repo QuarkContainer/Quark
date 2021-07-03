@@ -331,11 +331,11 @@ pub fn ReadLinkAt(dirfd: i32, path: &str) -> Result<String> {
 pub fn GetDents(fd: i32, buf: u64, count: u32) -> i64 {
     return HostSpace::GetDents64(fd, buf, count)
 }
-
+/* 
 pub fn AsyncClose(fd: i32) {
     return HostSpace::AsyncClose(fd)
 }
-
+*/
 pub fn Dup(fd: i32) -> i64 {
     return HostSpace::Dup(fd)
 }
