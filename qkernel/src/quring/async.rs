@@ -336,6 +336,18 @@ impl AsyncSocketSend {
             //return true;
         }
 
+        // EOF
+        // to debug
+        if result == 0 {
+            buf.SetClosed();
+            if buf.ProduceReadBuf(0) {
+                self.ops.Notify(EVENT_OUT);
+            } else {
+                self.ops.Notify(EVENT_HUP);
+            }
+            return false
+        }
+
         let (trigger, addr, len) = buf.ConsumeAndGetAvailableWriteBuf(result as usize);
         if trigger {
             self.ops.Notify(EVENT_OUT);

@@ -24,6 +24,7 @@ pub mod syscalls;
 pub mod metadata;
 pub mod buf_allocator;
 pub mod linked_list;
+pub mod list_allocator;
 
 use alloc::string::String;
 use alloc::string::ToString;
