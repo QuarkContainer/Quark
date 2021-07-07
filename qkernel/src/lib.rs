@@ -123,7 +123,8 @@ use self::boot::controller::*;
 use self::task::*;
 use self::threadmgr::task_sched::*;
 use self::qlib::perf_tunning::*;
-use self::memmgr::buf_allocator::*;
+//use self::memmgr::buf_allocator::*;
+use self::memmgr::list_allocator::*;
 use self::quring::*;
 use self::print::SCALE;
 
@@ -131,12 +132,13 @@ pub const HEAP_START: usize = 0x70_2000_0000;
 pub const HEAP_SIZE: usize = 0x1000_0000;
 
 #[global_allocator]
-static ALLOCATOR: StackHeap = StackHeap::Empty();
+//static ALLOCATOR: StackHeap = StackHeap::Empty();
+static ALLOCATOR: ListAllocator = ListAllocator::Empty();
 //static ALLOCATOR: BufHeap = BufHeap::Empty();
 //static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
 pub fn AllocatorPrint() {
-    ALLOCATOR.Print();
+    //ALLOCATOR.Print();
 }
 
 lazy_static! {
@@ -297,6 +299,7 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                     let _fdtbl = thread.lock().fdTbl.clone();
                     // clear current thread fdtbl
                     thread.lock().fdTbl = currTask.fdTbl.clone();
+                    thread.lock().memoryMgr = currTask.mm.clone();
                     // drop _fdtbl
                     CPULocal::SetPendingFreeStack(currTask.taskId);
                     //PerfGofrom(PerfType::KernelHandling);

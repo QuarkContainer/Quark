@@ -376,6 +376,20 @@ impl Thread {
     pub fn reparentLocked(&self, parent: &Option<Thread>) {
         let oldParent = self.lock().parent.clone();
         self.lock().parent = parent.clone();
+        /*{
+            let oldid = match oldParent.clone() {
+                Some(t) => t.lock().id,
+                None => 0
+            };
+
+            let parent = self.lock().parent.clone();
+            if parent.is_some() {
+                error!("reparentLocked set {} old parent is {} parent to {}", self.lock().id, oldid, parent.unwrap().lock().id);
+            } else {
+                error!("reparentLocked set {} old parent is {} parent None", self.lock().id, oldid);
+            }
+
+        }*/
 
         // If a thread group leader's parent changes, reset the thread group's
         // termination signal to SIGCHLD and re-check exit notification. (Compare
@@ -872,10 +886,9 @@ impl Thread {
         let lastExiter = self.exitThreadGroup();
         let tg = self.lock().tg.clone();
 
-        let pidns = tg.PIDNamespace();
-        let owner = pidns.lock().owner.clone();
-
         {
+            let pidns = tg.PIDNamespace();
+            let owner = pidns.lock().owner.clone();
             let _l = owner.WriteLock();
             self.updateRSSLocked();
         }

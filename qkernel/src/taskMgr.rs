@@ -120,11 +120,20 @@ pub fn IOWait() {
 pub fn WaitFn() {
     CPULocal::SetCPUState(VcpuState::Searching);
     loop {
-        let next = { SHARESPACE.scheduler.GetNext() };
+        let next = if CPULocal::PendingFreeStack() != 0 || CPULocal::PendingFreePagetable() !=0 {
+            None
+        } else {
+            SHARESPACE.scheduler.GetNext()
+        };
+
         match next {
             None => {
                 CPULocal::SetCPUState(VcpuState::Waiting);
                 SHARESPACE.scheduler.IncreaseHaltVcpuCnt();
+
+                // if there is memory needs free and freed, continue free them
+                while super::ALLOCATOR.Free() {}
+
                 if SHARESPACE.scheduler.GlobalReadyTaskCnt() == 0 {
                     HostSpace::Hlt();
                 }
@@ -140,7 +149,6 @@ pub fn WaitFn() {
                 //error!("WaitFn newTask2 is {:x?}", &newTask);
                 switch(current, newTask);
 
-                CPULocal::SetCPUState(VcpuState::Searching);
                 let pendingFreeStack = CPULocal::PendingFreeStack();
                 if pendingFreeStack != 0 {
                     //(*PAGE_ALLOCATOR).Free(pendingFreeStack, DEFAULT_STACK_PAGES).unwrap();
@@ -149,6 +157,8 @@ pub fn WaitFn() {
                 }
 
                 FreePageTables();
+
+                CPULocal::SetCPUState(VcpuState::Searching);
             }
         }
     }
@@ -185,6 +195,8 @@ pub fn Wait() {
             break;
         }
 
+        super::ALLOCATOR.Free();
+
         let currentTime = Rdtsc();
         if currentTime - start >= WAIT_CYCLES {
             let current = TaskId::New(CPULocal::CurrentTask());
@@ -200,7 +212,7 @@ pub fn Wait() {
 }
 
 pub fn SwitchToNewTask() -> ! {
-    CPULocal::SetCPUState(VcpuState::Searching);
+    CPULocal::SetCPUState(VcpuState::Running);
 
     let current = Task::TaskId();
     let waitTask = TaskId::New(CPULocal::WaitTask());
@@ -213,6 +225,13 @@ impl Scheduler {
     pub fn GetNext(&self) -> Option<TaskId> {
         let vcpuId = CPULocal::CpuId() as usize;
         let vcpuCount = self.vcpuCnt.load(Ordering::Relaxed);
+
+        match self.GetNextForCpu(vcpuId, 0) {
+            None => (),
+            Some(t) => {
+                return Some(t)
+            }
+        }
 
         for i in vcpuId..vcpuId+vcpuCount {
             match self.GetNextForCpu(vcpuId, i % vcpuCount) {
