@@ -335,7 +335,11 @@ impl FileOperations for HostFileOp {
         if inodeType == InodeType::RegularFile || inodeType == InodeType::SpecialFile {
             defer!(task.GetMut().iovs.clear());
             task.V2PIovs(srcs, false, &mut task.GetMut().iovs)?;
-            let srcs = &task.GetMut().iovs;
+            let srcs = &mut task.GetMut().iovs;
+
+            if srcs.len() == 0 {
+                srcs.push(IoVec::NewFromAddr(0, 0));
+            }
 
             let iovsAddr = &srcs[0] as *const _ as u64;
             let mut iovcnt = srcs.len() as i32;
