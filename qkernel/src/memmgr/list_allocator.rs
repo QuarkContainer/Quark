@@ -68,8 +68,8 @@ impl ListAllocator {
         }
 
         let size = end - start;
-        self.total.fetch_add(size, Ordering::SeqCst);
-        self.free.fetch_add(size, Ordering::SeqCst);
+        self.total.fetch_add(size, Ordering::Release);
+        self.free.fetch_add(size, Ordering::Release);
     }
 
     pub fn Add(&self, start: usize, size: usize) {
@@ -88,12 +88,16 @@ impl ListAllocator {
     }
 
     pub fn NeedFree(&self) -> bool {
-        let total = self.total.load(Ordering::Relaxed);
-        let free = self.free.load(Ordering::Relaxed);
-        let bufSize = self.bufSize.load(Ordering::Relaxed);
+        let total = self.total.load(Ordering::Acquire);
+        let free = self.free.load(Ordering::Acquire);
+        let bufSize = self.bufSize.load(Ordering::Acquire);
 
-        if total * FREE_THRESHOLD > free * 100 && // there are too little free memory
-            free * BUFF_THRESHOLD < bufSize * 100 { // there are too much bufferred memory
+        if free > core::usize::MAX / 100 || total > core::usize::MAX / 100 {
+            error!("total is {:x}, free is {:x}, buffsize is {:x}", total, free, bufSize);
+        }
+
+        if total * FREE_THRESHOLD / 100 > free && // there are too little free memory
+            free * BUFF_THRESHOLD /100 < bufSize { // there are too much bufferred memory
             return true
         }
 
@@ -108,8 +112,10 @@ impl ListAllocator {
                 return count > 0
             }
 
-            let idx = self.bufs.len() - i; // free from larger size
-            count += self.bufs[idx].lock().FreeMultiple(&self.heap, FREE_BATCH - count);
+            let idx = self.bufs.len() - i - 1; // free from larger size
+            let cnt = self.bufs[idx].lock().FreeMultiple(&self.heap, FREE_BATCH - count);
+            self.bufSize.fetch_sub(cnt * self.bufs[idx].lock().size, Ordering::Release);
+            count += cnt;
         }
 
         return count > 0;
@@ -125,12 +131,12 @@ unsafe impl GlobalAlloc for ListAllocator {
 
         let class = size.trailing_zeros() as usize;
 
-        self.free.fetch_sub(size, Ordering::SeqCst);
+        self.free.fetch_sub(size, Ordering::Release);
 
         if class < self.bufs.len() {
             let (ret, fromBuf) = self.bufs[class].lock().Alloc(&self.heap);
             if fromBuf {
-                self.bufSize.fetch_sub(size, Ordering::SeqCst);
+                self.bufSize.fetch_sub(size, Ordering::Release);
             }
 
             return ret;
@@ -159,8 +165,8 @@ unsafe impl GlobalAlloc for ListAllocator {
         );
         let class = size.trailing_zeros() as usize;
 
-        self.free.fetch_add(size, Ordering::SeqCst);
-        self.bufSize.fetch_add(size, Ordering::SeqCst);
+        self.free.fetch_add(size, Ordering::Release);
+        self.bufSize.fetch_add(size, Ordering::Release);
         if class < self.bufs.len() {
             return self.bufs[class].lock().Dealloc(ptr, &self.heap);
         }
@@ -196,6 +202,16 @@ impl FreeMemBlockMgr {
         if self.count > 0 {
             self.count -= 1;
             let ret = self.list.Pop();
+
+            let zeroB = MemBlock {
+                next: 0
+            };
+
+            let ptr = ret as * mut MemBlock;
+            unsafe {
+                ptr.write(zeroB)
+            }
+
             return (ret as * mut u8, true)
         }
 
