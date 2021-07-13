@@ -120,11 +120,7 @@ pub fn IOWait() {
 pub fn WaitFn() {
     CPULocal::SetCPUState(VcpuState::Searching);
     loop {
-        let next = if CPULocal::PendingFreeStack() != 0 || CPULocal::PendingFreePagetable() !=0 {
-            None
-        } else {
-            SHARESPACE.scheduler.GetNext()
-        };
+        let next = SHARESPACE.scheduler.GetNext();
 
         match next {
             None => {
@@ -132,7 +128,7 @@ pub fn WaitFn() {
                 SHARESPACE.scheduler.IncreaseHaltVcpuCnt();
 
                 // if there is memory needs free and freed, continue free them
-                while super::ALLOCATOR.Free() {}
+                // while super::ALLOCATOR.Free() {}
 
                 if SHARESPACE.scheduler.GlobalReadyTaskCnt() == 0 {
                     HostSpace::Hlt();
@@ -157,6 +153,8 @@ pub fn WaitFn() {
                 }
 
                 FreePageTables();
+
+                //while super::ALLOCATOR.Free() {}
 
                 CPULocal::SetCPUState(VcpuState::Searching);
             }

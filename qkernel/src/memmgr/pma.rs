@@ -134,6 +134,10 @@ impl PageMgr {
     pub fn PrintRefs(&self) {
         self.lock().allocator.lock().PrintRefs();
     }
+
+    pub fn DerefPage(&self, addr: u64) {
+        self.lock().allocator.lock().Deref(addr).unwrap();
+    }
 }
 
 pub struct PageMgrInternal {
@@ -166,6 +170,10 @@ impl PageMgrInternal {
 
         self.allocator.lock().Ref(self.zeroPage).unwrap();
         return self.zeroPage;
+    }
+
+    pub fn Deref(&self, addr: u64) {
+        self.allocator.lock().Ref(addr).unwrap();
     }
 
     pub fn VsyscallPages(&mut self) -> &[u64] {

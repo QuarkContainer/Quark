@@ -175,7 +175,10 @@ impl CloneOptions {
         };
 
         if opts.sharingOption.NewUserNamespace {
-            panic!("doesn't support new usernamespace ...");
+            // todo: handle NewUserNamespace
+            //panic!("doesn't support new usernamespace ...");
+            error!("doesn't support new usernamespace ...");
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         // Since signal actions may refer to application signal handlers by virtual

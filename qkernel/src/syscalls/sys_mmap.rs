@@ -133,8 +133,8 @@ pub fn SysBrk(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg0 as u64;
 
     match task.mm.Brk(task, addr) {
-        Ok(addr) => Ok(addr as i64),
-        Err(e) => Err(e),
+        Ok(addr) => return Ok(addr as i64),
+        Err(e) => return Err(e),
     }
 }
 
@@ -234,8 +234,8 @@ pub fn SysMremap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         Move: moveMode,
         NewAddr: newAddr
     })  {
-        Ok(addr) => Ok(addr as i64),
-        Err(e) => Err(e),
+        Ok(addr) => return Ok(addr as i64),
+        Err(e) => return Err(e),
     }
 }
 

@@ -158,12 +158,12 @@ impl Counters {
         self.Enter(top);
     }
 
-    pub fn Enter(&self, typ: PerfType) {
-        self.data[typ as usize].Enter()
+    pub fn Enter(&self, _typ: PerfType) {
+        //self.data[typ as usize].Enter()
     }
 
-    pub fn Leave(&self, typ: PerfType) {
-        self.data[typ as usize].Leave()
+    pub fn Leave(&self, _typ: PerfType) {
+        //self.data[typ as usize].Leave()
     }
 }
 

@@ -607,7 +607,8 @@ impl Thread {
     //
     // Preconditions: The TaskSet mutex must be locked for writing.
     pub fn updateRSSLocked(&self) {
-        let mmMaxRSS = self.lock().memoryMgr.MaxResidentSetSize();
+        let mm = self.lock().memoryMgr.clone();
+        let mmMaxRSS = mm.MaxResidentSetSize();
         let tg = self.lock().tg.clone();
         if tg.lock().maxRSS < mmMaxRSS {
             tg.lock().maxRSS = mmMaxRSS;

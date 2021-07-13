@@ -18,6 +18,7 @@ use core::sync::atomic::Ordering;
 use core::cmp::max;
 use core::mem::size_of;
 use core::ptr::NonNull;
+// use alloc::slice;
 use spin::Mutex;
 use buddy_system_allocator::Heap;
 
@@ -133,7 +134,7 @@ unsafe impl GlobalAlloc for ListAllocator {
 
         self.free.fetch_sub(size, Ordering::Release);
 
-        if class < self.bufs.len() {
+        if 3 <= class && class < self.bufs.len() {
             let (ret, fromBuf) = self.bufs[class].lock().Alloc(&self.heap);
             if fromBuf {
                 self.bufSize.fetch_sub(size, Ordering::Release);
@@ -193,7 +194,7 @@ impl FreeMemBlockMgr {
     }
 
     pub fn Layout(&self) -> Layout {
-        return Layout::from_size_align(self.size, 1).unwrap();
+        return Layout::from_size_align(self.size, self.size).unwrap();
     }
 
 
@@ -203,14 +204,20 @@ impl FreeMemBlockMgr {
             self.count -= 1;
             let ret = self.list.Pop();
 
-            let zeroB = MemBlock {
-                next: 0
-            };
+            /*let zeroB = 0;
 
             let ptr = ret as * mut MemBlock;
             unsafe {
                 ptr.write(zeroB)
             }
+
+            let size = self.size / 8;
+            unsafe {
+                let toArr = slice::from_raw_parts_mut(ret as *mut u64, size);
+                for i in 0..size {
+                    toArr[i] = 0;
+                }
+            }*/
 
             return (ret as * mut u8, true)
         }
@@ -222,13 +229,22 @@ impl FreeMemBlockMgr {
             .map_or(0 as *mut u8, |allocation| allocation.as_ptr()) as u64;
 
         if ret == 0 {
-            panic!("GlobalAlloc::alloc OOM")
+            super::super::Kernel::HostSpace::KernelMsg(ret, 0);
+            super::super::Kernel::HostSpace::KernelOOM(self.size as u64, 1);
+            loop {}
         }
 
         return (ret as * mut u8, false);
     }
 
     pub fn Dealloc(&mut self, ptr: *mut u8, _heap: &Mutex<Heap>) {
+        /*let size = self.size / 8;
+        unsafe {
+            let toArr = slice::from_raw_parts(ptr as *mut u64, size);
+            for i in 0..size {
+                assert!(toArr[i] == 0);
+            }
+        }*/
 
         self.count += 1;
         self.list.Push(ptr as u64);
@@ -258,12 +274,11 @@ impl FreeMemBlockMgr {
 }
 
 
-struct MemBlock {
-    next: u64, // Option<&'static mut MemBlock>,
-}
+type MemBlock = u64;
+
 
 pub struct MemList {
-    next: u64, // Option<&'static mut MemBlock>,
+    next: MemBlock,
 }
 
 impl MemList {
@@ -274,10 +289,8 @@ impl MemList {
     }
 
     pub fn Push(&mut self, addr: u64) {
-        let next = self.next;
-        let newB = MemBlock {
-            next: next
-        };
+        assert!(addr % 8 == 0);
+        let newB = self.next;
 
         let ptr = addr as * mut MemBlock;
         unsafe {
@@ -296,7 +309,8 @@ impl MemList {
            &mut *(next as * mut MemBlock)
         };
 
-        self.next = ptr.next;
+        self.next = *ptr;
+        assert!(next % 8 == 0);
         return next;
     }
 }
