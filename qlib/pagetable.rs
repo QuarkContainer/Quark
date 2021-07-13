@@ -821,6 +821,37 @@ impl PageTables {
     }
 }
 
+
+pub struct PageBufAllocator {
+    pub buf: Vec<u64>,
+    pub allocator: AlignedAllocator,
+}
+
+impl PageBufAllocator {
+    pub fn New() -> Self {
+        return Self {
+            buf: Vec::with_capacity(4096 * 16),
+            allocator: AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize),
+        }
+    }
+
+    pub fn Allocate(&mut self) -> Result<u64> {
+        match self.buf.pop() {
+            None => return self.allocator.Allocate(),
+            Some(addr) => return Ok(addr)
+        }
+    }
+
+    pub fn Free(&mut self, addr: u64) -> Result<()> {
+        if self.buf.len() < 4096 * 16 {
+            self.buf.push(addr);
+            return Ok(())
+        }
+
+        return self.allocator.Free(addr);
+    }
+}
+
 pub struct AlignedAllocator {
     pub size: usize,
     pub align: usize,

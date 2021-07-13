@@ -137,7 +137,7 @@ impl fmt::Debug for ExceptionStackFrame {
     }
 }
 
-pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, _errorCode: u64) {
+pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, errorCode: u64) {
     let PRINT_EXECPTION : bool = SHARESPACE.config.PrintException;
 
     let currTask = Task::Current();
@@ -148,7 +148,9 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, _errorC
         //PerfGofrom(PerfType::User);
         currTask.AccountTaskLeave(SchedState::RunningApp);
     } else {
-        panic!("get non page fault exception from kernel ...ev is {:?}, sf is {:x?}", ev, sf)
+        let pt = currTask.GetPtRegs();
+        panic!("get non page fault exception from kernel ...ev is {:?}, sf is {:#x?}, errorCode is {:x} rflags is {:#x?}",
+               ev, sf, errorCode, pt)
     };
 
     if PRINT_EXECPTION {
@@ -455,8 +457,8 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
         );
     }
 
-    //defer!(print!("end of in PageFaultHandler ..."));
-
+    //error!("PageFaultHandler 1");
+    //defer!(error!("PageFaultHandler 2"));
     let ml = currTask.mm.MappingLock();
     let ml = ml.write();
 
@@ -553,6 +555,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
 }
 
 pub fn HandleFault(task: &mut Task, user: bool, errorCode: u64, cr2: u64, sf: &mut ExceptionStackFrame, signal: i32) -> ! {
+    //error!("HandleFault 1");
     if !user {
         let map =  task.mm.GetSnapshotLocked(task, false);
         print!("unhandle EXCEPTION: page_fault FAULT\n{:#?}, error code is {:?}, cr2 is {:x}, registers is {:#x?}",
@@ -587,6 +590,7 @@ pub fn HandleFault(task: &mut Task, user: bool, errorCode: u64, cr2: u64, sf: &m
     thread.SendSignal(&info).expect("PageFaultHandler send signal fail");
     MainRun(task, TaskRunState::RunApp);
 
+    //error!("HandleFault 2");
     ReturnToApp(task);
 }
 

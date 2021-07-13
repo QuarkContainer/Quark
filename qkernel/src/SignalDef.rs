@@ -526,7 +526,7 @@ impl SignalSet {
     pub fn ForEachSignal(&self, mut f: impl FnMut(Signal)) {
         for i in 0..64 {
             if self.0 & (1 << i) != 0 {
-                f(Signal(i as i32 + i))
+                f(Signal(i as i32 + 1))
             }
         }
     }

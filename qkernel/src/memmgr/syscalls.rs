@@ -736,7 +736,9 @@ impl MemoryManager {
 
     pub fn MaxResidentSetSize(&self) -> u64 {
         let ml = self.MappingLock();
+        //error!("MaxResidentSetSize 1");
         let _ml = ml.read();
+        //error!("MaxResidentSetSize 2");
         return self.MaxResidentSetSizeLocked();
     }
 }

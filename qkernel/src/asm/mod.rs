@@ -52,7 +52,7 @@ pub fn GetVcpuId() -> usize {
 pub fn HyperCall64(type_: u16, para1: u64, para2: u64) {
     unsafe {
         let data: u16 = 0;
-        llvm_asm!("outw $1, $0":: "{dx}"(type_), "{ax}"(data), "{rbx}"(para1), "{rcx}"(para2) : "memory" : "volatile" )
+        llvm_asm!("out $1, $0":: "{dx}"(type_), "{ax}"(data), "{rbx}"(para1), "{rcx}"(para2))
     }
 }
 
