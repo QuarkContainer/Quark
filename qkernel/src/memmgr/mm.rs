@@ -766,6 +766,7 @@ impl MemoryManager {
                     }
                 }
 
+                Invlpg(pageAddr);
                 return Ok(())
             },
             None => {
@@ -785,6 +786,7 @@ impl MemoryManager {
                 }
 
                 super::super::PAGE_MGR.DerefPage(phyAddr);
+                Invlpg(pageAddr);
                 return Ok(())
             }
         }

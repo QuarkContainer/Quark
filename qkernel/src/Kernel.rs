@@ -1461,13 +1461,13 @@ impl HostSpace {
     pub fn Kprint(level: DebugLevel, str: &str) {
         let inWaitFn = super::task::Task::TaskId().Addr() == CPULocal::WaitTask() || CPULocal::WaitTask() == 0;
 
-        if false || inWaitFn {
+        if inWaitFn {
             let msg = Print {
                 level,
                 str,
             };
 
-            HyperCall64(HYPERCALL_PRINT, &msg as *const _ as u64, 0);
+            HyperCall64(HYPERCALL_PRINT, &msg as *const _ as u64, 1);
         } else {
             let bytes = str.as_bytes();
             match super::BUF_MGR.Alloc(bytes.len() as u64) {
@@ -1477,7 +1477,7 @@ impl HostSpace {
                         str,
                     };
 
-                    HyperCall64(HYPERCALL_PRINT, &msg as *const _ as u64, 0);
+                    HyperCall64(HYPERCALL_PRINT, &msg as *const _ as u64, 2);
                 }
                 Ok(addr) => {
                     IoVec::NewFromAddr(addr, bytes.len()).ToSliceMut().copy_from_slice(bytes);

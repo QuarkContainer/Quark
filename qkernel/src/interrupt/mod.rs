@@ -457,105 +457,112 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
         );
     }
 
-    //error!("PageFaultHandler 1");
-    //defer!(error!("PageFaultHandler 2"));
-    let ml = currTask.mm.MappingLock();
-    let ml = ml.write();
+    let signal;
+    // no need loop, just need to enable break
+    loop {
+        let ml = currTask.mm.MappingLock();
+        let _ml = ml.write();
 
-    let (vma, range) = match currTask.mm.GetVmaAndRangeLocked(cr2) {
-        //vmas.lock().Get(cr2) {
-        None => {
-            //todo: when to send sigbus/SIGSEGV
-            core::mem::drop(ml);
-            HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
-        }
-        Some(vma) => vma.clone(),
-    };
-
-    let errbits = PageFaultErrorCode::from_bits(errorCode).unwrap();
-    if vma.kernel == true {
-        let map =  currTask.mm.GetSnapshotLocked(currTask, false);
-        print!("the map is {}", &map);
-
-        core::mem::drop(ml);
-        HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
-    }
-
-    if !vma.effectivePerms.Read() { // has no read permission
-        core::mem::drop(ml);
-        HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
-    }
-
-    let pageAddr = Addr(cr2).RoundDown().unwrap().0;
-    assert!(range.Contains(pageAddr), "PageFaultHandler vaddr is not in the Vma range");
-
-    // triggered because pagetable not mapping
-    if errbits & PageFaultErrorCode::PROTECTION_VIOLATION !=  PageFaultErrorCode::PROTECTION_VIOLATION {
-        //error!("InstallPage 1, range is {:x?}, address is {:x}, vma.growsDown is {}",
-        //    &range, pageAddr, vma.growsDown);
-        match currTask.mm.InstallPageLocked(currTask, &vma, pageAddr, &range) {
-            Err(Error::FileMapError) => {
-                core::mem::drop(ml);
-                HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGBUS);
-            }
-            Err(e) => {
-                panic!("PageFaultHandler error is {:?}", e)
-            }
-            _ => ()
-        };
-
-        for i in 1..8 {
-            let addr = if vma.growsDown {
-                pageAddr - i * PAGE_SIZE
-            } else {
-                pageAddr + i * PAGE_SIZE
-            };
-            if range.Contains(addr) {
-                match currTask.mm.InstallPageLocked(currTask, &vma, pageAddr, &range) {
-                    Err(_) => {
-                        break;
-                    }
-                    _ => ()
-                };
-            } else {
+        let (vma, range) = match currTask.mm.GetVmaAndRangeLocked(cr2) {
+            //vmas.lock().Get(cr2) {
+            None => {
+                //todo: when to send sigbus/SIGSEGV
+                signal = Signal::SIGSEGV;
                 break;
             }
+            Some(vma) => vma.clone(),
+        };
+
+        let errbits = PageFaultErrorCode::from_bits(errorCode).unwrap();
+        if vma.kernel == true {
+            let map =  currTask.mm.GetSnapshotLocked(currTask, false);
+            print!("the map is {}", &map);
+
+            signal = Signal::SIGSEGV;
+            break;
         }
 
-        if !vma.private || (errbits & PageFaultErrorCode::CAUSED_BY_WRITE) != PageFaultErrorCode::CAUSED_BY_WRITE {
+        if !vma.effectivePerms.Read() { // has no read permission
+            signal = Signal::SIGSEGV;
+            break;
+        }
+
+        let pageAddr = Addr(cr2).RoundDown().unwrap().0;
+        assert!(range.Contains(pageAddr), "PageFaultHandler vaddr is not in the Vma range");
+
+        // triggered because pagetable not mapping
+        if errbits & PageFaultErrorCode::PROTECTION_VIOLATION !=  PageFaultErrorCode::PROTECTION_VIOLATION {
+            //error!("InstallPage 1, range is {:x?}, address is {:x}, vma.growsDown is {}",
+            //    &range, pageAddr, vma.growsDown);
+            match currTask.mm.InstallPageLocked(currTask, &vma, pageAddr, &range) {
+                Err(Error::FileMapError) => {
+                    signal = Signal::SIGBUS;
+                    break;
+                }
+                Err(e) => {
+                    panic!("PageFaultHandler error is {:?}", e)
+                }
+                _ => ()
+            };
+
+            for i in 1..8 {
+                let addr = if vma.growsDown {
+                    pageAddr - i * PAGE_SIZE
+                } else {
+                    pageAddr + i * PAGE_SIZE
+                };
+                if range.Contains(addr) {
+                    match currTask.mm.InstallPageLocked(currTask, &vma, pageAddr, &range) {
+                        Err(_) => {
+                            break;
+                        }
+                        _ => ()
+                    };
+                } else {
+                    break;
+                }
+            }
+
+            if !vma.private || (errbits & PageFaultErrorCode::CAUSED_BY_WRITE) != PageFaultErrorCode::CAUSED_BY_WRITE {
+                if fromUser {
+                    //PerfGoto(PerfType::User);
+                    currTask.AccountTaskEnter(SchedState::RunningApp);
+                    SwapGs();
+                }
+
+                return
+            }
+        }
+
+        if vma.private == false {
+            signal = Signal::SIGSEGV;
+            break;
+        }
+
+        if (errbits & PageFaultErrorCode::CAUSED_BY_WRITE) == PageFaultErrorCode::CAUSED_BY_WRITE {
+            if !vma.effectivePerms.Write() && fromUser {
+                signal = Signal::SIGSEGV;
+                break;
+            }
+
+            currTask.mm.CopyOnWriteLocked(pageAddr, &vma);
             if fromUser {
                 //PerfGoto(PerfType::User);
+                currTask.AccountTaskEnter(SchedState::RunningApp);
                 SwapGs();
             }
-            return
-        }
-    }
-
-    if vma.private == false {
-        core::mem::drop(ml);
-        HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
-    }
-
-    if (errbits & PageFaultErrorCode::CAUSED_BY_WRITE) == PageFaultErrorCode::CAUSED_BY_WRITE {
-        if !vma.effectivePerms.Write() && fromUser {
-            core::mem::drop(ml);
-            HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
+        } else {
+            signal = Signal::SIGSEGV;
+            break;
         }
 
-        currTask.mm.CopyOnWriteLocked(pageAddr, &vma);
-        if fromUser {
-            //PerfGoto(PerfType::User);
-            SwapGs();
-            currTask.AccountTaskEnter(SchedState::RunningApp);
-        }
-    } else {
-        core::mem::drop(ml);
-        HandleFault(currTask, fromUser, errorCode, cr2, sf, Signal::SIGSEGV);
+        return
     }
+
+    HandleFault(currTask, fromUser, errorCode, cr2, sf, signal);
 }
 
 pub fn HandleFault(task: &mut Task, user: bool, errorCode: u64, cr2: u64, sf: &mut ExceptionStackFrame, signal: i32) -> ! {
-    //error!("HandleFault 1");
     if !user {
         let map =  task.mm.GetSnapshotLocked(task, false);
         print!("unhandle EXCEPTION: page_fault FAULT\n{:#?}, error code is {:?}, cr2 is {:x}, registers is {:#x?}",
@@ -590,7 +597,6 @@ pub fn HandleFault(task: &mut Task, user: bool, errorCode: u64, cr2: u64, sf: &m
     thread.SendSignal(&info).expect("PageFaultHandler send signal fail");
     MainRun(task, TaskRunState::RunApp);
 
-    //error!("HandleFault 2");
     ReturnToApp(task);
 }
 
