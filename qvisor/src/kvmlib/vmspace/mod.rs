@@ -1868,7 +1868,7 @@ impl VMSpace {
     }
 
     pub fn FdNotify(&self, fd: i32, mask: EventMask) {
-        self.shareSpace.AQHostInputCall(HostInputMsg::FdNotify(FdNotify{
+        self.shareSpace.AQHostInputCall(&HostInputMsg::FdNotify(FdNotify{
             fd: fd,
             mask: mask,
         }));

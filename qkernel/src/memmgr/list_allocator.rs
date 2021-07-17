@@ -18,7 +18,7 @@ use core::sync::atomic::Ordering;
 use core::cmp::max;
 use core::mem::size_of;
 use core::ptr::NonNull;
-// use alloc::slice;
+//use alloc::slice;
 use spin::Mutex;
 use buddy_system_allocator::Heap;
 
@@ -222,19 +222,16 @@ impl FreeMemBlockMgr {
             return (ret as * mut u8, true)
         }
 
-        let ret = heap
-            .lock()
-            .alloc(self.Layout())
-            .ok()
-            .map_or(0 as *mut u8, |allocation| allocation.as_ptr()) as u64;
-
-        if ret == 0 {
-            super::super::Kernel::HostSpace::KernelMsg(ret, 0);
-            super::super::Kernel::HostSpace::KernelOOM(self.size as u64, 1);
-            loop {}
+        match heap.lock().alloc(self.Layout()) {
+            Err(_) => {
+                super::super::Kernel::HostSpace::KernelMsg(0, 0);
+                super::super::Kernel::HostSpace::KernelOOM(self.size as u64, 1);
+                loop {}
+            }
+            Ok(ret) => {
+                return (ret.as_ptr(), false)
+            }
         }
-
-        return (ret as * mut u8, false);
     }
 
     pub fn Dealloc(&mut self, ptr: *mut u8, _heap: &Mutex<Heap>) {

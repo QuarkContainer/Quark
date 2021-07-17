@@ -95,7 +95,7 @@ impl TimerKeeper {
         };
 
         if expire < 10_000 {
-            ss.AQHostInputCall(HostInputMsg::FireTimer(FireTimer {
+            ss.AQHostInputCall(&HostInputMsg::FireTimer(FireTimer {
                 TimerId: timerId,
                 SeqNo: seqNo,
             }));
@@ -153,7 +153,7 @@ impl TimerKeeper {
         let mut hasMsg = false;
 
         self.Expire(now, |timer| {
-            ss.AQHostInputCall(HostInputMsg::FireTimer(FireTimer {
+            ss.AQHostInputCall(&HostInputMsg::FireTimer(FireTimer {
                 TimerId: timer.timerId,
                 SeqNo: timer.seqNo,
             }));

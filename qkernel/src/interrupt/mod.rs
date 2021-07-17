@@ -161,7 +161,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, errorCo
     rflags &= !KERNEL_FLAGS_CLEAR;
     rflags |= KERNEL_FLAGS_SET;
     SetRflags(rflags);
-    currTask.SaveFp();
+    //currTask.SaveFp();
 
     let regs = currTask.GetPtRegs();
 
@@ -428,7 +428,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
         rflags &= !KERNEL_FLAGS_CLEAR;
         rflags |= KERNEL_FLAGS_SET;
         SetRflags(rflags);
-        currTask.SaveFp();
+        //currTask.SaveFp();
     }
 
     let regs = currTask.GetPtRegs();
@@ -438,7 +438,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
             eflags &= !USER_FLAGS_CLEAR;
             eflags |= USER_FLAGS_SET;
             SetRflags(eflags);
-            Task::Current().RestoreFp();
+            //Task::Current().RestoreFp();
         }
     });
 

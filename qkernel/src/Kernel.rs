@@ -188,7 +188,7 @@ impl HostSpace {
             offset,
         });
 
-        HostSpace::AQCall(msg);
+        HostSpace::AQCall(&msg);
     }
 
     pub fn IOReadAt(fd: i32, iovs: u64, iovcnt: i32, offset: u64) -> i64 {
@@ -350,7 +350,7 @@ impl HostSpace {
     }
 
     pub fn AsyncClose(fd: i32) {
-        Self::AQCall(qmsg::HostOutputMsg::Close(qmsg::output::Close {
+        Self::AQCall(&qmsg::HostOutputMsg::Close(qmsg::output::Close {
             fd: fd,
         }));
     }
@@ -391,7 +391,7 @@ impl HostSpace {
     }
 
     pub fn Exit() {
-        HyperCall64(HYPERCALL_EXIT, 0, 0)
+        HyperCall64(HYPERCALL_EXIT, 0, 0);
         //let mut exit = qlib::Msg::Exit;
         //Kernel::Call(&mut exit);
     }
@@ -1365,7 +1365,7 @@ impl HostSpace {
             len,
         });
 
-        HostSpace::AQCall(msg);
+        HostSpace::AQCall(&msg);
     }
 
     pub fn WakeVCPU(vcpuId: usize) {
@@ -1379,7 +1379,7 @@ impl HostSpace {
             vcpuId,
         });
 
-        HostSpace::AQCall(msg);
+        HostSpace::AQCall(&msg);
     }
 
     pub fn PrintInt(val: i64) {
@@ -1403,7 +1403,7 @@ impl HostSpace {
             len,
         });
 
-        HostSpace::AQCall(msg);
+        HostSpace::AQCall(&msg);
     }
 
     fn Call(msg: &mut Msg, mustAsync: bool) -> u64 {
@@ -1447,12 +1447,12 @@ impl HostSpace {
         return event.ret;
     }
 
-    fn AQCall(msg: qmsg::HostOutputMsg) {
+    fn AQCall(msg: &qmsg::HostOutputMsg) {
         super::SHARESPACE.AQHostOutputCall(msg);
     }
 
     pub fn WaitFD(fd: i32, mask: EventMask) {
-        Self::AQCall(qmsg::HostOutputMsg::WaitFD(qmsg::WaitFD {
+        Self::AQCall(&qmsg::HostOutputMsg::WaitFD(qmsg::WaitFD {
             fd,
             mask,
         }))
@@ -1546,26 +1546,26 @@ pub fn GetSockOptI32(sockfd: i32, level: i32, optname: i32) -> Result<i32> {
 impl<'a> ShareSpace {
     pub fn QCall(&self, item: &mut Event) {
         let addr = item as *const _ as u64;
-        let mut msg = HostOutputMsg::QCall(addr);
+        let msg = HostOutputMsg::QCall(addr);
         loop {
-           msg = match self.QOutput.TryPush(msg) {
-                None => {
+           match self.QOutput.TryPush(&msg) {
+                Ok(()) => {
                     break;
                 }
-                Some(msg) => msg,
+                Err(_) => (),
             };
         }
     }
 
-    pub fn AQHostOutputCall(&self, item: HostOutputMsg) {
+    pub fn AQHostOutputCall(&self, item: &HostOutputMsg) {
         self.hostMsgCount.fetch_add(1, Ordering::SeqCst);
         self.Notify();
 
-        let mut item = item;
+        let item = *item;
         loop {
-            item = match self.QOutput.TryPush(item) {
-                None => break,
-                Some(item) => item,
+            match self.QOutput.TryPush(&item) {
+                Ok(()) => break,
+                Err(_) => (),
             };
         }
     }

@@ -295,16 +295,15 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                     currTask.PerfStop();
                     currTask.SetDummy();
 
-                    // copy thread's fdtable
-                    let _fdtbl = thread.lock().fdTbl.clone();
-                    // clear current thread fdtbl
                     thread.lock().fdTbl = currTask.fdTbl.clone();
+                    let mm = thread.lock().memoryMgr.clone();
                     thread.lock().memoryMgr = currTask.mm.clone();
-                    // drop _fdtbl
                     CPULocal::SetPendingFreeStack(currTask.taskId);
-                    //PerfGofrom(PerfType::KernelHandling);
-                    error!("RunExitDone 2 [{:x}] ...", currTask.taskId);
-                    //self::taskMgr::Wait();
+                    error!("RunExitDone xxx 3 [{:x}] ...", currTask.taskId);
+
+                    // mm needs to be clean as last function before SwitchToNewTask
+                    // after this is called, another vcpu might drop the pagetable
+                    core::mem::drop(mm);
                 }
 
                 self::taskMgr::SwitchToNewTask();

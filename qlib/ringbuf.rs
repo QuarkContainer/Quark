@@ -143,9 +143,9 @@ impl <T> SpMcRing <T> {
     }
 }
 
-pub struct QRingBuf<T>(Mutex<VecDeque<T>>);
+pub struct QRingBuf<T:Clone + Copy>(Mutex<VecDeque<T>>);
 
-impl <T> Deref for QRingBuf <T> {
+impl <T:Clone + Copy> Deref for QRingBuf <T> {
     type Target = Mutex<VecDeque<T>>;
 
     fn deref(&self) -> &Mutex<VecDeque<T>> {
@@ -153,34 +153,34 @@ impl <T> Deref for QRingBuf <T> {
     }
 }
 
-impl <T> QRingBuf <T> {
+impl <T:Clone + Copy> QRingBuf <T> {
     pub fn New(size: usize) -> Self {
         return Self(Mutex::new(VecDeque::with_capacity(size)))
     }
 
-    pub fn Push(&self, data: T) -> Result<()> {
+    pub fn Push(&self, data: &T) -> Result<()> {
         let mut p = self.lock();
 
         if p.len() == p.capacity() {
             return Err(Error::QueueFull);
         }
 
-        p.push_back(data);
+        p.push_back(*data);
         return Ok(());
     }
 
-    pub fn TryPush(&self, data: T) -> Option<T> {
+    pub fn TryPush(&self, data: &T) -> Result<()> {
         let mut p = match self.try_lock() {
-            None => return Some(data),
+            None => return Err(Error::NoData),
             Some(p) => p
         };
 
         if p.len() == p.capacity() {
-            return Some(data);
+            return Err(Error::QueueFull);
         }
 
-        p.push_back(data);
-        return None;
+        p.push_back(*data);
+        return Ok(());
     }
 
     pub fn Pop(&self) -> Option<T> {
