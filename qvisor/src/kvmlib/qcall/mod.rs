@@ -57,8 +57,8 @@ pub fn AQHostCall(msg: HostOutputMsg, shareSpace: &ShareSpace) {
         HostOutputMsg::PrintStr(msg) => {
             let ptr = msg.addr as *const u8;
             let slice = unsafe { slice::from_raw_parts(ptr, msg.len) };
-            info!("{}", str::from_utf8(slice).expect("PrintStr hanlding fail"));
-            shareSpace.AQHostInputCall(HostInputMsg::PrintStrResp(PrintStrResp{
+            info!("{}", str::from_utf8(slice).expect("PrintStr handling fail"));
+            shareSpace.AQHostInputCall(&HostInputMsg::PrintStrResp(PrintStrResp{
                 addr: msg.addr,
                 len: msg.len,
             }));
@@ -71,13 +71,13 @@ pub fn AQHostCall(msg: HostOutputMsg, shareSpace: &ShareSpace) {
 }
 
 impl<'a> ShareSpace {
-    pub fn AQHostInputCall(&self, item: HostInputMsg) {
+    pub fn AQHostInputCall(&self, item: &HostInputMsg) {
         loop {
             if self.QInput.IsFull() {
                 continue;
             }
 
-            self.QInput.Push(item).unwrap();
+            self.QInput.Push(&item).unwrap();
             break;
         }
         //SyncMgr::WakeVcpu(self, TaskIdQ::default());
