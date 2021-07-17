@@ -340,8 +340,17 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
+    pub fn Close(fd: i32) -> i64 {
+        let mut msg = Msg::Close(qcall::Close {
+            fd
+        });
+
+        return HostSpace::HCall(&mut msg) as i64;
+
+    }
+
     pub fn AsyncClose(fd: i32) {
-        Self::AQCall(&qmsg::HostOutputMsg::Close(qmsg::Close {
+        Self::AQCall(&qmsg::HostOutputMsg::Close(qmsg::output::Close {
             fd: fd,
         }));
     }

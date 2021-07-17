@@ -56,6 +56,7 @@ pub enum Msg {
     Fcntl(Fcntl),
     NanoSleep(NanoSleep),
     Time(Time),
+    Close(Close),
 
     Getxattr(Getxattr),
     Lgetxattr(Lgetxattr),
@@ -426,6 +427,11 @@ pub struct NanoSleep {
 #[derive(Clone, Default, Debug)]
 pub struct Time {
     pub tloc: u64,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct Close {
+    pub fd: i32,
 }
 
 #[derive(Clone, Default, Debug)]

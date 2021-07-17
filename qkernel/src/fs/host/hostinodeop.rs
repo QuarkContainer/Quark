@@ -184,7 +184,7 @@ impl Drop for HostInodeOpIntern {
         }
 
         RemoveFD(self.HostFd);
-        AsyncClose(self.HostFd);
+        HostSpace::Close(self.HostFd);
     }
 }
 

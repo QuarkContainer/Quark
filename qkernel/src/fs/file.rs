@@ -14,6 +14,7 @@
 
 use alloc::sync::Arc;
 use alloc::sync::Weak;
+use alloc::vec::Vec;
 use spin::Mutex;
 use alloc::string::String;
 use alloc::string::ToString;
@@ -29,7 +30,7 @@ use super::super::qlib::auth::*;
 use super::super::qlib::range::*;
 use super::super::kernel::waiter::*;
 use super::super::qlib::linux_def::*;
-use super::super::socket::unix::transport::unix::*;
+//use super::super::socket::unix::transport::unix::*;
 use super::super::task::*;
 use super::super::memmgr::*;
 use super::super::fs::flags::*;
@@ -134,7 +135,7 @@ pub trait SockOperations: Sync + Send {
 
     //return (receive bytes, msgFlags, (senderAddr, senderAddrLen), controlMessages)
     fn RecvMsg(&self, _task: &Task, _dst: &mut [IoVec], _flags: i32, _deadline: Option<Time>, _senderRequested: bool, _controlDataLen: usize)
-        -> Result<(i64, i32, Option<(SockAddr, usize)>, SCMControlMessages)> {
+        -> Result<(i64, i32, Option<(SockAddr, usize)>, Vec<u8>)> {
         return Err(Error::SysError(SysErr::ENOTSOCK))
     }
 

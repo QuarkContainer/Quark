@@ -141,6 +141,57 @@ impl UnixSocketOperations {
             task.blocker.BlockGeneral()?;
         }
     }
+
+    fn encodeControlMsg(&self, task: &Task, mut ctrls: SCMControlMessages, controlDataLen: usize, mflags: &mut i32, cloexec: bool) -> Vec<u8> {
+        // fill this with logic currently in sys_socket.....
+        let mut controlVec: Vec<u8> = vec![0; controlDataLen];
+        let controlData = &mut controlVec[..];
+
+        let mut opt = SockOpt::PasscredOption(0);
+        
+        let controlData = if let Ok(_) = self.ep.GetSockOpt(&mut opt) {
+            match opt {
+                SockOpt::PasscredOption(0) => controlData,
+                _ => match ctrls.Credentials {
+                    // Edge case: user set SO_PASSCRED but the sender didn't set it in control massage
+                    None => {
+                        let (data, flags) = ControlMessageCredentials::Empty().EncodeInto(controlData, *mflags);
+                        *mflags = flags;
+                        data
+                    },
+                    Some(ref creds) => {
+                        let (data, flags) = creds.Credentials().EncodeInto(controlData, *mflags);
+                        *mflags = flags;
+                        data
+                    },
+                }
+            }
+        } else {
+            controlData
+        };
+
+        let controlData = match ctrls.Rights {
+            None => controlData,
+            Some(ref mut rights) => {
+                let maxFDs = (controlData.len() as isize - SIZE_OF_CONTROL_MESSAGE_HEADER as isize) / 4;
+                if maxFDs < 0 {
+                    *mflags |= MsgType::MSG_CTRUNC;
+                    controlData
+                } else {
+                    let (fds, trunc) = rights.RightsFDs(task, cloexec, maxFDs as usize);
+                    if trunc {
+                        *mflags |= MsgType::MSG_CTRUNC;
+                    }
+                    let (controlData, _) = ControlMessageRights(fds).EncodeInto(controlData, *mflags);
+                    controlData
+                }
+            },
+        };
+
+        let new_size = controlDataLen - controlData.len();
+        controlVec.resize(new_size, 0);
+        return controlVec;
+    }
 }
 
 impl Drop for UnixSocketOperations {
@@ -536,11 +587,12 @@ impl SockOperations for UnixSocketOperations {
     }
 
     fn RecvMsg(&self, task: &Task, dsts: &mut [IoVec], flags: i32, deadline: Option<Time>, senderRequested: bool, controlDataLen: usize)
-               -> Result<(i64, i32, Option<(SockAddr, usize)>, SCMControlMessages)>  {
+               -> Result<(i64, i32, Option<(SockAddr, usize)>, Vec<u8>)>  {
         let trunc = flags & MsgType::MSG_TRUNC != 0;
         let peek = flags & MsgType::MSG_PEEK != 0;
         let dontWait = flags & MsgType::MSG_DONTWAIT != 0;
         let waitAll = flags & MsgType::MSG_WAITALL != 0;
+        let cloexec = flags & MsgType::MSG_CMSG_CLOEXEC != 0;
 
         // Calculate the number of FDs for which we have space and if we are
         // requesting credentials.
@@ -569,7 +621,7 @@ impl SockOperations for UnixSocketOperations {
         let mut total = 0;
         let mut sender = None;
         let mut outputctrls = SCMControlMessages::default();
-
+        let mut ControlVec = self.encodeControlMsg(task, outputctrls, controlDataLen, &mut msgFlags, cloexec);
         let mut dsts = BlockSeq::ToBlocks(dsts);
         match self.ep.RecvMsg(&mut dsts, wantCreds, numRights as u64, peek, Some(&mut unixAddr)) {
             Err(Error::SysError(SysErr::EAGAIN)) => {
@@ -581,7 +633,7 @@ impl SockOperations for UnixSocketOperations {
                 if self.IsPacket() {
                     return Err(Error::SysError(SysErr::EAGAIN))
                 }
-                return Ok((total, msgFlags, sender, outputctrls))
+                return Ok((total, msgFlags, sender, ControlVec))
             }
             Err(e) => {
                 return Err(e)
@@ -595,7 +647,7 @@ impl SockOperations for UnixSocketOperations {
                 };
 
                 outputctrls = ctrls;
-
+                ControlVec = self.encodeControlMsg(task, outputctrls, controlDataLen, &mut msgFlags, cloexec);
                 if ctrunc {
                     msgFlags |= MsgType::MSG_CTRUNC;
                 }
@@ -619,7 +671,7 @@ impl SockOperations for UnixSocketOperations {
                         n = ms;
                     }
 
-                    return Ok((n as i64, msgFlags, sender, outputctrls))
+                    return Ok((n as i64, msgFlags, sender, ControlVec))
                 }
 
                 let seq = seq.DropFirst(n as u64);
@@ -637,11 +689,11 @@ impl SockOperations for UnixSocketOperations {
             match self.ep.RecvMsg(&mut dsts, wantCreds, numRights as u64, peek, Some(&mut unixAddr)) {
                 Err(Error::SysError(SysErr::EAGAIN)) => (),
                 Err(Error::ErrClosedForReceive) => {
-                    return Ok((total as i64, msgFlags, sender, outputctrls))
+                    return Ok((total as i64, msgFlags, sender, ControlVec))
                 }
                 Err(e) => {
                     if total > 0 {
-                        return Ok((total as i64, msgFlags, sender, outputctrls))
+                        return Ok((total as i64, msgFlags, sender, ControlVec))
                     }
 
                     return Err(e)
@@ -679,8 +731,8 @@ impl SockOperations for UnixSocketOperations {
                         if self.IsPacket() && n < ms {
                             msgFlags |= MsgType::MSG_TRUNC;
                         }
-
-                        return Ok((total, msgFlags, sender, ctrls))
+                        let ControlVector = self.encodeControlMsg(task, ctrls, controlDataLen, &mut msgFlags, cloexec);
+                        return Ok((total, msgFlags, sender, ControlVector))
                     }
 
                     let seq = seq.DropFirst(n as u64);
@@ -691,7 +743,7 @@ impl SockOperations for UnixSocketOperations {
             match task.blocker.BlockWithMonoTimer(true, deadline) {
                 Err(Error::SysError(SysErr::ETIMEDOUT)) => {
                     if total > 0 {
-                        return Ok((total as i64, msgFlags, sender, outputctrls))
+                        return Ok((total as i64, msgFlags, sender, ControlVec))
                     }
                     return Err(Error::SysError(SysErr::EAGAIN))
                 }
