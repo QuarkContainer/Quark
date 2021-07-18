@@ -32,7 +32,9 @@ pub fn AQHostCall(msg: HostOutputMsg, shareSpace: &ShareSpace) {
         HostOutputMsg::WaitFD(msg) => {
             let ret = super::VMSpace::WaitFD(msg.fd, msg.mask);
             if ret < 0 {
-                panic!("WaitFD fail err is {}", ret);
+                //panic!("WaitFD fail err is {}, fd is {}", ret, msg.fd);
+                // ignore this, when change the Close to HCall, the waitfd is still async call,
+                // there is chance that the WaitFd fired before close
             }
         }
         HostOutputMsg::Close(msg) => {
