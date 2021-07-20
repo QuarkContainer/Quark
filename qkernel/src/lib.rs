@@ -299,7 +299,9 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                     let mm = thread.lock().memoryMgr.clone();
                     thread.lock().memoryMgr = currTask.mm.clone();
                     CPULocal::SetPendingFreeStack(currTask.taskId);
-                    error!("RunExitDone xxx 3 [{:x}] ...", currTask.taskId);
+
+                    error!("RunExitDone xxx 2 [{:x}] ...", currTask.taskId);
+                    KERNEL_PAGETABLE.SwitchTo();
 
                     // mm needs to be clean as last function before SwitchToNewTask
                     // after this is called, another vcpu might drop the pagetable
