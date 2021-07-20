@@ -66,7 +66,8 @@ impl FdNotifierInternal {
         let epollfd = n.epollfd;
         let mut fi = match n.fdMap.get_mut(&fd) {
             None => {
-                panic!("HostFdNotifier::WaitFd can't find fd {}", fd)
+                // panic!("HostFdNotifier::WaitFd can't find fd {}", fd)
+                return Ok(())
             }
             Some(fi) => fi,
         };
