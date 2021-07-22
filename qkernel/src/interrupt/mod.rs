@@ -154,7 +154,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, errorCo
     };
 
     if PRINT_EXECPTION {
-        error!("ExceptionHandler  .... ev is {:?}, sf is {:x?}", ev, sf);
+        error!("ExceptionHandler  .... ev is {:?}, sf is {:x?} errorcode is {:x}", ev, sf, errorCode);
     }
 
     let mut rflags = GetRflags();
