@@ -70,8 +70,8 @@ impl TaskStore {
         return TaskStore {}
     }
 
-    pub fn CreateTask(runFn: TaskFn, para: *const u8) -> TaskId {
-        let t = Task::Create(runFn, para);
+    pub fn CreateTask(runFn: TaskFn, para: *const u8, kernel: bool) -> TaskId {
+        let t = Task::Create(runFn, para, kernel);
         return TaskId::New(t.taskId);
     }
 
@@ -234,7 +234,7 @@ impl Task {
             taskId: 0,
             queueId: 0,
             //mm: MemoryMgr::default(),
-            mm: MemoryManager::Init(),
+            mm: MemoryManager::Init(true),
             tidInfo: Default::default(),
             isWaitThread: false,
             signalStack: Default::default(),
@@ -576,7 +576,7 @@ impl Task {
         return TaskIdQ::New(self.taskId, self.queueId as u64)
     }
 
-    pub fn Create(runFn: TaskFn, para: *const u8) -> &'static mut Self {
+    pub fn Create(runFn: TaskFn, para: *const u8, kernel: bool) -> &'static mut Self {
         //let s_ptr = pa.Alloc(DEFAULT_STACK_PAGES).unwrap() as *mut u8;
         let s_ptr = KERNEL_STACK_ALLOCATOR.Allocate().unwrap() as *mut u8;
 
@@ -601,7 +601,7 @@ impl Task {
                 context: ctx,
                 taskId: s_ptr as u64,
                 queueId: 0,
-                mm: MemoryManager::Init(),
+                mm: MemoryManager::Init(kernel),
                 tidInfo: Default::default(),
                 isWaitThread: false,
                 signalStack: Default::default(),
@@ -713,7 +713,8 @@ impl Task {
                 context: Context::New(),
                 taskId: baseStackAddr,
                 queueId: 0,
-                mm: MemoryManager::Init(), //mm: dummyTask.mm.clone(),
+                //mm: MemoryManager::Init(), //
+                mm: dummyTask.mm.clone(),
                 tidInfo: Default::default(),
                 isWaitThread: true,
                 signalStack: Default::default(),

@@ -399,10 +399,10 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
         error!("heap start is {:x}/{:x}", heapStart, heapStart + heapLen);
 
         if autoStart {
-            CreateTask(StartRootContainer, ptr::null());
+            CreateTask(StartRootContainer, ptr::null(), false);
         }
 
-        CreateTask(ControllerProcess, ptr::null());
+        CreateTask(ControllerProcess, ptr::null(), true);
     }
 
     WaitFn();
@@ -441,7 +441,7 @@ fn ControllerProcess(_para: *const u8) {
 }
 
 pub fn StartRootProcess() {
-    CreateTask(StartRootContainer, ptr::null());
+    CreateTask(StartRootContainer, ptr::null(), false);
 }
 
 fn StartRootContainer(_para: *const u8) {

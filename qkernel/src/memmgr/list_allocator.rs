@@ -286,12 +286,15 @@ impl MemList {
     }
 
     pub fn Push(&mut self, addr: u64) {
+        if addr % 8 != 0 {
+            super::super::Kernel::HostSpace::KernelMsg(101, addr);
+        }
         assert!(addr % 8 == 0);
         let newB = self.next;
 
         let ptr = addr as * mut MemBlock;
         unsafe {
-            ptr.write(newB)
+            *ptr = newB;
         }
         self.next = addr;
     }
@@ -307,6 +310,10 @@ impl MemList {
         };
 
         self.next = *ptr;
+
+        if next % 8 != 0 {
+            super::super::Kernel::HostSpace::KernelMsg(100, next);
+        }
         assert!(next % 8 == 0);
         return next;
     }

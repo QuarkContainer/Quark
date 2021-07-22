@@ -174,7 +174,7 @@ impl MemoryManagerWeak{
 }
 
 impl MemoryManager {
-    pub fn Init() -> Self {
+    pub fn Init(kernel: bool) -> Self {
         let mut vmas = AreaSet::New(0, !0);
         let vma = VMA {
             mappable: None,
@@ -213,7 +213,12 @@ impl MemoryManager {
             dumpability: NOT_DUMPABLE,
         };
 
-        let pt = KERNEL_PAGETABLE.Fork(&*PAGE_MGR).unwrap();
+        let pt = if kernel {
+            KERNEL_PAGETABLE.Clone()
+        } else {
+            KERNEL_PAGETABLE.Fork(&*PAGE_MGR).unwrap()
+        };
+
         let pagetable = MMPagetable {
             pt: pt,
             sharedLoadsOffset: MemoryDef::SHARED_START,

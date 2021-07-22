@@ -53,7 +53,7 @@ pub struct PagePool {
 
 impl PagePool {
     pub fn PrintRefs(&self) {
-        error!("PagePool left is {:x?}", self.refs);
+        error!("PagePool left is {:#x?}", self.refs);
     }
 
     pub fn Ref(&mut self, addr: u64) -> Result<u64> {
@@ -79,6 +79,7 @@ impl PagePool {
                 return Ok(1)
             }
             Some(v) => {
+                assert!(*v >= 1, "deref fail: addresss is {:x}", addr);
                 *v -= 1;
                 *v
             }

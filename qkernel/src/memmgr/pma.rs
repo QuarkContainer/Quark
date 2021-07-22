@@ -202,6 +202,17 @@ impl Drop for FreePageTables {
 
 impl Drop for PageTables {
     fn drop(&mut self) {
+        // it will happen when execv
+        if self.GetRoot() == 0 {
+            return;
+        }
+
+        if CurrentCr3() != self.GetRoot() {
+            error!("clean pagetable in execv root is {:x}", self.GetRoot());
+            self.Drop();
+            return;
+        }
+
         let addr = self.SwapZero();
         if addr == 0 {
             return;
