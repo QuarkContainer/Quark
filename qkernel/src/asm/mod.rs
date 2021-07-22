@@ -52,7 +52,7 @@ pub fn GetVcpuId() -> usize {
 pub fn HyperCall64(type_: u16, para1: u64, para2: u64) {
     unsafe {
         let data: u8 = 0;
-        llvm_asm!("out $1, $0":: "{dx}"(type_), "{al}"(data), "{rbx}"(para1), "{rcx}"(para2))
+        llvm_asm!("out $1, $0":: "{dx}"(type_), "{al}"(data), "{rbx}"(para1), "{rcx}"(para2): "memory" : "volatile" )
     }
 }
 
@@ -67,13 +67,13 @@ pub fn Hlt() {
 
 #[inline]
 pub fn LoadCr3(cr3: u64) {
-    unsafe { llvm_asm!("mov $0, %cr3" : : "r" (cr3) ) };
+    unsafe { llvm_asm!("mov $0, %cr3" : : "r" (cr3) : "memory" : "volatile" ) };
 }
 
 #[inline]
 pub fn CurrentCr3() -> u64 {
     let cr3: u64;
-    unsafe { llvm_asm!("mov %cr3, $0" : "=r" (cr3) ) };
+    unsafe { llvm_asm!("mov %cr3, $0" : "=r" (cr3) : : "memory" : "volatile" ) };
     return cr3;
 }
 
@@ -112,8 +112,8 @@ pub fn EnterUser(entry: u64, userStackAddr: u64, kernelStackAddr: u64) {
               "
               :
               : "{rdi}"(entry), "{rsi}"(userStackAddr), "{rdx}"(kernelStackAddr)
-              :
-              : "intel");
+              : "memory"
+              : "intel", "volatile");
         ::core::intrinsics::unreachable();
     }
 }
@@ -486,7 +486,7 @@ pub fn SyscallEnter() -> ! {
               "
               :
               :
-              :: "intel");
+              : "memory" : "intel", "volatile");
         ::core::intrinsics::unreachable();
     }
 }
@@ -527,7 +527,7 @@ pub fn SyscallRet(kernelRsp: u64) -> ! {
               "
               :
               : "{rsp}"(kernelRsp)
-              :: "intel");
+              : "memory" : "intel", "volatile");
         ::core::intrinsics::unreachable();
     }
 }
@@ -561,7 +561,7 @@ pub fn IRet(kernelRsp: u64) -> ! {
               "
               :
               : "{rsp}"(kernelRsp)
-              :: "intel");
+              : "memory" : "intel", "volatile");
         ::core::intrinsics::unreachable();
     }
 }
@@ -606,7 +606,7 @@ pub fn child_clone(userSp: u64) {
             sysret
         ":
              : "{rdi}"(userSp), "{rax}"(negtive1), "{rdx}"(negtive1)
-             :: "intel", "volatile");
+             : "memory" : "intel", "volatile");
     }
 }
 
@@ -656,14 +656,14 @@ pub fn SigReturnAsm(rsp: u64) {
             call syscall_handler
         ":
              : "{rsp}"(rsp)
-             :: "intel", "volatile");
+             : "memory" : "intel", "volatile");
     }
 }
 
 #[inline]
 pub fn GetRsp() -> u64 {
     let rsp: u64;
-    unsafe { llvm_asm!("mov %rsp, $0" : "=r" (rsp) ) };
+    unsafe { llvm_asm!("mov %rsp, $0" : "=r" (rsp) : : "memory" : "volatile" ) };
     return rsp;
 }
 
@@ -781,7 +781,7 @@ pub fn Rdtsc() -> i64 {
         lfence
         rdtsc
         " : "={rax}"(rax), "={rdx}"(rdx)
-        : : )
+        : : "memory" : "volatile")
     };
 
     return rax as i64 | ((rdx as i64) << 32);
@@ -794,7 +794,7 @@ pub fn GetCpu() -> u32 {
         llvm_asm!("\
         rdtscp
         " : "={rcx}"(rcx)
-        : : )
+        : :  "memory" : "volatile")
     };
 
     return (rcx & 0xfff) as u32;
@@ -808,7 +808,7 @@ pub fn GetRflags() -> u64 {
             pushfq                  # push eflags into stack
             pop rax                 # pop it into rax
         " : "={rax}"(rax)
-        : : : "intel", "volatile")
+        : : "memory" : "intel", "volatile")
     };
 
     return rax;
@@ -821,7 +821,7 @@ pub fn SetRflags(val: u64) {
             push rax
             popfq
         " : : "{rax}"(val)
-        : : "intel", "volatile")
+        : "memory" : "intel", "volatile")
     };
 }
 
@@ -836,7 +836,7 @@ pub fn xsaveopt(addr: u64) {
         llvm_asm!("\
             xsaveopt [rdi + 0]
         " : : "{rdi}"(addr), "{rax}"(negtive1), "{rdx}"(negtive1)
-        : : "intel", "volatile")
+        : "memory" : "intel", "volatile")
     };
 }
 
@@ -846,7 +846,7 @@ pub fn fxsave(addr: u64) {
         llvm_asm!("\
             fxsave64 [rbx + 0]
         " : : "{rbx}"(addr), "{rax}"(negtive1), "{rdx}"(negtive1)
-        : : "intel", "volatile")
+        : "memory" : "intel", "volatile")
     };
 }
 
@@ -860,6 +860,6 @@ pub fn fxrstor(addr: u64) {
         llvm_asm!("\
             fxrstor64 [rbx + 0]
         " : : "{rbx}"(addr), "{rax}"(negtive1), "{rdx}"(negtive1)
-        : : "intel", "volatile")
+        : "memory" : "intel", "volatile")
     };
 }
