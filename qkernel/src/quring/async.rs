@@ -70,8 +70,8 @@ impl AsyncOps {
         panic!("AsyncOps::None SEntry fail")
     }
 
-    pub fn Process(mut self, result: i32) {
-        let ret = match &mut self {
+    pub fn Process(&mut self, result: i32, id: usize) -> bool {
+        let ret = match self {
             AsyncOps::AsyncTimeout(ref mut msg) => msg.Process(result),
             AsyncOps::AsyncTimerRemove(ref mut msg) => msg.Process(result),
             AsyncOps::AsyncTTTYWrite(ref mut msg) => msg.Process(result),
@@ -88,8 +88,10 @@ impl AsyncOps {
         };
 
         if ret {
-            IOURING.AUCall(self);
+            IOURING.AUCallDirect(self, id);
         }
+
+        return ret;
     }
 
     pub fn Type(&self) -> usize {
@@ -115,8 +117,8 @@ impl AsyncOps {
 
 #[derive(Default)]
 pub struct UringAsyncMgr {
-    pub ops: Vec<Option<AsyncOps>>,
-    pub ids: VecDeque<u16>,
+    pub ops: Vec<Mutex<AsyncOps>>,
+    pub ids: Mutex<VecDeque<u16>>,
 }
 
 unsafe impl Sync for UringAsyncMgr {}
@@ -128,46 +130,39 @@ impl UringAsyncMgr {
         let mut ops = Vec::with_capacity(size);
         for i in 0..size {
             ids.push_back(i as u16);
-            ops.push(None);
+            ops.push(Mutex::new(AsyncOps::None));
         }
         return Self {
             ops: ops,
-            ids: ids,
+            ids: Mutex::new(ids),
         }
     }
 
     pub fn Print(&self) {
         let mut vec = Vec::new();
         for op in &self.ops {
-            match op {
-                None => (),
-                Some(ref v) => {
-                    vec.push(v.Type());
-                }
-            }
+            vec.push(op.lock().Type());
         }
         error!("UringAsyncMgr Print {:?}", vec);
     }
 
-    pub fn AllocSlot(&mut self) -> Option<usize> {
-        match self.ids.pop_front() {
+    pub fn AllocSlot(&self) -> Option<usize> {
+        match self.ids.lock().pop_front() {
             None => None,
             Some(id) => Some(id as usize),
         }
     }
 
-    pub fn SetOps(&mut self, id : usize, ops: AsyncOps) -> squeue::Entry {
-        self.ops[id] = Some(ops);
-        return self.ops[id]
-            .as_ref().unwrap()
-            .SEntry()
-            .user_data(id as u64);
+    pub fn FreeSlot(&self, id: usize) {
+        self.ids.lock().push_back(id as u16);
     }
 
-    pub fn GetOps(&mut self, id: usize) -> AsyncOps {
-        let ops = self.ops[id].take().expect("UringAsyncMgr::GetOps fail");
-        self.ids.push_back(id as u16);
-        return ops;
+    pub fn SetOps(&self, id : usize, ops: AsyncOps) -> squeue::Entry {
+        *self.ops[id].lock() = ops;
+        return self.ops[id]
+            .lock()
+            .SEntry()
+            .user_data(id as u64);
     }
 }
 
