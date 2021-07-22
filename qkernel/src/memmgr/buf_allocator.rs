@@ -26,6 +26,7 @@ use super::super::qlib::common::*;
 pub const BUF_CNT: usize = 16;
 pub const CLASS_CNT : usize = 32;
 pub const ENABLE_BUF : bool = true;
+pub const ORDER : usize = 30;
 
 pub struct SliceStack128  {
     pub arr: [u64; 128],
@@ -257,7 +258,7 @@ pub struct StackHeapInternal {
     pub buf12   : SliceStack128,
     pub buf13   : SliceStack16,
 
-    pub heap    : Heap,
+    pub heap    : Heap<ORDER>,
     pub count   : i64,
     pub hit     : i64,
     pub time    : i64,
@@ -485,7 +486,7 @@ pub struct BufHeapInternal {
     pub bufs: [[u64; BUF_CNT]; CLASS_CNT],
     pub tops: [usize; CLASS_CNT],
     pub times: [(u64, u64, u64); CLASS_CNT], // (consume cycles, access count, cache hit)
-    pub heap: Heap,
+    pub heap: Heap<ORDER>,
 }
 
 pub struct BufHeap(Mutex<BufHeapInternal>);
