@@ -138,7 +138,7 @@ impl Completion {
 pub struct QUring {
     pub submission: Mutex<Submission>,
     pub completion: Mutex<Completion>,
-    pub asyncMgr: Mutex<UringAsyncMgr>
+    pub asyncMgr: UringAsyncMgr
 }
 
 impl QUring {
@@ -146,7 +146,7 @@ impl QUring {
         let mut ret = QUring {
             submission: Default::default(),
             completion: Default::default(),
-            asyncMgr: Mutex::new(UringAsyncMgr::New(size))
+            asyncMgr: UringAsyncMgr::New(size)
         };
 
         super::super::Kernel::HostSpace::IoUringSetup(
@@ -298,9 +298,12 @@ impl QUring {
             ScheduleQ(call.taskId);
         } else {
             let idx = data as usize;
-            let ops = self.asyncMgr.lock().GetOps(idx);
             //error!("uring process: async is {:?}", &ops.Type());
-            ops.Process(ret);
+            let rerun = self.asyncMgr.ops[idx].lock().Process(ret, idx);
+            if !rerun {
+                *self.asyncMgr.ops[idx].lock() = AsyncOps::None;
+                self.asyncMgr.FreeSlot(idx);
+            }
             //error!("uring process 2");
         }
     }
@@ -321,13 +324,31 @@ impl QUring {
         return call.ret as i64;
     }
 
+    pub fn AUCallDirect(&self, ops: &AsyncOps, id: usize) {
+        let mut entry = ops.SEntry().user_data(id as u64);
+        loop {
+            loop {
+                if !self.submission.lock().IsFull() {
+                    break;
+                }
+
+                error!("AUCall submission full...");
+            }
+
+            entry = match self.AUringCall(entry) {
+                None => return,
+                Some(e) => e
+            }
+        }
+    }
+
     pub fn AUCall(&self, ops: AsyncOps) -> usize {
         let id;
 
         loop {
-            match self.asyncMgr.lock().AllocSlot() {
+            match self.asyncMgr.AllocSlot() {
                 None => {
-                    self.asyncMgr.lock().Print();
+                    self.asyncMgr.Print();
                     error!("AUCall async slots usage up...");
                 },
                 Some(idx) => {
@@ -337,7 +358,7 @@ impl QUring {
             }
         }
 
-        let mut entry = self.asyncMgr.lock().SetOps(id, ops);
+        let mut entry = self.asyncMgr.SetOps(id, ops);
         loop {
             loop {
                 if !self.submission.lock().IsFull() {
