@@ -30,11 +30,14 @@ impl SocketBufIovs {
         return (&self.iovs[0] as * const _ as u64, self.cnt)
     }
 }
+/// ByteStream serves as a buffer for socket operations, backed by a fixed size byte slice. 
+/// 
+///
 
 pub struct ByteStream {
     pub buf: &'static mut [u8],
+    /// size of data available to consume by consumer
     pub available: usize,
-    //available data
     pub readpos: usize,
     pub dataIovs: SocketBufIovs,
     pub spaceiovs: SocketBufIovs,
@@ -286,6 +289,7 @@ impl ByteStream {
         return trigger
     }
 
+    /// return: write user buffer to socket bytestream and determine whether to trigger async socket ops
     pub fn write(&mut self, buf: &[u8]) -> Result<(bool, usize)> {
         let empty = self.available == 0;
         let writePos = (self.readpos + self.available) % self.buf.len();

@@ -23,6 +23,8 @@ use core::ptr;
 use core::ops::Deref;
 use spin::Mutex;
 
+use crate::socket::control::ControlMessage;
+
 //use super::super::*;
 use super::super::super::guestfdnotifier::*;
 use super::super::socket::*;
@@ -50,6 +52,7 @@ use super::super::super::tcpip::tcpip::*;
 use super::super::super::SHARESPACE;
 use super::socket_buf::*;
 use super::super::super::qlib::linux::time::Timeval;
+use super::super::control::ControlMessageTCPInq;
 
 fn newSocketFile(task: &Task, family: i32, fd: i32, stype: i32, nonblock: bool, enableBuf: bool, addr: Option<Vec<u8>>) -> Result<File> {
     let dirent = NewSocketDirent(task, SOCKET_DEVICE.clone(), fd)?;
@@ -74,6 +77,7 @@ pub struct SocketOperationsIntern {
     pub remoteAddr: Mutex<Option<SockAddr>>,
     pub socketBuf: Mutex<Option<Arc<SocketBuff>>>,
     pub enableSocketBuf: AtomicBool,
+    passInq: AtomicBool,
 }
 
 #[derive(Clone)]
@@ -104,6 +108,7 @@ impl SocketOperations {
             remoteAddr: Mutex::new(addr),
             socketBuf: Mutex::new(None),
             enableSocketBuf: AtomicBool::new(false),
+            passInq: AtomicBool::new(false)
         };
 
         let ret = Self(Arc::new(ret));
@@ -114,6 +119,26 @@ impl SocketOperations {
 
        //AddFD(fd, &ret.queue);
         return Ok(ret)
+    }
+
+    fn prepareControlMessage(&self, controlDataLen: usize) -> (i32, Vec<u8>) {
+        // shortcut for no controldata wanted
+        if controlDataLen == 0 {
+            return (0, Vec::new())
+        }
+
+
+        let mut controlData: Vec<u8> = vec![0; controlDataLen];
+        if self.passInq.load(Ordering::Relaxed) {
+            let inqMessage = ControlMessageTCPInq {
+                Size: self.SocketBuf().readBuf.lock().available as u32};
+                let (remaining, updated_flags) = inqMessage.EncodeInto(&mut controlData[..], 0);
+                let remainSize = remaining.len();
+                controlData.resize(controlDataLen - remainSize, 0);
+                return (updated_flags, controlData)
+        } else {
+            return (0, Vec::new())
+        }
     }
 
     pub fn SocketBufEnabled(&self) -> bool {
@@ -329,13 +354,29 @@ impl FileOperations for SocketOperations {
 
                 return Ok(())
             }
+            LibcConst::TIOCINQ => {
+                if self.SocketBufEnabled() {
+                    let v: &mut i32 = task.GetTypeMut(val)?;
+
+                    *v =  self.SocketBuf().readBuf.lock().available as i32;
+                    return Ok(())
+                } else {
+                    let tmp: i32 = 0;
+                    let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64);
+                    if res < 0 {
+                        return Err(Error::SysError(-res as i32))
+                    }
+                    let v: &mut i32 = task.GetTypeMut(val)?;
+                    *v = tmp;
+                    return Ok(())
+                }
+            }
             _ => {
                 let tmp: i32 = 0;
                 let res = Kernel::HostSpace::IoCtl(self.fd, request, &tmp as *const _ as u64);
                 if res < 0 {
                     return Err(Error::SysError(-res as i32))
                 }
-
                 let v: &mut i32 = task.GetTypeMut(val)?;
                 *v = tmp;
                 return Ok(())
@@ -592,6 +633,7 @@ impl SockOperations for SocketOperations {
     }
 
     fn SetSockOpt(&self, task: &Task, level: i32, name: i32, opt: &[u8]) -> Result<i64> {
+        
         /*let optlen = match level as u64 {
             LibcConst::SOL_IPV6 => {
                 match name as u64 {
@@ -639,6 +681,19 @@ impl SockOperations for SocketOperations {
                 }
             }
 
+        // TCP_INQ is bound to buffer implementation
+        if (level as u64) == LibcConst::SOL_TCP &&
+            (name as u64) == LibcConst::TCP_INQ {
+                let val = unsafe {
+                    *(&opt[0] as * const _ as u64 as * const i32)
+                };
+                if val == 1 {
+                    self.passInq.store(true, Ordering::Relaxed);
+                } else {
+                    self.passInq.store(false, Ordering::Relaxed);
+                }
+        }
+
         let optLen = opt.len();
         let res = if optLen == 0 {
             Kernel::HostSpace::SetSockOpt(self.fd, level, name, ptr::null::<u8>() as u64, optLen as u32)
@@ -678,22 +733,23 @@ impl SockOperations for SocketOperations {
         -> Result<(i64, i32, Option<(SockAddr, usize)>, Vec<u8>)>  {
 
         if self.SocketBufEnabled() {
+            /*
             if controlDataLen != 0 {
                 panic!("Hostnet RecvMsg Socketbuf doesn't support control data");
             }
-
+            */
             let len = Iovs(dsts).Count();
             let mut count = 0;
             let mut dsts = dsts;
             let mut tmp;
             let mut res = 0;
-
             loop {
                 match IOURING.BufSockRead(task, self, dsts) {
                     Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
                         if flags & MsgType::MSG_DONTWAIT != 0 {
                             if count > 0 {
-                                return Ok((count as i64, 0, None, Vec::new()))
+                                let (retFlags, controlData) = self.prepareControlMessage(controlDataLen); 
+                                return Ok((count as i64, retFlags, None, controlData))
                             }
                             return Err(Error::SysError(SysErr::EWOULDBLOCK))
                         }
@@ -702,18 +758,21 @@ impl SockOperations for SocketOperations {
                     }
                     Err(e) => {
                         if count > 0 {
-                            return Ok((count as i64, 0, None, Vec::new()))
+                            let (retFlags, controlData) = self.prepareControlMessage(controlDataLen); 
+                            return Ok((count as i64, retFlags, None, controlData))
                         }
                         return Err(e)
                     },
                     Ok(n) => {
                         if n == 0 {
-                            return Ok((count, 0, None, Vec::new()))
+                            let (retFlags, controlData) = self.prepareControlMessage(controlDataLen); 
+                            return Ok((count, retFlags, None, controlData))
                         }
 
                         count += n;
                         if count == len as i64 {
-                            return Ok((count as i64, 0, None, Vec::new()))
+                            let (retFlags, controlData) = self.prepareControlMessage(controlDataLen); 
+                            return Ok((count as i64, retFlags, None, controlData))
                         }
 
                         tmp = Iovs(dsts).DropFirst(n as usize);
@@ -781,7 +840,8 @@ impl SockOperations for SocketOperations {
                 None
             };
 
-            return Ok((res as i64, 0, senderAddr, Vec::new()))
+            let (retFlags, controlData) = self.prepareControlMessage(controlDataLen);
+            return Ok((res as i64, retFlags, senderAddr, controlData))
         }
 
         //todo: we don't support MSG_ERRQUEUE

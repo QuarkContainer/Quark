@@ -1791,6 +1791,7 @@ impl LibcConst {
     pub const TCP_QUICKACK: u64 = 0xc;
     pub const TCP_SYNCNT: u64 = 0x7;
     pub const TCP_WINDOW_CLAMP: u64 = 0xa;
+    pub const TCP_INQ:u64 = 0x24;
     pub const TIOCCBRK: u64 = 0x5428;
     pub const TIOCCONS: u64 = 0x541d;
     pub const TIOCEXCL: u64 = 0x540c;
