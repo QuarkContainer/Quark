@@ -102,7 +102,7 @@ pub fn Run() -> Result<()> {
 
         *MSG.lock() = Some(msg);
 
-        taskMgr::CreateTask(ControlMsgHandler, ptr::null());
+        taskMgr::CreateTask(ControlMsgHandler, ptr::null(), false);
     }
 }
 

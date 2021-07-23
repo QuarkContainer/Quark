@@ -43,6 +43,12 @@ impl PageTables {
         })
     }
 
+    pub fn Clone(&self) -> Self {
+        return Self {
+            root: AtomicU64::new(self.GetRoot())
+        }
+    }
+
     pub fn Init(root: u64) -> Self {
         return Self {
             root: AtomicU64::new(root)

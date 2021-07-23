@@ -46,8 +46,8 @@ pub fn Current() -> TaskId {
     return TaskId::New(CPULocal::CurrentTask());
 }
 
-pub fn CreateTask(runFn: TaskFn, para: *const u8) {
-    let taskId = { TaskStore::CreateTask(runFn, para) };
+pub fn CreateTask(runFn: TaskFn, para: *const u8, kernel: bool) {
+    let taskId = { TaskStore::CreateTask(runFn, para, kernel) };
     SHARESPACE.scheduler.NewTask(taskId);
 }
 

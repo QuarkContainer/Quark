@@ -142,7 +142,7 @@ impl IOMgr {
     pub fn GetFdByHost(&self, hostfd: i32) -> Option<i32> {
         match self.fdTbl.Get(hostfd) {
             None => {
-                self.Print();
+                //self.Print();
                 None
             }
             Some(fdInfo) => Some(fdInfo.lock().osfd),

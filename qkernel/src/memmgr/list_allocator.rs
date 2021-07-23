@@ -26,10 +26,11 @@ pub const CLASS_CNT : usize = 14;
 pub const FREE_THRESHOLD: usize = 30; // when free size less than 30%, need to free buffer
 pub const BUFF_THRESHOLD: usize = 50; // when buff size takes more than 50% of free size, needs to free
 pub const FREE_BATCH: usize = 10; // free 10 blocks each time.
+pub const ORDER : usize = 30;
 
 pub struct ListAllocator {
     pub bufs: [Mutex<FreeMemBlockMgr>; CLASS_CNT],
-    pub heap: Mutex<Heap>,
+    pub heap: Mutex<Heap<ORDER>>,
     pub total: AtomicUsize,
     pub free: AtomicUsize,
     pub bufSize: AtomicUsize,
@@ -199,7 +200,7 @@ impl FreeMemBlockMgr {
 
 
     // ret: (data, whether it is from list)
-    pub fn Alloc(&mut self, heap: &Mutex<Heap>) -> (*mut u8, bool) {
+    pub fn Alloc(&mut self, heap: &Mutex<Heap<ORDER>>) -> (*mut u8, bool) {
         if self.count > 0 {
             self.count -= 1;
             let ret = self.list.Pop();
@@ -234,7 +235,7 @@ impl FreeMemBlockMgr {
         }
     }
 
-    pub fn Dealloc(&mut self, ptr: *mut u8, _heap: &Mutex<Heap>) {
+    pub fn Dealloc(&mut self, ptr: *mut u8, _heap: &Mutex<Heap<ORDER>>) {
         /*let size = self.size / 8;
         unsafe {
             let toArr = slice::from_raw_parts(ptr as *mut u64, size);
@@ -247,7 +248,7 @@ impl FreeMemBlockMgr {
         self.list.Push(ptr as u64);
     }
 
-    fn Free(&mut self, heap: &Mutex<Heap>) {
+    fn Free(&mut self, heap: &Mutex<Heap<ORDER>>) {
         assert!(self.count > 0);
         self.count -= 1;
         let addr = self.list.Pop();
@@ -257,7 +258,7 @@ impl FreeMemBlockMgr {
         }
     }
 
-    pub fn FreeMultiple(&mut self, heap: &Mutex<Heap>, count: usize) -> usize {
+    pub fn FreeMultiple(&mut self, heap: &Mutex<Heap<ORDER>>, count: usize) -> usize {
         for i in 0..count {
             if self.count <= self.capacity {
                 return i;
@@ -286,12 +287,15 @@ impl MemList {
     }
 
     pub fn Push(&mut self, addr: u64) {
+        if addr % 8 != 0 {
+            super::super::Kernel::HostSpace::KernelMsg(101, addr);
+        }
         assert!(addr % 8 == 0);
         let newB = self.next;
 
         let ptr = addr as * mut MemBlock;
         unsafe {
-            ptr.write(newB)
+            *ptr = newB;
         }
         self.next = addr;
     }
@@ -307,6 +311,10 @@ impl MemList {
         };
 
         self.next = *ptr;
+
+        if next % 8 != 0 {
+            super::super::Kernel::HostSpace::KernelMsg(100, next);
+        }
         assert!(next % 8 == 0);
         return next;
     }
