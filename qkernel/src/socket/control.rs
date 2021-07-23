@@ -175,6 +175,7 @@ pub fn PadBytes<'a> (len: usize, dst: &'a mut [u8]) -> &'a mut [u8] {
 pub const SCM_RIGHTS      : i32 = 0x1;
 pub const SCM_CREDENTIALS : i32 = 0x2;
 pub const SCM_TIMESTAMP   : i32 = SO_TIMESTAMP;
+pub const SCM_TCP_INQ     : i32 = 0x24; // /* Notify bytes available to read as a cmsg on read */
 
 // A ControlMessageHeader is the header for a socket control message.
 //
@@ -190,6 +191,67 @@ pub struct ControlMessageHeader {
 // SizeOfControlMessageHeader is the binary size of a ControlMessageHeader
 // struct.
 pub const SIZE_OF_CONTROL_MESSAGE_HEADER : usize = 16;
+
+// A ControlMessageTCPInq is the control message for TCP
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
+pub struct ControlMessageTCPInq {
+    pub Size: u32, 
+}
+
+impl ControlMessage for ControlMessageTCPInq {
+    fn CMsgLevel(&self) -> i32 {
+        return SOL_TCP;
+    }
+
+    fn Len(&self) -> usize {
+        let headerLen = CMsgAlign(mem::size_of::<ControlMessageHeader>());
+        let bodyLen = mem::size_of_val(&self);
+        return headerLen + bodyLen;
+    }
+
+    fn CMsgType(&self) -> i32 {
+        return SCM_TCP_INQ;
+    }
+
+    fn EncodeInto<'a> (&self, buf: &'a mut [u8], flags: i32) -> (&'a mut [u8], i32) {
+        let space = AlignDown(buf.len(), 4);
+        let mut flags = flags;
+
+        if space < mem::size_of::<ControlMessageHeader>(){
+            flags |= MsgType::MSG_CTRUNC;
+            return (buf, flags)
+        }
+
+        let mut length = 4 + mem::size_of::<ControlMessageHeader>();
+        if length > space {
+            flags |= MsgType::MSG_CTRUNC;
+            length = space;
+        }
+
+        let cmsg = ControlMessageHeader {
+            Length: length as u64, //self.Len() as _,
+            Level: self.CMsgLevel(),
+            Type: self.CMsgType(),
+        };
+
+        let buf = CopyBytes(&cmsg, buf);
+
+        let buf = if buf.len() >= 4 {
+            CopyBytes(&self.Size, buf)
+        } else {
+            return (buf, flags)
+        };
+
+        let aligned = AlignUp(length, ALIGNMENT) - length;
+        if aligned > buf.len() {
+            return (buf, flags)
+        }
+
+        return (&mut buf[aligned..], flags)
+    }
+
+}
 
 // A ControlMessageCredentials is an SCM_CREDENTIALS socket control message.
 //
