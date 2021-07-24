@@ -26,7 +26,6 @@ use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::util::cstring::*;
 use super::super::super::qlib::device::*;
-use super::super::super::qlib::mem::io::*;
 use super::super::super::qlib::pagetable::*;
 use super::super::super::qlib::range::*;
 use super::super::super::qlib::addr::*;
@@ -217,9 +216,8 @@ impl FileOperations for HostFileOp {
             iovs.push(IoVec::NewFromAddr(0, 0));
         }
 
-        if self.InodeOp.InodeType() != InodeType::RegularFile {
-            let mut ioReader = FdReadWriter::New(hostIops.HostFd());
-            return ioReader.IORead(iovs);
+        if self.InodeOp.InodeType() != InodeType::RegularFile && self.InodeOp.InodeType() != InodeType::CharacterDevice {
+            return IORead(hostIops.HostFd(), &iovs);
         } else {
             if URING_ENABLE {
                 let ret = IOURING.Read(task,
@@ -242,13 +240,12 @@ impl FileOperations for HostFileOp {
             }
 
             let offset = if self.InodeOp.InodeType() == InodeType::CharacterDevice {
-                -1
+                return IOTTYRead(hostIops.HostFd(), &iovs)
             } else {
                 offset
             };
 
-            let mut ioReader = FdReadWriter::New(hostIops.HostFd());
-            return ioReader.IOReadAt(iovs, offset as u64);
+            return IOReadAt(hostIops.HostFd(), iovs, offset as u64);
         }
     }
 
@@ -265,8 +262,7 @@ impl FileOperations for HostFileOp {
 
 
         if self.InodeOp.InodeType() != InodeType::RegularFile && self.InodeOp.InodeType() != InodeType::CharacterDevice {
-            let mut ioWriter = FdReadWriter::New(hostIops.HostFd());
-            return ioWriter.IOWrite(iovs);
+            return IOWrite(hostIops.HostFd(), iovs);
         } else {
             if URING_ENABLE {
                 // the IOURING.BufWrite doesn't work for InodeType::CharacterDevice
@@ -316,8 +312,7 @@ impl FileOperations for HostFileOp {
                 offset
             };
 
-            let mut ioWriter = FdReadWriter::New(hostIops.HostFd());
-            match ioWriter.IOWriteAt(iovs, offset as u64) {
+            match IOWriteAt(hostIops.HostFd(), iovs, offset as u64) {
                 Err(e) => return Err(e),
                 Ok(ret) => {
                     hostIops.UpdateMaxLen(offset + ret);

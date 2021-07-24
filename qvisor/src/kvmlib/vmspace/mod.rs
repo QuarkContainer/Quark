@@ -747,6 +747,29 @@ impl VMSpace {
         return Self::GetRet(ret as i64)
     }
 
+    pub fn IOTTYRead(_taskId: u64, fd: i32, iovs: u64, iovcnt: i32) -> i64 {
+        let fd = match Self::GetOsfd(fd) {
+            Some(fd) => fd,
+            None => return -SysErr::EBADF as i64,
+        };
+
+        let ret = unsafe{
+            let opt : i32 = 1;
+            // in some cases, tty read will blocked even after set unblock with fcntl
+            // todo: this workaround, fix this
+            ioctl(fd, FIONBIO, &opt);
+
+            readv(fd as c_int, iovs as *const iovec, iovcnt) as i64
+        };
+
+        unsafe {
+            let opt : i32 = 0;
+            ioctl(fd, FIONBIO, &opt);
+        }
+
+        return Self::GetRet(ret as i64)
+    }
+
     pub fn IOBufWrite(fd: i32, addr: u64, len: usize, offset: isize) -> i64 {
         PerfGoto(PerfType::BufWrite);
         defer!(PerfGofrom(PerfType::BufWrite));

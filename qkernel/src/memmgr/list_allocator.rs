@@ -205,14 +205,12 @@ impl FreeMemBlockMgr {
             self.count -= 1;
             let ret = self.list.Pop();
 
-            /*let zeroB = 0;
-
             let ptr = ret as * mut MemBlock;
             unsafe {
-                ptr.write(zeroB)
+                ptr.write(0)
             }
 
-            let size = self.size / 8;
+            /*let size = self.size / 8;
             unsafe {
                 let toArr = slice::from_raw_parts_mut(ret as *mut u64, size);
                 for i in 0..size {
@@ -276,13 +274,15 @@ type MemBlock = u64;
 
 
 pub struct MemList {
-    next: MemBlock,
+    head: MemBlock,
+    tail: MemBlock,
 }
 
 impl MemList {
     pub const fn New() -> Self {
         return Self {
-            next: 0
+            head: 0,
+            tail: 0,
         }
     }
 
@@ -291,26 +291,45 @@ impl MemList {
             super::super::Kernel::HostSpace::KernelMsg(101, addr);
         }
         assert!(addr % 8 == 0);
-        let newB = self.next;
 
-        let ptr = addr as * mut MemBlock;
+        let newB = addr as * mut MemBlock;
         unsafe {
-            *ptr = newB;
+            *newB = 0;
         }
-        self.next = addr;
+
+       if self.head == 0 {
+            self.head = addr;
+            self.tail = addr;
+            return
+        }
+
+        let tail = self.tail;
+
+        let ptr = tail as * mut MemBlock;
+        unsafe {
+            *ptr = addr;
+        }
+        self.tail = addr;
     }
 
     pub fn Pop(&mut self) -> u64 {
-        if self.next == 0 {
+        if self.head == 0 {
             return 0
         }
 
-        let next = self.next;
+        let next = self.head;
+
+        if self.head == self.tail {
+            self.head = 0;
+            self.tail = 0;
+            return next;
+        }
+
         let ptr = unsafe {
            &mut *(next as * mut MemBlock)
         };
 
-        self.next = *ptr;
+        self.head = *ptr;
 
         if next % 8 != 0 {
             super::super::Kernel::HostSpace::KernelMsg(100, next);
