@@ -346,6 +346,52 @@ impl MemoryManager {
     pub const VSYSCALLEND: u64 = 0xffffffffff601000;
     pub const VSYSCALL_MAPS_ENTRY : &'static str  = "ffffffffff600000-ffffffffff601000 --xp 00000000 00:00 0                  [vsyscall]\n";
 
+    pub fn PrintVma(&self, task: &Task,  vma: &VMA, range: &Range) -> String {
+        let private = if vma.private {
+            "p"
+        } else {
+            "s"
+        };
+
+        let (dev, inodeId) = match &vma.id {
+            None => (0, 0),
+            Some(ref mapping) => {
+                (mapping.DeviceID(), mapping.InodeID())
+            }
+        };
+
+        let devMajor = (dev >> Self::DEV_MINOR_BITS) as u32;
+        let devMinor = (dev & ((1 <<Self::DEV_MINOR_BITS) - 1)) as u32;
+
+        let mut s = if vma.hint.len() == 0 {
+            vma.hint.to_string()
+        } else {
+            match &vma.id {
+                None => "".to_string(),
+                //todo: seems that mappedName doesn't work. Fix it
+                Some(ref id) => id.MappedName(task),
+            }
+        };
+
+        let str = format!("{:08x}-{:08x} {}{} {:08x} {:02x}:{:02x} {} ",
+                          range.Start(),
+                          range.End(),
+                          vma.realPerms.String(),
+                          private,
+                          vma.offset,
+                          devMajor,
+                          devMinor,
+                          inodeId
+        );
+
+        if s.len() != 0 && str.len() < 73 {
+            let pad = String::from_utf8(vec![b' '; 73 - str.len()]).unwrap();
+            s = pad + &s;
+        }
+
+        return str + &s;
+    }
+
     pub fn GetSnapshotLocked(&self, task: &Task, skipKernel: bool) -> String {
         let internal = self.mapping.lock();
         let mut seg = internal.vmas.FirstSeg();

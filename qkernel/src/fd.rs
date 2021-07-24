@@ -84,97 +84,96 @@ impl<'a> IOWriter for MemBuf<'a> {
     }
 }
 
-#[derive(Clone)]
-pub struct FdReadWriter {
-    pub fd: i32,
+pub fn IORead(fd: i32, buf: &[IoVec]) -> Result<i64> {
+    if buf.len() == 0 {
+        return Ok(0)
+    }
+
+    let iovsAddr = &buf[0] as *const _ as u64;
+    let iovcnt = buf.len() as i32;
+
+    let ret = HostSpace::IORead(fd, iovsAddr, iovcnt);
+
+    if ret < 0 {
+        return Err(Error::SysError(-ret as i32))
+    }
+
+    return Ok(ret)
 }
 
-impl FdReadWriter {
-    pub fn New(fd: i32) -> Self {
-        return Self {
-            fd: fd,
-        }
+pub fn IOReadAt(fd: i32, buf: &[IoVec], offset: u64) -> Result<i64> {
+    if buf.len() == 0 {
+        return Ok(0)
     }
+
+    let iovsAddr = &buf[0] as *const _ as u64;
+    let mut iovcnt = buf.len() as i32;
+    if iovcnt > 1024 {
+        iovcnt = 1024;
+    }
+
+    let ret = HostSpace::IOReadAt(fd, iovsAddr, iovcnt, offset);
+
+    if ret < 0 {
+        return Err(Error::SysError(-ret as i32))
+    }
+
+    return Ok(ret)
 }
 
-impl IORead for FdReadWriter {
-    fn IORead(&mut self, buf: &mut [IoVec]) -> Result<i64> {
-        if buf.len() == 0 {
-            return Ok(0)
-        }
-
-        let iovsAddr = &buf[0] as *const _ as u64;
-        let iovcnt = buf.len() as i32;
-
-        let ret = HostSpace::IORead(self.fd, iovsAddr, iovcnt);
-
-        if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
-        }
-
-        return Ok(ret)
+pub fn IOTTYRead(fd: i32, buf: &[IoVec]) -> Result<i64> {
+    if buf.len() == 0 {
+        return Ok(0)
     }
+
+    let iovsAddr = &buf[0] as *const _ as u64;
+    let mut iovcnt = buf.len() as i32;
+    if iovcnt > 1024 {
+        iovcnt = 1024;
+    }
+
+    let ret = HostSpace::IOTTYRead(fd, iovsAddr, iovcnt);
+
+    if ret < 0 {
+        return Err(Error::SysError(-ret as i32))
+    }
+
+    return Ok(ret)
 }
 
-impl IOWrite for FdReadWriter {
-    fn IOWrite(&mut self, buf: &[IoVec]) -> Result<i64> {
-        if buf.len() == 0 {
-            return Ok(0)
-        }
-
-        let iovsAddr = &buf[0] as *const _ as u64;
-        let iovcnt = buf.len() as i32;
-        let ret = HostSpace::IOWrite(self.fd, iovsAddr, iovcnt);
-
-        if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
-        }
-
-        return Ok(ret)
+pub fn IOWrite(fd: i32, buf: &[IoVec]) -> Result<i64> {
+    if buf.len() == 0 {
+        return Ok(0)
     }
+
+    let iovsAddr = &buf[0] as *const _ as u64;
+    let iovcnt = buf.len() as i32;
+    let ret = HostSpace::IOWrite(fd, iovsAddr, iovcnt);
+
+    if ret < 0 {
+        return Err(Error::SysError(-ret as i32))
+    }
+
+    return Ok(ret)
 }
 
-impl IOReadAt for FdReadWriter {
-    fn IOReadAt(&mut self, buf: &mut [IoVec], offset: u64) -> Result<i64> {
-        if buf.len() == 0 {
-            return Ok(0)
-        }
-
-        let iovsAddr = &buf[0] as *const _ as u64;
-        let mut iovcnt = buf.len() as i32;
-        if iovcnt > 1024 {
-            iovcnt = 1024;
-        }
-
-        let ret = HostSpace::IOReadAt(self.fd, iovsAddr, iovcnt, offset);
-
-        if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
-        }
-
-        return Ok(ret)
+pub fn IOWriteAt(fd: i32, buf: &[IoVec], offset: u64) -> Result<i64> {
+    if buf.len() == 0 {
+        return Ok(0)
     }
-}
 
-impl IOWriteAt for FdReadWriter {
-    fn IOWriteAt(&mut self, buf: &[IoVec], offset: u64) -> Result<i64> {
-        if buf.len() == 0 {
-            return Ok(0)
-        }
-
-        let iovsAddr = &buf[0] as *const _ as u64;
-        let mut iovcnt = buf.len() as i32;
-        if iovcnt > 1024 {
-            iovcnt = 1024;
-        }
-        let ret = HostSpace::IOWriteAt(self.fd, iovsAddr, iovcnt, offset);
-
-        if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
-        }
-
-        return Ok(ret)
+    let iovsAddr = &buf[0] as *const _ as u64;
+    let mut iovcnt = buf.len() as i32;
+    if iovcnt > 1024 {
+        iovcnt = 1024;
     }
+    let ret = HostSpace::IOWriteAt(fd, iovsAddr, iovcnt, offset);
+
+    if ret < 0 {
+        return Err(Error::SysError(-ret as i32))
+    }
+
+    return Ok(ret)
 }
 
 pub struct RangeReader<'a> {

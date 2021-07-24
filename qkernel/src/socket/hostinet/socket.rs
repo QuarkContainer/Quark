@@ -40,7 +40,6 @@ use super::super::super::kernel::waiter::*;
 use super::super::super::kernel::time::*;
 use super::super::super::qlib::common::*;
 use super::super::super::task::*;
-use super::super::super::qlib::mem::io::*;
 use super::super::super::qlib::mem::block::*;
 use super::super::super::qlib::linux::netdevice::*;
 use super::super::super::Kernel;
@@ -285,10 +284,9 @@ impl FileOperations for SocketOperations {
             return IOURING.BufSockRead(task, self, dsts)
         }
 
-        let mut ioReader = FdReadWriter::New(self.fd);
         defer!(task.GetMut().iovs.clear());
         task.V2PIovs(dsts, true, &mut task.GetMut().iovs)?;
-        let res = ioReader.IORead(&mut task.GetMut().iovs);
+        let res = IORead(self.fd, &task.GetMut().iovs);
 
         return res;
     }
@@ -298,10 +296,9 @@ impl FileOperations for SocketOperations {
             return IOURING.BufSockWrite(task, self, srcs)
         }
 
-        let mut ioWriter = FdReadWriter::New(self.fd);
         defer!(task.GetMut().iovs.clear());
         task.V2PIovs(srcs, false, &mut task.GetMut().iovs)?;
-        return ioWriter.IOWrite(&task.GetMut().iovs);
+        return IOWrite(self.fd, &task.GetMut().iovs);
     }
 
     fn Append(&self, task: &Task, f: &File, srcs: &[IoVec]) -> Result<(i64, i64)> {

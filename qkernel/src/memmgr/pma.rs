@@ -207,19 +207,8 @@ impl Drop for PageTables {
             return;
         }
 
-        if CurrentCr3() != self.GetRoot() {
-            error!("clean pagetable in execv root is {:x}", self.GetRoot());
-            self.Drop();
-            return;
-        }
-
-        let addr = self.SwapZero();
-        if addr == 0 {
-            return;
-        }
-
-        //pagetables can't be free from current kernel thread, need to be free async
-        AddFreePageTables(addr);
+        self.Drop();
+        return;
     }
 }
 

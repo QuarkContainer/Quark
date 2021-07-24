@@ -170,6 +170,16 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
+    pub fn IOTTYRead(fd: i32, iovs: u64, iovcnt: i32) -> i64 {
+        let mut msg = Msg::IOTTYRead(IOTTYRead {
+            fd,
+            iovs,
+            iovcnt,
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
     pub fn IOWrite(fd: i32, iovs: u64, iovcnt: i32) -> i64 {
         let mut msg = Msg::IOWrite(IOWrite {
             fd,

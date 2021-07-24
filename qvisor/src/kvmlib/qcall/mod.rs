@@ -420,6 +420,9 @@ pub fn qCall(eventAddr: u64, event: &'static mut Event) -> QcallRet {
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::IORead(msg) } => {
             *ret = super::VMSpace::IORead(taskId.Addr(), msg.fd, msg.iovs, msg.iovcnt) as u64;
         }
+        Event { taskId, interrupted: _, ref mut ret, msg: Msg::IOTTYRead(msg) } => {
+            *ret = super::VMSpace::IOTTYRead(taskId.Addr(), msg.fd, msg.iovs, msg.iovcnt) as u64;
+        }
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::IOWrite(msg) } => {
             *ret = super::VMSpace::IOWrite(taskId.Addr(), msg.fd, msg.iovs, msg.iovcnt) as u64;
         }

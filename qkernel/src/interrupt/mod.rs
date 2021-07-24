@@ -444,7 +444,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
 
     let PRINT_EXECPTION : bool = SHARESPACE.config.PrintException;
     if PRINT_EXECPTION {
-        error!("in PageFaultHandler, cr2: {:x}, cr3: {:x}, isuser = {}, error is {:b}, ss is {:x}, cs == {:x}, eflags = {:x}, new ss is {}, pageaddr is {:x}",
+        error!("in PageFaultHandler, cr2: {:x}, cr3: {:x}, isuser = {}, error is {:b}, ss is {:x}, cs == {:x}, eflags = {:x}, new ss is {}",
             cr2,
             cr3,
             PageFaultErrorCode::from_bits(errorCode).unwrap() & PageFaultErrorCode::USER_MODE == PageFaultErrorCode::USER_MODE,
@@ -452,8 +452,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
             sf.ss,
             sf.cs,
             sf.eflags,
-            ss,
-            Addr(cr2).RoundDown().unwrap().0
+            ss
         );
     }
 
@@ -480,6 +479,10 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
 
             signal = Signal::SIGSEGV;
             break;
+        }
+
+        if PRINT_EXECPTION {
+            error!("in PageFaultHandler {}", currTask.mm.PrintVma(currTask, &vma, &range))
         }
 
         if !vma.effectivePerms.Read() { // has no read permission

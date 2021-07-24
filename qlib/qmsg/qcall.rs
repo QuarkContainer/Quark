@@ -150,6 +150,7 @@ pub enum Msg {
     HostCPUInfo(HostCPUInfo),
 
     IORead(IORead),
+    IOTTYRead(IOTTYRead),
     IOWrite(IOWrite),
     IOReadAt(IOReadAt),
     IOWriteAt(IOWriteAt),
@@ -992,6 +993,13 @@ pub struct GetStdfds {
 
 #[derive(Clone, Default, Debug)]
 pub struct IORead {
+    pub fd: i32,
+    pub iovs: u64,
+    pub iovcnt: i32,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct IOTTYRead {
     pub fd: i32,
     pub iovs: u64,
     pub iovcnt: i32,
