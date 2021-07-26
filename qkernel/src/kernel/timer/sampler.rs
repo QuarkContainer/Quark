@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use alloc::collections::vec_deque::VecDeque;
-use alloc::string::ToString;
 
 use super::super::super::asm::*;
 use super::super::super::qlib::common::*;
@@ -131,7 +130,7 @@ impl Sampler {
             let mut newOverhead = 2 * self.overhead;
             if newOverhead > MAX_OVERHEAD_CYCLES {
                 if self.overhead == MAX_OVERHEAD_CYCLES {
-                    return Err(Error::Common("time syscall overhead exceeds maximum".to_string()));
+                    return Err(Error::Common(format!("time syscall overhead exceeds maximum, overhead is {}, MAX_OVERHEAD_CYCLES is {}", self.overhead, MAX_OVERHEAD_CYCLES)));
                 }
 
                 newOverhead = MAX_OVERHEAD_CYCLES;

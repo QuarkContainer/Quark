@@ -190,7 +190,7 @@ impl FreeMemBlockMgr {
             size: 1<<class,
             capacity: capacity,
             count: 0,
-            list: MemList::New(),
+            list: MemList::New(1<<class),
         }
     }
 
@@ -274,23 +274,25 @@ type MemBlock = u64;
 
 
 pub struct MemList {
+    size: u64,
     head: MemBlock,
     tail: MemBlock,
 }
 
 impl MemList {
-    pub const fn New() -> Self {
+    pub const fn New(size: usize) -> Self {
         return Self {
+            size: size as u64,
             head: 0,
             tail: 0,
         }
     }
 
     pub fn Push(&mut self, addr: u64) {
-        if addr % 8 != 0 {
-            super::super::Kernel::HostSpace::KernelMsg(101, addr);
+        if addr % self.size != 0 {
+            super::super::Kernel::HostSpace::KernelMsg(self.size as u64, addr);
         }
-        assert!(addr % 8 == 0);
+        assert!(addr % self.size == 0);
 
         let newB = addr as * mut MemBlock;
         unsafe {
@@ -331,10 +333,10 @@ impl MemList {
 
         self.head = *ptr;
 
-        if next % 8 != 0 {
-            super::super::Kernel::HostSpace::KernelMsg(100, next);
+        if next % self.size as u64 != 0 {
+            super::super::Kernel::HostSpace::KernelMsg(self.size as u64, next);
         }
-        assert!(next % 8 == 0);
+        assert!(next % self.size == 0);
         return next;
     }
 }

@@ -24,6 +24,7 @@ use super::super::super::guestfdnotifier::*;
 use super::super::super::kernel::waiter::*;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
+use super::super::super::qlib::qmsg::qcall::*;
 use super::super::super::util::cstring::*;
 use super::super::super::qlib::device::*;
 use super::super::super::qlib::pagetable::*;
@@ -74,7 +75,7 @@ impl HostFileOp {
             return Err(Error::SysError(-res))
         }
 
-        let mut names: Vec<String> = Vec::new();
+        let mut names: Vec<CString> = Vec::new();
         loop {
             let addr = &buf[0] as *const _ as u64;
             let cnt = GetDents(fd, addr, buf.len() as u32);
@@ -93,9 +94,8 @@ impl HostFileOp {
                 unsafe {
                     let d: *const Dirent64 = (addr + pos) as *const Dirent64;
                     let name = (*d).name;
-
-                    names.push(CString::ToString(task, &name[0] as *const _ as u64)?.to_string());
-
+                    let str = CString::ToString(task, &name[0] as *const _ as u64).expect("ReadDirAll fail1");
+                    names.push(CString::New(str));
                     pos += (*d).reclen as u64;
                 }
             }
@@ -103,11 +103,27 @@ impl HostFileOp {
 
         let mut entries = BTreeMap::new();
 
-        let mut stat: LibcStat = Default::default();
+        if names.len() == 0 {
+            return Ok(entries);
+        }
 
-        for i in 0..names.len() {
-            let name = &names[i];
-            let ret = Fstatat(fd, name, &mut stat, ATType::AT_SYMLINK_NOFOLLOW) as i32;
+        let mut fts = Vec::with_capacity(names.len());
+        for name in &names {
+            fts.push(FileType {
+                dirfd: fd,
+                pathname: name.Ptr(),
+                mode: 0,
+                device: 0,
+                inode: 0,
+                ret: 0,
+            })
+        }
+
+        HostSpace::BatchFstatat(&mut fts);
+
+        for i in 0 .. fts.len() {
+            let ft = &fts[i];
+            let ret = ft.ret;
             if ret < 0 {
                 if -ret == SysErr::ENOENT {
                     continue
@@ -117,15 +133,16 @@ impl HostFileOp {
             }
 
             let dentry = DentAttr {
-                Type: stat.InodeType(),
+                Type: InodeType(ft.mode),
                 InodeId: HOSTFILE_DEVICE.lock().Map(MultiDeviceKey {
-                    Device: stat.st_dev,
-                    Inode: stat.st_ino,
+                    Device: ft.device,
+                    Inode: ft.inode,
                     SecondaryDevice: "".to_string(),
                 })
             };
 
-            entries.insert(name.clone(), dentry);
+            let name = CString::ToString(task, names[i].Ptr()).expect("ReadDirAll fail2").to_string();
+            entries.insert(name, dentry);
         }
 
         return Ok(entries);

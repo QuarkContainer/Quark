@@ -63,6 +63,7 @@ pub enum Msg {
     Fgetxattr(Fgetxattr),
     Stat(Stat),
     Fstat(Fstat),
+    BatchFstatat(BatchFstatat),
     Fstatat(Fstatat),
     Statfs(Statfs),
     Fstatfs(Fstatfs),
@@ -460,11 +461,27 @@ pub struct Fstat {
 }
 
 #[derive(Clone, Default, Debug)]
+pub struct FileType {
+    pub dirfd: i32,
+    pub pathname: u64,
+    pub mode: u32,
+    pub device: u64,
+    pub inode: u64,
+    pub ret: i32,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct BatchFstatat {
+    pub addr: u64,
+    pub count: usize
+}
+
+#[derive(Clone, Default, Debug)]
 pub struct Fstatat {
     pub dirfd: i32,
     pub pathname: u64,
     pub buff: u64,
-    pub flags: i32,
+    pub flags: i32
 }
 
 #[derive(Clone, Default, Debug)]

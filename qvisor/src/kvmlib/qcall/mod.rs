@@ -203,6 +203,9 @@ pub fn qCall(eventAddr: u64, event: &'static mut Event) -> QcallRet {
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::Fstat(msg) } => {
             *ret = super::VMSpace::Fstat(taskId.Addr(), msg.fd, msg.buff) as u64;
         }
+        Event { taskId, interrupted: _, ref mut ret, msg: Msg::BatchFstatat(msg) } => {
+            *ret = super::VMSpace::BatchFstatat(taskId.Addr(), msg.addr, msg.count) as u64;
+        }
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::Fstatat(msg) } => {
             *ret = super::VMSpace::Fstatat(taskId.Addr(), msg.dirfd, msg.pathname, msg.buff, msg.flags) as u64;
         }

@@ -1064,6 +1064,35 @@ impl VMSpace {
         return ret
     }
 
+
+    pub fn BatchFstatat(_taskId: u64, addr: u64, count: usize) -> i64 {
+        let mut stat: LibcStat = Default::default();
+
+        let ptr = addr as * mut FileType;
+        let filetypes = unsafe { slice::from_raw_parts_mut(ptr, count) };
+
+        for ft in filetypes {
+            let dirfd = {
+                if ft.dirfd > 0 {
+                    Self::GetOsfd(ft.dirfd).expect("Fstatat")
+                } else {
+                    ft.dirfd
+                }
+            };
+
+            let ret = unsafe {
+                Self::GetRet(libc::fstatat(dirfd, ft.pathname as *const c_char, &mut stat as *mut _ as u64 as *mut stat, AT_SYMLINK_NOFOLLOW) as i64)
+            };
+
+            ft.mode = stat.st_mode;
+            ft.device = stat.st_dev;
+            ft.inode = stat.st_ino;
+            ft.ret = ret as i32;
+        }
+
+        return 0;
+    }
+
     pub fn Fstatat(_taskId: u64, dirfd: i32, pathname: u64, buf: u64, flags: i32) -> i64 {
         let dirfd = {
             if dirfd > 0 {
