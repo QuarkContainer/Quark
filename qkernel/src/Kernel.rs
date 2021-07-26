@@ -500,6 +500,17 @@ impl HostSpace {
         //return HostSpace::Call(&mut msg, false) as i64;
     }
 
+    pub fn BatchFstatat(filetypes: &mut [FileType]) -> i64 {
+        let addr = &filetypes[0] as * const _ as u64;
+        let count = filetypes.len();
+        let mut msg = Msg::BatchFstatat(BatchFstatat {
+            addr,
+            count
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
     pub fn Fstatat(dirfd: i32, pathname: u64, buff: u64, flags: i32) -> i64 {
         let mut msg = Msg::Fstatat(Fstatat {
             dirfd,

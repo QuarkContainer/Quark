@@ -155,6 +155,8 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, errorCo
 
     if PRINT_EXECPTION {
         error!("ExceptionHandler  .... ev is {:?}, sf is {:x?} errorcode is {:x}", ev, sf, errorCode);
+        let map =  currTask.mm.GetSnapshotLocked(currTask, false);
+        print!("the map is {}", &map);
     }
 
     let mut rflags = GetRflags();
@@ -465,6 +467,11 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
         let (vma, range) = match currTask.mm.GetVmaAndRangeLocked(cr2) {
             //vmas.lock().Get(cr2) {
             None => {
+                if cr2 > 0x1000 {
+                    let map =  currTask.mm.GetSnapshotLocked(currTask, false);
+                    print!("the map is {}", &map);
+                }
+
                 //todo: when to send sigbus/SIGSEGV
                 signal = Signal::SIGSEGV;
                 break;

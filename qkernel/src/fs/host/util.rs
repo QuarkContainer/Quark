@@ -128,23 +128,27 @@ impl Statx {
     }
 }
 
+pub fn InodeType(st_mode: u32) -> InodeType {
+    let x = st_mode as u16 & ModeType::S_IFMT;
+
+    match x {
+        ModeType::S_IFLNK => InodeType::Symlink,
+        ModeType::S_IFIFO => InodeType::Pipe,
+        ModeType::S_IFCHR => InodeType::CharacterDevice,
+        ModeType::S_IFBLK => InodeType::BlockDevice,
+        ModeType::S_IFSOCK => InodeType::Socket,
+        ModeType::S_IFDIR => InodeType::Directory,
+        ModeType::S_IFREG => InodeType::RegularFile,
+        _ => {
+            info!("unknow host file type {}: assuming regular", x);
+            return InodeType::RegularFile;
+        }
+    }
+}
+
 impl LibcStat {
     pub fn InodeType(&self) -> InodeType {
-        let x = self.st_mode as u16 & ModeType::S_IFMT;
-
-        match x {
-            ModeType::S_IFLNK => InodeType::Symlink,
-            ModeType::S_IFIFO => InodeType::Pipe,
-            ModeType::S_IFCHR => InodeType::CharacterDevice,
-            ModeType::S_IFBLK => InodeType::BlockDevice,
-            ModeType::S_IFSOCK => InodeType::Socket,
-            ModeType::S_IFDIR => InodeType::Directory,
-            ModeType::S_IFREG => InodeType::RegularFile,
-            _ => {
-                info!("unknow host file type {}: assuming regular", x);
-                return InodeType::RegularFile;
-            }
-        }
+        return InodeType(self.st_mode)
     }
 
     pub fn WouldBlock(&self) -> bool {
