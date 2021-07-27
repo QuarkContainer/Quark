@@ -154,9 +154,9 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, errorCo
     };
 
     if PRINT_EXECPTION {
-        error!("ExceptionHandler  .... ev is {:?}, sf is {:x?} errorcode is {:x}", ev, sf, errorCode);
         let map =  currTask.mm.GetSnapshotLocked(currTask, false);
-        print!("the map is {}", &map);
+        error!("ExceptionHandler  .... ev is {:?}, sf is {:x?} errorcode is {:x}, map is {}",
+            ev, sf, errorCode, &map);
     }
 
     let mut rflags = GetRflags();
@@ -482,14 +482,10 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
         let errbits = PageFaultErrorCode::from_bits(errorCode).unwrap();
         if vma.kernel == true {
             let map =  currTask.mm.GetSnapshotLocked(currTask, false);
-            print!("the map is {}", &map);
+            error!("the map2 is {}", &map);
 
             signal = Signal::SIGSEGV;
             break;
-        }
-
-        if PRINT_EXECPTION {
-            error!("in PageFaultHandler {}", currTask.mm.PrintVma(currTask, &vma, &range))
         }
 
         if !vma.effectivePerms.Read() { // has no read permission
@@ -533,15 +529,13 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
                 }
             }
 
-            if !vma.private || (errbits & PageFaultErrorCode::CAUSED_BY_WRITE) != PageFaultErrorCode::CAUSED_BY_WRITE {
-                if fromUser {
-                    //PerfGoto(PerfType::User);
-                    currTask.AccountTaskEnter(SchedState::RunningApp);
-                    SwapGs();
-                }
-
-                return
+            if fromUser {
+                //PerfGoto(PerfType::User);
+                currTask.AccountTaskEnter(SchedState::RunningApp);
+                SwapGs();
             }
+
+            return
         }
 
         if vma.private == false {
@@ -577,7 +571,7 @@ pub fn HandleFault(task: &mut Task, user: bool, errorCode: u64, cr2: u64, sf: &m
         let map =  task.mm.GetSnapshotLocked(task, false);
         print!("unhandle EXCEPTION: page_fault FAULT\n{:#?}, error code is {:?}, cr2 is {:x}, registers is {:#x?}",
                sf, errorCode, cr2, task.GetPtRegs());
-        print!("the map is {}", &map);
+        print!("the map 3 is {}", &map);
         panic!();
     }
 

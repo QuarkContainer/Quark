@@ -808,6 +808,16 @@ impl MemoryManager {
 
                 if vma.private {
                     self.MapPageReadLocked(pageAddr, phyAddr, exec);
+
+                    let writeable = vma.effectivePerms.Write();
+                    if writeable {
+                        self.MapPageWriteLocked(pageAddr, phyAddr, exec);
+
+                        let page = { super::super::PAGE_MGR.AllocPage(true).unwrap() };
+                        CopyPage(pageAddr, page);
+                        self.MapPageWriteLocked(pageAddr, page, exec);
+                        super::super::PAGE_MGR.DerefPage(page);
+                    }
                 } else {
                     let writeable = vma.effectivePerms.Write();
                     if writeable {
@@ -825,15 +835,11 @@ impl MemoryManager {
                 //let phyAddr = vmaOffset + vma.offset; // offset in the phyAddr
 
                 let phyAddr = super::super::PAGE_MGR.AllocPage(true).unwrap();
-                if vma.private {
-                    self.MapPageReadLocked(pageAddr, phyAddr, exec);
+                let writeable = vma.effectivePerms.Write();
+                if writeable {
+                    self.MapPageWriteLocked(pageAddr, phyAddr, exec);
                 } else {
-                    let writeable = vma.effectivePerms.Write();
-                    if writeable {
-                        self.MapPageWriteLocked(pageAddr, phyAddr, exec);
-                    } else {
-                        self.MapPageReadLocked(pageAddr, phyAddr, exec);
-                    }
+                    self.MapPageReadLocked(pageAddr, phyAddr, exec);
                 }
 
                 super::super::PAGE_MGR.DerefPage(phyAddr);
@@ -936,27 +942,28 @@ impl MemoryManager {
                 }
                 Ok(ret) => ret,
             };
-            if writeReq && !permission.Write() {
-                let (vma, _) = match self.GetVmaAndRangeLocked(addr) {
-                    None => {
-                        if !allowPartial || addr < vAddr {
-                            return Err(Error::SysError(SysErr::EFAULT))
-                        }
 
-                        return Ok(addr - vAddr)
-                    },
-                    Some(vma) => vma.clone(),
-                };
-
-                if !vma.effectivePerms.Write() {
+            let (vma, _) = match self.GetVmaAndRangeLocked(addr) {
+                None => {
                     if !allowPartial || addr < vAddr {
                         return Err(Error::SysError(SysErr::EFAULT))
                     }
 
                     return Ok(addr - vAddr)
+                },
+                Some(vma) => vma.clone(),
+            };
+
+            if vma.effectivePerms.Write() && !permission.Write() {
+                self.CopyOnWriteLocked(addr, &vma);
+            }
+
+            if writeReq && !vma.effectivePerms.Write() {
+                if !allowPartial || addr < vAddr {
+                    return Err(Error::SysError(SysErr::EFAULT))
                 }
 
-                self.CopyOnWriteLocked(addr, &vma);
+                return Ok(addr - vAddr)
             }
 
             addr += MemoryDef::PAGE_SIZE;
