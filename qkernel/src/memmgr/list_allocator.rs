@@ -299,7 +299,7 @@ impl MemList {
             *newB = 0;
         }
 
-       if self.head == 0 {
+        if self.head == 0 {
             self.head = addr;
             self.tail = addr;
             return
@@ -328,7 +328,7 @@ impl MemList {
         }
 
         let ptr = unsafe {
-           &mut *(next as * mut MemBlock)
+            &mut *(next as * mut MemBlock)
         };
 
         self.head = *ptr;
