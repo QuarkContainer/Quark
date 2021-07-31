@@ -175,4 +175,24 @@ impl IoVec {
             toSlice = &mut toSlice[iov.len..];
         }
     }
+
+    pub fn CopySlice(src:&[u8], to: &[IoVec]) {
+        let mut offset = 0;
+        let mut idx = 0;
+        while offset < src.len() && idx < to.len() {
+            let ptr = to[idx].start as * mut u8;
+            let toSlice = unsafe {
+                slice::from_raw_parts_mut (ptr, to[idx].len)
+            };
+            idx += 1;
+
+            let mut len = src.len() - offset;
+            if len > toSlice.len() {
+                len = toSlice.len()
+            }
+
+            toSlice[0..len].copy_from_slice(&src[offset..offset+len]);
+            offset += len;
+        }
+    }
 }
