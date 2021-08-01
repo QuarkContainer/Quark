@@ -136,15 +136,6 @@ impl VMSpace {
         return IO_MGR.lock().GetByHost(hostfd);
     }
 
-    pub fn GetDents(_taskId: u64, fd: i32, dirp: u64, count: u32) -> i64 {
-        let fd = Self::GetOsfd(fd).expect("GetDents64");
-
-        let nr = SysCallID::sys_getdents as usize;
-        unsafe {
-            return syscall3(nr, fd as usize, dirp as usize, count as usize) as i64;
-        }
-    }
-
     pub fn GetDents64(_taskId: u64, fd: i32, dirp: u64, count: u32) -> i64 {
         let fd = Self::GetOsfd(fd).expect("GetDents64");
 
@@ -161,24 +152,6 @@ impl VMSpace {
         unsafe {
             return Self::GetRet(sysinfo(info as *mut sysinfo) as i64);
         }
-    }
-
-    pub fn GetCwd(_taskId: u64, buf: u64, size: u64) -> i64 {
-        let nr = SysCallID::sys_getcwd as usize;
-
-        unsafe {
-            let res = syscall2(nr, buf as usize, size as usize) as i64;
-            return res
-        }
-
-        /*let ret = unsafe {
-            getcwd(buf as *mut c_char, size as size_t) as i64
-        };
-        info!("GetCwd: the local path is {}", Self::GetStr(ret as u64));
-
-        return Self::GetRet(ret as i64)*/
-        //return ret;
-        //return Self::GetStrLen(ret as u64);
     }
 
     pub fn Mount(&self, id: &str, rootfs: &str) -> Result<()> {
@@ -1346,10 +1319,6 @@ impl VMSpace {
         };
 
         return Self::GetRet(ret as i64) as i64;
-    }
-
-    pub fn Pause() -> QcallRet {
-        return QcallRet::Block
     }
 
     pub fn GetDuration(timeout: u64) -> Duration {

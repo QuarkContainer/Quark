@@ -67,7 +67,6 @@ pub enum Msg {
     PRLimit(PRLimit),
     GetRLimit(GetRLimit),
     SetRLimit(SetRLimit),
-    GetDents(GetDents),
     GetDents64(GetDents64),
 
     ForkFdTbl(ForkFdTbl),
@@ -86,12 +85,8 @@ pub enum Msg {
     Umask(Umask),
     Access(Access),
     FAccessAt(FAccessAt),
-    Pause(Pause),
 
     MinCore(MinCore),
-    Dup(Dup),
-    Dup2(Dup2),
-    Dup3(Dup3),
 
     Socket(Socket),
     SocketPair(SocketPair),
@@ -111,10 +106,7 @@ pub enum Msg {
     EpollCtl(EpollCtl),
 
     Sysinfo(Sysinfo),
-    GetCwd(GetCwd),
-    GetWd(GetWd),
     GetCurrentDirName(GetCurrentDirName),
-    GetPGid(GetPGid),
     SchedGetAffinity(SchedGetAffinity),
     GetRandom(GetRandom),
     Chdir(Chdir),
@@ -432,13 +424,6 @@ pub struct Fstatat {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct GetDents {
-    pub fd: i32,
-    pub dirp: u64,
-    pub count: u32,
-}
-
-#[derive(Clone, Default, Debug)]
 pub struct GetDents64 {
     pub fd: i32,
     pub dirp: u64,
@@ -467,21 +452,7 @@ pub struct Sysinfo {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct GetCwd {
-    pub buf: u64,
-    pub size: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct GetWd {
-    pub buf: u64,
-}
-
-#[derive(Clone, Default, Debug)]
 pub struct GetCurrentDirName {}
-
-#[derive(Clone, Default, Debug)]
-pub struct GetPGid {}
 
 //create a new fdTbl by fork from a tgid
 #[derive(Clone, Default, Debug)]
@@ -574,9 +545,6 @@ pub struct CreateAt {
 pub struct Uname {
     pub buff: u64,
 }
-
-#[derive(Clone, Default, Debug)]
-pub struct Pause {}
 
 #[derive(Clone, Default, Debug)]
 pub struct Access {
@@ -724,24 +692,6 @@ pub struct MinCore {
     pub addr: u64,
     pub len: u64,
     pub vec: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Dup {
-    pub oldfd: i32,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Dup2 {
-    pub oldfd: i32,
-    pub newfd: i32,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Dup3 {
-    pub oldfd: i32,
-    pub newfd: i32,
-    pub flags: i32,
 }
 
 #[derive(Clone, Default, Debug)]
