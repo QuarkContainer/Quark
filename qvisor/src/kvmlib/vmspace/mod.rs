@@ -157,52 +157,6 @@ impl VMSpace {
         }
     }
 
-    pub fn GetUid(_taskId: u64) -> i64 {
-        unsafe {
-            return getuid() as i64; //always success
-        }
-    }
-
-    pub fn GetEUid(_taskId: u64) -> i64 {
-        unsafe {
-            return geteuid() as i64;//always success
-        }
-    }
-
-    pub fn GetGid(_taskId: u64) -> i64 {
-        unsafe {
-            return getgid() as i64;//always success
-        }
-    }
-
-    pub fn SetGid(_taskId: u64, _gid: u32) -> i64 {
-        //unsafe {
-            //return setgid(gid) as i64;
-        //}
-
-        return 0;
-    }
-
-    pub fn GetEGid(_taskId: u64) -> i64 {
-        unsafe {
-            return getegid() as i64; //always success
-        }
-    }
-
-    pub fn GetGroups(_taskId: u64, size: i32, list: u64) -> i64 {
-        //info!("GetGroups the list is {:x}", list);
-
-        unsafe {
-            return getgroups(size, list as *mut gid_t) as i64;
-        }
-    }
-
-    pub fn SetGroups(_taskId: u64, size: usize, list: u64) -> i64 {
-        unsafe {
-            return setgroups(size, list as *mut gid_t) as i64;
-        }
-    }
-
     pub fn Sysinfo(_taskId: u64, info: u64) -> i64 {
         unsafe {
             return Self::GetRet(sysinfo(info as *mut sysinfo) as i64);
@@ -457,30 +411,6 @@ impl VMSpace {
         return hostfd as i64
     }
 
-    pub fn Pipe2(_taskId: u64, fds: u64, flags: i32) -> i64 {
-        unsafe {
-            let ret = pipe2(fds as *mut c_int, flags | O_NONBLOCK);
-
-            if ret < 0 {
-                return Self::GetRet(ret as i64)
-            }
-
-            let ptr = fds as * mut i32;
-            let fds = slice::from_raw_parts_mut(ptr, 2);
-
-            let hostfd0 = IO_MGR.lock().AddFd(fds[0], true);
-            let hostfd1 = IO_MGR.lock().AddFd(fds[1], true);
-
-            FD_NOTIFIER.AddFd(fds[0], Box::new(GuestFd{hostfd: hostfd0}));
-            FD_NOTIFIER.AddFd(fds[1], Box::new(GuestFd{hostfd: hostfd1}));
-
-            fds[0] = hostfd0;
-            fds[1] = hostfd1;
-
-            return Self::GetRet(ret as i64)
-        }
-    }
-
     pub fn Fallocate(_taskId: u64, fd: i32, mode: i32, offset: i64, len: i64) -> i64 {
         let fd = match Self::GetOsfd(fd) {
             Some(fd) => fd,
@@ -519,14 +449,6 @@ impl VMSpace {
 
         let ret = unsafe {
             renameat(olddirfd, oldpath as *const c_char, newdirfd, newpath as *const c_char)
-        };
-
-        return Self::GetRet(ret as i64)
-    }
-
-    pub fn Truncate(_taskId: u64, path: u64, len: i64) -> i64 {
-        let ret = unsafe {
-            truncate64(path as *const c_char, len)
         };
 
         return Self::GetRet(ret as i64)

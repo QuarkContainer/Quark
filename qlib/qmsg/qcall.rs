@@ -25,8 +25,6 @@ pub enum Msg {
     LoadExecProcess(LoadExecProcess),
     ControlMsgCall(ControlMsgCall),
     ControlMsgRet(ControlMsgRet),
-    MapAnon(MapAnon),
-    MapFile(MapFile),
     PrintInt(PrintInt),
     SetBuff(SetBuff),
     WriteBuffTrigger(WriteBuffTrigger),
@@ -37,7 +35,6 @@ pub enum Msg {
     //Syscall
     Fallocate(Fallocate),
     RenameAt(RenameAt),
-    Truncate(Truncate),
     Ftruncate(Ftruncate),
     Eventfd(Eventfd),
     Seek(Seek),
@@ -113,19 +110,11 @@ pub enum Msg {
     EpollPWait(EpollPWait),
     EpollCtl(EpollCtl),
 
-    GetUid(GetUid),
-    GetEUid(GetEUid),
-    GetGid(GetGid),
-    SetGid(SetGid),
-    GetEGid(GetEGid),
-    GetGroups(GetGroups),
-    SetGroups(SetGroups),
     Sysinfo(Sysinfo),
     GetCwd(GetCwd),
     GetWd(GetWd),
     GetCurrentDirName(GetCurrentDirName),
     GetPGid(GetPGid),
-    Pipe2(Pipe2),
     SchedGetAffinity(SchedGetAffinity),
     GetRandom(GetRandom),
     Chdir(Chdir),
@@ -160,7 +149,6 @@ pub enum Msg {
     IOConnect(IOConnect),
     IORecvMsg(IORecvMsg),
     IOSendMsg(IOSendMsg),
-    MMapAnon(MMapAnon),
     MMapFile(MMapFile),
     UnMapPma(UnMapPma),
     NonBlockingPoll(NonBlockingPoll),
@@ -222,19 +210,6 @@ pub struct SetRLimit {
     pub rlimit: u64,
 }
 
-//GDT, IDT: descriptor table
-#[derive(Clone, Default, Debug)]
-pub struct DT {
-    pub base: u64,
-    pub limit: u16,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct MMapAnon {
-    pub len: u64,
-    pub prot: i32,
-}
-
 #[derive(Clone, Default, Debug)]
 pub struct MMapFile {
     pub len: u64,
@@ -243,28 +218,6 @@ pub struct MMapFile {
     pub prot: i32,
 }
 
-/*
-#[derive(Clone, Default, Debug)]
-pub struct MUnmap {
-    pub addr: u64,
-    pub len: u64,
-}*/
-
-#[derive(Clone, Default, Debug)]
-pub struct MapAnon {
-    pub len: u64,
-    pub hugePage: bool,
-    pub share: bool,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct MapFile {
-    pub len: u64,
-    pub hugePage: bool,
-    pub fd: i32,
-    pub offset: u64,
-    pub share: bool,
-}
 
 #[derive(Clone, Default, Debug)]
 pub struct Fallocate {
@@ -297,12 +250,6 @@ pub struct RenameAt {
     pub oldpath: u64,
     pub newdirfd: i32,
     pub newpath: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Truncate {
-    pub path: u64,
-    pub len: i64,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -512,35 +459,6 @@ pub struct HostCPUInfo {
     pub cxArg: u32,
     pub addr: u64,
     //address of CPUIDInfo struct
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct GetUid {}
-
-#[derive(Clone, Default, Debug)]
-pub struct GetEUid {}
-
-#[derive(Clone, Default, Debug)]
-pub struct GetGid {}
-
-#[derive(Clone, Default, Debug)]
-pub struct SetGid {
-    pub gid: u32,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct GetEGid {}
-
-#[derive(Clone, Default, Debug)]
-pub struct GetGroups {
-    pub size: i32,
-    pub list: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct SetGroups {
-    pub size: usize,
-    pub list: u64,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -823,12 +741,6 @@ pub struct Dup2 {
 pub struct Dup3 {
     pub oldfd: i32,
     pub newfd: i32,
-    pub flags: i32,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Pipe2 {
-    pub fds: u64,
     pub flags: i32,
 }
 

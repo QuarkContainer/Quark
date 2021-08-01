@@ -112,13 +112,6 @@ pub fn qCall(eventAddr: u64, event: &'static mut Event) -> QcallRet {
         Event { taskId: _taskId, interrupted: _, ret: _, msg: Msg::PrintInt(msg) } => {
             error!("PrintInt: {}", msg.val);
         }
-        Event { taskId: _, interrupted: _, ref mut ret, msg: Msg::MMapAnon(MMapAnon) } => {
-            *ret = match super::PMA_KEEPER.lock().MapAnon(MMapAnon.len, MMapAnon.prot) {
-                Err(Error::SysError(e)) => -e as u64,
-                Ok(phyAddr) => phyAddr,
-                Err(err) => panic!("MapAnon: unexpected error {:?}", err),
-            }
-        }
         Event { taskId: _, interrupted: _, ref mut ret, msg: Msg::MMapFile(MMapFile) } => {
             *ret = match super::PMA_KEEPER.lock().MapFile(MMapFile.len, MMapFile.prot, MMapFile.fd, MMapFile.offset) {
                 Err(Error::SysError(e)) => -e as u64,
@@ -142,9 +135,6 @@ pub fn qCall(eventAddr: u64, event: &'static mut Event) -> QcallRet {
         }
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::Fallocate(msg) } => {
             *ret = super::VMSpace::Fallocate(taskId.Addr(), msg.fd, msg.mode, msg.offset, msg.len) as u64;
-        }
-        Event { taskId, interrupted: _, ref mut ret, msg: Msg::Truncate(msg) } => {
-            *ret = super::VMSpace::Truncate(taskId.Addr(), msg.path, msg.len) as u64;
         }
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::Ftruncate(msg) } => {
             *ret = super::VMSpace::Ftruncate(taskId.Addr(), msg.fd, msg.len) as u64;
@@ -306,27 +296,6 @@ pub fn qCall(eventAddr: u64, event: &'static mut Event) -> QcallRet {
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::GetDents64(msg) } => {
             *ret = super::VMSpace::GetDents64(taskId.Addr(), msg.fd, msg.dirp, msg.count) as u64;
         }
-        Event { taskId, interrupted: _, ref mut ret, msg: Msg::GetUid(_msg) } => {
-            *ret = super::VMSpace::GetUid(taskId.Addr()) as u64;
-        }
-        Event { taskId, interrupted: _, ref mut ret, msg: Msg::GetEUid(_msg) } => {
-            *ret = super::VMSpace::GetEUid(taskId.Addr()) as u64;
-        }
-        Event { taskId, interrupted: _, ref mut ret, msg: Msg::GetGid(_msg) } => {
-            *ret = super::VMSpace::GetGid(taskId.Addr()) as u64;
-        }
-        Event { taskId, interrupted: _, ref mut ret, msg: Msg::SetGid(msg) } => {
-            *ret = super::VMSpace::SetGid(taskId.Addr(), msg.gid) as u64;
-        }
-        Event { taskId, interrupted: _, ref mut ret, msg: Msg::GetEGid(_msg) } => {
-            *ret = super::VMSpace::GetEGid(taskId.Addr()) as u64;
-        }
-        Event { taskId, interrupted: _, ref mut ret, msg: Msg::GetGroups(msg) } => {
-            *ret = super::VMSpace::GetGroups(taskId.Addr(), msg.size, msg.list) as u64;
-        }
-        Event { taskId, interrupted: _, ref mut ret, msg: Msg::SetGroups(msg) } => {
-            *ret = super::VMSpace::SetGroups(taskId.Addr(), msg.size, msg.list) as u64;
-        }
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::Sysinfo(msg) } => {
             *ret = super::VMSpace::Sysinfo(taskId.Addr(), msg.info) as u64;
         }
@@ -335,9 +304,6 @@ pub fn qCall(eventAddr: u64, event: &'static mut Event) -> QcallRet {
         }
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::CreateMemfd(msg) } => {
             *ret = super::VMSpace::CreateMemfd(taskId.Addr(), msg.len) as u64;
-        }
-        Event { taskId, interrupted: _, ref mut ret, msg: Msg::Pipe2(msg) } => {
-            *ret = super::VMSpace::Pipe2(taskId.Addr(), msg.fds, msg.flags) as u64;
         }
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::SchedGetAffinity(msg) } => {
             *ret = super::VMSpace::SchedGetAffinity(taskId.Addr(), msg.pid, msg.cpuSetSize, msg.mask) as u64;
