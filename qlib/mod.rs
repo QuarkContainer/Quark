@@ -71,7 +71,6 @@ pub const HYPERCALL_PRINT: u16 = 8;
 pub const HYPERCALL_EXIT: u16 = 9;
 pub const HYPERCALL_WAKEUP: u16 = 10;
 pub const HYPERCALL_GETTIME: u16 = 11;
-pub const HYPERCALL_PRINTSTATE: u16 = 12;
 pub const HYPERCALL_HLT: u16 = 13;
 pub const HYPERCALL_URING_WAKE: u16 = 14;
 pub const HYPERCALL_HCALL: u16 = 15;

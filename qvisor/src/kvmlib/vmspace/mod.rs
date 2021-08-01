@@ -147,12 +147,6 @@ impl VMSpace {
         }
     }
 
-    pub fn Sysinfo(_taskId: u64, info: u64) -> i64 {
-        unsafe {
-            return Self::GetRet(sysinfo(info as *mut sysinfo) as i64);
-        }
-    }
-
     pub fn Mount(&self, id: &str, rootfs: &str) -> Result<()> {
         let spec = &self.args.as_ref().unwrap().Spec;
         //let rootfs : &str = &spec.root.path;
@@ -437,19 +431,6 @@ impl VMSpace {
         };
 
         return Self::GetRet(ret as i64)
-    }
-
-    pub fn Eventfd(_taskId: u64, initval: u32, flags: i32) -> i64 {
-        unsafe {
-            let fd = eventfd(initval, flags);
-            if fd < 0 {
-                return Self::GetRet(fd as i64)
-            }
-
-            let hostfd = IO_MGR.lock().AddFd(fd, true);
-            FD_NOTIFIER.AddFd(fd, Box::new(GuestFd{hostfd: hostfd}));
-            return hostfd as i64
-        }
     }
 
     pub fn GetStr(string: u64) -> &'static str {
@@ -829,13 +810,6 @@ impl VMSpace {
         return fdInfo.Seek(taskId, offset, whence)
     }
 
-    pub fn ReadLink(_taskId: u64, path: u64, buf: u64, bufsize: u64) -> i64 {
-        //info!("ReadLink: the path is {}", Self::GetStr(path));
-
-        let res = unsafe{ readlink(path as *const c_char, buf as *mut c_char, bufsize as usize) };
-        return Self::GetRet(res as i64)
-    }
-
     pub fn ReadLinkAt(_taskId: u64, dirfd: i32, path: u64, buf: u64, bufsize: u64) -> i64 {
         //info!("ReadLinkAt: the path is {}", Self::GetStr(path));
 
@@ -852,51 +826,6 @@ impl VMSpace {
 
         let res = unsafe{ readlinkat(dirfd, path as *const c_char, buf as *mut c_char, bufsize as usize) };
         return Self::GetRet(res as i64)
-    }
-
-    pub fn IOSetup(_taskId: u64, nr_events: u64, ctx_idp: u64) -> i64 {
-        let nr = SysCallID::sys_io_setup as usize;
-        unsafe {
-            let res = syscall2(nr, nr_events as usize, ctx_idp as usize) as i64;
-
-            let context = *(ctx_idp as * const u64);
-            error!("IOSetup context id is {:x}", context);
-            return res
-        }
-    }
-
-    pub fn IOSubmit(_taskId: u64, _ctx_id: u64, _nr: u64, _iocbpp: u64) -> i64 {
-        /*let callId = SysCallID::sys_io_submit as usize;
-
-        unsafe {
-            for i in 0..nr {
-                let addr = (iocbpp + i*8) as *const u64;
-                let iocbp = &mut *((*addr) as *mut iocb);
-                iocbp.aio_fildes = match Self::GetOsfd(taskId, iocbp.aio_fildes as i32) {
-                    Some(fd) => fd as u32,
-                    None => return -SysErr::EBADF as i64,
-                };
-
-                if iocbp.aio_resfd != 0 {
-                    iocbp.aio_resfd = match Self::GetOsfd(taskId, iocbp.aio_resfd as i32) {
-                        Some(fd) => fd as u32,
-                        None => return -SysErr::EBADF as i64,
-                    };
-                }
-            }
-        }
-
-        unsafe {
-            let res = syscall3(callId, ctx_id as usize, nr as usize, iocbpp as usize) as i64;
-
-            if res < 0 {
-                error!("IOSubmit get error {}", -res);
-            }
-            return res
-        }*/
-
-        //todo: disable aio now. enable it later
-        return -EINVAL as i64;
     }
 
     pub fn Fstat(_taskId: u64, fd: i32, buf: u64) -> i64 {
@@ -990,14 +919,6 @@ impl VMSpace {
         return unsafe {
             Self::GetRet(libc::fstatat(dirfd, pathname as *const c_char, buf as *mut stat, flags) as i64)
         };
-    }
-
-    pub fn Statfs(path: u64, buf: u64) -> i64 {
-        let ret = unsafe{
-            statfs(path as *const c_char, buf as *mut statfs)
-        };
-
-        return Self::GetRet(ret as i64);
     }
 
     pub fn Fstatfs(_taskId: u64, fd: i32, buf: u64) -> i64 {
@@ -1254,14 +1175,6 @@ impl VMSpace {
         }
     }
 
-    pub fn MinCore(_taskId: u64,  addr: u64, len: u64, vec: u64) -> i64 {
-        let ret = unsafe{
-            mincore(addr as *mut c_void, len as size_t, vec as *mut c_uchar)
-        };
-
-        return Self::GetRet(ret as i64) as i64;
-    }
-
     pub fn GetTimeOfDay(_taskId: u64, tv: u64, tz: u64) -> i64 {
         //let res = unsafe{ gettimeofday(tv as *mut timeval, tz as *mut timezone) };
         //return Self::GetRet(res as i64)
@@ -1281,14 +1194,6 @@ impl VMSpace {
         }
 
         return len as i64;
-    }
-
-    pub fn Chdir(_taskId: u64, path: u64) -> i64 {
-        let ret = unsafe {
-            chdir(path as *const c_char)
-        };
-
-        return Self::GetRet(ret as i64)
     }
 
     pub fn Fchdir(_taskId: u64, fd: i32) -> i64 {
@@ -1317,14 +1222,6 @@ impl VMSpace {
         return Self::GetRet(ret as i64)
     }
 
-    pub fn Prctl(_taskId: u64, option: i32, arg2:u64, arg3 :u64, arg4 :u64, arg5: u64) -> i64 {
-        let ret = unsafe {
-            prctl(option, arg2, arg3, arg4, arg5)
-        };
-
-        return Self::GetRet(ret as i64)
-    }
-
     pub fn Mlock2(_taskId: u64, addr: u64, len: u64, flags: u32) -> i64 {
         let nr = SysCallID::sys_mlock2 as usize;
         let ret = unsafe {
@@ -1337,14 +1234,6 @@ impl VMSpace {
     pub fn MUnlock(_taskId: u64, addr: u64, len: u64) -> i64 {
         let ret = unsafe {
             munlock(addr as *const c_void, len as size_t)
-        };
-
-        return Self::GetRet(ret as i64)
-    }
-
-    pub fn Rename(_taskId: u64, oldpath: u64, newpath: u64) -> i64 {
-        let ret = unsafe {
-            rename(oldpath as *const c_char, newpath as *const c_char)
         };
 
         return Self::GetRet(ret as i64)
@@ -1368,46 +1257,6 @@ impl VMSpace {
 
         let ret = unsafe {
             fchown(fd, owner, group)
-        };
-
-        return Self::GetRet(ret as i64)
-    }
-
-    pub fn TimerFdCreate(_taskId: u64, clockId: i32, flags: i32) -> i64 {
-        let fd = unsafe {
-            timerfd_create(clockId, flags)
-        };
-
-        if fd < 0 {
-            return Self::GetRet(fd as i64)
-        }
-
-        let guestfd = IO_MGR.lock().AddFd(fd, true);
-
-        return guestfd as i64
-    }
-
-    pub fn TimerFdSetTime(_taskId: u64, fd: i32, flags: i32, newValue: u64, oldValue: u64) -> i64 {
-        let fd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
-        let ret = unsafe {
-            timerfd_settime(fd, flags, newValue as *const itimerspec, oldValue as *mut itimerspec)
-        };
-
-        return Self::GetRet(ret as i64)
-    }
-
-    pub fn TimerFdGetTime(_taskId: u64, fd: i32, currVal: u64) -> i64 {
-        let fd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
-        let ret = unsafe {
-            timerfd_gettime(fd, currVal as *mut itimerspec)
         };
 
         return Self::GetRet(ret as i64)
@@ -1543,42 +1392,6 @@ impl VMSpace {
         }
     }
 
-    pub fn OpenFifo(_taskId: u64, uid: u64, flags: i32) -> i64 {
-        let path = format!("/tmp/fifo_{}", uid);
-        error!("OpenFifo path is {}, flag is {:x}", &path, flags);
-        let cstr = CString::New(&path);
-        let osfd = unsafe {
-            open(cstr.Ptr() as *const c_char, flags)
-        };
-
-        {
-            let flags = unsafe {
-                fcntl(osfd, F_GETFL)
-            };
-
-            let flags = flags | Flags::O_NONBLOCK as i32;
-
-            let ret = unsafe {
-                fcntl(osfd, F_SETFL, flags)
-            };
-
-            if ret == -1 {
-                panic!("SetUnblock: can't F_SETFL for fd");
-            }
-        }
-
-        error!("OpenFifo path is {}, flag is {:x}, osfd is {}", &path, flags, osfd);
-
-        if osfd < 0 {
-            return Self::GetRet(osfd as i64);
-        }
-
-        let hostfd = IO_MGR.lock().AddFd(osfd, false);
-        FD_NOTIFIER.AddFd(osfd, Box::new(GuestFd{hostfd: hostfd}));
-
-        return hostfd as i64;
-    }
-
     pub fn Statm(_taskId: u64, buf: u64) -> i64 {
         const STATM : &str = "/proc/self/statm";
         let contents = fs::read_to_string(STATM)
@@ -1610,29 +1423,6 @@ impl VMSpace {
         }
 
         return (ax, bx, cx, dx)
-    }
-
-    pub fn HostCPUInfo(_taskId: u64, axArg: u32, cxArg: u32, addr: u64) -> i64 {
-        let (ax, bx, cx, dx) = Self::HostID(axArg, cxArg);
-
-        let CPUIDInfo = unsafe {
-            &mut *(addr as * mut CPUIDInfo)
-        };
-
-        CPUIDInfo.ax = ax;
-        CPUIDInfo.bx = bx;
-        CPUIDInfo.cx = cx;
-        CPUIDInfo.dx = dx;
-
-        return 0;
-    }
-
-    pub fn SetHostName(_taskId: u64, name: u64, len: usize) -> i64 {
-        let ret = unsafe {
-            sethostname(name as *const c_char, len)
-        };
-
-        return Self::GetRet(ret as i64)
     }
 
     pub fn SymLinkAt(_taskId: u64, oldpath: u64, newdirfd: i32, newpath: u64) -> i64 {

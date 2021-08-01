@@ -486,11 +486,6 @@ impl KVMVcpu {
 
                             SyncMgr::WakeShareSpaceReady();
                         }
-                        qlib::HYPERCALL_PRINTSTATE => {
-                            info!("get io out: HYPERCALL_PRINTSTATE");
-                            error!("vcpu_sregs is {:#x?}", vcpu_sregs);
-                        }
-
                         qlib::HYPERCALL_WAKEUP => {
                             //error!("qlib::HYPERCALL_WAKEUP***************");
                             self.Notify().expect("IO_MGR.lock().Notify() fail");
