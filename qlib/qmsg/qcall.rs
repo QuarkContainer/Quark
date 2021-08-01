@@ -41,32 +41,22 @@ pub enum Msg {
     ReadLink(ReadLink),
     ReadLinkAt(ReadLinkAt),
     GetTimeOfDay(GetTimeOfDay),
-    ClockGetRes(ClockGetRes),
-    ClockGetTime(ClockGetTime),
-    ClockSetTime(ClockSetTime),
-    Times(Times),
     Interrupt(Interrupt),
     Wait,
     Exit(Exit),
     ExitThreadGroup(ExitThreadGroup),
     IoCtl(IoCtl),
     Fcntl(Fcntl),
-    NanoSleep(NanoSleep),
-    Time(Time),
     Close(Close),
 
     Getxattr(Getxattr),
     Lgetxattr(Lgetxattr),
     Fgetxattr(Fgetxattr),
-    Stat(Stat),
     Fstat(Fstat),
     BatchFstatat(BatchFstatat),
     Fstatat(Fstatat),
     Statfs(Statfs),
     Fstatfs(Fstatfs),
-    PRLimit(PRLimit),
-    GetRLimit(GetRLimit),
-    SetRLimit(SetRLimit),
     GetDents64(GetDents64),
 
     ForkFdTbl(ForkFdTbl),
@@ -81,9 +71,6 @@ pub enum Msg {
     MSync(MSync),
     MAdvise(MAdvise),
     FDataSync(FDataSync),
-    Uname(Uname),
-    Umask(Umask),
-    Access(Access),
     FAccessAt(FAccessAt),
 
     MinCore(MinCore),
@@ -106,7 +93,6 @@ pub enum Msg {
     EpollCtl(EpollCtl),
 
     Sysinfo(Sysinfo),
-    GetCurrentDirName(GetCurrentDirName),
     SchedGetAffinity(SchedGetAffinity),
     GetRandom(GetRandom),
     Chdir(Chdir),
@@ -180,26 +166,6 @@ pub struct InitPara {
     pub pagePoolBase: u64,
     pub pageCount: u32,
     pub next: u32,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct PRLimit {
-    pub pid: i32,
-    pub resource: i32,
-    pub newLimit: u64,
-    pub oldLimit: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct GetRLimit {
-    pub resource: u32,
-    pub rlimit: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct SetRLimit {
-    pub resource: u32,
-    pub rlimit: u64,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -291,29 +257,6 @@ pub struct GetTimeOfDay {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct ClockGetRes {
-    pub clkId: i32,
-    pub ts: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct ClockGetTime {
-    pub clkId: i32,
-    pub ts: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct ClockSetTime {
-    pub clkId: i32,
-    pub ts: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Times {
-    pub tms: u64,
-}
-
-#[derive(Clone, Default, Debug)]
 pub struct Getxattr {
     pub path: u64,
     pub name: u64,
@@ -360,17 +303,6 @@ pub struct Fcntl {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct NanoSleep {
-    pub req: u64,
-    pub rem: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Time {
-    pub tloc: u64,
-}
-
-#[derive(Clone, Default, Debug)]
 pub struct Close {
     pub fd: i32,
 }
@@ -385,12 +317,6 @@ pub struct Statfs {
 pub struct Fstatfs {
     pub fd: i32,
     pub buf: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Stat {
-    pub pathName: u64,
-    pub statBuff: u64,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -450,9 +376,6 @@ pub struct HostCPUInfo {
 pub struct Sysinfo {
     pub info: u64,
 }
-
-#[derive(Clone, Default, Debug)]
-pub struct GetCurrentDirName {}
 
 //create a new fdTbl by fork from a tgid
 #[derive(Clone, Default, Debug)]
@@ -539,17 +462,6 @@ pub struct CreateAt {
     pub uid: u32,
     pub gid: u32,
     pub fstatAddr: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Uname {
-    pub buff: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Access {
-    pub pathName: u64,
-    pub mode: i32,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -724,11 +636,6 @@ pub struct Fadvise {
     pub offset: u64,
     pub len: u64,
     pub advice: i32,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Umask {
-    pub mask: u32
 }
 
 #[derive(Clone, Default, Debug)]
