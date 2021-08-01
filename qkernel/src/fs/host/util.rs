@@ -394,8 +394,3 @@ pub fn SetTimestamps(fd: i32, ts: &InterTimeSpec) -> Result<()> {
 pub fn Seek(fd: i32, offset: i64, whence: i32) -> i64 {
     return HostSpace::Seek(fd, offset, whence)
 }
-
-pub fn Pipe(fds: &mut [i32; 2]) -> i64 {
-    let addr = &fds[0] as *const _ as u64;
-    return HostSpace::Pipe2(addr, 0);
-}

@@ -132,15 +132,6 @@ impl HostSpace {
         return HostSpace::HCall(&mut msg) as i64;
     }
 
-    pub fn Truncate(path: u64, len: i64) -> i64 {
-        let mut msg = Msg::Truncate(Truncate {
-            path,
-            len,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
     pub fn Ftruncate(fd: i32, len: i64) -> i64 {
         let mut msg = Msg::Ftruncate(Ftruncate {
             fd,
@@ -376,28 +367,6 @@ impl HostSpace {
         //let res = HostSpace::Call(&mut msg) as i64;
         let res = HostSpace::HCall(&mut msg) as i64;
         return res;
-    }
-
-    pub fn MapFile(len: u64, hugePage: bool, fd: i32, offset: u64, share: bool) -> i64 {
-        let mut msg = Msg::MapFile(MapFile {
-            len,
-            hugePage,
-            fd,
-            offset,
-            share,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn MapAnon(len: u64, hugePage: bool, share: bool) -> i64 {
-        let mut msg = Msg::MapAnon(MapAnon {
-            len,
-            hugePage,
-            share,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn Exit() {
@@ -712,7 +681,7 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn GetDents(fd: i32, dirp: u64, count: u32) -> i64 {
+    pub fn GetDents1(fd: i32, dirp: u64, count: u32) -> i64 {
         let mut msg = Msg::GetDents(GetDents {
             fd,
             dirp,
@@ -730,56 +699,6 @@ impl HostSpace {
         });
 
         return HostSpace::HCall(&mut msg) as i64;
-    }
-
-    pub fn GetUid() -> i64 {
-        let mut msg = Msg::GetUid(GetUid {});
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn GetEUid() -> i64 {
-        let mut msg = Msg::GetUid(GetUid {});
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn GetGid() -> i64 {
-        let mut msg = Msg::GetGid(GetGid {});
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn SetGid(gid: u32) -> i64 {
-        let mut msg = Msg::SetGid(SetGid {
-            gid,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn GetEGid() -> i64 {
-        let mut msg = Msg::GetEGid(GetEGid {});
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn GetGroups(size: i32, list: u64) -> i64 {
-        let mut msg = Msg::GetGroups(GetGroups {
-            size,
-            list
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn SetGroups(size: usize, list: u64) -> i64 {
-        let mut msg = Msg::SetGroups(SetGroups {
-            size,
-            list
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn GetRandom(buf: u64, len: u64, flags: u32) -> i64 {
@@ -1024,15 +943,6 @@ impl HostSpace {
         let mut msg = Msg::ForkFdTbl(ForkFdTbl {
             pTgid,
             tgid,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn Pipe2(fds: u64, flags: i32) -> i64 {
-        let mut msg = Msg::Pipe2(Pipe2 {
-            fds,
-            flags,
         });
 
         return HostSpace::Call(&mut msg, false) as i64;
