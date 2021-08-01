@@ -29,7 +29,6 @@ use std::str;
 use std::slice;
 use std::fs;
 use libc::*;
-use std::time::Duration;
 use std::marker::Send;
 use serde_json;
 use alloc::collections::btree_map::BTreeMap;
@@ -136,15 +135,6 @@ impl VMSpace {
         return IO_MGR.lock().GetByHost(hostfd);
     }
 
-    pub fn GetDents(_taskId: u64, fd: i32, dirp: u64, count: u32) -> i64 {
-        let fd = Self::GetOsfd(fd).expect("GetDents64");
-
-        let nr = SysCallID::sys_getdents as usize;
-        unsafe {
-            return syscall3(nr, fd as usize, dirp as usize, count as usize) as i64;
-        }
-    }
-
     pub fn GetDents64(_taskId: u64, fd: i32, dirp: u64, count: u32) -> i64 {
         let fd = Self::GetOsfd(fd).expect("GetDents64");
 
@@ -161,24 +151,6 @@ impl VMSpace {
         unsafe {
             return Self::GetRet(sysinfo(info as *mut sysinfo) as i64);
         }
-    }
-
-    pub fn GetCwd(_taskId: u64, buf: u64, size: u64) -> i64 {
-        let nr = SysCallID::sys_getcwd as usize;
-
-        unsafe {
-            let res = syscall2(nr, buf as usize, size as usize) as i64;
-            return res
-        }
-
-        /*let ret = unsafe {
-            getcwd(buf as *mut c_char, size as size_t) as i64
-        };
-        info!("GetCwd: the local path is {}", Self::GetStr(ret as u64));
-
-        return Self::GetRet(ret as i64)*/
-        //return ret;
-        //return Self::GetStrLen(ret as u64);
     }
 
     pub fn Mount(&self, id: &str, rootfs: &str) -> Result<()> {
@@ -927,15 +899,6 @@ impl VMSpace {
         return -EINVAL as i64;
     }
 
-    pub fn Stat(pathName: u64, statBuff: u64) -> i64 {
-        info!("Stat: the filename is {}", Self::GetStr(pathName));
-        let ret = unsafe{
-            stat(pathName as *const c_char, statBuff as *mut stat)
-        };
-
-        return Self::GetRet(ret as i64);
-    }
-
     pub fn Fstat(_taskId: u64, fd: i32, buf: u64) -> i64 {
         let fd = match Self::GetOsfd(fd) {
             Some(fd) => fd,
@@ -1047,30 +1010,6 @@ impl VMSpace {
         return Self::GetRet(ret as i64);
     }
 
-    pub fn PRLimit(_pid: i32, resource: i32, newLimit: u64, oldLimit: u64) -> i64 {
-        let ret = unsafe{
-            prlimit(0 as pid_t, resource as u32, newLimit as *const rlimit, oldLimit as *mut rlimit)
-        };
-
-        return Self::GetRet(ret as i64);
-    }
-
-    pub fn GetRLimit(resource: u32, rlimit: u64) -> i64 {
-        let ret = unsafe {
-            getrlimit(resource, rlimit as *mut rlimit )
-        };
-
-        return Self::GetRet(ret as i64);
-    }
-
-    pub fn SetRLimit(resource: u32, rlimit: u64) -> i64 {
-        let ret = unsafe {
-            setrlimit(resource, rlimit as *const rlimit)
-        };
-
-        return Self::GetRet(ret as i64);
-    }
-
     pub fn Unlinkat(_taskId: u64, dirfd: i32, pathname: u64, flags: i32) -> i64 {
         info!("Unlinkat: the pathname is {}", Self::GetStr(pathname));
         let dirfd = {
@@ -1134,31 +1073,6 @@ impl VMSpace {
     pub fn MAdvise(_taskId: u64, addr: u64, len: usize, advise: i32) -> i64 {
         let ret = unsafe{
             madvise(addr as *mut c_void, len, advise)
-        };
-
-        return Self::GetRet(ret as i64);
-    }
-
-    pub fn Uname(_taskId: u64, buff: u64) -> i64 {
-        let ret = unsafe{
-            uname(buff as *mut utsname)
-        };
-
-        return Self::GetRet(ret as i64);
-    }
-
-    pub fn Umask(_taskId: u64, mask: u32) -> i64 {
-        let ret = unsafe{
-            umask(mask)
-        };
-
-        return Self::GetRet(ret as i64);
-    }
-
-    pub fn Access(_taskId: u64, pathName: u64, mode: i32) -> i64 {
-        info!("Access: the pathName is {}", Self::GetStr(pathName));
-        let ret = unsafe{
-            access(pathName as *const c_char, mode)
         };
 
         return Self::GetRet(ret as i64);
@@ -1348,30 +1262,6 @@ impl VMSpace {
         return Self::GetRet(ret as i64) as i64;
     }
 
-    pub fn Pause() -> QcallRet {
-        return QcallRet::Block
-    }
-
-    pub fn GetDuration(timeout: u64) -> Duration {
-        let timespec = unsafe {
-            &*(timeout as *const libc::timespec)
-        };
-
-        let dur = Duration::new(timespec.tv_sec as u64, timespec.tv_nsec as u32);
-        return dur;
-    }
-
-    pub fn Time(tloc: u64) -> i64 {
-        //info!("---------------call in SysTime tloc = {:x}", tloc);
-        let ret = unsafe{
-            time(tloc as *mut time_t)
-        };
-
-        //info!("The sysTime ret is {:x}", ret);
-
-        return Self::GetRet(ret as i64);
-    }
-
     pub fn GetTimeOfDay(_taskId: u64, tv: u64, tz: u64) -> i64 {
         //let res = unsafe{ gettimeofday(tv as *mut timeval, tz as *mut timezone) };
         //return Self::GetRet(res as i64)
@@ -1382,29 +1272,6 @@ impl VMSpace {
             //error!("finish GetTimeOfDay");
             return res
         }
-    }
-
-    pub fn ClockGetRes(_taskId: u64, clkId: i32, ts: u64) -> i64 {
-        let res = unsafe{ clock_getres(clkId as clockid_t, ts as *mut timespec) };
-        return Self::GetRet(res as i64)
-    }
-
-    pub fn ClockGetTime(_taskId: u64, clkId: i32, ts: u64) -> i64 {
-        let res = unsafe{ clock_gettime(clkId as clockid_t, ts as *mut timespec) };
-        return Self::GetRet(res as i64)
-    }
-
-    pub fn ClockSetTime(_taskId: u64, clkId: i32, ts: u64) -> i64 {
-        let res = unsafe{ clock_getres(clkId as clockid_t, ts as *mut timespec) };
-        return Self::GetRet(res as i64)
-    }
-
-    pub fn Times(_taskId: u64, tms: u64) -> i64 {
-        let res = unsafe {
-            times(tms as *mut tms)
-        };
-
-        return Self::GetRet(res as i64)
     }
 
     pub fn GetRandom(&mut self, _taskId: u64, buf: u64, len: u64, _flags: u32) -> i64 {

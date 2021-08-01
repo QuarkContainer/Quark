@@ -285,41 +285,6 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn ClockGetRes(clkId: i32, ts: u64) -> i64 {
-        let mut msg = Msg::ClockGetRes(ClockGetRes {
-            clkId,
-            ts,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn ClockGetTime(clkId: i32, ts: u64) -> i64 {
-        let mut msg = Msg::ClockGetTime(ClockGetTime {
-            clkId,
-            ts,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn ClockSetTime(clkId: i32, ts: u64) -> i64 {
-        let mut msg = Msg::ClockSetTime(ClockSetTime {
-            clkId,
-            ts,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn Times(tms: u64) -> i64 {
-        let mut msg = Msg::Times(Times {
-            tms,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
     pub fn ReadLink(path: u64, buf: u64, bufsize: u64) -> i64 {
         let mut msg = Msg::ReadLink(ReadLink {
             path,
@@ -395,23 +360,6 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn NanoSleep(req: u64, rem: u64) -> i64 {
-        let mut msg = Msg::NanoSleep(NanoSleep {
-            req,
-            rem,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn Time(tloc: u64) -> i64 {
-        let mut msg = Msg::Time(Time {
-            tloc,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
     pub fn Statfs(path: u64, buf: u64) -> i64 {
         let mut msg = Msg::Statfs(Statfs {
             path,
@@ -430,30 +378,12 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64
     }
 
-    pub fn Access(pathName: u64, mode: i32) -> i64 {
-        let mut msg = Msg::Access(Access {
-            pathName,
-            mode,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
     pub fn FAccessAt(dirfd: i32, pathname: u64, mode: i32, flags: i32) -> i64 {
         let mut msg = Msg::FAccessAt(FAccessAt {
             dirfd,
             pathname,
             mode,
             flags
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn Stat(pathName: u64, statBuff: u64) -> i64 {
-        let mut msg = Msg::Stat(Stat {
-            pathName,
-            statBuff,
         });
 
         return HostSpace::Call(&mut msg, false) as i64;
@@ -607,14 +537,6 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn Uname(buff: u64) -> i64 {
-        let mut msg = Msg::Uname(Uname {
-            buff,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
     pub fn Seek(fd: i32, offset: i64, whence: i32) -> i64 {
         let mut msg = Msg::Seek(Seek {
             fd,
@@ -623,72 +545,6 @@ impl HostSpace {
         });
 
         return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn PRLimit(pid: i32, resource: i32, newLimit: u64, oldLimit: u64) -> i64 {
-        let mut msg = Msg::PRLimit(PRLimit {
-            pid,
-            resource,
-            newLimit,
-            oldLimit,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn GetRLimit(resource: u32, rlimit: u64) -> i64 {
-        let mut msg = Msg::GetRLimit(GetRLimit {
-            resource,
-            rlimit,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn SetRLimit(resource: u32, rlimit: u64) -> i64 {
-        let mut msg = Msg::SetRLimit(SetRLimit {
-            resource,
-            rlimit,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn Dup(oldfd: i32) -> i64 {
-        let mut msg = Msg::Dup(Dup {
-            oldfd,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn Dup2(oldfd: i32, newfd: i32) -> i64 {
-        let mut msg = Msg::Dup2(Dup2 {
-            oldfd,
-            newfd,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn Dup3(oldfd: i32, newfd: i32, flags: i32) -> i64 {
-        let mut msg = Msg::Dup3(Dup3 {
-            oldfd,
-            newfd,
-            flags,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn GetDents1(fd: i32, dirp: u64, count: u32) -> i64 {
-        let mut msg = Msg::GetDents(GetDents {
-            fd,
-            dirp,
-            count,
-        });
-
-        return HostSpace::HCall(&mut msg) as i64;
     }
 
     pub fn GetDents64(fd: i32, dirp: u64, count: u32) -> i64 {
@@ -723,27 +579,6 @@ impl HostSpace {
         let mut msg = Msg::Statm(Statm {
             buf: statm as * const _ as u64
         });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn GetCwd(buf: u64, size: u64) -> i64 {
-        let mut msg = Msg::GetCwd(GetCwd {
-            buf,
-            size,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn GetPGid() -> i64 {
-        let mut msg = Msg::GetPGid(GetPGid {});
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn Pause() -> i64 {
-        let mut msg = Msg::Pause(Pause {});
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
@@ -1006,14 +841,6 @@ impl HostSpace {
             offset,
             len,
             advice,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn Umask(mask: u32) -> i64 {
-        let mut msg = Msg::Umask(Umask {
-            mask,
         });
 
         return HostSpace::Call(&mut msg, false) as i64;

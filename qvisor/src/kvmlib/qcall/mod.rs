@@ -157,38 +157,11 @@ pub fn qCall(eventAddr: u64, event: &'static mut Event) -> QcallRet {
             *ret = super::VMSpace::GetTimeOfDay(taskId.Addr(), msg.tv, msg.tz) as u64;
             //info!("end of GetTimeOfDay");
         }
-        Event { taskId, interrupted: _, ref mut ret, msg: Msg::ClockGetRes(msg) } => {
-            *ret = super::VMSpace::ClockGetRes(taskId.Addr(), msg.clkId, msg.ts) as u64;
-        }
-        Event { taskId, interrupted: _, ref mut ret, msg: Msg::ClockGetTime(msg) } => {
-            *ret = super::VMSpace::ClockGetTime(taskId.Addr(), msg.clkId, msg.ts) as u64;
-        }
-        Event { taskId, interrupted: _, ref mut ret, msg: Msg::ClockSetTime(msg) } => {
-            *ret = super::VMSpace::ClockSetTime(taskId.Addr(), msg.clkId, msg.ts) as u64;
-        }
-        Event { taskId, interrupted: _, ref mut ret, msg: Msg::Times(msg) } => {
-            *ret = super::VMSpace::Times(taskId.Addr(), msg.tms) as u64;
-        }
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::IoCtl(msg) } => {
             *ret = super::VMSpace::IoCtl(taskId.Addr(), msg.fd, msg.cmd, msg.argp) as u64;
         }
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::Fcntl(msg) } => {
             *ret = super::VMSpace::Fcntl(taskId.Addr(), msg.fd, msg.cmd, msg.arg) as u64;
-        }
-       Event { taskId: _, interrupted: _, ref mut ret, msg: Msg::Time(msg) } => {
-            *ret = super::VMSpace::Time(msg.tloc) as u64;
-        }
-        Event { taskId: _, interrupted: _, ref mut ret, msg: Msg::PRLimit(msg) } => {
-            *ret = super::VMSpace::PRLimit(msg.pid, msg.resource, msg.newLimit, msg.oldLimit) as u64;
-        }
-        Event { taskId: _, interrupted: _, ref mut ret, msg: Msg::GetRLimit(msg) } => {
-            *ret = super::VMSpace::GetRLimit(msg.resource, msg.rlimit) as u64;
-        }
-        Event { taskId: _, interrupted: _, ref mut ret, msg: Msg::SetRLimit(msg) } => {
-            *ret = super::VMSpace::SetRLimit(msg.resource, msg.rlimit) as u64;
-        }
-        Event { taskId: _, interrupted: _, ref mut ret, msg: Msg::Stat(msg) } => {
-            *ret = super::VMSpace::Stat(msg.pathName, msg.statBuff) as u64;
         }
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::Fstat(msg) } => {
             *ret = super::VMSpace::Fstat(taskId.Addr(), msg.fd, msg.buff) as u64;
@@ -238,27 +211,14 @@ pub fn qCall(eventAddr: u64, event: &'static mut Event) -> QcallRet {
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::FDataSync(msg) } => {
             *ret = super::VMSpace::FDataSync(taskId.Addr(), msg.fd) as u64;
         }
-        Event { taskId, interrupted: _, ref mut ret, msg: Msg::Uname(msg) } => {
-            *ret = super::VMSpace::Uname(taskId.Addr(), msg.buff) as u64;
-        }
-        Event { taskId, interrupted: _, ref mut ret, msg: Msg::Umask(msg) } => {
-            *ret = super::VMSpace::Umask(taskId.Addr(), msg.mask) as u64;
-        }
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::Unlinkat(msg) } => {
             *ret = super::VMSpace::Unlinkat(taskId.Addr(), msg.dirfd, msg.pathname, msg.flags) as u64;
         }
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::Mkdirat(msg) } => {
             *ret = super::VMSpace::Mkdirat(taskId.Addr(), msg.dirfd, msg.pathname, msg.mode_, msg.uid, msg.gid) as u64;
         }
-        Event { taskId, interrupted: _, ref mut ret, msg: Msg::Access(msg) } => {
-            *ret = super::VMSpace::Access(taskId.Addr(), msg.pathName, msg.mode) as u64;
-        }
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::FAccessAt(msg) } => {
             *ret = super::VMSpace::FAccessAt(taskId.Addr(), msg.dirfd, msg.pathname, msg.mode, msg.flags) as u64;
-        }
-        Event { taskId: _, interrupted: _, ref mut ret, msg: Msg::Pause(_msg) } => {
-            *ret = 0;
-            return super::VMSpace::Pause();
         }
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::Socket(msg) } => {
             *ret = super::VMSpace::Socket(taskId.Addr(), msg.domain, msg.type_, msg.protocol) as u64;
@@ -290,17 +250,11 @@ pub fn qCall(eventAddr: u64, event: &'static mut Event) -> QcallRet {
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::MinCore(msg) } => {
             *ret = super::VMSpace::MinCore(taskId.Addr(), msg.addr, msg.len, msg.vec) as u64;
         }
-        Event { taskId, interrupted: _, ref mut ret, msg: Msg::GetDents(msg) } => {
-            *ret = super::VMSpace::GetDents(taskId.Addr(), msg.fd, msg.dirp, msg.count) as u64;
-        }
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::GetDents64(msg) } => {
             *ret = super::VMSpace::GetDents64(taskId.Addr(), msg.fd, msg.dirp, msg.count) as u64;
         }
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::Sysinfo(msg) } => {
             *ret = super::VMSpace::Sysinfo(taskId.Addr(), msg.info) as u64;
-        }
-        Event { taskId, interrupted: _, ref mut ret, msg: Msg::GetCwd(msg) } => {
-            *ret = super::VMSpace::GetCwd(taskId.Addr(), msg.buf, msg.size) as u64;
         }
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::CreateMemfd(msg) } => {
             *ret = super::VMSpace::CreateMemfd(taskId.Addr(), msg.len) as u64;

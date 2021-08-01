@@ -367,11 +367,6 @@ impl Task {
         return self.fsContext.Umask();
     }
 
-    pub fn SwapUmask(&self, mask: u32) -> i64 {
-        //return self.fsContext.SwapUmask(mask);
-        return Kernel::HostSpace::Umask(mask as u32)
-    }
-
     pub fn Creds(&self) -> Credentials {
         return self.creds.clone();
     }
