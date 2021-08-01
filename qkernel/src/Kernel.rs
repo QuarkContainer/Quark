@@ -100,16 +100,6 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn MinCore(addr: u64, len: u64, vec: u64) -> i64 {
-        let mut msg = Msg::MinCore(MinCore {
-            addr,
-            len,
-            vec,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
     pub fn Fallocate(fd: i32, mode: i32, offset: i64, len: i64) -> i64 {
         let mut msg = Msg::Fallocate(Fallocate {
             fd,
@@ -136,16 +126,6 @@ impl HostSpace {
         let mut msg = Msg::Ftruncate(Ftruncate {
             fd,
             len,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn Lseek(fd: i32, offset: i64, whence: i32) -> i64 {
-        let mut msg = Msg::Seek(Seek {
-            fd,
-            offset,
-            whence,
         });
 
         return HostSpace::Call(&mut msg, false) as i64;
@@ -285,16 +265,6 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn ReadLink(path: u64, buf: u64, bufsize: u64) -> i64 {
-        let mut msg = Msg::ReadLink(ReadLink {
-            path,
-            buf,
-            bufsize,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
     pub fn ReadLinkAt(dirfd: i32, path: u64, buf: u64, bufsize: u64) -> i64 {
         let mut msg = Msg::ReadLinkAt(ReadLinkAt {
             dirfd,
@@ -334,12 +304,6 @@ impl HostSpace {
         return res;
     }
 
-    pub fn Exit() {
-        HyperCall64(HYPERCALL_EXIT, 0, 0);
-        //let mut exit = qlib::Msg::Exit;
-        //Kernel::Call(&mut exit);
-    }
-
     pub fn Fcntl(fd: i32, cmd: i32, arg: u64) -> i64 {
         let mut msg = Msg::Fcntl(Fcntl {
             fd,
@@ -358,15 +322,6 @@ impl HostSpace {
         });
 
         return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn Statfs(path: u64, buf: u64) -> i64 {
-        let mut msg = Msg::Statfs(Statfs {
-            path,
-            buf,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64
     }
 
     pub fn Fstatfs(fd: i32, buf: u64) -> i64 {
@@ -567,14 +522,6 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn Sysinfo(info: u64) -> i64 {
-        let mut msg = Msg::Sysinfo(Sysinfo {
-            info
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
     pub fn Statm(statm: &mut StatmInfo) -> i64 {
         let mut msg = Msg::Statm(Statm {
             buf: statm as * const _ as u64
@@ -678,88 +625,6 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn Select(nfds: i32, readfds: u64, writefds: u64, exceptfds: u64, timeout: u64) -> i64 {
-        let mut msg = Msg::Select(Select {
-            nfds,
-            readfds,
-            writefds,
-            exceptfds,
-            timeout,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn PSelect(nfds: i32, readfds: u64, writefds: u64, exceptfds: u64, timeout: u64, sigmask: u64) -> i64 {
-        let mut msg = Msg::PSelect(PSelect {
-            nfds,
-            readfds,
-            writefds,
-            exceptfds,
-            timeout,
-            sigmask,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn Poll(fds: u64, nfds: u64, timeout: i32) -> i64 {
-        let mut msg = Msg::Poll(Poll {
-            fds,
-            nfds,
-            timeout,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn EpollCreate(size: i32) -> i64 {
-        let mut msg = Msg::EpollCreate(EpollCreate {
-            size,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn EpollCreate1(flags: i32) -> i64 {
-        let mut msg = Msg::EpollCreate1(EpollCreate1 {
-            flags,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn EpollPWait(epfd: i32, events: u64, maxEvents: i32, timeout: i32, sigmask: u64) -> i64 {
-        let mut msg = Msg::EpollPWait(EpollPWait {
-            epfd,
-            events,
-            maxEvents,
-            timeout,
-            sigmask,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn EpollCtl(epfd: i32, op: i32, fd: i32, event: u64) -> i64 {
-        let mut msg = Msg::EpollCtl(EpollCtl {
-            epfd,
-            op,
-            fd,
-            event,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn ExitThreadGroup(tgid: i32) -> i64 {
-        let mut msg = Msg::ExitThreadGroup(ExitThreadGroup {
-            tgid,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
     pub fn ExitVM(exitCode: i32) {
         HyperCall64(HYPERCALL_EXIT_VM, exitCode as u64, 0);
         //Self::AQCall(qmsg::HostOutputMsg::ExitVM(exitCode));
@@ -772,15 +637,6 @@ impl HostSpace {
         };
 
         HyperCall64(HYPERCALL_PANIC, &msg as *const _ as u64, 0);
-    }
-
-    pub fn ForkFdTbl(pTgid: i32, tgid: i32) -> i64 {
-        let mut msg = Msg::ForkFdTbl(ForkFdTbl {
-            pTgid,
-            tgid,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn TryOpenAt(dirfd: i32, name: u64, addr: u64) -> i64 {
@@ -819,14 +675,6 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn Chdir(path: u64) -> i64 {
-        let mut msg = Msg::Chdir(Chdir {
-            path,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
     pub fn Fchdir(fd: i32) -> i64 {
         let mut msg = Msg::Fchdir(Fchdir {
             fd,
@@ -841,46 +689,6 @@ impl HostSpace {
             offset,
             len,
             advice,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn Eventfd(initval: u32, flags: i32) -> i64 {
-        let mut msg = Msg::Eventfd(Eventfd {
-            initval,
-            flags,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn Prctl(option: i32, arg2: u64, arg3: u64, arg4: u64, arg5: u64) -> i64 {
-        let mut msg = Msg::Prctl(Prctl {
-            option,
-            arg2,
-            arg3,
-            arg4,
-            arg5,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn IOSetup(nr_events: u64, ctx_idp: u64) -> i64 {
-        let mut msg = Msg::IOSetup(IOSetup {
-            nr_events,
-            ctx_idp,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn IOSubmit(ctx_id: u64, nr: u64, iocbpp: u64) -> i64 {
-        let mut msg = Msg::IOSubmit(IOSubmit {
-            ctx_id,
-            nr,
-            iocbpp,
         });
 
         return HostSpace::Call(&mut msg, false) as i64;
@@ -905,15 +713,6 @@ impl HostSpace {
         return HostSpace::HCall(&mut msg) as i64;
     }
 
-    pub fn Rename(oldpath: u64, newpath: u64) -> i64 {
-        let mut msg = Msg::Rename(Rename {
-            oldpath,
-            newpath,
-        });
-
-        return HostSpace::HCall(&mut msg) as i64;
-    }
-
     pub fn NonBlockingPoll(fd: i32, mask: EventMask) -> i64 {
         let mut msg = Msg::NonBlockingPoll(NonBlockingPoll {
             fd,
@@ -931,15 +730,6 @@ impl HostSpace {
         let mut msg = Msg::NewTmpfsFile(NewTmpfsFile {
             typ,
             addr,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn OpenFifo(UID: u64, flags: i32) -> i64 {
-        let mut msg = Msg::OpenFifo(OpenFifo {
-            UID,
-            flags,
         });
 
         return HostSpace::Call(&mut msg, false) as i64;
@@ -986,16 +776,6 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn SetBuff(fd: i32, readBuf: u64, writeBuf: u64) -> i64 {
-        let mut msg = Msg::SetBuff(SetBuff {
-            fd,
-            readBuf,
-            writeBuf,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
     pub fn Chown(pathname: u64, owner: u32, group: u32) -> i64 {
         let mut msg = Msg::Chown(Chown {
             pathname,
@@ -1011,35 +791,6 @@ impl HostSpace {
             fd,
             owner,
             group,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn TimerFdCreate(clockId: i32, flags: i32) -> i64 {
-        let mut msg = Msg::TimerFdCreate(TimerFdCreate {
-            clockId,
-            flags,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn TimerFdSetTime(fd: i32, flags: i32, newValue: u64, oldValue: u64) -> i64 {
-        let mut msg = Msg::TimerFdSetTime(TimerFdSetTime {
-            fd,
-            flags,
-            newValue,
-            oldValue,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn TimerFdGetTime(fd: i32, currVal: u64) -> i64 {
-        let mut msg = Msg::TimerFdGetTime(TimerFdGetTime {
-            fd,
-            currVal,
         });
 
         return HostSpace::Call(&mut msg, false) as i64;
@@ -1063,15 +814,6 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn SetHostName(name: u64, len: usize) -> i64 {
-        let mut msg = Msg::SetHostName(SetHostName {
-            name,
-            len,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
     pub fn SymLinkAt(oldpath: u64, newdirfd: i32, newpath: u64) -> i64 {
         let mut msg = Msg::SymLinkAt(SymLinkAt {
             oldpath,
@@ -1086,16 +828,6 @@ impl HostSpace {
         let mut msg = Msg::Futimens(Futimens {
             fd,
             times,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn HostCPUInfo(axArg: u32, cxArg: u32, addr: u64) -> i64 {
-        let mut msg = Msg::HostCPUInfo(HostCPUInfo {
-            axArg,
-            cxArg,
-            addr,
         });
 
         return HostSpace::Call(&mut msg, false) as i64;
@@ -1138,14 +870,6 @@ impl HostSpace {
         });
 
         HostSpace::AQCall(&msg);
-    }
-
-    pub fn PrintInt(val: i64) {
-        let mut msg = Msg::PrintInt(PrintInt {
-            val
-        });
-
-        HostSpace::Call(&mut msg, false);
     }
 
     //unmap a Physical Memory Area
@@ -1252,10 +976,6 @@ impl HostSpace {
                 }
             };
         }
-    }
-
-    pub fn PrintState() {
-        HyperCall64(HYPERCALL_PRINTSTATE, 0, 0);
     }
 
     pub fn KernelMsg(id: u64, val: u64) {
