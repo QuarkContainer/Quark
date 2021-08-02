@@ -811,8 +811,6 @@ impl MemoryManager {
 
                     let writeable = vma.effectivePerms.Write();
                     if writeable {
-                        self.MapPageWriteLocked(pageAddr, phyAddr, exec);
-
                         let page = { super::super::PAGE_MGR.AllocPage(true).unwrap() };
                         CopyPage(pageAddr, page);
                         self.MapPageWriteLocked(pageAddr, page, exec);
@@ -827,7 +825,6 @@ impl MemoryManager {
                     }
                 }
 
-                Invlpg(pageAddr);
                 return Ok(())
             },
             None => {
@@ -843,7 +840,6 @@ impl MemoryManager {
                 }
 
                 super::super::PAGE_MGR.DerefPage(phyAddr);
-                Invlpg(pageAddr);
                 return Ok(())
             }
         }
@@ -886,8 +882,6 @@ impl MemoryManager {
             self.MapPageWriteLocked(pageAddr, page, exec);
             super::super::PAGE_MGR.DerefPage(page);
         }
-
-        Invlpg(pageAddr);
     }
 
     pub fn CopyOnWrite(&self, pageAddr: u64, vma: &VMA) {

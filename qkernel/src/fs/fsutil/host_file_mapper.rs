@@ -15,20 +15,12 @@
 use alloc::collections::btree_map::BTreeMap;
 use spin::Mutex;
 
-use super::super::super::Kernel::HostSpace;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::range::*;
 
 pub struct Mapping {
     pub addr: u64,
     pub writeable: bool,
-}
-
-impl Mapping {
-    pub fn Unmap(&self) {
-        info!("Mapping Dropping start is {:x}", self.addr);
-        HostSpace::UnMapPma(self.addr);
-    }
 }
 
 const CHUNK_SHIFT: u64 = MemoryDef::HUGE_PAGE_SHIFT;
