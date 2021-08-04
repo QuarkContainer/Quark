@@ -764,14 +764,14 @@ impl SockOperations for UnixSocketOperations {
 
                 return Err(Error::SysError(SysErr::EOPNOTSUPP));
             } else {
-                task.CopyIn(msgHdr.msgName, msgHdr.nameLen as usize)?
+                task.CopyInVec(msgHdr.msgName, msgHdr.nameLen as usize)?
             }
         } else {
             Vec::new()
         };
 
         let controlVec: Vec<u8> = if msgHdr.msgControl != 0 {
-            task.CopyIn(msgHdr.msgControl, msgHdr.msgControlLen as usize)?
+            task.CopyInVec(msgHdr.msgControl, msgHdr.msgControlLen as usize)?
         } else {
             Vec::new()
         };

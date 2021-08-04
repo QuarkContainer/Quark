@@ -277,7 +277,7 @@ pub fn SysSplice(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         if outOffset != 0 {
             let offset : i64 = if outOffset != 0 {
                 opts.DstOffset = true;
-                *task.GetType(outOffset)?
+                task.CopyInObj(outOffset)?
             } else {
                 0
             };
@@ -292,7 +292,7 @@ pub fn SysSplice(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
         let offset : i64 = if inOffset != 0 {
             opts.SrcOffset = true;
-            *task.GetType(inOffset)?
+            task.CopyInObj(inOffset)?
         } else {
             0
         };
@@ -346,7 +346,7 @@ pub fn SysSendfile(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Err(Error::SysError(SysErr::ESPIPE))
         }
 
-        let offset : i64 = *task.GetType(offsetAddr)?;
+        let offset : i64 = task.CopyInObj(offsetAddr)?;
 
         n = DoSplice(task, &outFile, &inFile, &mut SpliceOpts{
             Length: count,

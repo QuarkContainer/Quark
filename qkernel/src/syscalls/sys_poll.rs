@@ -397,7 +397,7 @@ pub fn SysSelect(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     // Use a negative Duration to indicate "no timeout".
     let mut timeout = -1 as Duration;
     if timeValAddr != 0 {
-        let timeval : Timeval = *task.GetType(timeValAddr)?;
+        let timeval : Timeval = task.CopyInObj(timeValAddr)?;
         if timeval.Sec < 0 || timeval.Usec < 0 {
             return Err(Error::SysError(SysErr::EINVAL))
         }
@@ -546,7 +546,7 @@ pub fn DoPoll(task: &Task, addr: u64, nfds: u32, timeout: Duration) -> (Duration
     }
 
     let mut pfd : Vec<PollFd> = if addr != 0 {
-        match task.CopyIn(addr, nfds as usize) {
+        match task.CopyInVec(addr, nfds as usize) {
             Err(e) => {
                 return (timeout, Err(e))
             },
@@ -627,7 +627,7 @@ pub fn TimeoutRemain(_task: &Task, startNs: i64, timeout: Duration) -> Duration 
 pub fn CopyTimespecIntoDuration(task: &Task, timespecAddr: u64) -> Result<Duration> {
     let mut timeout = -1 as Duration;
     if timespecAddr != 0 {
-        let timespec : Timespec = *task.GetType(timespecAddr)?;
+        let timespec : Timespec = task.CopyInObj(timespecAddr)?;
         if !timespec.IsValid() {
             return Err(Error::SysError(SysErr::EINVAL))
         }

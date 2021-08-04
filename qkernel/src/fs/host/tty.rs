@@ -560,7 +560,7 @@ impl FileOperations for TTYFileOps {
             IoCtlCmd::TCSETS | IoCtlCmd::TCSETSW | IoCtlCmd::TCSETSF => {
                 self.lock().checkChange(task, Signal(Signal::SIGTTOU))?;
 
-                let t: Termios = *task.GetType(val)?;
+                let t: Termios = task.CopyInObj(val)?;
                 ioctlSetTermios(fd, ioctl, &t)?;
                 self.lock().termios.FromTermios(&t);
                 return Ok(())
@@ -602,7 +602,7 @@ impl FileOperations for TTYFileOps {
                     return Err(Error::SysError(SysErr::ENOTTY));
                 }
 
-                let pgid: i32 = *task.GetType(val)?;
+                let pgid: i32 = task.CopyInObj(val)?;
                 if pgid < 0 {
                     return Err(Error::SysError(SysErr::EINVAL));
                 }
@@ -629,7 +629,7 @@ impl FileOperations for TTYFileOps {
                 return Ok(())
             }
             IoCtlCmd::TIOCSWINSZ => {
-                let w: Winsize = *task.GetType(val)?;
+                let w: Winsize = task.CopyInObj(val)?;
                 return ioctlSetWinsize(fd, &w)
             }
             IoCtlCmd::TIOCSETD |

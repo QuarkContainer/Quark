@@ -812,7 +812,7 @@ pub struct SigMask {
 }
 
 pub fn CopyInSigSetWithSize(task: &Task, addr: u64) -> Result<(u64, usize)> {
-    let mask : SigMask = *task.GetType(addr)?;
+    let mask : SigMask = task.CopyInObj(addr)?;
     return Ok((mask.addr, mask.len))
 }
 
@@ -827,6 +827,6 @@ pub fn CopyInSigSet(task: &Task, sigSetAddr: u64, size: usize) -> Result<SignalS
         return Err(Error::SysError(SysErr::EINVAL))
     }
 
-    let mask : u64 = *task.GetType(sigSetAddr)?;
+    let mask : u64 = task.CopyInObj(sigSetAddr)?;
     return Ok(SignalSet(mask & !UnblockableSignals().0))
 }

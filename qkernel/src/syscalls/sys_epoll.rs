@@ -221,7 +221,7 @@ pub fn SysEpollCtl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let mut data : [i32; 2] = [0, 0];
 
     if op != LibcConst::EPOLL_CTL_DEL as i32 {
-        let e : EpollEvent = *task.GetType(eventAddr)?;
+        let e : EpollEvent = task.CopyInObj(eventAddr)?;
 
         if e.Events & LibcConst::EPOLLONESHOT as u32 != 0 {
             flags |= ONE_SHOT;

@@ -116,8 +116,7 @@ pub fn SysRtSigProcMask(task: &mut Task, args: &SyscallArguments) -> Result<i64>
     let t = task.Thread();
     let oldMask = t.SignalMask().0;
     if setaddr != 0 {
-        let mut mask: u64 = 0;
-        task.CopyInObj(setaddr, &mut mask)?;
+        let mask: u64 = task.CopyInObj(setaddr)?;
 
         match how {
             SigHow::SIG_BLOCK => t.SetSignalMask(SignalSet(oldMask | mask)),
@@ -217,7 +216,7 @@ pub fn SysRtSigqueueinfo(task: &mut Task, args: &SyscallArguments) -> Result<i64
     // We must ensure that the Signo is set (Linux overrides this in the
     // same way), and that the code is in the allowed set. This same logic
     // appears below in RtSigtgqueueinfo and should be kept in sync.
-    let mut info : SignalInfo = *task.GetType(infoAddr)?;
+    let mut info : SignalInfo = task.CopyInObj(infoAddr)?;
     info.Signo = sig;
 
     let t = task.Thread();
@@ -270,7 +269,7 @@ pub fn SysRtTgsigqueueinfo(task: &mut Task, args: &SyscallArguments) -> Result<i
     // We must ensure that the Signo is set (Linux overrides this in the
     // same way), and that the code is in the allowed set. This same logic
     // appears below in RtSigtgqueueinfo and should be kept in sync.
-    let mut info : SignalInfo = *task.GetType(infoAddr)?;
+    let mut info : SignalInfo = task.CopyInObj(infoAddr)?;
     info.Signo = sig;
 
     let t = task.Thread();

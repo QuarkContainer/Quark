@@ -136,7 +136,7 @@ pub fn SysCapet(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 return Err(Error::SysError(SysErr::EPERM))
             }
 
-            let data : [CapUserData; 2] = *task.GetType(dataAddr)?;
+            let data : [CapUserData; 2] = task.CopyInObj(dataAddr)?;
             let p = CapSet((data[0].Permitted as u64 | (data[1].Permitted as u64) << 32) & ALL_CAP.0);
             let i = CapSet((data[0].Inheritable as u64 | (data[1].Inheritable as u64) << 32) & ALL_CAP.0);
             let e = CapSet((data[0].Effective as u64 | (data[1].Effective as u64) << 32) & ALL_CAP.0);

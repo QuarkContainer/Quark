@@ -124,7 +124,7 @@ impl ReadonlyFileNode for ExecArgReadonlyFileNode {
             length = dsts.NumBytes();
         }
 
-        let data : Vec<u8> = task.CopyIn(start, length as usize)?;
+        let data : Vec<u8> = task.CopyInVec(start, length as usize)?;
         let mut buf = &data[..];
 
         // On Linux, if the NUL byte at the end of the argument vector has been
@@ -149,7 +149,7 @@ impl ReadonlyFileNode for ExecArgReadonlyFileNode {
                     lengthEnvv = MemoryDef::PAGE_SIZE as usize - buf.len();
                 }
 
-                let envvData = task.CopyIn(envv.Start(), lengthEnvv as usize)?;
+                let envvData = task.CopyInVec(envv.Start(), lengthEnvv as usize)?;
                 let mut copyNE = envvData.len();
                 for i in 0..envvData.len() {
                     if envvData[i] == 0{

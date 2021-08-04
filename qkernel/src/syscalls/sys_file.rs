@@ -510,7 +510,7 @@ pub fn Ioctl(task: &mut Task, fd: i32, request: u64, val: u64) -> Result<()> {
             return Ok(())
         }
         IoCtlCmd::FIONBIO => {
-            let set: u32 = *task.GetType(val)?;
+            let set: u32 = task.CopyInObj(val)?;
 
             let mut flags = file.Flags();
 
@@ -524,7 +524,7 @@ pub fn Ioctl(task: &mut Task, fd: i32, request: u64, val: u64) -> Result<()> {
             return Ok(())
         }
         IoCtlCmd::FIOASYNC => {
-            let set: u32 = *task.GetType(val)?;
+            let set: u32 = task.CopyInObj(val)?;
 
             let mut flags = file.Flags();
 
@@ -538,7 +538,7 @@ pub fn Ioctl(task: &mut Task, fd: i32, request: u64, val: u64) -> Result<()> {
             return Ok(())
         }
         IoCtlCmd::FIOSETOWN | IoCtlCmd::SIOCSPGRP => {
-            let set : i32 = *task.GetType(val)?;
+            let set : i32 = task.CopyInObj(val)?;
             FSetOwner(task, &file, set)?;
             return Ok(())
         }
@@ -962,7 +962,7 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
         Cmd::F_SETOWN_EX => {
             let addr = val;
-            let owner : FOwnerEx = *task.GetType(addr)?;
+            let owner : FOwnerEx = task.CopyInObj(addr)?;
             let a = file.Async(task, Some(FileAsync::default())).unwrap();
 
             match owner.Type {

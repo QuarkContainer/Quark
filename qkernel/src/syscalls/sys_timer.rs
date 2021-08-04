@@ -30,7 +30,7 @@ pub fn CopyItimerValIn(task: &Task, addr: u64) -> Result<ItimerVal> {
         return Ok(ItimerVal::default())
     }
 
-    let itv : ItimerVal = *task.GetType(addr)?;
+    let itv : ItimerVal = task.CopyInObj(addr)?;
     return Ok(itv)
 }
 
@@ -103,7 +103,7 @@ pub fn SysTimerCreate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let mut sev = Sigevent::default();
     if sevp != 0 {
-        sev = *task.GetType(sevp)?;
+        sev = task.CopyInObj(sevp)?;
     }
 
     let timerID = task.GetTypeMut(timerIDp)?;
@@ -121,7 +121,7 @@ pub fn SysTimerSettime(task: &mut Task, args: &SyscallArguments) -> Result<i64> 
     let newValAddr = args.arg2 as u64;
     let oldValAddr = args.arg3 as u64;
 
-    let newVal : Itimerspec = *task.GetType(newValAddr)?;
+    let newVal : Itimerspec = task.CopyInObj(newValAddr)?;
 
     let oldVal = task.Thread().IntervalTimerSettime(timerID, &newVal, flags & TIMER_ABSTIME != 0)?;
     if oldValAddr != 0 {

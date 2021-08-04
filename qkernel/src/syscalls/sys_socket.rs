@@ -123,7 +123,7 @@ pub fn CaptureAddress(task: &Task, addr: u64, addrlen: u32) -> Result<Vec<u8>> {
 
     task.CheckPermission(addr, addrlen as u64, false, false)?;
 
-    return task.CopyIn(addr, addrlen as usize);
+    return task.CopyInVec(addr, addrlen as usize);
 }
 
 #[derive(Debug)]
@@ -242,7 +242,7 @@ pub fn SysBind(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Err(Error::SysError(SysErr::EINVAL))
     }
 
-    let addrstr = task.CopyIn(addr, addrlen as usize)?;
+    let addrstr = task.CopyInVec(addr, addrlen as usize)?;
     let res = sock.Bind(task, &addrstr);
 
     return res;
@@ -339,7 +339,7 @@ pub fn SysSetSockOpt(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Err(Error::SysError(SysErr::EINVAL))
     }
 
-    let optVal = task.CopyIn(optValAddr, optLen as usize)?;
+    let optVal = task.CopyInVec(optValAddr, optLen as usize)?;
     let res = sock.SetSockOpt(task, level, name, &optVal[..optLen as usize])?;
 
     return Ok(res)
@@ -526,8 +526,8 @@ fn sendSingleMsg(task: &Task, sock: &Arc<FileOperations>, msgPtr: u64, flags: i3
         return Err(Error::SysError(SysErr::EMSGSIZE))
     }
 
-    let msgVec: Vec<u8> = task.CopyIn(msg.msgName, msg.nameLen as usize)?;
-    let controlVec: Vec<u8> = task.CopyIn(msg.msgControl, msg.msgControlLen as usize)?;
+    let msgVec: Vec<u8> = task.CopyInVec(msg.msgName, msg.nameLen as usize)?;
+    let controlVec: Vec<u8> = task.CopyInVec(msg.msgControl, msg.msgControlLen as usize)?;
 
     let mut pMsg = *msg;
     if msg.nameLen > 0 {
@@ -680,7 +680,7 @@ pub fn SysRecvFrom(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let mut nameLen: i32 = 0;
     if nameLenPtr != 0 {
-        task.CopyInObj(nameLenPtr, &mut nameLen)?;
+        nameLen = task.CopyInObj(nameLenPtr)?;
     }
 
     //todo: handle the msg.nameLen > 1024

@@ -117,7 +117,7 @@ pub fn SysSetrlimit(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         Some(r) => *r,
     };
 
-    let rlim : RLimit64 = *task.GetType(addr)?;
+    let rlim : RLimit64 = task.CopyInObj(addr)?;
 
     PrLimit64(&task.Thread(), resource, Some(rlim.ToLimit()))?;
 
@@ -136,7 +136,7 @@ pub fn SysPrlimit64(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     };
 
     let newlim = if newRlimAddr != 0 {
-        let nrl : RLimit64 = *task.GetType(newRlimAddr)?;
+        let nrl : RLimit64 = task.CopyInObj(newRlimAddr)?;
         Some(nrl.ToLimit())
     } else {
         None

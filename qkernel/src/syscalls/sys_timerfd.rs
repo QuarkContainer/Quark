@@ -65,7 +65,7 @@ pub fn SysTimerfdSettime(task: &mut Task, args: &SyscallArguments) -> Result<i64
         None => return Err(Error::SysError(SysErr::EINVAL)),
     };
 
-    let newVal : Itimerspec = *task.GetType(newValAddr)?;
+    let newVal : Itimerspec = task.CopyInObj(newValAddr)?;
     let clock = tf.Clock();
     let newS = Setting::FromItimerspec(&newVal, flags & TFD_TIMER_ABSTIME != 0, &clock)?;
 
