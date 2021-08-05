@@ -89,7 +89,7 @@ impl AreaSet<HostSegment> {
         mo.MapShare();
         mo.MapLocked();
 
-        let start = self.Allocate(len, MemoryDef::PAGE_SIZE)?;
+        let start = self.Allocate(len, MemoryDef::PMD_SIZE)?;
         mo.Addr(start);
         return self.Map(&mut mo, &Range::New(start, len));
     }

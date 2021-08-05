@@ -123,7 +123,7 @@ pub fn CaptureAddress(task: &Task, addr: u64, addrlen: u32) -> Result<Vec<u8>> {
 
     task.CheckPermission(addr, addrlen as u64, false, false)?;
 
-    return task.CopyIn(addr, addrlen as usize);
+    return task.CopyInVec(addr, addrlen as usize);
 }
 
 #[derive(Debug)]
@@ -182,12 +182,12 @@ pub fn Accept4(task: &Task, fd: i32, addr: u64, addrlen: u64, flags: i32) -> Res
     let len = if addrlen == 0 {
         0
     } else {
-        let len = task.GetType::<i32>(addrlen)?;
+        let len = task.CopyInObj::<i32>(addrlen)?;
 
-        if *len < 0 {
+        if len < 0 {
             return Err(Error::SysError(SysErr::EINVAL))
         }
-        *len as u32
+        len as u32
     };
 
     let mut addrstr: [u8; MAX_ADDR_LEN as usize] = [0; MAX_ADDR_LEN as usize];
@@ -242,7 +242,7 @@ pub fn SysBind(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Err(Error::SysError(SysErr::EINVAL))
     }
 
-    let addrstr = task.CopyIn(addr, addrlen as usize)?;
+    let addrstr = task.CopyInVec(addr, addrlen as usize)?;
     let res = sock.Bind(task, &addrstr);
 
     return res;
@@ -297,7 +297,7 @@ pub fn SysGetSockOpt(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let sock = file.FileOp.clone();
 
     let optlen = if optLenAddr != 0 {
-        let optlen = *task.GetType::<i32>(optLenAddr)?;
+        let optlen = task.CopyInObj::<i32>(optLenAddr)?;
 
         if optlen < 0 {
             return Err(Error::SysError(SysErr::EINVAL))
@@ -339,7 +339,7 @@ pub fn SysSetSockOpt(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Err(Error::SysError(SysErr::EINVAL))
     }
 
-    let optVal = task.CopyIn(optValAddr, optLen as usize)?;
+    let optVal = task.CopyInVec(optValAddr, optLen as usize)?;
     let res = sock.SetSockOpt(task, level, name, &optVal[..optLen as usize])?;
 
     return Ok(res)
@@ -355,7 +355,7 @@ pub fn SysGetSockName(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let sock = file.FileOp.clone();
 
     let mut buf: [u8; MAX_ADDR_LEN as usize] = [0; MAX_ADDR_LEN as usize];
-    let len = *(task.GetType::<i32>(addrlen)?);
+    let len = task.CopyInObj::<i32>(addrlen)?;
 
     let len = if len > MAX_ADDR_LEN as i32 {
         MAX_ADDR_LEN as i32
@@ -389,7 +389,7 @@ pub fn SysGetPeerName(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     //info!("SysGetPeerName buf is {}", &buf[..outputlen as usize]);
 
-    let len = *(task.GetType::<i32>(addrlen)?);
+    let len = task.CopyInObj::<i32>(addrlen)?;
     if len < outputlen as i32 {
         outputlen = len as usize;
     }
@@ -516,7 +516,7 @@ fn recvSingleMsg(task: &Task, sock: &Arc<FileOperations>, msgPtr: u64, flags: i3
 }
 
 fn sendSingleMsg(task: &Task, sock: &Arc<FileOperations>, msgPtr: u64, flags: i32, deadline: Option<Time>) -> Result<i64> {
-    let msg = task.GetType::<MsgHdr>(msgPtr)?;
+    let msg = task.CopyInObj::<MsgHdr>(msgPtr)?;
 
     if msg.msgControlLen > MAX_CONTROL_LEN as usize {
         return Err(Error::SysError(SysErr::ENOBUFS))
@@ -526,10 +526,10 @@ fn sendSingleMsg(task: &Task, sock: &Arc<FileOperations>, msgPtr: u64, flags: i3
         return Err(Error::SysError(SysErr::EMSGSIZE))
     }
 
-    let msgVec: Vec<u8> = task.CopyIn(msg.msgName, msg.nameLen as usize)?;
-    let controlVec: Vec<u8> = task.CopyIn(msg.msgControl, msg.msgControlLen as usize)?;
+    let msgVec: Vec<u8> = task.CopyInVec(msg.msgName, msg.nameLen as usize)?;
+    let controlVec: Vec<u8> = task.CopyInVec(msg.msgControl, msg.msgControlLen as usize)?;
 
-    let mut pMsg = *msg;
+    let mut pMsg = msg;
     if msg.nameLen > 0 {
         pMsg.msgName = &msgVec[0] as *const _ as u64;
     }
@@ -591,7 +591,7 @@ pub fn SysRecvMMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let mut deadline = None;
     if timeout != 0 {
-        let timePtr = task.GetType::<Timespec>(timeout)?;
+        let timePtr = task.CopyInObj::<Timespec>(timeout)?;
 
         let now = MonotonicNow();
         deadline = Some(Time(now + timePtr.ToNs()?));
@@ -680,7 +680,7 @@ pub fn SysRecvFrom(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let mut nameLen: i32 = 0;
     if nameLenPtr != 0 {
-        task.CopyInObj(nameLenPtr, &mut nameLen)?;
+        nameLen = task.CopyInObj(nameLenPtr)?;
     }
 
     //todo: handle the msg.nameLen > 1024

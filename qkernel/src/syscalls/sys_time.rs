@@ -172,7 +172,7 @@ pub fn SysNanoSleep(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let req = args.arg0 as u64;
     let rem = args.arg1 as u64;
 
-    let ts : &Timespec = task.GetType(req)?;
+    let ts : Timespec = task.CopyInObj(req)?;
 
     if !ts.IsValid() {
         return Err(Error::SysError(SysErr::EINVAL));
@@ -196,7 +196,7 @@ pub fn SysClockNanosleep(task: &mut Task, args: &SyscallArguments) -> Result<i64
     let addr = args.arg2 as u64;
     let rem = args.arg3 as u64;
 
-    let ts : &Timespec = task.GetType(addr)?;
+    let ts : Timespec = task.CopyInObj(addr)?;
 
     if !ts.IsValid() {
         return Err(Error::SysError(SysErr::EINVAL));

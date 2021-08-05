@@ -174,7 +174,7 @@ pub fn SysFutex(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             // WAIT{_BITSET} wait forever if the timeout isn't passed.
             let forever = timeout == 0;
             let timespec = if !forever {
-                Some(*task.GetType::<Timespec>(timeout)?)
+                Some(task.CopyInObj::<Timespec>(timeout)?)
             } else {
                 None
             };
@@ -250,7 +250,7 @@ pub fn SysFutex(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             let timespec = if forever {
                 None
             } else {
-                Some(*task.GetType::<Timespec>(timeout)?)
+                Some(task.CopyInObj::<Timespec>(timeout)?)
             };
 
             FutexLockPI(task, timespec, addr, private)?;

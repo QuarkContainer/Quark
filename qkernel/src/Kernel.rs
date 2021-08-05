@@ -291,19 +291,6 @@ impl HostSpace {
         }));
     }
 
-    pub fn MMapFile(len: u64, fd: i32, offset: u64, prot: i32) -> i64 {
-        let mut msg = Msg::MMapFile(MMapFile {
-            len,
-            fd,
-            offset,
-            prot,
-        });
-
-        //let res = HostSpace::Call(&mut msg) as i64;
-        let res = HostSpace::HCall(&mut msg) as i64;
-        return res;
-    }
-
     pub fn Fcntl(fd: i32, cmd: i32, arg: u64) -> i64 {
         let mut msg = Msg::Fcntl(Fcntl {
             fd,
@@ -872,14 +859,24 @@ impl HostSpace {
         HostSpace::AQCall(&msg);
     }
 
-    //unmap a Physical Memory Area
-    //todo: implement UnMapPma
-    pub fn UnMapPma(_addr: u64) {
-        //let UnMapPma = qlib::Msg::UnMapPma(qlib::UnMapPma { addr });
-        //HostSpace::AsyncCall(UnMapPma);
+    pub fn MMapFile(len: u64, fd: i32, offset: u64, prot: i32) -> i64 {
+        assert!(len % MemoryDef::PMD_SIZE == 0, "offset is {:x}, len is {:x}", offset, len);
+        assert!(offset % MemoryDef::PMD_SIZE == 0, "offset is {:x}, len is {:x}", offset, len);
+        let mut msg = Msg::MMapFile(MMapFile {
+            len,
+            fd,
+            offset,
+            prot,
+        });
+
+        let res = HostSpace::HCall(&mut msg) as i64;
+        assert!(res as u64 % MemoryDef::PMD_SIZE == 0, "res {:x}", res);
+        return res;
     }
 
     pub fn MUnmap(addr: u64, len: u64) {
+        assert!(addr % MemoryDef::PMD_SIZE == 0, "addr is {:x}, len is {:x}", addr, len);
+        assert!(len % MemoryDef::PMD_SIZE == 0, "addr is {:x}, len is {:x}", addr, len);
         let msg = qmsg::HostOutputMsg::MUnmap(qmsg::MUnmap {
             addr,
             len,

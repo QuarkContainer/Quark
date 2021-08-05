@@ -64,9 +64,8 @@ impl LineDiscipline {
     pub fn SetTermios(&mut self, task: &Task, srcAddr: u64) -> Result<()> {
         let oldCanonEnabled = self.termios.LEnabled(LocalFlags::ICANON);
 
-        let mut t: Termios = Termios::default();
-        //task.CopyInObject(&t as * const _ as u64, srcAddr, size_of::<Termios>())?;
-        task.CopyInObj(srcAddr, &mut t)?;
+        let t: Termios =task.CopyInObj(srcAddr)?;
+
         self.termios.FromTermios(&t);
 
         if oldCanonEnabled && !self.termios.LEnabled(LocalFlags::ICANON) {
@@ -96,7 +95,7 @@ impl LineDiscipline {
     }
 
     pub fn SetWindowSize(&mut self, task: &Task, srcAddr: u64) -> Result<()> {
-        task.CopyInObj(srcAddr, &mut self.size)?;
+        self.size = task.CopyInObj(srcAddr)?;
         return Ok(())
     }
 

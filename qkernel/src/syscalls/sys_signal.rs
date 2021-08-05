@@ -81,16 +81,16 @@ pub fn SysRtSigaction(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    let mut newactptr: Option<&SigAct> = None;
+    let mut newactptr: Option<SigAct> = None;
     if sigAction != 0 {
-        let sigAction1 = task.GetType::<SigAct>(sigAction)?;
+        let sigAction1 = task.CopyInObj::<SigAct>(sigAction)?;
         //info!("signum is {} the signaction is {:?}, ", signum, sigAction1);
         newactptr = Some(sigAction1);
     }
 
     let t = task.Thread();
     let tg = t.ThreadGroup();
-    let oldact = tg.SetSignalAct(Signal(signum as i32), newactptr)?;
+    let oldact = tg.SetSignalAct(Signal(signum as i32), &newactptr)?;
 
     if oldSigAction != 0 {
         *task.GetTypeMut(oldSigAction)? = oldact;
@@ -116,8 +116,7 @@ pub fn SysRtSigProcMask(task: &mut Task, args: &SyscallArguments) -> Result<i64>
     let t = task.Thread();
     let oldMask = t.SignalMask().0;
     if setaddr != 0 {
-        let mut mask: u64 = 0;
-        task.CopyInObj(setaddr, &mut mask)?;
+        let mask: u64 = task.CopyInObj(setaddr)?;
 
         match how {
             SigHow::SIG_BLOCK => t.SetSignalMask(SignalSet(oldMask | mask)),
@@ -145,7 +144,7 @@ pub fn SysSigaltstack(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     }
 
     if setaddr != 0 {
-        let alt = *task.GetType::<SignalStack>(setaddr)?;
+        let alt = task.CopyInObj::<SignalStack>(setaddr)?;
         // The signal stack cannot be changed if the task is currently
         // on the stack. This is enforced at the lowest level because
         // these semantics apply to changing the signal stack via a
@@ -166,7 +165,7 @@ pub fn SysPause(task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
 pub fn SysRtSigsuspend(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let sigset = args.arg0 as u64;
 
-    let mask = SignalSet(*task.GetType::<u64>(sigset)?);
+    let mask = SignalSet(task.CopyInObj::<u64>(sigset)?);
     let mask = SignalSet(mask.0 & !UnblockableSignals().0);
 
     let thread = task.Thread();
@@ -217,7 +216,7 @@ pub fn SysRtSigqueueinfo(task: &mut Task, args: &SyscallArguments) -> Result<i64
     // We must ensure that the Signo is set (Linux overrides this in the
     // same way), and that the code is in the allowed set. This same logic
     // appears below in RtSigtgqueueinfo and should be kept in sync.
-    let mut info : SignalInfo = *task.GetType(infoAddr)?;
+    let mut info : SignalInfo = task.CopyInObj(infoAddr)?;
     info.Signo = sig;
 
     let t = task.Thread();
@@ -270,7 +269,7 @@ pub fn SysRtTgsigqueueinfo(task: &mut Task, args: &SyscallArguments) -> Result<i
     // We must ensure that the Signo is set (Linux overrides this in the
     // same way), and that the code is in the allowed set. This same logic
     // appears below in RtSigtgqueueinfo and should be kept in sync.
-    let mut info : SignalInfo = *task.GetType(infoAddr)?;
+    let mut info : SignalInfo = task.CopyInObj(infoAddr)?;
     info.Signo = sig;
 
     let t = task.Thread();

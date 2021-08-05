@@ -46,7 +46,7 @@ pub fn SysCapget(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let hdrAddr = args.arg0 as u64;
     let dataAddr = args.arg1 as u64;
 
-    let mut hdr = *task.GetType::<CapUserHeader>(hdrAddr)?;
+    let mut hdr = task.CopyInObj::<CapUserHeader>(hdrAddr)?;
 
     // hdr.Pid doesn't need to be valid if this capget() is a "version probe"
     // (hdr.Version is unrecognized and dataAddr is null), so we can't do the
@@ -112,7 +112,7 @@ pub fn SysCapet(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let hdrAddr = args.arg0 as u64;
     let dataAddr = args.arg1 as u64;
 
-    let mut hdr = *task.GetType::<CapUserHeader>(hdrAddr)?;
+    let mut hdr = task.CopyInObj::<CapUserHeader>(hdrAddr)?;
 
     match hdr.Version {
         LINUX_CAPABILITY_VERSION_1 => {
@@ -121,7 +121,7 @@ pub fn SysCapet(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 return Err(Error::SysError(SysErr::EPERM))
             }
 
-            let data = *task.GetType::<CapUserData>(dataAddr)?;
+            let data = task.CopyInObj::<CapUserData>(dataAddr)?;
 
             let p = CapSet(data.Permitted as u64 & ALL_CAP.0);
             let i = CapSet(data.Inheritable as u64 & ALL_CAP.0);
@@ -136,7 +136,7 @@ pub fn SysCapet(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 return Err(Error::SysError(SysErr::EPERM))
             }
 
-            let data : [CapUserData; 2] = *task.GetType(dataAddr)?;
+            let data : [CapUserData; 2] = task.CopyInObj(dataAddr)?;
             let p = CapSet((data[0].Permitted as u64 | (data[1].Permitted as u64) << 32) & ALL_CAP.0);
             let i = CapSet((data[0].Inheritable as u64 | (data[1].Inheritable as u64) << 32) & ALL_CAP.0);
             let e = CapSet((data[0].Effective as u64 | (data[1].Effective as u64) << 32) & ALL_CAP.0);

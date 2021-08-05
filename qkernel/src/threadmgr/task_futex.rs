@@ -32,9 +32,9 @@ impl Thread {
             return;
         }
 
-        let rl : RobustListHead = match task.GetType(addr) {
+        let rl : RobustListHead = match task.CopyInObj(addr) {
             Err(_) => return,
-            Ok(p) => *p,
+            Ok(p) => p,
         };
 
         let mut next = rl.List;
@@ -54,7 +54,7 @@ impl Thread {
             // Try to decode the next element in the list before waking the
             // current futex. But don't check the error until after we've
             // woken the current futex. Linux does it in this order too
-            next = match task.GetType(next) {
+            next = match task.CopyInObj(next) {
                 Err(_) => {
                     if thisLockAddr != pendingLockAddr {
                         self.WakeRobustListOne(task, thisLockAddr)
@@ -67,7 +67,7 @@ impl Thread {
                     if thisLockAddr != pendingLockAddr {
                         self.WakeRobustListOne(task, thisLockAddr)
                     };
-                    *next
+                    next
                 }
             };
 

@@ -527,7 +527,6 @@ pub fn wait4(task: &Task, pid: i32, statusAddr: u64, options: u32, _rusage: u64)
         //task.CopyInObject(statusAddr, &wr.Status as * const _ as u64, 4)?;
         task.CopyOutObj(&wr.Status, statusAddr)?;
     }
-
     //todo: handle rusageAddr
     /*if rusageAddr != 0 {
 
@@ -636,7 +635,7 @@ pub fn SysSchedSetaffinity(task: &mut Task, args: &SyscallArguments) -> Result<i
         size = mask.Size();
     }
 
-    let arr = task.CopyIn::<u8>(maskAddr, size)?;
+    let arr = task.CopyInVec::<u8>(maskAddr, size)?;
     for i in 0..size {
         mask.0[i] = arr[0];
     }

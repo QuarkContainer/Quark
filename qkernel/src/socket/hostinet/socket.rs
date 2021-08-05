@@ -218,7 +218,7 @@ impl Waitable for SocketOperations {
 
 // pass the ioctl to the shadow hostfd
 pub fn HostIoctlIFReq(task: &Task, hostfd: i32, request: u64, addr: u64) -> Result<()> {
-    let mut ifr : IFReq = *task.GetType(addr)?;
+    let mut ifr : IFReq = task.CopyInObj(addr)?;
     let res = HostSpace::IoCtl(hostfd, request, &mut ifr as *const _ as u64);
     if res < 0 {
         return Err(Error::SysError(-res as i32))
@@ -229,7 +229,7 @@ pub fn HostIoctlIFReq(task: &Task, hostfd: i32, request: u64, addr: u64) -> Resu
 }
 
 pub fn HostIoctlIFConf(task: &Task, hostfd: i32, request: u64, addr: u64) -> Result<()> {
-    let mut ifc : IFConf = *task.GetType(addr)?;
+    let mut ifc : IFConf = task.CopyInObj(addr)?;
     let count = ifc.Len as usize / SIZE_OF_IFREQ;
 
     let ifrs :&mut [IFReq] = task.GetSliceMut(ifc.Ptr, count)?;
@@ -670,7 +670,7 @@ impl SockOperations for SocketOperations {
         if (level as u64) == LibcConst::SOL_SOCKET &&
             (name as u64) == LibcConst::SO_RCVTIMEO {
                 if opt.len() >= SocketSize::SIZEOF_TIMEVAL {
-                    let timeVal = task.GetType::<Timeval>(&opt[0] as *const _ as u64)?;
+                    let timeVal = task.CopyInObj::<Timeval>(&opt[0] as *const _ as u64)?;
                     self.SetRecvTimeout(timeVal.ToDuration() as i64);
                 } else {
                     //TODO: to be aligned with Linux, Linux allows shorter length for this flag.

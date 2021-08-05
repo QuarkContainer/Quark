@@ -193,7 +193,7 @@ pub fn SysSetgroups(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Ok(0)
     }
 
-    let gids: Vec<GID> = task.CopyIn(addr, size as usize)?;
+    let gids: Vec<GID> = task.CopyInVec(addr, size as usize)?;
     task.Thread().SetExtraGIDs(&gids[..])?;
     return Ok(0)
 }

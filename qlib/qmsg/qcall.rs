@@ -25,10 +25,6 @@ pub enum Msg {
     LoadExecProcess(LoadExecProcess),
     ControlMsgCall(ControlMsgCall),
     ControlMsgRet(ControlMsgRet),
-    PrintInt(PrintInt),
-    SetBuff(SetBuff),
-    WriteBuffTrigger(WriteBuffTrigger),
-    ReadBuffTrigger(ReadBuffTrigger),
     GetStdfds(GetStdfds),
     CreateMemfd(CreateMemfd),
 
@@ -36,15 +32,10 @@ pub enum Msg {
     Fallocate(Fallocate),
     RenameAt(RenameAt),
     Ftruncate(Ftruncate),
-    Eventfd(Eventfd),
     Seek(Seek),
-    ReadLink(ReadLink),
     ReadLinkAt(ReadLinkAt),
     GetTimeOfDay(GetTimeOfDay),
-    Interrupt(Interrupt),
     Wait,
-    Exit(Exit),
-    ExitThreadGroup(ExitThreadGroup),
     IoCtl(IoCtl),
     Fcntl(Fcntl),
     Close(Close),
@@ -55,11 +46,9 @@ pub enum Msg {
     Fstat(Fstat),
     BatchFstatat(BatchFstatat),
     Fstatat(Fstatat),
-    Statfs(Statfs),
     Fstatfs(Fstatfs),
     GetDents64(GetDents64),
 
-    ForkFdTbl(ForkFdTbl),
     TryOpenAt(TryOpenAt),
     CreateAt(CreateAt),
     Unlinkat(Unlinkat),
@@ -73,8 +62,6 @@ pub enum Msg {
     FDataSync(FDataSync),
     FAccessAt(FAccessAt),
 
-    MinCore(MinCore),
-
     Socket(Socket),
     SocketPair(SocketPair),
     GetPeerName(GetPeerName),
@@ -84,38 +71,19 @@ pub enum Msg {
     Bind(Bind),
     Listen(Listen),
     Shutdown(Shutdown),
-    Select(Select),
-    PSelect(PSelect),
-    Poll(Poll),
-    EpollCreate(EpollCreate),
-    EpollCreate1(EpollCreate1),
-    EpollPWait(EpollPWait),
-    EpollCtl(EpollCtl),
 
-    Sysinfo(Sysinfo),
     SchedGetAffinity(SchedGetAffinity),
     GetRandom(GetRandom),
-    Chdir(Chdir),
     Fchdir(Fchdir),
     Fadvise(Fadvise),
-    Prctl(Prctl),
     Mlock2(Mlock2),
     MUnlock(MUnlock),
-    IOSetup(IOSetup),
-    IOSubmit(IOSubmit),
-    Rename(Rename),
     Chown(Chown),
     FChown(FChown),
-    TimerFdCreate(TimerFdCreate),
-    TimerFdSetTime(TimerFdSetTime),
-    TimerFdGetTime(TimerFdGetTime),
     Chmod(Chmod),
     Fchmod(Fchmod),
-    SetHostName(SetHostName),
     SymLinkAt(SymLinkAt),
     Futimens(Futimens),
-
-    HostCPUInfo(HostCPUInfo),
 
     IORead(IORead),
     IOTTYRead(IOTTYRead),
@@ -131,7 +99,6 @@ pub enum Msg {
     UnMapPma(UnMapPma),
     NonBlockingPoll(NonBlockingPoll),
     NewTmpfsFile(NewTmpfsFile),
-    OpenFifo(OpenFifo),
     IoUringSetup(IoUringSetup),
     IoUringRegister(IoUringRegister),
     IoUringEnter(IoUringEnter),
@@ -224,21 +191,6 @@ pub struct Seek {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct Interrupt {
-    pub target: TaskId,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Exit {
-    pub target: TaskId,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct ExitThreadGroup {
-    pub tgid: i32,
-}
-
-#[derive(Clone, Default, Debug)]
 pub struct IoCtl {
     pub fd: i32,
     pub cmd: u64,
@@ -281,13 +233,6 @@ pub struct Fgetxattr {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct ReadLink {
-    pub path: u64,
-    pub buf: u64,
-    pub bufsize: u64,
-}
-
-#[derive(Clone, Default, Debug)]
 pub struct ReadLinkAt {
     pub dirfd: i32,
     pub path: u64,
@@ -305,12 +250,6 @@ pub struct Fcntl {
 #[derive(Clone, Default, Debug)]
 pub struct Close {
     pub fd: i32,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Statfs {
-    pub path: u64,
-    pub buf: u64,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -356,34 +295,6 @@ pub struct GetDents64 {
     pub count: u32,
 }
 
-#[derive(Clone, Default, Debug)]
-pub struct CPUIDInfo {
-    pub ax: u32,
-    pub bx: u32,
-    pub cx: u32,
-    pub dx: u32,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct HostCPUInfo {
-    pub axArg: u32,
-    pub cxArg: u32,
-    pub addr: u64,
-    //address of CPUIDInfo struct
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Sysinfo {
-    pub info: u64,
-}
-
-//create a new fdTbl by fork from a tgid
-#[derive(Clone, Default, Debug)]
-pub struct ForkFdTbl {
-    pub pTgid: i32,
-    //parent tgid
-    pub tgid: i32,
-}
 
 #[derive(Clone, Default, Debug)]
 pub struct Unlinkat {
@@ -547,66 +458,6 @@ pub struct Shutdown {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct Select {
-    pub nfds: i32,
-    pub readfds: u64,
-    pub writefds: u64,
-    pub exceptfds: u64,
-    pub timeout: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct PSelect {
-    pub nfds: i32,
-    pub readfds: u64,
-    pub writefds: u64,
-    pub exceptfds: u64,
-    pub timeout: u64,
-    pub sigmask: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Poll {
-    pub fds: u64,
-    pub nfds: u64,
-    pub timeout: i32,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct EpollCreate {
-    pub size: i32,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct EpollCreate1 {
-    pub flags: i32,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct EpollPWait {
-    pub epfd: i32,
-    pub events: u64,
-    pub maxEvents: i32,
-    pub timeout: i32,
-    pub sigmask: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct EpollCtl {
-    pub epfd: i32,
-    pub op: i32,
-    pub fd: i32,
-    pub event: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct MinCore {
-    pub addr: u64,
-    pub len: u64,
-    pub vec: u64,
-}
-
-#[derive(Clone, Default, Debug)]
 pub struct SchedGetAffinity {
     pub pid: i32,
     pub cpuSetSize: u64,
@@ -618,11 +469,6 @@ pub struct GetRandom {
     pub buf: u64,
     pub len: u64,
     pub flags: u32,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Chdir {
-    pub path: u64,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -639,21 +485,6 @@ pub struct Fadvise {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct Eventfd {
-    pub initval: u32,
-    pub flags: i32,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Prctl {
-    pub option: i32,
-    pub arg2: u64,
-    pub arg3: u64,
-    pub arg4: u64,
-    pub arg5: u64,
-}
-
-#[derive(Clone, Default, Debug)]
 pub struct Mlock2 {
     pub addr: u64,
     pub len: u64,
@@ -664,25 +495,6 @@ pub struct Mlock2 {
 pub struct MUnlock {
     pub addr: u64,
     pub len: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct IOSetup {
-    pub nr_events: u64,
-    pub ctx_idp: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct IOSubmit {
-    pub ctx_id: u64,
-    pub nr: u64,
-    pub iocbpp: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Rename {
-    pub oldpath: u64,
-    pub newpath: u64,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -700,26 +512,6 @@ pub struct FChown {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct TimerFdCreate {
-    pub clockId: i32,
-    pub flags: i32,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct TimerFdSetTime {
-    pub fd: i32,
-    pub flags: i32,
-    pub newValue: u64,
-    pub oldValue: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct TimerFdGetTime {
-    pub fd: i32,
-    pub currVal: u64,
-}
-
-#[derive(Clone, Default, Debug)]
 pub struct Chmod {
     pub pathname: u64,
     pub mode: u32,
@@ -729,12 +521,6 @@ pub struct Chmod {
 pub struct Fchmod {
     pub fd: i32,
     pub mode: u32,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct SetHostName {
-    pub name: u64,
-    pub len: usize,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -748,26 +534,6 @@ pub struct SymLinkAt {
 pub struct Futimens {
     pub fd: i32,
     pub times: u64,
-}
-
-//set read/write buff for buffered fd. Internal api
-#[derive(Clone, Default, Debug)]
-pub struct SetBuff {
-    pub fd: i32,
-    pub readBuf: u64,
-    pub writeBuf: u64,
-}
-
-//write buff and find write buff is empty, notify host to write it to os, async call
-#[derive(Clone, Default, Debug)]
-pub struct WriteBuffTrigger {
-    pub fd: i32,
-}
-
-//read buff and find read buff full, notify host to read more from os, async call
-#[derive(Clone, Default, Debug)]
-pub struct ReadBuffTrigger {
-    pub fd: i32,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -886,17 +652,6 @@ impl Default for TmpfsFileType {
 pub struct NewTmpfsFile {
     pub typ: TmpfsFileType,
     pub addr: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct OpenFifo {
-    pub UID: u64,
-    pub flags: i32
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct PrintInt {
-    pub val: i64,
 }
 
 #[derive(Clone, Debug)]

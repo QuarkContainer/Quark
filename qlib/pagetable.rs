@@ -262,6 +262,7 @@ impl PageTables {
     pub fn MapPage(&self, vaddr: Addr, phyAddr: Addr, flags: PageTableFlags, pagePool: &Allocator) -> Result<bool> {
         let mut res = false;
 
+        let vaddr = Addr(vaddr.0 & !(PAGE_SIZE - 1));
         let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
         unsafe {
             let p4Idx = VirtAddr::new(vaddr.0).p4_index();
@@ -420,6 +421,7 @@ impl PageTables {
     //return true when there is previous mapping in the range
     pub fn Map(&self, start: Addr, end: Addr, physical: Addr, flags: PageTableFlags, pagePool: &Allocator, kernel: bool) -> Result<bool> {
         start.PageAligned()?;
+        end.PageAligned()?;
         if end.0 < start.0 {
             return Err(Error::AddressNotInRange);
         }
@@ -454,6 +456,8 @@ impl PageTables {
     }
 
     pub fn Unmap(&self, start: u64, end: u64, pagePool: &Allocator) -> Result<()> {
+        Addr(start).PageAligned()?;
+        Addr(end).PageAligned()?;
         let mut start = start;
         let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
         unsafe {
@@ -566,6 +570,8 @@ impl PageTables {
     }
 
     pub fn Traverse(&self, start: Addr, end: Addr, mut f: impl FnMut(&mut PageTableEntry, u64), failFast: bool) -> Result<()> {
+        start.PageAligned()?;
+        end.PageAligned()?;
         //let mut curAddr = start;
         let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
         unsafe {

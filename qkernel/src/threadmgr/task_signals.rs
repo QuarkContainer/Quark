@@ -754,7 +754,7 @@ impl ThreadGroup {
 
     // SetSignalAct atomically sets the thread group's signal action for signal sig
     // to *actptr (if actptr is not nil) and returns the old signal action.
-    pub fn SetSignalAct(&self, sig: Signal, actptr: Option<&SigAct>) -> Result<SigAct> {
+    pub fn SetSignalAct(&self, sig: Signal, actptr: &Option<SigAct>) -> Result<SigAct> {
         if !sig.IsValid() {
             return Err(Error::SysError(SysErr::EINVAL));
         }

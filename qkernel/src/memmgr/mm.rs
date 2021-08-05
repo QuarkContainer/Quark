@@ -22,7 +22,6 @@ use core::sync::atomic::AtomicU64;
 use core::sync::atomic;
 use alloc::string::String;
 use alloc::string::ToString;
-use alloc::slice;
 use x86_64::structures::paging::PageTableFlags;
 use alloc::vec::Vec;
 use super::super::arch::x86_64::context::*;
@@ -34,7 +33,6 @@ use super::super::qlib::linux_def::*;
 use super::super::qlib::range::*;
 use super::super::qlib::addr::*;
 use super::super::qlib::stack::*;
-use super::super::qlib::mem::seq::*;
 use super::super::task::*;
 use super::super::qlib::pagetable::*;
 use super::super::qlib::limits::*;
@@ -43,7 +41,7 @@ use super::super::kernel::aio::aio_context::*;
 use super::super::fs::dirent::*;
 use super::super::mm::*;
 use super::super::qlib::mem::areaset::*;
-use super::super::asm::*;
+//use super::super::asm::*;
 use super::arch::*;
 use super::vma::*;
 use super::metadata::*;
@@ -893,6 +891,65 @@ impl MemoryManager {
         //PerfGofrom(PerfType::PageFault);
     }
 
+    pub fn V2P(&self, task: &Task, start: u64, len: u64, output: &mut Vec<IoVec>, writable: bool) -> Result<()> {
+        if len == 0 {
+            return Ok(())
+        }
+
+        if start == 0 {
+            return Err(Error::SysError(SysErr::EFAULT))
+        }
+
+        let ml = self.MappingLock();
+        let _ml = ml.write();
+
+        return self.V2PLocked(task, start, len, output, writable);
+    }
+
+    pub fn V2PLocked(&self, task: &Task, start: u64, len: u64, output: &mut Vec<IoVec>, writable: bool) -> Result<()> {
+        self.FixPermissionLocked(task, start, len, writable, false)?;
+
+        let mut start = start;
+        let end = start + len;
+
+        while start < end {
+            let next = if Addr(start).IsPageAligned() {
+                start + MemoryDef::PAGE_SIZE
+            } else {
+                Addr(start).RoundUp().unwrap().0
+            };
+
+            match self.VirtualToPhyLocked(start) {
+                Err(e) => {
+                    info!("convert to phyaddress fail, addr = {:x} e={:?}", start, e);
+                    return Err(Error::SysError(SysErr::EFAULT))
+                }
+                Ok((pAddr, _)) => {
+                    let iov = IoVec {
+                        start: pAddr,
+                        len: if end < next {
+                            (end - start) as usize
+                        } else {
+                            (next - start) as usize
+                        },
+                    };
+
+                    let cnt = output.len();
+                    if cnt > 0 && output[cnt-1].End() == iov.start {
+                        // use the last entry
+                        output[cnt-1].len += iov.len;
+                    } else {
+                        output.push(iov);
+                    }
+                }
+            }
+
+            start = next;
+        }
+
+        return Ok(())
+    }
+
     // check whether the address range is legal.
     // 1. whether the range belong to user's space
     // 2. Whether the read/write permission meet requirement
@@ -1228,21 +1285,6 @@ impl MemoryManager {
             start = next;
         }
 
-        return Ok(())
-    }
-
-    //Copy an Object to user memory, it is used only for the task_clone
-    pub fn CopyOutObj<T: Sized + Copy>(&self, task: &Task, src: &T, dst: u64) -> Result<()> {
-        let len = core::mem::size_of::<T>();
-
-        let mut dsts = Vec::new();
-        self.V2PIov(task, dst, len as u64, &mut dsts, true)?;
-        let dsts = BlockSeq::NewFromSlice(&dsts);
-
-        let srcAddr = src as * const _ as u64 as * const u8;
-        let src = unsafe { slice::from_raw_parts(srcAddr, len) };
-
-        dsts.CopyOut(src);
         return Ok(())
     }
 }
