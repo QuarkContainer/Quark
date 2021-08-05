@@ -226,7 +226,7 @@ pub struct IOCallback {
 
 // ioEvent describes an I/O result.
 #[repr(C)]
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone, Copy)]
 pub struct IOEvent {
     pub data    : u64,
     pub obj     : u64,

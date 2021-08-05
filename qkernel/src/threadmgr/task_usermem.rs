@@ -53,10 +53,7 @@ impl MemoryManager {
         return Ok(())
     }
 
-    pub fn CopyDataOut(&self, task: &Task, from: u64, vaddr: u64, len: usize) -> Result<()> {
-        let ml = self.MappingLock();
-        let _ml = ml.write();
-
+    pub fn CopyDataOutLocked(&self, task: &Task, from: u64, vaddr: u64, len: usize) -> Result<()> {
         self.V2PLocked(task, vaddr, len as u64, &mut task.GetMut().iovs, false)?;
         defer!(task.GetMut().iovs.clear());
         let from : * const u8 = from as * const u8;
@@ -73,6 +70,20 @@ impl MemoryManager {
         return Ok(())
     }
 
+    pub fn CopyDataOut(&self, task: &Task, from: u64, vaddr: u64, len: usize) -> Result<()> {
+        let ml = self.MappingLock();
+        let _ml = ml.write();
+
+        return self.CopyDataOutLocked(task, from, vaddr, len);
+    }
+
+    pub fn CopyInObjLocked<T: Sized + Copy>(&self, task: &Task, src: u64) -> Result<T> {
+        let data : T = unsafe { MaybeUninit::uninit().assume_init() };
+        let size = size_of::<T>();
+        self.CopyDataInLocked(task, src, &data as * const _ as u64, size)?;
+        return Ok(data)
+    }
+
     pub fn CopyInObj<T: Sized + Copy>(&self, task: &Task, src: u64) -> Result<T> {
         let data : T = unsafe { MaybeUninit::uninit().assume_init() };
         let size = size_of::<T>();
@@ -80,11 +91,40 @@ impl MemoryManager {
         return Ok(data)
     }
 
+    pub fn CopyOutObjLocked<T: Sized + Copy>(&self, task: &Task, data: &T, dst: u64) -> Result<()> {
+        let size = size_of::<T>();
+        self.CopyDataOutLocked(task, data as * const _ as u64, dst, size)?;
+
+        return Ok(())
+    }
+
     pub fn CopyOutObj<T: Sized + Copy>(&self, task: &Task, data: &T, dst: u64) -> Result<()> {
         let size = size_of::<T>();
         self.CopyDataOut(task, data as * const _ as u64, dst, size)?;
 
         return Ok(())
+    }
+
+    pub fn SwapObj<T: Sized + Copy>(&self, task: &Task, data: &T, addr: u64) -> Result<T> {
+        let ml = self.MappingLock();
+        let _ml = ml.write();
+
+        let val = self.CopyInObjLocked(task, addr)?;
+        self.CopyOutObj(task, data, addr)?;
+        return Ok(val)
+    }
+
+    pub fn CompareAndSwap<T: Sized + Copy + Eq>(&self, task: &Task, addr: u64, old: T, new: T) -> Result<T> {
+        let ml = self.MappingLock();
+        let _ml = ml.write();
+
+        let val = self.CopyInObjLocked(task, addr)?;
+        if val != old {
+            return Ok(val)
+        }
+
+        self.CopyOutObjLocked(task, &new, addr)?;
+        return Ok(val)
     }
 
     pub fn CopyInVec<T: Sized + Copy>(&self, task: &Task, src: u64, count: usize) -> Result<Vec<T>> {
@@ -312,7 +352,7 @@ impl Task {
         return Ok(())
     }
 
-    pub fn GetType<T: Sized>(&self, vAddr: u64) -> Result<&T> {
+    pub fn GetType1<T: Sized>(&self, vAddr: u64) -> Result<&T> {
         let len = core::mem::size_of::<T>();
         self.CheckPermission(vAddr, len as u64, false, false)?;
 

@@ -552,8 +552,7 @@ impl FileOperations for TTYFileOps {
             IoCtlCmd::TCGETS => {
                 let mut term = Termios::default();
                 ioctlGetTermios(fd, &mut term)?;
-                let t: &mut Termios = task.GetTypeMut(val)?;
-                *t = term;
+                task.CopyOutObj(&term, val)?;
                 return Ok(())
             }
 
@@ -573,11 +572,9 @@ impl FileOperations for TTYFileOps {
                 let internal = self.lock();
 
                 let pgid = pidns.IDOfProcessGroup(internal.fgProcessgroup.as_ref().unwrap());
-                let p : &mut i32 = task.GetTypeMut(val)?;
-
                 info!("TIOCGPGRP pgid is {}, val is {:x}", pgid, val);
 
-                *p = pgid;
+                task.CopyOutObj(&pgid, val)?;
 
                 return Ok(())
             }
@@ -624,8 +621,7 @@ impl FileOperations for TTYFileOps {
             IoCtlCmd::TIOCGWINSZ => {
                 let mut win = Winsize::default();
                 ioctlGetWinsize(fd, &mut win)?;
-                let w: &mut Winsize = task.GetTypeMut(val)?;
-                *w = win;
+                task.CopyOutObj(&win, val)?;
                 return Ok(())
             }
             IoCtlCmd::TIOCSWINSZ => {

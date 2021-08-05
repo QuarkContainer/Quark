@@ -1175,8 +1175,7 @@ impl Task {
                     //println!("there is no clear_child_tid");
                 }
                 Some(addr) => {
-                     *self.GetTypeMut::<u32>(addr).unwrap() = 0;
-
+                    self.CopyOutObj(&(0 as u32), addr).unwrap();
                     self.futexMgr.Wake(self, addr, false, !0, 1).unwrap();
                 }
             }
