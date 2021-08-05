@@ -110,9 +110,9 @@ impl Target for Task {
     }
 
     fn LoadU32(&self, addr: u64) -> Result<u32> {
-        let val = self.GetType::<u32>(addr)?;
+        let val : u32 = self.CopyInObj(addr)?;
 
-        return Ok(*val)
+        return Ok(val)
     }
 
     fn GetSharedKey(&self, addr: u64) -> Result<Key> {

@@ -670,7 +670,7 @@ impl SockOperations for SocketOperations {
         if (level as u64) == LibcConst::SOL_SOCKET &&
             (name as u64) == LibcConst::SO_RCVTIMEO {
                 if opt.len() >= SocketSize::SIZEOF_TIMEVAL {
-                    let timeVal = task.GetType::<Timeval>(&opt[0] as *const _ as u64)?;
+                    let timeVal = task.CopyInObj::<Timeval>(&opt[0] as *const _ as u64)?;
                     self.SetRecvTimeout(timeVal.ToDuration() as i64);
                 } else {
                     //TODO: to be aligned with Linux, Linux allows shorter length for this flag.

@@ -178,7 +178,7 @@ impl MemoryManager {
 
         // Protect against 'ids' that are inaccessible (Linux also reads 4 bytes
         // from id).
-        let _buf : [u8; 4] = *match task.GetType(id) {
+        let _buf : [u8; 4] = match task.CopyInObj(id) {
             Err(_) => return None,
             Ok(t) => t,
         };

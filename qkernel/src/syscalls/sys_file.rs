@@ -866,7 +866,7 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             }
 
             let flockAddr = val;
-            let flock : &FlockStruct = task.GetType(flockAddr)?;
+            let flock : FlockStruct = task.CopyInObj(flockAddr)?;
 
             let sw = match flock.l_whence {
                 0 => SeekWhence::SEEK_SET,
@@ -1685,7 +1685,7 @@ pub fn SysUtime(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let mut ts = InterTimeSpec::default();
 
     if timesAddr != 0 {
-        let times: &Utime = task.GetType(timesAddr)?;
+        let times: Utime = task.CopyInObj(timesAddr)?;
         ts.ATime = Time::FromSec(times.Actime);
         ts.ATimeSetSystemTime = false;
         ts.MTime = Time::FromSec(times.Modtime);
@@ -1702,7 +1702,7 @@ pub fn SysUtimes(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let mut ts = InterTimeSpec::default();
 
     if timesAddr != 0 {
-        let times: &[Timeval; 2] = task.GetType(timesAddr)?;
+        let times: [Timeval; 2] = task.CopyInObj(timesAddr)?;
         ts.ATime = Time::FromTimeval(&times[0]);
         ts.ATimeSetSystemTime = false;
         ts.MTime = Time::FromTimeval(&times[1]);
@@ -1726,7 +1726,7 @@ pub fn SysUtimensat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let mut ts = InterTimeSpec::default();
 
     if timesAddr != 0 {
-        let times: &[Timespec; 2] = task.GetType(timesAddr)?;
+        let times: [Timespec; 2] = task.CopyInObj(timesAddr)?;
 
         if !TimespecIsValid(&times[0]) || !TimespecIsValid(&times[1]) {
             return Err(Error::SysError(SysErr::EINVAL))
@@ -1759,7 +1759,7 @@ pub fn SysFutimesat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     const E6: i64 = 1_000_000;
 
     if timesAddr != 0 {
-        let times: &[Timeval; 2] = task.GetType(timesAddr)?;
+        let times: [Timeval; 2] = task.CopyInObj(timesAddr)?;
 
         if times[0].Usec > E6 || times[0].Usec < 0 ||
             times[1].Usec > E6 || times[1].Usec < 0 {

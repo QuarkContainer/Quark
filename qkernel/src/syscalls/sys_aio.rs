@@ -170,7 +170,7 @@ pub fn SysIOSubmit(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     }
 
     for i in 0..nrEvents as usize {
-        let cbAddr : u64 = *match task.GetType(addr) {
+        let cbAddr : u64 = match task.CopyInObj(addr) {
             Err(e) => {
                 if i > 0 {
                     // Some successful.
@@ -183,7 +183,7 @@ pub fn SysIOSubmit(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         };
 
         // Copy in this callback.
-        let cb : IOCallback = *match task.GetType(cbAddr) {
+        let cb : IOCallback = match task.CopyInObj(cbAddr) {
             Err(e) => {
                 if i > 0 {
                     // Some successful.

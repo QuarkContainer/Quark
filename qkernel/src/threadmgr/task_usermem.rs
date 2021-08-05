@@ -22,7 +22,6 @@ use core::mem::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::util::cstring::*;
-use super::super::qlib::addr::*;
 use super::super::qlib::mem::seq::*;
 use super::super::task::*;
 use super::super::memmgr::mm::*;
