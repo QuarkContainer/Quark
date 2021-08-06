@@ -301,23 +301,6 @@ impl Task {
     // would exceed maxlen, CopyStringIn returns the string truncated to maxlen and
     // ENAMETOOLONG.
     pub fn CopyInString(&self, addr: u64, maxlen: usize) -> (String, Result<()>) {
-        /*let maxlen = match self.CheckPermission(addr, maxlen as u64, false, true) {
-            Err(e) => return ("".to_string(), Err(e)),
-            Ok(l) => l as usize
-        };
-
-        let slice = match self.GetSlice::<u8>(addr, maxlen) {
-            Err(e) => return ("".to_string(), Err(e)),
-            Ok(s) => s,
-        };
-
-        for i in 0..maxlen {
-            if slice[i] == 0 {
-                return (str::from_utf8(&slice[0..i]).unwrap().to_string(), Ok(()));
-            }
-        }
-
-        return (str::from_utf8(&slice[0..maxlen]).unwrap().to_string(), Err(Error::SysError(SysErr::ENAMETOOLONG)));*/
         return self.mm.CopyInString(self, addr, maxlen);
     }
 
@@ -350,25 +333,6 @@ impl Task {
         }
 
         return Ok(())
-    }
-
-    pub fn GetType1<T: Sized>(&self, vAddr: u64) -> Result<&T> {
-        let len = core::mem::size_of::<T>();
-        self.CheckPermission(vAddr, len as u64, false, false)?;
-
-        let t: *const T = vAddr as *const T;
-
-        return Ok(unsafe { &(*t) })
-    }
-
-    pub fn GetTypeMut<T: Sized>(&self, vAddr: u64) -> Result<&mut T> {
-        let len = core::mem::size_of::<T>();
-        // only check whether the address is valid, if readonly, will cow
-        self.CheckPermission(vAddr, len as u64, false, false)?;
-
-        let t: *mut T = vAddr as *mut T;
-
-        return Ok(unsafe { &mut (*t) })
     }
 
     // check whether the address range is legal.

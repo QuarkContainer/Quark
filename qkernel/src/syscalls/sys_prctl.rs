@@ -183,7 +183,8 @@ pub fn SysPrctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             let addr = args.arg1 as u64;
             let sig = thread.ParentDeathSignal();
 
-            *task.GetTypeMut(addr)? = sig.0;
+            task.CopyOutObj(&sig.0, addr)?;
+            //*task.GetTypeMut(addr)? = sig.0;
             return Ok(0)
         }
         PR_GET_DUMPABLE => {

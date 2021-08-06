@@ -95,7 +95,7 @@ impl HostFileOp {
                     let d: *const Dirent64 = (addr + pos) as *const Dirent64;
                     let name = (*d).name;
                     let str = CString::ToString(task, &name[0] as *const _ as u64).expect("ReadDirAll fail1");
-                    names.push(CString::New(str));
+                    names.push(CString::New(&str));
                     pos += (*d).reclen as u64;
                 }
             }
@@ -141,7 +141,7 @@ impl HostFileOp {
                 })
             };
 
-            let name = CString::ToString(task, names[i].Ptr()).expect("ReadDirAll fail2").to_string();
+            let name = CString::ToString(task, names[i].Ptr()).expect("ReadDirAll fail2");
             entries.insert(name, dentry);
         }
 
