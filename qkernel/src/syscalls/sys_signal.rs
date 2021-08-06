@@ -93,7 +93,8 @@ pub fn SysRtSigaction(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let oldact = tg.SetSignalAct(Signal(signum as i32), &newactptr)?;
 
     if oldSigAction != 0 {
-        *task.GetTypeMut(oldSigAction)? = oldact;
+        //*task.GetTypeMut(oldSigAction)? = oldact;
+        task.CopyOutObj(&oldact, oldSigAction)?;
     }
 
     return Ok(0)
@@ -139,8 +140,9 @@ pub fn SysSigaltstack(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let alt = task.SignalStack();
     if oldaddr != 0 {
-        let oldStack = task.GetTypeMut::<SignalStack>(oldaddr)?;
-        *oldStack = alt;
+        //let oldStack = task.GetTypeMut::<SignalStack>(oldaddr)?;
+        //*oldStack = alt;
+        task.CopyOutObj(&alt, oldaddr)?;
     }
 
     if setaddr != 0 {
@@ -199,7 +201,8 @@ pub fn SysRtSigtimedwait(task: &mut Task, args: &SyscallArguments) -> Result<i64
 
     if siginfo != 0 {
         si.FixSignalCodeForUser();
-        *task.GetTypeMut(siginfo)? = *si;
+        //*task.GetTypeMut(siginfo)? = *si;
+        task.CopyOutObj::<SignalInfo>(&*si, siginfo)?;
     }
 
     return Ok(si.Signo as i64)

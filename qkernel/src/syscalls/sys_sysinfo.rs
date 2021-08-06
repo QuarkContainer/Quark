@@ -36,15 +36,15 @@ pub fn SysInfo(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let totalUsage = statm.rss;
     let totalSize = TotalMemory(0, totalUsage);
 
-    let sysInfo: &mut LibcSysinfo = task.GetTypeMut(addr)?;
+    //let sysInfo: &mut LibcSysinfo = task.GetTypeMut(addr)?;
     info.procs = task.Thread().PIDNamespace().Tasks().len() as u16;
     info.uptime = Task::MonoTimeNow().Seconds() as i64;
     info.totalram = totalSize; //super::super::ALLOCATOR.Total() as u64;
     info.freeram = totalSize - totalUsage; // super::super::ALLOCATOR.Free() as u64;
     info.mem_unit = 1;
 
-    *sysInfo = info;
-
+    //*sysInfo = info;
+    task.CopyOutObj(&info, addr)?;
     //error!("SysInfo output is {:?}", &info);
 
     //return Ok(ret)

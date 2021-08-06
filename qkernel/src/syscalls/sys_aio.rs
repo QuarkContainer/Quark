@@ -42,14 +42,14 @@ pub fn SysIoSetup(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     // Linux uses the native long as the aio ID.
     //
     // The context pointer _must_ be zero initially.
-    let idPtr = task.GetTypeMut(idAddr)?;
-    let idIn : u64 = *idPtr;
+    //let idPtr = task.GetTypeMut(idAddr)?;
+    let idIn : u64 = task.CopyInObj(idAddr)?;
     if idIn != 0 {
         return Err(Error::SysError(SysErr::EINVAL))
     }
 
     let id = task.mm.NewAIOContext(task, nrEvents as usize)?;
-    *idPtr = id;
+    task.CopyOutObj(&id, idAddr)?;
     return Ok(0)
 }
 
@@ -111,7 +111,7 @@ pub fn SysIoGetevents(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             }
         }
 
-        let eventPtr = match task.GetTypeMut(eventsAddr) {
+        match task.CopyOutObj(&event, eventsAddr) {
             Err(e) => {
                 if count > 0 {
                     return Ok(count as i64)
@@ -119,10 +119,10 @@ pub fn SysIoGetevents(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
                 return Err(e)
             }
-            Ok(e) => e,
+            Ok(()) => (),
         };
 
-        *eventPtr = event;
+        //*eventPtr = event;
         eventsAddr += IOEVENT_SIZE;
     }
 

@@ -53,10 +53,12 @@ pub fn SysArchPrctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             //info!("after ARCH_SET_FS, the input value is {:x}, the get fs result is {:x}", addr, ReadMsr(MSR::MSR_FS_BASE as u32));
         }
         PrCtlEnum::ARCH_GET_FS => {
-            *task.GetTypeMut::<u64>(addr)? = GetFs();
+            //*task.GetTypeMut::<u64>(addr)? = GetFs();
+            task.CopyOutObj(&GetFs(), addr)?;
         }
         PrCtlEnum::ARCH_GET_GS => {
-            *task.GetTypeMut::<u64>(addr)? = GetGs();
+            //*task.GetTypeMut::<u64>(addr)? = GetGs();
+            task.CopyOutObj(&GetGs(), addr)?;
             //unsafe {*(addr as *mut u64) = ReadMsr(MSR::MSR_KERNEL_GS_BASE as u32)}
         }
     }

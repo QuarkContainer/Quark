@@ -72,8 +72,10 @@ pub fn SysTimerfdSettime(task: &mut Task, args: &SyscallArguments) -> Result<i64
     let (tm, oldS) = tf.SetTime(&newS);
     if oldValAddr != 0 {
         let oldVal = ItimerspecFromSetting(tm, oldS);
-        let v : &mut Itimerspec = task.GetTypeMut(oldValAddr)?;
-        *v = oldVal;
+        //let v : &mut Itimerspec = task.GetTypeMut(oldValAddr)?;
+        //*v = oldVal;
+
+        task.CopyOutObj(&oldVal, oldValAddr)?;
     }
 
     return Ok(0)
@@ -93,8 +95,10 @@ pub fn SysTimerfdGettime(task: &mut Task, args: &SyscallArguments) -> Result<i64
 
     let (tm, s) = tf.GetTime();
     let curVal = ItimerspecFromSetting(tm, s);
-    let v :&mut Itimerspec = task.GetTypeMut(curValAddr)?;
-    *v = curVal;
+    //let v :&mut Itimerspec = task.GetTypeMut(curValAddr)?;
+    //*v = curVal;
+
+    task.CopyOutObj(&curVal, curValAddr)?;
 
     return Ok(0)
 }

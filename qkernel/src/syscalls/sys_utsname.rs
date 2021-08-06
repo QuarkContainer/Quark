@@ -25,6 +25,7 @@ use super::super::syscalls::syscalls::*;
 pub const UTS_LEN : usize = 64;
 
 #[repr(C)]
+#[derive(Clone, Debug, Copy)]
 pub struct UtsName {
     pub Sysname    : [u8; UTS_LEN + 1],
     pub Nodename   : [u8; UTS_LEN + 1],
@@ -88,8 +89,10 @@ pub fn SysUname(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     u.Machine[0.."x86_64".len()].clone_from_slice("x86_64".as_bytes());
     u.Domainname[0..uts.DomainName().len()].clone_from_slice(uts.DomainName().as_bytes());
 
-    let va : &mut UtsName = task.GetTypeMut(va)?;
-    *va = u;
+    //let va : &mut UtsName = task.GetTypeMut(va)?;
+    //*va = u;
+
+    task.CopyOutObj(&u, va)?;
 
     /*info!("Sysname is {}", UtsNameString(&va.Sysname));
     info!("Nodename is {}", UtsNameString(&va.Nodename));

@@ -33,8 +33,9 @@ pub fn Pipe2(task: &mut Task, addr: u64, flags: i32) -> Result<i64> {
     w.SetFlags(task, FileFlags::FromFlags(flags as u32).SettableFileFlags());
     w.flags.lock().0.NonSeekable = true;
 
-    let fds : &mut [i32; 2] = task.GetTypeMut(addr)?;
+    //let fds : &mut [i32; 2] = task.GetTypeMut(addr)?;
 
+    let mut fds : [i32; 2] = [0, 0];
     let rfd = task.NewFDFrom(0, &r, &FDFlags {
         CloseOnExec: flags & Flags::O_CLOEXEC != 0,
     })?;
@@ -45,6 +46,7 @@ pub fn Pipe2(task: &mut Task, addr: u64, flags: i32) -> Result<i64> {
 
     fds[0] = rfd;
     fds[1] = wfd;
+    task.CopyOutObj(&fds, addr)?;
 
     info!("Pipe2 the fds is {:?}", &fds);
 

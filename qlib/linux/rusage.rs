@@ -26,7 +26,7 @@ pub const RUSAGE_SELF       :i32 = 0x0;
 pub const RUSAGE_THREAD     :i32 = 0x1;
 
 #[repr(C)]
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone, Copy)]
 pub struct Rusage {
     pub UTime    : Timeval,
     pub STime    : Timeval,
