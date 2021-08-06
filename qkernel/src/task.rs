@@ -681,16 +681,7 @@ impl Task {
                 //println!("there is no clear_child_tid");
             }
             Some(addr) => {
-                //todo: FutexWake
-                match self.GetTypeMut::<i32>(addr) {
-                    Err(_) => (),
-                    Ok(v) => *v = 0,
-                }
-                /*unsafe {
-                    *(addr as *mut u64) = 0;
-                }*/
-
-                //self.FutexWake(addr);
+                self.CopyOutObj(&(0 as i32), addr).ok();
             }
         }
     }

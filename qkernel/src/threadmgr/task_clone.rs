@@ -413,7 +413,7 @@ impl Task {
 
         let (pid, childTask) = self.CloneVM(&opts, userSp)?; //, cStack as * const u8);
         if opts.ParentSetTID {
-            *self.GetTypeMut::<i32>(pTid)? = pid;
+            self.CopyOutObj(&pid, pTid)?;
         }
 
         let cTask = unsafe {

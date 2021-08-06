@@ -121,7 +121,7 @@ impl FileOperations for Reader {
                 v = core::i32::MAX as usize
             }
 
-            *task.GetTypeMut(val)? = v as i32;
+            task.CopyOutObj(&v, val)?;
             return Ok(())
         }
         return Err(Error::SysError(SysErr::ENOTTY))

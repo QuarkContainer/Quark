@@ -224,35 +224,35 @@ pub fn HostIoctlIFReq(task: &Task, hostfd: i32, request: u64, addr: u64) -> Resu
         return Err(Error::SysError(-res as i32))
     }
 
-    *task.GetTypeMut(addr)? = ifr;
+    task.CopyOutObj(&ifr, addr)?;
     return Ok(())
 }
 
 pub fn HostIoctlIFConf(task: &Task, hostfd: i32, request: u64, addr: u64) -> Result<()> {
     let mut ifc : IFConf = task.CopyInObj(addr)?;
-    let count = ifc.Len as usize / SIZE_OF_IFREQ;
 
-    let ifrs :&mut [IFReq] = task.GetSliceMut(ifc.Ptr, count)?;
-    let mut ifrvec = Vec::with_capacity(count);
-    for i in 0..count {
-        ifrvec.push(ifrs[i]);
+    let mut data = Vec::with_capacity(ifc.Len as usize);
+    data.resize(ifc.Len as usize, 0);
+
+    let mut ifr = IFConf {
+        Len: ifc.Len,
+        ..Default::default()
+    };
+
+    if ifr.Ptr != 0 {
+        ifr.Ptr = &data[0] as * const _ as u64;
     }
 
-    if ifc.Ptr != 0 && count > 0 {
-        ifc.Ptr = &ifrvec[0] as * const _ as u64;
-    }
-
-    let res = HostSpace::IoCtl(hostfd, request, &mut ifc as *const _ as u64);
+    let res = HostSpace::IoCtl(hostfd, request, &mut ifr as *const _ as u64);
     if res < 0 {
         return Err(Error::SysError(-res as i32))
     }
 
-    let ifrPtr : &mut IFConf = task.GetTypeMut(addr)?;
-    ifrPtr.Len = ifc.Len;
-    for i in 0..count {
-        ifrs[i] = ifrvec[i];
-    }
+    task.mm.CopyDataOut(task, ifr.Ptr, ifc.Ptr, ifr.Len as usize)?;
 
+    ifc.Len = ifr.Len;
+
+    task.CopyOutObj(&ifc, addr)?;
     return Ok(())
 }
 
@@ -353,9 +353,8 @@ impl FileOperations for SocketOperations {
             }
             LibcConst::TIOCINQ => {
                 if self.SocketBufEnabled() {
-                    let v: &mut i32 = task.GetTypeMut(val)?;
-
-                    *v =  self.SocketBuf().readBuf.lock().available as i32;
+                    let v =  self.SocketBuf().readBuf.lock().available as i32;
+                    task.CopyOutObj(&v, val)?;
                     return Ok(())
                 } else {
                     let tmp: i32 = 0;
@@ -363,8 +362,7 @@ impl FileOperations for SocketOperations {
                     if res < 0 {
                         return Err(Error::SysError(-res as i32))
                     }
-                    let v: &mut i32 = task.GetTypeMut(val)?;
-                    *v = tmp;
+                    task.CopyOutObj(&tmp, val)?;
                     return Ok(())
                 }
             }
@@ -374,8 +372,7 @@ impl FileOperations for SocketOperations {
                 if res < 0 {
                     return Err(Error::SysError(-res as i32))
                 }
-                let v: &mut i32 = task.GetTypeMut(val)?;
-                *v = tmp;
+                task.CopyOutObj(&tmp, val)?;
                 return Ok(())
             }
         }

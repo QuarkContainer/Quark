@@ -65,7 +65,8 @@ pub fn SysCapget(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 Inheritable: i.0 as u32,
             };
 
-            *task.GetTypeMut(dataAddr)? = data;
+            //*task.GetTypeMut(dataAddr)? = data;
+            task.CopyOutObj(&data, dataAddr)?;
 
             return Ok(0)
 
@@ -90,13 +91,14 @@ pub fn SysCapget(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 },
             ];
 
-            *task.GetTypeMut(dataAddr)? = data;
-
+            //*task.GetTypeMut(dataAddr)? = data;
+            task.CopyOutObj(&data, dataAddr)?;
             return Ok(0)
         }
         _ => {
             hdr.Version = HIGHEST_CAPABILITY_VERSION;
-            *task.GetTypeMut(hdrAddr)? = hdr;
+            //*task.GetTypeMut(hdrAddr)? = hdr;
+            task.CopyOutObj(&hdr, hdrAddr)?;
 
             if dataAddr != 0 {
                 return Err(Error::SysError(SysErr::EINVAL))
@@ -145,11 +147,11 @@ pub fn SysCapet(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
         _ => {
             hdr.Version = HIGHEST_CAPABILITY_VERSION;
-            let hdrptr = match task.GetTypeMut(hdrAddr) {
+            match task.CopyOutObj(&hdr, hdrAddr) {
                 Err(_) => return Err(Error::SysError(SysErr::EINVAL)),
-                Ok(ptr) => ptr
+                Ok(()) => ()
             };
-            *hdrptr = hdr;
+
             return Ok(0)
         }
     }

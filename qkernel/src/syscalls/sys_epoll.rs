@@ -267,10 +267,11 @@ pub fn CopyOutEvents(task: &Task, addr: u64, e: &[Event]) -> Result<()> {
 
     //error!("epool CopyOutEvents events is {:x?}", e);
     for i in 0..e.len() {
-        let output : &mut Event = task.GetTypeMut(addr + (i * itemLen) as u64)?;
+        /*let output : &mut Event = task.GetTypeMut(addr + (i * itemLen) as u64)?;
         output.Events = e[i].Events;
         output.Data[0] = e[i].Data[0];
-        output.Data[1] = e[i].Data[1];
+        output.Data[1] = e[i].Data[1];*/
+        task.CopyOutObj(&e[i], addr + (i * itemLen) as u64)?;
     }
 
     return Ok(())

@@ -107,8 +107,11 @@ pub fn SysGetRobustList(task: &mut Task, args: &SyscallArguments) -> Result<i64>
     };
 
     // todo: check whether the current thread has permission to get the RobustList from target thread
-    *task.GetTypeMut::<u64>(headAddr)? = thread.lock().robust_list_head;
-    *task.GetTypeMut::<i64>(lenAddr)? = ROBUST_LIST_LEN as i64;
+    //*task.GetTypeMut::<u64>(headAddr)? = thread.lock().robust_list_head;
+    //*task.GetTypeMut::<i64>(lenAddr)? = ROBUST_LIST_LEN as i64;
+
+    task.CopyOutObj(&(thread.lock().robust_list_head as u64), headAddr)?;
+    task.CopyOutObj(&(ROBUST_LIST_LEN as i64), lenAddr)?;
 
     return Ok(0);
 }
@@ -691,12 +694,14 @@ pub fn SysGetcpu(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     if cpu != 0 {
         let id = task.CPU();
-        *task.GetTypeMut(cpu)? = id;
+        //*task.GetTypeMut(cpu)? = id;
+        task.CopyOutObj(&id, cpu)?;
     }
 
     if node != 0 {
         let val: u32 = 0;
-        *task.GetTypeMut(node)? = val;
+        //*task.GetTypeMut(node)? = val;
+        task.CopyOutObj(&val, node)?;
     }
 
     return Ok(0);

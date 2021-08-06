@@ -103,8 +103,8 @@ pub fn SysGetrlimit(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let lim = PrLimit64(&task.Thread(), resource, None)?;
     let rlim = RLimit64::FromLimit(&lim);
 
-    *task.GetTypeMut(addr)? = rlim;
-
+    //*task.GetTypeMut(addr)? = rlim;
+    task.CopyOutObj(&rlim, addr)?;
     return Ok(0)
 }
 
@@ -186,7 +186,8 @@ pub fn SysPrlimit64(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     if oldRlimAddr != 0 {
         let rlim = RLimit64::FromLimit(&oldLim);
-        *task.GetTypeMut(oldRlimAddr)? = rlim;
+        //*task.GetTypeMut(oldRlimAddr)? = rlim;
+        task.CopyOutObj(&rlim, oldRlimAddr)?;
     }
 
     return Ok(0)

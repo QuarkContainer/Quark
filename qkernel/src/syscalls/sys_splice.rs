@@ -357,7 +357,8 @@ pub fn SysSendfile(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             DstStart: 0,
         }, outFile.Flags().NonBlocking)?;
 
-        *task.GetTypeMut(offsetAddr)? = offset + n;
+        //*task.GetTypeMut(offsetAddr)? = offset + n;
+        task.CopyOutObj(&(offset + n), offsetAddr)?;
     } else {
         n = DoSplice(task, &outFile, &inFile, &mut SpliceOpts{
             Length: count,

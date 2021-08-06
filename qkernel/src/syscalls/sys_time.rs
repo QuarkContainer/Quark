@@ -127,11 +127,17 @@ pub fn SysClockGetRes(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Ok(0);
     }
 
-    let ts : &mut Timespec = task.GetTypeMut(addr)?;
+    /*let ts : &mut Timespec = task.GetTypeMut(addr)?;
     *ts = Timespec {
         tv_sec: 0,
         tv_nsec: 1,
+    };*/
+
+    let ts = Timespec {
+        tv_sec: 0,
+        tv_nsec: 1,
     };
+    task.CopyOutObj(&ts, addr)?;
 
     return Ok(0)
 }
@@ -143,8 +149,11 @@ pub fn SysClockGetTime(task: &mut Task, args: &SyscallArguments) -> Result<i64> 
     //let clockID = 1;
 
     let clock = GetClock(task, clockID)?;
-    let ts : &mut Timespec = task.GetTypeMut(addr)?;
-    *ts = clock.Now().Timespec();
+    //let ts : &mut Timespec = task.GetTypeMut(addr)?;
+    //*ts = clock.Now().Timespec();
+
+    let ts = clock.Now().Timespec();
+    task.CopyOutObj(&ts, addr)?;
     //info!("SysClockGetTime: output is {:?}", ts);
 
     return Ok(0);
@@ -162,8 +171,10 @@ pub fn SysTime(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Ok(now)
     }
 
-    let ptr : &mut i64 = task.GetTypeMut(addr)?;
-    *ptr = now;
+    //let ptr : &mut i64 = task.GetTypeMut(addr)?;
+    //*ptr = now;
+
+    task.CopyOutObj(&now, addr)?;
 
     return Ok(0)
 }
@@ -233,7 +244,8 @@ pub fn NansleepFor(task: &mut Task, timer: Timer, dur: i64, rem: u64) -> Result<
 
     if rem != 0 && remaining != 0 {
         let timeleft = Timespec::FromNs(remaining);
-        *task.GetTypeMut(rem)? = timeleft;
+        //*task.GetTypeMut(rem)? = timeleft;
+        task.CopyOutObj(&timeleft, rem)?;
     }
 
     match res {
@@ -265,8 +277,10 @@ pub struct NanosleepRestartBlock {
 impl SyscallRestartBlock for NanosleepRestartBlock {
     fn Restart(&self, task: &mut Task) -> Result<i64> {
         if self.rem != 0 {
-            let ts : &mut Timespec = task.GetTypeMut(self.rem)?;
-            *ts = Timespec::FromNs(self.dur);
+            //let ts : &mut Timespec = task.GetTypeMut(self.rem)?;
+            //*ts = Timespec::FromNs(self.dur);
+            let ts = Timespec::FromNs(self.dur);
+            task.CopyOutObj(&ts, self.rem)?;
         }
 
         return Err(Error::SysError(SysErr::EINTR));
@@ -287,13 +301,17 @@ pub fn SysGettimeofday(task: &mut Task, args: &SyscallArguments) -> Result<i64> 
     }
 
     if tvAddr != 0 {
-        let tv : &mut Timeval = task.GetTypeMut(tvAddr)?;
-        *tv = timeV;
+        //let tv : &mut Timeval = task.GetTypeMut(tvAddr)?;
+        //*tv = timeV;
+
+        task.CopyOutObj(&timeV, tvAddr)?;
     }
 
     if tzAddr != 0 {
-        let tz : &mut [u32; 2] = task.GetTypeMut(tvAddr)?;
-        *tz = timezone;
+        //let tz : &mut [u32; 2] = task.GetTypeMut(tzAddr)?;
+        //*tz = timezone;
+
+        task.CopyOutObj(&timezone, tzAddr)?;
     }
 
     return Ok(0)

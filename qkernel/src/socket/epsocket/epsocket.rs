@@ -45,7 +45,8 @@ pub fn Ioctl(task: &Task, ep: &BoundEndpoint, _fd: i32, request: u64, val: u64) 
             }*/
             let addr = val;
             if let SockOpt::ReceiveQueueSizeOption(res) = v {
-                *task.GetTypeMut(addr)? = res;
+                //*task.GetTypeMut(addr)? = res;
+                task.CopyOutObj(&res, addr)?;
             }
 
             return Ok(())
@@ -59,7 +60,8 @@ pub fn Ioctl(task: &Task, ep: &BoundEndpoint, _fd: i32, request: u64, val: u64) 
             }*/
             let addr = val;
             if let SockOpt::SendQueueSizeOption(res) = v {
-                *task.GetTypeMut(addr)? = res;
+                //*task.GetTypeMut(addr)? = res;
+                task.CopyOutObj(&res, addr)?;
             }
 
             return Ok(())

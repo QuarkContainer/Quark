@@ -215,7 +215,8 @@ pub fn Accept4(task: &Task, fd: i32, addr: u64, addrlen: u64, flags: i32) -> Res
 
     if peerRequested {
         task.CopyOutSlice(addrstr, addr, lenCopy as usize)?;
-        *task.GetTypeMut::<i32>(addrlen)? = len as i32;
+        //*task.GetTypeMut::<i32>(addrlen)? = len as i32;
+        task.CopyOutObj(&(len as i32), addrlen)?
     }
 
     return Ok(nfd)
@@ -317,7 +318,8 @@ pub fn SysGetSockOpt(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let len = res as usize;
     task.CopyOutSlice(&optVal[..len], optValAddr, len)?;
-    *task.GetTypeMut(optLenAddr)? = len as i32;
+    //*task.GetTypeMut(optLenAddr)? = len as i32;
+    task.CopyOutObj(&(len as i32), optLenAddr)?;
 
     return Ok(0)
 }
@@ -364,7 +366,8 @@ pub fn SysGetSockName(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     };
 
     let mut outputlen = sock.GetSockName(task, &mut buf[0..len as usize])? as usize;
-    *(task.GetTypeMut::<i32>(addrlen)?) = outputlen as i32;
+    //*(task.GetTypeMut::<i32>(addrlen)?) = outputlen as i32;
+    task.CopyOutObj(&(outputlen as i32), addrlen)?;
 
     if len < outputlen as i32 {
         outputlen = len as usize;
@@ -395,14 +398,15 @@ pub fn SysGetPeerName(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     }
 
     task.CopyOutSlice(&buf[..outputlen as usize], addr, addrlen as usize)?;
-    *(task.GetTypeMut::<i32>(addrlen)?) = outputlen as i32;
-
+    //*(task.GetTypeMut::<i32>(addrlen)?) = outputlen as i32;
+    task.CopyOutObj(&(outputlen as i32), addrlen)?;
     return Ok(0)
 }
 
 fn recvSingleMsg(task: &Task, sock: &Arc<FileOperations>, msgPtr: u64, flags: i32, deadline: Option<Time>) -> Result<i64> {
-    let msg = task.GetTypeMut::<MsgHdr>(msgPtr)?;
+    //let msg = task.GetTypeMut::<MsgHdr>(msgPtr)?;
 
+    let mut msg : MsgHdr = task.CopyInObj(msgPtr)?;
     if msg.iovLen > UIO_MAXIOV {
         return Err(Error::SysError(SysErr::EMSGSIZE))
     }

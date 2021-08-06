@@ -70,7 +70,8 @@ pub fn CopyOutNodemask(task: &Task, addr: u64, maxnode: u32, val: u64) -> Result
     }
 
     // Copy out the first unsigned long in the nodemask.
-    *task.GetTypeMut(addr)? = val;
+    //*task.GetTypeMut(addr)? = val;
+    task.CopyOutObj(&val, addr)?;
 
     // Zero out remaining unsigned longs in the nodemask.
     if bits > 64 {
@@ -78,7 +79,8 @@ pub fn CopyOutNodemask(task: &Task, addr: u64, maxnode: u32, val: u64) -> Result
 
         let remU64 = (bits - 65) / 64;
         for _i in 0.. remU64 as usize {
-            *task.GetTypeMut(remAddr)? = 0;
+            //*task.GetTypeMut(remAddr)? = 0;
+            task.CopyOutObj(&(0 as u64), remAddr)?;
             remAddr += 8;
         }
     }
@@ -142,13 +144,16 @@ pub fn SysGetMempolicy(task: &mut Task, args: &SyscallArguments) -> Result<i64> 
             // get_mempolicy() will allocate a page as if the thread had
             // performed a read (load) access to that address, and return the
             // ID of the node where that page was allocated."
-            *task.GetTypeMut(addr)? = 0 as u8;
+            //*task.GetTypeMut(addr)? = 0 as u8;
+            task.CopyOutObj(&(0 as u8), addr)?;
+
             policy = MPOL_DEFAULT; // maxNodes == 1
         }
 
         if mode != 0 {
-            let mode = task.GetTypeMut(mode)?;
-            *mode = policy;
+            //let mode = task.GetTypeMut(mode)?;
+            //*mode = policy;
+            task.CopyOutObj(&policy, mode)?;
         }
 
         if nodemask != 0 {
@@ -177,8 +182,9 @@ pub fn SysGetMempolicy(task: &mut Task, args: &SyscallArguments) -> Result<i64> 
     }
 
     if mode != 0 {
-        let mode = task.GetTypeMut(mode)?;
-        *mode = policy;
+        //let mode = task.GetTypeMut(mode)?;
+        //*mode = policy;
+        task.CopyOutObj(&policy, mode)?;
     }
 
     if nodemask != 0 {

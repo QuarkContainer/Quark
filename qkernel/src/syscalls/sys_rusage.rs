@@ -83,7 +83,8 @@ pub fn SysGetrusage(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     }
 
     let ru = GetUsage(task, which)?;
-    *task.GetTypeMut(addr)? = ru;
+    //*task.GetTypeMut(addr)? = ru;
+    task.CopyOutObj(&ru, addr)?;
     return Ok(0)
 }
 
@@ -105,7 +106,7 @@ pub fn SysTimes(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         CSTime: ClockTFromDuration(cs2.SysTime),
     };
 
-    *task.GetTypeMut(addr)? = r;
-
+    //*task.GetTypeMut(addr)? = r;
+    task.CopyOutObj(&r, addr)?;
     return Ok(0)
 }

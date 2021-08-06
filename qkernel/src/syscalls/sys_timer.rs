@@ -42,8 +42,8 @@ pub fn CopyItimerValOut(task: &mut Task, addr: u64, itv: &ItimerVal) -> Result<(
         return Ok(())
     }
 
-    *task.GetTypeMut(addr)? = *itv;
-
+    //*task.GetTypeMut(addr)? = *itv;
+    task.CopyOutObj(itv, addr)?;
     return Ok(())
 }
 
@@ -106,11 +106,12 @@ pub fn SysTimerCreate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         sev = task.CopyInObj(sevp)?;
     }
 
-    let timerID = task.GetTypeMut(timerIDp)?;
-
     let id = task.Thread().IntervalTimerCreate(&c, &mut sev)?;
 
-    *timerID = id;
+    //let timerID = task.GetTypeMut(timerIDp)?;
+    //*timerID = id;
+
+    task.CopyOutObj(&id, timerIDp)?;
     return Ok(0)
 }
 
@@ -125,7 +126,8 @@ pub fn SysTimerSettime(task: &mut Task, args: &SyscallArguments) -> Result<i64> 
 
     let oldVal = task.Thread().IntervalTimerSettime(timerID, &newVal, flags & TIMER_ABSTIME != 0)?;
     if oldValAddr != 0 {
-        *task.GetTypeMut(oldValAddr)? = oldVal;
+        //*task.GetTypeMut(oldValAddr)? = oldVal;
+        task.CopyOutObj(&oldVal, oldValAddr)?;
     }
 
     return Ok(0)
@@ -137,7 +139,8 @@ pub fn SysTimerGettime(task: &mut Task, args: &SyscallArguments) -> Result<i64> 
     let curValAddr = args.arg1 as u64;
 
     let curVal = task.Thread().IntervalTimerGettime(timerID)?;
-    *task.GetTypeMut(curValAddr)? = curVal;
+    //*task.GetTypeMut(curValAddr)? = curVal;
+    task.CopyOutObj(&curVal, curValAddr)?;
     return Ok(0)
 }
 

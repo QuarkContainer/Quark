@@ -595,9 +595,10 @@ pub fn CopyOutTimevalRemaining(task: &Task, startNs: i64, timeout: Duration, tim
 
     let remaining = TimeoutRemain(task, startNs, timeout);
     let tvRemaining = Timeval::FromNs(remaining);
-    let timeval : &mut Timeval = task.GetTypeMut(timeValAddr)?;
-    *timeval = tvRemaining;
+    //let timeval : &mut Timeval = task.GetTypeMut(timeValAddr)?;
+    //*timeval = tvRemaining;
 
+    task.CopyOutObj(&tvRemaining, timeValAddr)?;
     return Ok(())
 }
 
@@ -608,9 +609,10 @@ pub fn CopyOutTimespecRemaining(task: &Task, startNs: i64, timeout: Duration, ti
 
     let remaining = TimeoutRemain(task, startNs, timeout);
     let tsRemaining = Timespec::FromNs(remaining);
-    let ts : &mut Timespec = task.GetTypeMut(timespecAddr)?;
-    *ts = tsRemaining;
+    //let ts : &mut Timespec = task.GetTypeMut(timespecAddr)?;
+    //*ts = tsRemaining;
 
+    task.CopyOutObj(&tsRemaining, timespecAddr)?;
     return Ok(())
 }
 

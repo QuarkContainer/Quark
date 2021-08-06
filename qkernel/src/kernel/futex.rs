@@ -17,7 +17,7 @@ use spin::Mutex;
 use core::ops::Deref;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicU8, AtomicU32, Ordering};
+use core::sync::atomic::{AtomicU8, Ordering};
 use lazy_static::lazy_static;
 
 use super::super::qlib::common::*;
@@ -95,18 +95,22 @@ pub trait Target {
 
 impl Target for Task {
     fn SwapU32(&self, addr: u64, new: u32) -> Result<u32> {
-        let val = self.GetTypeMut::<AtomicU32>(addr)?;
+        //let val = self.GetTypeMut::<AtomicU32>(addr)?;
+        //val.swap(new, Ordering::SeqCst);
 
-        val.swap(new, Ordering::SeqCst);
-        return Ok(new)
+        let val = self.mm.SwapObj(self, &new, addr)?;
+        return Ok(val)
     }
 
     fn CompareAndSwapU32(&self, addr: u64, old: u32, new: u32) -> Result<u32> {
-        let pval = self.GetTypeMut::<AtomicU32>(addr)?;
+        /*let pval = self.GetTypeMut::<AtomicU32>(addr)?;
         match pval.compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst) {
             Ok(v) => return Ok(v),
             Err(v) => return Ok(v),
-        }
+        }*/
+
+        let val = self.mm.CompareAndSwap(self, addr, old, new)?;
+        return Ok(val)
     }
 
     fn LoadU32(&self, addr: u64) -> Result<u32> {

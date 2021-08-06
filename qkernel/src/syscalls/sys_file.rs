@@ -544,7 +544,8 @@ pub fn Ioctl(task: &mut Task, fd: i32, request: u64, val: u64) -> Result<()> {
         }
         IoCtlCmd::FIOGETOWN | IoCtlCmd::SIOCGPGRP => {
             let who = FGetOwn(task, &file);
-            *task.GetTypeMut(val)? = who;
+            //*task.GetTypeMut(val)? = who;
+            task.CopyOutObj(&who, val)?;
             return Ok(())
         }
         _ => {
@@ -957,7 +958,8 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         Cmd::F_GETOWN_EX => {
             let addr = val;
             let owner = FGetOwnEx(task, &file);
-            *task.GetTypeMut(addr)? = owner;
+            //*task.GetTypeMut(addr)? = owner;
+            task.CopyOutObj(&owner, addr)?;
             return Ok(0)
         }
         Cmd::F_SETOWN_EX => {
