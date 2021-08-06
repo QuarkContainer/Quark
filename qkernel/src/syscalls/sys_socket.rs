@@ -109,9 +109,8 @@ pub fn SysSocketPair(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let fd1 = task.NewFDFrom(0, &s1, &fdFlags)?;
     let fd2 = task.NewFDFrom(0, &s2, &fdFlags)?;
 
-    let fds = task.GetSliceMut::<i32>(socks, 2)?;
-    fds[0] = fd1;
-    fds[1] = fd2;
+    let fds = [fd1, fd2];
+    task.CopyOutSlice(&fds, socks, 2)?;
 
     return Ok(0)
 }
@@ -544,7 +543,7 @@ fn sendSingleMsg(task: &Task, sock: &Arc<FileOperations>, msgPtr: u64, flags: i3
 
     let src = task.IovsFromAddr(msg.iov, msg.iovLen)?;
 
-    let res = sock.SendMsg(task, src, flags, &mut pMsg, deadline)?;
+    let res = sock.SendMsg(task, &src, flags, &mut pMsg, deadline)?;
     return Ok(res);
 }
 

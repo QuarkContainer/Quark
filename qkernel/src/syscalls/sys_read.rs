@@ -130,9 +130,9 @@ pub fn Readv(task: &Task, fd: i32, addr: u64, iovcnt: i32) -> Result<i64> {
         return Err(Error::SysError(SysErr::EINVAL))
     }
 
-    let dsts = task.IovsFromAddr(addr, iovcnt as usize)?;
+    let mut dsts = task.IovsFromAddr(addr, iovcnt as usize)?;
 
-    return readv(task, &file, dsts);
+    return readv(task, &file, &mut dsts);
 }
 
 pub fn SysPreadv(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -204,8 +204,8 @@ pub fn Preadv(task: &Task, fd: i32, addr: u64, iovcnt: i32, offset: i64) -> Resu
         return Ok(0)
     }
 
-    let dsts = task.IovsFromAddr(addr, iovcnt as usize)?;
-    return preadv(task, &file, dsts, offset);
+    let mut dsts = task.IovsFromAddr(addr, iovcnt as usize)?;
+    return preadv(task, &file, &mut dsts, offset);
 }
 
 fn RepReadv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {

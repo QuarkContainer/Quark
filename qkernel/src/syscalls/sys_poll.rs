@@ -75,11 +75,7 @@ pub fn DoSelect(task: &Task, nfds: i32, readfds: u64, writefds: u64, exceptfds: 
     let mut e = Vec::with_capacity(byteCount);
 
     if readfds != 0 {
-        let arr = task.GetSliceMut::<u8>(readfds, byteCount)?;
-
-        for b in arr {
-            r.push(*b)
-        }
+        r = task.CopyInVec::<u8>(readfds, byteCount)?;
 
         if bitsPartial != 0 {
             r[byteCount-1] &= !(0xff << bitsPartial)
@@ -91,11 +87,7 @@ pub fn DoSelect(task: &Task, nfds: i32, readfds: u64, writefds: u64, exceptfds: 
     }
 
     if writefds != 0 {
-        let arr = task.GetSliceMut::<u8>(writefds, byteCount)?;
-
-        for b in arr {
-            w.push(*b)
-        }
+        w = task.CopyInVec::<u8>(writefds, byteCount)?;
 
         if bitsPartial != 0 {
             w[byteCount-1] &= !(0xff << bitsPartial)
@@ -107,11 +99,7 @@ pub fn DoSelect(task: &Task, nfds: i32, readfds: u64, writefds: u64, exceptfds: 
     }
 
     if exceptfds != 0 {
-        let arr = task.GetSliceMut::<u8>(exceptfds, byteCount)?;
-
-        for b in arr {
-            e.push(*b)
-        }
+        e = task.CopyInVec::<u8>(exceptfds, byteCount)?;
 
         if bitsPartial != 0 {
             e[byteCount-1] &= !(0xff << bitsPartial)
@@ -214,27 +202,15 @@ pub fn DoSelect(task: &Task, nfds: i32, readfds: u64, writefds: u64, exceptfds: 
 
     // Copy updated vectors back.
     if readfds != 0 {
-        let arr = task.GetSliceMut::<u8>(readfds, byteCount)?;
-
-        for i in 0..arr.len() {
-            arr[i] = r[i];
-        }
+        task.CopyOutSlice(&r, readfds, byteCount)?;
     }
 
     if writefds != 0 {
-        let arr = task.GetSliceMut::<u8>(writefds, byteCount)?;
-
-        for i in 0..arr.len() {
-            arr[i] = w[i];
-        }
+        task.CopyOutSlice(&w, writefds, byteCount)?;
     }
 
     if exceptfds != 0 {
-        let arr = task.GetSliceMut::<u8>(exceptfds, byteCount)?;
-
-        for i in 0..arr.len() {
-            arr[i] = e[i];
-        }
+        task.CopyOutSlice(&e, exceptfds, byteCount)?;
     }
 
     return Ok(bitSetCount)

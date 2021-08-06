@@ -248,35 +248,12 @@ impl MemoryManager {
 impl Task {
     //Copy a vec from user memory
     pub fn CopyInVec<T: Sized + Copy>(&self, addr: u64, size: usize) -> Result<Vec<T>> {
-        /*if addr == 0 && size == 0 {
-            return Ok(Vec::new())
-        }
-
-        let mut res = Vec::with_capacity(size);
-        let slice = self.GetSlice::<T>(addr, size)?;
-
-        for i in 0..size {
-            res.push(slice[i]);
-        }
-
-        return Ok(res);*/
         return self.mm.CopyInVec(self, addr, size);
     }
 
     //Copy a slice to user memory
     pub fn CopyOutSlice<T: Sized + Copy>(&self, src: &[T], dst: u64, len: usize) -> Result<()> {
         return self.mm.CopyOutSlice(self, src, dst, len)
-
-        /*if len < src.len() {
-            return Err(Error::SysError(SysErr::ERANGE));
-        }
-
-        let dst = self.GetSliceMut::<T>(dst, src.len())?;
-        for i in 0..dst.len() {
-            dst[i] = src[i]
-        }
-
-        return Ok(())*/
     }
 
     //Copy an Object from user memory
@@ -353,8 +330,8 @@ impl Task {
         return Ok(vAddr)
     }
 
-    pub fn IovsFromAddr(&self, iovs: u64, iovsnum: usize) -> Result<&mut [IoVec]> {
-        return self.GetSliceMut::<IoVec>(iovs, iovsnum);
+    pub fn IovsFromAddr(&self, iovs: u64, iovsnum: usize) -> Result<Vec<IoVec>> {
+        return self.mm.CopyInVec(self, iovs, iovsnum)
     }
 
     pub fn V2P(&self, start: u64, len: u64, output: &mut Vec<IoVec>, writable: bool) -> Result<()> {
