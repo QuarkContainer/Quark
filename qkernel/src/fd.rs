@@ -12,31 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::vec::Vec;
 
 use super::Kernel::HostSpace;
 use super::qlib::common::*;
-use super::task::*;
 use super::qlib::linux_def::*;
 use super::qlib::mem::io::*;
 
-pub struct MemBuf<'a> {
-    pub data: &'a mut [u8],
+pub struct MemBuf {
+    pub data: Vec<u8>,
     pub offset: usize,
 }
 
-impl<'a> MemBuf<'a> {
-    pub fn NewFromAddr(task: &'a Task, addr: u64, size: usize) -> Result<Self> {
-        let slice = task.GetSliceMut::<u8>(addr, size)?;
-
-        return Ok(Self {
-            data: slice,
-            offset: 0,
-        })
-    }
-
-    pub fn New(data: &'a mut [u8]) -> Self {
+impl MemBuf {
+    pub fn New(size: usize) -> Self {
         return Self {
-            data: data,
+            data: Vec::with_capacity(size),
             offset: 0,
         }
     }
@@ -46,7 +37,7 @@ impl<'a> MemBuf<'a> {
     }
 }
 
-impl<'a> IOReader for MemBuf<'a> {
+impl IOReader for MemBuf {
     fn Read(&mut self, buf: &mut [u8]) -> Result<i64> {
         let tmp = &self.data[self.offset..];
 
@@ -65,22 +56,13 @@ impl<'a> IOReader for MemBuf<'a> {
     }
 }
 
-impl<'a> IOWriter for MemBuf<'a> {
+impl IOWriter for MemBuf {
     fn Write(&mut self, buf: &[u8]) -> Result<i64> {
-        let tmp = &mut self.data[self.offset..];
-
-        let mut len = buf.len();
-        if len > tmp.len() {
-            len = tmp.len();
+        for i in 0..buf.len() {
+            self.data.push(buf[i])
         }
 
-        for i in 0..len {
-            tmp[i] = buf[i]
-        }
-
-        self.offset += len;
-
-        return Ok(len as i64)
+        return Ok(buf.len() as i64)
     }
 }
 

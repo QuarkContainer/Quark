@@ -67,12 +67,17 @@ fn getDents(task: &Task, fd: i32, addr: u64, size: i32, f: fn(&Task, &Dirent, &m
 
     task.CheckPermission(addr, size as u64, true, false)?;
 
-    let mut writer = MemBuf::NewFromAddr(task, addr, size as usize)?;
-    let len = writer.Len() as i32;
+    let mut writer : MemBuf = MemBuf::New(size as usize);
+
+    let len = size; // writer.Len() as i32;
     let mut ds = HostDirentSerializer::New(f, &mut writer, WIDTH, len);
     let err = dir.ReadDir(task, &mut ds);
     match err {
-        Ok(()) => return Ok(ds.Written() as i64),
+        Ok(()) => {
+            let buf = &writer.data;
+            task.CopyOutSlice(buf, addr, size as usize)?;
+            return Ok(buf.len() as i64)
+        },
         Err(Error::EOF) => return Ok(0),
         Err(e) => return Err(e)
     }
@@ -189,8 +194,7 @@ impl<'a> DentrySerializer for HostDirentSerializer<'a> {
         self.offset += 1;
         let d = Dirent::New(self.width, name, attr, self.offset);
 
-        let mut b: [u8; 1024] = [0; 1024];
-        let mut writer = MemBuf::New(&mut b);
+        let mut writer = MemBuf::New(1024);
         let res = (self.serialize)(task, &d, &mut writer);
         let n = match res {
             Ok(n) => n,
@@ -205,6 +209,7 @@ impl<'a> DentrySerializer for HostDirentSerializer<'a> {
             return Err(Error::EOF)
         }
 
+        let b = &writer.data;
         match self.w.Write(&b[..n as usize]) {
             Ok(_) => (),
             Err(e) => {

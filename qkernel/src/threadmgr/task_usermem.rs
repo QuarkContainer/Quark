@@ -308,15 +308,6 @@ impl Task {
         return self.mm.CopyInVector(self, addr, maxElemSize, maxTotalSize);
     }
 
-    pub fn GetSlice<T: Sized>(&self, vAddr: u64, count: usize) -> Result<&[T]> {
-        let recordLen = core::mem::size_of::<T>();
-        let len = self.CheckPermission(vAddr, count as u64 * recordLen as u64, false, false)?;
-
-        let t: *const T = vAddr as *const T;
-        let slice = unsafe { slice::from_raw_parts(t, (len as usize) / recordLen) };
-        return Ok(slice)
-    }
-
     pub fn GetSliceMut<T: Sized>(&self, vAddr: u64, count: usize) -> Result<&mut [T]> {
         let recordLen = core::mem::size_of::<T>();
         // only check whether the address is valid, if readonly, will cow
