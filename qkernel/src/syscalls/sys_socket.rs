@@ -827,7 +827,8 @@ pub fn SysSendTo(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let mut pMsg = MsgHdr::default();
 
     let _msgVec = if namePtr != 0 && nameLen > 0 {
-        let vec = task.GetSlice::<u8>(namePtr, nameLen as usize)?.to_vec();
+        //let vec = task.GetSlice::<u8>(namePtr, nameLen as usize)?.to_vec();
+        let vec = task.CopyInVec::<u8>(namePtr, nameLen as usize)?;
         pMsg.msgName = vec.as_ptr() as u64;
         pMsg.nameLen = nameLen;
         Some(vec)

@@ -14,6 +14,7 @@
 
 use alloc::vec::Vec;
 use alloc::str;
+use alloc::string::String;
 
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
@@ -50,30 +51,15 @@ impl CString {
     }
 
     pub const MAX_STR_LEN: usize = 4096;
-    pub fn ToString<'b>(task: &'b Task, addr: u64) -> Result<&'b str> {
+    pub fn ToString(task: &Task, addr: u64) -> Result<String> {
         return Self::ToStringWithLen(task, addr, Self::MAX_STR_LEN);
     }
 
-    pub fn ToStringWithLen<'b>(task: &'b Task, addr: u64, len: usize) -> Result<&'b str> {
-        let len = task.CheckPermission(addr, len as u64, false, true)? as usize;
-
-        let slice = task.GetSlice::<u8>(addr, len)?;
-
-        let len = {
-            let mut res: usize = len;
-            for i in 0..slice.len() {
-                if slice[i] == 0 {
-                    res = i;
-                    break
-                }
-            }
-
-            res
-        };
-
-        match str::from_utf8(&slice[0..len]) {
-            Ok(s) => return Ok(s),
+    pub fn ToStringWithLen(task: &Task, addr: u64, len: usize) -> Result<String> {
+        let (str, err) = task.CopyInString(addr, len);
+        match err {
             Err(_) => return Err(Error::SysError(SysErr::EINVAL)),
+            Ok(()) => return Ok(str)
         }
     }
 }

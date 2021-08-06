@@ -141,9 +141,10 @@ impl Dirent {
 fn Serialize64(task: &Task, dir: &Dirent, w: &mut IOWriter) -> Result<i32> {
     let addr = &dir.Hdr as *const _ as u64;
     let size = 18; //mem::size_of::<DirentHdr>();
-    let slice = task.GetSlice::<u8>(addr, size)?;
+    //let slice = task.GetSlice::<u8>(addr, size)?;
+    let buf = task.CopyInVec::<u8>(addr, size)?;
 
-    let n1 = w.Write(slice)?;
+    let n1 = w.Write(&buf)?;
     let n3 = w.Write(&[dir.Hdr.Type; 1])?;
     let n2 = w.Write(&dir.Name)?;
     return Ok((n1 + n2 + n3) as i32)
@@ -152,9 +153,10 @@ fn Serialize64(task: &Task, dir: &Dirent, w: &mut IOWriter) -> Result<i32> {
 fn Serialize(task: &Task, dir: &Dirent, w: &mut IOWriter) -> Result<i32> {
     let addr = &dir.Hdr as *const _ as u64;
     let size = 18; //mem::size_of::<OldDirentHdr>();
-    let slice = task.GetSlice::<u8>(addr, size)?;
+    //let slice = task.GetSlice::<u8>(addr, size)?;
+    let buf = task.CopyInVec::<u8>(addr, size)?;
 
-    let n1 = w.Write(slice)?;
+    let n1 = w.Write(&buf)?;
     let n2 = w.Write(&dir.Name)?;
     let n3 = w.Write(&[dir.Hdr.Type; 1])?;
     return Ok((n1 + n2 + n3) as i32)

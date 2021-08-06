@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::vec::Vec;
+
 use super::super::task::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
@@ -47,7 +49,8 @@ pub fn CopyInNodemask(task: &Task, addr: u64, maxnode: u32) -> Result<u64> {
     // Copy in the whole nodemask.
     let numU64 = ((bits + 63) / 64) as usize;
 
-    let val : &[u64] = task.GetSlice(addr, numU64)?;
+    //let val : &[u64] = task.GetSlice(addr, numU64)?;
+    let val : Vec<u64> = task.CopyInVec(addr, numU64)?;
     if val[0] & !ALLOW_NODE_MASK != 0 {
         return Err(Error::SysError(SysErr::EINVAL))
     }

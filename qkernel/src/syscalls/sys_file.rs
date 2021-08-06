@@ -94,11 +94,11 @@ pub fn fileOpOn(task: &Task, dirFd: i32, path: &str, resolve: bool,
 pub fn copyInPath(task: &Task, addr: u64, allowEmpty: bool) -> Result<(String, bool)> {
     let str = CString::ToString(task, addr)?;
 
-    if str == "" && !allowEmpty {
+    if &str == "" && !allowEmpty {
         return Err(Error::SysError(SysErr::ENOENT))
     }
 
-    let (path, dirPath) = TrimTrailingSlashes(str);
+    let (path, dirPath) = TrimTrailingSlashes(&str);
 
     return Ok((path.to_string(), dirPath))
 }

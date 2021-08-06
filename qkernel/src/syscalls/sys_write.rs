@@ -162,13 +162,12 @@ pub fn SysWritev(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let iovcnt = args.arg2 as i32;
 
     if fd < 3 {
-        use alloc::string::ToString;
         use super::super::util::cstring::*;
 
         let srcs = task.IovsFromAddr(addr, iovcnt as usize)?;
 
         for i in 0..srcs.len() {
-            let str = CString::ToStringWithLen(task, srcs[i].start, srcs[i].len as usize)?.to_string();
+            let str = CString::ToStringWithLen(task, srcs[i].start, srcs[i].len as usize)?;
             info!("Write: {}", str);
         }
     }
