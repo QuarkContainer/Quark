@@ -605,7 +605,7 @@ pub fn SysRecvMMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         if dl > 0 {
             let now = MonotonicNow();
             deadline = Some(Time(now + dl));
-        } else {
+        } else if dl < 0 {
             flags |= MsgType::MSG_DONTWAIT;
         }
     }
