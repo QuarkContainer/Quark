@@ -226,15 +226,15 @@ impl FileOperations for HostFileOp {
     fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], offset: i64, _blocking: bool) -> Result<i64> {
         let hostIops = self.InodeOp.clone();
 
-        defer!(task.GetMut().iovs.clear());
-        task.V2PIovs(dsts, true, &mut task.GetMut().iovs)?;
-        let iovs = &mut task.GetMut().iovs;
-        if iovs.len() == 0 {
-            iovs.push(IoVec::NewFromAddr(0, 0));
-        }
+        let size = IoVec::Size(dsts);
+        let buf = DataBuff::New(size);
+
+        let mut iovs = buf.Iovs();
 
         if self.InodeOp.InodeType() != InodeType::RegularFile && self.InodeOp.InodeType() != InodeType::CharacterDevice {
-            return IORead(hostIops.HostFd(), &iovs);
+            let ret = IORead(hostIops.HostFd(), &iovs)?;
+            task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
+            return Ok(ret as i64)
         } else {
             if URING_ENABLE {
                 let ret = IOURING.Read(task,
@@ -248,6 +248,7 @@ impl FileOperations for HostFileOp {
                         return Err(Error::SysError(-ret as i32))
                     }
                 } else if ret >= 0 {
+                    task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
                     return Ok(ret as i64)
                 }
 
@@ -257,52 +258,33 @@ impl FileOperations for HostFileOp {
             }
 
             let offset = if self.InodeOp.InodeType() == InodeType::CharacterDevice {
-                return IOTTYRead(hostIops.HostFd(), &iovs)
+                let ret = IOTTYRead(hostIops.HostFd(), &iovs)?;
+                task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
+                return Ok(ret as i64)
             } else {
                 offset
             };
 
-            return IOReadAt(hostIops.HostFd(), iovs, offset as u64);
+            let ret = IOReadAt(hostIops.HostFd(), &iovs, offset as u64)?;
+            task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
+            return Ok(ret as i64)
         }
     }
 
     fn WriteAt(&self, task: &Task, _f: &File, srcs: &[IoVec], offset: i64, _blocking: bool) -> Result<i64> {
         let hostIops = self.InodeOp.clone();
 
-        task.V2PIovs(srcs, false, &mut task.GetMut().iovs)?;
-        defer!(task.GetMut().iovs.clear());
+        let size = IoVec::Size(srcs);
+        let mut buf = DataBuff::New(size);
+        let iovs = buf.Iovs();
 
-        let iovs = &mut task.GetMut().iovs;
-        if iovs.len() == 0 {
-            iovs.push(IoVec::NewFromAddr(0, 0));
-        }
-
+        task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
 
         if self.InodeOp.InodeType() != InodeType::RegularFile && self.InodeOp.InodeType() != InodeType::CharacterDevice {
-            return IOWrite(hostIops.HostFd(), iovs);
+            let ret = IOWrite(hostIops.HostFd(), &iovs)?;
+            return Ok(ret as i64)
         } else {
             if URING_ENABLE {
-                // the IOURING.BufWrite doesn't work for InodeType::CharacterDevice
-
-                /*if self.InodeOp.InodeType() == InodeType::CharacterDevice { //BUF_WRITE {
-                    let size = IoVec::Size(srcs);
-                    let buf = BUF_MGR.Alloc(size as u64);
-                    if let Ok(addr) = buf {
-                        //error!("writeat addr is {:x}, size is {:x}, offset is {:x}", addr, size, offset);
-                        IoVec::Copy(srcs, addr, size);
-                        let ret = IOURING.BufWrite(task, f,
-                                         hostIops.HostFd(),
-                                         addr, size,
-                                         offset as i64);
-
-                        if ret < 0 {
-                            return Err(Error::SysError(-ret as i32))
-                        }
-
-                        return Ok(ret as i64)
-                    }
-                };*/
-
                 let ret = IOURING.Write(task,
                               hostIops.HostFd(),
                               &iovs[0] as * const _ as u64,
@@ -329,14 +311,13 @@ impl FileOperations for HostFileOp {
                 offset
             };
 
-            match IOWriteAt(hostIops.HostFd(), iovs, offset as u64) {
+            match IOWriteAt(hostIops.HostFd(), &iovs, offset as u64) {
                 Err(e) => return Err(e),
                 Ok(ret) => {
                     hostIops.UpdateMaxLen(offset + ret);
                     return Ok(ret)
                 }
             }
-
         }
     }
 
@@ -345,19 +326,14 @@ impl FileOperations for HostFileOp {
 
         let inodeType = hostIops.InodeType();
         if inodeType == InodeType::RegularFile || inodeType == InodeType::SpecialFile {
-            defer!(task.GetMut().iovs.clear());
-            task.V2PIovs(srcs, false, &mut task.GetMut().iovs)?;
-            let srcs = &mut task.GetMut().iovs;
+            let size = IoVec::Size(srcs);
+            let mut buf = DataBuff::New(size);
 
-            if srcs.len() == 0 {
-                srcs.push(IoVec::NewFromAddr(0, 0));
-            }
+            task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
+            let iovs = buf.Iovs();
 
-            let iovsAddr = &srcs[0] as *const _ as u64;
-            let mut iovcnt = srcs.len() as i32;
-            if iovcnt > 1024 {
-                iovcnt = 1024;
-            }
+            let iovsAddr = &iovs[0] as *const _ as u64;
+            let iovcnt = 1;
 
             let (count, len) = HostSpace::IOAppend(hostIops.HostFd(), iovsAddr, iovcnt);
             if count < 0 {

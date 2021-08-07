@@ -77,6 +77,58 @@ impl MemoryManager {
         return self.CopyDataOutLocked(task, from, vaddr, len);
     }
 
+    pub fn CopyDataOutToIovs(&self, task: &Task, buf:&[u8], iovs: &[IoVec]) -> Result<usize> {
+        if buf.len() == 0 {
+            return Ok(0)
+        }
+
+        let ml = self.MappingLock();
+        let _ml = ml.write();
+
+        let mut offset = 0;
+        for iov in iovs {
+            if offset >= buf.len() {
+                break;
+            }
+
+            let mut len = buf.len() - offset;
+            if len > iov.len {
+                len = iov.len
+            }
+
+            self.CopyDataOutLocked(task, &buf[offset] as * const _ as u64, iov.start, len)?;
+            offset += len;
+        }
+
+        return Ok(offset)
+    }
+
+    pub fn CopyDataInFromIovs(&self, task: &Task, buf:&mut [u8], iovs: &[IoVec]) -> Result<usize> {
+        if buf.len() == 0 {
+            return Ok(0)
+        }
+
+        let ml = self.MappingLock();
+        let _ml = ml.write();
+
+        let mut offset = 0;
+        for iov in iovs {
+            if offset >= buf.len() {
+                break;
+            }
+
+            let mut len = buf.len() - offset;
+            if len > iov.len {
+                len = iov.len
+            }
+
+            self.CopyDataInLocked(task, iov.start, &buf[offset] as * const _ as u64, len)?;
+            offset += len;
+        }
+
+        return Ok(offset)
+    }
+
     pub fn CopyInObjLocked<T: Sized + Copy>(&self, task: &Task, src: u64) -> Result<T> {
         let data : T = unsafe { MaybeUninit::uninit().assume_init() };
         let size = size_of::<T>();
@@ -110,7 +162,7 @@ impl MemoryManager {
         let _ml = ml.write();
 
         let val = self.CopyInObjLocked(task, addr)?;
-        self.CopyOutObj(task, data, addr)?;
+        self.CopyOutObjLocked(task, data, addr)?;
         return Ok(val)
     }
 
@@ -128,6 +180,10 @@ impl MemoryManager {
     }
 
     pub fn CopyInVec<T: Sized + Copy>(&self, task: &Task, src: u64, count: usize) -> Result<Vec<T>> {
+        if src == 0 && count == 0 {
+            return Ok(Vec::new())
+        }
+
         let recordLen = core::mem::size_of::<T>();
         let mut vec : Vec<T> = Vec::with_capacity(count);
         unsafe {
@@ -139,6 +195,10 @@ impl MemoryManager {
 
     //Copy a slice to user memory
     pub fn CopyOutSlice<T: Sized + Copy>(&self, task: &Task, src: &[T], dst: u64, len: usize) -> Result<()> {
+        if src.len() == 0 {
+            return Ok(())
+        }
+
         if len < src.len() {
             return Err(Error::SysError(SysErr::ERANGE));
         }
@@ -248,35 +308,20 @@ impl MemoryManager {
 impl Task {
     //Copy a vec from user memory
     pub fn CopyInVec<T: Sized + Copy>(&self, addr: u64, size: usize) -> Result<Vec<T>> {
-        /*if addr == 0 && size == 0 {
-            return Ok(Vec::new())
-        }
-
-        let mut res = Vec::with_capacity(size);
-        let slice = self.GetSlice::<T>(addr, size)?;
-
-        for i in 0..size {
-            res.push(slice[i]);
-        }
-
-        return Ok(res);*/
         return self.mm.CopyInVec(self, addr, size);
     }
 
     //Copy a slice to user memory
     pub fn CopyOutSlice<T: Sized + Copy>(&self, src: &[T], dst: u64, len: usize) -> Result<()> {
         return self.mm.CopyOutSlice(self, src, dst, len)
+    }
 
-        /*if len < src.len() {
-            return Err(Error::SysError(SysErr::ERANGE));
-        }
+    pub fn CopyDataOutToIovs(&self, src: &[u8], dsts: &[IoVec]) -> Result<usize> {
+        return self.mm.CopyDataOutToIovs(self, src, dsts)
+    }
 
-        let dst = self.GetSliceMut::<T>(dst, src.len())?;
-        for i in 0..dst.len() {
-            dst[i] = src[i]
-        }
-
-        return Ok(())*/
+    pub fn CopyDataInFromIovs(&self, buf:&mut [u8], iovs: &[IoVec]) -> Result<usize> {
+        return self.mm.CopyDataInFromIovs(&self, buf, iovs)
     }
 
     //Copy an Object from user memory
@@ -353,8 +398,8 @@ impl Task {
         return Ok(vAddr)
     }
 
-    pub fn IovsFromAddr(&self, iovs: u64, iovsnum: usize) -> Result<&mut [IoVec]> {
-        return self.GetSliceMut::<IoVec>(iovs, iovsnum);
+    pub fn IovsFromAddr(&self, iovs: u64, iovsnum: usize) -> Result<Vec<IoVec>> {
+        return self.mm.CopyInVec(self, iovs, iovsnum)
     }
 
     pub fn V2P(&self, start: u64, len: u64, output: &mut Vec<IoVec>, writable: bool) -> Result<()> {
@@ -373,7 +418,7 @@ impl Task {
         return Ok(())
     }
 
-    pub fn V2PBlockSeq(&self, bs: BlockSeq, output: &mut Vec<IoVec>, writable: bool) -> Result<()> {
+    pub fn V2PBlockSeq1(&self, bs: BlockSeq, output: &mut Vec<IoVec>, writable: bool) -> Result<()> {
         let mut bs = bs;
         while !bs.IsEmpty() {
             let iov = bs.Head();

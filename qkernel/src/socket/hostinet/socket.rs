@@ -284,11 +284,15 @@ impl FileOperations for SocketOperations {
             return IOURING.BufSockRead(task, self, dsts)
         }
 
-        defer!(task.GetMut().iovs.clear());
-        task.V2PIovs(dsts, true, &mut task.GetMut().iovs)?;
-        let res = IORead(self.fd, &task.GetMut().iovs);
+        //defer!(task.GetMut().iovs.clear());
+        //task.V2PIovs(dsts, true, &mut task.GetMut().iovs)?;
 
-        return res;
+        let size = IoVec::Size(dsts);
+        let buf = DataBuff::New(size);
+        let iovs = buf.Iovs();
+        let ret = IORead(self.fd, &iovs)?;
+        task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
+        return Ok(ret);
     }
 
     fn WriteAt(&self, task: &Task, _f: &File, srcs: &[IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
@@ -296,9 +300,14 @@ impl FileOperations for SocketOperations {
             return IOURING.BufSockWrite(task, self, srcs)
         }
 
-        defer!(task.GetMut().iovs.clear());
-        task.V2PIovs(srcs, false, &mut task.GetMut().iovs)?;
-        return IOWrite(self.fd, &task.GetMut().iovs);
+        //defer!(task.GetMut().iovs.clear());
+        //task.V2PIovs(srcs, false, &mut task.GetMut().iovs)?;
+
+        let size = IoVec::Size(srcs);
+        let mut buf = DataBuff::New(size);
+        let iovs = buf.Iovs();
+        task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
+        return IOWrite(self.fd, &iovs);
     }
 
     fn Append(&self, task: &Task, f: &File, srcs: &[IoVec]) -> Result<(i64, i64)> {
@@ -849,9 +858,13 @@ impl SockOperations for SocketOperations {
         }
         */
 
-        defer!(task.GetMut().iovs.clear());
+        /*defer!(task.GetMut().iovs.clear());
         task.V2PIovs(dsts, true, &mut task.GetMut().iovs)?;
-        let iovs = &mut task.GetMut().iovs;
+        let iovs = &mut task.GetMut().iovs;*/
+
+        let size = IoVec::Size(dsts);
+        let buf = DataBuff::New(size);
+        let iovs = buf.Iovs();
 
         let mut msgHdr = MsgHdr::default();
         if IoVec::NumBytes(dsts) != 0 {
@@ -916,6 +929,7 @@ impl SockOperations for SocketOperations {
 
         controlVec.resize(msgHdr.msgControlLen, 0);
 
+        task.CopyDataOutToIovs(&buf.buf[0..res as usize], dsts)?;
         return Ok((res as i64, msgFlags, senderAddr, controlVec))
     }
 
@@ -989,9 +1003,15 @@ impl SockOperations for SocketOperations {
             return Err(Error::SysError(SysErr::EINVAL))
         }
         
-        defer!(task.GetMut().iovs.clear());
+        /*defer!(task.GetMut().iovs.clear());
         task.V2PIovs(srcs, false, &mut task.GetMut().iovs)?;
-        let iovs = &task.GetMut().iovs;
+        let iovs = &task.GetMut().iovs;*/
+
+        let size = IoVec::Size(srcs);
+        let mut buf = DataBuff::New(size);
+        let iovs = buf.Iovs();
+
+        task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
 
         if IoVec::NumBytes(srcs) != 0 {
             msgHdr.iov = &iovs[0] as *const _ as u64;

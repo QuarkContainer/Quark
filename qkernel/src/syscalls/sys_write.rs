@@ -194,7 +194,7 @@ pub fn Writev(task: &Task, fd: i32, addr: u64, iovcnt: i32) -> Result<i64> {
     }
 
     let srcs = task.IovsFromAddr(addr, iovcnt as usize)?;
-    return writev(task, &file, srcs);
+    return writev(task, &file, &srcs);
 }
 
 pub fn SysPwritev(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -232,7 +232,7 @@ pub fn Pwritev(task: &Task, fd: i32, addr: u64, iovcnt: i32, offset: i64) -> Res
     }
 
     let srcs = task.IovsFromAddr(addr, iovcnt as usize)?;
-    return pwritev(task, &file, srcs, offset);
+    return pwritev(task, &file, &srcs, offset);
 }
 
 fn RepWritev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
