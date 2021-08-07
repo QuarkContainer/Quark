@@ -120,7 +120,7 @@ pub fn CaptureAddress(task: &Task, addr: u64, addrlen: u32) -> Result<Vec<u8>> {
         return Err(Error::SysError(SysErr::EINVAL))
     }
 
-    task.CheckPermission(addr, addrlen as u64, false, false)?;
+    //task.CheckPermission(addr, addrlen as u64, false, false)?;
 
     return task.CopyInVec(addr, addrlen as usize);
 }
@@ -612,7 +612,8 @@ pub fn SysRecvMMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let mut count = 0;
     let mut res = 0;
-    let msgs = task.GetSliceMut::<MMsgHdr>(msgPtr, vlen as usize)?;
+    //let msgs = task.GetSliceMut::<MMsgHdr>(msgPtr, vlen as usize)?;
+    let mut msgs = task.CopyInVec::<MMsgHdr>(msgPtr, vlen as usize)?;
 
     info!("SysRecvMMsg 1 vlen is {}", vlen);
     for i in 0..vlen as usize {
@@ -638,6 +639,8 @@ pub fn SysRecvMMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     if count == 0 {
         return Err(Error::SysError(-res as i32))
     }
+
+    task.CopyOutSlice(&msgs, msgPtr, vlen as usize)?;
 
     return Ok(count)
 }
@@ -712,8 +715,11 @@ pub fn SysRecvFrom(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             if nameLen < senderLen as i32 {
                 return Err(Error::SysError(SysErr::ERANGE));
             }
-            let slices = task.GetSliceMut::<u8>(namePtr, nameLen as usize)?;
-            sender.Marsh(slices, senderLen)?;
+            //let slices = task.GetSliceMut::<u8>(namePtr, nameLen as usize)?;
+            //sender.Marsh(slices, senderLen)?;
+            let mut dataBuf = DataBuff::New(nameLen as usize);
+            sender.Marsh(&mut dataBuf.buf, senderLen)?;
+            task.CopyOutSlice(&mut dataBuf.buf, namePtr, nameLen as usize)?;
             //task.CopyOutSlice(&msgVec[0..pMsg.nameLen as usize], namePtr, nameLen as usize)?;
             task.CopyOutObj(&(senderLen as u32), nameLenPtr)?;
         } else {
@@ -784,7 +790,8 @@ pub fn SysSendMMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let mut count = 0;
     let mut res = 0;
-    let msgs = task.GetSliceMut::<MMsgHdr>(msgPtr, vlen as usize)?;
+    //let msgs = task.GetSliceMut::<MMsgHdr>(msgPtr, vlen as usize)?;
+    let mut msgs = task.CopyInVec::<MMsgHdr>(msgPtr, vlen as usize)?;
     for i in 0..vlen as usize {
         res = sendSingleMsg(task, &sock, &(msgs[i].msgHdr) as *const MsgHdr as u64, flags, deadline)?;
 
@@ -799,6 +806,8 @@ pub fn SysSendMMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     if count == 0 {
         return Err(Error::SysError(-res as i32))
     }
+
+    task.CopyOutSlice(&msgs, msgPtr, vlen as usize)?;
 
     return Ok(count)
 }

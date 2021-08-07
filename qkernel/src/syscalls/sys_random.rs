@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::vec::Vec;
-
 use super::super::qlib::common::*;
 use super::super::Kernel::HostSpace;
 use super::super::qlib::linux_def::*;
@@ -34,15 +32,14 @@ pub fn SysGetRandom(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         length = core::i32::MAX as u32;
     }
 
-    let mut iovs = Vec::new();
-    task.V2P(addr, length as u64, &mut iovs, true)?;
+    let buf = DataBuff::New(length as usize);
 
-    for iov in iovs {
-        let ret = HostSpace::GetRandom(iov.start, iov.len as u64, flags as u32);
-        if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
-        }
+    let ret = HostSpace::GetRandom(buf.Ptr(), buf.Len() as u64, flags as u32);
+    if ret < 0 {
+        return Err(Error::SysError(-ret as i32))
     }
 
-    return Ok(length as i64)
+    task.CopyOutSlice(&buf.buf[0..ret as usize], addr, length as usize)?;
+
+    return Ok(ret as i64)
 }

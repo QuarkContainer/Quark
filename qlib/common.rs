@@ -305,3 +305,4 @@ pub trait Allocator: RefMgr {
     fn FreePage(&self, addr: u64) -> Result<()>;
     fn ZeroPage(&self) -> u64;
 }
+

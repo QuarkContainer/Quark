@@ -77,6 +77,58 @@ impl MemoryManager {
         return self.CopyDataOutLocked(task, from, vaddr, len);
     }
 
+    pub fn CopyDataOutToIovs(&self, task: &Task, buf:&[u8], iovs: &[IoVec]) -> Result<usize> {
+        if buf.len() == 0 {
+            return Ok(0)
+        }
+
+        let ml = self.MappingLock();
+        let _ml = ml.write();
+
+        let mut offset = 0;
+        for iov in iovs {
+            if offset >= buf.len() {
+                break;
+            }
+
+            let mut len = buf.len() - offset;
+            if len > iov.len {
+                len = iov.len
+            }
+
+            self.CopyDataOutLocked(task, &buf[offset] as * const _ as u64, iov.start, len)?;
+            offset += len;
+        }
+
+        return Ok(offset)
+    }
+
+    pub fn CopyDataInFromIovs(&self, task: &Task, buf:&mut [u8], iovs: &[IoVec]) -> Result<usize> {
+        if buf.len() == 0 {
+            return Ok(0)
+        }
+
+        let ml = self.MappingLock();
+        let _ml = ml.write();
+
+        let mut offset = 0;
+        for iov in iovs {
+            if offset >= buf.len() {
+                break;
+            }
+
+            let mut len = buf.len() - offset;
+            if len > iov.len {
+                len = iov.len
+            }
+
+            self.CopyDataInLocked(task, iov.start, &buf[offset] as * const _ as u64, len)?;
+            offset += len;
+        }
+
+        return Ok(offset)
+    }
+
     pub fn CopyInObjLocked<T: Sized + Copy>(&self, task: &Task, src: u64) -> Result<T> {
         let data : T = unsafe { MaybeUninit::uninit().assume_init() };
         let size = size_of::<T>();
@@ -256,6 +308,14 @@ impl Task {
         return self.mm.CopyOutSlice(self, src, dst, len)
     }
 
+    pub fn CopyDataOutToIovs(&self, src: &[u8], dsts: &[IoVec]) -> Result<usize> {
+        return self.mm.CopyDataOutToIovs(self, src, dsts)
+    }
+
+    pub fn CopyDataInFromIovs(&self, buf:&mut [u8], iovs: &[IoVec]) -> Result<usize> {
+        return self.mm.CopyDataInFromIovs(&self, buf, iovs)
+    }
+
     //Copy an Object from user memory
     pub fn CopyInObj<T: Sized + Copy>(&self, src: u64) -> Result<T> {
         return self.mm.CopyInObj(self, src)
@@ -350,7 +410,7 @@ impl Task {
         return Ok(())
     }
 
-    pub fn V2PBlockSeq(&self, bs: BlockSeq, output: &mut Vec<IoVec>, writable: bool) -> Result<()> {
+    pub fn V2PBlockSeq1(&self, bs: BlockSeq, output: &mut Vec<IoVec>, writable: bool) -> Result<()> {
         let mut bs = bs;
         while !bs.IsEmpty() {
             let iov = bs.Head();
