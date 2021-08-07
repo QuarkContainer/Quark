@@ -815,13 +815,6 @@ impl SockOperations for SocketOperations {
 
 
                 match task.blocker.BlockWithMonoTimer(true, deadline) {
-                    Err(Error::SysError(SysErr::ETIMEDOUT)) => {
-                        if count > 0 {
-                            res = count;
-                            break 'main;
-                        }
-                        return Err(Error::SysError(SysErr::EWOULDBLOCK));
-                    }
                     Err(e) => {
                         if count > 0 {
                             res = count;

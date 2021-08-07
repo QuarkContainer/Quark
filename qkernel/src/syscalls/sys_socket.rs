@@ -619,7 +619,6 @@ pub fn SysRecvMMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     for i in 0..vlen as usize {
         res = match recvSingleMsg(task, &sock, &(msgs[i].msgHdr) as *const MsgHdr as u64, flags, deadline) {
             Err(e) => {
-                error!("error message from here, {:?}", &e);
                 if count > 0 {
                     return Ok(count)
                 }
