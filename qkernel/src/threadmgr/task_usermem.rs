@@ -162,7 +162,7 @@ impl MemoryManager {
         let _ml = ml.write();
 
         let val = self.CopyInObjLocked(task, addr)?;
-        self.CopyOutObj(task, data, addr)?;
+        self.CopyOutObjLocked(task, data, addr)?;
         return Ok(val)
     }
 
@@ -180,6 +180,10 @@ impl MemoryManager {
     }
 
     pub fn CopyInVec<T: Sized + Copy>(&self, task: &Task, src: u64, count: usize) -> Result<Vec<T>> {
+        if src == 0 && count == 0 {
+            return Ok(Vec::new())
+        }
+
         let recordLen = core::mem::size_of::<T>();
         let mut vec : Vec<T> = Vec::with_capacity(count);
         unsafe {
@@ -191,6 +195,10 @@ impl MemoryManager {
 
     //Copy a slice to user memory
     pub fn CopyOutSlice<T: Sized + Copy>(&self, task: &Task, src: &[T], dst: u64, len: usize) -> Result<()> {
+        if src.len() == 0 {
+            return Ok(())
+        }
+
         if len < src.len() {
             return Err(Error::SysError(SysErr::ERANGE));
         }
