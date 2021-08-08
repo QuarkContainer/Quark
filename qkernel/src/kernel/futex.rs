@@ -95,21 +95,11 @@ pub trait Target {
 
 impl Target for Task {
     fn SwapU32(&self, addr: u64, new: u32) -> Result<u32> {
-        //let val = self.GetTypeMut::<AtomicU32>(addr)?;
-        //val.swap(new, Ordering::SeqCst);
-
-        let val = self.mm.SwapObj(self, &new, addr)?;
-        return Ok(val)
+        return self.mm.SwapU32(self, addr, new)
     }
 
     fn CompareAndSwapU32(&self, addr: u64, old: u32, new: u32) -> Result<u32> {
-        /*let pval = self.GetTypeMut::<AtomicU32>(addr)?;
-        match pval.compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst) {
-            Ok(v) => return Ok(v),
-            Err(v) => return Ok(v),
-        }*/
-
-        let val = self.mm.CompareAndSwap(self, addr, old, new)?;
+        let val = self.mm.CompareAndSwapU32(self, addr, old, new)?;
         return Ok(val)
     }
 
