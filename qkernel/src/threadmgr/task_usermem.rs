@@ -386,16 +386,6 @@ impl Task {
         return self.mm.CopyInVector(self, addr, maxElemSize, maxTotalSize);
     }
 
-    pub fn GetSliceMut<T: Sized>(&self, vAddr: u64, count: usize) -> Result<&mut [T]> {
-        let recordLen = core::mem::size_of::<T>();
-        // only check whether the address is valid, if readonly, will cow
-        let len = self.CheckPermission(vAddr, count as u64 * recordLen as u64, true, false)?;
-
-        let t: *mut T = vAddr as *mut T;
-        let slice = unsafe { slice::from_raw_parts_mut(t, (len as usize) / recordLen) };
-        return Ok(slice)
-    }
-
     pub fn CheckIOVecPermission(&self, iovs: &[IoVec], writeReq: bool) -> Result<()> {
         for iov in iovs {
             self.CheckPermission(iov.start, iov.len as u64, writeReq, false)?;

@@ -226,7 +226,7 @@ impl FileOperations for HostFileOp {
     fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], offset: i64, _blocking: bool) -> Result<i64> {
         let hostIops = self.InodeOp.clone();
 
-        let size = IoVec::Size(dsts);
+        let size = IoVec::NumBytes(dsts);
         let buf = DataBuff::New(size);
 
         let mut iovs = buf.Iovs();
@@ -274,7 +274,7 @@ impl FileOperations for HostFileOp {
     fn WriteAt(&self, task: &Task, _f: &File, srcs: &[IoVec], offset: i64, _blocking: bool) -> Result<i64> {
         let hostIops = self.InodeOp.clone();
 
-        let size = IoVec::Size(srcs);
+        let size = IoVec::NumBytes(srcs);
         let mut buf = DataBuff::New(size);
         let iovs = buf.Iovs();
 
@@ -326,7 +326,7 @@ impl FileOperations for HostFileOp {
 
         let inodeType = hostIops.InodeType();
         if inodeType == InodeType::RegularFile || inodeType == InodeType::SpecialFile {
-            let size = IoVec::Size(srcs);
+            let size = IoVec::NumBytes(srcs);
             let mut buf = DataBuff::New(size);
 
             task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
