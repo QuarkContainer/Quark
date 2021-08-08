@@ -18,6 +18,7 @@ use alloc::string::ToString;
 use alloc::vec::Vec;
 use alloc::slice;
 use core::mem::*;
+use core::sync::atomic::{AtomicU32, Ordering};
 
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
@@ -157,28 +158,6 @@ impl MemoryManager {
         return Ok(())
     }
 
-    pub fn SwapObj<T: Sized + Copy>(&self, task: &Task, data: &T, addr: u64) -> Result<T> {
-        let ml = self.MappingLock();
-        let _ml = ml.write();
-
-        let val = self.CopyInObjLocked(task, addr)?;
-        self.CopyOutObjLocked(task, data, addr)?;
-        return Ok(val)
-    }
-
-    pub fn CompareAndSwap<T: Sized + Copy + Eq>(&self, task: &Task, addr: u64, old: T, new: T) -> Result<T> {
-        let ml = self.MappingLock();
-        let _ml = ml.write();
-
-        let val = self.CopyInObjLocked(task, addr)?;
-        if val != old {
-            return Ok(val)
-        }
-
-        self.CopyOutObjLocked(task, &new, addr)?;
-        return Ok(val)
-    }
-
     pub fn CopyInVec<T: Sized + Copy>(&self, task: &Task, src: u64, count: usize) -> Result<Vec<T>> {
         if src == 0 && count == 0 {
             return Ok(Vec::new())
@@ -205,6 +184,47 @@ impl MemoryManager {
 
         let size = size_of::<T>() * src.len();
         return self.CopyDataOut(task, src.as_ptr() as u64, dst, size)
+    }
+
+
+    pub fn SwapU32(&self, task: &Task, vaddr: u64, new: u32) -> Result<u32> {
+        let ml = self.MappingLock();
+        let _ml = ml.write();
+
+        assert!(vaddr % 4 == 0);
+
+        self.V2PLocked(task, vaddr, 4, &mut task.GetMut().iovs, false)?;
+        defer!(task.GetMut().iovs.clear());
+
+        assert!(task.GetMut().iovs.len() == 1);
+        let addr = task.GetMut().iovs[0].start;
+        let val = unsafe {
+            &*(addr as * const AtomicU32)
+        };
+
+        val.swap(new, Ordering::SeqCst);
+        return Ok(new)
+    }
+
+    pub fn CompareAndSwapU32(&self, task: &Task, vaddr: u64, old: u32, new: u32) -> Result<u32> {
+        let ml = self.MappingLock();
+        let _ml = ml.write();
+
+        assert!(vaddr % 4 == 0);
+
+        self.V2PLocked(task, vaddr, 4, &mut task.GetMut().iovs, false)?;
+        defer!(task.GetMut().iovs.clear());
+
+        assert!(task.GetMut().iovs.len() == 1);
+        let addr = task.GetMut().iovs[0].start;
+        let val = unsafe {
+            &*(addr as * const AtomicU32)
+        };
+
+        match val.compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst) {
+            Ok(v) => return Ok(v),
+            Err(v) => return Ok(v),
+        }
     }
 
     // CopyInVector copies a NULL-terminated vector of strings from the task's
