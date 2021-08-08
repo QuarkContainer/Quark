@@ -570,8 +570,14 @@ pub fn SysGetcwd(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Err(Error::SysError(SysErr::ERANGE))
     }
 
-    task.CopyOutString(addr, size, &s)?;
-    return Ok(s.len() as i64 + 1)
+    let len = if s.len() + 1 > size {
+        size
+    } else {
+        s.len() + 1
+    };
+
+    task.CopyOutString(addr, len, &s)?;
+    return Ok(len as i64)
 }
 
 pub fn SysChroot(task: &mut Task, args: &SyscallArguments) -> Result<i64> {

@@ -370,11 +370,6 @@ impl Task {
     //Copy an str to user memory
     pub fn CopyOutString(&self, vAddr: u64, len: usize, s: &str) -> Result<()> {
         let str = CString::New(s);
-        let len = if s.len() + 1 > len {
-            len
-        } else {
-            s.len() + 1
-        };
         self.CopyOutSlice(str.Slice(), vAddr, len)
     }
 
