@@ -231,11 +231,20 @@ pub fn HostIoctlIFReq(task: &Task, hostfd: i32, request: u64, addr: u64) -> Resu
 pub fn HostIoctlIFConf(task: &Task, hostfd: i32, request: u64, addr: u64) -> Result<()> {
     let mut ifc : IFConf = task.CopyInObj(addr)?;
 
-    let mut data = Vec::with_capacity(ifc.Len as usize);
-    data.resize(ifc.Len as usize, 0);
+    const MAX_LEN : usize = 64 * 0x1000; // 256 KB
+
+    // todo: how to handle very large ifconf?
+    let len = if MAX_LEN > ifc.Len as usize {
+        ifc.Len as usize
+    } else {
+        MAX_LEN
+    };
+
+    let mut data = Vec::with_capacity(len);
+    data.resize(len as usize, 0);
 
     let mut ifr = IFConf {
-        Len: ifc.Len,
+        Len: len as i32,
         ..Default::default()
     };
 
