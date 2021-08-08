@@ -23,7 +23,6 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::util::cstring::*;
-use super::super::qlib::mem::seq::*;
 use super::super::task::*;
 use super::super::memmgr::mm::*;
 
@@ -158,7 +157,7 @@ impl MemoryManager {
         return Ok(())
     }
 
-    pub fn CopyInVec<T: Sized + Copy>(&self, task: &Task, src: u64, count: usize) -> Result<Vec<T>> {
+    pub fn CopyInVecLocked<T: Sized + Copy>(&self, task: &Task, src: u64, count: usize) -> Result<Vec<T>> {
         if src == 0 && count == 0 {
             return Ok(Vec::new())
         }
@@ -169,6 +168,20 @@ impl MemoryManager {
             vec.set_len(count);
         }
         self.CopyDataInLocked(task, src, vec.as_ptr() as u64, recordLen * count)?;
+        return Ok(vec);
+    }
+
+    pub fn CopyInVec<T: Sized + Copy>(&self, task: &Task, src: u64, count: usize) -> Result<Vec<T>> {
+        if src == 0 && count == 0 {
+            return Ok(Vec::new())
+        }
+
+        let recordLen = core::mem::size_of::<T>();
+        let mut vec : Vec<T> = Vec::with_capacity(count);
+        unsafe {
+            vec.set_len(count);
+        }
+        self.CopyDataIn(task, src, vec.as_ptr() as u64, recordLen * count)?;
         return Ok(vec);
     }
 
@@ -297,7 +310,7 @@ impl MemoryManager {
             Ok(l) => l as usize
         };
 
-        let data : Vec<u8> = self.CopyInVec(task, addr, maxlen).expect("CopyInString fail ...");
+        let data : Vec<u8> = self.CopyInVecLocked(task, addr, maxlen).expect("CopyInString fail ...");
 
         for i in 0..data.len() {
             if data[i] == 0 {
@@ -407,17 +420,6 @@ impl Task {
         return self.mm.FixPermission(self, vAddr, len, writeReq, allowPartial)
     }
 
-    #[cfg(not(test))]
-    pub fn VirtualToPhy(&self, vAddr: u64) -> Result<u64> {
-        let (addr, _) = self.mm.VirtualToPhy(vAddr)?;
-        return Ok(addr);
-    }
-
-    #[cfg(test)]
-    pub fn VirtualToPhy(&self, vAddr: u64) -> Result<u64> {
-        return Ok(vAddr)
-    }
-
     pub fn IovsFromAddr(&self, iovs: u64, iovsnum: usize) -> Result<Vec<IoVec>> {
         return self.mm.CopyInVec(self, iovs, iovsnum)
     }
@@ -433,18 +435,6 @@ impl Task {
     pub fn V2PIovs(&self, iovs: &[IoVec], writable: bool, output: &mut Vec<IoVec>) -> Result<()> {
         for iov in iovs {
             self.V2PIov(iov, output, writable)?;
-        }
-
-        return Ok(())
-    }
-
-    pub fn V2PBlockSeq1(&self, bs: BlockSeq, output: &mut Vec<IoVec>, writable: bool) -> Result<()> {
-        let mut bs = bs;
-        while !bs.IsEmpty() {
-            let iov = bs.Head();
-            self.V2PIov(&iov, output, writable)?;
-
-            bs = bs.Tail();
         }
 
         return Ok(())
