@@ -154,15 +154,6 @@ impl IoVec {
         return self.start + self.len as u64;
     }
 
-    pub fn Size(iovs: &[IoVec]) -> usize {
-        let mut ret = 0;
-        for iov in iovs {
-            ret += iov.len;
-        }
-
-        return ret;
-    }
-
     pub fn Copy(from: &[IoVec], to: u64, size: usize) {
         let ptr = to as * mut u8;
         let mut toSlice = unsafe {

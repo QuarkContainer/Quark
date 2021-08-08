@@ -370,6 +370,11 @@ impl Task {
     //Copy an str to user memory
     pub fn CopyOutString(&self, vAddr: u64, len: usize, s: &str) -> Result<()> {
         let str = CString::New(s);
+        let len = if s.len() + 1 > len {
+            len
+        } else {
+            s.len() + 1
+        };
         self.CopyOutSlice(str.Slice(), vAddr, len)
     }
 
@@ -384,16 +389,6 @@ impl Task {
 
     pub fn CopyInVector(&self, addr: u64, maxElemSize: usize, maxTotalSize: i32) -> Result<Vec<String>> {
         return self.mm.CopyInVector(self, addr, maxElemSize, maxTotalSize);
-    }
-
-    pub fn GetSliceMut<T: Sized>(&self, vAddr: u64, count: usize) -> Result<&mut [T]> {
-        let recordLen = core::mem::size_of::<T>();
-        // only check whether the address is valid, if readonly, will cow
-        let len = self.CheckPermission(vAddr, count as u64 * recordLen as u64, true, false)?;
-
-        let t: *mut T = vAddr as *mut T;
-        let slice = unsafe { slice::from_raw_parts_mut(t, (len as usize) / recordLen) };
-        return Ok(slice)
     }
 
     pub fn CheckIOVecPermission(&self, iovs: &[IoVec], writeReq: bool) -> Result<()> {

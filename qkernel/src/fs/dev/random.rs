@@ -265,7 +265,7 @@ impl FileOperations for RandomFileOperations {
     }
 
     fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
-        let len = IoVec::Size(dsts);
+        let len = IoVec::NumBytes(dsts);
         let buf = DataBuff::New(len);
 
         let mut ioReader = RandomReader {};
