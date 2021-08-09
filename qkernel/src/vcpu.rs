@@ -143,14 +143,6 @@ impl CPULocal {
         return Self::Myself().pendingFreeStack.load(Ordering::SeqCst);
     }
 
-    pub fn SetPendingFreePagetable(stack: u64) {
-        Self::Myself().pendingFreePagetable.store(stack, Ordering::SeqCst);
-    }
-
-    pub fn PendingFreePagetable() -> u64 {
-        return Self::Myself().pendingFreePagetable.load(Ordering::SeqCst);
-    }
-
     pub fn SetCPUState(state: VcpuState) {
         Self::Myself().SetState(state);
     }

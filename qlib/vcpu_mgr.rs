@@ -29,11 +29,11 @@ pub enum VcpuState {
 pub struct CPULocal {
     pub kernelStack: AtomicU64,             //offset 0
     pub userStack: AtomicU64,               //offset 8
-    pub vcpuId: usize,                   //offset 16
+    pub vcpuId: usize,                      //offset 16
     pub waitTask: AtomicU64,                //offset 24
     pub currentTask: AtomicU64,             //offset 32
     pub pendingFreeStack: AtomicU64,        //offset 40
-    pub pendingFreePagetable: AtomicU64,    //offset 48
+    //pub pendingFreePagetable: AtomicU64,    //offset 48
     pub state: AtomicU64,                   //offset 56
 
     pub data: u64, // for eventfd data writing and reading

@@ -29,55 +29,7 @@ use super::super::qlib::range::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::pagetable::*;
-use super::super::qlib::vcpu_mgr::*;
 use super::pmamgr::*;
-
-
-pub fn AddFreePageTables(root: u64) {
-    CPULocal::SetPendingFreePagetable(root);
-}
-
-#[inline]
-pub fn FreePageTables() {
-    let ptAddr = CPULocal::PendingFreePagetable();
-    if ptAddr != 0 {
-        let _pt = FreePageTables {
-            root: Addr(ptAddr)
-        };
-        CPULocal::SetPendingFreePagetable(0);
-    }
-}
-
-pub struct FreePageTables {
-    pub root: Addr
-}
-
-impl FreePageTables {
-    pub fn Drop(&mut self, _pagePool: &Allocator) {
-        let root = self.root.0;
-        if root == 0 {
-            return;
-        }
-
-        let pagetables = PageTables::Init(self.root.0);
-        pagetables.Drop();
-
-        /*let pt: *mut PageTable = self.root.0 as *mut PageTable;
-
-        let pgdEntry = unsafe {
-            &(*pt)[0]
-        };
-        if pgdEntry.is_unused() {
-            panic!("pagetable::Drop page is not mapped")
-        }
-
-        let pudTblAddr = pgdEntry.addr().as_u64();
-        pagePool.Deref(pudTblAddr).expect("PageTable::Drop fail");
-
-        pagePool.Deref(root).expect("PageTable::Drop fail");*/
-
-    }
-}
 
 pub struct PageMgr(Mutex<PageMgrInternal>);
 
@@ -191,12 +143,6 @@ impl PageMgrInternal {
         }
 
         return &self.vsyscallPages;
-    }
-}
-
-impl Drop for FreePageTables {
-    fn drop(&mut self) {
-        self.Drop(&*PAGE_MGR);
     }
 }
 

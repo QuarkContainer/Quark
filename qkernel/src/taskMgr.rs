@@ -22,7 +22,6 @@ use super::qlib::perf_tunning::*;
 use super::qlib::vcpu_mgr::*;
 use super::threadmgr::task_sched::*;
 use super::KERNEL_STACK_ALLOCATOR;
-use super::memmgr::pma::*;
 use super::quring::uring_mgr::*;
 use super::asm::*;
 
@@ -151,8 +150,6 @@ pub fn WaitFn() {
                     KERNEL_STACK_ALLOCATOR.Free(pendingFreeStack).unwrap();
                     CPULocal::SetPendingFreeStack(0);
                 }
-
-                FreePageTables();
 
                 //while super::ALLOCATOR.Free() {}
 
