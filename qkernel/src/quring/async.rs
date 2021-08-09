@@ -595,7 +595,7 @@ impl AsycnRecvMsgIntern {
 
 pub struct AIOWrite {
     pub fd: i32,
-    pub iovs: Vec<IoVec>,
+    pub buf: DataBuff,
     pub offset: i64,
 
     pub cbAddr: u64,
@@ -606,15 +606,14 @@ pub struct AIOWrite {
 
 impl AIOWrite {
     pub fn NewWrite(task: &Task, ctx: AIOContext, cb: &IOCallback, cbAddr: u64, eventfops: Option<EventOperations>) -> Result<Self> {
-        let iov = IoVec::NewFromAddr(cb.buf, cb.bytes as usize);
-
-        let srcs : [IoVec; 1] = [iov];
-        let mut iovs = Vec::new();
-        task.V2PIovs(&srcs, false, &mut iovs)?;
+        let vec = task.CopyInVec(cb.buf, cb.bytes as usize)?;
+        let buf = DataBuff {
+            buf: vec
+        };
 
         return Ok(Self {
             fd: cb.fd as i32,
-            iovs: iovs,
+            buf: buf,
             offset: cb.offset,
             cbAddr: cbAddr,
             cbData: cb.data,
@@ -625,13 +624,13 @@ impl AIOWrite {
 
     pub fn NewWritev(task: &Task, ctx: AIOContext, cb: &IOCallback, cbAddr: u64, eventfops: Option<EventOperations>) -> Result<Self> {
         let srcs = task.IovsFromAddr(cb.buf, cb.bytes as usize)?;
-
-        let mut iovs = Vec::new();
-        task.V2PIovs(&srcs, false, &mut iovs)?;
+        let size = IoVec::NumBytes(&srcs);
+        let mut buf = DataBuff::New(size);
+        task.CopyDataInFromIovs(&mut buf.buf, &srcs)?;
 
         return Ok(Self {
             fd: cb.fd as i32,
-            iovs: iovs,
+            buf: buf,
             offset: cb.offset,
             cbAddr: cbAddr,
             cbData: cb.data,
@@ -641,7 +640,7 @@ impl AIOWrite {
     }
 
     pub fn SEntry(&self) -> squeue::Entry {
-        let op = Writev::new(types::Fd(self.fd), &self.iovs[0] as * const _ as * const u64, self.iovs.len() as u32)
+        let op = Write::new(types::Fd(self.fd), self.buf.Ptr() as * const u8, self.buf.Len() as u32)
                     .offset(self.offset);
 
         return op.build()
@@ -675,8 +674,10 @@ impl AIOWrite {
 
 pub struct AIORead {
     pub fd: i32,
+    pub buf: DataBuff,
     pub iovs: Vec<IoVec>,
     pub offset: i64,
+    pub taskId: u64,
 
     pub cbAddr: u64,
     pub cbData: u64,
@@ -688,14 +689,15 @@ impl AIORead {
     pub fn NewRead(task: &Task, ctx: AIOContext, cb: &IOCallback, cbAddr: u64, eventfops: Option<EventOperations>) -> Result<Self> {
         let iov = IoVec::NewFromAddr(cb.buf, cb.bytes as usize);
 
-        let dsts : [IoVec; 1] = [iov];
-        let mut iovs = Vec::new();
-        task.V2PIovs(&dsts, true, &mut iovs)?;
+        let iovs = vec![iov];
+        let buf = DataBuff::New(cb.bytes as usize);
 
         return Ok(Self {
             fd: cb.fd as i32,
+            buf: buf,
             iovs: iovs,
             offset: cb.offset,
+            taskId: task.taskId,
             cbAddr: cbAddr,
             cbData: cb.data,
             ctx: ctx,
@@ -704,14 +706,16 @@ impl AIORead {
     }
 
     pub fn NewReadv(task: &Task, ctx: AIOContext, cb: &IOCallback, cbAddr: u64, eventfops: Option<EventOperations>) -> Result<Self> {
-        let dsts = task.IovsFromAddr(cb.buf, cb.bytes as usize)?;
-        let mut iovs = Vec::new();
-        task.V2PIovs(&dsts, true, &mut iovs)?;
+        let iovs = task.IovsFromAddr(cb.buf, cb.bytes as usize)?;
+        let size = IoVec::NumBytes(&iovs);
+        let buf = DataBuff::New(size as usize);
 
         return Ok(Self {
             fd: cb.fd as i32,
+            buf: buf,
             iovs: iovs,
             offset: cb.offset,
+            taskId: task.taskId,
             cbAddr: cbAddr,
             cbData: cb.data,
             ctx: ctx,
@@ -720,7 +724,7 @@ impl AIORead {
     }
 
     pub fn SEntry(&self) -> squeue::Entry {
-        let op = Readv::new(types::Fd(self.fd), &self.iovs[0] as * const _ as * const u64, self.iovs.len() as u32)
+        let op = Read::new(types::Fd(self.fd), self.buf.Ptr() as * mut u8, self.buf.Len() as u32)
             .offset(self.offset);
 
 
@@ -729,6 +733,12 @@ impl AIORead {
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
+        if result > 0 {
+            let task = Task::GetTask(self.taskId);
+            let len = task.CopyDataOutToIovs(&self.buf.buf[0..result as usize], &self.iovs).expect("AIORead Process fail ...");
+            assert!(len == result as usize);
+        }
+
         let ev = IOEvent {
             data: self.cbData,
             obj: self.cbAddr,
