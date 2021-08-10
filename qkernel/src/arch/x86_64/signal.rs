@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::mem;
-use alloc::sync::Arc;
-use spin::Mutex;
+//use core::mem;
+//use alloc::sync::Arc;
+//use spin::Mutex;
 
-use super::super::super::SignalDef::*;
-use super::super::super::qlib::stack::*;
-use super::super::super::qlib::common::*;
-use super::super::super::qlib::linux_def::*;
+//use super::super::super::SignalDef::*;
+//use super::super::super::stack::*;
+//use super::super::super::qlib::common::*;
+//use super::super::super::qlib::linux_def::*;
 use super::context::*;
-use super::arch_x86::*;
+//use super::arch_x86::*;
 
 const FP_XSTATE_MAGIC2_SIZE: usize = 4;
 
@@ -40,7 +40,7 @@ impl Context64 {
 
     // SignalSetup implements Context.SignalSetup. (Compare to Linux's
     // arch/x86/kernel/signal.c:__setup_rt_frame().)
-    pub fn SignalSetup(&mut self, st: &mut Stack, act: &SigAct, info: &mut SignalInfo, alt: &SignalStack, sigset: SignalSet) -> Result<()> {
+    /*pub fn SignalSetup(&mut self, st: &mut Stack, act: &SigAct, info: &mut SignalInfo, alt: &SignalStack, sigset: SignalSet) -> Result<()> {
         let mut sp = st.sp;
 
         // "The 128-byte area beyond the location pointed to by %rsp is considered
@@ -118,5 +118,5 @@ impl Context64 {
         self.state.x86FPState = Arc::new(Mutex::new(X86fpstate::NewX86FPState()));
 
         return Ok(())
-    }
+    }*/
 }

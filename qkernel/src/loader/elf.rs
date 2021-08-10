@@ -26,7 +26,7 @@ use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::addr::*;
 use super::super::qlib::limits::*;
-use super::super::qlib::stack::*;
+use super::super::qlib::auxv::*;
 use super::super::util::cstring::*;
 use super::super::qlib::platform::defs_impl::*;
 use super::super::task::*;

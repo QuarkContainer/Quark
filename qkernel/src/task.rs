@@ -734,6 +734,10 @@ impl Task {
         super::qlib::pagetable::PageTables::Switch(root);
     }
 
+    pub fn SetKernelPageTable() {
+        KERNEL_PAGETABLE.SwitchTo();
+    }
+
     #[inline]
     pub fn SetFS(&self) {
         SetFs(self.context.fs);

@@ -18,7 +18,7 @@ use rand_pcg::Pcg64;
 use libc::*;
 use std::slice;
 
-use super::super::qlib::stack::AuxVec;
+use super::super::qlib::auxv::*;
 
 pub struct RandGen {
     rng : Pcg64,
