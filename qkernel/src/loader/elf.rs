@@ -20,7 +20,6 @@ use xmas_elf::program::ProgramHeader::{Ph64};
 pub use xmas_elf::header::HeaderPt2;
 use xmas_elf::program::ProgramHeader64;
 use xmas_elf::*;
-use alloc::slice;
 
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
@@ -72,8 +71,8 @@ pub struct ElfHeadersInfo {
 
 // parseHeader parse the ELF header, verifying that this is a supported ELF
 // file and returning the ELF program headers.
-pub fn ParseHeader(task: &Task, file: &File) -> Result<ElfHeadersInfo>  {
-    let mut moptions = MMapOpts::NewFileOptions(&file)?;
+pub fn ParseHeader(task: &mut Task, file: &File) -> Result<ElfHeadersInfo>  {
+    /*let mut moptions = MMapOpts::NewFileOptions(&file)?;
     moptions.Length = 2 * 4096;
     moptions.Fixed = false;
     moptions.Perms = AccessType::ReadOnly();
@@ -81,9 +80,21 @@ pub fn ParseHeader(task: &Task, file: &File) -> Result<ElfHeadersInfo>  {
     moptions.Private = false;
     moptions.Offset = 0;
 
+    error!("ParseHeader 2");
     let addr = task.mm.MMap(task, &mut moptions).expect("mmap elf head fail");
-    let slice = unsafe { slice::from_raw_parts(addr as *const u8, 2 * 4096) };
-    let elfFile = ElfFile::new(&slice).map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+    error!("ParseHeader 3 addr is {:x}", addr);
+    let slice = unsafe { slice::from_raw_parts(addr as *const u8, 2 * 4096) };*/
+
+    let mut buf = DataBuff::New(2 * 0x1000);
+    let n = match ReadAll(task, &file, &mut buf.buf, 0) {
+        Err(e) => {
+            print!("Error ParseHeader {:?}", e);
+            return Err(Error::SysError(SysErr::ENOEXEC));
+        }
+        Ok(n) => n,
+    };
+
+    let elfFile = ElfFile::new(&buf.buf[0..n]).map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
 
     let phdrAddr;
     let phdrSize;
@@ -181,6 +192,9 @@ pub fn MapSegment(task: &Task, file: &File, header: &ProgramHeader64, offset: u6
     let adjust = header.virtual_addr - startMem.0;
 
     if adjust + header.file_size < endMem.0 - startMem.0 {
+        //let cnt = (endMem.0 - startMem.0 - (adjust + header.file_size)) as usize;
+        //let buf: [u8; 4096] = [0; 4096];
+        //task.CopyOutSlice(&buf[0..cnt], addr + adjust + header.file_size, cnt)?;
         for zero in (addr + adjust + header.file_size)..(addr + endMem.0 - startMem.0) {
             unsafe {
                 *(zero as *mut u8) = 0;

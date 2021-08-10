@@ -290,7 +290,9 @@ pub fn SysExecve(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             task.mm = newMM.clone();
             task.futexMgr = task.futexMgr.Fork();
             task.Thread().lock().memoryMgr = newMM;
-            task.SwitchPageTable();
+            if !super::super::KERNELTABLE {
+                task.SwitchPageTable();
+            }
 
             // make the old mm exist before switch pagetable
             core::mem::drop(oldMM);

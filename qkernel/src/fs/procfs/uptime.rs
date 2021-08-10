@@ -27,7 +27,6 @@ use super::super::super::task::*;
 use super::super::super::qlib::auth::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::common::*;
-use super::super::super::qlib::mem::seq::*;
 use super::super::fsutil::inode::simple_file_inode::*;
 use super::super::fsutil::file::readonly_file::*;
 use super::inode::*;
@@ -51,9 +50,7 @@ impl ReadonlyFileNode for UptimeFileNode {
             return Ok(0)
         }
 
-        let blocks = BlockSeq::ToBlocks(dsts);
-        let dsts = BlockSeq::NewFromSlice(&blocks);
-        let n = dsts.CopyOut(&bytes[offset as usize..]);
+        let n = task.CopyDataOutToIovs(&bytes[offset as usize..], dsts)?;
 
         return Ok(n as i64)
     }

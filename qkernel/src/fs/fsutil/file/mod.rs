@@ -35,7 +35,7 @@ use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::task::*;
 use super::super::super::qlib::mem::seq::*;
-use super::super::super::qlib::mem::io::*;
+//use super::super::super::qlib::mem::io::*;
 
 pub fn SeekWithDirCursor(task: &Task, f: &File, whence: i32, current: i64, offset: i64, dirCursor: Option<&mut String>) -> Result<i64> {
     let inode = f.Dirent.Inode();
@@ -280,7 +280,7 @@ pub struct FileStaticContentReader {
     pub content: Vec<u8>,
 }
 
-impl FileStaticContentReader {
+/*impl FileStaticContentReader {
     fn ReadAt(&self, _task: &Task, _f: &File, dsts: BlockSeq, offset: i64) -> Result<i64> {
         if offset < 0 {
             return Err(Error::SysError(SysErr::EINVAL))
@@ -293,8 +293,10 @@ impl FileStaticContentReader {
         let mut bsw = BlockSeqWriter(dsts);
         let mut ioWriter = ToIOWriter { writer: &mut bsw };
         return ioWriter.Write(&self.content[offset as usize..]);
+
+        //task.CopyDataOutToIovs(&self.content[offset as usize..], )
     }
-}
+}*/
 
 pub struct FileNoMMap {}
 

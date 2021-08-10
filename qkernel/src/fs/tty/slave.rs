@@ -307,20 +307,16 @@ impl FileOperations for SlaveFileOperations {
     fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
         let mut buf: [u8; 4096] = [0; 4096];
 
-        let blocks = BlockSeq::ToBlocks(dsts);
-        let dsts = BlockSeq::NewFromSlice(&blocks);
-
-        let mut size = dsts.NumBytes() as usize;
+        let mut size = IoVec::NumBytes(dsts);
         if size > buf.len() {
             size = buf.len();
         }
 
-        let cnt = self.d.read().t.ld.lock().InputQueueRead(task, &mut buf[..size as usize])?;
-        let srcs = BlockSeq::New(&mut buf[..cnt as usize]);
-        let mut reader = BlockSeqReader(srcs);
-        let res = reader.ReadToBlocks(dsts)?;
-        assert!(res == cnt as i64, "MasterFileOperations:ReadAt fail");
-        return Ok(res)
+        let cnt = self.d.read().t.ld.lock().InputQueueRead(task, &mut buf[..size as usize])? as usize;
+
+        let res = task.CopyDataOutToIovs(&buf[0..cnt], dsts)?;
+        assert!(res == cnt, "MasterFileOperations:ReadAt fail");
+        return Ok(res as i64)
     }
 
     fn WriteAt(&self, task: &Task, _f: &File, srcs: &[IoVec], _offset: i64, _blocking: bool) -> Result<i64> {

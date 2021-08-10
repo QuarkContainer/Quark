@@ -83,17 +83,26 @@ impl FileOperations for ReaderWriter {
     }
 
     fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
-        let dsts = BlockSeq::NewFromSlice(dsts);
-        let n = self.pipe.Read(task, dsts)?;
+        let size = IoVec::NumBytes(dsts);
+        let buf = DataBuff::New(size);
+        let bs = BlockSeq::New(&buf.buf);
+        let n = self.pipe.Read(task, bs)?;
         if n > 0 {
             self.pipe.Notify(EVENT_OUT)
         }
+
+        task.CopyDataOutToIovs(&buf.buf[0..n], dsts)?;
 
         return Ok(n as i64)
     }
 
     fn WriteAt(&self, task: &Task, _f: &File, srcs: &[IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
-        let srcs = BlockSeq::NewFromSlice(srcs);
+        //let srcs = BlockSeq::NewFromSlice(srcs);
+
+        let size = IoVec::NumBytes(srcs);
+        let mut buf = DataBuff::New(size);
+        task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
+        let srcs = BlockSeq::New(&buf.buf);
         let n = self.pipe.Write(task, srcs)?;
         if n > 0 {
             self.pipe.Notify(EVENT_IN)
