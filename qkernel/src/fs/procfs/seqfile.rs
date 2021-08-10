@@ -39,7 +39,6 @@ use super::super::super::kernel::waiter::qlock::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::auth::*;
-use super::super::super::qlib::mem::seq::*;
 use super::super::super::id_mgr::*;
 
 #[derive(Clone, Copy)]
@@ -369,7 +368,9 @@ impl FileOperations for SeqFileOperations {
     }
 
     fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], offset: i64, _blocking: bool) -> Result<i64> {
-        let dsts = BlockSeq::NewFromSlice(dsts);
+        let size = IoVec::NumBytes(dsts);
+        let dataBuf = DataBuff::New(size);
+        let bs = dataBuf.BlockSeq();
 
         let mut file = self.seqFile.write();
 
@@ -397,14 +398,15 @@ impl FileOperations for SeqFileOperations {
             }
         }
 
-        let mut dsts = dsts;
+        let mut bs = bs;
         let mut done = 0;
         if recordOffset != 0 {
-            let n = dsts.CopyOut(&file.source[i].Buf[recordOffset..]);
+            let n = bs.CopyOut(&file.source[i].Buf[recordOffset..]);
             done += n;
-            dsts = dsts.DropFirst(n as u64);
-            if dsts.NumBytes() == 0 {
+            bs = bs.DropFirst(n as u64);
+            if bs.NumBytes() == 0 {
                 file.lastRead = offset;
+                task.CopyDataOutToIovs(&dataBuf.buf[0..done], dsts)?;
                 return Ok(done as i64)
             }
 
@@ -416,18 +418,20 @@ impl FileOperations for SeqFileOperations {
         }
 
         for buf in &file.source[i..] {
-            let n = dsts.CopyOut(&buf.Buf);
+            let n = bs.CopyOut(&buf.Buf);
             done += n;
 
-            dsts = dsts.DropFirst(n as u64);
-            if dsts.NumBytes() == 0 {
+            bs = bs.DropFirst(n as u64);
+            if bs.NumBytes() == 0 {
                 file.lastRead = offset;
+                task.CopyDataOutToIovs(&dataBuf.buf[0..done], dsts)?;
                 return Ok(done as i64)
             }
         }
 
         info!("SeqFileOperations ReadAt 5, done = {}", done);
         file.lastRead = offset;
+        task.CopyDataOutToIovs(&dataBuf.buf[0..done], dsts)?;
         return Ok(done as i64)
     }
 

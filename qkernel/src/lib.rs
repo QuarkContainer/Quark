@@ -138,6 +138,8 @@ static ALLOCATOR: ListAllocator = ListAllocator::Empty();
 //static ALLOCATOR: BufHeap = BufHeap::Empty();
 //static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
+pub const KERNELTABLE : bool = false;
+
 pub fn AllocatorPrint() {
     //ALLOCATOR.Print();
 }
@@ -172,7 +174,9 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
 
     currTask.PerfGoto(PerfType::Kernel);
 
-    //Task::SetKernelPageTable();
+    if KERNELTABLE {
+        Task::SetKernelPageTable();
+    }
 
     currTask.AccountTaskLeave(SchedState::RunningApp);
     let pt = currTask.GetPtRegs();
@@ -252,7 +256,9 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     SetRflags(rflags);
     currTask.RestoreFp();
 
-    //currTask.SwitchPageTable();
+    if KERNELTABLE {
+        currTask.SwitchPageTable();
+    }
 
     //SHARESPACE.SetValue(CPULocal::CpuId(), 0, 0);
     if pt.rip != 0 { // if it is from signal trigger from kernel, e.g. page fault

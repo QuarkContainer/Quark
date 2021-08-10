@@ -417,6 +417,9 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
         SwapGs();
         //PerfGofrom(PerfType::User);
         currTask.AccountTaskLeave(SchedState::RunningApp);
+        if super::KERNELTABLE {
+            Task::SetKernelPageTable();
+        }
         true
     } else {
         false
@@ -532,6 +535,9 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
             if fromUser {
                 //PerfGoto(PerfType::User);
                 currTask.AccountTaskEnter(SchedState::RunningApp);
+                if super::KERNELTABLE {
+                    currTask.SwitchPageTable();
+                }
                 SwapGs();
             }
 
@@ -553,6 +559,10 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
             if fromUser {
                 //PerfGoto(PerfType::User);
                 currTask.AccountTaskEnter(SchedState::RunningApp);
+
+                if super::KERNELTABLE {
+                    currTask.SwitchPageTable();
+                }
                 SwapGs();
             }
         } else {

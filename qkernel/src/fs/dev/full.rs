@@ -28,7 +28,6 @@ use super::super::super::qlib::linux_def::*;
 use super::super::super::task::*;
 use super::super::super::kernel::time::*;
 use super::super::super::kernel::waiter::*;
-use super::super::super::qlib::mem::seq::*;
 use super::super::super::kernel::waiter::qlock::*;
 use super::super::super::id_mgr::*;
 
@@ -262,12 +261,13 @@ impl FileOperations for FullFileOperations {
         return Err(Error::SysError(SysErr::ENOTDIR))
     }
 
-    fn ReadAt(&self, _task: &Task, _f: &File, dsts: &mut [IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
-        let blocks = BlockSeq::ToBlocks(dsts);
-        let dsts = BlockSeq::NewFromSlice(&blocks);
+    fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
+        let size = IoVec::NumBytes(dsts);
+        let mut buf = DataBuff::New(size);
+        buf.Zero();
 
-        let done = BlockSeq::Zero(dsts);
-        return Ok(done)
+        let done = task.CopyDataOutToIovs(&buf.buf, dsts)?;
+        return Ok(done as i64)
     }
 
     fn WriteAt(&self, _task: &Task, _f: &File, _srcs: &[IoVec], _offset: i64, _blocking: bool) -> Result<i64> {

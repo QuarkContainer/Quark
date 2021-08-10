@@ -20,7 +20,6 @@ use core::slice;
 use super::super::super::super::qlib::common::*;
 use super::super::super::super::qlib::linux_def::*;
 use super::super::super::super::qlib::auth::*;
-use super::super::super::super::qlib::mem::seq::*;
 use super::super::super::fsutil::file::readonly_file::*;
 use super::super::super::fsutil::inode::simple_file_inode::*;
 use super::super::super::super::task::*;
@@ -74,7 +73,7 @@ pub struct AUXVecReadonlyFileNode {
 }
 
 impl ReadonlyFileNode for AUXVecReadonlyFileNode {
-    fn ReadAt(&self, _task: &Task, _f: &File, dsts: &mut [IoVec], offset: i64, _blocking: bool) -> Result<i64> {
+    fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], offset: i64, _blocking: bool) -> Result<i64> {
         if offset < 0 {
             return Err(Error::SysError(SysErr::EINVAL))
         }
@@ -103,9 +102,7 @@ impl ReadonlyFileNode for AUXVecReadonlyFileNode {
         assert!(buf.len() * 8 >= size);
         let slice = unsafe { slice::from_raw_parts(ptr, size) };
 
-        let blocks = BlockSeq::ToBlocks(dsts);
-        let dsts = BlockSeq::NewFromSlice(&blocks);
-        let n = dsts.CopyOut(slice);
+        let n = task.CopyDataOutToIovs(slice, dsts)?;
 
         return Ok(n as i64)
     }

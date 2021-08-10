@@ -112,7 +112,11 @@ impl FileOperations for Writer {
             }
         }*/
 
-        let srcs = BlockSeq::NewFromSlice(srcs);
+        //let srcs = BlockSeq::NewFromSlice(srcs);
+        let size = IoVec::NumBytes(srcs);
+        let mut buf = DataBuff::New(size);
+        task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
+        let srcs = BlockSeq::New(&buf.buf);
 
         let n = match self.pipe.Write(task, srcs) {
             Err(e) => {

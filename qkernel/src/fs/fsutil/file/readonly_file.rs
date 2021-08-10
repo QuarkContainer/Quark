@@ -42,7 +42,7 @@ pub struct SnapshotReadonlyFileNode {
 }
 
 impl ReadonlyFileNode for SnapshotReadonlyFileNode {
-    fn ReadAt(&self, _task: &Task, _f: &File, dsts: &mut [IoVec], offset: i64, _blocking: bool) -> Result<i64> {
+    fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], offset: i64, _blocking: bool) -> Result<i64> {
         if offset < 0 {
             return Err(Error::SysError(SysErr::EINVAL))
         }
@@ -51,9 +51,7 @@ impl ReadonlyFileNode for SnapshotReadonlyFileNode {
             return Ok(0)
         }
 
-        let blocks = BlockSeq::ToBlocks(dsts);
-        let dsts = BlockSeq::NewFromSlice(&blocks);
-        let n = dsts.CopyOut(&self.data[offset as usize ..]);
+        let n = task.CopyDataOutToIovs(&self.data[offset as usize ..], dsts)?;
 
         return Ok(n as i64)
     }

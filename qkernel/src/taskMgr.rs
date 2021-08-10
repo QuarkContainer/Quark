@@ -64,7 +64,9 @@ fn switch(from: TaskId, to: TaskId) {
     let fromCtx = from.GetTask();
     let toCtx = to.GetTask();
 
-    toCtx.SwitchPageTable();
+    if !super::KERNELTABLE {
+        toCtx.SwitchPageTable();
+    }
     toCtx.SetFS();
     unsafe {
         context_swap(fromCtx.GetContext(), toCtx.GetContext(), 1, 0);
@@ -80,7 +82,9 @@ fn switch_to(to: TaskId) {
     CPULocal::SetCurrentTask(to.Addr());
     let toCtx = to.GetTask();
 
-    toCtx.SwitchPageTable();
+    if !super::KERNELTABLE {
+        toCtx.SwitchPageTable();
+    }
     toCtx.SetFS();
     unsafe {
         context_swap_to(0, toCtx.GetContext(), 1, 0);

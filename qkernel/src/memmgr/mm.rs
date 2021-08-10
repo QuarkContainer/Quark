@@ -811,7 +811,7 @@ impl MemoryManager {
                     let writeable = vma.effectivePerms.Write();
                     if writeable {
                         let page = { super::super::PAGE_MGR.AllocPage(true).unwrap() };
-                        CopyPage(pageAddr, page);
+                        CopyPage(phyAddr, page);
                         self.MapPageWriteLocked(pageAddr, page, exec);
                         super::super::PAGE_MGR.DerefPage(page);
                     }

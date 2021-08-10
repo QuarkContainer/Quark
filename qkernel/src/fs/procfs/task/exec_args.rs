@@ -20,7 +20,6 @@ use super::super::super::super::qlib::common::*;
 use super::super::super::super::qlib::linux_def::*;
 use super::super::super::super::qlib::addr::*;
 use super::super::super::super::qlib::auth::*;
-use super::super::super::super::qlib::mem::seq::*;
 use super::super::super::fsutil::file::readonly_file::*;
 use super::super::super::super::task::*;
 use super::super::super::file::*;
@@ -118,10 +117,8 @@ impl ReadonlyFileNode for ExecArgReadonlyFileNode {
 
         let mut length = end - start;
 
-        let blocks = BlockSeq::ToBlocks(dsts);
-        let dsts = BlockSeq::NewFromSlice(&blocks);
-        if length > dsts.NumBytes() {
-            length = dsts.NumBytes();
+        if length > IoVec::NumBytes(dsts) as u64{
+            length = IoVec::NumBytes(dsts) as u64;
         }
 
         let data : Vec<u8> = task.CopyInVec(start, length as usize)?;
@@ -167,12 +164,12 @@ impl ReadonlyFileNode for ExecArgReadonlyFileNode {
                 }
                 buf = &ret[..];
 
-                let n = dsts.CopyOut(buf);
+                let n = task.CopyDataOutToIovs(buf, dsts)?;
                 return Ok(n as i64)
             }
         }
 
-        let n = dsts.CopyOut(buf);
+        let n = task.CopyDataOutToIovs(buf, dsts)?;
         return Ok(n as i64)
     }
 }

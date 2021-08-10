@@ -19,7 +19,6 @@ use alloc::string::ToString;
 use super::super::super::super::qlib::common::*;
 use super::super::super::super::qlib::linux_def::*;
 use super::super::super::super::qlib::auth::*;
-use super::super::super::super::qlib::mem::seq::*;
 use super::super::super::fsutil::file::readonly_file::*;
 use super::super::super::fsutil::inode::simple_file_inode::*;
 use super::super::super::super::task::*;
@@ -85,7 +84,7 @@ pub struct IdMapReadonlyFileNode {
 
 //todo: shall we support Write?
 impl ReadonlyFileNode for IdMapReadonlyFileNode {
-    fn ReadAt(&self, _task: &Task, _f: &File, dsts: &mut [IoVec], offset: i64, _blocking: bool) -> Result<i64> {
+    fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], offset: i64, _blocking: bool) -> Result<i64> {
         if offset < 0 {
             return Err(Error::SysError(SysErr::EINVAL))
         }
@@ -106,9 +105,7 @@ impl ReadonlyFileNode for IdMapReadonlyFileNode {
             return Ok(0)
         }
 
-        let blocks = BlockSeq::ToBlocks(dsts);
-        let dsts = BlockSeq::NewFromSlice(&blocks);
-        let n = dsts.CopyOut(&buf.as_bytes()[offset as usize..]);
+        let n = task.CopyDataOutToIovs(&buf.as_bytes()[offset as usize..], dsts)?;
 
         return Ok(n as i64)
     }

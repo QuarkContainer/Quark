@@ -20,7 +20,6 @@ use alloc::sync::Arc;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::linux::time::*;
-use super::super::qlib::mem::seq::*;
 use super::super::task::*;
 use super::super::kernel::time::*;
 use super::super::kernel::timer::*;
@@ -196,11 +195,8 @@ impl FileOperations for TimerOperations {
         return Err(Error::SysError(SysErr::ENOTDIR))
     }
 
-    fn ReadAt(&self, _task: &Task, _f: &File, dsts: &mut [IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
-        let blocks = BlockSeq::ToBlocks(dsts);
-        let dsts = BlockSeq::NewFromSlice(&blocks);
-
-        if dsts.NumBytes() < 8 {
+    fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
+        if IoVec::NumBytes(dsts) < 8 {
             return Err(Error::SysError(SysErr::EINVAL))
         }
 
@@ -209,7 +205,7 @@ impl FileOperations for TimerOperations {
         if val > 0 {
             let ptr = &val as * const _ as u64 as * const u8;
             let buf = unsafe { slice::from_raw_parts(ptr, 8) };
-            dsts.CopyOut(buf);
+            task.CopyDataOutToIovs(buf, dsts)?;
 
             return Ok(8)
         }

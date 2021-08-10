@@ -2214,6 +2214,8 @@ pub struct DataBuff {
     pub buf: Vec<u8>
 }
 
+use super::mem::seq::BlockSeq;
+
 impl DataBuff {
     pub fn New(size: usize) -> Self {
         let mut buf = Vec::with_capacity(size);
@@ -2223,6 +2225,12 @@ impl DataBuff {
 
         return Self {
             buf: buf
+        }
+    }
+
+    pub fn Zero(&mut self) {
+        for i in 0..self.buf.len() {
+            self.buf[i] = 0;
         }
     }
 
@@ -2247,6 +2255,11 @@ impl DataBuff {
 
     pub fn Iovs(&self) -> [IoVec; 1] {
         return [self.IoVec()]
+    }
+
+
+    pub fn BlockSeq(&self) -> BlockSeq {
+        return BlockSeq::New(&self.buf);
     }
 }
 
