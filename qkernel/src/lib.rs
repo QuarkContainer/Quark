@@ -94,6 +94,7 @@ pub mod util;
 pub mod perflog;
 pub mod seqcount;
 pub mod quring;
+pub mod stack;
 
 use core::panic::PanicInfo;
 use lazy_static::lazy_static;
@@ -170,6 +171,8 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     currTask.PerfGofrom(PerfType::User);
 
     currTask.PerfGoto(PerfType::Kernel);
+
+    //Task::SetKernelPageTable();
 
     currTask.AccountTaskLeave(SchedState::RunningApp);
     let pt = currTask.GetPtRegs();
@@ -248,6 +251,8 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     rflags |= USER_FLAGS_SET;
     SetRflags(rflags);
     currTask.RestoreFp();
+
+    //currTask.SwitchPageTable();
 
     //SHARESPACE.SetValue(CPULocal::CpuId(), 0, 0);
     if pt.rip != 0 { // if it is from signal trigger from kernel, e.g. page fault
@@ -361,11 +366,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
         HyperCall64(qlib::HYPERCALL_INIT, (&(*SHARESPACE) as *const ShareSpace) as u64, 0);
 
         {
-            let root = {
-                let cr3: u64; // kernel root page table
-                unsafe { llvm_asm!("mov %cr3, $0" : "=r" (cr3) ) };
-                cr3
-            };
+            let root = CurrentCr3();
             let kpt = &KERNEL_PAGETABLE;
             kpt.SetRoot(root);
 

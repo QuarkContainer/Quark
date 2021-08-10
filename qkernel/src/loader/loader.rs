@@ -21,7 +21,8 @@ use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::addr::*;
 use super::super::qlib::range::*;
-use super::super::qlib::stack::*;
+use super::super::stack::*;
+use super::super::qlib::auxv::*;
 use super::super::qlib::path::*;
 use super::super::fs::dirent::*;
 use super::super::fs::file::*;
@@ -30,7 +31,7 @@ use super::super::task::*;
 use super::super::kernel::timer::*;
 use super::super::kernel_util::*;
 use super::super::memmgr::*;
-use super::super::memmgr::mm::*;
+//use super::super::memmgr::mm::*;
 use super::interpreter::*;
 
 // maxLoaderAttempts is the maximum number of attempts to try to load
@@ -233,7 +234,7 @@ pub fn Load(task: &mut Task, filename: &str, argv: &mut Vec<String>, envv: &[Str
 
     let mut stack = Stack::New(stackRange.End());
 
-    let usersp = SetupUserStack(&task.mm, &mut stack, &loaded, filename, &argv, envv, extraAuxv, vdsoAddr);
+    let usersp = SetupUserStack(task, &mut stack, &loaded, filename, &argv, envv, extraAuxv, vdsoAddr)?;
     let kernelsp = Task::TaskId().Addr() + MemoryDef::DEFAULT_STACK_SIZE - 0x10;
     let entry = loaded.entry;
 
@@ -241,23 +242,23 @@ pub fn Load(task: &mut Task, filename: &str, argv: &mut Vec<String>, envv: &[Str
 }
 
 //return: user stack sp
-pub fn SetupUserStack(mm: &MemoryManager,
+pub fn SetupUserStack(task: &Task,
                       stack: &mut Stack,
                       loaded: &LoadedElf,
                       _filename: &str,
                       argv: &[String],
                       envv: &[String],
                       extraAuxv: &[AuxEntry],
-                      vdsoAddr: u64) -> u64 {
+                      vdsoAddr: u64) -> Result<u64> {
     /* auxv dagta */
-    let x86_64 = stack.PushStr("x86_64");
+    let x86_64 = stack.PushStr(task, "x86_64")?;
 
     /* random */
     let (rand1, rand2) = RandU128().unwrap();
-    stack.PushU64(rand1);
-    let randAddr = stack.PushU64(rand2);
+    stack.PushU64(task, rand1)?;
+    let randAddr = stack.PushU64(task, rand2)?;
 
-    let execfn = stack.PushStr(argv[0].as_str());
+    let execfn = stack.PushStr(task, argv[0].as_str())?;
 
     /*auxv vector*/
     let mut auxv = Vec::new();
@@ -285,7 +286,7 @@ pub fn SetupUserStack(mm: &MemoryManager,
         auxv.push(*e)
     }
 
-    let l = stack.LoadEnv(envv, argv, &auxv);
+    let l = stack.LoadEnv(task, envv, argv, &auxv)?;
 
     /*{
         let mut mmlock = mm.write();
@@ -294,7 +295,7 @@ pub fn SetupUserStack(mm: &MemoryManager,
         mmlock.envv = Range::New(l.EnvvStart, l.EvvvEnd - l.EnvvStart)
     }*/
 
-    mm.SetupStack(&l, extraAuxv);
+    task.mm.SetupStack(&l, extraAuxv);
 
-    return stack.sp;
+    return Ok(stack.sp);
 }

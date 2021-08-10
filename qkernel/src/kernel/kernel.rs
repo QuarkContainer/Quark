@@ -27,7 +27,7 @@ use lazy_static::lazy_static;
 use super::super::uid::NewUID;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
-use super::super::qlib::stack::*;
+use super::super::qlib::auxv::*;
 use super::super::task::*;
 //use super::super::qlib::context::Context;
 use super::super::qlib::cpuid::*;

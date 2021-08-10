@@ -19,8 +19,7 @@ use alloc::sync::Arc;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::task::*;
-//use super::super::vcpu::*;
-use super::super::qlib::stack::*;
+use super::super::stack::*;
 use super::super::qlib::linux::time::*;
 use super::super::kernel::posixtimer::*;
 use super::super::kernel::waiter::*;
@@ -1061,11 +1060,11 @@ impl Task {
 
         let ctx = UContext::New(pt, mask.0, cr2, 0, &self.signalStack);
 
-        let sigInfoAddr = userStack.PushType::<SignalInfo>(info);
-        let sigCtxAddr = userStack.PushType::<UContext>(&ctx);
+        let sigInfoAddr = userStack.PushType::<SignalInfo>(self, info)?;
+        let sigCtxAddr = userStack.PushType::<UContext>(self, &ctx)?;
 
         let signo = info.Signo as u64;
-        let rsp = userStack.PushU64(sigAct.restorer);
+        let rsp = userStack.PushU64(self, sigAct.restorer)?;
         info!("=========start enter user, the address is {:?}, rsp is {:x}, signo is {}", sigAct, rsp, signo);
         let currTask = Task::Current();
         //SetGsOffset(CPULocalType::KernelStack, currTask.GetKernelSp());
@@ -1089,9 +1088,9 @@ impl Task {
 
         let mut userStack = Stack::New(pt.rsp);
         let mut uc = UContext::default();
-        userStack.PopType::<UContext>(&mut uc);
+        userStack.PopType::<UContext>(self, &mut uc)?;
         let mut sigInfo = SignalInfo::default();
-        userStack.PopType::<SignalInfo>(&mut sigInfo);
+        userStack.PopType::<SignalInfo>(self, &mut sigInfo)?;
 
         let alt = uc.Stack;
 
