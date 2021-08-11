@@ -200,26 +200,27 @@ impl FileOperations for EventOperations {
     }
 
     fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
-        let blocks = BlockSeq::ToBlocks(dsts);
-        let dsts = BlockSeq::NewFromSlice(&blocks);
-
-        if dsts.NumBytes() < 8 {
+        let size = IoVec::NumBytes(dsts);
+        if size < 8 {
             return Err(Error::SysError(SysErr::EINVAL))
         }
 
-        self.Read(task, dsts)?;
+        let buf = DataBuff::New(size);
+        self.Read(task, buf.BlockSeq())?;
+        task.CopyDataOutToIovs(&buf.buf, dsts)?;
         return Ok(8)
     }
 
     fn WriteAt(&self, task: &Task, _f: &File, srcs: &[IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
-        let blocks = BlockSeq::ToBlocks(srcs);
-        let srcs = BlockSeq::NewFromSlice(&blocks);
-
-        if srcs.NumBytes() < 8 {
+        let size = IoVec::NumBytes(srcs);
+        if size < 8 {
             return Err(Error::SysError(SysErr::EINVAL))
         }
 
-        self.Write(task, srcs)?;
+        let mut buf = DataBuff::New(size);
+        task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
+
+        self.Write(task, buf.BlockSeq())?;
         return Ok(8)
     }
 

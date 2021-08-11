@@ -97,8 +97,6 @@ impl FileOperations for ReaderWriter {
     }
 
     fn WriteAt(&self, task: &Task, _f: &File, srcs: &[IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
-        //let srcs = BlockSeq::NewFromSlice(srcs);
-
         let size = IoVec::NumBytes(srcs);
         let mut buf = DataBuff::New(size);
         task.CopyDataInFromIovs(&mut buf.buf, srcs)?;

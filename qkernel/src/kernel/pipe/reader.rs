@@ -90,8 +90,10 @@ impl FileOperations for Reader {
 
     fn WriteAt(&self, task: &Task, _f: &File, srcs: &[IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
         //error!("pipe reader WriteAt id {}, writers is {}", self.pipe.Uid(), self.pipe.Writers());
-        let srcs = BlockSeq::NewFromSlice(srcs);
-        let n = self.pipe.Write(task, srcs)?;
+        let size = IoVec::NumBytes(srcs);
+        let mut buf = DataBuff::New(size);
+        task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
+        let n = self.pipe.Write(task, buf.BlockSeq())?;
         if n > 0 {
             self.pipe.Notify(EVENT_IN)
         }

@@ -24,8 +24,6 @@ use super::super::super::super::kernel::waiter::*;
 use super::super::super::super::qlib::common::*;
 use super::super::super::super::qlib::linux_def::*;
 use super::super::super::super::task::*;
-use super::super::super::super::qlib::mem::seq::*;
-use super::super::super::super::qlib::mem::io::*;
 use super::super::super::host::hostinodeop::*;
 use super::*;
 
@@ -70,7 +68,7 @@ impl FileOperations for StaticFile {
         return Err(Error::SysError(SysErr::ENOTDIR))
     }
 
-    fn ReadAt(&self, _task: &Task, _f: &File, dsts: &mut [IoVec], offset: i64, _blocking: bool) -> Result<i64> {
+    fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], offset: i64, _blocking: bool) -> Result<i64> {
         if offset < 0 {
             return Err(Error::SysError(SysErr::EINVAL))
         }
@@ -79,12 +77,8 @@ impl FileOperations for StaticFile {
             return Ok(0)
         }
 
-        let blocks = BlockSeq::ToBlocks(dsts);
-        let dsts = BlockSeq::NewFromSlice(&blocks);
-
-        let mut bsw = BlockSeqWriter(dsts);
-        let mut ioWriter = ToIOWriter { writer: &mut bsw };
-        return ioWriter.Write(&self.content[offset as usize..]);
+        let n = task.CopyDataOutToIovs(&self.content[offset as usize..], dsts)?;
+        return Ok(n as i64)
     }
 
     fn WriteAt(&self, _task: &Task, _f: &File, srcs: &[IoVec], _offset: i64, _blocking: bool) -> Result<i64> {

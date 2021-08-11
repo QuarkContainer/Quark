@@ -30,8 +30,6 @@ use super::super::super::kernel::time::*;
 use super::super::super::kernel::waiter::*;
 use super::super::super::kernel::waiter::qlock::*;
 use super::super::super::qlib::linux_def::*;
-use super::super::super::qlib::mem::seq::*;
-use super::super::super::qlib::mem::io::*;
 use super::super::attr::*;
 use super::super::inode::*;
 use super::super::mount::*;
@@ -320,21 +318,11 @@ impl FileOperations for SlaveFileOperations {
     }
 
     fn WriteAt(&self, task: &Task, _f: &File, srcs: &[IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
-        let mut buf: [u8; 4096] = [0; 4096];
-        let blocks = BlockSeq::ToBlocks(srcs);
-        let srcs = BlockSeq::NewFromSlice(&blocks);
+        let size = IoVec::NumBytes(srcs);
+        let mut buf = DataBuff::New(size);
+        task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
 
-        let mut size = srcs.NumBytes() as usize;
-        if size > buf.len() {
-            size = buf.len();
-        }
-
-        let dsts = BlockSeq::New(&mut buf[..size]);
-        let mut writer = BlockSeqWriter(dsts);
-        let cnt = writer.WriteFromBlocks(srcs)?;
-        assert!(size == cnt as usize, "MasterFileOperations:WriteAt fail");
-
-        let res = self.d.read().t.ld.lock().OutputQueueWrite(task, &mut buf[0..size as usize])?;
+        let res = self.d.read().t.ld.lock().OutputQueueWrite(task, &mut buf.buf[0..size as usize])?;
         return Ok(res)
     }
 

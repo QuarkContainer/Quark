@@ -494,6 +494,10 @@ pub fn SysIoctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 pub fn Ioctl(task: &mut Task, fd: i32, request: u64, val: u64) -> Result<()> {
     let file = task.GetFile(fd)?;
 
+    //let fops = file.FileOp.clone();
+    //let inode = file.Dirent.Inode();
+    //error!("Ioctl inodetype is {:?}, fopstype is {:?}", inode.InodeType(), fops.FopsType());
+
     match request {
         IoCtlCmd::FIONCLEX => {
             task.SetFlags(fd, &FDFlags {

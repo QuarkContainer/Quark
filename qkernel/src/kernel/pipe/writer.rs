@@ -99,20 +99,6 @@ impl FileOperations for Writer {
 
     fn WriteAt(&self, task: &Task, _f: &File, srcs: &[IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
         //error!("pipe writer WriteAt id {}, writers is {}", self.pipe.Uid(), self.pipe.Writers());
-        /*{
-            use super::super::super::util::cstring::*;
-
-            let addr = srcs[0].start;
-            let size = srcs[0].len;
-            match CString::ToStringWithLen(task, addr, size as usize) {
-                Ok(str) => {
-                    error!("(Data) Pipe: {}", str);
-                }
-                Err(_) => ()
-            }
-        }*/
-
-        //let srcs = BlockSeq::NewFromSlice(srcs);
         let size = IoVec::NumBytes(srcs);
         let mut buf = DataBuff::New(size);
         task.CopyDataInFromIovs(&mut buf.buf, srcs)?;

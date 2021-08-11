@@ -806,7 +806,7 @@ impl MemoryManager {
                 //      vma.mappable.is_some(), pageAddr, phyAddr);
 
                 if vma.private {
-                    self.MapPageReadLocked(pageAddr, phyAddr, exec);
+                    //self.MapPageReadLocked(pageAddr, phyAddr, exec);
 
                     let writeable = vma.effectivePerms.Write();
                     if writeable {
@@ -814,6 +814,8 @@ impl MemoryManager {
                         CopyPage(phyAddr, page);
                         self.MapPageWriteLocked(pageAddr, page, exec);
                         super::super::PAGE_MGR.DerefPage(page);
+                    } else {
+                        self.MapPageReadLocked(pageAddr, phyAddr, exec);
                     }
                 } else {
                     let writeable = vma.effectivePerms.Write();
@@ -1050,9 +1052,15 @@ impl MemoryManager {
                 //host file mapping
                 // the map file mapfile cost is high. Only pre-commit it when the size < 4MB.
                 // todo: improve that later
+                let currPerm = if !vma.private {
+                    perms
+                } else {
+                    // disable write for private range, so that it could trigger cow in pagefault
+                    AccessType(perms.0 & !MmapProt::PROT_WRITE)
+                };
 
                 if precommit && segAr.Len() < 0x200000 {
-                    self.pagetable.write().pt.MapFile(task, ar.Start(), &mappable, &Range::New(vma.offset + ar.Start() - segAr.Start(), ar.Len()), &perms, precommit)?;
+                    self.pagetable.write().pt.MapFile(task, ar.Start(), &mappable, &Range::New(vma.offset + ar.Start() - segAr.Start(), ar.Len()), &currPerm, precommit)?;
                 }
                 self.AddRssLock(ar);
             }
