@@ -37,7 +37,6 @@ use super::super::super::runc::runtime::loader::*;
 use super::super::super::qcall;
 use super::super::super::kvm_vcpu::*;
 use super::super::super::elf_loader::*;
-use super::super::super::memmgr::*;
 use super::super::super::vmspace::*;
 use super::super::super::{FD_NOTIFIER, VMS, PMA_KEEPER};
 use super::super::super::ucall::ucall_server::*;
@@ -101,18 +100,6 @@ pub struct VirtualMachine {
 }
 
 impl VirtualMachine {
-    fn InitKernelMem(_vm_fd: &VmFd, phyUpperAddr: u64, pageMmapsize: u64) -> Result<Box<MappedRegion>> {
-        let mr = MapOption::New().Addr(phyUpperAddr).Len(pageMmapsize).MapHugeTLB().MapAnan().ProtoRead().ProtoWrite().ProtoExec().Map()?;
-        let pageMmap = Box::new(mr);
-
-        let pageMapAddr = pageMmap.as_ptr() as *mut u8;
-        if pageMapAddr as u64 != phyUpperAddr {
-            return Err(Error::AddressDoesMatch);
-        }
-
-        return Ok(pageMmap)
-    }
-
     pub fn SetMemRegion(slotId: u32, vm_fd: &VmFd, phyAddr: u64, hostAddr: u64, pageMmapsize: u64) -> Result<()> {
         info!("SetMemRegion phyAddr = {:x}, hostAddr={:x}; pageMmapsize = {:x} MB", phyAddr, hostAddr, (pageMmapsize >> 20));
 

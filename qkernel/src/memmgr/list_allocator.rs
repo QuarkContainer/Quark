@@ -22,7 +22,7 @@ use core::ptr::NonNull;
 use spin::Mutex;
 use buddy_system_allocator::Heap;
 
-pub const CLASS_CNT : usize = 14;
+pub const CLASS_CNT : usize = 16;
 pub const FREE_THRESHOLD: usize = 30; // when free size less than 30%, need to free buffer
 pub const BUFF_THRESHOLD: usize = 50; // when buff size takes more than 50% of free size, needs to free
 pub const FREE_BATCH: usize = 10; // free 10 blocks each time.
@@ -52,7 +52,9 @@ impl ListAllocator {
             Mutex::new(FreeMemBlockMgr::New(32, 10)),
             Mutex::new(FreeMemBlockMgr::New(16, 11)),
             Mutex::new(FreeMemBlockMgr::New(1024, 12)),
-            Mutex::new(FreeMemBlockMgr::New(16, 13))
+            Mutex::new(FreeMemBlockMgr::New(16, 13)),
+            Mutex::new(FreeMemBlockMgr::New(8, 14)),
+            Mutex::new(FreeMemBlockMgr::New(8, 15))
         ];
 
         return Self {

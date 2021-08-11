@@ -36,6 +36,7 @@ use super::super::super::kernel::abstract_socket_namespace::*;
 use super::super::super::kernel::waiter::*;
 use super::super::super::kernel::time::*;
 use super::super::super::qlib::common::*;
+use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::linux::socket::*;
 use super::super::super::task::*;
 //use super::super::super::qlib::mem::io::*;
@@ -43,7 +44,6 @@ use super::super::super::qlib::mem::seq::*;
 use super::super::super::qlib::path::*;
 //use super::super::super::Kernel;
 use super::super::super::Kernel::HostSpace;
-use super::super::super::qlib::linux_def::*;
 //use super::super::super::fd::*;
 use super::super::super::tcpip::tcpip::*;
 use super::transport::unix::*;
@@ -272,10 +272,7 @@ impl FileOperations for UnixSocketOperations {
     }
 
     fn ReadAt(&self, _task: &Task, _f: &File, dsts: &mut [IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
-        let count = {
-            let srcs = BlockSeq::NewFromSlice(dsts);
-            srcs.NumBytes()
-        };
+        let count = IoVec::NumBytes(dsts);
 
         if count == 0 {
             return Ok(0)
@@ -303,10 +300,7 @@ impl FileOperations for UnixSocketOperations {
             SCMControlMessages::default()
         };
 
-        let count = {
-            let srcs = BlockSeq::NewFromSlice(srcs);
-            srcs.NumBytes()
-        };
+        let count = IoVec::NumBytes(srcs);
 
         if count == 0 {
             let nInt = self.ep.SendMsg(srcs, &ctrl, &None)?;
@@ -618,12 +612,15 @@ impl SockOperations for UnixSocketOperations {
 
         let mut unixAddr = SockAddrUnix::default();
 
-        let mut total = 0;
+        let mut total : i64 = 0;
         let mut sender = None;
         let mut outputctrls = SCMControlMessages::default();
         let mut ControlVec = self.encodeControlMsg(task, outputctrls, controlDataLen, &mut msgFlags, cloexec);
-        let mut dsts = BlockSeq::ToBlocks(dsts);
-        match self.ep.RecvMsg(&mut dsts, wantCreds, numRights as u64, peek, Some(&mut unixAddr)) {
+        let size = IoVec::NumBytes(dsts);
+        let buf = DataBuff::New(size);
+
+        let mut bs = BlockSeqToIoVecs(buf.BlockSeq());
+        match self.ep.RecvMsg(&mut bs, wantCreds, numRights as u64, peek, Some(&mut unixAddr)) {
             Err(Error::SysError(SysErr::EAGAIN)) => {
                 if dontWait {
                     return Err(Error::SysError(SysErr::EAGAIN))
@@ -633,6 +630,7 @@ impl SockOperations for UnixSocketOperations {
                 if self.IsPacket() {
                     return Err(Error::SysError(SysErr::EAGAIN))
                 }
+                task.CopyDataOutToIovs(&buf.buf[0..total as usize], dsts)?;
                 return Ok((total, msgFlags, sender, ControlVec))
             }
             Err(e) => {
@@ -652,7 +650,7 @@ impl SockOperations for UnixSocketOperations {
                     msgFlags |= MsgType::MSG_CTRUNC;
                 }
 
-                let seq = BlockSeq::NewFromSlice(&dsts);
+                let seq = BlockSeq::NewFromSlice(&bs);
 
                 if self.IsPacket() && n < ms {
                     msgFlags |= MsgType::MSG_TRUNC;
@@ -671,11 +669,12 @@ impl SockOperations for UnixSocketOperations {
                         n = ms;
                     }
 
+                    task.CopyDataOutToIovs(&buf.buf[0..n as usize], dsts)?;
                     return Ok((n as i64, msgFlags, sender, ControlVec))
                 }
 
                 let seq = seq.DropFirst(n as u64);
-                dsts = BlockSeqToIoVecs(seq);
+                bs = BlockSeqToIoVecs(seq);
                 total += n as i64;
             }
         }
@@ -686,13 +685,15 @@ impl SockOperations for UnixSocketOperations {
 
         loop {
             let mut unixAddr = SockAddrUnix::default();
-            match self.ep.RecvMsg(&mut dsts, wantCreds, numRights as u64, peek, Some(&mut unixAddr)) {
+            match self.ep.RecvMsg(&mut bs, wantCreds, numRights as u64, peek, Some(&mut unixAddr)) {
                 Err(Error::SysError(SysErr::EAGAIN)) => (),
                 Err(Error::ErrClosedForReceive) => {
+                    task.CopyDataOutToIovs(&buf.buf[0..total as usize], dsts)?;
                     return Ok((total as i64, msgFlags, sender, ControlVec))
                 }
                 Err(e) => {
                     if total > 0 {
+                        task.CopyDataOutToIovs(&buf.buf[0..total as usize], dsts)?;
                         return Ok((total as i64, msgFlags, sender, ControlVec))
                     }
 
@@ -717,7 +718,7 @@ impl SockOperations for UnixSocketOperations {
                     }
 
                     // todo: handle waitAll
-                    let seq = BlockSeq::NewFromSlice(&dsts);
+                    let seq = BlockSeq::NewFromSlice(&bs);
                     if waitAll && n < seq.NumBytes() as usize {
                         info!("RecvMsg get waitall, but return partial......")
                     }
@@ -726,23 +727,25 @@ impl SockOperations for UnixSocketOperations {
                         msgFlags |= MsgType::MSG_TRUNC;
                     }
 
-                    let seq = BlockSeq::NewFromSlice(&dsts);
+                    let seq = BlockSeq::NewFromSlice(&bs);
                     if !waitAll || self.IsPacket() || n >= seq.NumBytes() as usize {
                         if self.IsPacket() && n < ms {
                             msgFlags |= MsgType::MSG_TRUNC;
                         }
                         let ControlVector = self.encodeControlMsg(task, ctrls, controlDataLen, &mut msgFlags, cloexec);
+                        task.CopyDataOutToIovs(&buf.buf[0..total as usize], dsts)?;
                         return Ok((total, msgFlags, sender, ControlVector))
                     }
 
                     let seq = seq.DropFirst(n as u64);
-                    dsts = BlockSeqToIoVecs(seq);
+                    bs = BlockSeqToIoVecs(seq);
                 }
             }
 
             match task.blocker.BlockWithMonoTimer(true, deadline) {
                 Err(Error::SysError(SysErr::ETIMEDOUT)) => {
                     if total > 0 {
+                        task.CopyDataOutToIovs(&buf.buf[0..total as usize], dsts)?;
                         return Ok((total as i64, msgFlags, sender, ControlVec))
                     }
                     return Err(Error::SysError(SysErr::EAGAIN))
@@ -791,7 +794,10 @@ impl SockOperations for UnixSocketOperations {
 
         let scmCtrlMsg = ctrlMsg.ToSCMUnix(task, &self.ep, &toEp)?;
 
-        let n = match self.ep.SendMsg(srcs, &scmCtrlMsg, &toEp) {
+        let size = IoVec::NumBytes(srcs);
+        let mut buf = DataBuff::New(size);
+        task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
+        let n = match self.ep.SendMsg(&buf.Iovs(), &scmCtrlMsg, &toEp) {
             Err(Error::SysError(SysErr::EAGAIN)) => {
                 if flags & MsgType::MSG_DONTWAIT != 0 {
                     return Err(Error::SysError(SysErr::EAGAIN))
@@ -815,7 +821,7 @@ impl SockOperations for UnixSocketOperations {
 
         let mut total = n;
 
-        let bs = BlockSeq::NewFromSlice(srcs);
+        let bs = buf.BlockSeq();
         let totalLen = bs.Len();
         while total < totalLen {
             let left = bs.DropFirst(total as u64);
