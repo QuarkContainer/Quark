@@ -240,16 +240,15 @@ pub fn HostIoctlIFConf(task: &Task, hostfd: i32, request: u64, addr: u64) -> Res
         MAX_LEN
     };
 
-    let mut data = Vec::with_capacity(len);
-    data.resize(len as usize, 0);
+    let buf = DataBuff::New(len);
 
     let mut ifr = IFConf {
         Len: len as i32,
         ..Default::default()
     };
 
-    if ifr.Ptr != 0 {
-        ifr.Ptr = &data[0] as * const _ as u64;
+    if ifc.Ptr != 0 {
+        ifr.Ptr = buf.Ptr();
     }
 
     let res = HostSpace::IoCtl(hostfd, request, &mut ifr as *const _ as u64);
