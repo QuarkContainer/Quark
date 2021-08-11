@@ -289,7 +289,17 @@ impl FileOperations for SocketOperations {
 
     fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
         if self.SocketBufEnabled() {
-            return IOURING.BufSockRead(task, self, dsts)
+            //todo: optimize to avoid extra memory copy
+            let size = IoVec::NumBytes(dsts);
+            let buf = DataBuff::New(size);
+            let mut iovs = buf.Iovs();
+            let ret = IOURING.BufSockRead(task, self, &mut iovs)?;
+            if ret > 0 {
+                task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
+            }
+            return Ok(ret);
+
+            //return IOURING.BufSockRead(task, self, dsts)
         }
 
         //defer!(task.GetMut().iovs.clear());
@@ -305,7 +315,14 @@ impl FileOperations for SocketOperations {
 
     fn WriteAt(&self, task: &Task, _f: &File, srcs: &[IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
         if self.SocketBufEnabled() {
-            return IOURING.BufSockWrite(task, self, srcs)
+            //todo: optimize to avoid extra memory copy
+            let size = IoVec::NumBytes(srcs);
+            let mut buf = DataBuff::New(size);
+            task.CopyDataInFromIovs(&mut buf.buf, &srcs)?;
+            let iovs = buf.Iovs();
+            return IOURING.BufSockWrite(task, self, &iovs)
+
+            //return IOURING.BufSockWrite(task, self, srcs)
         }
 
         //defer!(task.GetMut().iovs.clear());
