@@ -2683,6 +2683,7 @@ impl MemoryDef {
 
     pub const PAGE_SHIFT: u64 = 12;
     pub const HUGE_PAGE_SHIFT: u64 = 21;
+    pub const HUGE_1GPAGE_SHIFT: u64 = 30;
 
     pub const ONE_KB: u64 = 1 << 10; //0x100_000;
     pub const ONE_MB: u64 = 1 << 20; //0x100_000;
@@ -2695,8 +2696,10 @@ impl MemoryDef {
 
     pub const DEFAULT_STACK_PAGES: u64 = 16;
     pub const DEFAULT_STACK_SIZE: u64 = Self::DEFAULT_STACK_PAGES * Self::PAGE_SIZE;  //64 KB
-    pub const PAGE_SIZE: u64 = 1 << 12;//0x1000;
-    pub const HUGE_PAGE_SIZE: u64 = 1 << Self::HUGE_PAGE_SHIFT;//0x1000;
+    pub const PAGE_SIZE: u64 = 1 << Self::PAGE_SHIFT;//0x1000;
+    pub const HUGE_PAGE_SIZE: u64 = 1 << Self::HUGE_PAGE_SHIFT;
+    pub const HUGE_PAGE_SIZE_1G: u64 = 1 << Self::HUGE_1GPAGE_SHIFT;
+
     pub const PAGE_MASK: u64 = Self::PAGE_SIZE - 1;
 
     pub const PAGE_SIZE_4K: u64 = 1 << Self::PAGE_SHIFT;//0x1000;

@@ -1457,6 +1457,11 @@ impl VMSpace {
         return self.pageTables.Map(start, end, physical, flags, self.allocator.as_mut().unwrap(), true);
     }
 
+    pub fn KernelMapHugeTable(&mut self, start: Addr, end: Addr, physical: Addr, flags: PageTableFlags) -> Result<bool> {
+        error!("KernelMap1G start is {:x}, end is {:x}", start.0, end.0);
+        return self.pageTables.MapWith1G(start, end, physical, flags, self.allocator.as_mut().unwrap(), true);
+    }
+
     pub fn PrintStr(phAddr: u64) {
         unsafe {
             info!("the Str: {} ", str::from_utf8_unchecked(slice::from_raw_parts(phAddr as *const u8, strlen(phAddr as *const i8)+1)));

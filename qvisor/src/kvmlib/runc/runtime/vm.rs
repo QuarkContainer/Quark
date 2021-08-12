@@ -202,7 +202,8 @@ impl VirtualMachine {
             vms.pageTables = PageTables::New(vms.allocator.as_ref().unwrap())?;
 
             info!("the pageAllocatorBaseAddr is {:x}, the end of pageAllocator is {:x}", pageAllocatorBaseAddr, pageAllocatorBaseAddr + kernelMemSize);
-            vms.KernelMap(addr::Addr(pageAllocatorBaseAddr), addr::Addr(pageAllocatorBaseAddr + kernelMemSize), addr::Addr(pageAllocatorBaseAddr),
+            //vms.KernelMap(addr::Addr(pageAllocatorBaseAddr), addr::Addr(pageAllocatorBaseAddr + kernelMemSize), addr::Addr(pageAllocatorBaseAddr),
+            vms.KernelMapHugeTable(addr::Addr(pageAllocatorBaseAddr), addr::Addr(pageAllocatorBaseAddr + kernelMemSize), addr::Addr(pageAllocatorBaseAddr),
                           addr::PageOpts::Zero().SetPresent().SetWrite().SetGlobal().Val())?;
             autoStart = args.AutoStart;
             vms.pivot = args.Pivot;

@@ -910,6 +910,16 @@ impl MemoryManager {
     }
 
     pub fn V2PLocked(&self, task: &Task, start: u64, len: u64, output: &mut Vec<IoVec>, writable: bool) -> Result<()> {
+        if MemoryDef::PHY_LOWER_ADDR <= start && start <= MemoryDef::PHY_UPPER_ADDR { // Kernel phy address
+            let end = start + len;
+            assert!(MemoryDef::PHY_LOWER_ADDR <= end && end <= MemoryDef::PHY_UPPER_ADDR);
+            output.push(IoVec {
+                start: start,
+                len: len as usize
+            });
+            return Ok(())
+        }
+
         self.FixPermissionLocked(task, start, len, writable, false)?;
 
         let mut start = start;

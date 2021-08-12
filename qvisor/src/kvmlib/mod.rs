@@ -56,7 +56,7 @@ use self::vmspace::uringMgr::*;
 
 const LOWER_TOP: u64 = 0x00007fffffffffff;
 const UPPER_BOTTOM: u64 = 0xffff800000000000;
-const START_ADDR: u64 = MemoryDef::PHY_LOWER_ADDR + 64 * MemoryDef::ONE_MB;
+const START_ADDR: u64 = MemoryDef::PHY_LOWER_ADDR + 1 * MemoryDef::ONE_GB;
 
 lazy_static! {
     pub static ref SHARE_SPACE : AtomicU64 = AtomicU64::new(0);
