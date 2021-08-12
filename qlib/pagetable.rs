@@ -418,6 +418,57 @@ impl PageTables {
         return Ok(false)
     }
 
+    pub fn MapWith1G(&self, start: Addr, end: Addr, physical: Addr, flags: PageTableFlags, pagePool: &Allocator, _kernel: bool) -> Result<bool> {
+        if start.0 & (MemoryDef::HUGE_PAGE_SIZE_1G - 1) != 0 || end.0 & (MemoryDef::HUGE_PAGE_SIZE_1G - 1) != 0 {
+            panic!("start/end address not 1G aligned")
+        }
+
+        let mut res = false;
+
+        let mut curAddr = start;
+        let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
+        unsafe {
+            let mut p4Idx = VirtAddr::new(curAddr.0).p4_index();
+            let mut p3Idx = VirtAddr::new(curAddr.0).p3_index();
+
+            while curAddr.0 < end.0 {
+                let pgdEntry = &mut (*pt)[p4Idx];
+                let pudTbl: *mut PageTable;
+
+                if pgdEntry.is_unused() {
+                    pudTbl = pagePool.AllocPage(true)? as *mut PageTable;
+                    pgdEntry.set_addr(PhysAddr::new(pudTbl as u64), PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE);
+                } else {
+                    pudTbl = pgdEntry.addr().as_u64() as *mut PageTable;
+                }
+
+                while curAddr.0 < end.0 {
+                    let pudEntry = &mut (*pudTbl)[p3Idx];
+                    let newphysAddr = curAddr.0 - start.0 + physical.0;
+
+                    // Question: if we also do this for kernel, do we still need this?
+                    if !pudEntry.is_unused() {
+                        res = Self::freeEntry(pudEntry, pagePool)?;
+                    }
+
+                    pudEntry.set_addr(PhysAddr::new(newphysAddr), flags | PageTableFlags::HUGE_PAGE);
+                    curAddr = curAddr.AddLen(MemoryDef::HUGE_PAGE_SIZE_1G)?;
+
+                    if p3Idx == PageTableIndex::new(MemoryDef::ENTRY_COUNT - 1) {
+                        p3Idx = PageTableIndex::new(0);
+                        break;
+                    } else {
+                        p3Idx = PageTableIndex::new(u16::from(p3Idx) + 1);
+                    }
+                }
+
+                p4Idx = PageTableIndex::new(u16::from(p4Idx) + 1);
+            }
+        }
+
+        return Ok(res);
+    }
+
     //return true when there is previous mapping in the range
     pub fn Map(&self, start: Addr, end: Addr, physical: Addr, flags: PageTableFlags, pagePool: &Allocator, kernel: bool) -> Result<bool> {
         start.PageAligned()?;

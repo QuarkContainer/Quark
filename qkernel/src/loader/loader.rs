@@ -177,7 +177,7 @@ pub fn LoadExecutable(task: &mut Task, filename: &str, argv: &mut Vec<String>) -
             //info!("load script filename is {} argv is {:?}", &filename, &argv);
 
         } else {
-            info!("unknow majac: {:?}", hdr);
+            info!("unknow magic: {:?}", hdr);
             return Err(Error::SysError(SysErr::ENOEXEC));
         }
     }
