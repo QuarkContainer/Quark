@@ -27,10 +27,7 @@ pub use xmas_elf::symbol_table::{Entry, Entry64};
 pub use xmas_elf::{P32, P64};
 pub use xmas_elf::header::HeaderPt2;
 
-
-use super::VMS;
 use super::addr::Addr;
-use super::addr::PageOpts;
 
 //use xmas_elf::dynamic::Tag;
 //use xmas_elf::header;
@@ -135,8 +132,6 @@ impl KernelELF {
             }
         }
 
-        VMS.lock().KernelMap(self.startAddr, self.endAddr, self.startAddr, PageOpts::Zero().SetPresent().SetWrite().Val())?;
-
         self.mr = Some(mr);
 
         return Ok(self.entry)
@@ -165,8 +160,6 @@ impl KernelELF {
         self.vdsoStart = hostAddr;
         self.vdsoLen = 3 * 4096;
         self.vdsomr = Some(mr);
-
-        VMS.lock().KernelMap(Addr(self.vdsoStart), Addr(self.vdsoStart + self.vdsoLen), Addr(self.vdsoStart), PageOpts::Zero().SetPresent().SetWrite().Val())?;
 
         return Ok(())
     }

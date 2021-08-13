@@ -17,7 +17,6 @@ use core::mem;
 use super::super::qlib::uring::util::*;
 use super::super::qlib::uring::porting::*;
 use super::super::qlib::uring::*;
-use super::super::qlib::addr::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::util::*;
@@ -29,10 +28,6 @@ impl Mmap {
         let prot = (MmapProt::PROT_WRITE | MmapProt::PROT_READ ) as i32;
 
         let addr = PMA_KEEPER.lock().MapFile(len as u64, prot, fd, offset)?;
-        VMS.lock().KernelMap(Addr(addr),
-                             Addr(addr + len as u64).RoundUp().unwrap(),
-                             Addr(addr),
-                             PageOpts::Zero().SetPresent().SetWrite().Val())?;
 
         return Ok(Mmap {
             addr: addr,
