@@ -985,6 +985,13 @@ impl MemoryManager {
     // 3. if need cow, fix the page.
     // 4. return max allowed len
     pub fn FixPermissionLocked(&self, task: &Task, vAddr: u64, len: u64, writeReq: bool, allowPartial: bool) -> Result<u64> {
+        // todo: fix the security check issue
+        if MemoryDef::PHY_LOWER_ADDR <= vAddr && vAddr <= MemoryDef::PHY_UPPER_ADDR { // Kernel phy address
+            let end = vAddr + len;
+            assert!(MemoryDef::PHY_LOWER_ADDR <= end && end <= MemoryDef::PHY_UPPER_ADDR);
+            return Ok(len)
+        }
+
         let mut addr = Addr(vAddr).RoundDown()?.0;
         //error!("FixPermission vaddr {:x} addr {:x} len is {:x}", vAddr, addr, len);
         while addr <= vAddr + len - 1 {
