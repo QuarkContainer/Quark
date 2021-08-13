@@ -191,7 +191,7 @@ impl VirtualMachine {
             let vms = &mut VMS.lock();
             //pageAllocatorBaseAddr = vms.pmaMgr.MapAnon(kernelMemSize, AccessType::ReadWrite().Val() as i32, true, false)?;
             pageAllocatorBaseAddr = PMA_KEEPER.lock().MapAnon(kernelMemSize, AccessType::ReadWrite().Val() as i32)?;
-            info!("*******************alloc address is {:x}, expect{:x}", pageAllocatorBaseAddr, MemoryDef::PHY_LOWER_ADDR + 64 * MemoryDef::ONE_MB);
+            info!("*******************alloc address is {:x}, expect{:x}", pageAllocatorBaseAddr, MemoryDef::PHY_LOWER_ADDR + MemoryDef::ONE_GB);
 
             //pageAlloc = PageAllocator::Init(pageMmap.as_ptr() as u64, memOrd - 12 /*1GB*/);
             pageAllocatorOrd = memOrd - 12 /*1GB*/;
@@ -202,9 +202,10 @@ impl VirtualMachine {
             vms.pageTables = PageTables::New(vms.allocator.as_ref().unwrap())?;
 
             info!("the pageAllocatorBaseAddr is {:x}, the end of pageAllocator is {:x}", pageAllocatorBaseAddr, pageAllocatorBaseAddr + kernelMemSize);
-            //vms.KernelMap(addr::Addr(pageAllocatorBaseAddr), addr::Addr(pageAllocatorBaseAddr + kernelMemSize), addr::Addr(pageAllocatorBaseAddr),
-            vms.KernelMapHugeTable(addr::Addr(pageAllocatorBaseAddr), addr::Addr(pageAllocatorBaseAddr + kernelMemSize), addr::Addr(pageAllocatorBaseAddr),
-                          addr::PageOpts::Zero().SetPresent().SetWrite().SetGlobal().Val())?;
+            vms.KernelMapHugeTable(addr::Addr(MemoryDef::PHY_LOWER_ADDR),
+                                   addr::Addr(MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB),
+                                   addr::Addr(MemoryDef::PHY_LOWER_ADDR),
+                                   addr::PageOpts::Zero().SetPresent().SetWrite().SetGlobal().Val())?;
             autoStart = args.AutoStart;
             vms.pivot = args.Pivot;
             vms.args = Some(args);

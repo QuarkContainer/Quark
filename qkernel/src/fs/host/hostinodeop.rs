@@ -37,8 +37,6 @@ use super::super::super::qlib::addr::*;
 use super::super::super::kernel::waiter::queue::*;
 use super::super::super::Kernel::HostSpace;
 use super::super::super::IOURING;
-use super::super::super::KERNEL_PAGETABLE;
-use super::super::super::PAGE_MGR;
 use super::super::super::memmgr::*;
 
 use super::super::attr::*;
@@ -101,8 +99,6 @@ impl MappableInternal {
                 };
 
                 HostSpace::MUnmap(phyAddr, CHUNK_SIZE);
-                KERNEL_PAGETABLE.Unmap(phyAddr, phyAddr + CHUNK_SIZE, &*PAGE_MGR).unwrap();
-
                 self.f2pmap.remove(&chunkStart);
 
             } else if refs > 0 {
@@ -641,8 +637,6 @@ impl HostInodeOp {
         }
 
         let phyAddr = ret as u64;
-
-        KERNEL_PAGETABLE.Map(Addr(phyAddr), Addr(phyAddr + CHUNK_SIZE), Addr(phyAddr), PageOpts::New(false, true, false).Val(), &*PAGE_MGR, true).unwrap();
         return Ok(phyAddr)
     }
 
