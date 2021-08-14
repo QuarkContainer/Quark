@@ -160,8 +160,7 @@ impl VirtualMachine {
         let eventfd = FD_NOTIFIER.Eventfd();
         let kvm = unsafe { Kvm::from_raw_fd(kvmfd) };
 
-        let KVM_MAX_CPUID_ENTRIES = 0x100;
-        let kvm_cpuid = kvm.get_supported_cpuid(KVM_MAX_CPUID_ENTRIES).unwrap();
+        let kvm_cpuid = kvm.get_supported_cpuid(kvm_bindings::KVM_MAX_CPUID_ENTRIES;).unwrap();
 
         let vm_fd = kvm.create_vm().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
 

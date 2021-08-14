@@ -130,7 +130,8 @@ impl Sampler {
             let mut newOverhead = 2 * self.overhead;
             if newOverhead > MAX_OVERHEAD_CYCLES {
                 if self.overhead == MAX_OVERHEAD_CYCLES {
-                    return Err(Error::Common(format!("time syscall overhead exceeds maximum, overhead is {}, MAX_OVERHEAD_CYCLES is {}", self.overhead, MAX_OVERHEAD_CYCLES)));
+                    return Err(Error::Common(format!("time syscall overhead exceeds maximum, overhead is {}, MAX_OVERHEAD_CYCLES is {}, newOverhead is {}",
+                                                     self.overhead, MAX_OVERHEAD_CYCLES, newOverhead)));
                 }
 
                 newOverhead = MAX_OVERHEAD_CYCLES;

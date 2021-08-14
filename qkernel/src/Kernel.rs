@@ -1000,6 +1000,16 @@ impl HostSpace {
 
         return Ok(call.res);
     }
+
+    pub fn KernelVcpuFreq() -> i64 {
+        let call = VcpuFeq::default();
+
+        let addr = &call as *const _ as u64;
+        HyperCall64(HYPERCALL_VCPU_FREQ, addr, 0);
+
+        return call.res;
+    }
+
 }
 
 pub fn GetSockOptI32(sockfd: i32, level: i32, optname: i32) -> Result<i32> {

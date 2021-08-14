@@ -22,6 +22,8 @@ use super::super::super::qlib::linux::time::*;
 use super::super::super::qlib::metric::*;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
+use super::super::super::Kernel::HostSpace;
+use super::super::super::asm::*;
 use super::sampler::*;
 use super::parameters::*;
 use super::*;
@@ -222,11 +224,41 @@ impl CalibratedClocks {
         }
     }
 
-    pub fn Update(&mut self) -> (Parameters, bool, Parameters, bool) {
+    pub fn Update_withSample(&mut self) -> (Parameters, bool, Parameters, bool) {
         let (monotonicParams, monotonicOk) = self.monotonic.Update();
         let (realtimeParams, realtimeOk) = self.realtime.Update();
 
         return (monotonicParams, monotonicOk, realtimeParams, realtimeOk)
+    }
+
+    pub fn Update(&mut self) -> (Parameters, bool, Parameters, bool) {
+        let freq = HostSpace::KernelVcpuFreq() as u64;
+
+        let tsc1 = Rdtsc();
+        let monotime = HostSpace::KernelGetTime(MONOTONIC).unwrap();
+        let tsc2 = Rdtsc();
+
+        let tsc = (tsc1 + tsc2) / 2;
+
+        let monotonicParams = Parameters {
+            Frequency: freq,
+            BaseRef: monotime,
+            BaseCycles: tsc,
+        };
+
+        let tsc1 = Rdtsc();
+        let realtime = HostSpace::KernelGetTime(REALTIME).unwrap();
+        let tsc2 = Rdtsc();
+
+        let tsc = (tsc1 + tsc2) / 2;
+
+        let realtimeParams = Parameters {
+            Frequency: freq,
+            BaseRef: realtime,
+            BaseCycles: tsc,
+        };
+
+        return (monotonicParams, true, realtimeParams, true)
     }
 
     pub fn GetTime(&self, id: ClockID) -> Result<i64> {
