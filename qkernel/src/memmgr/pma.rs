@@ -237,18 +237,24 @@ impl PageTables {
             if pgdEntry.is_unused() {
                 return Err(Error::AddressNotMap(0))
             }
-            let pudTbl = pgdEntry.addr().as_u64() as *const PageTable;
+
+            if false {
+                let nPt: *mut PageTable = ret.GetRoot() as *mut PageTable;
+                *(&mut (*nPt)[1] as *mut _ as *mut u64) = *(&(*pt)[1] as *const _ as *const u64);
+            } else {
+                let pudTbl = pgdEntry.addr().as_u64() as *const PageTable;
 
 
-            let nPt: *mut PageTable = ret.GetRoot() as *mut PageTable;
-            let nPgdEntry = &mut (*nPt)[0];
-            let nPudTbl = nPgdEntry.addr().as_u64() as *mut PageTable;
+                let nPt: *mut PageTable = ret.GetRoot() as *mut PageTable;
+                let nPgdEntry = &mut (*nPt)[0];
+                let nPudTbl = nPgdEntry.addr().as_u64() as *mut PageTable;
 
-            for i in MemoryDef::KERNEL_START_P2_ENTRY..MemoryDef::KERNEL_END_P2_ENTRY {
-                //memspace between 256GB to 512GB
-                //copy entry[i]
-                //note: only copy p3 entry, reuse p2, p1 page
-                *(&mut (*nPudTbl)[i] as *mut _ as *mut u64) = *(&(*pudTbl)[i] as *const _ as *const u64);
+                for i in MemoryDef::KERNEL_START_P2_ENTRY..MemoryDef::KERNEL_END_P2_ENTRY {
+                    //memspace between 256GB to 512GB
+                    //copy entry[i]
+                    //note: only copy p3 entry, reuse p2, p1 page
+                    *(&mut (*nPudTbl)[i] as *mut _ as *mut u64) = *(&(*pudTbl)[i] as *const _ as *const u64);
+                }
             }
         }
 

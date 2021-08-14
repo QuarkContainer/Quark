@@ -349,9 +349,11 @@ fn InitGs(id: u64) {
 
 #[no_mangle]
 pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u64, vcpuCnt: u64, autoStart: bool) {
+    Kernel::HostSpace::KernelMsg(0x10, 1);
     if id == 0 {
         ALLOCATOR.Add(heapStart as usize, heapLen as usize);
 
+        Kernel::HostSpace::KernelMsg(0x10, 2);
         PAGE_MGR.lock().Init();
 
         {
@@ -368,20 +370,27 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
             IOURING.submission.lock();
         }
 
+        Kernel::HostSpace::KernelMsg(0x10, 3);
         SHARESPACE.scheduler.SetVcpuCnt(vcpuCnt as usize);
         HyperCall64(qlib::HYPERCALL_INIT, (&(*SHARESPACE) as *const ShareSpace) as u64, 0);
 
+        Kernel::HostSpace::KernelMsg(0x10, 4);
         {
             let root = CurrentCr3();
             let kpt = &KERNEL_PAGETABLE;
+            Kernel::HostSpace::KernelMsg(0x11, 1);
             kpt.SetRoot(root);
 
+            Kernel::HostSpace::KernelMsg(0x11, 2);
             let mut lock = PAGE_MGR.lock();
+            Kernel::HostSpace::KernelMsg(0x11, 3);
             let vsyscallPages = lock.VsyscallPages();
 
+            Kernel::HostSpace::KernelMsg(0x11, 4);
             kpt.InitVsyscall(vsyscallPages);
         }
 
+        Kernel::HostSpace::KernelMsg(0x10, 5);
         SetVCPCount(vcpuCnt as usize);
         InitTimeKeeper(vdsoParamAddr);
         VDSO.Init(vdsoParamAddr);
@@ -390,6 +399,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
         //PerfGoto(PerfType::Kernel);
     }
 
+    Kernel::HostSpace::KernelMsg(0x10, 6);
     taskMgr::AddNewCpu();
     RegisterSysCall(syscall_entry as u64);
 

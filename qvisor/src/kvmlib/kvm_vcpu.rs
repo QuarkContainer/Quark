@@ -271,7 +271,7 @@ impl KVMVcpu {
 
         let tssSegment = self.tssAddr as *mut x86_64::structures::tss::TaskStateSegment;
         unsafe {
-            (*tssSegment).interrupt_stack_table[0] = stack_end;
+            (*tssSegment).interrupt_stack_table[0] = stack_end - MemoryDef::ADDR_GAP;
             (*tssSegment).iomap_base = -1 as i16 as u16;
             info!("[{}] the tssSegment stack is {:x}", self.id, self.tssIntStackStart + MemoryDef::INTERRUPT_STACK_PAGES * MemoryDef::PAGE_SIZE);
             let (tssLow, tssHigh, limit) = Self::TSStoDescriptor(&(*tssSegment));
@@ -280,7 +280,7 @@ impl KVMVcpu {
             gdtTbl[6] = tssHigh;
 
             sregs.tr = SegmentDescriptor::New(tssLow).GenKvmSegment(TSS);
-            sregs.tr.base = self.tssAddr;
+            sregs.tr.base = self.tssAddr - MemoryDef::ADDR_GAP;
             sregs.tr.limit = limit as u32;
         }
     }
@@ -294,6 +294,7 @@ impl KVMVcpu {
 
     fn TSStoDescriptor(tss: &x86_64::structures::tss::TaskStateSegment) -> (u64, u64, u16) {
         let (tssBase, tssLimit) = Self::TSS(tss);
+        let tssBase = tssBase;
         let low = SegmentDescriptor::default().Set(
             tssBase as u32, tssLimit as u32, 0, SEGMENT_DESCRIPTOR_PRESENT |
             SEGMENT_DESCRIPTOR_ACCESS |
@@ -310,7 +311,7 @@ impl KVMVcpu {
 
         //vcpu_sregs.cr0 = CR0_PE | CR0_MP | CR0_AM | CR0_ET | CR0_NE | CR0_WP | CR0_PG;
         vcpu_sregs.cr0 = CR0_PE | CR0_AM | CR0_ET | CR0_PG | CR0_WP; // | CR0_MP | CR0_NE;
-        vcpu_sregs.cr3 = VMS.lock().pageTables.GetRoot();
+        vcpu_sregs.cr3 = VMS.lock().pageTables.GetRoot() - MemoryDef::ADDR_GAP;
         //vcpu_sregs.cr4 = CR4_PAE | CR4_OSFXSR | CR4_OSXMMEXCPT;
         vcpu_sregs.cr4 = CR4_PAE | CR4_OSFXSR | CR4_OSXMMEXCPT | CR4_FSGSBASE;// | CR4_UMIP ;// CR4_PSE | | CR4_SMEP | CR4_SMAP;
 
@@ -323,7 +324,7 @@ impl KVMVcpu {
         };
 
         vcpu_sregs.gdt = kvm_bindings::kvm_dtable {
-            base: self.gdtAddr,
+            base: self.gdtAddr - MemoryDef::ADDR_GAP,
             limit: 4095,
             ..Default::default()
         };
@@ -340,6 +341,7 @@ impl KVMVcpu {
     pub fn run(&mut self) -> Result<()> {
         self.setup_long_mode()?;
 
+        error!("run entry is {:x}, stack is {:x}, heap {:x}", self.entry, self.topStackAddr, self.heapStartAddr);
         let regs: kvm_regs = kvm_regs {
             rflags: KERNEL_FLAGS_SET,
             rip: self.entry,

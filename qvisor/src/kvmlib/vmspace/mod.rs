@@ -102,7 +102,6 @@ pub struct WaitingMsgCall {
 pub struct VMSpace {
     pub pageTables : PageTables,
     pub allocator: Option<SimplePageAllocator>,
-    pub hostAddrTop: u64,
     pub sharedLoasdOffset: u64,
     pub vdsoAddr: u64,
 
@@ -1458,7 +1457,7 @@ impl VMSpace {
     }
 
     pub fn KernelMapHugeTable(&mut self, start: Addr, end: Addr, physical: Addr, flags: PageTableFlags) -> Result<bool> {
-        error!("KernelMap1G start is {:x}, end is {:x}", start.0, end.0);
+        error!("KernelMap1G start is {:x}, end is {:x}, paddr is {:x}", start.0, end.0, physical.0);
         return self.pageTables.MapWith1G(start, end, physical, flags, self.allocator.as_mut().unwrap(), true);
     }
 
@@ -1543,7 +1542,6 @@ impl VMSpace {
         return VMSpace {
             allocator: None,
             pageTables: PageTables::default(),
-            hostAddrTop: 0,
             sharedLoasdOffset: 0x0000_5555_0000_0000,
             vdsoAddr: 0,
             shareSpace: unsafe {

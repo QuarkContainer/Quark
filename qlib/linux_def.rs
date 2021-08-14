@@ -2707,7 +2707,9 @@ impl MemoryDef {
     pub const BLOCK_SIZE: u64 = 64 * Self::ONE_GB;
 
 
-    pub const PHY_LOWER_ADDR: u64 = 256 * Self::ONE_GB; // 256 ~ 512GB is Guest kernal space
+    pub const VIRTUAL_LOWER_ADDR: u64  = 256 * Self::ONE_GB;
+    pub const ADDR_GAP: u64 = Self::PHY_LOWER_ADDR - Self::VIRTUAL_LOWER_ADDR;
+    pub const PHY_LOWER_ADDR: u64 = 512 * Self::ONE_GB; // 256 ~ 512GB is Guest kernal space
     pub const PHY_UPPER_ADDR: u64 = Self::PHY_LOWER_ADDR + 256 * Self::ONE_GB; // 256 ~ 512GB is Guest kernal space
     // start address for memmap and dynamic load address space, there is heap address space between PHY_UPPER_ADDR + VIR_MMAP_START
     pub const VIR_MMAP_START: u64 = Self::PHY_UPPER_ADDR + 128 * Self::ONE_GB; // + 1 * Self::ONE_TB; //start from 1.5 TB

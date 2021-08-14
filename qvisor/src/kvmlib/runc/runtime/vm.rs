@@ -172,7 +172,7 @@ impl VirtualMachine {
 
         let mut elf = KernelELF::Init(&String::from(Self::KERNEL_IMAGE))?;
         info!("the end address is {:x}", elf.EndAddr().0);
-        Self::SetMemRegion(1, &vm_fd, MemoryDef::PHY_LOWER_ADDR, MemoryDef::PHY_LOWER_ADDR, kernelMemRegionSize * MemoryDef::ONE_GB)?;
+        Self::SetMemRegion(1, &vm_fd, MemoryDef::VIRTUAL_LOWER_ADDR, MemoryDef::PHY_LOWER_ADDR, kernelMemRegionSize * MemoryDef::ONE_GB)?;
 
         info!("set map region start={:x}, end={:x}", MemoryDef::PHY_LOWER_ADDR, MemoryDef::PHY_LOWER_ADDR + 16 * MemoryDef::ONE_GB);
 
@@ -198,13 +198,12 @@ impl VirtualMachine {
             bootstrapMem = BootStrapMem::New(pageAllocatorBaseAddr, cpuCount);
             vms.allocator = Some(bootstrapMem.SimplePageAllocator());
 
-            vms.hostAddrTop = MemoryDef::PHY_LOWER_ADDR + 64 * MemoryDef::ONE_MB + 2 * MemoryDef::ONE_GB;
             vms.pageTables = PageTables::New(vms.allocator.as_ref().unwrap())?;
 
             info!("the pageAllocatorBaseAddr is {:x}, the end of pageAllocator is {:x}", pageAllocatorBaseAddr, pageAllocatorBaseAddr + kernelMemSize);
             vms.KernelMapHugeTable(addr::Addr(MemoryDef::PHY_LOWER_ADDR),
                                    addr::Addr(MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB),
-                                   addr::Addr(MemoryDef::PHY_LOWER_ADDR),
+                                   addr::Addr(MemoryDef::VIRTUAL_LOWER_ADDR),
                                    addr::PageOpts::Zero().SetPresent().SetWrite().SetGlobal().Val())?;
             autoStart = args.AutoStart;
             vms.pivot = args.Pivot;
@@ -218,8 +217,8 @@ impl VirtualMachine {
         elf.LoadVDSO(&"/usr/local/bin/vdso.so".to_string())?;
         VMS.lock().vdsoAddr = elf.vdsoStart;
 
-        let p = entry as *const u8;
-        info!("entry is 0x{:x}, data at entry is {:x}", entry, unsafe { *p } );
+        let p = entry as *const [u8; 8];
+        info!("entry is 0x{:x}, data at entry is {:x?}", entry, unsafe { *p } );
 
         //let usocket = USocket::InitServer(&ControlSocketAddr(&containerId))?;
         //let usocket = USocket::CreateServer(&ControlSocketAddr(&containerId), usockfd)?;

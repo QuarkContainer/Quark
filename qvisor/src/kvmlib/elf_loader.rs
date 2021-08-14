@@ -111,7 +111,8 @@ impl KernelELF {
             return Err(Error::AddressDoesMatch)
         }
 
-        info!("loadKernel: get address is {:x}, len is {:x}, self.endAddr.0 - self.startAddr.0 is {:x}", mr.ptr as u64, mr.sz, self.endAddr.0 - self.startAddr.0);
+        info!("loadKernel: get address is {:x}, len is {:x}, self.endAddr.0 - self.startAddr.0 is {:x}",
+            mr.ptr as u64, mr.sz, self.endAddr.0 - self.startAddr.0);
 
         let mmap = self.mmap.take().unwrap();
         let elfFile = ElfFile::new(&mmap).map_err(Error::ELFLoadError)?;

@@ -437,9 +437,9 @@ impl PageTables {
 
                 if pgdEntry.is_unused() {
                     pudTbl = pagePool.AllocPage(true)? as *mut PageTable;
-                    pgdEntry.set_addr(PhysAddr::new(pudTbl as u64), PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE);
+                    pgdEntry.set_addr(PhysAddr::new(pudTbl as u64 - MemoryDef::ADDR_GAP), PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE);
                 } else {
-                    pudTbl = pgdEntry.addr().as_u64() as *mut PageTable;
+                    pudTbl = (pgdEntry.addr().as_u64() + MemoryDef::ADDR_GAP) as *mut PageTable;
                 }
 
                 while curAddr.0 < end.0 {
