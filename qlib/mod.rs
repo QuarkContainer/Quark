@@ -77,6 +77,7 @@ pub const HYPERCALL_HCALL: u16 = 15;
 pub const HYPERCALL_IOWAIT: u16 = 16;
 pub const HYPERCALL_WAKEUP_VCPU: u16 = 17;
 pub const HYPERCALL_EXIT_VM: u16 = 18;
+pub const HYPERCALL_VCPU_FREQ: u16 = 19;
 
 pub const DUMMY_TASKID: TaskId = TaskId::New(0xffff_ffff);
 
@@ -461,6 +462,11 @@ pub enum SysCallID {
 pub struct GetTimeCall {
     pub res: i64,
     pub clockId: i32,
+}
+
+#[derive(Clone, Default, Debug, Copy)]
+pub struct VcpuFeq {
+    pub res: i64,
 }
 
 pub enum IOState {
