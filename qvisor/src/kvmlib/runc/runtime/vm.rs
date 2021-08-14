@@ -170,8 +170,7 @@ impl VirtualMachine {
         cap.args[0] = (KVM_X86_DISABLE_EXITS_HLT | KVM_X86_DISABLE_EXITS_MWAIT) as u64;
         vm_fd.enable_cap(&cap).unwrap();
 
-        let mut elf = KernelELF::Init(&String::from(Self::KERNEL_IMAGE))?;
-        info!("the end address is {:x}", elf.EndAddr().0);
+        let mut elf = KernelELF::New()?;
         Self::SetMemRegion(1, &vm_fd, MemoryDef::PHY_LOWER_ADDR, MemoryDef::PHY_LOWER_ADDR, kernelMemRegionSize * MemoryDef::ONE_GB)?;
 
         info!("set map region start={:x}, end={:x}", MemoryDef::PHY_LOWER_ADDR, MemoryDef::PHY_LOWER_ADDR + 16 * MemoryDef::ONE_GB);
@@ -213,7 +212,7 @@ impl VirtualMachine {
 
         info!("before loadKernel");
 
-        let entry = elf.LoadKernel()?;
+        let entry = elf.LoadKernel(Self::KERNEL_IMAGE)?;
         //let vdsoMap = VDSOMemMap::Init(&"/home/brad/rust/quark/vdso/vdso.so".to_string()).unwrap();
         elf.LoadVDSO(&"/usr/local/bin/vdso.so".to_string())?;
         VMS.lock().vdsoAddr = elf.vdsoStart;
