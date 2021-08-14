@@ -8,8 +8,8 @@ edition = "2018"
 
 [dependencies]
 libc = "0.2.94"
-kvm-bindings = "0.3.0"
-kvm-ioctls = "0.6.0"
+kvm-bindings = "0.4.0"
+kvm-ioctls = "0.9.0"
 xmas-elf = { git = "https://github.com/gz/xmas-elf.git" }
 x86_64 = "0.14.3"
 memmap = "0.7.0"

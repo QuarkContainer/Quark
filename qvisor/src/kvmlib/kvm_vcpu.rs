@@ -199,7 +199,7 @@ impl KVMVcpu {
 
         //info!("the tssIntStackStart is {:x}, tssAddr address is {:x}", tssIntStackStart, tssAddr);
 
-        let vcpu = vm_fd.create_vcpu(id as u8).map_err(|e| Error::IOError(format!("io::error is {:?}", e))).expect("create vcpu fail");
+        let vcpu = vm_fd.create_vcpu(id as u64).map_err(|e| Error::IOError(format!("io::error is {:?}", e))).expect("create vcpu fail");
 
         return Ok(Self {
             id: id,
@@ -597,6 +597,17 @@ impl KVMVcpu {
                                 } else {
                                     call.res = ts.ToNs()?;
                                 }
+                            }
+                        }
+
+                        qlib::HYPERCALL_VCPU_FREQ => {
+                            let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                            let data = regs.rbx;
+
+                            let freq = self.vcpu.get_tsc_khz().unwrap() * 1000;
+                            unsafe {
+                                let call = &mut *(data as *mut VcpuFeq);
+                                call.res = freq as i64;
                             }
                         }
 
