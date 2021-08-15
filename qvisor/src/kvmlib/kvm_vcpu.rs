@@ -650,24 +650,6 @@ impl KVMVcpu {
                 }
                 VcpuExit::Hlt => {
                     error!("in hlt....");
-                    /*loop {
-                        if !super::runc::runtime::vm::IsRunning() {
-                            return Ok(())
-                        }
-
-                        let readyTaskCnt = self.shareSpace.lock().ReadyTaskCnt();
-
-                        if readyTaskCnt > 0 {
-                            break;
-                        }
-
-                        let asyncMsgCnt = self.shareSpace.lock().ReadyAsyncMsgCnt();
-                        if asyncMsgCnt > 0 {
-                            break;
-                        }
-
-                        SyncMgr::WaitVcpuWait(self.shareSpace);
-                    }*/
                 }
                 VcpuExit::FailEntry => {
                     info!("get fail entry***********************************");
@@ -737,21 +719,6 @@ impl CPULocal {
     pub fn Wait(&self) -> Result<()> {
         self.SetWaiting();
         defer!(self.SetRunning(););
-
-        let mut e = libc::pollfd {
-            fd: self.eventfd,
-            events: EVENT_READ as i16,
-            revents: 0,
-        };
-
-        let ret = unsafe {
-            // wait 10 ms
-            libc::poll(&mut e, 1, 10)
-        };
-
-        if ret == 0 {
-            return Ok(())
-        }
 
         let mut data : u64 = 0;
         let ret = unsafe {
