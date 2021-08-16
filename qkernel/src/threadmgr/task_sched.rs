@@ -569,17 +569,22 @@ impl ThreadGroup {
     }
 }
 
+#[derive(Default)]
 pub struct KernelCPUClockTicker {}
 
 impl KernelCPUClockTicker {
     pub fn New() -> Self {
         return Self {}
     }
+
+    pub fn Atomically(&self, f: impl FnMut()) {
+        super::super::kernel::kernel::ASYNC_PROCESS.Atomically(f);
+    }
 }
 
 // Notify implements ktime.TimerListener.Notify.
 impl TimerListener for KernelCPUClockTicker {
-    fn Notify(&self, _exp: u64) {
+    fn Notify(&self, exp: u64) {
         // Only increment cpuClock by 1 regardless of the number of expirations.
         // This approximately compensates for cases where thread throttling or bad
         // Go runtime scheduling prevents the kernelCPUClockTicker goroutine, and
@@ -587,7 +592,7 @@ impl TimerListener for KernelCPUClockTicker {
         // time. It's also necessary to prevent CPU clocks from seeing large
         // discontinuous jumps.
         let kernel = GetKernel();
-        let now = kernel.cpuClock.fetch_add(1, Ordering::SeqCst);
+        let now = kernel.cpuClock.fetch_add(exp, Ordering::SeqCst);
         let tasks = kernel.tasks.clone();
         let root = tasks.Root();
         let tgs = root.ThreadGroups();
