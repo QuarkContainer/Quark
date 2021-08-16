@@ -18,6 +18,7 @@ use super::task::*;
 use super::SHARESPACE;
 use super::qlib::task_mgr::*;
 use super::Kernel::HostSpace;
+use super::kernel::kernel::*;
 use super::qlib::perf_tunning::*;
 use super::qlib::vcpu_mgr::*;
 use super::threadmgr::task_sched::*;
@@ -165,11 +166,13 @@ pub fn WaitFn() {
 
 #[inline]
 pub fn PollAsyncMsg() -> usize {
+    ASYNC_PROCESS.Process();
     return HostInputProcess() + QUringTrigger();
 }
 
 #[inline]
 pub fn ProcessOne() -> bool {
+    ASYNC_PROCESS.Process();
     if QUringProcessOne() {
         return true;
     }

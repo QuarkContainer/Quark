@@ -17,6 +17,7 @@ use spin::RwLock;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::sync::atomic::AtomicU64;
+use core::sync::atomic::AtomicI64;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 use alloc::string::String;
@@ -36,6 +37,7 @@ use super::super::qlib::auth::*;
 use super::super::qlib::limits::*;
 use super::super::qlib::linux::time::*;
 use super::super::qlib::path::*;
+use super::super::asm::*;
 use super::super::loader::loader::*;
 use super::super::SignalDef::*;
 use super::super::threadmgr::pid_namespace::*;
@@ -59,6 +61,41 @@ use super::platform::*;
 
 lazy_static! {
     pub static ref KERNEL: Mutex<Option<Kernel>> = Mutex::new(None);
+    pub static ref ASYNC_PROCESS : AsyncProcess = AsyncProcess::default();
+}
+
+#[derive(Default)]
+pub struct AsyncProcess {
+    pub lastTsc: AtomicI64,
+    pub lastProcessTime: Mutex<i64>
+}
+
+const TSC_GAP : i64 = 1_000_000; // for 1GHZ process, it is 1 ms
+const CLOCK_TICK_MS : i64 = CLOCK_TICK / MILLISECOND;
+
+impl AsyncProcess {
+    pub fn Process(&self) {
+        let curr = Rdtsc();
+        if curr - self.lastTsc.load(Ordering::Relaxed) > TSC_GAP {
+            self.lastTsc.store(curr, Ordering::Relaxed);
+            if let Some(mut processTime) = self.lastProcessTime.try_lock() {
+                let currTime = Task::MonoTimeNow().0 / MILLISECOND;
+                if currTime - *processTime >= CLOCK_TICK_MS {
+                    let tick = (currTime - *processTime)/CLOCK_TICK_MS;
+                    if let Some(kernel) = GetKernelOption() {
+                        let ticker = kernel.cpuClockTicker.clone();
+                        ticker.Notify(tick as u64);
+                        *processTime = currTime;
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn Atomically(&self, mut f: impl FnMut()) {
+        let _t = self.lastProcessTime.lock();
+        f();
+    }
 }
 
 #[inline]
@@ -132,7 +169,8 @@ pub struct KernelInternal {
 
     pub staticInfo: Mutex<StaticInfo>,
 
-    pub cpuClockTicker: Timer,
+    //pub cpuClockTicker: Timer,
+    pub cpuClockTicker: Arc<KernelCPUClockTicker>,
 
     pub startTime: Time,
     pub started: AtomicBool,
@@ -182,6 +220,7 @@ impl Deref for Kernel {
 
 impl Kernel {
     pub fn Init(args: InitKernalArgs) -> Self {
+        let cpuTicker = Arc::new(KernelCPUClockTicker::New());
         let internal = KernelInternal {
             extMu: Mutex::new(()),
             featureSet: args.FeatureSet,
@@ -198,7 +237,8 @@ impl Kernel {
                 useHostCores: false,
                 cpu: 0,
             }),
-            cpuClockTicker: Timer::New(&MONOTONIC_CLOCK, &Arc::new(KernelCPUClockTicker::New())),
+            //cpuClockTicker: Timer::New(&MONOTONIC_CLOCK, &cpuTicker),
+            cpuClockTicker: cpuTicker,
             startTime: Task::RealTimeNow(),
             started: AtomicBool::new(false),
             platform: DefaultPlatform::default(),
@@ -226,11 +266,11 @@ impl Kernel {
         }
 
         self.started.store(true, Ordering::SeqCst);
-        self.cpuClockTicker.Swap(&Setting {
+        /*self.cpuClockTicker.Swap(&Setting {
             Enabled: true,
             Period: CLOCK_TICK,
             Next: Time(0),
-        });
+        });*/
 
         return Ok(())
     }
