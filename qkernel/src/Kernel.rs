@@ -203,7 +203,7 @@ impl HostSpace {
             fileLenAddr : &mut fileLen as * mut _ as u64,
         });
 
-        let ret = HostSpace::Call(&mut msg, true) as i64;
+        let ret = HostSpace::Call(&mut msg, false) as i64;
         if ret < 0 {
             return (ret, 0)
         }

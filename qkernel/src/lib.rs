@@ -109,6 +109,7 @@ use self::qlib::buddyallocator::*;
 use self::qlib::pagetable::*;
 use self::qlib::control_msg::*;
 use self::qlib::common::*;
+use self::qlib::linux_def::MemoryDef;
 use self::qlib::range::*;
 use self::qlib::loader::*;
 use self::qlib::config::*;
@@ -152,8 +153,8 @@ lazy_static! {
     pub static ref LOADER: Loader = Loader::default();
     //pub static ref BUF_MGR: Mutex<BufMgr> = Mutex::new(BufMgr::default());
     pub static ref BUF_MGR: BufMgr = BufMgr::New();
-    pub static ref IOURING: QUring = QUring::New(1024);
-    pub static ref KERNEL_STACK_ALLOCATOR : AlignedAllocator = AlignedAllocator::New(DEFAULT_STACK_SIZE, DEFAULT_STACK_SIZE);
+    pub static ref IOURING: QUring = QUring::New(4096);
+    pub static ref KERNEL_STACK_ALLOCATOR : AlignedAllocator = AlignedAllocator::New(MemoryDef::DEFAULT_STACK_SIZE as usize, MemoryDef::DEFAULT_STACK_SIZE as usize);
 }
 
 extern "C" {
@@ -351,8 +352,6 @@ fn InitGs(id: u64) {
 pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u64, vcpuCnt: u64, autoStart: bool) {
     if id == 0 {
         ALLOCATOR.Add(heapStart as usize, heapLen as usize);
-
-        PAGE_MGR.lock().Init();
 
         {
             //to initial the SHARESPACE

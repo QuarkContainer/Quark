@@ -44,10 +44,6 @@ pub struct PagePool {
     //refCount for whole pma
     pub refCount: u64,
     pub refs: BTreeMap<u64, u32>,
-
-    //the zeroed paged which will be readyonly, e.g. page for Virtual Address 0
-    pub zeroPage: u64,
-
     pub allocator: AlignedAllocator,
 }
 
@@ -126,22 +122,10 @@ impl PagePool {
     pub fn New() -> Self {
         return Self {
             refs: BTreeMap::new(),
-            zeroPage: 0,
             //the PagePool won't be free. fake a always nonzero refcount
             refCount: 1,
             allocator: AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize),
         };
-    }
-
-    pub fn Init(&mut self) {
-        self.zeroPage = self.AllocPage(true).unwrap();
-        self.Ref(self.zeroPage).unwrap();
-    }
-
-    pub fn GetZeroPage(&mut self) -> u64 {
-        let zeroPage = self.zeroPage;
-        self.Ref(zeroPage).unwrap();
-        return zeroPage;
     }
 
     pub fn Allocate(&mut self) -> Result<u64> {
