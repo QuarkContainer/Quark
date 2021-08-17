@@ -68,10 +68,6 @@ impl Allocator for PageMgr {
     fn FreePage(&self, addr: u64) -> Result<()> {
         return self.lock().allocator.lock().FreePage(addr)
     }
-
-    fn ZeroPage(&self) -> u64 {
-        return self.lock().allocator.lock().GetZeroPage();
-    }
 }
 
 extern "C" {
@@ -105,10 +101,6 @@ impl PageMgrInternal {
             zeroPage: 0,
             vsyscallPages: Vec::new(),
         }
-    }
-
-    pub fn Init(&mut self) {
-        self.allocator.lock().Init();
     }
 
     fn PagePool(&self) -> Arc<Mutex<PagePool>> {
@@ -214,22 +206,9 @@ impl PageTables {
     // There are following pages need allocated:
     // 1: root page
     // 2: p3 page for 0GB to 512G
-    // 3&4: p2, p1 page for Empty page at 0 address
 
-    //  zero page, p3, p2, p1, p0 for ffffffffff600000 will be reused
     pub fn NewWithKernelPageTables(&self, pagePool: &PageMgr) -> Result<Self> {
         let ret = Self::New(pagePool)?;
-
-        //todo: do we still need zero page at address 0?
-        let zeroPage = pagePool.ZeroPage();
-        ret.MapPage(Addr(0), Addr(zeroPage), PageOpts::UserNonAccessable().Val(), pagePool)?;
-        //ret.MapPage(Addr(0), Addr(zeroPage), PageOpts::UserReadOnly().Val(), pagePool)?;
-
-        {
-            let mut lock = pagePool.lock();
-            let vsyscallPages = lock.VsyscallPages();
-            ret.MapVsyscall(vsyscallPages);
-        }
 
         unsafe {
             let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
@@ -239,17 +218,22 @@ impl PageTables {
             }
             let pudTbl = pgdEntry.addr().as_u64() as *const PageTable;
 
-
             let nPt: *mut PageTable = ret.GetRoot() as *mut PageTable;
             let nPgdEntry = &mut (*nPt)[0];
-            let nPudTbl = nPgdEntry.addr().as_u64() as *mut PageTable;
+            let nPudTbl = pagePool.AllocPage(true)? as *mut PageTable;
+            nPgdEntry.set_addr(PhysAddr::new(nPudTbl as u64), PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE);
 
             for i in MemoryDef::KERNEL_START_P2_ENTRY..MemoryDef::KERNEL_END_P2_ENTRY {
                 //memspace between 256GB to 512GB
                 //copy entry[i]
-                //note: only copy p3 entry, reuse p2, p1 page
                 *(&mut (*nPudTbl)[i] as *mut _ as *mut u64) = *(&(*pudTbl)[i] as *const _ as *const u64);
             }
+        }
+
+        {
+            let mut lock = pagePool.lock();
+            let vsyscallPages = lock.VsyscallPages();
+            ret.MapVsyscall(vsyscallPages);
         }
 
         return Ok(ret)
@@ -373,23 +357,7 @@ impl PageTables {
         assert!(!pgdEntry.is_unused(), "pagetable::Drop page is not mapped");
 
         let pudTblAddr = pgdEntry.addr().as_u64();
-        let pudTbl = pudTblAddr as *mut PageTable;
-        let pudEntry = unsafe {
-            &(*pudTbl)[0]
-        };
-        assert!(!pudEntry.is_unused(), "pagetable::Drop page is not mapped");
 
-        let pmdTblAddr = pudEntry.addr().as_u64();
-        let pmdTbl = pmdTblAddr as *mut PageTable;
-        let pmdEntry = unsafe {
-            &(*pmdTbl)[0]
-        };
-        assert!(!pmdEntry.is_unused(), "pagetable::Drop page is not mapped");
-
-        let pteTblAddr = pmdEntry.addr().as_u64();
-
-        PAGE_MGR.Deref(pteTblAddr).expect("PageTable::Drop fail");
-        PAGE_MGR.Deref(pmdTblAddr).expect("PageTable::Drop fail");
         PAGE_MGR.Deref(pudTblAddr).expect("PageTable::Drop fail");
         PAGE_MGR.Deref(self.GetRoot())?;
         return Ok(())
