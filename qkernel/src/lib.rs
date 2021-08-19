@@ -139,8 +139,6 @@ static ALLOCATOR: ListAllocator = ListAllocator::Empty();
 //static ALLOCATOR: BufHeap = BufHeap::Empty();
 //static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
-pub const KERNELTABLE : bool = false;
-
 pub fn AllocatorPrint() {
     //ALLOCATOR.Print();
 }
@@ -175,7 +173,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
 
     currTask.PerfGoto(PerfType::Kernel);
 
-    if KERNELTABLE {
+    if SHARESPACE.config.KernelPagetable {
         Task::SetKernelPageTable();
     }
 
@@ -257,11 +255,11 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     SetRflags(rflags);
     currTask.RestoreFp();
 
-    if KERNELTABLE {
+    if SHARESPACE.config.KernelPagetable {
         currTask.SwitchPageTable();
     }
 
-    //currTask.Check();
+    currTask.Check();
     //SHARESPACE.SetValue(CPULocal::CpuId(), 0, 0);
     if pt.rip != 0 { // if it is from signal trigger from kernel, e.g. page fault
         pt.eflags = rflags;
@@ -314,8 +312,9 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                     CPULocal::SetPendingFreeStack(currTask.taskId);
 
                     error!("RunExitDone xxx 2 [{:x}] ...", currTask.taskId);
-                    KERNEL_PAGETABLE.SwitchTo();
-
+                    if !SHARESPACE.config.KernelPagetable {
+                        KERNEL_PAGETABLE.SwitchTo();
+                    }
                     // mm needs to be clean as last function before SwitchToNewTask
                     // after this is called, another vcpu might drop the pagetable
                     core::mem::drop(mm);
@@ -452,39 +451,6 @@ pub fn StartRootProcess() {
 }
 
 fn StartRootContainer(_para: *const u8) {
-    //Print();
-
-    //let bits = VirtualAddressBits();
-    //info!("bits is {}", bits);
-
-    /*let fs = self::qlib::cpuid::HostFeatureSet();
-      info!("{}", fs.CPUInfo(0));
-
-      let (size, align) = fs.ExtendedStateSize();
-      info!("ExtendedStateSize size is {}, align is {}", size, align);*/
-
-    //waiter + timer example, todo: remove it
-    /*let waiter = Waiter::default();
-    let we = waiter.NewWaitEntry(1);
-    let mut timer = NewTimer(&we);
-    timer.Reset(1000_000_000);
-    info!("before wait");
-    waiter.Wait(&[we.clone()]);
-    info!("after wait");
-    timer.Reset(111111);
-    timer.Stop();
-    timer.Reset(111111);
-    timer.Drop();*/
-
-
-    //let vdsopage : [u8; 4096] = [0; 4096];
-    //let timekeeper = kernel::time::timekeeper::TimeKeeper::New(&vdsopage[0] as * const _ as u64);
-
-    //todo: the exception's stack is different than the task, so it can't be use for taskId
-    //info!("before int3");
-    //x86_64::instructions::interrupts::int3();
-    //info!("after int3");
-
     self::Init();
     info!("StartRootContainer ....");
     let task = Task::Current();

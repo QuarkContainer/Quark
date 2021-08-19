@@ -65,7 +65,7 @@ fn switch(from: TaskId, to: TaskId) {
     let fromCtx = from.GetTask();
     let toCtx = to.GetTask();
 
-    if !super::KERNELTABLE {
+    if !SHARESPACE.config.KernelPagetable {
         toCtx.SwitchPageTable();
     }
     toCtx.SetFS();
@@ -83,7 +83,7 @@ fn switch_to(to: TaskId) {
     CPULocal::SetCurrentTask(to.Addr());
     let toCtx = to.GetTask();
 
-    if !super::KERNELTABLE {
+    if !SHARESPACE.config.KernelPagetable {
         toCtx.SwitchPageTable();
     }
     toCtx.SetFS();
