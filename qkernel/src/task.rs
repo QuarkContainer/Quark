@@ -151,6 +151,10 @@ impl Default for Guard {
 
 impl Guard {
     const MAGIC_GUILD: u64 = 0x1234567890abcd;
+
+    pub fn Check(&self) {
+        assert!(self.0==Self::MAGIC_GUILD)
+    }
 }
 
 impl Drop for Task {
@@ -197,6 +201,10 @@ pub struct Task {
 unsafe impl Sync for Task {}
 
 impl Task {
+    pub fn Check(&self) {
+        self.guard.Check();
+    }
+
     //clean object on stack
     pub fn SetDummy(&mut self) {
         let dummyTask = DUMMY_TASK.read();

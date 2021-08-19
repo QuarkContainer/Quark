@@ -61,6 +61,7 @@ use self::task_mgr::*;
 use self::qmsg::*;
 use self::ringbuf::*;
 use self::config::*;
+use self::linux_def::*;
 
 pub const HYPERCALL_INIT: u16 = 1;
 pub const HYPERCALL_PANIC: u16 = 2;
@@ -81,7 +82,6 @@ pub const HYPERCALL_VCPU_FREQ: u16 = 19;
 
 pub const DUMMY_TASKID: TaskId = TaskId::New(0xffff_ffff);
 
-pub const MSG_QLEN: usize = 1024;
 pub const MAX_VCPU_COUNT: usize = 16;
 
 #[allow(non_camel_case_types)]
@@ -518,8 +518,8 @@ pub struct ShareSpace {
 impl ShareSpace {
     pub fn New() -> Self {
         return ShareSpace {
-            QInput: QRingBuf::New(MSG_QLEN), //Mutex::new(VecDeque::with_capacity(MSG_QLEN)),
-            QOutput: QRingBuf::New(MSG_QLEN), //Mutex::new(VecDeque::with_capacity(MSG_QLEN)),
+            QInput: QRingBuf::New(MemoryDef::MSG_QLEN), //Mutex::new(VecDeque::with_capacity(MSG_QLEN)),
+            QOutput: QRingBuf::New(MemoryDef::MSG_QLEN), //Mutex::new(VecDeque::with_capacity(MSG_QLEN)),
 
             hostIOThreadEventfd: 0,
             hostIOThreadTriggerData: 1,
