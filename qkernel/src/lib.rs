@@ -153,7 +153,7 @@ lazy_static! {
     pub static ref LOADER: Loader = Loader::default();
     //pub static ref BUF_MGR: Mutex<BufMgr> = Mutex::new(BufMgr::default());
     pub static ref BUF_MGR: BufMgr = BufMgr::New();
-    pub static ref IOURING: QUring = QUring::New(4096);
+    pub static ref IOURING: QUring = QUring::New(MemoryDef::QURING_SIZE);
     pub static ref KERNEL_STACK_ALLOCATOR : AlignedAllocator = AlignedAllocator::New(MemoryDef::DEFAULT_STACK_SIZE as usize, MemoryDef::DEFAULT_STACK_SIZE as usize);
 }
 
@@ -261,6 +261,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
         currTask.SwitchPageTable();
     }
 
+    //currTask.Check();
     //SHARESPACE.SetValue(CPULocal::CpuId(), 0, 0);
     if pt.rip != 0 { // if it is from signal trigger from kernel, e.g. page fault
         pt.eflags = rflags;

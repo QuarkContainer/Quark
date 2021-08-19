@@ -207,12 +207,12 @@ impl FreeMemBlockMgr {
             self.count -= 1;
             let ret = self.list.Pop();
 
-            let ptr = ret as * mut MemBlock;
+            /*let ptr = ret as * mut MemBlock;
             unsafe {
                 ptr.write(0)
             }
 
-            /*let size = self.size / 8;
+            let size = self.size / 8;
             unsafe {
                 let toArr = slice::from_raw_parts_mut(ret as *mut u64, size);
                 for i in 0..size {

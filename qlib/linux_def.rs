@@ -2694,7 +2694,10 @@ impl MemoryDef {
     //interrupt stack pages
     pub const INTERRUPT_STACK_PAGES: u64 = 1;
 
+    pub const MSG_QLEN: usize = 1024;
+    pub const QURING_SIZE: usize = 1024;
     pub const DEFAULT_STACK_PAGES: u64 = 16;
+
     pub const DEFAULT_STACK_SIZE: u64 = Self::DEFAULT_STACK_PAGES * Self::PAGE_SIZE;  //64 KB
     pub const PAGE_SIZE: u64 = 1 << Self::PAGE_SHIFT;//0x1000;
     pub const HUGE_PAGE_SIZE: u64 = 1 << Self::HUGE_PAGE_SHIFT;

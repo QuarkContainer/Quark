@@ -174,7 +174,7 @@ impl MemoryManagerWeak{
 
 impl MemoryManager {
     pub fn Init(kernel: bool) -> Self {
-        let mut vmas = AreaSet::New(0, !0);
+        let mut vmas = AreaSet::New(0, MemoryDef::LOWER_TOP);
         let vma = VMA {
             mappable: None,
             offset: 0,
