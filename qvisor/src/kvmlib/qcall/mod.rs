@@ -44,7 +44,7 @@ pub fn AQHostCall(msg: HostOutputMsg, shareSpace: &ShareSpace) {
             super::VMSpace::Close(0, msg.fd);
         }
         HostOutputMsg::MUnmap(msg) => {
-            match super::PMA_KEEPER.lock().Unmap(&Range::New(msg.addr, msg.len)) {
+            match super::PMA_KEEPER.Unmap(&Range::New(msg.addr, msg.len)) {
                 Ok(()) => (),
                 Err(err) => panic!("MUnmap: unexpected error {:?}", err),
             }
@@ -110,7 +110,7 @@ pub fn qCall(eventAddr: u64, event: &'static mut Event) -> QcallRet {
             //print!("{}", str);
         }
         Event { taskId: _, interrupted: _, ref mut ret, msg: Msg::MMapFile(MMapFile) } => {
-            *ret = match super::PMA_KEEPER.lock().MapFile(MMapFile.len, MMapFile.prot, MMapFile.fd, MMapFile.offset) {
+            *ret = match super::PMA_KEEPER.MapFile(MMapFile.len, MMapFile.prot, MMapFile.fd, MMapFile.offset) {
                 Err(Error::SysError(e)) => -e as u64,
                 Ok(phyAddr) => phyAddr,
                 Err(err) => panic!("MMapFile: unexpected error {:?}", err),

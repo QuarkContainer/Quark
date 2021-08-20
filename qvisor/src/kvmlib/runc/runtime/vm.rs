@@ -45,6 +45,8 @@ lazy_static! {
     static ref EXIT_STATUS : AtomicI32 = AtomicI32::new(-1);
 }
 
+const HEAP_OFFSET: u64 = 1 * MemoryDef::ONE_GB;
+
 #[inline]
 pub fn IsRunning() -> bool {
     return EXIT_STATUS.load(Ordering::Relaxed) == -1
@@ -103,6 +105,7 @@ impl VirtualMachine {
     pub fn SetMemRegion(slotId: u32, vm_fd: &VmFd, phyAddr: u64, hostAddr: u64, pageMmapsize: u64) -> Result<()> {
         info!("SetMemRegion phyAddr = {:x}, hostAddr={:x}; pageMmapsize = {:x} MB", phyAddr, hostAddr, (pageMmapsize >> 20));
 
+        // guest_phys_addr must be <512G
         let mem_region = kvm_userspace_memory_region {
             slot: slotId,
             guest_phys_addr: phyAddr,
@@ -171,8 +174,9 @@ impl VirtualMachine {
 
         let mut elf = KernelELF::New()?;
         Self::SetMemRegion(1, &vm_fd, MemoryDef::PHY_LOWER_ADDR, MemoryDef::PHY_LOWER_ADDR, kernelMemRegionSize * MemoryDef::ONE_GB)?;
+        PMA_KEEPER.Init(MemoryDef::PHY_LOWER_ADDR + HEAP_OFFSET, kernelMemRegionSize * MemoryDef::ONE_GB - HEAP_OFFSET);
 
-        info!("set map region start={:x}, end={:x}", MemoryDef::PHY_LOWER_ADDR, MemoryDef::PHY_LOWER_ADDR + 16 * MemoryDef::ONE_GB);
+        info!("set map region start={:x}, end={:x}", MemoryDef::PHY_LOWER_ADDR, MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB);
 
         let pageAllocatorBaseAddr;
         let pageAllocatorOrd;
@@ -188,9 +192,10 @@ impl VirtualMachine {
             info!("kernelMemSize is {:x}", kernelMemSize);
             let vms = &mut VMS.lock();
             //pageAllocatorBaseAddr = vms.pmaMgr.MapAnon(kernelMemSize, AccessType::ReadWrite().Val() as i32, true, false)?;
-            pageAllocatorBaseAddr = PMA_KEEPER.lock().MapAnon(kernelMemSize, AccessType::ReadWrite().Val() as i32)?;
+            pageAllocatorBaseAddr = PMA_KEEPER.MapAnon(kernelMemSize, AccessType::ReadWrite().Val() as i32)?;
             info!("*******************alloc address is {:x}, expect{:x}", pageAllocatorBaseAddr, MemoryDef::PHY_LOWER_ADDR + MemoryDef::ONE_GB);
 
+            PMA_KEEPER.InitHugePages();
             //pageAlloc = PageAllocator::Init(pageMmap.as_ptr() as u64, memOrd - 12 /*1GB*/);
             pageAllocatorOrd = memOrd - 12 /*1GB*/;
             bootstrapMem = BootStrapMem::New(pageAllocatorBaseAddr, cpuCount);

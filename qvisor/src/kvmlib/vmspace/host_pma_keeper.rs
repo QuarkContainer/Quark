@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use spin::Mutex;
-use core::ops::Deref;
+use std::collections::VecDeque;
 
 use super::super::qlib::mem::areaset::*;
 use super::super::qlib::common::*;
@@ -22,21 +22,6 @@ use super::super::qlib::range::*;
 use super::super::memmgr::*;
 use super::super::IO_MGR;
 
-pub struct HostPMAKeeper (Mutex<AreaSet<HostSegment>>);
-
-impl Deref for HostPMAKeeper {
-    type Target = Mutex<AreaSet<HostSegment>>;
-
-    fn deref(&self) -> &Mutex<AreaSet<HostSegment>> {
-        &self.0
-    }
-}
-
-impl HostPMAKeeper {
-    pub fn New() -> Self {
-        return Self(Mutex::new(AreaSet::New(0,0)))
-    }
-}
 
 #[derive(Clone, Default)]
 pub struct HostSegment {}
@@ -51,8 +36,47 @@ impl AreaValue for HostSegment {
     }
 }
 
-impl AreaSet<HostSegment> {
-    fn Map(&mut self, mo: &mut MapOption, r: &Range) -> Result<u64> {
+//pub struct HostPMAKeeper (Mutex<AreaSet<HostSegment>>);
+
+pub struct HostPMAKeeper {
+    pub ranges: Mutex<AreaSet<HostSegment>>,
+    pub hugePages: Mutex<VecDeque<u64>>,
+}
+
+impl HostPMAKeeper {
+    const HUGE_PAGE_RANGE: u64 = 6 * MemoryDef::ONE_GB as u64;
+
+    pub fn New() -> Self {
+        return Self {
+            ranges: Mutex::new(AreaSet::New(0,0)),
+            hugePages: Mutex::new(VecDeque::with_capacity((Self::HUGE_PAGE_RANGE / MemoryDef::PAGE_SIZE_2M) as usize))
+        }
+    }
+
+    pub fn FreeHugePage(&self, addr: u64) {
+        self.hugePages.lock().push_front(addr);
+    }
+
+    pub fn AllocHugePage(&self) -> Option<u64> {
+        let ret = self.hugePages.lock().pop_back();
+        return ret;
+    }
+
+    pub fn Init(&self, start: u64, len: u64) {
+        assert!(len > Self::HUGE_PAGE_RANGE as u64);
+        self.ranges.lock().Reset(start, len);
+    }
+
+    pub fn InitHugePages(&self) {
+        let hugePageStart = self.RangeAllocate(Self::HUGE_PAGE_RANGE, MemoryDef::PAGE_SIZE_2M).unwrap();
+        let mut addr = hugePageStart;
+        while addr < hugePageStart + Self::HUGE_PAGE_RANGE as u64 {
+            self.FreeHugePage(addr);
+            addr += MemoryDef::PAGE_SIZE_2M;
+        }
+    }
+
+    fn Map(&self, mo: &mut MapOption, r: &Range) -> Result<u64> {
         match mo.MMap() {
             Err(e) => {
                 self.RemoveSeg(r);
@@ -68,7 +92,7 @@ impl AreaSet<HostSegment> {
         }
     }
 
-    pub fn MapAnon(&mut self, len: u64, prot: i32) -> Result<u64> {
+    pub fn MapAnon(&self, len: u64, prot: i32) -> Result<u64> {
         let mut mo = &mut MapOption::New();
         mo = mo.MapAnan().Proto(prot).Len(len);
         mo.MapShare();
@@ -78,7 +102,7 @@ impl AreaSet<HostSegment> {
         return self.Map(&mut mo, &Range::New(start, len));
     }
 
-    pub fn MapFile(&mut self, len: u64, prot: i32, fd: i32, offset: u64) -> Result<u64> {
+    pub fn MapFile(&self, len: u64, prot: i32, fd: i32, offset: u64) -> Result<u64> {
         let osfd = IO_MGR.lock().GetFdByHost(fd).expect("MapFile: Getosfd fail");
         let mut mo = &mut MapOption::New();
 
@@ -94,17 +118,56 @@ impl AreaSet<HostSegment> {
         return self.Map(&mut mo, &Range::New(start, len));
     }
 
-    fn Allocate(&mut self, len: u64, alignment: u64) -> Result<u64> {
-        let start = self.FindAvailable(len, alignment)?;
+    fn RangeAllocate(&self, len: u64, alignment: u64) -> Result<u64> {
+        let mut ranges = self.ranges.lock();
+        let start = ranges.FindAvailable(len, alignment)?;
 
         let r = Range::New(start, len);
-        let gap = self.FindGap(start);
-        let seg = self.Insert(&gap, &r, HostSegment {});
+        let gap = ranges.FindGap(start);
+        let seg = ranges.Insert(&gap, &r, HostSegment {});
         assert!(seg.Ok(), "AreaSet <HostSegment>:: insert fail");
 
         return Ok(start)
     }
 
+    fn Allocate(&self, len: u64, alignment: u64) -> Result<u64> {
+        if len == MemoryDef::PAGE_SIZE_2M {
+            assert!(alignment <= MemoryDef::PAGE_SIZE_2M, "Allocate fail .... {:x}/{:x}", len, alignment);
+            let addr = self.AllocHugePage().expect("AllocHugePage fail...");
+            return Ok(addr)
+        }
+
+        return self.RangeAllocate(len, alignment);
+    }
+
+    pub fn RemoveSeg(&self, r: &Range) {
+        if r.Len() == MemoryDef::PAGE_SIZE_2M {
+            self.FreeHugePage(r.Start());
+            return;
+        }
+
+        let mut ranges = self.ranges.lock();
+        let (seg, _gap) = ranges.Find(r.Start());
+
+        if !seg.Ok() || !seg.Range().IsSupersetOf(r) {
+            panic!("AreaSet <HostSegment>::Unmap invalid, remove range {:?} from range {:?}",
+                   r, seg.Range());
+        }
+
+        let seg = ranges.Isolate(&seg, r);
+
+        ranges.Remove(&seg);
+    }
+
+    pub fn Unmap(&self, r: &Range) -> Result<()> {
+        self.RemoveSeg(r);
+
+        let res = MapOption::MUnmap(r.Start(), r.Len());
+        return res;
+    }
+}
+
+impl AreaSet<HostSegment> {
     fn FindAvailable(&mut self, len: u64, alignment: u64) -> Result<u64> {
         let mut gap = self.FirstGap();
 
@@ -125,59 +188,5 @@ impl AreaSet<HostSegment> {
         }
 
         return Err(Error::SysError(SysErr::ENOMEM));
-    }
-
-    pub fn RemoveSeg(&mut self, r: &Range) {
-        let (seg, _gap) = self.Find(r.Start());
-
-        if !seg.Ok() || !seg.Range().IsSupersetOf(r) {
-            panic!("AreaSet <HostSegment>::Unmap invalid, remove range {:?} from range {:?}",
-                   r, seg.Range());
-        }
-
-        let seg = self.Isolate(&seg, r);
-
-        self.Remove(&seg);
-    }
-
-    pub fn Unmap(&mut self, r: &Range) -> Result<()> {
-        self.RemoveSeg(r);
-
-        let res = MapOption::MUnmap(r.Start(), r.Len());
-        return res;
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    // Note this useful idiom: importing names from outer (for mod tests) scope.
-    use super::*;
-
-    #[test]
-    fn TestPMA() {
-        let mut pmaKeeper: AreaSet<HostSegment> = AreaSet::New(0, 64);
-
-        assert_eq!(pmaKeeper.Allocate(2, 16).unwrap(), 0);
-
-        let (seg, _gap) = pmaKeeper.Find(0);
-        assert_eq!(seg.Range(), Range::New(0, 2));
-        let gap = seg.NextGap();
-        assert_eq!(gap.Range(), Range::New(2, 62));
-
-        assert_eq!(pmaKeeper.Allocate(8, 16).unwrap(), 16);
-
-        pmaKeeper.RemoveSeg(&Range::New(20, 2));
-        let seg = pmaKeeper.FindSeg(0);
-        assert_eq!(seg.Range(), Range::New(0, 2));
-        let seg = seg.NextSeg();
-        assert_eq!(seg.Range(), Range::New(16, 4));
-        let seg = seg.NextSeg();
-        assert_eq!(seg.Range(), Range::New(22, 2));
-
-        assert_eq!(pmaKeeper.Allocate(14, 1).unwrap(), 2);
-        let seg = pmaKeeper.FindSeg(0);
-        assert_eq!(seg.Range(), Range::New(0, 20));
-        let seg = seg.NextSeg();
-        assert_eq!(seg.Range(), Range::New(22, 2));
     }
 }
