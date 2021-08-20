@@ -27,7 +27,7 @@ impl Mmap {
     pub fn new(fd: i32, offset: u64, len: usize) -> Result<Mmap> {
         let prot = (MmapProt::PROT_WRITE | MmapProt::PROT_READ ) as i32;
 
-        let addr = PMA_KEEPER.lock().MapFile(len as u64, prot, fd, offset)?;
+        let addr = PMA_KEEPER.MapFile(len as u64, prot, fd, offset)?;
 
         return Ok(Mmap {
             addr: addr,

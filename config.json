@@ -6,5 +6,5 @@
   "TcpBuffIO"     : true,
   "EnableAIO"     : true,
   "PrintException": false,
-  "KernelPagetable": true
+  "KernelPagetable": false
 }

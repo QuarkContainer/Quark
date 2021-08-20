@@ -38,6 +38,7 @@ use super::super::super::kernel::waiter::queue::*;
 use super::super::super::Kernel::HostSpace;
 use super::super::super::IOURING;
 use super::super::super::memmgr::*;
+//use super::super::super::asm::*;
 
 use super::super::attr::*;
 use super::*;
@@ -99,6 +100,15 @@ impl MappableInternal {
                 };
 
                 HostSpace::MUnmap(phyAddr, CHUNK_SIZE);
+
+                /*error!("DecrRefOn 1 {:x}/{:x}", phyAddr,  phyAddr + CHUNK_SIZE);
+                let mut curr = phyAddr;
+                while curr < phyAddr + CHUNK_SIZE {
+                    Clflush(curr);
+                    error!("DecrRefOn 1.1 {:x}", curr);
+                    curr += 64;
+                }
+                error!("DecrRefOn 2");*/
                 self.f2pmap.remove(&chunkStart);
 
             } else if refs > 0 {
@@ -637,6 +647,16 @@ impl HostInodeOp {
         }
 
         let phyAddr = ret as u64;
+
+        /*error!("MapFileChunk 1 {:x}/{:x}", phyAddr, phyAddr + CHUNK_SIZE);
+        let mut curr = phyAddr;
+        while curr < phyAddr + CHUNK_SIZE {
+            Clflush(curr);
+            error!("MapFileChunk 1.1 {:x}", curr);
+            curr += 32;
+        }
+        error!("MapFileChunk 2");*/
+
         return Ok(phyAddr)
     }
 
