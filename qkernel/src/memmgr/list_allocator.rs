@@ -76,6 +76,7 @@ impl ListAllocator {
         self.free.fetch_add(size, Ordering::Release);
     }
 
+    /// add the chunk of memory (start, start+size) to heap for allocating dynamic memory
     pub fn Add(&self, start: usize, size: usize) {
         let mut start = start;
         let end = start + size;
@@ -135,6 +136,7 @@ unsafe impl GlobalAlloc for ListAllocator {
 
         let class = size.trailing_zeros() as usize;
 
+        // CDU: overflow? TODO: change to i64
         self.free.fetch_sub(size, Ordering::Release);
 
         if 3 <= class && class < self.bufs.len() {
@@ -179,6 +181,7 @@ unsafe impl GlobalAlloc for ListAllocator {
     }
 }
 
+/// FreeMemoryBlockMgr is used to manage heap memory block allocated by allocator
 pub struct FreeMemBlockMgr {
     pub size: usize,
     pub count: usize,
@@ -187,6 +190,11 @@ pub struct FreeMemBlockMgr {
 }
 
 impl FreeMemBlockMgr {
+    /// Return a newly created FreeMemBlockMgr
+    /// # Arguments
+    ///
+    /// * `capacity` - A
+    /// * `class` - denotes the block size this manager is in charge of. class i means the block is of size 2^i bytes
     pub const fn New(capacity: usize, class: usize) -> Self {
         return Self {
             size: 1<<class,
@@ -209,6 +217,7 @@ impl FreeMemBlockMgr {
 
             let ptr = ret as * mut MemBlock;
             unsafe {
+                // CDU: what is this for?
                 ptr.write(0)
             }
 
@@ -227,6 +236,7 @@ impl FreeMemBlockMgr {
             Err(_) => {
                 super::super::Kernel::HostSpace::KernelMsg(0, 0);
                 super::super::Kernel::HostSpace::KernelOOM(self.size as u64, 1);
+                // CDU: what is this loop for?
                 loop {}
             }
             Ok(ret) => {
