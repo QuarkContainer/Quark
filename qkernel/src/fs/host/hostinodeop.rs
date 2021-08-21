@@ -244,6 +244,109 @@ impl HostInodeOpIntern {
         return mappableLock.DecrRefOn(fr);
     }
 
+
+    //get phyaddress ranges for the file range
+    pub fn MapInternal(&mut self, task: &Task, fr: &Range) -> Result<Vec<IoVec>> {
+        let mut chunkStart = fr.Start() & !HUGE_PAGE_MASK;
+
+        self.Fill(task, chunkStart, fr.End())?;
+        let mut res = Vec::new();
+
+        let mappable = self.Mappable();
+        let mappableLock = mappable.lock();
+
+        while chunkStart < fr.End() {
+            let phyAddr = mappableLock.f2pmap.get(&chunkStart).unwrap();
+            let mut startOffset = 0;
+            if chunkStart < fr.Start() {
+                startOffset = fr.Start() - chunkStart;
+            }
+
+            let mut endOff = CHUNK_SIZE;
+            if chunkStart + CHUNK_SIZE > fr.End() {
+                endOff = fr.End() - chunkStart;
+            }
+
+            res.push(IoVec::NewFromAddr(phyAddr + startOffset, (endOff - startOffset) as usize));
+            chunkStart += CHUNK_SIZE;
+        }
+
+        return Ok(res);
+    }
+
+    // map one page from file offsetFile to phyAddr
+    pub fn MapFilePage(&mut self, task: &Task, fileOffset: u64) -> Result<u64> {
+        // todo: handle the file range. The file size could be changed by write, fallcoate, ftruncate
+        /*let filesize = self.lock().size as u64;
+        if filesize <= fileOffset {
+            return Err(Error::FileMapError)
+        }*/
+
+        let chunkStart = fileOffset & !HUGE_PAGE_MASK;
+        self.Fill(task, chunkStart, fileOffset + PAGE_SIZE)?;
+
+        let mappable = self.Mappable();
+        let mappableLock = mappable.lock();
+
+        let phyAddr = mappableLock.f2pmap.get(&chunkStart).unwrap();
+        return Ok(phyAddr + (fileOffset - chunkStart))
+    }
+
+
+
+    //fill the holes for the file range by mmap
+    //start must be Hugepage aligned
+    fn Fill(&mut self, _task: &Task, start: u64, end: u64) -> Result<()> {
+        let mappable = self.Mappable();
+
+        let mut start = start;
+
+        let mut holes = Vec::new();
+
+        while start < end {
+            match mappable.lock().f2pmap.get(&start) {
+                None => holes.push(start),
+                Some(_) => (),
+            }
+
+            start += HUGE_PAGE_SIZE;
+        }
+
+        for offset in holes {
+            self.MMapChunk(offset)?;
+        }
+        return Ok(())
+    }
+
+    pub fn MMapChunk(&mut self, offset: u64) -> Result<u64> {
+        let writeable = self.Writeable;
+
+        let prot = if writeable {
+            (MmapProt::PROT_WRITE | MmapProt::PROT_READ) as i32
+        } else {
+            MmapProt::PROT_READ as i32
+        };
+
+        let phyAddr = self.MapFileChunk(offset, prot)?;
+        self.AddPhyMapping(phyAddr, offset);
+        return Ok(phyAddr)
+    }
+
+    pub fn MapFileChunk(&self, offset: u64, prot: i32) -> Result<u64> {
+        assert!(offset & CHUNK_MASK == 0, "MapFile offset must be chunk aligned");
+
+        let fd = self.HostFd();
+        let ret = HostSpace::MMapFile(CHUNK_SIZE, fd, offset, prot);
+
+        if ret < 0 {
+            return Err(Error::SysError(-ret as i32))
+        }
+
+        let phyAddr = ret as u64;
+
+        return Ok(phyAddr)
+    }
+
     /*********************************end of mappable****************************************************************/
 
     pub fn SetMaskedAttributes(&self, mask: &AttrMask, attr: &UnstableAttr) -> Result<()> {
@@ -490,49 +593,12 @@ impl HostInodeOp {
 
     //get phyaddress ranges for the file range
     pub fn MapInternal(&self, task: &Task, fr: &Range) -> Result<Vec<IoVec>> {
-        let mut chunkStart = fr.Start() & !HUGE_PAGE_MASK;
-
-        self.Fill(task, chunkStart, fr.End())?;
-        let mut res = Vec::new();
-
-        let mappable = self.lock().Mappable();
-        let mappableLock = mappable.lock();
-
-        while chunkStart < fr.End() {
-            let phyAddr = mappableLock.f2pmap.get(&chunkStart).unwrap();
-            let mut startOffset = 0;
-            if chunkStart < fr.Start() {
-                startOffset = fr.Start() - chunkStart;
-            }
-
-            let mut endOff = CHUNK_SIZE;
-            if chunkStart + CHUNK_SIZE > fr.End() {
-                endOff = fr.End() - chunkStart;
-            }
-
-            res.push(IoVec::NewFromAddr(phyAddr + startOffset, (endOff - startOffset) as usize));
-            chunkStart += CHUNK_SIZE;
-        }
-
-        return Ok(res);
+        return self.lock().MapInternal(task, fr);
     }
 
     // map one page from file offsetFile to phyAddr
     pub fn MapFilePage(&self, task: &Task, fileOffset: u64) -> Result<u64> {
-        // todo: handle the file range. The file size could be changed by write, fallcoate, ftruncate
-        /*let filesize = self.lock().size as u64;
-        if filesize <= fileOffset {
-            return Err(Error::FileMapError)
-        }*/
-
-        let chunkStart = fileOffset & !HUGE_PAGE_MASK;
-        self.Fill(task, chunkStart, fileOffset + PAGE_SIZE)?;
-
-        let mappable = self.lock().Mappable();
-        let mappableLock = mappable.lock();
-
-        let phyAddr = mappableLock.f2pmap.get(&chunkStart).unwrap();
-        return Ok(phyAddr + (fileOffset - chunkStart))
+        return self.lock().MapFilePage(task, fileOffset)
     }
 
     pub fn MSync(&self, fr: &Range, msyncType: MSyncType) -> Result<()> {
@@ -620,68 +686,6 @@ impl HostInodeOp {
         }
 
         return rs;
-    }
-
-    pub fn MMapChunk(&self, offset: u64) -> Result<u64> {
-        let writeable = self.lock().Writeable;
-
-        let prot = if writeable {
-            (MmapProt::PROT_WRITE | MmapProt::PROT_READ) as i32
-        } else {
-            MmapProt::PROT_READ as i32
-        };
-
-        let phyAddr = self.MapFileChunk(offset, prot)?;
-        self.lock().AddPhyMapping(phyAddr, offset);
-        return Ok(phyAddr)
-    }
-
-    pub fn MapFileChunk(&self, offset: u64, prot: i32) -> Result<u64> {
-        assert!(offset & CHUNK_MASK == 0, "MapFile offset must be chunk aligned");
-
-        let fd = self.lock().HostFd();
-        let ret = HostSpace::MMapFile(CHUNK_SIZE, fd, offset, prot);
-
-        if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
-        }
-
-        let phyAddr = ret as u64;
-
-        /*error!("MapFileChunk 1 {:x}/{:x}", phyAddr, phyAddr + CHUNK_SIZE);
-        let mut curr = phyAddr;
-        while curr < phyAddr + CHUNK_SIZE {
-            Clflush(curr);
-            error!("MapFileChunk 1.1 {:x}", curr);
-            curr += 32;
-        }
-        error!("MapFileChunk 2");*/
-
-        return Ok(phyAddr)
-    }
-
-    //fill the holes for the file range by mmap
-    //start must be Hugepage aligned
-    fn Fill(&self, _task: &Task, start: u64, end: u64) -> Result<()> {
-        let mappable = self.lock().Mappable();
-
-        let mut start = start;
-
-        let mut holes = Vec::new();
-
-        while start < end {
-            match mappable.lock().f2pmap.get(&start) {
-                None => holes.push(start),
-                Some(_) => (),
-            }
-
-            start += HUGE_PAGE_SIZE;
-        }
-
-        for offset in holes {
-            self.MMapChunk(offset)?;
-        }
-        return Ok(())
     }
 
     /*********************************end of mappable****************************************************************/
