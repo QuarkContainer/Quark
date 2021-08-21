@@ -1116,7 +1116,7 @@ impl MemoryManager {
 
     pub fn Fork(&self) -> Result<Self> {
         let ml = self.MappingLock();
-        let _ml = ml.read();
+        let _ml = ml.write();
 
         let layout = *self.layout.lock();
         let mmIntern2 = MemoryManagerInternal {
@@ -1273,7 +1273,7 @@ impl MemoryManager {
 
     pub fn V2PIov(&self, task: &Task, start: u64, len: u64, output: &mut Vec<IoVec>, writable: bool) -> Result<()> {
         let ml = self.MappingLock();
-        let _ml = ml.read();
+        let _ml = ml.write();
         return self.V2PIovLocked(task, start, len, output, writable)
     }
 

@@ -35,6 +35,7 @@ use super::super::super::Kernel::HostSpace;
 use super::super::super::task::*;
 use super::super::super::fd::*;
 use super::super::super::IOURING;
+use super::super::super::SHARESPACE;
 //use super::super::super::BUF_MGR;
 
 use super::super::file::*;
@@ -186,8 +187,6 @@ impl Waitable for HostFileOp {
 
 impl SpliceOperations for HostFileOp {}
 
-const URING_ENABLE: bool = true;
-
 impl FileOperations for HostFileOp {
     fn as_any(&self) -> &Any {
         return self
@@ -236,7 +235,7 @@ impl FileOperations for HostFileOp {
             task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
             return Ok(ret as i64)
         } else {
-            if URING_ENABLE {
+            if SHARESPACE.config.TcpBuffIO {
                 let ret = IOURING.Read(task,
                                         hostIops.HostFd(),
                                         &mut iovs[0] as * mut _ as u64,
@@ -284,7 +283,7 @@ impl FileOperations for HostFileOp {
             let ret = IOWrite(hostIops.HostFd(), &iovs)?;
             return Ok(ret as i64)
         } else {
-            if URING_ENABLE {
+            if SHARESPACE.config.TcpBuffIO {
                 let ret = IOURING.Write(task,
                               hostIops.HostFd(),
                               &iovs[0] as * const _ as u64,
@@ -355,7 +354,7 @@ impl FileOperations for HostFileOp {
             false
         };
 
-        let ret = if URING_ENABLE && self.InodeOp.InodeType() == InodeType::RegularFile {
+        let ret = if SHARESPACE.config.TcpBuffIO && self.InodeOp.InodeType() == InodeType::RegularFile {
             IOURING.Fsync(task,
                           fd,
                           datasync
