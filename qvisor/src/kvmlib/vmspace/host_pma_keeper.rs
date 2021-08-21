@@ -131,7 +131,11 @@ impl HostPMAKeeper {
     }
 
     fn Allocate(&self, len: u64, alignment: u64) -> Result<u64> {
-        if len == MemoryDef::PAGE_SIZE_2M {
+        if len != MemoryDef::PAGE_SIZE_2M {
+            error!("Allocate len is {:x} alignment {:x}", len, alignment);
+        }
+
+        if len <= MemoryDef::PAGE_SIZE_2M {
             assert!(alignment <= MemoryDef::PAGE_SIZE_2M, "Allocate fail .... {:x}/{:x}", len, alignment);
             let addr = self.AllocHugePage().expect("AllocHugePage fail...");
             return Ok(addr)
@@ -141,7 +145,7 @@ impl HostPMAKeeper {
     }
 
     pub fn RemoveSeg(&self, r: &Range) {
-        if r.Len() == MemoryDef::PAGE_SIZE_2M {
+        if r.Len() <= MemoryDef::PAGE_SIZE_2M {
             self.FreeHugePage(r.Start());
             return;
         }
