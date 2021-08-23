@@ -399,7 +399,7 @@ impl Timer {
 
         t.paused = true;
         if t.kicker.is_some() {
-            t.Kicker().Stop1();
+            t.Kicker().Stop();
         }
     }
 
@@ -423,7 +423,7 @@ impl Timer {
         //cancel current runtimer to stop it for unexpired fire
         let mut t = self.lock();
         t.paused = true;
-        t.Kicker().Stop1();
+        t.Kicker().Stop();
     }
 
     // Get returns a snapshot of the Timer's current Setting and the time

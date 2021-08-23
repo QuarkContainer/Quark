@@ -170,22 +170,9 @@ impl QUring {
         return idx;
     }
 
-    pub fn Timeout(&self, _task: &Task, timerId: u64, seqNo: u64, ns: i64) -> usize {
-        let ops = AsyncTimeout::New(timerId, seqNo, ns);
+    pub fn Timeout(&self, expire: i64, timeout: i64) -> usize {
+        let ops = AsyncTimeout::New(expire, timeout);
         let idx = self.AUCall(AsyncOps::AsyncTimeout(ops));
-
-        return idx;
-    }
-
-    pub fn AsyncTimerRemove1(&self, userData: u64) -> usize {
-        let ops = AsyncTimerRemove1::New(userData);
-        let idx = self.AUCall(AsyncOps::AsyncTimerRemove1(ops));
-        return idx;
-    }
-
-    pub fn Timeout1(&self, expire: i64, timeout: i64) -> usize {
-        let ops = AsyncTimeout1::New(expire, timeout);
-        let idx = self.AUCall(AsyncOps::AsyncTimeout1(ops));
 
         return idx;
     }

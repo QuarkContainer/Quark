@@ -17,8 +17,6 @@ use spin::Mutex;
 use core::ops::Deref;
 
 use super::super::super::kernel::timer::*;
-use super::super::super::IOURING;
-use super::super::super::task::*;
 use super::timermgr::*;
 use super::TIMER_STORE;
 
@@ -47,36 +45,6 @@ pub struct RawTimerInternal {
     pub SeqNo: u64,
     pub TM: TimerMgr,
     pub userData: u64,
-}
-
-impl RawTimerInternal {
-    pub fn Reset(&mut self, delta: i64) -> bool {
-        assert!(delta >= 0, "Timer::Reset get negtive delta");
-        let mut t = self;
-
-        let task = Task::Current();
-
-        if delta == 0 { // cancel the timer
-            if t.State != TimerState::Running {
-                return false; //one out of data fire.
-            }
-
-            t.SeqNo += 1;
-
-            //HostSpace::StopTimer(t.ClockId, t.Id);
-
-            IOURING.TimerRemove(task, t.userData);
-            return true;
-        }
-
-
-        t.State = TimerState::Running;
-        t.SeqNo += 1;
-
-        let userData = IOURING.Timeout(task, t.Id, t.SeqNo, delta) as u64;
-        t.userData = userData;
-        return false;
-    }
 }
 
 #[derive(Clone)]
@@ -117,23 +85,7 @@ impl RawTimer {
     // expired or been stopped.
     // Stop does not close the channel, to prevent a read from the channel succeeding
     // incorrectly.
-    pub fn Stop2(&self) -> bool {
-        let (state, userData) = {
-            let mut t = self.lock();
-            let state = t.State;
-            t.State = TimerState::Stopped;
-            (state, t.userData)
-        };
-
-        // we need to call the TimerRemove out of lock to avoid deadlock
-        if state == TimerState::Running {
-            IOURING.AsyncTimerRemove(userData);
-        }
-
-        return false;
-    }
-
-    pub fn Stop1(&self) -> bool {
+    pub fn Stop(&self) -> bool {
         let needTrigger = {
             let mut tm = TIMER_STORE.lock();
             let mut t = self.lock();
@@ -152,13 +104,6 @@ impl RawTimer {
         }
 
         return false;
-    }
-
-    // Reset changes the timer to expire after duration d.
-    // It returns true if the timer had been active, false if the timer had
-    // expired or been stopped.
-    pub fn Reset2(&self, delta: i64) -> bool {
-        return self.lock().Reset(delta)
     }
 
     pub fn Reset(&self, delta: i64) -> bool {
@@ -217,7 +162,7 @@ impl RawTimer {
     }
 
     pub fn Drop(&mut self) {
-        self.Stop1();
+        self.Stop();
         let tm = self.lock().TM.clone();
         tm.RemoveTimer(self);
     }

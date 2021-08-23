@@ -179,7 +179,7 @@ impl TimerStoreIntern {
         };
         assert!(self.nextExpire == 0);
         self.nextExpire = expire;
-        self.uringId = IOURING.Timeout1(expire, expire - now) as u64;
+        self.uringId = IOURING.Timeout(expire, expire - now) as u64;
     }
 
     pub fn GetFirst(&mut self, now: i64) -> Option<TimerUnit> {
