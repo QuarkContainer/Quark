@@ -30,6 +30,7 @@
 #![feature(llvm_asm, naked_functions)]
 #![feature(maybe_uninit_uninit_array)]
 #![feature(panic_info_message)]
+#![feature(map_first_last)]
 
 #[macro_use]
 extern crate serde_derive;

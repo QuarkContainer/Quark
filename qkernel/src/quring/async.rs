@@ -46,6 +46,8 @@ pub enum AsyncOps {
     AIOWrite(AIOWrite),
     AIORead(AIORead),
     AIOFsync(AIOFsync),
+    AsyncTimeout1(AsyncTimeout1),
+    AsyncTimerRemove1(AsyncTimerRemove1),
     None,
 }
 
@@ -64,6 +66,8 @@ impl AsyncOps {
             AsyncOps::AIOWrite(ref msg) => return msg.SEntry(),
             AsyncOps::AIORead(ref msg) => return msg.SEntry(),
             AsyncOps::AIOFsync(ref msg) => return msg.SEntry(),
+            AsyncOps::AsyncTimeout1(ref msg) => return msg.SEntry(),
+            AsyncOps::AsyncTimerRemove1(ref msg) => return msg.SEntry(),
             AsyncOps::None => ()
         };
 
@@ -84,6 +88,8 @@ impl AsyncOps {
             AsyncOps::AIOWrite(ref mut msg) => msg.Process(result),
             AsyncOps::AIORead(ref mut msg) => msg.Process(result),
             AsyncOps::AIOFsync(ref mut msg) => msg.Process(result),
+            AsyncOps::AsyncTimeout1(ref mut msg) => msg.Process(result),
+            AsyncOps::AsyncTimerRemove1(ref mut msg) => msg.Process(result),
             AsyncOps::None => panic!("AsyncOps::None SEntry fail"),
         };
 
@@ -108,6 +114,8 @@ impl AsyncOps {
             AsyncOps::AIOWrite(_) => return 10,
             AsyncOps::AIORead(_) => return 11,
             AsyncOps::AIOFsync(_) => return 12,
+            AsyncOps::AsyncTimeout1(_) => return 13,
+            AsyncOps::AsyncTimerRemove1(_) => return 14,
             AsyncOps::None => ()
         };
 
@@ -183,6 +191,59 @@ impl AsyncEventfdWrite {
         let op = Write::new(types::Fd(self.fd), &self.addr as * const _ as u64 as * const u8, 8);
         return op.build()
             .flags(squeue::Flags::FIXED_FILE);
+    }
+
+    pub fn Process(&mut self, _result: i32) -> bool {
+        return false
+    }
+}
+
+#[derive(Debug)]
+pub struct AsyncTimeout1 {
+    pub expire: i64,
+    pub ts: types::Timespec,
+}
+
+impl AsyncTimeout1 {
+    pub fn New(expire: i64, timeout: i64) -> Self {
+        return Self {
+            expire: expire,
+            ts: types::Timespec {
+                tv_sec: timeout / 1000_000_000,
+                tv_nsec: timeout % 1000_000_000,
+            },
+        }
+    }
+
+    pub fn SEntry(&self) -> squeue::Entry {
+        let op = Timeout::new(&self.ts);
+        return op.build();
+    }
+
+    pub fn Process(&mut self, result: i32) -> bool {
+        if result == -SysErr::ETIME {
+            timer::FireTimer1(self.expire);
+        }
+
+        return false
+    }
+}
+
+pub struct AsyncTimerRemove1 {
+    pub userData: u64
+}
+
+impl AsyncTimerRemove1 {
+    pub fn New(userData: u64) -> Self {
+        return Self {
+            userData: userData
+        }
+    }
+
+    pub fn SEntry(&self) -> squeue::Entry {
+        let op = TimeoutRemove::new(self.userData);
+
+        return op.build();
     }
 
     pub fn Process(&mut self, _result: i32) -> bool {

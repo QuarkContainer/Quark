@@ -20,6 +20,7 @@ use super::super::super::kernel::timer::*;
 use super::super::super::IOURING;
 use super::super::super::task::*;
 use super::timermgr::*;
+use super::TIMER_STORE;
 
 pub trait Notifier: Sync + Send {
     fn Timeout(&self) -> i64;
@@ -116,7 +117,7 @@ impl RawTimer {
     // expired or been stopped.
     // Stop does not close the channel, to prevent a read from the channel succeeding
     // incorrectly.
-    pub fn Stop(&self) -> bool {
+    pub fn Stop2(&self) -> bool {
         let (state, userData) = {
             let mut t = self.lock();
             let state = t.State;
@@ -126,9 +127,28 @@ impl RawTimer {
 
         // we need to call the TimerRemove out of lock to avoid deadlock
         if state == TimerState::Running {
-            let task = Task::Current();
-            //IOURING.TimerRemove(task, userData);
-            IOURING.AsyncTimerRemove(task, userData);
+            IOURING.AsyncTimerRemove(userData);
+        }
+
+        return false;
+    }
+
+    pub fn Stop1(&self) -> bool {
+        let needTrigger = {
+            let mut tm = TIMER_STORE.lock();
+            let mut t = self.lock();
+            let state = t.State;
+            t.State = TimerState::Stopped;
+            if state == TimerState::Running {
+                tm.RemoveTimer(t.Id);
+            }
+
+            state == TimerState::Running
+        };
+
+        // we need to call the TimerRemove out of lock to avoid deadlock
+        if needTrigger {
+            TIMER_STORE.Trigger(0);
         }
 
         return false;
@@ -137,8 +157,46 @@ impl RawTimer {
     // Reset changes the timer to expire after duration d.
     // It returns true if the timer had been active, false if the timer had
     // expired or been stopped.
-    pub fn Reset(&self, delta: i64) -> bool {
+    pub fn Reset2(&self, delta: i64) -> bool {
         return self.lock().Reset(delta)
+    }
+
+    pub fn Reset(&self, delta: i64) -> bool {
+        assert!(delta >= 0, "Timer::Reset get negtive delta");
+        if delta == 0 { // cancel the timer
+            {
+                let mut tm = TIMER_STORE.lock();
+                let timerId;
+                {
+                    let mut t = self.lock();
+                    if t.State != TimerState::Running {
+                        return false; //one out of data fire.
+                    }
+
+                    t.SeqNo += 1;
+                    timerId = t.Id;
+                }
+
+                tm.RemoveTimer(timerId);
+            }
+
+            TIMER_STORE.Trigger(0);
+            return true;
+        }
+
+        {
+            let mut tm = TIMER_STORE.lock();
+            let mut t = self.lock();
+            t.State = TimerState::Running;
+            t.SeqNo += 1;
+            let timerId = t.Id;
+            let seqNo = t.SeqNo;
+
+            tm.ResetTimer(timerId, seqNo, delta);
+        }
+
+        TIMER_STORE.Trigger(0);
+        return false;
     }
 
     pub fn Fire(&self, SeqNo: u64) {
@@ -152,7 +210,6 @@ impl RawTimer {
             t.Timer.clone()
         };
 
-        //t.WaitEntry.Notify(1);
         let delta = timer.Timeout();
         if delta > 0 {
             self.Reset(delta);
@@ -160,7 +217,7 @@ impl RawTimer {
     }
 
     pub fn Drop(&mut self) {
-        self.Stop();
+        self.Stop1();
         let tm = self.lock().TM.clone();
         tm.RemoveTimer(self);
     }

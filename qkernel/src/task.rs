@@ -699,7 +699,6 @@ impl Task {
         let taskPtr = baseStackAddr as *mut Task;
 
         unsafe {
-            //let root = super::KERNEL_PAGETABLE.read().GetRoot();
             let creds = Credentials::default();
             let userns = creds.lock().UserNamespace.clone();
             let dummyTask = DUMMY_TASK.read();
