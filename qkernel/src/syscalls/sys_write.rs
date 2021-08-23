@@ -45,7 +45,9 @@ pub fn Write(task: &Task, fd: i32, addr: u64, size: i64) -> Result<i64> {
              Ok(str) => {
                  error!("(Data) Write: {}", str);
              }
-             Err(_) => ()
+             Err(_) => {
+                 error!("(Data) Write fail ");
+             }
          }
     }*/
 

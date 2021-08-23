@@ -122,6 +122,10 @@ impl PageTables {
             return Err(Error::UnallignedAddress);
         }
 
+        //change to read only
+        //todo: there is chance the orignal range is changed to readonly by mprotected before. Need to handle.
+        let _ = self.MProtect(Addr(start), Addr(start + len), PageOpts::UserReadOnly().Val(), false);//there won't be any failure
+
         let mut vAddr = start;
         while vAddr < start + len {
             match self.VirtualToEntry(vAddr) {
@@ -133,10 +137,6 @@ impl PageTables {
             }
             vAddr += MemoryDef::PAGE_SIZE;
         }
-
-        //change to read only
-        //todo: there is chance the orignal range is changed to readonly by mprotected before. Need to handle.
-        let _ = self.MProtect(Addr(start), Addr(start + len), PageOpts::UserReadOnly().Val(), false);//there won't be any failure
 
         Ok(())
     }

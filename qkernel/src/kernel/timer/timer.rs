@@ -404,14 +404,19 @@ impl Timer {
     }
 
     pub fn Resume(&self) {
-        let mut t = self.lock();
-        if !t.paused {
-            return;
+        let delta;
+        {
+            let mut t = self.lock();
+            if !t.paused {
+                return;
+            }
+
+            t.paused = false;
+            delta = t.NextExpire();
         }
 
-        t.paused = false;
-        let delta = t.NextExpire();
-        t.Kicker().Reset(delta);
+        let kicker = self.lock().Kicker();
+        kicker.Reset(delta);
     }
 
     pub fn Cancel(&self) {
@@ -427,20 +432,28 @@ impl Timer {
     // Preconditions: The Timer must not be paused (since its Setting cannot
     // be advanced to the current time while it is paused.)
     pub fn Get(&self) -> (Time, Setting) {
-        let mut t = self.lock();
-        let now = t.clock.Now();
-        if t.paused {
-            panic!("Timer.Get called on paused Timer")
+        let now;
+        let s;
+        let delta;
+        {
+            let mut t = self.lock();
+            now = t.clock.Now();
+            if t.paused {
+                panic!("Timer.Get called on paused Timer")
+            }
+
+            let (setting, exp) = t.setting.At(Time(now.0 + 20000));
+            t.setting = setting;
+            if exp > 0 {
+                t.listener.Notify(exp)
+            }
+
+            delta = t.NextExpire();
+            s = setting;
         }
 
-        let (s, exp) = t.setting.At(Time(now.0 + 20000));
-        t.setting = s;
-        if exp > 0 {
-            t.listener.Notify(exp)
-        }
-
-        let delta = t.NextExpire();
-        t.Kicker().Reset(delta);
+        let kicker = self.lock().Kicker();
+        kicker.Reset(delta);
         return (now, s)
     }
 
@@ -462,34 +475,41 @@ impl Timer {
     // Preconditions: The Timer must not be paused. f cannot call any Timer methods
     // since it is called with the Timer mutex locked.
     pub fn SwapAnd(&self, s: &Setting, mut f: impl FnMut()) -> (Time, Setting) {
-        let mut t = self.lock();
-        let now = t.clock.Now();
-        let now = Time(now.0 + 30000);
+        let mut now;
+        let oldS;
+        let delta;
+        {
+            let mut t = self.lock();
+            now = t.clock.Now();
+            now = Time(now.0 + 30000);
 
-        let oldS = if !t.paused {
-            let (oldS, oldExp) = t.setting.At(now);
-            if oldExp > 0 {
-                t.listener.Notify(oldExp)
+            oldS = if !t.paused {
+                let (oldS, oldExp) = t.setting.At(now);
+                if oldExp > 0 {
+                    t.listener.Notify(oldExp)
+                }
+
+                oldS
+            } else {
+                t.paused = false;
+                let (oldS, _oldExp) = t.setting.At(now);
+                oldS
+            };
+
+            f();
+
+            let (newS, newExp) = s.At(now);
+            t.setting = newS;
+
+            if newExp > 0 {
+                t.listener.Notify(newExp);
             }
 
-            oldS
-        } else {
-            t.paused = false;
-            let (oldS, _oldExp) = t.setting.At(now);
-            oldS
-        };
-
-        f();
-
-        let (newS, newExp) = s.At(now);
-        t.setting = newS;
-
-        if newExp > 0 {
-            t.listener.Notify(newExp);
+            delta = t.NextExpire();
         }
 
-        let delta = t.NextExpire();
-        t.Kicker().Reset(delta);
+        let kicker = self.lock().Kicker();
+        kicker.Reset(delta);
         return (now, oldS)
     }
 
