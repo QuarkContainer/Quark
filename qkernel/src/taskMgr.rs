@@ -268,6 +268,8 @@ impl Scheduler {
                             //error!("cpu currentCpuId {} stealing task {:x?} from cpu {}", currentCpuId, taskId, vcpuId);
 
                             taskId.GetTask().queueId = currentCpuId;
+                        } else {
+                            self.WakeOne();
                         }
 
                         //error!("GetNextForCpu task is {:x?}", taskId);
