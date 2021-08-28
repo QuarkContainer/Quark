@@ -19,6 +19,7 @@ use core::ops::Deref;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
 use core::sync::atomic::AtomicU64;
+use alloc::string::String;
 
 use super::MAX_VCPU_COUNT;
 use super::vcpu_mgr::*;
@@ -115,6 +116,10 @@ impl Scheduler {
     pub fn ReadyTaskCnt(&self, vcpuId: usize) -> u64 {
         //return self.readyTaskCnt.load(Ordering::SeqCst) as u64
         return self.queue[vcpuId].Len();
+    }
+
+    pub fn PrintQ(&self, vcpuId: u64) -> String {
+        return format!("{:x?}", self.queue[vcpuId as usize].lock());
     }
 
     pub fn ScheduleQ(&self, task: TaskId, vcpuId: u64) {

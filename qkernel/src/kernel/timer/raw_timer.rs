@@ -110,7 +110,7 @@ impl RawTimer {
         assert!(delta >= 0, "Timer::Reset get negtive delta");
         if delta == 0 { // cancel the timer
             {
-                let mut tm = TIMER_STORE.lock();
+                let mut ts = TIMER_STORE.lock();
                 let timerId;
                 {
                     let mut t = self.lock();
@@ -118,11 +118,12 @@ impl RawTimer {
                         return false; //one out of data fire.
                     }
 
+                    t.State = TimerState::Stopped;
                     t.SeqNo += 1;
                     timerId = t.Id;
                 }
 
-                tm.RemoveTimer(timerId);
+                ts.RemoveTimer(timerId);
             }
 
             TIMER_STORE.Trigger(0);
@@ -130,14 +131,14 @@ impl RawTimer {
         }
 
         {
-            let mut tm = TIMER_STORE.lock();
+            let mut ts = TIMER_STORE.lock();
             let mut t = self.lock();
             t.State = TimerState::Running;
             t.SeqNo += 1;
             let timerId = t.Id;
             let seqNo = t.SeqNo;
 
-            tm.ResetTimer(timerId, seqNo, delta);
+            ts.ResetTimer(timerId, seqNo, delta);
         }
 
         TIMER_STORE.Trigger(0);

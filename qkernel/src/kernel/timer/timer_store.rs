@@ -17,15 +17,16 @@ use alloc::collections::btree_set::BTreeSet;
 use core::cmp::Ordering;
 use core::ops::Deref;
 use spin::Mutex;
+use alloc::string::String;
 
 use super::super::super::IOURING;
 use super::*;
 
 #[derive(Debug, Copy, Clone)]
 pub struct TimerUnit {
-    pub expire: i64,
     pub timerId: u64,
     pub seqNo: u64,
+    pub expire: i64,
 }
 
 impl TimerUnit {
@@ -81,34 +82,41 @@ impl TimerStore {
     // the timeout need to process a timer, <PROCESS_TIME means the timer will be triggered immediatelyfa
     pub const PROCESS_TIME : i64 = 2000;
 
+    pub fn Print(&self) -> String {
+        let ts = self.lock();
+        return format!("expire:{:?} {:?} ", ts.nextExpire, &ts.timers);
+    }
+
     pub fn Trigger(&self, expire: i64) {
         let mut now;
         loop {
             now = MONOTONIC_CLOCK.Now().0 + Self::PROCESS_TIME;
             let tu = self.lock().GetFirst(now);
             match tu {
-                Some(timer) => {
-                    timer.Fire();
-                }
+                Some(tu) => {
+                    tu.Fire();
+                 }
                 None => break,
             }
         }
 
-        let mut tm = self.lock();
+        {
+            let mut tm = self.lock();
 
-        if expire != tm.nextExpire // not triggered by the the timer's timeout
-            && now > tm.nextExpire { // the nextExpire has passed
-            tm.RemoveUringTimer();
-        }
+            if expire != tm.nextExpire // not triggered by the the timer's timeout
+                && now > tm.nextExpire { // the nextExpire has passed
+                tm.RemoveUringTimer();
+            }
 
-        let firstExpire = match tm.timerSeq.first() {
-            None => return,
-            Some(t) => t.expire,
-        };
+            let firstExpire = match tm.timerSeq.first() {
+                None => return,
+                Some(t) => t.expire,
+            };
 
-         if firstExpire < tm.nextExpire || tm.nextExpire == 0 {
-            tm.RemoveUringTimer();
-            tm.SetUringTimer(firstExpire);
+            if firstExpire < tm.nextExpire || tm.nextExpire == 0 {
+                tm.RemoveUringTimer();
+                tm.SetUringTimer(firstExpire);
+            }
         }
     }
 
@@ -116,7 +124,6 @@ impl TimerStore {
         self.lock().ResetTimer(timerId, seqNo, timeout);
         self.Trigger(0);
     }
-
 
     pub fn CancelTimer(&self, timerId: u64) {
         self.lock().RemoveTimer(timerId);

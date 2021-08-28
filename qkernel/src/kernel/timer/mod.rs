@@ -77,7 +77,7 @@ pub fn FireTimer(timerId: u64, seqNo: u64) {
     TIMER_MGR.Fire(timerId, seqNo);
 }
 
-pub fn FireTimer1(expire: i64) {
+pub fn Timeout(expire: i64) {
     TIMER_STORE.Trigger(expire);
 }
 
