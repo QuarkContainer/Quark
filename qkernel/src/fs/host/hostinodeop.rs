@@ -91,7 +91,7 @@ impl MappableInternal {
             if refs == 0 {
                 let phyAddr = match self.f2pmap.get(&chunkStart) {
                     None => {
-                        info!("HostMappable::RemovePhysicalMapping fileOffset {:x} doesn't exist", chunkStart);
+                        //info!("HostMappable::RemovePhysicalMapping fileOffset {:x} doesn't exist", chunkStart);
                         //for kernel pma registation, tehre is no phymapping,
                         chunkStart += CHUNK_SIZE;
                         continue;

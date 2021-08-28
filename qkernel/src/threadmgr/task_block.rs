@@ -128,6 +128,7 @@ impl Blocker {
         let adjustTimeout = timeout.unwrap() - 30_000; // 30 us is process time.
 
         if adjustTimeout <= 0 { // if timeout < 30 us, just timeout immediately as 30 us is process time.
+            super::super::taskMgr::Yield();
             return (0, Err(Error::SysError(SysErr::ETIMEDOUT)))
         }
 

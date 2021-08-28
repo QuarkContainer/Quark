@@ -214,7 +214,7 @@ impl AsyncTimeout {
 
     pub fn Process(&mut self, result: i32) -> bool {
         if result == -SysErr::ETIME {
-            timer::FireTimer1(self.expire);
+            timer::Timeout(self.expire);
         }
 
         return false

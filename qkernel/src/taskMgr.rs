@@ -262,19 +262,23 @@ impl Scheduler {
                 Some(taskId) => {
                     self.readyTaskCnt.fetch_sub(1, Ordering::SeqCst);
 
-                    if taskId.GetTask().context.ready !=0 || taskId.data == Task::Current().taskId {
+                    if taskId.GetTask().context.ready != 0 || taskId.data == Task::Current().taskId {
                         //the task is in the queue, but the context has not been setup
                         if currentCpuId != vcpuId { //stealing
                             //error!("cpu currentCpuId {} stealing task {:x?} from cpu {}", currentCpuId, taskId, vcpuId);
 
                             taskId.GetTask().queueId = currentCpuId;
+                        } else {
+                            if count > 1 { // current CPU has more task, try to wake other vcpu to handle
+                                self.WakeOne();
+                            }
                         }
 
                         //error!("GetNextForCpu task is {:x?}", taskId);
                         return task
                     }
 
-                    self.Schedule(taskId);
+                    self.ScheduleQ(taskId, vcpuId as u64);
                 }
             }
         }

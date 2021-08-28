@@ -309,6 +309,10 @@ impl VirtualMachine {
         shareSpace.scheduler.ScheduleQ(taskId.TaskId(), taskId.Queue());
     }
 
+    pub fn PrintQ(shareSpace: &ShareSpace, vcpuId: u64) -> String {
+        return shareSpace.scheduler.PrintQ(vcpuId)
+    }
+
     pub const EVENT_COUNT: usize = 128;
 
     pub fn Process() {
