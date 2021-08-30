@@ -21,9 +21,6 @@ use core::ptr::NonNull;
 use spin::Mutex;
 use buddy_system_allocator::Heap;
 
-
-
-
 pub const CLASS_CNT : usize = 16;
 pub const FREE_THRESHOLD: usize = 30; // when free size less than 30%, need to free buffer
 pub const BUFF_THRESHOLD: usize = 50; // when buff size takes more than 50% of free size, needs to free
@@ -49,7 +46,7 @@ impl ListAllocator {
         let bufs : [Mutex<FreeMemBlockMgr>; CLASS_CNT] = [
             Mutex::new(FreeMemBlockMgr::New(0, 0)),
             Mutex::new(FreeMemBlockMgr::New(0, 1)),
-            Mutex::new(FreeMemBlockMgr::New(0, 2 )),
+            Mutex::new(FreeMemBlockMgr::New(0, 2)),
             Mutex::new(FreeMemBlockMgr::New(128, 3)),
             Mutex::new(FreeMemBlockMgr::New(128, 4)),
             Mutex::new(FreeMemBlockMgr::New(128, 5)),
@@ -142,8 +139,7 @@ unsafe impl GlobalAlloc for ListAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let initialized = self.initialized.load(Ordering::Relaxed);
         if !initialized {
-            self.initialize();
-            
+            self.initialize();      
         }
 
         let size = max(
@@ -169,10 +165,6 @@ unsafe impl GlobalAlloc for ListAllocator {
             .map_or(0 as *mut u8, |allocation| allocation.as_ptr()) as u64;
 
         if ret == 0 {
-            /* 
-            super::super::Kernel::HostSpace::KernelMsg(ret, 0);
-            super::super::Kernel::HostSpace::KernelOOM(size as u64, layout.align() as u64);
-            */
             self.handleError(size as u64, layout.align() as u64);
             loop {}
         }
@@ -236,50 +228,11 @@ impl FreeMemBlockMgr {
             unsafe {
                 ptr.write(0)
             }
-
             return Some(ret as * mut u8)
         } else {
             return None
         }
     }
-    /* 
-    // ret: (data, whether it is from list)
-    pub fn Alloc(&mut self, heap: &Mutex<Heap<ORDER>>) -> (*mut u8, bool) {
-        if self.count > 0 {
-            self.count -= 1;
-            let ret = self.list.Pop();
-
-            /*let ptr = ret as * mut MemBlock;
-            unsafe {
-                ptr.write(0)
-            }
-
-            let size = self.size / 8;
-            unsafe {
-                let toArr = slice::from_raw_parts_mut(ret as *mut u64, size);
-                for i in 0..size {
-                    toArr[i] = 0;
-                }
-            }*/
-
-            return (ret as * mut u8, true)
-        }
-
-        match heap.lock().alloc(self.Layout()) {
-            Err(_) => {
-                super::super::Kernel::HostSpace::KernelMsg(0, 0);
-                super::super::Kernel::HostSpace::KernelOOM(self.size as u64, 1);
-                //self.errorHandler.handleError(self.size as u64, 1);
-                loop {}
-            }
-            Ok(ret) => {
-                return (ret.as_ptr(), false)
-            }
-        }
-    }
-
-
-    */
 
     pub fn Dealloc(&mut self, ptr: *mut u8, _heap: &Mutex<Heap<ORDER>>) {
         /*let size = self.size / 8;
@@ -337,11 +290,6 @@ impl MemList {
     }
 
     pub fn Push(&mut self, addr: u64) {
-        /* 
-        if addr % self.size != 0 {
-            super::super::Kernel::HostSpace::KernelMsg(self.size as u64, addr);
-        }
-        */
         assert!(addr % self.size == 0);
 
         let newB = addr as * mut MemBlock;
@@ -382,12 +330,6 @@ impl MemList {
         };
 
         self.head = *ptr;
-
-        /* 
-        if next % self.size as u64 != 0 {
-            super::super::Kernel::HostSpace::KernelMsg(self.size as u64, next);
-        }
-        */
         assert!(next % self.size == 0);
         return next;
     }

@@ -107,10 +107,6 @@ pub fn StartLog(log: &str, level: LevelFilter) {
 fn main() {
     use self::kvmlib::runc::cmd::command::*;
 
-    /*
-    #[global_allocator]
-    //static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
-    */
     #[global_allocator]
     static GLOBAL: ListAllocator = ListAllocator::Empty();
 
