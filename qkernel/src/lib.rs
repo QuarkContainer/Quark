@@ -125,12 +125,13 @@ use self::task::*;
 use self::threadmgr::task_sched::*;
 use self::qlib::perf_tunning::*;
 //use self::memmgr::buf_allocator::*;
-use self::memmgr::list_allocator::*;
+use self::qlib::mem::list_allocator::*;
 use self::quring::*;
 use self::print::SCALE;
 
 pub const HEAP_START: usize = 0x70_2000_0000;
 pub const HEAP_SIZE: usize = 0x1000_0000;
+
 
 #[global_allocator]
 //static ALLOCATOR: StackHeap = StackHeap::Empty();

@@ -26,6 +26,7 @@ pub mod asm;
 
 pub mod qlib;
 mod memmgr;
+mod heap_alloc;
 mod qcall;
 mod vmspace;
 mod kvm_vcpu;
