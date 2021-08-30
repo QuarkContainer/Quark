@@ -13,12 +13,11 @@
 // limitations under the License.
 
 use core::alloc::{GlobalAlloc, Layout};
-use core::sync::atomic::AtomicUsize;
+use core::sync::atomic::{AtomicBool, AtomicUsize};
 use core::sync::atomic::Ordering;
 use core::cmp::max;
 use core::mem::size_of;
 use core::ptr::NonNull;
-//use alloc::slice;
 use spin::Mutex;
 use buddy_system_allocator::Heap;
 
@@ -34,6 +33,12 @@ pub struct ListAllocator {
     pub total: AtomicUsize,
     pub free: AtomicUsize,
     pub bufSize: AtomicUsize,
+    //pub errorHandler: Arc<OOMHandler>
+    pub initialized: AtomicBool
+}
+
+pub trait OOMHandler {
+    fn handleError(&self, a:u64, b:u64) -> ();
 }
 
 impl ListAllocator {
@@ -63,6 +68,7 @@ impl ListAllocator {
             total: AtomicUsize::new(0),
             free: AtomicUsize::new(0),
             bufSize: AtomicUsize::new(0),
+            initialized: AtomicBool::new(false)
         }
     }
 
@@ -76,6 +82,7 @@ impl ListAllocator {
         self.free.fetch_add(size, Ordering::Release);
     }
 
+    /// add the chunk of memory (start, start+size) to heap for allocating dynamic memory
     pub fn Add(&self, start: usize, size: usize) {
         let mut start = start;
         let end = start + size;
@@ -89,6 +96,8 @@ impl ListAllocator {
         if start < end {
             self.AddToHead(start, end)
         }
+
+        self.initialized.store(true, Ordering::Relaxed);
     }
 
     pub fn NeedFree(&self) -> bool {
@@ -128,6 +137,11 @@ impl ListAllocator {
 
 unsafe impl GlobalAlloc for ListAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        let initialized = self.initialized.load(Ordering::Relaxed);
+        if !initialized {
+            self.initialize();      
+        }
+
         let size = max(
             layout.size().next_power_of_two(),
             max(layout.align(), size_of::<usize>()),
@@ -135,15 +149,12 @@ unsafe impl GlobalAlloc for ListAllocator {
 
         let class = size.trailing_zeros() as usize;
 
-        self.free.fetch_sub(size, Ordering::Release);
-
         if 3 <= class && class < self.bufs.len() {
-            let (ret, fromBuf) = self.bufs[class].lock().Alloc(&self.heap);
-            if fromBuf {
+            let ret = self.bufs[class].lock().Alloc();
+            if ret.is_some() {
                 self.bufSize.fetch_sub(size, Ordering::Release);
+                return ret.unwrap();
             }
-
-            return ret;
         }
 
         let ret = self
@@ -154,10 +165,12 @@ unsafe impl GlobalAlloc for ListAllocator {
             .map_or(0 as *mut u8, |allocation| allocation.as_ptr()) as u64;
 
         if ret == 0 {
-            super::super::Kernel::HostSpace::KernelMsg(ret, 0);
-            super::super::Kernel::HostSpace::KernelOOM(size as u64, layout.align() as u64);
+            self.handleError(size as u64, layout.align() as u64);
             loop {}
         }
+
+        // Subtract when ret != 0 to avoid overflow
+        self.free.fetch_sub(size, Ordering::Release);
 
         return ret as *mut u8;
     }
@@ -179,18 +192,24 @@ unsafe impl GlobalAlloc for ListAllocator {
     }
 }
 
+/// FreeMemoryBlockMgr is used to manage heap memory block allocated by allocator
 pub struct FreeMemBlockMgr {
     pub size: usize,
     pub count: usize,
-    pub capacity: usize,
+    pub reserve: usize,
     pub list: MemList,
 }
 
 impl FreeMemBlockMgr {
-    pub const fn New(capacity: usize, class: usize) -> Self {
+    /// Return a newly created FreeMemBlockMgr
+    /// # Arguments
+    ///
+    /// * `reserve` - number of clocks the Block Manager keeps for itself when free multiple is called.
+    /// * `class` - denotes the block size this manager is in charge of. class i means the block is of size 2^i bytes
+    pub const fn New(reserve: usize, class: usize) -> Self {
         return Self {
             size: 1<<class,
-            capacity: capacity,
+            reserve: reserve,
             count: 0,
             list: MemList::New(1<<class),
         }
@@ -200,38 +219,18 @@ impl FreeMemBlockMgr {
         return Layout::from_size_align(self.size, self.size).unwrap();
     }
 
-
-    // ret: (data, whether it is from list)
-    pub fn Alloc(&mut self, heap: &Mutex<Heap<ORDER>>) -> (*mut u8, bool) {
+    pub fn Alloc(&mut self) -> Option<*mut u8> {
         if self.count > 0 {
             self.count -= 1;
             let ret = self.list.Pop();
 
-            /*let ptr = ret as * mut MemBlock;
+            let ptr = ret as * mut MemBlock;
             unsafe {
                 ptr.write(0)
             }
-
-            let size = self.size / 8;
-            unsafe {
-                let toArr = slice::from_raw_parts_mut(ret as *mut u64, size);
-                for i in 0..size {
-                    toArr[i] = 0;
-                }
-            }*/
-
-            return (ret as * mut u8, true)
-        }
-
-        match heap.lock().alloc(self.Layout()) {
-            Err(_) => {
-                super::super::Kernel::HostSpace::KernelMsg(0, 0);
-                super::super::Kernel::HostSpace::KernelOOM(self.size as u64, 1);
-                loop {}
-            }
-            Ok(ret) => {
-                return (ret.as_ptr(), false)
-            }
+            return Some(ret as * mut u8)
+        } else {
+            return None
         }
     }
 
@@ -260,7 +259,7 @@ impl FreeMemBlockMgr {
 
     pub fn FreeMultiple(&mut self, heap: &Mutex<Heap<ORDER>>, count: usize) -> usize {
         for i in 0..count {
-            if self.count <= self.capacity {
+            if self.count <= self.reserve {
                 return i;
             }
 
@@ -291,9 +290,6 @@ impl MemList {
     }
 
     pub fn Push(&mut self, addr: u64) {
-        if addr % self.size != 0 {
-            super::super::Kernel::HostSpace::KernelMsg(self.size as u64, addr);
-        }
         assert!(addr % self.size == 0);
 
         let newB = addr as * mut MemBlock;
@@ -334,10 +330,6 @@ impl MemList {
         };
 
         self.head = *ptr;
-
-        if next % self.size as u64 != 0 {
-            super::super::Kernel::HostSpace::KernelMsg(self.size as u64, next);
-        }
         assert!(next % self.size == 0);
         return next;
     }
