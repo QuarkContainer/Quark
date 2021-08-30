@@ -48,7 +48,6 @@ use core::sync::atomic::AtomicU64;
 use self::qlib::buddyallocator::MemAllocator;
 use self::qlib::{addr};
 use self::qlib::qmsg::*;
-use self::qlib::linux_def::MemoryDef;
 use self::vmspace::hostfdnotifier::*;
 use self::vmspace::host_pma_keeper::*;
 use self::vmspace::kernel_io_thread::*;
@@ -57,11 +56,10 @@ use self::vmspace::uringMgr::*;
 
 const LOWER_TOP: u64 = 0x00007fffffffffff;
 const UPPER_BOTTOM: u64 = 0xffff800000000000;
-const START_ADDR: u64 = MemoryDef::PHY_LOWER_ADDR + 1 * MemoryDef::ONE_GB;
 
 lazy_static! {
     pub static ref SHARE_SPACE : AtomicU64 = AtomicU64::new(0);
-    pub static ref VMS: Mutex<VMSpace> = Mutex::new(VMSpace::Init(START_ADDR, LOWER_TOP - START_ADDR));
+    pub static ref VMS: Mutex<VMSpace> = Mutex::new(VMSpace::Init());
     pub static ref PAGE_ALLOCATOR: MemAllocator = MemAllocator::New();
     pub static ref FD_NOTIFIER: HostFdNotifier = HostFdNotifier::New();
     pub static ref IO_MGR: Mutex<vmspace::HostFileMap::IOMgr> = Mutex::new(vmspace::HostFileMap::IOMgr::Init().expect("Init IOMgr fail"));

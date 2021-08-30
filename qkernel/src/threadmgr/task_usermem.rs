@@ -296,7 +296,7 @@ impl MemoryManager {
         return Ok(v)
     }
 
-        // CopyStringIn copies a NUL-terminated string of unknown length from the
+    // CopyStringIn copies a NUL-terminated string of unknown length from the
     // memory mapped at addr in uio and returns it as a string (not including the
     // trailing NUL). If the length of the string, including the terminating NUL,
     // would exceed maxlen, CopyStringIn returns the string truncated to maxlen and
@@ -314,11 +314,25 @@ impl MemoryManager {
 
         for i in 0..data.len() {
             if data[i] == 0 {
-                return (str::from_utf8(&data[0..i]).unwrap().to_string(), Ok(()));
+                match str::from_utf8(&data[0..i]) {
+                    Ok(str) => {
+                        return (str.to_string(), Ok(()));
+                    }
+                    _ => {
+                        return ("".to_string(), Err(Error::Common("Invalid from_utf8".to_string())))
+                    }
+                }
             }
         }
 
-        return (str::from_utf8(&data[0..maxlen]).unwrap().to_string(), Err(Error::SysError(SysErr::ENAMETOOLONG)));
+        match str::from_utf8(&data[0..maxlen]) {
+            Ok(str) => {
+                return (str.to_string(), Err(Error::SysError(SysErr::ENAMETOOLONG)));
+            }
+            _ => {
+                return ("".to_string(), Err(Error::Common("Invalid from_utf8".to_string())))
+            }
+        }
     }
 
     // check whether the address range is legal.

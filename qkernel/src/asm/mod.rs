@@ -669,7 +669,14 @@ pub fn GetRsp() -> u64 {
 
 #[inline]
 pub fn Invlpg(addr: u64) {
-    unsafe { llvm_asm!("invlpg ($0)" :: "r" (addr): "memory" : "volatile" ) };
+    if !super::SHARESPACE.config.KernelPagetable {
+        unsafe { llvm_asm!("invlpg ($0)" :: "r" (addr): "memory" : "volatile" ) };
+    }
+}
+
+#[inline]
+pub fn Clflush(addr: u64) {
+    unsafe { llvm_asm!("clflush ($0)" :: "r" (addr): "memory" : "volatile" ) }
 }
 
 // muldiv64 multiplies two 64-bit numbers, then divides the result by another

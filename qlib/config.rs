@@ -22,6 +22,7 @@ pub struct Config {
     pub TcpBuffIO: bool,
     pub EnableAIO: bool,
     pub PrintException: bool,
+    pub KernelPagetable: bool,
 }
 
 impl Config {}
@@ -36,6 +37,7 @@ impl Default for Config {
             TcpBuffIO: true,
             EnableAIO: false,
             PrintException: false,
+            KernelPagetable: false
         }
     }
 }

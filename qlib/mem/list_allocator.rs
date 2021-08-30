@@ -28,7 +28,7 @@ pub const CLASS_CNT : usize = 16;
 pub const FREE_THRESHOLD: usize = 30; // when free size less than 30%, need to free buffer
 pub const BUFF_THRESHOLD: usize = 50; // when buff size takes more than 50% of free size, needs to free
 pub const FREE_BATCH: usize = 10; // free 10 blocks each time.
-pub const ORDER : usize = 30;
+pub const ORDER : usize = 33;
 
 pub struct ListAllocator {
     pub bufs: [Mutex<FreeMemBlockMgr>; CLASS_CNT],
@@ -249,12 +249,12 @@ impl FreeMemBlockMgr {
             self.count -= 1;
             let ret = self.list.Pop();
 
-            let ptr = ret as * mut MemBlock;
+            /*let ptr = ret as * mut MemBlock;
             unsafe {
                 ptr.write(0)
             }
 
-            /*let size = self.size / 8;
+            let size = self.size / 8;
             unsafe {
                 let toArr = slice::from_raw_parts_mut(ret as *mut u64, size);
                 for i in 0..size {

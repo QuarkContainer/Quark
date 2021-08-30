@@ -168,16 +168,16 @@ pub fn SysMadvise(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             task.mm.MAdvise(task, addr, length, adv)?;
         }
         MAdviseOp::MADV_HUGEPAGE | MAdviseOp::MADV_NOHUGEPAGE => {
-            task.mm.MAdvise(task, addr, length, adv)?;
+            //task.mm.MAdvise(task, addr, length, adv)?;
         }
         MAdviseOp::MADV_MERGEABLE | MAdviseOp::MADV_UNMERGEABLE => {
-            task.mm.MAdvise(task, addr, length, adv)?;
+            //task.mm.MAdvise(task, addr, length, adv)?;
         }
         MAdviseOp::MADV_DONTDUMP | MAdviseOp::MADV_DODUMP => {
             // Core dumping isn't implemented, so do nothing
         }
         MAdviseOp::MADV_NORMAL | MAdviseOp::MADV_RANDOM | MAdviseOp::MADV_SEQUENTIAL | MAdviseOp::MADV_WILLNEED => {
-            task.mm.MAdvise(task, addr, length, adv)?;
+            //task.mm.MAdvise(task, addr, length, adv)?;
         }
         MAdviseOp::MADV_DONTFORK => {
             task.mm.SetDontFork(task, addr, length, true)?;

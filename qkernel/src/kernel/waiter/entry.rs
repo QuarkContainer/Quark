@@ -158,7 +158,6 @@ impl WaitEntry {
 
     pub fn Notify(&self, mask: EventMask) -> bool {
         let e = self.lock();
-        //info!("WaitEntry::Notify mask is {:x}, e.mask is {:x}", mask, e.mask);
         if mask & e.mask != 0 {
             e.context.CallBack();
             return true

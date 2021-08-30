@@ -1536,10 +1536,7 @@ impl VMSpace {
         error!("LibcStatx osfd is {} ret is {} error is {}", osfd, ret, errno::errno().0);
     }
 
-    pub fn Init(start: u64, len: u64) -> Self {
-        error!("vmspace init start is {:x}, len is {:x}", start, len);
-        PMA_KEEPER.lock().Reset(start, len);
-
+    pub fn Init() -> Self {
         return VMSpace {
             allocator: None,
             pageTables: PageTables::default(),

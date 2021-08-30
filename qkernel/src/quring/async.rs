@@ -36,7 +36,7 @@ use super::super::kernel::timer;
 pub enum AsyncOps {
     AsyncTimeout(AsyncTimeout),
     AsyncTimerRemove(AsyncTimerRemove),
-    AsyncTTTYWrite(AsyncTTTYWrite),
+    AsyncTTYWrite(AsyncTTYWrite),
     AsyncWrite(AsyncWritev),
     AsyncEventfdWrite(AsyncEventfdWrite),
     AsycnSendMsg(AsycnSendMsg),
@@ -54,7 +54,7 @@ impl AsyncOps {
         match self {
             AsyncOps::AsyncTimeout(ref msg) => return msg.SEntry(),
             AsyncOps::AsyncTimerRemove(ref msg) => return msg.SEntry(),
-            AsyncOps::AsyncTTTYWrite(ref msg) => return msg.SEntry(),
+            AsyncOps::AsyncTTYWrite(ref msg) => return msg.SEntry(),
             AsyncOps::AsyncWrite(ref msg) => return msg.SEntry(),
             AsyncOps::AsyncEventfdWrite(ref msg) => return msg.SEntry(),
             AsyncOps::AsycnSendMsg(ref msg) => return msg.SEntry(),
@@ -74,7 +74,7 @@ impl AsyncOps {
         let ret = match self {
             AsyncOps::AsyncTimeout(ref mut msg) => msg.Process(result),
             AsyncOps::AsyncTimerRemove(ref mut msg) => msg.Process(result),
-            AsyncOps::AsyncTTTYWrite(ref mut msg) => msg.Process(result),
+            AsyncOps::AsyncTTYWrite(ref mut msg) => msg.Process(result),
             AsyncOps::AsyncWrite(ref mut msg) => msg.Process(result),
             AsyncOps::AsyncEventfdWrite(ref mut msg) => msg.Process(result),
             AsyncOps::AsycnSendMsg(ref mut msg) => msg.Process(result),
@@ -98,7 +98,7 @@ impl AsyncOps {
         match self {
             AsyncOps::AsyncTimeout(_) => return 1,
             AsyncOps::AsyncTimerRemove(_) => return 2,
-            AsyncOps::AsyncTTTYWrite(_) => return 3,
+            AsyncOps::AsyncTTYWrite(_) => return 3,
             AsyncOps::AsyncWrite(_) => return 4,
             AsyncOps::AsyncEventfdWrite(_) => return 5,
             AsyncOps::AsycnSendMsg(_) => return 6,
@@ -172,15 +172,15 @@ pub struct AsyncEventfdWrite {
 }
 
 impl AsyncEventfdWrite {
-    pub fn New(fd: i32, addr: u64) -> Self {
+    pub fn New(fd: i32, _addr: u64) -> Self {
         return Self {
             fd: fd,
-            addr: addr,
+            addr: 1,
         }
     }
 
     pub fn SEntry(&self) -> squeue::Entry {
-        let op = Write::new(types::Fd(self.fd), self.addr as * const u8, 8);
+        let op = Write::new(types::Fd(self.fd), &self.addr as * const _ as u64 as * const u8, 8);
         return op.build()
             .flags(squeue::Flags::FIXED_FILE);
     }
@@ -192,19 +192,17 @@ impl AsyncEventfdWrite {
 
 #[derive(Debug)]
 pub struct AsyncTimeout {
-    pub timerId: u64,
-    pub seqNo: u64,
+    pub expire: i64,
     pub ts: types::Timespec,
 }
 
 impl AsyncTimeout {
-    pub fn New(timerId: u64, seqNo: u64, ns: i64) -> Self {
+    pub fn New(expire: i64, timeout: i64) -> Self {
         return Self {
-            timerId: timerId,
-            seqNo: seqNo,
+            expire: expire,
             ts: types::Timespec {
-                tv_sec: ns / 1000_000_000,
-                tv_nsec: ns % 1000_000_000,
+                tv_sec: timeout / 1000_000_000,
+                tv_nsec: timeout % 1000_000_000,
             },
         }
     }
@@ -216,7 +214,7 @@ impl AsyncTimeout {
 
     pub fn Process(&mut self, result: i32) -> bool {
         if result == -SysErr::ETIME {
-            timer::FireTimer(self.timerId, self.seqNo);
+            timer::Timeout(self.expire);
         }
 
         return false
@@ -245,14 +243,14 @@ impl AsyncTimerRemove {
     }
 }
 
-pub struct AsyncTTTYWrite {
+pub struct AsyncTTYWrite {
     pub file: File,
     pub fd: i32,
     pub addr: u64,
     pub len: usize,
 }
 
-impl AsyncTTTYWrite {
+impl AsyncTTYWrite {
     pub fn New(file: &File, fd: i32, addr: u64, len: usize) -> Self {
         return Self {
             file: file.clone(),
@@ -278,7 +276,8 @@ impl AsyncTTTYWrite {
 pub struct AsyncWritev {
     pub file: File,
     pub fd: i32,
-    pub iov: IoVec,
+    pub addr: u64,
+    pub len: u32,
     pub offset: i64,
 }
 
@@ -287,13 +286,14 @@ impl AsyncWritev {
         return Self {
             file: file.clone(),
             fd: fd,
-            iov: IoVec::NewFromAddr(addr, len),
+            addr: addr,
+            len: len as u32,
             offset: offset,
         }
     }
 
     pub fn SEntry(&self) -> squeue::Entry {
-        let op = Writev::new(types::Fd(self.fd), &self.iov as * const _ as * const u64, 1)
+        let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len)
             .offset(self.offset);
 
         return op.build()
@@ -301,7 +301,7 @@ impl AsyncWritev {
     }
 
     pub fn Process(&mut self, _result: i32) -> bool {
-        BUF_MGR.Free(self.iov.start, self.iov.len as u64);
+        BUF_MGR.Free(self.addr, self.len as u64);
         return false
     }
 }

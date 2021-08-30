@@ -19,6 +19,7 @@ use core::ops::Deref;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
 use core::sync::atomic::AtomicU64;
+use alloc::string::String;
 
 use super::MAX_VCPU_COUNT;
 use super::vcpu_mgr::*;
@@ -117,6 +118,10 @@ impl Scheduler {
         return self.queue[vcpuId].Len();
     }
 
+    pub fn PrintQ(&self, vcpuId: u64) -> String {
+        return format!("{:x?}", self.queue[vcpuId as usize].lock());
+    }
+
     pub fn ScheduleQ(&self, task: TaskId, vcpuId: u64) {
         self.readyTaskCnt.fetch_add(1, Ordering::SeqCst);
         self.queue[vcpuId as usize].Enqueue(task);
@@ -182,6 +187,8 @@ impl Scheduler {
         let state = self.VcpuArr[vcpuId].State();
         if state == VcpuState::Waiting {
             self.VcpuArr[vcpuId].Wakeup();
+        } else {
+            self.WakeOne();
         }
     }
 }

@@ -129,10 +129,6 @@ impl Allocator for MemAllocator {
         ZeroPage(addr);
         return self.lock().Free(addr, 1)
     }
-
-    fn ZeroPage(&self) -> u64 {
-        panic!("MemAllocator doesn't support zeropage");
-    }
 }
 
 impl MemAllocator {

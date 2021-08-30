@@ -55,7 +55,7 @@ use super::kernel::fs_context::*;
 use super::asm::*;
 use super::qlib::SysCallID;
 
-pub const DEFAULT_STACK_SIZE: usize = MemoryDef::DEFAULT_STACK_SIZE as usize;
+const DEFAULT_STACK_SIZE: usize = MemoryDef::DEFAULT_STACK_SIZE as usize;
 pub const DEFAULT_STACK_PAGES: u64 = DEFAULT_STACK_SIZE as u64 / (4 * 1024);
 pub const DEFAULT_STACK_MAST: u64 = !(DEFAULT_STACK_SIZE as u64 - 1);
 
@@ -151,6 +151,10 @@ impl Default for Guard {
 
 impl Guard {
     const MAGIC_GUILD: u64 = 0x1234567890abcd;
+
+    pub fn Check(&self) {
+        assert!(self.0==Self::MAGIC_GUILD)
+    }
 }
 
 impl Drop for Task {
@@ -197,6 +201,10 @@ pub struct Task {
 unsafe impl Sync for Task {}
 
 impl Task {
+    pub fn Check(&self) {
+        self.guard.Check();
+    }
+
     //clean object on stack
     pub fn SetDummy(&mut self) {
         let dummyTask = DUMMY_TASK.read();
@@ -691,7 +699,6 @@ impl Task {
         let taskPtr = baseStackAddr as *mut Task;
 
         unsafe {
-            //let root = super::KERNEL_PAGETABLE.read().GetRoot();
             let creds = Credentials::default();
             let userns = creds.lock().UserNamespace.clone();
             let dummyTask = DUMMY_TASK.read();

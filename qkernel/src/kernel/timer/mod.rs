@@ -19,6 +19,7 @@ pub mod parameters;
 pub mod calibratedClock;
 pub mod timekeeper;
 pub mod timer;
+pub mod timer_store;
 
 pub use self::raw_timer::*;
 
@@ -26,6 +27,7 @@ use lazy_static::lazy_static;
 
 use self::timermgr::*;
 use self::timekeeper::*;
+use self::timer_store::*;
 use self::timer::*;
 
 lazy_static! {
@@ -33,6 +35,7 @@ lazy_static! {
     pub static ref TIME_KEEPER: TimeKeeper = TimeKeeper::default();
     pub static ref REALTIME_CLOCK: Clock = TIME_KEEPER.NewClock(REALTIME);
     pub static ref MONOTONIC_CLOCK: Clock = TIME_KEEPER.NewClock(MONOTONIC);
+    pub static ref TIMER_STORE: TimerStore = TimerStore::default();
 }
 
 pub struct TimerUpdater {}
@@ -72,6 +75,10 @@ pub fn RemoveTimer(timer: &RawTimer) {
 pub fn FireTimer(timerId: u64, seqNo: u64) {
     //error!("FireTimer timerId is {}, seqNo is {}", timerId, seqNo);
     TIMER_MGR.Fire(timerId, seqNo);
+}
+
+pub fn Timeout(expire: i64) {
+    TIMER_STORE.Trigger(expire);
 }
 
 pub type ClockID = i32;

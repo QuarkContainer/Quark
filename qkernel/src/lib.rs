@@ -30,6 +30,7 @@
 #![feature(llvm_asm, naked_functions)]
 #![feature(maybe_uninit_uninit_array)]
 #![feature(panic_info_message)]
+#![feature(map_first_last)]
 
 #[macro_use]
 extern crate serde_derive;
@@ -109,6 +110,7 @@ use self::qlib::buddyallocator::*;
 use self::qlib::pagetable::*;
 use self::qlib::control_msg::*;
 use self::qlib::common::*;
+use self::qlib::linux_def::MemoryDef;
 use self::qlib::range::*;
 use self::qlib::loader::*;
 use self::qlib::config::*;
@@ -139,8 +141,6 @@ static ALLOCATOR: ListAllocator = ListAllocator::Empty();
 //static ALLOCATOR: BufHeap = BufHeap::Empty();
 //static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
-pub const KERNELTABLE : bool = false;
-
 pub fn AllocatorPrint() {
     //ALLOCATOR.Print();
 }
@@ -153,8 +153,8 @@ lazy_static! {
     pub static ref LOADER: Loader = Loader::default();
     //pub static ref BUF_MGR: Mutex<BufMgr> = Mutex::new(BufMgr::default());
     pub static ref BUF_MGR: BufMgr = BufMgr::New();
-    pub static ref IOURING: QUring = QUring::New(1024);
-    pub static ref KERNEL_STACK_ALLOCATOR : AlignedAllocator = AlignedAllocator::New(DEFAULT_STACK_SIZE, DEFAULT_STACK_SIZE);
+    pub static ref IOURING: QUring = QUring::New(MemoryDef::QURING_SIZE);
+    pub static ref KERNEL_STACK_ALLOCATOR : AlignedAllocator = AlignedAllocator::New(MemoryDef::DEFAULT_STACK_SIZE as usize, MemoryDef::DEFAULT_STACK_SIZE as usize);
 }
 
 extern "C" {
@@ -175,7 +175,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
 
     currTask.PerfGoto(PerfType::Kernel);
 
-    if KERNELTABLE {
+    if SHARESPACE.config.KernelPagetable {
         Task::SetKernelPageTable();
     }
 
@@ -257,10 +257,11 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     SetRflags(rflags);
     currTask.RestoreFp();
 
-    if KERNELTABLE {
+    if SHARESPACE.config.KernelPagetable {
         currTask.SwitchPageTable();
     }
 
+    currTask.Check();
     //SHARESPACE.SetValue(CPULocal::CpuId(), 0, 0);
     if pt.rip != 0 { // if it is from signal trigger from kernel, e.g. page fault
         pt.eflags = rflags;
@@ -313,8 +314,9 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                     CPULocal::SetPendingFreeStack(currTask.taskId);
 
                     error!("RunExitDone xxx 2 [{:x}] ...", currTask.taskId);
-                    KERNEL_PAGETABLE.SwitchTo();
-
+                    if !SHARESPACE.config.KernelPagetable {
+                        KERNEL_PAGETABLE.SwitchTo();
+                    }
                     // mm needs to be clean as last function before SwitchToNewTask
                     // after this is called, another vcpu might drop the pagetable
                     core::mem::drop(mm);
@@ -352,8 +354,6 @@ fn InitGs(id: u64) {
 pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u64, vcpuCnt: u64, autoStart: bool) {
     if id == 0 {
         ALLOCATOR.Add(heapStart as usize, heapLen as usize);
-
-        PAGE_MGR.lock().Init();
 
         {
             //to initial the SHARESPACE
@@ -453,39 +453,6 @@ pub fn StartRootProcess() {
 }
 
 fn StartRootContainer(_para: *const u8) {
-    //Print();
-
-    //let bits = VirtualAddressBits();
-    //info!("bits is {}", bits);
-
-    /*let fs = self::qlib::cpuid::HostFeatureSet();
-      info!("{}", fs.CPUInfo(0));
-
-      let (size, align) = fs.ExtendedStateSize();
-      info!("ExtendedStateSize size is {}, align is {}", size, align);*/
-
-    //waiter + timer example, todo: remove it
-    /*let waiter = Waiter::default();
-    let we = waiter.NewWaitEntry(1);
-    let mut timer = NewTimer(&we);
-    timer.Reset(1000_000_000);
-    info!("before wait");
-    waiter.Wait(&[we.clone()]);
-    info!("after wait");
-    timer.Reset(111111);
-    timer.Stop();
-    timer.Reset(111111);
-    timer.Drop();*/
-
-
-    //let vdsopage : [u8; 4096] = [0; 4096];
-    //let timekeeper = kernel::time::timekeeper::TimeKeeper::New(&vdsopage[0] as * const _ as u64);
-
-    //todo: the exception's stack is different than the task, so it can't be use for taskId
-    //info!("before int3");
-    //x86_64::instructions::interrupts::int3();
-    //info!("after int3");
-
     self::Init();
     info!("StartRootContainer ....");
     let task = Task::Current();

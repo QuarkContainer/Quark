@@ -303,6 +303,5 @@ pub trait RefMgr: Send {
 pub trait Allocator: RefMgr {
     fn AllocPage(&self, incrRef: bool) -> Result<u64>;
     fn FreePage(&self, addr: u64) -> Result<()>;
-    fn ZeroPage(&self) -> u64;
 }
 

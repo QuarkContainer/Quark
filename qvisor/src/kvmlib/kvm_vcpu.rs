@@ -125,10 +125,6 @@ impl Allocator for SimplePageAllocator {
     fn FreePage(&self, _addr: u64) -> Result<()> {
         panic!("SimplePageAllocator doesn't support FreePage");
     }
-
-    fn ZeroPage(&self) -> u64 {
-        panic!("SimplePageAllocator doesn't support ZeroPage");
-    }
 }
 
 impl RefMgr for SimplePageAllocator {

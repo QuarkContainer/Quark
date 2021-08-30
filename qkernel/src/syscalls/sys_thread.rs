@@ -39,6 +39,7 @@ use super::super::threadmgr::task_exec::*;
 use super::super::threadmgr::task_clone::*;
 use super::super::threadmgr::task_sched::*;
 use super::super::memmgr::mm::*;
+use super::super::SHARESPACE;
 
 #[derive(Default, Debug)]
 pub struct ElfInfo {
@@ -290,7 +291,7 @@ pub fn SysExecve(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             task.mm = newMM.clone();
             task.futexMgr = task.futexMgr.Fork();
             task.Thread().lock().memoryMgr = newMM;
-            if !super::super::KERNELTABLE {
+            if !SHARESPACE.config.KernelPagetable {
                 task.SwitchPageTable();
             }
 
