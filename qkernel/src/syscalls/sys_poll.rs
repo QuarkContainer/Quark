@@ -56,6 +56,9 @@ pub fn DoSelect(task: &Task, nfds: i32, readfds: u64, writefds: u64, exceptfds: 
             Err(Error::SysError(SysErr::ETIMEDOUT)) => {
                 return Ok(0)
             }
+            Err(Error::ErrInterrupted) => {
+                return Err(Error::SysError(SysErr::ERESTARTNOHAND));
+            }
             Err(e) => {
                 return Err(e)
             }

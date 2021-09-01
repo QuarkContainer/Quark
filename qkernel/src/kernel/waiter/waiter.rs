@@ -77,9 +77,9 @@ impl Waiter {
         return b.idCnt - 1
     }
 
-    pub const TIMER_WAITID : WaiterID = 0;
+    pub const GENERAL_WAITID : WaiterID = 0;
     pub const INTERRUPT_WAITID : WaiterID = 1;
-    pub const GENERAL_WAITID : WaiterID = 2;
+    pub const TIMER_WAITID : WaiterID = 2;
 
     pub fn NewWaitEntry(&self, waitId: WaiterID, mask: EventMask) -> WaitEntry {
         //let waitId = self.NextWaiterId();
@@ -88,7 +88,7 @@ impl Waiter {
 
     pub fn Trigger(&self, id: WaiterID) {
         let mut b = self.lock();
-        assert!(id <= Self::GENERAL_WAITID, "Waiter out of range");
+        assert!(id <= Self::TIMER_WAITID, "Waiter out of range");
 
         b.bitmap |= 1 << id as usize;
 
@@ -102,29 +102,38 @@ impl Waiter {
         }
     }
 
-    pub fn Wait(&self, entries: &[Option<WaitEntry>]) -> WaitEntry {
-        let mut mask = 0;
-
+    pub fn Check(&self, entries: &[Option<WaitEntry>]) -> Option<WaitEntry> {
+        let mut b = self.lock();
         for i in 0..entries.len() {
             match &entries[i] {
                 None => continue,
-                Some(_) => {
-                    mask |= 1 << i;
+                Some(ref e) => {
+                    let _elock = e.lock();
+                    if b.bitmap & (1 << i) != 0 {
+                        b.bitmap &= !(1 << i); //clear the bit
+                        b.state = WaitState::Running;
+                        return Some(e.clone())
+                    }
                 }
             }
         }
 
+        return None;
+    }
+
+    pub fn Wait(&self, entries: &[Option<WaitEntry>], mask: u64) -> WaitEntry {
         loop {
             {
-                'r: loop {
+                loop {
                     let mut b = self.lock();
+                    //error!("b.bitmap {:b} mask is {:b}", b.bitmap, mask);
 
                     if b.bitmap & mask != 0 {
                         for i in 0..entries.len() {
                             match &entries[i] {
                                 None => continue,
                                 Some(ref e) => {
-                                    if let Some(elock) = e.try_lock() {
+                                    /*if let Some(elock) = e.try_lock() {
                                         if b.bitmap & (1 << i) != 0 {
                                             b.bitmap &= !(1 << i); //clear the bit
                                             b.state = WaitState::Running;
@@ -133,8 +142,13 @@ impl Waiter {
                                         }
                                     } else {
                                         continue 'r;
-                                    }
+                                    }*/
 
+                                    if b.bitmap & (1 << i) != 0 {
+                                        b.bitmap &= !(1 << i); //clear the bit
+                                        b.state = WaitState::Running;
+                                        return e.clone()
+                                    }
                                 }
                             }
                         }

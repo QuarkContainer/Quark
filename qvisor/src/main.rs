@@ -22,6 +22,7 @@
 #![feature(map_first_last)]
 #![allow(non_camel_case_types)]
 #![feature(llvm_asm)]
+#![allow(deprecated)]
 
 #[macro_use]
 extern crate serde_derive;
