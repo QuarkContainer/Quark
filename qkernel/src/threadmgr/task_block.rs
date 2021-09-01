@@ -281,6 +281,7 @@ impl Blocker {
             return Ok(())
         } else if entry == self.timerEntry.clone() {
             self.SleepFinish(true);
+            self.waiter.lock().bitmap &= !(1<<Waiter::TIMER_WAITID);
             return Err(Error::SysError(SysErr::ETIMEDOUT));
         } else {
             //interrutpted
@@ -291,7 +292,6 @@ impl Blocker {
                 }
                 _ => (),
             }
-            self.waiter.lock().bitmap &= !(1<<Waiter::INTERRUPT_WAITID);
             return Err(Error::ErrInterrupted);
         }
     }
@@ -302,6 +302,7 @@ impl Blocker {
         let entry = self.waiter.Wait(&entries, 0b011);
 
         if entry == self.generalEntry.clone() {
+            self.waiter.lock().bitmap &= !(1<<Waiter::GENERAL_WAITID);
             return Ok(())
         } else {
             //interrutpted
@@ -313,7 +314,8 @@ impl Blocker {
     // block on general entry
     pub fn BlockGeneralOnly(&self) {
         let entries = [Some(self.generalEntry.clone()), None, None];
-        let _entry = self.waiter.Wait(&entries, 0b100);
+        let _entry = self.waiter.Wait(&entries, 0b001);
+        self.waiter.lock().bitmap &= !(1<<Waiter::GENERAL_WAITID);
 
         return
     }
