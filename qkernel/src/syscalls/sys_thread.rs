@@ -199,7 +199,8 @@ pub fn SysExecve(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 if taskCnt != 1 {
                     // "[All] other threads except the thread group leader report death as
                     // if they exited via _exit(2) with exit code 0." - ptrace(2)
-                    for sibling in &tg.lock().tasks {
+                    let tasks : Vec<_> = tg.lock().tasks.iter().cloned().collect();
+                    for sibling in &tasks {
                         if t != sibling.clone() {
                             sibling.lock().killLocked();
                         }

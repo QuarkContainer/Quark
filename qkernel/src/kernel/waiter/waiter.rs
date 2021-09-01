@@ -145,7 +145,6 @@ impl Waiter {
                                     }*/
 
                                     if b.bitmap & (1 << i) != 0 {
-                                        b.bitmap &= !(1 << i); //clear the bit
                                         b.state = WaitState::Running;
                                         return e.clone()
                                     }
