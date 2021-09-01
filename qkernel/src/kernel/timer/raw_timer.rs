@@ -92,7 +92,7 @@ impl RawTimer {
             let state = t.State;
             t.State = TimerState::Stopped;
             if state == TimerState::Running {
-                tm.RemoveTimer(t.Id);
+                tm.RemoveTimer(t.Id, t.SeqNo);
             }
 
             state == TimerState::Running
@@ -112,6 +112,7 @@ impl RawTimer {
             {
                 let mut ts = TIMER_STORE.lock();
                 let timerId;
+                let seqNo;
                 {
                     let mut t = self.lock();
                     if t.State != TimerState::Running {
@@ -119,11 +120,12 @@ impl RawTimer {
                     }
 
                     t.State = TimerState::Stopped;
+                    seqNo = t.SeqNo;
                     t.SeqNo += 1;
                     timerId = t.Id;
                 }
 
-                ts.RemoveTimer(timerId);
+                ts.RemoveTimer(timerId, seqNo);
             }
 
             TIMER_STORE.Trigger(0);
@@ -138,7 +140,7 @@ impl RawTimer {
             let timerId = t.Id;
             let seqNo = t.SeqNo;
 
-            ts.ResetTimer(timerId, seqNo, delta);
+            ts.ResetTimerLocked(timerId, seqNo, delta);
         }
 
         TIMER_STORE.Trigger(0);

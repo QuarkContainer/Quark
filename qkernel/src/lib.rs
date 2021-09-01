@@ -31,6 +31,7 @@
 #![feature(maybe_uninit_uninit_array)]
 #![feature(panic_info_message)]
 #![feature(map_first_last)]
+#![allow(deprecated)]
 
 #[macro_use]
 extern crate serde_derive;

@@ -80,11 +80,11 @@ impl Deref for TimerStore {
 
 impl TimerStore {
     // the timeout need to process a timer, <PROCESS_TIME means the timer will be triggered immediatelyfa
-    pub const PROCESS_TIME : i64 = 2000;
+    pub const PROCESS_TIME : i64 = 30_000;
 
     pub fn Print(&self) -> String {
         let ts = self.lock();
-        return format!("expire:{:?} {:?} ", ts.nextExpire, &ts.timers);
+        return format!("expire:{:?} {:?} ", ts.nextExpire, &ts.timerSeq);
     }
 
     pub fn Trigger(&self, expire: i64) {
@@ -103,16 +103,46 @@ impl TimerStore {
         {
             let mut tm = self.lock();
 
+            // triggered by the the timer's timeout: No need to RemoveUringTimer
+            if expire == tm.nextExpire {
+                let firstExpire = match tm.timerSeq.first() {
+                    None => {
+                        core::mem::drop(&tm);
+                        return
+                    },
+                    Some(t) => t.expire,
+                };
+
+                tm.nextExpire = 0;
+                tm.SetUringTimer(firstExpire);
+                core::mem::drop(&tm);
+                return
+            }
+
+            // the nextExpire has passed and processed
             if expire != tm.nextExpire // not triggered by the the timer's timeout
-                && now > tm.nextExpire { // the nextExpire has passed
+                && now > tm.nextExpire { // the nextExpire has passed and processed
                 tm.RemoveUringTimer();
+
+                let firstExpire = match tm.timerSeq.first() {
+                    None => {
+                        return
+                    },
+                    Some(t) => t.expire,
+                };
+
+                tm.SetUringTimer(firstExpire);
+                return
             }
 
             let firstExpire = match tm.timerSeq.first() {
-                None => return,
+                None => {
+                    return
+                },
                 Some(t) => t.expire,
             };
 
+            // the new added timer is early than the last expire time: RemoveUringTimer and set the new expire
             if firstExpire < tm.nextExpire || tm.nextExpire == 0 {
                 tm.RemoveUringTimer();
                 tm.SetUringTimer(firstExpire);
@@ -121,12 +151,12 @@ impl TimerStore {
     }
 
     pub fn ResetTimer(&mut self, timerId: u64, seqNo: u64, timeout: i64) {
-        self.lock().ResetTimer(timerId, seqNo, timeout);
+        self.lock().ResetTimerLocked(timerId, seqNo, timeout);
         self.Trigger(0);
     }
 
-    pub fn CancelTimer(&self, timerId: u64) {
-        self.lock().RemoveTimer(timerId);
+    pub fn CancelTimer(&self, timerId: u64, seqNo: u64) {
+        self.lock().RemoveTimer(timerId, seqNo);
         self.Trigger(0);
     }
 }
@@ -141,7 +171,7 @@ pub struct TimerStoreIntern {
 
 impl TimerStoreIntern {
     // return: existing or not
-    pub fn RemoveTimer(&mut self, timerId: u64) -> bool {
+    pub fn RemoveTimer(&mut self, timerId: u64, seqNo: u64) -> bool {
         let tu = match self.timers.remove(&timerId) {
             None => {
                 return false
@@ -149,13 +179,16 @@ impl TimerStoreIntern {
             Some(tu) => tu,
         };
 
+        assert!(tu.seqNo == seqNo, "TimerStoreIntern::RemoveTimer doesn't match tu.seqNo is {}, expect {}", tu.seqNo, seqNo);
         self.timerSeq.remove(&tu);
         return true;
     }
 
 
-    pub fn ResetTimer(&mut self, timerId: u64, seqNo: u64, timeout: i64) {
-        self.RemoveTimer(timerId);
+    pub fn ResetTimerLocked(&mut self, timerId: u64, seqNo: u64, timeout: i64) {
+        if seqNo > 0 {
+            self.RemoveTimer(timerId, seqNo - 1);
+        }
 
         let current = MONOTONIC_CLOCK.Now().0;
         let expire = current + timeout;
@@ -180,7 +213,7 @@ impl TimerStoreIntern {
     pub fn SetUringTimer(&mut self, expire: i64) {
         let now = MONOTONIC_CLOCK.Now().0;
         let expire = if expire < now {
-            now
+            now + 2000
         } else {
             expire
         };
@@ -200,7 +233,7 @@ impl TimerStoreIntern {
         }
 
         let timerId = tu.timerId;
-        self.RemoveTimer(timerId);
+        self.RemoveTimer(timerId, tu.seqNo);
 
         return Some(tu)
     }
