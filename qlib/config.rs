@@ -23,6 +23,7 @@ pub struct Config {
     pub EnableAIO: bool,
     pub PrintException: bool,
     pub KernelPagetable: bool,
+    pub RawTimer: bool,
 }
 
 impl Config {}
@@ -37,7 +38,8 @@ impl Default for Config {
             TcpBuffIO: true,
             EnableAIO: false,
             PrintException: false,
-            KernelPagetable: false
+            KernelPagetable: false,
+            RawTimer: true
         }
     }
 }

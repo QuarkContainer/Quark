@@ -220,6 +220,7 @@ impl Blocker {
         match id {
             None => {
                 self.SleepFinish(true);
+                super::super::taskMgr::Yield();
                 return Err(Error::SysError(SysErr::ETIMEDOUT));
             }
             Some(id) => {
