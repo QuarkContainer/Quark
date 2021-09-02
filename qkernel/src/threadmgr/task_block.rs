@@ -190,8 +190,7 @@ impl Blocker {
     }
 
     pub fn BlockInterrupt(&self) -> Result<()> {
-        let entries = [None, Some(self.interruptEntry.clone()), None];
-        let _entry = self.waiter.Wait(&entries, 0b010);
+        self.waiter.Wait(0b010);
         self.SleepFinish(false);
         return Err(Error::SysError(SysErr::ERESTARTNOHAND));
     }
@@ -211,27 +210,27 @@ impl Blocker {
     // check whether  the generalEntry or the interrupt ready
     // it is used for the scenario that the timeout is zero
     pub fn Check(&self, waitGeneral: bool) -> Result<()> {
-        let entries = if waitGeneral  {
-            [Some(self.generalEntry.clone()), Some(self.interruptEntry.clone())]
+        let bitmap = if waitGeneral  {
+            0x011
         } else {
-            [None, Some(self.interruptEntry.clone())]
+            0x010
         };
 
-        let entry = self.waiter.Check(&entries);
-        match entry {
+        let id = self.waiter.Check(bitmap);
+        match id {
             None => {
                 self.SleepFinish(true);
                 return Err(Error::SysError(SysErr::ETIMEDOUT));
             }
-            Some(entry) => {
-                if entry == self.generalEntry.clone() {
+            Some(id) => {
+                if id == Waiter::GENERAL_WAITID {
                     self.SleepFinish(true);
                     self.waiter.lock().bitmap &= !(1<<Waiter::GENERAL_WAITID);
                     return Ok(())
                 } else {
                     //interrutpted
                     self.SleepFinish(false);
-                    self.waiter.lock().bitmap &= !(1<<Waiter::INTERRUPT_WAITID);
+                    //self.waiter.lock().bitmap &= !(1<<Waiter::INTERRUPT_WAITID);
                     return Err(Error::ErrInterrupted);
                 }
             }
@@ -239,37 +238,23 @@ impl Blocker {
     }
 
     pub fn block(&self, waitGeneral: bool, waitTimer: Option<Timer>) -> Result<()> {
-        if waitGeneral && self.waiter.TryWait(&self.generalEntry, true) {
-            match waitTimer {
-                Some(timer) => {
-                    timer.Cancel();
-                }
-                _ => (),
-            }
-            return Ok(())
-        }
-
         self.SleepStart();
 
         let mask;
 
-        let entries = if waitGeneral && waitTimer.is_some() {
+        if waitGeneral && waitTimer.is_some() {
             mask = 0b111;
-            [Some(self.generalEntry.clone()), Some(self.interruptEntry.clone()), Some(self.timerEntry.clone())]
         } else if waitGeneral {
             mask = 0b011;
-            [Some(self.generalEntry.clone()), Some(self.interruptEntry.clone()), None]
         } else if waitTimer.is_some() {
             mask = 0b110;
-            [None, Some(self.interruptEntry.clone()), Some(self.timerEntry.clone())]
         } else {
             mask = 0b010;
-            [None, Some(self.interruptEntry.clone()), None]
         };
 
-        let entry = self.waiter.Wait(&entries, mask);
+        let id = self.waiter.Wait(mask);
         Task::Current().DoStop();
-        if entry == self.generalEntry.clone() {
+        if id == Waiter::GENERAL_WAITID {
             self.SleepFinish(true);
             match waitTimer {
                 Some(timer) => {
@@ -279,7 +264,7 @@ impl Blocker {
             }
             self.waiter.lock().bitmap &= !(1<<Waiter::GENERAL_WAITID);
             return Ok(())
-        } else if entry == self.timerEntry.clone() {
+        } else if id == Waiter::TIMER_WAITID {
             self.SleepFinish(true);
             self.waiter.lock().bitmap &= !(1<<Waiter::TIMER_WAITID);
             return Err(Error::SysError(SysErr::ETIMEDOUT));
@@ -298,10 +283,9 @@ impl Blocker {
 
     // block on both generalentry and interrupt
     pub fn BlockGeneral(&self) -> Result<()> {
-        let entries = [Some(self.generalEntry.clone()), Some(self.interruptEntry.clone()), None];
-        let entry = self.waiter.Wait(&entries, 0b011);
+        let id = self.waiter.Wait(0b011);
 
-        if entry == self.generalEntry.clone() {
+        if id == Waiter::GENERAL_WAITID {
             self.waiter.lock().bitmap &= !(1<<Waiter::GENERAL_WAITID);
             return Ok(())
         } else {
@@ -313,8 +297,7 @@ impl Blocker {
 
     // block on general entry
     pub fn BlockGeneralOnly(&self) {
-        let entries = [Some(self.generalEntry.clone()), None, None];
-        let _entry = self.waiter.Wait(&entries, 0b001);
+        self.waiter.Wait(0b001);
         self.waiter.lock().bitmap &= !(1<<Waiter::GENERAL_WAITID);
 
         return
