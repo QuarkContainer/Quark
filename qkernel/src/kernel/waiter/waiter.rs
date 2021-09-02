@@ -102,55 +102,28 @@ impl Waiter {
         }
     }
 
-    pub fn Check(&self, entries: &[Option<WaitEntry>]) -> Option<WaitEntry> {
-        let mut b = self.lock();
-        for i in 0..entries.len() {
-            match &entries[i] {
-                None => continue,
-                Some(ref e) => {
-                    let _elock = e.lock();
-                    if b.bitmap & (1 << i) != 0 {
-                        b.bitmap &= !(1 << i); //clear the bit
-                        b.state = WaitState::Running;
-                        return Some(e.clone())
-                    }
-                }
-            }
+    pub fn Check(&self, mask: u64) -> Option<WaiterID> {
+        let b = self.lock();
+        let bitmap = b.bitmap & mask;
+        if bitmap > 0 {
+            return Some(bitmap.trailing_zeros())
+        } else {
+            return None
         }
-
-        return None;
     }
 
-    pub fn Wait(&self, entries: &[Option<WaitEntry>], mask: u64) -> WaitEntry {
+    pub fn Wait(&self, mask: u64) -> WaiterID {
         loop {
             {
                 loop {
                     let mut b = self.lock();
                     //error!("b.bitmap {:b} mask is {:b}", b.bitmap, mask);
+                    let bitmap = b.bitmap & mask;
 
-                    if b.bitmap & mask != 0 {
-                        for i in 0..entries.len() {
-                            match &entries[i] {
-                                None => continue,
-                                Some(ref e) => {
-                                    /*if let Some(elock) = e.try_lock() {
-                                        if b.bitmap & (1 << i) != 0 {
-                                            b.bitmap &= !(1 << i); //clear the bit
-                                            b.state = WaitState::Running;
-                                            core::mem::drop(elock);
-                                            return e.clone()
-                                        }
-                                    } else {
-                                        continue 'r;
-                                    }*/
-
-                                    if b.bitmap & (1 << i) != 0 {
-                                        b.state = WaitState::Running;
-                                        return e.clone()
-                                    }
-                                }
-                            }
-                        }
+                    if bitmap != 0 {
+                        let idx = bitmap.trailing_zeros() as usize;
+                        b.state = WaitState::Running;
+                        return idx as WaiterID;
                     }
 
                     b.mask = mask;
