@@ -177,6 +177,13 @@ impl QUring {
         return idx;
     }
 
+    pub fn RawTimeout(&self, _task: &Task, timerId: u64, seqNo: u64, ns: i64) -> usize {
+        let ops = AsyncRawTimeout::New(timerId, seqNo, ns);
+        let idx = self.AUCall(AsyncOps::AsyncRawTimeout(ops));
+
+        return idx;
+    }
+
     pub fn Read(&self, task: &Task, fd: i32, addr: u64, cnt: u32, offset: i64) -> i64 {
         let msg = UringOp::Read(ReadOp {
             fd: fd,

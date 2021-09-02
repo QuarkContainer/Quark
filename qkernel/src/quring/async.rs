@@ -46,6 +46,7 @@ pub enum AsyncOps {
     AIOWrite(AIOWrite),
     AIORead(AIORead),
     AIOFsync(AIOFsync),
+    AsyncRawTimeout(AsyncRawTimeout),
     None,
 }
 
@@ -64,6 +65,7 @@ impl AsyncOps {
             AsyncOps::AIOWrite(ref msg) => return msg.SEntry(),
             AsyncOps::AIORead(ref msg) => return msg.SEntry(),
             AsyncOps::AIOFsync(ref msg) => return msg.SEntry(),
+            AsyncOps::AsyncRawTimeout(ref msg) => return msg.SEntry(),
             AsyncOps::None => ()
         };
 
@@ -84,6 +86,7 @@ impl AsyncOps {
             AsyncOps::AIOWrite(ref mut msg) => msg.Process(result),
             AsyncOps::AIORead(ref mut msg) => msg.Process(result),
             AsyncOps::AIOFsync(ref mut msg) => msg.Process(result),
+            AsyncOps::AsyncRawTimeout(ref mut msg) => msg.Process(result),
             AsyncOps::None => panic!("AsyncOps::None SEntry fail"),
         };
 
@@ -108,6 +111,7 @@ impl AsyncOps {
             AsyncOps::AIOWrite(_) => return 10,
             AsyncOps::AIORead(_) => return 11,
             AsyncOps::AIOFsync(_) => return 12,
+            AsyncOps::AsyncRawTimeout(_) => return 13,
             AsyncOps::None => ()
         };
 
@@ -215,6 +219,39 @@ impl AsyncTimeout {
     pub fn Process(&mut self, result: i32) -> bool {
         if result == -SysErr::ETIME {
             timer::Timeout(self.expire);
+        }
+
+        return false
+    }
+}
+
+#[derive(Debug)]
+pub struct AsyncRawTimeout {
+    pub timerId: u64,
+    pub seqNo: u64,
+    pub ts: types::Timespec,
+}
+
+impl AsyncRawTimeout {
+    pub fn New(timerId: u64, seqNo: u64, ns: i64) -> Self {
+        return Self {
+            timerId: timerId,
+            seqNo: seqNo,
+            ts: types::Timespec {
+                tv_sec: ns / 1000_000_000,
+                tv_nsec: ns % 1000_000_000,
+            },
+        }
+    }
+
+    pub fn SEntry(&self) -> squeue::Entry {
+        let op = Timeout::new(&self.ts);
+        return op.build();
+    }
+
+    pub fn Process(&mut self, result: i32) -> bool {
+        if result == -SysErr::ETIME {
+            timer::FireTimer(self.timerId, self.seqNo);
         }
 
         return false
