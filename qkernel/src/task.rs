@@ -89,7 +89,7 @@ impl TaskId {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 #[repr(C)]
 pub struct Context {
     pub rsp: u64,
@@ -112,8 +112,21 @@ pub struct Context {
 impl Context {
     pub fn New() -> Self {
         return Self {
+            rsp: 0,
+            r15: 0,
+            r14: 0,
+            r13: 0,
+            r12: 0,
+            rbx: 0,
+            rbp: 0,
+            rdi: 0,
+
             ready: 1,
-            ..Default::default()
+
+            fs: 0,
+            gs: 0,
+            X86fpstate: Default::default(),
+            sigFPState: Default::default(),
         }
     }
 }
@@ -238,7 +251,7 @@ impl Task {
         let userns = creds.lock().UserNamespace.clone();
 
         return Task {
-            context: Context::default(),
+            context: Context::New(),
             taskId: 0,
             queueId: 0,
             //mm: MemoryMgr::default(),

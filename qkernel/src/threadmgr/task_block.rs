@@ -241,44 +241,48 @@ impl Blocker {
     pub fn block(&self, waitGeneral: bool, waitTimer: Option<Timer>) -> Result<()> {
         self.SleepStart();
 
-        let mask;
+        let mut mask = 0b010; // interrupt is always enabled
 
-        if waitGeneral && waitTimer.is_some() {
-            mask = 0b111;
-        } else if waitGeneral {
-            mask = 0b011;
-        } else if waitTimer.is_some() {
-            mask = 0b110;
-        } else {
-            mask = 0b010;
-        };
+        if waitTimer.is_some() {
+            mask |= 0b100;
+        }
+
+        if waitGeneral {
+            mask |= 0b001;
+        }
 
         let id = self.waiter.Wait(mask);
         Task::Current().DoStop();
-        if id == Waiter::GENERAL_WAITID {
-            self.SleepFinish(true);
-            match waitTimer {
-                Some(timer) => {
-                    timer.Cancel();
+        match id {
+            Waiter::GENERAL_WAITID => {
+                self.SleepFinish(true);
+                match waitTimer {
+                    Some(timer) => {
+                        timer.Cancel();
+                    }
+                    _ => (),
                 }
-                _ => (),
+                self.waiter.lock().bitmap &= !(1<<Waiter::GENERAL_WAITID);
+                return Ok(())
             }
-            self.waiter.lock().bitmap &= !(1<<Waiter::GENERAL_WAITID);
-            return Ok(())
-        } else if id == Waiter::TIMER_WAITID {
-            self.SleepFinish(true);
-            self.waiter.lock().bitmap &= !(1<<Waiter::TIMER_WAITID);
-            return Err(Error::SysError(SysErr::ETIMEDOUT));
-        } else {
-            //interrutpted
-            self.SleepFinish(false);
-            match waitTimer {
-                Some(timer) => {
-                    timer.Cancel();
+            Waiter::TIMER_WAITID => {
+                self.SleepFinish(true);
+                self.waiter.lock().bitmap &= !(1<<Waiter::TIMER_WAITID);
+                return Err(Error::SysError(SysErr::ETIMEDOUT));
+            }
+            Waiter::INTERRUPT_WAITID => {
+                self.SleepFinish(false);
+                match waitTimer {
+                    Some(timer) => {
+                        timer.Cancel();
+                    }
+                    _ => (),
                 }
-                _ => (),
+                return Err(Error::ErrInterrupted);
             }
-            return Err(Error::ErrInterrupted);
+            _ => {
+                panic!("task block invalid block id {}", id)
+            }
         }
     }
 

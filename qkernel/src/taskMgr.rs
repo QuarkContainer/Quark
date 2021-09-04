@@ -190,6 +190,9 @@ pub fn Wait() {
         if let Some(newTask) = next {
             CPULocal::SetCPUState(VcpuState::Running);
             let current = TaskId::New(CPULocal::CurrentTask());
+            //let vcpuId = newTask.GetTask().queueId;
+            //assert!(CPULocal::CpuId()==vcpuId, "cpu {}, target cpu {}", CPULocal::CpuId(), vcpuId);
+
             if current.data != newTask.data {
                 switch(current, newTask);
             }
@@ -288,6 +291,7 @@ impl Scheduler {
 
     pub fn Schedule(&self, taskId: TaskId) {
         let vcpuId = taskId.GetTask().queueId;
+        //assert!(CPULocal::CpuId()==vcpuId, "cpu {}, target cpu {}", CPULocal::CpuId(), vcpuId);
         self.KScheduleQ(taskId, vcpuId);
     }
 

@@ -46,8 +46,8 @@ pub const TIMEOUT_PROCESS_TIME : i64 = 30_000;
 
 pub fn DoSelect(task: &Task, nfds: i32, readfds: u64, writefds: u64, exceptfds: u64, timeout: i64) -> Result<i64> {
     if nfds == 0 {
-        super::super::taskMgr::Yield();
         if timeout == 0 {
+            super::super::taskMgr::Yield();
             return Ok(0)
         }
 

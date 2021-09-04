@@ -484,7 +484,7 @@ impl Task {
             let ioUsage = nt.lock().ioUsage.clone();
 
             ptr::write(taskPtr, Self {
-                context: Default::default(),
+                context: Context::New(),
                 queueId: 0,
                 taskId: s_ptr as u64,
                 mm: mm,
