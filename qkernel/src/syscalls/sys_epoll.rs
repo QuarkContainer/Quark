@@ -142,6 +142,7 @@ pub fn WaitEpoll(task: &Task, epfd: i32, max: i32, timeout: i32) -> Result<Vec<E
     // caller requested a non-blocking "wait".
     let r = ep.ReadEvents(task, max);
     if r.len() != 0 || timeout == 0 {
+        super::super::taskMgr::Yield(); // yield vcpu to avoid live lock
         return Ok(r)
     }
 
