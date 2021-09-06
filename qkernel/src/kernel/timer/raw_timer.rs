@@ -66,7 +66,7 @@ impl RawTimerInternal {
 
             //HostSpace::StopTimer(t.ClockId, t.Id);
 
-            IOURING.TimerRemove(task, t.userData);
+            IOURING.AsyncTimerRemove(t.userData);
             return true;
         }
 
@@ -74,6 +74,7 @@ impl RawTimerInternal {
         t.State = TimerState::Running;
         t.SeqNo += 1;
 
+        //error!("ResetRaw {}/{}/{}", t.Id, t.SeqNo, delta);
         let userData = IOURING.RawTimeout(task, t.Id, t.SeqNo, delta) as u64;
         t.userData = userData;
         return false;
@@ -219,6 +220,7 @@ impl RawTimer {
     pub fn Fire(&self, SeqNo: u64) {
         let timer = {
             let mut t = self.lock();
+            //error!("Fire {}/{}", t.Id, t.SeqNo);
             if SeqNo != t.SeqNo || t.State != TimerState::Running {
                 return; //one out of data fire.
             }
