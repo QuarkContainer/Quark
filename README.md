@@ -45,6 +45,10 @@ After installing both Rust and Rust nightly. Please also install "cargo-xbuild" 
 ```sh
 cargo install cargo-xbuild
 ```
+And Installing lcap library
+```sh
+sudo apt-get install libcap-dev
+```
 And also add the rust-src component to the current toolchain:
 ```sh
 rustup component add rust-src
