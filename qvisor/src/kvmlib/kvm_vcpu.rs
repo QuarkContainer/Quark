@@ -372,6 +372,9 @@ impl KVMVcpu {
 
         //let mut localStr: Vec<u8> = Vec::new();
 
+        let coreid = core_affinity::CoreId{id: self.id};
+        core_affinity::set_for_current(coreid);
+
         info!("start enter guest[{}]: entry is {:x}, stack is {:x}", self.id, self.entry, self.topStackAddr);
         loop {
             match self.vcpu.run().expect(&format!("kvm virtual cpu[{}] run failed", self.id)) {

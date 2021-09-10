@@ -17,6 +17,7 @@
 extern crate alloc;
 extern crate bit_field;
 extern crate errno;
+extern crate core_affinity;
 
 #[macro_use]
 mod print;
@@ -65,7 +66,7 @@ lazy_static! {
     pub static ref IO_MGR: Mutex<vmspace::HostFileMap::IOMgr> = Mutex::new(vmspace::HostFileMap::IOMgr::Init().expect("Init IOMgr fail"));
     pub static ref SYNC_MGR: Mutex<syncmgr::SyncMgr> = Mutex::new(syncmgr::SyncMgr::New());
     pub static ref PMA_KEEPER: HostPMAKeeper = HostPMAKeeper::New();
-    pub static ref URING_MGR: Mutex<UringMgr> = Mutex::new(UringMgr::New(1024));
+    pub static ref URING_MGR: Mutex<UringMgr> = Mutex::new(UringMgr::New(64));
     pub static ref KERNEL_IO_THREAD: KIOThread = KIOThread::New();
     pub static ref GLOCK: Mutex<()> = Mutex::new(());
 }
