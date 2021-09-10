@@ -57,8 +57,7 @@ pub mod kvmlib;
 use simplelog::*;
 use std::fs::OpenOptions;
 use std::env;
-use core::alloc::GlobalAlloc;
-use core::alloc::Layout;
+
 use kvmlib::qlib::mem::list_allocator::*;
 
 pub const LOG_FILE : &'static str = "/var/log/quark/quark.log";
@@ -110,16 +109,8 @@ fn main() {
 
     #[global_allocator]
     static GLOBAL: ListAllocator = ListAllocator::Empty();
-
-
     StartLog(LOG_FILE, LevelFilter::Info);
     
-    let layout = Layout::from_size_align(1<<20, 1<<20).unwrap();
-    unsafe {
-        let ptr = GLOBAL.alloc(layout);
-        info!("allocated from list_allocator: {:x}", ptr as u64);
-    }
-    //info!("allocated address is {:x}", address as u64);
     {
         let mut str = "".to_string();
         let args : Vec<String> = env::args().collect();
