@@ -225,6 +225,11 @@ impl MapOption {
         self
     }
 
+    pub fn MapPrecommit(&mut self) -> &mut Self {
+        self.flags |= libc::MAP_POPULATE;
+        self
+    }
+
     pub fn MapLocked(&mut self) -> &mut Self {
         self.flags |= libc::MAP_LOCKED;
         self
