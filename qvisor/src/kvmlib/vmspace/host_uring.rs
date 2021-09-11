@@ -56,18 +56,34 @@ impl IoUring {
         let sqe_len = p.sq_entries as usize * mem::size_of::<sys::io_uring_sqe>();
         let sqe_mmap = Mmap::new(fd, sys::IORING_OFF_SQES as _, sqe_len)?;
 
-        let sq_mmap = Mmap::new(fd, sys::IORING_OFF_SQ_RING as _, sq_len)?;
-        let cq_mmap = Mmap::new(fd, sys::IORING_OFF_CQ_RING as _, cq_len)?;
+        if p.features & sys::IORING_FEAT_SINGLE_MMAP != 0 {
+            let scq_mmap =
+                Mmap::new(fd, sys::IORING_OFF_SQ_RING as _, core::cmp::max(sq_len, cq_len))?;
 
-        let sq = unsafe {SubmissionQueue::new(&sq_mmap, &sqe_mmap, p)};
-        let cq = unsafe {CompletionQueue::new(&cq_mmap, p)};
-        let mm = MemoryMap {
-            cq_mmap: Some(cq_mmap),
-            sq_mmap,
-            sqe_mmap,
-        };
+            let sq = unsafe {SubmissionQueue::new(&scq_mmap, &sqe_mmap, p)};
+            let cq = unsafe {CompletionQueue::new(&scq_mmap, p)};
 
-        Ok((mm, sq, cq))
+            let mm = MemoryMap {
+                sq_mmap: scq_mmap,
+                cq_mmap: None,
+                sqe_mmap,
+            };
+
+            Ok((mm, sq, cq))
+        } else {
+            let sq_mmap = Mmap::new(fd, sys::IORING_OFF_SQ_RING as _, sq_len)?;
+            let cq_mmap = Mmap::new(fd, sys::IORING_OFF_CQ_RING as _, cq_len)?;
+
+            let sq = unsafe {SubmissionQueue::new(&sq_mmap, &sqe_mmap, p)};
+            let cq = unsafe {CompletionQueue::new(&cq_mmap, p)};
+            let mm = MemoryMap {
+                cq_mmap: Some(cq_mmap),
+                sq_mmap,
+                sqe_mmap,
+            };
+
+            Ok((mm, sq, cq))
+        }
     }
 
     fn with_params(entries: u32, mut p: sys::io_uring_params) -> Result<IoUring> {
