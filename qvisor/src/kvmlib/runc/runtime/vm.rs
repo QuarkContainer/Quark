@@ -65,7 +65,7 @@ pub struct BootStrapMem {
     pub vcpuCount: usize,
 }
 
-pub const KERNEL_HEAP_ORD : usize = 32; // 4GB
+pub const KERNEL_HEAP_ORD : usize = 34; // 4GB
 pub const PAGE_POOL_ORD: usize = KERNEL_HEAP_ORD - 8;
 
 impl BootStrapMem {
@@ -184,7 +184,7 @@ impl VirtualMachine {
         let bootstrapMem;
 
         {
-            let memOrd = KERNEL_HEAP_ORD; // 8GB
+            let memOrd = KERNEL_HEAP_ORD;
             let kernelMemSize = 1 << memOrd;
             //pageMmap = KVMMachine::initKernelMem(&vm_fd, MemoryDef::PHY_LOWER_ADDR  + 64 * MemoryDef::ONE_MB, kernelMemSize)?;
             //pageAllocatorBaseAddr = pageMmap.as_ptr() as u64;
@@ -306,6 +306,7 @@ impl VirtualMachine {
     }
 
     pub fn Schedule(shareSpace: &ShareSpace, taskId: TaskIdQ) {
+        //error!("schedule {:x?}", taskId.TaskId());
         shareSpace.scheduler.ScheduleQ(taskId.TaskId(), taskId.Queue());
     }
 

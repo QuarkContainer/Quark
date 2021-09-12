@@ -1,11 +1,11 @@
 {
   "DebugLevel"    : "Error",
-  "KernelMemSize" : 16,
+  "KernelMemSize" : 32,
   "SlowPrint"     : false,
   "LogLevel"      : "Simple",
-  "TcpBuffIO"     : true,
+  "TcpBuffIO"     : false,
   "EnableAIO"     : true,
   "PrintException": false,
   "KernelPagetable": false,
-  "RawTimer"      : false
+  "RawTimer"      : true
 }

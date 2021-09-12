@@ -2941,12 +2941,14 @@ pub fn ComparePage(from: u64, to: u64) -> bool {
 
 #[no_mangle]
 pub extern fn CopyData(from: u64, to: u64, cnt: usize) {
+    super::super::asm::lfence();
     unsafe {
         let fromArr = slice::from_raw_parts(from as *const u64, cnt);
         let toArr = slice::from_raw_parts_mut(to as *mut u64, cnt);
         for i in 0..cnt {
             toArr[i] = fromArr[i]
         }
+        super::super::asm::sfence();
     }
 }
 
