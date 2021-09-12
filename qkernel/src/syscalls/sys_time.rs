@@ -25,6 +25,7 @@ use super::super::threadmgr::thread::*;
 use super::super::kernel::timer::timer::*;
 use super::super::kernel::timer::*;
 use super::sys_poll::TIMEOUT_PROCESS_TIME;
+use super::super::taskMgr::*;
 
 // The most significant 29 bits hold either a pid or a file descriptor.
 pub fn PidOfClockID(c: i32) -> i32 {
@@ -192,6 +193,7 @@ pub fn SysNanoSleep(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let dur = ts.ToNs()?;
 
     if dur < TIMEOUT_PROCESS_TIME {
+        Yield();
         return Ok(0)
     }
 
@@ -232,6 +234,7 @@ pub fn SysClockNanosleep(task: &mut Task, args: &SyscallArguments) -> Result<i64
     }
 
     if dur < TIMEOUT_PROCESS_TIME {
+        Yield();
         return Ok(0)
     }
 
