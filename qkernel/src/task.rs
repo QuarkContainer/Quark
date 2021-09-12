@@ -21,7 +21,7 @@ use core::mem;
 use alloc::boxed::Box;
 use lazy_static::lazy_static;
 
-use super::arch::x86_64::arch_x86::*;
+//use super::arch::x86_64::arch_x86::*;
 use super::qlib::linux_def::*;
 use super::qlib::common::*;
 use super::SignalDef::*;
@@ -105,8 +105,8 @@ pub struct Context {
 
     pub fs: u64,
     pub gs: u64,
-    pub X86fpstate: Box<X86fpstate>,
-    pub sigFPState: Vec<Box<X86fpstate>>,
+    //pub X86fpstate: Box<X86fpstate>,
+    //pub sigFPState: Vec<Box<X86fpstate>>,
 }
 
 impl Context {
@@ -125,8 +125,8 @@ impl Context {
 
             fs: 0,
             gs: 0,
-            X86fpstate: Default::default(),
-            sigFPState: Default::default(),
+            //X86fpstate: Default::default(),
+            //sigFPState: Default::default(),
         }
     }
 }
@@ -239,11 +239,11 @@ impl Task {
     }
 
     pub fn SaveFp(&self) {
-        self.context.X86fpstate.SaveFp();
+        //self.context.X86fpstate.SaveFp();
     }
 
     pub fn RestoreFp(&self) {
-        self.context.X86fpstate.RestoreFp();
+        //self.context.X86fpstate.RestoreFp();
     }
 
     pub fn DummyTask() -> Self {
