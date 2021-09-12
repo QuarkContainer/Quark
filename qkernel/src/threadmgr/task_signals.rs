@@ -1034,8 +1034,8 @@ impl Task {
         }
 
         // create new X86fpstate state
-        self.context.sigFPState.push(Box::new(self.context.X86fpstate.Fork()));
-        self.context.X86fpstate = Box::new(X86fpstate::default());
+        //self.context.sigFPState.push(Box::new(self.context.X86fpstate.Fork()));
+        //self.context.X86fpstate = Box::new(X86fpstate::default());
 
         let t = self.Thread();
         let mut mask = t.lock().signalMask;
@@ -1103,13 +1103,13 @@ impl Task {
         pt.eflags = (pt.eflags & !EFLAGS_RESTORABLE) | (uc.MContext.eflags & EFLAGS_RESTORABLE);
         pt.orig_rax = core::u64::MAX;
 
-        if self.context.sigFPState.len() > 0 {
+        /*if self.context.sigFPState.len() > 0 {
             // restore X86fpstate state
             let X86fpstate = self.context.sigFPState.pop().unwrap();
             self.context.X86fpstate = X86fpstate;
         } else {
             error!("SignalReturn can't restore X86fpstate");
-        }
+        }*/
 
         let oldMask = uc.MContext.oldmask & !(UNBLOCKED_SIGNALS.0);
         let t = self.Thread();

@@ -572,7 +572,7 @@ pub fn child_clone(userSp: u64) {
     unsafe {
         llvm_asm!("\
             mov rbx, [rsp - 16]
-            fxrstor64 [rbx + 0]
+            //fxrstor64 [rbx + 0]
 
             mov gs:8, rdi
 
