@@ -131,6 +131,8 @@ context_swap:
     mov [rdi+0x30], rbp
 
     mov [rdi+0x40], rdx
+    sfence
+    lfence
 
     mov rsp, [rsi+0x00]
     mov r15, [rsi+0x08]
@@ -144,6 +146,7 @@ context_swap:
     ret
 
 context_swap_to:
+    lfence
     mov rsp, [rsi+0x00]
     mov r15, [rsi+0x08]
     mov r14, [rsi+0x10]

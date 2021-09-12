@@ -570,7 +570,8 @@ pub fn IRet(kernelRsp: u64) -> ! {
 pub fn child_clone(userSp: u64) {
     let negtive1 : u64 = 0xffffffff;
     unsafe {
-        llvm_asm!("\
+        llvm_asm!("
+            lfence
             mov rbx, [rsp - 16]
             //fxrstor64 [rbx + 0]
 
@@ -670,7 +671,10 @@ pub fn GetRsp() -> u64 {
 #[inline]
 pub fn Invlpg(addr: u64) {
     if !super::SHARESPACE.config.KernelPagetable {
-        unsafe { llvm_asm!("invlpg ($0)" :: "r" (addr): "memory" : "volatile" ) };
+        unsafe { llvm_asm!("
+            sfence
+            invlpg ($0)
+            " :: "r" (addr): "memory" : "volatile" ) };
     }
 }
 
@@ -869,4 +873,26 @@ pub fn fxrstor(addr: u64) {
         " : : "{rbx}"(addr), "{rax}"(negtive1), "{rdx}"(negtive1)
         : "memory" : "intel", "volatile")
     };
+}
+
+#[inline(always)]
+pub fn mfence() {
+    unsafe { llvm_asm!("
+        sfence
+        lfence
+    " : : : "memory" : "volatile" ) }
+}
+
+#[inline(always)]
+pub fn sfence() {
+    unsafe { llvm_asm!("
+        sfence
+    " : : : "memory" : "volatile" ) }
+}
+
+#[inline(always)]
+pub fn lfence() {
+    unsafe { llvm_asm!("
+        lfence
+    " : : : "memory" : "volatile" ) }
 }

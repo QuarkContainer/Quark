@@ -222,14 +222,8 @@ impl TaskQueue {
         self.lock().push_back(task);
     }
 
-    pub fn Print(&self) {
-        //info!("start TaskQueue::Print...");
-
-        for id in self.lock().iter() {
-            info!("Get task {:x}", (*id).Addr());
-        }
-
-        //info!("end TaskQueue::Print...");
+    pub fn ToString(&self) -> String {
+        return format!("{:x?}", self.lock());
     }
 
     pub fn Len(&self) -> u64 {

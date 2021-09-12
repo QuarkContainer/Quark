@@ -16,6 +16,7 @@ use core::ptr;
 use alloc::sync::Arc;
 //use alloc::boxed::Box;
 use alloc::string::ToString;
+use core::sync::atomic::AtomicUsize;
 
 use super::super::*;
 use super::super::kernel::ipc_namespace::*;
@@ -485,7 +486,7 @@ impl Task {
 
             ptr::write(taskPtr, Self {
                 context: Context::New(),
-                queueId: 0,
+                queueId: AtomicUsize::new(0),
                 taskId: s_ptr as u64,
                 mm: mm,
                 tidInfo: Default::default(),
@@ -634,9 +635,8 @@ pub fn CreateCloneTask(fromTask: &Task, toTask: &mut Task, userSp: u64) {
             to -= 8;
         }
 
-        toTask.context.ready = 1;
+        toTask.context.SetReady(1);
         toTask.context.fs = fromTask.context.fs;
-        toTask.context.gs = fromTask.context.gs;
         toTask.context.rsp = toTask.GetPtRegs() as *const _ as u64 - 8;
         toTask.context.rdi = userSp;
         //toTask.context.X86fpstate = Box::new(fromTask.context.X86fpstate.Fork());
@@ -646,6 +646,7 @@ pub fn CreateCloneTask(fromTask: &Task, toTask: &mut Task, userSp: u64) {
 
         // put the floattpointer state address in the stack, and the "child_clone" call can restore that
         //*((toTask.context.rsp - 8) as *mut u64) = toTask.context.X86fpstate.FloatingPointData();
+        super::super::asm::sfence();
     }
 }
 

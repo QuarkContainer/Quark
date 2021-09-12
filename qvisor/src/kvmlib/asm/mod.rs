@@ -55,3 +55,22 @@ pub fn CurrentCr3() -> u64 {
     unsafe { llvm_asm!("mov %cr3, $0" : "=r" (cr3) ) };
     return cr3;
 }
+
+#[inline(always)]
+pub fn mfence() {
+    unsafe { llvm_asm!("mfence" : : : "memory" : "volatile" ) }
+}
+
+#[inline(always)]
+pub fn sfence() {
+    unsafe { llvm_asm!("
+        sfence
+    " : : : "memory" : "volatile" ) }
+}
+
+#[inline(always)]
+pub fn lfence() {
+    unsafe { llvm_asm!("
+        lfence
+    " : : : "memory" : "volatile" ) }
+}
