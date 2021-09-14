@@ -62,4 +62,8 @@ impl CString {
             Ok(()) => return Ok(str)
         }
     }
+
+    pub fn CopyInString(task: &Task, addr: u64, len: usize) -> (String, Result<()>) {
+        return task.CopyInString(addr, len);
+    }
 }
