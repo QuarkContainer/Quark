@@ -17,7 +17,8 @@ backtracer = {git = "https://github.com/gz/backtracer.git" }
 buddy_system_allocator = "0.8.0"
 #linked_list_allocator = {path = "/home/brad/rust/linked_list_allocator"}
 
-spin = "0.7.1"
+#spin = "0.9.2"
+spin = {path = "/home/brad/rust/spin-rs"}
 #pic8259_simple = "0.2.0"
 #xmas-elf = { git = "https://github.com/gz/xmas-elf.git" }
 xmas-elf = "0.7.0"
