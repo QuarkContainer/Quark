@@ -3,7 +3,7 @@
   "KernelMemSize" : 32,
   "SlowPrint"     : false,
   "LogLevel"      : "Simple",
-  "TcpBuffIO"     : false,
+  "TcpBuffIO"     : true,
   "EnableAIO"     : true,
   "PrintException": false,
   "KernelPagetable": false,

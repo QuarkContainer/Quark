@@ -305,13 +305,12 @@ impl QUring {
             ScheduleQ(call.taskId);
         } else {
             let idx = data as usize;
-            //error!("uring process: async is {:?}", &ops.Type());
-            let rerun = self.asyncMgr.ops[idx].lock().Process(ret, idx);
+            let mut ops = self.asyncMgr.ops[idx].lock();
+            let rerun = ops.Process(ret, idx);
             if !rerun {
-                *self.asyncMgr.ops[idx].lock() = AsyncOps::None;
+                *ops = AsyncOps::None;
                 self.asyncMgr.FreeSlot(idx);
             }
-            //error!("uring process 2");
         }
     }
 

@@ -306,7 +306,6 @@ impl VirtualMachine {
     }
 
     pub fn Schedule(shareSpace: &ShareSpace, taskId: TaskIdQ) {
-        //error!("schedule {:x?}", taskId.TaskId());
         shareSpace.scheduler.ScheduleQ(taskId.TaskId(), taskId.Queue());
     }
 
