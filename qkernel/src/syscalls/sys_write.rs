@@ -40,13 +40,13 @@ pub fn Write(task: &Task, fd: i32, addr: u64, size: i64) -> Result<i64> {
 
     /*if fd <= 2  {
          use super::super::util::cstring::*;
-
-         match CString::ToStringWithLen(task, addr, size as usize) {
-             Ok(str) => {
+        let (str, err) = CString::CopyInString(task, addr, size as usize);
+         match err {
+             Ok(_) => {
                  error!("(Data) Write: {}", str);
              }
              Err(_) => {
-                 error!("(Data) Write fail ");
+                 error!("(Data) Write fail: {}", str);
              }
          }
     }*/

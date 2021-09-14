@@ -280,13 +280,16 @@ pub fn mknodeAt(task: &Task, dirFd: i32, addr: u64, mode: FileMode) -> Result<()
 pub fn createAt(task: &Task, dirFd: i32, addr: u64, flags: u32, mode: FileMode) -> Result<i32> {
     let (path, dirPath) = copyInPath(task,  addr, false)?;
 
-    info!("createAt path is {}, current is {}", &path, task.fsContext.WorkDirectory().MyFullName());
+    info!("createAt path is {}, current is {}, flags is {}", &path, task.fsContext.WorkDirectory().MyFullName(), flags);
     if dirPath {
         return Err(Error::SysError(SysErr::EISDIR))
     }
 
     let mut fileFlags = FileFlags::FromFlags(flags);
     fileFlags.LargeFile = true;
+
+    // the io_uring write will fail with EAGAIN even for disk file. Work around to make sure the file is opened without nonblocking
+    fileFlags.NonBlocking = false;
 
     let mut fd = 0;
     let mnt = task.mountNS.clone();
