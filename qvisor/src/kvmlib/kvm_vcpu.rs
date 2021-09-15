@@ -31,7 +31,6 @@ use super::qlib::linux_def::*;
 use super::qlib::perf_tunning::*;
 use super::qlib::*;
 use super::qlib::vcpu_mgr::*;
-use super::qlib::config::*;
 use super::amd64_def::*;
 use super::URING_MGR;
 use super::runc::runtime::vm::*;
@@ -477,6 +476,9 @@ impl KVMVcpu {
                             };
 
                             sharespace.Init();
+                            if !sharespace.config.SlowPrint {
+                                super::super::print::EnableKernelPrint();
+                            }
                             KERNEL_IO_THREAD.Init(sharespace.scheduler.VcpuArr[0].eventfd);
                             URING_MGR.lock().SetupEventfd(sharespace.scheduler.VcpuArr[0].eventfd);
                             vms.shareSpace = sharespace;
@@ -535,14 +537,7 @@ impl KVMVcpu {
                                 &*(addr as *const Print)
                             };
 
-                            if msg.level == DebugLevel::Info {
-                                info!("{}", msg.str);
-                            } else if msg.level == DebugLevel::Error {
-                                error!("{}", msg.str);
-                            } else {
-                                debug!("{}", msg.str);
-                            }
-
+                            log!("{}", msg.str);
                         }
 
                         qlib::HYPERCALL_MSG => {

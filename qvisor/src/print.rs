@@ -26,6 +26,11 @@ lazy_static! {
 
 pub struct Log {
     pub file: File,
+    pub kernelPrint: bool,
+}
+
+pub fn EnableKernelPrint() {
+    LOG.lock().EnableKernelPrint();
 }
 
 pub const LOG_FILE : &str = "/var/log/quark/quark.log";
@@ -34,12 +39,26 @@ impl Log {
     pub fn New() -> Self {
         let file = OpenOptions::new().create(true).append(true).open(LOG_FILE).expect("Log Open fail");
         return Self {
-            file: file
+            file: file,
+            kernelPrint: false,
         }
     }
 
+    pub fn EnableKernelPrint(&mut self) {
+        self.kernelPrint = false;
+    }
+
     pub fn Write(&mut self, str: &str) {
-        self.file.write_all(str.as_bytes()).expect("log write fail");
+        if !self.kernelPrint {
+            self.WriteBytes(str.as_bytes());
+        } else {
+            super::kvmlib::VMS.lock().shareSpace.Log(str.as_bytes());
+            super::kvmlib::VMS.lock().shareSpace.LogFlush();
+        }
+    }
+
+    pub fn WriteBytes(&mut self, buf: &[u8]) {
+        self.file.write_all(buf).expect("log write fail");
     }
 
     pub fn Now() -> String {
@@ -47,10 +66,18 @@ impl Log {
     }
 
     pub fn Print(&mut self, level: &str, str: &str) {
-        self.Write(&format!("{} [{}] {}\n", Self::Now(), level, str));
+        //self.Write(&format!("{} [{}] {}\n", Self::Now(), level, str));
+        self.Write(&format!("[{}] {}\n", level, str));
     }
 }
 
+#[macro_export]
+macro_rules! log {
+    ($($arg:tt)*) => ({
+        let s = &format!($($arg)*);
+        crate::print::LOG.lock().Write(&format!("{}\n",&s));
+    });
+}
 
 #[macro_export]
 macro_rules! error {

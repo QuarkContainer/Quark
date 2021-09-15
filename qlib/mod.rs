@@ -55,6 +55,7 @@ pub mod vcpu_mgr;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
+use spin::Mutex;
 
 use super::asm::*;
 use self::task_mgr::*;
@@ -62,6 +63,7 @@ use self::qmsg::*;
 use self::ringbuf::*;
 use self::config::*;
 use self::linux_def::*;
+use self::bytestream::*;
 
 pub const HYPERCALL_INIT: u16 = 1;
 pub const HYPERCALL_PANIC: u16 = 2;
@@ -511,6 +513,7 @@ pub struct ShareSpace {
 
     pub kernelIOThreadWaiting: AtomicBool,
     pub config: Config,
+    pub logBuf: Mutex<Option<ByteStream>>,
 
     pub values: [[AtomicU64; 2]; 16],
 }
@@ -530,6 +533,7 @@ impl ShareSpace {
             guestMsgCount: AtomicU64::new(0),
             kernelIOThreadWaiting: AtomicBool::new(false),
             config: Config::default(),
+            logBuf: Mutex::new(None),
             values: [
                 [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)],
                 [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)],
@@ -567,6 +571,18 @@ impl ShareSpace {
         }
 
         return res;
+    }
+
+    pub fn Log(&self, buf: &[u8]) -> bool {
+        let (trigger, cnt) = self.logBuf.lock().as_mut().unwrap().write(buf).unwrap();
+        assert!(buf.len() == cnt, "log buff full");
+
+        return trigger;
+    }
+
+    pub fn ReadLog(&self, buf: &mut [u8]) -> usize {
+        let (_trigger, cnt) = self.logBuf.lock().as_mut().unwrap().read(buf).unwrap();
+        return cnt;
     }
 
     #[inline]
