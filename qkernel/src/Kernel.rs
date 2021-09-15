@@ -22,7 +22,6 @@ use super::qlib::qmsg::*;
 use super::qlib::task_mgr::*;
 use super::qlib::linux_def::*;
 //use super::qlib::perf_tunning::*;
-use super::qlib::vcpu_mgr::*;
 use super::task::*;
 use super::asm::*;
 use super::IOURING;
@@ -159,17 +158,6 @@ impl HostSpace {
         });
 
         return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn IOBufWrite(fd: i32, addr: u64, len: usize, offset: isize) {
-        let msg = qmsg::HostOutputMsg::IOBufWrite(qmsg::IOBufWrite {
-            fd,
-            addr,
-            len,
-            offset,
-        });
-
-        HostSpace::AQCall(&msg);
     }
 
     pub fn IOReadAt(fd: i32, iovs: u64, iovcnt: i32, offset: u64) -> i64 {
@@ -835,12 +823,8 @@ impl HostSpace {
         HostSpace::Call(&mut msg, true);
     }
 
-    pub fn PrintStr(level: DebugLevel, addr: u64, len: usize) {
-        let msg = qmsg::HostOutputMsg::PrintStr(qmsg::PrintStr {
-            level,
-            addr,
-            len,
-        });
+    pub fn PrintStr() {
+        let msg = qmsg::HostOutputMsg::PrintStr(qmsg::PrintStr{});
 
         HostSpace::AQCall(&msg);
     }
@@ -946,32 +930,11 @@ impl HostSpace {
         HyperCall64(HYPERCALL_PRINT, &msg as *const _ as u64, 0);
     }
 
-    pub fn Kprint(level: DebugLevel, str: &str) {
-        let inWaitFn = super::task::Task::TaskId().Addr() == CPULocal::WaitTask() || CPULocal::WaitTask() == 0;
-
-        if inWaitFn {
-            let msg = Print {
-                level,
-                str,
-            };
-
-            HyperCall64(HYPERCALL_PRINT, &msg as *const _ as u64, 1);
-        } else {
-            let bytes = str.as_bytes();
-            match super::BUF_MGR.Alloc(bytes.len() as u64) {
-                Err(_) => {
-                    let msg = Print {
-                        level,
-                        str,
-                    };
-
-                    HyperCall64(HYPERCALL_PRINT, &msg as *const _ as u64, 2);
-                }
-                Ok(addr) => {
-                    IoVec::NewFromAddr(addr, bytes.len()).ToSliceMut().copy_from_slice(bytes);
-                    Self::PrintStr(level, addr, bytes.len());
-                }
-            };
+    pub fn Kprint(str: &str) {
+        let bytes = str.as_bytes();
+        let trigger = super::SHARESPACE.Log(bytes);
+        if trigger {
+            Self::PrintStr();
         }
     }
 

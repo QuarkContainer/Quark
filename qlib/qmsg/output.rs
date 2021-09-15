@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::super::config::*;
 use super::super::linux_def::*;
 
 // kernel to host
@@ -25,7 +24,6 @@ pub enum HostOutputMsg {
     //WriteBuffTrigger(WriteBuffTrigger),
     //ReadBuffTrigger(ReadBuffTrigger),
     MUnmap(MUnmap),
-    IOBufWrite(IOBufWrite),
     PrintStr(PrintStr),
     WakeVCPU(WakeVCPU)
 }
@@ -58,20 +56,8 @@ pub struct MUnmap {
     pub len: u64,
 }
 
-#[derive(Clone, Default, Debug, Copy)]
-pub struct IOBufWrite {
-    pub fd: i32,
-    pub addr: u64,
-    pub len: usize,
-    pub offset: isize,
-}
-
 #[derive(Clone, Debug, Copy)]
-pub struct PrintStr {
-    pub level: DebugLevel,
-    pub addr: u64,
-    pub len: usize,
-}
+pub struct PrintStr {}
 
 #[derive(Clone, Debug, Copy)]
 pub struct WakeVCPU {

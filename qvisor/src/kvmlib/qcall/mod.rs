@@ -12,14 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::str;
-use core::slice;
 
 use super::qlib::{ShareSpace};
 use super::qlib::common::*;
 use super::qlib::qmsg::*;
 use super::qlib::range::*;
-use super::VMSpace;
 use super::syncmgr::*;
 use super::*;
 
@@ -49,24 +46,8 @@ pub fn AQHostCall(msg: HostOutputMsg, shareSpace: &ShareSpace) {
                 Err(err) => panic!("MUnmap: unexpected error {:?}", err),
             }
         }
-        HostOutputMsg::IOBufWrite(msg) => {
-            let _ret = VMSpace::IOBufWrite(msg.fd, msg.addr, msg.len, msg.offset);
-            //error!("HostOutputMsg::IOBufWrite ret is {}", ret);
-            /*shareSpace.AQHostInputCall(HostInputMsg::IOBufWriteResp(IOBufWriteResp{
-                fd: msg.fd,
-                addr: msg.addr,
-                len: msg.len,
-                ret: ret,
-            }));*/
-        }
-        HostOutputMsg::PrintStr(msg) => {
-            let ptr = msg.addr as *const u8;
-            let slice = unsafe { slice::from_raw_parts(ptr, msg.len) };
-            info!("{}", str::from_utf8(slice).expect("PrintStr handling fail"));
-            shareSpace.AQHostInputCall(&HostInputMsg::PrintStrResp(PrintStrResp{
-                addr: msg.addr,
-                len: msg.len,
-            }));
+        HostOutputMsg::PrintStr(_msg) => {
+            shareSpace.LogFlush();
         }
         HostOutputMsg::WakeVCPU(msg) => {
             let vcpuId = msg.vcpuId as usize;
@@ -89,6 +70,18 @@ impl<'a> ShareSpace {
 
         //SyncMgr::WakeVcpu(self, TaskIdQ::New(1<<12, 0));
         KERNEL_IO_THREAD.Wakeup(self);
+    }
+
+    pub fn LogFlush(&self) {
+        let mut buf : [u8; 1024] = [0; 1024];
+
+        loop {
+            let cnt = self.ReadLog(&mut buf);
+            if cnt == 0 {
+                break;
+            }
+            super::super::print::LOG.lock().WriteBytes(&buf[0..cnt]);
+        }
     }
 }
 

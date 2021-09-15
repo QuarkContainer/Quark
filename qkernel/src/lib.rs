@@ -351,6 +351,11 @@ fn InitGs(id: u64) {
     SwapGs();
 }
 
+pub fn LogInit() {
+    let bs = self::qlib::bytestream::ByteStream::Init(256); // 1MB
+    *SHARESPACE.logBuf.lock() = Some(bs);
+}
+
 #[no_mangle]
 pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u64, vcpuCnt: u64, autoStart: bool) {
     if id == 0 {
@@ -384,6 +389,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
             kpt.InitVsyscall(vsyscallPages);
         }
 
+        LogInit();
         SetVCPCount(vcpuCnt as usize);
         InitTimeKeeper(vdsoParamAddr);
         VDSO.Init(vdsoParamAddr);
