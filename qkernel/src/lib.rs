@@ -351,8 +351,8 @@ fn InitGs(id: u64) {
     SwapGs();
 }
 
-pub fn LogInit() {
-    let bs = self::qlib::bytestream::ByteStream::Init(256); // 1MB
+pub fn LogInit(pages: u64) {
+    let bs = self::qlib::bytestream::ByteStream::Init(pages); // 4MB
     *SHARESPACE.logBuf.lock() = Some(bs);
 }
 
@@ -389,7 +389,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
             kpt.InitVsyscall(vsyscallPages);
         }
 
-        LogInit();
+        LogInit(1024); // 1024 pages, i.e. 4MB
         SetVCPCount(vcpuCnt as usize);
         InitTimeKeeper(vdsoParamAddr);
         VDSO.Init(vdsoParamAddr);

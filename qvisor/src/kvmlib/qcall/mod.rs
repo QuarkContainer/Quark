@@ -73,7 +73,7 @@ impl<'a> ShareSpace {
     }
 
     pub fn LogFlush(&self) {
-        let mut buf : [u8; 1024] = [0; 1024];
+        let mut buf : [u8; 4096 * 4] = [0; 4096 * 4];
 
         loop {
             let cnt = self.ReadLog(&mut buf);

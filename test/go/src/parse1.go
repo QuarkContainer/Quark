@@ -32,17 +32,17 @@ func main() {
 	for scanner.Scan() {
 		num += 1
 		fullstr := scanner.Text()
-		if len(fullstr) < 13 {
+		if len(fullstr) < 0 {
 			continue
 		}
 
-		str := fullstr[13:]
+		str := fullstr[0:]
 
 		substr := "";
 		if strings.HasPrefix(str, "[ERROR] [") {
 			substr = strings.TrimPrefix(str, "[ERROR] [")
-		} else if strings.HasPrefix(str, "[ INFO] [") {
-			substr = strings.TrimPrefix(str, "[ INFO] [")
+		} else if strings.HasPrefix(str, "[INFO] [") {
+			substr = strings.TrimPrefix(str, "[INFO] [")
 		} else {
 			continue
 		}

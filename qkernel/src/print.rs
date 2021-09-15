@@ -23,7 +23,7 @@ use super::asm::*;
 pub const SCALE : i64 = 2_000;
 
 pub fn PrintPrefix() -> String {
-    return format!("[{}/{:x}|{}] ", CPULocal::CpuId() , Task::TaskId().Addr(), Rdtsc()/SCALE);
+    return format!("[{}/{:x}|{}]", CPULocal::CpuId() , Task::TaskId().Addr(), Rdtsc()/SCALE);
 }
 
 #[macro_export]
