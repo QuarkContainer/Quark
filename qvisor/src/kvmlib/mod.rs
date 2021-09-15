@@ -20,9 +20,6 @@ extern crate errno;
 extern crate core_affinity;
 
 #[macro_use]
-mod print;
-
-#[macro_use]
 pub mod asm;
 
 pub mod qlib;

@@ -138,17 +138,6 @@ impl VirtualMachine {
     pub fn Init(args: Args /*args: &Args, kvmfd: i32*/) -> Result<Self> {
         PerfGoto(PerfType::Other);
 
-        /*{
-            use super::super::super::qlib::cpuid::*;
-            let featureSet = HostFeatureSet();
-            error!("Host::hasXSAVEOPT is {}", featureSet.UseXsaveopt());
-            error!("Host::hasXSAVE is {}", featureSet.UseXsave());
-            error!("Host::hasFSGSBASE is {}", featureSet.HasFeature(Feature(X86Feature::X86FeatureFSGSBase as i32)));
-            error!("Host::X86FeatureXSAVEOPT is {}", featureSet.HasFeature(Feature(X86Feature::X86FeatureXSAVEOPT as i32)));
-            error!("Host::X86FeatureXSAVE is {}", featureSet.HasFeature(Feature(X86Feature::X86FeatureXSAVE as i32)));
-            error!("Host::X86FeatureOSXSAVE is {}", featureSet.HasFeature(Feature(X86Feature::X86FeatureOSXSAVE as i32)));
-        }*/
-
         let mut config = Config::default();
         config.Load();
 
