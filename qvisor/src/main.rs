@@ -52,65 +52,23 @@ extern crate fs2;
 extern crate caps;
 extern crate tabwriter;
 
+#[macro_use]
+pub mod print;
+
 pub mod kvmlib;
 
-use simplelog::*;
-use std::fs::OpenOptions;
 use std::env;
 
 use kvmlib::qlib::mem::list_allocator::*;
 
 pub const LOG_FILE : &'static str = "/var/log/quark/quark.log";
 
-pub fn StartLog(log: &str, level: LevelFilter) {
-    //std::fs::remove_file(log).ok();
-
-    //let termLog = TermLogger::new(LevelFilter::Error, Config::default(), TerminalMode::Mixed).unwrap();
-
-    let mut build = ConfigBuilder::new();
-    build.set_time_format_str("%H:%M:%S%.3f");
-    //build.set_time_format_str("");
-    let config = build.build();
-
-    let commonLogfile = OpenOptions::new()
-        .append(true)
-        .create(true)
-        .open(LOG_FILE).unwrap();
-
-    if log == LOG_FILE {
-        CombinedLogger::init(
-            vec![
-                //termLog,
-                WriteLogger::new(level, config, commonLogfile)
-            ]
-        ).unwrap();
-    } else {
-        let mut build1 = ConfigBuilder::new();
-        build1.set_time_format_str("%H:%M:%S%.3f");
-        let config1 = build1.build();
-
-        let logfile = OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(log).unwrap();
-
-        CombinedLogger::init(
-            vec![
-                //termLog,
-                WriteLogger::new(level, config, commonLogfile),
-                WriteLogger::new(level, config1, logfile)
-            ]
-        ).unwrap();
-    }
-}
-
 fn main() {
     use self::kvmlib::runc::cmd::command::*;
 
     #[global_allocator]
     static GLOBAL: ListAllocator = ListAllocator::Empty();
-    StartLog(LOG_FILE, LevelFilter::Info);
-    
+
     {
         let mut str = "".to_string();
         let args : Vec<String> = env::args().collect();
@@ -122,18 +80,6 @@ fn main() {
     }
 
     let mut args = Parse().unwrap();
-
-    //StartLog(&args.config.DebugLog, args.config.DebugLevel.ToLevelFilter());
-    //StartLog(&args.config.DebugLog, LevelFilter::Info);
-
-    /*use std::fs::File;
-    use std::io::Write;
-
-    let mut file = File::create(&args.config.DebugLog).unwrap();
-
-    // Write a &str in the file (ignoring the result).
-    let log = r#"{"Level": "Debug", "Time":"2018-04-09T23:00:00Z", "Msg": "asdfasdf"}"#;
-    writeln!(&mut file, "{}", log).unwrap();*/
 
     match Run(&mut args) {
         Err(e) => {
