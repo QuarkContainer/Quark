@@ -27,6 +27,7 @@ func main() {
 	defer file.Close()
 
 	m := make(map[string]line)
+	vcpus := make(map[string]line)
 	scanner := bufio.NewScanner(file)
 	num := 0
 	for scanner.Scan() {
@@ -47,10 +48,11 @@ func main() {
 			continue
 		}
 
+		//start := strings.Index(substr, "[")
 		first := strings.Index(substr, "]")
 		left := strings.Index(substr, "/")
 		right := strings.Index(substr, "|")
-		//fmt.Printf("substr: %v, len is %v, i is %v, next is %v \n", substr, len(substr), i, next);
+		// fmt.Printf("substr: %v, len is %v \n", substr, len(substr));
 		if len(substr) <= 12 || first==-1 || left == -1 || right == -1 || left > right {
 			continue;
 		}
@@ -62,6 +64,12 @@ func main() {
 		//fmt.Printf("idstr is %v\n", idstr);
 
 		m[idstr]= line {
+			num: num,
+			str: str,
+		}
+
+		cpuStr := substr[0:left];
+		vcpus[cpuStr]= line {
 			num: num,
 			str: str,
 		}
@@ -79,5 +87,17 @@ func main() {
 
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
+	}
+
+	lines := []line{}
+	for _, line := range vcpus {
+		lines = append(lines, line)
+	}
+	sort.Sort(Lines(lines))
+
+
+	fmt.Println("vpus is:");
+	for _, line := range lines {
+		fmt.Println(line)
 	}
 }
