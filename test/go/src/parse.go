@@ -32,16 +32,16 @@ func main() {
 	for scanner.Scan() {
 		num += 1
 		fullstr := scanner.Text()
-		if len(fullstr) < 13 {
+		if len(fullstr) < 0 {
 			continue
 		}
 
-		str := fullstr[13:]
+		str := fullstr[0:]
 		substr := "";
 		if strings.HasPrefix(str, "[ERROR] [") {
 			substr = strings.TrimPrefix(str, "[ERROR] [")
-		} else if strings.HasPrefix(str, "[ INFO] [") {
-			substr = strings.TrimPrefix(str, "[ INFO] [")
+		} else if strings.HasPrefix(str, "[INFO] [") {
+			substr = strings.TrimPrefix(str, "[INFO] [")
 		} else {
 			continue
 		}
@@ -49,7 +49,7 @@ func main() {
 		first := strings.Index(substr, "]")
 		left := strings.Index(substr, "(")
 		right := strings.Index(substr, ")")
-		//fmt.Printf("substr: %v, len is %v, i is %v, next is %v \n", substr, len(substr), i, next);
+		//fmt.Printf("substr: %v, len is %v, left %v, first %v\n", substr, len(substr), left, first);
 		if len(substr) <= 12 || first==-1 || left == -1 || right == -1 || left > right || left - first != 2 {
 			continue;
 		}
