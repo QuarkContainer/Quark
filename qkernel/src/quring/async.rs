@@ -27,10 +27,10 @@ use super::super::fs::file::*;
 use super::super::task::*;
 use super::super::kernel::aio::aio_context::*;
 use super::super::kernel::eventfd::*;
-use super::super::BUF_MGR;
 use super::super::socket::hostinet::socket::*;
 use super::super::IOURING;
 use super::super::kernel::timer;
+use super::super::SHARESPACE;
 
 #[repr(align(128))]
 pub enum AsyncOps {
@@ -47,6 +47,7 @@ pub enum AsyncOps {
     AIORead(AIORead),
     AIOFsync(AIOFsync),
     AsyncRawTimeout(AsyncRawTimeout),
+    AsyncLogFlush(AsyncLogFlush),
     None,
 }
 
@@ -66,6 +67,7 @@ impl AsyncOps {
             AsyncOps::AIORead(ref msg) => return msg.SEntry(),
             AsyncOps::AIOFsync(ref msg) => return msg.SEntry(),
             AsyncOps::AsyncRawTimeout(ref msg) => return msg.SEntry(),
+            AsyncOps::AsyncLogFlush(ref msg) => return msg.SEntry(),
             AsyncOps::None => ()
         };
 
@@ -87,6 +89,7 @@ impl AsyncOps {
             AsyncOps::AIORead(ref mut msg) => msg.Process(result),
             AsyncOps::AIOFsync(ref mut msg) => msg.Process(result),
             AsyncOps::AsyncRawTimeout(ref mut msg) => msg.Process(result),
+            AsyncOps::AsyncLogFlush(ref mut msg) => msg.Process(result),
             AsyncOps::None => panic!("AsyncOps::None SEntry fail"),
         };
 
@@ -112,6 +115,7 @@ impl AsyncOps {
             AsyncOps::AIORead(_) => return 11,
             AsyncOps::AIOFsync(_) => return 12,
             AsyncOps::AsyncRawTimeout(_) => return 13,
+            AsyncOps::AsyncLogFlush(_) => return 14,
             AsyncOps::None => ()
         };
 
@@ -310,6 +314,7 @@ impl AsyncTTYWrite {
     }
 }
 
+/// deprecated.
 pub struct AsyncWritev {
     pub file: File,
     pub fd: i32,
@@ -338,8 +343,50 @@ impl AsyncWritev {
     }
 
     pub fn Process(&mut self, _result: i32) -> bool {
-        BUF_MGR.Free(self.addr, self.len as u64);
+        // add back when need
+        //BUF_MGR.Free(self.addr, self.len as u64);
         return false
+    }
+}
+
+pub struct AsyncLogFlush {
+    pub fd : i32,
+    pub addr: u64,
+    pub len: usize,
+}
+
+impl AsyncLogFlush {
+    pub fn SEntry(&self) -> squeue::Entry {
+        //let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
+        let op = opcode::Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32); //.flags(MsgType::MSG_DONTWAIT);
+
+        return op.build()
+            .flags(squeue::Flags::FIXED_FILE);
+    }
+
+    pub fn Process(&mut self, result: i32) -> bool {
+        if result <= 0 {
+            panic!("AsyncLogFlush fail {}/{}", result, self.fd)
+        }
+
+        let (addr, len) = SHARESPACE.ConsumeAndGetAvailableWriteBuf(result as usize);
+
+        if addr == 0 {
+            return false;
+        }
+
+        self.addr = addr;
+        self.len = len;
+
+        return true
+    }
+
+    pub fn New(fd: i32, addr: u64, len: usize) -> Self {
+        return Self {
+            fd,
+            addr,
+            len,
+        }
     }
 }
 

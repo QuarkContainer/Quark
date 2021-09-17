@@ -22,7 +22,6 @@ use super::kernel::waiter::*;
 use super::fs::host::hostinodeop::*;
 use super::qlib::common::*;
 use super::qlib::linux_def::*;
-use super::BUF_MGR;
 
 lazy_static! {
     static ref GUEST_NOTIFIER : Notifier = Notifier::New();
@@ -52,8 +51,9 @@ pub fn IOBufWriteRespHandle(fd: i32, addr: u64, len: usize, ret: i64) {
     GUEST_NOTIFIER.IOBufWriteRespHandle(fd, addr, len, ret)
 }
 
-pub fn PrintStrRespHandler(addr: u64, len: usize) {
-    GUEST_NOTIFIER.PrintStrRespHandler(addr, len)
+pub fn HostLogFlush() {
+    //GUEST_NOTIFIER.PrintStrRespHandler(addr, len)
+    super::IOURING.LogFlush();
 }
 
 pub struct GuestFdInfo {
@@ -160,8 +160,8 @@ impl Notifier {
         }
     }
 
-    pub fn IOBufWriteRespHandle(&self, fd: i32, addr: u64, len: usize, ret: i64) {
-        BUF_MGR.Free(addr, len as u64);
+    pub fn IOBufWriteRespHandle(&self, _fd: i32, _addr: u64, _len: usize, _ret: i64) {
+        /*BUF_MGR.Free(addr, len as u64);
         if ret < 0 {
             let n = self.lock();
             match n.fdMap.get(&fd) {
@@ -177,10 +177,6 @@ impl Notifier {
                     iops.lock().errorcode = ret;
                 }
             }
-        }
-    }
-
-    pub fn PrintStrRespHandler(&self, addr: u64, len: usize) {
-        BUF_MGR.Free(addr, len as u64);
+        }*/
     }
 }

@@ -212,6 +212,13 @@ impl QUring {
         return len as i64
     }
 
+    pub fn LogFlush(&self) {
+        let fd = super::super::SHARESPACE.Logfd();
+        let (addr, len) = super::super::SHARESPACE.GetDataBuf();
+        let ops = AsyncLogFlush::New(fd, addr, len);
+        self.AUCall(AsyncOps::AsyncLogFlush(ops));
+    }
+
     pub fn EventfdWrite(&self, fd: i32, addr: u64) {
         let ops = AsyncEventfdWrite::New(fd, addr);
         self.AUCall(AsyncOps::AsyncEventfdWrite(ops));

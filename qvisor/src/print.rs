@@ -19,6 +19,9 @@ use std::fs::OpenOptions;
 use spin::Mutex;
 use lazy_static::lazy_static;
 use chrono::prelude::*;
+use std::os::unix::io::AsRawFd;
+
+use super::kvmlib::qlib::qmsg::input::*;
 
 lazy_static! {
     pub static ref LOG : Mutex<Log> = Mutex::new(Log::New());
@@ -44,6 +47,10 @@ impl Log {
         }
     }
 
+    pub fn Logfd(&self) -> i32 {
+        return self.file.as_raw_fd();
+    }
+
     pub fn EnableKernelPrint(&mut self) {
         self.kernelPrint = false;
     }
@@ -52,8 +59,18 @@ impl Log {
         if !self.kernelPrint {
             self.WriteBytes(str.as_bytes());
         } else {
-            super::kvmlib::VMS.lock().shareSpace.Log(str.as_bytes());
-            super::kvmlib::VMS.lock().shareSpace.LogFlush();
+            let uringLog = super::kvmlib::VMS.lock().shareSpace.config.UringLog;
+            let trigger = super::kvmlib::VMS.lock().shareSpace.Log(str.as_bytes());
+            if trigger {
+                if uringLog {
+                    super::kvmlib::VMS.lock().shareSpace.AQHostInputCall(&HostInputMsg::LogFlush);
+                }
+            }
+
+
+            if !uringLog {
+                super::kvmlib::VMS.lock().shareSpace.LogFlush();
+            }
         }
     }
 

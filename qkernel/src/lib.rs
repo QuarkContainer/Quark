@@ -112,7 +112,6 @@ use self::qlib::pagetable::*;
 use self::qlib::control_msg::*;
 use self::qlib::common::*;
 use self::qlib::linux_def::MemoryDef;
-use self::qlib::range::*;
 use self::qlib::loader::*;
 use self::qlib::config::*;
 use self::qlib::vcpu_mgr::*;
@@ -152,8 +151,6 @@ lazy_static! {
     pub static ref KERNEL_PAGETABLE: PageTables = PageTables::Init(0);
     pub static ref PAGE_MGR: PageMgr = PageMgr::New();
     pub static ref LOADER: Loader = Loader::default();
-    //pub static ref BUF_MGR: Mutex<BufMgr> = Mutex::new(BufMgr::default());
-    pub static ref BUF_MGR: BufMgr = BufMgr::New();
     pub static ref IOURING: QUring = QUring::New(MemoryDef::QURING_SIZE);
     pub static ref KERNEL_STACK_ALLOCATOR : AlignedAllocator = AlignedAllocator::New(MemoryDef::DEFAULT_STACK_SIZE as usize, MemoryDef::DEFAULT_STACK_SIZE as usize);
 }

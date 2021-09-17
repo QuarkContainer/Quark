@@ -7,5 +7,6 @@
   "EnableAIO"     : true,
   "PrintException": false,
   "KernelPagetable": false,
-  "RawTimer"      : true
+  "RawTimer"      : true,
+  "UringLog"      : true
 }

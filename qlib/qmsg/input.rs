@@ -20,7 +20,7 @@ pub enum HostInputMsg {
     FireTimer(FireTimer),
     FdNotify(FdNotify),
     IOBufWriteResp(IOBufWriteResp),
-    PrintStrResp(PrintStrResp),
+    LogFlush,
     WakeIOThreadResp(()),
 }
 
