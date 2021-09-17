@@ -53,6 +53,7 @@ pub mod ringbuf;
 pub mod vcpu_mgr;
 
 use core::sync::atomic::AtomicU64;
+use core::sync::atomic::AtomicI32;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 use spin::Mutex;
@@ -513,7 +514,9 @@ pub struct ShareSpace {
 
     pub kernelIOThreadWaiting: AtomicBool,
     pub config: Config,
+
     pub logBuf: Mutex<Option<ByteStream>>,
+    pub logfd: AtomicI32,
 
     pub values: [[AtomicU64; 2]; 16],
 }
@@ -534,6 +537,7 @@ impl ShareSpace {
             kernelIOThreadWaiting: AtomicBool::new(false),
             config: Config::default(),
             logBuf: Mutex::new(None),
+            logfd: AtomicI32::new(-1),
             values: [
                 [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)],
                 [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)],
@@ -573,11 +577,32 @@ impl ShareSpace {
         return res;
     }
 
+    pub fn SetLogfd(&self, fd: i32) {
+        self.logfd.store(fd, Ordering::SeqCst);
+    }
+
+    pub fn Logfd(&self) -> i32 {
+        return self.logfd.load(Ordering::SeqCst);
+    }
+
     pub fn Log(&self, buf: &[u8]) -> bool {
         let (trigger, cnt) = self.logBuf.lock().as_mut().unwrap().write(buf).unwrap();
         assert!(buf.len() == cnt, "log buff full");
 
         return trigger;
+    }
+
+    pub fn ConsumeAndGetAvailableWriteBuf(&self, cnt: usize) -> (u64, usize) {
+        let mut lock = self.logBuf.lock();
+        lock.as_mut().unwrap().Consume(cnt);
+        let (addr, len) = lock.as_mut().unwrap().GetDataBuf();
+        return (addr, len)
+    }
+
+    pub fn GetDataBuf(&self) -> (u64, usize) {
+        let mut lock = self.logBuf.lock();
+        let (addr, len) = lock.as_mut().unwrap().GetDataBuf();
+        return (addr, len)
     }
 
     pub fn ReadLog(&self, buf: &mut [u8]) -> usize {

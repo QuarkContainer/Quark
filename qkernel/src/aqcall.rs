@@ -28,8 +28,8 @@ impl HostInputMsg {
             HostInputMsg::IOBufWriteResp(msg) => {
                 IOBufWriteRespHandle(msg.fd, msg.addr, msg.len, msg.ret);
             }
-            HostInputMsg::PrintStrResp(msg) => {
-                PrintStrRespHandler(msg.addr, msg.len);
+            HostInputMsg::LogFlush => {
+                HostLogFlush();
             }
             HostInputMsg::WakeIOThreadResp(()) => ()
         }

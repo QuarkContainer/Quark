@@ -24,6 +24,7 @@ pub struct Config {
     pub PrintException: bool,
     pub KernelPagetable: bool,
     pub RawTimer: bool,
+    pub UringLog: bool,
 }
 
 impl Config {}
@@ -39,7 +40,8 @@ impl Default for Config {
             EnableAIO: false,
             PrintException: false,
             KernelPagetable: false,
-            RawTimer: true
+            RawTimer: true,
+            UringLog: true,
         }
     }
 }

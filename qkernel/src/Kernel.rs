@@ -933,7 +933,12 @@ impl HostSpace {
     pub fn Kprint(str: &str) {
         let bytes = str.as_bytes();
         let trigger = super::SHARESPACE.Log(bytes);
-        if trigger {
+        let uringLog = super::SHARESPACE.config.UringLog;
+        if uringLog {
+            if trigger {
+                super::IOURING.LogFlush();
+            }
+        } else {
             Self::PrintStr();
         }
     }
