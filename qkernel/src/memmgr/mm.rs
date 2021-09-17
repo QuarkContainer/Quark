@@ -14,8 +14,7 @@
 
 use alloc::sync::Arc;
 use alloc::sync::Weak;
-use spin::RwLock;
-use spin::Mutex;
+use spin::*;
 use core::ops::Deref;
 use lazy_static::lazy_static;
 use core::sync::atomic::AtomicU64;
@@ -303,13 +302,16 @@ impl MemoryManager {
         return Ok(())
     }
 
-    pub fn MappingLock(&self) -> Arc<RwLock<()>> {
-        return self.mappingLock.clone();
+    pub fn MappingReadLock(&self) -> RwLockReadGuard<()> {
+        return self.mappingLock.read();
+    }
+
+    pub fn MappingWriteLock(&self) -> RwLockWriteGuard<()> {
+        return self.mappingLock.write();
     }
 
     pub fn BrkSetup(&self, addr: u64) {
-        let ml = self.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.MappingWriteLock();
         self.mapping.lock().brkInfo = BrkInfo {
             brkStart : addr,
             brkEnd: addr,
@@ -475,8 +477,7 @@ impl MemoryManager {
 
     //remove all the user vmas, used for execve
     pub fn Clear(&self) -> Result<()> {
-        let ml = self.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.MappingWriteLock();
 
         let mut pt = self.pagetable.write();
 
@@ -513,8 +514,7 @@ impl MemoryManager {
     }
 
     pub fn MinCore(&self, _task: &Task, r: &Range) -> Vec<u8> {
-        let ml = self.MappingLock();
-        let _ml = ml.read();
+        let _ml = self.MappingWriteLock();
 
         let mut res = Vec::with_capacity((r.Len() / MemoryDef::PAGE_SIZE) as usize);
         let mut addr = r.Start();
@@ -542,8 +542,7 @@ impl MemoryManager {
             Err(_) => return Err(Error::SysError(SysErr::EINVAL))
         };
 
-        let ml = self.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.MappingWriteLock();
 
         if ar.Len() == 0 {
             return Ok(())
@@ -620,8 +619,7 @@ impl MemoryManager {
         // todo: fully support opts.Current and opts.Future
         // it is not supported now
         let mode = opts.Mode;
-        let ml = self.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.MappingWriteLock();
 
         let mapping = self.mapping.lock();
         let mut vseg = mapping.vmas.FirstSeg();
@@ -666,8 +664,7 @@ impl MemoryManager {
 
         let ar = Range::New(addr, la);
 
-        let ml = self.MappingLock();
-        let _ml = ml.read();
+        let _ml = self.MappingReadLock();
 
         let mapping = self.mapping.lock();
         let mut vseg = mapping.vmas.LowerBoundSeg(ar.Start());
@@ -757,8 +754,7 @@ impl MemoryManager {
     }
 
     pub fn VirtualToPhy(&self, vAddr: u64) -> Result<(u64, AccessType)> {
-        let ml = self.MappingLock();
-        let _ml = ml.read();
+        let _ml = self.MappingReadLock();
 
         if vAddr == 0 {
             return Err(Error::SysError(SysErr::EFAULT))
@@ -886,8 +882,7 @@ impl MemoryManager {
     }
 
     pub fn CopyOnWrite(&self, pageAddr: u64, vma: &VMA) {
-        let ml = self.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.MappingWriteLock();
 
         //PerfGoto(PerfType::PageFault);
         self.CopyOnWriteLocked(pageAddr, vma);
@@ -903,8 +898,7 @@ impl MemoryManager {
             return Err(Error::SysError(SysErr::EFAULT))
         }
 
-        let ml = self.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.MappingWriteLock();
 
         return self.V2PLocked(task, start, len, output, writable);
     }
@@ -973,8 +967,7 @@ impl MemoryManager {
             return Err(Error::SysError(SysErr::EFAULT))
         }
 
-        let ml = self.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.MappingWriteLock();
 
         self.FixPermissionLocked(task, vAddr, len ,writeReq, allowPartial)
     }
@@ -1115,8 +1108,7 @@ impl MemoryManager {
     }
 
     pub fn Fork(&self) -> Result<Self> {
-        let ml = self.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.MappingWriteLock();
 
         let layout = *self.layout.lock();
         let mmIntern2 = MemoryManagerInternal {
@@ -1272,8 +1264,7 @@ impl MemoryManager {
     }
 
     pub fn V2PIov(&self, task: &Task, start: u64, len: u64, output: &mut Vec<IoVec>, writable: bool) -> Result<()> {
-        let ml = self.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.MappingWriteLock();
         return self.V2PIovLocked(task, start, len, output, writable)
     }
 

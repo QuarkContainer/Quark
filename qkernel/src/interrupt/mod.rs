@@ -264,8 +264,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, errorCo
             thread.SendSignal(&info).expect("DivByZeroHandler send signal fail");
         }
         ExceptionStackVec::InvalidOpcode => {
-            let ml = currTask.mm.MappingLock();
-            let _ml = ml.write();
+            let _ml = currTask.mm.MappingWriteLock();
             let map =  currTask.mm.GetSnapshotLocked(currTask, false);
             let data = unsafe {
                 *(sf.ip as * const u64)
@@ -464,8 +463,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     let signal;
     // no need loop, just need to enable break
     loop {
-        let ml = currTask.mm.MappingLock();
-        let _ml = ml.write();
+        let _ml = currTask.mm.MappingWriteLock();
 
         let (vma, range) = match currTask.mm.GetVmaAndRangeLocked(cr2) {
             //vmas.lock().Get(cr2) {

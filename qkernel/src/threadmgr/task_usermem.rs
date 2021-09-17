@@ -29,8 +29,7 @@ use super::super::memmgr::mm::*;
 impl MemoryManager {
     // copy raw data from user to kernel
     pub fn CopyDataIn(&self, task: &Task, vaddr: u64, to: u64, len: usize) -> Result<()> {
-        let ml = self.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.MappingWriteLock();
 
         return self.CopyDataInLocked(task, vaddr, to, len)
     }
@@ -74,8 +73,7 @@ impl MemoryManager {
     }
 
     pub fn CopyDataOut(&self, task: &Task, from: u64, vaddr: u64, len: usize) -> Result<()> {
-        let ml = self.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.MappingWriteLock();
 
         return self.CopyDataOutLocked(task, from, vaddr, len);
     }
@@ -85,8 +83,7 @@ impl MemoryManager {
             return Ok(0)
         }
 
-        let ml = self.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.MappingWriteLock();
 
         let mut offset = 0;
         for iov in iovs {
@@ -111,8 +108,7 @@ impl MemoryManager {
             return Ok(0)
         }
 
-        let ml = self.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.MappingWriteLock();
 
         let mut offset = 0;
         for iov in iovs {
@@ -204,8 +200,7 @@ impl MemoryManager {
 
 
     pub fn SwapU32(&self, task: &Task, vaddr: u64, new: u32) -> Result<u32> {
-        let ml = self.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.MappingWriteLock();
 
         assert!(vaddr % 4 == 0);
 
@@ -223,8 +218,7 @@ impl MemoryManager {
     }
 
     pub fn CompareAndSwapU32(&self, task: &Task, vaddr: u64, old: u32, new: u32) -> Result<u32> {
-        let ml = self.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.MappingWriteLock();
 
         assert!(vaddr % 4 == 0);
 
@@ -305,8 +299,7 @@ impl MemoryManager {
     // would exceed maxlen, CopyStringIn returns the string truncated to maxlen and
     // ENAMETOOLONG.
     pub fn CopyInString(&self, task: &Task, addr: u64, maxlen: usize) -> (String, Result<()>) {
-        let ml = self.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.MappingWriteLock();
 
         let maxlen = match self.CheckPermissionLocked(task, addr, maxlen as u64, false, true) {
             Err(e) => return ("".to_string(), Err(e)),
