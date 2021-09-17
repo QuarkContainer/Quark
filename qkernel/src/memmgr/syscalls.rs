@@ -37,8 +37,7 @@ pub struct MSyncOpts {
 impl MemoryManager {
     // MMap establishes a memory mapping.
     pub fn MMap(&self, task: &Task, opts: &mut MMapOpts) -> Result<u64> {
-        let ml = self.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.MappingWriteLock();
 
         if opts.Length == 0 {
             return Err(Error::SysError(SysErr::EINVAL));
@@ -96,8 +95,7 @@ impl MemoryManager {
 
     // MapStack allocates the initial process stack.
     pub fn MapStack(&self, task: &Task) -> Result<Range> {
-        let ml = self.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.MappingWriteLock();
 
         // maxStackSize is the maximum supported process stack size in bytes.
         //
@@ -143,8 +141,7 @@ impl MemoryManager {
 
     // MUnmap implements the semantics of Linux's munmap(2).
     pub fn MUnmap(&self, _task: &Task, addr: u64, length: u64) -> Result<()> {
-        let ml = self.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.MappingWriteLock();
 
         if addr != Addr(addr).RoundDown()?.0 {
             return Err(Error::SysError(SysErr::EINVAL));
@@ -164,8 +161,7 @@ impl MemoryManager {
 
     // MRemap implements the semantics of Linux's mremap(2).
     pub fn MRemap(&self, task: &Task, oldAddr: u64, oldSize: u64, newSize: u64, opts: &MRemapOpts) -> Result<u64> {
-        let ml = self.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.MappingWriteLock();
 
         // "Note that old_address has to be page aligned." - mremap(2)
         if oldAddr != Addr(oldAddr).RoundDown()?.0 {
@@ -382,8 +378,7 @@ impl MemoryManager {
     }
 
     pub fn MProtect(&self, addr: u64, len: u64, realPerms: &AccessType, growsDown: bool) -> Result<()> {
-        let ml = self.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.MappingWriteLock();
 
         if Addr(addr).RoundDown()?.0 != addr {
             return Err(Error::SysError(SysErr::EINVAL));
@@ -480,8 +475,7 @@ impl MemoryManager {
     }
 
     pub fn NumaPolicy(&self, addr: u64) -> Result<(i32, u64)> {
-        let ml = self.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.MappingWriteLock();
         return self.NumaPolicyLocked(addr);
     }
 
@@ -496,8 +490,7 @@ impl MemoryManager {
     }
 
     pub fn SetNumaPolicy(&self, addr: u64, len: u64, policy: i32, nodemask: u64) -> Result<()> {
-        let ml = self.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.MappingWriteLock();
 
         if !Addr(addr).IsPageAligned() {
             return Err(Error::SysError(SysErr::EINVAL))
@@ -553,8 +546,7 @@ impl MemoryManager {
     // Brk implements the semantics of Linux's brk(2), except that it returns an
     // error on failure.
     pub fn Brk(&self, task: &Task, addr: u64) -> Result<u64> {
-        let ml = self.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.MappingWriteLock();
 
         if addr == 0 || addr == -1 as i64 as u64 {
             return Ok(self.mapping.lock().brkInfo.brkEnd);
@@ -606,8 +598,7 @@ impl MemoryManager {
     }
 
     pub fn GetSharedFutexKey(&self, _task: &Task, addr: u64) -> Result<Key> {
-        let ml = self.MappingLock();
-        let _ml = ml.read();
+        let _ml = self.MappingWriteLock();
 
         let ar = match Addr(addr).ToRange(4) {
             Ok(r) => r,
@@ -642,8 +633,7 @@ impl MemoryManager {
             Ok(r) => r
         };
 
-        let ml = self.MappingLock();
-        let _ml = ml.read();
+        let _ml = self.MappingReadLock();
 
         let mapping = self.mapping.lock();
         let mut vseg = mapping.vmas.LowerBoundSeg(ar.Start());
@@ -676,8 +666,7 @@ impl MemoryManager {
             Ok(r) => r
         };
 
-        let ml = self.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.MappingWriteLock();
 
         let mut mapping = self.mapping.lock();
         let mut vseg = mapping.vmas.LowerBoundSeg(ar.Start());
@@ -705,8 +694,7 @@ impl MemoryManager {
     }
 
     pub fn VirtualMemorySizeRange(&self, ar: &Range) -> u64 {
-        let ml = self.MappingLock();
-        let _ml = ml.read();
+        let _ml = self.MappingReadLock();
         return self.VirtualMemorySizeRangeLocked(ar);
     }
 
@@ -715,8 +703,7 @@ impl MemoryManager {
     }
 
     pub fn VirtualMemorySize(&self) -> u64 {
-        let ml = self.MappingLock();
-        let _ml = ml.read();
+        let _ml = self.MappingReadLock();
         return self.VirtualMemorySizeLocked();
     }
 
@@ -725,8 +712,7 @@ impl MemoryManager {
     }
 
     pub fn ResidentSetSize(&self) -> u64 {
-        let ml = self.MappingLock();
-        let _ml = ml.read();
+        let _ml = self.MappingReadLock();
         return self.ResidentSetSize();
     }
 
@@ -735,8 +721,7 @@ impl MemoryManager {
     }
 
     pub fn MaxResidentSetSize(&self) -> u64 {
-        let ml = self.MappingLock();
-        let _ml = ml.read();
+        let _ml = self.MappingReadLock();
         return self.MaxResidentSetSizeLocked();
     }
 }

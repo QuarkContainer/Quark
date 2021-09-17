@@ -89,8 +89,8 @@ impl StatusData {
 
         let mm = self.thread.lock().memoryMgr.clone();
 
-        let ml = mm.MappingLock();
-        let _ml = ml.read();
+        let _ml = mm.MappingReadLock();
+
         let vss = mm.VirtualMemorySizeLocked();
         let rss = mm.ResidentSetSizeLocked();
         ret += &format!("VmSize:\t{} kB\n", vss>>10);

@@ -286,8 +286,7 @@ impl MemoryManager {
 
     //find free seg with enough len
     pub fn FindAvailableSeg(&self, _task: &Task, offset: u64, len: u64) -> Result<u64> {
-        let ml = self.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.MappingWriteLock();
 
         let mut findopts = FindAvailableOpts {
             Addr: offset,

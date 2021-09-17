@@ -115,8 +115,7 @@ impl Target for Task {
             None => return Err(Error::SysError(SysErr::EFAULT)),
             Some(v) => v.clone(),
         };*/
-        let ml = self.mm.MappingLock();
-        let _ml = ml.write();
+        let _ml = self.mm.MappingWriteLock();
 
         let (vma, _) = match self.mm.GetVmaAndRangeLocked(addr) {
             None => return Err(Error::SysError(SysErr::EFAULT)),
