@@ -241,7 +241,11 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     //currTask.PerfGofrom(PerfType::KernelHandling);
 
     if llevel == LogLevel::Simple || llevel == LogLevel::Complex {
-        let gap = Rdtsc() - startTime;
+        let gap = if self::SHARESPACE.config.PerfDebug {
+            Rdtsc() - startTime
+        } else {
+            0
+        };
         info!("({}/{})------Return[{}] res is {:x}: call id {:?} ",
         tid, pid, gap / SCALE, res, callId);
     }
