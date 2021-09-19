@@ -61,8 +61,10 @@ extern crate backtracer;
 extern crate ringbuf;
 
 #[macro_use]
-pub mod asm;
 mod print;
+
+#[macro_use]
+pub mod asm;
 mod taskMgr;
 #[macro_use]
 mod qlib;
