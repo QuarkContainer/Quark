@@ -21,7 +21,13 @@ use super::asm::*;
 pub const SCALE : i64 = 2_000;
 
 pub fn PrintPrefix() -> String {
-    return format!("[{}/{:x}|{}]", CPULocal::CpuId() , Task::TaskId().Addr(), Rdtsc()/SCALE);
+    let now = if super::SHARESPACE.config.PerfDebug {
+        Rdtsc()/SCALE
+    } else {
+        0
+    };
+
+    return format!("[{}/{:x}|{}]", CPULocal::CpuId() , Task::TaskId().Addr(), now);
 }
 
 #[macro_export]

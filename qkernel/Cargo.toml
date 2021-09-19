@@ -40,7 +40,7 @@ features = ["spin_no_std"]
 
 [profile.dev]
 panic = "abort"
-debug = 0
+debug = 1
 lto = true
 
 [profile.release]
