@@ -27,6 +27,7 @@ use super::MainRun;
 use super::asm::*;
 use super::qlib::perf_tunning::*;
 use super::SHARESPACE;
+use super::backtracer;
 
 #[derive(Clone, Copy, Debug)]
 pub enum ExceptionStackVec {
@@ -149,8 +150,12 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, errorCo
         currTask.AccountTaskLeave(SchedState::RunningApp);
     } else {
         let pt = currTask.GetPtRegs();
-        panic!("get non page fault exception from kernel ...ev is {:?}, sf is {:#x?}, errorCode is {:x} rflags is {:#x?}",
-               ev, sf, errorCode, pt)
+        print!("get non page fault exception from kernel ... {:x?}/registers is {:x?}", sf, pt);
+        backtracer::trace1(sf.ip, sf.sp, pt.rbp, &mut |frame| {
+            print!("pagefault frame is {:#x?}", frame);
+            true
+        });
+        panic!("Get on page fault exception from kernel");
     };
 
     if PRINT_EXECPTION {
@@ -423,6 +428,16 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     } else {
         false
     };
+
+    if !fromUser {
+        print!("Get pagefault from kernel ... {:x?}/registers is {:x?}", sf, currTask.GetPtRegs());
+        let pt = currTask.GetPtRegs();
+        backtracer::trace1(sf.ip, sf.sp, pt.rbp, &mut |frame| {
+            print!("pagefault frame is {:#x?}", frame);
+            true
+        });
+        panic!("Get pagefault from kernel .");
+    }
 
     currTask.PerfGoto(PerfType::PageFault);
     defer!(Task::Current().PerfGofrom(PerfType::PageFault));

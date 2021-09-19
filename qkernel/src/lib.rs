@@ -57,7 +57,6 @@ extern crate buddy_system_allocator;
 extern crate bitflags;
 //#[macro_use]
 extern crate x86;
-extern crate backtracer;
 extern crate ringbuf;
 
 #[macro_use]
@@ -100,6 +99,7 @@ pub mod seqcount;
 pub mod quring;
 pub mod stack;
 pub mod mutex;
+pub mod backtracer;
 
 use core::panic::PanicInfo;
 use lazy_static::lazy_static;
@@ -498,11 +498,7 @@ fn panic(info: &PanicInfo) -> ! {
     /*backtracer::trace(|frame| {
         print!("panic frame is {:#x?}", frame);
         true
-    });
-
-    for i in 0..CPU_LOCAL.len() {
-        error!("CPU#{} is {:#x?}", i, CPU_LOCAL[i]);
-    }*/
+    });*/
 
     print!("get panic : {:?}", info.message());
     if let Some(location) = info.location() {
@@ -514,13 +510,17 @@ fn panic(info: &PanicInfo) -> ! {
         print!("panic occurred but can't get location information...");
     }
 
-    backtracer::trace(|frame| {
+    for i in 0..CPU_LOCAL.len() {
+        error!("CPU#{} is {:#x?}", i, CPU_LOCAL[i]);
+    }
+
+    backtracer::trace(&mut |frame| {
         print!("panic frame is {:#x?}", frame);
         true
     });
 
     //self::Kernel::HostSpace::Panic(&format!("get panic: {:?}", info));
-    self::Kernel::HostSpace::Panic("get panic ...");
+    //self::Kernel::HostSpace::Panic("get panic ...");
     loop {}
 }
 
