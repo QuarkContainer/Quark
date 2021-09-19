@@ -11,7 +11,6 @@ bit_field = "0.10.1"
 bitflags = "1.2.1"
 rusty-asm = "0.2.1"
 x86_64 = "0.14.3"
-backtracer = {git = "https://github.com/gz/backtracer.git" }
 
 #linked_list_allocator = "0.8.6"
 buddy_system_allocator = "0.8.0"
