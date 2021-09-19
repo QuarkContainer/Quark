@@ -53,7 +53,7 @@ impl<T: ?Sized> QMutex<T> {
             }
         }
 
-        error!("QMutex lock by {:x}", val);
+        debug!("QMutex lock by {:x}", val);
 
         loop  {
             let val = self.lock.compare_and_swap(0, id, Ordering::Acquire);

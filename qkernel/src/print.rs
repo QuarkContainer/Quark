@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![macro_use]
-
 use alloc::string::String;
 
 use super::task::*;
@@ -24,6 +22,20 @@ pub const SCALE : i64 = 2_000;
 
 pub fn PrintPrefix() -> String {
     return format!("[{}/{:x}|{}]", CPULocal::CpuId() , Task::TaskId().Addr(), Rdtsc()/SCALE);
+}
+
+#[macro_export]
+macro_rules! raw_print {
+    ($($arg:tt)*) => ({
+        if $crate::SHARESPACE.config.DebugLevel >= $crate::qlib::config::DebugLevel::Error {
+            //$crate::qlib::perf_tunning::PerfGoto($crate::qlib::perf_tunning::PerfType::Print);
+            let s = &format!($($arg)*);
+            let str = format!("[ERROR] {}", s);
+
+            $crate::Kernel::HostSpace::SlowPrint($crate::qlib::config::DebugLevel::Error, &str);
+            //$crate::qlib::perf_tunning::PerfGofrom($crate::qlib::perf_tunning::PerfType::Print);
+        }
+    });
 }
 
 #[macro_export]
