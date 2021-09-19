@@ -36,6 +36,7 @@ use super::super::qlib::auxv::*;
 use super::super::task::*;
 use super::super::qlib::pagetable::*;
 use super::super::qlib::limits::*;
+use super::super::mutex::*;
 //use super::super::qlib::perf_tunning::*;
 use super::super::kernel::aio::aio_context::*;
 use super::super::fs::dirent::*;
@@ -132,7 +133,7 @@ pub struct MemoryManagerInternal {
     pub uid: UniqueID,
     pub inited: bool,
 
-    pub mappingLock: Arc<RwLock<()>>,
+    pub mappingLock: Arc<QMutex<()>>,
     pub mapping: Mutex<MMMapping>,
 
     pub pagetable: RwLock<MMPagetable>,
@@ -235,7 +236,7 @@ impl MemoryManager {
         let internal = MemoryManagerInternal {
             uid: NewUID(),
             inited: true,
-            mappingLock: Arc::new(RwLock::new(())),
+            mappingLock: Arc::new(QMutex::new(())),
             mapping: Mutex::new(mapping),
             pagetable: RwLock::new(pagetable),
             metadataLock: Arc::new(Mutex::new(())),
@@ -302,12 +303,12 @@ impl MemoryManager {
         return Ok(())
     }
 
-    pub fn MappingReadLock(&self) -> RwLockReadGuard<()> {
-        return self.mappingLock.read();
+    pub fn MappingReadLock(&self) -> QMutexGuard<()> {
+        return self.mappingLock.lock();
     }
 
-    pub fn MappingWriteLock(&self) -> RwLockWriteGuard<()> {
-        return self.mappingLock.write();
+    pub fn MappingWriteLock(&self) -> QMutexGuard<()> {
+        return self.mappingLock.lock();
     }
 
     pub fn BrkSetup(&self, addr: u64) {
