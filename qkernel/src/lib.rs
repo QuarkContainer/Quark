@@ -97,6 +97,7 @@ pub mod perflog;
 pub mod seqcount;
 pub mod quring;
 pub mod stack;
+pub mod mutex;
 
 use core::panic::PanicInfo;
 use lazy_static::lazy_static;

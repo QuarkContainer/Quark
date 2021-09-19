@@ -13,11 +13,11 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
 use core::ops::Deref;
 
 use super::super::super::qlib::task_mgr::*;
 use super::super::super::taskMgr;
+use super::super::super::mutex::QMutex;
 use super::super::super::SHARESPACE;
 
 use super::entry::*;
@@ -47,12 +47,12 @@ impl Default for WaiterInternal {
 }
 
 #[derive(Clone, Default)]
-pub struct Waiter(Arc<Mutex<WaiterInternal>>);
+pub struct Waiter(Arc<QMutex<WaiterInternal>>);
 
 impl Deref for Waiter {
-    type Target = Arc<Mutex<WaiterInternal>>;
+    type Target = Arc<QMutex<WaiterInternal>>;
 
-    fn deref(&self) -> &Arc<Mutex<WaiterInternal>> {
+    fn deref(&self) -> &Arc<QMutex<WaiterInternal>> {
         &self.0
     }
 }
@@ -64,7 +64,7 @@ impl Waiter {
             ..Default::default()
         };
 
-        return Self(Arc::new(Mutex::new(internal)));
+        return Self(Arc::new(QMutex::new(internal)));
     }
 
     fn NextWaiterId(&self) -> WaiterID {
