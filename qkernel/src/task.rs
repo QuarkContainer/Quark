@@ -767,7 +767,10 @@ impl Task {
     #[inline]
     pub fn SwitchPageTable(&self) {
         let root = self.mm.GetRoot();
-        super::qlib::pagetable::PageTables::Switch(root);
+        let curr = super::asm::CurrentCr3();
+        if curr != root {
+            super::qlib::pagetable::PageTables::Switch(root);
+        }
     }
 
     pub fn SetKernelPageTable() {

@@ -978,6 +978,9 @@ impl HostSpace {
         return call.res;
     }
 
+    pub fn VcpuYield() {
+        HyperCall64(HYPERCALL_VCPU_YIELD, 0, 0);
+    }
 }
 
 pub fn GetSockOptI32(sockfd: i32, level: i32, optname: i32) -> Result<i32> {
@@ -1037,5 +1040,11 @@ impl<'a> ShareSpace {
 
     pub fn Schedule(&self, taskId: u64) {
         self.scheduler.Schedule(TaskId::New(taskId));
+    }
+}
+
+impl ShareSpace {
+    pub fn Yield() {
+        HostSpace::VcpuYield();
     }
 }

@@ -27,7 +27,6 @@ use super::MainRun;
 use super::asm::*;
 use super::qlib::perf_tunning::*;
 use super::SHARESPACE;
-use super::backtracer;
 
 #[derive(Clone, Copy, Debug)]
 pub enum ExceptionStackVec {
@@ -150,11 +149,16 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, errorCo
         currTask.AccountTaskLeave(SchedState::RunningApp);
     } else {
         let pt = currTask.GetPtRegs();
-        print!("get non page fault exception from kernel ... {:x?}/registers is {:x?}", sf, pt);
-        backtracer::trace1(sf.ip, sf.sp, pt.rbp, &mut |frame| {
+        print!("get non page fault exception from kernel ... {:#x?}/registers is {:#x?}", sf, pt);
+
+        for i in 0..super::CPU_LOCAL.len() {
+            print!("CPU#{} is {:#x?}", i, super::CPU_LOCAL[i]);
+        }
+
+        /*backtracer::trace1(sf.ip, sf.sp, pt.rbp, &mut |frame| {
             print!("pagefault frame is {:#x?}", frame);
             true
-        });
+        });*/
         panic!("Get on page fault exception from kernel");
     };
 
@@ -430,12 +434,14 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     };
 
     if !fromUser {
-        print!("Get pagefault from kernel ... {:x?}/registers is {:x?}", sf, currTask.GetPtRegs());
-        let pt = currTask.GetPtRegs();
-        backtracer::trace1(sf.ip, sf.sp, pt.rbp, &mut |frame| {
+        print!("Get pagefault from kernel ... {:#x?}/registers is {:#x?}", sf, currTask.GetPtRegs());
+        for i in 0..super::CPU_LOCAL.len() {
+            print!("CPU#{} is {:#x?}", i, super::CPU_LOCAL[i]);
+        }
+        /*backtracer::trace1(sf.ip, sf.sp, pt.rbp, &mut |frame| {
             print!("pagefault frame is {:#x?}", frame);
             true
-        });
+        });*/
         panic!("Get pagefault from kernel .");
     }
 

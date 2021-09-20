@@ -290,7 +290,7 @@ impl MemList {
     }
 
     pub fn Push(&mut self, addr: u64) {
-        assert!(addr % self.size == 0);
+        assert!(addr % self.size == 0, "Push addr is {:x}/size is {:x}", addr, self.size);
 
         let newB = addr as * mut MemBlock;
         unsafe {
@@ -330,7 +330,7 @@ impl MemList {
         };
 
         self.head = *ptr;
-        assert!(next % self.size == 0);
+        assert!(next % self.size == 0, "Pop next is {:x}/size is {:x}", next, self.size);
         return next;
     }
 }

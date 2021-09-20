@@ -323,6 +323,15 @@ impl ByteStream {
         return Ok((empty, writeSize))
     }
 
+    pub fn writeFull(&mut self, buf: &[u8]) -> Result<(bool, usize)> {
+        if self.AvailableSpace() < buf.len() {
+            print!("write full {}/{}", self.available, buf.len());
+            return Err(Error::QueueFull)
+        }
+
+        return self.write(buf);
+    }
+
     pub fn writeViaAddr(&mut self, buf: u64, count: u64) -> (bool, usize) {
         let ptr = buf as *const u8;
         let slice = unsafe { slice::from_raw_parts(ptr, count as usize) };

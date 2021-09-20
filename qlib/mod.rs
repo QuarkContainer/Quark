@@ -82,6 +82,7 @@ pub const HYPERCALL_IOWAIT: u16 = 16;
 pub const HYPERCALL_WAKEUP_VCPU: u16 = 17;
 pub const HYPERCALL_EXIT_VM: u16 = 18;
 pub const HYPERCALL_VCPU_FREQ: u16 = 19;
+pub const HYPERCALL_VCPU_YIELD: u16 = 20;
 
 pub const DUMMY_TASKID: TaskId = TaskId::New(0xffff_ffff);
 
@@ -586,10 +587,19 @@ impl ShareSpace {
     }
 
     pub fn Log(&self, buf: &[u8]) -> bool {
-        let (trigger, cnt) = self.logBuf.lock().as_mut().unwrap().write(buf).unwrap();
-        assert!(buf.len() == cnt, "log buff full");
+        for i in 0..3 {
+            match self.logBuf.lock().as_mut().unwrap().writeFull(buf) {
+                Err(_) => {
+                    print!("log is full ... retry {}", i+1);
+                    Self::Yield();
+                }
+                Ok((trigger, _)) => {
+                    return trigger
+                }
+            }
+        }
 
-        return trigger;
+        panic!("Log is full...")
     }
 
     pub fn ConsumeAndGetAvailableWriteBuf(&self, cnt: usize) -> (u64, usize) {
