@@ -69,6 +69,11 @@ fn switch(from: TaskId, to: TaskId) {
         toCtx.SwitchPageTable();
     }
     toCtx.SetFS();
+
+    fromCtx.Check();
+    toCtx.Check();
+    debug!("switch {:x}->{:x}", from.data, to.data);
+
     unsafe {
         context_swap(fromCtx.GetContext(), toCtx.GetContext(), 1, 0);
     }
@@ -135,7 +140,10 @@ pub fn WaitFn() {
                 // while super::ALLOCATOR.Free() {}
 
                 if SHARESPACE.scheduler.GlobalReadyTaskCnt() == 0 {
+                    debug!("vcpu {} sleep", CPULocal::CpuId());
                     HostSpace::Hlt();
+                    debug!("vcpu {} wakeup", CPULocal::CpuId());
+
                 }
 
                 SHARESPACE.scheduler.DecreaseHaltVcpuCnt();
@@ -296,7 +304,7 @@ impl Scheduler {
     }
 
     pub fn KScheduleQ(&self, task: TaskId, vcpuId: usize) {
-        //error!("KScheduleQ task {:x?}, vcpuId {}", task, vcpuId);
+        debug!("KScheduleQ task {:x?}, vcpuId {}", task, vcpuId);
         self.ScheduleQ(task, vcpuId as u64);
     }
 

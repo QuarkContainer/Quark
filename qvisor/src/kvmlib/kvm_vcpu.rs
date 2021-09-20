@@ -606,6 +606,10 @@ impl KVMVcpu {
                             }
                         }
 
+                        qlib::HYPERCALL_VCPU_YIELD => {
+                            std::thread::yield_now();
+                        }
+
                         qlib::HYPERCALL_HCALL => {
                             let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                             let addr = regs.rbx;
@@ -750,5 +754,9 @@ impl ShareSpace {
         self.hostIOThreadEventfd = FD_NOTIFIER.Eventfd();
         URING_MGR.lock().Addfd(self.hostIOThreadEventfd).unwrap();
         self.config.Load();
+    }
+
+    pub fn Yield() {
+        std::thread::yield_now();
     }
 }

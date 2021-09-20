@@ -518,10 +518,10 @@ fn panic(info: &PanicInfo) -> ! {
         error!("CPU#{} is {:#x?}", i, CPU_LOCAL[i]);
     }
 
-    backtracer::trace(&mut |frame| {
+    /*backtracer::trace(&mut |frame| {
         print!("panic frame is {:#x?}", frame);
         true
-    });
+    });*/
 
     //self::Kernel::HostSpace::Panic(&format!("get panic: {:?}", info));
     //self::Kernel::HostSpace::Panic("get panic ...");
