@@ -13,12 +13,21 @@
 // limitations under the License.
 
 use alloc::string::String;
+use lazy_static::lazy_static;
 
 use super::task::*;
 use super::qlib::vcpu_mgr::*;
+use super::qlib::config::DebugLevel;
 use super::asm::*;
 
 pub const SCALE : i64 = 2_000;
+pub const ERROR : DebugLevel = DebugLevel::Error;
+pub const INFO : DebugLevel = DebugLevel::Info;
+pub const DEBUG : DebugLevel = DebugLevel::Debug;
+
+lazy_static! {
+    pub static ref DEBUG_LEVEL: DebugLevel = super::SHARESPACE.config.DebugLevel;
+}
 
 pub fn PrintPrefix() -> String {
     let now = if super::SHARESPACE.config.PerfDebug {
@@ -30,13 +39,18 @@ pub fn PrintPrefix() -> String {
     return format!("[{}/{:x}|{}]", CPULocal::CpuId() , Task::TaskId().Addr(), now);
 }
 
+pub fn DebugLevel() -> DebugLevel {
+    let level = super::SHARESPACE.config.DebugLevel;
+    return level;
+}
+
 #[macro_export]
 macro_rules! raw_print {
     ($($arg:tt)*) => ({
         if $crate::SHARESPACE.config.DebugLevel >= $crate::qlib::config::DebugLevel::Error {
             //$crate::qlib::perf_tunning::PerfGoto($crate::qlib::perf_tunning::PerfType::Print);
             let s = &format!($($arg)*);
-            let str = format!("[ERROR] {}", s);
+            let str = format!("[Print] {}", s);
 
             $crate::Kernel::HostSpace::SlowPrint($crate::qlib::config::DebugLevel::Error, &str);
             //$crate::qlib::perf_tunning::PerfGofrom($crate::qlib::perf_tunning::PerfType::Print);
@@ -47,11 +61,15 @@ macro_rules! raw_print {
 #[macro_export]
 macro_rules! print {
     ($($arg:tt)*) => ({
-        if $crate::SHARESPACE.config.DebugLevel >= $crate::qlib::config::DebugLevel::Error {
+        let current = $crate::print::ERROR;
+        let level = *$crate::print::DEBUG_LEVEL;
+        let cmp = level >= current;
+
+        if cmp {
             //$crate::qlib::perf_tunning::PerfGoto($crate::qlib::perf_tunning::PerfType::Print);
             let prefix = $crate::print::PrintPrefix();
             let s = &format!($($arg)*);
-            let str = format!("[ERROR] {} {}", prefix, s);
+            let str = format!("[Print] {} {}", prefix, s);
 
             $crate::Kernel::HostSpace::SlowPrint($crate::qlib::config::DebugLevel::Error, &str);
             //$crate::qlib::perf_tunning::PerfGofrom($crate::qlib::perf_tunning::PerfType::Print);
@@ -62,7 +80,20 @@ macro_rules! print {
 #[macro_export]
 macro_rules! error {
     ($($arg:tt)*) => ({
-        if $crate::SHARESPACE.config.DebugLevel >= $crate::qlib::config::DebugLevel::Error {
+
+        let repro = true;
+        let cmp;
+
+        if !repro {
+            let current = $crate::print::ERROR;
+            let level = *$crate::print::DEBUG_LEVEL;
+            cmp = level >= current;
+        } else {
+            cmp = $crate::SHARESPACE.config.DebugLevel >= $crate::qlib::config::DebugLevel::Error;
+        }
+
+        if cmp {
+        //if $crate::SHARESPACE.config.DebugLevel >= $crate::qlib::config::DebugLevel::Error {
             //$crate::qlib::perf_tunning::PerfGoto($crate::qlib::perf_tunning::PerfType::Print);
             let prefix = $crate::print::PrintPrefix();
             let s = &format!($($arg)*);
@@ -83,7 +114,11 @@ macro_rules! error {
 #[macro_export]
 macro_rules! info {
     ($($arg:tt)*) => ({
-        if $crate::SHARESPACE.config.DebugLevel >= $crate::qlib::config::DebugLevel::Info {
+        let current = $crate::print::INFO;
+        let level = *$crate::print::DEBUG_LEVEL;
+        let cmp = level >= current;
+
+        if cmp  {
             //$crate::qlib::perf_tunning::PerfGoto($crate::qlib::perf_tunning::PerfType::Print);
             let prefix = $crate::print::PrintPrefix();
             let s = &format!($($arg)*);
@@ -103,7 +138,11 @@ macro_rules! info {
 #[macro_export]
 macro_rules! debug {
     ($($arg:tt)*) => ({
-        if $crate::SHARESPACE.config.DebugLevel >= $crate::qlib::config::DebugLevel::Debug {
+        let current = $crate::print::DEBUG;
+        let level = *$crate::print::DEBUG_LEVEL;
+        let cmp = level >= current;
+
+        if cmp {
             //$crate::qlib::perf_tunning::PerfGoto($crate::qlib::perf_tunning::PerfType::Print);
             let prefix = $crate::print::PrintPrefix();
             let s = &format!($($arg)*);
