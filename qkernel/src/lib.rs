@@ -100,6 +100,7 @@ pub mod quring;
 pub mod stack;
 pub mod mutex;
 pub mod backtracer;
+pub mod singleton;
 
 use core::panic::PanicInfo;
 use lazy_static::lazy_static;
@@ -133,6 +134,7 @@ use self::qlib::perf_tunning::*;
 use self::qlib::mem::list_allocator::*;
 use self::quring::*;
 use self::print::SCALE;
+use self::singleton::*;
 
 pub const HEAP_START: usize = 0x70_2000_0000;
 pub const HEAP_SIZE: usize = 0x1000_0000;
@@ -148,8 +150,10 @@ pub fn AllocatorPrint() {
     //ALLOCATOR.Print();
 }
 
+pub static SHARESPACE : Singleton<ShareSpace> = Singleton::<ShareSpace>::New();
+
 lazy_static! {
-    pub static ref SHARESPACE: ShareSpace = ShareSpace::New();
+    //pub static ref SHARESPACE: ShareSpace = ShareSpace::New();
     pub static ref PAGE_ALLOCATOR: MemAllocator = MemAllocator::New();
     pub static ref KERNEL_PAGETABLE: PageTables = PageTables::Init(0);
     pub static ref PAGE_MGR: PageMgr = PageMgr::New();
@@ -365,9 +369,8 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
     if id == 0 {
         ALLOCATOR.Add(heapStart as usize, heapLen as usize);
 
-        {
-            //to initial the SHARESPACE
-            let _tmp = &SHARESPACE;
+        unsafe {
+            SHARESPACE.Init(ShareSpace::New())
         }
 
         // InitGS rely on SHARESPACE
