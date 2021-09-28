@@ -38,7 +38,7 @@ use super::super::super::kernel::waiter::qlock::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::auth::*;
-use super::super::super::id_mgr::*;
+use super::super::super::uid::*;
 use super::super::super::socket::unix::transport::unix::*;
 
 #[derive(Clone, Default)]
@@ -383,7 +383,7 @@ impl InodeOperations for Dir {
 
         let dirOps = DirFileOperation::New(self);
         let file = FileInternal {
-            UniqueId: UniqueID(),
+            UniqueId: NewUID(),
             Dirent: dirent.clone(),
             flags: Mutex::new((flags, None)),
             offset: QLock::New(0),

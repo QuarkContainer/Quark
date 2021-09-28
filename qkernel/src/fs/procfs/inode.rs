@@ -37,7 +37,7 @@ use super::super::super::qlib::common::*;
 use super::super::super::qlib::auth::*;
 use super::super::super::qlib::device::*;
 use super::super::super::threadmgr::thread::*;
-use super::super::super::id_mgr::*;
+use super::super::super::uid::*;
 
 pub struct TaskOwnedInodeOps {
     pub iops: Arc<InodeOperations>,
@@ -277,7 +277,7 @@ impl InodeOperations for StaticFileInodeOps {
 
     fn GetFile(&self, _task: &Task, _dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File> {
         return Ok(File(Arc::new(FileInternal {
-            UniqueId: UniqueID(),
+            UniqueId: NewUID(),
             Dirent: dirent.clone(),
             flags: Mutex::new((flags.clone(), None)),
             offset: QLock::New(0),

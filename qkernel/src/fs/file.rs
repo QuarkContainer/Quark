@@ -21,7 +21,7 @@ use alloc::string::ToString;
 use core::any::Any;
 use core::ops::Deref;
 
-use super::super::id_mgr::*;
+use super::super::uid::*;
 use super::super::kernel::waiter::qlock::*;
 use super::super::kernel::time::*;
 use super::super::qlib::metric::*;
@@ -431,7 +431,7 @@ impl File {
 
     pub fn New<T: FileOperations + 'static>(dirent: &Dirent, flags: &FileFlags, fops: T) -> Self {
         let f = FileInternal {
-            UniqueId: UniqueID(),
+            UniqueId: NewUID(),
             Dirent: dirent.clone(),
             flags: Mutex::new((*flags, None)),
             //offsetLock: QLock::default(),
@@ -494,7 +494,7 @@ impl File {
         }
 
         return File(Arc::new(FileInternal {
-            UniqueId: UniqueID(),
+            UniqueId: NewUID(),
             Dirent: dirent.clone(),
             flags: Mutex::new((flags, None)),
             //offsetLock: QLock::default(),

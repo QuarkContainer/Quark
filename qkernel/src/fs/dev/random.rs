@@ -32,7 +32,7 @@ use super::super::super::Kernel;
 use super::super::super::qlib::mem::seq::*;
 use super::super::super::qlib::mem::io::*;
 use super::super::super::kernel::waiter::qlock::*;
-use super::super::super::id_mgr::*;
+use super::super::super::uid::*;
 
 use super::super::inode::*;
 use super::super::mount::*;
@@ -140,7 +140,7 @@ impl InodeOperations for RandomDevice {
         let fops = RandomFileOperations {};
 
         let f = FileInternal {
-            UniqueId: UniqueID(),
+            UniqueId: NewUID(),
             Dirent: dirent.clone(),
             flags: Mutex::new((flags, None)),
             offset: QLock::New(0),

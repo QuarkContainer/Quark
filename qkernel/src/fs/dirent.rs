@@ -24,7 +24,7 @@ use core::ops::Deref;
 use core::cmp::Eq;
 use core::cmp::PartialEq;
 
-use super::super::id_mgr::*;
+use super::super::uid::*;
 use super::super::qlib::common::*;
 use super::super::task::*;
 use super::super::qlib::linux_def::*;
@@ -42,7 +42,7 @@ pub struct Dirent(pub Arc<(Mutex<InterDirent>, u64)>);
 
 impl Default for Dirent {
     fn default() -> Self {
-        return Self(Arc::new((Mutex::new(InterDirent::default()), UniqueID())))
+        return Self(Arc::new((Mutex::new(InterDirent::default()), NewUID())))
     }
 }
 
@@ -71,7 +71,7 @@ impl Dirent {
             Children: BTreeMap::new(),
             frozen: false,
             mounted: false,
-        }), UniqueID())))
+        }), NewUID())))
     }
 
     pub fn NewTransient(inode: &Inode) -> Self {
@@ -83,7 +83,7 @@ impl Dirent {
             frozen: false,
             mounted: false,
         });
-        return Self(Arc::new((iDirent, UniqueID())))
+        return Self(Arc::new((iDirent, NewUID())))
     }
 
     pub fn ID(&self) -> u64 {
@@ -564,7 +564,7 @@ impl Dirent {
             return Err(Error::SysError(SysErr::ENOENT))
         }
 
-        let replacement = Arc::new((Mutex::new(InterDirent::New(inode.clone(), &(self.0).0.lock().Name)), UniqueID()));
+        let replacement = Arc::new((Mutex::new(InterDirent::New(inode.clone(), &(self.0).0.lock().Name)), NewUID()));
         replacement.0.lock().mounted = true;
 
         parent.AddChild(&replacement);

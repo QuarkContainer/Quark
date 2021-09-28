@@ -38,7 +38,7 @@ use super::super::super::kernel::waiter::qlock::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::task::*;
 use super::super::super::qlib::auth::*;
-use super::super::super::id_mgr::*;
+use super::super::super::uid::*;
 
 pub struct SymlinkInternal {
     pub Target: String,
@@ -146,7 +146,7 @@ impl InodeOperations for Symlink {
 
     fn GetFile(&self, _task: &Task, _dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File> {
         let file = FileInternal {
-            UniqueId: UniqueID(),
+            UniqueId: NewUID(),
             Dirent: dirent.clone(),
             flags: Mutex::new((flags, None)),
             offset: QLock::New(0),

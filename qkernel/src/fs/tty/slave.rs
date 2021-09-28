@@ -39,7 +39,7 @@ use super::super::dentry::*;
 use super::super::dirent::*;
 use super::dir::*;
 use super::terminal::*;
-use super::super::super::id_mgr::*;
+use super::super::super::uid::*;
 
 pub fn NewSlaveNode(task: &Task, d: &DirInodeOperations, t: &Arc<Terminal>, owner: &FileOwner, p: &FilePermissions) -> Inode {
     let unstable = WithCurrentTime(task, &UnstableAttr {
@@ -189,7 +189,7 @@ impl InodeOperations for SlaveInodeOperations {
         });
 
         let internal = FileInternal {
-            UniqueId: UniqueID(),
+            UniqueId: NewUID(),
             Dirent: dirent.clone(),
             flags: Mutex::new((flags, None)),
             offset: QLock::New(0),

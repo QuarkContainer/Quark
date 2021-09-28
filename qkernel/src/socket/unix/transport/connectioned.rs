@@ -26,7 +26,7 @@ use super::super::super::super::qlib::common::*;
 use super::super::super::super::qlib::linux::socket::*;
 use super::super::super::super::qlib::linux_def::*;
 use super::super::super::super::task::*;
-use super::super::super::super::id_mgr::*;
+use super::super::super::super::uid::*;
 //use super::super::super::control::*;
 use super::unix::*;
 use super::queue::*;
@@ -152,7 +152,7 @@ impl ConnectionedEndPoint {
     pub fn New(stype: i32, hostfd: i32) -> Self {
         let internal = ConnectionedEndPointInternal {
             baseEndpoint: BaseEndpoint::NewWithHostfd(hostfd),
-            id: UniqueID(),
+            id: NewUID(),
             stype: stype,
             backlog: 0,
             acceptedChan: None,
@@ -176,7 +176,7 @@ impl ConnectionedEndPoint {
     pub fn NewWithBaseEndpoint(baseEndpoint: BaseEndpoint, stype: i32) -> Self {
         let internal = ConnectionedEndPointInternal {
             baseEndpoint: baseEndpoint,
-            id: UniqueID(),
+            id: NewUID(),
             stype: stype,
             backlog: 0,
             acceptedChan: None,
@@ -223,7 +223,7 @@ impl ConnectionedEndPoint {
 
         let internal = ConnectionedEndPointInternal {
             baseEndpoint: baseEndpoint,
-            id: UniqueID(),
+            id: NewUID(),
             stype: stype,
             backlog: 0,
             acceptedChan: None,

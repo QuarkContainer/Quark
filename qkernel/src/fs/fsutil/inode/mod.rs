@@ -35,7 +35,7 @@ use super::super::super::qlib::linux_def::*;
 use super::super::super::task::*;
 use super::super::super::qlib::common::*;
 use super::super::super::kernel::waiter::qlock::*;
-use super::super::super::id_mgr::*;
+use super::super::super::uid::*;
 
 pub struct InodeSimpleExtendedAttributesInternal {
     pub xattrs: BTreeMap<String, String>
@@ -119,7 +119,7 @@ impl Deref for InodeStaticFileGetter {
 impl InodeStaticFileGetter {
     fn GetFile(&self, _dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File> {
         return Ok(File(Arc::new(FileInternal {
-            UniqueId: UniqueID(),
+            UniqueId: NewUID(),
             Dirent: dirent.clone(),
             flags: Mutex::new((flags.clone(), None)),
             offset: QLock::New(0),

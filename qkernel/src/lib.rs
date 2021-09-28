@@ -67,7 +67,6 @@ pub mod asm;
 mod taskMgr;
 #[macro_use]
 mod qlib;
-mod gdt;
 #[macro_use]
 mod interrupt;
 mod Kernel;
@@ -92,7 +91,6 @@ pub mod loader;
 pub mod tcpip;
 pub mod uid;
 pub mod version;
-pub mod id_mgr;
 pub mod util;
 pub mod perflog;
 pub mod seqcount;
@@ -103,7 +101,7 @@ pub mod backtracer;
 pub mod singleton;
 
 use core::panic::PanicInfo;
-//use lazy_static::lazy_static;
+use core::sync::atomic::AtomicU64;
 use core::{ptr, mem};
 use alloc::vec::Vec;
 
@@ -134,7 +132,9 @@ use self::qlib::perf_tunning::*;
 use self::qlib::mem::list_allocator::*;
 use self::quring::*;
 use self::print::SCALE;
+
 use self::singleton::*;
+use self::uid::*;
 
 pub const HEAP_START: usize = 0x70_2000_0000;
 pub const HEAP_SIZE: usize = 0x1000_0000;
@@ -167,18 +167,11 @@ pub fn SingltonInit() {
         LOADER.Init(Loader::default());
         IOURING.Init(QUring::New(MemoryDef::QURING_SIZE));
         KERNEL_STACK_ALLOCATOR.Init( AlignedAllocator::New(MemoryDef::DEFAULT_STACK_SIZE as usize, MemoryDef::DEFAULT_STACK_SIZE as usize));
+
+        guestfdnotifier::GUEST_NOTIFIER.Init(guestfdnotifier::Notifier::New());
+        UID.Init(AtomicU64::new(1));
     }
 }
-
-/*lazy_static! {
-    //pub static ref SHARESPACE: ShareSpace = ShareSpace::New();
-    //pub static ref PAGE_ALLOCATOR: MemAllocator = MemAllocator::New();
-    //pub static ref KERNEL_PAGETABLE: PageTables = PageTables::Init(0);
-    //pub static ref PAGE_MGR: PageMgr = PageMgr::New();
-    //pub static ref LOADER: Loader = Loader::default();
-    //pub static ref IOURING: QUring = QUring::New(MemoryDef::QURING_SIZE);
-    //pub static ref KERNEL_STACK_ALLOCATOR : AlignedAllocator = AlignedAllocator::New(MemoryDef::DEFAULT_STACK_SIZE as usize, MemoryDef::DEFAULT_STACK_SIZE as usize);
-}*/
 
 extern "C" {
     pub fn syscall_entry();

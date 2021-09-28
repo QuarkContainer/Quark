@@ -130,7 +130,7 @@ impl InodeOperations for TTYDevice {
         /* let fops = TTYFileOperations {};
 
         let f = FileInternal {
-            UniqueId: UniqueID(),
+            UniqueId: NewUID(),
             Dirent: dirent.clone(),
             flags: Mutex::new((flags, None)),
             offsetLock: QLock::default(),

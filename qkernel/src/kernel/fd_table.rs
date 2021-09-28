@@ -21,7 +21,7 @@ use core::ops::Deref;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::common::*;
 use super::super::fs::file::*;
-use super::super::id_mgr::*;
+use super::super::uid::*;
 
 #[derive(Clone, Default, Debug)]
 pub struct FDFlags {
@@ -71,7 +71,7 @@ impl FDTable {
     pub fn Fork(&self) -> FDTable {
         let internal = self.lock().Fork();
 
-        return FDTable((Arc::new(Mutex::new(internal)), UniqueID()));
+        return FDTable((Arc::new(Mutex::new(internal)), NewUID()));
     }
 
     pub fn Clear(&self) {
