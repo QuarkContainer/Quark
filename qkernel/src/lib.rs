@@ -96,7 +96,6 @@ pub mod perflog;
 pub mod seqcount;
 pub mod quring;
 pub mod stack;
-pub mod mutex;
 pub mod backtracer;
 
 use core::panic::PanicInfo;
@@ -401,9 +400,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
     if id == 0 {
         ALLOCATOR.Add(heapStart as usize, heapLen as usize);
 
-        Kernel::HostSpace::KernelMsg(0x111, 1);
         SingltonInit();
-        Kernel::HostSpace::KernelMsg(0x111, 2);
 
         // InitGS rely on SHARESPACE
         InitGs(id);
@@ -415,7 +412,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
         }
 
         SHARESPACE.scheduler.SetVcpuCnt(vcpuCnt as usize);
-        HyperCall64(qlib::HYPERCALL_INIT, (&(*SHARESPACE) as *const ShareSpace) as u64, 0);
+        HyperCall64(qlib::HYPERCALL_INIT, (&(*SHARESPACE) as *const ShareSpace) as u64, 0, 0);
 
         {
             let root = CurrentCr3();

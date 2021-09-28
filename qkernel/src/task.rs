@@ -269,6 +269,13 @@ impl Task {
         return self.queueId.store(queueId, Ordering::Release)
     }
 
+    #[inline(always)]
+    pub fn TaskAddress() -> u64{
+        let rsp = GetRsp();
+        //Self::Current().Check();
+        return rsp; //& DEFAULT_STACK_MAST;
+    }
+
     pub fn DummyTask() -> Self {
         let creds = Credentials::default();
         let userns = creds.lock().UserNamespace.clone();

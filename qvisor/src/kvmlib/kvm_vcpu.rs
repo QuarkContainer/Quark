@@ -20,6 +20,8 @@ use kvm_ioctls::VcpuExit;
 use core::mem::size_of;
 use libc::*;
 
+use super::qlib::mutex::*;
+
 use super::*;
 use super::syncmgr::*;
 //use super::kvm_ctl::*;
@@ -545,7 +547,8 @@ impl KVMVcpu {
                             let vcpu_regs = self.vcpu.get_regs().unwrap();
                             let data1 = vcpu_regs.rbx;
                             let data2 = vcpu_regs.rcx;
-                            info!("[{}] get kernel msg: {:x}, {:x}", self.id, data1, data2);
+                            let data3 = vcpu_regs.rdi;
+                            info!("[{}] get kernel msg [rsp {:x}]: {:x}, {:x}, {:x}", self.id, vcpu_regs.rsp, data1, data2, data3);
                         }
 
                         qlib::HYPERCALL_OOM => {
@@ -758,5 +761,15 @@ impl ShareSpace {
 
     pub fn Yield() {
         std::thread::yield_now();
+    }
+}
+
+impl<T: ?Sized> QMutex<T> {
+    pub fn Log(&self, a: u64, b: u64) {
+        error!("ListAllocator::Log {:x}/{:x}", a, b);
+    }
+
+    pub fn GetID() -> u64 {
+        return 0xffff;
     }
 }

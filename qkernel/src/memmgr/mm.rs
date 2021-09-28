@@ -21,6 +21,8 @@ use alloc::string::ToString;
 use x86_64::structures::paging::PageTableFlags;
 use alloc::vec::Vec;
 
+use ::qlib::mutex::*;
+
 use super::super::arch::x86_64::context::*;
 use super::super::PAGE_MGR;
 use super::super::uid::*;
@@ -34,8 +36,6 @@ use super::super::qlib::auxv::*;
 use super::super::task::*;
 use super::super::qlib::pagetable::*;
 use super::super::qlib::limits::*;
-use super::super::mutex::*;
-//use super::super::qlib::perf_tunning::*;
 use super::super::kernel::aio::aio_context::*;
 use super::super::fs::dirent::*;
 use super::super::mm::*;
