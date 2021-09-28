@@ -17,6 +17,7 @@ use core::sync::atomic;
 
 use super::singleton::*;
 
+pub type UniqueID = u64;
 pub static UID : Singleton<AtomicU64> = Singleton::<AtomicU64>::New();
 
 pub fn NewUID() -> u64 {

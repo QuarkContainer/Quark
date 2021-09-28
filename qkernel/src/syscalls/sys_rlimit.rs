@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use alloc::collections::btree_set::BTreeSet;
-use lazy_static::lazy_static;
 
 //use super::super::Kernel;
 use super::super::qlib::common::*;
@@ -22,21 +21,25 @@ use super::super::qlib::limits::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::Task;
 use super::super::threadmgr::thread::*;
+use super::super::singleton::*;
 
-lazy_static! {
-    pub static ref SETABLE_LIMITS : BTreeSet<LimitType> = [
-        LimitType::NumberOfFiles,
-        LimitType::AS,
-        LimitType::CPU,
-        LimitType::Data,
-        LimitType::FileSize,
-        LimitType::MemoryLocked,
-        LimitType::Stack,
-        // These are not enforced, but we include them here to avoid returning
-        // EPERM, since some apps expect them to succeed.
-        LimitType::Core,
-        LimitType::ProcessCount,
-    ].iter().cloned().collect();
+pub static SETABLE_LIMITS : Singleton<BTreeSet<LimitType>> = Singleton::<BTreeSet<LimitType>>::New();
+
+pub unsafe fn InitSingleton() {
+    SETABLE_LIMITS.Init([
+                            LimitType::NumberOfFiles,
+                            LimitType::AS,
+                            LimitType::CPU,
+                            LimitType::Data,
+                            LimitType::FileSize,
+                            LimitType::MemoryLocked,
+                            LimitType::Stack,
+                            // These are not enforced, but we include them here to avoid returning
+                            // EPERM, since some apps expect them to succeed.
+                            LimitType::Core,
+                            LimitType::ProcessCount,
+                        ].iter().cloned().collect()
+    );
 }
 
 pub fn PrLimit64(thread: &Thread, resource: LimitType, newLimit: Option<Limit>) -> Result<Limit> {

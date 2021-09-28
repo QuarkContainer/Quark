@@ -46,11 +46,8 @@ impl <T> Singleton<T> {
     }
 
     pub unsafe fn Init(&self, data: T) {
-        super::Kernel::HostSpace::KernelMsg(0x123, 4);
         let uninit = &mut *self.data.get();
-        super::Kernel::HostSpace::KernelMsg(0x123, 5);
         uninit.write(data);
-        super::Kernel::HostSpace::KernelMsg(0x123, 6);
     }
 
     /// Get a reference to the initialized instance. Must only be called once COMPLETE.

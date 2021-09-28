@@ -184,6 +184,12 @@ pub fn SingltonInit() {
         kernel::futex::InitSingleton();
         kernel::kernel::InitSingleton();
         kernel::semaphore::InitSingleton();
+        kernel::epoll::epoll::InitSingleton();
+        kernel::timer::InitSingleton();
+        loader::vdso::InitSingleton();
+        socket::socket::InitSingleton();
+        syscalls::sys_rlimit::InitSingleton();
+        //task::InitSingleton();
     }
 }
 
@@ -422,7 +428,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
         LogInit(1024); // 1024 pages, i.e. 4MB
         SetVCPCount(vcpuCnt as usize);
         InitTimeKeeper(vdsoParamAddr);
-        VDSO.Init(vdsoParamAddr);
+        VDSO.Initialization(vdsoParamAddr);
     } else {
         InitGs(id);
         //PerfGoto(PerfType::Kernel);

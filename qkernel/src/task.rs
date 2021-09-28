@@ -56,11 +56,18 @@ use super::fs::mount::*;
 use super::kernel::fs_context::*;
 
 use super::asm::*;
+//use super::singleton::*;
 use super::qlib::SysCallID;
 
 const DEFAULT_STACK_SIZE: usize = MemoryDef::DEFAULT_STACK_SIZE as usize;
 pub const DEFAULT_STACK_PAGES: u64 = DEFAULT_STACK_SIZE as u64 / (4 * 1024);
 pub const DEFAULT_STACK_MAST: u64 = !(DEFAULT_STACK_SIZE as u64 - 1);
+
+/*pub static DUMMY_TASK : Singleton<RwLock<Task>> = Singleton::<RwLock<Task>>::New();
+
+pub unsafe fn InitSingleton() {
+    DUMMY_TASK.Init(RwLock::new(Task::DummyTask()));
+}*/
 
 lazy_static! {
     pub static ref DUMMY_TASK : RwLock<Task> = RwLock::new(Task::DummyTask());

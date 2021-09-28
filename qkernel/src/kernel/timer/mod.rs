@@ -23,19 +23,24 @@ pub mod timer_store;
 
 pub use self::raw_timer::*;
 
-use lazy_static::lazy_static;
-
 use self::timermgr::*;
 use self::timekeeper::*;
 use self::timer_store::*;
 use self::timer::*;
+use super::super::singleton::*;
 
-lazy_static! {
-    static ref TIMER_MGR: TimerMgr = TimerMgr::default();
-    pub static ref TIME_KEEPER: TimeKeeper = TimeKeeper::default();
-    pub static ref REALTIME_CLOCK: Clock = TIME_KEEPER.NewClock(REALTIME);
-    pub static ref MONOTONIC_CLOCK: Clock = TIME_KEEPER.NewClock(MONOTONIC);
-    pub static ref TIMER_STORE: TimerStore = TimerStore::default();
+pub static TIMER_MGR : Singleton<TimerMgr> = Singleton::<TimerMgr>::New();
+pub static TIME_KEEPER : Singleton<TimeKeeper> = Singleton::<TimeKeeper>::New();
+pub static REALTIME_CLOCK : Singleton<Clock> = Singleton::<Clock>::New();
+pub static MONOTONIC_CLOCK : Singleton<Clock> = Singleton::<Clock>::New();
+pub static TIMER_STORE : Singleton<TimerStore> = Singleton::<TimerStore>::New();
+
+pub unsafe fn InitSingleton() {
+    TIMER_MGR.Init(TimerMgr::default());
+    TIME_KEEPER.Init(TimeKeeper::default());
+    REALTIME_CLOCK.Init(TIME_KEEPER.NewClock(REALTIME));
+    MONOTONIC_CLOCK.Init(TIME_KEEPER.NewClock(MONOTONIC));
+    TIMER_STORE.Init(TimerStore::default());
 }
 
 pub struct TimerUpdater {}
@@ -49,7 +54,7 @@ impl TimerListener for TimerUpdater {
 }
 
 pub fn InitTimeKeeper(vdsoParamPageAddr: u64) {
-    TIME_KEEPER.Init(vdsoParamPageAddr)
+    TIME_KEEPER.Initialization(vdsoParamPageAddr)
 }
 
 pub fn GetVDSOParamPageAddr() -> u64 {

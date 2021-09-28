@@ -16,16 +16,14 @@ use alloc::sync::Arc;
 use alloc::sync::Weak;
 use spin::*;
 use core::ops::Deref;
-use lazy_static::lazy_static;
-use core::sync::atomic::AtomicU64;
-use core::sync::atomic;
 use alloc::string::String;
 use alloc::string::ToString;
 use x86_64::structures::paging::PageTableFlags;
 use alloc::vec::Vec;
-use super::super::arch::x86_64::context::*;
 
+use super::super::arch::x86_64::context::*;
 use super::super::PAGE_MGR;
+use super::super::uid::*;
 use super::super::KERNEL_PAGETABLE;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
@@ -1305,15 +1303,6 @@ impl MemoryManager {
 
         return Ok(())
     }
-}
-
-pub type UniqueID = u64;
-lazy_static! {
-    static ref UID: AtomicU64 = AtomicU64::new(1);
-}
-
-pub fn NewUID() -> u64 {
-    return UID.fetch_add(1, atomic::Ordering::SeqCst);
 }
 
 // MLockAllOpts holds options to MLockAll.

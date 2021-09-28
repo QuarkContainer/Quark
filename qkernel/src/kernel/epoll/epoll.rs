@@ -18,11 +18,11 @@ use spin::Mutex;
 use alloc::collections::btree_map::BTreeMap;
 use core::any::Any;
 use core::ops::Deref;
-use lazy_static::lazy_static;
 use alloc::string::String;
 use alloc::string::ToString;
 
 use super::super::super::task::*;
+use super::super::super::singleton::*;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::fs::attr::*;
@@ -36,8 +36,9 @@ use super::super::waiter::*;
 use super::epoll_entry::*;
 use super::epoll_list::*;
 
-lazy_static! {
-    pub static ref CYCLE_MU : Mutex<()> = Mutex::new(());
+pub static CYCLE_MU : Singleton<Mutex<()>> = Singleton::<Mutex<()>>::New();
+pub unsafe fn InitSingleton() {
+    CYCLE_MU.Init(Mutex::new(()));
 }
 
 // Event describes the event mask that was observed and the user data to be
