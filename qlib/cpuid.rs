@@ -18,15 +18,17 @@ use alloc::string::String;
 use alloc::string::ToString;
 use alloc::vec::Vec;
 use spin::Mutex;
+use lazy_static::lazy_static;
 
 use super::common::*;
-use super::singleton::*;
+//use super::singleton::*;
 use super::*;
 
-pub static X86_FEATURES_FROM_STRING : Singleton<Mutex<BTreeMap<String, i32>>> = Singleton::<Mutex<BTreeMap<String, i32>>>::New();
+/*pub static X86_FEATURES_FROM_STRING : Singleton<Mutex<BTreeMap<String, i32>>> = Singleton::<Mutex<BTreeMap<String, i32>>>::New();
 pub static X86_FEATURE_STRINGS : Singleton<BTreeMap<i32, &'static str>> = Singleton::<BTreeMap<i32, &'static str>>::New();
 pub static X86_FEATURE_PARSE_ONLY_STRINGS : Singleton<BTreeMap<i32, &'static str>> = Singleton::<BTreeMap<i32, &'static str>>::New();
 pub static CPU_FREQ_MHZ : Singleton<Mutex<f64>> = Singleton::<Mutex<f64>>::New();
+
 
 pub unsafe fn InitSingleton() {
     X86_FEATURES_FROM_STRING.Init(Mutex::new(BTreeMap::new()));
@@ -186,6 +188,168 @@ pub unsafe fn InitSingleton() {
     ].iter().cloned().collect());
 
     CPU_FREQ_MHZ.Init(Mutex::new(0.0));
+}
+*/
+
+lazy_static! {
+    static ref X86_FEATURES_FROM_STRING : Mutex<BTreeMap<String, i32>> = Mutex::new(BTreeMap::new());
+
+    static ref X86_FEATURE_STRINGS : BTreeMap<i32, &'static str> = [
+	    // Block 0.
+        (X86Feature::X86FeatureSSE3 as i32,    "pni"),
+        (X86Feature::X86FeaturePCLMULDQ as i32,"pclmulqdq"),
+        (X86Feature::X86FeatureDTES64 as i32,  "dtes64"),
+        (X86Feature::X86FeatureMONITOR as i32, "monitor"),
+        (X86Feature::X86FeatureDSCPL as i32,   "ds_cpl"),
+        (X86Feature::X86FeatureVMX as i32,     "vmx"),
+        (X86Feature::X86FeatureSMX as i32,     "smx"),
+        (X86Feature::X86FeatureEST as i32,     "est"),
+        (X86Feature::X86FeatureTM2 as i32,     "tm2"),
+        (X86Feature::X86FeatureSSSE3 as i32,   "ssse3"),
+        (X86Feature::X86FeatureCNXTID as i32,  "cid"),
+        (X86Feature::X86FeatureSDBG as i32,    "sdbg"),
+        (X86Feature::X86FeatureFMA as i32,     "fma"),
+        (X86Feature::X86FeatureCX16 as i32,    "cx16"),
+        (X86Feature::X86FeatureXTPR as i32,    "xtpr"),
+        (X86Feature::X86FeaturePDCM as i32,    "pdcm"),
+        (X86Feature::X86FeaturePCID as i32,    "pcid"),
+        (X86Feature::X86FeatureDCA as i32,     "dca"),
+        (X86Feature::X86FeatureSSE4_1 as i32,  "sse4_1"),
+        (X86Feature::X86FeatureSSE4_2 as i32,  "sse4_2"),
+        (X86Feature::X86FeatureX2APIC as i32,  "x2apic"),
+        (X86Feature::X86FeatureMOVBE as i32,   "movbe"),
+        (X86Feature::X86FeaturePOPCNT as i32,  "popcnt"),
+        (X86Feature::X86FeatureTSCD as i32,    "tsc_deadline_timer"),
+        (X86Feature::X86FeatureAES as i32,     "aes"),
+        (X86Feature::X86FeatureXSAVE as i32,   "xsave"),
+        (X86Feature::X86FeatureAVX as i32,     "avx"),
+        (X86Feature::X86FeatureF16C as i32,    "f16c"),
+        (X86Feature::X86FeatureRDRAND as i32,  "rdrand"),
+
+        // Block 1.
+        (X86Feature::X86FeatureFPU as i32,  "fpu"),
+        (X86Feature::X86FeatureVME as i32,  "vme"),
+        (X86Feature::X86FeatureDE as i32,   "de"),
+        (X86Feature::X86FeaturePSE as i32,  "pse"),
+        (X86Feature::X86FeatureTSC as i32,  "tsc"),
+        (X86Feature::X86FeatureMSR as i32,  "msr"),
+        (X86Feature::X86FeaturePAE as i32,  "pae"),
+        (X86Feature::X86FeatureMCE as i32,  "mce"),
+        (X86Feature::X86FeatureCX8 as i32,  "cx8"),
+        (X86Feature::X86FeatureAPIC as i32, "apic"),
+        (X86Feature::X86FeatureSEP as i32,  "sep"),
+        (X86Feature::X86FeatureMTRR as i32, "mtrr"),
+        (X86Feature::X86FeaturePGE as i32,  "pge"),
+        (X86Feature::X86FeatureMCA as i32,  "mca"),
+        (X86Feature::X86FeatureCMOV as i32, "cmov"),
+        (X86Feature::X86FeaturePAT as i32,  "pat"),
+        (X86Feature::X86FeaturePSE36 as i32,"pse36"),
+        (X86Feature::X86FeaturePSN as i32,  "pn"),
+        (X86Feature::X86FeatureCLFSH as i32,"clflush"),
+        (X86Feature::X86FeatureDS as i32,   "dts"),
+        (X86Feature::X86FeatureACPI as i32, "acpi"),
+        (X86Feature::X86FeatureMMX as i32,  "mmx"),
+        (X86Feature::X86FeatureFXSR as i32, "fxsr"),
+        (X86Feature::X86FeatureSSE as i32,  "sse"),
+        (X86Feature::X86FeatureSSE2 as i32, "sse2"),
+        (X86Feature::X86FeatureSS as i32,   "ss"),
+        (X86Feature::X86FeatureHTT as i32,  "ht"),
+        (X86Feature::X86FeatureTM as i32,   "tm"),
+        (X86Feature::X86FeatureIA64 as i32, "ia64"),
+        (X86Feature::X86FeaturePBE as i32,  "pbe"),
+
+        // Block 2.
+        (X86Feature::X86FeatureFSGSBase as i32,  "fsgsbase"),
+        (X86Feature::X86FeatureTSC_ADJUST as i32,"tsc_adjust"),
+        (X86Feature::X86FeatureBMI1 as i32,      "bmi1"),
+        (X86Feature::X86FeatureHLE as i32,       "hle"),
+        (X86Feature::X86FeatureAVX2 as i32,      "avx2"),
+        (X86Feature::X86FeatureSMEP as i32,      "smep"),
+        (X86Feature::X86FeatureBMI2 as i32,      "bmi2"),
+        (X86Feature::X86FeatureERMS as i32,      "erms"),
+        (X86Feature::X86FeatureINVPCID as i32,   "invpcid"),
+        (X86Feature::X86FeatureRTM as i32,       "rtm"),
+        (X86Feature::X86FeatureCQM as i32,       "cqm"),
+        (X86Feature::X86FeatureMPX as i32,       "mpx"),
+        (X86Feature::X86FeatureRDT as i32,       "rdt_a"),
+        (X86Feature::X86FeatureAVX512F as i32,   "avx512f"),
+        (X86Feature::X86FeatureAVX512DQ as i32,  "avx512dq"),
+        (X86Feature::X86FeatureRDSEED as i32,    "rdseed"),
+        (X86Feature::X86FeatureADX as i32,       "adx"),
+        (X86Feature::X86FeatureSMAP as i32,      "smap"),
+        (X86Feature::X86FeatureCLWB as i32,      "clwb"),
+        (X86Feature::X86FeatureAVX512PF as i32,  "avx512pf"),
+        (X86Feature::X86FeatureAVX512ER as i32,  "avx512er"),
+        (X86Feature::X86FeatureAVX512CD as i32,  "avx512cd"),
+        (X86Feature::X86FeatureSHA as i32,       "sha_ni"),
+        (X86Feature::X86FeatureAVX512BW as i32,  "avx512bw"),
+        (X86Feature::X86FeatureAVX512VL as i32,  "avx512vl"),
+
+        // Block 3.
+        (X86Feature::X86FeatureAVX512VBMI as i32,"avx512vbmi"),
+        (X86Feature::X86FeatureUMIP as i32,      "umip"),
+        (X86Feature::X86FeaturePKU as i32,       "pku"),
+
+        // Block 4.
+        (X86Feature::X86FeatureXSAVEOPT as i32,"xsaveopt"),
+        (X86Feature::X86FeatureXSAVEC as i32,  "xsavec"),
+        (X86Feature::X86FeatureXGETBV1 as i32, "xgetbv1"),
+        (X86Feature::X86FeatureXSAVES as i32,  "xsaves"),
+
+        // Block 5.
+        (X86Feature::X86FeatureLAHF64 as i32,      "lahf_lm"),// LAHF/SAHF in long mode
+        (X86Feature::X86FeatureCMP_LEGACY as i32,  "cmp_legacy"),
+        (X86Feature::X86FeatureSVM as i32,         "svm"),
+        (X86Feature::X86FeatureEXTAPIC as i32,     "extapic"),
+        (X86Feature::X86FeatureCR8_LEGACY as i32,  "cr8_legacy"),
+        (X86Feature::X86FeatureLZCNT as i32,       "abm"),// Advanced bit manipulation
+        (X86Feature::X86FeatureSSE4A as i32,       "sse4a"),
+        (X86Feature::X86FeatureMISALIGNSSE as i32, "misalignsse"),
+        (X86Feature::X86FeaturePREFETCHW as i32,   "3dnowprefetch"),
+        (X86Feature::X86FeatureOSVW as i32,        "osvw"),
+        (X86Feature::X86FeatureIBS as i32,         "ibs"),
+        (X86Feature::X86FeatureXOP as i32,         "xop"),
+        (X86Feature::X86FeatureSKINIT as i32,      "skinit"),
+        (X86Feature::X86FeatureWDT as i32,         "wdt"),
+        (X86Feature::X86FeatureLWP as i32,         "lwp"),
+        (X86Feature::X86FeatureFMA4 as i32,        "fma4"),
+        (X86Feature::X86FeatureTCE as i32,         "tce"),
+        (X86Feature::X86FeatureTBM as i32,         "tbm"),
+        (X86Feature::X86FeatureTOPOLOGY as i32,    "topoext"),
+        (X86Feature::X86FeaturePERFCTR_CORE as i32,"perfctr_core"),
+        (X86Feature::X86FeaturePERFCTR_NB as i32,  "perfctr_nb"),
+        (X86Feature::X86FeatureBPEXT as i32,       "bpext"),
+        (X86Feature::X86FeaturePERFCTR_TSC as i32, "ptsc"),
+        (X86Feature::X86FeaturePERFCTR_LLC as i32, "perfctr_llc"),
+        (X86Feature::X86FeatureMWAITX as i32,      "mwaitx"),
+
+        // Block 6.
+        (X86Feature::X86FeatureSYSCALL as i32, "syscall"),
+        (X86Feature::X86FeatureNX as i32,      "nx"),
+        (X86Feature::X86FeatureMMXEXT as i32,  "mmxext"),
+        (X86Feature::X86FeatureFXSR_OPT as i32,"fxsr_opt"),
+        (X86Feature::X86FeatureGBPAGES as i32, "pdpe1gb"),
+        (X86Feature::X86FeatureRDTSCP as i32,  "rdtscp"),
+        (X86Feature::X86FeatureLM as i32,      "lm"),
+        (X86Feature::X86Feature3DNOWEXT as i32,"3dnowext"),
+        (X86Feature::X86Feature3DNOW as i32,   "3dnow"),
+    ].iter().cloned().collect();
+
+    static ref X86_FEATURE_PARSE_ONLY_STRINGS : BTreeMap<i32, &'static str> = [
+        // Block 0.
+        (X86Feature::X86FeatureOSXSAVE as i32, "osxsave"),
+
+        // Block 2.
+        (X86Feature::X86FeatureFDP_EXCPTN_ONLY as i32, "fdp_excptn_only"),
+        (X86Feature::X86FeatureFPCSDS as i32,          "fpcsds"),
+        (X86Feature::X86FeatureIPT as i32,             "pt"),
+        (X86Feature::X86FeatureCLFLUSHOPT as i32,      "clfushopt"),
+
+        // Block 3.
+        (X86Feature::X86FeaturePREFETCHWT1 as i32, "prefetchwt1"),
+	].iter().cloned().collect();
+
+	static ref CPU_FREQ_MHZ : Mutex<f64> = Mutex::new(0.0);
 }
 
 pub type Block = i32;

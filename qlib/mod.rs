@@ -70,7 +70,7 @@ use self::bytestream::*;
 pub fn InitSingleton() {
     unsafe {
         control_msg::InitSingleton();
-        cpuid::InitSingleton();
+        //cpuid::InitSingleton();
         device::InitSingleton();
         eventchannel::InitSingleton();
         //limits::InitSingleton();
