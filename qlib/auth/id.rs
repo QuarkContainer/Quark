@@ -14,12 +14,14 @@
 
 use alloc::vec::Vec;
 use spin::Mutex;
-use lazy_static::lazy_static;
 
 use super::userns::*;
+use super::super::singleton::*;
 
-lazy_static! {
-    pub static ref HOST_AUTH_ID: Mutex<HostAuthID> = Mutex::new(HostAuthID::New());
+pub static HOST_AUTH_ID : Singleton<Mutex<HostAuthID>> = Singleton::<Mutex<HostAuthID>>::New();
+
+pub unsafe fn InitSingleton() {
+    HOST_AUTH_ID.Init(Mutex::new(HostAuthID::New()));
 }
 
 #[derive(Serialize, Deserialize, Debug, Copy, Clone)]

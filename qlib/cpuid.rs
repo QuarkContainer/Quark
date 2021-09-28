@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use lazy_static::lazy_static;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::collections::btree_set::BTreeSet;
 use alloc::string::String;
@@ -21,13 +20,18 @@ use alloc::vec::Vec;
 use spin::Mutex;
 
 use super::common::*;
-use super::super::qlib::*;
+use super::singleton::*;
+use super::*;
 
-lazy_static! {
-    static ref X86_FEATURES_FROM_STRING : Mutex<BTreeMap<String, i32>> = Mutex::new(BTreeMap::new());
+pub static X86_FEATURES_FROM_STRING : Singleton<Mutex<BTreeMap<String, i32>>> = Singleton::<Mutex<BTreeMap<String, i32>>>::New();
+pub static X86_FEATURE_STRINGS : Singleton<BTreeMap<i32, &'static str>> = Singleton::<BTreeMap<i32, &'static str>>::New();
+pub static X86_FEATURE_PARSE_ONLY_STRINGS : Singleton<BTreeMap<i32, &'static str>> = Singleton::<BTreeMap<i32, &'static str>>::New();
+pub static CPU_FREQ_MHZ : Singleton<Mutex<f64>> = Singleton::<Mutex<f64>>::New();
 
-    static ref X86_FEATURE_STRINGS : BTreeMap<i32, &'static str> = [
-	    // Block 0.
+pub unsafe fn InitSingleton() {
+    X86_FEATURES_FROM_STRING.Init(Mutex::new(BTreeMap::new()));
+    X86_FEATURE_STRINGS.Init([
+        // Block 0.
         (X86Feature::X86FeatureSSE3 as i32,    "pni"),
         (X86Feature::X86FeaturePCLMULDQ as i32,"pclmulqdq"),
         (X86Feature::X86FeatureDTES64 as i32,  "dtes64"),
@@ -165,9 +169,9 @@ lazy_static! {
         (X86Feature::X86FeatureLM as i32,      "lm"),
         (X86Feature::X86Feature3DNOWEXT as i32,"3dnowext"),
         (X86Feature::X86Feature3DNOW as i32,   "3dnow"),
-    ].iter().cloned().collect();
+    ].iter().cloned().collect());
 
-    static ref X86_FEATURE_PARSE_ONLY_STRINGS : BTreeMap<i32, &'static str> = [
+    X86_FEATURE_PARSE_ONLY_STRINGS.Init([
         // Block 0.
         (X86Feature::X86FeatureOSXSAVE as i32, "osxsave"),
 
@@ -179,9 +183,9 @@ lazy_static! {
 
         // Block 3.
         (X86Feature::X86FeaturePREFETCHWT1 as i32, "prefetchwt1"),
-	].iter().cloned().collect();
+    ].iter().cloned().collect());
 
-	static ref CPU_FREQ_MHZ : Mutex<f64> = Mutex::new(0.0);
+    CPU_FREQ_MHZ.Init(Mutex::new(0.0));
 }
 
 pub type Block = i32;

@@ -67,6 +67,19 @@ use self::config::*;
 use self::linux_def::*;
 use self::bytestream::*;
 
+pub fn InitSingleton() {
+    unsafe {
+        control_msg::InitSingleton();
+        cpuid::InitSingleton();
+        device::InitSingleton();
+        eventchannel::InitSingleton();
+        //limits::InitSingleton();
+        metric::InitSingleton();
+        //perf_tunning::InitSingleton();
+        auth::id::InitSingleton();
+    }
+}
+
 pub const HYPERCALL_INIT: u16 = 1;
 pub const HYPERCALL_PANIC: u16 = 2;
 pub const HYPERCALL_OOM: u16 = 4;

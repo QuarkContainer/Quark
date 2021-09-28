@@ -16,13 +16,15 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-use lazy_static::lazy_static;
 
 use super::loader::*;
 use super::auth::id::*;
+use super::singleton::*;
 
-lazy_static! {
-    static ref MSG_ID : AtomicU64 = AtomicU64::new(1);
+pub static MSG_ID : Singleton<AtomicU64> = Singleton::<AtomicU64>::New();
+
+pub unsafe fn InitSingleton() {
+    MSG_ID.Init(AtomicU64::new(1));
 }
 
 #[derive(Serialize, Deserialize, Debug)]

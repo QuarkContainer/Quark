@@ -63,6 +63,10 @@ use kvmlib::qlib::mem::list_allocator::*;
 
 pub const LOG_FILE : &'static str = "/var/log/quark/quark.log";
 
+pub fn InitSingleton() {
+    kvmlib::qlib::InitSingleton();
+}
+
 fn main() {
     use self::kvmlib::runc::cmd::command::*;
 

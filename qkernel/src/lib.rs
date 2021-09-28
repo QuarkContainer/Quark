@@ -189,6 +189,8 @@ pub fn SingltonInit() {
         socket::socket::InitSingleton();
         syscalls::sys_rlimit::InitSingleton();
         //task::InitSingleton();
+
+        qlib::InitSingleton();
     }
 }
 
@@ -399,7 +401,9 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
     if id == 0 {
         ALLOCATOR.Add(heapStart as usize, heapLen as usize);
 
+        Kernel::HostSpace::KernelMsg(0x111, 1);
         SingltonInit();
+        Kernel::HostSpace::KernelMsg(0x111, 2);
 
         // InitGS rely on SHARESPACE
         InitGs(id);
@@ -438,6 +442,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
 
     //interrupts::init_idt();
     interrupt::init();
+
 
     /***************** can't run any qcall before this point ************************************/
 

@@ -46,7 +46,7 @@ impl <T> Singleton<T> {
     }
 
     pub unsafe fn Init(&self, data: T) {
-        let uninit = &mut *self.data.get();
+        let uninit = (*self.data.get()).as_mut_ptr();
         uninit.write(data);
     }
 

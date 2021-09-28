@@ -17,18 +17,29 @@ use alloc::collections::btree_map::BTreeMap;
 use core::cmp::Ordering;
 use alloc::sync::Arc;
 use spin::Mutex;
-use lazy_static::lazy_static;
 
-lazy_static! {
-    pub static ref SIMPLE_DEVICES: Mutex<Registry> = Mutex::new(Registry::New());
-    pub static ref HOSTFILE_DEVICE: Mutex<MultiDevice> = Mutex::new(NewAnonMultiDevice());
-    pub static ref PSEUDO_DEVICE: Arc<Mutex<Device>> = NewAnonDevice();
-    pub static ref DEV_DEVICE: Arc<Mutex<Device>> = NewAnonDevice();
-    pub static ref PTS_DEVICE: Arc<Mutex<Device>> = NewAnonDevice();
-    pub static ref PROC_DEVICE: Arc<Mutex<Device>> = NewAnonDevice();
-    pub static ref SHM_DEVICE: Arc<Mutex<Device>> = NewAnonDevice();
-    pub static ref SYS_DEVICE: Arc<Mutex<Device>> = NewAnonDevice();
-    pub static ref TMPFS_DEVICE: Arc<Mutex<Device>> = NewAnonDevice();
+use super::singleton::*;
+
+pub static SIMPLE_DEVICES : Singleton<Mutex<Registry>> = Singleton::<Mutex<Registry>>::New();
+pub static HOSTFILE_DEVICE : Singleton<Mutex<MultiDevice>> = Singleton::<Mutex<MultiDevice>>::New();
+pub static PSEUDO_DEVICE : Singleton<Arc<Mutex<Device>>> = Singleton::<Arc<Mutex<Device>>>::New();
+pub static DEV_DEVICE : Singleton<Arc<Mutex<Device>>> = Singleton::<Arc<Mutex<Device>>>::New();
+pub static PTS_DEVICE : Singleton<Arc<Mutex<Device>>> = Singleton::<Arc<Mutex<Device>>>::New();
+pub static PROC_DEVICE : Singleton<Arc<Mutex<Device>>> = Singleton::<Arc<Mutex<Device>>>::New();
+pub static SHM_DEVICE : Singleton<Arc<Mutex<Device>>> = Singleton::<Arc<Mutex<Device>>>::New();
+pub static SYS_DEVICE : Singleton<Arc<Mutex<Device>>> = Singleton::<Arc<Mutex<Device>>>::New();
+pub static TMPFS_DEVICE : Singleton<Arc<Mutex<Device>>> = Singleton::<Arc<Mutex<Device>>>::New();
+
+pub unsafe fn InitSingleton() {
+    SIMPLE_DEVICES.Init(Mutex::new(Registry::New()));
+    HOSTFILE_DEVICE.Init(Mutex::new(NewAnonMultiDevice()));
+    PSEUDO_DEVICE.Init(NewAnonDevice());
+    DEV_DEVICE.Init(NewAnonDevice());
+    PTS_DEVICE.Init(NewAnonDevice());
+    PROC_DEVICE.Init(NewAnonDevice());
+    SHM_DEVICE.Init(NewAnonDevice());
+    SYS_DEVICE.Init(NewAnonDevice());
+    TMPFS_DEVICE.Init(NewAnonDevice());
 }
 
 // TTYAUX_MAJOR is the major device number for alternate TTY devices.
