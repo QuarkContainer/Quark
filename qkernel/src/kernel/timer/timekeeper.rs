@@ -38,7 +38,7 @@ impl Deref for TimeKeeper {
 }
 
 impl TimeKeeper {
-    pub fn Init(&self, vdsoParamPageAddr: u64) {
+    pub fn Initialization(&self, vdsoParamPageAddr: u64) {
         {
             let mut internal = self.write();
             internal.Init(vdsoParamPageAddr);

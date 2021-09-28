@@ -20,10 +20,12 @@ use alloc::string::String;
 use alloc::string::ToString;
 use alloc::collections::btree_map::BTreeMap;
 
-use lazy_static::lazy_static;
+use super::singleton::*;
 
-lazy_static! {
-    pub static ref ALL_METRICS: Mutex<MetricSet> = Mutex::new(MetricSet::New());
+pub static ALL_METRICS : Singleton<Mutex<MetricSet>> = Singleton::<Mutex<MetricSet>>::New();
+
+pub unsafe fn InitSingleton() {
+    ALL_METRICS.Init(Mutex::new(MetricSet::New()));
 }
 
 pub fn NewU64Metric(name: &str, sync: bool, description: &str) -> Arc<U64Metric> {

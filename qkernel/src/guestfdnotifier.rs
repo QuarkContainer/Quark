@@ -15,17 +15,15 @@
 use alloc::collections::btree_map::BTreeMap;
 use spin::Mutex;
 use core::ops::Deref;
-use lazy_static::lazy_static;
 
 use super::Kernel::HostSpace;
 use super::kernel::waiter::*;
 use super::fs::host::hostinodeop::*;
 use super::qlib::common::*;
 use super::qlib::linux_def::*;
+use super::qlib::singleton::*;
 
-lazy_static! {
-    static ref GUEST_NOTIFIER : Notifier = Notifier::New();
-}
+pub static GUEST_NOTIFIER : Singleton<Notifier> = Singleton::<Notifier>::New();
 
 pub fn AddFD(fd: i32, iops: &HostInodeOp) {
     GUEST_NOTIFIER.AddFD(fd, iops);

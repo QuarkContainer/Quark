@@ -2,7 +2,6 @@ use alloc::string::ToString;
 use alloc::sync::Arc;
 use spin::RwLock;
 use spin::Mutex;
-use lazy_static::lazy_static;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::vec::Vec;
 use alloc::boxed::Box;
@@ -21,12 +20,24 @@ use super::super::fs::mount::*;
 use super::super::fs::dirent::*;
 use super::super::fs::inode::*;
 use super::super::fs::host::util::*;
+use super::super::qlib::singleton::*;
 
+pub static FAMILIAES : Singleton<RwLock<Families>> = Singleton::<RwLock<Families>>::New();
+pub static SOCKET_DEVICE : Singleton<Arc<Mutex<Device>>> = Singleton::<Arc<Mutex<Device>>>::New();
+pub static UNIX_SOCKET_DEVICE : Singleton<Arc<Mutex<Device>>> = Singleton::<Arc<Mutex<Device>>>::New();
+
+pub unsafe fn InitSingleton() {
+    FAMILIAES.Init(RwLock::new(Families::New()));
+    SOCKET_DEVICE.Init(NewAnonDevice());
+    UNIX_SOCKET_DEVICE.Init(NewAnonDevice());
+}
+
+/*
 lazy_static! {
     pub static ref FAMILIAES: RwLock<Families> = RwLock::new(Families::New());
     pub static ref SOCKET_DEVICE : Arc<Mutex<Device>> = NewAnonDevice();
     pub static ref UNIX_SOCKET_DEVICE : Arc<Mutex<Device>> = NewAnonDevice();
-}
+}*/
 
 pub trait Provider: Send + Sync {
     fn Socket(&self, task: &Task, stype: i32, protocol: i32) -> Result<Option<Arc<File>>>;

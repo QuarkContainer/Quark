@@ -22,13 +22,15 @@ use xmas_elf::program::ProgramHeader::{Ph64};
 pub use xmas_elf::header::HeaderPt2;
 use xmas_elf::program::ProgramHeader64;
 use xmas_elf::*;
-use lazy_static::lazy_static;
 
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
+use super::super::qlib::singleton::*;
 
-lazy_static! {
-    pub static ref VDSO: Vdso = Vdso::default();
+pub static VDSO : Singleton<Vdso> = Singleton::<Vdso>::New();
+
+pub unsafe fn InitSingleton() {
+    VDSO.Init(Vdso::default());
 }
 
 #[derive(Default)]
@@ -40,7 +42,7 @@ pub struct VdsoInternal {
 }
 
 impl VdsoInternal {
-    pub fn Init(&mut self, vdsoParamAddr: u64) -> Result<()> {
+    pub fn Initialization(&mut self, vdsoParamAddr: u64) -> Result<()> {
         self.vdsoParamAddr = vdsoParamAddr;
         self.vdsoAddr = vdsoParamAddr + MemoryDef::PAGE_SIZE;
 
@@ -93,8 +95,8 @@ impl Deref for Vdso {
 }
 
 impl Vdso {
-    pub fn Init(&self, vdsoParamPageAddr: u64) {
-        self.write().Init(vdsoParamPageAddr).expect("VDSO init fail");
+    pub fn Initialization(&self, vdsoParamPageAddr: u64) {
+        self.write().Initialization(vdsoParamPageAddr).expect("VDSO init fail");
     }
 
     pub fn VDSOAddr(&self) -> u64 {

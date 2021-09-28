@@ -17,13 +17,8 @@ use spin::Mutex;
 use core::ops::Deref;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::vec::Vec;
-use lazy_static::lazy_static;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-
-lazy_static! {
-    pub static ref WAITER_ID: AtomicU64 = AtomicU64::new(1);
-}
 
 use super::super::qlib::auth::userns::*;
 use super::super::qlib::auth::*;
@@ -32,8 +27,14 @@ use super::super::qlib::common::*;
 use super::super::task::*;
 use super::super::qlib::linux::sem::*;
 use super::super::qlib::linux::ipc::*;
+use super::super::qlib::singleton::*;
 //use super::super::fs::attr::*;
 use super::time::*;
+
+pub static WAITER_ID : Singleton<AtomicU64> = Singleton::<AtomicU64>::New();
+pub unsafe fn InitSingleton() {
+    WAITER_ID.Init(AtomicU64::new(1));
+}
 
 pub const VALUE_MAX: i16 = 32767; // SEMVMX
 

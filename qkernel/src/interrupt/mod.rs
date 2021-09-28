@@ -14,7 +14,6 @@
 
 
 mod idt;
-use lazy_static::lazy_static;
 use core::fmt;
 
 use super::qlib::addr::*;
@@ -27,6 +26,7 @@ use super::MainRun;
 use super::asm::*;
 use super::qlib::perf_tunning::*;
 use super::SHARESPACE;
+use super::qlib::singleton::*;
 
 #[derive(Clone, Copy, Debug)]
 pub enum ExceptionStackVec {
@@ -83,38 +83,37 @@ extern "C" {
     pub fn security_handler();
 }
 
-lazy_static! {
-    static ref IDT: idt::Idt = {
-        let mut idt = idt::Idt::new();
+pub static IDT : Singleton<idt::Idt> = Singleton::<idt::Idt>::New();
+pub unsafe fn InitSingleton() {
+    let mut idt = idt::Idt::new();
 
-        idt.set_handler(0, div_zero_handler).set_stack_index(0);
+    idt.set_handler(0, div_zero_handler).set_stack_index(0);
 
-        idt.set_handler(1, debug_handler).set_stack_index(0);
-        idt.set_handler(2, nm_handler).set_stack_index(0);
-        idt.set_handler(3, breakpoint_handler).set_stack_index(0).set_privilege_level(3);
-        idt.set_handler(4, overflow_handler).set_stack_index(0);
-        idt.set_handler(5, bound_range_handler).set_stack_index(0);
-        idt.set_handler(6, invalid_op_handler).set_stack_index(0).set_privilege_level(3);
-        idt.set_handler(7, device_not_available_handler).set_stack_index(0);
-        idt.set_handler(8, double_fault_handler).set_stack_index(0);
+    idt.set_handler(1, debug_handler).set_stack_index(0);
+    idt.set_handler(2, nm_handler).set_stack_index(0);
+    idt.set_handler(3, breakpoint_handler).set_stack_index(0).set_privilege_level(3);
+    idt.set_handler(4, overflow_handler).set_stack_index(0);
+    idt.set_handler(5, bound_range_handler).set_stack_index(0);
+    idt.set_handler(6, invalid_op_handler).set_stack_index(0).set_privilege_level(3);
+    idt.set_handler(7, device_not_available_handler).set_stack_index(0);
+    idt.set_handler(8, double_fault_handler).set_stack_index(0);
 
-        idt.set_handler(10, invalid_tss_handler).set_stack_index(0);
-        idt.set_handler(11, segment_not_present_handler).set_stack_index(0);
-        idt.set_handler(12, stack_segment_handler).set_stack_index(0);
-        idt.set_handler(13, gp_handler).set_stack_index(0).set_privilege_level(3);
+    idt.set_handler(10, invalid_tss_handler).set_stack_index(0);
+    idt.set_handler(11, segment_not_present_handler).set_stack_index(0);
+    idt.set_handler(12, stack_segment_handler).set_stack_index(0);
+    idt.set_handler(13, gp_handler).set_stack_index(0).set_privilege_level(3);
 
-        idt.set_handler(14, page_fault_handler).set_stack_index(0).set_privilege_level(3);
+    idt.set_handler(14, page_fault_handler).set_stack_index(0).set_privilege_level(3);
 
-        idt.set_handler(16, x87_fp_handler).set_stack_index(0);
-        idt.set_handler(17, alignment_check_handler).set_stack_index(0);
-        idt.set_handler(18, machine_check_handler).set_stack_index(0);
-        idt.set_handler(19, simd_fp_handler).set_stack_index(0);
-        idt.set_handler(20, virtualization_handler).set_stack_index(0);
+    idt.set_handler(16, x87_fp_handler).set_stack_index(0);
+    idt.set_handler(17, alignment_check_handler).set_stack_index(0);
+    idt.set_handler(18, machine_check_handler).set_stack_index(0);
+    idt.set_handler(19, simd_fp_handler).set_stack_index(0);
+    idt.set_handler(20, virtualization_handler).set_stack_index(0);
 
-        idt.set_handler(30, security_handler).set_stack_index(0);
+    idt.set_handler(30, security_handler).set_stack_index(0);
 
-        idt
-    };
+    IDT.Init(idt);
 }
 
 pub fn init() {
@@ -434,7 +433,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     };
 
     if !fromUser {
-        print!("Get pagefault from kernel ... {:#x?}/registers is {:#x?}", sf, currTask.GetPtRegs());
+        print!("Get pagefault from kernel ... {:#x?}/cr2 is {:x}/cr3 is {:x}", sf, cr2, cr3);
         for i in 0..super::CPU_LOCAL.len() {
             print!("CPU#{} is {:#x?}", i, super::CPU_LOCAL[i]);
         }

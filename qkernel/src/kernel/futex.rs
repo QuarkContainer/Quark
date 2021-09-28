@@ -18,16 +18,17 @@ use core::ops::Deref;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU8, Ordering};
-use lazy_static::lazy_static;
 
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::linux::futex::*;
 use super::super::task::*;
 use super::super::kernel::waiter::*;
+use super::super::qlib::singleton::*;
 
-lazy_static! {
-    pub static ref FUTEX_MGR : FutexMgr = FutexMgr::default();
+pub static FUTEX_MGR : Singleton<FutexMgr> = Singleton::<FutexMgr>::New();
+pub unsafe fn InitSingleton() {
+    FUTEX_MGR.Init(FutexMgr::default());
 }
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Clone, Copy)]

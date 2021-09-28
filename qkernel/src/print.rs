@@ -36,7 +36,7 @@ macro_rules! raw_print {
         if $crate::SHARESPACE.config.DebugLevel >= $crate::qlib::config::DebugLevel::Error {
             //$crate::qlib::perf_tunning::PerfGoto($crate::qlib::perf_tunning::PerfType::Print);
             let s = &format!($($arg)*);
-            let str = format!("[ERROR] {}", s);
+            let str = format!("[Print] {}", s);
 
             $crate::Kernel::HostSpace::SlowPrint($crate::qlib::config::DebugLevel::Error, &str);
             //$crate::qlib::perf_tunning::PerfGofrom($crate::qlib::perf_tunning::PerfType::Print);
@@ -51,7 +51,7 @@ macro_rules! print {
             //$crate::qlib::perf_tunning::PerfGoto($crate::qlib::perf_tunning::PerfType::Print);
             let prefix = $crate::print::PrintPrefix();
             let s = &format!($($arg)*);
-            let str = format!("[ERROR] {} {}", prefix, s);
+            let str = format!("[Print] {} {}", prefix, s);
 
             $crate::Kernel::HostSpace::SlowPrint($crate::qlib::config::DebugLevel::Error, &str);
             //$crate::qlib::perf_tunning::PerfGofrom($crate::qlib::perf_tunning::PerfType::Print);

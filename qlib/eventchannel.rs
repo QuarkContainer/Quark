@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use lazy_static::lazy_static;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -20,9 +19,12 @@ use spin::Mutex;
 use alloc::string::ToString;
 
 use super::common::*;
+use super::singleton::*;
 
-lazy_static! {
-    pub static ref EMITTERS: Mutex<Emitters> = Mutex::new(Emitters(BTreeMap::new()));
+pub static EMITTERS : Singleton<Mutex<Emitters>> = Singleton::<Mutex<Emitters>>::New();
+
+pub unsafe fn InitSingleton() {
+    EMITTERS.Init(Mutex::new(Emitters(BTreeMap::new())));
 }
 
 pub struct Emitters(BTreeMap<u64, Arc<Mutex<Emitter>>>);

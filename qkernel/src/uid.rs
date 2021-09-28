@@ -12,16 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use lazy_static::lazy_static;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic;
 
-pub type UniqueID = u64;
+use super::qlib::singleton::*;
 
-lazy_static! {
-    static ref UID: AtomicU64 = AtomicU64::new(1);
-}
+pub type UniqueID = u64;
+pub static UID : Singleton<AtomicU64> = Singleton::<AtomicU64>::New();
 
 pub fn NewUID() -> u64 {
     return UID.fetch_add(1, atomic::Ordering::SeqCst);
 }
+

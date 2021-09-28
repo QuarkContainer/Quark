@@ -29,7 +29,7 @@ use super::super::super::task::*;
 use super::super::super::kernel::time::*;
 use super::super::super::kernel::waiter::*;
 use super::super::super::kernel::waiter::qlock::*;
-use super::super::super::id_mgr::*;
+use super::super::super::uid::*;
 
 use super::super::inode::*;
 use super::super::mount::*;
@@ -137,7 +137,7 @@ impl InodeOperations for NullDevice {
         let fops = NullFileOperations {};
 
         let f = FileInternal {
-            UniqueId: UniqueID(),
+            UniqueId: NewUID(),
             Dirent: dirent.clone(),
             flags: Mutex::new((flags, None)),
             offset: QLock::New(0),

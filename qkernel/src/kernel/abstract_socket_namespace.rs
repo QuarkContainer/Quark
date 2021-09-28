@@ -16,15 +16,16 @@ use alloc::sync::Arc;
 use spin::Mutex;
 use alloc::collections::btree_map::BTreeMap;
 use core::ops::Deref;
-use lazy_static::lazy_static;
 use alloc::vec::Vec;
 
 use super::super::socket::unix::transport::unix::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
+use super::super::qlib::singleton::*;
 
-lazy_static! {
-    pub static ref ABSTRACT_SOCKET: AbstractSocketNamespace = AbstractSocketNamespace::default();
+pub static ABSTRACT_SOCKET : Singleton<AbstractSocketNamespace> = Singleton::<AbstractSocketNamespace>::New();
+pub unsafe fn InitSingleton() {
+    ABSTRACT_SOCKET.Init(AbstractSocketNamespace::default());
 }
 
 pub fn BoundEndpoint(name: &Vec<u8>) -> Option<BoundEndpoint> {

@@ -17,9 +17,9 @@ use alloc::sync::Arc;
 use spin::Mutex;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::vec::Vec;
-use lazy_static::lazy_static;
 
 use super::super::qlib::common::*;
+use super::super::qlib::singleton::*;
 use super::super::task::*;
 use super::inode::*;
 
@@ -29,8 +29,10 @@ pub type FilesystemFlags = i32;
 // on mount. It is used to construct the output of /proc/filesystems.
 pub const FILESYSTEM_REQUIRES_DEV : FilesystemFlags = 1;
 
-lazy_static! {
-    pub static ref FILESYSTEMS: Mutex<FileSystems> = Mutex::new(FileSystems::New());
+pub static FILESYSTEMS : Singleton<Mutex<FileSystems>> = Singleton::<Mutex<FileSystems>>::New();
+
+pub unsafe fn InitSingleton() {
+    FILESYSTEMS.Init(Mutex::new(FileSystems::New()));
 }
 
 pub fn FindFilesystem(name: &str) -> Option<Arc<Mutex<Filesystem>>> {

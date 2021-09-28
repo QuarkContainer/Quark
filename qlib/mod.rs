@@ -48,6 +48,7 @@ pub mod auth;
 pub mod control_msg;
 pub mod perf_tunning;
 pub mod uring;
+pub mod singleton;
 
 pub mod ringbuf;
 pub mod vcpu_mgr;
@@ -65,6 +66,19 @@ use self::ringbuf::*;
 use self::config::*;
 use self::linux_def::*;
 use self::bytestream::*;
+
+pub fn InitSingleton() {
+    unsafe {
+        control_msg::InitSingleton();
+        //cpuid::InitSingleton();
+        device::InitSingleton();
+        eventchannel::InitSingleton();
+        //limits::InitSingleton();
+        metric::InitSingleton();
+        //perf_tunning::InitSingleton();
+        auth::id::InitSingleton();
+    }
+}
 
 pub const HYPERCALL_INIT: u16 = 1;
 pub const HYPERCALL_PANIC: u16 = 2;

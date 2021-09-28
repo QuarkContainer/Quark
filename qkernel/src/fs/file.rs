@@ -21,7 +21,7 @@ use alloc::string::ToString;
 use core::any::Any;
 use core::ops::Deref;
 
-use super::super::id_mgr::*;
+use super::super::uid::*;
 use super::super::kernel::waiter::qlock::*;
 use super::super::kernel::time::*;
 use super::super::qlib::metric::*;
@@ -36,6 +36,7 @@ use super::super::memmgr::*;
 use super::super::fs::flags::*;
 use super::super::tcpip::tcpip::*;
 use super::super::kernel::fasync::*;
+use super::super::qlib::singleton::*;
 
 use super::attr::*;
 use super::dirent::*;
@@ -48,10 +49,11 @@ use super::host::fs::*;
 use super::host::tty::*;
 use super::host::util::*;
 use super::host::hostinodeop::*;
-use lazy_static::lazy_static;
 
-lazy_static! {
-    pub static ref READS : Arc<U64Metric> = NewU64Metric("/fs/reads", false, "Number of file reads.");
+pub static READS : Singleton<Arc<U64Metric>> = Singleton::<Arc<U64Metric>>::New();
+
+pub unsafe fn InitSingleton() {
+    READS.Init(NewU64Metric("/fs/reads", false, "Number of file reads."));
 }
 
 // SpliceOpts define how a splice works.
@@ -431,7 +433,7 @@ impl File {
 
     pub fn New<T: FileOperations + 'static>(dirent: &Dirent, flags: &FileFlags, fops: T) -> Self {
         let f = FileInternal {
-            UniqueId: UniqueID(),
+            UniqueId: NewUID(),
             Dirent: dirent.clone(),
             flags: Mutex::new((*flags, None)),
             //offsetLock: QLock::default(),
@@ -494,7 +496,7 @@ impl File {
         }
 
         return File(Arc::new(FileInternal {
-            UniqueId: UniqueID(),
+            UniqueId: NewUID(),
             Dirent: dirent.clone(),
             flags: Mutex::new((flags, None)),
             //offsetLock: QLock::default(),

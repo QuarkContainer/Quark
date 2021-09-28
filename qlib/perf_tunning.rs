@@ -21,10 +21,19 @@ use core::mem;
 
 use super::super::asm::Rdtsc;
 pub use super::super::perflog::PerfType;
+/*use super::singleton::*;
+
+pub static COUNTS : Singleton<CounterSet> = Singleton::<CounterSet>::New();
+
+pub unsafe fn InitSingleton() {
+    COUNTS.Init(CounterSet::default());
+}
+*/
 
 lazy_static! {
     static ref COUNTS : CounterSet = CounterSet::default();
 }
+
 
 pub fn PerfGoto(typ: PerfType) {
     COUNTS.Goto(typ)

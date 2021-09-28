@@ -39,7 +39,7 @@ use super::super::super::kernel::waiter::qlock::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::auth::*;
-use super::super::super::id_mgr::*;
+use super::super::super::uid::*;
 
 #[derive(Clone, Copy)]
 pub enum SeqHandle {
@@ -236,7 +236,7 @@ impl InodeOperations for SeqFile {
         });
 
         let internal = FileInternal {
-            UniqueId: UniqueID(),
+            UniqueId: NewUID(),
             Dirent: dirent.clone(),
             flags: Mutex::new((flags, None)),
             offset: QLock::New(0),

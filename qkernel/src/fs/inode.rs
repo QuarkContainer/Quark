@@ -23,7 +23,7 @@ use core::ops::Deref;
 
 use super::super::qlib::common::*;
 use super::super::kernel::time::*;
-use super::super::id_mgr::*;
+use super::super::uid::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::auth::*;
 use super::super::task::*;
@@ -664,7 +664,7 @@ pub struct InodeIntern {
 impl Default for InodeIntern {
     fn default() -> Self {
         return Self {
-            UniqueId: UniqueID(),
+            UniqueId: NewUID(),
             InodeOp: Arc::new(HostInodeOp::default()),
             StableAttr: Default::default(),
             LockCtx: LockCtx::default(),

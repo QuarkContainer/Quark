@@ -15,17 +15,15 @@
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
 use core::mem;
-use lazy_static::lazy_static;
 use spin::Mutex;
 
 use super::qlib::perf_tunning::*;
 use super::qlib::vcpu_mgr::*;
 use super::uid::*;
 use super::task::*;
+use super::qlib::singleton::*;
 
-lazy_static! {
-    pub static ref THREAD_COUNTS : Mutex<ThreadPerfCounters> = Mutex::new(ThreadPerfCounters::default());
-}
+pub static THREAD_COUNTS : Singleton<Mutex<ThreadPerfCounters>> = Singleton::<Mutex<ThreadPerfCounters>>::New();
 
 #[repr(usize)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

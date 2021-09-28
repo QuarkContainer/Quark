@@ -67,7 +67,6 @@ pub mod asm;
 mod taskMgr;
 #[macro_use]
 mod qlib;
-mod gdt;
 #[macro_use]
 mod interrupt;
 mod Kernel;
@@ -92,7 +91,6 @@ pub mod loader;
 pub mod tcpip;
 pub mod uid;
 pub mod version;
-pub mod id_mgr;
 pub mod util;
 pub mod perflog;
 pub mod seqcount;
@@ -102,9 +100,11 @@ pub mod mutex;
 pub mod backtracer;
 
 use core::panic::PanicInfo;
-use lazy_static::lazy_static;
+use core::sync::atomic::AtomicU64;
+use core::sync::atomic::AtomicUsize;
 use core::{ptr, mem};
 use alloc::vec::Vec;
+use spin::Mutex;
 
 //use linked_list_allocator::LockedHeap;
 //use buddy_system_allocator::LockedHeap;
@@ -134,6 +134,9 @@ use self::qlib::mem::list_allocator::*;
 use self::quring::*;
 use self::print::SCALE;
 
+use self::qlib::singleton::*;
+use self::uid::*;
+
 pub const HEAP_START: usize = 0x70_2000_0000;
 pub const HEAP_SIZE: usize = 0x1000_0000;
 
@@ -148,14 +151,47 @@ pub fn AllocatorPrint() {
     //ALLOCATOR.Print();
 }
 
-lazy_static! {
-    pub static ref SHARESPACE: ShareSpace = ShareSpace::New();
-    pub static ref PAGE_ALLOCATOR: MemAllocator = MemAllocator::New();
-    pub static ref KERNEL_PAGETABLE: PageTables = PageTables::Init(0);
-    pub static ref PAGE_MGR: PageMgr = PageMgr::New();
-    pub static ref LOADER: Loader = Loader::default();
-    pub static ref IOURING: QUring = QUring::New(MemoryDef::QURING_SIZE);
-    pub static ref KERNEL_STACK_ALLOCATOR : AlignedAllocator = AlignedAllocator::New(MemoryDef::DEFAULT_STACK_SIZE as usize, MemoryDef::DEFAULT_STACK_SIZE as usize);
+pub static SHARESPACE : Singleton<ShareSpace> = Singleton::<ShareSpace>::New();
+pub static PAGE_ALLOCATOR : Singleton<MemAllocator> = Singleton::<MemAllocator>::New();
+pub static KERNEL_PAGETABLE : Singleton<PageTables> = Singleton::<PageTables>::New();
+pub static PAGE_MGR : Singleton<PageMgr> = Singleton::<PageMgr>::New();
+pub static LOADER : Singleton<Loader> = Singleton::<Loader>::New();
+pub static IOURING : Singleton<QUring> = Singleton::<QUring>::New();
+pub static KERNEL_STACK_ALLOCATOR : Singleton<AlignedAllocator> = Singleton::<AlignedAllocator>::New();
+
+pub fn SingltonInit() {
+    unsafe {
+        SHARESPACE.Init(ShareSpace::New());
+        PAGE_ALLOCATOR.Init(MemAllocator::New());
+        KERNEL_PAGETABLE.Init(PageTables::Init(0));
+        PAGE_MGR.Init(PageMgr::New());
+        LOADER.Init(Loader::default());
+        IOURING.Init(QUring::New(MemoryDef::QURING_SIZE));
+        KERNEL_STACK_ALLOCATOR.Init( AlignedAllocator::New(MemoryDef::DEFAULT_STACK_SIZE as usize, MemoryDef::DEFAULT_STACK_SIZE as usize));
+
+        guestfdnotifier::GUEST_NOTIFIER.Init(guestfdnotifier::Notifier::New());
+        UID.Init(AtomicU64::new(1));
+        perflog::THREAD_COUNTS.Init(Mutex::new(perflog::ThreadPerfCounters::default()));
+        vcpu::VCPU_COUNT.Init(AtomicUsize::new(0));
+        vcpu::CPU_LOCAL.Init(&SHARESPACE.scheduler.VcpuArr);
+        boot::controller::MSG.Init(Mutex::new(None));
+
+        fs::file::InitSingleton();
+        fs::filesystems::InitSingleton();
+        interrupt::InitSingleton();
+        kernel::abstract_socket_namespace::InitSingleton();
+        kernel::futex::InitSingleton();
+        kernel::kernel::InitSingleton();
+        kernel::semaphore::InitSingleton();
+        kernel::epoll::epoll::InitSingleton();
+        kernel::timer::InitSingleton();
+        loader::vdso::InitSingleton();
+        socket::socket::InitSingleton();
+        syscalls::sys_rlimit::InitSingleton();
+        //task::InitSingleton();
+
+        qlib::InitSingleton();
+    }
 }
 
 extern "C" {
@@ -365,10 +401,9 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
     if id == 0 {
         ALLOCATOR.Add(heapStart as usize, heapLen as usize);
 
-        {
-            //to initial the SHARESPACE
-            let _tmp = &SHARESPACE;
-        }
+        Kernel::HostSpace::KernelMsg(0x111, 1);
+        SingltonInit();
+        Kernel::HostSpace::KernelMsg(0x111, 2);
 
         // InitGS rely on SHARESPACE
         InitGs(id);
@@ -396,7 +431,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
         LogInit(1024); // 1024 pages, i.e. 4MB
         SetVCPCount(vcpuCnt as usize);
         InitTimeKeeper(vdsoParamAddr);
-        VDSO.Init(vdsoParamAddr);
+        VDSO.Initialization(vdsoParamAddr);
     } else {
         InitGs(id);
         //PerfGoto(PerfType::Kernel);
@@ -407,6 +442,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
 
     //interrupts::init_idt();
     interrupt::init();
+
 
     /***************** can't run any qcall before this point ************************************/
 

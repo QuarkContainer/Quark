@@ -14,7 +14,6 @@
 
 use alloc::sync::Arc;
 use spin::RwLock;
-use lazy_static::lazy_static;
 use core::ops::Deref;
 
 use super::super::super::asm::muldiv64;
@@ -22,18 +21,17 @@ use super::super::super::qlib::linux::time::*;
 use super::super::super::qlib::metric::*;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
+use super::super::super::qlib::singleton::*;
 use super::super::super::Kernel::HostSpace;
 use super::super::super::asm::*;
 use super::sampler::*;
 use super::parameters::*;
 use super::*;
 
-lazy_static! {
-    // fallbackMetric tracks failed updates. It is not sync, as it is not critical
-    // that all occurrences are captured and CalibratedClock may fallback many
-    // times.
-    pub static ref FALLBACK_METRIC : Arc<U64Metric> = NewU64Metric("/time/fallback", false,
-            "Incremented when a clock falls back to system calls due to a failed update");
+pub static FALLBACK_METRIC : Singleton<Arc<U64Metric>> = Singleton::<Arc<U64Metric>>::New();
+pub unsafe fn InitSingleton() {
+    FALLBACK_METRIC.Init(NewU64Metric("/time/fallback", false,
+                                      "Incremented when a clock falls back to system calls due to a failed update"));
 }
 
 // CalibratedClock implements a clock that tracks a reference clock.
