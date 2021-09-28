@@ -45,7 +45,7 @@ pub type CreateDirectory = fn(_data: &InodeOpsData, task: &Task, dir: &mut Inode
 pub type CreateLink = fn(_data: &InodeOpsData, task: &Task, dir: &mut Inode, oldname: &str, newname: &str) -> Result<()>;
 pub type CreateHardLink = fn(_data: &InodeOpsData, task: &Task, dir: &mut Inode, target: &Inode, name: &str) -> Result<()>;
 pub type CreateFifo = fn(_data: &InodeOpsData, task: &Task, dir: &mut Inode, name: &str, perm: &FilePermissions) -> Result<()>;
-//pub type RemoveDirent(&mut self, dir: &mut InodeStruStru, remove: &Arc<Mutex<Dirent>>) -> Result<()> ;
+//pub type RemoveDirent(&mut self, dir: &mut InodeStruStru, remove: &Arc<QMutex<Dirent>>) -> Result<()> ;
 pub type Remove = fn(_data: &InodeOpsData, task: &Task, dir: &mut Inode, name: &str) -> Result<()>;
 pub type RemoveDirectory = fn(_data: &InodeOpsData, task: &Task, dir: &mut Inode, name: &str) -> Result<()>;
 pub type Rename = fn(_data: &InodeOpsData, task: &Task, dir: &mut Inode, oldParent: &Inode, oldname: &str, newParent: &Inode, newname: &str, replacement: bool) -> Result<()>;

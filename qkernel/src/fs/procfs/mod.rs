@@ -29,10 +29,10 @@ pub mod stat;
 pub mod sys;
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 
 use super::filesystems::*;
 
 pub fn Init() {
-    RegisterFilesystem(&Arc::new(Mutex::new(self::fs::ProcFileSystem {})));
+    RegisterFilesystem(&Arc::new(QMutex::new(self::fs::ProcFileSystem {})));
 }

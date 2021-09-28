@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use alloc::string::String;
 use alloc::string::ToString;
 use core::any::Any;
@@ -43,9 +43,9 @@ impl Filesystem for PtsTmpfs {
             return Err(Error::SysError(SysErr::EINVAL))
         }
 
-        let mops = Arc::new(Mutex::new(PtsSuperOperations {}));
+        let mops = Arc::new(QMutex::new(PtsSuperOperations {}));
         let msrc = MountSource::NewPtsMountSource(&mops, self, flags);
-        let dir = NewDir(task, &Arc::new(Mutex::new(msrc)));
+        let dir = NewDir(task, &Arc::new(QMutex::new(msrc)));
         return Ok(dir)
     }
 

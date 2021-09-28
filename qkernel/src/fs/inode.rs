@@ -16,7 +16,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 //use alloc::string::ToString;
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use spin::RwLock;
 use core::any::Any;
 use core::ops::Deref;
@@ -123,7 +123,7 @@ pub trait InodeOperations: Sync + Send {
     fn CreateLink(&self, task: &Task, dir: &mut Inode, oldname: &str, newname: &str) -> Result<()>;
     fn CreateHardLink(&self, task: &Task, dir: &mut Inode, target: &Inode, name: &str) -> Result<()>;
     fn CreateFifo(&self, task: &Task, dir: &mut Inode, name: &str, perm: &FilePermissions) -> Result<()>;
-    //fn RemoveDirent(&mut self, dir: &mut InodeStruStru, remove: &Arc<Mutex<Dirent>>) -> Result<()> ;
+    //fn RemoveDirent(&mut self, dir: &mut InodeStruStru, remove: &Arc<QMutex<Dirent>>) -> Result<()> ;
     fn Remove(&self, task: &Task, dir: &mut Inode, name: &str) -> Result<()>;
     fn RemoveDirectory(&self, task: &Task, dir: &mut Inode, name: &str) -> Result<()>;
     fn Rename(&self, task: &Task, dir: &mut Inode, oldParent: &Inode, oldname: &str, newParent: &Inode, newname: &str, replacement: bool) -> Result<()>;
@@ -166,24 +166,24 @@ pub struct LockCtx {
 }
 
 #[derive(Clone)]
-pub struct Inode(pub Arc<Mutex<InodeIntern>>);
+pub struct Inode(pub Arc<QMutex<InodeIntern>>);
 
 impl Default for Inode {
     fn default() -> Self {
-        return Self(Arc::new(Mutex::new(InodeIntern::default())))
+        return Self(Arc::new(QMutex::new(InodeIntern::default())))
     }
 }
 
 impl Deref for Inode {
-    type Target = Arc<Mutex<InodeIntern>>;
+    type Target = Arc<QMutex<InodeIntern>>;
 
-    fn deref(&self) -> &Arc<Mutex<InodeIntern>> {
+    fn deref(&self) -> &Arc<QMutex<InodeIntern>> {
         &self.0
     }
 }
 
 impl Inode {
-    pub fn New<T: InodeOperations + 'static>(InodeOp: &Arc<T>, MountSource: &Arc<Mutex<MountSource>>, StableAttr: &StableAttr) -> Self {
+    pub fn New<T: InodeOperations + 'static>(InodeOp: &Arc<T>, MountSource: &Arc<QMutex<MountSource>>, StableAttr: &StableAttr) -> Self {
         let inodeInternal = InodeIntern {
             InodeOp: InodeOp.clone(),
             StableAttr: StableAttr.clone(),
@@ -193,20 +193,20 @@ impl Inode {
             ..Default::default()
         };
 
-        return Self(Arc::new(Mutex::new(inodeInternal)))
+        return Self(Arc::new(QMutex::new(inodeInternal)))
     }
 
     pub fn WouldBlock(&self) -> bool {
         return self.lock().InodeOp.WouldBlock();
     }
 
-    pub fn NewHostInode(msrc: &Arc<Mutex<MountSource>>, fd: i32, fstat: &LibcStat, writeable: bool) -> Result<Self> {
+    pub fn NewHostInode(msrc: &Arc<QMutex<MountSource>>, fd: i32, fstat: &LibcStat, writeable: bool) -> Result<Self> {
         //info!("after fstat: {:?}", fstat.StableAttr());
 
          //println!("the stable attr is {:?}", &fstat.StableAttr());
         let iops = HostInodeOp::New(&msrc.lock().MountSourceOperations.clone(), fd, fstat.WouldBlock(), &fstat, writeable);
 
-        return Ok(Self(Arc::new(Mutex::new(InodeIntern {
+        return Ok(Self(Arc::new(QMutex::new(InodeIntern {
             InodeOp: Arc::new(iops),
             StableAttr: fstat.StableAttr(),
             LockCtx: LockCtx::default(),
@@ -657,7 +657,7 @@ pub struct InodeIntern {
     pub InodeOp: Arc<InodeOperations>,
     pub StableAttr: StableAttr,
     pub LockCtx: LockCtx,
-    pub MountSource: Arc<Mutex<MountSource>>,
+    pub MountSource: Arc<QMutex<MountSource>>,
     pub Overlay: Option<Arc<RwLock<OverlayEntry>>>,
 }
 
@@ -668,7 +668,7 @@ impl Default for InodeIntern {
             InodeOp: Arc::new(HostInodeOp::default()),
             StableAttr: Default::default(),
             LockCtx: LockCtx::default(),
-            MountSource: Arc::new(Mutex::new(MountSource::default())),
+            MountSource: Arc::new(QMutex::new(MountSource::default())),
             Overlay: None,
         }
     }

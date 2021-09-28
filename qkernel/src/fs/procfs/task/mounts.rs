@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use alloc::vec::Vec;
 use alloc::string::ToString;
 
@@ -32,7 +32,7 @@ use super::super::super::inode::*;
 use super::super::super::super::threadmgr::thread::*;
 use super::super::inode::*;
 
-pub fn ForEachMount(thread: &Thread, f: &mut FnMut(&str, &Arc<Mutex<Mount>>)) {
+pub fn ForEachMount(thread: &Thread, f: &mut FnMut(&str, &Arc<QMutex<Mount>>)) {
     let fsctx = thread.lock().fsc.clone();
 
     let rootDir = fsctx.RootDirectory();
@@ -62,7 +62,7 @@ pub fn ForEachMount(thread: &Thread, f: &mut FnMut(&str, &Arc<Mutex<Mount>>)) {
     }
 }
 
-pub fn NewMountInfoFile(task: &Task, thread: &Thread, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+pub fn NewMountInfoFile(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let v = NewMountInfoFileSimpleFileInode(task, thread, &ROOT_OWNER, &FilePermissions::FromMode(FileMode(0o400)), FSMagic::PROC_SUPER_MAGIC);
     return NewProcInode(&Arc::new(v), msrc, InodeType::SpecialFile, Some(thread.clone()))
 
@@ -88,7 +88,7 @@ impl MountInfoFile {
         info!("MountInfoFile GenSnapshot...");
         let mut ret = "".to_string();
 
-        ForEachMount(&self.thread, &mut |mountPath: &str, m: &Arc<Mutex<Mount>>| {
+        ForEachMount(&self.thread, &mut |mountPath: &str, m: &Arc<QMutex<Mount>>| {
             // Format:
             // 36 35 98:0 /mnt1 /mnt2 rw,noatime master:1 - ext3 /dev/root rw,errors=continue
             // (1)(2)(3)   (4)   (5)      (6)      (7)   (8) (9)   (10)         (11)
@@ -167,7 +167,7 @@ impl SimpleFileTrait for MountInfoFile {
     }
 }
 
-pub fn NewMountsFile(task: &Task, thread: &Thread, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+pub fn NewMountsFile(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let v = NewMountsFileSimpleFileInode(task, thread, &ROOT_OWNER, &FilePermissions::FromMode(FileMode(0o400)), FSMagic::PROC_SUPER_MAGIC);
     return NewProcInode(&Arc::new(v), msrc, InodeType::SpecialFile, Some(thread.clone()))
 
@@ -192,7 +192,7 @@ impl MountsFile {
     pub fn GenSnapshot(&self, _task: &Task) -> Vec<u8> {
         let mut ret = "".to_string();
 
-        ForEachMount(&self.thread, &mut |mountPath: &str, m: &Arc<Mutex<Mount>>| {
+        ForEachMount(&self.thread, &mut |mountPath: &str, m: &Arc<QMutex<Mount>>| {
             let mroot = m.lock().Root();
             let mountSource = mroot.Inode().lock().MountSource.clone();
             let flags = mountSource.lock().Flags;

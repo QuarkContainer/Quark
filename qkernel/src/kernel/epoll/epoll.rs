@@ -14,7 +14,7 @@
 
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use core::any::Any;
 use core::ops::Deref;
@@ -36,9 +36,9 @@ use super::super::waiter::*;
 use super::epoll_entry::*;
 use super::epoll_list::*;
 
-pub static CYCLE_MU : Singleton<Mutex<()>> = Singleton::<Mutex<()>>::New();
+pub static CYCLE_MU : Singleton<QMutex<()>> = Singleton::<QMutex<()>>::New();
 pub unsafe fn InitSingleton() {
-    CYCLE_MU.Init(Mutex::new(()));
+    CYCLE_MU.Init(QMutex::new(()));
 }
 
 // Event describes the event mask that was observed and the user data to be
@@ -90,9 +90,9 @@ impl PollLists {
 #[derive(Default)]
 pub struct EventPollInternal {
     pub queue: Queue,
-    pub files: Mutex<BTreeMap<FileIdentifier, PollEntry>>,
+    pub files: QMutex<BTreeMap<FileIdentifier, PollEntry>>,
 
-    pub lists: Mutex<PollLists>,
+    pub lists: QMutex<PollLists>,
 }
 
 // NewEventPoll allocates and initializes a new event poll object.
@@ -440,7 +440,7 @@ impl EventPoll {
             readyTimeStamp: 0,
         };
 
-        let entry = PollEntry(Arc::new(Mutex::new(entryInternal)));
+        let entry = PollEntry(Arc::new(QMutex::new(entryInternal)));
         entry.lock().waiter.lock().context = WaitContext::EpollContext(entry.clone());
         files.insert(id, entry.clone());
 

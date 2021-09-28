@@ -17,10 +17,10 @@ pub mod fs;
 pub mod devices;
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 
 use super::filesystems::*;
 
 pub fn Init() {
-    RegisterFilesystem(&Arc::new(Mutex::new(self::fs::SysFileSystem {})));
+    RegisterFilesystem(&Arc::new(QMutex::new(self::fs::SysFileSystem {})));
 }

@@ -165,7 +165,7 @@ impl<'a, T: ?Sized> DerefMut for QMutexGuard<'a, T> {
 }
 
 impl<'a, T: ?Sized> Drop for QMutexGuard<'a, T> {
-    /// The dropping of the MutexGuard will release the lock it was created from.
+    /// The dropping of the QMutexGuard will release the lock it was created from.
     fn drop(&mut self) {
         self.lock.store(0, QOrdering::RELEASE);
         super::super::asm::mfence();

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::ops::Deref;
 
 use super::super::super::qlib::common::*;
@@ -281,12 +281,12 @@ impl TimerInternal {
 }
 
 #[derive(Clone, Default)]
-pub struct Timer(Arc<Mutex<TimerInternal>>);
+pub struct Timer(Arc<QMutex<TimerInternal>>);
 
 impl Deref for Timer {
-    type Target = Arc<Mutex<TimerInternal>>;
+    type Target = Arc<QMutex<TimerInternal>>;
 
-    fn deref(&self) -> &Arc<Mutex<TimerInternal>> {
+    fn deref(&self) -> &Arc<QMutex<TimerInternal>> {
         &self.0
     }
 }
@@ -323,7 +323,7 @@ impl Timer {
             kicker: None,
         };
 
-        let mut res = Self(Arc::new(Mutex::new(internal)));
+        let mut res = Self(Arc::new(QMutex::new(internal)));
         res.Init();
         return res;
     }
@@ -337,7 +337,7 @@ impl Timer {
             kicker: None,
         };
 
-        let mut res = Self(Arc::new(Mutex::new(internal)));
+        let mut res = Self(Arc::new(QMutex::new(internal)));
         res.Init();
 
         let now = clock.Now();
@@ -359,7 +359,7 @@ impl Timer {
             kicker: None,
         };
 
-        let mut res = Self(Arc::new(Mutex::new(internal)));
+        let mut res = Self(Arc::new(QMutex::new(internal)));
         res.Init();
 
         let now = clock.Now();

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 
 use super::super::super::super::super::kernel::kernel::*;
 use super::super::super::super::super::task::*;
@@ -21,7 +21,7 @@ use super::super::super::super::mount::*;
 use super::super::super::super::inode::*;
 use super::super::super::inode::*;
 
-pub fn NewMinAddrData(task: &Task, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+pub fn NewMinAddrData(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let kernel = GetKernel();
     let minaddr = format!("{}\n", kernel.platform.MinUserAddress());
 

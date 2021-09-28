@@ -58,7 +58,7 @@ use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicI32;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
-use spin::Mutex;
+use self::mutex::*;
 
 use super::asm::*;
 use self::task_mgr::*;
@@ -517,8 +517,8 @@ pub enum IOThreadState {
 
 #[repr(align(128))]
 pub struct ShareSpace {
-    pub QInput: QRingBuf<HostInputMsg>, //Mutex<VecDeque<HostInputMsg>>,
-    pub QOutput: QRingBuf<HostOutputMsg>,  //Mutex<VecDeque<HostOutputMsg>>,
+    pub QInput: QRingBuf<HostInputMsg>, //QMutex<VecDeque<HostInputMsg>>,
+    pub QOutput: QRingBuf<HostOutputMsg>,  //QMutex<VecDeque<HostOutputMsg>>,
 
     pub hostIOThreadEventfd: i32,
     pub hostIOThreadTriggerData: u64,
@@ -531,7 +531,7 @@ pub struct ShareSpace {
     pub kernelIOThreadWaiting: AtomicBool,
     pub config: Config,
 
-    pub logBuf: Mutex<Option<ByteStream>>,
+    pub logBuf: QMutex<Option<ByteStream>>,
     pub logfd: AtomicI32,
 
     pub values: [[AtomicU64; 2]; 16],
@@ -540,8 +540,8 @@ pub struct ShareSpace {
 impl ShareSpace {
     pub fn New() -> Self {
         return ShareSpace {
-            QInput: QRingBuf::New(MemoryDef::MSG_QLEN), //Mutex::new(VecDeque::with_capacity(MSG_QLEN)),
-            QOutput: QRingBuf::New(MemoryDef::MSG_QLEN), //Mutex::new(VecDeque::with_capacity(MSG_QLEN)),
+            QInput: QRingBuf::New(MemoryDef::MSG_QLEN), //QMutex::new(VecDeque::with_capacity(MSG_QLEN)),
+            QOutput: QRingBuf::New(MemoryDef::MSG_QLEN), //QMutex::new(VecDeque::with_capacity(MSG_QLEN)),
 
             hostIOThreadEventfd: 0,
             hostIOThreadTriggerData: 1,
@@ -552,7 +552,7 @@ impl ShareSpace {
             guestMsgCount: AtomicU64::new(0),
             kernelIOThreadWaiting: AtomicBool::new(false),
             config: Config::default(),
-            logBuf: Mutex::new(None),
+            logBuf: QMutex::new(None),
             logfd: AtomicI32::new(-1),
             values: [
                 [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)],

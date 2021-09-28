@@ -132,14 +132,14 @@ pub struct MemoryManagerInternal {
     pub inited: bool,
 
     pub mappingLock: Arc<QMutex<()>>,
-    pub mapping: Mutex<MMMapping>,
+    pub mapping: QMutex<MMMapping>,
 
     pub pagetable: RwLock<MMPagetable>,
 
-    pub metadataLock: Arc<Mutex<()>>,
-    pub metadata: Mutex<MMMetadata>,
+    pub metadataLock: Arc<QMutex<()>>,
+    pub metadata: QMutex<MMMetadata>,
 
-    pub layout: Mutex<MmapLayout>,
+    pub layout: QMutex<MmapLayout>,
     pub aioManager: AIOManager,
 }
 
@@ -235,11 +235,11 @@ impl MemoryManager {
             uid: NewUID(),
             inited: true,
             mappingLock: Arc::new(QMutex::new(())),
-            mapping: Mutex::new(mapping),
+            mapping: QMutex::new(mapping),
             pagetable: RwLock::new(pagetable),
-            metadataLock: Arc::new(Mutex::new(())),
-            metadata: Mutex::new(metadata),
-            layout: Mutex::new(layout),
+            metadataLock: Arc::new(QMutex::new(())),
+            metadata: QMutex::new(metadata),
+            layout: QMutex::new(layout),
             aioManager: AIOManager::default(),
         };
 
@@ -1113,7 +1113,7 @@ impl MemoryManager {
         let mmIntern2 = MemoryManagerInternal {
             uid: NewUID(),
             inited: true,
-            layout: Mutex::new(layout),
+            layout: QMutex::new(layout),
             ..Default::default()
         };
 

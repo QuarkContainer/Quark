@@ -14,10 +14,11 @@
 
 use alloc::sync::Arc;
 use alloc::sync::Weak;
-use spin::*;
 use core::ops::Deref;
 use core::any::Any;
 use alloc::string::ToString;
+
+use ::qlib::mutex::*;
 
 use super::super::super::super::kernel::waiter::*;
 use super::super::super::super::kernel::waiter::bufchan::*;
@@ -34,7 +35,7 @@ use super::queue::*;
 // A ConnectingEndpoint is a connectioned unix endpoint that is attempting to
 // establish a bidirectional connection with a BoundEndpoint.
 pub trait ConnectingEndpoint : PartialEndPoint {
-    fn Lock(&self) -> MutexGuard<()>;
+    fn Lock(&self) -> QMutexGuard<()>;
 
     fn as_any(&self) -> &Any;
 
@@ -110,7 +111,7 @@ impl ConnectionedEndPointInternal {
     }
 }
 #[derive(Clone)]
-pub struct ConnectionedEndPointWeak(Weak<(Mutex<ConnectionedEndPointInternal>, Mutex<()>)>);
+pub struct ConnectionedEndPointWeak(Weak<(QMutex<ConnectionedEndPointInternal>, QMutex<()>)>);
 
 impl ConnectionedEndPointWeak {
     pub fn Upgrade(&self) -> Option<ConnectionedEndPoint> {
@@ -124,7 +125,7 @@ impl ConnectionedEndPointWeak {
 }
 
 #[derive(Clone)]
-pub struct ConnectionedEndPoint(Arc<(Mutex<ConnectionedEndPointInternal>, Mutex<()>)>);
+pub struct ConnectionedEndPoint(Arc<(QMutex<ConnectionedEndPointInternal>, QMutex<()>)>);
 
 impl ConnectionedEndPoint {
     pub fn Downgrade(&self) -> ConnectionedEndPointWeak {
@@ -133,9 +134,9 @@ impl ConnectionedEndPoint {
 }
 
 impl Deref for ConnectionedEndPoint {
-    type Target = Mutex<ConnectionedEndPointInternal>;
+    type Target = QMutex<ConnectionedEndPointInternal>;
 
-    fn deref(&self) -> &Mutex<ConnectionedEndPointInternal> {
+    fn deref(&self) -> &QMutex<ConnectionedEndPointInternal> {
         &(self.0).0
     }
 }
@@ -158,7 +159,7 @@ impl ConnectionedEndPoint {
             acceptedChan: None,
         };
 
-        return Self(Arc::new((Mutex::new(internal), Mutex::new(()))))
+        return Self(Arc::new((QMutex::new(internal), QMutex::new(()))))
     }
 
     pub fn RefCount(&self) -> usize {
@@ -182,7 +183,7 @@ impl ConnectionedEndPoint {
             acceptedChan: None,
         };
 
-        return Self(Arc::new((Mutex::new(internal), Mutex::new(()))))
+        return Self(Arc::new((QMutex::new(internal), QMutex::new(()))))
     }
 
     pub fn NewPair(stype: i32, hostfd1: i32, hostfd2: i32) -> (Self, Self) {
@@ -229,10 +230,10 @@ impl ConnectionedEndPoint {
             acceptedChan: None,
         };
 
-        return Self(Arc::new((Mutex::new(internal), Mutex::new(()))))
+        return Self(Arc::new((QMutex::new(internal), QMutex::new(()))))
     }
 
-    pub fn TryLock(&self) -> Option<MutexGuard<()>> {
+    pub fn TryLock(&self) -> Option<QMutexGuard<()>> {
         return (self.0).1.try_lock()
     }
 
@@ -334,7 +335,7 @@ impl ConnectionedEndPoint {
 }
 
 impl ConnectingEndpoint for ConnectionedEndPoint {
-    fn Lock(&self) -> MutexGuard<()> {
+    fn Lock(&self) -> QMutexGuard<()> {
         return (self.0).1.lock()
     }
 

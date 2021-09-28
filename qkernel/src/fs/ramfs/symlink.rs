@@ -15,7 +15,7 @@
 use core::any::Any;
 use alloc::sync::Arc;
 use spin::RwLock;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::ops::Deref;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
@@ -148,7 +148,7 @@ impl InodeOperations for Symlink {
         let file = FileInternal {
             UniqueId: NewUID(),
             Dirent: dirent.clone(),
-            flags: Mutex::new((flags, None)),
+            flags: QMutex::new((flags, None)),
             offset: QLock::New(0),
             FileOp: Arc::new(SymlinkFileOperations {}),
         };

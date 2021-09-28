@@ -14,7 +14,7 @@
 
 use alloc::sync::Arc;
 use spin::RwLock;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::ops::Deref;
 use core::any::Any;
 use alloc::string::String;
@@ -77,7 +77,7 @@ pub fn NewSlaveNode(task: &Task, d: &DirInodeOperations, t: &Arc<Terminal>, owne
         ..Default::default()
     };
 
-    return Inode(Arc::new(Mutex::new(inodeInternal)))
+    return Inode(Arc::new(QMutex::new(inodeInternal)))
 }
 
 pub struct SlaveInodeOperationsInternal {
@@ -191,7 +191,7 @@ impl InodeOperations for SlaveInodeOperations {
         let internal = FileInternal {
             UniqueId: NewUID(),
             Dirent: dirent.clone(),
-            flags: Mutex::new((flags, None)),
+            flags: QMutex::new((flags, None)),
             offset: QLock::New(0),
             FileOp: fileOp,
         };

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use alloc::string::String;
 use alloc::string::ToString;
 
@@ -39,7 +39,7 @@ impl Filesystem for DevTmpfs {
         //let options = FileSystem::GenericMountSourceOptions(data);
 
         let mountSource = MountSource::NewCachingMountSource(self, flags);
-        let inode = NewDev(task, &Arc::new(Mutex::new(mountSource)));
+        let inode = NewDev(task, &Arc::new(QMutex::new(mountSource)));
         return Ok(inode)
     }
 

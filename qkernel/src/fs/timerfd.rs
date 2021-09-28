@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::any::Any;
 use core::slice;
 use alloc::sync::Arc;
@@ -47,14 +47,14 @@ pub struct TimerOperationsInternal {
     // val is the number of timer expirations since the last successful call to
     // Readv, Preadv, or SetTime. val is accessed using atomic memory
     // operations.
-    pub val: Mutex<u64>,
+    pub val: QMutex<u64>,
 }
 
 impl TimerOperationsInternal {
     pub fn New() -> Self {
         return Self {
             queue: Queue::default(),
-            val: Mutex::new(0),
+            val: QMutex::new(0),
         }
     }
 }

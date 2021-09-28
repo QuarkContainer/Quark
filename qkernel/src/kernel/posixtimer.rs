@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::ops::Deref;
 use core::fmt;
 
@@ -122,12 +122,12 @@ impl IntervalTimerInternal {
 }
 
 #[derive(Debug, Clone)]
-pub struct IntervalTimer(Arc<Mutex<IntervalTimerInternal>>);
+pub struct IntervalTimer(Arc<QMutex<IntervalTimerInternal>>);
 
 impl Deref for IntervalTimer {
-    type Target = Arc<Mutex<IntervalTimerInternal>>;
+    type Target = Arc<QMutex<IntervalTimerInternal>>;
 
-    fn deref(&self) -> &Arc<Mutex<IntervalTimerInternal>> {
+    fn deref(&self) -> &Arc<QMutex<IntervalTimerInternal>> {
         &self.0
     }
 }
@@ -196,7 +196,7 @@ impl IntervalTimer {
             ..Default::default()
         };
 
-        return Self(Arc::new(Mutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)))
     }
 
     pub fn DestroyTimer(&self) {

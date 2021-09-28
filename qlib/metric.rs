@@ -14,7 +14,7 @@
 
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-use spin::Mutex;
+use super::mutex::*;
 use alloc::sync::Arc;
 use alloc::string::String;
 use alloc::string::ToString;
@@ -22,10 +22,10 @@ use alloc::collections::btree_map::BTreeMap;
 
 use super::singleton::*;
 
-pub static ALL_METRICS : Singleton<Mutex<MetricSet>> = Singleton::<Mutex<MetricSet>>::New();
+pub static ALL_METRICS : Singleton<QMutex<MetricSet>> = Singleton::<QMutex<MetricSet>>::New();
 
 pub unsafe fn InitSingleton() {
-    ALL_METRICS.Init(Mutex::new(MetricSet::New()));
+    ALL_METRICS.Init(QMutex::new(MetricSet::New()));
 }
 
 pub fn NewU64Metric(name: &str, sync: bool, description: &str) -> Arc<U64Metric> {

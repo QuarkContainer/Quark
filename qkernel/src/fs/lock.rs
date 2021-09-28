@@ -15,7 +15,7 @@
 use alloc::collections::btree_set::BTreeSet;
 use core::ops::Deref;
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use alloc::string::String;
 
 use super::super::qlib::mem::areaset::*;
@@ -60,12 +60,12 @@ pub struct LockInternel {
 // the write lock's uid is the same as the read lock.
 //
 #[derive(Clone, Default)]
-pub struct Lock(Arc<Mutex<LockInternel>>);
+pub struct Lock(Arc<QMutex<LockInternel>>);
 
 impl Deref for Lock {
-    type Target = Arc<Mutex<LockInternel>>;
+    type Target = Arc<QMutex<LockInternel>>;
 
-    fn deref(&self) -> &Arc<Mutex<LockInternel>> {
+    fn deref(&self) -> &Arc<QMutex<LockInternel>> {
         &self.0
     }
 }
@@ -148,7 +148,7 @@ pub fn MakeLock(uid: UniqueId, t: LockType) -> Lock {
         }
     }
 
-    return Lock(Arc::new(Mutex::new(val)))
+    return Lock(Arc::new(QMutex::new(val)))
 }
 
 impl AreaValue for Lock {
@@ -186,7 +186,7 @@ impl AreaValue for Lock {
 
         v2.Writer = v1.Writer;
 
-        return (self.clone(), Self(Arc::new(Mutex::new(v2))))
+        return (self.clone(), Self(Arc::new(QMutex::new(v2))))
     }
 }
 
@@ -381,12 +381,12 @@ impl LocksInternal {
 }
 
 #[derive(Clone, Default)]
-pub struct Locks(Arc<Mutex<LocksInternal>>);
+pub struct Locks(Arc<QMutex<LocksInternal>>);
 
 impl Deref for Locks {
-    type Target = Arc<Mutex<LocksInternal>>;
+    type Target = Arc<QMutex<LocksInternal>>;
 
-    fn deref(&self) -> &Arc<Mutex<LocksInternal>> {
+    fn deref(&self) -> &Arc<QMutex<LocksInternal>> {
         &self.0
     }
 }

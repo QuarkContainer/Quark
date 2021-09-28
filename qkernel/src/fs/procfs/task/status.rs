@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use alloc::vec::Vec;
 use alloc::string::ToString;
 
@@ -34,7 +34,7 @@ use super::super::super::super::threadmgr::thread::*;
 use super::super::super::super::threadmgr::pid_namespace::*;
 use super::super::inode::*;
 
-pub fn NewStatus(task: &Task, thread: &Thread, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+pub fn NewStatus(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let v = NewStatusSimpleFileInode(task, thread, &ROOT_OWNER, &FilePermissions::FromMode(FileMode(0o400)), FSMagic::PROC_SUPER_MAGIC);
     return NewProcInode(&Arc::new(v), msrc, InodeType::SpecialFile, Some(thread.clone()))
 

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 
 use super::super::task::*;
 use super::super::qlib::auth::*;
@@ -57,6 +57,6 @@ pub fn NewAnonInode(task: &Task) -> Inode {
     };
 
     return Inode::New(&Arc::new(iops),
-                      &Arc::new(Mutex::new(MountSource::NewPseudoMountSource())),
+                      &Arc::new(QMutex::new(MountSource::NewPseudoMountSource())),
                       &sattr);
 }

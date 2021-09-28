@@ -17,21 +17,21 @@ use alloc::collections::btree_set::BTreeSet;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::vec::Vec;
-use spin::Mutex;
+use super::mutex::*;
 use lazy_static::lazy_static;
 
 use super::common::*;
 //use super::singleton::*;
 use super::*;
 
-/*pub static X86_FEATURES_FROM_STRING : Singleton<Mutex<BTreeMap<String, i32>>> = Singleton::<Mutex<BTreeMap<String, i32>>>::New();
+/*pub static X86_FEATURES_FROM_STRING : Singleton<QMutex<BTreeMap<String, i32>>> = Singleton::<QMutex<BTreeMap<String, i32>>>::New();
 pub static X86_FEATURE_STRINGS : Singleton<BTreeMap<i32, &'static str>> = Singleton::<BTreeMap<i32, &'static str>>::New();
 pub static X86_FEATURE_PARSE_ONLY_STRINGS : Singleton<BTreeMap<i32, &'static str>> = Singleton::<BTreeMap<i32, &'static str>>::New();
-pub static CPU_FREQ_MHZ : Singleton<Mutex<f64>> = Singleton::<Mutex<f64>>::New();
+pub static CPU_FREQ_MHZ : Singleton<QMutex<f64>> = Singleton::<QMutex<f64>>::New();
 
 
 pub unsafe fn InitSingleton() {
-    X86_FEATURES_FROM_STRING.Init(Mutex::new(BTreeMap::new()));
+    X86_FEATURES_FROM_STRING.Init(QMutex::new(BTreeMap::new()));
     X86_FEATURE_STRINGS.Init([
         // Block 0.
         (X86Feature::X86FeatureSSE3 as i32,    "pni"),
@@ -187,12 +187,12 @@ pub unsafe fn InitSingleton() {
         (X86Feature::X86FeaturePREFETCHWT1 as i32, "prefetchwt1"),
     ].iter().cloned().collect());
 
-    CPU_FREQ_MHZ.Init(Mutex::new(0.0));
+    CPU_FREQ_MHZ.Init(QMutex::new(0.0));
 }
 */
 
 lazy_static! {
-    static ref X86_FEATURES_FROM_STRING : Mutex<BTreeMap<String, i32>> = Mutex::new(BTreeMap::new());
+    static ref X86_FEATURES_FROM_STRING : QMutex<BTreeMap<String, i32>> = QMutex::new(BTreeMap::new());
 
     static ref X86_FEATURE_STRINGS : BTreeMap<i32, &'static str> = [
 	    // Block 0.
@@ -349,7 +349,7 @@ lazy_static! {
         (X86Feature::X86FeaturePREFETCHWT1 as i32, "prefetchwt1"),
 	].iter().cloned().collect();
 
-	static ref CPU_FREQ_MHZ : Mutex<f64> = Mutex::new(0.0);
+	static ref CPU_FREQ_MHZ : QMutex<f64> = QMutex::new(0.0);
 }
 
 pub type Block = i32;

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::ops::Deref;
 use core::cmp::*;
 
@@ -59,13 +59,13 @@ pub struct ProcessGroupInternal {
 #[derive(Clone, Default)]
 pub struct ProcessGroup {
     pub uid: UniqueID,
-    pub data: Arc<Mutex<ProcessGroupInternal>>
+    pub data: Arc<QMutex<ProcessGroupInternal>>
 }
 
 impl Deref for ProcessGroup {
-    type Target = Arc<Mutex<ProcessGroupInternal>>;
+    type Target = Arc<QMutex<ProcessGroupInternal>>;
 
-    fn deref(&self) -> &Arc<Mutex<ProcessGroupInternal>> {
+    fn deref(&self) -> &Arc<QMutex<ProcessGroupInternal>> {
         &self.data
     }
 }
@@ -108,7 +108,7 @@ impl ProcessGroup {
 
         return Self {
             uid: NewUID(),
-            data: Arc::new(Mutex::new(pg)),
+            data: Arc::new(QMutex::new(pg)),
         }
     }
 

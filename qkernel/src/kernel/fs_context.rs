@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use spin::Mutex;
+use ::qlib::mutex::*;
 use alloc::sync::Arc;
 use core::ops::Deref;
 
@@ -26,12 +26,12 @@ pub struct FSContextInternal {
 }
 
 #[derive(Clone, Default)]
-pub struct FSContext(Arc<Mutex<FSContextInternal>>);
+pub struct FSContext(Arc<QMutex<FSContextInternal>>);
 
 impl Deref for FSContext {
-    type Target = Arc<Mutex<FSContextInternal>>;
+    type Target = Arc<QMutex<FSContextInternal>>;
 
-    fn deref(&self) -> &Arc<Mutex<FSContextInternal>> {
+    fn deref(&self) -> &Arc<QMutex<FSContextInternal>> {
         &self.0
     }
 }
@@ -44,7 +44,7 @@ impl FSContext {
             umask: umask,
         };
 
-        return Self(Arc::new(Mutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)))
     }
 
     pub fn Fork(&self) -> Self {

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 
 use super::super::attr::*;
 use super::super::file::*;
@@ -69,7 +69,7 @@ impl SimpleFileTrait for UptimeInode {
     }
 }
 
-pub fn NewUptime(task: &Task, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+pub fn NewUptime(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let node = SimpleFileInode::New (
         task,
         &ROOT_OWNER,

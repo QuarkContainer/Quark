@@ -14,7 +14,7 @@
 
 use alloc::sync::Arc;
 use spin::RwLock;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::ops::Deref;
 use core::any::Any;
 use alloc::string::String;
@@ -74,7 +74,7 @@ pub fn NewMasterNode(task: &Task, d: &DirInodeOperations, owner: &FileOwner, p: 
         ..Default::default()
     };
 
-    return Inode(Arc::new(Mutex::new(inodeInternal)))
+    return Inode(Arc::new(QMutex::new(inodeInternal)))
 }
 
 pub struct MasterInodeOperationsInternal {

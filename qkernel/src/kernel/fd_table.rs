@@ -14,7 +14,7 @@
 
 use alloc::collections::btree_map::BTreeMap;
 use alloc::vec::Vec;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use alloc::sync::Arc;
 use core::ops::Deref;
 
@@ -53,12 +53,12 @@ pub struct Descriptor {
 }
 
 #[derive(Clone, Default)]
-pub struct FDTable((Arc<Mutex<FDTableInternal>>, u64));
+pub struct FDTable((Arc<QMutex<FDTableInternal>>, u64));
 
 impl Deref for FDTable {
-    type Target = Arc<Mutex<FDTableInternal>>;
+    type Target = Arc<QMutex<FDTableInternal>>;
 
-    fn deref(&self) -> &Arc<Mutex<FDTableInternal>> {
+    fn deref(&self) -> &Arc<QMutex<FDTableInternal>> {
         &(self.0).0
     }
 }
@@ -71,7 +71,7 @@ impl FDTable {
     pub fn Fork(&self) -> FDTable {
         let internal = self.lock().Fork();
 
-        return FDTable((Arc::new(Mutex::new(internal)), NewUID()));
+        return FDTable((Arc::new(QMutex::new(internal)), NewUID()));
     }
 
     pub fn Clear(&self) {

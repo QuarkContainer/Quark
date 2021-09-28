@@ -21,7 +21,7 @@ use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 use core::ptr;
 use core::ops::Deref;
-use spin::Mutex;
+use ::qlib::mutex::*;
 
 use crate::socket::control::ControlMessage;
 
@@ -73,8 +73,8 @@ pub struct SocketOperationsIntern {
     pub stype: i32,
     pub fd: i32,
     pub queue: Queue,
-    pub remoteAddr: Mutex<Option<SockAddr>>,
-    pub socketBuf: Mutex<Option<Arc<SocketBuff>>>,
+    pub remoteAddr: QMutex<Option<SockAddr>>,
+    pub socketBuf: QMutex<Option<Arc<SocketBuff>>>,
     pub enableSocketBuf: AtomicBool,
     passInq: AtomicBool,
 }
@@ -104,8 +104,8 @@ impl SocketOperations {
             stype,
             fd,
             queue,
-            remoteAddr: Mutex::new(addr),
-            socketBuf: Mutex::new(None),
+            remoteAddr: QMutex::new(addr),
+            socketBuf: QMutex::new(None),
             enableSocketBuf: AtomicBool::new(false),
             passInq: AtomicBool::new(false)
         };

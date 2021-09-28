@@ -20,7 +20,7 @@ pub use self::simple_file_inode::*;
 use alloc::string::String;
 use alloc::string::ToString;
 use spin::RwLock;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::ops::Deref;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::vec::Vec;
@@ -121,7 +121,7 @@ impl InodeStaticFileGetter {
         return Ok(File(Arc::new(FileInternal {
             UniqueId: NewUID(),
             Dirent: dirent.clone(),
-            flags: Mutex::new((flags.clone(), None)),
+            flags: QMutex::new((flags.clone(), None)),
             offset: QLock::New(0),
             FileOp: Arc::new(StaticFile { content: self.read().content.clone() }),
         })))
@@ -203,7 +203,7 @@ impl InodeNotRenameable {
 pub struct InodeNotOpenable {}
 
 impl InodeNotOpenable {
-    fn GetFile(&self, _dir: &Inode, _dirent: &Dirent, _flags: FileFlags) -> Result<Arc<Mutex<File>>> {
+    fn GetFile(&self, _dir: &Inode, _dirent: &Dirent, _flags: FileFlags) -> Result<Arc<QMutex<File>>> {
         return Err(Error::SysError(SysErr::EIO))
     }
 }

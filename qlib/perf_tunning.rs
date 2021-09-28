@@ -16,7 +16,7 @@ use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use lazy_static::lazy_static;
 use alloc::vec::Vec;
-use spin::Mutex;
+use super::mutex::*;
 use core::mem;
 
 use super::super::asm::Rdtsc;
@@ -96,14 +96,14 @@ impl Counter {
 #[derive(Debug)]
 pub struct Counters {
     pub data: [Counter; 32],
-    pub state: Mutex<Vec<PerfType>>,
+    pub state: QMutex<Vec<PerfType>>,
 }
 
 impl Default for Counters {
     fn default() -> Self {
         let ret = Self {
             data: Default::default(),
-            state: Mutex::new(Vec::with_capacity(8)),
+            state: QMutex::new(Vec::with_capacity(8)),
         };
 
         ret.state.lock().push(PerfType::Start);

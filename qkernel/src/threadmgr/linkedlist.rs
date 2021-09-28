@@ -14,20 +14,20 @@
 
 use alloc::sync::Arc;
 use alloc::sync::Weak;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::ops::Deref;
 use core::ops::DerefMut;
 
 pub struct LinkedList<T> {
-    pub head: Arc<Mutex<LinkEntry<T>>>,
-    pub tail: Arc<Mutex<LinkEntry<T>>>,
+    pub head: Arc<QMutex<LinkEntry<T>>>,
+    pub tail: Arc<QMutex<LinkEntry<T>>>,
     pub count: usize,
 }
 
 impl<T> Default for LinkedList<T> {
     fn default() -> Self {
-        let head = Arc::new(Mutex::new(LinkEntry::default()));
-        let tail = Arc::new(Mutex::new(LinkEntry::default()));
+        let head = Arc::new(QMutex::new(LinkEntry::default()));
+        let tail = Arc::new(QMutex::new(LinkEntry::default()));
 
         head.lock().next = Some(tail.clone());
         tail.lock().prev = Some(Arc::downgrade(&head));
@@ -50,21 +50,21 @@ impl<T> LinkedList<T> {
         return self.count == 0;
     }
 
-    pub fn Front(&self) -> Option<Arc<Mutex<LinkEntry<T>>>> {
+    pub fn Front(&self) -> Option<Arc<QMutex<LinkEntry<T>>>> {
         return match &self.head.lock().next {
             None => None,
             Some(ref e) => Some(e.clone()),
         }
     }
 
-    pub fn Back(&self) -> Option<Arc<Mutex<LinkEntry<T>>>> {
+    pub fn Back(&self) -> Option<Arc<QMutex<LinkEntry<T>>>> {
         return match &self.tail.lock().prev {
             None => None,
             Some(ref e) => Some(e.upgrade().unwrap().clone()),
         }
     }
 
-    pub fn PushFront(&mut self, entry: Arc<Mutex<LinkEntry<T>>>) {
+    pub fn PushFront(&mut self, entry: Arc<QMutex<LinkEntry<T>>>) {
         let next = self.head.lock().next.take().unwrap();
 
         next.lock().prev = Some(Arc::downgrade(&entry));
@@ -76,7 +76,7 @@ impl<T> LinkedList<T> {
         self.count += 1;
     }
 
-    pub fn PopFront(&mut self) -> Option<Arc<Mutex<LinkEntry<T>>>> {
+    pub fn PopFront(&mut self) -> Option<Arc<QMutex<LinkEntry<T>>>> {
         if self.count == 0 {
             return None;
         }
@@ -89,7 +89,7 @@ impl<T> LinkedList<T> {
         return Some(ret);
     }
 
-    pub fn PushBack(&mut self, entry: Arc<Mutex<LinkEntry<T>>>) {
+    pub fn PushBack(&mut self, entry: Arc<QMutex<LinkEntry<T>>>) {
         let prev = self.tail.lock().prev.take().unwrap().upgrade().unwrap();
 
         entry.lock().prev = Some(Arc::downgrade(&prev));
@@ -100,7 +100,7 @@ impl<T> LinkedList<T> {
         self.count += 1;
     }
 
-    pub fn PopBack(&mut self) -> Option<Arc<Mutex<LinkEntry<T>>>> {
+    pub fn PopBack(&mut self) -> Option<Arc<QMutex<LinkEntry<T>>>> {
         if self.count == 0 {
             return None;
         }
@@ -115,8 +115,8 @@ impl<T> LinkedList<T> {
 }
 
 pub struct LinkEntry<T> {
-    pub prev: Option<Weak<Mutex<LinkEntry<T>>>>,
-    pub next: Option<Arc<Mutex<LinkEntry<T>>>>,
+    pub prev: Option<Weak<QMutex<LinkEntry<T>>>>,
+    pub next: Option<Arc<QMutex<LinkEntry<T>>>>,
     pub data: Option<T>,
 }
 

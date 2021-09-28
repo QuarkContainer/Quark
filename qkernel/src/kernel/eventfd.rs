@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::ops::Deref;
 use core::any::Any;
 use core::slice;
@@ -60,7 +60,7 @@ pub fn NewEventfd(task: &Task, initVal: u64, semMode: bool) -> File {
         semMode: semMode,
     };
 
-    let ops = EventOperations(Arc::new(Mutex::new(internal)));
+    let ops = EventOperations(Arc::new(QMutex::new(internal)));
 
     return File::New(&dirent, &FileFlags{
         Read: true,
@@ -70,12 +70,12 @@ pub fn NewEventfd(task: &Task, initVal: u64, semMode: bool) -> File {
 }
 
 #[derive(Clone)]
-pub struct EventOperations(Arc<Mutex<EventOperationsInternal>>);
+pub struct EventOperations(Arc<QMutex<EventOperationsInternal>>);
 
 impl Deref for EventOperations {
-    type Target = Arc<Mutex<EventOperationsInternal>>;
+    type Target = Arc<QMutex<EventOperationsInternal>>;
 
-    fn deref(&self) -> &Arc<Mutex<EventOperationsInternal>> {
+    fn deref(&self) -> &Arc<QMutex<EventOperationsInternal>> {
         &self.0
     }
 }

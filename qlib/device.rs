@@ -16,23 +16,23 @@ use alloc::string::String;
 use alloc::collections::btree_map::BTreeMap;
 use core::cmp::Ordering;
 use alloc::sync::Arc;
-use spin::Mutex;
+use super::mutex::*;
 
 use super::singleton::*;
 
-pub static SIMPLE_DEVICES : Singleton<Mutex<Registry>> = Singleton::<Mutex<Registry>>::New();
-pub static HOSTFILE_DEVICE : Singleton<Mutex<MultiDevice>> = Singleton::<Mutex<MultiDevice>>::New();
-pub static PSEUDO_DEVICE : Singleton<Arc<Mutex<Device>>> = Singleton::<Arc<Mutex<Device>>>::New();
-pub static DEV_DEVICE : Singleton<Arc<Mutex<Device>>> = Singleton::<Arc<Mutex<Device>>>::New();
-pub static PTS_DEVICE : Singleton<Arc<Mutex<Device>>> = Singleton::<Arc<Mutex<Device>>>::New();
-pub static PROC_DEVICE : Singleton<Arc<Mutex<Device>>> = Singleton::<Arc<Mutex<Device>>>::New();
-pub static SHM_DEVICE : Singleton<Arc<Mutex<Device>>> = Singleton::<Arc<Mutex<Device>>>::New();
-pub static SYS_DEVICE : Singleton<Arc<Mutex<Device>>> = Singleton::<Arc<Mutex<Device>>>::New();
-pub static TMPFS_DEVICE : Singleton<Arc<Mutex<Device>>> = Singleton::<Arc<Mutex<Device>>>::New();
+pub static SIMPLE_DEVICES : Singleton<QMutex<Registry>> = Singleton::<QMutex<Registry>>::New();
+pub static HOSTFILE_DEVICE : Singleton<QMutex<MultiDevice>> = Singleton::<QMutex<MultiDevice>>::New();
+pub static PSEUDO_DEVICE : Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();
+pub static DEV_DEVICE : Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();
+pub static PTS_DEVICE : Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();
+pub static PROC_DEVICE : Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();
+pub static SHM_DEVICE : Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();
+pub static SYS_DEVICE : Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();
+pub static TMPFS_DEVICE : Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();
 
 pub unsafe fn InitSingleton() {
-    SIMPLE_DEVICES.Init(Mutex::new(Registry::New()));
-    HOSTFILE_DEVICE.Init(Mutex::new(NewAnonMultiDevice()));
+    SIMPLE_DEVICES.Init(QMutex::new(Registry::New()));
+    HOSTFILE_DEVICE.Init(QMutex::new(NewAnonMultiDevice()));
     PSEUDO_DEVICE.Init(NewAnonDevice());
     DEV_DEVICE.Init(NewAnonDevice());
     PTS_DEVICE.Init(NewAnonDevice());
@@ -74,7 +74,7 @@ impl Device {
 
 pub struct Registry {
     pub last: u32,
-    pub devices: BTreeMap<ID, Arc<Mutex<Device>>>
+    pub devices: BTreeMap<ID, Arc<QMutex<Device>>>
 }
 
 impl Registry {
@@ -93,8 +93,8 @@ impl Registry {
         }
     }
 
-    pub fn NewAnonDevice(&mut self) -> Arc<Mutex<Device>> {
-        let d = Arc::new(Mutex::new(Device {
+    pub fn NewAnonDevice(&mut self) -> Arc<QMutex<Device>> {
+        let d = Arc::new(QMutex::new(Device {
             id: self.newAnonID(),
             last: 0,
         }));
@@ -243,7 +243,7 @@ impl MultiDevice {
     }
 }
 
-pub fn NewAnonDevice() -> Arc<Mutex<Device>> {
+pub fn NewAnonDevice() -> Arc<QMutex<Device>> {
     return SIMPLE_DEVICES.lock().NewAnonDevice()
 }
 

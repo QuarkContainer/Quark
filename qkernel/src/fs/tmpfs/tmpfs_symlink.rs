@@ -15,7 +15,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::any::Any;
 
 use socket::unix::transport::unix::BoundEndpoint;
@@ -35,7 +35,7 @@ use super::super::host::hostinodeop::*;
 use super::super::ramfs::symlink::*;
 use super::tmpfs_dir::*;
 
-pub fn NewTmpfsSymlink(task: &Task, target: &str, owner: &FileOwner, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+pub fn NewTmpfsSymlink(task: &Task, target: &str, owner: &FileOwner, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let s = Symlink::New(task, owner, target);
     let s = TmpfsSymlink(s);
 
@@ -100,7 +100,7 @@ impl InodeOperations for TmpfsSymlink {
         return self.0.CreateFifo(task, dir, name, perm)
     }
 
-    //fn RemoveDirent(&mut self, dir: &mut InodeStruStru, remove: &Arc<Mutex<Dirent>>) -> Result<()> ;
+    //fn RemoveDirent(&mut self, dir: &mut InodeStruStru, remove: &Arc<QMutex<Dirent>>) -> Result<()> ;
     fn Remove(&self, task: &Task, dir: &mut Inode, name: &str) -> Result<()> {
         return self.0.Remove(task, dir, name)
     }

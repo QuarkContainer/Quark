@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use core::ops::Deref;
 use alloc::vec::Vec;
@@ -37,12 +37,12 @@ pub fn Bind(name: Vec<u8>, ep: &BoundEndpoint) -> Result<()> {
 }
 
 #[derive(Clone, Default)]
-pub struct AbstractSocketNamespace(Arc<Mutex<BTreeMap<Vec<u8>, BoundEndpointWeak>>>);
+pub struct AbstractSocketNamespace(Arc<QMutex<BTreeMap<Vec<u8>, BoundEndpointWeak>>>);
 
 impl Deref for AbstractSocketNamespace {
-    type Target = Arc<Mutex<BTreeMap<Vec<u8>, BoundEndpointWeak>>>;
+    type Target = Arc<QMutex<BTreeMap<Vec<u8>, BoundEndpointWeak>>>;
 
-    fn deref(&self) -> &Arc<Mutex<BTreeMap<Vec<u8>, BoundEndpointWeak>>> {
+    fn deref(&self) -> &Arc<QMutex<BTreeMap<Vec<u8>, BoundEndpointWeak>>> {
         &self.0
     }
 }

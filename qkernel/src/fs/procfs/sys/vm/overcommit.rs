@@ -13,14 +13,14 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 
 use super::super::super::super::super::task::*;
 use super::super::super::super::mount::*;
 use super::super::super::super::inode::*;
 use super::super::super::inode::*;
 
-pub fn NewOvercommit(task: &Task, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+pub fn NewOvercommit(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let overcommmit = format!("{}\n", 0);
 
     return NewStaticProcInode(task,

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::ops::Deref;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -56,15 +56,15 @@ pub fn NewPipeInodeOps(task: &Task, perms: &FilePermissions, p: Pipe) -> PipeIop
         unstable: unstable,
     };
 
-    return PipeIops(Arc::new(Mutex::new(internal)))
+    return PipeIops(Arc::new(QMutex::new(internal)))
 }
 
-pub struct PipeIops(Arc<Mutex<PipeIopsInternal>>);
+pub struct PipeIops(Arc<QMutex<PipeIopsInternal>>);
 
 impl Deref for PipeIops {
-    type Target = Arc<Mutex<PipeIopsInternal>>;
+    type Target = Arc<QMutex<PipeIopsInternal>>;
 
-    fn deref(&self) -> &Arc<Mutex<PipeIopsInternal>> {
+    fn deref(&self) -> &Arc<QMutex<PipeIopsInternal>> {
         &self.0
     }
 }

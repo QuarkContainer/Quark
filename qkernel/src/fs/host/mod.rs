@@ -79,7 +79,7 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use tempfile::Builder;
     use alloc::sync::Arc;
-    use spin::Mutex;
+    use ::qlib::mutex::*;
     use std::fs::*;
     use std::str;
 
@@ -118,11 +118,11 @@ mod tests {
         }
 
         let ms = MountSource::NewHostMountSource(&rootStr, &ROOT_OWNER, &WhitelistFileSystem::New(), &MountSourceFlags::default(), false);
-        let root = Inode::NewHostInode(&Arc::new(Mutex::new(ms)), fd)?;
+        let root = Inode::NewHostInode(&Arc::new(QMutex::new(ms)), fd)?;
 
         let mm = MountNs::New(&root);
 
-        return Ok((Arc::new(Mutex::new(mm)), rootStr))
+        return Ok((Arc::new(QMutex::new(mm)), rootStr))
     }
 
     // createTestDirs populates the root with some test files and directories.
@@ -254,7 +254,7 @@ mod tests {
         let mut task = Task::default();
 
         let inode = hostFS.Mount(&task, &"".to_owned(), &MountSourceFlags::default(), &data).unwrap();
-        let mm = Arc::new(Mutex::new(MountNs::New(&inode)));
+        let mm = Arc::new(QMutex::new(MountNs::New(&inode)));
 
         hostFS.InstallWhitelist(&task, &mm).unwrap();
 
@@ -330,7 +330,7 @@ mod tests {
         ];
 
         let mount = MountSource::NewPseudoMountSource();
-        let tree = MakeDirectoryTree(&task, &Arc::new(Mutex::new(mount)), &memdirs).unwrap();
+        let tree = MakeDirectoryTree(&task, &Arc::new(QMutex::new(mount)), &memdirs).unwrap();
 
         mm.lock().Mount(&mp, &tree).unwrap();
 

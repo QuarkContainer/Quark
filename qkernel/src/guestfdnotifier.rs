@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::collections::btree_map::BTreeMap;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::ops::Deref;
 
 use super::Kernel::HostSpace;
@@ -69,12 +69,12 @@ pub struct NotifierInternal {
     fdMap: BTreeMap<i32, GuestFdInfo>,
 }
 
-pub struct Notifier(Mutex<NotifierInternal>);
+pub struct Notifier(QMutex<NotifierInternal>);
 
 impl Deref for Notifier {
-    type Target = Mutex<NotifierInternal>;
+    type Target = QMutex<NotifierInternal>;
 
-    fn deref(&self) -> &Mutex<NotifierInternal> {
+    fn deref(&self) -> &QMutex<NotifierInternal> {
         &self.0
     }
 }
@@ -85,7 +85,7 @@ impl Notifier {
             fdMap: BTreeMap::new()
         };
 
-        return Self(Mutex::new(internal))
+        return Self(QMutex::new(internal))
     }
 
     fn waitfd(fd: i32, mask: EventMask) -> Result<()> {

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use spin::RwLock;
 use spin::RwLockReadGuard;
 use spin::RwLockWriteGuard;
@@ -227,7 +227,7 @@ impl TaskSet {
 
         let t = Thread {
             uid: NewUID(),
-            data: Arc::new(Mutex::new(internal))
+            data: Arc::new(QMutex::new(internal))
         };
 
         if fromContext {

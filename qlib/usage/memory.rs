@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use spin::Mutex;
 use core::ops::Deref;
+use super::super::mutex::*;
 //use core::sync::atomic::AtomicU64;
 //use core::sync::atomic::Ordering;
 
@@ -76,12 +76,12 @@ pub struct MemoryStats {
     pub RTMapped    : u64,
 }
 
-pub struct MemoryAccounting(Mutex<MemoryStats>);
+pub struct MemoryAccounting(QMutex<MemoryStats>);
 
 impl Deref for MemoryAccounting {
-    type Target = Mutex<MemoryStats>;
+    type Target = QMutex<MemoryStats>;
 
-    fn deref(&self) -> &Mutex<MemoryStats> {
+    fn deref(&self) -> &QMutex<MemoryStats> {
         &self.0
     }
 }

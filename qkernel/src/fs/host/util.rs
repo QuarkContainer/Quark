@@ -15,7 +15,7 @@
 use alloc::string::ToString;
 use alloc::string::String;
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
@@ -82,7 +82,7 @@ impl Statx {
         }
     }
 
-    pub fn Owner(&self, mo: Arc<Mutex<MountSourceOperations>>) -> FileOwner {
+    pub fn Owner(&self, mo: Arc<QMutex<MountSourceOperations>>) -> FileOwner {
         //todo: info!("we don't handle dontTranslateOwnership, fix it");
         //let mut dontTranslateOwnership = mo.lock().as_any().downcast_ref::<SuperOperations>().expect("Owner: not SuperOperations").dontTranslateOwnership;
         let mounter = mo.lock().as_any().downcast_ref::<SuperOperations>().expect("Owner: not SuperOperations").mounter.clone();
@@ -114,7 +114,7 @@ impl Statx {
         return owner;
     }
 
-    pub fn UnstableAttr(&self, mo: &Arc<Mutex<MountSourceOperations>>) -> UnstableAttr {
+    pub fn UnstableAttr(&self, mo: &Arc<QMutex<MountSourceOperations>>) -> UnstableAttr {
         return UnstableAttr {
             Size: self.stx_size as i64,
             Usage: self.stx_blocks as i64 * 512,
@@ -176,7 +176,7 @@ impl LibcStat {
         }
     }
 
-    pub fn Owner(&self, mo: Arc<Mutex<MountSourceOperations>>) -> FileOwner {
+    pub fn Owner(&self, mo: Arc<QMutex<MountSourceOperations>>) -> FileOwner {
         //todo: info!("we don't handle dontTranslateOwnership, fix it");
         //let mut dontTranslateOwnership = mo.lock().as_any().downcast_ref::<SuperOperations>().expect("Owner: not SuperOperations").dontTranslateOwnership;
         let mounter = mo.lock().as_any().downcast_ref::<SuperOperations>().expect("Owner: not SuperOperations").mounter.clone();
@@ -208,7 +208,7 @@ impl LibcStat {
         return owner;
     }
 
-    pub fn UnstableAttr(&self, mo: &Arc<Mutex<MountSourceOperations>>) -> UnstableAttr {
+    pub fn UnstableAttr(&self, mo: &Arc<QMutex<MountSourceOperations>>) -> UnstableAttr {
         return UnstableAttr {
             Size: self.st_size,
             Usage: self.st_blocks * 512,

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::sync::atomic;
 
 use super::super::task::*;
@@ -136,8 +136,8 @@ impl Completion {
 
 #[derive(Default)]
 pub struct QUring {
-    pub submission: Mutex<Submission>,
-    pub completion: Mutex<Completion>,
+    pub submission: QMutex<Submission>,
+    pub completion: QMutex<Completion>,
     pub asyncMgr: UringAsyncMgr
 }
 
