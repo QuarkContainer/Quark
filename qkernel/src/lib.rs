@@ -102,8 +102,10 @@ pub mod singleton;
 
 use core::panic::PanicInfo;
 use core::sync::atomic::AtomicU64;
+use core::sync::atomic::AtomicUsize;
 use core::{ptr, mem};
 use alloc::vec::Vec;
+use spin::Mutex;
 
 //use linked_list_allocator::LockedHeap;
 //use buddy_system_allocator::LockedHeap;
@@ -170,6 +172,18 @@ pub fn SingltonInit() {
 
         guestfdnotifier::GUEST_NOTIFIER.Init(guestfdnotifier::Notifier::New());
         UID.Init(AtomicU64::new(1));
+        perflog::THREAD_COUNTS.Init(Mutex::new(perflog::ThreadPerfCounters::default()));
+        vcpu::VCPU_COUNT.Init(AtomicUsize::new(0));
+        vcpu::CPU_LOCAL.Init(&SHARESPACE.scheduler.VcpuArr);
+        boot::controller::MSG.Init(Mutex::new(None));
+
+        fs::file::InitSingleton();
+        fs::filesystems::InitSingleton();
+        interrupt::InitSingleton();
+        kernel::abstract_socket_namespace::InitSingleton();
+        kernel::futex::InitSingleton();
+        kernel::kernel::InitSingleton();
+        kernel::semaphore::InitSingleton();
     }
 }
 

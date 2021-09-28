@@ -23,7 +23,6 @@ use core::sync::atomic::Ordering;
 use alloc::string::String;
 use alloc::string::ToString;
 use core::ops::Deref;
-use lazy_static::lazy_static;
 
 use super::super::uid::NewUID;
 use super::super::qlib::common::*;
@@ -47,6 +46,7 @@ use super::super::threadmgr::task_sched::*;
 use super::super::threadmgr::thread_group::*;
 use super::super::fs::mount::*;
 use super::super::fs::dirent::*;
+use super::super::singleton::*;
 use super::ipc_namespace::*;
 use super::uts_namespace::*;
 use super::fd_table::*;
@@ -59,9 +59,11 @@ use super::cpuset::*;
 use super::time::*;
 use super::platform::*;
 
-lazy_static! {
-    pub static ref KERNEL: Mutex<Option<Kernel>> = Mutex::new(None);
-    pub static ref ASYNC_PROCESS : AsyncProcess = AsyncProcess::default();
+pub static KERNEL : Singleton<Mutex<Option<Kernel>>> = Singleton::<Mutex<Option<Kernel>>>::New();
+pub static ASYNC_PROCESS : Singleton<AsyncProcess> = Singleton::<AsyncProcess>::New();
+pub unsafe fn InitSingleton() {
+    KERNEL.Init(Mutex::new(None));
+    ASYNC_PROCESS.Init(AsyncProcess::default());
 }
 
 #[derive(Default)]

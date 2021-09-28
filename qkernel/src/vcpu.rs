@@ -14,26 +14,18 @@
 
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
-use lazy_static::lazy_static;
-use spin::Mutex;
 
 use super::asm::*;
-use super::SHARESPACE;
 use super::IOURING;
 use super::qlib::vcpu_mgr::*;
+use super::singleton::*;
 
-lazy_static! {
-    pub static ref LAST_REBALANCE: Mutex<i64> = Mutex::new(0);
-    pub static ref VCPU_COUNT : AtomicUsize = AtomicUsize::new(0);
-    pub static ref CPU_LOCAL: &'static [CPULocal] = &SHARESPACE.scheduler.VcpuArr;
-}
+pub static VCPU_COUNT : Singleton<AtomicUsize> = Singleton::<AtomicUsize>::New();
+pub static CPU_LOCAL : Singleton<&'static [CPULocal]> = Singleton::<&'static [CPULocal]>::New();
 
 pub fn SetVCPCount(cpuCnt: usize) {
     VCPU_COUNT.store(cpuCnt, Ordering::SeqCst)
 }
-
-pub const REBALANCE_PERIOD : i64 = 500_000;
-pub const REBALANCE_THRESHOLD : i64 = 5; // if idle time < 20%, do rebalance
 
 #[derive(Debug)]
 #[allow(non_camel_case_types)]

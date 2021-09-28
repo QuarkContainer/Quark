@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use lazy_static::lazy_static;
 use spin::Mutex;
 use alloc::vec::Vec;
 use core::{ptr};
@@ -25,10 +24,9 @@ use super::super::task::*;
 use super::super::{StartRootContainer, StartExecProcess};
 use super::super::{LOADER, KERNEL_STACK_ALLOCATOR};
 use super::process::*;
+use super::super::singleton::*;
 
-lazy_static! {
-    pub static ref MSG: Mutex<Option<ControlMsg>> = Mutex::new(None);
-}
+pub static MSG : Singleton<Mutex<Option<ControlMsg>>> = Singleton::<Mutex<Option<ControlMsg>>>::New();
 
 pub fn Run() -> Result<()> {
     let task = Task::Current();
