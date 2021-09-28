@@ -103,7 +103,7 @@ pub mod backtracer;
 pub mod singleton;
 
 use core::panic::PanicInfo;
-use lazy_static::lazy_static;
+//use lazy_static::lazy_static;
 use core::{ptr, mem};
 use alloc::vec::Vec;
 
@@ -151,16 +151,34 @@ pub fn AllocatorPrint() {
 }
 
 pub static SHARESPACE : Singleton<ShareSpace> = Singleton::<ShareSpace>::New();
+pub static PAGE_ALLOCATOR : Singleton<MemAllocator> = Singleton::<MemAllocator>::New();
+pub static KERNEL_PAGETABLE : Singleton<PageTables> = Singleton::<PageTables>::New();
+pub static PAGE_MGR : Singleton<PageMgr> = Singleton::<PageMgr>::New();
+pub static LOADER : Singleton<Loader> = Singleton::<Loader>::New();
+pub static IOURING : Singleton<QUring> = Singleton::<QUring>::New();
+pub static KERNEL_STACK_ALLOCATOR : Singleton<AlignedAllocator> = Singleton::<AlignedAllocator>::New();
 
-lazy_static! {
-    //pub static ref SHARESPACE: ShareSpace = ShareSpace::New();
-    pub static ref PAGE_ALLOCATOR: MemAllocator = MemAllocator::New();
-    pub static ref KERNEL_PAGETABLE: PageTables = PageTables::Init(0);
-    pub static ref PAGE_MGR: PageMgr = PageMgr::New();
-    pub static ref LOADER: Loader = Loader::default();
-    pub static ref IOURING: QUring = QUring::New(MemoryDef::QURING_SIZE);
-    pub static ref KERNEL_STACK_ALLOCATOR : AlignedAllocator = AlignedAllocator::New(MemoryDef::DEFAULT_STACK_SIZE as usize, MemoryDef::DEFAULT_STACK_SIZE as usize);
+pub fn SingltonInit() {
+    unsafe {
+        SHARESPACE.Init(ShareSpace::New());
+        PAGE_ALLOCATOR.Init(MemAllocator::New());
+        KERNEL_PAGETABLE.Init(PageTables::Init(0));
+        PAGE_MGR.Init(PageMgr::New());
+        LOADER.Init(Loader::default());
+        IOURING.Init(QUring::New(MemoryDef::QURING_SIZE));
+        KERNEL_STACK_ALLOCATOR.Init( AlignedAllocator::New(MemoryDef::DEFAULT_STACK_SIZE as usize, MemoryDef::DEFAULT_STACK_SIZE as usize));
+    }
 }
+
+/*lazy_static! {
+    //pub static ref SHARESPACE: ShareSpace = ShareSpace::New();
+    //pub static ref PAGE_ALLOCATOR: MemAllocator = MemAllocator::New();
+    //pub static ref KERNEL_PAGETABLE: PageTables = PageTables::Init(0);
+    //pub static ref PAGE_MGR: PageMgr = PageMgr::New();
+    //pub static ref LOADER: Loader = Loader::default();
+    //pub static ref IOURING: QUring = QUring::New(MemoryDef::QURING_SIZE);
+    //pub static ref KERNEL_STACK_ALLOCATOR : AlignedAllocator = AlignedAllocator::New(MemoryDef::DEFAULT_STACK_SIZE as usize, MemoryDef::DEFAULT_STACK_SIZE as usize);
+}*/
 
 extern "C" {
     pub fn syscall_entry();
@@ -369,9 +387,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
     if id == 0 {
         ALLOCATOR.Add(heapStart as usize, heapLen as usize);
 
-        unsafe {
-            SHARESPACE.Init(ShareSpace::New())
-        }
+        SingltonInit();
 
         // InitGS rely on SHARESPACE
         InitGs(id);

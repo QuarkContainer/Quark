@@ -434,7 +434,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     };
 
     if !fromUser {
-        print!("Get pagefault from kernel ... {:#x?}/registers is {:#x?}", sf, currTask.GetPtRegs());
+        print!("Get pagefault from kernel ... {:#x?}/cr2 is {:x}/cr3 is {:x}", sf, cr2, cr3);
         for i in 0..super::CPU_LOCAL.len() {
             print!("CPU#{} is {:#x?}", i, super::CPU_LOCAL[i]);
         }
