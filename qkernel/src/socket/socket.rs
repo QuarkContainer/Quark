@@ -20,7 +20,7 @@ use super::super::fs::mount::*;
 use super::super::fs::dirent::*;
 use super::super::fs::inode::*;
 use super::super::fs::host::util::*;
-use super::super::singleton::*;
+use super::super::qlib::singleton::*;
 
 pub static FAMILIAES : Singleton<RwLock<Families>> = Singleton::<RwLock<Families>>::New();
 pub static SOCKET_DEVICE : Singleton<Arc<Mutex<Device>>> = Singleton::<Arc<Mutex<Device>>>::New();

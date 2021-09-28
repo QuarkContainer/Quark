@@ -24,7 +24,7 @@ use super::super::qlib::linux_def::*;
 use super::super::qlib::linux::futex::*;
 use super::super::task::*;
 use super::super::kernel::waiter::*;
-use super::super::singleton::*;
+use super::super::qlib::singleton::*;
 
 pub static FUTEX_MGR : Singleton<FutexMgr> = Singleton::<FutexMgr>::New();
 pub unsafe fn InitSingleton() {

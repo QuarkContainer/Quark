@@ -21,7 +21,7 @@ use super::super::qlib::limits::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::Task;
 use super::super::threadmgr::thread::*;
-use super::super::singleton::*;
+use super::super::qlib::singleton::*;
 
 pub static SETABLE_LIMITS : Singleton<BTreeSet<LimitType>> = Singleton::<BTreeSet<LimitType>>::New();
 

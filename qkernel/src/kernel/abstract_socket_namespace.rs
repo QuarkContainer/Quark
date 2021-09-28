@@ -21,7 +21,7 @@ use alloc::vec::Vec;
 use super::super::socket::unix::transport::unix::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
-use super::super::singleton::*;
+use super::super::qlib::singleton::*;
 
 pub static ABSTRACT_SOCKET : Singleton<AbstractSocketNamespace> = Singleton::<AbstractSocketNamespace>::New();
 pub unsafe fn InitSingleton() {

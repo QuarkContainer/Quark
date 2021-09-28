@@ -1,7 +1,7 @@
 use core::mem::MaybeUninit;
 use core::cell::UnsafeCell;
 use core::ops::Deref;
-//use core::format;
+use core::fmt;
 
 pub struct Singleton<T> {
     data: UnsafeCell<MaybeUninit<T>>,
@@ -21,17 +21,17 @@ impl<T> Default for Singleton<T> {
     fn default() -> Self { Self::New() }
 }
 
-/*
 impl<T: fmt::Debug> fmt::Debug for Singleton<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.get() {
-            Some(s) => write!(f, "Singleton {{ data: ")
-                .and_then(|()| s.fmt(f))
-                .and_then(|()| write!(f, "}}")),
-            None => write!(f, "Singleton {{ <uninitialized> }}")
-        }
+        let s = unsafe {
+            self.force_get();
+        };
+
+        return write!(f, "Singleton {{ data: ")
+            .and_then(|()| s.fmt(f))
+            .and_then(|()| write!(f, "}}"));
     }
-}*/
+}
 
 // Same unsafe impls as `std::sync::RwLock`, because this also allows for
 // concurrent reads.

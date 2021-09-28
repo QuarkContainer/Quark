@@ -56,7 +56,7 @@ use super::fs::mount::*;
 use super::kernel::fs_context::*;
 
 use super::asm::*;
-//use super::singleton::*;
+//use super::qlib::singleton::*;
 use super::qlib::SysCallID;
 
 const DEFAULT_STACK_SIZE: usize = MemoryDef::DEFAULT_STACK_SIZE as usize;

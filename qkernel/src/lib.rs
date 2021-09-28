@@ -98,7 +98,6 @@ pub mod quring;
 pub mod stack;
 pub mod mutex;
 pub mod backtracer;
-pub mod singleton;
 
 use core::panic::PanicInfo;
 use core::sync::atomic::AtomicU64;
@@ -135,7 +134,7 @@ use self::qlib::mem::list_allocator::*;
 use self::quring::*;
 use self::print::SCALE;
 
-use self::singleton::*;
+use self::qlib::singleton::*;
 use self::uid::*;
 
 pub const HEAP_START: usize = 0x70_2000_0000;

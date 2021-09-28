@@ -21,7 +21,7 @@ use super::kernel::waiter::*;
 use super::fs::host::hostinodeop::*;
 use super::qlib::common::*;
 use super::qlib::linux_def::*;
-use super::singleton::*;
+use super::qlib::singleton::*;
 
 pub static GUEST_NOTIFIER : Singleton<Notifier> = Singleton::<Notifier>::New();
 

@@ -18,7 +18,7 @@ use core::sync::atomic::Ordering;
 use super::asm::*;
 use super::IOURING;
 use super::qlib::vcpu_mgr::*;
-use super::singleton::*;
+use super::qlib::singleton::*;
 
 pub static VCPU_COUNT : Singleton<AtomicUsize> = Singleton::<AtomicUsize>::New();
 pub static CPU_LOCAL : Singleton<&'static [CPULocal]> = Singleton::<&'static [CPULocal]>::New();

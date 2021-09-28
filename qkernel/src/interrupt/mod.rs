@@ -26,7 +26,7 @@ use super::MainRun;
 use super::asm::*;
 use super::qlib::perf_tunning::*;
 use super::SHARESPACE;
-use super::singleton::*;
+use super::qlib::singleton::*;
 
 #[derive(Clone, Copy, Debug)]
 pub enum ExceptionStackVec {

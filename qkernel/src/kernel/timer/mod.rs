@@ -27,7 +27,7 @@ use self::timermgr::*;
 use self::timekeeper::*;
 use self::timer_store::*;
 use self::timer::*;
-use super::super::singleton::*;
+use super::super::qlib::singleton::*;
 
 pub static TIMER_MGR : Singleton<TimerMgr> = Singleton::<TimerMgr>::New();
 pub static TIME_KEEPER : Singleton<TimeKeeper> = Singleton::<TimeKeeper>::New();

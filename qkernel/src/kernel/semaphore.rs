@@ -27,7 +27,7 @@ use super::super::qlib::common::*;
 use super::super::task::*;
 use super::super::qlib::linux::sem::*;
 use super::super::qlib::linux::ipc::*;
-use super::super::singleton::*;
+use super::super::qlib::singleton::*;
 //use super::super::fs::attr::*;
 use super::time::*;
 

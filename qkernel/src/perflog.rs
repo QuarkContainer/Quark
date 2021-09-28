@@ -21,7 +21,7 @@ use super::qlib::perf_tunning::*;
 use super::qlib::vcpu_mgr::*;
 use super::uid::*;
 use super::task::*;
-use super::singleton::*;
+use super::qlib::singleton::*;
 
 pub static THREAD_COUNTS : Singleton<Mutex<ThreadPerfCounters>> = Singleton::<Mutex<ThreadPerfCounters>>::New();
 

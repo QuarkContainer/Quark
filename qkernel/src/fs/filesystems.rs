@@ -19,7 +19,7 @@ use alloc::collections::btree_map::BTreeMap;
 use alloc::vec::Vec;
 
 use super::super::qlib::common::*;
-use super::super::singleton::*;
+use super::super::qlib::singleton::*;
 use super::super::task::*;
 use super::inode::*;
 

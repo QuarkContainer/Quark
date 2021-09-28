@@ -46,7 +46,7 @@ use super::super::threadmgr::task_sched::*;
 use super::super::threadmgr::thread_group::*;
 use super::super::fs::mount::*;
 use super::super::fs::dirent::*;
-use super::super::singleton::*;
+use super::super::qlib::singleton::*;
 use super::ipc_namespace::*;
 use super::uts_namespace::*;
 use super::fd_table::*;

@@ -48,6 +48,7 @@ pub mod auth;
 pub mod control_msg;
 pub mod perf_tunning;
 pub mod uring;
+pub mod singleton;
 
 pub mod ringbuf;
 pub mod vcpu_mgr;

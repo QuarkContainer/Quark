@@ -24,7 +24,7 @@ use super::super::task::*;
 use super::super::{StartRootContainer, StartExecProcess};
 use super::super::{LOADER, KERNEL_STACK_ALLOCATOR};
 use super::process::*;
-use super::super::singleton::*;
+use super::super::qlib::singleton::*;
 
 pub static MSG : Singleton<Mutex<Option<ControlMsg>>> = Singleton::<Mutex<Option<ControlMsg>>>::New();
 

@@ -36,7 +36,7 @@ use super::super::memmgr::*;
 use super::super::fs::flags::*;
 use super::super::tcpip::tcpip::*;
 use super::super::kernel::fasync::*;
-use super::super::singleton::*;
+use super::super::qlib::singleton::*;
 
 use super::attr::*;
 use super::dirent::*;
