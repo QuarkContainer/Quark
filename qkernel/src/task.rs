@@ -138,7 +138,7 @@ impl Context {
     }
 
     pub fn Ready(&self) -> u64 {
-        return self.ready.load(Ordering::SeqCst)
+        return self.ready.load(Ordering::Acquire)
     }
 
     pub fn SetReady(&self, val: u64) {

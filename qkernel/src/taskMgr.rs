@@ -42,10 +42,6 @@ pub fn AddNewCpu() {
     CPULocal::SetCurrentTask(mainTaskId.Addr());
 }
 
-pub fn Current() -> TaskId {
-    return TaskId::New(CPULocal::CurrentTask());
-}
-
 pub fn CreateTask(runFn: TaskFn, para: *const u8, kernel: bool) {
     let taskId = { TaskStore::CreateTask(runFn, para, kernel) };
     SHARESPACE.scheduler.NewTask(taskId);
@@ -245,6 +241,13 @@ impl Scheduler {
                 return Some(t)
             }
         }
+
+        /*match self.GetNextForCpu(vcpuId, vcpuId) {
+            None => (),
+            Some(t) => {
+                return Some(t)
+            }
+        }*/
 
         for i in vcpuId..vcpuId+vcpuCount {
             match self.GetNextForCpu(vcpuId, i % vcpuCount) {

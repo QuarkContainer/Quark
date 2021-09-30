@@ -878,6 +878,7 @@ impl HostSpace {
             return Self::HCall(msg) as u64
         }
 
+        //super::SHARESPACE.Notify();
         let current = Task::Current().GetTaskIdQ();
 
         //error!("Qcall msg is {:?}, super::SHARESPACE.hostMsgCount is {}", msg, super::SHARESPACE.hostMsgCount.load(Ordering::SeqCst));
@@ -1032,7 +1033,7 @@ impl<'a> ShareSpace {
     pub fn Notify(&self) -> bool {
         let old = self.SwapIOThreadState(IOThreadState::RUNNING);
         if old == IOThreadState::WAITING {
-            IOURING.EventfdWrite(self.hostIOThreadEventfd, &self.hostIOThreadTriggerData as * const _ as u64);
+            IOURING.EventfdWrite(self.hostIOThreadEventfd);
             //error!("ShareSpace::Notify wake up...");
             return true
         }
@@ -1043,9 +1044,7 @@ impl<'a> ShareSpace {
     pub fn Schedule(&self, taskId: u64) {
         self.scheduler.Schedule(TaskId::New(taskId));
     }
-}
 
-impl ShareSpace {
     pub fn Yield() {
         HostSpace::VcpuYield();
     }

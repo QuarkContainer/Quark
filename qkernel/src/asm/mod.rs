@@ -131,7 +131,7 @@ macro_rules! SaveScratchRegs {
               push r9
               push r10
               push r11
-        " :::: "intel", "volatile");
+        " ::: "memory" : "intel", "volatile");
     }
 }
 
@@ -145,7 +145,7 @@ macro_rules! SavePreservedRegs {
               push r13
               push r14
               push r15
-        " :::: "intel", "volatile");
+        " ::: "memory" : "intel", "volatile");
     }
 }
 
@@ -159,7 +159,7 @@ macro_rules! RestorePreservedRegs {
               pop r12
               pop rbp
               pop rbx
-            " :::: "intel", "volatile");
+            " ::: "memory" : "intel", "volatile");
     }
 }
 
@@ -176,7 +176,7 @@ macro_rules! RestoreScratchRegs {
               pop rdx
               pop rsi
               pop rdi
-            " :::: "intel", "volatile");
+            " ::: "memory" : "intel", "volatile");
     }
 }
 
@@ -440,7 +440,7 @@ macro_rules! SwitchExceptionStack {
               mov rsp, rsi //switch to kernel stack
               " :
             :"i"(CopyData as fn(from: u64, to:u64, cnt: usize))
-            : "rdi" "rsi", "rdx", "rsp"
+            : "rdi" "rsi", "rdx", "rsp", "memory"
             : "intel", "volatile");
     }
 }

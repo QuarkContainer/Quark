@@ -148,7 +148,7 @@ impl CPULocal {
     }
 
     pub fn Wakeup(&self) {
-        IOURING.EventfdWrite(self.eventfd, &self.data as * const _ as u64);
+        IOURING.EventfdWrite(self.eventfd);
     }
 }
 

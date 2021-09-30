@@ -180,7 +180,7 @@ pub struct AsyncEventfdWrite {
 }
 
 impl AsyncEventfdWrite {
-    pub fn New(fd: i32, _addr: u64) -> Self {
+    pub fn New(fd: i32) -> Self {
         return Self {
             fd: fd,
             addr: 1,

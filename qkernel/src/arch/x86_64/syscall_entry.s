@@ -130,9 +130,8 @@ context_swap:
     mov [rdi+0x28], rbx
     mov [rdi+0x30], rbp
 
-    mov [rdi+0x40], rdx
     sfence
-    lfence
+    mov [rdi+0x40], rdx
 
     mov rsp, [rsi+0x00]
     mov r15, [rsi+0x08]
@@ -143,10 +142,11 @@ context_swap:
     mov rbp, [rsi+0x30]
     mov rdi, [rsi+0x38]
     mov [rsi+0x40], rcx
+    sfence
+
     ret
 
 context_swap_to:
-    lfence
     mov rsp, [rsi+0x00]
     mov r15, [rsi+0x08]
     mov r14, [rsi+0x10]
@@ -155,7 +155,9 @@ context_swap_to:
     mov rbx, [rsi+0x28]
     mov rbp, [rsi+0x30]
     mov rdi, [rsi+0x38]
+
     mov [rsi+0x40], rcx
+    sfence
     ret
 
 .macro HandlerWithoutErrorCode target

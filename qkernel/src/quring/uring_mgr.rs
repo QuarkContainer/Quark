@@ -219,8 +219,8 @@ impl QUring {
         self.AUCall(AsyncOps::AsyncLogFlush(ops));
     }
 
-    pub fn EventfdWrite(&self, fd: i32, addr: u64) {
-        let ops = AsyncEventfdWrite::New(fd, addr);
+    pub fn EventfdWrite(&self, fd: i32) {
+        let ops = AsyncEventfdWrite::New(fd);
         self.AUCall(AsyncOps::AsyncEventfdWrite(ops));
     }
 

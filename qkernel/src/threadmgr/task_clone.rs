@@ -484,7 +484,7 @@ impl Task {
 
             let ioUsage = nt.lock().ioUsage.clone();
 
-            ptr::write(taskPtr, Self {
+            ptr::write_volatile(taskPtr, Self {
                 context: Context::New(),
                 queueId: AtomicUsize::new(0),
                 taskId: s_ptr as u64,
