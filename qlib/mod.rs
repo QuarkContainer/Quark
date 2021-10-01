@@ -50,6 +50,7 @@ pub mod perf_tunning;
 pub mod uring;
 pub mod singleton;
 pub mod mutex;
+pub mod sort_arr;
 
 pub mod ringbuf;
 pub mod vcpu_mgr;
@@ -71,12 +72,12 @@ use self::bytestream::*;
 pub fn InitSingleton() {
     unsafe {
         control_msg::InitSingleton();
-        //cpuid::InitSingleton();
+        cpuid::InitSingleton();
         device::InitSingleton();
         eventchannel::InitSingleton();
-        //limits::InitSingleton();
+        limits::InitSingleton();
         metric::InitSingleton();
-        //perf_tunning::InitSingleton();
+        perf_tunning::InitSingleton();
         auth::id::InitSingleton();
     }
 }

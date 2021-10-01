@@ -13,9 +13,35 @@
 // limitations under the License.
 
 use super::futex::*;
-use alloc::collections::btree_map::BTreeMap;
-use lazy_static::lazy_static;
 
+use super::super::singleton::*;
+use super::super::sort_arr::*;
+
+pub static INIT_RLIMITS : Singleton<SortArr<i32, RLimit>> = Singleton::<SortArr<i32, RLimit>>::New();
+
+pub unsafe fn InitSingleton() {
+    let arr = [
+        (RLIMIT_CPU,        RLimit {Cur: RLIM_INFINITY,             Max: RLIM_INFINITY}),
+        (RLIMIT_FSIZE,      RLimit {Cur: RLIM_INFINITY,             Max: RLIM_INFINITY}),
+        (RLIMIT_DATA,       RLimit {Cur: RLIM_INFINITY,             Max: RLIM_INFINITY}),
+        (RLIMIT_STACK,      RLimit {Cur: DEFAULT_STACK_SOFT_LIMIT,  Max: RLIM_INFINITY}),
+        (RLIMIT_CORE,       RLimit {Cur: 0,                         Max: RLIM_INFINITY}),
+        (RLIMIT_RSS,        RLimit {Cur: RLIM_INFINITY,             Max: RLIM_INFINITY}),
+        (RLIMIT_NPROC,      RLimit {Cur: DEFAULT_NPROC_LIMIT,       Max: DEFAULT_NPROC_LIMIT}),
+        (RLIMIT_NOFILE,     RLimit {Cur: DEFAULT_NOFILE_SOFT_LIMIT, Max: DEFAULT_NOFILE_HARD_LIMIT}),
+        (RLIMIT_MEMLOCK,    RLimit {Cur: DEFAULT_MEMLOCK_LIMIT,     Max: DEFAULT_MEMLOCK_LIMIT}),
+        (RLIMIT_AS,         RLimit {Cur: RLIM_INFINITY,             Max: RLIM_INFINITY}),
+        (RLIMIT_LOCKS,      RLimit {Cur: RLIM_INFINITY,             Max: RLIM_INFINITY}),
+        (RLIMIT_SIGPENDING, RLimit {Cur: 0,                         Max: 0}),
+        (RLIMIT_MSGQUEUE,   RLimit {Cur: DEFAULT_MSGQUEUE_LIMIT,    Max: DEFAULT_MSGQUEUE_LIMIT}),
+        (RLIMIT_NICE,       RLimit {Cur: 0,                         Max: 0}),
+        (RLIMIT_RTPRIO,     RLimit {Cur: 0,                         Max: 0}),
+        (RLIMIT_RTTIME,     RLimit {Cur: RLIM_INFINITY,             Max: RLIM_INFINITY}),
+    ];
+
+    INIT_RLIMITS.Init(SortArr::New(&arr));
+}
+/*
 lazy_static! {
     pub static ref INIT_RLIMITS : BTreeMap<i32, RLimit> = [
         (RLIMIT_CPU,        RLimit {Cur: RLIM_INFINITY,             Max: RLIM_INFINITY}),
@@ -35,7 +61,7 @@ lazy_static! {
         (RLIMIT_RTPRIO,     RLimit {Cur: 0,                         Max: 0}),
         (RLIMIT_RTTIME,     RLimit {Cur: RLIM_INFINITY,             Max: RLIM_INFINITY}),
     ].iter().cloned().collect();
-}
+}*/
 
 // RLimit corresponds to Linux's struct rlimit.
 #[derive(Clone, Copy, Debug)]

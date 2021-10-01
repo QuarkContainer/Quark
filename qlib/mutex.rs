@@ -58,6 +58,9 @@ impl<T: ?Sized> QMutex<T> {
         // Can fail to lock even if the spinlock is not locked. May be more efficient than `try_lock`
         // when called in a loop.
         let id = Self::GetID();
+        /*if id < 0x4040000000 {
+            raw!(0x122, id, &self.lock as * const _ as u64);
+        }*/
 
         let mut val = 0;
         for _ in 0..10000 {
@@ -73,8 +76,7 @@ impl<T: ?Sized> QMutex<T> {
             spin_loop();
         }
 
-
-        self.Log(0x123, val);
+        raw!(0x123, val, &self.lock as * const _ as u64);
 
         loop  {
             super::super::asm::mfence();

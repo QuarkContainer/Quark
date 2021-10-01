@@ -31,6 +31,16 @@ pub fn PrintPrefix() -> String {
 }
 
 #[macro_export]
+macro_rules! raw {
+ // macth like arm for macro
+    ($a:expr,$b:expr,$c:expr)=>{
+        {
+           $crate::Kernel::HostSpace::KernelMsg($a, $b, $c);
+        }
+    }
+}
+
+#[macro_export]
 macro_rules! raw_print {
     ($($arg:tt)*) => ({
         if $crate::SHARESPACE.config.DebugLevel >= $crate::qlib::config::DebugLevel::Error {

@@ -1051,10 +1051,6 @@ impl<'a> ShareSpace {
 }
 
 impl<T: ?Sized> QMutex<T> {
-    pub fn Log(&self, a: u64, b: u64) {
-        super::Kernel::HostSpace::KernelMsg(a, b, 0);
-    }
-
     pub fn GetID() -> u64 {
         return Task::TaskAddress();
     }

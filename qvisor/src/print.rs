@@ -89,6 +89,16 @@ impl Log {
 }
 
 #[macro_export]
+macro_rules! raw {
+ // macth like arm for macro
+    ($a:expr,$b:expr,$c:expr)=>{
+        {
+           error!("raw:: {:x}/{:x}/{:x}", $a, $b, $c);
+        }
+    }
+}
+
+#[macro_export]
 macro_rules! log {
     ($($arg:tt)*) => ({
         let s = &format!($($arg)*);

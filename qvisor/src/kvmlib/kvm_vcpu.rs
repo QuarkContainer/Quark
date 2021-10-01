@@ -765,10 +765,6 @@ impl ShareSpace {
 }
 
 impl<T: ?Sized> QMutex<T> {
-    pub fn Log(&self, a: u64, b: u64) {
-        error!("ListAllocator::Log {:x}/{:x}", a, b);
-    }
-
     pub fn GetID() -> u64 {
         return 0xffff;
     }

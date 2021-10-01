@@ -14,26 +14,19 @@
 
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-use lazy_static::lazy_static;
 use alloc::vec::Vec;
 use super::mutex::*;
 use core::mem;
 
 use super::super::asm::Rdtsc;
 pub use super::super::perflog::PerfType;
-/*use super::singleton::*;
+use super::singleton::*;
 
 pub static COUNTS : Singleton<CounterSet> = Singleton::<CounterSet>::New();
 
 pub unsafe fn InitSingleton() {
     COUNTS.Init(CounterSet::default());
 }
-*/
-
-lazy_static! {
-    static ref COUNTS : CounterSet = CounterSet::default();
-}
-
 
 pub fn PerfGoto(typ: PerfType) {
     COUNTS.Goto(typ)

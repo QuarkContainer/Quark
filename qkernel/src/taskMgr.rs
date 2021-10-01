@@ -170,8 +170,15 @@ pub fn WaitFn() {
 
 #[inline]
 pub fn PollAsyncMsg() -> usize {
+    //error!("PollAsyncMsg 1");
     ASYNC_PROCESS.Process();
-    return HostInputProcess() + QUringTrigger();
+    //error!("PollAsyncMsg 2");
+    let ret = HostInputProcess();
+
+    //error!("PollAsyncMsg 3");
+    let ret = ret + QUringTrigger();
+    //error!("PollAsyncMsg 4 count {}", ret);
+    return ret;
 }
 
 #[inline]
