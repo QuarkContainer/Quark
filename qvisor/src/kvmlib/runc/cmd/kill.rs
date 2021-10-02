@@ -23,6 +23,50 @@ use super::super::cmd::config::*;
 use super::super::container::container::*;
 use super::command::*;
 
+
+lazy_static! {
+    static ref SIGNAL_MAP: BTreeMap<&'static str, i32> = {
+        let mut map = BTreeMap::new();
+
+        map.insert("ABRT",   Signal::SIGABRT);
+        map.insert("ALRM",   Signal::SIGALRM);
+        map.insert("BUS",    Signal::SIGBUS);
+        map.insert("CHLD",   Signal::SIGCHLD);
+        map.insert("CLD",    Signal::SIGCLD);
+        map.insert("CONT",   Signal::SIGCONT);
+        map.insert("FPE",    Signal::SIGFPE);
+        map.insert("HUP",    Signal::SIGHUP);
+        map.insert("ILL",    Signal::SIGILL);
+        map.insert("INT",    Signal::SIGINT);
+        map.insert("IO",     Signal::SIGIO);
+        map.insert("IOT",    Signal::SIGIOT);
+        map.insert("KILL",   Signal::SIGKILL);
+        map.insert("PIPE",   Signal::SIGPIPE);
+        map.insert("POLL",   Signal::SIGPOLL);
+        map.insert("PROF",   Signal::SIGPROF);
+        map.insert("PWR",    Signal::SIGPWR);
+        map.insert("QUIT",   Signal::SIGQUIT);
+        map.insert("SEGV",   Signal::SIGSEGV);
+        map.insert("STKFLT", Signal::SIGSTKFLT);
+        map.insert("STOP",   Signal::SIGSTOP);
+        map.insert("SYS",    Signal::SIGSYS);
+        map.insert("TERM",   Signal::SIGTERM);
+        map.insert("TRAP",   Signal::SIGTRAP);
+        map.insert("TSTP",   Signal::SIGTSTP);
+        map.insert("TTIN",   Signal::SIGTTIN);
+        map.insert("TTOU",   Signal::SIGTTOU);
+        map.insert("URG",    Signal::SIGURG);
+        map.insert("USR1",   Signal::SIGUSR1);
+        map.insert("USR2",   Signal::SIGUSR2);
+        map.insert("VTALRM", Signal::SIGVTALRM);
+        map.insert("WINCH",  Signal::SIGWINCH);
+        map.insert("XCPU",   Signal::SIGXCPU);
+        map.insert("XFSZ",   Signal::SIGXFSZ);
+
+        map
+    };
+}
+
 #[derive(Default, Debug)]
 pub struct KillCmd  {
     pub id: String,
@@ -130,47 +174,4 @@ pub fn ParseSignal(s: &str) -> Result<i32> {
         None => return Err(Error::Common(format!("unknown signal {}", s))),
         Some(sig) => Ok(*sig),
     }
-}
-
-lazy_static! {
-    static ref SIGNAL_MAP: BTreeMap<&'static str, i32> = {
-        let mut map = BTreeMap::new();
-
-        map.insert("ABRT",   Signal::SIGABRT);
-        map.insert("ALRM",   Signal::SIGALRM);
-        map.insert("BUS",    Signal::SIGBUS);
-        map.insert("CHLD",   Signal::SIGCHLD);
-        map.insert("CLD",    Signal::SIGCLD);
-        map.insert("CONT",   Signal::SIGCONT);
-        map.insert("FPE",    Signal::SIGFPE);
-        map.insert("HUP",    Signal::SIGHUP);
-        map.insert("ILL",    Signal::SIGILL);
-        map.insert("INT",    Signal::SIGINT);
-        map.insert("IO",     Signal::SIGIO);
-        map.insert("IOT",    Signal::SIGIOT);
-        map.insert("KILL",   Signal::SIGKILL);
-        map.insert("PIPE",   Signal::SIGPIPE);
-        map.insert("POLL",   Signal::SIGPOLL);
-        map.insert("PROF",   Signal::SIGPROF);
-        map.insert("PWR",    Signal::SIGPWR);
-        map.insert("QUIT",   Signal::SIGQUIT);
-        map.insert("SEGV",   Signal::SIGSEGV);
-        map.insert("STKFLT", Signal::SIGSTKFLT);
-        map.insert("STOP",   Signal::SIGSTOP);
-        map.insert("SYS",    Signal::SIGSYS);
-        map.insert("TERM",   Signal::SIGTERM);
-        map.insert("TRAP",   Signal::SIGTRAP);
-        map.insert("TSTP",   Signal::SIGTSTP);
-        map.insert("TTIN",   Signal::SIGTTIN);
-        map.insert("TTOU",   Signal::SIGTTOU);
-        map.insert("URG",    Signal::SIGURG);
-        map.insert("USR1",   Signal::SIGUSR1);
-        map.insert("USR2",   Signal::SIGUSR2);
-        map.insert("VTALRM", Signal::SIGVTALRM);
-        map.insert("WINCH",  Signal::SIGWINCH);
-        map.insert("XCPU",   Signal::SIGXCPU);
-        map.insert("XFSZ",   Signal::SIGXFSZ);
-
-        map
-    };
 }
