@@ -479,7 +479,7 @@ impl KVMVcpu {
 
                             sharespace.Init();
                             super::URING_MGR.lock().Addfd(super::super::print::LOG.lock().Logfd()).unwrap();
-                            if !sharespace.config.SlowPrint {
+                            if !sharespace.config.read().SlowPrint {
                                 super::super::print::EnableKernelPrint();
                             }
                             KERNEL_IO_THREAD.Init(sharespace.scheduler.VcpuArr[0].eventfd);
@@ -754,9 +754,9 @@ impl ShareSpace {
     pub fn Init(&mut self) {
         self.scheduler.Init();
         self.SetLogfd(super::super::print::LOG.lock().Logfd());
-        self.hostIOThreadEventfd = FD_NOTIFIER.Eventfd();
-        URING_MGR.lock().Addfd(self.hostIOThreadEventfd).unwrap();
-        self.config.Load();
+        self.hostIOThreadEventfd.store(FD_NOTIFIER.Eventfd(), Ordering::SeqCst);
+        URING_MGR.lock().Addfd(self.HostIOThreadEventfd()).unwrap();
+        self.config.write().Load();
     }
 
     pub fn Yield() {

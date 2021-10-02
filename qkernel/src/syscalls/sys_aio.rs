@@ -30,7 +30,7 @@ use super::sys_poll::*;
 
 // IoSetup implements linux syscall io_setup(2).
 pub fn SysIoSetup(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
-    let enableAIO = SHARESPACE.config.EnableAIO;
+    let enableAIO = SHARESPACE.config.read().EnableAIO;
 
     if !enableAIO {
         return Err(Error::SysError(SysErr::ENOSYS))

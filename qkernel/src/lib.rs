@@ -211,7 +211,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
 
     currTask.PerfGoto(PerfType::Kernel);
 
-    if SHARESPACE.config.KernelPagetable {
+    if SHARESPACE.config.read().KernelPagetable {
         Task::SetKernelPageTable();
     }
 
@@ -237,7 +237,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     let mut pid = 0;
     let startTime = Rdtsc();
 
-    let llevel = SHARESPACE.config.LogLevel;
+    let llevel = SHARESPACE.config.read().LogLevel;
     if llevel == LogLevel::Complex {
         tid = currTask.Thread().lock().id;
         pid = currTask.Thread().ThreadGroup().ID();
@@ -276,7 +276,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     //currTask.PerfGofrom(PerfType::KernelHandling);
 
     if llevel == LogLevel::Simple || llevel == LogLevel::Complex {
-        let gap = if self::SHARESPACE.config.PerfDebug {
+        let gap = if self::SHARESPACE.config.read().PerfDebug {
             Rdtsc() - startTime
         } else {
             0
@@ -297,7 +297,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     SetRflags(rflags);
     currTask.RestoreFp();
 
-    if SHARESPACE.config.KernelPagetable {
+    if SHARESPACE.config.read().KernelPagetable {
         currTask.SwitchPageTable();
     }
 
@@ -354,7 +354,7 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                     CPULocal::SetPendingFreeStack(currTask.taskId);
 
                     error!("RunExitDone xxx 2 [{:x}] ...", currTask.taskId);
-                    if !SHARESPACE.config.KernelPagetable {
+                    if !SHARESPACE.config.read().KernelPagetable {
                         KERNEL_PAGETABLE.SwitchTo();
                     }
                     // mm needs to be clean as last function before SwitchToNewTask

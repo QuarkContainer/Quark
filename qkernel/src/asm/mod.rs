@@ -670,7 +670,7 @@ pub fn GetRsp() -> u64 {
 
 #[inline]
 pub fn Invlpg(addr: u64) {
-    if !super::SHARESPACE.config.KernelPagetable {
+    if !super::SHARESPACE.config.read().KernelPagetable {
         unsafe { llvm_asm!("
             sfence
             invlpg ($0)

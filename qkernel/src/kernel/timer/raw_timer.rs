@@ -141,7 +141,7 @@ impl RawTimer {
     // Stop does not close the channel, to prevent a read from the channel succeeding
     // incorrectly.
     pub fn Stop(&self) -> bool {
-        if SHARESPACE.config.RawTimer {
+        if SHARESPACE.config.read().RawTimer {
             return self.StopRaw();
         }
 
@@ -173,7 +173,7 @@ impl RawTimer {
     }
 
     pub fn Reset(&self, delta: i64) -> bool {
-        if SHARESPACE.config.RawTimer {
+        if SHARESPACE.config.read().RawTimer {
             return self.ResetRaw(delta);
         }
 

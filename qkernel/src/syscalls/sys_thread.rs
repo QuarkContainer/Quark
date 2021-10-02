@@ -292,7 +292,7 @@ pub fn SysExecve(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             task.mm = newMM.clone();
             task.futexMgr = task.futexMgr.Fork();
             task.Thread().lock().memoryMgr = newMM;
-            if !SHARESPACE.config.KernelPagetable {
+            if !SHARESPACE.config.read().KernelPagetable {
                 task.SwitchPageTable();
             }
 

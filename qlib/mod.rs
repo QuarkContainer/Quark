@@ -60,6 +60,7 @@ use core::sync::atomic::AtomicI32;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 use self::mutex::*;
+use spin::RwLock;
 
 use super::asm::*;
 use self::task_mgr::*;
@@ -521,8 +522,7 @@ pub struct ShareSpace {
     pub QInput: QRingBuf<HostInputMsg>, //QMutex<VecDeque<HostInputMsg>>,
     pub QOutput: QRingBuf<HostOutputMsg>,  //QMutex<VecDeque<HostOutputMsg>>,
 
-    pub hostIOThreadEventfd: i32,
-    pub hostIOThreadTriggerData: u64,
+    pub hostIOThreadEventfd: AtomicI32,
 
     pub scheduler: task_mgr::Scheduler,
     pub ioThreadState: AtomicU64,
@@ -530,7 +530,7 @@ pub struct ShareSpace {
     pub guestMsgCount: AtomicU64,
 
     pub kernelIOThreadWaiting: AtomicBool,
-    pub config: Config,
+    pub config: RwLock<Config>,
 
     pub logBuf: QMutex<Option<ByteStream>>,
     pub logfd: AtomicI32,
@@ -544,15 +544,14 @@ impl ShareSpace {
             QInput: QRingBuf::New(MemoryDef::MSG_QLEN), //QMutex::new(VecDeque::with_capacity(MSG_QLEN)),
             QOutput: QRingBuf::New(MemoryDef::MSG_QLEN), //QMutex::new(VecDeque::with_capacity(MSG_QLEN)),
 
-            hostIOThreadEventfd: 0,
-            hostIOThreadTriggerData: 1,
+            hostIOThreadEventfd: AtomicI32::new(0),
 
             scheduler: task_mgr::Scheduler::default(),
             ioThreadState: AtomicU64::new(IOThreadState::WAITING as u64),
             hostMsgCount: AtomicU64::new(0),
             guestMsgCount: AtomicU64::new(0),
             kernelIOThreadWaiting: AtomicBool::new(false),
-            config: Config::default(),
+            config: RwLock::new(Config::default()),
             logBuf: QMutex::new(None),
             logfd: AtomicI32::new(-1),
             values: [
@@ -562,6 +561,10 @@ impl ShareSpace {
                 [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)],
             ],
         }
+    }
+
+    pub fn HostIOThreadEventfd(&self) -> i32 {
+        return self.hostIOThreadEventfd.load(Ordering::Relaxed);
     }
 
     pub fn SetValue(&self, cpuId: usize, idx: usize, val: u64) {

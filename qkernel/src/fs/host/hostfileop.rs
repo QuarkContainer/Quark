@@ -235,7 +235,7 @@ impl FileOperations for HostFileOp {
             task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
             return Ok(ret as i64)
         } else {
-            if SHARESPACE.config.TcpBuffIO {
+            if SHARESPACE.config.read().TcpBuffIO {
                 let ret = IOURING.Read(task,
                                         hostIops.HostFd(),
                                         &mut iovs[0] as * mut _ as u64,
@@ -283,7 +283,7 @@ impl FileOperations for HostFileOp {
             let ret = IOWrite(hostIops.HostFd(), &iovs)?;
             return Ok(ret as i64)
         } else {
-            if SHARESPACE.config.TcpBuffIO {
+            if SHARESPACE.config.read().TcpBuffIO {
                 let ret = IOURING.Write(task,
                               hostIops.HostFd(),
                               &iovs[0] as * const _ as u64,
@@ -354,7 +354,7 @@ impl FileOperations for HostFileOp {
             false
         };
 
-        let ret = if SHARESPACE.config.TcpBuffIO && self.InodeOp.InodeType() == InodeType::RegularFile {
+        let ret = if SHARESPACE.config.read().TcpBuffIO && self.InodeOp.InodeType() == InodeType::RegularFile {
             IOURING.Fsync(task,
                           fd,
                           datasync

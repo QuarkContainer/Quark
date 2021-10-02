@@ -137,7 +137,7 @@ impl fmt::Debug for ExceptionStackFrame {
 }
 
 pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, errorCode: u64) {
-    let PRINT_EXECPTION : bool = SHARESPACE.config.PrintException;
+    let PRINT_EXECPTION : bool = SHARESPACE.config.read().PrintException;
 
     let currTask = Task::Current();
 
@@ -424,7 +424,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
         SwapGs();
         //PerfGofrom(PerfType::User);
         currTask.AccountTaskLeave(SchedState::RunningApp);
-        if SHARESPACE.config.KernelPagetable {
+        if SHARESPACE.config.read().KernelPagetable {
             Task::SetKernelPageTable();
         }
         true
@@ -466,7 +466,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
         }
     });
 
-    let PRINT_EXECPTION : bool = SHARESPACE.config.PrintException;
+    let PRINT_EXECPTION : bool = SHARESPACE.config.read().PrintException;
     if PRINT_EXECPTION {
         error!("in PageFaultHandler, cr2: {:x}, cr3: {:x}, isuser = {}, error is {:b}, ss is {:x}, cs == {:x}, eflags = {:x}, new ss is {}",
             cr2,
@@ -553,7 +553,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
             if fromUser {
                 //PerfGoto(PerfType::User);
                 currTask.AccountTaskEnter(SchedState::RunningApp);
-                if SHARESPACE.config.KernelPagetable {
+                if SHARESPACE.config.read().KernelPagetable {
                     currTask.SwitchPageTable();
                 }
                 SwapGs();
@@ -578,7 +578,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
                 //PerfGoto(PerfType::User);
                 currTask.AccountTaskEnter(SchedState::RunningApp);
 
-                if SHARESPACE.config.KernelPagetable {
+                if SHARESPACE.config.read().KernelPagetable {
                     currTask.SwitchPageTable();
                 }
                 SwapGs();

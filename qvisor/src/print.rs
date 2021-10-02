@@ -59,7 +59,7 @@ impl Log {
         if !self.kernelPrint {
             self.WriteBytes(str.as_bytes());
         } else {
-            let uringLog = super::kvmlib::VMS.lock().shareSpace.config.UringLog;
+            let uringLog = super::kvmlib::VMS.lock().shareSpace.config.read().UringLog;
             let trigger = super::kvmlib::VMS.lock().shareSpace.Log(str.as_bytes());
             if trigger {
                 if uringLog {

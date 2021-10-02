@@ -468,7 +468,7 @@ impl SockOperations for SocketOperations {
 
         self.SetRemoteAddr(socketaddr.to_vec());
 
-        if SHARESPACE.config.TcpBuffIO {
+        if SHARESPACE.config.read().TcpBuffIO {
             self.EnableSocketBuf();
         }
 
@@ -507,7 +507,7 @@ impl SockOperations for SocketOperations {
             return Err(Error::SysError(-res as i32))
         }
 
-        let enableBuf = SHARESPACE.config.TcpBuffIO &&
+        let enableBuf = SHARESPACE.config.read().TcpBuffIO &&
             (self.family == AFType::AF_INET || self.family == AFType::AF_INET6) &&
             self.stype == SockType::SOCK_STREAM;
 

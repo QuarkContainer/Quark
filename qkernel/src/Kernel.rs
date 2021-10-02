@@ -936,7 +936,7 @@ impl HostSpace {
     pub fn Kprint(str: &str) {
         let bytes = str.as_bytes();
         let trigger = super::SHARESPACE.Log(bytes);
-        let uringLog = super::SHARESPACE.config.UringLog;
+        let uringLog = super::SHARESPACE.config.read().UringLog;
         if uringLog {
             if trigger {
                 super::IOURING.LogFlush();
@@ -1033,7 +1033,7 @@ impl<'a> ShareSpace {
     pub fn Notify(&self) -> bool {
         let old = self.SwapIOThreadState(IOThreadState::RUNNING);
         if old == IOThreadState::WAITING {
-            IOURING.EventfdWrite(self.hostIOThreadEventfd);
+            IOURING.EventfdWrite(self.HostIOThreadEventfd());
             //error!("ShareSpace::Notify wake up...");
             return true
         }
