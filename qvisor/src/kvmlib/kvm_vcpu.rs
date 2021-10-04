@@ -194,7 +194,8 @@ impl KVMVcpu {
         let tssIntStackStart = vcpuBoostrapMem.TssIntStackAddr();
         let tssAddr = vcpuBoostrapMem.TssAddr();
 
-        //info!("the tssIntStackStart is {:x}, tssAddr address is {:x}", tssIntStackStart, tssAddr);
+        info!("the tssIntStackStart is {:x}, tssAddr address is {:x}, idt addr is {:x}, gdt addr is {:x}",
+            tssIntStackStart, tssAddr, idtAddr, gdtAddr);
 
         let vcpu = vm_fd.create_vcpu(id as u64).map_err(|e| Error::IOError(format!("io::error is {:?}", e))).expect("create vcpu fail");
 
@@ -370,8 +371,6 @@ impl KVMVcpu {
 
         let mut lastVal: u32 = 0;
         let mut first = true;
-
-        //let mut localStr: Vec<u8> = Vec::new();
 
         let coreid = core_affinity::CoreId{id: self.id};
         core_affinity::set_for_current(coreid);

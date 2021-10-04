@@ -20,7 +20,8 @@ use core::marker::PhantomData;
 use core::hint::spin_loop;
 //use spin::*;
 
-use super::linux_def::QOrdering;
+//use super::linux_def::QOrdering;
+//use super::super::asm::*;
 
 pub struct Spin;
 pub struct QMutex<T: ?Sized, R = Spin> {
@@ -52,7 +53,66 @@ impl<T, R> QMutex<T, R> {
     }
 }
 
+#[inline(always)]
+pub fn CmpExchg(addr: u64, old: u64, new: u64) -> u64 {
+    let mut ret : u64;
+    unsafe {
+        llvm_asm!("
+              lock cmpxchgq $2, ($3)
+            "
+            : "={rax}"(ret)
+            : "{rax}"(old), "{rdx}"(new), "{rcx}"(addr)
+            : "memory" : "volatile"  );
+    };
+
+    return ret;
+}
+
+#[inline(always)]
+pub fn WriteOnce(addr: u64, val: u64) {
+    unsafe {
+        llvm_asm!("
+               sfence
+               mov $1, ($0)
+            "
+            :
+            : "r"(addr), "r"(val)
+            : "memory" : "volatile"  );
+    };
+}
+
+#[inline(always)]
+pub fn LoadOnce(addr: u64) ->  u64 {
+    let ret: u64;
+    unsafe {
+        llvm_asm!("
+               movq ($1), $0
+               lfence
+            "
+            : "={rax}"(ret)
+            : "{rdi}"(addr)
+            : "memory" : "volatile"  );
+    };
+
+    return ret;
+}
+
 impl<T: ?Sized> QMutex<T> {
+    #[inline(always)]
+    pub fn CmpExchg(&self, old: u64, new: u64) -> u64 {
+        /*match self.lock.compare_exchange(old, new, QOrdering::ACQUIRE, QOrdering::RELAXED) {
+            Ok(v) => return v,
+            Err(v) => return v,
+        }*/
+
+        return CmpExchg(&self.lock as * const _ as u64, old, new)
+        //return self.lock.compare_and_swap(old, new, QOrdering::ACQUIRE);
+    }
+
+    pub fn Addr(&self) -> u64 {
+        return &self.lock as * const _ as u64
+    }
+
     #[inline(always)]
     pub fn lock(&self) -> QMutexGuard<T> {
         // Can fail to lock even if the spinlock is not locked. May be more efficient than `try_lock`
@@ -65,7 +125,8 @@ impl<T: ?Sized> QMutex<T> {
         let mut val = 0;
         for _ in 0..10000 {
             super::super::asm::mfence();
-            val = self.lock.compare_and_swap(0, id, QOrdering::ACQUIRE);
+            //val = self.lock.compare_and_swap(0, id, QOrdering::ACQUIRE);
+            val = self.CmpExchg(0, id);
             if val == 0 {
                 return QMutexGuard {
                     lock: &self.lock,
@@ -77,10 +138,12 @@ impl<T: ?Sized> QMutex<T> {
         }
 
         raw!(0x123, val, &self.lock as * const _ as u64);
+        defer!(raw!(0x122, val, &self.lock as * const _ as u64));
 
         loop  {
             super::super::asm::mfence();
-            let val = self.lock.compare_and_swap(0, id, QOrdering::ACQUIRE);
+            //let val = self.lock.compare_and_swap(0, id, QOrdering::ACQUIRE);
+            let val = self.CmpExchg(0, id);
             if val == 0 {
                 break;
             }
@@ -98,7 +161,9 @@ impl<T: ?Sized> QMutex<T> {
 
     #[inline(always)]
     pub fn is_locked(&self) -> bool {
-        self.lock.load(QOrdering::RELAXED) != 0
+        //self.lock.load(QOrdering::RELAXED) != 0
+
+        return LoadOnce(self.Addr()) != 0;
     }
 
     #[inline(always)]
@@ -106,7 +171,7 @@ impl<T: ?Sized> QMutex<T> {
         let id = Self::GetID();
 
         super::super::asm::mfence();
-        let val = self.lock.compare_and_swap(0, id, QOrdering::ACQUIRE);
+        let val = self.CmpExchg(0, id);
         if val == 0 {
             Some(QMutexGuard {
                 lock: &self.lock,
@@ -169,8 +234,10 @@ impl<'a, T: ?Sized> DerefMut for QMutexGuard<'a, T> {
 impl<'a, T: ?Sized> Drop for QMutexGuard<'a, T> {
     /// The dropping of the QMutexGuard will release the lock it was created from.
     fn drop(&mut self) {
-        self.lock.store(0, QOrdering::RELEASE);
-        super::super::asm::mfence();
+        //self.lock.store(0, QOrdering::RELEASE);
+
+        WriteOnce(self.lock as * const _ as u64, 0);
+        //super::super::asm::mfence();
     }
 }
 
