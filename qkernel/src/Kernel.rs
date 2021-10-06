@@ -946,6 +946,7 @@ impl HostSpace {
         }
     }
 
+    #[inline(always)]
     pub fn KernelMsg(id: u64, val1: u64, val2: u64) {
         HyperCall64(HYPERCALL_MSG, id, val1, val2)
     }

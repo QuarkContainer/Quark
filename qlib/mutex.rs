@@ -72,7 +72,7 @@ pub fn CmpExchg(addr: u64, old: u64, new: u64) -> u64 {
 pub fn WriteOnce(addr: u64, val: u64) {
     unsafe {
         llvm_asm!("
-               sfence
+               mfence
                mov $1, ($0)
             "
             :
@@ -111,6 +111,10 @@ impl<T: ?Sized> QMutex<T> {
 
     pub fn Addr(&self) -> u64 {
         return &self.lock as * const _ as u64
+    }
+
+    pub fn MutexId(&self) -> u64 {
+        return &self.lock as * const _ as u64;
     }
 
     #[inline(always)]

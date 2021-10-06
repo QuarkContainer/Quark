@@ -72,6 +72,13 @@ impl ListAllocator {
         }
     }
 
+    pub fn Print(&self) {
+        error!("heap addr is {:x}", self.heap.MutexId());
+        for i in 0..self.bufs.len() {
+            error!("ListAllocator[{}] {:x}", i, self.bufs[i].MutexId());
+        }
+    }
+
     pub fn AddToHead(&self, start: usize, end: usize) {
         unsafe {
             self.heap.lock().add_to_heap(start, end);
@@ -105,9 +112,9 @@ impl ListAllocator {
         let free = self.free.load(Ordering::Acquire);
         let bufSize = self.bufSize.load(Ordering::Acquire);
 
-        if free > core::usize::MAX / 100 || total > core::usize::MAX / 100 {
+        /*if free > core::usize::MAX / 100 || total > core::usize::MAX / 100 {
             error!("total is {:x}, free is {:x}, buffsize is {:x}", total, free, bufSize);
-        }
+        }*/
 
         if total * FREE_THRESHOLD / 100 > free && // there are too little free memory
             free * BUFF_THRESHOLD /100 < bufSize { // there are too much bufferred memory
@@ -118,7 +125,7 @@ impl ListAllocator {
     }
 
     // ret: true: free some memory, false: no memory freed
-    pub fn Free(&self) -> bool {
+    pub fn Free1(&self) -> bool {
         let mut count = 0;
         for i in 0..self.bufs.len() {
             if !self.NeedFree() || count == FREE_BATCH {
@@ -290,7 +297,10 @@ impl MemList {
     }
 
     pub fn Push(&mut self, addr: u64) {
-        assert!(addr % self.size == 0, "Push addr is {:x}/size is {:x}", addr, self.size);
+        if addr % self.size != 0 {
+            raw!(235, addr, self.size);
+            panic!("Push next fail");
+        }
 
         let newB = addr as * mut MemBlock;
         unsafe {
@@ -330,7 +340,11 @@ impl MemList {
         };
 
         self.head = *ptr;
-        assert!(next % self.size == 0, "Pop next is {:x}/size is {:x}", next, self.size);
+        if next % self.size != 0 {
+            raw!(234, next, self.size);
+            panic!("Pop next fail");
+        }
+        //assert!(next % self.size == 0, "Pop next is {:x}/size is {:x}", next, self.size);
         return next;
     }
 }

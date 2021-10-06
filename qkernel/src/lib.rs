@@ -434,6 +434,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
     /***************** can't run any qcall before this point ************************************/
 
     if id == 0 {
+        ALLOCATOR.Print();
         IOWait();
     };
 

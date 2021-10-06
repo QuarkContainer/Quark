@@ -547,7 +547,7 @@ impl KVMVcpu {
                             let data1 = vcpu_regs.rbx;
                             let data2 = vcpu_regs.rcx;
                             let data3 = vcpu_regs.rdi;
-                            info!("[{}] get kernel msg [rsp {:x}]: {:x}, {:x}, {:x}", self.id, vcpu_regs.rsp, data1, data2, data3);
+                            info!("[{}] get kernel msg [rsp {:x}/rip {:x}]: {:x}, {:x}, {:x}", self.id, vcpu_regs.rsp, vcpu_regs.rip, data1, data2, data3);
                         }
 
                         qlib::HYPERCALL_OOM => {

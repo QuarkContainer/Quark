@@ -484,6 +484,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     // no need loop, just need to enable break
     loop {
         let _ml = currTask.mm.MappingWriteLock();
+        defer!(raw!(0x999, 9, 9));
 
         let (vma, range) = match currTask.mm.GetVmaAndRangeLocked(cr2) {
             //vmas.lock().Get(cr2) {

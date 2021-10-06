@@ -48,7 +48,7 @@ pub fn GetVcpuId() -> usize {
     return result;
 }
 
-#[inline]
+#[inline(always)]
 pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64) {
     unsafe {
         let data: u8 = 0;

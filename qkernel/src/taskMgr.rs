@@ -100,24 +100,31 @@ pub fn IOWait() {
     let mut start = Rdtsc();
 
     loop {
+        error!("IOWait 1");
         if PollAsyncMsg() > 10 {
             start = Rdtsc();
         }
 
         let currentTime = Rdtsc();
         if currentTime - start >= IO_WAIT_CYCLES {
+            error!("IOWait 2");
             SHARESPACE.kernelIOThreadWaiting.store(true, Ordering::Release);
 
+            error!("IOWait 3");
             // after change the state, check again in case new message coming
             if PollAsyncMsg() > 10 {
                 start = Rdtsc();
+                error!("IOWait 4");
                 SHARESPACE.kernelIOThreadWaiting.store(false, Ordering::Release);
                 continue;
             }
 
+            error!("IOWait sleep");
             HostSpace::IOWait();
+            error!("IOWait wakeup");
             start = Rdtsc();
             SHARESPACE.kernelIOThreadWaiting.store(false, Ordering::Release);
+            error!("IOWait 5");
         }
     }
 }
@@ -170,14 +177,14 @@ pub fn WaitFn() {
 
 #[inline]
 pub fn PollAsyncMsg() -> usize {
-    //error!("PollAsyncMsg 1");
+    error!("PollAsyncMsg 1");
     ASYNC_PROCESS.Process();
-    //error!("PollAsyncMsg 2");
+    error!("PollAsyncMsg 2");
     let ret = HostInputProcess();
 
-    //error!("PollAsyncMsg 3");
+    error!("PollAsyncMsg 3");
     let ret = ret + QUringTrigger();
-    //error!("PollAsyncMsg 4 count {}", ret);
+    error!("PollAsyncMsg 4 count {}", ret);
     return ret;
 }
 
@@ -211,7 +218,7 @@ pub fn Wait() {
             break;
         }
 
-        super::ALLOCATOR.Free();
+        //super::ALLOCATOR.Free();
 
         let currentTime = Rdtsc();
         if currentTime - start >= WAIT_CYCLES {
