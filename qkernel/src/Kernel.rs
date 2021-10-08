@@ -985,6 +985,14 @@ impl HostSpace {
     pub fn VcpuYield() {
         HyperCall64(HYPERCALL_VCPU_YIELD, 0, 0, 0);
     }
+
+    pub fn VcpuDebug() {
+        HyperCall64(HYPERCALL_VCPU_DEBUG, 0, 0, 0);
+    }
+
+    pub fn VcpuPrint() {
+        HyperCall64(HYPERCALL_VCPU_PRINT, 0, 0, 0);
+    }
 }
 
 pub fn GetSockOptI32(sockfd: i32, level: i32, optname: i32) -> Result<i32> {

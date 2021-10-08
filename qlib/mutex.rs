@@ -20,7 +20,7 @@ use core::marker::PhantomData;
 use core::hint::spin_loop;
 //use spin::*;
 
-//use super::linux_def::QOrdering;
+use super::linux_def::QOrdering;
 //use super::super::asm::*;
 
 pub struct Spin;
@@ -238,9 +238,9 @@ impl<'a, T: ?Sized> DerefMut for QMutexGuard<'a, T> {
 impl<'a, T: ?Sized> Drop for QMutexGuard<'a, T> {
     /// The dropping of the QMutexGuard will release the lock it was created from.
     fn drop(&mut self) {
-        //self.lock.store(0, QOrdering::RELEASE);
+        self.lock.store(0, QOrdering::RELEASE);
 
-        WriteOnce(self.lock as * const _ as u64, 0);
+        //WriteOnce(self.lock as * const _ as u64, 0);
         //super::super::asm::mfence();
     }
 }

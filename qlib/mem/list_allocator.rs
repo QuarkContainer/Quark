@@ -176,6 +176,11 @@ unsafe impl GlobalAlloc for ListAllocator {
             loop {}
         }
 
+        if ret % size as u64 != 0 {
+            raw!(0x236, ret, size as u64);
+            panic!("alloc next fail");
+        }
+
         // Subtract when ret != 0 to avoid overflow
         self.free.fetch_sub(size, Ordering::Release);
 
@@ -340,8 +345,9 @@ impl MemList {
         };
 
         self.head = *ptr;
+
         if next % self.size != 0 {
-            raw!(234, next, self.size);
+            raw!(0x234, ret, size as u64);
             panic!("Pop next fail");
         }
         //assert!(next % self.size == 0, "Pop next is {:x}/size is {:x}", next, self.size);

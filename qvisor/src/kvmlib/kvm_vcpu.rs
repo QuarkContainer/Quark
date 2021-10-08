@@ -612,6 +612,20 @@ impl KVMVcpu {
                             std::thread::yield_now();
                         }
 
+                        qlib::HYPERCALL_VCPU_DEBUG => {
+                            let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                            let vcpu_sregs = self.vcpu.get_sregs().map_err(|e| Error::IOError(format!("vcpu::error is {:?}", e)))?;
+                            error!("[{}] HYPERCALL_VCPU_DEBUG regs is {:#x?}", self.id, regs);
+                            error!("sregs is {:#x?}", vcpu_sregs);
+                            error!("vcpus is {:#x?}", &self.shareSpace.scheduler.VcpuArr);
+                            unsafe { libc::_exit(0) }
+                        }
+
+                        qlib::HYPERCALL_VCPU_PRINT => {
+                            let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                            error!("[{}] HYPERCALL_VCPU_PRINT regs is {:#x?}", self.id, regs);
+                        }
+
                         qlib::HYPERCALL_HCALL => {
                             let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                             let addr = regs.rbx;
