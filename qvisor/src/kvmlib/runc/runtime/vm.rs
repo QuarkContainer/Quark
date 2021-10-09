@@ -143,6 +143,7 @@ impl VirtualMachine {
 
         let kvmfd = args.KvmFd;
         let cpuCount = VMSpace::VCPUCount() - 1;
+        VMS.lock().vcpuCount = VMSpace::VCPUCount();
         let kernelMemRegionSize = config.KernelMemSize;
         let controlSock = args.ControlSock;
 
