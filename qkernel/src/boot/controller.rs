@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use spin::Mutex;
+use ::qlib::mutex::*;
 use alloc::vec::Vec;
 use core::{ptr};
 
@@ -26,7 +26,7 @@ use super::super::{LOADER, KERNEL_STACK_ALLOCATOR};
 use super::process::*;
 use super::super::qlib::singleton::*;
 
-pub static MSG : Singleton<Mutex<Option<ControlMsg>>> = Singleton::<Mutex<Option<ControlMsg>>>::New();
+pub static MSG : Singleton<QMutex<Option<ControlMsg>>> = Singleton::<QMutex<Option<ControlMsg>>>::New();
 
 pub fn Run() -> Result<()> {
     let task = Task::Current();

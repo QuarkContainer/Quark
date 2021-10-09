@@ -14,7 +14,7 @@
 
 //use core::mem;
 //use alloc::sync::Arc;
-//use spin::Mutex;
+//use ::qlib::mutex::*;
 
 //use super::super::super::SignalDef::*;
 //use super::super::super::stack::*;
@@ -115,7 +115,7 @@ impl Context64 {
         // Save the thread's floating point state.
         self.sigFPState.push(self.state.x86FPState.clone());
 
-        self.state.x86FPState = Arc::new(Mutex::new(X86fpstate::NewX86FPState()));
+        self.state.x86FPState = Arc::new(QMutex::new(X86fpstate::NewX86FPState()));
 
         return Ok(())
     }*/

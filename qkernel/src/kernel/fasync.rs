@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::ops::Deref;
 
 use super::super::qlib::auth::*;
@@ -40,12 +40,12 @@ pub struct FileAsyncInternal {
 }
 
 #[derive(Clone, Default)]
-pub struct FileAsync(Arc<Mutex<FileAsyncInternal>>);
+pub struct FileAsync(Arc<QMutex<FileAsyncInternal>>);
 
 impl Deref for FileAsync {
-    type Target = Arc<Mutex<FileAsyncInternal>>;
+    type Target = Arc<QMutex<FileAsyncInternal>>;
 
-    fn deref(&self) -> &Arc<Mutex<FileAsyncInternal>> {
+    fn deref(&self) -> &Arc<QMutex<FileAsyncInternal>> {
         &self.0
     }
 }

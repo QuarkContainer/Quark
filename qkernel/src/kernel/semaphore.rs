@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::ops::Deref;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::vec::Vec;
@@ -109,12 +109,12 @@ impl RegistryInternal {
 }
 
 #[derive(Clone, Default)]
-pub struct Registry(Arc<Mutex<RegistryInternal>>);
+pub struct Registry(Arc<QMutex<RegistryInternal>>);
 
 impl Deref for Registry {
-    type Target = Arc<Mutex<RegistryInternal>>;
+    type Target = Arc<QMutex<RegistryInternal>>;
 
-    fn deref(&self) -> &Arc<Mutex<RegistryInternal>> {
+    fn deref(&self) -> &Arc<QMutex<RegistryInternal>> {
         &self.0
     }
 }
@@ -127,7 +127,7 @@ impl Registry {
             lastIDUsed: 0,
         };
 
-        return Self(Arc::new(Mutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)))
     }
 
     pub fn FindOrCreate(&self, task: &Task, key: i32, nsems: i32,
@@ -333,12 +333,12 @@ impl<'a> SetInternal {
 }
 
 #[derive(Clone)]
-pub struct Set(Arc<Mutex<SetInternal>>);
+pub struct Set(Arc<QMutex<SetInternal>>);
 
 impl Deref for Set {
-    type Target = Arc<Mutex<SetInternal>>;
+    type Target = Arc<QMutex<SetInternal>>;
 
-    fn deref(&self) -> &Arc<Mutex<SetInternal>> {
+    fn deref(&self) -> &Arc<QMutex<SetInternal>> {
         &self.0
     }
 }
@@ -362,7 +362,7 @@ impl Set {
             internal.sems.push(Sem::default())
         }
 
-        return Self(Arc::new(Mutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)))
     }
 
     pub fn Size(&self) -> usize {

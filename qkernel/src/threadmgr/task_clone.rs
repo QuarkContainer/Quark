@@ -484,7 +484,7 @@ impl Task {
 
             let ioUsage = nt.lock().ioUsage.clone();
 
-            ptr::write(taskPtr, Self {
+            ptr::write_volatile(taskPtr, Self {
                 context: Context::New(),
                 queueId: AtomicUsize::new(0),
                 taskId: s_ptr as u64,
@@ -493,7 +493,7 @@ impl Task {
                 isWaitThread: false,
                 signalStack: signalStack,
                 mountNS: task.mountNS.clone(),
-                // Arc::new(Mutex::new(Default::default())),
+                // Arc::new(QMutex::new(Default::default())),
                 creds: creds,
                 utsns: utsns,
                 ipcns: ipcns,

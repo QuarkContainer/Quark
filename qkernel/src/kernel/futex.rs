@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::ops::Deref;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::vec::Vec;
@@ -246,14 +246,14 @@ impl SpinLock {
 
 // bucket holds a list of waiters
 pub struct BucketInternal {
-    pub map: Mutex<BTreeMap<Key, Queue>>,
+    pub map: QMutex<BTreeMap<Key, Queue>>,
     pub locks: Vec<SpinLock>,
 }
 
 impl Default for BucketInternal {
     fn default() -> Self {
         let mut ret = Self {
-            map: Mutex::new(BTreeMap::new()),
+            map: QMutex::new(BTreeMap::new()),
             locks: Vec::with_capacity(BUCKET_COUNT),
         };
 

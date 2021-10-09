@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::ops::Deref;
 use alloc::collections::linked_list::LinkedList;
 use alloc::vec::Vec;
@@ -41,12 +41,12 @@ pub struct MessageInternal {
 }
 
 #[derive(Clone)]
-pub struct Message(Arc<Mutex<MessageInternal>>);
+pub struct Message(Arc<QMutex<MessageInternal>>);
 
 impl Deref for Message {
-    type Target = Arc<Mutex<MessageInternal>>;
+    type Target = Arc<QMutex<MessageInternal>>;
 
-    fn deref(&self) -> &Arc<Mutex<MessageInternal>> {
+    fn deref(&self) -> &Arc<QMutex<MessageInternal>> {
         &self.0
     }
 }
@@ -59,7 +59,7 @@ impl Message {
             Address: Address,
         };
 
-        return Self(Arc::new(Mutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)))
     }
 
     pub fn Length(&self) -> usize {
@@ -112,12 +112,12 @@ impl MsgQueueInternal {
 }
 
 #[derive(Clone)]
-pub struct MsgQueue(Arc<Mutex<MsgQueueInternal>>);
+pub struct MsgQueue(Arc<QMutex<MsgQueueInternal>>);
 
 impl Deref for MsgQueue {
-    type Target = Arc<Mutex<MsgQueueInternal>>;
+    type Target = Arc<QMutex<MsgQueueInternal>>;
 
-    fn deref(&self) -> &Arc<Mutex<MsgQueueInternal>> {
+    fn deref(&self) -> &Arc<QMutex<MsgQueueInternal>> {
         &self.0
     }
 }
@@ -142,7 +142,7 @@ impl MsgQueue {
             dataList: LinkedList::new(),
         };
 
-        return Self(Arc::new(Mutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)))
     }
 
     // Close closes q for reading and writing. It is immediately not writable and

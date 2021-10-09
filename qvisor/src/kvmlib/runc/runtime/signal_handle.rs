@@ -65,6 +65,8 @@ extern fn handle_sigintAct(signal :i32, signInfo: *mut libc::siginfo_t, _: *mut 
         for i in 0..8 {
             error!("vcpu[{}] state is {}/{}", i, vms.GetShareSpace().GetValue(i, 0), vms.GetShareSpace().GetValue(i, 1))
         }
+
+        error!("vcpus is {:x?}", vms.GetShareSpace().scheduler.VcpuArr);
     }
 
     if SIGNAL_HANDLE_ENABLE.load(Ordering::Relaxed) {

@@ -20,6 +20,8 @@ use kvm_ioctls::VcpuExit;
 use core::mem::size_of;
 use libc::*;
 
+use super::qlib::mutex::*;
+
 use super::*;
 use super::syncmgr::*;
 //use super::kvm_ctl::*;
@@ -192,7 +194,8 @@ impl KVMVcpu {
         let tssIntStackStart = vcpuBoostrapMem.TssIntStackAddr();
         let tssAddr = vcpuBoostrapMem.TssAddr();
 
-        //info!("the tssIntStackStart is {:x}, tssAddr address is {:x}", tssIntStackStart, tssAddr);
+        info!("the tssIntStackStart is {:x}, tssAddr address is {:x}, idt addr is {:x}, gdt addr is {:x}",
+            tssIntStackStart, tssAddr, idtAddr, gdtAddr);
 
         let vcpu = vm_fd.create_vcpu(id as u64).map_err(|e| Error::IOError(format!("io::error is {:?}", e))).expect("create vcpu fail");
 
@@ -369,8 +372,6 @@ impl KVMVcpu {
         let mut lastVal: u32 = 0;
         let mut first = true;
 
-        //let mut localStr: Vec<u8> = Vec::new();
-
         let coreid = core_affinity::CoreId{id: self.id};
         core_affinity::set_for_current(coreid);
 
@@ -477,7 +478,7 @@ impl KVMVcpu {
 
                             sharespace.Init();
                             super::URING_MGR.lock().Addfd(super::super::print::LOG.lock().Logfd()).unwrap();
-                            if !sharespace.config.SlowPrint {
+                            if !sharespace.config.read().SlowPrint {
                                 super::super::print::EnableKernelPrint();
                             }
                             KERNEL_IO_THREAD.Init(sharespace.scheduler.VcpuArr[0].eventfd);
@@ -545,7 +546,8 @@ impl KVMVcpu {
                             let vcpu_regs = self.vcpu.get_regs().unwrap();
                             let data1 = vcpu_regs.rbx;
                             let data2 = vcpu_regs.rcx;
-                            info!("[{}] get kernel msg: {:x}, {:x}", self.id, data1, data2);
+                            let data3 = vcpu_regs.rdi;
+                            info!("[{}] get kernel msg [rsp {:x}/rip {:x}]: {:x}, {:x}, {:x}", self.id, vcpu_regs.rsp, vcpu_regs.rip, data1, data2, data3);
                         }
 
                         qlib::HYPERCALL_OOM => {
@@ -607,7 +609,24 @@ impl KVMVcpu {
                         }
 
                         qlib::HYPERCALL_VCPU_YIELD => {
-                            std::thread::yield_now();
+                            use std::{thread, time};
+
+                            let millis10 = time::Duration::from_millis(10);
+                            thread::sleep(millis10);
+                        }
+
+                        qlib::HYPERCALL_VCPU_DEBUG => {
+                            let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                            let vcpu_sregs = self.vcpu.get_sregs().map_err(|e| Error::IOError(format!("vcpu::error is {:?}", e)))?;
+                            error!("[{}] HYPERCALL_VCPU_DEBUG regs is {:#x?}", self.id, regs);
+                            error!("sregs is {:#x?}", vcpu_sregs);
+                            error!("vcpus is {:#x?}", &self.shareSpace.scheduler.VcpuArr);
+                            unsafe { libc::_exit(0) }
+                        }
+
+                        qlib::HYPERCALL_VCPU_PRINT => {
+                            let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                            error!("[{}] HYPERCALL_VCPU_PRINT regs is {:#x?}", self.id, regs);
                         }
 
                         qlib::HYPERCALL_HCALL => {
@@ -751,12 +770,19 @@ impl ShareSpace {
     pub fn Init(&mut self) {
         self.scheduler.Init();
         self.SetLogfd(super::super::print::LOG.lock().Logfd());
-        self.hostIOThreadEventfd = FD_NOTIFIER.Eventfd();
-        URING_MGR.lock().Addfd(self.hostIOThreadEventfd).unwrap();
-        self.config.Load();
+        self.hostIOThreadEventfd.store(FD_NOTIFIER.Eventfd(), Ordering::SeqCst);
+        URING_MGR.lock().Addfd(self.HostIOThreadEventfd()).unwrap();
+        self.config.write().Load();
     }
 
     pub fn Yield() {
         std::thread::yield_now();
+    }
+}
+
+
+impl<T: ?Sized> QMutexIntern<T> {
+    pub fn GetID() -> u64 {
+        return 0xffff;
     }
 }

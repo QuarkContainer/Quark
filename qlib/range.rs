@@ -17,7 +17,7 @@ use core::ops::Bound::*;
 use alloc::vec::Vec;
 use core::cmp::*;
 use core::ops::Deref;
-use spin::Mutex;
+use super::mutex::*;
 
 use super::addr::*;
 use super::common::{Error, Result};
@@ -315,12 +315,12 @@ impl<T: core::clone::Clone> AreaMgr<T> {
 }
 
 #[derive(Debug, Default)]
-pub struct BufMgr (Mutex<BufMgrIntern>);
+pub struct BufMgr (QMutex<BufMgrIntern>);
 
 impl Deref for BufMgr {
-    type Target = Mutex<BufMgrIntern>;
+    type Target = QMutex<BufMgrIntern>;
 
-    fn deref(&self) -> &Mutex<BufMgrIntern> {
+    fn deref(&self) -> &QMutex<BufMgrIntern> {
         &self.0
     }
 }
@@ -332,7 +332,7 @@ impl BufMgr {
 
     pub fn New() -> Self {
         let intern = BufMgrIntern::New();
-        return Self(Mutex::new(intern))
+        return Self(QMutex::new(intern))
     }
 
     pub fn Alloc(&self, len: u64) -> Result<u64> {

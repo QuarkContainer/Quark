@@ -21,7 +21,7 @@ use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 use core::ptr;
 use core::ops::Deref;
-use spin::Mutex;
+use ::qlib::mutex::*;
 
 use crate::socket::control::ControlMessage;
 
@@ -73,8 +73,8 @@ pub struct SocketOperationsIntern {
     pub stype: i32,
     pub fd: i32,
     pub queue: Queue,
-    pub remoteAddr: Mutex<Option<SockAddr>>,
-    pub socketBuf: Mutex<Option<Arc<SocketBuff>>>,
+    pub remoteAddr: QMutex<Option<SockAddr>>,
+    pub socketBuf: QMutex<Option<Arc<SocketBuff>>>,
     pub enableSocketBuf: AtomicBool,
     passInq: AtomicBool,
 }
@@ -104,8 +104,8 @@ impl SocketOperations {
             stype,
             fd,
             queue,
-            remoteAddr: Mutex::new(addr),
-            socketBuf: Mutex::new(None),
+            remoteAddr: QMutex::new(addr),
+            socketBuf: QMutex::new(None),
             enableSocketBuf: AtomicBool::new(false),
             passInq: AtomicBool::new(false)
         };
@@ -468,7 +468,7 @@ impl SockOperations for SocketOperations {
 
         self.SetRemoteAddr(socketaddr.to_vec());
 
-        if SHARESPACE.config.TcpBuffIO {
+        if SHARESPACE.config.read().TcpBuffIO {
             self.EnableSocketBuf();
         }
 
@@ -507,7 +507,7 @@ impl SockOperations for SocketOperations {
             return Err(Error::SysError(-res as i32))
         }
 
-        let enableBuf = SHARESPACE.config.TcpBuffIO &&
+        let enableBuf = SHARESPACE.config.read().TcpBuffIO &&
             (self.family == AFType::AF_INET || self.family == AFType::AF_INET6) &&
             self.stype == SockType::SOCK_STREAM;
 

@@ -59,7 +59,7 @@ impl Log {
         if !self.kernelPrint {
             self.WriteBytes(str.as_bytes());
         } else {
-            let uringLog = super::kvmlib::VMS.lock().shareSpace.config.UringLog;
+            let uringLog = super::kvmlib::VMS.lock().shareSpace.config.read().UringLog;
             let trigger = super::kvmlib::VMS.lock().shareSpace.Log(str.as_bytes());
             if trigger {
                 if uringLog {
@@ -85,6 +85,16 @@ impl Log {
     pub fn Print(&mut self, level: &str, str: &str) {
         //self.Write(&format!("{} [{}] {}\n", Self::Now(), level, str));
         self.Write(&format!("[{}] {}\n", level, str));
+    }
+}
+
+#[macro_export]
+macro_rules! raw {
+ // macth like arm for macro
+    ($a:expr,$b:expr,$c:expr)=>{
+        {
+           error!("raw:: {:x}/{:x}/{:x}", $a, $b, $c);
+        }
     }
 }
 

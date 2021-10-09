@@ -14,15 +14,15 @@
 
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
-use spin::Mutex;
+use super::mutex::*;
 
 use super::common::*;
 
 struct LinkEntry<T: Clone> {
     pub key: u64,
     pub val: Option<T>,
-    pub prev: Option<Arc<Mutex<LinkEntry<T>>>>,
-    pub next: Option<Arc<Mutex<LinkEntry<T>>>>,
+    pub prev: Option<Arc<QMutex<LinkEntry<T>>>>,
+    pub next: Option<Arc<QMutex<LinkEntry<T>>>>,
 }
 
 impl<T: Clone> Default for LinkEntry<T> {
@@ -68,15 +68,15 @@ impl<T: Clone> LinkEntry<T> {
 }
 
 struct LinkedList<T: Clone> {
-    pub head: Arc<Mutex<LinkEntry<T>>>,
-    pub tail: Arc<Mutex<LinkEntry<T>>>,
+    pub head: Arc<QMutex<LinkEntry<T>>>,
+    pub tail: Arc<QMutex<LinkEntry<T>>>,
     pub count: u64,
 }
 
 impl<T: Clone> Default for LinkedList<T> {
     fn default() -> Self {
-        let head = Arc::new(Mutex::new(LinkEntry::default()));
-        let tail = Arc::new(Mutex::new(LinkEntry::default()));
+        let head = Arc::new(QMutex::new(LinkEntry::default()));
+        let tail = Arc::new(QMutex::new(LinkEntry::default()));
         (*head).lock().next = Some(tail.clone());
         (*tail).lock().prev = Some(head.clone());
 
@@ -93,7 +93,7 @@ impl<T: Clone> LinkedList<T> {
         self.count -= 1;
     }
 
-    pub fn PushFront(&mut self, entry: &Arc<Mutex<LinkEntry<T>>>) {
+    pub fn PushFront(&mut self, entry: &Arc<QMutex<LinkEntry<T>>>) {
         let next = self.head.lock().next.take().unwrap();
 
         (*next).lock().prev = Some(entry.clone());
@@ -105,7 +105,7 @@ impl<T: Clone> LinkedList<T> {
         self.count += 1;
     }
 
-    pub fn PopFront(&mut self) -> Option<Arc<Mutex<LinkEntry<T>>>> {
+    pub fn PopFront(&mut self) -> Option<Arc<QMutex<LinkEntry<T>>>> {
         if self.count == 0 {
             return None;
         }
@@ -121,7 +121,7 @@ impl<T: Clone> LinkedList<T> {
         return Some(ret);
     }
 
-    pub fn PushBack(&mut self, entry: &Arc<Mutex<LinkEntry<T>>>) {
+    pub fn PushBack(&mut self, entry: &Arc<QMutex<LinkEntry<T>>>) {
         let prev = self.tail.lock().prev.take().unwrap();
 
         (*prev).lock().next = Some(entry.clone());
@@ -133,7 +133,7 @@ impl<T: Clone> LinkedList<T> {
         self.count += 1;
     }
 
-    pub fn PopBack(&mut self) -> Option<Arc<Mutex<LinkEntry<T>>>> {
+    pub fn PopBack(&mut self) -> Option<Arc<QMutex<LinkEntry<T>>>> {
         if self.count == 0 {
             return None;
         }
@@ -154,7 +154,7 @@ pub struct LruCache<T: Clone> {
     maxSize: u64,
     currentSize: u64,
     list: LinkedList<T>,
-    map: BTreeMap<u64, Arc<Mutex<LinkEntry<T>>>>,
+    map: BTreeMap<u64, Arc<QMutex<LinkEntry<T>>>>,
 }
 
 impl<T: Clone> LruCache<T> {
@@ -191,7 +191,7 @@ impl<T: Clone> LruCache<T> {
                 self.currentSize -= 1;
             }
 
-            let entry = Arc::new(Mutex::new(LinkEntry::New(key, d)));
+            let entry = Arc::new(QMutex::new(LinkEntry::New(key, d)));
             self.map.insert(key, entry);
             false
         } else {

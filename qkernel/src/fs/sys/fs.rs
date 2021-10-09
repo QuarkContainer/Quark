@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use alloc::string::String;
 use alloc::string::ToString;
 
@@ -39,7 +39,7 @@ impl Filesystem for SysFileSystem {
         info!("sysfs file system mount ...");
 
         let msrc = MountSource::NewCachingMountSource(self, flags);
-        let inode = NewSys(task, &Arc::new(Mutex::new(msrc)));
+        let inode = NewSys(task, &Arc::new(QMutex::new(msrc)));
         return Ok(inode)
     }
 

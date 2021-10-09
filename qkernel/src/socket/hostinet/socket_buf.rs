@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicI32;
 use core::sync::atomic::Ordering;
@@ -25,8 +25,8 @@ pub struct SocketBuff {
     pub closed: AtomicBool,
     pub error: AtomicI32,
 
-    pub readBuf: Mutex<ByteStream>,
-    pub writeBuf: Mutex<ByteStream>,
+    pub readBuf: QMutex<ByteStream>,
+    pub writeBuf: QMutex<ByteStream>,
 }
 
 impl SocketBuff {
@@ -34,8 +34,8 @@ impl SocketBuff {
         return Self {
             closed: AtomicBool::new(false),
             error: AtomicI32::new(0),
-            readBuf: Mutex::new(ByteStream::Init(pageCount)),
-            writeBuf: Mutex::new(ByteStream::Init(pageCount)),
+            readBuf: QMutex::new(ByteStream::Init(pageCount)),
+            writeBuf: QMutex::new(ByteStream::Init(pageCount)),
         }
     }
 

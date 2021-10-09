@@ -15,19 +15,19 @@
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use spin::Mutex;
+use super::mutex::*;
 use alloc::string::ToString;
 
 use super::common::*;
 use super::singleton::*;
 
-pub static EMITTERS : Singleton<Mutex<Emitters>> = Singleton::<Mutex<Emitters>>::New();
+pub static EMITTERS : Singleton<QMutex<Emitters>> = Singleton::<QMutex<Emitters>>::New();
 
 pub unsafe fn InitSingleton() {
-    EMITTERS.Init(Mutex::new(Emitters(BTreeMap::new())));
+    EMITTERS.Init(QMutex::new(Emitters(BTreeMap::new())));
 }
 
-pub struct Emitters(BTreeMap<u64, Arc<Mutex<Emitter>>>);
+pub struct Emitters(BTreeMap<u64, Arc<QMutex<Emitter>>>);
 
 #[derive(Clone, Debug)]
 pub struct UncaughtSignal {
@@ -75,7 +75,7 @@ pub fn Emit(event: &Event) -> Result<()> {
     return Err(Error::Common(errMsg))
 }
 
-pub fn AddEmiiter(e: &Arc<Mutex<Emitter>>) {
+pub fn AddEmiiter(e: &Arc<QMutex<Emitter>>) {
     let id = e.lock().Uid();
     EMITTERS.lock().0.insert(id, e.clone());
 }

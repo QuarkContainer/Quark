@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::string::String;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::any::Any;
 use alloc::vec::Vec;
 use alloc::sync::Arc;
@@ -125,7 +125,7 @@ impl InodeOperations for SocketInodeOps {
         let f = FileInternal {
             UniqueId: NewUID(),
             Dirent: dirent.clone(),
-            flags: Mutex::new((flags, None)),
+            flags: QMutex::new((flags, None)),
             offset: QLock::New(0),
             FileOp: Arc::new(fops),
         };

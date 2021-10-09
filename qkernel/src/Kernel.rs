@@ -14,6 +14,8 @@
 
 use core::sync::atomic::Ordering;
 
+use ::qlib::mutex::*;
+
 use qlib::*;
 use super::qlib::common::*;
 use super::qlib::qmsg;
@@ -35,23 +37,23 @@ pub struct HostSpace {}
 
 impl HostSpace {
     pub fn Wakeup() {
-        HyperCall64(HYPERCALL_WAKEUP, 0, 0);
+        HyperCall64(HYPERCALL_WAKEUP, 0, 0, 0);
     }
 
     pub fn WakeupVcpu(vcpuId: u64) {
-        HyperCall64(HYPERCALL_WAKEUP_VCPU, vcpuId, 0);
+        HyperCall64(HYPERCALL_WAKEUP_VCPU, vcpuId, 0, 0);
     }
 
     pub fn IOWait() {
-        HyperCall64(HYPERCALL_IOWAIT, 0, 0);
+        HyperCall64(HYPERCALL_IOWAIT, 0, 0, 0);
     }
 
     pub fn Hlt() {
-        HyperCall64(HYPERCALL_HLT, 0, 0);
+        HyperCall64(HYPERCALL_HLT, 0, 0, 0);
     }
 
     pub fn UringWake() {
-        HyperCall64(HYPERCALL_URING_WAKE, 0, 0);
+        HyperCall64(HYPERCALL_URING_WAKE, 0, 0, 0);
     }
 
     pub fn LoadProcessKernel(processAddr: u64, len: usize) -> i64 {
@@ -601,7 +603,7 @@ impl HostSpace {
     }
 
     pub fn ExitVM(exitCode: i32) {
-        HyperCall64(HYPERCALL_EXIT_VM, exitCode as u64, 0);
+        HyperCall64(HYPERCALL_EXIT_VM, exitCode as u64, 0, 0);
         //Self::AQCall(qmsg::HostOutputMsg::ExitVM(exitCode));
     }
 
@@ -611,7 +613,7 @@ impl HostSpace {
             str: str,
         };
 
-        HyperCall64(HYPERCALL_PANIC, &msg as *const _ as u64, 0);
+        HyperCall64(HYPERCALL_PANIC, &msg as *const _ as u64, 0, 0);
     }
 
     pub fn TryOpenAt(dirfd: i32, name: u64, addr: u64) -> i64 {
@@ -876,6 +878,7 @@ impl HostSpace {
             return Self::HCall(msg) as u64
         }
 
+        //super::SHARESPACE.Notify();
         let current = Task::Current().GetTaskIdQ();
 
         //error!("Qcall msg is {:?}, super::SHARESPACE.hostMsgCount is {}", msg, super::SHARESPACE.hostMsgCount.load(Ordering::SeqCst));
@@ -905,7 +908,7 @@ impl HostSpace {
             msg: msg
         };
 
-        HyperCall64(HYPERCALL_HCALL, &mut event as * const _ as u64, 0);
+        HyperCall64(HYPERCALL_HCALL, &mut event as * const _ as u64, 0, 0);
 
         return event.ret;
     }
@@ -927,13 +930,13 @@ impl HostSpace {
             str,
         };
 
-        HyperCall64(HYPERCALL_PRINT, &msg as *const _ as u64, 0);
+        HyperCall64(HYPERCALL_PRINT, &msg as *const _ as u64, 0, 0);
     }
 
     pub fn Kprint(str: &str) {
         let bytes = str.as_bytes();
         let trigger = super::SHARESPACE.Log(bytes);
-        let uringLog = super::SHARESPACE.config.UringLog;
+        let uringLog = super::SHARESPACE.config.read().UringLog;
         if uringLog {
             if trigger {
                 super::IOURING.LogFlush();
@@ -943,12 +946,13 @@ impl HostSpace {
         }
     }
 
-    pub fn KernelMsg(id: u64, val: u64) {
-        HyperCall64(HYPERCALL_MSG, id, val)
+    #[inline(always)]
+    pub fn KernelMsg(id: u64, val1: u64, val2: u64) {
+        HyperCall64(HYPERCALL_MSG, id, val1, val2)
     }
 
     pub fn KernelOOM(size: u64, alignment: u64) {
-        HyperCall64(HYPERCALL_OOM, size, alignment)
+        HyperCall64(HYPERCALL_OOM, size, alignment, 0)
     }
 
     pub fn KernelGetTime(clockId: i32) -> Result<i64> {
@@ -958,7 +962,7 @@ impl HostSpace {
         };
 
         let addr = &call as *const _ as u64;
-        HyperCall64(HYPERCALL_GETTIME, addr, 0);
+        HyperCall64(HYPERCALL_GETTIME, addr, 0, 0);
 
         use self::common::*;
 
@@ -973,13 +977,21 @@ impl HostSpace {
         let call = VcpuFeq::default();
 
         let addr = &call as *const _ as u64;
-        HyperCall64(HYPERCALL_VCPU_FREQ, addr, 0);
+        HyperCall64(HYPERCALL_VCPU_FREQ, addr, 0, 0);
 
         return call.res;
     }
 
     pub fn VcpuYield() {
-        HyperCall64(HYPERCALL_VCPU_YIELD, 0, 0);
+        HyperCall64(HYPERCALL_VCPU_YIELD, 0, 0, 0);
+    }
+
+    pub fn VcpuDebug() {
+        HyperCall64(HYPERCALL_VCPU_DEBUG, 0, 0, 0);
+    }
+
+    pub fn VcpuPrint() {
+        HyperCall64(HYPERCALL_VCPU_PRINT, 0, 0, 0);
     }
 }
 
@@ -1030,7 +1042,7 @@ impl<'a> ShareSpace {
     pub fn Notify(&self) -> bool {
         let old = self.SwapIOThreadState(IOThreadState::RUNNING);
         if old == IOThreadState::WAITING {
-            IOURING.EventfdWrite(self.hostIOThreadEventfd, &self.hostIOThreadTriggerData as * const _ as u64);
+            IOURING.EventfdWrite(self.HostIOThreadEventfd());
             //error!("ShareSpace::Notify wake up...");
             return true
         }
@@ -1041,10 +1053,14 @@ impl<'a> ShareSpace {
     pub fn Schedule(&self, taskId: u64) {
         self.scheduler.Schedule(TaskId::New(taskId));
     }
-}
 
-impl ShareSpace {
     pub fn Yield() {
         HostSpace::VcpuYield();
+    }
+}
+
+impl<T: ?Sized> QMutexIntern<T> {
+    pub fn GetID() -> u64 {
+        return Task::TaskAddress();
     }
 }

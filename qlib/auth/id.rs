@@ -13,15 +13,15 @@
 // limitations under the License.
 
 use alloc::vec::Vec;
-use spin::Mutex;
+use super::super::mutex::*;
 
 use super::userns::*;
 use super::super::singleton::*;
 
-pub static HOST_AUTH_ID : Singleton<Mutex<HostAuthID>> = Singleton::<Mutex<HostAuthID>>::New();
+pub static HOST_AUTH_ID : Singleton<QMutex<HostAuthID>> = Singleton::<QMutex<HostAuthID>>::New();
 
 pub unsafe fn InitSingleton() {
-    HOST_AUTH_ID.Init(Mutex::new(HostAuthID::New()));
+    HOST_AUTH_ID.Init(QMutex::new(HostAuthID::New()));
 }
 
 #[derive(Serialize, Deserialize, Debug, Copy, Clone)]

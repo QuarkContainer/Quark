@@ -19,7 +19,6 @@ use alloc::sync::Arc;
 use spin::RwLock;
 use core::mem;
 use alloc::boxed::Box;
-use lazy_static::lazy_static;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
@@ -56,21 +55,17 @@ use super::fs::mount::*;
 use super::kernel::fs_context::*;
 
 use super::asm::*;
-//use super::qlib::singleton::*;
+use super::qlib::singleton::*;
 use super::qlib::SysCallID;
 
 const DEFAULT_STACK_SIZE: usize = MemoryDef::DEFAULT_STACK_SIZE as usize;
 pub const DEFAULT_STACK_PAGES: u64 = DEFAULT_STACK_SIZE as u64 / (4 * 1024);
 pub const DEFAULT_STACK_MAST: u64 = !(DEFAULT_STACK_SIZE as u64 - 1);
 
-/*pub static DUMMY_TASK : Singleton<RwLock<Task>> = Singleton::<RwLock<Task>>::New();
+pub static DUMMY_TASK : Singleton<RwLock<Task>> = Singleton::<RwLock<Task>>::New();
 
 pub unsafe fn InitSingleton() {
     DUMMY_TASK.Init(RwLock::new(Task::DummyTask()));
-}*/
-
-lazy_static! {
-    pub static ref DUMMY_TASK : RwLock<Task> = RwLock::new(Task::DummyTask());
 }
 
 pub struct TaskStore {}
@@ -138,7 +133,7 @@ impl Context {
     }
 
     pub fn Ready(&self) -> u64 {
-        return self.ready.load(Ordering::SeqCst)
+        return self.ready.load(Ordering::Acquire)
     }
 
     pub fn SetReady(&self, val: u64) {
@@ -267,6 +262,19 @@ impl Task {
 
     pub fn SetQueueId(&self, queueId: usize) {
         return self.queueId.store(queueId, Ordering::Release)
+    }
+
+    #[inline(always)]
+    pub fn TaskAddress() -> u64{
+        let rsp = GetRsp();
+        /*let task = rsp & DEFAULT_STACK_MAST;
+        if rsp - task < 0x8000 {
+            raw!(0x237, rsp, task);
+            super::Kernel::HostSpace::VcpuDebug();
+            loop {}
+            //panic!("TaskAddress panic");
+        }*/
+        return rsp; //& DEFAULT_STACK_MAST;
     }
 
     pub fn DummyTask() -> Self {

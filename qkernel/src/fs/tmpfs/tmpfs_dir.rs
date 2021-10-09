@@ -15,7 +15,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::any::Any;
 use alloc::collections::btree_map::BTreeMap;
 
@@ -67,7 +67,7 @@ pub fn NewTmpfsDir(task: &Task,
                    contents: BTreeMap<String, Inode>,
                    owner: &FileOwner,
                    perms: &FilePermissions,
-                   msrc: Arc<Mutex<MountSource>>) -> Inode {
+                   msrc: Arc<QMutex<MountSource>>) -> Inode {
     let d = Dir::New(task, contents, owner, perms);
     let d = TmpfsDir(d);
 
@@ -182,7 +182,7 @@ impl InodeOperations for TmpfsDir {
         return self.0.CreateFifo(task, dir, name, perm)
     }
 
-    //fn RemoveDirent(&mut self, dir: &mut InodeStruStru, remove: &Arc<Mutex<Dirent>>) -> Result<()> ;
+    //fn RemoveDirent(&mut self, dir: &mut InodeStruStru, remove: &Arc<QMutex<Dirent>>) -> Result<()> ;
     fn Remove(&self, task: &Task, dir: &mut Inode, name: &str) -> Result<()> {
         //todo: fix remove fifo
         return self.0.Remove(task, dir, name)

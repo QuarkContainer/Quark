@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use core::sync::atomic::Ordering;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::ops::Deref;
@@ -132,12 +132,12 @@ impl TaskSchedInfoInternal {
 }
 
 #[derive(Clone, Default)]
-pub struct TaskSchedInfo(Arc<Mutex<TaskSchedInfoInternal>>);
+pub struct TaskSchedInfo(Arc<QMutex<TaskSchedInfoInternal>>);
 
 impl Deref for TaskSchedInfo {
-    type Target = Arc<Mutex<TaskSchedInfoInternal>>;
+    type Target = Arc<QMutex<TaskSchedInfoInternal>>;
 
-    fn deref(&self) -> &Arc<Mutex<TaskSchedInfoInternal>> {
+    fn deref(&self) -> &Arc<QMutex<TaskSchedInfoInternal>> {
         &self.0
     }
 }

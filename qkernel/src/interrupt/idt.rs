@@ -20,7 +20,7 @@ use x86_64::addr::VirtAddr;
 #[allow(missing_debug_implementations)]
 #[derive(Clone)]
 #[repr(C)]
-#[repr(align(16))]
+#[repr(align(0x100))]
 pub struct Idt([Entry; 32]);
 
 impl Idt {

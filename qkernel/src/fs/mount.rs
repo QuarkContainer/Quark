@@ -14,7 +14,7 @@
 
 use alloc::string::String;
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::ToString;
 use alloc::vec::Vec;
@@ -42,7 +42,7 @@ pub struct Mount {
     pub Id: u64,
     pub Pid: u64,
     pub root: Dirent,
-    pub prev: Option<Arc<Mutex<Mount>>>,
+    pub prev: Option<Arc<QMutex<Mount>>>,
 }
 
 impl Mount {
@@ -97,7 +97,7 @@ impl Mount {
 pub struct MountNsInternal {
     pub userns: UserNameSpace,
     pub root: Dirent,
-    pub mounts: Mutex<BTreeMap<u64, Arc<Mutex<Mount>>>>,
+    pub mounts: QMutex<BTreeMap<u64, Arc<QMutex<Mount>>>>,
     pub mountId: AtomicU64,
 }
 
@@ -106,7 +106,7 @@ impl Default for MountNsInternal {
         return Self {
             userns: UserNameSpace::default(),
             root: Dirent::default(),
-            mounts: Mutex::new(BTreeMap::new()),
+            mounts: QMutex::new(BTreeMap::new()),
             mountId: AtomicU64::new(0),
         }
     }
@@ -125,14 +125,14 @@ impl Deref for MountNs {
 
 impl MountNs {
     pub fn New(task: &Task, root: &Inode) -> Self {
-        let d = Dirent::New(&root, &"/".to_string());  //(Arc::new(Mutex::new(InterDirent::New(root.clone(), &"/".to_string()))));
+        let d = Dirent::New(&root, &"/".to_string());  //(Arc::new(QMutex::new(InterDirent::New(root.clone(), &"/".to_string()))));
         let mut mounts = BTreeMap::new();
-        let rootMount = Arc::new(Mutex::new(Mount::NewRootMount(1, &d)));
+        let rootMount = Arc::new(QMutex::new(Mount::NewRootMount(1, &d)));
         mounts.insert(d.ID(), rootMount);
         let internal = MountNsInternal {
             userns: task.creds.lock().UserNamespace.clone(),
             root: d,
-            mounts: Mutex::new(mounts),
+            mounts: QMutex::new(mounts),
             mountId: AtomicU64::new(2),
         };
 
@@ -173,12 +173,12 @@ impl MountNs {
         if havePre {
             childMnt.prev = Some(prev.unwrap().clone());
             mounts.remove(&mntId);
-            mounts.insert(replacement.ID(), Arc::new(Mutex::new(childMnt)));
+            mounts.insert(replacement.ID(), Arc::new(QMutex::new(childMnt)));
             return Ok(())
         }
 
-        childMnt.prev = Some(Arc::new(Mutex::new(Mount::NewUndoMount(mountPoint))));
-        mounts.insert(replacement.ID(), Arc::new(Mutex::new(childMnt)));
+        childMnt.prev = Some(Arc::new(QMutex::new(Mount::NewUndoMount(mountPoint))));
+        mounts.insert(replacement.ID(), Arc::new(QMutex::new(childMnt)));
         return Ok(())
     }
 
@@ -221,7 +221,7 @@ impl MountNs {
         return Ok(())
     }
 
-    pub fn FindMount(&self, d: &Dirent) -> Option<Arc<Mutex<Mount>>> {
+    pub fn FindMount(&self, d: &Dirent) -> Option<Arc<QMutex<Mount>>> {
         let mut d = d.clone();
         let mounts = self.mounts.lock();
         loop {
@@ -242,8 +242,8 @@ impl MountNs {
         }
     }
 
-    pub fn AllMountsUnder(&self, parent: &Arc<Mutex<Mount>>) -> Vec<Arc<Mutex<Mount>>> {
-        let mut ret: Vec<Arc<Mutex<Mount>>> = Vec::new();
+    pub fn AllMountsUnder(&self, parent: &Arc<QMutex<Mount>>) -> Vec<Arc<QMutex<Mount>>> {
+        let mut ret: Vec<Arc<QMutex<Mount>>> = Vec::new();
 
         for (_, mp) in self.mounts.lock().iter() {
             if mp.lock().IsUndo() {
@@ -429,7 +429,7 @@ pub fn GetPath(env : &[String]) -> Vec<String> {
 
 #[derive(Clone)]
 pub enum MountOptions {
-    Host(Arc<Mutex<SuperOperations>>),
+    Host(Arc<QMutex<SuperOperations>>),
     Default,
 }
 
@@ -440,7 +440,7 @@ impl Default for MountOptions {
 }
 
 impl MountOptions {
-    pub fn HostOptions(&self) -> Result<Arc<Mutex<SuperOperations>>> {
+    pub fn HostOptions(&self) -> Result<Arc<QMutex<SuperOperations>>> {
         match self {
             MountOptions::Host(o) => Ok(o.clone()),
             _ => Err(Error::InvalidInput)
@@ -454,7 +454,7 @@ const DEFAULT_DIRENT_CACHE_SIZE: u64 = 1024;
 pub struct MountSource {
     pub FileSystemType: String,
     pub Flags: MountSourceFlags,
-    pub MountSourceOperations: Arc<Mutex<MountSourceOperations>>,
+    pub MountSourceOperations: Arc<QMutex<MountSourceOperations>>,
     pub fscache: LruCache<Dirent>,
     frozen: Vec<Dirent>,
 }
@@ -464,7 +464,7 @@ impl Default for MountSource {
         return Self {
             FileSystemType: "".to_string(),
             Flags: MountSourceFlags::default(),
-            MountSourceOperations: Arc::new(Mutex::new(SimpleMountSourceOperations::default())),
+            MountSourceOperations: Arc::new(QMutex::new(SimpleMountSourceOperations::default())),
             fscache: LruCache::New(DEFAULT_DIRENT_CACHE_SIZE),
             frozen: Vec::new(),
         }
@@ -486,7 +486,7 @@ impl DirentOperations for MountSource {
 }
 
 impl MountSource {
-    pub fn New(mops: &Arc<Mutex<MountSourceOperations>>, filesystem: &Filesystem, flags: &MountSourceFlags) -> Self {
+    pub fn New(mops: &Arc<QMutex<MountSourceOperations>>, filesystem: &Filesystem, flags: &MountSourceFlags) -> Self {
         /*let mut fsType = "none".to_string();
         if let fs = Some(filesystem) {
             fsType = filesystem.Name()
@@ -502,7 +502,7 @@ impl MountSource {
         }
     }
 
-    pub fn NewPtsMountSource(mops: &Arc<Mutex<PtsSuperOperations>>, filesystem: &Filesystem, flags: &MountSourceFlags) -> Self {
+    pub fn NewPtsMountSource(mops: &Arc<QMutex<PtsSuperOperations>>, filesystem: &Filesystem, flags: &MountSourceFlags) -> Self {
         let fsType = filesystem.Name();
         return Self {
             Flags: flags.clone(),
@@ -513,7 +513,7 @@ impl MountSource {
         }
     }
 
-    pub fn NewOverlayMountSource(mops: &Arc<Mutex<OverlayMountSourceOperations>>, filesystem: &Filesystem, flags: &MountSourceFlags) -> Self {
+    pub fn NewOverlayMountSource(mops: &Arc<QMutex<OverlayMountSourceOperations>>, filesystem: &Filesystem, flags: &MountSourceFlags) -> Self {
         let fsType = filesystem.Name();
         return Self {
             Flags: flags.clone(),
@@ -525,7 +525,7 @@ impl MountSource {
     }
 
     pub fn NewHostMountSource(root: &str, mounter: &FileOwner, filesystem: &Filesystem, flags: &MountSourceFlags, dontTranslateOwnership: bool) -> Self {
-        let mops = Arc::new(Mutex::new(SuperOperations {
+        let mops = Arc::new(QMutex::new(SuperOperations {
             mountSourceOperations: Default::default(),
             root: root.to_string(),
             inodeMapping: BTreeMap::new(),
@@ -545,7 +545,7 @@ impl MountSource {
     }
 
     pub fn NewCachingMountSource(filesystem: &Filesystem, flags: &MountSourceFlags) -> Self {
-        let mops = Arc::new(Mutex::new(SimpleMountSourceOperations {
+        let mops = Arc::new(QMutex::new(SimpleMountSourceOperations {
             keep: false,
             revalidate: false,
             cacheReaddir: false,
@@ -563,7 +563,7 @@ impl MountSource {
     }
 
     pub fn NewNonCachingMountSource(filesystem: &Filesystem, flags: &MountSourceFlags) -> Self {
-        let mops = Arc::new(Mutex::new(SimpleMountSourceOperations {
+        let mops = Arc::new(QMutex::new(SimpleMountSourceOperations {
             keep: false,
             revalidate: false,
             cacheReaddir: true,
@@ -581,7 +581,7 @@ impl MountSource {
     }
 
     pub fn NewRevalidatingMountSource(filesystem: &Filesystem, flags: &MountSourceFlags) -> Self {
-        let mops = Arc::new(Mutex::new(SimpleMountSourceOperations {
+        let mops = Arc::new(QMutex::new(SimpleMountSourceOperations {
             keep: true,
             revalidate: true,
             cacheReaddir: false,
@@ -599,7 +599,7 @@ impl MountSource {
     }
 
     pub fn NewPseudoMountSource() -> Self {
-        let mops = Arc::new(Mutex::new(SimpleMountSourceOperations {
+        let mops = Arc::new(QMutex::new(SimpleMountSourceOperations {
             keep: false,
             revalidate: false,
             cacheReaddir: false,
@@ -707,7 +707,7 @@ pub struct FsInfo {
 #[cfg(test1)]
 mod tests {
     use alloc::sync::Arc;
-    use spin::Mutex;
+    use ::qlib::mutex::*;
     use core::any::Any;
     use alloc::rc::Rc;
     use core::cell::RefCell;
@@ -722,7 +722,7 @@ mod tests {
     //use super::super::super::Common::*;
     //use super::super::super::libcDef::*;
 
-    fn NewMockInode(msrc: &Arc<Mutex<MountSource>>, sattr: &StableAttr) -> Inode {
+    fn NewMockInode(msrc: &Arc<QMutex<MountSource>>, sattr: &StableAttr) -> Inode {
         let iops = Arc::new(NewMockInodeOperations());
         let inodeInternal = InodeIntern {
             InodeOp: iops,
@@ -731,7 +731,7 @@ mod tests {
             ..Default::default()
         };
 
-        return Inode(Arc::new(Mutex::new(inodeInternal)))
+        return Inode(Arc::new(QMutex::new(inodeInternal)))
     }
 
     fn NewMockInodeOperations() -> MockInodeOperations {
@@ -743,11 +743,11 @@ mod tests {
             ..Default::default()
         };
 
-        return MockInodeOperations(Arc::new(Mutex::new(internal)))
+        return MockInodeOperations(Arc::new(QMutex::new(internal)))
     }
 
     fn NewMockMountSource(cacheSize: u64) -> MountSource {
-        let msops = Arc::new(Mutex::new(MockMountSourceOps {
+        let msops = Arc::new(QMutex::new(MockMountSourceOps {
             keep: true,
             revalidate: false,
         }));
@@ -859,18 +859,18 @@ mod tests {
         walkCalled: bool,
     }
 
-    struct MockInodeOperations(pub Arc<Mutex<MockInodeOperationsIntern>>);
+    struct MockInodeOperations(pub Arc<QMutex<MockInodeOperationsIntern>>);
 
     impl Default for MockInodeOperations {
         fn default() -> Self {
-            return Self(Arc::new(Mutex::new(Default::default())))
+            return Self(Arc::new(QMutex::new(Default::default())))
         }
     }
 
     impl Deref for MockInodeOperations {
-        type Target = Arc<Mutex<MockInodeOperationsIntern>>;
+        type Target = Arc<QMutex<MockInodeOperationsIntern>>;
 
-        fn deref(&self) -> &Arc<Mutex<MockInodeOperationsIntern>> {
+        fn deref(&self) -> &Arc<QMutex<MockInodeOperationsIntern>> {
             &self.0
         }
     }
@@ -897,12 +897,12 @@ mod tests {
                 ..Default::default()
             };
 
-            let inode = Inode(Arc::new(Mutex::new(inodeInternal)));
+            let inode = Inode(Arc::new(QMutex::new(inodeInternal)));
             let dirent = Dirent::New(&inode, name);
             return Ok(dirent)
         }
 
-        fn Create(&self, _task: &Task, dir: &mut Inode, name: &str, _flags: &FileFlags, _perm: &FilePermissions) -> Result<Arc<Mutex<File>>> {
+        fn Create(&self, _task: &Task, dir: &mut Inode, name: &str, _flags: &FileFlags, _perm: &FilePermissions) -> Result<Arc<QMutex<File>>> {
             self.lock().createCalled = true;
             let inodeInternal = InodeIntern {
                 InodeOp: Arc::new(Self::default()),
@@ -911,10 +911,10 @@ mod tests {
                 ..Default::default()
             };
 
-            let inode = Inode(Arc::new(Mutex::new(inodeInternal)));
+            let inode = Inode(Arc::new(QMutex::new(inodeInternal)));
             let dirent = Dirent::New(&inode, name);
 
-            return Ok(Arc::new(Mutex::new(File {
+            return Ok(Arc::new(QMutex::new(File {
                 UniqueId: 0,
                 Dirent: dirent,
                 flags: FileFlags::default(),
@@ -941,7 +941,7 @@ mod tests {
             return Err(Error::None)
         }
 
-        //fn RemoveDirent(&mut self, dir: &mut InodeStruStru, remove: &Arc<Mutex<Dirent>>) -> Result<()> ;
+        //fn RemoveDirent(&mut self, dir: &mut InodeStruStru, remove: &Arc<QMutex<Dirent>>) -> Result<()> ;
         fn Remove(&self, _task: &Task, _dir: &mut Inode, _name: &str) -> Result<()> {
             return Ok(())
         }
@@ -959,7 +959,7 @@ mod tests {
         fn BoundEndpoint(&self, _task: &Task, inode: &Inode, path: &str) -> Option<BoundEndpoint>;
 
 
-        fn GetFile(&self, _dir: &Inode, _dirent: &Dirent, _flags: FileFlags) -> Result<Arc<Mutex<File>>> {
+        fn GetFile(&self, _dir: &Inode, _dirent: &Dirent, _flags: FileFlags) -> Result<Arc<QMutex<File>>> {
             return Err(Error::None)
         }
 
@@ -1032,7 +1032,7 @@ mod tests {
     fn TestMountSourceOnlyCachedOnce() {
         let task = Task::default();
 
-        let ms = Arc::new(Mutex::new(NewMockMountSource(100)));
+        let ms = Arc::new(QMutex::new(NewMockMountSource(100)));
         let rootInode = NewMockInode(&ms, &StableAttr {
             Type: InodeType::Directory,
             ..Default::default()
@@ -1046,7 +1046,7 @@ mod tests {
 
         assert!(ms.lock().ContainsKey(child.lock().Id));
 
-        let subms = Arc::new(Mutex::new(NewMockMountSource(100)));
+        let subms = Arc::new(QMutex::new(NewMockMountSource(100)));
         let submountInode = NewMockInode(&subms, &StableAttr {
             Type: InodeType::Directory,
             ..Default::default()

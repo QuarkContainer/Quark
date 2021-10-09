@@ -15,7 +15,7 @@
 use alloc::slice;
 use alloc::vec::Vec;
 use core::ops::Deref;
-use spin::Mutex;
+use super::mutex::*;
 
 //use alloc::string::String;
 
@@ -94,12 +94,12 @@ impl MemAllocatorInternal {
     }
 }
 
-pub struct MemAllocator(Mutex<MemAllocatorInternal>);
+pub struct MemAllocator(QMutex<MemAllocatorInternal>);
 
 impl Deref for MemAllocator {
-    type Target = Mutex<MemAllocatorInternal>;
+    type Target = QMutex<MemAllocatorInternal>;
 
-    fn deref(&self) -> &Mutex<MemAllocatorInternal> {
+    fn deref(&self) -> &QMutex<MemAllocatorInternal> {
         &self.0
     }
 }
@@ -133,14 +133,14 @@ impl Allocator for MemAllocator {
 
 impl MemAllocator {
     pub fn New() -> Self {
-        return Self(Mutex::new(MemAllocatorInternal::New()))
+        return Self(QMutex::new(MemAllocatorInternal::New()))
     }
 
     //baseAddr: is the base memory address
     //ord: the memory size is 2^ord pages
     //memory layout: the Buddy Allocator's memory is also allocated by itself.
     pub fn Init(baseAddr: u64, ord: u64) -> Self {
-        return Self(Mutex::new(MemAllocatorInternal::Init(baseAddr, ord)))
+        return Self(QMutex::new(MemAllocatorInternal::Init(baseAddr, ord)))
     }
 
     pub fn Load(&self, baseAddr: u64, ord: u64) {

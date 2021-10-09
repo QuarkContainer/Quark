@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::ops::Deref;
 use alloc::collections::btree_map::BTreeMap;
 
@@ -36,12 +36,12 @@ impl Default for TimerMgrInternal {
 }
 
 #[derive(Clone, Default)]
-pub struct TimerMgr(Arc<Mutex<TimerMgrInternal>>);
+pub struct TimerMgr(Arc<QMutex<TimerMgrInternal>>);
 
 impl Deref for TimerMgr {
-    type Target = Arc<Mutex<TimerMgrInternal>>;
+    type Target = Arc<QMutex<TimerMgrInternal>>;
 
-    fn deref(&self) -> &Arc<Mutex<TimerMgrInternal>> {
+    fn deref(&self) -> &Arc<QMutex<TimerMgrInternal>> {
         &self.0
     }
 }

@@ -14,7 +14,7 @@
 
 use alloc::string::String;
 use spin::RwLock;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::ops::Deref;
 use core::any::Any;
 use alloc::vec::Vec;
@@ -139,7 +139,7 @@ impl InodeOperations for ZeroDevice {
         let f = FileInternal {
             UniqueId: NewUID(),
             Dirent: dirent.clone(),
-            flags: Mutex::new((flags, None)),
+            flags: QMutex::new((flags, None)),
             offset: QLock::New(0),
             FileOp: Arc::new(fops),
         };

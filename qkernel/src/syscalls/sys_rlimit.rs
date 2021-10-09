@@ -98,9 +98,9 @@ pub fn SysGetrlimit(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let lr = args.arg0 as i32;
     let addr = args.arg1 as u64;
 
-    let resource = match FROM_LINUX_RESOURCE.get(&lr) {
+    let resource = match FROM_LINUX_RESOURCE.Get(lr) {
         None => return Err(Error::SysError(SysErr::EINVAL)),
-        Some(r) => *r,
+        Some(r) => r,
     };
 
     let lim = PrLimit64(&task.Thread(), resource, None)?;
@@ -115,9 +115,9 @@ pub fn SysSetrlimit(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let lr = args.arg0 as i32;
     let addr = args.arg1 as u64;
 
-    let resource = match FROM_LINUX_RESOURCE.get(&lr) {
+    let resource = match FROM_LINUX_RESOURCE.Get(lr) {
         None => return Err(Error::SysError(SysErr::EINVAL)),
-        Some(r) => *r,
+        Some(r) => r,
     };
 
     let rlim : RLimit64 = task.CopyInObj(addr)?;
@@ -133,9 +133,9 @@ pub fn SysPrlimit64(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let newRlimAddr = args.arg2 as u64;
     let oldRlimAddr = args.arg3 as u64;
 
-    let resource = match FROM_LINUX_RESOURCE.get(&lr) {
+    let resource = match FROM_LINUX_RESOURCE.Get(lr) {
         None => return Err(Error::SysError(SysErr::EINVAL)),
-        Some(r) => *r,
+        Some(r) => r,
     };
 
     let newlim = if newRlimAddr != 0 {

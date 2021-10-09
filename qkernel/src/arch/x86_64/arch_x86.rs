@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 
 use super::super::super::qlib::cpuid::*;
 use super::super::super::SignalDef::*;
@@ -161,7 +161,7 @@ pub struct State {
     pub Regs: &'static mut PtRegs,
 
     // Our floating point state.
-    pub x86FPState: Arc<Mutex<X86fpstate>>,
+    pub x86FPState: Arc<QMutex<X86fpstate>>,
 }
 
 impl State {
@@ -188,7 +188,7 @@ impl State {
     pub fn Fork(&self, regs: &'static mut PtRegs) -> Self {
         return Self {
             Regs: regs,
-            x86FPState: Arc::new(Mutex::new(self.x86FPState.lock().Fork())),
+            x86FPState: Arc::new(QMutex::new(self.x86FPState.lock().Fork())),
         }
     }
 }

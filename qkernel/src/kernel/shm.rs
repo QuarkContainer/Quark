@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::ops::Deref;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
@@ -49,12 +49,12 @@ pub struct RegistryInternal {
 impl RegistryInternal {}
 
 #[derive(Clone, Default, Debug)]
-pub struct Registry(Arc<Mutex<RegistryInternal>>);
+pub struct Registry(Arc<QMutex<RegistryInternal>>);
 
 impl Deref for Registry {
-    type Target = Arc<Mutex<RegistryInternal>>;
+    type Target = Arc<QMutex<RegistryInternal>>;
 
-    fn deref(&self) -> &Arc<Mutex<RegistryInternal>> {
+    fn deref(&self) -> &Arc<QMutex<RegistryInternal>> {
         &self.0
     }
 }
@@ -69,7 +69,7 @@ impl Registry {
             lastIDUsed: 0,
         };
 
-        return Self(Arc::new(Mutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)))
     }
 
     pub fn FindByID(&self, id: ID) -> Option<Shm> {
@@ -155,7 +155,7 @@ impl Registry {
 
         PAGE_MGR.RefRange(&fr)?;
 
-        let shm = Shm(Arc::new(Mutex::new(ShmInternal {
+        let shm = Shm(Arc::new(QMutex::new(ShmInternal {
             registry: self.clone(),
             id: 0,
             creator: *creator,
@@ -289,12 +289,12 @@ impl ShmInternal {
 }
 
 #[derive(Clone, Debug)]
-pub struct Shm(Arc<Mutex<ShmInternal>>);
+pub struct Shm(Arc<QMutex<ShmInternal>>);
 
 impl Deref for Shm {
-    type Target = Arc<Mutex<ShmInternal>>;
+    type Target = Arc<QMutex<ShmInternal>>;
 
-    fn deref(&self) -> &Arc<Mutex<ShmInternal>> {
+    fn deref(&self) -> &Arc<QMutex<ShmInternal>> {
         &self.0
     }
 }

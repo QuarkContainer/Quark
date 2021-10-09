@@ -14,7 +14,7 @@
 
 use alloc::sync::Arc;
 use alloc::sync::Weak;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::ops::Deref;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::collections::btree_set::BTreeSet;
@@ -101,7 +101,7 @@ pub struct ThreadGroupInternal {
     // processGroup is protected by the TaskSet mutex.
     pub processGroup: Option<ProcessGroup>,
 
-    pub signalLock: Arc<Mutex<()>>,
+    pub signalLock: Arc<QMutex<()>>,
     pub signalHandlers: SignalHandlers,
 
     // pendingSignals is the set of pending signals that may be handled by any
@@ -275,7 +275,7 @@ pub struct ThreadGroupInternal {
 
     pub containerID: String,
 
-    pub timerMu: Arc<Mutex<()>>,
+    pub timerMu: Arc<QMutex<()>>,
     // todo: handle tty
     //pub tty: Option<TTY>
 }
@@ -283,7 +283,7 @@ pub struct ThreadGroupInternal {
 #[derive(Default)]
 pub struct ThreadGroupWeak {
     pub uid: UniqueID,
-    pub data: Weak<Mutex<ThreadGroupInternal>>,
+    pub data: Weak<QMutex<ThreadGroupInternal>>,
 }
 
 impl ThreadGroupWeak {
@@ -303,13 +303,13 @@ impl ThreadGroupWeak {
 #[derive(Clone, Default)]
 pub struct ThreadGroup {
     pub uid: UniqueID,
-    pub data: Arc<Mutex<ThreadGroupInternal>>
+    pub data: Arc<QMutex<ThreadGroupInternal>>
 }
 
 impl Deref for ThreadGroup {
-    type Target = Arc<Mutex<ThreadGroupInternal>>;
+    type Target = Arc<QMutex<ThreadGroupInternal>>;
 
-    fn deref(&self) -> &Arc<Mutex<ThreadGroupInternal>> {
+    fn deref(&self) -> &Arc<QMutex<ThreadGroupInternal>> {
         &self.data
     }
 }
@@ -353,7 +353,7 @@ impl ThreadGroup {
         }
     }
 
-    pub fn TimerMu(&self) -> Arc<Mutex<()>> {
+    pub fn TimerMu(&self) -> Arc<QMutex<()>> {
         return self.lock().timerMu.clone();
     }
 

@@ -96,7 +96,6 @@ pub mod perflog;
 pub mod seqcount;
 pub mod quring;
 pub mod stack;
-pub mod mutex;
 pub mod backtracer;
 
 use core::panic::PanicInfo;
@@ -104,7 +103,7 @@ use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicUsize;
 use core::{ptr, mem};
 use alloc::vec::Vec;
-use spin::Mutex;
+use ::qlib::mutex::*;
 
 //use linked_list_allocator::LockedHeap;
 //use buddy_system_allocator::LockedHeap;
@@ -159,11 +158,11 @@ pub static LOADER : Singleton<Loader> = Singleton::<Loader>::New();
 pub static IOURING : Singleton<QUring> = Singleton::<QUring>::New();
 pub static KERNEL_STACK_ALLOCATOR : Singleton<AlignedAllocator> = Singleton::<AlignedAllocator>::New();
 
-pub fn SingltonInit() {
+pub fn SingletonInit() {
     unsafe {
         SHARESPACE.Init(ShareSpace::New());
         PAGE_ALLOCATOR.Init(MemAllocator::New());
-        KERNEL_PAGETABLE.Init(PageTables::Init(0));
+        KERNEL_PAGETABLE.Init(PageTables::Init(CurrentCr3()));
         PAGE_MGR.Init(PageMgr::New());
         LOADER.Init(Loader::default());
         IOURING.Init(QUring::New(MemoryDef::QURING_SIZE));
@@ -171,10 +170,10 @@ pub fn SingltonInit() {
 
         guestfdnotifier::GUEST_NOTIFIER.Init(guestfdnotifier::Notifier::New());
         UID.Init(AtomicU64::new(1));
-        perflog::THREAD_COUNTS.Init(Mutex::new(perflog::ThreadPerfCounters::default()));
+        perflog::THREAD_COUNTS.Init(QMutex::new(perflog::ThreadPerfCounters::default()));
         vcpu::VCPU_COUNT.Init(AtomicUsize::new(0));
         vcpu::CPU_LOCAL.Init(&SHARESPACE.scheduler.VcpuArr);
-        boot::controller::MSG.Init(Mutex::new(None));
+        boot::controller::MSG.Init(QMutex::new(None));
 
         fs::file::InitSingleton();
         fs::filesystems::InitSingleton();
@@ -188,7 +187,7 @@ pub fn SingltonInit() {
         loader::vdso::InitSingleton();
         socket::socket::InitSingleton();
         syscalls::sys_rlimit::InitSingleton();
-        //task::InitSingleton();
+        task::InitSingleton();
 
         qlib::InitSingleton();
     }
@@ -212,7 +211,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
 
     currTask.PerfGoto(PerfType::Kernel);
 
-    if SHARESPACE.config.KernelPagetable {
+    if SHARESPACE.config.read().KernelPagetable {
         Task::SetKernelPageTable();
     }
 
@@ -227,6 +226,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     let callId: SysCallID = unsafe { mem::transmute(nr as u64) };
 
     let mut rflags = GetRflags();
+    rflags &= !RFLAGS_DF;
     rflags &= !KERNEL_FLAGS_CLEAR;
     rflags |= KERNEL_FLAGS_SET;
     SetRflags(rflags);
@@ -238,7 +238,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     let mut pid = 0;
     let startTime = Rdtsc();
 
-    let llevel = SHARESPACE.config.LogLevel;
+    let llevel = SHARESPACE.config.read().LogLevel;
     if llevel == LogLevel::Complex {
         tid = currTask.Thread().lock().id;
         pid = currTask.Thread().ThreadGroup().ID();
@@ -277,7 +277,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     //currTask.PerfGofrom(PerfType::KernelHandling);
 
     if llevel == LogLevel::Simple || llevel == LogLevel::Complex {
-        let gap = if self::SHARESPACE.config.PerfDebug {
+        let gap = if self::SHARESPACE.config.read().PerfDebug {
             Rdtsc() - startTime
         } else {
             0
@@ -298,7 +298,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     SetRflags(rflags);
     currTask.RestoreFp();
 
-    if SHARESPACE.config.KernelPagetable {
+    if SHARESPACE.config.read().KernelPagetable {
         currTask.SwitchPageTable();
     }
 
@@ -355,7 +355,7 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                     CPULocal::SetPendingFreeStack(currTask.taskId);
 
                     error!("RunExitDone xxx 2 [{:x}] ...", currTask.taskId);
-                    if !SHARESPACE.config.KernelPagetable {
+                    if !SHARESPACE.config.read().KernelPagetable {
                         KERNEL_PAGETABLE.SwitchTo();
                     }
                     // mm needs to be clean as last function before SwitchToNewTask
@@ -401,26 +401,14 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
     if id == 0 {
         ALLOCATOR.Add(heapStart as usize, heapLen as usize);
 
-        Kernel::HostSpace::KernelMsg(0x111, 1);
-        SingltonInit();
-        Kernel::HostSpace::KernelMsg(0x111, 2);
-
-        // InitGS rely on SHARESPACE
+        SingletonInit();
         InitGs(id);
-        //PerfGoto(PerfType::Kernel);
-
-        {
-            // init the IOURING
-            IOURING.submission.lock();
-        }
 
         SHARESPACE.scheduler.SetVcpuCnt(vcpuCnt as usize);
-        HyperCall64(qlib::HYPERCALL_INIT, (&(*SHARESPACE) as *const ShareSpace) as u64, 0);
+        HyperCall64(qlib::HYPERCALL_INIT, (&(*SHARESPACE) as *const ShareSpace) as u64, 0, 0);
 
         {
-            let root = CurrentCr3();
             let kpt = &KERNEL_PAGETABLE;
-            kpt.SetRoot(root);
 
             let mut lock = PAGE_MGR.lock();
             let vsyscallPages = lock.VsyscallPages();
@@ -447,6 +435,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
     /***************** can't run any qcall before this point ************************************/
 
     if id == 0 {
+        //ALLOCATOR.Print();
         IOWait();
     };
 

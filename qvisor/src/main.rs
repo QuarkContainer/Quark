@@ -73,6 +73,8 @@ fn main() {
     #[global_allocator]
     static GLOBAL: ListAllocator = ListAllocator::Empty();
 
+    InitSingleton();
+
     {
         let mut str = "".to_string();
         let args : Vec<String> = env::args().collect();

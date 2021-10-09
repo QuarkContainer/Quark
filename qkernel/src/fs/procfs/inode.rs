@@ -14,7 +14,7 @@
 
 use alloc::string::String;
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use spin::RwLock;
 use alloc::vec::Vec;
 use core::any::Any;
@@ -279,7 +279,7 @@ impl InodeOperations for StaticFileInodeOps {
         return Ok(File(Arc::new(FileInternal {
             UniqueId: NewUID(),
             Dirent: dirent.clone(),
-            flags: Mutex::new((flags.clone(), None)),
+            flags: QMutex::new((flags.clone(), None)),
             offset: QLock::New(0),
             FileOp: Arc::new(StaticFile { content: self.read().content.clone() }),
         })))
@@ -370,7 +370,7 @@ impl InodeOperations for StaticFileInodeOps {
     }
 }
 
-pub fn NewProcInode<T: InodeOperations + 'static>(iops: &Arc<T>, msrc: &Arc<Mutex<MountSource>>, typ: InodeType, thread: Option<Thread>) -> Inode {
+pub fn NewProcInode<T: InodeOperations + 'static>(iops: &Arc<T>, msrc: &Arc<QMutex<MountSource>>, typ: InodeType, thread: Option<Thread>) -> Inode {
     let deviceId = PROC_DEVICE.lock().id.DeviceID();
     let inodeId = PROC_DEVICE.lock().NextIno();
 
@@ -395,7 +395,7 @@ pub fn NewProcInode<T: InodeOperations + 'static>(iops: &Arc<T>, msrc: &Arc<Mute
     return Inode::New(&iops, msrc, &sattr)
 }
 
-pub fn NewStaticProcInode(task: &Task, msrc: &Arc<Mutex<MountSource>>, contents: &Arc<Vec<u8>>) -> Inode {
+pub fn NewStaticProcInode(task: &Task, msrc: &Arc<QMutex<MountSource>>, contents: &Arc<Vec<u8>>) -> Inode {
     let unstable = WithCurrentTime(task, &UnstableAttr {
         Owner: ROOT_OWNER,
         Perms: FilePermissions::FromMode(FileMode(0o444)),

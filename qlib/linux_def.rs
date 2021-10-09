@@ -14,6 +14,21 @@
 
 use alloc::slice;
 use alloc::vec::Vec;
+use core::sync::atomic::Ordering;
+
+pub struct QOrdering {}
+impl QOrdering {
+    pub const RELAXED :Ordering = Ordering::Relaxed;
+    pub const RELEASE :Ordering = Ordering::Release;
+    pub const ACQUIRE :Ordering = Ordering::Acquire;
+    pub const ACQ_REL :Ordering = Ordering::AcqRel;
+    pub const SEQ_CST :Ordering = Ordering::SeqCst;
+    /*pub const RELAXED :Ordering = Ordering::SeqCst;
+    pub const RELEASE :Ordering = Ordering::SeqCst;
+    pub const ACQUIRE :Ordering = Ordering::SeqCst;
+    pub const ACQ_REL :Ordering = Ordering::SeqCst;
+    pub const SEQ_CST :Ordering = Ordering::SeqCst;*/
+}
 
 pub const MLOCK_ONFAULT : u32 = 0x01;
 
@@ -2696,7 +2711,7 @@ impl MemoryDef {
 
     pub const MSG_QLEN: usize = 1024;
     pub const QURING_SIZE: usize = 1024;
-    pub const DEFAULT_STACK_PAGES: u64 = 16;
+    pub const DEFAULT_STACK_PAGES: u64 = 32;
 
     pub const DEFAULT_STACK_SIZE: u64 = Self::DEFAULT_STACK_PAGES * Self::PAGE_SIZE;  //64 KB
     pub const PAGE_SIZE: u64 = 1 << Self::PAGE_SHIFT;//0x1000;

@@ -14,8 +14,8 @@
 
 use alloc::collections::vec_deque::VecDeque;
 use alloc::sync::Arc;
-use spin::Mutex;
 use core::ops::Deref;
+use super::super::mutex::*;
 
 #[derive(Default)]
 pub struct PoolInternal<T: Default> {
@@ -23,12 +23,12 @@ pub struct PoolInternal<T: Default> {
     pub size: usize,
 }
 
-pub struct Pool<T: Default>(Arc<Mutex<PoolInternal<T>>>);
+pub struct Pool<T: Default>(Arc<QMutex<PoolInternal<T>>>);
 
 impl <T: Default> Deref for Pool <T> {
-    type Target = Arc<Mutex<PoolInternal<T>>>;
+    type Target = Arc<QMutex<PoolInternal<T>>>;
 
-    fn deref(&self) -> &Arc<Mutex<PoolInternal<T>>> {
+    fn deref(&self) -> &Arc<QMutex<PoolInternal<T>>> {
         &self.0
     }
 }
@@ -40,7 +40,7 @@ impl <T: Default>  Pool <T> {
             size: size,
         };
 
-        return Self(Arc::new(Mutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)))
     }
 
     pub fn Pop(&self) -> Option<T> {

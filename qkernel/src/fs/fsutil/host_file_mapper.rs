@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::collections::btree_map::BTreeMap;
-use spin::Mutex;
+use ::qlib::mutex::*;
 
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::range::*;
@@ -32,15 +32,15 @@ fn PagesInChunk(mr: &Range, chunkStart: u64) -> i32 {
 }
 
 pub struct HostFileMapper {
-    pub refs: Mutex<BTreeMap<u64, i32>>,
-    pub mappings: Mutex<BTreeMap<u64, Mapping>>,
+    pub refs: QMutex<BTreeMap<u64, i32>>,
+    pub mappings: QMutex<BTreeMap<u64, Mapping>>,
 }
 
 impl HostFileMapper {
     pub fn New() -> Self {
         return Self {
-            refs: Mutex::new(BTreeMap::new()),
-            mappings: Mutex::new(BTreeMap::new()),
+            refs: QMutex::new(BTreeMap::new()),
+            mappings: QMutex::new(BTreeMap::new()),
         }
     }
 }

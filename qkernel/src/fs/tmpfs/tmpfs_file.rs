@@ -15,7 +15,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::any::Any;
 
 use socket::unix::transport::unix::BoundEndpoint;
@@ -36,7 +36,7 @@ use super::super::dirent::*;
 use super::super::host::hostinodeop::*;
 use super::tmpfs_dir::*;
 
-pub fn NewTmpfsFileInode(_task: &Task, uattr: UnstableAttr, msrc: &Arc<Mutex<MountSource>>) -> Result<Inode> {
+pub fn NewTmpfsFileInode(_task: &Task, uattr: UnstableAttr, msrc: &Arc<QMutex<MountSource>>) -> Result<Inode> {
     let mut fstat = LibcStat::default();
     let tmpfd = HostSpace::NewTmpfsFile(TmpfsFileType::File, &mut fstat as * mut _ as u64) as i32;
     if tmpfd < 0 {
@@ -53,7 +53,7 @@ pub fn NewTmpfsFileInode(_task: &Task, uattr: UnstableAttr, msrc: &Arc<Mutex<Mou
 
     let ops = TmpfsFileInodeOp {
         inodeops: hostiops,
-        uattr: Arc::new(Mutex::new(uattr)),
+        uattr: Arc::new(QMutex::new(uattr)),
     };
 
     let deviceId = TMPFS_DEVICE.lock().DeviceID();
@@ -72,7 +72,7 @@ pub fn NewTmpfsFileInode(_task: &Task, uattr: UnstableAttr, msrc: &Arc<Mutex<Mou
 
 pub struct TmpfsFileInodeOp {
     pub inodeops : HostInodeOp,
-    pub uattr: Arc<Mutex<UnstableAttr>>,
+    pub uattr: Arc<QMutex<UnstableAttr>>,
 }
 
 impl InodeOperations for TmpfsFileInodeOp {
@@ -120,7 +120,7 @@ impl InodeOperations for TmpfsFileInodeOp {
         return self.inodeops.CreateFifo(task, dir, name, perm)
     }
 
-    //fn RemoveDirent(&mut self, dir: &mut InodeStruStru, remove: &Arc<Mutex<Dirent>>) -> Result<()> ;
+    //fn RemoveDirent(&mut self, dir: &mut InodeStruStru, remove: &Arc<QMutex<Dirent>>) -> Result<()> ;
     fn Remove(&self, task: &Task, dir: &mut Inode, name: &str) -> Result<()> {
         return self.inodeops.Remove(task, dir, name)
     }

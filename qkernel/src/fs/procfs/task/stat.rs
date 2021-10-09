@@ -15,7 +15,7 @@
 use alloc::sync::Arc;
 use alloc::string::String;
 use alloc::string::ToString;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use alloc::vec::Vec;
 
 use super::super::super::super::qlib::common::*;
@@ -36,7 +36,7 @@ use super::super::super::super::threadmgr::thread::*;
 use super::super::super::super::threadmgr::pid_namespace::*;
 use super::super::inode::*;
 
-pub fn NewStat(task: &Task, thread: &Thread, showSubtasks: bool, pidns: PIDNamespace, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+pub fn NewStat(task: &Task, thread: &Thread, showSubtasks: bool, pidns: PIDNamespace, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let v = NewStatSimpleFileInode(task,
                                    thread,
                                    showSubtasks,

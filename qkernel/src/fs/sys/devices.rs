@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use alloc::vec::Vec;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::ToString;
@@ -32,7 +32,7 @@ use super::super::mount::*;
 use super::super::inode::*;
 use super::sys::*;
 
-pub fn NewPossible(task: &Task, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+pub fn NewPossible(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let v = NewPossibleSimpleFileInode(task, &ROOT_OWNER, &FilePermissions::FromMode(FileMode(0o400)), FSMagic::PROC_SUPER_MAGIC);
     return NewFile(&Arc::new(v), msrc)
 
@@ -68,7 +68,7 @@ impl SimpleFileTrait for PossibleData {
     }
 }
 
-pub fn NewCPU(task: &Task, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+pub fn NewCPU(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let mut m = BTreeMap::new();
 
     m.insert("online".to_string(), NewPossible(task, msrc));
@@ -85,7 +85,7 @@ pub fn NewCPU(task: &Task, msrc: &Arc<Mutex<MountSource>>) -> Inode {
     return NewDir(task, msrc, m)
 }
 
-pub fn NewSystemDir(task: &Task, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+pub fn NewSystemDir(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let mut m = BTreeMap::new();
 
     m.insert("cpu".to_string(), NewCPU(task, msrc));
@@ -93,7 +93,7 @@ pub fn NewSystemDir(task: &Task, msrc: &Arc<Mutex<MountSource>>) -> Inode {
     return NewDir(task, msrc, m)
 }
 
-pub fn NewDevicesDir(task: &Task, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+pub fn NewDevicesDir(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let mut m = BTreeMap::new();
 
     m.insert("system".to_string(), NewSystemDir(task, msrc));

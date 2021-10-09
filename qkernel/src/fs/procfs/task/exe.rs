@@ -14,7 +14,7 @@
 
 use alloc::sync::Arc;
 use alloc::string::String;
-use spin::Mutex;
+use ::qlib::mutex::*;
 
 use super::super::super::super::qlib::common::*;
 use super::super::super::super::qlib::linux_def::*;
@@ -56,7 +56,7 @@ impl ReadLinkNode for ExeNode {
     }
 }
 
-pub fn NewExe(task: &Task, thread: &Thread, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+pub fn NewExe(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let node = ExeNode {
         thread: thread.clone()
     };

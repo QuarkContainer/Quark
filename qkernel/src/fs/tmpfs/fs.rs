@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::collections::btree_map::BTreeMap;
@@ -126,7 +126,7 @@ impl Filesystem for TmpfsFileSystem {
 
         let msrc = MountSource::NewCachingMountSource(self, flags);
 
-        let inode = NewTmpfsDir(task, BTreeMap::new(), &owner, &perms, Arc::new(Mutex::new(msrc)));
+        let inode = NewTmpfsDir(task, BTreeMap::new(), &owner, &perms, Arc::new(QMutex::new(msrc)));
         return Ok(inode)
     }
 

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::ToString;
 
@@ -41,7 +41,7 @@ const FULL_DEV_MINOR: u32 = 7;
 const RANDOM_DEV_MINOR: u32 = 8;
 const URANDOM_DEV_MINOR: u32 = 9;
 
-fn NewTTYDevice(iops: &Arc<TTYDevice>, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+fn NewTTYDevice(iops: &Arc<TTYDevice>, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let deviceId = DEV_DEVICE.lock().id.DeviceID();
     let inodeId = DEV_DEVICE.lock().NextIno();
 
@@ -63,10 +63,10 @@ fn NewTTYDevice(iops: &Arc<TTYDevice>, msrc: &Arc<Mutex<MountSource>>) -> Inode 
         ..Default::default()
     };
 
-    return Inode(Arc::new(Mutex::new(inodeInternal)))
+    return Inode(Arc::new(QMutex::new(inodeInternal)))
 }
 
-fn NewNullDevice(iops: &Arc<NullDevice>, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+fn NewNullDevice(iops: &Arc<NullDevice>, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let deviceId = DEV_DEVICE.lock().id.DeviceID();
     let inodeId = DEV_DEVICE.lock().NextIno();
 
@@ -88,10 +88,10 @@ fn NewNullDevice(iops: &Arc<NullDevice>, msrc: &Arc<Mutex<MountSource>>) -> Inod
         ..Default::default()
     };
 
-    return Inode(Arc::new(Mutex::new(inodeInternal)))
+    return Inode(Arc::new(QMutex::new(inodeInternal)))
 }
 
-fn NewZeroDevice(iops: &Arc<ZeroDevice>, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+fn NewZeroDevice(iops: &Arc<ZeroDevice>, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let deviceId = DEV_DEVICE.lock().id.DeviceID();
     let inodeId = DEV_DEVICE.lock().NextIno();
 
@@ -113,10 +113,10 @@ fn NewZeroDevice(iops: &Arc<ZeroDevice>, msrc: &Arc<Mutex<MountSource>>) -> Inod
         ..Default::default()
     };
 
-    return Inode(Arc::new(Mutex::new(inodeInternal)))
+    return Inode(Arc::new(QMutex::new(inodeInternal)))
 }
 
-fn NewFullDevice(iops: &Arc<FullDevice>, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+fn NewFullDevice(iops: &Arc<FullDevice>, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let deviceId = DEV_DEVICE.lock().id.DeviceID();
     let inodeId = DEV_DEVICE.lock().NextIno();
 
@@ -138,10 +138,10 @@ fn NewFullDevice(iops: &Arc<FullDevice>, msrc: &Arc<Mutex<MountSource>>) -> Inod
         ..Default::default()
     };
 
-    return Inode(Arc::new(Mutex::new(inodeInternal)))
+    return Inode(Arc::new(QMutex::new(inodeInternal)))
 }
 
-fn NewRandomDevice(iops: &Arc<RandomDevice>, msrc: &Arc<Mutex<MountSource>>, minor: u32) -> Inode {
+fn NewRandomDevice(iops: &Arc<RandomDevice>, msrc: &Arc<QMutex<MountSource>>, minor: u32) -> Inode {
     let deviceId = DEV_DEVICE.lock().id.DeviceID();
     let inodeId = DEV_DEVICE.lock().NextIno();
 
@@ -163,10 +163,10 @@ fn NewRandomDevice(iops: &Arc<RandomDevice>, msrc: &Arc<Mutex<MountSource>>, min
         ..Default::default()
     };
 
-    return Inode(Arc::new(Mutex::new(inodeInternal)))
+    return Inode(Arc::new(QMutex::new(inodeInternal)))
 }
 
-fn NewDirectory(task: &Task, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+fn NewDirectory(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let iops = Dir::New(task, BTreeMap::new(), &ROOT_OWNER, &FilePermissions::FromMode(FileMode(0o0555)));
 
     let deviceId = PROC_DEVICE.lock().id.DeviceID();
@@ -190,10 +190,10 @@ fn NewDirectory(task: &Task, msrc: &Arc<Mutex<MountSource>>) -> Inode {
         ..Default::default()
     };
 
-    return Inode(Arc::new(Mutex::new(inodeInternal)))
+    return Inode(Arc::new(QMutex::new(inodeInternal)))
 }
 
-fn NewSymlink(task: &Task, target: &str, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+fn NewSymlink(task: &Task, target: &str, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let iops = Symlink::New(task, &ROOT_OWNER, target);
 
     let deviceId = DEV_DEVICE.lock().id.DeviceID();
@@ -217,10 +217,10 @@ fn NewSymlink(task: &Task, target: &str, msrc: &Arc<Mutex<MountSource>>) -> Inod
         ..Default::default()
     };
 
-    return Inode(Arc::new(Mutex::new(inodeInternal)))
+    return Inode(Arc::new(QMutex::new(inodeInternal)))
 }
 
-pub fn NewDev(task: &Task, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+pub fn NewDev(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let mut contents = BTreeMap::new();
 
     contents.insert("fd".to_string(), NewSymlink(task, &"/proc/self/fd".to_string(), msrc));
@@ -282,5 +282,5 @@ pub fn NewDev(task: &Task, msrc: &Arc<Mutex<MountSource>>) -> Inode {
         ..Default::default()
     };
 
-    return Inode(Arc::new(Mutex::new(inodeInternal)))
+    return Inode(Arc::new(QMutex::new(inodeInternal)))
 }

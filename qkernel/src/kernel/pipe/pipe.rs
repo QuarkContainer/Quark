@@ -16,8 +16,7 @@ use core::sync::atomic::AtomicI64;
 use core::sync::atomic::Ordering;
 use alloc::collections::linked_list::LinkedList;
 use alloc::vec::Vec;
-use spin::Mutex;
-use spin::MutexGuard;
+use ::qlib::mutex::*;
 use alloc::sync::Arc;
 use core::ops::Deref;
 
@@ -168,7 +167,7 @@ pub struct PipeIn {
     // Access atomically.
     pub writers: AtomicI64,
 
-    pub intern: Mutex<PipeInternal>,
+    pub intern: QMutex<PipeInternal>,
 
     pub rWakeup: Cond,
     pub wWakeup: Cond,
@@ -213,7 +212,7 @@ impl Pipe {
             writers: AtomicI64::new(0),
             rWakeup: Cond::default(),
             wWakeup: Cond::default(),
-            intern: Mutex::new(PipeInternal{
+            intern: QMutex::new(PipeInternal{
                 id : super::super::super::uid::NewUID(),
                 max: sizeBytes,
                 ..Default::default()
@@ -239,7 +238,7 @@ impl Pipe {
             DeviceFileMinor: 0,
         };
 
-        let ms = Arc::new(Mutex::new(MountSource::NewPseudoMountSource()));
+        let ms = Arc::new(QMutex::new(MountSource::NewPseudoMountSource()));
         let inode = Inode::New(&iops, &ms, &attr);
         let dirent = Dirent::New(&inode, &format!("pipe:[{}]", inodeId));
         p.intern.lock().dirent = Some(dirent);
@@ -464,7 +463,7 @@ impl Pipe {
     }
 
     // rReadinessLocked calculates the read readiness.
-    pub fn RReadinessLocked(&self, intern: &MutexGuard<PipeInternal>) -> EventMask {
+    pub fn RReadinessLocked(&self, intern: &QMutexGuard<PipeInternal>) -> EventMask {
         let mut ready = 0;
 
         if self.HasReaders() && intern.data.len() > 0 {
@@ -490,7 +489,7 @@ impl Pipe {
     }
 
     // wReadinessLocked calculates the write readiness.
-    pub fn WReadinessLocked(&self, intern: &MutexGuard<PipeInternal>) -> EventMask {
+    pub fn WReadinessLocked(&self, intern: &QMutexGuard<PipeInternal>) -> EventMask {
         let mut ready = 0;
         if self.HasWriters() && intern.size < intern.max {
             ready |= EVENT_OUT;

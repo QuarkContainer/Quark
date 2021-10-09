@@ -14,7 +14,7 @@
 
 use alloc::string::String;
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::vec::Vec;
 
@@ -29,21 +29,21 @@ pub type FilesystemFlags = i32;
 // on mount. It is used to construct the output of /proc/filesystems.
 pub const FILESYSTEM_REQUIRES_DEV : FilesystemFlags = 1;
 
-pub static FILESYSTEMS : Singleton<Mutex<FileSystems>> = Singleton::<Mutex<FileSystems>>::New();
+pub static FILESYSTEMS : Singleton<QMutex<FileSystems>> = Singleton::<QMutex<FileSystems>>::New();
 
 pub unsafe fn InitSingleton() {
-    FILESYSTEMS.Init(Mutex::new(FileSystems::New()));
+    FILESYSTEMS.Init(QMutex::new(FileSystems::New()));
 }
 
-pub fn FindFilesystem(name: &str) -> Option<Arc<Mutex<Filesystem>>> {
+pub fn FindFilesystem(name: &str) -> Option<Arc<QMutex<Filesystem>>> {
     return FILESYSTEMS.lock().FindFilesystem(name);
 }
 
-pub fn RegisterFilesystem<T: Filesystem + 'static>(f: &Arc<Mutex<T>>) {
+pub fn RegisterFilesystem<T: Filesystem + 'static>(f: &Arc<QMutex<T>>) {
     FILESYSTEMS.lock().RegisterFilesystem(f)
 }
 
-pub fn GetFilesystems() -> Vec<Arc<Mutex<Filesystem>>> {
+pub fn GetFilesystems() -> Vec<Arc<QMutex<Filesystem>>> {
     return FILESYSTEMS.lock().GetFilesystems()
 }
 
@@ -56,7 +56,7 @@ pub struct MountSourceFlags {
 }
 
 pub struct FileSystems {
-    pub registered: BTreeMap<String, Arc<Mutex<Filesystem>>>
+    pub registered: BTreeMap<String, Arc<QMutex<Filesystem>>>
 }
 
 impl FileSystems {
@@ -66,7 +66,7 @@ impl FileSystems {
         }
     }
 
-    pub fn RegisterFilesystem<T: Filesystem + 'static>(&mut self, f: &Arc<Mutex<T>>) {
+    pub fn RegisterFilesystem<T: Filesystem + 'static>(&mut self, f: &Arc<QMutex<T>>) {
         let name = f.lock().Name();
         if let Some(_) = self.registered.get(&name) {
             panic!("filesystem already registered at {}", name)
@@ -75,14 +75,14 @@ impl FileSystems {
         self.registered.insert(name, f.clone());
     }
 
-    pub fn FindFilesystem(&self, name: &str) -> Option<Arc<Mutex<Filesystem>>> {
+    pub fn FindFilesystem(&self, name: &str) -> Option<Arc<QMutex<Filesystem>>> {
         match self.registered.get(name) {
             None => None,
             Some(f) => Some(f.clone())
         }
     }
 
-    pub fn GetFilesystems(&self) -> Vec<Arc<Mutex<Filesystem>>> {
+    pub fn GetFilesystems(&self) -> Vec<Arc<QMutex<Filesystem>>> {
         let mut res = Vec::new();
         for (_, f) in &self.registered {
             res.push(f.clone())

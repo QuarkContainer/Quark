@@ -14,7 +14,7 @@
 
 use alloc::string::String;
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::ToString;
 use alloc::vec::Vec;
@@ -231,7 +231,7 @@ impl Filesystem for WhitelistFileSystem {
         if ret < 0 {
             return Err(Error::SysError(-ret as i32));
         }
-        let inode = Inode::NewHostInode(&Arc::new(Mutex::new(msrc)), fd, &fstat, writable)?;
+        let inode = Inode::NewHostInode(&Arc::new(QMutex::new(msrc)), fd, &fstat, writable)?;
 
         return Ok(inode)
     }

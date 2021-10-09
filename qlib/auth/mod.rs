@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use super::mutex::*;
 use core::ops::Deref;
 
 pub mod id;
@@ -121,7 +121,7 @@ impl CredentialsInternal {
 }
 
 #[derive(Clone, Debug)]
-pub struct Credentials(Arc<Mutex<CredentialsInternal>>);
+pub struct Credentials(Arc<QMutex<CredentialsInternal>>);
 
 impl PartialEq for Credentials {
     fn eq(&self, other: &Self) -> bool {
@@ -130,9 +130,9 @@ impl PartialEq for Credentials {
 }
 
 impl Deref for Credentials {
-    type Target = Arc<Mutex<CredentialsInternal>>;
+    type Target = Arc<QMutex<CredentialsInternal>>;
 
-    fn deref(&self) -> &Arc<Mutex<CredentialsInternal>> {
+    fn deref(&self) -> &Arc<QMutex<CredentialsInternal>> {
         &self.0
     }
 }
@@ -163,7 +163,7 @@ impl Credentials {
             UserNamespace: UserNameSpace::NewRootUserNamespace(),
         };
 
-        return Self(Arc::new(Mutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)))
     }
 
     pub fn NewRootCredentials(userns: UserNameSpace) -> Self {
@@ -185,7 +185,7 @@ impl Credentials {
             UserNamespace: userns,
         };
 
-        return Self(Arc::new(Mutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)))
     }
 
     pub fn NewUserCredentials(kuid: KUID, kgid: KGID, extraKGIDs: &[KGID], caps: Option<&TaskCaps>, userns: &UserNameSpace) -> Self {
@@ -233,7 +233,7 @@ impl Credentials {
     fn copy(&self) -> Self {
         let internal = self.lock().copy();
 
-        return Self(Arc::new(Mutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)))
     }
 
     pub fn Fork(&self) -> Self {
@@ -326,7 +326,7 @@ impl Credentials {
             ..Default::default()
         };
 
-        return Ok(UserNameSpace(Arc::new(Mutex::new(internal))))
+        return Ok(UserNameSpace(Arc::new(QMutex::new(internal))))
     }
 }
 

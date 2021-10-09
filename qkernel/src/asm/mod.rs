@@ -48,11 +48,11 @@ pub fn GetVcpuId() -> usize {
     return result;
 }
 
-#[inline]
-pub fn HyperCall64(type_: u16, para1: u64, para2: u64) {
+#[inline(always)]
+pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64) {
     unsafe {
         let data: u8 = 0;
-        llvm_asm!("out $1, $0":: "{dx}"(type_), "{al}"(data), "{rbx}"(para1), "{rcx}"(para2): "memory" : "volatile" )
+        llvm_asm!("out $1, $0":: "{dx}"(type_), "{al}"(data), "{rbx}"(para1), "{rcx}"(para2), "{rdi}"(para3): "memory" : "volatile" )
     }
 }
 
@@ -131,7 +131,7 @@ macro_rules! SaveScratchRegs {
               push r9
               push r10
               push r11
-        " :::: "intel", "volatile");
+        " ::: "memory" : "intel", "volatile");
     }
 }
 
@@ -145,7 +145,7 @@ macro_rules! SavePreservedRegs {
               push r13
               push r14
               push r15
-        " :::: "intel", "volatile");
+        " ::: "memory" : "intel", "volatile");
     }
 }
 
@@ -159,7 +159,7 @@ macro_rules! RestorePreservedRegs {
               pop r12
               pop rbp
               pop rbx
-            " :::: "intel", "volatile");
+            " ::: "memory" : "intel", "volatile");
     }
 }
 
@@ -176,7 +176,7 @@ macro_rules! RestoreScratchRegs {
               pop rdx
               pop rsi
               pop rdi
-            " :::: "intel", "volatile");
+            " ::: "memory" : "intel", "volatile");
     }
 }
 
@@ -440,7 +440,7 @@ macro_rules! SwitchExceptionStack {
               mov rsp, rsi //switch to kernel stack
               " :
             :"i"(CopyData as fn(from: u64, to:u64, cnt: usize))
-            : "rdi" "rsi", "rdx", "rsp"
+            : "rdi" "rsi", "rdx", "rsp", "memory"
             : "intel", "volatile");
     }
 }
@@ -670,7 +670,7 @@ pub fn GetRsp() -> u64 {
 
 #[inline]
 pub fn Invlpg(addr: u64) {
-    if !super::SHARESPACE.config.KernelPagetable {
+    if !super::SHARESPACE.config.read().KernelPagetable {
         unsafe { llvm_asm!("
             sfence
             invlpg ($0)

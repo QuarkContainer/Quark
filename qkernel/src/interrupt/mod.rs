@@ -129,6 +129,15 @@ pub struct ExceptionStackFrame {
     ss: u64,
 }
 
+impl ExceptionStackFrame {
+    pub fn PtRegs(&self) -> &'static PtRegs {
+        let addr = self as * const _ as u64 - 16 * 8;
+        return unsafe {
+            &mut *(addr as *mut PtRegs)
+        };
+    }
+}
+
 impl fmt::Debug for ExceptionStackFrame {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "ExceptionStackFrame {{ ip: {:x}, cs: {:x}, eflags: {:x}, sp: {:x}, ss: {:x},}}",
@@ -137,7 +146,7 @@ impl fmt::Debug for ExceptionStackFrame {
 }
 
 pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &ExceptionStackFrame, errorCode: u64) {
-    let PRINT_EXECPTION : bool = SHARESPACE.config.PrintException;
+    let PRINT_EXECPTION : bool = SHARESPACE.config.read().PrintException;
 
     let currTask = Task::Current();
 
@@ -424,7 +433,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
         SwapGs();
         //PerfGofrom(PerfType::User);
         currTask.AccountTaskLeave(SchedState::RunningApp);
-        if SHARESPACE.config.KernelPagetable {
+        if SHARESPACE.config.read().KernelPagetable {
             Task::SetKernelPageTable();
         }
         true
@@ -432,6 +441,16 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
         false
     };
 
+    let mut rflags = GetRflags();
+
+    if fromUser {
+        rflags &= !KERNEL_FLAGS_CLEAR;
+        rflags &= !RFLAGS_DF;
+        rflags |= KERNEL_FLAGS_SET;
+        SetRflags(rflags);
+        //currTask.SaveFp();
+        //raw!(0x990, cr2, rflags);
+    }
     if !fromUser {
         print!("Get pagefault from kernel ... {:#x?}/cr2 is {:x}/cr3 is {:x}", sf, cr2, cr3);
         for i in 0..super::CPU_LOCAL.len() {
@@ -447,26 +466,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     currTask.PerfGoto(PerfType::PageFault);
     defer!(Task::Current().PerfGofrom(PerfType::PageFault));
 
-    if fromUser {
-        let mut rflags = GetRflags();
-        rflags &= !KERNEL_FLAGS_CLEAR;
-        rflags |= KERNEL_FLAGS_SET;
-        SetRflags(rflags);
-        //currTask.SaveFp();
-    }
-
-    let regs = currTask.GetPtRegs();
-    defer!({
-        if fromUser {
-            let mut eflags = regs.eflags;
-            eflags &= !USER_FLAGS_CLEAR;
-            eflags |= USER_FLAGS_SET;
-            SetRflags(eflags);
-            //Task::Current().RestoreFp();
-        }
-    });
-
-    let PRINT_EXECPTION : bool = SHARESPACE.config.PrintException;
+    let PRINT_EXECPTION : bool = SHARESPACE.config.read().PrintException;
     if PRINT_EXECPTION {
         error!("in PageFaultHandler, cr2: {:x}, cr3: {:x}, isuser = {}, error is {:b}, ss is {:x}, cs == {:x}, eflags = {:x}, new ss is {}",
             cr2,
@@ -484,6 +484,16 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     // no need loop, just need to enable break
     loop {
         let _ml = currTask.mm.MappingWriteLock();
+        defer!({
+            if fromUser {
+                let regs = currTask.GetPtRegs();
+                let mut eflags = regs.eflags;
+                eflags &= !USER_FLAGS_CLEAR;
+                eflags |= USER_FLAGS_SET;
+                SetRflags(eflags);
+                //Task::Current().RestoreFp();
+            }
+         });
 
         let (vma, range) = match currTask.mm.GetVmaAndRangeLocked(cr2) {
             //vmas.lock().Get(cr2) {
@@ -553,7 +563,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
             if fromUser {
                 //PerfGoto(PerfType::User);
                 currTask.AccountTaskEnter(SchedState::RunningApp);
-                if SHARESPACE.config.KernelPagetable {
+                if SHARESPACE.config.read().KernelPagetable {
                     currTask.SwitchPageTable();
                 }
                 SwapGs();
@@ -578,7 +588,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
                 //PerfGoto(PerfType::User);
                 currTask.AccountTaskEnter(SchedState::RunningApp);
 
-                if SHARESPACE.config.KernelPagetable {
+                if SHARESPACE.config.read().KernelPagetable {
                     currTask.SwitchPageTable();
                 }
                 SwapGs();

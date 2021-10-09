@@ -325,7 +325,8 @@ impl ByteStream {
 
     pub fn writeFull(&mut self, buf: &[u8]) -> Result<(bool, usize)> {
         if self.AvailableSpace() < buf.len() {
-            print!("write full {}/{}", self.available, buf.len());
+            let str = alloc::str::from_utf8(buf).unwrap();
+            print!("write full {}/{}/{}", self.AvailableSpace(), buf.len(), str);
             return Err(Error::QueueFull)
         }
 

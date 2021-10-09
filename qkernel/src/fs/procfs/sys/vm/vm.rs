@@ -14,7 +14,7 @@
 
 use alloc::sync::Arc;
 use alloc::string::ToString;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 
 use super::super::super::super::super::qlib::common::*;
@@ -47,7 +47,7 @@ impl DirDataNode for ProcSysDirNode {
     }
 }
 
-pub fn NewVm(task: &Task, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+pub fn NewVm(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let mut contents = BTreeMap::new();
     contents.insert("mmap_min_addr".to_string(), NewMinAddrData(task, msrc));
     contents.insert("overcommit_memory".to_string(), NewOvercommit(task, msrc));

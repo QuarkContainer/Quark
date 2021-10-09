@@ -42,10 +42,6 @@ pub fn AddNewCpu() {
     CPULocal::SetCurrentTask(mainTaskId.Addr());
 }
 
-pub fn Current() -> TaskId {
-    return TaskId::New(CPULocal::CurrentTask());
-}
-
 pub fn CreateTask(runFn: TaskFn, para: *const u8, kernel: bool) {
     let taskId = { TaskStore::CreateTask(runFn, para, kernel) };
     SHARESPACE.scheduler.NewTask(taskId);
@@ -65,7 +61,7 @@ fn switch(from: TaskId, to: TaskId) {
     let fromCtx = from.GetTask();
     let toCtx = to.GetTask();
 
-    if !SHARESPACE.config.KernelPagetable {
+    if !SHARESPACE.config.read().KernelPagetable {
         toCtx.SwitchPageTable();
     }
     toCtx.SetFS();
@@ -88,7 +84,7 @@ fn switch_to(to: TaskId) {
     CPULocal::SetCurrentTask(to.Addr());
     let toCtx = to.GetTask();
 
-    if !SHARESPACE.config.KernelPagetable {
+    if !SHARESPACE.config.read().KernelPagetable {
         toCtx.SwitchPageTable();
     }
     toCtx.SetFS();
@@ -119,7 +115,9 @@ pub fn IOWait() {
                 continue;
             }
 
+            //error!("IOWait sleep");
             HostSpace::IOWait();
+            //error!("IOWait wakeup");
             start = Rdtsc();
             SHARESPACE.kernelIOThreadWaiting.store(false, Ordering::Release);
         }
@@ -174,8 +172,15 @@ pub fn WaitFn() {
 
 #[inline]
 pub fn PollAsyncMsg() -> usize {
+    //error!("PollAsyncMsg 1");
     ASYNC_PROCESS.Process();
-    return HostInputProcess() + QUringTrigger();
+    //error!("PollAsyncMsg 2");
+    let ret = HostInputProcess();
+
+    //error!("PollAsyncMsg 3");
+    let ret = ret + QUringTrigger();
+    //error!("PollAsyncMsg 4 count {}", ret);
+    return ret;
 }
 
 #[inline]
@@ -208,7 +213,7 @@ pub fn Wait() {
             break;
         }
 
-        super::ALLOCATOR.Free();
+        //super::ALLOCATOR.Free();
 
         let currentTime = Rdtsc();
         if currentTime - start >= WAIT_CYCLES {
@@ -245,6 +250,13 @@ impl Scheduler {
                 return Some(t)
             }
         }
+
+        /*match self.GetNextForCpu(vcpuId, vcpuId) {
+            None => (),
+            Some(t) => {
+                return Some(t)
+            }
+        }*/
 
         for i in vcpuId..vcpuId+vcpuCount {
             match self.GetNextForCpu(vcpuId, i % vcpuCount) {
@@ -304,7 +316,7 @@ impl Scheduler {
     }
 
     pub fn KScheduleQ(&self, task: TaskId, vcpuId: usize) {
-        debug!("KScheduleQ task {:x?}, vcpuId {}", task, vcpuId);
+        //debug!("KScheduleQ task {:x?}, vcpuId {}", task, vcpuId);
         self.ScheduleQ(task, vcpuId as u64);
     }
 

@@ -132,7 +132,7 @@ impl InodeOperations for TTYDevice {
         let f = FileInternal {
             UniqueId: NewUID(),
             Dirent: dirent.clone(),
-            flags: Mutex::new((flags, None)),
+            flags: QMutex::new((flags, None)),
             offsetLock: QLock::default(),
             offset: AtomicI64::new(123),
             FileOp: Arc::new(fops),

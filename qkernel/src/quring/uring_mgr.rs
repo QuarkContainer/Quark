@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::sync::atomic;
 
 use super::super::task::*;
@@ -136,8 +136,8 @@ impl Completion {
 
 #[derive(Default)]
 pub struct QUring {
-    pub submission: Mutex<Submission>,
-    pub completion: Mutex<Completion>,
+    pub submission: QMutex<Submission>,
+    pub completion: QMutex<Completion>,
     pub asyncMgr: UringAsyncMgr
 }
 
@@ -219,8 +219,8 @@ impl QUring {
         self.AUCall(AsyncOps::AsyncLogFlush(ops));
     }
 
-    pub fn EventfdWrite(&self, fd: i32, addr: u64) {
-        let ops = AsyncEventfdWrite::New(fd, addr);
+    pub fn EventfdWrite(&self, fd: i32) {
+        let ops = AsyncEventfdWrite::New(fd);
         self.AUCall(AsyncOps::AsyncEventfdWrite(ops));
     }
 
@@ -345,7 +345,8 @@ impl QUring {
                     break;
                 }
 
-                error!("AUCall submission full...");
+                //error!("AUCall submission full...");
+                print!("AUCall submission full...");
             }
 
             entry = match self.AUringCall(entry) {
@@ -362,7 +363,8 @@ impl QUring {
             match self.asyncMgr.AllocSlot() {
                 None => {
                     self.asyncMgr.Print();
-                    error!("AUCall async slots usage up...");
+                    //error!("AUCall async slots usage up...");
+                    print!("AUCall async slots usage up...");
                 },
                 Some(idx) => {
                     id = idx;
@@ -378,7 +380,8 @@ impl QUring {
                     break;
                 }
 
-                error!("AUCall submission full...");
+                //error!("AUCall submission full...");
+                print!("AUCall submission full...");
             }
 
             entry = match self.AUringCall(entry) {

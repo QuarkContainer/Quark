@@ -15,7 +15,7 @@
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use spin::RwLock;
 
 use super::super::qlib::linux_def::*;
@@ -57,7 +57,7 @@ pub fn NewOverlayRoot(task: &Task, upper: &Inode, lower: &Inode, flags: &MountSo
     return Ok(NewOverlayInode(task, overlay, &msrc))
 }
 
-pub fn NewOverlayInode(_task: &Task, o: OverlayEntry, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+pub fn NewOverlayInode(_task: &Task, o: OverlayEntry, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let inode = o.Inode();
     let inodeOptions = inode.lock().InodeOp.clone(); //useless, just avoid to have empty inodeoperations
     let inodeInternal = InodeIntern {
@@ -69,10 +69,10 @@ pub fn NewOverlayInode(_task: &Task, o: OverlayEntry, msrc: &Arc<Mutex<MountSour
         ..Default::default()
     };
 
-    return Inode(Arc::new(Mutex::new(inodeInternal)))
+    return Inode(Arc::new(QMutex::new(inodeInternal)))
 }
 
-pub fn overlayUpperMountSource(overlayMountSource: &Arc<Mutex<MountSource>>) -> Arc<Mutex<MountSource>> {
+pub fn overlayUpperMountSource(overlayMountSource: &Arc<QMutex<MountSource>>) -> Arc<QMutex<MountSource>> {
     let currentOps = overlayMountSource.lock().MountSourceOperations.clone();
     let upper = currentOps.lock().as_any().downcast_ref::<OverlayMountSourceOperations>().expect("OverlayMountSourceOperations convert fail").upper.clone();
     return upper;

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::ops::Deref;
 
 use super::super::super::kernel::timer::*;
@@ -82,7 +82,7 @@ impl RawTimerInternal {
 }
 
 #[derive(Clone)]
-pub struct RawTimer(Arc<Mutex<RawTimerInternal>>);
+pub struct RawTimer(Arc<QMutex<RawTimerInternal>>);
 
 impl Drop for RawTimer {
     fn drop(&mut self) {
@@ -93,9 +93,9 @@ impl Drop for RawTimer {
 }
 
 impl Deref for RawTimer {
-    type Target = Arc<Mutex<RawTimerInternal>>;
+    type Target = Arc<QMutex<RawTimerInternal>>;
 
-    fn deref(&self) -> &Arc<Mutex<RawTimerInternal>> {
+    fn deref(&self) -> &Arc<QMutex<RawTimerInternal>> {
         &self.0
     }
 }
@@ -111,7 +111,7 @@ impl RawTimer {
             userData: 0,
         };
 
-        return Self(Arc::new(Mutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)))
     }
 
     // Stop prevents the Timer from firing.
@@ -141,7 +141,7 @@ impl RawTimer {
     // Stop does not close the channel, to prevent a read from the channel succeeding
     // incorrectly.
     pub fn Stop(&self) -> bool {
-        if SHARESPACE.config.RawTimer {
+        if SHARESPACE.config.read().RawTimer {
             return self.StopRaw();
         }
 
@@ -173,7 +173,7 @@ impl RawTimer {
     }
 
     pub fn Reset(&self, delta: i64) -> bool {
-        if SHARESPACE.config.RawTimer {
+        if SHARESPACE.config.read().RawTimer {
             return self.ResetRaw(delta);
         }
 

@@ -92,22 +92,22 @@ pub fn DefaultLimits() -> LimitSet {
             panic!("Getrlimit fail with err {}", errno::errno().0)
         }
 
-        let lt = FROM_LINUX_RESOURCE.get(&res).expect(&format!("unknown rlimit type {}", res));
+        let lt = FROM_LINUX_RESOURCE.Get(res).expect(&format!("unknown rlimit type {}", res));
 
         let hostLimit = Limit {
             Cur: FromLinux(hl.rlim_cur),
             Max: FromLinux(hl.rlim_max),
         };
 
-        let defaultLimit = ls.Get(*lt);
+        let defaultLimit = ls.Get(lt);
         if hostLimit.Cur != INFINITY && hostLimit.Cur < defaultLimit.Cur {
             error!("Host limit is lower than recommended, resource: {}, host: {}, recommended: {}",
-                FindName(*lt), hostLimit.Cur, defaultLimit.Cur);
+                FindName(lt), hostLimit.Cur, defaultLimit.Cur);
         }
 
         if hostLimit.Cur != defaultLimit.Cur || hostLimit.Max != defaultLimit.Max {
-            info!("Setting limit from host, resource: {} {{soft: {}, hard: {}}}", FindName(*lt), hostLimit.Cur, hostLimit.Max);
-            ls.SetUnchecked(*lt, hostLimit);
+            info!("Setting limit from host, resource: {} {{soft: {}, hard: {}}}", FindName(lt), hostLimit.Cur, hostLimit.Max);
+            ls.SetUnchecked(lt, hostLimit);
         }
     }
 
@@ -118,9 +118,9 @@ pub fn CreateLimitSet(spec: &Spec) -> Result<LimitSet> {
     let ls = DEFAULT_LIMITS.GetCopy();
 
     for rl in &spec.process.rlimits {
-        let lt = match FROM_LINUX_RESOURCE.get(&(rl.typ as i32)) {
+        let lt = match FROM_LINUX_RESOURCE.Get(rl.typ as i32) {
             None => return Err(Error::Common(format!("unknown resource {:?}", rl.typ))),
-            Some(lt) => *lt,
+            Some(lt) => lt,
         };
 
         ls.SetUnchecked(lt, Limit {

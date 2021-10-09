@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use core::any::Any;
 use alloc::string::String;
@@ -41,14 +41,14 @@ use super::super::fsutil::file::*;
 use super::terminal::*;
 use super::master::*;
 
-pub fn NewDir(task: &Task, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+pub fn NewDir(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let unstable = WithCurrentTime(task, &UnstableAttr {
         Owner: ROOT_OWNER,
         Perms: FilePermissions::FromMode(FileMode(0o555)),
         ..Default::default()
     });
 
-    let d = DirInodeOperations(Arc::new(Mutex::new(DirInodeOperationsInternal {
+    let d = DirInodeOperations(Arc::new(QMutex::new(DirInodeOperationsInternal {
         fsType: FSMagic::DEVPTS_SUPER_MAGIC as i64,
         unstable: unstable,
         msrc: msrc.clone(),
@@ -92,13 +92,13 @@ pub fn NewDir(task: &Task, msrc: &Arc<Mutex<MountSource>>) -> Inode {
         ..Default::default()
     };
 
-    return Inode(Arc::new(Mutex::new(inodeInternal)))
+    return Inode(Arc::new(QMutex::new(inodeInternal)))
 }
 
 pub struct DirInodeOperationsInternal {
     pub fsType: i64,
     pub unstable: UnstableAttr,
-    pub msrc: Arc<Mutex<MountSource>>,
+    pub msrc: Arc<QMutex<MountSource>>,
     pub master: Inode,
     pub slaves: BTreeMap<u32, Inode>,
     pub dentryMap: DentMap,
@@ -106,12 +106,12 @@ pub struct DirInodeOperationsInternal {
 }
 
 #[derive(Clone)]
-pub struct DirInodeOperations(Arc<Mutex<DirInodeOperationsInternal>>);
+pub struct DirInodeOperations(Arc<QMutex<DirInodeOperationsInternal>>);
 
 impl Deref for DirInodeOperations {
-    type Target = Arc<Mutex<DirInodeOperationsInternal>>;
+    type Target = Arc<QMutex<DirInodeOperationsInternal>>;
 
-    fn deref(&self) -> &Arc<Mutex<DirInodeOperationsInternal>> {
+    fn deref(&self) -> &Arc<QMutex<DirInodeOperationsInternal>> {
         &self.0
     }
 }
@@ -309,7 +309,7 @@ impl InodeOperations for DirInodeOperations {
 
 pub struct DirFileOperations {
     pub di: DirInodeOperations,
-    pub DirCursor: Mutex<String>,
+    pub DirCursor: QMutex<String>,
 }
 
 impl Waitable for DirFileOperations {

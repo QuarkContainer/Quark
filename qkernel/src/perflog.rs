@@ -15,7 +15,7 @@
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
 use core::mem;
-use spin::Mutex;
+use ::qlib::mutex::*;
 
 use super::qlib::perf_tunning::*;
 use super::qlib::vcpu_mgr::*;
@@ -23,7 +23,7 @@ use super::uid::*;
 use super::task::*;
 use super::qlib::singleton::*;
 
-pub static THREAD_COUNTS : Singleton<Mutex<ThreadPerfCounters>> = Singleton::<Mutex<ThreadPerfCounters>>::New();
+pub static THREAD_COUNTS : Singleton<QMutex<ThreadPerfCounters>> = Singleton::<QMutex<ThreadPerfCounters>>::New();
 
 #[repr(usize)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

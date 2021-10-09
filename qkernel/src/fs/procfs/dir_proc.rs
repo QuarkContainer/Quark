@@ -91,7 +91,7 @@ impl <T: 'static + DirDataNode> InodeOperations for DirNode <T> {
         return self.dir.CreateFifo(task, dir, name, perms);
     }
 
-    //fn RemoveDirent(&mut self, dir: &mut InodeStruStru, remove: &Arc<Mutex<Dirent>>) -> Result<()> ;
+    //fn RemoveDirent(&mut self, dir: &mut InodeStruStru, remove: &Arc<QMutex<Dirent>>) -> Result<()> ;
     fn Remove(&self, task: &Task, dir: &mut Inode, name: &str) -> Result<()> {
         return self.dir.Remove(task, dir, name);
     }

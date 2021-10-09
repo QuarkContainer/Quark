@@ -15,7 +15,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::any::Any;
 
 use socket::unix::transport::unix::BoundEndpoint;
@@ -36,7 +36,7 @@ use super::super::dirent::*;
 use super::super::host::hostinodeop::*;
 use super::tmpfs_dir::*;
 
-pub fn NewTmpfsFifoInode(task: &Task, perms: &FilePermissions, msrc: &Arc<Mutex<MountSource>>) -> Result<Inode> {
+pub fn NewTmpfsFifoInode(task: &Task, perms: &FilePermissions, msrc: &Arc<QMutex<MountSource>>) -> Result<Inode> {
     // First create a pipe.
     let pipe = Pipe::New(task, true, DEFAULT_PIPE_SIZE, MemoryDef::PAGE_SIZE as usize);
 

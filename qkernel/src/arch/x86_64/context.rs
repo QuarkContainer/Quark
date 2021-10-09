@@ -14,7 +14,7 @@
 
 use alloc::vec::Vec;
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 
 use super::super::super::qlib::limits::*;
 use super::super::super::qlib::common::*;
@@ -91,7 +91,7 @@ pub const MIN_MMAP_RAND64: u64 = (1 << 26) * MemoryDef::PAGE_SIZE;
 
 pub struct Context64 {
     pub state: State,
-    pub sigFPState: Vec<Arc<Mutex<X86fpstate>>>,
+    pub sigFPState: Vec<Arc<QMutex<X86fpstate>>>,
 }
 
 impl Context64 {
@@ -101,17 +101,17 @@ impl Context64 {
                 Regs: unsafe {
                     &mut *(0 as *mut PtRegs)
                 },
-                x86FPState: Arc::new(Mutex::new(X86fpstate::New())),
+                x86FPState: Arc::new(QMutex::new(X86fpstate::New())),
             },
             sigFPState: Vec::new(),
         }
     }
 
-    pub fn CopySigFPState(&self) -> Vec<Arc<Mutex<X86fpstate>>> {
+    pub fn CopySigFPState(&self) -> Vec<Arc<QMutex<X86fpstate>>> {
         let mut sigfs = Vec::with_capacity(self.sigFPState.len());
 
         for s in &self.sigFPState {
-            sigfs.push(Arc::new(Mutex::new(s.lock().Fork())));
+            sigfs.push(Arc::new(QMutex::new(s.lock().Fork())));
         }
 
         return sigfs

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use alloc::vec::Vec;
 
 use super::super::super::qlib::common::*;
@@ -30,7 +30,7 @@ use super::super::mount::*;
 use super::super::inode::*;
 use super::inode::*;
 
-pub fn NewLoadAvg(task: &Task, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+pub fn NewLoadAvg(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let v = NewLoadAvgSimpleFileInode(task, &ROOT_OWNER, &FilePermissions::FromMode(FileMode(0o400)), FSMagic::PROC_SUPER_MAGIC);
     return NewProcInode(&Arc::new(v), msrc, InodeType::SpecialFile, None)
 

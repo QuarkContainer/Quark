@@ -18,8 +18,8 @@ use core::sync::atomic::Ordering;
 use core::cmp::max;
 use core::mem::size_of;
 use core::ptr::NonNull;
-use spin::Mutex;
 use buddy_system_allocator::Heap;
+use super::super::mutex::*;
 
 pub const CLASS_CNT : usize = 16;
 pub const FREE_THRESHOLD: usize = 30; // when free size less than 30%, need to free buffer
@@ -28,8 +28,8 @@ pub const FREE_BATCH: usize = 10; // free 10 blocks each time.
 pub const ORDER : usize = 33;
 
 pub struct ListAllocator {
-    pub bufs: [Mutex<FreeMemBlockMgr>; CLASS_CNT],
-    pub heap: Mutex<Heap<ORDER>>,
+    pub bufs: [QMutex<FreeMemBlockMgr>; CLASS_CNT],
+    pub heap: QMutex<Heap<ORDER>>,
     pub total: AtomicUsize,
     pub free: AtomicUsize,
     pub bufSize: AtomicUsize,
@@ -43,34 +43,41 @@ pub trait OOMHandler {
 
 impl ListAllocator {
     pub const fn Empty() -> Self {
-        let bufs : [Mutex<FreeMemBlockMgr>; CLASS_CNT] = [
-            Mutex::new(FreeMemBlockMgr::New(0, 0)),
-            Mutex::new(FreeMemBlockMgr::New(0, 1)),
-            Mutex::new(FreeMemBlockMgr::New(0, 2)),
-            Mutex::new(FreeMemBlockMgr::New(128, 3)),
-            Mutex::new(FreeMemBlockMgr::New(128, 4)),
-            Mutex::new(FreeMemBlockMgr::New(128, 5)),
-            Mutex::new(FreeMemBlockMgr::New(64, 6)),
-            Mutex::new(FreeMemBlockMgr::New(64, 7)),
-            Mutex::new(FreeMemBlockMgr::New(64, 8)),
-            Mutex::new(FreeMemBlockMgr::New(32, 9)),
-            Mutex::new(FreeMemBlockMgr::New(32, 10)),
-            Mutex::new(FreeMemBlockMgr::New(16, 11)),
-            Mutex::new(FreeMemBlockMgr::New(1024, 12)),
-            Mutex::new(FreeMemBlockMgr::New(16, 13)),
-            Mutex::new(FreeMemBlockMgr::New(8, 14)),
-            Mutex::new(FreeMemBlockMgr::New(8, 15))
+        let bufs : [QMutex<FreeMemBlockMgr>; CLASS_CNT] = [
+            QMutex::new(FreeMemBlockMgr::New(0, 0)),
+            QMutex::new(FreeMemBlockMgr::New(0, 1)),
+            QMutex::new(FreeMemBlockMgr::New(0, 2)),
+            QMutex::new(FreeMemBlockMgr::New(128, 3)),
+            QMutex::new(FreeMemBlockMgr::New(128, 4)),
+            QMutex::new(FreeMemBlockMgr::New(128, 5)),
+            QMutex::new(FreeMemBlockMgr::New(64, 6)),
+            QMutex::new(FreeMemBlockMgr::New(64, 7)),
+            QMutex::new(FreeMemBlockMgr::New(64, 8)),
+            QMutex::new(FreeMemBlockMgr::New(32, 9)),
+            QMutex::new(FreeMemBlockMgr::New(32, 10)),
+            QMutex::new(FreeMemBlockMgr::New(16, 11)),
+            QMutex::new(FreeMemBlockMgr::New(1024, 12)),
+            QMutex::new(FreeMemBlockMgr::New(16, 13)),
+            QMutex::new(FreeMemBlockMgr::New(8, 14)),
+            QMutex::new(FreeMemBlockMgr::New(8, 15))
         ];
 
         return Self {
             bufs: bufs,
-            heap: Mutex::new(Heap::empty()),
+            heap: QMutex::new(Heap::empty()),
             total: AtomicUsize::new(0),
             free: AtomicUsize::new(0),
             bufSize: AtomicUsize::new(0),
             initialized: AtomicBool::new(false)
         }
     }
+
+    /*pub fn Print(&self) {
+        print!("heap addr is {:x}", self.heap.MutexId());
+        for i in 0..self.bufs.len() {
+            print!("ListAllocator[{}] {:x}", i, self.bufs[i].MutexId());
+        }
+    }*/
 
     pub fn AddToHead(&self, start: usize, end: usize) {
         unsafe {
@@ -105,9 +112,9 @@ impl ListAllocator {
         let free = self.free.load(Ordering::Acquire);
         let bufSize = self.bufSize.load(Ordering::Acquire);
 
-        if free > core::usize::MAX / 100 || total > core::usize::MAX / 100 {
+        /*if free > core::usize::MAX / 100 || total > core::usize::MAX / 100 {
             error!("total is {:x}, free is {:x}, buffsize is {:x}", total, free, bufSize);
-        }
+        }*/
 
         if total * FREE_THRESHOLD / 100 > free && // there are too little free memory
             free * BUFF_THRESHOLD /100 < bufSize { // there are too much bufferred memory
@@ -118,7 +125,7 @@ impl ListAllocator {
     }
 
     // ret: true: free some memory, false: no memory freed
-    pub fn Free(&self) -> bool {
+    pub fn Free1(&self) -> bool {
         let mut count = 0;
         for i in 0..self.bufs.len() {
             if !self.NeedFree() || count == FREE_BATCH {
@@ -167,6 +174,11 @@ unsafe impl GlobalAlloc for ListAllocator {
         if ret == 0 {
             self.handleError(size as u64, layout.align() as u64);
             loop {}
+        }
+
+        if ret % size as u64 != 0 {
+            raw!(0x236, ret, size as u64);
+            panic!("alloc next fail");
         }
 
         // Subtract when ret != 0 to avoid overflow
@@ -234,7 +246,7 @@ impl FreeMemBlockMgr {
         }
     }
 
-    pub fn Dealloc(&mut self, ptr: *mut u8, _heap: &Mutex<Heap<ORDER>>) {
+    pub fn Dealloc(&mut self, ptr: *mut u8, _heap: &QMutex<Heap<ORDER>>) {
         /*let size = self.size / 8;
         unsafe {
             let toArr = slice::from_raw_parts(ptr as *mut u64, size);
@@ -247,7 +259,7 @@ impl FreeMemBlockMgr {
         self.list.Push(ptr as u64);
     }
 
-    fn Free(&mut self, heap: &Mutex<Heap<ORDER>>) {
+    fn Free(&mut self, heap: &QMutex<Heap<ORDER>>) {
         assert!(self.count > 0);
         self.count -= 1;
         let addr = self.list.Pop();
@@ -257,7 +269,7 @@ impl FreeMemBlockMgr {
         }
     }
 
-    pub fn FreeMultiple(&mut self, heap: &Mutex<Heap<ORDER>>, count: usize) -> usize {
+    pub fn FreeMultiple(&mut self, heap: &QMutex<Heap<ORDER>>, count: usize) -> usize {
         for i in 0..count {
             if self.count <= self.reserve {
                 return i;
@@ -290,7 +302,10 @@ impl MemList {
     }
 
     pub fn Push(&mut self, addr: u64) {
-        assert!(addr % self.size == 0, "Push addr is {:x}/size is {:x}", addr, self.size);
+        if addr % self.size != 0 {
+            raw!(235, addr, self.size);
+            panic!("Push next fail");
+        }
 
         let newB = addr as * mut MemBlock;
         unsafe {
@@ -330,7 +345,12 @@ impl MemList {
         };
 
         self.head = *ptr;
-        assert!(next % self.size == 0, "Pop next is {:x}/size is {:x}", next, self.size);
+
+        if next % self.size != 0 {
+            raw!(0x234, next, self.size as u64);
+            panic!("Pop next fail");
+        }
+        //assert!(next % self.size == 0, "Pop next is {:x}/size is {:x}", next, self.size);
         return next;
     }
 }

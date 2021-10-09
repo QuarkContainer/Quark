@@ -16,7 +16,7 @@ use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use spin::RwLock;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use alloc::vec::Vec;
 
 use super::super::qlib::common::*;
@@ -153,7 +153,7 @@ pub fn OverlayCreate(task: &Task, o: &Arc<RwLock<OverlayEntry>>, parent: &Dirent
     oFlags.Pread = upperFile.Flags().Pread;
     oFlags.PWrite = upperFile.Flags().PWrite;
     let overlayFile = File::New(&overlayDirent, &oFlags, OverlayFileOperations {
-        upper: Mutex::new(Some(upperFile)),
+        upper: QMutex::new(Some(upperFile)),
         ..Default::default()
     });
 
@@ -351,7 +351,7 @@ pub fn overlayGetFile(task: &Task, o: &Arc<RwLock<OverlayEntry>>, d: &Dirent, fl
         flags.PWrite = upper.Flags().PWrite;
 
         let overlayFileOps = OverlayFileOperations {
-            upper: Mutex::new(Some(upper)),
+            upper: QMutex::new(Some(upper)),
             ..Default::default()
         };
 
@@ -366,7 +366,7 @@ pub fn overlayGetFile(task: &Task, o: &Arc<RwLock<OverlayEntry>>, d: &Dirent, fl
     flags.PWrite = lower.Flags().PWrite;
 
     let overlayFileOps = OverlayFileOperations {
-        upper: Mutex::new(Some(lower)),
+        upper: QMutex::new(Some(lower)),
         ..Default::default()
     };
 

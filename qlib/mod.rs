@@ -49,6 +49,8 @@ pub mod control_msg;
 pub mod perf_tunning;
 pub mod uring;
 pub mod singleton;
+pub mod mutex;
+pub mod sort_arr;
 
 pub mod ringbuf;
 pub mod vcpu_mgr;
@@ -57,7 +59,8 @@ use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicI32;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
-use spin::Mutex;
+use self::mutex::*;
+use spin::RwLock;
 
 use super::asm::*;
 use self::task_mgr::*;
@@ -70,12 +73,12 @@ use self::bytestream::*;
 pub fn InitSingleton() {
     unsafe {
         control_msg::InitSingleton();
-        //cpuid::InitSingleton();
+        cpuid::InitSingleton();
         device::InitSingleton();
         eventchannel::InitSingleton();
-        //limits::InitSingleton();
+        limits::InitSingleton();
         metric::InitSingleton();
-        //perf_tunning::InitSingleton();
+        perf_tunning::InitSingleton();
         auth::id::InitSingleton();
     }
 }
@@ -97,6 +100,8 @@ pub const HYPERCALL_WAKEUP_VCPU: u16 = 17;
 pub const HYPERCALL_EXIT_VM: u16 = 18;
 pub const HYPERCALL_VCPU_FREQ: u16 = 19;
 pub const HYPERCALL_VCPU_YIELD: u16 = 20;
+pub const HYPERCALL_VCPU_DEBUG: u16 = 21;
+pub const HYPERCALL_VCPU_PRINT: u16 = 22;
 
 pub const DUMMY_TASKID: TaskId = TaskId::New(0xffff_ffff);
 
@@ -516,11 +521,10 @@ pub enum IOThreadState {
 
 #[repr(align(128))]
 pub struct ShareSpace {
-    pub QInput: QRingBuf<HostInputMsg>, //Mutex<VecDeque<HostInputMsg>>,
-    pub QOutput: QRingBuf<HostOutputMsg>,  //Mutex<VecDeque<HostOutputMsg>>,
+    pub QInput: QRingBuf<HostInputMsg>, //QMutex<VecDeque<HostInputMsg>>,
+    pub QOutput: QRingBuf<HostOutputMsg>,  //QMutex<VecDeque<HostOutputMsg>>,
 
-    pub hostIOThreadEventfd: i32,
-    pub hostIOThreadTriggerData: u64,
+    pub hostIOThreadEventfd: AtomicI32,
 
     pub scheduler: task_mgr::Scheduler,
     pub ioThreadState: AtomicU64,
@@ -528,9 +532,9 @@ pub struct ShareSpace {
     pub guestMsgCount: AtomicU64,
 
     pub kernelIOThreadWaiting: AtomicBool,
-    pub config: Config,
+    pub config: RwLock<Config>,
 
-    pub logBuf: Mutex<Option<ByteStream>>,
+    pub logBuf: QMutex<Option<ByteStream>>,
     pub logfd: AtomicI32,
 
     pub values: [[AtomicU64; 2]; 16],
@@ -539,19 +543,18 @@ pub struct ShareSpace {
 impl ShareSpace {
     pub fn New() -> Self {
         return ShareSpace {
-            QInput: QRingBuf::New(MemoryDef::MSG_QLEN), //Mutex::new(VecDeque::with_capacity(MSG_QLEN)),
-            QOutput: QRingBuf::New(MemoryDef::MSG_QLEN), //Mutex::new(VecDeque::with_capacity(MSG_QLEN)),
+            QInput: QRingBuf::New(MemoryDef::MSG_QLEN), //QMutex::new(VecDeque::with_capacity(MSG_QLEN)),
+            QOutput: QRingBuf::New(MemoryDef::MSG_QLEN), //QMutex::new(VecDeque::with_capacity(MSG_QLEN)),
 
-            hostIOThreadEventfd: 0,
-            hostIOThreadTriggerData: 1,
+            hostIOThreadEventfd: AtomicI32::new(0),
 
             scheduler: task_mgr::Scheduler::default(),
             ioThreadState: AtomicU64::new(IOThreadState::WAITING as u64),
             hostMsgCount: AtomicU64::new(0),
             guestMsgCount: AtomicU64::new(0),
             kernelIOThreadWaiting: AtomicBool::new(false),
-            config: Config::default(),
-            logBuf: Mutex::new(None),
+            config: RwLock::new(Config::default()),
+            logBuf: QMutex::new(None),
             logfd: AtomicI32::new(-1),
             values: [
                 [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)],
@@ -560,6 +563,10 @@ impl ShareSpace {
                 [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)],
             ],
         }
+    }
+
+    pub fn HostIOThreadEventfd(&self) -> i32 {
+        return self.hostIOThreadEventfd.load(Ordering::Relaxed);
     }
 
     pub fn SetValue(&self, cpuId: usize, idx: usize, val: u64) {
@@ -602,7 +609,8 @@ impl ShareSpace {
 
     pub fn Log(&self, buf: &[u8]) -> bool {
         for i in 0..3 {
-            match self.logBuf.lock().as_mut().unwrap().writeFull(buf) {
+            let ret = self.logBuf.lock().as_mut().unwrap().writeFull(buf);
+            match ret {
                 Err(_) => {
                     print!("log is full ... retry {}", i+1);
                     Self::Yield();

@@ -14,7 +14,7 @@
 
 use alloc::collections::vec_deque::*;
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::ops::Deref;
 
 use super::super::super::qlib::common::*;
@@ -32,12 +32,12 @@ pub struct BufChanInternel<T: Sized> {
 }
 
 #[derive(Clone)]
-pub struct BufChan<T>(Arc<Mutex<BufChanInternel<T>>>);
+pub struct BufChan<T>(Arc<QMutex<BufChanInternel<T>>>);
 
 impl <T> Deref for BufChan<T> {
-    type Target = Arc<Mutex<BufChanInternel<T>>>;
+    type Target = Arc<QMutex<BufChanInternel<T>>>;
 
-    fn deref(&self) -> &Arc<Mutex<BufChanInternel<T>>> {
+    fn deref(&self) -> &Arc<QMutex<BufChanInternel<T>>> {
         &self.0
     }
 }
@@ -51,7 +51,7 @@ impl <T> BufChan <T> {
             closed: false,
         };
 
-        return Self(Arc::new(Mutex::new(internel)))
+        return Self(Arc::new(QMutex::new(internel)))
     }
 
     // Get the items waiting in the buffer

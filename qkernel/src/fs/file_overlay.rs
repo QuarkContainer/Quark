@@ -15,7 +15,7 @@
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use spin::RwLock;
 use core::any::Any;
 use alloc::collections::btree_map::BTreeMap;
@@ -42,19 +42,19 @@ pub fn OverlayFile(task: &Task, inode: &Inode, flags: &FileFlags) -> Result<File
 }
 
 pub struct OverlayFileOperations {
-    pub upper: Mutex<Option<File>>,
-    pub lower: Mutex<Option<File>>,
-    pub dirCursor: Mutex<String>,
-    pub dirCache: Mutex<DentMap>,
+    pub upper: QMutex<Option<File>>,
+    pub lower: QMutex<Option<File>>,
+    pub dirCursor: QMutex<String>,
+    pub dirCache: QMutex<DentMap>,
 }
 
 impl Default for OverlayFileOperations {
     fn default() -> Self {
         return Self {
-            upper: Mutex::new(None),
-            lower: Mutex::new(None),
-            dirCursor: Mutex::new("".to_owned()),
-            dirCache: Mutex::new(DentMap::default())
+            upper: QMutex::new(None),
+            lower: QMutex::new(None),
+            dirCursor: QMutex::new("".to_owned()),
+            dirCache: QMutex::new(DentMap::default())
         }
     }
 }

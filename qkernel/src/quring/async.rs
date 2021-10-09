@@ -15,7 +15,7 @@
 use alloc::vec::Vec;
 use alloc::collections::vec_deque::VecDeque;
 use core::marker::Send;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::ops::Deref;
 
 use super::super::qlib::linux_def::*;
@@ -125,8 +125,8 @@ impl AsyncOps {
 
 #[derive(Default)]
 pub struct UringAsyncMgr {
-    pub ops: Vec<Mutex<AsyncOps>>,
-    pub ids: Mutex<VecDeque<u16>>,
+    pub ops: Vec<QMutex<AsyncOps>>,
+    pub ids: QMutex<VecDeque<u16>>,
 }
 
 unsafe impl Sync for UringAsyncMgr {}
@@ -138,11 +138,11 @@ impl UringAsyncMgr {
         let mut ops = Vec::with_capacity(size);
         for i in 0..size {
             ids.push_back(i as u16);
-            ops.push(Mutex::new(AsyncOps::None));
+            ops.push(QMutex::new(AsyncOps::None));
         }
         return Self {
             ops: ops,
-            ids: Mutex::new(ids),
+            ids: QMutex::new(ids),
         }
     }
 
@@ -151,7 +151,8 @@ impl UringAsyncMgr {
         for op in &self.ops {
             vec.push(op.lock().Type());
         }
-        error!("UringAsyncMgr Print {:?}", vec);
+        print!("UringAsyncMgr Print {:?}", vec);
+        //error!("UringAsyncMgr Print {:?}", vec);
     }
 
     pub fn AllocSlot(&self) -> Option<usize> {
@@ -180,7 +181,7 @@ pub struct AsyncEventfdWrite {
 }
 
 impl AsyncEventfdWrite {
-    pub fn New(fd: i32, _addr: u64) -> Self {
+    pub fn New(fd: i32) -> Self {
         return Self {
             fd: fd,
             addr: 1,
@@ -517,12 +518,12 @@ pub struct AsycnSendMsgIntern {
     pub msg: MsgHdr,
 }
 
-pub struct AsycnSendMsg(Mutex<AsycnSendMsgIntern>);
+pub struct AsycnSendMsg(QMutex<AsycnSendMsgIntern>);
 
 impl Deref for AsycnSendMsg {
-    type Target = Mutex<AsycnSendMsgIntern>;
+    type Target = QMutex<AsycnSendMsgIntern>;
 
-    fn deref(&self) -> &Mutex<AsycnSendMsgIntern> {
+    fn deref(&self) -> &QMutex<AsycnSendMsgIntern> {
         &self.0
     }
 }
@@ -572,7 +573,7 @@ impl AsycnSendMsg {
 
     pub fn New(fd: i32, ops: &SocketOperations) -> Self {
         let intern = AsycnSendMsgIntern::New(fd, ops);
-        return Self(Mutex::new(intern))
+        return Self(QMutex::new(intern))
     }
 }
 
@@ -601,12 +602,12 @@ pub struct AsycnRecvMsgIntern {
     pub msg: MsgHdr,
 }
 
-pub struct AsycnRecvMsg(Mutex<AsycnRecvMsgIntern>);
+pub struct AsycnRecvMsg(QMutex<AsycnRecvMsgIntern>);
 
 impl Deref for AsycnRecvMsg {
-    type Target = Mutex<AsycnRecvMsgIntern>;
+    type Target = QMutex<AsycnRecvMsgIntern>;
 
-    fn deref(&self) -> &Mutex<AsycnRecvMsgIntern> {
+    fn deref(&self) -> &QMutex<AsycnRecvMsgIntern> {
         &self.0
     }
 }
@@ -653,7 +654,7 @@ impl AsycnRecvMsg {
 impl AsycnRecvMsg {
     pub fn New(fd: i32, ops: &SocketOperations) -> Self {
         let intern = AsycnRecvMsgIntern::New(fd, ops);
-        return Self(Mutex::new(intern))
+        return Self(QMutex::new(intern))
     }
 }
 

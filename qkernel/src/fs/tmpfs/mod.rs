@@ -20,10 +20,10 @@ pub mod tmpfs_fifo;
 pub mod fs;
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 
 use super::filesystems::*;
 
 pub fn Init() {
-    RegisterFilesystem(&Arc::new(Mutex::new(self::fs::TmpfsFileSystem {})));
+    RegisterFilesystem(&Arc::new(QMutex::new(self::fs::TmpfsFileSystem {})));
 }

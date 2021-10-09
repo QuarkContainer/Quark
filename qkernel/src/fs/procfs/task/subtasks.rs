@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::ToString;
 
@@ -39,7 +39,7 @@ use super::super::dir_proc::*;
 use super::super::inode::*;
 
 impl ProcNode {
-    pub fn NewSubTasksDir(&self, task: &Task, thread: &Thread, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+    pub fn NewSubTasksDir(&self, task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         let contents = BTreeMap::new();
         let subTasksNode = SubTasksNode {
             thread: thread.clone(),

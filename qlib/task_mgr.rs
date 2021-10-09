@@ -14,7 +14,7 @@
 
 use alloc::collections::vec_deque::VecDeque;
 use alloc::vec::Vec;
-use spin::Mutex;
+use super::mutex::*;
 use core::ops::Deref;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
@@ -193,12 +193,12 @@ impl Scheduler {
     }
 }
 
-pub struct TaskQueue(pub Mutex<VecDeque<TaskId>>);
+pub struct TaskQueue(pub QMutex<VecDeque<TaskId>>);
 
 impl Deref for TaskQueue {
-    type Target = Mutex<VecDeque<TaskId>>;
+    type Target = QMutex<VecDeque<TaskId>>;
 
-    fn deref(&self) -> &Mutex<VecDeque<TaskId>> {
+    fn deref(&self) -> &QMutex<VecDeque<TaskId>> {
         &self.0
     }
 }
@@ -211,7 +211,7 @@ impl Default for TaskQueue {
 
 impl TaskQueue {
     pub fn New() -> Self {
-        return TaskQueue(Mutex::new(VecDeque::with_capacity(128)));
+        return TaskQueue(QMutex::new(VecDeque::with_capacity(128)));
     }
 
     pub fn Dequeue(&self) -> Option<TaskId> {

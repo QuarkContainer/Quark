@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::any::Any;
 use alloc::sync::Arc;
 use core::ops::Deref;
@@ -72,7 +72,7 @@ pub struct SignalOperationInternal {
     pub target: Thread,
 
     // mask is the signal mask,
-    pub mask: Mutex<SignalSet>,
+    pub mask: QMutex<SignalSet>,
 }
 
 pub struct SignalOperation(Arc<SignalOperationInternal>);
@@ -93,7 +93,7 @@ impl SignalOperation {
 
         let intern = SignalOperationInternal {
             target: task.Thread(),
-            mask: Mutex::new(mask)
+            mask: QMutex::new(mask)
         };
 
         let fops = Self(Arc::new(intern));

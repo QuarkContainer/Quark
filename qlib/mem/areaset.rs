@@ -17,8 +17,8 @@ use core::ops::Deref;
 use alloc::sync::Arc;
 use alloc::string::String;
 use alloc::string::ToString;
-use spin::Mutex;
 use core::ops::Bound::*;
+use super::super::mutex::*;
 
 use super::super::range::*;
 
@@ -225,12 +225,12 @@ impl<T: AreaValue> AreaEntryInternal<T> {
 }
 
 #[derive(Clone, Default)]
-pub struct AreaEntry<T: AreaValue>(pub Arc<Mutex<AreaEntryInternal<T>>>);
+pub struct AreaEntry<T: AreaValue>(pub Arc<QMutex<AreaEntryInternal<T>>>);
 
 impl<T: AreaValue> Deref for AreaEntry<T> {
-    type Target = Arc<Mutex<AreaEntryInternal<T>>>;
+    type Target = Arc<QMutex<AreaEntryInternal<T>>>;
 
-    fn deref(&self) -> &Arc<Mutex<AreaEntryInternal<T>>> {
+    fn deref(&self) -> &Arc<QMutex<AreaEntryInternal<T>>> {
         &self.0
     }
 }
@@ -250,7 +250,7 @@ impl<T: AreaValue> AreaEntry<T> {
             ..Default::default()
         };
 
-        return Self(Arc::new(Mutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)))
     }
 
     pub fn New(start: u64, len: u64, vma: T) -> Self {
@@ -260,7 +260,7 @@ impl<T: AreaValue> AreaEntry<T> {
             ..Default::default()
         };
 
-        return Self(Arc::new(Mutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)))
     }
 
     pub fn Remove(&self) {

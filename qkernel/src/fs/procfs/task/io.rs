@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use alloc::string::ToString;
 use core::sync::atomic::Ordering;
 use alloc::vec::Vec;
@@ -36,7 +36,7 @@ use super::super::super::super::threadmgr::thread_group::*;
 use super::super::super::super::threadmgr::task_acct::*;
 use super::super::inode::*;
 
-pub fn NewIO(task: &Task, thread: &Thread, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+pub fn NewIO(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let v = NewIOSimpleFileInode(task, thread, &ROOT_OWNER, &FilePermissions::FromMode(FileMode(0o400)), FSMagic::PROC_SUPER_MAGIC);
     return NewProcInode(&Arc::new(v), msrc, InodeType::SpecialFile, Some(thread.clone()))
 
@@ -85,7 +85,7 @@ impl SimpleFileTrait for IOData {
 }
 
 /*use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use alloc::vec::Vec;
 use core::sync::atomic::Ordering;
 use alloc::string::ToString;
@@ -101,9 +101,9 @@ use super::super::inode::*;
 use super::super::seqfile::*;
 
 
-pub fn NewIO(task: &Task, msrc: &Arc<Mutex<MountSource>>) -> Inode {
+pub fn NewIO(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let tg = task.Thread().ThreadGroup();
-    let seqFile = SeqFile::New(task, Arc::new(Mutex::new(IOData{tg: tg})));
+    let seqFile = SeqFile::New(task, Arc::new(QMutex::new(IOData{tg: tg})));
 
     return NewProcInode(&Arc::new(seqFile), msrc, InodeType::SpecialFile, Some(task))
 }

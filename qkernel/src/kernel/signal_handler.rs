@@ -14,7 +14,7 @@
 
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
-use spin::Mutex;
+use ::qlib::mutex::*;
 use core::ops::Deref;
 
 use super::super::SignalDef::*;
@@ -45,12 +45,12 @@ impl SignalHandlersInternal {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct SignalHandlers(Arc<Mutex<SignalHandlersInternal>>);
+pub struct SignalHandlers(Arc<QMutex<SignalHandlersInternal>>);
 
 impl Deref for SignalHandlers {
-    type Target = Arc<Mutex<SignalHandlersInternal>>;
+    type Target = Arc<QMutex<SignalHandlersInternal>>;
 
-    fn deref(&self) -> &Arc<Mutex<SignalHandlersInternal>> {
+    fn deref(&self) -> &Arc<QMutex<SignalHandlersInternal>> {
         &self.0
     }
 }
@@ -64,7 +64,7 @@ impl SignalHandlers {
             sh.actions.insert(*i, *act);
         }
 
-        return SignalHandlers(Arc::new(Mutex::new(sh)))
+        return SignalHandlers(Arc::new(QMutex::new(sh)))
     }
 
     pub fn CopyForExec(&self) -> Self {
@@ -80,7 +80,7 @@ impl SignalHandlers {
             }
         }
 
-        return SignalHandlers(Arc::new(Mutex::new(sh)))
+        return SignalHandlers(Arc::new(QMutex::new(sh)))
     }
 
     pub fn IsIgored(&self, sig: Signal) -> bool {

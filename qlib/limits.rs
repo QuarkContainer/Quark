@@ -14,15 +14,15 @@
 
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
-use spin::Mutex;
+use super::mutex::*;
 use core::ops::Deref;
 use core::u64;
-use lazy_static::lazy_static;
 
 use super::common::*;
 use super::linux_def::*;
 use super::linux::limits::*;
-//use super::singleton::*;
+use super::singleton::*;
+use super::sort_arr::*;
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Ord, PartialOrd, Eq, PartialEq)]
 #[repr(i32)]
@@ -45,8 +45,7 @@ pub enum LimitType {
     Rttime,
 }
 
-/*
-pub static FROM_LINUX_RESOURCE : Singleton<BTreeMap<i32, LimitType>> = Singleton::<BTreeMap<i32, LimitType>>::New();
+pub static FROM_LINUX_RESOURCE : Singleton<SortArr<i32, LimitType>> = Singleton::<SortArr<i32, LimitType>>::New();
 
 pub unsafe fn InitSingleton() {
     let arr = [
@@ -66,31 +65,9 @@ pub unsafe fn InitSingleton() {
         (RLIMIT_NICE,       LimitType::Nice),
         (RLIMIT_RTPRIO,     LimitType::RealTimePriority),
         (RLIMIT_RTTIME,     LimitType::Rttime),
-    ].iter().cloned().collect();
-    error!("InitSingleton limits1 is {:?}", &arr);
-    FROM_LINUX_RESOURCE.Init(arr);
-    error!("InitSingleton limits12 is {:?}", FROM_LINUX_RESOURCE);
-}*/
+    ];
 
-lazy_static! {
-    pub static ref FROM_LINUX_RESOURCE : BTreeMap<i32, LimitType> = [
-        (RLIMIT_CPU,        LimitType::CPU),
-        (RLIMIT_FSIZE,      LimitType::FileSize),
-        (RLIMIT_DATA,       LimitType::Data),
-        (RLIMIT_STACK,      LimitType::Stack),
-        (RLIMIT_CORE,       LimitType::Core),
-        (RLIMIT_RSS,        LimitType::Rss),
-        (RLIMIT_NPROC,      LimitType::ProcessCount),
-        (RLIMIT_NOFILE,     LimitType::NumberOfFiles),
-        (RLIMIT_MEMLOCK,    LimitType::MemoryLocked),
-        (RLIMIT_AS,         LimitType::AS),
-        (RLIMIT_LOCKS,      LimitType::Locks),
-        (RLIMIT_SIGPENDING, LimitType::SignalsPending),
-        (RLIMIT_MSGQUEUE,   LimitType::MessageQueueBytes),
-        (RLIMIT_NICE,       LimitType::Nice),
-        (RLIMIT_RTPRIO,     LimitType::RealTimePriority),
-        (RLIMIT_RTTIME,     LimitType::Rttime),
-    ].iter().cloned().collect();
+    FROM_LINUX_RESOURCE.Init(SortArr::New(&arr));
 }
 
 pub const INFINITY: u64 = u64::MAX;
@@ -113,9 +90,9 @@ pub fn ToLinux(l: u64) -> u64 {
 
 pub fn NewLinuxLimitSet() -> LimitSet {
     let ls = LimitSet::default();
-    for (rlt, rl) in &*INIT_RLIMITS {
-        let lt = FROM_LINUX_RESOURCE.get(rlt).expect(&format!("unknown rlimit type {}", rlt));
-        ls.SetUnchecked(*lt, Limit {
+    for (rlt, rl) in &INIT_RLIMITS.0 {
+        let lt = FROM_LINUX_RESOURCE.Get(*rlt).expect(&format!("unknown rlimit type {}", rlt));
+        ls.SetUnchecked(lt, Limit {
             Cur: FromLinux(rl.Cur),
             Max: FromLinux(rl.Max),
         });
@@ -145,19 +122,19 @@ pub struct LimitSetInternal {
 }
 
 #[derive(Clone)]
-pub struct LimitSet(pub Arc<Mutex<LimitSetInternal>>);
+pub struct LimitSet(pub Arc<QMutex<LimitSetInternal>>);
 
 impl Deref for LimitSet {
-    type Target = Arc<Mutex<LimitSetInternal>>;
+    type Target = Arc<QMutex<LimitSetInternal>>;
 
-    fn deref(&self) -> &Arc<Mutex<LimitSetInternal>> {
+    fn deref(&self) -> &Arc<QMutex<LimitSetInternal>> {
         &self.0
     }
 }
 
 impl Default for LimitSet {
     fn default() -> Self {
-        return Self(Arc::new(Mutex::new(LimitSetInternal {
+        return Self(Arc::new(QMutex::new(LimitSetInternal {
             data: BTreeMap::new()
         })))
     }
@@ -171,7 +148,7 @@ impl LimitSet {
             data.insert(*k, *v);
         }
 
-        return Self(Arc::new(Mutex::new(LimitSetInternal {
+        return Self(Arc::new(QMutex::new(LimitSetInternal {
             data: data
         })))
     }
