@@ -204,82 +204,7 @@ context_swap_to:
 
     mov rdi, rsp
     // calculate exception stack frame pointer
-    add rdi, 16*8
-    // align the stack pointer
-    //sub rsp, 8
-    call \target
-    // undo stack pointer alignment
-    //add rsp, 8
-
-    pop r15
-    pop r14
-    pop r13
-    pop r12
-    pop rbp
-    pop rbx
-
-    pop r11
-    pop r10
-    pop r9
-    pop r8
-    pop rax
-    pop rcx
-    pop rdx
-    pop rsi
-    pop rdi
-
-    // pop error code
-    add rsp, 8
-    iretq
-.endm
-
-//todo: better solution with higher performance? fix this.
-.macro HandlerWithErrorCode1 target
-    push rdi
-
-    mov rdi, [rsp + 3*8]    /* regs->cs */
-
-    //caused in user mode?
-    and rdi, 0b11
-    jz 1f
-    //load kernel rsp
-    mov rdi, rsp
-    swapgs
-    mov rsp, gs:0
-    swapgs
-1:
-    //load exception rsp, which is kernel rsp
-    mov rsp, [rsp + 5 * 8]
-2:
-    pushq	[rdi + 6*8]		/* regs->ss */
-    pushq	[rdi + 5*8]		/* regs->rsp */
-    pushq	[rdi + 4*8]		/* regs->eflags */
-    pushq	[rdi + 3*8]		/* regs->cs */
-    pushq	[rdi + 2*8]		/* regs->ip */
-    pushq	[rdi + 1*8]		/* regs->orig_ax */
-    pushq	[rdi + 0*8]     /* regs->rdi */
-
-
-    push rsi
-    push rdx
-    push rcx
-    push rax
-    push r8
-    push r9
-    push r10
-    push r11
-
-    push rbx
-    push rbp
-    push r12
-    push r13
-    push r14
-    push r15
-
-    mov rsi, [rsp + 15*8]
-    mov rdi, rsp
-    // calculate exception stack frame pointer
-    add rdi, 16*8
+    // add rdi, 16*8
     // align the stack pointer
     //sub rsp, 8
     call \target
@@ -350,7 +275,7 @@ context_swap_to:
     mov rsi, [rsp + 15*8]
     mov rdi, rsp
     // calculate exception stack frame pointer
-    add rdi, 16*8
+    // add rdi, 16*8
     // align the stack pointer
     //sub rsp, 8
     call \target
