@@ -72,12 +72,12 @@ impl ListAllocator {
         }
     }
 
-    pub fn Print(&self) {
-        error!("heap addr is {:x}", self.heap.MutexId());
+    /*pub fn Print(&self) {
+        print!("heap addr is {:x}", self.heap.MutexId());
         for i in 0..self.bufs.len() {
-            error!("ListAllocator[{}] {:x}", i, self.bufs[i].MutexId());
+            print!("ListAllocator[{}] {:x}", i, self.bufs[i].MutexId());
         }
-    }
+    }*/
 
     pub fn AddToHead(&self, start: usize, end: usize) {
         unsafe {
@@ -347,7 +347,7 @@ impl MemList {
         self.head = *ptr;
 
         if next % self.size != 0 {
-            raw!(0x234, ret, size as u64);
+            raw!(0x234, next, self.size as u64);
             panic!("Pop next fail");
         }
         //assert!(next % self.size == 0, "Pop next is {:x}/size is {:x}", next, self.size);

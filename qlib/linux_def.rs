@@ -18,16 +18,16 @@ use core::sync::atomic::Ordering;
 
 pub struct QOrdering {}
 impl QOrdering {
-    /*pub const RELAXED :Ordering = Ordering::Relaxed;
+    pub const RELAXED :Ordering = Ordering::Relaxed;
     pub const RELEASE :Ordering = Ordering::Release;
     pub const ACQUIRE :Ordering = Ordering::Acquire;
     pub const ACQ_REL :Ordering = Ordering::AcqRel;
-    pub const SEQ_CST :Ordering = Ordering::SeqCst;*/
-    pub const RELAXED :Ordering = Ordering::SeqCst;
+    pub const SEQ_CST :Ordering = Ordering::SeqCst;
+    /*pub const RELAXED :Ordering = Ordering::SeqCst;
     pub const RELEASE :Ordering = Ordering::SeqCst;
     pub const ACQUIRE :Ordering = Ordering::SeqCst;
     pub const ACQ_REL :Ordering = Ordering::SeqCst;
-    pub const SEQ_CST :Ordering = Ordering::SeqCst;
+    pub const SEQ_CST :Ordering = Ordering::SeqCst;*/
 }
 
 pub const MLOCK_ONFAULT : u32 = 0x01;

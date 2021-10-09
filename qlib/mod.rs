@@ -609,7 +609,8 @@ impl ShareSpace {
 
     pub fn Log(&self, buf: &[u8]) -> bool {
         for i in 0..3 {
-            match self.logBuf.lock().as_mut().unwrap().writeFull(buf) {
+            let ret = self.logBuf.lock().as_mut().unwrap().writeFull(buf);
+            match ret {
                 Err(_) => {
                     print!("log is full ... retry {}", i+1);
                     Self::Yield();

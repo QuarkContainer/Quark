@@ -151,7 +151,8 @@ impl UringAsyncMgr {
         for op in &self.ops {
             vec.push(op.lock().Type());
         }
-        error!("UringAsyncMgr Print {:?}", vec);
+        print!("UringAsyncMgr Print {:?}", vec);
+        //error!("UringAsyncMgr Print {:?}", vec);
     }
 
     pub fn AllocSlot(&self) -> Option<usize> {

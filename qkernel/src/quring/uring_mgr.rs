@@ -345,7 +345,8 @@ impl QUring {
                     break;
                 }
 
-                error!("AUCall submission full...");
+                //error!("AUCall submission full...");
+                print!("AUCall submission full...");
             }
 
             entry = match self.AUringCall(entry) {
@@ -362,7 +363,8 @@ impl QUring {
             match self.asyncMgr.AllocSlot() {
                 None => {
                     self.asyncMgr.Print();
-                    error!("AUCall async slots usage up...");
+                    //error!("AUCall async slots usage up...");
+                    print!("AUCall async slots usage up...");
                 },
                 Some(idx) => {
                     id = idx;
@@ -378,7 +380,8 @@ impl QUring {
                     break;
                 }
 
-                error!("AUCall submission full...");
+                //error!("AUCall submission full...");
+                print!("AUCall submission full...");
             }
 
             entry = match self.AUringCall(entry) {

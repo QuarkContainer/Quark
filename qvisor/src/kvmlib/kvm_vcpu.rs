@@ -609,7 +609,10 @@ impl KVMVcpu {
                         }
 
                         qlib::HYPERCALL_VCPU_YIELD => {
-                            std::thread::yield_now();
+                            use std::{thread, time};
+
+                            let millis10 = time::Duration::from_millis(10);
+                            thread::sleep(millis10);
                         }
 
                         qlib::HYPERCALL_VCPU_DEBUG => {
@@ -777,7 +780,8 @@ impl ShareSpace {
     }
 }
 
-impl<T: ?Sized> QMutex<T> {
+
+impl<T: ?Sized> QMutexIntern<T> {
     pub fn GetID() -> u64 {
         return 0xffff;
     }

@@ -1059,7 +1059,7 @@ impl<'a> ShareSpace {
     }
 }
 
-impl<T: ?Sized> QMutex<T> {
+impl<T: ?Sized> QMutexIntern<T> {
     pub fn GetID() -> u64 {
         return Task::TaskAddress();
     }

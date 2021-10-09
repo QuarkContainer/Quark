@@ -18,30 +18,35 @@ use core::fmt;
 use core::sync::atomic::{AtomicU64};
 use core::marker::PhantomData;
 use core::hint::spin_loop;
-//use spin::*;
+use spin::*;
 
 use super::linux_def::QOrdering;
 //use super::super::asm::*;
 
 pub struct Spin;
-pub struct QMutex<T: ?Sized, R = Spin> {
+
+pub type QMutex<T> = Mutex<T>;
+pub type QMutexGuard<'a, T> = MutexGuard<'a, T>;
+
+
+pub struct QMutexIntern<T: ?Sized, R = Spin> {
     phantom: PhantomData<R>,
     pub(crate) lock: AtomicU64,
     data: UnsafeCell<T>,
 }
 
-pub struct QMutexGuard<'a, T: ?Sized + 'a> {
+pub struct QMutexInternGuard<'a, T: ?Sized + 'a> {
     lock: &'a AtomicU64,
     data: &'a mut T,
 }
 
-unsafe impl<T: ?Sized + Send> Sync for QMutex<T> {}
-unsafe impl<T: ?Sized + Send> Send for QMutex<T> {}
+unsafe impl<T: ?Sized + Send> Sync for QMutexIntern<T> {}
+unsafe impl<T: ?Sized + Send> Send for QMutexIntern<T> {}
 
-impl<T, R> QMutex<T, R> {
+impl<T, R> QMutexIntern<T, R> {
     #[inline(always)]
     pub const fn new(data: T) -> Self {
-        QMutex {
+        QMutexIntern {
             lock: AtomicU64::new(0),
             data: UnsafeCell::new(data),
             phantom: PhantomData,
@@ -97,7 +102,7 @@ pub fn LoadOnce(addr: u64) ->  u64 {
     return ret;
 }
 
-impl<T: ?Sized> QMutex<T> {
+impl<T: ?Sized> QMutexIntern<T> {
     #[inline(always)]
     pub fn CmpExchg(&self, old: u64, new: u64) -> u64 {
         /*match self.lock.compare_exchange(old, new, QOrdering::ACQUIRE, QOrdering::RELAXED) {
@@ -118,7 +123,7 @@ impl<T: ?Sized> QMutex<T> {
     }
 
     #[inline(always)]
-    pub fn lock(&self) -> QMutexGuard<T> {
+    pub fn lock(&self) -> QMutexInternGuard<T> {
         // Can fail to lock even if the spinlock is not locked. May be more efficient than `try_lock`
         // when called in a loop.
         let id = Self::GetID();
@@ -132,7 +137,7 @@ impl<T: ?Sized> QMutex<T> {
             //val = self.lock.compare_and_swap(0, id, QOrdering::ACQUIRE);
             val = self.CmpExchg(0, id);
             if val == 0 {
-                return QMutexGuard {
+                return QMutexInternGuard {
                     lock: &self.lock,
                     data: unsafe { &mut *self.data.get() },
                 }
@@ -157,7 +162,7 @@ impl<T: ?Sized> QMutex<T> {
             }
         }
 
-        return QMutexGuard {
+        return QMutexInternGuard {
             lock: &self.lock,
             data: unsafe { &mut *self.data.get() },
         }
@@ -171,13 +176,13 @@ impl<T: ?Sized> QMutex<T> {
     }
 
     #[inline(always)]
-    pub fn try_lock(&self) -> Option<QMutexGuard<T>> {
+    pub fn try_lock(&self) -> Option<QMutexInternGuard<T>> {
         let id = Self::GetID();
 
         super::super::asm::mfence();
         let val = self.CmpExchg(0, id);
         if val == 0 {
-            Some(QMutexGuard {
+            Some(QMutexInternGuard {
                 lock: &self.lock,
                 data: unsafe { &mut *self.data.get() },
             })
@@ -187,56 +192,56 @@ impl<T: ?Sized> QMutex<T> {
     }
 }
 
-impl<T: ?Sized + fmt::Debug> fmt::Debug for QMutex<T> {
+impl<T: ?Sized + fmt::Debug> fmt::Debug for QMutexIntern<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.try_lock() {
-            Some(guard) => write!(f, "QMutex {{ data: ")
+            Some(guard) => write!(f, "QMutexIntern {{ data: ")
                 .and_then(|()| (&*guard).fmt(f))
                 .and_then(|()| write!(f, "}}")),
-            None => write!(f, "QMutex {{ <locked> }}"),
+            None => write!(f, "QMutexIntern {{ <locked> }}"),
         }
     }
 }
 
-impl<T: ?Sized + Default, R> Default for QMutex<T, R> {
+impl<T: ?Sized + Default, R> Default for QMutexIntern<T, R> {
     fn default() -> Self {
         Self::new(Default::default())
     }
 }
 
-impl<T, R> From<T> for QMutex<T, R> {
+impl<T, R> From<T> for QMutexIntern<T, R> {
     fn from(data: T) -> Self {
         Self::new(data)
     }
 }
 
-impl<'a, T: ?Sized + fmt::Debug> fmt::Debug for QMutexGuard<'a, T> {
+impl<'a, T: ?Sized + fmt::Debug> fmt::Debug for QMutexInternGuard<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(&**self, f)
     }
 }
 
-impl<'a, T: ?Sized + fmt::Display> fmt::Display for QMutexGuard<'a, T> {
+impl<'a, T: ?Sized + fmt::Display> fmt::Display for QMutexInternGuard<'a, T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(&**self, f)
     }
 }
 
-impl<'a, T: ?Sized> Deref for QMutexGuard<'a, T> {
+impl<'a, T: ?Sized> Deref for QMutexInternGuard<'a, T> {
     type Target = T;
     fn deref(&self) -> &T {
         self.data
     }
 }
 
-impl<'a, T: ?Sized> DerefMut for QMutexGuard<'a, T> {
+impl<'a, T: ?Sized> DerefMut for QMutexInternGuard<'a, T> {
     fn deref_mut(&mut self) -> &mut T {
         self.data
     }
 }
 
-impl<'a, T: ?Sized> Drop for QMutexGuard<'a, T> {
-    /// The dropping of the QMutexGuard will release the lock it was created from.
+impl<'a, T: ?Sized> Drop for QMutexInternGuard<'a, T> {
+    /// The dropping of the QMutexInternGuard will release the lock it was created from.
     fn drop(&mut self) {
         self.lock.store(0, QOrdering::RELEASE);
 
@@ -248,15 +253,15 @@ impl<'a, T: ?Sized> Drop for QMutexGuard<'a, T> {
 //////////////////////////////////////////////////////////////////////////////////////////////
 
 pub struct QRwLock<T: ?Sized> {
-    data: QMutex<T>,
+    data: QMutexIntern<T>,
 }
 
 pub struct QRwLockReadGuard<'a, T: 'a + ?Sized> {
-    data: QMutexGuard<'a, T>,
+    data: QMutexInternGuard<'a, T>,
 }
 
 pub struct QRwLockWriteGuard<'a, T: 'a + ?Sized> {
-    data: QMutexGuard<'a, T>,
+    data: QMutexInternGuard<'a, T>,
 }
 
 
@@ -267,7 +272,7 @@ impl<T> QRwLock<T> {
     #[inline]
     pub const fn new(data: T) -> Self {
         return Self {
-            data: QMutex::new(data)
+            data: QMutexIntern::new(data)
         }
     }
 }

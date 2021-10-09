@@ -226,7 +226,6 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     let callId: SysCallID = unsafe { mem::transmute(nr as u64) };
 
     let mut rflags = GetRflags();
-    let dflags = rflags & RFLAGS_DF;
     rflags &= !RFLAGS_DF;
     rflags &= !KERNEL_FLAGS_CLEAR;
     rflags |= KERNEL_FLAGS_SET;
@@ -296,7 +295,6 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     let mut rflags = pt.eflags;
     rflags &= !USER_FLAGS_CLEAR;
     rflags |= USER_FLAGS_SET;
-    eflags |= dflags;
     SetRflags(rflags);
     currTask.RestoreFp();
 
@@ -437,7 +435,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
     /***************** can't run any qcall before this point ************************************/
 
     if id == 0 {
-        ALLOCATOR.Print();
+        //ALLOCATOR.Print();
         IOWait();
     };
 

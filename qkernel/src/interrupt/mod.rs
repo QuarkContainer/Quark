@@ -442,7 +442,6 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
     };
 
     let mut rflags = GetRflags();
-    let dflags = rflags & RFLAGS_DF;
 
     if fromUser {
         rflags &= !KERNEL_FLAGS_CLEAR;
@@ -450,7 +449,7 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
         rflags |= KERNEL_FLAGS_SET;
         SetRflags(rflags);
         //currTask.SaveFp();
-        raw!(0x990, cr2, rflags);
+        //raw!(0x990, cr2, rflags);
     }
     if !fromUser {
         print!("Get pagefault from kernel ... {:#x?}/cr2 is {:x}/cr3 is {:x}", sf, cr2, cr3);
@@ -491,7 +490,6 @@ pub extern fn PageFaultHandler(sf: &mut ExceptionStackFrame, errorCode: u64) {
                 let mut eflags = regs.eflags;
                 eflags &= !USER_FLAGS_CLEAR;
                 eflags |= USER_FLAGS_SET;
-                eflags |= dflags;
                 SetRflags(eflags);
                 //Task::Current().RestoreFp();
             }
