@@ -105,6 +105,7 @@ pub struct VMSpace {
     pub hostAddrTop: u64,
     pub sharedLoasdOffset: u64,
     pub vdsoAddr: u64,
+    pub vcpuCount: usize,
 
     pub shareSpace: &'static ShareSpace,
     pub rng: RandGen,
@@ -289,7 +290,7 @@ impl VMSpace {
 
         process.HostName = spec.hostname.to_string();
 
-        process.NumCpu = Self::VCPUCount() as u32;
+        process.NumCpu = self.vcpuCount as u32;
 
         for i in 0..process.Stdiofds.len() {
             let osfd = unsafe {
@@ -1543,6 +1544,7 @@ impl VMSpace {
             hostAddrTop: 0,
             sharedLoasdOffset: 0x0000_5555_0000_0000,
             vdsoAddr: 0,
+            vcpuCount: 0,
             shareSpace: unsafe {
                 &mut *(0 as * mut ShareSpace)
             },
