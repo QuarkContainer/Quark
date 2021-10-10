@@ -14,6 +14,7 @@
 
 use alloc::string::String;
 use alloc::vec::Vec;
+use spin::*;
 //use alloc::string::ToString;
 use alloc::sync::Arc;
 use ::qlib::mutex::*;
@@ -657,7 +658,7 @@ pub struct InodeIntern {
     pub StableAttr: StableAttr,
     pub LockCtx: LockCtx,
     pub MountSource: Arc<QMutex<MountSource>>,
-    pub Overlay: Option<Arc<QRwLock<OverlayEntry>>>,
+    pub Overlay: Option<Arc<RwLock<OverlayEntry>>>,
 }
 
 impl Default for InodeIntern {

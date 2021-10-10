@@ -15,6 +15,7 @@
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::sync::Weak;
+use spin::*;
 use ::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::ToString;
@@ -34,7 +35,7 @@ use super::file::*;
 use super::dentry::*;
 use super::mount::*;
 
-pub static RENAME: QRwLock<()> = QRwLock::new(());
+pub static RENAME: RwLock<()> = RwLock::new(());
 
 #[derive(Clone)]
 pub struct Dirent(pub Arc<(QMutex<InterDirent>, u64)>);

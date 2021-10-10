@@ -57,17 +57,15 @@ impl DirentOperations for OverlayMountSourceOperations {
             Some(p) => p.clone(),
         };
 
-        match &c.read().lower {
-            Some(ref _l) => {
+        let childLow = c.read().lower.clone();
+        match &childLow {
+            Some(ref l) => {
                 let parentLower = match &p.read().lower {
                     Some(ref l) => l.clone(),
                     _ => panic!("Revalidatef fail"),
                 };
 
-                let childLower = match &c.read().lower {
-                    Some(ref l) => l.clone(),
-                    _ => panic!("Revalidatef fail"),
-                };
+                let childLower = l.clone();
 
                 if self.lower.lock().Revalidate(name, &parentLower, &childLower) {
                     panic!("an overlay cannot revalidate file objects from the lower fs")

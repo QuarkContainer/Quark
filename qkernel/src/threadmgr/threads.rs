@@ -13,9 +13,8 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
+use spin::*;
 use ::qlib::mutex::*;
-use spin::RwLockReadGuard;
-use spin::RwLockWriteGuard;
 use core::ops::Deref;
 use alloc::collections::btree_set::BTreeSet;
 use alloc::vec::Vec;
@@ -120,24 +119,24 @@ impl TaskSetInternal {
 }
 
 #[derive(Clone, Default)]
-pub struct TaskSet(Arc<QRwLock<TaskSetInternal>>, Arc<QRwLock<()>>);
+pub struct TaskSet(Arc<RwLock<TaskSetInternal>>, Arc<RwLock<()>>);
 
 impl Deref for TaskSet {
-    type Target = Arc<QRwLock<TaskSetInternal>>;
+    type Target = Arc<RwLock<TaskSetInternal>>;
 
-    fn deref(&self) -> &Arc<QRwLock<TaskSetInternal>> {
+    fn deref(&self) -> &Arc<RwLock<TaskSetInternal>> {
         &self.0
     }
 }
 
 impl TaskSet {
     pub fn New() -> Self {
-        let ts = Self(Arc::new(QRwLock::new(TaskSetInternal {
+        let ts = Self(Arc::new(RwLock::new(TaskSetInternal {
             root: None,
             sessions: BTreeSet::new(),
             stopCount: 0,
             taskCount: 0,
-        })), Arc::new(QRwLock::new(())));
+        })), Arc::new(RwLock::new(())));
 
         let userns = UserNameSpace::NewRootUserNamespace();
         ts.write().root = Some(PIDNamespace::New(&ts, None, &userns));

@@ -16,6 +16,7 @@ use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use ::qlib::mutex::*;
+use spin::*;
 
 use super::super::qlib::linux_def::*;
 use super::super::qlib::common::*;
@@ -64,7 +65,7 @@ pub fn NewOverlayInode(_task: &Task, o: OverlayEntry, msrc: &Arc<QMutex<MountSou
         StableAttr: inode.StableAttr(),
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
-        Overlay: Some(Arc::new(QRwLock::new(o))),
+        Overlay: Some(Arc::new(RwLock::new(o))),
         ..Default::default()
     };
 
