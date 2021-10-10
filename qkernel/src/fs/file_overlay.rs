@@ -16,7 +16,6 @@ use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use ::qlib::mutex::*;
-use spin::RwLock;
 use core::any::Any;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::borrow::ToOwned;
@@ -255,7 +254,7 @@ impl FileOperations for OverlayFileOperations {
 
 impl SockOperations for OverlayFileOperations {}
 
-fn ReaddirEntries(task: &Task, o: Arc<RwLock<OverlayEntry>>) -> Result<DentMap> {
+fn ReaddirEntries(task: &Task, o: Arc<QRwLock<OverlayEntry>>) -> Result<DentMap> {
     if o.read().upper.is_none() && o.read().lower.is_none() {
         panic!("invalid overlayEntry, needs at least one Inode")
     }

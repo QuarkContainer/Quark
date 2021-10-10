@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::RwLock;
+use ::qlib::mutex::*;
 use core::ops::Deref;
 
 use super::waitlist::*;
@@ -21,12 +21,12 @@ use super::entry::*;
 use super::*;
 
 #[derive(Default, Clone)]
-pub struct Queue(Arc<RwLock<WaitList>>);
+pub struct Queue(Arc<QRwLock<WaitList>>);
 
 impl Deref for Queue {
-    type Target = Arc<RwLock<WaitList>>;
+    type Target = Arc<QRwLock<WaitList>>;
 
-    fn deref(&self) -> &Arc<RwLock<WaitList>> {
+    fn deref(&self) -> &Arc<QRwLock<WaitList>> {
         &self.0
     }
 }

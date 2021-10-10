@@ -28,6 +28,9 @@ pub struct Spin;
 pub type QMutex<T> = Mutex<T>;
 pub type QMutexGuard<'a, T> = MutexGuard<'a, T>;
 
+pub type QRwLock<T> = RwLock<T>;
+pub type QRwLockReadGuard<'a, T> = RwLockReadGuard<'a, T>;
+pub type QRwLockWriteGuard<'a, T> = RwLockWriteGuard<'a, T>;
 
 pub struct QMutexIntern<T: ?Sized, R = Spin> {
     phantom: PhantomData<R>,
@@ -252,23 +255,23 @@ impl<'a, T: ?Sized> Drop for QMutexInternGuard<'a, T> {
 
 //////////////////////////////////////////////////////////////////////////////////////////////
 
-pub struct QRwLock<T: ?Sized> {
+pub struct QRwLockIntern<T: ?Sized> {
     data: QMutexIntern<T>,
 }
 
-pub struct QRwLockReadGuard<'a, T: 'a + ?Sized> {
+pub struct QRwLockInternReadGuard<'a, T: 'a + ?Sized> {
     data: QMutexInternGuard<'a, T>,
 }
 
-pub struct QRwLockWriteGuard<'a, T: 'a + ?Sized> {
+pub struct QRwLockInternWriteGuard<'a, T: 'a + ?Sized> {
     data: QMutexInternGuard<'a, T>,
 }
 
 
-unsafe impl<T: ?Sized + Send> Send for QRwLock<T> {}
-unsafe impl<T: ?Sized + Send + Sync> Sync for QRwLock<T> {}
+unsafe impl<T: ?Sized + Send> Send for QRwLockIntern<T> {}
+unsafe impl<T: ?Sized + Send + Sync> Sync for QRwLockIntern<T> {}
 
-impl<T> QRwLock<T> {
+impl<T> QRwLockIntern<T> {
     #[inline]
     pub const fn new(data: T) -> Self {
         return Self {
@@ -277,44 +280,44 @@ impl<T> QRwLock<T> {
     }
 }
 
-impl<T: ?Sized> QRwLock<T> {
+impl<T: ?Sized> QRwLockIntern<T> {
     #[inline]
-    pub fn read(&self) -> QRwLockReadGuard<T> {
-        return QRwLockReadGuard {
+    pub fn read(&self) -> QRwLockInternReadGuard<T> {
+        return QRwLockInternReadGuard {
             data: self.data.lock()
         }
     }
 
     #[inline]
-    pub fn write(&self) -> QRwLockWriteGuard<T> {
+    pub fn write(&self) -> QRwLockInternWriteGuard<T> {
         super::super::asm::mfence();
-        return QRwLockWriteGuard {
+        return QRwLockInternWriteGuard {
             data: self.data.lock()
         }
     }
 
     #[inline]
-    pub fn try_read(&self) -> Option<QRwLockReadGuard<T>> {
+    pub fn try_read(&self) -> Option<QRwLockInternReadGuard<T>> {
         match self.data.try_lock() {
             None => None,
-            Some(g) => Some(QRwLockReadGuard{
+            Some(g) => Some(QRwLockInternReadGuard{
                 data: g
             })
         }
     }
 
     #[inline]
-    pub fn try_write(&self) -> Option<QRwLockWriteGuard<T>> {
+    pub fn try_write(&self) -> Option<QRwLockInternWriteGuard<T>> {
         match self.data.try_lock() {
             None => None,
-            Some(g) => Some(QRwLockWriteGuard{
+            Some(g) => Some(QRwLockInternWriteGuard{
                 data: g
             })
         }
     }
 }
 
-impl<'rwlock, T: ?Sized> Deref for QRwLockReadGuard<'rwlock, T> {
+impl<'rwlock, T: ?Sized> Deref for QRwLockInternReadGuard<'rwlock, T> {
     type Target = T;
 
     fn deref(&self) -> &T {
@@ -322,7 +325,7 @@ impl<'rwlock, T: ?Sized> Deref for QRwLockReadGuard<'rwlock, T> {
     }
 }
 
-impl<'rwlock, T: ?Sized> Deref for QRwLockWriteGuard<'rwlock, T> {
+impl<'rwlock, T: ?Sized> Deref for QRwLockInternWriteGuard<'rwlock, T> {
     type Target = T;
 
     fn deref(&self) -> &T {
@@ -330,13 +333,13 @@ impl<'rwlock, T: ?Sized> Deref for QRwLockWriteGuard<'rwlock, T> {
     }
 }
 
-impl<'rwlock, T: ?Sized> DerefMut for QRwLockWriteGuard<'rwlock, T> {
+impl<'rwlock, T: ?Sized> DerefMut for QRwLockInternWriteGuard<'rwlock, T> {
     fn deref_mut(&mut self) -> &mut T {
         &mut self.data
     }
 }
 
-impl<T: ?Sized + Default> Default for QRwLock<T> {
+impl<T: ?Sized + Default> Default for QRwLockIntern<T> {
     fn default() -> Self {
         Self::new(Default::default())
     }
@@ -345,26 +348,26 @@ impl<T: ?Sized + Default> Default for QRwLock<T> {
 //////////////////////////////////////////////////////////////////
 
 /*
-pub struct QRwLock<T: ?Sized> {
+pub struct QRwLockIntern<T: ?Sized> {
     data: RwLock<T>,
 }
 
-pub struct QRwLockReadGuard<'a, T: 'a + ?Sized> {
+pub struct QRwLockInternReadGuard<'a, T: 'a + ?Sized> {
     data: RwLockReadGuard<'a, T>,
 }
 
-pub struct QRwLockWriteGuard<'a, T: 'a + ?Sized> {
+pub struct QRwLockInternWriteGuard<'a, T: 'a + ?Sized> {
     data: RwLockWriteGuard<'a, T>,
 }
 
-pub struct QRwLockUpgradableGuard<'a, T: 'a + ?Sized> {
+pub struct QRwLockInternUpgradableGuard<'a, T: 'a + ?Sized> {
     data: RwLockUpgradableGuard<'a, T>,
 }
 
-unsafe impl<T: ?Sized + Send> Send for QRwLock<T> {}
-unsafe impl<T: ?Sized + Send + Sync> Sync for QRwLock<T> {}
+unsafe impl<T: ?Sized + Send> Send for QRwLockIntern<T> {}
+unsafe impl<T: ?Sized + Send + Sync> Sync for QRwLockIntern<T> {}
 
-impl<T> QRwLock<T> {
+impl<T> QRwLockIntern<T> {
     #[inline]
     pub const fn new(data: T) -> Self {
         return Self {
@@ -373,64 +376,64 @@ impl<T> QRwLock<T> {
     }
 }
 
-impl<T: ?Sized> QRwLock<T> {
+impl<T: ?Sized> QRwLockIntern<T> {
     #[inline]
-    pub fn read(&self) -> QRwLockReadGuard<T> {
+    pub fn read(&self) -> QRwLockInternReadGuard<T> {
         super::super::asm::mfence();
-        return QRwLockReadGuard {
+        return QRwLockInternReadGuard {
             data: self.data.read()
         }
     }
 
     #[inline]
-    pub fn write(&self) -> QRwLockWriteGuard<T> {
+    pub fn write(&self) -> QRwLockInternWriteGuard<T> {
         super::super::asm::mfence();
-        return QRwLockWriteGuard {
+        return QRwLockInternWriteGuard {
             data: self.data.write()
         }
     }
 
     #[inline]
-    pub fn upgradeable_read(&self) -> QRwLockUpgradableGuard<T> {
-        return QRwLockUpgradableGuard {
+    pub fn upgradeable_read(&self) -> QRwLockInternUpgradableGuard<T> {
+        return QRwLockInternUpgradableGuard {
             data: self.data.upgradeable_read()
         }
     }
 
     #[inline]
-    pub fn try_read(&self) -> Option<QRwLockReadGuard<T>> {
+    pub fn try_read(&self) -> Option<QRwLockInternReadGuard<T>> {
         super::super::asm::mfence();
         match self.data.try_read() {
             None => None,
-            Some(g) => Some(QRwLockReadGuard{
+            Some(g) => Some(QRwLockInternReadGuard{
                 data: g
             })
         }
     }
 
     #[inline]
-    pub fn try_write(&self) -> Option<QRwLockWriteGuard<T>> {
+    pub fn try_write(&self) -> Option<QRwLockInternWriteGuard<T>> {
         match self.data.try_write() {
             None => None,
-            Some(g) => Some(QRwLockWriteGuard{
+            Some(g) => Some(QRwLockInternWriteGuard{
                 data: g
             })
         }
     }
 
     #[inline]
-    pub fn try_upgradeable_read(&self) -> Option<QRwLockUpgradableGuard<T>> {
+    pub fn try_upgradeable_read(&self) -> Option<QRwLockInternUpgradableGuard<T>> {
         super::super::asm::mfence();
         match self.data.try_upgradeable_read() {
             None => None,
-            Some(g) => Some(QRwLockUpgradableGuard {
+            Some(g) => Some(QRwLockInternUpgradableGuard {
                 data: g
             })
         }
     }
 }
 
-impl<'rwlock, T: ?Sized> Deref for QRwLockReadGuard<'rwlock, T> {
+impl<'rwlock, T: ?Sized> Deref for QRwLockInternReadGuard<'rwlock, T> {
     type Target = T;
 
     fn deref(&self) -> &T {
@@ -438,7 +441,7 @@ impl<'rwlock, T: ?Sized> Deref for QRwLockReadGuard<'rwlock, T> {
     }
 }
 
-impl<'rwlock, T: ?Sized> Deref for QRwLockUpgradableGuard<'rwlock, T> {
+impl<'rwlock, T: ?Sized> Deref for QRwLockInternUpgradableGuard<'rwlock, T> {
     type Target = T;
 
     fn deref(&self) -> &T {
@@ -446,7 +449,7 @@ impl<'rwlock, T: ?Sized> Deref for QRwLockUpgradableGuard<'rwlock, T> {
     }
 }
 
-impl<'rwlock, T: ?Sized> Deref for QRwLockWriteGuard<'rwlock, T> {
+impl<'rwlock, T: ?Sized> Deref for QRwLockInternWriteGuard<'rwlock, T> {
     type Target = T;
 
     fn deref(&self) -> &T {
@@ -454,13 +457,13 @@ impl<'rwlock, T: ?Sized> Deref for QRwLockWriteGuard<'rwlock, T> {
     }
 }
 
-impl<'rwlock, T: ?Sized> DerefMut for QRwLockWriteGuard<'rwlock, T> {
+impl<'rwlock, T: ?Sized> DerefMut for QRwLockInternWriteGuard<'rwlock, T> {
     fn deref_mut(&mut self) -> &mut T {
         &mut self.data
     }
 }
 
-impl<T: ?Sized + Default> Default for QRwLock<T> {
+impl<T: ?Sized + Default> Default for QRwLockIntern<T> {
     fn default() -> Self {
         Self::new(Default::default())
     }

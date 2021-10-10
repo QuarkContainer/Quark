@@ -15,7 +15,6 @@
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
-use spin::RwLock;
 use ::qlib::mutex::*;
 use alloc::vec::Vec;
 
@@ -47,7 +46,7 @@ pub fn overlayCreateWhiteout(parent: &mut Inode, name: &str) -> Result<()> {
     return parent.Setxattr(&XattrOverlayWhiteout(name), &"y".to_string())
 }
 
-pub fn overlayLookup(task: &Task, parent: &Arc<RwLock<OverlayEntry>>, inode: &Inode, name: &str) -> Result<(Dirent, bool)> {
+pub fn overlayLookup(task: &Task, parent: &Arc<QRwLock<OverlayEntry>>, inode: &Inode, name: &str) -> Result<(Dirent, bool)> {
     let parent = parent.read();
 
     if parent.upper.is_none() && parent.lower.is_none() {
@@ -125,7 +124,7 @@ pub fn overlayLookup(task: &Task, parent: &Arc<RwLock<OverlayEntry>>, inode: &In
     return Ok((d, upperIsSome))
 }
 
-pub fn OverlayCreate(task: &Task, o: &Arc<RwLock<OverlayEntry>>, parent: &Dirent, name: &str, flags: &FileFlags, perm: &FilePermissions) -> Result<File> {
+pub fn OverlayCreate(task: &Task, o: &Arc<QRwLock<OverlayEntry>>, parent: &Dirent, name: &str, flags: &FileFlags, perm: &FilePermissions) -> Result<File> {
     CopyUpLockedForRename(task, parent)?;
 
     let mut upper = o.read().upper.as_ref().unwrap().clone();
@@ -160,7 +159,7 @@ pub fn OverlayCreate(task: &Task, o: &Arc<RwLock<OverlayEntry>>, parent: &Dirent
     return Ok(overlayFile)
 }
 
-pub fn overlayCreateDirectory(task: &Task, o: &Arc<RwLock<OverlayEntry>>, parent: &Dirent, name: &str, perm: &FilePermissions) -> Result<()> {
+pub fn overlayCreateDirectory(task: &Task, o: &Arc<QRwLock<OverlayEntry>>, parent: &Dirent, name: &str, perm: &FilePermissions) -> Result<()> {
     CopyUpLockedForRename(task, parent)?;
 
     let mut inode = o.read().upper.as_ref().unwrap().clone();
@@ -169,7 +168,7 @@ pub fn overlayCreateDirectory(task: &Task, o: &Arc<RwLock<OverlayEntry>>, parent
     return res;
 }
 
-pub fn overlayCreateLink(task: &Task, o: &Arc<RwLock<OverlayEntry>>, parent: &Dirent, oldname: &str, newname: &str) -> Result<()> {
+pub fn overlayCreateLink(task: &Task, o: &Arc<QRwLock<OverlayEntry>>, parent: &Dirent, oldname: &str, newname: &str) -> Result<()> {
     CopyUpLockedForRename(task, parent)?;
 
     let mut inode = o.read().upper.as_ref().unwrap().clone();
@@ -178,7 +177,7 @@ pub fn overlayCreateLink(task: &Task, o: &Arc<RwLock<OverlayEntry>>, parent: &Di
     return res;
 }
 
-pub fn overlayCreateHardLink(task: &Task, o: &Arc<RwLock<OverlayEntry>>, parent: &Dirent, target: &Dirent, name: &str) -> Result<()> {
+pub fn overlayCreateHardLink(task: &Task, o: &Arc<QRwLock<OverlayEntry>>, parent: &Dirent, target: &Dirent, name: &str) -> Result<()> {
     CopyUpLockedForRename(task, parent)?;
     CopyUpLockedForRename(task, target)?;
 
@@ -191,7 +190,7 @@ pub fn overlayCreateHardLink(task: &Task, o: &Arc<RwLock<OverlayEntry>>, parent:
     return res;
 }
 
-pub fn overlayCreateFifo(task: &Task, o: &Arc<RwLock<OverlayEntry>>, parent: &Dirent, name: &str, perm: &FilePermissions) -> Result<()> {
+pub fn overlayCreateFifo(task: &Task, o: &Arc<QRwLock<OverlayEntry>>, parent: &Dirent, name: &str, perm: &FilePermissions) -> Result<()> {
     CopyUpLockedForRename(task, parent)?;
 
     let mut inode = o.read().upper.as_ref().unwrap().clone();
@@ -200,7 +199,7 @@ pub fn overlayCreateFifo(task: &Task, o: &Arc<RwLock<OverlayEntry>>, parent: &Di
     return res;
 }
 
-pub fn overlayRemove(task: &Task, o: &Arc<RwLock<OverlayEntry>>, parent: &Dirent, child: &Dirent) -> Result<()> {
+pub fn overlayRemove(task: &Task, o: &Arc<QRwLock<OverlayEntry>>, parent: &Dirent, child: &Dirent) -> Result<()> {
     CopyUpLockedForRename(task, parent)?;
 
     let childinode = child.Inode();
@@ -225,7 +224,7 @@ pub fn overlayRemove(task: &Task, o: &Arc<RwLock<OverlayEntry>>, parent: &Dirent
     return Ok(())
 }
 
-pub fn overlayRename(task: &Task, o: &Arc<RwLock<OverlayEntry>>, oldParent: &Dirent, renamed: &Dirent,
+pub fn overlayRename(task: &Task, o: &Arc<QRwLock<OverlayEntry>>, oldParent: &Dirent, renamed: &Dirent,
                      newParent: &Dirent, newName: &str, replacement: bool) -> Result<()> {
     let renamedInode = renamed.Inode();
     let oldParentInode = oldParent.Inode();
@@ -289,7 +288,7 @@ pub fn overlayRename(task: &Task, o: &Arc<RwLock<OverlayEntry>>, oldParent: &Dir
     return Ok(())
 }
 
-pub fn overlayBind(task: &Task, o: &Arc<RwLock<OverlayEntry>>, name: &str, data: &BoundEndpoint, perm: &FilePermissions) -> Result<Dirent> {
+pub fn overlayBind(task: &Task, o: &Arc<QRwLock<OverlayEntry>>, name: &str, data: &BoundEndpoint, perm: &FilePermissions) -> Result<Dirent> {
     let overlay = o.write();
 
     // We do not support doing anything exciting with sockets unless there
@@ -312,7 +311,7 @@ pub fn overlayBind(task: &Task, o: &Arc<RwLock<OverlayEntry>>, name: &str, data:
     return Ok(Dirent::New(&oInode, name))
 }
 
-pub fn overlayBoundEndpoint(task: &Task, o: &Arc<RwLock<OverlayEntry>>, path: &str) -> Option<BoundEndpoint> {
+pub fn overlayBoundEndpoint(task: &Task, o: &Arc<QRwLock<OverlayEntry>>, path: &str) -> Option<BoundEndpoint> {
     let overlay = o.read();
 
     if overlay.upper.is_some() {
@@ -335,7 +334,7 @@ pub fn overlayBoundEndpoint(task: &Task, o: &Arc<RwLock<OverlayEntry>>, path: &s
     }
 }
 
-pub fn overlayGetFile(task: &Task, o: &Arc<RwLock<OverlayEntry>>, d: &Dirent, flags: &FileFlags) -> Result<File> {
+pub fn overlayGetFile(task: &Task, o: &Arc<QRwLock<OverlayEntry>>, d: &Dirent, flags: &FileFlags) -> Result<File> {
     if flags.Write {
         copyUp(task, d)?
     }
@@ -374,7 +373,7 @@ pub fn overlayGetFile(task: &Task, o: &Arc<RwLock<OverlayEntry>>, d: &Dirent, fl
     return Ok(f)
 }
 
-pub fn overlayUnstableAttr(task: &Task, o: &Arc<RwLock<OverlayEntry>>) -> Result<UnstableAttr> {
+pub fn overlayUnstableAttr(task: &Task, o: &Arc<QRwLock<OverlayEntry>>) -> Result<UnstableAttr> {
     let overlay = o.read();
     if overlay.upper.is_some() {
         let upperInode = overlay.upper.as_ref().unwrap().clone();
@@ -385,7 +384,7 @@ pub fn overlayUnstableAttr(task: &Task, o: &Arc<RwLock<OverlayEntry>>) -> Result
     }
 }
 
-pub fn overlayStableAttr(o: &Arc<RwLock<OverlayEntry>>) -> StableAttr {
+pub fn overlayStableAttr(o: &Arc<QRwLock<OverlayEntry>>) -> StableAttr {
     let overlay = o.read();
     if overlay.upper.is_some() {
         let upperInode = overlay.upper.as_ref().unwrap().clone();
@@ -396,7 +395,7 @@ pub fn overlayStableAttr(o: &Arc<RwLock<OverlayEntry>>) -> StableAttr {
     }
 }
 
-pub fn overlayGetxattr(o: &Arc<RwLock<OverlayEntry>>, name: &str) -> Result<String> {
+pub fn overlayGetxattr(o: &Arc<QRwLock<OverlayEntry>>, name: &str) -> Result<String> {
     if HasPrefix(name, &XATTR_OVERLAY_PREFIX.to_string()) {
         return Err(Error::SysError(SysErr::ENODATA))
     }
@@ -411,7 +410,7 @@ pub fn overlayGetxattr(o: &Arc<RwLock<OverlayEntry>>, name: &str) -> Result<Stri
     }
 }
 
-pub fn overlayListxattr(o: &Arc<RwLock<OverlayEntry>>) -> Result<Vec<String>> {
+pub fn overlayListxattr(o: &Arc<QRwLock<OverlayEntry>>) -> Result<Vec<String>> {
     let overlay = o.read();
     let names = if overlay.upper.is_some() {
         let upperInode = overlay.upper.as_ref().unwrap().clone();
@@ -433,7 +432,7 @@ pub fn overlayListxattr(o: &Arc<RwLock<OverlayEntry>>) -> Result<Vec<String>> {
     return Ok(res)
 }
 
-pub fn overlayCheck(task: &Task, o: &Arc<RwLock<OverlayEntry>>, p: &PermMask) -> Result<()> {
+pub fn overlayCheck(task: &Task, o: &Arc<QRwLock<OverlayEntry>>, p: &PermMask) -> Result<()> {
     let overlay = o.read();
     if overlay.upper.is_some() {
         let upperInode = overlay.upper.as_ref().unwrap().clone();
@@ -450,7 +449,7 @@ pub fn overlayCheck(task: &Task, o: &Arc<RwLock<OverlayEntry>>, p: &PermMask) ->
     }
 }
 
-pub fn overlaySetPermissions(task: &Task, o: &Arc<RwLock<OverlayEntry>>, d: &Dirent, f: FilePermissions) -> bool {
+pub fn overlaySetPermissions(task: &Task, o: &Arc<QRwLock<OverlayEntry>>, d: &Dirent, f: FilePermissions) -> bool {
     match copyUp(task, d) {
         Err(_) => return false,
         Ok(()) => (),
@@ -462,7 +461,7 @@ pub fn overlaySetPermissions(task: &Task, o: &Arc<RwLock<OverlayEntry>>, d: &Dir
     return upperInodeOps.SetPermissions(task, &mut upperInode, f)
 }
 
-pub fn overlaySetOwner(task: &Task, o: &Arc<RwLock<OverlayEntry>>, d: &Dirent, owner: &FileOwner) -> Result<()> {
+pub fn overlaySetOwner(task: &Task, o: &Arc<QRwLock<OverlayEntry>>, d: &Dirent, owner: &FileOwner) -> Result<()> {
     copyUp(task, d)?;
 
     let overlay = o.read();
@@ -471,7 +470,7 @@ pub fn overlaySetOwner(task: &Task, o: &Arc<RwLock<OverlayEntry>>, d: &Dirent, o
     return upperInodeOps.SetOwner(task, &mut upperInode, owner)
 }
 
-pub fn overlaySetTimestamps(task: &Task, o: &Arc<RwLock<OverlayEntry>>, d: &Dirent, ts: &InterTimeSpec) -> Result<()> {
+pub fn overlaySetTimestamps(task: &Task, o: &Arc<QRwLock<OverlayEntry>>, d: &Dirent, ts: &InterTimeSpec) -> Result<()> {
     copyUp(task, d)?;
 
     let overlay = o.read();
@@ -480,7 +479,7 @@ pub fn overlaySetTimestamps(task: &Task, o: &Arc<RwLock<OverlayEntry>>, d: &Dire
     return upperInodeOps.SetTimestamps(task, &mut upperInode, ts)
 }
 
-pub fn overlayTruncate(task: &Task, o: &Arc<RwLock<OverlayEntry>>, d: &Dirent, size: i64) -> Result<()> {
+pub fn overlayTruncate(task: &Task, o: &Arc<QRwLock<OverlayEntry>>, d: &Dirent, size: i64) -> Result<()> {
     copyUp(task, d)?;
 
     let overlay = o.read();
@@ -489,7 +488,7 @@ pub fn overlayTruncate(task: &Task, o: &Arc<RwLock<OverlayEntry>>, d: &Dirent, s
     return upperInodeOps.Truncate(task, &mut upperInode, size)
 }
 
-pub fn overlayAllocate(task: &Task, o: &Arc<RwLock<OverlayEntry>>, d: &Dirent, offset: i64, length: i64) -> Result<()> {
+pub fn overlayAllocate(task: &Task, o: &Arc<QRwLock<OverlayEntry>>, d: &Dirent, offset: i64, length: i64) -> Result<()> {
     copyUp(task, d)?;
 
     let overlay = o.read();
@@ -498,7 +497,7 @@ pub fn overlayAllocate(task: &Task, o: &Arc<RwLock<OverlayEntry>>, d: &Dirent, o
     return upperInodeOps.Allocate(task, &mut upperInode, offset, length)
 }
 
-pub fn overlayReadlink(task: &Task, o: &Arc<RwLock<OverlayEntry>>) -> Result<String> {
+pub fn overlayReadlink(task: &Task, o: &Arc<QRwLock<OverlayEntry>>) -> Result<String> {
     let overlay = o.read();
     if overlay.upper.is_some() {
         let upperInode = overlay.upper.as_ref().unwrap().clone();
@@ -509,7 +508,7 @@ pub fn overlayReadlink(task: &Task, o: &Arc<RwLock<OverlayEntry>>) -> Result<Str
     }
 }
 
-pub fn overlayGetlink(task: &Task, o: &Arc<RwLock<OverlayEntry>>) -> Result<Dirent> {
+pub fn overlayGetlink(task: &Task, o: &Arc<QRwLock<OverlayEntry>>) -> Result<Dirent> {
     let overlay = o.read();
     let _dirent = if overlay.upper.is_some() {
         let upperInode = overlay.upper.as_ref().unwrap().clone();
@@ -538,7 +537,7 @@ pub fn overlayGetlink(task: &Task, o: &Arc<RwLock<OverlayEntry>>) -> Result<Dire
     panic!("overlayGetlink: get dirent");
 }
 
-pub fn overlayStatFS(task: &Task, o: &Arc<RwLock<OverlayEntry>>) -> Result<FsInfo> {
+pub fn overlayStatFS(task: &Task, o: &Arc<QRwLock<OverlayEntry>>) -> Result<FsInfo> {
     let overlay = o.read();
     let mut info = if overlay.upper.is_some() {
         let upperInode = overlay.upper.as_ref().unwrap().clone();

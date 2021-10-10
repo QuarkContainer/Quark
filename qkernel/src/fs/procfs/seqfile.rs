@@ -16,7 +16,6 @@ use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use ::qlib::mutex::*;
-use spin::RwLock;
 use alloc::vec::Vec;
 use core::any::Any;
 use core::ops::Deref;
@@ -129,16 +128,16 @@ fn findIndexAndOffset(data: &[SeqData], offset: usize) -> (usize, usize) {
 }
 
 #[derive(Clone)]
-pub struct SeqFile(Arc<RwLock<SeqFileInternal>>);
+pub struct SeqFile(Arc<QRwLock<SeqFileInternal>>);
 
 unsafe impl Send for SeqFile {}
 
 unsafe impl Sync for SeqFile {}
 
 impl Deref for SeqFile {
-    type Target = Arc<RwLock<SeqFileInternal>>;
+    type Target = Arc<QRwLock<SeqFileInternal>>;
 
-    fn deref(&self) -> &Arc<RwLock<SeqFileInternal>> {
+    fn deref(&self) -> &Arc<QRwLock<SeqFileInternal>> {
         &self.0
     }
 }
@@ -161,7 +160,7 @@ impl SeqFile {
             lastRead: 0,
         };
 
-        return Self(Arc::new(RwLock::new(internal)))
+        return Self(Arc::new(QRwLock::new(internal)))
     }
 }
 

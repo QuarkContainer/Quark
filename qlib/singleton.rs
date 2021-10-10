@@ -33,7 +33,7 @@ impl<T: fmt::Debug> fmt::Debug for Singleton<T> {
     }
 }
 
-// Same unsafe impls as `std::sync::RwLock`, because this also allows for
+// Same unsafe impls as `std::sync::QRwLock`, because this also allows for
 // concurrent reads.
 unsafe impl<T: Send + Sync> Sync for Singleton<T> {}
 unsafe impl<T: Send> Send for Singleton<T> {}

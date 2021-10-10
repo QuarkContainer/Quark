@@ -16,7 +16,7 @@ use alloc::string::ToString;
 use alloc::vec::Vec;
 use core::ptr;
 use alloc::sync::Arc;
-use spin::RwLock;
+use ::qlib::mutex::*;
 use core::mem;
 use alloc::boxed::Box;
 use core::sync::atomic::AtomicU64;
@@ -62,10 +62,10 @@ const DEFAULT_STACK_SIZE: usize = MemoryDef::DEFAULT_STACK_SIZE as usize;
 pub const DEFAULT_STACK_PAGES: u64 = DEFAULT_STACK_SIZE as u64 / (4 * 1024);
 pub const DEFAULT_STACK_MAST: u64 = !(DEFAULT_STACK_SIZE as u64 - 1);
 
-pub static DUMMY_TASK : Singleton<RwLock<Task>> = Singleton::<RwLock<Task>>::New();
+pub static DUMMY_TASK : Singleton<QRwLock<Task>> = Singleton::<QRwLock<Task>>::New();
 
 pub unsafe fn InitSingleton() {
-    DUMMY_TASK.Init(RwLock::new(Task::DummyTask()));
+    DUMMY_TASK.Init(QRwLock::new(Task::DummyTask()));
 }
 
 pub struct TaskStore {}

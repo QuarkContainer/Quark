@@ -14,7 +14,6 @@
 
 use core::any::Any;
 use alloc::sync::Arc;
-use spin::RwLock;
 use ::qlib::mutex::*;
 use core::ops::Deref;
 use alloc::collections::btree_map::BTreeMap;
@@ -50,12 +49,12 @@ pub struct SymlinkInternal {
 }
 
 #[derive(Clone)]
-pub struct Symlink(pub Arc<RwLock<SymlinkInternal>>);
+pub struct Symlink(pub Arc<QRwLock<SymlinkInternal>>);
 
 impl Deref for Symlink {
-    type Target = Arc<RwLock<SymlinkInternal>>;
+    type Target = Arc<QRwLock<SymlinkInternal>>;
 
-    fn deref(&self) -> &Arc<RwLock<SymlinkInternal>> {
+    fn deref(&self) -> &Arc<QRwLock<SymlinkInternal>> {
         &self.0
     }
 }
@@ -75,7 +74,7 @@ impl Symlink {
             xattrs: BTreeMap::new(),
         };
 
-        return Self(Arc::new(RwLock::new(internal)))
+        return Self(Arc::new(QRwLock::new(internal)))
     }
 }
 

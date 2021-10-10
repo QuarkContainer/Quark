@@ -1,6 +1,5 @@
 use alloc::string::ToString;
 use alloc::sync::Arc;
-use spin::RwLock;
 use ::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::vec::Vec;
@@ -22,19 +21,19 @@ use super::super::fs::inode::*;
 use super::super::fs::host::util::*;
 use super::super::qlib::singleton::*;
 
-pub static FAMILIAES : Singleton<RwLock<Families>> = Singleton::<RwLock<Families>>::New();
+pub static FAMILIAES : Singleton<QRwLock<Families>> = Singleton::<QRwLock<Families>>::New();
 pub static SOCKET_DEVICE : Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();
 pub static UNIX_SOCKET_DEVICE : Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();
 
 pub unsafe fn InitSingleton() {
-    FAMILIAES.Init(RwLock::new(Families::New()));
+    FAMILIAES.Init(QRwLock::new(Families::New()));
     SOCKET_DEVICE.Init(NewAnonDevice());
     UNIX_SOCKET_DEVICE.Init(NewAnonDevice());
 }
 
 /*
 lazy_static! {
-    pub static ref FAMILIAES: RwLock<Families> = RwLock::new(Families::New());
+    pub static ref FAMILIAES: QRwLock<Families> = QRwLock::new(Families::New());
     pub static ref SOCKET_DEVICE : Arc<QMutex<Device>> = NewAnonDevice();
     pub static ref UNIX_SOCKET_DEVICE : Arc<QMutex<Device>> = NewAnonDevice();
 }*/

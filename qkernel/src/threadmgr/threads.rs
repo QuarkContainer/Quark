@@ -14,7 +14,6 @@
 
 use alloc::sync::Arc;
 use ::qlib::mutex::*;
-use spin::RwLock;
 use spin::RwLockReadGuard;
 use spin::RwLockWriteGuard;
 use core::ops::Deref;
@@ -121,24 +120,24 @@ impl TaskSetInternal {
 }
 
 #[derive(Clone, Default)]
-pub struct TaskSet(Arc<RwLock<TaskSetInternal>>, Arc<RwLock<()>>);
+pub struct TaskSet(Arc<QRwLock<TaskSetInternal>>, Arc<QRwLock<()>>);
 
 impl Deref for TaskSet {
-    type Target = Arc<RwLock<TaskSetInternal>>;
+    type Target = Arc<QRwLock<TaskSetInternal>>;
 
-    fn deref(&self) -> &Arc<RwLock<TaskSetInternal>> {
+    fn deref(&self) -> &Arc<QRwLock<TaskSetInternal>> {
         &self.0
     }
 }
 
 impl TaskSet {
     pub fn New() -> Self {
-        let ts = Self(Arc::new(RwLock::new(TaskSetInternal {
+        let ts = Self(Arc::new(QRwLock::new(TaskSetInternal {
             root: None,
             sessions: BTreeSet::new(),
             stopCount: 0,
             taskCount: 0,
-        })), Arc::new(RwLock::new(())));
+        })), Arc::new(QRwLock::new(())));
 
         let userns = UserNameSpace::NewRootUserNamespace();
         ts.write().root = Some(PIDNamespace::New(&ts, None, &userns));
