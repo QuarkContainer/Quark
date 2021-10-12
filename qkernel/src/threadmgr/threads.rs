@@ -13,10 +13,8 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
+use spin::*;
 use ::qlib::mutex::*;
-use spin::RwLock;
-use spin::RwLockReadGuard;
-use spin::RwLockWriteGuard;
 use core::ops::Deref;
 use alloc::collections::btree_set::BTreeSet;
 use alloc::vec::Vec;

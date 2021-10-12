@@ -16,7 +16,7 @@ use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use ::qlib::mutex::*;
-use spin::RwLock;
+use spin::*;
 use core::any::Any;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::borrow::ToOwned;

@@ -14,10 +14,10 @@
 
 use alloc::string::String;
 use alloc::vec::Vec;
+use spin::*;
 //use alloc::string::ToString;
 use alloc::sync::Arc;
 use ::qlib::mutex::*;
-use spin::RwLock;
 use core::any::Any;
 use core::ops::Deref;
 

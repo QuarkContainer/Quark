@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::RwLock;
 use ::qlib::mutex::*;
 use core::ops::Deref;
 use core::any::Any;
@@ -46,7 +45,7 @@ pub fn NewMasterNode(task: &Task, d: &DirInodeOperations, owner: &FileOwner, p: 
         ..Default::default()
     });
 
-    let iops = MasterInodeOperations(Arc::new(RwLock::new(MasterInodeOperationsInternal {
+    let iops = MasterInodeOperations(Arc::new(QRwLock::new(MasterInodeOperationsInternal {
         fsType: FSMagic::DEVPTS_SUPER_MAGIC,
         unstable: unstable,
         d: d.clone(),
@@ -84,12 +83,12 @@ pub struct MasterInodeOperationsInternal {
 }
 
 #[derive(Clone)]
-pub struct MasterInodeOperations(Arc<RwLock<MasterInodeOperationsInternal>>);
+pub struct MasterInodeOperations(Arc<QRwLock<MasterInodeOperationsInternal>>);
 
 impl Deref for MasterInodeOperations {
-    type Target = Arc<RwLock<MasterInodeOperationsInternal>>;
+    type Target = Arc<QRwLock<MasterInodeOperationsInternal>>;
 
-    fn deref(&self) -> &Arc<RwLock<MasterInodeOperationsInternal>> {
+    fn deref(&self) -> &Arc<QRwLock<MasterInodeOperationsInternal>> {
         &self.0
     }
 }

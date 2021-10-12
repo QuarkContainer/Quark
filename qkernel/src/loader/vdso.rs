@@ -16,7 +16,7 @@ use alloc::vec::Vec;
 use alloc::sync::Arc;
 use alloc::slice;
 use core::ops::Deref;
-use spin::RwLock;
+use ::qlib::mutex::*;
 use xmas_elf::program::Type;
 use xmas_elf::program::ProgramHeader::{Ph64};
 pub use xmas_elf::header::HeaderPt2;
@@ -84,12 +84,12 @@ impl VdsoInternal {
 }
 
 #[derive(Clone, Default)]
-pub struct Vdso(Arc<RwLock<VdsoInternal>>);
+pub struct Vdso(Arc<QRwLock<VdsoInternal>>);
 
 impl Deref for Vdso {
-    type Target = Arc<RwLock<VdsoInternal>>;
+    type Target = Arc<QRwLock<VdsoInternal>>;
 
-    fn deref(&self) -> &Arc<RwLock<VdsoInternal>> {
+    fn deref(&self) -> &Arc<QRwLock<VdsoInternal>> {
         &self.0
     }
 }

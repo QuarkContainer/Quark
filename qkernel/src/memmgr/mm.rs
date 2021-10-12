@@ -14,7 +14,6 @@
 
 use alloc::sync::Arc;
 use alloc::sync::Weak;
-use spin::*;
 use core::ops::Deref;
 use alloc::string::String;
 use alloc::string::ToString;
@@ -134,7 +133,7 @@ pub struct MemoryManagerInternal {
     pub mappingLock: Arc<QMutex<()>>,
     pub mapping: QMutex<MMMapping>,
 
-    pub pagetable: RwLock<MMPagetable>,
+    pub pagetable: QRwLock<MMPagetable>,
 
     pub metadataLock: Arc<QMutex<()>>,
     pub metadata: QMutex<MMMetadata>,
@@ -236,7 +235,7 @@ impl MemoryManager {
             inited: true,
             mappingLock: Arc::new(QMutex::new(())),
             mapping: QMutex::new(mapping),
-            pagetable: RwLock::new(pagetable),
+            pagetable: QRwLock::new(pagetable),
             metadataLock: Arc::new(QMutex::new(())),
             metadata: QMutex::new(metadata),
             layout: QMutex::new(layout),

@@ -60,7 +60,6 @@ use core::sync::atomic::AtomicI32;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 use self::mutex::*;
-use spin::RwLock;
 
 use super::asm::*;
 use self::task_mgr::*;
@@ -532,7 +531,7 @@ pub struct ShareSpace {
     pub guestMsgCount: AtomicU64,
 
     pub kernelIOThreadWaiting: AtomicBool,
-    pub config: RwLock<Config>,
+    pub config: QRwLock<Config>,
 
     pub logBuf: QMutex<Option<ByteStream>>,
     pub logfd: AtomicI32,
@@ -553,7 +552,7 @@ impl ShareSpace {
             hostMsgCount: AtomicU64::new(0),
             guestMsgCount: AtomicU64::new(0),
             kernelIOThreadWaiting: AtomicBool::new(false),
-            config: RwLock::new(Config::default()),
+            config: QRwLock::new(Config::default()),
             logBuf: QMutex::new(None),
             logfd: AtomicI32::new(-1),
             values: [
