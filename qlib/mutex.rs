@@ -28,6 +28,9 @@ pub struct Spin;
 pub type QMutex<T> = Mutex<T>;
 pub type QMutexGuard<'a, T> = MutexGuard<'a, T>;
 
+//pub type QMutex<T> = QMutexIntern<T>;
+//pub type QMutexGuard<'a, T> = QMutexInternGuard<'a, T>;
+
 pub type QRwLock<T> = RwLock<T>;
 pub type QRwLockReadGuard<'a, T> = RwLockReadGuard<'a, T>;
 pub type QRwLockWriteGuard<'a, T> = RwLockWriteGuard<'a, T>;
@@ -35,7 +38,6 @@ pub type QRwLockWriteGuard<'a, T> = RwLockWriteGuard<'a, T>;
 //pub type QRwLock<T> = QRwLockIntern<T>;
 //pub type QRwLockReadGuard<'a, T> = QRwLockInternReadGuard<'a, T>;
 //pub type QRwLockWriteGuard<'a, T> = QRwLockInternWriteGuard<'a, T>;
-
 
 pub struct QMutexIntern<T: ?Sized, R = Spin> {
     phantom: PhantomData<R>,

@@ -29,7 +29,7 @@ pub struct UringMgr {
     pub ring: IoUring,
 }
 
-pub const FDS_SIZE : usize = 4096;
+pub const FDS_SIZE : usize = 8192;
 
 impl UringMgr {
     pub fn New(size: usize) -> Self {
@@ -96,6 +96,10 @@ impl UringMgr {
     }
 
     pub fn Addfd(&mut self, fd: i32) -> Result<()> {
+        if fd as usize >= self.fds.len() {
+            error!("Addfd out of bound fd {}", fd);
+            panic!("Addfd out of bound fd {}", fd)
+        }
         self.fds[fd as usize] = fd;
 
         let fu = sys::io_uring_files_update {
@@ -108,6 +112,11 @@ impl UringMgr {
     }
 
     pub fn Removefd(&mut self, fd: i32) -> Result<()> {
+        if fd as usize >= self.fds.len() {
+            error!("Removefd out of bound fd {}", fd);
+            panic!("Removefd out of bound fd {}", fd)
+        }
+
         self.fds[fd as usize] = -1;
         let fu = sys::io_uring_files_update {
             offset : fd as u32,
