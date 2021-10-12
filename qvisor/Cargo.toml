@@ -49,7 +49,7 @@ buddy_system_allocator = "0.8.0"
 core_affinity = "0.5.10"
 
 [dependencies.lazy_static]
-version = "1.0"
+version = "1.4"
 features = ["spin_no_std"]
 
 [profile.dev]

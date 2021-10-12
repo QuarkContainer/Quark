@@ -79,6 +79,7 @@ pub fn InitSingleton() {
         metric::InitSingleton();
         perf_tunning::InitSingleton();
         auth::id::InitSingleton();
+        linux::limits::InitSingleton();
     }
 }
 
