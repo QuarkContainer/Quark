@@ -46,10 +46,6 @@ pub fn Notify(fd: i32, mask: EventMask) {
     GUEST_NOTIFIER.Notify(fd, mask);
 }
 
-pub fn IOBufWriteRespHandle(fd: i32, addr: u64, len: usize, ret: i64) {
-    GUEST_NOTIFIER.IOBufWriteRespHandle(fd, addr, len, ret)
-}
-
 pub fn HostLogFlush() {
     //GUEST_NOTIFIER.PrintStrRespHandler(addr, len)
     super::IOURING.LogFlush();
@@ -191,25 +187,5 @@ impl Notifier {
                 fi.queue.Notify(EventMaskFromLinux(mask as u32));
             }
         }
-    }
-
-    pub fn IOBufWriteRespHandle(&self, _fd: i32, _addr: u64, _len: usize, _ret: i64) {
-        /*BUF_MGR.Free(addr, len as u64);
-        if ret < 0 {
-            let n = self.lock();
-            match n.fdMap.get(&fd) {
-                None => (),
-                Some(fi) => {
-                    let iops = match fi.iops.Upgrade() {
-                        None => {
-                            return;
-                        }
-                        Some(iops) => iops
-                    };
-
-                    iops.lock().errorcode = ret;
-                }
-            }
-        }*/
     }
 }

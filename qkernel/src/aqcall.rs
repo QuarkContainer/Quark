@@ -21,13 +21,9 @@ impl HostInputMsg {
             HostInputMsg::FdNotify(notify) => {
                 notify.Process()
             }
-            HostInputMsg::IOBufWriteResp(msg) => {
-                IOBufWriteRespHandle(msg.fd, msg.addr, msg.len, msg.ret);
-            }
             HostInputMsg::LogFlush => {
                 HostLogFlush();
             }
-            HostInputMsg::WakeIOThreadResp(()) => ()
         }
     }
 }
