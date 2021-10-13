@@ -415,7 +415,7 @@ impl AsyncPollAdd {
 
     pub fn Process(&mut self, result: i32) -> bool {
         if result <= 0 {
-            if result != -SysErr::ECANCELED {
+            if result != -SysErr::ECANCELED && result != -SysErr::EBADF {
                 panic!("AsyncPollAdd fail {}/{}", result, self.fd)
             }
 
