@@ -20,7 +20,6 @@ pub enum HostOutputMsg {
     MUnmap(MUnmap),
 }
 
-
 #[derive(Clone, Default, Debug, Copy)]
 pub struct MUnmap {
     pub addr: u64,

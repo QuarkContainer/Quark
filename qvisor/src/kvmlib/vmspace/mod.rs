@@ -13,9 +13,7 @@
 // limitations under the License.
 
 pub mod HostFileMap;
-//pub mod TimerMgr;
 pub mod syscall;
-pub mod timer_keeper;
 pub mod hostfdnotifier;
 pub mod time;
 pub mod host_pma_keeper;
@@ -61,7 +59,6 @@ use super::ucall::usocket::*;
 use super::*;
 use self::HostFileMap::fdinfo::*;
 use self::syscall::*;
-use self::time::*;
 use self::random::*;
 use self::limits::*;
 use super::runc::runtime::signal_handle::*;
