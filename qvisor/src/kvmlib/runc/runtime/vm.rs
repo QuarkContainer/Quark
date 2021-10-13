@@ -350,9 +350,6 @@ impl VirtualMachine {
                 return;
             }
 
-            //PerfGofrom(PerfType::QCall);
-            FD_NOTIFIER.WaitAndNotify(shareSpace, 0).unwrap();
-
             for _ in 0..10 {
                 for _ in 0..20 {
                     if shareSpace.ReadyOutputMsgCnt() > 0 {
@@ -376,7 +373,7 @@ impl VirtualMachine {
                 }
 
                 //error!("io thread sleep... shareSpace.ReadyOutputMsgCnt() = {}", shareSpace.ReadyOutputMsgCnt());
-                let _cnt = FD_NOTIFIER.WaitAndNotify(shareSpace, -1).unwrap();
+                FD_NOTIFIER.Wait();
                 //error!("io thread wake...");
 
                 if !IsRunning() {
