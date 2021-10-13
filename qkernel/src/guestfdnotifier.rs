@@ -22,6 +22,7 @@ use super::fs::host::hostinodeop::*;
 use super::qlib::common::*;
 use super::qlib::linux_def::*;
 use super::qlib::singleton::*;
+use super::IOURING;
 
 pub static GUEST_NOTIFIER : Singleton<Notifier> = Singleton::<Notifier>::New();
 
@@ -59,6 +60,7 @@ pub struct GuestFdInfo {
     pub mask: EventMask,
     pub waiting: bool,
     pub iops: HostInodeOpWeak,
+    pub userdata: Option<usize>,
 }
 
 // notifier holds all the state necessary to issue notifications when IO events
@@ -88,9 +90,27 @@ impl Notifier {
         return Self(QMutex::new(internal))
     }
 
-    fn waitfd(fd: i32, mask: EventMask) -> Result<()> {
-        HostSpace::WaitFD(fd, mask);
+    fn Waitfd(&self, fd: i32, mask: EventMask) -> Result<()> {
+        let mut n = self.lock();
+        let fi = match n.fdMap.get_mut(&fd) {
+            None => {
+                panic!("Notifier::waitfd can't find fd {}", fd)
+            }
+            Some(fi) => fi,
+        };
 
+        let userdata = fi.userdata.take();
+
+        match userdata {
+            None => (),
+            Some(idx) => {
+                IOURING.AsyncPollRemove(idx as u64);
+            }
+        }
+
+        let idx = IOURING.AsyncPollAdd(fd, mask as _);
+
+        fi.userdata = Some(idx);
         return Ok(())
     }
 
@@ -123,7 +143,7 @@ impl Notifier {
             mask
         };
 
-        return Self::waitfd(fd, mask);
+        return self.Waitfd(fd, mask);
     }
 
     pub fn AddFD(&self, fd: i32, iops: &HostInodeOp) {
@@ -140,12 +160,27 @@ impl Notifier {
             mask: 0,
             waiting: false,
             iops: iops.Downgrade(),
+            userdata: None,
         });
     }
 
     pub fn RemoveFD(&self, fd: i32) {
         let mut n = self.lock();
-        n.fdMap.remove(&fd);
+        let mut fi = match n.fdMap.remove(&fd) {
+            None => {
+                panic!("Notifier::RemoveFD can't find fd {}", fd)
+            }
+            Some(fi) => fi
+        };
+
+        let userdata = fi.userdata.take();
+
+        match userdata {
+            None => (),
+            Some(idx) => {
+                IOURING.AsyncPollRemove(idx as u64);
+            }
+        }
     }
 
     pub fn Notify(&self, fd: i32, mask: EventMask) {

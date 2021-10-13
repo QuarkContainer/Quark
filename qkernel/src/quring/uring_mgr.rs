@@ -177,6 +177,19 @@ impl QUring {
         return idx;
     }
 
+    pub fn AsyncPollAdd(&self, fd: i32, flags: u32) -> usize {
+        let ops = AsyncPollAdd::New(fd, flags);
+        let idx = self.AUCall(AsyncOps::AsyncPollAdd(ops));
+
+        return idx;
+    }
+
+    pub fn AsyncPollRemove(&self, userData: u64) -> usize {
+        let ops = AsyncPollRemove::New(userData);
+        let idx = self.AUCall(AsyncOps::AsyncPollRemove(ops));
+        return idx;
+    }
+
     pub fn RawTimeout(&self, _task: &Task, timerId: u64, seqNo: u64, ns: i64) -> usize {
         let ops = AsyncRawTimeout::New(timerId, seqNo, ns);
         let idx = self.AUCall(AsyncOps::AsyncRawTimeout(ops));
