@@ -22,12 +22,11 @@ use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::control_msg::*;
 use super::super::qlib::loader;
-use super::super::{FD_NOTIFIER, IO_MGR};
+use super::super::IO_MGR;
 use super::ucall::*;
 use super::usocket::*;
 use super::super::runc::container::container::*;
 use super::super::vmspace::*;
-use super::super::vmspace::hostfdnotifier::*;
 
 lazy_static! {
     pub static ref UCALL_SRV : Mutex<UCallController> = Mutex::new(UCallController::New());
@@ -108,9 +107,9 @@ pub fn HandleExecProcess(usock: USocket, execArgs: &mut ExecArgs, fds: &[i32]) -
         let hostfd = IO_MGR.lock().AddFd(osfd, epollable);
 
         // can block wait
-        if epollable {
+        /*if epollable {
             FD_NOTIFIER.AddFd(osfd, Box::new(GuestFd{hostfd: hostfd}));
-        }
+        }*/
 
         process.Stdiofds[i] = hostfd;
     }

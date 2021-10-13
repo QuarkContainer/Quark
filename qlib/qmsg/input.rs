@@ -18,9 +18,7 @@ use super::super::linux_def::*;
 #[repr(align(128))]
 pub enum HostInputMsg {
     FdNotify(FdNotify),
-    IOBufWriteResp(IOBufWriteResp),
     LogFlush,
-    WakeIOThreadResp(()),
 }
 
 
@@ -38,10 +36,4 @@ pub struct IOBufWriteResp {
     pub addr: u64,
     pub len: usize,
     pub ret: i64,
-}
-
-#[derive(Debug, Default, Copy, Clone)]
-pub struct PrintStrResp {
-    pub addr: u64,
-    pub len: usize,
 }
