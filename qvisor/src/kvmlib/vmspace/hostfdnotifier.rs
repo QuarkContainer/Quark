@@ -21,7 +21,6 @@ use core::ops::Deref;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::ShareSpace;
-use super::super::VMS;
 
 pub trait HostFdHandler: Send + Sync {
     fn Process(&self, shareSpace: &'static ShareSpace, event: EventMask);
@@ -31,16 +30,6 @@ pub struct EventHandler {}
 
 impl HostFdHandler for EventHandler {
     fn Process(&self, _shareSpace: &'static ShareSpace, _event: EventMask) {}
-}
-
-pub struct GuestFd {
-    pub hostfd: i32
-}
-
-impl HostFdHandler for GuestFd {
-    fn Process(&self, _shareSpace: &'static ShareSpace, event: EventMask) {
-        VMS.lock().FdNotify(self.hostfd, event);
-    }
 }
 
 //#[derive(Clone)]
@@ -185,27 +174,6 @@ impl HostFdNotifier {
             let errno = errno::errno().0;
             error!("hostfdnotifier Trigger fail to write data to the eventfd, errno is {}", errno);
         }
-    }
-
-    pub fn WaitFd(&self, fd: i32, mask: EventMask) -> Result<()> {
-        let mut n = self.write();
-
-        return n.WaitFd(fd, mask);
-    }
-
-    pub fn AddFd<T: HostFdHandler + 'static>(&self, fd: i32, handler: Box<T>) {
-        let mut n = self.0.write();
-
-        n.AddFd(fd, handler);
-    }
-
-    pub fn RemoveFd(&self, fd: i32) -> Result<()> {
-        let mut n = self.0.write();
-
-        n.WaitFd(fd, 0)?;
-        n.fdMap.remove(&fd);
-
-        return Ok(())
     }
 
     pub const MAX_EVENTS: usize = 128;
