@@ -31,6 +31,7 @@ use super::super::socket::hostinet::socket::*;
 use super::super::IOURING;
 use super::super::kernel::timer;
 use super::super::SHARESPACE;
+use super::super::guestfdnotifier::GUEST_NOTIFIER;
 
 #[repr(align(128))]
 pub enum AsyncOps {
@@ -48,6 +49,8 @@ pub enum AsyncOps {
     AIOFsync(AIOFsync),
     AsyncRawTimeout(AsyncRawTimeout),
     AsyncLogFlush(AsyncLogFlush),
+    AsyncPollAdd(AsyncPollAdd),
+    AsyncPollRemove(AsyncPollRemove),
     None,
 }
 
@@ -68,6 +71,8 @@ impl AsyncOps {
             AsyncOps::AIOFsync(ref msg) => return msg.SEntry(),
             AsyncOps::AsyncRawTimeout(ref msg) => return msg.SEntry(),
             AsyncOps::AsyncLogFlush(ref msg) => return msg.SEntry(),
+            AsyncOps::AsyncPollAdd(ref msg) => return msg.SEntry(),
+            AsyncOps::AsyncPollRemove(ref msg) => return msg.SEntry(),
             AsyncOps::None => ()
         };
 
@@ -90,6 +95,8 @@ impl AsyncOps {
             AsyncOps::AIOFsync(ref mut msg) => msg.Process(result),
             AsyncOps::AsyncRawTimeout(ref mut msg) => msg.Process(result),
             AsyncOps::AsyncLogFlush(ref mut msg) => msg.Process(result),
+            AsyncOps::AsyncPollAdd(ref mut msg) => msg.Process(result),
+            AsyncOps::AsyncPollRemove(ref mut msg) => msg.Process(result),
             AsyncOps::None => panic!("AsyncOps::None SEntry fail"),
         };
 
@@ -116,6 +123,8 @@ impl AsyncOps {
             AsyncOps::AIOFsync(_) => return 12,
             AsyncOps::AsyncRawTimeout(_) => return 13,
             AsyncOps::AsyncLogFlush(_) => return 14,
+            AsyncOps::AsyncPollAdd(_) => return 15,
+            AsyncOps::AsyncPollRemove(_) => return 16,
             AsyncOps::None => ()
         };
 
@@ -388,6 +397,62 @@ impl AsyncLogFlush {
             addr,
             len,
         }
+    }
+}
+
+pub struct AsyncPollAdd {
+    pub fd : i32,
+    pub flags: u32,
+}
+
+impl AsyncPollAdd {
+    pub fn SEntry(&self) -> squeue::Entry {
+        let op = opcode::PollAdd::new(types::Fd(self.fd), self.flags);
+
+        return op.build()
+            .flags(squeue::Flags::FIXED_FILE);
+    }
+
+    pub fn Process(&mut self, result: i32) -> bool {
+        if result <= 0 {
+            if result != -SysErr::ECANCELED {
+                panic!("AsyncPollAdd fail {}/{}", result, self.fd)
+            }
+
+            return false
+        }
+
+        GUEST_NOTIFIER.Notify(self.fd, result as EventMask);
+        return true
+    }
+
+    pub fn New(fd: i32, flags: u32) -> Self {
+        return Self {
+            fd,
+            flags,
+        }
+    }
+}
+
+pub struct AsyncPollRemove{
+    pub userData: u64
+}
+
+impl AsyncPollRemove {
+    pub fn New(userData: u64) -> Self {
+        return Self {
+            userData: userData
+        }
+    }
+
+    pub fn SEntry(&self) -> squeue::Entry {
+        let op = PollRemove::new(self.userData);
+
+        return op.build();
+    }
+
+    pub fn Process(&mut self, _result: i32) -> bool {
+        return false
     }
 }
 
