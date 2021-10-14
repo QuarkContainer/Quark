@@ -164,14 +164,6 @@ impl QUring {
         return self.UCall(task, msg);
     }
 
-    pub fn PollRemove(&self, task: &Task, userData: u64) -> i64 {
-        let msg = UringOp::PollRemove(PollRemoveOp{
-            userData: userData,
-        });
-
-        return self.UCall(task, msg);
-    }
-
     pub fn AsyncTimerRemove(&self, userData: u64) -> usize {
         let ops = AsyncTimerRemove::New(userData);
         let idx = self.AUCall(AsyncOps::AsyncTimerRemove(ops));
@@ -182,19 +174,6 @@ impl QUring {
         let ops = AsyncTimeout::New(expire, timeout);
         let idx = self.AUCall(AsyncOps::AsyncTimeout(ops));
 
-        return idx;
-    }
-
-    pub fn AsyncPollAdd(&self, fd: i32, flags: u32) -> usize {
-        let ops = AsyncPollAdd::New(fd, flags);
-        let idx = self.AUCall(AsyncOps::AsyncPollAdd(ops));
-
-        return idx;
-    }
-
-    pub fn AsyncPollRemove(&self, userData: u64) -> usize {
-        let ops = AsyncPollRemove::New(userData);
-        let idx = self.AUCall(AsyncOps::AsyncPollRemove(ops));
         return idx;
     }
 
@@ -323,7 +302,7 @@ impl QUring {
         let ret = cqe.result();
 
         // the taskid should be larger than 0x1000 (4K)
-        if data < UringAsyncMgr::MinAsyncId() {
+        if data > 0x10000 {
             let call = unsafe {
                 &mut *(data as * mut UringCall)
             };
@@ -332,13 +311,11 @@ impl QUring {
             //error!("uring process: call is {:x?}", &call);
             ScheduleQ(call.taskId);
         } else {
-            let id = data as usize;
-            let idx = UringAsyncMgr::ToIdx(id);
+            let idx = data as usize;
             let mut ops = self.asyncMgr.ops[idx].lock();
-            let rerun = ops.0.Process(ret, id);
+            let rerun = ops.Process(ret, idx);
             if !rerun {
-                ops.0 = AsyncOps::None;
-                ops.1 = ops.1.wrapping_add(1);
+                *ops = AsyncOps::None;
                 self.asyncMgr.FreeSlot(idx);
             }
         }
@@ -380,7 +357,7 @@ impl QUring {
     }
 
     pub fn AUCall(&self, ops: AsyncOps) -> usize {
-        let index;
+        let id;
 
         loop {
             match self.asyncMgr.AllocSlot() {
@@ -390,13 +367,13 @@ impl QUring {
                     print!("AUCall async slots usage up...");
                 },
                 Some(idx) => {
-                    index = idx;
+                    id = idx;
                     break;
                 }
             }
         }
 
-        let (mut entry, id) = self.asyncMgr.SetOps(index, ops);
+        let mut entry = self.asyncMgr.SetOps(id, ops);
         loop {
             loop {
                 if !self.submission.lock().IsFull() {
@@ -408,7 +385,7 @@ impl QUring {
             }
 
             entry = match self.AUringCall(entry) {
-                None => return id as usize,
+                None => return id,
                 Some(e) => e
             }
         }

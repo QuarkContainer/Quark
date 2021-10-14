@@ -14,17 +14,31 @@
 
 use super::guestfdnotifier::*;
 use super::qlib::qmsg::*;
+use super::kernel::timer;
 
 impl HostInputMsg {
     pub fn Process(self) {
         match self {
+            HostInputMsg::FireTimer(timer) => {
+                timer.Process()
+            }
             HostInputMsg::FdNotify(notify) => {
                 notify.Process()
+            }
+            HostInputMsg::IOBufWriteResp(msg) => {
+                IOBufWriteRespHandle(msg.fd, msg.addr, msg.len, msg.ret);
             }
             HostInputMsg::LogFlush => {
                 HostLogFlush();
             }
+            HostInputMsg::WakeIOThreadResp(()) => ()
         }
+    }
+}
+
+impl FireTimer {
+    pub fn Process(&self) {
+        timer::FireTimer(self.TimerId, self.SeqNo);
     }
 }
 
