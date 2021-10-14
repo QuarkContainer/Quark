@@ -164,6 +164,14 @@ impl QUring {
         return self.UCall(task, msg);
     }
 
+    pub fn PollRemove(&self, task: &Task, userData: u64) -> i64 {
+        let msg = UringOp::PollRemove(PollRemoveOp{
+            userData: userData,
+        });
+
+        return self.UCall(task, msg);
+    }
+
     pub fn AsyncTimerRemove(&self, userData: u64) -> usize {
         let ops = AsyncTimerRemove::New(userData);
         let idx = self.AUCall(AsyncOps::AsyncTimerRemove(ops));
@@ -315,7 +323,7 @@ impl QUring {
         let ret = cqe.result();
 
         // the taskid should be larger than 0x1000 (4K)
-        if data > 0x10000 {
+        if data < UringAsyncMgr::MinAsyncId() {
             let call = unsafe {
                 &mut *(data as * mut UringCall)
             };
@@ -324,11 +332,13 @@ impl QUring {
             //error!("uring process: call is {:x?}", &call);
             ScheduleQ(call.taskId);
         } else {
-            let idx = data as usize;
+            let id = data as usize;
+            let idx = UringAsyncMgr::ToIdx(id);
             let mut ops = self.asyncMgr.ops[idx].lock();
-            let rerun = ops.Process(ret, idx);
+            let rerun = ops.0.Process(ret, id);
             if !rerun {
-                *ops = AsyncOps::None;
+                ops.0 = AsyncOps::None;
+                ops.1 = ops.1.wrapping_add(1);
                 self.asyncMgr.FreeSlot(idx);
             }
         }
@@ -370,7 +380,7 @@ impl QUring {
     }
 
     pub fn AUCall(&self, ops: AsyncOps) -> usize {
-        let id;
+        let index;
 
         loop {
             match self.asyncMgr.AllocSlot() {
@@ -380,13 +390,13 @@ impl QUring {
                     print!("AUCall async slots usage up...");
                 },
                 Some(idx) => {
-                    id = idx;
+                    index = idx;
                     break;
                 }
             }
         }
 
-        let mut entry = self.asyncMgr.SetOps(id, ops);
+        let (mut entry, id) = self.asyncMgr.SetOps(index, ops);
         loop {
             loop {
                 if !self.submission.lock().IsFull() {
@@ -398,7 +408,7 @@ impl QUring {
             }
 
             entry = match self.AUringCall(entry) {
-                None => return id,
+                None => return id as usize,
                 Some(e) => e
             }
         }

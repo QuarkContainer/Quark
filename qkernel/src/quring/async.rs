@@ -134,7 +134,7 @@ impl AsyncOps {
 
 #[derive(Default)]
 pub struct UringAsyncMgr {
-    pub ops: Vec<QMutex<AsyncOps>>,
+    pub ops: Vec<QMutex<(AsyncOps, u32)>>,
     pub ids: QMutex<VecDeque<u16>>,
 }
 
@@ -147,7 +147,7 @@ impl UringAsyncMgr {
         let mut ops = Vec::with_capacity(size);
         for i in 0..size {
             ids.push_back(i as u16);
-            ops.push(QMutex::new(AsyncOps::None));
+            ops.push(QMutex::new((AsyncOps::None, 1)));
         }
         return Self {
             ops: ops,
@@ -158,7 +158,7 @@ impl UringAsyncMgr {
     pub fn Print(&self) {
         let mut vec = Vec::new();
         for op in &self.ops {
-            vec.push(op.lock().Type());
+            vec.push(op.lock().0.Type());
         }
         print!("UringAsyncMgr Print {:?}", vec);
         //error!("UringAsyncMgr Print {:?}", vec);
@@ -175,12 +175,34 @@ impl UringAsyncMgr {
         self.ids.lock().push_back(id as u16);
     }
 
-    pub fn SetOps(&self, id : usize, ops: AsyncOps) -> squeue::Entry {
-        *self.ops[id].lock() = ops;
-        return self.ops[id]
-            .lock()
+    // bit 63: 1
+    // bit 32~62: seqence number
+    // bit 0~31: index in the vector
+    pub fn AsyncId(idx: usize, seq: u32) -> u64 {
+        return (idx as u64) | ((seq as u64) << 32) | (1 << 63);
+    }
+
+    pub fn GetAsyncId(&self, idx: usize) -> u64 {
+        let seq = self.ops[idx].lock().1;
+        return Self::AsyncId(idx, seq);
+    }
+
+    pub fn ToIdx(id: usize) -> usize {
+        return id & (u32::MAX as usize);
+    }
+
+    pub fn MinAsyncId() -> u64 {
+        return 1 << 63;
+    }
+
+    pub fn SetOps(&self, idx : usize, ops: AsyncOps) -> (squeue::Entry, u64) {
+        self.ops[idx].lock().0 = ops;
+        let seq = self.ops[idx].lock().1;
+        let id = Self::AsyncId(idx, seq);
+        return (self.ops[idx]
+            .lock().0
             .SEntry()
-            .user_data(id as u64);
+            .user_data(id), id);
     }
 }
 
@@ -447,11 +469,19 @@ impl AsyncPollRemove {
 
     pub fn SEntry(&self) -> squeue::Entry {
         let op = PollRemove::new(self.userData);
-
+        //let op = AsyncCancel::new(self.userData);
         return op.build();
     }
 
-    pub fn Process(&mut self, _result: i32) -> bool {
+    pub fn Process(&mut self, result: i32, ) -> bool {
+        if result == -2 {
+            let idx = UringAsyncMgr::ToIdx(self.userData as usize);
+            if IOURING.asyncMgr.GetAsyncId(idx) != self.userData {
+                return false
+            }
+            return true;
+        }
+
         return false
     }
 }

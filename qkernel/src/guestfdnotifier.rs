@@ -54,7 +54,6 @@ pub fn HostLogFlush() {
 pub struct GuestFdInfo {
     pub queue: Queue,
     pub mask: EventMask,
-    pub waiting: bool,
     pub iops: HostInodeOpWeak,
     pub userdata: Option<usize>,
 }
@@ -95,18 +94,29 @@ impl Notifier {
             Some(fi) => fi,
         };
 
-        let userdata = fi.userdata.take();
+        if fi.mask == mask {
+            return Ok(())
+        }
 
-        match userdata {
-            None => (),
-            Some(idx) => {
-                IOURING.AsyncPollRemove(idx as u64);
+        if fi.mask != 0 {
+            let userdata = fi.userdata.take();
+
+            match userdata {
+                None => {
+                    panic!("Notifier::Waitfd get non userdata");
+                },
+                Some(idx) => {
+                   IOURING.AsyncPollRemove(idx as u64);
+                }
             }
         }
 
-        let idx = IOURING.AsyncPollAdd(fd, mask as _);
+        if mask != 0 {
+            let idx = IOURING.AsyncPollAdd(fd, mask as _);
+            fi.userdata = Some(idx);
+        }
+        fi.mask = mask;
 
-        fi.userdata = Some(idx);
         return Ok(())
     }
 
@@ -121,20 +131,6 @@ impl Notifier {
             };
 
             let mask = fi.queue.Events();
-
-            if !fi.waiting && mask == 0 {
-                return Ok(())
-            }
-
-            if !fi.waiting && mask != 0 {
-                fi.waiting = true;
-            } else if fi.waiting && mask == 0 {
-                fi.waiting = false;
-            } else if fi.waiting && mask != 0 {
-                if mask | fi.mask == fi.mask {
-                    return Ok(())
-                }
-            }
 
             mask
         };
@@ -154,7 +150,6 @@ impl Notifier {
         n.fdMap.insert(fd, GuestFdInfo {
             queue: queue.clone(),
             mask: 0,
-            waiting: false,
             iops: iops.Downgrade(),
             userdata: None,
         });
@@ -170,7 +165,6 @@ impl Notifier {
         };
 
         let userdata = fi.userdata.take();
-
         match userdata {
             None => (),
             Some(idx) => {

@@ -49,6 +49,7 @@ impl UringCall {
         match self.msg {
             UringOp::None => (),
             UringOp::TimerRemove(ref msg) => return msg.SEntry(),
+            UringOp::PollRemove(ref msg) => return msg.SEntry(),
             UringOp::Read(ref msg) => return msg.SEntry(),
             UringOp::Write(ref msg) => return msg.SEntry(),
             UringOp::Statx(ref msg) => return msg.SEntry(),
@@ -63,6 +64,7 @@ impl UringCall {
 pub enum UringOp {
     None,
     TimerRemove(TimerRemoveOp),
+    PollRemove(PollRemoveOp),
     Read(ReadOp),
     Write(WriteOp),
     Statx(StatxOp),
@@ -83,6 +85,20 @@ pub struct TimerRemoveOp {
 impl TimerRemoveOp {
     pub fn SEntry(&self) -> squeue::Entry {
         let op = TimeoutRemove::new(self.userData);
+
+        return op.build();
+    }
+}
+
+#[derive(Clone, Debug, Copy)]
+pub struct PollRemoveOp {
+    pub userData: u64
+}
+
+impl PollRemoveOp {
+    pub fn SEntry(&self) -> squeue::Entry {
+        //let op = PollRemove::new(self.userData);
+        let op = AsyncCancel::new(self.userData);
 
         return op.build();
     }
