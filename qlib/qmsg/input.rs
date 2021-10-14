@@ -17,10 +17,19 @@ use super::super::linux_def::*;
 #[derive(Debug, Copy, Clone)]
 #[repr(align(128))]
 pub enum HostInputMsg {
+    FireTimer(FireTimer),
     FdNotify(FdNotify),
+    IOBufWriteResp(IOBufWriteResp),
     LogFlush,
+    WakeIOThreadResp(()),
 }
 
+//host call kernel
+#[derive(Debug, Default, Copy, Clone)]
+pub struct FireTimer {
+    pub TimerId: u64,
+    pub SeqNo: u64,
+}
 
 //host call kernel
 #[derive(Debug, Default, Copy, Clone)]
@@ -36,4 +45,10 @@ pub struct IOBufWriteResp {
     pub addr: u64,
     pub len: usize,
     pub ret: i64,
+}
+
+#[derive(Debug, Default, Copy, Clone)]
+pub struct PrintStrResp {
+    pub addr: u64,
+    pub len: usize,
 }

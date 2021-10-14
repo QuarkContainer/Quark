@@ -22,7 +22,6 @@ use super::fs::host::hostinodeop::*;
 use super::qlib::common::*;
 use super::qlib::linux_def::*;
 use super::qlib::singleton::*;
-use super::IOURING;
 
 pub static GUEST_NOTIFIER : Singleton<Notifier> = Singleton::<Notifier>::New();
 
@@ -46,6 +45,10 @@ pub fn Notify(fd: i32, mask: EventMask) {
     GUEST_NOTIFIER.Notify(fd, mask);
 }
 
+pub fn IOBufWriteRespHandle(fd: i32, addr: u64, len: usize, ret: i64) {
+    GUEST_NOTIFIER.IOBufWriteRespHandle(fd, addr, len, ret)
+}
+
 pub fn HostLogFlush() {
     //GUEST_NOTIFIER.PrintStrRespHandler(addr, len)
     super::IOURING.LogFlush();
@@ -54,8 +57,8 @@ pub fn HostLogFlush() {
 pub struct GuestFdInfo {
     pub queue: Queue,
     pub mask: EventMask,
+    pub waiting: bool,
     pub iops: HostInodeOpWeak,
-    pub userdata: Option<usize>,
 }
 
 // notifier holds all the state necessary to issue notifications when IO events
@@ -85,37 +88,8 @@ impl Notifier {
         return Self(QMutex::new(internal))
     }
 
-    fn Waitfd(&self, fd: i32, mask: EventMask) -> Result<()> {
-        let mut n = self.lock();
-        let fi = match n.fdMap.get_mut(&fd) {
-            None => {
-                panic!("Notifier::waitfd can't find fd {}", fd)
-            }
-            Some(fi) => fi,
-        };
-
-        if fi.mask == mask {
-            return Ok(())
-        }
-
-        if fi.mask != 0 {
-            let userdata = fi.userdata.take();
-
-            match userdata {
-                None => {
-                    panic!("Notifier::Waitfd get non userdata");
-                },
-                Some(idx) => {
-                   IOURING.AsyncPollRemove(idx as u64);
-                }
-            }
-        }
-
-        if mask != 0 {
-            let idx = IOURING.AsyncPollAdd(fd, mask as _);
-            fi.userdata = Some(idx);
-        }
-        fi.mask = mask;
+    fn waitfd(fd: i32, mask: EventMask) -> Result<()> {
+        HostSpace::WaitFD(fd, mask);
 
         return Ok(())
     }
@@ -132,10 +106,24 @@ impl Notifier {
 
             let mask = fi.queue.Events();
 
+            if !fi.waiting && mask == 0 {
+                return Ok(())
+            }
+
+            if !fi.waiting && mask != 0 {
+                fi.waiting = true;
+            } else if fi.waiting && mask == 0 {
+                fi.waiting = false;
+            } else if fi.waiting && mask != 0 {
+                if mask | fi.mask == fi.mask {
+                    return Ok(())
+                }
+            }
+
             mask
         };
 
-        return self.Waitfd(fd, mask);
+        return Self::waitfd(fd, mask);
     }
 
     pub fn AddFD(&self, fd: i32, iops: &HostInodeOp) {
@@ -150,27 +138,14 @@ impl Notifier {
         n.fdMap.insert(fd, GuestFdInfo {
             queue: queue.clone(),
             mask: 0,
+            waiting: false,
             iops: iops.Downgrade(),
-            userdata: None,
         });
     }
 
     pub fn RemoveFD(&self, fd: i32) {
         let mut n = self.lock();
-        let mut fi = match n.fdMap.remove(&fd) {
-            None => {
-                panic!("Notifier::RemoveFD can't find fd {}", fd)
-            }
-            Some(fi) => fi
-        };
-
-        let userdata = fi.userdata.take();
-        match userdata {
-            None => (),
-            Some(idx) => {
-                IOURING.AsyncPollRemove(idx as u64);
-            }
-        }
+        n.fdMap.remove(&fd);
     }
 
     pub fn Notify(&self, fd: i32, mask: EventMask) {
@@ -181,5 +156,25 @@ impl Notifier {
                 fi.queue.Notify(EventMaskFromLinux(mask as u32));
             }
         }
+    }
+
+    pub fn IOBufWriteRespHandle(&self, _fd: i32, _addr: u64, _len: usize, _ret: i64) {
+        /*BUF_MGR.Free(addr, len as u64);
+        if ret < 0 {
+            let n = self.lock();
+            match n.fdMap.get(&fd) {
+                None => (),
+                Some(fi) => {
+                    let iops = match fi.iops.Upgrade() {
+                        None => {
+                            return;
+                        }
+                        Some(iops) => iops
+                    };
+
+                    iops.lock().errorcode = ret;
+                }
+            }
+        }*/
     }
 }
