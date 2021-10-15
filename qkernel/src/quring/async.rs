@@ -32,6 +32,7 @@ use super::super::IOURING;
 use super::super::kernel::timer;
 use super::super::SHARESPACE;
 use super::super::guestfdnotifier::GUEST_NOTIFIER;
+use super::super::kernel::async_wait::*;
 
 #[repr(align(128))]
 pub enum AsyncOps {
@@ -52,6 +53,8 @@ pub enum AsyncOps {
     AsyncPollAdd(AsyncPollAdd),
     AsyncPollRemove(AsyncPollRemove),
     AsyncTimeoutLinked(AsyncTimeoutLinked),
+    AsyncLinkTimeout(AsyncLinkTimeout),
+    UnblockBlockPollAdd(UnblockBlockPollAdd),
     None,
 }
 
@@ -75,6 +78,8 @@ impl AsyncOps {
             AsyncOps::AsyncPollAdd(ref msg) => return msg.SEntry(),
             AsyncOps::AsyncPollRemove(ref msg) => return msg.SEntry(),
             AsyncOps::AsyncTimeoutLinked(ref msg) => return msg.SEntry(),
+            AsyncOps::AsyncLinkTimeout(ref msg) => return msg.SEntry(),
+            AsyncOps::UnblockBlockPollAdd(ref msg) => return msg.SEntry(),
             AsyncOps::None => ()
         };
 
@@ -100,6 +105,8 @@ impl AsyncOps {
             AsyncOps::AsyncPollAdd(ref mut msg) => msg.Process(result),
             AsyncOps::AsyncPollRemove(ref mut msg) => msg.Process(result),
             AsyncOps::AsyncTimeoutLinked(ref mut msg) => msg.Process(result),
+            AsyncOps::AsyncLinkTimeout(ref mut msg) => msg.Process(result),
+            AsyncOps::UnblockBlockPollAdd(ref mut msg) => msg.Process(result),
             AsyncOps::None => panic!("AsyncOps::None SEntry fail"),
         };
 
@@ -129,6 +136,8 @@ impl AsyncOps {
             AsyncOps::AsyncPollAdd(_) => return 15,
             AsyncOps::AsyncPollRemove(_) => return 16,
             AsyncOps::AsyncTimeoutLinked(_) => return 17,
+            AsyncOps::AsyncLinkTimeout(_) => return 17,
+            AsyncOps::UnblockBlockPollAdd(_) => return 17,
             AsyncOps::None => ()
         };
 
@@ -447,6 +456,66 @@ impl AsyncLogFlush {
             fd,
             addr,
             len,
+        }
+    }
+}
+
+pub struct AsyncLinkTimeout {
+    pub ts: types::Timespec,
+}
+
+impl AsyncLinkTimeout {
+    pub fn SEntry(&self) -> squeue::Entry {
+        let op = opcode::LinkTimeout::new(&self.ts);
+
+        return op.build();
+    }
+
+    pub fn Process(&mut self, _result: i32) -> bool {
+        return false;
+    }
+
+    pub fn New(timeout: i64) -> Self {
+        return Self {
+            ts: types::Timespec {
+                tv_sec: timeout / 1000_000_000,
+                tv_nsec: timeout % 1000_000_000,
+            },
+        }
+    }
+}
+
+pub struct UnblockBlockPollAdd {
+    pub fd : i32,
+    pub flags: u32,
+    pub wait: MultiWait,
+    pub data: Future<EventMask>,
+}
+
+impl UnblockBlockPollAdd {
+    pub fn SEntry(&self) -> squeue::Entry {
+        let op = opcode::PollAdd::new(types::Fd(self.fd), self.flags);
+
+        return op.build()
+            .flags(squeue::Flags::FIXED_FILE);
+    }
+
+    pub fn Process(&mut self, result: i32) -> bool {
+        self.wait.Done();
+
+        if result >= 0 {
+            self.data.Set(result as EventMask);
+        }
+
+        return false;
+    }
+
+    pub fn New(fd: i32, flags: u32, wait: &MultiWait, data: &Future<EventMask>) -> Self {
+        return Self {
+            fd,
+            flags,
+            wait: wait.clone(),
+            data: data.clone(),
         }
     }
 }
