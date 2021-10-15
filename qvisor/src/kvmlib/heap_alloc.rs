@@ -23,4 +23,8 @@ impl ListAllocator {
         }
         self.initialized.store(true, Ordering::Relaxed);
     }
+
+    pub fn Check(&self) {
+
+    }
 }
