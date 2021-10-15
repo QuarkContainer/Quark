@@ -18,6 +18,7 @@ use core::sync::atomic;
 use super::super::task::*;
 use super::super::qlib::common::*;
 use super::super::taskMgr::*;
+use super::super::kernel::async_wait::*;
 pub use super::super::qlib::uring::cqueue::CompletionQueue;
 pub use super::super::qlib::uring::cqueue;
 pub use super::super::qlib::uring::squeue::SubmissionQueue;
@@ -182,6 +183,15 @@ impl QUring {
         return idx;
     }
 
+    pub fn UnblockPollAdd(&self, fd: i32, flags: u32, wait: &MultiWait) -> Future<EventMask> {
+        let future = Future::New(0 as EventMask);
+        let ops = UnblockBlockPollAdd::New(fd, flags, wait, &future);
+        let timeout = AsyncLinkTimeout::New(0);
+        self.AUCallLinked(AsyncOps::UnblockBlockPollAdd(ops), AsyncOps::AsyncLinkTimeout(timeout));
+        return future;
+
+    }
+
     pub fn AsyncPollAdd(&self, fd: i32, flags: u32, seqNum: u64) -> usize {
         let ops = AsyncPollAdd::New(fd, flags, seqNum);
         let idx = self.AUCall(AsyncOps::AsyncPollAdd(ops));
@@ -191,7 +201,7 @@ impl QUring {
 
     pub fn AsyncPollRemove(&self, userData: u64) -> usize {
         let ops = AsyncPollRemove::New(userData);
-        let timeout = AsyncTimeoutLinked::New(100_0000);
+        let timeout = AsyncTimeoutLinked::New(100_0000); // 100 us
         self.AUCallLinked(AsyncOps::AsyncTimeoutLinked(timeout), AsyncOps::AsyncPollRemove(ops));
         return 0;
     }
