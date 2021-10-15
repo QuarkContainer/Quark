@@ -13,4 +13,8 @@ impl ListAllocator {
     pub fn initialize(&self)-> () {
         self.initialized.store(true, Ordering::Relaxed);
     }
+
+    pub fn Check(&self) {
+        super::super::task::Task::StackOverflowCheck();
+    }
 }

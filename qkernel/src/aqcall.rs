@@ -44,7 +44,7 @@ impl FireTimer {
 
 impl FdNotify {
     pub fn Process(&self) {
-        Notify(self.fd, self.mask);
+        Notify(self.fd, self.mask, 0);
     }
 }
 

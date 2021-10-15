@@ -1,7 +1,7 @@
 {
-  "DebugLevel"    : "Error",
+  "DebugLevel"    : "Debug",
   "KernelMemSize" : 32,
-  "SlowPrint"     : false,
+  "SlowPrint"     : true,
   "LogLevel"      : "Simple",
   "TcpBuffIO"     : true,
   "EnableAIO"     : true,
