@@ -64,7 +64,7 @@ pub struct BootStrapMem {
     pub vcpuCount: usize,
 }
 
-pub const KERNEL_HEAP_ORD : usize = 34; // 4GB
+pub const KERNEL_HEAP_ORD : usize = 32; // 4GB
 pub const PAGE_POOL_ORD: usize = KERNEL_HEAP_ORD - 8;
 
 impl BootStrapMem {
@@ -286,7 +286,7 @@ impl VirtualMachine {
         for t in threads {
             t.join().expect("the working threads has panicked");
         }
-
+        info!("finally get here");
         Ok(GetExitStatus())
     }
 
