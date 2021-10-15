@@ -191,7 +191,7 @@ impl QUring {
 
     pub fn AsyncPollRemove(&self, userData: u64) -> usize {
         let ops = AsyncPollRemove::New(userData);
-        let timeout = AsyncTimeoutLinked::New(1000_0000);
+        let timeout = AsyncTimeoutLinked::New(100_0000);
         self.AUCallLinked(AsyncOps::AsyncTimeoutLinked(timeout), AsyncOps::AsyncPollRemove(ops));
         return 0;
     }
