@@ -230,7 +230,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     let callId: SysCallID = unsafe { mem::transmute(nr as u64) };
 
     let mut rflags = GetRflags();
-    rflags &= !RFLAGS_DF;
+    rflags &= !RFLAGS_RESTORABLE;
     rflags &= !KERNEL_FLAGS_CLEAR;
     rflags |= KERNEL_FLAGS_SET;
     SetRflags(rflags);

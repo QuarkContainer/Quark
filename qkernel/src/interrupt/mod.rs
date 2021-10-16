@@ -419,7 +419,7 @@ pub extern fn PageFaultHandler(sf: &mut PtRegs, errorCode: u64) {
 
     if fromUser {
         rflags &= !KERNEL_FLAGS_CLEAR;
-        rflags &= !RFLAGS_DF;
+        rflags &= !RFLAGS_RESTORABLE;
         rflags |= KERNEL_FLAGS_SET;
         SetRflags(rflags);
         //currTask.SaveFp();
