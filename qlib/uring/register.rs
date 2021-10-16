@@ -23,20 +23,18 @@ impl Probe {
 
     #[allow(clippy::cast_ptr_alignment)]
     pub fn new() -> Probe {
-        /*use std::alloc::{alloc_zeroed, Layout};
+       use alloc::alloc::{Layout, alloc_zeroed};
 
         let probe_align = Layout::new::<sys::io_uring_probe>().align();
         let ptr = unsafe {
             let probe_layout = Layout::from_size_align_unchecked(Probe::SIZE, probe_align);
             alloc_zeroed(probe_layout)
-        };*/
+        };
 
-        panic!("alloc zero")
-
-        /*ptr::NonNull::new(ptr)
+        ptr::NonNull::new(ptr)
             .map(ptr::NonNull::cast)
             .map(Probe)
-            .expect("Probe alloc failed!")*/
+            .expect("Probe alloc failed!")
     }
 
     #[inline]
@@ -67,14 +65,13 @@ impl Default for Probe {
 
 impl Drop for Probe {
     fn drop(&mut self) {
-        /*use std::alloc::{dealloc, Layout};
+        use alloc::alloc::{Layout, dealloc};
 
         let probe_align = Layout::new::<sys::io_uring_probe>().align();
         unsafe {
             let probe_layout = Layout::from_size_align_unchecked(Probe::SIZE, probe_align);
             dealloc(self.0.as_ptr() as *mut _, probe_layout);
-        }*/
-        panic!("Probe::drop....");
+        }
     }
 }
 

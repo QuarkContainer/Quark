@@ -328,6 +328,13 @@ pub fn qCall(eventAddr: u64, event: &'static mut Event) -> QcallRet {
                 _ => panic!("UringMgr Enter fail")
             }
         }
+        Event { taskId: _, interrupted: _, ref mut ret, msg: Msg::IoUringRegister(msg) } => {
+            *ret = match URING_MGR.lock().Register(msg.opcode, msg.arg, msg.nrArgs) {
+                Ok(()) => 0,
+                Err(Error::SysError(v)) => -v as i64 as u64,
+                _ => panic!("UringMgr Enter fail")
+            }
+        }
         _ => {
             error!("unsupported qcall {:x}", eventAddr);
             panic!("unsupported qcall {:x}, event is {:?}", eventAddr, event);

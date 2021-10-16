@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use alloc::slice;
-use alloc::vec::Vec;
 use core::sync::atomic::Ordering;
 
 pub struct QOrdering {}
@@ -2222,60 +2221,6 @@ pub const UIO_MAXIOV: usize = 1024;
 pub struct IoVec {
     pub start: u64,
     pub len: usize,
-}
-
-
-pub struct DataBuff {
-    pub buf: Vec<u8>
-}
-
-use super::mem::seq::BlockSeq;
-
-impl DataBuff {
-    pub fn New(size: usize) -> Self {
-        let mut buf = Vec::with_capacity(size);
-        unsafe {
-            buf.set_len(size);
-        }
-
-        return Self {
-            buf: buf
-        }
-    }
-
-    pub fn Zero(&mut self) {
-        for i in 0..self.buf.len() {
-            self.buf[i] = 0;
-        }
-    }
-
-    pub fn Ptr(&self) -> u64 {
-        return self.buf.as_ptr() as u64;
-    }
-
-    pub fn Len(&self) -> usize {
-        return self.buf.len()
-    }
-
-    pub fn IoVec(&self) -> IoVec {
-        if self.Len() == 0 {
-            return IoVec::NewFromAddr(0, 0)
-        }
-
-        return IoVec {
-            start: self.Ptr(),
-            len: self.Len(),
-        }
-    }
-
-    pub fn Iovs(&self) -> [IoVec; 1] {
-        return [self.IoVec()]
-    }
-
-
-    pub fn BlockSeq(&self) -> BlockSeq {
-        return BlockSeq::New(&self.buf);
-    }
 }
 
 #[repr(C)]

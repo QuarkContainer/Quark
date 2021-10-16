@@ -24,6 +24,7 @@ pub use super::super::qlib::uring::cqueue;
 pub use super::super::qlib::uring::squeue::SubmissionQueue;
 pub use super::super::qlib::uring::*;
 use super::super::qlib::uring::util::*;
+use super::super::qlib::uring::sys::sys::*;
 use super::super::qlib::uring::porting::*;
 use super::super::qlib::linux_def::*;
 use super::super::fs::file::*;
@@ -31,6 +32,7 @@ use super::super::socket::hostinet::socket::*;
 use super::super::socket::unix::transport::unix::*;
 use super::super::Kernel::HostSpace;
 use super::super::IOURING;
+use super::super::BUF_MGR;
 use super::uring_op::*;
 use super::async::*;
 
@@ -159,7 +161,17 @@ impl QUring {
             &mut ret.submission as * mut _ as u64,
             &mut ret.completion as * mut _ as u64,
         );
+
+        //Self::InitIOBuf();
         return ret;
+    }
+
+    pub fn InitIOBuf() {
+        let addr = BUF_MGR.lock().Ptr();
+        let size = BUF_MGR.lock().Size();
+        let ioVec = IoVec::NewFromAddr(addr, size);
+        let ret = HostSpace::IoUringRegister(IORING_REGISTER_BUFFERS, &ioVec as * const _ as u64, 1);
+        assert!(ret == 0, "InitIOBuf IORING_REGISTER_BUFFERS fail")
     }
 
     pub fn TimerRemove(&self, task: &Task, userData: u64) -> i64 {
@@ -224,11 +236,22 @@ impl QUring {
         return self.UCall(task, msg);
     }
 
-    pub fn Write(&self, task: &Task, fd: i32, addr: u64, cnt: u32, offset: i64) -> i64 {
+    pub fn Write(&self, task: &Task, fd: i32, addr: u64, len: u32, offset: i64) -> i64 {
         let msg = UringOp::Write(WriteOp {
             fd: fd,
             addr: addr,
-            cnt: cnt,
+            len: len,
+            offset: offset,
+        });
+
+        return self.UCall(task, msg);
+    }
+
+    pub fn WriteFixed(&self, task: &Task, fd: i32, addr: u64, len: u32, offset: i64) -> i64 {
+        let msg = UringOp::WriteFixed(WriteFixedOp {
+            fd: fd,
+            addr: addr,
+            len: len,
             offset: offset,
         });
 
@@ -369,22 +392,8 @@ impl QUring {
     }
 
     pub fn AUCallDirect(&self, ops: &AsyncOps, id: usize) {
-        let mut entry = ops.SEntry().user_data(id as u64);
-        loop {
-            loop {
-                if !self.submission.lock().IsFull() {
-                    break;
-                }
-
-                //error!("AUCall submission full...");
-                print!("AUCallDirect submission full...");
-            }
-
-            entry = match self.AUringCall(entry) {
-                None => return,
-                Some(e) => e
-            }
-        }
+        let entry = ops.SEntry().user_data(id as u64);
+        self.AUringCall(entry)
     }
 
     pub fn AUCall(&self, ops: AsyncOps) -> usize {
@@ -404,22 +413,9 @@ impl QUring {
             }
         }
 
-        let (mut entry, id) = self.asyncMgr.SetOps(index, ops);
-        loop {
-            loop {
-                if !self.submission.lock().IsFull() {
-                    break;
-                }
-
-                //error!("AUCall submission full...");
-                print!("AUCall submission full...");
-            }
-
-            entry = match self.AUringCall(entry) {
-                None => return id as usize,
-                Some(e) => e
-            }
-        }
+        let (entry, id) = self.asyncMgr.SetOps(index, ops);
+        self.AUringCall(entry);
+        return id as usize;
     }
 
     pub fn AUCallLinked(&self, ops1: AsyncOps, ops2: AsyncOps) {
@@ -454,28 +450,10 @@ impl QUring {
             }
         }
 
-        let (mut entry1, _) = self.asyncMgr.SetOps(index1, ops1);
-        let (mut entry2, _) = self.asyncMgr.SetOps(index2, ops2);
-        loop {
-            loop {
-                if !self.submission.lock().FreeSlots() >= 2 {
-                    break;
-                }
+        let (entry1, _) = self.asyncMgr.SetOps(index1, ops1);
+        let (entry2, _) = self.asyncMgr.SetOps(index2, ops2);
 
-                //error!("AUCall submission full...");
-                print!("AUCall submission full...1111");
-            }
-
-            let (e1, e2) = match self.AUringCallLinked(entry1, entry2) {
-                None => return,
-                Some(e) => {
-                    e
-                }
-            };
-
-            entry1 = e1;
-            entry2 = e2;
-        }
+        self.AUringCallLinked(entry1, entry2);
     }
 
     pub fn ProcessOne(&self) -> bool {
@@ -515,49 +493,6 @@ impl QUring {
                 }
             }
         }
-
-        /*let mut processed = false;
-        const BATCH_SIZE : usize = 16;
-        let mut cqes : [cqueue::Entry; BATCH_SIZE] = Default::default();
-        let mut cnt = 0;
-
-        {
-            let mut clock = match self.completion.try_lock() {
-                None => return false,
-                Some(lock) => lock
-            };
-
-            //let mut clock = self.completion.lock();
-
-            while cnt < BATCH_SIZE {
-                let cqe = {
-                    clock.Next()
-                };
-
-                match cqe {
-                    None => {
-                        if cnt == 0 {
-                            return false
-                        }
-
-                        break
-                    },
-                    Some(cqe) => {
-                        cqes[cnt] = cqe;
-                        cnt += 1;
-                    }
-                }
-            }
-        }
-
-        let mut idx = 0;
-        for cqe in &cqes[0..cnt] {
-            processed = true;
-            self.Process(idx, cqe);
-            idx += 1;
-        }
-
-        return processed;*/
     }
 
     pub fn UringCall(&self, call: &UringCall) {
@@ -565,61 +500,72 @@ impl QUring {
         let entry = entry
             .user_data(call.Ptr());
 
-        let mut s = self.submission.lock();
-        unsafe {
-            let mut queue = s.Available();
-            queue.push(entry).ok().expect("submission queue is full");
+        loop {
+            let mut s = self.submission.lock();
+            if s.FreeSlots() < 1 {
+                print!("UringCall: submission full...");
+                continue
+            }
+
+            unsafe {
+                let mut queue = s.Available();
+                queue.push(entry).ok().expect("UringCall push fail");
+            }
+
+            s.Submit().expect("QUringIntern::submit fail");
+            break;
         }
 
-        s.Submit().expect("QUringIntern::submit fail");
     }
 
-    pub fn AUringCallLinked(&self, entry1: squeue::Entry, entry2: squeue::Entry) -> Option<(squeue::Entry, squeue::Entry)> {
-        //let (fd, user_data, opcode) = (entry.0.fd, entry.0.user_data, entry.0.opcode);
-        let mut s = self.submission.lock();
-        if s.FreeSlots() < 2 {
-            return Some((entry1, entry2))
-        }
+    pub fn AUringCallLinked(&self, entry1: squeue::Entry, entry2: squeue::Entry) {
+        loop {
+            let mut s = self.submission.lock();
+            if s.FreeSlots() < 2 {
+                print!("AUringCallLinked: submission full...");
+                continue;
+            }
 
-        unsafe {
-            let mut queue = s.Available();
-            match queue.push(entry1.flags(squeue::Flags::IO_LINK)) {
-                Ok(_) => (),
-                Err(_e) => {
-                    panic!("AUringCallLinked push fail 1 ...");
+            unsafe {
+                let mut queue = s.Available();
+                match queue.push(entry1.flags(squeue::Flags::IO_LINK)) {
+                    Ok(_) => (),
+                    Err(_e) => {
+                        panic!("AUringCallLinked push fail 1 ...");
+                    }
+                }
+
+                match queue.push(entry2) {
+                    Ok(_) => (),
+                    Err(_e) => {
+                        panic!("AUringCallLinked push fail 2 ...");
+                    }
                 }
             }
 
-            match queue.push(entry2) {
-                Ok(_) => (),
-                Err(_e) => {
-                    panic!("AUringCallLinked push fail 1 ...");
-                }
-            }
+            let _n = s.Submit().expect("QUringIntern::submit fail");
+            break;
         }
-
-        let _n = s.Submit().expect("QUringIntern::submit fail");
-        //error!("AUCall after sumbit fd is {}, user_data is {}, opcode is {}", fd, user_data, opcode);
-        return None;
     }
 
-    pub fn AUringCall(&self, entry: squeue::Entry) -> Option<squeue::Entry> {
-        //let (fd, user_data, opcode) = (entry.0.fd, entry.0.user_data, entry.0.opcode);
-        let mut s = self.submission.lock();
-        if s.FreeSlots() == 0 {
-            return Some(entry)
-        }
-
-        unsafe {
-            let mut queue = s.Available();
-            match queue.push(entry) {
-                Ok(_) => (),
-                Err(e) => return Some(e),
+    pub fn AUringCall(&self, entry: squeue::Entry) {
+        loop {
+            let mut s = self.submission.lock();
+            if s.FreeSlots() == 0 {
+                print!("AUringCall: submission full...");
+                continue;
             }
-        }
 
-        let _n = s.Submit().expect("QUringIntern::submit fail");
-        //error!("AUCall after sumbit fd is {}, user_data is {}, opcode is {}", fd, user_data, opcode);
-        return None;
+            unsafe {
+                let mut queue = s.Available();
+                match queue.push(entry) {
+                    Ok(_) => (),
+                    Err(_) => panic!("AUringCall submission queue is full"),
+                }
+            }
+
+            let _n = s.Submit().expect("QUringIntern::submit fail");
+            break;
+        }
     }
 }

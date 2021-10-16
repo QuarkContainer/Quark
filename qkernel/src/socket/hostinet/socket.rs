@@ -52,6 +52,7 @@ use super::super::super::SHARESPACE;
 use super::socket_buf::*;
 use super::super::super::qlib::linux::time::Timeval;
 use super::super::control::ControlMessageTCPInq;
+use super::super::super::data_buff::*;
 
 fn newSocketFile(task: &Task, family: i32, fd: i32, stype: i32, nonblock: bool, enableBuf: bool, addr: Option<Vec<u8>>) -> Result<File> {
     let dirent = NewSocketDirent(task, SOCKET_DEVICE.clone(), fd)?;

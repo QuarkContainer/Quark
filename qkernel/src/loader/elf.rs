@@ -32,6 +32,7 @@ use super::super::task::*;
 use super::super::fs::file::*;
 use super::super::memmgr::*;
 use super::super::arch::x86_64::context::*;
+use super::super::data_buff::*;
 
 pub const ELF_MAGIC : &str = "\x7fELF";
 pub const INTERPRETER_SCRIPT_MAGIC: &str = "#!";

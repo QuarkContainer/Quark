@@ -45,7 +45,6 @@ impl MemoryManager {
             let src = iov.start as *const u8;
             let src = unsafe { slice::from_raw_parts(src, iov.len) };
             dst[offset..offset + iov.len].clone_from_slice(src);
-            super::super::asm::sfence();
 
             offset += iov.len;
         }

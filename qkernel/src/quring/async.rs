@@ -33,6 +33,7 @@ use super::super::kernel::timer;
 use super::super::SHARESPACE;
 use super::super::guestfdnotifier::GUEST_NOTIFIER;
 use super::super::kernel::async_wait::*;
+use super::super::data_buff::*;
 
 #[repr(align(128))]
 pub enum AsyncOps {

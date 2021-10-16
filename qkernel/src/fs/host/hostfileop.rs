@@ -31,6 +31,7 @@ use super::super::super::qlib::pagetable::*;
 use super::super::super::qlib::range::*;
 use super::super::super::qlib::addr::*;
 use super::super::super::qlib::bytestream::*;
+use super::super::super::data_buff::*;
 use super::super::super::Kernel::HostSpace;
 use super::super::super::task::*;
 use super::super::super::fd::*;
@@ -275,9 +276,10 @@ impl FileOperations for HostFileOp {
 
         let size = IoVec::NumBytes(srcs);
         let mut buf = DataBuff::New(size);
-        let iovs = buf.Iovs();
+        //let buf = IOBuff::New(size);
+        task.CopyDataInFromIovs(buf.Buf(), srcs)?;
 
-        task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
+        let iovs = buf.Iovs();
 
         if self.InodeOp.InodeType() != InodeType::RegularFile && self.InodeOp.InodeType() != InodeType::CharacterDevice {
             let ret = IOWrite(hostIops.HostFd(), &iovs)?;
@@ -286,8 +288,8 @@ impl FileOperations for HostFileOp {
             if SHARESPACE.config.read().TcpBuffIO {
                 let ret = IOURING.Write(task,
                               hostIops.HostFd(),
-                              &iovs[0] as * const _ as u64,
-                              iovs.len() as u32,
+                              buf.Ptr(),
+                              buf.Len() as u32,
                               offset as i64);
 
                 if ret < 0 {
