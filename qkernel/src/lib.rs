@@ -445,7 +445,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
 
     if id == 1 {
         error!("heap start is {:x}/{:x}", heapStart, heapStart + heapLen);
-
+        //error!("val 4440001000 is {:x}", unsafe { *(0x4440001000 as * const u64)});
         if autoStart {
             CreateTask(StartRootContainer, ptr::null(), false);
         }

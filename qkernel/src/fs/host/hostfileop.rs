@@ -275,7 +275,7 @@ impl FileOperations for HostFileOp {
         let hostIops = self.InodeOp.clone();
 
         let size = IoVec::NumBytes(srcs);
-        let buf = DataBuff::New(size);
+        let mut buf = DataBuff::New(size);
         //let buf = IOBuff::New(size);
         task.CopyDataInFromIovs(buf.Buf(), srcs)?;
 

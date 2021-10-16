@@ -27,8 +27,8 @@ impl DataBuff {
         }
     }
 
-    pub fn Buf(&self) -> &'static mut[u8] {
-        let ptr = self.buf[0] as * mut u8;
+    pub fn Buf(&mut self) -> &'static mut[u8] {
+        let ptr = &mut self.buf[0] as * mut u8;
         let toSlice = unsafe {
             slice::from_raw_parts_mut (ptr, self.buf.len())
         };
