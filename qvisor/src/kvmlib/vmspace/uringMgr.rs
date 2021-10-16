@@ -17,6 +17,7 @@ use alloc::vec::Vec;
 use super::super::qlib::common::*;
 use super::super::qlib::uring::sys::sys::*;
 use super::super::qlib::uring::*;
+use super::super::qlib::linux_def::*;
 
 use super::super::*;
 use super::host_uring::*;
@@ -50,6 +51,14 @@ impl UringMgr {
 
         ret.Register(IORING_REGISTER_FILES, &ret.fds[0] as * const _ as u64, ret.fds.len() as u32).expect("InitUring register files fail");
         return ret;
+    }
+
+    pub fn Probe(&self) {
+        error!("UringMgr probe is ....");
+        let mut probe = Probe::new();
+        self.RegisterProbe(probe.as_mut_ptr() as *const _ as u64, Probe::COUNT as u32).unwrap();
+        error!("opcode::Write::CODE support is {}", probe.is_supported(opcode::Write::CODE as u8));
+        error!("opcode::WriteFixed::CODE support is {}", probe.is_supported(opcode::WriteFixed::CODE as u8));
     }
 
     pub fn Setup(&mut self, submission: u64, completion: u64) -> Result<i32> {
@@ -89,6 +98,15 @@ impl UringMgr {
         }
 
         return Ok(())
+    }
+
+    pub fn RegisterBuff(&self, addr: u64, size: usize) -> Result<()> {
+        let ioVec = IoVec::NewFromAddr(addr, size);
+        return self.Register(IORING_REGISTER_BUFFERS, &ioVec as * const _ as u64, 1);
+    }
+
+    pub fn RegisterProbe(&self, probe: u64, size: u32) -> Result<()> {
+        return self.Register(IORING_REGISTER_PROBE, probe, size);
     }
 
     pub fn UnRegisterFile(&mut self) -> Result<()> {

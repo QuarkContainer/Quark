@@ -51,6 +51,7 @@ impl UringCall {
             UringOp::TimerRemove(ref msg) => return msg.SEntry(),
             UringOp::Read(ref msg) => return msg.SEntry(),
             UringOp::Write(ref msg) => return msg.SEntry(),
+            UringOp::WriteFixed(ref msg) => return msg.SEntry(),
             UringOp::Statx(ref msg) => return msg.SEntry(),
             UringOp::Fsync(ref msg) => return msg.SEntry(),
         };
@@ -65,6 +66,7 @@ pub enum UringOp {
     TimerRemove(TimerRemoveOp),
     Read(ReadOp),
     Write(WriteOp),
+    WriteFixed(WriteFixedOp),
     Statx(StatxOp),
     Fsync(FsyncOp),
 }
@@ -110,13 +112,31 @@ impl ReadOp {
 pub struct WriteOp {
     pub fd: i32,
     pub addr: u64,
-    pub cnt: u32,
+    pub len: u32,
     pub offset: i64,
 }
 
 impl WriteOp {
     pub fn SEntry(&self) -> squeue::Entry {
-        let op = Writev::new(types::Fd(self.fd), self.addr as * const _, self.cnt)
+        let op = Write::new(types::Fd(self.fd), self.addr as * const _, self.len)
+            .offset(self.offset);
+
+        return op.build()
+            .flags(squeue::Flags::FIXED_FILE);
+    }
+}
+
+#[derive(Clone, Debug, Copy)]
+pub struct WriteFixedOp {
+    pub fd: i32,
+    pub addr: u64,
+    pub len: u32,
+    pub offset: i64,
+}
+
+impl WriteFixedOp {
+    pub fn SEntry(&self) -> squeue::Entry {
+        let op = WriteFixed::new(types::Fd(self.fd), self.addr as * const _, self.len, 0)
             .offset(self.offset);
 
         return op.build()

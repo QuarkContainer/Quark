@@ -24,6 +24,7 @@ pub use super::super::qlib::uring::cqueue;
 pub use super::super::qlib::uring::squeue::SubmissionQueue;
 pub use super::super::qlib::uring::*;
 use super::super::qlib::uring::util::*;
+use super::super::qlib::uring::sys::sys::*;
 use super::super::qlib::uring::porting::*;
 use super::super::qlib::linux_def::*;
 use super::super::fs::file::*;
@@ -31,6 +32,7 @@ use super::super::socket::hostinet::socket::*;
 use super::super::socket::unix::transport::unix::*;
 use super::super::Kernel::HostSpace;
 use super::super::IOURING;
+use super::super::BUF_MGR;
 use super::uring_op::*;
 use super::async::*;
 
@@ -159,7 +161,17 @@ impl QUring {
             &mut ret.submission as * mut _ as u64,
             &mut ret.completion as * mut _ as u64,
         );
+
+        //Self::InitIOBuf();
         return ret;
+    }
+
+    pub fn InitIOBuf() {
+        let addr = BUF_MGR.lock().Ptr();
+        let size = BUF_MGR.lock().Size();
+        let ioVec = IoVec::NewFromAddr(addr, size);
+        let ret = HostSpace::IoUringRegister(IORING_REGISTER_BUFFERS, &ioVec as * const _ as u64, 1);
+        assert!(ret == 0, "InitIOBuf IORING_REGISTER_BUFFERS fail")
     }
 
     pub fn TimerRemove(&self, task: &Task, userData: u64) -> i64 {
@@ -224,11 +236,22 @@ impl QUring {
         return self.UCall(task, msg);
     }
 
-    pub fn Write(&self, task: &Task, fd: i32, addr: u64, cnt: u32, offset: i64) -> i64 {
+    pub fn Write(&self, task: &Task, fd: i32, addr: u64, len: u32, offset: i64) -> i64 {
         let msg = UringOp::Write(WriteOp {
             fd: fd,
             addr: addr,
-            cnt: cnt,
+            len: len,
+            offset: offset,
+        });
+
+        return self.UCall(task, msg);
+    }
+
+    pub fn WriteFixed(&self, task: &Task, fd: i32, addr: u64, len: u32, offset: i64) -> i64 {
+        let msg = UringOp::WriteFixed(WriteFixedOp {
+            fd: fd,
+            addr: addr,
+            len: len,
             offset: offset,
         });
 

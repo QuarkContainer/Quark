@@ -722,15 +722,14 @@ impl HostSpace {
         return Self::HCall(&mut msg) as i64
     }
 
-    pub fn IoUringRegister(fd: i32, Opcode: u32, arg: u64, nrArgs: u32) -> i64 {
+    pub fn IoUringRegister(opcode: u32, arg: u64, nrArgs: u32) -> i64 {
         let mut msg = Msg::IoUringRegister(IoUringRegister {
-            fd,
-            Opcode,
+            opcode,
             arg,
             nrArgs,
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        return HostSpace::HCall(&mut msg) as i64;
     }
 
     pub fn IoUringEnter(fd: i32, toSubmit: u32, minComplete: u32, flags: u32) -> i64 {

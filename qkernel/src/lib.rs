@@ -97,6 +97,7 @@ pub mod seqcount;
 pub mod quring;
 pub mod stack;
 pub mod backtracer;
+pub mod data_buff;
 
 use core::panic::PanicInfo;
 use core::sync::atomic::AtomicU64;
@@ -128,6 +129,7 @@ use self::boot::controller::*;
 use self::task::*;
 use self::threadmgr::task_sched::*;
 use self::qlib::perf_tunning::*;
+use self::qlib::range::*;
 //use self::memmgr::buf_allocator::*;
 use self::qlib::mem::list_allocator::*;
 use self::quring::*;
@@ -157,6 +159,7 @@ pub static PAGE_MGR : Singleton<PageMgr> = Singleton::<PageMgr>::New();
 pub static LOADER : Singleton<Loader> = Singleton::<Loader>::New();
 pub static IOURING : Singleton<QUring> = Singleton::<QUring>::New();
 pub static KERNEL_STACK_ALLOCATOR : Singleton<AlignedAllocator> = Singleton::<AlignedAllocator>::New();
+pub static BUF_MGR: Singleton<BufMgr> = Singleton::<BufMgr>::New(); //BufMgr::New();
 
 pub fn SingletonInit() {
     unsafe {
@@ -164,6 +167,7 @@ pub fn SingletonInit() {
         PAGE_ALLOCATOR.Init(MemAllocator::New());
         KERNEL_PAGETABLE.Init(PageTables::Init(CurrentCr3()));
         PAGE_MGR.Init(PageMgr::New());
+        BUF_MGR.Init(BufMgr::New());
         LOADER.Init(Loader::default());
         IOURING.Init(QUring::New(MemoryDef::QURING_SIZE));
         KERNEL_STACK_ALLOCATOR.Init( AlignedAllocator::New(MemoryDef::DEFAULT_STACK_SIZE as usize, MemoryDef::DEFAULT_STACK_SIZE as usize));

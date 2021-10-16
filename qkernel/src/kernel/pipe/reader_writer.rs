@@ -25,6 +25,7 @@ use super::super::super::task::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::mem::seq::*;
+use super::super::super::data_buff::*;
 use super::pipe::*;
 
 #[derive(Clone)]

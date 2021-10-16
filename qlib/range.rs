@@ -326,7 +326,7 @@ impl Deref for BufMgr {
 }
 
 impl BufMgr {
-    pub fn Init(&self, start: u64, len: u64) {
+    pub fn Initialize(&self, start: u64, len: u64) {
         self.lock().Init(start, len);
     }
 
@@ -346,9 +346,9 @@ impl BufMgr {
 
 #[derive(Debug, Clone, Default)]
 pub struct BufMgrIntern {
+    pub buf: Vec<u8>,
     pub next: u64,
     pub gapMgr: GapMgr,
-    pub buf: Vec<u8>,
 }
 
 impl BufMgrIntern {
@@ -357,8 +357,16 @@ impl BufMgrIntern {
         self.gapMgr.Init(start, len);
     }
 
+    pub fn Ptr(&self) -> u64 {
+        return &self.buf[0] as * const _ as u64;
+    }
+
+    pub fn Size(&self) -> usize {
+        return self.buf.len();
+    }
+
     pub fn New() -> Self {
-        let memoryOrd = 23; // 8 mb
+        let memoryOrd = 12; // 8 mb
         let size = 1 << memoryOrd;
         let mut buf = Vec::with_capacity(size);
         unsafe {
