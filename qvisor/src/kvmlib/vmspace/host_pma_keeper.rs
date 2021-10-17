@@ -20,8 +20,6 @@ use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::range::*;
 use super::super::memmgr::*;
-use super::super::IO_MGR;
-
 
 #[derive(Clone, Default)]
 pub struct HostSegment {}
@@ -103,12 +101,11 @@ impl HostPMAKeeper {
     }
 
     pub fn MapFile(&self, len: u64, prot: i32, fd: i32, offset: u64) -> Result<u64> {
-        let osfd = IO_MGR.lock().GetFdByHost(fd).expect("MapFile: Getosfd fail");
         let mut mo = &mut MapOption::New();
 
         //let prot = prot | MmapProt::PROT_WRITE as i32;
 
-        mo = mo.Proto(prot).FileOffset(offset).FileId(osfd).Len(len).MapFixed();
+        mo = mo.Proto(prot).FileOffset(offset).FileId(fd).Len(len).MapFixed();
         //mo.MapPrivate();
         mo.MapShare();
         mo.MapLocked();
