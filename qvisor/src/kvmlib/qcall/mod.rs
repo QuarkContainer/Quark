@@ -17,7 +17,6 @@ use super::qlib::{ShareSpace};
 use super::qlib::common::*;
 use super::qlib::qmsg::*;
 use super::qlib::range::*;
-use super::syncmgr::*;
 use super::*;
 
 pub fn AQHostCall(msg: HostOutputMsg, shareSpace: &ShareSpace) {
@@ -25,17 +24,6 @@ pub fn AQHostCall(msg: HostOutputMsg, shareSpace: &ShareSpace) {
     match msg {
         HostOutputMsg::QCall(_addr) => {
             panic!("AQHostCall Process get Qcall msg...");
-        }
-        HostOutputMsg::WaitFD(msg) => {
-            let ret = super::VMSpace::WaitFD(msg.fd, msg.mask);
-            if ret < 0 {
-                if ret != -9 {
-                    panic!("WaitFD fail err is {}, fd is {}", ret, msg.fd);
-                }
-
-                // ignore -9 EBADF, when change the Close to HCall, the waitfd is still async call,
-                // there is chance that the WaitFd fired before close
-            }
         }
         HostOutputMsg::Close(msg) => {
             super::VMSpace::Close(0, msg.fd);
@@ -48,10 +36,6 @@ pub fn AQHostCall(msg: HostOutputMsg, shareSpace: &ShareSpace) {
         }
         HostOutputMsg::PrintStr(_msg) => {
             shareSpace.LogFlush();
-        }
-        HostOutputMsg::WakeVCPU(msg) => {
-            let vcpuId = msg.vcpuId as usize;
-            SyncMgr::WakeVcpu(vcpuId);
         }
     }
 }

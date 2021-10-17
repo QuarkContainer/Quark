@@ -113,6 +113,10 @@ impl UringMgr {
         return self.Register(IORING_UNREGISTER_FILES, 0, 0)
     }
 
+    pub fn GetFds(&self) -> u64 {
+        return self.fds[0..].as_ptr() as _;
+    }
+
     pub fn Addfd(&mut self, fd: i32) -> Result<()> {
         if fd as usize >= self.fds.len() {
             error!("Addfd out of bound fd {}", fd);

@@ -26,8 +26,6 @@ pub fn ZeroPage(pageStart: u64) {
             arr[i] = 0
         }
     }
-
-    super::super::asm::sfence();
 }
 
 pub fn CheckZeroPage(pageStart: u64) {

@@ -771,6 +771,7 @@ impl ShareSpace {
         self.scheduler.Init();
         self.SetLogfd(super::super::print::LOG.lock().Logfd());
         self.hostIOThreadEventfd.store(FD_NOTIFIER.Eventfd(), Ordering::SeqCst);
+        self.uringFds.store(URING_MGR.lock().GetFds(), Ordering::SeqCst);
         URING_MGR.lock().Addfd(self.HostIOThreadEventfd()).unwrap();
         self.config.write().Load();
     }

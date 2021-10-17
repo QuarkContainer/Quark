@@ -210,6 +210,20 @@ impl HostFdNotifier {
 
     pub const MAX_EVENTS: usize = 128;
     pub fn WaitAndNotify(&self, shareSpace: &'static ShareSpace, timeout: i32) -> Result<i32> {
+        /*let mut data : u64 = 0;
+        let eventfd = self.read().eventfd;
+        let ret = unsafe {
+            libc::read(eventfd, &mut data as * mut _ as *mut libc::c_void, 8)
+        };
+
+        if ret < 0 {
+            panic!("KIOThread::Wakeup fail... eventfd is {}, errno is {}",
+                   eventfd, errno::errno().0);
+        }
+
+        return Ok(0)*/
+
+
         let mut events = [epoll_event { events: 0, u64: 0 }; Self::MAX_EVENTS];
 
         let epollfd = self.read().epollfd;

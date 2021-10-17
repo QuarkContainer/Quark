@@ -33,6 +33,7 @@ use super::super::socket::unix::transport::unix::*;
 use super::super::Kernel::HostSpace;
 use super::super::IOURING;
 use super::super::BUF_MGR;
+use super::super::SHARESPACE;
 use super::uring_op::*;
 use super::async::*;
 
@@ -280,6 +281,45 @@ impl QUring {
         let msg = UringOp::Fsync(FsyncOp {
             fd: fd,
             dataSyncOnly: dataSyncOnly,
+        });
+
+        return self.UCall(task, msg);
+    }
+
+    pub fn Accept(&self, task: &Task, fd: i32, addr: u64, addrlen: u64, flags: u32) -> i64 {
+        let ret = self.AcceptOp(task, fd, addr, addrlen, flags);
+        if ret < 0 {
+            return ret;
+        }
+
+        let fd = ret;
+
+        let ret = self.FilesUpdate(task, ret as i32);
+        if ret < 0 {
+            return ret;
+        }
+
+        return fd;
+    }
+
+    pub fn AcceptOp(&self, task: &Task, fd: i32, addr: u64, addrlen: u64, flags: u32) -> i64 {
+        let flags = flags | SocketFlags::SOCK_NONBLOCK as u32;
+        let msg = UringOp::Accept(AcceptOp {
+            fd: fd,
+            addr: addr,
+            addrlen: addrlen,
+            flags: flags,
+        });
+
+        return self.UCall(task, msg);
+    }
+
+    pub fn FilesUpdate(&self, task: &Task, fd: i32) -> i64 {
+        let addr = SHARESPACE.UringFds();
+        let msg = UringOp::FilesUpdate(FilesUpdateOp {
+            fds: addr,
+            len: 1,
+            offset: fd,
         });
 
         return self.UCall(task, msg);
