@@ -93,7 +93,7 @@ impl IoUring {
             return Err(Error::SysError(-fd))
         }
 
-        let _hostfd = IO_MGR.lock().AddFd(fd, false);
+        let _hostfd = IO_MGR.lock().AddFd(fd);
         let (mm, sq, cq) = Self::SetupQueue(fd, &p)?;
 
         Ok(IoUring {

@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
 use core::ops::Deref;
 use libc::*;
 
@@ -22,32 +21,39 @@ use super::super::qlib::common::*;
 use super::super::super::util::*;
 
 #[derive(Clone, Debug)]
-pub struct FdInfo (pub Arc<Mutex<FdInfoIntern>>);
+pub struct FdInfo(Arc<FdInfoIntern>);
+
+impl FdInfo {
+    pub fn New(osfd: i32) -> Self {
+        return Self(Arc::new(FdInfoIntern::New(osfd)))
+    }
+}
 
 impl Deref for FdInfo {
-    type Target = Arc<Mutex<FdInfoIntern>>;
+    type Target = Arc<FdInfoIntern>;
 
-    fn deref(&self) -> &Arc<Mutex<FdInfoIntern>> {
+    fn deref(&self) -> &Arc<FdInfoIntern> {
         &self.0
     }
 }
 
-impl FdInfo {
-    pub fn New(osfd: i32, epollable: bool) -> Self {
-        return Self(Arc::new(Mutex::new(FdInfoIntern::New(osfd, epollable))))
+#[derive(Debug)]
+pub struct FdInfoIntern {
+    pub osfd: i32,
+}
+
+impl FdInfoIntern {
+    pub fn New(osfd: i32) -> Self {
+        //info!("New osfd {}, hostfd{}: epollable is {}", osfd, hostfd, epollable);
+        let res = Self {
+            osfd: osfd,
+        };
+
+        return res;
     }
 
     pub fn IOBufWrite(&self, addr: u64, len: usize, offset: isize) -> i64 {
-        /*if offset >= 0 {
-            let bufWrite = UringBufWrite::New(self.clone(), addr, len, offset);
-            match URING.lock().BufWrite(bufWrite) {
-                Ok(()) => return 0,
-                Err(Error::SysError(e)) => return -e as i64,
-                Err(e) => panic!("IOBufWrite get unexpected error {:?}", e)
-            }
-        }*/
-
-        let osfd = self.lock().osfd;
+        let osfd = self.osfd;
         let ret = unsafe{
             if offset < 0 {
                 write(osfd as c_int, addr as *const c_void, len as size_t)
@@ -60,7 +66,7 @@ impl FdInfo {
     }
 
     pub fn IOWrite(&self, _taskId: u64, iovs: u64, iovcnt: i32) -> i64 {
-        let osfd = self.lock().osfd;
+        let osfd = self.osfd;
         let ret = unsafe {
             writev(osfd as c_int, iovs as *const iovec, iovcnt) as i64
         };
@@ -69,7 +75,7 @@ impl FdInfo {
     }
 
     pub fn IOAppend(&self, _taskId: u64, iovs: u64, iovcnt: i32, fileLenAddr: u64) -> i64 {
-        let osfd = self.lock().osfd;
+        let osfd = self.osfd;
 
         //let nr = SysCallID::pwritev2 as usize;
 
@@ -98,9 +104,9 @@ impl FdInfo {
 
         return size;
 
-        // the pwritev2 doesn't work. It will bread the bazel build.
+        // the pwritev2 doesn't work. It will break the bazel build.
         // Todo: root cause this.
-        /*let osfd = self.lock().osfd;
+        /*let osfd = self.osfd;
 
         let size = unsafe{
             pwritev2(osfd as c_int, iovs as *const iovec, iovcnt, -1, Flags::RWF_APPEND) as i64
@@ -122,7 +128,7 @@ impl FdInfo {
     }
 
     pub fn IOReadAt(&self, _taskId: u64, iovs: u64, iovcnt: i32, offset: u64) -> i64 {
-        let osfd = self.lock().osfd;
+        let osfd = self.osfd;
 
         let ret = unsafe {
             if offset as i64 == -1 {
@@ -136,7 +142,7 @@ impl FdInfo {
     }
 
     pub fn IOWriteAt(&self, _taskId: u64, iovs: u64, iovcnt: i32, offset: u64) -> i64 {
-        let osfd = self.lock().osfd;
+        let osfd = self.osfd;
 
         let ret = unsafe{
             if offset as i64 == -1 {
@@ -150,7 +156,7 @@ impl FdInfo {
     }
 
     pub fn IOAccept(&self, _taskId: u64, addr: u64, addrlen: u64, _flags: i32) -> i64 {
-        let osfd = self.lock().osfd;
+        let osfd = self.osfd;
 
         let newOsfd = unsafe{
             accept4(osfd, addr as  *mut sockaddr, addrlen as  *mut socklen_t, SocketFlags::SOCK_NONBLOCK | SocketFlags::SOCK_CLOEXEC)
@@ -160,13 +166,13 @@ impl FdInfo {
             return SysRet(newOsfd as i64);
         }
 
-        let hostfd = IO_MGR.lock().AddFd(newOsfd, true);
+        let hostfd = IO_MGR.lock().AddFd(newOsfd);
         URING_MGR.lock().Addfd(newOsfd).unwrap();
         return SysRet(hostfd as i64);
     }
 
     pub fn IOConnect(&self, _taskId: u64, addr: u64, addrlen: u32) -> i64 {
-        let osfd = self.lock().osfd;
+        let osfd = self.osfd;
 
         let ret = unsafe{
             connect(osfd, addr as *const sockaddr, addrlen as socklen_t)
@@ -176,7 +182,7 @@ impl FdInfo {
     }
 
     pub fn IORecvMsg(&self, _taskId: u64, msghdr: u64, flags: i32) -> i64 {
-        let osfd = self.lock().osfd;
+        let osfd = self.osfd;
 
         let ret = unsafe{
             recvmsg(osfd, msghdr as *mut msghdr, flags as c_int)
@@ -186,7 +192,7 @@ impl FdInfo {
     }
 
     pub fn IOSendMsg(&self, _taskId: u64, msghdr: u64, flags: i32) -> i64 {
-        let osfd = self.lock().osfd;
+        let osfd = self.osfd;
 
         let ret = unsafe{
             sendmsg(osfd, msghdr as *mut msghdr, flags as c_int)
@@ -196,21 +202,21 @@ impl FdInfo {
     }
 
     pub fn Fcntl(&self, _taskId: u64, cmd: i32, arg: u64) -> i64 {
-        let osfd = self.lock().osfd;
+        let osfd = self.osfd;
 
-        if cmd == Cmd::F_GETFL {
-            return self.lock().GetFlags() as i64;
-        }
+        /*if cmd == Cmd::F_GETFL {
+            return self.GetFlags() as i64;
+        }*/
 
         let ret = unsafe{
             fcntl(osfd as c_int, cmd, arg)
         };
 
-        if cmd == Cmd::F_SETFL  {
+        /*if cmd == Cmd::F_SETFL  {
             if ret == 0 {
-                self.lock().SetFlags(arg as i32);
+                self.SetFlags(arg as i32);
             }
-        }
+        }*/
 
         return SysRet(ret as i64);
     }
@@ -222,7 +228,7 @@ impl FdInfo {
         ioctl(2, TCGETS, 0x7ffdf82a09a0)        = -1 ENOTTY (Inappropriate ioctl for device)
         ioctl(-1, TIOCGPGRP, 0x7ffdf82a0a14)    = -1 EBADF (Bad file descriptor)
         */
-        let osfd = self.lock().osfd;
+        let osfd = self.osfd;
 
         if osfd == 2 {
             return -SysErr::ENOTTY as i64
@@ -238,7 +244,7 @@ impl FdInfo {
     }
 
     pub fn FSync(&self, _taskId: u64, dataSync: bool) -> i64 {
-        let osfd = self.lock().osfd;
+        let osfd = self.osfd;
 
         let ret = if dataSync {
             unsafe{
@@ -254,7 +260,7 @@ impl FdInfo {
     }
 
     pub fn Seek(&self, _taskId: u64, offset: i64, whence: i32) -> i64 {
-        let osfd = self.lock().osfd;
+        let osfd = self.osfd;
 
         let ret = unsafe {
             libc::lseek(osfd, offset, whence)
@@ -262,42 +268,11 @@ impl FdInfo {
 
         return SysRet(ret as i64)
     }
-}
 
-#[derive(Debug)]
-pub struct FdInfoIntern {
-    pub osfd: i32,
 
-    pub flags: Flags,
-    pub epollable: bool,
-}
-
-impl Drop for FdInfoIntern {
-    fn drop(&mut self) {
-        //error!("in fdInfo drop: guest fd is {}, osfd is {}", self.hostfd, self.osfd);
-        self.Close();
-    }
-}
-
-impl FdInfoIntern {
-    pub fn New(osfd: i32, epollable: bool) -> Self {
-        //info!("New osfd {}, hostfd{}: epollable is {}", osfd, hostfd, epollable);
-        let flags = unsafe {
-            fcntl(osfd, F_GETFL)
-        };
-
-        let res = Self {
-            osfd: osfd,
-            flags: Flags(flags),
-            epollable: epollable,
-        };
-
-        return res;
-    }
-
-    pub fn Flags(&self) -> Flags {
-        return self.flags;
-    }
+    /*pub fn Flags(&self) -> Flags {
+        return Flags(self.GetFlags());
+    }*/
 
     pub fn GetSockErr(&self) -> Result<u64> {
         let mut err = 0;
@@ -327,13 +302,12 @@ impl FdInfoIntern {
 
         return 0;
     }
+}
 
-    pub fn SetFlags(&mut self, flags: i32) {
-        self.flags = Flags(flags)
-    }
-
-    pub fn GetFlags(&mut self) -> i32 {
-        return self.Flags().0
+impl Drop for FdInfoIntern {
+    fn drop(&mut self) {
+        //error!("in fdInfo drop: guest fd is {}, osfd is {}", self.hostfd, self.osfd);
+        self.Close();
     }
 }
 
