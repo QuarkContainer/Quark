@@ -316,7 +316,9 @@ impl QUring {
 
     pub fn FilesUpdate(&self, task: &Task, fd: i32) -> i64 {
         let addr = SHARESPACE.UringFds();
+        let uringfd = SHARESPACE.UringFd();
         let msg = UringOp::FilesUpdate(FilesUpdateOp {
+            uringfd: uringfd,
             fds: addr,
             len: 1,
             offset: fd,

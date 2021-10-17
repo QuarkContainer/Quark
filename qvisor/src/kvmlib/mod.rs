@@ -60,7 +60,6 @@ lazy_static! {
     pub static ref VMS: Mutex<VMSpace> = Mutex::new(VMSpace::Init());
     pub static ref PAGE_ALLOCATOR: MemAllocator = MemAllocator::New();
     pub static ref FD_NOTIFIER: HostFdNotifier = HostFdNotifier::New();
-    pub static ref IO_MGR: Mutex<vmspace::HostFileMap::IOMgr> = Mutex::new(vmspace::HostFileMap::IOMgr::Init().expect("Init IOMgr fail"));
     pub static ref SYNC_MGR: Mutex<syncmgr::SyncMgr> = Mutex::new(syncmgr::SyncMgr::New());
     pub static ref PMA_KEEPER: HostPMAKeeper = HostPMAKeeper::New();
     pub static ref URING_MGR: Mutex<UringMgr> = Mutex::new(UringMgr::New(64));

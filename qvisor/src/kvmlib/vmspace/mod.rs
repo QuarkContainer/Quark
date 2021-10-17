@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod HostFileMap;
-//pub mod TimerMgr;
 pub mod syscall;
 pub mod timer_keeper;
 pub mod hostfdnotifier;
@@ -30,7 +28,6 @@ use std::slice;
 use std::fs;
 use libc::*;
 use std::marker::Send;
-use serde_json;
 use alloc::collections::btree_map::BTreeMap;
 use x86_64::structures::paging::PageTableFlags;
 use std::collections::VecDeque;
@@ -58,7 +55,6 @@ use super::namespace::MountNs;
 use super::runc::runtime::vm::*;
 use super::ucall::usocket::*;
 use super::*;
-use self::HostFileMap::fdinfo::*;
 use self::syscall::*;
 use self::time::*;
 use self::random::*;
@@ -127,14 +123,6 @@ impl VMSpace {
     }
 
     ///////////start of file operation//////////////////////////////////////////////
-    pub fn GetOsfd(hostfd: i32) -> Option<i32> {
-        return IO_MGR.lock().GetFdByHost(hostfd);
-    }
-
-    pub fn GetFdInfo(hostfd: i32) -> Option<FdInfo> {
-        return IO_MGR.lock().GetByHost(hostfd);
-    }
-
     pub fn GetDents64(_taskId: u64, fd: i32, dirp: u64, count: u32) -> i64 {
         let nr = SysCallID::sys_getdents64 as usize;
 
@@ -299,9 +287,7 @@ impl VMSpace {
                 return osfd as i64
             }
 
-            let hostfd = IO_MGR.lock().AddFd(osfd);
-
-            process.Stdiofds[i] = hostfd;
+            process.Stdiofds[i] = osfd;
         }
 
         process.Root = "/".to_string();
@@ -357,8 +343,7 @@ impl VMSpace {
             return Self::GetRet(ret as i64)
         }
 
-        let hostfd = IO_MGR.lock().AddFd(fd);
-        return hostfd as i64
+        return fd as i64
     }
 
     pub fn Fallocate(_taskId: u64, fd: i32, mode: i32, offset: i64, len: i64) -> i64 {
@@ -485,13 +470,11 @@ impl VMSpace {
         }
 
         tryOpenAt.writeable = writeable;
-        let hostfd = IO_MGR.lock().AddFd(fd);
-
         if tryOpenAt.fstat.IsRegularFile() {
-            URING_MGR.lock().Addfd(hostfd).unwrap();
+            URING_MGR.lock().Addfd(fd).unwrap();
         }
 
-        return hostfd as i64
+        return fd as i64
     }
 
     pub fn CreateAt(_taskId: u64, dirfd: i32, fileName: u64, flags: i32, mode: i32, uid: u32, gid: u32, fstatAddr: u64) -> i32 {
@@ -517,19 +500,16 @@ impl VMSpace {
                 return Self::GetRet(ret as i64) as i32
             }
 
-            let hostfd = IO_MGR.lock().AddFd(osfd);
-
             URING_MGR.lock().Addfd(osfd).unwrap();
 
-            return hostfd
+            return osfd
         }
     }
 
     pub fn Close(_taskId: u64, fd: i32) -> i64 {
-        IO_MGR.lock().RemoveFd(fd);
         URING_MGR.lock().Removefd(fd).unwrap();
 
-        let _ = IO_MGR.lock();
+        let _ = VMS.lock();
 
         if fd >= 0 {
             let ret = unsafe {
@@ -685,9 +665,8 @@ impl VMSpace {
             return Self::GetRet(newOsfd as i64);
         }
 
-        let hostfd = IO_MGR.lock().AddFd(newOsfd);
         URING_MGR.lock().Addfd(newOsfd).unwrap();
-        return Self::GetRet(hostfd as i64);
+        return Self::GetRet(newOsfd as i64);
     }
 
     pub fn IOConnect(_taskId: u64, fd: i32, addr: u64, addrlen: u32) -> i64 {
@@ -981,9 +960,8 @@ impl VMSpace {
             return Self::GetRet(fd as i64);
         }
 
-        let hostfd = IO_MGR.lock().AddFd(fd);
         URING_MGR.lock().Addfd(fd).unwrap();
-        return Self::GetRet(hostfd as i64);
+        return Self::GetRet(fd as i64);
     }
 
     pub fn SocketPair(_taskId: u64, domain: i32, type_: i32, protocol: i32, socketVect: u64) -> i64 {
@@ -994,15 +972,6 @@ impl VMSpace {
         if res < 0 {
             return Self::GetRet(res as i64);
         }
-
-        let ptr = socketVect as * mut i32;
-        let fds = unsafe { slice::from_raw_parts_mut(ptr, 2) };
-
-        let hostfd0 = IO_MGR.lock().AddFd(fds[0]);
-        let hostfd1 = IO_MGR.lock().AddFd(fds[1]);
-
-        fds[0] = hostfd0;
-        fds[1] = hostfd1;
 
         return Self::GetRet(res as i64);
     }
@@ -1229,9 +1198,7 @@ impl VMSpace {
             return Self::GetRet(ret as i64);
         }
 
-        let guestfd = IO_MGR.lock().AddFd(fd);
-
-        return guestfd as i64
+        return fd as i64
     }
 
     pub fn NewFifo() -> i64 {
@@ -1350,8 +1317,7 @@ impl VMSpace {
 
             Self::UnblockFd(osfd);
 
-            let hostfd = IO_MGR.lock().AddFd(osfd);
-            stdfds[i] = hostfd;
+            stdfds[i] = osfd;
         }
 
         return 0;

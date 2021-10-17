@@ -286,7 +286,7 @@ impl FdInfoIntern {
     }
 
     pub fn Close(&self) -> i32 {
-        let _ioMgr = IO_MGR.lock(); //global lock
+        //let _ioMgr = IO_MGR.lock(); //global lock
         if self.osfd >= 0 {
             unsafe {
                 // shutdown for socket, without shutdown, it the uring read won't be wake up

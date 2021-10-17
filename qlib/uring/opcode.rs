@@ -801,6 +801,7 @@ opcode!(
     /// This command is an alternative to using [super::Submitter::register_files_update]
     /// which then works in an async fashion, like the rest of the io_uring commands.
     pub struct FilesUpdate {
+        fd: { RawFd },
         fds: { *const RawFd },
         len: { u32 },
         ;;
@@ -810,11 +811,11 @@ opcode!(
     pub const CODE = sys::IORING_OP_FILES_UPDATE;
 
     pub fn build(self) -> Entry {
-        let FilesUpdate { fds, len, offset } = self;
+        let FilesUpdate { fd, fds, len, offset } = self;
 
         let mut sqe = sqe_zeroed();
         sqe.opcode = Self::CODE;
-        sqe.fd = -1;
+        sqe.fd = fd;
         sqe.__bindgen_anon_2.addr = fds as _;
         sqe.len = len;
         sqe.__bindgen_anon_1.off = offset as _;

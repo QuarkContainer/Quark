@@ -110,17 +110,21 @@ impl SimplePageAllocator {
             end: start + len as u64,
         }
     }
+
+    pub fn AllocPages(&self, count: u64) -> Result<u64> {
+        let current = self.next.fetch_add(MemoryDef::PAGE_SIZE * count, Ordering::SeqCst);
+        let next = current + MemoryDef::PAGE_SIZE * count;
+        if next > self.end {
+            panic!("SimplePageAllocator Out Of Memory")
+        }
+
+        return Ok(current)
+    }
 }
 
 impl Allocator for SimplePageAllocator {
     fn AllocPage(&self, _incrRef: bool) -> Result<u64> {
-        let current = self.next.load(Ordering::SeqCst);
-        if current == self.end {
-            panic!("SimplePageAllocator Out Of Memory")
-        }
-
-        self.next.fetch_add(MemoryDef::PAGE_SIZE, Ordering::SeqCst);
-        return Ok(current)
+        return self.AllocPages(1);
     }
 
     fn FreePage(&self, _addr: u64) -> Result<()> {
@@ -772,6 +776,7 @@ impl ShareSpace {
         self.SetLogfd(super::super::print::LOG.lock().Logfd());
         self.hostIOThreadEventfd.store(FD_NOTIFIER.Eventfd(), Ordering::SeqCst);
         self.uringFds.store(URING_MGR.lock().GetFds(), Ordering::SeqCst);
+        self.uringFd.store(URING_MGR.lock().GetUringFd(), Ordering::SeqCst);
         URING_MGR.lock().Addfd(self.HostIOThreadEventfd()).unwrap();
         self.config.write().Load();
     }
