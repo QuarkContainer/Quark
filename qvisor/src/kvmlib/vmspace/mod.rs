@@ -303,14 +303,7 @@ impl VMSpace {
                 return osfd as i64
             }
 
-            let stat = Self::LibcFstat(osfd).expect("LoadProcessKernel: can't fstat for the stdio fds");
-
-            //Self::UnblockFd(osfd);
-
-            let st_mode = stat.st_mode & ModeType::S_IFMT as u32;
-            let epollable = st_mode == S_IFIFO || st_mode == S_IFSOCK || st_mode == S_IFCHR;
-
-            let hostfd = IO_MGR.lock().AddFd(osfd, epollable);
+            let hostfd = IO_MGR.lock().AddFd(osfd);
 
             process.Stdiofds[i] = hostfd;
         }
@@ -368,7 +361,7 @@ impl VMSpace {
             return Self::GetRet(ret as i64)
         }
 
-        let hostfd = IO_MGR.lock().AddFd(fd, true);
+        let hostfd = IO_MGR.lock().AddFd(fd);
         return hostfd as i64
     }
 
@@ -538,7 +531,7 @@ impl VMSpace {
         }
 
         tryOpenAt.writeable = writeable;
-        let hostfd = IO_MGR.lock().AddFd(fd, false);
+        let hostfd = IO_MGR.lock().AddFd(fd);
 
         if tryOpenAt.fstat.IsRegularFile() {
             URING_MGR.lock().Addfd(hostfd).unwrap();
@@ -579,7 +572,7 @@ impl VMSpace {
                 return Self::GetRet(ret as i64) as i32
             }
 
-            let hostfd = IO_MGR.lock().AddFd(osfd, false);
+            let hostfd = IO_MGR.lock().AddFd(osfd);
 
             URING_MGR.lock().Addfd(osfd).unwrap();
 
@@ -1024,7 +1017,7 @@ impl VMSpace {
             return Self::GetRet(fd as i64);
         }
 
-        let hostfd = IO_MGR.lock().AddFd(fd, true);
+        let hostfd = IO_MGR.lock().AddFd(fd);
         URING_MGR.lock().Addfd(fd).unwrap();
         return Self::GetRet(hostfd as i64);
     }
@@ -1041,8 +1034,8 @@ impl VMSpace {
         let ptr = socketVect as * mut i32;
         let fds = unsafe { slice::from_raw_parts_mut(ptr, 2) };
 
-        let hostfd0 = IO_MGR.lock().AddFd(fds[0], true);
-        let hostfd1 = IO_MGR.lock().AddFd(fds[1], true);
+        let hostfd0 = IO_MGR.lock().AddFd(fds[0]);
+        let hostfd1 = IO_MGR.lock().AddFd(fds[1]);
 
         fds[0] = hostfd0;
         fds[1] = hostfd1;
@@ -1332,7 +1325,7 @@ impl VMSpace {
             return Self::GetRet(ret as i64);
         }
 
-        let guestfd = IO_MGR.lock().AddFd(fd, false);
+        let guestfd = IO_MGR.lock().AddFd(fd);
 
         return guestfd as i64
     }
@@ -1463,7 +1456,7 @@ impl VMSpace {
 
             Self::UnblockFd(osfd);
 
-            let hostfd = IO_MGR.lock().AddFd(osfd, true);
+            let hostfd = IO_MGR.lock().AddFd(osfd);
             stdfds[i] = hostfd;
         }
 

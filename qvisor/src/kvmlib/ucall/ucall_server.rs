@@ -97,14 +97,10 @@ pub fn HandleExecProcess(usock: USocket, execArgs: &mut ExecArgs, fds: &[i32]) -
 
     for i in 0..execArgs.Fds.len() {
         let osfd = execArgs.Fds[i];
-        let stat = VMSpace::LibcFstat(osfd)?;
 
         VMSpace::UnblockFd(osfd);
 
-        let st_mode = stat.st_mode & ModeType::S_IFMT as u32;
-        let epollable = st_mode == S_IFIFO || st_mode == S_IFSOCK || st_mode == S_IFCHR;
-
-        let hostfd = IO_MGR.lock().AddFd(osfd, epollable);
+        let hostfd = IO_MGR.lock().AddFd(osfd);
 
         process.Stdiofds[i] = hostfd;
     }

@@ -97,8 +97,8 @@ impl IOMgr {
     }
 
     //return guest fd
-    pub fn AddFd(&mut self, osfd: i32, epollable: bool) -> i32 {
-        let fdInfo = self.fdTbl.Alloc(osfd, epollable).expect("hostfdMap: guest fd alloc fail");
+    pub fn AddFd(&mut self, osfd: i32) -> i32 {
+        let fdInfo = self.fdTbl.Alloc(osfd).expect("hostfdMap: guest fd alloc fail");
 
         self.osMap.insert(osfd, fdInfo.clone());
 
@@ -185,22 +185,22 @@ impl FdTbl {
             len: MAX_FD,
         };
 
-        res.map.insert(0, FdInfo::New(0, true));
-        res.map.insert(1, FdInfo::New(1, true));
-        res.map.insert(2, FdInfo::New(2, true));
+        res.map.insert(0, FdInfo::New(0));
+        res.map.insert(1, FdInfo::New(1));
+        res.map.insert(2, FdInfo::New(2));
 
         return res
     }
 
-    pub fn Alloc(&mut self, osfd: i32, epollable: bool) -> Result<FdInfo> {
-        let fdInfo = FdInfo::New(osfd, epollable);
+    pub fn Alloc(&mut self, osfd: i32) -> Result<FdInfo> {
+        let fdInfo = FdInfo::New(osfd);
 
         self.map.insert(osfd, fdInfo.clone());
         return Ok(fdInfo)
     }
 
-    pub fn Take(&mut self, osfd: i32, epollable: bool) -> Result<FdInfo> {
-        let fdInfo = FdInfo::New(osfd, epollable);
+    pub fn Take(&mut self, osfd: i32) -> Result<FdInfo> {
+        let fdInfo = FdInfo::New(osfd);
 
         self.map.insert(osfd as i32, fdInfo.clone());
         return Ok(fdInfo)

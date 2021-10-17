@@ -33,8 +33,8 @@ impl Deref for FdInfo {
 }
 
 impl FdInfo {
-    pub fn New(osfd: i32, epollable: bool) -> Self {
-        return Self(Arc::new(Mutex::new(FdInfoIntern::New(osfd, epollable))))
+    pub fn New(osfd: i32) -> Self {
+        return Self(Arc::new(Mutex::new(FdInfoIntern::New(osfd))))
     }
 
     pub fn IOBufWrite(&self, addr: u64, len: usize, offset: isize) -> i64 {
@@ -160,7 +160,7 @@ impl FdInfo {
             return SysRet(newOsfd as i64);
         }
 
-        let hostfd = IO_MGR.lock().AddFd(newOsfd, true);
+        let hostfd = IO_MGR.lock().AddFd(newOsfd);
         URING_MGR.lock().Addfd(newOsfd).unwrap();
         return SysRet(hostfd as i64);
     }
@@ -269,7 +269,6 @@ pub struct FdInfoIntern {
     pub osfd: i32,
 
     pub flags: Flags,
-    pub epollable: bool,
 }
 
 impl Drop for FdInfoIntern {
@@ -280,7 +279,7 @@ impl Drop for FdInfoIntern {
 }
 
 impl FdInfoIntern {
-    pub fn New(osfd: i32, epollable: bool) -> Self {
+    pub fn New(osfd: i32) -> Self {
         //info!("New osfd {}, hostfd{}: epollable is {}", osfd, hostfd, epollable);
         let flags = unsafe {
             fcntl(osfd, F_GETFL)
@@ -289,7 +288,6 @@ impl FdInfoIntern {
         let res = Self {
             osfd: osfd,
             flags: Flags(flags),
-            epollable: epollable,
         };
 
         return res;
