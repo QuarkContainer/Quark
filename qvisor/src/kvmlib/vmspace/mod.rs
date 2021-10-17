@@ -312,11 +312,6 @@ impl VMSpace {
 
             let hostfd = IO_MGR.lock().AddFd(osfd, epollable);
 
-            // can block wait
-            if epollable {
-                FD_NOTIFIER.AddFd(osfd, Box::new(GuestFd{hostfd: hostfd}));
-            }
-
             process.Stdiofds[i] = hostfd;
         }
 
@@ -374,7 +369,6 @@ impl VMSpace {
         }
 
         let hostfd = IO_MGR.lock().AddFd(fd, true);
-        FD_NOTIFIER.AddFd(fd, Box::new(GuestFd{hostfd: hostfd}));
         return hostfd as i64
     }
 
@@ -597,11 +591,7 @@ impl VMSpace {
         let info = IO_MGR.lock().RemoveFd(fd);
 
         URING_MGR.lock().Removefd(fd).unwrap();
-        let res = if let Some(info) = info {
-            let waitable = info.lock().epollable;
-            if waitable {
-                FD_NOTIFIER.RemoveFd(info.lock().osfd).expect("close FD_NOTIFIER.RemoveFd fail");
-            }
+        let res = if info.is_some() {
             0
         } else {
             -SysErr::EINVAL as i64
@@ -1035,7 +1025,6 @@ impl VMSpace {
         }
 
         let hostfd = IO_MGR.lock().AddFd(fd, true);
-        FD_NOTIFIER.AddFd(fd, Box::new(GuestFd{hostfd: hostfd}));
         URING_MGR.lock().Addfd(fd).unwrap();
         return Self::GetRet(hostfd as i64);
     }
@@ -1054,9 +1043,6 @@ impl VMSpace {
 
         let hostfd0 = IO_MGR.lock().AddFd(fds[0], true);
         let hostfd1 = IO_MGR.lock().AddFd(fds[1], true);
-
-        FD_NOTIFIER.AddFd(fds[0], Box::new(GuestFd{hostfd: hostfd0}));
-        FD_NOTIFIER.AddFd(fds[1], Box::new(GuestFd{hostfd: hostfd1}));
 
         fds[0] = hostfd0;
         fds[1] = hostfd1;
@@ -1478,7 +1464,6 @@ impl VMSpace {
             Self::UnblockFd(osfd);
 
             let hostfd = IO_MGR.lock().AddFd(osfd, true);
-            FD_NOTIFIER.AddFd(osfd, Box::new(GuestFd{hostfd: hostfd}));
             stdfds[i] = hostfd;
         }
 
