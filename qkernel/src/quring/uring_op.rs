@@ -54,6 +54,8 @@ impl UringCall {
             UringOp::WriteFixed(ref msg) => return msg.SEntry(),
             UringOp::Statx(ref msg) => return msg.SEntry(),
             UringOp::Fsync(ref msg) => return msg.SEntry(),
+            UringOp::Accept(ref msg) => return msg.SEntry(),
+            UringOp::FilesUpdate(ref msg) => return msg.SEntry(),
         };
 
         panic!("UringCall SEntry UringOp::None")
@@ -69,6 +71,8 @@ pub enum UringOp {
     WriteFixed(WriteFixedOp),
     Statx(StatxOp),
     Fsync(FsyncOp),
+    Accept(AcceptOp),
+    FilesUpdate(FilesUpdateOp),
 }
 
 impl Default for UringOp {
@@ -181,5 +185,39 @@ impl FsyncOp {
 
         return op.build()
             .flags(squeue::Flags::FIXED_FILE);
+    }
+}
+
+#[derive(Clone, Debug, Copy)]
+pub struct AcceptOp {
+    pub fd: i32,
+    pub addr: u64,
+    pub addrlen: u64,
+    pub flags: u32,
+}
+
+impl AcceptOp {
+    pub fn SEntry(&self) -> squeue::Entry {
+        let op = Accept::new(types::Fd(self.fd), self.addr as * mut _, self.addrlen as * mut _)
+            .flags(self.flags);
+
+        return op.build()
+            .flags(squeue::Flags::FIXED_FILE);
+    }
+}
+
+#[derive(Clone, Debug, Copy)]
+pub struct FilesUpdateOp {
+    pub fds: u64,
+    pub len: u32,
+    pub offset: i32,
+}
+
+impl FilesUpdateOp {
+    pub fn SEntry(&self) -> squeue::Entry {
+        let op = FilesUpdate::new(self.fds as * const i32, self.len)
+            .offset(self.offset);
+
+        return op.build();
     }
 }

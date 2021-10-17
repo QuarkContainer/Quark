@@ -486,8 +486,10 @@ impl SockOperations for SocketOperations {
 
         info!("host socket accept #1");
         *addrlen = addr.len() as u32;
+
         let mut res = Kernel::HostSpace::IOAccept(self.fd, addrLoc, addrlen as *const _ as u64, flags, blocking) as i32;
-        //info!("host socket accept #2 blocking = {}", blocking);
+        //let mut res = IOURING.Accept(task, self.fd, addrLoc, addrlen as *const _ as u64, flags as u32) as i32;
+        //info!("host socket accept #2 blocking = {}, res is {}", blocking, res);
         if blocking {
             let general = task.blocker.generalEntry.clone();
             self.EventRegister(task, &general, EVENT_IN);
@@ -500,6 +502,7 @@ impl SockOperations for SocketOperations {
                     _ => ()
                 }
                 res = Kernel::HostSpace::IOAccept(self.fd, addrLoc, addrlen as *const _ as u64, flags, blocking) as i32;
+                //res = IOURING.Accept(task, self.fd, addrLoc, addrlen as *const _ as u64, flags as u32) as i32;
             }
             self.EventUnregister(task, &general);
         }

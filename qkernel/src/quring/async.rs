@@ -216,7 +216,8 @@ impl UringAsyncMgr {
         return (self.ops[idx]
                     .lock().0
                     .SEntry()
-                    .user_data(id), id);
+                    .user_data(id)
+                , id);
     }
 }
 

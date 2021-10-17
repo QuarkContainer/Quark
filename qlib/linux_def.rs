@@ -2908,7 +2908,6 @@ pub extern fn CopyData(from: u64, to: u64, cnt: usize) {
         for i in 0..cnt {
             toArr[i] = fromArr[i]
         }
-        super::super::asm::sfence();
     }
 }
 
