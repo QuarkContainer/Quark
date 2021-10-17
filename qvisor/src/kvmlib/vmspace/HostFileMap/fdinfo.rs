@@ -270,10 +270,6 @@ impl FdInfoIntern {
     }
 
 
-    /*pub fn Flags(&self) -> Flags {
-        return Flags(self.GetFlags());
-    }*/
-
     pub fn GetSockErr(&self) -> Result<u64> {
         let mut err = 0;
         let mut len: u32 = 8;
@@ -307,7 +303,7 @@ impl FdInfoIntern {
 impl Drop for FdInfoIntern {
     fn drop(&mut self) {
         //error!("in fdInfo drop: guest fd is {}, osfd is {}", self.hostfd, self.osfd);
-        self.Close();
+        //self.Close();
     }
 }
 
