@@ -166,9 +166,9 @@ impl FdInfoIntern {
             return SysRet(newOsfd as i64);
         }
 
-        let hostfd = IO_MGR.lock().AddFd(newOsfd);
+        //let hostfd = IO_MGR.lock().AddFd(newOsfd);
         URING_MGR.lock().Addfd(newOsfd).unwrap();
-        return SysRet(hostfd as i64);
+        return SysRet(newOsfd as i64);
     }
 
     pub fn IOConnect(&self, _taskId: u64, addr: u64, addrlen: u32) -> i64 {

@@ -136,10 +136,7 @@ impl VMSpace {
     }
 
     pub fn GetDents64(_taskId: u64, fd: i32, dirp: u64, count: u32) -> i64 {
-        let fd = Self::GetOsfd(fd).expect("GetDents64");
-
         let nr = SysCallID::sys_getdents64 as usize;
-
 
         //info!("sys_getdents64 is {}", nr);
         unsafe {
@@ -365,11 +362,6 @@ impl VMSpace {
     }
 
     pub fn Fallocate(_taskId: u64, fd: i32, mode: i32, offset: i64, len: i64) -> i64 {
-        let fd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe {
             fallocate(fd, mode, offset, len)
         };
@@ -378,28 +370,6 @@ impl VMSpace {
     }
 
     pub fn RenameAt(_taskId: u64, olddirfd: i32, oldpath: u64, newdirfd: i32, newpath: u64) -> i64 {
-        let olddirfd = {
-            if olddirfd > 0 {
-                match Self::GetOsfd(olddirfd) {
-                    Some(olddirfd) => olddirfd,
-                    None => return -SysErr::EBADF as i64,
-                }
-            } else {
-                olddirfd
-            }
-        };
-
-        let newdirfd = {
-            if newdirfd > 0 {
-                match Self::GetOsfd(newdirfd) {
-                    Some(newdirfd) => newdirfd,
-                    None => return -SysErr::EBADF as i64,
-                }
-            } else {
-                newdirfd
-            }
-        };
-
         let ret = unsafe {
             renameat(olddirfd, oldpath as *const c_char, newdirfd, newpath as *const c_char)
         };
@@ -408,11 +378,6 @@ impl VMSpace {
     }
 
     pub fn Ftruncate(_taskId: u64, fd: i32, len: i64) -> i64 {
-        let fd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe {
             ftruncate64(fd, len)
         };
@@ -496,16 +461,6 @@ impl VMSpace {
     }
 
     pub fn TryOpenAt(_taskId: u64, dirfd: i32, name: u64, addr: u64) -> i64 {
-        //info!("TryOpenAt: the filename is {}", Self::GetStr(name));
-        let dirfd = if dirfd < 0 {
-            dirfd
-        } else {
-            match Self::GetOsfd(dirfd) {
-                Some(fd) => fd,
-                None => return -SysErr::EBADF as i64,
-            }
-        };
-
         let tryOpenAt = unsafe {
             &mut *(addr as * mut TryOpenStruct)
         };
@@ -542,15 +497,6 @@ impl VMSpace {
     pub fn CreateAt(_taskId: u64, dirfd: i32, fileName: u64, flags: i32, mode: i32, uid: u32, gid: u32, fstatAddr: u64) -> i32 {
         info!("CreateAt: the filename is {}, flag is {:x}, the mode is {:b}, owenr is {}:{}, dirfd is {}",
             Self::GetStr(fileName), flags, mode, uid, gid, dirfd);
-
-        let dirfd = if dirfd < 0 {
-            dirfd
-        } else {
-            match Self::GetOsfd(dirfd) {
-                Some(fd) => fd,
-                None => return -SysErr::EBADF as i32,
-            }
-        };
 
         unsafe {
             let osfd = libc::openat(dirfd, fileName as *const c_char, flags as c_int, mode as c_int);
@@ -815,26 +761,16 @@ impl VMSpace {
     }
 
     pub fn SyncFs(_taskId: u64, fd: i32) -> i64 {
-        let osfd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe {
-            libc::syncfs(osfd) as i64
+            libc::syncfs(fd) as i64
         };
 
         return Self::GetRet(ret);
     }
 
     pub fn SyncFileRange(_taskId: u64, fd: i32, offset: i64, nbytes: i64, flags: u32) -> i64 {
-        let osfd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe {
-            libc::sync_file_range(osfd, offset, nbytes, flags) as i64
+            libc::sync_file_range(fd, offset, nbytes, flags) as i64
         };
 
         return Self::GetRet(ret);
@@ -891,28 +827,11 @@ impl VMSpace {
 
     pub fn ReadLinkAt(_taskId: u64, dirfd: i32, path: u64, buf: u64, bufsize: u64) -> i64 {
         //info!("ReadLinkAt: the path is {}", Self::GetStr(path));
-
-        let dirfd = {
-            if dirfd == -100 {
-                dirfd
-            } else {
-                match Self::GetOsfd(dirfd) {
-                    Some(dirfd) => dirfd,
-                    None => return -SysErr::EBADF as i64,
-                }
-            }
-        };
-
         let res = unsafe{ readlinkat(dirfd, path as *const c_char, buf as *mut c_char, bufsize as usize) };
         return Self::GetRet(res as i64)
     }
 
     pub fn Fstat(_taskId: u64, fd: i32, buf: u64) -> i64 {
-        let fd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe {
             libc::fstat(fd, buf as *mut stat) as i64
         };
@@ -940,7 +859,6 @@ impl VMSpace {
     }
 
     pub fn Fgetxattr(_taskId: u64, fd: i32, name: u64, value: u64, size: u64) -> i64 {
-        let fd = Self::GetOsfd(fd).expect("fgetxattr");
         let ret = unsafe {
             fgetxattr(fd, name as *const c_char, value as *mut c_void, size as usize) as i64
         };
@@ -965,13 +883,7 @@ impl VMSpace {
         let filetypes = unsafe { slice::from_raw_parts_mut(ptr, count) };
 
         for ft in filetypes {
-            let dirfd = {
-                if ft.dirfd > 0 {
-                    Self::GetOsfd(ft.dirfd).expect("Fstatat")
-                } else {
-                    ft.dirfd
-                }
-            };
+            let dirfd = ft.dirfd;
 
             let ret = unsafe {
                 Self::GetRet(libc::fstatat(dirfd, ft.pathname as *const c_char, &mut stat as *mut _ as u64 as *mut stat, AT_SYMLINK_NOFOLLOW) as i64)
@@ -987,22 +899,12 @@ impl VMSpace {
     }
 
     pub fn Fstatat(_taskId: u64, dirfd: i32, pathname: u64, buf: u64, flags: i32) -> i64 {
-        let dirfd = {
-            if dirfd > 0 {
-                Self::GetOsfd(dirfd).expect("Fstatat")
-            } else {
-                dirfd
-            }
-        };
-
         return unsafe {
             Self::GetRet(libc::fstatat(dirfd, pathname as *const c_char, buf as *mut stat, flags) as i64)
         };
     }
 
     pub fn Fstatfs(_taskId: u64, fd: i32, buf: u64) -> i64 {
-        let fd = Self::GetOsfd(fd).expect("Fstatfs");
-
         let ret = unsafe{
             fstatfs(fd, buf as *mut statfs)
         };
@@ -1012,17 +914,6 @@ impl VMSpace {
 
     pub fn Unlinkat(_taskId: u64, dirfd: i32, pathname: u64, flags: i32) -> i64 {
         info!("Unlinkat: the pathname is {}", Self::GetStr(pathname));
-        let dirfd = {
-            if dirfd > 0 {
-                match Self::GetOsfd(dirfd) {
-                    Some(dirfd) => dirfd,
-                    None => return -SysErr::EBADF as i64,
-                }
-            } else {
-                dirfd
-            }
-        };
-
         let ret = unsafe {
             unlinkat(dirfd, pathname as *const c_char, flags)
         };
@@ -1032,17 +923,6 @@ impl VMSpace {
 
     pub fn Mkdirat(_taskId: u64, dirfd: i32, pathname: u64, mode_ : u32, uid: u32, gid: u32) -> i64 {
         info!("Mkdirat: the pathname is {}", Self::GetStr(pathname));
-
-        let dirfd = {
-            if dirfd > 0 {
-                match Self::GetOsfd(dirfd) {
-                    Some(dirfd) => dirfd,
-                    None => return -SysErr::EBADF as i64,
-                }
-            } else {
-                dirfd
-            }
-        };
 
         let ret = unsafe {
             mkdirat(dirfd, pathname as *const c_char, mode_ as mode_t)
@@ -1080,17 +960,6 @@ impl VMSpace {
 
     pub fn FAccessAt(_taskId: u64, dirfd: i32, pathname: u64, mode: i32, flags: i32) -> i64 {
         info!("FAccessAt: the pathName is {}", Self::GetStr(pathname));
-        let dirfd = {
-            if dirfd == -100 {
-                dirfd
-            } else {
-                match Self::GetOsfd(dirfd) {
-                    Some(dirfd) => dirfd,
-                    None => return -SysErr::EBADF as i64,
-                }
-            }
-        };
-
         let ret = unsafe{
             faccessat(dirfd, pathname as *const c_char, mode, flags)
         };
@@ -1139,11 +1008,6 @@ impl VMSpace {
     }
 
     pub fn GetSockName(_taskId: u64, sockfd: i32, addr: u64, addrlen: u64) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe{
             getsockname(sockfd, addr as *mut sockaddr, addrlen as *mut socklen_t)
         };
@@ -1152,11 +1016,6 @@ impl VMSpace {
     }
 
     pub fn GetPeerName(_taskId: u64, sockfd: i32, addr: u64, addrlen: u64) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe{
             getpeername(sockfd, addr as *mut sockaddr, addrlen as *mut socklen_t)
         };
@@ -1165,11 +1024,6 @@ impl VMSpace {
     }
 
     pub fn GetSockOpt(_taskId: u64, sockfd: i32, level: i32, optname: i32, optval: u64, optlen: u64) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe{
             getsockopt(sockfd, level, optname, optval as *mut c_void, optlen as *mut socklen_t)
         };
@@ -1178,11 +1032,6 @@ impl VMSpace {
     }
 
     pub fn SetSockOpt(_taskId: u64, sockfd: i32, level: i32, optname: i32, optval: u64, optlen: u32) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe{
             setsockopt(sockfd, level, optname, optval as *const c_void, optlen as socklen_t)
         };
@@ -1191,11 +1040,6 @@ impl VMSpace {
     }
 
     pub fn Bind(_taskId: u64, sockfd: i32, sockaddr: u64, addrlen: u32, umask: u32) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe{
             // todo: this is not thread safe, need to add lock when implement multiple io threads
             let oldUmask = libc::umask(umask);
@@ -1208,11 +1052,6 @@ impl VMSpace {
     }
 
     pub fn Listen(_taskId: u64, sockfd: i32, backlog: i32) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe{
             listen(sockfd, backlog)
         };
@@ -1221,11 +1060,6 @@ impl VMSpace {
     }
 
     pub fn Shutdown(_taskId: u64, sockfd: i32, how: i32) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe{
             shutdown(sockfd, how)
         };
@@ -1272,11 +1106,6 @@ impl VMSpace {
     }
 
     pub fn Fchdir(_taskId: u64, fd: i32) -> i64 {
-        let fd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe {
             fchdir(fd)
         };
@@ -1285,11 +1114,6 @@ impl VMSpace {
     }
 
     pub fn Fadvise(_taskId: u64, fd: i32, offset: u64, len: u64, advice: i32) -> i64 {
-        let fd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe {
             posix_fadvise(fd, offset as i64, len as i64, advice)
         };
@@ -1325,11 +1149,6 @@ impl VMSpace {
     }
 
     pub fn FChown(_taskId: u64, fd: i32, owner: u32, group: u32) -> i64 {
-        let fd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe {
             fchown(fd, owner, group)
         };
@@ -1346,11 +1165,6 @@ impl VMSpace {
     }
 
     pub fn Fchmod(_taskId: u64, fd: i32, mode: u32) -> i64 {
-        let fd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe {
             fchmod(fd, mode as mode_t)
         };
@@ -1359,11 +1173,6 @@ impl VMSpace {
     }
 
     pub fn NonBlockingPoll(_taskId: u64, fd: i32, mask: EventMask) -> i64 {
-        let fd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let mut e = pollfd {
             fd: fd,
             events: mask as i16,
@@ -1486,11 +1295,6 @@ impl VMSpace {
     }
 
     pub fn SymLinkAt(_taskId: u64, oldpath: u64, newdirfd: i32, newpath: u64) -> i64 {
-        let newdirfd = match Self::GetOsfd(newdirfd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe {
             symlinkat(oldpath as *const c_char, newdirfd, newpath as *const c_char)
         };
@@ -1499,11 +1303,6 @@ impl VMSpace {
     }
 
     pub fn Futimens(_taskId: u64, fd: i32, times: u64) -> i64 {
-        let fd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe {
             futimens(fd, times as *const timespec)
         };
