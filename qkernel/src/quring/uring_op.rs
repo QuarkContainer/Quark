@@ -208,6 +208,7 @@ impl AcceptOp {
 
 #[derive(Clone, Debug, Copy)]
 pub struct FilesUpdateOp {
+    pub uringfd: i32,
     pub fds: u64,
     pub len: u32,
     pub offset: i32,
@@ -215,7 +216,12 @@ pub struct FilesUpdateOp {
 
 impl FilesUpdateOp {
     pub fn SEntry(&self) -> squeue::Entry {
-        let op = FilesUpdate::new(self.fds as * const i32, self.len)
+        let addr = self.fds + 4 * self.offset as u64;
+        unsafe {
+            *(addr as * mut i32) = self.offset;
+        }
+
+        let op = FilesUpdate::new(self.uringfd, addr as * const i32, self.len)
             .offset(self.offset);
 
         return op.build();
