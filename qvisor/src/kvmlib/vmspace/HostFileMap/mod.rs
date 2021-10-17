@@ -13,14 +13,12 @@
 // limitations under the License.
 
 pub mod fdinfo;
-pub mod file_range_mgr;
+//pub mod file_range_mgr;
 
 use std::collections::BTreeMap;
-use libc::*;
 
 use self::fdinfo::*;
 use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
 
 pub struct IOMgr {
     pub osMap: BTreeMap<i32, FdInfo>,
@@ -51,23 +49,6 @@ impl IOMgr {
         self.osMap.insert(osfd, fdInfo.clone());
 
         return fdInfo.osfd;
-    }
-
-    pub fn SetUnblock1(osfd: i32) {
-        unsafe {
-            /*let mut flags = fcntl(osfd, F_GETFL, 0);
-            if flags == -1 {
-                panic!("SetUnblock: can't F_GETFL for fd");
-            }
-
-            flags |= Flags::O_NONBLOCK as i32;*/
-            let flags = Flags::O_NONBLOCK as i32;
-
-            let ret = fcntl(osfd, F_SETFL, flags);
-            if ret == -1 {
-                panic!("SetUnblock: can't F_SETFL for fd");
-            }
-        }
     }
 
     //ret: true: exist, false: not exist

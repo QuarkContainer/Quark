@@ -53,7 +53,6 @@ use super::qlib::addr::{Addr};
 use super::qlib::control_msg::*;
 use super::qlib::qmsg::*;
 use super::qlib::cstring::*;
-use super::qlib::perf_tunning::*;
 use super::qcall::*;
 use super::namespace::MountNs;
 use super::runc::runtime::vm::*;
@@ -137,10 +136,7 @@ impl VMSpace {
     }
 
     pub fn GetDents64(_taskId: u64, fd: i32, dirp: u64, count: u32) -> i64 {
-        let fd = Self::GetOsfd(fd).expect("GetDents64");
-
         let nr = SysCallID::sys_getdents64 as usize;
-
 
         //info!("sys_getdents64 is {}", nr);
         unsafe {
@@ -366,11 +362,6 @@ impl VMSpace {
     }
 
     pub fn Fallocate(_taskId: u64, fd: i32, mode: i32, offset: i64, len: i64) -> i64 {
-        let fd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe {
             fallocate(fd, mode, offset, len)
         };
@@ -379,28 +370,6 @@ impl VMSpace {
     }
 
     pub fn RenameAt(_taskId: u64, olddirfd: i32, oldpath: u64, newdirfd: i32, newpath: u64) -> i64 {
-        let olddirfd = {
-            if olddirfd > 0 {
-                match Self::GetOsfd(olddirfd) {
-                    Some(olddirfd) => olddirfd,
-                    None => return -SysErr::EBADF as i64,
-                }
-            } else {
-                olddirfd
-            }
-        };
-
-        let newdirfd = {
-            if newdirfd > 0 {
-                match Self::GetOsfd(newdirfd) {
-                    Some(newdirfd) => newdirfd,
-                    None => return -SysErr::EBADF as i64,
-                }
-            } else {
-                newdirfd
-            }
-        };
-
         let ret = unsafe {
             renameat(olddirfd, oldpath as *const c_char, newdirfd, newpath as *const c_char)
         };
@@ -409,11 +378,6 @@ impl VMSpace {
     }
 
     pub fn Ftruncate(_taskId: u64, fd: i32, len: i64) -> i64 {
-        let fd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe {
             ftruncate64(fd, len)
         };
@@ -497,16 +461,6 @@ impl VMSpace {
     }
 
     pub fn TryOpenAt(_taskId: u64, dirfd: i32, name: u64, addr: u64) -> i64 {
-        //info!("TryOpenAt: the filename is {}", Self::GetStr(name));
-        let dirfd = if dirfd < 0 {
-            dirfd
-        } else {
-            match Self::GetOsfd(dirfd) {
-                Some(fd) => fd,
-                None => return -SysErr::EBADF as i64,
-            }
-        };
-
         let tryOpenAt = unsafe {
             &mut *(addr as * mut TryOpenStruct)
         };
@@ -544,15 +498,6 @@ impl VMSpace {
         info!("CreateAt: the filename is {}, flag is {:x}, the mode is {:b}, owenr is {}:{}, dirfd is {}",
             Self::GetStr(fileName), flags, mode, uid, gid, dirfd);
 
-        let dirfd = if dirfd < 0 {
-            dirfd
-        } else {
-            match Self::GetOsfd(dirfd) {
-                Some(fd) => fd,
-                None => return -SysErr::EBADF as i32,
-            }
-        };
-
         unsafe {
             let osfd = libc::openat(dirfd, fileName as *const c_char, flags as c_int, mode as c_int);
             if osfd <= 0 {
@@ -581,24 +526,28 @@ impl VMSpace {
     }
 
     pub fn Close(_taskId: u64, fd: i32) -> i64 {
-        let info = IO_MGR.lock().RemoveFd(fd);
-
+        IO_MGR.lock().RemoveFd(fd);
         URING_MGR.lock().Removefd(fd).unwrap();
-        let res = if info.is_some() {
-            0
-        } else {
-            -SysErr::EINVAL as i64
-        };
 
-        return res;
+        let _ = IO_MGR.lock();
+
+        if fd >= 0 {
+            let ret = unsafe {
+                // shutdown for socket, without shutdown, it the uring read won't be wake up
+                // todo: handle this elegant
+                shutdown(fd, 2);
+                close(fd)
+            };
+
+            if ret <0 {
+                return Self::GetRet(ret as i64);
+            }
+        }
+
+        return 0;
     }
 
     pub fn IORead(_taskId: u64, fd: i32, iovs: u64, iovcnt: i32) -> i64 {
-        let fd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe{
             readv(fd as c_int, iovs as *const iovec, iovcnt) as i64
         };
@@ -607,11 +556,6 @@ impl VMSpace {
     }
 
     pub fn IOTTYRead(_taskId: u64, fd: i32, iovs: u64, iovcnt: i32) -> i64 {
-        let fd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe{
             let opt : i32 = 1;
             // in some cases, tty read will blocked even after set unblock with fcntl
@@ -630,105 +574,180 @@ impl VMSpace {
     }
 
     pub fn IOBufWrite(fd: i32, addr: u64, len: usize, offset: isize) -> i64 {
-        PerfGoto(PerfType::BufWrite);
-        defer!(PerfGofrom(PerfType::BufWrite));
-
-        let fdInfo = match Self::GetFdInfo(fd) {
-            Some(info) => info,
-            None => return -SysErr::EBADF as i64,
+        let ret = unsafe{
+            if offset < 0 {
+                write(fd as c_int, addr as *const c_void, len as size_t)
+            } else {
+                pwrite(fd as c_int, addr as *const c_void, len as size_t, offset as off_t)
+            }
         };
 
-        return fdInfo.IOBufWrite(addr, len, offset);
+        return Self::GetRet(ret as i64)
     }
 
-    pub fn IOWrite(taskId: u64, fd: i32, iovs: u64, iovcnt: i32) -> i64 {
-        let fdInfo = match Self::GetFdInfo(fd) {
-            Some(info) => info,
-            None => return -SysErr::EBADF as i64,
+    pub fn IOWrite(_taskId: u64, fd: i32, iovs: u64, iovcnt: i32) -> i64 {
+        let ret = unsafe {
+            writev(fd as c_int, iovs as *const iovec, iovcnt) as i64
         };
 
-        return fdInfo.IOWrite(taskId, iovs, iovcnt)
+        return Self::GetRet(ret as i64)
     }
 
-    pub fn IOAppend(taskId: u64, fd: i32, iovs: u64, iovcnt: i32, fileLenAddr: u64) -> i64 {
-        let fdInfo = match Self::GetFdInfo(fd) {
-            Some(info) => info,
-            None => return -SysErr::EBADF as i64,
+    pub fn IOAppend(_taskId: u64, fd: i32, iovs: u64, iovcnt: i32, fileLenAddr: u64) -> i64 {
+        let osfd = fd;
+
+        //let nr = SysCallID::pwritev2 as usize;
+
+        let end = unsafe {
+            lseek(osfd as c_int, 0, libc::SEEK_END)
         };
 
-        return fdInfo.IOAppend(taskId, iovs, iovcnt, fileLenAddr)
+        if end < 0 {
+            panic!("IOAppend lseek1 fail")
+        }
+
+        let size = unsafe{
+            //todo: don't know why RWF_APPEND doesn't work. need to fix.
+            //syscall5(nr, osfd as usize, iovs as usize, iovcnt as usize, -1 as i32 as usize, Flags::RWF_APPEND as usize) as i64
+            pwritev(osfd as c_int, iovs as *const iovec, iovcnt, end as i64) as i64
+        };
+
+        //error!("IOAppend: end is {:x}, size is {:x}, new end is {:x}", end, size, end + size);
+        if size < 0 {
+            return Self::GetRet(size as i64)
+        }
+
+        unsafe {
+            *(fileLenAddr as * mut i64) = (end + size) as i64
+        }
+
+        return size;
+
+        // the pwritev2 doesn't work. It will break the bazel build.
+        // Todo: root cause this.
+        /*let osfd = self.osfd;
+
+        let size = unsafe{
+            pwritev2(osfd as c_int, iovs as *const iovec, iovcnt, -1, Flags::RWF_APPEND) as i64
+        };
+
+        if size < 0 {
+            return SysRet(size as i64)
+        }
+
+        let end = unsafe {
+            lseek(osfd as c_int, 0, libc::SEEK_END)
+        };
+
+        unsafe {
+            *(fileLenAddr as * mut i64) = end as i64
+        }
+
+        return size as i64*/
     }
 
-    pub fn IOReadAt(taskId: u64, fd: i32, iovs: u64, iovcnt: i32, offset: u64) -> i64 {
-        let fdInfo = match Self::GetFdInfo(fd) {
-            Some(info) => info,
-            None => return -SysErr::EBADF as i64,
+    pub fn IOReadAt(_taskId: u64, fd: i32, iovs: u64, iovcnt: i32, offset: u64) -> i64 {
+        let osfd = fd;
+
+        let ret = unsafe {
+            if offset as i64 == -1 {
+                readv(osfd as c_int, iovs as *const iovec, iovcnt) as i64
+            } else {
+                preadv(osfd as c_int, iovs as *const iovec, iovcnt, offset as i64) as i64
+            }
         };
 
-        return fdInfo.IOReadAt(taskId, iovs, iovcnt, offset)
+        return Self::GetRet(ret as i64)
     }
 
-    pub fn IOWriteAt(taskId: u64, fd: i32, iovs: u64, iovcnt: i32, offset: u64) -> i64 {
-        let fdInfo = match Self::GetFdInfo(fd) {
-            Some(info) => info,
-            None => return -SysErr::EBADF as i64,
+    pub fn IOWriteAt(_taskId: u64, fd: i32, iovs: u64, iovcnt: i32, offset: u64) -> i64 {
+        let osfd = fd;
+
+        let ret = unsafe{
+            if offset as i64 == -1 {
+                writev(osfd as c_int, iovs as *const iovec, iovcnt) as i64
+            } else {
+                pwritev(osfd as c_int, iovs as *const iovec, iovcnt, offset as i64) as i64
+            }
         };
 
-        return fdInfo.IOWriteAt(taskId, iovs, iovcnt, offset)
+        return Self::GetRet(ret as i64)
     }
 
-    pub fn IOAccept(taskId: u64, fd: i32, addr: u64, addrlen: u64, flags: i32) -> i64 {
-        let fdInfo = match Self::GetFdInfo(fd) {
-            Some(info) => info,
-            None => return -SysErr::EBADF as i64,
+    pub fn IOAccept(_taskId: u64, fd: i32, addr: u64, addrlen: u64, _flags: i32) -> i64 {
+        let osfd = fd;
+
+        let newOsfd = unsafe{
+            accept4(osfd, addr as  *mut sockaddr, addrlen as  *mut socklen_t, SocketFlags::SOCK_NONBLOCK | SocketFlags::SOCK_CLOEXEC)
         };
 
-        return fdInfo.IOAccept(taskId, addr, addrlen, flags)
+        if newOsfd < 0 {
+            return Self::GetRet(newOsfd as i64);
+        }
+
+        let hostfd = IO_MGR.lock().AddFd(newOsfd);
+        URING_MGR.lock().Addfd(newOsfd).unwrap();
+        return Self::GetRet(hostfd as i64);
     }
 
-    pub fn IOConnect(taskId: u64, fd: i32, addr: u64, addrlen: u32) -> i64 {
-        let fdInfo = match Self::GetFdInfo(fd) {
-            Some(info) => info,
-            None => return -SysErr::EBADF as i64,
+    pub fn IOConnect(_taskId: u64, fd: i32, addr: u64, addrlen: u32) -> i64 {
+        let osfd = fd;
+
+        let ret = unsafe{
+            connect(osfd, addr as *const sockaddr, addrlen as socklen_t)
         };
 
-        return fdInfo.IOConnect(taskId, addr, addrlen)
+        return Self::GetRet(ret as i64)
     }
 
-    pub fn IORecvMsg(taskId: u64, fd: i32, msghdr: u64, flags: i32) -> i64 {
-        let fdInfo = match Self::GetFdInfo(fd) {
-            Some(info) => info,
-            None => return -SysErr::EBADF as i64,
+    pub fn IORecvMsg(_taskId: u64, fd: i32, msghdr: u64, flags: i32) -> i64 {
+        let osfd = fd;
+
+        let ret = unsafe{
+            recvmsg(osfd, msghdr as *mut msghdr, flags as c_int)
         };
 
-        return fdInfo.IORecvMsg(taskId, msghdr, flags)
+        return Self::GetRet(ret as i64);
     }
 
-    pub fn IOSendMsg(taskId: u64, fd: i32, msghdr: u64, flags: i32) -> i64 {
-        let fdInfo = match Self::GetFdInfo(fd) {
-            Some(info) => info,
-            None => return -SysErr::EBADF as i64,
+    pub fn IOSendMsg(_taskId: u64, fd: i32, msghdr: u64, flags: i32) -> i64 {
+        let osfd = fd;
+
+        let ret = unsafe{
+            sendmsg(osfd, msghdr as *mut msghdr, flags as c_int)
         };
 
-        return fdInfo.IOSendMsg(taskId, msghdr, flags)
+        return Self::GetRet(ret as i64);
     }
 
-    pub fn Fcntl(taskId: u64, fd: i32, cmd: i32, arg: u64) -> i64 {
-        let fdInfo = match Self::GetFdInfo(fd) {
-            Some(info) => info,
-            None => return -SysErr::EBADF as i64,
+    pub fn Fcntl(_taskId: u64, fd: i32, cmd: i32, arg: u64) -> i64 {
+        let ret = unsafe{
+            fcntl(fd as c_int, cmd, arg)
         };
 
-        return fdInfo.Fcntl(taskId, cmd, arg)
+        return Self::GetRet(ret as i64);
     }
 
-    pub fn IoCtl(taskId: u64, fd: i32, cmd: u64, argp: u64) -> i64 {
-        let fdInfo = match Self::GetFdInfo(fd) {
-            Some(fdInfo) => fdInfo,
-            None => return -SysErr::EBADF as i64,
+    pub fn IoCtl(_taskId: u64, fd: i32, cmd: u64, argp: u64) -> i64 {
+        //todo: fix this.
+        /* when run /bin/bash, the second command as below return ENOTTY. Doesn't know why
+        ioctl(0, TCGETS, {B38400 opost isig icanon echo ...}) = 0
+        ioctl(2, TCGETS, 0x7ffdf82a09a0)        = -1 ENOTTY (Inappropriate ioctl for device)
+        ioctl(-1, TIOCGPGRP, 0x7ffdf82a0a14)    = -1 EBADF (Bad file descriptor)
+        */
+        let osfd = fd;
+
+        if osfd == 2 {
+            return -SysErr::ENOTTY as i64
+        }
+
+        //error!("IoCtl osfd is {}, cmd is {:x}, argp is {:x}", osfd, cmd, argp);
+
+        let ret = unsafe{
+            ioctl(osfd as c_int, cmd, argp)
         };
 
-        return fdInfo.IoCtl(taskId, cmd, argp)
+        return Self::GetRet(ret as i64);
     }
 
     pub fn SysSync(_taskId: u64) -> i64 {
@@ -742,82 +761,77 @@ impl VMSpace {
     }
 
     pub fn SyncFs(_taskId: u64, fd: i32) -> i64 {
-        let osfd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe {
-            libc::syncfs(osfd) as i64
+            libc::syncfs(fd) as i64
         };
 
         return Self::GetRet(ret);
     }
 
     pub fn SyncFileRange(_taskId: u64, fd: i32, offset: i64, nbytes: i64, flags: u32) -> i64 {
-        let osfd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe {
-            libc::sync_file_range(osfd, offset, nbytes, flags) as i64
+            libc::sync_file_range(fd, offset, nbytes, flags) as i64
         };
 
         return Self::GetRet(ret);
     }
 
-    pub fn FSync(taskId: u64, fd: i32) -> i64 {
-        let fdInfo = match Self::GetFdInfo(fd) {
-            Some(fdInfo) => fdInfo,
-            None => return -SysErr::EBADF as i64,
+    pub fn FSyncIt(_taskId: u64, fd: i32, dataSync: bool) -> i64 {
+        let osfd = fd;
+
+        let ret = if dataSync {
+            unsafe{
+                fsync(osfd)
+            }
+        } else {
+            unsafe{
+                fdatasync(osfd)
+            }
         };
 
-        return fdInfo.FSync(taskId, false)
+        return Self::GetRet(ret as i64);
+    }
+
+    pub fn FSync(taskId: u64, fd: i32) -> i64 {
+        return Self::FSyncIt(taskId, fd, false)
     }
 
     pub fn FDataSync(taskId: u64, fd: i32) -> i64 {
-        let fdInfo = match Self::GetFdInfo(fd) {
-            Some(fdInfo) => fdInfo,
-            None => return -SysErr::EBADF as i64,
-        };
-
-        return fdInfo.FSync(taskId, true)
+        return Self::FSyncIt(taskId, fd, true)
     }
 
-    pub fn Seek(taskId: u64, fd: i32, offset: i64, whence: i32) -> i64 {
-        let fdInfo = match Self::GetFdInfo(fd) {
-            Some(fdInfo) => fdInfo,
-            None => return -SysErr::EBADF as i64,
+    pub fn Seek(_taskId: u64, fd: i32, offset: i64, whence: i32) -> i64 {
+        let osfd = fd;
+
+        let ret = unsafe {
+            libc::lseek(osfd, offset, whence)
         };
 
-        return fdInfo.Seek(taskId, offset, whence)
+        return Self::GetRet(ret as i64)
+    }
+
+    pub fn GetSockErr(&self, fd: i32) -> Result<u64> {
+        let mut err = 0;
+        let mut len: u32 = 8;
+
+        let ret = unsafe {
+            getsockopt(fd, SOL_SOCKET, SO_ERROR, &mut err as *mut _ as *mut c_void, &mut len as *mut socklen_t)
+        };
+
+        if ret == -1 {
+            return Err(Error::SysError(errno::errno().0))
+        }
+
+        return Ok(err);
     }
 
     pub fn ReadLinkAt(_taskId: u64, dirfd: i32, path: u64, buf: u64, bufsize: u64) -> i64 {
         //info!("ReadLinkAt: the path is {}", Self::GetStr(path));
-
-        let dirfd = {
-            if dirfd == -100 {
-                dirfd
-            } else {
-                match Self::GetOsfd(dirfd) {
-                    Some(dirfd) => dirfd,
-                    None => return -SysErr::EBADF as i64,
-                }
-            }
-        };
-
         let res = unsafe{ readlinkat(dirfd, path as *const c_char, buf as *mut c_char, bufsize as usize) };
         return Self::GetRet(res as i64)
     }
 
     pub fn Fstat(_taskId: u64, fd: i32, buf: u64) -> i64 {
-        let fd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe {
             libc::fstat(fd, buf as *mut stat) as i64
         };
@@ -845,7 +859,6 @@ impl VMSpace {
     }
 
     pub fn Fgetxattr(_taskId: u64, fd: i32, name: u64, value: u64, size: u64) -> i64 {
-        let fd = Self::GetOsfd(fd).expect("fgetxattr");
         let ret = unsafe {
             fgetxattr(fd, name as *const c_char, value as *mut c_void, size as usize) as i64
         };
@@ -870,13 +883,7 @@ impl VMSpace {
         let filetypes = unsafe { slice::from_raw_parts_mut(ptr, count) };
 
         for ft in filetypes {
-            let dirfd = {
-                if ft.dirfd > 0 {
-                    Self::GetOsfd(ft.dirfd).expect("Fstatat")
-                } else {
-                    ft.dirfd
-                }
-            };
+            let dirfd = ft.dirfd;
 
             let ret = unsafe {
                 Self::GetRet(libc::fstatat(dirfd, ft.pathname as *const c_char, &mut stat as *mut _ as u64 as *mut stat, AT_SYMLINK_NOFOLLOW) as i64)
@@ -892,22 +899,12 @@ impl VMSpace {
     }
 
     pub fn Fstatat(_taskId: u64, dirfd: i32, pathname: u64, buf: u64, flags: i32) -> i64 {
-        let dirfd = {
-            if dirfd > 0 {
-                Self::GetOsfd(dirfd).expect("Fstatat")
-            } else {
-                dirfd
-            }
-        };
-
         return unsafe {
             Self::GetRet(libc::fstatat(dirfd, pathname as *const c_char, buf as *mut stat, flags) as i64)
         };
     }
 
     pub fn Fstatfs(_taskId: u64, fd: i32, buf: u64) -> i64 {
-        let fd = Self::GetOsfd(fd).expect("Fstatfs");
-
         let ret = unsafe{
             fstatfs(fd, buf as *mut statfs)
         };
@@ -917,17 +914,6 @@ impl VMSpace {
 
     pub fn Unlinkat(_taskId: u64, dirfd: i32, pathname: u64, flags: i32) -> i64 {
         info!("Unlinkat: the pathname is {}", Self::GetStr(pathname));
-        let dirfd = {
-            if dirfd > 0 {
-                match Self::GetOsfd(dirfd) {
-                    Some(dirfd) => dirfd,
-                    None => return -SysErr::EBADF as i64,
-                }
-            } else {
-                dirfd
-            }
-        };
-
         let ret = unsafe {
             unlinkat(dirfd, pathname as *const c_char, flags)
         };
@@ -937,17 +923,6 @@ impl VMSpace {
 
     pub fn Mkdirat(_taskId: u64, dirfd: i32, pathname: u64, mode_ : u32, uid: u32, gid: u32) -> i64 {
         info!("Mkdirat: the pathname is {}", Self::GetStr(pathname));
-
-        let dirfd = {
-            if dirfd > 0 {
-                match Self::GetOsfd(dirfd) {
-                    Some(dirfd) => dirfd,
-                    None => return -SysErr::EBADF as i64,
-                }
-            } else {
-                dirfd
-            }
-        };
 
         let ret = unsafe {
             mkdirat(dirfd, pathname as *const c_char, mode_ as mode_t)
@@ -985,17 +960,6 @@ impl VMSpace {
 
     pub fn FAccessAt(_taskId: u64, dirfd: i32, pathname: u64, mode: i32, flags: i32) -> i64 {
         info!("FAccessAt: the pathName is {}", Self::GetStr(pathname));
-        let dirfd = {
-            if dirfd == -100 {
-                dirfd
-            } else {
-                match Self::GetOsfd(dirfd) {
-                    Some(dirfd) => dirfd,
-                    None => return -SysErr::EBADF as i64,
-                }
-            }
-        };
-
         let ret = unsafe{
             faccessat(dirfd, pathname as *const c_char, mode, flags)
         };
@@ -1044,11 +1008,6 @@ impl VMSpace {
     }
 
     pub fn GetSockName(_taskId: u64, sockfd: i32, addr: u64, addrlen: u64) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe{
             getsockname(sockfd, addr as *mut sockaddr, addrlen as *mut socklen_t)
         };
@@ -1057,11 +1016,6 @@ impl VMSpace {
     }
 
     pub fn GetPeerName(_taskId: u64, sockfd: i32, addr: u64, addrlen: u64) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe{
             getpeername(sockfd, addr as *mut sockaddr, addrlen as *mut socklen_t)
         };
@@ -1070,11 +1024,6 @@ impl VMSpace {
     }
 
     pub fn GetSockOpt(_taskId: u64, sockfd: i32, level: i32, optname: i32, optval: u64, optlen: u64) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe{
             getsockopt(sockfd, level, optname, optval as *mut c_void, optlen as *mut socklen_t)
         };
@@ -1083,11 +1032,6 @@ impl VMSpace {
     }
 
     pub fn SetSockOpt(_taskId: u64, sockfd: i32, level: i32, optname: i32, optval: u64, optlen: u32) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe{
             setsockopt(sockfd, level, optname, optval as *const c_void, optlen as socklen_t)
         };
@@ -1096,11 +1040,6 @@ impl VMSpace {
     }
 
     pub fn Bind(_taskId: u64, sockfd: i32, sockaddr: u64, addrlen: u32, umask: u32) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe{
             // todo: this is not thread safe, need to add lock when implement multiple io threads
             let oldUmask = libc::umask(umask);
@@ -1113,11 +1052,6 @@ impl VMSpace {
     }
 
     pub fn Listen(_taskId: u64, sockfd: i32, backlog: i32) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe{
             listen(sockfd, backlog)
         };
@@ -1126,11 +1060,6 @@ impl VMSpace {
     }
 
     pub fn Shutdown(_taskId: u64, sockfd: i32, how: i32) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe{
             shutdown(sockfd, how)
         };
@@ -1177,11 +1106,6 @@ impl VMSpace {
     }
 
     pub fn Fchdir(_taskId: u64, fd: i32) -> i64 {
-        let fd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe {
             fchdir(fd)
         };
@@ -1190,11 +1114,6 @@ impl VMSpace {
     }
 
     pub fn Fadvise(_taskId: u64, fd: i32, offset: u64, len: u64, advice: i32) -> i64 {
-        let fd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe {
             posix_fadvise(fd, offset as i64, len as i64, advice)
         };
@@ -1230,11 +1149,6 @@ impl VMSpace {
     }
 
     pub fn FChown(_taskId: u64, fd: i32, owner: u32, group: u32) -> i64 {
-        let fd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe {
             fchown(fd, owner, group)
         };
@@ -1251,11 +1165,6 @@ impl VMSpace {
     }
 
     pub fn Fchmod(_taskId: u64, fd: i32, mode: u32) -> i64 {
-        let fd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe {
             fchmod(fd, mode as mode_t)
         };
@@ -1264,11 +1173,6 @@ impl VMSpace {
     }
 
     pub fn NonBlockingPoll(_taskId: u64, fd: i32, mask: EventMask) -> i64 {
-        let fd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let mut e = pollfd {
             fd: fd,
             events: mask as i16,
@@ -1391,11 +1295,6 @@ impl VMSpace {
     }
 
     pub fn SymLinkAt(_taskId: u64, oldpath: u64, newdirfd: i32, newpath: u64) -> i64 {
-        let newdirfd = match Self::GetOsfd(newdirfd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe {
             symlinkat(oldpath as *const c_char, newdirfd, newpath as *const c_char)
         };
@@ -1404,11 +1303,6 @@ impl VMSpace {
     }
 
     pub fn Futimens(_taskId: u64, fd: i32, times: u64) -> i64 {
-        let fd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
-            None => return -SysErr::EBADF as i64,
-        };
-
         let ret = unsafe {
             futimens(fd, times as *const timespec)
         };
