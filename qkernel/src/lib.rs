@@ -205,6 +205,8 @@ pub fn Init() {
 #[no_mangle]
 pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: u64, arg5: u64) -> ! {
     //PerfGofrom(PerfType::User);
+    let rflags = KERNEL_FLAGS_SET;
+    SetRflags(rflags);
 
     let currTask = task::Task::Current();
     currTask.PerfGofrom(PerfType::User);
@@ -224,13 +226,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
 
     //SHARESPACE.SetValue(CPULocal::CpuId(), 0, nr);
     let callId: SysCallID = unsafe { mem::transmute(nr as u64) };
-
-    let mut rflags = pt.eflags;
-    rflags &= !RFLAGS_RESTORABLE;
-    rflags &= !KERNEL_FLAGS_CLEAR;
-    rflags |= KERNEL_FLAGS_SET;
-    SetRflags(rflags);
-
+    
     currTask.SaveFp();
 
     //let tid = currTask.Thread().lock().id;
@@ -301,8 +297,6 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
         currTask.SwitchPageTable();
     }
 
-    currTask.Check();
-    //SHARESPACE.SetValue(CPULocal::CpuId(), 0, 0);
     if pt.rip != 0 { // if it is from signal trigger from kernel, e.g. page fault
         pt.eflags = rflags;
         IRet(kernalRsp)

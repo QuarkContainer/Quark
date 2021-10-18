@@ -400,6 +400,9 @@ pub extern fn PageFaultHandler(sf: &mut PtRegs, errorCode: u64) {
     let ss: u16 = 16;
     unsafe{ llvm_asm!("movw $0, %ss" :: "r" (ss) : "memory");}
 
+    let rflags = KERNEL_FLAGS_SET;
+    SetRflags(rflags);
+
     let currTask = Task::Current();
 
     // is this call from user
@@ -415,16 +418,6 @@ pub extern fn PageFaultHandler(sf: &mut PtRegs, errorCode: u64) {
         false
     };
 
-    let mut rflags = GetRflags();
-
-    if fromUser {
-        rflags &= !KERNEL_FLAGS_CLEAR;
-        rflags &= !RFLAGS_RESTORABLE;
-        rflags |= KERNEL_FLAGS_SET;
-        SetRflags(rflags);
-        //currTask.SaveFp();
-        //raw!(0x990, cr2, rflags);
-    }
     if !fromUser {
         print!("Get pagefault from kernel ... {:#x?}/cr2 is {:x}/cr3 is {:x}", sf, cr2, cr3);
         for i in 0..super::CPU_LOCAL.len() {
