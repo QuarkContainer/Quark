@@ -97,7 +97,6 @@ pub mod seqcount;
 pub mod quring;
 pub mod stack;
 pub mod backtracer;
-pub mod data_buff;
 
 use core::panic::PanicInfo;
 use core::sync::atomic::AtomicU64;
@@ -129,7 +128,6 @@ use self::boot::controller::*;
 use self::task::*;
 use self::threadmgr::task_sched::*;
 use self::qlib::perf_tunning::*;
-use self::qlib::range::*;
 //use self::memmgr::buf_allocator::*;
 use self::qlib::mem::list_allocator::*;
 use self::quring::*;
@@ -159,7 +157,6 @@ pub static PAGE_MGR : Singleton<PageMgr> = Singleton::<PageMgr>::New();
 pub static LOADER : Singleton<Loader> = Singleton::<Loader>::New();
 pub static IOURING : Singleton<QUring> = Singleton::<QUring>::New();
 pub static KERNEL_STACK_ALLOCATOR : Singleton<AlignedAllocator> = Singleton::<AlignedAllocator>::New();
-pub static BUF_MGR: Singleton<BufMgr> = Singleton::<BufMgr>::New(); //BufMgr::New();
 
 pub fn SingletonInit() {
     unsafe {
@@ -167,7 +164,6 @@ pub fn SingletonInit() {
         PAGE_ALLOCATOR.Init(MemAllocator::New());
         KERNEL_PAGETABLE.Init(PageTables::Init(CurrentCr3()));
         PAGE_MGR.Init(PageMgr::New());
-        BUF_MGR.Init(BufMgr::New());
         LOADER.Init(Loader::default());
         IOURING.Init(QUring::New(MemoryDef::QURING_SIZE));
         KERNEL_STACK_ALLOCATOR.Init( AlignedAllocator::New(MemoryDef::DEFAULT_STACK_SIZE as usize, MemoryDef::DEFAULT_STACK_SIZE as usize));
@@ -230,7 +226,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     let callId: SysCallID = unsafe { mem::transmute(nr as u64) };
 
     let mut rflags = GetRflags();
-    rflags &= !RFLAGS_RESTORABLE;
+    rflags &= !RFLAGS_DF;
     rflags &= !KERNEL_FLAGS_CLEAR;
     rflags |= KERNEL_FLAGS_SET;
     SetRflags(rflags);
@@ -445,7 +441,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
 
     if id == 1 {
         error!("heap start is {:x}/{:x}", heapStart, heapStart + heapLen);
-        //error!("val 4440001000 is {:x}", unsafe { *(0x4440001000 as * const u64)});
+
         if autoStart {
             CreateTask(StartRootContainer, ptr::null(), false);
         }

@@ -530,8 +530,6 @@ pub struct ShareSpace {
     pub ioThreadState: AtomicU64,
     pub hostMsgCount : AtomicU64,
     pub guestMsgCount: AtomicU64,
-    pub uringFds: AtomicU64,
-    pub uringFd: AtomicI32,
 
     pub kernelIOThreadWaiting: AtomicBool,
     pub config: QRwLock<Config>,
@@ -554,8 +552,6 @@ impl ShareSpace {
             ioThreadState: AtomicU64::new(IOThreadState::WAITING as u64),
             hostMsgCount: AtomicU64::new(0),
             guestMsgCount: AtomicU64::new(0),
-            uringFds: AtomicU64::new(0),
-            uringFd: AtomicI32::new(0),
             kernelIOThreadWaiting: AtomicBool::new(false),
             config: QRwLock::new(Config::default()),
             logBuf: QMutex::new(None),
@@ -579,14 +575,6 @@ impl ShareSpace {
 
     pub fn GetValue(&self, cpuId: usize, idx: usize) -> u64 {
         return self.values[cpuId][idx].load(Ordering::Relaxed);
-    }
-
-    pub fn UringFd(&self) -> i32 {
-        return self.uringFd.load(Ordering::Relaxed)
-    }
-
-    pub fn UringFds(&self) -> u64 {
-        return self.uringFds.load(Ordering::Relaxed)
     }
 
     #[inline]

@@ -29,7 +29,6 @@ use super::super::kernel::time::*;
 use super::super::qlib::linux::time::*;
 //use super::super::qlib::linux::socket::*;
 use super::super::kernel::timer::*;
-use super::super::data_buff::*;
 
 // minListenBacklog is the minimum reasonable backlog for listening sockets.
 const MIN_LISTEN_BACKLOG: u32 = 8;

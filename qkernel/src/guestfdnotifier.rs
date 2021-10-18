@@ -22,7 +22,6 @@ use super::fs::host::hostinodeop::*;
 use super::qlib::common::*;
 use super::qlib::linux_def::*;
 use super::qlib::singleton::*;
-use super::IOURING;
 
 pub static GUEST_NOTIFIER : Singleton<Notifier> = Singleton::<Notifier>::New();
 
@@ -42,8 +41,8 @@ pub fn NonBlockingPoll(fd: i32, mask: EventMask) -> EventMask {
     return HostSpace::NonBlockingPoll(fd, mask) as EventMask
 }
 
-pub fn Notify(fd: i32, mask: EventMask, seqNum: u64) {
-    GUEST_NOTIFIER.Notify(fd, mask, seqNum);
+pub fn Notify(fd: i32, mask: EventMask) {
+    GUEST_NOTIFIER.Notify(fd, mask);
 }
 
 pub fn IOBufWriteRespHandle(fd: i32, addr: u64, len: usize, ret: i64) {
@@ -58,9 +57,8 @@ pub fn HostLogFlush() {
 pub struct GuestFdInfo {
     pub queue: Queue,
     pub mask: EventMask,
+    pub waiting: bool,
     pub iops: HostInodeOpWeak,
-    pub userdata: Option<usize>,
-    pub seqNum: u64,
 }
 
 // notifier holds all the state necessary to issue notifications when IO events
@@ -90,40 +88,9 @@ impl Notifier {
         return Self(QMutex::new(internal))
     }
 
-    fn Waitfd(&self, fd: i32, mask: EventMask) -> Result<()> {
-        let mut n = self.lock();
-        let fi = match n.fdMap.get_mut(&fd) {
-            None => {
-                panic!("Notifier::waitfd can't find fd {}", fd)
-            }
-            Some(fi) => fi,
-        };
+    fn waitfd(fd: i32, mask: EventMask) -> Result<()> {
+        HostSpace::WaitFD(fd, mask);
 
-        if fi.mask == mask {
-            return Ok(())
-        }
-
-        fi.seqNum += 1;
-
-        if fi.mask != 0 {
-            let userdata = fi.userdata.take();
-
-            match userdata {
-                None => {
-                    panic!("Notifier::Waitfd get non userdata");
-                },
-                Some(idx) => {
-                   IOURING.AsyncPollRemove(idx as u64);
-                }
-            }
-        }
-
-        if mask != 0 {
-            let idx = IOURING.AsyncPollAdd(fd, mask as _, fi.seqNum);
-            fi.userdata = Some(idx);
-        }
-
-        fi.mask = mask;
         return Ok(())
     }
 
@@ -138,10 +105,25 @@ impl Notifier {
             };
 
             let mask = fi.queue.Events();
+
+            if !fi.waiting && mask == 0 {
+                return Ok(())
+            }
+
+            if !fi.waiting && mask != 0 {
+                fi.waiting = true;
+            } else if fi.waiting && mask == 0 {
+                fi.waiting = false;
+            } else if fi.waiting && mask != 0 {
+                if mask | fi.mask == fi.mask {
+                    return Ok(())
+                }
+            }
+
             mask
         };
 
-        return self.Waitfd(fd, mask);
+        return Self::waitfd(fd, mask);
     }
 
     pub fn AddFD(&self, fd: i32, iops: &HostInodeOp) {
@@ -156,9 +138,8 @@ impl Notifier {
         n.fdMap.insert(fd, GuestFdInfo {
             queue: queue.clone(),
             mask: 0,
+            waiting: false,
             iops: iops.Downgrade(),
-            userdata: None,
-            seqNum: 0,
         });
     }
 
@@ -167,22 +148,14 @@ impl Notifier {
         n.fdMap.remove(&fd);
     }
 
-    pub fn Notify(&self, fd: i32, mask: EventMask, seqNum: u64) -> bool {
+    pub fn Notify(&self, fd: i32, mask: EventMask) {
         let n = self.lock();
-
         match n.fdMap.get(&fd) {
             None => (),
             Some(fi) => {
-                if seqNum != fi.seqNum {
-                    return false;
-                }
-
-                assert!(fi.mask != 0 && fi.mask & mask != 0);
                 fi.queue.Notify(EventMaskFromLinux(mask as u32));
             }
         }
-
-        return true;
     }
 
     pub fn IOBufWriteRespHandle(&self, _fd: i32, _addr: u64, _len: usize, _ret: i64) {

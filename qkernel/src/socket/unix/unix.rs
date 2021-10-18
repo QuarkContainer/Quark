@@ -51,7 +51,6 @@ use super::transport::connectioned::*;
 use super::transport::connectionless::*;
 use super::super::super::socket::control::*;
 use super::super::super::socket::epsocket::epsocket::*;
-use super::super::super::data_buff::*;
 
 pub fn NewUnixSocket(task: &Task, ep: BoundEndpoint, stype: i32, hostfd: i32) -> Result<File> {
     //assert!(family == AFType::AF_UNIX, "NewUnixSocket family is not AF_UNIX");

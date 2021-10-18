@@ -15,7 +15,6 @@
 use super::super::qlib::common::*;
 use super::super::Kernel::HostSpace;
 use super::super::qlib::linux_def::*;
-use super::super::data_buff::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::Task;
 

@@ -22,10 +22,12 @@ use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::control_msg::*;
 use super::super::qlib::loader;
+use super::super::{FD_NOTIFIER, IO_MGR};
 use super::ucall::*;
 use super::usocket::*;
 use super::super::runc::container::container::*;
 use super::super::vmspace::*;
+use super::super::vmspace::hostfdnotifier::*;
 
 lazy_static! {
     pub static ref UCALL_SRV : Mutex<UCallController> = Mutex::new(UCallController::New());
@@ -96,9 +98,21 @@ pub fn HandleExecProcess(usock: USocket, execArgs: &mut ExecArgs, fds: &[i32]) -
 
     for i in 0..execArgs.Fds.len() {
         let osfd = execArgs.Fds[i];
+        let stat = VMSpace::LibcFstat(osfd)?;
 
         VMSpace::UnblockFd(osfd);
-        process.Stdiofds[i] = osfd;
+
+        let st_mode = stat.st_mode & ModeType::S_IFMT as u32;
+        let epollable = st_mode == S_IFIFO || st_mode == S_IFSOCK || st_mode == S_IFCHR;
+
+        let hostfd = IO_MGR.lock().AddFd(osfd, epollable);
+
+        // can block wait
+        if epollable {
+            FD_NOTIFIER.AddFd(osfd, Box::new(GuestFd{hostfd: hostfd}));
+        }
+
+        process.Stdiofds[i] = hostfd;
     }
 
     SendControlMsg(usock, ControlMsg::New(Payload::ExecProcess(process)))?;

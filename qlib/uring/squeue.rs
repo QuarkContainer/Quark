@@ -163,11 +163,6 @@ impl SubmissionQueue {
         self.len() == self.capacity()
     }
 
-    #[inline]
-    pub fn freeSlot(&self) -> usize {
-        self.capacity() - self.len()
-    }
-
     /// Get currently available submission queue
     pub fn available(&mut self) -> AvailableQueue<'_> {
         unsafe {

@@ -722,14 +722,15 @@ impl HostSpace {
         return Self::HCall(&mut msg) as i64
     }
 
-    pub fn IoUringRegister(opcode: u32, arg: u64, nrArgs: u32) -> i64 {
+    pub fn IoUringRegister(fd: i32, Opcode: u32, arg: u64, nrArgs: u32) -> i64 {
         let mut msg = Msg::IoUringRegister(IoUringRegister {
-            opcode,
+            fd,
+            Opcode,
             arg,
             nrArgs,
         });
 
-        return HostSpace::HCall(&mut msg) as i64;
+        return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn IoUringEnter(fd: i32, toSubmit: u32, minComplete: u32, flags: u32) -> i64 {
@@ -830,6 +831,20 @@ impl HostSpace {
         HostSpace::AQCall(&msg);
     }
 
+    pub fn WakeVCPU(vcpuId: usize) {
+        // quick path
+        if super::SHARESPACE.IOThreadState() == IOThreadState::WAITING {
+            HostSpace::WakeupVcpu(vcpuId as u64);
+            return
+        }
+
+        let msg = qmsg::HostOutputMsg::WakeVCPU(qmsg::WakeVCPU {
+            vcpuId,
+        });
+
+        HostSpace::AQCall(&msg);
+    }
+
     pub fn MMapFile(len: u64, fd: i32, offset: u64, prot: i32) -> i64 {
         assert!(len % MemoryDef::PMD_SIZE == 0, "offset is {:x}, len is {:x}", offset, len);
         assert!(offset % MemoryDef::PMD_SIZE == 0, "offset is {:x}, len is {:x}", offset, len);
@@ -900,6 +915,13 @@ impl HostSpace {
 
     fn AQCall(msg: &qmsg::HostOutputMsg) {
         super::SHARESPACE.AQHostOutputCall(msg);
+    }
+
+    pub fn WaitFD(fd: i32, mask: EventMask) {
+        Self::AQCall(&qmsg::HostOutputMsg::WaitFD(qmsg::WaitFD {
+            fd,
+            mask,
+        }))
     }
 
     pub fn SlowPrint(level: DebugLevel, str: &str) {

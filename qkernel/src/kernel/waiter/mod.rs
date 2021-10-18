@@ -28,7 +28,7 @@ use super::super::task::*;
 pub use self::entry::*;
 pub use self::waiter::*;
 pub use self::queue::*;
-use super::async_wait::*;
+
 
 // EventMaskFromLinux returns an EventMask representing the supported events
 // from the Linux events e, which is in the format used by poll(2).
@@ -53,15 +53,6 @@ pub trait Waitable {
     // to be returned regardless of whether they are in the input EventMask.
     fn Readiness(&self, _task: &Task, mask: EventMask) -> EventMask {
         return mask
-    }
-
-    fn AsyncReadiness(&self, task: &Task, mask: EventMask, _wait: &MultiWait) -> Future<EventMask> {
-        //wait.AddWait();
-        let future = Future::New(0 as EventMask);
-        let ret = self.Readiness(task, mask);
-        future.Set(ret);
-        //wait.Done();
-        return future;
     }
 
     // EventRegister registers the given waiter entry to receive

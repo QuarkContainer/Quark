@@ -149,8 +149,6 @@ unsafe impl GlobalAlloc for ListAllocator {
             self.initialize();      
         }
 
-        self.Check();
-
         let size = max(
             layout.size().next_power_of_two(),
             max(layout.align(), size_of::<usize>()),
@@ -190,8 +188,6 @@ unsafe impl GlobalAlloc for ListAllocator {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        self.Check();
-
         let size = max(
             layout.size().next_power_of_two(),
             max(layout.align(), size_of::<usize>()),
