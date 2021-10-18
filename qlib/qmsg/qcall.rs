@@ -113,7 +113,8 @@ pub struct IoUringSetup {
 
 #[derive(Clone, Default, Debug)]
 pub struct IoUringRegister {
-    pub opcode: u32,
+    pub fd: i32,
+    pub Opcode: u32,
     pub arg: u64,
     pub nrArgs: u32
 }

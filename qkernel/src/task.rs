@@ -264,17 +264,6 @@ impl Task {
         return self.queueId.store(queueId, Ordering::Release)
     }
 
-    pub fn StackOverflowCheck() {
-        let rsp = GetRsp();
-        let task = rsp & DEFAULT_STACK_MAST;
-        if rsp - task < 0x8000 {
-            raw!(0x237, rsp, task);
-            super::Kernel::HostSpace::VcpuDebug();
-            loop {}
-            //panic!("TaskAddress panic");
-        }
-    }
-
     #[inline(always)]
     pub fn TaskAddress() -> u64{
         let rsp = GetRsp();

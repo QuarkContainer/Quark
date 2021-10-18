@@ -17,6 +17,7 @@ use super::qlib::{ShareSpace};
 use super::qlib::common::*;
 use super::qlib::qmsg::*;
 use super::qlib::range::*;
+use super::syncmgr::*;
 use super::*;
 
 pub fn AQHostCall(msg: HostOutputMsg, shareSpace: &ShareSpace) {
@@ -24,6 +25,17 @@ pub fn AQHostCall(msg: HostOutputMsg, shareSpace: &ShareSpace) {
     match msg {
         HostOutputMsg::QCall(_addr) => {
             panic!("AQHostCall Process get Qcall msg...");
+        }
+        HostOutputMsg::WaitFD(msg) => {
+            let ret = super::VMSpace::WaitFD(msg.fd, msg.mask);
+            if ret < 0 {
+                if ret != -9 {
+                    panic!("WaitFD fail err is {}, fd is {}", ret, msg.fd);
+                }
+
+                // ignore -9 EBADF, when change the Close to HCall, the waitfd is still async call,
+                // there is chance that the WaitFd fired before close
+            }
         }
         HostOutputMsg::Close(msg) => {
             super::VMSpace::Close(0, msg.fd);
@@ -36,6 +48,10 @@ pub fn AQHostCall(msg: HostOutputMsg, shareSpace: &ShareSpace) {
         }
         HostOutputMsg::PrintStr(_msg) => {
             shareSpace.LogFlush();
+        }
+        HostOutputMsg::WakeVCPU(msg) => {
+            let vcpuId = msg.vcpuId as usize;
+            SyncMgr::WakeVcpu(vcpuId);
         }
     }
 }
@@ -308,13 +324,6 @@ pub fn qCall(eventAddr: u64, event: &'static mut Event) -> QcallRet {
         Event { taskId: _, interrupted: _, ref mut ret, msg: Msg::IoUringEnter(msg) } => {
             *ret = match URING_MGR.lock().Enter(msg.toSubmit, msg.minComplete, msg.flags) {
                 Ok(v) => v as u64,
-                Err(Error::SysError(v)) => -v as i64 as u64,
-                _ => panic!("UringMgr Enter fail")
-            }
-        }
-        Event { taskId: _, interrupted: _, ref mut ret, msg: Msg::IoUringRegister(msg) } => {
-            *ret = match URING_MGR.lock().Register(msg.opcode, msg.arg, msg.nrArgs) {
-                Ok(()) => 0,
                 Err(Error::SysError(v)) => -v as i64 as u64,
                 _ => panic!("UringMgr Enter fail")
             }

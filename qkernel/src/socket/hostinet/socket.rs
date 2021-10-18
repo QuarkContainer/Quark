@@ -52,7 +52,6 @@ use super::super::super::SHARESPACE;
 use super::socket_buf::*;
 use super::super::super::qlib::linux::time::Timeval;
 use super::super::control::ControlMessageTCPInq;
-use super::super::super::data_buff::*;
 
 fn newSocketFile(task: &Task, family: i32, fd: i32, stype: i32, nonblock: bool, enableBuf: bool, addr: Option<Vec<u8>>) -> Result<File> {
     let dirent = NewSocketDirent(task, SOCKET_DEVICE.clone(), fd)?;
@@ -486,10 +485,8 @@ impl SockOperations for SocketOperations {
 
         info!("host socket accept #1");
         *addrlen = addr.len() as u32;
-
-        //let mut res = Kernel::HostSpace::IOAccept(self.fd, addrLoc, addrlen as *const _ as u64, flags, blocking) as i32;
-        let mut res = IOURING.Accept(task, self.fd, addrLoc, addrlen as *const _ as u64, flags as u32) as i32;
-        //info!("host socket accept #2 blocking = {}, res is {}", blocking, res);
+        let mut res = Kernel::HostSpace::IOAccept(self.fd, addrLoc, addrlen as *const _ as u64, flags, blocking) as i32;
+        //info!("host socket accept #2 blocking = {}", blocking);
         if blocking {
             let general = task.blocker.generalEntry.clone();
             self.EventRegister(task, &general, EVENT_IN);
@@ -501,8 +498,7 @@ impl SockOperations for SocketOperations {
                     }
                     _ => ()
                 }
-                //res = Kernel::HostSpace::IOAccept(self.fd, addrLoc, addrlen as *const _ as u64, flags, blocking) as i32;
-                res = IOURING.Accept(task, self.fd, addrLoc, addrlen as *const _ as u64, flags as u32) as i32;
+                res = Kernel::HostSpace::IOAccept(self.fd, addrLoc, addrlen as *const _ as u64, flags, blocking) as i32;
             }
             self.EventUnregister(task, &general);
         }

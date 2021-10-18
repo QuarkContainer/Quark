@@ -39,7 +39,6 @@ use super::super::dirent::*;
 use super::dir::*;
 use super::terminal::*;
 use super::super::super::uid::*;
-use super::super::super::data_buff::*;
 
 pub fn NewSlaveNode(task: &Task, d: &DirInodeOperations, t: &Arc<Terminal>, owner: &FileOwner, p: &FilePermissions) -> Inode {
     let unstable = WithCurrentTime(task, &UnstableAttr {

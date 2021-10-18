@@ -12,13 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::slice;
+use alloc::vec::Vec;
 
 use super::super::qlib::common::*;
 use super::super::qlib::uring::sys::sys::*;
 use super::super::qlib::uring::*;
-use super::super::qlib::linux_def::*;
-use super::super::VMS;
 
 use super::super::*;
 use super::host_uring::*;
@@ -27,7 +25,7 @@ use super::host_uring::*;
 pub struct UringMgr {
     pub fd: i32,
     pub eventfd: i32,
-    pub fds: &'static mut [i32],
+    pub fds: Vec<i32>,
     pub ring: IoUring,
 }
 
@@ -35,18 +33,13 @@ pub const FDS_SIZE : usize = 8192;
 
 impl UringMgr {
     pub fn New(size: usize) -> Self {
-        let pages = (FDS_SIZE * 4 + 4095) / 4096;
-        let fdsAddr = VMS.lock().allocator.as_mut().unwrap().AllocPages(pages as u64).expect("UringMgr allocpages fail");
-        let fds = unsafe {
-            slice::from_raw_parts_mut(fdsAddr as *mut i32, FDS_SIZE)
-        };
-
-        for i in 0..FDS_SIZE {
-            fds[i] = -1;
+        let mut fds = Vec::with_capacity(FDS_SIZE);
+        for _i in 0..FDS_SIZE {
+            fds.push(-1);
         }
 
         //let ring = Builder::default().setup_sqpoll(50).setup_sqpoll_cpu(0).build(size as u32).expect("InitUring fail");
-        let ring = Builder::default().setup_sqpoll(10).dontfork().build(size as u32).expect("InitUring fail");
+        let ring = Builder::default().setup_sqpoll(10).build(size as u32).expect("InitUring fail");
 
         let ret = Self {
             fd: ring.fd.0,
@@ -57,14 +50,6 @@ impl UringMgr {
 
         ret.Register(IORING_REGISTER_FILES, &ret.fds[0] as * const _ as u64, ret.fds.len() as u32).expect("InitUring register files fail");
         return ret;
-    }
-
-    pub fn Probe(&self) {
-        error!("UringMgr probe is ....");
-        let mut probe = Probe::new();
-        self.RegisterProbe(probe.as_mut_ptr() as *const _ as u64, Probe::COUNT as u32).unwrap();
-        error!("opcode::Write::CODE support is {}", probe.is_supported(opcode::Write::CODE as u8));
-        error!("opcode::WriteFixed::CODE support is {}", probe.is_supported(opcode::WriteFixed::CODE as u8));
     }
 
     pub fn Setup(&mut self, submission: u64, completion: u64) -> Result<i32> {
@@ -106,25 +91,8 @@ impl UringMgr {
         return Ok(())
     }
 
-    pub fn RegisterBuff(&self, addr: u64, size: usize) -> Result<()> {
-        let ioVec = IoVec::NewFromAddr(addr, size);
-        return self.Register(IORING_REGISTER_BUFFERS, &ioVec as * const _ as u64, 1);
-    }
-
-    pub fn RegisterProbe(&self, probe: u64, size: u32) -> Result<()> {
-        return self.Register(IORING_REGISTER_PROBE, probe, size);
-    }
-
     pub fn UnRegisterFile(&mut self) -> Result<()> {
         return self.Register(IORING_UNREGISTER_FILES, 0, 0)
-    }
-
-    pub fn GetFds(&self) -> u64 {
-        return self.fds[0..].as_ptr() as _;
-    }
-
-    pub fn GetUringFd(&self) -> i32 {
-        return self.fd;
     }
 
     pub fn Addfd(&mut self, fd: i32) -> Result<()> {
