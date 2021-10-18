@@ -344,6 +344,17 @@ impl Task {
         t.State = state;
     }
 
+    pub fn StackOverflowCheck() {
+        let rsp = GetRsp();
+        let task = rsp & DEFAULT_STACK_MAST;
+        if rsp - task < 0x2000 {
+            raw!(0x237, rsp, task);
+            super::Kernel::HostSpace::VcpuDebug();
+            loop {}
+            //panic!("TaskAddress panic");
+        }
+    }
+
     pub fn AccountTaskLeave(&self, state: SchedState) {
         //print!("AccountTaskLeave current task is {:x}, state is {:?}", self.taskId, state);
         if self.taskId == CPULocal::WaitTask() {

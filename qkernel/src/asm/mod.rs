@@ -568,10 +568,8 @@ pub fn IRet(kernelRsp: u64) -> ! {
 
 #[inline]
 pub fn child_clone(userSp: u64) {
-    let negtive1 : u64 = 0xffffffff;
     unsafe {
         llvm_asm!("
-            lfence
             mov rbx, [rsp - 16]
             //fxrstor64 [rbx + 0]
 
@@ -606,7 +604,7 @@ pub fn child_clone(userSp: u64) {
             .byte 0x48
             sysret
         ":
-             : "{rdi}"(userSp), "{rax}"(negtive1), "{rdx}"(negtive1)
+             : "{rdi}"(userSp)
              : "memory" : "intel", "volatile");
     }
 }

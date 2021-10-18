@@ -372,8 +372,8 @@ impl KVMVcpu {
         let mut lastVal: u32 = 0;
         let mut first = true;
 
-        //let coreid = core_affinity::CoreId{id: self.id};
-        //core_affinity::set_for_current(coreid);
+        let coreid = core_affinity::CoreId{id: self.id};
+        core_affinity::set_for_current(coreid);
 
         info!("start enter guest[{}]: entry is {:x}, stack is {:x}", self.id, self.entry, self.topStackAddr);
         loop {
