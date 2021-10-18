@@ -225,8 +225,8 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     //SHARESPACE.SetValue(CPULocal::CpuId(), 0, nr);
     let callId: SysCallID = unsafe { mem::transmute(nr as u64) };
 
-    let mut rflags = GetRflags();
-    rflags &= !RFLAGS_DF;
+    let mut rflags = pt.eflags;
+    rflags &= !RFLAGS_RESTORABLE;
     rflags &= !KERNEL_FLAGS_CLEAR;
     rflags |= KERNEL_FLAGS_SET;
     SetRflags(rflags);
@@ -295,7 +295,6 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     let mut rflags = pt.eflags;
     rflags &= !USER_FLAGS_CLEAR;
     rflags |= USER_FLAGS_SET;
-    SetRflags(rflags);
     currTask.RestoreFp();
 
     if SHARESPACE.config.read().KernelPagetable {
@@ -308,6 +307,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
         pt.eflags = rflags;
         IRet(kernalRsp)
     } else {
+        pt.r11 = rflags;
         SyscallRet(kernalRsp)
     }
 }

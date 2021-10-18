@@ -67,7 +67,9 @@ syscall_entry:
       // eflags
       push r11
       // cs
-      sub rsp, 2 * 8
+      sub rsp, 1 * 8
+      // rip
+      push rcx
       push rax
 
       push rdi

@@ -58,6 +58,10 @@ impl Submission {
         return self.sq.is_full();
     }
 
+    pub fn FreeSlots(&self) -> usize {
+        return self.sq.freeSlot();
+    }
+
     pub fn Available(&mut self) -> squeue::AvailableQueue<'_> {
         return self.sq.available()
     }
@@ -338,26 +342,12 @@ impl QUring {
     }
 
     pub fn AUCallDirect(&self, ops: &AsyncOps, id: usize) {
-        let mut entry = ops.SEntry().user_data(id as u64);
-        loop {
-            loop {
-                if !self.submission.lock().IsFull() {
-                    break;
-                }
-
-                //error!("AUCall submission full...");
-                print!("AUCall submission full...");
-            }
-
-            entry = match self.AUringCall(entry) {
-                None => return,
-                Some(e) => e
-            }
-        }
+        let entry = ops.SEntry().user_data(id as u64);
+        self.AUringCall(entry)
     }
 
     pub fn AUCall(&self, ops: AsyncOps) -> usize {
-        let id;
+        let index;
 
         loop {
             match self.asyncMgr.AllocSlot() {
@@ -367,28 +357,15 @@ impl QUring {
                     print!("AUCall async slots usage up...");
                 },
                 Some(idx) => {
-                    id = idx;
+                    index = idx;
                     break;
                 }
             }
         }
 
-        let mut entry = self.asyncMgr.SetOps(id, ops);
-        loop {
-            loop {
-                if !self.submission.lock().IsFull() {
-                    break;
-                }
-
-                //error!("AUCall submission full...");
-                print!("AUCall submission full...");
-            }
-
-            entry = match self.AUringCall(entry) {
-                None => return id,
-                Some(e) => e
-            }
-        }
+        let entry = self.asyncMgr.SetOps(index, ops);
+        self.AUringCall(entry);
+        return index as usize;
     }
 
     pub fn ProcessOne(&self) -> bool {
@@ -426,49 +403,6 @@ impl QUring {
                 }
             }
         }
-
-        /*let mut processed = false;
-        const BATCH_SIZE : usize = 16;
-        let mut cqes : [cqueue::Entry; BATCH_SIZE] = Default::default();
-        let mut cnt = 0;
-
-        {
-            let mut clock = match self.completion.try_lock() {
-                None => return false,
-                Some(lock) => lock
-            };
-
-            //let mut clock = self.completion.lock();
-
-            while cnt < BATCH_SIZE {
-                let cqe = {
-                    clock.Next()
-                };
-
-                match cqe {
-                    None => {
-                        if cnt == 0 {
-                            return false
-                        }
-
-                        break
-                    },
-                    Some(cqe) => {
-                        cqes[cnt] = cqe;
-                        cnt += 1;
-                    }
-                }
-            }
-        }
-
-        let mut idx = 0;
-        for cqe in &cqes[0..cnt] {
-            processed = true;
-            self.Process(idx, cqe);
-            idx += 1;
-        }
-
-        return processed;*/
     }
 
     pub fn UringCall(&self, call: &UringCall) {
@@ -476,28 +410,42 @@ impl QUring {
         let entry = entry
             .user_data(call.Ptr());
 
-        let mut s = self.submission.lock();
-        unsafe {
-            let mut queue = s.Available();
-            queue.push(entry).ok().expect("submission queue is full");
+        loop {
+            let mut s = self.submission.lock();
+            if s.FreeSlots() < 1 {
+                print!("UringCall: submission full...");
+                continue
+            }
+
+            unsafe {
+                let mut queue = s.Available();
+                queue.push(entry).ok().expect("UringCall push fail");
+            }
+
+            s.Submit().expect("QUringIntern::submit fail");
+            break;
         }
 
-        s.Submit().expect("QUringIntern::submit fail");
     }
 
-    pub fn AUringCall(&self, entry: squeue::Entry) -> Option<squeue::Entry> {
-        //let (fd, user_data, opcode) = (entry.0.fd, entry.0.user_data, entry.0.opcode);
-        let mut s = self.submission.lock();
-        unsafe {
-            let mut queue = s.Available();
-            match queue.push(entry) {
-                Ok(_) => (),
-                Err(e) => return Some(e),
+    pub fn AUringCall(&self, entry: squeue::Entry) {
+        loop {
+            let mut s = self.submission.lock();
+            if s.FreeSlots() == 0 {
+                print!("AUringCall: submission full...");
+                continue;
             }
-        }
 
-        let _n = s.Submit().expect("QUringIntern::submit fail");
-        //error!("AUCall after sumbit fd is {}, user_data is {}, opcode is {}", fd, user_data, opcode);
-        return None;
+            unsafe {
+                let mut queue = s.Available();
+                match queue.push(entry) {
+                    Ok(_) => (),
+                    Err(_) => panic!("AUringCall submission queue is full"),
+                }
+            }
+
+            let _n = s.Submit().expect("QUringIntern::submit fail");
+            break;
+        }
     }
 }
