@@ -646,7 +646,6 @@ pub fn CreateCloneTask(fromTask: &Task, toTask: &mut Task, userSp: u64) {
 
         // put the floattpointer state address in the stack, and the "child_clone" call can restore that
         //*((toTask.context.rsp - 8) as *mut u64) = toTask.context.X86fpstate.FloatingPointData();
-        super::super::asm::sfence();
     }
 }
 

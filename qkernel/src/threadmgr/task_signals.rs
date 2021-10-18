@@ -26,7 +26,6 @@ use super::super::kernel::waiter::*;
 use super::super::threadmgr::thread::*;
 use super::super::threadmgr::thread_group::*;
 use super::super::SignalDef::*;
-use super::super::arch::x86_64::arch_x86::*;
 //use super::super::eventchannel::*;
 use super::task_exit::*;
 use super::task_stop::*;
@@ -1100,8 +1099,6 @@ impl Task {
         let nEflags = uc.MContext.eflags;
 
         pt.Set(&uc.MContext);
-        pt.eflags = (pt.eflags & !EFLAGS_RESTORABLE) | (uc.MContext.eflags & EFLAGS_RESTORABLE);
-        pt.orig_rax = core::u64::MAX;
 
         /*if self.context.sigFPState.len() > 0 {
             // restore X86fpstate state
@@ -1116,6 +1113,7 @@ impl Task {
         t.SetSignalMask(SignalSet(oldMask));
 
         pt.eflags = (cEflags & !EflagsDef::EFLAGS_RESTOREABLE) | (nEflags & EflagsDef::EFLAGS_RESTOREABLE);
+        pt.orig_rax = core::u64::MAX;
 
         if t.lock().HasSignal() {
             t.lock().interruptSelf();

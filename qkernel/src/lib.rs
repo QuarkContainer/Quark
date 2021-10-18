@@ -226,7 +226,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
 
     //SHARESPACE.SetValue(CPULocal::CpuId(), 0, nr);
     let callId: SysCallID = unsafe { mem::transmute(nr as u64) };
-    
+
     currTask.SaveFp();
 
     //let tid = currTask.Thread().lock().id;
