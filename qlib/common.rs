@@ -52,13 +52,25 @@ pub const CR4_OSXSAVE    : u64 = 1 << 18;
 pub const CR4_SMEP       : u64 = 1 << 20;
 pub const CR4_SMAP       : u64 = 1 << 21;
 
-pub const RFLAGS_AC       : u64 = 1 << 18;
-pub const RFLAGS_NT       : u64 = 1 << 14;
-pub const RFLAGS_IOPL     : u64 = 3 << 12;
-pub const RFLAGS_DF       : u64 = 1 << 10;
-pub const RFLAGS_IF       : u64 = 1 << 9;
-pub const RFLAGS_STEP     : u64 = 1 << 8;
+pub const RFLAGS_CF : u64 = 1 << 0;
 pub const RFLAGS_RESERVED : u64 = 1 << 1;
+pub const RFLAGS_PF : u64 = 1 << 2;
+pub const RFLAGS_AF : u64 = 1 << 4;
+pub const RFLAGS_ZF : u64 = 1 << 6;
+pub const RFLAGS_SF : u64 = 1 << 7;
+
+pub const RFLAGS_STEP     : u64 = 1 << 8;
+pub const RFLAGS_IF       : u64 = 1 << 9;
+pub const RFLAGS_DF       : u64 = 1 << 10;
+pub const RFLAGS_OF       : u64 = 1 << 11;
+pub const RFLAGS_IOPL     : u64 = 3 << 12;
+pub const RFLAGS_NT       : u64 = 1 << 14;
+pub const RFLAGS_RF       : u64 = 1 << 16;
+pub const RFLAGS_VM       : u64 = 1 << 17;
+pub const RFLAGS_AC       : u64 = 1 << 18;
+pub const RFLAGS_VIF       : u64 = 1 << 19;
+pub const RFLAGS_VIP       : u64 = 1 << 20;
+pub const RFLAGS_ID       : u64 = 1 << 21;
 
 pub const EFER_SCE : u64 = 0x001;
 pub const EFER_LME : u64 = 0x100;
@@ -87,6 +99,10 @@ pub const KERNEL_FLAGS_CLEAR : u64 = RFLAGS_STEP | RFLAGS_IF | RFLAGS_IOPL | RFL
 
 // UserFlagsClear are always cleared in userspace.
 pub const USER_FLAGS_CLEAR : u64 = RFLAGS_NT | RFLAGS_IOPL;
+
+// eflagsRestorable is the mask for the set of EFLAGS that may be changed by
+// SignalReturn. eflagsRestorable is analogous to Linux's FIX_EFLAGS.
+pub const RFLAGS_RESTORABLE : u64 = RFLAGS_AC | RFLAGS_OF | RFLAGS_DF | RFLAGS_STEP | RFLAGS_SF | RFLAGS_ZF | RFLAGS_AF | RFLAGS_PF | RFLAGS_CF | RFLAGS_RF;
 
 use alloc::string::String;
 
