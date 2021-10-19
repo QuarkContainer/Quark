@@ -278,6 +278,17 @@ impl MapOption {
         }
     }
 
+    pub fn MSync(addr: u64, len: u64) -> Result<()> {
+        unsafe {
+            if libc::msync(addr as *mut libc::c_void, len as usize, libc::MS_SYNC) != 0 {
+                let errno = errno::errno().0;
+                return Err(Error::SysError(errno));
+            }
+        }
+
+        return Ok(())
+    }
+
     pub fn MUnmap(addr: u64, len: u64) -> Result<()> {
         unsafe {
             if libc::munmap(addr as *mut libc::c_void, len as usize) != 0 {

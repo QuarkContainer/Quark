@@ -205,8 +205,6 @@ pub fn Init() {
 #[no_mangle]
 pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: u64, arg5: u64) -> ! {
     //PerfGofrom(PerfType::User);
-    let rflags = KERNEL_FLAGS_SET;
-    SetRflags(rflags);
 
     let currTask = task::Task::Current();
     currTask.PerfGofrom(PerfType::User);

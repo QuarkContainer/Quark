@@ -119,10 +119,15 @@ pub fn init() {
     IDT.load();
 }
 
-pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &PtRegs, errorCode: u64) {
+pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) {
     let PRINT_EXECPTION : bool = SHARESPACE.config.read().PrintException;
 
     let currTask = Task::Current();
+
+    let mut rflags = sf.eflags;
+    rflags &= !USER_FLAGS_CLEAR;
+    rflags |= USER_FLAGS_SET;
+    sf.eflags = rflags;
 
     // is this call from user
     if sf.ss & 0x3 != 0 {
@@ -150,21 +155,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &PtRegs, errorCode: u64) {
             ev, sf, errorCode, &map);
     }
 
-    let mut rflags = GetRflags();
-    rflags &= !KERNEL_FLAGS_CLEAR;
-    rflags |= KERNEL_FLAGS_SET;
-    SetRflags(rflags);
     //currTask.SaveFp();
-
-    let regs = currTask.GetPtRegs();
-
-    defer!({
-        let mut rflags = regs.eflags;
-        rflags &= !USER_FLAGS_CLEAR;
-        rflags |= USER_FLAGS_SET;
-        SetRflags(rflags);
-        Task::Current().RestoreFp();
-    });
 
     match ev {
         ExceptionStackVec::DivideByZero => {
@@ -296,58 +287,52 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &PtRegs, errorCode: u64) {
 
     MainRun(currTask, TaskRunState::RunApp);
 
-    ReturnToApp(currTask);
+    ReturnToApp(sf);
 }
 
-pub fn ReturnToApp(task: &Task) -> ! {
-    let pt = task.GetPtRegs();
+pub fn ReturnToApp(pt: &mut PtRegs) -> ! {
     let kernalRsp = pt as *const _ as u64;
-    let mut rflags = pt.eflags;
-    rflags &= !USER_FLAGS_CLEAR;
-    rflags |= USER_FLAGS_SET;
-    SetRflags(rflags);
-
     SyscallRet(kernalRsp);
 }
 
 #[no_mangle]
-pub extern fn DivByZeroHandler(sf: &PtRegs) {
+pub extern fn DivByZeroHandler(sf: &mut PtRegs) {
     ExceptionHandler(ExceptionStackVec::DivideByZero, sf, 0);
 }
 
 #[no_mangle]
-pub extern fn DebugHandler(sf: &PtRegs) {
+pub extern fn DebugHandler(sf: &mut PtRegs) {
     ExceptionHandler(ExceptionStackVec::Debug, sf, 0);
 }
 
 #[no_mangle]
-pub extern fn NonmaskableInterrupt(sf: &PtRegs) {
+pub extern fn NonmaskableInterrupt(sf: &mut PtRegs) {
     ExceptionHandler(ExceptionStackVec::NMI, sf, 0);
 }
 
 #[no_mangle]
-pub extern fn BreakpointHandler(sf: &PtRegs) {
+pub extern fn BreakpointHandler(sf: &mut PtRegs) {
     // breakpoint can only call from user;
     ExceptionHandler(ExceptionStackVec::Breakpoint, sf, 0);
 }
 
 #[no_mangle]
-pub extern fn OverflowHandler(sf: &PtRegs) {
+pub extern fn OverflowHandler(sf: &mut PtRegs) {
     ExceptionHandler(ExceptionStackVec::Overflow, sf, 0);
 }
 
 #[no_mangle]
-pub extern fn BoundRangeHandler(sf: &PtRegs) {
+pub extern fn BoundRangeHandler(sf: &mut PtRegs) {
     ExceptionHandler(ExceptionStackVec::BoundRangeExceeded, sf, 0);
 }
 
 #[no_mangle]
-pub extern fn InvalidOpcodeHandler(sf: &PtRegs) {
+pub extern fn InvalidOpcodeHandler(sf: &mut PtRegs) {
     ExceptionHandler(ExceptionStackVec::InvalidOpcode, sf, 0);
 }
 
 #[no_mangle]
-pub extern fn DeviceNotAvailableHandler(sf: &PtRegs) {
+pub extern fn DeviceNotAvailableHandler(sf: &mut PtRegs) {
     ExceptionHandler(ExceptionStackVec::DeviceNotAvailable, sf, 0);
 }
 
@@ -391,7 +376,7 @@ bitflags! {
 }
 
 #[no_mangle]
-pub extern fn PageFaultHandler(sf: &mut PtRegs, errorCode: u64) {
+pub extern fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
     let cr2: u64;
     unsafe { llvm_asm!("mov %cr2, $0" : "=r" (cr2) ) };
     let cr3: u64;
@@ -400,14 +385,17 @@ pub extern fn PageFaultHandler(sf: &mut PtRegs, errorCode: u64) {
     let ss: u16 = 16;
     unsafe{ llvm_asm!("movw $0, %ss" :: "r" (ss) : "memory");}
 
-    let rflags = KERNEL_FLAGS_SET;
-    SetRflags(rflags);
-
     let currTask = Task::Current();
 
     // is this call from user
-    let fromUser = if sf.ss & 0x3 != 0 {
+    let fromUser = if ptRegs.ss & 0x3 != 0 {
         SwapGs();
+
+        let mut rflags = ptRegs.eflags;
+        rflags &= !USER_FLAGS_CLEAR;
+        rflags |= USER_FLAGS_SET;
+        ptRegs.eflags = rflags;
+
         //PerfGofrom(PerfType::User);
         currTask.AccountTaskLeave(SchedState::RunningApp);
         if SHARESPACE.config.read().KernelPagetable {
@@ -419,7 +407,7 @@ pub extern fn PageFaultHandler(sf: &mut PtRegs, errorCode: u64) {
     };
 
     if !fromUser {
-        print!("Get pagefault from kernel ... {:#x?}/cr2 is {:x}/cr3 is {:x}", sf, cr2, cr3);
+        print!("Get pagefault from kernel ... {:#x?}/cr2 is {:x}/cr3 is {:x}", ptRegs, cr2, cr3);
         for i in 0..super::CPU_LOCAL.len() {
             print!("CPU#{} is {:#x?}", i, super::CPU_LOCAL[i]);
         }
@@ -440,9 +428,9 @@ pub extern fn PageFaultHandler(sf: &mut PtRegs, errorCode: u64) {
             cr3,
             PageFaultErrorCode::from_bits(errorCode).unwrap() & PageFaultErrorCode::USER_MODE == PageFaultErrorCode::USER_MODE,
             PageFaultErrorCode::from_bits(errorCode).unwrap(),
-            sf.ss,
-            sf.cs,
-            sf.eflags,
+            ptRegs.ss,
+            ptRegs.cs,
+            ptRegs.eflags,
             ss
         );
     }
@@ -451,16 +439,6 @@ pub extern fn PageFaultHandler(sf: &mut PtRegs, errorCode: u64) {
     // no need loop, just need to enable break
     loop {
         let _ml = currTask.mm.MappingWriteLock();
-        defer!({
-            if fromUser {
-                let regs = currTask.GetPtRegs();
-                let mut eflags = regs.eflags;
-                eflags &= !USER_FLAGS_CLEAR;
-                eflags |= USER_FLAGS_SET;
-                SetRflags(eflags);
-                //Task::Current().RestoreFp();
-            }
-         });
 
         let (vma, range) = match currTask.mm.GetVmaAndRangeLocked(cr2) {
             //vmas.lock().Get(cr2) {
@@ -568,7 +546,7 @@ pub extern fn PageFaultHandler(sf: &mut PtRegs, errorCode: u64) {
         return
     }
 
-    HandleFault(currTask, fromUser, errorCode, cr2, sf, signal);
+    HandleFault(currTask, fromUser, errorCode, cr2, ptRegs, signal);
 }
 
 pub fn HandleFault(task: &mut Task, user: bool, errorCode: u64, cr2: u64, sf: &mut PtRegs, signal: i32) -> ! {
@@ -606,12 +584,12 @@ pub fn HandleFault(task: &mut Task, user: bool, errorCode: u64, cr2: u64, sf: &m
     thread.SendSignal(&info).expect("PageFaultHandler send signal fail");
     MainRun(task, TaskRunState::RunApp);
 
-    ReturnToApp(task);
+    ReturnToApp(sf);
 }
 
 // x87 Floating-Point Exception
 #[no_mangle]
-pub extern fn X87FPHandler(sf: &PtRegs) {
+pub extern fn X87FPHandler(sf: &mut PtRegs) {
     ExceptionHandler(ExceptionStackVec::X87FloatingPointException, sf, 0);
 }
 
@@ -621,17 +599,17 @@ pub extern fn AlignmentCheckHandler(sf: &mut PtRegs, errorCode: u64) {
 }
 
 #[no_mangle]
-pub extern fn MachineCheckHandler(sf: &PtRegs) {
+pub extern fn MachineCheckHandler(sf: &mut PtRegs) {
     ExceptionHandler(ExceptionStackVec::MachineCheck, sf, 0);
 }
 
 #[no_mangle]
-pub extern fn SIMDFPHandler(sf: &PtRegs) {
+pub extern fn SIMDFPHandler(sf: &mut PtRegs) {
     ExceptionHandler(ExceptionStackVec::SIMDFloatingPointException, sf, 0);
 }
 
 #[no_mangle]
-pub extern fn VirtualizationHandler(sf: &PtRegs) {
+pub extern fn VirtualizationHandler(sf: &mut PtRegs) {
     ExceptionHandler(ExceptionStackVec::VirtualizationException, sf, 0);
 }
 
@@ -641,7 +619,7 @@ pub extern fn SecurityHandler(sf: &mut PtRegs, errorCode: u64) {
 }
 
 #[no_mangle]
-pub extern fn TripleFaultHandler(sf: &PtRegs) {
+pub extern fn TripleFaultHandler(sf: &mut PtRegs) {
     info!("\nTripleFaultHandler: at {:#x}\n{:#?}",
     sf.rip,
     sf);
