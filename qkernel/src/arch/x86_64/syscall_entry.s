@@ -90,6 +90,11 @@ syscall_entry:
       push r14
       push r15
 
+      // RFLAGS_RESERVED
+      mov r11, 0x2
+      push r11
+      popfq
+
       mov rcx, r10
       call syscall_handler
 
@@ -134,7 +139,7 @@ context_swap:
 
     sfence
     mov [rdi+0x40], rdx
-
+    lfence
     mov rsp, [rsi+0x00]
     mov r15, [rsi+0x08]
     mov r14, [rsi+0x10]
@@ -144,7 +149,6 @@ context_swap:
     mov rbp, [rsi+0x30]
     mov rdi, [rsi+0x38]
     mov [rsi+0x40], rcx
-    sfence
 
     ret
 
@@ -175,6 +179,11 @@ context_swap_to:
     push r9
     push r10
     push r11
+
+    // RFLAGS_RESERVED
+    mov rax, 0x2
+    push rax
+    popfq
 
     // switch to task kernel stack
     mov rdi, rsp
@@ -245,6 +254,11 @@ context_swap_to:
     push r9
     push r10
     push r11
+
+    // RFLAGS_RESERVED
+    mov rax, 0x2
+    push rax
+    popfq
 
     // switch to task kernel stack
     mov rdi, rsp
