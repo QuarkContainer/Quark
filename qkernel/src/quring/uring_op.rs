@@ -92,13 +92,13 @@ impl TimerRemoveOp {
 pub struct ReadOp {
     pub fd: i32,
     pub addr: u64,
-    pub cnt: u32,
+    pub len: u32,
     pub offset: i64,
 }
 
 impl ReadOp {
     pub fn SEntry(&self) -> squeue::Entry {
-        let op = Readv::new(types::Fd(self.fd), self.addr as * const _, self.cnt)
+        let op = Read::new(types::Fd(self.fd), self.addr as * mut _, self.len)
             .offset(self.offset);
 
         return op.build()
@@ -110,13 +110,13 @@ impl ReadOp {
 pub struct WriteOp {
     pub fd: i32,
     pub addr: u64,
-    pub cnt: u32,
+    pub len: u32,
     pub offset: i64,
 }
 
 impl WriteOp {
     pub fn SEntry(&self) -> squeue::Entry {
-        let op = Writev::new(types::Fd(self.fd), self.addr as * const _, self.cnt)
+        let op = Write::new(types::Fd(self.fd), self.addr as * const _, self.len)
             .offset(self.offset);
 
         return op.build()
