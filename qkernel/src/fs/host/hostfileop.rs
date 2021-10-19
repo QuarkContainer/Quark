@@ -228,7 +228,7 @@ impl FileOperations for HostFileOp {
         let size = IoVec::NumBytes(dsts);
         let buf = DataBuff::New(size);
 
-        let mut iovs = buf.Iovs();
+        let iovs = buf.Iovs();
 
         if self.InodeOp.InodeType() != InodeType::RegularFile && self.InodeOp.InodeType() != InodeType::CharacterDevice {
             let ret = IORead(hostIops.HostFd(), &iovs)?;
@@ -238,8 +238,8 @@ impl FileOperations for HostFileOp {
             if SHARESPACE.config.read().TcpBuffIO {
                 let ret = IOURING.Read(task,
                                         hostIops.HostFd(),
-                                        &mut iovs[0] as * mut _ as u64,
-                                        iovs.len() as u32,
+                                        buf.Ptr(),
+                                        buf.Len() as u32,
                                         offset as i64);
 
                 if ret < 0 {
@@ -285,10 +285,10 @@ impl FileOperations for HostFileOp {
         } else {
             if SHARESPACE.config.read().TcpBuffIO {
                 let ret = IOURING.Write(task,
-                              hostIops.HostFd(),
-                              &iovs[0] as * const _ as u64,
-                              iovs.len() as u32,
-                              offset as i64);
+                                        hostIops.HostFd(),
+                                        buf.Ptr(),
+                                        buf.Len() as u32,
+                                        offset as i64);
 
                 if ret < 0 {
                     if ret as i32 != -SysErr::EINVAL {

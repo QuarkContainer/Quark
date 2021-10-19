@@ -188,22 +188,22 @@ impl QUring {
         return idx;
     }
 
-    pub fn Read(&self, task: &Task, fd: i32, addr: u64, cnt: u32, offset: i64) -> i64 {
+    pub fn Read(&self, task: &Task, fd: i32, addr: u64, len: u32, offset: i64) -> i64 {
         let msg = UringOp::Read(ReadOp {
             fd: fd,
             addr: addr,
-            cnt: cnt,
+            len: len,
             offset: offset,
         });
 
         return self.UCall(task, msg);
     }
 
-    pub fn Write(&self, task: &Task, fd: i32, addr: u64, cnt: u32, offset: i64) -> i64 {
+    pub fn Write(&self, task: &Task, fd: i32, addr: u64, len: u32, offset: i64) -> i64 {
         let msg = UringOp::Write(WriteOp {
             fd: fd,
             addr: addr,
-            cnt: cnt,
+            len: len,
             offset: offset,
         });
 
