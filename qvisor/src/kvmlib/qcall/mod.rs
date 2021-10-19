@@ -17,7 +17,6 @@ use super::qlib::{ShareSpace};
 use super::qlib::common::*;
 use super::qlib::qmsg::*;
 use super::qlib::range::*;
-use super::syncmgr::*;
 use super::*;
 
 pub fn AQHostCall(msg: HostOutputMsg, shareSpace: &ShareSpace) {
@@ -37,21 +36,8 @@ pub fn AQHostCall(msg: HostOutputMsg, shareSpace: &ShareSpace) {
                 // there is chance that the WaitFd fired before close
             }
         }
-        HostOutputMsg::Close(msg) => {
-            super::VMSpace::Close(0, msg.fd);
-        }
-        HostOutputMsg::MUnmap(msg) => {
-            match super::PMA_KEEPER.Unmap(&Range::New(msg.addr, msg.len)) {
-                Ok(()) => (),
-                Err(err) => panic!("MUnmap: unexpected error {:?}", err),
-            }
-        }
         HostOutputMsg::PrintStr(_msg) => {
             shareSpace.LogFlush();
-        }
-        HostOutputMsg::WakeVCPU(msg) => {
-            let vcpuId = msg.vcpuId as usize;
-            SyncMgr::WakeVcpu(vcpuId);
         }
     }
 }
@@ -108,6 +94,13 @@ pub fn qCall(eventAddr: u64, event: &'static mut Event) -> QcallRet {
                 Ok(phyAddr) => phyAddr,
                 Err(err) => panic!("MMapFile: unexpected error {:?}", err),
             };
+        }
+        Event { taskId: _, interrupted: _, ref mut ret, msg: Msg::MUnmap(msg) } => {
+            match super::PMA_KEEPER.Unmap(&Range::New(msg.addr, msg.len)) {
+                Ok(()) => (),
+                Err(err) => panic!("MUnmap: unexpected error {:?}", err),
+            }
+            *ret = 0;
         }
         Event { taskId, interrupted: _, ref mut ret, msg: Msg::LoadProcessKernel(msg) } => {
             *ret = super::VMS.lock().LoadProcessKernel(taskId.Addr(), msg.processAddr, msg.len) as u64;

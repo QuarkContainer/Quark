@@ -129,6 +129,7 @@ impl Blocker {
         let adjustTimeout = timeout - 30_000; // 30 us is process time.
 
         if adjustTimeout <= 0 { // if timeout < 30 us, just timeout immediately as 30 us is process time.
+            super::super::taskMgr::Yield();
             return (0, self.Check(waitGeneral))
         }
 
@@ -266,6 +267,7 @@ impl Blocker {
                 return Ok(())
             }
             Waiter::TIMER_WAITID => {
+                super::super::taskMgr::Yield();
                 self.SleepFinish(true);
                 self.waiter.lock().bitmap &= !(1<<Waiter::TIMER_WAITID);
                 return Err(Error::SysError(SysErr::ETIMEDOUT));

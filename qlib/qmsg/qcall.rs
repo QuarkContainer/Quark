@@ -96,6 +96,7 @@ pub enum Msg {
     IORecvMsg(IORecvMsg),
     IOSendMsg(IOSendMsg),
     MMapFile(MMapFile),
+    MUnmap(MUnmap),
     UnMapPma(UnMapPma),
     NonBlockingPoll(NonBlockingPoll),
     NewTmpfsFile(NewTmpfsFile),
@@ -143,6 +144,12 @@ pub struct MMapFile {
     pub prot: i32,
 }
 
+
+#[derive(Clone, Default, Debug)]
+pub struct MUnmap {
+    pub addr: u64,
+    pub len: u64,
+}
 
 #[derive(Clone, Default, Debug)]
 pub struct Fallocate {
