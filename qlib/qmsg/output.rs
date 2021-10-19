@@ -20,12 +20,7 @@ use super::super::linux_def::*;
 pub enum HostOutputMsg {
     QCall(u64),
     WaitFD(WaitFD),
-    Close(Close),
-    //WriteBuffTrigger(WriteBuffTrigger),
-    //ReadBuffTrigger(ReadBuffTrigger),
-    MUnmap(MUnmap),
     PrintStr(PrintStr),
-    WakeVCPU(WakeVCPU)
 }
 
 #[derive(Clone, Default, Debug, Copy)]
@@ -34,32 +29,5 @@ pub struct WaitFD {
     pub mask: EventMask,
 }
 
-#[derive(Clone, Default, Debug, Copy)]
-pub struct Close {
-    pub fd: i32,
-}
-
-//write buff and find write buff is empty, notify host to write it to os, async call
-#[derive(Clone, Default, Debug, Copy)]
-pub struct WriteBuffTrigger {
-    pub fd: i32,
-}
-//read buff and find read buff full, notify host to read more from os, async call
-#[derive(Clone, Default, Debug, Copy)]
-pub struct ReadBuffTrigger {
-    pub fd: i32,
-}
-
-#[derive(Clone, Default, Debug, Copy)]
-pub struct MUnmap {
-    pub addr: u64,
-    pub len: u64,
-}
-
 #[derive(Clone, Debug, Copy)]
 pub struct PrintStr {}
-
-#[derive(Clone, Debug, Copy)]
-pub struct WakeVCPU {
-    pub vcpuId: usize,
-}

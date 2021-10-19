@@ -275,12 +275,6 @@ impl HostSpace {
 
     }
 
-    pub fn AsyncClose(fd: i32) {
-        Self::AQCall(&qmsg::HostOutputMsg::Close(qmsg::output::Close {
-            fd: fd,
-        }));
-    }
-
     pub fn Fcntl(fd: i32, cmd: i32, arg: u64) -> i64 {
         let mut msg = Msg::Fcntl(Fcntl {
             fd,
@@ -831,20 +825,6 @@ impl HostSpace {
         HostSpace::AQCall(&msg);
     }
 
-    pub fn WakeVCPU(vcpuId: usize) {
-        // quick path
-        if super::SHARESPACE.IOThreadState() == IOThreadState::WAITING {
-            HostSpace::WakeupVcpu(vcpuId as u64);
-            return
-        }
-
-        let msg = qmsg::HostOutputMsg::WakeVCPU(qmsg::WakeVCPU {
-            vcpuId,
-        });
-
-        HostSpace::AQCall(&msg);
-    }
-
     pub fn MMapFile(len: u64, fd: i32, offset: u64, prot: i32) -> i64 {
         assert!(len % MemoryDef::PMD_SIZE == 0, "offset is {:x}, len is {:x}", offset, len);
         assert!(offset % MemoryDef::PMD_SIZE == 0, "offset is {:x}, len is {:x}", offset, len);
@@ -863,12 +843,12 @@ impl HostSpace {
     pub fn MUnmap(addr: u64, len: u64) {
         assert!(addr % MemoryDef::PMD_SIZE == 0, "addr is {:x}, len is {:x}", addr, len);
         assert!(len % MemoryDef::PMD_SIZE == 0, "addr is {:x}, len is {:x}", addr, len);
-        let msg = qmsg::HostOutputMsg::MUnmap(qmsg::MUnmap {
+        let mut msg = Msg::MUnmap(qmsg::qcall::MUnmap {
             addr,
             len,
         });
 
-        HostSpace::AQCall(&msg);
+        HostSpace::HCall(&mut msg);
     }
 
     fn Call(msg: &mut Msg, mustAsync: bool) -> u64 {
