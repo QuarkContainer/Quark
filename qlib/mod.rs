@@ -565,6 +565,10 @@ impl ShareSpace {
         }
     }
 
+    pub fn Addr(&self) -> u64 {
+        return self as * const _ as u64;
+    }
+
     pub fn HostIOThreadEventfd(&self) -> i32 {
         return self.hostIOThreadEventfd.load(Ordering::Relaxed);
     }

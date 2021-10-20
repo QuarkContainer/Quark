@@ -292,6 +292,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
 
 pub fn ReturnToApp(pt: &mut PtRegs) -> ! {
     let kernalRsp = pt as *const _ as u64;
+    pt.r11 = pt.eflags;
     SyscallRet(kernalRsp);
 }
 
