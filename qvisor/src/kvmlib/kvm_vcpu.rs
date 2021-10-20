@@ -373,11 +373,6 @@ impl KVMVcpu {
 
         self.vcpu.set_regs(&regs).map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
 
-        //kvmCtl::QueueTimer(&self.vcpu_fds[0]);
-
-        //let mut shareSpace : * mut Mutex<ShareSpace> = 0 as * mut Mutex<ShareSpace>; //give a default to work around compile uninitialized error
-
-        //self.vcpu_fds[0].EnableInterruptWindow();
 
         let mut lastVal: u32 = 0;
         let mut first = true;

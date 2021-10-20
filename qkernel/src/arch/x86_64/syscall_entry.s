@@ -91,8 +91,7 @@ syscall_entry:
       push r15
 
       // RFLAGS_RESERVED
-      mov r11, 0x2
-      push r11
+      pushq 0x2
       popfq
 
       mov rcx, r10
@@ -181,8 +180,7 @@ context_swap_to:
     push r11
 
     // RFLAGS_RESERVED
-    mov rax, 0x2
-    push rax
+    pushq 0x2
     popfq
 
     // switch to task kernel stack
@@ -201,10 +199,11 @@ context_swap_to:
     //load exception rsp, which is kernel rsp
     mov rsi, [rsp + 13 *8]
     2:
-    sub rsi, 15 * 8
-    mov rdx, 15
-    mov rsi, rsp
-    call CopyData
+    sub rsp, 15 * 8
+    mov rsi, rdi
+    mov rdi, rsp
+    mov rcx, 15
+    rep movsq
 
     push rbx
     push rbp
@@ -256,8 +255,7 @@ context_swap_to:
     push r11
 
     // RFLAGS_RESERVED
-    mov rax, 0x2
-    push rax
+    pushq 0x2
     popfq
 
     // switch to task kernel stack
@@ -277,9 +275,10 @@ context_swap_to:
     mov rsp, [rsp + 13 *8]
     2:
     sub rsp, 15 * 8
-    mov rdx, 15
-    mov rsi, rsp
-    call CopyData
+    mov rsi, rdi
+    mov rdi, rsp
+    mov rcx, 15
+    rep movsq
 
     push rbx
     push rbp
