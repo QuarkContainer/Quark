@@ -609,55 +609,6 @@ pub fn child_clone(userSp: u64) {
     }
 }
 
-#[inline]
-pub fn SigReturnAsm(rsp: u64) {
-    unsafe {
-        llvm_asm!("\
-            //restore orginal syscall's registers
-            pop r15
-            pop r14
-            pop r13
-            pop r12
-            pop rbp
-            pop rbx
-
-            pop r11
-            pop r10
-            pop r9
-            pop r8
-
-            pop rax
-            pop rcx
-            pop rdx
-            pop rsi
-            pop rdi
-
-            //rebuild the kernel stack
-            push rdi
-            push rsi
-            push rdx
-            push rcx
-            push rax
-            push r8
-            push r9
-            push r10
-            push r11
-
-            //callee-preserved
-            push rbx
-            push rbp
-            push r12
-            push r13
-            push r14
-            push r15
-
-            mov rcx, r10
-            call syscall_handler
-        ":
-             : "{rsp}"(rsp)
-             : "memory" : "intel", "volatile");
-    }
-}
 
 #[inline]
 pub fn GetRsp() -> u64 {
@@ -670,7 +621,6 @@ pub fn GetRsp() -> u64 {
 pub fn Invlpg(addr: u64) {
     if !super::SHARESPACE.config.read().KernelPagetable {
         unsafe { llvm_asm!("
-            sfence
             invlpg ($0)
             " :: "r" (addr): "memory" : "volatile" ) };
     }
