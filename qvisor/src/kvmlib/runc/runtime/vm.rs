@@ -14,7 +14,6 @@
 
 use kvm_ioctls::{Kvm, VmFd};
 use kvm_bindings::{kvm_userspace_memory_region, KVM_CAP_X86_DISABLE_EXITS, kvm_enable_cap, KVM_X86_DISABLE_EXITS_HLT, KVM_X86_DISABLE_EXITS_MWAIT};
-use spin::Mutex;
 use alloc::sync::Arc;
 use std::{thread};
 use core::sync::atomic::AtomicI32;
@@ -97,7 +96,7 @@ impl BootStrapMem {
 pub struct VirtualMachine {
     pub kvm: Kvm,
     pub vmfd: VmFd,
-    pub vcpus: Vec<Arc<Mutex<KVMVcpu>>>,
+    pub vcpus: Vec<Arc<KVMVcpu>>,
     pub elf: KernelELF,
 }
 
@@ -224,17 +223,17 @@ impl VirtualMachine {
 
         let mut vcpus = Vec::with_capacity(cpuCount);
         for i in 0..cpuCount/*args.NumCPU*/ {
-            let vcpu = Arc::new(Mutex::new(KVMVcpu::Init(i as usize,
+            let vcpu = Arc::new(KVMVcpu::Init(i as usize,
                                                          cpuCount,
                                                          &vm_fd,
                                                          &bootstrapMem,
                                                          entry, pageAllocatorBaseAddr,
                                                          pageAllocatorOrd as u64,
                                                          eventfd,
-                                                         autoStart)?));
+                                                         autoStart)?);
 
             // enable cpuid in host
-            vcpu.lock().vcpu.set_cpuid2(&kvm_cpuid).unwrap();
+            vcpu.vcpu.set_cpuid2(&kvm_cpuid).unwrap();
             vcpus.push(vcpu);
         }
 
@@ -255,7 +254,7 @@ impl VirtualMachine {
         let mut threads = Vec::new();
 
         threads.push(thread::spawn(move || {
-            cpu.lock().run().expect("vcpu run fail");
+            cpu.run().expect("vcpu run fail");
             info!("cpu#{} finish", 0);
         }));
 
@@ -264,11 +263,11 @@ impl VirtualMachine {
 
         for i in 1..self.vcpus.len() {
             let cpu = self.vcpus[i].clone();
-            cpu.lock().shareSpace = VMS.lock().GetShareSpace();
+            cpu.StoreShareSpace(VMS.lock().GetShareSpace().Addr());
 
             threads.push(thread::spawn(move || {
                 info!("cpu#{} start", i);
-                cpu.lock().run().expect("vcpu run fail");
+                cpu.run().expect("vcpu run fail");
                 info!("cpu#{} finish", i);
             }));
         }

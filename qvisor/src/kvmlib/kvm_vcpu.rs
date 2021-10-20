@@ -160,7 +160,7 @@ pub struct KVMVcpu {
     pub heapStartAddr: u64,
     pub heapLen: u64,
 
-    pub shareSpace: &'static ShareSpace,
+    pub shareSpace: AtomicU64, // &'static ShareSpace,
 
     pub eventfd: i32,
     pub autoStart: bool,
@@ -211,16 +211,26 @@ impl KVMVcpu {
             tssAddr: tssAddr,
             heapStartAddr: pageAllocatorBaseAddr + boostrapMem.Size() as u64,
             heapLen: (1 << (pageAllocatorOrd + 12)) - boostrapMem.Size() as u64,
-            shareSpace: unsafe {
-                &*(0 as *const ShareSpace)
-            },
+            shareSpace: AtomicU64::new(0),
             eventfd: eventfd,
             autoStart: autoStart,
         })
     }
 
+    #[inline]
+    pub fn ShareSpace(&self) -> &'static ShareSpace {
+        let addr = self.shareSpace.load(Ordering::Relaxed);
+        return unsafe {
+            & *(addr as * const ShareSpace)
+        };
+    }
+
+    pub fn StoreShareSpace(&self, addr: u64) {
+        self.shareSpace.store(addr, Ordering::SeqCst);
+    }
+
     //Notify hostfdnotifier there is message from guest kernel
-    pub fn Notify(&mut self) -> Result<()> {
+    pub fn Notify(&self) -> Result<()> {
         let data: u64 = 1;
         let ret = unsafe {
             write(self.eventfd, &data as *const _ as *const c_void, 8)
@@ -235,7 +245,7 @@ impl KVMVcpu {
         Ok(())
     }
 
-    fn SetupGDT(&mut self, sregs: &mut kvm_sregs) {
+    fn SetupGDT(&self, sregs: &mut kvm_sregs) {
         let gdtTbl = unsafe {
             std::slice::from_raw_parts_mut(self.gdtAddr as *mut u64, 4096 / 8)
         };
@@ -303,7 +313,7 @@ impl KVMVcpu {
         return (low.AsU64(), hi.AsU64(), tssLimit);
     }
 
-    fn setup_long_mode(&mut self) -> Result<()> {
+    fn setup_long_mode(&self) -> Result<()> {
         let mut vcpu_sregs = self.vcpu.get_sregs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
 
         //vcpu_sregs.cr0 = CR0_PE | CR0_MP | CR0_AM | CR0_ET | CR0_NE | CR0_WP | CR0_PG;
@@ -332,10 +342,10 @@ impl KVMVcpu {
     }
 
     pub fn Schedule(&self, taskId: TaskIdQ) {
-        self.shareSpace.scheduler.ScheduleQ(taskId.TaskId(), taskId.Queue());
+        self.ShareSpace().scheduler.ScheduleQ(taskId.TaskId(), taskId.Queue());
     }
 
-    pub fn run(&mut self) -> Result<()> {
+    pub fn run(&self) -> Result<()> {
         self.setup_long_mode()?;
 
         let regs: kvm_regs = kvm_regs {
@@ -405,7 +415,7 @@ impl KVMVcpu {
                                 }
 
                                 //short term workaround, need to change back to unblock my sql scenario.
-                                if self.shareSpace.scheduler.GlobalReadyTaskCnt() > 0 {
+                                if self.ShareSpace().scheduler.GlobalReadyTaskCnt() > 0 {
                                     break;
                                 }
 
@@ -414,18 +424,18 @@ impl KVMVcpu {
                                     break;
                                 }*/
 
-                                self.shareSpace.scheduler.VcpuSetWaiting(self.id);
+                                self.ShareSpace().scheduler.VcpuSetWaiting(self.id);
 
-                                if !(self.shareSpace.ReadyTaskCnt(self.id) > 0 ||
-                                    self.shareSpace.ReadyTaskCnt(0) > 0) {
-                                    match self.shareSpace.scheduler.WaitVcpu(self.id) {
+                                if !(self.ShareSpace().ReadyTaskCnt(self.id) > 0 ||
+                                    self.ShareSpace().ReadyTaskCnt(0) > 0) {
+                                    match self.ShareSpace().scheduler.WaitVcpu(self.id) {
                                         Ok(()) => (),
                                         Err(Error::Exit) => (),
                                         Err(e) => panic!("HYPERCALL_HLT wait fail with error {:?}", e),
                                     }
                                 }
 
-                                self.shareSpace.scheduler.VcpuSetSearching(self.id);
+                                self.ShareSpace().scheduler.VcpuSetSearching(self.id);
                             }
                         }
                         qlib::HYPERCALL_IOWAIT => {
@@ -433,7 +443,7 @@ impl KVMVcpu {
                                 {
                                     error!("signal debug");
                                     for i in 0..8 {
-                                        error!("vcpu[{}] state is {}/{}", i, self.shareSpace.GetValue(i, 0), self.shareSpace.GetValue(i, 1))
+                                        error!("vcpu[{}] state is {}/{}", i, self.ShareSpace().GetValue(i, 0), self.ShareSpace().GetValue(i, 1))
                                     }
                                 }
 
@@ -441,14 +451,14 @@ impl KVMVcpu {
                             }
 
                             //error!("HYPERCALL_IOWAIT sleeping ...");
-                            match KERNEL_IO_THREAD.Wait(&self.shareSpace) {
+                            match KERNEL_IO_THREAD.Wait(&self.ShareSpace()) {
                                 Ok(()) => (),
                                 Err(Error::Exit) => {
                                     if !super::runc::runtime::vm::IsRunning() {
                                         {
                                             error!("signal debug");
                                             for i in 0..8 {
-                                                error!("vcpu[{}] state is {}/{}", i, self.shareSpace.GetValue(i, 0), self.shareSpace.GetValue(i, 1))
+                                                error!("vcpu[{}] state is {}/{}", i, self.ShareSpace().GetValue(i, 0), self.ShareSpace().GetValue(i, 1))
                                             }
                                         }
 
@@ -485,7 +495,8 @@ impl KVMVcpu {
                             URING_MGR.lock().SetupEventfd(sharespace.scheduler.VcpuArr[0].eventfd);
                             vms.shareSpace = sharespace;
 
-                            self.shareSpace = vms.GetShareSpace();
+                            //self.shareSpace = vms.GetShareSpace();
+                            self.StoreShareSpace(regs.rbx); // = vms.GetShareSpace();
 
                             SyncMgr::WakeShareSpaceReady();
                         }
@@ -620,7 +631,7 @@ impl KVMVcpu {
                             let vcpu_sregs = self.vcpu.get_sregs().map_err(|e| Error::IOError(format!("vcpu::error is {:?}", e)))?;
                             error!("[{}] HYPERCALL_VCPU_DEBUG regs is {:#x?}", self.id, regs);
                             error!("sregs is {:#x?}", vcpu_sregs);
-                            error!("vcpus is {:#x?}", &self.shareSpace.scheduler.VcpuArr);
+                            error!("vcpus is {:#x?}", &self.ShareSpace().scheduler.VcpuArr);
                             unsafe { libc::_exit(0) }
                         }
 
