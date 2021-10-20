@@ -374,13 +374,9 @@ impl FileOperations for HostFileOp {
         return Ok(())
     }
 
-    fn Flush(&self, _task: &Task, _f: &File) -> Result<()> {
+    fn Flush(&self, task: &Task, f: &File) -> Result<()> {
         if self.InodeOp.InodeType() == InodeType::RegularFile {
-            let fd = self.InodeOp.lock().HostFd();
-            let ret = HostSpace::FSync(fd);
-            if ret < 0 {
-                return Err(Error::SysError(-ret as i32))
-            }
+            return self.Fsync(task, f, 0, 0, SyncType::SyncAll);
         }
 
         return Ok(())

@@ -127,7 +127,7 @@ impl PageMgrInternal {
                 self.vsyscallPages.push(addr);
             }
 
-            CopyPage(__vsyscall_page as u64, self.vsyscallPages[0]);
+            CopyPage( self.vsyscallPages[0], __vsyscall_page as u64);
         }
 
         for p in &mut self.vsyscallPages {

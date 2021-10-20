@@ -1,4 +1,4 @@
-.globl syscall_entry, kernel_stack,
+.globl syscall_entry, kernel_stack, CopyPageUnsafe
 .globl context_swap, context_swap_to, signal_call, __vsyscall_page, rdtsc, initX86FPState
 
 .globl div_zero_handler
@@ -163,6 +163,13 @@ context_swap_to:
 
     mov [rsi+0x40], rcx
     sfence
+    ret
+
+CopyPageUnsafe:
+    push rcx
+    mov rcx, 512
+    rep movsq
+    pop rcx
     ret
 
 .macro HandlerWithoutErrorCode target
