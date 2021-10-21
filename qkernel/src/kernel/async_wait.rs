@@ -1,21 +1,42 @@
 use core::sync::atomic::AtomicU64;
 use alloc::sync::Arc;
-use core::hint::spin_loop;
+use core::ops::Deref;
 
 use super::super::qlib::mutex::*;
+use super::super::qlib::common::*;
+use super::super::qlib::task_mgr::*;
+use super::super::taskMgr::*;
 
 use super::super::qlib::linux_def::QOrdering;
 
-pub type MultiWait = Arc<MultiWaitIntern>;
+#[derive(Clone)]
+pub struct MultiWait(Arc<MultiWaitIntern>);
 
-#[derive(Default)]
+impl MultiWait {
+    pub fn New(taskId: TaskIdQ) -> Self {
+        return Self(Arc::new(MultiWaitIntern::New(taskId)))
+    }
+}
+
+impl Deref for MultiWait {
+    type Target = Arc<MultiWaitIntern>;
+
+    fn deref(&self) -> &Arc<MultiWaitIntern> {
+        &self.0
+    }
+}
+
 pub struct MultiWaitIntern {
-    pub count: AtomicU64
+    pub count: AtomicU64,
+    pub taskId: TaskIdQ,
 }
 
 impl MultiWaitIntern {
-    pub fn New(&self) -> Self {
-        return Self::default();
+    pub fn New(taskId: TaskIdQ) -> Self {
+        return Self {
+            count: AtomicU64::new(1),
+            taskId: taskId,
+        }
     }
 
     pub fn AddWait(&self) -> u64 {
@@ -23,17 +44,20 @@ impl MultiWaitIntern {
     }
 
     pub fn Done(&self) -> u64 {
-        return self.count.fetch_sub(1, QOrdering::ACQUIRE) - 1
+        let ret = self.count.fetch_sub(1, QOrdering::ACQUIRE) - 1;
+        if ret == 0 {
+            ScheduleQ(self.taskId);
+        }
+
+        return ret;
     }
 
     pub fn Wait(&self) {
-        while self.count.load(QOrdering::ACQUIRE) > 0 {
-            while self.count.load(QOrdering::RELAXED) > 0 {
-                spin_loop();
-            }
-        }
+        self.Done();
+        Wait();
     }
 
+    // return the waiting work item count
     pub fn TryWait(&self) -> u64 {
         return self.count.load(QOrdering::ACQUIRE)
     }
@@ -41,21 +65,39 @@ impl MultiWaitIntern {
 
 #[derive(Clone)]
 pub struct Future<T: Clone + Copy> {
-    data: Arc<QMutex<T>>,
+    data: Arc<QMutex<(Result<T>, bool)>>,
 }
 
 impl <T: Clone + Copy> Future <T> {
     pub fn New(t: T) -> Self {
         return Self {
-            data: Arc::new(QMutex::new(t))
+            data: Arc::new(QMutex::new((Ok(t), false)))
         };
     }
 
-    pub fn Set(&self, t: T) {
-        *self.data.lock() = t;
+    pub fn Wait(&self) -> Result<T> {
+        loop {
+            let lock = self.data.lock();
+            if !lock.1 {
+                continue;
+            }
+
+            return lock.0.clone();
+        }
     }
 
-    pub fn Get(&self) -> T {
-        return *self.data.lock()
+    pub fn TryWait(&self) -> Option<Result<T>> {
+        let lock = self.data.lock();
+        if lock.1 {
+            return Some(lock.0.clone())
+        }
+
+        return None
+    }
+
+    pub fn Set(&self, t: Result<T>) {
+        let mut lock = self.data.lock();
+        lock.0 = t;
+        lock.1 = true;
     }
 }

@@ -528,6 +528,8 @@ impl VMSpace {
             Self::TryOpenHelper(dirfd, name)
         };
 
+        //error!("TryOpenAt dirfd {}, name {} ret {}", dirfd, Self::GetStr(name), fd);
+
         if fd < 0 {
             return fd as i64
         }

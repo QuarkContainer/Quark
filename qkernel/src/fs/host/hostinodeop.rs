@@ -835,9 +835,9 @@ impl InodeOperations for HostInodeOp {
     }
 
     fn UnstableAttr(&self, task: &Task, _dir: &Inode) -> Result<UnstableAttr> {
-        let useStatx = false;
+        let useUringStatx = true;
 
-        if !useStatx {
+        if !useUringStatx {
             let mut s: LibcStat = Default::default();
             let hostfd = self.lock().HostFd;
             let ret = Fstat(hostfd, &mut s) as i32;

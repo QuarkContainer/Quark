@@ -19,6 +19,7 @@ use ::qlib::mutex::*;
 use core::ops::Deref;
 
 use super::super::qlib::linux_def::*;
+use super::super::qlib::linux_def;
 use super::super::qlib::common::*;
 use super::super::qlib::uring::squeue;
 use super::super::qlib::uring::opcode::*;
@@ -30,6 +31,7 @@ use super::super::kernel::eventfd::*;
 use super::super::socket::hostinet::socket::*;
 use super::super::IOURING;
 use super::super::kernel::timer;
+use super::super::kernel::async_wait::*;
 use super::super::SHARESPACE;
 
 #[repr(align(128))]
@@ -48,6 +50,7 @@ pub enum AsyncOps {
     AIOFsync(AIOFsync),
     AsyncRawTimeout(AsyncRawTimeout),
     AsyncLogFlush(AsyncLogFlush),
+    AsyncStatx(AsyncStatx),
     None,
 }
 
@@ -68,6 +71,7 @@ impl AsyncOps {
             AsyncOps::AIOFsync(ref msg) => return msg.SEntry(),
             AsyncOps::AsyncRawTimeout(ref msg) => return msg.SEntry(),
             AsyncOps::AsyncLogFlush(ref msg) => return msg.SEntry(),
+            AsyncOps::AsyncStatx(ref msg) => return msg.SEntry(),
             AsyncOps::None => ()
         };
 
@@ -90,6 +94,7 @@ impl AsyncOps {
             AsyncOps::AIOFsync(ref mut msg) => msg.Process(result),
             AsyncOps::AsyncRawTimeout(ref mut msg) => msg.Process(result),
             AsyncOps::AsyncLogFlush(ref mut msg) => msg.Process(result),
+            AsyncOps::AsyncStatx(ref mut msg) => msg.Process(result),
             AsyncOps::None => panic!("AsyncOps::None SEntry fail"),
         };
 
@@ -116,6 +121,7 @@ impl AsyncOps {
             AsyncOps::AIOFsync(_) => return 12,
             AsyncOps::AsyncRawTimeout(_) => return 13,
             AsyncOps::AsyncLogFlush(_) => return 14,
+            AsyncOps::AsyncStatx(_) => return 15,
             AsyncOps::None => ()
         };
 
@@ -281,6 +287,51 @@ impl AsyncTimerRemove {
     }
 
     pub fn Process(&mut self, _result: i32) -> bool {
+        return false
+    }
+}
+
+pub struct AsyncStatx {
+    pub dirfd: i32,
+    pub pathname: u64,
+    pub future: Future<linux_def::Statx>,
+    pub flags: i32,
+    pub mask: u32,
+    pub statx: linux_def::Statx,
+    pub mw: MultiWait,
+}
+
+impl AsyncStatx {
+    pub fn New(dirfd: i32, pathname: u64, flags: i32, mask: u32, future: Future<linux_def::Statx>, mw: &MultiWait) -> Self {
+        mw.AddWait();
+        return Self {
+            dirfd,
+            pathname,
+            future,
+            flags,
+            mask,
+            statx: linux_def::Statx::default(),
+            mw: mw.clone(),
+        }
+    }
+
+    pub fn SEntry(&self) -> squeue::Entry {
+        let op = opcode::Statx::new(types::Fd(self.dirfd), self.pathname as * const _, &self.statx as * const _ as u64 as * mut types::statx)
+            .flags(self.flags)
+            .mask(self.mask);
+
+        return op.build();
+    }
+
+    pub fn Process(&mut self, result: i32) -> bool {
+        if result < 0 {
+            self.future.Set(Err(Error::SysError(-result)))
+        } else {
+            self.future.Set(Ok(self.statx))
+        }
+
+        self.mw.Done();
+
         return false
     }
 }

@@ -24,7 +24,6 @@ use super::super::super::guestfdnotifier::*;
 use super::super::super::kernel::waiter::*;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
-use super::super::super::qlib::qmsg::qcall::*;
 use super::super::super::util::cstring::*;
 use super::super::super::qlib::device::*;
 use super::super::super::qlib::pagetable::*;
@@ -33,6 +32,7 @@ use super::super::super::qlib::addr::*;
 use super::super::super::qlib::bytestream::*;
 use super::super::super::Kernel::HostSpace;
 use super::super::super::task::*;
+use super::super::super::kernel::async_wait::*;
 use super::super::super::fd::*;
 use super::super::super::IOURING;
 use super::super::super::SHARESPACE;
@@ -58,6 +58,13 @@ pub struct HostFileOp {
     pub InodeOp: HostInodeOp,
     pub DirCursor: QMutex<String>,
     //pub Buf: HostFileBuf,
+}
+
+#[derive(Clone)]
+pub struct FutureFileType {
+    pub dirfd: i32,
+    pub pathname: u64,
+    pub future: Future<Statx>,
 }
 
 impl HostFileOp {
@@ -108,8 +115,10 @@ impl HostFileOp {
             return Ok(entries);
         }
 
+        let mw = MultiWait::New(task.GetTaskIdQ());
+
         let mut fts = Vec::with_capacity(names.len());
-        for name in &names {
+        /*for name in &names {
             fts.push(FileType {
                 dirfd: fd,
                 pathname: name.Ptr(),
@@ -120,24 +129,44 @@ impl HostFileOp {
             })
         }
 
-        HostSpace::BatchFstatat(&mut fts);
+        HostSpace::BatchFstatat(&mut fts);*/
+
+        for name in &names {
+            let mask = StatxMask::STATX_MODE | StatxMask::STATX_INO;
+            let future = IOURING.AsyncStatx(fd, name.Ptr(), ATType::AT_SYMLINK_NOFOLLOW, mask, &mw);
+            fts.push(FutureFileType {
+                dirfd: fd,
+                pathname: name.Ptr(),
+                future: future,
+            })
+        }
+
+        mw.Wait();
 
         for i in 0 .. fts.len() {
             let ft = &fts[i];
-            let ret = ft.ret;
+            /*let ret = ft.ret;
             if ret < 0 {
                 if -ret == SysErr::ENOENT {
                     continue
                 }
 
                 return Err(Error::SysError(-ret))
-            }
+            }*/
+
+            let ret = match ft.future.Wait() {
+                Err(Error::SysError(SysErr::ENOENT)) => {
+                    continue
+                }
+                Err(e) => return Err(e),
+                Ok(ret) => ret,
+            };
 
             let dentry = DentAttr {
-                Type: InodeType(ft.mode),
+                Type: InodeType(ret.stx_mode as _),
                 InodeId: HOSTFILE_DEVICE.lock().Map(MultiDeviceKey {
-                    Device: ft.device,
-                    Inode: ft.inode,
+                    Device: MakeDeviceID(ret.stx_dev_major as u16, ret.stx_dev_minor as _) as u64,
+                    Inode: ret.stx_ino as _,
                     SecondaryDevice: "".to_string(),
                 })
             };
