@@ -241,7 +241,7 @@ pub fn SwitchToNewTask() -> ! {
 impl Scheduler {
     // steal scheduling
     pub fn GetNext(&self) -> Option<TaskId> {
-        let vcpuId = CPULocal::CpuId() as usize;
+        let mut vcpuId = CPULocal::CpuId() as usize;
         let vcpuCount = self.vcpuCnt.load(Ordering::Relaxed);
 
         match self.GetNextForCpu(vcpuId, 0) {
@@ -257,6 +257,11 @@ impl Scheduler {
                 return Some(t)
             }
         }*/
+
+        let switchCount = CPULocal::IncreaseSwitchCount();
+        if switchCount % 1000 == 0 { // rebalance tasks between vcpus after 1000 switch
+            vcpuId += 1; // rebalance vcpu
+        }
 
         for i in vcpuId..vcpuId+vcpuCount {
             match self.GetNextForCpu(vcpuId, i % vcpuCount) {

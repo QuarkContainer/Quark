@@ -35,6 +35,7 @@ pub struct CPULocal {
     pub pendingFreeStack: AtomicU64,        //offset 40
     pub state: AtomicU64,                   //offset 48
 
+    pub switchCount: AtomicU64,
     pub data: u64, // for eventfd data writing and reading
     pub eventfd: i32,
 }
