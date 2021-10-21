@@ -29,6 +29,7 @@ use super::super::fs::file::*;
 use super::super::socket::hostinet::socket::*;
 use super::super::socket::unix::transport::unix::*;
 use super::super::Kernel::HostSpace;
+use super::super::kernel::async_wait::*;
 use super::super::IOURING;
 use super::uring_op::*;
 use super::async::*;
@@ -227,6 +228,23 @@ impl QUring {
         let ops = AsyncEventfdWrite::New(fd);
         self.AUCall(AsyncOps::AsyncEventfdWrite(ops));
     }
+
+    pub fn AsyncStatx(&self, dirfd: i32, pathname: u64, flags: i32, mask: u32, mw: &MultiWait) -> Future<Statx> {
+        let future = Future::New(Statx::default());
+        let ops = AsyncStatx::New(
+            dirfd,
+            pathname,
+            flags,
+            mask,
+            future.clone(),
+            mw
+        );
+
+        self.AUCall(AsyncOps::AsyncStatx(ops));
+        return future;
+    }
+
+
 
     pub fn Fsync(&self, task: &Task, fd: i32, dataSyncOnly: bool) -> i64 {
         let msg = UringOp::Fsync(FsyncOp {

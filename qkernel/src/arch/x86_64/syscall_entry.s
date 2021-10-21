@@ -174,7 +174,7 @@ CopyPageUnsafe:
 
 .macro HandlerWithoutErrorCode target
     //push dummy error code
-    sub rsp, 8
+    push 0
 
     push rdi
     push rsi

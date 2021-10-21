@@ -835,9 +835,9 @@ impl InodeOperations for HostInodeOp {
     }
 
     fn UnstableAttr(&self, task: &Task, _dir: &Inode) -> Result<UnstableAttr> {
-        let useStatx = false;
+        let useUringStatx = true;
 
-        if !useStatx {
+        if !useUringStatx {
             let mut s: LibcStat = Default::default();
             let hostfd = self.lock().HostFd;
             let ret = Fstat(hostfd, &mut s) as i32;
@@ -850,10 +850,13 @@ impl InodeOperations for HostInodeOp {
         } else {
             let mut s: Statx = Default::default();
             let hostfd = self.lock().HostFd;
-            let addr : i8 = 0;
+
+            use super::super::super::util::cstring::*;
+
+            let str = CString::New("");
             let ret = IOURING.Statx(task,
                                     hostfd,
-                                    &addr as *const _ as u64,
+                                    str.Ptr(),
                                     &mut s as * mut _ as u64,
                                     ATType::AT_EMPTY_PATH,
                                     StatxMask::STATX_BASIC_STATS);
