@@ -44,6 +44,8 @@ func main() {
 			substr = strings.TrimPrefix(str, "[INFO] [")
 		} else if strings.HasPrefix(str, "[DEBUG] [") {
 			substr = strings.TrimPrefix(str, "[DEBUG] [")
+		} else if strings.HasPrefix(str, "[Print] [") {
+			substr = strings.TrimPrefix(str, "[Print] [")
 		} else {
 			continue
 		}
