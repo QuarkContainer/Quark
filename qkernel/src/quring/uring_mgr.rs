@@ -432,6 +432,8 @@ impl QUring {
             let mut s = self.submission.lock();
             if s.FreeSlots() < 1 {
                 print!("UringCall: submission full...");
+                drop(s);
+                Yield();
                 continue
             }
 
@@ -451,6 +453,8 @@ impl QUring {
             let mut s = self.submission.lock();
             if s.FreeSlots() == 0 {
                 print!("AUringCall: submission full...");
+                drop(s);
+                Yield();
                 continue;
             }
 
