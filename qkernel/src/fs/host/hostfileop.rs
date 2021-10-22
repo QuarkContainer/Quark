@@ -36,6 +36,7 @@ use super::super::super::kernel::async_wait::*;
 use super::super::super::fd::*;
 use super::super::super::IOURING;
 use super::super::super::SHARESPACE;
+use super::super::super::qlib::qmsg::qcall::*;
 //use super::super::super::BUF_MGR;
 
 use super::super::file::*;
@@ -66,6 +67,8 @@ pub struct FutureFileType {
     pub pathname: u64,
     pub future: Future<Statx>,
 }
+
+pub const URING_GETSTATX : bool = false;
 
 impl HostFileOp {
     fn ReadDirAll(&self, task: &Task) -> Result<BTreeMap<String, DentAttr>> {
@@ -115,64 +118,84 @@ impl HostFileOp {
             return Ok(entries);
         }
 
-        let mw = MultiWait::New(task.GetTaskIdQ());
-
-        let mut fts = Vec::with_capacity(names.len());
-        /*for name in &names {
-            fts.push(FileType {
-                dirfd: fd,
-                pathname: name.Ptr(),
-                mode: 0,
-                device: 0,
-                inode: 0,
-                ret: 0,
-            })
-        }
-
-        HostSpace::BatchFstatat(&mut fts);*/
-
-        for name in &names {
-            let mask = StatxMask::STATX_MODE | StatxMask::STATX_INO;
-            let future = IOURING.AsyncStatx(fd, name.Ptr(), ATType::AT_SYMLINK_NOFOLLOW, mask, &mw);
-            fts.push(FutureFileType {
-                dirfd: fd,
-                pathname: name.Ptr(),
-                future: future,
-            })
-        }
-
-        mw.Wait();
-
-        for i in 0 .. fts.len() {
-            let ft = &fts[i];
-            /*let ret = ft.ret;
-            if ret < 0 {
-                if -ret == SysErr::ENOENT {
-                    continue
-                }
-
-                return Err(Error::SysError(-ret))
-            }*/
-
-            let ret = match ft.future.Wait() {
-                Err(Error::SysError(SysErr::ENOENT)) => {
-                    continue
-                }
-                Err(e) => return Err(e),
-                Ok(ret) => ret,
-            };
-
-            let dentry = DentAttr {
-                Type: InodeType(ret.stx_mode as _),
-                InodeId: HOSTFILE_DEVICE.lock().Map(MultiDeviceKey {
-                    Device: MakeDeviceID(ret.stx_dev_major as u16, ret.stx_dev_minor as _) as u64,
-                    Inode: ret.stx_ino as _,
-                    SecondaryDevice: "".to_string(),
+        if !URING_GETSTATX {
+            let mut fts = Vec::with_capacity(names.len());
+            for name in &names {
+                fts.push(FileType {
+                    dirfd: fd,
+                    pathname: name.Ptr(),
+                    mode: 0,
+                    device: 0,
+                    inode: 0,
+                    ret: 0,
                 })
-            };
+            }
 
-            let name = CString::ToString(task, names[i].Ptr()).expect("ReadDirAll fail2");
-            entries.insert(name, dentry);
+            HostSpace::BatchFstatat(&mut fts);
+
+            for i in 0 .. fts.len() {
+                let ft = &fts[i];
+                let ret = ft.ret;
+                if ret < 0 {
+                    if -ret == SysErr::ENOENT {
+                        continue
+                    }
+
+                    return Err(Error::SysError(-ret))
+                }
+
+                let dentry = DentAttr {
+                    Type: InodeType(ft.mode),
+                    InodeId: HOSTFILE_DEVICE.lock().Map(MultiDeviceKey {
+                        Device: ft.device,
+                        Inode: ft.inode,
+                        SecondaryDevice: "".to_string(),
+                    })
+                };
+
+                let name = CString::ToString(task, names[i].Ptr()).expect("ReadDirAll fail2");
+                entries.insert(name, dentry);
+            }
+
+        } else {
+            let mw = MultiWait::New(task.GetTaskIdQ());
+
+            let mut fts = Vec::with_capacity(names.len());
+            for name in &names {
+                let mask = StatxMask::STATX_MODE | StatxMask::STATX_INO;
+                let future = IOURING.AsyncStatx(fd, name.Ptr(), ATType::AT_SYMLINK_NOFOLLOW, mask, &mw);
+                fts.push(FutureFileType {
+                    dirfd: fd,
+                    pathname: name.Ptr(),
+                    future: future,
+                })
+            }
+
+            mw.Wait();
+
+            for i in 0 .. fts.len() {
+                let ft = &fts[i];
+
+                let ret = match ft.future.Wait() {
+                    Err(Error::SysError(SysErr::ENOENT)) => {
+                        continue
+                    }
+                    Err(e) => return Err(e),
+                    Ok(ret) => ret,
+                };
+
+                let dentry = DentAttr {
+                    Type: InodeType(ret.stx_mode as _),
+                    InodeId: HOSTFILE_DEVICE.lock().Map(MultiDeviceKey {
+                        Device: MakeDeviceID(ret.stx_dev_major as u16, ret.stx_dev_minor as _) as u64,
+                        Inode: ret.stx_ino as _,
+                        SecondaryDevice: "".to_string(),
+                    })
+                };
+
+                let name = CString::ToString(task, names[i].Ptr()).expect("ReadDirAll fail2");
+                entries.insert(name, dentry);
+            }
         }
 
         return Ok(entries);
