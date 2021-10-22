@@ -109,8 +109,9 @@ impl Scheduler {
         self.vcpuCnt.load(Ordering::SeqCst)
     }
 
+    #[inline(always)]
     pub fn GlobalReadyTaskCnt(&self) -> usize {
-        self.readyTaskCnt.load(Ordering::SeqCst)
+        self.readyTaskCnt.load(Ordering::Acquire)
     }
 
     pub fn ReadyTaskCnt(&self, vcpuId: usize) -> u64 {
@@ -122,8 +123,18 @@ impl Scheduler {
         return format!("{:x?}", self.queue[vcpuId as usize].lock());
     }
 
+    #[inline(always)]
+    pub fn IncReadyTaskCount(&self) -> usize {
+        return self.readyTaskCnt.fetch_add(1, Ordering::AcqRel) + 1;
+    }
+
+    #[inline(always)]
+    pub fn DecReadyTaskCount(&self) -> usize {
+        return self.readyTaskCnt.fetch_sub(1, Ordering::AcqRel) - 1;
+    }
+
     pub fn ScheduleQ(&self, task: TaskId, vcpuId: u64) {
-        self.readyTaskCnt.fetch_add(1, Ordering::SeqCst);
+        self.IncReadyTaskCount();
         self.queue[vcpuId as usize].Enqueue(task);
 
         //error!("ScheduleQ task {:x?}, vcpuId {}", task, vcpuId);
@@ -223,7 +234,7 @@ impl TaskQueue {
     }
 
     pub fn ToString(&self) -> String {
-        return format!("{:x?}", self.lock());
+        return format!("{:x?} ", self.lock());
     }
 
     pub fn Len(&self) -> u64 {

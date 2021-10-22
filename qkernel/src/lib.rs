@@ -533,7 +533,7 @@ fn panic(info: &PanicInfo) -> ! {
     }
 
     for i in 0..CPU_LOCAL.len() {
-        error!("CPU#{} is {:#x?}", i, CPU_LOCAL[i]);
+        error!("CPU  #{} is {:#x?}", i, CPU_LOCAL[i]);
     }
 
     /*backtracer::trace(&mut |frame| {

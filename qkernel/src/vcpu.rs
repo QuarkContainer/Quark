@@ -103,6 +103,14 @@ impl CPULocal {
         Self::Myself().kernelStack.store(task, Ordering::Relaxed); //the data only read in current thread
     }
 
+    pub fn SwitchCount() -> u64 {
+        Self::Myself().switchCount.load(Ordering::Relaxed)
+    }
+
+    pub fn IncreaseSwitchCount() -> u64 {
+        return Self::Myself().switchCount.fetch_add(1, Ordering::Relaxed) + 1;
+    }
+
     pub fn SetUserStack(task: u64) {
         Self::Myself().userStack.store(task, Ordering::Relaxed); //the data only read in current thread
     }

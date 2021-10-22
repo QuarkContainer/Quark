@@ -268,8 +268,8 @@ impl Task {
     pub fn TaskAddress() -> u64{
         let rsp = GetRsp();
         let task = rsp & DEFAULT_STACK_MAST;
-        if rsp - task < 0x8000 {
-            raw!(0x237, rsp, task);
+        if rsp - task < 0x2000 {
+            raw!(0x238, rsp, task);
             super::Kernel::HostSpace::VcpuDebug();
             loop {}
             //panic!("TaskAddress panic");

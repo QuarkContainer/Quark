@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use core::sync::atomic::{Ordering, AtomicU32};
+use alloc::string::String;
 
 use super::task::*;
 use super::SHARESPACE;
@@ -258,7 +259,7 @@ impl Scheduler {
             }
         }*/
 
-        for i in vcpuId..vcpuId+vcpuCount {
+        for i in vcpuId ..vcpuId + vcpuCount {
             match self.GetNextForCpu(vcpuId, i % vcpuCount) {
                 None => (),
                 Some(t) => {
@@ -268,6 +269,28 @@ impl Scheduler {
         }
 
         return None;
+    }
+
+    pub fn Count(&self) -> u64 {
+        let mut total = 0;
+        let vcpuCount = self.vcpuCnt.load(Ordering::Relaxed);
+        for i in 0..vcpuCount {
+            total += self.queue[i].Len();
+        }
+
+        return total;
+    }
+
+    pub fn Print(&self) -> String {
+        let mut str = alloc::string::String::new();
+        let vcpuCount = self.vcpuCnt.load(Ordering::Relaxed);
+        for i in 0..vcpuCount {
+            if self.queue[i].Len() > 0 {
+                str += &format!("{}:{}", i, self.queue[i].ToString());
+            }
+        }
+
+        return str;
     }
 
     #[inline]
