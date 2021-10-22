@@ -38,6 +38,7 @@ use super::super::super::kernel::waiter::queue::*;
 use super::super::super::Kernel::HostSpace;
 use super::super::super::IOURING;
 use super::super::super::memmgr::*;
+use super::super::super::SHARESPACE;
 //use super::super::super::asm::*;
 
 use super::super::attr::*;
@@ -835,10 +836,10 @@ impl InodeOperations for HostInodeOp {
     }
 
     fn UnstableAttr(&self, task: &Task, _dir: &Inode) -> Result<UnstableAttr> {
-        let useUringStatx = false;
+        let uringStatx = SHARESPACE.config.read().UringStatx;
 
         // the statx uring call sometime become very slow. todo: root cause this.
-        if !useUringStatx {
+        if !uringStatx {
             let mut s: LibcStat = Default::default();
             let hostfd = self.lock().HostFd;
             let ret = Fstat(hostfd, &mut s) as i32;
@@ -861,6 +862,7 @@ impl InodeOperations for HostInodeOp {
                                     &mut s as * mut _ as u64,
                                     ATType::AT_EMPTY_PATH,
                                     StatxMask::STATX_BASIC_STATS);
+
             if ret < 0 {
                 return Err(Error::SysError(-ret as i32))
             }

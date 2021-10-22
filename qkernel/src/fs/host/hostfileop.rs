@@ -68,10 +68,10 @@ pub struct FutureFileType {
     pub future: Future<Statx>,
 }
 
-pub const URING_GETSTATX : bool = false;
-
 impl HostFileOp {
     fn ReadDirAll(&self, task: &Task) -> Result<BTreeMap<String, DentAttr>> {
+        let uringStatx = SHARESPACE.config.read().UringStatx;
+
         let buf: [u8; 4096] = [0; 4096];
 
         let fd = self.InodeOp.HostFd();
@@ -118,7 +118,7 @@ impl HostFileOp {
             return Ok(entries);
         }
 
-        if !URING_GETSTATX {
+        if !uringStatx {
             let mut fts = Vec::with_capacity(names.len());
             for name in &names {
                 fts.push(FileType {

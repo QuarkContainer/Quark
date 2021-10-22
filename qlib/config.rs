@@ -26,6 +26,7 @@ pub struct Config {
     pub RawTimer: bool,
     pub UringLog: bool,
     pub PerfDebug: bool,
+    pub UringStatx: bool
 }
 
 impl Config {}
@@ -43,7 +44,8 @@ impl Default for Config {
             KernelPagetable: false,
             RawTimer: true,
             UringLog: true,
-            PerfDebug: true
+            PerfDebug: true,
+            UringStatx: false
         }
     }
 }
