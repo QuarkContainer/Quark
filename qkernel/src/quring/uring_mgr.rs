@@ -335,6 +335,8 @@ impl QUring {
         } else {
             let idx = data as usize;
             let mut ops = self.asyncMgr.ops[idx].lock();
+            //error!("uring process2: call is {:x?}", ops.Type());
+
             let rerun = ops.Process(ret, idx);
             if !rerun {
                 *ops = AsyncOps::None;
@@ -433,7 +435,7 @@ impl QUring {
             if s.FreeSlots() < 1 {
                 print!("UringCall: submission full...");
                 drop(s);
-                Yield();
+                super::super::qlib::ShareSpace::Yield();
                 continue
             }
 
@@ -452,9 +454,9 @@ impl QUring {
         loop {
             let mut s = self.submission.lock();
             if s.FreeSlots() == 0 {
-                print!("AUringCall: submission full...");
+                print!("AUringCall1: submission full...");
                 drop(s);
-                Yield();
+                super::super::qlib::ShareSpace::Yield();
                 continue;
             }
 

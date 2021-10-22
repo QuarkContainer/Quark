@@ -835,8 +835,9 @@ impl InodeOperations for HostInodeOp {
     }
 
     fn UnstableAttr(&self, task: &Task, _dir: &Inode) -> Result<UnstableAttr> {
-        let useUringStatx = true;
+        let useUringStatx = false;
 
+        // the statx uring call sometime become very slow. todo: root cause this.
         if !useUringStatx {
             let mut s: LibcStat = Default::default();
             let hostfd = self.lock().HostFd;

@@ -107,6 +107,14 @@ macro_rules! log {
 }
 
 #[macro_export]
+macro_rules! print {
+    ($($arg:tt)*) => ({
+        let s = &format!($($arg)*);
+        crate::print::LOG.lock().Print("Print", &s);
+    });
+}
+
+#[macro_export]
 macro_rules! error {
     ($($arg:tt)*) => ({
         let s = &format!($($arg)*);
