@@ -406,7 +406,10 @@ pub extern fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
         false
     };
 
-    assert!(ptRegs.cs!=ptRegs.rip && ptRegs.r11 != ptRegs.eflags, "PageFaultHandler full restore wrong...");
+    if ptRegs.rcx==ptRegs.rip && ptRegs.r11 == ptRegs.eflags {
+        error!("PageFaultHandler full restore wrong...");
+        panic!("PageFaultHandler full restore wrong...");
+    }
 
     if !fromUser {
         print!("Get pagefault from kernel ... {:#x?}/cr2 is {:x}/cr3 is {:x}", ptRegs, cr2, cr3);

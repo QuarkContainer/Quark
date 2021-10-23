@@ -217,13 +217,14 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
 
     currTask.AccountTaskLeave(SchedState::RunningApp);
     let pt = currTask.GetPtRegs();
-    pt.rip = 0; // set rip as 0 as the syscall will set cs as ret ipaddr
+    //pt.rip = 0; // set rip as 0 as the syscall will set cs as ret ipaddr
 
     let mut rflags = pt.eflags;
     rflags &= !USER_FLAGS_CLEAR;
     rflags |= USER_FLAGS_SET;
     pt.eflags = rflags;
     pt.r11 = rflags;
+    pt.rip = pt.rcx;
 
     let nr = pt.orig_rax;
     assert!(nr < SysCallID::maxsupport as u64, "get supported syscall id {:x}", nr);
@@ -298,7 +299,8 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
         currTask.SwitchPageTable();
     }
 
-    if pt.rip != 0 { // if it is from signal trigger from kernel, e.g. page fault
+    if !(pt.rip == pt.rcx && pt.r11 == pt.eflags) {
+        //error!("iret *****, pt is {:x?}", pt);
         IRet(kernalRsp)
     } else {
         SyscallRet(kernalRsp)

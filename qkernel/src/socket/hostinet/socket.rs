@@ -448,6 +448,7 @@ impl SockOperations for SocketOperations {
         if self.Readiness(task, EVENT_OUT) == 0 {
             match task.blocker.BlockWithMonoTimer(true, None) {
                 Err(e) => {
+                    error!("connect error {:?}", &e);
                     return Err(e);
                 }
                 _ => ()
@@ -494,6 +495,7 @@ impl SockOperations for SocketOperations {
                 match task.blocker.BlockWithMonoTimer(true, None) {
                     Err(e) => {
                         self.EventUnregister(task, &general);
+                        error!("Accept error {:?}", &e);
                         return Err(e);
                     }
                     _ => ()
