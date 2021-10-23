@@ -120,7 +120,7 @@ impl HostSpace {
             newpath,
         });
 
-        return HostSpace::HCall(&mut msg) as i64;
+        return HostSpace::HCall(&mut msg, true) as i64;
     }
 
     pub fn Ftruncate(fd: i32, len: i64) -> i64 {
@@ -271,7 +271,7 @@ impl HostSpace {
             fd
         });
 
-        return HostSpace::HCall(&mut msg) as i64;
+        return HostSpace::HCall(&mut msg, true) as i64;
 
     }
 
@@ -321,7 +321,7 @@ impl HostSpace {
             buff,
         });
 
-        return Self::HCall(&mut msg) as i64;
+        return Self::HCall(&mut msg, true) as i64;
         //return HostSpace::Call(&mut msg, false) as i64;
     }
 
@@ -387,7 +387,7 @@ impl HostSpace {
             flags
         });
 
-        return HostSpace::HCall(&mut msg) as i64;
+        return HostSpace::HCall(&mut msg, true) as i64;
     }
 
     pub fn Mkdirat(dirfd: i32, pathname: u64, mode_: u32, uid: u32, gid: u32) -> i64 {
@@ -399,7 +399,7 @@ impl HostSpace {
             gid,
         });
 
-        return HostSpace::HCall(&mut msg) as i64;
+        return HostSpace::HCall(&mut msg, true) as i64;
     }
 
     pub fn SysSync() -> i64 {
@@ -442,7 +442,7 @@ impl HostSpace {
             flags,
         });
 
-        return HostSpace::HCall(&mut msg) as i64;
+        return HostSpace::HCall(&mut msg, true) as i64;
     }
 
     pub fn Madvise(addr: u64, len: usize, advise: i32) -> i64 {
@@ -452,7 +452,7 @@ impl HostSpace {
             advise,
         });
 
-        return HostSpace::HCall(&mut msg) as i64;
+        return HostSpace::HCall(&mut msg, true) as i64;
     }
 
     pub fn FDataSync(fd: i32) -> i64 {
@@ -480,7 +480,7 @@ impl HostSpace {
             count,
         });
 
-        return HostSpace::HCall(&mut msg) as i64;
+        return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn GetRandom(buf: u64, len: u64, flags: u32) -> i64 {
@@ -617,7 +617,7 @@ impl HostSpace {
             addr: addr,
         });
 
-        let ret = Self::HCall(&mut msg) as i64;
+        let ret = Self::HCall(&mut msg, true) as i64;
         return ret;
         //return HostSpace::Call(&mut msg, false) as i64;
     }
@@ -633,7 +633,7 @@ impl HostSpace {
             fstatAddr
         });
 
-        return HostSpace::HCall(&mut msg) as i64;
+        return HostSpace::HCall(&mut msg, true) as i64;
     }
 
     pub fn SchedGetAffinity(pid: i32, cpuSetSize: u64, mask: u64) -> i64 {
@@ -672,7 +672,7 @@ impl HostSpace {
             flags,
         });
 
-        return HostSpace::HCall(&mut msg) as i64;
+        return HostSpace::HCall(&mut msg, true) as i64;
     }
 
     pub fn MUnlock(addr: u64, len: u64) -> i64 {
@@ -681,7 +681,7 @@ impl HostSpace {
             len,
         });
 
-        return HostSpace::HCall(&mut msg) as i64;
+        return HostSpace::HCall(&mut msg, true) as i64;
     }
 
     pub fn NonBlockingPoll(fd: i32, mask: EventMask) -> i64 {
@@ -691,7 +691,7 @@ impl HostSpace {
         });
 
         //return HostSpace::Call(&mut msg, false) as i64;
-        let ret = Self::HCall(&mut msg) as i64;
+        let ret = Self::HCall(&mut msg, false) as i64;
         //error!("NonBlockingPoll2 fd is {} ret is {}", fd, ret);
 
         return ret;
@@ -713,7 +713,7 @@ impl HostSpace {
         });
 
         //return HostSpace::Call(&mut msg, false) as i64;
-        return Self::HCall(&mut msg) as i64
+        return Self::HCall(&mut msg, true) as i64
     }
 
     pub fn IoUringRegister(fd: i32, Opcode: u32, arg: u64, nrArgs: u32) -> i64 {
@@ -792,7 +792,7 @@ impl HostSpace {
             newpath
         });
 
-        return HostSpace::HCall(&mut msg) as i64;
+        return HostSpace::HCall(&mut msg, true) as i64;
     }
 
     pub fn Futimens(fd: i32, times: u64) -> i64 {
@@ -835,7 +835,7 @@ impl HostSpace {
             prot,
         });
 
-        let res = HostSpace::HCall(&mut msg) as i64;
+        let res = HostSpace::HCall(&mut msg, true) as i64;
         assert!(res as u64 % MemoryDef::PMD_SIZE == 0, "res {:x}", res);
         return res;
     }
@@ -848,14 +848,14 @@ impl HostSpace {
             len,
         });
 
-        HostSpace::HCall(&mut msg);
+        HostSpace::HCall(&mut msg, true);
     }
 
     fn Call(msg: &mut Msg, mustAsync: bool) -> u64 {
         super::SHARESPACE.hostMsgCount.fetch_add(1, Ordering::SeqCst);
         if super::SHARESPACE.Notify() && !mustAsync  {
             super::SHARESPACE.hostMsgCount.fetch_sub(1, Ordering::SeqCst);
-            return Self::HCall(msg) as u64
+            return Self::HCall(msg, true) as u64
         }
 
         //super::SHARESPACE.Notify();
@@ -864,7 +864,7 @@ impl HostSpace {
         //error!("Qcall msg is {:?}, super::SHARESPACE.hostMsgCount is {}", msg, super::SHARESPACE.hostMsgCount.load(Ordering::SeqCst));
         let mut event = Event {
             taskId: current,
-            interrupted: false,
+            globalLock: true,
             ret: 0,
             msg: msg
         };
@@ -878,12 +878,12 @@ impl HostSpace {
         return event.ret;
     }
 
-    fn HCall(msg: &mut Msg) -> u64 {
+    fn HCall(msg: &mut Msg, lock: bool) -> u64 {
         let current = Task::Current().GetTaskIdQ();
 
         let mut event = Event {
             taskId: current,
-            interrupted: false,
+            globalLock: lock,
             ret: 0,
             msg: msg
         };
