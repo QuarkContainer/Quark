@@ -139,7 +139,7 @@ impl StatxOp {
             .flags(self.flags)
             .mask(self.mask);
 
-        return op.build();
+        return op.build().flags(squeue::Flags::FIXED_FILE);
     }
 }
 

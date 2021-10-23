@@ -9,5 +9,6 @@
   "KernelPagetable": false,
   "RawTimer"      : true,
   "UringLog"      : true,
-  "PerfDebug"     : false
+  "PerfDebug"     : false,
+  "UringStatx"    : false
 }
