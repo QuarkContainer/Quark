@@ -120,7 +120,7 @@ impl HostSpace {
             newpath,
         });
 
-        return HostSpace::HCall(&mut msg, true) as i64;
+        return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn Ftruncate(fd: i32, len: i64) -> i64 {
@@ -271,7 +271,7 @@ impl HostSpace {
             fd
         });
 
-        return HostSpace::HCall(&mut msg, true) as i64;
+        return HostSpace::HCall(&mut msg, false) as i64;
 
     }
 
@@ -387,7 +387,7 @@ impl HostSpace {
             flags
         });
 
-        return HostSpace::HCall(&mut msg, true) as i64;
+        return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn Mkdirat(dirfd: i32, pathname: u64, mode_: u32, uid: u32, gid: u32) -> i64 {
@@ -399,7 +399,7 @@ impl HostSpace {
             gid,
         });
 
-        return HostSpace::HCall(&mut msg, true) as i64;
+        return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn SysSync() -> i64 {
@@ -442,7 +442,7 @@ impl HostSpace {
             flags,
         });
 
-        return HostSpace::HCall(&mut msg, true) as i64;
+        return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn Madvise(addr: u64, len: usize, advise: i32) -> i64 {
@@ -452,7 +452,7 @@ impl HostSpace {
             advise,
         });
 
-        return HostSpace::HCall(&mut msg, true) as i64;
+        return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn FDataSync(fd: i32) -> i64 {
@@ -633,7 +633,7 @@ impl HostSpace {
             fstatAddr
         });
 
-        return HostSpace::HCall(&mut msg, true) as i64;
+        return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn SchedGetAffinity(pid: i32, cpuSetSize: u64, mask: u64) -> i64 {
@@ -672,7 +672,7 @@ impl HostSpace {
             flags,
         });
 
-        return HostSpace::HCall(&mut msg, true) as i64;
+        return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn MUnlock(addr: u64, len: u64) -> i64 {
@@ -681,7 +681,7 @@ impl HostSpace {
             len,
         });
 
-        return HostSpace::HCall(&mut msg, true) as i64;
+        return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn NonBlockingPoll(fd: i32, mask: EventMask) -> i64 {
@@ -792,7 +792,7 @@ impl HostSpace {
             newpath
         });
 
-        return HostSpace::HCall(&mut msg, true) as i64;
+        return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn Futimens(fd: i32, times: u64) -> i64 {

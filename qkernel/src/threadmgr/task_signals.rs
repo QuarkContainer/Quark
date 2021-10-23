@@ -1078,6 +1078,8 @@ impl Task {
         regs.rsi = sigInfoAddr;
         regs.rdx = sigCtxAddr;
         regs.rax = 0;
+        regs.rip = regs.rcx;
+        regs.eflags = regs.r11;
 
         return Ok(())
     }
