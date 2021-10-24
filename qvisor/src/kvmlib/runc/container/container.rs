@@ -223,7 +223,7 @@ impl Container {
     // container to which id unambiguously refers to.
     // Returns ErrNotExist if container doesn't exist.
     pub fn Load(rootDir: &str, id: &str) -> Result<Self> {
-        info!("Load container {} {}", rootDir, id);
+        info!("Load metadata for container {} {}", rootDir, id);
         ValidateID(id)?;
 
         let cRoot = findContainerRoot(rootDir, id)?;
@@ -243,7 +243,7 @@ impl Container {
         if c.Status == Status::Running || c.Status == Status::Created {
             // Check if the sandbox process is still running.
             if !c.isSandboxRunning() {
-                error!("it is not running");
+                info!("sandbox is not running, marking container as stopped...");
                 c.changeStatus(Status::Stopped);
             } else if c.Status == Status::Running {
                 match c.SignalContainer(0, false) {
@@ -661,15 +661,25 @@ impl Container {
         let _unlock = maybeLockRootContainer(&self.Spec, &self.RootContainerDir)?;
         match self.Stop() {
             Err(e) => {
-                info!("fail to deleting container root dir {}: {:?}", &self.Root, &e);
-                errs.push(format!("fail to deleting container root dir {}: {:?}", &self.Root, &e));
+                info!("fail to stop container and uninstall cgroup: {}: {:?}", &self.Root, &e);
+                errs.push(format!("fail to stop container and uninstall cgroup: {} {:?}", &self.Root, &e));
             }
-            Ok(_) => (),
+            Ok(_) => {
+                info!("container process stopped");
+            },
         }
 
         if Path::new(&self.Root).exists() {
-            fs::remove_dir_all(&self.Root)
-                .map_err(|e| Error::Common(format!("deleting container root directory {} fail: {:?}", &self.Root, e)))?;
+            info!("deleting container root directory...");
+            let res =  fs::remove_dir_all(&self.Root);
+                //.map_err(|e| Error::Common(format!("deleting container root directory {} fail: {:?}", &self.Root, e)));
+            match res {
+                Err(e) => {
+                    errs.push(format!("deleting container root directory {} fails: {:?}", &self.Root, e));
+                }
+                Ok(_) => ()
+            }
+                
         }
 
         self.changeStatus(Status::Stopped);
@@ -716,13 +726,16 @@ impl Container {
 
         if self.Sandbox.is_some() {
             info!("Destroying container {}", &self.ID);
-            self.Sandbox.as_ref().unwrap().DestroyContainer(&self.ID)?;
+            let sandbox = self.Sandbox.as_ref().unwrap();
+            if sandbox.IsRunning() {
+                sandbox.DestroyContainer(&self.ID)?;
+            }
             // Only uninstall cgroup for sandbox stop.
-            if self.Sandbox.as_ref().unwrap().IsRootContainer(&self.ID) {
+            if sandbox.IsRootContainer(&self.ID) {
                 cgroup = self.Sandbox.as_mut().unwrap().Cgroup.take();
             }
 
-            // Only set sandbox to nil after it has been told to destroy the container.
+            // Only set sandbox to none after it has been told to destroy the container.
             self.Sandbox = None;
         }
 
