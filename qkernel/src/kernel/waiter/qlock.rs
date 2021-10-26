@@ -16,6 +16,7 @@ use ::qlib::mutex::*;
 use core::ops::Deref;
 use core::ops::DerefMut;
 use core::cell::UnsafeCell;
+use alloc::sync::Arc;
 
 use super::super::super::qlib::common::*;
 use super::queue::*;
@@ -126,5 +127,81 @@ impl <'a, T: ?Sized + 'a> DerefMut for QLockGuard <'a, T> {
 impl <'a, T: ?Sized + 'a> Drop for QLockGuard <'a, T> {
     fn drop(&mut self) {
         self.lock.Unlock();
+    }
+}
+
+#[derive(Default)]
+pub struct QAsyncLock {
+    pub locked: Arc<QMutex<bool>>,
+    pub queue: Queue,
+}
+
+#[derive(Default)]
+pub struct QAsyncLockGuard {
+    pub locked: Arc<QMutex<bool>>,
+    pub queue: Queue,
+}
+
+
+impl QAsyncLock {
+    pub fn Lock(&self, task: &Task) -> QAsyncLockGuard {
+        loop {
+            match self.Block(task) {
+                Err(_) => continue,
+                Ok(ret) => return ret
+            }
+        }
+    }
+
+    pub fn Block(&self, task: &Task) -> Result<QAsyncLockGuard> {
+        let blocker = task.blocker.clone();
+
+        loop {
+            let block = {
+                let mut l = self.locked.lock();
+                if *l == false {
+                    //fast path, got lock
+                    *l = true;
+                    false
+                } else {
+                    blocker.generalEntry.Clear();
+                    self.queue.EventRegister(task, &blocker.generalEntry, 1);
+                    true
+                }
+            };
+
+            if !block {
+                //fast path
+                return Ok(QAsyncLockGuard {
+                    locked: self.locked.clone(),
+                    queue: self.queue.clone(),
+                })
+            }
+
+            match blocker.BlockGeneral() {
+                Err(e) => {
+                    self.queue.EventUnregister(task, &blocker.generalEntry);
+                    return Err(e)
+                }
+                Ok(()) => ()
+            }
+
+            self.queue.EventUnregister(task, &blocker.generalEntry);
+        }
+    }
+}
+
+impl QAsyncLockGuard {
+    pub fn Unlock(&self) {
+        let mut l = self.locked.lock();
+        assert!(*l == true, "QLock::Unlock misrun");
+        *l = false;
+        self.queue.Notify(!0);
+    }
+}
+
+impl Drop for QAsyncLockGuard {
+    fn drop(&mut self) {
+        self.Unlock();
     }
 }
