@@ -56,6 +56,16 @@ impl <T: ?Sized> QLock <T> {
         //self.queue.write().RemoveAll();
     }
 
+    pub fn lock(&self) -> QLockGuard<T> {
+        let task = super::super::super::task::Task::Current();
+        loop {
+            match self.Lock(task) {
+                Err(_) => continue,
+                Ok(ret) => return ret
+            }
+        }
+    }
+
     pub fn Lock(&self, task: &Task) -> Result<QLockGuard<T>> {
         let blocker = task.blocker.clone();
 

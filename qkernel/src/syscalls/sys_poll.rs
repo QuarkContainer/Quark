@@ -221,6 +221,8 @@ pub fn DoSelect(task: &Task, nfds: i32, readfds: u64, writefds: u64, exceptfds: 
 }
 
 
+pub const URING_POLL : bool = false;
+
 pub fn PollBlock(task: &Task, pfd: &mut [PollFd], timeout: i64) -> (Duration, Result<usize>) {
     // no fd to wait, just a nansleep
     if pfd.len() == 0 {
@@ -255,28 +257,30 @@ pub fn PollBlock(task: &Task, pfd: &mut [PollFd], timeout: i64) -> (Duration, Re
     // map <File -> (Mask, Readiness)>
     let mut waits = BTreeMap::new();
 
-    for i in 0..pfd.len() {
-        match task.GetFile(pfd[i].fd) {
-            Err(_) => {
-                pfd[i].revents = PollConst::POLLNVAL as i16;
-            },
-            Ok(f) => {
-                match waits.get_mut(&f) {
-                    None => {
-                        let r = f.Readiness(task, EventMaskFromLinux(pfd[i].events as u32));
-                        pfd[i].revents = ToLinux(r) as i16 & pfd[i].events;
-                        waits.insert(f, (pfd[i].events, r));
-                    }
-                    Some(t) => {
-                        (*t).0 |= pfd[i].events;
-                        pfd[i].revents = (*t).1 as i16 & pfd[i].events;
+    if !URING_POLL {
+        for i in 0..pfd.len() {
+            match task.GetFile(pfd[i].fd) {
+                Err(_) => {
+                    pfd[i].revents = PollConst::POLLNVAL as i16;
+                },
+                Ok(f) => {
+                    match waits.get_mut(&f) {
+                        None => {
+                            let r = f.Readiness(task, EventMaskFromLinux(pfd[i].events as u32));
+                            pfd[i].revents = ToLinux(r) as i16 & pfd[i].events;
+                            waits.insert(f, (pfd[i].events, r));
+                        }
+                        Some(t) => {
+                            (*t).0 |= pfd[i].events;
+                            pfd[i].revents = (*t).1 as i16 & pfd[i].events;
+                        }
                     }
                 }
-            }
-        };
+            };
 
-        if pfd[i].revents != 0 {
-            n += 1;
+            if pfd[i].revents != 0 {
+                n += 1;
+            }
         }
     }
 
@@ -304,18 +308,20 @@ pub fn PollBlock(task: &Task, pfd: &mut [PollFd], timeout: i64) -> (Duration, Re
         // then this was a spurious notification, and we just go back
         // to sleep with the remaining timeout.
 
-        for i in 0..pfd.len() {
-            match task.GetFile(pfd[i].fd) {
-                Err(_) => (),
-                Ok(f) => {
-                    let r = f.Readiness(task, EventMaskFromLinux(pfd[i].events as u32));
-                    let rl = ToLinux(r) as i16 & pfd[i].events;
-                    if rl != 0 {
-                        pfd[i].revents = rl;
-                        n += 1;
+        if !URING_POLL {
+            for i in 0..pfd.len() {
+                match task.GetFile(pfd[i].fd) {
+                    Err(_) => (),
+                    Ok(f) => {
+                        let r = f.Readiness(task, EventMaskFromLinux(pfd[i].events as u32));
+                        let rl = ToLinux(r) as i16 & pfd[i].events;
+                        if rl != 0 {
+                            pfd[i].revents = rl;
+                            n += 1;
+                        }
                     }
-                }
-            };
+                };
+            }
         }
 
         if n > 0 {
