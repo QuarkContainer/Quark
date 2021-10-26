@@ -135,8 +135,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
         //PerfGofrom(PerfType::User);
         currTask.AccountTaskLeave(SchedState::RunningApp);
     } else {
-        let pt = currTask.GetPtRegs();
-        print!("get non page fault exception from kernel ... {:#x?}/registers is {:#x?}", sf, pt);
+        print!("get non page fault exception from kernel ... {:#x?}/ev {:#x?}", sf, ev);
 
         for i in 0..super::CPU_LOCAL.len() {
             print!("CPU#{} is {:#x?}", i, super::CPU_LOCAL[i]);

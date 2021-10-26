@@ -5,7 +5,7 @@ use core::ops::Deref;
 use super::super::qlib::mutex::*;
 use super::super::qlib::common::*;
 use super::super::qlib::task_mgr::*;
-use super::super::taskMgr::*;
+//use super::super::taskMgr::*;
 
 use super::super::qlib::linux_def::QOrdering;
 
@@ -45,16 +45,21 @@ impl MultiWaitIntern {
 
     pub fn Done(&self) -> u64 {
         let ret = self.count.fetch_sub(1, QOrdering::ACQUIRE) - 1;
-        if ret == 0 {
+        /*if ret == 0 {
             ScheduleQ(self.taskId);
-        }
+        }*/
 
         return ret;
     }
 
     pub fn Wait(&self) {
         self.Done();
-        Wait();
+        //Wait();
+        while self.count.load(QOrdering::ACQUIRE) != 0 {
+            while self.count.load(QOrdering::RELAXED) != 0{
+                core::hint::spin_loop();
+            }
+        }
     }
 
     // return the waiting work item count

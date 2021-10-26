@@ -94,7 +94,7 @@ fn switch_to(to: TaskId) {
     }
 }
 
-pub const IO_WAIT_CYCLES : i64 = 20_000_000; // 1ms
+pub const IO_WAIT_CYCLES : i64 = 2_000_000; // 1ms
 pub const WAIT_CYCLES : i64 = 2_000_000; // 1ms
 
 pub fn IOWait() {
@@ -116,9 +116,9 @@ pub fn IOWait() {
                 continue;
             }
 
-            //error!("IOWait sleep");
+            debug!("IOWait sleep");
             HostSpace::IOWait();
-            //error!("IOWait wakeup");
+            debug!("IOWait wakeup");
             start = Rdtsc();
             SHARESPACE.kernelIOThreadWaiting.store(false, Ordering::Release);
         }

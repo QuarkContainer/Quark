@@ -182,6 +182,15 @@ impl QUring {
         return idx;
     }
 
+    pub fn UnblockPollAdd(&self, fd: i32, flags: u32, wait: &MultiWait) -> Future<EventMask> {
+        let future = Future::New(0 as EventMask);
+        let ops = UnblockBlockPollAdd::New(fd, flags, wait, &future);
+        let timeout = AsyncLinkTimeout::New(0);
+        self.AUCallLinked(AsyncOps::UnblockBlockPollAdd(ops), AsyncOps::AsyncLinkTimeout(timeout));
+        return future;
+
+    }
+
     pub fn RawTimeout(&self, _task: &Task, timerId: u64, seqNo: u64, ns: i64) -> usize {
         let ops = AsyncRawTimeout::New(timerId, seqNo, ns);
         let idx = self.AUCall(AsyncOps::AsyncRawTimeout(ops));
@@ -388,6 +397,44 @@ impl QUring {
         return index as usize;
     }
 
+    pub fn AUCallLinked(&self, ops1: AsyncOps, ops2: AsyncOps) {
+        let index1;
+
+        loop {
+            match self.asyncMgr.AllocSlot() {
+                None => {
+                    self.asyncMgr.Print();
+                    //error!("AUCall async slots usage up...");
+                    print!("AUCall async slots usage up...");
+                },
+                Some(idx) => {
+                    index1 = idx;
+                    break;
+                }
+            }
+        }
+
+        let index2;
+        loop {
+            match self.asyncMgr.AllocSlot() {
+                None => {
+                    self.asyncMgr.Print();
+                    //error!("AUCall async slots usage up...");
+                    print!("AUCall async slots usage up...");
+                },
+                Some(idx) => {
+                    index2 = idx;
+                    break;
+                }
+            }
+        }
+
+        let entry1 = self.asyncMgr.SetOps(index1, ops1);
+        let entry2 = self.asyncMgr.SetOps(index2, ops2);
+
+        self.AUringCallLinked(entry1, entry2);
+    }
+
     pub fn ProcessOne(&self) -> bool {
         let cqe = {
             let mut clock = match self.completion.try_lock() {
@@ -465,6 +512,37 @@ impl QUring {
                 match queue.push(entry) {
                     Ok(_) => (),
                     Err(_) => panic!("AUringCall submission queue is full"),
+                }
+            }
+
+            let _n = s.Submit().expect("QUringIntern::submit fail");
+            break;
+        }
+    }
+
+    pub fn AUringCallLinked(&self, entry1: squeue::Entry, entry2: squeue::Entry) {
+        loop {
+            let mut s = self.submission.lock();
+            if s.FreeSlots() < 2 {
+                print!("AUringCallLinked: submission full...");
+                continue;
+            }
+
+            error!("AUringCallLinked xxx ");
+            unsafe {
+                let mut queue = s.Available();
+                match queue.push(entry1.flags(squeue::Flags::IO_LINK)) {
+                    Ok(_) => (),
+                    Err(_e) => {
+                        panic!("AUringCallLinked push fail 1 ...");
+                    }
+                }
+
+                match queue.push(entry2) {
+                    Ok(_) => (),
+                    Err(_e) => {
+                        panic!("AUringCallLinked push fail 2 ...");
+                    }
                 }
             }
 

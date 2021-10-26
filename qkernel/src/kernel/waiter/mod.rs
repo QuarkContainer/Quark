@@ -28,7 +28,9 @@ use super::super::task::*;
 pub use self::entry::*;
 pub use self::waiter::*;
 pub use self::queue::*;
+use super::async_wait::*;
 
+use super::super::fs::file::File;
 
 // EventMaskFromLinux returns an EventMask representing the supported events
 // from the Linux events e, which is in the format used by poll(2).
@@ -45,6 +47,15 @@ pub fn ToLinux(e: EventMask) -> u32 {
 // objects.
 // default:: Alway readable
 pub trait Waitable {
+    fn AsyncReadiness(&self, task: &Task, mask: EventMask, _wait: &MultiWait) -> Future<EventMask> {
+        //wait.AddWait();
+        let future = Future::New(0 as EventMask);
+        let ret = self.Readiness(task, mask);
+        future.Set(Ok(ret));
+        //wait.Done();
+        return future;
+    }
+
     // Readiness returns what the object is currently ready for. If it's
     // not ready for a desired purpose, the caller may use EventRegister and
     // EventUnregister to get notifications once the object becomes ready.
@@ -65,4 +76,39 @@ pub trait Waitable {
     fn EventUnregister(&self, _task: &Task, _e: &WaitEntry) {}
 }
 
+pub struct PollStruct {
+    pub f: File,
+    pub event: EventMask,
+    pub revent: EventMask,
+    pub future: Option<Future<EventMask>>,
+}
 
+impl PollStruct {
+    pub fn PollMulti(task: &Task, polls: &mut [PollStruct]) -> usize {
+        let mw = MultiWait::New(task.GetTaskIdQ());
+
+        for i in 0..polls.len() {
+            let poll = &mut polls[i];
+            let future = poll.f.AsyncReadiness(task, poll.event, &mw);
+            poll.future = Some(future)
+        }
+
+        mw.Wait();
+
+        let mut cnt = 0;
+        for i in 0..polls.len() {
+            let poll = &mut polls[i];
+            match poll.future.take().unwrap().Wait() {
+                Err(_) => (),
+                Ok(revent) => {
+                    if revent > 0 {
+                        poll.revent = revent;
+                        cnt += 1;
+                    }
+                },
+            };
+        }
+
+        return cnt;
+    }
+}
