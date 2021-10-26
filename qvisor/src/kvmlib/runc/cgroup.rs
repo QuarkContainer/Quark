@@ -323,7 +323,7 @@ impl Cgroup {
                 match fs::remove_dir(&path) {
                     Ok(()) => break,
                     Err(e) => if let Some(errno) = e.raw_os_error() {
-                        if errno == SysErr::EEXIST {
+                        if errno == SysErr::ENOENT {
                             continue
                         }
 

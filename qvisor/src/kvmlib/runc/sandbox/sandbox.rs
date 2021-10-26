@@ -400,7 +400,7 @@ impl Sandbox {
 
     // IsRunning returns true if the sandbox is running.
     pub fn IsRunning(&self) -> bool {
-        /*if self.Pid != 0 {
+        if self.Pid != 0 {
             // Send a signal 0 to the sandbox process.
             let ret = unsafe {
                 kill(self.Pid, 0)
@@ -412,8 +412,7 @@ impl Sandbox {
             }
         }
 
-        return false;*/
-        return true;
+        return false;
     }
 
     pub fn SignalContainer(&self, _cid: &str, signo: i32, all: bool) -> Result<()> {
