@@ -318,7 +318,6 @@ impl EventPoll {
 
             epoll: self.clone(),
             state: PollEntryState::Waiting,
-            readyTimeStamp: 0,
         };
 
         let entry = PollEntry(Arc::new(QMutex::new(entryInternal)));
