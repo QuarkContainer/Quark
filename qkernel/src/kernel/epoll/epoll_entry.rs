@@ -71,12 +71,10 @@ pub struct PollEntryInternal {
 
     pub epoll: EventPoll,
     pub state: PollEntryState,
-    pub readyTimeStamp: u64,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct ReadyState {
-    pub readyTimeStamp: u64,
     pub mask: u32,
 }
 
@@ -101,16 +99,11 @@ impl PollEntry {
         let mut e = self.lock();
         let oldstate = e.state;
         e.state = PollEntryState::Ready;
-        e.readyTimeStamp += 1;
         return oldstate;
     }
 
-    pub fn ReadyState(&self) -> ReadyState {
-        let e = self.lock();
-        return ReadyState {
-            readyTimeStamp: e.readyTimeStamp,
-            mask: e.mask as u32,
-        }
+    pub fn ReadyState(&self) -> u32 {
+        return self.lock().mask as u32;
     }
 
     pub fn Id(&self) -> i32 {

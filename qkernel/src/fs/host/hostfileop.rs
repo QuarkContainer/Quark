@@ -33,7 +33,6 @@ use super::super::super::qlib::bytestream::*;
 use super::super::super::Kernel::HostSpace;
 use super::super::super::task::*;
 use super::super::super::kernel::async_wait::*;
-use super::super::super::fd::*;
 use super::super::super::IOURING;
 use super::super::super::SHARESPACE;
 use super::super::super::qlib::qmsg::qcall::*;
@@ -274,156 +273,28 @@ impl FileOperations for HostFileOp {
         return Ok(res);
     }
 
-    fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], offset: i64, _blocking: bool) -> Result<i64> {
+    fn ReadAt(&self, task: &Task, f: &File, dsts: &mut [IoVec], offset: i64, blocking: bool) -> Result<i64> {
         let hostIops = self.InodeOp.clone();
 
-        let size = IoVec::NumBytes(dsts);
-        let buf = DataBuff::New(size);
-
-        let iovs = buf.Iovs();
-
-        if self.InodeOp.InodeType() != InodeType::RegularFile && self.InodeOp.InodeType() != InodeType::CharacterDevice {
-            let ret = IORead(hostIops.HostFd(), &iovs)?;
-            task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
-            return Ok(ret as i64)
-        } else {
-            if SHARESPACE.config.read().TcpBuffIO {
-                let ret = IOURING.Read(task,
-                                        hostIops.HostFd(),
-                                        buf.Ptr(),
-                                        buf.Len() as u32,
-                                        offset as i64);
-
-                if ret < 0 {
-                    if ret as i32 != -SysErr::EINVAL {
-                        return Err(Error::SysError(-ret as i32))
-                    }
-                } else if ret >= 0 {
-                    task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
-                    return Ok(ret as i64)
-                }
-
-                // if ret == SysErr::EINVAL, the file might be tmpfs file, io_uring can't handle this
-                // fallback to normal case
-                // todo: handle tmp file elegant
-            }
-
-            let offset = if self.InodeOp.InodeType() == InodeType::CharacterDevice {
-                let ret = IOTTYRead(hostIops.HostFd(), &iovs)?;
-                task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
-                return Ok(ret as i64)
-            } else {
-                offset
-            };
-
-            let ret = IOReadAt(hostIops.HostFd(), &iovs, offset as u64)?;
-            task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
-            return Ok(ret as i64)
-        }
+        hostIops.ReadAt(task, f, dsts, offset, blocking)
     }
 
-    fn WriteAt(&self, task: &Task, _f: &File, srcs: &[IoVec], offset: i64, _blocking: bool) -> Result<i64> {
+    fn WriteAt(&self, task: &Task, f: &File, srcs: &[IoVec], offset: i64, blocking: bool) -> Result<i64> {
         let hostIops = self.InodeOp.clone();
 
-        let size = IoVec::NumBytes(srcs);
-        let mut buf = DataBuff::New(size);
-        let iovs = buf.Iovs();
-
-        task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
-
-        if self.InodeOp.InodeType() != InodeType::RegularFile && self.InodeOp.InodeType() != InodeType::CharacterDevice {
-            let ret = IOWrite(hostIops.HostFd(), &iovs)?;
-            return Ok(ret as i64)
-        } else {
-            if SHARESPACE.config.read().TcpBuffIO {
-                let ret = IOURING.Write(task,
-                                        hostIops.HostFd(),
-                                        buf.Ptr(),
-                                        buf.Len() as u32,
-                                        offset as i64);
-
-                if ret < 0 {
-                    if ret as i32 != -SysErr::EINVAL {
-                        return Err(Error::SysError(-ret as i32))
-                    }
-                } else if ret >= 0 {
-                    hostIops.UpdateMaxLen(offset + ret);
-                    return Ok(ret as i64)
-                }
-
-                // if ret == SysErr::EINVAL, the file might be tmpfs file, io_uring can't handle this
-                // fallback to normal case
-                // todo: handle tmp file elegant
-            }
-
-            let offset = if self.InodeOp.InodeType() == InodeType::CharacterDevice {
-                -1
-            } else {
-                offset
-            };
-
-            match IOWriteAt(hostIops.HostFd(), &iovs, offset as u64) {
-                Err(e) => return Err(e),
-                Ok(ret) => {
-                    hostIops.UpdateMaxLen(offset + ret);
-                    return Ok(ret)
-                }
-            }
-        }
+        hostIops.WriteAt(task, f, srcs, offset, blocking)
     }
 
     fn Append(&self, task: &Task, f: &File, srcs: &[IoVec]) -> Result<(i64, i64)> {
         let hostIops = self.InodeOp.clone();
 
-        let inodeType = hostIops.InodeType();
-        if inodeType == InodeType::RegularFile || inodeType == InodeType::SpecialFile {
-            let size = IoVec::NumBytes(srcs);
-            let mut buf = DataBuff::New(size);
-
-            task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
-            let iovs = buf.Iovs();
-
-            let iovsAddr = &iovs[0] as *const _ as u64;
-            let iovcnt = 1;
-
-            let (count, len) = HostSpace::IOAppend(hostIops.HostFd(), iovsAddr, iovcnt);
-            if count < 0 {
-                return Err(Error::SysError(-count as i32))
-            }
-
-            return Ok((count, len))
-        } else {
-            let n = self.WriteAt(task, f, srcs, 0, true)?;
-            return Ok((n, 0))
-        }
+        return hostIops.Append(task, f, srcs);
     }
 
-    fn Fsync(&self, task: &Task, _f: &File, _start: i64, _end: i64, syncType: SyncType) -> Result<()> {
-        let fd = self.InodeOp.lock().HostFd();
-        let datasync = if syncType == SyncType::SyncData {
-            true
-        } else {
-            false
-        };
+    fn Fsync(&self, task: &Task, f: &File, start: i64, end: i64, syncType: SyncType) -> Result<()> {
+        let hostIops = self.InodeOp.clone();
 
-        let ret = if SHARESPACE.config.read().TcpBuffIO && self.InodeOp.InodeType() == InodeType::RegularFile {
-            IOURING.Fsync(task,
-                          fd,
-                          datasync
-            )
-        } else {
-            if datasync {
-                HostSpace::FDataSync(fd)
-            } else {
-                HostSpace::FSync(fd)
-            }
-        };
-
-        if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
-        }
-
-        return Ok(())
+        return hostIops.Fsync(task, f, start, end, syncType)
     }
 
     fn Flush(&self, task: &Task, f: &File) -> Result<()> {

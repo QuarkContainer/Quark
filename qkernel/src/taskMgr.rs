@@ -116,9 +116,9 @@ pub fn IOWait() {
                 continue;
             }
 
-            debug!("IOWait sleep");
+            //debug!("IOWait sleep");
             HostSpace::IOWait();
-            debug!("IOWait wakeup");
+            //debug!("IOWait wakeup");
             start = Rdtsc();
             SHARESPACE.kernelIOThreadWaiting.store(false, Ordering::Release);
         }

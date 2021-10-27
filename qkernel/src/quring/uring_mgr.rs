@@ -25,7 +25,6 @@ pub use super::super::qlib::uring::*;
 use super::super::qlib::uring::util::*;
 use super::super::qlib::uring::porting::*;
 use super::super::qlib::linux_def::*;
-use super::super::fs::file::*;
 use super::super::socket::hostinet::socket::*;
 use super::super::socket::unix::transport::unix::*;
 use super::super::Kernel::HostSpace;
@@ -33,6 +32,7 @@ use super::super::kernel::async_wait::*;
 use super::super::IOURING;
 use super::uring_op::*;
 use super::async::*;
+use super::super::kernel::waiter::qlock::*;
 
 pub fn QUringTrigger() -> usize {
     return IOURING.DrainCompletionQueue();
@@ -220,12 +220,6 @@ impl QUring {
         return self.UCall(task, msg);
     }
 
-    pub fn BufWrite(&self, _task: &Task, file: &File, fd: i32, addr: u64, len: usize, offset: i64) -> i64 {
-        let ops = AsyncWritev::New(file, fd, addr, len, offset);
-        self.AUCall(AsyncOps::AsyncWrite(ops));
-        return len as i64
-    }
-
     pub fn LogFlush(&self) {
         let fd = super::super::SHARESPACE.Logfd();
         let (addr, len) = super::super::SHARESPACE.GetDataBuf();
@@ -252,8 +246,6 @@ impl QUring {
         self.AUCall(AsyncOps::AsyncStatx(ops));
         return future;
     }
-
-
 
     pub fn Fsync(&self, task: &Task, fd: i32, dataSyncOnly: bool) -> i64 {
         let msg = UringOp::Fsync(FsyncOp {
@@ -326,6 +318,14 @@ impl QUring {
         }
 
         return Ok(cnt as i64)
+    }
+
+    pub fn BufFileWrite(&self, fd: i32, buf: DataBuff, offset: i64, lockGuard: QAsyncLockGuard) -> i64 {
+        let len = buf.Len() as i64;
+        let writeop = AsyncBufWrite::New(fd, buf, offset, lockGuard);
+
+        IOURING.AUCall(AsyncOps::AsyncBufWrite(writeop));
+        return len
     }
 
     pub fn Process(&self, cqe: &cqueue::Entry) {
