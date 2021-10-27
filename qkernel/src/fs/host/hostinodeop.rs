@@ -588,12 +588,10 @@ impl HostInodeOp {
             return Ok(ret as i64)
         } else {
             if SHARESPACE.config.read().TcpBuffIO {
-                let _= if self.BufWriteEnable() {
-                    let lock = self.lock().bufWriteLock.Lock(task);
-                    Some(lock)
-                } else {
-                    None
-                };
+                if self.BufWriteEnable() {
+                    // try to gain the lock once, release immediately
+                    self.lock().bufWriteLock.Lock(task);
+                }
 
                 let ret = IOURING.Read(task,
                                        hostIops.HostFd(),
@@ -721,24 +719,20 @@ impl HostInodeOp {
         };
 
         let ret = if false && SHARESPACE.config.read().TcpBuffIO && self.InodeType() == InodeType::RegularFile {
-            let _= if self.BufWriteEnable() {
-                let lock = self.lock().bufWriteLock.Lock(task);
-                Some(lock)
-            } else {
-                None
-            };
+            if self.BufWriteEnable() {
+                // try to gain the lock once, release immediately
+                self.lock().bufWriteLock.Lock(task);
+            }
 
             IOURING.Fsync(task,
                           fd,
                           datasync
             )
         } else {
-            let _= if self.BufWriteEnable() {
-                let lock = self.lock().bufWriteLock.Lock(task);
-                Some(lock)
-            } else {
-                None
-            };
+            if self.BufWriteEnable() {
+                // try to gain the lock once, release immediately
+                self.lock().bufWriteLock.Lock(task);
+            }
 
             if datasync {
                 HostSpace::FDataSync(fd)
@@ -1043,12 +1037,10 @@ impl InodeOperations for HostInodeOp {
     fn UnstableAttr(&self, task: &Task, _dir: &Inode) -> Result<UnstableAttr> {
         let uringStatx = SHARESPACE.config.read().UringStatx;
 
-        let _= if self.BufWriteEnable() {
-            let lock = self.lock().bufWriteLock.Lock(task);
-            Some(lock)
-        } else {
-            None
-        };
+        if self.BufWriteEnable() {
+            // try to gain the lock once, release immediately
+            self.lock().bufWriteLock.Lock(task);
+        }
 
         // the statx uring call sometime become very slow. todo: root cause this.
         if !uringStatx {
