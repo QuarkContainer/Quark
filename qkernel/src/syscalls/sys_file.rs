@@ -1794,6 +1794,8 @@ fn renameAt(task: &Task, oldDirfd: i32, oldAddr: u64, newDirfd: i32, newAddr: u6
     let (newPath, _) = copyInPath(task,  newAddr, false)?;
     let (oldPath, _) = copyInPath(task,  oldAddr, false)?;
 
+    debug!("renameAt old {}, new {}", &oldPath, newPath);
+
     fileOpAt(task, oldDirfd, &oldPath.to_string(), &mut |_root: &Dirent, oldParent: &Dirent, oldName: &str, _remainingTraversals: u32| -> Result<()> {
         let inode = oldParent.Inode();
         if !inode.StableAttr().IsDir() {

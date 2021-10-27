@@ -10,5 +10,6 @@
   "RawTimer"      : true,
   "UringLog"      : true,
   "PerfDebug"     : false,
-  "UringStatx"    : false
+  "UringStatx"    : false,
+  "FileBufWrite"  : true
 }

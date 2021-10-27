@@ -26,7 +26,8 @@ pub struct Config {
     pub RawTimer: bool,
     pub UringLog: bool,
     pub PerfDebug: bool,
-    pub UringStatx: bool
+    pub UringStatx: bool,
+    pub FileBufWrite: bool
 }
 
 impl Config {}
@@ -45,7 +46,8 @@ impl Default for Config {
             RawTimer: true,
             UringLog: true,
             PerfDebug: true,
-            UringStatx: false
+            UringStatx: false,
+            FileBufWrite: true
         }
     }
 }

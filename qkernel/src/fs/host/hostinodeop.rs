@@ -50,6 +50,7 @@ use super::super::dirent::*;
 use super::super::flags::*;
 use super::super::filesystems::*;
 use super::fs::*;
+use super::super::super::kernel::waiter::qlock::*;
 
 pub struct MappableInternal {
     //addr mapping from file offset to physical address
@@ -167,6 +168,8 @@ pub struct HostInodeOpIntern {
     pub size: i64,
 
     pub mappable: Option<Mappable>,
+    pub bufWriteLock: QAsyncLock,
+    pub hasMappable: bool,
 }
 
 impl Default for HostInodeOpIntern {
@@ -181,6 +184,8 @@ impl Default for HostInodeOpIntern {
             errorcode: 0,
             mappable: None,
             size: 0,
+            bufWriteLock: QAsyncLock::default(),
+            hasMappable: false,
         }
     }
 }
@@ -209,6 +214,8 @@ impl HostInodeOpIntern {
             errorcode: 0,
             mappable: None,
             size: fstat.st_size,
+            bufWriteLock: QAsyncLock::default(),
+            hasMappable: false,
         };
 
         if ret.CanMap() {
@@ -563,6 +570,10 @@ impl HostInodeOp {
 
     /*********************************start of fileoperation *******************/
 
+    pub fn BufWriteEnable(&self) -> bool {
+        return SHARESPACE.config.read().FileBufWrite && !self.lock().hasMappable;
+    }
+
     pub fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], offset: i64, _blocking: bool) -> Result<i64> {
         let hostIops = self.clone();
 
@@ -577,6 +588,13 @@ impl HostInodeOp {
             return Ok(ret as i64)
         } else {
             if SHARESPACE.config.read().TcpBuffIO {
+                let _= if self.BufWriteEnable() {
+                    let lock = self.lock().bufWriteLock.Lock(task);
+                    Some(lock)
+                } else {
+                    None
+                };
+
                 let ret = IOURING.Read(task,
                                        hostIops.HostFd(),
                                        buf.Ptr(),
@@ -625,11 +643,18 @@ impl HostInodeOp {
             return Ok(ret as i64)
         } else {
             if SHARESPACE.config.read().TcpBuffIO {
-                let ret = IOURING.Write(task,
-                                        hostIops.HostFd(),
-                                        buf.Ptr(),
-                                        buf.Len() as u32,
-                                        offset as i64);
+                let ret =
+                    if self.BufWriteEnable() {
+                        let lock = self.lock().bufWriteLock.Lock(task);
+                        let count = IOURING.BufFileWrite(hostIops.HostFd(), buf, offset, lock);
+                        count
+                    } else {
+                        IOURING.Write(task,
+                                      hostIops.HostFd(),
+                                      buf.Ptr(),
+                                      buf.Len() as u32,
+                                      offset as i64)
+                    };
 
                 if ret < 0 {
                     if ret as i32 != -SysErr::EINVAL {
@@ -695,12 +720,26 @@ impl HostInodeOp {
             false
         };
 
-        let ret = if SHARESPACE.config.read().TcpBuffIO && self.InodeType() == InodeType::RegularFile {
+        let ret = if false && SHARESPACE.config.read().TcpBuffIO && self.InodeType() == InodeType::RegularFile {
+            let _= if self.BufWriteEnable() {
+                let lock = self.lock().bufWriteLock.Lock(task);
+                Some(lock)
+            } else {
+                None
+            };
+
             IOURING.Fsync(task,
                           fd,
                           datasync
             )
         } else {
+            let _= if self.BufWriteEnable() {
+                let lock = self.lock().bufWriteLock.Lock(task);
+                Some(lock)
+            } else {
+                None
+            };
+
             if datasync {
                 HostSpace::FDataSync(fd)
             } else {
@@ -719,6 +758,19 @@ impl HostInodeOp {
 
     //add mapping between file offset and the <MappingSpace(i.e. memorymanager), Virtual Address>
     pub fn AddMapping(&self, ms: &MemoryManager, ar: &Range, offset: u64, writeable: bool) -> Result<()> {
+        self.lock().hasMappable = true;
+
+        // todo: if there is bufwrite ongoing, should we wait for it?
+        /*let _= if self.BufWriteEnable() {
+            let task = Task::Current();
+            error!("AddMapping 1");
+            let lock = self.lock().bufWriteLock.Lock(task);
+            error!("AddMapping 2");
+            Some(lock)
+        } else {
+            None
+        };*/
+
         let mappable = self.lock().Mappable();
         let mut mappableLock = mappable.lock();
 
@@ -990,6 +1042,13 @@ impl InodeOperations for HostInodeOp {
 
     fn UnstableAttr(&self, task: &Task, _dir: &Inode) -> Result<UnstableAttr> {
         let uringStatx = SHARESPACE.config.read().UringStatx;
+
+        let _= if self.BufWriteEnable() {
+            let lock = self.lock().bufWriteLock.Lock(task);
+            Some(lock)
+        } else {
+            None
+        };
 
         // the statx uring call sometime become very slow. todo: root cause this.
         if !uringStatx {

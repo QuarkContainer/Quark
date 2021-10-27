@@ -33,6 +33,7 @@ use super::super::IOURING;
 use super::super::kernel::timer;
 use super::super::kernel::async_wait::*;
 use super::super::SHARESPACE;
+use super::super::kernel::waiter::qlock::*;
 
 #[repr(align(128))]
 pub enum AsyncOps {
@@ -53,6 +54,7 @@ pub enum AsyncOps {
     AsyncStatx(AsyncStatx),
     AsyncLinkTimeout(AsyncLinkTimeout),
     UnblockBlockPollAdd(UnblockBlockPollAdd),
+    AsyncBufWrite(AsyncBufWrite),
     None,
 }
 
@@ -76,6 +78,7 @@ impl AsyncOps {
             AsyncOps::AsyncStatx(ref msg) => return msg.SEntry(),
             AsyncOps::AsyncLinkTimeout(ref msg) => return msg.SEntry(),
             AsyncOps::UnblockBlockPollAdd(ref msg) => return msg.SEntry(),
+            AsyncOps::AsyncBufWrite(ref msg) => return msg.SEntry(),
             AsyncOps::None => ()
         };
 
@@ -101,6 +104,7 @@ impl AsyncOps {
             AsyncOps::AsyncStatx(ref mut msg) => msg.Process(result),
             AsyncOps::AsyncLinkTimeout(ref mut msg) => msg.Process(result),
             AsyncOps::UnblockBlockPollAdd(ref mut msg) => msg.Process(result),
+            AsyncOps::AsyncBufWrite(ref mut msg) => msg.Process(result),
             AsyncOps::None => panic!("AsyncOps::None SEntry fail"),
         };
 
@@ -130,6 +134,7 @@ impl AsyncOps {
             AsyncOps::AsyncStatx(_) => return 15,
             AsyncOps::AsyncLinkTimeout(_) => return 16,
             AsyncOps::UnblockBlockPollAdd(_) => return 17,
+            AsyncOps::AsyncBufWrite(_) => return 18,
             AsyncOps::None => ()
         };
 
@@ -374,7 +379,6 @@ impl AsyncTTYWrite {
     }
 }
 
-/// deprecated.
 pub struct AsyncWritev {
     pub file: File,
     pub fd: i32,
@@ -406,6 +410,38 @@ impl AsyncWritev {
         // add back when need
         //BUF_MGR.Free(self.addr, self.len as u64);
         return false
+    }
+}
+
+pub struct AsyncBufWrite {
+    pub fd: i32,
+    pub buf: DataBuff,
+    pub offset: i64,
+    pub lockGuard: QAsyncLockGuard,
+}
+
+impl AsyncBufWrite {
+    pub fn SEntry(&self) -> squeue::Entry {
+        //let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
+        let op = opcode::Write::new(types::Fd(self.fd), self.buf.Ptr() as * const u8, self.buf.Len() as u32)
+            .offset(self.offset);
+
+        return op.build()
+            .flags(squeue::Flags::FIXED_FILE);
+    }
+
+    pub fn Process(&mut self, result: i32) -> bool {
+        assert!(result as usize == self.buf.Len());
+        return false
+    }
+
+    pub fn New(fd: i32, buf: DataBuff, offset: i64, lockGuard: QAsyncLockGuard) -> Self {
+        return Self {
+            fd,
+            buf,
+            offset,
+            lockGuard
+        }
     }
 }
 
