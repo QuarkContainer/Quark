@@ -53,7 +53,8 @@ pub fn SysFstatat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 pub fn Fstatat(task: &Task, fd: i32, addr: u64, statAddr: u64, flags: i32) -> Result<i64> {
     let (path, dirPath) = copyInPath(task,  addr, flags & ATType::AT_EMPTY_PATH != 0)?;
 
-    info!("Fstatat path is {}", &path);
+    info!("Fstatat path is {} dirPath {}, flags & ATType::AT_SYMLINK_NOFOLLOW {:x}",
+        &path, dirPath, flags & ATType::AT_SYMLINK_NOFOLLOW);
     if path.len() == 0 {
         let file = task.GetFile(fd)?;
 
@@ -240,7 +241,7 @@ fn copyOutStat(task: &Task, statAddr: u64, sattr: &StableAttr, uattr: &UnstableA
     s.st_ctime_nsec = ctime.tv_nsec;
 
     task.CopyOutObj(&s, statAddr)?;
-    // error!("copyOutStat stat is {:x?}", s);
+    info!("copyOutStat stat is {:x?}", s);
     return Ok(())
 }
 

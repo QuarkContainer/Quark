@@ -281,7 +281,7 @@ impl QUring {
 
     pub fn BufSockWrite(&self, _task: &Task, sockops: &SocketOperations, srcs: &[IoVec]) -> Result<i64> {
         assert!((sockops.family == AFType::AF_INET || sockops.family == AFType::AF_INET6)
-            && sockops.stype == SockType::SOCK_STREAM);
+            && sockops.stype == SockType::SOCK_STREAM, "family is {}, stype is {}", sockops.family, sockops.stype);
 
         let buf = sockops.SocketBuf();
         let (count, writeBuf) = buf.Writev(srcs)?;
@@ -344,7 +344,7 @@ impl QUring {
         } else {
             let idx = data as usize;
             let mut ops = self.asyncMgr.ops[idx].lock();
-            //error!("uring process2: call is {:x?}", ops.Type());
+            //error!("uring process2: call is {:?}", ops.Type());
 
             let rerun = ops.Process(ret, idx);
             if !rerun {
@@ -352,6 +352,8 @@ impl QUring {
                 self.asyncMgr.FreeSlot(idx);
             }
         }
+
+        //error!("uring process:xxx");
     }
 
     pub fn UCall(&self, task: &Task, msg: UringOp) -> i64 {

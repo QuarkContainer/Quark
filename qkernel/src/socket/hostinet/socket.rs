@@ -172,10 +172,11 @@ impl SocketOperations {
         return self.socketBuf.lock().as_ref().unwrap().clone();
     }
 
-    pub fn SetRemoteAddr(&self, addr: Vec<u8>) {
-        let addr = GetAddr(addr[0] as i16, &addr[0..addr.len()]).unwrap();
+    pub fn SetRemoteAddr(&self, addr: Vec<u8>) -> Result<()> {
+        let addr = GetAddr(addr[0] as i16, &addr[0..addr.len()])?;
 
         *self.remoteAddr.lock() = Some(addr);
+        return Ok(())
     }
 
     pub fn GetRemoteAddr(&self) -> Option<Vec<u8>> {
@@ -466,29 +467,53 @@ impl SockOperations for SocketOperations {
 
         let res = Kernel::HostSpace::IOConnect(self.fd, &socketaddr[0] as *const _ as u64, socketaddr.len() as u32, blocking) as i32;
         if res == 0 {
+            self.SetRemoteAddr(socketaddr.to_vec())?;
+            if SHARESPACE.config.read().TcpBuffIO && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
+                && self.stype == SockType::SOCK_STREAM {
+                self.EnableSocketBuf();
+            }
+
             return Ok(0)
         }
 
-        if -res != SysErr::EINPROGRESS || !blocking {
-            return Err(Error::SysError(-res))
-        }
+        let blocking = if blocking {
+            true
+        } else {
+            // in order to enable uring buff, have to do block accept
+            if SHARESPACE.config.read().TcpBuffIO
+                && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
+                && self.stype == SockType::SOCK_STREAM {
+                true
+            } else {
+                false
+            }
 
+            //false
+        };
 
-        //todo: which one is more efficent?
-        let general = task.blocker.generalEntry.clone();
-        self.EventRegister(task, &general, EVENT_OUT);
-        defer!(self.EventUnregister(task, &general));
+        if res != 0 {
+            if -res != SysErr::EINPROGRESS || !blocking {
+                return Err(Error::SysError(-res))
+            }
 
-        if self.Readiness(task, EVENT_OUT) == 0 {
-            match task.blocker.BlockWithMonoTimer(true, None) {
-                Err(e) => {
-                    error!("connect error {:?}", &e);
-                    return Err(e);
+            //todo: which one is more efficent?
+            let general = task.blocker.generalEntry.clone();
+            self.EventRegister(task, &general, EVENT_OUT);
+            defer!(self.EventUnregister(task, &general));
+
+            if self.Readiness(task, EVENT_OUT) == 0 {
+                match task.blocker.BlockWithMonoTimer(true, None) {
+                    Err(Error::ErrInterrupted) => {
+                        return Err(Error::SysError(SysErr::ERESTARTSYS));
+                    }
+                    Err(e) => {
+                        error!("connect error {:?}", &e);
+                        return Err(e);
+                    }
+                    _ => ()
                 }
-                _ => ()
             }
         }
-
         let mut val: i32 = 0;
         let len: i32 = 4;
         let res = HostSpace::GetSockOpt(self.fd, LibcConst::SOL_SOCKET as i32, LibcConst::SO_ERROR as i32, &mut val as *mut i32 as u64, &len as *const i32 as u64) as i32;
@@ -501,9 +526,10 @@ impl SockOperations for SocketOperations {
             return Err(Error::SysError(val as i32))
         }
 
-        self.SetRemoteAddr(socketaddr.to_vec());
 
-        if SHARESPACE.config.read().TcpBuffIO {
+        self.SetRemoteAddr(socketaddr.to_vec())?;
+        if SHARESPACE.config.read().TcpBuffIO && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
+            && self.stype == SockType::SOCK_STREAM {
             self.EnableSocketBuf();
         }
 
@@ -796,25 +822,36 @@ impl SockOperations for SocketOperations {
     fn RecvMsg(&self, task: &Task, dsts: &mut [IoVec], flags: i32, deadline: Option<Time>, senderRequested: bool, controlDataLen: usize)
         -> Result<(i64, i32, Option<(SockAddr, usize)>, Vec<u8>)>  {
 
+        //let family = self.family;
+        //let stype = self.stype;
+
+        //error!("RecvMsg ... host socket  fd {} {}/{}/{}/{}", self.fd, flags & MsgType::MSG_DONTWAIT, self.SocketBufEnabled(), family, stype);
         if self.SocketBufEnabled() {
             /*
             if controlDataLen != 0 {
                 panic!("Hostnet RecvMsg Socketbuf doesn't support control data");
             }
             */
-            let len = Iovs(dsts).Count();
+
+            let controlDataLen = 0;
+
+            let len = IoVec::NumBytes(dsts);
+            let buf = DataBuff::New(len);
+            let mut vec = buf.Iovs();
+            let mut iovs : &mut [IoVec] = &mut vec;
+
             let mut count = 0;
-            let mut dsts = dsts;
             let mut tmp;
-            let mut res = 0;
             loop {
-                match IOURING.BufSockRead(task, self, dsts) {
+                match IOURING.BufSockRead(task, self, iovs) {
                     Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
                         if flags & MsgType::MSG_DONTWAIT != 0 {
                             if count > 0 {
-                                let (retFlags, controlData) = self.prepareControlMessage(controlDataLen); 
+                                let (retFlags, controlData) = self.prepareControlMessage(controlDataLen);
+                                task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts)?;
                                 return Ok((count as i64, retFlags, None, controlData))
                             }
+
                             return Err(Error::SysError(SysErr::EWOULDBLOCK))
                         }
 
@@ -822,25 +859,30 @@ impl SockOperations for SocketOperations {
                     }
                     Err(e) => {
                         if count > 0 {
-                            let (retFlags, controlData) = self.prepareControlMessage(controlDataLen); 
+                            let (retFlags, controlData) = self.prepareControlMessage(controlDataLen);
+                            task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts)?;
                             return Ok((count as i64, retFlags, None, controlData))
                         }
                         return Err(e)
                     },
                     Ok(n) => {
                         if n == 0 {
-                            let (retFlags, controlData) = self.prepareControlMessage(controlDataLen); 
+                            let (retFlags, controlData) = self.prepareControlMessage(controlDataLen);
+                            if count > 0 {
+                                task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts)?;
+                            }
                             return Ok((count, retFlags, None, controlData))
                         }
 
                         count += n;
                         if count == len as i64 {
-                            let (retFlags, controlData) = self.prepareControlMessage(controlDataLen); 
+                            let (retFlags, controlData) = self.prepareControlMessage(controlDataLen);
+                            task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts)?;
                             return Ok((count as i64, retFlags, None, controlData))
                         }
 
-                        tmp = Iovs(dsts).DropFirst(n as usize);
-                        dsts = &mut tmp;
+                        tmp = Iovs(iovs).DropFirst(n as usize);
+                        iovs = &mut tmp;
                     }
                 }
             }
@@ -851,17 +893,15 @@ impl SockOperations for SocketOperations {
 
             'main: loop {
                 loop {
-                    match IOURING.BufSockRead(task, self, dsts) {
+                    match IOURING.BufSockRead(task, self, iovs) {
                         Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
                             if count > 0 {
-                                res = count;
                                 break 'main;
                             }
                             break;
                         },
                         Err(e) => {
                             if count > 0 {
-                                res = count;
                                 break 'main;
                             }
                             return Err(e);
@@ -873,26 +913,23 @@ impl SockOperations for SocketOperations {
 
                             count += n;
                             if count == len as i64 {
-                                res = count;
                                 break 'main;
                             }
 
-                            tmp = Iovs(dsts).DropFirst(n as usize);
-                            dsts = &mut tmp;
+                            tmp = Iovs(iovs).DropFirst(n as usize);
+                            iovs = &mut tmp;
                         }
                     };
                 }
 
-
                 match task.blocker.BlockWithMonoTimer(true, deadline) {
                     Err(e) => {
                         if count > 0 {
-                            res = count;
                             break 'main;
                         }
                         match e {
                             Error::SysError(SysErr::ETIMEDOUT) => {
-                                return Err(Error::SysError(SysErr::EWOULDBLOCK));
+                                return Err(Error::SysError(SysErr::EAGAIN));
                             }
                             Error::ErrInterrupted => {
                                 return Err(Error::SysError(SysErr::ERESTARTSYS));
@@ -914,8 +951,12 @@ impl SockOperations for SocketOperations {
                 None
             };
 
+            if count > 0 {
+                task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts)?;
+            }
+
             let (retFlags, controlData) = self.prepareControlMessage(controlDataLen);
-            return Ok((res as i64, retFlags, senderAddr, controlData))
+            return Ok((count as i64, retFlags, senderAddr, controlData))
         }
 
         //todo: we don't support MSG_ERRQUEUE
@@ -1145,7 +1186,7 @@ impl Provider for SocketProvider {
             return Err(Error::SysError(-res as i32))
         }
 
-        let fd = res as i32;
+       let fd = res as i32;
 
         let file = newSocketFile(task, self.family, fd, stype & SocketType::SOCK_TYPE_MASK, stype & SocketFlags::SOCK_NONBLOCK != 0, false, None)?;
         return Ok(Some(Arc::new(file)))
