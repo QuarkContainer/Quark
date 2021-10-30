@@ -224,7 +224,10 @@ pub fn GetAddr(sfamily: i16, addr: &[u8]) -> Result<SockAddr> {
 
             let unix = SockAddrUnix {
                 Family: sfamily as u16,
-                Path: String::from_utf8(path.to_vec()).unwrap(),
+                Path: match String::from_utf8(path.to_vec()) {
+                    Err(_) => return Err(Error::SysError(SysErr::EINVAL)),
+                    Ok(s) => s,
+                },
             };
 
             return Ok(SockAddr::Unix(unix));

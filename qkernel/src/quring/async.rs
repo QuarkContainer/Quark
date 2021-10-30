@@ -514,7 +514,7 @@ impl AsyncSocketSend {
         // EOF
         // to debug
         if result == 0 {
-            buf.SetClosed();
+            buf.SetWClosed();
             if buf.ProduceReadBuf(0) {
                 self.ops.Notify(EVENT_OUT);
             } else {
@@ -573,7 +573,7 @@ impl AsyncSocketRecv {
 
         // EOF
         if result == 0 {
-            buf.SetClosed();
+            buf.SetRClosed();
             if buf.ProduceReadBuf(0) {
                 self.ops.Notify(EVENT_IN);
             } else {
@@ -727,7 +727,7 @@ impl AsycnRecvMsg {
 
         // EOF
         if result == 0 {
-            buf.SetClosed();
+            buf.SetRClosed();
             if buf.ProduceReadBuf(0) {
                 intern.ops.Notify(EVENT_IN);
             }

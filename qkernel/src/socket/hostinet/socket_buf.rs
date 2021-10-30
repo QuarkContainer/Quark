@@ -22,7 +22,8 @@ use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::common::*;
 
 pub struct SocketBuff {
-    pub closed: AtomicBool,
+    pub wClosed: AtomicBool,
+    pub rClosed: AtomicBool,
     pub error: AtomicI32,
 
     pub readBuf: QMutex<ByteStream>,
@@ -32,7 +33,8 @@ pub struct SocketBuff {
 impl SocketBuff {
     pub fn Init(pageCount: u64) -> Self {
         return Self {
-            closed: AtomicBool::new(false),
+            wClosed: AtomicBool::new(false),
+            rClosed: AtomicBool::new(false),
             error: AtomicI32::new(0),
             readBuf: QMutex::new(ByteStream::Init(pageCount)),
             writeBuf: QMutex::new(ByteStream::Init(pageCount)),
@@ -47,7 +49,7 @@ impl SocketBuff {
         let mut event = EventMask::default();
         if self.readBuf.lock().AvailableDataSize() > 0 {
             event |= EVENT_IN;
-        } else if self.Closed() {
+        } else if self.RClosed() || self.WClosed() {
             event |= EVENT_IN
         }
 
@@ -62,12 +64,20 @@ impl SocketBuff {
         return event
     }
 
-    pub fn Closed(&self) -> bool {
-        self.closed.load(Ordering::SeqCst)
+    pub fn WClosed(&self) -> bool {
+        self.wClosed.load(Ordering::SeqCst)
     }
 
-    pub fn SetClosed(&self) {
-        self.closed.store(true, Ordering::SeqCst)
+    pub fn RClosed(&self) -> bool {
+        self.rClosed.load(Ordering::SeqCst)
+    }
+
+    pub fn SetWClosed(&self) {
+        self.wClosed.store(true, Ordering::SeqCst)
+    }
+
+    pub fn SetRClosed(&self) {
+        self.rClosed.store(true, Ordering::SeqCst)
     }
 
     pub fn Error(&self) -> i32 {
@@ -135,7 +145,7 @@ impl SocketBuff {
             return Ok((trigger, cnt))
         } else if self.Error() != 0 {
             return Err(Error::SysError(self.Error()));
-        } else if self.Closed() {
+        } else if self.RClosed() {
             return Ok((false, 0))
         } else {
             return Err(Error::SysError(SysErr::EAGAIN))
@@ -151,7 +161,7 @@ impl SocketBuff {
             return Err(Error::SysError(self.Error()));
         }
 
-        if self.Closed() {
+        if self.WClosed() {
             error!("writev it is closed");
             //return Ok((0, None))
             return Err(Error::SysError(SysErr::EPIPE))
