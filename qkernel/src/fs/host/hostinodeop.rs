@@ -581,8 +581,9 @@ impl HostInodeOp {
         let buf = DataBuff::New(size);
 
         let iovs = buf.Iovs();
+        let inodeType = self.InodeType();
 
-        if self.InodeType() != InodeType::RegularFile && self.InodeType() != InodeType::CharacterDevice {
+        if inodeType != InodeType::RegularFile && inodeType != InodeType::CharacterDevice {
             let ret = IORead(hostIops.HostFd(), &iovs)?;
             task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
             return Ok(ret as i64)
@@ -590,7 +591,7 @@ impl HostInodeOp {
             if SHARESPACE.config.read().TcpBuffIO {
                 if self.BufWriteEnable() {
                     // try to gain the lock once, release immediately
-                    self.lock().bufWriteLock.Lock(task);
+                    self.BufWriteLock().Lock(task);
                 }
 
                 let ret = IOURING.Read(task,
@@ -613,7 +614,7 @@ impl HostInodeOp {
                 // todo: handle tmp file elegant
             }
 
-            let offset = if self.InodeType() == InodeType::CharacterDevice {
+            let offset = if inodeType == InodeType::CharacterDevice {
                 let ret = IOTTYRead(hostIops.HostFd(), &iovs)?;
                 task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
                 return Ok(ret as i64)
@@ -627,6 +628,10 @@ impl HostInodeOp {
         }
     }
 
+    pub fn BufWriteLock(&self) -> QAsyncLock {
+        return self.lock().bufWriteLock.clone();
+    }
+
     pub fn WriteAt(&self, task: &Task, _f: &File, srcs: &[IoVec], offset: i64, _blocking: bool) -> Result<i64> {
         let hostIops = self.clone();
 
@@ -635,15 +640,22 @@ impl HostInodeOp {
         let iovs = buf.Iovs();
 
         task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
+        let inodeType = self.InodeType();
 
-        if self.InodeType() != InodeType::RegularFile && self.InodeType() != InodeType::CharacterDevice {
+        if inodeType != InodeType::RegularFile && inodeType != InodeType::CharacterDevice {
             let ret = IOWrite(hostIops.HostFd(), &iovs)?;
             return Ok(ret as i64)
         } else {
+            let offset = if inodeType == InodeType::CharacterDevice {
+                -1
+            } else {
+                offset
+            };
+
             if SHARESPACE.config.read().TcpBuffIO {
                 let ret =
                     if self.BufWriteEnable() {
-                        let lock = self.lock().bufWriteLock.Lock(task);
+                        let lock = self.BufWriteLock().Lock(task);
                         let count = IOURING.BufFileWrite(hostIops.HostFd(), buf, offset, lock);
                         count
                     } else {
@@ -659,7 +671,10 @@ impl HostInodeOp {
                         return Err(Error::SysError(-ret as i32))
                     }
                 } else if ret >= 0 {
-                    hostIops.UpdateMaxLen(offset + ret);
+                    if inodeType != InodeType::CharacterDevice {
+                        hostIops.UpdateMaxLen(offset + ret);
+                    }
+
                     return Ok(ret as i64)
                 }
 
@@ -667,12 +682,6 @@ impl HostInodeOp {
                 // fallback to normal case
                 // todo: handle tmp file elegant
             }
-
-            let offset = if self.InodeType() == InodeType::CharacterDevice {
-                -1
-            } else {
-                offset
-            };
 
             match IOWriteAt(hostIops.HostFd(), &iovs, offset as u64) {
                 Err(e) => return Err(e),
@@ -721,7 +730,7 @@ impl HostInodeOp {
         let ret = if false && SHARESPACE.config.read().TcpBuffIO && self.InodeType() == InodeType::RegularFile {
             if self.BufWriteEnable() {
                 // try to gain the lock once, release immediately
-                self.lock().bufWriteLock.Lock(task);
+                self.BufWriteLock().Lock(task);
             }
 
             IOURING.Fsync(task,
@@ -731,7 +740,7 @@ impl HostInodeOp {
         } else {
             if self.BufWriteEnable() {
                 // try to gain the lock once, release immediately
-                self.lock().bufWriteLock.Lock(task);
+                self.BufWriteLock().Lock(task);
             }
 
             if datasync {
@@ -1039,7 +1048,7 @@ impl InodeOperations for HostInodeOp {
 
         if self.BufWriteEnable() {
             // try to gain the lock once, release immediately
-            self.lock().bufWriteLock.Lock(task);
+            self.BufWriteLock().Lock(task);
         }
 
         // the statx uring call sometime become very slow. todo: root cause this.
