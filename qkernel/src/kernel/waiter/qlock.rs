@@ -130,7 +130,7 @@ impl <'a, T: ?Sized + 'a> Drop for QLockGuard <'a, T> {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct QAsyncLock {
     pub locked: Arc<QMutex<bool>>,
     pub queue: Queue,

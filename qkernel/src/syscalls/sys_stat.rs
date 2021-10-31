@@ -241,7 +241,7 @@ fn copyOutStat(task: &Task, statAddr: u64, sattr: &StableAttr, uattr: &UnstableA
     s.st_ctime_nsec = ctime.tv_nsec;
 
     task.CopyOutObj(&s, statAddr)?;
-    info!("copyOutStat stat is {:x?}", s);
+    //info!("copyOutStat stat is {:x?}", s);
     return Ok(())
 }
 
