@@ -30,12 +30,14 @@ int __common_clock_gettime(clockid_t clock, struct timespec* ts) {
 
   switch (clock) {
     case CLOCK_REALTIME:
+    //case CLOCK_REALTIME_COARSE:
       ret = ClockRealtime(ts);
       break;
 
     case CLOCK_BOOTTIME:
       // Fallthrough, CLOCK_BOOTTIME is an alias for CLOCK_MONOTONIC
     case CLOCK_MONOTONIC:
+    case CLOCK_MONOTONIC_COARSE:
       ret = ClockMonotonic(ts);
       break;
 
