@@ -429,7 +429,7 @@ fn recvSingleMsg(task: &Task, sock: &Arc<FileOperations>, msgPtr: u64, flags: i3
     if msg.msgControlLen == 0 && msg.nameLen == 0 {
         let (n, mut mflags, _ , controlMessageBuffer) = sock.RecvMsg(task, &mut dst, flags, deadline, false, 0)?;
 
-        if controlMessageBuffer.len() != 0{
+        if controlMessageBuffer.len() != 0 {
             mflags |= MsgType::MSG_CTRUNC;
         }
 
@@ -515,6 +515,7 @@ fn recvSingleMsg(task: &Task, sock: &Arc<FileOperations>, msgPtr: u64, flags: i3
 
     msg.msgFlags = mflags;
 
+    task.CopyOutObj(&msg, msgPtr)?;
     return Ok(n)
 }
 
@@ -544,6 +545,7 @@ fn sendSingleMsg(task: &Task, sock: &Arc<FileOperations>, msgPtr: u64, flags: i3
     let src = task.IovsFromAddr(msg.iov, msg.iovLen)?;
 
     let res = sock.SendMsg(task, &src, flags, &mut pMsg, deadline)?;
+    task.CopyOutObj(&msg, msgPtr)?;
     return Ok(res);
 }
 
