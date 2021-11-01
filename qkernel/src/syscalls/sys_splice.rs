@@ -18,10 +18,15 @@ use super::super::kernel::waiter::*;
 use super::super::kernel::waiter::qlock::*;
 use super::super::fs::attr::*;
 use super::super::fs::file::*;
+use super::super::fs::host::hostfileop::*;
+use super::super::fs::file_overlay::OverlayFileOperations;
+use super::super::socket::hostinet::socket::*;
 use super::super::task::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
+use super::super::IOURING;
+use super::super::SHARESPACE;
 
 // Splice moves data to this file, directly from another.
 //
@@ -169,6 +174,19 @@ pub fn Splice(task: &Task, dst: &File, src: &File, opts: &mut SpliceOpts) -> Res
     }
 
     return Ok(n)
+}
+
+pub fn SpliceSendFile2Socket(task: &Task, dst: &SocketOperations, src: &HostFileOp, offset: i64, len: u32) -> Result<i64> {
+    let dstfd = dst.fd;
+    let srcfd = src.InodeOp.HostFd();
+
+    let ret = IOURING.Splice(task, srcfd, offset, dstfd, -1, len, 0);
+
+    if ret < 0 {
+        return Err(Error::SysError(-ret as i32))
+    }
+
+    return Ok(ret)
 }
 
 // doSplice implements a blocking splice operation.
@@ -335,12 +353,42 @@ pub fn SysSendfile(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Err(Error::SysError(SysErr::EINVAL))
     }
 
-    let inode = inFile.Dirent.Inode();
-    if inode.InodeType() != InodeType::RegularFile {
+    let inodeSrc = inFile.Dirent.Inode();
+    if inodeSrc.InodeType() != InodeType::RegularFile {
         return Err(Error::SysError(SysErr::EINVAL))
     }
 
     let n;
+
+
+    // for the file to socket scenario
+    let inodeDst = outFile.Dirent.Inode();
+    if false && // disable it, why comments doesn't work?
+        inodeDst.InodeType() == InodeType::Socket
+        && SHARESPACE.config.read().TcpBuffIO {
+        let dstfops = outFile.FileOp.clone();
+        let srcfops = inFile.FileOp.clone();
+
+        if let Some(sockOps) = dstfops.as_any().downcast_ref::<SocketOperations>() {
+            if let Some(fileOps) = srcfops.as_any().downcast_ref::<OverlayFileOperations>() {
+                if let Some(fileOps) = fileOps.FileOps().as_any().downcast_ref::<HostFileOp>() {
+                    if offsetAddr != 0 {
+                        let offset : i64 = task.CopyInObj(offsetAddr)?;
+
+                        n = SpliceSendFile2Socket(task, sockOps, fileOps, offset, count as u32)?;
+                        //*task.GetTypeMut(offsetAddr)? = offset + n;
+                        task.CopyOutObj(&(offset + n), offsetAddr)?;
+                    } else {
+                        n = SpliceSendFile2Socket(task, sockOps, fileOps, 0, count as u32)?
+                    }
+
+                    return Ok(n);
+                }
+
+            }
+        }
+    }
+
     if offsetAddr != 0 {
         if !inFile.Flags().Pread {
             return Err(Error::SysError(SysErr::ESPIPE))

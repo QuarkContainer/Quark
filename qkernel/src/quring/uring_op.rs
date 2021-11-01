@@ -53,6 +53,7 @@ impl UringCall {
             UringOp::Write(ref msg) => return msg.SEntry(),
             UringOp::Statx(ref msg) => return msg.SEntry(),
             UringOp::Fsync(ref msg) => return msg.SEntry(),
+            UringOp::Splice(ref msg) => return msg.SEntry(),
         };
 
         panic!("UringCall SEntry UringOp::None")
@@ -67,6 +68,7 @@ pub enum UringOp {
     Write(WriteOp),
     Statx(StatxOp),
     Fsync(FsyncOp),
+    Splice(SpliceOp),
 }
 
 impl Default for UringOp {
@@ -158,6 +160,26 @@ impl FsyncOp {
             Fsync::new(types::Fd(self.fd))
         };
 
+        return op.build()
+            .flags(squeue::Flags::FIXED_FILE);
+    }
+}
+
+#[derive(Clone, Debug, Copy)]
+pub struct SpliceOp {
+    pub fdIn: i32,
+    pub offsetIn: i64,
+    pub fdOut: i32,
+    pub offsetOut: i64,
+    pub len: u32,
+    pub flags: u32,
+}
+
+impl SpliceOp {
+    pub fn SEntry(&self) -> squeue::Entry {
+        let op = Splice::new(types::Fixed(self.fdIn as u32), self.offsetIn, types::Fixed(self.fdOut as u32), self.offsetOut, self.len);
+
+        error!("SpliceOp {:x?}", self);
         return op.build()
             .flags(squeue::Flags::FIXED_FILE);
     }
