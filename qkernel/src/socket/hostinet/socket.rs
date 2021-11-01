@@ -127,7 +127,6 @@ impl SocketOperations {
             return (0, Vec::new())
         }
 
-
         let mut controlData: Vec<u8> = vec![0; controlDataLen];
         if self.passInq.load(Ordering::Relaxed) {
             let inqMessage = ControlMessageTCPInq {

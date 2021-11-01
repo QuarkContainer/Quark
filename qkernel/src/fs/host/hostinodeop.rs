@@ -299,8 +299,6 @@ impl HostInodeOpIntern {
         return Ok(phyAddr + (fileOffset - chunkStart))
     }
 
-
-
     //fill the holes for the file range by mmap
     //start must be Hugepage aligned
     fn Fill(&mut self, _task: &Task, start: u64, end: u64) -> Result<()> {

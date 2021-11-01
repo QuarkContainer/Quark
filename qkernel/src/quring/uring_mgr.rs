@@ -220,6 +220,19 @@ impl QUring {
         return self.UCall(task, msg);
     }
 
+    pub fn Splice(&self, task: &Task, fdIn: i32, offsetIn: i64, fdOut: i32, offsetOut: i64, len: u32, flags: u32) -> i64 {
+        let msg = UringOp::Splice(SpliceOp {
+            fdIn: fdIn,
+            offsetIn: offsetIn,
+            fdOut: fdOut,
+            offsetOut: offsetOut,
+            len: len,
+            flags: flags,
+        });
+
+        return self.UCall(task, msg);
+    }
+
     pub fn LogFlush(&self) {
         let fd = super::super::SHARESPACE.Logfd();
         let (addr, len) = super::super::SHARESPACE.GetDataBuf();

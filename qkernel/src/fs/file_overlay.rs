@@ -84,7 +84,7 @@ impl OverlayFileOperations {
         return func(&upper, upperfops)
     }
 
-    fn FileOps(&self) -> Arc<FileOperations> {
+    pub fn FileOps(&self) -> Arc<FileOperations> {
         let ops = if self.upper.lock().is_some() {
             self.upper.lock().as_ref().unwrap().FileOp.clone()
         } else if self.lower.lock().is_some() {

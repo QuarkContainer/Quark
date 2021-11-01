@@ -1073,7 +1073,6 @@ opcode!(
 
 // === 5.7 ===
 
-#[cfg(feature = "unstable")]
 opcode!(
     pub struct Splice {
         fd_in: { impl sealed::UseFixed },

@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors / 2018 The gVisor Authors.
+// Copyright (c) 2021 Quark Container Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -142,7 +142,6 @@ pub struct QAsyncLockGuard {
     pub queue: Queue,
 }
 
-
 impl QAsyncLock {
     pub fn Lock(&self, task: &Task) -> QAsyncLockGuard {
         loop {
@@ -201,6 +200,194 @@ impl QAsyncLockGuard {
 }
 
 impl Drop for QAsyncLockGuard {
+    fn drop(&mut self) {
+        self.Unlock();
+    }
+}
+
+pub enum RWState {
+    NoLock,
+    Write,
+    Read(u32)
+}
+
+impl Default for RWState {
+    fn default() -> Self {
+        return Self::NoLock
+    }
+}
+
+#[derive(Default, Clone)]
+pub struct QAsyncRwLock {
+    pub locked: Arc<QMutex<RWState>>,
+    pub queue: Queue,
+}
+
+#[derive(Default)]
+pub struct QAsyncReadLockGuard {
+    pub locked: Arc<QMutex<RWState>>,
+    pub queue: Queue,
+}
+
+#[derive(Default)]
+pub struct QAsyncWriteLockGuard {
+    pub locked: Arc<QMutex<RWState>>,
+    pub queue: Queue,
+}
+
+impl QAsyncRwLock {
+    pub fn Read(&self, task: &Task) -> QAsyncReadLockGuard {
+        loop {
+            match self.BlockRead(task) {
+                Err(_) => continue,
+                Ok(ret) => return ret
+            }
+        }
+    }
+
+    pub fn Write(&self, task: &Task) -> QAsyncWriteLockGuard {
+        loop {
+            match self.BlockWrite(task) {
+                Err(_) => continue,
+                Ok(ret) => return ret
+            }
+        }
+    }
+
+    pub fn BlockRead(&self, task: &Task) -> Result<QAsyncReadLockGuard> {
+        let blocker = task.blocker.clone();
+
+        loop {
+            let getLock = {
+                let mut l = self.locked.lock();
+
+                match *l {
+                    RWState::NoLock => {
+                        *l = RWState::Read(1);
+                        true
+                    }
+                    RWState::Read(count) => {
+                        *l = RWState::Read(count+1);
+                        true
+                    }
+                    RWState::Write => {
+                        self.queue.EventRegister(task, &blocker.generalEntry, 1);
+                        false
+                    }
+                }
+            };
+
+            if getLock {
+                //fast path
+                return Ok(QAsyncReadLockGuard {
+                    locked: self.locked.clone(),
+                    queue: self.queue.clone(),
+                })
+            }
+
+            match blocker.BlockGeneral() {
+                Err(e) => {
+                    self.queue.EventUnregister(task, &blocker.generalEntry);
+                    return Err(e)
+                }
+                Ok(()) => ()
+            }
+
+            self.queue.EventUnregister(task, &blocker.generalEntry);
+        }
+    }
+
+    pub fn BlockWrite(&self, task: &Task) -> Result<QAsyncWriteLockGuard> {
+        let blocker = task.blocker.clone();
+
+        loop {
+            let getLock = {
+                let mut l = self.locked.lock();
+
+                match *l {
+                    RWState::NoLock => {
+                        *l = RWState::Write;
+                        true
+                    }
+                    RWState::Read(_) => {
+                        self.queue.EventRegister(task, &blocker.generalEntry, 1);
+                        false
+                    }
+                    RWState::Write => {
+                        self.queue.EventRegister(task, &blocker.generalEntry, 1);
+                        false
+                    }
+                }
+            };
+
+            if getLock {
+                //fast path
+                return Ok(QAsyncWriteLockGuard {
+                    locked: self.locked.clone(),
+                    queue: self.queue.clone(),
+                })
+            }
+
+            match blocker.BlockGeneral() {
+                Err(e) => {
+                    self.queue.EventUnregister(task, &blocker.generalEntry);
+                    return Err(e)
+                }
+                Ok(()) => ()
+            }
+
+            self.queue.EventUnregister(task, &blocker.generalEntry);
+        }
+    }
+}
+
+impl QAsyncReadLockGuard {
+    pub fn Unlock(&self) {
+        let mut l = self.locked.lock();
+        match *l {
+            RWState::NoLock => {
+                panic!("QAsyncReadLockGuard unlock found RWState::NoLock");
+            }
+            RWState::Read(count) => {
+                if count == 1 {
+                    *l = RWState::NoLock;
+                    self.queue.Notify(!0);
+                } else {
+                    *l = RWState::Read(count-1)
+                }
+            }
+            RWState::Write => {
+                panic!("QAsyncReadLockGuard unlock found RWState::Write");
+            }
+        }
+    }
+}
+
+impl Drop for QAsyncReadLockGuard {
+    fn drop(&mut self) {
+        self.Unlock();
+    }
+}
+
+impl QAsyncWriteLockGuard {
+    pub fn Unlock(&self) {
+        let mut l = self.locked.lock();
+        match *l {
+            RWState::NoLock => {
+                panic!("QAsyncWriteLockGuard unlock found RWState::NoLock");
+            }
+            RWState::Read(count) => {
+                panic!("QAsyncWriteLockGuard unlock found RWState::Read count = {}", count);
+            }
+            RWState::Write => {
+                *l = RWState::NoLock;
+                self.queue.Notify(!0);
+            }
+        }
+    }
+}
+
+impl Drop for QAsyncWriteLockGuard {
     fn drop(&mut self) {
         self.Unlock();
     }
