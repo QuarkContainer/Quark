@@ -425,6 +425,8 @@ impl Deref for TTYFileOps {
     }
 }
 
+pub const ENABLE_RINGBUF : bool = true;
+
 impl TTYFileOps {
     pub fn New(fops: Arc<HostFileOp>) -> Self {
         let queue = fops.InodeOp.lock().queue.clone();
@@ -439,8 +441,8 @@ impl TTYFileOps {
             queue: queue,
         };
 
-        if SHARESPACE.config.read().TcpBuffIO {
-            IOURING.BufSockInit(internal.fd, internal.queue.clone(), internal.buf.clone()).unwrap();
+        if SHARESPACE.config.read().TcpBuffIO && ENABLE_RINGBUF {
+            IOURING.BufSockInit(internal.fd, internal.queue.clone(), internal.buf.clone(), false).unwrap();
         }
 
         return Self(Arc::new(QMutex::new(internal)))
@@ -463,7 +465,7 @@ impl TTYFileOps {
 
 impl Waitable for TTYFileOps {
     fn Readiness(&self, task: &Task,mask: EventMask) -> EventMask {
-        if SHARESPACE.config.read().TcpBuffIO {
+        if SHARESPACE.config.read().TcpBuffIO && ENABLE_RINGBUF {
             return self.lock().buf.Events() & mask
         }
 
@@ -475,7 +477,7 @@ impl Waitable for TTYFileOps {
         let queue = self.lock().queue.clone();
         queue.EventRegister(task, e, mask);
         let fd = self.lock().fd;
-        if !SHARESPACE.config.read().TcpBuffIO {
+        if !SHARESPACE.config.read().TcpBuffIO && ENABLE_RINGBUF {
             UpdateFD(fd).unwrap();
         };
     }
@@ -484,7 +486,7 @@ impl Waitable for TTYFileOps {
         let queue = self.lock().queue.clone();
         queue.EventUnregister(task, e);
         let fd = self.lock().fd;
-        if !SHARESPACE.config.read().TcpBuffIO {
+        if !SHARESPACE.config.read().TcpBuffIO && ENABLE_RINGBUF {
             UpdateFD(fd).unwrap();
         };
     }
@@ -520,7 +522,7 @@ impl FileOperations for TTYFileOps {
     fn ReadAt(&self, task: &Task, f: &File, dsts: &mut [IoVec], offset: i64, blocking: bool) -> Result<i64> {
         self.lock().checkChange(task, Signal(Signal::SIGTTIN))?;
 
-        if SHARESPACE.config.read().TcpBuffIO {
+        if SHARESPACE.config.read().TcpBuffIO  && ENABLE_RINGBUF{
             let size = IoVec::NumBytes(dsts);
             let buf = DataBuff::New(size);
             let mut iovs = buf.Iovs();
@@ -529,7 +531,7 @@ impl FileOperations for TTYFileOps {
             let queue = self.lock().queue.clone();
             let ringBuf = self.lock().buf.clone();
 
-            let ret = IOURING.RingFileRead(task, fd, queue, ringBuf, &mut iovs)?;
+            let ret = IOURING.RingFileRead(task, fd, queue, ringBuf, &mut iovs, false)?;
             if ret > 0 {
                 task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
             }
@@ -549,7 +551,7 @@ impl FileOperations for TTYFileOps {
             }
         }
 
-        if SHARESPACE.config.read().TcpBuffIO {
+        if SHARESPACE.config.read().TcpBuffIO && ENABLE_RINGBUF {
             let size = IoVec::NumBytes(srcs);
             let mut buf = DataBuff::New(size);
             task.CopyDataInFromIovs(&mut buf.buf, &srcs)?;

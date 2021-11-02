@@ -283,9 +283,9 @@ impl QUring {
         return self.UCall(task, msg);
     }
 
-    pub fn BufSockInit(&self, fd: i32, queue: Queue, buf: Arc<SocketBuff>) -> Result<()> {
+    pub fn BufSockInit(&self, fd: i32, queue: Queue, buf: Arc<SocketBuff>, isSocket: bool) -> Result<()> {
         let (addr, len) = buf.GetFreeReadBuf();
-        let readop = AsyncFileRead::New(fd, queue, buf, addr, len);
+        let readop = AsyncFileRead::New(fd, queue, buf, addr, len, isSocket);
 
         IOURING.AUCall(AsyncOps::AsyncFileRead(readop));
 
@@ -304,18 +304,14 @@ impl QUring {
         return Ok(count as i64)
     }
 
-    pub fn RingFileRead(&self, _task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, dsts: &mut [IoVec]) -> Result<i64> {
+    pub fn RingFileRead(&self, _task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, dsts: &mut [IoVec], isSocket: bool) -> Result<i64> {
         let (trigger, cnt) = buf.Readv(dsts)?;
 
         if trigger {
             let (addr, len) = buf.GetFreeReadBuf();
-            let readop = AsyncFileRead::New(fd, queue, buf, addr, len);
+            let readop = AsyncFileRead::New(fd, queue, buf, addr, len, isSocket);
 
             IOURING.AUCall(AsyncOps::AsyncFileRead(readop));
-            //let recvMsgOp = AsycnRecvMsg::New(sockops.fd, sockops);
-            //recvMsgOp.lock().SetIovs(addr, cnt);
-
-            //self.AUCall(AsyncOps::AsycnRecvMsg(recvMsgOp));
         }
 
         return Ok(cnt as i64)
