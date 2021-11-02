@@ -23,7 +23,7 @@ use core::ptr;
 use core::ops::Deref;
 use ::qlib::mutex::*;
 
-use crate::socket::control::ControlMessage;
+use ::socket::control::ControlMessage;
 
 //use super::super::*;
 use super::super::super::guestfdnotifier::*;
