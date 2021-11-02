@@ -83,8 +83,6 @@ pub struct SocketOperationsIntern {
 #[derive(Clone)]
 pub struct SocketOperations(Arc<SocketOperationsIntern>);
 
-pub const DEFAULT_BUF_PAGE_COUNT : u64 = 16;
-
 impl SocketOperations {
     pub fn New(family: i32, fd: i32, stype: i32, queue: Queue, enableSocketBuf: bool, addr: Option<Vec<u8>>) -> Result<Self> {
         let addr = match addr {
@@ -141,16 +139,18 @@ impl SocketOperations {
     }
 
     pub fn SocketBufEnabled(&self) -> bool {
+        assert!((self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
+            && self.stype == SockType::SOCK_STREAM);
         return self.enableSocketBuf.load(Ordering::Relaxed);
     }
 
     pub fn EnableSocketBuf(&self) {
         assert!(self.SocketBufEnabled() == false);
 
-        let socketBuf = Arc::new(SocketBuff::Init(DEFAULT_BUF_PAGE_COUNT));
+        let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
         *self.socketBuf.lock() = Some(socketBuf);
         self.enableSocketBuf.store(true, Ordering::Relaxed);
-        IOURING.BufSockInit(self).unwrap();
+        IOURING.BufSockInit(self.fd, self.queue.clone(), self.SocketBuf()).unwrap();
     }
 
     pub fn Notify(&self, mask: EventMask) {
@@ -327,13 +327,13 @@ impl FileOperations for SocketOperations {
             let size = IoVec::NumBytes(dsts);
             let buf = DataBuff::New(size);
             let mut iovs = buf.Iovs();
-            let ret = IOURING.BufSockRead(task, self, &mut iovs)?;
+            let ret = IOURING.RingFileRead(task, self.fd, self.queue.clone(), self.SocketBuf(), &mut iovs)?;
             if ret > 0 {
                 task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
             }
             return Ok(ret);
 
-            //return IOURING.BufSockRead(task, self, dsts)
+            //return IOURING.RingFileRead(task, self, dsts)
         }
 
         //defer!(task.GetMut().iovs.clear());
@@ -354,9 +354,9 @@ impl FileOperations for SocketOperations {
             let mut buf = DataBuff::New(size);
             task.CopyDataInFromIovs(&mut buf.buf, &srcs)?;
             let iovs = buf.Iovs();
-            return IOURING.BufSockWrite(task, self, &iovs)
+            return IOURING.RingFileWrite(task, self.fd, self.queue.clone(), self.SocketBuf(), &iovs)
 
-            //return IOURING.BufSockWrite(task, self, srcs)
+            //return IOURING.RingFileWrite(task, self, srcs)
         }
 
         //defer!(task.GetMut().iovs.clear());
@@ -842,7 +842,7 @@ impl SockOperations for SocketOperations {
             let mut count = 0;
             let mut tmp;
             loop {
-                match IOURING.BufSockRead(task, self, iovs) {
+                match IOURING.RingFileRead(task, self.fd, self.queue.clone(), self.SocketBuf(), iovs) {
                     Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
                         if flags & MsgType::MSG_DONTWAIT != 0 {
                             if count > 0 {
@@ -892,7 +892,7 @@ impl SockOperations for SocketOperations {
 
             'main: loop {
                 loop {
-                    match IOURING.BufSockRead(task, self, iovs) {
+                    match IOURING.RingFileRead(task, self.fd, self.queue.clone(), self.SocketBuf(), iovs) {
                         Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
                             if count > 0 {
                                 break 'main;
@@ -1057,7 +1057,7 @@ impl SockOperations for SocketOperations {
 
             loop {
                 loop {
-                    match IOURING.BufSockWrite(task, self, srcs) {
+                    match IOURING.RingFileWrite(task, self.fd, self.queue.clone(), self.SocketBuf(), srcs) {
                         Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
                             if count > 0 {
                                 return Ok(count)

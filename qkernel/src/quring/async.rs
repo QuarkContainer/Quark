@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use alloc::vec::Vec;
+use alloc::sync::Arc;
 use alloc::collections::vec_deque::VecDeque;
 use core::marker::Send;
 use ::qlib::mutex::*;
@@ -24,6 +25,8 @@ use super::super::qlib::common::*;
 use super::super::qlib::uring::squeue;
 use super::super::qlib::uring::opcode::*;
 use super::super::qlib::uring::opcode;
+use super::super::kernel::waiter::*;
+use super::super::socket::hostinet::socket_buf::*;
 use super::super::fs::file::*;
 use super::super::task::*;
 use super::super::kernel::aio::aio_context::*;
@@ -44,8 +47,8 @@ pub enum AsyncOps {
     AsyncEventfdWrite(AsyncEventfdWrite),
     AsycnSendMsg(AsycnSendMsg),
     AsycnRecvMsg(AsycnRecvMsg),
-    AsyncSocketSend(AsyncSocketSend),
-    AsyncSocketRecv(AsyncSocketRecv),
+    AsyncFiletWrite(AsyncFiletWrite),
+    AsyncFileRead(AsyncFileRead),
     AIOWrite(AIOWrite),
     AIORead(AIORead),
     AIOFsync(AIOFsync),
@@ -68,8 +71,8 @@ impl AsyncOps {
             AsyncOps::AsyncEventfdWrite(ref msg) => return msg.SEntry(),
             AsyncOps::AsycnSendMsg(ref msg) => return msg.SEntry(),
             AsyncOps::AsycnRecvMsg(ref msg) => return msg.SEntry(),
-            AsyncOps::AsyncSocketSend(ref msg) => return msg.SEntry(),
-            AsyncOps::AsyncSocketRecv(ref msg) => return msg.SEntry(),
+            AsyncOps::AsyncFiletWrite(ref msg) => return msg.SEntry(),
+            AsyncOps::AsyncFileRead(ref msg) => return msg.SEntry(),
             AsyncOps::AIOWrite(ref msg) => return msg.SEntry(),
             AsyncOps::AIORead(ref msg) => return msg.SEntry(),
             AsyncOps::AIOFsync(ref msg) => return msg.SEntry(),
@@ -94,8 +97,8 @@ impl AsyncOps {
             AsyncOps::AsyncEventfdWrite(ref mut msg) => msg.Process(result),
             AsyncOps::AsycnSendMsg(ref mut msg) => msg.Process(result),
             AsyncOps::AsycnRecvMsg(ref mut msg) => msg.Process(result),
-            AsyncOps::AsyncSocketSend(ref mut msg) => msg.Process(result),
-            AsyncOps::AsyncSocketRecv(ref mut msg) => msg.Process(result),
+            AsyncOps::AsyncFiletWrite(ref mut msg) => msg.Process(result),
+            AsyncOps::AsyncFileRead(ref mut msg) => msg.Process(result),
             AsyncOps::AIOWrite(ref mut msg) => msg.Process(result),
             AsyncOps::AIORead(ref mut msg) => msg.Process(result),
             AsyncOps::AIOFsync(ref mut msg) => msg.Process(result),
@@ -124,8 +127,8 @@ impl AsyncOps {
             AsyncOps::AsyncEventfdWrite(_) => return 5,
             AsyncOps::AsycnSendMsg(_) => return 6,
             AsyncOps::AsycnRecvMsg(_) => return 7,
-            AsyncOps::AsyncSocketSend(_) => return 8,
-            AsyncOps::AsyncSocketRecv(_) => return 9,
+            AsyncOps::AsyncFiletWrite(_) => return 8,
+            AsyncOps::AsyncFileRead(_) => return 9,
             AsyncOps::AIOWrite(_) => return 10,
             AsyncOps::AIORead(_) => return 11,
             AsyncOps::AIOFsync(_) => return 12,
@@ -486,27 +489,27 @@ impl AsyncLogFlush {
     }
 }
 
-pub struct AsyncSocketSend {
+pub struct AsyncFiletWrite {
     pub fd : i32,
-    pub ops: SocketOperations,
+    pub queue: Queue,
+    pub buf: Arc<SocketBuff>,
     pub addr: u64,
     pub len: usize,
 }
 
-impl AsyncSocketSend {
+impl AsyncFiletWrite {
     pub fn SEntry(&self) -> squeue::Entry {
         //let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
-        let op = opcode::Send::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32); //.flags(MsgType::MSG_DONTWAIT);
+        let op = opcode::Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32); //.flags(MsgType::MSG_DONTWAIT);
 
         return op.build()
             .flags(squeue::Flags::FIXED_FILE);
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
-        let buf = self.ops.SocketBuf();
         if result < 0 {
-            buf.SetErr(-result);
-            self.ops.Notify(EVENT_ERR | EVENT_IN);
+            self.buf.SetErr(-result);
+            self.queue.Notify(EventMaskFromLinux((EVENT_ERR | EVENT_IN) as u32));
             return false;
             //return true;
         }
@@ -514,18 +517,18 @@ impl AsyncSocketSend {
         // EOF
         // to debug
         if result == 0 {
-            buf.SetWClosed();
-            if buf.ProduceReadBuf(0) {
-                self.ops.Notify(EVENT_OUT);
+            self.buf.SetWClosed();
+            if self.buf.ProduceReadBuf(0) {
+                self.queue.Notify(EventMaskFromLinux(EVENT_OUT as u32));
             } else {
-                self.ops.Notify(EVENT_HUP);
+                self.queue.Notify(EventMaskFromLinux(EVENT_HUP as u32));
             }
             return false
         }
 
-        let (trigger, addr, len) = buf.ConsumeAndGetAvailableWriteBuf(result as usize);
+        let (trigger, addr, len) = self.buf.ConsumeAndGetAvailableWriteBuf(result as usize);
         if trigger {
-            self.ops.Notify(EVENT_OUT);
+            self.queue.Notify(EventMaskFromLinux(EVENT_OUT as u32));
         }
 
         if addr == 0 {
@@ -538,53 +541,54 @@ impl AsyncSocketSend {
         return true
     }
 
-    pub fn New(fd: i32, ops: SocketOperations, addr: u64, len: usize) -> Self {
+    pub fn New(fd: i32, queue: Queue, buf: Arc<SocketBuff>, addr: u64, len: usize) -> Self {
         return Self {
             fd,
-            ops,
+            queue,
+            buf,
             addr,
             len,
         }
     }
 }
 
-pub struct AsyncSocketRecv {
+pub struct AsyncFileRead {
     pub fd : i32,
-    pub ops: SocketOperations,
+    pub queue: Queue,
+    pub buf: Arc<SocketBuff>,
     pub addr: u64,
     pub len: usize,
 }
 
-impl AsyncSocketRecv {
+impl AsyncFileRead {
     pub fn SEntry(&self) -> squeue::Entry {
-        let op = Recv::new(types::Fd(self.fd), self.addr as * mut u8, self.len as u32);
+        let op = Read::new(types::Fd(self.fd), self.addr as * mut u8, self.len as u32);
 
         return op.build()
             .flags(squeue::Flags::FIXED_FILE);
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
-        let buf = self.ops.SocketBuf();
         if result < 0 {
-            buf.SetErr(-result);
-            self.ops.Notify(EVENT_ERR | EVENT_IN);
+            self.buf.SetErr(-result);
+            self.queue.Notify(EventMaskFromLinux((EVENT_ERR | EVENT_IN) as u32));
             return false;
         }
 
         // EOF
         if result == 0 {
-            buf.SetRClosed();
-            if buf.ProduceReadBuf(0) {
-                self.ops.Notify(EVENT_IN);
+            self.buf.SetRClosed();
+            if self.buf.ProduceReadBuf(0) {
+                self.queue.Notify(EventMaskFromLinux(EVENT_IN as u32));
             } else {
-                self.ops.Notify(EVENT_HUP);
+                self.queue.Notify(EventMaskFromLinux(EVENT_HUP as u32)) ;
             }
             return false
         }
 
-        let (trigger, addr, len) = buf.ProduceAndGetFreeReadBuf(result as usize);
+        let (trigger, addr, len) = self.buf.ProduceAndGetFreeReadBuf(result as usize);
         if trigger {
-            self.ops.Notify(EVENT_IN);
+            self.queue.Notify(EventMaskFromLinux(EVENT_IN as u32));
         }
 
         if len == 0 {
@@ -596,10 +600,11 @@ impl AsyncSocketRecv {
         return true;
     }
 
-    pub fn New(fd: i32, ops: SocketOperations, addr: u64, len: usize) -> Self {
+    pub fn New(fd: i32, queue: Queue, buf: Arc<SocketBuff>, addr: u64, len: usize) -> Self {
         return Self {
             fd,
-            ops,
+            queue,
+            buf,
             addr,
             len,
         }

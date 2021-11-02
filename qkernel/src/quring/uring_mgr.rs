@@ -14,6 +14,7 @@
 
 use ::qlib::mutex::*;
 use core::sync::atomic;
+use alloc::sync::Arc;
 
 use super::super::task::*;
 use super::super::qlib::common::*;
@@ -22,11 +23,12 @@ pub use super::super::qlib::uring::cqueue::CompletionQueue;
 pub use super::super::qlib::uring::cqueue;
 pub use super::super::qlib::uring::squeue::SubmissionQueue;
 pub use super::super::qlib::uring::*;
+
 use super::super::qlib::uring::util::*;
 use super::super::qlib::uring::porting::*;
 use super::super::qlib::linux_def::*;
-use super::super::socket::hostinet::socket::*;
-use super::super::socket::unix::transport::unix::*;
+use super::super::kernel::waiter::*;
+use super::super::socket::hostinet::socket_buf::*;
 use super::super::Kernel::HostSpace;
 use super::super::kernel::async_wait::*;
 use super::super::IOURING;
@@ -281,49 +283,35 @@ impl QUring {
         return self.UCall(task, msg);
     }
 
-    pub fn BufSockInit(&self, sockops: &SocketOperations) -> Result<()> {
-        let buf = sockops.SocketBuf();
-
+    pub fn BufSockInit(&self, fd: i32, queue: Queue, buf: Arc<SocketBuff>) -> Result<()> {
         let (addr, len) = buf.GetFreeReadBuf();
-        let readop = AsyncSocketRecv::New(sockops.fd, sockops.clone(), addr, len);
+        let readop = AsyncFileRead::New(fd, queue, buf, addr, len);
 
-        IOURING.AUCall(AsyncOps::AsyncSocketRecv(readop));
+        IOURING.AUCall(AsyncOps::AsyncFileRead(readop));
 
         return Ok(())
     }
 
-    pub fn BufSockWrite(&self, _task: &Task, sockops: &SocketOperations, srcs: &[IoVec]) -> Result<i64> {
-        assert!((sockops.family == AFType::AF_INET || sockops.family == AFType::AF_INET6)
-            && sockops.stype == SockType::SOCK_STREAM, "family is {}, stype is {}", sockops.family, sockops.stype);
-
-        let buf = sockops.SocketBuf();
+    pub fn RingFileWrite(&self, _task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, srcs: &[IoVec]) -> Result<i64> {
         let (count, writeBuf) = buf.Writev(srcs)?;
 
         if let Some((addr, len)) = writeBuf {
-            let writeop = AsyncSocketSend::New(sockops.fd, sockops.clone(), addr, len);
+            let writeop = AsyncFiletWrite::New(fd, queue, buf, addr, len);
 
-            IOURING.AUCall(AsyncOps::AsyncSocketSend(writeop));
-            /*let sendMsgOp = AsycnSendMsg::New(sockops.fd, sockops);
-            sendMsgOp.lock().SetIovs(addr, cnt);
-
-            self.AUCall(AsyncOps::AsycnSendMsg(sendMsgOp));*/
+            IOURING.AUCall(AsyncOps::AsyncFiletWrite(writeop));
         }
 
         return Ok(count as i64)
     }
 
-    pub fn BufSockRead(&self, _task: &Task, sockops: &SocketOperations, dsts: &mut [IoVec]) -> Result<i64> {
-        assert!((sockops.family == AFType::AF_INET || sockops.family == AFType::AF_INET6)
-            && sockops.stype == SockType::SOCK_STREAM);
-
-        let buf = sockops.SocketBuf();
+    pub fn RingFileRead(&self, _task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, dsts: &mut [IoVec]) -> Result<i64> {
         let (trigger, cnt) = buf.Readv(dsts)?;
 
         if trigger {
             let (addr, len) = buf.GetFreeReadBuf();
-            let readop = AsyncSocketRecv::New(sockops.fd, sockops.clone(), addr, len);
+            let readop = AsyncFileRead::New(fd, queue, buf, addr, len);
 
-            IOURING.AUCall(AsyncOps::AsyncSocketRecv(readop));
+            IOURING.AUCall(AsyncOps::AsyncFileRead(readop));
             //let recvMsgOp = AsycnRecvMsg::New(sockops.fd, sockops);
             //recvMsgOp.lock().SetIovs(addr, cnt);
 
