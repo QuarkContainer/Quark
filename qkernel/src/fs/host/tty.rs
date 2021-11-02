@@ -23,6 +23,7 @@ use super::super::super::qlib::linux_def::*;
 use super::super::super::task::*;
 use super::super::super::threadmgr::processgroup::*;
 use super::super::super::threadmgr::session::*;
+use super::super::super::socket::hostinet::socket_buf::*;
 
 use super::super::file::*;
 use super::super::dirent::*;
@@ -367,10 +368,12 @@ impl KernelTermios {
 }
 
 pub struct TTYFileOpsInternal {
-    pub fileOps: Arc<FileOperations>,
+    pub fileOps: Arc<HostFileOp>,
     pub termios: KernelTermios,
     pub session: Option<Session>,
     pub fgProcessgroup: Option<ProcessGroup>,
+    pub buf: Arc<SocketBuff>,
+    pub queue: Queue,
 }
 
 impl TTYFileOpsInternal {
@@ -419,17 +422,19 @@ impl Deref for TTYFileOps {
 }
 
 impl TTYFileOps {
-    pub fn New(fops: Arc<FileOperations>) -> Self {
+    pub fn New(fops: Arc<HostFileOp>) -> Self {
+        let queue = fops.InodeOp.lock().queue.clone();
         let internal = TTYFileOpsInternal {
             fileOps: fops,
             termios: DEFAULT_SLAVE_TERMIOS,
             session: None,
             fgProcessgroup: None,
+            buf: Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT)),
+            queue: queue,
         };
 
         return Self(Arc::new(QMutex::new(internal)))
     }
-
 
     pub fn InitForegroundProcessGroup(&self, pg: &ProcessGroup) {
         let mut t = self.lock();

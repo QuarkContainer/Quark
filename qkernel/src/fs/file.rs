@@ -34,6 +34,7 @@ use super::super::qlib::linux_def::*;
 use super::super::task::*;
 use super::super::memmgr::*;
 use super::super::fs::flags::*;
+use super::super::fs::host::hostfileop::*;
 use super::super::tcpip::tcpip::*;
 use super::super::kernel::fasync::*;
 use super::super::qlib::singleton::*;
@@ -505,7 +506,7 @@ impl File {
         }))
     }
 
-    pub fn NewTTYFile(dirent: &Dirent, flags: &FileFlags, fops: Arc<FileOperations>) -> Self {
+    pub fn NewTTYFile(dirent: &Dirent, flags: &FileFlags, fops: Arc<HostFileOp>) -> Self {
         let ttyfileops = TTYFileOps::New(fops);
 
         return Self::New(dirent, flags, ttyfileops)
