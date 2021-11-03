@@ -247,7 +247,14 @@ impl HostFdNotifier {
         for i in 0..nfds as usize {
             let n = self.read();
             let fd = events[i].u64 as i32;
-            let fi = n.fdMap.get(&fd).expect(&format!("WaitAndNotify get none fd {}", fd));
+            let fi = match n.fdMap.get(&fd) {
+                None => {
+                    info!("WaitAndNotify fd {} has been removed", fd);
+                    continue
+                }
+                Some(fi) => fi,
+            };
+
             fi.handler.Process(shareSpace, events[i].events as EventMask);
         }
 

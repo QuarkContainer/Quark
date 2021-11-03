@@ -295,6 +295,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
 
     currTask.RestoreFp();
 
+    currTask.Check();
     if SHARESPACE.config.read().KernelPagetable {
         currTask.SwitchPageTable();
     }
@@ -411,7 +412,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
             kpt.InitVsyscall(vsyscallPages);
         }
 
-        LogInit(1024); // 1024 pages, i.e. 4MB
+        LogInit(1 * 1024); // 1024 pages, i.e. 4MB
         SetVCPCount(vcpuCnt as usize);
         InitTimeKeeper(vdsoParamAddr);
         VDSO.Initialization(vdsoParamAddr);

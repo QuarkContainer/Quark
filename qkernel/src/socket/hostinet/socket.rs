@@ -139,13 +139,14 @@ impl SocketOperations {
     }
 
     pub fn SocketBufEnabled(&self) -> bool {
-        assert!((self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
-            && self.stype == SockType::SOCK_STREAM);
         return self.enableSocketBuf.load(Ordering::Relaxed);
     }
 
     pub fn EnableSocketBuf(&self) {
         assert!(self.SocketBufEnabled() == false);
+
+        assert!((self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
+            && self.stype == SockType::SOCK_STREAM, "family {}, stype {}", self.family, self.stype);
 
         let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
         *self.socketBuf.lock() = Some(socketBuf);
