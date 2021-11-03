@@ -131,10 +131,8 @@ impl Loader {
     //Exec a new process in current sandbox, it supports 'runc exec'
     pub fn ExecProcess(&self, process: Process) -> Result<(i32, u64, u64, u64)> {
         let task = Task::Current();
-
         let kernel = self.Lock(task)?.kernel.clone();
         let userns = kernel.rootUserNamespace.clone();
-
         let mut gids = Vec::with_capacity(process.AdditionalGids.len());
         for gid in &process.AdditionalGids {
             gids.push(KGID(*gid))
@@ -174,9 +172,9 @@ impl Loader {
             tg : tg,
             tty: ttyFileOps,
         };
-
         self.Lock(task)?.processes.insert(tid, execProc);
-
+        let paths = GetPath(&procArgs.Envv);
+        procArgs.Filename = task.mountNS.ResolveExecutablePath(task, &procArgs.WorkingDirectory, &procArgs.Filename, &paths)?;
         let (entry, userStackAddr, kernelStackAddr) = kernel.LoadProcess(&procArgs.Filename, &procArgs.Envv, &mut procArgs.Argv)?;
         return Ok((tid, entry, userStackAddr, kernelStackAddr))
     }

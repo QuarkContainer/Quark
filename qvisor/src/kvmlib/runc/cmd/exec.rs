@@ -163,7 +163,7 @@ impl ExecCmd {
                     .takes_value(true)
                     .default_value("")
                     .long("pid-file")
-                    .help("specify the file to write the process id to"),
+                    .help("specify the file to write the container pid to"),
             )
             .arg(
                 Arg::with_name("internal-pid-file")
@@ -332,10 +332,6 @@ impl ExecCmd {
     pub fn ExecAndWait(&self, gCfg: &GlobalConfig) -> Result<()> {
         let mut cmd = std::process::Command::new(&ReadLink(EXE_PATH)?);
 
-        // The command needs to write a pid file so that execAndWait can tell
-        // when it has started. If no pid-file was provided, we should use a
-        // filename in a temp directory.
-        let mut pidFile = self.pid.to_string();
         cmd.arg("--root");
         cmd.arg(&gCfg.RootDir);
 
@@ -390,6 +386,10 @@ impl ExecCmd {
             cmd.arg(&self.processPath);
         }
 
+        // The command needs to write a pid file so that execAndWait can tell
+        // when it has started. If no pid-file was provided, we should use a
+        // filename in a temp directory.
+        let mut pidFile = self.pid.to_string();
         cmd.arg("--pid-file");
         if pidFile.len() == 0{
             let tmpDir = Builder::new().prefix("exec-pid-").tempdir()
@@ -406,33 +406,35 @@ impl ExecCmd {
             cmd.arg(&self.internalPidFile);
         }
 
-        if self.consoleSocket.len() > 0{
+        cmd.stdin(Stdio::inherit());
+        cmd.stdout(Stdio::inherit());
+        cmd.stderr(Stdio::inherit());
+
+        if self.consoleSocket.len() > 0 {
             cmd.arg("--console-socket");
             cmd.arg(&self.consoleSocket);
+
+            let (master, slave) = NewPty()?;
+            unsafe {
+                let tty = slave.dup()?;
+                cmd.stdin(Stdio::from_raw_fd(tty));
+                cmd.stdout(Stdio::from_raw_fd(tty));
+                cmd.stderr(Stdio::from_raw_fd(tty));
+            }
+
+            let client = UnixSocket::NewClient(&self.consoleSocket)?;
+            client.SendFd(master.as_raw_fd())?;
         }
 
         for a in &self.argv {
             cmd.arg(a);
         }
 
-        let (master, slave) = NewPty()?;
-
-        unsafe {
-            let tty = slave.dup()?;
-            cmd.stdin(Stdio::from_raw_fd(tty));
-            cmd.stdout(Stdio::from_raw_fd(tty));
-            cmd.stderr(Stdio::from_raw_fd(tty));
-        }
-
-        assert!(self.consoleSocket.len() > 0);
-        let client = UnixSocket::NewClient(&self.consoleSocket)?;
-        client.SendFd(master.as_raw_fd())?;
-
         let child = cmd.spawn().unwrap();
 
-        error!("before wait for ready");
+        info!("quark exec: before wait for ready");
         WaitForReady(&pidFile, child.id() as i32, 10 * SECOND)?;
-        error!("after wait for ready");
+        info!("quark exec: after wait for ready");
         return Ok(())
     }
 }
