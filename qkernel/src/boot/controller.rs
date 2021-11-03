@@ -18,6 +18,7 @@ use core::{ptr};
 
 use super::super::qlib::common::*;
 use super::super::qlib::control_msg::*;
+use super::super::qlib::vcpu_mgr::*;
 use super::super::Kernel;
 use super::super::taskMgr;
 use super::super::task::*;
@@ -140,11 +141,9 @@ pub fn ControlMsgHandler(_para: *const u8) {
         }
     }
 
-
-    let taskId = Task::Current().taskId;
-    KERNEL_STACK_ALLOCATOR.Free(taskId).unwrap();
-    //(*PAGE_ALLOCATOR).Free(taskId, DEFAULT_STACK_PAGES).unwrap();
-    taskMgr::Wait();
+    // free curent task in the waitfn context
+    CPULocal::SetPendingFreeStack(Task::Current().taskId);
+    super::super::taskMgr::SwitchToNewTask();
 }
 
 pub fn ControlMsgCall() -> Result<ControlMsg> {
