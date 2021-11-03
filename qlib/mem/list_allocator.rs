@@ -19,6 +19,9 @@ use core::cmp::max;
 use core::mem::size_of;
 use core::ptr::NonNull;
 use buddy_system_allocator::Heap;
+
+//use super::buddy_allocator::Heap;
+
 use super::super::mutex::*;
 
 pub const CLASS_CNT : usize = 16;
