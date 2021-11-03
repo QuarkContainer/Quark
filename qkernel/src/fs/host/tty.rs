@@ -18,12 +18,15 @@ use ::qlib::mutex::*;
 use core::ops::Deref;
 
 use super::super::super::kernel::waiter::*;
+use super::super::super::guestfdnotifier::*;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::task::*;
 use super::super::super::threadmgr::processgroup::*;
 use super::super::super::threadmgr::session::*;
 use super::super::super::socket::hostinet::socket_buf::*;
+use super::super::super::SHARESPACE;
+use super::super::super::IOURING;
 
 use super::super::file::*;
 use super::super::dirent::*;
@@ -372,6 +375,7 @@ pub struct TTYFileOpsInternal {
     pub termios: KernelTermios,
     pub session: Option<Session>,
     pub fgProcessgroup: Option<ProcessGroup>,
+    pub fd: i32,
     pub buf: Arc<SocketBuff>,
     pub queue: Queue,
 }
@@ -421,17 +425,25 @@ impl Deref for TTYFileOps {
     }
 }
 
+pub const ENABLE_RINGBUF : bool = true;
+
 impl TTYFileOps {
     pub fn New(fops: Arc<HostFileOp>) -> Self {
         let queue = fops.InodeOp.lock().queue.clone();
+        let fd = fops.InodeOp.lock().HostFd;
         let internal = TTYFileOpsInternal {
             fileOps: fops,
             termios: DEFAULT_SLAVE_TERMIOS,
             session: None,
             fgProcessgroup: None,
+            fd: fd,
             buf: Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT)),
             queue: queue,
         };
+
+        if SHARESPACE.config.read().TcpBuffIO && ENABLE_RINGBUF {
+            IOURING.BufSockInit(internal.fd, internal.queue.clone(), internal.buf.clone(), false).unwrap();
+        }
 
         return Self(Arc::new(QMutex::new(internal)))
     }
@@ -453,18 +465,30 @@ impl TTYFileOps {
 
 impl Waitable for TTYFileOps {
     fn Readiness(&self, task: &Task,mask: EventMask) -> EventMask {
+        if SHARESPACE.config.read().TcpBuffIO && ENABLE_RINGBUF {
+            return self.lock().buf.Events() & mask
+        }
+
         let fops = self.lock().fileOps.clone();
         return fops.Readiness(task, mask)
     }
 
     fn EventRegister(&self, task: &Task,e: &WaitEntry, mask: EventMask) {
-        let fops = self.lock().fileOps.clone();
-        fops.EventRegister(task, e, mask);
+        let queue = self.lock().queue.clone();
+        queue.EventRegister(task, e, mask);
+        let fd = self.lock().fd;
+        if !SHARESPACE.config.read().TcpBuffIO && ENABLE_RINGBUF {
+            UpdateFD(fd).unwrap();
+        };
     }
 
     fn EventUnregister(&self, task: &Task,e: &WaitEntry) {
-        let fops = self.lock().fileOps.clone();
-        fops.EventUnregister(task, e);
+        let queue = self.lock().queue.clone();
+        queue.EventUnregister(task, e);
+        let fd = self.lock().fd;
+        if !SHARESPACE.config.read().TcpBuffIO && ENABLE_RINGBUF {
+            UpdateFD(fd).unwrap();
+        };
     }
 }
 
@@ -498,6 +522,22 @@ impl FileOperations for TTYFileOps {
     fn ReadAt(&self, task: &Task, f: &File, dsts: &mut [IoVec], offset: i64, blocking: bool) -> Result<i64> {
         self.lock().checkChange(task, Signal(Signal::SIGTTIN))?;
 
+        if SHARESPACE.config.read().TcpBuffIO  && ENABLE_RINGBUF{
+            let size = IoVec::NumBytes(dsts);
+            let buf = DataBuff::New(size);
+            let mut iovs = buf.Iovs();
+
+            let fd = self.lock().fd;
+            let queue = self.lock().queue.clone();
+            let ringBuf = self.lock().buf.clone();
+
+            let ret = IOURING.RingFileRead(task, fd, queue, ringBuf, &mut iovs, false)?;
+            if ret > 0 {
+                task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
+            }
+            return Ok(ret);
+        }
+
         let fops = self.lock().fileOps.clone();
         let res = fops.ReadAt(task, f, dsts, offset, blocking);
         return res;
@@ -509,6 +549,18 @@ impl FileOperations for TTYFileOps {
             if t.termios.LEnabled(LocalFlags::TOSTOP) {
                 t.checkChange(task, Signal(Signal::SIGTTOU))?;
             }
+        }
+
+        if SHARESPACE.config.read().TcpBuffIO && ENABLE_RINGBUF {
+            let size = IoVec::NumBytes(srcs);
+            let mut buf = DataBuff::New(size);
+            task.CopyDataInFromIovs(&mut buf.buf, &srcs)?;
+            let iovs = buf.Iovs();
+
+            let fd = self.lock().fd;
+            let queue = self.lock().queue.clone();
+            let ringBuf = self.lock().buf.clone();
+            return IOURING.RingFileWrite(task, fd, queue, ringBuf, &iovs)
         }
 
         let fops = self.lock().fileOps.clone();

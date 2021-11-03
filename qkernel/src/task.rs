@@ -175,8 +175,15 @@ impl Default for Guard {
 impl Guard {
     const MAGIC_GUILD: u64 = 0x1234567890abcd;
 
+    #[inline(always)]
     pub fn Check(&self) {
-        assert!(self.0==Self::MAGIC_GUILD)
+        if self.0 != Self::MAGIC_GUILD {
+            let task = Task::Current();
+            raw!(0x240, task.taskId, 0);
+            super::Kernel::HostSpace::VcpuDebug();
+            loop {}
+        }
+        //assert!(self.0==Self::MAGIC_GUILD)
     }
 }
 
@@ -224,6 +231,7 @@ pub struct Task {
 unsafe impl Sync for Task {}
 
 impl Task {
+    #[inline(always)]
     pub fn Check(&self) {
         self.guard.Check();
     }

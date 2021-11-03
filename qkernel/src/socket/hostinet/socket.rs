@@ -23,7 +23,7 @@ use core::ptr;
 use core::ops::Deref;
 use ::qlib::mutex::*;
 
-use crate::socket::control::ControlMessage;
+use ::socket::control::ControlMessage;
 
 //use super::super::*;
 use super::super::super::guestfdnotifier::*;
@@ -139,18 +139,19 @@ impl SocketOperations {
     }
 
     pub fn SocketBufEnabled(&self) -> bool {
-        assert!((self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
-            && self.stype == SockType::SOCK_STREAM);
         return self.enableSocketBuf.load(Ordering::Relaxed);
     }
 
     pub fn EnableSocketBuf(&self) {
         assert!(self.SocketBufEnabled() == false);
 
+        assert!((self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
+            && self.stype == SockType::SOCK_STREAM, "family {}, stype {}", self.family, self.stype);
+
         let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
         *self.socketBuf.lock() = Some(socketBuf);
         self.enableSocketBuf.store(true, Ordering::Relaxed);
-        IOURING.BufSockInit(self.fd, self.queue.clone(), self.SocketBuf()).unwrap();
+        IOURING.BufSockInit(self.fd, self.queue.clone(), self.SocketBuf(), true).unwrap();
     }
 
     pub fn Notify(&self, mask: EventMask) {
@@ -327,13 +328,11 @@ impl FileOperations for SocketOperations {
             let size = IoVec::NumBytes(dsts);
             let buf = DataBuff::New(size);
             let mut iovs = buf.Iovs();
-            let ret = IOURING.RingFileRead(task, self.fd, self.queue.clone(), self.SocketBuf(), &mut iovs)?;
+            let ret = IOURING.RingFileRead(task, self.fd, self.queue.clone(), self.SocketBuf(), &mut iovs, true)?;
             if ret > 0 {
                 task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
             }
             return Ok(ret);
-
-            //return IOURING.RingFileRead(task, self, dsts)
         }
 
         //defer!(task.GetMut().iovs.clear());
@@ -842,7 +841,7 @@ impl SockOperations for SocketOperations {
             let mut count = 0;
             let mut tmp;
             loop {
-                match IOURING.RingFileRead(task, self.fd, self.queue.clone(), self.SocketBuf(), iovs) {
+                match IOURING.RingFileRead(task, self.fd, self.queue.clone(), self.SocketBuf(), iovs, true) {
                     Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
                         if flags & MsgType::MSG_DONTWAIT != 0 {
                             if count > 0 {
@@ -892,7 +891,7 @@ impl SockOperations for SocketOperations {
 
             'main: loop {
                 loop {
-                    match IOURING.RingFileRead(task, self.fd, self.queue.clone(), self.SocketBuf(), iovs) {
+                    match IOURING.RingFileRead(task, self.fd, self.queue.clone(), self.SocketBuf(), iovs, true) {
                         Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
                             if count > 0 {
                                 break 'main;

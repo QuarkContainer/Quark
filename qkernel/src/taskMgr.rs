@@ -307,7 +307,8 @@ impl Scheduler {
                 None => return None,
                 Some(taskId) => {
                     self.readyTaskCnt.fetch_sub(1, Ordering::SeqCst);
-                    assert!(vcpuId==taskId.GetTask().QueueId());
+                    assert!(vcpuId==taskId.GetTask().QueueId(),
+                        "vcpuId is {:x}, taskId.GetTask().QueueId() is {:x}, task {:x?}/{:x?}", vcpuId, taskId.GetTask().QueueId(), taskId, taskId.GetTask().guard);
                     if taskId.GetTask().context.Ready() != 0 || taskId.data == Task::Current().taskId {
                         //the task is in the queue, but the context has not been setup
                         if currentCpuId != vcpuId { //stealing

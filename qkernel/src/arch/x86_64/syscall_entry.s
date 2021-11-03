@@ -138,7 +138,7 @@ context_swap:
 
     sfence
     mov [rdi+0x40], rdx
-    lfence
+
     mov rsp, [rsi+0x00]
     mov r15, [rsi+0x08]
     mov r14, [rsi+0x10]
@@ -147,6 +147,7 @@ context_swap:
     mov rbx, [rsi+0x28]
     mov rbp, [rsi+0x30]
     mov rdi, [rsi+0x38]
+    sfence
     mov [rsi+0x40], rcx
 
     ret
@@ -161,6 +162,7 @@ context_swap_to:
     mov rbp, [rsi+0x30]
     mov rdi, [rsi+0x38]
 
+    sfence
     mov [rsi+0x40], rcx
     sfence
     ret

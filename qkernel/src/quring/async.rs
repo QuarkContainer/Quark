@@ -558,12 +558,18 @@ pub struct AsyncFileRead {
     pub buf: Arc<SocketBuff>,
     pub addr: u64,
     pub len: usize,
+    pub isSocket: bool,
 }
 
 impl AsyncFileRead {
     pub fn SEntry(&self) -> squeue::Entry {
-        let op = Read::new(types::Fd(self.fd), self.addr as * mut u8, self.len as u32);
+        if self.isSocket {
+            let op = Recv::new(types::Fd(self.fd), self.addr as * mut u8, self.len as u32);
+            return op.build()
+                .flags(squeue::Flags::FIXED_FILE);
+        }
 
+        let op = Read::new(types::Fd(self.fd), self.addr as * mut u8, self.len as u32);
         return op.build()
             .flags(squeue::Flags::FIXED_FILE);
     }
@@ -600,13 +606,14 @@ impl AsyncFileRead {
         return true;
     }
 
-    pub fn New(fd: i32, queue: Queue, buf: Arc<SocketBuff>, addr: u64, len: usize) -> Self {
+    pub fn New(fd: i32, queue: Queue, buf: Arc<SocketBuff>, addr: u64, len: usize, isSocket: bool) -> Self {
         return Self {
             fd,
             queue,
             buf,
             addr,
             len,
+            isSocket
         }
     }
 }
