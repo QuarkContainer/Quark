@@ -23,7 +23,7 @@ use super::super::Kernel;
 use super::super::taskMgr;
 use super::super::task::*;
 use super::super::{StartRootContainer, StartExecProcess};
-use super::super::{LOADER, KERNEL_STACK_ALLOCATOR};
+use super::super::LOADER;
 use super::process::*;
 use super::super::qlib::singleton::*;
 
