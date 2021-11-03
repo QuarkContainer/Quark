@@ -54,6 +54,8 @@ pub fn CapabilitySetOfMany(cps: &[u64]) -> CapSet {
     return CapSet(cs)
 }
 
+// TaskCapabilities represents all the capability sets for a task. Each of these
+// sets is explained in greater detail in capabilities(7).
 #[derive(Serialize, Deserialize, Default, Debug, Copy, Clone, Eq, PartialEq)]
 pub struct TaskCaps {
     pub PermittedCaps: CapSet,

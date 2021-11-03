@@ -313,7 +313,7 @@ impl Sandbox {
         let resp = client.Call(&req)?;
         match resp {
             UCallResp::WaitPidResp(status) => {
-                println!("WaitPID status is {}", WaitStatus(status).ExitStatus());
+                info!("WaitPID status is {}", WaitStatus(status).ExitStatus());
                 return Ok(status);
             },
             resp => {
