@@ -198,8 +198,6 @@ impl Scheduler {
         let state = self.VcpuArr[vcpuId].State();
         if state == VcpuState::Waiting {
             self.VcpuArr[vcpuId].Wakeup();
-        } else {
-            self.WakeOne();
         }
     }
 }

@@ -179,7 +179,7 @@ impl Guard {
     pub fn Check(&self) {
         if self.0 != Self::MAGIC_GUILD {
             let task = Task::Current();
-            raw!(0x240, task.taskId, 0);
+            raw!(0x240, task.taskId, self.0);
             super::Kernel::HostSpace::VcpuDebug();
             loop {}
         }
