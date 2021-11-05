@@ -851,6 +851,18 @@ impl HostSpace {
         HostSpace::HCall(&mut msg, true);
     }
 
+    pub fn Sendfile(fdOut: i32, fdIn: i32, offsetIn: u64, len: i64) -> i64 {
+        let mut msg = Msg::Sendfile(Sendfile {
+            fdOut,
+            fdIn,
+            offsetIn,
+            len,
+        });
+
+        let res = HostSpace::HCall(&mut msg, false) as i64;
+        return res;
+    }
+
     fn Call(msg: &mut Msg, mustAsync: bool) -> u64 {
         super::SHARESPACE.hostMsgCount.fetch_add(1, Ordering::SeqCst);
         if super::SHARESPACE.Notify() && !mustAsync  {

@@ -25,7 +25,6 @@ use super::super::task::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
-use super::super::IOURING;
 use super::super::SHARESPACE;
 
 // Splice moves data to this file, directly from another.
@@ -176,11 +175,11 @@ pub fn Splice(task: &Task, dst: &File, src: &File, opts: &mut SpliceOpts) -> Res
     return Ok(n)
 }
 
-pub fn SpliceSendFile2Socket(task: &Task, dst: &SocketOperations, src: &HostFileOp, offset: i64, len: u32) -> Result<i64> {
+pub fn Sendfile(_task: &Task, dst: &SocketOperations, src: &HostFileOp, offset: u64, len: i64) -> Result<i64> {
     let dstfd = dst.fd;
     let srcfd = src.InodeOp.HostFd();
 
-    let ret = IOURING.Splice(task, srcfd, offset, dstfd, -1, len, 0);
+    let ret = super::super::Kernel::HostSpace::Sendfile( dstfd, srcfd, offset, len);
 
     if ret < 0 {
         return Err(Error::SysError(-ret as i32))
@@ -363,9 +362,8 @@ pub fn SysSendfile(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     // for the file to socket scenario
     let inodeDst = outFile.Dirent.Inode();
-    if false && // disable it, why comments doesn't work?
-        inodeDst.InodeType() == InodeType::Socket
-        && SHARESPACE.config.read().TcpBuffIO {
+    if inodeDst.InodeType() == InodeType::Socket
+        && SHARESPACE.config.read().EnableSendfile {
         let dstfops = outFile.FileOp.clone();
         let srcfops = inFile.FileOp.clone();
 
@@ -373,13 +371,12 @@ pub fn SysSendfile(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             if let Some(fileOps) = srcfops.as_any().downcast_ref::<OverlayFileOperations>() {
                 if let Some(fileOps) = fileOps.FileOps().as_any().downcast_ref::<HostFileOp>() {
                     if offsetAddr != 0 {
-                        let offset : i64 = task.CopyInObj(offsetAddr)?;
+                        let mut offset : i64 = task.CopyInObj(offsetAddr)?;
 
-                        n = SpliceSendFile2Socket(task, sockOps, fileOps, offset, count as u32)?;
-                        //*task.GetTypeMut(offsetAddr)? = offset + n;
-                        task.CopyOutObj(&(offset + n), offsetAddr)?;
+                        n = Sendfile(task, sockOps, fileOps, &mut offset as * mut _ as u64, count as i64)?;
+                        task.CopyOutObj(&offset, offsetAddr)?;
                     } else {
-                        n = SpliceSendFile2Socket(task, sockOps, fileOps, 0, count as u32)?
+                        n = Sendfile(task, sockOps, fileOps, 0, count as i64)?
                     }
 
                     return Ok(n);

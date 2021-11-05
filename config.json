@@ -11,5 +11,6 @@
   "UringLog"      : true,
   "PerfDebug"     : false,
   "UringStatx"    : false,
-  "FileBufWrite"  : true
+  "FileBufWrite"  : true,
+  "EnableSendfile": true
 }
