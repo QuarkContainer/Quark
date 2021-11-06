@@ -286,7 +286,6 @@ impl VirtualMachine {
         for t in threads {
             t.join().expect("the working threads has panicked");
         }
-        info!("finally get here");
         Ok(GetExitStatus())
     }
 

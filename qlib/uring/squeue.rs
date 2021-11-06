@@ -177,72 +177,16 @@ impl SubmissionQueue {
         }
     }
 
-    /// Get currently available submission queue
-    pub fn available(&mut self) -> AvailableQueue<'_> {
-        unsafe {
-            AvailableQueue {
-                head: (*self.head).load(atomic::Ordering::Acquire),
-                tail: unsync_load(self.tail),
-                ring_mask: self.ring_mask.read(),
-                ring_entries: self.ring_entries.read(),
-                queue: self,
-            }
-        }
-    }
-}
-
-impl AvailableQueue<'_> {
-    /// Sync queue
-    pub fn sync(&mut self) {
-        unsafe {
-            (*self.queue.tail).store(self.tail, atomic::Ordering::Release);
-            self.head = (*self.queue.head).load(atomic::Ordering::Acquire);
-        }
-    }
-
-    #[inline]
-    pub fn capacity(&self) -> usize {
-        self.ring_entries as usize
-    }
-
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.tail.wrapping_sub(self.head) as usize
-    }
-
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.head == self.tail
-    }
-
-    #[inline]
-    pub fn is_full(&self) -> bool {
-        self.tail.wrapping_sub(self.head) == self.ring_entries
-    }
-
-    /// Attempts to push an [Entry] into the queue.
-    /// If the queue is full, the element is returned back as an error.
-    ///
-    /// # Safety
-    ///
-    /// Developers must ensure that parameters of the [Entry] (such as buffer) are valid,
-    /// otherwise it may cause memory problems.
     pub unsafe fn push(&mut self, Entry(entry): Entry) -> Result<(), Entry> {
         if !self.is_full() {
-            let idx = (self.tail & self.ring_mask) as usize;
-            *self.queue.sqes.add(idx) = entry;
-            self.tail = self.tail.wrapping_add(1);
+            let tail = unsync_load(self.tail);
+            let ring_mask = self.ring_mask.read();
+            let idx = (tail & ring_mask) as usize;
+            *self.sqes.add(idx) = entry;
+            (*self.tail).store(tail.wrapping_add(1), atomic::Ordering::Release);
             Ok(())
         } else {
             Err(Entry(entry))
-        }
-    }
-}
-
-impl Drop for AvailableQueue<'_> {
-    fn drop(&mut self) {
-        unsafe {
-            (*self.queue.tail).store(self.tail, atomic::Ordering::Release);
         }
     }
 }

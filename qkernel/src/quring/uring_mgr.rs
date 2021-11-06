@@ -65,10 +65,6 @@ impl Submission {
         return self.sq.freeSlot();
     }
 
-    pub fn Available(&mut self) -> squeue::AvailableQueue<'_> {
-        return self.sq.available()
-    }
-
     pub fn NeedWakeup(&self) -> bool {
         unsafe {
             (*self.sq.flags).load(atomic::Ordering::Acquire) & sys::IORING_SQ_NEED_WAKEUP != 0
@@ -487,8 +483,7 @@ impl QUring {
             }
 
             unsafe {
-                let mut queue = s.Available();
-                queue.push(entry).ok().expect("UringCall push fail");
+                s.sq.push(entry).ok().expect("UringCall push fail");
             }
 
             s.Submit().expect("QUringIntern::submit fail");
@@ -509,8 +504,7 @@ impl QUring {
             }
 
             unsafe {
-                let mut queue = s.Available();
-                match queue.push(entry) {
+                match s.sq.push(entry) {
                     Ok(_) => (),
                     Err(_) => panic!("AUringCall submission queue is full"),
                 }
@@ -534,15 +528,14 @@ impl QUring {
 
             error!("AUringCallLinked xxx ");
             unsafe {
-                let mut queue = s.Available();
-                match queue.push(entry1.flags(squeue::Flags::IO_LINK)) {
+                match s.sq.push(entry1.flags(squeue::Flags::IO_LINK)) {
                     Ok(_) => (),
                     Err(_e) => {
                         panic!("AUringCallLinked push fail 1 ...");
                     }
                 }
 
-                match queue.push(entry2) {
+                match s.sq.push(entry2) {
                     Ok(_) => (),
                     Err(_e) => {
                         panic!("AUringCallLinked push fail 2 ...");
