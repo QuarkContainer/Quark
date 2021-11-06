@@ -542,7 +542,7 @@ impl SockOperations for SocketOperations {
             &addr[0] as *const _ as u64
         };
 
-        info!("host socket accept #1");
+        //info!("host socket accept #1");
         *addrlen = addr.len() as u32;
         let mut res = Kernel::HostSpace::IOAccept(self.fd, addrLoc, addrlen as *const _ as u64, flags, blocking) as i32;
         //info!("host socket accept #2 blocking = {}", blocking);

@@ -133,7 +133,6 @@ impl SubmissionQueue {
         unsafe { (*self.dropped).load(atomic::Ordering::Acquire) }
     }
 
-    #[cfg(feature = "unstable")]
     pub fn cq_overflow(&self) -> bool {
         unsafe { (*self.flags).load(atomic::Ordering::Acquire) & sys::IORING_SQ_CQ_OVERFLOW != 0 }
     }
@@ -166,6 +165,16 @@ impl SubmissionQueue {
     #[inline]
     pub fn freeSlot(&self) -> usize {
         self.capacity() - self.len()
+    }
+
+    pub fn Print(&self) {
+        unsafe {
+            let head = unsync_load(self.head); //(*self.head).load(atomic::Ordering::Acquire);
+            let tail = unsync_load(self.tail);
+
+            error!("tail is {:x}, head is {:x}, tail-head = {:x}, {}, dropped {} overflow {}, flags {:x}",
+                tail, head, tail - head, self.capacity(), self.dropped(), self.cq_overflow(), (*self.flags).load(atomic::Ordering::Acquire));
+        }
     }
 
     /// Get currently available submission queue

@@ -52,8 +52,8 @@ impl HostSpace {
         HyperCall64(HYPERCALL_HLT, 0, 0, 0);
     }
 
-    pub fn UringWake() {
-        HyperCall64(HYPERCALL_URING_WAKE, 0, 0, 0);
+    pub fn UringWake(minCompleted: u64) {
+        HyperCall64(HYPERCALL_URING_WAKE, minCompleted, 0, 0);
     }
 
     pub fn LoadProcessKernel(processAddr: u64, len: usize) -> i64 {

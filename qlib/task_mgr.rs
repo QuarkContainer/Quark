@@ -190,11 +190,6 @@ impl Scheduler {
     }
 
     pub fn WakeIdleCPU(&self, vcpuId: usize) {
-        if vcpuId == 0 {
-            self.WakeOne();
-            return
-        }
-
         let state = self.VcpuArr[vcpuId].State();
         if state == VcpuState::Waiting {
             self.VcpuArr[vcpuId].Wakeup();

@@ -89,7 +89,7 @@ impl Submission {
                 if want > 0 {
                     flags |= sys::IORING_ENTER_SQ_WAKEUP;
                 } else {
-                    super::super::Kernel::HostSpace::UringWake();
+                    super::super::Kernel::HostSpace::UringWake(0);
                     return Ok(0)
                 }
             } else if want == 0 {
@@ -481,7 +481,8 @@ impl QUring {
             if s.FreeSlots() < 1 {
                 print!("UringCall: submission full...");
                 drop(s);
-                super::super::qlib::ShareSpace::Yield();
+                super::super::Kernel::HostSpace::UringWake(1);
+                //super::super::qlib::ShareSpace::Yield();
                 continue
             }
 
@@ -502,7 +503,8 @@ impl QUring {
             if s.FreeSlots() == 0 {
                 print!("AUringCall1: submission full...");
                 drop(s);
-                super::super::qlib::ShareSpace::Yield();
+                super::super::Kernel::HostSpace::UringWake(1);
+                //super::super::qlib::ShareSpace::Yield();
                 continue;
             }
 
@@ -524,6 +526,9 @@ impl QUring {
             let mut s = self.submission.lock();
             if s.FreeSlots() < 2 {
                 print!("AUringCallLinked: submission full...");
+                drop(s);
+                super::super::Kernel::HostSpace::UringWake(1);
+                //super::super::qlib::ShareSpace::Yield();
                 continue;
             }
 
