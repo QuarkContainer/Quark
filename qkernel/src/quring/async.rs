@@ -495,12 +495,19 @@ pub struct AsyncFiletWrite {
     pub buf: Arc<SocketBuff>,
     pub addr: u64,
     pub len: usize,
+    pub isSocket: bool,
 }
 
 impl AsyncFiletWrite {
     pub fn SEntry(&self) -> squeue::Entry {
         //let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
-        let op = opcode::Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32); //.flags(MsgType::MSG_DONTWAIT);
+        if self.isSocket {
+            let op = opcode::Send::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
+            return op.build()
+                .flags(squeue::Flags::FIXED_FILE);
+        }
+
+        let op = opcode::Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
 
         return op.build()
             .flags(squeue::Flags::FIXED_FILE);
@@ -541,13 +548,14 @@ impl AsyncFiletWrite {
         return true
     }
 
-    pub fn New(fd: i32, queue: Queue, buf: Arc<SocketBuff>, addr: u64, len: usize) -> Self {
+    pub fn New(fd: i32, queue: Queue, buf: Arc<SocketBuff>, addr: u64, len: usize, isSocket: bool) -> Self {
         return Self {
             fd,
             queue,
             buf,
             addr,
             len,
+            isSocket
         }
     }
 }

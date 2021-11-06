@@ -560,7 +560,7 @@ impl FileOperations for TTYFileOps {
             let fd = self.lock().fd;
             let queue = self.lock().queue.clone();
             let ringBuf = self.lock().buf.clone();
-            return IOURING.RingFileWrite(task, fd, queue, ringBuf, &iovs)
+            return IOURING.RingFileWrite(task, fd, queue, ringBuf, &iovs, false)
         }
 
         let fops = self.lock().fileOps.clone();
