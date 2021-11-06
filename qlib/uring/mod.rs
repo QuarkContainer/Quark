@@ -74,7 +74,7 @@ impl IoUring {
         self.cq.CopyTo(&mut c.cq);
     }
 
-    pub fn HasCompleteEntry(&mut self) -> bool {
+    pub fn HasCompleteEntry(&self) -> bool {
         return self.completion().len() > 0;
     }
 }
@@ -117,8 +117,8 @@ impl IoUring {
     }
 
     /// Get completion queue
-    pub fn completion(&mut self) -> &mut CompletionQueue {
-        &mut self.cq
+    pub fn completion(&self) -> &CompletionQueue {
+        &self.cq
     }
 
     /// Make a concurrent IoUring.

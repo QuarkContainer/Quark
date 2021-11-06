@@ -126,84 +126,8 @@ impl CompletionQueue {
             }
         }
     }
-
-   /* /// Get currently available completion queue
-    pub fn available1(&mut self) -> AvailableQueue<'_> {
-        unsafe {
-            AvailableQueue {
-                head: unsync_load(self.head),
-                tail: (*self.tail).load(atomic::Ordering::Acquire),
-                ring_mask: self.ring_mask.read(),
-                ring_entries: self.ring_entries.read(),
-                queue: self,
-            }
-        }
-    }
-*/
 }
 
-/*
-pub struct AvailableQueue<'a> {
-    head: u32,
-    tail: u32,
-    ring_mask: u32,
-    ring_entries: u32,
-
-    queue: &'a mut CompletionQueue,
-}
-
-impl AvailableQueue<'_> {
-    /// Sync queue
-    pub fn sync(&mut self) {
-        unsafe {
-            (*self.queue.head).store(self.head, atomic::Ordering::Release);
-            self.tail = (*self.queue.tail).load(atomic::Ordering::Acquire);
-        }
-    }
-
-    #[inline]
-    pub fn capacity(&self) -> usize {
-        self.ring_entries as usize
-    }
-
-    #[inline]
-    pub fn is_full(&self) -> bool {
-        self.len() == self.capacity()
-    }
-}
-
-impl ExactSizeIterator for AvailableQueue<'_> {
-    #[inline]
-    fn len(&self) -> usize {
-        self.tail.wrapping_sub(self.head) as usize
-    }
-}
-
-impl Iterator for AvailableQueue<'_> {
-    type Item = Entry;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.head != self.tail {
-            unsafe {
-                let entry = self.queue.cqes.add((self.head & self.ring_mask) as usize);
-                error!("AvailableQueue::Next head is {}", self.head);
-                self.head = self.head.wrapping_add(1);
-                Some(Entry(*entry))
-            }
-        } else {
-            None
-        }
-    }
-}
-
-impl Drop for AvailableQueue<'_> {
-    fn drop(&mut self) {
-        unsafe {
-            (*self.queue.head).store(self.head, atomic::Ordering::Release);
-        }
-    }
-}
-*/
 impl Entry {
     /// Result value
     pub fn result(&self) -> i32 {
