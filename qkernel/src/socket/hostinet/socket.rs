@@ -353,7 +353,7 @@ impl FileOperations for SocketOperations {
             let mut buf = DataBuff::New(size);
             task.CopyDataInFromIovs(&mut buf.buf, &srcs)?;
             let iovs = buf.Iovs();
-            return IOURING.RingFileWrite(task, self.fd, self.queue.clone(), self.SocketBuf(), &iovs)
+            return IOURING.RingFileWrite(task, self.fd, self.queue.clone(), self.SocketBuf(), &iovs, true)
 
             //return IOURING.RingFileWrite(task, self, srcs)
         }
@@ -1056,7 +1056,7 @@ impl SockOperations for SocketOperations {
 
             loop {
                 loop {
-                    match IOURING.RingFileWrite(task, self.fd, self.queue.clone(), self.SocketBuf(), srcs) {
+                    match IOURING.RingFileWrite(task, self.fd, self.queue.clone(), self.SocketBuf(), srcs, true) {
                         Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
                             if count > 0 {
                                 return Ok(count)
