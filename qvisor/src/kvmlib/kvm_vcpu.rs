@@ -470,7 +470,9 @@ impl KVMVcpu {
 
                         }
                         qlib::HYPERCALL_URING_WAKE => {
-                            URING_MGR.lock().Wake().expect("qlib::HYPER CALL_URING_WAKE fail");
+                            let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                            let count = regs.rbx as usize;
+                            URING_MGR.lock().Wake(count).expect("qlib::HYPER CALL_URING_WAKE fail");
                         }
                         qlib::HYPERCALL_INIT => {
                             info!("get io out: HYPERCALL_INIT");

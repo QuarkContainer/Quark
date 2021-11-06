@@ -27,7 +27,8 @@ pub struct Config {
     pub UringLog: bool,
     pub PerfDebug: bool,
     pub UringStatx: bool,
-    pub FileBufWrite: bool
+    pub FileBufWrite: bool,
+    pub EnableSendfile: bool,
 }
 
 impl Config {}
@@ -47,7 +48,8 @@ impl Default for Config {
             UringLog: true,
             PerfDebug: true,
             UringStatx: false,
-            FileBufWrite: true
+            FileBufWrite: true,
+            EnableSendfile: true
         }
     }
 }

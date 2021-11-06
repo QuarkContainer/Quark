@@ -39,7 +39,7 @@ impl UringMgr {
         }
 
         //let ring = Builder::default().setup_sqpoll(50).setup_sqpoll_cpu(0).build(size as u32).expect("InitUring fail");
-        let ring = Builder::default().setup_sqpoll(10).build(size as u32).expect("InitUring fail");
+        let ring = Builder::default().setup_sqpoll(10).setup_clamp().setup_cqsize(size as u32 * 2).build(size as u32).expect("InitUring fail");
 
         let ret = Self {
             fd: ring.fd.0,
@@ -72,8 +72,15 @@ impl UringMgr {
         return Ok(ret as i32)
     }
 
-    pub fn Wake(&self) -> Result<()> {
-        let ret = IOUringEnter(self.fd, 1, 0, IORING_ENTER_SQ_WAKEUP);
+    pub fn Wake(&self, minComplete: usize) -> Result<()> {
+        let ret = if minComplete == 0 {
+            IOUringEnter(self.fd, 1, minComplete as u32, IORING_ENTER_SQ_WAKEUP)
+        } else {
+            IOUringEnter(self.fd, 1, minComplete as u32, 0)
+        };
+
+        //error!("uring wake minComplete {} ret {}, free {}", minComplete, ret, self.ring.sq.freeSlot());
+        //self.ring.sq.Print();
         if ret < 0 {
             return Err(Error::SysError(-ret as i32))
         }

@@ -41,7 +41,7 @@ impl IoUring {
                 if want > 0 {
                     flags |= sys::IORING_ENTER_SQ_WAKEUP;
                 } else {
-                    super::super::Kernel::HostSpace::UringWake();
+                    super::super::Kernel::HostSpace::UringWake(0);
                     return Ok(0)
                 }
             } else if want == 0 {

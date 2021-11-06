@@ -52,8 +52,8 @@ impl HostSpace {
         HyperCall64(HYPERCALL_HLT, 0, 0, 0);
     }
 
-    pub fn UringWake() {
-        HyperCall64(HYPERCALL_URING_WAKE, 0, 0, 0);
+    pub fn UringWake(minCompleted: u64) {
+        HyperCall64(HYPERCALL_URING_WAKE, minCompleted, 0, 0);
     }
 
     pub fn LoadProcessKernel(processAddr: u64, len: usize) -> i64 {
@@ -849,6 +849,18 @@ impl HostSpace {
         });
 
         HostSpace::HCall(&mut msg, true);
+    }
+
+    pub fn Sendfile(fdOut: i32, fdIn: i32, offsetIn: u64, len: i64) -> i64 {
+        let mut msg = Msg::Sendfile(Sendfile {
+            fdOut,
+            fdIn,
+            offsetIn,
+            len,
+        });
+
+        let res = HostSpace::HCall(&mut msg, false) as i64;
+        return res;
     }
 
     fn Call(msg: &mut Msg, mustAsync: bool) -> u64 {
