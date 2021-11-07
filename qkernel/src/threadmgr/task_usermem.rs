@@ -22,6 +22,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
+use super::super::qlib::mem::block::*;
 use super::super::util::cstring::*;
 use super::super::task::*;
 use super::super::memmgr::mm::*;
@@ -78,12 +79,10 @@ impl MemoryManager {
         return self.CopyDataOutLocked(task, from, vaddr, len);
     }
 
-    pub fn CopyDataOutToIovs(&self, task: &Task, buf:&[u8], iovs: &[IoVec]) -> Result<usize> {
+    pub fn CopyDataOutToIovsLocked(&self, task: &Task, buf:&[u8], iovs: &[IoVec]) -> Result<usize> {
         if buf.len() == 0 {
             return Ok(0)
         }
-
-        let _ml = self.MappingWriteLock();
 
         let mut offset = 0;
         for iov in iovs {
@@ -103,12 +102,34 @@ impl MemoryManager {
         return Ok(offset)
     }
 
-    pub fn CopyDataInFromIovs(&self, task: &Task, buf:&mut [u8], iovs: &[IoVec]) -> Result<usize> {
+    pub fn CopyDataOutToIovs(&self, task: &Task, buf:&[u8], iovs: &[IoVec]) -> Result<usize> {
+        let _ml = self.MappingWriteLock();
+
+        return self.CopyDataOutToIovsLocked(task, buf, iovs)
+    }
+
+    pub fn CopyIovsOutToIovs(&self, task: &Task, srcIovs: &[IoVec], dstIovs: &[IoVec]) -> Result<usize> {
+        let _ml = self.MappingWriteLock();
+
+        let mut dsts = dstIovs;
+        let mut count = 0;
+        let mut tmp;
+
+        for iov in srcIovs {
+            let buf = iov.ToSlice();
+            let n = self.CopyDataOutToIovsLocked(task, buf, dsts)?;
+            count += n;
+            tmp = Iovs(dsts).DropFirst(n as usize);
+            dsts = &tmp;
+        }
+
+        return Ok(count)
+    }
+
+    pub fn CopyDataInFromIovsLocked(&self, task: &Task, buf:&mut [u8], iovs: &[IoVec]) -> Result<usize> {
         if buf.len() == 0 {
             return Ok(0)
         }
-
-        let _ml = self.MappingWriteLock();
 
         let mut offset = 0;
         for iov in iovs {
@@ -126,6 +147,30 @@ impl MemoryManager {
         }
 
         return Ok(offset)
+    }
+
+    pub fn CopyDataInFromIovs(&self, task: &Task, buf:&mut [u8], iovs: &[IoVec]) -> Result<usize> {
+        let _ml = self.MappingWriteLock();
+
+        return self.CopyDataInFromIovsLocked(task, buf, iovs);
+    }
+
+    pub fn CopyIovsOutFromIovs(&self, task: &Task, srcIovs: &[IoVec], dstIovs: &[IoVec]) -> Result<usize> {
+        let _ml = self.MappingWriteLock();
+
+        let mut srcs = srcIovs;
+        let mut count = 0;
+        let mut tmp;
+
+        for iov in dstIovs {
+            let buf = iov.ToSliceMut();
+            let n = self.CopyDataInFromIovsLocked(task, buf, srcs)?;
+            count += n;
+            tmp = Iovs(srcs).DropFirst(n as usize);
+            srcs = &tmp;
+        }
+
+        return Ok(count)
     }
 
     pub fn CopyInObjLocked<T: Sized + Copy>(&self, task: &Task, src: u64) -> Result<T> {
@@ -361,6 +406,10 @@ impl Task {
 
     pub fn CopyDataOutToIovs(&self, src: &[u8], dsts: &[IoVec]) -> Result<usize> {
         return self.mm.CopyDataOutToIovs(self, src, dsts)
+    }
+
+    pub fn CopyIovsOutToIovs(&self, srcs:  &[IoVec], dsts: &[IoVec]) -> Result<usize> {
+        return self.mm.CopyIovsOutToIovs(self, srcs, dsts)
     }
 
     pub fn CopyDataInFromIovs(&self, buf:&mut [u8], iovs: &[IoVec]) -> Result<usize> {

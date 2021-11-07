@@ -29,6 +29,7 @@ pub struct Config {
     pub UringStatx: bool,
     pub FileBufWrite: bool,
     pub EnableSendfile: bool,
+    pub MmapRead: bool,
 }
 
 impl Config {}
@@ -49,7 +50,8 @@ impl Default for Config {
             PerfDebug: true,
             UringStatx: false,
             FileBufWrite: true,
-            EnableSendfile: true
+            EnableSendfile: true,
+            MmapRead: true
         }
     }
 }
