@@ -107,7 +107,7 @@ impl IoVec {
         }
     }
 
-    pub fn ToSliceMut<'a>(&mut self) -> &'a mut [u8] {
+    pub fn ToSliceMut<'a>(&self) -> &'a mut [u8] {
         let ptr = self.start as *mut u8;
         return unsafe { slice::from_raw_parts_mut(ptr, self.len) };
     }

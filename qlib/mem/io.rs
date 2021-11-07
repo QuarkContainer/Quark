@@ -143,7 +143,7 @@ impl<'a> BlockReader for FromIOReader<'a> {
         let mut dsts = dsts;
 
         while !dsts.IsEmpty() {
-            let mut dst = dsts.Head();
+            let dst = dsts.Head();
             dsts = dsts.Tail();
 
             let slice = dst.ToSliceMut();
@@ -206,7 +206,7 @@ impl<'a> BlockReader for FromIOReaderAt<'a> {
         let mut dsts = dsts;
 
         while !dsts.IsEmpty() {
-            let mut dst = dsts.Head();
+            let dst = dsts.Head();
             dsts = dsts.Tail();
 
             let slice = dst.ToSliceMut();

@@ -60,10 +60,18 @@ pub struct MappableInternal {
     // memmap.MappingSpaces.
     pub mapping: AreaSet<MappingsOfRange>,
 
+    // file offset to ref count mapping
     pub chunkrefs: BTreeMap<u64, i32>,
 }
 
 impl MappableInternal {
+    pub fn Clear(&mut self) {
+        for (offset, phyAddr) in &self.f2pmap {
+            //error!("MappableInternal clean phyAddr {:x?}/{:x?}", phyAddr, offset);
+            HostSpace::MUnmap(*phyAddr, CHUNK_SIZE);
+        }
+    }
+
     pub fn IncrRefOn(&mut self, fr: &Range) {
         let mut chunkStart = fr.Start() & !CHUNK_MASK;
         while chunkStart < fr.End() {
@@ -195,6 +203,15 @@ impl Drop for HostInodeOpIntern {
         if self.HostFd == -1 {
             //default fd
             return
+        }
+
+        if SHARESPACE.config.read().MmapRead {
+            match self.mappable.take() {
+                None => (),
+                Some(mapable) => {
+                    mapable.lock().Clear();
+                }
+            }
         }
 
         RemoveFD(self.HostFd);
@@ -572,6 +589,28 @@ impl HostInodeOp {
         return SHARESPACE.config.read().FileBufWrite && !self.lock().hasMappable;
     }
 
+    // ReadEndOffset returns an exclusive end offset for a read operation
+    // so that the read does not overflow an int64 nor size.
+    //
+    // Parameters:
+    // - offset: the starting offset of the read.
+    // - length: the number of bytes to read.
+    // - size:   the size of the file.
+    //
+    // Postconditions: The returned offset is >= offset.
+    pub fn ReadEndOffset(offset: i64, len: i64, size: i64) -> i64 {
+        if offset >= size {
+            return offset;
+        }
+
+        let mut end = offset + len;
+        if end < offset ||end > size {
+            end = size;
+        }
+
+        return end;
+    }
+
     pub fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], offset: i64, _blocking: bool) -> Result<i64> {
         let hostIops = self.clone();
 
@@ -586,6 +625,23 @@ impl HostInodeOp {
             task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
             return Ok(ret as i64)
         } else {
+            if inodeType == InodeType::RegularFile && SHARESPACE.config.read().MmapRead  {
+                let mut intern = self.lock();
+                if offset > intern.size {
+                    return Ok(0)
+                }
+
+                let end = Self::ReadEndOffset(offset, size as i64, intern.size);
+                if end == offset  {
+                    return Ok(0)
+                }
+
+                let srcIovs = intern.MapInternal(task, &Range::New(offset as u64, (end - offset) as u64))?;
+                let count = task.CopyIovsOutToIovs(&srcIovs, dsts)?;
+
+                return Ok(count as i64)
+            }
+
             if SHARESPACE.config.read().TcpBuffIO {
                 if self.BufWriteEnable() {
                     // try to gain the lock once, release immediately

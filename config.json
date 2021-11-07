@@ -7,10 +7,11 @@
   "EnableAIO"     : true,
   "PrintException": false,
   "KernelPagetable": false,
-  "RawTimer"      : true,
+  "RawTimer"      : false,
   "UringLog"      : true,
   "PerfDebug"     : false,
   "UringStatx"    : false,
   "FileBufWrite"  : true,
-  "EnableSendfile": false
+  "EnableSendfile": false,
+  "MmapRead"      : false
 }
