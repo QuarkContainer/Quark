@@ -176,13 +176,18 @@ impl Scheduler {
     }
 
     pub fn WakeOne(&self) {
-        let mask = self.vcpuWaitMask.load(Ordering::Acquire);
-        let vcpuId = mask.trailing_zeros() as usize;
-        if vcpuId >= 64 {
-            return;
-        }
+        loop {
+            let mask = self.vcpuWaitMask.load(Ordering::Acquire);
 
-        self.WakeIdleCPU(vcpuId);
+            let vcpuId = mask.trailing_zeros() as usize;
+            if vcpuId >= 64 {
+                return;
+            }
+
+            if self.WakeIdleCPU(vcpuId) {
+                return
+            }
+        }
     }
 
     pub fn WakeAll(&self) {
@@ -191,11 +196,24 @@ impl Scheduler {
         }
     }
 
-    pub fn WakeIdleCPU(&self, vcpuId: usize) {
-        let state = self.VcpuArr[vcpuId].State();
-        if state == VcpuState::Waiting {
+    pub fn WakeIdleCPU(&self, vcpuId: usize) -> bool {
+        let vcpuMask = (1<<vcpuId) as u64;
+        let prev = self.vcpuWaitMask.fetch_and(!vcpuMask, Ordering::Acquire);
+
+        let wake = (prev & vcpuMask) != 0;
+        if wake {
             self.VcpuArr[vcpuId].Wakeup();
         }
+
+        return wake;
+
+        /*let state = self.VcpuArr[vcpuId].State();
+        if state == VcpuState::Waiting {
+            self.VcpuArr[vcpuId].Wakeup();
+            return true
+        }
+
+        return false*/
     }
 }
 

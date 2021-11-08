@@ -337,7 +337,7 @@ impl QUring {
         } else {
             let idx = data as usize;
             let mut ops = self.asyncMgr.ops[idx].lock();
-            //error!("uring process2: call is {:?}", ops.Type());
+            //error!("uring process2: call is {:?}, idx {}", ops.Type(), idx);
 
             let rerun = ops.Process(ret, idx);
             if !rerun {

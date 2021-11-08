@@ -187,8 +187,13 @@ pub fn PollAsyncMsg() -> usize {
 #[inline]
 pub fn ProcessOne() -> bool {
     ASYNC_PROCESS.Process();
-    if QUringProcessOne() {
-        return true;
+    let mut count = 0;
+    while QUringProcessOne() {
+        count += 1;
+    }
+
+    if count > 0 {
+        return true
     }
 
     return HostInputProcessOne(true);
