@@ -333,7 +333,7 @@ impl HostSpace {
             count
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn Fstatat(dirfd: i32, pathname: u64, buff: u64, flags: i32) -> i64 {
@@ -851,20 +851,8 @@ impl HostSpace {
         HostSpace::HCall(&mut msg, true);
     }
 
-    pub fn Sendfile(fdOut: i32, fdIn: i32, offsetIn: u64, len: i64) -> i64 {
-        let mut msg = Msg::Sendfile(Sendfile {
-            fdOut,
-            fdIn,
-            offsetIn,
-            len,
-        });
-
-        let res = HostSpace::HCall(&mut msg, false) as i64;
-        return res;
-    }
-
     fn Call(msg: &mut Msg, mustAsync: bool) -> u64 {
-        super::SHARESPACE.hostMsgCount.fetch_add(1, Ordering::SeqCst);
+        super::SHARESPACE.hostMsgCount.fetch_add(1, Ordering::Release);
         if super::SHARESPACE.Notify() && !mustAsync  {
             super::SHARESPACE.hostMsgCount.fetch_sub(1, Ordering::SeqCst);
             return Self::HCall(msg, true) as u64

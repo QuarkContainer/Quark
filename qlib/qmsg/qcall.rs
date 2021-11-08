@@ -103,8 +103,7 @@ pub enum Msg {
     IoUringSetup(IoUringSetup),
     IoUringRegister(IoUringRegister),
     IoUringEnter(IoUringEnter),
-    Statm(Statm),
-    Sendfile(Sendfile),
+    Statm(Statm)
 }
 
 #[derive(Clone, Default, Debug)]
@@ -170,14 +169,6 @@ pub struct StatmInfo {
 #[derive(Clone, Default, Debug)]
 pub struct Statm {
     pub buf: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Sendfile {
-    pub fdOut: i32,
-    pub fdIn: i32,
-    pub offsetIn: u64,
-    pub len: i64,
 }
 
 #[derive(Clone, Default, Debug)]

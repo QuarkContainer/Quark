@@ -12,6 +12,5 @@
   "PerfDebug"     : false,
   "UringStatx"    : false,
   "FileBufWrite"  : true,
-  "EnableSendfile": false,
   "MmapRead"      : false
 }

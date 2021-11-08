@@ -1454,14 +1454,6 @@ impl VMSpace {
         return Self::GetRet(ret as i64)
     }
 
-    pub fn Sendfile(_taskId: u64, fdOut: i32,  fdIn: i32, offsetIn: u64, len: i64) -> i64 {
-        let ret = unsafe {
-            libc::sendfile(fdOut, fdIn, offsetIn as _, len as _)
-        };
-
-        return Self::GetRet(ret as i64)
-    }
-
     //map kernel table
     pub fn KernelMap(&mut self, start: Addr, end: Addr, physical: Addr, flags: PageTableFlags) -> Result<bool> {
         error!("KernelMap start is {:x}, end is {:x}", start.0, end.0);

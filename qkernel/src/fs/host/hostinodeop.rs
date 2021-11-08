@@ -66,7 +66,7 @@ pub struct MappableInternal {
 
 impl MappableInternal {
     pub fn Clear(&mut self) {
-        for (offset, phyAddr) in &self.f2pmap {
+        for (_offset, phyAddr) in &self.f2pmap {
             //error!("MappableInternal clean phyAddr {:x?}/{:x?}", phyAddr, offset);
             HostSpace::MUnmap(*phyAddr, CHUNK_SIZE);
         }
