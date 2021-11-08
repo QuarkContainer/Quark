@@ -659,7 +659,7 @@ impl ShareSpace {
     #[inline]
     pub fn ReadyOutputMsgCnt(&self) -> u64 {
         //return self.QOutput.CountLockless() as u64;
-        self.hostMsgCount.load(Ordering::SeqCst)
+        self.hostMsgCount.load(Ordering::Acquire)
     }
 
     pub fn SetIOThreadState(&self, state: IOThreadState) {

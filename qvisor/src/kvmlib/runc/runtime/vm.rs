@@ -368,6 +368,9 @@ impl VirtualMachine {
             loop {
                 //PerfGoto(PerfType::IdleWait);
                 shareSpace.WaitInHost();
+
+                // wait sometime to avoid race condition
+                std::thread::yield_now();
                 if shareSpace.ReadyOutputMsgCnt() > 0 {
                     shareSpace.WakeInHost();
                     break;

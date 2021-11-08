@@ -147,6 +147,8 @@ impl Scheduler {
         if state == VcpuState::Waiting {
             //error!("ScheduleQ: vcpu {} is waiting ..., wake it up", vcpuId);
             self.VcpuArr[vcpuId as usize].Wakeup();
+        } else if state == VcpuState::Running {
+            self.WakeOne();
         }
     }
 
