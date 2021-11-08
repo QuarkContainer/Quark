@@ -38,6 +38,16 @@ use super::tty::fs::*;
 use super::mount_overlay::*;
 use super::super::qlib::lrc_cache::*;
 
+pub struct LookupContext {
+    pub path: String,
+    pub wd: Option<Dirent>,
+}
+
+pub enum ResolveResult {
+    Dirent(Dirent),
+    Path(LookupContext)
+}
+
 pub struct Mount {
     pub Id: u64,
     pub Pid: u64,
@@ -260,11 +270,7 @@ impl MountNs {
         return ret;
     }
 
-    pub fn FindLink(&self, task: &Task, root: &Dirent, wd: Option<Dirent>, path: &str, remainingTraversals: &mut u32) -> Result<Dirent> {
-        if path.len() == 0 {
-            return Err(Error::SysError(SysErr::ENOENT))
-        }
-
+    pub fn InitPath<'a> (&self, root: &Dirent, wd: &Option<Dirent>, path: &'a str) -> Option<(Dirent, &'a str, &'a str)> {
         let (mut first, mut remain) = SplitFirst(path);
 
         let mut current = match wd {
@@ -274,7 +280,7 @@ impl MountNs {
 
         while first == "/" {
             if remain == "" {
-                return Ok(root.clone())
+                return None
             }
 
             current = root.clone();
@@ -282,6 +288,170 @@ impl MountNs {
             first = tfirst;
             remain = tremain;
         }
+
+        return Some((current, first, remain));
+    }
+
+
+    pub fn ResolvePath(&self, task: &Task, current: &Dirent, remainingTraversals: &mut u32) -> Result<ResolveResult> {
+        let inode = current.Inode();
+        let target = inode.GetLink(task);
+
+        match target {
+            Ok(target) => {
+                if *remainingTraversals == 0 {
+                    return Err(Error::SysError(SysErr::ELOOP))
+                }
+
+                return Ok(ResolveResult::Dirent(target))
+            }
+            Err(Error::SysError(SysErr::ENOLINK)) => {
+                return Ok(ResolveResult::Dirent(current.clone()))
+            }
+            Err(Error::ErrResolveViaReadlink) => {
+                if *remainingTraversals == 0 {
+                    return Err(Error::SysError(SysErr::ELOOP))
+                }
+
+                let targetPath = inode.ReadLink(task)?;
+                *remainingTraversals -= 1;
+
+                let wd = match &(current.0).0.lock().Parent {
+                    None => {
+                        None
+                    },
+                    Some(ref wd) => {
+                        Some(wd.clone())
+                    },
+                };
+
+                return Ok(ResolveResult::Path(LookupContext{
+                    path: targetPath,
+                    wd: wd
+                }));
+            }
+            Err(err) => Err(err)
+        }
+    }
+
+    pub fn FindLinkNew(&self, task: &Task, root: &Dirent, wd: Option<Dirent>, path: &str, remainingTraversals: &mut u32, resolve: bool) -> Result<Dirent> {
+        if path.len() == 0 {
+            return Err(Error::SysError(SysErr::ENOENT))
+        }
+
+        let (mut current, mut first, mut remain) = match self.InitPath(root, &wd, path) {
+            None => return Ok(root.clone()),
+            Some(res) => res
+        };
+
+        let mut remainStr;
+
+        let mut contexts = Vec::new();
+
+        loop {
+            let currentIode = current.Inode();
+            if !Arc::ptr_eq(&current, root) {
+                if !currentIode.StableAttr().IsDir() {
+                    return Err(Error::SysError(SysErr::ENOTDIR))
+                }
+
+                currentIode.CheckPermission(task, &PermMask {
+                    execute: true,
+                    ..Default::default()
+                })?
+            }
+
+            let next = match current.Walk(task, root, first) {
+                Err(e) => {
+                    current.ExtendReference();
+                    return Err(e);
+                }
+                Ok(n) => n,
+            };
+
+            if !resolve {
+                if remain != ""  {
+                    match self.ResolvePath(task, &next, remainingTraversals)? {
+                        ResolveResult::Dirent(d) => current = d,
+                        ResolveResult::Path(context) => {
+                            contexts.push(remain.to_string());
+
+                            remainStr = context.path;
+                            remain = &remainStr;
+
+                            match self.InitPath(root, &context.wd, remain) {
+                                None => (),
+                                Some((tnext, _tfirst, _tremain)) => {
+                                    current = tnext;
+                                }
+                            };
+                        }
+                    }
+                } else {
+                    match contexts.pop() {
+                        None => {
+                            next.ExtendReference();
+                            return Ok(next)
+                        }
+                        Some(path) => {
+                            remainStr = path;
+                            remain = &remainStr;
+                            current = next;
+                        }
+                    }
+                }
+            } else {
+                match self.ResolvePath(task, &next, remainingTraversals)? {
+                    ResolveResult::Dirent(d) => {
+                        current = d;
+
+                        if remain == "" {
+                            match contexts.pop() {
+                                None => {
+                                    next.ExtendReference();
+                                    return Ok(next)
+                                }
+                                Some(path) => {
+                                    remainStr = path;
+                                    remain = &remainStr;
+                                    current = next;
+                                }
+                            }
+                        }
+                    },
+                    ResolveResult::Path(context) => {
+                        if remain != "" {
+                            contexts.push(remain.to_string());
+                        }
+
+                        remainStr = context.path;
+                        remain = &remainStr;
+
+                        match self.InitPath(root, &context.wd, remain) {
+                            None => (),
+                            Some((tnext, _tfirst, _tremain)) => {
+                                current = tnext;
+                            }
+                        };
+                    }
+                }
+            }
+
+            let (tfirst, tremain) = SplitFirst(remain);
+            first = tfirst;
+            remain = tremain;
+        }
+    }
+
+    pub fn FindLink(&self, task: &Task, root: &Dirent, wd: Option<Dirent>, path: &str, remainingTraversals: &mut u32) -> Result<Dirent> {
+        if path.len() == 0 {
+            return Err(Error::SysError(SysErr::ENOENT))
+        }
+
+        let (mut current, mut first, mut remain) = match self.InitPath(root, &wd, path) {
+            None => return Ok(root.clone()),
+            Some(res) => res
+        };
 
         loop {
             let currentIode = current.Inode();
