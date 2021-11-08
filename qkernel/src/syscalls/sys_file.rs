@@ -81,11 +81,13 @@ pub fn fileOpOn(task: &Task, dirFd: i32, path: &str, resolve: bool,
     let root = task.Root();
     let mut remainTraversals = MAX_SYMLINK_TRAVERSALS;
 
-    if resolve {
+    d = task.mountNS.FindLinkNew(task, &root, rel, path, &mut remainTraversals, resolve)?;
+
+    /*if resolve {
         d = task.mountNS.FindInode(task, &root, rel, path, &mut remainTraversals)?;
     } else {
         d = task.mountNS.FindLink(task, &root, rel, path, &mut remainTraversals)?
-    }
+    }*/
 
     return func(&root, &d, remainTraversals)
 }
