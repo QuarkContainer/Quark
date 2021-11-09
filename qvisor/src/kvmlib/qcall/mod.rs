@@ -216,7 +216,7 @@ pub fn qCall(eventAddr: u64, event: &'static mut Event) -> QcallRet {
             *ret = super::VMSpace::Bind(taskId.Addr(), msg.sockfd, msg.addr, msg.addrlen, msg.umask) as u64;
         }
         Event { taskId, globalLock: _, ref mut ret, msg: Msg::Listen(msg) } => {
-            *ret = super::VMSpace::Listen(taskId.Addr(), msg.sockfd, msg.backlog) as u64;
+            *ret = super::VMSpace::Listen(taskId.Addr(), msg.sockfd, msg.backlog, msg.block) as u64;
         }
         Event { taskId, globalLock: _, ref mut ret, msg: Msg::Shutdown(msg) } => {
             *ret = super::VMSpace::Shutdown(taskId.Addr(), msg.sockfd, msg.how) as u64
@@ -310,6 +310,9 @@ pub fn qCall(eventAddr: u64, event: &'static mut Event) -> QcallRet {
         }
         Event { taskId, globalLock: _, ref mut ret, msg: Msg::Statm(msg) } => {
             *ret = super::VMSpace::Statm(taskId.Addr(), msg.buf) as u64;
+        }
+        Event { taskId, globalLock: _, ref mut ret, msg: Msg::NewFd(msg) } => {
+            *ret = super::VMSpace::NewFd(taskId.Addr(), msg.fd) as u64;
         }
         Event { taskId: _, globalLock: _, ref mut ret, msg: Msg::IoUringSetup(msg) } => {
             *ret = match URING_MGR.lock().Setup(msg.submission, msg.completion) {

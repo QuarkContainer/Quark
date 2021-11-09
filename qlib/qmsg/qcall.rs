@@ -103,7 +103,8 @@ pub enum Msg {
     IoUringSetup(IoUringSetup),
     IoUringRegister(IoUringRegister),
     IoUringEnter(IoUringEnter),
-    Statm(Statm)
+    Statm(Statm),
+    NewFd(NewFd)
 }
 
 #[derive(Clone, Default, Debug)]
@@ -302,7 +303,6 @@ pub struct GetDents64 {
     pub count: u32,
 }
 
-
 #[derive(Clone, Default, Debug)]
 pub struct Unlinkat {
     pub dirfd: i32,
@@ -456,6 +456,7 @@ pub struct Bind {
 pub struct Listen {
     pub sockfd: i32,
     pub backlog: i32,
+    pub block: bool,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -630,12 +631,10 @@ pub struct IOSendMsg {
     pub blocking: bool,
 }
 
-/*
 #[derive(Clone, Default, Debug)]
-pub struct WaitFD {
-    pub fd: i32,
-    pub mask: u32,
-}*/
+pub struct NewFd {
+    pub fd: i32
+}
 
 #[derive(Clone, Default, Debug)]
 pub struct NonBlockingPoll {

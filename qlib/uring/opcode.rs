@@ -4,6 +4,7 @@
 
 use core::mem;
 //use std::os::unix::io::RawFd;
+use super::super::linux_def::TcpSockAddr;
 
 use super::squeue::Entry;
 use super::sys;
@@ -635,7 +636,7 @@ opcode!(
     /// Issue the equivalent of an `accept4 (2)` system call.
     pub struct Accept {
         fd: { impl sealed::UseFixed },
-        addr: { *mut sockaddr },
+        addr: { *mut TcpSockAddr },
         addrlen: { *mut socklen_t },
         ;;
         flags: u32 = 0
@@ -707,7 +708,7 @@ opcode!(
     /// Issue the equivalent of a `connect (2)` system call.
     pub struct Connect {
         fd: { impl sealed::UseFixed },
-        addr: { *const sockaddr },
+        addr: { *const TcpSockAddr },
         addrlen: { socklen_t }
         ;;
     }

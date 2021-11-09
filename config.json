@@ -12,5 +12,6 @@
   "PerfDebug"     : false,
   "UringStatx"    : false,
   "FileBufWrite"  : true,
-  "MmapRead"      : false
+  "MmapRead"      : false,
+  "AsyncAccept"   : false
 }

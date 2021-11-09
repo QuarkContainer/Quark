@@ -27,16 +27,17 @@ use super::super::qlib::uring::opcode::*;
 use super::super::qlib::uring::opcode;
 use super::super::kernel::waiter::*;
 use super::super::socket::hostinet::socket_buf::*;
+use super::super::socket::hostinet::socket::*;
 use super::super::fs::file::*;
 use super::super::task::*;
 use super::super::kernel::aio::aio_context::*;
 use super::super::kernel::eventfd::*;
-use super::super::socket::hostinet::socket::*;
 use super::super::IOURING;
 use super::super::kernel::timer;
 use super::super::kernel::async_wait::*;
 use super::super::SHARESPACE;
 use super::super::kernel::waiter::qlock::*;
+use super::super::Kernel::HostSpace;
 
 #[repr(align(128))]
 pub enum AsyncOps {
@@ -58,6 +59,7 @@ pub enum AsyncOps {
     AsyncLinkTimeout(AsyncLinkTimeout),
     UnblockBlockPollAdd(UnblockBlockPollAdd),
     AsyncBufWrite(AsyncBufWrite),
+    AsyncAccept(AsyncAccept),
     None,
 }
 
@@ -82,6 +84,7 @@ impl AsyncOps {
             AsyncOps::AsyncLinkTimeout(ref msg) => return msg.SEntry(),
             AsyncOps::UnblockBlockPollAdd(ref msg) => return msg.SEntry(),
             AsyncOps::AsyncBufWrite(ref msg) => return msg.SEntry(),
+            AsyncOps::AsyncAccept(ref msg) => return msg.SEntry(),
             AsyncOps::None => ()
         };
 
@@ -108,6 +111,7 @@ impl AsyncOps {
             AsyncOps::AsyncLinkTimeout(ref mut msg) => msg.Process(result),
             AsyncOps::UnblockBlockPollAdd(ref mut msg) => msg.Process(result),
             AsyncOps::AsyncBufWrite(ref mut msg) => msg.Process(result),
+            AsyncOps::AsyncAccept(ref mut msg) => msg.Process(result),
             AsyncOps::None => panic!("AsyncOps::None SEntry fail"),
         };
 
@@ -138,6 +142,7 @@ impl AsyncOps {
             AsyncOps::AsyncLinkTimeout(_) => return 16,
             AsyncOps::UnblockBlockPollAdd(_) => return 17,
             AsyncOps::AsyncBufWrite(_) => return 18,
+            AsyncOps::AsyncAccept(_) => return 19,
             AsyncOps::None => ()
         };
 
@@ -556,6 +561,49 @@ impl AsyncFiletWrite {
             addr,
             len,
             isSocket
+        }
+    }
+}
+
+pub struct AsyncAccept {
+    pub fd : i32,
+    pub queue: Queue,
+    pub acceptQueue: Arc<QMutex<AsyncAcceptStruct>>,
+    pub addr: TcpSockAddr,
+    pub len: u32,
+}
+
+impl AsyncAccept {
+    pub fn SEntry(&self) -> squeue::Entry {
+        let op = Accept::new(types::Fd(self.fd), &self.addr as * const _ as u64 as * mut _, &self.len as * const _ as u64 as * mut _);
+        return op.build()
+            .flags(squeue::Flags::FIXED_FILE);
+    }
+
+    pub fn Process(&mut self, result: i32) -> bool {
+        if result < 0 {
+            self.acceptQueue.lock().SetErr(-result);
+            self.queue.Notify(EventMaskFromLinux((EVENT_ERR | EVENT_IN) as u32));
+            return false;
+        }
+
+        HostSpace::NewFd(result);
+        let (trigger, hasSpace) = self.acceptQueue.lock().EnqSocket(result, self.addr, self.len);
+        if trigger {
+            self.queue.Notify(EventMaskFromLinux(EVENT_IN as u32));
+        }
+        self.len = 16;
+
+        return hasSpace;
+    }
+
+    pub fn New(fd: i32, queue: Queue, acceptQueue: Arc<QMutex<AsyncAcceptStruct>>) -> Self {
+        return Self {
+            fd,
+            queue,
+            acceptQueue,
+            addr: TcpSockAddr::default(),
+            len: 16, //size of TcpSockAddr
         }
     }
 }

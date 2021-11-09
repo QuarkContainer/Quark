@@ -29,6 +29,7 @@ use super::super::qlib::uring::porting::*;
 use super::super::qlib::linux_def::*;
 use super::super::kernel::waiter::*;
 use super::super::socket::hostinet::socket_buf::*;
+use super::super::socket::hostinet::socket::*;
 use super::super::Kernel::HostSpace;
 use super::super::kernel::async_wait::*;
 use super::super::IOURING;
@@ -277,6 +278,23 @@ impl QUring {
         });
 
         return self.UCall(task, msg);
+    }
+
+    pub fn AcceptInit(&self, fd: i32, queue: &Queue, acceptQueue: &Arc<QMutex<AsyncAcceptStruct>>) -> Result<()> {
+        let acceptOp = AsyncAccept::New(fd, queue.clone(), acceptQueue.clone());
+        IOURING.AUCall(AsyncOps::AsyncAccept(acceptOp));
+
+        return Ok(())
+    }
+
+    pub fn Accept(&self, fd: i32, queue: &Queue, acceptQueue: &Arc<QMutex<AsyncAcceptStruct>>) -> Result<AcceptItem> {
+        let (trigger, ai) = acceptQueue.lock().DeqSocket();
+        if trigger {
+            let acceptOp = AsyncAccept::New(fd, queue.clone(), acceptQueue.clone());
+            IOURING.AUCall(AsyncOps::AsyncAccept(acceptOp));
+        }
+
+        return ai
     }
 
     pub fn BufSockInit(&self, fd: i32, queue: Queue, buf: Arc<SocketBuff>, isSocket: bool) -> Result<()> {
