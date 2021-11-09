@@ -16,6 +16,12 @@ use alloc::slice;
 use alloc::vec::Vec;
 use core::sync::atomic::Ordering;
 
+#[repr(C)]
+#[derive(Clone, Default, Debug, Copy)]
+pub struct TcpSockAddr {
+    pub data: [u8; 16],
+}
+
 pub struct QOrdering {}
 impl QOrdering {
     pub const RELAXED :Ordering = Ordering::Relaxed;

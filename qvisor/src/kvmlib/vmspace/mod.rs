@@ -705,6 +705,13 @@ impl VMSpace {
         return fdInfo.IOAccept(taskId, addr, addrlen, flags)
     }
 
+    pub fn NewFd(_taskId: u64, fd: i32) -> i64 {
+        let hostfd = IO_MGR.lock().AddFd(fd, true);
+        FD_NOTIFIER.AddFd(fd, Box::new(GuestFd{hostfd: hostfd}));
+        URING_MGR.lock().Addfd(fd).unwrap();
+        return 0;
+    }
+
     pub fn IOConnect(taskId: u64, fd: i32, addr: u64, addrlen: u32) -> i64 {
         let fdInfo = match Self::GetFdInfo(fd) {
             Some(info) => info,
@@ -841,7 +848,6 @@ impl VMSpace {
             libc::fstat(fd, buf as *mut stat) as i64
         };
 
-        //Self::LibcStatx(fd);
         return Self::GetRet(ret);
     }
 
@@ -1135,7 +1141,7 @@ impl VMSpace {
         return Self::GetRet(ret as i64);
     }
 
-    pub fn Listen(_taskId: u64, sockfd: i32, backlog: i32) -> i64 {
+    pub fn Listen(_taskId: u64, sockfd: i32, backlog: i32, block: bool) -> i64 {
         let sockfd = match Self::GetOsfd(sockfd) {
             Some(sockfd) => sockfd,
             None => return -SysErr::EBADF as i64,
@@ -1144,6 +1150,10 @@ impl VMSpace {
         let ret = unsafe{
             listen(sockfd, backlog)
         };
+
+        if block {
+            Self::BlockFd(sockfd);
+        }
 
         return Self::GetRet(ret as i64);
     }
@@ -1475,6 +1485,14 @@ impl VMSpace {
         unsafe {
             let flags = fcntl(fd, Cmd::F_GETFL, 0);
             let ret = fcntl(fd, Cmd::F_SETFL, flags | Flags::O_NONBLOCK);
+            assert!(ret==0, "UnblockFd fail");
+        }
+    }
+
+    pub fn BlockFd(fd: i32) {
+        unsafe {
+            let flags = fcntl(fd, Cmd::F_GETFL, 0);
+            let ret = fcntl(fd, Cmd::F_SETFL, flags & !Flags::O_NONBLOCK);
             assert!(ret==0, "UnblockFd fail");
         }
     }

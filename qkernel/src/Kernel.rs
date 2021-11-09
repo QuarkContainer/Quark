@@ -210,7 +210,7 @@ impl HostSpace {
             blocking,
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn IOConnect(fd: i32, addr: u64, addrlen: u32, blocking: bool) -> i64 {
@@ -302,6 +302,14 @@ impl HostSpace {
         });
 
         return HostSpace::Call(&mut msg, false) as i64
+    }
+
+    pub fn NewFd(fd: i32) -> i64 {
+        let mut msg = Msg::NewFd(NewFd {
+            fd
+        });
+
+        return HostSpace::HCall(&mut msg, true) as i64
     }
 
     pub fn FAccessAt(dirfd: i32, pathname: u64, mode: i32, flags: i32) -> i64 {
@@ -578,10 +586,11 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn Listen(sockfd: i32, backlog: i32) -> i64 {
+    pub fn Listen(sockfd: i32, backlog: i32, block: bool) -> i64 {
         let mut msg = Msg::Listen(Listen {
             sockfd,
             backlog,
+            block,
         });
 
         return HostSpace::Call(&mut msg, false) as i64;
@@ -593,7 +602,7 @@ impl HostSpace {
             how,
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn ExitVM(exitCode: i32) {
