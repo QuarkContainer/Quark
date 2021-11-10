@@ -16,10 +16,23 @@ use alloc::slice;
 use alloc::vec::Vec;
 use core::sync::atomic::Ordering;
 
+// UNIX_PATH_MAX is the maximum length of the path in an AF_UNIX socket.
+//
+// From uapi/linux/un.h.
+pub const UNIX_PATH_MAX : usize = 108;
+
 #[repr(C)]
-#[derive(Clone, Default, Debug, Copy)]
+#[derive(Clone, Debug, Copy)]
 pub struct TcpSockAddr {
-    pub data: [u8; 16],
+    pub data: [u8; UNIX_PATH_MAX + 2],
+}
+
+impl Default for TcpSockAddr {
+    fn default() -> Self {
+        return Self {
+            data: [0; UNIX_PATH_MAX + 2]
+        }
+    }
 }
 
 pub struct QOrdering {}

@@ -197,7 +197,7 @@ impl SocketOperations {
 
     pub fn IOAccept(&self) -> Result<AcceptItem> {
         let mut ai = AcceptItem::default();
-        ai.len = 16;
+        ai.len = ai.addr.data.len() as _;
         let res = Kernel::HostSpace::IOAccept(self.fd, &ai.addr as * const _ as u64, &ai.len as * const _ as u64, 0, false) as i32;
         if res < 0 {
             return Err(Error::SysError(-res as i32))
@@ -678,18 +678,14 @@ impl SockOperations for SocketOperations {
             }
         }
 
+        let mut len : usize = acceptItem.addr.data.len();
         if addr.len() > 0 {
-            let len = if addr.len() > acceptItem.len as usize {
-                acceptItem.len as usize
-            } else {
-                addr.len()
-            };
-
+            len = core::cmp::min(core::cmp::min(acceptItem.len as usize, addr.len()), acceptItem.addr.data.len());
             for i in 0..len {
                 addr[i] = acceptItem.addr.data[i];
             }
 
-            *addrlen = acceptItem.len;
+            *addrlen = len as u32;
         }
 
         let fd = acceptItem.fd;
@@ -697,7 +693,7 @@ impl SockOperations for SocketOperations {
             (self.family == AFType::AF_INET || self.family == AFType::AF_INET6) &&
             self.stype == SockType::SOCK_STREAM;
 
-        let remoteAddr = &acceptItem.addr.data[0..acceptItem.len as usize];
+        let remoteAddr = &acceptItem.addr.data[0..len];
         let file = newSocketFile(task,
                                  self.family,
                                  fd as i32,
