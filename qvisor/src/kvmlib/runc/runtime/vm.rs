@@ -352,16 +352,16 @@ impl VirtualMachine {
             FD_NOTIFIER.WaitAndNotify(shareSpace, 0).unwrap();
 
             for _ in 0..10 {
-                for _ in 0..20 {
+                for _ in 0..2000 {
                     if shareSpace.ReadyOutputMsgCnt() > 0 {
                         continue 'main
                     }
 
                     unsafe { llvm_asm!("pause" :::: "volatile"); }
                     unsafe { llvm_asm!("pause" :::: "volatile"); }
-                    /*unsafe { llvm_asm!("pause" :::: "volatile"); }
                     unsafe { llvm_asm!("pause" :::: "volatile"); }
-                    unsafe { llvm_asm!("pause" :::: "volatile"); }*/
+                    unsafe { llvm_asm!("pause" :::: "volatile"); }
+                    unsafe { llvm_asm!("pause" :::: "volatile"); }
                 }
             }
 
@@ -370,7 +370,11 @@ impl VirtualMachine {
                 shareSpace.WaitInHost();
 
                 // wait sometime to avoid race condition
-                std::thread::yield_now();
+                unsafe { llvm_asm!("pause" :::: "volatile"); }
+                unsafe { llvm_asm!("pause" :::: "volatile"); }
+                unsafe { llvm_asm!("pause" :::: "volatile"); }
+                unsafe { llvm_asm!("pause" :::: "volatile"); }
+                unsafe { llvm_asm!("pause" :::: "volatile"); }
                 if shareSpace.ReadyOutputMsgCnt() > 0 {
                     shareSpace.WakeInHost();
                     break;
