@@ -116,11 +116,6 @@ pub enum SockOpt {
     BroadcastOption(i32),
 }
 
-// UNIX_PATH_MAX is the maximum length of the path in an AF_UNIX socket.
-//
-// From uapi/linux/un.h.
-pub const UNIX_PATH_MAX : usize = 108;
-
 // NICID is a number that uniquely identifies a NIC.
 pub type NICID = i32;
 
