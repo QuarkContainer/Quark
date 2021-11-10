@@ -329,7 +329,7 @@ impl HostSpace {
             buff,
         });
 
-        return Self::HCall(&mut msg, true) as i64;
+        return Self::HCall(&mut msg, false) as i64;
         //return HostSpace::Call(&mut msg, false) as i64;
     }
 
@@ -861,6 +861,10 @@ impl HostSpace {
     }
 
     fn Call(msg: &mut Msg, mustAsync: bool) -> u64 {
+        /*if !mustAsync  {
+            return Self::HCall(msg, true) as u64
+        }*/
+
         super::SHARESPACE.hostMsgCount.fetch_add(1, Ordering::Release);
         if super::SHARESPACE.Notify() && !mustAsync  {
             super::SHARESPACE.hostMsgCount.fetch_sub(1, Ordering::SeqCst);
