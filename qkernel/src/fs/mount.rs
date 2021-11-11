@@ -349,13 +349,13 @@ impl MountNs {
         let mut contexts = Vec::new();
 
         loop {
-            let currentIode = current.Inode();
+            let currentInode = current.Inode();
             if !Arc::ptr_eq(&current, root) {
-                if !currentIode.StableAttr().IsDir() {
+                if !currentInode.StableAttr().IsDir() {
                     return Err(Error::SysError(SysErr::ENOTDIR))
                 }
 
-                currentIode.CheckPermission(task, &PermMask {
+                currentInode.CheckPermission(task, &PermMask {
                     execute: true,
                     ..Default::default()
                 })?
@@ -429,8 +429,11 @@ impl MountNs {
 
                         match self.InitPath(root, &context.wd, remain) {
                             None => (),
-                            Some((tnext, _tfirst, _tremain)) => {
+                            Some((tnext, tfirst, tremain)) => {
                                 current = tnext;
+                                first = tfirst;
+                                remain = tremain;
+                                continue;
                             }
                         };
                     }
@@ -454,13 +457,13 @@ impl MountNs {
         };
 
         loop {
-            let currentIode = current.Inode();
+            let currentInode = current.Inode();
             if !Arc::ptr_eq(&current, root) {
-                if !currentIode.StableAttr().IsDir() {
+                if !currentInode.StableAttr().IsDir() {
                     return Err(Error::SysError(SysErr::ENOTDIR))
                 }
 
-                currentIode.CheckPermission(task, &PermMask {
+                currentInode.CheckPermission(task, &PermMask {
                     execute: true,
                     ..Default::default()
                 })?
