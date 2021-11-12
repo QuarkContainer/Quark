@@ -22,6 +22,7 @@ use super::fs::host::hostinodeop::*;
 use super::qlib::common::*;
 use super::qlib::linux_def::*;
 use super::qlib::singleton::*;
+use super::IOURING;
 
 pub static GUEST_NOTIFIER : Singleton<Notifier> = Singleton::<Notifier>::New();
 
@@ -67,6 +68,7 @@ pub struct NotifierInternal {
     // fdMap maps file descriptors to their notification queues and waiting
     // status.
     fdMap: BTreeMap<i32, GuestFdInfo>,
+    pub epollfd: i32,
 }
 
 pub struct Notifier(QMutex<NotifierInternal>);
@@ -82,7 +84,8 @@ impl Deref for Notifier {
 impl Notifier {
     pub fn New() -> Self {
         let internal = NotifierInternal {
-            fdMap: BTreeMap::new()
+            fdMap: BTreeMap::new(),
+            epollfd: 0,
         };
 
         return Self(QMutex::new(internal))
@@ -91,6 +94,47 @@ impl Notifier {
     fn waitfd(fd: i32, mask: EventMask) -> Result<()> {
         HostSpace::WaitFD(fd, mask);
 
+        return Ok(())
+    }
+
+    pub fn UpdateFDAsync(&self, fd: i32) -> Result<()> {
+        let op;
+        let epollfd;
+        let mask = {
+            let mut n = self.lock();
+            let fi = match n.fdMap.get_mut(&fd) {
+                None => {
+                    return Ok(())
+                }
+                Some(fi) => fi,
+            };
+
+            let mask = fi.queue.Events() | LibcConst::EPOLLET as u64;
+
+            if !fi.waiting {
+                if mask != 0 {
+                    op = LibcConst::EPOLL_CTL_ADD;
+                    fi.waiting = true;
+                } else {
+                    return Ok(())
+                }
+            } else {
+                if mask == 0 {
+                    op = LibcConst::EPOLL_CTL_DEL;
+                    fi.waiting = false;
+                } else {
+                    if mask | fi.mask == fi.mask {
+                        return Ok(())
+                    }
+                    op = LibcConst::EPOLL_CTL_MOD;
+                }
+            }
+            epollfd = n.epollfd;
+
+            mask
+        };
+
+        IOURING.EpollCtl(epollfd, fd, op as i32, mask as u32);
         return Ok(())
     }
 
@@ -106,17 +150,19 @@ impl Notifier {
 
             let mask = fi.queue.Events();
 
-            if !fi.waiting && mask == 0 {
-                return Ok(())
-            }
-
-            if !fi.waiting && mask != 0 {
-                fi.waiting = true;
-            } else if fi.waiting && mask == 0 {
-                fi.waiting = false;
-            } else if fi.waiting && mask != 0 {
-                if mask | fi.mask == fi.mask {
+            if !fi.waiting {
+                if mask != 0 {
+                    fi.waiting = true;
+                } else {
                     return Ok(())
+                }
+            } else {
+                if mask == 0 {
+                    fi.waiting = false;
+                } else {
+                    if mask | fi.mask == fi.mask {
+                        return Ok(())
+                    }
                 }
             }
 

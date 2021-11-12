@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::super::qlib::task_mgr::*;
+use super::super::qlib::linux_def::EpollEvent;
 use super::super::qlib::uring::squeue;
 use super::super::qlib::uring::opcode::*;
 
@@ -180,6 +181,23 @@ impl SpliceOp {
         let op = Splice::new(types::Fixed(self.fdIn as u32), self.offsetIn, types::Fixed(self.fdOut as u32), self.offsetOut, self.len);
 
         error!("SpliceOp {:x?}", self);
+        return op.build()
+            .flags(squeue::Flags::FIXED_FILE);
+    }
+}
+
+#[derive(Clone, Debug, Copy)]
+pub struct EpollCtlOp {
+    pub epollfd: i32,
+    pub fd: i32,
+    pub op: i32,
+    pub ev: EpollEvent,
+}
+
+impl EpollCtlOp {
+    pub fn SEntry(&self) -> squeue::Entry {
+        let op = EpollCtl::new(types::Fd(self.epollfd), types::Fd(self.fd), self.op, &self.ev as * const _ as u64 as * const types::epoll_event);
+
         return op.build()
             .flags(squeue::Flags::FIXED_FILE);
     }

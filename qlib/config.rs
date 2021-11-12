@@ -17,7 +17,7 @@
 pub struct Config {
     pub DebugLevel: DebugLevel,
     pub KernelMemSize: u64,
-    pub SlowPrint: bool,
+    pub SyncPrint: bool,
     pub LogLevel: LogLevel,
     pub TcpBuffIO: bool,
     pub EnableAIO: bool,
@@ -39,7 +39,7 @@ impl Default for Config {
         return Self {
             DebugLevel: DebugLevel::Off,
             KernelMemSize: 16, // GB
-            SlowPrint: false,
+            SyncPrint: false,
             LogLevel: LogLevel::Simple,
             TcpBuffIO: true,
             EnableAIO: false,

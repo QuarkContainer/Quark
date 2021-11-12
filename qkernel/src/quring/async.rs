@@ -60,6 +60,7 @@ pub enum AsyncOps {
     UnblockBlockPollAdd(UnblockBlockPollAdd),
     AsyncBufWrite(AsyncBufWrite),
     AsyncAccept(AsyncAccept),
+    AsyncEpollCtl(AsyncEpollCtl),
     None,
 }
 
@@ -85,6 +86,7 @@ impl AsyncOps {
             AsyncOps::UnblockBlockPollAdd(ref msg) => return msg.SEntry(),
             AsyncOps::AsyncBufWrite(ref msg) => return msg.SEntry(),
             AsyncOps::AsyncAccept(ref msg) => return msg.SEntry(),
+            AsyncOps::AsyncEpollCtl(ref msg) => return msg.SEntry(),
             AsyncOps::None => ()
         };
 
@@ -112,7 +114,12 @@ impl AsyncOps {
             AsyncOps::UnblockBlockPollAdd(ref mut msg) => msg.Process(result),
             AsyncOps::AsyncBufWrite(ref mut msg) => msg.Process(result),
             AsyncOps::AsyncAccept(ref mut msg) => msg.Process(result),
-            AsyncOps::None => panic!("AsyncOps::None SEntry fail"),
+            AsyncOps::AsyncEpollCtl(ref mut msg) => msg.Process(result),
+            AsyncOps::None => {
+                //panic!("AsyncOps::None SEntry fail")
+                panic!("AsyncOps::None SEntry fail result {} id {}", result, id);
+                //return false;
+            },
         };
 
         if ret {
@@ -143,6 +150,7 @@ impl AsyncOps {
             AsyncOps::UnblockBlockPollAdd(_) => return 17,
             AsyncOps::AsyncBufWrite(_) => return 18,
             AsyncOps::AsyncAccept(_) => return 19,
+            AsyncOps::AsyncEpollCtl(_) => return 20,
             AsyncOps::None => ()
         };
 
@@ -1134,5 +1142,49 @@ impl UnblockBlockPollAdd {
             wait: wait.clone(),
             data: data.clone(),
         }
+    }
+}
+
+#[repr(C)]
+#[repr(packed)]
+#[derive(Debug, Default, Copy, Clone)]
+pub struct EpollEvent1 {
+    pub Events: u32,
+    pub Data: u64,
+}
+
+#[derive(Clone, Debug, Copy)]
+pub struct AsyncEpollCtl {
+    pub epollfd: i32,
+    pub fd: i32,
+    pub op: i32,
+    pub ev: EpollEvent1,
+}
+
+impl AsyncEpollCtl {
+    pub fn New(epollfd: i32, fd: i32, op: i32, mask: u32) -> Self {
+        error!("AsyncEpollCtl new ... fd is {}, ops is {}", fd, op);
+        return Self {
+            epollfd: epollfd,
+            fd: fd,
+            op: op,
+            ev: EpollEvent1 {
+                Events: mask,
+                Data: fd as u64,
+            },
+        }
+    }
+
+    pub fn SEntry(&self) -> squeue::Entry {
+        let op = EpollCtl::new(types::Fd(self.epollfd), types::Fd(self.fd), self.op, &self.ev as * const _ as u64 as * const types::epoll_event);
+
+        return op.build();
+            //.flags(squeue::Flags::FIXED_FILE);
+    }
+
+    pub fn Process(&mut self, result: i32) -> bool {
+        assert!(result >= 0, "AsyncEpollCtl process fail fd is {} {}, {:?}", self.fd, result, self);
+
+        return false
     }
 }

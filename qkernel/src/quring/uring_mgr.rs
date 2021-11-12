@@ -197,6 +197,13 @@ impl QUring {
         return idx;
     }
 
+    pub fn EpollCtl(&self, epollfd: i32, fd: i32, op: i32, mask: u32) -> usize {
+        let ops = AsyncEpollCtl::New(epollfd, fd, op, mask);
+        let idx = self.AUCall(AsyncOps::AsyncEpollCtl(ops));
+
+        return idx;
+    }
+
     pub fn Read(&self, task: &Task, fd: i32, addr: u64, len: u32, offset: i64) -> i64 {
         let msg = UringOp::Read(ReadOp {
             fd: fd,

@@ -917,7 +917,7 @@ impl HostSpace {
         }))
     }
 
-    pub fn SlowPrint(level: DebugLevel, str: &str) {
+    pub fn SyncPrint(level: DebugLevel, str: &str) {
         let msg = Print {
             level,
             str,
