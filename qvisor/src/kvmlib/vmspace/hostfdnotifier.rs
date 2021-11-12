@@ -72,26 +72,26 @@ impl FdNotifierInternal {
             Some(fi) => fi,
         };
 
-        if !fi.waiting && mask == 0 {
-            return Ok(())
-        }
-
         let mut ev = epoll_event {
             events: mask as u32 | EPOLLET as u32,
             u64: fd as u64
         };
 
-        if !fi.waiting && mask != 0 {
-            let ret = unsafe {
-                epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &mut ev as *mut epoll_event)
-            };
+        if !fi.waiting {
+            if mask == 0 {
+                return Ok(())
+            } else {
+                let ret = unsafe {
+                    epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &mut ev as *mut epoll_event)
+                };
 
-            if ret == -1 {
-                return Err(Error::SysError(errno::errno().0))
+                if ret == -1 {
+                    return Err(Error::SysError(errno::errno().0))
+                }
+
+                fi.waiting = true;
             }
-
-            fi.waiting = true;
-        } else if fi.waiting {
+        } else {
             if mask == 0 {
                 let ret = unsafe {
                     epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &mut ev as *mut epoll_event)
@@ -173,6 +173,10 @@ impl HostFdNotifier {
 
     pub fn Eventfd(&self) -> i32 {
         return self.read().eventfd;
+    }
+
+    pub fn Epollfd(&self) -> i32 {
+        return self.read().epollfd;
     }
 
     pub fn Notify(&self)  {

@@ -525,6 +525,7 @@ pub struct ShareSpace {
     pub QOutput: QRingBuf<HostOutputMsg>,  //QMutex<VecDeque<HostOutputMsg>>,
 
     pub hostIOThreadEventfd: AtomicI32,
+    pub hostEpollfd: AtomicI32,
 
     pub scheduler: task_mgr::Scheduler,
     pub ioThreadState: AtomicU64,
@@ -547,6 +548,7 @@ impl ShareSpace {
             QOutput: QRingBuf::New(MemoryDef::MSG_QLEN), //QMutex::new(VecDeque::with_capacity(MSG_QLEN)),
 
             hostIOThreadEventfd: AtomicI32::new(0),
+            hostEpollfd: AtomicI32::new(0),
 
             scheduler: task_mgr::Scheduler::default(),
             ioThreadState: AtomicU64::new(IOThreadState::WAITING as u64),
@@ -571,6 +573,10 @@ impl ShareSpace {
 
     pub fn HostIOThreadEventfd(&self) -> i32 {
         return self.hostIOThreadEventfd.load(Ordering::Relaxed);
+    }
+
+    pub fn HostHostEpollfd(&self) -> i32 {
+        return self.hostEpollfd.load(Ordering::Relaxed);
     }
 
     pub fn SetValue(&self, cpuId: usize, idx: usize, val: u64) {
