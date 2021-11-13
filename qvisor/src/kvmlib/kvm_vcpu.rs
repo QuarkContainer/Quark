@@ -725,6 +725,14 @@ impl Scheduler {
 
 impl CPULocal {
     pub fn Init(&mut self, vcpuId: usize) {
+        let epfd = unsafe {
+            epoll_create1(0)
+        };
+
+        if epfd == -1 {
+            panic!("CPULocal::Init {} create epollfd fail, error is {}", self.vcpuId, errno::errno().0);
+        }
+
         let eventfd = unsafe {
             libc::eventfd(0, libc::EFD_CLOEXEC)
         };
@@ -733,11 +741,38 @@ impl CPULocal {
             panic!("Vcpu::Init fail...");
         }
 
+        let mut ev = epoll_event {
+            events: EVENT_READ as u32 | EPOLLET as u32,
+            u64: eventfd as u64
+        };
+
+        let ret = unsafe {
+            epoll_ctl(epfd, EPOLL_CTL_ADD, eventfd, &mut ev as *mut epoll_event)
+        };
+
+        if ret == -1 {
+            panic!("CPULocal::Init {} add eventfd fail, error is {}", self.vcpuId, errno::errno().0);
+        }
+
+        let mut ev = epoll_event {
+            events: EVENT_READ as u32 | EPOLLET as u32,
+            u64: FD_NOTIFIER.Epollfd() as u64
+        };
+
+        let ret = unsafe {
+            epoll_ctl(epfd, EPOLL_CTL_ADD, FD_NOTIFIER.Epollfd(), &mut ev as *mut epoll_event)
+        };
+
+        if ret == -1 {
+            panic!("CPULocal::Init {} add host epollfd fail, error is {}", self.vcpuId, errno::errno().0);
+        }
+
         let mut uring = URING_MGR.lock();
 
         uring.Addfd(eventfd).expect("fail to add vcpu eventfd");
 
         self.eventfd = eventfd;
+        self.epollfd = epfd;
         self.vcpuId = vcpuId;
         self.data = 1;
     }
@@ -763,6 +798,64 @@ impl CPULocal {
         return Ok(())
     }
 
+    pub fn Wait1(&self) -> Result<()> {
+        let shareSpace = VMS.lock().GetShareSpace();
+        let mut events = [epoll_event { events: 0, u64: 0 }; 2];
+
+        self.SetWaiting();
+        defer!(self.SetRunning());
+
+        loop {
+            let nfds = unsafe {
+                epoll_wait(self.epollfd, &mut events[0], (events.len() - 1) as i32, -1)
+            };
+
+            if !super::runc::runtime::vm::IsRunning() {
+                return Err(Error::Exit)
+            }
+
+            if nfds == -1 {
+                let err = errno::errno().0;
+                return Err(Error::SysError(err))
+            }
+
+            let mut wakeVcpu = false;
+            let mut hasMsg = false;
+
+            if nfds == 2 {
+                wakeVcpu = true;
+                hasMsg = true;
+            } else {
+                assert!(nfds == 1);
+                let fd = events[0].u64 as i32;
+                if fd == self.eventfd { // ask for the vcpu wake up
+                    wakeVcpu = true;
+                } else {
+                    hasMsg = true;
+                }
+            }
+
+            if hasMsg {
+                shareSpace.GuestMsgProcess();
+            }
+
+            if wakeVcpu {
+                let mut data : u64 = 0;
+                let ret = unsafe {
+                    libc::read(self.eventfd, &mut data as * mut _ as *mut libc::c_void, 8)
+                };
+
+                if ret < 0 {
+                    panic!("KIOThread::Wakeup fail... eventfd is {}, errno is {}",
+                           self.eventfd, errno::errno().0);
+                }
+
+                return Ok(())
+            }
+        }
+
+    }
+
     pub fn Wakeup(&self) {
         let val : u64 = 1;
         let ret = unsafe {
@@ -786,6 +879,44 @@ impl ShareSpace {
 
     pub fn Yield() {
         std::thread::yield_now();
+    }
+
+    pub fn GuestMsgProcess(&self) {
+        while self.ReadyOutputMsgCnt() > 0 {
+            unsafe {
+                let msg = self.AQHostOutputPop();
+
+                match msg {
+                    None => {
+                        llvm_asm!("pause" :::: "volatile");
+                        //error!("get none output msg ...");
+                    },
+                    Some(HostOutputMsg::QCall(addr)) => {
+                        let eventAddr = addr as *mut Event; // as &mut qlib::Event;
+                        let event = &mut (*eventAddr);
+                        let currTaskId = event.taskId;
+
+                        //error!("qcall event is {:x?}", &event);
+
+                        match qcall::qCall(addr, event) {
+                            qcall::QcallRet::Normal => {
+                                if currTaskId.Addr() != 0 {
+                                    //Self::Schedule(shareSpace, currTaskId);
+                                    self.scheduler.ScheduleQ(currTaskId.TaskId(), currTaskId.Queue())
+                                }
+                            }
+                            qcall::QcallRet::Block => {
+                                //info!("start blocked wait ...........");
+                            }
+                        }
+                    }
+                    Some(msg) => {
+                        //error!("qcall msg is {:x?}", &msg);
+                        qcall::AQHostCall(msg, self);
+                    }
+                }
+            }
+        }
     }
 }
 

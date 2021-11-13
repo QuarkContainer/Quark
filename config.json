@@ -1,7 +1,7 @@
 {
   "DebugLevel"    : "Error",
   "KernelMemSize" : 32,
-  "SlowPrint"     : true,
+  "SyncPrint"     : true,
   "LogLevel"      : "Simple",
   "TcpBuffIO"     : true,
   "EnableAIO"     : true,
@@ -13,5 +13,5 @@
   "UringStatx"    : false,
   "FileBufWrite"  : true,
   "MmapRead"      : false,
-  "AsyncAccept"   : false
+  "AsyncAccept"   : true
 }
