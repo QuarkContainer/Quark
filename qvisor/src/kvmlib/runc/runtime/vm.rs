@@ -30,10 +30,8 @@ use super::super::super::qlib::addr;
 use super::super::super::qlib::config::*;
 use super::super::super::qlib::perf_tunning::*;
 use super::super::super::qlib::task_mgr::*;
-use super::super::super::qlib::qmsg::*;
 use super::super::super::syncmgr;
 use super::super::super::runc::runtime::loader::*;
-use super::super::super::qcall;
 use super::super::super::kvm_vcpu::*;
 use super::super::super::elf_loader::*;
 use super::super::super::vmspace::*;
@@ -307,41 +305,7 @@ impl VirtualMachine {
         let shareSpace = VMS.lock().GetShareSpace();
 
         'main: loop {
-            //PerfGoto(PerfType::QCall);
-            while shareSpace.ReadyOutputMsgCnt() > 0 {
-                unsafe {
-                    let msg = shareSpace.AQHostOutputPop();
-
-                    match msg {
-                        None => {
-                            llvm_asm!("pause" :::: "volatile");
-                            //error!("get none output msg ...");
-                        },
-                        Some(HostOutputMsg::QCall(addr)) => {
-                            let eventAddr = addr as *mut Event; // as &mut qlib::Event;
-                            let event = &mut (*eventAddr);
-                            let currTaskId = event.taskId;
-
-                            //error!("qcall event is {:x?}", &event);
-
-                            match qcall::qCall(addr, event) {
-                                qcall::QcallRet::Normal => {
-                                    if currTaskId.Addr() != 0 {
-                                        Self::Schedule(shareSpace, currTaskId);
-                                    }
-                                }
-                                qcall::QcallRet::Block => {
-                                    //info!("start blocked wait ...........");
-                                }
-                            }
-                        }
-                        Some(msg) => {
-                            //error!("qcall msg is {:x?}", &msg);
-                            qcall::AQHostCall(msg, shareSpace);
-                        }
-                    }
-                }
-            }
+            shareSpace.GuestMsgProcess();
 
             if !IsRunning() {
                 VMS.lock().CloseVMSpace();
@@ -398,3 +362,4 @@ impl VirtualMachine {
         }
     }
 }
+
