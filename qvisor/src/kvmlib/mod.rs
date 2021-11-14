@@ -46,6 +46,7 @@ use core::sync::atomic::AtomicU64;
 use self::qlib::buddyallocator::MemAllocator;
 use self::qlib::{addr};
 use self::qlib::qmsg::*;
+use self::qlib::config::*;
 use self::vmspace::hostfdnotifier::*;
 use self::vmspace::host_pma_keeper::*;
 use self::vmspace::kernel_io_thread::*;
@@ -63,7 +64,18 @@ lazy_static! {
     pub static ref IO_MGR: Mutex<vmspace::HostFileMap::IOMgr> = Mutex::new(vmspace::HostFileMap::IOMgr::Init().expect("Init IOMgr fail"));
     pub static ref SYNC_MGR: Mutex<syncmgr::SyncMgr> = Mutex::new(syncmgr::SyncMgr::New());
     pub static ref PMA_KEEPER: HostPMAKeeper = HostPMAKeeper::New();
-    pub static ref URING_MGR: Mutex<UringMgr> = Mutex::new(UringMgr::New(64));
+    pub static ref QUARK_CONFIG: Mutex<Config> = {
+        let mut config = Config::default();
+        config.Load();
+        Mutex::new(config)
+    };
+    pub static ref URING_MGR: Mutex<UringMgr> = {
+        let config = QUARK_CONFIG.lock();
+        let dedicateUring = config.DedicateUring;
+        let uringSize = config.UringSize;
+        Mutex::new(UringMgr::New(uringSize, dedicateUring))
+        //Mutex::new(UringMgr::New(64, true))
+    };
     pub static ref KERNEL_IO_THREAD: KIOThread = KIOThread::New();
     pub static ref GLOCK: Mutex<()> = Mutex::new(());
 }

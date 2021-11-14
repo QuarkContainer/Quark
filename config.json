@@ -13,5 +13,7 @@
   "UringStatx"    : false,
   "FileBufWrite"  : true,
   "MmapRead"      : false,
-  "AsyncAccept"   : true
+  "AsyncAccept"   : true,
+  "DedicateUring" : true,
+  "UringSize"     : 64
 }

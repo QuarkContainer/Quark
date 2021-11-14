@@ -377,7 +377,7 @@ impl KVMVcpu {
         let mut lastVal: u32 = 0;
         let mut first = true;
 
-        let coreid = core_affinity::CoreId{id: self.id};
+        let coreid = core_affinity::CoreId{id: self.id+1}; // skip core #0 for uring
         core_affinity::set_for_current(coreid);
 
         info!("start enter guest[{}]: entry is {:x}, stack is {:x}", self.id, self.entry, self.topStackAddr);
@@ -874,7 +874,7 @@ impl ShareSpace {
         self.hostIOThreadEventfd.store(FD_NOTIFIER.Eventfd(), Ordering::SeqCst);
         self.hostEpollfd.store(FD_NOTIFIER.Epollfd(), Ordering::SeqCst);
         URING_MGR.lock().Addfd(self.HostIOThreadEventfd()).unwrap();
-        self.config.write().Load();
+        *self.config.write() = *QUARK_CONFIG.lock();
     }
 
     pub fn Yield() {
