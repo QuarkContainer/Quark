@@ -29,7 +29,9 @@ pub struct Config {
     pub UringStatx: bool,
     pub FileBufWrite: bool,
     pub MmapRead: bool,
-    pub AsyncAccept: bool
+    pub AsyncAccept: bool,
+    pub DedicateUring: bool,
+    pub UringSize: usize
 }
 
 impl Config {}
@@ -51,7 +53,9 @@ impl Default for Config {
             UringStatx: false,
             FileBufWrite: true,
             MmapRead: true,
-            AsyncAccept: true
+            AsyncAccept: true,
+            DedicateUring: true,
+            UringSize: 64,
         }
     }
 }

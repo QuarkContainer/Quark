@@ -27,7 +27,6 @@ use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::ShareSpace;
 use super::super::super::qlib::addr::AccessType;
 use super::super::super::qlib::addr;
-use super::super::super::qlib::config::*;
 use super::super::super::qlib::perf_tunning::*;
 use super::super::super::qlib::task_mgr::*;
 use super::super::super::syncmgr;
@@ -35,7 +34,7 @@ use super::super::super::runc::runtime::loader::*;
 use super::super::super::kvm_vcpu::*;
 use super::super::super::elf_loader::*;
 use super::super::super::vmspace::*;
-use super::super::super::{FD_NOTIFIER, VMS, PMA_KEEPER};
+use super::super::super::{FD_NOTIFIER, VMS, PMA_KEEPER, QUARK_CONFIG};
 use super::super::super::ucall::ucall_server::*;
 
 lazy_static! {
@@ -135,13 +134,10 @@ impl VirtualMachine {
     pub fn Init(args: Args /*args: &Args, kvmfd: i32*/) -> Result<Self> {
         PerfGoto(PerfType::Other);
 
-        let mut config = Config::default();
-        config.Load();
-
         let kvmfd = args.KvmFd;
         let cpuCount = VMSpace::VCPUCount() - 1;
         VMS.lock().vcpuCount = VMSpace::VCPUCount();
-        let kernelMemRegionSize = config.KernelMemSize;
+        let kernelMemRegionSize = QUARK_CONFIG.lock().KernelMemSize;
         let controlSock = args.ControlSock;
 
         let umask = Self::Umask();

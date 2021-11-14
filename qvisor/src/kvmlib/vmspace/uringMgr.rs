@@ -32,15 +32,17 @@ pub struct UringMgr {
 pub const FDS_SIZE : usize = 8192;
 
 impl UringMgr {
-    pub fn New(size: usize) -> Self {
+    pub fn New(size: usize, dedicateUring: bool) -> Self {
         let mut fds = Vec::with_capacity(FDS_SIZE);
         for _i in 0..FDS_SIZE {
             fds.push(-1);
         }
 
-        //let ring = Builder::default().setup_sqpoll(50).setup_sqpoll_cpu(0).build(size as u32).expect("InitUring fail");
-        //let ring = Builder::default().setup_sqpoll(10).setup_sqpoll_cpu(15).setup_clamp().setup_cqsize(size as u32 * 2).build(size as u32).expect("InitUring fail");
-        let ring = Builder::default().setup_sqpoll(10).setup_clamp().setup_cqsize(size as u32 * 2).build(size as u32).expect("InitUring fail");
+        let ring = if dedicateUring {
+            Builder::default().setup_sqpoll(10).setup_sqpoll_cpu(0).setup_clamp().setup_cqsize(size as u32 * 2).build(size as u32).expect("InitUring fail")
+        } else {
+            Builder::default().setup_sqpoll(10).setup_clamp().setup_cqsize(size as u32 * 2).build(size as u32).expect("InitUring fail")
+        };
 
         let ret = Self {
             fd: ring.fd.0,
