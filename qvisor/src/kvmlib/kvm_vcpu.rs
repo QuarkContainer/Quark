@@ -879,6 +879,11 @@ impl ShareSpace {
 
     pub fn Yield() {
         std::thread::yield_now();
+        std::thread::yield_now();
+        std::thread::yield_now();
+        std::thread::yield_now();
+        std::thread::yield_now();
+        std::thread::yield_now();
     }
 
     pub fn GuestMsgProcess(&self) {

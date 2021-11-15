@@ -38,6 +38,7 @@ impl UringMgr {
             fds.push(-1);
         }
 
+        error!("UringMgr size {}, dedicateUring {}", size, dedicateUring);
         let ring = if dedicateUring {
             Builder::default().setup_sqpoll(10).setup_sqpoll_cpu(0).setup_clamp().setup_cqsize(size as u32 * 2).build(size as u32).expect("InitUring fail")
         } else {
