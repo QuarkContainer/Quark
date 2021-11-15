@@ -492,6 +492,10 @@ impl QUring {
         }
     }
 
+    // we will leave some queue idle to make uring more stable
+    // todo: fx this, do we need throttling?
+    pub const SUBMISSION_QUUEUE_FREE_COUNT : usize = 10;
+
     pub fn UringCall(&self, call: &UringCall) {
         let entry = call.SEntry();
         let entry = entry
@@ -499,11 +503,11 @@ impl QUring {
 
         loop {
             let mut s = self.submission.lock();
-            if s.FreeSlots() < 1 {
+            if s.FreeSlots() < Self::SUBMISSION_QUUEUE_FREE_COUNT {
                 print!("UringCall: submission full...");
                 drop(s);
-                super::super::Kernel::HostSpace::UringWake(1);
-                //super::super::qlib::ShareSpace::Yield();
+                //super::super::Kernel::HostSpace::UringWake(1);
+                super::super::qlib::ShareSpace::Yield();
                 continue
             }
 
@@ -520,11 +524,11 @@ impl QUring {
     pub fn AUringCall(&self, entry: squeue::Entry) {
         loop {
             let mut s = self.submission.lock();
-            if s.FreeSlots() == 0 {
+            if s.FreeSlots() < Self::SUBMISSION_QUUEUE_FREE_COUNT {
                 print!("AUringCall1: submission full...");
                 drop(s);
-                super::super::Kernel::HostSpace::UringWake(1);
-                //super::super::qlib::ShareSpace::Yield();
+                //super::super::Kernel::HostSpace::UringWake(1);
+                super::super::qlib::ShareSpace::Yield();
                 continue;
             }
 
@@ -543,11 +547,11 @@ impl QUring {
     pub fn AUringCallLinked(&self, entry1: squeue::Entry, entry2: squeue::Entry) {
         loop {
             let mut s = self.submission.lock();
-            if s.FreeSlots() < 2 {
+            if s.FreeSlots() < Self::SUBMISSION_QUUEUE_FREE_COUNT + 1 {
                 print!("AUringCallLinked: submission full...");
                 drop(s);
-                super::super::Kernel::HostSpace::UringWake(1);
-                //super::super::qlib::ShareSpace::Yield();
+                //super::super::Kernel::HostSpace::UringWake(1);
+                super::super::qlib::ShareSpace::Yield();
                 continue;
             }
 
