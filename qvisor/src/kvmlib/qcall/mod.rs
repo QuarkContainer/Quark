@@ -315,14 +315,14 @@ pub fn qCall(eventAddr: u64, event: &'static mut Event) -> QcallRet {
             *ret = super::VMSpace::NewFd(taskId.Addr(), msg.fd) as u64;
         }
         Event { taskId: _, globalLock: _, ref mut ret, msg: Msg::IoUringSetup(msg) } => {
-            *ret = match URING_MGR.lock().Setup(msg.submission, msg.completion) {
+            *ret = match URING_MGR.lock().Setup(msg.idx, msg.submission, msg.completion) {
                 Ok(v) => v as u64,
                 Err(Error::SysError(v)) => -v as i64 as u64,
                 _ => panic!("UringMgr setup fail")
             }
         }
         Event { taskId: _, globalLock: _, ref mut ret, msg: Msg::IoUringEnter(msg) } => {
-            *ret = match URING_MGR.lock().Enter(msg.toSubmit, msg.minComplete, msg.flags) {
+            *ret = match URING_MGR.lock().Enter(msg.idx, msg.toSubmit, msg.minComplete, msg.flags) {
                 Ok(v) => v as u64,
                 Err(Error::SysError(v)) => -v as i64 as u64,
                 _ => panic!("UringMgr Enter fail")

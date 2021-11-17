@@ -51,7 +51,9 @@ fn FutexWaitAbsolute(task: &mut Task, realtime: bool, ts: Option<Timespec>, addr
     task.futexMgr.WaitPrepare(&waitEntry, task, addr, private, val, mask)?;
 
     let res = match ts {
-        None => task.blocker.BlockWithRealTimer(true, None),
+        None => {
+            task.blocker.BlockWithRealTimer(true, None)
+        },
         Some(ts) => {
             let ns = ts.ToDuration()?;
             if realtime {

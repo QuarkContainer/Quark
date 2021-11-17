@@ -135,7 +135,15 @@ impl VirtualMachine {
         PerfGoto(PerfType::Other);
 
         let kvmfd = args.KvmFd;
-        let cpuCount = VMSpace::VCPUCount() - 1;
+
+        let uringCnt = QUARK_CONFIG.lock().DedicateUring;
+        let cnt = if uringCnt == 0 {
+            1
+        } else {
+            uringCnt
+        };
+
+        let cpuCount = VMSpace::VCPUCount() - cnt;
         VMS.lock().vcpuCount = VMSpace::VCPUCount();
         let kernelMemRegionSize = QUARK_CONFIG.lock().KernelMemSize;
         let controlSock = args.ControlSock;

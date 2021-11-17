@@ -24,6 +24,7 @@ use super::super::super::qlib::common::*;
 pub struct SocketBuff {
     pub wClosed: AtomicBool,
     pub rClosed: AtomicBool,
+    pub pendingWShutdown: AtomicBool,
     pub error: AtomicI32,
 
     pub readBuf: QMutex<ByteStream>,
@@ -35,10 +36,23 @@ impl SocketBuff {
         return Self {
             wClosed: AtomicBool::new(false),
             rClosed: AtomicBool::new(false),
+            pendingWShutdown: AtomicBool::new(false),
             error: AtomicI32::new(0),
             readBuf: QMutex::new(ByteStream::Init(pageCount)),
             writeBuf: QMutex::new(ByteStream::Init(pageCount)),
         }
+    }
+
+    pub fn PendingWriteShutdown(&self) -> bool {
+        self.pendingWShutdown.load(Ordering::SeqCst)
+    }
+
+    pub fn SetPendingWriteShutdown(&self) {
+        self.pendingWShutdown.store(true, Ordering::SeqCst)
+    }
+
+    pub fn HasWritingData(&self) -> bool {
+        return self.writeBuf.lock().AvailableDataSize() > 0;
     }
 
     pub fn WriteBufAvailableDataSize(&self) -> usize {

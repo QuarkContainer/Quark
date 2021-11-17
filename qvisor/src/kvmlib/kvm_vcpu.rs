@@ -35,6 +35,7 @@ use super::qlib::*;
 use super::qlib::vcpu_mgr::*;
 use super::amd64_def::*;
 use super::URING_MGR;
+use super::QUARK_CONFIG;
 use super::runc::runtime::vm::*;
 
 // bootstrap memory for vcpu
@@ -377,7 +378,7 @@ impl KVMVcpu {
         let mut lastVal: u32 = 0;
         let mut first = true;
 
-        let coreid = core_affinity::CoreId{id: self.id+1}; // skip core #0 for uring
+        let coreid = core_affinity::CoreId{id: self.id + QUARK_CONFIG.lock().DedicateUring}; // skip core #0 for uring
         core_affinity::set_for_current(coreid);
 
         info!("start enter guest[{}]: entry is {:x}, stack is {:x}", self.id, self.entry, self.topStackAddr);
@@ -471,8 +472,10 @@ impl KVMVcpu {
                         }
                         qlib::HYPERCALL_URING_WAKE => {
                             let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                            let count = regs.rbx as usize;
-                            URING_MGR.lock().Wake(count).expect("qlib::HYPER CALL_URING_WAKE fail");
+                            let idx = regs.rbx as usize;
+                            let minComplete = regs.rcx as usize;
+
+                            URING_MGR.lock().Wake(idx, minComplete).expect("qlib::HYPER CALL_URING_WAKE fail");
                         }
                         qlib::HYPERCALL_INIT => {
                             info!("get io out: HYPERCALL_INIT");
@@ -484,7 +487,9 @@ impl KVMVcpu {
                             };
 
                             sharespace.Init();
-                            super::URING_MGR.lock().Addfd(super::super::print::LOG.lock().Logfd()).unwrap();
+                            let logfd = super::super::print::LOG.lock().Logfd();
+                            super::URING_MGR.lock().Init(sharespace.config.read().DedicateUring);
+                            super::URING_MGR.lock().Addfd(logfd).unwrap();
                             if !sharespace.config.read().SyncPrint {
                                 super::super::print::EnableKernelPrint();
                             }

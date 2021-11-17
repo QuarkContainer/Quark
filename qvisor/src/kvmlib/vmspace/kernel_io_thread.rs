@@ -51,7 +51,7 @@ impl KIOThread {
                 return Err(Error::Exit)
             }
 
-            if sharespace.ReadyAsyncMsgCnt() > 0 || URING_MGR.lock().ring.HasCompleteEntry() {
+            if sharespace.ReadyAsyncMsgCnt() > 0 || URING_MGR.lock().CompletEntries() > 0 {
                 return Ok(())
             }
         }

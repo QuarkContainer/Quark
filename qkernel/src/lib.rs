@@ -165,7 +165,7 @@ pub fn SingletonInit() {
         KERNEL_PAGETABLE.Init(PageTables::Init(CurrentCr3()));
         PAGE_MGR.Init(PageMgr::New());
         LOADER.Init(Loader::default());
-        IOURING.Init(QUring::New(MemoryDef::QURING_SIZE));
+        IOURING.Init(QUring::New(MemoryDef::QURING_SIZE, 1));
         KERNEL_STACK_ALLOCATOR.Init( AlignedAllocator::New(MemoryDef::DEFAULT_STACK_SIZE as usize, MemoryDef::DEFAULT_STACK_SIZE as usize));
 
         guestfdnotifier::GUEST_NOTIFIER.Init(guestfdnotifier::Notifier::New());
@@ -402,7 +402,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
 
         SHARESPACE.scheduler.SetVcpuCnt(vcpuCnt as usize);
         HyperCall64(qlib::HYPERCALL_INIT, (&(*SHARESPACE) as *const ShareSpace) as u64, 0, 0);
-
+        IOURING.Setup(SHARESPACE.config.read().DedicateUring);
         {
             let kpt = &KERNEL_PAGETABLE;
 

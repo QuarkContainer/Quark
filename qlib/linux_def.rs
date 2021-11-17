@@ -203,6 +203,9 @@ pub const EVENT_OUT: EventMask = 0x04; // POLLOUT
 pub const EVENT_ERR: EventMask = 0x08; // POLLERR
 pub const EVENT_HUP: EventMask = 0x10; // POLLHUP
 
+// Quark event, when application shutdown the connection, it is used for wait the uring to drain the writing buffer
+pub const EVENT_PENDING_SHUTDOWN: EventMask = 0x20;
+
 pub const ALL_EVENTS: EventMask = 0x1f;
 pub const EVENT_READ: EventMask = EVENT_IN | EVENT_HUP | EVENT_ERR;
 pub const EVENT_WRITE: EventMask = EVENT_OUT | EVENT_HUP | EVENT_ERR;

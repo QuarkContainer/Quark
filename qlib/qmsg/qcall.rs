@@ -109,6 +109,7 @@ pub enum Msg {
 
 #[derive(Clone, Default, Debug)]
 pub struct IoUringSetup {
+    pub idx: usize,
     pub submission: u64,
     pub completion: u64
 }
@@ -123,7 +124,7 @@ pub struct IoUringRegister {
 
 #[derive(Clone, Default, Debug, Copy)]
 pub struct IoUringEnter {
-    pub fd: i32,
+    pub idx: usize,
     pub toSubmit: u32,
     pub minComplete: u32,
     pub flags: u32,
