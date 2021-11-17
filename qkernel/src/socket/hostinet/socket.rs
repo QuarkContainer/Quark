@@ -757,8 +757,21 @@ impl SockOperations for SocketOperations {
         return Ok(res)
     }
 
-    fn Shutdown(&self, _task: &Task, how: i32) -> Result<i64> {
+    fn Shutdown(&self, task: &Task, how: i32) -> Result<i64> {
         let how = how as u64;
+
+        if how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR {
+            if self.SocketBuf().HasWritingData() {
+                self.SocketBuf().SetPendingWriteShutdown();
+                let general = task.blocker.generalEntry.clone();
+                self.EventRegister(task, &general, EVENT_PENDING_SHUTDOWN);
+                defer!(self.EventUnregister(task, &general));
+
+                if self.SocketBuf().HasWritingData() {
+                    task.blocker.BlockGeneralOnly();
+                }
+            }
+        }
 
         if how == LibcConst::SHUT_RD || how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR {
             let res = Kernel::HostSpace::Shutdown(self.fd, how as i32);

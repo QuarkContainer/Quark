@@ -23,41 +23,54 @@ use super::host_uring::*;
 
 //#[derive(Debug)]
 pub struct UringMgr {
-    pub fd: i32,
+    pub uringfds: Vec<i32>,
     pub eventfd: i32,
     pub fds: Vec<i32>,
-    pub ring: IoUring,
+    pub rings: Vec<IoUring>,
 }
 
 pub const FDS_SIZE : usize = 8192;
 
 impl UringMgr {
-    pub fn New(size: usize, dedicateUring: bool) -> Self {
+    pub fn New(size: usize, uringCount: usize) -> Self {
         let mut fds = Vec::with_capacity(FDS_SIZE);
         for _i in 0..FDS_SIZE {
             fds.push(-1);
         }
 
-        error!("UringMgr size {}, dedicateUring {}", size, dedicateUring);
-        let ring = if dedicateUring {
+        error!("UringMgr size {}, uringCount {}", size, uringCount);
+        /*let ring = if dedicateUring {
             Builder::default().setup_sqpoll(10).setup_sqpoll_cpu(0).setup_clamp().setup_cqsize(size as u32 * 2).build(size as u32).expect("InitUring fail")
         } else {
             Builder::default().setup_sqpoll(10).setup_clamp().setup_cqsize(size as u32 * 2).build(size as u32).expect("InitUring fail")
-        };
+        };*/
+
+        let mut rings = Vec::with_capacity(uringCount);
+        let mut uringfds = Vec::with_capacity(uringCount);
+        for i in 0..uringCount {
+            let ring = Builder::default()
+                .setup_sqpoll(10)
+                .setup_sqpoll_cpu(i as u32)
+                .setup_clamp()
+                .setup_cqsize(size as u32 * 2)
+                .build(size as u32).expect("InitUring fail");
+            uringfds.push(ring.fd.0);
+            rings.push(ring);
+        }
 
         let ret = Self {
-            fd: ring.fd.0,
+            uringfds: uringfds,
             eventfd: 0,
             fds: fds,
-            ring: ring,
+            rings: rings,
         };
 
         ret.Register(IORING_REGISTER_FILES, &ret.fds[0] as * const _ as u64, ret.fds.len() as u32).expect("InitUring register files fail");
         return ret;
     }
 
-    pub fn Setup(&mut self, submission: u64, completion: u64) -> Result<i32> {
-        self.ring.CopyTo(submission, completion);
+    pub fn Setup(&mut self, idx: usize, submission: u64, completion: u64) -> Result<i32> {
+        self.rings[idx].CopyTo(submission, completion);
         return Ok(0)
     }
 
@@ -67,8 +80,8 @@ impl UringMgr {
         self.Register(IORING_REGISTER_EVENTFD, &self.eventfd as * const _ as u64, 1).expect("InitUring register eventfd fail");
     }
 
-    pub fn Enter(&mut self, toSumbit: u32, minComplete:u32, flags: u32) -> Result<i32> {
-        let ret = IOUringEnter(self.fd, toSumbit, minComplete, flags);
+    pub fn Enter(&mut self, idx: usize, toSumbit: u32, minComplete:u32, flags: u32) -> Result<i32> {
+        let ret = IOUringEnter(self.uringfds[idx], toSumbit, minComplete, flags);
         if ret < 0 {
             return Err(Error::SysError(-ret as i32))
         }
@@ -76,11 +89,21 @@ impl UringMgr {
         return Ok(ret as i32)
     }
 
-    pub fn Wake(&self, minComplete: usize) -> Result<()> {
+    pub fn CompletEntries(&self) -> usize {
+        let mut cnt = 0;
+        for r in &self.rings {
+            cnt += r.completion().len();
+        };
+
+        return cnt;
+    }
+
+    pub fn Wake(&self, idx: usize, minComplete: usize) -> Result<()> {
+        let fd = self.uringfds[idx];
         let ret = if minComplete == 0 {
-            IOUringEnter(self.fd, 1, minComplete as u32, IORING_ENTER_SQ_WAKEUP)
+            IOUringEnter(fd, 1, minComplete as u32, IORING_ENTER_SQ_WAKEUP)
         } else {
-            IOUringEnter(self.fd, 1, minComplete as u32, 0)
+            IOUringEnter(fd, 1, minComplete as u32, 0)
         };
 
         //error!("uring wake minComplete {} ret {}, free {}", minComplete, ret, self.ring.sq.freeSlot());
@@ -93,7 +116,15 @@ impl UringMgr {
     }
 
     pub fn Register(&self, opcode: u32, arg: u64, nrArgs: u32) -> Result<()> {
-        let ret = IOUringRegister(self.fd, opcode, arg, nrArgs);
+        for fd in &self.uringfds {
+            self.RegisterOne(*fd, opcode, arg, nrArgs)?;
+        }
+
+        return Ok(())
+    }
+
+    pub fn RegisterOne(&self, fd: i32, opcode: u32, arg: u64, nrArgs: u32) -> Result<()> {
+        let ret = IOUringRegister(fd, opcode, arg, nrArgs);
         if ret < 0 {
             error!("IOUringRegister get fail {}", ret);
             return Err(Error::SysError(-ret as i32))

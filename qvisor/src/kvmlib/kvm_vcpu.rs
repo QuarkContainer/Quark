@@ -471,8 +471,10 @@ impl KVMVcpu {
                         }
                         qlib::HYPERCALL_URING_WAKE => {
                             let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                            let count = regs.rbx as usize;
-                            URING_MGR.lock().Wake(count).expect("qlib::HYPER CALL_URING_WAKE fail");
+                            let idx = regs.rbx as usize;
+                            let minComplete = regs.rcx as usize;
+
+                            URING_MGR.lock().Wake(idx, minComplete).expect("qlib::HYPER CALL_URING_WAKE fail");
                         }
                         qlib::HYPERCALL_INIT => {
                             info!("get io out: HYPERCALL_INIT");
@@ -484,7 +486,8 @@ impl KVMVcpu {
                             };
 
                             sharespace.Init();
-                            super::URING_MGR.lock().Addfd(super::super::print::LOG.lock().Logfd()).unwrap();
+                            let logfd = super::super::print::LOG.lock().Logfd();
+                            super::URING_MGR.lock().Addfd(logfd).unwrap();
                             if !sharespace.config.read().SyncPrint {
                                 super::super::print::EnableKernelPrint();
                             }

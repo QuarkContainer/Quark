@@ -552,6 +552,10 @@ impl AsyncFiletWrite {
         }
 
         if addr == 0 {
+            if self.buf.PendingWriteShutdown() {
+                self.queue.Notify(EVENT_PENDING_SHUTDOWN);
+            }
+
             return false;
         }
 

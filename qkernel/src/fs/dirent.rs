@@ -26,6 +26,7 @@ use core::cmp::PartialEq;
 
 use super::super::uid::*;
 use super::super::qlib::common::*;
+use super::super::qlib::singleton::*;
 use super::super::task::*;
 use super::super::qlib::linux_def::*;
 use super::super::socket::unix::transport::unix::*;
@@ -35,7 +36,10 @@ use super::file::*;
 use super::dentry::*;
 use super::mount::*;
 
-pub static RENAME: RwLock<()> = RwLock::new(());
+pub static RENAME : Singleton<RwLock<()>> = Singleton::<RwLock<()>>::New();
+pub unsafe fn InitSingleton() {
+    RENAME.Init(RwLock::new(()));
+}
 
 #[derive(Clone)]
 pub struct Dirent(pub Arc<(QMutex<InterDirent>, u64)>);

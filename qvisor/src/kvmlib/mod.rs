@@ -71,9 +71,9 @@ lazy_static! {
     };
     pub static ref URING_MGR: Mutex<UringMgr> = {
         let config = QUARK_CONFIG.lock();
-        let dedicateUring = config.DedicateUring;
+        //let dedicateUring = config.DedicateUring;
         let uringSize = config.UringSize;
-        Mutex::new(UringMgr::New(uringSize, dedicateUring))
+        Mutex::new(UringMgr::New(uringSize, 1))
         //Mutex::new(UringMgr::New(64, true))
     };
     pub static ref KERNEL_IO_THREAD: KIOThread = KIOThread::New();

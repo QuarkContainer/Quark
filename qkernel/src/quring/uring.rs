@@ -16,18 +16,17 @@ use core::sync::atomic;
 
 use super::super::qlib::uring::*;
 use super::super::qlib::uring::util::*;
-use super::super::qlib::uring::porting::*;
 use super::super::qlib::common::*;
 use super::super::Kernel::HostSpace;
 
 impl IoUring {
     /// Initiate asynchronous I/O.
     #[inline]
-    pub fn submit(&self) -> Result<usize> {
-        self.submit_and_wait(0)
+    pub fn submit(&self, idx: usize) -> Result<usize> {
+        self.submit_and_wait(idx, 0)
     }
 
-    pub fn submit_and_wait(&self, want: usize) -> Result<usize> {
+    pub fn submit_and_wait(&self, idx: usize, want: usize) -> Result<usize> {
         let len = self.sq_len();
 
         let mut flags = 0;
@@ -41,7 +40,7 @@ impl IoUring {
                 if want > 0 {
                     flags |= sys::IORING_ENTER_SQ_WAKEUP;
                 } else {
-                    super::super::Kernel::HostSpace::UringWake(0);
+                    super::super::Kernel::HostSpace::UringWake(idx, 0);
                     return Ok(0)
                 }
             } else if want == 0 {
@@ -50,7 +49,7 @@ impl IoUring {
             }
         }
 
-        unsafe { self.enter(len as _, want as _, flags) }
+        unsafe { self.enter(idx, len as _, want as _, flags) }
     }
 
     pub fn sq_len(&self) -> usize {
@@ -70,22 +69,23 @@ impl IoUring {
 
     pub unsafe fn enter(
         &self,
+        idx: usize,
         to_submit: u32,
         min_complete: u32,
         flag: u32
     ) -> Result<usize> {
-        return io_uring_enter(self.fd.as_raw_fd(), to_submit, min_complete, flag)
+        return io_uring_enter(idx, to_submit, min_complete, flag)
     }
 }
 
 pub fn io_uring_enter(
-    fd: i32,
+    idx: usize,
     to_submit: u32,
     min_complete: u32,
     flags: u32,
     //sig: *const sigset_t,
 ) -> Result<usize> {
-    let ret = HostSpace::IoUringEnter(fd, to_submit, min_complete, flags);
+    let ret = HostSpace::IoUringEnter(idx, to_submit, min_complete, flags);
     if ret < 0 {
         return Err(Error::SysError(-ret as i32))
     }

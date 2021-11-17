@@ -15,6 +15,7 @@
 use ::qlib::mutex::*;
 use core::sync::atomic;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 use super::super::task::*;
 use super::super::qlib::common::*;
@@ -25,8 +26,8 @@ pub use super::super::qlib::uring::squeue::SubmissionQueue;
 pub use super::super::qlib::uring::*;
 
 use super::super::qlib::uring::util::*;
-use super::super::qlib::uring::porting::*;
 use super::super::qlib::linux_def::*;
+use super::super::qlib::vcpu_mgr::*;
 use super::super::kernel::waiter::*;
 use super::super::socket::hostinet::socket_buf::*;
 use super::super::socket::hostinet::socket::*;
@@ -41,9 +42,9 @@ pub fn QUringTrigger() -> usize {
     return IOURING.DrainCompletionQueue();
 }
 
-pub fn QUringProcessOne() -> bool {
+/*pub fn QUringProcessOne() -> bool {
     return IOURING.ProcessOne();
-}
+}*/
 
 unsafe impl Send for Submission {}
 unsafe impl Sync for Submission {}
@@ -72,7 +73,7 @@ impl Submission {
         }
     }
 
-    pub fn SubmitAndWait(&self, want: usize) -> Result<usize> {
+    pub fn SubmitAndWait(&self, idx: usize, want: usize) -> Result<usize> {
         let len = self.SqLen();
 
         let mut flags = 0;
@@ -86,7 +87,7 @@ impl Submission {
                 if want > 0 {
                     flags |= sys::IORING_ENTER_SQ_WAKEUP;
                 } else {
-                    super::super::Kernel::HostSpace::UringWake(0);
+                    super::super::Kernel::HostSpace::UringWake(idx, 0);
                     return Ok(0)
                 }
             } else if want == 0 {
@@ -95,19 +96,20 @@ impl Submission {
             }
         }
 
-        return self.Enter(len as _, want as _, flags)
+        return self.Enter(idx, len as _, want as _, flags)
     }
 
-    pub fn Submit(&self) -> Result<usize> {
-        return self.SubmitAndWait(0)
+    pub fn Submit(&self, idx: usize) -> Result<usize> {
+        return self.SubmitAndWait(idx, 0)
     }
 
     pub fn Enter(&self,
+                 idx: usize,
                  to_submit: u32,
                  min_complete: u32,
                  flags: u32
     ) -> Result<usize> {
-        let ret = HostSpace::IoUringEnter(self.fd.as_raw_fd(),
+        let ret = HostSpace::IoUringEnter(idx,
                                           to_submit,
                                           min_complete,
                                           flags);
@@ -140,23 +142,34 @@ impl Completion {
 
 #[derive(Default)]
 pub struct QUring {
-    pub submission: QMutex<Submission>,
-    pub completion: QMutex<Completion>,
-    pub asyncMgr: UringAsyncMgr
+    pub submission: Vec<QMutex<Submission>>,
+    pub completion: Vec<QMutex<Completion>>,
+    pub asyncMgr: UringAsyncMgr,
+    pub uringCount: usize,
 }
 
 impl QUring {
-    pub fn New(size: usize) -> Self {
+    pub fn New(size: usize, uringCount: usize) -> Self {
         let mut ret = QUring {
-            submission: Default::default(),
-            completion: Default::default(),
-            asyncMgr: UringAsyncMgr::New(size)
+            submission: Vec::with_capacity(uringCount),
+            completion: Vec::with_capacity(uringCount),
+            asyncMgr: UringAsyncMgr::New(size),
+            uringCount: uringCount
         };
 
-        super::super::Kernel::HostSpace::IoUringSetup(
-            &mut ret.submission as * mut _ as u64,
-            &mut ret.completion as * mut _ as u64,
-        );
+        for _i in 0..uringCount {
+            ret.submission.push(Default::default());
+            ret.completion.push(Default::default());
+        }
+
+        for i in 0..uringCount {
+            super::super::Kernel::HostSpace::IoUringSetup(
+                i,
+                &mut ret.submission[i] as *mut _ as u64,
+                &mut ret.completion[i] as *mut _ as u64,
+            );
+        }
+
         return ret;
     }
 
@@ -455,7 +468,7 @@ impl QUring {
         self.AUringCallLinked(entry1, entry2);
     }
 
-    pub fn ProcessOne(&self) -> bool {
+    /*pub fn ProcessOne(&self) -> bool {
         let cqe = {
             let mut clock = match self.completion.try_lock() {
                 None => return false,
@@ -472,39 +485,48 @@ impl QUring {
 
         self.Process(&cqe);
         return true;
-    }
+    }*/
 
     pub fn DrainCompletionQueue(&self) -> usize {
         let mut count = 0;
-        loop {
-            let cqe = {
-                let mut c = self.completion.lock();
-                c.Next()
-            };
+        for i in 0..self.uringCount {
+            let idx = (i + CPULocal::CpuId()) % self.uringCount;
+            loop {
+                let cqe = {
+                    let mut c = self.completion[idx].lock();
+                    c.Next()
+                };
 
-            match cqe {
-                None => return count,
-                Some(cqe) => {
-                    count += 1;
-                    self.Process(&cqe);
+                match cqe {
+                    None => break,
+                    Some(cqe) => {
+                        count += 1;
+                        self.Process(&cqe);
+                    }
                 }
             }
         }
+
+        return count;
     }
 
     // we will leave some queue idle to make uring more stable
     // todo: fx this, do we need throttling?
     pub const SUBMISSION_QUUEUE_FREE_COUNT : usize = 10;
+    pub fn NextUringIdx(cnt: u64) -> usize {
+        return CPULocal::NextUringIdx(cnt);
+    }
 
     pub fn UringCall(&self, call: &UringCall) {
         let entry = call.SEntry();
         let entry = entry
             .user_data(call.Ptr());
 
+        let idx = Self::NextUringIdx(1) % self.uringCount;
         loop {
-            let mut s = self.submission.lock();
+            let mut s = self.submission[idx].lock();
             if s.FreeSlots() < Self::SUBMISSION_QUUEUE_FREE_COUNT {
-                print!("UringCall: submission full...");
+                print!("UringCall: submission full... idx {}", idx);
                 drop(s);
                 //super::super::Kernel::HostSpace::UringWake(1);
                 super::super::qlib::ShareSpace::Yield();
@@ -515,17 +537,18 @@ impl QUring {
                 s.sq.push(entry).ok().expect("UringCall push fail");
             }
 
-            s.Submit().expect("QUringIntern::submit fail");
+            s.Submit(idx).expect("QUringIntern::submit fail");
             break;
         }
-
     }
 
-    pub fn AUringCall(&self, entry: squeue::Entry) {
+   pub fn AUringCall(&self, entry: squeue::Entry) {
+        let idx = Self::NextUringIdx(1) % self.uringCount;
+
         loop {
-            let mut s = self.submission.lock();
+            let mut s = self.submission[idx].lock();
             if s.FreeSlots() < Self::SUBMISSION_QUUEUE_FREE_COUNT {
-                print!("AUringCall1: submission full...");
+                print!("AUringCall1: submission full... idx {}", idx);
                 drop(s);
                 //super::super::Kernel::HostSpace::UringWake(1);
                 super::super::qlib::ShareSpace::Yield();
@@ -539,16 +562,17 @@ impl QUring {
                 }
             }
 
-            let _n = s.Submit().expect("QUringIntern::submit fail");
+            let _n = s.Submit(idx).expect("QUringIntern::submit fail");
             break;
         }
     }
 
     pub fn AUringCallLinked(&self, entry1: squeue::Entry, entry2: squeue::Entry) {
+        let idx = Self::NextUringIdx(2) % self.uringCount;
         loop {
-            let mut s = self.submission.lock();
+            let mut s = self.submission[idx].lock();
             if s.FreeSlots() < Self::SUBMISSION_QUUEUE_FREE_COUNT + 1 {
-                print!("AUringCallLinked: submission full...");
+                print!("AUringCallLinked: submission full... idx {}", idx);
                 drop(s);
                 //super::super::Kernel::HostSpace::UringWake(1);
                 super::super::qlib::ShareSpace::Yield();
@@ -572,7 +596,7 @@ impl QUring {
                 }
             }
 
-            let _n = s.Submit().expect("QUringIntern::submit fail");
+            let _n = s.Submit(idx).expect("QUringIntern::submit fail");
             break;
         }
     }

@@ -99,6 +99,11 @@ impl CPULocal {
         return &CPU_LOCAL[Self::CpuId() as usize]
     }
 
+    pub fn NextUringIdx(cnt: u64) -> usize {
+        let cpuId = Self::CpuId() as usize;
+        return CPU_LOCAL[Self::CpuId() as usize].IncrUringMsgCnt(cnt) as usize + cpuId;
+    }
+
     pub fn SetKernelStack(task: u64) {
         Self::Myself().kernelStack.store(task, Ordering::Relaxed); //the data only read in current thread
     }

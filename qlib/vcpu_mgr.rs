@@ -36,6 +36,7 @@ pub struct CPULocal {
     pub state: AtomicU64,                   //offset 48
 
     pub switchCount: AtomicU64,
+    pub uringMsgCount: AtomicU64,
     pub data: u64, // for eventfd data writing and reading
     pub eventfd: i32,
     pub epollfd: i32,
@@ -66,5 +67,9 @@ impl CPULocal {
 
     pub fn SetSearching(&self) {
         self.SetState(VcpuState::Searching)
+    }
+
+    pub fn IncrUringMsgCnt(&self, cnt: u64) -> u64 {
+        return self.uringMsgCount.fetch_add(cnt, Ordering::Relaxed);
     }
 }
