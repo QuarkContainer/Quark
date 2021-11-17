@@ -27,6 +27,7 @@ pub struct UringMgr {
     pub eventfd: i32,
     pub fds: Vec<i32>,
     pub rings: Vec<IoUring>,
+    pub uringSize: usize
 }
 
 pub const FDS_SIZE : usize = 8192;
@@ -38,35 +39,41 @@ impl UringMgr {
             fds.push(-1);
         }
 
-        error!("UringMgr size {}, uringCount {}", size, uringCount);
-        /*let ring = if dedicateUring {
-            Builder::default().setup_sqpoll(10).setup_sqpoll_cpu(0).setup_clamp().setup_cqsize(size as u32 * 2).build(size as u32).expect("InitUring fail")
-        } else {
-            Builder::default().setup_sqpoll(10).setup_clamp().setup_cqsize(size as u32 * 2).build(size as u32).expect("InitUring fail")
-        };*/
-
-        let mut rings = Vec::with_capacity(uringCount);
-        let mut uringfds = Vec::with_capacity(uringCount);
-        for i in 0..uringCount {
-            let ring = Builder::default()
-                .setup_sqpoll(10)
-                .setup_sqpoll_cpu(i as u32)
-                .setup_clamp()
-                .setup_cqsize(size as u32 * 2)
-                .build(size as u32).expect("InitUring fail");
-            uringfds.push(ring.fd.0);
-            rings.push(ring);
-        }
-
         let ret = Self {
-            uringfds: uringfds,
+            uringfds: Vec::new(),
             eventfd: 0,
             fds: fds,
-            rings: rings,
+            rings: Vec::new(),
+            uringSize: size
         };
 
-        ret.Register(IORING_REGISTER_FILES, &ret.fds[0] as * const _ as u64, ret.fds.len() as u32).expect("InitUring register files fail");
         return ret;
+    }
+
+    pub fn Init(&mut self, DedicateUringCnt: usize) {
+        if DedicateUringCnt == 0 {
+            let ring = Builder::default()
+                .setup_sqpoll(10)
+                .setup_sqpoll_cpu(0) // vcpu#0
+                .setup_clamp()
+                .setup_cqsize(self.uringSize as u32 * 2)
+                .build(self.uringSize as u32).expect("InitUring fail");
+            self.uringfds.push(ring.fd.0);
+            self.rings.push(ring);
+        } else {
+            for i in 0..DedicateUringCnt {
+                let ring = Builder::default()
+                    .setup_sqpoll(10)
+                    .setup_sqpoll_cpu(i as u32)
+                    .setup_clamp()
+                    .setup_cqsize(self.uringSize as u32 * 2)
+                    .build(self.uringSize as u32).expect("InitUring fail");
+                self.uringfds.push(ring.fd.0);
+                self.rings.push(ring);
+            }
+        }
+
+        self.Register(IORING_REGISTER_FILES, &self.fds[0] as * const _ as u64, self.fds.len() as u32).expect("InitUring register files fail");
     }
 
     pub fn Setup(&mut self, idx: usize, submission: u64, completion: u64) -> Result<i32> {

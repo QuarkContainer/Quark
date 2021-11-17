@@ -30,7 +30,7 @@ pub struct Config {
     pub FileBufWrite: bool,
     pub MmapRead: bool,
     pub AsyncAccept: bool,
-    pub DedicateUring: bool,
+    pub DedicateUring: usize,
     pub UringSize: usize
 }
 
@@ -54,7 +54,7 @@ impl Default for Config {
             FileBufWrite: true,
             MmapRead: true,
             AsyncAccept: true,
-            DedicateUring: true,
+            DedicateUring: 1,
             UringSize: 64,
         }
     }

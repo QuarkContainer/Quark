@@ -1,5 +1,5 @@
 {
-  "DebugLevel"    : "Error",
+  "DebugLevel"    : "Debug",
   "KernelMemSize" : 32,
   "SyncPrint"     : true,
   "LogLevel"      : "Simple",
@@ -14,6 +14,6 @@
   "FileBufWrite"  : true,
   "MmapRead"      : false,
   "AsyncAccept"   : true,
-  "DedicateUring" : true,
+  "DedicateUring" : 1,
   "UringSize"     : 64
 }

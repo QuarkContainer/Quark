@@ -14,6 +14,7 @@
 
 use ::qlib::mutex::*;
 use core::sync::atomic;
+use core::sync::atomic::AtomicUsize;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
@@ -145,32 +146,50 @@ pub struct QUring {
     pub submission: Vec<QMutex<Submission>>,
     pub completion: Vec<QMutex<Completion>>,
     pub asyncMgr: UringAsyncMgr,
-    pub uringCount: usize,
+    pub uringCount: AtomicUsize,
 }
 
 impl QUring {
-    pub fn New(size: usize, uringCount: usize) -> Self {
+    pub const MAX_URING_COUNT : usize = 8;
+
+    pub fn New(size: usize, _uringCount: usize) -> Self {
         let mut ret = QUring {
-            submission: Vec::with_capacity(uringCount),
-            completion: Vec::with_capacity(uringCount),
+            submission: Vec::with_capacity(Self::MAX_URING_COUNT),
+            completion: Vec::with_capacity(Self::MAX_URING_COUNT),
             asyncMgr: UringAsyncMgr::New(size),
-            uringCount: uringCount
+            uringCount: AtomicUsize::new(0)
         };
 
-        for _i in 0..uringCount {
+        for _i in 0..Self::MAX_URING_COUNT {
             ret.submission.push(Default::default());
             ret.completion.push(Default::default());
         }
 
-        for i in 0..uringCount {
+        return ret;
+    }
+
+    pub fn UringCount(&self) -> usize {
+        return self.uringCount.load(atomic::Ordering::Relaxed)
+    }
+
+    pub fn Setup(&self, uringCount: usize) {
+        let count = if uringCount == 0 {
+            1
+        } else {
+            uringCount
+        };
+
+        assert!(count < Self::MAX_URING_COUNT);
+
+        for i in 0..count {
             super::super::Kernel::HostSpace::IoUringSetup(
                 i,
-                &mut ret.submission[i] as *mut _ as u64,
-                &mut ret.completion[i] as *mut _ as u64,
+                &self.submission[i] as *const _ as u64,
+                &self.completion[i] as *const _ as u64,
             );
         }
 
-        return ret;
+        self.uringCount.store(count, atomic::Ordering::Relaxed)
     }
 
     pub fn TimerRemove(&self, task: &Task, userData: u64) -> i64 {
@@ -489,8 +508,8 @@ impl QUring {
 
     pub fn DrainCompletionQueue(&self) -> usize {
         let mut count = 0;
-        for i in 0..self.uringCount {
-            let idx = (i + CPULocal::CpuId()) % self.uringCount;
+        for i in 0..self.UringCount() {
+            let idx = (i + CPULocal::CpuId()) % self.UringCount();
             loop {
                 let cqe = {
                     let mut c = self.completion[idx].lock();
@@ -522,7 +541,7 @@ impl QUring {
         let entry = entry
             .user_data(call.Ptr());
 
-        let idx = Self::NextUringIdx(1) % self.uringCount;
+        let idx = Self::NextUringIdx(1) % self.UringCount();
         loop {
             let mut s = self.submission[idx].lock();
             if s.FreeSlots() < Self::SUBMISSION_QUUEUE_FREE_COUNT {
@@ -543,7 +562,7 @@ impl QUring {
     }
 
    pub fn AUringCall(&self, entry: squeue::Entry) {
-        let idx = Self::NextUringIdx(1) % self.uringCount;
+        let idx = Self::NextUringIdx(1) % self.UringCount();
 
         loop {
             let mut s = self.submission[idx].lock();
@@ -568,7 +587,7 @@ impl QUring {
     }
 
     pub fn AUringCallLinked(&self, entry1: squeue::Entry, entry2: squeue::Entry) {
-        let idx = Self::NextUringIdx(2) % self.uringCount;
+        let idx = Self::NextUringIdx(2) % self.UringCount();
         loop {
             let mut s = self.submission[idx].lock();
             if s.FreeSlots() < Self::SUBMISSION_QUUEUE_FREE_COUNT + 1 {
