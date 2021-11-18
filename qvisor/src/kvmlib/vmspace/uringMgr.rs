@@ -33,7 +33,7 @@ pub struct UringMgr {
 pub const FDS_SIZE : usize = 8192;
 
 impl UringMgr {
-    pub fn New(size: usize, uringCount: usize) -> Self {
+    pub fn New(size: usize) -> Self {
         let mut fds = Vec::with_capacity(FDS_SIZE);
         for _i in 0..FDS_SIZE {
             fds.push(-1);
