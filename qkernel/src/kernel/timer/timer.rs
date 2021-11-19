@@ -304,7 +304,7 @@ impl Notifier for Timer {
         let (s, exp) = t.setting.At(Time(now.0 + 20000));
         t.setting = s;
         if exp > 0 {
-            t.listener.Notify(exp)
+            t.listener.Notify(exp);
         }
 
         return t.NextExpire();
@@ -378,7 +378,7 @@ impl Timer {
             return
         }
 
-        t.kicker = Some(NewRawTimer(self));
+        t.kicker = Some(RawTimer::New(self));
         t.Kicker().Stop();
         t.Kicker().lock().Timer = self.clone();
     }
@@ -421,9 +421,13 @@ impl Timer {
 
     pub fn Cancel(&self) {
         //cancel current runtimer to stop it for unexpired fire
-        let mut t = self.lock();
-        t.paused = true;
-        t.Kicker().Stop();
+        let kicker = {
+            let mut t = self.lock();
+            t.paused = true;
+            t.Kicker()
+        };
+
+        kicker.Stop();
     }
 
     // Get returns a snapshot of the Timer's current Setting and the time

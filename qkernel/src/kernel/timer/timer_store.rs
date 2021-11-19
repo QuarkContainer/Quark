@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use alloc::collections::btree_map::BTreeMap;
-use alloc::collections::btree_set::BTreeSet;
 use core::cmp::Ordering;
 use core::ops::Deref;
 use ::qlib::mutex::*;
@@ -25,22 +24,7 @@ use super::*;
 #[derive(Debug, Copy, Clone)]
 pub struct TimerUnit {
     pub timerId: u64,
-    pub seqNo: u64,
     pub expire: i64,
-}
-
-impl TimerUnit {
-    pub fn New(taskId: u64, seqNo: u64, expire: i64) -> Self {
-        return Self {
-            timerId: taskId,
-            seqNo: seqNo,
-            expire: expire,
-        }
-    }
-
-    pub fn Fire(&self) {
-        super::FireTimer(self.timerId, self.seqNo);
-    }
 }
 
 impl Ord for TimerUnit {
@@ -63,7 +47,7 @@ impl Eq for TimerUnit {}
 
 impl PartialEq for TimerUnit {
     fn eq(&self, other: &Self) -> bool {
-        self.timerId == other.timerId && self.seqNo == other.seqNo
+        self.timerId == other.timerId && self.expire == other.expire
     }
 }
 
@@ -79,162 +63,138 @@ impl Deref for TimerStore {
 }
 
 impl TimerStore {
-    // the timeout need to process a timer, <PROCESS_TIME means the timer will be triggered immediatelyfa
-    pub const PROCESS_TIME : i64 = 30_000;
-
-    pub fn Print(&self) -> String {
-        let ts = self.lock();
-        return format!("expire:{:?} {:?} ", ts.nextExpire, &ts.timerSeq);
+    pub fn Trigger(&self) {
+        self.lock().Trigger();
     }
 
-    pub fn Trigger(&self, expire: i64) {
-        let mut now;
-        loop {
-            now = MONOTONIC_CLOCK.Now().0 + Self::PROCESS_TIME;
-            let tu = self.lock().GetFirst(now);
-            match tu {
-                Some(tu) => {
-                    tu.Fire();
-                 }
-                None => break,
-            }
-        }
-
-        {
-            let mut tm = self.lock();
-
-            // triggered by the the timer's timeout: No need to RemoveUringTimer
-            if expire == tm.nextExpire {
-                let firstExpire = match tm.timerSeq.first() {
-                    None => {
-                        core::mem::drop(&tm);
-                        return
-                    },
-                    Some(t) => t.expire,
-                };
-
-                tm.nextExpire = 0;
-                tm.SetUringTimer(firstExpire);
-                core::mem::drop(&tm);
-                return
-            }
-
-            // the nextExpire has passed and processed
-            if expire != tm.nextExpire // not triggered by the the timer's timeout
-                && now > tm.nextExpire { // the nextExpire has passed and processed
-                tm.RemoveUringTimer();
-
-                let firstExpire = match tm.timerSeq.first() {
-                    None => {
-                        return
-                    },
-                    Some(t) => t.expire,
-                };
-
-                tm.SetUringTimer(firstExpire);
-                return
-            }
-
-            let firstExpire = match tm.timerSeq.first() {
-                None => {
-                    return
-                },
-                Some(t) => t.expire,
-            };
-
-            // the new added timer is early than the last expire time: RemoveUringTimer and set the new expire
-            if firstExpire < tm.nextExpire || tm.nextExpire == 0 {
-                tm.RemoveUringTimer();
-                tm.SetUringTimer(firstExpire);
-            }
-        }
+    pub fn ResetTimer(&self, timer: &RawTimer, timeout: i64) {
+        let mut ts = self.lock();
+        ts.ResetTimer(timer, timeout);
+        ts.Trigger();
     }
 
-    pub fn ResetTimer(&mut self, timerId: u64, seqNo: u64, timeout: i64) {
-        self.lock().ResetTimerLocked(timerId, seqNo, timeout);
-        self.Trigger(0);
-    }
+    pub fn CancelTimer(&self, timer: &RawTimer) {
+        let mut ts = self.lock();
 
-    pub fn CancelTimer(&self, timerId: u64, seqNo: u64) {
-        self.lock().RemoveTimer(timerId, seqNo);
-        self.Trigger(0);
+        ts.RemoveTimer(timer);
+        ts.Trigger();
     }
 }
 
 #[derive(Default)]
 pub struct TimerStoreIntern {
-    pub timerSeq: BTreeSet<TimerUnit>, // order by expire time
-    pub timers: BTreeMap<u64, TimerUnit>, // timerid -> TimerUnit
+    // expire time -> RawTimer
+    pub timerSeq: BTreeMap<TimerUnit, RawTimer>, // order by expire time
     pub nextExpire: i64,
+    pub uringExpire: i64,
     pub uringId: u64,
 }
 
 impl TimerStoreIntern {
-    // return: existing or not
-    pub fn RemoveTimer(&mut self, timerId: u64, seqNo: u64) -> bool {
-        let tu = match self.timers.remove(&timerId) {
-            None => {
-                return false
-            },
-            Some(tu) => tu,
-        };
+    // the timeout need to process a timer, <PROCESS_TIME means the timer will be triggered immediatelyfa
+    pub const PROCESS_TIME : i64 = 30_000;
 
-        assert!(tu.seqNo == seqNo, "TimerStoreIntern::RemoveTimer doesn't match tu.seqNo is {}, expect {}", tu.seqNo, seqNo);
-        self.timerSeq.remove(&tu);
-        return true;
+    pub fn Print(&self) -> String {
+        use alloc::vec::Vec;
+        let keys : Vec<TimerUnit> = self.timerSeq.keys().cloned().collect();
+        return format!("TimerStoreIntern seq is {:#?}", keys);
     }
 
+    pub fn Trigger(&mut self) {
+        let mut now;
+        loop {
+            now = MONOTONIC_CLOCK.Now().0 + Self::PROCESS_TIME;
+            let timer = self.GetFirst(now);
+            match timer {
+                Some(timer) => {
+                    timer.Fire(self);
+                }
+                None => break,
+            }
+        }
 
-    pub fn ResetTimerLocked(&mut self, timerId: u64, seqNo: u64, timeout: i64) {
-        if seqNo > 0 {
-            self.RemoveTimer(timerId, seqNo - 1);
+        if self.nextExpire != self.uringExpire {
+            self.RemoveUringTimer();
+
+            if self.nextExpire != 0 {
+                self.SetUringTimer(self.nextExpire);
+            }
+        }
+    }
+
+    // return: existing or not
+    pub fn RemoveTimer(&mut self, timer: &RawTimer) -> bool {
+        let timer = timer.lock();
+
+        if timer.Expire > 0 {
+            self.timerSeq.remove(&timer.TimerUnit());
+            return true;
+        }
+
+        return false
+    }
+
+    pub fn ResetTimer(&mut self, timer: &RawTimer, timeout: i64) {
+        let mut tl = timer.lock();
+        if tl.Expire > 0 {
+            self.timerSeq.remove(&tl.TimerUnit());
+        }
+
+        if timeout == 0 {
+            return;
         }
 
         let current = MONOTONIC_CLOCK.Now().0;
-        let expire = current + timeout;
+        tl.Expire = current + timeout;
 
-        let tu = TimerUnit {
-            expire: expire,
-            timerId: timerId,
-            seqNo: seqNo,
-        };
+        if self.nextExpire == 0 || self.nextExpire > tl.Expire {
+            self.nextExpire = tl.Expire;
+        }
 
-        self.timerSeq.insert(tu.clone());
-        self.timers.insert(timerId, tu);
+        self.timerSeq.insert(tl.TimerUnit(), timer.clone());
     }
 
     pub fn RemoveUringTimer(&mut self) {
-        if self.nextExpire != 0 {
+        if self.uringExpire != 0 {
             IOURING.AsyncTimerRemove(self.uringId);
-            self.nextExpire = 0;
+            self.uringExpire = 0;
         }
     }
 
     pub fn SetUringTimer(&mut self, expire: i64) {
         let now = MONOTONIC_CLOCK.Now().0;
-        let expire = if expire < now {
-            now + 2000
+        let expire = if expire < now + Self::PROCESS_TIME {
+            now + Self::PROCESS_TIME
         } else {
             expire
         };
-        assert!(self.nextExpire == 0);
-        self.nextExpire = expire;
+        assert!(self.uringExpire == 0);
+        assert!(expire > now, "Expire {}, now {}, expire - now {}", expire, now, expire-now);
+        self.uringExpire = expire;
         self.uringId = IOURING.Timeout(expire, expire - now) as u64;
     }
 
-    pub fn GetFirst(&mut self, now: i64) -> Option<TimerUnit> {
-        let tu = match self.timerSeq.first() {
-            None => return None,
-            Some(t) => *t,
-        };
-
-        if tu.expire > now {
+    // return (Expire, Timer)
+    pub fn GetFirst(&mut self, now: i64) -> Option<RawTimer> {
+        if self.nextExpire==0
+            || self.nextExpire > now {
             return None;
         }
 
-        let timerId = tu.timerId;
-        self.RemoveTimer(timerId, tu.seqNo);
+        let timer = match self.timerSeq.pop_first() {
+            None => return None,
+            Some((_, timer)) => timer
+        };
 
-        return Some(tu)
+        match self.timerSeq.first_key_value() {
+            None => {
+                self.nextExpire = 0;
+            },
+            Some((tu, _)) => {
+                self.nextExpire = tu.expire;
+            }
+        }
+
+        return Some(timer);
     }
 }
