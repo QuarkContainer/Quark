@@ -13,7 +13,6 @@
 // limitations under the License.
 
 pub mod raw_timer;
-pub mod timermgr;
 pub mod sampler;
 pub mod parameters;
 pub mod calibratedClock;
@@ -23,20 +22,17 @@ pub mod timer_store;
 
 pub use self::raw_timer::*;
 
-use self::timermgr::*;
 use self::timekeeper::*;
 use self::timer_store::*;
 use self::timer::*;
 use super::super::qlib::singleton::*;
 
-pub static TIMER_MGR : Singleton<TimerMgr> = Singleton::<TimerMgr>::New();
 pub static TIME_KEEPER : Singleton<TimeKeeper> = Singleton::<TimeKeeper>::New();
 pub static REALTIME_CLOCK : Singleton<Clock> = Singleton::<Clock>::New();
 pub static MONOTONIC_CLOCK : Singleton<Clock> = Singleton::<Clock>::New();
 pub static TIMER_STORE : Singleton<TimerStore> = Singleton::<TimerStore>::New();
 
 pub unsafe fn InitSingleton() {
-    TIMER_MGR.Init(TimerMgr::default());
     TIME_KEEPER.Init(TimeKeeper::default());
     REALTIME_CLOCK.Init(TIME_KEEPER.NewClock(REALTIME));
     MONOTONIC_CLOCK.Init(TIME_KEEPER.NewClock(MONOTONIC));
@@ -69,21 +65,8 @@ pub fn MonotonicNow() -> i64 {
     return TIME_KEEPER.GetTime(MONOTONIC).expect("MonotonicNow fail");
 }
 
-pub fn NewRawTimer(notifier: &Timer) -> RawTimer {
-    return TIMER_MGR.NewTimer(notifier);
-}
-
-pub fn RemoveTimer(timer: &RawTimer) {
-    TIMER_MGR.RemoveTimer(timer);
-}
-
-pub fn FireTimer(timerId: u64, seqNo: u64) {
-    //error!("FireTimer timerId is {}, seqNo is {}", timerId, seqNo);
-    TIMER_MGR.Fire(timerId, seqNo);
-}
-
-pub fn Timeout(expire: i64) {
-    TIMER_STORE.Trigger(expire);
+pub fn Timeout() {
+    TIMER_STORE.Trigger();
 }
 
 pub type ClockID = i32;

@@ -236,14 +236,12 @@ impl AsyncEventfdWrite {
 
 #[derive(Debug)]
 pub struct AsyncTimeout {
-    pub expire: i64,
     pub ts: types::Timespec,
 }
 
 impl AsyncTimeout {
-    pub fn New(expire: i64, timeout: i64) -> Self {
+    pub fn New(_expire: i64, timeout: i64) -> Self {
         return Self {
-            expire: expire,
             ts: types::Timespec {
                 tv_sec: timeout / 1000_000_000,
                 tv_nsec: timeout % 1000_000_000,
@@ -258,7 +256,7 @@ impl AsyncTimeout {
 
     pub fn Process(&mut self, result: i32) -> bool {
         if result == -SysErr::ETIME {
-            timer::Timeout(self.expire);
+            timer::Timeout();
         }
 
         return false
@@ -291,7 +289,8 @@ impl AsyncRawTimeout {
 
     pub fn Process(&mut self, result: i32) -> bool {
         if result == -SysErr::ETIME {
-            timer::FireTimer(self.timerId, self.seqNo);
+            // todo: deprecate this
+            //timer::FireTimer(self.timerId, self.seqNo);
         }
 
         return false
