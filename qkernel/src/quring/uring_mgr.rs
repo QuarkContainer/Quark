@@ -357,6 +357,18 @@ impl QUring {
         return Ok(count as i64)
     }
 
+    pub fn SocketSend(&self, _task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, srcs: &[IoVec], ops: &SocketOperations)-> Result<i64> {
+        let (count, writeBuf) = buf.Writev(srcs)?;
+
+        if let Some((addr, len)) = writeBuf {
+            let writeop = AsyncSend::New(fd, queue, buf, addr, len, ops);
+
+            IOURING.AUCall(AsyncOps::AsyncSend(writeop));
+        }
+
+        return Ok(count as i64)
+    }
+
     pub fn RingFileRead(&self, _task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, dsts: &mut [IoVec], isSocket: bool) -> Result<i64> {
         let (trigger, cnt) = buf.Readv(dsts)?;
 
