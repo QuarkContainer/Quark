@@ -61,6 +61,7 @@ pub enum AsyncOps {
     AsyncBufWrite(AsyncBufWrite),
     AsyncAccept(AsyncAccept),
     AsyncEpollCtl(AsyncEpollCtl),
+    AsyncSend(AsyncSend),
     None,
 }
 
@@ -87,6 +88,7 @@ impl AsyncOps {
             AsyncOps::AsyncBufWrite(ref msg) => return msg.SEntry(),
             AsyncOps::AsyncAccept(ref msg) => return msg.SEntry(),
             AsyncOps::AsyncEpollCtl(ref msg) => return msg.SEntry(),
+            AsyncOps::AsyncSend(ref msg) => return msg.SEntry(),
             AsyncOps::None => ()
         };
 
@@ -115,6 +117,7 @@ impl AsyncOps {
             AsyncOps::AsyncBufWrite(ref mut msg) => msg.Process(result),
             AsyncOps::AsyncAccept(ref mut msg) => msg.Process(result),
             AsyncOps::AsyncEpollCtl(ref mut msg) => msg.Process(result),
+            AsyncOps::AsyncSend(ref mut msg) => msg.Process(result),
             AsyncOps::None => {
                 //panic!("AsyncOps::None SEntry fail")
                 panic!("AsyncOps::None SEntry fail result {} id {}", result, id);
@@ -151,6 +154,7 @@ impl AsyncOps {
             AsyncOps::AsyncBufWrite(_) => return 18,
             AsyncOps::AsyncAccept(_) => return 19,
             AsyncOps::AsyncEpollCtl(_) => return 20,
+            AsyncOps::AsyncSend(_) => return 21,
             AsyncOps::None => ()
         };
 
@@ -229,7 +233,10 @@ impl AsyncEventfdWrite {
             .flags(squeue::Flags::FIXED_FILE);
     }
 
-    pub fn Process(&mut self, _result: i32) -> bool {
+    pub fn Process(&mut self, result: i32) -> bool {
+        if result < 0 {
+            panic!("AsyncEventfdWrite result {}, fd {}", result, self.fd);
+        }
         return false
     }
 }
@@ -497,6 +504,76 @@ impl AsyncLogFlush {
             fd,
             addr,
             len,
+        }
+    }
+}
+
+pub struct AsyncSend {
+    pub fd : i32,
+    pub queue: Queue,
+    pub buf: Arc<SocketBuff>,
+    pub addr: u64,
+    pub len: usize,
+
+    // keep the socket in the async ops to avoid socket before send finish
+    pub ops: SocketOperations,
+}
+
+impl AsyncSend {
+    pub fn SEntry(&self) -> squeue::Entry {
+        //let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
+        let op = opcode::Send::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
+        return op.build()
+            .flags(squeue::Flags::FIXED_FILE);
+    }
+
+    pub fn Process(&mut self, result: i32) -> bool {
+        if result < 0 {
+            self.buf.SetErr(-result);
+            self.queue.Notify(EventMaskFromLinux((EVENT_ERR | EVENT_IN) as u32));
+            return false;
+            //return true;
+        }
+
+        // EOF
+        // to debug
+        if result == 0 {
+            self.buf.SetWClosed();
+            if self.buf.ProduceReadBuf(0) {
+                self.queue.Notify(EventMaskFromLinux(EVENT_OUT as u32));
+            } else {
+                self.queue.Notify(EventMaskFromLinux(EVENT_HUP as u32));
+            }
+            return false
+        }
+
+        let (trigger, addr, len) = self.buf.ConsumeAndGetAvailableWriteBuf(result as usize);
+        if trigger {
+            self.queue.Notify(EventMaskFromLinux(EVENT_OUT as u32));
+        }
+
+        if addr == 0 {
+            if self.buf.PendingWriteShutdown() {
+                self.queue.Notify(EVENT_PENDING_SHUTDOWN);
+            }
+
+            return false;
+        }
+
+        self.addr = addr;
+        self.len = len;
+
+        return true
+    }
+
+    pub fn New(fd: i32, queue: Queue, buf: Arc<SocketBuff>, addr: u64, len: usize, ops: &SocketOperations) -> Self {
+        return Self {
+            fd,
+            queue,
+            buf,
+            addr,
+            len,
+            ops: ops.clone()
         }
     }
 }

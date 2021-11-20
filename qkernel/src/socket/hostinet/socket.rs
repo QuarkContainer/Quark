@@ -60,7 +60,7 @@ fn newSocketFile(task: &Task, family: i32, fd: i32, stype: i32, nonblock: bool, 
     let inode = dirent.Inode();
     let iops = inode.lock().InodeOp.clone();
     let hostiops = iops.as_any().downcast_ref::<HostInodeOp>().unwrap();
-    let s = SocketOperations::New(family, fd, stype, hostiops.Queue(), enableBuf, addr)?;
+    let s = SocketOperations::New(family, fd, stype, hostiops.Queue(), hostiops.clone(), enableBuf, addr)?;
 
     Ok(File::New(&dirent,
               &FileFlags { NonBlocking: nonblock, Read: true, Write: true, ..Default::default() },
@@ -80,6 +80,7 @@ pub struct SocketOperationsIntern {
     pub enableSocketBuf: AtomicBool,
     pub enableAsyncAccept: AtomicBool,
     pub acceptQueue: Arc<QMutex<AsyncAcceptStruct>>,
+    pub hostops: HostInodeOp,
     passInq: AtomicBool,
 }
 
@@ -158,7 +159,7 @@ impl AsyncAcceptStruct {
 pub struct SocketOperations(Arc<SocketOperationsIntern>);
 
 impl SocketOperations {
-    pub fn New(family: i32, fd: i32, stype: i32, queue: Queue, enableSocketBuf: bool, addr: Option<Vec<u8>>) -> Result<Self> {
+    pub fn New(family: i32, fd: i32, stype: i32, queue: Queue, hostops: HostInodeOp, enableSocketBuf: bool, addr: Option<Vec<u8>>) -> Result<Self> {
         let addr = match addr {
             None => None,
             Some(v) => {
@@ -182,6 +183,7 @@ impl SocketOperations {
             enableSocketBuf: AtomicBool::new(false),
             enableAsyncAccept: AtomicBool::new(false),
             acceptQueue: Arc::new(QMutex::new(AsyncAcceptStruct::default())),
+            hostops: hostops,
             passInq: AtomicBool::new(false)
         };
 
@@ -449,7 +451,7 @@ impl FileOperations for SocketOperations {
             let mut buf = DataBuff::New(size);
             task.CopyDataInFromIovs(&mut buf.buf, &srcs)?;
             let iovs = buf.Iovs();
-            return IOURING.RingFileWrite(task, self.fd, self.queue.clone(), self.SocketBuf(), &iovs, true)
+            return IOURING.SocketSend(task, self.fd, self.queue.clone(), self.SocketBuf(), &iovs, self)
 
             //return IOURING.RingFileWrite(task, self, srcs)
         }
@@ -1209,7 +1211,7 @@ impl SockOperations for SocketOperations {
 
             loop {
                 loop {
-                    match IOURING.RingFileWrite(task, self.fd, self.queue.clone(), self.SocketBuf(), srcs, true) {
+                    match IOURING.SocketSend(task, self.fd, self.queue.clone(), self.SocketBuf(), srcs, self) {
                         Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
                             if count > 0 {
                                 return Ok(count)
