@@ -335,6 +335,8 @@ impl MountNs {
     }
 
     pub fn FindLinkNew(&self, task: &Task, root: &Dirent, wd: Option<Dirent>, path: &str, remainingTraversals: &mut u32, resolve: bool) -> Result<Dirent> {
+        error!("FindLinkNew 1");
+        defer!(error!("FindLinkNew 2"));
         if path.len() == 0 {
             return Err(Error::SysError(SysErr::ENOENT))
         }

@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors / 2018 The gVisor Authors.
+// Copyright (c) 2021 Quark Container Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,9 +24,10 @@ use super::super::super::task::*;
 use super::super::super::threadmgr::thread_group::*;
 use super::super::super::threadmgr::task_sched::*;
 use super::super::waiter::*;
+use super::super::super::uid::*;
 use super::super::time::*;
 use super::timekeeper::*;
-use super::raw_timer::*;
+use super::timer_store::*;
 use super::*;
 
 // ClockEventSet occurs when a Clock undergoes a discontinuous change.
@@ -221,6 +222,20 @@ pub fn ItimerspecFromSetting(now: Time, s: Setting) -> Itimerspec {
     }
 }
 
+#[derive(Eq, PartialEq, Clone, Copy, Debug)]
+pub enum TimerState {
+    Expired,
+    Running,
+    Stopped,
+}
+
+impl Default for TimerState {
+    fn default() -> Self {
+        return Self::Stopped;
+    }
+}
+
+
 // Timer is an optionally-periodic timer driven by sampling a user-specified
 // Clock. Timer's semantics support the requirements of Linux's interval timers
 // (setitimer(2), timer_create(2), timerfd_create(2)).
@@ -239,17 +254,25 @@ pub struct TimerInternal {
 
     // paused is true if the Timer is paused. paused is protected by mu.
     pub paused: bool,
-    pub kicker: Option<RawTimer>,
+
+    // RawTimer
+    pub Id: u64,
+    pub Expire: i64,
+    pub State: TimerState,
 }
 
 impl Default for TimerInternal {
     fn default() -> Self {
+        let id = NewUID();
         return Self {
             clock: REALTIME_CLOCK.clone(),
             listener: Arc::new(DummyTimerListener {}),
             setting: Setting::default(),
             paused: true,
-            kicker: None,
+
+            Id: id,
+            State: TimerState::default(),
+            Expire: 0,
         }
     }
 }
@@ -275,8 +298,11 @@ impl TimerInternal {
         }
     }
 
-    pub fn Kicker(&self) -> RawTimer {
-        return self.kicker.clone().unwrap();
+    pub fn TimerUnit(&self) -> TimerUnit {
+        return TimerUnit {
+            timerId: self.Id,
+            expire: self.Expire,
+        }
     }
 }
 
@@ -291,7 +317,15 @@ impl Deref for Timer {
     }
 }
 
-impl Notifier for Timer {
+impl Drop for Timer {
+    fn drop(&mut self) {
+        if Arc::strong_count(&self.0) == 1 {
+            self.Drop();
+        }
+    }
+}
+
+impl Timer {
     fn Timeout(&self) -> i64 {
         let mut t = self.lock();
 
@@ -310,17 +344,17 @@ impl Notifier for Timer {
         return t.NextExpire();
     }
 
-    fn Reset(&self) {}
-}
-
-impl Timer {
     pub fn New<L: TimerListener + 'static>(clock: &Clock, listener: &Arc<L>) -> Self {
+        let id = NewUID();
         let internal = TimerInternal {
             clock: clock.clone(),
             listener: listener.clone(),
             setting: Setting::default(),
             paused: false,
-            kicker: None,
+
+            Id: id,
+            State: TimerState::default(),
+            Expire: 0,
         };
 
         let mut res = Self(Arc::new(QMutex::new(internal)));
@@ -329,12 +363,16 @@ impl Timer {
     }
 
     pub fn Period<L: TimerListener + 'static>(clock: &Clock, listener: &Arc<L>, duration: Duration) -> Self {
+        let id = NewUID();
         let internal = TimerInternal {
             clock: clock.clone(),
             listener: listener.clone(),
             setting: Setting::default(),
             paused: false,
-            kicker: None,
+
+            Id: id,
+            State: TimerState::default(),
+            Expire: 0,
         };
 
         let mut res = Self(Arc::new(QMutex::new(internal)));
@@ -351,12 +389,16 @@ impl Timer {
     }
 
     pub fn After<L: TimerListener + 'static>(clock: &Clock, listener: &Arc<L>, duration: Duration) -> Self {
+        let id = NewUID();
         let internal = TimerInternal {
             clock: clock.clone(),
             listener: listener.clone(),
             setting: Setting::default(),
             paused: false,
-            kicker: None,
+
+            Id: id,
+            State: TimerState::default(),
+            Expire: 0,
         };
 
         let mut res = Self(Arc::new(QMutex::new(internal)));
@@ -373,34 +415,22 @@ impl Timer {
     }
 
     fn Init(&mut self) {
-        let mut t = self.lock();
-        if t.kicker.is_some() {
-            return
-        }
-
-        t.kicker = Some(RawTimer::New(self));
-        t.Kicker().Stop();
-        t.Kicker().lock().Timer = self.clone();
+        self.Stop();
     }
 
     pub fn Destroy(&self) {
-        let mut t = self.lock();
-
-        t.setting.Enabled = false;
-        if t.kicker.is_some() {
-            t.Kicker().Drop();
+        {
+            let mut t = self.lock();
+            t.setting.Enabled = false;
+            t.listener.Destroy();
         }
 
-        t.listener.Destroy();
+        self.Drop()
     }
 
     pub fn Pause(&self) {
-        let mut t = self.lock();
-
-        t.paused = true;
-        if t.kicker.is_some() {
-            t.Kicker().Stop();
-        }
+        self.lock().paused = true;
+        self.Stop();
     }
 
     pub fn Resume(&self) {
@@ -415,19 +445,13 @@ impl Timer {
             delta = t.NextExpire();
         }
 
-        let kicker = self.lock().Kicker();
-        kicker.Reset(delta);
+        self.Reset(delta);
     }
 
     pub fn Cancel(&self) {
         //cancel current runtimer to stop it for unexpired fire
-        let kicker = {
-            let mut t = self.lock();
-            t.paused = true;
-            t.Kicker()
-        };
-
-        kicker.Stop();
+        self.lock().paused = true;
+        self.Stop();
     }
 
     // Get returns a snapshot of the Timer's current Setting and the time
@@ -456,8 +480,7 @@ impl Timer {
             s = setting;
         }
 
-        let kicker = self.lock().Kicker();
-        kicker.Reset(delta);
+        self.Reset(delta);
         return (now, s)
     }
 
@@ -512,8 +535,7 @@ impl Timer {
             delta = t.NextExpire();
         }
 
-        let kicker = self.lock().Kicker();
-        kicker.Reset(delta);
+        self.Reset(delta);
         return (now, oldS)
     }
 
@@ -529,6 +551,49 @@ impl Timer {
 
     pub fn Clock(&self) -> Clock {
         return self.lock().clock.clone();
+    }
+
+    // Stop prevents the Timer from firing.
+    // It returns true if the call stops the timer, false if the timer has already
+    // expired or been stopped.
+    pub fn Stop(&self) -> bool {
+        let state = self.lock().State;
+        if state != TimerState::Running {
+            return false
+        }
+
+        self.lock().State = TimerState::Stopped;
+        TIMER_STORE.CancelTimer(self);
+        return true;
+    }
+
+    // Reset changes the timer to expire after duration d.
+    // It returns true if the timer had been active, false if the timer had
+    // expired or been stopped.
+    pub fn Reset(&self, timeout: i64) -> bool {
+        if timeout == 0 {
+            return self.Stop();
+        }
+
+        assert!(timeout > 0, "Timer::Reset get negtive delta");
+
+        TIMER_STORE.ResetTimer(self, timeout);
+        self.lock().State = TimerState::Running;
+        return false;
+    }
+
+    pub fn Fire(&self, ts: &mut TimerStoreIntern) {
+        self.lock().State = TimerState::Expired;
+
+        let delta = self.Timeout();
+        if delta > 0 {
+            ts.ResetTimer(self, delta);
+            self.lock().State = TimerState::Running;
+        }
+    }
+
+    pub fn Drop(&self) {
+        self.Stop();
     }
 }
 

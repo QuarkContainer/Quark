@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod raw_timer;
+//pub mod raw_timer;
 pub mod sampler;
 pub mod parameters;
 pub mod calibratedClock;
@@ -20,7 +20,7 @@ pub mod timekeeper;
 pub mod timer;
 pub mod timer_store;
 
-pub use self::raw_timer::*;
+//pub use self::raw_timer::*;
 
 use self::timekeeper::*;
 use self::timer_store::*;
