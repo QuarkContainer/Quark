@@ -20,6 +20,7 @@ use alloc::string::String;
 
 use super::super::super::IOURING;
 use super::*;
+use super::timer::*;
 
 #[derive(Debug, Copy, Clone)]
 pub struct TimerUnit {
@@ -67,13 +68,13 @@ impl TimerStore {
         self.lock().Trigger();
     }
 
-    pub fn ResetTimer(&self, timer: &RawTimer, timeout: i64) {
+    pub fn ResetTimer(&self, timer: &Timer, timeout: i64) {
         let mut ts = self.lock();
         ts.ResetTimer(timer, timeout);
         ts.Trigger();
     }
 
-    pub fn CancelTimer(&self, timer: &RawTimer) {
+    pub fn CancelTimer(&self, timer: &Timer) {
         let mut ts = self.lock();
 
         ts.RemoveTimer(timer);
@@ -83,8 +84,8 @@ impl TimerStore {
 
 #[derive(Default)]
 pub struct TimerStoreIntern {
-    // expire time -> RawTimer
-    pub timerSeq: BTreeMap<TimerUnit, RawTimer>, // order by expire time
+    // expire time -> Timer
+    pub timerSeq: BTreeMap<TimerUnit, Timer>, // order by expire time
     pub nextExpire: i64,
     pub uringExpire: i64,
     pub uringId: u64,
@@ -123,7 +124,7 @@ impl TimerStoreIntern {
     }
 
     // return: existing or not
-    pub fn RemoveTimer(&mut self, timer: &RawTimer) -> bool {
+    pub fn RemoveTimer(&mut self, timer: &Timer) -> bool {
         let timer = timer.lock();
 
         if timer.Expire > 0 {
@@ -134,7 +135,7 @@ impl TimerStoreIntern {
         return false
     }
 
-    pub fn ResetTimer(&mut self, timer: &RawTimer, timeout: i64) {
+    pub fn ResetTimer(&mut self, timer: &Timer, timeout: i64) {
         let mut tl = timer.lock();
         if tl.Expire > 0 {
             self.timerSeq.remove(&tl.TimerUnit());
@@ -175,7 +176,7 @@ impl TimerStoreIntern {
     }
 
     // return (Expire, Timer)
-    pub fn GetFirst(&mut self, now: i64) -> Option<RawTimer> {
+    pub fn GetFirst(&mut self, now: i64) -> Option<Timer> {
         if self.nextExpire==0
             || self.nextExpire > now {
             return None;
