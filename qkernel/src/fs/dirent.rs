@@ -278,6 +278,23 @@ impl Dirent {
         return None
     }
 
+    fn GetCacheChild(&self, name: &str) -> Option<Arc<(QMutex<InterDirent>, u64)>> {
+        match (self.0).0.lock().Children.get(name) {
+            Some(subD) => {
+                match subD.upgrade() {
+                    Some(cd) => {
+                        return Some(cd.clone())
+                    }
+                    None => ()
+                }
+            }
+
+            None => ()
+        };
+
+        return None
+    }
+
     fn walk(&self, task: &Task, root: &Dirent, name: &str) -> Result<Dirent> {
         let inode = self.Inode();
         if !inode.StableAttr().IsDir() {
@@ -297,29 +314,22 @@ impl Dirent {
             }
         }
 
-        let remove = match (self.0).0.lock().Children.get(name) {
-            Some(subD) => {
-                match subD.upgrade() {
-                    Some(cd) => {
-                        let subInode = cd.0.lock().Inode.clone();
-                        let mountSource = subInode.lock().MountSource.clone();
-                        let mountsourceOpations = mountSource.lock().MountSourceOperations.clone();
-                        let mounted = cd.0.lock().mounted;
-                        let revalidate = mountsourceOpations.lock().Revalidate(name, &inode, &subInode);
-                        if mounted || !revalidate {
-                            return Ok(Dirent(cd.clone()))
-                        }
-
-                        false
-                    }
-                    None => {
-                        true
-                    }
+        let child = self.GetCacheChild(name);
+        let remove = match child {
+            Some(cd) => {
+                let subInode = cd.0.lock().Inode.clone();
+                let mountSource = subInode.lock().MountSource.clone();
+                let mountsourceOpations = mountSource.lock().MountSourceOperations.clone();
+                let mounted = cd.0.lock().mounted;
+                let revalidate = mountsourceOpations.lock().Revalidate(name, &inode, &subInode);
+                if mounted || !revalidate {
+                    return Ok(Dirent(cd.clone()))
                 }
-            }
 
-            None => {
                 false
+            }
+            None => {
+                true
             }
         };
 
