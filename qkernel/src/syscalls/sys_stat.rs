@@ -64,9 +64,17 @@ pub fn Fstatat(task: &Task, fd: i32, addr: u64, statAddr: u64, flags: i32) -> Re
 
     let resolve = dirPath || flags & ATType::AT_SYMLINK_NOFOLLOW == 0;
 
-    fileOpOn(task, fd, &path, resolve, &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
+    let ret = fileOpOn(task, fd, &path, resolve, &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
         return stat(task, d, dirPath, statAddr)
-    })?;
+    });
+
+    match ret {
+        Err(e) => {
+            //error!("Fstatat fail path is {}, error is {:?}", &path, &e);
+            return Err(e)
+        }
+        _ => ()
+    }
 
     return Ok(0)
 }
