@@ -543,7 +543,7 @@ impl QUring {
 
     // we will leave some queue idle to make uring more stable
     // todo: fx this, do we need throttling?
-    pub const SUBMISSION_QUUEUE_FREE_COUNT : usize = 10;
+    pub const SUBMISSION_QUEUE_FREE_COUNT : usize = 10;
     pub fn NextUringIdx(cnt: u64) -> usize {
         return CPULocal::NextUringIdx(cnt);
     }
@@ -553,82 +553,105 @@ impl QUring {
         let entry = entry
             .user_data(call.Ptr());
 
-        let idx = Self::NextUringIdx(1) % self.UringCount();
+        //let idx = Self::NextUringIdx(1) % self.UringCount();
         loop {
-            let mut s = self.submission[idx].lock();
-            if s.FreeSlots() < Self::SUBMISSION_QUUEUE_FREE_COUNT {
-                print!("UringCall: submission full... idx {}", idx);
-                drop(s);
-                //super::super::Kernel::HostSpace::UringWake(1);
-                super::super::qlib::ShareSpace::Yield();
-                continue
+            for idx in 0..self.UringCount() {
+                let mut s = self.submission[idx].lock();
+                if s.FreeSlots() < Self::SUBMISSION_QUEUE_FREE_COUNT {
+                    super::super::Kernel::HostSpace::UringWake(idx, 1);
+                    print!("UringCall: submission full... idx {}", idx);
+                    //drop(s);
+                    //super::super::Kernel::HostSpace::UringWake(1);
+                    //super::super::qlib::ShareSpace::Yield();
+                    continue
+                }
+
+                unsafe {
+                    s.sq.push(entry).ok().expect("UringCall push fail");
+                }
+
+                s.Submit(idx).expect("QUringIntern::submit fail");
+                return;
             }
 
-            unsafe {
-                s.sq.push(entry).ok().expect("UringCall push fail");
+            /*for i in 0..self.UringCount() {
+                super::super::Kernel::HostSpace::UringWake(i, 1);
             }
-
-            s.Submit(idx).expect("QUringIntern::submit fail");
-            break;
+            print!("UringCall: all submission full...");*/
+            //super::super::qlib::ShareSpace::Yield();
         }
+
     }
 
    pub fn AUringCall(&self, entry: squeue::Entry) {
-        let idx = Self::NextUringIdx(1) % self.UringCount();
+        //let idx = Self::NextUringIdx(1) % self.UringCount();
 
         loop {
-            let mut s = self.submission[idx].lock();
-            if s.FreeSlots() < Self::SUBMISSION_QUUEUE_FREE_COUNT {
-                print!("AUringCall1: submission full... idx {}", idx);
-                drop(s);
-                //super::super::Kernel::HostSpace::UringWake(1);
-                super::super::qlib::ShareSpace::Yield();
-                continue;
-            }
-
-            unsafe {
-                match s.sq.push(entry) {
-                    Ok(_) => (),
-                    Err(_) => panic!("AUringCall submission queue is full"),
+            for idx in 0..self.UringCount() {
+                let mut s = self.submission[idx].lock();
+                if s.FreeSlots() < Self::SUBMISSION_QUEUE_FREE_COUNT {
+                    super::super::Kernel::HostSpace::UringWake(idx, 1);
+                    print!("AUringCall1: submission full... idx {}", idx);
+                    continue;
                 }
+
+                unsafe {
+                    match s.sq.push(entry) {
+                        Ok(_) => (),
+                        Err(_) => panic!("AUringCall submission queue is full"),
+                    }
+                }
+
+                let _n = s.Submit(idx).expect("QUringIntern::submit fail");
+                return;
             }
 
-            let _n = s.Submit(idx).expect("QUringIntern::submit fail");
-            break;
+            /*for i in 0..self.UringCount() {
+                super::super::Kernel::HostSpace::UringWake(i, 1);
+            }
+            print!("UringCall: all submission full...");
+            //super::super::qlib::ShareSpace::Yield();*/
         }
     }
 
     pub fn AUringCallLinked(&self, entry1: squeue::Entry, entry2: squeue::Entry) {
-        let idx = Self::NextUringIdx(2) % self.UringCount();
+        //let idx = Self::NextUringIdx(2) % self.UringCount();
+
         loop {
-            let mut s = self.submission[idx].lock();
-            if s.FreeSlots() < Self::SUBMISSION_QUUEUE_FREE_COUNT + 1 {
-                print!("AUringCallLinked: submission full... idx {}", idx);
-                drop(s);
-                //super::super::Kernel::HostSpace::UringWake(1);
-                super::super::qlib::ShareSpace::Yield();
-                continue;
-            }
+            for idx in 0..self.UringCount() {
+                let mut s = self.submission[idx].lock();
+                if s.FreeSlots() < Self::SUBMISSION_QUEUE_FREE_COUNT + 1 {
+                    super::super::Kernel::HostSpace::UringWake(idx, 1);
+                    //print!("AUringCallLinked: submission full... idx {}", idx);
+                    continue;
+                }
 
-            error!("AUringCallLinked xxx ");
-            unsafe {
-                match s.sq.push(entry1.flags(squeue::Flags::IO_LINK)) {
-                    Ok(_) => (),
-                    Err(_e) => {
-                        panic!("AUringCallLinked push fail 1 ...");
+                unsafe {
+                    match s.sq.push(entry1.flags(squeue::Flags::IO_LINK)) {
+                        Ok(_) => (),
+                        Err(_e) => {
+                            panic!("AUringCallLinked push fail 1 ...");
+                        }
+                    }
+
+                    match s.sq.push(entry2) {
+                        Ok(_) => (),
+                        Err(_e) => {
+                            panic!("AUringCallLinked push fail 2 ...");
+                        }
                     }
                 }
 
-                match s.sq.push(entry2) {
-                    Ok(_) => (),
-                    Err(_e) => {
-                        panic!("AUringCallLinked push fail 2 ...");
-                    }
-                }
+                let _n = s.Submit(idx).expect("QUringIntern::submit fail");
+                return;
             }
 
-            let _n = s.Submit(idx).expect("QUringIntern::submit fail");
-            break;
+            /*for i in 0..self.UringCount() {
+                super::super::Kernel::HostSpace::UringWake(i, 1);
+            }*/
+
+            print!("UringCall: all submission full...");
+            //super::super::qlib::ShareSpace::Yield();
         }
     }
 }
