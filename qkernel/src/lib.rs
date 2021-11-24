@@ -412,7 +412,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
             kpt.InitVsyscall(vsyscallPages);
         }
 
-        self::guestfdnotifier::GUEST_NOTIFIER.lock().epollfd = SHARESPACE.HostHostEpollfd();
+        self::guestfdnotifier::GUEST_NOTIFIER.InitPollHostEpoll(SHARESPACE.HostHostEpollfd());
         LogInit(1 * 1024); // 1024 pages, i.e. 4MB
         SetVCPCount(vcpuCnt as usize);
         InitTimeKeeper(vdsoParamAddr);

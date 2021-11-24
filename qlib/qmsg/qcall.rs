@@ -104,7 +104,8 @@ pub enum Msg {
     IoUringRegister(IoUringRegister),
     IoUringEnter(IoUringEnter),
     Statm(Statm),
-    NewFd(NewFd)
+    NewFd(NewFd),
+    HostEpollWaitProcess(HostEpollWaitProcess),
 }
 
 #[derive(Clone, Default, Debug)]
@@ -635,6 +636,12 @@ pub struct IOSendMsg {
 #[derive(Clone, Default, Debug)]
 pub struct NewFd {
     pub fd: i32
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct HostEpollWaitProcess {
+    pub addr: u64,
+    pub count: usize,
 }
 
 #[derive(Clone, Default, Debug)]

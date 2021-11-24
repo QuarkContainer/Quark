@@ -38,6 +38,7 @@ use super::super::kernel::async_wait::*;
 use super::super::SHARESPACE;
 use super::super::kernel::waiter::qlock::*;
 use super::super::Kernel::HostSpace;
+use super::super::guestfdnotifier::GUEST_NOTIFIER;
 
 #[repr(align(128))]
 pub enum AsyncOps {
@@ -62,6 +63,7 @@ pub enum AsyncOps {
     AsyncAccept(AsyncAccept),
     AsyncEpollCtl(AsyncEpollCtl),
     AsyncSend(AsyncSend),
+    PollHostEpollWait(PollHostEpollWait),
     None,
 }
 
@@ -89,6 +91,7 @@ impl AsyncOps {
             AsyncOps::AsyncAccept(ref msg) => return msg.SEntry(),
             AsyncOps::AsyncEpollCtl(ref msg) => return msg.SEntry(),
             AsyncOps::AsyncSend(ref msg) => return msg.SEntry(),
+            AsyncOps::PollHostEpollWait(ref msg) => return msg.SEntry(),
             AsyncOps::None => ()
         };
 
@@ -118,6 +121,7 @@ impl AsyncOps {
             AsyncOps::AsyncAccept(ref mut msg) => msg.Process(result),
             AsyncOps::AsyncEpollCtl(ref mut msg) => msg.Process(result),
             AsyncOps::AsyncSend(ref mut msg) => msg.Process(result),
+            AsyncOps::PollHostEpollWait(ref mut msg) => msg.Process(result),
             AsyncOps::None => {
                 //panic!("AsyncOps::None SEntry fail")
                 panic!("AsyncOps::None SEntry fail result {} id {}", result, id);
@@ -155,6 +159,7 @@ impl AsyncOps {
             AsyncOps::AsyncAccept(_) => return 19,
             AsyncOps::AsyncEpollCtl(_) => return 20,
             AsyncOps::AsyncSend(_) => return 21,
+            AsyncOps::PollHostEpollWait(_) => return 22,
             AsyncOps::None => ()
         };
 
@@ -1221,6 +1226,33 @@ impl UnblockBlockPollAdd {
             flags,
             wait: wait.clone(),
             data: data.clone(),
+        }
+    }
+}
+
+pub struct PollHostEpollWait {
+    pub fd : i32,
+}
+
+impl PollHostEpollWait {
+    pub fn SEntry(&self) -> squeue::Entry {
+        let op = opcode::PollAdd::new(types::Fd(self.fd), EVENT_READ as u32);
+
+        return op.build()
+            .flags(squeue::Flags::FIXED_FILE);
+    }
+
+    pub fn Process(&mut self, result: i32) -> bool {
+        if result  < 0 {
+            error!("PollHostEpollWait::Process result {}", result);
+        }
+        GUEST_NOTIFIER.ProcessHostEpollWait();
+        return true;
+    }
+
+    pub fn New(fd: i32) -> Self {
+        return Self {
+            fd
         }
     }
 }

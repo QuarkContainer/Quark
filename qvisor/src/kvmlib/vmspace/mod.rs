@@ -1418,6 +1418,11 @@ impl VMSpace {
         return 0;
     }
 
+    pub fn HostEpollWaitProcess(_taskId: u64, addr: u64, count: usize) -> i64 {
+        let ret = FD_NOTIFIER.HostEpollWait(addr, count);
+        return ret;
+    }
+
     pub fn HostID(axArg: u32, cxArg: u32) -> (u32, u32, u32, u32) {
         let ax: u32;
         let bx: u32;

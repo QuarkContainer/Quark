@@ -706,6 +706,16 @@ impl HostSpace {
         return ret;
     }
 
+    pub fn HostEpollWaitProcess(addr: u64, count: usize) -> i64 {
+        let mut msg = Msg::HostEpollWaitProcess(HostEpollWaitProcess {
+            addr,
+            count,
+        });
+
+        let ret = Self::HCall(&mut msg, false) as i64;
+        return ret;
+    }
+
     pub fn NewTmpfsFile(typ: TmpfsFileType, addr: u64) -> i64 {
         let mut msg = Msg::NewTmpfsFile(NewTmpfsFile {
             typ,

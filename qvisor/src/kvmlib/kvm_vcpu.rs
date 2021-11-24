@@ -495,6 +495,7 @@ impl KVMVcpu {
                             }
                             KERNEL_IO_THREAD.Init(sharespace.scheduler.VcpuArr[0].eventfd);
                             URING_MGR.lock().SetupEventfd(sharespace.scheduler.VcpuArr[0].eventfd);
+                            URING_MGR.lock().Addfd(sharespace.HostHostEpollfd()).unwrap();
                             vms.shareSpace = sharespace;
 
                             //self.shareSpace = vms.GetShareSpace();
@@ -782,7 +783,7 @@ impl CPULocal {
         self.data = 1;
     }
 
-    pub fn Wait(&self) -> Result<()> {
+    pub fn Wait1(&self) -> Result<()> {
         self.SetWaiting();
         defer!(self.SetRunning(););
 
@@ -803,7 +804,7 @@ impl CPULocal {
         return Ok(())
     }
 
-    pub fn Wait1(&self) -> Result<()> {
+    pub fn Wait(&self) -> Result<()> {
         let shareSpace = VMS.lock().GetShareSpace();
         let mut events = [epoll_event { events: 0, u64: 0 }; 2];
 
