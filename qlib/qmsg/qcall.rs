@@ -107,6 +107,7 @@ pub enum Msg {
     NewFd(NewFd),
     HostEpollWaitProcess(HostEpollWaitProcess),
     WaitFD(WaitFD),
+    VcpuWait(VcpuWait),
 }
 
 #[derive(Clone, Default, Debug)]
@@ -641,6 +642,12 @@ pub struct NewFd {
 
 #[derive(Clone, Default, Debug)]
 pub struct HostEpollWaitProcess {
+    pub addr: u64,
+    pub count: usize,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct VcpuWait {
     pub addr: u64,
     pub count: usize,
 }

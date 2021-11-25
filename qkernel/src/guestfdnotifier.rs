@@ -100,30 +100,40 @@ impl Notifier {
         return Self(QMutex::new(internal))
     }
 
+    pub fn VcpuWait(&self) {
+        let mut events = [EpollEvent::default(); Self::MAX_EVENTS];
+        let addr = &mut events[0] as * mut _ as u64;
+
+        let count = HostSpace::VcpuWait(addr, Self::MAX_EVENTS);
+        if count < 0 {
+            panic!("ProcessHostEpollWait fail with error {}", count)
+        };
+
+        if count > 0 {
+            self.ProcessEvents(&events[0..count as usize]);
+        }
+    }
+
     pub const MAX_EVENTS: usize = 128;
     pub fn ProcessHostEpollWait(&self) {
         let mut events = [EpollEvent::default(); Self::MAX_EVENTS];
         let addr = &mut events[0] as * mut _ as u64;
 
-        loop {
-            let count = HostSpace::HostEpollWaitProcess(addr, Self::MAX_EVENTS);
-            if count < 0 {
-                panic!("ProcessHostEpollWait fail with error {}", count)
-            };
+        let count = HostSpace::HostEpollWaitProcess(addr, Self::MAX_EVENTS);
+        if count < 0 {
+            panic!("ProcessHostEpollWait fail with error {}", count)
+        };
 
-            if count == 0 {
-                break;
-            }
+        if count > 0 {
+            self.ProcessEvents(&events[0..count as usize]);
+        }
+    }
 
-            for i in 0..count as usize {
-                let fd = events[i].U64 as i32;
-                let event = events[i].Event as EventMask;
-                self.Notify(fd, event)
-            }
-
-            if count as usize == Self::MAX_EVENTS {
-                break
-            }
+    pub fn ProcessEvents(&self, events: &[EpollEvent]) {
+        for e in events {
+            let fd = e.U64 as i32;
+            let event = e.Event as EventMask;
+            self.Notify(fd, event)
         }
     }
 

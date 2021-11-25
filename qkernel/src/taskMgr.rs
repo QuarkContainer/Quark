@@ -25,6 +25,7 @@ use super::qlib::vcpu_mgr::*;
 use super::threadmgr::task_sched::*;
 use super::KERNEL_STACK_ALLOCATOR;
 use super::quring::uring_mgr::*;
+use super::guestfdnotifier::GUEST_NOTIFIER;
 use super::asm::*;
 
 static ACTIVE_TASK: AtomicU32 = AtomicU32::new(0);
@@ -140,7 +141,7 @@ pub fn WaitFn() {
 
                 if SHARESPACE.scheduler.GlobalReadyTaskCnt() == 0 {
                     debug!("vcpu {} sleep", CPULocal::CpuId());
-                    HostSpace::Hlt();
+                    GUEST_NOTIFIER.VcpuWait();
                     debug!("vcpu {} wakeup", CPULocal::CpuId());
 
                 }

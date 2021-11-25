@@ -1246,7 +1246,15 @@ impl PollHostEpollWait {
         if result  < 0 {
             error!("PollHostEpollWait::Process result {}", result);
         }
-        GUEST_NOTIFIER.ProcessHostEpollWait();
+
+        // check whether there is vcpu waiting in the host can process this
+        match SHARESPACE.TryLockEpollProcess() {
+            None => (),
+            Some(_) => {
+                GUEST_NOTIFIER.ProcessHostEpollWait();
+            }
+        }
+
         return true;
     }
 
@@ -1275,7 +1283,6 @@ pub struct AsyncEpollCtl {
 
 impl AsyncEpollCtl {
     pub fn New(epollfd: i32, fd: i32, op: i32, mask: u32) -> Self {
-        error!("AsyncEpollCtl new ... fd is {}, ops is {}", fd, op);
         return Self {
             epollfd: epollfd,
             fd: fd,
@@ -1294,8 +1301,8 @@ impl AsyncEpollCtl {
             //.flags(squeue::Flags::FIXED_FILE);
     }
 
-    pub fn Process(&mut self, result: i32) -> bool {
-        assert!(result >= 0, "AsyncEpollCtl process fail fd is {} {}, {:?}", self.fd, result, self);
+    pub fn Process(&mut self, _result: i32) -> bool {
+        //assert!(result >= 0, "AsyncEpollCtl process fail fd is {} {}, {:?}", self.fd, result, self);
 
         return false
     }

@@ -364,6 +364,10 @@ impl KVMVcpu {
 
         info!("start enter guest[{}]: entry is {:x}, stack is {:x}", self.id, self.entry, self.topStackAddr);
         loop {
+            if !super::runc::runtime::vm::IsRunning() {
+                return Ok(())
+            }
+
             match self.vcpu.run().expect(&format!("kvm virtual cpu[{}] run failed", self.id)) {
                 VcpuExit::IoIn(addr, data) => {
                     info!(
@@ -385,36 +389,6 @@ impl KVMVcpu {
                     }
 
                     match addr {
-                        qlib::HYPERCALL_HLT => {
-                            loop {
-                                if !super::runc::runtime::vm::IsRunning() {
-                                    return Ok(())
-                                }
-
-                                //short term workaround, need to change back to unblock my sql scenario.
-                                if self.ShareSpace().scheduler.GlobalReadyTaskCnt() > 0 {
-                                    break;
-                                }
-
-                                /*if self.shareSpace.ReadyTaskCnt(self.id) > 0 ||
-                                    self.shareSpace.ReadyTaskCnt(0) > 0 {
-                                    break;
-                                }*/
-
-                                self.ShareSpace().scheduler.VcpuSetWaiting(self.id);
-
-                                if !(self.ShareSpace().ReadyTaskCnt(self.id) > 0 ||
-                                    self.ShareSpace().ReadyTaskCnt(0) > 0) {
-                                    match self.ShareSpace().scheduler.WaitVcpu(self.id) {
-                                        Ok(()) => (),
-                                        Err(Error::Exit) => (),
-                                        Err(e) => panic!("HYPERCALL_HLT wait fail with error {:?}", e),
-                                    }
-                                }
-
-                                self.ShareSpace().scheduler.VcpuSetSearching(self.id);
-                            }
-                        }
                         qlib::HYPERCALL_IOWAIT => {
                             if !super::runc::runtime::vm::IsRunning() {
                                 {
@@ -625,7 +599,7 @@ impl KVMVcpu {
                                 &mut (*eventAddr)
                             };
 
-                            match qcall::qCall(addr, event) {
+                            match self.qCall(addr, event) {
                                 qcall::QcallRet::Normal => {
                                     /*info!("HYPERCALL_HCALL finish call {:x?}", unsafe {
                                         &mut (*eventAddr)
@@ -694,11 +668,11 @@ impl Scheduler {
         }
     }
 
-    pub fn WaitVcpu(&self, vcpuId: usize) -> Result<()> {
+    pub fn WaitVcpu(&self, sharespace: &ShareSpace, vcpuId: usize, addr: u64, count: usize) -> Result<i64> {
         self.vcpuWaitMask.fetch_or(1<<vcpuId, Ordering::SeqCst);
         defer!(self.vcpuWaitMask.fetch_and(!(1<<vcpuId), Ordering::SeqCst););
 
-        return self.VcpuArr[vcpuId].Wait();
+        return self.VcpuArr[vcpuId].VcpuWait(sharespace, addr, count);
     }
 }
 
@@ -756,7 +730,7 @@ impl CPULocal {
         self.data = 1;
     }
 
-    pub fn Wait(&self) -> Result<()> {
+    pub fn VcpuWait(&self, sharespace: &ShareSpace, addr: u64, count: usize) -> Result<i64> {
         let mut events = [epoll_event { events: 0, u64: 0 }; 2];
 
         self.SetWaiting();
@@ -792,22 +766,31 @@ impl CPULocal {
                 }
             }
 
-            if hasMsg {
-                //shareSpace.GuestMsgProcess();
-            }
+            let count = if hasMsg {
+                match sharespace.TryLockEpollProcess() {
+                    None => 0,
+                    Some(_) => {
+                        FD_NOTIFIER.HostEpollWait(addr, count)
+                    }
+                }
+            } else {
+                0
+            };
 
-            if wakeVcpu {
-                let mut data : u64 = 0;
-                let ret = unsafe {
-                    libc::read(self.eventfd, &mut data as * mut _ as *mut libc::c_void, 8)
-                };
+            if wakeVcpu || count > 0 {
+                if wakeVcpu {
+                    let mut data : u64 = 0;
+                    let ret = unsafe {
+                        libc::read(self.eventfd, &mut data as * mut _ as *mut libc::c_void, 8)
+                    };
 
-                if ret < 0 {
-                    panic!("KIOThread::Wakeup fail... eventfd is {}, errno is {}",
-                           self.eventfd, errno::errno().0);
+                    if ret < 0 {
+                        panic!("KIOThread::Wakeup fail... eventfd is {}, errno is {}",
+                               self.eventfd, errno::errno().0);
+                    }
                 }
 
-                return Ok(())
+                return Ok(count)
             }
         }
 
