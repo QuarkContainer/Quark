@@ -20,7 +20,6 @@ use super::super::linux_def::*;
 pub enum HostOutputMsg {
     QCall(u64),
     WaitFD(WaitFD),
-    PrintStr(PrintStr),
 }
 
 #[derive(Clone, Default, Debug, Copy)]
@@ -28,6 +27,3 @@ pub struct WaitFD {
     pub fd: i32,
     pub mask: EventMask,
 }
-
-#[derive(Clone, Debug, Copy)]
-pub struct PrintStr {}

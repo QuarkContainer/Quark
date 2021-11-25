@@ -53,9 +53,6 @@ pub struct FdNotifierInternal {
     //main epoll fd
     pub epollfd: i32,
 
-    //eventfd which guest notify host for message
-    pub eventfd: i32,
-
     pub fdMap: HashMap<i32, HostFdInfo>,
 }
 
@@ -150,45 +147,16 @@ impl HostFdNotifier {
             panic!("FdNotifier::New create epollfd fail, error is {}", errno::errno().0);
         }
 
-        let eventfd = unsafe {
-            //eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)
-            eventfd(0, EFD_CLOEXEC)
-        };
-
-        if eventfd == -1 {
-            panic!("FdNotifier::New create eventfd fail, error is {}", errno::errno().0);
-        }
-
-        let mut internal = FdNotifierInternal {
+        let internal = FdNotifierInternal {
             epollfd: epfd,
-            eventfd: eventfd,
             fdMap: HashMap::new(),
         };
-
-        internal.AddFd(eventfd, Box::new(EventHandler {}));
-        internal.WaitFd(eventfd, (EPOLLIN | EPOLLOUT | EPOLLHUP | EPOLLPRI | EPOLLERR | EPOLLHUP | EPOLLET) as EventMask).unwrap();
 
         return Self(RwLock::new(internal))
     }
 
-    pub fn Eventfd(&self) -> i32 {
-        return self.read().eventfd;
-    }
-
     pub fn Epollfd(&self) -> i32 {
         return self.read().epollfd;
-    }
-
-    pub fn Notify(&self)  {
-        let data: u64 = 1;
-        let ret = unsafe {
-            write(self.read().eventfd, &data as *const _ as *const c_void, 8)
-        };
-
-        if ret == -1 {
-            let errno = errno::errno().0;
-            error!("hostfdnotifier Trigger fail to write data to the eventfd, errno is {}", errno);
-        }
     }
 
     pub fn WaitFd(&self, fd: i32, mask: EventMask) -> Result<()> {
@@ -210,6 +178,18 @@ impl HostFdNotifier {
         n.fdMap.remove(&fd);
 
         return Ok(())
+    }
+
+    pub fn HostEpollWait(&self, addr: u64, count: usize) -> i64 {
+        //let ptr = addr as *const epoll_event;
+        //let events = unsafe { slice::from_raw_parts(ptr, count) };
+
+        let epollfd = self.read().epollfd;
+        let nfds = unsafe {
+            epoll_wait(epollfd, addr as _, count as i32, 0)
+        };
+
+        return nfds as i64
     }
 
     pub const MAX_EVENTS: usize = 128;

@@ -8,12 +8,12 @@
   "PrintException": false,
   "KernelPagetable": false,
   "RawTimer"      : false,
-  "UringLog"      : true,
   "PerfDebug"     : false,
   "UringStatx"    : false,
   "FileBufWrite"  : true,
   "MmapRead"      : false,
   "AsyncAccept"   : true,
   "DedicateUring" : 1,
-  "UringSize"     : 64
+  "UringSize"     : 64,
+  "UringEpollCtl" : false
 }

@@ -24,14 +24,14 @@ pub struct Config {
     pub PrintException: bool,
     pub KernelPagetable: bool,
     pub RawTimer: bool,
-    pub UringLog: bool,
     pub PerfDebug: bool,
     pub UringStatx: bool,
     pub FileBufWrite: bool,
     pub MmapRead: bool,
     pub AsyncAccept: bool,
     pub DedicateUring: usize,
-    pub UringSize: usize
+    pub UringSize: usize,
+    pub UringEpollCtl: bool,
 }
 
 impl Config {}
@@ -48,7 +48,6 @@ impl Default for Config {
             PrintException: false,
             KernelPagetable: false,
             RawTimer: true,
-            UringLog: true,
             PerfDebug: true,
             UringStatx: false,
             FileBufWrite: true,
@@ -56,6 +55,7 @@ impl Default for Config {
             AsyncAccept: true,
             DedicateUring: 1,
             UringSize: 64,
+            UringEpollCtl: false,
         }
     }
 }

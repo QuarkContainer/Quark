@@ -336,6 +336,11 @@ impl QUring {
         return ai
     }
 
+    pub fn PollHostEpollWaitInit(&self, hostEpollWaitfd: i32) {
+        let op = PollHostEpollWait::New(hostEpollWaitfd);
+        IOURING.AUCall(AsyncOps::PollHostEpollWait(op));
+    }
+
     pub fn BufSockInit(&self, fd: i32, queue: Queue, buf: Arc<SocketBuff>, isSocket: bool) -> Result<()> {
         let (addr, len) = buf.GetFreeReadBuf();
         let readop = AsyncFileRead::New(fd, queue, buf, addr, len, isSocket);

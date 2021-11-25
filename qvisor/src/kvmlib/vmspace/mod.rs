@@ -53,7 +53,6 @@ use super::qlib::control_msg::*;
 use super::qlib::qmsg::*;
 use super::qlib::cstring::*;
 use super::qlib::perf_tunning::*;
-use super::qcall::*;
 use super::namespace::MountNs;
 use super::runc::runtime::vm::*;
 use super::ucall::usocket::*;
@@ -161,7 +160,7 @@ impl VMSpace {
         mns.PivotRoot();
     }
 
-    pub fn ControlMsgCall(&mut self, taskId: TaskIdQ, addr: u64, len: usize, retAddr: u64) -> QcallRet {
+    pub fn ControlMsgCall(&mut self, taskId: TaskIdQ, addr: u64, len: usize, retAddr: u64) -> i64 {
         match self.controlMsgQueue.pop_back() {
             Some(data) => {
                 self.CopyControlMsg(&WaitingMsgCall{
@@ -171,7 +170,7 @@ impl VMSpace {
                     retAddr,
                 }, data.0, &data.1).expect("ControlMsgCall CopyControlMsg fail");
 
-                return QcallRet::Normal
+                return 0
             }
             None => ()
         };
@@ -183,7 +182,7 @@ impl VMSpace {
             retAddr,
         });
 
-        return QcallRet::Block
+        return 0
     }
 
     pub fn ControlMsgRet(&mut self, _taskId: u64, msgId: u64, addr: u64, len: usize) -> i64 {
@@ -1416,6 +1415,11 @@ impl VMSpace {
         statm.vss = output.0.unwrap();
         statm.rss = output.1.unwrap();
         return 0;
+    }
+
+    pub fn HostEpollWaitProcess(_taskId: u64, addr: u64, count: usize) -> i64 {
+        let ret = FD_NOTIFIER.HostEpollWait(addr, count);
+        return ret;
     }
 
     pub fn HostID(axArg: u32, cxArg: u32) -> (u32, u32, u32, u32) {
