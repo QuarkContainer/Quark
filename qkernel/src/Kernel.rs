@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::sync::atomic::Ordering;
-
 use ::qlib::mutex::*;
 
 use qlib::*;
@@ -26,7 +24,6 @@ use super::qlib::linux_def::*;
 //use super::qlib::perf_tunning::*;
 use super::task::*;
 use super::asm::*;
-use super::IOURING;
 use taskMgr;
 
 extern "C" {
@@ -36,10 +33,6 @@ extern "C" {
 pub struct HostSpace {}
 
 impl HostSpace {
-    pub fn Wakeup() {
-        HyperCall64(HYPERCALL_WAKEUP, 0, 0, 0);
-    }
-
     pub fn WakeupVcpu(vcpuId: u64) {
         HyperCall64(HYPERCALL_WAKEUP_VCPU, vcpuId, 0, 0);
     }
@@ -893,11 +886,6 @@ impl HostSpace {
         return event.ret;
     }
 
-    fn AQCall(msg: &qmsg::HostOutputMsg) {
-        super::SHARESPACE.AQHostOutputCall(msg);
-    }
-
-
     pub fn SyncPrint(level: DebugLevel, str: &str) {
         let msg = Print {
             level,
@@ -992,31 +980,6 @@ impl<'a> ShareSpace {
                 Err(_) => (),
             };
         }
-    }
-
-    pub fn AQHostOutputCall(&self, item: &HostOutputMsg) {
-        self.hostMsgCount.fetch_add(1, Ordering::SeqCst);
-        self.Notify();
-
-        let item = *item;
-        loop {
-            match self.QOutput.TryPush(&item) {
-                Ok(()) => break,
-                Err(_) => (),
-            };
-        }
-    }
-
-    // return whether it is sleeping
-    pub fn Notify(&self) -> bool {
-        let old = self.SwapIOThreadState(IOThreadState::RUNNING);
-        if old == IOThreadState::WAITING {
-            IOURING.EventfdWrite(self.HostIOThreadEventfd());
-            //error!("ShareSpace::Notify wake up...");
-            return true
-        }
-
-        return false;
     }
 
     pub fn Schedule(&self, taskId: u64) {

@@ -121,9 +121,6 @@ impl SyncMgr {
 
         // Kernel IO Thread
         KERNEL_IO_THREAD.Wakeup(shareSpace);
-
-        // host IO Thread
-        FD_NOTIFIER.Notify();
     }
 
     pub fn SharespaceReady(&mut self) -> &mut AtomicU32 {

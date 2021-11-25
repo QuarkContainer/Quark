@@ -34,7 +34,7 @@ use super::super::super::runc::runtime::loader::*;
 use super::super::super::kvm_vcpu::*;
 use super::super::super::elf_loader::*;
 use super::super::super::vmspace::*;
-use super::super::super::{FD_NOTIFIER, VMS, PMA_KEEPER, QUARK_CONFIG};
+use super::super::super::{VMS, PMA_KEEPER, QUARK_CONFIG};
 use super::super::super::ucall::ucall_server::*;
 
 lazy_static! {
@@ -151,7 +151,6 @@ impl VirtualMachine {
         let umask = Self::Umask();
         info!("reset umask from {:o} to {}, kernelMemRegionSize is {:x}", umask, 0, kernelMemRegionSize);
 
-        let eventfd = FD_NOTIFIER.Eventfd();
         let kvm = unsafe { Kvm::from_raw_fd(kvmfd) };
 
         let kvm_cpuid = kvm.get_supported_cpuid(kvm_bindings::KVM_MAX_CPUID_ENTRIES).unwrap();
@@ -231,7 +230,6 @@ impl VirtualMachine {
                                                          &bootstrapMem,
                                                          entry, pageAllocatorBaseAddr,
                                                          pageAllocatorOrd as u64,
-                                                         eventfd,
                                                          autoStart)?);
 
             // enable cpuid in host
@@ -295,70 +293,6 @@ impl VirtualMachine {
 
     pub fn PrintQ(shareSpace: &ShareSpace, vcpuId: u64) -> String {
         return shareSpace.scheduler.PrintQ(vcpuId)
-    }
-
-    pub const EVENT_COUNT: usize = 128;
-
-    pub fn Process() {
-        let shareSpace = VMS.lock().GetShareSpace();
-
-        /*'main:*/ loop {
-            shareSpace.GuestMsgProcess();
-
-            if !IsRunning() {
-                VMS.lock().CloseVMSpace();
-                return;
-            }
-
-            //PerfGofrom(PerfType::QCall);
-            /*FD_NOTIFIER.WaitAndNotify(shareSpace, 0).unwrap();
-
-            for _ in 0..10 {
-                for _ in 0..2000 {
-                    if shareSpace.ReadyOutputMsgCnt() > 0 {
-                        continue 'main
-                    }
-
-                    unsafe { llvm_asm!("pause" :::: "volatile"); }
-                    unsafe { llvm_asm!("pause" :::: "volatile"); }
-                    unsafe { llvm_asm!("pause" :::: "volatile"); }
-                    unsafe { llvm_asm!("pause" :::: "volatile"); }
-                    unsafe { llvm_asm!("pause" :::: "volatile"); }
-                }
-            }*/
-
-            loop {
-                //PerfGoto(PerfType::IdleWait);
-                shareSpace.WaitInHost();
-
-                // wait sometime to avoid race condition
-                unsafe { llvm_asm!("pause" :::: "volatile"); }
-                unsafe { llvm_asm!("pause" :::: "volatile"); }
-                unsafe { llvm_asm!("pause" :::: "volatile"); }
-                unsafe { llvm_asm!("pause" :::: "volatile"); }
-                unsafe { llvm_asm!("pause" :::: "volatile"); }
-                if shareSpace.ReadyOutputMsgCnt() > 0 {
-                    shareSpace.WakeInHost();
-                    break;
-                }
-
-                //error!("io thread sleep... shareSpace.ReadyOutputMsgCnt() = {}", shareSpace.ReadyOutputMsgCnt());
-                //let _cnt = FD_NOTIFIER.WaitAndNotify(shareSpace, -1).unwrap();
-                FD_NOTIFIER.WaitEventfd();
-                //error!("io thread wake...");
-
-                if !IsRunning() {
-                    VMS.lock().CloseVMSpace();
-                    return;
-                }
-                shareSpace.WakeInHost();
-                //PerfGofrom(PerfType::IdleWait);
-
-                if shareSpace.ReadyOutputMsgCnt() > 0 {
-                    break;
-                }
-            }
-        }
     }
 }
 

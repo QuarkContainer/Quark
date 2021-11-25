@@ -163,7 +163,6 @@ pub struct KVMVcpu {
 
     pub shareSpace: AtomicU64, // &'static ShareSpace,
 
-    pub eventfd: i32,
     pub autoStart: bool,
     //the pipe id to notify io_mgr
 }
@@ -179,7 +178,6 @@ impl KVMVcpu {
                 entry: u64,
                 pageAllocatorBaseAddr: u64,
                 pageAllocatorOrd: u64,
-                eventfd: i32,
                 autoStart: bool) -> Result<Self> {
         const DEFAULT_STACK_PAGES: u64 = qlib::linux_def::MemoryDef::DEFAULT_STACK_PAGES; //64KB
         //let stackAddr = pageAlloc.Alloc(DEFAULT_STACK_PAGES)?;
@@ -213,7 +211,6 @@ impl KVMVcpu {
             heapStartAddr: pageAllocatorBaseAddr + boostrapMem.Size() as u64,
             heapLen: (1 << (pageAllocatorOrd + 12)) - boostrapMem.Size() as u64,
             shareSpace: AtomicU64::new(0),
-            eventfd: eventfd,
             autoStart: autoStart,
         })
     }
@@ -228,22 +225,6 @@ impl KVMVcpu {
 
     pub fn StoreShareSpace(&self, addr: u64) {
         self.shareSpace.store(addr, Ordering::SeqCst);
-    }
-
-    //Notify hostfdnotifier there is message from guest kernel
-    pub fn Notify(&self) -> Result<()> {
-        let data: u64 = 1;
-        let ret = unsafe {
-            write(self.eventfd, &data as *const _ as *const c_void, 8)
-        };
-
-        if ret == -1 {
-            let errno = errno::errno().0;
-            return Err(Error::SysError(errno))
-        }
-
-        assert!(ret == 8, "hostfdnotifier Trigger fail to write data to the eventfd");
-        Ok(())
     }
 
     fn SetupGDT(&self, sregs: &mut kvm_sregs) {
@@ -503,11 +484,6 @@ impl KVMVcpu {
 
                             SyncMgr::WakeShareSpaceReady();
                         }
-                        qlib::HYPERCALL_WAKEUP => {
-                            //error!("qlib::HYPERCALL_WAKEUP***************");
-                            self.Notify().expect("IO_MGR.lock().Notify() fail");
-                        }
-
                         qlib::HYPERCALL_EXIT_VM => {
                             let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                             let exitCode = regs.rbx as i32;
@@ -516,9 +492,6 @@ impl KVMVcpu {
 
                             SetExitStatus(exitCode);
                             super::ucall::ucall_server::Stop().unwrap();
-
-                            //wake up host iothread
-                            self.Notify().expect("IO_MGR.lock().Notify() fail");
 
                             //wake up Kernel io thread
                             KERNEL_IO_THREAD.Wakeup(VMS.lock().GetShareSpace());
@@ -877,9 +850,7 @@ impl ShareSpace {
     pub fn Init(&mut self) {
         self.scheduler.Init();
         self.SetLogfd(super::super::print::LOG.lock().Logfd());
-        self.hostIOThreadEventfd.store(FD_NOTIFIER.Eventfd(), Ordering::SeqCst);
         self.hostEpollfd.store(FD_NOTIFIER.Epollfd(), Ordering::SeqCst);
-        URING_MGR.lock().Addfd(self.HostIOThreadEventfd()).unwrap();
         *self.config.write() = *QUARK_CONFIG.lock();
     }
 

@@ -90,7 +90,6 @@ pub const HYPERCALL_MSG: u16 = 5;
 pub const HYPERCALL_U64: u16 = 6;
 pub const HYPERCALL_PRINT: u16 = 8;
 pub const HYPERCALL_EXIT: u16 = 9;
-pub const HYPERCALL_WAKEUP: u16 = 10;
 pub const HYPERCALL_GETTIME: u16 = 11;
 pub const HYPERCALL_HLT: u16 = 13;
 pub const HYPERCALL_URING_WAKE: u16 = 14;
@@ -510,25 +509,14 @@ pub struct Str {
     pub len: u32
 }
 
-#[derive(Clone, Debug, PartialEq, Copy)]
-#[repr(u64)]
-pub enum IOThreadState {
-    //IOThread is in waiting epoll_wait state
-    WAITING = 0,
-    //IOThread is running
-    RUNNING = 1,
-}
-
 #[repr(align(128))]
 pub struct ShareSpace {
     pub QInput: QRingBuf<HostInputMsg>, //QMutex<VecDeque<HostInputMsg>>,
     pub QOutput: QRingBuf<HostOutputMsg>,  //QMutex<VecDeque<HostOutputMsg>>,
 
-    pub hostIOThreadEventfd: AtomicI32,
     pub hostEpollfd: AtomicI32,
 
     pub scheduler: task_mgr::Scheduler,
-    pub ioThreadState: AtomicU64,
     pub hostMsgCount : AtomicU64,
     pub guestMsgCount: AtomicU64,
 
@@ -547,11 +535,9 @@ impl ShareSpace {
             QInput: QRingBuf::New(MemoryDef::MSG_QLEN), //QMutex::new(VecDeque::with_capacity(MSG_QLEN)),
             QOutput: QRingBuf::New(MemoryDef::MSG_QLEN), //QMutex::new(VecDeque::with_capacity(MSG_QLEN)),
 
-            hostIOThreadEventfd: AtomicI32::new(0),
             hostEpollfd: AtomicI32::new(0),
 
             scheduler: task_mgr::Scheduler::default(),
-            ioThreadState: AtomicU64::new(IOThreadState::WAITING as u64),
             hostMsgCount: AtomicU64::new(0),
             guestMsgCount: AtomicU64::new(0),
             kernelIOThreadWaiting: AtomicBool::new(false),
@@ -571,9 +557,6 @@ impl ShareSpace {
         return self as * const _ as u64;
     }
 
-    pub fn HostIOThreadEventfd(&self) -> i32 {
-        return self.hostIOThreadEventfd.load(Ordering::Relaxed);
-    }
 
     pub fn HostHostEpollfd(&self) -> i32 {
         return self.hostEpollfd.load(Ordering::Relaxed);
@@ -666,27 +649,5 @@ impl ShareSpace {
     pub fn ReadyOutputMsgCnt(&self) -> u64 {
         //return self.QOutput.CountLockless() as u64;
         self.hostMsgCount.load(Ordering::Acquire)
-    }
-
-    pub fn SetIOThreadState(&self, state: IOThreadState) {
-        self.ioThreadState.store(state as u64, Ordering::Release);
-    }
-
-    pub fn SwapIOThreadState(&self, state: IOThreadState) -> IOThreadState {
-        let old = self.ioThreadState.swap(state as u64, Ordering::SeqCst);
-        return unsafe { core::mem::transmute(old) };
-    }
-
-    pub fn WakeInHost(&self) {
-        self.SetIOThreadState(IOThreadState::RUNNING);
-    }
-
-    pub fn WaitInHost(&self) {
-        self.SetIOThreadState(IOThreadState::WAITING);
-    }
-
-    pub fn IOThreadState(&self) -> IOThreadState {
-        let state = self.ioThreadState.load(Ordering::Acquire);
-        return unsafe { core::mem::transmute(state) };
     }
 }
