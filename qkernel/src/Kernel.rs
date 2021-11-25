@@ -872,10 +872,7 @@ impl HostSpace {
     }
 
     fn HCall(msg: &mut Msg, lock: bool) -> u64 {
-        let current = Task::Current().GetTaskIdQ();
-
         let mut event = Event {
-            taskId: current,
             globalLock: lock,
             ret: 0,
             msg: msg

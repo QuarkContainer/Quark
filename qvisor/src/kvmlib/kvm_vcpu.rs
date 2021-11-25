@@ -756,27 +756,6 @@ impl CPULocal {
         self.data = 1;
     }
 
-    pub fn Wait1(&self) -> Result<()> {
-        self.SetWaiting();
-        defer!(self.SetRunning(););
-
-        let mut data : u64 = 0;
-        let ret = unsafe {
-            libc::read(self.eventfd, &mut data as * mut _ as *mut libc::c_void, 8)
-        };
-
-        if ret < 0 {
-            panic!("KIOThread::Wakeup fail... eventfd is {}, errno is {}",
-                   self.eventfd, errno::errno().0);
-        }
-
-        if !super::runc::runtime::vm::IsRunning() {
-            return Err(Error::Exit)
-        }
-
-        return Ok(())
-    }
-
     pub fn Wait(&self) -> Result<()> {
         let mut events = [epoll_event { events: 0, u64: 0 }; 2];
 
@@ -785,7 +764,7 @@ impl CPULocal {
 
         loop {
             let nfds = unsafe {
-                epoll_wait(self.epollfd, &mut events[0], (events.len() - 1) as i32, -1)
+                epoll_wait(self.epollfd, &mut events[0], 2, -1)
             };
 
             if !super::runc::runtime::vm::IsRunning() {

@@ -59,7 +59,7 @@ impl FdInfo {
         return SysRet(ret as i64)
     }
 
-    pub fn IOWrite(&self, _taskId: u64, iovs: u64, iovcnt: i32) -> i64 {
+    pub fn IOWrite(&self, iovs: u64, iovcnt: i32) -> i64 {
         let osfd = self.lock().osfd;
         let ret = unsafe {
             writev(osfd as c_int, iovs as *const iovec, iovcnt) as i64
@@ -68,7 +68,7 @@ impl FdInfo {
         return SysRet(ret as i64)
     }
 
-    pub fn IOAppend(&self, _taskId: u64, iovs: u64, iovcnt: i32, fileLenAddr: u64) -> i64 {
+    pub fn IOAppend(&self, iovs: u64, iovcnt: i32, fileLenAddr: u64) -> i64 {
         let osfd = self.lock().osfd;
 
         //let nr = SysCallID::pwritev2 as usize;
@@ -121,7 +121,7 @@ impl FdInfo {
         return size as i64*/
     }
 
-    pub fn IOReadAt(&self, _taskId: u64, iovs: u64, iovcnt: i32, offset: u64) -> i64 {
+    pub fn IOReadAt(&self, iovs: u64, iovcnt: i32, offset: u64) -> i64 {
         let osfd = self.lock().osfd;
 
         let ret = unsafe {
@@ -135,7 +135,7 @@ impl FdInfo {
         return SysRet(ret as i64)
     }
 
-    pub fn IOWriteAt(&self, _taskId: u64, iovs: u64, iovcnt: i32, offset: u64) -> i64 {
+    pub fn IOWriteAt(&self, iovs: u64, iovcnt: i32, offset: u64) -> i64 {
         let osfd = self.lock().osfd;
 
         let ret = unsafe{
@@ -149,7 +149,7 @@ impl FdInfo {
         return SysRet(ret as i64)
     }
 
-    pub fn IOAccept(&self, _taskId: u64, addr: u64, addrlen: u64, _flags: i32) -> i64 {
+    pub fn IOAccept(&self, addr: u64, addrlen: u64, _flags: i32) -> i64 {
         let osfd = self.lock().osfd;
 
         let newOsfd = unsafe{
@@ -166,7 +166,7 @@ impl FdInfo {
         return SysRet(hostfd as i64);
     }
 
-    pub fn IOConnect(&self, _taskId: u64, addr: u64, addrlen: u32) -> i64 {
+    pub fn IOConnect(&self, addr: u64, addrlen: u32) -> i64 {
         let osfd = self.lock().osfd;
 
         let ret = unsafe{
@@ -176,7 +176,7 @@ impl FdInfo {
         return SysRet(ret as i64)
     }
 
-    pub fn IORecvMsg(&self, _taskId: u64, msghdr: u64, flags: i32) -> i64 {
+    pub fn IORecvMsg(&self, msghdr: u64, flags: i32) -> i64 {
         let osfd = self.lock().osfd;
 
         let ret = unsafe{
@@ -186,7 +186,7 @@ impl FdInfo {
         return SysRet(ret as i64);
     }
 
-    pub fn IOSendMsg(&self, _taskId: u64, msghdr: u64, flags: i32) -> i64 {
+    pub fn IOSendMsg(&self, msghdr: u64, flags: i32) -> i64 {
         let osfd = self.lock().osfd;
 
         let ret = unsafe{
@@ -196,7 +196,7 @@ impl FdInfo {
         return SysRet(ret as i64);
     }
 
-    pub fn Fcntl(&self, _taskId: u64, cmd: i32, arg: u64) -> i64 {
+    pub fn Fcntl(&self, cmd: i32, arg: u64) -> i64 {
         let osfd = self.lock().osfd;
 
         if cmd == Cmd::F_GETFL {
@@ -216,7 +216,7 @@ impl FdInfo {
         return SysRet(ret as i64);
     }
 
-    pub fn IoCtl(&self, _taskId: u64, cmd: u64, argp: u64) -> i64 {
+    pub fn IoCtl(&self, cmd: u64, argp: u64) -> i64 {
         //todo: fix this.
         /* when run /bin/bash, the second command as below return ENOTTY. Doesn't know why
         ioctl(0, TCGETS, {B38400 opost isig icanon echo ...}) = 0
@@ -238,7 +238,7 @@ impl FdInfo {
         return SysRet(ret as i64);
     }
 
-    pub fn FSync(&self, _taskId: u64, dataSync: bool) -> i64 {
+    pub fn FSync(&self, dataSync: bool) -> i64 {
         let osfd = self.lock().osfd;
 
         let ret = if dataSync {
@@ -254,7 +254,7 @@ impl FdInfo {
         return SysRet(ret as i64);
     }
 
-    pub fn Seek(&self, _taskId: u64, offset: i64, whence: i32) -> i64 {
+    pub fn Seek(&self, offset: i64, whence: i32) -> i64 {
         let osfd = self.lock().osfd;
 
         let ret = unsafe {
