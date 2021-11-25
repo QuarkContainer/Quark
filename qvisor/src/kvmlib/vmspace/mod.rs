@@ -170,6 +170,7 @@ impl VMSpace {
                     retAddr,
                 }, data.0, &data.1).expect("ControlMsgCall CopyControlMsg fail");
 
+                VirtualMachine::Schedule(self.GetShareSpace(), taskId);
                 return 0
             }
             None => ()
