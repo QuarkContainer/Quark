@@ -313,6 +313,9 @@ pub fn qCall(eventAddr: u64, event: &'static mut Event) -> QcallRet {
         Event { taskId, globalLock: _, ref mut ret, msg: Msg::HostEpollWaitProcess(msg) } => {
             *ret = super::VMSpace::HostEpollWaitProcess(taskId.Addr(), msg.addr, msg.count) as u64;
         }
+        Event { taskId: _, globalLock: _, ref mut ret, msg: Msg::WaitFD(msg) } => {
+            *ret = super::VMSpace::WaitFD(msg.fd, msg.mask) as u64;
+        }
         Event { taskId: _, globalLock: _, ref mut ret, msg: Msg::IoUringSetup(msg) } => {
             *ret = match URING_MGR.lock().Setup(msg.idx, msg.submission, msg.completion) {
                 Ok(v) => v as u64,
