@@ -513,6 +513,7 @@ pub struct Str {
 pub struct ShareSpace {
     pub QInput: QRingBuf<HostInputMsg>, //QMutex<VecDeque<HostInputMsg>>,
     pub hostEpollfd: AtomicI32,
+    pub hostEpollProcessing: QMutex<()>,
 
     pub scheduler: task_mgr::Scheduler,
     pub guestMsgCount: AtomicU64,
@@ -531,6 +532,7 @@ impl ShareSpace {
         return ShareSpace {
             QInput: QRingBuf::New(MemoryDef::MSG_QLEN), //QMutex::new(VecDeque::with_capacity(MSG_QLEN)),
             hostEpollfd: AtomicI32::new(0),
+            hostEpollProcessing: QMutex::new(()),
 
             scheduler: task_mgr::Scheduler::default(),
             guestMsgCount: AtomicU64::new(0),
@@ -551,6 +553,9 @@ impl ShareSpace {
         return self as * const _ as u64;
     }
 
+    pub fn TryLockEpollProcess(&self) -> Option<QMutexGuard<()>> {
+        return self.hostEpollProcessing.try_lock();
+    }
 
     pub fn HostHostEpollfd(&self) -> i32 {
         return self.hostEpollfd.load(Ordering::Relaxed);
