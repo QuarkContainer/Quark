@@ -512,12 +512,9 @@ pub struct Str {
 #[repr(align(128))]
 pub struct ShareSpace {
     pub QInput: QRingBuf<HostInputMsg>, //QMutex<VecDeque<HostInputMsg>>,
-    pub QOutput: QRingBuf<HostOutputMsg>,  //QMutex<VecDeque<HostOutputMsg>>,
-
     pub hostEpollfd: AtomicI32,
 
     pub scheduler: task_mgr::Scheduler,
-    pub hostMsgCount : AtomicU64,
     pub guestMsgCount: AtomicU64,
 
     pub kernelIOThreadWaiting: AtomicBool,
@@ -533,12 +530,9 @@ impl ShareSpace {
     pub fn New() -> Self {
         return ShareSpace {
             QInput: QRingBuf::New(MemoryDef::MSG_QLEN), //QMutex::new(VecDeque::with_capacity(MSG_QLEN)),
-            QOutput: QRingBuf::New(MemoryDef::MSG_QLEN), //QMutex::new(VecDeque::with_capacity(MSG_QLEN)),
-
             hostEpollfd: AtomicI32::new(0),
 
             scheduler: task_mgr::Scheduler::default(),
-            hostMsgCount: AtomicU64::new(0),
             guestMsgCount: AtomicU64::new(0),
             kernelIOThreadWaiting: AtomicBool::new(false),
             config: QRwLock::new(Config::default()),
@@ -579,17 +573,6 @@ impl ShareSpace {
     #[inline]
     pub fn AQHostInputTryPop(&self) -> Option<HostInputMsg> {
         return self.QInput.TryPop();
-    }
-
-    #[inline]
-    pub fn AQHostOutputPop(&self) -> Option<HostOutputMsg> {
-        let res = self.QOutput.Pop();
-
-        if res.is_some() {
-            self.hostMsgCount.fetch_sub(1, Ordering::SeqCst);
-        }
-
-        return res;
     }
 
     pub fn SetLogfd(&self, fd: i32) {
@@ -643,11 +626,5 @@ impl ShareSpace {
     #[inline]
     pub fn ReadyAsyncMsgCnt(&self) -> u64 {
         return self.QInput.Count() as u64;
-    }
-
-    #[inline]
-    pub fn ReadyOutputMsgCnt(&self) -> u64 {
-        //return self.QOutput.CountLockless() as u64;
-        self.hostMsgCount.load(Ordering::Acquire)
     }
 }

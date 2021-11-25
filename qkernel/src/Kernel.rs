@@ -872,10 +872,7 @@ impl HostSpace {
     }
 
     fn HCall(msg: &mut Msg, lock: bool) -> u64 {
-        let current = Task::Current().GetTaskIdQ();
-
         let mut event = Event {
-            taskId: current,
             globalLock: lock,
             ret: 0,
             msg: msg
@@ -969,19 +966,6 @@ pub fn GetSockOptI32(sockfd: i32, level: i32, optname: i32) -> Result<i32> {
 }
 
 impl<'a> ShareSpace {
-    pub fn QCall(&self, item: &mut Event) {
-        let addr = item as *const _ as u64;
-        let msg = HostOutputMsg::QCall(addr);
-        loop {
-           match self.QOutput.TryPush(&msg) {
-                Ok(()) => {
-                    break;
-                }
-                Err(_) => (),
-            };
-        }
-    }
-
     pub fn Schedule(&self, taskId: u64) {
         self.scheduler.Schedule(TaskId::New(taskId));
     }

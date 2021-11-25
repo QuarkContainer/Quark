@@ -756,29 +756,7 @@ impl CPULocal {
         self.data = 1;
     }
 
-    pub fn Wait1(&self) -> Result<()> {
-        self.SetWaiting();
-        defer!(self.SetRunning(););
-
-        let mut data : u64 = 0;
-        let ret = unsafe {
-            libc::read(self.eventfd, &mut data as * mut _ as *mut libc::c_void, 8)
-        };
-
-        if ret < 0 {
-            panic!("KIOThread::Wakeup fail... eventfd is {}, errno is {}",
-                   self.eventfd, errno::errno().0);
-        }
-
-        if !super::runc::runtime::vm::IsRunning() {
-            return Err(Error::Exit)
-        }
-
-        return Ok(())
-    }
-
     pub fn Wait(&self) -> Result<()> {
-        let shareSpace = VMS.lock().GetShareSpace();
         let mut events = [epoll_event { events: 0, u64: 0 }; 2];
 
         self.SetWaiting();
@@ -786,7 +764,7 @@ impl CPULocal {
 
         loop {
             let nfds = unsafe {
-                epoll_wait(self.epollfd, &mut events[0], (events.len() - 1) as i32, -1)
+                epoll_wait(self.epollfd, &mut events[0], 2, -1)
             };
 
             if !super::runc::runtime::vm::IsRunning() {
@@ -815,7 +793,7 @@ impl CPULocal {
             }
 
             if hasMsg {
-                shareSpace.GuestMsgProcess();
+                //shareSpace.GuestMsgProcess();
             }
 
             if wakeVcpu {
@@ -861,44 +839,6 @@ impl ShareSpace {
         std::thread::yield_now();
         std::thread::yield_now();
         std::thread::yield_now();
-    }
-
-    pub fn GuestMsgProcess(&self) {
-        while self.ReadyOutputMsgCnt() > 0 {
-            unsafe {
-                let msg = self.AQHostOutputPop();
-
-                match msg {
-                    None => {
-                        llvm_asm!("pause" :::: "volatile");
-                        //error!("get none output msg ...");
-                    },
-                    Some(HostOutputMsg::QCall(addr)) => {
-                        let eventAddr = addr as *mut Event; // as &mut qlib::Event;
-                        let event = &mut (*eventAddr);
-                        let currTaskId = event.taskId;
-
-                        //error!("qcall event is {:x?}", &event);
-
-                        match qcall::qCall(addr, event) {
-                            qcall::QcallRet::Normal => {
-                                if currTaskId.Addr() != 0 {
-                                    //Self::Schedule(shareSpace, currTaskId);
-                                    self.scheduler.ScheduleQ(currTaskId.TaskId(), currTaskId.Queue())
-                                }
-                            }
-                            qcall::QcallRet::Block => {
-                                //info!("start blocked wait ...........");
-                            }
-                        }
-                    }
-                    Some(msg) => {
-                        //error!("qcall msg is {:x?}", &msg);
-                        qcall::AQHostCall(msg, self);
-                    }
-                }
-            }
-        }
     }
 }
 

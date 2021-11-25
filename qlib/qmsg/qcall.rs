@@ -709,7 +709,6 @@ pub struct Print<'a> {
 
 #[derive(Debug)]
 pub struct Event<'a> {
-    pub taskId: TaskIdQ,
     pub globalLock: bool,
     pub ret: u64,
     pub msg: &'a mut Msg,
