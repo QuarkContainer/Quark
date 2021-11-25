@@ -22,6 +22,7 @@ use super::fs::host::hostinodeop::*;
 use super::qlib::common::*;
 use super::qlib::linux_def::*;
 use super::qlib::singleton::*;
+use super::SHARESPACE;
 use super::IOURING;
 
 pub static GUEST_NOTIFIER : Singleton<Notifier> = Singleton::<Notifier>::New();
@@ -137,6 +138,14 @@ impl Notifier {
         return Ok(())
     }
 
+    pub fn UpdateFD(&self, fd: i32) -> Result<()> {
+        if SHARESPACE.config.read().UringEpollCtl {
+            return self.UpdateFDAsync(fd)
+        } else {
+            return self.UpdateFDSync(fd)
+        }
+    }
+
     pub fn UpdateFDAsync(&self, fd: i32) -> Result<()> {
         let op;
         let epollfd;
@@ -178,7 +187,7 @@ impl Notifier {
         return Ok(())
     }
 
-    pub fn UpdateFD(&self, fd: i32) -> Result<()> {
+    pub fn UpdateFDSync(&self, fd: i32) -> Result<()> {
         let mask = {
             let mut n = self.lock();
             let fi = match n.fdMap.get_mut(&fd) {

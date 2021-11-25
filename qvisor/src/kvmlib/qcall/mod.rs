@@ -19,7 +19,7 @@ use super::qlib::qmsg::*;
 use super::qlib::range::*;
 use super::*;
 
-pub fn AQHostCall(msg: HostOutputMsg, shareSpace: &ShareSpace) {
+pub fn AQHostCall(msg: HostOutputMsg, _shareSpace: &ShareSpace) {
     let _l = super::GLOCK.lock();
     match msg {
         HostOutputMsg::QCall(_addr) => {
@@ -35,9 +35,6 @@ pub fn AQHostCall(msg: HostOutputMsg, shareSpace: &ShareSpace) {
                 // ignore -9 EBADF, when change the Close to HCall, the waitfd is still async call,
                 // there is chance that the WaitFd fired before close
             }
-        }
-        HostOutputMsg::PrintStr(_msg) => {
-            shareSpace.LogFlush();
         }
     }
 }
@@ -112,10 +109,9 @@ pub fn qCall(eventAddr: u64, event: &'static mut Event) -> QcallRet {
         Event { taskId, globalLock: _, ref mut ret, msg: Msg::ControlMsgRet(msg) } => {
             *ret = super::VMS.lock().ControlMsgRet(taskId.Addr(), msg.msgId, msg.addr, msg.len) as u64;
         }
-        Event { taskId, globalLock: _, ref mut ret, msg: Msg::ControlMsgCall(msg) } => {
-            let retAddr = ret as * const _ as u64;
-            let ret = super::VMS.lock().ControlMsgCall(*taskId, msg.addr, msg.len, retAddr);
-            return ret;
+        Event { taskId: _, globalLock: _, ref mut ret, msg: Msg::ControlMsgCall(msg) } => {
+            let retAddr = &msg.ret as * const _ as u64;
+            *ret = super::VMS.lock().ControlMsgCall(msg.taskId, msg.addr, msg.len, retAddr) as u64;
         }
         Event { taskId, globalLock: _, ref mut ret, msg: Msg::RenameAt(msg) } => {
             *ret = super::VMSpace::RenameAt(taskId.Addr(), msg.olddirfd, msg.oldpath, msg.newdirfd, msg.newpath) as u64;

@@ -279,12 +279,6 @@ impl VirtualMachine {
             info!("UcallSrvProcess finish...");
         }));
 
-
-        threads.push(thread::spawn(move || {
-            Self::Process();
-            info!("IOThread  finish...");
-        }));
-
         for t in threads {
             t.join().expect("the working threads has panicked");
         }

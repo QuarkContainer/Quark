@@ -106,6 +106,7 @@ pub enum Msg {
     Statm(Statm),
     NewFd(NewFd),
     HostEpollWaitProcess(HostEpollWaitProcess),
+    WaitFD(WaitFD),
 }
 
 #[derive(Clone, Default, Debug)]
@@ -645,6 +646,12 @@ pub struct HostEpollWaitProcess {
 }
 
 #[derive(Clone, Default, Debug)]
+pub struct WaitFD {
+    pub fd: i32,
+    pub mask: EventMask,
+}
+
+#[derive(Clone, Default, Debug)]
 pub struct NonBlockingPoll {
     pub fd: i32,
     pub mask: EventMask,
@@ -684,6 +691,8 @@ pub struct LoadExecProcess {
 pub struct ControlMsgCall {
     pub addr: u64,
     pub len: usize,
+    pub taskId: TaskIdQ,
+    pub ret : i64,
 }
 
 #[derive(Clone, Debug)]
@@ -705,4 +714,5 @@ pub struct Event<'a> {
     pub ret: u64,
     pub msg: &'a mut Msg,
 }
+
 

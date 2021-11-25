@@ -73,13 +73,21 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn ControlMsgCall(addr: u64, len: usize) -> i64 {
+    pub fn ControlMsgCall(addr: u64, len: usize, taskId: TaskIdQ) -> i64 {
         let mut msg = Msg::ControlMsgCall(ControlMsgCall {
             addr: addr,
             len: len,
+            taskId: taskId,
+            ret: 0,
         });
 
-        return HostSpace::Call(&mut msg, true) as i64;
+        HostSpace::Call(&mut msg, false) as i64;
+        taskMgr::Wait();
+        if let Msg::ControlMsgCall(m) = msg {
+            return m.ret
+        }
+
+        panic!("ControlMsgCall fail...");
     }
 
     pub fn ControlMsgRet(msgId: u64, addr: u64, len: usize) -> i64 {
@@ -89,7 +97,7 @@ impl HostSpace {
             len: len,
         });
 
-        return HostSpace::Call(&mut msg, true) as i64;
+        return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn LoadExecProcess(processAddr: u64, len: usize) -> i64 {
@@ -830,12 +838,6 @@ impl HostSpace {
         HostSpace::Call(&mut msg, true);
     }
 
-    pub fn PrintStr() {
-        let msg = qmsg::HostOutputMsg::PrintStr(qmsg::PrintStr{});
-
-        HostSpace::AQCall(&msg);
-    }
-
     pub fn MMapFile(len: u64, fd: i32, offset: u64, prot: i32) -> i64 {
         assert!(len % MemoryDef::PMD_SIZE == 0, "offset is {:x}, len is {:x}", offset, len);
         assert!(offset % MemoryDef::PMD_SIZE == 0, "offset is {:x}, len is {:x}", offset, len);
@@ -862,35 +864,18 @@ impl HostSpace {
         HostSpace::HCall(&mut msg, true);
     }
 
-    fn Call(msg: &mut Msg, mustAsync: bool) -> u64 {
-        /*if !mustAsync  {
-            return Self::HCall(msg, true) as u64
-        }*/
 
-        super::SHARESPACE.hostMsgCount.fetch_add(1, Ordering::Release);
-        if super::SHARESPACE.Notify() && !mustAsync  {
-            super::SHARESPACE.hostMsgCount.fetch_sub(1, Ordering::SeqCst);
-            return Self::HCall(msg, true) as u64
-        }
+    pub fn WaitFD(fd: i32, mask: EventMask) {
+        let mut msg = Msg::WaitFD(qmsg::qcall::WaitFD {
+            fd,
+            mask
+        });
 
-        //super::SHARESPACE.Notify();
-        let current = Task::Current().GetTaskIdQ();
+        HostSpace::Call(&mut msg, false);
+    }
 
-        //error!("Qcall msg is {:?}, super::SHARESPACE.hostMsgCount is {}", msg, super::SHARESPACE.hostMsgCount.load(Ordering::SeqCst));
-        let mut event = Event {
-            taskId: current,
-            globalLock: true,
-            ret: 0,
-            msg: msg
-        };
-
-        //PerfGoto(PerfType::QCall);
-        //error!("Qcall event is {:x?}", event);
-        super::SHARESPACE.QCall(&mut event);
-        //PerfGofrom(PerfType::QCall);
-
-        taskMgr::Wait();
-        return event.ret;
+    fn Call(msg: &mut Msg, _mustAsync: bool) -> u64 {
+        return Self::HCall(msg, true) as u64
     }
 
     fn HCall(msg: &mut Msg, lock: bool) -> u64 {
@@ -912,12 +897,6 @@ impl HostSpace {
         super::SHARESPACE.AQHostOutputCall(msg);
     }
 
-    pub fn WaitFD(fd: i32, mask: EventMask) {
-        Self::AQCall(&qmsg::HostOutputMsg::WaitFD(qmsg::WaitFD {
-            fd,
-            mask,
-        }))
-    }
 
     pub fn SyncPrint(level: DebugLevel, str: &str) {
         let msg = Print {
@@ -931,13 +910,8 @@ impl HostSpace {
     pub fn Kprint(str: &str) {
         let bytes = str.as_bytes();
         let trigger = super::SHARESPACE.Log(bytes);
-        let uringLog = super::SHARESPACE.config.read().UringLog;
-        if uringLog {
-            if trigger {
-                super::IOURING.LogFlush();
-            }
-        } else {
-            Self::PrintStr();
+        if trigger {
+            super::IOURING.LogFlush();
         }
     }
 
