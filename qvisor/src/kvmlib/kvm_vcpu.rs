@@ -590,6 +590,16 @@ impl KVMVcpu {
                             error!("[{}] HYPERCALL_VCPU_PRINT regs is {:#x?}", self.id, regs);
                         }
 
+                        qlib::HYPERCALL_QCALL => {
+                            let sharespace = self.ShareSpace();
+
+                            self.GuestMsgProcess(sharespace);
+                            // last processor in host
+                            if sharespace.DecrHostProcessor() == 0 {
+                                self.GuestMsgProcess(sharespace);
+                            }
+                        }
+
                         qlib::HYPERCALL_HCALL => {
                             let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                             let addr = regs.rbx;
@@ -599,15 +609,23 @@ impl KVMVcpu {
                                 &mut (*eventAddr)
                             };
 
-                            match self.qCall(qmsg) {
-                                qcall::QcallRet::Normal => {
-                                    /*info!("HYPERCALL_HCALL finish call {:x?}", unsafe {
-                                        &mut (*eventAddr)
-                                    });*/
-                                }
-                                qcall::QcallRet::Block => {
-                                    //info!("start blocked wait ...........");
-                                }
+                            {
+                                let _l = if qmsg.globalLock {
+                                    Some(super::GLOCK.lock())
+                                } else {
+                                    None
+                                };
+
+                                qmsg.ret = self.qCall(qmsg.msg);
+                            }
+
+                            let sharespace = self.ShareSpace();
+                            sharespace.IncrHostProcessor();
+
+                            self.GuestMsgProcess(sharespace);
+                            // last processor in host
+                            if sharespace.DecrHostProcessor() == 0 {
+                                self.GuestMsgProcess(sharespace);
                             }
                         }
 
@@ -658,6 +676,44 @@ impl KVMVcpu {
 
         //let mut vcpu_regs = self.vcpu_fd.get_regs()?;
         Ok(())
+    }
+
+    pub fn GuestMsgProcess(&self, sharespace: &'static ShareSpace) {
+        loop  {
+            let msg = sharespace.AQHostOutputPop();
+
+            match msg {
+                None => {
+                    break
+                },
+                Some(HostOutputMsg::QCall(addr)) => {
+                    let eventAddr = addr as *mut QMsg; // as &mut qlib::Event;
+                    let qmsg = unsafe {
+                        &mut (*eventAddr)
+                    };
+                    let currTaskId = qmsg.taskId;
+
+                    {
+                        let _l = if qmsg.globalLock {
+                            Some(super::GLOCK.lock())
+                        } else {
+                            None
+                        };
+
+                        qmsg.ret = self.qCall(qmsg.msg);
+                    }
+
+                    if currTaskId.Addr() != 0 {
+                        sharespace.scheduler.ScheduleQ(currTaskId.TaskId(), currTaskId.Queue())
+                    }
+                }
+                Some(msg) => {
+                    //error!("qcall msg is {:x?}", &msg);
+                    qcall::AQHostCall(msg, sharespace);
+                }
+            }
+
+        }
     }
 }
 

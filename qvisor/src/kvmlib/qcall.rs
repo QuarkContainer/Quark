@@ -20,6 +20,26 @@ use super::qlib::range::*;
 use super::*;
 use super::kvm_vcpu::KVMVcpu;
 
+pub fn AQHostCall(msg: HostOutputMsg, _shareSpace: &ShareSpace) {
+    let _l = super::GLOCK.lock();
+    match msg {
+        HostOutputMsg::QCall(_addr) => {
+            panic!("AQHostCall Process get Qcall msg...");
+        }
+        HostOutputMsg::WaitFDAsync(msg) => {
+            let ret = super::VMSpace::WaitFD(msg.fd, msg.mask);
+            if ret < 0 {
+                if ret != -9 {
+                    panic!("WaitFD fail err is {}, fd is {}", ret, msg.fd);
+                }
+
+                // ignore -9 EBADF, when change the Close to HCall, the waitfd is still async call,
+                // there is chance that the WaitFd fired before close
+            }
+        }
+    }
+}
+
 impl<'a> ShareSpace {
     pub fn AQHostInputCall(&self, item: &HostInputMsg) {
         loop {
@@ -86,14 +106,7 @@ impl KVMVcpu {
     }
 
     //return : true(push the result back), false(block wait)
-    pub fn qCall(&self, qmsg: &'static mut QMsg) -> QcallRet {
-        let _l = if qmsg.globalLock {
-            Some(super::GLOCK.lock())
-        } else {
-            None
-        };
-
-        let msg = qmsg.GetMsg();
+    pub fn qCall(&self, msg: &'static Msg) -> u64 {
         let mut ret = 0;
 
         match msg {
@@ -346,8 +359,7 @@ impl KVMVcpu {
             },
         };
 
-        qmsg.ret = ret;
-        return QcallRet::Normal
+        return ret
     }
 
 }

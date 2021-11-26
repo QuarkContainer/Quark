@@ -402,6 +402,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
         InitGs(id);
 
         SHARESPACE.scheduler.SetVcpuCnt(vcpuCnt as usize);
+        //Kernel::HostSpace::KernelMsg(0, 0, 0);
         HyperCall64(qlib::HYPERCALL_INIT, (&(*SHARESPACE) as *const ShareSpace) as u64, 0, 0);
         IOURING.Setup(SHARESPACE.config.read().DedicateUring);
         {

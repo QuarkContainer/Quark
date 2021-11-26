@@ -74,7 +74,7 @@ impl HostSpace {
             ret: 0,
         });
 
-        HostSpace::Call(&mut msg, false) as i64;
+        HostSpace::HCall(&mut msg, false) as i64;
         taskMgr::Wait();
         if let Msg::ControlMsgCall(m) = msg {
             return m.ret
@@ -618,7 +618,7 @@ impl HostSpace {
             addr: addr,
         });
 
-        let ret = Self::HCall(&mut msg, true) as i64;
+        let ret = Self::HCall(&mut msg, false) as i64;
         return ret;
         //return HostSpace::Call(&mut msg, false) as i64;
     }
@@ -851,7 +851,24 @@ impl HostSpace {
     }
 
     fn Call(msg: &mut Msg, _mustAsync: bool) -> u64 {
-        return Self::HCall(msg, true) as u64
+        //return Self::HCall(msg, true);
+        let current = Task::Current().GetTaskIdQ();
+
+        let mut qMsg = QMsg {
+            taskId: current,
+            globalLock: true,
+            ret: 0,
+            msg: msg
+        };
+
+        super::SHARESPACE.QCall(&mut qMsg);
+
+        if super::SHARESPACE.NeedHostProcess() {
+            HyperCall64(HYPERCALL_QCALL, 0, 0, 0);
+        }
+
+        taskMgr::Wait();
+        return qMsg.ret;
     }
 
     fn HCall(msg: &mut Msg, lock: bool) -> u64 {
@@ -861,7 +878,7 @@ impl HostSpace {
             taskId: taskId,
             globalLock: lock,
             ret: 0,
-            msg: msg as * const _ as u64
+            msg: msg
         };
 
         HyperCall64(HYPERCALL_HCALL, &mut event as * const _ as u64, 0, 0);
@@ -952,6 +969,19 @@ pub fn GetSockOptI32(sockfd: i32, level: i32, optname: i32) -> Result<i32> {
 }
 
 impl<'a> ShareSpace {
+    pub fn QCall(&self, item: &mut QMsg) {
+        let addr = item as *const _ as u64;
+        let msg = HostOutputMsg::QCall(addr);
+        loop {
+            match self.QOutput.TryPush(&msg) {
+                Ok(()) => {
+                    break;
+                }
+                Err(_) => (),
+            };
+        }
+    }
+
     pub fn Schedule(&self, taskId: u64) {
         self.scheduler.Schedule(TaskId::New(taskId));
     }

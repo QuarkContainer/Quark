@@ -92,6 +92,7 @@ pub const HYPERCALL_U64: u16 = 6;
 pub const HYPERCALL_PRINT: u16 = 8;
 pub const HYPERCALL_EXIT: u16 = 9;
 pub const HYPERCALL_GETTIME: u16 = 11;
+pub const HYPERCALL_QCALL: u16 = 12;
 pub const HYPERCALL_HLT: u16 = 13;
 pub const HYPERCALL_URING_WAKE: u16 = 14;
 pub const HYPERCALL_HCALL: u16 = 15;
@@ -514,7 +515,7 @@ pub struct Str {
 #[repr(align(128))]
 pub struct ShareSpace {
     pub QInput: QRingBuf<HostInputMsg>, //QMutex<VecDeque<HostInputMsg>>,
-    //pub QOutput: QRingBuf<Event>, //QMutex<VecDeque<HostInputMsg>>,
+    pub QOutput: QRingBuf<HostOutputMsg>, //QMutex<VecDeque<HostInputMsg>>,
 
     // add this pad can decrease the mariadb start time 25 sec to 12 sec
     //todo: root cause this. False share?
@@ -524,6 +525,7 @@ pub struct ShareSpace {
 
     pub scheduler: task_mgr::Scheduler,
     pub guestMsgCount: CachePadded<AtomicU64>,
+    pub hostProcessor: CachePadded<AtomicU64>,
 
     pub kernelIOThreadWaiting: CachePadded<AtomicBool>,
     pub config: QRwLock<Config>,
@@ -538,13 +540,14 @@ impl ShareSpace {
     pub fn New() -> Self {
         return ShareSpace {
             QInput: QRingBuf::New(MemoryDef::MSG_QLEN), //QMutex::new(VecDeque::with_capacity(MSG_QLEN)),
-            //QOutput: QRingBuf::New(MemoryDef::MSG_QLEN), //QMutex::new(VecDeque::with_capacity(MSG_QLEN)),
+            QOutput: QRingBuf::New(MemoryDef::MSG_QLEN), //QMutex::new(VecDeque::with_capacity(MSG_QLEN)),
             //pad: [0; 8],
             hostEpollfd: AtomicI32::new(0),
             hostEpollProcessing: CachePadded::new(QMutex::new(())),
 
             scheduler: task_mgr::Scheduler::default(),
             guestMsgCount: CachePadded::new(AtomicU64::new(0)),
+            hostProcessor: CachePadded::new(AtomicU64::new(0)),
             kernelIOThreadWaiting: CachePadded::new(AtomicBool::new(false)),
             config: QRwLock::new(Config::default()),
             logBuf: QMutex::new(None),
@@ -582,6 +585,36 @@ impl ShareSpace {
     pub fn AQHostInputPop(&self) -> Option<HostInputMsg> {
         let res = self.QInput.Pop();
         return res;
+    }
+
+    #[inline]
+    pub fn AQHostOutputPop(&self) -> Option<HostOutputMsg> {
+        return self.QOutput.Pop();
+    }
+
+    #[inline]
+    pub fn IncrHostProcessor(&self) {
+        self.hostProcessor.fetch_add(1, Ordering::SeqCst);
+    }
+
+    #[inline]
+    pub fn NeedHostProcess(&self) -> bool {
+        match self.hostProcessor.compare_exchange(0, 1, Ordering::SeqCst, Ordering::SeqCst) {
+            Ok(_) => return true,
+            Err(_) => return false,
+        }
+    }
+
+    // return Processor count after decrease
+    #[inline]
+    pub fn DecrHostProcessor(&self) -> u64 {
+        let cnt = self.hostProcessor.fetch_sub(1, Ordering::SeqCst);
+        return cnt - 1;
+    }
+
+    #[inline]
+    pub fn HostProcessor(&self) -> u64 {
+        return self.hostProcessor.load(Ordering::SeqCst);
     }
 
     #[inline]
