@@ -20,9 +20,7 @@ use super::super::config::*;
 #[derive(Clone, Debug)]
 pub enum Msg {
     //Qcall
-    Print(u64, &'static str),
     LoadProcessKernel(LoadProcessKernel),
-    LoadExecProcess(LoadExecProcess),
     ControlMsgCall(ControlMsgCall),
     ControlMsgRet(ControlMsgRet),
     GetStdfds(GetStdfds),
@@ -35,7 +33,6 @@ pub enum Msg {
     Seek(Seek),
     ReadLinkAt(ReadLinkAt),
     GetTimeOfDay(GetTimeOfDay),
-    Wait,
     IoCtl(IoCtl),
     Fcntl(Fcntl),
     Close(Close),
@@ -97,11 +94,9 @@ pub enum Msg {
     IOSendMsg(IOSendMsg),
     MMapFile(MMapFile),
     MUnmap(MUnmap),
-    UnMapPma(UnMapPma),
     NonBlockingPoll(NonBlockingPoll),
     NewTmpfsFile(NewTmpfsFile),
     IoUringSetup(IoUringSetup),
-    IoUringRegister(IoUringRegister),
     IoUringEnter(IoUringEnter),
     Statm(Statm),
     NewFd(NewFd),
@@ -207,11 +202,6 @@ pub struct IoCtl {
     pub fd: i32,
     pub cmd: u64,
     pub argp: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct UnMapPma {
-    pub addr: u64,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -689,12 +679,6 @@ pub struct LoadProcessKernel {
 }
 
 #[derive(Clone, Debug)]
-pub struct LoadExecProcess {
-    pub processAddr: u64,
-    pub len: usize,
-}
-
-#[derive(Clone, Debug)]
 pub struct ControlMsgCall {
     pub addr: u64,
     pub len: usize,
@@ -714,11 +698,19 @@ pub struct Print<'a> {
     pub str: &'a str,
 }
 
-#[derive(Debug)]
-pub struct Event<'a> {
+#[derive(Debug, Copy, Clone)]
+pub struct QMsg {
+    pub taskId: TaskIdQ,
     pub globalLock: bool,
     pub ret: u64,
-    pub msg: &'a mut Msg,
+    pub msg: u64,
 }
 
-
+impl QMsg {
+    #[inline]
+    pub fn GetMsg(&self) -> &'static mut Msg {
+        return unsafe {
+            &mut *(self.msg as * mut Msg)
+        }
+    }
+}

@@ -594,12 +594,12 @@ impl KVMVcpu {
                             let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                             let addr = regs.rbx;
 
-                            let eventAddr = addr as *mut Event; // as &mut qlib::Event;
-                            let event = unsafe {
+                            let eventAddr = addr as *mut QMsg; // as &mut qlib::Event;
+                            let qmsg = unsafe {
                                 &mut (*eventAddr)
                             };
 
-                            match self.qCall(addr, event) {
+                            match self.qCall(qmsg) {
                                 qcall::QcallRet::Normal => {
                                     /*info!("HYPERCALL_HCALL finish call {:x?}", unsafe {
                                         &mut (*eventAddr)

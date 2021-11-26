@@ -514,6 +514,7 @@ pub struct Str {
 #[repr(align(128))]
 pub struct ShareSpace {
     pub QInput: QRingBuf<HostInputMsg>, //QMutex<VecDeque<HostInputMsg>>,
+    //pub QOutput: QRingBuf<Event>, //QMutex<VecDeque<HostInputMsg>>,
 
     // add this pad can decrease the mariadb start time 25 sec to 12 sec
     //todo: root cause this. False share?
@@ -537,6 +538,7 @@ impl ShareSpace {
     pub fn New() -> Self {
         return ShareSpace {
             QInput: QRingBuf::New(MemoryDef::MSG_QLEN), //QMutex::new(VecDeque::with_capacity(MSG_QLEN)),
+            //QOutput: QRingBuf::New(MemoryDef::MSG_QLEN), //QMutex::new(VecDeque::with_capacity(MSG_QLEN)),
             //pad: [0; 8],
             hostEpollfd: AtomicI32::new(0),
             hostEpollProcessing: CachePadded::new(QMutex::new(())),
