@@ -51,7 +51,7 @@ pub struct PagePool {
 
 impl PagePool {
     pub fn PrintRefs(&self) {
-        error!("PagePool left is {:#x?}", self.refs);
+        //error!("PagePool left is {:#x?}", self.refs);
     }
 
     pub fn Ref(&mut self, addr: u64) -> Result<u64> {

@@ -698,19 +698,23 @@ pub struct Print<'a> {
     pub str: &'a str,
 }
 
-#[derive(Debug, Copy, Clone)]
-pub struct QMsg {
+#[derive(Debug)]
+pub struct QMsg <'a> {
     pub taskId: TaskIdQ,
     pub globalLock: bool,
     pub ret: u64,
-    pub msg: u64,
+    pub msg: &'a Msg,
 }
 
-impl QMsg {
-    #[inline]
-    pub fn GetMsg(&self) -> &'static mut Msg {
-        return unsafe {
-            &mut *(self.msg as * mut Msg)
-        }
-    }
+#[derive(Debug, Copy, Clone)]
+pub enum HostOutputMsg {
+    QCall(u64),
+    WaitFDAsync(WaitFDAsync),
 }
+
+#[derive(Clone, Default, Debug, Copy)]
+pub struct WaitFDAsync {
+    pub fd: i32,
+    pub mask: EventMask,
+}
+
