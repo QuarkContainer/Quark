@@ -47,6 +47,7 @@ ringbuf = "0.2.3"
 num_cpus = "1.13.0"
 buddy_system_allocator = "0.8.0"
 core_affinity = "0.5.10"
+cache-padded = "1.1.1"
 
 [dependencies.lazy_static]
 version = "1.4"

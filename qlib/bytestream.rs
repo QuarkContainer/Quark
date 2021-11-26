@@ -34,6 +34,7 @@ impl SocketBufIovs {
 /// 
 ///
 
+#[repr(align(128))]
 pub struct ByteStream {
     pub buf: &'static mut [u8],
     /// size of data available to consume by consumer

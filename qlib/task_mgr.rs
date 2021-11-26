@@ -20,6 +20,7 @@ use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
 use core::sync::atomic::AtomicU64;
 use alloc::string::String;
+use cache_padded::CachePadded;
 
 use super::MAX_VCPU_COUNT;
 use super::vcpu_mgr::*;
@@ -77,8 +78,10 @@ impl TaskIdQ {
 }
 
 #[derive(Default)]
+#[repr(C)]
+#[repr(align(128))]
 pub struct Scheduler {
-    pub queue: [TaskQueue; MAX_VCPU_COUNT],
+    pub queue: [CachePadded<TaskQueue>; MAX_VCPU_COUNT],
     pub vcpuCnt: AtomicUsize,
     pub taskCnt: AtomicUsize,
     pub readyTaskCnt: AtomicUsize,

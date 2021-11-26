@@ -19,7 +19,7 @@ use core::cmp::max;
 use core::mem::size_of;
 use core::ptr::NonNull;
 use buddy_system_allocator::Heap;
-
+use cache_padded::CachePadded;
 //use super::buddy_allocator::Heap;
 
 use super::super::mutex::*;
@@ -31,7 +31,7 @@ pub const FREE_BATCH: usize = 10; // free 10 blocks each time.
 pub const ORDER : usize = 33;
 
 pub struct ListAllocator {
-    pub bufs: [QMutex<FreeMemBlockMgr>; CLASS_CNT],
+    pub bufs: [CachePadded<QMutex<FreeMemBlockMgr>>; CLASS_CNT],
     pub heap: QMutex<Heap<ORDER>>,
     pub total: AtomicUsize,
     pub free: AtomicUsize,
@@ -46,23 +46,23 @@ pub trait OOMHandler {
 
 impl ListAllocator {
     pub const fn Empty() -> Self {
-        let bufs : [QMutex<FreeMemBlockMgr>; CLASS_CNT] = [
-            QMutex::new(FreeMemBlockMgr::New(0, 0)),
-            QMutex::new(FreeMemBlockMgr::New(0, 1)),
-            QMutex::new(FreeMemBlockMgr::New(0, 2)),
-            QMutex::new(FreeMemBlockMgr::New(128, 3)),
-            QMutex::new(FreeMemBlockMgr::New(128, 4)),
-            QMutex::new(FreeMemBlockMgr::New(128, 5)),
-            QMutex::new(FreeMemBlockMgr::New(64, 6)),
-            QMutex::new(FreeMemBlockMgr::New(64, 7)),
-            QMutex::new(FreeMemBlockMgr::New(64, 8)),
-            QMutex::new(FreeMemBlockMgr::New(32, 9)),
-            QMutex::new(FreeMemBlockMgr::New(32, 10)),
-            QMutex::new(FreeMemBlockMgr::New(16, 11)),
-            QMutex::new(FreeMemBlockMgr::New(1024, 12)),
-            QMutex::new(FreeMemBlockMgr::New(16, 13)),
-            QMutex::new(FreeMemBlockMgr::New(8, 14)),
-            QMutex::new(FreeMemBlockMgr::New(8, 15))
+        let bufs : [CachePadded<QMutex<FreeMemBlockMgr>>; CLASS_CNT] = [
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(0, 0))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(0, 1))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(0, 2))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(128, 3))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(128, 4))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(128, 5))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(64, 6))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(64, 7))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(64, 8))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(32, 9))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(32, 10))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(16, 11))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(1024, 12))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(16, 13))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(8, 14))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(8, 15)))
         ];
 
         return Self {
@@ -212,6 +212,7 @@ unsafe impl GlobalAlloc for ListAllocator {
 }
 
 /// FreeMemoryBlockMgr is used to manage heap memory block allocated by allocator
+#[repr(align(128))]
 pub struct FreeMemBlockMgr {
     pub size: usize,
     pub count: usize,

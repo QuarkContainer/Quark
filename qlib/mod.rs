@@ -60,6 +60,7 @@ use core::sync::atomic::AtomicI32;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 use self::mutex::*;
+use cache_padded::CachePadded;
 
 use super::asm::*;
 use self::task_mgr::*;
@@ -509,20 +510,21 @@ pub struct Str {
     pub len: u32
 }
 
+#[repr(C)]
 #[repr(align(128))]
 pub struct ShareSpace {
     pub QInput: QRingBuf<HostInputMsg>, //QMutex<VecDeque<HostInputMsg>>,
 
     // add this pad can decrease the mariadb start time 25 sec to 12 sec
     //todo: root cause this. False share?
-    pub pad: [u64; 8],
+    //pub pad: [u64; 8],
     pub hostEpollfd: AtomicI32,
-    pub hostEpollProcessing: QMutex<()>,
+    pub hostEpollProcessing: CachePadded<QMutex<()>>,
 
     pub scheduler: task_mgr::Scheduler,
-    pub guestMsgCount: AtomicU64,
+    pub guestMsgCount: CachePadded<AtomicU64>,
 
-    pub kernelIOThreadWaiting: AtomicBool,
+    pub kernelIOThreadWaiting: CachePadded<AtomicBool>,
     pub config: QRwLock<Config>,
 
     pub logBuf: QMutex<Option<ByteStream>>,
@@ -535,13 +537,13 @@ impl ShareSpace {
     pub fn New() -> Self {
         return ShareSpace {
             QInput: QRingBuf::New(MemoryDef::MSG_QLEN), //QMutex::new(VecDeque::with_capacity(MSG_QLEN)),
-            pad: [0; 8],
+            //pad: [0; 8],
             hostEpollfd: AtomicI32::new(0),
-            hostEpollProcessing: QMutex::new(()),
+            hostEpollProcessing: CachePadded::new(QMutex::new(())),
 
             scheduler: task_mgr::Scheduler::default(),
-            guestMsgCount: AtomicU64::new(0),
-            kernelIOThreadWaiting: AtomicBool::new(false),
+            guestMsgCount: CachePadded::new(AtomicU64::new(0)),
+            kernelIOThreadWaiting: CachePadded::new(AtomicBool::new(false)),
             config: QRwLock::new(Config::default()),
             logBuf: QMutex::new(None),
             logfd: AtomicI32::new(-1),
