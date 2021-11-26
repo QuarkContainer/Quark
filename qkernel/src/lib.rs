@@ -37,6 +37,7 @@
 extern crate serde_derive;
 extern crate serde_json;
 extern crate serde;
+extern crate cache_padded;
 
 #[macro_use]
 extern crate alloc;
