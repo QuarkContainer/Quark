@@ -93,15 +93,6 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn LoadExecProcess(processAddr: u64, len: usize) -> i64 {
-        let mut msg = Msg::LoadExecProcess(LoadExecProcess {
-            processAddr: processAddr,
-            len: len,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
     pub fn Fallocate(fd: i32, mode: i32, offset: i64, len: i64) -> i64 {
         let mut msg = Msg::Fallocate(Fallocate {
             fd,
@@ -747,17 +738,6 @@ impl HostSpace {
         return Self::HCall(&mut msg, true) as i64
     }
 
-    pub fn IoUringRegister(fd: i32, Opcode: u32, arg: u64, nrArgs: u32) -> i64 {
-        let mut msg = Msg::IoUringRegister(IoUringRegister {
-            fd,
-            Opcode,
-            arg,
-            nrArgs,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
     pub fn IoUringEnter(idx: usize, toSubmit: u32, minComplete: u32, flags: u32) -> i64 {
         let mut msg = Msg::IoUringEnter(IoUringEnter {
             idx,
@@ -834,13 +814,6 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    //unblock wait
-    pub fn Wait() {
-        info!("start send qlib::Msg::Wait");
-        let mut msg = Msg::Wait;
-        HostSpace::Call(&mut msg, true);
-    }
-
     pub fn MMapFile(len: u64, fd: i32, offset: u64, prot: i32) -> i64 {
         assert!(len % MemoryDef::PMD_SIZE == 0, "offset is {:x}, len is {:x}", offset, len);
         assert!(offset % MemoryDef::PMD_SIZE == 0, "offset is {:x}, len is {:x}", offset, len);
@@ -882,10 +855,13 @@ impl HostSpace {
     }
 
     fn HCall(msg: &mut Msg, lock: bool) -> u64 {
-        let mut event = Event {
+        let taskId = Task::Current().GetTaskIdQ();
+
+        let mut event = QMsg {
+            taskId: taskId,
             globalLock: lock,
             ret: 0,
-            msg: msg
+            msg: msg as * const _ as u64
         };
 
         HyperCall64(HYPERCALL_HCALL, &mut event as * const _ as u64, 0, 0);
