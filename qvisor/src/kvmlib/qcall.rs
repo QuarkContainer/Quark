@@ -89,7 +89,6 @@ impl KVMVcpu {
                 return 0;
             }
 
-
             sharespace.scheduler.VcpuSetWaiting(self.id);
 
             if !(sharespace.ReadyTaskCnt(self.id) > 0 ||

@@ -840,9 +840,17 @@ impl HostSpace {
         HostSpace::HCall(&mut msg, true);
     }
 
+    pub fn WaitFDAsync(fd: i32, mask: EventMask) {
+        let msg = HostOutputMsg::WaitFDAsync(WaitFDAsync {
+            fd,
+            mask
+        });
+
+        super::SHARESPACE.AQCall(&msg);
+    }
 
     pub fn WaitFD(fd: i32, mask: EventMask) {
-        let mut msg = Msg::WaitFD(qmsg::qcall::WaitFD {
+        let mut msg = Msg::WaitFD(WaitFD {
             fd,
             mask
         });
@@ -854,19 +862,17 @@ impl HostSpace {
         //return Self::HCall(msg, true);
         let current = Task::Current().GetTaskIdQ();
 
-        let mut qMsg = QMsg {
+        let qMsg = QMsg {
             taskId: current,
             globalLock: true,
             ret: 0,
             msg: msg
         };
 
-        super::SHARESPACE.QCall(&mut qMsg);
+        let addr = &qMsg as *const _ as u64;
+        let om = HostOutputMsg::QCall(addr);
 
-        if super::SHARESPACE.NeedHostProcess() {
-            HyperCall64(HYPERCALL_QCALL, 0, 0, 0);
-        }
-
+        super::SHARESPACE.AQCall(&om);
         taskMgr::Wait();
         return qMsg.ret;
     }
@@ -969,16 +975,21 @@ pub fn GetSockOptI32(sockfd: i32, level: i32, optname: i32) -> Result<i32> {
 }
 
 impl<'a> ShareSpace {
-    pub fn QCall(&self, item: &mut QMsg) {
-        let addr = item as *const _ as u64;
-        let msg = HostOutputMsg::QCall(addr);
+    pub fn AQCall(&self, msg: &HostOutputMsg) {
         loop {
-            match self.QOutput.TryPush(&msg) {
+            match self.QOutput.TryPush(msg) {
                 Ok(()) => {
                     break;
                 }
                 Err(_) => (),
             };
+        }
+
+        if super::SHARESPACE.HostProcessor() == 0 {
+            let vcpuId = super::SHARESPACE.scheduler.WakeOne();
+            if vcpuId < 0 &&super::SHARESPACE.NeedHostProcess()  {
+                HyperCall64(HYPERCALL_QCALL, 0, 0, 0);
+            }
         }
     }
 

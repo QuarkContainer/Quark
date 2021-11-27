@@ -103,6 +103,7 @@ pub const HYPERCALL_VCPU_FREQ: u16 = 19;
 pub const HYPERCALL_VCPU_YIELD: u16 = 20;
 pub const HYPERCALL_VCPU_DEBUG: u16 = 21;
 pub const HYPERCALL_VCPU_PRINT: u16 = 22;
+pub const HYPERCALL_VCPU_WAIT: u16 = 23;
 
 pub const DUMMY_TASKID: TaskId = TaskId::New(0xffff_ffff);
 
