@@ -709,13 +709,9 @@ impl HostSpace {
     }
 
     pub fn VcpuWait(addr: u64, count: usize) -> i64 {
-        let mut msg = Msg::VcpuWait(VcpuWait {
-            addr,
-            count,
-        });
-
-        let ret = Self::HCall(&mut msg, false) as i64;
-        return ret;
+        let mut ret : i64 = 0;
+        HyperCall64(HYPERCALL_VCPU_WAIT, addr, count as u64, &mut ret as * mut _ as u64);
+        return ret as i64
     }
 
     pub fn NewTmpfsFile(typ: TmpfsFileType, addr: u64) -> i64 {
