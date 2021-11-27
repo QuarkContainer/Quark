@@ -143,7 +143,7 @@ impl Notifier {
     }
 
     fn waitfd(fd: i32, mask: EventMask) -> Result<()> {
-        HostSpace::WaitFD(fd, mask);
+        HostSpace::WaitFDAsync(fd, mask);
 
         return Ok(())
     }

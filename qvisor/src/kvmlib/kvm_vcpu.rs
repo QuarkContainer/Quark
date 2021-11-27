@@ -629,6 +629,10 @@ impl KVMVcpu {
                             }
                         }
 
+                        qlib::HYPERCALL_VCPU_WAIT => {
+
+                        }
+
                         _ => info!("Unknow hyper call!!!!! address is {}", addr)
                     }
                 }

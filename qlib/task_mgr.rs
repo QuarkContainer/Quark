@@ -178,17 +178,17 @@ impl Scheduler {
         self.VcpuArr[vcpuId].SetState(VcpuState::Searching)
     }
 
-    pub fn WakeOne(&self) {
+    pub fn WakeOne(&self) -> i64 {
         loop {
             let mask = self.vcpuWaitMask.load(Ordering::Acquire);
 
             let vcpuId = mask.trailing_zeros() as usize;
             if vcpuId >= 64 {
-                return;
+                return -1;
             }
 
             if self.WakeIdleCPU(vcpuId) {
-                return
+                return vcpuId as i64
             }
         }
     }
