@@ -630,7 +630,31 @@ impl KVMVcpu {
                         }
 
                         qlib::HYPERCALL_VCPU_WAIT => {
+                            let sharespace = self.ShareSpace();
+                            sharespace.IncrHostProcessor();
 
+                            self.GuestMsgProcess(sharespace);
+                            // last processor in host
+                            if sharespace.DecrHostProcessor() == 0 {
+                                self.GuestMsgProcess(sharespace);
+                            }
+
+                            let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                            let addr = regs.rbx;
+                            let count = regs.rcx as usize;
+                            let retAddr = regs.rdi;
+                            let ret = self.VcpuWait(addr, count) as u64;
+                            unsafe {
+                                *(retAddr as * mut u64) = ret;
+                            }
+
+                            sharespace.IncrHostProcessor();
+
+                            self.GuestMsgProcess(sharespace);
+                            // last processor in host
+                            if sharespace.DecrHostProcessor() == 0 {
+                                self.GuestMsgProcess(sharespace);
+                            }
                         }
 
                         _ => info!("Unknow hyper call!!!!! address is {}", addr)
