@@ -77,33 +77,6 @@ pub enum QcallRet {
 }
 
 impl KVMVcpu {
-    pub fn VcpuWait(&self, addr: u64, count: usize) -> i64 {
-        let sharespace = self.ShareSpace();
-        loop {
-            if !super::runc::runtime::vm::IsRunning() {
-                return -1
-            }
-
-            //short term workaround, need to change back to unblock my sql scenario.
-            if sharespace.scheduler.GlobalReadyTaskCnt() > 0 {
-                return 0;
-            }
-
-            sharespace.scheduler.VcpuSetWaiting(self.id);
-
-            if !(sharespace.ReadyTaskCnt(self.id) > 0 ||
-                sharespace.ReadyTaskCnt(0) > 0) {
-                match sharespace.scheduler.WaitVcpu(sharespace, self.id, addr, count) {
-                    Ok(count) => return count,
-                    Err(Error::Exit) => (),
-                    Err(e) => panic!("HYPERCALL_HLT wait fail with error {:?}", e),
-                }
-            }
-
-            self.ShareSpace().scheduler.VcpuSetSearching(self.id);
-        }
-    }
-
     //return : true(push the result back), false(block wait)
     pub fn qCall(&self, msg: &'static Msg) -> u64 {
         let mut ret = 0;

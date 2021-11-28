@@ -128,17 +128,19 @@ impl Scheduler {
 
     #[inline(always)]
     pub fn IncReadyTaskCount(&self) -> usize {
-        return self.readyTaskCnt.fetch_add(1, Ordering::AcqRel) + 1;
+        let cnt = self.readyTaskCnt.fetch_add(1, Ordering::AcqRel) + 1;
+        return cnt
     }
 
     #[inline(always)]
     pub fn DecReadyTaskCount(&self) -> usize {
-        return self.readyTaskCnt.fetch_sub(1, Ordering::AcqRel) - 1;
+        let cnt = self.readyTaskCnt.fetch_sub(1, Ordering::AcqRel) - 1;
+        return cnt;
     }
 
     pub fn ScheduleQ(&self, task: TaskId, vcpuId: u64) {
-        self.IncReadyTaskCount();
         self.queue[vcpuId as usize].Enqueue(task);
+        let _cnt = self.IncReadyTaskCount();
 
         //error!("ScheduleQ task {:x?}, vcpuId {}", task, vcpuId);
         if vcpuId == 0 {

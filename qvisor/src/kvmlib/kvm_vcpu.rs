@@ -630,30 +630,17 @@ impl KVMVcpu {
                         }
 
                         qlib::HYPERCALL_VCPU_WAIT => {
-                            let sharespace = self.ShareSpace();
-                            sharespace.IncrHostProcessor();
-
-                            self.GuestMsgProcess(sharespace);
-                            // last processor in host
-                            if sharespace.DecrHostProcessor() == 0 {
-                                self.GuestMsgProcess(sharespace);
-                            }
-
                             let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                             let addr = regs.rbx;
                             let count = regs.rcx as usize;
                             let retAddr = regs.rdi;
-                            let ret = self.VcpuWait(addr, count) as u64;
-                            unsafe {
-                                *(retAddr as * mut u64) = ret;
+                            let ret = self.VcpuWait(addr, count);
+                            if ret == -1 {
+                                return Ok(())
                             }
 
-                            sharespace.IncrHostProcessor();
-
-                            self.GuestMsgProcess(sharespace);
-                            // last processor in host
-                            if sharespace.DecrHostProcessor() == 0 {
-                                self.GuestMsgProcess(sharespace);
+                            unsafe {
+                                *(retAddr as * mut u64) = ret as u64;
                             }
                         }
 
@@ -706,6 +693,68 @@ impl KVMVcpu {
         Ok(())
     }
 
+    pub fn VcpuWait(&self, addr: u64, count: usize) -> i64 {
+        let sharespace = self.ShareSpace();
+        while sharespace.scheduler.GlobalReadyTaskCnt() == 0 {
+            if !super::runc::runtime::vm::IsRunning() {
+                return -1
+            }
+
+            {
+                sharespace.scheduler.VcpuSetRunning(self.id);
+                defer!(self.ShareSpace().scheduler.VcpuSetSearching(self.id));
+
+                sharespace.IncrHostProcessor();
+                self.GuestMsgProcess(sharespace);
+
+                defer!({
+                    // last processor in host
+                    if sharespace.DecrHostProcessor() == 0 {
+                        self.GuestMsgProcess(sharespace);
+                    }
+                });
+
+                for _ in 0..10 {
+                    self.GuestMsgProcess(sharespace);
+                    //short term workaround, need to change back to unblock my sql scenario.
+                    if sharespace.scheduler.GlobalReadyTaskCnt() > 0 {
+                        return 0;
+                    }
+
+                    match sharespace.scheduler.WaitVcpu(sharespace, self.id, addr, count, false) {
+                        Ok(count) => {
+                            if count > 0 {
+                                return count
+                            }
+                        },
+                        Err(Error::Exit) => return -1,
+                        Err(e) => panic!("HYPERCALL_HLT wait fail with error {:?}", e),
+                    }
+
+                    //std::thread::yield_now();
+                    //std::thread::yield_now();
+                }
+            }
+
+            sharespace.scheduler.VcpuSetWaiting(self.id);
+            defer!(self.ShareSpace().scheduler.VcpuSetSearching(self.id));
+
+            if sharespace.scheduler.GlobalReadyTaskCnt() != 0 {
+                return 0;
+            }
+            let ret = sharespace.scheduler.WaitVcpu(sharespace, self.id, addr, count, true);
+            match ret {
+                Ok(count) => {
+                    return count
+                },
+                Err(Error::Exit) => return -1,
+                Err(e) => panic!("HYPERCALL_HLT wait fail with error {:?}", e),
+            }
+        }
+
+        return 0;
+    }
+
     pub fn GuestMsgProcess(&self, sharespace: &'static ShareSpace) {
         loop  {
             let msg = sharespace.AQHostOutputPop();
@@ -752,11 +801,11 @@ impl Scheduler {
         }
     }
 
-    pub fn WaitVcpu(&self, sharespace: &ShareSpace, vcpuId: usize, addr: u64, count: usize) -> Result<i64> {
+    pub fn WaitVcpu(&self, sharespace: &ShareSpace, vcpuId: usize, addr: u64, count: usize, block: bool) -> Result<i64> {
         self.vcpuWaitMask.fetch_or(1<<vcpuId, Ordering::SeqCst);
         defer!(self.vcpuWaitMask.fetch_and(!(1<<vcpuId), Ordering::SeqCst););
 
-        return self.VcpuArr[vcpuId].VcpuWait(sharespace, addr, count);
+        return self.VcpuArr[vcpuId].VcpuWait(sharespace, addr, count, block);
     }
 }
 
@@ -814,15 +863,18 @@ impl CPULocal {
         self.data = 1;
     }
 
-    pub fn VcpuWait(&self, sharespace: &ShareSpace, addr: u64, count: usize) -> Result<i64> {
+    pub fn VcpuWait(&self, sharespace: &ShareSpace, addr: u64, count: usize, block: bool) -> Result<i64> {
         let mut events = [epoll_event { events: 0, u64: 0 }; 2];
 
-        self.SetWaiting();
-        defer!(self.SetRunning());
+        let time = if block {
+            -1
+        } else {
+            0
+        };
 
         loop {
             let nfds = unsafe {
-                epoll_wait(self.epollfd, &mut events[0], 2, -1)
+                epoll_wait(self.epollfd, &mut events[0], 2, time)
             };
 
             if !super::runc::runtime::vm::IsRunning() {
@@ -836,6 +888,10 @@ impl CPULocal {
 
             let mut wakeVcpu = false;
             let mut hasMsg = false;
+
+            if nfds == 0 {
+                return Ok(0)
+            }
 
             if nfds == 2 {
                 wakeVcpu = true;
