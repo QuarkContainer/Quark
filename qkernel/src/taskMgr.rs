@@ -143,7 +143,8 @@ pub fn WaitFn() {
                     debug!("vcpu {} sleep", CPULocal::CpuId());
                     GUEST_NOTIFIER.VcpuWait();
                     debug!("vcpu {} wakeup", CPULocal::CpuId());
-
+                } else {
+                    //error!("Waitfd None {}", SHARESPACE.scheduler.Print());
                 }
 
                 SHARESPACE.scheduler.DecreaseHaltVcpuCnt();
@@ -317,7 +318,8 @@ impl Scheduler {
             match task {
                 None => return None,
                 Some(taskId) => {
-                    self.readyTaskCnt.fetch_sub(1, Ordering::SeqCst);
+                    let _cnt = self.DecReadyTaskCount();
+                    //defer!(error!("DecReadyTaskCount {:x?}/{}", taskId, cnt));
                     assert!(vcpuId==taskId.GetTask().QueueId(),
                         "vcpuId is {:x}, taskId.GetTask().QueueId() is {:x}, task {:x?}/{:x?}", vcpuId, taskId.GetTask().QueueId(), taskId, taskId.GetTask().guard);
                     if taskId.GetTask().context.Ready() != 0 || taskId.data == Task::Current().taskId {
