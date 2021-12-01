@@ -336,7 +336,7 @@ impl Kernel {
         task.mountNS = mns.clone();
 
         let mut remainTraversals = MAX_SYMLINK_TRAVERSALS;
-        let cwdDir = mns.FindInode(task, &root, None, &args.WorkingDirectory, &mut remainTraversals).expect("can't get cwd dirent");
+        let cwdDir = mns.FindDirent(task, &root, None, &args.WorkingDirectory, &mut remainTraversals, true).expect("can't get cwd dirent");
         task.fsContext.SetWorkDirectory(&cwdDir);
 
         let config = TaskConfig {

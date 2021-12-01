@@ -334,7 +334,7 @@ impl MountNs {
         }
     }
 
-    pub fn FindLinkNew(&self, task: &Task, root: &Dirent, wd: Option<Dirent>, path: &str, remainingTraversals: &mut u32, resolve: bool) -> Result<Dirent> {
+    pub fn FindDirent(&self, task: &Task, root: &Dirent, wd: Option<Dirent>, path: &str, remainingTraversals: &mut u32, resolve: bool) -> Result<Dirent> {
         if path.len() == 0 {
             return Err(Error::SysError(SysErr::ENOENT))
         }
@@ -446,92 +446,6 @@ impl MountNs {
         }
     }
 
-    pub fn FindLink(&self, task: &Task, root: &Dirent, wd: Option<Dirent>, path: &str, remainingTraversals: &mut u32) -> Result<Dirent> {
-        if path.len() == 0 {
-            return Err(Error::SysError(SysErr::ENOENT))
-        }
-
-        let (mut current, mut first, mut remain) = match self.InitPath(root, &wd, path) {
-            None => return Ok(root.clone()),
-            Some(res) => res
-        };
-
-        loop {
-            let currentInode = current.Inode();
-            if !Arc::ptr_eq(&current, root) {
-                if !currentInode.StableAttr().IsDir() {
-                    return Err(Error::SysError(SysErr::ENOTDIR))
-                }
-
-                currentInode.CheckPermission(task, &PermMask {
-                    execute: true,
-                    ..Default::default()
-                })?
-            }
-
-            let next = match current.Walk(task, root, first) {
-                Err(e) => {
-                    current.ExtendReference();
-                    return Err(e);
-                }
-                Ok(n) => n,
-            };
-
-            if remain != "" {
-                current = self.resolve(task, root, &next, remainingTraversals)?;
-            } else {
-                next.ExtendReference();
-                return Ok(next)
-            }
-
-            let (tfirst, tremain) = SplitFirst(remain);
-            first = tfirst;
-            remain = tremain;
-        }
-    }
-
-    pub fn FindInode(&self, task: &Task, root: &Dirent, wd: Option<Dirent>, path: &str, remainingTraversals: &mut u32) -> Result<Dirent> {
-        let d = self.FindLink(task, root, wd, path, remainingTraversals)?;
-        let ret = self.resolve(task, root, &d, remainingTraversals);
-        return ret;
-    }
-
-    pub fn resolve(&self, task: &Task, root: &Dirent, node: &Dirent, remainingTraversals: &mut u32) -> Result<Dirent> {
-        let inode = node.Inode();
-        let target = inode.GetLink(task);
-
-        match target {
-            Ok(target) => {
-                if *remainingTraversals == 0 {
-                    return Err(Error::SysError(SysErr::ELOOP))
-                }
-
-                return Ok(target)
-            }
-            Err(Error::SysError(SysErr::ENOLINK)) => {
-                return Ok(node.clone())
-            }
-            Err(Error::ErrResolveViaReadlink) => {
-                if *remainingTraversals == 0 {
-                    return Err(Error::SysError(SysErr::ELOOP))
-                }
-
-                let targetPath = inode.ReadLink(task)?;
-                *remainingTraversals -= 1;
-
-                let wd = match &(node.0).0.lock().Parent {
-                    None => None,
-                    Some(ref wd) => Some(wd.clone()),
-                };
-
-                let d = self.FindInode(task, root, wd, &targetPath, remainingTraversals)?;
-
-                return Ok(d)
-            }
-            Err(err) => Err(err)
-        }
-    }
-
     pub fn ResolveExecutablePath(&self, task: &Task, wd: &str, name: &str, paths: &Vec<String>) -> Result<String> {
         if IsAbs(name) {
             return Ok(name.to_string());
@@ -556,8 +470,7 @@ impl MountNs {
             let binPath = Join(p, name);
             let mut traversals = MAX_SYMLINK_TRAVERSALS;
 
-            let d = self.FindInode(task, &root, None, &binPath, &mut traversals);
-
+            let d = self.FindDirent(task, &root, None, &binPath, &mut traversals, true);
             let d = match d {
                 Err(Error::SysError(SysErr::ENOENT)) | Err(Error::SysError(SysErr::EACCES)) => continue,
                 Err(error) => return Err(error),
