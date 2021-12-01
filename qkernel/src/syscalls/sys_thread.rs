@@ -164,7 +164,7 @@ pub fn SysExecve(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         let cwd = fscontex.lock().cwd.clone();
         let root = fscontex.lock().root.clone();
         let mut remainingTraversals = 40;
-        let d = task.mountNS.FindInode(task, &root, Some(cwd), &fileName, &mut remainingTraversals)?;
+        let d = task.mountNS.FindDirent(task, &root, Some(cwd), &fileName, &mut remainingTraversals, true)?;
         d.MyFullName()
     };
 

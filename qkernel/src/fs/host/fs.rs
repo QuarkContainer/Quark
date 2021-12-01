@@ -105,7 +105,7 @@ pub fn InstallWhitelist(task: &Task, m: &MountNs, inputPaths: &Vec<String>) -> R
             let current = String::from_utf8(s[..j].to_vec()).unwrap();
 
             let mut remainingTraversals = MAX_TRAVERSALS;
-            let d = m.FindLink(task, &root, None, &current, &mut remainingTraversals);
+            let d = m.FindDirent(task, &root, None, &current, &mut remainingTraversals, false);
             let dir = match d {
                 Err(e) => {
                     info!("populate failed for {}, {:?}", current, e);

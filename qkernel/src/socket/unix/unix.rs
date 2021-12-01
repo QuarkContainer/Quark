@@ -369,7 +369,7 @@ pub fn ExtractEndpoint(task: &Task, sockAddr: &[u8]) -> Result<BoundEndpoint> {
     let cwd = task.fsContext.WorkDirectory();
     let mut remainingTraversals = 10; //DefaultTraversalLimit
     let mns = task.Thread().MountNamespace();
-    let d = mns.FindInode(task, &root, Some(cwd), &path, &mut remainingTraversals)?;
+    let d = mns.FindDirent(task, &root, Some(cwd), &path, &mut remainingTraversals, true)?;
 
     // Extract the endpoint if one is there.
     let inode = d.Inode();
@@ -498,7 +498,7 @@ impl SockOperations for UnixSocketOperations {
                 };
 
                 let mut remainingTraversals = 10;
-                d = task.Thread().MountNamespace().FindInode(task, &root, Some(cwd), &subpath.to_string(), &mut remainingTraversals)?;
+                d = task.Thread().MountNamespace().FindDirent(task, &root, Some(cwd), &subpath.to_string(), &mut remainingTraversals, true)?;
                 name = &p[lastSlash as usize + 1..];
             }
 

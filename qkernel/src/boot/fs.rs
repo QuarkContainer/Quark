@@ -260,7 +260,7 @@ fn MountSubmount(task: &Task, config: &config::Config, mns: &MountNs, root: &Dir
     }
 
     let mut maxTraversals = 0;
-    let dirent = mns.FindInode(task, root, Some(root.clone()), &m.destination, &mut maxTraversals)?;
+    let dirent = mns.FindDirent(task, root, Some(root.clone()), &m.destination, &mut maxTraversals, true)?;
     mns.Mount(&dirent, &inode)?;
 
     info!("Mounted {} to {} type {}", m.source, m.destination, m.typ);

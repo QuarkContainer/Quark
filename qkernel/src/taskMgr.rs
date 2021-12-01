@@ -314,33 +314,38 @@ impl Scheduler {
 
         let count = self.queue[vcpuId].lock().len();
         for _ in 0..count {
-            let task = self.queue[vcpuId].Dequeue();
-            match task {
-                None => return None,
-                Some(taskId) => {
-                    let _cnt = self.DecReadyTaskCount();
-                    //defer!(error!("DecReadyTaskCount {:x?}/{}", taskId, cnt));
-                    assert!(vcpuId==taskId.GetTask().QueueId(),
-                        "vcpuId is {:x}, taskId.GetTask().QueueId() is {:x}, task {:x?}/{:x?}", vcpuId, taskId.GetTask().QueueId(), taskId, taskId.GetTask().guard);
-                    if taskId.GetTask().context.Ready() != 0 || taskId.data == Task::Current().taskId {
-                        //the task is in the queue, but the context has not been setup
-                        if currentCpuId != vcpuId { //stealing
-                            //error!("cpu currentCpuId {} stealing task {:x?} from cpu {}", currentCpuId, taskId, vcpuId);
-
-                            taskId.GetTask().SetQueueId(currentCpuId);
-                        } else {
-                            if count > 1 { // current CPU has more task, try to wake other vcpu to handle
-                                self.WakeOne();
-                            }
-                        }
-
-                        //error!("GetNextForCpu task is {:x?}", taskId);
-                        return task
-                    }
-
-                    self.ScheduleQ(taskId, vcpuId as u64);
+            let task = {
+                let mut queue = self.queue[vcpuId].lock();
+                let task = queue.pop_front();
+                if task.is_none() {
+                    return None;
                 }
+
+                let _cnt = self.DecReadyTaskCount();
+                task
+            };
+
+            let taskId = task.unwrap();
+
+            assert!(vcpuId==taskId.GetTask().QueueId(),
+            "vcpuId is {:x}, taskId.GetTask().QueueId() is {:x}, task {:x?}/{:x?}", vcpuId, taskId.GetTask().QueueId(), taskId, taskId.GetTask().guard);
+            if taskId.GetTask().context.Ready() != 0 || taskId.data == Task::Current().taskId {
+                //the task is in the queue, but the context has not been setup
+                if currentCpuId != vcpuId { //stealing
+                    //error!("cpu currentCpuId {} stealing task {:x?} from cpu {}", currentCpuId, taskId, vcpuId);
+
+                    taskId.GetTask().SetQueueId(currentCpuId);
+                } else {
+                    if count > 1 { // current CPU has more task, try to wake other vcpu to handle
+                        self.WakeOne();
+                    }
+                }
+
+                //error!("GetNextForCpu task is {:x?}", taskId);
+                return task
             }
+
+            self.ScheduleQ(taskId, vcpuId as u64);
         }
 
         return None;

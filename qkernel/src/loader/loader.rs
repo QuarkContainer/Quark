@@ -108,7 +108,7 @@ pub fn OpenPath(task: &mut Task, filename: &str, maxTraversals: u32) -> Result<(
     let root = fscontex.lock().root.clone();
     let mut remainingTraversals = maxTraversals;
 
-    let d = task.mountNS.FindInode(task, &root, Some(cwd), filename, &mut remainingTraversals)?;
+    let d = task.mountNS.FindDirent(task, &root, Some(cwd), filename, &mut remainingTraversals, true)?;
 
     let perms = PermMask {
         read: true,

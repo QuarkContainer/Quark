@@ -81,7 +81,7 @@ pub fn fileOpOn(task: &Task, dirFd: i32, path: &str, resolve: bool,
     let root = task.Root();
     let mut remainTraversals = MAX_SYMLINK_TRAVERSALS;
 
-    d = task.mountNS.FindLinkNew(task, &root, rel, path, &mut remainTraversals, resolve)?;
+    d = task.mountNS.FindDirent(task, &root, rel, path, &mut remainTraversals, resolve)?;
 
     /*if resolve {
         d = task.mountNS.FindInode(task, &root, rel, path, &mut remainTraversals)?;
@@ -310,7 +310,7 @@ pub fn createAt(task: &Task, dirFd: i32, addr: u64, flags: u32, mode: FileMode) 
                 return Err(Error::SysError(SysErr::ENOTDIR))
             }
 
-            found = match mnt.FindLink(task, root, Some(parent.clone()), &name, &mut remainingTraversals) {
+            found = match mnt.FindDirent(task, root, Some(parent.clone()), &name, &mut remainingTraversals, false) {
                 Ok(d) => d,
                 Err(e) => {
                     err = e;
@@ -358,7 +358,7 @@ pub fn createAt(task: &Task, dirFd: i32, addr: u64, flags: u32, mode: FileMode) 
             remainingTraversals -= 1;
 
             let (newParentPath, newName) = SplitLast(&path);
-            let newParent = match mnt.FindInode(task, root, Some(parent.clone()), &newParentPath.to_string(), &mut remainingTraversals) {
+            let newParent = match mnt.FindDirent(task, root, Some(parent.clone()), &newParentPath.to_string(), &mut remainingTraversals, true) {
                 Err(e) => {
                     err = e;
                     break
@@ -1123,7 +1123,7 @@ fn mkdirAt(task: &Task, dirFd: i32, addr: u64, mode: FileMode) -> Result<i64> {
         }
 
         let mut remainingTraversals = MAX_SYMLINK_TRAVERSALS;
-        let res = task.mountNS.FindInode(task, root, Some(d.clone()), name, &mut remainingTraversals);
+        let res = task.mountNS.FindDirent(task, root, Some(d.clone()), name, &mut remainingTraversals, true);
 
         match res {
             Ok(_) => Err(Error::SysError(SysErr::EEXIST)),
