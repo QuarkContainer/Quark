@@ -19,6 +19,7 @@ use super::asm::*;
 use super::IOURING;
 use super::qlib::vcpu_mgr::*;
 use super::qlib::singleton::*;
+use super::SHARESPACE;
 
 pub static VCPU_COUNT : Singleton<AtomicUsize> = Singleton::<AtomicUsize>::New();
 pub static CPU_LOCAL : Singleton<&'static [CPULocal]> = Singleton::<&'static [CPULocal]>::New();
@@ -148,10 +149,6 @@ impl CPULocal {
         return Self::Myself().pendingFreeStack.load(Ordering::SeqCst);
     }
 
-    pub fn SetCPUState(state: VcpuState) {
-        Self::Myself().SetState(state);
-    }
-
     pub fn CPUState() -> VcpuState {
         return Self::Myself().State();
     }
@@ -162,6 +159,13 @@ impl CPULocal {
 
     pub fn Wakeup(&self) {
         IOURING.EventfdWrite(self.eventfd);
+    }
+
+    pub fn SwitchToRunning(&self) {
+        let _searchingCnt = self.ToRunning(&SHARESPACE);
+        /*if searchingCnt == 0 {
+            SHARESPACE.scheduler.WakeOne();
+        }*/
     }
 }
 

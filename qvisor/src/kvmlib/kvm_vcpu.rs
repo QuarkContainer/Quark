@@ -702,9 +702,6 @@ impl KVMVcpu {
             }
 
             {
-                sharespace.scheduler.VcpuSetRunning(self.id);
-                defer!(self.ShareSpace().scheduler.VcpuSetSearching(self.id));
-
                 sharespace.IncrHostProcessor();
                 self.GuestMsgProcess(sharespace);
 
@@ -736,9 +733,6 @@ impl KVMVcpu {
                     //std::thread::yield_now();
                 }
             }
-
-            sharespace.scheduler.VcpuSetWaiting(self.id);
-            defer!(self.ShareSpace().scheduler.VcpuSetSearching(self.id));
 
             if sharespace.scheduler.GlobalReadyTaskCnt() != 0 {
                 return 0;
@@ -874,9 +868,11 @@ impl CPULocal {
         };
 
         loop {
+            self.ToWaiting(sharespace);
             let nfds = unsafe {
                 epoll_wait(self.epollfd, &mut events[0], 2, time)
             };
+            self.ToSearch(sharespace);
 
             if !super::runc::runtime::vm::IsRunning() {
                 return Err(Error::Exit)

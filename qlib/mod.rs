@@ -528,6 +528,7 @@ pub struct ShareSpace {
     pub scheduler: task_mgr::Scheduler,
     pub guestMsgCount: CachePadded<AtomicU64>,
     pub hostProcessor: CachePadded<AtomicU64>,
+    pub VcpuSearchingCnt: CachePadded<AtomicU64>,
 
     pub kernelIOThreadWaiting: CachePadded<AtomicBool>,
     pub config: QRwLock<Config>,
@@ -546,6 +547,7 @@ impl ShareSpace {
             //pad: [0; 8],
             hostEpollfd: AtomicI32::new(0),
             hostEpollProcessing: CachePadded::new(QMutex::new(())),
+            VcpuSearchingCnt: CachePadded::new(AtomicU64::new(0)),
 
             scheduler: task_mgr::Scheduler::default(),
             guestMsgCount: CachePadded::new(AtomicU64::new(0)),
@@ -597,6 +599,16 @@ impl ShareSpace {
     #[inline]
     pub fn IncrHostProcessor(&self) {
         self.hostProcessor.fetch_add(1, Ordering::SeqCst);
+    }
+
+    pub fn IncrVcpuSearching(&self) -> u64 {
+        let ret = self.VcpuSearchingCnt.fetch_add(1, Ordering::SeqCst);
+        return ret + 1;
+    }
+
+    pub fn DecrVcpuSearching(&self) -> u64 {
+        let ret = self.VcpuSearchingCnt.fetch_sub(1, Ordering::SeqCst);
+        return ret - 1;
     }
 
     #[inline]

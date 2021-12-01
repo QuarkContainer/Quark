@@ -427,6 +427,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
         //PerfGoto(PerfType::Kernel);
     }
 
+    SHARESPACE.IncrVcpuSearching();
     taskMgr::AddNewCpu();
     RegisterSysCall(syscall_entry as u64);
 

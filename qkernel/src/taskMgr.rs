@@ -127,13 +127,11 @@ pub fn IOWait() {
 }
 
 pub fn WaitFn() {
-    CPULocal::SetCPUState(VcpuState::Searching);
     loop {
         let next = SHARESPACE.scheduler.GetNext();
 
         match next {
             None => {
-                CPULocal::SetCPUState(VcpuState::Waiting);
                 SHARESPACE.scheduler.IncreaseHaltVcpuCnt();
 
                 // if there is memory needs free and freed, continue free them
@@ -148,14 +146,13 @@ pub fn WaitFn() {
                 }
 
                 SHARESPACE.scheduler.DecreaseHaltVcpuCnt();
-                CPULocal::SetCPUState(VcpuState::Searching);
             }
 
             Some(newTask) => {
                 //error!("WaitFn newTask1 is {:x?}", &newTask);
-                CPULocal::SetCPUState(VcpuState::Running);
                 let current = TaskId::New(CPULocal::CurrentTask());
                 //error!("WaitFn newTask2 is {:x?}", &newTask);
+                CPULocal::Myself().SwitchToRunning();
                 switch(current, newTask);
 
                 let pendingFreeStack = CPULocal::PendingFreeStack();
@@ -166,8 +163,6 @@ pub fn WaitFn() {
                 }
 
                 //while super::ALLOCATOR.Free() {}
-
-                CPULocal::SetCPUState(VcpuState::Searching);
             }
         }
     }
@@ -207,18 +202,18 @@ pub fn ProcessOne() -> bool {
 }
 
 pub fn Wait() {
-    CPULocal::SetCPUState(VcpuState::Searching);
+    CPULocal::Myself().ToSearch(&SHARESPACE);
     let start = Rdtsc();
 
     loop {
         let next = { SHARESPACE.scheduler.GetNext() };
 
         if let Some(newTask) = next {
-            CPULocal::SetCPUState(VcpuState::Running);
             let current = TaskId::New(CPULocal::CurrentTask());
             //let vcpuId = newTask.GetTask().queueId;
             //assert!(CPULocal::CpuId()==vcpuId, "cpu {}, target cpu {}", CPULocal::CpuId(), vcpuId);
 
+            CPULocal::Myself().SwitchToRunning();
             if current.data != newTask.data {
                 switch(current, newTask);
             }
@@ -243,7 +238,7 @@ pub fn Wait() {
 }
 
 pub fn SwitchToNewTask() -> ! {
-    CPULocal::SetCPUState(VcpuState::Running);
+    CPULocal::Myself().ToSearch(&SHARESPACE);
 
     let current = Task::TaskId();
     let waitTask = TaskId::New(CPULocal::WaitTask());
