@@ -171,18 +171,6 @@ impl Scheduler {
         return ret;
     }
 
-    pub fn VcpuSetWaiting(&self, vcpuId: usize) {
-        self.VcpuArr[vcpuId].SetState(VcpuState::Waiting)
-    }
-
-    pub fn VcpuSetRunning(&self, vcpuId: usize) {
-        self.VcpuArr[vcpuId].SetState(VcpuState::Running)
-    }
-
-    pub fn VcpuSetSearching(&self, vcpuId: usize) {
-        self.VcpuArr[vcpuId].SetState(VcpuState::Searching)
-    }
-
     pub fn WakeOne(&self) -> i64 {
         loop {
             let mask = self.vcpuWaitMask.load(Ordering::Acquire);
