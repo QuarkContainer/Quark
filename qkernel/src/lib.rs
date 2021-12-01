@@ -419,6 +419,9 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
         SetVCPCount(vcpuCnt as usize);
         InitTimeKeeper(vdsoParamAddr);
         VDSO.Initialization(vdsoParamAddr);
+
+        // release other vcpus
+        HyperCall64(qlib::HYPERCALL_RELEASE_VCPU, 0, 0, 0);
     } else {
         InitGs(id);
         //PerfGoto(PerfType::Kernel);
