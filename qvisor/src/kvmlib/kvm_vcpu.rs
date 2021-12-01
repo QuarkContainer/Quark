@@ -455,7 +455,8 @@ impl KVMVcpu {
 
                             //self.shareSpace = vms.GetShareSpace();
                             self.StoreShareSpace(regs.rbx); // = vms.GetShareSpace();
-
+                        }
+                        qlib::HYPERCALL_RELESE_VCPU => {
                             SyncMgr::WakeShareSpaceReady();
                         }
                         qlib::HYPERCALL_EXIT_VM => {
