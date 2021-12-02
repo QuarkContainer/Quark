@@ -23,6 +23,7 @@ use std::fs::File;
 use fs2::FileExt;
 use std::io::Write;
 use std::fs::OpenOptions;
+use std::thread;
 //use std::os::unix::io::{AsRawFd};
 
 use super::super::super::qlib::common::*;
@@ -427,88 +428,86 @@ impl Container {
                 RootContainerDir: conf.RootDir.to_string(),
             };
 
-            {
-                // If the metadata annotations indicate that this container should be
-                // started in an existing sandbox, we must do so. The metadata will
-                // indicate the ID of the sandbox, which is the same as the ID of the
-                // init container in the sandbox.
-                let isRoot = IsRoot(&c.Spec);
-                if isRoot {
-                    info!("Creating new sandbox for container {}", id);
+            // If the metadata annotations indicate that this container should be
+            // started in an existing sandbox, we must do so. The metadata will
+            // indicate the ID of the sandbox, which is the same as the ID of the
+            // init container in the sandbox.
+            let isRoot = IsRoot(&c.Spec);
+            if isRoot {
+                info!("Creating new sandbox for container {}", id);
 
-                    // Create and join cgroup before processes are created to ensure they are
-                    // part of the cgroup from the start (and all children processes).
-                    let mut cg = match Cgroup::New(&c.Spec) {
-                        Err(e) => {
-                            c.Destroy()?;
-                            return Err(e);
-                        }
-                        Ok(cg) => cg,
-                    };
-
-                    if cg.is_some() {
-                        let ret = cg.as_mut().unwrap().Install(&c.Spec.linux.as_ref().unwrap().resources);
-                        match ret {
-                            Err(e) => {
-                                c.Destroy()?;
-                                return Err(e);
-                            }
-                            Ok(_) => ()
-                        }
-                    }
-
-                    let restore = match &cg {
-                        Some(ref cgroup) => {
-                            let restore = cgroup.Join()?;
-                            Some(restore)
-                        }
-                        None => {
-                            None
-                        },
-                    };
-
-                    let ret = Sandbox::New(id, action, &c.Spec, conf, bundleDir, consoleSocket, userlog, cg, detach, pivot);
-
-                    c.Sandbox = match ret {
-                        Err(e) => {
-                            c.Destroy()?;
-                            return Err(e);
-                        }
-                        Ok(s) => Some(s),
-                    };
-
-                    match restore {
-                        None => (),
-                        Some(restore) => restore(),
-                    }
-                } else {
-                    panic!("doesn't support non-root container");
-                }
-
-                c.changeStatus(Status::Created);
-
-                // Save the metadata file.
-                let ret = c.Save();
-                match ret {
+                // Create and join cgroup before processes are created to ensure they are
+                // part of the cgroup from the start (and all children processes).
+                let mut cg = match Cgroup::New(&c.Spec) {
                     Err(e) => {
                         c.Destroy()?;
                         return Err(e);
                     }
-                    Ok(_) => ()
-                }
+                    Ok(cg) => cg,
+                };
 
-                // Write the PID file. Containerd considers the create complete after
-                // this file is created, so it must be the last thing we do.
-                if pidFile.len() != 0 {
-                    let id = format!("{}", c.SandboxPid());
-                    let ret = Self::WriteStr(pidFile, &id);
+                if cg.is_some() {
+                    let ret = cg.as_mut().unwrap().Install(&c.Spec.linux.as_ref().unwrap().resources);
                     match ret {
                         Err(e) => {
                             c.Destroy()?;
                             return Err(e);
                         }
-                        Ok(_) => (),
+                        Ok(_) => ()
                     }
+                }
+
+                let restore = match &cg {
+                    Some(ref cgroup) => {
+                        let restore = cgroup.Join()?;
+                        Some(restore)
+                    }
+                    None => {
+                        None
+                    },
+                };
+
+                let ret = Sandbox::New(id, action, &c.Spec, conf, bundleDir, consoleSocket, userlog, cg, detach, pivot);
+
+                c.Sandbox = match ret {
+                    Err(e) => {
+                        c.Destroy()?;
+                        return Err(e);
+                    }
+                    Ok(s) => Some(s),
+                };
+
+                match restore {
+                    None => (),
+                    Some(restore) => restore(),
+                }
+            } else {
+                panic!("doesn't support non-root container");
+            }
+
+            c.changeStatus(Status::Created);
+
+            // Save the metadata file.
+            let ret = c.Save();
+            match ret {
+                Err(e) => {
+                    c.Destroy()?;
+                    return Err(e);
+                }
+                Ok(_) => ()
+            }
+
+            // Write the PID file. Containerd considers the create complete after
+            // this file is created, so it must be the last thing we do.
+            if pidFile.len() != 0 {
+                let id = format!("{}", c.SandboxPid());
+                let ret = Self::WriteStr(pidFile, &id);
+                match ret {
+                    Err(e) => {
+                        c.Destroy()?;
+                        return Err(e);
+                    }
+                    Ok(_) => (),
                 }
             }
 

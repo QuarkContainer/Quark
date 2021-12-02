@@ -52,6 +52,8 @@ pub struct CommonArgs <'a, 'b> {
     pub pid_arg: Arg<'a, 'b>,
     pub init_arg: Arg<'a, 'b>,
     pub format_arg: Arg<'a, 'b>,
+    // adhoc: for working with gvisor
+    pub user_log_arg: Arg<'a, 'b>,
 }
 
 impl <'a, 'b> CommonArgs <'a, 'b> {
@@ -96,6 +98,11 @@ impl <'a, 'b> CommonArgs <'a, 'b> {
             .long("format")
             .short("f")
             .takes_value(true);
+        let user_log_arg = Arg::with_name("user-log")
+            .default_value("/var/log/")
+            .long("user-log")
+            .short("u")
+            .takes_value(true);
 
         return Self {
             id_arg: id_arg,
@@ -106,6 +113,7 @@ impl <'a, 'b> CommonArgs <'a, 'b> {
             pid_arg: pid_arg,
             init_arg: init_arg,
             format_arg: format_arg,
+            user_log_arg: user_log_arg
         }
     }
 }

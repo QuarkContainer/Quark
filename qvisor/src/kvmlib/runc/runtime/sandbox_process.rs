@@ -178,7 +178,10 @@ impl SandboxProcess {
                 let ret = vm.run().expect("vm.run() fail");
                 ret
             }
-            Err(e) => panic!("error is {:?}", e)
+            Err(e) => {
+                info!("vm.init() failed, error is {:?}", e);
+                panic!("error is {:?}", e)
+            }
         };
 
         unsafe {
