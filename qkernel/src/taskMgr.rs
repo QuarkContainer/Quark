@@ -162,6 +162,7 @@ pub fn WaitFn() {
                     CPULocal::SetPendingFreeStack(0);
                 }
 
+                //error!("WaitFn newTask3");
                 //while super::ALLOCATOR.Free() {}
             }
         }

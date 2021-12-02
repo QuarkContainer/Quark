@@ -101,7 +101,6 @@ pub enum Msg {
     Statm(Statm),
     NewFd(NewFd),
     HostEpollWaitProcess(HostEpollWaitProcess),
-    WaitFD(WaitFD),
     VcpuWait(VcpuWait),
 }
 
@@ -643,12 +642,6 @@ pub struct VcpuWait {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct WaitFD {
-    pub fd: i32,
-    pub mask: EventMask,
-}
-
-#[derive(Clone, Default, Debug)]
 pub struct NonBlockingPoll {
     pub fd: i32,
     pub mask: EventMask,
@@ -715,6 +708,7 @@ pub enum HostOutputMsg {
 #[derive(Clone, Default, Debug, Copy)]
 pub struct WaitFDAsync {
     pub fd: i32,
+    pub op: u32,
     pub mask: EventMask,
 }
 

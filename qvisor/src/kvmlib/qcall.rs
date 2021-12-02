@@ -27,7 +27,7 @@ pub fn AQHostCall(msg: HostOutputMsg, _shareSpace: &ShareSpace) {
             panic!("AQHostCall Process get Qcall msg...");
         }
         HostOutputMsg::WaitFDAsync(msg) => {
-            let ret = super::VMSpace::WaitFD(msg.fd, msg.mask);
+            let ret = super::VMSpace::WaitFD(msg.fd, msg.op, msg.mask);
             if ret < 0 {
                 if ret != -9 {
                     panic!("WaitFD fail err is {}, fd is {}", ret, msg.fd);
@@ -322,9 +322,6 @@ impl KVMVcpu {
             },
             Msg::HostEpollWaitProcess(msg) => {
                 ret = super::VMSpace::HostEpollWaitProcess(msg.addr, msg.count) as u64;
-            },
-            Msg::WaitFD(msg) => {
-                ret = super::VMSpace::WaitFD(msg.fd, msg.mask) as u64;
             },
             Msg::VcpuWait(msg) => {
                 ret = self.VcpuWait(msg.addr, msg.count) as u64;

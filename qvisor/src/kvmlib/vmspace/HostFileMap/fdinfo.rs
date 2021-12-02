@@ -161,7 +161,6 @@ impl FdInfo {
         }
 
         let hostfd = IO_MGR.lock().AddFd(newOsfd, true);
-        FD_NOTIFIER.AddFd(newOsfd, Box::new(GuestFd{hostfd: hostfd}));
         URING_MGR.lock().Addfd(newOsfd).unwrap();
         return SysRet(hostfd as i64);
     }

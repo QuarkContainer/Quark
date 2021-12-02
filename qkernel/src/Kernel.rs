@@ -836,22 +836,14 @@ impl HostSpace {
         HostSpace::HCall(&mut msg, true);
     }
 
-    pub fn WaitFDAsync(fd: i32, mask: EventMask) {
+    pub fn WaitFDAsync(fd: i32, op: u32, mask: EventMask) {
         let msg = HostOutputMsg::WaitFDAsync(WaitFDAsync {
             fd,
+            op,
             mask
         });
 
         super::SHARESPACE.AQCall(&msg);
-    }
-
-    pub fn WaitFD(fd: i32, mask: EventMask) {
-        let mut msg = Msg::WaitFD(WaitFD {
-            fd,
-            mask
-        });
-
-        HostSpace::Call(&mut msg, false);
     }
 
     fn Call(msg: &mut Msg, _mustAsync: bool) -> u64 {
