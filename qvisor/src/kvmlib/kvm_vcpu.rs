@@ -445,13 +445,15 @@ impl KVMVcpu {
                             let logfd = super::super::print::LOG.lock().Logfd();
                             super::URING_MGR.lock().Init(sharespace.config.read().DedicateUring);
                             super::URING_MGR.lock().Addfd(logfd).unwrap();
-                            if !sharespace.config.read().SyncPrint {
-                                super::super::print::EnableKernelPrint();
-                            }
+
                             KERNEL_IO_THREAD.Init(sharespace.scheduler.VcpuArr[0].eventfd);
                             URING_MGR.lock().SetupEventfd(sharespace.scheduler.VcpuArr[0].eventfd);
                             URING_MGR.lock().Addfd(sharespace.HostHostEpollfd()).unwrap();
                             vms.shareSpace = sharespace;
+
+                            let syncPrint = sharespace.config.read().SyncPrint();
+                            super::super::print::SetSharespace(sharespace);
+                            super::super::print::SetSyncPrint(syncPrint);
 
                             //self.shareSpace = vms.GetShareSpace();
                             self.StoreShareSpace(regs.rbx); // = vms.GetShareSpace();
@@ -463,6 +465,7 @@ impl KVMVcpu {
                             let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                             let exitCode = regs.rbx as i32;
 
+                            super::super::print::LOG.lock().Clear();
                             PerfPrint();
 
                             SetExitStatus(exitCode);
@@ -869,6 +872,10 @@ impl CPULocal {
 
         loop {
             self.ToWaiting(sharespace);
+            if sharespace.config.read().AsyncPrint() {
+                sharespace.LogFlush(false);
+            }
+
             let nfds = unsafe {
                 epoll_wait(self.epollfd, &mut events[0], 2, time)
             };

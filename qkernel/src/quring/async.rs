@@ -488,7 +488,7 @@ impl AsyncLogFlush {
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
-        if result <= 0 {
+       if result <= 0 {
             panic!("AsyncLogFlush fail {}/{}", result, self.fd)
         }
 

@@ -951,6 +951,8 @@ impl Thread {
         let taskCnt = owner.write().DecrTaskCount1();
         error!("ExitNotify 4 [{:x}], taskcnt is {}", self.lock().taskId, taskCnt);
         if taskCnt == 0 {
+            error!("ExitNotify shutdown");
+            super::super::SHUTDOWN.store(true, QOrdering::SEQ_CST);
             //PerfStop();
             PerfPrint();
             super::super::perflog::THREAD_COUNTS.lock().Print(false);

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use core::sync::atomic::Ordering;
 
 use super::qlib::{ShareSpace};
 use super::qlib::common::*;
@@ -56,15 +57,55 @@ impl<'a> ShareSpace {
         KERNEL_IO_THREAD.Wakeup(self);
     }
 
-    pub fn LogFlush(&self) {
-        let mut buf : [u8; 4096 * 4] = [0; 4096 * 4];
+    pub fn LogFlush(&self, partial: bool) {
+        let lock = self.logLock.try_lock();
+        if lock.is_none() {
+            return;
+        }
+
+        let logfd = self.logfd.load(Ordering::Relaxed);
+
+        let mut cnt = 0;
+        if partial {
+            let (addr, len) = self.ConsumeAndGetAvailableWriteBuf(cnt);
+            if len == 0 {
+                return
+            }
+
+            /*if len > 16 * 1024 {
+                len = 16 * 1024
+            };*/
+
+            let ret = unsafe {
+                libc::write(logfd, addr as _, len)
+            };
+            if ret < 0 {
+                panic!("log flush fail {}", ret);
+            }
+
+            if ret < 0 {
+                panic!("log flush fail {}", ret);
+            }
+
+            cnt = ret as usize;
+            self.ConsumeAndGetAvailableWriteBuf(cnt);
+            return
+        }
 
         loop {
-            let cnt = self.ReadLog(&mut buf);
-            if cnt == 0 {
-                break;
+            let (addr, len) = self.ConsumeAndGetAvailableWriteBuf(cnt);
+            if len == 0 {
+                return
             }
-            super::super::print::LOG.lock().WriteBytes(&buf[0..cnt]);
+
+            let ret = unsafe {
+                libc::write(logfd, addr as _, len)
+            };
+            if ret < 0 {
+                panic!("log flush fail {}", ret);
+            }
+
+            cnt = ret as usize;
         }
     }
 }

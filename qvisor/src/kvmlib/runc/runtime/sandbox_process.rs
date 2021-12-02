@@ -175,7 +175,8 @@ impl SandboxProcess {
 
         let exitStatus = match VirtualMachine::Init(args) {
             Ok(mut vm) => {
-                vm.run().expect("vm.run() fail")
+                let ret = vm.run().expect("vm.run() fail");
+                ret
             }
             Err(e) => panic!("error is {:?}", e)
         };

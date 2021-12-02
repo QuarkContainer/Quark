@@ -272,6 +272,11 @@ impl QUring {
     }
 
     pub fn LogFlush(&self) {
+        let uringPrint = super::super::SHARESPACE.config.read().UringPrint();
+        if !uringPrint {
+            return
+        }
+
         let fd = super::super::SHARESPACE.Logfd();
         let (addr, len) = super::super::SHARESPACE.GetDataBuf();
         let ops = AsyncLogFlush::New(fd, addr, len);
@@ -396,6 +401,10 @@ impl QUring {
     }
 
     pub fn Process(&self, cqe: &cqueue::Entry) {
+        if super::super::Shutdown() {
+            return
+        }
+
         let data = cqe.user_data();
         let ret = cqe.result();
 
@@ -414,6 +423,9 @@ impl QUring {
             //error!("uring process2: call is {:?}, idx {}", ops.Type(), idx);
 
             let rerun = ops.Process(ret, idx);
+            if super::super::Shutdown() {
+                return
+            }
             if !rerun {
                 *ops = AsyncOps::None;
                 self.asyncMgr.FreeSlot(idx);
@@ -528,6 +540,10 @@ impl QUring {
         for i in 0..self.UringCount() {
             let idx = (i + CPULocal::CpuId()) % self.UringCount();
             loop {
+                if super::super::Shutdown() {
+                    return 0;
+                }
+
                 let cqe = {
                     let mut c = self.completion[idx].lock();
                     c.Next()

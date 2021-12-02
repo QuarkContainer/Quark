@@ -17,7 +17,7 @@
 pub struct Config {
     pub DebugLevel: DebugLevel,
     pub KernelMemSize: u64,
-    pub SyncPrint: bool,
+    pub LogType: LogType,
     pub LogLevel: LogLevel,
     pub TcpBuffIO: bool,
     pub EnableAIO: bool,
@@ -34,6 +34,20 @@ pub struct Config {
     pub UringEpollCtl: bool,
 }
 
+impl Config {
+    pub fn SyncPrint(&self) -> bool {
+        return self.LogType == LogType::Sync;
+    }
+
+    pub fn UringPrint(&self) -> bool {
+        return self.LogType == LogType::UringPrint;
+    }
+
+    pub fn AsyncPrint(&self) -> bool {
+        return self.LogType == LogType::Async;
+    }
+}
+
 impl Config {}
 
 impl Default for Config {
@@ -41,7 +55,7 @@ impl Default for Config {
         return Self {
             DebugLevel: DebugLevel::Off,
             KernelMemSize: 16, // GB
-            SyncPrint: false,
+            LogType: LogType::Sync,
             LogLevel: LogLevel::Simple,
             TcpBuffIO: true,
             EnableAIO: false,
@@ -89,4 +103,11 @@ impl Default for LogLevel {
     fn default() -> Self {
         return Self::None
     }
+}
+
+#[derive(PartialEq, Eq, Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum LogType {
+    Sync,
+    UringPrint,
+    Async
 }
