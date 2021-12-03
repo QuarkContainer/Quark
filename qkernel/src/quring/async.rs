@@ -488,7 +488,7 @@ impl AsyncLogFlush {
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
-        if result <= 0 {
+       if result <= 0 {
             panic!("AsyncLogFlush fail {}/{}", result, self.fd)
         }
 
@@ -589,18 +589,11 @@ pub struct AsyncFiletWrite {
     pub buf: Arc<SocketBuff>,
     pub addr: u64,
     pub len: usize,
-    pub isSocket: bool,
+    pub fops: Arc<FileOperations>,
 }
 
 impl AsyncFiletWrite {
     pub fn SEntry(&self) -> squeue::Entry {
-        //let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
-        if self.isSocket {
-            let op = opcode::Send::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
-            return op.build()
-                .flags(squeue::Flags::FIXED_FILE);
-        }
-
         let op = opcode::Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
 
         return op.build()
@@ -646,14 +639,14 @@ impl AsyncFiletWrite {
         return true
     }
 
-    pub fn New(fd: i32, queue: Queue, buf: Arc<SocketBuff>, addr: u64, len: usize, isSocket: bool) -> Self {
+    pub fn New(fd: i32, queue: Queue, buf: Arc<SocketBuff>, addr: u64, len: usize, fops: Arc<FileOperations>) -> Self {
         return Self {
             fd,
             queue,
             buf,
             addr,
             len,
-            isSocket
+            fops,
         }
     }
 }

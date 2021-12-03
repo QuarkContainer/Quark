@@ -77,7 +77,7 @@ macro_rules! error {
             let prefix = $crate::print::PrintPrefix();
             let s = &format!($($arg)*);
 
-            if $crate::SHARESPACE.config.read().SyncPrint {
+            if $crate::SHARESPACE.config.read().SyncPrint() {
                 let str = format!("[ERROR] {} {}", prefix, s);
                 $crate::Kernel::HostSpace::SyncPrint($crate::qlib::config::DebugLevel::Error, &str);
             } else {
@@ -98,7 +98,7 @@ macro_rules! info {
             let prefix = $crate::print::PrintPrefix();
             let s = &format!($($arg)*);
 
-            if $crate::SHARESPACE.config.read().SyncPrint {
+            if $crate::SHARESPACE.config.read().SyncPrint() {
                 let str = format!("[INFO] {} {}", prefix, s);
                 $crate::Kernel::HostSpace::SyncPrint($crate::qlib::config::DebugLevel::Error, &str);
             } else {
@@ -118,7 +118,7 @@ macro_rules! debug {
             let prefix = $crate::print::PrintPrefix();
             let s = &format!($($arg)*);
 
-            if $crate::SHARESPACE.config.read().SyncPrint {
+            if $crate::SHARESPACE.config.read().SyncPrint() {
                 let str = format!("[DEBUG] {} {}", prefix, s);
                 $crate::Kernel::HostSpace::SyncPrint($crate::qlib::config::DebugLevel::Error, &str);
             } else {

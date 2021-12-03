@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use core::sync::atomic::Ordering;
 
 use super::qlib::{ShareSpace};
 use super::qlib::common::*;
@@ -27,14 +28,14 @@ pub fn AQHostCall(msg: HostOutputMsg, _shareSpace: &ShareSpace) {
             panic!("AQHostCall Process get Qcall msg...");
         }
         HostOutputMsg::WaitFDAsync(msg) => {
-            let ret = super::VMSpace::WaitFD(msg.fd, msg.mask);
+            let ret = super::VMSpace::WaitFD(msg.fd, msg.op, msg.mask);
             if ret < 0 {
-                if ret != -9 {
-                    panic!("WaitFD fail err is {}, fd is {}", ret, msg.fd);
-                }
-
                 // ignore -9 EBADF, when change the Close to HCall, the waitfd is still async call,
                 // there is chance that the WaitFd fired before close
+                if ret != -9 {
+                    error!("WaitFD fail err is {}, fd is {}, errorno is {}",
+                        ret, msg.fd, ret);
+                }
             }
         }
     }
@@ -56,15 +57,55 @@ impl<'a> ShareSpace {
         KERNEL_IO_THREAD.Wakeup(self);
     }
 
-    pub fn LogFlush(&self) {
-        let mut buf : [u8; 4096 * 4] = [0; 4096 * 4];
+    pub fn LogFlush(&self, partial: bool) {
+        let lock = self.logLock.try_lock();
+        if lock.is_none() {
+            return;
+        }
+
+        let logfd = self.logfd.load(Ordering::Relaxed);
+
+        let mut cnt = 0;
+        if partial {
+            let (addr, len) = self.ConsumeAndGetAvailableWriteBuf(cnt);
+            if len == 0 {
+                return
+            }
+
+            /*if len > 16 * 1024 {
+                len = 16 * 1024
+            };*/
+
+            let ret = unsafe {
+                libc::write(logfd, addr as _, len)
+            };
+            if ret < 0 {
+                panic!("log flush fail {}", ret);
+            }
+
+            if ret < 0 {
+                panic!("log flush fail {}", ret);
+            }
+
+            cnt = ret as usize;
+            self.ConsumeAndGetAvailableWriteBuf(cnt);
+            return
+        }
 
         loop {
-            let cnt = self.ReadLog(&mut buf);
-            if cnt == 0 {
-                break;
+            let (addr, len) = self.ConsumeAndGetAvailableWriteBuf(cnt);
+            if len == 0 {
+                return
             }
-            super::super::print::LOG.lock().WriteBytes(&buf[0..cnt]);
+
+            let ret = unsafe {
+                libc::write(logfd, addr as _, len)
+            };
+            if ret < 0 {
+                panic!("log flush fail {}", ret);
+            }
+
+            cnt = ret as usize;
         }
     }
 }
@@ -322,9 +363,6 @@ impl KVMVcpu {
             },
             Msg::HostEpollWaitProcess(msg) => {
                 ret = super::VMSpace::HostEpollWaitProcess(msg.addr, msg.count) as u64;
-            },
-            Msg::WaitFD(msg) => {
-                ret = super::VMSpace::WaitFD(msg.fd, msg.mask) as u64;
             },
             Msg::VcpuWait(msg) => {
                 ret = self.VcpuWait(msg.addr, msg.count) as u64;

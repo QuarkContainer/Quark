@@ -102,6 +102,7 @@ pub mod backtracer;
 use core::panic::PanicInfo;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicUsize;
+use core::sync::atomic::AtomicBool;
 use core::{ptr, mem};
 use alloc::vec::Vec;
 use ::qlib::mutex::*;
@@ -158,6 +159,7 @@ pub static PAGE_MGR : Singleton<PageMgr> = Singleton::<PageMgr>::New();
 pub static LOADER : Singleton<Loader> = Singleton::<Loader>::New();
 pub static IOURING : Singleton<QUring> = Singleton::<QUring>::New();
 pub static KERNEL_STACK_ALLOCATOR : Singleton<AlignedAllocator> = Singleton::<AlignedAllocator>::New();
+pub static SHUTDOWN : Singleton<AtomicBool> = Singleton::<AtomicBool>::New();
 
 pub fn SingletonInit() {
     unsafe {
@@ -168,6 +170,7 @@ pub fn SingletonInit() {
         LOADER.Init(Loader::default());
         IOURING.Init(QUring::New(MemoryDef::QURING_SIZE, 1));
         KERNEL_STACK_ALLOCATOR.Init( AlignedAllocator::New(MemoryDef::DEFAULT_STACK_SIZE as usize, MemoryDef::DEFAULT_STACK_SIZE as usize));
+        SHUTDOWN.Init(AtomicBool::new(false));
 
         guestfdnotifier::GUEST_NOTIFIER.Init(guestfdnotifier::Notifier::New());
         UID.Init(AtomicU64::new(1));
@@ -196,6 +199,10 @@ pub fn SingletonInit() {
 
 extern "C" {
     pub fn syscall_entry();
+}
+
+pub fn Shutdown() -> bool {
+    return SHUTDOWN.load(self::qlib::linux_def::QOrdering::RELAXED);
 }
 
 pub fn Init() {
@@ -402,9 +409,14 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
         InitGs(id);
 
         SHARESPACE.scheduler.SetVcpuCnt(vcpuCnt as usize);
-        //Kernel::HostSpace::KernelMsg(0, 0, 0);
         HyperCall64(qlib::HYPERCALL_INIT, (&(*SHARESPACE) as *const ShareSpace) as u64, 0, 0);
         IOURING.Setup(SHARESPACE.config.read().DedicateUring);
+
+        let SyncLog= SHARESPACE.config.read().SyncPrint();
+        if !SyncLog {
+            LogInit(128 * 1024); // 128 * 1024 pages, i.e. 512 MB
+        }
+        //Kernel::HostSpace::KernelMsg(0, 0, 1);
         {
             let kpt = &KERNEL_PAGETABLE;
 
@@ -415,7 +427,6 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
         }
 
         self::guestfdnotifier::GUEST_NOTIFIER.InitPollHostEpoll(SHARESPACE.HostHostEpollfd());
-        LogInit(1 * 1024); // 1024 pages, i.e. 4MB
         SetVCPCount(vcpuCnt as usize);
         InitTimeKeeper(vdsoParamAddr);
         VDSO.Initialization(vdsoParamAddr);

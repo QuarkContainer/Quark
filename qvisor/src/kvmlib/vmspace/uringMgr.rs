@@ -30,6 +30,16 @@ pub struct UringMgr {
     pub uringSize: usize
 }
 
+impl Drop for UringMgr {
+    fn drop(&mut self) {
+        for fd in &self.fds {
+            unsafe {
+                libc::close(*fd);
+            }
+        }
+    }
+}
+
 pub const FDS_SIZE : usize = 8192;
 
 impl UringMgr {

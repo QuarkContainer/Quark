@@ -25,6 +25,7 @@ pub use super::super::qlib::uring::cqueue::CompletionQueue;
 pub use super::super::qlib::uring::cqueue;
 pub use super::super::qlib::uring::squeue::SubmissionQueue;
 pub use super::super::qlib::uring::*;
+use super::super::fs::file::*;
 
 use super::super::qlib::uring::util::*;
 use super::super::qlib::linux_def::*;
@@ -272,6 +273,11 @@ impl QUring {
     }
 
     pub fn LogFlush(&self) {
+        let uringPrint = super::super::SHARESPACE.config.read().UringPrint();
+        if !uringPrint {
+            return
+        }
+
         let fd = super::super::SHARESPACE.Logfd();
         let (addr, len) = super::super::SHARESPACE.GetDataBuf();
         let ops = AsyncLogFlush::New(fd, addr, len);
@@ -350,11 +356,11 @@ impl QUring {
         return Ok(())
     }
 
-    pub fn RingFileWrite(&self, _task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, srcs: &[IoVec], isSocket: bool) -> Result<i64> {
+    pub fn RingFileWrite(&self, _task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, srcs: &[IoVec], fops: Arc<FileOperations>) -> Result<i64> {
         let (count, writeBuf) = buf.Writev(srcs)?;
 
         if let Some((addr, len)) = writeBuf {
-            let writeop = AsyncFiletWrite::New(fd, queue, buf, addr, len, isSocket);
+            let writeop = AsyncFiletWrite::New(fd, queue, buf, addr, len, fops);
 
             IOURING.AUCall(AsyncOps::AsyncFiletWrite(writeop));
         }
@@ -396,6 +402,10 @@ impl QUring {
     }
 
     pub fn Process(&self, cqe: &cqueue::Entry) {
+        if super::super::Shutdown() {
+            return
+        }
+
         let data = cqe.user_data();
         let ret = cqe.result();
 
@@ -414,6 +424,9 @@ impl QUring {
             //error!("uring process2: call is {:?}, idx {}", ops.Type(), idx);
 
             let rerun = ops.Process(ret, idx);
+            if super::super::Shutdown() {
+                return
+            }
             if !rerun {
                 *ops = AsyncOps::None;
                 self.asyncMgr.FreeSlot(idx);
@@ -528,6 +541,10 @@ impl QUring {
         for i in 0..self.UringCount() {
             let idx = (i + CPULocal::CpuId()) % self.UringCount();
             loop {
+                if super::super::Shutdown() {
+                    return 0;
+                }
+
                 let cqe = {
                     let mut c = self.completion[idx].lock();
                     c.Next()

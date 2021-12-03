@@ -534,6 +534,7 @@ pub struct ShareSpace {
     pub config: QRwLock<Config>,
 
     pub logBuf: QMutex<Option<ByteStream>>,
+    pub logLock: QMutex<()>,
     pub logfd: AtomicI32,
 
     pub values: [[AtomicU64; 2]; 16],
@@ -555,6 +556,7 @@ impl ShareSpace {
             kernelIOThreadWaiting: CachePadded::new(AtomicBool::new(false)),
             config: QRwLock::new(Config::default()),
             logBuf: QMutex::new(None),
+            logLock: QMutex::new(()),
             logfd: AtomicI32::new(-1),
             values: [
                 [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)],

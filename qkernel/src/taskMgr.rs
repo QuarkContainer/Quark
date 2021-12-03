@@ -101,17 +101,17 @@ pub const WAIT_CYCLES : i64 = 1_0_000; // 1ms
 pub fn IOWait() {
     let mut start = Rdtsc();
 
-    loop {
+    while !super::Shutdown() {
         if PollAsyncMsg() > 10 {
             start = Rdtsc();
         }
 
         let currentTime = Rdtsc();
-        if currentTime - start >= IO_WAIT_CYCLES {
+        if currentTime - start >= IO_WAIT_CYCLES || super::Shutdown() {
             SHARESPACE.kernelIOThreadWaiting.store(true, Ordering::Release);
 
             // after change the state, check again in case new message coming
-            if PollAsyncMsg() > 10 {
+            if PollAsyncMsg() > 10 && !super::Shutdown() {
                 start = Rdtsc();
                 SHARESPACE.kernelIOThreadWaiting.store(false, Ordering::Release);
                 continue;
@@ -123,6 +123,10 @@ pub fn IOWait() {
             start = Rdtsc();
             SHARESPACE.kernelIOThreadWaiting.store(false, Ordering::Release);
         }
+    }
+
+    loop {
+        HostSpace::IOWait();
     }
 }
 
@@ -162,6 +166,7 @@ pub fn WaitFn() {
                     CPULocal::SetPendingFreeStack(0);
                 }
 
+                //error!("WaitFn newTask3");
                 //while super::ALLOCATOR.Free() {}
             }
         }
@@ -170,13 +175,26 @@ pub fn WaitFn() {
 
 #[inline]
 pub fn PollAsyncMsg() -> usize {
+    if super::Shutdown() {
+        return 0;
+    }
     //error!("PollAsyncMsg 1");
     ASYNC_PROCESS.Process();
+    if super::Shutdown() {
+        return 0;
+    }
     //error!("PollAsyncMsg 2");
     let ret = HostInputProcess();
+    if super::Shutdown() {
+        return 0;
+    }
 
     //error!("PollAsyncMsg 3");
+
     let ret = ret + QUringTrigger();
+    if super::Shutdown() {
+        return 0;
+    }
     //error!("PollAsyncMsg 4 count {}", ret);
     return ret;
 }

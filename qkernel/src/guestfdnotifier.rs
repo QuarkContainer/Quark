@@ -142,8 +142,8 @@ impl Notifier {
         IOURING.PollHostEpollWaitInit(hostEpollWaitfd);
     }
 
-    fn waitfd(fd: i32, mask: EventMask) -> Result<()> {
-        HostSpace::WaitFDAsync(fd, mask);
+    fn waitfd(fd: i32, op: u32, mask: EventMask) -> Result<()> {
+        HostSpace::WaitFDAsync(fd, op, mask);
 
         return Ok(())
     }
@@ -198,6 +198,7 @@ impl Notifier {
     }
 
     pub fn UpdateFDSync(&self, fd: i32) -> Result<()> {
+        let op;
         let mask = {
             let mut n = self.lock();
             let fi = match n.fdMap.get_mut(&fd) {
@@ -207,28 +208,31 @@ impl Notifier {
                 Some(fi) => fi,
             };
 
-            let mask = fi.queue.Events();
+            let mask = fi.queue.Events() | LibcConst::EPOLLET as u64;
 
             if !fi.waiting {
                 if mask != 0 {
+                    op = LibcConst::EPOLL_CTL_ADD;
                     fi.waiting = true;
                 } else {
                     return Ok(())
                 }
             } else {
                 if mask == 0 {
+                    op = LibcConst::EPOLL_CTL_DEL;
                     fi.waiting = false;
                 } else {
                     if mask | fi.mask == fi.mask {
                         return Ok(())
                     }
+                    op = LibcConst::EPOLL_CTL_MOD;
                 }
             }
 
             mask
         };
 
-        return Self::waitfd(fd, mask);
+        return Self::waitfd(fd, op as u32, mask);
     }
 
     pub fn AddFD(&self, fd: i32, iops: &HostInodeOp) {

@@ -21,17 +21,25 @@ use lazy_static::lazy_static;
 use chrono::prelude::*;
 use std::os::unix::io::AsRawFd;
 
+use super::kvmlib::qlib::ShareSpace;
+use super::kvmlib::qlib::qmsg::input::*;
+
 lazy_static! {
     pub static ref LOG : Mutex<Log> = Mutex::new(Log::New());
 }
 
 pub struct Log {
     pub file: File,
-    pub kernelPrint: bool,
+    pub syncPrint: bool,
+    pub shareSpace: &'static ShareSpace,
 }
 
-pub fn EnableKernelPrint() {
-    LOG.lock().EnableKernelPrint();
+pub fn SetSyncPrint(syncPrint: bool) {
+    LOG.lock().SetSyncPrint(syncPrint);
+}
+
+pub fn SetSharespace(sharespace: &'static ShareSpace) {
+    LOG.lock().shareSpace = sharespace;
 }
 
 pub const LOG_FILE : &str = "/var/log/quark/quark.log";
@@ -41,27 +49,42 @@ impl Log {
         let file = OpenOptions::new().create(true).append(true).open(LOG_FILE).expect("Log Open fail");
         return Self {
             file: file,
-            kernelPrint: false,
+            syncPrint: true,
+            shareSpace: unsafe {
+                &mut *(0 as * mut ShareSpace)
+            },
         }
+    }
+
+    pub fn SetSharespace(&mut self, sharespace: &'static ShareSpace) {
+        self.shareSpace = sharespace;
     }
 
     pub fn Logfd(&self) -> i32 {
         return self.file.as_raw_fd();
     }
 
-    pub fn EnableKernelPrint(&mut self) {
-        self.kernelPrint = false;
+    pub fn SetSyncPrint(&mut self, syncPrint: bool) {
+        self.syncPrint = syncPrint;
+    }
+
+    pub fn RawWrite(&mut self, str: &str) {
+        self.WriteBytes(str.as_bytes());
     }
 
     pub fn Write(&mut self, str: &str) {
-        if !self.kernelPrint {
-            self.WriteBytes(str.as_bytes());
+        if self.syncPrint {
+            self.RawWrite(str);
         } else {
-            let trigger = super::kvmlib::VMS.lock().shareSpace.Log(str.as_bytes());
-            if trigger {
-                super::kvmlib::VMS.lock().shareSpace.LogFlush();
+            let trigger = self.shareSpace.Log(str.as_bytes());
+            if trigger && self.shareSpace.config.read().UringPrint() {
+                self.shareSpace.AQHostInputCall(&HostInputMsg::LogFlush);
             }
         }
+    }
+
+    pub fn Flush(&self, partial: bool) {
+        self.shareSpace.LogFlush(partial);
     }
 
     pub fn WriteBytes(&mut self, buf: &[u8]) {
@@ -75,6 +98,18 @@ impl Log {
     pub fn Print(&mut self, level: &str, str: &str) {
         //self.Write(&format!("{} [{}] {}\n", Self::Now(), level, str));
         self.Write(&format!("[{}] {}\n", level, str));
+    }
+
+    pub fn RawPrint(&mut self, level: &str, str: &str) {
+        //self.Write(&format!("{} [{}] {}\n", Self::Now(), level, str));
+        self.RawWrite(&format!("[{}] {}\n", level, str));
+    }
+
+    pub fn Clear(&mut self) {
+        if !self.syncPrint {
+            self.shareSpace.LogFlush(false);
+            self.syncPrint = true;
+        }
     }
 }
 
@@ -92,7 +127,7 @@ macro_rules! raw {
 macro_rules! log {
     ($($arg:tt)*) => ({
         let s = &format!($($arg)*);
-        crate::print::LOG.lock().Write(&format!("{}\n",&s));
+        crate::print::LOG.lock().RawWrite(&format!("{}\n",&s));
     });
 }
 
@@ -100,7 +135,7 @@ macro_rules! log {
 macro_rules! print {
     ($($arg:tt)*) => ({
         let s = &format!($($arg)*);
-        crate::print::LOG.lock().Print("Print", &s);
+        crate::print::LOG.lock().RawPrint("Print", &s);
     });
 }
 
