@@ -590,6 +590,7 @@ pub struct AsyncFiletWrite {
     pub addr: u64,
     pub len: usize,
     pub fops: Arc<FileOperations>,
+    pub lockGuard: QAsyncLockGuard,
 }
 
 impl AsyncFiletWrite {
@@ -639,7 +640,7 @@ impl AsyncFiletWrite {
         return true
     }
 
-    pub fn New(fd: i32, queue: Queue, buf: Arc<SocketBuff>, addr: u64, len: usize, fops: Arc<FileOperations>) -> Self {
+    pub fn New(fd: i32, queue: Queue, buf: Arc<SocketBuff>, addr: u64, len: usize, fops: Arc<FileOperations>, lockGuard: QAsyncLockGuard) -> Self {
         return Self {
             fd,
             queue,
@@ -647,6 +648,7 @@ impl AsyncFiletWrite {
             addr,
             len,
             fops,
+            lockGuard,
         }
     }
 }
