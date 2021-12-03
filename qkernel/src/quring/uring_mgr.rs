@@ -25,6 +25,7 @@ pub use super::super::qlib::uring::cqueue::CompletionQueue;
 pub use super::super::qlib::uring::cqueue;
 pub use super::super::qlib::uring::squeue::SubmissionQueue;
 pub use super::super::qlib::uring::*;
+use super::super::fs::file::*;
 
 use super::super::qlib::uring::util::*;
 use super::super::qlib::linux_def::*;
@@ -355,11 +356,11 @@ impl QUring {
         return Ok(())
     }
 
-    pub fn RingFileWrite(&self, _task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, srcs: &[IoVec], isSocket: bool) -> Result<i64> {
+    pub fn RingFileWrite(&self, _task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, srcs: &[IoVec], fops: Arc<FileOperations>) -> Result<i64> {
         let (count, writeBuf) = buf.Writev(srcs)?;
 
         if let Some((addr, len)) = writeBuf {
-            let writeop = AsyncFiletWrite::New(fd, queue, buf, addr, len, isSocket);
+            let writeop = AsyncFiletWrite::New(fd, queue, buf, addr, len, fops);
 
             IOURING.AUCall(AsyncOps::AsyncFiletWrite(writeop));
         }
