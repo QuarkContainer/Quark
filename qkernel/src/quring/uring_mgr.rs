@@ -356,11 +356,11 @@ impl QUring {
         return Ok(())
     }
 
-    pub fn RingFileWrite(&self, _task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, srcs: &[IoVec], fops: Arc<FileOperations>) -> Result<i64> {
+    pub fn RingFileWrite(&self, _task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, srcs: &[IoVec], fops: Arc<FileOperations>, lockGuard: QAsyncLockGuard) -> Result<i64> {
         let (count, writeBuf) = buf.Writev(srcs)?;
 
         if let Some((addr, len)) = writeBuf {
-            let writeop = AsyncFiletWrite::New(fd, queue, buf, addr, len, fops);
+            let writeop = AsyncFiletWrite::New(fd, queue, buf, addr, len, fops, lockGuard);
 
             IOURING.AUCall(AsyncOps::AsyncFiletWrite(writeop));
         }
