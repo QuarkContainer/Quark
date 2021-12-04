@@ -49,7 +49,7 @@ impl KIOThread {
             //    sharespace.ReadyAsyncMsgCnt(), URING_MGR.lock().CompletEntries(), data);
 
             // for the "dd" test long run test, without this, uring might sleep for sometime
-            log!("iowait workaround");
+            //log!("iowait workaround");
             if sharespace.ReadyAsyncMsgCnt() > 0 || URING_MGR.lock().CompletEntries() > 0 {
                 return Ok(())
             }
