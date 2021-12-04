@@ -65,7 +65,7 @@ impl UringMgr {
             let ring = Builder::default()
                 .setup_sqpoll(10)
                 .setup_sqpoll_cpu(0) // vcpu#0
-                .setup_clamp()
+                //.setup_clamp()
                 .setup_cqsize(self.uringSize as u32 * 2)
                 .build(self.uringSize as u32).expect("InitUring fail");
             self.uringfds.push(ring.fd.0);
@@ -75,7 +75,8 @@ impl UringMgr {
                 let ring = Builder::default()
                     .setup_sqpoll(10)
                     .setup_sqpoll_cpu(i as u32)
-                    .setup_clamp()
+                    //.setup_iopoll()
+                    //.setup_clamp()
                     .setup_cqsize(self.uringSize as u32 * 2)
                     .build(self.uringSize as u32).expect("InitUring fail");
                 self.uringfds.push(ring.fd.0);
