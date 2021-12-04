@@ -36,8 +36,24 @@ impl KIOThread {
     }
 
     pub fn Wait(&self, sharespace: &ShareSpace) -> Result<()> {
+        let mut data : u64 = 0;
         loop {
-            let mut data : u64 = 0;
+            if !super::super::runc::runtime::vm::IsRunning() {
+                return Err(Error::Exit)
+            }
+
+            //URING_MGR.lock().Wake(0, 0).expect("qlib::HYPER CALL_URING_WAKE fail");
+
+
+            //print!("KIOThread complete count is {}/{}/{}",
+            //    sharespace.ReadyAsyncMsgCnt(), URING_MGR.lock().CompletEntries(), data);
+
+            // for the "dd" test long run test, without this, uring might sleep for sometime
+            //log!("iowait workaround");
+            if sharespace.ReadyAsyncMsgCnt() > 0 || URING_MGR.lock().CompletEntries() > 0 {
+                return Ok(())
+            }
+
             let ret = unsafe {
                 libc::read(self.eventfd, &mut data as * mut _ as *mut libc::c_void, 8)
             };
@@ -45,14 +61,6 @@ impl KIOThread {
             if ret < 0 {
                 panic!("KIOThread::Wakeup fail... eventfd is {}, errno is {}",
                         self.eventfd, errno::errno().0);
-            }
-
-            if !super::super::runc::runtime::vm::IsRunning() {
-                return Err(Error::Exit)
-            }
-
-            if sharespace.ReadyAsyncMsgCnt() > 0 || URING_MGR.lock().CompletEntries() > 0 {
-                return Ok(())
             }
         }
     }
