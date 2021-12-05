@@ -19,11 +19,17 @@ impl ListAllocator {
             if address == libc::MAP_FAILED {
                 panic!("mmap: failed to get mapped memory area for heap");
             }
-            self.heap.lock().init(address as usize, 1<<29 as usize);
+            GLOBAL_ALLOCATOR.lock().init(address as usize, 1<<29 as usize);
         }
         self.initialized.store(true, Ordering::Relaxed);
     }
 
     pub fn Check(&self) {
+    }
+}
+
+impl VcpuAllocator {
+    pub fn handleError(&self, _size:u64, _alignment:u64) {
+
     }
 }
