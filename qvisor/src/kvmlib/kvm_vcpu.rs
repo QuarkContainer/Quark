@@ -794,7 +794,7 @@ impl KVMVcpu {
 
 impl Scheduler {
    pub fn Init(&mut self) {
-        for i in 0..self.vcpuCnt.load(Ordering::Relaxed) {
+        for i in 0..self.vcpuCnt {
             self.VcpuArr[i].Init(i);
         }
     }

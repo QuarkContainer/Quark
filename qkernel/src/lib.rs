@@ -165,9 +165,9 @@ pub static IOURING : Singleton<QUring> = Singleton::<QUring>::New();
 pub static KERNEL_STACK_ALLOCATOR : Singleton<AlignedAllocator> = Singleton::<AlignedAllocator>::New();
 pub static SHUTDOWN : Singleton<AtomicBool> = Singleton::<AtomicBool>::New();
 
-pub fn SingletonInit() {
+pub fn SingletonInit(vcpuCount: usize) {
     unsafe {
-        SHARESPACE.Init(ShareSpace::New());
+        SHARESPACE.Init(ShareSpace::New(vcpuCount));
         PAGE_ALLOCATOR.Init(MemAllocator::New());
         KERNEL_PAGETABLE.Init(PageTables::Init(CurrentCr3()));
         PAGE_MGR.Init(PageMgr::New());
@@ -409,12 +409,11 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
     if id == 0 {
         //ALLOCATOR.Add(heapStart as usize, heapLen as usize);
         ALLOCATOR.Init(heapStart as usize, heapLen as usize);
-        SingletonInit();
+        SingletonInit(vcpuCnt as usize);
         InitGs(id);
 
         ALLOCATOR.SetReady(true);
 
-        SHARESPACE.scheduler.SetVcpuCnt(vcpuCnt as usize);
         HyperCall64(qlib::HYPERCALL_INIT, (&(*SHARESPACE) as *const ShareSpace) as u64, 0, 0);
         IOURING.Setup(SHARESPACE.config.read().DedicateUring);
 
