@@ -131,7 +131,6 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
 
     // is this call from user
     if sf.ss & 0x3 != 0 {
-        SwapGs();
         //PerfGofrom(PerfType::User);
         currTask.AccountTaskLeave(SchedState::RunningApp);
     } else {
@@ -388,8 +387,6 @@ pub extern fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
 
     // is this call from user
     let fromUser = if ptRegs.ss & 0x3 != 0 {
-        SwapGs();
-
         let mut rflags = ptRegs.eflags;
         rflags &= !USER_FLAGS_CLEAR;
         rflags |= USER_FLAGS_SET;
@@ -515,7 +512,6 @@ pub extern fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
                 if SHARESPACE.config.read().KernelPagetable {
                     currTask.SwitchPageTable();
                 }
-                SwapGs();
             }
 
             return
@@ -540,7 +536,6 @@ pub extern fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
                 if SHARESPACE.config.read().KernelPagetable {
                     currTask.SwitchPageTable();
                 }
-                SwapGs();
             }
         } else {
             signal = Signal::SIGSEGV;

@@ -167,6 +167,8 @@ pub fn WaitFn() {
                 }
 
                 //error!("WaitFn newTask3");
+
+                // todo: free heap cache
                 //while super::ALLOCATOR.Free() {}
             }
         }

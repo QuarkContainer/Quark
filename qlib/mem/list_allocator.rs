@@ -30,23 +30,16 @@ pub const BUFF_THRESHOLD: usize = 50; // when buff size takes more than 50% of f
 pub const FREE_BATCH: usize = 10; // free 10 blocks each time.
 pub const ORDER : usize = 33;
 
-pub struct ListAllocator {
-    pub bufs: [CachePadded<QMutex<FreeMemBlockMgr>>; CLASS_CNT],
-    pub heap: QMutex<Heap<ORDER>>,
-    pub total: AtomicUsize,
-    pub free: AtomicUsize,
-    pub bufSize: AtomicUsize,
-    //pub errorHandler: Arc<OOMHandler>
-    pub initialized: AtomicBool
+pub static GLOBAL_ALLOCATOR : QMutex<Heap<ORDER>> = QMutex::new(Heap::empty());
+
+#[derive(Debug)]
+pub struct VcpuAllocator {
+    pub bufs: [CachePadded<QMutex<FreeMemBlockMgr>>; 13],
 }
 
-pub trait OOMHandler {
-    fn handleError(&self, a:u64, b:u64) -> ();
-}
-
-impl ListAllocator {
-    pub const fn Empty() -> Self {
-        let bufs : [CachePadded<QMutex<FreeMemBlockMgr>>; CLASS_CNT] = [
+impl Default for VcpuAllocator {
+    fn default() -> Self {
+        let bufs : [CachePadded<QMutex<FreeMemBlockMgr>>; 13] = [
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(0, 0))),
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(0, 1))),
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(0, 2))),
@@ -60,14 +53,55 @@ impl ListAllocator {
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(32, 10))),
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(16, 11))),
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(1024, 12))),
-            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(16, 13))),
-            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(8, 14))),
-            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(8, 15)))
+        ];
+
+        return Self {
+            bufs
+        }
+    }
+}
+
+
+#[derive(Debug)]
+pub struct ListAllocator {
+    pub bufs: [CachePadded<QMutex<FreeMemBlockMgr>>; 13],
+    pub total: AtomicUsize,
+    pub free: AtomicUsize,
+    pub bufSize: AtomicUsize,
+    //pub errorHandler: Arc<OOMHandler>
+    pub initialized: AtomicBool
+}
+
+pub trait OOMHandler {
+    fn handleError(&self, a:u64, b:u64) -> ();
+}
+
+impl Default for ListAllocator {
+    fn default() -> Self {
+        return Self::Empty();
+    }
+}
+
+impl ListAllocator {
+    pub const fn Empty() -> Self {
+        let bufs : [CachePadded<QMutex<FreeMemBlockMgr>>; 13] = [
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(0, 0))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(0, 1))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(0, 2))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(128, 3))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(128, 4))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(128, 5))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(64, 6))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(64, 7))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(64, 8))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(32, 9))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(32, 10))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(16, 11))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(1024, 12))),
         ];
 
         return Self {
             bufs: bufs,
-            heap: QMutex::new(Heap::empty()),
             total: AtomicUsize::new(0),
             free: AtomicUsize::new(0),
             bufSize: AtomicUsize::new(0),
@@ -84,7 +118,7 @@ impl ListAllocator {
 
     pub fn AddToHead(&self, start: usize, end: usize) {
         unsafe {
-            self.heap.lock().add_to_heap(start, end);
+            GLOBAL_ALLOCATOR.lock().add_to_heap(start, end);
         }
 
         let size = end - start;
@@ -136,7 +170,7 @@ impl ListAllocator {
             }
 
             let idx = self.bufs.len() - i - 1; // free from larger size
-            let cnt = self.bufs[idx].lock().FreeMultiple(&self.heap, FREE_BATCH - count);
+            let cnt = self.bufs[idx].lock().FreeMultiple(&GLOBAL_ALLOCATOR, FREE_BATCH - count);
             self.bufSize.fetch_sub(cnt * self.bufs[idx].lock().size, Ordering::Release);
             count += cnt;
         }
@@ -169,8 +203,7 @@ unsafe impl GlobalAlloc for ListAllocator {
             }
         }
 
-        let ret = self
-            .heap
+        let ret = GLOBAL_ALLOCATOR
             .lock()
             .alloc(layout)
             .ok()
@@ -204,15 +237,16 @@ unsafe impl GlobalAlloc for ListAllocator {
         self.free.fetch_add(size, Ordering::Release);
         self.bufSize.fetch_add(size, Ordering::Release);
         if class < self.bufs.len() {
-            return self.bufs[class].lock().Dealloc(ptr, &self.heap);
+            return self.bufs[class].lock().Dealloc(ptr, &GLOBAL_ALLOCATOR);
         }
 
-        self.heap.lock().dealloc(NonNull::new_unchecked(ptr), layout)
+        GLOBAL_ALLOCATOR.lock().dealloc(NonNull::new_unchecked(ptr), layout)
     }
 }
 
 /// FreeMemoryBlockMgr is used to manage heap memory block allocated by allocator
 #[repr(align(128))]
+#[derive(Debug, Default)]
 pub struct FreeMemBlockMgr {
     pub size: usize,
     pub count: usize,
@@ -293,11 +327,10 @@ impl FreeMemBlockMgr {
 
 type MemBlock = u64;
 
-
+#[derive(Debug, Default)]
 pub struct MemList {
     size: u64,
     head: MemBlock,
-    tail: MemBlock,
 }
 
 impl MemList {
@@ -305,7 +338,6 @@ impl MemList {
         return Self {
             size: size as u64,
             head: 0,
-            tail: 0,
         }
     }
 
@@ -320,19 +352,11 @@ impl MemList {
             *newB = 0;
         }
 
-        if self.head == 0 {
-            self.head = addr;
-            self.tail = addr;
-            return
-        }
-
-        let tail = self.tail;
-
-        let ptr = tail as * mut MemBlock;
+        let ptr = addr as * mut MemBlock;
         unsafe {
-            *ptr = addr;
+            *ptr = self.head;
         }
-        self.tail = addr;
+        self.head = addr;
     }
 
     pub fn Pop(&mut self) -> u64 {
@@ -341,12 +365,6 @@ impl MemList {
         }
 
         let next = self.head;
-
-        if self.head == self.tail {
-            self.head = 0;
-            self.tail = 0;
-            return next;
-        }
 
         let ptr = unsafe {
             &mut *(next as * mut MemBlock)

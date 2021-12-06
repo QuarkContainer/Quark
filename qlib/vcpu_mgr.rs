@@ -16,6 +16,7 @@ use core::sync::atomic::Ordering;
 use core::sync::atomic::AtomicU64;
 
 use super::ShareSpace;
+use super::mem::list_allocator::*;
 
 #[derive(Clone, Debug, PartialEq, Copy)]
 #[repr(u64)]
@@ -42,6 +43,7 @@ pub struct CPULocal {
     pub data: u64, // for eventfd data writing and reading
     pub eventfd: i32,
     pub epollfd: i32,
+    pub allocator: VcpuAllocator,
 }
 
 impl CPULocal {

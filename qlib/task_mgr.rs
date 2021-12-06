@@ -88,10 +88,21 @@ pub struct Scheduler {
     pub haltVcpuCnt: AtomicUsize,
 
     pub vcpuWaitMask: AtomicU64,
-    pub VcpuArr : [CPULocal; MAX_VCPU_COUNT],
+    pub VcpuArr : Vec<CPULocal>,
 }
 
 impl Scheduler {
+    pub fn New() -> Self {
+        let mut vcpuArr : Vec<CPULocal> = Vec::with_capacity(MAX_VCPU_COUNT);
+        for _i in 0..MAX_VCPU_COUNT {
+            vcpuArr.push(CPULocal::default())
+        }
+        return Self {
+            VcpuArr: vcpuArr,
+            ..Default::default()
+        }
+    }
+
     pub fn DecreaseHaltVcpuCnt(&self) {
         self.haltVcpuCnt.fetch_sub(1, Ordering::SeqCst);
     }

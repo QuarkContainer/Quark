@@ -202,7 +202,6 @@ CopyPageUnsafe:
     //load kernel rsp
     swapgs
     mov rsp, gs:0
-    swapgs
     jmp 2f
     1:
     //load exception rsp, which is kernel rsp
@@ -236,6 +235,15 @@ CopyPageUnsafe:
     pop r12
     pop rbp
     pop rbx
+
+    // cs of call, if it from user, last 3 bit is 0b11
+    mov rsi, [rsp + 11*8]
+    //caused in user mode?
+    and rsi, 0b11
+    jz 3f
+    //load kernel rsp
+    swapgs
+    3:
 
     pop r11
     pop r10
@@ -277,7 +285,6 @@ CopyPageUnsafe:
     //load kernel rsp
     swapgs
     mov rsp, gs:0
-    swapgs
     jmp 2f
     1:
     //load exception rsp, which is kernel rsp
@@ -312,6 +319,15 @@ CopyPageUnsafe:
     pop r12
     pop rbp
     pop rbx
+
+    // cs of call, if it from user, last 3 bit is 0b11
+    mov rsi, [rsp + 11*8]
+    //caused in user mode?
+    and rsi, 0b11
+    jz 3f
+    //load kernel rsp
+    swapgs
+    3:
 
     pop r11
     pop r10

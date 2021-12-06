@@ -550,7 +550,7 @@ impl ShareSpace {
             hostEpollProcessing: CachePadded::new(QMutex::new(())),
             VcpuSearchingCnt: CachePadded::new(AtomicU64::new(0)),
 
-            scheduler: task_mgr::Scheduler::default(),
+            scheduler: Scheduler::New(),
             guestMsgCount: CachePadded::new(AtomicU64::new(0)),
             hostProcessor: CachePadded::new(AtomicU64::new(0)),
             kernelIOThreadWaiting: CachePadded::new(AtomicBool::new(false)),
