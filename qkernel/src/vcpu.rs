@@ -16,7 +16,7 @@ use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
 
 use super::asm::*;
-use super::IOURING;
+//use super::IOURING;
 use super::qlib::vcpu_mgr::*;
 use super::qlib::singleton::*;
 use super::SHARESPACE;
@@ -158,7 +158,14 @@ impl CPULocal {
     }
 
     pub fn Wakeup(&self) {
-        IOURING.EventfdWrite(self.eventfd);
+        // the uring eventwrite maynot return successfully, likely linux bug
+        // todo: fix this.
+        //IOURING.EventfdWrite(self.vcpuId, self.eventfd);
+
+        // look like hcall based eventwrite is faster than qcall.
+        // todo: root cause this
+        //super::Kernel::HostSpace::EventfdWriteAsync(self.eventfd);
+        super::Kernel::HostSpace::EventfdWrite(self.eventfd);
     }
 
     pub fn SwitchToRunning(&self) {

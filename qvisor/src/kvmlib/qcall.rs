@@ -38,6 +38,12 @@ pub fn AQHostCall(msg: HostOutputMsg, _shareSpace: &ShareSpace) {
                 }
             }
         }
+        HostOutputMsg::EventfdWriteAsync(msg) => {
+            let ret = super::VMSpace::EventfdWrite(msg.fd);
+            if ret < 0 {
+                panic!("Eventfd write fail with error {}", ret)
+            }
+        }
     }
 }
 
@@ -366,6 +372,9 @@ impl KVMVcpu {
             },
             Msg::VcpuWait(msg) => {
                 ret = self.VcpuWait(msg.addr, msg.count) as u64;
+            },
+            Msg::EventfdWrite(msg) => {
+                ret = super::VMSpace::EventfdWrite(msg.fd) as u64;
             },
         };
 
