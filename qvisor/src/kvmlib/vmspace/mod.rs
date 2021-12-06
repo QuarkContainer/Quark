@@ -1279,6 +1279,16 @@ impl VMSpace {
         return Self::GetRet(ret as i64)
     }
 
+    pub fn EventfdWrite(fd: i32) -> i64 {
+        let val: u64 = 8;
+
+        let ret = unsafe {
+            write(fd, &val as * const _ as _, 8)
+        };
+
+        return Self::GetRet(ret as i64)
+    }
+
     pub fn WaitFD(fd: i32, op: u32, mask: EventMask) -> i64 {
         let osfd = match Self::GetOsfd(fd) {
             Some(fd) => fd,

@@ -104,6 +104,14 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
+    pub fn EventfdWrite(fd: i32) -> i64 {
+        let mut msg = Msg::EventfdWrite(EventfdWrite {
+            fd,
+        });
+
+        return HostSpace::HCall(&mut msg, false) as i64;
+    }
+
     pub fn RenameAt(olddirfd: i32, oldpath: u64, newdirfd: i32, newpath: u64) -> i64 {
         let mut msg = Msg::RenameAt(RenameAt {
             olddirfd,
@@ -841,6 +849,14 @@ impl HostSpace {
             fd,
             op,
             mask
+        });
+
+        super::SHARESPACE.AQCall(&msg);
+    }
+
+    pub fn EventfdWriteAsync(fd: i32) {
+        let msg = HostOutputMsg::EventfdWriteAsync(EventfdWriteAsync {
+            fd,
         });
 
         super::SHARESPACE.AQCall(&msg);

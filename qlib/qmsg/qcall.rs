@@ -102,6 +102,12 @@ pub enum Msg {
     NewFd(NewFd),
     HostEpollWaitProcess(HostEpollWaitProcess),
     VcpuWait(VcpuWait),
+    EventfdWrite(EventfdWrite),
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct EventfdWrite {
+    pub fd: i32
 }
 
 #[derive(Clone, Default, Debug)]
@@ -703,6 +709,7 @@ pub struct QMsg <'a> {
 pub enum HostOutputMsg {
     QCall(u64),
     WaitFDAsync(WaitFDAsync),
+    EventfdWriteAsync(EventfdWriteAsync),
 }
 
 #[derive(Clone, Default, Debug, Copy)]
@@ -712,3 +719,7 @@ pub struct WaitFDAsync {
     pub mask: EventMask,
 }
 
+#[derive(Clone, Default, Debug, Copy)]
+pub struct EventfdWriteAsync {
+    pub fd: i32,
+}
