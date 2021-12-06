@@ -114,7 +114,7 @@ impl SyncMgr {
 
     pub fn WakeVcpuAll(shareSpace: &ShareSpace) {
         // working VCPU
-        let vcpuCnt = shareSpace.scheduler.GetVcpuCnt();
+        let vcpuCnt = shareSpace.scheduler.vcpuCnt;
         for i in 1..vcpuCnt {
             Self::WakeVcpu(i);
         }

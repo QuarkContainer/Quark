@@ -541,7 +541,7 @@ pub struct ShareSpace {
 }
 
 impl ShareSpace {
-    pub fn New() -> Self {
+    pub fn New(vcpuCount: usize) -> Self {
         return ShareSpace {
             QInput: QRingBuf::New(MemoryDef::MSG_QLEN), //QMutex::new(VecDeque::with_capacity(MSG_QLEN)),
             QOutput: QRingBuf::New(MemoryDef::MSG_QLEN), //QMutex::new(VecDeque::with_capacity(MSG_QLEN)),
@@ -550,7 +550,7 @@ impl ShareSpace {
             hostEpollProcessing: CachePadded::new(QMutex::new(())),
             VcpuSearchingCnt: CachePadded::new(AtomicU64::new(0)),
 
-            scheduler: Scheduler::New(),
+            scheduler: Scheduler::New(vcpuCount),
             guestMsgCount: CachePadded::new(AtomicU64::new(0)),
             hostProcessor: CachePadded::new(AtomicU64::new(0)),
             kernelIOThreadWaiting: CachePadded::new(AtomicBool::new(false)),

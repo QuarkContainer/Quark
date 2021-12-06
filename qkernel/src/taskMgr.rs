@@ -270,7 +270,7 @@ impl Scheduler {
     // steal scheduling
     pub fn GetNext(&self) -> Option<TaskId> {
         let vcpuId = CPULocal::CpuId() as usize;
-        let vcpuCount = self.vcpuCnt.load(Ordering::Relaxed);
+        let vcpuCount = self.vcpuCnt;
 
         match self.GetNextForCpu(vcpuId, 0) {
             None => (),
@@ -300,7 +300,7 @@ impl Scheduler {
 
     pub fn Count(&self) -> u64 {
         let mut total = 0;
-        let vcpuCount = self.vcpuCnt.load(Ordering::Relaxed);
+        let vcpuCount = self.vcpuCnt;
         for i in 0..vcpuCount {
             total += self.queue[i].Len();
         }
@@ -310,7 +310,7 @@ impl Scheduler {
 
     pub fn Print(&self) -> String {
         let mut str = alloc::string::String::new();
-        let vcpuCount = self.vcpuCnt.load(Ordering::Relaxed);
+        let vcpuCount = self.vcpuCnt;
         for i in 0..vcpuCount {
             if self.queue[i].Len() > 0 {
                 str += &format!("{}:{}", i, self.queue[i].ToString());

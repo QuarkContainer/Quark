@@ -22,7 +22,6 @@ use core::sync::atomic::AtomicU64;
 use alloc::string::String;
 use cache_padded::CachePadded;
 
-use super::MAX_VCPU_COUNT;
 use super::vcpu_mgr::*;
 
 #[derive(Debug, Copy, Clone, Default)]
@@ -81,8 +80,8 @@ impl TaskIdQ {
 #[repr(C)]
 #[repr(align(128))]
 pub struct Scheduler {
-    pub queue: [CachePadded<TaskQueue>; MAX_VCPU_COUNT],
-    pub vcpuCnt: AtomicUsize,
+    pub queue: Vec<CachePadded<TaskQueue>>,
+    pub vcpuCnt: usize,
     pub taskCnt: AtomicUsize,
     pub readyTaskCnt: AtomicUsize,
     pub haltVcpuCnt: AtomicUsize,
@@ -92,13 +91,18 @@ pub struct Scheduler {
 }
 
 impl Scheduler {
-    pub fn New() -> Self {
-        let mut vcpuArr : Vec<CPULocal> = Vec::with_capacity(MAX_VCPU_COUNT);
-        for _i in 0..MAX_VCPU_COUNT {
-            vcpuArr.push(CPULocal::default())
+    pub fn New(vcpuCount: usize) -> Self {
+        let mut vcpuArr : Vec<CPULocal> = Vec::with_capacity(vcpuCount);
+        let mut queue: Vec<CachePadded<TaskQueue>> = Vec::with_capacity(vcpuCount);
+        for _i in 0..vcpuCount {
+            vcpuArr.push(CPULocal::default());
+            queue.push(CachePadded::new(TaskQueue::default()));
         }
+
         return Self {
             VcpuArr: vcpuArr,
+            queue: queue,
+            vcpuCnt: vcpuCount,
             ..Default::default()
         }
     }
@@ -113,14 +117,6 @@ impl Scheduler {
 
     pub fn HaltVcpuCnt(&self) -> usize {
         return self.haltVcpuCnt.load(Ordering::Acquire);
-    }
-
-    pub fn SetVcpuCnt(&self, vcpuCnt: usize) {
-        self.vcpuCnt.store(vcpuCnt, Ordering::SeqCst)
-    }
-
-    pub fn GetVcpuCnt(&self) -> usize {
-        self.vcpuCnt.load(Ordering::SeqCst)
     }
 
     #[inline(always)]
@@ -198,7 +194,7 @@ impl Scheduler {
     }
 
     pub fn WakeAll(&self) {
-        for i in 1..self.vcpuCnt.load(Ordering::Relaxed) {
+        for i in 1..self.vcpuCnt {
             self.WakeIdleCPU(i);
         }
     }

@@ -144,7 +144,7 @@ impl VirtualMachine {
         };
 
         let cpuCount = VMSpace::VCPUCount() - cnt;
-        VMS.lock().vcpuCount = VMSpace::VCPUCount();
+        VMS.lock().vcpuCount = cpuCount; //VMSpace::VCPUCount();
         let kernelMemRegionSize = QUARK_CONFIG.lock().KernelMemSize;
         let controlSock = args.ControlSock;
 
