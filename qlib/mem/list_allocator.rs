@@ -34,16 +34,25 @@ pub static GLOBAL_ALLOCATOR : QMutex<Heap<ORDER>> = QMutex::new(Heap::empty());
 
 #[derive(Debug)]
 pub struct VcpuAllocator {
-    pub bufs: [CachePadded<QMutex<FreeMemBlockMgr>>; 4],
+    pub bufs: [CachePadded<QMutex<FreeMemBlockMgr>>; 13],
 }
 
 impl Default for VcpuAllocator {
     fn default() -> Self {
-        let bufs : [CachePadded<QMutex<FreeMemBlockMgr>>; 4] = [
+        let bufs : [CachePadded<QMutex<FreeMemBlockMgr>>; 13] = [
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(0, 0))),
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(0, 1))),
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(0, 2))),
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(128, 3))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(128, 4))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(128, 5))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(64, 6))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(64, 7))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(64, 8))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(32, 9))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(32, 10))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(16, 11))),
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(1024, 12))),
         ];
 
         return Self {
@@ -322,7 +331,6 @@ type MemBlock = u64;
 pub struct MemList {
     size: u64,
     head: MemBlock,
-    tail: MemBlock,
 }
 
 impl MemList {
@@ -330,7 +338,6 @@ impl MemList {
         return Self {
             size: size as u64,
             head: 0,
-            tail: 0,
         }
     }
 
@@ -345,19 +352,11 @@ impl MemList {
             *newB = 0;
         }
 
-        if self.head == 0 {
-            self.head = addr;
-            self.tail = addr;
-            return
-        }
-
-        let tail = self.tail;
-
-        let ptr = tail as * mut MemBlock;
+        let ptr = addr as * mut MemBlock;
         unsafe {
-            *ptr = addr;
+            *ptr = self.head;
         }
-        self.tail = addr;
+        self.head = addr;
     }
 
     pub fn Pop(&mut self) -> u64 {
@@ -366,12 +365,6 @@ impl MemList {
         }
 
         let next = self.head;
-
-        if self.head == self.tail {
-            self.head = 0;
-            self.tail = 0;
-            return next;
-        }
 
         let ptr = unsafe {
             &mut *(next as * mut MemBlock)

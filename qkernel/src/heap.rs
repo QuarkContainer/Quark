@@ -8,8 +8,6 @@ use core::cmp::max;
 use super::qlib::vcpu_mgr::*;
 use super::qlib::mem::list_allocator::*;
 
-use super::Kernel;
-
 impl VcpuAllocator {
     pub fn handleError(&self, size:u64, alignment:u64) {
         super::Kernel::HostSpace::KernelOOM(size, alignment);
@@ -23,9 +21,6 @@ pub struct QAllocator {
 
 unsafe impl GlobalAlloc for QAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        super::Kernel::HostSpace::KernelMsg(3, 1, layout.size().next_power_of_two() as u64);
-        defer!(super::Kernel::HostSpace::KernelMsg(3, 2, layout.size().next_power_of_two() as u64));
-
         if self.Ready() {
             return CPULocal::Myself().allocator.alloc(layout);
         }
@@ -36,8 +31,6 @@ unsafe impl GlobalAlloc for QAllocator {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        //super::Kernel::HostSpace::KernelMsg(4, 1, layout.size().next_power_of_two() as u64);
-        //defer!(super::Kernel::HostSpace::KernelMsg(4, 2, layout.size().next_power_of_two() as u64));
         if self.Ready() {
             return CPULocal::Myself().allocator.dealloc(ptr, layout);
         }
@@ -54,11 +47,11 @@ impl QAllocator {
     }
 
     pub fn AddToHead(&self, start: usize, end: usize) {
-        Kernel::HostSpace::KernelMsg(2, start as u64, end as u64);
+        //Kernel::HostSpace::KernelMsg(2, start as u64, end as u64);
         unsafe {
             GLOBAL_ALLOCATOR.lock().add_to_heap(start, end);
         }
-        Kernel::HostSpace::KernelMsg(2, 0, 2    );
+        //Kernel::HostSpace::KernelMsg(2, 0, 2);
 
     }
 

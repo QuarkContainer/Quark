@@ -132,7 +132,7 @@ use self::task::*;
 use self::threadmgr::task_sched::*;
 use self::qlib::perf_tunning::*;
 //use self::memmgr::buf_allocator::*;
-use self::qlib::mem::list_allocator::*;
+//use self::qlib::mem::list_allocator::*;
 use self::quring::*;
 use self::print::SCALE;
 use self::heap::QAllocator;
@@ -409,7 +409,6 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
     if id == 0 {
         //ALLOCATOR.Add(heapStart as usize, heapLen as usize);
         ALLOCATOR.Init(heapStart as usize, heapLen as usize);
-
         SingletonInit();
         InitGs(id);
 
