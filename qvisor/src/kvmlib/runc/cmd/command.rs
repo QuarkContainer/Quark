@@ -31,6 +31,7 @@ use super::resume::*;
 use super::ps::*;
 use super::kill::*;
 use super::delete::*;
+use super::state::*;
 
 fn id_validator(val: String) -> core::result::Result<(), String> {
     if val.contains("..") || val.contains('/') {
@@ -199,6 +200,9 @@ pub fn Parse() -> Result<Arguments> {
         .subcommand(
             DeleteCmd::SubCommand(&common)
         )
+        .subcommand(
+            StateCmd::SubCommand(&common)
+        )
         .get_matches_from(get_args());
 
     let level = match matches.occurrences_of("v") {
@@ -305,6 +309,12 @@ pub fn Parse() -> Result<Arguments> {
                 cmd: Command::DeleteCmd(DeleteCmd::Init(&cmd_matches)?)
             }
         }
+        ("state", Some(cmd_matches)) => {
+            Arguments {
+                config: gConfig,
+                cmd: Command::StateCmd(StateCmd::Init(&cmd_matches)?)
+            }
+        }
         // We should never reach here because clap already enforces this
          _ => panic!("command not recognized"),
     };
@@ -333,6 +343,7 @@ pub enum Command {
     PsCmd(PsCmd),
     KillCmd(KillCmd),
     DeleteCmd(DeleteCmd),
+    StateCmd(StateCmd)
 }
 
 pub fn Run(args: &mut Arguments) -> Result<()> {
@@ -350,5 +361,6 @@ pub fn Run(args: &mut Arguments) -> Result<()> {
         Command::PsCmd(cmd) => return cmd.Run(&mut args.config),
         Command::KillCmd(cmd) => return cmd.Run(&mut args.config),
         Command::DeleteCmd(cmd) => return cmd.Run(&mut args.config),
+        Command::StateCmd(cmd) => return cmd.Run(&mut args.config)
     }
 }

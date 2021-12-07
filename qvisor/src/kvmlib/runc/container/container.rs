@@ -23,7 +23,6 @@ use std::fs::File;
 use fs2::FileExt;
 use std::io::Write;
 use std::fs::OpenOptions;
-use std::thread;
 //use std::os::unix::io::{AsRawFd};
 
 use super::super::super::qlib::common::*;
