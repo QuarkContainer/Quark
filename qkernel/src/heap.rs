@@ -1,5 +1,6 @@
 use core::alloc::{GlobalAlloc, Layout};
 use core::sync::atomic::AtomicBool;
+use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use core::ptr::NonNull;
 use core::mem::size_of;
@@ -14,13 +15,49 @@ impl VcpuAllocator {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
+pub struct Count {
+    pub curr: AtomicU64,
+    pub max: AtomicU64,
+}
+
+impl Count {
+    pub const fn New() -> Self {
+        return Self {
+            curr: AtomicU64::new(0),
+            max: AtomicU64::new(0)
+        }
+    }
+
+    pub fn Incr(&self) {
+        let val = self.curr.fetch_add(1, Ordering::SeqCst);
+        if val + 1 > self.max.load(Ordering::Relaxed) {
+            self.max.store(val + 1, Ordering::SeqCst)
+        }
+    }
+    pub fn Decr(&self) {
+        self.curr.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+#[derive(Default, Debug)]
 pub struct QAllocator {
     pub localReady: AtomicBool,
+    pub counts: [Count; 13],
 }
 
 unsafe impl GlobalAlloc for QAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        /*let size = max(
+            layout.size().next_power_of_two(),
+            max(layout.align(), size_of::<usize>()),
+        );
+
+        let class = size.trailing_zeros() as usize;
+        if class < self.counts.len() {
+            self.counts[class].Incr();
+        }*/
+
         if self.Ready() {
             return CPULocal::Myself().allocator.alloc(layout);
         }
@@ -31,6 +68,16 @@ unsafe impl GlobalAlloc for QAllocator {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        /*let size = max(
+            layout.size().next_power_of_two(),
+            max(layout.align(), size_of::<usize>()),
+        );
+
+        let class = size.trailing_zeros() as usize;
+        if class < self.counts.len() {
+            self.counts[class].Decr();
+        }*/
+
         if self.Ready() {
             return CPULocal::Myself().allocator.dealloc(ptr, layout);
         }
@@ -42,7 +89,13 @@ unsafe impl GlobalAlloc for QAllocator {
 impl QAllocator {
     pub const fn New() -> Self {
         return Self {
-            localReady: AtomicBool::new(false)
+            localReady: AtomicBool::new(false),
+            counts: [
+                Count::New(), Count::New(), Count::New(), Count::New(),
+                Count::New(), Count::New(), Count::New(), Count::New(),
+                Count::New(), Count::New(), Count::New(), Count::New(),
+                Count::New(),
+            ],
         }
     }
 
