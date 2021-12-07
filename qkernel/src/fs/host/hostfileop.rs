@@ -157,7 +157,7 @@ impl HostFileOp {
             }
 
         } else {
-            let mw = MultiWait::New(task.GetTaskIdQ());
+            let mw = MultiWait::New(task.GetTaskId());
 
             let mut fts = Vec::with_capacity(names.len());
             for name in &names {

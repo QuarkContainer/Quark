@@ -90,7 +90,7 @@ pub fn Init() {
 
 #[derive(Clone, Copy, Debug)]
 pub struct WaitingMsgCall {
-    pub taskId: TaskIdQ,
+    pub taskId: TaskId,
     pub addr: u64,
     pub len: usize,
     pub retAddr: u64,
@@ -160,7 +160,7 @@ impl VMSpace {
         mns.PivotRoot();
     }
 
-    pub fn ControlMsgCall(&mut self, taskId: TaskIdQ, addr: u64, len: usize, retAddr: u64) -> i64 {
+    pub fn ControlMsgCall(&mut self, taskId: TaskId, addr: u64, len: usize, retAddr: u64) -> i64 {
         match self.controlMsgQueue.pop_back() {
             Some(data) => {
                 self.CopyControlMsg(&WaitingMsgCall{

@@ -681,7 +681,7 @@ pub struct LoadProcessKernel {
 pub struct ControlMsgCall {
     pub addr: u64,
     pub len: usize,
-    pub taskId: TaskIdQ,
+    pub taskId: TaskId,
     pub ret : i64,
 }
 
@@ -699,7 +699,7 @@ pub struct Print<'a> {
 
 #[derive(Debug)]
 pub struct QMsg <'a> {
-    pub taskId: TaskIdQ,
+    pub taskId: TaskId,
     pub globalLock: bool,
     pub ret: u64,
     pub msg: &'a Msg,

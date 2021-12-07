@@ -66,7 +66,7 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn ControlMsgCall(addr: u64, len: usize, taskId: TaskIdQ) -> i64 {
+    pub fn ControlMsgCall(addr: u64, len: usize, taskId: TaskId) -> i64 {
         let mut msg = Msg::ControlMsgCall(ControlMsgCall {
             addr: addr,
             len: len,
@@ -864,7 +864,7 @@ impl HostSpace {
 
     fn Call(msg: &mut Msg, _mustAsync: bool) -> u64 {
         //return Self::HCall(msg, true);
-        let current = Task::Current().GetTaskIdQ();
+        let current = Task::Current().GetTaskId();
 
         let qMsg = QMsg {
             taskId: current,
@@ -882,7 +882,7 @@ impl HostSpace {
     }
 
     fn HCall(msg: &mut Msg, lock: bool) -> u64 {
-        let taskId = Task::Current().GetTaskIdQ();
+        let taskId = Task::Current().GetTaskId();
 
         let mut event = QMsg {
             taskId: taskId,

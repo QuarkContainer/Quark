@@ -13,7 +13,7 @@ use super::super::qlib::linux_def::QOrdering;
 pub struct MultiWait(Arc<MultiWaitIntern>);
 
 impl MultiWait {
-    pub fn New(taskId: TaskIdQ) -> Self {
+    pub fn New(taskId: TaskId) -> Self {
         return Self(Arc::new(MultiWaitIntern::New(taskId)))
     }
 }
@@ -28,11 +28,11 @@ impl Deref for MultiWait {
 
 pub struct MultiWaitIntern {
     pub count: AtomicU64,
-    pub taskId: TaskIdQ,
+    pub taskId: TaskId,
 }
 
 impl MultiWaitIntern {
-    pub fn New(taskId: TaskIdQ) -> Self {
+    pub fn New(taskId: TaskId) -> Self {
         return Self {
             count: AtomicU64::new(1),
             taskId: taskId,

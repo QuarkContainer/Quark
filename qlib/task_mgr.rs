@@ -41,38 +41,77 @@ impl TaskId {
     pub fn Addr(&self) -> u64 {
         return self.data;
     }
-}
 
-// task with cpu queue id
-// bit 0~11 queue id, 12~63 task address & !0xfff
-#[derive(Debug, Copy, Clone, Default)]
-pub struct TaskIdQ {
-    data: u64
-}
-
-impl TaskIdQ {
     #[inline]
-    // the last 12 bits of addr should be zero and queue < 4096
-    pub fn New(addr: u64, queue: u64) -> Self {
-        assert!((addr & 0xfff) ==0 && queue < 4096, "TaskIdQ::New addr is {:x}", addr);
-        return Self {
-            data: addr | queue
+    pub fn Context(&self) -> &'static Context {
+        unsafe {
+            return &*(self.data as * const Context)
         }
     }
 
     #[inline]
-    pub fn Addr(&self) -> u64 {
-        return self.data & !0xfff;
-    }
-
-    #[inline]
     pub fn Queue(&self) -> u64 {
-        return self.data & 0xfff;
+        return self.Context().queueId.load(Ordering::Relaxed) as u64;
+    }
+}
+
+
+#[derive(Debug, Default)]
+pub struct Links {
+    pub prev: AtomicU64,
+    pub next: AtomicU64,
+}
+
+#[derive(Debug)]
+#[repr(C)]
+pub struct Context {
+    pub rsp: u64,
+    pub r15: u64,
+    pub r14: u64,
+    pub r13: u64,
+    pub r12: u64,
+    pub rbx: u64,
+    pub rbp: u64,
+    pub rdi: u64,
+
+    pub ready: AtomicU64,
+    pub fs: u64,
+    //pub X86fpstate: Box<X86fpstate>,
+    //pub sigFPState: Vec<Box<X86fpstate>>,
+    // job queue id
+    pub queueId: AtomicUsize,
+    pub links: Links
+}
+
+impl Context {
+    pub fn New() -> Self {
+        return Self {
+            rsp: 0,
+            r15: 0,
+            r14: 0,
+            r13: 0,
+            r12: 0,
+            rbx: 0,
+            rbp: 0,
+            rdi: 0,
+
+            ready: AtomicU64::new(1),
+
+            fs: 0,
+            //X86fpstate: Default::default(),
+            //sigFPState: Default::default(),
+            queueId: AtomicUsize::new(0),
+            links: Links::default(),
+
+        }
     }
 
-    #[inline]
-    pub fn TaskId(&self) -> TaskId {
-        return TaskId::New(self.Addr())
+    pub fn Ready(&self) -> u64 {
+        return self.ready.load(Ordering::Acquire)
+    }
+
+    pub fn SetReady(&self, val: u64) {
+        return self.ready.store(val, Ordering::SeqCst)
     }
 }
 

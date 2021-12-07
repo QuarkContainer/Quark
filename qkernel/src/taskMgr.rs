@@ -424,6 +424,6 @@ pub fn NewTask(taskId: TaskId) {
     SHARESPACE.scheduler.NewTask(taskId);
 }
 
-pub fn ScheduleQ(taskId: TaskIdQ) {
-    SHARESPACE.scheduler.KScheduleQ(taskId.TaskId(), taskId.Queue() as usize);
+pub fn ScheduleQ(taskId: TaskId) {
+    SHARESPACE.scheduler.KScheduleQ(taskId, taskId.Queue() as usize);
 }

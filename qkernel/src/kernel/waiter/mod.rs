@@ -85,7 +85,7 @@ pub struct PollStruct {
 
 impl PollStruct {
     pub fn PollMulti(task: &Task, polls: &mut [PollStruct]) -> usize {
-        let mw = MultiWait::New(task.GetTaskIdQ());
+        let mw = MultiWait::New(task.GetTaskId());
 
         for i in 0..polls.len() {
             let poll = &mut polls[i];
