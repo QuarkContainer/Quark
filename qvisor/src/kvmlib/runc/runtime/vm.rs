@@ -287,8 +287,8 @@ impl VirtualMachine {
         shareSpace.scheduler.WakeAll();
     }
 
-    pub fn Schedule(shareSpace: &ShareSpace, taskId: TaskIdQ) {
-        shareSpace.scheduler.ScheduleQ(taskId.TaskId(), taskId.Queue());
+    pub fn Schedule(shareSpace: &ShareSpace, taskId: TaskId) {
+        shareSpace.scheduler.ScheduleQ(taskId, taskId.Queue());
     }
 
     pub fn PrintQ(shareSpace: &ShareSpace, vcpuId: u64) -> String {

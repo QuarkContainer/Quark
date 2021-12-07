@@ -21,7 +21,7 @@ pub static DEFAULT_MSG : UringOp = UringOp::None;
 
 #[derive(Clone, Debug, Copy)]
 pub struct UringCall {
-    pub taskId: TaskIdQ,
+    pub taskId: TaskId,
     pub ret: i32,
     pub msg: UringOp,
 }
@@ -29,7 +29,7 @@ pub struct UringCall {
 impl Default for UringCall {
     fn default() -> Self {
         return Self {
-            taskId : TaskIdQ::default(),
+            taskId : TaskId::default(),
             ret: 0,
             msg: DEFAULT_MSG,
         }

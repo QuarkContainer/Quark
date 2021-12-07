@@ -16,7 +16,6 @@ use core::ptr;
 use alloc::sync::Arc;
 //use alloc::boxed::Box;
 use alloc::string::ToString;
-use core::sync::atomic::AtomicUsize;
 
 use super::super::*;
 use super::super::kernel::ipc_namespace::*;
@@ -486,7 +485,6 @@ impl Task {
 
             ptr::write_volatile(taskPtr, Self {
                 context: Context::New(),
-                queueId: AtomicUsize::new(0),
                 taskId: s_ptr as u64,
                 mm: mm,
                 tidInfo: Default::default(),

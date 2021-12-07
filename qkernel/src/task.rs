@@ -19,8 +19,6 @@ use alloc::sync::Arc;
 use ::qlib::mutex::*;
 use core::mem;
 use alloc::boxed::Box;
-use core::sync::atomic::AtomicU64;
-use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
 
 //use super::arch::x86_64::arch_x86::*;
@@ -94,52 +92,7 @@ impl TaskId {
     }
 }
 
-#[derive(Debug)]
-#[repr(C)]
-pub struct Context {
-    pub rsp: u64,
-    pub r15: u64,
-    pub r14: u64,
-    pub r13: u64,
-    pub r12: u64,
-    pub rbx: u64,
-    pub rbp: u64,
-    pub rdi: u64,
 
-    pub ready: AtomicU64,
-    pub fs: u64,
-    //pub X86fpstate: Box<X86fpstate>,
-    //pub sigFPState: Vec<Box<X86fpstate>>,
-}
-
-impl Context {
-    pub fn New() -> Self {
-        return Self {
-            rsp: 0,
-            r15: 0,
-            r14: 0,
-            r13: 0,
-            r12: 0,
-            rbx: 0,
-            rbp: 0,
-            rdi: 0,
-
-            ready: AtomicU64::new(1),
-
-            fs: 0,
-            //X86fpstate: Default::default(),
-            //sigFPState: Default::default(),
-        }
-    }
-
-    pub fn Ready(&self) -> u64 {
-        return self.ready.load(Ordering::Acquire)
-    }
-
-    pub fn SetReady(&self, val: u64) {
-        return self.ready.store(val, Ordering::SeqCst)
-    }
-}
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum TaskState {
@@ -193,12 +146,11 @@ impl Drop for Task {
     }
 }
 
+
 #[repr(C)]
 pub struct Task {
     pub context: Context,
     pub taskId: u64,
-    // job queue id
-    pub queueId: AtomicUsize,
     pub mm: MemoryManager,
     pub tidInfo: TidInfo,
     pub isWaitThread: bool,
@@ -265,11 +217,11 @@ impl Task {
     }
 
     pub fn QueueId(&self) -> usize {
-        return self.queueId.load(Ordering::Acquire)
+        return self.context.queueId.load(Ordering::Acquire)
     }
 
     pub fn SetQueueId(&self, queueId: usize) {
-        return self.queueId.store(queueId, Ordering::Release)
+        return self.context.queueId.store(queueId, Ordering::Release)
     }
 
     #[inline(always)]
@@ -292,7 +244,6 @@ impl Task {
         return Task {
             context: Context::New(),
             taskId: 0,
-            queueId: AtomicUsize::new(0),
             //mm: MemoryMgr::default(),
             mm: MemoryManager::Init(true),
             tidInfo: Default::default(),
@@ -638,8 +589,8 @@ impl Task {
         }
     }
 
-    pub fn GetTaskIdQ(&self) -> TaskIdQ {
-        return TaskIdQ::New(self.taskId, self.QueueId() as u64)
+    pub fn GetTaskId(&self) -> TaskId {
+        return TaskId::New(self.taskId)
     }
 
     pub fn Create(runFn: TaskFn, para: *const u8, kernel: bool) -> &'static mut Self {
@@ -666,7 +617,6 @@ impl Task {
             ptr::write(taskPtr, Task {
                 context: ctx,
                 taskId: s_ptr as u64,
-                queueId: AtomicUsize::new(0),
                 mm: MemoryManager::Init(kernel),
                 tidInfo: Default::default(),
                 isWaitThread: false,
@@ -768,8 +718,6 @@ impl Task {
             ptr::write(taskPtr, Task {
                 context: Context::New(),
                 taskId: baseStackAddr,
-                queueId: AtomicUsize::new(0),
-                //mm: MemoryManager::Init(), //
                 mm: dummyTask.mm.clone(),
                 tidInfo: Default::default(),
                 isWaitThread: true,

@@ -323,8 +323,8 @@ impl KVMVcpu {
         Ok(())
     }
 
-    pub fn Schedule(&self, taskId: TaskIdQ) {
-        self.ShareSpace().scheduler.ScheduleQ(taskId.TaskId(), taskId.Queue());
+    pub fn Schedule(&self, taskId: TaskId) {
+        self.ShareSpace().scheduler.ScheduleQ(taskId, taskId.Queue());
     }
 
     pub fn run(&self) -> Result<()> {
@@ -779,7 +779,7 @@ impl KVMVcpu {
                     }
 
                     if currTaskId.Addr() != 0 {
-                        sharespace.scheduler.ScheduleQ(currTaskId.TaskId(), currTaskId.Queue())
+                        sharespace.scheduler.ScheduleQ(currTaskId, currTaskId.Queue())
                     }
                 }
                 Some(msg) => {

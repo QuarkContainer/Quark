@@ -438,7 +438,7 @@ impl QUring {
 
     pub fn UCall(&self, task: &Task, msg: UringOp) -> i64 {
         let call = UringCall {
-            taskId: task.GetTaskIdQ(),
+            taskId: task.GetTaskId(),
             ret: 0,
             msg: msg,
         };
