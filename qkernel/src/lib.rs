@@ -517,8 +517,14 @@ fn StartRootContainer(_para: *const u8) {
         let mut buf: [u8; 8192] = [0; 8192];
         let addr = &mut buf[0] as * mut _ as u64;
         let size = Kernel::HostSpace::LoadProcessKernel(addr, buf.len()) as usize;
-
-        let process : Process = serde_json::from_slice(&buf[0..size]).expect("StartRootContainer: LoadProcessKernel des fail");
+        let process  = serde_json::from_slice(&buf[0..size]);
+        let process = match process {
+            Ok(p) => p,
+            Err(e) => {
+                error!("StartRootContainer: failed to LoadProcessKernel, cause: {:?}", e);
+                panic!("failed to load Process");
+            }
+        };
         process
     };
 

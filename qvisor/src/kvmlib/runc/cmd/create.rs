@@ -51,6 +51,7 @@ impl CreateCmd {
             .arg(&common.no_pivot_arg)
             .arg(&common.pid_arg)
             .arg(&common.init_arg)
+            .arg(&common.user_log_arg)
             .about("Create a container (to be started later)");
     }
 

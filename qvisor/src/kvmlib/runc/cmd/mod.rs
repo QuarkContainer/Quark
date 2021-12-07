@@ -27,3 +27,4 @@ pub mod resume;
 pub mod ps;
 pub mod kill;
 pub mod delete;
+pub mod state;
