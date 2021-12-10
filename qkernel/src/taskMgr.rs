@@ -250,7 +250,7 @@ pub fn Wait() {
             switch(current, waitTask);
             break;
         } else {
-            if !ProcessOne() {
+            if PollAsyncMsg() == 0 {
                 unsafe { llvm_asm!("pause" :::: "volatile"); }
             }
         }
