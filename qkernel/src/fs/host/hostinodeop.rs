@@ -781,7 +781,7 @@ impl HostInodeOp {
             false
         };
 
-        let ret = if false && SHARESPACE.config.read().TcpBuffIO && self.InodeType() == InodeType::RegularFile {
+        let ret = if SHARESPACE.config.read().TcpBuffIO && self.InodeType() == InodeType::RegularFile {
             if self.BufWriteEnable() {
                 // try to gain the lock once, release immediately
                 self.BufWriteLock().Lock(task);
