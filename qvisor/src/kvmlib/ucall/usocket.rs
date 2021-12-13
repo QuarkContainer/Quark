@@ -23,6 +23,7 @@ use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::control_msg::*;
 use super::super::qlib::cstring::*;
+use super::super::URING_MGR;
 use super::ucall::*;
 
 #[derive(Debug)]
@@ -30,19 +31,19 @@ pub struct USocket {
     pub socket: i32,
 }
 
-impl Drop for USocket {
-    fn drop(&mut self) {
+impl USocket {
+    pub fn Drop(&self) {
         if self.socket == -1 {
             return;
         }
+
+        URING_MGR.lock().Removefd(self.socket).unwrap();
 
         unsafe {
             close(self.socket);
         }
     }
-}
 
-impl USocket {
     // this is designed for the QVisor signal sending to QKernel.
     // As there is no real unix connection setup, the SendResponse won't work
     pub fn DummyUSocket() -> Self {

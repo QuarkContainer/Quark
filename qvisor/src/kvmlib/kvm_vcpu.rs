@@ -441,7 +441,7 @@ impl KVMVcpu {
                                 &mut *(regs.rbx as * mut ShareSpace)
                             };
 
-                            sharespace.Init();
+                            sharespace.Init(vms.controlSock);
                             let logfd = super::super::print::LOG.lock().Logfd();
                             super::URING_MGR.lock().Init(sharespace.config.read().DedicateUring);
                             super::URING_MGR.lock().Addfd(logfd).unwrap();
@@ -449,6 +449,7 @@ impl KVMVcpu {
                             KERNEL_IO_THREAD.Init(sharespace.scheduler.VcpuArr[0].eventfd);
                             URING_MGR.lock().SetupEventfd(sharespace.scheduler.VcpuArr[0].eventfd);
                             URING_MGR.lock().Addfd(sharespace.HostHostEpollfd()).unwrap();
+                            URING_MGR.lock().Addfd(vms.controlSock).unwrap();
                             vms.shareSpace = sharespace;
 
                             let syncPrint = sharespace.config.read().SyncPrint();
@@ -469,7 +470,6 @@ impl KVMVcpu {
                             PerfPrint();
 
                             SetExitStatus(exitCode);
-                            super::ucall::ucall_server::Stop().unwrap();
 
                             //wake up Kernel io thread
                             KERNEL_IO_THREAD.Wakeup(VMS.lock().GetShareSpace());
@@ -952,11 +952,13 @@ impl CPULocal {
 }
 
 impl ShareSpace {
-    pub fn Init(&mut self) {
+    pub fn Init(&mut self, controlSock: i32) {
         self.scheduler.Init();
         self.SetLogfd(super::super::print::LOG.lock().Logfd());
         self.hostEpollfd.store(FD_NOTIFIER.Epollfd(), Ordering::SeqCst);
         *self.config.write() = *QUARK_CONFIG.lock();
+        self.controlSock = controlSock;
+        super::vmspace::VMSpace::BlockFd(controlSock);
     }
 
     pub fn Yield() {
