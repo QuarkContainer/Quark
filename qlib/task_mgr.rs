@@ -191,7 +191,7 @@ impl Scheduler {
             self.IncReadyTaskCount()
         };
 
-        error!("ScheduleQ task {:x?}, vcpuId {}", task, vcpuId);
+        //error!("ScheduleQ task {:x?}, vcpuId {}", task, vcpuId);
         if vcpuId == 0 {
             self.WakeOne();
             return
