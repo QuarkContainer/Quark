@@ -82,7 +82,8 @@ pub fn HandleSignal(signalArgs: &SignalArgs) {
 }
 
 pub fn SignalHandler(_ :  *const u8) {
-    match MSG.lock().take() {
+    let msg = MSG.lock().take();
+    match msg {
         None => (),
         Some(msg) => {
             HandleSignal(&msg);

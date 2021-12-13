@@ -57,7 +57,7 @@ pub struct SignalFaultInfo {
 extern fn handle_sigintAct(signal :i32, signInfo: *mut libc::siginfo_t, _: *mut libc::c_void) {
     let console = CONSOLE.load(Ordering::SeqCst);
 
-    {
+    /*{
         let vms = super::super::super::VMS.lock();
 
         error!("signal debug");
@@ -66,7 +66,7 @@ extern fn handle_sigintAct(signal :i32, signInfo: *mut libc::siginfo_t, _: *mut 
         }
 
         error!("vcpus is {:x?}", vms.GetShareSpace().scheduler.VcpuArr);
-    }
+    }*/
 
     if SIGNAL_HANDLE_ENABLE.load(Ordering::Relaxed) {
         let sigfault: &SignalFaultInfo = unsafe {
