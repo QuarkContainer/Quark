@@ -21,8 +21,6 @@ use super::super::config::*;
 pub enum Msg {
     //Qcall
     LoadProcessKernel(LoadProcessKernel),
-    ControlMsgCall(ControlMsgCall),
-    ControlMsgRet(ControlMsgRet),
     GetStdfds(GetStdfds),
     CreateMemfd(CreateMemfd),
 
@@ -103,6 +101,8 @@ pub enum Msg {
     HostEpollWaitProcess(HostEpollWaitProcess),
     VcpuWait(VcpuWait),
     EventfdWrite(EventfdWrite),
+    ReadControlMsg(ReadControlMsg),
+    WriteControlMsgResp(WriteControlMsgResp),
 }
 
 #[derive(Clone, Default, Debug)]
@@ -678,16 +678,15 @@ pub struct LoadProcessKernel {
 }
 
 #[derive(Clone, Debug)]
-pub struct ControlMsgCall {
+pub struct ReadControlMsg {
+    pub fd: i32,
     pub addr: u64,
     pub len: usize,
-    pub taskId: TaskId,
-    pub ret : i64,
 }
 
 #[derive(Clone, Debug)]
-pub struct ControlMsgRet {
-    pub msgId: u64,
+pub struct WriteControlMsgResp {
+    pub fd: i32,
     pub addr: u64,
     pub len: usize,
 }

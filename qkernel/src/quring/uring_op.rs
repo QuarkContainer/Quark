@@ -55,6 +55,7 @@ impl UringCall {
             UringOp::Statx(ref msg) => return msg.SEntry(),
             UringOp::Fsync(ref msg) => return msg.SEntry(),
             UringOp::Splice(ref msg) => return msg.SEntry(),
+            UringOp::Accept(ref msg) => return msg.SEntry(),
         };
 
         panic!("UringCall SEntry UringOp::None")
@@ -70,6 +71,7 @@ pub enum UringOp {
     Statx(StatxOp),
     Fsync(FsyncOp),
     Splice(SpliceOp),
+    Accept(AcceptOp),
 }
 
 impl Default for UringOp {
@@ -198,6 +200,19 @@ impl EpollCtlOp {
     pub fn SEntry(&self) -> squeue::Entry {
         let op = EpollCtl::new(types::Fd(self.epollfd), types::Fd(self.fd), self.op, &self.ev as * const _ as u64 as * const types::epoll_event);
 
+        return op.build()
+            .flags(squeue::Flags::FIXED_FILE);
+    }
+}
+
+#[derive(Clone, Debug, Copy)]
+pub struct AcceptOp {
+    pub fd : i32,
+}
+
+impl AcceptOp {
+    pub fn SEntry(&self) -> squeue::Entry {
+        let op = Accept::new(types::Fd(self.fd), &0 as * const _ as u64 as * mut _, &0 as * const _ as u64 as * mut _);
         return op.build()
             .flags(squeue::Flags::FIXED_FILE);
     }

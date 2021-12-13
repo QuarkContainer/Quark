@@ -14,6 +14,7 @@
 
 use super::guestfdnotifier::*;
 use super::qlib::qmsg::*;
+use super::boot::controller::SignalProcess;
 
 impl HostInputMsg {
     pub fn Process(self) {
@@ -26,6 +27,9 @@ impl HostInputMsg {
             }
             HostInputMsg::LogFlush => {
                 HostLogFlush();
+            }
+            HostInputMsg::Signal(msg) => {
+                SignalProcess(&msg);
             }
             HostInputMsg::WakeIOThreadResp(()) => ()
         }

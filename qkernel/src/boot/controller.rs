@@ -24,120 +24,142 @@ use super::super::taskMgr;
 use super::super::task::*;
 use super::super::{StartRootContainer, StartExecProcess};
 use super::super::LOADER;
+use super::super::IOURING;
+use super::super::SHARESPACE;
 use super::process::*;
 use super::super::qlib::singleton::*;
 
-pub static MSG : Singleton<QMutex<Option<ControlMsg>>> = Singleton::<QMutex<Option<ControlMsg>>>::New();
+pub static MSG : Singleton<QMutex<Option<SignalArgs>>> = Singleton::<QMutex<Option<SignalArgs>>>::New();
 
-pub fn Run() -> Result<()> {
+pub fn ControllerProcessHandler() -> Result<()> {
     let task = Task::Current();
     loop {
-        let msg = ControlMsgCall()?;
-
-        match msg.payload {
-            Payload::Pause => {
-                let kernel = LOADER.Lock(task).unwrap().kernel.clone();
-                kernel.Pause();
-                ControlMsgRet(msg.msgId, &UCallResp::PauseResp);
-                continue;
-            }
-            Payload::Unpause => {
-                let kernel = LOADER.Lock(task).unwrap().kernel.clone();
-                kernel.Unpause();
-                ControlMsgRet(msg.msgId, &UCallResp::UnpauseResp);
-                continue;
-            }
-            Payload::Ps(cid) => {
-                let kernel = LOADER.Lock(task).unwrap().kernel.clone();
-                let ps = Processes(&kernel, &cid);
-                ControlMsgRet(msg.msgId, &UCallResp::PsResp(ps));
-                continue;
-            }
-            Payload::Signal(signalArgs) => {
-                info!("get signal {:?}", &signalArgs);
-                match signalArgs.Mode {
-                    SignalDeliveryMode::DeliverToProcess => {
-                        match LOADER.Lock(task).unwrap().SignalProcess(signalArgs.PID, signalArgs.Signo) {
-                            Err(e) => {
-                                info!("signal DeliverToProcess fail with error {:?}", e);
-                            }
-                            Ok(())=> ()
-                        }
-                    }
-                    SignalDeliveryMode::DeliverToAllProcesses => {
-                        match LOADER.Lock(task).unwrap().SignalAll(signalArgs.Signo) {
-                            Err(e) => {
-                                info!("signal DeliverToAllProcesses fail with error {:?}", e);
-                            }
-                            Ok(())=> ()
-                        }
-                    }
-                    SignalDeliveryMode::DeliverToForegroundProcessGroup => {
-                        match LOADER.Lock(task).unwrap().SignalForegroundProcessGroup(signalArgs.PID, signalArgs.Signo) {
-                            Err(_e) => {
-                                info!("signal DeliverToForegroundProcessGroup fail with error");
-                                //todo: enable the error when ready
-                                //info!("signal DeliverToForegroundProcessGroup fail with error {:?}", e);
-                            }
-                            Ok(())=> ()
-                        }
-                    }
-                };
-
-                ControlMsgRet(msg.msgId, &UCallResp::SignalResp);
-                continue;
-            }
-            Payload::ContainerDestroy => {
-                LOADER.Lock(task).unwrap().DestroyContainer()?;
-                ControlMsgRet(msg.msgId, &UCallResp::ContainerDestroyResp);
-                continue;
-            }
-            _ => ()
-        }
-
-        while MSG.lock().is_some() {
-            taskMgr::Yield();
-        }
-
-        *MSG.lock() = Some(msg);
-
-        taskMgr::CreateTask(ControlMsgHandler, ptr::null(), false);
+        let fd = IOURING.SyncAccept(task, SHARESPACE.controlSock);
+        taskMgr::CreateTask(ControlMsgHandler, fd as *const u8, false);
     }
 }
 
-pub fn ControlMsgHandler(_para: *const u8) {
-    let msg = MSG.lock().take().expect("ControlMsgHandler: get none msg");
+pub fn SignalProcess(signalArgs: &SignalArgs) {
+    *MSG.lock() = Some(*signalArgs);
+    taskMgr::CreateTask(SignalHandler, 0 as *const u8, false);
+}
+
+pub fn HandleSignal(signalArgs: &SignalArgs) {
+    info!("get signal {:?}", &signalArgs);
+    let task = Task::Current();
+    match signalArgs.Mode {
+        SignalDeliveryMode::DeliverToProcess => {
+            match LOADER.Lock(task).unwrap().SignalProcess(signalArgs.PID, signalArgs.Signo) {
+                Err(e) => {
+                    info!("signal DeliverToProcess fail with error {:?}", e);
+                }
+                Ok(())=> ()
+            }
+        }
+        SignalDeliveryMode::DeliverToAllProcesses => {
+            match LOADER.Lock(task).unwrap().SignalAll(signalArgs.Signo) {
+                Err(e) => {
+                    info!("signal DeliverToAllProcesses fail with error {:?}", e);
+                }
+                Ok(())=> ()
+            }
+        }
+        SignalDeliveryMode::DeliverToForegroundProcessGroup => {
+            match LOADER.Lock(task).unwrap().SignalForegroundProcessGroup(signalArgs.PID, signalArgs.Signo) {
+                Err(_e) => {
+                    info!("signal DeliverToForegroundProcessGroup fail with error");
+                    //todo: enable the error when ready
+                    //info!("signal DeliverToForegroundProcessGroup fail with error {:?}", e);
+                }
+                Ok(())=> ()
+            }
+        }
+    };
+
+    // free curent task in the waitfn context
+    CPULocal::SetPendingFreeStack(Task::Current().taskId);
+    super::super::taskMgr::SwitchToNewTask();
+}
+
+pub fn SignalHandler(_ :  *const u8) {
+    match MSG.lock().take() {
+        None => (),
+        Some(msg) => {
+            HandleSignal(&msg);
+        }
+    }
+}
+
+pub fn ControlMsgHandler(fd: *const u8) {
+    let fd = fd as i32;
+
+    let task = Task::Current();
+    let msg = {
+        let mut buf: [u8; 8192] = [0; 8192];
+        let addr = &mut buf[0] as * mut _ as u64;
+        let ret = Kernel::HostSpace::ReadControlMsg(fd, addr, buf.len());
+
+        if ret < 0 {
+            return
+        }
+
+        let size = ret as usize;
+
+        let msg : ControlMsg = serde_json::from_slice(&buf[0..size]).expect(&format!("LoadProcessKernel des fail size is {}", size));
+        msg
+    };
 
     match msg.payload {
+        Payload::Pause => {
+            let kernel = LOADER.Lock(task).unwrap().kernel.clone();
+            kernel.Pause();
+            WriteControlMsgResp(fd, &UCallResp::PauseResp);
+        }
+        Payload::Unpause => {
+            let kernel = LOADER.Lock(task).unwrap().kernel.clone();
+            kernel.Unpause();
+            WriteControlMsgResp(fd, &UCallResp::UnpauseResp);
+        }
+        Payload::Ps(cid) => {
+            let kernel = LOADER.Lock(task).unwrap().kernel.clone();
+            let ps = Processes(&kernel, &cid);
+            WriteControlMsgResp(fd, &UCallResp::PsResp(ps));
+        }
+        Payload::Signal(signalArgs) => {
+            HandleSignal(&signalArgs);
+
+            WriteControlMsgResp(fd, &UCallResp::SignalResp);
+        }
+        Payload::ContainerDestroy => {
+            LOADER.Lock(task).unwrap().DestroyContainer().unwrap();
+            WriteControlMsgResp(fd, &UCallResp::ContainerDestroyResp);
+        }
         Payload::RootContainerStart(_) => {
-            ControlMsgRet(msg.msgId, &UCallResp::RootContainerStartResp);
+            WriteControlMsgResp(fd, &UCallResp::RootContainerStartResp);
             StartRootContainer(ptr::null());
         }
         Payload::ExecProcess(process) => {
-            StartExecProcess(msg.msgId, process);
+            StartExecProcess(fd, process);
         }
         Payload::WaitContainer => {
             match LOADER.WaitContainer() {
                 Ok(exitStatus) => {
-                    ControlMsgRet(msg.msgId, &UCallResp::WaitContainerResp(exitStatus));
+                    WriteControlMsgResp(fd, &UCallResp::WaitContainerResp(exitStatus));
                 }
                 Err(e) => {
-                    ControlMsgRet(msg.msgId, &UCallResp::UCallRespErr(format!("{:?}", e)));
+                    WriteControlMsgResp(fd, &UCallResp::UCallRespErr(format!("{:?}", e)));
                 }
             }
         }
         Payload::WaitPid(waitpid) => {
             match LOADER.WaitPID(waitpid.pid, waitpid.clearStatus) {
                 Ok(exitStatus) => {
-                    ControlMsgRet(msg.msgId, &UCallResp::WaitPidResp(exitStatus));
+                    WriteControlMsgResp(fd, &UCallResp::WaitPidResp(exitStatus));
                 }
                 Err(e) => {
-                    ControlMsgRet(msg.msgId, &UCallResp::UCallRespErr(format!("{:?}", e)));
+                    WriteControlMsgResp(fd, &UCallResp::UCallRespErr(format!("{:?}", e)));
                 }
             }
-        }
-        _ => {
-            panic!("ControlMsgHandler unsupported message {:?}", msg);
         }
     }
 
@@ -146,24 +168,10 @@ pub fn ControlMsgHandler(_para: *const u8) {
     super::super::taskMgr::SwitchToNewTask();
 }
 
-pub fn ControlMsgCall() -> Result<ControlMsg> {
-    let msg = {
-        let mut buf: [u8; 8192] = [0; 8192];
-        let addr = &mut buf[0] as * mut _ as u64;
-        let taskId = Task::Current().GetTaskId();
-        let size = Kernel::HostSpace::ControlMsgCall(addr, buf.len(), taskId) as usize;
-
-        let msg : ControlMsg = serde_json::from_slice(&buf[0..size]).expect(&format!("LoadProcessKernel des fail size is {}", size));
-        msg
-    };
-
-    return Ok(msg)
-}
-
-pub fn ControlMsgRet(msgId: u64, msg: &UCallResp) {
+pub fn WriteControlMsgResp(fd: i32, msg: &UCallResp) {
     let data : Vec<u8> = serde_json::to_vec(&msg).expect("LoadProcessKernel ser fail...");
     let addr = &data[0] as * const _ as u64;
     let len = data.len();
 
-    Kernel::HostSpace::ControlMsgRet(msgId, addr, len);
+    Kernel::HostSpace::WriteControlMsgResp(fd, addr, len);
 }

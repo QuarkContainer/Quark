@@ -537,6 +537,8 @@ pub struct ShareSpace {
     pub logLock: QMutex<()>,
     pub logfd: AtomicI32,
 
+    pub controlSock: i32,
+
     pub values: [[AtomicU64; 2]; 16],
 }
 
@@ -558,6 +560,7 @@ impl ShareSpace {
             logBuf: QMutex::new(None),
             logLock: QMutex::new(()),
             logfd: AtomicI32::new(-1),
+            controlSock: -1,
             values: [
                 [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)],
                 [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)],

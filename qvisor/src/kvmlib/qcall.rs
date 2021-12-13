@@ -132,13 +132,6 @@ impl KVMVcpu {
             Msg::LoadProcessKernel(msg) => {
                 ret = super::VMS.lock().LoadProcessKernel(msg.processAddr, msg.len) as u64;
             },
-            Msg::ControlMsgCall(msg) => {
-                let retAddr = &msg.ret as * const _ as u64;
-                ret = super::VMS.lock().ControlMsgCall(msg.taskId, msg.addr, msg.len, retAddr) as u64;
-            },
-            Msg::ControlMsgRet(msg) => {
-                ret = super::VMS.lock().ControlMsgRet(msg.msgId, msg.addr, msg.len) as u64;
-            },
             Msg::GetStdfds(msg) => {
                 ret = super::VMSpace::GetStdfds(msg.addr) as u64;
             },
@@ -375,6 +368,12 @@ impl KVMVcpu {
             },
             Msg::EventfdWrite(msg) => {
                 ret = super::VMSpace::EventfdWrite(msg.fd) as u64;
+            },
+            Msg::ReadControlMsg(msg) => {
+                ret = super::VMSpace::ReadControlMsg(msg.fd, msg.addr, msg.len) as u64;
+            },
+            Msg::WriteControlMsgResp(msg) => {
+                ret = super::VMSpace::WriteControlMsgResp(msg.fd, msg.addr, msg.len) as u64;
             },
         };
 

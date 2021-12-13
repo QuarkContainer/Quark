@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::super::linux_def::*;
+use super::super::control_msg::SignalArgs;
 
 #[derive(Debug, Copy, Clone)]
 #[repr(align(128))]
@@ -21,6 +22,7 @@ pub enum HostInputMsg {
     IOBufWriteResp(IOBufWriteResp),
     LogFlush,
     WakeIOThreadResp(()),
+    Signal(SignalArgs),
 }
 
 //host call kernel

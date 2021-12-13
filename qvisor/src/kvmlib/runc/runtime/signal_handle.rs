@@ -19,8 +19,7 @@ use core::sync::atomic::Ordering;
 
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::control_msg::*;
-use super::super::super::vmspace::*;
-use super::super::super::ucall::usocket::*;
+use super::super::super::VMS;
 
 lazy_static! {
     static ref SIGNAL_HANDLE_ENABLE : AtomicBool = AtomicBool::new(false);
@@ -77,19 +76,17 @@ extern fn handle_sigintAct(signal :i32, signInfo: *mut libc::siginfo_t, _: *mut 
         error!("get signal {}, action is {:x?}", signal, sigfault);
 
 
-        let payload = Payload::Signal({
-            SignalArgs {
-                Signo: signal,
-                PID: 0,
-                Mode: if console {
-                    SignalDeliveryMode::DeliverToForegroundProcessGroup
-                } else {
-                    SignalDeliveryMode::DeliverToProcess
-                }
+        let signal = SignalArgs {
+            Signo: signal,
+            PID: 0,
+            Mode: if console {
+                SignalDeliveryMode::DeliverToForegroundProcessGroup
+            } else {
+                SignalDeliveryMode::DeliverToProcess
             }
-        });
-        SendControlMsg(USocket::DummyUSocket(), ControlMsg::New(payload))
-            .expect("handle_sigint fail when SendControlMsg")
+        };
+
+        VMS.lock().Signal(signal);
     }
 }
 

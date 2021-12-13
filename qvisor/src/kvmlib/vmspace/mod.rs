@@ -30,10 +30,7 @@ use std::fs;
 use libc::*;
 use std::marker::Send;
 use serde_json;
-use alloc::collections::btree_map::BTreeMap;
 use x86_64::structures::paging::PageTableFlags;
-use std::collections::VecDeque;
-use alloc::boxed::Box;
 use tempfile::tempfile;
 use std::os::unix::io::IntoRawFd;
 use lazy_static::lazy_static;
@@ -54,7 +51,6 @@ use super::qlib::qmsg::*;
 use super::qlib::cstring::*;
 use super::qlib::perf_tunning::*;
 use super::namespace::MountNs;
-use super::runc::runtime::vm::*;
 use super::ucall::usocket::*;
 use super::*;
 use self::HostFileMap::fdinfo::*;
@@ -109,21 +105,13 @@ pub struct VMSpace {
     pub args: Option<Args>,
     pub pivot: bool,
     pub waitingMsgCall: Option<WaitingMsgCall>,
-    pub controlMsgCallBack: BTreeMap<u64, USocket>,
-    pub controlMsgQueue: VecDeque<Box<(USocket, ControlMsg)>>,
+    pub controlSock: i32,
 }
 
 unsafe impl Sync for VMSpace {}
 unsafe impl Send for VMSpace {}
 
 impl VMSpace {
-    pub fn CloseVMSpace(&mut self) {
-        for (_, sock) in self.controlMsgCallBack.iter() {
-            sock.SendResp(&UCallResp::UCallRespErr("container shutdown...".to_string())).ok();
-        }
-        self.controlMsgCallBack.clear();
-    }
-
     ///////////start of file operation//////////////////////////////////////////////
     pub fn GetOsfd(hostfd: i32) -> Option<i32> {
         return IO_MGR.lock().GetFdByHost(hostfd);
@@ -160,33 +148,7 @@ impl VMSpace {
         mns.PivotRoot();
     }
 
-    pub fn ControlMsgCall(&mut self, taskId: TaskId, addr: u64, len: usize, retAddr: u64) -> i64 {
-        match self.controlMsgQueue.pop_back() {
-            Some(data) => {
-                self.CopyControlMsg(&WaitingMsgCall{
-                    taskId: taskId,
-                    addr: addr,
-                    len: len,
-                    retAddr,
-                }, data.0, &data.1).expect("ControlMsgCall CopyControlMsg fail");
-
-                VirtualMachine::Schedule(self.GetShareSpace(), taskId);
-                return 0
-            }
-            None => ()
-        };
-
-        self.waitingMsgCall = Some(WaitingMsgCall{
-            taskId: taskId,
-            addr: addr,
-            len: len,
-            retAddr,
-        });
-
-        return 0
-    }
-
-    pub fn ControlMsgRet(&mut self, msgId: u64, addr: u64, len: usize) -> i64 {
+    pub fn WriteControlMsgResp(fd: i32, addr: u64, len: usize) -> i64 {
         let buf = {
             let ptr = addr as * const u8;
             unsafe { slice::from_raw_parts(ptr, len) }
@@ -194,9 +156,8 @@ impl VMSpace {
 
         let resp : UCallResp = serde_json::from_slice(&buf[0..len]).expect("ControlMsgRet des fail");
 
-        let usock = match self.controlMsgCallBack.remove(&msgId) {
-            None => panic!("ControlMsgRet get non-exist msgid {}", msgId),
-            Some(s) => s,
+        let usock = USocket {
+            socket: fd,
         };
 
         match usock.SendResp(&resp) {
@@ -204,48 +165,9 @@ impl VMSpace {
             Ok(()) => (),
         }
 
+        usock.Drop();
+
         return 0;
-    }
-
-    pub fn CopyControlMsg(&mut self, waitMsg: &WaitingMsgCall, usock: USocket, msg: &ControlMsg) -> Result<()> {
-        let msgId = msg.msgId;
-
-        let vec : Vec<u8> = serde_json::to_vec(msg).expect("SendControlMsg ser fail...");
-        let buff = {
-            let ptr = waitMsg.addr as *mut u8;
-            unsafe { slice::from_raw_parts_mut(ptr, waitMsg.len) }
-        };
-
-        if vec.len() > buff.len() {
-            return Err(Error::Common(format!("ExecProcess not enough space..., required len is {}, buff len is {}", vec.len(), buff.len())));
-        }
-
-        for i in 0..vec.len() {
-            buff[i] = vec[i];
-        }
-
-        let addr = waitMsg.retAddr;
-        unsafe {
-            *(addr as * mut u64) = vec.len() as u64;
-        }
-
-        self.controlMsgCallBack.insert(msgId, usock);
-        return Ok(())
-    }
-
-    pub fn SendControlMsg(&mut self, usock: USocket, msg: ControlMsg) -> Result<()> {
-        let waitMsg = match self.waitingMsgCall.take() {
-            None => {
-                self.controlMsgQueue.push_front(Box::new((usock, msg)));
-                return Ok(());
-            },
-            Some(m) => m,
-        };
-
-        self.CopyControlMsg(&waitMsg, usock, &msg)?;
-
-        VirtualMachine::Schedule(self.GetShareSpace(), waitMsg.taskId);
-        return Ok(())
     }
 
     pub fn VCPUCount() -> usize {
@@ -1107,6 +1029,31 @@ impl VMSpace {
         return Self::GetRet(ret as i64)
     }
 
+    pub fn ReadControlMsg(fd: i32, addr: u64, len: usize) -> i64 {
+        match super::ucall::ucall_server::ReadControlMsg(fd) {
+            Err(_e) => {
+                return -1
+            }
+            Ok(msg) => {
+                let vec : Vec<u8> = serde_json::to_vec(&msg).expect("SendControlMsg ser fail...");
+                let buff = {
+                    let ptr = addr as *mut u8;
+                    unsafe { slice::from_raw_parts_mut(ptr, len) }
+                };
+
+                if vec.len() > buff.len() {
+                    panic!("ReadControlMsg not enough space..., required len is {}, buff len is {}", vec.len(), buff.len());
+                }
+
+                for i in 0..vec.len() {
+                    buff[i] = vec[i];
+                }
+
+                return vec.len() as i64
+            }
+        }
+    }
+
     pub fn Bind(sockfd: i32, sockaddr: u64, addrlen: u32, umask: u32) -> i64 {
         let sockfd = match Self::GetOsfd(sockfd) {
             Some(sockfd) => sockfd,
@@ -1528,6 +1475,10 @@ impl VMSpace {
         }));
     }
 
+    pub fn Signal(&self, signal: SignalArgs) {
+        self.shareSpace.AQHostInputCall(&HostInputMsg::Signal(signal));
+    }
+
     pub fn LibcFstat(osfd: i32) -> Result<LibcStat> {
         let mut stat = LibcStat::default();
         let ret = unsafe {
@@ -1569,14 +1520,7 @@ impl VMSpace {
             args: None,
             pivot: false,
             waitingMsgCall: None,
-            controlMsgCallBack: BTreeMap::new(),
-            controlMsgQueue: VecDeque::with_capacity(5),
+            controlSock: -1,
         }
     }
-}
-
-pub fn SendControlMsg(usock: USocket, msg: ControlMsg) -> Result<()> {
-    VMS.lock().SendControlMsg(usock, msg)?;
-
-    return Ok(())
 }

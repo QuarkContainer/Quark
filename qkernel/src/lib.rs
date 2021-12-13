@@ -486,12 +486,12 @@ fn Print() {
     info!("cr2 is {:x}, cr3 is {:x}, cs is {}, ss is {}", cr2, cr3, cs, ss);
 }
 
-fn StartExecProcess(msgId: u64, process: Process) {
+fn StartExecProcess(fd: i32, process: Process) {
     let (tid, entry, userStackAddr, kernelStackAddr) = {
         LOADER.ExecProcess(process).unwrap()
     };
 
-    ControlMsgRet(msgId, &UCallResp::ExecProcessResp(tid));
+    WriteControlMsgResp(fd, &UCallResp::ExecProcessResp(tid));
 
     let currTask = Task::Current();
     currTask.AccountTaskEnter(SchedState::RunningApp);
@@ -500,7 +500,7 @@ fn StartExecProcess(msgId: u64, process: Process) {
 }
 
 fn ControllerProcess(_para: *const u8) {
-    Run().expect("ControllerProcess crash");
+    ControllerProcessHandler().expect("ControllerProcess crash");
 }
 
 pub fn StartRootProcess() {

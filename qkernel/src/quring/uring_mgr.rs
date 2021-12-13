@@ -248,6 +248,14 @@ impl QUring {
         return self.UCall(task, msg);
     }
 
+    pub fn SyncAccept(&self, task: &Task, fd: i32) -> i64 {
+        let msg = UringOp::Accept(AcceptOp {
+            fd: fd,
+        });
+
+        return self.UCall(task, msg);
+    }
+
     pub fn Write(&self, task: &Task, fd: i32, addr: u64, len: u32, offset: i64) -> i64 {
         let msg = UringOp::Write(WriteOp {
             fd: fd,

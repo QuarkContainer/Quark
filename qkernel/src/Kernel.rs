@@ -66,33 +66,6 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn ControlMsgCall(addr: u64, len: usize, taskId: TaskId) -> i64 {
-        let mut msg = Msg::ControlMsgCall(ControlMsgCall {
-            addr: addr,
-            len: len,
-            taskId: taskId,
-            ret: 0,
-        });
-
-        HostSpace::HCall(&mut msg, false) as i64;
-        taskMgr::Wait();
-        if let Msg::ControlMsgCall(m) = msg {
-            return m.ret
-        }
-
-        panic!("ControlMsgCall fail...");
-    }
-
-    pub fn ControlMsgRet(msgId: u64, addr: u64, len: usize) -> i64 {
-        let mut msg = Msg::ControlMsgRet(ControlMsgRet {
-            msgId: msgId,
-            addr: addr,
-            len: len,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
     pub fn Fallocate(fd: i32, mode: i32, offset: i64, len: i64) -> i64 {
         let mut msg = Msg::Fallocate(Fallocate {
             fd,
@@ -799,6 +772,26 @@ impl HostSpace {
         });
 
         return HostSpace::HCall(&mut msg, false) as i64;
+    }
+
+    pub fn ReadControlMsg(fd: i32, addr: u64, len: usize) -> i64 {
+        let mut msg = Msg::ReadControlMsg(ReadControlMsg {
+            fd,
+            addr,
+            len
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
+    pub fn WriteControlMsgResp(fd: i32, addr: u64, len: usize) -> i64 {
+        let mut msg = Msg::WriteControlMsgResp(WriteControlMsgResp {
+            fd: fd,
+            addr: addr,
+            len: len,
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn Futimens(fd: i32, times: u64) -> i64 {

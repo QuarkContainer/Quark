@@ -35,7 +35,6 @@ use super::super::super::kvm_vcpu::*;
 use super::super::super::elf_loader::*;
 use super::super::super::vmspace::*;
 use super::super::super::{VMS, PMA_KEEPER, QUARK_CONFIG};
-use super::super::super::ucall::ucall_server::*;
 
 lazy_static! {
     static ref EXIT_STATUS : AtomicI32 = AtomicI32::new(-1);
@@ -181,6 +180,7 @@ impl VirtualMachine {
 
             info!("kernelMemSize is {:x}", kernelMemSize);
             let vms = &mut VMS.lock();
+            vms.controlSock = controlSock;
             //pageAllocatorBaseAddr = vms.pmaMgr.MapAnon(kernelMemSize, AccessType::ReadWrite().Val() as i32, true, false)?;
             pageAllocatorBaseAddr = PMA_KEEPER.MapAnon(kernelMemSize, AccessType::ReadWrite().Val() as i32)?;
             info!("*******************alloc address is {:x}, expect{:x}", pageAllocatorBaseAddr, MemoryDef::PHY_LOWER_ADDR + MemoryDef::ONE_GB);
@@ -213,10 +213,6 @@ impl VirtualMachine {
 
         let p = entry as *const u8;
         info!("entry is 0x{:x}, data at entry is {:x}", entry, unsafe { *p } );
-
-        //let usocket = USocket::InitServer(&ControlSocketAddr(&containerId))?;
-        //let usocket = USocket::CreateServer(&ControlSocketAddr(&containerId), usockfd)?;
-        InitUCallController(controlSock)?;
 
         {
             super::super::super::URING_MGR.lock();
@@ -271,11 +267,6 @@ impl VirtualMachine {
                 info!("cpu#{} finish", i);
             }));
         }
-
-        threads.push(thread::spawn(move || {
-            UcallSrvProcess().unwrap();
-            info!("UcallSrvProcess finish...");
-        }));
 
         for t in threads {
             t.join().expect("the working threads has panicked");
