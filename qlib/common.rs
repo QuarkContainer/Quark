@@ -117,7 +117,7 @@ pub enum TaskRunState {
     RunExit,
     RunExitNotify,
     RunThreadExit,
-    RunTreadExitNotify,
+    RunThreadExitNotify,
     RunExitDone,
     RunNoneReachAble,
     // can't reach this state

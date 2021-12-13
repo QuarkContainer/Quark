@@ -1162,7 +1162,7 @@ impl Task {
     pub fn RunThreadExit(&mut self) -> TaskRunState {
         let t = self.Thread();
         t.ExitMain();
-        return TaskRunState::RunTreadExitNotify;
+        return TaskRunState::RunThreadExitNotify;
     }
 
     pub fn RunThreadExitNotify(&mut self) -> TaskRunState {
@@ -1177,7 +1177,8 @@ impl Task {
                     //println!("there is no clear_child_tid");
                 }
                 Some(addr) => {
-                    self.CopyOutObj(&(0 as u32), addr).unwrap();
+                    let val : u32 = 0;
+                    self.CopyOutObj(&val, addr).unwrap();
                     self.futexMgr.Wake(self, addr, false, !0, 1).unwrap();
                 }
             }

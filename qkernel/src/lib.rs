@@ -346,10 +346,10 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                 info!("RunThreadExit[{:x}] ...", currTask.taskId);
                 currTask.RunThreadExit()
             },
-            TaskRunState::RunTreadExitNotify => {
+            TaskRunState::RunThreadExitNotify => {
                 info!("RunTreadExitNotify[{:x}] ...", currTask.taskId);
                 currTask.RunThreadExitNotify()
-            },
+            }
             TaskRunState::RunExitDone => {
                 {
                     error!("RunExitDone 1 [{:x}] ...", currTask.taskId);
