@@ -104,15 +104,17 @@ use core::panic::PanicInfo;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::AtomicBool;
+use core::sync::atomic::AtomicI32;
 use core::{ptr, mem};
 use alloc::vec::Vec;
 use ::qlib::mutex::*;
+use alloc::string::String;
 
 //use linked_list_allocator::LockedHeap;
 //use buddy_system_allocator::LockedHeap;
 use taskMgr::{CreateTask, WaitFn, IOWait};
 use self::qlib::{ShareSpace, SysCallID};
-use self::qlib::buddyallocator::*;
+//use self::qlib::buddyallocator::*;
 use self::qlib::pagetable::*;
 use self::qlib::control_msg::*;
 use self::qlib::common::*;
@@ -152,29 +154,30 @@ static ALLOCATOR: QAllocator = QAllocator::New();
 //static ALLOCATOR: BufHeap = BufHeap::Empty();
 //static ALLOCATOR: LockedHeap<33> = LockedHeap::empty();
 
-pub fn AllocatorPrint() {
-    //ALLOCATOR.Print();
+pub fn AllocatorPrint(_class: usize) -> String {
+    let class = 4;
+    return ALLOCATOR.Print(class);
 }
 
 pub static SHARESPACE : Singleton<ShareSpace> = Singleton::<ShareSpace>::New();
-pub static PAGE_ALLOCATOR : Singleton<MemAllocator> = Singleton::<MemAllocator>::New();
 pub static KERNEL_PAGETABLE : Singleton<PageTables> = Singleton::<PageTables>::New();
 pub static PAGE_MGR : Singleton<PageMgr> = Singleton::<PageMgr>::New();
 pub static LOADER : Singleton<Loader> = Singleton::<Loader>::New();
 pub static IOURING : Singleton<QUring> = Singleton::<QUring>::New();
 pub static KERNEL_STACK_ALLOCATOR : Singleton<AlignedAllocator> = Singleton::<AlignedAllocator>::New();
 pub static SHUTDOWN : Singleton<AtomicBool> = Singleton::<AtomicBool>::New();
+pub static EXIT_CODE : Singleton<AtomicI32> = Singleton::<AtomicI32>::New();
 
 pub fn SingletonInit(vcpuCount: usize) {
     unsafe {
         SHARESPACE.Init(ShareSpace::New(vcpuCount));
-        PAGE_ALLOCATOR.Init(MemAllocator::New());
         KERNEL_PAGETABLE.Init(PageTables::Init(CurrentCr3()));
         PAGE_MGR.Init(PageMgr::New());
         LOADER.Init(Loader::default());
         IOURING.Init(QUring::New(MemoryDef::QURING_SIZE, 1));
         KERNEL_STACK_ALLOCATOR.Init( AlignedAllocator::New(MemoryDef::DEFAULT_STACK_SIZE as usize, MemoryDef::DEFAULT_STACK_SIZE as usize));
         SHUTDOWN.Init(AtomicBool::new(false));
+        EXIT_CODE.Init(AtomicI32::new(0));
 
         guestfdnotifier::GUEST_NOTIFIER.Init(guestfdnotifier::Notifier::New());
         UID.Init(AtomicU64::new(1));
