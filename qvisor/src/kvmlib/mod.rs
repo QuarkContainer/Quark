@@ -56,6 +56,10 @@ use self::vmspace::uringMgr::*;
 const LOWER_TOP: u64 = 0x00007fffffffffff;
 const UPPER_BOTTOM: u64 = 0xffff800000000000;
 
+pub fn AllocatorPrint(_class: usize) -> String {
+    return "".to_string();
+}
+
 lazy_static! {
     pub static ref SHARE_SPACE : AtomicU64 = AtomicU64::new(0);
     pub static ref VMS: Mutex<VMSpace> = Mutex::new(VMSpace::Init());

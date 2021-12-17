@@ -5,6 +5,7 @@ use core::sync::atomic::Ordering;
 use core::ptr::NonNull;
 use core::mem::size_of;
 use core::cmp::max;
+use alloc::string::String;
 
 use super::qlib::vcpu_mgr::*;
 use super::qlib::mem::list_allocator::*;
@@ -97,6 +98,10 @@ impl QAllocator {
                 Count::New(),
             ],
         }
+    }
+
+    pub fn Print(&self, class: usize) -> String {
+        return format!("alloc[{}] xxx {:?}", class, &self.counts[class]);
     }
 
     pub fn AddToHead(&self, start: usize, end: usize) {
