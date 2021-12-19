@@ -170,7 +170,7 @@ pub struct Inode(pub Arc<QMutex<InodeIntern>>);
 
 impl Default for Inode {
     fn default() -> Self {
-        return Self(Arc::new(QMutex::new(InodeIntern::default())))
+        return Self(Arc::new(QMutex::new(InodeIntern::New())))
     }
 }
 
@@ -185,12 +185,12 @@ impl Deref for Inode {
 impl Inode {
     pub fn New<T: InodeOperations + 'static>(InodeOp: &Arc<T>, MountSource: &Arc<QMutex<MountSource>>, StableAttr: &StableAttr) -> Self {
         let inodeInternal = InodeIntern {
+            UniqueId: NewUID(),
             InodeOp: InodeOp.clone(),
             StableAttr: StableAttr.clone(),
             LockCtx: LockCtx::default(),
             MountSource: MountSource.clone(),
             Overlay: None,
-            ..Default::default()
         };
 
         return Self(Arc::new(QMutex::new(inodeInternal)))
@@ -207,12 +207,12 @@ impl Inode {
         let iops = HostInodeOp::New(&msrc.lock().MountSourceOperations.clone(), fd, fstat.WouldBlock(), &fstat, writeable);
 
         return Ok(Self(Arc::new(QMutex::new(InodeIntern {
+            UniqueId: NewUID(),
             InodeOp: Arc::new(iops),
             StableAttr: fstat.StableAttr(),
             LockCtx: LockCtx::default(),
             MountSource: msrc.clone(),
             Overlay: None,
-            ..Default::default()
         }))))
     }
 
@@ -675,6 +675,17 @@ impl Default for InodeIntern {
 }
 
 impl InodeIntern {
+    pub fn New() -> Self {
+        return Self {
+            UniqueId: NewUID(),
+            InodeOp: Arc::new(HostInodeOp::default()),
+            StableAttr: Default::default(),
+            LockCtx: LockCtx::default(),
+            MountSource: Arc::new(QMutex::new(MountSource::default())),
+            Overlay: None,
+        }
+    }
+
     pub fn StableAttr(&self) -> &StableAttr {
         return &self.StableAttr
     }

@@ -102,6 +102,7 @@ impl QAllocator {
 
     pub fn Print(&self, class: usize) -> String {
         return format!("alloc[{}] xxx {:?}", class, &self.counts[class]);
+        //return format!("alloc[{}] xxx {:#?}", class, &self.counts);
     }
 
     pub fn AddToHead(&self, start: usize, end: usize) {
