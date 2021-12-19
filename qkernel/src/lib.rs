@@ -155,7 +155,7 @@ static ALLOCATOR: QAllocator = QAllocator::New();
 //static ALLOCATOR: LockedHeap<33> = LockedHeap::empty();
 
 pub fn AllocatorPrint(_class: usize) -> String {
-    let class = 4;
+    let class = 6;
     return ALLOCATOR.Print(class);
 }
 
@@ -292,6 +292,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     MainRun(currTask, state);
     //currTask.PerfGofrom(PerfType::KernelHandling);
 
+    //error!("syscall_handler: {}", ::AllocatorPrint(10));
     if llevel == LogLevel::Simple || llevel == LogLevel::Complex {
         let gap = if self::SHARESPACE.config.read().PerfDebug {
             Rdtsc() - startTime
@@ -457,6 +458,8 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
     /***************** can't run any qcall before this point ************************************/
 
     if id == 0 {
+        //error!("start main: {}", ::AllocatorPrint(10));
+
         //ALLOCATOR.Print();
         IOWait();
     };

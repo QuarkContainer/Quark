@@ -157,7 +157,7 @@ impl Drop for MemoryManager {
     fn drop(&mut self) {
         if Arc::strong_count(&self.0) == 1 {
             let _ml = self.MappingWriteLock();
-            self.RemoveVMAsLocked(&Range::New(0, !0)).unwrap();
+            self.CleanVMAs().unwrap();
         }
     }
 }
@@ -273,6 +273,30 @@ impl MemoryManager {
 
         meta.argv = Range::New(stackLayout.ArgvStart, stackLayout.ArgvEnd - stackLayout.ArgvStart);
         meta.envv = Range::New(stackLayout.EnvvStart, stackLayout.EvvvEnd - stackLayout.EnvvStart)
+    }
+
+    pub fn CleanVMAs(&self) -> Result<()> {
+        let mut mapping = self.mapping.lock();
+        let (mut vseg, vgap) = mapping.vmas.Find(0);
+        if vgap.Ok() {
+            vseg = vgap.NextSeg();
+        }
+
+        while vseg.Ok() {
+            let r = vseg.Range();
+            let vma = vseg.Value();
+
+            if !vma.kernel {
+                if vma.mappable.is_some() {
+                    let mappable = vma.mappable.clone().unwrap();
+                    mappable.RemoveMapping(self, &r, vma.offset, vma.CanWriteMappableLocked())?;
+                }
+            }
+            let vgap = mapping.vmas.Remove(&vseg);
+            vseg = vgap.NextSeg();
+        }
+
+        return Ok(())
     }
 
     //Remove virtual memory to the phy mem mapping

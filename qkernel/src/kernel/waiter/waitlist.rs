@@ -62,7 +62,7 @@ impl WaitList {
         } else {
             let head = self.head.clone().unwrap();
             e.lock().next = Some(head.clone());
-            head.lock().prev = Some(e.clone());
+            head.lock().prev = Some(e.Downgrade());
             self.head = Some(e.clone());
         }
     }
@@ -77,7 +77,7 @@ impl WaitList {
             self.tail = Some(e.clone())
         } else {
             let tail = self.tail.clone().unwrap();
-            e.lock().prev = Some(tail.clone());
+            e.lock().prev = Some(tail.Downgrade());
             tail.lock().next = Some(e.clone());
             self.tail = Some(e.clone());
         }
@@ -93,12 +93,15 @@ impl WaitList {
             self.head = e.lock().next.clone();
         } else {
             let lock = e.lock();
-            lock.prev.clone().unwrap().lock().next = lock.next.clone();
+            lock.prev.clone().unwrap().Upgrade().unwrap().lock().next = lock.next.clone();
         }
 
         if e.lock().next.is_none() {
             //tail
-            self.tail = e.lock().prev.clone();
+            self.tail = match &e.lock().prev {
+                None => None,
+                Some(ref p) => p.Upgrade()
+            };
         } else {
             let lock = e.lock();
             lock.next.clone().unwrap().lock().prev = lock.prev.clone();
