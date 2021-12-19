@@ -66,6 +66,21 @@ impl PartialEq for Dirent {
 
 impl Eq for Dirent {}
 
+impl Drop for Dirent {
+    fn drop(&mut self) {
+        if Arc::strong_count(&self.0) == 1 {
+            let parent = (self.0).0.lock().Parent.take();
+            match parent {
+                None => (),
+                Some(parent) => {
+                    let name = (self.0).0.lock().Name.clone();
+                    parent.RemoveChild(&name);
+                }
+            }
+        }
+    }
+}
+
 impl Dirent {
     pub fn New(inode: &Inode, name: &str) -> Self {
         return Self(Arc::new((QMutex::new(InterDirent {
@@ -357,6 +372,10 @@ impl Dirent {
         let _a = RENAME.read();
 
         return self.walk(task, root, name)
+    }
+
+    pub fn RemoveChild(&self, name: &String) {
+        (self.0).0.lock().Children.remove(name);
     }
 
     pub fn AddChild(&self, child: &Arc<(QMutex<InterDirent>, u64)>) -> Option<Weak<(QMutex<InterDirent>, u64)>> {
@@ -898,7 +917,6 @@ impl Dirent {
     }
 
     pub fn ExtendReference(&self) {
-        //defer!(error!("ExtendReference 2"));
         let msrc = self.Inode().lock().MountSource.clone();
         let keep = msrc.lock().Keep(self);
         if keep {

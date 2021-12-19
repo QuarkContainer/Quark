@@ -15,6 +15,7 @@
 use alloc::collections::btree_map::BTreeMap;
 use core::ops::Deref;
 use alloc::sync::Arc;
+use alloc::sync::Weak;
 use alloc::string::String;
 use alloc::string::ToString;
 use core::ops::Bound::*;
@@ -214,13 +215,27 @@ impl<T: AreaValue> AreaGap<T> {
 pub struct AreaEntryInternal<T: AreaValue> {
     pub range: Range,
     pub value: Option<T>,
-    pub prev: Option<AreaEntry<T>>,
+    pub prev: Option<AreaEntryWeak<T>>,
     pub next: Option<AreaEntry<T>>,
 }
 
 impl<T: AreaValue> AreaEntryInternal<T> {
     pub fn Value(&self) -> &T {
         return self.value.as_ref().expect("AreaEntryInternal get None, it is head/tail")
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct AreaEntryWeak<T: AreaValue>(pub Weak<QMutex<AreaEntryInternal<T>>>);
+
+impl<T: AreaValue> AreaEntryWeak<T> {
+    pub fn Upgrade(&self) -> Option<AreaEntry<T>> {
+        let c = match self.0.upgrade() {
+            None => return None,
+            Some(c) => c,
+        };
+
+        return Some(AreaEntry(c))
     }
 }
 
@@ -244,6 +259,11 @@ impl<T: AreaValue> PartialEq for AreaEntry<T> {
 impl<T: AreaValue> Eq for AreaEntry<T> {}
 
 impl<T: AreaValue> AreaEntry<T> {
+    pub fn Downgrade(&self) -> AreaEntryWeak<T> {
+        let c = Arc::downgrade(&self.0);
+        return AreaEntryWeak(c);
+    }
+
     pub fn Dummy(start: u64, len: u64) -> Self {
         let internal = AreaEntryInternal {
             range: Range::New(start, len),
@@ -269,8 +289,8 @@ impl<T: AreaValue> AreaEntry<T> {
         let next = curr.next.take().expect("next is null");
 
 
-        (*prev).lock().next = Some(next.clone());
-        (*next).lock().prev = Some(prev.clone());
+        prev.Upgrade().unwrap().lock().next = Some(next.clone());
+        (*next).lock().prev = Some(prev);
     }
 
     pub fn InsertAfter(&self, r: &Range, vma: T) -> Self {
@@ -278,9 +298,9 @@ impl<T: AreaValue> AreaEntry<T> {
 
         let next = self.lock().next.take().expect("next is null");
         self.lock().next = Some(n.clone());
-        n.lock().prev = Some(self.clone());
+        n.lock().prev = Some(self.Downgrade());
 
-        next.lock().prev = Some(n.clone());
+        next.lock().prev = Some(n.Downgrade());
         n.lock().next = Some(next.clone());
 
         return n;
@@ -339,7 +359,7 @@ impl<T: AreaValue> AreaEntry<T> {
         }
 
         let tmp = self.lock().prev.clone().unwrap();
-        return Some(tmp);
+        return tmp.Upgrade();
     }
 
     //return <prev Gap before the Area, the area before the Gap>
@@ -380,7 +400,7 @@ impl<T: AreaValue> AreaSet<T> {
         };
 
         head.lock().next = Some(tail.clone());
-        tail.lock().prev = Some(head.clone());
+        tail.lock().prev = Some(head.Downgrade());
 
         return Self {
             range: Range::New(start, len),

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
+use alloc::sync::Weak;
 use ::qlib::mutex::*;
 use core::ops::Deref;
 use core::cell::*;
@@ -81,10 +82,24 @@ pub struct ThreadContext {
 #[derive(Default)]
 pub struct EntryInternal {
     pub next: Option<WaitEntry>,
-    pub prev: Option<WaitEntry>,
+    pub prev: Option<WaitEntryWeak>,
     pub mask: EventMask,
 
     pub context: WaitContext,
+}
+
+#[derive(Clone, Default)]
+pub struct WaitEntryWeak(pub Weak<QMutex<EntryInternal>>);
+
+impl WaitEntryWeak {
+    pub fn Upgrade(&self) -> Option<WaitEntry> {
+        let c = match self.0.upgrade() {
+            None => return None,
+            Some(c) => c,
+        };
+
+        return Some(WaitEntry(c))
+    }
 }
 
 #[derive(Default, Clone)]
@@ -107,6 +122,11 @@ impl PartialEq for WaitEntry {
 impl Eq for WaitEntry {}
 
 impl WaitEntry {
+    pub fn Downgrade(&self) -> WaitEntryWeak {
+        let c = Arc::downgrade(&self.0);
+        return WaitEntryWeak(c);
+    }
+
     pub fn New() -> Self {
         let internal = EntryInternal {
             next: None,
@@ -180,7 +200,7 @@ impl WaitEntry {
 
     pub fn InitState(&self) -> bool {
         let s = self.lock();
-        return s.prev == None && s.next == None;
+        return s.prev.is_none() && s.next == None;
     }
 
     pub fn Mask(&self) -> EventMask {

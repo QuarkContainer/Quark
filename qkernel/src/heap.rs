@@ -44,7 +44,7 @@ impl Count {
 #[derive(Default, Debug)]
 pub struct QAllocator {
     pub localReady: AtomicBool,
-    pub counts: [Count; 13],
+    pub counts: [Count; 16],
 }
 
 unsafe impl GlobalAlloc for QAllocator {
@@ -95,7 +95,7 @@ impl QAllocator {
                 Count::New(), Count::New(), Count::New(), Count::New(),
                 Count::New(), Count::New(), Count::New(), Count::New(),
                 Count::New(), Count::New(), Count::New(), Count::New(),
-                Count::New(),
+                Count::New(), Count::New(), Count::New(), Count::New()
             ],
         }
     }
