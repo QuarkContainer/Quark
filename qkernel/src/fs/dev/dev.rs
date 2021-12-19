@@ -20,6 +20,7 @@ use alloc::string::ToString;
 use super::super::super::qlib::device::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::auth::*;
+use super::super::super::uid::NewUID;
 use super::super::super::task::*;
 use super::super::mount::*;
 use super::super::inode::*;
@@ -55,12 +56,12 @@ fn NewTTYDevice(iops: &Arc<TTYDevice>, msrc: &Arc<QMutex<MountSource>>) -> Inode
     };
 
     let inodeInternal = InodeIntern {
+        UniqueId: NewUID(),
         InodeOp: iops.clone(),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: None,
-        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)))
@@ -80,12 +81,12 @@ fn NewNullDevice(iops: &Arc<NullDevice>, msrc: &Arc<QMutex<MountSource>>) -> Ino
     };
 
     let inodeInternal = InodeIntern {
+        UniqueId: NewUID(),
         InodeOp: iops.clone(),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: None,
-        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)))
@@ -105,12 +106,12 @@ fn NewZeroDevice(iops: &Arc<ZeroDevice>, msrc: &Arc<QMutex<MountSource>>) -> Ino
     };
 
     let inodeInternal = InodeIntern {
+        UniqueId: NewUID(),
         InodeOp: iops.clone(),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: None,
-        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)))
@@ -130,12 +131,12 @@ fn NewFullDevice(iops: &Arc<FullDevice>, msrc: &Arc<QMutex<MountSource>>) -> Ino
     };
 
     let inodeInternal = InodeIntern {
+        UniqueId: NewUID(),
         InodeOp: iops.clone(),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: None,
-        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)))
@@ -155,12 +156,12 @@ fn NewRandomDevice(iops: &Arc<RandomDevice>, msrc: &Arc<QMutex<MountSource>>, mi
     };
 
     let inodeInternal = InodeIntern {
+        UniqueId: NewUID(),
         InodeOp: iops.clone(),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: None,
-        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)))
@@ -182,12 +183,12 @@ fn NewDirectory(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     };
 
     let inodeInternal = InodeIntern {
+        UniqueId: NewUID(),
         InodeOp: Arc::new(iops),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: None,
-        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)))
@@ -209,12 +210,12 @@ fn NewSymlink(task: &Task, target: &str, msrc: &Arc<QMutex<MountSource>>) -> Ino
     };
 
     let inodeInternal = InodeIntern {
+        UniqueId: NewUID(),
         InodeOp: Arc::new(iops),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: None,
-        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)))
@@ -274,12 +275,12 @@ pub fn NewDev(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     };
 
     let inodeInternal = InodeIntern {
+        UniqueId: NewUID(),
         InodeOp: Arc::new(iops),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: None,
-        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)))

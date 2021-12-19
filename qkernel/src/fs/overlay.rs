@@ -22,6 +22,7 @@ use super::super::qlib::linux_def::*;
 use super::super::qlib::common::*;
 use super::super::qlib::path::*;
 use super::super::task::*;
+use super::super::uid::NewUID;
 use super::inode::*;
 use super::mount::*;
 use super::mount_overlay::*;
@@ -58,15 +59,43 @@ pub fn NewOverlayRoot(task: &Task, upper: &Inode, lower: &Inode, flags: &MountSo
 }
 
 pub fn NewOverlayInode(_task: &Task, o: OverlayEntry, msrc: &Arc<QMutex<MountSource>>) -> Inode {
+    /*{
+        error!("NewOverlayInode 1: {}", ::AllocatorPrint(10));
+        let inode = o.Inode();
+        let inodeOptions = inode.lock().InodeOp.clone(); //useless, just avoid to have empty inodeoperations
+        let attr = inode.StableAttr();
+        let LockCtx = LockCtx::default();
+        error!("NewOverlayInode 1.1: {}", ::AllocatorPrint(10));
+        //drop(LockCtx);
+        let inodeInternal = InodeIntern {
+            UniqueId: NewUID(),
+            InodeOp: inodeOptions,
+            StableAttr: attr,
+            LockCtx: LockCtx,
+            MountSource: msrc.clone(),
+            Overlay: None,
+
+            // after enable this, there are 2 x 64 bytes memory leak
+            // repro: run bash container; run ls in container; search "Stat path is /usr/bin/ls"
+            // todo: root cause this
+            ..Default::default()
+        };
+        error!("NewOverlayInode 2: {}", ::AllocatorPrint(10));
+        drop(inodeInternal);
+        drop(inode);
+        error!("NewOverlayInode 3: {}", ::AllocatorPrint(10));
+    }*/
+
     let inode = o.Inode();
     let inodeOptions = inode.lock().InodeOp.clone(); //useless, just avoid to have empty inodeoperations
+    let Overlay = Some(Arc::new(RwLock::new(o)));
     let inodeInternal = InodeIntern {
+        UniqueId: NewUID(),
         InodeOp: inodeOptions,
         StableAttr: inode.StableAttr(),
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
-        Overlay: Some(Arc::new(RwLock::new(o))),
-        ..Default::default()
+        Overlay: Overlay,
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)))

@@ -25,6 +25,7 @@ use super::super::inode::*;
 use super::super::super::qlib::path::*;
 use super::super::attr::*;
 use super::super::super::task::*;
+use super::super::super::uid::NewUID;
 use super::super::super::qlib::auth::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::device::*;
@@ -44,12 +45,12 @@ fn emptyDir(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     };
 
     let inodeInternal = InodeIntern {
+        UniqueId: NewUID(),
         InodeOp: Arc::new(dir),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: None,
-        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)))
