@@ -15,7 +15,7 @@ impl ListAllocator {
         let address: *mut libc::c_void;
         unsafe {
             address = libc::mmap(ptr::null_mut(), 1<<29 as usize, libc::PROT_READ | libc::PROT_WRITE,
-            libc::MAP_PRIVATE | libc::MAP_ANON, -1, 0);
+                libc::MAP_PRIVATE | libc::MAP_ANON, -1, 0);
             if address == libc::MAP_FAILED {
                 panic!("mmap: failed to get mapped memory area for heap");
             }

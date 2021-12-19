@@ -60,7 +60,7 @@ pub struct BootStrapMem {
     pub vcpuCount: usize,
 }
 
-pub const KERNEL_HEAP_ORD : usize = 34; // 16GB
+pub const KERNEL_HEAP_ORD : usize = 33; // 16GB
 pub const PAGE_POOL_ORD: usize = KERNEL_HEAP_ORD - 8;
 
 impl BootStrapMem {

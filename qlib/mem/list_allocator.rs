@@ -20,6 +20,9 @@ use core::mem::size_of;
 use core::ptr::NonNull;
 use buddy_system_allocator::Heap;
 use cache_padded::CachePadded;
+use alloc::string::String;
+use alloc::string::ToString;
+
 //use super::buddy_allocator::Heap;
 
 use super::super::mutex::*;
@@ -109,12 +112,14 @@ impl ListAllocator {
         }
     }
 
-    /*pub fn Print(&self) {
-        print!("heap addr is {:x}", self.heap.MutexId());
+    pub fn Print(&self, _class: usize) -> String {
+        /*print!("heap addr is {:x}", self.heap.MutexId());
         for i in 0..self.bufs.len() {
             print!("ListAllocator[{}] {:x}", i, self.bufs[i].MutexId());
-        }
-    }*/
+        }*/
+
+        return "".to_string();
+    }
 
     pub fn AddToHead(&self, start: usize, end: usize) {
         unsafe {
@@ -124,6 +129,10 @@ impl ListAllocator {
         let size = end - start;
         self.total.fetch_add(size, Ordering::Release);
         self.free.fetch_add(size, Ordering::Release);
+    }
+
+    pub fn Init(&self, start: usize, size: usize) {
+        self.Add(start, size);
     }
 
     /// add the chunk of memory (start, start+size) to heap for allocating dynamic memory

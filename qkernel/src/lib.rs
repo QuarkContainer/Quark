@@ -134,10 +134,10 @@ use self::task::*;
 use self::threadmgr::task_sched::*;
 use self::qlib::perf_tunning::*;
 //use self::memmgr::buf_allocator::*;
-//use self::qlib::mem::list_allocator::*;
+use self::qlib::mem::list_allocator::*;
 use self::quring::*;
 use self::print::SCALE;
-use self::heap::QAllocator;
+//use self::heap::QAllocator;
 
 use self::qlib::singleton::*;
 use self::uid::*;
@@ -148,9 +148,9 @@ pub const HEAP_SIZE: usize = 0x1000_0000;
 
 //use buddy_system_allocator::*;
 #[global_allocator]
-static ALLOCATOR: QAllocator = QAllocator::New();
+//static ALLOCATOR: QAllocator = QAllocator::New();
 //static ALLOCATOR: StackHeap = StackHeap::Empty();
-//static ALLOCATOR: ListAllocator = ListAllocator::Empty();
+static ALLOCATOR: ListAllocator = ListAllocator::Empty();
 //static ALLOCATOR: BufHeap = BufHeap::Empty();
 //static ALLOCATOR: LockedHeap<33> = LockedHeap::empty();
 
@@ -416,7 +416,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
         SingletonInit(vcpuCnt as usize);
         InitGs(id);
 
-        ALLOCATOR.SetReady(true);
+        //ALLOCATOR.SetReady(true);
 
         HyperCall64(qlib::HYPERCALL_INIT, (&(*SHARESPACE) as *const ShareSpace) as u64, 0, 0);
         IOURING.Setup(SHARESPACE.config.read().DedicateUring);
