@@ -30,6 +30,7 @@ use super::qlib::linux::time::Timespec;
 use super::qlib::common::*;
 use super::qlib::task_mgr::*;
 use super::qlib::linux_def::*;
+use super::qlib::pagetable::*;
 use super::qlib::perf_tunning::*;
 use super::qlib::*;
 use super::qlib::vcpu_mgr::*;
@@ -40,6 +41,7 @@ use super::runc::runtime::vm::*;
 
 // bootstrap memory for vcpu
 #[repr(C)]
+#[repr(align(0x1000))]
 pub struct VcpuBootstrapMem {
     pub stack: [u8; MemoryDef::DEFAULT_STACK_SIZE as usize], //kernel stack
     pub gdt: [u8; MemoryDef::PAGE_SIZE as usize], // gdt: one page
@@ -49,6 +51,16 @@ pub struct VcpuBootstrapMem {
 }
 
 impl VcpuBootstrapMem {
+    pub fn New() -> Self {
+        return Self {
+            stack: [0; MemoryDef::DEFAULT_STACK_SIZE as usize],
+            gdt: [0; MemoryDef::PAGE_SIZE as usize as usize],
+            idt: [0; MemoryDef::PAGE_SIZE as usize],
+            tssIntStack: [0; (MemoryDef::INTERRUPT_STACK_PAGES * MemoryDef::PAGE_SIZE) as usize],
+            tss: [0; MemoryDef::PAGE_SIZE as usize],
+        }
+    }
+
     pub fn FromAddr(addr: u64) -> &'static VcpuBootstrapMem {
         return unsafe {
             &*(addr as * const VcpuBootstrapMem)
@@ -93,6 +105,43 @@ impl VcpuBootstrapMem {
         let size = 2 * MemoryDef::DEFAULT_STACK_SIZE as usize;
         assert!(Self::Size() < size);
         return size;
+    }
+}
+
+pub struct HostPageAllocator {
+    pub allocator: AlignedAllocator,
+}
+
+impl HostPageAllocator {
+    pub fn New() -> Self {
+        return Self {
+            allocator: AlignedAllocator::New(0x1000, 0x10000)
+        }
+    }
+}
+
+impl Allocator for HostPageAllocator {
+    fn AllocPage(&self, _incrRef: bool) -> Result<u64> {
+       return self.allocator.Allocate();
+    }
+
+    fn FreePage(&self, _addr: u64) -> Result<()> {
+        panic!("HostPageAllocator doesn't support FreePage");
+    }
+}
+
+impl RefMgr for HostPageAllocator {
+    fn Ref(&self, _addr: u64) -> Result<u64> {
+        //panic!("HostPageAllocator doesn't support Ref");
+        return Ok(1)
+    }
+
+    fn Deref(&self, _addr: u64) -> Result<u64> {
+        panic!("HostPageAllocator doesn't support Deref");
+    }
+
+    fn GetRef(&self, _addr: u64) -> Result<u64> {
+        panic!("HostPageAllocator doesn't support GetRef");
     }
 }
 
@@ -164,6 +213,7 @@ pub struct KVMVcpu {
     pub shareSpace: AtomicU64, // &'static ShareSpace,
 
     pub autoStart: bool,
+    pub vcpuBootstrapMem: VcpuBootstrapMem,
     //the pipe id to notify io_mgr
 }
 
@@ -212,6 +262,7 @@ impl KVMVcpu {
             heapLen: (1 << (pageAllocatorOrd + 12)) - boostrapMem.Size() as u64,
             shareSpace: AtomicU64::new(0),
             autoStart: autoStart,
+            vcpuBootstrapMem: VcpuBootstrapMem::New()
         })
     }
 

@@ -60,7 +60,7 @@ pub mod kvmlib;
 
 use std::env;
 
-use kvmlib::qlib::mem::list_allocator::*;
+use kvmlib::heap_alloc::*;
 
 pub const LOG_FILE : &'static str = "/var/log/quark/quark.log";
 
@@ -68,11 +68,11 @@ pub fn InitSingleton() {
     kvmlib::qlib::InitSingleton();
 }
 
+#[global_allocator]
+static GLOBAL: HostAllocator = HostAllocator::New();
+
 fn main() {
     use self::kvmlib::runc::cmd::command::*;
-
-    #[global_allocator]
-    static GLOBAL: ListAllocator = ListAllocator::Empty();
 
     InitSingleton();
 
@@ -87,7 +87,6 @@ fn main() {
     }
 
     let mut args = Parse().unwrap();
-
     match Run(&mut args) {
         Err(e) => {
             error!("the error is {:?}", e);

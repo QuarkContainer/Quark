@@ -20,12 +20,12 @@ use core::sync::atomic::AtomicI32;
 use core::sync::atomic::Ordering;
 use lazy_static::lazy_static;
 use std::os::unix::io::FromRawFd;
+use alloc::alloc::{Layout, alloc};
 
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::pagetable::{PageTables};
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::ShareSpace;
-use super::super::super::qlib::addr::AccessType;
 use super::super::super::qlib::addr;
 use super::super::super::qlib::perf_tunning::*;
 use super::super::super::qlib::task_mgr::*;
@@ -66,7 +66,12 @@ pub const PAGE_POOL_ORD: usize = KERNEL_HEAP_ORD - 8;
 impl BootStrapMem {
     pub const PAGE_POOL_SIZE : usize = 1 << PAGE_POOL_ORD;
 
-    pub fn New(startAddr: u64, vcpuCount: usize) -> Self {
+    pub fn New(vcpuCount: usize) -> Self {
+        let size = vcpuCount * VcpuBootstrapMem::AlignedSize() + Self::PAGE_POOL_SIZE;
+        let layout = Layout::from_size_align(size, 0x1000).unwrap();
+        let startAddr = unsafe {
+            alloc(layout) as u64
+        };
         return Self {
             startAddr: startAddr,
             vcpuCount: vcpuCount,
@@ -163,18 +168,18 @@ impl VirtualMachine {
 
         let mut elf = KernelELF::New()?;
         Self::SetMemRegion(1, &vm_fd, MemoryDef::PHY_LOWER_ADDR, MemoryDef::PHY_LOWER_ADDR, kernelMemRegionSize * MemoryDef::ONE_GB)?;
-        PMA_KEEPER.Init(MemoryDef::PHY_LOWER_ADDR + HEAP_OFFSET, kernelMemRegionSize * MemoryDef::ONE_GB - HEAP_OFFSET);
+        let memOrd = KERNEL_HEAP_ORD;
+        let kernelMemSize = 1 << memOrd;
+        let heapStartAddr = MemoryDef::PHY_LOWER_ADDR + HEAP_OFFSET;
+        PMA_KEEPER.Init(heapStartAddr + kernelMemSize, kernelMemRegionSize * MemoryDef::ONE_GB - HEAP_OFFSET - kernelMemSize);
 
         info!("set map region start={:x}, end={:x}", MemoryDef::PHY_LOWER_ADDR, MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB);
 
-        let pageAllocatorBaseAddr;
         let pageAllocatorOrd;
         let autoStart;
         let bootstrapMem;
 
         {
-            let memOrd = KERNEL_HEAP_ORD;
-            let kernelMemSize = 1 << memOrd;
             //pageMmap = KVMMachine::initKernelMem(&vm_fd, MemoryDef::PHY_LOWER_ADDR  + 64 * MemoryDef::ONE_MB, kernelMemSize)?;
             //pageAllocatorBaseAddr = pageMmap.as_ptr() as u64;
 
@@ -182,19 +187,19 @@ impl VirtualMachine {
             let vms = &mut VMS.lock();
             vms.controlSock = controlSock;
             //pageAllocatorBaseAddr = vms.pmaMgr.MapAnon(kernelMemSize, AccessType::ReadWrite().Val() as i32, true, false)?;
-            pageAllocatorBaseAddr = PMA_KEEPER.MapAnon(kernelMemSize, AccessType::ReadWrite().Val() as i32)?;
-            info!("*******************alloc address is {:x}, expect{:x}", pageAllocatorBaseAddr, MemoryDef::PHY_LOWER_ADDR + MemoryDef::ONE_GB);
+            //pageAllocatorBaseAddr = PMA_KEEPER.MapAnon(kernelMemSize, AccessType::ReadWrite().Val() as i32)?;
+            //info!("*******************alloc address is {:x}, expect{:x}", pageAllocatorBaseAddr, MemoryDef::PHY_LOWER_ADDR + MemoryDef::ONE_GB);
 
             PMA_KEEPER.InitHugePages();
             //pageAlloc = PageAllocator::Init(pageMmap.as_ptr() as u64, memOrd - 12 /*1GB*/);
             pageAllocatorOrd = memOrd - 12 /*1GB*/;
-            bootstrapMem = BootStrapMem::New(pageAllocatorBaseAddr, cpuCount);
+            bootstrapMem = BootStrapMem::New(cpuCount);
             vms.allocator = Some(bootstrapMem.SimplePageAllocator());
 
             vms.hostAddrTop = MemoryDef::PHY_LOWER_ADDR + 64 * MemoryDef::ONE_MB + 2 * MemoryDef::ONE_GB;
             vms.pageTables = PageTables::New(vms.allocator.as_ref().unwrap())?;
 
-            info!("the pageAllocatorBaseAddr is {:x}, the end of pageAllocator is {:x}", pageAllocatorBaseAddr, pageAllocatorBaseAddr + kernelMemSize);
+            //info!("the pageAllocatorBaseAddr is {:x}, the end of pageAllocator is {:x}", pageAllocatorBaseAddr, pageAllocatorBaseAddr + kernelMemSize);
             vms.KernelMapHugeTable(addr::Addr(MemoryDef::PHY_LOWER_ADDR),
                                    addr::Addr(MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB),
                                    addr::Addr(MemoryDef::PHY_LOWER_ADDR),
@@ -212,7 +217,7 @@ impl VirtualMachine {
         VMS.lock().vdsoAddr = elf.vdsoStart;
 
         let p = entry as *const u8;
-        info!("entry is 0x{:x}, data at entry is {:x}", entry, unsafe { *p } );
+        info!("entry is 0x{:x}, data at entry is {:x}, heapStartAddr is {:x}", entry, unsafe { *p } , heapStartAddr);
 
         {
             super::super::super::URING_MGR.lock();
@@ -224,7 +229,7 @@ impl VirtualMachine {
                                                          cpuCount,
                                                          &vm_fd,
                                                          &bootstrapMem,
-                                                         entry, pageAllocatorBaseAddr,
+                                                         entry, heapStartAddr,
                                                          pageAllocatorOrd as u64,
                                                          autoStart)?);
 

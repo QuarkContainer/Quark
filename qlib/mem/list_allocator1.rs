@@ -33,7 +33,7 @@ pub const BUFF_THRESHOLD: usize = 50; // when buff size takes more than 50% of f
 pub const FREE_BATCH: usize = 10; // free 10 blocks each time.
 pub const ORDER : usize = 33;
 
-//pub static GLOBAL_ALLOCATOR : QMutex<Heap<ORDER>> = QMutex::new(Heap::empty());
+pub static GLOBAL_ALLOCATOR : QMutex<Heap<ORDER>> = QMutex::new(Heap::empty());
 
 #[derive(Debug)]
 pub struct VcpuAllocator {
@@ -64,13 +64,14 @@ impl Default for VcpuAllocator {
     }
 }
 
+
 #[derive(Debug)]
 pub struct ListAllocator {
-    pub bufs: [CachePadded<QMutex<FreeMemBlockMgr>>; CLASS_CNT],
-    pub heap: QMutex<Heap<ORDER>>,
+    pub bufs: [CachePadded<QMutex<FreeMemBlockMgr>>; 13],
     pub total: AtomicUsize,
     pub free: AtomicUsize,
     pub bufSize: AtomicUsize,
+    pub allocator: QMutex<Heap<ORDER>>,
     //pub errorHandler: Arc<OOMHandler>
     pub initialized: AtomicBool
 }
@@ -87,7 +88,7 @@ impl Default for ListAllocator {
 
 impl ListAllocator {
     pub const fn Empty() -> Self {
-        let bufs : [CachePadded<QMutex<FreeMemBlockMgr>>; CLASS_CNT] = [
+        let bufs : [CachePadded<QMutex<FreeMemBlockMgr>>; 13] = [
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(0, 0))),
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(0, 1))),
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(0, 2))),
@@ -101,17 +102,14 @@ impl ListAllocator {
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(32, 10))),
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(16, 11))),
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(1024, 12))),
-            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(16, 13))),
-            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(8, 14))),
-            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(8, 15)))
         ];
 
         return Self {
             bufs: bufs,
-            heap: QMutex::new(Heap::empty()),
             total: AtomicUsize::new(0),
             free: AtomicUsize::new(0),
             bufSize: AtomicUsize::new(0),
+            allocator: QMutex::new(Heap::empty()),
             initialized: AtomicBool::new(false)
         }
     }
@@ -127,7 +125,7 @@ impl ListAllocator {
 
     pub fn AddToHead(&self, start: usize, end: usize) {
         unsafe {
-            self.heap.lock().add_to_heap(start, end);
+            self.allocator.lock().add_to_heap(start, end);
         }
 
         let size = end - start;
@@ -183,7 +181,7 @@ impl ListAllocator {
             }
 
             let idx = self.bufs.len() - i - 1; // free from larger size
-            let cnt = self.bufs[idx].lock().FreeMultiple(&self.heap, FREE_BATCH - count);
+            let cnt = self.bufs[idx].lock().FreeMultiple(&GLOBAL_ALLOCATOR, FREE_BATCH - count);
             self.bufSize.fetch_sub(cnt * self.bufs[idx].lock().size, Ordering::Release);
             count += cnt;
         }
@@ -216,8 +214,7 @@ unsafe impl GlobalAlloc for ListAllocator {
             }
         }
 
-        let ret = self
-            .heap
+        let ret = self.allocator
             .lock()
             .alloc(layout)
             .ok()
@@ -251,10 +248,10 @@ unsafe impl GlobalAlloc for ListAllocator {
         self.free.fetch_add(size, Ordering::Release);
         self.bufSize.fetch_add(size, Ordering::Release);
         if class < self.bufs.len() {
-            return self.bufs[class].lock().Dealloc(ptr, &self.heap);
+            return self.bufs[class].lock().Dealloc(ptr, &self.allocator);
         }
 
-        self.heap.lock().dealloc(NonNull::new_unchecked(ptr), layout)
+        self.allocator.lock().dealloc(NonNull::new_unchecked(ptr), layout)
     }
 }
 
