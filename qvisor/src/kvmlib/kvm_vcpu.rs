@@ -34,6 +34,7 @@ use super::qlib::pagetable::*;
 use super::qlib::perf_tunning::*;
 use super::qlib::*;
 use super::qlib::vcpu_mgr::*;
+use super::qlib::buddyallocator::ZeroPage;
 use super::amd64_def::*;
 use super::URING_MGR;
 use super::QUARK_CONFIG;
@@ -41,7 +42,6 @@ use super::runc::runtime::vm::*;
 
 // bootstrap memory for vcpu
 #[repr(C)]
-#[repr(align(0x1000))]
 pub struct VcpuBootstrapMem {
     pub stack: [u8; MemoryDef::DEFAULT_STACK_SIZE as usize], //kernel stack
     pub gdt: [u8; MemoryDef::PAGE_SIZE as usize], // gdt: one page
@@ -103,7 +103,7 @@ impl VcpuBootstrapMem {
 
     pub fn AlignedSize() -> usize {
         let size = 2 * MemoryDef::DEFAULT_STACK_SIZE as usize;
-        assert!(Self::Size() < size);
+        assert!(Self::Size() < size, "AlignedSize {:x}/{:x}", Self::Size(), size);
         return size;
     }
 }
@@ -122,7 +122,9 @@ impl HostPageAllocator {
 
 impl Allocator for HostPageAllocator {
     fn AllocPage(&self, _incrRef: bool) -> Result<u64> {
-       return self.allocator.Allocate();
+       let ret = self.allocator.Allocate()?;
+        ZeroPage(ret);
+        return Ok(ret);
     }
 
     fn FreePage(&self, _addr: u64) -> Result<()> {
@@ -145,54 +147,6 @@ impl RefMgr for HostPageAllocator {
     }
 }
 
-pub struct SimplePageAllocator {
-    pub next: AtomicU64,
-    pub end: u64,
-}
-
-impl SimplePageAllocator {
-    pub fn New(start: u64, len: usize) -> Self {
-        assert!(start & (MemoryDef::PAGE_SIZE - 1)  == 0);
-        assert!(len as u64 & (MemoryDef::PAGE_SIZE - 1) == 0);
-
-        return Self {
-            next: AtomicU64::new(start),
-            end: start + len as u64,
-        }
-    }
-}
-
-impl Allocator for SimplePageAllocator {
-    fn AllocPage(&self, _incrRef: bool) -> Result<u64> {
-        let current = self.next.load(Ordering::SeqCst);
-        if current == self.end {
-            panic!("SimplePageAllocator Out Of Memory")
-        }
-
-        self.next.fetch_add(MemoryDef::PAGE_SIZE, Ordering::SeqCst);
-        return Ok(current)
-    }
-
-    fn FreePage(&self, _addr: u64) -> Result<()> {
-        panic!("SimplePageAllocator doesn't support FreePage");
-    }
-}
-
-impl RefMgr for SimplePageAllocator {
-    fn Ref(&self, _addr: u64) -> Result<u64> {
-        //panic!("SimplePageAllocator doesn't support Ref");
-        return Ok(1)
-    }
-
-    fn Deref(&self, _addr: u64) -> Result<u64> {
-        panic!("SimplePageAllocator doesn't support Deref");
-    }
-
-    fn GetRef(&self, _addr: u64) -> Result<u64> {
-        panic!("SimplePageAllocator doesn't support GetRef");
-    }
-}
-
 pub struct KVMVcpu {
     pub id: usize,
     pub vcpuCnt: usize,
@@ -208,7 +162,6 @@ pub struct KVMVcpu {
     pub tssAddr: u64,
 
     pub heapStartAddr: u64,
-    pub heapLen: u64,
 
     pub shareSpace: AtomicU64, // &'static ShareSpace,
 
@@ -227,7 +180,6 @@ impl KVMVcpu {
                 boostrapMem: &BootStrapMem,
                 entry: u64,
                 pageAllocatorBaseAddr: u64,
-                pageAllocatorOrd: u64,
                 autoStart: bool) -> Result<Self> {
         const DEFAULT_STACK_PAGES: u64 = qlib::linux_def::MemoryDef::DEFAULT_STACK_PAGES; //64KB
         //let stackAddr = pageAlloc.Alloc(DEFAULT_STACK_PAGES)?;
@@ -258,8 +210,7 @@ impl KVMVcpu {
             idtAddr: idtAddr,
             tssIntStackStart: tssIntStackStart,
             tssAddr: tssAddr,
-            heapStartAddr: pageAllocatorBaseAddr + boostrapMem.Size() as u64,
-            heapLen: (1 << (pageAllocatorOrd + 12)) - boostrapMem.Size() as u64,
+            heapStartAddr: pageAllocatorBaseAddr,
             shareSpace: AtomicU64::new(0),
             autoStart: autoStart,
             vcpuBootstrapMem: VcpuBootstrapMem::New()
@@ -390,7 +341,7 @@ impl KVMVcpu {
             //arg0
             rdi: self.heapStartAddr, // self.pageAllocatorBaseAddr + self.,
             //arg1
-            rsi: self.heapLen,
+            rsi: 0,
             //arg2
             rdx: self.id as u64,
             //arg3

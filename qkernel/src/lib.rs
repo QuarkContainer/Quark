@@ -409,10 +409,8 @@ pub fn LogInit(pages: u64) {
 }
 
 #[no_mangle]
-pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u64, vcpuCnt: u64, autoStart: bool) {
+pub extern fn rust_main(heapStart: u64, _heapLen: u64, id: u64, vdsoParamAddr: u64, vcpuCnt: u64, autoStart: bool) {
     if id == 0 {
-        //ALLOCATOR.Add(heapStart as usize, heapLen as usize);
-        //ALLOCATOR.Init(heapStart as usize, heapLen as usize);
         ALLOCATOR.Init(heapStart);
         SingletonInit(vcpuCnt as usize);
         InitGs(id);
@@ -466,7 +464,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
     };
 
     if id == 1 {
-        error!("heap start is {:x}/{:x}", heapStart, heapStart + heapLen);
+        error!("heap start is {:x}", heapStart);
 
         if autoStart {
             CreateTask(StartRootContainer, ptr::null(), false);

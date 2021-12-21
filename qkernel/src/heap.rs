@@ -22,9 +22,8 @@ impl GuestAllocator {
         }
     }
 
-    pub fn Init(&self, _heapAddr: u64) {
-        self.heapAddr.store(HEAP_ADDR, Ordering::SeqCst)
-        //self.heapAddr.store(heapAddr, Ordering::SeqCst)
+    pub fn Init(&self, heapAddr: u64) {
+        self.heapAddr.store(heapAddr, Ordering::SeqCst)
     }
 
     #[inline(always)]

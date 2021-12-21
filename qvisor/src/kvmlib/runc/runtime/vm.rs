@@ -61,14 +61,11 @@ pub struct BootStrapMem {
 }
 
 pub const KERNEL_HEAP_ORD : usize = 33; // 16GB
-pub const PAGE_POOL_ORD: usize = KERNEL_HEAP_ORD - 8;
 
 impl BootStrapMem {
-    pub const PAGE_POOL_SIZE : usize = 1 << PAGE_POOL_ORD;
-
     pub fn New(vcpuCount: usize) -> Self {
-        let size = vcpuCount * VcpuBootstrapMem::AlignedSize() + Self::PAGE_POOL_SIZE;
-        let layout = Layout::from_size_align(size, 0x1000).unwrap();
+        let size = vcpuCount * VcpuBootstrapMem::AlignedSize();
+        let layout = Layout::from_size_align(size, MemoryDef::DEFAULT_STACK_SIZE as usize).unwrap();
         let startAddr = unsafe {
             alloc(layout) as u64
         };
@@ -79,18 +76,13 @@ impl BootStrapMem {
     }
 
     pub fn Size(&self) -> usize {
-        let size = self.vcpuCount * VcpuBootstrapMem::AlignedSize() + Self::PAGE_POOL_SIZE;
+        let size = self.vcpuCount * VcpuBootstrapMem::AlignedSize();
         return size;
     }
 
     pub fn VcpuBootstrapMem(&self, idx: usize) -> &'static VcpuBootstrapMem {
         let addr = self.startAddr + (idx * VcpuBootstrapMem::AlignedSize()) as u64;
         return VcpuBootstrapMem::FromAddr(addr);
-    }
-
-    pub fn SimplePageAllocator(&self) -> SimplePageAllocator {
-        let addr = self.startAddr + (self.vcpuCount * VcpuBootstrapMem::AlignedSize()) as u64;
-        return SimplePageAllocator::New(addr, Self::PAGE_POOL_SIZE)
     }
 }
 
@@ -175,29 +167,18 @@ impl VirtualMachine {
 
         info!("set map region start={:x}, end={:x}", MemoryDef::PHY_LOWER_ADDR, MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB);
 
-        let pageAllocatorOrd;
         let autoStart;
         let bootstrapMem;
 
         {
-            //pageMmap = KVMMachine::initKernelMem(&vm_fd, MemoryDef::PHY_LOWER_ADDR  + 64 * MemoryDef::ONE_MB, kernelMemSize)?;
-            //pageAllocatorBaseAddr = pageMmap.as_ptr() as u64;
-
             info!("kernelMemSize is {:x}", kernelMemSize);
             let vms = &mut VMS.lock();
             vms.controlSock = controlSock;
-            //pageAllocatorBaseAddr = vms.pmaMgr.MapAnon(kernelMemSize, AccessType::ReadWrite().Val() as i32, true, false)?;
-            //pageAllocatorBaseAddr = PMA_KEEPER.MapAnon(kernelMemSize, AccessType::ReadWrite().Val() as i32)?;
-            //info!("*******************alloc address is {:x}, expect{:x}", pageAllocatorBaseAddr, MemoryDef::PHY_LOWER_ADDR + MemoryDef::ONE_GB);
-
             PMA_KEEPER.InitHugePages();
-            //pageAlloc = PageAllocator::Init(pageMmap.as_ptr() as u64, memOrd - 12 /*1GB*/);
-            pageAllocatorOrd = memOrd - 12 /*1GB*/;
             bootstrapMem = BootStrapMem::New(cpuCount);
-            vms.allocator = Some(bootstrapMem.SimplePageAllocator());
 
             vms.hostAddrTop = MemoryDef::PHY_LOWER_ADDR + 64 * MemoryDef::ONE_MB + 2 * MemoryDef::ONE_GB;
-            vms.pageTables = PageTables::New(vms.allocator.as_ref().unwrap())?;
+            vms.pageTables = PageTables::New(&vms.allocator)?;
 
             //info!("the pageAllocatorBaseAddr is {:x}, the end of pageAllocator is {:x}", pageAllocatorBaseAddr, pageAllocatorBaseAddr + kernelMemSize);
             vms.KernelMapHugeTable(addr::Addr(MemoryDef::PHY_LOWER_ADDR),
@@ -229,8 +210,8 @@ impl VirtualMachine {
                                                          cpuCount,
                                                          &vm_fd,
                                                          &bootstrapMem,
-                                                         entry, heapStartAddr,
-                                                         pageAllocatorOrd as u64,
+                                                         entry,
+                                                         heapStartAddr,
                                                          autoStart)?);
 
             // enable cpuid in host
