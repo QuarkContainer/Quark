@@ -143,6 +143,7 @@ impl <T> SpMcRing <T> {
     }
 }
 
+#[derive(Default)]
 pub struct QRingBuf<T:Clone + Copy>(QMutex<VecDeque<T>>);
 
 impl <T:Clone + Copy> Deref for QRingBuf <T> {

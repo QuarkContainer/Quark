@@ -19,11 +19,11 @@ use super::boot::controller::SignalProcess;
 impl HostInputMsg {
     pub fn Process(self) {
         match self {
+            HostInputMsg::Default => {
+                panic!("HostInputMsg::Process get Default message");
+            }
             HostInputMsg::FdNotify(notify) => {
                 notify.Process()
-            }
-            HostInputMsg::IOBufWriteResp(msg) => {
-                IOBufWriteRespHandle(msg.fd, msg.addr, msg.len, msg.ret);
             }
             HostInputMsg::LogFlush => {
                 HostLogFlush();

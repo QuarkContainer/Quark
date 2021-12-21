@@ -1,6 +1,6 @@
 {
   "DebugLevel"    : "Error",
-  "KernelMemSize" : 32,
+  "KernelMemSize" : 16,
   "LogType"       : "Sync",
   "LogLevel"      : "Simple",
   "TcpBuffIO"     : true,

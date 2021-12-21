@@ -25,6 +25,8 @@ use super::super::super::qlib::common::*;
 use super::super::super::qlib::pagetable::{PageTables};
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::ShareSpace;
+use super::super::super::SHARE_SPACE_STRUCT;
+use super::super::super::SHARE_SPACE;
 use super::super::super::qlib::addr;
 use super::super::super::qlib::perf_tunning::*;
 use super::super::super::qlib::task_mgr::*;
@@ -33,7 +35,7 @@ use super::super::super::runc::runtime::loader::*;
 use super::super::super::kvm_vcpu::*;
 use super::super::super::elf_loader::*;
 use super::super::super::vmspace::*;
-use super::super::super::{VMS, PMA_KEEPER, QUARK_CONFIG};
+use super::super::super::{VMS, PMA_KEEPER, QUARK_CONFIG, URING_MGR, KERNEL_IO_THREAD};
 
 lazy_static! {
     static ref EXIT_STATUS : AtomicI32 = AtomicI32::new(-1);
@@ -99,6 +101,25 @@ impl VirtualMachine {
     #[cfg(not(debug_assertions))]
     pub const KERNEL_IMAGE : &'static str = "/usr/local/bin/qkernel.bin";
 
+    pub fn InitShareSpace(cpuCount: usize, controlSock: i32) {
+        SHARE_SPACE_STRUCT.lock().Init(cpuCount, controlSock);
+        SHARE_SPACE.SetValue(&(*SHARE_SPACE_STRUCT.lock()) as * const _ as u64);
+
+        let sharespace = SHARE_SPACE.Ptr();
+        let logfd = super::super::super::super::print::LOG.lock().Logfd();
+        URING_MGR.lock().Init(sharespace.config.read().DedicateUring);
+        URING_MGR.lock().Addfd(logfd).unwrap();
+
+        KERNEL_IO_THREAD.Init(sharespace.scheduler.VcpuArr[0].eventfd);
+        URING_MGR.lock().SetupEventfd(sharespace.scheduler.VcpuArr[0].eventfd);
+        URING_MGR.lock().Addfd(sharespace.HostHostEpollfd()).unwrap();
+        URING_MGR.lock().Addfd(controlSock).unwrap();
+
+        let syncPrint = sharespace.config.read().SyncPrint();
+        super::super::super::super::print::SetSharespace(sharespace);
+        super::super::super::super::print::SetSyncPrint(syncPrint);
+    }
+
     pub fn Init(args: Args /*args: &Args, kvmfd: i32*/) -> Result<Self> {
         PerfGoto(PerfType::Other);
 
@@ -160,6 +181,8 @@ impl VirtualMachine {
             vms.args = Some(args);
         }
 
+        Self::InitShareSpace(cpuCount, controlSock);
+
         info!("before loadKernel");
 
         let entry = elf.LoadKernel(Self::KERNEL_IMAGE)?;
@@ -177,11 +200,12 @@ impl VirtualMachine {
         let mut vcpus = Vec::with_capacity(cpuCount);
         for i in 0..cpuCount/*args.NumCPU*/ {
             let vcpu = Arc::new(KVMVcpu::Init(i as usize,
-                                                         cpuCount,
-                                                         &vm_fd,
-                                                         entry,
-                                                         heapStartAddr,
-                                                         autoStart)?);
+                                                cpuCount,
+                                                &vm_fd,
+                                                entry,
+                                                heapStartAddr,
+                                                SHARE_SPACE.Value(),
+                                                autoStart)?);
 
             // enable cpuid in host
             vcpu.vcpu.set_cpuid2(&kvm_cpuid).unwrap();
@@ -214,7 +238,6 @@ impl VirtualMachine {
 
         for i in 1..self.vcpus.len() {
             let cpu = self.vcpus[i].clone();
-            cpu.StoreShareSpace(VMS.lock().GetShareSpace().Addr());
 
             threads.push(thread::spawn(move || {
                 info!("cpu#{} start", i);
