@@ -24,6 +24,9 @@ use super::kvm_vcpu::KVMVcpu;
 pub fn AQHostCall(msg: HostOutputMsg, _shareSpace: &ShareSpace) {
     let _l = super::GLOCK.lock();
     match msg {
+        HostOutputMsg::Default => {
+            panic!("AQHostCall Process get Default msg...");
+        }
         HostOutputMsg::QCall(_addr) => {
             panic!("AQHostCall Process get Qcall msg...");
         }

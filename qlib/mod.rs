@@ -61,6 +61,8 @@ use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 use self::mutex::*;
 use cache_padded::CachePadded;
+use alloc::vec::Vec;
+use core::ops::Deref;
 
 use super::asm::*;
 use self::task_mgr::*;
@@ -513,8 +515,46 @@ pub struct Str {
     pub len: u32
 }
 
+#[derive(Default)]
+pub struct ShareSpaceRef {
+    addr: AtomicU64
+}
+
+impl Deref for ShareSpaceRef {
+    type Target = ShareSpace;
+
+    fn deref(&self) -> &ShareSpace {
+        unsafe {
+            &*(self.addr.load(Ordering::Relaxed) as * const ShareSpace)
+        }
+    }
+}
+
+impl ShareSpaceRef {
+    pub const fn New() -> Self {
+        return Self {
+            addr: AtomicU64::new(0)
+        }
+    }
+
+    pub fn Ptr(&self) -> &ShareSpace {
+        unsafe {
+            &*(self.addr.load(Ordering::Relaxed) as * const ShareSpace)
+        }
+    }
+
+    pub fn SetValue(&self, addr: u64) {
+        self.addr.store(addr, Ordering::SeqCst);
+    }
+
+    pub fn Value(&self) -> u64 {
+        return self.addr.load(Ordering::Relaxed)
+    }
+}
+
 #[repr(C)]
 #[repr(align(128))]
+#[derive(Default)]
 pub struct ShareSpace {
     pub QInput: QRingBuf<HostInputMsg>, //QMutex<VecDeque<HostInputMsg>>,
     pub QOutput: QRingBuf<HostOutputMsg>, //QMutex<VecDeque<HostInputMsg>>,
@@ -539,11 +579,15 @@ pub struct ShareSpace {
 
     pub controlSock: i32,
 
-    pub values: [[AtomicU64; 2]; 16],
+    pub values: Vec<[AtomicU64; 2]>,
 }
 
 impl ShareSpace {
     pub fn New(vcpuCount: usize) -> Self {
+        let mut values = Vec::with_capacity(vcpuCount);
+        for _i in 0..vcpuCount {
+            values.push([AtomicU64::new(0), AtomicU64::new(0)])
+        };
         return ShareSpace {
             QInput: QRingBuf::New(MemoryDef::MSG_QLEN), //QMutex::new(VecDeque::with_capacity(MSG_QLEN)),
             QOutput: QRingBuf::New(MemoryDef::MSG_QLEN), //QMutex::new(VecDeque::with_capacity(MSG_QLEN)),
@@ -561,12 +605,7 @@ impl ShareSpace {
             logLock: QMutex::new(()),
             logfd: AtomicI32::new(-1),
             controlSock: -1,
-            values: [
-                [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)],
-                [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)],
-                [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)],
-                [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)], [AtomicU64::new(0), AtomicU64::new(0)],
-            ],
+            values: values,
         }
     }
 

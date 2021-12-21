@@ -113,7 +113,7 @@ use alloc::string::String;
 //use linked_list_allocator::LockedHeap;
 //use buddy_system_allocator::LockedHeap;
 use taskMgr::{CreateTask, WaitFn, IOWait};
-use self::qlib::{ShareSpace, SysCallID};
+use self::qlib::{SysCallID, ShareSpaceRef};
 //use self::qlib::buddyallocator::*;
 use self::qlib::pagetable::*;
 use self::qlib::control_msg::*;
@@ -159,7 +159,8 @@ pub fn AllocatorPrint(_class: usize) -> String {
     return ALLOCATOR.Print(class);
 }
 
-pub static SHARESPACE : Singleton<ShareSpace> = Singleton::<ShareSpace>::New();
+pub static SHARESPACE : ShareSpaceRef = ShareSpaceRef::New();
+
 pub static KERNEL_PAGETABLE : Singleton<PageTables> = Singleton::<PageTables>::New();
 pub static PAGE_MGR : Singleton<PageMgr> = Singleton::<PageMgr>::New();
 pub static LOADER : Singleton<Loader> = Singleton::<Loader>::New();
@@ -168,9 +169,8 @@ pub static KERNEL_STACK_ALLOCATOR : Singleton<AlignedAllocator> = Singleton::<Al
 pub static SHUTDOWN : Singleton<AtomicBool> = Singleton::<AtomicBool>::New();
 pub static EXIT_CODE : Singleton<AtomicI32> = Singleton::<AtomicI32>::New();
 
-pub fn SingletonInit(vcpuCount: usize) {
+pub fn SingletonInit() {
     unsafe {
-        SHARESPACE.Init(ShareSpace::New(vcpuCount));
         KERNEL_PAGETABLE.Init(PageTables::Init(CurrentCr3()));
         PAGE_MGR.Init(PageMgr::New());
         LOADER.Init(Loader::default());
@@ -409,15 +409,13 @@ pub fn LogInit(pages: u64) {
 }
 
 #[no_mangle]
-pub extern fn rust_main(heapStart: u64, _heapLen: u64, id: u64, vdsoParamAddr: u64, vcpuCnt: u64, autoStart: bool) {
+pub extern fn rust_main(heapStart: u64, shareSpaceAddr: u64, id: u64, vdsoParamAddr: u64, vcpuCnt: u64, autoStart: bool) {
     if id == 0 {
         ALLOCATOR.Init(heapStart);
-        SingletonInit(vcpuCnt as usize);
+        SHARESPACE.SetValue(shareSpaceAddr);
+        SingletonInit();
         InitGs(id);
 
-        //ALLOCATOR.SetReady(true);
-
-        HyperCall64(qlib::HYPERCALL_INIT, (&(*SHARESPACE) as *const ShareSpace) as u64, 0, 0);
         IOURING.Setup(SHARESPACE.config.read().DedicateUring);
 
         let SyncLog= SHARESPACE.config.read().SyncPrint();

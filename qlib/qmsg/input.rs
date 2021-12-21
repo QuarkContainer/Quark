@@ -18,12 +18,19 @@ use super::super::control_msg::SignalArgs;
 #[derive(Debug, Copy, Clone)]
 #[repr(align(128))]
 pub enum HostInputMsg {
+    Default,
     FdNotify(FdNotify),
-    IOBufWriteResp(IOBufWriteResp),
     LogFlush,
     WakeIOThreadResp(()),
     Signal(SignalArgs),
 }
+
+impl Default for HostInputMsg {
+    fn default() -> Self {
+        return Self::Default
+    }
+}
+
 
 //host call kernel
 #[derive(Debug, Default, Copy, Clone)]
@@ -31,7 +38,6 @@ pub struct FdNotify {
     pub fd: i32,
     pub mask: EventMask,
 }
-
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct IOBufWriteResp {

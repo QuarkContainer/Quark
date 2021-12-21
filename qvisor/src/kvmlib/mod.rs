@@ -41,14 +41,14 @@ pub mod perflog;
 
 use spin::Mutex;
 use lazy_static::lazy_static;
-use core::sync::atomic::AtomicU64;
-use core::sync::atomic::Ordering;
+use alloc::sync::Arc;
 
 use self::qlib::buddyallocator::MemAllocator;
 use self::qlib::{addr};
 use self::qlib::qmsg::*;
 use self::qlib::config::*;
 use self::qlib::ShareSpace;
+use self::qlib::ShareSpaceRef;
 use self::vmspace::hostfdnotifier::*;
 use self::vmspace::host_pma_keeper::*;
 use self::vmspace::kernel_io_thread::*;
@@ -62,14 +62,10 @@ pub fn AllocatorPrint(_class: usize) -> String {
     return "".to_string();
 }
 
-pub fn ShareSpace() -> &'static ShareSpace {
-    return unsafe {
-        &*(SHARE_SPACE.load(Ordering::Relaxed) as * const ShareSpace)
-    }
-}
+pub static SHARE_SPACE : ShareSpaceRef = ShareSpaceRef::New();
 
 lazy_static! {
-    pub static ref SHARE_SPACE : AtomicU64 = AtomicU64::new(0);
+    pub static ref SHARE_SPACE_STRUCT : Arc<Mutex<ShareSpace>> = Arc::new(Mutex::new(ShareSpace::default()));
     pub static ref VMS: Mutex<VMSpace> = Mutex::new(VMSpace::Init());
     pub static ref PAGE_ALLOCATOR: MemAllocator = MemAllocator::New();
     pub static ref FD_NOTIFIER: HostFdNotifier = HostFdNotifier::New();

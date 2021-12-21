@@ -100,7 +100,6 @@ pub struct VMSpace {
     pub vdsoAddr: u64,
     pub vcpuCount: usize,
 
-    pub shareSpace: &'static ShareSpace,
     pub rng: RandGen,
     pub args: Option<Args>,
     pub pivot: bool,
@@ -1464,19 +1463,15 @@ impl VMSpace {
         return 0;
     }
 
-    pub fn GetShareSpace(&self) -> &'static ShareSpace {
-        return &self.shareSpace
-    }
-
     pub fn FdNotify(&self, fd: i32, mask: EventMask) {
-        self.shareSpace.AQHostInputCall(&HostInputMsg::FdNotify(FdNotify{
+        SHARE_SPACE.AQHostInputCall(&HostInputMsg::FdNotify(FdNotify{
             fd: fd,
             mask: mask,
         }));
     }
 
     pub fn Signal(&self, signal: SignalArgs) {
-        self.shareSpace.AQHostInputCall(&HostInputMsg::Signal(signal));
+        SHARE_SPACE.AQHostInputCall(&HostInputMsg::Signal(signal));
     }
 
     pub fn LibcFstat(osfd: i32) -> Result<LibcStat> {
@@ -1513,9 +1508,6 @@ impl VMSpace {
             sharedLoasdOffset: 0x0000_5555_0000_0000,
             vdsoAddr: 0,
             vcpuCount: 0,
-            shareSpace: unsafe {
-                &mut *(0 as * mut ShareSpace)
-            },
             rng: RandGen::Init(),
             args: None,
             pivot: false,
