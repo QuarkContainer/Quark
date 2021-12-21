@@ -22,7 +22,7 @@ use super::mutex::*;
 use super::addr::*;
 use super::common::*;
 
-fn ZeroPage(pageStart: u64) {
+pub fn ZeroPage(pageStart: u64) {
     unsafe {
         let arr = slice::from_raw_parts_mut(pageStart as *mut u64, 512);
         for i in 0..512 {

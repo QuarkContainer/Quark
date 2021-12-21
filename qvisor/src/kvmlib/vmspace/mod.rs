@@ -58,7 +58,7 @@ use self::syscall::*;
 use self::random::*;
 use self::limits::*;
 use super::runc::runtime::signal_handle::*;
-use super::kvm_vcpu::SimplePageAllocator;
+use super::kvm_vcpu::HostPageAllocator;
 
 const ARCH_SET_GS:u64 = 0x1001;
 const ARCH_SET_FS:u64 = 0x1002;
@@ -94,7 +94,7 @@ pub struct WaitingMsgCall {
 
 pub struct VMSpace {
     pub pageTables : PageTables,
-    pub allocator: Option<SimplePageAllocator>,
+    pub allocator: HostPageAllocator,
     pub hostAddrTop: u64,
     pub sharedLoasdOffset: u64,
     pub vdsoAddr: u64,
@@ -1412,12 +1412,12 @@ impl VMSpace {
     //map kernel table
     pub fn KernelMap(&mut self, start: Addr, end: Addr, physical: Addr, flags: PageTableFlags) -> Result<bool> {
         error!("KernelMap start is {:x}, end is {:x}", start.0, end.0);
-        return self.pageTables.Map(start, end, physical, flags, self.allocator.as_mut().unwrap(), true);
+        return self.pageTables.Map(start, end, physical, flags, &mut self.allocator, true);
     }
 
     pub fn KernelMapHugeTable(&mut self, start: Addr, end: Addr, physical: Addr, flags: PageTableFlags) -> Result<bool> {
         error!("KernelMap1G start is {:x}, end is {:x}", start.0, end.0);
-        return self.pageTables.MapWith1G(start, end, physical, flags, self.allocator.as_mut().unwrap(), true);
+        return self.pageTables.MapWith1G(start, end, physical, flags, &mut self.allocator, true);
     }
 
     pub fn PrintStr(phAddr: u64) {
@@ -1507,7 +1507,7 @@ impl VMSpace {
 
     pub fn Init() -> Self {
         return VMSpace {
-            allocator: None,
+            allocator: HostPageAllocator::New(),
             pageTables: PageTables::default(),
             hostAddrTop: 0,
             sharedLoasdOffset: 0x0000_5555_0000_0000,

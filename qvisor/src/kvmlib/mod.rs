@@ -24,7 +24,7 @@ pub mod asm;
 
 pub mod qlib;
 mod memmgr;
-mod heap_alloc;
+pub mod heap_alloc;
 mod qcall;
 mod vmspace;
 mod kvm_vcpu;
@@ -42,11 +42,13 @@ pub mod perflog;
 use spin::Mutex;
 use lazy_static::lazy_static;
 use core::sync::atomic::AtomicU64;
+use core::sync::atomic::Ordering;
 
 use self::qlib::buddyallocator::MemAllocator;
 use self::qlib::{addr};
 use self::qlib::qmsg::*;
 use self::qlib::config::*;
+use self::qlib::ShareSpace;
 use self::vmspace::hostfdnotifier::*;
 use self::vmspace::host_pma_keeper::*;
 use self::vmspace::kernel_io_thread::*;
@@ -58,6 +60,12 @@ const UPPER_BOTTOM: u64 = 0xffff800000000000;
 
 pub fn AllocatorPrint(_class: usize) -> String {
     return "".to_string();
+}
+
+pub fn ShareSpace() -> &'static ShareSpace {
+    return unsafe {
+        &*(SHARE_SPACE.load(Ordering::Relaxed) as * const ShareSpace)
+    }
 }
 
 lazy_static! {

@@ -137,20 +137,20 @@ use self::qlib::perf_tunning::*;
 //use self::qlib::mem::list_allocator::*;
 use self::quring::*;
 use self::print::SCALE;
-use self::heap::QAllocator;
-
+//use self::heap::QAllocator;
+use self::heap::GuestAllocator;
 use self::qlib::singleton::*;
 use self::uid::*;
 
 pub const HEAP_START: usize = 0x70_2000_0000;
 pub const HEAP_SIZE: usize = 0x1000_0000;
 
-
 //use buddy_system_allocator::*;
 #[global_allocator]
-static ALLOCATOR: QAllocator = QAllocator::New();
+//static ALLOCATOR: QAllocator = QAllocator::New();
 //static ALLOCATOR: StackHeap = StackHeap::Empty();
 //static ALLOCATOR: ListAllocator = ListAllocator::Empty();
+static ALLOCATOR: GuestAllocator = GuestAllocator::New();
 //static ALLOCATOR: BufHeap = BufHeap::Empty();
 //static ALLOCATOR: LockedHeap<33> = LockedHeap::empty();
 
@@ -409,14 +409,13 @@ pub fn LogInit(pages: u64) {
 }
 
 #[no_mangle]
-pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u64, vcpuCnt: u64, autoStart: bool) {
+pub extern fn rust_main(heapStart: u64, _heapLen: u64, id: u64, vdsoParamAddr: u64, vcpuCnt: u64, autoStart: bool) {
     if id == 0 {
-        //ALLOCATOR.Add(heapStart as usize, heapLen as usize);
-        ALLOCATOR.Init(heapStart as usize, heapLen as usize);
+        ALLOCATOR.Init(heapStart);
         SingletonInit(vcpuCnt as usize);
         InitGs(id);
 
-        ALLOCATOR.SetReady(true);
+        //ALLOCATOR.SetReady(true);
 
         HyperCall64(qlib::HYPERCALL_INIT, (&(*SHARESPACE) as *const ShareSpace) as u64, 0, 0);
         IOURING.Setup(SHARESPACE.config.read().DedicateUring);
@@ -465,7 +464,7 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
     };
 
     if id == 1 {
-        error!("heap start is {:x}/{:x}", heapStart, heapStart + heapLen);
+        error!("heap start is {:x}", heapStart);
 
         if autoStart {
             CreateTask(StartRootContainer, ptr::null(), false);
