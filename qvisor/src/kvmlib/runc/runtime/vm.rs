@@ -20,7 +20,6 @@ use core::sync::atomic::AtomicI32;
 use core::sync::atomic::Ordering;
 use lazy_static::lazy_static;
 use std::os::unix::io::FromRawFd;
-use alloc::alloc::{Layout, alloc};
 
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::pagetable::{PageTables};
@@ -55,36 +54,9 @@ pub fn GetExitStatus() -> i32 {
     return EXIT_STATUS.load(Ordering::Acquire)
 }
 
-pub struct BootStrapMem {
-    pub startAddr: u64,
-    pub vcpuCount: usize,
-}
 
 pub const KERNEL_HEAP_ORD : usize = 33; // 16GB
 
-impl BootStrapMem {
-    pub fn New(vcpuCount: usize) -> Self {
-        let size = vcpuCount * VcpuBootstrapMem::AlignedSize();
-        let layout = Layout::from_size_align(size, MemoryDef::DEFAULT_STACK_SIZE as usize).unwrap();
-        let startAddr = unsafe {
-            alloc(layout) as u64
-        };
-        return Self {
-            startAddr: startAddr,
-            vcpuCount: vcpuCount,
-        }
-    }
-
-    pub fn Size(&self) -> usize {
-        let size = self.vcpuCount * VcpuBootstrapMem::AlignedSize();
-        return size;
-    }
-
-    pub fn VcpuBootstrapMem(&self, idx: usize) -> &'static VcpuBootstrapMem {
-        let addr = self.startAddr + (idx * VcpuBootstrapMem::AlignedSize()) as u64;
-        return VcpuBootstrapMem::FromAddr(addr);
-    }
-}
 
 pub struct VirtualMachine {
     pub kvm: Kvm,
@@ -168,14 +140,12 @@ impl VirtualMachine {
         info!("set map region start={:x}, end={:x}", MemoryDef::PHY_LOWER_ADDR, MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB);
 
         let autoStart;
-        let bootstrapMem;
 
         {
             info!("kernelMemSize is {:x}", kernelMemSize);
             let vms = &mut VMS.lock();
             vms.controlSock = controlSock;
             PMA_KEEPER.InitHugePages();
-            bootstrapMem = BootStrapMem::New(cpuCount);
 
             vms.hostAddrTop = MemoryDef::PHY_LOWER_ADDR + 64 * MemoryDef::ONE_MB + 2 * MemoryDef::ONE_GB;
             vms.pageTables = PageTables::New(&vms.allocator)?;
@@ -209,7 +179,6 @@ impl VirtualMachine {
             let vcpu = Arc::new(KVMVcpu::Init(i as usize,
                                                          cpuCount,
                                                          &vm_fd,
-                                                         &bootstrapMem,
                                                          entry,
                                                          heapStartAddr,
                                                          autoStart)?);
