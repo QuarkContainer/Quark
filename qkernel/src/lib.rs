@@ -172,9 +172,17 @@ pub static EXIT_CODE : Singleton<AtomicI32> = Singleton::<AtomicI32>::New();
 pub fn SingletonInit() {
     unsafe {
         KERNEL_PAGETABLE.Init(PageTables::Init(CurrentCr3()));
+        vcpu::VCPU_COUNT.Init(AtomicUsize::new(0));
+        vcpu::CPU_LOCAL.Init(&SHARESPACE.scheduler.VcpuArr);
+        InitGs(0);
+        IOURING.Init(QUring::New(MemoryDef::QURING_SIZE, 1));
+        IOURING.Setup(SHARESPACE.config.read().DedicateUring);
+
+        // the error! can run after this point
+        //error!("error message");
+
         PAGE_MGR.Init(PageMgr::New());
         LOADER.Init(Loader::default());
-        IOURING.Init(QUring::New(MemoryDef::QURING_SIZE, 1));
         KERNEL_STACK_ALLOCATOR.Init( AlignedAllocator::New(MemoryDef::DEFAULT_STACK_SIZE as usize, MemoryDef::DEFAULT_STACK_SIZE as usize));
         SHUTDOWN.Init(AtomicBool::new(false));
         EXIT_CODE.Init(AtomicI32::new(0));
@@ -182,8 +190,6 @@ pub fn SingletonInit() {
         guestfdnotifier::GUEST_NOTIFIER.Init(guestfdnotifier::Notifier::New());
         UID.Init(AtomicU64::new(1));
         perflog::THREAD_COUNTS.Init(QMutex::new(perflog::ThreadPerfCounters::default()));
-        vcpu::VCPU_COUNT.Init(AtomicUsize::new(0));
-        vcpu::CPU_LOCAL.Init(&SHARESPACE.scheduler.VcpuArr);
         boot::controller::MSG.Init(QMutex::new(None));
 
         fs::file::InitSingleton();
@@ -414,14 +420,9 @@ pub extern fn rust_main(heapStart: u64, shareSpaceAddr: u64, id: u64, vdsoParamA
         ALLOCATOR.Init(heapStart);
         SHARESPACE.SetValue(shareSpaceAddr);
         SingletonInit();
-        InitGs(id);
 
         IOURING.Setup(SHARESPACE.config.read().DedicateUring);
 
-        let SyncLog= SHARESPACE.config.read().SyncPrint();
-        if !SyncLog {
-            LogInit(128 * 1024); // 128 * 1024 pages, i.e. 512 MB
-        }
         //Kernel::HostSpace::KernelMsg(0, 0, 1);
         {
             let kpt = &KERNEL_PAGETABLE;
