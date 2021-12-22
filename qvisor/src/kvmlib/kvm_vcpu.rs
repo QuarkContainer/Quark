@@ -864,10 +864,17 @@ impl CPULocal {
 
 impl ShareSpace {
     pub fn Init(&mut self, vcpuCount: usize, controlSock: i32) {
+        *self.config.write() = *QUARK_CONFIG.lock();
         let mut values = Vec::with_capacity(vcpuCount);
         for _i in 0..vcpuCount {
             values.push([AtomicU64::new(0), AtomicU64::new(0)])
         };
+
+        let SyncLog= self.config.read().SyncPrint();
+        if !SyncLog {
+            let bs = super::qlib::bytestream::ByteStream::Init(128 * 1024); // 128 MB
+            *self.logBuf.lock() = Some(bs);
+        }
 
         self.scheduler = Scheduler::New(vcpuCount);
         self.values = values;
@@ -875,7 +882,6 @@ impl ShareSpace {
         self.scheduler.Init();
         self.SetLogfd(super::super::print::LOG.lock().Logfd());
         self.hostEpollfd.store(FD_NOTIFIER.Epollfd(), Ordering::SeqCst);
-        *self.config.write() = *QUARK_CONFIG.lock();
         self.controlSock = controlSock;
         super::vmspace::VMSpace::BlockFd(controlSock);
     }
