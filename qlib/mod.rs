@@ -576,6 +576,7 @@ pub struct ShareSpace {
     pub logBuf: QMutex<Option<ByteStream>>,
     pub logLock: QMutex<()>,
     pub logfd: AtomicI32,
+    pub uringsAddr: AtomicU64,
 
     pub controlSock: i32,
 
@@ -604,9 +605,18 @@ impl ShareSpace {
             logBuf: QMutex::new(None),
             logLock: QMutex::new(()),
             logfd: AtomicI32::new(-1),
+            uringsAddr: AtomicU64::new(0),
             controlSock: -1,
             values: values,
         }
+    }
+
+    pub fn SetIOUringsAddr(&self, addr: u64) {
+        self.uringsAddr.store(addr, Ordering::SeqCst);
+    }
+
+    pub fn IOUringsAddr(&self) -> u64 {
+        return self.uringsAddr.load(Ordering::Relaxed);
     }
 
     pub fn Addr(&self) -> u64 {

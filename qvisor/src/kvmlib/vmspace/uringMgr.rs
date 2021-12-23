@@ -60,6 +60,11 @@ impl UringMgr {
         return ret;
     }
 
+    pub fn IOUringsAddr(&self) -> u64 {
+        let addr = &self.rings as * const Vec<IoUring> as u64;
+        return addr;
+    }
+
     pub fn Init(&mut self, DedicateUringCnt: usize) {
         if DedicateUringCnt == 0 {
             let ring = Builder::default()
@@ -110,7 +115,7 @@ impl UringMgr {
     pub fn CompletEntries(&self) -> usize {
         let mut cnt = 0;
         for r in &self.rings {
-            cnt += r.completion().len();
+            cnt += r.completion().lock().len();
         };
 
         return cnt;
