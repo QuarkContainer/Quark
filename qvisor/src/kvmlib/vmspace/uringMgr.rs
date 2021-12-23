@@ -92,11 +92,6 @@ impl UringMgr {
         self.Register(IORING_REGISTER_FILES, &self.fds[0] as * const _ as u64, self.fds.len() as u32).expect("InitUring register files fail");
     }
 
-    pub fn Setup(&mut self, idx: usize, submission: u64, completion: u64) -> Result<i32> {
-        self.rings[idx].CopyTo(submission, completion);
-        return Ok(0)
-    }
-
     pub fn SetupEventfd(&mut self, eventfd: i32) {
         self.eventfd = eventfd;
 

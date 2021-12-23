@@ -371,8 +371,6 @@ impl KVMVcpu {
 
                             URING_MGR.lock().Wake(idx, minComplete).expect("qlib::HYPER CALL_URING_WAKE fail");
                         }
-                        qlib::HYPERCALL_INIT => {
-                        }
                         qlib::HYPERCALL_RELEASE_VCPU => {
                             SyncMgr::WakeShareSpaceReady();
                         }

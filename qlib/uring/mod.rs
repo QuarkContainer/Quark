@@ -53,24 +53,6 @@ pub struct IoUring {
 }
 
 impl IoUring {
-    pub fn CopyTo(&self, submission: u64, completion: u64) {
-        let submission = unsafe {
-            &*(submission as * const QMutex<Submission>)
-        };
-
-        let completion = unsafe {
-            &*(completion as * const QMutex<Completion>)
-        };
-
-        let mut s = submission.lock();
-        s.params = self.params;
-        s.memory = self.memory;
-        self.sq.lock().CopyTo(&mut s.sq);
-
-        let mut c = completion.lock();
-        self.cq.lock().CopyTo(&mut c.cq);
-    }
-
     pub fn HasCompleteEntry(&self) -> bool {
         return self.completion().lock().len() > 0;
     }

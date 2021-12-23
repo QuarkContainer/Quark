@@ -175,9 +175,9 @@ pub fn SingletonInit() {
         vcpu::VCPU_COUNT.Init(AtomicUsize::new(0));
         vcpu::CPU_LOCAL.Init(&SHARESPACE.scheduler.VcpuArr);
         InitGs(0);
-        IOURING.Init(QUring::New(MemoryDef::QURING_SIZE, 1));
+        IOURING.Init(QUring::New(MemoryDef::QURING_SIZE));
         IOURING.SetIOUringsAddr(SHARESPACE.IOUringsAddr());
-        
+
         // the error! can run after this point
         //error!("error message");
 

@@ -32,18 +32,6 @@ impl Default for SubmissionQueue {
     }
 }
 
-impl SubmissionQueue {
-    pub fn CopyTo(&self, to: &mut Self) {
-        to.head = self.head;
-        to.tail = self.tail;
-        to.ring_mask = self.ring_mask;
-        to.ring_entries = self.ring_entries;
-        to.flags = self.flags;
-        to.dropped = self.dropped;
-        to.sqes = self.sqes;
-    }
-}
-
 pub struct AvailableQueue<'a> {
     head: u32,
     tail: u32,

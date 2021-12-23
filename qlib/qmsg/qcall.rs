@@ -94,7 +94,6 @@ pub enum Msg {
     MUnmap(MUnmap),
     NonBlockingPoll(NonBlockingPoll),
     NewTmpfsFile(NewTmpfsFile),
-    IoUringSetup(IoUringSetup),
     IoUringEnter(IoUringEnter),
     Statm(Statm),
     NewFd(NewFd),
@@ -108,13 +107,6 @@ pub enum Msg {
 #[derive(Clone, Default, Debug)]
 pub struct EventfdWrite {
     pub fd: i32
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct IoUringSetup {
-    pub idx: usize,
-    pub submission: u64,
-    pub completion: u64
 }
 
 #[derive(Clone, Default, Debug)]
