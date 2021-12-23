@@ -177,7 +177,7 @@ pub fn SingletonInit() {
         InitGs(0);
         IOURING.Init(QUring::New(MemoryDef::QURING_SIZE, 1));
         IOURING.SetIOUringsAddr(SHARESPACE.IOUringsAddr());
-
+        
         // the error! can run after this point
         //error!("error message");
 
