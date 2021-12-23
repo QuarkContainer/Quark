@@ -343,13 +343,6 @@ impl KVMVcpu {
             Msg::NewTmpfsFile(msg) => {
                 ret = super::VMSpace::NewTmpfsFile(msg.typ, msg.addr) as u64;
             },
-            Msg::IoUringSetup(msg) => {
-                ret = match URING_MGR.lock().Setup(msg.idx, msg.submission, msg.completion) {
-                    Ok(v) => v as u64,
-                    Err(Error::SysError(v)) => -v as i64 as u64,
-                    _ => panic!("UringMgr setup fail")
-                }
-            },
             Msg::IoUringEnter(msg) => {
                 ret = match URING_MGR.lock().Enter(msg.idx, msg.toSubmit, msg.minComplete, msg.flags) {
                     Ok(v) => v as u64,

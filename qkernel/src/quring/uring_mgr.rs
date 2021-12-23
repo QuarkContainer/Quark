@@ -138,97 +138,6 @@ impl IoUring {
     }
 }
 
-impl Submission {
-    pub fn SqLen(&self) -> usize {
-        unsafe {
-            let head = (*self.sq.head).load(atomic::Ordering::Acquire);
-            let tail = unsync_load(self.sq.tail);
-
-            tail.wrapping_sub(head) as usize
-        }
-    }
-
-    pub fn IsFull(&self) -> bool {
-        return self.sq.is_full();
-    }
-
-    pub fn FreeSlots(&self) -> usize {
-        return self.sq.freeSlot();
-    }
-
-    pub fn NeedWakeup(&self) -> bool {
-        unsafe {
-            (*self.sq.flags).load(atomic::Ordering::Acquire) & sys::IORING_SQ_NEED_WAKEUP != 0
-        }
-    }
-
-    pub fn SubmitAndWait(&self, idx: usize, want: usize) -> Result<usize> {
-        let len = self.SqLen();
-
-        let mut flags = 0;
-
-        if want > 0 {
-            flags |= sys::IORING_ENTER_GETEVENTS;
-        }
-
-        if self.params.0.flags & sys::IORING_SETUP_SQPOLL != 0 {
-            if self.NeedWakeup() {
-                if want > 0 {
-                    flags |= sys::IORING_ENTER_SQ_WAKEUP;
-                } else {
-                    super::super::Kernel::HostSpace::UringWake(idx, 0);
-                    return Ok(0)
-                }
-            } else if want == 0 {
-                // fast poll
-                return Ok(len);
-            }
-        }
-
-        return self.Enter(idx, len as _, want as _, flags)
-    }
-
-    pub fn Submit(&self, idx: usize) -> Result<usize> {
-        return self.SubmitAndWait(idx, 0)
-    }
-
-    pub fn Enter(&self,
-                 idx: usize,
-                 to_submit: u32,
-                 min_complete: u32,
-                 flags: u32
-    ) -> Result<usize> {
-        let ret = HostSpace::IoUringEnter(idx,
-                                          to_submit,
-                                          min_complete,
-                                          flags);
-        if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
-        }
-
-        return Ok(ret as usize)
-    }
-
-}
-
-unsafe impl Send for Completion {}
-unsafe impl Sync for Completion {}
-
-impl Completion {
-    pub fn Next(&mut self) -> Option<cqueue::Entry> {
-        //return self.cq.available().next()
-        return self.cq.next();
-    }
-
-    pub fn CqLen(&mut self) -> usize {
-        return self.cq.len()
-    }
-
-    pub fn Overflow(&self) -> u32 {
-        return self.cq.overflow();
-    }
-}
-
 #[derive(Default)]
 pub struct QUring {
     pub uringsAddr: AtomicU64,
@@ -239,7 +148,7 @@ pub struct QUring {
 impl QUring {
     pub const MAX_URING_COUNT : usize = 8;
 
-    pub fn New(size: usize, _uringCount: usize) -> Self {
+    pub fn New(size: usize) -> Self {
         let ret = QUring {
             asyncMgr: UringAsyncMgr::New(size),
             uringsAddr: AtomicU64::new(0),

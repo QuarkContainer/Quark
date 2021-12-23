@@ -86,7 +86,6 @@ pub fn InitSingleton() {
     }
 }
 
-pub const HYPERCALL_INIT: u16 = 1;
 pub const HYPERCALL_PANIC: u16 = 2;
 pub const HYPERCALL_OOM: u16 = 4;
 pub const HYPERCALL_MSG: u16 = 5;

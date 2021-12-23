@@ -704,17 +704,6 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn IoUringSetup(idx: usize, submission: u64, completion: u64) -> i64 {
-        let mut msg = Msg::IoUringSetup(IoUringSetup {
-            idx,
-            submission,
-            completion
-        });
-
-        //return HostSpace::Call(&mut msg, false) as i64;
-        return Self::HCall(&mut msg, true) as i64
-    }
-
     pub fn IoUringEnter(idx: usize, toSubmit: u32, minComplete: u32, flags: u32) -> i64 {
         let mut msg = Msg::IoUringEnter(IoUringEnter {
             idx,
