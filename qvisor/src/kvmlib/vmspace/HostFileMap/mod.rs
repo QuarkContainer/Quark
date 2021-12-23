@@ -30,8 +30,6 @@ const MAX_FD: i32 = 65535; //skip stdin, stdout, stderr
 
 //map between guest/process fd to host fd
 pub struct IOMgr {
-    pub osMap: BTreeMap<i32, FdInfo>,
-
     //guest hostfd to fdInfo
     pub fdTbl: FdTbl,
     pub eventfd: i32,
@@ -41,10 +39,6 @@ unsafe impl Send for IOMgr {}
 
 impl IOMgr {
     pub fn Print(&self) {
-        for (osfd, fdInfo) in &self.osMap {
-            info!("osfd[{}]->{:?}", osfd, fdInfo.lock())
-        }
-
         info!("fdTbl is {:?}", self.fdTbl);
     }
 
@@ -67,13 +61,8 @@ impl IOMgr {
 
         let mut res = Self {
             eventfd: eventfd,
-            osMap: BTreeMap::new(),
             fdTbl: FdTbl::New(),
         };
-
-        for i in 0..2 {
-            res.osMap.insert(i, res.fdTbl.Get(i).expect("no intial fd"));
-        }
 
         res.DrainPipe()?;
 
@@ -99,9 +88,6 @@ impl IOMgr {
     //return guest fd
     pub fn AddFd(&mut self, osfd: i32, epollable: bool) -> i32 {
         let fdInfo = self.fdTbl.Alloc(osfd, epollable).expect("hostfdMap: guest fd alloc fail");
-
-        self.osMap.insert(osfd, fdInfo.clone());
-
         return fdInfo.lock().osfd;
     }
 
@@ -125,17 +111,6 @@ impl IOMgr {
     //ret: true: exist, false: not exist
     pub fn RemoveFd(&mut self, hostfd: i32) -> Option<FdInfo> {
         let fdInfo = self.fdTbl.Remove(hostfd);
-
-        match &fdInfo {
-            None => (),
-            Some(info) => {
-                let osfd = info.lock().osfd;
-                if osfd >= 0 {
-                    self.osMap.remove(&osfd);
-                }
-            }
-        }
-
         return fdInfo;
     }
 
@@ -146,13 +121,6 @@ impl IOMgr {
                 None
             }
             Some(fdInfo) => Some(fdInfo.lock().osfd),
-        }
-    }
-
-    pub fn GetByOs(&self, osfd: i32) -> Option<FdInfo> {
-        match self.osMap.get(&osfd) {
-            None => None,
-            Some(fdInfo) => Some(fdInfo.clone()),
         }
     }
 
@@ -173,16 +141,12 @@ pub struct FdTbl {
     //map between guest fd to host fd
     //pub map: BTreeMap<i32, osfd>,
     pub map: BTreeMap<i32, FdInfo>,
-    pub start: i32,
-    pub len: i32,
 }
 
 impl FdTbl {
     pub fn New() -> Self {
         let mut res = Self {
             map: BTreeMap::new(),
-            start: START_FD,
-            len: MAX_FD,
         };
 
         res.map.insert(0, FdInfo::New(0, true));
