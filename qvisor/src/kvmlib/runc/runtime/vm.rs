@@ -114,6 +114,7 @@ impl VirtualMachine {
         URING_MGR.lock().SetupEventfd(sharespace.scheduler.VcpuArr[0].eventfd);
         URING_MGR.lock().Addfd(sharespace.HostHostEpollfd()).unwrap();
         URING_MGR.lock().Addfd(controlSock).unwrap();
+        sharespace.SetIOUringsAddr(URING_MGR.lock().IOUringsAddr());
 
         let syncPrint = sharespace.config.read().SyncPrint();
         super::super::super::super::print::SetSharespace(sharespace);

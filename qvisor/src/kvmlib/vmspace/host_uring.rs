@@ -19,6 +19,7 @@ use super::super::qlib::uring::porting::*;
 use super::super::qlib::uring::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
+use super::super::qlib::mutex::QMutex;
 use super::super::util::*;
 use super::super::*;
 use super::syscall::*;
@@ -98,8 +99,8 @@ impl IoUring {
 
         Ok(IoUring {
             fd: Fd(fd),
-            sq,
-            cq,
+            sq: QMutex::new(sq),
+            cq: QMutex::new(cq),
             params: Parameters(p),
             memory: mm,
         })
@@ -109,12 +110,6 @@ impl IoUring {
     #[inline]
     pub fn submit(&self) -> Result<usize> {
         self.submitter().submit()
-    }
-
-    /// Get submitter and submission queue and completion queue
-    pub fn split(&mut self) -> (Submitter<'_>, &mut SubmissionQueue, &mut CompletionQueue) {
-        let submit = Submitter::new(&self.fd, self.params.0.flags, &self.sq);
-        (submit, &mut self.sq, &mut self.cq)
     }
 
     /// Initiate and/or complete asynchronous I/O

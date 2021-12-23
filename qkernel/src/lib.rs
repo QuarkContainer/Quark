@@ -176,8 +176,8 @@ pub fn SingletonInit() {
         vcpu::CPU_LOCAL.Init(&SHARESPACE.scheduler.VcpuArr);
         InitGs(0);
         IOURING.Init(QUring::New(MemoryDef::QURING_SIZE, 1));
-        IOURING.Setup(SHARESPACE.config.read().DedicateUring);
-
+        IOURING.SetIOUringsAddr(SHARESPACE.IOUringsAddr());
+        
         // the error! can run after this point
         //error!("error message");
 
@@ -421,7 +421,6 @@ pub extern fn rust_main(heapStart: u64, shareSpaceAddr: u64, id: u64, vdsoParamA
         SHARESPACE.SetValue(shareSpaceAddr);
         SingletonInit();
 
-        IOURING.Setup(SHARESPACE.config.read().DedicateUring);
 
         //Kernel::HostSpace::KernelMsg(0, 0, 1);
         {
