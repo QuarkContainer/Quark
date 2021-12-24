@@ -28,6 +28,7 @@ use super::super::super::threadmgr::session::*;
 use super::super::super::socket::hostinet::socket_buf::*;
 use super::super::super::SHARESPACE;
 use super::super::super::IOURING;
+use super::super::super::quring::QUring;
 
 use super::super::file::*;
 use super::super::dirent::*;
@@ -531,18 +532,13 @@ impl FileOperations for TTYFileOps {
         self.lock().checkChange(task, Signal(Signal::SIGTTIN))?;
 
         if SHARESPACE.config.read().TcpBuffIO  && ENABLE_RINGBUF{
-            let size = IoVec::NumBytes(dsts);
-            let buf = DataBuff::New(size);
-            let mut iovs = buf.Iovs();
+
 
             let fd = self.lock().fd;
             let queue = self.lock().queue.clone();
             let ringBuf = self.lock().buf.clone();
 
-            let ret = IOURING.RingFileRead(task, fd, queue, ringBuf, &mut iovs, false)?;
-            if ret > 0 {
-                task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
-            }
+            let ret = QUring::RingFileRead(task, fd, queue, ringBuf, dsts, false)?;
             return Ok(ret);
         }
 
@@ -560,16 +556,16 @@ impl FileOperations for TTYFileOps {
         }
 
         if SHARESPACE.config.read().TcpBuffIO && ENABLE_RINGBUF {
-            let size = IoVec::NumBytes(srcs);
+           /* let size = IoVec::NumBytes(srcs);
             let mut buf = DataBuff::New(size);
             task.CopyDataInFromIovs(&mut buf.buf, &srcs)?;
-            let iovs = buf.Iovs();
+            let iovs = buf.Iovs();*/
 
             let fd = self.lock().fd;
             let queue = self.lock().queue.clone();
             let ringBuf = self.lock().buf.clone();
             let lock = self.BufWriteLock().Lock(task);
-            return IOURING.RingFileWrite(task, fd, queue, ringBuf, &iovs, Arc::new(self.clone()), lock)
+            return QUring::RingFileWrite(task, fd, queue, ringBuf, srcs, Arc::new(self.clone()), lock)
         }
 
         let fops = self.lock().fileOps.clone();
