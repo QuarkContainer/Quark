@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use alloc::slice;
+use alloc::vec::Vec;
 
 use super::common::*;
 use super::pagetable::AlignedAllocator;
@@ -28,6 +29,15 @@ pub struct SocketBufIovs {
 impl SocketBufIovs {
     pub fn Address(&self) -> (u64, usize) {
         return (&self.iovs[0] as * const _ as u64, self.cnt)
+    }
+
+    pub fn Iovs(&self) -> Vec<IoVec> {
+        let mut iovs = Vec::with_capacity(self.cnt);
+        for i in 0..self.cnt {
+            iovs.push(self.iovs[i])
+        }
+
+        return iovs;
     }
 }
 /// ByteStream serves as a buffer for socket operations, backed by a fixed size byte slice. 
@@ -172,12 +182,12 @@ impl ByteStream {
         }
     }
 
-    pub fn GetSpaceIovs(&mut self) -> (u64, usize) {
+    pub fn PrepareSpaceIovs(&mut self) {
         let mut iovs = &mut self.spaceiovs.iovs;
 
         if self.available == self.buf.len() {
             self.spaceiovs.cnt = 0;
-            return self.spaceiovs.Address()
+            return
         }
 
         //error!("GetSpaceIovs available is {}", self.available);
@@ -202,8 +212,16 @@ impl ByteStream {
 
             self.spaceiovs.cnt = 1;
         }
+    }
 
+    pub fn GetSpaceIovs(&mut self) -> (u64, usize) {
+        self.PrepareSpaceIovs();
         return self.spaceiovs.Address()
+    }
+
+    pub fn GetSpaceIovsVec(&mut self) -> Vec<IoVec> {
+        self.PrepareSpaceIovs();
+        return self.spaceiovs.Iovs();
     }
 
     pub fn GetDataBuf(&self) -> (u64, usize) {
@@ -237,12 +255,11 @@ impl ByteStream {
         }
     }
 
-    pub fn GetDataIovs(&mut self) -> (u64, usize) {
+    pub fn PrepareDataIovs(&mut self) {
         let mut iovs = &mut self.dataIovs.iovs;
-
         if self.available == 0 {
             self.dataIovs.cnt = 0;
-            return self.dataIovs.Address()
+            return
         }
 
         assert!(iovs.len()>=2);
@@ -264,8 +281,16 @@ impl ByteStream {
 
             self.dataIovs.cnt = 1;
         }
+    }
 
+    pub fn GetDataIovs(&mut self) -> (u64, usize) {
+        self.PrepareDataIovs();
         return self.dataIovs.Address()
+    }
+
+    pub fn GetDataIovsVec(&mut self) -> Vec<IoVec> {
+        self.PrepareDataIovs();
+        return self.dataIovs.Iovs()
     }
 
     pub fn Produce(&mut self, count: usize) -> bool {
@@ -280,13 +305,7 @@ impl ByteStream {
         let trigger = self.available == self.buf.len();
         self.available -= count;
 
-        //self.readpos = (self.readpos + count) % self.buf.len();
-        if self.available == 0 {
-            self.readpos = 0;
-        } else {
-            self.readpos = (self.readpos + count) % self.buf.len();
-        }
-
+        self.readpos = (self.readpos + count) % self.buf.len();
         return trigger
     }
 

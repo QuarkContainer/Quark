@@ -218,11 +218,13 @@ impl SocketOperations {
         let mut controlData: Vec<u8> = vec![0; controlDataLen];
         if self.passInq.load(Ordering::Relaxed) {
             let inqMessage = ControlMessageTCPInq {
-                Size: self.SocketBuf().readBuf.lock().available as u32};
-                let (remaining, updated_flags) = inqMessage.EncodeInto(&mut controlData[..], 0);
-                let remainSize = remaining.len();
-                controlData.resize(controlDataLen - remainSize, 0);
-                return (updated_flags, controlData)
+                Size: self.SocketBuf().readBuf.lock().available as u32
+            };
+
+            let (remaining, updated_flags) = inqMessage.EncodeInto(&mut controlData[..], 0);
+            let remainSize = remaining.len();
+            controlData.resize(controlDataLen - remainSize, 0);
+            return (updated_flags, controlData)
         } else {
             return (0, Vec::new())
         }
@@ -422,19 +424,9 @@ impl FileOperations for SocketOperations {
 
     fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
         if self.SocketBufEnabled() {
-            //todo: optimize to avoid extra memory copy
-            let size = IoVec::NumBytes(dsts);
-            let buf = DataBuff::New(size);
-            let mut iovs = buf.Iovs();
-            let ret = IOURING.RingFileRead(task, self.fd, self.queue.clone(), self.SocketBuf(), &mut iovs, true)?;
-            if ret > 0 {
-                task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
-            }
+            let ret = IOURING.RingFileRead(task, self.fd, self.queue.clone(), self.SocketBuf(), dsts, true)?;
             return Ok(ret);
         }
-
-        //defer!(task.GetMut().iovs.clear());
-        //task.V2PIovs(dsts, true, &mut task.GetMut().iovs)?;
 
         let size = IoVec::NumBytes(dsts);
         let buf = DataBuff::New(size);
@@ -446,18 +438,8 @@ impl FileOperations for SocketOperations {
 
     fn WriteAt(&self, task: &Task, _f: &File, srcs: &[IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
         if self.SocketBufEnabled() {
-            //todo: optimize to avoid extra memory copy
-            let size = IoVec::NumBytes(srcs);
-            let mut buf = DataBuff::New(size);
-            task.CopyDataInFromIovs(&mut buf.buf, &srcs)?;
-            let iovs = buf.Iovs();
-            return IOURING.SocketSend(task, self.fd, self.queue.clone(), self.SocketBuf(), &iovs, self)
-
-            //return IOURING.RingFileWrite(task, self, srcs)
+            return IOURING.SocketSend(task, self.fd, self.queue.clone(), self.SocketBuf(), srcs, self)
         }
-
-        //defer!(task.GetMut().iovs.clear());
-        //task.V2PIovs(srcs, false, &mut task.GetMut().iovs)?;
 
         let size = IoVec::NumBytes(srcs);
         let mut buf = DataBuff::New(size);
@@ -980,18 +962,10 @@ impl SockOperations for SocketOperations {
 
         //error!("RecvMsg ... host socket  fd {} {}/{}/{}/{}", self.fd, flags & MsgType::MSG_DONTWAIT, self.SocketBufEnabled(), family, stype);
         if self.SocketBufEnabled() {
-            /*
-            if controlDataLen != 0 {
-                panic!("Hostnet RecvMsg Socketbuf doesn't support control data");
-            }
-            */
-
             let controlDataLen = 0;
 
             let len = IoVec::NumBytes(dsts);
-            let buf = DataBuff::New(len);
-            let mut vec = buf.Iovs();
-            let mut iovs : &mut [IoVec] = &mut vec;
+            let mut iovs = dsts;
 
             let mut count = 0;
             let mut tmp;
@@ -1001,7 +975,6 @@ impl SockOperations for SocketOperations {
                         if flags & MsgType::MSG_DONTWAIT != 0 {
                             if count > 0 {
                                 let (retFlags, controlData) = self.prepareControlMessage(controlDataLen);
-                                task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts)?;
                                 return Ok((count as i64, retFlags, None, controlData))
                             }
 
@@ -1013,7 +986,6 @@ impl SockOperations for SocketOperations {
                     Err(e) => {
                         if count > 0 {
                             let (retFlags, controlData) = self.prepareControlMessage(controlDataLen);
-                            task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts)?;
                             return Ok((count as i64, retFlags, None, controlData))
                         }
                         return Err(e)
@@ -1021,16 +993,12 @@ impl SockOperations for SocketOperations {
                     Ok(n) => {
                         if n == 0 {
                             let (retFlags, controlData) = self.prepareControlMessage(controlDataLen);
-                            if count > 0 {
-                                task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts)?;
-                            }
                             return Ok((count, retFlags, None, controlData))
                         }
 
                         count += n;
                         if count == len as i64 {
                             let (retFlags, controlData) = self.prepareControlMessage(controlDataLen);
-                            task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts)?;
                             return Ok((count as i64, retFlags, None, controlData))
                         }
 
@@ -1103,10 +1071,6 @@ impl SockOperations for SocketOperations {
             } else {
                 None
             };
-
-            if count > 0 {
-                task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts)?;
-            }
 
             let (retFlags, controlData) = self.prepareControlMessage(controlDataLen);
             return Ok((count as i64, retFlags, senderAddr, controlData))
