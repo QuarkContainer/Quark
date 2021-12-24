@@ -1359,8 +1359,8 @@ impl VMSpace {
         return 0;
     }
 
-    pub fn HostEpollWaitProcess(addr: u64, count: usize) -> i64 {
-        let ret = FD_NOTIFIER.HostEpollWait(addr, count);
+    pub fn HostEpollWaitProcess() -> i64 {
+        let ret = FD_NOTIFIER.HostEpollWait();
         return ret;
     }
 

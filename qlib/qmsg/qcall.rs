@@ -628,10 +628,7 @@ pub struct NewFd {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct HostEpollWaitProcess {
-    pub addr: u64,
-    pub count: usize,
-}
+pub struct HostEpollWaitProcess {}
 
 #[derive(Clone, Default, Debug)]
 pub struct VcpuWait {
