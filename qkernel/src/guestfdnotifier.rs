@@ -96,32 +96,17 @@ impl Notifier {
     }
 
     pub fn VcpuWait(&self) {
-        let mut events = [EpollEvent::default(); Self::MAX_EVENTS];
-        let addr = &mut events[0] as * mut _ as u64;
-
-        let count = HostSpace::VcpuWait(addr, Self::MAX_EVENTS);
-        if count < 0 {
-            panic!("ProcessHostEpollWait fail with error {}", count)
+        let ret = HostSpace::VcpuWait();
+        if ret < 0 {
+            panic!("ProcessHostEpollWait fail with error {}", ret)
         };
-
-        if count > 0 {
-            self.ProcessEvents(&events[0..count as usize]);
-        }
     }
 
-    pub const MAX_EVENTS: usize = 128;
     pub fn ProcessHostEpollWait(&self) {
-        let mut events = [EpollEvent::default(); Self::MAX_EVENTS];
-        let addr = &mut events[0] as * mut _ as u64;
-
-        let count = HostSpace::HostEpollWaitProcess(addr, Self::MAX_EVENTS);
-        if count < 0 {
-            panic!("ProcessHostEpollWait fail with error {}", count)
+        let ret = HostSpace::HostEpollWaitProcess();
+        if ret < 0 {
+            panic!("ProcessHostEpollWait fail with error {}", ret)
         };
-
-        if count > 0 {
-            self.ProcessEvents(&events[0..count as usize]);
-        }
     }
 
     pub fn ProcessEvents(&self, events: &[EpollEvent]) {

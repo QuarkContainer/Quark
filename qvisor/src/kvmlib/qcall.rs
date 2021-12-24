@@ -356,11 +356,11 @@ impl KVMVcpu {
             Msg::NewFd(msg) => {
                 ret = super::VMSpace::NewFd(msg.fd) as u64;
             },
-            Msg::HostEpollWaitProcess(msg) => {
-                ret = super::VMSpace::HostEpollWaitProcess(msg.addr, msg.count) as u64;
+            Msg::HostEpollWaitProcess(_) => {
+                ret = super::VMSpace::HostEpollWaitProcess() as u64;
             },
-            Msg::VcpuWait(msg) => {
-                ret = self.VcpuWait(msg.addr, msg.count) as u64;
+            Msg::VcpuWait(_) => {
+                ret = self.VcpuWait() as u64;
             },
             Msg::EventfdWrite(msg) => {
                 ret = super::VMSpace::EventfdWrite(msg.fd) as u64;

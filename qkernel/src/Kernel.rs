@@ -679,19 +679,16 @@ impl HostSpace {
         return ret;
     }
 
-    pub fn HostEpollWaitProcess(addr: u64, count: usize) -> i64 {
-        let mut msg = Msg::HostEpollWaitProcess(HostEpollWaitProcess {
-            addr,
-            count,
-        });
+    pub fn HostEpollWaitProcess() -> i64 {
+        let mut msg = Msg::HostEpollWaitProcess(HostEpollWaitProcess {});
 
         let ret = Self::HCall(&mut msg, false) as i64;
         return ret;
     }
 
-    pub fn VcpuWait(addr: u64, count: usize) -> i64 {
+    pub fn VcpuWait() -> i64 {
         let mut ret : i64 = 0;
-        HyperCall64(HYPERCALL_VCPU_WAIT, addr, count as u64, &mut ret as * mut _ as u64);
+        HyperCall64(HYPERCALL_VCPU_WAIT, 0, 0, &mut ret as * mut _ as u64);
         return ret as i64
     }
 

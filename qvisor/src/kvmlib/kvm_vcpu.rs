@@ -544,10 +544,8 @@ impl KVMVcpu {
 
                         qlib::HYPERCALL_VCPU_WAIT => {
                             let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                            let addr = regs.rbx;
-                            let count = regs.rcx as usize;
                             let retAddr = regs.rdi;
-                            let ret = self.VcpuWait(addr, count);
+                            let ret = self.VcpuWait();
                             if ret == -1 {
                                 return Ok(())
                             }
@@ -606,7 +604,7 @@ impl KVMVcpu {
         Ok(())
     }
 
-    pub fn VcpuWait(&self, addr: u64, count: usize) -> i64 {
+    pub fn VcpuWait(&self) -> i64 {
         let sharespace = &SHARE_SPACE;
         while sharespace.scheduler.GlobalReadyTaskCnt() == 0 {
             if !super::runc::runtime::vm::IsRunning() {
@@ -631,12 +629,8 @@ impl KVMVcpu {
                         return 0;
                     }
 
-                    match sharespace.scheduler.WaitVcpu(sharespace, self.id, addr, count, false) {
-                        Ok(count) => {
-                            if count > 0 {
-                                return count
-                            }
-                        },
+                    match sharespace.scheduler.WaitVcpu(sharespace, self.id, false) {
+                        Ok(_) => {}
                         Err(Error::Exit) => return -1,
                         Err(e) => panic!("HYPERCALL_HLT wait fail with error {:?}", e),
                     }
@@ -649,7 +643,7 @@ impl KVMVcpu {
             if sharespace.scheduler.GlobalReadyTaskCnt() != 0 {
                 return 0;
             }
-            let ret = sharespace.scheduler.WaitVcpu(sharespace, self.id, addr, count, true);
+            let ret = sharespace.scheduler.WaitVcpu(sharespace, self.id, true);
             match ret {
                 Ok(count) => {
                     return count
@@ -708,11 +702,11 @@ impl Scheduler {
         }
     }
 
-    pub fn WaitVcpu(&self, sharespace: &ShareSpace, vcpuId: usize, addr: u64, count: usize, block: bool) -> Result<i64> {
+    pub fn WaitVcpu(&self, sharespace: &ShareSpace, vcpuId: usize, block: bool) -> Result<i64> {
         self.vcpuWaitMask.fetch_or(1<<vcpuId, Ordering::SeqCst);
         defer!(self.vcpuWaitMask.fetch_and(!(1<<vcpuId), Ordering::SeqCst););
 
-        return self.VcpuArr[vcpuId].VcpuWait(sharespace, addr, count, block);
+        return self.VcpuArr[vcpuId].VcpuWait(sharespace, block);
     }
 }
 
@@ -770,7 +764,7 @@ impl CPULocal {
         self.data = 1;
     }
 
-    pub fn VcpuWait(&self, sharespace: &ShareSpace, addr: u64, count: usize, block: bool) -> Result<i64> {
+    pub fn VcpuWait(&self, sharespace: &ShareSpace, block: bool) -> Result<i64> {
         let mut events = [epoll_event { events: 0, u64: 0 }; 2];
 
         let time = if block {
@@ -819,18 +813,16 @@ impl CPULocal {
                 }
             }
 
-            let count = if hasMsg {
+            if hasMsg {
                 match sharespace.TryLockEpollProcess() {
-                    None => 0,
+                    None => {},
                     Some(_) => {
-                        FD_NOTIFIER.HostEpollWait(addr, count)
+                        FD_NOTIFIER.HostEpollWait();
                     }
                 }
-            } else {
-                0
-            };
+            }
 
-            if wakeVcpu || count > 0 {
+            if wakeVcpu {
                 if wakeVcpu {
                     let mut data : u64 = 0;
                     let ret = unsafe {
@@ -843,7 +835,7 @@ impl CPULocal {
                     }
                 }
 
-                return Ok(count)
+                return Ok(0)
             }
         }
 
