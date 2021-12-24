@@ -20,6 +20,7 @@ use core::sync::atomic::Ordering;
 use super::super::super::qlib::bytestream::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::common::*;
+use super::super::super::task::Task;
 
 pub struct SocketBuff {
     pub wClosed: AtomicBool,
@@ -138,21 +139,15 @@ impl SocketBuff {
         return (trigger, addr, size)
     }
 
-    pub fn Readv(&self, iovs: &mut [IoVec]) -> Result<(bool, usize)> {
+    pub fn Readv(&self, task: &Task, iovs: &mut [IoVec]) -> Result<(bool, usize)> {
         let mut trigger = false;
         let mut cnt = 0;
 
-        let mut readbuf = self.readBuf.lock();
-        for iov in iovs {
-            let (toTrigger, size) = readbuf.read(iov.ToSliceMut())?;
-            if toTrigger {
-                trigger = true;
-            }
-
-            cnt += size;
-            if size < iov.len && cnt != 0 {
-                return Ok((trigger, cnt))
-            }
+        let mut buf = self.readBuf.lock();
+        let srcIovs = buf.GetDataIovsVec();
+        if srcIovs.len() > 0 {
+            cnt = task.mm.CopyIovsOutFromIovs(task, &srcIovs, iovs)?;
+            trigger = buf.Consume(cnt);
         }
 
         if cnt > 0 {
@@ -170,7 +165,7 @@ impl SocketBuff {
         return self.writeBuf.lock().GetDataBuf();
     }
 
-    pub fn Writev(&self, iovs: &[IoVec]) -> Result<(usize, Option<(u64, usize)>)> {
+    pub fn Writev(&self, task: &Task, iovs: &[IoVec]) -> Result<(usize, Option<(u64, usize)>)> {
         if self.Error() != 0 {
             return Err(Error::SysError(self.Error()));
         }
@@ -181,30 +176,24 @@ impl SocketBuff {
             return Err(Error::SysError(SysErr::EPIPE))
         }
 
-        let mut trigger = false;
-        let mut cnt = 0;
-        let mut writebuf = self.writeBuf.lock();
-        for iov in iovs {
-            let (toTrigger, size) = writebuf.write(iov.ToSlice())?;
-            if toTrigger {
-                trigger = true;
-            }
-
-            cnt += size;
-            if size < iov.len {
-                break
-            }
+        let mut buf = self.writeBuf.lock();
+        let dstIovs = buf.GetSpaceIovsVec();
+        if dstIovs.len() == 0 {
+            return Err(Error::SysError(SysErr::EAGAIN));
         }
+
+        let cnt = task.mm.CopyIovsOutToIovs(task, iovs, &dstIovs)?;
 
         if cnt == 0 {
             error!("writev cnt is zero....");
             return Err(Error::SysError(SysErr::EAGAIN));
         }
 
+        let trigger = buf.Produce(cnt);
         if !trigger {
             return Ok((cnt, None))
         } else {
-            let (addr, len) = writebuf.GetDataBuf();
+            let (addr, len) = buf.GetDataBuf();
             return Ok((cnt, Some((addr, len))))
         }
     }

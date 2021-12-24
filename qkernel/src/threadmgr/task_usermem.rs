@@ -79,13 +79,13 @@ impl MemoryManager {
         return self.CopyDataOutLocked(task, from, vaddr, len);
     }
 
-    pub fn CopyDataOutToIovsLocked(&self, task: &Task, buf:&[u8], iovs: &[IoVec]) -> Result<usize> {
+    pub fn CopyDataOutToIovsLocked(&self, task: &Task, buf:&[u8], dsts: &[IoVec]) -> Result<usize> {
         if buf.len() == 0 {
             return Ok(0)
         }
 
         let mut offset = 0;
-        for iov in iovs {
+        for iov in dsts {
             if offset >= buf.len() {
                 break;
             }
@@ -158,16 +158,16 @@ impl MemoryManager {
     pub fn CopyIovsOutFromIovs(&self, task: &Task, srcIovs: &[IoVec], dstIovs: &[IoVec]) -> Result<usize> {
         let _ml = self.MappingWriteLock();
 
-        let mut srcs = srcIovs;
+        let mut dsts = dstIovs;
         let mut count = 0;
         let mut tmp;
 
-        for iov in dstIovs {
+        for iov in srcIovs {
             let buf = iov.ToSliceMut();
-            let n = self.CopyDataInFromIovsLocked(task, buf, srcs)?;
+            let n = self.CopyDataOutToIovsLocked(task, buf, dsts)?;
             count += n;
-            tmp = Iovs(srcs).DropFirst(n as usize);
-            srcs = &tmp;
+            tmp = Iovs(dsts).DropFirst(n as usize);
+            dsts = &tmp;
         }
 
         return Ok(count)
