@@ -46,6 +46,7 @@ use super::super::super::qlib::mem::block::*;
 use super::super::super::qlib::linux::netdevice::*;
 use super::super::super::Kernel;
 use super::super::super::IOURING;
+use super::super::super::quring::QUring;
 use super::super::super::Kernel::HostSpace;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::fd::*;
@@ -424,7 +425,7 @@ impl FileOperations for SocketOperations {
 
     fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
         if self.SocketBufEnabled() {
-            let ret = IOURING.RingFileRead(task, self.fd, self.queue.clone(), self.SocketBuf(), dsts, true)?;
+            let ret = QUring::RingFileRead(task, self.fd, self.queue.clone(), self.SocketBuf(), dsts, true)?;
             return Ok(ret);
         }
 
@@ -438,7 +439,7 @@ impl FileOperations for SocketOperations {
 
     fn WriteAt(&self, task: &Task, _f: &File, srcs: &[IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
         if self.SocketBufEnabled() {
-            return IOURING.SocketSend(task, self.fd, self.queue.clone(), self.SocketBuf(), srcs, self)
+            return QUring::SocketSend(task, self.fd, self.queue.clone(), self.SocketBuf(), srcs, self)
         }
 
         let size = IoVec::NumBytes(srcs);
@@ -970,7 +971,7 @@ impl SockOperations for SocketOperations {
             let mut count = 0;
             let mut tmp;
             loop {
-                match IOURING.RingFileRead(task, self.fd, self.queue.clone(), self.SocketBuf(), iovs, true) {
+                match QUring::RingFileRead(task, self.fd, self.queue.clone(), self.SocketBuf(), iovs, true) {
                     Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
                         if flags & MsgType::MSG_DONTWAIT != 0 {
                             if count > 0 {
@@ -1014,7 +1015,7 @@ impl SockOperations for SocketOperations {
 
             'main: loop {
                 loop {
-                    match IOURING.RingFileRead(task, self.fd, self.queue.clone(), self.SocketBuf(), iovs, true) {
+                    match QUring::RingFileRead(task, self.fd, self.queue.clone(), self.SocketBuf(), iovs, true) {
                         Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
                             if count > 0 {
                                 break 'main;
@@ -1175,7 +1176,7 @@ impl SockOperations for SocketOperations {
 
             loop {
                 loop {
-                    match IOURING.SocketSend(task, self.fd, self.queue.clone(), self.SocketBuf(), srcs, self) {
+                    match QUring::SocketSend(task, self.fd, self.queue.clone(), self.SocketBuf(), srcs, self) {
                         Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
                             if count > 0 {
                                 return Ok(count)

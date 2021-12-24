@@ -348,7 +348,7 @@ impl QUring {
         return Ok(())
     }
 
-    pub fn RingFileWrite(&self, task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, srcs: &[IoVec], fops: Arc<FileOperations>, lockGuard: QAsyncLockGuard) -> Result<i64> {
+    pub fn RingFileWrite(task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, srcs: &[IoVec], fops: Arc<FileOperations>, lockGuard: QAsyncLockGuard) -> Result<i64> {
         let (count, writeBuf) = buf.Writev(task, srcs)?;
 
         if let Some((addr, len)) = writeBuf {
@@ -360,7 +360,7 @@ impl QUring {
         return Ok(count as i64)
     }
 
-    pub fn SocketSend(&self, task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, srcs: &[IoVec], ops: &SocketOperations)-> Result<i64> {
+    pub fn SocketSend(task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, srcs: &[IoVec], ops: &SocketOperations)-> Result<i64> {
         let (count, writeBuf) = buf.Writev(task, srcs)?;
 
         if let Some((addr, len)) = writeBuf {
@@ -372,7 +372,7 @@ impl QUring {
         return Ok(count as i64)
     }
 
-    pub fn RingFileRead(&self, task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, dsts: &mut [IoVec], isSocket: bool) -> Result<i64> {
+    pub fn RingFileRead(task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, dsts: &mut [IoVec], isSocket: bool) -> Result<i64> {
         let (trigger, cnt) = buf.Readv(task, dsts)?;
 
         if trigger {
