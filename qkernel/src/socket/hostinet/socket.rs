@@ -23,6 +23,7 @@ use core::sync::atomic::Ordering;
 use core::ptr;
 use core::ops::Deref;
 use ::qlib::mutex::*;
+use core::fmt;
 
 use ::socket::control::ControlMessage;
 
@@ -71,19 +72,80 @@ fn newSocketFile(task: &Task, family: i32, fd: i32, stype: i32, nonblock: bool, 
 #[repr(u64)]
 #[derive(Clone)]
 pub enum SocketBufType {
-    None,
+    Unknown,
+    NoTCP,              // Not TCP Socket
+    TCPInit,            // Init TCP Socket, no listen and no connect
+    TCPNormalServer,    // Common TCP Server socket, when socket start to listen
+    TCPRDMAServer,      // TCP Server socket over RDMA
+    TCPNormalData,      // Common TCP socket
     Uring(Arc<SocketBuff>),
     RDMA(Arc<SocketBuff>),
 }
 
-impl Default for SocketBufType {
-    fn default() -> Self {
-        return Self::None
+impl fmt::Debug for SocketBufType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Unknown => write!(f, "SocketBufType::Unknown"),
+            Self::NoTCP => write!(f, "SocketBufType::NoTCP"),
+            Self::TCPInit => write!(f, "SocketBufType::TCPInit"),
+            Self::TCPNormalServer => write!(f, "SocketBufType::TCPNormalServer"),
+            Self::TCPRDMAServer => write!(f, "SocketBufType::TCPRDMAServer"),
+            Self::TCPNormalData => write!(f, "SocketBufType::TCPNormalData"),
+            Self::Uring(_) => write!(f, "SocketBufType::Uring"),
+            Self::RDMA(_) => write!(f, "SocketBufType::RDMA"),
+        }
     }
 }
 
+impl SocketBufType {
+    pub fn Accept(&self) -> Self {
+        match self {
+            Self::TCPNormalServer => {
+                if SHARESPACE.config.read().UringIO {
+                    let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
+                    return Self::Uring(socketBuf)
+                }  else {
+                    return Self::TCPNormalData
+                }
+            },
+            Self::TCPRDMAServer => {
+                let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
+                return Self::RDMA(socketBuf)
+            }
+            _ => {
+                panic!("SocketBufType::Accept unexpect type {:?}", self)
+            }
+        }
+    }
 
-#[derive(Default)]
+    pub fn Connect(&self) -> Self {
+        match self {
+            Self::TCPInit => {
+                return self.ConnectType()
+            }
+            // in bazel, there is UDP socket also call connect
+            Self::NoTCP => {
+                return Self::NoTCP
+            }
+            _ => {
+                panic!("SocketBufType::Connect unexpect type {:?}", self)
+            }
+        }
+    }
+
+    fn ConnectType(&self) -> Self {
+        if SHARESPACE.config.read().EnableRDMA {
+            let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
+            return Self::RDMA(socketBuf)
+        } else if SHARESPACE.config.read().UringIO {
+            let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
+            return Self::Uring(socketBuf)
+        } else {
+            return Self::TCPNormalData
+        }
+    }
+}
+
 pub struct SocketOperationsIntern {
     pub send: AtomicI64,
     pub recv: AtomicI64,
@@ -252,29 +314,18 @@ impl SocketOperations {
 
     pub fn SocketBuf(&self) -> Arc<SocketBuff> {
         match self.SocketBufType() {
-            SocketBufType::None => panic!("SocketBufType::None has no SockBuff"),
             SocketBufType::Uring(b) => return b,
             SocketBufType::RDMA(b) => return b,
+            _ => panic!("SocketBufType::None has no SockBuff"),
         }
     }
 
     pub fn SocketBufEnabled(&self) -> bool {
         match self.SocketBufType() {
-            SocketBufType::None => return false,
             SocketBufType::Uring(_) => return true,
             SocketBufType::RDMA(_) => return true,
+            _ => false,
         }
-    }
-
-    pub fn ConfigSocketBufType(&self) -> SocketBufType {
-        if SHARESPACE.config.read().TcpBuffIO
-            && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
-            && self.stype == SockType::SOCK_STREAM {
-            let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
-            return SocketBufType::Uring(socketBuf)
-        }
-
-        return SocketBufType::None;
     }
 
     pub fn InitSocketBuf(&self, socketBuf: SocketBufType) {
@@ -282,7 +333,6 @@ impl SocketOperations {
         *self.socketBuf.lock() = socketBuf.clone();
 
         match socketBuf {
-            SocketBufType::None => (),
             SocketBufType::RDMA(_) => {
                 assert!((self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
                     && self.stype == SockType::SOCK_STREAM, "family {}, stype {}", self.family, self.stype);
@@ -292,6 +342,7 @@ impl SocketOperations {
                     && self.stype == SockType::SOCK_STREAM, "family {}, stype {}", self.family, self.stype);
                 QUring::BufSockInit(self.fd, self.queue.clone(), buf, true).unwrap();
             }
+            _ => ()
         }
 
 
@@ -592,7 +643,7 @@ impl SockOperations for SocketOperations {
         let res = Kernel::HostSpace::IOConnect(self.fd, &socketaddr[0] as *const _ as u64, socketaddr.len() as u32, blocking) as i32;
         if res == 0 {
             self.SetRemoteAddr(socketaddr.to_vec())?;
-            let sockBuf = self.ConfigSocketBufType();
+            let sockBuf = self.SocketBufType().Connect();
             self.InitSocketBuf(sockBuf);
 
             return Ok(0)
@@ -602,7 +653,7 @@ impl SockOperations for SocketOperations {
             true
         } else {
             // in order to enable uring buff, have to do block accept
-            if SHARESPACE.config.read().TcpBuffIO
+            if SHARESPACE.config.read().UringIO
                 && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
                 && self.stype == SockType::SOCK_STREAM {
                 true
@@ -651,7 +702,7 @@ impl SockOperations for SocketOperations {
 
 
         self.SetRemoteAddr(socketaddr.to_vec())?;
-        let sockBuf = self.ConfigSocketBufType();
+        let sockBuf = self.SocketBufType().Connect();
         self.InitSocketBuf(sockBuf);
 
         return Ok(0)
@@ -722,7 +773,8 @@ impl SockOperations for SocketOperations {
         let fd = acceptItem.fd;
 
         let remoteAddr = &acceptItem.addr.data[0..len];
-        let sockBuf = self.ConfigSocketBufType();
+        //let sockBuf = self.ConfigSocketBufType();
+        let sockBuf = self.SocketBufType().Accept();
 
         let file = newSocketFile(task,
                                  self.family,
@@ -769,6 +821,12 @@ impl SockOperations for SocketOperations {
         if res < 0 {
             return Err(Error::SysError(-res as i32))
         }
+
+        *self.socketBuf.lock() = if SHARESPACE.config.read().EnableRDMA {
+            SocketBufType::TCPRDMAServer
+        } else {
+            SocketBufType::TCPNormalServer
+        };
 
         if asyncAccept {
             let len = if backlog <= 0 {
@@ -1351,12 +1409,19 @@ impl Provider for SocketProvider {
 
        let fd = res as i32;
 
+        let socketType = if (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
+            && stype == SockType::SOCK_STREAM {
+            SocketBufType::TCPInit
+        } else {
+            SocketBufType::NoTCP
+        };
+
         let file = newSocketFile(task,
                                  self.family,
                                  fd,
                                  stype & SocketType::SOCK_TYPE_MASK,
                                  stype & SocketFlags::SOCK_NONBLOCK != 0,
-                                 SocketBufType::None,
+                                 socketType,
                                  None)?;
         return Ok(Some(Arc::new(file)))
     }
