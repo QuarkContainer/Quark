@@ -149,7 +149,7 @@ impl FdInfo {
         return SysRet(ret as i64)
     }
 
-    pub fn IOAccept(&self, addr: u64, addrlen: u64, _flags: i32) -> i64 {
+    pub fn IOAccept(&self, addr: u64, addrlen: u64) -> i64 {
         let osfd = self.lock().osfd;
 
         let newOsfd = unsafe{

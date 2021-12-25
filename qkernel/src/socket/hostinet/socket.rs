@@ -274,7 +274,7 @@ impl SocketOperations {
     pub fn IOAccept(&self) -> Result<AcceptItem> {
         let mut ai = AcceptItem::default();
         ai.len = ai.addr.data.len() as _;
-        let res = Kernel::HostSpace::IOAccept(self.fd, &ai.addr as * const _ as u64, &ai.len as * const _ as u64, 0, false) as i32;
+        let res = Kernel::HostSpace::IOAccept(self.fd, &ai.addr as * const _ as u64, &ai.len as * const _ as u64) as i32;
         if res < 0 {
             return Err(Error::SysError(-res as i32))
         }
@@ -631,6 +631,10 @@ impl FileOperations for SocketOperations {
     }
 }
 
+impl SocketOperations {
+    //pub fn ConnectIntern(fd: i32, addr: u64, addrlen: u32) -> i64 {}
+}
+
 impl SockOperations for SocketOperations {
     fn Connect(&self, task: &Task, sockaddr: &[u8], blocking: bool) -> Result<i64> {
         let mut socketaddr = sockaddr;
@@ -640,10 +644,11 @@ impl SockOperations for SocketOperations {
             socketaddr = &socketaddr[..SIZEOF_SOCKADDR]
         }
 
-        let res = Kernel::HostSpace::IOConnect(self.fd, &socketaddr[0] as *const _ as u64, socketaddr.len() as u32, blocking) as i32;
+        let sockBuf = self.SocketBufType().Connect();
+
+        let res = Kernel::HostSpace::IOConnect(self.fd, &socketaddr[0] as *const _ as u64, socketaddr.len() as u32) as i32;
         if res == 0 {
             self.SetRemoteAddr(socketaddr.to_vec())?;
-            let sockBuf = self.SocketBufType().Connect();
             self.InitSocketBuf(sockBuf);
 
             return Ok(0)
@@ -702,7 +707,6 @@ impl SockOperations for SocketOperations {
 
 
         self.SetRemoteAddr(socketaddr.to_vec())?;
-        let sockBuf = self.SocketBufType().Connect();
         self.InitSocketBuf(sockBuf);
 
         return Ok(0)

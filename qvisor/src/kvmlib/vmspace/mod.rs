@@ -605,13 +605,13 @@ impl VMSpace {
         return fdInfo.IOWriteAt(iovs, iovcnt, offset)
     }
 
-    pub fn IOAccept(fd: i32, addr: u64, addrlen: u64, flags: i32) -> i64 {
+    pub fn IOAccept(fd: i32, addr: u64, addrlen: u64) -> i64 {
         let fdInfo = match Self::GetFdInfo(fd) {
             Some(info) => info,
             None => return -SysErr::EBADF as i64,
         };
 
-        return fdInfo.IOAccept(addr, addrlen, flags)
+        return fdInfo.IOAccept(addr, addrlen)
     }
 
     pub fn NewFd(fd: i32) -> i64 {

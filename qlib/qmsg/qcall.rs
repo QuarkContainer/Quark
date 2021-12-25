@@ -592,8 +592,6 @@ pub struct IOAccept {
     pub fd: i32,
     pub addr: u64,
     pub addrlen: u64,
-    pub flags: i32,
-    pub blocking: bool,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -601,7 +599,6 @@ pub struct IOConnect {
     pub fd: i32,
     pub addr: u64,
     pub addrlen: u32,
-    pub blocking: bool,
 }
 
 #[derive(Clone, Default, Debug)]

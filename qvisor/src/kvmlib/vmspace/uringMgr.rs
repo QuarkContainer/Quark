@@ -32,9 +32,17 @@ pub struct UringMgr {
 
 impl Drop for UringMgr {
     fn drop(&mut self) {
-        for fd in &self.fds {
+        for fd in &self.uringfds {
             unsafe {
                 libc::close(*fd);
+            }
+        }
+
+        for fd in &self.fds {
+            if *fd >= 0 {
+                unsafe {
+                    libc::close(*fd);
+                }
             }
         }
     }
