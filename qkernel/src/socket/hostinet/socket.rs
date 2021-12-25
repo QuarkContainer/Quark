@@ -56,17 +56,32 @@ use super::socket_buf::*;
 use super::super::super::qlib::linux::time::Timeval;
 use super::super::control::ControlMessageTCPInq;
 
-fn newSocketFile(task: &Task, family: i32, fd: i32, stype: i32, nonblock: bool, enableBuf: bool, addr: Option<Vec<u8>>) -> Result<File> {
+fn newSocketFile(task: &Task, family: i32, fd: i32, stype: i32, nonblock: bool, socketBuf: SocketBufType, addr: Option<Vec<u8>>) -> Result<File> {
     let dirent = NewSocketDirent(task, SOCKET_DEVICE.clone(), fd)?;
     let inode = dirent.Inode();
     let iops = inode.lock().InodeOp.clone();
     let hostiops = iops.as_any().downcast_ref::<HostInodeOp>().unwrap();
-    let s = SocketOperations::New(family, fd, stype, hostiops.Queue(), hostiops.clone(), enableBuf, addr)?;
+    let s = SocketOperations::New(family, fd, stype, hostiops.Queue(), hostiops.clone(), socketBuf, addr)?;
 
     Ok(File::New(&dirent,
               &FileFlags { NonBlocking: nonblock, Read: true, Write: true, ..Default::default() },
               s))
 }
+
+#[repr(u64)]
+#[derive(Clone)]
+pub enum SocketBufType {
+    None,
+    Uring(Arc<SocketBuff>),
+    RDMA(Arc<SocketBuff>),
+}
+
+impl Default for SocketBufType {
+    fn default() -> Self {
+        return Self::None
+    }
+}
+
 
 #[derive(Default)]
 pub struct SocketOperationsIntern {
@@ -77,8 +92,7 @@ pub struct SocketOperationsIntern {
     pub fd: i32,
     pub queue: Queue,
     pub remoteAddr: QMutex<Option<SockAddr>>,
-    pub socketBuf: QMutex<Option<Arc<SocketBuff>>>,
-    pub enableSocketBuf: AtomicBool,
+    pub socketBuf: QMutex<SocketBufType>,
     pub enableAsyncAccept: AtomicBool,
     pub acceptQueue: Arc<QMutex<AsyncAcceptStruct>>,
     pub hostops: HostInodeOp,
@@ -160,7 +174,7 @@ impl AsyncAcceptStruct {
 pub struct SocketOperations(Arc<SocketOperationsIntern>);
 
 impl SocketOperations {
-    pub fn New(family: i32, fd: i32, stype: i32, queue: Queue, hostops: HostInodeOp, enableSocketBuf: bool, addr: Option<Vec<u8>>) -> Result<Self> {
+    pub fn New(family: i32, fd: i32, stype: i32, queue: Queue, hostops: HostInodeOp, socketBuf: SocketBufType, addr: Option<Vec<u8>>) -> Result<Self> {
         let addr = match addr {
             None => None,
             Some(v) => {
@@ -180,8 +194,7 @@ impl SocketOperations {
             fd,
             queue,
             remoteAddr: QMutex::new(addr),
-            socketBuf: QMutex::new(None),
-            enableSocketBuf: AtomicBool::new(false),
+            socketBuf: QMutex::new(socketBuf.clone()),
             enableAsyncAccept: AtomicBool::new(false),
             acceptQueue: Arc::new(QMutex::new(AsyncAcceptStruct::default())),
             hostops: hostops,
@@ -190,9 +203,7 @@ impl SocketOperations {
 
         let ret = Self(Arc::new(ret));
 
-        if enableSocketBuf {
-            ret.EnableSocketBuf();
-        }
+        ret.InitSocketBuf(socketBuf);
 
        //AddFD(fd, &ret.queue);
         return Ok(ret)
@@ -235,20 +246,62 @@ impl SocketOperations {
         return self.enableAsyncAccept.load(Ordering::Relaxed);
     }
 
-    pub fn SocketBufEnabled(&self) -> bool {
-        return self.enableSocketBuf.load(Ordering::Relaxed);
+    pub fn SocketBufType(&self) -> SocketBufType {
+        return self.socketBuf.lock().clone();
     }
 
-    pub fn EnableSocketBuf(&self) {
-        assert!(self.SocketBufEnabled() == false);
+    pub fn SocketBuf(&self) -> Arc<SocketBuff> {
+        match self.SocketBufType() {
+            SocketBufType::None => panic!("SocketBufType::None has no SockBuff"),
+            SocketBufType::Uring(b) => return b,
+            SocketBufType::RDMA(b) => return b,
+        }
+    }
 
-        assert!((self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
+    pub fn SocketBufEnabled(&self) -> bool {
+        match self.SocketBufType() {
+            SocketBufType::None => return false,
+            SocketBufType::Uring(_) => return true,
+            SocketBufType::RDMA(_) => return true,
+        }
+    }
+
+    pub fn ConfigSocketBufType(&self) -> SocketBufType {
+        if SHARESPACE.config.read().TcpBuffIO
+            && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
+            && self.stype == SockType::SOCK_STREAM {
+            let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
+            return SocketBufType::Uring(socketBuf)
+        }
+
+        return SocketBufType::None;
+    }
+
+    pub fn InitSocketBuf(&self, socketBuf: SocketBufType) {
+        //let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
+        *self.socketBuf.lock() = socketBuf.clone();
+
+        match socketBuf {
+            SocketBufType::None => (),
+            SocketBufType::RDMA(_) => {
+                assert!((self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
+                    && self.stype == SockType::SOCK_STREAM, "family {}, stype {}", self.family, self.stype);
+            }
+            SocketBufType::Uring(buf) => {
+                assert!((self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
+                    && self.stype == SockType::SOCK_STREAM, "family {}, stype {}", self.family, self.stype);
+                QUring::BufSockInit(self.fd, self.queue.clone(), buf, true).unwrap();
+            }
+        }
+
+
+        /*assert!((self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
             && self.stype == SockType::SOCK_STREAM, "family {}, stype {}", self.family, self.stype);
 
         let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
         *self.socketBuf.lock() = Some(socketBuf);
         self.enableSocketBuf.store(true, Ordering::Relaxed);
-        IOURING.BufSockInit(self.fd, self.queue.clone(), self.SocketBuf(), true).unwrap();
+        QUring::BufSockInit(self.fd, self.queue.clone(), self.SocketBuf(), true).unwrap();*/
     }
 
     pub fn Notify(&self, mask: EventMask) {
@@ -265,10 +318,6 @@ impl Deref for SocketOperations {
 }
 
 impl SocketOperations {
-    pub fn SocketBuf(&self) -> Arc<SocketBuff> {
-        return self.socketBuf.lock().as_ref().unwrap().clone();
-    }
-
     pub fn SetRemoteAddr(&self, addr: Vec<u8>) -> Result<()> {
         let addr = GetAddr(addr[0] as i16, &addr[0..addr.len()])?;
 
@@ -543,10 +592,8 @@ impl SockOperations for SocketOperations {
         let res = Kernel::HostSpace::IOConnect(self.fd, &socketaddr[0] as *const _ as u64, socketaddr.len() as u32, blocking) as i32;
         if res == 0 {
             self.SetRemoteAddr(socketaddr.to_vec())?;
-            if SHARESPACE.config.read().TcpBuffIO && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
-                && self.stype == SockType::SOCK_STREAM {
-                self.EnableSocketBuf();
-            }
+            let sockBuf = self.ConfigSocketBufType();
+            self.InitSocketBuf(sockBuf);
 
             return Ok(0)
         }
@@ -589,6 +636,7 @@ impl SockOperations for SocketOperations {
                 }
             }
         }
+
         let mut val: i32 = 0;
         let len: i32 = 4;
         let res = HostSpace::GetSockOpt(self.fd, LibcConst::SOL_SOCKET as i32, LibcConst::SO_ERROR as i32, &mut val as *mut i32 as u64, &len as *const i32 as u64) as i32;
@@ -603,10 +651,8 @@ impl SockOperations for SocketOperations {
 
 
         self.SetRemoteAddr(socketaddr.to_vec())?;
-        if SHARESPACE.config.read().TcpBuffIO && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
-            && self.stype == SockType::SOCK_STREAM {
-            self.EnableSocketBuf();
-        }
+        let sockBuf = self.ConfigSocketBufType();
+        self.InitSocketBuf(sockBuf);
 
         return Ok(0)
     }
@@ -674,17 +720,16 @@ impl SockOperations for SocketOperations {
         }
 
         let fd = acceptItem.fd;
-        let enableBuf = SHARESPACE.config.read().TcpBuffIO &&
-            (self.family == AFType::AF_INET || self.family == AFType::AF_INET6) &&
-            self.stype == SockType::SOCK_STREAM;
 
         let remoteAddr = &acceptItem.addr.data[0..len];
+        let sockBuf = self.ConfigSocketBufType();
+
         let file = newSocketFile(task,
                                  self.family,
                                  fd as i32,
                                  self.stype,
                                  flags & SocketFlags::SOCK_NONBLOCK != 0,
-                                 enableBuf, Some(remoteAddr.to_vec()))?;
+                                 sockBuf, Some(remoteAddr.to_vec()))?;
 
         let fdFlags = FDFlags {
             CloseOnExec: flags & SocketFlags::SOCK_CLOEXEC != 0
@@ -1306,7 +1351,13 @@ impl Provider for SocketProvider {
 
        let fd = res as i32;
 
-        let file = newSocketFile(task, self.family, fd, stype & SocketType::SOCK_TYPE_MASK, stype & SocketFlags::SOCK_NONBLOCK != 0, false, None)?;
+        let file = newSocketFile(task,
+                                 self.family,
+                                 fd,
+                                 stype & SocketType::SOCK_TYPE_MASK,
+                                 stype & SocketFlags::SOCK_NONBLOCK != 0,
+                                 SocketBufType::None,
+                                 None)?;
         return Ok(Some(Arc::new(file)))
     }
 

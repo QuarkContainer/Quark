@@ -27,7 +27,6 @@ use super::super::super::threadmgr::processgroup::*;
 use super::super::super::threadmgr::session::*;
 use super::super::super::socket::hostinet::socket_buf::*;
 use super::super::super::SHARESPACE;
-use super::super::super::IOURING;
 use super::super::super::quring::QUring;
 
 use super::super::file::*;
@@ -447,7 +446,7 @@ impl TTYFileOps {
         };
 
         if SHARESPACE.config.read().TcpBuffIO && ENABLE_RINGBUF {
-            IOURING.BufSockInit(internal.fd, internal.queue.clone(), internal.buf.clone(), false).unwrap();
+            QUring::BufSockInit(internal.fd, internal.queue.clone(), internal.buf.clone(), false).unwrap();
         }
 
         return Self(Arc::new(QMutex::new(internal)))
