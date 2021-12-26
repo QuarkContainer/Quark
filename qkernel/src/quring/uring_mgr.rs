@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use ::qlib::mutex::*;
 use core::sync::atomic;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicUsize;
@@ -31,8 +30,8 @@ use super::super::fs::file::*;
 use super::super::qlib::uring::util::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::vcpu_mgr::*;
+use super::super::qlib::socket_buf::*;
 use super::super::kernel::waiter::*;
-use super::super::socket::hostinet::socket_buf::*;
 use super::super::socket::hostinet::socket::*;
 use super::super::Kernel::HostSpace;
 use super::super::kernel::async_wait::*;
@@ -317,14 +316,14 @@ impl QUring {
         return self.UCall(task, msg);
     }
 
-    pub fn AcceptInit(&self, fd: i32, queue: &Queue, acceptQueue: &Arc<QMutex<AsyncAcceptStruct>>) -> Result<()> {
+    pub fn AcceptInit(&self, fd: i32, queue: &Queue, acceptQueue: &AcceptQueue) -> Result<()> {
         let acceptOp = AsyncAccept::New(fd, queue.clone(), acceptQueue.clone());
         IOURING.AUCall(AsyncOps::AsyncAccept(acceptOp));
 
         return Ok(())
     }
 
-    pub fn Accept(&self, fd: i32, queue: &Queue, acceptQueue: &Arc<QMutex<AsyncAcceptStruct>>) -> Result<AcceptItem> {
+    pub fn Accept(&self, fd: i32, queue: &Queue, acceptQueue: &AcceptQueue) -> Result<AcceptItem> {
         let (trigger, ai) = acceptQueue.lock().DeqSocket();
         if trigger {
             let acceptOp = AsyncAccept::New(fd, queue.clone(), acceptQueue.clone());
@@ -339,7 +338,7 @@ impl QUring {
         IOURING.AUCall(AsyncOps::PollHostEpollWait(op));
     }
 
-    pub fn BufSockInit(&self, fd: i32, queue: Queue, buf: Arc<SocketBuff>, isSocket: bool) -> Result<()> {
+    pub fn BufSockInit(fd: i32, queue: Queue, buf: Arc<SocketBuff>, isSocket: bool) -> Result<()> {
         let (addr, len) = buf.GetFreeReadBuf();
         let readop = AsyncFileRead::New(fd, queue, buf, addr, len, isSocket);
 

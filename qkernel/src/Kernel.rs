@@ -174,24 +174,21 @@ impl HostSpace {
         return (ret, fileLen)
     }
 
-    pub fn IOAccept(fd: i32, addr: u64, addrlen: u64, flags: i32, blocking: bool) -> i64 {
+    pub fn IOAccept(fd: i32, addr: u64, addrlen: u64) -> i64 {
         let mut msg = Msg::IOAccept(IOAccept {
             fd,
             addr,
             addrlen,
-            flags,
-            blocking,
         });
 
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
-    pub fn IOConnect(fd: i32, addr: u64, addrlen: u32, blocking: bool) -> i64 {
+    pub fn IOConnect(fd: i32, addr: u64, addrlen: u32) -> i64 {
         let mut msg = Msg::IOConnect(IOConnect {
             fd,
             addr,
             addrlen,
-            blocking,
         });
 
         return HostSpace::Call(&mut msg, false) as i64;
@@ -487,17 +484,6 @@ impl HostSpace {
             domain,
             type_,
             protocol,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn SocketPair(domain: i32, type_: i32, protocol: i32, socketVect: u64) -> i64 {
-        let mut msg = Msg::SocketPair(SocketPair {
-            domain,
-            type_,
-            protocol,
-            socketVect,
         });
 
         return HostSpace::Call(&mut msg, false) as i64;

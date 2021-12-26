@@ -233,9 +233,6 @@ impl KVMVcpu {
             Msg::Socket(msg) => {
                 ret = super::VMSpace::Socket(msg.domain, msg.type_, msg.protocol) as u64;
             },
-            Msg::SocketPair(msg) => {
-                ret = super::VMSpace::SocketPair(msg.domain, msg.type_, msg.protocol, msg.socketVect) as u64;
-            },
             Msg::GetPeerName(msg) => {
                 ret = super::VMSpace::GetPeerName(msg.sockfd, msg.addr, msg.addrlen) as u64;
             },
@@ -313,7 +310,7 @@ impl KVMVcpu {
                 ret = super::VMSpace::IOAppend(msg.fd, msg.iovs, msg.iovcnt, msg.fileLenAddr) as u64;
             },
             Msg::IOAccept(msg) => {
-                ret = super::VMSpace::IOAccept(msg.fd, msg.addr, msg.addrlen, msg.flags) as u64;
+                ret = super::VMSpace::IOAccept(msg.fd, msg.addr, msg.addrlen) as u64;
             },
             Msg::IOConnect(msg) => {
                 ret = super::VMSpace::IOConnect(msg.fd, msg.addr, msg.addrlen) as u64;

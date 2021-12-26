@@ -15,7 +15,6 @@
 use alloc::sync::Arc;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use alloc::collections::vec_deque::VecDeque;
 use core::any::Any;
 use core::sync::atomic::AtomicI64;
 use core::sync::atomic::AtomicBool;
@@ -23,6 +22,7 @@ use core::sync::atomic::Ordering;
 use core::ptr;
 use core::ops::Deref;
 use ::qlib::mutex::*;
+use core::fmt;
 
 use ::socket::control::ControlMessage;
 
@@ -49,26 +49,101 @@ use super::super::super::IOURING;
 use super::super::super::quring::QUring;
 use super::super::super::Kernel::HostSpace;
 use super::super::super::qlib::linux_def::*;
+use super::super::super::qlib::socket_buf::*;
 use super::super::super::fd::*;
 use super::super::super::tcpip::tcpip::*;
 use super::super::super::SHARESPACE;
-use super::socket_buf::*;
 use super::super::super::qlib::linux::time::Timeval;
 use super::super::control::ControlMessageTCPInq;
 
-fn newSocketFile(task: &Task, family: i32, fd: i32, stype: i32, nonblock: bool, enableBuf: bool, addr: Option<Vec<u8>>) -> Result<File> {
+fn newSocketFile(task: &Task, family: i32, fd: i32, stype: i32, nonblock: bool, socketBuf: SocketBufType, addr: Option<Vec<u8>>) -> Result<File> {
     let dirent = NewSocketDirent(task, SOCKET_DEVICE.clone(), fd)?;
     let inode = dirent.Inode();
     let iops = inode.lock().InodeOp.clone();
     let hostiops = iops.as_any().downcast_ref::<HostInodeOp>().unwrap();
-    let s = SocketOperations::New(family, fd, stype, hostiops.Queue(), hostiops.clone(), enableBuf, addr)?;
+    let s = SocketOperations::New(family, fd, stype, hostiops.Queue(), hostiops.clone(), socketBuf, addr)?;
 
     Ok(File::New(&dirent,
               &FileFlags { NonBlocking: nonblock, Read: true, Write: true, ..Default::default() },
               s))
 }
 
-#[derive(Default)]
+#[repr(u64)]
+#[derive(Clone)]
+pub enum SocketBufType {
+    Unknown,
+    NoTCP,              // Not TCP Socket
+    TCPInit,            // Init TCP Socket, no listen and no connect
+    TCPNormalServer,    // Common TCP Server socket, when socket start to listen
+    TCPUringlServer(AcceptQueue),    // Uring TCP Server socket, when socket start to listen
+    TCPRDMAServer,      // TCP Server socket over RDMA
+    TCPNormalData,      // Common TCP socket
+    Uring(Arc<SocketBuff>),
+    RDMA(Arc<SocketBuff>),
+}
+
+impl fmt::Debug for SocketBufType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Unknown => write!(f, "SocketBufType::Unknown"),
+            Self::NoTCP => write!(f, "SocketBufType::NoTCP"),
+            Self::TCPInit => write!(f, "SocketBufType::TCPInit"),
+            Self::TCPNormalServer => write!(f, "SocketBufType::TCPNormalServer"),
+            Self::TCPUringlServer(_) => write!(f, "SocketBufType::TCPUringlServer"),
+            Self::TCPRDMAServer => write!(f, "SocketBufType::TCPRDMAServer"),
+            Self::TCPNormalData => write!(f, "SocketBufType::TCPNormalData"),
+            Self::Uring(_) => write!(f, "SocketBufType::Uring"),
+            Self::RDMA(_) => write!(f, "SocketBufType::RDMA"),
+        }
+    }
+}
+
+impl SocketBufType {
+    pub fn Accept(&self, socketBuf: Arc<SocketBuff>) -> Self {
+        match self {
+            SocketBufType::TCPNormalServer => {
+                return SocketBufType::TCPNormalData
+            },
+            SocketBufType::TCPUringlServer(_) => {
+                return SocketBufType::Uring(socketBuf)
+            },
+            SocketBufType::TCPRDMAServer => {
+                return SocketBufType::RDMA(socketBuf)
+            }
+            _ => {
+                panic!("SocketBufType::Accept unexpect type {:?}", self)
+            }
+        }
+    }
+
+    pub fn Connect(&self) -> Self {
+        match self {
+            Self::TCPInit => {
+                return self.ConnectType()
+            }
+            // in bazel, there is UDP socket also call connect
+            Self::NoTCP => {
+                return Self::NoTCP
+            }
+            _ => {
+                panic!("SocketBufType::Connect unexpect type {:?}", self)
+            }
+        }
+    }
+
+    fn ConnectType(&self) -> Self {
+        if SHARESPACE.config.read().EnableRDMA {
+            let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
+            return Self::RDMA(socketBuf)
+        } else if SHARESPACE.config.read().UringIO {
+            let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
+            return Self::Uring(socketBuf)
+        } else {
+            return Self::TCPNormalData
+        }
+    }
+}
+
 pub struct SocketOperationsIntern {
     pub send: AtomicI64,
     pub recv: AtomicI64,
@@ -77,90 +152,17 @@ pub struct SocketOperationsIntern {
     pub fd: i32,
     pub queue: Queue,
     pub remoteAddr: QMutex<Option<SockAddr>>,
-    pub socketBuf: QMutex<Option<Arc<SocketBuff>>>,
-    pub enableSocketBuf: AtomicBool,
+    pub socketBuf: QMutex<SocketBufType>,
     pub enableAsyncAccept: AtomicBool,
-    pub acceptQueue: Arc<QMutex<AsyncAcceptStruct>>,
     pub hostops: HostInodeOp,
     passInq: AtomicBool,
-}
-
-pub const TCP_ADDR_LEN : usize = 128;
-
-#[derive(Default, Debug)]
-pub struct AcceptItem {
-    pub fd: i32,
-    pub addr: TcpSockAddr,
-    pub len: u32,
-}
-
-#[derive(Default)]
-pub struct AsyncAcceptStruct {
-    pub queue: VecDeque<AcceptItem>,
-    pub queueLen: usize,
-    pub error: i32,
-    pub total: u64,
-}
-
-impl AsyncAcceptStruct {
-    pub fn SetErr(&mut self, error: i32) {
-        self.error = error
-    }
-
-    pub fn SetQueueLen(&mut self, len: usize) {
-        self.queueLen = len;
-    }
-
-    //return: (trigger, hasSpace)
-    pub fn EnqSocket(&mut self, fd: i32, addr: TcpSockAddr, len: u32) -> (bool, bool) {
-        let item = AcceptItem {
-            fd: fd,
-            addr: addr,
-            len: len
-        };
-
-        self.queue.push_back(item);
-        self.total += 1;
-        let trigger = self.queue.len() == 1;
-        return (trigger, self.queue.len() < self.queueLen);
-    }
-
-
-    pub fn DeqSocket(&mut self) -> (bool, Result<AcceptItem>) {
-        let trigger = self.queue.len() == self.queueLen;
-
-        match self.queue.pop_front() {
-            None => {
-                if self.error != 0 {
-                    return (false, Err(Error::SysError(self.error)))
-                }
-                return (trigger, Err(Error::SysError(SysErr::EAGAIN)))
-            }
-            Some(item) => {
-                return (trigger, Ok(item))
-            }
-        }
-    }
-
-    pub fn Events(&self) -> EventMask {
-        let mut event = EventMask::default();
-        if self.queue.len() > 0 {
-            event |= EVENT_IN;
-        }
-
-        if self.error != 0 {
-            event |= EVENT_ERR;
-        }
-
-        return event
-    }
 }
 
 #[derive(Clone)]
 pub struct SocketOperations(Arc<SocketOperationsIntern>);
 
 impl SocketOperations {
-    pub fn New(family: i32, fd: i32, stype: i32, queue: Queue, hostops: HostInodeOp, enableSocketBuf: bool, addr: Option<Vec<u8>>) -> Result<Self> {
+    pub fn New(family: i32, fd: i32, stype: i32, queue: Queue, hostops: HostInodeOp, socketBuf: SocketBufType, addr: Option<Vec<u8>>) -> Result<Self> {
         let addr = match addr {
             None => None,
             Some(v) => {
@@ -180,19 +182,15 @@ impl SocketOperations {
             fd,
             queue,
             remoteAddr: QMutex::new(addr),
-            socketBuf: QMutex::new(None),
-            enableSocketBuf: AtomicBool::new(false),
+            socketBuf: QMutex::new(socketBuf.clone()),
             enableAsyncAccept: AtomicBool::new(false),
-            acceptQueue: Arc::new(QMutex::new(AsyncAcceptStruct::default())),
             hostops: hostops,
             passInq: AtomicBool::new(false)
         };
 
         let ret = Self(Arc::new(ret));
 
-        if enableSocketBuf {
-            ret.EnableSocketBuf();
-        }
+        ret.InitSocketBuf(socketBuf);
 
        //AddFD(fd, &ret.queue);
         return Ok(ret)
@@ -201,7 +199,7 @@ impl SocketOperations {
     pub fn IOAccept(&self) -> Result<AcceptItem> {
         let mut ai = AcceptItem::default();
         ai.len = ai.addr.data.len() as _;
-        let res = Kernel::HostSpace::IOAccept(self.fd, &ai.addr as * const _ as u64, &ai.len as * const _ as u64, 0, false) as i32;
+        let res = Kernel::HostSpace::IOAccept(self.fd, &ai.addr as * const _ as u64, &ai.len as * const _ as u64) as i32;
         if res < 0 {
             return Err(Error::SysError(-res as i32))
         }
@@ -235,24 +233,78 @@ impl SocketOperations {
         return self.enableAsyncAccept.load(Ordering::Relaxed);
     }
 
-    pub fn SocketBufEnabled(&self) -> bool {
-        return self.enableSocketBuf.load(Ordering::Relaxed);
+    pub fn SocketBufType(&self) -> SocketBufType {
+        return self.socketBuf.lock().clone();
     }
 
-    pub fn EnableSocketBuf(&self) {
-        assert!(self.SocketBufEnabled() == false);
+    pub fn SocketBuf(&self) -> Arc<SocketBuff> {
+        match self.SocketBufType() {
+            SocketBufType::Uring(b) => return b,
+            SocketBufType::RDMA(b) => return b,
+            _ => panic!("SocketBufType::None has no SockBuff"),
+        }
+    }
 
-        assert!((self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
+    pub fn SocketBufEnabled(&self) -> bool {
+        match self.SocketBufType() {
+            SocketBufType::Uring(_) => return true,
+            SocketBufType::RDMA(_) => return true,
+            _ => false,
+        }
+    }
+
+    pub fn AcceptQueue(&self) -> Option<AcceptQueue> {
+        match self.SocketBufType() {
+            SocketBufType::TCPUringlServer(q) => return Some(q.clone()),
+            _ => return None,
+        }
+    }
+
+    pub fn InitSocketBuf(&self, socketBuf: SocketBufType) {
+        //let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
+        *self.socketBuf.lock() = socketBuf.clone();
+
+        match socketBuf {
+            SocketBufType::RDMA(_) => {
+                assert!((self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
+                    && self.stype == SockType::SOCK_STREAM, "family {}, stype {}", self.family, self.stype);
+            }
+            SocketBufType::Uring(buf) => {
+                assert!((self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
+                    && self.stype == SockType::SOCK_STREAM, "family {}, stype {}", self.family, self.stype);
+                QUring::BufSockInit(self.fd, self.queue.clone(), buf, true).unwrap();
+            }
+            _ => ()
+        }
+
+
+        /*assert!((self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
             && self.stype == SockType::SOCK_STREAM, "family {}, stype {}", self.family, self.stype);
 
         let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
         *self.socketBuf.lock() = Some(socketBuf);
         self.enableSocketBuf.store(true, Ordering::Relaxed);
-        IOURING.BufSockInit(self.fd, self.queue.clone(), self.SocketBuf(), true).unwrap();
+        QUring::BufSockInit(self.fd, self.queue.clone(), self.SocketBuf(), true).unwrap();*/
     }
 
     pub fn Notify(&self, mask: EventMask) {
         self.queue.Notify(EventMaskFromLinux(mask as u32));
+    }
+
+    pub fn AcceptData(&self) -> Result<AcceptItem> {
+        let sockBufType = self.socketBuf.lock().clone();
+        match sockBufType {
+            SocketBufType::TCPNormalServer => {
+                return self.IOAccept()
+            }
+            SocketBufType::TCPUringlServer(ref queue) => {
+                return IOURING.Accept(self.fd, &self.queue, queue)
+            }
+            _ => {
+                error!("SocketBufType invalid accept {:?}", sockBufType);
+                return Err(Error::SysError(SysErr::EINVAL))
+            }
+        }
     }
 }
 
@@ -265,10 +317,6 @@ impl Deref for SocketOperations {
 }
 
 impl SocketOperations {
-    pub fn SocketBuf(&self) -> Arc<SocketBuff> {
-        return self.socketBuf.lock().as_ref().unwrap().clone();
-    }
-
     pub fn SetRemoteAddr(&self, addr: Vec<u8>) -> Result<()> {
         let addr = GetAddr(addr[0] as i16, &addr[0..addr.len()])?;
 
@@ -307,8 +355,9 @@ impl Waitable for SocketOperations {
             return self.SocketBuf().Events() & mask
         };
 
-        if self.AsyncAcceptEnabled() {
-            return self.acceptQueue.lock().Events() & mask
+        match self.AcceptQueue() {
+            Some(q) => return q.lock().Events() & mask,
+            None => ()
         }
 
         let fd = self.fd;
@@ -531,6 +580,10 @@ impl FileOperations for SocketOperations {
     }
 }
 
+impl SocketOperations {
+    //pub fn ConnectIntern(fd: i32, addr: u64, addrlen: u32) -> i64 {}
+}
+
 impl SockOperations for SocketOperations {
     fn Connect(&self, task: &Task, sockaddr: &[u8], blocking: bool) -> Result<i64> {
         let mut socketaddr = sockaddr;
@@ -540,13 +593,12 @@ impl SockOperations for SocketOperations {
             socketaddr = &socketaddr[..SIZEOF_SOCKADDR]
         }
 
-        let res = Kernel::HostSpace::IOConnect(self.fd, &socketaddr[0] as *const _ as u64, socketaddr.len() as u32, blocking) as i32;
+        let sockBuf = self.SocketBufType().Connect();
+
+        let res = Kernel::HostSpace::IOConnect(self.fd, &socketaddr[0] as *const _ as u64, socketaddr.len() as u32) as i32;
         if res == 0 {
             self.SetRemoteAddr(socketaddr.to_vec())?;
-            if SHARESPACE.config.read().TcpBuffIO && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
-                && self.stype == SockType::SOCK_STREAM {
-                self.EnableSocketBuf();
-            }
+            self.InitSocketBuf(sockBuf);
 
             return Ok(0)
         }
@@ -555,7 +607,7 @@ impl SockOperations for SocketOperations {
             true
         } else {
             // in order to enable uring buff, have to do block accept
-            if SHARESPACE.config.read().TcpBuffIO
+            if SHARESPACE.config.read().UringIO
                 && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
                 && self.stype == SockType::SOCK_STREAM {
                 true
@@ -589,6 +641,7 @@ impl SockOperations for SocketOperations {
                 }
             }
         }
+
         let mut val: i32 = 0;
         let len: i32 = 4;
         let res = HostSpace::GetSockOpt(self.fd, LibcConst::SOL_SOCKET as i32, LibcConst::SO_ERROR as i32, &mut val as *mut i32 as u64, &len as *const i32 as u64) as i32;
@@ -603,46 +656,34 @@ impl SockOperations for SocketOperations {
 
 
         self.SetRemoteAddr(socketaddr.to_vec())?;
-        if SHARESPACE.config.read().TcpBuffIO && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
-            && self.stype == SockType::SOCK_STREAM {
-            self.EnableSocketBuf();
-        }
+        self.InitSocketBuf(sockBuf);
 
         return Ok(0)
     }
 
     fn Accept(&self, task: &Task, addr: &mut [u8], addrlen: &mut u32, flags: i32, blocking: bool) -> Result<i64> {
-        let asyncAccept = self.AsyncAcceptEnabled();
-
         let mut acceptItem = AcceptItem::default();
-        let ai = if asyncAccept {
-            IOURING.Accept(self.fd, &self.queue, &self.acceptQueue)
-        } else {
-            self.IOAccept()
-        };
-        match ai {
-            Err(Error::SysError(SysErr::EAGAIN)) => if !blocking {
-                return Err(Error::SysError(SysErr::EAGAIN))
-            }
-            Err(e) => {
-                return Err(e)
-            }
-            Ok(item) => {
-                acceptItem = item;
-            }
-        }
+        if !blocking {
+            let ai = self.AcceptData();
 
-        if blocking {
+            match ai {
+                Err(Error::SysError(SysErr::EAGAIN)) => if !blocking {
+                    return Err(Error::SysError(SysErr::EAGAIN))
+                }
+                Err(e) => {
+                    return Err(e)
+                }
+                Ok(item) => {
+                    acceptItem = item;
+                }
+            }
+        } else {
             let general = task.blocker.generalEntry.clone();
             self.EventRegister(task, &general, EVENT_IN);
             defer!(self.EventUnregister(task, &general));
 
             loop {
-                let ai = if asyncAccept {
-                    IOURING.Accept(self.fd, &self.queue, &self.acceptQueue)
-                } else {
-                    self.IOAccept()
-                };
+                let ai = self.AcceptData();
 
                 match ai {
                     Err(Error::SysError(SysErr::EAGAIN)) => (),
@@ -674,17 +715,17 @@ impl SockOperations for SocketOperations {
         }
 
         let fd = acceptItem.fd;
-        let enableBuf = SHARESPACE.config.read().TcpBuffIO &&
-            (self.family == AFType::AF_INET || self.family == AFType::AF_INET6) &&
-            self.stype == SockType::SOCK_STREAM;
 
         let remoteAddr = &acceptItem.addr.data[0..len];
+        //let sockBuf = self.ConfigSocketBufType();
+        let sockBuf = self.SocketBufType().Accept(acceptItem.sockBuf.clone());
+
         let file = newSocketFile(task,
                                  self.family,
                                  fd as i32,
                                  self.stype,
                                  flags & SocketFlags::SOCK_NONBLOCK != 0,
-                                 enableBuf, Some(remoteAddr.to_vec()))?;
+                                 sockBuf, Some(remoteAddr.to_vec()))?;
 
         let fdFlags = FDFlags {
             CloseOnExec: flags & SocketFlags::SOCK_CLOEXEC != 0
@@ -725,19 +766,36 @@ impl SockOperations for SocketOperations {
             return Err(Error::SysError(-res as i32))
         }
 
-        if asyncAccept {
+        *self.socketBuf.lock() = if SHARESPACE.config.read().EnableRDMA {
+            /*let mut acceptQueue = AsyncAcceptStruct::default();
             let len = if backlog <= 0 {
                 5
             } else {
                 backlog
             };
 
-            self.acceptQueue.lock().SetQueueLen(len as usize);
+            acceptQueue.SetQueueLen(len as usize);*/
+
+            SocketBufType::TCPRDMAServer
+        } else if asyncAccept {
+            let acceptQueue = AcceptQueue::default();
+            let len = if backlog <= 0 {
+                5
+            } else {
+                backlog
+            };
+
+            acceptQueue.lock().SetQueueLen(len as usize);
+
             if !self.AsyncAcceptEnabled() {
-                IOURING.AcceptInit(self.fd, &self.queue, &self.acceptQueue)?;
+                IOURING.AcceptInit(self.fd, &self.queue, &acceptQueue)?;
                 self.enableAsyncAccept.store(true, Ordering::Relaxed);
             }
-        }
+
+            SocketBufType::TCPUringlServer(acceptQueue)
+        } else {
+            SocketBufType::TCPNormalServer
+        };
 
         return Ok(res)
     }
@@ -1306,7 +1364,20 @@ impl Provider for SocketProvider {
 
        let fd = res as i32;
 
-        let file = newSocketFile(task, self.family, fd, stype & SocketType::SOCK_TYPE_MASK, stype & SocketFlags::SOCK_NONBLOCK != 0, false, None)?;
+        let socketType = if (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
+            && stype == SockType::SOCK_STREAM {
+            SocketBufType::TCPInit
+        } else {
+            SocketBufType::NoTCP
+        };
+
+        let file = newSocketFile(task,
+                                 self.family,
+                                 fd,
+                                 stype & SocketType::SOCK_TYPE_MASK,
+                                 stype & SocketFlags::SOCK_NONBLOCK != 0,
+                                 socketType,
+                                 None)?;
         return Ok(Some(Arc::new(file)))
     }
 

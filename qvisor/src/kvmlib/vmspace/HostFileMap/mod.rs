@@ -14,6 +14,7 @@
 
 pub mod fdinfo;
 pub mod file_range_mgr;
+pub mod rdma_socket;
 
 use std::collections::BTreeMap;
 use libc::*;
@@ -21,7 +22,7 @@ use libc::*;
 use self::fdinfo::*;
 use super::super::qlib::common::*;
 use super::super::qlib::SysCallID;
-use super::super::qlib::linux_def::*;
+//use super::super::qlib::linux_def::*;
 use super::syscall::*;
 use super::super::*;
 
@@ -86,26 +87,9 @@ impl IOMgr {
     }
 
     //return guest fd
-    pub fn AddFd(&mut self, osfd: i32, epollable: bool) -> i32 {
-        let fdInfo = self.fdTbl.Alloc(osfd, epollable).expect("hostfdMap: guest fd alloc fail");
+    pub fn AddFd(&mut self, osfd: i32, _epollable: bool) -> i32 {
+        let fdInfo = self.fdTbl.Add(osfd).expect("hostfdMap: guest fd alloc fail");
         return fdInfo.lock().osfd;
-    }
-
-    pub fn SetUnblock(osfd: i32) {
-        unsafe {
-            /*let mut flags = fcntl(osfd, F_GETFL, 0);
-            if flags == -1 {
-                panic!("SetUnblock: can't F_GETFL for fd");
-            }
-
-            flags |= Flags::O_NONBLOCK as i32;*/
-            let flags = Flags::O_NONBLOCK as i32;
-
-            let ret = fcntl(osfd, F_SETFL, flags);
-            if ret == -1 {
-                panic!("SetUnblock: can't F_SETFL for fd");
-            }
-        }
     }
 
     //ret: true: exist, false: not exist
@@ -149,24 +133,17 @@ impl FdTbl {
             map: BTreeMap::new(),
         };
 
-        res.map.insert(0, FdInfo::New(0, true));
-        res.map.insert(1, FdInfo::New(1, true));
-        res.map.insert(2, FdInfo::New(2, true));
+        res.map.insert(0, FdInfo::New(0));
+        res.map.insert(1, FdInfo::New(1));
+        res.map.insert(2, FdInfo::New(2));
 
         return res
     }
 
-    pub fn Alloc(&mut self, osfd: i32, epollable: bool) -> Result<FdInfo> {
-        let fdInfo = FdInfo::New(osfd, epollable);
+    pub fn Add(&mut self, osfd: i32) -> Result<FdInfo> {
+        let fdInfo = FdInfo::New(osfd);
 
         self.map.insert(osfd, fdInfo.clone());
-        return Ok(fdInfo)
-    }
-
-    pub fn Take(&mut self, osfd: i32, epollable: bool) -> Result<FdInfo> {
-        let fdInfo = FdInfo::New(osfd, epollable);
-
-        self.map.insert(osfd as i32, fdInfo.clone());
         return Ok(fdInfo)
     }
 
