@@ -75,7 +75,7 @@ pub enum SocketBufType {
     NoTCP,              // Not TCP Socket
     TCPInit,            // Init TCP Socket, no listen and no connect
     TCPNormalServer,    // Common TCP Server socket, when socket start to listen
-    TCPUringlServer(Arc<QMutex<AsyncAcceptStruct>>),    // Uring TCP Server socket, when socket start to listen
+    TCPUringlServer(AcceptQueue),    // Uring TCP Server socket, when socket start to listen
     TCPRDMAServer,      // TCP Server socket over RDMA
     TCPNormalData,      // Common TCP socket
     Uring(Arc<SocketBuff>),
@@ -253,7 +253,7 @@ impl SocketOperations {
         }
     }
 
-    pub fn AcceptQueue(&self) -> Option<Arc<QMutex<AsyncAcceptStruct>>> {
+    pub fn AcceptQueue(&self) -> Option<AcceptQueue> {
         match self.SocketBufType() {
             SocketBufType::TCPUringlServer(q) => return Some(q.clone()),
             _ => return None,
@@ -767,18 +767,26 @@ impl SockOperations for SocketOperations {
         }
 
         *self.socketBuf.lock() = if SHARESPACE.config.read().EnableRDMA {
-            SocketBufType::TCPRDMAServer
-        } else if asyncAccept {
-            let mut acceptQueue = AsyncAcceptStruct::default();
+            /*let mut acceptQueue = AsyncAcceptStruct::default();
             let len = if backlog <= 0 {
                 5
             } else {
                 backlog
             };
 
-            acceptQueue.SetQueueLen(len as usize);
+            acceptQueue.SetQueueLen(len as usize);*/
 
-            let acceptQueue = Arc::new(QMutex::new(acceptQueue));
+            SocketBufType::TCPRDMAServer
+        } else if asyncAccept {
+            let acceptQueue = AcceptQueue::default();
+            let len = if backlog <= 0 {
+                5
+            } else {
+                backlog
+            };
+
+            acceptQueue.lock().SetQueueLen(len as usize);
+
             if !self.AsyncAcceptEnabled() {
                 IOURING.AcceptInit(self.fd, &self.queue, &acceptQueue)?;
                 self.enableAsyncAccept.store(true, Ordering::Relaxed);

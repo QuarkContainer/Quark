@@ -489,17 +489,6 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn SocketPair(domain: i32, type_: i32, protocol: i32, socketVect: u64) -> i64 {
-        let mut msg = Msg::SocketPair(SocketPair {
-            domain,
-            type_,
-            protocol,
-            socketVect,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
     pub fn GetSockName(sockfd: i32, addr: u64, addrlen: u64) -> i64 {
         let mut msg = Msg::GetSockName(GetSockName {
             sockfd,

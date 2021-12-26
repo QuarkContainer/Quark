@@ -17,6 +17,7 @@ use core::sync::atomic::AtomicI32;
 use core::sync::atomic::Ordering;
 use alloc::collections::vec_deque::VecDeque;
 use alloc::sync::Arc;
+use core::ops::Deref;
 
 use super::mutex::*;
 use super::bytestream::*;
@@ -161,21 +162,40 @@ pub struct AcceptItem {
     pub sockBuf: Arc<SocketBuff>,
 }
 
+#[derive(Default, Clone)]
+pub struct AcceptQueue(Arc<QMutex<AcceptQueueIntern>>);
+
+impl Deref for AcceptQueue {
+    type Target = Arc<QMutex<AcceptQueueIntern>>;
+
+    fn deref(&self) -> &Arc<QMutex<AcceptQueueIntern>> {
+        &self.0
+    }
+}
+
 #[derive(Default)]
-pub struct AsyncAcceptStruct {
+pub struct AcceptQueueIntern {
     pub queue: VecDeque<AcceptItem>,
     pub queueLen: usize,
     pub error: i32,
     pub total: u64,
 }
 
-impl AsyncAcceptStruct {
+impl AcceptQueueIntern {
     pub fn SetErr(&mut self, error: i32) {
         self.error = error
     }
 
+    pub fn Err(&self) -> i32 {
+        return self.error
+    }
+
     pub fn SetQueueLen(&mut self, len: usize) {
         self.queueLen = len;
+    }
+
+    pub fn HasSpace(&self) -> bool {
+        return self.queue.len() < self.queueLen
     }
 
     //return: (trigger, hasSpace)

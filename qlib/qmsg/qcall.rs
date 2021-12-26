@@ -61,7 +61,6 @@ pub enum Msg {
     FAccessAt(FAccessAt),
 
     Socket(Socket),
-    SocketPair(SocketPair),
     GetPeerName(GetPeerName),
     GetSockName(GetSockName),
     GetSockOpt(GetSockOpt),
@@ -389,14 +388,6 @@ pub struct Socket {
     pub domain: i32,
     pub type_: i32,
     pub protocol: i32,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct SocketPair {
-    pub domain: i32,
-    pub type_: i32,
-    pub protocol: i32,
-    pub socketVect: u64,
 }
 
 #[derive(Clone, Default, Debug)]

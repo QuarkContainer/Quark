@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use ::qlib::mutex::*;
 use core::sync::atomic;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicUsize;
@@ -317,14 +316,14 @@ impl QUring {
         return self.UCall(task, msg);
     }
 
-    pub fn AcceptInit(&self, fd: i32, queue: &Queue, acceptQueue: &Arc<QMutex<AsyncAcceptStruct>>) -> Result<()> {
+    pub fn AcceptInit(&self, fd: i32, queue: &Queue, acceptQueue: &AcceptQueue) -> Result<()> {
         let acceptOp = AsyncAccept::New(fd, queue.clone(), acceptQueue.clone());
         IOURING.AUCall(AsyncOps::AsyncAccept(acceptOp));
 
         return Ok(())
     }
 
-    pub fn Accept(&self, fd: i32, queue: &Queue, acceptQueue: &Arc<QMutex<AsyncAcceptStruct>>) -> Result<AcceptItem> {
+    pub fn Accept(&self, fd: i32, queue: &Queue, acceptQueue: &AcceptQueue) -> Result<AcceptItem> {
         let (trigger, ai) = acceptQueue.lock().DeqSocket();
         if trigger {
             let acceptOp = AsyncAccept::New(fd, queue.clone(), acceptQueue.clone());

@@ -1,58 +1,71 @@
 use alloc::sync::Arc;
+use libc::*;
 
-use std::collections::VecDeque;
-
+use super::super::super::IO_MGR;
+use super::super::super::URING_MGR;
+use super::super::super::SHARE_SPACE;
 use super::super::super::qlib::linux_def::*;
 //use super::super::super::qlib::common::*;
 //use super::super::super::qlib::task_mgr::*;
 use super::super::super::qlib::socket_buf::*;
-use super::super::super::qlib::qmsg::qcall::*;
+//use super::super::super::qlib::qmsg::qcall::*;
+use super::super::super::qlib::qmsg::input::*;
 
-pub struct AcceptStruct {
-    pub addr: TcpSockAddr,
-    pub addrlen: u32,
-    pub sockBuf: Arc<SocketBuff>,
-}
 
 pub struct RDMAServerSocket {
     pub fd: i32,
-    pub queueSize: usize,
-    pub waitQueue: VecDeque<u64>,
-    pub error: Option<i32>,
-    pub acceptQueue: VecDeque<AcceptStruct>,
+    pub acceptQueue: AcceptQueue,
 }
 
 impl RDMAServerSocket {
-    pub fn Accept(&mut self, acceptAddr: u64) -> i64 {
-        if self.acceptQueue.len() > 0 {
-            let wait = RDMAAcceptStruct::FromAddr(acceptAddr);
-            let accept = self.acceptQueue.pop_front().unwrap();
-            for i in 0..accept.addrlen as usize {
-                wait.addr.data[i] = accept.addr.data[i];
-            }
-
-            wait.addrlen = accept.addrlen;
-            wait.ret = 0;
-
-            if self.acceptQueue.len() == self.queueSize - 1 {
-                self.TryAccept();
-            }
-            return 0
-        }
-
-        if self.error.is_some() {
-            return self.error.unwrap() as i64;
-        }
-
-        self.waitQueue.push_back(acceptAddr);
-        return SysErr::EAGAIN as i64;
-    }
-
     pub fn TryAccept(&mut self) {
+        if self.acceptQueue.lock().Err() != 0 {
+            Self::FdNotify(self.fd, EVENT_ERR | EVENT_IN);
+            return
+        }
 
+        let mut hasSpace = self.acceptQueue.lock().HasSpace();
+
+        while hasSpace {
+            let tcpAddr = TcpSockAddr::default();
+            let mut len : u32 = TCP_ADDR_LEN as _;
+
+            let ret = unsafe{
+                accept4(self.fd, tcpAddr.Addr() as  *mut sockaddr, &mut len as  *mut socklen_t, SocketFlags::SOCK_NONBLOCK | SocketFlags::SOCK_CLOEXEC)
+            };
+
+            if ret < 0 {
+                if ret == -SysErr::EAGAIN {
+                    return
+                }
+
+                Self::FdNotify(self.fd, EVENT_ERR | EVENT_IN);
+                self.acceptQueue.lock().SetErr(-ret);
+                return
+            }
+
+            let fd = ret;
+
+            IO_MGR.lock().AddFd(fd, true);
+            URING_MGR.lock().Addfd(fd).unwrap();
+
+            let (trigger, tmp) = self.acceptQueue.lock().EnqSocket(fd, tcpAddr, len, Arc::new(SocketBuff::default()));
+            hasSpace = tmp;
+
+            if trigger {
+                Self::FdNotify(self.fd, EVENT_IN);
+            }
+        }
     }
 
-    /*pub fn Trigger(&mut self, eventmask: EventMask) {
-        if eventmask
-    }*/
+    pub fn FdNotify(fd: i32, mask: EventMask) {
+        SHARE_SPACE.AQHostInputCall(&HostInputMsg::FdNotify(FdNotify{
+            fd: fd,
+            mask: mask,
+        }));
+    }
+
+    pub fn Trigger(&mut self, _eventmask: EventMask) {
+        self.TryAccept();
+    }
 }

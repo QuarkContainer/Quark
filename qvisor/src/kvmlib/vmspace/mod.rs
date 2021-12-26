@@ -955,79 +955,70 @@ impl VMSpace {
         return Self::GetRet(hostfd as i64);
     }
 
-    pub fn SocketPair(domain: i32, type_: i32, protocol: i32, socketVect: u64) -> i64 {
-        let res = unsafe{
-            socketpair(domain, type_ | SocketFlags::SOCK_NONBLOCK | SocketFlags::SOCK_CLOEXEC, protocol, socketVect as *mut i32)
-        };
-
-        if res < 0 {
-            return Self::GetRet(res as i64);
-        }
-
-        let ptr = socketVect as * mut i32;
-        let fds = unsafe { slice::from_raw_parts_mut(ptr, 2) };
-
-        let hostfd0 = IO_MGR.lock().AddFd(fds[0], true);
-        let hostfd1 = IO_MGR.lock().AddFd(fds[1], true);
-
-        fds[0] = hostfd0;
-        fds[1] = hostfd1;
-
-        return Self::GetRet(res as i64);
-    }
-
     pub fn GetSockName(sockfd: i32, addr: u64, addrlen: u64) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
+        let fdInfo = match Self::GetFdInfo(sockfd) {
+            Some(fdInfo) => fdInfo,
             None => return -SysErr::EBADF as i64,
         };
 
-        let ret = unsafe{
-            getsockname(sockfd, addr as *mut sockaddr, addrlen as *mut socklen_t)
-        };
-
-        return Self::GetRet(ret as i64)
+        return fdInfo.GetSockName(addr, addrlen)
     }
 
     pub fn GetPeerName(sockfd: i32, addr: u64, addrlen: u64) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
+        let fdInfo = match Self::GetFdInfo(sockfd) {
+            Some(fdInfo) => fdInfo,
             None => return -SysErr::EBADF as i64,
         };
 
-        let ret = unsafe{
-            getpeername(sockfd, addr as *mut sockaddr, addrlen as *mut socklen_t)
-        };
-
-        return Self::GetRet(ret as i64)
+        return fdInfo.GetPeerName(addr, addrlen)
     }
 
     pub fn GetSockOpt(sockfd: i32, level: i32, optname: i32, optval: u64, optlen: u64) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
+        let fdInfo = match Self::GetFdInfo(sockfd) {
+            Some(fdInfo) => fdInfo,
             None => return -SysErr::EBADF as i64,
         };
 
-        let ret = unsafe{
-            getsockopt(sockfd, level, optname, optval as *mut c_void, optlen as *mut socklen_t)
-        };
-
-        return Self::GetRet(ret as i64)
+        return fdInfo.GetSockOpt(level, optname, optval, optlen)
     }
 
     pub fn SetSockOpt(sockfd: i32, level: i32, optname: i32, optval: u64, optlen: u32) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
+        let fdInfo = match Self::GetFdInfo(sockfd) {
+            Some(fdInfo) => fdInfo,
             None => return -SysErr::EBADF as i64,
         };
 
-        let ret = unsafe{
-            setsockopt(sockfd, level, optname, optval as *const c_void, optlen as socklen_t)
-        };
-
-        return Self::GetRet(ret as i64)
+        return fdInfo.SetSockOpt(level, optname, optval, optlen)
     }
 
+    pub fn Bind(sockfd: i32, sockaddr: u64, addrlen: u32, umask: u32) -> i64 {
+        let fdInfo = match Self::GetFdInfo(sockfd) {
+            Some(fdInfo) => fdInfo,
+            None => return -SysErr::EBADF as i64,
+        };
+
+        return fdInfo.Bind(sockaddr, addrlen, umask)
+    }
+
+    pub fn Listen(sockfd: i32, backlog: i32, block: bool) -> i64 {
+        let fdInfo = match Self::GetFdInfo(sockfd) {
+            Some(fdInfo) => fdInfo,
+            None => return -SysErr::EBADF as i64,
+        };
+
+        return fdInfo.Listen(backlog, block)
+    }
+
+    pub fn Shutdown(sockfd: i32, how: i32) -> i64 {
+        let fdInfo = match Self::GetFdInfo(sockfd) {
+            Some(fdInfo) => fdInfo,
+            None => return -SysErr::EBADF as i64,
+        };
+
+        return fdInfo.Shutdown(how)
+    }
+
+    ///////////end of network operation//////////////////////////////////////////////////////////////////
     pub fn ReadControlMsg(fd: i32, addr: u64, len: usize) -> i64 {
         match super::ucall::ucall_server::ReadControlMsg(fd) {
             Err(_e) => {
@@ -1053,54 +1044,6 @@ impl VMSpace {
         }
     }
 
-    pub fn Bind(sockfd: i32, sockaddr: u64, addrlen: u32, umask: u32) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
-            None => return -SysErr::EBADF as i64,
-        };
-
-        let ret = unsafe{
-            // todo: this is not thread safe, need to add lock when implement multiple io threads
-            let oldUmask = libc::umask(umask);
-            let ret = bind(sockfd, sockaddr as *const sockaddr, addrlen as socklen_t);
-            libc::umask(oldUmask);
-            ret
-        };
-
-        return Self::GetRet(ret as i64);
-    }
-
-    pub fn Listen(sockfd: i32, backlog: i32, block: bool) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
-            None => return -SysErr::EBADF as i64,
-        };
-
-        let ret = unsafe{
-            listen(sockfd, backlog)
-        };
-
-        if block {
-            Self::BlockFd(sockfd);
-        }
-
-        return Self::GetRet(ret as i64);
-    }
-
-    pub fn Shutdown(sockfd: i32, how: i32) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
-            None => return -SysErr::EBADF as i64,
-        };
-
-        let ret = unsafe{
-            shutdown(sockfd, how)
-        };
-
-        return Self::GetRet(ret as i64)
-    }
-
-    ///////////end of network operation//////////////////////////////////////////////////////////////////
     pub fn SchedGetAffinity( pid: i32, cpuSetSize: u64, mask: u64) -> i64 {
         //todo: fix this
         //let pid = 0;

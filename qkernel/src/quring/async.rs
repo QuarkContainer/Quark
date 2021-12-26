@@ -656,7 +656,7 @@ impl AsyncFiletWrite {
 pub struct AsyncAccept {
     pub fd : i32,
     pub queue: Queue,
-    pub acceptQueue: Arc<QMutex<AsyncAcceptStruct>>,
+    pub acceptQueue: AcceptQueue,
     pub addr: TcpSockAddr,
     pub len: u32,
 }
@@ -686,7 +686,7 @@ impl AsyncAccept {
         return hasSpace;
     }
 
-    pub fn New(fd: i32, queue: Queue, acceptQueue: Arc<QMutex<AsyncAcceptStruct>>) -> Self {
+    pub fn New(fd: i32, queue: Queue, acceptQueue: AcceptQueue) -> Self {
         return Self {
             fd,
             queue,

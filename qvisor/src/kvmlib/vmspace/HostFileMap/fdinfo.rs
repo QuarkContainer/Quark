@@ -33,20 +33,11 @@ impl Deref for FdInfo {
 }
 
 impl FdInfo {
-    pub fn New(osfd: i32, epollable: bool) -> Self {
-        return Self(Arc::new(Mutex::new(FdInfoIntern::New(osfd, epollable))))
+    pub fn New(osfd: i32) -> Self {
+        return Self(Arc::new(Mutex::new(FdInfoIntern::New(osfd))))
     }
 
     pub fn IOBufWrite(&self, addr: u64, len: usize, offset: isize) -> i64 {
-        /*if offset >= 0 {
-            let bufWrite = UringBufWrite::New(self.clone(), addr, len, offset);
-            match URING.lock().BufWrite(bufWrite) {
-                Ok(()) => return 0,
-                Err(Error::SysError(e)) => return -e as i64,
-                Err(e) => panic!("IOBufWrite get unexpected error {:?}", e)
-            }
-        }*/
-
         let osfd = self.lock().osfd;
         let ret = unsafe{
             if offset < 0 {
@@ -149,70 +140,9 @@ impl FdInfo {
         return SysRet(ret as i64)
     }
 
-    pub fn IOAccept(&self, addr: u64, addrlen: u64) -> i64 {
-        let osfd = self.lock().osfd;
-
-        let newOsfd = unsafe{
-            accept4(osfd, addr as  *mut sockaddr, addrlen as  *mut socklen_t, SocketFlags::SOCK_NONBLOCK | SocketFlags::SOCK_CLOEXEC)
-        };
-
-        if newOsfd < 0 {
-            return SysRet(newOsfd as i64);
-        }
-
-        let hostfd = IO_MGR.lock().AddFd(newOsfd, true);
-        URING_MGR.lock().Addfd(newOsfd).unwrap();
-        return SysRet(hostfd as i64);
-    }
-
-    pub fn IOConnect(&self, addr: u64, addrlen: u32) -> i64 {
-        let osfd = self.lock().osfd;
-
-        let ret = unsafe{
-            connect(osfd, addr as *const sockaddr, addrlen as socklen_t)
-        };
-
-        return SysRet(ret as i64)
-    }
-
-    pub fn IORecvMsg(&self, msghdr: u64, flags: i32) -> i64 {
-        let osfd = self.lock().osfd;
-
-        let ret = unsafe{
-            recvmsg(osfd, msghdr as *mut msghdr, flags as c_int)
-        };
-
-        return SysRet(ret as i64);
-    }
-
-    pub fn IOSendMsg(&self, msghdr: u64, flags: i32) -> i64 {
-        let osfd = self.lock().osfd;
-
-        let ret = unsafe{
-            sendmsg(osfd, msghdr as *mut msghdr, flags as c_int)
-        };
-
-        return SysRet(ret as i64);
-    }
-
-    pub fn Fcntl(&self, cmd: i32, arg: u64) -> i64 {
-        let osfd = self.lock().osfd;
-
-        if cmd == Cmd::F_GETFL {
-            return self.lock().GetFlags() as i64;
-        }
-
-        let ret = unsafe{
-            fcntl(osfd as c_int, cmd, arg)
-        };
-
-        if cmd == Cmd::F_SETFL  {
-            if ret == 0 {
-                self.lock().SetFlags(arg as i32);
-            }
-        }
-
-        return SysRet(ret as i64);
+    pub fn Fcntl(&self, cmd: i32, _arg: u64) -> i64 {
+        assert!(cmd == Cmd::F_GETFL, "we only support Cmd::F_GETFL in Fcntl");
+        return self.lock().GetFlags() as i64;
     }
 
     pub fn IoCtl(&self, cmd: u64, argp: u64) -> i64 {
@@ -262,6 +192,134 @@ impl FdInfo {
 
         return SysRet(ret as i64)
     }
+
+    ///////////////////////////socket operation//////////////////////////////
+    pub fn IOAccept(&self, addr: u64, addrlen: u64) -> i64 {
+        let osfd = self.lock().osfd;
+
+        let newOsfd = unsafe{
+            accept4(osfd, addr as  *mut sockaddr, addrlen as  *mut socklen_t, SocketFlags::SOCK_NONBLOCK | SocketFlags::SOCK_CLOEXEC)
+        };
+
+        if newOsfd < 0 {
+            return SysRet(newOsfd as i64);
+        }
+
+        let hostfd = IO_MGR.lock().AddFd(newOsfd, true);
+        URING_MGR.lock().Addfd(newOsfd).unwrap();
+        return SysRet(hostfd as i64);
+    }
+
+    pub fn IOConnect(&self, addr: u64, addrlen: u32) -> i64 {
+        let osfd = self.lock().osfd;
+
+        let ret = unsafe{
+            connect(osfd, addr as *const sockaddr, addrlen as socklen_t)
+        };
+
+        return SysRet(ret as i64)
+    }
+
+    pub fn IORecvMsg(&self, msghdr: u64, flags: i32) -> i64 {
+        let osfd = self.lock().osfd;
+
+        let ret = unsafe{
+            recvmsg(osfd, msghdr as *mut msghdr, flags as c_int)
+        };
+
+        return SysRet(ret as i64);
+    }
+
+    pub fn IOSendMsg(&self, msghdr: u64, flags: i32) -> i64 {
+        let osfd = self.lock().osfd;
+
+        let ret = unsafe{
+            sendmsg(osfd, msghdr as *mut msghdr, flags as c_int)
+        };
+
+        return SysRet(ret as i64);
+    }
+
+    pub fn GetSockName(&self, addr: u64, addrlen: u64) -> i64 {
+        let sockfd = self.lock().osfd;
+
+        let ret = unsafe{
+            getsockname(sockfd, addr as *mut sockaddr, addrlen as *mut socklen_t)
+        };
+
+        return SysRet(ret as i64)
+    }
+
+    pub fn GetPeerName(&self, addr: u64, addrlen: u64) -> i64 {
+        let sockfd = self.lock().osfd;
+
+        let ret = unsafe{
+            getpeername(sockfd, addr as *mut sockaddr, addrlen as *mut socklen_t)
+        };
+
+        return SysRet(ret as i64)
+    }
+
+    pub fn GetSockOpt(&self, level: i32, optname: i32, optval: u64, optlen: u64) -> i64 {
+        let sockfd = self.lock().osfd;
+
+        let ret = unsafe{
+            getsockopt(sockfd, level, optname, optval as *mut c_void, optlen as *mut socklen_t)
+        };
+
+        return SysRet(ret as i64)
+    }
+
+    pub fn SetSockOpt(&self, level: i32, optname: i32, optval: u64, optlen: u32) -> i64 {
+        let sockfd = self.lock().osfd;
+
+        let ret = unsafe{
+            setsockopt(sockfd, level, optname, optval as *const c_void, optlen as socklen_t)
+        };
+
+        return SysRet(ret as i64)
+    }
+
+    pub fn Bind(&self, sockaddr: u64, addrlen: u32, umask: u32) -> i64 {
+        // use global lock to avoid race condition
+        //let _ = GLOCK.lock();
+        let sockfd = self.lock().osfd;
+
+        let ret = unsafe{
+            let oldUmask = libc::umask(umask);
+            let ret = bind(sockfd, sockaddr as *const sockaddr, addrlen as socklen_t);
+            libc::umask(oldUmask);
+            ret
+        };
+
+        return SysRet(ret as i64);
+    }
+
+    pub fn Listen(&self, backlog: i32, block: bool) -> i64 {
+        let sockfd = self.lock().osfd;
+
+        let ret = unsafe{
+            listen(sockfd, backlog)
+        };
+
+        if block {
+            VMSpace::BlockFd(sockfd);
+        }
+
+        return SysRet(ret as i64);
+    }
+
+    pub fn Shutdown(&self, how: i32) -> i64 {
+        let sockfd = self.lock().osfd;
+
+        let ret = unsafe{
+            shutdown(sockfd, how)
+        };
+
+        return SysRet(ret as i64)
+    }
+
+    ///////////////////////////socket operation//////////////////////////////
 }
 
 #[derive(Debug)]
@@ -269,7 +327,6 @@ pub struct FdInfoIntern {
     pub osfd: i32,
 
     pub flags: Flags,
-    pub epollable: bool,
 }
 
 impl Drop for FdInfoIntern {
@@ -280,7 +337,7 @@ impl Drop for FdInfoIntern {
 }
 
 impl FdInfoIntern {
-    pub fn New(osfd: i32, epollable: bool) -> Self {
+    pub fn New(osfd: i32) -> Self {
         //info!("New osfd {}, hostfd{}: epollable is {}", osfd, hostfd, epollable);
         let flags = unsafe {
             fcntl(osfd, F_GETFL)
@@ -289,7 +346,6 @@ impl FdInfoIntern {
         let res = Self {
             osfd: osfd,
             flags: Flags(flags),
-            epollable: epollable,
         };
 
         return res;
@@ -326,10 +382,6 @@ impl FdInfoIntern {
         }
 
         return 0;
-    }
-
-    pub fn SetFlags(&mut self, flags: i32) {
-        self.flags = Flags(flags)
     }
 
     pub fn GetFlags(&mut self) -> i32 {
