@@ -25,8 +25,8 @@ use super::super::qlib::common::*;
 use super::super::qlib::uring::squeue;
 use super::super::qlib::uring::opcode::*;
 use super::super::qlib::uring::opcode;
+use super::super::qlib::socket_buf::*;
 use super::super::kernel::waiter::*;
-use super::super::socket::hostinet::socket_buf::*;
 use super::super::socket::hostinet::socket::*;
 use super::super::fs::file::*;
 use super::super::task::*;
@@ -676,7 +676,8 @@ impl AsyncAccept {
         }
 
         HostSpace::NewFd(result);
-        let (trigger, hasSpace) = self.acceptQueue.lock().EnqSocket(result, self.addr, self.len);
+        let sockBuf = Arc::new(SocketBuff::default());
+        let (trigger, hasSpace) = self.acceptQueue.lock().EnqSocket(result, self.addr, self.len, sockBuf);
         if trigger {
             self.queue.Notify(EventMaskFromLinux(EVENT_IN as u32));
         }

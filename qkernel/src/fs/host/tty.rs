@@ -22,10 +22,10 @@ use super::super::super::kernel::waiter::qlock::*;
 use super::super::super::guestfdnotifier::*;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
+use super::super::super::qlib::socket_buf::*;
 use super::super::super::task::*;
 use super::super::super::threadmgr::processgroup::*;
 use super::super::super::threadmgr::session::*;
-use super::super::super::socket::hostinet::socket_buf::*;
 use super::super::super::SHARESPACE;
 use super::super::super::quring::QUring;
 

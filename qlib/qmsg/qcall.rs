@@ -12,8 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::sync::Arc;
+
 use super::super::task_mgr::*;
 use super::super::linux_def::*;
+use super::super::socket_buf::*;
 use super::super::config::*;
 
 #[repr(align(128))]
@@ -592,6 +595,31 @@ pub struct IOAccept {
     pub fd: i32,
     pub addr: u64,
     pub addrlen: u64,
+}
+
+pub struct RDMAAcceptStruct {
+    pub addr: TcpSockAddr,
+    pub addrlen: u32,
+    pub sockBuf: Option<Arc<SocketBuff>>,
+    pub ret: i64,
+}
+
+impl RDMAAcceptStruct {
+    pub fn FromAddr(addr: u64) -> &'static mut Self {
+        return unsafe {
+            &mut *(addr as * mut Self)
+        }
+    }
+
+    pub fn ToAddr(&self) -> u64 {
+        return self as * const _ as u64;
+    }
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct RDMAAccept {
+    pub fd: i32,
+    pub acceptAddr: u64, // &'static mut RDMAAccept,
 }
 
 #[derive(Clone, Default, Debug)]

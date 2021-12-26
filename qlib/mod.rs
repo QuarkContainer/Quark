@@ -51,6 +51,7 @@ pub mod uring;
 pub mod singleton;
 pub mod mutex;
 pub mod sort_arr;
+pub mod socket_buf;
 
 pub mod ringbuf;
 pub mod vcpu_mgr;

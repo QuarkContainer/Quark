@@ -15,7 +15,6 @@
 use alloc::sync::Arc;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use alloc::collections::vec_deque::VecDeque;
 use core::any::Any;
 use core::sync::atomic::AtomicI64;
 use core::sync::atomic::AtomicBool;
@@ -50,10 +49,10 @@ use super::super::super::IOURING;
 use super::super::super::quring::QUring;
 use super::super::super::Kernel::HostSpace;
 use super::super::super::qlib::linux_def::*;
+use super::super::super::qlib::socket_buf::*;
 use super::super::super::fd::*;
 use super::super::super::tcpip::tcpip::*;
 use super::super::super::SHARESPACE;
-use super::socket_buf::*;
 use super::super::super::qlib::linux::time::Timeval;
 use super::super::control::ControlMessageTCPInq;
 
@@ -76,6 +75,7 @@ pub enum SocketBufType {
     NoTCP,              // Not TCP Socket
     TCPInit,            // Init TCP Socket, no listen and no connect
     TCPNormalServer,    // Common TCP Server socket, when socket start to listen
+    TCPUringlServer(Arc<QMutex<AsyncAcceptStruct>>),    // Uring TCP Server socket, when socket start to listen
     TCPRDMAServer,      // TCP Server socket over RDMA
     TCPNormalData,      // Common TCP socket
     Uring(Arc<SocketBuff>),
@@ -89,6 +89,7 @@ impl fmt::Debug for SocketBufType {
             Self::NoTCP => write!(f, "SocketBufType::NoTCP"),
             Self::TCPInit => write!(f, "SocketBufType::TCPInit"),
             Self::TCPNormalServer => write!(f, "SocketBufType::TCPNormalServer"),
+            Self::TCPUringlServer(_) => write!(f, "SocketBufType::TCPUringlServer"),
             Self::TCPRDMAServer => write!(f, "SocketBufType::TCPRDMAServer"),
             Self::TCPNormalData => write!(f, "SocketBufType::TCPNormalData"),
             Self::Uring(_) => write!(f, "SocketBufType::Uring"),
@@ -98,19 +99,16 @@ impl fmt::Debug for SocketBufType {
 }
 
 impl SocketBufType {
-    pub fn Accept(&self) -> Self {
+    pub fn Accept(&self, socketBuf: Arc<SocketBuff>) -> Self {
         match self {
-            Self::TCPNormalServer => {
-                if SHARESPACE.config.read().UringIO {
-                    let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
-                    return Self::Uring(socketBuf)
-                }  else {
-                    return Self::TCPNormalData
-                }
+            SocketBufType::TCPNormalServer => {
+                return SocketBufType::TCPNormalData
             },
-            Self::TCPRDMAServer => {
-                let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
-                return Self::RDMA(socketBuf)
+            SocketBufType::TCPUringlServer(_) => {
+                return SocketBufType::Uring(socketBuf)
+            },
+            SocketBufType::TCPRDMAServer => {
+                return SocketBufType::RDMA(socketBuf)
             }
             _ => {
                 panic!("SocketBufType::Accept unexpect type {:?}", self)
@@ -156,80 +154,8 @@ pub struct SocketOperationsIntern {
     pub remoteAddr: QMutex<Option<SockAddr>>,
     pub socketBuf: QMutex<SocketBufType>,
     pub enableAsyncAccept: AtomicBool,
-    pub acceptQueue: Arc<QMutex<AsyncAcceptStruct>>,
     pub hostops: HostInodeOp,
     passInq: AtomicBool,
-}
-
-pub const TCP_ADDR_LEN : usize = 128;
-
-#[derive(Default, Debug)]
-pub struct AcceptItem {
-    pub fd: i32,
-    pub addr: TcpSockAddr,
-    pub len: u32,
-}
-
-#[derive(Default)]
-pub struct AsyncAcceptStruct {
-    pub queue: VecDeque<AcceptItem>,
-    pub queueLen: usize,
-    pub error: i32,
-    pub total: u64,
-}
-
-impl AsyncAcceptStruct {
-    pub fn SetErr(&mut self, error: i32) {
-        self.error = error
-    }
-
-    pub fn SetQueueLen(&mut self, len: usize) {
-        self.queueLen = len;
-    }
-
-    //return: (trigger, hasSpace)
-    pub fn EnqSocket(&mut self, fd: i32, addr: TcpSockAddr, len: u32) -> (bool, bool) {
-        let item = AcceptItem {
-            fd: fd,
-            addr: addr,
-            len: len
-        };
-
-        self.queue.push_back(item);
-        self.total += 1;
-        let trigger = self.queue.len() == 1;
-        return (trigger, self.queue.len() < self.queueLen);
-    }
-
-
-    pub fn DeqSocket(&mut self) -> (bool, Result<AcceptItem>) {
-        let trigger = self.queue.len() == self.queueLen;
-
-        match self.queue.pop_front() {
-            None => {
-                if self.error != 0 {
-                    return (false, Err(Error::SysError(self.error)))
-                }
-                return (trigger, Err(Error::SysError(SysErr::EAGAIN)))
-            }
-            Some(item) => {
-                return (trigger, Ok(item))
-            }
-        }
-    }
-
-    pub fn Events(&self) -> EventMask {
-        let mut event = EventMask::default();
-        if self.queue.len() > 0 {
-            event |= EVENT_IN;
-        }
-
-        if self.error != 0 {
-            event |= EVENT_ERR;
-        }
-
-        return event
-    }
 }
 
 #[derive(Clone)]
@@ -258,7 +184,6 @@ impl SocketOperations {
             remoteAddr: QMutex::new(addr),
             socketBuf: QMutex::new(socketBuf.clone()),
             enableAsyncAccept: AtomicBool::new(false),
-            acceptQueue: Arc::new(QMutex::new(AsyncAcceptStruct::default())),
             hostops: hostops,
             passInq: AtomicBool::new(false)
         };
@@ -328,6 +253,13 @@ impl SocketOperations {
         }
     }
 
+    pub fn AcceptQueue(&self) -> Option<Arc<QMutex<AsyncAcceptStruct>>> {
+        match self.SocketBufType() {
+            SocketBufType::TCPUringlServer(q) => return Some(q.clone()),
+            _ => return None,
+        }
+    }
+
     pub fn InitSocketBuf(&self, socketBuf: SocketBufType) {
         //let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
         *self.socketBuf.lock() = socketBuf.clone();
@@ -357,6 +289,22 @@ impl SocketOperations {
 
     pub fn Notify(&self, mask: EventMask) {
         self.queue.Notify(EventMaskFromLinux(mask as u32));
+    }
+
+    pub fn AcceptData(&self) -> Result<AcceptItem> {
+        let sockBufType = self.socketBuf.lock().clone();
+        match sockBufType {
+            SocketBufType::TCPNormalServer => {
+                return self.IOAccept()
+            }
+            SocketBufType::TCPUringlServer(ref queue) => {
+                return IOURING.Accept(self.fd, &self.queue, queue)
+            }
+            _ => {
+                error!("SocketBufType invalid accept {:?}", sockBufType);
+                return Err(Error::SysError(SysErr::EINVAL))
+            }
+        }
     }
 }
 
@@ -407,8 +355,9 @@ impl Waitable for SocketOperations {
             return self.SocketBuf().Events() & mask
         };
 
-        if self.AsyncAcceptEnabled() {
-            return self.acceptQueue.lock().Events() & mask
+        match self.AcceptQueue() {
+            Some(q) => return q.lock().Events() & mask,
+            None => ()
         }
 
         let fd = self.fd;
@@ -713,37 +662,28 @@ impl SockOperations for SocketOperations {
     }
 
     fn Accept(&self, task: &Task, addr: &mut [u8], addrlen: &mut u32, flags: i32, blocking: bool) -> Result<i64> {
-        let asyncAccept = self.AsyncAcceptEnabled();
-
         let mut acceptItem = AcceptItem::default();
-        let ai = if asyncAccept {
-            IOURING.Accept(self.fd, &self.queue, &self.acceptQueue)
-        } else {
-            self.IOAccept()
-        };
-        match ai {
-            Err(Error::SysError(SysErr::EAGAIN)) => if !blocking {
-                return Err(Error::SysError(SysErr::EAGAIN))
-            }
-            Err(e) => {
-                return Err(e)
-            }
-            Ok(item) => {
-                acceptItem = item;
-            }
-        }
+        if !blocking {
+            let ai = self.AcceptData();
 
-        if blocking {
+            match ai {
+                Err(Error::SysError(SysErr::EAGAIN)) => if !blocking {
+                    return Err(Error::SysError(SysErr::EAGAIN))
+                }
+                Err(e) => {
+                    return Err(e)
+                }
+                Ok(item) => {
+                    acceptItem = item;
+                }
+            }
+        } else {
             let general = task.blocker.generalEntry.clone();
             self.EventRegister(task, &general, EVENT_IN);
             defer!(self.EventUnregister(task, &general));
 
             loop {
-                let ai = if asyncAccept {
-                    IOURING.Accept(self.fd, &self.queue, &self.acceptQueue)
-                } else {
-                    self.IOAccept()
-                };
+                let ai = self.AcceptData();
 
                 match ai {
                     Err(Error::SysError(SysErr::EAGAIN)) => (),
@@ -778,7 +718,7 @@ impl SockOperations for SocketOperations {
 
         let remoteAddr = &acceptItem.addr.data[0..len];
         //let sockBuf = self.ConfigSocketBufType();
-        let sockBuf = self.SocketBufType().Accept();
+        let sockBuf = self.SocketBufType().Accept(acceptItem.sockBuf.clone());
 
         let file = newSocketFile(task,
                                  self.family,
@@ -828,23 +768,26 @@ impl SockOperations for SocketOperations {
 
         *self.socketBuf.lock() = if SHARESPACE.config.read().EnableRDMA {
             SocketBufType::TCPRDMAServer
-        } else {
-            SocketBufType::TCPNormalServer
-        };
-
-        if asyncAccept {
+        } else if asyncAccept {
+            let mut acceptQueue = AsyncAcceptStruct::default();
             let len = if backlog <= 0 {
                 5
             } else {
                 backlog
             };
 
-            self.acceptQueue.lock().SetQueueLen(len as usize);
+            acceptQueue.SetQueueLen(len as usize);
+
+            let acceptQueue = Arc::new(QMutex::new(acceptQueue));
             if !self.AsyncAcceptEnabled() {
-                IOURING.AcceptInit(self.fd, &self.queue, &self.acceptQueue)?;
+                IOURING.AcceptInit(self.fd, &self.queue, &acceptQueue)?;
                 self.enableAsyncAccept.store(true, Ordering::Relaxed);
             }
-        }
+
+            SocketBufType::TCPUringlServer(acceptQueue)
+        } else {
+            SocketBufType::TCPNormalServer
+        };
 
         return Ok(res)
     }
