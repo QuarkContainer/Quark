@@ -18,6 +18,7 @@ use core::ops::Deref;
 use libc::*;
 
 use super::socket_info::*;
+use super::rdma_socket::*;
 use super::super::*;
 use super::super::qlib::common::*;
 use super::super::super::util::*;
@@ -34,6 +35,10 @@ impl Deref for FdInfo {
 }
 
 impl FdInfo {
+    pub fn SockInfo(&self) -> SockInfo {
+        return self.lock().sockInfo.lock().clone();
+    }
+
     pub fn BufWrite(osfd: i32, addr: u64, len: usize, offset: isize) -> i64 {
         let ret = unsafe{
             if offset < 0 {
@@ -60,7 +65,7 @@ impl FdInfo {
         };
 
         if end < 0 {
-            panic!("IOAppend lseek1 fail")
+            panic!("IOAppend lseek fail")
         }
 
         let size = unsafe{
@@ -179,7 +184,7 @@ impl FdInfo {
             return SysRet(newOsfd as i64);
         }
 
-        let hostfd = IO_MGR.lock().AddSocket(newOsfd);
+        let hostfd = IO_MGR.AddSocket(newOsfd);
         URING_MGR.lock().Addfd(newOsfd).unwrap();
         return SysRet(hostfd as i64);
     }
@@ -279,6 +284,16 @@ impl FdInfo {
 impl FdInfo {
     pub fn NewFile(osfd: i32) -> Self {
         return Self(Arc::new(Mutex::new(FdInfoIntern::NewFile(osfd))))
+    }
+
+    pub fn Notify(&self, mask: EventMask) {
+        let fd = self.Fd();
+        let sockInfo = self.SockInfo();
+        sockInfo.Trigger(fd, mask);
+    }
+
+    pub fn Fd(&self) -> i32 {
+        return self.lock().osfd;
     }
 
     pub fn NewSocket(osfd: i32) -> Self {
@@ -381,6 +396,26 @@ impl FdInfo {
         return Self::Listen(sockfd, backlog, block);
     }
 
+    pub fn RDMAListen(&self, backlog: i32, block: bool, acceptQueue: AcceptQueue) -> i64 {
+        let sockfd = self.lock().osfd;
+        let ret = Self::Listen(sockfd, backlog, block);
+        if ret < 0 {
+            return ret;
+        }
+
+        match self.SockInfo() {
+            SockInfo::Socket => {
+                let rdmaSocket = RDMAServerSock::New(sockfd, acceptQueue);
+                *self.lock().sockInfo.lock() = SockInfo::RDMAServerSocket(rdmaSocket);
+            }
+            _ => {
+                error!("RDMAListen listen fail with wrong state {:?}", self.SockInfo());
+            }
+        }
+
+        return 0;
+    }
+
     pub fn IOShutdown(&self, how: i32) -> i64 {
         let sockfd = self.lock().osfd;
         return Self::Shutdown(sockfd, how);
@@ -455,7 +490,7 @@ impl FdInfoIntern {
     }
 
     pub fn Close(&self) -> i32 {
-        let _ioMgr = IO_MGR.lock(); //global lock
+        let _ioMgr = IO_MGR.fdTbl.lock(); //global lock
         if self.osfd >= 0 {
             unsafe {
                 // shutdown for socket, without shutdown, it the uring read won't be wake up
@@ -473,3 +508,9 @@ impl FdInfoIntern {
     }
 }
 
+pub fn FdNotify(fd: i32, mask: EventMask) {
+    SHARE_SPACE.AQHostInputCall(&HostInputMsg::FdNotify(FdNotify{
+        fd: fd,
+        mask: mask,
+    }));
+}

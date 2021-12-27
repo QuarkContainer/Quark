@@ -245,13 +245,16 @@ impl KVMVcpu {
             Msg::SetSockOpt(msg) => {
                 ret = super::VMSpace::SetSockOpt(msg.sockfd, msg.level, msg.optname, msg.optval, msg.optlen) as u64;
             },
-            Msg::Bind(msg) => {
+            Msg::IOBind(msg) => {
                 ret = super::VMSpace::Bind(msg.sockfd, msg.addr, msg.addrlen, msg.umask) as u64;
             },
-            Msg::Listen(msg) => {
+            Msg::RDMAListen(msg) => {
+                ret = super::VMSpace::RDMAListen(msg.sockfd, msg.backlog, msg.block, msg.acceptQueue.clone()) as u64;
+            },
+            Msg::IOListen(msg) => {
                 ret = super::VMSpace::Listen(msg.sockfd, msg.backlog, msg.block) as u64;
             },
-            Msg::Shutdown(msg) => {
+            Msg::IOShutdown(msg) => {
                 ret = super::VMSpace::Shutdown(msg.sockfd, msg.how) as u64
             },
             Msg::SchedGetAffinity(msg) => {

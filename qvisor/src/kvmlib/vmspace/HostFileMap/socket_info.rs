@@ -1,6 +1,8 @@
 use core::fmt;
 
 use super::rdma_socket::*;
+use super::fdinfo::*;
+use super::super::super::qlib::linux_def::*;
 
 #[derive(Clone)]
 pub enum SockInfo {
@@ -20,3 +22,23 @@ impl fmt::Debug for SockInfo {
         }
     }
 }
+
+impl SockInfo {
+    pub fn Trigger(&self, fd: i32, eventmask: EventMask) {
+        match self {
+            Self::File => {
+                FdNotify(fd, eventmask)
+            }
+            Self::Socket => {
+                FdNotify(fd, eventmask)
+            }
+            Self::RDMAServerSocket(ref sock) => {
+                sock.Notify(eventmask)
+            }
+            Self::RDMADataSocket => {
+                FdNotify(fd, eventmask)
+            }
+        }
+    }
+}
+

@@ -21,6 +21,7 @@ use super::qlib::config::*;
 use super::qlib::qmsg::*;
 use super::qlib::task_mgr::*;
 use super::qlib::linux_def::*;
+use super::qlib::socket_buf::*;
 //use super::qlib::perf_tunning::*;
 use super::task::*;
 use super::asm::*;
@@ -535,7 +536,7 @@ impl HostSpace {
     }
 
     pub fn Bind(sockfd: i32, addr: u64, addrlen: u32, umask: u32) -> i64 {
-        let mut msg = Msg::Bind(Bind {
+        let mut msg = Msg::IOBind(IOBind {
             sockfd,
             addr,
             addrlen,
@@ -546,7 +547,7 @@ impl HostSpace {
     }
 
     pub fn Listen(sockfd: i32, backlog: i32, block: bool) -> i64 {
-        let mut msg = Msg::Listen(Listen {
+        let mut msg = Msg::IOListen(IOListen {
             sockfd,
             backlog,
             block,
@@ -555,8 +556,19 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
+    pub fn RDMAListen(sockfd: i32, backlog: i32, block: bool, acceptQueue: AcceptQueue) -> i64 {
+        let mut msg = Msg::RDMAListen(RDMAListen {
+            sockfd,
+            backlog,
+            block,
+            acceptQueue,
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
     pub fn Shutdown(sockfd: i32, how: i32) -> i64 {
-        let mut msg = Msg::Shutdown(Shutdown {
+        let mut msg = Msg::IOShutdown(IOShutdown {
             sockfd,
             how,
         });

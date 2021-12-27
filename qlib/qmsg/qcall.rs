@@ -65,9 +65,11 @@ pub enum Msg {
     GetSockName(GetSockName),
     GetSockOpt(GetSockOpt),
     SetSockOpt(SetSockOpt),
-    Bind(Bind),
-    Listen(Listen),
-    Shutdown(Shutdown),
+    IOBind(IOBind),
+    IOListen(IOListen),
+    IOShutdown(IOShutdown),
+
+    RDMAListen(RDMAListen),
 
     SchedGetAffinity(SchedGetAffinity),
     GetRandom(GetRandom),
@@ -430,7 +432,7 @@ pub struct Connect {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct Bind {
+pub struct IOBind {
     pub sockfd: i32,
     pub addr: u64,
     pub addrlen: u32,
@@ -438,14 +440,30 @@ pub struct Bind {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct Listen {
+pub struct RDMABind {
+    pub sockfd: i32,
+    pub addr: u64,
+    pub addrlen: u32,
+    pub umask: u32,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct IOListen {
     pub sockfd: i32,
     pub backlog: i32,
     pub block: bool,
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct Shutdown {
+pub struct RDMAListen {
+    pub sockfd: i32,
+    pub backlog: i32,
+    pub block: bool,
+    pub acceptQueue: AcceptQueue,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct IOShutdown {
     pub sockfd: i32,
     pub how: i32,
 }

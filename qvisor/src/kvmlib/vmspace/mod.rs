@@ -49,6 +49,7 @@ use super::qlib::addr::{Addr};
 use super::qlib::control_msg::*;
 use super::qlib::qmsg::*;
 use super::qlib::cstring::*;
+use super::qlib::socket_buf::*;
 use super::qlib::perf_tunning::*;
 use super::namespace::MountNs;
 use super::ucall::usocket::*;
@@ -113,11 +114,11 @@ unsafe impl Send for VMSpace {}
 impl VMSpace {
     ///////////start of file operation//////////////////////////////////////////////
     pub fn GetOsfd(hostfd: i32) -> Option<i32> {
-        return IO_MGR.lock().GetFdByHost(hostfd);
+        return IO_MGR.GetFdByHost(hostfd);
     }
 
     pub fn GetFdInfo(hostfd: i32) -> Option<FdInfo> {
-        return IO_MGR.lock().GetByHost(hostfd);
+        return IO_MGR.GetByHost(hostfd);
     }
 
     pub fn GetDents64(fd: i32, dirp: u64, count: u32) -> i64 {
@@ -222,7 +223,7 @@ impl VMSpace {
                 return osfd as i64
             }
 
-            let hostfd = IO_MGR.lock().AddFile(osfd);
+            let hostfd = IO_MGR.AddFile(osfd);
 
             process.Stdiofds[i] = hostfd;
         }
@@ -280,7 +281,7 @@ impl VMSpace {
             return Self::GetRet(ret as i64)
         }
 
-        let hostfd = IO_MGR.lock().AddFile(fd);
+        let hostfd = IO_MGR.AddFile(fd);
         return hostfd as i64
     }
 
@@ -452,7 +453,7 @@ impl VMSpace {
         }
 
         tryOpenAt.writeable = writeable;
-        let hostfd = IO_MGR.lock().AddFile(fd);
+        let hostfd = IO_MGR.AddFile(fd);
 
         if tryOpenAt.fstat.IsRegularFile() {
             URING_MGR.lock().Addfd(hostfd).unwrap();
@@ -493,7 +494,7 @@ impl VMSpace {
                 return Self::GetRet(ret as i64) as i32
             }
 
-            let hostfd = IO_MGR.lock().AddFile(osfd);
+            let hostfd = IO_MGR.AddFile(osfd);
 
             URING_MGR.lock().Addfd(osfd).unwrap();
 
@@ -502,7 +503,7 @@ impl VMSpace {
     }
 
     pub fn Close(fd: i32) -> i64 {
-        let info = IO_MGR.lock().RemoveFd(fd);
+        let info = IO_MGR.RemoveFd(fd);
 
         URING_MGR.lock().Removefd(fd).unwrap();
         let res = if info.is_some() {
@@ -608,7 +609,7 @@ impl VMSpace {
     }
 
     pub fn NewSocket(fd: i32) -> i64 {
-        IO_MGR.lock().AddSocket(fd);
+        IO_MGR.AddSocket(fd);
         URING_MGR.lock().Addfd(fd).unwrap();
         return 0;
     }
@@ -943,7 +944,7 @@ impl VMSpace {
             return Self::GetRet(fd as i64);
         }
 
-        let hostfd = IO_MGR.lock().AddSocket(fd);
+        let hostfd = IO_MGR.AddSocket(fd);
         URING_MGR.lock().Addfd(fd).unwrap();
         return Self::GetRet(hostfd as i64);
     }
@@ -1000,6 +1001,16 @@ impl VMSpace {
         };
 
         return fdInfo.IOListen(backlog, block)
+    }
+
+
+    pub fn RDMAListen(sockfd: i32, backlog: i32, block: bool, acceptQueue: AcceptQueue) -> i64 {
+        let fdInfo = match Self::GetFdInfo(sockfd) {
+            Some(fdInfo) => fdInfo,
+            None => return -SysErr::EBADF as i64,
+        };
+
+        return fdInfo.RDMAListen(backlog, block, acceptQueue)
     }
 
     pub fn Shutdown(sockfd: i32, how: i32) -> i64 {
@@ -1248,7 +1259,7 @@ impl VMSpace {
             return Self::GetRet(ret as i64);
         }
 
-        let guestfd = IO_MGR.lock().AddFile(fd);
+        let guestfd = IO_MGR.AddFile(fd);
 
         return guestfd as i64
     }
@@ -1392,7 +1403,7 @@ impl VMSpace {
 
             Self::UnblockFd(osfd);
 
-            let hostfd = IO_MGR.lock().AddFile(osfd);
+            let hostfd = IO_MGR.AddFile(osfd);
             stdfds[i] = hostfd;
         }
 

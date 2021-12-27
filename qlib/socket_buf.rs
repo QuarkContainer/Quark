@@ -18,6 +18,7 @@ use core::sync::atomic::Ordering;
 use alloc::collections::vec_deque::VecDeque;
 use alloc::sync::Arc;
 use core::ops::Deref;
+use core::fmt;
 
 use super::mutex::*;
 use super::bytestream::*;
@@ -32,6 +33,13 @@ pub struct SocketBuff {
 
     pub readBuf: QMutex<ByteStream>,
     pub writeBuf: QMutex<ByteStream>,
+}
+
+impl fmt::Debug for SocketBuff {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "wClosed {:?}, rClosed {:?}, pendingWShutdown {:?}, error {:?}",
+               self.wClosed, self.wClosed, self.pendingWShutdown, self.error)
+    }
 }
 
 impl Default for SocketBuff {
@@ -154,7 +162,7 @@ impl SocketBuff {
 
 pub const TCP_ADDR_LEN : usize = 128;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct AcceptItem {
     pub fd: i32,
     pub addr: TcpSockAddr,
@@ -162,7 +170,7 @@ pub struct AcceptItem {
     pub sockBuf: Arc<SocketBuff>,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone,  Debug)]
 pub struct AcceptQueue(Arc<QMutex<AcceptQueueIntern>>);
 
 impl Deref for AcceptQueue {
@@ -173,7 +181,7 @@ impl Deref for AcceptQueue {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct AcceptQueueIntern {
     pub queue: VecDeque<AcceptItem>,
     pub queueLen: usize,

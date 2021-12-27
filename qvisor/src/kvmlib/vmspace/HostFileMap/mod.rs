@@ -17,13 +17,14 @@ pub mod file_range_mgr;
 pub mod rdma_socket;
 pub mod socket_info;
 
+use spin::Mutex;
 use std::collections::BTreeMap;
 use libc::*;
 
 use self::fdinfo::*;
 use super::super::qlib::common::*;
 use super::super::qlib::SysCallID;
-//use super::super::qlib::linux_def::*;
+use super::super::qlib::linux_def::*;
 use super::syscall::*;
 use super::super::*;
 
@@ -33,11 +34,9 @@ const MAX_FD: i32 = 65535; //skip stdin, stdout, stderr
 //map between guest/process fd to host fd
 pub struct IOMgr {
     //guest hostfd to fdInfo
-    pub fdTbl: FdTbl,
+    pub fdTbl: Mutex<FdTbl>,
     pub eventfd: i32,
 }
-
-unsafe impl Send for IOMgr {}
 
 impl IOMgr {
     pub fn Print(&self) {
@@ -61,9 +60,9 @@ impl IOMgr {
 
         info!("EpollMgr eventfd = {}", eventfd);
 
-        let mut res = Self {
+        let res = Self {
             eventfd: eventfd,
-            fdTbl: FdTbl::New(),
+            fdTbl: Mutex::new(FdTbl::New()),
         };
 
         res.DrainPipe()?;
@@ -72,7 +71,7 @@ impl IOMgr {
     }
 
     //this needs to be called after Notify
-    pub fn DrainPipe(&mut self) -> Result<()> {
+    pub fn DrainPipe(&self) -> Result<()> {
         let mut data: u64 = 0;
 
         let nr = SysCallID::sys_read as usize;
@@ -88,38 +87,46 @@ impl IOMgr {
     }
 
     //return guest fd
-    pub fn AddFile(&mut self, osfd: i32) -> i32 {
-        let fdInfo = self.fdTbl.AddFile(osfd).expect("hostfdMap: guest fd alloc fail");
-        return fdInfo.lock().osfd;
+    pub fn AddFile(&self, fd: i32) -> i32 {
+        self.fdTbl.lock().AddFile(fd).expect("hostfdMap: guest fd alloc fail");
+        return fd;
     }
 
-    pub fn AddSocket(&mut self, osfd: i32) -> i32 {
-        let fdInfo = self.fdTbl.AddSocket(osfd).expect("hostfdMap: guest fd alloc fail");
-        return fdInfo.lock().osfd;
+    pub fn AddSocket(&self, fd: i32) -> i32 {
+        self.fdTbl.lock().AddSocket(fd).expect("hostfdMap: guest fd alloc fail");
+        return fd;
     }
 
     //ret: true: exist, false: not exist
-    pub fn RemoveFd(&mut self, hostfd: i32) -> Option<FdInfo> {
-        let fdInfo = self.fdTbl.Remove(hostfd);
+    pub fn RemoveFd(&self, fd: i32) -> Option<FdInfo> {
+        let fdInfo = self.fdTbl.lock().Remove(fd);
         return fdInfo;
     }
 
-    pub fn GetFdByHost(&self, hostfd: i32) -> Option<i32> {
-        match self.fdTbl.Get(hostfd) {
-            None => {
-                //self.Print();
-                None
-            }
-            Some(fdInfo) => Some(fdInfo.lock().osfd),
+    pub fn GetFdByHost(&self, fd: i32) -> Option<i32> {
+        if self.fdTbl.lock().Contains(fd) {
+            return Some(fd)
         }
+
+        return None;
     }
 
-    pub fn GetByHost(&self, hostfd: i32) -> Option<FdInfo> {
-        match self.fdTbl.Get(hostfd) {
+    pub fn GetByHost(&self, fd: i32) -> Option<FdInfo> {
+        match self.fdTbl.lock().Get(fd) {
             None => {
                 None
             }
             Some(fdInfo) => Some(fdInfo.clone()),
+        }
+    }
+
+    pub fn Notify(&self, fd: i32, mask: EventMask) {
+        let fdInfo = self.GetByHost(fd);
+        match fdInfo {
+            None => (),
+            Some(fdInfo) => {
+                fdInfo.Notify(mask);
+            }
         }
     }
 }
@@ -170,5 +177,9 @@ impl FdTbl {
     pub fn Remove(&mut self, fd: i32) -> Option<FdInfo> {
         //self.gaps.Free(fd as u64, 1);
         self.map.remove(&fd)
+    }
+
+    pub fn Contains(&self, fd: i32) -> bool {
+        return self.map.contains_key(&fd)
     }
 }
