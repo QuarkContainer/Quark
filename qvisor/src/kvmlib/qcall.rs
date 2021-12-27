@@ -350,8 +350,8 @@ impl KVMVcpu {
             Msg::Statm(msg) => {
                 ret = super::VMSpace::Statm(msg.buf) as u64;
             },
-            Msg::NewFd(msg) => {
-                ret = super::VMSpace::NewFd(msg.fd) as u64;
+            Msg::NewSocket(msg) => {
+                ret = super::VMSpace::NewSocket(msg.fd) as u64;
             },
             Msg::HostEpollWaitProcess(_) => {
                 ret = super::VMSpace::HostEpollWaitProcess() as u64;

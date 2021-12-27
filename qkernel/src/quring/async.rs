@@ -675,7 +675,7 @@ impl AsyncAccept {
             return false;
         }
 
-        HostSpace::NewFd(result);
+        HostSpace::NewSocket(result);
         let sockBuf = Arc::new(SocketBuff::default());
         let (trigger, hasSpace) = self.acceptQueue.lock().EnqSocket(result, self.addr, self.len, sockBuf);
         if trigger {

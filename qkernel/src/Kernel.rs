@@ -274,8 +274,8 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64
     }
 
-    pub fn NewFd(fd: i32) -> i64 {
-        let mut msg = Msg::NewFd(NewFd {
+    pub fn NewSocket(fd: i32) -> i64 {
+        let mut msg = Msg::NewSocket(NewSocket {
             fd
         });
 

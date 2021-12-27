@@ -1,5 +1,7 @@
 use alloc::sync::Arc;
 use libc::*;
+use core::ops::Deref;
+use super::super::super::qlib::mutex::*;
 
 use super::super::super::IO_MGR;
 use super::super::super::URING_MGR;
@@ -11,13 +13,23 @@ use super::super::super::qlib::socket_buf::*;
 //use super::super::super::qlib::qmsg::qcall::*;
 use super::super::super::qlib::qmsg::input::*;
 
+#[derive(Clone)]
+pub struct RDMAServerSock(Arc<QMutex<RDMAServerSockIntern>>);
 
-pub struct RDMAServerSocket {
+impl Deref for RDMAServerSock {
+    type Target = Arc<QMutex<RDMAServerSockIntern>>;
+
+    fn deref(&self) -> &Arc<QMutex<RDMAServerSockIntern>> {
+        &self.0
+    }
+}
+
+pub struct RDMAServerSockIntern {
     pub fd: i32,
     pub acceptQueue: AcceptQueue,
 }
 
-impl RDMAServerSocket {
+impl RDMAServerSockIntern {
     pub fn TryAccept(&mut self) {
         if self.acceptQueue.lock().Err() != 0 {
             Self::FdNotify(self.fd, EVENT_ERR | EVENT_IN);
@@ -46,7 +58,7 @@ impl RDMAServerSocket {
 
             let fd = ret;
 
-            IO_MGR.lock().AddFd(fd, true);
+            IO_MGR.lock().AddSocket(fd);
             URING_MGR.lock().Addfd(fd).unwrap();
 
             let (trigger, tmp) = self.acceptQueue.lock().EnqSocket(fd, tcpAddr, len, Arc::new(SocketBuff::default()));

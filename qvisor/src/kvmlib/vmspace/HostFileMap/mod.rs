@@ -15,6 +15,7 @@
 pub mod fdinfo;
 pub mod file_range_mgr;
 pub mod rdma_socket;
+pub mod socket_info;
 
 use std::collections::BTreeMap;
 use libc::*;
@@ -87,8 +88,13 @@ impl IOMgr {
     }
 
     //return guest fd
-    pub fn AddFd(&mut self, osfd: i32, _epollable: bool) -> i32 {
-        let fdInfo = self.fdTbl.Add(osfd).expect("hostfdMap: guest fd alloc fail");
+    pub fn AddFile(&mut self, osfd: i32) -> i32 {
+        let fdInfo = self.fdTbl.AddFile(osfd).expect("hostfdMap: guest fd alloc fail");
+        return fdInfo.lock().osfd;
+    }
+
+    pub fn AddSocket(&mut self, osfd: i32) -> i32 {
+        let fdInfo = self.fdTbl.AddSocket(osfd).expect("hostfdMap: guest fd alloc fail");
         return fdInfo.lock().osfd;
     }
 
@@ -133,15 +139,22 @@ impl FdTbl {
             map: BTreeMap::new(),
         };
 
-        res.map.insert(0, FdInfo::New(0));
-        res.map.insert(1, FdInfo::New(1));
-        res.map.insert(2, FdInfo::New(2));
+        res.map.insert(0, FdInfo::NewFile(0));
+        res.map.insert(1, FdInfo::NewFile(1));
+        res.map.insert(2, FdInfo::NewFile(2));
 
         return res
     }
 
-    pub fn Add(&mut self, osfd: i32) -> Result<FdInfo> {
-        let fdInfo = FdInfo::New(osfd);
+    pub fn AddFile(&mut self, osfd: i32) -> Result<FdInfo> {
+        let fdInfo = FdInfo::NewFile(osfd);
+
+        self.map.insert(osfd, fdInfo.clone());
+        return Ok(fdInfo)
+    }
+
+    pub fn AddSocket(&mut self, osfd: i32) -> Result<FdInfo> {
+        let fdInfo = FdInfo::NewSocket(osfd);
 
         self.map.insert(osfd, fdInfo.clone());
         return Ok(fdInfo)

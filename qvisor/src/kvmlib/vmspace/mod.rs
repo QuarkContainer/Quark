@@ -222,14 +222,7 @@ impl VMSpace {
                 return osfd as i64
             }
 
-            let stat = Self::LibcFstat(osfd).expect("LoadProcessKernel: can't fstat for the stdio fds");
-
-            //Self::UnblockFd(osfd);
-
-            let st_mode = stat.st_mode & ModeType::S_IFMT as u32;
-            let epollable = st_mode == S_IFIFO || st_mode == S_IFSOCK || st_mode == S_IFCHR;
-
-            let hostfd = IO_MGR.lock().AddFd(osfd, epollable);
+            let hostfd = IO_MGR.lock().AddFile(osfd);
 
             process.Stdiofds[i] = hostfd;
         }
@@ -287,7 +280,7 @@ impl VMSpace {
             return Self::GetRet(ret as i64)
         }
 
-        let hostfd = IO_MGR.lock().AddFd(fd, true);
+        let hostfd = IO_MGR.lock().AddFile(fd);
         return hostfd as i64
     }
 
@@ -459,7 +452,7 @@ impl VMSpace {
         }
 
         tryOpenAt.writeable = writeable;
-        let hostfd = IO_MGR.lock().AddFd(fd, false);
+        let hostfd = IO_MGR.lock().AddFile(fd);
 
         if tryOpenAt.fstat.IsRegularFile() {
             URING_MGR.lock().Addfd(hostfd).unwrap();
@@ -500,7 +493,7 @@ impl VMSpace {
                 return Self::GetRet(ret as i64) as i32
             }
 
-            let hostfd = IO_MGR.lock().AddFd(osfd, false);
+            let hostfd = IO_MGR.lock().AddFile(osfd);
 
             URING_MGR.lock().Addfd(osfd).unwrap();
 
@@ -614,8 +607,8 @@ impl VMSpace {
         return fdInfo.IOAccept(addr, addrlen)
     }
 
-    pub fn NewFd(fd: i32) -> i64 {
-        IO_MGR.lock().AddFd(fd, true);
+    pub fn NewSocket(fd: i32) -> i64 {
+        IO_MGR.lock().AddSocket(fd);
         URING_MGR.lock().Addfd(fd).unwrap();
         return 0;
     }
@@ -653,7 +646,7 @@ impl VMSpace {
             None => return -SysErr::EBADF as i64,
         };
 
-        return fdInfo.Fcntl(cmd, arg)
+        return fdInfo.IOFcntl(cmd, arg)
     }
 
     pub fn IoCtl(fd: i32, cmd: u64, argp: u64) -> i64 {
@@ -662,7 +655,7 @@ impl VMSpace {
             None => return -SysErr::EBADF as i64,
         };
 
-        return fdInfo.IoCtl(cmd, argp)
+        return fdInfo.IOIoCtl(cmd, argp)
     }
 
     pub fn SysSync() -> i64 {
@@ -707,7 +700,7 @@ impl VMSpace {
             None => return -SysErr::EBADF as i64,
         };
 
-        return fdInfo.FSync(false)
+        return fdInfo.IOFSync(false)
     }
 
     pub fn FDataSync(fd: i32) -> i64 {
@@ -716,7 +709,7 @@ impl VMSpace {
             None => return -SysErr::EBADF as i64,
         };
 
-        return fdInfo.FSync(true)
+        return fdInfo.IOFSync(true)
     }
 
     pub fn Seek(fd: i32, offset: i64, whence: i32) -> i64 {
@@ -725,7 +718,7 @@ impl VMSpace {
             None => return -SysErr::EBADF as i64,
         };
 
-        return fdInfo.Seek(offset, whence)
+        return fdInfo.IOSeek(offset, whence)
     }
 
     pub fn ReadLinkAt(dirfd: i32, path: u64, buf: u64, bufsize: u64) -> i64 {
@@ -950,7 +943,7 @@ impl VMSpace {
             return Self::GetRet(fd as i64);
         }
 
-        let hostfd = IO_MGR.lock().AddFd(fd, true);
+        let hostfd = IO_MGR.lock().AddSocket(fd);
         URING_MGR.lock().Addfd(fd).unwrap();
         return Self::GetRet(hostfd as i64);
     }
@@ -961,7 +954,7 @@ impl VMSpace {
             None => return -SysErr::EBADF as i64,
         };
 
-        return fdInfo.GetSockName(addr, addrlen)
+        return fdInfo.IOGetSockName(addr, addrlen)
     }
 
     pub fn GetPeerName(sockfd: i32, addr: u64, addrlen: u64) -> i64 {
@@ -970,7 +963,7 @@ impl VMSpace {
             None => return -SysErr::EBADF as i64,
         };
 
-        return fdInfo.GetPeerName(addr, addrlen)
+        return fdInfo.IOGetPeerName(addr, addrlen)
     }
 
     pub fn GetSockOpt(sockfd: i32, level: i32, optname: i32, optval: u64, optlen: u64) -> i64 {
@@ -979,7 +972,7 @@ impl VMSpace {
             None => return -SysErr::EBADF as i64,
         };
 
-        return fdInfo.GetSockOpt(level, optname, optval, optlen)
+        return fdInfo.IOGetSockOpt(level, optname, optval, optlen)
     }
 
     pub fn SetSockOpt(sockfd: i32, level: i32, optname: i32, optval: u64, optlen: u32) -> i64 {
@@ -988,7 +981,7 @@ impl VMSpace {
             None => return -SysErr::EBADF as i64,
         };
 
-        return fdInfo.SetSockOpt(level, optname, optval, optlen)
+        return fdInfo.IOSetSockOpt(level, optname, optval, optlen)
     }
 
     pub fn Bind(sockfd: i32, sockaddr: u64, addrlen: u32, umask: u32) -> i64 {
@@ -997,7 +990,7 @@ impl VMSpace {
             None => return -SysErr::EBADF as i64,
         };
 
-        return fdInfo.Bind(sockaddr, addrlen, umask)
+        return fdInfo.IOBind(sockaddr, addrlen, umask)
     }
 
     pub fn Listen(sockfd: i32, backlog: i32, block: bool) -> i64 {
@@ -1006,7 +999,7 @@ impl VMSpace {
             None => return -SysErr::EBADF as i64,
         };
 
-        return fdInfo.Listen(backlog, block)
+        return fdInfo.IOListen(backlog, block)
     }
 
     pub fn Shutdown(sockfd: i32, how: i32) -> i64 {
@@ -1015,7 +1008,7 @@ impl VMSpace {
             None => return -SysErr::EBADF as i64,
         };
 
-        return fdInfo.Shutdown(how)
+        return fdInfo.IOShutdown(how)
     }
 
     ///////////end of network operation//////////////////////////////////////////////////////////////////
@@ -1255,7 +1248,7 @@ impl VMSpace {
             return Self::GetRet(ret as i64);
         }
 
-        let guestfd = IO_MGR.lock().AddFd(fd, false);
+        let guestfd = IO_MGR.lock().AddFile(fd);
 
         return guestfd as i64
     }
@@ -1399,7 +1392,7 @@ impl VMSpace {
 
             Self::UnblockFd(osfd);
 
-            let hostfd = IO_MGR.lock().AddFd(osfd, true);
+            let hostfd = IO_MGR.lock().AddFile(osfd);
             stdfds[i] = hostfd;
         }
 

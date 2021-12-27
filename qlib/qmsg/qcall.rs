@@ -98,7 +98,7 @@ pub enum Msg {
     NewTmpfsFile(NewTmpfsFile),
     IoUringEnter(IoUringEnter),
     Statm(Statm),
-    NewFd(NewFd),
+    NewSocket(NewSocket),
     HostEpollWaitProcess(HostEpollWaitProcess),
     VcpuWait(VcpuWait),
     EventfdWrite(EventfdWrite),
@@ -639,7 +639,7 @@ pub struct IOSendMsg {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct NewFd {
+pub struct NewSocket {
     pub fd: i32
 }
 
