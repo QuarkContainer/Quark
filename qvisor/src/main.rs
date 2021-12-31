@@ -23,6 +23,7 @@
 #![allow(non_camel_case_types)]
 #![feature(llvm_asm)]
 #![allow(deprecated)]
+#![feature(thread_id_value)]
 
 #[macro_use]
 extern crate serde_derive;

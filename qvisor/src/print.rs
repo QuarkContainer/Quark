@@ -97,7 +97,7 @@ impl Log {
 
     pub fn Print(&mut self, level: &str, str: &str) {
         //self.Write(&format!("{} [{}] {}\n", Self::Now(), level, str));
-        self.Write(&format!("[{}] {}\n", level, str));
+        self.Write(&format!("[{}] [{}] {}\n", level, std::thread::current().name().unwrap(), str));
     }
 
     pub fn RawPrint(&mut self, level: &str, str: &str) {

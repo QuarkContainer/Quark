@@ -38,7 +38,7 @@ use super::super::kernel::async_wait::*;
 use super::super::SHARESPACE;
 use super::super::kernel::waiter::qlock::*;
 use super::super::Kernel::HostSpace;
-use super::super::guestfdnotifier::GUEST_NOTIFIER;
+//use super::super::guestfdnotifier::GUEST_NOTIFIER;
 
 #[repr(align(128))]
 pub enum AsyncOps {
@@ -613,7 +613,7 @@ impl AsyncFiletWrite {
         // to debug
         if result == 0 {
             self.buf.SetWClosed();
-            if self.buf.ProduceReadBuf(0) {
+            if self.buf.HasWriteData() {
                 self.queue.Notify(EventMaskFromLinux(EVENT_OUT as u32));
             } else {
                 self.queue.Notify(EventMaskFromLinux(EVENT_HUP as u32));
@@ -675,7 +675,7 @@ impl AsyncAccept {
             return false;
         }
 
-        HostSpace::NewFd(result);
+        HostSpace::NewSocket(result);
         let sockBuf = Arc::new(SocketBuff::default());
         let (trigger, hasSpace) = self.acceptQueue.lock().EnqSocket(result, self.addr, self.len, sockBuf);
         if trigger {
@@ -729,7 +729,7 @@ impl AsyncFileRead {
         // EOF
         if result == 0 {
             self.buf.SetRClosed();
-            if self.buf.ProduceReadBuf(0) {
+            if self.buf.HasReadData() {
                 self.queue.Notify(EventMaskFromLinux(EVENT_IN as u32));
             } else {
                 self.queue.Notify(EventMaskFromLinux(EVENT_HUP as u32)) ;
@@ -1243,15 +1243,19 @@ impl PollHostEpollWait {
             error!("PollHostEpollWait::Process result {}", result);
         }
 
+        // we don't handle the host epollwait in kernel.
+        // todo: fix this when merge kernel IO CPU and host IO thread
         // check whether there is vcpu waiting in the host can process this
-        match SHARESPACE.TryLockEpollProcess() {
+        /*match SHARESPACE.TryLockEpollProcess() {
             None => (),
             Some(_) => {
                 GUEST_NOTIFIER.ProcessHostEpollWait();
             }
         }
 
-        return true;
+        return false;*/
+
+        return false
     }
 
     pub fn New(fd: i32) -> Self {

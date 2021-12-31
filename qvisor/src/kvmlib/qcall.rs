@@ -36,8 +36,8 @@ pub fn AQHostCall(msg: HostOutputMsg, _shareSpace: &ShareSpace) {
                 // ignore -9 EBADF, when change the Close to HCall, the waitfd is still async call,
                 // there is chance that the WaitFd fired before close
                 if ret != -9 {
-                    error!("WaitFD fail err is {}, fd is {}, errorno is {}",
-                        ret, msg.fd, ret);
+                    error!("WaitFD fail err is {}, fd is {:x?}, errorno is {}",
+                        ret, &msg, ret);
                 }
             }
         }
@@ -245,13 +245,22 @@ impl KVMVcpu {
             Msg::SetSockOpt(msg) => {
                 ret = super::VMSpace::SetSockOpt(msg.sockfd, msg.level, msg.optname, msg.optval, msg.optlen) as u64;
             },
-            Msg::Bind(msg) => {
+            Msg::IOBind(msg) => {
                 ret = super::VMSpace::Bind(msg.sockfd, msg.addr, msg.addrlen, msg.umask) as u64;
             },
-            Msg::Listen(msg) => {
+            Msg::RDMAListen(msg) => {
+                ret = super::VMSpace::RDMAListen(msg.sockfd, msg.backlog, msg.block, msg.acceptQueue.clone()) as u64;
+            },
+            Msg::RDMANotify(msg) => {
+                ret = super::VMSpace::RDMANotify(msg.sockfd, msg.typ) as u64;
+            },
+            Msg::PostRDMAConnect(msg) => {
+                ret = super::VMSpace::PostRDMAConnect(msg.fd, msg.socketBuf.clone()) as u64;
+            },
+            Msg::IOListen(msg) => {
                 ret = super::VMSpace::Listen(msg.sockfd, msg.backlog, msg.block) as u64;
             },
-            Msg::Shutdown(msg) => {
+            Msg::IOShutdown(msg) => {
                 ret = super::VMSpace::Shutdown(msg.sockfd, msg.how) as u64
             },
             Msg::SchedGetAffinity(msg) => {
@@ -350,8 +359,8 @@ impl KVMVcpu {
             Msg::Statm(msg) => {
                 ret = super::VMSpace::Statm(msg.buf) as u64;
             },
-            Msg::NewFd(msg) => {
-                ret = super::VMSpace::NewFd(msg.fd) as u64;
+            Msg::NewSocket(msg) => {
+                ret = super::VMSpace::NewSocket(msg.fd) as u64;
             },
             Msg::HostEpollWaitProcess(_) => {
                 ret = super::VMSpace::HostEpollWaitProcess() as u64;

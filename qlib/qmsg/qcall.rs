@@ -65,9 +65,13 @@ pub enum Msg {
     GetSockName(GetSockName),
     GetSockOpt(GetSockOpt),
     SetSockOpt(SetSockOpt),
-    Bind(Bind),
-    Listen(Listen),
-    Shutdown(Shutdown),
+    IOBind(IOBind),
+    IOListen(IOListen),
+    IOShutdown(IOShutdown),
+
+    RDMAListen(RDMAListen),
+    RDMANotify(RDMANotify),
+    PostRDMAConnect(PostRDMAConnect),
 
     SchedGetAffinity(SchedGetAffinity),
     GetRandom(GetRandom),
@@ -98,7 +102,7 @@ pub enum Msg {
     NewTmpfsFile(NewTmpfsFile),
     IoUringEnter(IoUringEnter),
     Statm(Statm),
-    NewFd(NewFd),
+    NewSocket(NewSocket),
     HostEpollWaitProcess(HostEpollWaitProcess),
     VcpuWait(VcpuWait),
     EventfdWrite(EventfdWrite),
@@ -430,7 +434,7 @@ pub struct Connect {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct Bind {
+pub struct IOBind {
     pub sockfd: i32,
     pub addr: u64,
     pub addrlen: u32,
@@ -438,14 +442,49 @@ pub struct Bind {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct Listen {
+pub struct RDMABind {
+    pub sockfd: i32,
+    pub addr: u64,
+    pub addrlen: u32,
+    pub umask: u32,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct IOListen {
     pub sockfd: i32,
     pub backlog: i32,
     pub block: bool,
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct Shutdown {
+pub struct RDMAListen {
+    pub sockfd: i32,
+    pub backlog: i32,
+    pub block: bool,
+    pub acceptQueue: AcceptQueue,
+}
+
+#[derive(Clone, Debug, Copy)]
+pub enum RDMANotifyType {
+    Accept,
+    Read,
+    Write,
+}
+
+impl Default for RDMANotifyType {
+    fn default() -> Self {
+        return Self::Accept
+    }
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct RDMANotify {
+    pub sockfd: i32,
+    pub typ: RDMANotifyType,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct IOShutdown {
     pub sockfd: i32,
     pub how: i32,
 }
@@ -614,6 +653,12 @@ pub struct RDMAAccept {
 }
 
 #[derive(Clone, Default, Debug)]
+pub struct PostRDMAConnect {
+    pub fd: i32,
+    pub socketBuf: Arc<SocketBuff>,
+}
+
+#[derive(Clone, Default, Debug)]
 pub struct IOConnect {
     pub fd: i32,
     pub addr: u64,
@@ -639,7 +684,7 @@ pub struct IOSendMsg {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct NewFd {
+pub struct NewSocket {
     pub fd: i32
 }
 

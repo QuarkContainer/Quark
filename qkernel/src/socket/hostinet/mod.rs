@@ -14,6 +14,7 @@
 
 pub mod socket;
 pub mod socket_buf;
+pub mod rdma_socket;
 
 pub fn Init() {
     self::socket::Init();

@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use libc::*;
-
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::control_msg::*;
@@ -66,14 +64,9 @@ pub fn ExecProcessHandler(execArgs: &mut ExecArgs, fds: &[i32]) -> Result<Contro
 
     for i in 0..execArgs.Fds.len() {
         let osfd = execArgs.Fds[i];
-        let stat = VMSpace::LibcFstat(osfd)?;
-
         VMSpace::UnblockFd(osfd);
 
-        let st_mode = stat.st_mode & ModeType::S_IFMT as u32;
-        let epollable = st_mode == S_IFIFO || st_mode == S_IFSOCK || st_mode == S_IFCHR;
-
-        let hostfd = IO_MGR.lock().AddFd(osfd, epollable);
+        let hostfd = IO_MGR.AddFile(osfd);
 
         process.Stdiofds[i] = hostfd;
     }

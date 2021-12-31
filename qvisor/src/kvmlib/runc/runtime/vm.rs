@@ -229,10 +229,10 @@ impl VirtualMachine {
 
         let mut threads = Vec::new();
 
-        threads.push(thread::spawn(move || {
+        threads.push(thread::Builder::new().name("0".to_string()).spawn(move || {
             cpu.run().expect("vcpu run fail");
             info!("cpu#{} finish", 0);
-        }));
+        }).unwrap());
 
         syncmgr::SyncMgr::WaitShareSpaceReady();
         info!("shareSpace ready...");
@@ -240,11 +240,11 @@ impl VirtualMachine {
         for i in 1..self.vcpus.len() {
             let cpu = self.vcpus[i].clone();
 
-            threads.push(thread::spawn(move || {
+            threads.push(thread::Builder::new().name(format!("{}", i)).spawn(move || {
                 info!("cpu#{} start", i);
                 cpu.run().expect("vcpu run fail");
                 info!("cpu#{} finish", i);
-            }));
+            }).unwrap());
         }
 
         for t in threads {

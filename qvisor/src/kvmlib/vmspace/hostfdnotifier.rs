@@ -16,8 +16,9 @@ use libc::*;
 
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
-use super::super::qlib::qmsg::input::*;
-use super::super::SHARE_SPACE;
+//use super::super::qlib::qmsg::input::*;
+//use super::super::SHARE_SPACE;
+use super::super::IO_MGR;
 
 #[repr(C)]
 #[repr(packed)]
@@ -50,6 +51,18 @@ impl HostFdNotifier {
 
     pub fn Epollfd(&self) -> i32 {
         return self.epollfd;
+    }
+
+    pub fn EpollCtlAdd(&self, fd: i32, mask: EventMask) -> Result<()> {
+        return self.WaitFd(fd, LibcConst::EPOLL_CTL_ADD as _, mask);
+    }
+
+    pub fn EpollCtlMod(&self, fd: i32, mask: EventMask) -> Result<()> {
+        return self.WaitFd(fd, LibcConst::EPOLL_CTL_MOD as _, mask);
+    }
+
+    pub fn EpollCtlDel(&self, fd: i32) -> Result<()> {
+        return self.WaitFd(fd, LibcConst::EPOLL_CTL_DEL as _, 0);
     }
 
     pub fn WaitFd(&self, fd: i32, op: u32, mask: EventMask) -> Result<()> {
@@ -99,9 +112,6 @@ impl HostFdNotifier {
     }
 
     pub fn FdNotify(fd: i32, mask: EventMask) {
-        SHARE_SPACE.AQHostInputCall(&HostInputMsg::FdNotify(FdNotify{
-            fd: fd,
-            mask: mask,
-        }));
+        IO_MGR.Notify(fd, mask);
     }
 }
