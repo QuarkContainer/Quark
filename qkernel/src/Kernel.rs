@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use ::qlib::mutex::*;
+use alloc::sync::Arc;
 
 use qlib::*;
 use super::qlib::common::*;
@@ -190,6 +191,15 @@ impl HostSpace {
             fd,
             addr,
             addrlen,
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
+    pub fn PostRDMAConnect(fd: i32, socketBuf: Arc<SocketBuff>) -> i64 {
+        let mut msg = Msg::PostRDMAConnect(PostRDMAConnect {
+            fd,
+            socketBuf
         });
 
         return HostSpace::Call(&mut msg, false) as i64;
@@ -562,6 +572,15 @@ impl HostSpace {
             backlog,
             block,
             acceptQueue,
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
+    pub fn RDMANotify(sockfd: i32, typ: RDMANotifyType) -> i64 {
+        let mut msg = Msg::RDMANotify(RDMANotify {
+            sockfd,
+            typ
         });
 
         return HostSpace::Call(&mut msg, false) as i64;

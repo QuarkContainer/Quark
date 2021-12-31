@@ -178,6 +178,24 @@ impl Notifier {
     }
 
     pub fn UpdateFDSync(&self, fd: i32) -> Result<()> {
+        let op = LibcConst::EPOLL_CTL_ADD as u32/*dummy value*/;
+        let mask = {
+            let mut n = self.lock();
+            let fi = match n.fdMap.get_mut(&fd) {
+                None => {
+                    return Ok(())
+                }
+                Some(fi) => fi,
+            };
+
+            let mask = fi.queue.Events();
+            mask
+        };
+
+        return Self::waitfd(fd, op, mask);
+    }
+
+    pub fn UpdateFDSync1(&self, fd: i32) -> Result<()> {
         let op;
         let mask = {
             let mut n = self.lock();
@@ -237,12 +255,18 @@ impl Notifier {
     }
 
     pub fn Notify(&self, fd: i32, mask: EventMask) {
-        let n = self.lock();
-        match n.fdMap.get(&fd) {
-            None => (),
-            Some(fi) => {
-                fi.queue.Notify(EventMaskFromLinux(mask as u32));
+        let queue = {
+            let n = self.lock();
+            match n.fdMap.get(&fd) {
+                None => {
+                    return
+                },
+                Some(fi) => {
+                    fi.queue.clone()
+                }
             }
-        }
+        };
+
+        queue.Notify(EventMaskFromLinux(mask as u32));
     }
 }

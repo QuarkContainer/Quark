@@ -36,8 +36,8 @@ pub fn AQHostCall(msg: HostOutputMsg, _shareSpace: &ShareSpace) {
                 // ignore -9 EBADF, when change the Close to HCall, the waitfd is still async call,
                 // there is chance that the WaitFd fired before close
                 if ret != -9 {
-                    error!("WaitFD fail err is {}, fd is {}, errorno is {}",
-                        ret, msg.fd, ret);
+                    error!("WaitFD fail err is {}, fd is {:x?}, errorno is {}",
+                        ret, &msg, ret);
                 }
             }
         }
@@ -250,6 +250,12 @@ impl KVMVcpu {
             },
             Msg::RDMAListen(msg) => {
                 ret = super::VMSpace::RDMAListen(msg.sockfd, msg.backlog, msg.block, msg.acceptQueue.clone()) as u64;
+            },
+            Msg::RDMANotify(msg) => {
+                ret = super::VMSpace::RDMANotify(msg.sockfd, msg.typ) as u64;
+            },
+            Msg::PostRDMAConnect(msg) => {
+                ret = super::VMSpace::PostRDMAConnect(msg.fd, msg.socketBuf.clone()) as u64;
             },
             Msg::IOListen(msg) => {
                 ret = super::VMSpace::Listen(msg.sockfd, msg.backlog, msg.block) as u64;

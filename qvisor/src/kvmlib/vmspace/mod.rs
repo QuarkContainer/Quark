@@ -1013,6 +1013,24 @@ impl VMSpace {
         return fdInfo.RDMAListen(backlog, block, acceptQueue)
     }
 
+    pub fn RDMANotify(sockfd: i32, typ: RDMANotifyType) -> i64 {
+        let fdInfo = match Self::GetFdInfo(sockfd) {
+            Some(fdInfo) => fdInfo,
+            None => return -SysErr::EBADF as i64,
+        };
+
+        return fdInfo.RDMANotify(typ)
+    }
+
+    pub fn PostRDMAConnect(sockfd: i32, socketBuf: Arc<SocketBuff>) -> i64 {
+        let fdInfo = match Self::GetFdInfo(sockfd) {
+            Some(fdInfo) => fdInfo,
+            None => return -SysErr::EBADF as i64,
+        };
+
+        return fdInfo.PostRDMAConnect(socketBuf);
+    }
+
     pub fn Shutdown(sockfd: i32, how: i32) -> i64 {
         let fdInfo = match Self::GetFdInfo(sockfd) {
             Some(fdInfo) => fdInfo,
@@ -1182,19 +1200,29 @@ impl VMSpace {
         return Self::GetRet(ret as i64)
     }
 
-    pub fn WaitFD(fd: i32, op: u32, mask: EventMask) -> i64 {
-        let osfd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
+    pub fn WaitFD(fd: i32, _op: u32, mask: EventMask) -> i64 {
+        let fdinfo = match Self::GetFdInfo(fd) {
+            Some(fdinfo) => fdinfo,
             None => return -SysErr::EBADF as i64,
         };
 
-        match FD_NOTIFIER.WaitFd(osfd, op, mask) {
+        let ret = fdinfo.lock().WaitFd(mask);
+
+        match ret {
             Ok(()) => return 0,
             Err(Error::SysError(syserror)) => return -syserror as i64,
             Err(e) => {
                 panic!("WaitFD get error {:?}", e);
             }
         }
+
+        /*match FD_NOTIFIER.WaitFd(osfd, op, mask) {
+            Ok(()) => return 0,
+            Err(Error::SysError(syserror)) => return -syserror as i64,
+            Err(e) => {
+                panic!("WaitFD get error {:?}", e);
+            }
+        }*/
     }
 
     pub fn NonBlockingPoll(fd: i32, mask: EventMask) -> i64 {

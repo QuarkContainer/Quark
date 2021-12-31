@@ -21,7 +21,9 @@ use super::socket_info::*;
 use super::rdma_socket::*;
 use super::super::*;
 use super::super::qlib::common::*;
+//use super::super::qlib::linux_def::*;
 use super::super::super::util::*;
+use super::super::FD_NOTIFIER;
 
 #[derive(Clone, Debug)]
 pub struct FdInfo (pub Arc<Mutex<FdInfoIntern>>);
@@ -289,7 +291,7 @@ impl FdInfo {
     pub fn Notify(&self, mask: EventMask) {
         let fd = self.Fd();
         let sockInfo = self.SockInfo();
-        sockInfo.Trigger(fd, mask);
+        sockInfo.Notify(fd, mask);
     }
 
     pub fn Fd(&self) -> i32 {
@@ -400,16 +402,68 @@ impl FdInfo {
         let sockfd = self.lock().osfd;
         let ret = Self::Listen(sockfd, backlog, block);
         if ret < 0 {
-            return ret;
+            return errno::errno().0 as _;
         }
 
         match self.SockInfo() {
             SockInfo::Socket => {
                 let rdmaSocket = RDMAServerSock::New(sockfd, acceptQueue);
                 *self.lock().sockInfo.lock() = SockInfo::RDMAServerSocket(rdmaSocket);
+                self.lock().AddWait(EVENT_READ | EVENT_WRITE).expect("RDMAListen EpollCtlAdd fail");
+
+                // the accept4 with SOCK_NONBLOCK doesn't work, have to fcntl it to unblock
+                super::super::VMSpace::UnblockFd(sockfd);
             }
             _ => {
                 error!("RDMAListen listen fail with wrong state {:?}", self.SockInfo());
+                return -SysErr::EINVAL as i64
+            }
+        }
+
+        return 0;
+    }
+
+    pub fn RDMANotify(&self, typ: RDMANotifyType) -> i64 {
+        match self.SockInfo() {
+            SockInfo::RDMAServerSocket(RDMAServerSock) => {
+                RDMAServerSock.Accept();
+            }
+            SockInfo::RDMADataSocket(sock) => {
+                match typ {
+                    RDMANotifyType::Read => {
+                        sock.Notify(EVENT_IN);
+                        //self.lock().AddWait(EVENT_READ).unwrap();
+                    }
+                    RDMANotifyType::Write => {
+                        sock.Notify(EVENT_OUT);
+                        //self.lock().AddWait(EVENT_WRITE).unwrap();
+                    }
+                    _ => {
+                        panic!("RDMANotify wrong state {:?}", typ);
+                    }
+                }
+            }
+            _ => {
+                error!("RDMAListen RDMANotify fail with wrong state {:?}", self.SockInfo());
+            }
+        }
+
+        return 0;
+    }
+
+    pub fn PostRDMAConnect(&self, socketBuf: Arc<SocketBuff>) -> i64 {
+        let sockfd = self.Fd();
+        match self.SockInfo() {
+            SockInfo::Socket => {
+                let rdmaSocket = RDMADataSock::New(sockfd, socketBuf);
+                *self.lock().sockInfo.lock() = SockInfo::RDMADataSocket(rdmaSocket);
+                self.lock().AddWait(EVENT_READ | EVENT_WRITE).expect("RDMAListen EpollCtlAdd fail");
+
+                // the accept4 with SOCK_NONBLOCK doesn't work, have to fcntl it to unblock
+                super::super::VMSpace::UnblockFd(sockfd);
+            }
+            _ => {
+                error!("PostRDMAConnect fail with wrong state {:?}", self.SockInfo());
             }
         }
 
@@ -427,6 +481,7 @@ impl FdInfo {
 #[derive(Debug)]
 pub struct FdInfoIntern {
     pub osfd: i32,
+    pub mask: EventMask,
 
     pub flags: Flags,
     pub sockInfo: Mutex<SockInfo>,
@@ -448,6 +503,7 @@ impl FdInfoIntern {
 
         let res = Self {
             osfd: osfd,
+            mask: 0,
             flags: Flags(flags),
             sockInfo: Mutex::new(SockInfo::File)
         };
@@ -463,6 +519,7 @@ impl FdInfoIntern {
 
         let res = Self {
             osfd: osfd,
+            mask: 0,
             flags: Flags(flags),
             sockInfo: Mutex::new(SockInfo::Socket)
         };
@@ -505,6 +562,34 @@ impl FdInfoIntern {
 
     pub fn GetFlags(&mut self) -> i32 {
         return self.Flags().0
+    }
+
+    pub fn RemoveWait(&mut self, mask: EventMask) -> Result<()> {
+        let mask = self.mask & !mask;
+        return self.WaitFd(mask)
+    }
+
+    pub fn AddWait(&mut self, mask: EventMask) -> Result<()> {
+        let mask = self.mask | mask;
+        return self.WaitFd(mask)
+    }
+
+    pub fn WaitFd(&mut self, mask: EventMask) -> Result<()> {
+        if mask == self.mask {
+            return Ok(())
+        }
+
+        let op: u64;
+        if self.mask == 0 {
+            op = LibcConst::EPOLL_CTL_ADD;
+        } else if mask == 0 {
+            op = LibcConst::EPOLL_CTL_DEL;
+        } else {
+            op = LibcConst::EPOLL_CTL_MOD;
+        }
+
+        self.mask = mask;
+        return FD_NOTIFIER.WaitFd(self.osfd, op as u32, mask);
     }
 }
 

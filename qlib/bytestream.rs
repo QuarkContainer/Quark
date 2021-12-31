@@ -302,6 +302,7 @@ impl ByteStream {
 
     //consume count data
     pub fn Consume(&mut self, count: usize) -> bool {
+        //assert!(self.available >= count, "bytestream Consume available {} count {}", self.available, count);
         let trigger = self.available == self.buf.len();
         self.available -= count;
 

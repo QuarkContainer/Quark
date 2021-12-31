@@ -70,6 +70,8 @@ pub enum Msg {
     IOShutdown(IOShutdown),
 
     RDMAListen(RDMAListen),
+    RDMANotify(RDMANotify),
+    PostRDMAConnect(PostRDMAConnect),
 
     SchedGetAffinity(SchedGetAffinity),
     GetRandom(GetRandom),
@@ -462,6 +464,25 @@ pub struct RDMAListen {
     pub acceptQueue: AcceptQueue,
 }
 
+#[derive(Clone, Debug, Copy)]
+pub enum RDMANotifyType {
+    Accept,
+    Read,
+    Write,
+}
+
+impl Default for RDMANotifyType {
+    fn default() -> Self {
+        return Self::Accept
+    }
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct RDMANotify {
+    pub sockfd: i32,
+    pub typ: RDMANotifyType,
+}
+
 #[derive(Clone, Default, Debug)]
 pub struct IOShutdown {
     pub sockfd: i32,
@@ -629,6 +650,12 @@ impl RDMAAcceptStruct {
 pub struct RDMAAccept {
     pub fd: i32,
     pub acceptAddr: u64, // &'static mut RDMAAccept,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct PostRDMAConnect {
+    pub fd: i32,
+    pub socketBuf: Arc<SocketBuff>,
 }
 
 #[derive(Clone, Default, Debug)]

@@ -129,6 +129,26 @@ impl IOMgr {
             }
         }
     }
+
+    pub fn AddWait(&self, fd: i32, mask: EventMask) {
+        let fdInfo = self.GetByHost(fd);
+        match fdInfo {
+            None => (),
+            Some(fdInfo) => {
+                fdInfo.lock().AddWait(mask).unwrap();
+            }
+        }
+    }
+
+    pub fn RemoveWait(&self, fd: i32, mask: EventMask) {
+        let fdInfo = self.GetByHost(fd);
+        match fdInfo {
+            None => (),
+            Some(fdInfo) => {
+                fdInfo.lock().RemoveWait(mask).unwrap();
+            }
+        }
+    }
 }
 
 //guest fdset for one process

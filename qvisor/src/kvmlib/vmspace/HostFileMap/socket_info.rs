@@ -9,7 +9,7 @@ pub enum SockInfo {
     File, // it is not socket
     Socket, // normal socket
     RDMAServerSocket(RDMAServerSock), //
-    RDMADataSocket, //
+    RDMADataSocket(RDMADataSock), //
 }
 
 impl fmt::Debug for SockInfo {
@@ -18,13 +18,13 @@ impl fmt::Debug for SockInfo {
             Self::File => write!(f, "SockInfo::File"),
             Self::Socket => write!(f, "SockInfo::Socket"),
             Self::RDMAServerSocket(_) => write!(f, "SockInfo::RDMAServerSocket"),
-            Self::RDMADataSocket => write!(f, "SockInfo::RDMADataSocket"),
+            Self::RDMADataSocket(_) => write!(f, "SockInfo::RDMADataSocket"),
         }
     }
 }
 
 impl SockInfo {
-    pub fn Trigger(&self, fd: i32, eventmask: EventMask) {
+    pub fn Notify(&self, fd: i32, eventmask: EventMask) {
         match self {
             Self::File => {
                 FdNotify(fd, eventmask)
@@ -35,8 +35,8 @@ impl SockInfo {
             Self::RDMAServerSocket(ref sock) => {
                 sock.Notify(eventmask)
             }
-            Self::RDMADataSocket => {
-                FdNotify(fd, eventmask)
+            Self::RDMADataSocket(ref sock) => {
+                sock.Notify(eventmask)
             }
         }
     }

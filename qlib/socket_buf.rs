@@ -68,8 +68,12 @@ impl SocketBuff {
         self.pendingWShutdown.store(true, Ordering::SeqCst)
     }
 
-    pub fn HasWritingData(&self) -> bool {
+    pub fn HasWriteData(&self) -> bool {
         return self.writeBuf.lock().AvailableDataSize() > 0;
+    }
+
+    pub fn HasReadData(&self) -> bool {
+        return self.readBuf.lock().AvailableDataSize() > 0;
     }
 
     pub fn WriteBufAvailableDataSize(&self) -> usize {

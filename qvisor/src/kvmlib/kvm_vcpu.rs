@@ -773,7 +773,7 @@ impl CPULocal {
             0
         };
 
-        loop {
+        while sharespace.scheduler.GlobalReadyTaskCnt() == 0 {
             self.ToWaiting(sharespace);
             if sharespace.config.read().AsyncPrint() {
                 sharespace.LogFlush(false);
@@ -814,12 +814,14 @@ impl CPULocal {
             }
 
             if hasMsg {
+                self.ToRunning(sharespace);
                 match sharespace.TryLockEpollProcess() {
                     None => {},
-                    Some(_) => {
+                    Some(_lock) => {
                         FD_NOTIFIER.HostEpollWait();
                     }
                 }
+                self.ToSearch(sharespace);
             }
 
             if wakeVcpu {
@@ -839,6 +841,7 @@ impl CPULocal {
             }
         }
 
+        return Ok(0)
     }
 
     pub fn Wakeup(&self) {
