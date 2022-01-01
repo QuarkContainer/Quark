@@ -820,12 +820,26 @@ impl SockOperations for SocketOperations {
             (self.family == AFType::AF_INET || self.family == AFType::AF_INET6) &&
             self.stype == SockType::SOCK_STREAM;
 
-        let acceptQueue = AcceptQueue::default();
         let len = if backlog <= 0 {
             5
         } else {
             backlog
         };
+
+        let socketBuf = self.socketBuf.lock().clone();
+        let acceptQueue = match socketBuf {
+            SocketBufType::TCPUringlServer(q) => {
+                q.lock().SetQueueLen(len as usize);
+                return Ok(0)
+            },
+            SocketBufType::TCPRDMAServer(q) => {
+                q.lock().SetQueueLen(len as usize);
+                return Ok(0)
+            },
+            SocketBufType::TCPInit => AcceptQueue::default(),
+            _=> AcceptQueue::default(), // panic?
+        };
+
         acceptQueue.lock().SetQueueLen(len as usize);
 
         let res = if enableRDMA {
