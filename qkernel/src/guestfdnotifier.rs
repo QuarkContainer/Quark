@@ -141,6 +141,7 @@ impl Notifier {
         let epollfd;
         let mask = {
             let mut n = self.lock();
+            epollfd = n.epollfd;
             let fi = match n.fdMap.get_mut(&fd) {
                 None => {
                     return Ok(())
@@ -168,7 +169,8 @@ impl Notifier {
                     op = LibcConst::EPOLL_CTL_MOD;
                 }
             }
-            epollfd = n.epollfd;
+
+            fi.mask = mask;
 
             mask
         };
