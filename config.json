@@ -15,6 +15,6 @@
   "AsyncAccept"   : true,
   "DedicateUring" : 1,
   "UringSize"     : 64,
-  "UringEpollCtl" : false,
+  "UringEpollCtl" : true,
   "EnableRDMA"    : false
 }
