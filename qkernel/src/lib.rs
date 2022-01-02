@@ -420,6 +420,7 @@ pub extern fn rust_main(heapStart: u64, shareSpaceAddr: u64, id: u64, vdsoParamA
         ALLOCATOR.Init(heapStart);
         SHARESPACE.SetValue(shareSpaceAddr);
         SingletonInit();
+        InitTimeKeeper(vdsoParamAddr);
 
 
         //Kernel::HostSpace::KernelMsg(0, 0, 1);
@@ -434,7 +435,6 @@ pub extern fn rust_main(heapStart: u64, shareSpaceAddr: u64, id: u64, vdsoParamA
 
         self::guestfdnotifier::GUEST_NOTIFIER.InitPollHostEpoll(SHARESPACE.HostHostEpollfd());
         SetVCPCount(vcpuCnt as usize);
-        InitTimeKeeper(vdsoParamAddr);
         VDSO.Initialization(vdsoParamAddr);
 
         // release other vcpus
