@@ -56,11 +56,20 @@ impl AsMut<rdmaffi::ibv_gid> for Gid {
     }
 }
 
-
 pub struct IBContext (pub * mut rdmaffi::ibv_context);
 
 impl Drop for IBContext {
-    fn drop(&mut self) {}
+    fn drop(&mut self) {
+        if self.0 as u64 != 0 {
+            // to close ibv_context
+        }
+    }
+}
+
+impl Default for IBContext {
+    fn default() -> Self {
+        return Self (0 as _)
+    }
 }
 
 impl IBContext {
@@ -206,10 +215,48 @@ impl Deref for PortAttr {
     }
 }
 
+impl Default for PortAttr {
+    fn default() -> Self {
+        let attr = rdmaffi::ibv_port_attr {
+            state: rdmaffi::ibv_port_state::IBV_PORT_NOP,
+            max_mtu: rdmaffi::ibv_mtu::IBV_MTU_1024,
+            active_mtu: rdmaffi::ibv_mtu::IBV_MTU_1024,
+            gid_tbl_len: 0,
+            port_cap_flags: 0,
+            max_msg_sz: 0,
+            bad_pkey_cntr: 0,
+            qkey_viol_cntr: 0,
+            pkey_tbl_len: 0,
+            lid: 0,
+            sm_lid: 0,
+            lmc: 0,
+            max_vl_num: 0,
+            sm_sl: 0,
+            subnet_timeout: 0,
+            init_type_reply: 0,
+            active_width: 0,
+            active_speed: 0,
+            phys_state: 0,
+            link_layer: 0,
+            flags: 0,
+            port_cap_flags2: 0,
+        };
+
+        return Self(attr);
+    }
+}
+
+
 pub struct ProtectionDomain(pub * mut rdmaffi::ibv_pd);
 
 impl Drop for ProtectionDomain {
     fn drop(&mut self) {}
+}
+
+impl Default for ProtectionDomain {
+    fn default() -> Self {
+        return Self (0 as _)
+    }
 }
 
 pub struct CompleteChannel(pub * mut rdmaffi::ibv_comp_channel);
@@ -217,13 +264,24 @@ impl Drop for CompleteChannel {
     fn drop(&mut self) {}
 }
 
+impl Default for CompleteChannel {
+    fn default() -> Self {
+        return Self (0 as _)
+    }
+}
+
 pub struct CompleteQueue(pub * mut rdmaffi::ibv_cq);
 impl Drop for CompleteQueue {
     fn drop(&mut self) {}
 }
 
+impl Default for CompleteQueue {
+    fn default() -> Self {
+        return Self (0 as _)
+    }
+}
 
-
+#[derive(Default)]
 pub struct RDMAContextIntern {
     //device_attr: rdmaffi::ibv_device_attr,
     /* Device attributes */
@@ -257,7 +315,11 @@ impl RDMAContextIntern {
     }
 }
 
+#[derive(Default)]
 pub struct RDMAContext(Mutex<RDMAContextIntern>);
+
+unsafe impl Send for RDMAContext {}
+unsafe impl Sync for RDMAContext {}
 
 impl Deref for RDMAContext {
     type Target = Mutex<RDMAContextIntern>;
@@ -273,6 +335,20 @@ pub const MAX_SEND_SGE: u32 = 1;
 pub const MAX_RECV_SGE: u32 = 1;
 
 impl RDMAContext {
+    pub fn Init(&self, deviceName: &str, ibPort: u8) {
+        *self.0.lock() = RDMAContextIntern::New(deviceName, ibPort);
+    }
+
+    pub fn Lid(&self) -> u16 {
+        let context = self.lock();
+        return context.portAttr.0.lid;
+    }
+
+    pub fn Gid(&self) -> Gid {
+        let context = self.lock();
+        return context.gid;
+    }
+
     pub fn CreateQueuePair(&self) -> Result<QueuePair> {
         let context = self.lock();
         //create queue pair
@@ -298,7 +374,7 @@ impl RDMAContext {
             return Err(Error::SysError(errno::errno().0));
         }
 
-        return Ok(QueuePair(qp))
+        return Ok(QueuePair(Mutex::new(qp)))
     }
 
     pub fn CreateMemoryRegion(&self, addr: u64, size: usize) -> Result<MemoryRegion> {
@@ -325,13 +401,26 @@ impl RDMAContext {
     }
 
 }
-pub struct QueuePair(pub *mut rdmaffi::ibv_qp);
+pub struct QueuePair(pub Mutex<*mut rdmaffi::ibv_qp>);
+
+unsafe impl Send for QueuePair {}
+unsafe impl Sync for QueuePair {}
 
 impl Drop for QueuePair {
     fn drop(&mut self) {}
 }
 
 impl QueuePair {
+    pub fn Data(&self) -> *mut rdmaffi::ibv_qp {
+        return *self.0.lock()
+    }
+
+    pub fn qpNum(&self) -> u32 {
+        return unsafe {
+            (*self.Data()).qp_num
+        };
+    }
+
     pub fn ToInit(&self, context: &RDMAContext) -> Result<()> {
         let mut attr = rdmaffi::ibv_qp_attr {
             qp_state: rdmaffi::ibv_qp_state::IBV_QPS_INIT,
@@ -407,7 +496,7 @@ impl QueuePair {
             | rdmaffi::ibv_qp_attr_mask::IBV_QP_PKEY_INDEX
             | rdmaffi::ibv_qp_attr_mask::IBV_QP_PORT
             | rdmaffi::ibv_qp_attr_mask::IBV_QP_ACCESS_FLAGS;
-        let rc = unsafe { rdmaffi::ibv_modify_qp(self.0, &mut attr, flags.0 as i32) };
+        let rc = unsafe { rdmaffi::ibv_modify_qp(self.Data(), &mut attr, flags.0 as i32) };
         if rc != 0 {
             return Err(Error::SysError(errno::errno().0));
         }
@@ -512,7 +601,7 @@ impl QueuePair {
             | rdmaffi::ibv_qp_attr_mask::IBV_QP_RQ_PSN
             | rdmaffi::ibv_qp_attr_mask::IBV_QP_MAX_DEST_RD_ATOMIC
             | rdmaffi::ibv_qp_attr_mask::IBV_QP_MIN_RNR_TIMER;
-        let rc = unsafe { rdmaffi::ibv_modify_qp(self.0, &mut attr, flags.0 as i32) };
+        let rc = unsafe { rdmaffi::ibv_modify_qp(self.Data(), &mut attr, flags.0 as i32) };
         if rc != 0 {
             return Err(Error::SysError(errno::errno().0));
         }
@@ -596,7 +685,7 @@ impl QueuePair {
             | rdmaffi::ibv_qp_attr_mask::IBV_QP_RNR_RETRY
             | rdmaffi::ibv_qp_attr_mask::IBV_QP_SQ_PSN
             | rdmaffi::ibv_qp_attr_mask::IBV_QP_MAX_QP_RD_ATOMIC;
-        let rc = unsafe { rdmaffi::ibv_modify_qp(self.0, &mut attr, flags.0 as i32) };
+        let rc = unsafe { rdmaffi::ibv_modify_qp(self.Data(), &mut attr, flags.0 as i32) };
         if rc != 0 {
             return Err(Error::SysError(errno::errno().0));
         }
@@ -610,12 +699,19 @@ impl Drop for MemoryRegion {
     fn drop(&mut self) {}
 }
 
+impl MemoryRegion {
+    pub fn LKey(&self) -> u32 {
+        return unsafe {
+            (*self.0).lkey
+        };
+    }
 
-#[derive(Clone)]
-pub struct CMConData {
-    addr: u64,     /* Buffer address */
-    rkey: u32,     /* Remote key */
-    qp_num: u32,   /* QP number */
-    lid: u16,      /* LID of the IB port */
-    gid: [u8; 16], /* gid */
+    pub fn RKey(&self) -> u32 {
+        return unsafe {
+            (*self.0).rkey
+        };
+    }
 }
+
+unsafe impl Send for MemoryRegion {}
+unsafe impl Sync for MemoryRegion {}

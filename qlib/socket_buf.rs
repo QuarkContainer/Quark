@@ -60,6 +60,10 @@ impl SocketBuff {
         }
     }
 
+    pub fn ReadBuf(&self) -> (u64, usize) {
+        return self.readBuf.lock().GetRawBuf();
+    }
+
     pub fn PendingWriteShutdown(&self) -> bool {
         self.pendingWShutdown.load(Ordering::SeqCst)
     }
