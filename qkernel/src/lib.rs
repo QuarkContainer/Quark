@@ -499,6 +499,13 @@ fn StartExecProcess(msgId: u64, process: Process) {
     EnterUser(entry, userStackAddr, kernelStackAddr);
 }
 
+fn StartSubContainerProcess(elfEntry: u64, userStackAddr: u64, kernelStackAddr: u64) {
+    let currTask = Task::Current();
+    currTask.AccountTaskEnter(SchedState::RunningApp);
+
+    EnterUser(elfEntry, userStackAddr, kernelStackAddr);
+}
+
 fn ControllerProcess(_para: *const u8) {
     Run().expect("ControllerProcess crash");
 }

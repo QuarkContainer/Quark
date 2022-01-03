@@ -79,6 +79,7 @@ extern fn handle_sigintAct(signal :i32, signInfo: *mut libc::siginfo_t, _: *mut 
 
         let payload = Payload::Signal({
             SignalArgs {
+                CID: "".to_string(),
                 Signo: signal,
                 PID: 0,
                 Mode: if console {

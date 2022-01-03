@@ -129,13 +129,13 @@ pub fn HandlePs(usock: USocket, cid: &str) -> Result<()> {
     return Ok(())
 }
 
-pub fn HandleWait(usock: USocket) -> Result<()> {
-    SendControlMsg(usock, ControlMsg::New(Payload::WaitContainer))?;
+pub fn HandleWait(usock: USocket, cid: &str) -> Result<()> {
+    SendControlMsg(usock, ControlMsg::New(Payload::WaitContainer(cid.to_string())))?;
     return Ok(())
 }
 
 pub fn HandleWaitPid(usock: USocket, waitpid: &WaitPid) -> Result<()> {
-    SendControlMsg(usock, ControlMsg::New(Payload::WaitPid(*waitpid)))?;
+    SendControlMsg(usock, ControlMsg::New(Payload::WaitPid(waitpid.clone())))?;
     return Ok(())
 }
 
@@ -152,13 +152,47 @@ pub fn HandleSignal(usock: USocket, signalArgs: &SignalArgs) -> Result<()> {
         }
     }
 
-    SendControlMsg(usock, ControlMsg::New(Payload::Signal(*signalArgs)))?;
+    SendControlMsg(usock, ControlMsg::New(Payload::Signal(signalArgs.clone())))?;
     return Ok(())
 }
 
-pub fn HandleContainerDestroy(usock: USocket) -> Result<()> {
-    SendControlMsg(usock, ControlMsg::New(Payload::ContainerDestroy))?;
+pub fn HandleContainerDestroy(usock: USocket, cid: &String) -> Result<()> {
+    SendControlMsg(usock, ControlMsg::New(Payload::ContainerDestroy(cid.clone())))?;
     return Ok(())
+}
+
+pub fn HandleCreateSubContainer(usock: USocket, args: &mut CreateArgs, fds: &[i32]) -> Result<()> {
+    //set fds back to args, 
+    if fds.len() == 1 {
+        args.fds[0] = fds[0]
+    }
+    SendControlMsg(usock, ControlMsg::New(Payload::CreateSubContainer(args.clone())))?;
+    return Ok(())
+}
+
+pub fn HandleStartSubContainer(usock: USocket, args: &mut StartArgs, fds: &[i32]) -> Result<()> {
+    if fds.len() == 3 {
+        args.process.Stdiofds[0] = fds[0];
+        args.process.Stdiofds[1] = fds[1];
+        args.process.Stdiofds[2] = fds[2];
+    }
+
+    for i in 0..args.process.Stdiofds.len() {
+        let osfd = args.process.Stdiofds[i];
+        let stat = VMSpace::LibcFstat(osfd)?;
+
+        VMSpace::UnblockFd(osfd);
+
+        let st_mode = stat.st_mode & ModeType::S_IFMT as u32;
+        let epollable = st_mode == S_IFIFO || st_mode == S_IFSOCK || st_mode == S_IFCHR;
+
+        let hostfd = IO_MGR.lock().AddFd(osfd, epollable);
+
+        args.process.Stdiofds[i] = hostfd;
+    }
+
+    SendControlMsg(usock, ControlMsg::New(Payload::StartSubContainer(args.clone())))?;
+    return Ok(());
 }
 
 pub fn ProcessReq(usock: USocket, req: &mut UCallReq, fds: &[i32]) -> Result<()> {
@@ -168,10 +202,12 @@ pub fn ProcessReq(usock: USocket, req: &mut UCallReq, fds: &[i32]) -> Result<()>
         UCallReq::Pause => HandlePause(usock)?,
         UCallReq::Unpause => HandleUnpause(usock)?,
         UCallReq::Ps(cid) => HandlePs(usock, cid)?,
-        UCallReq::WaitContainer => HandleWait(usock)?,
+        UCallReq::WaitContainer(cid) => HandleWait(usock, cid)?,
         UCallReq::WaitPid(waitpid) => HandleWaitPid(usock, waitpid)?,
         UCallReq::Signal(signalArgs) => HandleSignal(usock, signalArgs)?,
-        UCallReq::ContainerDestroy => HandleContainerDestroy(usock)?,
+        UCallReq::ContainerDestroy(cid) => HandleContainerDestroy(usock, cid)?,
+        UCallReq::CreateSubContainer(args) => HandleCreateSubContainer(usock, args, fds)?,
+        UCallReq::StartSubContainer(args) => HandleStartSubContainer(usock, args, fds)?,
     };
 
     return Ok(())

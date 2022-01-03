@@ -20,6 +20,7 @@ use lazy_static::lazy_static;
 use spin::Mutex;
 use nix::sys::signal;
 
+use super::super::specutils::specutils;
 use super::super::super::qlib::*;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
@@ -27,12 +28,14 @@ use super::super::super::qlib::control_msg::*;
 use super::super::super::ucall::ucall::*;
 use super::super::super::ucall::ucall_client::*;
 use super::super::super::vmspace::syscall::*;
+use super::super::super::vmspace::limits::CreateLimitSet;
 use super::super::runtime::console::*;
 use super::super::cgroup::*;
 use super::super::oci::*;
 use super::super::container::container::*;
 use super::super::cmd::config::*;
 use super::super::runtime::sandbox_process::*;
+use super::super::super::qlib::loader;
 
 lazy_static! {
     static ref SIGNAL_STRUCT : Mutex<Option<SignalStruct>> = Mutex::new(None);
@@ -110,6 +113,7 @@ pub fn SignalProcess(cid: &str, pid: i32, signo: i32, fgProcess: bool) -> Result
     }
 
     let req = UCallReq::Signal(SignalArgs{
+        CID: cid.to_string(),
         Signo: signo,
         PID: pid,
         Mode: mode,
@@ -265,6 +269,68 @@ impl Sandbox {
         return Ok(());
     }
 
+    /// CreateSubContainer creates a container inside the sandbox
+    pub fn CreateSubContainer(&self, _conf: &GlobalConfig, id: &str, tty: i32) -> Result<()> {
+        // todo: see if we can get rid of globalconfig
+
+        let client = self.SandboxConnect()?;
+        let createArgs = CreateArgs {
+            cid: id.to_string(),
+            fds: vec![tty],
+        };
+        let req = UCallReq::CreateSubContainer(createArgs);
+        let res = client.Call(&req)?;
+        match res {
+            UCallResp::CreateSubContainerResp => {
+                return Ok(())
+            },
+            resp => {
+                error!("CreateSubContainer get unknown resp {:?}", resp);
+                panic!("Failed creating subcontainer");
+            }
+        }
+    }
+
+    pub fn StartSubContainer(&self, spec: &Spec, _conf: &GlobalConfig, id: &str, stdios: &[i32]) -> Result<()> {
+        debug!("Starting subcontainer {} in sandbox {}", id, &self.ID);
+
+        let client = self.SandboxConnect()?;
+        // to avoid sharing the spec structure with qkernel, construct the process spec from oci Spec.
+        let mut process = loader::Process {
+            UID: spec.process.user.uid,
+            GID: spec.process.user.gid,
+            AdditionalGids: spec.process.user.additional_gids.clone(),
+            Terminal: spec.process.terminal,
+            Args: spec.process.args.clone(),
+            Envs: spec.process.env.clone(),
+            Cwd: spec.process.cwd.clone(),
+            limitSet: CreateLimitSet(&spec).expect("load limitSet fail").GetInternalCopy(),
+            ID: id.to_string(),
+            Caps: specutils::Capabilities(false, &spec.process.capabilities),
+            ..Default::default()
+        };
+
+        process.Stdiofds[0] = stdios[0];
+        process.Stdiofds[1] = stdios[1];
+        process.Stdiofds[2] = stdios[2];
+
+        let startArgs = StartArgs {
+            process: process
+        };
+        debug!("starting subcontainer with the following args: {:?}", &startArgs);
+        let req = UCallReq::StartSubContainer(startArgs);
+        let res = client.Call(&req)?;
+        match res {
+            UCallResp::StartSubContainerResp => {
+                return Ok(())
+            },
+            resp => {
+                error!("StartSubContainer get unknown resp {:?}", resp);
+                panic!("Failed starting subcontainer");
+            }
+        }
+    }
+
     pub fn Execute(&self, mut args: ExecArgs) -> Result<i32> {
         info!("Executing new process in container {} in sandbox {}", &args.ContainerID, &self.ID);
 
@@ -302,10 +368,11 @@ impl Sandbox {
         return Ok(())
     }
 
-    pub fn WaitPID(&mut self, _cid: &str, pid: i32, clearStatus: bool) -> Result<u32> {
+    pub fn WaitPID(&mut self, cid: &str, pid: i32, clearStatus: bool) -> Result<u32> {
         let client = self.SandboxConnect()?;
 
         let req = UCallReq::WaitPid(WaitPid{
+            cid: cid.to_string(),
             pid: pid,
             clearStatus: clearStatus,
         });
@@ -322,10 +389,10 @@ impl Sandbox {
         }
     }
 
-    pub fn Wait(&mut self, _cid: &str) -> Result<u32> {
+    pub fn Wait(&mut self, cid: &str) -> Result<u32> {
         match self.SandboxConnect() {
             Ok(client) => {
-                let req = UCallReq::WaitContainer;
+                let req = UCallReq::WaitContainer(cid.to_string());
 
                 match client.Call(&req) {
                     Ok(UCallResp::WaitContainerResp(status)) => {
@@ -415,7 +482,7 @@ impl Sandbox {
         return false;
     }
 
-    pub fn SignalContainer(&self, _cid: &str, signo: i32, all: bool) -> Result<()> {
+    pub fn SignalContainer(&self, cid: &str, signo: i32, all: bool) -> Result<()> {
         info!("Signal container sandbox {}", &self.ID);
 
         let client = self.SandboxConnect()?;
@@ -426,6 +493,7 @@ impl Sandbox {
         }
 
         let req = UCallReq::Signal(SignalArgs{
+            CID: cid.to_string(),
             Signo: signo,
             PID: 0,
             Mode: mode,
@@ -446,9 +514,9 @@ impl Sandbox {
         return SignalProcess(&self.ID, pid, signo, fgProcess)
     }
 
-    pub fn DestroyContainer(&self, _cid: &str) -> Result<()> {
+    pub fn DestroyContainer(&self, cid: &str) -> Result<()> {
         let client = self.SandboxConnect()?;
-        let req = UCallReq::ContainerDestroy;
+        let req = UCallReq::ContainerDestroy(cid.to_string());
         let resp = client.Call(&req)?;
         match resp {
             UCallResp::ContainerDestroyResp => {

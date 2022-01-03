@@ -22,7 +22,7 @@ use super::super::qlib::vcpu_mgr::*;
 use super::super::Kernel;
 use super::super::taskMgr;
 use super::super::task::*;
-use super::super::{StartRootContainer, StartExecProcess};
+use super::super::{StartRootContainer, StartExecProcess, StartSubContainerProcess};
 use super::super::LOADER;
 use super::process::*;
 use super::super::qlib::singleton::*;
@@ -57,7 +57,7 @@ pub fn Run() -> Result<()> {
                 info!("get signal {:?}", &signalArgs);
                 match signalArgs.Mode {
                     SignalDeliveryMode::DeliverToProcess => {
-                        match LOADER.Lock(task).unwrap().SignalProcess(signalArgs.PID, signalArgs.Signo) {
+                        match LOADER.Lock(task).unwrap().SignalProcess(signalArgs.CID, signalArgs.PID, signalArgs.Signo) {
                             Err(e) => {
                                 info!("signal DeliverToProcess fail with error {:?}", e);
                             }
@@ -73,7 +73,7 @@ pub fn Run() -> Result<()> {
                         }
                     }
                     SignalDeliveryMode::DeliverToForegroundProcessGroup => {
-                        match LOADER.Lock(task).unwrap().SignalForegroundProcessGroup(signalArgs.PID, signalArgs.Signo) {
+                        match LOADER.Lock(task).unwrap().SignalForegroundProcessGroup(signalArgs.CID, signalArgs.PID, signalArgs.Signo) {
                             Err(_e) => {
                                 info!("signal DeliverToForegroundProcessGroup fail with error");
                                 //todo: enable the error when ready
@@ -87,8 +87,8 @@ pub fn Run() -> Result<()> {
                 ControlMsgRet(msg.msgId, &UCallResp::SignalResp);
                 continue;
             }
-            Payload::ContainerDestroy => {
-                LOADER.Lock(task).unwrap().DestroyContainer()?;
+            Payload::ContainerDestroy(cid) => {
+                LOADER.Lock(task).unwrap().DestroyContainer(cid)?;
                 ControlMsgRet(msg.msgId, &UCallResp::ContainerDestroyResp);
                 continue;
             }
@@ -116,8 +116,8 @@ pub fn ControlMsgHandler(_para: *const u8) {
         Payload::ExecProcess(process) => {
             StartExecProcess(msg.msgId, process);
         }
-        Payload::WaitContainer => {
-            match LOADER.WaitContainer() {
+        Payload::WaitContainer(cid) => {
+            match LOADER.WaitContainer(cid) {
                 Ok(exitStatus) => {
                     ControlMsgRet(msg.msgId, &UCallResp::WaitContainerResp(exitStatus));
                 }
@@ -127,7 +127,7 @@ pub fn ControlMsgHandler(_para: *const u8) {
             }
         }
         Payload::WaitPid(waitpid) => {
-            match LOADER.WaitPID(waitpid.pid, waitpid.clearStatus) {
+            match LOADER.WaitPID(waitpid.cid, waitpid.pid, waitpid.clearStatus) {
                 Ok(exitStatus) => {
                     ControlMsgRet(msg.msgId, &UCallResp::WaitPidResp(exitStatus));
                 }
@@ -135,6 +135,28 @@ pub fn ControlMsgHandler(_para: *const u8) {
                     ControlMsgRet(msg.msgId, &UCallResp::UCallRespErr(format!("{:?}", e)));
                 }
             }
+        }
+        Payload::CreateSubContainer(createArgs) => {
+            match LOADER.CreateSubContainer(createArgs.cid, createArgs.fds) {
+                Ok(()) => {
+                    ControlMsgRet(msg.msgId, &UCallResp::CreateSubContainerResp);
+                }
+                Err(e) => {
+                    ControlMsgRet(msg.msgId, &UCallResp::UCallRespErr(format!("{:?}", e)));
+                }
+            }
+        }
+        Payload::StartSubContainer(startArgs) => {
+            match LOADER.StartSubContainer(startArgs.process) {
+                Ok((_, entry, userStackAddr, kernelStackAddr)) => {
+                    ControlMsgRet(msg.msgId, &UCallResp::StartSubContainerResp);
+                    StartSubContainerProcess(entry, userStackAddr, kernelStackAddr);
+                }
+                Err(e) => {
+                    ControlMsgRet(msg.msgId, &UCallResp::UCallRespErr(format!("{:?}", e)));
+                }
+            }
+
         }
         _ => {
             panic!("ControlMsgHandler unsupported message {:?}", msg);

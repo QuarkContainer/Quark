@@ -210,7 +210,7 @@ pub fn CreateStack(task: &Task) -> Result<Range> {
 
 pub const TASK_COMM_LEN : usize = 16;
 
-// Load loads filename into a MemoryManager.
+// Load loads file with filename into memory.
 //return (entry: u64, usersp: u64, kernelsp: u64)
 pub fn Load(task: &mut Task, filename: &str, argv: &mut Vec<String>, envv: &[String], extraAuxv: &[AuxEntry]) -> Result<(u64, u64, u64)> {
     let vdsoAddr = LoadVDSO(task)?;

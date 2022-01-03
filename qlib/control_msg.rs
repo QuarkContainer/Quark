@@ -21,6 +21,8 @@ use super::loader::*;
 use super::auth::id::*;
 use super::singleton::*;
 
+type Cid = String;
+
 pub static MSG_ID : Singleton<AtomicU64> = Singleton::<AtomicU64>::New();
 
 pub unsafe fn InitSingleton() {
@@ -42,8 +44,9 @@ impl ControlMsg {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct WaitPid {
+    pub cid: String,
     pub pid: i32,
     pub clearStatus: bool,
 }
@@ -66,8 +69,12 @@ pub enum SignalDeliveryMode {
     DeliverToForegroundProcessGroup,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+/// SignalArgs is payload for Signal control msg to quark sandbox, 
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SignalArgs {
+    // CID is the container ID that will be signaled
+    pub CID: String,
+
     // Signo is the signal to send to the process.
     pub Signo: i32,
 
@@ -79,17 +86,38 @@ pub struct SignalArgs {
     pub Mode: SignalDeliveryMode,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CreateArgs {
+    // cid is the id for the new container
+    pub cid: String,
+
+    // fd to be sent to the new container, usually tty replica
+    pub fds: Vec<i32>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct StartArgs {
+    pub process: Process,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Payload {
     RootContainerStart(RootProcessStart),
     ExecProcess(Process),
     Pause,
     Unpause,
-    WaitContainer,
+    WaitContainer(Cid),
     WaitPid(WaitPid),
-    Ps(String),
+    Ps(Cid),
     Signal(SignalArgs),
-    ContainerDestroy,
+    ContainerDestroy(Cid),
+    CreateSubContainer(CreateArgs),
+    StartSubContainer(StartArgs),
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+pub struct RootContainerStart {
+    pub cid: String
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -109,6 +137,8 @@ pub enum UCallResp {
     WaitPidResp(u32),
     SignalResp,
     ContainerDestroyResp,
+    CreateSubContainerResp,
+    StartSubContainerResp,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

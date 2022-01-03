@@ -21,6 +21,7 @@ pub const ALL_CAP: CapSet = CapSet((1 << Capability::CAP_LAST_CAP) - 1);
 #[derive(Serialize, Deserialize, Default, Debug, Copy, Clone, Eq, PartialEq)]
 pub struct CapSet(pub u64);
 
+// A CapSet is a set of capabilities, implemented as a bitset
 impl CapSet {
     pub fn New(cap: u64) -> Self {
         return Self(1 << cap)

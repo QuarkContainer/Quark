@@ -18,7 +18,7 @@ use alloc::string::String;
 use super::limits::*;
 use super::auth::cap_set::*;
 
-#[derive(Serialize, Deserialize, Default, Debug, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Default, Debug, Eq, PartialEq, Clone)]
 pub struct Process {
     //user
     pub UID: u32,
