@@ -1022,13 +1022,16 @@ impl VMSpace {
         return fdInfo.RDMANotify(typ)
     }
 
-    pub fn PostRDMAConnect(sockfd: i32, socketBuf: Arc<SocketBuff>) -> i64 {
-        let fdInfo = match Self::GetFdInfo(sockfd) {
+    pub fn PostRDMAConnect(msg: &'static mut PostRDMAConnect) {
+        let fdInfo = match Self::GetFdInfo(msg.fd) {
             Some(fdInfo) => fdInfo,
-            None => return -SysErr::EBADF as i64,
+            None => {
+                msg.Finish(-SysErr::EBADF as i64);
+                return;
+            }
         };
 
-        return fdInfo.PostRDMAConnect(socketBuf);
+        fdInfo.PostRDMAConnect(msg);
     }
 
     pub fn Shutdown(sockfd: i32, how: i32) -> i64 {
@@ -1489,5 +1492,20 @@ impl VMSpace {
             waitingMsgCall: None,
             controlSock: -1,
         }
+    }
+}
+
+impl PostRDMAConnect {
+    pub fn Finish(&mut self, ret: i64) {
+        self.ret = ret;
+        SHARE_SPACE.scheduler.ScheduleQ(self.taskId, self.taskId.Queue())
+    }
+
+    pub fn ToRef(addr: u64) -> &'static mut Self {
+        let msgRef = unsafe {
+            &mut *(addr as * mut Self)
+        };
+
+        return msgRef
     }
 }

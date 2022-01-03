@@ -451,11 +451,11 @@ impl FdInfo {
         return 0;
     }
 
-    pub fn PostRDMAConnect(&self, socketBuf: Arc<SocketBuff>) -> i64 {
+    pub fn PostRDMAConnect(&self, msg: &mut PostRDMAConnect) {
         let sockfd = self.Fd();
         match self.SockInfo() {
             SockInfo::Socket => {
-                let rdmaSocket = RDMADataSock::New(sockfd, socketBuf);
+                let rdmaSocket = RDMADataSock::New(sockfd, msg.socketBuf.clone());
                 *self.lock().sockInfo.lock() = SockInfo::RDMADataSocket(rdmaSocket);
                 self.lock().AddWait(EVENT_READ | EVENT_WRITE).expect("RDMAListen EpollCtlAdd fail");
 
@@ -467,7 +467,7 @@ impl FdInfo {
             }
         }
 
-        return 0;
+        msg.Finish(0)
     }
 
     pub fn IOShutdown(&self, how: i32) -> i64 {

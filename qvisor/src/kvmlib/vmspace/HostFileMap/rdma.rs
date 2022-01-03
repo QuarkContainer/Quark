@@ -403,6 +403,12 @@ impl RDMAContext {
 }
 pub struct QueuePair(pub Mutex<*mut rdmaffi::ibv_qp>);
 
+impl Default for QueuePair {
+    fn default() -> Self {
+        return Self (Mutex::new(0 as _))
+    }
+}
+
 unsafe impl Send for QueuePair {}
 unsafe impl Sync for QueuePair {}
 
@@ -697,6 +703,12 @@ impl QueuePair {
 pub struct MemoryRegion(pub *mut rdmaffi::ibv_mr);
 impl Drop for MemoryRegion {
     fn drop(&mut self) {}
+}
+
+impl Default for MemoryRegion {
+    fn default() -> Self {
+        return Self (0 as _)
+    }
 }
 
 impl MemoryRegion {

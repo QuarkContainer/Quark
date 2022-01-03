@@ -265,7 +265,7 @@ impl SocketOperations {
         }
     }
 
-    pub fn PostConnect(&self) {
+    pub fn PostConnect(&self, task: &Task) {
          let socketBuf = self.SocketBufType().Connect();
         *self.socketBuf.lock() = socketBuf.clone();
 
@@ -273,7 +273,7 @@ impl SocketOperations {
             SocketBufType::RDMA(buf) => {
                 assert!((self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
                     && self.stype == SockType::SOCK_STREAM, "family {}, stype {}", self.family, self.stype);
-                HostSpace::PostRDMAConnect(self.fd, buf);
+                HostSpace::PostRDMAConnect(task, self.fd, buf);
             }
             SocketBufType::Uring(buf) => {
                 assert!((self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
@@ -653,7 +653,7 @@ impl SockOperations for SocketOperations {
         let res = Kernel::HostSpace::IOConnect(self.fd, &socketaddr[0] as *const _ as u64, socketaddr.len() as u32) as i32;
         if res == 0 {
             self.SetRemoteAddr(socketaddr.to_vec())?;
-            self.PostConnect();
+            self.PostConnect(task);
 
             return Ok(0)
         }
@@ -711,7 +711,7 @@ impl SockOperations for SocketOperations {
 
 
         self.SetRemoteAddr(socketaddr.to_vec())?;
-        self.PostConnect();
+        self.PostConnect(task);
 
         return Ok(0)
     }

@@ -47,6 +47,10 @@ pub fn AQHostCall(msg: HostOutputMsg, _shareSpace: &ShareSpace) {
                 panic!("Eventfd write fail with error {}", ret)
             }
         }
+        HostOutputMsg::PostRDMAConnect(addr) => {
+            let msgRef = PostRDMAConnect::ToRef(addr);
+            super::VMSpace::PostRDMAConnect(msgRef);
+        }
     }
 }
 
@@ -253,9 +257,6 @@ impl KVMVcpu {
             },
             Msg::RDMANotify(msg) => {
                 ret = super::VMSpace::RDMANotify(msg.sockfd, msg.typ) as u64;
-            },
-            Msg::PostRDMAConnect(msg) => {
-                ret = super::VMSpace::PostRDMAConnect(msg.fd, msg.socketBuf.clone()) as u64;
             },
             Msg::IOListen(msg) => {
                 ret = super::VMSpace::Listen(msg.sockfd, msg.backlog, msg.block) as u64;

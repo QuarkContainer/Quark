@@ -144,6 +144,7 @@ pub enum SocketState {
     WaitingForRemoteMeta,
     WaitingForRemoteReady,
     Ready,
+    Error,
 }
 
 #[derive(Clone)]
@@ -157,40 +158,96 @@ impl Deref for RDMADataSock {
     }
 }
 
+pub const RDMA_ENABLE : bool= false;
+
 impl RDMADataSock {
     pub fn New(fd: i32, socketBuf: Arc<SocketBuff>) -> Self {
         let (addr, len) = socketBuf.ReadBuf();
-        let mr = RDMA.CreateMemoryRegion(addr, len).expect("RDMADataSock CreateMemoryRegion fail");
-        let qp = RDMA.CreateQueuePair().expect("RDMADataSock create QP fail");
 
-        let localRDMAInfo = RDMAInfo {
-            raddr: addr,
-            rlen: len as _,
-            rkey: mr.RKey(),
-            qp_num: qp.qpNum(),
-            lid: RDMA.Lid(),
-            offset: 0,
-            freeSpace: len as u32,
-            gid: RDMA.Gid()
-        };
+        if RDMA_ENABLE {
+            let mr = RDMA.CreateMemoryRegion(addr, len).expect("RDMADataSock CreateMemoryRegion fail");
+            let qp = RDMA.CreateQueuePair().expect("RDMADataSock create QP fail");
 
-        return Self (
-            Arc::new(RDMADataSockIntern{
-                fd: fd,
-                socketBuf: socketBuf,
-                readLock: QMutex::new(()),
-                writeLock: QMutex::new(()),
-                qp: QMutex::new(qp),
-                peerInfo: QMutex::new(RDMAInfo::default()),
-                socketState: AtomicU64::new(0),
-                localRDMAInfo: localRDMAInfo,
-                remoteRDMAInfo: QMutex::new(RDMAInfo::default()),
-                mr: mr
-            })
-        )
+            let localRDMAInfo = RDMAInfo {
+                raddr: addr,
+                rlen: len as _,
+                rkey: mr.RKey(),
+                qp_num: qp.qpNum(),
+                lid: RDMA.Lid(),
+                offset: 0,
+                freeSpace: len as u32,
+                gid: RDMA.Gid()
+            };
+
+            return Self (
+                Arc::new(RDMADataSockIntern{
+                    fd: fd,
+                    socketBuf: socketBuf,
+                    readLock: QMutex::new(()),
+                    writeLock: QMutex::new(()),
+                    qp: QMutex::new(qp),
+                    peerInfo: QMutex::new(RDMAInfo::default()),
+                    socketState: AtomicU64::new(0),
+                    localRDMAInfo: localRDMAInfo,
+                    remoteRDMAInfo: QMutex::new(RDMAInfo::default()),
+                    mr: mr
+                })
+            )
+        } else {
+            let mr = MemoryRegion::default();
+            let qp = QueuePair::default();
+
+            let localRDMAInfo = RDMAInfo::default();
+
+            return Self (
+                Arc::new(RDMADataSockIntern{
+                    fd: fd,
+                    socketBuf: socketBuf,
+                    readLock: QMutex::new(()),
+                    writeLock: QMutex::new(()),
+                    qp: QMutex::new(qp),
+                    peerInfo: QMutex::new(RDMAInfo::default()),
+                    socketState: AtomicU64::new(0),
+                    localRDMAInfo: localRDMAInfo,
+                    remoteRDMAInfo: QMutex::new(RDMAInfo::default()),
+                    mr: mr
+                })
+            )
+        }
+
     }
 
     pub fn SendLocalRDMAInfo(&self) -> Result<()> {
+        let ret = unsafe {
+            write(self.fd, &self.localRDMAInfo as * const _ as u64 as _, RDMAInfo::Size())
+        };
+
+        if ret < 0 {
+            let errno = errno::errno().0;
+            self.socketBuf.SetErr(errno);
+            return Err(Error::SysError(errno))
+        }
+
+        assert!(ret == RDMAInfo::Size() as isize, "SendLocalRDMAInfo fail ret is {}, expect {}", ret, RDMAInfo::Size());
+        return Ok(())
+    }
+
+    pub fn RecvRemoteRDMAInfo(&self) -> Result<()> {
+        let mut data = RDMAInfo::default();
+        let ret = unsafe {
+            read(self.fd, &mut data as * mut _ as u64 as _, RDMAInfo::Size())
+        };
+
+        if ret < 0 {
+            let errno = errno::errno().0;
+            self.socketBuf.SetErr(errno);
+            return Err(Error::SysError(errno))
+        }
+
+        assert!(ret == RDMAInfo::Size() as isize, "SendLocalRDMAInfo fail ret is {}, expect {}", ret, RDMAInfo::Size());
+
+        *self.remoteRDMAInfo.lock() = data;
+
         return Ok(())
     }
 
@@ -206,6 +263,18 @@ impl RDMADataSock {
     }
 
     pub fn Read(&self) {
+        if !RDMA_ENABLE {
+            self.ReadData();
+        } else {
+            /*match self.SocketState() {
+                SocketState::WaitingForRemoteMeta => {
+
+                }
+            }*/
+        }
+    }
+
+    pub fn ReadData(&self) {
         let _readlock = self.readLock.lock();
 
         let fd = self.fd;
@@ -262,6 +331,10 @@ impl RDMADataSock {
     }
 
     pub fn Write(&self) {
+        self.WriteData();
+    }
+
+    pub fn WriteData(&self) {
         let _writelock = self.writeLock.lock();
 
         let fd = self.fd;
@@ -330,10 +403,12 @@ impl RDMADataSock {
             return
         }
 
+        if eventmask & EVENT_WRITE != 0 {
+            self.Write()
+        }
+
         if eventmask & EVENT_READ != 0 {
             self.Read()
-        } else if eventmask & EVENT_WRITE != 0 {
-            self.Write()
         }
     }
 }

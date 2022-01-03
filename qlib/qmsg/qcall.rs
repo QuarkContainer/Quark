@@ -71,7 +71,6 @@ pub enum Msg {
 
     RDMAListen(RDMAListen),
     RDMANotify(RDMANotify),
-    PostRDMAConnect(PostRDMAConnect),
 
     SchedGetAffinity(SchedGetAffinity),
     GetRandom(GetRandom),
@@ -656,6 +655,8 @@ pub struct RDMAAccept {
 pub struct PostRDMAConnect {
     pub fd: i32,
     pub socketBuf: Arc<SocketBuff>,
+    pub taskId: TaskId,
+    pub ret: i64,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -760,6 +761,7 @@ pub enum HostOutputMsg {
     QCall(u64),
     WaitFDAsync(WaitFDAsync),
     EventfdWriteAsync(EventfdWriteAsync),
+    PostRDMAConnect(u64),
 }
 
 impl Default for HostOutputMsg {
@@ -780,3 +782,4 @@ pub struct WaitFDAsync {
 pub struct EventfdWriteAsync {
     pub fd: i32,
 }
+
