@@ -455,7 +455,16 @@ impl FdInfo {
         let sockfd = self.Fd();
         match self.SockInfo() {
             SockInfo::Socket => {
-                let rdmaSocket = RDMADataSock::New(sockfd, msg.socketBuf.clone());
+                let sockBuf = msg.socketBuf.clone();
+                let rdmaType = if super::rdma_socket::RDMA_ENABLE {
+                    let addr = msg as *const _ as u64;
+                    let msg = PostRDMAConnect::ToRef(addr);
+                    RDMAType::Client(msg)
+                } else {
+                    RDMAType::None
+                };
+
+                let rdmaSocket = RDMADataSock::New(sockfd, sockBuf, rdmaType);
                 *self.lock().sockInfo.lock() = SockInfo::RDMADataSocket(rdmaSocket);
                 self.lock().AddWait(EVENT_READ | EVENT_WRITE).expect("RDMAListen EpollCtlAdd fail");
 
@@ -467,7 +476,9 @@ impl FdInfo {
             }
         }
 
-        msg.Finish(0)
+        if !super::rdma_socket::RDMA_ENABLE {
+            msg.Finish(0)
+        }
     }
 
     pub fn IOShutdown(&self, how: i32) -> i64 {
