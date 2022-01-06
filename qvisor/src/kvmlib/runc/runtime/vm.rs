@@ -133,6 +133,12 @@ impl VirtualMachine {
             uringCnt
         };
 
+        if QUARK_CONFIG.lock().EnableRDMA {
+            let rdmaDeviceName = "rdma";
+            let lbPort = 0;
+            super::super::super::vmspace::HostFileMap::rdma_socket::RDMA.Init(rdmaDeviceName, lbPort);
+        }
+
         let cpuCount = VMSpace::VCPUCount() - cnt;
         VMS.lock().vcpuCount = cpuCount; //VMSpace::VCPUCount();
         let kernelMemRegionSize = QUARK_CONFIG.lock().KernelMemSize;

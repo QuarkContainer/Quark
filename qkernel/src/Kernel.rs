@@ -196,13 +196,20 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn PostRDMAConnect(fd: i32, socketBuf: Arc<SocketBuff>) -> i64 {
-        let mut msg = Msg::PostRDMAConnect(PostRDMAConnect {
+    pub fn PostRDMAConnect(task: &Task, fd: i32, socketBuf: Arc<SocketBuff>) -> i64 {
+        let mut msg = PostRDMAConnect {
             fd,
-            socketBuf
-        });
+            socketBuf,
+            taskId: task.GetTaskId(),
+            ret: 0
+        };
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        let addr = &mut msg as * mut _ as u64;
+        let om = HostOutputMsg::PostRDMAConnect(addr);
+
+        super::SHARESPACE.AQCall(&om);
+        taskMgr::Wait();
+        return msg.ret;
     }
 
     pub fn IORecvMsg(fd: i32, msghdr: u64, flags: i32, blocking: bool) -> i64 {

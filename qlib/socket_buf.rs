@@ -14,6 +14,7 @@
 
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicI32;
+use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use alloc::collections::vec_deque::VecDeque;
 use alloc::sync::Arc;
@@ -30,6 +31,13 @@ pub struct SocketBuff {
     pub rClosed: AtomicBool,
     pub pendingWShutdown: AtomicBool,
     pub error: AtomicI32,
+
+    // used by RDMA data socket, used to sync with rdma remote peer for the local read buff free space size
+    // when socket application consume data and free read buf space, it will fetch_add the value
+    // if the value >= 0.5 of read buf, we will send the information to the remote peer immediately otherwise,
+    // when rdmadata socket send data to peer, it will read and clear the consumeReadData and send the information
+    // to the peer in the rdmawrite packet to save rdmawrite call
+    pub consumeReadData: AtomicU64,
 
     pub readBuf: QMutex<ByteStream>,
     pub writeBuf: QMutex<ByteStream>,
@@ -55,9 +63,22 @@ impl SocketBuff {
             rClosed: AtomicBool::new(false),
             pendingWShutdown: AtomicBool::new(false),
             error: AtomicI32::new(0),
+            consumeReadData: AtomicU64::new(0),
             readBuf: QMutex::new(ByteStream::Init(pageCount)),
             writeBuf: QMutex::new(ByteStream::Init(pageCount)),
         }
+    }
+
+    pub fn AddConsumeReadData(&self, count: u64) -> u64 {
+        return self.consumeReadData.fetch_add(count, Ordering::Relaxed) + count
+    }
+
+    pub fn GetAndClearConsumeReadData(&self) -> u64 {
+        return self.consumeReadData.swap(0, Ordering::Relaxed)
+    }
+
+    pub fn ReadBuf(&self) -> (u64, usize) {
+        return self.readBuf.lock().GetRawBuf();
     }
 
     pub fn PendingWriteShutdown(&self) -> bool {

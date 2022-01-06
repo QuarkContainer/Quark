@@ -110,6 +110,10 @@ impl ByteStream {
         return self.available
     }
 
+    pub fn BufSize(&self) -> usize {
+        return self.buf.len();
+    }
+
     //return (initial size is full, how much read)
     pub fn read(&mut self, buf: &mut [u8]) -> Result<(bool, usize)> {
         let full = self.available == self.buf.len();
