@@ -345,7 +345,7 @@ impl Deref for RDMAContext {
 }
 
 pub const MAX_SEND_WR: u32 = 1;
-pub const MAX_RECV_WR: u32 = 1;
+pub const MAX_RECV_WR: u32 = 4;
 pub const MAX_SEND_SGE: u32 = 1;
 pub const MAX_RECV_SGE: u32 = 1;
 
@@ -415,6 +415,7 @@ impl RDMAContext {
         }
 
         return Ok(MemoryRegion(mr))
+    }
 
     pub fn CompleteQueue(&self) -> * mut rdmaffi::ibv_cq {
         return self.lock().completeQueue.0
@@ -443,7 +444,7 @@ impl RDMAContext {
             if poll_result > 0 {
                 self.ProcessWC(&wc);
             } else {
-                break;
+                return Ok(())
             }
         }
     }
@@ -600,7 +601,7 @@ impl QueuePair {
         return Ok(())
     }
 
-    pub fn PostRecv(&self, wrId: u64,) -> Result<()> {
+    pub fn PostRecv(&self, wrId: u64) -> Result<()> {
         let mut rw = rdmaffi::ibv_recv_wr {
             wr_id: wrId,
             next: ptr::null_mut(),

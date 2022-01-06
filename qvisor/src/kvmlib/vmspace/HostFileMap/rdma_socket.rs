@@ -340,6 +340,10 @@ impl RDMADataSock {
         let remoteInfo = self.remoteRDMAInfo.lock();
 
         self.qp.lock().Setup(&RDMA, remoteInfo.qp_num, remoteInfo.lid, remoteInfo.gid).expect("SetupRDMA fail...");
+        for _i in 0..MAX_RECV_WR {
+            let wr = WorkRequestId::New(self.fd, WorkRequestType::Recv);
+            self.qp.lock().PostRecv(wr.0).expect("SetupRDMA PostRecv fail");
+        }
     }
 
     pub fn RDMAWriteImm(&self, localAddr: u64, remoteAddr: u64, writeCount: usize, readCount: usize) -> Result<()>{
@@ -399,6 +403,9 @@ impl RDMADataSock {
 
     // triggered when remote's writeimmedate reach local
     pub fn ProcessRDMARecvWriteImm(&self, recvCount: u64, writeConsumeCount: u64) {
+        let wr = WorkRequestId::New(self.fd, WorkRequestType::Recv);
+        self.qp.lock().PostRecv(wr.0).expect("ProcessRDMARecvWriteImm PostRecv fail");
+
         if recvCount > 0 {
             let (trigger, _addr, _len) = self.socketBuf.ProduceAndGetFreeReadBuf(recvCount as usize);
             if trigger {
