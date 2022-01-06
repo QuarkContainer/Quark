@@ -184,9 +184,6 @@ pub fn ControlMsgHandler(fd: *const u8) {
             }
 
         }
-        _ => {
-            panic!("ControlMsgHandler unsupported message {:?}", msg);
-        }
     }
 
     // free curent task in the waitfn context
