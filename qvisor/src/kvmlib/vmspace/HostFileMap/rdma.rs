@@ -292,7 +292,7 @@ pub struct RDMAContextIntern {
     protectDomain: ProtectionDomain, /* PD handle */
     completeChannel: CompleteChannel, /* io completion channel */
     completeQueue: CompleteQueue, /* CQ handle */
-    ccfd: i32,
+    ccfd: i32, // complete channel fd
     ibPort: u8,
     gid: Gid,
 }
@@ -415,7 +415,6 @@ impl RDMAContext {
         }
 
         return Ok(MemoryRegion(mr))
-    }
 
     pub fn CompleteQueue(&self) -> * mut rdmaffi::ibv_cq {
         return self.lock().completeQueue.0
@@ -443,6 +442,8 @@ impl RDMAContext {
             let poll_result = unsafe { rdmaffi::ibv_poll_cq(self.CompleteQueue(), 1, &mut wc) };
             if poll_result > 0 {
                 self.ProcessWC(&wc);
+            } else {
+                break;
             }
         }
     }
