@@ -22,7 +22,7 @@ use super::super::qlib::vcpu_mgr::*;
 use super::super::Kernel;
 use super::super::taskMgr;
 use super::super::task::*;
-use super::super::{StartRootContainer, StartExecProcess};
+use super::super::{StartRootContainer, StartExecProcess, StartSubContainerProcess};
 use super::super::LOADER;
 use super::super::IOURING;
 use super::super::SHARESPACE;
@@ -40,7 +40,7 @@ pub fn ControllerProcessHandler() -> Result<()> {
 }
 
 pub fn SignalProcess(signalArgs: &SignalArgs) {
-    *MSG.lock() = Some(*signalArgs);
+    *MSG.lock() = Some(signalArgs.clone());
     taskMgr::CreateTask(SignalHandler, 0 as *const u8, false);
 }
 
@@ -49,7 +49,7 @@ pub fn HandleSignal(signalArgs: &SignalArgs) {
     let task = Task::Current();
     match signalArgs.Mode {
         SignalDeliveryMode::DeliverToProcess => {
-            match LOADER.Lock(task).unwrap().SignalProcess(signalArgs.PID, signalArgs.Signo) {
+            match LOADER.Lock(task).unwrap().SignalProcess(signalArgs.CID.clone(), signalArgs.PID, signalArgs.Signo) {
                 Err(e) => {
                     info!("signal DeliverToProcess fail with error {:?}", e);
                 }
@@ -65,7 +65,7 @@ pub fn HandleSignal(signalArgs: &SignalArgs) {
             }
         }
         SignalDeliveryMode::DeliverToForegroundProcessGroup => {
-            match LOADER.Lock(task).unwrap().SignalForegroundProcessGroup(signalArgs.PID, signalArgs.Signo) {
+            match LOADER.Lock(task).unwrap().SignalForegroundProcessGroup(signalArgs.CID.clone(), signalArgs.PID, signalArgs.Signo) {
                 Err(_e) => {
                     info!("signal DeliverToForegroundProcessGroup fail with error");
                     //todo: enable the error when ready
@@ -131,8 +131,8 @@ pub fn ControlMsgHandler(fd: *const u8) {
 
             WriteControlMsgResp(fd, &UCallResp::SignalResp);
         }
-        Payload::ContainerDestroy => {
-            LOADER.Lock(task).unwrap().DestroyContainer().unwrap();
+        Payload::ContainerDestroy(cid) => {
+            LOADER.Lock(task).unwrap().DestroyContainer(cid).unwrap();
             WriteControlMsgResp(fd, &UCallResp::ContainerDestroyResp);
         }
         Payload::RootContainerStart(_) => {
@@ -142,8 +142,8 @@ pub fn ControlMsgHandler(fd: *const u8) {
         Payload::ExecProcess(process) => {
             StartExecProcess(fd, process);
         }
-        Payload::WaitContainer => {
-            match LOADER.WaitContainer() {
+        Payload::WaitContainer(cid) => {
+            match LOADER.WaitContainer(cid) {
                 Ok(exitStatus) => {
                     WriteControlMsgResp(fd, &UCallResp::WaitContainerResp(exitStatus));
                 }
@@ -153,7 +153,7 @@ pub fn ControlMsgHandler(fd: *const u8) {
             }
         }
         Payload::WaitPid(waitpid) => {
-            match LOADER.WaitPID(waitpid.pid, waitpid.clearStatus) {
+            match LOADER.WaitPID(waitpid.cid, waitpid.pid, waitpid.clearStatus) {
                 Ok(exitStatus) => {
                     WriteControlMsgResp(fd, &UCallResp::WaitPidResp(exitStatus));
                 }
@@ -161,6 +161,28 @@ pub fn ControlMsgHandler(fd: *const u8) {
                     WriteControlMsgResp(fd, &UCallResp::UCallRespErr(format!("{:?}", e)));
                 }
             }
+        }
+        Payload::CreateSubContainer(createArgs) => {
+            match LOADER.CreateSubContainer(createArgs.cid, createArgs.fds) {
+                Ok(()) => {
+                    WriteControlMsgResp(fd, &UCallResp::CreateSubContainerResp);
+                }
+                Err(e) => {
+                    WriteControlMsgResp(fd, &UCallResp::UCallRespErr(format!("{:?}", e)));
+                }
+            }
+        }
+        Payload::StartSubContainer(startArgs) => {
+            match LOADER.StartSubContainer(startArgs.process) {
+                Ok((_, entry, userStackAddr, kernelStackAddr)) => {
+                    WriteControlMsgResp(fd, &UCallResp::StartSubContainerResp);
+                    StartSubContainerProcess(entry, userStackAddr, kernelStackAddr);
+                }
+                Err(e) => {
+                    WriteControlMsgResp(fd, &UCallResp::UCallRespErr(format!("{:?}", e)));
+                }
+            }
+
         }
     }
 

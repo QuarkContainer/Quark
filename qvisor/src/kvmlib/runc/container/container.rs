@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use alloc::string::String;
+use std::os::unix::prelude::AsRawFd;
 use std::time::{SystemTime, UNIX_EPOCH, Duration};
 use std::path::Path;
 use std::env;
@@ -33,7 +34,8 @@ use super::super::super::qlib::auth::cap_set::*;
 use super::super::super::qlib::control_msg::*;
 use super::super::super::ucall::ucall::*;
 //use super::super::super::qlib::util::*;
-//use super::super::super::console::pty::*;
+use super::super::super::console::pty::*;
+use super::super::super::console::unix_socket::UnixSocket;
 use super::super::oci::*;
 use super::super::cgroup::*;
 use super::super::oci::serialize::*;
@@ -433,7 +435,7 @@ impl Container {
             // init container in the sandbox.
             let isRoot = IsRoot(&c.Spec);
             if isRoot {
-                info!("Creating new sandbox for container {}", id);
+                debug!("Creating new sandbox for container {}", id);
 
                 // Create and join cgroup before processes are created to ensure they are
                 // part of the cgroup from the start (and all children processes).
@@ -481,7 +483,41 @@ impl Container {
                     Some(restore) => restore(),
                 }
             } else {
-                panic!("doesn't support non-root container");
+                let sandboxId = match SandboxID(&c.Spec) {
+                    Some(sid) => sid,
+                    None => {
+                        error!("No sandbox ID found in spec when creating container inside sandbox");
+                        return Err(Error::InvalidInput);
+                    }
+                };
+
+                debug!("Creating new container {} inside exisitng sandbox {}", id, &sandboxId);
+                let rootContainer = match Container::Load(&c.RootContainerDir, &sandboxId) {
+                    Ok(container) => container,
+                    Err(e) => {
+                        error!("failed to load root container: {:?}", &e);
+                        return Err(e);
+                    }
+                };
+                c.Sandbox = rootContainer.Sandbox;
+                
+                // TODO: create placeholder cgroup paths for subcontainers, 
+                // althought it won't take effect, some tools use this for reporting and discovery 
+
+                // If the console control socket file is provided, then create a new
+		        // pty master/slave pair and send the TTY to the sandbox process.
+                let tty = if c.ConsoleSocket.len() > 0 {
+                    let (master, replicas) = NewPty()?;
+                    let client = UnixSocket::NewClient(&c.ConsoleSocket)?;
+                    client.SendFd(master.as_raw_fd())?;
+                    replicas.as_raw_fd()
+                } else {
+                    -1
+                };
+
+                if let Err(e) = c.Sandbox.as_ref().unwrap().CreateSubContainer(conf, id, tty) {
+                    error!("failed to create subcontainer: {:?}", e);
+                }
             }
 
             c.changeStatus(Status::Created);
@@ -600,7 +636,7 @@ impl Container {
     }
 
     // Start starts running the containerized process inside the sandbox.
-    pub fn Start(&mut self, _config: &GlobalConfig) -> Result<()> {
+    pub fn Start(&mut self, config: &GlobalConfig) -> Result<()> {
         info!("Start container {}", &self.ID);
 
         let _unlockRoot = maybeLockRootContainer(&self.Spec, &self.RootContainerDir)?;
@@ -619,7 +655,16 @@ impl Container {
         if IsRoot(&self.Spec) {
             self.Sandbox.as_ref().unwrap().StartRootContainer()?;
         } else {
-            panic!("need implement");
+            // todo: make sure understand how these are used
+            let stdiofds: [i32;3] = if self.Spec.process.terminal {
+                [-1, -1, -1]
+            } else {
+                [0, 1, 2]
+            };
+            if let Err(e) = self.Sandbox.as_ref().unwrap().StartSubContainer(&self.Spec, config, &self.ID[..], &stdiofds) {
+                error!("Failed to start subcontainer, error : {:?}", &e);
+                panic!("{:?}", &e);
+            }
         }
 
         if self.Spec.hooks.is_some() {

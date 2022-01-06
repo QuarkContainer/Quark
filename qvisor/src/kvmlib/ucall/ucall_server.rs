@@ -91,13 +91,13 @@ pub fn PsHandler(cid: &str) -> Result<ControlMsg> {
     return Ok(msg)
 }
 
-pub fn WaitHandler() -> Result<ControlMsg> {
-    let msg = ControlMsg::New(Payload::WaitContainer);
+pub fn WaitHandler(cid: &str) -> Result<ControlMsg> {
+    let msg = ControlMsg::New(Payload::WaitContainer(cid.to_string()));
     return Ok(msg)
 }
 
 pub fn WaitPidHandler(waitpid: &WaitPid) -> Result<ControlMsg> {
-    let msg = ControlMsg::New(Payload::WaitPid(*waitpid));
+    let msg = ControlMsg::New(Payload::WaitPid(waitpid.clone()));
     return Ok(msg)
 }
 
@@ -110,13 +110,43 @@ pub fn SignalHandler(signalArgs: &SignalArgs) -> Result<ControlMsg> {
         }
     }
 
-    let msg = ControlMsg::New(Payload::Signal(*signalArgs));
+    let msg = ControlMsg::New(Payload::Signal(signalArgs.clone()));
     return Ok(msg)
 }
 
-pub fn ContainerDestroyHandler() -> Result<ControlMsg> {
-    let msg = ControlMsg::New(Payload::ContainerDestroy);
+pub fn ContainerDestroyHandler(cid: &String) -> Result<ControlMsg> {
+    let msg = ControlMsg::New(Payload::ContainerDestroy(cid.clone()));
     return Ok(msg)
+}
+
+pub fn CreateSubContainerHandler(args: &mut CreateArgs, fds: &[i32]) -> Result<ControlMsg> {
+    //set fds back to args, 
+    if fds.len() == 1 {
+        args.fds[0] = fds[0]
+    }
+    let msg = ControlMsg::New(Payload::CreateSubContainer(args.clone()));
+    return Ok(msg)
+}
+
+pub fn StartSubContainerHandler(args: &mut StartArgs, fds: &[i32]) -> Result<ControlMsg> {
+    if fds.len() == 3 {
+        args.process.Stdiofds[0] = fds[0];
+        args.process.Stdiofds[1] = fds[1];
+        args.process.Stdiofds[2] = fds[2];
+    }
+
+    for i in 0..args.process.Stdiofds.len() {
+        let osfd = args.process.Stdiofds[i];
+        VMSpace::UnblockFd(osfd);
+
+        let hostfd = IO_MGR.AddFile(osfd);
+
+        args.process.Stdiofds[i] = hostfd;
+    }
+
+
+    let msg = ControlMsg::New(Payload::StartSubContainer(args.clone()));
+    return Ok(msg);
 }
 
 pub fn ProcessReqHandler(req: &mut UCallReq, fds: &[i32]) -> Result<ControlMsg> {
@@ -126,10 +156,12 @@ pub fn ProcessReqHandler(req: &mut UCallReq, fds: &[i32]) -> Result<ControlMsg> 
         UCallReq::Pause => PauseHandler()?,
         UCallReq::Unpause => UnpauseHandler()?,
         UCallReq::Ps(cid) => PsHandler(cid)?,
-        UCallReq::WaitContainer => WaitHandler()?,
+        UCallReq::WaitContainer(cid) => WaitHandler(cid)?,
         UCallReq::WaitPid(waitpid) => WaitPidHandler(waitpid)?,
         UCallReq::Signal(signalArgs) => SignalHandler(signalArgs)?,
-        UCallReq::ContainerDestroy => ContainerDestroyHandler()?,
+        UCallReq::ContainerDestroy(cid) => ContainerDestroyHandler(cid)?,
+        UCallReq::CreateSubContainer(args) => CreateSubContainerHandler(args, fds)?,
+        UCallReq::StartSubContainer(args) => StartSubContainerHandler(args, fds)?,
     };
 
     return Ok(msg)

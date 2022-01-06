@@ -23,6 +23,7 @@ pub fn ControlSocketAddr(id: &str) -> String {
 }
 
 pub const UCALL_BUF_LEN : usize = 4096;
+type Cid = String;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum UCallReq {
@@ -30,17 +31,35 @@ pub enum UCallReq {
     ExecProcess(ExecArgs),
     Pause,
     Unpause,
-    Ps(String),
-    WaitContainer,
+    Ps(Cid),
+    WaitContainer(Cid),
     WaitPid(WaitPid),
     Signal(SignalArgs),
-    ContainerDestroy,
+    ContainerDestroy(Cid),
+    CreateSubContainer(CreateArgs),
+    StartSubContainer(StartArgs),
 }
 
 impl FileDescriptors for UCallReq {
+    // todo: need to implement this so that fds can be passed
     fn GetFds(&self) -> Option<&[i32]> {
         match self {
             UCallReq::ExecProcess(args) => return args.GetFds(),
+            UCallReq::CreateSubContainer(args) => {
+                if args.fds[0] == -1 {
+                    return None
+                } else {
+                    return Some(&args.fds)
+                }
+            },
+            UCallReq::StartSubContainer(args) => {
+                let stdios = &args.process.Stdiofds;
+                if stdios[0] != -1 {
+                    return Some(stdios)
+                } else {
+                    return None
+                }
+            }
             _ => return None,
         }
     }
@@ -51,11 +70,6 @@ impl FileDescriptors for UCallReq {
             _ => ()
         }
     }
-}
-
-#[derive(Serialize, Deserialize, Debug, Default)]
-pub struct RootContainerStart {
-    pub cid: String
 }
 
 pub trait FileDescriptors {

@@ -144,9 +144,9 @@ impl <T> SpMcRing <T> {
 }
 
 #[derive(Default)]
-pub struct QRingBuf<T:Clone + Copy>(QMutex<VecDeque<T>>);
+pub struct QRingBuf<T:Clone>(QMutex<VecDeque<T>>);
 
-impl <T:Clone + Copy> Deref for QRingBuf <T> {
+impl <T:Clone> Deref for QRingBuf <T> {
     type Target = QMutex<VecDeque<T>>;
 
     fn deref(&self) -> &QMutex<VecDeque<T>> {
@@ -154,7 +154,7 @@ impl <T:Clone + Copy> Deref for QRingBuf <T> {
     }
 }
 
-impl <T:Clone + Copy> QRingBuf <T> {
+impl <T:Clone> QRingBuf <T> {
     pub fn New(size: usize) -> Self {
         return Self(QMutex::new(VecDeque::with_capacity(size)))
     }
@@ -166,7 +166,7 @@ impl <T:Clone + Copy> QRingBuf <T> {
             return Err(Error::QueueFull);
         }
 
-        p.push_back(*data);
+        p.push_back(data.clone());
         return Ok(());
     }
 
@@ -180,7 +180,7 @@ impl <T:Clone + Copy> QRingBuf <T> {
             return Err(Error::QueueFull);
         }
 
-        p.push_back(*data);
+        p.push_back(data.clone());
         return Ok(());
     }
 

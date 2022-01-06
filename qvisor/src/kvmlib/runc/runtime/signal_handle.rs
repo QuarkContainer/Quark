@@ -78,6 +78,7 @@ extern fn handle_sigintAct(signal :i32, signInfo: *mut libc::siginfo_t, _: *mut 
 
         let signal = SignalArgs {
             Signo: signal,
+            CID: "".to_string(),
             PID: 0,
             Mode: if console {
                 SignalDeliveryMode::DeliverToForegroundProcessGroup

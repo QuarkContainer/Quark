@@ -27,7 +27,7 @@ use super::super::qlib::cpuid::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::limits::*;
 use super::super::qlib::loader::*;
-use super::super::qlib::auth::*;
+use super::super::qlib::auth;
 use super::super::qlib::auth::userns::*;
 use super::super::qlib::auth::id::*;
 use super::super::SignalDef::*;
@@ -86,6 +86,7 @@ impl PartialEq for ExecID {
 pub struct ExecProcess {
     pub tg: ThreadGroup,
     pub tty: Option<TTYFileOps>,
+    pub hostTTY: i32,
 }
 
 #[derive(Default)]
@@ -100,9 +101,9 @@ impl Deref for Loader {
 }
 
 impl Loader {
-    pub fn WaitContainer(&self) -> Result<u32> {
+    pub fn WaitContainer(&self, cid: String) -> Result<u32> {
         let task = Task::Current();
-        let (tg, _) = self.Lock(task)?.ThreadGroupFromID(0).expect("WaitContainer: there is no root container");
+        let (tg, _) = self.Lock(task)?.ThreadGroupFromID(&ExecID{cid: cid, pid:0}).expect("WaitContainer: there is no root container");
 
         let task = Task::Current();
         tg.WaitExited(task);
@@ -110,9 +111,9 @@ impl Loader {
         return Ok(tg.ExitStatus().Status())
     }
 
-    pub fn WaitPID(&self, pid: ThreadID, clearStatus: bool) -> Result<u32> {
+    pub fn WaitPID(&self, cid: String, pid: ThreadID, clearStatus: bool) -> Result<u32> {
         let task = Task::Current();
-        let tg =  match self.Lock(task)?.ThreadGroupFromID(pid) {
+        let tg =  match self.Lock(task)?.ThreadGroupFromID(&ExecID{cid: cid.clone(), pid: pid}) {
             None => {
                 return Err(Error::Common(format!("Loader::WaitPID pid {} doesn't exist", pid)))
             },
@@ -120,7 +121,7 @@ impl Loader {
         };
 
         if clearStatus {
-            self.Lock(task)?.processes.remove(&pid);
+            self.Lock(task)?.processes.remove(&ExecID{cid, pid});
         }
 
         tg.WaitExited(task);
@@ -132,13 +133,13 @@ impl Loader {
     pub fn ExecProcess(&self, process: Process) -> Result<(i32, u64, u64, u64)> {
         let task = Task::Current();
         let kernel = self.Lock(task)?.kernel.clone();
-        let userns = kernel.rootUserNamespace.clone();
+        let userns = kernel.RootUserNamespace();
         let mut gids = Vec::with_capacity(process.AdditionalGids.len());
         for gid in &process.AdditionalGids {
             gids.push(KGID(*gid))
         }
-
-        let creds = Credentials::NewUserCredentials(
+        let cid = process.ID.clone();
+        let creds = auth::Credentials::NewUserCredentials(
             KUID(process.UID),
             KGID(process.GID),
             &gids[..],
@@ -171,8 +172,9 @@ impl Loader {
         let execProc = ExecProcess {
             tg : tg,
             tty: ttyFileOps,
+            ..Default::default()
         };
-        self.Lock(task)?.processes.insert(tid, execProc);
+        self.Lock(task)?.processes.insert(ExecID{cid: cid, pid: tid}, execProc);
         let paths = GetPath(&procArgs.Envv);
         procArgs.Filename = task.mountNS.ResolveExecutablePath(task, &procArgs.WorkingDirectory, &procArgs.Filename, &paths)?;
         let (entry, userStackAddr, kernelStackAddr) = kernel.LoadProcess(&procArgs.Filename, &procArgs.Envv, &mut procArgs.Argv)?;
@@ -212,16 +214,106 @@ impl Loader {
         let execProc = ExecProcess {
             tg : tg,
             tty: ttyFileOps,
+            ..Default::default()
         };
 
         //self.processes.insert(ExecID{cid: procArgs.ContainerID.to_string(), pid: tid}, execProc);
         //for the root container, the tid is always 0,
-        self.Lock(task)?.processes.insert(0, execProc);
+        self.Lock(task)?.processes.insert(ExecID{cid: procArgs.ContainerID.to_string(), pid: 0}, execProc);
 
         let (entry, userStackAddr, kernelStackAddr) = kernel.LoadProcess(&procArgs.Filename, &procArgs.Envv, &mut procArgs.Argv)?;
         return Ok((tid, entry, userStackAddr, kernelStackAddr))
     }
 
+    pub fn CreateSubContainer(&self, cid: String, tty: Vec<i32>) -> Result<()> {
+        let tty = if tty.len() > 0 {
+            tty[0]
+        } else {
+            -1
+        };
+        let task = Task::Current();
+        let execId = ExecID {
+            cid: cid,
+            pid: 0,
+        };
+
+        if self.lock().processes.contains_key(&execId) {
+            error!("Subcontainer {} already exists", &execId.cid);
+            return Err(Error::Common("Subcontainer already exists".to_string()));
+        }
+
+        self.Lock(task)?.processes.insert(execId, ExecProcess{hostTTY: tty, ..Default::default()});
+        return Ok(());        
+    }
+
+    pub fn StartSubContainer(&self, processSpec: Process) -> Result<(i32, u64, u64, u64)> {
+        let task = Task::Current();
+        let mut lockedLoader = self.Lock(task)?;
+        let kernel = lockedLoader.kernel.clone();
+        let cid = processSpec.ID.clone();
+        let execId = ExecID {
+            cid: cid,
+            pid: 0
+        };
+        let mut process = match lockedLoader.processes.get_mut(&execId) {
+            None => return Err(Error::Common(format!("trying to start a deleted container {}", &execId.cid))),
+            Some(p) => p
+        };
+
+        let mut gids = Vec::with_capacity(processSpec.AdditionalGids.len());
+        for gid in &processSpec.AdditionalGids {
+            gids.push(KGID(*gid))
+        };
+
+        
+        let userns = kernel.RootUserNamespace();
+
+        let creds = auth::Credentials::NewUserCredentials(
+            KUID(processSpec.UID),
+            KGID(processSpec.GID),
+            &gids[..],
+            Some(&processSpec.TaskCaps()),
+            &userns
+        );
+
+        //todo: investigate PID namespace and whether we need it.
+        let mut createProcessArgs = NewProcess(processSpec, &creds, &kernel);
+        let (tg, tid) = kernel.CreateProcess(&mut createProcessArgs)?;
+
+        let mut ttyFileOps = None;
+        if createProcessArgs.Terminal {
+            if process.hostTTY == -1 {
+                error!("terminal fd not provided for terminal mode");
+                return Err(Error::Common("missing terminal fd for subcontainer".to_string()));
+            }
+            let file = task.NewFileFromHostFd(0, process.hostTTY, true).expect("Task: create std fds");
+            file.flags.lock().0.NonBlocking = false;
+
+            assert!(task.Dup2(0, 1) == 1);
+            assert!(task.Dup2(0, 2) == 2);
+
+            let fileops = file.FileOp.clone();
+            let ttyops = fileops.as_any().downcast_ref::<TTYFileOps>()
+                .expect("TTYFileOps convert fail").clone();
+
+            ttyops.InitForegroundProcessGroup(&tg.ProcessGroup().unwrap());
+            ttyFileOps = Some(ttyops)
+        } else {
+            debug!("debugging stdios: {:?}", &createProcessArgs.Stdiofds[..]);
+            task.NewStdFds(&createProcessArgs.Stdiofds[..], false).expect("Task: create std fds");
+        }
+
+        process.tg = tg;
+        process.tty = ttyFileOps;
+
+        let paths = GetPath(&createProcessArgs.Envv);
+        createProcessArgs.Filename = task.mountNS.ResolveExecutablePath(task,
+             &createProcessArgs.WorkingDirectory,
+            &createProcessArgs.Filename, &paths)?;
+        let (entry, userStackAddr, kernelStackAddr) = kernel.LoadProcess(
+            &createProcessArgs.Filename, &createProcessArgs.Envv, &mut createProcessArgs.Argv)?;
+        return Ok((tid, entry, userStackAddr, kernelStackAddr));
+    }
 }
 
 #[derive(Default)]
@@ -241,7 +333,7 @@ pub struct LoaderInternal {
     // processes maps containers init process and invocation of exec. Root
     // processes are keyed with container ID and pid=0, while exec invocations
     // have the corresponding pid set.
-    pub processes: BTreeMap<ThreadID, ExecProcess>,
+    pub processes: BTreeMap<ExecID, ExecProcess>,
 
     //whether the root container will auto started without StartRootContainer Ucall
     pub autoStart: bool,
@@ -259,7 +351,7 @@ impl LoaderInternal {
         }
 
         let userns = UserNameSpace::NewRootUserNamespace();
-        let creds = Credentials::NewUserCredentials(
+        let creds = auth::Credentials::NewUserCredentials(
             KUID(process.UID),
             KGID(process.GID),
             &gids[..],
@@ -296,8 +388,8 @@ impl LoaderInternal {
         return processArgs
     }
 
-    pub fn ThreadGroupFromID(&self, pid: ThreadID) -> Option<(ThreadGroup, Option<TTYFileOps>)> {
-        match self.processes.get(&pid) {
+    pub fn ThreadGroupFromID(&self, key: &ExecID) -> Option<(ThreadGroup, Option<TTYFileOps>)> {
+        match self.processes.get(key) {
             None => (),
             Some(ep) => return Some((ep.tg.clone(), ep.tty.clone())),
         };
@@ -305,8 +397,8 @@ impl LoaderInternal {
         return None;
     }
 
-    pub fn SignalForegroundProcessGroup(&self, tgid: ThreadID, signo: i32) -> Result<()> {
-        let (tg, tty) = match self.ThreadGroupFromID(tgid) {
+    pub fn SignalForegroundProcessGroup(&self, cid: String, tgid: ThreadID, signo: i32) -> Result<()> {
+        let (tg, tty) = match self.ThreadGroupFromID(&ExecID{cid: cid, pid: tgid}) {
             None => {
                 info!("SignalForegroundProcessGroup: no thread group found for {}", tgid);
                 let err = Err(Error::Common(format!("no thread group found for {}", tgid)));
@@ -357,8 +449,8 @@ impl LoaderInternal {
         return lastErr
     }
 
-    pub fn SignalProcess(&self, tgid: ThreadID, signo: i32) -> Result<()> {
-        match self.ThreadGroupFromID(tgid) {
+    pub fn SignalProcess(&self, cid: String, tgid: ThreadID, signo: i32) -> Result<()> {
+        match self.ThreadGroupFromID(&ExecID{cid: cid.clone(), pid: tgid}) {
             None => (),
             Some((execTG, _)) => {
                 return execTG.SendSignal(&SignalInfo{
@@ -371,7 +463,7 @@ impl LoaderInternal {
         // The caller may be signaling a process not started directly via exec.
         // In this case, find the process in the container's PID namespace and
         // signal it.
-        let (initTG, _) = self.ThreadGroupFromID(0).unwrap();
+        let (initTG, _) = self.ThreadGroupFromID(&ExecID{cid: cid.clone(), pid: 0}).unwrap();
         let tg = match initTG.PIDNamespace().ThreadGroupWithID(tgid) {
             None => return Err(Error::Common(format!("no such process with PID {}", tgid))),
             Some(tg) => tg,
@@ -399,8 +491,8 @@ impl LoaderInternal {
         }
     }
 
-    pub fn ThreadGroupFromIDLocked(&self, key: ThreadID) -> Result<(ThreadGroup, Option<TTYFileOps>)> {
-        let ep = match self.processes.get(&key) {
+    pub fn ThreadGroupFromIDLocked(&self, key: &ExecID) -> Result<(ThreadGroup, Option<TTYFileOps>)> {
+        let ep = match self.processes.get(key) {
             None => return Err(Error::Common("container not found".to_string())),
             Some(ep) => ep,
         };
@@ -424,10 +516,10 @@ impl LoaderInternal {
         return Ok(())
     }
 
-    pub fn DestroyContainer(&mut self) -> Result<()> {
+    pub fn DestroyContainer(&mut self, cid: String) -> Result<()> {
         let l = self;
 
-        match l.ThreadGroupFromIDLocked(0) {
+        match l.ThreadGroupFromIDLocked(&ExecID{cid: cid, pid: 0}) {
             Ok(_) => {
                 l.SignalAll(Signal::SIGKILL as i32)
                     .map_err(|e| Error::Common(format!("sending SIGKILL to all container processes: {:?}", e)))?;
@@ -442,7 +534,7 @@ impl LoaderInternal {
     }
 }
 
-pub fn NewProcess(process: Process, creds: &Credentials, k: &Kernel) -> CreateProcessArgs {
+pub fn NewProcess(process: Process, creds: &auth::Credentials, k: &Kernel) -> CreateProcessArgs {
     let utsns = k.rootUTSNamespace.clone();
     let ipcns = k.rootIPCNamespace.clone();
     let mut stdiofds : [i32; 3] = [0; 3];

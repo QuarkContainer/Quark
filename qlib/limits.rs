@@ -116,7 +116,7 @@ impl Default for Limit {
     }
 }
 
-#[derive(Serialize, Deserialize, Default, Debug, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Default, Debug, Eq, PartialEq, Clone)]
 pub struct LimitSetInternal {
     pub data: BTreeMap<LimitType, Limit>,
 }
