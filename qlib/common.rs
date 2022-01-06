@@ -14,6 +14,8 @@
 
 extern crate alloc;
 
+pub const RDMA_ENABLE : bool= false;
+
 // Segment indices and Selectors.
 pub const SEG_KCODE      : u16 = 1;
 pub const SEG_KDATA      : u16 = 2;

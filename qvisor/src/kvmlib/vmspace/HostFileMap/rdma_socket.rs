@@ -5,12 +5,13 @@ use super::super::super::qlib::mutex::*;
 use core::mem;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
+use lazy_static::lazy_static;
 
 use super::super::super::IO_MGR;
 use super::super::super::URING_MGR;
 //use super::super::super::SHARE_SPACE;
 use super::super::super::qlib::linux_def::*;
-use super::super::super::vmspace::singleton::*;
+//use super::super::super::vmspace::singleton::*;
 use super::super::super::qlib::common::*;
 //use super::super::super::qlib::task_mgr::*;
 use super::super::super::qlib::socket_buf::*;
@@ -20,8 +21,9 @@ use super::fdinfo::*;
 use super::socket_info::*;
 use super::rdma::*;
 
-pub static RDMA : Singleton<RDMAContext> = Singleton::<RDMAContext>::New();
-
+lazy_static! {
+    pub static ref RDMA: RDMAContext = RDMAContext::default();
+}
 
 #[derive(Clone)]
 pub struct RDMAServerSock(Arc<QMutex<RDMAServerSockIntern>>);
@@ -153,8 +155,9 @@ pub struct RDMAInfo {
     qp_num: u32,   /* QP number */
     lid: u16,      /* LID of the IB port */
     offset: u32,    //read buffer offset
-    freeSpace: u32, //read buffer free space size
+    freespace: u32, //read buffer free space size
     gid: Gid, /* gid */
+    sending: bool, // the writeimmediately is ongoing
 }
 
 
@@ -192,8 +195,6 @@ impl Deref for RDMADataSock {
     }
 }
 
-pub const RDMA_ENABLE : bool= false;
-
 impl RDMADataSock {
     pub fn New(fd: i32, socketBuf: Arc<SocketBuff>, rdmaType: RDMAType) -> Self {
         let (addr, len) = socketBuf.ReadBuf();
@@ -209,8 +210,9 @@ impl RDMADataSock {
                 qp_num: qp.qpNum(),
                 lid: RDMA.Lid(),
                 offset: 0,
-                freeSpace: len as u32,
-                gid: RDMA.Gid()
+                freespace: len as u32,
+                gid: RDMA.Gid(),
+                sending: false,
             };
 
             return Self (
@@ -250,7 +252,6 @@ impl RDMADataSock {
                 })
             )
         }
-
     }
 
     pub fn SendLocalRDMAInfo(&self) -> Result<()> {
@@ -333,10 +334,85 @@ impl RDMADataSock {
         self.socketState.store(state as u64, Ordering::SeqCst)
     }
 
+    /************************************ rdma integration ****************************/
     // after get remote peer's RDMA metadata and need to setup RDMA
-    pub fn SetupUpUring(&self) {
+    pub fn SetupRDMA(&self) {
+        let remoteInfo = self.remoteRDMAInfo.lock();
 
+        self.qp.lock().Setup(&RDMA, remoteInfo.qp_num, remoteInfo.lid, remoteInfo.gid).expect("SetupRDMA fail...");
     }
+
+    pub fn RDMAWriteImm(&self, localAddr: u64, remoteAddr: u64, writeCount: usize, readCount: usize) -> Result<()>{
+        let wrid = WorkRequestId::New(self.fd, WorkRequestType::WriteImm);
+        let immData = ImmData::New(writeCount as u16, readCount as u16);
+
+        let rkey = self.remoteRDMAInfo.lock().rkey;
+
+        self.qp.lock().WriteImm(wrid.0, localAddr, writeCount as u32, self.mr.LKey(), remoteAddr, rkey, immData.0)?;
+        return Ok(())
+    }
+
+    // need to be called when the self.writeLock is locked
+    pub fn RDMASend(&self) {
+        let mut remoteInfo = self.remoteRDMAInfo.lock();
+        if remoteInfo.sending == true {
+            return // the sending is ongoing
+        }
+
+        let readCount = self.socketBuf.GetAndClearConsumeReadData();
+        let buf = self.socketBuf.writeBuf.lock();
+        let (addr, mut len) = buf.GetDataBuf();
+        if readCount > 0 || len > 0 {
+            if len > remoteInfo.freespace as usize {
+                len = remoteInfo.freespace as usize;
+            }
+
+            self.RDMAWriteImm(addr,
+                                      remoteInfo.raddr + remoteInfo.offset as u64,
+                                      len,
+                                      readCount as usize
+            ).expect("RDMAWriteImm fail...");
+
+            remoteInfo.sending = true;
+            remoteInfo.freespace -= len  as u32;
+        }
+    }
+
+    // triggered by the RDMAWriteImmediately finish
+    pub fn ProcessRDMAWriteImmFinish(&self, writeCount: u64) {
+        let _writelock = self.writeLock.lock();
+        {
+            let mut remoteInfo = self.remoteRDMAInfo.lock();
+            remoteInfo.sending = false;
+            remoteInfo.offset = (remoteInfo.offset + writeCount as u32) % remoteInfo.rlen;
+        }
+
+        let (trigger, addr, _len) = self.socketBuf.ConsumeAndGetAvailableWriteBuf(writeCount as usize);
+        if trigger {
+            FdNotify(self.fd, EVENT_OUT);
+        }
+
+        if addr != 0 {
+            self.RDMASend()
+        }
+    }
+
+    // triggered when remote's writeimmedate reach local
+    pub fn ProcessRDMARecvWriteImm(&self, recvCount: u64, writeConsumeCount: u64) {
+        if recvCount > 0 {
+            let (trigger, _addr, _len) = self.socketBuf.ProduceAndGetFreeReadBuf(recvCount as usize);
+            if trigger {
+                FdNotify(self.fd, EVENT_IN);
+            }
+        }
+
+        if writeConsumeCount > 0 {
+            let mut remoteInfo = self.remoteRDMAInfo.lock();
+            remoteInfo.freespace += writeConsumeCount as u32;
+        }
+    }
+
+    /*********************************** end of rdma integration ****************************/
 
     pub fn SetReady(&self) {
         match &self.rdmaType {
@@ -366,11 +442,11 @@ impl RDMADataSock {
         if !RDMA_ENABLE {
             self.ReadData();
         } else {
-            let _readlock = self.readLock.lock();
             match self.SocketState() {
                 SocketState::WaitingForRemoteMeta => {
+                    let _readlock = self.readLock.lock();
                     self.RecvRemoteRDMAInfo().unwrap();
-                    self.SetupUpUring();
+                    self.SetupRDMA();
                     self.SendAck().unwrap(); // assume the socket is ready for send
                     self.SetSocketState(SocketState::WaitingForRemoteReady);
 
@@ -382,11 +458,13 @@ impl RDMADataSock {
                     }
                 }
                 SocketState::WaitingForRemoteReady => {
+                    let _readlock = self.readLock.lock();
                     self.RecvAck().unwrap();
                     self.SetReady();
                 }
                 SocketState::Ready => {
-                    self.ReadData();
+                    let _writelock = self.writeLock.lock();
+                    self.RDMASend();
                 }
                 _ => {
                     panic!("RDMA socket read state error with state {:?}", self.SocketState())
@@ -462,7 +540,7 @@ impl RDMADataSock {
                     self.SetSocketState(SocketState::WaitingForRemoteMeta);
                 }
                 SocketState::Ready => {
-                    self.WriteData();
+                    self.RDMASend();
                 }
                 _ => {
                     panic!("RDMA socket Write state error with state {:?}", self.SocketState())

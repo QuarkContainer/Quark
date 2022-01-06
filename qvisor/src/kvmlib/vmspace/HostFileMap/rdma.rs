@@ -5,6 +5,8 @@ use std::ptr;
 use std::convert::TryInto;
 
 use super::super::super::qlib::common::*;
+use super::super::super::qlib::linux_def::*;
+use super::super::super::IO_MGR;
 
 #[derive(Default, Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(transparent)]
@@ -290,6 +292,7 @@ pub struct RDMAContextIntern {
     protectDomain: ProtectionDomain, /* PD handle */
     completeChannel: CompleteChannel, /* io completion channel */
     completeQueue: CompleteQueue, /* CQ handle */
+    ccfd: i32,
     ibPort: u8,
     gid: Gid,
 }
@@ -300,14 +303,26 @@ impl RDMAContextIntern {
         let portAttr = ibContext.QueryPort(ibPort);
         let protectDomain = ibContext.AllocProtectionDomain();
         let completeChannel = ibContext.CreateCompleteChannel();
+        let ccfd = unsafe {
+            (*completeChannel.0).fd
+        };
+
+        // start to monitor the complete channel
+        IO_MGR.AddRDMAContext(ccfd);
+        IO_MGR.AddWait(ccfd, EVENT_READ);
+
         let completeQueue = ibContext.CreateCompleteQueue(&completeChannel);
         let gid = ibContext.QueryGid(ibPort);
+
+        // unblock complete channel fd
+        super::super::VMSpace::UnblockFd(ccfd);
 
         return Self {
             portAttr: portAttr,
             ibContext: ibContext,
             protectDomain: protectDomain,
             completeChannel: completeChannel,
+            ccfd: ccfd,
             completeQueue: completeQueue,
             ibPort: ibPort,
             gid: gid
@@ -336,7 +351,9 @@ pub const MAX_RECV_SGE: u32 = 1;
 
 impl RDMAContext {
     pub fn Init(&self, deviceName: &str, ibPort: u8) {
-        *self.0.lock() = RDMAContextIntern::New(deviceName, ibPort);
+        if RDMA_ENABLE {
+            *self.0.lock() = RDMAContextIntern::New(deviceName, ibPort);
+        }
     }
 
     pub fn Lid(&self) -> u16 {
@@ -400,7 +417,108 @@ impl RDMAContext {
         return Ok(MemoryRegion(mr))
     }
 
+    pub fn CompleteQueue(&self) -> * mut rdmaffi::ibv_cq {
+        return self.lock().completeQueue.0
+    }
+
+    pub fn PollCompletion(&self) -> Result<()> {
+        let mut wc = rdmaffi::ibv_wc {
+            //TODO: find a better way to initialize
+            wr_id: 0,
+            status: rdmaffi::ibv_wc_status::IBV_WC_SUCCESS,
+            opcode: rdmaffi::ibv_wc_opcode::IBV_WC_BIND_MW,
+            vendor_err: 0,
+            byte_len: 0,
+            imm_data_invalidated_rkey_union: rdmaffi::imm_data_invalidated_rkey_union_t { imm_data: 0 }, //TODO: need double check
+            qp_num: 0,
+            src_qp: 0,
+            wc_flags: 0,
+            pkey_index: 0,
+            slid: 0,
+            sl: 0,
+            dlid_path_bits: 0,
+        };
+
+        loop {
+            let poll_result = unsafe { rdmaffi::ibv_poll_cq(self.CompleteQueue(), 1, &mut wc) };
+            if poll_result > 0 {
+                self.ProcessWC(&wc);
+            }
+        }
+    }
+
+    // call back for
+    pub fn ProcessWC(&self, wc: &rdmaffi::ibv_wc) {
+        let wrid = WorkRequestId(wc.wr_id);
+        let fd = wrid.Fd();
+        let typ = wrid.Type();
+
+        match typ {
+            WorkRequestType::WriteImm => {
+                IO_MGR.ProcessRDMAWriteImmFinish(fd, wc.byte_len as _);
+            }
+            WorkRequestType::Recv => {
+                let imm = unsafe {
+                    wc.imm_data_invalidated_rkey_union.imm_data
+                };
+                let immData = ImmData(imm);
+                IO_MGR.ProcessRDMARecvWriteImm(fd, immData.ReadCount() as _, immData.WriteCount() as _);
+            }
+        }
+    }
+
 }
+
+pub struct ImmData(pub u32);
+
+impl ImmData {
+    pub fn New(writeCount: u16, readCount: u16) -> Self {
+        return Self (
+            ((writeCount as u32) << 16) | (readCount as u32)
+        )
+    }
+
+    pub fn ReadCount(&self) -> u16 {
+        return (self.0 & 0xffff) as u16
+    }
+
+    pub fn WriteCount(&self) -> u16 {
+        return ((self.0 >> 16) & 0xffff) as u16
+    }
+}
+
+
+#[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Clone, Copy)]
+#[repr(u32)]
+pub enum  WorkRequestType {
+    WriteImm,
+    Recv,
+}
+
+pub struct WorkRequestId(pub u64);
+
+impl WorkRequestId {
+    pub fn New(fd: i32, typ: WorkRequestType) -> Self {
+        return Self (
+            ((fd as u64) << 32) | (typ as u32 as u64)
+        )
+    }
+
+    pub fn Fd(&self) -> i32 {
+        ((self.0 >> 32) & 0xffff_ffff) as i32
+    }
+
+    pub fn Type(&self) -> WorkRequestType {
+        let val = self.0 & 0xffff_ffff;
+        if val == 0 {
+            return WorkRequestType::WriteImm
+        } else {
+            assert!(val == 1);
+            return WorkRequestType::Recv
+        }
+    }
+}
+
 pub struct QueuePair(pub Mutex<*mut rdmaffi::ibv_qp>);
 
 impl Default for QueuePair {
@@ -425,6 +543,84 @@ impl QueuePair {
         return unsafe {
             (*self.Data()).qp_num
         };
+    }
+
+    pub fn WriteImm(&self,
+                    wrId: u64,
+                    laddr: u64,
+                    len: u32,
+                    lkey: u32,
+                    raddr: u64,
+                    rkey: u32,
+                    imm: u32) -> Result<()> {
+        let opcode = rdmaffi::ibv_wr_opcode::IBV_WR_RDMA_WRITE_WITH_IMM;
+        let mut sge = rdmaffi::ibv_sge {
+            addr: laddr,
+            length: len,
+            lkey: lkey,
+        };
+
+        let mut sw = rdmaffi::ibv_send_wr {
+            wr_id: wrId,
+            next: ptr::null_mut(),
+            sg_list: &mut sge,
+            num_sge: 1,
+            opcode: opcode,
+            send_flags: rdmaffi::ibv_send_flags::IBV_SEND_SIGNALED.0,
+            imm_data_invalidated_rkey_union: rdmaffi::imm_data_invalidated_rkey_union_t { imm_data: imm }, //TODO: need double check
+            qp_type: rdmaffi::qp_type_t {
+                xrc: rdmaffi::xrc_t { remote_srqn: 0 },
+            },
+            wr: rdmaffi::wr_t {
+                rdma: rdmaffi::rdma_t {
+                    //TODO: this is not needed when opcode is IBV_WR_SEND
+                    remote_addr: raddr,
+                    rkey: rkey,
+                },
+            },
+            bind_mw_tso_union: rdmaffi::bind_mw_tso_union_t {
+                //TODO: need a better init solution
+                tso: rdmaffi::tso_t {
+                    hdr: ptr::null_mut(),
+                    hdr_sz: 0,
+                    mss: 0,
+                },
+            },
+        };
+
+        let mut bad_wr: *mut rdmaffi::ibv_send_wr = ptr::null_mut();
+
+        let rc = unsafe { rdmaffi::ibv_post_send(self.Data(), &mut sw, &mut bad_wr) };
+
+        if rc != 0 {
+            return Err(Error::SysError(errno::errno().0));
+        }
+
+        return Ok(())
+    }
+
+    pub fn PostRecv(&self, wrId: u64,) -> Result<()> {
+        let mut rw = rdmaffi::ibv_recv_wr {
+            wr_id: wrId,
+            next: ptr::null_mut(),
+            sg_list: ptr::null_mut(),
+            num_sge: 1,
+        };
+
+        let mut bad_wr: *mut rdmaffi::ibv_recv_wr = ptr::null_mut();
+        let rc = unsafe { rdmaffi::ibv_post_recv(self.Data(), &mut rw, &mut bad_wr) };
+        if rc != 0 {
+            return Err(Error::SysError(errno::errno().0));
+        }
+
+        return Ok(())
+    }
+
+    pub fn Setup(&self, context: &RDMAContext, remote_qpn: u32, dlid: u16, dgid: Gid) -> Result<()> {
+        self.ToInit(context)?;
+        self.ToRtr(context, remote_qpn, dlid, dgid)?;
+        self.ToRts()?;
+        return Ok(())
     }
 
     pub fn ToInit(&self, context: &RDMAContext) -> Result<()> {

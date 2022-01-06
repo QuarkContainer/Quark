@@ -302,6 +302,10 @@ impl FdInfo {
         return Self(Arc::new(Mutex::new(FdInfoIntern::NewSocket(osfd))))
     }
 
+    pub fn NewRDMAContext(osfd: i32) -> Self {
+        return Self(Arc::new(Mutex::new(FdInfoIntern::NewRDMAContext(osfd))))
+    }
+
     pub fn IOBufWrite(&self, addr: u64, len: usize, offset: isize) -> i64 {
         let osfd = self.lock().osfd;
         return Self::BufWrite(osfd, addr, len, offset)
@@ -423,6 +427,28 @@ impl FdInfo {
         return 0;
     }
 
+    pub fn ProcessRDMAWriteImmFinish(&self, writeCount: u64) {
+        match self.SockInfo() {
+            SockInfo::RDMADataSocket(sock) => {
+                sock.ProcessRDMAWriteImmFinish(writeCount)
+            }
+            _ => {
+                panic!("ProcessRDMAWriteImmFinish get unexpected socket {:?}", self.SockInfo())
+            }
+        }
+    }
+
+    pub fn ProcessRDMARecvWriteImm(&self, recvCount: u64, writeCount: u64) {
+        match self.SockInfo() {
+            SockInfo::RDMADataSocket(sock) => {
+                sock.ProcessRDMARecvWriteImm(recvCount, writeCount)
+            }
+            _ => {
+                panic!("ProcessRDMARecvWriteImm get unexpected socket {:?}", self.SockInfo())
+            }
+        }
+    }
+
     pub fn RDMANotify(&self, typ: RDMANotifyType) -> i64 {
         match self.SockInfo() {
             SockInfo::RDMAServerSocket(RDMAServerSock) => {
@@ -456,7 +482,7 @@ impl FdInfo {
         match self.SockInfo() {
             SockInfo::Socket => {
                 let sockBuf = msg.socketBuf.clone();
-                let rdmaType = if super::rdma_socket::RDMA_ENABLE {
+                let rdmaType = if RDMA_ENABLE {
                     let addr = msg as *const _ as u64;
                     let msg = PostRDMAConnect::ToRef(addr);
                     RDMAType::Client(msg)
@@ -476,7 +502,7 @@ impl FdInfo {
             }
         }
 
-        if !super::rdma_socket::RDMA_ENABLE {
+        if !RDMA_ENABLE {
             msg.Finish(0)
         }
     }
@@ -517,6 +543,21 @@ impl FdInfoIntern {
             mask: 0,
             flags: Flags(flags),
             sockInfo: Mutex::new(SockInfo::File)
+        };
+
+        return res;
+    }
+
+    pub fn NewRDMAContext(fd: i32) -> Self {
+        let flags = unsafe {
+            fcntl(fd, F_GETFL)
+        };
+
+        let res = Self {
+            osfd: fd,
+            mask: 0,
+            flags: Flags(flags),
+            sockInfo: Mutex::new(SockInfo::RDMAContext)
         };
 
         return res;
