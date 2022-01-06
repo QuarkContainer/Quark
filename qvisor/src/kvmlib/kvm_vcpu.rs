@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::alloc::{Layout, alloc};
+use alloc::slice;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use kvm_bindings::kvm_sregs;
@@ -30,117 +32,71 @@ use super::qlib::linux::time::Timespec;
 use super::qlib::common::*;
 use super::qlib::task_mgr::*;
 use super::qlib::linux_def::*;
+use super::qlib::pagetable::*;
 use super::qlib::perf_tunning::*;
 use super::qlib::*;
 use super::qlib::vcpu_mgr::*;
+use super::qlib::buddyallocator::ZeroPage;
 use super::amd64_def::*;
 use super::URING_MGR;
 use super::QUARK_CONFIG;
 use super::runc::runtime::vm::*;
 
-// bootstrap memory for vcpu
-#[repr(C)]
-pub struct VcpuBootstrapMem {
-    pub stack: [u8; MemoryDef::DEFAULT_STACK_SIZE as usize], //kernel stack
-    pub gdt: [u8; MemoryDef::PAGE_SIZE as usize], // gdt: one page
-    pub idt: [u8; MemoryDef::PAGE_SIZE as usize], // idt: one page
-    pub tssIntStack: [u8; (MemoryDef::INTERRUPT_STACK_PAGES * MemoryDef::PAGE_SIZE) as usize],
-    pub tss: [u8; MemoryDef::PAGE_SIZE as usize], // tss: one page
-}
+pub fn AlignedAllocate(size: usize, align: usize, zeroData: bool) -> Result<u64> {
+    assert!(size % 8 == 0, "AlignedAllocate get unaligned size {:x}", size);
+    let layout = Layout::from_size_align(size, align);
+    match layout {
+        Err(_e) => Err(Error::UnallignedAddress),
+        Ok(l) => unsafe {
+            let addr = alloc(l);
+            if zeroData {
+                let arr = slice::from_raw_parts_mut(addr as *mut u64, size / 8);
+                for i in 0..512 {
+                    arr[i] = 0
+                }
+            }
 
-impl VcpuBootstrapMem {
-    pub fn FromAddr(addr: u64) -> &'static VcpuBootstrapMem {
-        return unsafe {
-            &*(addr as * const VcpuBootstrapMem)
+            Ok(addr as u64)
         }
     }
-
-    pub fn StackAddr(&self) -> u64 {
-        let addr = &self.stack[0] as * const _ as u64;
-        assert!(addr & (MemoryDef::DEFAULT_STACK_PAGES - 1) == 0, "VcpuBootstrapMem stack is not aligned");
-        return addr;
-    }
-
-    pub fn GdtAddr(&self) -> u64 {
-        let addr = &self.gdt[0] as * const _ as u64;
-        assert!(addr & (MemoryDef::PAGE_SIZE - 1) == 0, "VcpuBootstrapMem stack is not aligned");
-        return addr;
-    }
-
-    pub fn IdtAddr(&self) -> u64 {
-        let addr = &self.idt[0] as * const _ as u64;
-        assert!(addr & (MemoryDef::PAGE_SIZE - 1) == 0, "VcpuBootstrapMem stack is not aligned");
-        return addr;
-    }
-
-    pub fn TssIntStackAddr(&self) -> u64 {
-        let addr = &self.tssIntStack[0] as * const _ as u64;
-        assert!(addr & (MemoryDef::PAGE_SIZE - 1) == 0, "VcpuBootstrapMem stack is not aligned");
-        return addr;
-    }
-
-    pub fn TssAddr(&self) -> u64 {
-        let addr = &self.tss[0] as * const _ as u64;
-        assert!(addr & (MemoryDef::PAGE_SIZE - 1) == 0, "VcpuBootstrapMem stack is not aligned");
-        return addr;
-    }
-
-    pub fn Size() -> usize {
-        return core::mem::size_of::<Self>()
-    }
-
-    pub fn AlignedSize() -> usize {
-        let size = 2 * MemoryDef::DEFAULT_STACK_SIZE as usize;
-        assert!(Self::Size() < size);
-        return size;
-    }
 }
 
-pub struct SimplePageAllocator {
-    pub next: AtomicU64,
-    pub end: u64,
+pub struct HostPageAllocator {
+    pub allocator: AlignedAllocator,
 }
 
-impl SimplePageAllocator {
-    pub fn New(start: u64, len: usize) -> Self {
-        assert!(start & (MemoryDef::PAGE_SIZE - 1)  == 0);
-        assert!(len as u64 & (MemoryDef::PAGE_SIZE - 1) == 0);
-
+impl HostPageAllocator {
+    pub fn New() -> Self {
         return Self {
-            next: AtomicU64::new(start),
-            end: start + len as u64,
+            allocator: AlignedAllocator::New(0x1000, 0x10000)
         }
     }
 }
 
-impl Allocator for SimplePageAllocator {
+impl Allocator for HostPageAllocator {
     fn AllocPage(&self, _incrRef: bool) -> Result<u64> {
-        let current = self.next.load(Ordering::SeqCst);
-        if current == self.end {
-            panic!("SimplePageAllocator Out Of Memory")
-        }
-
-        self.next.fetch_add(MemoryDef::PAGE_SIZE, Ordering::SeqCst);
-        return Ok(current)
+       let ret = self.allocator.Allocate()?;
+        ZeroPage(ret);
+        return Ok(ret);
     }
 
     fn FreePage(&self, _addr: u64) -> Result<()> {
-        panic!("SimplePageAllocator doesn't support FreePage");
+        panic!("HostPageAllocator doesn't support FreePage");
     }
 }
 
-impl RefMgr for SimplePageAllocator {
+impl RefMgr for HostPageAllocator {
     fn Ref(&self, _addr: u64) -> Result<u64> {
-        //panic!("SimplePageAllocator doesn't support Ref");
+        //panic!("HostPageAllocator doesn't support Ref");
         return Ok(1)
     }
 
     fn Deref(&self, _addr: u64) -> Result<u64> {
-        panic!("SimplePageAllocator doesn't support Deref");
+        panic!("HostPageAllocator doesn't support Deref");
     }
 
     fn GetRef(&self, _addr: u64) -> Result<u64> {
-        panic!("SimplePageAllocator doesn't support GetRef");
+        panic!("HostPageAllocator doesn't support GetRef");
     }
 }
 
@@ -159,9 +115,7 @@ pub struct KVMVcpu {
     pub tssAddr: u64,
 
     pub heapStartAddr: u64,
-    pub heapLen: u64,
-
-    pub shareSpace: AtomicU64, // &'static ShareSpace,
+    pub shareSpaceAddr: u64,
 
     pub autoStart: bool,
     //the pipe id to notify io_mgr
@@ -174,24 +128,22 @@ impl KVMVcpu {
     pub fn Init(id: usize,
                 vcpuCnt: usize,
                 vm_fd: &kvm_ioctls::VmFd,
-                boostrapMem: &BootStrapMem,
                 entry: u64,
                 pageAllocatorBaseAddr: u64,
-                pageAllocatorOrd: u64,
+                shareSpaceAddr: u64,
                 autoStart: bool) -> Result<Self> {
         const DEFAULT_STACK_PAGES: u64 = qlib::linux_def::MemoryDef::DEFAULT_STACK_PAGES; //64KB
         //let stackAddr = pageAlloc.Alloc(DEFAULT_STACK_PAGES)?;
-        let vcpuBoostrapMem = boostrapMem.VcpuBootstrapMem(id);
-        let stackAddr = vcpuBoostrapMem.StackAddr();
+        let stackSize = DEFAULT_STACK_PAGES << 12;
+        let stackAddr = AlignedAllocate(stackSize as usize, stackSize as usize, false).unwrap();
         let topStackAddr = stackAddr + (DEFAULT_STACK_PAGES << 12);
 
-        //info!("the stack addr is {:x}, topstack address is {:x}", stackAddr, topStackAddr);
 
-        let gdtAddr = vcpuBoostrapMem.GdtAddr();
-        let idtAddr = vcpuBoostrapMem.IdtAddr();
+        let gdtAddr = AlignedAllocate(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize, true).unwrap();
+        let idtAddr = AlignedAllocate(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize, true).unwrap();
 
-        let tssIntStackStart = vcpuBoostrapMem.TssIntStackAddr();
-        let tssAddr = vcpuBoostrapMem.TssAddr();
+        let tssIntStackStart = AlignedAllocate(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize, true).unwrap();
+        let tssAddr = AlignedAllocate(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize, true).unwrap();
 
         info!("the tssIntStackStart is {:x}, tssAddr address is {:x}, idt addr is {:x}, gdt addr is {:x}",
             tssIntStackStart, tssAddr, idtAddr, gdtAddr);
@@ -208,23 +160,10 @@ impl KVMVcpu {
             idtAddr: idtAddr,
             tssIntStackStart: tssIntStackStart,
             tssAddr: tssAddr,
-            heapStartAddr: pageAllocatorBaseAddr + boostrapMem.Size() as u64,
-            heapLen: (1 << (pageAllocatorOrd + 12)) - boostrapMem.Size() as u64,
-            shareSpace: AtomicU64::new(0),
+            heapStartAddr: pageAllocatorBaseAddr,
+            shareSpaceAddr: shareSpaceAddr,
             autoStart: autoStart,
         })
-    }
-
-    #[inline]
-    pub fn ShareSpace(&self) -> &'static ShareSpace {
-        let addr = self.shareSpace.load(Ordering::Relaxed);
-        return unsafe {
-            & *(addr as * const ShareSpace)
-        };
-    }
-
-    pub fn StoreShareSpace(&self, addr: u64) {
-        self.shareSpace.store(addr, Ordering::SeqCst);
     }
 
     fn SetupGDT(&self, sregs: &mut kvm_sregs) {
@@ -324,7 +263,7 @@ impl KVMVcpu {
     }
 
     pub fn Schedule(&self, taskId: TaskId) {
-        self.ShareSpace().scheduler.ScheduleQ(taskId, taskId.Queue());
+        SHARE_SPACE.scheduler.ScheduleQ(taskId, taskId.Queue());
     }
 
     pub fn run(&self) -> Result<()> {
@@ -339,7 +278,7 @@ impl KVMVcpu {
             //arg0
             rdi: self.heapStartAddr, // self.pageAllocatorBaseAddr + self.,
             //arg1
-            rsi: self.heapLen,
+            rsi: self.shareSpaceAddr,
             //arg2
             rdx: self.id as u64,
             //arg3
@@ -394,7 +333,7 @@ impl KVMVcpu {
                                 {
                                     error!("signal debug");
                                     for i in 0..8 {
-                                        error!("vcpu[{}] state is {}/{}", i, self.ShareSpace().GetValue(i, 0), self.ShareSpace().GetValue(i, 1))
+                                        error!("vcpu[{}] state is {}/{}", i, SHARE_SPACE.GetValue(i, 0), SHARE_SPACE.GetValue(i, 1))
                                     }
                                 }
 
@@ -402,14 +341,14 @@ impl KVMVcpu {
                             }
 
                             //error!("HYPERCALL_IOWAIT sleeping ...");
-                            match KERNEL_IO_THREAD.Wait(&self.ShareSpace()) {
+                            match KERNEL_IO_THREAD.Wait(&SHARE_SPACE) {
                                 Ok(()) => (),
                                 Err(Error::Exit) => {
                                     if !super::runc::runtime::vm::IsRunning() {
                                         {
                                             error!("signal debug");
                                             for i in 0..8 {
-                                                error!("vcpu[{}] state is {}/{}", i, self.ShareSpace().GetValue(i, 0), self.ShareSpace().GetValue(i, 1))
+                                                error!("vcpu[{}] state is {}/{}", i, SHARE_SPACE.GetValue(i, 0), SHARE_SPACE.GetValue(i, 1))
                                             }
                                         }
 
@@ -432,32 +371,6 @@ impl KVMVcpu {
 
                             URING_MGR.lock().Wake(idx, minComplete).expect("qlib::HYPER CALL_URING_WAKE fail");
                         }
-                        qlib::HYPERCALL_INIT => {
-                            info!("get io out: HYPERCALL_INIT");
-
-                            let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                            let mut vms = VMS.lock();
-                            let sharespace = unsafe {
-                                &mut *(regs.rbx as * mut ShareSpace)
-                            };
-
-                            sharespace.Init();
-                            let logfd = super::super::print::LOG.lock().Logfd();
-                            super::URING_MGR.lock().Init(sharespace.config.read().DedicateUring);
-                            super::URING_MGR.lock().Addfd(logfd).unwrap();
-
-                            KERNEL_IO_THREAD.Init(sharespace.scheduler.VcpuArr[0].eventfd);
-                            URING_MGR.lock().SetupEventfd(sharespace.scheduler.VcpuArr[0].eventfd);
-                            URING_MGR.lock().Addfd(sharespace.HostHostEpollfd()).unwrap();
-                            vms.shareSpace = sharespace;
-
-                            let syncPrint = sharespace.config.read().SyncPrint();
-                            super::super::print::SetSharespace(sharespace);
-                            super::super::print::SetSyncPrint(syncPrint);
-
-                            //self.shareSpace = vms.GetShareSpace();
-                            self.StoreShareSpace(regs.rbx); // = vms.GetShareSpace();
-                        }
                         qlib::HYPERCALL_RELEASE_VCPU => {
                             SyncMgr::WakeShareSpaceReady();
                         }
@@ -469,13 +382,12 @@ impl KVMVcpu {
                             PerfPrint();
 
                             SetExitStatus(exitCode);
-                            super::ucall::ucall_server::Stop().unwrap();
 
                             //wake up Kernel io thread
-                            KERNEL_IO_THREAD.Wakeup(VMS.lock().GetShareSpace());
+                            KERNEL_IO_THREAD.Wakeup(&SHARE_SPACE);
 
                             //wake up workthread
-                            VirtualMachine::WakeAll(VMS.lock().GetShareSpace());
+                            VirtualMachine::WakeAll(&SHARE_SPACE);
                         }
 
                         qlib::HYPERCALL_PANIC => {
@@ -585,7 +497,7 @@ impl KVMVcpu {
                             let vcpu_sregs = self.vcpu.get_sregs().map_err(|e| Error::IOError(format!("vcpu::error is {:?}", e)))?;
                             error!("[{}] HYPERCALL_VCPU_DEBUG regs is {:#x?}", self.id, regs);
                             error!("sregs is {:#x?}", vcpu_sregs);
-                            error!("vcpus is {:#x?}", &self.ShareSpace().scheduler.VcpuArr);
+                            error!("vcpus is {:#x?}", &SHARE_SPACE.scheduler.VcpuArr);
                             unsafe { libc::_exit(0) }
                         }
 
@@ -595,12 +507,10 @@ impl KVMVcpu {
                         }
 
                         qlib::HYPERCALL_QCALL => {
-                            let sharespace = self.ShareSpace();
-
-                            self.GuestMsgProcess(sharespace);
+                            self.GuestMsgProcess(&SHARE_SPACE);
                             // last processor in host
-                            if sharespace.DecrHostProcessor() == 0 {
-                                self.GuestMsgProcess(sharespace);
+                            if SHARE_SPACE.DecrHostProcessor() == 0 {
+                                self.GuestMsgProcess(&SHARE_SPACE);
                             }
                         }
 
@@ -623,22 +533,19 @@ impl KVMVcpu {
                                 qmsg.ret = self.qCall(qmsg.msg);
                             }
 
-                            let sharespace = self.ShareSpace();
-                            sharespace.IncrHostProcessor();
+                            SHARE_SPACE.IncrHostProcessor();
 
-                            self.GuestMsgProcess(sharespace);
+                            self.GuestMsgProcess(&SHARE_SPACE);
                             // last processor in host
-                            if sharespace.DecrHostProcessor() == 0 {
-                                self.GuestMsgProcess(sharespace);
+                            if SHARE_SPACE.DecrHostProcessor() == 0 {
+                                self.GuestMsgProcess(&SHARE_SPACE);
                             }
                         }
 
                         qlib::HYPERCALL_VCPU_WAIT => {
                             let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                            let addr = regs.rbx;
-                            let count = regs.rcx as usize;
                             let retAddr = regs.rdi;
-                            let ret = self.VcpuWait(addr, count);
+                            let ret = self.VcpuWait();
                             if ret == -1 {
                                 return Ok(())
                             }
@@ -697,8 +604,8 @@ impl KVMVcpu {
         Ok(())
     }
 
-    pub fn VcpuWait(&self, addr: u64, count: usize) -> i64 {
-        let sharespace = self.ShareSpace();
+    pub fn VcpuWait(&self) -> i64 {
+        let sharespace = &SHARE_SPACE;
         while sharespace.scheduler.GlobalReadyTaskCnt() == 0 {
             if !super::runc::runtime::vm::IsRunning() {
                 return -1
@@ -722,12 +629,8 @@ impl KVMVcpu {
                         return 0;
                     }
 
-                    match sharespace.scheduler.WaitVcpu(sharespace, self.id, addr, count, false) {
-                        Ok(count) => {
-                            if count > 0 {
-                                return count
-                            }
-                        },
+                    match sharespace.scheduler.WaitVcpu(sharespace, self.id, false) {
+                        Ok(_) => {}
                         Err(Error::Exit) => return -1,
                         Err(e) => panic!("HYPERCALL_HLT wait fail with error {:?}", e),
                     }
@@ -740,7 +643,7 @@ impl KVMVcpu {
             if sharespace.scheduler.GlobalReadyTaskCnt() != 0 {
                 return 0;
             }
-            let ret = sharespace.scheduler.WaitVcpu(sharespace, self.id, addr, count, true);
+            let ret = sharespace.scheduler.WaitVcpu(sharespace, self.id, true);
             match ret {
                 Ok(count) => {
                     return count
@@ -799,11 +702,11 @@ impl Scheduler {
         }
     }
 
-    pub fn WaitVcpu(&self, sharespace: &ShareSpace, vcpuId: usize, addr: u64, count: usize, block: bool) -> Result<i64> {
+    pub fn WaitVcpu(&self, sharespace: &ShareSpace, vcpuId: usize, block: bool) -> Result<i64> {
         self.vcpuWaitMask.fetch_or(1<<vcpuId, Ordering::SeqCst);
         defer!(self.vcpuWaitMask.fetch_and(!(1<<vcpuId), Ordering::SeqCst););
 
-        return self.VcpuArr[vcpuId].VcpuWait(sharespace, addr, count, block);
+        return self.VcpuArr[vcpuId].VcpuWait(sharespace, block);
     }
 }
 
@@ -861,7 +764,7 @@ impl CPULocal {
         self.data = 1;
     }
 
-    pub fn VcpuWait(&self, sharespace: &ShareSpace, addr: u64, count: usize, block: bool) -> Result<i64> {
+    pub fn VcpuWait(&self, sharespace: &ShareSpace, block: bool) -> Result<i64> {
         let mut events = [epoll_event { events: 0, u64: 0 }; 2];
 
         let time = if block {
@@ -870,7 +773,7 @@ impl CPULocal {
             0
         };
 
-        loop {
+        while sharespace.scheduler.GlobalReadyTaskCnt() == 0 {
             self.ToWaiting(sharespace);
             if sharespace.config.read().AsyncPrint() {
                 sharespace.LogFlush(false);
@@ -910,18 +813,18 @@ impl CPULocal {
                 }
             }
 
-            let count = if hasMsg {
+            if hasMsg {
+                self.ToRunning(sharespace);
                 match sharespace.TryLockEpollProcess() {
-                    None => 0,
-                    Some(_) => {
-                        FD_NOTIFIER.HostEpollWait(addr, count)
+                    None => {},
+                    Some(_lock) => {
+                        FD_NOTIFIER.HostEpollWait();
                     }
                 }
-            } else {
-                0
-            };
+                self.ToSearch(sharespace);
+            }
 
-            if wakeVcpu || count > 0 {
+            if wakeVcpu {
                 if wakeVcpu {
                     let mut data : u64 = 0;
                     let ret = unsafe {
@@ -934,10 +837,11 @@ impl CPULocal {
                     }
                 }
 
-                return Ok(count)
+                return Ok(0)
             }
         }
 
+        return Ok(0)
     }
 
     pub fn Wakeup(&self) {
@@ -952,11 +856,27 @@ impl CPULocal {
 }
 
 impl ShareSpace {
-    pub fn Init(&mut self) {
+    pub fn Init(&mut self, vcpuCount: usize, controlSock: i32) {
+        *self.config.write() = *QUARK_CONFIG.lock();
+        let mut values = Vec::with_capacity(vcpuCount);
+        for _i in 0..vcpuCount {
+            values.push([AtomicU64::new(0), AtomicU64::new(0)])
+        };
+
+        let SyncLog= self.config.read().SyncPrint();
+        if !SyncLog {
+            let bs = super::qlib::bytestream::ByteStream::Init(128 * 1024); // 128 MB
+            *self.logBuf.lock() = Some(bs);
+        }
+
+        self.scheduler = Scheduler::New(vcpuCount);
+        self.values = values;
+
         self.scheduler.Init();
         self.SetLogfd(super::super::print::LOG.lock().Logfd());
         self.hostEpollfd.store(FD_NOTIFIER.Epollfd(), Ordering::SeqCst);
-        *self.config.write() = *QUARK_CONFIG.lock();
+        self.controlSock = controlSock;
+        super::vmspace::VMSpace::BlockFd(controlSock);
     }
 
     pub fn Yield() {

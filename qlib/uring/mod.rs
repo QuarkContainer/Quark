@@ -29,8 +29,6 @@ use self::util::{Fd, Mmap};
 use self::porting::*;
 use super::common::*;
 
-
-
 #[derive(Default)]
 pub struct Submission {
     pub fd: Fd,
@@ -44,38 +42,19 @@ pub struct Completion {
     pub cq: CompletionQueue,
 }
 
-
 /// IoUring instance
 #[derive(Default)]
 pub struct IoUring {
     pub fd: Fd,
     pub params: Parameters,
     pub memory: MemoryMap,
-    pub sq: SubmissionQueue,
-    pub cq: CompletionQueue,
+    pub sq: QMutex<SubmissionQueue>,
+    pub cq: QMutex<CompletionQueue>,
 }
 
 impl IoUring {
-    pub fn CopyTo(&self, submission: u64, completion: u64) {
-        let submission = unsafe {
-            &*(submission as * const QMutex<Submission>)
-        };
-
-        let completion = unsafe {
-            &*(completion as * const QMutex<Completion>)
-        };
-
-        let mut s = submission.lock();
-        s.params = self.params;
-        s.memory = self.memory;
-        self.sq.CopyTo(&mut s.sq);
-
-        let mut c = completion.lock();
-        self.cq.CopyTo(&mut c.cq);
-    }
-
     pub fn HasCompleteEntry(&self) -> bool {
-        return self.completion().len() > 0;
+        return self.completion().lock().len() > 0;
     }
 }
 
@@ -103,7 +82,7 @@ unsafe impl Sync for IoUring {}
 impl IoUring {
     #[inline]
     pub fn submitter(&self) -> Submitter<'_> {
-        Submitter::new(&self.fd, self.params.0.flags, &self.sq)
+        Submitter::new(&self.fd, self.params.0.flags, &self.sq.lock())
     }
 
     #[inline]
@@ -112,12 +91,12 @@ impl IoUring {
     }
 
     /// Get submission queue
-    pub fn submission(&mut self) -> &mut SubmissionQueue {
+    pub fn submission(&mut self) -> &QMutex<SubmissionQueue> {
         &mut self.sq
     }
 
     /// Get completion queue
-    pub fn completion(&self) -> &CompletionQueue {
+    pub fn completion(&self) -> &QMutex<CompletionQueue> {
         &self.cq
     }
 
@@ -129,7 +108,7 @@ impl IoUring {
 
     #[inline]
     pub fn submission_is_full(&self) -> bool {
-        return self.sq.is_full();
+        return self.sq.lock().is_full();
     }
 }
 

@@ -25,6 +25,7 @@ use super::super::super::qlib::common::*;
 use super::super::super::qlib::device::*;
 use super::super::super::qlib::auth::*;
 use super::super::super::task::*;
+use super::super::super::uid::NewUID;
 use super::super::super::kernel::time::*;
 use super::super::super::kernel::waiter::*;
 use super::super::super::kernel::waiter::qlock::*;
@@ -38,7 +39,6 @@ use super::super::dentry::*;
 use super::super::dirent::*;
 use super::dir::*;
 use super::terminal::*;
-use super::super::super::uid::*;
 
 pub fn NewSlaveNode(task: &Task, d: &DirInodeOperations, t: &Arc<Terminal>, owner: &FileOwner, p: &FilePermissions) -> Inode {
     let unstable = WithCurrentTime(task, &UnstableAttr {
@@ -68,12 +68,12 @@ pub fn NewSlaveNode(task: &Task, d: &DirInodeOperations, t: &Arc<Terminal>, owne
 
     let msrc = d.lock().msrc.clone();
     let inodeInternal = InodeIntern {
+        UniqueId: NewUID(),
         InodeOp: Arc::new(iops),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
         MountSource: msrc,
         Overlay: None,
-        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)))

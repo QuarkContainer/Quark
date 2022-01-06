@@ -32,9 +32,17 @@ pub struct UringMgr {
 
 impl Drop for UringMgr {
     fn drop(&mut self) {
-        for fd in &self.fds {
+        for fd in &self.uringfds {
             unsafe {
                 libc::close(*fd);
+            }
+        }
+
+        for fd in &self.fds {
+            if *fd >= 0 {
+                unsafe {
+                    libc::close(*fd);
+                }
             }
         }
     }
@@ -58,6 +66,11 @@ impl UringMgr {
         };
 
         return ret;
+    }
+
+    pub fn IOUringsAddr(&self) -> u64 {
+        let addr = &self.rings as * const Vec<IoUring> as u64;
+        return addr;
     }
 
     pub fn Init(&mut self, DedicateUringCnt: usize) {
@@ -87,11 +100,6 @@ impl UringMgr {
         self.Register(IORING_REGISTER_FILES, &self.fds[0] as * const _ as u64, self.fds.len() as u32).expect("InitUring register files fail");
     }
 
-    pub fn Setup(&mut self, idx: usize, submission: u64, completion: u64) -> Result<i32> {
-        self.rings[idx].CopyTo(submission, completion);
-        return Ok(0)
-    }
-
     pub fn SetupEventfd(&mut self, eventfd: i32) {
         self.eventfd = eventfd;
 
@@ -110,7 +118,7 @@ impl UringMgr {
     pub fn CompletEntries(&self) -> usize {
         let mut cnt = 0;
         for r in &self.rings {
-            cnt += r.completion().len();
+            cnt += r.completion().lock().len();
         };
 
         return cnt;

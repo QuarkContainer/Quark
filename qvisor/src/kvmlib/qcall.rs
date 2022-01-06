@@ -24,6 +24,9 @@ use super::kvm_vcpu::KVMVcpu;
 pub fn AQHostCall(msg: HostOutputMsg, _shareSpace: &ShareSpace) {
     let _l = super::GLOCK.lock();
     match msg {
+        HostOutputMsg::Default => {
+            panic!("AQHostCall Process get Default msg...");
+        }
         HostOutputMsg::QCall(_addr) => {
             panic!("AQHostCall Process get Qcall msg...");
         }
@@ -33,8 +36,8 @@ pub fn AQHostCall(msg: HostOutputMsg, _shareSpace: &ShareSpace) {
                 // ignore -9 EBADF, when change the Close to HCall, the waitfd is still async call,
                 // there is chance that the WaitFd fired before close
                 if ret != -9 {
-                    error!("WaitFD fail err is {}, fd is {}, errorno is {}",
-                        ret, msg.fd, ret);
+                    error!("WaitFD fail err is {}, fd is {:x?}, errorno is {}",
+                        ret, &msg, ret);
                 }
             }
         }
@@ -131,13 +134,6 @@ impl KVMVcpu {
         match msg {
             Msg::LoadProcessKernel(msg) => {
                 ret = super::VMS.lock().LoadProcessKernel(msg.processAddr, msg.len) as u64;
-            },
-            Msg::ControlMsgCall(msg) => {
-                let retAddr = &msg.ret as * const _ as u64;
-                ret = super::VMS.lock().ControlMsgCall(msg.taskId, msg.addr, msg.len, retAddr) as u64;
-            },
-            Msg::ControlMsgRet(msg) => {
-                ret = super::VMS.lock().ControlMsgRet(msg.msgId, msg.addr, msg.len) as u64;
             },
             Msg::GetStdfds(msg) => {
                 ret = super::VMSpace::GetStdfds(msg.addr) as u64;
@@ -237,9 +233,6 @@ impl KVMVcpu {
             Msg::Socket(msg) => {
                 ret = super::VMSpace::Socket(msg.domain, msg.type_, msg.protocol) as u64;
             },
-            Msg::SocketPair(msg) => {
-                ret = super::VMSpace::SocketPair(msg.domain, msg.type_, msg.protocol, msg.socketVect) as u64;
-            },
             Msg::GetPeerName(msg) => {
                 ret = super::VMSpace::GetPeerName(msg.sockfd, msg.addr, msg.addrlen) as u64;
             },
@@ -252,13 +245,22 @@ impl KVMVcpu {
             Msg::SetSockOpt(msg) => {
                 ret = super::VMSpace::SetSockOpt(msg.sockfd, msg.level, msg.optname, msg.optval, msg.optlen) as u64;
             },
-            Msg::Bind(msg) => {
+            Msg::IOBind(msg) => {
                 ret = super::VMSpace::Bind(msg.sockfd, msg.addr, msg.addrlen, msg.umask) as u64;
             },
-            Msg::Listen(msg) => {
+            Msg::RDMAListen(msg) => {
+                ret = super::VMSpace::RDMAListen(msg.sockfd, msg.backlog, msg.block, msg.acceptQueue.clone()) as u64;
+            },
+            Msg::RDMANotify(msg) => {
+                ret = super::VMSpace::RDMANotify(msg.sockfd, msg.typ) as u64;
+            },
+            Msg::PostRDMAConnect(msg) => {
+                ret = super::VMSpace::PostRDMAConnect(msg.fd, msg.socketBuf.clone()) as u64;
+            },
+            Msg::IOListen(msg) => {
                 ret = super::VMSpace::Listen(msg.sockfd, msg.backlog, msg.block) as u64;
             },
-            Msg::Shutdown(msg) => {
+            Msg::IOShutdown(msg) => {
                 ret = super::VMSpace::Shutdown(msg.sockfd, msg.how) as u64
             },
             Msg::SchedGetAffinity(msg) => {
@@ -317,7 +319,7 @@ impl KVMVcpu {
                 ret = super::VMSpace::IOAppend(msg.fd, msg.iovs, msg.iovcnt, msg.fileLenAddr) as u64;
             },
             Msg::IOAccept(msg) => {
-                ret = super::VMSpace::IOAccept(msg.fd, msg.addr, msg.addrlen, msg.flags) as u64;
+                ret = super::VMSpace::IOAccept(msg.fd, msg.addr, msg.addrlen) as u64;
             },
             Msg::IOConnect(msg) => {
                 ret = super::VMSpace::IOConnect(msg.fd, msg.addr, msg.addrlen) as u64;
@@ -347,13 +349,6 @@ impl KVMVcpu {
             Msg::NewTmpfsFile(msg) => {
                 ret = super::VMSpace::NewTmpfsFile(msg.typ, msg.addr) as u64;
             },
-            Msg::IoUringSetup(msg) => {
-                ret = match URING_MGR.lock().Setup(msg.idx, msg.submission, msg.completion) {
-                    Ok(v) => v as u64,
-                    Err(Error::SysError(v)) => -v as i64 as u64,
-                    _ => panic!("UringMgr setup fail")
-                }
-            },
             Msg::IoUringEnter(msg) => {
                 ret = match URING_MGR.lock().Enter(msg.idx, msg.toSubmit, msg.minComplete, msg.flags) {
                     Ok(v) => v as u64,
@@ -364,17 +359,23 @@ impl KVMVcpu {
             Msg::Statm(msg) => {
                 ret = super::VMSpace::Statm(msg.buf) as u64;
             },
-            Msg::NewFd(msg) => {
-                ret = super::VMSpace::NewFd(msg.fd) as u64;
+            Msg::NewSocket(msg) => {
+                ret = super::VMSpace::NewSocket(msg.fd) as u64;
             },
-            Msg::HostEpollWaitProcess(msg) => {
-                ret = super::VMSpace::HostEpollWaitProcess(msg.addr, msg.count) as u64;
+            Msg::HostEpollWaitProcess(_) => {
+                ret = super::VMSpace::HostEpollWaitProcess() as u64;
             },
-            Msg::VcpuWait(msg) => {
-                ret = self.VcpuWait(msg.addr, msg.count) as u64;
+            Msg::VcpuWait(_) => {
+                ret = self.VcpuWait() as u64;
             },
             Msg::EventfdWrite(msg) => {
                 ret = super::VMSpace::EventfdWrite(msg.fd) as u64;
+            },
+            Msg::ReadControlMsg(msg) => {
+                ret = super::VMSpace::ReadControlMsg(msg.fd, msg.addr, msg.len) as u64;
+            },
+            Msg::WriteControlMsgResp(msg) => {
+                ret = super::VMSpace::WriteControlMsgResp(msg.fd, msg.addr, msg.len) as u64;
             },
         };
 

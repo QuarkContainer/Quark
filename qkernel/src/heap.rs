@@ -1,14 +1,54 @@
 use core::alloc::{GlobalAlloc, Layout};
-use core::sync::atomic::AtomicBool;
+//use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-use core::ptr::NonNull;
-use core::mem::size_of;
-use core::cmp::max;
+//use core::ptr::NonNull;
+//use core::mem::size_of;
+//use core::cmp::max;
+use alloc::string::String;
 
-use super::qlib::vcpu_mgr::*;
+//use super::qlib::vcpu_mgr::*;
 use super::qlib::mem::list_allocator::*;
 
+pub const HEAP_ADDR: u64 = 0x4040000000;
+pub struct GuestAllocator {
+    pub heapAddr: AtomicU64,
+}
+
+impl GuestAllocator {
+    pub const fn New() -> Self {
+        return Self {
+            heapAddr: AtomicU64::new(0)
+        }
+    }
+
+    pub fn Init(&self, heapAddr: u64) {
+        self.heapAddr.store(heapAddr, Ordering::SeqCst)
+    }
+
+    #[inline(always)]
+    pub fn Allocator(&self) -> &'static ListAllocator {
+        return unsafe {
+            &*(self.heapAddr.load(Ordering::Relaxed) as * const ListAllocator)
+        }
+    }
+
+    pub fn Print(&self, class: usize) -> String {
+        return format!("GuestAllocator {} {:x}", class, HEAP_ADDR);
+    }
+}
+
+unsafe impl GlobalAlloc for GuestAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        return self.Allocator().alloc(layout)
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        return self.Allocator().dealloc(ptr, layout)
+    }
+}
+
+/*
 impl VcpuAllocator {
     pub fn handleError(&self, size:u64, alignment:u64) {
         super::Kernel::HostSpace::KernelOOM(size, alignment);
@@ -43,7 +83,7 @@ impl Count {
 #[derive(Default, Debug)]
 pub struct QAllocator {
     pub localReady: AtomicBool,
-    pub counts: [Count; 13],
+    pub counts: [Count; 16],
 }
 
 unsafe impl GlobalAlloc for QAllocator {
@@ -94,9 +134,14 @@ impl QAllocator {
                 Count::New(), Count::New(), Count::New(), Count::New(),
                 Count::New(), Count::New(), Count::New(), Count::New(),
                 Count::New(), Count::New(), Count::New(), Count::New(),
-                Count::New(),
+                Count::New(), Count::New(), Count::New(), Count::New()
             ],
         }
+    }
+
+    pub fn Print(&self, class: usize) -> String {
+        return format!("alloc[{}] xxx {:?}", class, &self.counts[class]);
+        //return format!("alloc[{}] xxx {:#?}", class, &self.counts);
     }
 
     pub fn AddToHead(&self, start: usize, end: usize) {
@@ -188,3 +233,4 @@ unsafe impl GlobalAlloc for VcpuAllocator {
         GLOBAL_ALLOCATOR.lock().dealloc(NonNull::new_unchecked(ptr), layout)
     }
 }
+*/

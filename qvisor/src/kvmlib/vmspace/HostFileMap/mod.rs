@@ -14,7 +14,10 @@
 
 pub mod fdinfo;
 pub mod file_range_mgr;
+pub mod rdma_socket;
+pub mod socket_info;
 
+use spin::Mutex;
 use std::collections::BTreeMap;
 use libc::*;
 
@@ -30,21 +33,13 @@ const MAX_FD: i32 = 65535; //skip stdin, stdout, stderr
 
 //map between guest/process fd to host fd
 pub struct IOMgr {
-    pub osMap: BTreeMap<i32, FdInfo>,
-
     //guest hostfd to fdInfo
-    pub fdTbl: FdTbl,
+    pub fdTbl: Mutex<FdTbl>,
     pub eventfd: i32,
 }
 
-unsafe impl Send for IOMgr {}
-
 impl IOMgr {
     pub fn Print(&self) {
-        for (osfd, fdInfo) in &self.osMap {
-            info!("osfd[{}]->{:?}", osfd, fdInfo.lock())
-        }
-
         info!("fdTbl is {:?}", self.fdTbl);
     }
 
@@ -65,15 +60,10 @@ impl IOMgr {
 
         info!("EpollMgr eventfd = {}", eventfd);
 
-        let mut res = Self {
+        let res = Self {
             eventfd: eventfd,
-            osMap: BTreeMap::new(),
-            fdTbl: FdTbl::New(),
+            fdTbl: Mutex::new(FdTbl::New()),
         };
-
-        for i in 0..2 {
-            res.osMap.insert(i, res.fdTbl.Get(i).expect("no intial fd"));
-        }
 
         res.DrainPipe()?;
 
@@ -81,7 +71,7 @@ impl IOMgr {
     }
 
     //this needs to be called after Notify
-    pub fn DrainPipe(&mut self) -> Result<()> {
+    pub fn DrainPipe(&self) -> Result<()> {
         let mut data: u64 = 0;
 
         let nr = SysCallID::sys_read as usize;
@@ -97,71 +87,66 @@ impl IOMgr {
     }
 
     //return guest fd
-    pub fn AddFd(&mut self, osfd: i32, epollable: bool) -> i32 {
-        let fdInfo = self.fdTbl.Alloc(osfd, epollable).expect("hostfdMap: guest fd alloc fail");
-
-        self.osMap.insert(osfd, fdInfo.clone());
-
-        return fdInfo.lock().osfd;
+    pub fn AddFile(&self, fd: i32) -> i32 {
+        self.fdTbl.lock().AddFile(fd).expect("hostfdMap: guest fd alloc fail");
+        return fd;
     }
 
-    pub fn SetUnblock(osfd: i32) {
-        unsafe {
-            /*let mut flags = fcntl(osfd, F_GETFL, 0);
-            if flags == -1 {
-                panic!("SetUnblock: can't F_GETFL for fd");
-            }
-
-            flags |= Flags::O_NONBLOCK as i32;*/
-            let flags = Flags::O_NONBLOCK as i32;
-
-            let ret = fcntl(osfd, F_SETFL, flags);
-            if ret == -1 {
-                panic!("SetUnblock: can't F_SETFL for fd");
-            }
-        }
+    pub fn AddSocket(&self, fd: i32) -> i32 {
+        self.fdTbl.lock().AddSocket(fd).expect("hostfdMap: guest fd alloc fail");
+        return fd;
     }
 
     //ret: true: exist, false: not exist
-    pub fn RemoveFd(&mut self, hostfd: i32) -> Option<FdInfo> {
-        let fdInfo = self.fdTbl.Remove(hostfd);
-
-        match &fdInfo {
-            None => (),
-            Some(info) => {
-                let osfd = info.lock().osfd;
-                if osfd >= 0 {
-                    self.osMap.remove(&osfd);
-                }
-            }
-        }
-
+    pub fn RemoveFd(&self, fd: i32) -> Option<FdInfo> {
+        let fdInfo = self.fdTbl.lock().Remove(fd);
         return fdInfo;
     }
 
-    pub fn GetFdByHost(&self, hostfd: i32) -> Option<i32> {
-        match self.fdTbl.Get(hostfd) {
-            None => {
-                //self.Print();
-                None
-            }
-            Some(fdInfo) => Some(fdInfo.lock().osfd),
+    pub fn GetFdByHost(&self, fd: i32) -> Option<i32> {
+        if self.fdTbl.lock().Contains(fd) {
+            return Some(fd)
         }
+
+        return None;
     }
 
-    pub fn GetByOs(&self, osfd: i32) -> Option<FdInfo> {
-        match self.osMap.get(&osfd) {
-            None => None,
-            Some(fdInfo) => Some(fdInfo.clone()),
-        }
-    }
-
-    pub fn GetByHost(&self, hostfd: i32) -> Option<FdInfo> {
-        match self.fdTbl.Get(hostfd) {
+    pub fn GetByHost(&self, fd: i32) -> Option<FdInfo> {
+        match self.fdTbl.lock().Get(fd) {
             None => {
                 None
             }
             Some(fdInfo) => Some(fdInfo.clone()),
+        }
+    }
+
+    pub fn Notify(&self, fd: i32, mask: EventMask) {
+        let fdInfo = self.GetByHost(fd);
+        match fdInfo {
+            None => (),
+            Some(fdInfo) => {
+                fdInfo.Notify(mask);
+            }
+        }
+    }
+
+    pub fn AddWait(&self, fd: i32, mask: EventMask) {
+        let fdInfo = self.GetByHost(fd);
+        match fdInfo {
+            None => (),
+            Some(fdInfo) => {
+                fdInfo.lock().AddWait(mask).unwrap();
+            }
+        }
+    }
+
+    pub fn RemoveWait(&self, fd: i32, mask: EventMask) {
+        let fdInfo = self.GetByHost(fd);
+        match fdInfo {
+            None => (),
+            Some(fdInfo) => {
+                fdInfo.lock().RemoveWait(mask).unwrap();
+            }
         }
     }
 }
@@ -173,36 +158,32 @@ pub struct FdTbl {
     //map between guest fd to host fd
     //pub map: BTreeMap<i32, osfd>,
     pub map: BTreeMap<i32, FdInfo>,
-    pub start: i32,
-    pub len: i32,
 }
 
 impl FdTbl {
     pub fn New() -> Self {
         let mut res = Self {
             map: BTreeMap::new(),
-            start: START_FD,
-            len: MAX_FD,
         };
 
-        res.map.insert(0, FdInfo::New(0, true));
-        res.map.insert(1, FdInfo::New(1, true));
-        res.map.insert(2, FdInfo::New(2, true));
+        res.map.insert(0, FdInfo::NewFile(0));
+        res.map.insert(1, FdInfo::NewFile(1));
+        res.map.insert(2, FdInfo::NewFile(2));
 
         return res
     }
 
-    pub fn Alloc(&mut self, osfd: i32, epollable: bool) -> Result<FdInfo> {
-        let fdInfo = FdInfo::New(osfd, epollable);
+    pub fn AddFile(&mut self, osfd: i32) -> Result<FdInfo> {
+        let fdInfo = FdInfo::NewFile(osfd);
 
         self.map.insert(osfd, fdInfo.clone());
         return Ok(fdInfo)
     }
 
-    pub fn Take(&mut self, osfd: i32, epollable: bool) -> Result<FdInfo> {
-        let fdInfo = FdInfo::New(osfd, epollable);
+    pub fn AddSocket(&mut self, osfd: i32) -> Result<FdInfo> {
+        let fdInfo = FdInfo::NewSocket(osfd);
 
-        self.map.insert(osfd as i32, fdInfo.clone());
+        self.map.insert(osfd, fdInfo.clone());
         return Ok(fdInfo)
     }
 
@@ -216,5 +197,9 @@ impl FdTbl {
     pub fn Remove(&mut self, fd: i32) -> Option<FdInfo> {
         //self.gaps.Free(fd as u64, 1);
         self.map.remove(&fd)
+    }
+
+    pub fn Contains(&self, fd: i32) -> bool {
+        return self.map.contains_key(&fd)
     }
 }

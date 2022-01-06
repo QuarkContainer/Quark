@@ -1,9 +1,9 @@
 {
   "DebugLevel"    : "Error",
-  "KernelMemSize" : 32,
+  "KernelMemSize" : 16,
   "LogType"       : "Sync",
   "LogLevel"      : "Simple",
-  "TcpBuffIO"     : true,
+  "UringIO"       : true,
   "EnableAIO"     : true,
   "PrintException": false,
   "KernelPagetable": false,
@@ -15,5 +15,6 @@
   "AsyncAccept"   : true,
   "DedicateUring" : 1,
   "UringSize"     : 64,
-  "UringEpollCtl" : false
+  "UringEpollCtl" : true,
+  "EnableRDMA"    : false
 }

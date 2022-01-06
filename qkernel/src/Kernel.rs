@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use ::qlib::mutex::*;
+use alloc::sync::Arc;
 
 use qlib::*;
 use super::qlib::common::*;
@@ -21,6 +22,7 @@ use super::qlib::config::*;
 use super::qlib::qmsg::*;
 use super::qlib::task_mgr::*;
 use super::qlib::linux_def::*;
+use super::qlib::socket_buf::*;
 //use super::qlib::perf_tunning::*;
 use super::task::*;
 use super::asm::*;
@@ -60,33 +62,6 @@ impl HostSpace {
 
     pub fn CreateMemfd(len: i64) -> i64 {
         let mut msg = Msg::CreateMemfd(CreateMemfd {
-            len: len,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn ControlMsgCall(addr: u64, len: usize, taskId: TaskId) -> i64 {
-        let mut msg = Msg::ControlMsgCall(ControlMsgCall {
-            addr: addr,
-            len: len,
-            taskId: taskId,
-            ret: 0,
-        });
-
-        HostSpace::HCall(&mut msg, false) as i64;
-        taskMgr::Wait();
-        if let Msg::ControlMsgCall(m) = msg {
-            return m.ret
-        }
-
-        panic!("ControlMsgCall fail...");
-    }
-
-    pub fn ControlMsgRet(msgId: u64, addr: u64, len: usize) -> i64 {
-        let mut msg = Msg::ControlMsgRet(ControlMsgRet {
-            msgId: msgId,
-            addr: addr,
             len: len,
         });
 
@@ -201,24 +176,30 @@ impl HostSpace {
         return (ret, fileLen)
     }
 
-    pub fn IOAccept(fd: i32, addr: u64, addrlen: u64, flags: i32, blocking: bool) -> i64 {
+    pub fn IOAccept(fd: i32, addr: u64, addrlen: u64) -> i64 {
         let mut msg = Msg::IOAccept(IOAccept {
             fd,
             addr,
             addrlen,
-            flags,
-            blocking,
         });
 
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
-    pub fn IOConnect(fd: i32, addr: u64, addrlen: u32, blocking: bool) -> i64 {
+    pub fn IOConnect(fd: i32, addr: u64, addrlen: u32) -> i64 {
         let mut msg = Msg::IOConnect(IOConnect {
             fd,
             addr,
             addrlen,
-            blocking,
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
+    pub fn PostRDMAConnect(fd: i32, socketBuf: Arc<SocketBuff>) -> i64 {
+        let mut msg = Msg::PostRDMAConnect(PostRDMAConnect {
+            fd,
+            socketBuf
         });
 
         return HostSpace::Call(&mut msg, false) as i64;
@@ -304,8 +285,8 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64
     }
 
-    pub fn NewFd(fd: i32) -> i64 {
-        let mut msg = Msg::NewFd(NewFd {
+    pub fn NewSocket(fd: i32) -> i64 {
+        let mut msg = Msg::NewSocket(NewSocket {
             fd
         });
 
@@ -519,17 +500,6 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn SocketPair(domain: i32, type_: i32, protocol: i32, socketVect: u64) -> i64 {
-        let mut msg = Msg::SocketPair(SocketPair {
-            domain,
-            type_,
-            protocol,
-            socketVect,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
     pub fn GetSockName(sockfd: i32, addr: u64, addrlen: u64) -> i64 {
         let mut msg = Msg::GetSockName(GetSockName {
             sockfd,
@@ -576,7 +546,7 @@ impl HostSpace {
     }
 
     pub fn Bind(sockfd: i32, addr: u64, addrlen: u32, umask: u32) -> i64 {
-        let mut msg = Msg::Bind(Bind {
+        let mut msg = Msg::IOBind(IOBind {
             sockfd,
             addr,
             addrlen,
@@ -587,7 +557,7 @@ impl HostSpace {
     }
 
     pub fn Listen(sockfd: i32, backlog: i32, block: bool) -> i64 {
-        let mut msg = Msg::Listen(Listen {
+        let mut msg = Msg::IOListen(IOListen {
             sockfd,
             backlog,
             block,
@@ -596,8 +566,28 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
+    pub fn RDMAListen(sockfd: i32, backlog: i32, block: bool, acceptQueue: AcceptQueue) -> i64 {
+        let mut msg = Msg::RDMAListen(RDMAListen {
+            sockfd,
+            backlog,
+            block,
+            acceptQueue,
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
+    pub fn RDMANotify(sockfd: i32, typ: RDMANotifyType) -> i64 {
+        let mut msg = Msg::RDMANotify(RDMANotify {
+            sockfd,
+            typ
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
     pub fn Shutdown(sockfd: i32, how: i32) -> i64 {
-        let mut msg = Msg::Shutdown(Shutdown {
+        let mut msg = Msg::IOShutdown(IOShutdown {
             sockfd,
             how,
         });
@@ -706,19 +696,16 @@ impl HostSpace {
         return ret;
     }
 
-    pub fn HostEpollWaitProcess(addr: u64, count: usize) -> i64 {
-        let mut msg = Msg::HostEpollWaitProcess(HostEpollWaitProcess {
-            addr,
-            count,
-        });
+    pub fn HostEpollWaitProcess() -> i64 {
+        let mut msg = Msg::HostEpollWaitProcess(HostEpollWaitProcess {});
 
         let ret = Self::HCall(&mut msg, false) as i64;
         return ret;
     }
 
-    pub fn VcpuWait(addr: u64, count: usize) -> i64 {
+    pub fn VcpuWait() -> i64 {
         let mut ret : i64 = 0;
-        HyperCall64(HYPERCALL_VCPU_WAIT, addr, count as u64, &mut ret as * mut _ as u64);
+        HyperCall64(HYPERCALL_VCPU_WAIT, 0, 0, &mut ret as * mut _ as u64);
         return ret as i64
     }
 
@@ -729,17 +716,6 @@ impl HostSpace {
         });
 
         return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn IoUringSetup(idx: usize, submission: u64, completion: u64) -> i64 {
-        let mut msg = Msg::IoUringSetup(IoUringSetup {
-            idx,
-            submission,
-            completion
-        });
-
-        //return HostSpace::Call(&mut msg, false) as i64;
-        return Self::HCall(&mut msg, true) as i64
     }
 
     pub fn IoUringEnter(idx: usize, toSubmit: u32, minComplete: u32, flags: u32) -> i64 {
@@ -799,6 +775,26 @@ impl HostSpace {
         });
 
         return HostSpace::HCall(&mut msg, false) as i64;
+    }
+
+    pub fn ReadControlMsg(fd: i32, addr: u64, len: usize) -> i64 {
+        let mut msg = Msg::ReadControlMsg(ReadControlMsg {
+            fd,
+            addr,
+            len
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
+    pub fn WriteControlMsgResp(fd: i32, addr: u64, len: usize) -> i64 {
+        let mut msg = Msg::WriteControlMsgResp(WriteControlMsgResp {
+            fd: fd,
+            addr: addr,
+            len: len,
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn Futimens(fd: i32, times: u64) -> i64 {

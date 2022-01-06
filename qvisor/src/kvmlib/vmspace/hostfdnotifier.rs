@@ -16,6 +16,18 @@ use libc::*;
 
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
+//use super::super::qlib::qmsg::input::*;
+//use super::super::SHARE_SPACE;
+use super::super::IO_MGR;
+
+#[repr(C)]
+#[repr(packed)]
+#[derive(Default, Copy, Clone, Debug)]
+pub struct EpollEvent {
+    pub Event: u32,
+    pub U64: u64
+}
+
 
 pub struct HostFdNotifier {
     //main epoll fd
@@ -41,6 +53,18 @@ impl HostFdNotifier {
         return self.epollfd;
     }
 
+    pub fn EpollCtlAdd(&self, fd: i32, mask: EventMask) -> Result<()> {
+        return self.WaitFd(fd, LibcConst::EPOLL_CTL_ADD as _, mask);
+    }
+
+    pub fn EpollCtlMod(&self, fd: i32, mask: EventMask) -> Result<()> {
+        return self.WaitFd(fd, LibcConst::EPOLL_CTL_MOD as _, mask);
+    }
+
+    pub fn EpollCtlDel(&self, fd: i32) -> Result<()> {
+        return self.WaitFd(fd, LibcConst::EPOLL_CTL_DEL as _, 0);
+    }
+
     pub fn WaitFd(&self, fd: i32, op: u32, mask: EventMask) -> Result<()> {
         let n = self;
 
@@ -62,12 +86,32 @@ impl HostFdNotifier {
         return Ok(())
     }
 
-    pub fn HostEpollWait(&self, addr: u64, count: usize) -> i64 {
+    pub const MAX_EVENTS: usize = 128;
+    pub fn HostEpollWait(&self) -> i64 {
+        let mut events = [EpollEvent::default(); Self::MAX_EVENTS];
+        let addr = &mut events[0] as * mut _ as u64;
+
         let epollfd = self.epollfd;
         let nfds = unsafe {
-            epoll_wait(epollfd, addr as _, count as i32, 0)
+            epoll_wait(epollfd, addr as _, Self::MAX_EVENTS as i32, 0)
         };
 
-        return nfds as i64
+        if nfds > 0 {
+            for e in &events[0..nfds as usize] {
+                let fd = e.U64 as i32;
+                let event = e.Event as EventMask;
+                Self::FdNotify(fd, event);
+            }
+        }
+
+        if nfds < 0 {
+            return nfds as i64
+        }
+
+        return 0 as i64
+    }
+
+    pub fn FdNotify(fd: i32, mask: EventMask) {
+        IO_MGR.Notify(fd, mask);
     }
 }

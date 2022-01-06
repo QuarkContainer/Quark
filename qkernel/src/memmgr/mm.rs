@@ -153,6 +153,15 @@ impl Deref for MemoryManager {
     }
 }
 
+impl Drop for MemoryManager {
+    fn drop(&mut self) {
+        if Arc::strong_count(&self.0) == 1 {
+            let _ml = self.MappingWriteLock();
+            self.CleanVMAs().unwrap();
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct MemoryManagerWeak {
     pub uid: UniqueID,
@@ -266,6 +275,30 @@ impl MemoryManager {
         meta.envv = Range::New(stackLayout.EnvvStart, stackLayout.EvvvEnd - stackLayout.EnvvStart)
     }
 
+    pub fn CleanVMAs(&self) -> Result<()> {
+        let mut mapping = self.mapping.lock();
+        let (mut vseg, vgap) = mapping.vmas.Find(0);
+        if vgap.Ok() {
+            vseg = vgap.NextSeg();
+        }
+
+        while vseg.Ok() {
+            let r = vseg.Range();
+            let vma = vseg.Value();
+
+            if !vma.kernel {
+                if vma.mappable.is_some() {
+                    let mappable = vma.mappable.clone().unwrap();
+                    mappable.RemoveMapping(self, &r, vma.offset, vma.CanWriteMappableLocked())?;
+                }
+            }
+            let vgap = mapping.vmas.Remove(&vseg);
+            vseg = vgap.NextSeg();
+        }
+
+        return Ok(())
+    }
+
     //Remove virtual memory to the phy mem mapping
     pub fn RemoveVMAsLocked(&self, ar: &Range) -> Result<()> {
         let mut mapping = self.mapping.lock();
@@ -279,20 +312,22 @@ impl MemoryManager {
             let r = vseg.Range();
             let vma = vseg.Value();
 
-            if vma.mappable.is_some() {
-                let mappable = vma.mappable.clone().unwrap();
-                mappable.RemoveMapping(self, &r, vma.offset, vma.CanWriteMappableLocked())?;
+            if !vma.kernel {
+                if vma.mappable.is_some() {
+                    let mappable = vma.mappable.clone().unwrap();
+                    mappable.RemoveMapping(self, &r, vma.offset, vma.CanWriteMappableLocked())?;
+                }
+
+                mapping.usageAS -= r.Len();
+                if vma.mlockMode != MLockMode::MlockNone {
+                    mapping.lockedAS -= r.Len();
+                }
+
+                let mut pt = self.pagetable.write();
+
+                pt.pt.MUnmap(r.Start(), r.Len())?;
+                pt.curRSS -= r.Len();
             }
-
-            mapping.usageAS -= r.Len();
-            if vma.mlockMode != MLockMode::MlockNone {
-                mapping.lockedAS -= r.Len();
-            }
-
-            let mut pt = self.pagetable.write();
-
-            pt.pt.MUnmap(r.Start(), r.Len())?;
-            pt.curRSS -= r.Len();
             let vgap = mapping.vmas.Remove(&vseg);
             vseg = vgap.NextSeg();
         }
@@ -1046,17 +1081,18 @@ impl MemoryManager {
 
         self.pagetable.write().pt.MUnmap(ar.Start(), ar.Len())?;
         let segAr = vmaSeg.Range();
-        match vma.mappable {
+        match &vma.mappable {
             None => {
                 //anonymous mapping
+                self.AddRssLock(ar);
                 if !vdso {
-                    self.AddRssLock(ar);
+                    //
                 } else {
                     //vdso: the phyaddress has been allocated and the address is vma.offset
                     self.pagetable.write().pt.MapHost(task, ar.Start(), &IoVec::NewFromAddr(vma.offset, ar.Len() as usize), &perms, true)?;
                 }
             }
-            Some(mappable) => {
+            Some(ref mappable) => {
                 //host file mapping
                 // the map file mapfile cost is high. Only pre-commit it when the size < 4MB.
                 // todo: improve that later

@@ -103,7 +103,7 @@ impl HostPMAKeeper {
     }
 
     pub fn MapFile(&self, len: u64, prot: i32, fd: i32, offset: u64) -> Result<u64> {
-        let osfd = IO_MGR.lock().GetFdByHost(fd).expect("MapFile: Getosfd fail");
+        let osfd = IO_MGR.GetFdByHost(fd).expect("MapFile: Getosfd fail");
         let mut mo = &mut MapOption::New();
 
         //let prot = prot | MmapProt::PROT_WRITE as i32;

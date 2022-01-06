@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use ::qlib::mutex::*;
 use core::sync::atomic;
+use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicUsize;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -30,8 +30,8 @@ use super::super::fs::file::*;
 use super::super::qlib::uring::util::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::vcpu_mgr::*;
+use super::super::qlib::socket_buf::*;
 use super::super::kernel::waiter::*;
-use super::super::socket::hostinet::socket_buf::*;
 use super::super::socket::hostinet::socket::*;
 use super::super::Kernel::HostSpace;
 use super::super::kernel::async_wait::*;
@@ -51,27 +51,28 @@ pub fn QUringTrigger() -> usize {
 unsafe impl Send for Submission {}
 unsafe impl Sync for Submission {}
 
-impl Submission {
+impl IoUring {
     pub fn SqLen(&self) -> usize {
+        let sq = self.sq.lock();
         unsafe {
-            let head = (*self.sq.head).load(atomic::Ordering::Acquire);
-            let tail = unsync_load(self.sq.tail);
+            let head = (*sq.head).load(atomic::Ordering::Acquire);
+            let tail = unsync_load(sq.tail);
 
             tail.wrapping_sub(head) as usize
         }
     }
 
     pub fn IsFull(&self) -> bool {
-        return self.sq.is_full();
+        return self.sq.lock().is_full();
     }
 
     pub fn FreeSlots(&self) -> usize {
-        return self.sq.freeSlot();
+        return self.sq.lock().freeSlot();
     }
 
     pub fn NeedWakeup(&self) -> bool {
         unsafe {
-            (*self.sq.flags).load(atomic::Ordering::Acquire) & sys::IORING_SQ_NEED_WAKEUP != 0
+            (*self.sq.lock().flags).load(atomic::Ordering::Acquire) & sys::IORING_SQ_NEED_WAKEUP != 0
         }
     }
 
@@ -122,30 +123,23 @@ impl Submission {
         return Ok(ret as usize)
     }
 
-}
-
-unsafe impl Send for Completion {}
-unsafe impl Sync for Completion {}
-
-impl Completion {
     pub fn Next(&mut self) -> Option<cqueue::Entry> {
         //return self.cq.available().next()
-        return self.cq.next();
+        return self.cq.lock().next();
     }
 
     pub fn CqLen(&mut self) -> usize {
-        return self.cq.len()
+        return self.cq.lock().len()
     }
 
     pub fn Overflow(&self) -> u32 {
-        return self.cq.overflow();
+        return self.cq.lock().overflow();
     }
 }
 
 #[derive(Default)]
 pub struct QUring {
-    pub submission: Vec<QMutex<Submission>>,
-    pub completion: Vec<QMutex<Completion>>,
+    pub uringsAddr: AtomicU64,
     pub asyncMgr: UringAsyncMgr,
     pub uringCount: AtomicUsize,
 }
@@ -153,44 +147,33 @@ pub struct QUring {
 impl QUring {
     pub const MAX_URING_COUNT : usize = 8;
 
-    pub fn New(size: usize, _uringCount: usize) -> Self {
-        let mut ret = QUring {
-            submission: Vec::with_capacity(Self::MAX_URING_COUNT),
-            completion: Vec::with_capacity(Self::MAX_URING_COUNT),
+    pub fn New(size: usize) -> Self {
+        let ret = QUring {
             asyncMgr: UringAsyncMgr::New(size),
+            uringsAddr: AtomicU64::new(0),
             uringCount: AtomicUsize::new(0)
         };
-
-        for _i in 0..Self::MAX_URING_COUNT {
-            ret.submission.push(Default::default());
-            ret.completion.push(Default::default());
-        }
 
         return ret;
     }
 
-    pub fn UringCount(&self) -> usize {
-        return self.uringCount.load(atomic::Ordering::Relaxed)
+    pub fn SetIOUringsAddr(&self, addr: u64) {
+        self.uringsAddr.store(addr, atomic::Ordering::SeqCst);
+        self.uringCount.store(self.IOUrings().len(), atomic::Ordering::SeqCst);
     }
 
-    pub fn Setup(&self, uringCount: usize) {
-        let count = if uringCount == 0 {
-            1
-        } else {
-            uringCount
+    #[inline(always)]
+    pub fn IOUrings(&self) -> &'static [IoUring] {
+        let addr = self.uringsAddr.load(atomic::Ordering::Relaxed);
+        let urings = unsafe {
+            &*(addr as * const Vec<IoUring>)
         };
 
-        assert!(count < Self::MAX_URING_COUNT);
+        return urings;
+    }
 
-        for i in 0..count {
-            super::super::Kernel::HostSpace::IoUringSetup(
-                i,
-                &self.submission[i] as *const _ as u64,
-                &self.completion[i] as *const _ as u64,
-            );
-        }
-
-        self.uringCount.store(count, atomic::Ordering::Relaxed)
+    pub fn UringCount(&self) -> usize {
+        return self.uringCount.load(atomic::Ordering::Relaxed)
     }
 
     pub fn TimerRemove(&self, task: &Task, userData: u64) -> i64 {
@@ -243,6 +226,14 @@ impl QUring {
             addr: addr,
             len: len,
             offset: offset,
+        });
+
+        return self.UCall(task, msg);
+    }
+
+    pub fn SyncAccept(&self, task: &Task, fd: i32) -> i64 {
+        let msg = UringOp::Accept(AcceptOp {
+            fd: fd,
         });
 
         return self.UCall(task, msg);
@@ -325,14 +316,14 @@ impl QUring {
         return self.UCall(task, msg);
     }
 
-    pub fn AcceptInit(&self, fd: i32, queue: &Queue, acceptQueue: &Arc<QMutex<AsyncAcceptStruct>>) -> Result<()> {
+    pub fn AcceptInit(&self, fd: i32, queue: &Queue, acceptQueue: &AcceptQueue) -> Result<()> {
         let acceptOp = AsyncAccept::New(fd, queue.clone(), acceptQueue.clone());
         IOURING.AUCall(AsyncOps::AsyncAccept(acceptOp));
 
         return Ok(())
     }
 
-    pub fn Accept(&self, fd: i32, queue: &Queue, acceptQueue: &Arc<QMutex<AsyncAcceptStruct>>) -> Result<AcceptItem> {
+    pub fn Accept(&self, fd: i32, queue: &Queue, acceptQueue: &AcceptQueue) -> Result<AcceptItem> {
         let (trigger, ai) = acceptQueue.lock().DeqSocket();
         if trigger {
             let acceptOp = AsyncAccept::New(fd, queue.clone(), acceptQueue.clone());
@@ -347,7 +338,7 @@ impl QUring {
         IOURING.AUCall(AsyncOps::PollHostEpollWait(op));
     }
 
-    pub fn BufSockInit(&self, fd: i32, queue: Queue, buf: Arc<SocketBuff>, isSocket: bool) -> Result<()> {
+    pub fn BufSockInit(fd: i32, queue: Queue, buf: Arc<SocketBuff>, isSocket: bool) -> Result<()> {
         let (addr, len) = buf.GetFreeReadBuf();
         let readop = AsyncFileRead::New(fd, queue, buf, addr, len, isSocket);
 
@@ -356,8 +347,8 @@ impl QUring {
         return Ok(())
     }
 
-    pub fn RingFileWrite(&self, _task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, srcs: &[IoVec], fops: Arc<FileOperations>, lockGuard: QAsyncLockGuard) -> Result<i64> {
-        let (count, writeBuf) = buf.Writev(srcs)?;
+    pub fn RingFileWrite(task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, srcs: &[IoVec], fops: Arc<FileOperations>, lockGuard: QAsyncLockGuard) -> Result<i64> {
+        let (count, writeBuf) = buf.Writev(task, srcs)?;
 
         if let Some((addr, len)) = writeBuf {
             let writeop = AsyncFiletWrite::New(fd, queue, buf, addr, len, fops, lockGuard);
@@ -368,8 +359,8 @@ impl QUring {
         return Ok(count as i64)
     }
 
-    pub fn SocketSend(&self, _task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, srcs: &[IoVec], ops: &SocketOperations)-> Result<i64> {
-        let (count, writeBuf) = buf.Writev(srcs)?;
+    pub fn SocketSend(task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, srcs: &[IoVec], ops: &SocketOperations)-> Result<i64> {
+        let (count, writeBuf) = buf.Writev(task, srcs)?;
 
         if let Some((addr, len)) = writeBuf {
             let writeop = AsyncSend::New(fd, queue, buf, addr, len, ops);
@@ -380,8 +371,8 @@ impl QUring {
         return Ok(count as i64)
     }
 
-    pub fn RingFileRead(&self, _task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, dsts: &mut [IoVec], isSocket: bool) -> Result<i64> {
-        let (trigger, cnt) = buf.Readv(dsts)?;
+    pub fn RingFileRead(task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, dsts: &mut [IoVec], isSocket: bool) -> Result<i64> {
+        let (trigger, cnt) = buf.Readv(task, dsts)?;
 
         if trigger {
             let (addr, len) = buf.GetFreeReadBuf();
@@ -546,8 +537,8 @@ impl QUring {
                 }
 
                 let cqe = {
-                    let mut c = self.completion[idx].lock();
-                    c.Next()
+                    let mut c = self.IOUrings()[idx].cq.lock();
+                    c.next()
                 };
 
                 match cqe {
@@ -578,29 +569,26 @@ impl QUring {
         //let idx = Self::NextUringIdx(1) % self.UringCount();
         loop {
             for idx in 0..self.UringCount() {
-                let mut s = self.submission[idx].lock();
-                if s.FreeSlots() < Self::SUBMISSION_QUEUE_FREE_COUNT {
-                    super::super::Kernel::HostSpace::UringWake(idx, 1);
-                    print!("UringCall: submission full... idx {}", idx);
-                    //drop(s);
-                    //super::super::Kernel::HostSpace::UringWake(1);
-                    //super::super::qlib::ShareSpace::Yield();
-                    continue
+                {
+                    let mut s = self.IOUrings()[idx].sq.lock();
+
+                    if s.freeSlot() < Self::SUBMISSION_QUEUE_FREE_COUNT {
+                        super::super::Kernel::HostSpace::UringWake(idx, 1);
+                        print!("UringCall: submission full... idx {}", idx);
+                        //drop(s);
+                        //super::super::Kernel::HostSpace::UringWake(1);
+                        //super::super::qlib::ShareSpace::Yield();
+                        continue
+                    }
+
+                    unsafe {
+                        s.push(entry).ok().expect("UringCall push fail");
+                    }
                 }
 
-                unsafe {
-                    s.sq.push(entry).ok().expect("UringCall push fail");
-                }
-
-                s.Submit(idx).expect("QUringIntern::submit fail");
+                self.IOUrings()[idx].Submit(idx).expect("QUringIntern::submit fail");
                 return;
             }
-
-            /*for i in 0..self.UringCount() {
-                super::super::Kernel::HostSpace::UringWake(i, 1);
-            }
-            print!("UringCall: all submission full...");*/
-            //super::super::qlib::ShareSpace::Yield();
         }
 
     }
@@ -610,29 +598,25 @@ impl QUring {
 
         loop {
             for idx in 0..self.UringCount() {
-                let mut s = self.submission[idx].lock();
-                if s.FreeSlots() < Self::SUBMISSION_QUEUE_FREE_COUNT {
-                    super::super::Kernel::HostSpace::UringWake(idx, 1);
-                    print!("AUringCall1: submission full... idx {}", idx);
-                    continue;
-                }
+                {
+                    let mut s = self.IOUrings()[idx].sq.lock();
+                    if s.freeSlot() < Self::SUBMISSION_QUEUE_FREE_COUNT {
+                        super::super::Kernel::HostSpace::UringWake(idx, 1);
+                        print!("AUringCall1: submission full... idx {}", idx);
+                        continue;
+                    }
 
-                unsafe {
-                    match s.sq.push(entry) {
-                        Ok(_) => (),
-                        Err(_) => panic!("AUringCall submission queue is full"),
+                    unsafe {
+                        match s.push(entry) {
+                            Ok(_) => (),
+                            Err(_) => panic!("AUringCall submission queue is full"),
+                        }
                     }
                 }
 
-                let _n = s.Submit(idx).expect("QUringIntern::submit fail");
+                self.IOUrings()[idx].Submit(idx).expect("QUringIntern::submit fail");
                 return;
             }
-
-            /*for i in 0..self.UringCount() {
-                super::super::Kernel::HostSpace::UringWake(i, 1);
-            }
-            print!("UringCall: all submission full...");
-            //super::super::qlib::ShareSpace::Yield();*/
         }
     }
 
@@ -641,39 +625,34 @@ impl QUring {
 
         loop {
             for idx in 0..self.UringCount() {
-                let mut s = self.submission[idx].lock();
-                if s.FreeSlots() < Self::SUBMISSION_QUEUE_FREE_COUNT + 1 {
-                    super::super::Kernel::HostSpace::UringWake(idx, 1);
-                    //print!("AUringCallLinked: submission full... idx {}", idx);
-                    continue;
-                }
-
-                unsafe {
-                    match s.sq.push(entry1.flags(squeue::Flags::IO_LINK)) {
-                        Ok(_) => (),
-                        Err(_e) => {
-                            panic!("AUringCallLinked push fail 1 ...");
-                        }
+                {
+                    let mut s = self.IOUrings()[idx].sq.lock();
+                    if s.freeSlot() < Self::SUBMISSION_QUEUE_FREE_COUNT + 1 {
+                        super::super::Kernel::HostSpace::UringWake(idx, 1);
+                        print!("AUringCallLinked: submission full... idx {}", idx);
+                        continue;
                     }
 
-                    match s.sq.push(entry2) {
-                        Ok(_) => (),
-                        Err(_e) => {
-                            panic!("AUringCallLinked push fail 2 ...");
+                    unsafe {
+                        match s.push(entry1.flags(squeue::Flags::IO_LINK)) {
+                            Ok(_) => (),
+                            Err(_e) => {
+                                panic!("AUringCallLinked push fail 1 ...");
+                            }
+                        }
+
+                        match s.push(entry2) {
+                            Ok(_) => (),
+                            Err(_e) => {
+                                panic!("AUringCallLinked push fail 2 ...");
+                            }
                         }
                     }
                 }
 
-                let _n = s.Submit(idx).expect("QUringIntern::submit fail");
+                self.IOUrings()[idx].Submit(idx).expect("QUringIntern::submit fail");
                 return;
             }
-
-            /*for i in 0..self.UringCount() {
-                super::super::Kernel::HostSpace::UringWake(i, 1);
-            }*/
-
-            print!("UringCall: all submission full...");
-            //super::super::qlib::ShareSpace::Yield();
         }
     }
 }

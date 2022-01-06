@@ -47,10 +47,6 @@ pub fn Notify(fd: i32, mask: EventMask) {
     GUEST_NOTIFIER.Notify(fd, mask);
 }
 
-pub fn IOBufWriteRespHandle(fd: i32, addr: u64, len: usize, ret: i64) {
-    GUEST_NOTIFIER.IOBufWriteRespHandle(fd, addr, len, ret)
-}
-
 pub fn HostLogFlush() {
     //GUEST_NOTIFIER.PrintStrRespHandler(addr, len)
     super::IOURING.LogFlush();
@@ -60,7 +56,6 @@ pub struct GuestFdInfo {
     pub queue: Queue,
     pub mask: EventMask,
     pub waiting: bool,
-    pub iops: HostInodeOpWeak,
 }
 
 // notifier holds all the state necessary to issue notifications when IO events
@@ -101,32 +96,17 @@ impl Notifier {
     }
 
     pub fn VcpuWait(&self) {
-        let mut events = [EpollEvent::default(); Self::MAX_EVENTS];
-        let addr = &mut events[0] as * mut _ as u64;
-
-        let count = HostSpace::VcpuWait(addr, Self::MAX_EVENTS);
-        if count < 0 {
-            panic!("ProcessHostEpollWait fail with error {}", count)
+        let ret = HostSpace::VcpuWait();
+        if ret < 0 {
+            panic!("ProcessHostEpollWait fail with error {}", ret)
         };
-
-        if count > 0 {
-            self.ProcessEvents(&events[0..count as usize]);
-        }
     }
 
-    pub const MAX_EVENTS: usize = 128;
     pub fn ProcessHostEpollWait(&self) {
-        let mut events = [EpollEvent::default(); Self::MAX_EVENTS];
-        let addr = &mut events[0] as * mut _ as u64;
-
-        let count = HostSpace::HostEpollWaitProcess(addr, Self::MAX_EVENTS);
-        if count < 0 {
-            panic!("ProcessHostEpollWait fail with error {}", count)
+        let ret = HostSpace::HostEpollWaitProcess();
+        if ret < 0 {
+            panic!("ProcessHostEpollWait fail with error {}", ret)
         };
-
-        if count > 0 {
-            self.ProcessEvents(&events[0..count as usize]);
-        }
     }
 
     pub fn ProcessEvents(&self, events: &[EpollEvent]) {
@@ -161,6 +141,7 @@ impl Notifier {
         let epollfd;
         let mask = {
             let mut n = self.lock();
+            epollfd = n.epollfd;
             let fi = match n.fdMap.get_mut(&fd) {
                 None => {
                     return Ok(())
@@ -188,7 +169,8 @@ impl Notifier {
                     op = LibcConst::EPOLL_CTL_MOD;
                 }
             }
-            epollfd = n.epollfd;
+
+            fi.mask = mask;
 
             mask
         };
@@ -198,6 +180,24 @@ impl Notifier {
     }
 
     pub fn UpdateFDSync(&self, fd: i32) -> Result<()> {
+        let op = LibcConst::EPOLL_CTL_ADD as u32/*dummy value*/;
+        let mask = {
+            let mut n = self.lock();
+            let fi = match n.fdMap.get_mut(&fd) {
+                None => {
+                    return Ok(())
+                }
+                Some(fi) => fi,
+            };
+
+            let mask = fi.queue.Events();
+            mask
+        };
+
+        return Self::waitfd(fd, op, mask);
+    }
+
+    pub fn UpdateFDSync1(&self, fd: i32) -> Result<()> {
         let op;
         let mask = {
             let mut n = self.lock();
@@ -248,7 +248,6 @@ impl Notifier {
             queue: queue.clone(),
             mask: 0,
             waiting: false,
-            iops: iops.Downgrade(),
         });
     }
 
@@ -258,32 +257,18 @@ impl Notifier {
     }
 
     pub fn Notify(&self, fd: i32, mask: EventMask) {
-        let n = self.lock();
-        match n.fdMap.get(&fd) {
-            None => (),
-            Some(fi) => {
-                fi.queue.Notify(EventMaskFromLinux(mask as u32));
-            }
-        }
-    }
-
-    pub fn IOBufWriteRespHandle(&self, _fd: i32, _addr: u64, _len: usize, _ret: i64) {
-        /*BUF_MGR.Free(addr, len as u64);
-        if ret < 0 {
+        let queue = {
             let n = self.lock();
             match n.fdMap.get(&fd) {
-                None => (),
+                None => {
+                    return
+                },
                 Some(fi) => {
-                    let iops = match fi.iops.Upgrade() {
-                        None => {
-                            return;
-                        }
-                        Some(iops) => iops
-                    };
-
-                    iops.lock().errorcode = ret;
+                    fi.queue.clone()
                 }
             }
-        }*/
+        };
+
+        queue.Notify(EventMaskFromLinux(mask as u32));
     }
 }

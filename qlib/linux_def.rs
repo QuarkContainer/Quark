@@ -35,6 +35,12 @@ impl Default for TcpSockAddr {
     }
 }
 
+impl TcpSockAddr {
+    pub fn Addr(&self) -> u64 {
+        return &self.data[0] as * const _ as u64
+    }
+}
+
 pub struct QOrdering {}
 impl QOrdering {
     pub const RELAXED :Ordering = Ordering::Relaxed;

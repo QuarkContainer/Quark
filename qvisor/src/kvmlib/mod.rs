@@ -24,7 +24,7 @@ pub mod asm;
 
 pub mod qlib;
 mod memmgr;
-mod heap_alloc;
+pub mod heap_alloc;
 mod qcall;
 mod vmspace;
 mod kvm_vcpu;
@@ -41,12 +41,14 @@ pub mod perflog;
 
 use spin::Mutex;
 use lazy_static::lazy_static;
-use core::sync::atomic::AtomicU64;
+use alloc::sync::Arc;
 
 use self::qlib::buddyallocator::MemAllocator;
 use self::qlib::{addr};
 use self::qlib::qmsg::*;
 use self::qlib::config::*;
+use self::qlib::ShareSpace;
+use self::qlib::ShareSpaceRef;
 use self::vmspace::hostfdnotifier::*;
 use self::vmspace::host_pma_keeper::*;
 use self::vmspace::kernel_io_thread::*;
@@ -56,12 +58,18 @@ use self::vmspace::uringMgr::*;
 const LOWER_TOP: u64 = 0x00007fffffffffff;
 const UPPER_BOTTOM: u64 = 0xffff800000000000;
 
+pub fn AllocatorPrint(_class: usize) -> String {
+    return "".to_string();
+}
+
+pub static SHARE_SPACE : ShareSpaceRef = ShareSpaceRef::New();
+
 lazy_static! {
-    pub static ref SHARE_SPACE : AtomicU64 = AtomicU64::new(0);
+    pub static ref SHARE_SPACE_STRUCT : Arc<Mutex<ShareSpace>> = Arc::new(Mutex::new(ShareSpace::default()));
     pub static ref VMS: Mutex<VMSpace> = Mutex::new(VMSpace::Init());
     pub static ref PAGE_ALLOCATOR: MemAllocator = MemAllocator::New();
     pub static ref FD_NOTIFIER: HostFdNotifier = HostFdNotifier::New();
-    pub static ref IO_MGR: Mutex<vmspace::HostFileMap::IOMgr> = Mutex::new(vmspace::HostFileMap::IOMgr::Init().expect("Init IOMgr fail"));
+    pub static ref IO_MGR: vmspace::HostFileMap::IOMgr = vmspace::HostFileMap::IOMgr::Init().expect("Init IOMgr fail");
     pub static ref SYNC_MGR: Mutex<syncmgr::SyncMgr> = Mutex::new(syncmgr::SyncMgr::New());
     pub static ref PMA_KEEPER: HostPMAKeeper = HostPMAKeeper::New();
     pub static ref QUARK_CONFIG: Mutex<Config> = {
@@ -69,10 +77,10 @@ lazy_static! {
         config.Load();
         Mutex::new(config)
     };
-    pub static ref URING_MGR: Mutex<UringMgr> = {
+    pub static ref URING_MGR: Arc<Mutex<UringMgr>> = {
         let config = QUARK_CONFIG.lock();
         let uringSize = config.UringSize;
-        Mutex::new(UringMgr::New(uringSize))
+        Arc::new(Mutex::new(UringMgr::New(uringSize)))
     };
     pub static ref KERNEL_IO_THREAD: KIOThread = KIOThread::New();
     pub static ref GLOCK: Mutex<()> = Mutex::new(());

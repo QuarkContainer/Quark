@@ -12,8 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::sync::Arc;
+
 use super::super::task_mgr::*;
 use super::super::linux_def::*;
+use super::super::socket_buf::*;
 use super::super::config::*;
 
 #[repr(align(128))]
@@ -21,8 +24,6 @@ use super::super::config::*;
 pub enum Msg {
     //Qcall
     LoadProcessKernel(LoadProcessKernel),
-    ControlMsgCall(ControlMsgCall),
-    ControlMsgRet(ControlMsgRet),
     GetStdfds(GetStdfds),
     CreateMemfd(CreateMemfd),
 
@@ -60,14 +61,17 @@ pub enum Msg {
     FAccessAt(FAccessAt),
 
     Socket(Socket),
-    SocketPair(SocketPair),
     GetPeerName(GetPeerName),
     GetSockName(GetSockName),
     GetSockOpt(GetSockOpt),
     SetSockOpt(SetSockOpt),
-    Bind(Bind),
-    Listen(Listen),
-    Shutdown(Shutdown),
+    IOBind(IOBind),
+    IOListen(IOListen),
+    IOShutdown(IOShutdown),
+
+    RDMAListen(RDMAListen),
+    RDMANotify(RDMANotify),
+    PostRDMAConnect(PostRDMAConnect),
 
     SchedGetAffinity(SchedGetAffinity),
     GetRandom(GetRandom),
@@ -96,25 +100,19 @@ pub enum Msg {
     MUnmap(MUnmap),
     NonBlockingPoll(NonBlockingPoll),
     NewTmpfsFile(NewTmpfsFile),
-    IoUringSetup(IoUringSetup),
     IoUringEnter(IoUringEnter),
     Statm(Statm),
-    NewFd(NewFd),
+    NewSocket(NewSocket),
     HostEpollWaitProcess(HostEpollWaitProcess),
     VcpuWait(VcpuWait),
     EventfdWrite(EventfdWrite),
+    ReadControlMsg(ReadControlMsg),
+    WriteControlMsgResp(WriteControlMsgResp),
 }
 
 #[derive(Clone, Default, Debug)]
 pub struct EventfdWrite {
     pub fd: i32
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct IoUringSetup {
-    pub idx: usize,
-    pub submission: u64,
-    pub completion: u64
 }
 
 #[derive(Clone, Default, Debug)]
@@ -397,14 +395,6 @@ pub struct Socket {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct SocketPair {
-    pub domain: i32,
-    pub type_: i32,
-    pub protocol: i32,
-    pub socketVect: u64,
-}
-
-#[derive(Clone, Default, Debug)]
 pub struct GetSockName {
     pub sockfd: i32,
     pub addr: u64,
@@ -444,7 +434,7 @@ pub struct Connect {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct Bind {
+pub struct IOBind {
     pub sockfd: i32,
     pub addr: u64,
     pub addrlen: u32,
@@ -452,14 +442,49 @@ pub struct Bind {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct Listen {
+pub struct RDMABind {
+    pub sockfd: i32,
+    pub addr: u64,
+    pub addrlen: u32,
+    pub umask: u32,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct IOListen {
     pub sockfd: i32,
     pub backlog: i32,
     pub block: bool,
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct Shutdown {
+pub struct RDMAListen {
+    pub sockfd: i32,
+    pub backlog: i32,
+    pub block: bool,
+    pub acceptQueue: AcceptQueue,
+}
+
+#[derive(Clone, Debug, Copy)]
+pub enum RDMANotifyType {
+    Accept,
+    Read,
+    Write,
+}
+
+impl Default for RDMANotifyType {
+    fn default() -> Self {
+        return Self::Accept
+    }
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct RDMANotify {
+    pub sockfd: i32,
+    pub typ: RDMANotifyType,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct IOShutdown {
     pub sockfd: i32,
     pub how: i32,
 }
@@ -600,8 +625,37 @@ pub struct IOAccept {
     pub fd: i32,
     pub addr: u64,
     pub addrlen: u64,
-    pub flags: i32,
-    pub blocking: bool,
+}
+
+pub struct RDMAAcceptStruct {
+    pub addr: TcpSockAddr,
+    pub addrlen: u32,
+    pub sockBuf: Option<Arc<SocketBuff>>,
+    pub ret: i64,
+}
+
+impl RDMAAcceptStruct {
+    pub fn FromAddr(addr: u64) -> &'static mut Self {
+        return unsafe {
+            &mut *(addr as * mut Self)
+        }
+    }
+
+    pub fn ToAddr(&self) -> u64 {
+        return self as * const _ as u64;
+    }
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct RDMAAccept {
+    pub fd: i32,
+    pub acceptAddr: u64, // &'static mut RDMAAccept,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct PostRDMAConnect {
+    pub fd: i32,
+    pub socketBuf: Arc<SocketBuff>,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -609,7 +663,6 @@ pub struct IOConnect {
     pub fd: i32,
     pub addr: u64,
     pub addrlen: u32,
-    pub blocking: bool,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -631,15 +684,12 @@ pub struct IOSendMsg {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct NewFd {
+pub struct NewSocket {
     pub fd: i32
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct HostEpollWaitProcess {
-    pub addr: u64,
-    pub count: usize,
-}
+pub struct HostEpollWaitProcess {}
 
 #[derive(Clone, Default, Debug)]
 pub struct VcpuWait {
@@ -678,16 +728,15 @@ pub struct LoadProcessKernel {
 }
 
 #[derive(Clone, Debug)]
-pub struct ControlMsgCall {
+pub struct ReadControlMsg {
+    pub fd: i32,
     pub addr: u64,
     pub len: usize,
-    pub taskId: TaskId,
-    pub ret : i64,
 }
 
 #[derive(Clone, Debug)]
-pub struct ControlMsgRet {
-    pub msgId: u64,
+pub struct WriteControlMsgResp {
+    pub fd: i32,
     pub addr: u64,
     pub len: usize,
 }
@@ -707,10 +756,18 @@ pub struct QMsg <'a> {
 
 #[derive(Debug, Copy, Clone)]
 pub enum HostOutputMsg {
+    Default,
     QCall(u64),
     WaitFDAsync(WaitFDAsync),
     EventfdWriteAsync(EventfdWriteAsync),
 }
+
+impl Default for HostOutputMsg {
+    fn default() -> Self {
+        return Self::Default
+    }
+}
+
 
 #[derive(Clone, Default, Debug, Copy)]
 pub struct WaitFDAsync {

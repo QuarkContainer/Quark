@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::vec::Vec;
-
 use super::super::kernel::waiter::*;
 use super::super::kernel::waiter::qlock::*;
 use super::super::fs::attr::*;
@@ -113,10 +111,9 @@ pub fn Splice(task: &Task, dst: &File, src: &File, opts: &mut SpliceOpts) -> Res
                     // We failed to splice the files. But that's fine; we just fall
                     // back to a slow path in this case. This copies without doing
                     // any mode changes, so should still be more efficient.
-                    let mut buf : Vec<u8> = Vec::with_capacity(opts.Length as usize); //todo: create a buffer pool
-                    buf.resize(opts.Length as usize, 0);
-                    let iov = IoVec::New(&buf);
-                    let mut iovs: [IoVec; 1] = [iov];
+
+                    let buf = DataBuff::New(opts.Length as usize);
+                    let mut iovs = buf.Iovs();
 
                     let srcStart = if opts.SrcOffset {
                         opts.SrcStart
@@ -127,7 +124,7 @@ pub fn Splice(task: &Task, dst: &File, src: &File, opts: &mut SpliceOpts) -> Res
                     let readn = src.FileOp.ReadAt(task, src, &mut iovs[..], srcStart, false)?;
 
                     if readn != 0 {
-                        let iov = IoVec::NewFromAddr(iov.Start(), readn as usize);
+                        let iov = IoVec::NewFromAddr(buf.Ptr(), readn as usize);
                         let iovs: [IoVec; 1] = [iov];
 
                         let dstStart = if opts.DstOffset {

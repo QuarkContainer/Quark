@@ -33,18 +33,6 @@ impl Default for CompletionQueue {
     }
 }
 
-impl CompletionQueue {
-    pub fn CopyTo(&self, to: &mut Self) {
-        to.head = self.head;
-        to.tail = self.tail;
-        to.ring_mask = self.ring_mask;
-        to.ring_entries = self.ring_entries;
-        to.overflow = self.overflow;
-        to.cqes = self.cqes;
-        to.flags = self.flags;
-    }
-}
-
 /// Completion Entry
 #[repr(transparent)]
 #[derive(Clone, Default)]

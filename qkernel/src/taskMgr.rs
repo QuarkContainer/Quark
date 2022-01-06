@@ -21,6 +21,7 @@ use super::qlib::task_mgr::*;
 use super::Kernel::HostSpace;
 use super::kernel::kernel::*;
 use super::qlib::perf_tunning::*;
+use super::qlib::linux_def::*;
 use super::qlib::vcpu_mgr::*;
 use super::threadmgr::task_sched::*;
 use super::KERNEL_STACK_ALLOCATOR;
@@ -166,6 +167,11 @@ pub fn WaitFn() {
                     CPULocal::SetPendingFreeStack(0);
                 }
 
+                if super::Shutdown() {
+                    //error!("shutdown: {}", super::AllocatorPrint(10));
+                    super::Kernel::HostSpace::ExitVM(super::EXIT_CODE.load(QOrdering::SEQ_CST));
+                }
+
                 //error!("WaitFn newTask3");
 
                 // todo: free heap cache
@@ -250,7 +256,7 @@ pub fn Wait() {
             switch(current, waitTask);
             break;
         } else {
-            if !ProcessOne() {
+            if PollAsyncMsg() == 0 {
                 unsafe { llvm_asm!("pause" :::: "volatile"); }
             }
         }

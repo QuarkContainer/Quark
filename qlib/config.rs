@@ -19,7 +19,7 @@ pub struct Config {
     pub KernelMemSize: u64,
     pub LogType: LogType,
     pub LogLevel: LogLevel,
-    pub TcpBuffIO: bool,
+    pub UringIO: bool,
     pub EnableAIO: bool,
     pub PrintException: bool,
     pub KernelPagetable: bool,
@@ -32,6 +32,7 @@ pub struct Config {
     pub DedicateUring: usize,
     pub UringSize: usize,
     pub UringEpollCtl: bool,
+    pub EnableRDMA: bool,
 }
 
 impl Config {
@@ -57,7 +58,7 @@ impl Default for Config {
             KernelMemSize: 16, // GB
             LogType: LogType::Sync,
             LogLevel: LogLevel::Simple,
-            TcpBuffIO: true,
+            UringIO: true,
             EnableAIO: false,
             PrintException: false,
             KernelPagetable: false,
@@ -70,6 +71,7 @@ impl Default for Config {
             DedicateUring: 1,
             UringSize: 64,
             UringEpollCtl: false,
+            EnableRDMA: false,
         }
     }
 }

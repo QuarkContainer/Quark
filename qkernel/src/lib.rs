@@ -104,15 +104,17 @@ use core::panic::PanicInfo;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::AtomicBool;
+use core::sync::atomic::AtomicI32;
 use core::{ptr, mem};
 use alloc::vec::Vec;
 use ::qlib::mutex::*;
+use alloc::string::String;
 
 //use linked_list_allocator::LockedHeap;
 //use buddy_system_allocator::LockedHeap;
 use taskMgr::{CreateTask, WaitFn, IOWait};
-use self::qlib::{ShareSpace, SysCallID};
-use self::qlib::buddyallocator::*;
+use self::qlib::{SysCallID, ShareSpaceRef};
+//use self::qlib::buddyallocator::*;
 use self::qlib::pagetable::*;
 use self::qlib::control_msg::*;
 use self::qlib::common::*;
@@ -135,52 +137,59 @@ use self::qlib::perf_tunning::*;
 //use self::qlib::mem::list_allocator::*;
 use self::quring::*;
 use self::print::SCALE;
-use self::heap::QAllocator;
-
+//use self::heap::QAllocator;
+use self::heap::GuestAllocator;
 use self::qlib::singleton::*;
 use self::uid::*;
 
 pub const HEAP_START: usize = 0x70_2000_0000;
 pub const HEAP_SIZE: usize = 0x1000_0000;
 
-
 //use buddy_system_allocator::*;
 #[global_allocator]
-static ALLOCATOR: QAllocator = QAllocator::New();
+//static ALLOCATOR: QAllocator = QAllocator::New();
 //static ALLOCATOR: StackHeap = StackHeap::Empty();
 //static ALLOCATOR: ListAllocator = ListAllocator::Empty();
+static ALLOCATOR: GuestAllocator = GuestAllocator::New();
 //static ALLOCATOR: BufHeap = BufHeap::Empty();
 //static ALLOCATOR: LockedHeap<33> = LockedHeap::empty();
 
-pub fn AllocatorPrint() {
-    //ALLOCATOR.Print();
+pub fn AllocatorPrint(_class: usize) -> String {
+    let class = 6;
+    return ALLOCATOR.Print(class);
 }
 
-pub static SHARESPACE : Singleton<ShareSpace> = Singleton::<ShareSpace>::New();
-pub static PAGE_ALLOCATOR : Singleton<MemAllocator> = Singleton::<MemAllocator>::New();
+pub static SHARESPACE : ShareSpaceRef = ShareSpaceRef::New();
+
 pub static KERNEL_PAGETABLE : Singleton<PageTables> = Singleton::<PageTables>::New();
 pub static PAGE_MGR : Singleton<PageMgr> = Singleton::<PageMgr>::New();
 pub static LOADER : Singleton<Loader> = Singleton::<Loader>::New();
 pub static IOURING : Singleton<QUring> = Singleton::<QUring>::New();
 pub static KERNEL_STACK_ALLOCATOR : Singleton<AlignedAllocator> = Singleton::<AlignedAllocator>::New();
 pub static SHUTDOWN : Singleton<AtomicBool> = Singleton::<AtomicBool>::New();
+pub static EXIT_CODE : Singleton<AtomicI32> = Singleton::<AtomicI32>::New();
 
-pub fn SingletonInit(vcpuCount: usize) {
+pub fn SingletonInit() {
     unsafe {
-        SHARESPACE.Init(ShareSpace::New(vcpuCount));
-        PAGE_ALLOCATOR.Init(MemAllocator::New());
         KERNEL_PAGETABLE.Init(PageTables::Init(CurrentCr3()));
+        vcpu::VCPU_COUNT.Init(AtomicUsize::new(0));
+        vcpu::CPU_LOCAL.Init(&SHARESPACE.scheduler.VcpuArr);
+        InitGs(0);
+        IOURING.Init(QUring::New(MemoryDef::QURING_SIZE));
+        IOURING.SetIOUringsAddr(SHARESPACE.IOUringsAddr());
+
+        // the error! can run after this point
+        //error!("error message");
+
         PAGE_MGR.Init(PageMgr::New());
         LOADER.Init(Loader::default());
-        IOURING.Init(QUring::New(MemoryDef::QURING_SIZE, 1));
         KERNEL_STACK_ALLOCATOR.Init( AlignedAllocator::New(MemoryDef::DEFAULT_STACK_SIZE as usize, MemoryDef::DEFAULT_STACK_SIZE as usize));
         SHUTDOWN.Init(AtomicBool::new(false));
+        EXIT_CODE.Init(AtomicI32::new(0));
 
         guestfdnotifier::GUEST_NOTIFIER.Init(guestfdnotifier::Notifier::New());
         UID.Init(AtomicU64::new(1));
         perflog::THREAD_COUNTS.Init(QMutex::new(perflog::ThreadPerfCounters::default()));
-        vcpu::VCPU_COUNT.Init(AtomicUsize::new(0));
-        vcpu::CPU_LOCAL.Init(&SHARESPACE.scheduler.VcpuArr);
         boot::controller::MSG.Init(QMutex::new(None));
 
         fs::file::InitSingleton();
@@ -289,6 +298,7 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     MainRun(currTask, state);
     //currTask.PerfGofrom(PerfType::KernelHandling);
 
+    //error!("syscall_handler: {}", ::AllocatorPrint(10));
     if llevel == LogLevel::Simple || llevel == LogLevel::Complex {
         let gap = if self::SHARESPACE.config.read().PerfDebug {
             Rdtsc() - startTime
@@ -346,10 +356,10 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                 info!("RunThreadExit[{:x}] ...", currTask.taskId);
                 currTask.RunThreadExit()
             },
-            TaskRunState::RunTreadExitNotify => {
+            TaskRunState::RunThreadExitNotify => {
                 info!("RunTreadExitNotify[{:x}] ...", currTask.taskId);
                 currTask.RunThreadExitNotify()
-            },
+            }
             TaskRunState::RunExitDone => {
                 {
                     error!("RunExitDone 1 [{:x}] ...", currTask.taskId);
@@ -405,22 +415,14 @@ pub fn LogInit(pages: u64) {
 }
 
 #[no_mangle]
-pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u64, vcpuCnt: u64, autoStart: bool) {
+pub extern fn rust_main(heapStart: u64, shareSpaceAddr: u64, id: u64, vdsoParamAddr: u64, vcpuCnt: u64, autoStart: bool) {
     if id == 0 {
-        //ALLOCATOR.Add(heapStart as usize, heapLen as usize);
-        ALLOCATOR.Init(heapStart as usize, heapLen as usize);
-        SingletonInit(vcpuCnt as usize);
-        InitGs(id);
+        ALLOCATOR.Init(heapStart);
+        SHARESPACE.SetValue(shareSpaceAddr);
+        SingletonInit();
+        InitTimeKeeper(vdsoParamAddr);
 
-        ALLOCATOR.SetReady(true);
 
-        HyperCall64(qlib::HYPERCALL_INIT, (&(*SHARESPACE) as *const ShareSpace) as u64, 0, 0);
-        IOURING.Setup(SHARESPACE.config.read().DedicateUring);
-
-        let SyncLog= SHARESPACE.config.read().SyncPrint();
-        if !SyncLog {
-            LogInit(128 * 1024); // 128 * 1024 pages, i.e. 512 MB
-        }
         //Kernel::HostSpace::KernelMsg(0, 0, 1);
         {
             let kpt = &KERNEL_PAGETABLE;
@@ -433,7 +435,6 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
 
         self::guestfdnotifier::GUEST_NOTIFIER.InitPollHostEpoll(SHARESPACE.HostHostEpollfd());
         SetVCPCount(vcpuCnt as usize);
-        InitTimeKeeper(vdsoParamAddr);
         VDSO.Initialization(vdsoParamAddr);
 
         // release other vcpus
@@ -454,12 +455,14 @@ pub extern fn rust_main(heapStart: u64, heapLen: u64, id: u64, vdsoParamAddr: u6
     /***************** can't run any qcall before this point ************************************/
 
     if id == 0 {
+        //error!("start main: {}", ::AllocatorPrint(10));
+
         //ALLOCATOR.Print();
         IOWait();
     };
 
     if id == 1 {
-        error!("heap start is {:x}/{:x}", heapStart, heapStart + heapLen);
+        error!("heap start is {:x}", heapStart);
 
         if autoStart {
             CreateTask(StartRootContainer, ptr::null(), false);
@@ -486,12 +489,12 @@ fn Print() {
     info!("cr2 is {:x}, cr3 is {:x}, cs is {}, ss is {}", cr2, cr3, cs, ss);
 }
 
-fn StartExecProcess(msgId: u64, process: Process) {
+fn StartExecProcess(fd: i32, process: Process) {
     let (tid, entry, userStackAddr, kernelStackAddr) = {
         LOADER.ExecProcess(process).unwrap()
     };
 
-    ControlMsgRet(msgId, &UCallResp::ExecProcessResp(tid));
+    WriteControlMsgResp(fd, &UCallResp::ExecProcessResp(tid));
 
     let currTask = Task::Current();
     currTask.AccountTaskEnter(SchedState::RunningApp);
@@ -507,7 +510,7 @@ fn StartSubContainerProcess(elfEntry: u64, userStackAddr: u64, kernelStackAddr: 
 }
 
 fn ControllerProcess(_para: *const u8) {
-    Run().expect("ControllerProcess crash");
+    ControllerProcessHandler().expect("ControllerProcess crash");
 }
 
 pub fn StartRootProcess() {

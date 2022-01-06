@@ -702,7 +702,8 @@ impl Task {
                 //println!("there is no clear_child_tid");
             }
             Some(addr) => {
-                self.CopyOutObj(&(0 as i32), addr).ok();
+                let val : i32 = 0;
+                self.CopyOutObj(&val, addr).ok();
             }
         }
     }

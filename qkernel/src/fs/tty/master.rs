@@ -22,6 +22,7 @@ use alloc::vec::Vec;
 use socket::unix::transport::unix::BoundEndpoint;
 use super::super::host::hostinodeop::*;
 use super::super::super::qlib::common::*;
+use super::super::super::uid::NewUID;
 use super::super::super::qlib::device::*;
 use super::super::super::qlib::auth::*;
 use super::super::super::task::*;
@@ -65,12 +66,12 @@ pub fn NewMasterNode(task: &Task, d: &DirInodeOperations, owner: &FileOwner, p: 
 
     let msrc = d.lock().msrc.clone();
     let inodeInternal = InodeIntern {
+        UniqueId: NewUID(),
         InodeOp: Arc::new(iops),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
         MountSource: msrc,
         Overlay: None,
-        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)))

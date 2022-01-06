@@ -54,8 +54,8 @@ impl IoUring {
 
     pub fn sq_len(&self) -> usize {
         unsafe {
-            let head = (*self.sq.head).load(atomic::Ordering::Acquire);
-            let tail = unsync_load(self.sq.tail);
+            let head = (*self.sq.lock().head).load(atomic::Ordering::Acquire);
+            let tail = unsync_load(self.sq.lock().tail);
 
             tail.wrapping_sub(head) as usize
         }
@@ -63,7 +63,7 @@ impl IoUring {
 
     pub fn sq_need_wakeup(&self) -> bool {
         unsafe {
-            (*self.sq.flags).load(atomic::Ordering::Acquire) & sys::IORING_SQ_NEED_WAKEUP != 0
+            (*self.sq.lock().flags).load(atomic::Ordering::Acquire) & sys::IORING_SQ_NEED_WAKEUP != 0
         }
     }
 

@@ -30,10 +30,7 @@ use std::fs;
 use libc::*;
 use std::marker::Send;
 use serde_json;
-use alloc::collections::btree_map::BTreeMap;
 use x86_64::structures::paging::PageTableFlags;
-use std::collections::VecDeque;
-use alloc::boxed::Box;
 use tempfile::tempfile;
 use std::os::unix::io::IntoRawFd;
 use lazy_static::lazy_static;
@@ -52,9 +49,9 @@ use super::qlib::addr::{Addr};
 use super::qlib::control_msg::*;
 use super::qlib::qmsg::*;
 use super::qlib::cstring::*;
+use super::qlib::socket_buf::*;
 use super::qlib::perf_tunning::*;
 use super::namespace::MountNs;
-use super::runc::runtime::vm::*;
 use super::ucall::usocket::*;
 use super::*;
 use self::HostFileMap::fdinfo::*;
@@ -62,7 +59,7 @@ use self::syscall::*;
 use self::random::*;
 use self::limits::*;
 use super::runc::runtime::signal_handle::*;
-use super::kvm_vcpu::SimplePageAllocator;
+use super::kvm_vcpu::HostPageAllocator;
 
 const ARCH_SET_GS:u64 = 0x1001;
 const ARCH_SET_FS:u64 = 0x1002;
@@ -98,39 +95,30 @@ pub struct WaitingMsgCall {
 
 pub struct VMSpace {
     pub pageTables : PageTables,
-    pub allocator: Option<SimplePageAllocator>,
+    pub allocator: HostPageAllocator,
     pub hostAddrTop: u64,
     pub sharedLoasdOffset: u64,
     pub vdsoAddr: u64,
     pub vcpuCount: usize,
 
-    pub shareSpace: &'static ShareSpace,
     pub rng: RandGen,
     pub args: Option<Args>,
     pub pivot: bool,
     pub waitingMsgCall: Option<WaitingMsgCall>,
-    pub controlMsgCallBack: BTreeMap<u64, USocket>,
-    pub controlMsgQueue: VecDeque<Box<(USocket, ControlMsg)>>,
+    pub controlSock: i32,
 }
 
 unsafe impl Sync for VMSpace {}
 unsafe impl Send for VMSpace {}
 
 impl VMSpace {
-    pub fn CloseVMSpace(&mut self) {
-        for (_, sock) in self.controlMsgCallBack.iter() {
-            sock.SendResp(&UCallResp::UCallRespErr("container shutdown...".to_string())).ok();
-        }
-        self.controlMsgCallBack.clear();
-    }
-
     ///////////start of file operation//////////////////////////////////////////////
     pub fn GetOsfd(hostfd: i32) -> Option<i32> {
-        return IO_MGR.lock().GetFdByHost(hostfd);
+        return IO_MGR.GetFdByHost(hostfd);
     }
 
     pub fn GetFdInfo(hostfd: i32) -> Option<FdInfo> {
-        return IO_MGR.lock().GetByHost(hostfd);
+        return IO_MGR.GetByHost(hostfd);
     }
 
     pub fn GetDents64(fd: i32, dirp: u64, count: u32) -> i64 {
@@ -160,33 +148,7 @@ impl VMSpace {
         mns.PivotRoot();
     }
 
-    pub fn ControlMsgCall(&mut self, taskId: TaskId, addr: u64, len: usize, retAddr: u64) -> i64 {
-        match self.controlMsgQueue.pop_back() {
-            Some(data) => {
-                self.CopyControlMsg(&WaitingMsgCall{
-                    taskId: taskId,
-                    addr: addr,
-                    len: len,
-                    retAddr,
-                }, data.0, &data.1).expect("ControlMsgCall CopyControlMsg fail");
-
-                VirtualMachine::Schedule(self.GetShareSpace(), taskId);
-                return 0
-            }
-            None => ()
-        };
-
-        self.waitingMsgCall = Some(WaitingMsgCall{
-            taskId: taskId,
-            addr: addr,
-            len: len,
-            retAddr,
-        });
-
-        return 0
-    }
-
-    pub fn ControlMsgRet(&mut self, msgId: u64, addr: u64, len: usize) -> i64 {
+    pub fn WriteControlMsgResp(fd: i32, addr: u64, len: usize) -> i64 {
         let buf = {
             let ptr = addr as * const u8;
             unsafe { slice::from_raw_parts(ptr, len) }
@@ -194,9 +156,8 @@ impl VMSpace {
 
         let resp : UCallResp = serde_json::from_slice(&buf[0..len]).expect("ControlMsgRet des fail");
 
-        let usock = match self.controlMsgCallBack.remove(&msgId) {
-            None => panic!("ControlMsgRet get non-exist msgid {}", msgId),
-            Some(s) => s,
+        let usock = USocket {
+            socket: fd,
         };
 
         match usock.SendResp(&resp) {
@@ -204,48 +165,9 @@ impl VMSpace {
             Ok(()) => (),
         }
 
+        usock.Drop();
+
         return 0;
-    }
-
-    pub fn CopyControlMsg(&mut self, waitMsg: &WaitingMsgCall, usock: USocket, msg: &ControlMsg) -> Result<()> {
-        let msgId = msg.msgId;
-
-        let vec : Vec<u8> = serde_json::to_vec(msg).expect("SendControlMsg ser fail...");
-        let buff = {
-            let ptr = waitMsg.addr as *mut u8;
-            unsafe { slice::from_raw_parts_mut(ptr, waitMsg.len) }
-        };
-
-        if vec.len() > buff.len() {
-            return Err(Error::Common(format!("ExecProcess not enough space..., required len is {}, buff len is {}", vec.len(), buff.len())));
-        }
-
-        for i in 0..vec.len() {
-            buff[i] = vec[i];
-        }
-
-        let addr = waitMsg.retAddr;
-        unsafe {
-            *(addr as * mut u64) = vec.len() as u64;
-        }
-
-        self.controlMsgCallBack.insert(msgId, usock);
-        return Ok(())
-    }
-
-    pub fn SendControlMsg(&mut self, usock: USocket, msg: ControlMsg) -> Result<()> {
-        let waitMsg = match self.waitingMsgCall.take() {
-            None => {
-                self.controlMsgQueue.push_front(Box::new((usock, msg)));
-                return Ok(());
-            },
-            Some(m) => m,
-        };
-
-        self.CopyControlMsg(&waitMsg, usock, &msg)?;
-
-        VirtualMachine::Schedule(self.GetShareSpace(), waitMsg.taskId);
-        return Ok(())
     }
 
     pub fn VCPUCount() -> usize {
@@ -301,14 +223,7 @@ impl VMSpace {
                 return osfd as i64
             }
 
-            let stat = Self::LibcFstat(osfd).expect("LoadProcessKernel: can't fstat for the stdio fds");
-
-            //Self::UnblockFd(osfd);
-
-            let st_mode = stat.st_mode & ModeType::S_IFMT as u32;
-            let epollable = st_mode == S_IFIFO || st_mode == S_IFSOCK || st_mode == S_IFCHR;
-
-            let hostfd = IO_MGR.lock().AddFd(osfd, epollable);
+            let hostfd = IO_MGR.AddFile(osfd);
 
             process.Stdiofds[i] = hostfd;
         }
@@ -366,7 +281,7 @@ impl VMSpace {
             return Self::GetRet(ret as i64)
         }
 
-        let hostfd = IO_MGR.lock().AddFd(fd, true);
+        let hostfd = IO_MGR.AddFile(fd);
         return hostfd as i64
     }
 
@@ -538,7 +453,7 @@ impl VMSpace {
         }
 
         tryOpenAt.writeable = writeable;
-        let hostfd = IO_MGR.lock().AddFd(fd, false);
+        let hostfd = IO_MGR.AddFile(fd);
 
         if tryOpenAt.fstat.IsRegularFile() {
             URING_MGR.lock().Addfd(hostfd).unwrap();
@@ -579,7 +494,7 @@ impl VMSpace {
                 return Self::GetRet(ret as i64) as i32
             }
 
-            let hostfd = IO_MGR.lock().AddFd(osfd, false);
+            let hostfd = IO_MGR.AddFile(osfd);
 
             URING_MGR.lock().Addfd(osfd).unwrap();
 
@@ -588,7 +503,7 @@ impl VMSpace {
     }
 
     pub fn Close(fd: i32) -> i64 {
-        let info = IO_MGR.lock().RemoveFd(fd);
+        let info = IO_MGR.RemoveFd(fd);
 
         URING_MGR.lock().Removefd(fd).unwrap();
         let res = if info.is_some() {
@@ -684,17 +599,17 @@ impl VMSpace {
         return fdInfo.IOWriteAt(iovs, iovcnt, offset)
     }
 
-    pub fn IOAccept(fd: i32, addr: u64, addrlen: u64, flags: i32) -> i64 {
+    pub fn IOAccept(fd: i32, addr: u64, addrlen: u64) -> i64 {
         let fdInfo = match Self::GetFdInfo(fd) {
             Some(info) => info,
             None => return -SysErr::EBADF as i64,
         };
 
-        return fdInfo.IOAccept(addr, addrlen, flags)
+        return fdInfo.IOAccept(addr, addrlen)
     }
 
-    pub fn NewFd(fd: i32) -> i64 {
-        IO_MGR.lock().AddFd(fd, true);
+    pub fn NewSocket(fd: i32) -> i64 {
+        IO_MGR.AddSocket(fd);
         URING_MGR.lock().Addfd(fd).unwrap();
         return 0;
     }
@@ -732,7 +647,7 @@ impl VMSpace {
             None => return -SysErr::EBADF as i64,
         };
 
-        return fdInfo.Fcntl(cmd, arg)
+        return fdInfo.IOFcntl(cmd, arg)
     }
 
     pub fn IoCtl(fd: i32, cmd: u64, argp: u64) -> i64 {
@@ -741,7 +656,7 @@ impl VMSpace {
             None => return -SysErr::EBADF as i64,
         };
 
-        return fdInfo.IoCtl(cmd, argp)
+        return fdInfo.IOIoCtl(cmd, argp)
     }
 
     pub fn SysSync() -> i64 {
@@ -786,7 +701,7 @@ impl VMSpace {
             None => return -SysErr::EBADF as i64,
         };
 
-        return fdInfo.FSync(false)
+        return fdInfo.IOFSync(false)
     }
 
     pub fn FDataSync(fd: i32) -> i64 {
@@ -795,7 +710,7 @@ impl VMSpace {
             None => return -SysErr::EBADF as i64,
         };
 
-        return fdInfo.FSync(true)
+        return fdInfo.IOFSync(true)
     }
 
     pub fn Seek(fd: i32, offset: i64, whence: i32) -> i64 {
@@ -804,7 +719,7 @@ impl VMSpace {
             None => return -SysErr::EBADF as i64,
         };
 
-        return fdInfo.Seek(offset, whence)
+        return fdInfo.IOSeek(offset, whence)
     }
 
     pub fn ReadLinkAt(dirfd: i32, path: u64, buf: u64, bufsize: u64) -> i64 {
@@ -1029,132 +944,128 @@ impl VMSpace {
             return Self::GetRet(fd as i64);
         }
 
-        let hostfd = IO_MGR.lock().AddFd(fd, true);
+        let hostfd = IO_MGR.AddSocket(fd);
         URING_MGR.lock().Addfd(fd).unwrap();
         return Self::GetRet(hostfd as i64);
     }
 
-    pub fn SocketPair(domain: i32, type_: i32, protocol: i32, socketVect: u64) -> i64 {
-        let res = unsafe{
-            socketpair(domain, type_ | SocketFlags::SOCK_NONBLOCK | SocketFlags::SOCK_CLOEXEC, protocol, socketVect as *mut i32)
-        };
-
-        if res < 0 {
-            return Self::GetRet(res as i64);
-        }
-
-        let ptr = socketVect as * mut i32;
-        let fds = unsafe { slice::from_raw_parts_mut(ptr, 2) };
-
-        let hostfd0 = IO_MGR.lock().AddFd(fds[0], true);
-        let hostfd1 = IO_MGR.lock().AddFd(fds[1], true);
-
-        fds[0] = hostfd0;
-        fds[1] = hostfd1;
-
-        return Self::GetRet(res as i64);
-    }
-
     pub fn GetSockName(sockfd: i32, addr: u64, addrlen: u64) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
+        let fdInfo = match Self::GetFdInfo(sockfd) {
+            Some(fdInfo) => fdInfo,
             None => return -SysErr::EBADF as i64,
         };
 
-        let ret = unsafe{
-            getsockname(sockfd, addr as *mut sockaddr, addrlen as *mut socklen_t)
-        };
-
-        return Self::GetRet(ret as i64)
+        return fdInfo.IOGetSockName(addr, addrlen)
     }
 
     pub fn GetPeerName(sockfd: i32, addr: u64, addrlen: u64) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
+        let fdInfo = match Self::GetFdInfo(sockfd) {
+            Some(fdInfo) => fdInfo,
             None => return -SysErr::EBADF as i64,
         };
 
-        let ret = unsafe{
-            getpeername(sockfd, addr as *mut sockaddr, addrlen as *mut socklen_t)
-        };
-
-        return Self::GetRet(ret as i64)
+        return fdInfo.IOGetPeerName(addr, addrlen)
     }
 
     pub fn GetSockOpt(sockfd: i32, level: i32, optname: i32, optval: u64, optlen: u64) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
+        let fdInfo = match Self::GetFdInfo(sockfd) {
+            Some(fdInfo) => fdInfo,
             None => return -SysErr::EBADF as i64,
         };
 
-        let ret = unsafe{
-            getsockopt(sockfd, level, optname, optval as *mut c_void, optlen as *mut socklen_t)
-        };
-
-        return Self::GetRet(ret as i64)
+        return fdInfo.IOGetSockOpt(level, optname, optval, optlen)
     }
 
     pub fn SetSockOpt(sockfd: i32, level: i32, optname: i32, optval: u64, optlen: u32) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
+        let fdInfo = match Self::GetFdInfo(sockfd) {
+            Some(fdInfo) => fdInfo,
             None => return -SysErr::EBADF as i64,
         };
 
-        let ret = unsafe{
-            setsockopt(sockfd, level, optname, optval as *const c_void, optlen as socklen_t)
-        };
-
-        return Self::GetRet(ret as i64)
+        return fdInfo.IOSetSockOpt(level, optname, optval, optlen)
     }
 
     pub fn Bind(sockfd: i32, sockaddr: u64, addrlen: u32, umask: u32) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
+        let fdInfo = match Self::GetFdInfo(sockfd) {
+            Some(fdInfo) => fdInfo,
             None => return -SysErr::EBADF as i64,
         };
 
-        let ret = unsafe{
-            // todo: this is not thread safe, need to add lock when implement multiple io threads
-            let oldUmask = libc::umask(umask);
-            let ret = bind(sockfd, sockaddr as *const sockaddr, addrlen as socklen_t);
-            libc::umask(oldUmask);
-            ret
-        };
-
-        return Self::GetRet(ret as i64);
+        return fdInfo.IOBind(sockaddr, addrlen, umask)
     }
 
     pub fn Listen(sockfd: i32, backlog: i32, block: bool) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
+        let fdInfo = match Self::GetFdInfo(sockfd) {
+            Some(fdInfo) => fdInfo,
             None => return -SysErr::EBADF as i64,
         };
 
-        let ret = unsafe{
-            listen(sockfd, backlog)
+        return fdInfo.IOListen(backlog, block)
+    }
+
+
+    pub fn RDMAListen(sockfd: i32, backlog: i32, block: bool, acceptQueue: AcceptQueue) -> i64 {
+        let fdInfo = match Self::GetFdInfo(sockfd) {
+            Some(fdInfo) => fdInfo,
+            None => return -SysErr::EBADF as i64,
         };
 
-        if block {
-            Self::BlockFd(sockfd);
-        }
+        return fdInfo.RDMAListen(backlog, block, acceptQueue)
+    }
 
-        return Self::GetRet(ret as i64);
+    pub fn RDMANotify(sockfd: i32, typ: RDMANotifyType) -> i64 {
+        let fdInfo = match Self::GetFdInfo(sockfd) {
+            Some(fdInfo) => fdInfo,
+            None => return -SysErr::EBADF as i64,
+        };
+
+        return fdInfo.RDMANotify(typ)
+    }
+
+    pub fn PostRDMAConnect(sockfd: i32, socketBuf: Arc<SocketBuff>) -> i64 {
+        let fdInfo = match Self::GetFdInfo(sockfd) {
+            Some(fdInfo) => fdInfo,
+            None => return -SysErr::EBADF as i64,
+        };
+
+        return fdInfo.PostRDMAConnect(socketBuf);
     }
 
     pub fn Shutdown(sockfd: i32, how: i32) -> i64 {
-        let sockfd = match Self::GetOsfd(sockfd) {
-            Some(sockfd) => sockfd,
+        let fdInfo = match Self::GetFdInfo(sockfd) {
+            Some(fdInfo) => fdInfo,
             None => return -SysErr::EBADF as i64,
         };
 
-        let ret = unsafe{
-            shutdown(sockfd, how)
-        };
-
-        return Self::GetRet(ret as i64)
+        return fdInfo.IOShutdown(how)
     }
 
     ///////////end of network operation//////////////////////////////////////////////////////////////////
+    pub fn ReadControlMsg(fd: i32, addr: u64, len: usize) -> i64 {
+        match super::ucall::ucall_server::ReadControlMsg(fd) {
+            Err(_e) => {
+                return -1
+            }
+            Ok(msg) => {
+                let vec : Vec<u8> = serde_json::to_vec(&msg).expect("SendControlMsg ser fail...");
+                let buff = {
+                    let ptr = addr as *mut u8;
+                    unsafe { slice::from_raw_parts_mut(ptr, len) }
+                };
+
+                if vec.len() > buff.len() {
+                    panic!("ReadControlMsg not enough space..., required len is {}, buff len is {}", vec.len(), buff.len());
+                }
+
+                for i in 0..vec.len() {
+                    buff[i] = vec[i];
+                }
+
+                return vec.len() as i64
+            }
+        }
+    }
+
     pub fn SchedGetAffinity( pid: i32, cpuSetSize: u64, mask: u64) -> i64 {
         //todo: fix this
         //let pid = 0;
@@ -1289,19 +1200,29 @@ impl VMSpace {
         return Self::GetRet(ret as i64)
     }
 
-    pub fn WaitFD(fd: i32, op: u32, mask: EventMask) -> i64 {
-        let osfd = match Self::GetOsfd(fd) {
-            Some(fd) => fd,
+    pub fn WaitFD(fd: i32, _op: u32, mask: EventMask) -> i64 {
+        let fdinfo = match Self::GetFdInfo(fd) {
+            Some(fdinfo) => fdinfo,
             None => return -SysErr::EBADF as i64,
         };
 
-        match FD_NOTIFIER.WaitFd(osfd, op, mask) {
+        let ret = fdinfo.lock().WaitFd(mask);
+
+        match ret {
             Ok(()) => return 0,
             Err(Error::SysError(syserror)) => return -syserror as i64,
             Err(e) => {
                 panic!("WaitFD get error {:?}", e);
             }
         }
+
+        /*match FD_NOTIFIER.WaitFd(osfd, op, mask) {
+            Ok(()) => return 0,
+            Err(Error::SysError(syserror)) => return -syserror as i64,
+            Err(e) => {
+                panic!("WaitFD get error {:?}", e);
+            }
+        }*/
     }
 
     pub fn NonBlockingPoll(fd: i32, mask: EventMask) -> i64 {
@@ -1366,7 +1287,7 @@ impl VMSpace {
             return Self::GetRet(ret as i64);
         }
 
-        let guestfd = IO_MGR.lock().AddFd(fd, false);
+        let guestfd = IO_MGR.AddFile(fd);
 
         return guestfd as i64
     }
@@ -1413,8 +1334,8 @@ impl VMSpace {
         return 0;
     }
 
-    pub fn HostEpollWaitProcess(addr: u64, count: usize) -> i64 {
-        let ret = FD_NOTIFIER.HostEpollWait(addr, count);
+    pub fn HostEpollWaitProcess() -> i64 {
+        let ret = FD_NOTIFIER.HostEpollWait();
         return ret;
     }
 
@@ -1465,12 +1386,12 @@ impl VMSpace {
     //map kernel table
     pub fn KernelMap(&mut self, start: Addr, end: Addr, physical: Addr, flags: PageTableFlags) -> Result<bool> {
         error!("KernelMap start is {:x}, end is {:x}", start.0, end.0);
-        return self.pageTables.Map(start, end, physical, flags, self.allocator.as_mut().unwrap(), true);
+        return self.pageTables.Map(start, end, physical, flags, &mut self.allocator, true);
     }
 
     pub fn KernelMapHugeTable(&mut self, start: Addr, end: Addr, physical: Addr, flags: PageTableFlags) -> Result<bool> {
         error!("KernelMap1G start is {:x}, end is {:x}", start.0, end.0);
-        return self.pageTables.MapWith1G(start, end, physical, flags, self.allocator.as_mut().unwrap(), true);
+        return self.pageTables.MapWith1G(start, end, physical, flags, &mut self.allocator, true);
     }
 
     pub fn PrintStr(phAddr: u64) {
@@ -1510,22 +1431,22 @@ impl VMSpace {
 
             Self::UnblockFd(osfd);
 
-            let hostfd = IO_MGR.lock().AddFd(osfd, true);
+            let hostfd = IO_MGR.AddFile(osfd);
             stdfds[i] = hostfd;
         }
 
         return 0;
     }
 
-    pub fn GetShareSpace(&self) -> &'static ShareSpace {
-        return &self.shareSpace
-    }
-
     pub fn FdNotify(&self, fd: i32, mask: EventMask) {
-        self.shareSpace.AQHostInputCall(&HostInputMsg::FdNotify(FdNotify{
+        SHARE_SPACE.AQHostInputCall(&HostInputMsg::FdNotify(FdNotify{
             fd: fd,
             mask: mask,
         }));
+    }
+
+    pub fn Signal(&self, signal: SignalArgs) {
+        SHARE_SPACE.AQHostInputCall(&HostInputMsg::Signal(signal));
     }
 
     pub fn LibcFstat(osfd: i32) -> Result<LibcStat> {
@@ -1556,27 +1477,17 @@ impl VMSpace {
 
     pub fn Init() -> Self {
         return VMSpace {
-            allocator: None,
+            allocator: HostPageAllocator::New(),
             pageTables: PageTables::default(),
             hostAddrTop: 0,
             sharedLoasdOffset: 0x0000_5555_0000_0000,
             vdsoAddr: 0,
             vcpuCount: 0,
-            shareSpace: unsafe {
-                &mut *(0 as * mut ShareSpace)
-            },
             rng: RandGen::Init(),
             args: None,
             pivot: false,
             waitingMsgCall: None,
-            controlMsgCallBack: BTreeMap::new(),
-            controlMsgQueue: VecDeque::with_capacity(5),
+            controlSock: -1,
         }
     }
-}
-
-pub fn SendControlMsg(usock: USocket, msg: ControlMsg) -> Result<()> {
-    VMS.lock().SendControlMsg(usock, msg)?;
-
-    return Ok(())
 }
