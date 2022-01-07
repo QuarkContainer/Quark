@@ -106,7 +106,7 @@ impl VirtualMachine {
         SHARE_SPACE.SetValue(&(*SHARE_SPACE_STRUCT.lock()) as * const _ as u64);
 
         let sharespace = SHARE_SPACE.Ptr();
-        let logfd = super::super::super::super::print::LOG.lock().Logfd();
+        let logfd = super::super::super::print::LOG.lock().Logfd();
         URING_MGR.lock().Init(sharespace.config.read().DedicateUring);
         URING_MGR.lock().Addfd(logfd).unwrap();
 
@@ -117,8 +117,8 @@ impl VirtualMachine {
         sharespace.SetIOUringsAddr(URING_MGR.lock().IOUringsAddr());
 
         let syncPrint = sharespace.config.read().SyncPrint();
-        super::super::super::super::print::SetSharespace(sharespace);
-        super::super::super::super::print::SetSyncPrint(syncPrint);
+        super::super::super::print::SetSharespace(sharespace);
+        super::super::super::print::SetSyncPrint(syncPrint);
     }
 
     pub fn Init(args: Args /*args: &Args, kvmfd: i32*/) -> Result<Self> {
