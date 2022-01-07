@@ -31,7 +31,7 @@ impl RDMA {
             let dataSize = buf.readBuf.lock().AvailableDataSize();
             let bufSize = buf.readBuf.lock().BufSize();
             if 2 * dataSize >= bufSize {
-                HostSpace::RDMANotify(fd, RDMANotifyType::Read);
+                HostSpace::RDMANotify(fd, RDMANotifyType::RDMARead);
             }
         }
 
@@ -44,7 +44,11 @@ impl RDMA {
         let (count, writeBuf) = buf.Writev(task, srcs)?;
 
         if writeBuf.is_some() {
-            HostSpace::RDMANotify(fd, RDMANotifyType::Write);
+            if RDMA_ENABLE {
+                HostSpace::RDMANotify(fd, RDMANotifyType::RDMAWrite);
+            } else {
+                HostSpace::RDMANotify(fd, RDMANotifyType::Write);
+            }
         }
 
         return Ok(count as i64)

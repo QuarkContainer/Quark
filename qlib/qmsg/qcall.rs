@@ -468,6 +468,8 @@ pub enum RDMANotifyType {
     Accept,
     Read,
     Write,
+    RDMARead,
+    RDMAWrite,
 }
 
 impl Default for RDMANotifyType {
