@@ -464,6 +464,14 @@ impl FdInfo {
                         sock.Notify(EVENT_OUT);
                         //self.lock().AddWait(EVENT_WRITE).unwrap();
                     }
+                    RDMANotifyType::RDMARead => {
+                        sock.RDMARead();
+                        //self.lock().AddWait(EVENT_WRITE).unwrap();
+                    }
+                    RDMANotifyType::RDMAWrite => {
+                        sock.RDMAWrite();
+                        //self.lock().AddWait(EVENT_WRITE).unwrap();
+                    }
                     _ => {
                         panic!("RDMANotify wrong state {:?}", typ);
                     }
