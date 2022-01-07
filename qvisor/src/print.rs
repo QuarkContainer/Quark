@@ -21,8 +21,8 @@ use lazy_static::lazy_static;
 use chrono::prelude::*;
 use std::os::unix::io::AsRawFd;
 
-use super::kvmlib::qlib::ShareSpace;
-use super::kvmlib::qlib::qmsg::input::*;
+use super::qlib::ShareSpace;
+use super::qlib::qmsg::input::*;
 
 lazy_static! {
     pub static ref LOG : Mutex<Log> = Mutex::new(Log::New());

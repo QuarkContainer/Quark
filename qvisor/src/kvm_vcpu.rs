@@ -378,7 +378,7 @@ impl KVMVcpu {
                             let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                             let exitCode = regs.rbx as i32;
 
-                            super::super::print::LOG.lock().Clear();
+                            super::print::LOG.lock().Clear();
                             PerfPrint();
 
                             SetExitStatus(exitCode);
@@ -873,7 +873,7 @@ impl ShareSpace {
         self.values = values;
 
         self.scheduler.Init();
-        self.SetLogfd(super::super::print::LOG.lock().Logfd());
+        self.SetLogfd(super::print::LOG.lock().Logfd());
         self.hostEpollfd.store(FD_NOTIFIER.Epollfd(), Ordering::SeqCst);
         self.controlSock = controlSock;
         super::vmspace::VMSpace::BlockFd(controlSock);

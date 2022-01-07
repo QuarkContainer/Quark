@@ -25,11 +25,43 @@
 #![allow(deprecated)]
 #![feature(thread_id_value)]
 
+#![allow(dead_code)]
+#![allow(non_snake_case)]
+extern crate alloc;
+extern crate bit_field;
+extern crate errno;
+extern crate core_affinity;
+
+
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
 extern crate serde;
 extern crate cache_padded;
+
+#[macro_use]
+pub mod asm;
+
+#[macro_use]
+pub mod print;
+
+
+pub mod qlib;
+mod memmgr;
+pub mod heap_alloc;
+mod qcall;
+mod vmspace;
+mod kvm_vcpu;
+mod syncmgr;
+pub mod namespace;
+pub mod elf_loader;
+pub mod runc;
+pub mod ucall;
+pub mod console;
+pub mod util;
+pub mod amd64_def;
+pub mod perflog;
+
 
 #[macro_use]
 extern crate clap;
@@ -40,10 +72,8 @@ extern crate scopeguard;
 #[macro_use]
 extern crate lazy_static;
 
-extern crate alloc;
 extern crate spin;
 extern crate x86_64;
-extern crate errno;
 extern crate libc;
 #[macro_use]
 extern crate log;
@@ -54,27 +84,72 @@ extern crate fs2;
 extern crate caps;
 extern crate tabwriter;
 
-#[macro_use]
-pub mod print;
 
-pub mod kvmlib;
+//pub mod kvmlib;
 
 use std::env;
+use spin::Mutex;
+use lazy_static::lazy_static;
+use alloc::sync::Arc;
 
-use kvmlib::heap_alloc::*;
+use self::qlib::buddyallocator::MemAllocator;
+use self::qlib::{addr};
+use self::qlib::qmsg::*;
+use self::qlib::config::*;
+use self::qlib::ShareSpace;
+use self::qlib::ShareSpaceRef;
+use self::vmspace::hostfdnotifier::*;
+use self::vmspace::host_pma_keeper::*;
+use self::vmspace::kernel_io_thread::*;
+use self::runc::cmd::command::*;
+use self::heap_alloc::*;
+
+use vmspace::*;
+use self::vmspace::uringMgr::*;
+
+const LOWER_TOP: u64 = 0x00007fffffffffff;
+const UPPER_BOTTOM: u64 = 0xffff800000000000;
+
+pub fn AllocatorPrint(_class: usize) -> String {
+    return "".to_string();
+}
+
+pub static SHARE_SPACE : ShareSpaceRef = ShareSpaceRef::New();
+
+lazy_static! {
+    pub static ref SHARE_SPACE_STRUCT : Arc<Mutex<ShareSpace>> = Arc::new(Mutex::new(ShareSpace::default()));
+    pub static ref VMS: Mutex<VMSpace> = Mutex::new(VMSpace::Init());
+    pub static ref PAGE_ALLOCATOR: MemAllocator = MemAllocator::New();
+    pub static ref FD_NOTIFIER: HostFdNotifier = HostFdNotifier::New();
+    pub static ref IO_MGR: vmspace::HostFileMap::IOMgr = vmspace::HostFileMap::IOMgr::Init().expect("Init IOMgr fail");
+    pub static ref SYNC_MGR: Mutex<syncmgr::SyncMgr> = Mutex::new(syncmgr::SyncMgr::New());
+    pub static ref PMA_KEEPER: HostPMAKeeper = HostPMAKeeper::New();
+    pub static ref QUARK_CONFIG: Mutex<Config> = {
+        let mut config = Config::default();
+        config.Load();
+        Mutex::new(config)
+    };
+    pub static ref URING_MGR: Arc<Mutex<UringMgr>> = {
+        let config = QUARK_CONFIG.lock();
+        let uringSize = config.UringSize;
+        Arc::new(Mutex::new(UringMgr::New(uringSize)))
+    };
+    pub static ref KERNEL_IO_THREAD: KIOThread = KIOThread::New();
+    pub static ref GLOCK: Mutex<()> = Mutex::new(());
+}
+
+
 
 pub const LOG_FILE : &'static str = "/var/log/quark/quark.log";
 
 pub fn InitSingleton() {
-    kvmlib::qlib::InitSingleton();
+    self::qlib::InitSingleton();
 }
 
 #[global_allocator]
 static GLOBAL: HostAllocator = HostAllocator::New();
 
 fn main() {
-    use self::kvmlib::runc::cmd::command::*;
-
     InitSingleton();
 
     {
