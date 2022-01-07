@@ -15,7 +15,7 @@
 //#![feature(macro_rules)]
 #![feature(lang_items)]
 #![no_std]
-#![feature(proc_macro_hygiene, asm)]
+#![feature(proc_macro_hygiene)]
 #![feature(alloc_error_handler)]
 #![feature(abi_x86_interrupt)]
 #![allow(dead_code)]
@@ -35,9 +35,9 @@
 
 #[macro_use]
 extern crate serde_derive;
-extern crate serde_json;
-extern crate serde;
 extern crate cache_padded;
+extern crate serde;
+extern crate serde_json;
 
 #[macro_use]
 extern crate alloc;
@@ -46,19 +46,19 @@ extern crate alloc;
 extern crate scopeguard;
 
 //extern crate rusty_asm;
-extern crate spin;
 extern crate lazy_static;
+extern crate spin;
 extern crate x86_64;
 //extern crate pic8259_simple;
-extern crate xmas_elf;
 extern crate bit_field;
+extern crate xmas_elf;
 //extern crate linked_list_allocator;
 extern crate buddy_system_allocator;
 #[macro_use]
 extern crate bitflags;
 //#[macro_use]
-extern crate x86;
 extern crate ringbuf;
+extern crate x86;
 
 #[macro_use]
 mod print;
@@ -71,72 +71,72 @@ mod qlib;
 #[macro_use]
 mod interrupt;
 mod Kernel;
-mod syscalls;
+pub mod SignalDef;
+pub mod aqcall;
 mod arch;
+pub mod boot;
+pub mod fd;
+pub mod fs;
+pub mod guestfdnotifier;
 pub mod kernel;
 pub mod kernel_util;
-pub mod guestfdnotifier;
-pub mod threadmgr;
-pub mod boot;
-pub mod fs;
-pub mod socket;
+pub mod loader;
 pub mod memmgr;
 pub mod mm;
-pub mod SignalDef;
-pub mod fd;
+pub mod socket;
+mod syscalls;
 pub mod task;
-pub mod aqcall;
+pub mod threadmgr;
 pub mod vcpu;
-pub mod loader;
 //pub mod ucall_server;
-pub mod tcpip;
-pub mod uid;
-pub mod version;
-pub mod util;
-pub mod perflog;
-pub mod seqcount;
-pub mod quring;
-pub mod stack;
 pub mod backtracer;
 pub mod heap;
+pub mod perflog;
+pub mod quring;
+pub mod seqcount;
+pub mod stack;
+pub mod tcpip;
+pub mod uid;
+pub mod util;
+pub mod version;
 
+use alloc::string::String;
+use alloc::vec::Vec;
 use core::panic::PanicInfo;
-use core::sync::atomic::AtomicU64;
-use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicI32;
-use core::{ptr, mem};
-use alloc::vec::Vec;
-use ::qlib::mutex::*;
-use alloc::string::String;
+use core::sync::atomic::AtomicU64;
+use core::sync::atomic::AtomicUsize;
+use core::{mem, ptr};
+use qlib::mutex::*;
 
 //use linked_list_allocator::LockedHeap;
 //use buddy_system_allocator::LockedHeap;
-use taskMgr::{CreateTask, WaitFn, IOWait};
-use self::qlib::{SysCallID, ShareSpaceRef};
+use self::qlib::{ShareSpaceRef, SysCallID};
+use taskMgr::{CreateTask, IOWait, WaitFn};
 //use self::qlib::buddyallocator::*;
-use self::qlib::pagetable::*;
-use self::qlib::control_msg::*;
+use self::asm::*;
+use self::boot::controller::*;
+use self::boot::loader::*;
+use self::kernel::timer::*;
+use self::loader::vdso::*;
+use self::memmgr::pma::*;
 use self::qlib::common::*;
+use self::qlib::config::*;
+use self::qlib::control_msg::*;
 use self::qlib::linux_def::MemoryDef;
 use self::qlib::loader::*;
-use self::qlib::config::*;
+use self::qlib::pagetable::*;
+use self::qlib::perf_tunning::*;
 use self::qlib::vcpu_mgr::*;
-use self::vcpu::*;
-use self::boot::loader::*;
-use self::loader::vdso::*;
 use self::syscalls::syscalls::*;
-use self::memmgr::pma::*;
-use self::asm::*;
-use self::kernel::timer::*;
-use self::boot::controller::*;
 use self::task::*;
 use self::threadmgr::task_sched::*;
-use self::qlib::perf_tunning::*;
+use self::vcpu::*;
 //use self::memmgr::buf_allocator::*;
 //use self::qlib::mem::list_allocator::*;
-use self::quring::*;
 use self::print::SCALE;
+use self::quring::*;
 //use self::heap::QAllocator;
 use self::heap::GuestAllocator;
 use self::qlib::singleton::*;
@@ -159,15 +159,16 @@ pub fn AllocatorPrint(_class: usize) -> String {
     return ALLOCATOR.Print(class);
 }
 
-pub static SHARESPACE : ShareSpaceRef = ShareSpaceRef::New();
+pub static SHARESPACE: ShareSpaceRef = ShareSpaceRef::New();
 
-pub static KERNEL_PAGETABLE : Singleton<PageTables> = Singleton::<PageTables>::New();
-pub static PAGE_MGR : Singleton<PageMgr> = Singleton::<PageMgr>::New();
-pub static LOADER : Singleton<Loader> = Singleton::<Loader>::New();
-pub static IOURING : Singleton<QUring> = Singleton::<QUring>::New();
-pub static KERNEL_STACK_ALLOCATOR : Singleton<AlignedAllocator> = Singleton::<AlignedAllocator>::New();
-pub static SHUTDOWN : Singleton<AtomicBool> = Singleton::<AtomicBool>::New();
-pub static EXIT_CODE : Singleton<AtomicI32> = Singleton::<AtomicI32>::New();
+pub static KERNEL_PAGETABLE: Singleton<PageTables> = Singleton::<PageTables>::New();
+pub static PAGE_MGR: Singleton<PageMgr> = Singleton::<PageMgr>::New();
+pub static LOADER: Singleton<Loader> = Singleton::<Loader>::New();
+pub static IOURING: Singleton<QUring> = Singleton::<QUring>::New();
+pub static KERNEL_STACK_ALLOCATOR: Singleton<AlignedAllocator> =
+    Singleton::<AlignedAllocator>::New();
+pub static SHUTDOWN: Singleton<AtomicBool> = Singleton::<AtomicBool>::New();
+pub static EXIT_CODE: Singleton<AtomicI32> = Singleton::<AtomicI32>::New();
 
 pub fn SingletonInit() {
     unsafe {
@@ -183,7 +184,10 @@ pub fn SingletonInit() {
 
         PAGE_MGR.Init(PageMgr::New());
         LOADER.Init(Loader::default());
-        KERNEL_STACK_ALLOCATOR.Init( AlignedAllocator::New(MemoryDef::DEFAULT_STACK_SIZE as usize, MemoryDef::DEFAULT_STACK_SIZE as usize));
+        KERNEL_STACK_ALLOCATOR.Init(AlignedAllocator::New(
+            MemoryDef::DEFAULT_STACK_SIZE as usize,
+            MemoryDef::DEFAULT_STACK_SIZE as usize,
+        ));
         SHUTDOWN.Init(AtomicBool::new(false));
         EXIT_CODE.Init(AtomicI32::new(0));
 
@@ -224,7 +228,14 @@ pub fn Init() {
 }
 
 #[no_mangle]
-pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: u64, arg5: u64) -> ! {
+pub extern "C" fn syscall_handler(
+    arg0: u64,
+    arg1: u64,
+    arg2: u64,
+    arg3: u64,
+    arg4: u64,
+    arg5: u64,
+) -> ! {
     //PerfGofrom(PerfType::User);
 
     let currTask = task::Task::Current();
@@ -248,7 +259,11 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     pt.rip = pt.rcx;
 
     let nr = pt.orig_rax;
-    assert!(nr < SysCallID::maxsupport as u64, "get supported syscall id {:x}", nr);
+    assert!(
+        nr < SysCallID::maxsupport as u64,
+        "get supported syscall id {:x}",
+        nr
+    );
 
     //SHARESPACE.SetValue(CPULocal::CpuId(), 0, nr);
     let callId: SysCallID = unsafe { mem::transmute(nr as u64) };
@@ -269,8 +284,10 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
     } else if llevel == LogLevel::Simple {
         tid = currTask.Thread().lock().id;
         pid = currTask.Thread().ThreadGroup().ID();
-        info!("({}/{})------get call id {:?} arg0:{:x}",
-            tid, pid, callId, arg0);
+        info!(
+            "({}/{})------get call id {:?} arg0:{:x}",
+            tid, pid, callId, arg0
+        );
     }
 
     let res;
@@ -305,8 +322,14 @@ pub extern fn syscall_handler(arg0: u64, arg1: u64, arg2: u64, arg3: u64, arg4: 
         } else {
             0
         };
-        info!("({}/{})------Return[{}] res is {:x}: call id {:?} ",
-        tid, pid, gap / SCALE, res, callId);
+        info!(
+            "({}/{})------Return[{}] res is {:x}: call id {:?} ",
+            tid,
+            pid,
+            gap / SCALE,
+            res,
+            callId
+        );
     }
 
     let kernalRsp = pt as *const _ as u64;
@@ -339,11 +362,11 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
             TaskRunState::RunInterrupt => {
                 info!("RunInterrupt[{:x}] ...", currTask.taskId);
                 currTask.RunInterrupt()
-            },
+            }
             TaskRunState::RunExit => {
                 info!("RunExit[{:x}] ...", currTask.taskId);
                 currTask.RunExit()
-            },
+            }
             TaskRunState::RunExitNotify => {
                 info!("RunExitNotify[{:x}] ...", currTask.taskId);
                 currTask.RunExitNotify();
@@ -351,11 +374,11 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                 // !!! make sure there is no object hold on stack
 
                 TaskRunState::RunExitDone
-            },
+            }
             TaskRunState::RunThreadExit => {
                 info!("RunThreadExit[{:x}] ...", currTask.taskId);
                 currTask.RunThreadExit()
-            },
+            }
             TaskRunState::RunThreadExitNotify => {
                 info!("RunTreadExitNotify[{:x}] ...", currTask.taskId);
                 currTask.RunThreadExitNotify()
@@ -415,13 +438,19 @@ pub fn LogInit(pages: u64) {
 }
 
 #[no_mangle]
-pub extern fn rust_main(heapStart: u64, shareSpaceAddr: u64, id: u64, vdsoParamAddr: u64, vcpuCnt: u64, autoStart: bool) {
+pub extern "C" fn rust_main(
+    heapStart: u64,
+    shareSpaceAddr: u64,
+    id: u64,
+    vdsoParamAddr: u64,
+    vcpuCnt: u64,
+    autoStart: bool,
+) {
     if id == 0 {
         ALLOCATOR.Init(heapStart);
         SHARESPACE.SetValue(shareSpaceAddr);
         SingletonInit();
         InitTimeKeeper(vdsoParamAddr);
-
 
         //Kernel::HostSpace::KernelMsg(0, 0, 1);
         {
@@ -450,7 +479,6 @@ pub extern fn rust_main(heapStart: u64, shareSpaceAddr: u64, id: u64, vdsoParamA
 
     //interrupts::init_idt();
     interrupt::init();
-
 
     /***************** can't run any qcall before this point ************************************/
 
@@ -486,13 +514,14 @@ fn Print() {
     let ss: u64;
     unsafe { llvm_asm!("mov %ss, $0" : "=r" (ss) ) };
 
-    info!("cr2 is {:x}, cr3 is {:x}, cs is {}, ss is {}", cr2, cr3, cs, ss);
+    info!(
+        "cr2 is {:x}, cr3 is {:x}, cs is {}, ss is {}",
+        cr2, cr3, cs, ss
+    );
 }
 
 fn StartExecProcess(fd: i32, process: Process) {
-    let (tid, entry, userStackAddr, kernelStackAddr) = {
-        LOADER.ExecProcess(process).unwrap()
-    };
+    let (tid, entry, userStackAddr, kernelStackAddr) = { LOADER.ExecProcess(process).unwrap() };
 
     WriteControlMsgResp(fd, &UCallResp::ExecProcessResp(tid));
 
@@ -525,19 +554,21 @@ fn StartRootContainer(_para: *const u8) {
     let process = {
         defer!(info!("after process"));
         let mut buf: [u8; 8192] = [0; 8192];
-        let addr = &mut buf[0] as * mut _ as u64;
+        let addr = &mut buf[0] as *mut _ as u64;
         let size = Kernel::HostSpace::LoadProcessKernel(addr, buf.len()) as usize;
-        let process  = serde_json::from_slice(&buf[0..size]);
+        let process = serde_json::from_slice(&buf[0..size]);
         let process = match process {
             Ok(p) => p,
             Err(e) => {
-                error!("StartRootContainer: failed to LoadProcessKernel, cause: {:?}", e);
+                error!(
+                    "StartRootContainer: failed to LoadProcessKernel, cause: {:?}",
+                    e
+                );
                 panic!("failed to load Process");
             }
         };
         process
     };
-
 
     let (_tid, entry, userStackAddr, kernelStackAddr) = {
         let mut processArgs = LOADER.Lock(task).unwrap().Init(process);
@@ -566,9 +597,10 @@ fn panic(info: &PanicInfo) -> ! {
 
     print!("get panic : {:?}", info.message());
     if let Some(location) = info.location() {
-        print!("panic occurred in file '{}' at line {}",
-                 location.file(),
-                 location.line(),
+        print!(
+            "panic occurred in file '{}' at line {}",
+            location.file(),
+            location.line(),
         );
     } else {
         print!("panic occurred but can't get location information...");
@@ -595,6 +627,5 @@ fn alloc_error_handler(layout: alloc::alloc::Layout) -> ! {
 }
 
 #[lang = "eh_personality"]
-extern fn eh_personality() {}
+extern "C" fn eh_personality() {}
 //#[lang = "panic_fmt"] #[no_mangle] pub extern fn panic_fmt() -> ! {loop{}}
-

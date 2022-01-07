@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 #![allow(dead_code)]
 #![allow(non_snake_case)]
 #![allow(deref_nullptr)]
-#![feature(proc_macro_hygiene, asm)]
+#![feature(proc_macro_hygiene)]
 #![feature(naked_functions)]
 #![allow(bare_trait_objects)]
 #![feature(map_first_last)]
@@ -24,20 +23,18 @@
 #![feature(llvm_asm)]
 #![allow(deprecated)]
 #![feature(thread_id_value)]
-
 #![allow(dead_code)]
 #![allow(non_snake_case)]
 extern crate alloc;
 extern crate bit_field;
-extern crate errno;
 extern crate core_affinity;
-
+extern crate errno;
 
 #[macro_use]
 extern crate serde_derive;
-extern crate serde_json;
-extern crate serde;
 extern crate cache_padded;
+extern crate serde;
+extern crate serde_json;
 
 #[macro_use]
 pub mod asm;
@@ -45,23 +42,21 @@ pub mod asm;
 #[macro_use]
 pub mod print;
 
-
-pub mod qlib;
-mod memmgr;
-pub mod heap_alloc;
-mod qcall;
-mod vmspace;
-mod kvm_vcpu;
-mod syncmgr;
-pub mod namespace;
-pub mod elf_loader;
-pub mod runc;
-pub mod ucall;
-pub mod console;
-pub mod util;
 pub mod amd64_def;
+pub mod console;
+pub mod elf_loader;
+pub mod heap_alloc;
+mod kvm_vcpu;
+mod memmgr;
+pub mod namespace;
 pub mod perflog;
-
+mod qcall;
+pub mod qlib;
+pub mod runc;
+mod syncmgr;
+pub mod ucall;
+pub mod util;
+mod vmspace;
 
 #[macro_use]
 extern crate clap;
@@ -72,40 +67,39 @@ extern crate scopeguard;
 #[macro_use]
 extern crate lazy_static;
 
+extern crate libc;
 extern crate spin;
 extern crate x86_64;
-extern crate libc;
 #[macro_use]
 extern crate log;
-extern crate simplelog;
 extern crate capabilities;
-extern crate regex;
-extern crate fs2;
 extern crate caps;
+extern crate fs2;
+extern crate regex;
+extern crate simplelog;
 extern crate tabwriter;
-
 
 //pub mod kvmlib;
 
-use std::env;
-use spin::Mutex;
-use lazy_static::lazy_static;
 use alloc::sync::Arc;
+use lazy_static::lazy_static;
+use spin::Mutex;
+use std::env;
 
+use self::heap_alloc::*;
+use self::qlib::addr;
 use self::qlib::buddyallocator::MemAllocator;
-use self::qlib::{addr};
-use self::qlib::qmsg::*;
 use self::qlib::config::*;
+use self::qlib::qmsg::*;
 use self::qlib::ShareSpace;
 use self::qlib::ShareSpaceRef;
-use self::vmspace::hostfdnotifier::*;
-use self::vmspace::host_pma_keeper::*;
-use self::vmspace::kernel_io_thread::*;
 use self::runc::cmd::command::*;
-use self::heap_alloc::*;
+use self::vmspace::host_pma_keeper::*;
+use self::vmspace::hostfdnotifier::*;
+use self::vmspace::kernel_io_thread::*;
 
-use vmspace::*;
 use self::vmspace::uringMgr::*;
+use vmspace::*;
 
 const LOWER_TOP: u64 = 0x00007fffffffffff;
 const UPPER_BOTTOM: u64 = 0xffff800000000000;
@@ -114,14 +108,16 @@ pub fn AllocatorPrint(_class: usize) -> String {
     return "".to_string();
 }
 
-pub static SHARE_SPACE : ShareSpaceRef = ShareSpaceRef::New();
+pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
 
 lazy_static! {
-    pub static ref SHARE_SPACE_STRUCT : Arc<Mutex<ShareSpace>> = Arc::new(Mutex::new(ShareSpace::default()));
+    pub static ref SHARE_SPACE_STRUCT: Arc<Mutex<ShareSpace>> =
+        Arc::new(Mutex::new(ShareSpace::default()));
     pub static ref VMS: Mutex<VMSpace> = Mutex::new(VMSpace::Init());
     pub static ref PAGE_ALLOCATOR: MemAllocator = MemAllocator::New();
     pub static ref FD_NOTIFIER: HostFdNotifier = HostFdNotifier::New();
-    pub static ref IO_MGR: vmspace::HostFileMap::IOMgr = vmspace::HostFileMap::IOMgr::Init().expect("Init IOMgr fail");
+    pub static ref IO_MGR: vmspace::HostFileMap::IOMgr =
+        vmspace::HostFileMap::IOMgr::Init().expect("Init IOMgr fail");
     pub static ref SYNC_MGR: Mutex<syncmgr::SyncMgr> = Mutex::new(syncmgr::SyncMgr::New());
     pub static ref PMA_KEEPER: HostPMAKeeper = HostPMAKeeper::New();
     pub static ref QUARK_CONFIG: Mutex<Config> = {
@@ -138,9 +134,7 @@ lazy_static! {
     pub static ref GLOCK: Mutex<()> = Mutex::new(());
 }
 
-
-
-pub const LOG_FILE : &'static str = "/var/log/quark/quark.log";
+pub const LOG_FILE: &'static str = "/var/log/quark/quark.log";
 
 pub fn InitSingleton() {
     self::qlib::InitSingleton();
@@ -154,7 +148,7 @@ fn main() {
 
     {
         let mut str = "".to_string();
-        let args : Vec<String> = env::args().collect();
+        let args: Vec<String> = env::args().collect();
         for s in &args {
             str.push_str(s);
             str.push_str(" ");
@@ -167,7 +161,7 @@ fn main() {
         Err(e) => {
             error!("the error is {:?}", e);
             ::std::process::exit(-1);
-        },
+        }
         Ok(()) => {
             //error!("successfully ...");
             ::std::process::exit(0);
