@@ -14,7 +14,7 @@
 
 use alloc::collections::vec_deque::*;
 use alloc::sync::Arc;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use core::ops::Deref;
 
 use super::super::super::super::common::*;

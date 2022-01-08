@@ -15,7 +15,7 @@
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use core::ops::Deref;
 
 use super::super::super::auth::userns::*;

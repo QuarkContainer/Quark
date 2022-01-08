@@ -21,7 +21,7 @@ use core::any::Any;
 use core::ops::Deref;
 use alloc::vec::Vec;
 
-use socket::unix::transport::unix::BoundEndpoint;
+use super::super::super::socket::unix::transport::unix::*;
 use super::super::super::guestfdnotifier::*;
 use super::super::super::super::common::*;
 use super::super::super::super::range::*;

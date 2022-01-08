@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use core::ops::Deref;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use x86_64::structures::paging::{PageTable};

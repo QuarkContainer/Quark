@@ -15,7 +15,7 @@
 use core::alloc::{GlobalAlloc, Layout};
 use core::ops::Deref;
 use buddy_system_allocator::Heap;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use core::cmp::max;
 use core::mem::size_of;
 use core::ptr::NonNull;

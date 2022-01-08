@@ -19,7 +19,7 @@ use core::any::Any;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use socket::unix::transport::unix::BoundEndpoint;
+use super::super::super::socket::unix::transport::unix::*;
 use super::super::host::hostinodeop::*;
 use super::super::super::super::common::*;
 use super::super::super::uid::NewUID;

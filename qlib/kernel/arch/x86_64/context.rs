@@ -14,7 +14,7 @@
 
 use alloc::vec::Vec;
 use alloc::sync::Arc;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 
 use super::super::super::super::limits::*;
 use super::super::super::super::common::*;

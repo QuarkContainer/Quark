@@ -15,7 +15,7 @@
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
 use core::mem;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 
 use super::super::perf_tunning::*;
 use super::super::vcpu_mgr::*;
@@ -24,38 +24,6 @@ use super::task::*;
 use super::super::singleton::*;
 
 pub static THREAD_COUNTS : Singleton<QMutex<ThreadPerfCounters>> = Singleton::<QMutex<ThreadPerfCounters>>::New();
-
-#[repr(usize)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PerfType {
-    Start,
-    Kernel,
-    User,
-    Read,
-    Write,
-    Open,
-    KernelHandling,
-    Print,
-    Idle,
-    PageFault,
-    QCall,
-    SysCall,
-    Blocked,
-    HostInputProcess,
-    End,
-}
-
-impl CounterSet {
-    pub const PERM_COUNTER_SET_SIZE : usize = 8;
-
-    pub fn GetPerfId(&self) -> usize {
-        CPULocal::CpuId() as usize
-    }
-
-    pub fn PerfType(&self) -> &str {
-        return "PerfPrint::Kernel"
-    }
-}
 
 #[derive(Default)]
 pub struct ThreadPerfCounters {

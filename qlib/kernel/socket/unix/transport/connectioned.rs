@@ -18,7 +18,7 @@ use core::ops::Deref;
 use core::any::Any;
 use alloc::string::ToString;
 
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 
 use super::super::super::super::kernel::waiter::*;
 use super::super::super::super::kernel::waiter::bufchan::*;

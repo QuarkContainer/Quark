@@ -97,6 +97,7 @@ pub mod seqcount;
 pub mod stack;
 pub mod tcpip;
 pub mod uid;
+pub mod kernel_def;
 //pub mod util;
 pub mod version;
 

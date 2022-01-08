@@ -21,7 +21,7 @@ pub mod fs;
 pub mod tty;
 
 use alloc::sync::Arc;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 
 use super::filesystems::*;
 

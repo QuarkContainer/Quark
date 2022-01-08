@@ -18,6 +18,8 @@ use alloc::sync::Arc;
 use alloc::string::ToString;
 
 use super::super::*;
+use super::super::asm::*;
+use super::super::arch::x86_64::context::*;
 use super::super::kernel::ipc_namespace::*;
 use super::super::threadmgr::task_start::*;
 use super::super::threadmgr::thread::*;
@@ -30,6 +32,10 @@ use super::super::task::*;
 use super::task_block::*;
 use super::task_stop::*;
 use super::super::perflog::*;
+
+pub fn IsValidSegmentBase(addr: u64) -> bool {
+    return addr < MAX_ADDR64
+}
 
 const DEFAULT_STACK_SIZE: usize = MemoryDef::DEFAULT_STACK_SIZE as usize;
 const DEFAULT_STACK_PAGES: u64 = DEFAULT_STACK_SIZE as u64 / (4 * 1024);

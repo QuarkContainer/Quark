@@ -21,7 +21,7 @@ use alloc::string::ToString;
 use alloc::vec::Vec;
 use core::ops::Deref;
 
-use socket::unix::transport::unix::BoundEndpoint;
+use super::super::super::socket::unix::transport::unix::*;
 use super::super::host::hostinodeop::*;
 use super::super::super::super::common::*;
 use super::super::super::super::device::*;

@@ -21,7 +21,7 @@ use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 use core::ptr;
 use core::ops::Deref;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use core::fmt;
 
 use ::socket::control::ControlMessage;
@@ -54,7 +54,7 @@ use super::super::super::fd::*;
 use super::super::super::tcpip::tcpip::*;
 use super::super::super::SHARESPACE;
 use super::super::super::super::linux::time::Timeval;
-use super::super::control::ControlMessageTCPInq;
+use super::super::control::*;
 use super::rdma_socket::*;
 
 fn newSocketFile(task: &Task, family: i32, fd: i32, stype: i32, nonblock: bool, socketBuf: SocketBufType, addr: Option<Vec<u8>>) -> Result<File> {

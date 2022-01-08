@@ -218,10 +218,6 @@ extern "C" {
     pub fn syscall_entry();
 }
 
-pub fn Shutdown() -> bool {
-    return SHUTDOWN.load(self::super::linux_def::QOrdering::RELAXED);
-}
-
 pub fn Init() {
     self::fs::Init();
     self::socket::Init();

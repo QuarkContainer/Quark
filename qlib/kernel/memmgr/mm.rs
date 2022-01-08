@@ -20,7 +20,7 @@ use alloc::string::ToString;
 use x86_64::structures::paging::PageTableFlags;
 use alloc::vec::Vec;
 
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 
 use super::super::arch::x86_64::context::*;
 use super::super::PAGE_MGR;

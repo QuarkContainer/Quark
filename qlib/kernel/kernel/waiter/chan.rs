@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use core::ops::Deref;
 
 use super::super::super::super::common::*;
@@ -130,25 +130,6 @@ impl <T> Chan <T> {
             }
         }
     }
-
-    /*
-
-    //we can't TryRead, because we can't set c.waiting
-    pub fn TryRead(&self, _task: &Task) -> Result<Option<T>> {
-        let mut c = self.lock();
-
-        if c.closed {
-            return Err(Error::ChanClose)
-        }
-
-        let data = c.data.take();
-        if data.is_some() {
-            c.queue.Notify(EVENT_OUT);
-        }
-
-        return Ok(None);
-    }
-    */
 
     pub fn Close(&self) {
         let mut c = self.lock();

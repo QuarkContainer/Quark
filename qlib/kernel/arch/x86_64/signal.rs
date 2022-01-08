@@ -14,7 +14,7 @@
 
 //use core::mem;
 //use alloc::sync::Arc;
-//use ::qlib::mutex::*;
+//use crate::qlib::mutex::*;
 
 //use super::super::super::SignalDef::*;
 //use super::super::super::stack::*;

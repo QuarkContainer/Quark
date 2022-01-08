@@ -157,16 +157,6 @@ impl CPULocal {
         return CPU_LOCAL[cpuId].State()
     }
 
-    pub fn Wakeup(&self) {
-        // the uring eventwrite maynot return successfully, likely linux bug
-        // todo: fix this.
-        //IOURING.EventfdWrite(self.vcpuId, self.eventfd);
-
-        // look like hcall based eventwrite is faster than qcall.
-        // todo: root cause this
-        //super::Kernel::HostSpace::EventfdWriteAsync(self.eventfd);
-        super::Kernel::HostSpace::EventfdWrite(self.eventfd);
-    }
 
     pub fn SwitchToRunning(&self) {
         let _searchingCnt = self.ToRunning(&SHARESPACE);

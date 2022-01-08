@@ -17,7 +17,7 @@ use alloc::sync::Weak;
 use core::ops::Deref;
 use alloc::string::ToString;
 use core::any::Any;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 
 use super::super::super::super::kernel::waiter::*;
 use super::super::super::super::tcpip::tcpip::*;

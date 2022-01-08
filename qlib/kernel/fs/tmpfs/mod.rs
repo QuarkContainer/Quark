@@ -20,7 +20,7 @@ pub mod tmpfs_fifo;
 pub mod fs;
 
 use alloc::sync::Arc;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 
 use super::filesystems::*;
 

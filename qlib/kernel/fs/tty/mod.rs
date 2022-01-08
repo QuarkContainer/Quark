@@ -22,7 +22,7 @@ pub mod slave;
 pub mod fs;
 
 use alloc::sync::Arc;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 
 use super::filesystems::*;
 

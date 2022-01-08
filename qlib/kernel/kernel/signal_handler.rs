@@ -14,7 +14,7 @@
 
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use core::ops::Deref;
 
 use super::super::SignalDef::*;

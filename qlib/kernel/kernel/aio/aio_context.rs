@@ -17,8 +17,9 @@ use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
 use alloc::string::String;
 use alloc::string::ToString;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use core::ops::Deref;
+use alloc::vec::Vec;
 
 use super::super::super::super::addr::*;
 use super::super::super::super::common::*;
@@ -347,7 +348,6 @@ impl AIOContext {
         let mut aio = self.lock();
         aio.results.push_back(data);
 
-        use alloc::vec::Vec;
         let mut v = Vec::new();
         for r in &aio.results {
             v.push(r.obj);

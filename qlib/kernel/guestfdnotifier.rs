@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::collections::btree_map::BTreeMap;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use core::ops::Deref;
 
 use super::Kernel::HostSpace;

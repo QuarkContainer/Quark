@@ -19,7 +19,7 @@ use alloc::vec::Vec;
 use core::any::Any;
 use core::ops::Deref;
 
-use socket::unix::transport::unix::BoundEndpoint;
+use super::super::super::socket::unix::transport::unix::*;
 use super::super::host::hostinodeop::*;
 use super::super::fsutil::file::*;
 use super::super::attr::*;
@@ -34,6 +34,7 @@ use super::super::super::kernel::waiter::qlock::*;
 use super::super::super::super::linux_def::*;
 use super::super::super::super::common::*;
 use super::super::super::super::auth::*;
+use super::super::super::super::mutex::*;
 use super::super::super::super::device::*;
 use super::super::super::threadmgr::thread::*;
 use super::super::super::uid::*;

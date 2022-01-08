@@ -14,7 +14,7 @@
 
 use alloc::sync::Arc;
 use alloc::sync::Weak;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use core::ops::Deref;
 use core::ops::DerefMut;
 

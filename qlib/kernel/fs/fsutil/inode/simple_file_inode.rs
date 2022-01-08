@@ -18,7 +18,7 @@ use core::ops::Deref;
 use alloc::vec::Vec;
 use core::any::Any;
 
-use socket::unix::transport::unix::BoundEndpoint;
+use super::super::super::socket::unix::transport::unix::*;
 use super::super::super::mount::*;
 use super::super::super::attr::*;
 use super::super::super::inode::*;

@@ -18,7 +18,7 @@ use core::ops::Deref;
 use core::any::Any;
 use alloc::vec::Vec;
 
-use socket::unix::transport::unix::BoundEndpoint;
+use super::super::super::socket::unix::transport::unix::*;
 use super::super::super::super::common::*;
 use super::super::super::super::auth::*;
 use super::super::super::super::linux_def::*;

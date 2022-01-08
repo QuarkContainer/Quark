@@ -15,7 +15,7 @@
 use alloc::sync::Arc;
 use core::ops::Deref;
 
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 
 use super::super::super::super::task_mgr::*;
 use super::super::super::taskMgr;

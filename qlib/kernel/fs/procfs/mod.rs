@@ -29,7 +29,7 @@ pub mod stat;
 pub mod sys;
 
 use alloc::sync::Arc;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 
 use super::filesystems::*;
 

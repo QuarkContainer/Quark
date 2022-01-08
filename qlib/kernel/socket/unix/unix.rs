@@ -19,7 +19,7 @@ use core::sync::atomic::AtomicI64;
 use core::sync::atomic::Ordering;
 use alloc::string::String;
 use alloc::string::ToString;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use core::ops::*;
 use alloc::boxed::Box;
 

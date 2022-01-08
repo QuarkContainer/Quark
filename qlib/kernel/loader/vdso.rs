@@ -16,7 +16,7 @@ use alloc::vec::Vec;
 use alloc::sync::Arc;
 use alloc::slice;
 use core::ops::Deref;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use xmas_elf::program::Type;
 use xmas_elf::program::ProgramHeader::{Ph64};
 pub use xmas_elf::header::HeaderPt2;

@@ -14,7 +14,7 @@
 
 use alloc::sync::Arc;
 use core::ops::Deref;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 
 use super::super::super::kernel::time::*;
 use super::super::super::super::common::*;

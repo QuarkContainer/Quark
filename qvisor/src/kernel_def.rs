@@ -158,3 +158,36 @@ impl Scheduler {
         return 0;
     }
 }*/
+
+use super::qlib::perf_tunning::*;
+
+#[repr(usize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PerfType {
+    Start,
+    Other,
+    QCall,
+    AQCall,
+    AQHostCall,
+    BusyWait,
+    IdleWait,
+    BufWrite,
+    End,
+    User, //work around for kernel clone
+    Idle, //work around for kernel clone
+}
+
+impl CounterSet {
+    pub const PERM_COUNTER_SET_SIZE : usize = 1;
+    pub fn GetPerfId(&self) -> usize {
+        0
+    }
+
+    pub fn PerfType(&self) -> &str {
+        return "PerfPrint::Host"
+    }
+}
+
+pub fn switch(_from: TaskId, _to: TaskId) {
+
+}

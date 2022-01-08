@@ -52,7 +52,6 @@ pub mod heap_alloc;
 mod kvm_vcpu;
 mod memmgr;
 pub mod namespace;
-pub mod perflog;
 mod qcall;
 pub mod qlib;
 pub mod runc;

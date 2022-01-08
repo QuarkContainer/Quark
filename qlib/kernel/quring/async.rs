@@ -16,7 +16,7 @@ use alloc::vec::Vec;
 use alloc::sync::Arc;
 use alloc::collections::vec_deque::VecDeque;
 use core::marker::Send;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use core::ops::Deref;
 
 use super::super::super::linux_def::*;

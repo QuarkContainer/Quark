@@ -16,7 +16,7 @@ use core::sync::atomic::AtomicI64;
 use core::sync::atomic::Ordering;
 use alloc::collections::linked_list::LinkedList;
 use alloc::vec::Vec;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use alloc::sync::Arc;
 use core::ops::Deref;
 

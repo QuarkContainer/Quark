@@ -13,12 +13,12 @@
 // limitations under the License.
 
 use core::sync::atomic::Ordering;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::ops::Deref;
 
-use super::super::asm::*;
+use super::super::asm::Rdtsc;
 use super::super::super::limits::*;
 use super::super::threadmgr::thread_group::*;
 use super::super::threadmgr::thread::*;

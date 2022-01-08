@@ -15,6 +15,7 @@
 use core::sync::atomic::{Ordering, AtomicU32};
 use alloc::string::String;
 
+use super::super::super::kernel_def::*;
 use super::task::*;
 use super::SHARESPACE;
 use super::super::task_mgr::*;
@@ -28,6 +29,7 @@ use super::KERNEL_STACK_ALLOCATOR;
 use super::quring::uring_mgr::*;
 use super::guestfdnotifier::GUEST_NOTIFIER;
 use super::asm::*;
+use super::Shutdown;
 
 static ACTIVE_TASK: AtomicU32 = AtomicU32::new(0);
 
@@ -55,32 +57,6 @@ extern "C" {
     pub fn context_swap_to(_fromCxt: u64, _toCtx: u64, _one: u64, _zero: u64);
 }
 
-#[inline]
-fn switch(from: TaskId, to: TaskId) {
-    Task::Current().PerfGoto(PerfType::Blocked);
-    Task::Current().AccountTaskEnter(SchedState::Blocked);
-
-    CPULocal::SetCurrentTask(to.Addr());
-    let fromCtx = from.GetTask();
-    let toCtx = to.GetTask();
-
-    if !SHARESPACE.config.read().KernelPagetable {
-        toCtx.SwitchPageTable();
-    }
-    toCtx.SetFS();
-
-    fromCtx.Check();
-    toCtx.Check();
-    debug!("switch {:x}->{:x}", from.data, to.data);
-
-    unsafe {
-        context_swap(fromCtx.GetContext(), toCtx.GetContext(), 1, 0);
-    }
-
-    Task::Current().PerfGofrom(PerfType::Blocked);
-    Task::Current().AccountTaskLeave(SchedState::Blocked);
-}
-
 fn switch_to(to: TaskId) {
     to.GetTask().AccountTaskLeave(SchedState::Blocked);
 
@@ -102,17 +78,17 @@ pub const WAIT_CYCLES : i64 = 1_00_000; // 1ms
 pub fn IOWait() {
     let mut start = Rdtsc();
 
-    while !super::Shutdown() {
+    while !Shutdown() {
         if PollAsyncMsg() > 10 {
             start = Rdtsc();
         }
 
         let currentTime = Rdtsc();
-        if currentTime - start >= IO_WAIT_CYCLES || super::Shutdown() {
+        if currentTime - start >= IO_WAIT_CYCLES || Shutdown() {
             SHARESPACE.kernelIOThreadWaiting.store(true, Ordering::Release);
 
             // after change the state, check again in case new message coming
-            if PollAsyncMsg() > 10 && !super::Shutdown() {
+            if PollAsyncMsg() > 10 && !Shutdown() {
                 start = Rdtsc();
                 SHARESPACE.kernelIOThreadWaiting.store(false, Ordering::Release);
                 continue;
@@ -167,7 +143,7 @@ pub fn WaitFn() {
                     CPULocal::SetPendingFreeStack(0);
                 }
 
-                if super::Shutdown() {
+                if Shutdown() {
                     //error!("shutdown: {}", super::AllocatorPrint(10));
                     super::Kernel::HostSpace::ExitVM(super::EXIT_CODE.load(QOrdering::SEQ_CST));
                 }
@@ -183,24 +159,24 @@ pub fn WaitFn() {
 
 #[inline]
 pub fn PollAsyncMsg() -> usize {
-    if super::Shutdown() {
+    if Shutdown() {
         return 0;
     }
     //error!("PollAsyncMsg 1");
     ASYNC_PROCESS.Process();
-    if super::Shutdown() {
+    if Shutdown() {
         return 0;
     }
     //error!("PollAsyncMsg 2");
     let ret = HostInputProcess();
-    if super::Shutdown() {
+    if Shutdown() {
         return 0;
     }
 
     //error!("PollAsyncMsg 3");
 
     let ret = ret + QUringTrigger();
-    if super::Shutdown() {
+    if Shutdown() {
         return 0;
     }
     //error!("PollAsyncMsg 4 count {}", ret);

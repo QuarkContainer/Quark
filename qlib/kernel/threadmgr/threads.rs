@@ -14,7 +14,7 @@
 
 use alloc::sync::Arc;
 use spin::*;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use core::ops::Deref;
 use alloc::collections::btree_set::BTreeSet;
 use alloc::vec::Vec;

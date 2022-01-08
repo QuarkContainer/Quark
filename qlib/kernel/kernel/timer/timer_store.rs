@@ -15,8 +15,9 @@
 use alloc::collections::btree_map::BTreeMap;
 use core::cmp::Ordering;
 use core::ops::Deref;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use alloc::string::String;
+use alloc::vec::Vec;
 
 use super::super::super::IOURING;
 use super::*;
@@ -96,7 +97,6 @@ impl TimerStoreIntern {
     pub const PROCESS_TIME : i64 = 30_000;
 
     pub fn Print(&self) -> String {
-        use alloc::vec::Vec;
         let keys : Vec<TimerUnit> = self.timerSeq.keys().cloned().collect();
         return format!("TimerStoreIntern seq is {:#?}", keys);
     }
