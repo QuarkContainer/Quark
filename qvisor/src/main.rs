@@ -25,6 +25,9 @@
 #![feature(thread_id_value)]
 #![allow(dead_code)]
 #![allow(non_snake_case)]
+#![feature(core_intrinsics)]
+
+
 extern crate alloc;
 extern crate bit_field;
 extern crate core_affinity;
@@ -57,6 +60,7 @@ mod syncmgr;
 pub mod ucall;
 pub mod util;
 mod vmspace;
+pub mod kernel_def;
 
 #[macro_use]
 extern crate clap;

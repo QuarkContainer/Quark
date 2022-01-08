@@ -22,6 +22,7 @@ use iou::*;
 use std::slice;
 use std::collections::HashMap;
 use lazy_static::lazy_static;
+use core::vec::Vec;
 
 use super::qlib::common::*;
 use super::qlib::range::*;

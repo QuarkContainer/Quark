@@ -1,0 +1,101 @@
+// Copyright (c) 2021 Quark Container Authors / 2018 The gVisor Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+use alloc::string::String;
+use alloc::sync::Arc;
+use ::qlib::mutex::*;
+use alloc::collections::btree_map::BTreeMap;
+use alloc::vec::Vec;
+
+use super::super::qlib::common::*;
+use super::super::qlib::singleton::*;
+use super::super::task::*;
+use super::inode::*;
+
+pub type FilesystemFlags = i32;
+
+// FilesystemRequiresDev indicates that the file system requires a device name
+// on mount. It is used to construct the output of /proc/filesystems.
+pub const FILESYSTEM_REQUIRES_DEV : FilesystemFlags = 1;
+
+pub static FILESYSTEMS : Singleton<QMutex<FileSystems>> = Singleton::<QMutex<FileSystems>>::New();
+
+pub unsafe fn InitSingleton() {
+    FILESYSTEMS.Init(QMutex::new(FileSystems::New()));
+}
+
+pub fn FindFilesystem(name: &str) -> Option<Arc<QMutex<Filesystem>>> {
+    return FILESYSTEMS.lock().FindFilesystem(name);
+}
+
+pub fn RegisterFilesystem<T: Filesystem + 'static>(f: &Arc<QMutex<T>>) {
+    FILESYSTEMS.lock().RegisterFilesystem(f)
+}
+
+pub fn GetFilesystems() -> Vec<Arc<QMutex<Filesystem>>> {
+    return FILESYSTEMS.lock().GetFilesystems()
+}
+
+#[derive(Debug, Clone, Default, Copy)]
+pub struct MountSourceFlags {
+    pub ReadOnly: bool,
+    pub NoAtime: bool,
+    pub ForcePageCache: bool,
+    pub NoExec: bool,
+}
+
+pub struct FileSystems {
+    pub registered: BTreeMap<String, Arc<QMutex<Filesystem>>>
+}
+
+impl FileSystems {
+    pub fn New() -> Self {
+        return Self {
+            registered: BTreeMap::new(),
+        }
+    }
+
+    pub fn RegisterFilesystem<T: Filesystem + 'static>(&mut self, f: &Arc<QMutex<T>>) {
+        let name = f.lock().Name();
+        if let Some(_) = self.registered.get(&name) {
+            panic!("filesystem already registered at {}", name)
+        }
+
+        self.registered.insert(name, f.clone());
+    }
+
+    pub fn FindFilesystem(&self, name: &str) -> Option<Arc<QMutex<Filesystem>>> {
+        match self.registered.get(name) {
+            None => None,
+            Some(f) => Some(f.clone())
+        }
+    }
+
+    pub fn GetFilesystems(&self) -> Vec<Arc<QMutex<Filesystem>>> {
+        let mut res = Vec::new();
+        for (_, f) in &self.registered {
+            res.push(f.clone())
+        }
+
+        return res;
+    }
+}
+
+pub trait Filesystem: Send {
+    fn Name(&self) -> String;
+    fn Flags(&self) -> FilesystemFlags;
+    fn Mount(&mut self, task: &Task, device: &str, flags: &MountSourceFlags, data: &str) -> Result<Inode>;
+    fn AllowUserMount(&self) -> bool;
+    fn AllowUserList(&self) -> bool;
+}
