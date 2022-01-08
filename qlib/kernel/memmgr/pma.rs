@@ -24,11 +24,11 @@ use x86_64::VirtAddr;
 use super::super::task::*;
 use super::super::PAGE_MGR;
 use super::super::asm::*;
-use super::super::qlib::addr::*;
-use super::super::qlib::range::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::pagetable::*;
+use super::super::super::addr::*;
+use super::super::super::range::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
+use super::super::super::pagetable::*;
 use super::pmamgr::*;
 
 pub struct PageMgr(QMutex<PageMgrInternal>);

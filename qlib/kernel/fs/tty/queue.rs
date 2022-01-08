@@ -13,9 +13,9 @@
 // limitations under the License.
 
 use super::super::super::task::*;
-use super::super::super::qlib::common::*;
-use super::super::super::qlib::linux_def::*;
-use super::super::super::qlib::bytestream::*;
+use super::super::super::super::common::*;
+use super::super::super::super::linux_def::*;
+use super::super::super::super::bytestream::*;
 use super::super::host::tty::*;
 use super::line_discipline::*;
 

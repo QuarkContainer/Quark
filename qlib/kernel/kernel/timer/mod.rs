@@ -25,7 +25,7 @@ pub mod timer_store;
 use self::timekeeper::*;
 use self::timer_store::*;
 use self::timer::*;
-use super::super::qlib::singleton::*;
+use super::super::super::singleton::*;
 
 pub static TIME_KEEPER : Singleton<TimeKeeper> = Singleton::<TimeKeeper>::New();
 pub static REALTIME_CLOCK : Singleton<Clock> = Singleton::<Clock>::New();

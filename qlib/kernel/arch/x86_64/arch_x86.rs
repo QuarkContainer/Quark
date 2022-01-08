@@ -15,7 +15,7 @@
 use alloc::sync::Arc;
 use ::qlib::mutex::*;
 
-use super::super::super::qlib::cpuid::*;
+use super::super::super::super::cpuid::*;
 use super::super::super::SignalDef::*;
 use super::super::super::asm::*;
 

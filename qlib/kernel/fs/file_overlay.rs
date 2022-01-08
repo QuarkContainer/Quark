@@ -22,9 +22,9 @@ use alloc::collections::btree_map::BTreeMap;
 use alloc::borrow::ToOwned;
 
 use super::super::kernel::waiter::*;
-use super::super::qlib::common::*;
+use super::super::super::common::*;
 use super::super::task::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::linux_def::*;
 use super::inode::*;
 use super::flags::*;
 use super::file::*;

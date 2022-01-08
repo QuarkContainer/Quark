@@ -19,11 +19,11 @@ use ::qlib::mutex::*;
 use spin::*;
 use alloc::vec::Vec;
 
-use super::super::qlib::common::*;
-use super::super::qlib::path::*;
+use super::super::super::common::*;
+use super::super::super::path::*;
 use super::super::task::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::auth::*;
+use super::super::super::linux_def::*;
+use super::super::super::auth::*;
 use super::super::kernel::time::*;
 use super::super::socket::unix::transport::unix::*;
 use super::inode::*;

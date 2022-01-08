@@ -17,11 +17,11 @@ use alloc::slice;
 use core::mem;
 use core::ptr;
 
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::auth::id::*;
-use super::super::qlib::linux::socket::*;
-use super::super::qlib::linux::time::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
+use super::super::super::auth::id::*;
+use super::super::super::linux::socket::*;
+use super::super::super::linux::time::*;
 use super::super::kernel::fd_table::*;
 use super::super::threadmgr::thread::*;
 use super::super::fs::file::*;

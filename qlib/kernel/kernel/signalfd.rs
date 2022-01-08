@@ -26,8 +26,8 @@ use super::super::fs::file::*;
 use super::super::fs::dirent::*;
 use super::super::task::*;
 use super::waiter::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
 use super::super::threadmgr::thread::*;
 use super::super::SignalDef::*;
 

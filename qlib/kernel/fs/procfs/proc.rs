@@ -20,11 +20,11 @@ use alloc::string::ToString;
 use core::any::Any;
 use core::ops::Deref;
 
-use super::super::super::qlib::common::*;
-use super::super::super::qlib::linux_def::*;
-use super::super::super::qlib::auth::*;
-use super::super::super::qlib::device::*;
-use super::super::super::qlib::task_mgr::*;
+use super::super::super::super::common::*;
+use super::super::super::super::linux_def::*;
+use super::super::super::super::auth::*;
+use super::super::super::super::device::*;
+use super::super::super::super::task_mgr::*;
 use super::super::super::fs::fsutil::file::*;
 use super::super::super::fs::dentry::*;
 use super::super::super::task::*;

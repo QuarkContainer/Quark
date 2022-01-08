@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::super::qlib::platform::defs_impl::*;
+use super::super::super::platform::defs_impl::*;
 
 #[derive(Default)]
 pub struct DefaultPlatform {}

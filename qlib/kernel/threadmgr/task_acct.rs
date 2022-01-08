@@ -17,13 +17,13 @@ use alloc::string::ToString;
 
 use super::super::kernel::timer::timer::*;
 use super::super::kernel::kernel::*;
-use super::super::qlib::linux::time::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::linux::time::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
 use super::super::threadmgr::thread::*;
 use super::super::threadmgr::thread_group::*;
-use super::super::qlib::usage::io::*;
-use super::super::qlib::linux::rusage::*;
+use super::super::super::usage::io::*;
+use super::super::super::linux::rusage::*;
 
 impl Thread {
     pub fn Getitimer(&self, id: i32) -> Result<ItimerVal> {

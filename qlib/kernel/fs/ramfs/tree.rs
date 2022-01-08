@@ -22,14 +22,14 @@ use ::qlib::mutex::*;
 use super::dir::*;
 use super::super::mount::*;
 use super::super::inode::*;
-use super::super::super::qlib::path::*;
+use super::super::super::super::path::*;
 use super::super::attr::*;
 use super::super::super::task::*;
 use super::super::super::uid::NewUID;
-use super::super::super::qlib::auth::*;
-use super::super::super::qlib::linux_def::*;
-use super::super::super::qlib::device::*;
-use super::super::super::qlib::common::*;
+use super::super::super::super::auth::*;
+use super::super::super::super::linux_def::*;
+use super::super::super::super::device::*;
+use super::super::super::super::common::*;
 
 fn emptyDir(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let dir = Dir::New(task, BTreeMap::new(), &ROOT_OWNER, &FilePermissions::FromMode(FileMode(0o777)));

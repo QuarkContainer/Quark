@@ -21,11 +21,11 @@ use ::qlib::mutex::*;
 use core::any::Any;
 use core::ops::Deref;
 
-use super::super::qlib::common::*;
+use super::super::super::common::*;
 use super::super::kernel::time::*;
 use super::super::uid::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::auth::*;
+use super::super::super::linux_def::*;
+use super::super::super::auth::*;
 use super::super::task::*;
 use super::super::socket::unix::transport::unix::*;
 

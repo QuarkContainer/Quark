@@ -14,10 +14,10 @@
 
 use alloc::vec::Vec;
 
-use super::super::qlib::auth::id::*;
+use super::super::super::auth::id::*;
 use super::super::task::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
 use super::super::syscalls::syscalls::*;
 
 const MAX_NGROUPS: i32 = 65536;

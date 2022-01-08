@@ -31,11 +31,11 @@ use super::super::attr::*;
 use super::super::dentry::*;
 use super::super::dirent::*;
 use super::super::super::kernel::waiter::*;
-use super::super::super::qlib::common::*;
-use super::super::super::qlib::linux_def::*;
+use super::super::super::super::common::*;
+use super::super::super::super::linux_def::*;
 use super::super::super::task::*;
-use super::super::super::qlib::mem::seq::*;
-//use super::super::super::qlib::mem::io::*;
+use super::super::super::super::mem::seq::*;
+//use super::super::super::super::mem::io::*;
 
 pub fn SeekWithDirCursor(task: &Task, f: &File, whence: i32, current: i64, offset: i64, dirCursor: Option<&mut String>) -> Result<i64> {
     let inode = f.Dirent.Inode();

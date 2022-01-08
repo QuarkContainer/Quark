@@ -17,11 +17,11 @@ use ::qlib::mutex::*;
 use core::ops::Deref;
 
 use super::super::super::asm::muldiv64;
-use super::super::super::qlib::linux::time::*;
-use super::super::super::qlib::metric::*;
-use super::super::super::qlib::common::*;
-use super::super::super::qlib::linux_def::*;
-use super::super::super::qlib::singleton::*;
+use super::super::super::super::linux::time::*;
+use super::super::super::super::metric::*;
+use super::super::super::super::common::*;
+use super::super::super::super::linux_def::*;
+use super::super::super::super::singleton::*;
 use super::super::super::Kernel::HostSpace;
 use super::super::super::asm::*;
 use super::sampler::*;

@@ -19,9 +19,9 @@ use core::ops::Deref;
 use super::Kernel::HostSpace;
 use super::kernel::waiter::*;
 use super::fs::host::hostinodeop::*;
-use super::qlib::common::*;
-use super::qlib::linux_def::*;
-use super::qlib::singleton::*;
+use super::super::common::*;
+use super::super::linux_def::*;
+use super::super::singleton::*;
 use super::SHARESPACE;
 use super::IOURING;
 

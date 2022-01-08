@@ -1,4 +1,4 @@
-use super::super::qlib::mem::list_allocator::*;
+use super::super::super::mem::list_allocator::*;
 use core::sync::atomic::Ordering;
 
 impl OOMHandler for ListAllocator {

@@ -16,9 +16,9 @@ use alloc::sync::Arc;
 use ::qlib::mutex::*;
 use core::ops::Deref;
 
-use super::super::super::qlib::common::*;
-use super::super::super::qlib::linux_def::*;
-use super::super::super::qlib::linux::time::*;
+use super::super::super::super::common::*;
+use super::super::super::super::linux_def::*;
+use super::super::super::super::linux::time::*;
 use super::super::super::SignalDef::*;
 use super::super::super::task::*;
 use super::super::super::threadmgr::thread_group::*;

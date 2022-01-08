@@ -17,20 +17,20 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use ::qlib::mutex::*;
 
-use super::super::super::qlib::common::*;
-use super::super::super::qlib::linux_def::*;
+use super::super::super::super::common::*;
+use super::super::super::super::linux_def::*;
 use super::super::super::util::cstring::*;
-use super::super::super::qlib::device::*;
-use super::super::super::qlib::auth::id::*;
-use super::super::super::qlib::auth::*;
-use super::super::super::qlib::qmsg::qcall::TryOpenStruct;
+use super::super::super::super::device::*;
+use super::super::super::super::auth::id::*;
+use super::super::super::super::auth::*;
+use super::super::super::super::qmsg::qcall::TryOpenStruct;
 use super::super::super::kernel::time::*;
-use super::super::super::qlib::linux::time::*;
+use super::super::super::super::linux::time::*;
 
 use super::super::super::Kernel::HostSpace;
 use super::*;
 use super::super::attr::*;
-use super::super::super::qlib::path;
+use super::super::super::super::path;
 
 impl Statx {
     pub fn InodeType(&self) -> InodeType {

@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::super::qlib::auth::cap_set::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::auth::cap_set::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
 use super::super::task::*;
 use super::super::loader::loader::*;
 use super::super::memmgr::metadata::*;

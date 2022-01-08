@@ -24,19 +24,19 @@ use core::sync::atomic::Ordering;
 use core::ops::Deref;
 
 //use socket::unix::transport::unix::BoundEndpoint;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::common::*;
-use super::super::qlib::path::*;
+use super::super::super::linux_def::*;
+use super::super::super::common::*;
+use super::super::super::path::*;
 use super::super::task::*;
-use super::super::qlib::auth::*;
-use super::super::qlib::auth::userns::*;
+use super::super::super::auth::*;
+use super::super::super::auth::userns::*;
 use super::filesystems::*;
 use super::inode::*;
 use super::host::*;
 use super::dirent::*;
 use super::tty::fs::*;
 use super::mount_overlay::*;
-use super::super::qlib::lrc_cache::*;
+use super::super::super::lrc_cache::*;
 
 pub struct LookupContext {
     pub path: String,

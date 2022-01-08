@@ -20,14 +20,14 @@ use alloc::vec::Vec;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 
-use super::super::qlib::auth::userns::*;
-use super::super::qlib::auth::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::common::*;
+use super::super::super::auth::userns::*;
+use super::super::super::auth::*;
+use super::super::super::linux_def::*;
+use super::super::super::common::*;
 use super::super::task::*;
-use super::super::qlib::linux::sem::*;
-use super::super::qlib::linux::ipc::*;
-use super::super::qlib::singleton::*;
+use super::super::super::linux::sem::*;
+use super::super::super::linux::ipc::*;
+use super::super::super::singleton::*;
 //use super::super::fs::attr::*;
 use super::time::*;
 

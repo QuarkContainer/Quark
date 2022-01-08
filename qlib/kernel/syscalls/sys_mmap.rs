@@ -16,12 +16,12 @@ use alloc::string::ToString;
 use alloc::sync::Arc;
 
 use super::super::task::*;
-use super::super::qlib::common::*;
+use super::super::super::common::*;
 use super::super::memmgr::*;
 use super::super::memmgr::mm::*;
 use super::super::memmgr::syscalls::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::addr::*;
+use super::super::super::linux_def::*;
+use super::super::super::addr::*;
 use super::super::syscalls::syscalls::*;
 use super::super::fs::host::hostinodeop::*;
 

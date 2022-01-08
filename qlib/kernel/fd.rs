@@ -15,9 +15,9 @@
 use alloc::vec::Vec;
 
 use super::Kernel::HostSpace;
-use super::qlib::common::*;
-use super::qlib::linux_def::*;
-use super::qlib::mem::io::*;
+use super::super::common::*;
+use super::super::linux_def::*;
+use super::super::mem::io::*;
 
 pub struct MemBuf {
     pub data: Vec<u8>,

@@ -20,18 +20,18 @@ use alloc::string::String;
 use core::fmt::Debug;
 
 use super::super::PAGE_MGR;
-use super::super::qlib::auth::userns::*;
-use super::super::qlib::auth::*;
-use super::super::qlib::auth::id::*;
-use super::super::qlib::addr::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::auth::userns::*;
+use super::super::super::auth::*;
+use super::super::super::auth::id::*;
+use super::super::super::addr::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
 use super::super::task::*;
-use super::super::qlib::range::*;
-use super::super::qlib::device::*;
+use super::super::super::range::*;
+use super::super::super::device::*;
 use super::super::memmgr::*;
-use super::super::qlib::linux::ipc::*;
-use super::super::qlib::linux::shm::*;
+use super::super::super::linux::ipc::*;
+use super::super::super::linux::shm::*;
 use super::time::*;
 
 type Key = i32;

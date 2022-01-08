@@ -17,8 +17,8 @@ use super::super::kernel::pipe::pipe::*;
 use super::super::fs::flags::*;
 use super::super::kernel::fd_table::*;
 use super::super::task::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
 use super::super::syscalls::syscalls::*;
 
 pub fn Pipe2(task: &mut Task, addr: u64, flags: i32) -> Result<i64> {

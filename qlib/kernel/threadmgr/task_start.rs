@@ -18,7 +18,7 @@ use alloc::string::String;
 use super::thread::*;
 use super::thread_group::*;
 use super::super::SignalDef::*;
-use super::super::qlib::auth::*;
+use super::super::super::auth::*;
 use super::super::memmgr::mm::*;
 use super::super::kernel::cpuset::*;
 use super::super::kernel::kernel::*;

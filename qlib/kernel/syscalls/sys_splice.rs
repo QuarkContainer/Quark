@@ -17,8 +17,8 @@ use super::super::kernel::waiter::qlock::*;
 use super::super::fs::attr::*;
 use super::super::fs::file::*;
 use super::super::task::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
 use super::super::syscalls::syscalls::*;
 
 // Splice moves data to this file, directly from another.

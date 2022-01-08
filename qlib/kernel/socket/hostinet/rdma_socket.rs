@@ -1,9 +1,9 @@
 use alloc::sync::Arc;
 
-use super::super::super::qlib::common::*;
-use super::super::super::qlib::linux_def::*;
-use super::super::super::qlib::qmsg::qcall::*;
-use super::super::super::qlib::socket_buf::*;
+use super::super::super::super::common::*;
+use super::super::super::super::linux_def::*;
+use super::super::super::super::qmsg::qcall::*;
+use super::super::super::super::socket_buf::*;
 use super::super::super::task::*;
 use super::super::super::Kernel::HostSpace;
 //use super::super::super::kernel::waiter::*;

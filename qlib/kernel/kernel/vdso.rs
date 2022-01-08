@@ -15,7 +15,7 @@
 use core::mem;
 
 use super::super::asm::*;
-use super::super::qlib::common::*;
+use super::super::super::common::*;
 use super::super::Kernel::HostSpace;
 use super::timer::*;
 

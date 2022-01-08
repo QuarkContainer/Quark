@@ -18,9 +18,9 @@ use alloc::sync::Arc;
 use ::qlib::mutex::*;
 use spin::*;
 
-use super::super::qlib::linux_def::*;
-use super::super::qlib::common::*;
-use super::super::qlib::path::*;
+use super::super::super::linux_def::*;
+use super::super::super::common::*;
+use super::super::super::path::*;
 use super::super::task::*;
 use super::super::uid::NewUID;
 use super::inode::*;

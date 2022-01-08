@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use super::super::task::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux::time::*;
+use super::super::super::common::*;
+use super::super::super::linux::time::*;
 use super::super::syscalls::syscalls::*;
 use super::super::SignalDef::*;
 use super::sys_time::*;

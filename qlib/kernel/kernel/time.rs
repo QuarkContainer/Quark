@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::super::qlib::linux_def::*;
-use super::super::qlib::linux::time::*;
+use super::super::super::linux_def::*;
+use super::super::super::linux::time::*;
 
 pub const MIN_TIME: Time = Time(core::i64::MIN);
 pub const MAX_TIME: Time = Time(core::i64::MAX);

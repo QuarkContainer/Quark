@@ -27,7 +27,7 @@ use alloc::string::ToString;
 use alloc::collections::btree_map::BTreeMap;
 use core::any::Any;
 
-use super::super::qlib::auth::*;
+use super::super::super::auth::*;
 use super::mount::*;
 use super::inode::*;
 use super::dirent::*;

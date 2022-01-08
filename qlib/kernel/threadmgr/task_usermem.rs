@@ -20,9 +20,9 @@ use alloc::slice;
 use core::mem::*;
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::mem::block::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
+use super::super::super::mem::block::*;
 use super::super::util::cstring::*;
 use super::super::task::*;
 use super::super::memmgr::mm::*;

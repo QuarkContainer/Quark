@@ -13,10 +13,10 @@
 // limitations under the License.
 
 use super::super::task::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::qmsg::qcall::StatmInfo;
-use super::super::qlib::usage::memory::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
+use super::super::super::qmsg::qcall::StatmInfo;
+use super::super::super::usage::memory::*;
 use super::super::syscalls::syscalls::*;
 use super::super::Kernel;
 

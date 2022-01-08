@@ -19,10 +19,10 @@ use ::qlib::mutex::*;
 use core::any::Any;
 
 use socket::unix::transport::unix::BoundEndpoint;
-use super::super::super::qlib::common::*;
-use super::super::super::qlib::linux_def::*;
-use super::super::super::qlib::auth::*;
-use super::super::super::qlib::device::*;
+use super::super::super::super::common::*;
+use super::super::super::super::linux_def::*;
+use super::super::super::super::auth::*;
+use super::super::super::super::device::*;
 use super::super::super::kernel::time::*;
 use super::super::super::kernel::pipe::pipe::*;
 use super::super::super::kernel::pipe::node::*;

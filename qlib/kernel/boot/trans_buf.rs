@@ -17,7 +17,7 @@ use core::mem;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use super::super::qlib::Common::*;
+use super::super::super::Common::*;
 
 pub struct TransBuf<'a> {
     pub buf: &'a mut [u8],

@@ -18,14 +18,14 @@ use alloc::string::ToString;
 use core::fmt;
 
 use super::super::fs::host::hostinodeop::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
 use super::super::task::*;
-use super::super::qlib::addr::*;
+use super::super::super::addr::*;
 //use super::super::task::*;
 use super::*;
-use super::super::qlib::range::*;
-use super::super::qlib::mem::areaset::*;
+use super::super::super::range::*;
+use super::super::super::mem::areaset::*;
 use super::mm::*;
 use super::arch::*;
 

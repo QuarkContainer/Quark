@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::super::arch::x86_64::context::*;
-use super::super::qlib::addr::*;
+use super::super::super::addr::*;
 
 pub type MmapDirection = i32;
 

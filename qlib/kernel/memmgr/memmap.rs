@@ -17,9 +17,9 @@ use alloc::vec::Vec;
 use alloc::string::ToString;
 
 use super::super::task::*;
-use super::super::qlib::common::*;
-use super::super::qlib::range::*;
-use super::super::qlib::addr::*;
+use super::super::super::common::*;
+use super::super::super::range::*;
+use super::super::super::addr::*;
 
 // Mappable represents a memory-mappable object, a mutable mapping from uint64
 // offsets to (platform.File, uint64 File offset) pairs.

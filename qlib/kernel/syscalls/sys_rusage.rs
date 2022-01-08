@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::linux::rusage::*;
-use super::super::qlib::linux::time::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
+use super::super::super::linux::rusage::*;
+use super::super::super::linux::time::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::Task;
 

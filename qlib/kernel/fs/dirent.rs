@@ -25,10 +25,10 @@ use core::cmp::Eq;
 use core::cmp::PartialEq;
 
 use super::super::uid::*;
-use super::super::qlib::common::*;
-use super::super::qlib::singleton::*;
+use super::super::super::common::*;
+use super::super::super::singleton::*;
 use super::super::task::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::linux_def::*;
 use super::super::socket::unix::transport::unix::*;
 use super::inode::*;
 use super::flags::*;

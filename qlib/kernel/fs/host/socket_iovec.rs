@@ -15,9 +15,9 @@
 use core::cmp;
 use alloc::vec::Vec;
 
-use super::super::super::qlib::common::*;
-use super::super::super::qlib::linux_def::*;
-use super::super::super::qlib::mem::stackvec::*;
+use super::super::super::super::common::*;
+use super::super::super::super::linux_def::*;
+use super::super::super::super::mem::stackvec::*;
 
 // UIO_MAXIOV is the maximum number of iovecs to pass to the host.
 const MAX_IOVS : usize = UIO_MAXIOV;

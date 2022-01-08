@@ -17,7 +17,7 @@ use ::qlib::mutex::*;
 use alloc::string::String;
 use alloc::string::ToString;
 
-use super::super::super::qlib::common::*;
+use super::super::super::super::common::*;
 use super::super::super::task::*;
 use super::super::filesystems::*;
 use super::super::inode::*;

@@ -14,8 +14,8 @@
 
 use core::mem;
 
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
 use super::super::syscalls::syscalls::*;
 use super::super::vcpu::*;
 use super::super::task::Task;

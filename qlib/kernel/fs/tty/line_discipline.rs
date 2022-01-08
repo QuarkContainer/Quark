@@ -16,8 +16,8 @@ use alloc::sync::Arc;
 use ::qlib::mutex::*;
 
 use super::super::super::task::*;
-use super::super::super::qlib::common::*;
-use super::super::super::qlib::linux_def::*;
+use super::super::super::super::common::*;
+use super::super::super::super::linux_def::*;
 //use super::super::super::mem::seq::*;
 use super::super::host::tty::*;
 use super::queue::*;

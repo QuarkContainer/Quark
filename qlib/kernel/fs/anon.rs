@@ -16,9 +16,9 @@ use alloc::sync::Arc;
 use ::qlib::mutex::*;
 
 use super::super::task::*;
-use super::super::qlib::auth::*;
-use super::super::qlib::device::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::auth::*;
+use super::super::super::device::*;
+use super::super::super::linux_def::*;
 use super::fsutil::inode::simple_file_inode::*;
 use super::attr::*;
 use super::inode::*;

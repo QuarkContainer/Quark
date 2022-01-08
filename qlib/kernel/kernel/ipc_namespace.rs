@@ -14,7 +14,7 @@
 
 use super::semaphore;
 //use super::shm;
-use super::super::qlib::auth::userns::*;
+use super::super::super::auth::userns::*;
 
 #[derive(Clone, Default)]
 pub struct IPCNamespace {

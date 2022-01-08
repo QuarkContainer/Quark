@@ -22,9 +22,9 @@ use alloc::string::String;
 use alloc::string::ToString;
 
 use super::super::super::task::*;
-use super::super::super::qlib::singleton::*;
-use super::super::super::qlib::common::*;
-use super::super::super::qlib::linux_def::*;
+use super::super::super::super::singleton::*;
+use super::super::super::super::common::*;
+use super::super::super::super::linux_def::*;
 use super::super::super::fs::attr::*;
 use super::super::super::fs::dirent::*;
 use super::super::super::fs::dentry::*;

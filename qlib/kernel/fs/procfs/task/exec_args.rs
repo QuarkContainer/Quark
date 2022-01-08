@@ -16,10 +16,10 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use ::qlib::mutex::*;
 
-use super::super::super::super::qlib::common::*;
-use super::super::super::super::qlib::linux_def::*;
-use super::super::super::super::qlib::addr::*;
-use super::super::super::super::qlib::auth::*;
+use super::super::super::super::super::common::*;
+use super::super::super::super::super::linux_def::*;
+use super::super::super::super::super::addr::*;
+use super::super::super::super::super::auth::*;
 use super::super::super::fsutil::file::readonly_file::*;
 use super::super::super::super::task::*;
 use super::super::super::file::*;

@@ -15,10 +15,10 @@
 use alloc::vec::Vec;
 
 use super::super::task::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::addr::*;
-use super::super::qlib::linux::time::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
+use super::super::super::addr::*;
+use super::super::super::linux::time::*;
 use super::super::SignalDef::*;
 use super::super::syscalls::syscalls::*;
 use super::super::kernel::time::*;

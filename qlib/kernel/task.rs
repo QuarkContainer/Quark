@@ -22,17 +22,17 @@ use alloc::boxed::Box;
 use core::sync::atomic::Ordering;
 
 //use super::arch::x86_64::arch_x86::*;
-use super::qlib::linux_def::*;
-use super::qlib::common::*;
+use super::super::linux_def::*;
+use super::super::common::*;
 use super::SignalDef::*;
 use super::*;
 use super::vcpu::*;
-use super::qlib::auth::*;
-use super::qlib::task_mgr::*;
-use super::qlib::perf_tunning::*;
+use super::super::auth::*;
+use super::super::task_mgr::*;
+use super::super::perf_tunning::*;
 use super::kernel::time::*;
 use super::syscalls::*;
-use super::qlib::usage::io::*;
+use super::super::usage::io::*;
 use super::fs::dirent::*;
 use super::kernel::uts_namespace::*;
 use super::kernel::ipc_namespace::*;
@@ -53,8 +53,8 @@ use super::fs::mount::*;
 use super::kernel::fs_context::*;
 
 use super::asm::*;
-use super::qlib::singleton::*;
-use super::qlib::SysCallID;
+use super::super::singleton::*;
+use super::super::SysCallID;
 
 const DEFAULT_STACK_SIZE: usize = MemoryDef::DEFAULT_STACK_SIZE as usize;
 pub const DEFAULT_STACK_PAGES: u64 = DEFAULT_STACK_SIZE as u64 / (4 * 1024);
@@ -751,7 +751,7 @@ impl Task {
         let root = self.mm.GetRoot();
         let curr = super::asm::CurrentCr3();
         if curr != root {
-            super::qlib::pagetable::PageTables::Switch(root);
+            super::super::pagetable::PageTables::Switch(root);
         }
     }
 

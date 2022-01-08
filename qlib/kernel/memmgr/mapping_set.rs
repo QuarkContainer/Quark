@@ -19,10 +19,10 @@ use alloc::collections::btree_set::BTreeSet;
 use core::cmp::Ordering;
 use core::ops::Deref;
 
-use super::super::qlib::mem::areaset::*;
+use super::super::super::mem::areaset::*;
 use super::super::memmgr::mm::*;
-use super::super::qlib::addr::*;
-use super::super::qlib::range::*;
+use super::super::super::addr::*;
+use super::super::super::range::*;
 use super::super::task::*;
 
 // MappingOfRange represents a mapping of a MappableRange.

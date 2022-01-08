@@ -20,9 +20,9 @@ use alloc::vec::Vec;
 use alloc::sync::Arc;
 
 use socket::unix::transport::unix::BoundEndpoint;
-use super::super::super::qlib::common::*;
-use super::super::super::qlib::auth::*;
-use super::super::super::qlib::linux_def::*;
+use super::super::super::super::common::*;
+use super::super::super::super::auth::*;
+use super::super::super::super::linux_def::*;
 use super::super::super::task::*;
 use super::super::super::kernel::waiter::*;
 use super::super::super::kernel::time::*;

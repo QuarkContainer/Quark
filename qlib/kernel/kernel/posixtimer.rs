@@ -18,9 +18,9 @@ use core::ops::Deref;
 use core::fmt;
 
 use super::super::SignalDef::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::linux::time::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
+use super::super::super::linux::time::*;
 use super::super::threadmgr::thread::*;
 use super::timer::timer::Clock;
 use super::timer::timer;

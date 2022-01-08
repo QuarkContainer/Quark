@@ -16,8 +16,8 @@ use alloc::vec::Vec;
 use alloc::str;
 use alloc::string::String;
 
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
 use super::super::task::*;
 
 pub struct CString {

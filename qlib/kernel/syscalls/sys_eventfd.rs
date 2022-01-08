@@ -13,8 +13,8 @@
 // limitations under the License.
 
 
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
 use super::super::task::*;
 use super::super::fs::flags::*;
 use super::super::kernel::eventfd::*;

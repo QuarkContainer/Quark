@@ -15,8 +15,8 @@
 use alloc::collections::btree_map::BTreeMap;
 use ::qlib::mutex::*;
 
-use super::super::super::qlib::linux_def::*;
-use super::super::super::qlib::range::*;
+use super::super::super::super::linux_def::*;
+use super::super::super::super::range::*;
 
 pub struct Mapping {
     pub addr: u64,

@@ -17,7 +17,7 @@ use core::ops::Deref;
 
 use ::qlib::mutex::*;
 
-use super::super::super::qlib::task_mgr::*;
+use super::super::super::super::task_mgr::*;
 use super::super::super::taskMgr;
 use super::super::super::SHARESPACE;
 

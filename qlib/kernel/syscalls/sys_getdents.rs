@@ -17,9 +17,9 @@ use alloc::vec::Vec;
 use super::super::fs::dentry::*;
 use super::super::fd::*;
 use super::super::task::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::mem::io::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
+use super::super::super::mem::io::*;
 use super::super::syscalls::syscalls::*;
 
 pub fn SysGetDents(task: &mut Task, args: &SyscallArguments) -> Result<i64> {

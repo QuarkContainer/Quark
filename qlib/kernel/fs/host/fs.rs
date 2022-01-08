@@ -19,9 +19,9 @@ use alloc::collections::btree_map::BTreeMap;
 use alloc::string::ToString;
 use alloc::vec::Vec;
 
-use super::super::super::qlib::common::*;
-use super::super::super::qlib::path::*;
-use super::super::super::qlib::linux_def::*;
+use super::super::super::super::common::*;
+use super::super::super::super::path::*;
+use super::super::super::super::linux_def::*;
 use super::super::super::task::*;
 use super::super::inode::*;
 use super::super::mount::*;

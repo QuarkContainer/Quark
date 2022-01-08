@@ -31,8 +31,8 @@ use alloc::string::ToString;
 use alloc::sync::Arc;
 
 use super::fs::host::hostinodeop::*;
-use super::qlib::common::*;
-use super::qlib::addr::*;
+use super::super::common::*;
+use super::super::addr::*;
 use super::task::*;
 use super::fs::file::*;
 use self::mapping::*;

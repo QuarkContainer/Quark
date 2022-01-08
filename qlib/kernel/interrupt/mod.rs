@@ -15,17 +15,17 @@
 
 mod idt;
 
-use super::qlib::addr::*;
+use super::super::addr::*;
 use super::task::*;
-use super::qlib::common::*;
-use super::qlib::linux_def::*;
+use super::super::common::*;
+use super::super::linux_def::*;
 use super::threadmgr::task_sched::*;
 use super::SignalDef::*;
 use super::MainRun;
 use super::asm::*;
-use super::qlib::perf_tunning::*;
+use super::super::perf_tunning::*;
 use super::SHARESPACE;
-use super::qlib::singleton::*;
+use super::super::singleton::*;
 
 #[derive(Clone, Copy, Debug)]
 pub enum ExceptionStackVec {

@@ -22,20 +22,20 @@ use core::any::Any;
 
 use super::super::super::guestfdnotifier::*;
 use super::super::super::kernel::waiter::*;
-use super::super::super::qlib::common::*;
-use super::super::super::qlib::linux_def::*;
+use super::super::super::super::common::*;
+use super::super::super::super::linux_def::*;
 use super::super::super::util::cstring::*;
-use super::super::super::qlib::device::*;
-use super::super::super::qlib::pagetable::*;
-use super::super::super::qlib::range::*;
-use super::super::super::qlib::addr::*;
-use super::super::super::qlib::bytestream::*;
+use super::super::super::super::device::*;
+use super::super::super::super::pagetable::*;
+use super::super::super::super::range::*;
+use super::super::super::super::addr::*;
+use super::super::super::super::bytestream::*;
 use super::super::super::Kernel::HostSpace;
 use super::super::super::task::*;
 use super::super::super::kernel::async_wait::*;
 use super::super::super::IOURING;
 use super::super::super::SHARESPACE;
-use super::super::super::qlib::qmsg::qcall::*;
+use super::super::super::super::qmsg::qcall::*;
 //use super::super::super::BUF_MGR;
 
 use super::super::file::*;

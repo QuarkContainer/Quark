@@ -19,12 +19,12 @@ use alloc::collections::btree_map::BTreeMap;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU8, Ordering};
 
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::linux::futex::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
+use super::super::super::linux::futex::*;
 use super::super::task::*;
 use super::super::kernel::waiter::*;
-use super::super::qlib::singleton::*;
+use super::super::super::singleton::*;
 
 pub static FUTEX_MGR : Singleton<FutexMgr> = Singleton::<FutexMgr>::New();
 pub unsafe fn InitSingleton() {

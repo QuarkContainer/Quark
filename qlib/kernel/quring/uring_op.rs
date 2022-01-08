@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::super::qlib::task_mgr::*;
-use super::super::qlib::linux_def::EpollEvent;
-use super::super::qlib::uring::squeue;
-use super::super::qlib::uring::opcode::*;
+use super::super::super::task_mgr::*;
+use super::super::super::linux_def::EpollEvent;
+use super::super::super::uring::squeue;
+use super::super::super::uring::opcode::*;
 
 pub static DEFAULT_MSG : UringOp = UringOp::None;
 

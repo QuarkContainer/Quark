@@ -18,8 +18,8 @@ use core::ops::Deref;
 use core::cmp::*;
 
 use super::super::uid::NewUID;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
 use super::super::SignalDef::*;
 use super::thread_group::*;
 use super::session::*;

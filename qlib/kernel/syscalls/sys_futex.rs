@@ -14,11 +14,11 @@
 
 use alloc::boxed::Box;
 
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
 use super::super::task::*;
-use super::super::qlib::linux::time::*;
-use super::super::qlib::linux::futex::*;
+use super::super::super::linux::time::*;
+use super::super::super::linux::futex::*;
 use super::super::kernel::time::*;
 use super::super::threadmgr::task_syscall::*;
 use super::super::syscalls::syscalls::*;

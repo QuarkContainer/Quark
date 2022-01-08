@@ -17,9 +17,9 @@ use super::super::kernel::timer::*;
 use super::super::kernel::time::*;
 use super::super::fs::file::*;
 use super::super::task::*;
-use super::super::qlib::common::*;
-use super::super::qlib::mem::block::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::common::*;
+use super::super::super::mem::block::*;
+use super::super::super::linux_def::*;
 use super::super::syscalls::syscalls::*;
 use super::super::perflog::*;
 
@@ -58,7 +58,7 @@ pub fn Read(task: &Task, fd: i32, addr: u64, size: i64) -> Result<i64> {
     let n = readv(task, &file, &mut iovs)?;
     /*if fd == 0 {
         use alloc::string::ToString;
-        use super::super::qlib::util::*;
+        use super::super::super::util::*;
 
         let str = CString::ToStringWithLen(addr, n as usize).to_string();
         info!("(Data)Read({}): {}", n, str);

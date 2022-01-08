@@ -16,7 +16,7 @@ use alloc::sync::Arc;
 use ::qlib::mutex::*;
 use core::ops::Deref;
 
-use super::super::super::qlib::common::*;
+use super::super::super::super::common::*;
 use super::super::super::task::*;
 use super::queue::*;
 use super::*;

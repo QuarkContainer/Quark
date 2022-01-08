@@ -15,13 +15,13 @@
 use alloc::collections::btree_set::BTreeSet;
 
 //use super::super::Kernel;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::limits::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
+use super::super::super::limits::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::Task;
 use super::super::threadmgr::thread::*;
-use super::super::qlib::singleton::*;
+use super::super::super::singleton::*;
 
 pub static SETABLE_LIMITS : Singleton<BTreeSet<LimitType>> = Singleton::<BTreeSet<LimitType>>::New();
 

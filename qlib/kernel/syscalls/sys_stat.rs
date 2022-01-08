@@ -14,9 +14,9 @@
 
 use super::sys_file::*;
 use super::super::task::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::device::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
+use super::super::super::device::*;
 use super::super::fs::dirent::*;
 use super::super::fs::file::*;
 use super::super::fs::attr::*;

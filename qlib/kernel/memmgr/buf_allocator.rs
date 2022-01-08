@@ -21,7 +21,7 @@ use core::mem::size_of;
 use core::ptr::NonNull;
 
 use super::super::asm::*;
-use super::super::qlib::common::*;
+use super::super::super::common::*;
 
 pub const BUF_CNT: usize = 16;
 pub const CLASS_CNT : usize = 32;

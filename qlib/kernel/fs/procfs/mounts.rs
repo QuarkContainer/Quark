@@ -17,7 +17,7 @@ use alloc::string::String;
 use alloc::string::ToString;
 use ::qlib::mutex::*;
 
-use super::super::super::qlib::common::*;
+use super::super::super::super::common::*;
 use super::super::super::task::*;
 use super::super::ramfs::symlink::*;
 use super::super::dirent::*;

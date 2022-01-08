@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::super::qlib::linux_def::*;
+use super::super::super::linux_def::*;
 use super::super::kernel::time::*;
 use super::super::task::*;
-use super::super::qlib::auth::*;
+use super::super::super::auth::*;
 use super::dentry::*;
 
 

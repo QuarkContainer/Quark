@@ -18,7 +18,7 @@ use alloc::sync::Arc;
 use ::qlib::mutex::*;
 use core::any::Any;
 
-use super::super::qlib::common::*;
+use super::super::super::common::*;
 use super::super::task::*;
 use super::mount::*;
 use super::inode::*;

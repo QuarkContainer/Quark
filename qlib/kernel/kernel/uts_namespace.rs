@@ -18,7 +18,7 @@ use alloc::sync::Arc;
 use ::qlib::mutex::*;
 use core::ops::Deref;
 
-use super::super::qlib::auth::userns::*;
+use super::super::super::auth::userns::*;
 
 #[derive(Default)]
 pub struct UTSNamespaceInternal {

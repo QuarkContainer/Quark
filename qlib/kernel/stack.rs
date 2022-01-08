@@ -16,8 +16,8 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::mem;
 
-use super::qlib::auxv::*;
-use super::qlib::common::*;
+use super::super::auxv::*;
+use super::super::common::*;
 use super::task::*;
 
 // StackLayout describes the location of the arguments and environment on the

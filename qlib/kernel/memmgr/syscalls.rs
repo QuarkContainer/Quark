@@ -18,11 +18,11 @@ use super::super::kernel::futex::*;
 use super::super::memmgr::mm::*;
 use super::super::memmgr::vma::*;
 use super::super::task::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::addr::*;
-use super::super::qlib::range::*;
-use super::super::qlib::linux::limits::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
+use super::super::super::addr::*;
+use super::super::super::range::*;
+use super::super::super::linux::limits::*;
 use super::*;
 
 #[derive(Debug)]

@@ -15,9 +15,9 @@
 use core::any::Any;
 
 use super::super::super::super::kernel::time::*;
-use super::super::super::super::qlib::common::*;
+use super::super::super::super::super::common::*;
 use super::super::super::super::kernel::waiter::*;
-use super::super::super::super::qlib::linux_def::*;
+use super::super::super::super::super::linux_def::*;
 use super::super::super::super::task::*;
 
 use super::super::super::file::*;

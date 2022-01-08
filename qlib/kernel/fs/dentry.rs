@@ -21,8 +21,8 @@ use alloc::vec::Vec;
 use ::qlib::mutex::*;
 use alloc::sync::Arc;
 
-use super::super::qlib::device::*;
-use super::super::qlib::common::*;
+use super::super::super::device::*;
+use super::super::super::common::*;
 use super::super::task::*;
 use super::attr::*;
 

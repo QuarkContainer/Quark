@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use super::super::super::asm::muldiv64;
-use super::super::super::qlib::linux::time::*;
-use super::super::super::qlib::common::*;
+use super::super::super::super::linux::time::*;
+use super::super::super::super::common::*;
 use super::sampler::*;
 use super::*;
 

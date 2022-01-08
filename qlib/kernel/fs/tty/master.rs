@@ -21,14 +21,14 @@ use alloc::vec::Vec;
 
 use socket::unix::transport::unix::BoundEndpoint;
 use super::super::host::hostinodeop::*;
-use super::super::super::qlib::common::*;
+use super::super::super::super::common::*;
 use super::super::super::uid::NewUID;
-use super::super::super::qlib::device::*;
-use super::super::super::qlib::auth::*;
+use super::super::super::super::device::*;
+use super::super::super::super::auth::*;
 use super::super::super::task::*;
 use super::super::super::kernel::time::*;
 use super::super::super::kernel::waiter::*;
-use super::super::super::qlib::linux_def::*;
+use super::super::super::super::linux_def::*;
 use super::super::attr::*;
 use super::super::inode::*;
 use super::super::mount::*;

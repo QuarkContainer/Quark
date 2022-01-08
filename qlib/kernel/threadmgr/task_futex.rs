@@ -14,7 +14,7 @@
 
 
 
-use super::super::qlib::linux::futex::*;
+use super::super::super::linux::futex::*;
 use super::super::kernel::futex::*;
 use super::super::task::*;
 use super::super::threadmgr::thread::*;

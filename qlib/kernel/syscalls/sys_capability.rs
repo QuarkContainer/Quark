@@ -13,9 +13,9 @@
 // limitations under the License.
 
 use super::super::task::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::auth::cap_set::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
+use super::super::super::auth::cap_set::*;
 use super::super::threadmgr::thread::*;
 use super::super::syscalls::syscalls::*;
 

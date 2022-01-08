@@ -112,34 +112,34 @@ use qlib::mutex::*;
 
 //use linked_list_allocator::LockedHeap;
 //use buddy_system_allocator::LockedHeap;
-use self::qlib::{ShareSpaceRef, SysCallID};
+use self::super::{ShareSpaceRef, SysCallID};
 use taskMgr::{CreateTask, IOWait, WaitFn};
-//use self::qlib::buddyallocator::*;
+//use self::super::buddyallocator::*;
 use self::asm::*;
 use self::boot::controller::*;
 use self::boot::loader::*;
 use self::kernel::timer::*;
 use self::loader::vdso::*;
 use self::memmgr::pma::*;
-use self::qlib::common::*;
-use self::qlib::config::*;
-use self::qlib::control_msg::*;
-use self::qlib::linux_def::MemoryDef;
-use self::qlib::loader::*;
-use self::qlib::pagetable::*;
-use self::qlib::perf_tunning::*;
-use self::qlib::vcpu_mgr::*;
+use self::super::common::*;
+use self::super::config::*;
+use self::super::control_msg::*;
+use self::super::linux_def::MemoryDef;
+use self::super::loader::*;
+use self::super::pagetable::*;
+use self::super::perf_tunning::*;
+use self::super::vcpu_mgr::*;
 use self::syscalls::syscalls::*;
 use self::task::*;
 use self::threadmgr::task_sched::*;
 use self::vcpu::*;
 //use self::memmgr::buf_allocator::*;
-//use self::qlib::mem::list_allocator::*;
+//use self::super::mem::list_allocator::*;
 use self::print::SCALE;
 use self::quring::*;
 //use self::heap::QAllocator;
 use self::heap::GuestAllocator;
-use self::qlib::singleton::*;
+use self::super::singleton::*;
 use self::uid::*;
 
 pub const HEAP_START: usize = 0x70_2000_0000;
@@ -219,7 +219,7 @@ extern "C" {
 }
 
 pub fn Shutdown() -> bool {
-    return SHUTDOWN.load(self::qlib::linux_def::QOrdering::RELAXED);
+    return SHUTDOWN.load(self::super::linux_def::QOrdering::RELAXED);
 }
 
 pub fn Init() {
@@ -433,7 +433,7 @@ fn InitGs(id: u64) {
 }
 
 pub fn LogInit(pages: u64) {
-    let bs = self::qlib::bytestream::ByteStream::Init(pages); // 4MB
+    let bs = self::super::bytestream::ByteStream::Init(pages); // 4MB
     *SHARESPACE.logBuf.lock() = Some(bs);
 }
 

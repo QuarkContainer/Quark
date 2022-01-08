@@ -16,7 +16,7 @@ use alloc::sync::Arc;
 use ::qlib::mutex::*;
 use core::ops::Deref;
 
-use super::super::super::qlib::linux_def::*;
+use super::super::super::super::linux_def::*;
 use super::super::super::fs::file::*;
 use super::super::waiter::*;
 use super::epoll::*;

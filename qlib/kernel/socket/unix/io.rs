@@ -14,7 +14,7 @@
 
 use alloc::sync::Arc;
 
-use super::super::super::qlib::mem::seq::*;
+use super::super::super::super::mem::seq::*;
 use super::transport::unix::*;
 
 // EndpointWriter implements safemem.Writer that writes to a transport.Endpoint.

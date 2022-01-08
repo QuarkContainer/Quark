@@ -16,8 +16,8 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use super::super::task::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
 use super::super::socket::socket::*;
 //use super::super::socket::control::*;
 //use super::super::socket::control::ControlMessage;
@@ -26,8 +26,8 @@ use super::super::fs::file::*;
 use super::super::kernel::fd_table::*;
 use super::super::syscalls::syscalls::*;
 use super::super::kernel::time::*;
-use super::super::qlib::linux::time::*;
-//use super::super::qlib::linux::socket::*;
+use super::super::super::linux::time::*;
+//use super::super::super::linux::socket::*;
 use super::super::kernel::timer::*;
 
 // minListenBacklog is the minimum reasonable backlog for listening sockets.

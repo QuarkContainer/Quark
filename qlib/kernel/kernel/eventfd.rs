@@ -18,9 +18,9 @@ use core::any::Any;
 use core::slice;
 use alloc::sync::Arc;
 
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::mem::seq::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
+use super::super::super::mem::seq::*;
 use super::super::task::*;
 use super::super::kernel::waiter::*;
 

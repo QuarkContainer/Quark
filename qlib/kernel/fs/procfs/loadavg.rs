@@ -16,9 +16,9 @@ use alloc::sync::Arc;
 use ::qlib::mutex::*;
 use alloc::vec::Vec;
 
-use super::super::super::qlib::common::*;
-use super::super::super::qlib::linux_def::*;
-use super::super::super::qlib::auth::*;
+use super::super::super::super::common::*;
+use super::super::super::super::linux_def::*;
+use super::super::super::super::auth::*;
 use super::super::super::task::*;
 use super::super::fsutil::file::readonly_file::*;
 use super::super::fsutil::inode::simple_file_inode::*;

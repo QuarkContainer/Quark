@@ -18,8 +18,8 @@
 
 //use super::super::super::SignalDef::*;
 //use super::super::super::stack::*;
-//use super::super::super::qlib::common::*;
-//use super::super::super::qlib::linux_def::*;
+//use super::super::super::super::common::*;
+//use super::super::super::super::linux_def::*;
 use super::context::*;
 //use super::arch_x86::*;
 

@@ -14,9 +14,9 @@
 
 use alloc::collections::btree_map::BTreeMap;
 
-use super::super::qlib::linux_def::*;
-use super::super::qlib::common::*;
-use super::super::qlib::pagetable::*;
+use super::super::super::linux_def::*;
+use super::super::super::common::*;
+use super::super::super::pagetable::*;
 
 pub fn ZeroPage(pageStart: u64) {
     use alloc::slice;

@@ -18,10 +18,10 @@ use alloc::sync::Arc;
 use ::qlib::mutex::*;
 use alloc::string::String;
 
-use super::super::qlib::mem::areaset::*;
-use super::super::qlib::range::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::mem::areaset::*;
+use super::super::super::range::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
 use super::super::task::*;
 use super::super::kernel::waiter::*;
 

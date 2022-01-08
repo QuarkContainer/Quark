@@ -16,8 +16,8 @@ use alloc::boxed::Box;
 use core::cell::RefCell;
 use core::ops::Deref;
 
-use super::super::super::qlib::mem::seq::*;
-use super::super::super::qlib::common::*;
+use super::super::super::super::mem::seq::*;
+use super::super::super::super::common::*;
 
 pub const BUF_SIZE : usize = 32;
 

@@ -19,8 +19,8 @@ use alloc::sync::Arc;
 use core::ops::Deref;
 use core::slice;
 
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
 
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

@@ -21,10 +21,10 @@ use super::super::kernel::timer::timer::Timer;
 use super::super::kernel::timer::timer::Clock;
 use super::super::kernel::timer::timer::WaitEntryListener;
 use super::super::threadmgr::thread::*;
-use super::super::qlib::linux::time::*;
+use super::super::super::linux::time::*;
 use super::super::kernel::time::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
 use super::super::task::*;
 
 impl ThreadInternal {

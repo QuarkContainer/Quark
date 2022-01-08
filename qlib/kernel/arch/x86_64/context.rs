@@ -16,11 +16,11 @@ use alloc::vec::Vec;
 use alloc::sync::Arc;
 use ::qlib::mutex::*;
 
-use super::super::super::qlib::limits::*;
-use super::super::super::qlib::common::*;
-use super::super::super::qlib::linux_def::*;
+use super::super::super::super::limits::*;
+use super::super::super::super::common::*;
+use super::super::super::super::linux_def::*;
 use super::super::super::SignalDef::*;
-use super::super::super::qlib::addr::*;
+use super::super::super::super::addr::*;
 use super::super::super::memmgr::arch::*;
 use super::super::super::kernel_util::*;
 use super::arch_x86::*;

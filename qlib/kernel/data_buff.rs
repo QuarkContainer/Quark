@@ -1,8 +1,8 @@
 use alloc::vec::Vec;
 use  core::slice;
 
-use super::qlib::mem::seq::BlockSeq;
-use super::qlib::linux_def::*;
+use super::super::mem::seq::BlockSeq;
+use super::super::linux_def::*;
 use super::BUF_MGR;
 
 pub struct DataBuff {

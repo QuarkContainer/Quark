@@ -1,10 +1,10 @@
 
 use super::super::super::fs::file::*;
 use super::super::super::task::*;
-use super::super::super::qlib::common::*;
-use super::super::super::qlib::linux_def::*;
-use super::super::super::qlib::linux::time::*;
-use super::super::super::qlib::linux::socket::*;
+use super::super::super::super::common::*;
+use super::super::super::super::linux_def::*;
+use super::super::super::super::linux::time::*;
+use super::super::super::super::linux::socket::*;
 use super::super::super::tcpip::tcpip::*;
 use super::super::unix::transport::unix::*;
 

@@ -46,9 +46,9 @@ use super::super::syscalls::sys_timer::*;
 use super::super::syscalls::sys_mempolicy::*;
 
 use super::super::task::*;
-use super::super::qlib::SysCallID;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::SysCallID;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
 
 //#[repr(align(128))]
 #[derive(Debug)]

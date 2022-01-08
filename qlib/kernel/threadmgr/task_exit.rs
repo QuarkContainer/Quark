@@ -15,18 +15,18 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
 use super::super::threadmgr::thread::*;
 use super::super::threadmgr::threads::*;
 use super::super::threadmgr::pid_namespace::*;
 use super::super::threadmgr::thread_group::*;
-use super::super::qlib::auth::id::*;
+use super::super::super::auth::id::*;
 //use super::super::Common::*;
 use super::super::SignalDef::*;
 use super::super::task::*;
 use super::task_stop::*;
-use super::super::qlib::perf_tunning::*;
+use super::super::super::perf_tunning::*;
 
 // An ExitStatus is a value communicated from an exiting task or thread group
 // to the party that reaps it.

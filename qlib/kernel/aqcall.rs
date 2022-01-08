@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::guestfdnotifier::*;
-use super::qlib::qmsg::*;
+use super::super::qmsg::*;
 use super::boot::controller::SignalProcess;
 
 impl HostInputMsg {

@@ -14,9 +14,9 @@
 
 
 use super::super::task::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::linux::membarrier::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
+use super::super::super::linux::membarrier::*;
 use super::super::syscalls::syscalls::*;
 
 // Membarrier implements syscall membarrier(2).

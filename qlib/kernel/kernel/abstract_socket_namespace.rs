@@ -19,9 +19,9 @@ use core::ops::Deref;
 use alloc::vec::Vec;
 
 use super::super::socket::unix::transport::unix::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::singleton::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
+use super::super::super::singleton::*;
 
 pub static ABSTRACT_SOCKET : Singleton<AbstractSocketNamespace> = Singleton::<AbstractSocketNamespace>::New();
 pub unsafe fn InitSingleton() {

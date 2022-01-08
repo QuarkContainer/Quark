@@ -23,9 +23,9 @@ pub use xmas_elf::header::HeaderPt2;
 use xmas_elf::program::ProgramHeader64;
 use xmas_elf::*;
 
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::singleton::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
+use super::super::super::singleton::*;
 
 pub static VDSO : Singleton<Vdso> = Singleton::<Vdso>::New();
 

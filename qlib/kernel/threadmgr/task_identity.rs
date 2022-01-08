@@ -15,12 +15,12 @@
 use alloc::vec::Vec;
 
 use super::super::threadmgr::thread::*;
-use super::super::qlib::auth::*;
-use super::super::qlib::auth::id::*;
-use super::super::qlib::auth::userns::*;
-use super::super::qlib::auth::cap_set::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::auth::*;
+use super::super::super::auth::id::*;
+use super::super::super::auth::userns::*;
+use super::super::super::auth::cap_set::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
 use super::super::task::*;
 
 impl ThreadInternal {

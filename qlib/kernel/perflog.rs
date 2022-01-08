@@ -17,11 +17,11 @@ use alloc::sync::Arc;
 use core::mem;
 use ::qlib::mutex::*;
 
-use super::qlib::perf_tunning::*;
-use super::qlib::vcpu_mgr::*;
+use super::super::perf_tunning::*;
+use super::super::vcpu_mgr::*;
 use super::uid::*;
 use super::task::*;
-use super::qlib::singleton::*;
+use super::super::singleton::*;
 
 pub static THREAD_COUNTS : Singleton<QMutex<ThreadPerfCounters>> = Singleton::<QMutex<ThreadPerfCounters>>::New();
 

@@ -18,9 +18,9 @@ use alloc::collections::btree_map::BTreeMap;
 use core::ops::Deref;
 use alloc::vec::Vec;
 
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::auth::userns::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
+use super::super::super::auth::userns::*;
 use super::session::*;
 use super::thread::*;
 use super::threads::*;

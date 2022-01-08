@@ -18,7 +18,7 @@ use core::ops::DerefMut;
 use core::cell::UnsafeCell;
 use alloc::sync::Arc;
 
-use super::super::super::qlib::common::*;
+use super::super::super::super::common::*;
 use super::queue::*;
 use super::*;
 

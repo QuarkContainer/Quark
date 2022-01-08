@@ -16,9 +16,9 @@ use ::qlib::mutex::*;
 use alloc::vec::Vec;
 use core::{ptr};
 
-use super::super::qlib::common::*;
-use super::super::qlib::control_msg::*;
-use super::super::qlib::vcpu_mgr::*;
+use super::super::super::common::*;
+use super::super::super::control_msg::*;
+use super::super::super::vcpu_mgr::*;
 use super::super::Kernel;
 use super::super::taskMgr;
 use super::super::task::*;
@@ -27,7 +27,7 @@ use super::super::LOADER;
 use super::super::IOURING;
 use super::super::SHARESPACE;
 use super::process::*;
-use super::super::qlib::singleton::*;
+use super::super::super::singleton::*;
 
 pub static MSG : Singleton<QMutex<Option<SignalArgs>>> = Singleton::<QMutex<Option<SignalArgs>>>::New();
 

@@ -22,9 +22,9 @@ use super::super::super::fs::file::*;
 use super::super::super::fs::dirent::*;
 use super::super::super::kernel::waiter::*;
 use super::super::super::task::*;
-use super::super::super::qlib::linux_def::*;
-use super::super::super::qlib::common::*;
-use super::super::super::qlib::mem::seq::*;
+use super::super::super::super::linux_def::*;
+use super::super::super::super::common::*;
+use super::super::super::super::mem::seq::*;
 use super::pipe::*;
 
 #[derive(Clone)]

@@ -14,9 +14,9 @@
 
 use core::sync::atomic;
 
-use super::super::qlib::uring::*;
-use super::super::qlib::uring::util::*;
-use super::super::qlib::common::*;
+use super::super::super::uring::*;
+use super::super::super::uring::util::*;
+use super::super::super::common::*;
 use super::super::Kernel::HostSpace;
 
 impl IoUring {

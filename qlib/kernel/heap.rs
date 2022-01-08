@@ -7,8 +7,8 @@ use core::sync::atomic::Ordering;
 //use core::cmp::max;
 use alloc::string::String;
 
-//use super::qlib::vcpu_mgr::*;
-use super::qlib::mem::list_allocator::*;
+//use super::super::vcpu_mgr::*;
+use super::super::mem::list_allocator::*;
 
 pub const HEAP_ADDR: u64 = 0x4040000000;
 pub struct GuestAllocator {

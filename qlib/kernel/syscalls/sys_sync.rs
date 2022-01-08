@@ -14,7 +14,7 @@
 
 
 use super::super::task::*;
-use super::super::qlib::common::*;
+use super::super::super::common::*;
 use super::super::fs::file::*;
 use super::super::fs::host::hostinodeop::*;
 use super::super::Kernel::HostSpace;

@@ -20,13 +20,13 @@ use ::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 
 use super::super::task::*;
-use super::super::qlib::common::*;
-use super::super::qlib::auth::*;
+use super::super::super::common::*;
+use super::super::super::auth::*;
 use super::super::fs::dirent::*;
 use super::super::fs::host::fs::*;
 use super::super::fs::filesystems::*;
 use super::super::fs::inode::*;
-use super::super::qlib::path::*;
+use super::super::super::path::*;
 use super::super::fs::mount::*;
 use super::super::fs::overlay::*;
 use super::super::fs::host::util::*;

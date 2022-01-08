@@ -19,18 +19,18 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use super::super::task::*;
-use super::super::qlib::common::*;
+use super::super::super::common::*;
 use super::super::taskMgr::*;
-pub use super::super::qlib::uring::cqueue::CompletionQueue;
-pub use super::super::qlib::uring::cqueue;
-pub use super::super::qlib::uring::squeue::SubmissionQueue;
-pub use super::super::qlib::uring::*;
+pub use super::super::super::uring::cqueue::CompletionQueue;
+pub use super::super::super::uring::cqueue;
+pub use super::super::super::uring::squeue::SubmissionQueue;
+pub use super::super::super::uring::*;
 use super::super::fs::file::*;
 
-use super::super::qlib::uring::util::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::vcpu_mgr::*;
-use super::super::qlib::socket_buf::*;
+use super::super::super::uring::util::*;
+use super::super::super::linux_def::*;
+use super::super::super::vcpu_mgr::*;
+use super::super::super::socket_buf::*;
 use super::super::kernel::waiter::*;
 use super::super::socket::hostinet::socket::*;
 use super::super::Kernel::HostSpace;
@@ -577,7 +577,7 @@ impl QUring {
                         print!("UringCall: submission full... idx {}", idx);
                         //drop(s);
                         //super::super::Kernel::HostSpace::UringWake(1);
-                        //super::super::qlib::ShareSpace::Yield();
+                        //super::super::super::ShareSpace::Yield();
                         continue
                     }
 

@@ -18,9 +18,9 @@ use alloc::string::String;
 use alloc::string::ToString;
 use core::any::Any;
 
-use super::super::super::qlib::common::*;
+use super::super::super::super::common::*;
 use super::super::super::task::*;
-use super::super::super::qlib::linux_def::*;
+use super::super::super::super::linux_def::*;
 use super::super::filesystems::*;
 use super::super::inode::*;
 use super::super::mount::*;

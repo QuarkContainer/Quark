@@ -16,10 +16,10 @@ use alloc::boxed::Box;
 
 use super::super::Kernel::HostSpace;
 use super::super::task::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
 use super::super::syscalls::syscalls::*;
-use super::super::qlib::linux::time::*;
+use super::super::super::linux::time::*;
 use super::super::threadmgr::task_syscall::*;
 use super::super::threadmgr::thread::*;
 use super::super::kernel::timer::timer::*;

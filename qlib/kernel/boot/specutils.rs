@@ -15,7 +15,7 @@
 use alloc::vec::Vec;
 use alloc::string::ToString;
 
-use super::super::qlib::path::*;
+use super::super::super::path::*;
 use super::*;
 
 pub fn ContainsStr(strs: &Vec<&str>, str: &str) -> bool {

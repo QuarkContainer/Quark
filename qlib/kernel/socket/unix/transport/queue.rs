@@ -18,8 +18,8 @@ use core::ops::Deref;
 use alloc::collections::linked_list::LinkedList;
 use alloc::vec::Vec;
 
-use super::super::super::super::qlib::common::*;
-use super::super::super::super::qlib::linux_def::*;
+use super::super::super::super::super::common::*;
+use super::super::super::super::super::linux_def::*;
 use super::super::super::super::kernel::waiter::queue::*;
 use super::super::super::super::tcpip::tcpip::*;
 use super::super::super::buffer::view::*;

@@ -2,12 +2,12 @@ use core::sync::atomic::AtomicU64;
 use alloc::sync::Arc;
 use core::ops::Deref;
 
-use super::super::qlib::mutex::*;
-use super::super::qlib::common::*;
-use super::super::qlib::task_mgr::*;
+use super::super::super::mutex::*;
+use super::super::super::common::*;
+use super::super::super::task_mgr::*;
 //use super::super::taskMgr::*;
 
-use super::super::qlib::linux_def::QOrdering;
+use super::super::super::linux_def::QOrdering;
 
 #[derive(Clone)]
 pub struct MultiWait(Arc<MultiWaitIntern>);

@@ -15,12 +15,12 @@
 
 use super::super::kernel::timer::timer::*;
 use super::super::kernel::fd_table::*;
-use super::super::qlib::linux::time::*;
+use super::super::super::linux::time::*;
 use super::super::fs::timerfd::*;
 use super::super::fs::flags::*;
 use super::super::task::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
 use super::super::syscalls::syscalls::*;
 
 // TimerfdCreate implements Linux syscall timerfd_create(2).

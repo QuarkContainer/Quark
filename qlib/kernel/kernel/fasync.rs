@@ -16,9 +16,9 @@ use alloc::sync::Arc;
 use ::qlib::mutex::*;
 use core::ops::Deref;
 
-use super::super::qlib::auth::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::linux::signal::*;
+use super::super::super::auth::*;
+use super::super::super::linux_def::*;
+use super::super::super::linux::signal::*;
 use super::super::task::*;
 use super::super::SignalDef::*;
 use super::super::threadmgr::processgroup::*;

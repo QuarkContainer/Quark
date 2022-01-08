@@ -15,8 +15,8 @@
 use alloc::vec::Vec;
 
 use super::super::task::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
 use super::super::syscalls::syscalls::*;
 
 // We unconditionally report a single NUMA node. This also means that our

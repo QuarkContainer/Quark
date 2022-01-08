@@ -20,9 +20,9 @@ use alloc::string::ToString;
 use ::qlib::mutex::*;
 use core::ops::Deref;
 
-use super::super::super::qlib::addr::*;
-use super::super::super::qlib::common::*;
-use super::super::super::qlib::linux_def::*;
+use super::super::super::super::addr::*;
+use super::super::super::super::common::*;
+use super::super::super::super::linux_def::*;
 use super::super::super::task::*;
 use super::super::super::memmgr::*;
 use super::super::super::memmgr::mm::*;

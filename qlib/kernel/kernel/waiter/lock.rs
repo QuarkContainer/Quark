@@ -17,7 +17,7 @@ use ::qlib::mutex::*;
 use core::ops::Deref;
 
 use super::super::super::threadmgr::task_block::*;
-use super::super::super::qlib::common::*;
+use super::super::super::super::common::*;
 use super::entry::*;
 use super::queue::*;
 use super::*;

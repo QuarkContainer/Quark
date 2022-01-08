@@ -15,8 +15,8 @@
 
 use super::super::task::*;
 use super::super::Kernel::HostSpace;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
 use super::super::fs::dirent::*;
 use super::super::util::cstring::*;
 use super::super::syscalls::syscalls::*;

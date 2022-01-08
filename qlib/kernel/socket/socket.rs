@@ -8,9 +8,9 @@ use core::sync::atomic::AtomicI64;
 use core::sync::atomic::Ordering;
 
 //use super::unix::transport::unix::*;
-use super::super::qlib::common::*;
-use super::super::qlib::device::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::common::*;
+use super::super::super::device::*;
+use super::super::super::linux_def::*;
 use super::super::task::*;
 use super::super::fs::file::*;
 use super::super::fs::filesystems::*;
@@ -19,7 +19,7 @@ use super::super::fs::mount::*;
 use super::super::fs::dirent::*;
 use super::super::fs::inode::*;
 use super::super::fs::host::util::*;
-use super::super::qlib::singleton::*;
+use super::super::super::singleton::*;
 
 pub static FAMILIAES : Singleton<QRwLock<Families>> = Singleton::<QRwLock<Families>>::New();
 pub static SOCKET_DEVICE : Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();

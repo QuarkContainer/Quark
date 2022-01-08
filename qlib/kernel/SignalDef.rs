@@ -16,8 +16,8 @@ use core::fmt;
 use alloc::collections::linked_list::LinkedList;
 use alloc::boxed::Box;
 
-use super::qlib::common::*;
-use super::qlib::linux_def::*;
+use super::super::common::*;
+use super::super::linux_def::*;
 use super::kernel::posixtimer::*;
 use super::task::*;
 

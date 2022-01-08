@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::qlib::common::*;
+use super::super::common::*;
 use super::Kernel::*;
 
 pub const GRND_NONBLOCK: u32 = 0x01;

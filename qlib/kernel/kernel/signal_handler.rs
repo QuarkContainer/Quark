@@ -18,7 +18,7 @@ use ::qlib::mutex::*;
 use core::ops::Deref;
 
 use super::super::SignalDef::*;
-use super::super::qlib::linux_def::*;
+use super::super::super::linux_def::*;
 
 #[derive(Clone, Debug)]
 pub struct SignalHandlersInternal {

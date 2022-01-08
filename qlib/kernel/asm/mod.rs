@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//use super::qlib::perf_tunning::*;
+//use super::super::perf_tunning::*;
 
 #[inline]
 pub fn WriteMsr(msr: u32, value: u64) {

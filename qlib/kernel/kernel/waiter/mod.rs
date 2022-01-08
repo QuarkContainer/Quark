@@ -23,7 +23,7 @@ pub mod chan;
 pub mod cond;
 pub mod qlock;
 
-use super::super::qlib::linux_def::*;
+use super::super::super::linux_def::*;
 use super::super::task::*;
 pub use self::entry::*;
 pub use self::waiter::*;
