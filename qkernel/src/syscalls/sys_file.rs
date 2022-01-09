@@ -38,7 +38,7 @@ use super::super::kernel::pipe::reader::*;
 use super::super::kernel::pipe::writer::*;
 use super::super::kernel::pipe::reader_writer::*;
 use super::super::syscalls::syscalls::*;
-use super::super::perflog::*;
+use super::super::kernel_def::*;
 
 fn fileOpAt(task: &Task, dirFd: i32, path: &str,
             func: &mut FnMut(&Dirent, &Dirent, &str, u32) -> Result<()>) -> Result<()> {

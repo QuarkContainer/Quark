@@ -2,6 +2,7 @@ use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 
 use super::qlib::*;
+use super::qlib::loader::*;
 use super::qlib::mutex::*;
 use super::qlib::common::*;
 use super::qlib::task_mgr::*;
@@ -203,3 +204,6 @@ pub fn OpenAt(_task: &Task, _dirFd: i32, _addr: u64, _flags: u32) -> Result<i32>
 
 pub fn SignalProcess(_signalArgs: &SignalArgs) {}
 
+pub fn StartRootContainer(_para: *const u8) {}
+pub fn StartExecProcess(_fd: i32, _process: Process) {}
+pub fn StartSubContainerProcess(_elfEntry: u64, _userStackAddr: u64, _kernelStackAddr: u64) {}

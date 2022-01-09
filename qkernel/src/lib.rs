@@ -63,46 +63,44 @@ extern crate x86;
 #[macro_use]
 mod print;
 
-#[macro_use]
-pub mod asm;
-mod taskMgr;
+//#[macro_use]
+//pub mod asm;
+//mod taskMgr;
 #[macro_use]
 mod qlib;
 #[macro_use]
 mod interrupt;
-mod Kernel;
-pub mod SignalDef;
-pub mod aqcall;
-mod arch;
-pub mod boot;
-pub mod fd;
-pub mod fs;
-pub mod guestfdnotifier;
-pub mod kernel;
-pub mod kernel_util;
-pub mod loader;
-pub mod memmgr;
-pub mod mm;
-pub mod socket;
 mod syscalls;
-pub mod task;
-pub mod threadmgr;
-pub mod vcpu;
-//pub mod ucall_server;
 pub mod backtracer;
-pub mod heap;
-pub mod perflog;
-pub mod quring;
-pub mod seqcount;
-pub mod stack;
-pub mod tcpip;
-pub mod uid;
 pub mod kernel_def;
-//pub mod util;
-pub mod version;
+
+use self::qlib::kernel::asm as asm;
+use self::qlib::kernel::arch as arch;
+use self::qlib::kernel::boot as boot;
+use self::qlib::kernel::fs as fs;
+use self::qlib::kernel::Kernel as Kernel;
+use self::qlib::kernel::kernel as kernel;
+use self::qlib::kernel::memmgr as memmgr;
+use self::qlib::kernel::quring as quring;
+use self::qlib::kernel::socket as socket;
+use self::qlib::kernel::threadmgr as threadmgr;
+use self::qlib::kernel::util as util;
+use self::qlib::kernel::fd as fd;
+use self::qlib::kernel::guestfdnotifier as guestfdnotifier;
+use self::qlib::kernel::heap as heap;
+use self::qlib::kernel::perflog as perflog;
+use self::qlib::kernel::SignalDef as SignalDef;
+use self::qlib::kernel::task as task;
+use self::qlib::kernel::taskMgr as taskMgr;
+use self::qlib::kernel::uid as uid;
+use self::qlib::kernel::vcpu as vcpu;
+use self::qlib::kernel::version as version;
+use self::qlib::kernel::loader as loader;
+
+use vcpu::CPU_LOCAL;
+use self::qlib::kernel::vcpu::*;
 
 use alloc::string::String;
-use alloc::vec::Vec;
 use core::panic::PanicInfo;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicI32;
@@ -133,14 +131,11 @@ use self::qlib::vcpu_mgr::*;
 use self::syscalls::syscalls::*;
 use self::task::*;
 use self::threadmgr::task_sched::*;
-use self::vcpu::*;
-//use self::memmgr::buf_allocator::*;
-//use self::qlib::mem::list_allocator::*;
+//use self::vcpu::*;
 use self::print::SCALE;
 use self::quring::*;
 //use self::heap::QAllocator;
 use self::heap::GuestAllocator;
-use self::qlib::singleton::*;
 use self::uid::*;
 
 pub const HEAP_START: usize = 0x70_2000_0000;
@@ -160,7 +155,7 @@ pub fn AllocatorPrint(_class: usize) -> String {
     return ALLOCATOR.Print(class);
 }
 
-pub static SHARESPACE: ShareSpaceRef = ShareSpaceRef::New();
+/*pub static SHARESPACE: ShareSpaceRef = ShareSpaceRef::New();
 
 pub static KERNEL_PAGETABLE: Singleton<PageTables> = Singleton::<PageTables>::New();
 pub static PAGE_MGR: Singleton<PageMgr> = Singleton::<PageMgr>::New();
@@ -168,7 +163,9 @@ pub static LOADER: Singleton<Loader> = Singleton::<Loader>::New();
 pub static IOURING: Singleton<QUring> = Singleton::<QUring>::New();
 pub static KERNEL_STACK_ALLOCATOR: Singleton<AlignedAllocator> = Singleton::<AlignedAllocator>::New();
 pub static SHUTDOWN: Singleton<AtomicBool> = Singleton::<AtomicBool>::New();
-pub static EXIT_CODE: Singleton<AtomicI32> = Singleton::<AtomicI32>::New();
+pub static EXIT_CODE: Singleton<AtomicI32> = Singleton::<AtomicI32>::New();*/
+
+use self::qlib::kernel::*;
 
 pub fn SingletonInit() {
     unsafe {

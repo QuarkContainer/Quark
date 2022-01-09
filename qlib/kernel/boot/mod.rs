@@ -17,6 +17,6 @@ pub mod oci;
 pub mod config;
 pub mod specutils;
 pub mod loader;
-//pub mod controller;
+pub mod controller;
 pub mod process;
 

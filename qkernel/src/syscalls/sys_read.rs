@@ -21,7 +21,7 @@ use super::super::qlib::common::*;
 use super::super::qlib::mem::block::*;
 use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
-use super::super::perflog::*;
+use super::super::kernel_def::*;
 
 pub fn SysRead(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let fd = args.arg0 as i32;
