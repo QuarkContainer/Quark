@@ -5,9 +5,9 @@ target ?= $(arch)-qkernel
 qkernel := ../target/$(target)/release/libqkernel.a
 qkernel_debug := ../target/$(target)/debug/libqkernel.a
 
-linker_script := src/arch/$(arch)/linker.ld
-assembly_source_files := $(wildcard src/arch/$(arch)/*.s)
-assembly_object_files := $(patsubst src/arch/$(arch)/%.s, \
+linker_script := src/qlib/kernel/arch/$(arch)/linker.ld
+assembly_source_files := $(wildcard src/qlib/kernel/arch/$(arch)/*.s)
+assembly_object_files := $(patsubst src/qlib/kernel/arch/$(arch)/%.s, \
 	../build/arch/$(arch)/%.o, $(assembly_source_files))
 
 all: $(kernel)
@@ -30,7 +30,7 @@ kernel:
 kernel_debug:
 	CARGO_TARGET_DIR=../target cargo xbuild --target x86_64-qkernel.json
 
-../build/arch/$(arch)/%.o: src/arch/$(arch)/%.s
+../build/arch/$(arch)/%.o: src/qlib/kernel/arch/$(arch)/%.s
 	@mkdir -p $(shell dirname $@)
 	$(AS) $^ -o $@
 
