@@ -14,7 +14,7 @@
 
 use super::guestfdnotifier::*;
 use super::super::qmsg::*;
-use super::boot::controller::SignalProcess;
+use super::super::super::kernel_def::SignalProcess;
 
 impl HostInputMsg {
     pub fn Process(self) {

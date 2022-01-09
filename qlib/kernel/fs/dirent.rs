@@ -16,7 +16,7 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::sync::Weak;
 use spin::*;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::ToString;
 use alloc::vec::Vec;

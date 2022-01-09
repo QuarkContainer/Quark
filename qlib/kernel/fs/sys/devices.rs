@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use alloc::vec::Vec;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::ToString;

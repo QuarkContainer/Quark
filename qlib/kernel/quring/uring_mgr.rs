@@ -37,7 +37,7 @@ use super::super::Kernel::HostSpace;
 use super::super::kernel::async_wait::*;
 use super::super::IOURING;
 use super::uring_op::*;
-use super::async::*;
+use super::uring_async::*;
 use super::super::kernel::waiter::qlock::*;
 
 pub fn QUringTrigger() -> usize {

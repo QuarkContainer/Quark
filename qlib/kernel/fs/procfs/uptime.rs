@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 
 use super::super::attr::*;
 use super::super::file::*;

@@ -14,7 +14,7 @@
 
 use alloc::sync::Arc;
 use alloc::string::ToString;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 
 use super::super::super::super::super::common::*;

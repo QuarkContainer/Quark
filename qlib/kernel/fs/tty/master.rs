@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use core::ops::Deref;
 use core::any::Any;
 use alloc::string::String;

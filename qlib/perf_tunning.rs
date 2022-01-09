@@ -19,7 +19,7 @@ use super::mutex::*;
 use core::mem;
 
 use super::super::asm::Rdtsc;
-pub use super::super::perflog::PerfType;
+pub use super::super::kernel_def::*;
 use super::singleton::*;
 
 pub static COUNTS : Singleton<CounterSet> = Singleton::<CounterSet>::New();

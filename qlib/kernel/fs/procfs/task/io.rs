@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use alloc::string::ToString;
 use core::sync::atomic::Ordering;
 use alloc::vec::Vec;
@@ -85,7 +85,7 @@ impl SimpleFileTrait for IOData {
 }
 
 /*use alloc::sync::Arc;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use alloc::vec::Vec;
 use core::sync::atomic::Ordering;
 use alloc::string::ToString;

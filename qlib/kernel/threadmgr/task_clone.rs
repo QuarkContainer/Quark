@@ -27,11 +27,12 @@ use super::super::SignalDef::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::super::task_mgr::*;
-use super::super::syscalls::sys_tls::*;
+//use super::super::syscalls::sys_tls::*;
 use super::super::task::*;
 use super::task_block::*;
 use super::task_stop::*;
 use super::super::perflog::*;
+use super::super::super::super::kernel_def::*;
 
 pub fn IsValidSegmentBase(addr: u64) -> bool {
     return addr < MAX_ADDR64

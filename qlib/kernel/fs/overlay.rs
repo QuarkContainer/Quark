@@ -15,7 +15,7 @@
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use spin::*;
 
 use super::super::super::linux_def::*;

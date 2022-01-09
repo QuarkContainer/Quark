@@ -3,8 +3,11 @@ use core::sync::atomic::Ordering;
 
 use super::qlib::*;
 use super::qlib::mutex::*;
+use super::qlib::common::*;
 use super::qlib::task_mgr::*;
 use super::qlib::qmsg::*;
+use super::qlib::control_msg::*;
+use super::qlib::kernel::task::*;
 use super::FD_NOTIFIER;
 use super::QUARK_CONFIG;
 use super::KERNEL_IO_THREAD;
@@ -175,6 +178,10 @@ pub enum PerfType {
     End,
     User, //work around for kernel clone
     Idle, //work around for kernel clone
+
+    ////////////////////////////////////////
+    Blocked,
+    Kernel
 }
 
 impl CounterSet {
@@ -188,6 +195,11 @@ impl CounterSet {
     }
 }
 
-pub fn switch(_from: TaskId, _to: TaskId) {
+pub fn switch(_from: TaskId, _to: TaskId) {}
 
+pub fn OpenAt(_task: &Task, _dirFd: i32, _addr: u64, _flags: u32) -> Result<i32> {
+    return Ok(0)
 }
+
+pub fn SignalProcess(_signalArgs: &SignalArgs) {}
+

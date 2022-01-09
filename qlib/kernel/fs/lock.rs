@@ -15,7 +15,7 @@
 use alloc::collections::btree_set::BTreeSet;
 use core::ops::Deref;
 use alloc::sync::Arc;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use alloc::string::String;
 
 use super::super::super::mem::areaset::*;

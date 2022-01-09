@@ -22,9 +22,9 @@ use alloc::boxed::Box;
 use core::sync::atomic::Ordering;
 
 //use super::arch::x86_64::arch_x86::*;
+use super::super::super::kernel_def::*;
 use super::super::linux_def::*;
 use super::super::vcpu_mgr::*;
-use super::asm::child_clone;
 use super::super::common::*;
 use super::SignalDef::*;
 use super::*;
@@ -33,7 +33,6 @@ use super::super::auth::*;
 use super::super::task_mgr::*;
 use super::super::perf_tunning::*;
 use super::kernel::time::*;
-use super::syscalls::*;
 use super::super::usage::io::*;
 use super::fs::dirent::*;
 use super::kernel::uts_namespace::*;
@@ -773,7 +772,7 @@ impl Task {
     //todo: remove this
     pub fn Open(&mut self, fileName: u64, flags: u64, _mode: u64) -> i64 {
         //todo: mode?
-        match sys_file::openAt(self, ATType::AT_FDCWD, fileName, flags as u32) {
+        match OpenAt(self, ATType::AT_FDCWD, fileName, flags as u32) {
             Ok(fd) => return fd as i64,
             Err(Error::SysError(e)) => return -e as i64,
             _ => panic!("Open get unknown failure"),

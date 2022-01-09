@@ -596,7 +596,7 @@ impl FutexMgr {
     // FUTEX_OWNER_DIED is only set by the Linux when robust lists are in use (see
     // exit_robust_list()). Given we don't support robust lists, although handled
     // below, it's never set.
-    pub fn LockPI(&self, w: &WaitEntry, t: &Target, addr: u64, tid: u32, private: bool, try: bool) -> Result<bool> {
+    pub fn LockPI(&self, w: &WaitEntry, t: &Target, addr: u64, tid: u32, private: bool, retry: bool) -> Result<bool> {
         let k = Getkey(t, addr, private)?;
 
         w.Clear();
@@ -606,7 +606,7 @@ impl FutexMgr {
 
         let q = self.lockQueueWithCreate(&k);
 
-        let success = match self.lockPILocked(w, t, addr, tid, &q, try) {
+        let success = match self.lockPILocked(w, t, addr, tid, &q, retry) {
             Err(e) => {
                 self.unlock(&k);
                 return Err(e)
@@ -618,7 +618,7 @@ impl FutexMgr {
         return Ok(success)
     }
 
-    fn lockPILocked(&self, w: &WaitEntry, t: &Target, addr: u64, tid: u32, q: &Queue, try: bool) -> Result<bool> {
+    fn lockPILocked(&self, w: &WaitEntry, t: &Target, addr: u64, tid: u32, q: &Queue, tryit: bool) -> Result<bool> {
         loop {
             let cur = t.LoadU32(addr)?;
 
@@ -647,7 +647,7 @@ impl FutexMgr {
             }
 
             // Futex is already owned, prepare to wait.
-            if try {
+            if tryit {
                 // Caller doesn't want to wait.
                 return Ok(false)
             }

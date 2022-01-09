@@ -14,7 +14,7 @@
 
 use alloc::string::String;
 use alloc::sync::Arc;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::ToString;
 use alloc::vec::Vec;
@@ -793,7 +793,7 @@ pub struct FsInfo {
 #[cfg(test1)]
 mod tests {
     use alloc::sync::Arc;
-    use ::qlib::mutex::*;
+    use crate::qlib::mutex::*;
     use core::any::Any;
     use alloc::rc::Rc;
     use core::cell::RefCell;

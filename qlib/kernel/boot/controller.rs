@@ -39,11 +39,6 @@ pub fn ControllerProcessHandler() -> Result<()> {
     }
 }
 
-pub fn SignalProcess(signalArgs: &SignalArgs) {
-    *MSG.lock() = Some(signalArgs.clone());
-    taskMgr::CreateTask(SignalHandler, 0 as *const u8, false);
-}
-
 pub fn HandleSignal(signalArgs: &SignalArgs) {
     info!("get signal {:?}", &signalArgs);
     let task = Task::Current();

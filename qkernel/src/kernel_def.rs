@@ -19,8 +19,11 @@ use super::qlib::kernel::perflog::*;
 use super::qlib::perf_tunning::*;
 use super::qlib::vcpu_mgr::*;
 use super::qlib::uring::*;
+use super::qlib::control_msg::*;
 use super::qlib::mem::list_allocator::*;
 use super::Kernel::HostSpace;
+use super::syscalls::sys_file::*;
+use super::boot::controller::*;
 
 impl IoUring {
     /// Initiate asynchronous I/O.
@@ -131,7 +134,6 @@ pub enum PerfType {
     End,
 }
 
-
 impl CounterSet {
     pub const PERM_COUNTER_SET_SIZE : usize = 8;
 
@@ -170,4 +172,14 @@ fn switch(from: TaskId, to: TaskId) {
 
     Task::Current().PerfGofrom(PerfType::Blocked);
     Task::Current().AccountTaskLeave(SchedState::Blocked);
+}
+
+pub fn OpenAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
+    return openAt(task, dirFd, addr, flags)
+}
+
+
+pub fn SignalProcess(signalArgs: &SignalArgs) {
+    *MSG.lock() = Some(signalArgs.clone());
+    taskMgr::CreateTask(SignalHandler, 0 as *const u8, false);
 }

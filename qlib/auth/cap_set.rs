@@ -14,7 +14,7 @@
 
 use alloc::vec::Vec;
 
-use super::super::super::qlib::linux_def::*;
+use super::super::linux_def::*;
 
 pub const ALL_CAP: CapSet = CapSet((1 << Capability::CAP_LAST_CAP) - 1);
 

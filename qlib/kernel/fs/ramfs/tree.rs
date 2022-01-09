@@ -17,7 +17,7 @@ use alloc::string::ToString;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::vec::Vec;
 use alloc::sync::Arc;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 
 use super::dir::*;
 use super::super::mount::*;

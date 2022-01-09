@@ -80,7 +80,7 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use tempfile::Builder;
     use alloc::sync::Arc;
-    use ::qlib::mutex::*;
+    use crate::qlib::mutex::*;
     use std::fs::*;
     use std::str;
 

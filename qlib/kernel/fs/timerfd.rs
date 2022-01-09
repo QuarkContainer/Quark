@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use core::any::Any;
 use core::slice;
 use alloc::sync::Arc;

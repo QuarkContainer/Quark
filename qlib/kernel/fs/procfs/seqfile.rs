@@ -15,7 +15,7 @@
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use alloc::vec::Vec;
 use core::any::Any;
 use core::ops::Deref;
@@ -38,7 +38,6 @@ use super::super::super::kernel::waiter::qlock::*;
 use super::super::super::super::linux_def::*;
 use super::super::super::super::common::*;
 use super::super::super::super::auth::*;
-use super::super::super::super::mutex::*;
 use super::super::super::uid::*;
 
 #[derive(Clone, Copy)]

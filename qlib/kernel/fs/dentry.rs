@@ -18,7 +18,7 @@ use alloc::collections::btree_map::BTreeMap;
 use alloc::collections::btree_map::Range;
 use core::ops::Bound::*;
 use alloc::vec::Vec;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use alloc::sync::Arc;
 
 use super::super::super::device::*;

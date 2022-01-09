@@ -18,12 +18,12 @@ use core::mem;
 use crate::qlib::mutex::*;
 
 use super::super::perf_tunning::*;
-use super::super::vcpu_mgr::*;
 use super::uid::*;
 use super::task::*;
 use super::super::singleton::*;
 
 pub static THREAD_COUNTS : Singleton<QMutex<ThreadPerfCounters>> = Singleton::<QMutex<ThreadPerfCounters>>::New();
+
 
 #[derive(Default)]
 pub struct ThreadPerfCounters {

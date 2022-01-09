@@ -13,12 +13,12 @@
 // limitations under the License.
 
 use alloc::string::String;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use core::any::Any;
 use alloc::vec::Vec;
 use alloc::sync::Arc;
 
-use socket::unix::transport::unix::*;
+use super::super::super::socket::unix::transport::unix::*;
 use super::super::host::hostinodeop::*;
 use super::super::super::super::common::*;
 use super::super::super::super::auth::*;

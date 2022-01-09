@@ -14,7 +14,6 @@
 
 pub mod uring_mgr;
 pub mod uring_op;
-pub mod uring;
-pub mod async;
+pub mod uring_async;
 
 pub use uring_mgr::*;

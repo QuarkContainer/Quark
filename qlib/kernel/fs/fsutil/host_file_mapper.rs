@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use alloc::collections::btree_map::BTreeMap;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 
 use super::super::super::super::linux_def::*;
 use super::super::super::super::range::*;

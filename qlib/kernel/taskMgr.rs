@@ -21,7 +21,6 @@ use super::SHARESPACE;
 use super::super::task_mgr::*;
 use super::Kernel::HostSpace;
 use super::kernel::kernel::*;
-use super::super::perf_tunning::*;
 use super::super::linux_def::*;
 use super::super::vcpu_mgr::*;
 use super::threadmgr::task_sched::*;

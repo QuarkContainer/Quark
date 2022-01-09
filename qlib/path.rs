@@ -16,7 +16,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::string::ToString;
 
-use super::super::qlib::common::*;
+use super::common::*;
 
 pub struct Lazybuf<'a> {
     s: &'a [u8],

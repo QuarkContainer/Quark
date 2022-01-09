@@ -23,7 +23,7 @@ use super::super::fs::host::hostinodeop::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::syscalls::syscalls::*;
-use super::super::quring::async::*;
+use super::super::quring::uring_async::*;
 use super::super::IOURING;
 use super::super::SHARESPACE;
 use super::sys_poll::*;

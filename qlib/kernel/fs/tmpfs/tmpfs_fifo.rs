@@ -26,7 +26,6 @@ use super::super::super::super::device::*;
 use super::super::super::kernel::time::*;
 use super::super::super::kernel::pipe::pipe::*;
 use super::super::super::kernel::pipe::node::*;
-use super::super::super::socket::unix::transport::unix::*;
 use super::super::super::task::*;
 use super::super::attr::*;
 use super::super::mount::*;

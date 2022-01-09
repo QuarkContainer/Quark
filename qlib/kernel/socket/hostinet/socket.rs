@@ -24,11 +24,10 @@ use core::ops::Deref;
 use crate::qlib::mutex::*;
 use core::fmt;
 
-use ::socket::control::ControlMessage;
-
 //use super::super::*;
 use super::super::super::guestfdnotifier::*;
 use super::super::socket::*;
+use super::super::control::*;
 use super::super::unix::transport::unix::*;
 use super::super::super::fs::file::*;
 use super::super::super::fs::flags::*;
@@ -54,7 +53,7 @@ use super::super::super::fd::*;
 use super::super::super::tcpip::tcpip::*;
 use super::super::super::SHARESPACE;
 use super::super::super::super::linux::time::Timeval;
-use super::super::control::*;
+use super::super::control::ControlMessageTCPInq;
 use super::rdma_socket::*;
 
 fn newSocketFile(task: &Task, family: i32, fd: i32, stype: i32, nonblock: bool, socketBuf: SocketBufType, addr: Option<Vec<u8>>) -> Result<File> {

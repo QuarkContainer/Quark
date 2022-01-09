@@ -910,9 +910,7 @@ impl HostSpace {
         let bytes = str.as_bytes();
         let trigger = super::SHARESPACE.Log(bytes);
         if trigger {
-
-            // porting...
-            //super::IOURING.LogFlush();
+            super::IOURING.LogFlush();
         }
     }
 

@@ -16,7 +16,7 @@ use alloc::string::String;
 use alloc::string::ToString;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::vec::Vec;
-use ::qlib::mutex::*;
+use crate::qlib::mutex::*;
 use core::any::Any;
 use alloc::sync::Arc;
 use core::ops::Deref;
