@@ -39,7 +39,7 @@ pub mod uid;
 pub mod vcpu;
 pub mod version;
 pub mod loader;
-pub mod fdinfo;
+pub mod guestfdnotifier;
 
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicI32;

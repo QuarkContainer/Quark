@@ -86,7 +86,7 @@ use self::qlib::kernel::socket as socket;
 use self::qlib::kernel::threadmgr as threadmgr;
 use self::qlib::kernel::util as util;
 use self::qlib::kernel::fd as fd;
-use self::qlib::kernel::fdinfo::guestfdnotifier as guestfdnotifier;
+use self::qlib::kernel::guestfdnotifier as guestfdnotifier;
 use self::qlib::kernel::heap as heap;
 use self::qlib::kernel::perflog as perflog;
 use self::qlib::kernel::SignalDef as SignalDef;

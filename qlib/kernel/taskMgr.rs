@@ -26,7 +26,7 @@ use super::super::vcpu_mgr::*;
 use super::threadmgr::task_sched::*;
 use super::KERNEL_STACK_ALLOCATOR;
 use super::quring::uring_mgr::*;
-use super::fdinfo::guestfdnotifier::GUEST_NOTIFIER;
+use super::guestfdnotifier::GUEST_NOTIFIER;
 use super::asm::*;
 use super::Shutdown;
 

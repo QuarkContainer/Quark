@@ -20,7 +20,7 @@ use alloc::vec::Vec;
 use alloc::sync::Arc;
 use core::any::Any;
 
-use super::super::super::fdinfo::guestfdnotifier::*;
+use super::super::super::guestfdnotifier::*;
 use super::super::super::kernel::waiter::*;
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
