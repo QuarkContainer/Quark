@@ -5,33 +5,29 @@ use super::super::super::qlib::mutex::*;
 use core::mem;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-use lazy_static::lazy_static;
 
 use super::super::super::IO_MGR;
 use super::super::super::URING_MGR;
-//use super::super::super::SHARE_SPACE;
 use super::super::super::qlib::linux_def::*;
-//use super::super::super::vmspace::singleton::*;
 use super::super::super::qlib::common::*;
-//use super::super::super::qlib::task_mgr::*;
 use super::super::super::qlib::socket_buf::*;
 use super::super::super::qlib::qmsg::qcall::*;
-//use super::super::super::qlib::qmsg::input::*;
 use super::fdinfo::*;
 use super::socket_info::*;
 use super::rdma::*;
 
-lazy_static! {
-    pub static ref RDMA: RDMAContext = RDMAContext::default();
+pub struct RDMAServerSockIntern {
+    pub fd: i32,
+    pub acceptQueue: AcceptQueue,
 }
 
 #[derive(Clone)]
-pub struct RDMAServerSock(Arc<QMutex<RDMAServerSockIntern>>);
+pub struct RDMAServerSock(Arc<RDMAServerSockIntern>);
 
 impl Deref for RDMAServerSock {
-    type Target = Arc<QMutex<RDMAServerSockIntern>>;
+    type Target = Arc<RDMAServerSockIntern>;
 
-    fn deref(&self) -> &Arc<QMutex<RDMAServerSockIntern>> {
+    fn deref(&self) -> &Arc<RDMAServerSockIntern> {
         &self.0
     }
 }
@@ -39,10 +35,10 @@ impl Deref for RDMAServerSock {
 impl RDMAServerSock {
     pub fn New(fd: i32, acceptQueue: AcceptQueue) -> Self {
         return Self (
-            Arc::new(QMutex::new(RDMAServerSockIntern{
+            Arc::new(RDMAServerSockIntern{
                 fd: fd,
                 acceptQueue: acceptQueue
-            }))
+            })
         )
     }
 
@@ -51,8 +47,8 @@ impl RDMAServerSock {
     }
 
     pub fn Accept(&self) {
-        let minefd = self.lock().fd;
-        let acceptQueue = self.lock().acceptQueue.clone();
+        let minefd = self.fd;
+        let acceptQueue = self.acceptQueue.clone();
         if acceptQueue.lock().Err() != 0 {
             FdNotify(minefd, EVENT_ERR | EVENT_IN);
             return
@@ -125,11 +121,6 @@ pub struct RDMAServerSocketInfo {
     pub addr: TcpSockAddr,
     pub len: u32,
     pub sockBuf: Arc<SocketBuff>
-}
-
-pub struct RDMAServerSockIntern {
-    pub fd: i32,
-    pub acceptQueue: AcceptQueue,
 }
 
 pub struct RDMADataSockIntern {
@@ -431,8 +422,8 @@ impl RDMADataSock {
                 msg.Finish(0)
             }
             RDMAType::Server(ref serverSock) => {
-                let minefd = serverSock.sock.lock().fd;
-                let acceptQueue = serverSock.sock.lock().acceptQueue.clone();
+                let minefd = serverSock.sock.fd;
+                let acceptQueue = serverSock.sock.acceptQueue.clone();
                 let (trigger, _tmp) = acceptQueue.lock().EnqSocket(serverSock.fd, serverSock.addr, serverSock.len, serverSock.sockBuf.clone());
 
                 if trigger {

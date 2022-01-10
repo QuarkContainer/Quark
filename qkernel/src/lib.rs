@@ -155,16 +155,6 @@ pub fn AllocatorPrint(_class: usize) -> String {
     return ALLOCATOR.Print(class);
 }
 
-/*pub static SHARESPACE: ShareSpaceRef = ShareSpaceRef::New();
-
-pub static KERNEL_PAGETABLE: Singleton<PageTables> = Singleton::<PageTables>::New();
-pub static PAGE_MGR: Singleton<PageMgr> = Singleton::<PageMgr>::New();
-pub static LOADER: Singleton<Loader> = Singleton::<Loader>::New();
-pub static IOURING: Singleton<QUring> = Singleton::<QUring>::New();
-pub static KERNEL_STACK_ALLOCATOR: Singleton<AlignedAllocator> = Singleton::<AlignedAllocator>::New();
-pub static SHUTDOWN: Singleton<AtomicBool> = Singleton::<AtomicBool>::New();
-pub static EXIT_CODE: Singleton<AtomicI32> = Singleton::<AtomicI32>::New();*/
-
 use self::qlib::kernel::*;
 
 pub fn SingletonInit() {

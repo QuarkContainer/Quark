@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::sync::Arc;
 use alloc::collections::btree_map::BTreeMap;
 use crate::qlib::mutex::*;
 use core::ops::Deref;
@@ -48,14 +49,122 @@ pub fn Notify(fd: i32, mask: EventMask) {
 }
 
 pub fn HostLogFlush() {
-    //GUEST_NOTIFIER.PrintStrRespHandler(addr, len)
-    super::IOURING.LogFlush();
+    IOURING.LogFlush();
 }
 
-pub struct GuestFdInfo {
+pub struct FdWaitIntern {
     pub queue: Queue,
     pub mask: EventMask,
-    pub waiting: bool,
+}
+
+#[derive(Clone)]
+pub struct FdWaitInfo(Arc<QMutex<FdWaitIntern>>);
+
+impl Deref for FdWaitInfo {
+    type Target = Arc<QMutex<FdWaitIntern>>;
+
+    fn deref(&self) -> &Arc<QMutex<FdWaitIntern>> {
+        &self.0
+    }
+}
+
+impl FdWaitInfo {
+    pub fn New(queue: Queue, mask: EventMask) -> Self {
+        let intern = FdWaitIntern {
+            queue,
+            mask
+        };
+
+        return Self(Arc::new(QMutex::new(intern)))
+    }
+
+    pub fn UpdateFDAsync(&self, fd: i32, epollfd: i32) -> Result<()> {
+        let op;
+        let mask = {
+            let mut fi = self.lock();
+
+            let mask = fi.queue.Events() | LibcConst::EPOLLET as u64;
+
+            if fi.mask == 0 {
+                if mask != 0 {
+                    op = LibcConst::EPOLL_CTL_ADD;
+                } else {
+                    return Ok(())
+                }
+            } else {
+                if mask == 0 {
+                    op = LibcConst::EPOLL_CTL_DEL;
+                } else {
+                    if mask | fi.mask == fi.mask {
+                        return Ok(())
+                    }
+                    op = LibcConst::EPOLL_CTL_MOD;
+                }
+            }
+
+            fi.mask = mask;
+
+            mask
+        };
+
+        IOURING.EpollCtl(epollfd, fd, op as i32, mask as u32);
+        return Ok(())
+    }
+
+    pub fn UpdateFDSync(&self, fd: i32) -> Result<()> {
+        let op = LibcConst::EPOLL_CTL_ADD as u32/*dummy value*/;
+        let mask = {
+            let mut fi = self.lock();
+            let mask = fi.queue.Events();
+            fi.mask = mask;
+            mask
+        };
+
+        return Self::waitfd(fd, op, mask);
+    }
+
+    pub fn UpdateFDSync1(&self, fd: i32) -> Result<()> {
+        let op;
+        let mask = {
+            let mut fi = self.lock();
+
+            let mask = fi.queue.Events() | LibcConst::EPOLLET as u64;
+
+            if fi.mask == 0 {
+                if mask != 0 {
+                    op = LibcConst::EPOLL_CTL_ADD;
+                } else {
+                    return Ok(())
+                }
+            } else {
+                if mask == 0 {
+                    op = LibcConst::EPOLL_CTL_DEL;
+                } else {
+                    if mask | fi.mask == fi.mask {
+                        return Ok(())
+                    }
+                    op = LibcConst::EPOLL_CTL_MOD;
+                }
+            }
+
+            fi.mask = mask;
+
+            mask
+        };
+
+        return Self::waitfd(fd, op as u32, mask);
+    }
+
+    pub fn Notify(&self, mask: EventMask) {
+        let queue = self.lock().queue.clone();
+        queue.Notify(EventMaskFromLinux(mask as u32));
+    }
+
+    fn waitfd(fd: i32, op: u32, mask: EventMask) -> Result<()> {
+        HostSpace::WaitFDAsync(fd, op, mask);
+
+        return Ok(())
+    }
 }
 
 // notifier holds all the state necessary to issue notifications when IO events
@@ -63,7 +172,7 @@ pub struct GuestFdInfo {
 pub struct NotifierInternal {
     // fdMap maps file descriptors to their notification queues and waiting
     // status.
-    fdMap: BTreeMap<i32, GuestFdInfo>,
+    fdMap: BTreeMap<i32, FdWaitInfo>,
     pub epollfd: i32,
 }
 
@@ -136,103 +245,44 @@ impl Notifier {
         }
     }
 
-    pub fn UpdateFDAsync(&self, fd: i32) -> Result<()> {
-        let op;
-        let epollfd;
-        let mask = {
-            let mut n = self.lock();
-            epollfd = n.epollfd;
-            let fi = match n.fdMap.get_mut(&fd) {
-                None => {
-                    return Ok(())
-                }
-                Some(fi) => fi,
-            };
-
-            let mask = fi.queue.Events() | LibcConst::EPOLLET as u64;
-
-            if !fi.waiting {
-                if mask != 0 {
-                    op = LibcConst::EPOLL_CTL_ADD;
-                    fi.waiting = true;
-                } else {
-                    return Ok(())
-                }
-            } else {
-                if mask == 0 {
-                    op = LibcConst::EPOLL_CTL_DEL;
-                    fi.waiting = false;
-                } else {
-                    if mask | fi.mask == fi.mask {
-                        return Ok(())
-                    }
-                    op = LibcConst::EPOLL_CTL_MOD;
-                }
+    pub fn FdWaitInfo(&self, fd: i32) -> Option<FdWaitInfo> {
+        let fi = match self.lock().fdMap.get(&fd) {
+            None => {
+                return None
             }
-
-            fi.mask = mask;
-
-            mask
+            Some(fi) => fi.clone(),
         };
 
-        IOURING.EpollCtl(epollfd, fd, op as i32, mask as u32);
-        return Ok(())
+        return Some(fi)
+    }
+
+    pub fn UpdateFDAsync(&self, fd: i32) -> Result<()> {
+        let fi = match self.FdWaitInfo(fd) {
+            None => return Ok(()),
+            Some(fi) => fi
+        };
+
+        let epollfd = self.lock().epollfd;
+
+        return fi.UpdateFDAsync(fd, epollfd);
     }
 
     pub fn UpdateFDSync(&self, fd: i32) -> Result<()> {
-        let op = LibcConst::EPOLL_CTL_ADD as u32/*dummy value*/;
-        let mask = {
-            let mut n = self.lock();
-            let fi = match n.fdMap.get_mut(&fd) {
-                None => {
-                    return Ok(())
-                }
-                Some(fi) => fi,
-            };
-
-            let mask = fi.queue.Events();
-            mask
+        let fi = match self.FdWaitInfo(fd) {
+            None => return Ok(()),
+            Some(fi) => fi
         };
 
-        return Self::waitfd(fd, op, mask);
+        return fi.UpdateFDSync(fd);
     }
 
     pub fn UpdateFDSync1(&self, fd: i32) -> Result<()> {
-        let op;
-        let mask = {
-            let mut n = self.lock();
-            let fi = match n.fdMap.get_mut(&fd) {
-                None => {
-                    return Ok(())
-                }
-                Some(fi) => fi,
-            };
-
-            let mask = fi.queue.Events() | LibcConst::EPOLLET as u64;
-
-            if !fi.waiting {
-                if mask != 0 {
-                    op = LibcConst::EPOLL_CTL_ADD;
-                    fi.waiting = true;
-                } else {
-                    return Ok(())
-                }
-            } else {
-                if mask == 0 {
-                    op = LibcConst::EPOLL_CTL_DEL;
-                    fi.waiting = false;
-                } else {
-                    if mask | fi.mask == fi.mask {
-                        return Ok(())
-                    }
-                    op = LibcConst::EPOLL_CTL_MOD;
-                }
-            }
-
-            mask
+        let fi = match self.FdWaitInfo(fd) {
+            None => return Ok(()),
+            Some(fi) => fi
         };
 
-        return Self::waitfd(fd, op as u32, mask);
+        return fi.UpdateFDSync1(fd);
     }
 
     pub fn AddFD(&self, fd: i32, iops: &HostInodeOp) {
@@ -244,11 +294,7 @@ impl Notifier {
             panic!("GUEST_NOTIFIER::AddFD fd {} added twice", fd);
         }
 
-        n.fdMap.insert(fd, GuestFdInfo {
-            queue: queue.clone(),
-            mask: 0,
-            waiting: false,
-        });
+        n.fdMap.insert(fd, FdWaitInfo::New(queue.clone(), 0));
     }
 
     pub fn RemoveFD(&self, fd: i32) {
@@ -257,18 +303,11 @@ impl Notifier {
     }
 
     pub fn Notify(&self, fd: i32, mask: EventMask) {
-        let queue = {
-            let n = self.lock();
-            match n.fdMap.get(&fd) {
-                None => {
-                    return
-                },
-                Some(fi) => {
-                    fi.queue.clone()
-                }
-            }
+        let fi = match self.FdWaitInfo(fd) {
+            None => return,
+            Some(fi) => fi
         };
 
-        queue.Notify(EventMaskFromLinux(mask as u32));
+        fi.Notify(mask);
     }
 }
