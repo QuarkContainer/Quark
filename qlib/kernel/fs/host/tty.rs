@@ -19,7 +19,7 @@ use core::ops::Deref;
 
 use super::super::super::kernel::waiter::*;
 use super::super::super::kernel::waiter::qlock::*;
-use super::super::super::guestfdnotifier::*;
+use super::super::super::fdinfo::guestfdnotifier::*;
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
 use super::super::super::super::socket_buf::*;

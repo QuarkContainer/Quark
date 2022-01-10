@@ -22,7 +22,7 @@ use core::ops::Deref;
 use alloc::vec::Vec;
 
 use super::super::super::socket::unix::transport::unix::*;
-use super::super::super::guestfdnotifier::*;
+use super::super::super::fdinfo::guestfdnotifier::*;
 use super::super::super::super::common::*;
 use super::super::super::super::range::*;
 use super::super::super::memmgr::mapping_set::*;

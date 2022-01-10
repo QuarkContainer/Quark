@@ -184,9 +184,6 @@ impl IOMgr {
 //guest fdset for one process
 #[derive(Debug, Clone)]
 pub struct FdTbl {
-    //pub gaps: GapMgr,
-    //map between guest fd to host fd
-    //pub map: BTreeMap<i32, osfd>,
     pub map: BTreeMap<i32, FdInfo>,
 }
 

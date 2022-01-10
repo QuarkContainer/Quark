@@ -8,6 +8,12 @@ use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::IO_MGR;
 
+use lazy_static::lazy_static;
+
+lazy_static! {
+    pub static ref RDMA: RDMAContext = RDMAContext::default();
+}
+
 #[derive(Default, Copy, Clone, Debug, Eq, PartialEq, Hash)]
 #[repr(transparent)]
 pub struct Gid {

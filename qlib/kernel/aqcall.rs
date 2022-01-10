@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::guestfdnotifier::*;
+use super::fdinfo::guestfdnotifier::*;
 use super::super::qmsg::*;
 use super::super::super::kernel_def::SignalProcess;
 

@@ -136,7 +136,7 @@ impl VirtualMachine {
         if QUARK_CONFIG.lock().EnableRDMA {
             let rdmaDeviceName = "rdma";
             let lbPort = 0;
-            super::super::super::vmspace::HostFileMap::rdma_socket::RDMA.Init(rdmaDeviceName, lbPort);
+            super::super::super::vmspace::HostFileMap::rdma::RDMA.Init(rdmaDeviceName, lbPort);
         }
 
         let cpuCount = VMSpace::VCPUCount() - cnt;

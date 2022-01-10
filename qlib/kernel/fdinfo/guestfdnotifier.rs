@@ -16,14 +16,14 @@ use alloc::collections::btree_map::BTreeMap;
 use crate::qlib::mutex::*;
 use core::ops::Deref;
 
-use super::Kernel::HostSpace;
-use super::kernel::waiter::*;
-use super::fs::host::hostinodeop::*;
-use super::super::common::*;
-use super::super::linux_def::*;
-use super::super::singleton::*;
-use super::SHARESPACE;
-use super::IOURING;
+use super::super::Kernel::HostSpace;
+use super::super::kernel::waiter::*;
+use super::super::fs::host::hostinodeop::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
+use super::super::super::singleton::*;
+use super::super::SHARESPACE;
+use super::super::IOURING;
 
 pub static GUEST_NOTIFIER : Singleton<Notifier> = Singleton::<Notifier>::New();
 
@@ -48,8 +48,7 @@ pub fn Notify(fd: i32, mask: EventMask) {
 }
 
 pub fn HostLogFlush() {
-    //GUEST_NOTIFIER.PrintStrRespHandler(addr, len)
-    super::IOURING.LogFlush();
+    IOURING.LogFlush();
 }
 
 pub struct GuestFdInfo {

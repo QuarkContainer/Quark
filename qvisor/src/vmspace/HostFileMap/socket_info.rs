@@ -1,6 +1,7 @@
 use core::fmt;
 
 use super::rdma_socket::*;
+use super::rdma::*;
 use super::fdinfo::*;
 use super::super::super::qlib::linux_def::*;
 

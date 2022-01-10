@@ -25,7 +25,7 @@ use crate::qlib::mutex::*;
 use core::fmt;
 
 //use super::super::*;
-use super::super::super::guestfdnotifier::*;
+use super::super::super::fdinfo::guestfdnotifier::*;
 use super::super::socket::*;
 use super::super::control::*;
 use super::super::unix::transport::unix::*;

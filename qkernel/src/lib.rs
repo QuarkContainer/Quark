@@ -86,7 +86,7 @@ use self::qlib::kernel::socket as socket;
 use self::qlib::kernel::threadmgr as threadmgr;
 use self::qlib::kernel::util as util;
 use self::qlib::kernel::fd as fd;
-use self::qlib::kernel::guestfdnotifier as guestfdnotifier;
+use self::qlib::kernel::fdinfo::guestfdnotifier as guestfdnotifier;
 use self::qlib::kernel::heap as heap;
 use self::qlib::kernel::perflog as perflog;
 use self::qlib::kernel::SignalDef as SignalDef;
@@ -154,16 +154,6 @@ pub fn AllocatorPrint(_class: usize) -> String {
     let class = 6;
     return ALLOCATOR.Print(class);
 }
-
-/*pub static SHARESPACE: ShareSpaceRef = ShareSpaceRef::New();
-
-pub static KERNEL_PAGETABLE: Singleton<PageTables> = Singleton::<PageTables>::New();
-pub static PAGE_MGR: Singleton<PageMgr> = Singleton::<PageMgr>::New();
-pub static LOADER: Singleton<Loader> = Singleton::<Loader>::New();
-pub static IOURING: Singleton<QUring> = Singleton::<QUring>::New();
-pub static KERNEL_STACK_ALLOCATOR: Singleton<AlignedAllocator> = Singleton::<AlignedAllocator>::New();
-pub static SHUTDOWN: Singleton<AtomicBool> = Singleton::<AtomicBool>::New();
-pub static EXIT_CODE: Singleton<AtomicI32> = Singleton::<AtomicI32>::New();*/
 
 use self::qlib::kernel::*;
 

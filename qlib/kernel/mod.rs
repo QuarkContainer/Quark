@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors / 2018 The gVisor Authors.
+// Copyright (c) 2021 Quark Container Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,7 +26,6 @@ pub mod threadmgr;
 pub mod util;
 pub mod aqcall;
 pub mod fd;
-pub mod guestfdnotifier;
 pub mod heap;
 pub mod kernel_util;
 pub mod mm;
@@ -40,6 +39,7 @@ pub mod uid;
 pub mod vcpu;
 pub mod version;
 pub mod loader;
+pub mod fdinfo;
 
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicI32;
