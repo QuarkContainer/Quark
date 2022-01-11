@@ -253,3 +253,7 @@ pub fn StartExecProcess(fd: i32, process: Process) {
 pub fn StartSubContainerProcess(elfEntry: u64, userStackAddr: u64, kernelStackAddr: u64) {
     super::StartSubContainerProcess(elfEntry, userStackAddr, kernelStackAddr)
 }
+
+extern "C" {
+    pub fn CopyPageUnsafe(to: u64, from: u64);
+}

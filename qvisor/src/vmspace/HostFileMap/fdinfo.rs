@@ -21,7 +21,6 @@ use super::socket_info::*;
 use super::rdma_socket::*;
 use super::super::*;
 use super::super::qlib::common::*;
-//use super::super::qlib::linux_def::*;
 use super::super::super::util::*;
 use super::super::FD_NOTIFIER;
 
@@ -39,6 +38,10 @@ impl Deref for FdInfo {
 impl FdInfo {
     pub fn SockInfo(&self) -> SockInfo {
         return self.lock().sockInfo.lock().clone();
+    }
+
+    pub fn UpdateWaitInfo(&self, waitInfo: FdWaitInfo) {
+        self.lock().waitInfo = waitInfo
     }
 
     pub fn BufWrite(fd: i32, addr: u64, len: usize, offset: isize) -> i64 {
@@ -289,9 +292,12 @@ impl FdInfo {
     }
 
     pub fn Notify(&self, mask: EventMask) {
-        let fd = self.Fd();
         let sockInfo = self.SockInfo();
-        sockInfo.Notify(fd, mask);
+        sockInfo.Notify(mask, self.WaitInfo());
+    }
+
+    pub fn WaitInfo(&self) -> FdWaitInfo {
+        return self.lock().waitInfo.clone();
     }
 
     pub fn Fd(&self) -> i32 {
@@ -430,7 +436,7 @@ impl FdInfo {
     pub fn ProcessRDMAWriteImmFinish(&self, writeCount: u64) {
         match self.SockInfo() {
             SockInfo::RDMADataSocket(sock) => {
-                sock.ProcessRDMAWriteImmFinish(writeCount)
+                sock.ProcessRDMAWriteImmFinish(writeCount, self.WaitInfo())
             }
             _ => {
                 panic!("ProcessRDMAWriteImmFinish get unexpected socket {:?}", self.SockInfo())
@@ -441,7 +447,7 @@ impl FdInfo {
     pub fn ProcessRDMARecvWriteImm(&self, recvCount: u64, writeCount: u64) {
         match self.SockInfo() {
             SockInfo::RDMADataSocket(sock) => {
-                sock.ProcessRDMARecvWriteImm(recvCount, writeCount)
+                sock.ProcessRDMARecvWriteImm(recvCount, writeCount, self.WaitInfo())
             }
             _ => {
                 panic!("ProcessRDMARecvWriteImm get unexpected socket {:?}", self.SockInfo())
@@ -452,16 +458,16 @@ impl FdInfo {
     pub fn RDMANotify(&self, typ: RDMANotifyType) -> i64 {
         match self.SockInfo() {
             SockInfo::RDMAServerSocket(RDMAServerSock) => {
-                RDMAServerSock.Accept();
+                RDMAServerSock.Accept(self.WaitInfo());
             }
             SockInfo::RDMADataSocket(sock) => {
                 match typ {
                     RDMANotifyType::Read => {
-                        sock.Notify(EVENT_IN);
+                        sock.Notify(EVENT_IN, self.WaitInfo());
                         //self.lock().AddWait(EVENT_READ).unwrap();
                     }
                     RDMANotifyType::Write => {
-                        sock.Notify(EVENT_OUT);
+                        sock.Notify(EVENT_OUT, self.WaitInfo());
                         //self.lock().AddWait(EVENT_WRITE).unwrap();
                     }
                     RDMANotifyType::RDMARead => {
@@ -526,7 +532,7 @@ impl FdInfo {
 #[derive(Debug)]
 pub struct FdInfoIntern {
     pub fd: i32,
-    pub mask: EventMask,
+    pub waitInfo: FdWaitInfo,
 
     pub flags: Flags,
     pub sockInfo: Mutex<SockInfo>,
@@ -547,7 +553,7 @@ impl FdInfoIntern {
 
         let res = Self {
             fd: fd,
-            mask: 0,
+            waitInfo: FdWaitInfo::default(),
             flags: Flags(flags),
             sockInfo: Mutex::new(SockInfo::File)
         };
@@ -562,7 +568,7 @@ impl FdInfoIntern {
 
         let res = Self {
             fd: fd,
-            mask: 0,
+            waitInfo: FdWaitInfo::default(),
             flags: Flags(flags),
             sockInfo: Mutex::new(SockInfo::RDMAContext)
         };
@@ -578,7 +584,7 @@ impl FdInfoIntern {
 
         let res = Self {
             fd: fd,
-            mask: 0,
+            waitInfo: FdWaitInfo::default(),
             flags: Flags(flags),
             sockInfo: Mutex::new(SockInfo::Socket)
         };
@@ -624,35 +630,39 @@ impl FdInfoIntern {
     }
 
     pub fn RemoveWait(&mut self, mask: EventMask) -> Result<()> {
-        let mask = self.mask & !mask;
+        let mask = self.waitInfo.lock().mask & !mask;
         return self.WaitFd(mask)
     }
 
     pub fn AddWait(&mut self, mask: EventMask) -> Result<()> {
-        let mask = self.mask | mask;
+        let mask = self.waitInfo.lock().mask | mask;
         return self.WaitFd(mask)
     }
 
     pub fn WaitFd(&mut self, mask: EventMask) -> Result<()> {
-        if mask == self.mask {
-            return Ok(())
+        let op;
+        {
+            let mut wi = self.waitInfo.lock();
+            if mask == wi.mask {
+                return Ok(())
+            }
+
+            if wi.mask == 0 {
+                op = LibcConst::EPOLL_CTL_ADD;
+            } else if mask == 0 {
+                op = LibcConst::EPOLL_CTL_DEL;
+            } else {
+                op = LibcConst::EPOLL_CTL_MOD;
+            }
+
+            wi.mask = mask;
         }
 
-        let op: u64;
-        if self.mask == 0 {
-            op = LibcConst::EPOLL_CTL_ADD;
-        } else if mask == 0 {
-            op = LibcConst::EPOLL_CTL_DEL;
-        } else {
-            op = LibcConst::EPOLL_CTL_MOD;
-        }
-
-        self.mask = mask;
         return FD_NOTIFIER.WaitFd(self.fd, op as u32, mask);
     }
 }
 
-pub fn FdNotify(fd: i32, mask: EventMask) {
+pub fn FdNotify1(fd: i32, mask: EventMask) {
     SHARE_SPACE.AQHostInputCall(&HostInputMsg::FdNotify(FdNotify{
         fd: fd,
         mask: mask,

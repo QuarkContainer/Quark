@@ -30,6 +30,7 @@ use super::super::super::SHARE_SPACE;
 use super::super::super::qlib::addr;
 use super::super::super::qlib::perf_tunning::*;
 use super::super::super::qlib::task_mgr::*;
+use super::super::super::qlib::kernel::SHARESPACE;
 use super::super::super::syncmgr;
 use super::super::super::runc::runtime::loader::*;
 use super::super::super::kvm_vcpu::*;
@@ -103,7 +104,9 @@ impl VirtualMachine {
 
     pub fn InitShareSpace(cpuCount: usize, controlSock: i32) {
         SHARE_SPACE_STRUCT.lock().Init(cpuCount, controlSock);
-        SHARE_SPACE.SetValue(&(*SHARE_SPACE_STRUCT.lock()) as * const _ as u64);
+        let spAddr = &(*SHARE_SPACE_STRUCT.lock()) as * const _ as u64;
+        SHARE_SPACE.SetValue(spAddr);
+        SHARESPACE.SetValue(spAddr);
 
         let sharespace = SHARE_SPACE.Ptr();
         let logfd = super::super::super::print::LOG.lock().Logfd();

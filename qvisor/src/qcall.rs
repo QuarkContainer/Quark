@@ -309,6 +309,9 @@ impl KVMVcpu {
             Msg::WriteControlMsgResp(msg) => {
                 ret = super::VMSpace::WriteControlMsgResp(msg.fd, msg.addr, msg.len) as u64;
             },
+            Msg::UpdateWaitInfo(msg) => {
+                ret = super::VMSpace::UpdateWaitInfo(msg.fd, msg.waitinfo.clone()) as u64;
+            },
         };
 
         return ret

@@ -207,3 +207,5 @@ pub fn SignalProcess(_signalArgs: &SignalArgs) {}
 pub fn StartRootContainer(_para: *const u8) {}
 pub fn StartExecProcess(_fd: i32, _process: Process) {}
 pub fn StartSubContainerProcess(_elfEntry: u64, _userStackAddr: u64, _kernelStackAddr: u64) {}
+
+pub unsafe fn CopyPageUnsafe(_to: u64, _from: u64){}
