@@ -22,7 +22,7 @@ use chrono::prelude::*;
 use std::os::unix::io::AsRawFd;
 
 use super::qlib::ShareSpace;
-use super::qlib::qmsg::input::*;
+use super::qlib::kernel::IOURING;
 
 lazy_static! {
     pub static ref LOG : Mutex<Log> = Mutex::new(Log::New());
@@ -78,7 +78,8 @@ impl Log {
         } else {
             let trigger = self.shareSpace.Log(str.as_bytes());
             if trigger && self.shareSpace.config.read().UringPrint() {
-                self.shareSpace.AQHostInputCall(&HostInputMsg::LogFlush);
+                //self.shareSpace.AQHostInputCall(&HostInputMsg::LogFlush);
+                IOURING.LogFlush();
             }
         }
     }

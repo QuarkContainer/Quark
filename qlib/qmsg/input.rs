@@ -20,7 +20,6 @@ use super::super::control_msg::SignalArgs;
 pub enum HostInputMsg {
     Default,
     FdNotify(FdNotify),
-    LogFlush,
     Signal(SignalArgs),
 }
 

@@ -49,10 +49,6 @@ pub fn Notify(fd: i32, mask: EventMask) {
     GUEST_NOTIFIER.Notify(fd, mask);
 }
 
-pub fn HostLogFlush() {
-    IOURING.LogFlush();
-}
-
 #[derive(Default)]
 pub struct FdWaitIntern {
     pub queue: Queue,
