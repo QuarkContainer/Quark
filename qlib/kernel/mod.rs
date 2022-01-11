@@ -52,10 +52,10 @@ use self::boot::loader::*;
 use self::memmgr::pma::*;
 
 pub static SHARESPACE: ShareSpaceRef = ShareSpaceRef::New();
+pub static IOURING: IOUringRef = IOUringRef::New();
 pub static KERNEL_PAGETABLE: Singleton<PageTables> = Singleton::<PageTables>::New();
 pub static PAGE_MGR: Singleton<PageMgr> = Singleton::<PageMgr>::New();
 pub static LOADER: Singleton<Loader> = Singleton::<Loader>::New();
-pub static IOURING: Singleton<QUring> = Singleton::<QUring>::New();
 pub static KERNEL_STACK_ALLOCATOR: Singleton<AlignedAllocator> =
     Singleton::<AlignedAllocator>::New();
 

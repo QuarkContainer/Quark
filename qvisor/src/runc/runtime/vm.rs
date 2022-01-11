@@ -31,6 +31,7 @@ use super::super::super::qlib::addr;
 use super::super::super::qlib::perf_tunning::*;
 use super::super::super::qlib::task_mgr::*;
 use super::super::super::qlib::kernel::SHARESPACE;
+use super::super::super::qlib::kernel::IOURING;
 use super::super::super::syncmgr;
 use super::super::super::runc::runtime::loader::*;
 use super::super::super::kvm_vcpu::*;
@@ -118,6 +119,7 @@ impl VirtualMachine {
         URING_MGR.lock().Addfd(sharespace.HostHostEpollfd()).unwrap();
         URING_MGR.lock().Addfd(controlSock).unwrap();
         sharespace.SetIOUringsAddr(URING_MGR.lock().IOUringsAddr());
+        IOURING.SetValue(sharespace.GetIOUringAddr());
 
         let syncPrint = sharespace.config.read().SyncPrint();
         super::super::super::print::SetSharespace(sharespace);

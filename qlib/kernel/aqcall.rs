@@ -31,7 +31,6 @@ impl HostInputMsg {
             HostInputMsg::Signal(msg) => {
                 SignalProcess(&msg);
             }
-            HostInputMsg::WakeIOThreadResp(()) => ()
         }
     }
 }
