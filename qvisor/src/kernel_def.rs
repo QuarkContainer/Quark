@@ -9,6 +9,8 @@ use super::qlib::task_mgr::*;
 use super::qlib::qmsg::*;
 use super::qlib::control_msg::*;
 use super::qlib::kernel::task::*;
+use super::qlib::perf_tunning::*;
+use super::qlib::vcpu_mgr::*;
 use super::FD_NOTIFIER;
 use super::QUARK_CONFIG;
 use super::KERNEL_IO_THREAD;
@@ -163,7 +165,6 @@ impl Scheduler {
     }
 }*/
 
-use super::qlib::perf_tunning::*;
 
 #[repr(usize)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -209,3 +210,9 @@ pub fn StartExecProcess(_fd: i32, _process: Process) {}
 pub fn StartSubContainerProcess(_elfEntry: u64, _userStackAddr: u64, _kernelStackAddr: u64) {}
 
 pub unsafe fn CopyPageUnsafe(_to: u64, _from: u64){}
+
+impl CPULocal {
+    pub fn CpuId() -> usize {
+        return 0;
+    }
+}

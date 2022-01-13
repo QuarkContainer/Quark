@@ -257,3 +257,9 @@ pub fn StartSubContainerProcess(elfEntry: u64, userStackAddr: u64, kernelStackAd
 extern "C" {
     pub fn CopyPageUnsafe(to: u64, from: u64);
 }
+
+impl CPULocal {
+    pub fn CpuId() -> usize {
+        return GetVcpuId();
+    }
+}

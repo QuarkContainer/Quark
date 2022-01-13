@@ -92,10 +92,6 @@ pub fn GetGs() -> u64 {
 }
 
 impl CPULocal {
-    pub fn CpuId() -> usize {
-        return GetVcpuId();
-    }
-
     pub fn Myself() -> &'static Self {
         return &CPU_LOCAL[Self::CpuId() as usize]
     }
