@@ -73,6 +73,7 @@ use self::ringbuf::*;
 use self::config::*;
 use self::linux_def::*;
 use self::bytestream::*;
+use self::kernel::quring::uring_mgr::QUring;
 
 pub fn InitSingleton() {
     unsafe {
@@ -572,12 +573,12 @@ pub struct ShareSpace {
     pub VcpuSearchingCnt: CachePadded<AtomicU64>,
 
     pub kernelIOThreadWaiting: CachePadded<AtomicBool>,
+    pub ioUring: CachePadded<QUring>,
     pub config: QRwLock<Config>,
 
     pub logBuf: QMutex<Option<ByteStream>>,
     pub logLock: QMutex<()>,
     pub logfd: AtomicI32,
-    pub uringsAddr: AtomicU64,
 
     pub controlSock: i32,
 
@@ -585,39 +586,19 @@ pub struct ShareSpace {
 }
 
 impl ShareSpace {
-    pub fn New(vcpuCount: usize) -> Self {
-        let mut values = Vec::with_capacity(vcpuCount);
-        for _i in 0..vcpuCount {
-            values.push([AtomicU64::new(0), AtomicU64::new(0)])
-        };
+    pub fn New() -> Self {
         return ShareSpace {
-            QInput: QRingBuf::New(MemoryDef::MSG_QLEN), //QMutex::new(VecDeque::with_capacity(MSG_QLEN)),
-            QOutput: QRingBuf::New(MemoryDef::MSG_QLEN), //QMutex::new(VecDeque::with_capacity(MSG_QLEN)),
-            //pad: [0; 8],
-            hostEpollfd: AtomicI32::new(0),
-            hostEpollProcessing: CachePadded::new(QMutex::new(())),
-            VcpuSearchingCnt: CachePadded::new(AtomicU64::new(0)),
-
-            scheduler: Scheduler::New(vcpuCount),
-            guestMsgCount: CachePadded::new(AtomicU64::new(0)),
-            hostProcessor: CachePadded::new(AtomicU64::new(0)),
-            kernelIOThreadWaiting: CachePadded::new(AtomicBool::new(false)),
-            config: QRwLock::new(Config::default()),
-            logBuf: QMutex::new(None),
-            logLock: QMutex::new(()),
-            logfd: AtomicI32::new(-1),
-            uringsAddr: AtomicU64::new(0),
-            controlSock: -1,
-            values: values,
+            ioUring: CachePadded::new(QUring::New(MemoryDef::QURING_SIZE)),
+            ..Default::default()
         }
     }
 
     pub fn SetIOUringsAddr(&self, addr: u64) {
-        self.uringsAddr.store(addr, Ordering::SeqCst);
+        self.ioUring.SetIOUringsAddr(addr);
     }
 
-    pub fn IOUringsAddr(&self) -> u64 {
-        return self.uringsAddr.load(Ordering::Relaxed);
+    pub fn GetIOUringAddr(&self) -> u64 {
+        return self.ioUring.Addr()
     }
 
     pub fn Addr(&self) -> u64 {

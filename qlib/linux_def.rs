@@ -16,6 +16,8 @@ use alloc::slice;
 use alloc::vec::Vec;
 use core::sync::atomic::Ordering;
 
+use super::super::kernel_def::*;
+
 // UNIX_PATH_MAX is the maximum length of the path in an AF_UNIX socket.
 //
 // From uapi/linux/un.h.
@@ -2982,11 +2984,6 @@ pub fn ComparePage(from: u64, to: u64) -> bool {
 
         return true;
     }
-}
-
-
-extern "C" {
-    pub fn CopyPageUnsafe(to: u64, from: u64);
 }
 
 #[inline(always)]

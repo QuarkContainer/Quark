@@ -2,8 +2,8 @@ use core::fmt;
 
 use super::rdma_socket::*;
 use super::rdma::*;
-use super::fdinfo::*;
 use super::super::super::qlib::linux_def::*;
+use super::super::super::qlib::kernel::guestfdnotifier::*;
 
 #[derive(Clone)]
 pub enum SockInfo {
@@ -27,19 +27,19 @@ impl fmt::Debug for SockInfo {
 }
 
 impl SockInfo {
-    pub fn Notify(&self, fd: i32, eventmask: EventMask) {
+    pub fn Notify(&self, eventmask: EventMask, waitinfo: FdWaitInfo) {
         match self {
             Self::File => {
-                FdNotify(fd, eventmask)
+                waitinfo.Notify(eventmask);
             }
             Self::Socket => {
-                FdNotify(fd, eventmask)
+                waitinfo.Notify(eventmask);
             }
             Self::RDMAServerSocket(ref sock) => {
-                sock.Notify(eventmask)
+                sock.Notify(eventmask, waitinfo)
             }
             Self::RDMADataSocket(ref sock) => {
-                sock.Notify(eventmask)
+                sock.Notify(eventmask, waitinfo)
             }
             Self::RDMAContext => {
                 RDMA.PollCompletion().expect("RDMA.PollCompletion fail");

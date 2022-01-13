@@ -21,7 +21,7 @@ use super::super::config::*;
 use super::super::qmsg::*;
 use super::super::linux_def::*;
 use super::super::socket_buf::*;
-//use super::super::perf_tunning::*;
+use super::guestfdnotifier::*;
 use super::task::*;
 use super::asm::*;
 use super::taskMgr;
@@ -801,6 +801,16 @@ impl HostSpace {
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
+
+    pub fn UpdateWaitInfo(fd: i32, waitinfo: FdWaitInfo) -> i64 {
+        let mut msg = Msg::UpdateWaitInfo(UpdateWaitInfo {
+            fd: fd,
+            waitinfo: waitinfo,
+        });
+
+        return HostSpace::HCall(&mut msg, false) as i64;
+    }
+
 
     pub fn Futimens(fd: i32, times: u64) -> i64 {
         let mut msg = Msg::Futimens(Futimens {

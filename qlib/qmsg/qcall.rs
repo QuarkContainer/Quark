@@ -16,6 +16,7 @@ use alloc::sync::Arc;
 
 use super::super::task_mgr::*;
 use super::super::linux_def::*;
+use super::super::kernel::guestfdnotifier::*;
 use super::super::socket_buf::*;
 use super::super::config::*;
 
@@ -107,6 +108,13 @@ pub enum Msg {
     EventfdWrite(EventfdWrite),
     ReadControlMsg(ReadControlMsg),
     WriteControlMsgResp(WriteControlMsgResp),
+    UpdateWaitInfo(UpdateWaitInfo),
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct UpdateWaitInfo {
+    pub fd: i32,
+    pub waitinfo: FdWaitInfo,
 }
 
 #[derive(Clone, Default, Debug)]

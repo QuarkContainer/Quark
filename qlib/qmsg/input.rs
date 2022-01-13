@@ -20,8 +20,6 @@ use super::super::control_msg::SignalArgs;
 pub enum HostInputMsg {
     Default,
     FdNotify(FdNotify),
-    LogFlush,
-    WakeIOThreadResp(()),
     Signal(SignalArgs),
 }
 
@@ -30,7 +28,6 @@ impl Default for HostInputMsg {
         return Self::Default
     }
 }
-
 
 //host call kernel
 #[derive(Debug, Default, Copy, Clone)]

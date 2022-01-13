@@ -16,6 +16,7 @@ use alloc::sync::Arc;
 use alloc::collections::btree_map::BTreeMap;
 use crate::qlib::mutex::*;
 use core::ops::Deref;
+use core::fmt;
 
 use super::Kernel::HostSpace;
 use super::kernel::waiter::*;
@@ -48,16 +49,21 @@ pub fn Notify(fd: i32, mask: EventMask) {
     GUEST_NOTIFIER.Notify(fd, mask);
 }
 
-pub fn HostLogFlush() {
-    IOURING.LogFlush();
-}
-
+#[derive(Default)]
 pub struct FdWaitIntern {
     pub queue: Queue,
     pub mask: EventMask,
 }
 
-#[derive(Clone)]
+impl fmt::Debug for FdWaitIntern {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FdWaitInfo")
+            .field("mask", &self.mask)
+            .finish()
+    }
+}
+
+#[derive(Default, Clone, Debug)]
 pub struct FdWaitInfo(Arc<QMutex<FdWaitIntern>>);
 
 impl Deref for FdWaitInfo {
@@ -112,18 +118,6 @@ impl FdWaitInfo {
     }
 
     pub fn UpdateFDSync(&self, fd: i32) -> Result<()> {
-        let op = LibcConst::EPOLL_CTL_ADD as u32/*dummy value*/;
-        let mask = {
-            let mut fi = self.lock();
-            let mask = fi.queue.Events();
-            fi.mask = mask;
-            mask
-        };
-
-        return Self::waitfd(fd, op, mask);
-    }
-
-    pub fn UpdateFDSync1(&self, fd: i32) -> Result<()> {
         let op;
         let mask = {
             let mut fi = self.lock();
@@ -276,15 +270,6 @@ impl Notifier {
         return fi.UpdateFDSync(fd);
     }
 
-    pub fn UpdateFDSync1(&self, fd: i32) -> Result<()> {
-        let fi = match self.FdWaitInfo(fd) {
-            None => return Ok(()),
-            Some(fi) => fi
-        };
-
-        return fi.UpdateFDSync1(fd);
-    }
-
     pub fn AddFD(&self, fd: i32, iops: &HostInodeOp) {
         let mut n = self.lock();
 
@@ -294,7 +279,9 @@ impl Notifier {
             panic!("GUEST_NOTIFIER::AddFD fd {} added twice", fd);
         }
 
-        n.fdMap.insert(fd, FdWaitInfo::New(queue.clone(), 0));
+        let waitinfo = FdWaitInfo::New(queue.clone(), 0);
+        n.fdMap.insert(fd, waitinfo.clone());
+        HostSpace::UpdateWaitInfo(fd, waitinfo);
     }
 
     pub fn RemoveFD(&self, fd: i32) {

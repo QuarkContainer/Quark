@@ -51,6 +51,7 @@ use super::qlib::qmsg::*;
 use super::qlib::cstring::*;
 use super::qlib::socket_buf::*;
 use super::qlib::perf_tunning::*;
+use super::qlib::kernel::guestfdnotifier::*;
 use super::namespace::MountNs;
 use super::ucall::usocket::*;
 use super::*;
@@ -570,6 +571,16 @@ impl VMSpace {
         };
 
         return fdInfo.IOWrite(iovs, iovcnt)
+    }
+
+    pub fn UpdateWaitInfo(fd: i32, waitInfo: FdWaitInfo) -> i64 {
+        let fdInfo = match Self::GetFdInfo(fd) {
+            Some(info) => info,
+            None => return -SysErr::EBADF as i64,
+        };
+
+        fdInfo.UpdateWaitInfo(waitInfo);
+        return 0;
     }
 
     pub fn IOAppend(fd: i32, iovs: u64, iovcnt: i32, fileLenAddr: u64) -> i64 {

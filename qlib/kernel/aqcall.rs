@@ -25,13 +25,9 @@ impl HostInputMsg {
             HostInputMsg::FdNotify(notify) => {
                 notify.Process()
             }
-            HostInputMsg::LogFlush => {
-                HostLogFlush();
-            }
             HostInputMsg::Signal(msg) => {
                 SignalProcess(&msg);
             }
-            HostInputMsg::WakeIOThreadResp(()) => ()
         }
     }
 }
