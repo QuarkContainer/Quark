@@ -156,14 +156,14 @@ impl IOMgr {
         }
     }
 
-    pub fn ProcessRDMAWriteImmFinish(&self, fd: i32, writeCount: u64) {
+    pub fn ProcessRDMAWriteImmFinish(&self, fd: i32) {
         let fdInfo = self.GetByHost(fd);
         match fdInfo {
             None => {
                 panic!("ProcessRDMAWriteImmFinish get unexpected fd {}", fd)
             },
             Some(fdInfo) => {
-                fdInfo.ProcessRDMAWriteImmFinish(writeCount);
+                fdInfo.ProcessRDMAWriteImmFinish();
             }
         }
     }

@@ -433,10 +433,10 @@ impl FdInfo {
         return 0;
     }
 
-    pub fn ProcessRDMAWriteImmFinish(&self, writeCount: u64) {
+    pub fn ProcessRDMAWriteImmFinish(&self) {
         match self.SockInfo() {
             SockInfo::RDMADataSocket(sock) => {
-                sock.ProcessRDMAWriteImmFinish(writeCount, self.WaitInfo())
+                sock.ProcessRDMAWriteImmFinish(self.WaitInfo())
             }
             _ => {
                 panic!("ProcessRDMAWriteImmFinish get unexpected socket {:?}", self.SockInfo())

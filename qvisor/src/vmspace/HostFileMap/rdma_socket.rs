@@ -4,6 +4,7 @@ use core::ops::Deref;
 use super::super::super::qlib::mutex::*;
 use core::mem;
 use core::sync::atomic::AtomicU64;
+use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
 
 use super::super::super::IO_MGR;
@@ -135,6 +136,7 @@ pub struct RDMADataSockIntern {
     pub remoteRDMAInfo: QMutex<RDMAInfo>,
     pub mr: MemoryRegion,
     pub rdmaType: RDMAType,
+    pub writeCount: AtomicUsize, //when run the writeimm, save the write bytes count here
 }
 
 #[derive(Clone, Default)]
@@ -218,7 +220,8 @@ impl RDMADataSock {
                     localRDMAInfo: localRDMAInfo,
                     remoteRDMAInfo: QMutex::new(RDMAInfo::default()),
                     mr: mr,
-                    rdmaType: rdmaType
+                    rdmaType: rdmaType,
+                    writeCount: AtomicUsize::new(0),
                 })
             )
         } else {
@@ -240,6 +243,7 @@ impl RDMADataSock {
                     remoteRDMAInfo: QMutex::new(RDMAInfo::default()),
                     mr: mr,
                     rdmaType: rdmaType,
+                    writeCount: AtomicUsize::new(0),
                 })
             )
         }
@@ -344,6 +348,7 @@ impl RDMADataSock {
         let rkey = self.remoteRDMAInfo.lock().rkey;
 
         self.qp.lock().WriteImm(wrid.0, localAddr, writeCount as u32, self.mr.LKey(), remoteAddr, rkey, immData.0)?;
+        self.writeCount.store(writeCount, QOrdering::RELEASE);
         return Ok(())
     }
 
@@ -379,10 +384,12 @@ impl RDMADataSock {
     }
 
     // triggered by the RDMAWriteImmediately finish
-    pub fn ProcessRDMAWriteImmFinish(&self, writeCount: u64, waitinfo: FdWaitInfo) {
+    pub fn ProcessRDMAWriteImmFinish(&self, waitinfo: FdWaitInfo) {
         let _writelock = self.writeLock.lock();
         let mut remoteInfo = self.remoteRDMAInfo.lock();
         remoteInfo.sending = false;
+
+        let writeCount = self.writeCount.load(QOrdering::ACQUIRE);
 
         let (trigger, addr, _len) = self.socketBuf.ConsumeAndGetAvailableWriteBuf(writeCount as usize);
         if trigger {

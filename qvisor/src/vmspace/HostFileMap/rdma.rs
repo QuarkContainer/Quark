@@ -463,7 +463,7 @@ impl RDMAContext {
 
         match typ {
             WorkRequestType::WriteImm => {
-                IO_MGR.ProcessRDMAWriteImmFinish(fd, wc.byte_len as _);
+                IO_MGR.ProcessRDMAWriteImmFinish(fd);
             }
             WorkRequestType::Recv => {
                 let imm = unsafe {
