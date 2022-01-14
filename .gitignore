@@ -1,2 +1,4 @@
 target/
 build/
+test/c/*
+!test/c/*.c
