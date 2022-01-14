@@ -1,8 +1,8 @@
-use rdmaffi;
 use core::ops::Deref;
+use rdmaffi;
 use spin::Mutex;
-use std::ptr;
 use std::convert::TryInto;
+use std::ptr;
 
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
@@ -64,7 +64,7 @@ impl AsMut<rdmaffi::ibv_gid> for Gid {
     }
 }
 
-pub struct IBContext (pub * mut rdmaffi::ibv_context);
+pub struct IBContext(pub *mut rdmaffi::ibv_context);
 
 impl Drop for IBContext {
     fn drop(&mut self) {
@@ -76,7 +76,7 @@ impl Drop for IBContext {
 
 impl Default for IBContext {
     fn default() -> Self {
-        return Self (0 as _)
+        return Self(0 as _);
     }
 }
 
@@ -130,7 +130,7 @@ impl IBContext {
         /* We are now done with device list, free it */
         unsafe { rdmaffi::ibv_free_device_list(device_list) };
 
-        return Self(context)
+        return Self(context);
     }
 
     pub fn QueryPort(&self, ibPort: u8) -> PortAttr {
@@ -165,7 +165,7 @@ impl IBContext {
             panic!("___ibv_query_port on port {} failed\n", ibPort);
         }
 
-        return PortAttr(port_attr)
+        return PortAttr(port_attr);
     }
 
     pub fn AllocProtectionDomain(&self) -> ProtectionDomain {
@@ -175,7 +175,7 @@ impl IBContext {
             panic!("ibv_alloc_pd failed\n");
         }
 
-        return ProtectionDomain(pd)
+        return ProtectionDomain(pd);
     }
 
     pub fn CreateCompleteChannel(&self) -> CompleteChannel {
@@ -184,33 +184,29 @@ impl IBContext {
             // TODO: cleanup
             panic!("ibv_create_comp_channel failed\n");
         }
-        return CompleteChannel(completionChannel)
+        return CompleteChannel(completionChannel);
     }
 
     pub fn CreateCompleteQueue(&self, cc: &CompleteChannel) -> CompleteQueue {
-        let cq = unsafe {
-            rdmaffi::ibv_create_cq(self.0, 1, ptr::null_mut(), cc.0, 0)
-        };
+        let cq = unsafe { rdmaffi::ibv_create_cq(self.0, 1, ptr::null_mut(), cc.0, 0) };
 
         if cq.is_null() {
             // TODO: cleanup
             panic!("ibv_create_cq failed\n");
         }
 
-        return CompleteQueue(cq)
+        return CompleteQueue(cq);
     }
 
     pub fn QueryGid(&self, ibPort: u8) -> Gid {
         let mut gid = Gid::default();
-        let ok = unsafe {
-            rdmaffi::ibv_query_gid(self.0, ibPort, 0, gid.as_mut())
-        };
+        let ok = unsafe { rdmaffi::ibv_query_gid(self.0, ibPort, 0, gid.as_mut()) };
 
         if ok != 0 {
             panic!("ibv_query_gid failed: {}\n", errno::errno().0);
         }
 
-        return gid
+        return gid;
     }
 }
 
@@ -254,8 +250,7 @@ impl Default for PortAttr {
     }
 }
 
-
-pub struct ProtectionDomain(pub * mut rdmaffi::ibv_pd);
+pub struct ProtectionDomain(pub *mut rdmaffi::ibv_pd);
 
 impl Drop for ProtectionDomain {
     fn drop(&mut self) {}
@@ -263,29 +258,29 @@ impl Drop for ProtectionDomain {
 
 impl Default for ProtectionDomain {
     fn default() -> Self {
-        return Self (0 as _)
+        return Self(0 as _);
     }
 }
 
-pub struct CompleteChannel(pub * mut rdmaffi::ibv_comp_channel);
+pub struct CompleteChannel(pub *mut rdmaffi::ibv_comp_channel);
 impl Drop for CompleteChannel {
     fn drop(&mut self) {}
 }
 
 impl Default for CompleteChannel {
     fn default() -> Self {
-        return Self (0 as _)
+        return Self(0 as _);
     }
 }
 
-pub struct CompleteQueue(pub * mut rdmaffi::ibv_cq);
+pub struct CompleteQueue(pub *mut rdmaffi::ibv_cq);
 impl Drop for CompleteQueue {
     fn drop(&mut self) {}
 }
 
 impl Default for CompleteQueue {
     fn default() -> Self {
-        return Self (0 as _)
+        return Self(0 as _);
     }
 }
 
@@ -293,12 +288,12 @@ impl Default for CompleteQueue {
 pub struct RDMAContextIntern {
     //device_attr: rdmaffi::ibv_device_attr,
     /* Device attributes */
-    portAttr: PortAttr,     /* IB port attributes */
-    ibContext: IBContext, /* device handle */
-    protectDomain: ProtectionDomain, /* PD handle */
+    portAttr: PortAttr,               /* IB port attributes */
+    ibContext: IBContext,             /* device handle */
+    protectDomain: ProtectionDomain,  /* PD handle */
     completeChannel: CompleteChannel, /* io completion channel */
-    completeQueue: CompleteQueue, /* CQ handle */
-    ccfd: i32, // complete channel fd
+    completeQueue: CompleteQueue,     /* CQ handle */
+    ccfd: i32,                        // complete channel fd
     ibPort: u8,
     gid: Gid,
 }
@@ -309,9 +304,7 @@ impl RDMAContextIntern {
         let portAttr = ibContext.QueryPort(ibPort);
         let protectDomain = ibContext.AllocProtectionDomain();
         let completeChannel = ibContext.CreateCompleteChannel();
-        let ccfd = unsafe {
-            (*completeChannel.0).fd
-        };
+        let ccfd = unsafe { (*completeChannel.0).fd };
 
         // start to monitor the complete channel
         IO_MGR.AddRDMAContext(ccfd);
@@ -331,8 +324,8 @@ impl RDMAContextIntern {
             ccfd: ccfd,
             completeQueue: completeQueue,
             ibPort: ibPort,
-            gid: gid
-        }
+            gid: gid,
+        };
     }
 }
 
@@ -392,12 +385,13 @@ impl RDMAContext {
             sq_sig_all: 0,
         };
 
-        let qp = unsafe { rdmaffi::ibv_create_qp(context.protectDomain.0, &mut qp_init_attr as *mut _) };
+        let qp =
+            unsafe { rdmaffi::ibv_create_qp(context.protectDomain.0, &mut qp_init_attr as *mut _) };
         if qp.is_null() {
             return Err(Error::SysError(errno::errno().0));
         }
 
-        return Ok(QueuePair(Mutex::new(qp)))
+        return Ok(QueuePair(Mutex::new(qp)));
     }
 
     pub fn CreateMemoryRegion(&self, addr: u64, size: usize) -> Result<MemoryRegion> {
@@ -420,11 +414,11 @@ impl RDMAContext {
             return Err(Error::SysError(errno::errno().0));
         }
 
-        return Ok(MemoryRegion(mr))
+        return Ok(MemoryRegion(mr));
     }
 
-    pub fn CompleteQueue(&self) -> * mut rdmaffi::ibv_cq {
-        return self.lock().completeQueue.0
+    pub fn CompleteQueue(&self) -> *mut rdmaffi::ibv_cq {
+        return self.lock().completeQueue.0;
     }
 
     pub fn PollCompletion(&self) -> Result<()> {
@@ -435,7 +429,9 @@ impl RDMAContext {
             opcode: rdmaffi::ibv_wc_opcode::IBV_WC_BIND_MW,
             vendor_err: 0,
             byte_len: 0,
-            imm_data_invalidated_rkey_union: rdmaffi::imm_data_invalidated_rkey_union_t { imm_data: 0 }, //TODO: need double check
+            imm_data_invalidated_rkey_union: rdmaffi::imm_data_invalidated_rkey_union_t {
+                imm_data: 0,
+            }, //TODO: need double check
             qp_num: 0,
             src_qp: 0,
             wc_flags: 0,
@@ -450,7 +446,7 @@ impl RDMAContext {
             if poll_result > 0 {
                 self.ProcessWC(&wc);
             } else {
-                return Ok(())
+                return Ok(());
             }
         }
     }
@@ -466,39 +462,37 @@ impl RDMAContext {
                 IO_MGR.ProcessRDMAWriteImmFinish(fd);
             }
             WorkRequestType::Recv => {
-                let imm = unsafe {
-                    wc.imm_data_invalidated_rkey_union.imm_data
-                };
+                let imm = unsafe { wc.imm_data_invalidated_rkey_union.imm_data };
                 let immData = ImmData(imm);
-                IO_MGR.ProcessRDMARecvWriteImm(fd, immData.ReadCount() as _, immData.WriteCount() as _);
+                IO_MGR.ProcessRDMARecvWriteImm(
+                    fd,
+                    immData.ReadCount() as _,
+                    immData.WriteCount() as _,
+                );
             }
         }
     }
-
 }
 
 pub struct ImmData(pub u32);
 
 impl ImmData {
     pub fn New(writeCount: u16, readCount: u16) -> Self {
-        return Self (
-            ((writeCount as u32) << 16) | (readCount as u32)
-        )
+        return Self(((writeCount as u32) << 16) | (readCount as u32));
     }
 
     pub fn ReadCount(&self) -> u16 {
-        return (self.0 & 0xffff) as u16
+        return (self.0 & 0xffff) as u16;
     }
 
     pub fn WriteCount(&self) -> u16 {
-        return ((self.0 >> 16) & 0xffff) as u16
+        return ((self.0 >> 16) & 0xffff) as u16;
     }
 }
 
-
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Clone, Copy)]
 #[repr(u32)]
-pub enum  WorkRequestType {
+pub enum WorkRequestType {
     WriteImm,
     Recv,
 }
@@ -507,9 +501,7 @@ pub struct WorkRequestId(pub u64);
 
 impl WorkRequestId {
     pub fn New(fd: i32, typ: WorkRequestType) -> Self {
-        return Self (
-            ((fd as u64) << 32) | (typ as u32 as u64)
-        )
+        return Self(((fd as u64) << 32) | (typ as u32 as u64));
     }
 
     pub fn Fd(&self) -> i32 {
@@ -519,10 +511,10 @@ impl WorkRequestId {
     pub fn Type(&self) -> WorkRequestType {
         let val = self.0 & 0xffff_ffff;
         if val == 0 {
-            return WorkRequestType::WriteImm
+            return WorkRequestType::WriteImm;
         } else {
             assert!(val == 1);
-            return WorkRequestType::Recv
+            return WorkRequestType::Recv;
         }
     }
 }
@@ -531,7 +523,7 @@ pub struct QueuePair(pub Mutex<*mut rdmaffi::ibv_qp>);
 
 impl Default for QueuePair {
     fn default() -> Self {
-        return Self (Mutex::new(0 as _))
+        return Self(Mutex::new(0 as _));
     }
 }
 
@@ -544,23 +536,23 @@ impl Drop for QueuePair {
 
 impl QueuePair {
     pub fn Data(&self) -> *mut rdmaffi::ibv_qp {
-        return *self.0.lock()
+        return *self.0.lock();
     }
 
     pub fn qpNum(&self) -> u32 {
-        return unsafe {
-            (*self.Data()).qp_num
-        };
+        return unsafe { (*self.Data()).qp_num };
     }
 
-    pub fn WriteImm(&self,
-                    wrId: u64,
-                    laddr: u64,
-                    len: u32,
-                    lkey: u32,
-                    raddr: u64,
-                    rkey: u32,
-                    imm: u32) -> Result<()> {
+    pub fn WriteImm(
+        &self,
+        wrId: u64,
+        laddr: u64,
+        len: u32,
+        lkey: u32,
+        raddr: u64,
+        rkey: u32,
+        imm: u32,
+    ) -> Result<()> {
         let opcode = rdmaffi::ibv_wr_opcode::IBV_WR_RDMA_WRITE_WITH_IMM;
         let mut sge = rdmaffi::ibv_sge {
             addr: laddr,
@@ -575,7 +567,9 @@ impl QueuePair {
             num_sge: 1,
             opcode: opcode,
             send_flags: rdmaffi::ibv_send_flags::IBV_SEND_SIGNALED.0,
-            imm_data_invalidated_rkey_union: rdmaffi::imm_data_invalidated_rkey_union_t { imm_data: imm }, //TODO: need double check
+            imm_data_invalidated_rkey_union: rdmaffi::imm_data_invalidated_rkey_union_t {
+                imm_data: imm,
+            }, //TODO: need double check
             qp_type: rdmaffi::qp_type_t {
                 xrc: rdmaffi::xrc_t { remote_srqn: 0 },
             },
@@ -604,7 +598,7 @@ impl QueuePair {
             return Err(Error::SysError(errno::errno().0));
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn PostRecv(&self, wrId: u64) -> Result<()> {
@@ -621,14 +615,20 @@ impl QueuePair {
             return Err(Error::SysError(errno::errno().0));
         }
 
-        return Ok(())
+        return Ok(());
     }
 
-    pub fn Setup(&self, context: &RDMAContext, remote_qpn: u32, dlid: u16, dgid: Gid) -> Result<()> {
+    pub fn Setup(
+        &self,
+        context: &RDMAContext,
+        remote_qpn: u32,
+        dlid: u16,
+        dgid: Gid,
+    ) -> Result<()> {
         self.ToInit(context)?;
         self.ToRtr(context, remote_qpn, dlid, dgid)?;
         self.ToRts()?;
-        return Ok(())
+        return Ok(());
     }
 
     pub fn ToInit(&self, context: &RDMAContext) -> Result<()> {
@@ -714,7 +714,13 @@ impl QueuePair {
         return Ok(());
     }
 
-    pub fn ToRtr(&self, context: &RDMAContext, remote_qpn: u32, dlid: u16, dgid: Gid) -> Result<()> {
+    pub fn ToRtr(
+        &self,
+        context: &RDMAContext,
+        remote_qpn: u32,
+        dlid: u16,
+        dgid: Gid,
+    ) -> Result<()> {
         let mut attr = rdmaffi::ibv_qp_attr {
             qp_state: rdmaffi::ibv_qp_state::IBV_QPS_INIT,
             cur_qp_state: rdmaffi::ibv_qp_state::IBV_QPS_INIT,
@@ -911,21 +917,17 @@ impl Drop for MemoryRegion {
 
 impl Default for MemoryRegion {
     fn default() -> Self {
-        return Self (0 as _)
+        return Self(0 as _);
     }
 }
 
 impl MemoryRegion {
     pub fn LKey(&self) -> u32 {
-        return unsafe {
-            (*self.0).lkey
-        };
+        return unsafe { (*self.0).lkey };
     }
 
     pub fn RKey(&self) -> u32 {
-        return unsafe {
-            (*self.0).rkey
-        };
+        return unsafe { (*self.0).rkey };
     }
 }
 
