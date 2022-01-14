@@ -627,7 +627,9 @@ impl KVMVcpu {
                     }
 
                     match sharespace.scheduler.WaitVcpu(sharespace, self.id, false) {
-                        Ok(_) => {}
+                        Ok(taskId) => {
+                            return taskId as i64
+                        }
                         Err(Error::Exit) => return -1,
                         Err(e) => panic!("HYPERCALL_HLT wait fail with error {:?}", e),
                     }
@@ -642,8 +644,8 @@ impl KVMVcpu {
             }
             let ret = sharespace.scheduler.WaitVcpu(sharespace, self.id, true);
             match ret {
-                Ok(count) => {
-                    return count
+                Ok(taskId) => {
+                    return taskId as i64
                 },
                 Err(Error::Exit) => return -1,
                 Err(e) => panic!("HYPERCALL_HLT wait fail with error {:?}", e),
@@ -699,7 +701,7 @@ impl Scheduler {
         }
     }
 
-    pub fn WaitVcpu(&self, sharespace: &ShareSpace, vcpuId: usize, block: bool) -> Result<i64> {
+    pub fn WaitVcpu(&self, sharespace: &ShareSpace, vcpuId: usize, block: bool) -> Result<u64> {
         self.vcpuWaitMask.fetch_or(1<<vcpuId, Ordering::SeqCst);
         defer!(self.vcpuWaitMask.fetch_and(!(1<<vcpuId), Ordering::SeqCst););
 
@@ -761,7 +763,7 @@ impl CPULocal {
         self.data = 1;
     }
 
-    pub fn VcpuWait(&self, sharespace: &ShareSpace, block: bool) -> Result<i64> {
+    pub fn VcpuWait(&self, sharespace: &ShareSpace, block: bool) -> Result<u64> {
         let mut events = [epoll_event { events: 0, u64: 0 }; 2];
 
         let time = if block {
@@ -770,7 +772,14 @@ impl CPULocal {
             0
         };
 
-        while sharespace.scheduler.GlobalReadyTaskCnt() == 0 {
+        match sharespace.scheduler.GetNext() {
+            None => (),
+            Some(newTask) => {
+                return Ok(newTask.data)
+            }
+        }
+
+        loop {
             self.ToWaiting(sharespace);
             if sharespace.config.read().AsyncPrint() {
                 sharespace.LogFlush(false);
@@ -780,6 +789,13 @@ impl CPULocal {
                 epoll_wait(self.epollfd, &mut events[0], 2, time)
             };
             self.ToSearch(sharespace);
+
+            match sharespace.scheduler.GetNext() {
+                None => (),
+                Some(newTask) => {
+                    return Ok(newTask.data)
+                }
+            }
 
             if !super::runc::runtime::vm::IsRunning() {
                 return Err(Error::Exit)
@@ -837,8 +853,6 @@ impl CPULocal {
                 return Ok(0)
             }
         }
-
-        return Ok(0)
     }
 
     pub fn Wakeup(&self) {

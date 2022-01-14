@@ -107,8 +107,15 @@ pub fn IOWait() {
 }
 
 pub fn WaitFn() {
+    let mut task = TaskId::default();
     loop {
-        let next = SHARESPACE.scheduler.GetNext();
+        let next = if task.data == 0 {
+            SHARESPACE.scheduler.GetNext()
+        } else {
+            let tmp = task;
+            task = TaskId::default();
+            Some(tmp)
+        };
 
         match next {
             None => {
@@ -119,7 +126,8 @@ pub fn WaitFn() {
 
                 if SHARESPACE.scheduler.GlobalReadyTaskCnt() == 0 {
                     debug!("vcpu {} sleep", CPULocal::CpuId());
-                    GUEST_NOTIFIER.VcpuWait();
+                    let addr = GUEST_NOTIFIER.VcpuWait();
+                    task = TaskId::New(addr);
                     debug!("vcpu {} wakeup", CPULocal::CpuId());
                 } else {
                     //error!("Waitfd None {}", SHARESPACE.scheduler.Print());

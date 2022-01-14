@@ -153,15 +153,10 @@ impl CPULocal {
         return CPU_LOCAL[cpuId].State()
     }
 
-
     pub fn SwitchToRunning(&self) {
         let _searchingCnt = self.ToRunning(&SHARESPACE);
         /*if searchingCnt == 0 {
             SHARESPACE.scheduler.WakeOne();
         }*/
     }
-}
-
-pub fn GetVCPUWaiting(cpuId: usize) -> bool {
-    return CPULocal::GetCPUState(cpuId) == VcpuState::Waiting;
 }

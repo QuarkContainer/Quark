@@ -198,11 +198,13 @@ impl Notifier {
         return Self(QMutex::new(internal))
     }
 
-    pub fn VcpuWait(&self) {
+    pub fn VcpuWait(&self) -> u64 {
         let ret = HostSpace::VcpuWait();
         if ret < 0 {
             panic!("ProcessHostEpollWait fail with error {}", ret)
         };
+
+        return ret as u64
     }
 
     pub fn ProcessHostEpollWait(&self) {
