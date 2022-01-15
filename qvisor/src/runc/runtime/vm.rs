@@ -149,8 +149,9 @@ impl VirtualMachine {
         };
 
         if QUARK_CONFIG.lock().EnableRDMA {
-            let rdmaDeviceName = "rdma";
-            let lbPort = 0;
+            // use default rdma device
+            let rdmaDeviceName = "";
+            let lbPort = QUARK_CONFIG.lock().RDMAPort;
             super::super::super::vmspace::HostFileMap::rdma::RDMA.Init(rdmaDeviceName, lbPort);
         }
 
