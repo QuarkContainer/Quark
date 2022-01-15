@@ -33,6 +33,7 @@ Quark Container's high level design is as below. It handles Container Applicatio
 1. OS: Linux Kernel > 5.8.0
 2. Processor: X86-64 (Quark only support 64 bit architecture, So far only support Intel CPU)
 3. Docker: > 17.09.0
+4. Enable virtualization technology in BIOS (Usually in Security tab of BIOS)
 
 ## Installing from source
 
