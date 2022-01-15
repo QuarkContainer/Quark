@@ -628,7 +628,9 @@ impl KVMVcpu {
 
                     match sharespace.scheduler.WaitVcpu(sharespace, self.id, false) {
                         Ok(taskId) => {
-                            return taskId as i64
+                            if taskId != 0 {
+                                return taskId as i64
+                            }
                         }
                         Err(Error::Exit) => return -1,
                         Err(e) => panic!("HYPERCALL_HLT wait fail with error {:?}", e),
