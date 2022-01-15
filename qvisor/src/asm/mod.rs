@@ -34,21 +34,6 @@ pub fn AsmHostID(axArg: u32, cxArg: u32) -> (u32, u32, u32, u32) {
     return (ax, bx, cx, dx)
 }
 
-#[inline(always)]
-pub fn Rdtsc() -> i64 {
-    let rax: u64;
-    let rdx: u64;
-    unsafe {
-        llvm_asm!("\
-        lfence
-        rdtsc
-        " : "={rax}"(rax), "={rdx}"(rdx)
-        : : )
-    };
-
-    return rax as i64 | ((rdx as i64) << 32);
-}
-
 #[inline]
 pub fn CurrentCr3() -> u64 {
     let cr3: u64;

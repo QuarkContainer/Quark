@@ -14,7 +14,7 @@
 
 use alloc::collections::vec_deque::VecDeque;
 
-use super::super::super::asm::*;
+use super::super::super::TSC;
 use super::super::super::super::common::*;
 use super::super::super::Kernel::HostSpace;
 
@@ -50,7 +50,7 @@ pub fn Magnitude(r: ReferenceNS) -> ReferenceNS {
 }
 
 pub fn Sample(c: ClockID) -> Result<Sample> {
-    let before = Rdtsc();
+    let before = TSC.Rdtsc();
 
     let time = HostSpace::KernelGetTime(c)?;
 
@@ -58,7 +58,7 @@ pub fn Sample(c: ClockID) -> Result<Sample> {
         return Err(Error::SysError(-time as i32));
     }
 
-    let after = Rdtsc();
+    let after = TSC.Rdtsc();
     let res = Sample {
         Before: before,
         After: after,
@@ -69,7 +69,7 @@ pub fn Sample(c: ClockID) -> Result<Sample> {
 }
 
 pub fn Cycles() -> TSCValue {
-    return Rdtsc()
+    return TSC.Rdtsc()
 }
 
 #[derive(Debug, Default, Copy, Clone)]
@@ -176,7 +176,7 @@ impl Sampler {
     }
 
     pub fn Cycles(&self) -> TSCValue {
-        return Rdtsc()
+        return TSC.Rdtsc()
     }
 
     pub fn Range(&self) -> Option<(Sample, Sample)> {

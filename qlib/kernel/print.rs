@@ -22,7 +22,7 @@ pub const SCALE : i64 = 2_000;
 
 pub fn PrintPrefix() -> String {
     let now = if super::SHARESPACE.config.read().PerfDebug {
-        Rdtsc()/SCALE
+        TSC.Rdtsc()/SCALE
     } else {
         0
     };

@@ -269,7 +269,7 @@ pub extern "C" fn syscall_handler(
     //let tid = currTask.Thread().lock().id;
     let mut tid = 0;
     let mut pid = 0;
-    let startTime = Rdtsc();
+    let startTime = TSC.Rdtsc();
 
     let llevel = SHARESPACE.config.read().LogLevel;
     if llevel == LogLevel::Complex {
@@ -314,7 +314,7 @@ pub extern "C" fn syscall_handler(
     //error!("syscall_handler: {}", ::AllocatorPrint(10));
     if llevel == LogLevel::Simple || llevel == LogLevel::Complex {
         let gap = if self::SHARESPACE.config.read().PerfDebug {
-            Rdtsc() - startTime
+            TSC.Rdtsc() - startTime
         } else {
             0
         };

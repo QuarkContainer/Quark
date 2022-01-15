@@ -16,6 +16,7 @@ use super::qlib::{ShareSpace};
 use super::qlib::common::*;
 use super::qlib::qmsg::*;
 use super::qlib::range::*;
+use super::qlib::kernel::*;
 use super::*;
 use super::kvm_vcpu::KVMVcpu;
 
@@ -311,6 +312,13 @@ impl KVMVcpu {
             },
             Msg::UpdateWaitInfo(msg) => {
                 ret = super::VMSpace::UpdateWaitInfo(msg.fd, msg.waitinfo.clone()) as u64;
+            },
+            Msg::Rdtsc(_msg) => {
+                ret = TSC.Rdtsc() as u64;
+            },
+            Msg::SetTscOffset(msg) => {
+                TSC.SetOffset(msg.offset);
+                ret = 0;
             },
         };
 

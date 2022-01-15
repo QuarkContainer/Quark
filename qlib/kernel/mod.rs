@@ -43,6 +43,8 @@ pub mod guestfdnotifier;
 
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicI32;
+use core::sync::atomic::AtomicI64;
+use core::sync::atomic::Ordering;
 
 use super::super::ShareSpaceRef;
 use super::singleton::*;
@@ -51,6 +53,7 @@ use self::quring::*;
 use self::boot::loader::*;
 use self::memmgr::pma::*;
 
+pub static TSC: Tsc = Tsc::New();
 pub static SHARESPACE: ShareSpaceRef = ShareSpaceRef::New();
 pub static IOURING: IOUringRef = IOUringRef::New();
 pub static KERNEL_PAGETABLE: Singleton<PageTables> = Singleton::<PageTables>::New();
@@ -64,4 +67,40 @@ pub static EXIT_CODE: Singleton<AtomicI32> = Singleton::<AtomicI32>::New();
 
 pub fn Shutdown() -> bool {
     return SHUTDOWN.load(self::super::linux_def::QOrdering::RELAXED);
+}
+
+#[derive(Default)]
+pub struct Tsc {
+    pub offset: AtomicI64,
+}
+
+impl Tsc {
+    pub const fn New() -> Self {
+        return  Self {
+            offset: AtomicI64::new(0)
+        }
+    }
+
+    #[inline(always)]
+    pub fn RawRdtsc() -> i64 {
+        let rax: u64;
+        let rdx: u64;
+        unsafe {
+            llvm_asm!("\
+        lfence
+        rdtsc
+        " : "={rax}"(rax), "={rdx}"(rdx)
+        : : )
+        };
+
+        return rax as i64 | ((rdx as i64) << 32);
+    }
+
+    pub fn SetOffset(&self, offset: i64) {
+        self.offset.store(offset, Ordering::SeqCst);
+    }
+
+    pub fn Rdtsc(&self) -> i64 {
+        return Self::RawRdtsc() - self.offset.load(Ordering::Relaxed);
+    }
 }
