@@ -33,6 +33,7 @@ use super::super::super::qlib::task_mgr::*;
 use super::super::super::qlib::kernel::SHARESPACE;
 use super::super::super::qlib::kernel::IOURING;
 use super::super::super::qlib::kernel::vcpu;
+use super::super::super::print::LOG;
 use super::super::super::syncmgr;
 use super::super::super::runc::runtime::loader::*;
 use super::super::super::kvm_vcpu::*;
@@ -133,6 +134,10 @@ impl VirtualMachine {
 
     pub fn Init(args: Args /*args: &Args, kvmfd: i32*/) -> Result<Self> {
         PerfGoto(PerfType::Other);
+
+        if QUARK_CONFIG.lock().PerSandboxLog {
+            LOG.lock().Reset(&args.ID[0..12]);
+        }
 
         let kvmfd = args.KvmFd;
 
