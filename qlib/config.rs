@@ -33,6 +33,7 @@ pub struct Config {
     pub UringSize: usize,
     pub UringEpollCtl: bool,
     pub EnableRDMA: bool,
+    pub RDMAPort: u8,
     pub PerSandboxLog: bool,
 }
 
@@ -73,6 +74,7 @@ impl Default for Config {
             UringSize: 64,
             UringEpollCtl: false,
             EnableRDMA: false,
+            RDMAPort: 1,
             PerSandboxLog: false,
         }
     }
