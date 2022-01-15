@@ -42,11 +42,12 @@ pub fn SetSharespace(sharespace: &'static ShareSpace) {
     LOG.lock().shareSpace = sharespace;
 }
 
-pub const LOG_FILE : &str = "/var/log/quark/quark.log";
+pub const LOG_FILE_DEFAULT : &str = "/var/log/quark/quark.log";
+pub const LOG_FILE_FORMAT : &str = "/var/log/quark/{}.log";
 pub  const TIME_FORMAT: &str = "%H:%M:%S%.3f";
 impl Log {
     pub fn New() -> Self {
-        let file = OpenOptions::new().create(true).append(true).open(LOG_FILE).expect("Log Open fail");
+        let file = OpenOptions::new().create(true).append(true).open(LOG_FILE_DEFAULT).expect("Log Open fail");
         return Self {
             file: file,
             syncPrint: true,
@@ -54,6 +55,12 @@ impl Log {
                 &mut *(0 as * mut ShareSpace)
             },
         }
+    }
+
+    pub fn Reset(&mut self, name: &str) {
+        let filename = format!( "/var/log/quark/{}.log", name);
+        let file = OpenOptions::new().create(true).append(true).open(filename).expect("Log Open fail");
+        self.file = file;
     }
 
     pub fn SetSharespace(&mut self, sharespace: &'static ShareSpace) {
