@@ -109,6 +109,16 @@ pub enum Msg {
     ReadControlMsg(ReadControlMsg),
     WriteControlMsgResp(WriteControlMsgResp),
     UpdateWaitInfo(UpdateWaitInfo),
+    Rdtsc(Rdtsc),
+    SetTscOffset(SetTscOffset),
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct Rdtsc {}
+
+#[derive(Clone, Default, Debug)]
+pub struct SetTscOffset {
+    pub offset: i64
 }
 
 #[derive(Clone, Default, Debug)]

@@ -320,30 +320,6 @@ pub fn WriteBarrier() {
     Barrier();
 }
 
-// Rdtsc reads the TSC.
-//
-// Intel SDM, Vol 3, Ch 17.15:
-// "The RDTSC instruction reads the time-stamp counter and is guaranteed to
-// return a monotonically increasing unique value whenever executed, except for
-// a 64-bit counter wraparound. Intel guarantees that the time-stamp counter
-// will not wraparound within 10 years after being reset."
-//
-// We use int64, so we have 5 years before wrap-around.
-#[inline(always)]
-pub fn Rdtsc() -> i64 {
-    let rax: u64;
-    let rdx: u64;
-    unsafe {
-        llvm_asm!("\
-        lfence
-        rdtsc
-        " : "={rax}"(rax), "={rdx}"(rdx)
-        : : "memory" : "volatile")
-    };
-
-    return rax as i64 | ((rdx as i64) << 32);
-}
-
 #[inline(always)]
 pub fn GetCpu() -> u32 {
     let rcx: u64;

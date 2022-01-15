@@ -105,6 +105,20 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
+    pub fn Rdtsc() -> i64 {
+        let mut msg = Msg::Rdtsc(Rdtsc {});
+
+        return HostSpace::HCall(&mut msg, false) as i64;
+    }
+
+    pub fn SetTscOffset(offset: i64) -> i64 {
+        let mut msg = Msg::SetTscOffset(SetTscOffset {
+            offset: offset
+        });
+
+        return HostSpace::HCall(&mut msg, false) as i64;
+    }
+
     pub fn IORead(fd: i32, iovs: u64, iovcnt: i32) -> i64 {
         let mut msg = Msg::IORead(IORead {
             fd,

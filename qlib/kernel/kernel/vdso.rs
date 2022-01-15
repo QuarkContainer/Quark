@@ -14,6 +14,7 @@
 
 use core::mem;
 
+use super::super::TSC;
 use super::super::asm::*;
 use super::super::super::common::*;
 use super::super::Kernel::HostSpace;
@@ -50,7 +51,7 @@ impl VdsoParams {
             baseRef = self.realtimeBaseRef;
             baseCycle = self.realtimeBaseCycles;
             frequency = self.realtimeFrequency;
-            now = Rdtsc();
+            now = TSC.Rdtsc();
 
             if self.ReadSeqReady(seq) {
                 break;
@@ -86,7 +87,7 @@ impl VdsoParams {
             baseRef = self.monotonicBaseRef;
             baseCycle = self.monotonicBaseCycles;
             frequency = self.monotonicFrequency;
-            now = Rdtsc();
+            now = TSC.Rdtsc();
 
             if self.ReadSeqReady(seq) {
                 break;

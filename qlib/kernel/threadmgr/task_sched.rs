@@ -18,7 +18,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::ops::Deref;
 
-use super::super::asm::*;
+use super::super::TSC;
 use super::super::super::limits::*;
 use super::super::threadmgr::thread_group::*;
 use super::super::threadmgr::thread::*;
@@ -628,7 +628,7 @@ impl TimerListener for KernelCPUClockTicker {
                     // timers.
                     nrVirtCandidates += 1;
                     //use rdtsc as random source
-                    if Rdtsc() % nrVirtCandidates == 0 {
+                    if TSC.Rdtsc() % nrVirtCandidates == 0 {
                         virtReceiver = Some(t.clone());
                     }
                 }
@@ -636,7 +636,7 @@ impl TimerListener for KernelCPUClockTicker {
                 if tsched.State == SchedState::RunningApp || tsched.State == SchedState::RunningSys {
                     // Considered by ITIMER_PROF and RLIMIT_CPU timers.
                     nrProfCandidates += 1;
-                    if Rdtsc() % nrProfCandidates == 0 {
+                    if TSC.Rdtsc() % nrProfCandidates == 0 {
                         profReceiver = Some(t.clone());
                     }
                 }

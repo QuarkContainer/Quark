@@ -35,7 +35,7 @@ use super::super::super::auth::*;
 use super::super::super::limits::*;
 use super::super::super::linux::time::*;
 use super::super::super::path::*;
-use super::super::asm::*;
+use super::super::TSC;
 use super::super::loader::loader::*;
 use super::super::SignalDef::*;
 use super::super::threadmgr::pid_namespace::*;
@@ -76,7 +76,7 @@ const CLOCK_TICK_MS : i64 = CLOCK_TICK / MILLISECOND;
 
 impl AsyncProcess {
     pub fn Process(&self) {
-        let curr = Rdtsc();
+        let curr = TSC.Rdtsc();
         if curr - self.lastTsc.load(Ordering::Relaxed) > TSC_GAP {
             self.lastTsc.store(curr, Ordering::Relaxed);
             if let Some(mut processTime) = self.lastProcessTime.try_lock() {

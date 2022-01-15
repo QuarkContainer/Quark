@@ -17,13 +17,13 @@ use crate::qlib::mutex::*;
 use core::ops::Deref;
 
 use super::super::super::asm::muldiv64;
+use super::super::super::TSC;
 use super::super::super::super::linux::time::*;
 use super::super::super::super::metric::*;
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
 use super::super::super::super::singleton::*;
 use super::super::super::Kernel::HostSpace;
-use super::super::super::asm::*;
 use super::sampler::*;
 use super::parameters::*;
 use super::*;
@@ -232,9 +232,9 @@ impl CalibratedClocks {
     pub fn Update(&mut self) -> (Parameters, bool, Parameters, bool) {
         let freq = HostSpace::KernelVcpuFreq() as u64;
 
-        let tsc1 = Rdtsc();
+        let tsc1 = TSC.Rdtsc();
         let monotime = HostSpace::KernelGetTime(MONOTONIC).unwrap();
-        let tsc2 = Rdtsc();
+        let tsc2 = TSC.Rdtsc();
 
         let tsc = (tsc1 + tsc2) / 2;
 
@@ -244,9 +244,9 @@ impl CalibratedClocks {
             BaseCycles: tsc,
         };
 
-        let tsc1 = Rdtsc();
+        let tsc1 = TSC.Rdtsc();
         let realtime = HostSpace::KernelGetTime(REALTIME).unwrap();
-        let tsc2 = Rdtsc();
+        let tsc2 = TSC.Rdtsc();
 
         let tsc = (tsc1 + tsc2) / 2;
 

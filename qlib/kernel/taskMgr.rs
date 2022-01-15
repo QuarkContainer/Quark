@@ -21,13 +21,13 @@ use super::SHARESPACE;
 use super::super::task_mgr::*;
 use super::Kernel::HostSpace;
 use super::kernel::kernel::*;
+use super::TSC;
 use super::super::linux_def::*;
 use super::super::vcpu_mgr::*;
 use super::threadmgr::task_sched::*;
 use super::KERNEL_STACK_ALLOCATOR;
 use super::quring::uring_mgr::*;
 use super::guestfdnotifier::GUEST_NOTIFIER;
-use super::asm::*;
 use super::Shutdown;
 
 static ACTIVE_TASK: AtomicU32 = AtomicU32::new(0);
@@ -75,20 +75,20 @@ pub const IO_WAIT_CYCLES : i64 = 20_000_000; // 1ms
 pub const WAIT_CYCLES : i64 = 1_00_000; // 1ms
 
 pub fn IOWait() {
-    let mut start = Rdtsc();
+    let mut start = TSC.Rdtsc();
 
     while !Shutdown() {
         if PollAsyncMsg() > 10 {
-            start = Rdtsc();
+            start = TSC.Rdtsc();
         }
 
-        let currentTime = Rdtsc();
+        let currentTime = TSC.Rdtsc();
         if currentTime - start >= IO_WAIT_CYCLES || Shutdown() {
             SHARESPACE.kernelIOThreadWaiting.store(true, Ordering::Release);
 
             // after change the state, check again in case new message coming
             if PollAsyncMsg() > 10 && !Shutdown() {
-                start = Rdtsc();
+                start = TSC.Rdtsc();
                 SHARESPACE.kernelIOThreadWaiting.store(false, Ordering::Release);
                 continue;
             }
@@ -96,7 +96,7 @@ pub fn IOWait() {
             //debug!("IOWait sleep");
             HostSpace::IOWait();
             //debug!("IOWait wakeup");
-            start = Rdtsc();
+            start = TSC.Rdtsc();
             SHARESPACE.kernelIOThreadWaiting.store(false, Ordering::Release);
         }
     }
@@ -212,7 +212,7 @@ pub fn ProcessOne() -> bool {
 
 pub fn Wait() {
     CPULocal::Myself().ToSearch(&SHARESPACE);
-    let start = Rdtsc();
+    let start = TSC.Rdtsc();
 
     loop {
         let next = { SHARESPACE.scheduler.GetNext() };
@@ -232,7 +232,7 @@ pub fn Wait() {
 
         //super::ALLOCATOR.Free();
 
-        let currentTime = Rdtsc();
+        let currentTime = TSC.Rdtsc();
         if currentTime - start >= WAIT_CYCLES {
             let current = TaskId::New(CPULocal::CurrentTask());
             let waitTask = TaskId::New(CPULocal::WaitTask());

@@ -74,6 +74,7 @@ mod syscalls;
 pub mod backtracer;
 pub mod kernel_def;
 
+use self::qlib::kernel::TSC;
 use self::qlib::kernel::asm as asm;
 use self::qlib::kernel::arch as arch;
 use self::qlib::kernel::boot as boot;
@@ -259,7 +260,7 @@ pub extern "C" fn syscall_handler(
     //let tid = currTask.Thread().lock().id;
     let mut tid = 0;
     let mut pid = 0;
-    let startTime = Rdtsc();
+    let startTime = TSC.Rdtsc();
 
     let llevel = SHARESPACE.config.read().LogLevel;
     if llevel == LogLevel::Complex {
@@ -304,7 +305,7 @@ pub extern "C" fn syscall_handler(
     //error!("syscall_handler: {}", ::AllocatorPrint(10));
     if llevel == LogLevel::Simple || llevel == LogLevel::Complex {
         let gap = if self::SHARESPACE.config.read().PerfDebug {
-            Rdtsc() - startTime
+            TSC.Rdtsc() - startTime
         } else {
             0
         };
@@ -423,6 +424,16 @@ pub fn LogInit(pages: u64) {
     *SHARESPACE.logBuf.lock() = Some(bs);
 }
 
+pub fn InitTsc() {
+    let _hosttsc1 = Kernel::HostSpace::Rdtsc();
+    let tsc1 = TSC.Rdtsc();
+    let hosttsc2 = Kernel::HostSpace::Rdtsc();
+    let tsc2 = TSC.Rdtsc();
+    let hosttsc3 = Kernel::HostSpace::Rdtsc();
+    let tsc3 = TSC.Rdtsc();
+    Kernel::HostSpace::SetTscOffset((hosttsc2 + hosttsc3)/2 - (tsc1 + tsc2 + tsc3) / 3);
+}
+
 #[no_mangle]
 pub extern "C" fn rust_main(
     heapStart: u64,
@@ -436,6 +447,8 @@ pub extern "C" fn rust_main(
         ALLOCATOR.Init(heapStart);
         SHARESPACE.SetValue(shareSpaceAddr);
         SingletonInit();
+
+        InitTsc();
         InitTimeKeeper(vdsoParamAddr);
 
         //Kernel::HostSpace::KernelMsg(0, 0, 1);

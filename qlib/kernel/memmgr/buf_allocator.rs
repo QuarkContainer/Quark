@@ -20,7 +20,7 @@ use core::cmp::max;
 use core::mem::size_of;
 use core::ptr::NonNull;
 
-use super::super::asm::*;
+use super::super::TSC;
 use super::super::super::common::*;
 
 pub const BUF_CNT: usize = 16;
@@ -378,7 +378,7 @@ impl StackHeap {
 
 unsafe impl GlobalAlloc for StackHeap {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let start = Rdtsc();
+        let start = TSC.Rdtsc();
         let mut intern = self.lock();
 
         let mut hit = 0;
@@ -426,7 +426,7 @@ unsafe impl GlobalAlloc for StackHeap {
             }
         };
 
-        let current = Rdtsc();
+        let current = TSC.Rdtsc();
         intern.time += current - start;
         intern.count += 1;
         intern.hit += hit;
@@ -436,7 +436,7 @@ unsafe impl GlobalAlloc for StackHeap {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        let start = Rdtsc();
+        let start = TSC.Rdtsc();
         let mut intern = self.lock();
 
         let mut hit = 0;
@@ -473,7 +473,7 @@ unsafe impl GlobalAlloc for StackHeap {
             }
         }
 
-        let current = Rdtsc();
+        let current = TSC.Rdtsc();
         intern.time += current - start;
         intern.count += 1;
         intern.hit += hit;
@@ -545,7 +545,7 @@ impl BufHeap {
 
 unsafe impl GlobalAlloc for BufHeap {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let start = Rdtsc();
+        let start = TSC.Rdtsc();
         let mut intern = self.lock();
         let size = max(
             layout.size().next_power_of_two(),
@@ -573,7 +573,7 @@ unsafe impl GlobalAlloc for BufHeap {
             ret
         };
 
-        let now = Rdtsc();
+        let now = TSC.Rdtsc();
         intern.times[class].0 += (now - start) as u64;
         intern.times[class].1 += 1;
 
@@ -581,7 +581,7 @@ unsafe impl GlobalAlloc for BufHeap {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        let start = Rdtsc();
+        let start = TSC.Rdtsc();
         let mut intern = self.lock();
 
         let size = max(
@@ -599,7 +599,7 @@ unsafe impl GlobalAlloc for BufHeap {
             intern.heap.dealloc(NonNull::new_unchecked(ptr), layout)
         }
 
-        let now = Rdtsc();
+        let now = TSC.Rdtsc();
         intern.times[class].0 += (now - start) as u64;
         intern.times[class].1 += 1;
     }

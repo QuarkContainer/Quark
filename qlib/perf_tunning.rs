@@ -18,7 +18,7 @@ use alloc::vec::Vec;
 use super::mutex::*;
 use core::mem;
 
-use super::super::asm::Rdtsc;
+use super::kernel::TSC;
 pub use super::super::kernel_def::*;
 use super::singleton::*;
 
@@ -61,11 +61,11 @@ impl Default for Counter {
 
 impl Counter {
     pub fn Enter(&self) {
-        self.lastVal.store(Rdtsc() as u64, Ordering::SeqCst);
+        self.lastVal.store(TSC.Rdtsc() as u64, Ordering::SeqCst);
     }
 
     pub fn Leave(&self) {
-        let currentVal = Rdtsc() as u64;
+        let currentVal = TSC.Rdtsc() as u64;
         let lastVal = self.lastVal.load(Ordering::SeqCst);
         if lastVal != 0 {
             self.count.fetch_add(currentVal - self.lastVal.load(Ordering::SeqCst), Ordering::SeqCst);
@@ -80,7 +80,7 @@ impl Counter {
         if last == 0 {
             return ret
         } else {
-            ret + (Rdtsc() as u64 - last)
+            ret + (TSC.Rdtsc() as u64 - last)
         }
     }
 }
