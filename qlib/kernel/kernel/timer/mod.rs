@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//pub mod raw_timer;
 pub mod sampler;
 pub mod parameters;
 pub mod calibratedClock;
@@ -26,6 +25,7 @@ use self::timekeeper::*;
 use self::timer_store::*;
 use self::timer::*;
 use super::super::super::singleton::*;
+use super::super::super::object_ref::*;
 
 pub static TIME_KEEPER : Singleton<TimeKeeper> = Singleton::<TimeKeeper>::New();
 pub static REALTIME_CLOCK : Singleton<Clock> = Singleton::<Clock>::New();
@@ -74,3 +74,4 @@ pub type ClockID = i32;
 pub const REALTIME: ClockID = 0;
 pub const MONOTONIC: ClockID = 1;
 
+pub type TimerKeeperRef = ObjectRef<TimeKeeper>;

@@ -52,6 +52,7 @@ pub mod singleton;
 pub mod mutex;
 pub mod sort_arr;
 pub mod socket_buf;
+pub mod object_ref;
 
 pub mod ringbuf;
 pub mod vcpu_mgr;
@@ -64,7 +65,6 @@ use core::sync::atomic::Ordering;
 use self::mutex::*;
 use cache_padded::CachePadded;
 use alloc::vec::Vec;
-use core::ops::Deref;
 
 use super::asm::*;
 use self::task_mgr::*;
@@ -74,6 +74,7 @@ use self::config::*;
 use self::linux_def::*;
 use self::bytestream::*;
 use self::kernel::quring::uring_mgr::QUring;
+use self::object_ref::ObjectRef;
 
 pub fn InitSingleton() {
     unsafe {
@@ -517,42 +518,7 @@ pub struct Str {
     pub len: u32
 }
 
-#[derive(Default)]
-pub struct ShareSpaceRef {
-    addr: AtomicU64
-}
-
-impl Deref for ShareSpaceRef {
-    type Target = ShareSpace;
-
-    fn deref(&self) -> &ShareSpace {
-        unsafe {
-            &*(self.addr.load(Ordering::Relaxed) as * const ShareSpace)
-        }
-    }
-}
-
-impl ShareSpaceRef {
-    pub const fn New() -> Self {
-        return Self {
-            addr: AtomicU64::new(0)
-        }
-    }
-
-    pub fn Ptr(&self) -> &ShareSpace {
-        unsafe {
-            &*(self.addr.load(Ordering::Relaxed) as * const ShareSpace)
-        }
-    }
-
-    pub fn SetValue(&self, addr: u64) {
-        self.addr.store(addr, Ordering::SeqCst);
-    }
-
-    pub fn Value(&self) -> u64 {
-        return self.addr.load(Ordering::Relaxed)
-    }
-}
+pub type ShareSpaceRef = ObjectRef<ShareSpace>;
 
 #[repr(C)]
 #[repr(align(128))]

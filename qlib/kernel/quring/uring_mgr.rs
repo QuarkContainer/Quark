@@ -15,13 +15,12 @@
 use core::sync::atomic;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicUsize;
-use core::sync::atomic::Ordering;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::ops::Deref;
 
 use super::super::task::*;
 use super::super::super::common::*;
+use super::super::super::object_ref::*;
 use super::super::taskMgr::*;
 pub use super::super::super::uring::cqueue::CompletionQueue;
 pub use super::super::super::uring::cqueue;
@@ -139,42 +138,7 @@ impl IoUring {
     }
 }
 
-#[derive(Default)]
-pub struct IOUringRef {
-    addr: AtomicU64
-}
-
-impl Deref for IOUringRef {
-    type Target = QUring;
-
-    fn deref(&self) -> &QUring {
-        unsafe {
-            &*(self.addr.load(Ordering::Relaxed) as * const QUring)
-        }
-    }
-}
-
-impl IOUringRef {
-    pub const fn New() -> Self {
-        return Self {
-            addr: AtomicU64::new(0)
-        }
-    }
-
-    pub fn Ptr(&self) -> &QUring {
-        unsafe {
-            &*(self.addr.load(Ordering::Relaxed) as * const QUring)
-        }
-    }
-
-    pub fn SetValue(&self, addr: u64) {
-        self.addr.store(addr, Ordering::SeqCst);
-    }
-
-    pub fn Value(&self) -> u64 {
-        return self.addr.load(Ordering::Relaxed)
-    }
-}
+pub type IOUringRef = ObjectRef<QUring>;
 
 #[derive(Default)]
 pub struct QUring {
