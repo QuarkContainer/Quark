@@ -50,6 +50,10 @@ And Installing lcap library
 ```sh
 sudo apt-get install libcap-dev
 ```
+Also, some extra libraries for compiling RDMA module:
+```sh
+sudo apt-get install build-essential cmake gcc libudev-dev libnl-3-dev libnl-route-3-dev ninja-build pkg-config valgrind python3-dev cython3 python3-docutils pandoc libclang-dev
+```
 And also add the rust-src component to the current toolchain:
 ```sh
 rustup component add rust-src
