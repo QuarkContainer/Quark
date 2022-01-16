@@ -74,6 +74,8 @@ use self::config::*;
 use self::linux_def::*;
 use self::bytestream::*;
 use self::kernel::quring::uring_mgr::QUring;
+use self::kernel::kernel::timer::timekeeper::*;
+use self::kernel::kernel::timer::timer_store::*;
 use self::object_ref::ObjectRef;
 
 pub fn InitSingleton() {
@@ -540,6 +542,8 @@ pub struct ShareSpace {
 
     pub kernelIOThreadWaiting: CachePadded<AtomicBool>,
     pub ioUring: CachePadded<QUring>,
+    pub timerkeeper: CachePadded<TimeKeeper>,
+    pub timerStore: CachePadded<TimerStore>,
     pub config: QRwLock<Config>,
 
     pub logBuf: QMutex<Option<ByteStream>>,
@@ -565,6 +569,14 @@ impl ShareSpace {
 
     pub fn GetIOUringAddr(&self) -> u64 {
         return self.ioUring.Addr()
+    }
+
+    pub fn GetTimerKeeperAddr(&self) -> u64 {
+        return self.timerkeeper.Addr()
+    }
+
+    pub fn GetTimerStoreAddr(&self) -> u64 {
+        return self.timerStore.Addr()
     }
 
     pub fn Addr(&self) -> u64 {

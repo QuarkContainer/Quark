@@ -52,6 +52,10 @@ impl TimeKeeper {
         }
     }
 
+    pub fn Addr(&self) -> u64 {
+        return self as * const _ as u64;
+    }
+
     pub fn NewClock(&self, clockId: ClockID) -> Clock {
         let c = TimeKeeperClock {
             tk: self.clone(),
