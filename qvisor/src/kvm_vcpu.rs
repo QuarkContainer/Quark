@@ -774,17 +774,18 @@ impl CPULocal {
             0
         };
 
-        match sharespace.scheduler.GetNext() {
-            None => (),
-            Some(newTask) => {
-                return Ok(newTask.data)
-            }
-        }
-
         loop {
             self.ToWaiting(sharespace);
             if sharespace.config.read().AsyncPrint() {
                 sharespace.LogFlush(false);
+            }
+
+            match sharespace.scheduler.GetNext() {
+                None => (),
+                Some(newTask) => {
+                    self.ToSearch(sharespace);
+                    return Ok(newTask.data)
+                }
             }
 
             let nfds = unsafe {
