@@ -16,6 +16,7 @@ use core::sync::atomic::Ordering;
 
 use super::super::qlib::ShareSpace;
 use super::super::qlib::common::*;
+//use super::super::qlib::kernel::IOURING;
 use super::super::*;
 
 pub struct KIOThread {
@@ -41,6 +42,8 @@ impl KIOThread {
             if !super::super::runc::runtime::vm::IsRunning() {
                 return Err(Error::Exit)
             }
+
+            //IOURING.DrainCompletionQueue();
 
             //URING_MGR.lock().Wake(0, 0).expect("qlib::HYPER CALL_URING_WAKE fail");
 

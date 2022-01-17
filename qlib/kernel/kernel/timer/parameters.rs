@@ -121,7 +121,7 @@ pub fn ErrorAdjust(prevParams: &Parameters, newParams: &Parameters, now: TSCValu
     // Current time as computed by prevParams.
     let (oldNowNS, ok) = prevParams.ComputeTime(now);
     if !ok {
-        return Err(Error::Common(format!("old now time computation overflowed. params = {:?}, now = {}",
+        return Err(Error::Common(format!("old now time computation overflowed1. params = {:?}, now = {}",
                                          prevParams, now)))
     }
 
@@ -135,7 +135,7 @@ pub fn ErrorAdjust(prevParams: &Parameters, newParams: &Parameters, now: TSCValu
         // The next update time already passed before the new
         // parameters were created! We definitely can't correct the
         // error by then.
-        return Err(Error::Common(format!("old now time computation overflowed. params = {:?}, now = {}",
+        return Err(Error::Common(format!("old now time computation overflowed2. params = {:?}, now = {}",
                                          prevParams, now)))
     }
 

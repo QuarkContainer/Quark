@@ -852,6 +852,13 @@ impl CPULocal {
                     }
                 }
 
+                match sharespace.scheduler.GetNext() {
+                    None => (),
+                    Some(newTask) => {
+                        return Ok(newTask.data)
+                    }
+                }
+
                 return Ok(0)
             }
         }

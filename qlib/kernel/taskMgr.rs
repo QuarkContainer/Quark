@@ -155,8 +155,6 @@ pub fn WaitFn() {
                     super::Kernel::HostSpace::ExitVM(super::EXIT_CODE.load(QOrdering::SEQ_CST));
                 }
 
-                //error!("WaitFn newTask3");
-
                 // todo: free heap cache
                 //while super::ALLOCATOR.Free() {}
             }

@@ -107,7 +107,13 @@ impl PipeInternal {
         // atomic, but requires no atomicity for writes larger than this.
         let wanted = src.NumBytes() as usize;
         let avail = p.Available();
-        //info!("pipe::write id is {} wanted is {}, avail is {}, atomicIOBytes is {}", p.id, wanted, avail, self.atomicIOBytes);
+
+        if avail == 0 {
+            return Ok(0)
+        }
+
+        //info!("pipe::write id is {} wanted is {}, avail is {}, size is {}, max is {}",
+        //    p.id, wanted, avail, p.size, p.max);
         if wanted > avail {
             // Is this needed? todo: confirm this
             // if this is must, Pipe::Readfrom needs redesign

@@ -256,6 +256,9 @@ impl CalibratedClocks {
             BaseCycles: tsc,
         };
 
+        self.monotonic.write().updateParams(&monotonicParams);
+        self.realtime.write().updateParams(&realtimeParams);
+
         return (monotonicParams, true, realtimeParams, true)
     }
 
