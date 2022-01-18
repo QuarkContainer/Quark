@@ -31,9 +31,11 @@ use super::qlib::perf_tunning::*;
 use super::qlib::vcpu_mgr::*;
 use super::qlib::common::*;
 use super::qlib::uring::*;
+use super::qlib::linux_def::*;
 use super::qlib::control_msg::*;
 use super::qlib::mem::list_allocator::*;
 use super::qlib::kernel::task::*;
+use super::qlib::kernel::memmgr::pma::*;
 use super::Kernel::HostSpace;
 use super::syscalls::sys_file::*;
 use super::boot::controller::*;
@@ -239,7 +241,7 @@ pub fn OpenAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
 
 
 pub fn SignalProcess(signalArgs: &SignalArgs) {
-    *MSG.lock() = Some(signalArgs.clone());
+    *SHARESPACE.signalArgs.lock() = Some(signalArgs.clone());
     CreateTask(SignalHandler, 0 as *const u8, false);
 }
 
@@ -261,5 +263,11 @@ extern "C" {
 impl CPULocal {
     pub fn CpuId() -> usize {
         return GetVcpuId();
+    }
+}
+
+impl PageMgrInternal {
+    pub fn CopyVsysCallPages(&self) {
+        CopyPage(self.vsyscallPages[0], __vsyscall_page as u64);
     }
 }

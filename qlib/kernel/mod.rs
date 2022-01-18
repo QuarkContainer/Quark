@@ -47,11 +47,14 @@ use core::sync::atomic::AtomicI64;
 use core::sync::atomic::Ordering;
 
 use super::super::ShareSpaceRef;
+use super::control_msg::*;
 use super::singleton::*;
 use super::pagetable::*;
+use self::taskMgr::*;
 use self::quring::*;
 use self::boot::loader::*;
 use self::memmgr::pma::*;
+use self::boot::controller::SignalHandler;
 
 pub static TSC: Tsc = Tsc::New();
 pub static SHARESPACE: ShareSpaceRef = ShareSpaceRef::New();
@@ -104,3 +107,12 @@ impl Tsc {
         return Self::RawRdtsc() - self.offset.load(Ordering::Relaxed);
     }
 }
+
+pub fn SignalProcess(signalArgs: &SignalArgs) {
+    error!("SignalProcess 1");
+    *SHARESPACE.signalArgs.lock() = Some(signalArgs.clone());
+    error!("SignalProcess 2");
+    CreateTask(SignalHandler, 0 as *const u8, false);
+    error!("SignalProcess 3");
+}
+

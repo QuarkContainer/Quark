@@ -181,7 +181,6 @@ pub fn SingletonInit() {
         guestfdnotifier::GUEST_NOTIFIER.Init(guestfdnotifier::Notifier::New());
         UID.Init(AtomicU64::new(1));
         perflog::THREAD_COUNTS.Init(QMutex::new(perflog::ThreadPerfCounters::default()));
-        boot::controller::MSG.Init(QMutex::new(None));
 
         fs::file::InitSingleton();
         fs::filesystems::InitSingleton();

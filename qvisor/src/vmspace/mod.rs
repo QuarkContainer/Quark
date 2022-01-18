@@ -52,6 +52,7 @@ use super::qlib::cstring::*;
 use super::qlib::socket_buf::*;
 use super::qlib::perf_tunning::*;
 use super::qlib::kernel::guestfdnotifier::*;
+use super::qlib::kernel::SignalProcess;
 use super::namespace::MountNs;
 use super::ucall::usocket::*;
 use super::*;
@@ -1460,7 +1461,8 @@ impl VMSpace {
     }
 
     pub fn Signal(&self, signal: SignalArgs) {
-        SHARE_SPACE.AQHostInputCall(&HostInputMsg::Signal(signal));
+        SignalProcess(&signal);
+        //SHARE_SPACE.AQHostInputCall(&HostInputMsg::Signal(signal));
     }
 
     pub fn LibcFstat(osfd: i32) -> Result<LibcStat> {

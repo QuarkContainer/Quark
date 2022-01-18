@@ -34,7 +34,6 @@ pub static REALTIME_CLOCK : Singleton<Clock> = Singleton::<Clock>::New();
 pub static MONOTONIC_CLOCK : Singleton<Clock> = Singleton::<Clock>::New();
 pub static TIMER_STORE: TimerStoreRef = TimerStoreRef::New();
 
-
 pub unsafe fn InitSingleton() {
     TIME_KEEPER.SetValue(SHARESPACE.GetTimerKeeperAddr());
     REALTIME_CLOCK.Init(TIME_KEEPER.NewClock(REALTIME));

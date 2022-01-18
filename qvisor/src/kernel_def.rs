@@ -11,6 +11,7 @@ use super::qlib::control_msg::*;
 use super::qlib::kernel::task::*;
 use super::qlib::perf_tunning::*;
 use super::qlib::vcpu_mgr::*;
+use super::qlib::kernel::memmgr::pma::*;
 use super::FD_NOTIFIER;
 use super::QUARK_CONFIG;
 use super::KERNEL_IO_THREAD;
@@ -134,38 +135,6 @@ impl<T: ?Sized> QMutexIntern<T> {
     }
 }
 
-/*
-impl Scheduler {
-    // steal scheduling
-    pub fn GetNext(&self) -> Option<TaskId> {
-        return None
-    }
-
-    pub fn Count(&self) -> u64 {
-        return 0
-    }
-
-    pub fn Print(&self) -> String {
-        return "".to_string();
-    }
-
-    #[inline]
-    pub fn GetNextForCpu(&self, currentCpuId: usize, vcpuId: usize) -> Option<TaskId> {
-        return None
-    }
-
-    pub fn Schedule(&self, taskId: TaskId) {
-    }
-
-    pub fn KScheduleQ(&self, task: TaskId, vcpuId: usize) {
-    }
-
-    pub fn NewTask(&self, taskId: TaskId) -> usize {
-        return 0;
-    }
-}*/
-
-
 #[repr(usize)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PerfType {
@@ -215,4 +184,8 @@ impl CPULocal {
     pub fn CpuId() -> usize {
         return 0;
     }
+}
+
+impl PageMgrInternal {
+    pub fn CopyVsysCallPages(&self) {}
 }

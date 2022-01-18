@@ -65,6 +65,7 @@ use core::sync::atomic::Ordering;
 use self::mutex::*;
 use cache_padded::CachePadded;
 use alloc::vec::Vec;
+use alloc::sync::Arc;
 
 use super::asm::*;
 use self::task_mgr::*;
@@ -76,6 +77,9 @@ use self::bytestream::*;
 use self::kernel::quring::uring_mgr::QUring;
 use self::kernel::kernel::timer::timekeeper::*;
 use self::kernel::kernel::timer::timer_store::*;
+use self::kernel::kernel::futex::*;
+use self::kernel::task::*;
+use self::control_msg::SignalArgs;
 use self::object_ref::ObjectRef;
 
 pub fn InitSingleton() {
@@ -544,6 +548,8 @@ pub struct ShareSpace {
     pub ioUring: CachePadded<QUring>,
     pub timerkeeper: CachePadded<TimeKeeper>,
     pub timerStore: CachePadded<TimerStore>,
+    pub signalArgs: CachePadded<QMutex<Option<SignalArgs>>>,
+    pub futexMgr: CachePadded<FutexMgr>,
     pub config: QRwLock<Config>,
 
     pub logBuf: QMutex<Option<ByteStream>>,
@@ -565,6 +571,10 @@ impl ShareSpace {
 
     pub fn SetIOUringsAddr(&self, addr: u64) {
         self.ioUring.SetIOUringsAddr(addr);
+    }
+
+    pub fn GetFutexMgrAddr(&self) -> u64 {
+        return self.futexMgr.Addr()
     }
 
     pub fn GetIOUringAddr(&self) -> u64 {

@@ -492,7 +492,9 @@ pub extern "C" fn rust_main(
             CreateTask(StartRootContainer, ptr::null(), false);
         }
 
+        error!("heap start is 1");
         CreateTask(ControllerProcess, ptr::null(), true);
+        error!("heap start is 2");
     }
 
     WaitFn();

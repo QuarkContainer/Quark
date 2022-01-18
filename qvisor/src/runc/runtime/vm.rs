@@ -31,9 +31,13 @@ use super::super::super::qlib::addr;
 use super::super::super::qlib::perf_tunning::*;
 use super::super::super::qlib::task_mgr::*;
 use super::super::super::qlib::kernel::SHARESPACE;
+use super::super::super::qlib::kernel::KERNEL_STACK_ALLOCATOR;
 use super::super::super::qlib::kernel::kernel::timer;
+use super::super::super::qlib::kernel::kernel::futex;
+use super::super::super::qlib::kernel::task;
 use super::super::super::qlib::kernel::IOURING;
 use super::super::super::qlib::kernel::vcpu;
+use super::super::super::qlib::pagetable::AlignedAllocator;
 use super::super::super::print::LOG;
 use super::super::super::syncmgr;
 use super::super::super::runc::runtime::loader::*;
@@ -129,6 +133,14 @@ impl VirtualMachine {
         IOURING.SetValue(sharespace.GetIOUringAddr());
 
         unsafe {
+            KERNEL_STACK_ALLOCATOR.Init(AlignedAllocator::New(
+                MemoryDef::DEFAULT_STACK_SIZE as usize,
+                MemoryDef::DEFAULT_STACK_SIZE as usize,
+            ));
+
+            error!("InitShareSpace 1");
+            task::InitSingleton();
+            futex::InitSingleton();
             timer::InitSingleton();
         }
 
