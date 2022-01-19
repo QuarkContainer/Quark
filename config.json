@@ -15,7 +15,7 @@
   "AsyncAccept"   : true,
   "DedicateUring" : 1,
   "UringSize"     : 64,
-  "UringEpollCtl" : true,
+  "UringEpollCtl" : false,
   "EnableRDMA"    : false,
   "RDMAPort"      : 1,
   "PerSandboxLog" : false

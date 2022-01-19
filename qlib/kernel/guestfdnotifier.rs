@@ -148,7 +148,6 @@ impl FdWaitInfo {
             mask
         };
 
-        let mask = mask | LibcConst::EPOLLET as u64;
         return Self::waitfd(fd, op as u32, mask);
     }
 
