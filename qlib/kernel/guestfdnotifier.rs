@@ -124,7 +124,7 @@ impl FdWaitInfo {
         let mask = {
             let mut fi = self.lock();
 
-            let mask = fi.queue.Events() | LibcConst::EPOLLET as u64;
+            let mask = fi.queue.Events();
 
             if fi.mask == 0 {
                 if mask != 0 {
@@ -148,6 +148,7 @@ impl FdWaitInfo {
             mask
         };
 
+        let mask = mask | LibcConst::EPOLLET as u64;
         return Self::waitfd(fd, op as u32, mask);
     }
 
