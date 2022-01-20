@@ -120,7 +120,6 @@ use self::boot::controller::*;
 use self::boot::loader::*;
 use self::kernel::timer::*;
 use self::loader::vdso::*;
-use self::memmgr::pma::*;
 use self::qlib::common::*;
 use self::qlib::config::*;
 use self::qlib::control_msg::*;
@@ -163,13 +162,14 @@ pub fn SingletonInit() {
         KERNEL_PAGETABLE.Init(PageTables::Init(CurrentCr3()));
         vcpu::VCPU_COUNT.Init(AtomicUsize::new(0));
         vcpu::CPU_LOCAL.Init(&SHARESPACE.scheduler.VcpuArr);
+        SHARESPACE.SetSignalHandlerAddr(SignalHandler as u64);
         InitGs(0);
         IOURING.SetValue(SHARESPACE.GetIOUringAddr());
 
         // the error! can run after this point
         //error!("error message");
 
-        PAGE_MGR.Init(PageMgr::New());
+        PAGE_MGR.SetValue(SHARESPACE.GetPageMgrAddr());
         LOADER.Init(Loader::default());
         KERNEL_STACK_ALLOCATOR.Init(AlignedAllocator::New(
             MemoryDef::DEFAULT_STACK_SIZE as usize,
@@ -491,10 +491,10 @@ pub extern "C" fn rust_main(
         error!("heap start is {:x}", heapStart);
 
         if autoStart {
-            CreateTask(StartRootContainer, ptr::null(), false);
+            CreateTask(StartRootContainer as u64, ptr::null(), false);
         }
 
-        CreateTask(ControllerProcess, ptr::null(), true);
+        CreateTask(ControllerProcess as u64, ptr::null(), true);
     }
 
     WaitFn();
@@ -541,7 +541,7 @@ fn ControllerProcess(_para: *const u8) {
 }
 
 pub fn StartRootProcess() {
-    CreateTask(StartRootContainer, ptr::null(), false);
+    CreateTask(StartRootContainer as u64, ptr::null(), false);
 }
 
 fn StartRootContainer(_para: *const u8) {

@@ -31,7 +31,7 @@ pub fn ControllerProcessHandler() -> Result<()> {
     let task = Task::Current();
     loop {
         let fd = IOURING.SyncAccept(task, SHARESPACE.controlSock);
-        taskMgr::CreateTask(ControlMsgHandler, fd as *const u8, false);
+        taskMgr::CreateTask(ControlMsgHandler as u64, fd as *const u8, false);
     }
 }
 

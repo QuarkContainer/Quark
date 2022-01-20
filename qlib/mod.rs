@@ -65,7 +65,6 @@ use core::sync::atomic::Ordering;
 use self::mutex::*;
 use cache_padded::CachePadded;
 use alloc::vec::Vec;
-use alloc::sync::Arc;
 
 use super::asm::*;
 use self::task_mgr::*;
@@ -77,8 +76,8 @@ use self::bytestream::*;
 use self::kernel::quring::uring_mgr::QUring;
 use self::kernel::kernel::timer::timekeeper::*;
 use self::kernel::kernel::timer::timer_store::*;
+use self::kernel::memmgr::pma::*;
 use self::kernel::kernel::futex::*;
-use self::kernel::task::*;
 use self::control_msg::SignalArgs;
 use self::object_ref::ObjectRef;
 
@@ -550,11 +549,13 @@ pub struct ShareSpace {
     pub timerStore: CachePadded<TimerStore>,
     pub signalArgs: CachePadded<QMutex<Option<SignalArgs>>>,
     pub futexMgr: CachePadded<FutexMgr>,
+    pub pageMgr: CachePadded<PageMgr>,
     pub config: QRwLock<Config>,
 
     pub logBuf: QMutex<Option<ByteStream>>,
     pub logLock: QMutex<()>,
     pub logfd: AtomicI32,
+    pub signalHandlerAddr: AtomicU64,
 
     pub controlSock: i32,
 
@@ -571,6 +572,18 @@ impl ShareSpace {
 
     pub fn SetIOUringsAddr(&self, addr: u64) {
         self.ioUring.SetIOUringsAddr(addr);
+    }
+
+    pub fn SetSignalHandlerAddr(&self, addr: u64) {
+        self.signalHandlerAddr.store(addr, Ordering::SeqCst);
+    }
+
+    pub fn SignalHandlerAddr(&self) -> u64 {
+        return self.signalHandlerAddr.load(Ordering::Relaxed);
+    }
+
+    pub fn GetPageMgrAddr(&self) -> u64 {
+        return self.pageMgr.Addr()
     }
 
     pub fn GetFutexMgrAddr(&self) -> u64 {

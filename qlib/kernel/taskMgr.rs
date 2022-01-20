@@ -27,7 +27,6 @@ use super::super::vcpu_mgr::*;
 use super::threadmgr::task_sched::*;
 use super::KERNEL_STACK_ALLOCATOR;
 use super::quring::uring_mgr::*;
-use super::guestfdnotifier::GUEST_NOTIFIER;
 use super::Shutdown;
 
 static ACTIVE_TASK: AtomicU32 = AtomicU32::new(0);
@@ -41,20 +40,14 @@ pub fn DecrActiveTask() -> u32 {
 }
 
 pub fn AddNewCpu() {
-    error!("AddNewCpu 1");
     let mainTaskId = TaskStore::CreateFromThread();
     CPULocal::SetWaitTask(mainTaskId.Addr());
     CPULocal::SetCurrentTask(mainTaskId.Addr());
-    error!("AddNewCpu 2");
 }
 
-pub fn CreateTask(runFn: TaskFn, para: *const u8, kernel: bool) {
-    error!("CreateTask xxx 1");
-    let taskId = { TaskStore::CreateTask(runFn, para, kernel) };
-    error!("CreateTask xxx 2 {:x?}", taskId);
-
+pub fn CreateTask(runFnAddr: u64, para: *const u8, kernel: bool) {
+    let taskId = { TaskStore::CreateTask(runFnAddr, para, kernel) };
     SHARESPACE.scheduler.NewTask(taskId);
-    error!("CreateTask xxx 3");
 
 }
 
@@ -114,10 +107,8 @@ pub fn IOWait() {
 }
 
 pub fn WaitFn() {
-    error!("WaitFn 1");
     let mut task = TaskId::default();
     loop {
-        error!("WaitFn 2 {:x}", task.data);
         let next = if task.data == 0 {
             SHARESPACE.scheduler.GetNext()
         } else {
@@ -126,36 +117,29 @@ pub fn WaitFn() {
             Some(tmp)
         };
 
-        error!("WaitFn 3 {:x} next {:x?}", task.data, &next);
         match next {
             None => {
-                error!("WaitFn 4 {:x}", task.data);
                 SHARESPACE.scheduler.IncreaseHaltVcpuCnt();
 
                 // if there is memory needs free and freed, continue free them
                 // while super::ALLOCATOR.Free() {}
 
-                error!("WaitFn 5 {:x}", task.data);
                 if SHARESPACE.scheduler.GlobalReadyTaskCnt() == 0 {
-                    error!("vcpu {} sleep", CPULocal::CpuId());
+                    debug!("vcpu sleep");
                     let addr = HostSpace::VcpuWait();
+                    debug!("vcpu wakeup {:x}", addr);
                     assert!(addr >= 0);
                     task = TaskId::New(addr as u64);
-                    error!("vcpu {} wakeup", CPULocal::CpuId());
                 } else {
                     //error!("Waitfd None {}", SHARESPACE.scheduler.Print());
                 }
-                error!("WaitFn xxx");
 
                 SHARESPACE.scheduler.DecreaseHaltVcpuCnt();
             }
 
             Some(newTask) => {
-                error!("WaitFn newTask1 is {:x?}", &newTask);
                 let current = TaskId::New(CPULocal::CurrentTask());
-                error!("WaitFn newTask2 is {:x?}", &newTask);
                 CPULocal::Myself().SwitchToRunning();
-                error!("WaitFn newTask3 is {:x?}", &newTask);
                 switch(current, newTask);
 
                 let pendingFreeStack = CPULocal::PendingFreeStack();

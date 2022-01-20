@@ -328,7 +328,6 @@ impl KVMVcpu {
                         qlib::HYPERCALL_IOWAIT => {
                             if !super::runc::runtime::vm::IsRunning() {
                                 {
-                                    error!("signal debug");
                                     for i in 0..8 {
                                         error!("vcpu[{}] state is {}/{}", i, SHARE_SPACE.GetValue(i, 0), SHARE_SPACE.GetValue(i, 1))
                                     }

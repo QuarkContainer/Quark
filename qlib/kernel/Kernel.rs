@@ -723,10 +723,8 @@ impl HostSpace {
     }
 
     pub fn VcpuWait() -> i64 {
-        error!("VcpuWait 1");
         let mut ret : i64 = 0;
         HyperCall64(HYPERCALL_VCPU_WAIT, 0, 0, &mut ret as * mut _ as u64);
-        error!("VcpuWait 2");
         return ret as i64
     }
 

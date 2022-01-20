@@ -26,7 +26,6 @@ use super::super::task::*;
 use super::super::kernel::waiter::*;
 use super::super::SHARESPACE;
 use super::super::super::object_ref::*;
-use super::super::super::singleton::*;
 
 pub type FutexMgrRef = ObjectRef<FutexMgr>;
 pub static FUTEX_MGR: FutexMgrRef = FutexMgrRef::New();

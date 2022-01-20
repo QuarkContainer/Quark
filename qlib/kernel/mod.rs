@@ -54,13 +54,12 @@ use self::taskMgr::*;
 use self::quring::*;
 use self::boot::loader::*;
 use self::memmgr::pma::*;
-use self::boot::controller::SignalHandler;
 
 pub static TSC: Tsc = Tsc::New();
 pub static SHARESPACE: ShareSpaceRef = ShareSpaceRef::New();
 pub static IOURING: IOUringRef = IOUringRef::New();
 pub static KERNEL_PAGETABLE: Singleton<PageTables> = Singleton::<PageTables>::New();
-pub static PAGE_MGR: Singleton<PageMgr> = Singleton::<PageMgr>::New();
+pub static PAGE_MGR: PageMgrRef = PageMgrRef::New();
 pub static LOADER: Singleton<Loader> = Singleton::<Loader>::New();
 pub static KERNEL_STACK_ALLOCATOR: Singleton<AlignedAllocator> =
     Singleton::<AlignedAllocator>::New();
@@ -109,10 +108,7 @@ impl Tsc {
 }
 
 pub fn SignalProcess(signalArgs: &SignalArgs) {
-    error!("SignalProcess 1");
     *SHARESPACE.signalArgs.lock() = Some(signalArgs.clone());
-    error!("SignalProcess 2");
-    CreateTask(SignalHandler, 0 as *const u8, false);
-    error!("SignalProcess 3");
+    CreateTask(SHARESPACE.SignalHandlerAddr(), 0 as *const u8, false);
 }
 

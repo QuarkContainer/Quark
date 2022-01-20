@@ -36,6 +36,8 @@ use super::super::super::qlib::kernel::kernel::timer;
 use super::super::super::qlib::kernel::kernel::futex;
 use super::super::super::qlib::kernel::task;
 use super::super::super::qlib::kernel::IOURING;
+use super::super::super::qlib::kernel::KERNEL_PAGETABLE;
+use super::super::super::qlib::kernel::PAGE_MGR;
 use super::super::super::qlib::kernel::vcpu;
 use super::super::super::qlib::pagetable::AlignedAllocator;
 use super::super::super::print::LOG;
@@ -133,12 +135,14 @@ impl VirtualMachine {
         IOURING.SetValue(sharespace.GetIOUringAddr());
 
         unsafe {
+            KERNEL_PAGETABLE.SetRoot(VMS.lock().pageTables.GetRoot());
+            PAGE_MGR.SetValue(sharespace.GetPageMgrAddr());
+
             KERNEL_STACK_ALLOCATOR.Init(AlignedAllocator::New(
                 MemoryDef::DEFAULT_STACK_SIZE as usize,
                 MemoryDef::DEFAULT_STACK_SIZE as usize,
             ));
 
-            error!("InitShareSpace 1");
             task::InitSingleton();
             futex::InitSingleton();
             timer::InitSingleton();

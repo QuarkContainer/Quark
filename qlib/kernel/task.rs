@@ -50,8 +50,6 @@ use super::kernel::timer::*;
 use super::kernel::kernel::GetKernelOption;
 use super::memmgr::mm::*;
 use super::perflog::*;
-use super::SHARESPACE;
-use super::super::object_ref::*;
 
 use super::fs::file::*;
 use super::fs::mount::*;
@@ -102,10 +100,8 @@ impl TaskStore {
         return TaskStore {}
     }
 
-    pub fn CreateTask(runFn: TaskFn, para: *const u8, kernel: bool) -> TaskId {
-        error!("CreateTask 1");
-        let t = Task::Create(runFn, para, kernel);
-        error!("CreateTask 2");
+    pub fn CreateTask(runFnAddr: u64, para: *const u8, kernel: bool) -> TaskId {
+        let t = Task::Create(runFnAddr as u64, para, kernel);
         return TaskId::New(t.taskId);
     }
 
@@ -272,11 +268,9 @@ impl Task {
     }
 
     pub fn DummyTask() -> Self {
-        error!("DummyTask 1");
         let creds = Credentials::default();
         let userns = creds.lock().UserNamespace.clone();
 
-        error!("DummyTask 2");
         let futexMgr =FutexMgr::default();
         let mm = MemoryManager::Init(true);
         let mountNS =  MountNs::default();
@@ -284,9 +278,7 @@ impl Task {
         let utsns = UTSNamespace::New("".to_string(), "".to_string(), userns.clone());
         let ipcns = IPCNamespace::New(&userns);
         let fdTbl = FDTable::default();
-        error!("DummyTask 3");
         let blocker = Blocker::Dummy();
-        error!("DummyTask 4");
 
         let  ret = Task {
             context: Context::New(),
@@ -315,7 +307,6 @@ impl Task {
             perfcounters: None,
             guard: Guard::default(),
         };
-        error!("DummyTask end");
 
         return ret;
     }
@@ -643,42 +634,31 @@ impl Task {
         return TaskId::New(self.taskId)
     }
 
-    pub fn Create(runFn: TaskFn, para: *const u8, kernel: bool) -> &'static mut Self {
+    pub fn Create(runFnAddr: u64, para: *const u8, kernel: bool) -> &'static mut Self {
         //let s_ptr = pa.Alloc(DEFAULT_STACK_PAGES).unwrap() as *mut u8;
-        error!("Task::Create 1");
         let s_ptr = KERNEL_STACK_ALLOCATOR.Allocate().unwrap() as *mut u8;
 
         let size = DEFAULT_STACK_SIZE;
 
         let mut ctx = Context::New();
 
-        error!("Task::Create 2");
         unsafe {
             //ptr::write(s_ptr.offset((size - 24) as isize) as *mut u64, guard as u64);
-            ptr::write(s_ptr.offset((size - 32) as isize) as *mut u64, runFn as u64);
+            ptr::write(s_ptr.offset((size - 32) as isize) as *mut u64, runFnAddr);
             ctx.rsp = s_ptr.offset((size - 32) as isize) as u64;
             ctx.rdi = para as u64;
         }
 
-        error!("Task::Create 3");
         //let ioUsage = DUMMY_TASK.read().ioUsage.clone();
-        let futexMgr = FUTEX_MGR.Fork();
-        error!("Task::Create 3.1");
-
         let ioUsage = DUMMY_TASK.read().ioUsage.clone();
-        error!("Task::Create 3.3");
         let perfcounters = Some(THREAD_COUNTS.lock().NewCounters());
         let futexMgr = FUTEX_MGR.Fork();
-        error!("Task::Create 3.3.1");
         let blocker = Blocker::New(s_ptr as u64);
-        error!("Task::Create 3.3.2");
         let mm = MemoryManager::Init(kernel);
-        error!("Task::Create 3.4");
         let creds = Credentials::default();
         let userns = creds.lock().UserNamespace.clone();
         let utsns = UTSNamespace::New("".to_string(), "".to_string(), userns.clone());
         let ipcns = IPCNamespace::New(&userns);
-        error!("Task::Create 3.5");
 
         //put Task on the task as Linux
         let taskPtr = s_ptr as *mut Task;
@@ -711,7 +691,6 @@ impl Task {
                 guard: Guard::default(),
             });
 
-            error!("Task::Create 4");
             let new = &mut *taskPtr;
             new.PerfGoto(PerfType::Blocked);
             new.PerfGoto(PerfType::Kernel);
@@ -783,7 +762,6 @@ impl Task {
         let baseStackAddr = Self::TaskId().Addr();
         let taskPtr = baseStackAddr as *mut Task;
 
-        error!("CreateFromThread 1");
         unsafe {
             let creds = Credentials::default();
             let userns = creds.lock().UserNamespace.clone();
@@ -815,7 +793,6 @@ impl Task {
                 guard: Guard::default(),
             });
 
-            error!("CreateFromThread 2");
             return &mut (*taskPtr)
         }
     }

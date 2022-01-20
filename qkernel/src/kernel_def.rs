@@ -242,7 +242,7 @@ pub fn OpenAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
 
 pub fn SignalProcess(signalArgs: &SignalArgs) {
     *SHARESPACE.signalArgs.lock() = Some(signalArgs.clone());
-    CreateTask(SignalHandler, 0 as *const u8, false);
+    CreateTask(SignalHandler as u64, 0 as *const u8, false);
 }
 
 pub fn StartRootContainer(para: *const u8) {
