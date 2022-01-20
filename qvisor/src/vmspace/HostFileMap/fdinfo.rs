@@ -661,10 +661,3 @@ impl FdInfoIntern {
         return FD_NOTIFIER.WaitFd(self.fd, op as u32, mask);
     }
 }
-
-pub fn FdNotify1(fd: i32, mask: EventMask) {
-    SHARE_SPACE.AQHostInputCall(&HostInputMsg::FdNotify(FdNotify{
-        fd: fd,
-        mask: mask,
-    }));
-}
