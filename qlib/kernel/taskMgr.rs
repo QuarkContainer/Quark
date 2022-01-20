@@ -171,15 +171,10 @@ pub fn PollAsyncMsg() -> usize {
     if Shutdown() {
         return 0;
     }
-    //error!("PollAsyncMsg 2");
-    let ret = HostInputProcess();
-    if Shutdown() {
-        return 0;
-    }
 
     //error!("PollAsyncMsg 3");
 
-    let ret = ret + QUringTrigger();
+    let ret = QUringTrigger();
     if Shutdown() {
         return 0;
     }
@@ -190,21 +185,12 @@ pub fn PollAsyncMsg() -> usize {
 #[inline]
 pub fn ProcessOne() -> bool {
     ASYNC_PROCESS.Process();
-    /*let mut count = 0;
-    while QUringProcessOne() {
-        count += 1;
-    }
-
-    if count > 0 {
-        return true
-    }*/
-
     let count = QUringTrigger();
     if count > 0 {
         return true;
     }
 
-    return HostInputProcessOne(true);
+    return false
 }
 
 pub fn Wait() {
@@ -372,38 +358,6 @@ impl Scheduler {
 pub fn Yield() {
     SHARESPACE.scheduler.Schedule(Task::TaskId());
     Wait();
-}
-
-#[inline]
-pub fn HostInputProcessOne(tryGet: bool) -> bool {
-    let m = if tryGet {
-        SHARESPACE.AQHostInputTryPop()
-    } else {
-        SHARESPACE.AQHostInputPop()
-    };
-
-    match m {
-        None => (),
-        Some(m) => {
-            m.Process();
-            return true;
-        }
-    };
-
-    return false
-}
-
-#[inline]
-pub fn HostInputProcess() -> usize {
-    let mut count = 0;
-    loop {
-        //drain the async message from host
-        if HostInputProcessOne(false) {
-            count += 1;
-        } else {
-            return count
-        }
-    }
 }
 
 pub fn NewTask(taskId: TaskId) {

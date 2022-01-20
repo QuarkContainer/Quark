@@ -529,7 +529,6 @@ pub type ShareSpaceRef = ObjectRef<ShareSpace>;
 #[repr(align(128))]
 #[derive(Default)]
 pub struct ShareSpace {
-    pub QInput: QRingBuf<HostInputMsg>, //QMutex<VecDeque<HostInputMsg>>,
     pub QOutput: QRingBuf<HostOutputMsg>, //QMutex<VecDeque<HostInputMsg>>,
 
     // add this pad can decrease the mariadb start time 25 sec to 12 sec
@@ -623,12 +622,6 @@ impl ShareSpace {
     }
 
     #[inline]
-    pub fn AQHostInputPop(&self) -> Option<HostInputMsg> {
-        let res = self.QInput.Pop();
-        return res;
-    }
-
-    #[inline]
     pub fn AQHostOutputPop(&self) -> Option<HostOutputMsg> {
         return self.QOutput.Pop();
     }
@@ -666,11 +659,6 @@ impl ShareSpace {
     #[inline]
     pub fn HostProcessor(&self) -> u64 {
         return self.hostProcessor.load(Ordering::SeqCst);
-    }
-
-    #[inline]
-    pub fn AQHostInputTryPop(&self) -> Option<HostInputMsg> {
-        return self.QInput.TryPop();
     }
 
     pub fn SetLogfd(&self, fd: i32) {
@@ -719,10 +707,5 @@ impl ShareSpace {
     #[inline]
     pub fn ReadyTaskCnt(&self, vcpuId: usize) -> u64 {
         return self.scheduler.ReadyTaskCnt(vcpuId) as u64;
-    }
-
-    #[inline]
-    pub fn ReadyAsyncMsgCnt(&self) -> u64 {
-        return self.QInput.Count() as u64;
     }
 }

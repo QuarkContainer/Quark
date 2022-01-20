@@ -14,7 +14,6 @@ use super::qlib::vcpu_mgr::*;
 use super::qlib::kernel::memmgr::pma::*;
 use super::FD_NOTIFIER;
 use super::QUARK_CONFIG;
-use super::KERNEL_IO_THREAD;
 
 impl<'a> ShareSpace {
     pub fn AQCall(&self, _msg: &HostOutputMsg) {
@@ -25,21 +24,6 @@ impl<'a> ShareSpace {
 }
 
 impl<'a> ShareSpace {
-    pub fn AQHostInputCall(&self, item: &HostInputMsg) {
-        loop {
-            if self.QInput.IsFull() {
-                continue;
-            }
-
-            self.QInput.Push(&item).unwrap();
-            break;
-        }
-        //SyncMgr::WakeVcpu(self, TaskIdQ::default());
-
-        //SyncMgr::WakeVcpu(self, TaskIdQ::New(1<<12, 0));
-        KERNEL_IO_THREAD.Wakeup(self);
-    }
-
     pub fn LogFlush(&self, partial: bool) {
         let lock = self.logLock.try_lock();
         if lock.is_none() {

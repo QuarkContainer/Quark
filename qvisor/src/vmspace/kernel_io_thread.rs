@@ -36,7 +36,7 @@ impl KIOThread {
         }
     }
 
-    pub fn Wait(&self, sharespace: &ShareSpace) -> Result<()> {
+    pub fn Wait(&self, _sharespace: &ShareSpace) -> Result<()> {
         let mut data : u64 = 0;
         loop {
             if !super::super::runc::runtime::vm::IsRunning() {
@@ -53,7 +53,7 @@ impl KIOThread {
 
             // for the "dd" test long run test, without this, uring might sleep for sometime
             //log!("iowait workaround");
-            if sharespace.ReadyAsyncMsgCnt() > 0 || URING_MGR.lock().CompletEntries() > 0 {
+            if URING_MGR.lock().CompletEntries() > 0 {
                 return Ok(())
             }
 

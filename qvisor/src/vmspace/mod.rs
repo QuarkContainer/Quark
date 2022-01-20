@@ -1453,13 +1453,6 @@ impl VMSpace {
         return 0;
     }
 
-    pub fn FdNotify(&self, fd: i32, mask: EventMask) {
-        SHARE_SPACE.AQHostInputCall(&HostInputMsg::FdNotify(FdNotify{
-            fd: fd,
-            mask: mask,
-        }));
-    }
-
     pub fn Signal(&self, signal: SignalArgs) {
         SignalProcess(&signal);
         //SHARE_SPACE.AQHostInputCall(&HostInputMsg::Signal(signal));

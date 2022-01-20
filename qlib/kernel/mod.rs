@@ -24,7 +24,6 @@ pub mod socket;
 pub mod tcpip;
 pub mod threadmgr;
 pub mod util;
-pub mod aqcall;
 pub mod fd;
 pub mod heap;
 pub mod kernel_util;
