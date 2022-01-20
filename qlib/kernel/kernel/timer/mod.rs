@@ -26,17 +26,19 @@ use self::timer_store::*;
 use self::timer::*;
 use super::super::super::singleton::*;
 use super::super::super::object_ref::*;
+use super::super::SHARESPACE;
 
-pub static TIME_KEEPER : Singleton<TimeKeeper> = Singleton::<TimeKeeper>::New();
+pub static TIME_KEEPER: TimerKeeperRef = TimerKeeperRef::New();
+
 pub static REALTIME_CLOCK : Singleton<Clock> = Singleton::<Clock>::New();
 pub static MONOTONIC_CLOCK : Singleton<Clock> = Singleton::<Clock>::New();
-pub static TIMER_STORE : Singleton<TimerStore> = Singleton::<TimerStore>::New();
+pub static TIMER_STORE: TimerStoreRef = TimerStoreRef::New();
 
 pub unsafe fn InitSingleton() {
-    TIME_KEEPER.Init(TimeKeeper::default());
+    TIME_KEEPER.SetValue(SHARESPACE.GetTimerKeeperAddr());
     REALTIME_CLOCK.Init(TIME_KEEPER.NewClock(REALTIME));
     MONOTONIC_CLOCK.Init(TIME_KEEPER.NewClock(MONOTONIC));
-    TIMER_STORE.Init(TimerStore::default());
+    TIMER_STORE.SetValue(SHARESPACE.GetTimerStoreAddr());
 }
 
 pub struct TimerUpdater {}
@@ -75,3 +77,4 @@ pub const REALTIME: ClockID = 0;
 pub const MONOTONIC: ClockID = 1;
 
 pub type TimerKeeperRef = ObjectRef<TimeKeeper>;
+pub type TimerStoreRef = ObjectRef<TimerStore>;

@@ -47,8 +47,10 @@ use core::sync::atomic::AtomicI64;
 use core::sync::atomic::Ordering;
 
 use super::super::ShareSpaceRef;
+use super::control_msg::*;
 use super::singleton::*;
 use super::pagetable::*;
+use self::taskMgr::*;
 use self::quring::*;
 use self::boot::loader::*;
 use self::memmgr::pma::*;
@@ -57,7 +59,7 @@ pub static TSC: Tsc = Tsc::New();
 pub static SHARESPACE: ShareSpaceRef = ShareSpaceRef::New();
 pub static IOURING: IOUringRef = IOUringRef::New();
 pub static KERNEL_PAGETABLE: Singleton<PageTables> = Singleton::<PageTables>::New();
-pub static PAGE_MGR: Singleton<PageMgr> = Singleton::<PageMgr>::New();
+pub static PAGE_MGR: PageMgrRef = PageMgrRef::New();
 pub static LOADER: Singleton<Loader> = Singleton::<Loader>::New();
 pub static KERNEL_STACK_ALLOCATOR: Singleton<AlignedAllocator> =
     Singleton::<AlignedAllocator>::New();
@@ -104,3 +106,9 @@ impl Tsc {
         return Self::RawRdtsc() - self.offset.load(Ordering::Relaxed);
     }
 }
+
+pub fn SignalProcess(signalArgs: &SignalArgs) {
+    *SHARESPACE.signalArgs.lock() = Some(signalArgs.clone());
+    CreateTask(SHARESPACE.SignalHandlerAddr(), 0 as *const u8, false);
+}
+

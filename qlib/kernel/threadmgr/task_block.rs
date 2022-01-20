@@ -90,6 +90,30 @@ impl Default for Blocker {
 }
 
 impl Blocker {
+    pub fn Dummy() -> Self {
+        let waiter = Waiter::default();
+
+        let timerEntry = waiter.NewWaitEntry(Waiter::TIMER_WAITID, 1);
+        let listener = WaitEntryListener::New(&timerEntry);
+
+        let waiter = Waiter::default();
+        let interruptEntry = waiter.NewWaitEntry(Waiter::INTERRUPT_WAITID, 1);
+        let generalEntry = waiter.NewWaitEntry(Waiter::GENERAL_WAITID, 0);
+
+        let monoTimer = Timer::Dummy();
+        let realTimer = Timer::Dummy();
+
+        return Self {
+            waiter: waiter,
+            timerEntry: timerEntry,
+            timerListner: listener,
+            realBlockTimer: realTimer,
+            monoBlockTimer: monoTimer,
+            interruptEntry: interruptEntry,
+            generalEntry: generalEntry,
+        }
+    }
+
     pub fn Drop(&mut self) {
         self.monoBlockTimer.Destroy();
     }

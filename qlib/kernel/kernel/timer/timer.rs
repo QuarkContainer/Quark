@@ -44,6 +44,7 @@ pub enum Clock {
     TimeKeeperClock(Arc<TimeKeeperClock>),
     TaskClock(TaskClock),
     ThreadGroupClock(ThreadGroupClock),
+    Dummy,
 }
 
 impl Clock {
@@ -53,6 +54,7 @@ impl Clock {
             Self::TimeKeeperClock(ref c) => c.Now(),
             Self::TaskClock(ref c) => c.Now(),
             Self::ThreadGroupClock(ref c) => c.Now(),
+            Self::Dummy  => panic!("Clock::Dummy Now..."),
         }
     }
 
@@ -76,6 +78,7 @@ impl Clock {
             Self::TimeKeeperClock(ref c) => c.WallTimeUntil(t, now),
             Self::TaskClock(ref c) => c.WallTimeUntil(t, now),
             Self::ThreadGroupClock(ref c) => c.WallTimeUntil(t, now),
+            Self::Dummy  => panic!("Clock::Dummy WallTimeUntil..."),
         }
     }
 }
@@ -279,6 +282,22 @@ impl Default for TimerInternal {
 
 
 impl TimerInternal {
+    pub fn Dummy() -> Self {
+        let id = NewUID();
+        let ret = Self {
+            clock: Clock::Dummy,
+            listener: Arc::new(DummyTimerListener {}),
+            setting: Setting::default(),
+            paused: true,
+
+            Id: id,
+            State: TimerState::default(),
+            Expire: 0,
+        };
+
+        return ret;
+    }
+
     fn NextExpire(&mut self) -> i64 {
         if self.setting.Enabled {
             let now = self.clock.Now();
@@ -326,6 +345,11 @@ impl Drop for Timer {
 }
 
 impl Timer {
+    pub fn Dummy() -> Self {
+        let ret = Self(Arc::new(QMutex::new(TimerInternal::Dummy())));
+        return ret;
+    }
+
     fn Timeout(&self) -> i64 {
         let mut t = self.lock();
 

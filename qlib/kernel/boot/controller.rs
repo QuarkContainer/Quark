@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::qlib::mutex::*;
 use alloc::vec::Vec;
 use core::{ptr};
 
@@ -27,15 +26,12 @@ use super::super::LOADER;
 use super::super::IOURING;
 use super::super::SHARESPACE;
 use super::process::*;
-use super::super::super::singleton::*;
-
-pub static MSG : Singleton<QMutex<Option<SignalArgs>>> = Singleton::<QMutex<Option<SignalArgs>>>::New();
 
 pub fn ControllerProcessHandler() -> Result<()> {
     let task = Task::Current();
     loop {
         let fd = IOURING.SyncAccept(task, SHARESPACE.controlSock);
-        taskMgr::CreateTask(ControlMsgHandler, fd as *const u8, false);
+        taskMgr::CreateTask(ControlMsgHandler as u64, fd as *const u8, false);
     }
 }
 
@@ -77,7 +73,7 @@ pub fn HandleSignal(signalArgs: &SignalArgs) {
 }
 
 pub fn SignalHandler(_ :  *const u8) {
-    let msg = MSG.lock().take();
+    let msg = SHARESPACE.signalArgs.lock().take();
     match msg {
         None => (),
         Some(msg) => {

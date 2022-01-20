@@ -27,7 +27,6 @@ use super::super::vcpu_mgr::*;
 use super::threadmgr::task_sched::*;
 use super::KERNEL_STACK_ALLOCATOR;
 use super::quring::uring_mgr::*;
-use super::guestfdnotifier::GUEST_NOTIFIER;
 use super::Shutdown;
 
 static ACTIVE_TASK: AtomicU32 = AtomicU32::new(0);
@@ -46,9 +45,10 @@ pub fn AddNewCpu() {
     CPULocal::SetCurrentTask(mainTaskId.Addr());
 }
 
-pub fn CreateTask(runFn: TaskFn, para: *const u8, kernel: bool) {
-    let taskId = { TaskStore::CreateTask(runFn, para, kernel) };
+pub fn CreateTask(runFnAddr: u64, para: *const u8, kernel: bool) {
+    let taskId = { TaskStore::CreateTask(runFnAddr, para, kernel) };
     SHARESPACE.scheduler.NewTask(taskId);
+
 }
 
 extern "C" {
@@ -125,10 +125,11 @@ pub fn WaitFn() {
                 // while super::ALLOCATOR.Free() {}
 
                 if SHARESPACE.scheduler.GlobalReadyTaskCnt() == 0 {
-                    debug!("vcpu {} sleep", CPULocal::CpuId());
-                    let addr = GUEST_NOTIFIER.VcpuWait();
-                    task = TaskId::New(addr);
-                    debug!("vcpu {} wakeup", CPULocal::CpuId());
+                    debug!("vcpu sleep");
+                    let addr = HostSpace::VcpuWait();
+                    debug!("vcpu wakeup {:x}", addr);
+                    assert!(addr >= 0);
+                    task = TaskId::New(addr as u64);
                 } else {
                     //error!("Waitfd None {}", SHARESPACE.scheduler.Print());
                 }
@@ -137,9 +138,7 @@ pub fn WaitFn() {
             }
 
             Some(newTask) => {
-                //error!("WaitFn newTask1 is {:x?}", &newTask);
                 let current = TaskId::New(CPULocal::CurrentTask());
-                //error!("WaitFn newTask2 is {:x?}", &newTask);
                 CPULocal::Myself().SwitchToRunning();
                 switch(current, newTask);
 
@@ -154,8 +153,6 @@ pub fn WaitFn() {
                     //error!("shutdown: {}", super::AllocatorPrint(10));
                     super::Kernel::HostSpace::ExitVM(super::EXIT_CODE.load(QOrdering::SEQ_CST));
                 }
-
-                //error!("WaitFn newTask3");
 
                 // todo: free heap cache
                 //while super::ALLOCATOR.Free() {}

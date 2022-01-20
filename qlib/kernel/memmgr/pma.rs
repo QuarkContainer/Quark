@@ -29,7 +29,10 @@ use super::super::super::range::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::super::pagetable::*;
+use super::super::super::object_ref::*;
 use super::pmamgr::*;
+
+pub type PageMgrRef = ObjectRef<PageMgr>;
 
 pub struct PageMgr(QMutex<PageMgrInternal>);
 
@@ -74,9 +77,19 @@ extern "C" {
     pub fn __vsyscall_page();
 }
 
+impl Default for PageMgr {
+    fn default() -> Self {
+        return Self::New()
+    }
+}
+
 impl PageMgr {
     pub fn New() -> Self {
         return Self(QMutex::new(PageMgrInternal::New()))
+    }
+
+    pub fn Addr(&self) -> u64 {
+        return self as * const _ as u64
     }
 
     pub fn PrintRefs(&self) {
@@ -127,7 +140,7 @@ impl PageMgrInternal {
                 self.vsyscallPages.push(addr);
             }
 
-            CopyPage( self.vsyscallPages[0], __vsyscall_page as u64);
+            self.CopyVsysCallPages();
         }
 
         for p in &mut self.vsyscallPages {

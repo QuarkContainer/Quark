@@ -20,6 +20,7 @@ use crate::qlib::mutex::*;
 use core::mem;
 use alloc::boxed::Box;
 use core::sync::atomic::Ordering;
+use core::ops::Deref;
 
 //use super::arch::x86_64::arch_x86::*;
 use super::super::super::kernel_def::*;
@@ -62,10 +63,34 @@ const DEFAULT_STACK_SIZE: usize = MemoryDef::DEFAULT_STACK_SIZE as usize;
 pub const DEFAULT_STACK_PAGES: u64 = DEFAULT_STACK_SIZE as u64 / (4 * 1024);
 pub const DEFAULT_STACK_MAST: u64 = !(DEFAULT_STACK_SIZE as u64 - 1);
 
-pub static DUMMY_TASK : Singleton<QRwLock<Task>> = Singleton::<QRwLock<Task>>::New();
+
+pub static DUMMY_TASK : Singleton<DummyTask> = Singleton::<DummyTask>::New();
+
 
 pub unsafe fn InitSingleton() {
-    DUMMY_TASK.Init(QRwLock::new(Task::DummyTask()));
+    DUMMY_TASK.Init(DummyTask::default());
+}
+
+pub struct DummyTask(Arc<QRwLock<Task>>);
+
+impl Deref for DummyTask {
+    type Target = Arc<QRwLock<Task>>;
+
+    fn deref(&self) -> &Arc<QRwLock<Task>> {
+        &self.0
+    }
+}
+
+impl Default for DummyTask {
+    fn default() -> Self {
+        return Self (Arc::new(QRwLock::new(Task::DummyTask())))
+    }
+}
+
+impl DummyTask {
+    pub fn Addr(&self) -> u64 {
+        return self as * const _ as u64
+    }
 }
 
 pub struct TaskStore {}
@@ -75,8 +100,8 @@ impl TaskStore {
         return TaskStore {}
     }
 
-    pub fn CreateTask(runFn: TaskFn, para: *const u8, kernel: bool) -> TaskId {
-        let t = Task::Create(runFn, para, kernel);
+    pub fn CreateTask(runFnAddr: u64, para: *const u8, kernel: bool) -> TaskId {
+        let t = Task::Create(runFnAddr as u64, para, kernel);
         return TaskId::New(t.taskId);
     }
 
@@ -181,6 +206,12 @@ pub struct Task {
 
 unsafe impl Sync for Task {}
 
+impl Default for Task {
+    fn default() -> Self {
+        return Self::DummyTask()
+    }
+}
+
 impl Task {
     #[inline(always)]
     pub fn Check(&self) {
@@ -240,33 +271,44 @@ impl Task {
         let creds = Credentials::default();
         let userns = creds.lock().UserNamespace.clone();
 
-        return Task {
+        let futexMgr =FutexMgr::default();
+        let mm = MemoryManager::Init(true);
+        let mountNS =  MountNs::default();
+        let fsContext = FSContext::default();
+        let utsns = UTSNamespace::New("".to_string(), "".to_string(), userns.clone());
+        let ipcns = IPCNamespace::New(&userns);
+        let fdTbl = FDTable::default();
+        let blocker = Blocker::Dummy();
+
+        let  ret = Task {
             context: Context::New(),
             taskId: 0,
             //mm: MemoryMgr::default(),
-            mm: MemoryManager::Init(true),
+            mm: mm,
             tidInfo: Default::default(),
             isWaitThread: false,
             signalStack: Default::default(),
-            mountNS: MountNs::default(),
+            mountNS: mountNS,
             creds: creds.clone(),
-            utsns: UTSNamespace::New("".to_string(), "".to_string(), userns.clone()),
-            ipcns: IPCNamespace::New(&userns),
+            utsns: utsns,
+            ipcns: ipcns,
 
-            fsContext: FSContext::default(),
+            fsContext: fsContext,
 
-            fdTbl: FDTable::default(),
-            blocker: Blocker::default(),
+            fdTbl: fdTbl,
+            blocker: blocker,
             thread: None,
             haveSyscallReturn: false,
             syscallRestartBlock: None,
-            futexMgr: FUTEX_MGR.clone(),
+            futexMgr: futexMgr,
             ioUsage: IO::default(),
             sched: TaskSchedInfo::default(),
             iovs: Vec::new(),
             perfcounters: None,
             guard: Guard::default(),
-        }
+        };
+
+        return ret;
     }
 
     pub fn AccountTaskEnter(&self, state: SchedState) {
@@ -592,7 +634,7 @@ impl Task {
         return TaskId::New(self.taskId)
     }
 
-    pub fn Create(runFn: TaskFn, para: *const u8, kernel: bool) -> &'static mut Self {
+    pub fn Create(runFnAddr: u64, para: *const u8, kernel: bool) -> &'static mut Self {
         //let s_ptr = pa.Alloc(DEFAULT_STACK_PAGES).unwrap() as *mut u8;
         let s_ptr = KERNEL_STACK_ALLOCATOR.Allocate().unwrap() as *mut u8;
 
@@ -602,41 +644,50 @@ impl Task {
 
         unsafe {
             //ptr::write(s_ptr.offset((size - 24) as isize) as *mut u64, guard as u64);
-            ptr::write(s_ptr.offset((size - 32) as isize) as *mut u64, runFn as u64);
+            ptr::write(s_ptr.offset((size - 32) as isize) as *mut u64, runFnAddr);
             ctx.rsp = s_ptr.offset((size - 32) as isize) as u64;
             ctx.rdi = para as u64;
         }
 
+        //let ioUsage = DUMMY_TASK.read().ioUsage.clone();
+        let ioUsage = DUMMY_TASK.read().ioUsage.clone();
+        let perfcounters = Some(THREAD_COUNTS.lock().NewCounters());
+        let futexMgr = FUTEX_MGR.Fork();
+        let blocker = Blocker::New(s_ptr as u64);
+        let mm = MemoryManager::Init(kernel);
+        let creds = Credentials::default();
+        let userns = creds.lock().UserNamespace.clone();
+        let utsns = UTSNamespace::New("".to_string(), "".to_string(), userns.clone());
+        let ipcns = IPCNamespace::New(&userns);
+
         //put Task on the task as Linux
         let taskPtr = s_ptr as *mut Task;
         unsafe {
-            let creds = Credentials::default();
-            let userns = creds.lock().UserNamespace.clone();
 
             ptr::write(taskPtr, Task {
                 context: ctx,
                 taskId: s_ptr as u64,
-                mm: MemoryManager::Init(kernel),
+                mm: mm,
                 tidInfo: Default::default(),
                 isWaitThread: false,
                 signalStack: Default::default(),
                 mountNS: MountNs::default(),
                 creds: creds.clone(),
-                utsns: UTSNamespace::New("".to_string(), "".to_string(), userns.clone()),
-                ipcns: IPCNamespace::New(&userns),
+                utsns: utsns,
+                ipcns: ipcns,
 
                 fsContext: FSContext::default(),
 
                 fdTbl: FDTable::default(),
-                blocker: Blocker::New(s_ptr as u64),
+                blocker: blocker,
                 thread: None,
                 haveSyscallReturn: false,
                 syscallRestartBlock: None,
-                futexMgr: FUTEX_MGR.Fork(),
-                ioUsage: DUMMY_TASK.read().ioUsage.clone(),
+                futexMgr: futexMgr,
+                ioUsage: ioUsage,
                 sched: TaskSchedInfo::default(),
                 iovs: Vec::with_capacity(4),
-                perfcounters: Some(THREAD_COUNTS.lock().NewCounters()),
+                perfcounters: perfcounters,
                 guard: Guard::default(),
             });
 

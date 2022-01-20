@@ -31,8 +31,15 @@ use super::super::super::qlib::addr;
 use super::super::super::qlib::perf_tunning::*;
 use super::super::super::qlib::task_mgr::*;
 use super::super::super::qlib::kernel::SHARESPACE;
+use super::super::super::qlib::kernel::KERNEL_STACK_ALLOCATOR;
+use super::super::super::qlib::kernel::kernel::timer;
+use super::super::super::qlib::kernel::kernel::futex;
+use super::super::super::qlib::kernel::task;
 use super::super::super::qlib::kernel::IOURING;
+use super::super::super::qlib::kernel::KERNEL_PAGETABLE;
+use super::super::super::qlib::kernel::PAGE_MGR;
 use super::super::super::qlib::kernel::vcpu;
+use super::super::super::qlib::pagetable::AlignedAllocator;
 use super::super::super::print::LOG;
 use super::super::super::syncmgr;
 use super::super::super::runc::runtime::loader::*;
@@ -126,6 +133,20 @@ impl VirtualMachine {
         URING_MGR.lock().Addfd(controlSock).unwrap();
         sharespace.SetIOUringsAddr(URING_MGR.lock().IOUringsAddr());
         IOURING.SetValue(sharespace.GetIOUringAddr());
+
+        unsafe {
+            KERNEL_PAGETABLE.SetRoot(VMS.lock().pageTables.GetRoot());
+            PAGE_MGR.SetValue(sharespace.GetPageMgrAddr());
+
+            KERNEL_STACK_ALLOCATOR.Init(AlignedAllocator::New(
+                MemoryDef::DEFAULT_STACK_SIZE as usize,
+                MemoryDef::DEFAULT_STACK_SIZE as usize,
+            ));
+
+            task::InitSingleton();
+            futex::InitSingleton();
+            timer::InitSingleton();
+        }
 
         let syncPrint = sharespace.config.read().SyncPrint();
         super::super::super::print::SetSharespace(sharespace);
