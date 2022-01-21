@@ -187,7 +187,6 @@ pub fn SingletonInit() {
         interrupt::InitSingleton();
         kernel::abstract_socket_namespace::InitSingleton();
         kernel::futex::InitSingleton();
-        kernel::kernel::InitSingleton();
         kernel::semaphore::InitSingleton();
         kernel::epoll::epoll::InitSingleton();
         kernel::timer::InitSingleton();

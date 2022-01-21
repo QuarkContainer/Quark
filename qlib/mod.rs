@@ -76,6 +76,7 @@ use self::bytestream::*;
 use self::kernel::quring::uring_mgr::QUring;
 use self::kernel::kernel::timer::timekeeper::*;
 use self::kernel::kernel::timer::timer_store::*;
+use self::kernel::kernel::kernel::Kernel;
 use self::kernel::memmgr::pma::*;
 use self::kernel::kernel::futex::*;
 use self::control_msg::SignalArgs;
@@ -555,6 +556,7 @@ pub struct ShareSpace {
     pub logLock: QMutex<()>,
     pub logfd: AtomicI32,
     pub signalHandlerAddr: AtomicU64,
+    pub kernel: QMutex<Option<Kernel>>,
 
     pub controlSock: i32,
 

@@ -27,7 +27,6 @@ use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::super::auxv::*;
 use super::super::task::*;
-//use super::super::super::context::Context;
 use super::super::super::cpuid::*;
 use super::super::super::auth::userns::*;
 use super::super::super::auth::*;
@@ -35,6 +34,7 @@ use super::super::super::limits::*;
 use super::super::super::linux::time::*;
 use super::super::super::path::*;
 use super::super::loader::loader::*;
+use super::super::SHARESPACE;
 use super::super::SignalDef::*;
 use super::super::threadmgr::pid_namespace::*;
 use super::super::threadmgr::thread::*;
@@ -56,12 +56,7 @@ use super::cpuset::*;
 use super::time::*;
 use super::platform::*;
 
-pub static KERNEL : Singleton<QMutex<Option<Kernel>>> = Singleton::<QMutex<Option<Kernel>>>::New();
 pub static ASYNC_PROCESS_TIMER: Singleton<Timer> = Singleton::<Timer>::New();
-
-pub unsafe fn InitSingleton() {
-    KERNEL.Init(QMutex::new(None));
-}
 
 pub unsafe fn InitAsyncProcessTimer() {
     ASYNC_PROCESS_TIMER.Init(GetKernel().NewAsyncProcessTimer());
@@ -71,12 +66,12 @@ const CLOCK_TICK_MS : i64 = CLOCK_TICK / MILLISECOND;
 
 #[inline]
 pub fn GetKernel() -> Kernel {
-    return KERNEL.lock().clone().unwrap();
+    return SHARESPACE.kernel.lock().clone().unwrap();
 }
 
 #[inline]
 pub fn GetKernelOption() -> Option<Kernel> {
-    return KERNEL.lock().clone();
+    return SHARESPACE.kernel.lock().clone();
 }
 
 #[derive(Default)]

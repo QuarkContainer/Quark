@@ -31,6 +31,7 @@ use super::super::super::auth;
 use super::super::super::auth::userns::*;
 use super::super::super::auth::id::*;
 use super::super::SignalDef::*;
+use super::super::SHARESPACE;
 use super::super::task::*;
 use super::super::kernel::kernel::*;
 use super::super::kernel::ipc_namespace::*;
@@ -374,7 +375,7 @@ impl LoaderInternal {
          };
 
         let kernel = Kernel::Init(kernalArgs);
-        *KERNEL.lock() = Some(kernel.clone());
+        *SHARESPACE.kernel.lock() = Some(kernel.clone());
         unsafe {
             InitAsyncProcessTimer();
         }
