@@ -375,6 +375,9 @@ impl LoaderInternal {
 
         let kernel = Kernel::Init(kernalArgs);
         *KERNEL.lock() = Some(kernel.clone());
+        unsafe {
+            InitAsyncProcessTimer();
+        }
 
         let rootMounts = BootInitRootFs(Task::Current(), &process.Root).expect("in loader::New, InitRootfs fail");
         *kernel.mounts.write() = Some(rootMounts);

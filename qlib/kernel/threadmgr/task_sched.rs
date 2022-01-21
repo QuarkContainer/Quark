@@ -578,7 +578,7 @@ impl KernelCPUClockTicker {
     }
 
     pub fn Atomically(&self, f: impl FnMut()) {
-        super::super::kernel::kernel::ASYNC_PROCESS.Atomically(f);
+        super::super::kernel::kernel::GetKernel().Atomically(f);
     }
 }
 
