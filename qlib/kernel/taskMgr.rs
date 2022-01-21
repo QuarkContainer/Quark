@@ -20,7 +20,6 @@ use super::task::*;
 use super::SHARESPACE;
 use super::super::task_mgr::*;
 use super::Kernel::HostSpace;
-use super::kernel::kernel::*;
 use super::TSC;
 use super::super::linux_def::*;
 use super::super::vcpu_mgr::*;
@@ -166,13 +165,6 @@ pub fn PollAsyncMsg() -> usize {
     if Shutdown() {
         return 0;
     }
-    //error!("PollAsyncMsg 1");
-    ASYNC_PROCESS.Process();
-    if Shutdown() {
-        return 0;
-    }
-
-    //error!("PollAsyncMsg 3");
 
     let ret = QUringTrigger();
     if Shutdown() {
@@ -184,7 +176,6 @@ pub fn PollAsyncMsg() -> usize {
 
 #[inline]
 pub fn ProcessOne() -> bool {
-    ASYNC_PROCESS.Process();
     let count = QUringTrigger();
     if count > 0 {
         return true;
