@@ -145,7 +145,7 @@ pub struct KernelInternal {
     pub lastProcessTime: QMutex<i64>
 }
 
-impl TimerListener for KernelInternal {
+impl TimerListenerTrait for KernelInternal {
     fn Notify(&self, _exp: u64) {
         self.ProcessData()
     }
@@ -175,7 +175,7 @@ impl KernelInternal {
             tg: tg.Downgrade(),
         };
 
-        let itimer = Timer::New(&MONOTONIC_CLOCK, &Arc::new(listener));
+        let itimer = Timer::New(&MONOTONIC_CLOCK, TimerListener::ITimerRealListener(Arc::new(listener)));
         tg.lock().itimerRealTimer = itimer;
 
         return tg
@@ -244,7 +244,7 @@ impl Kernel {
     }
 
     pub fn NewAsyncProcessTimer(&self) -> Timer {
-        let timer = Timer::New(&MONOTONIC_CLOCK, &self.0);
+        let timer = Timer::New(&MONOTONIC_CLOCK, TimerListener::Kernel(self.clone()));
         let start = MONOTONIC_CLOCK.Now().0;
         let duration = 10 * MILLISECOND;
         let next = Time(start + duration);
