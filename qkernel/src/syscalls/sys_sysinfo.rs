@@ -31,7 +31,9 @@ pub fn SysInfo(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     }*/
 
     let mut statm : StatmInfo = StatmInfo::default();
-    Kernel::HostSpace::Statm(&mut statm);
+    // TODO(Cong): bypassing this issue for now, fix before PR
+    //Kernel::HostSpace::Statm(&mut statm);
+    info!("pass to here, rss, {}", statm.rss);
 
     let totalUsage = statm.rss;
     let totalSize = TotalMemory(0, totalUsage);

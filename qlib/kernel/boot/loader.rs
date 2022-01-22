@@ -450,7 +450,11 @@ impl LoaderInternal {
         return lastErr
     }
 
-    pub fn SignalProcess(&self, cid: String, tgid: ThreadID, signo: i32) -> Result<()> {
+    pub fn SignalProcess(&self, mut cid: String, tgid: ThreadID, signo: i32) -> Result<()> {
+        // if the cid string is empty, by default send to process of the root container
+        if cid.is_empty() {
+            cid = self.sandboxID.clone();
+        }
         match self.ThreadGroupFromID(&ExecID{cid: cid.clone(), pid: tgid}) {
             None => (),
             Some((execTG, _)) => {

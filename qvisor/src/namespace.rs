@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use std::io::prelude::*;
-use std::fs::OpenOptions;
+use std::fs::{OpenOptions, create_dir_all};
 use std::string::String;
 use std::ffi::CString;
 use libc::*;
@@ -120,13 +120,45 @@ impl MountNs {
         }
     }
 
+    /* 
+        this mounts the host's root path to a /old_root directory when pivoting
+        this is an adhoc change to make qvisor able to mount further container fs images to the sandboxRootDir 
+        and made these available to current sandbox once get a "StartSubContainer" ucall (for k8s integration). 
+        Otherwise, these path won't be available to the mountNS.
+        Notice this might be a big security problem, 
+    */
+    pub fn PivotRoot2(&self) {
+        if Util::Chdir(&self.rootfs) < 0 {
+            panic!("chdir fail for rootfs {}", &self.rootfs)
+        }
+
+        match create_dir_all("old_root") {
+            Ok(()) => (),
+            Err(_e) => panic!("failed to create dir to put old root")
+        };
+
+        let errno = Util::PivotRoot(".", ".");
+        if errno != 0 {
+            panic!("pivot fail with errno = {}", errno)
+        }
+
+        if Util::Chdir("/") < 0 {
+            panic!("chdir fail")
+        }
+
+        // https://man.archlinux.org/man/pivot_root.2.en#pivot_root(&quot;.&quot;,_&quot;.&quot;)
+        if Util::Umount2("/", MNT_DETACH) < 0 {
+            panic!("UMount2 fail")
+        }
+    }
+
     pub fn PivotRoot(&self) {
         /*let flags = MS_REC | MS_SLAVE;
 
         if Util::Mount("","/", "", flags, "") < 0 {
             panic!("mount root fail")
         }*/
-
+        
         if Util::Chdir(&self.rootfs) < 0 {
             panic!("chdir fail for rootfs {}", &self.rootfs)
         }
@@ -140,6 +172,7 @@ impl MountNs {
             panic!("chdir fail")
         }
 
+        // https://man.archlinux.org/man/pivot_root.2.en#pivot_root(&quot;.&quot;,_&quot;.&quot;)
         if Util::Umount2("/", MNT_DETACH) < 0 {
             panic!("UMount2 fail")
         }
