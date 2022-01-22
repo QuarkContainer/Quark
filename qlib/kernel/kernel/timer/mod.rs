@@ -41,9 +41,10 @@ pub unsafe fn InitSingleton() {
     TIMER_STORE.SetValue(SHARESPACE.GetTimerStoreAddr());
 }
 
+#[derive(Clone)]
 pub struct TimerUpdater {}
 
-impl TimerListener for TimerUpdater {
+impl TimerListenerTrait for TimerUpdater {
     fn Notify(&self, _exp: u64) {
         TIME_KEEPER.write().Update();
     }

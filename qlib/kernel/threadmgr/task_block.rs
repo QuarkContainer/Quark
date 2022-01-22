@@ -12,12 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
-
 use super::super::kernel::waiter::*;
 use super::super::kernel::timer::*;
 use super::super::kernel::timer::timer::Setting;
-use super::super::kernel::timer::timer::Timer;
+use super::super::kernel::timer::timer::*;
 use super::super::kernel::timer::timer::Clock;
 use super::super::kernel::timer::timer::WaitEntryListener;
 use super::super::threadmgr::thread::*;
@@ -71,10 +69,10 @@ impl Default for Blocker {
         let generalEntry = waiter.NewWaitEntry(Waiter::GENERAL_WAITID, 0);
 
         let monoClock = MONOTONIC_CLOCK.clone();
-        let monoTimer = Timer::New(&monoClock, &Arc::new(listener.clone()));
+        let monoTimer = Timer::New(&monoClock, TimerListener::WaitEntryListener(listener.clone()));
 
         let realClock = REALTIME_CLOCK.clone();
-        let realTimer = Timer::New(&realClock, &Arc::new(listener.clone()));
+        let realTimer = Timer::New(&realClock, TimerListener::WaitEntryListener(listener.clone()));
 
 
         return Self {
@@ -128,10 +126,10 @@ impl Blocker {
         let generalEntry = waiter.NewWaitEntry(Waiter::GENERAL_WAITID, 0);
 
         let monoClock = MONOTONIC_CLOCK.clone();
-        let monoTimer = Timer::New(&monoClock, &Arc::new(listener.clone()));
+        let monoTimer = Timer::New(&monoClock, TimerListener::WaitEntryListener(listener.clone()));
 
         let realClock = REALTIME_CLOCK.clone();
-        let realTimer = Timer::New(&realClock, &Arc::new(listener.clone()));
+        let realTimer = Timer::New(&realClock, TimerListener::WaitEntryListener(listener.clone()));
 
         return Self {
             waiter: waiter,
@@ -221,7 +219,7 @@ impl Blocker {
     }
 
     pub fn GetTimerWithClock(&self, clock: &Clock) -> Timer {
-        return Timer::New(clock, &Arc::new(self.timerListner.clone()));
+        return Timer::New(clock, TimerListener::WaitEntryListener(self.timerListner.clone()));
     }
 
     pub fn GetTimer(&self, clockId: i32) -> Timer {

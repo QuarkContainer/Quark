@@ -583,7 +583,7 @@ impl KernelCPUClockTicker {
 }
 
 // Notify implements ktime.TimerListener.Notify.
-impl TimerListener for KernelCPUClockTicker {
+impl TimerListenerTrait for KernelCPUClockTicker {
     fn Notify(&self, exp: u64) {
         // Only increment cpuClock by 1 regardless of the number of expirations.
         // This approximately compensates for cases where thread throttling or bad

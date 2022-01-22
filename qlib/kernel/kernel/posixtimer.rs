@@ -22,7 +22,7 @@ use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::super::linux::time::*;
 use super::super::threadmgr::thread::*;
-use super::timer::timer::Clock;
+use super::timer::timer::*;
 use super::timer::timer;
 
 #[derive(Default)]
@@ -132,7 +132,7 @@ impl Deref for IntervalTimer {
     }
 }
 
-impl timer::TimerListener for IntervalTimer {
+impl timer::TimerListenerTrait for IntervalTimer {
     fn Notify(&self, exp: u64) {
         let mut it = self.lock();
 
@@ -298,7 +298,7 @@ impl Thread {
             }
         }
 
-        it.lock().timer = Some(timer::Timer::New(c, &Arc::new(it.clone())));
+        it.lock().timer = Some(timer::Timer::New(c, TimerListener::IntervalTimer(it.clone())));
         tg.lock().timers.insert(id, it);
         return Ok(id)
     }
