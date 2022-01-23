@@ -46,7 +46,7 @@ use super::super::super::runc::runtime::loader::*;
 use super::super::super::kvm_vcpu::*;
 use super::super::super::elf_loader::*;
 use super::super::super::vmspace::*;
-use super::super::super::{VMS, PMA_KEEPER, QUARK_CONFIG, URING_MGR, KERNEL_IO_THREAD};
+use super::super::super::{VMS, PMA_KEEPER, QUARK_CONFIG, URING_MGR, KERNEL_IO_THREAD, THREAD_ID};
 
 lazy_static! {
     static ref EXIT_STATUS : AtomicI32 = AtomicI32::new(-1);
@@ -274,6 +274,9 @@ impl VirtualMachine {
         let mut threads = Vec::new();
 
         threads.push(thread::Builder::new().name("0".to_string()).spawn(move || {
+            THREAD_ID.with ( |f| {
+                *f.borrow_mut() = 1;
+            });
             cpu.run().expect("vcpu run fail");
             info!("cpu#{} finish", 0);
         }).unwrap());
@@ -282,6 +285,9 @@ impl VirtualMachine {
         info!("shareSpace ready...");
 
         for i in 1..self.vcpus.len() {
+            THREAD_ID.with ( |f| {
+                *f.borrow_mut() = i as i32;
+            });
             let cpu = self.vcpus[i].clone();
 
             threads.push(thread::Builder::new().name(format!("{}", i)).spawn(move || {

@@ -88,6 +88,7 @@ use alloc::sync::Arc;
 use lazy_static::lazy_static;
 use spin::Mutex;
 use std::env;
+use std::cell::RefCell;
 
 use self::heap_alloc::*;
 use self::qlib::addr;
@@ -112,6 +113,16 @@ pub fn AllocatorPrint(_class: usize) -> String {
 }
 
 pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
+
+thread_local!(static THREAD_ID: RefCell<i32> = RefCell::new(-1));
+
+pub fn ThreadId() -> i32 {
+    let mut i = 0;
+    THREAD_ID.with(|f| {
+        i = *f.borrow();
+    });
+    return i;
+}
 
 lazy_static! {
     pub static ref SHARE_SPACE_STRUCT: Arc<Mutex<ShareSpace>> =

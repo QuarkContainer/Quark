@@ -120,7 +120,7 @@ impl ShareSpace {
 
 impl<T: ?Sized> QMutexIntern<T> {
     pub fn GetID() -> u64 {
-        return 0xffff;
+        return super::ThreadId() as u64;
     }
 }
 
