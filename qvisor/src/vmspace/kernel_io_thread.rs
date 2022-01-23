@@ -45,14 +45,6 @@ impl KIOThread {
 
             //IOURING.DrainCompletionQueue();
 
-            //URING_MGR.lock().Wake(0, 0).expect("qlib::HYPER CALL_URING_WAKE fail");
-
-
-            //print!("KIOThread complete count is {}/{}/{}",
-            //    sharespace.ReadyAsyncMsgCnt(), URING_MGR.lock().CompletEntries(), data);
-
-            // for the "dd" test long run test, without this, uring might sleep for sometime
-            //log!("iowait workaround");
             if URING_MGR.lock().CompletEntries() > 0 {
                 return Ok(())
             }

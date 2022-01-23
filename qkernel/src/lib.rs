@@ -103,7 +103,6 @@ use self::qlib::kernel::vcpu::*;
 
 use alloc::string::String;
 use core::panic::PanicInfo;
-use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicI32;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicUsize;
@@ -175,7 +174,6 @@ pub fn SingletonInit() {
             MemoryDef::DEFAULT_STACK_SIZE as usize,
             MemoryDef::DEFAULT_STACK_SIZE as usize,
         ));
-        SHUTDOWN.Init(AtomicBool::new(false));
         EXIT_CODE.Init(AtomicI32::new(0));
 
         guestfdnotifier::GUEST_NOTIFIER.Init(guestfdnotifier::Notifier::New());
@@ -201,10 +199,6 @@ pub fn SingletonInit() {
 
 extern "C" {
     pub fn syscall_entry();
-}
-
-pub fn Shutdown() -> bool {
-    return SHUTDOWN.load(self::qlib::linux_def::QOrdering::RELAXED);
 }
 
 pub fn Init() {
