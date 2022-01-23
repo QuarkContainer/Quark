@@ -532,13 +532,15 @@ impl Inode {
     }
 
     pub fn StableAttr(&self) -> StableAttr {
-        let isOverlay = self.lock().Overlay.is_some();
-        if isOverlay {
-            let overlay = self.lock().Overlay.as_ref().unwrap().clone();
-            return overlayStableAttr(&overlay);
+        let overlay = self.lock().Overlay.clone();
+        match overlay {
+            None => {
+                return self.lock().StableAttr.clone()
+            }
+            Some(overlay) => {
+                return overlayStableAttr(&overlay);
+            }
         }
-
-        return self.lock().StableAttr.clone()
     }
 
     pub fn CheckPermission(&self, task: &Task, p: &PermMask) -> Result<()> {

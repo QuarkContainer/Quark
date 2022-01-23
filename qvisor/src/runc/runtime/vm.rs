@@ -253,6 +253,7 @@ impl VirtualMachine {
 
             // enable cpuid in host
             vcpu.vcpu.set_cpuid2(&kvm_cpuid).unwrap();
+            VMS.lock().vcpus.push(vcpu.clone());
             vcpus.push(vcpu);
         }
 

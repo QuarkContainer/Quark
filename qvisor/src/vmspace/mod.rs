@@ -62,6 +62,7 @@ use self::random::*;
 use self::limits::*;
 use super::runc::runtime::signal_handle::*;
 use super::kvm_vcpu::HostPageAllocator;
+use super::kvm_vcpu::KVMVcpu;
 
 const ARCH_SET_GS:u64 = 0x1001;
 const ARCH_SET_FS:u64 = 0x1002;
@@ -108,6 +109,7 @@ pub struct VMSpace {
     pub pivot: bool,
     pub waitingMsgCall: Option<WaitingMsgCall>,
     pub controlSock: i32,
+    pub vcpus: Vec<Arc<KVMVcpu>>,
 }
 
 unsafe impl Sync for VMSpace {}
@@ -1484,6 +1486,11 @@ impl VMSpace {
         error!("LibcStatx osfd is {} ret is {} error is {}", osfd, ret, errno::errno().0);
     }
 
+    pub fn GetVcpuFreq(&self) -> i64 {
+        let freq = self.vcpus[0].vcpu.get_tsc_khz().unwrap() * 1000;
+        return freq as i64
+    }
+
     pub fn Init() -> Self {
         return VMSpace {
             allocator: HostPageAllocator::New(),
@@ -1497,6 +1504,7 @@ impl VMSpace {
             pivot: false,
             waitingMsgCall: None,
             controlSock: -1,
+            vcpus: Vec::new(),
         }
     }
 }
