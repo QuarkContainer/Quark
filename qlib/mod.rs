@@ -543,7 +543,6 @@ pub struct ShareSpace {
     pub hostProcessor: CachePadded<AtomicU64>,
     pub VcpuSearchingCnt: CachePadded<AtomicU64>,
 
-    pub kernelIOThreadWaiting: CachePadded<AtomicBool>,
     pub shutdown: CachePadded<AtomicBool>,
     pub ioUring: CachePadded<QUring>,
     pub timerkeeper: CachePadded<TimeKeeper>,
