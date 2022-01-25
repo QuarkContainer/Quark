@@ -420,7 +420,7 @@ impl FdInfo {
                 let rdmaSocket = RDMAServerSock::New(sockfd, acceptQueue);
                 *self.lock().sockInfo.lock() = SockInfo::RDMAServerSocket(rdmaSocket);
                 self.lock().AddWait(EVENT_READ | EVENT_WRITE).expect("RDMAListen EpollCtlAdd fail");
-
+                
                 // the accept4 with SOCK_NONBLOCK doesn't work, have to fcntl it to unblock
                 super::super::VMSpace::UnblockFd(sockfd);
             }
@@ -429,7 +429,7 @@ impl FdInfo {
                 return -SysErr::EINVAL as i64
             }
         }
-
+        
         return 0;
     }
 
@@ -498,8 +498,7 @@ impl FdInfo {
                 let sockBuf = msg.socketBuf.clone();
                 let rdmaType = if RDMA_ENABLE {
                     let addr = msg as *const _ as u64;
-                    let msg = PostRDMAConnect::ToRef(addr);
-                    RDMAType::Client(msg)
+                    RDMAType::Client(addr)
                 } else {
                     RDMAType::None
                 };

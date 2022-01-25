@@ -14,6 +14,7 @@ use super::qlib::vcpu_mgr::*;
 use super::FD_NOTIFIER;
 use super::QUARK_CONFIG;
 use super::KERNEL_IO_THREAD;
+use super::ThreadId;
 
 impl<'a> ShareSpace {
     pub fn AQCall(&self, _msg: &HostOutputMsg) {
@@ -130,7 +131,7 @@ impl ShareSpace {
 
 impl<T: ?Sized> QMutexIntern<T> {
     pub fn GetID() -> u64 {
-        return 0xffff;
+        return super::ThreadId() as u64;
     }
 }
 
@@ -213,6 +214,6 @@ pub unsafe fn CopyPageUnsafe(_to: u64, _from: u64){}
 
 impl CPULocal {
     pub fn CpuId() -> usize {
-        return 0;
+        return ThreadId() as _;
     }
 }

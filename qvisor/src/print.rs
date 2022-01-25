@@ -23,6 +23,7 @@ use std::os::unix::io::AsRawFd;
 
 use super::qlib::ShareSpace;
 use super::qlib::kernel::IOURING;
+use super::ThreadId;
 
 lazy_static! {
     pub static ref LOG : Mutex<Log> = Mutex::new(Log::New());
@@ -42,8 +43,8 @@ pub fn SetSharespace(sharespace: &'static ShareSpace) {
     LOG.lock().shareSpace = sharespace;
 }
 
-pub const LOG_FILE_DEFAULT : &str = "/var/log/quark/quark.log";
-pub const LOG_FILE_FORMAT : &str = "/var/log/quark/{}.log";
+pub const LOG_FILE_DEFAULT : &str = "/home/qingming/code/Quark/log/quark.log";
+pub const LOG_FILE_FORMAT : &str = "/home/qingming/code/Quark/log/{}.log";
 pub  const TIME_FORMAT: &str = "%H:%M:%S%.3f";
 impl Log {
     pub fn New() -> Self {
@@ -58,7 +59,7 @@ impl Log {
     }
 
     pub fn Reset(&mut self, name: &str) {
-        let filename = format!( "/var/log/quark/{}.log", name);
+        let filename = format!( "/home/qingming/code/Quark/log/{}.log", name);
         let file = OpenOptions::new().create(true).append(true).open(filename).expect("Log Open fail");
         self.file = file;
     }
@@ -104,8 +105,7 @@ impl Log {
     }
 
     pub fn Print(&mut self, level: &str, str: &str) {
-        //self.Write(&format!("{} [{}] {}\n", Self::Now(), level, str));
-        self.Write(&format!("[{}] [{}] {}\n", level, std::thread::current().name().unwrap(), str));
+        self.Write(&format!("[{}] [{}] {}\n", level, ThreadId(), str));
     }
 
     pub fn RawPrint(&mut self, level: &str, str: &str) {

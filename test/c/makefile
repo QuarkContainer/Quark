@@ -1,4 +1,4 @@
-all: std server client unixcli unixsrv socketpair stat dev fork signal futex multithread epoll mkdir fifo timerfd eventfd seek gettimeofday
+all: std server client unixcli unixsrv socketpair stat dev fork signal futex multithread epoll mkdir fifo timerfd eventfd seek gettimeofday server_benchmark client_benchmark
 
 std: std.c
 	gcc -o std std.c
@@ -6,6 +6,10 @@ server: server.c
 	gcc -o server server.c
 client: client.c
 	gcc -o client client.c
+server_benchmark: server_benchmark.c
+	gcc -o serverb server_benchmark.c
+client_benchmark: client_benchmark.c
+	gcc -o clientb client_benchmark.c
 unixcli: unixcli.c
 	gcc -o unixcli unixcli.c
 unixsrv: unixsrv.c

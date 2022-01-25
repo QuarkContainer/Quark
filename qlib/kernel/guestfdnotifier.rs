@@ -120,38 +120,42 @@ impl FdWaitInfo {
     }
 
     pub fn UpdateFDSync(&self, fd: i32) -> Result<()> {
-        let op;
-        let mask = {
-            let mut fi = self.lock();
+        // let op;
+        // let mask = {
+        //     let mut fi = self.lock();
 
-            let mask = fi.queue.Events();
+        //     let mask = fi.queue.Events();
 
-            if fi.mask == 0 {
-                if mask != 0 {
-                    op = LibcConst::EPOLL_CTL_ADD;
-                } else {
-                    return Ok(())
-                }
-            } else {
-                if mask == 0 {
-                    op = LibcConst::EPOLL_CTL_DEL;
-                } else {
-                    if mask | fi.mask == fi.mask {
-                        return Ok(())
-                    }
-                    op = LibcConst::EPOLL_CTL_MOD;
-                }
-            }
+        //     if fi.mask == 0 {
+        //         if mask != 0 {
+        //             op = LibcConst::EPOLL_CTL_ADD;
+        //         } else {
+        //             return Ok(())
+        //         }
+        //     } else {
+        //         if mask == 0 {
+        //             op = LibcConst::EPOLL_CTL_DEL;
+        //         } else {
+        //             if mask | fi.mask == fi.mask {
+        //                 return Ok(())
+        //             }
+        //             op = LibcConst::EPOLL_CTL_MOD;
+        //         }
+        //     }
 
-            fi.mask = mask;
+        //     fi.mask = mask;
 
-            mask
-        };
-
-        return Self::waitfd(fd, op as u32, mask);
+        //     mask
+        // };
+        // error!("WaitFd1: fd: {}, op: {}, mask: {:x} ", fd, op, mask);
+        // return Self::waitfd(fd, op as u32, mask);
+        let mask = self.lock().queue.Events();
+        error!("UpdateFDSync, mask: {}", mask);
+        return Self::waitfd(fd, 0 as u32, mask);
     }
 
     pub fn Notify(&self, mask: EventMask) {
+        error!("FDWaitInfo::Notify, mask: {:x}", mask);
         let queue = self.lock().queue.clone();
         queue.Notify(EventMaskFromLinux(mask as u32));
     }
