@@ -16,7 +16,6 @@ use crate::qlib::mutex::*;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::sync::atomic::AtomicU64;
-use core::sync::atomic::AtomicI64;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 use alloc::string::String;
@@ -28,15 +27,14 @@ use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::super::auxv::*;
 use super::super::task::*;
-//use super::super::super::context::Context;
 use super::super::super::cpuid::*;
 use super::super::super::auth::userns::*;
 use super::super::super::auth::*;
 use super::super::super::limits::*;
 use super::super::super::linux::time::*;
 use super::super::super::path::*;
-use super::super::TSC;
 use super::super::loader::loader::*;
+use super::super::SHARESPACE;
 use super::super::SignalDef::*;
 use super::super::threadmgr::pid_namespace::*;
 use super::super::threadmgr::thread::*;
@@ -58,55 +56,22 @@ use super::cpuset::*;
 use super::time::*;
 use super::platform::*;
 
-pub static KERNEL : Singleton<QMutex<Option<Kernel>>> = Singleton::<QMutex<Option<Kernel>>>::New();
-pub static ASYNC_PROCESS : Singleton<AsyncProcess> = Singleton::<AsyncProcess>::New();
-pub unsafe fn InitSingleton() {
-    KERNEL.Init(QMutex::new(None));
-    ASYNC_PROCESS.Init(AsyncProcess::default());
+pub static ASYNC_PROCESS_TIMER: Singleton<Timer> = Singleton::<Timer>::New();
+
+pub unsafe fn InitAsyncProcessTimer() {
+    ASYNC_PROCESS_TIMER.Init(GetKernel().NewAsyncProcessTimer());
 }
 
-#[derive(Default)]
-pub struct AsyncProcess {
-    pub lastTsc: AtomicI64,
-    pub lastProcessTime: QMutex<i64>
-}
-
-const TSC_GAP : i64 = 1_000_000; // for 1GHZ process, it is 1 ms
 const CLOCK_TICK_MS : i64 = CLOCK_TICK / MILLISECOND;
-
-impl AsyncProcess {
-    pub fn Process(&self) {
-        let curr = TSC.Rdtsc();
-        if curr - self.lastTsc.load(Ordering::Relaxed) > TSC_GAP {
-            self.lastTsc.store(curr, Ordering::Relaxed);
-            if let Some(mut processTime) = self.lastProcessTime.try_lock() {
-                let currTime = Task::MonoTimeNow().0 / MILLISECOND;
-                if currTime - *processTime >= CLOCK_TICK_MS {
-                    let tick = (currTime - *processTime)/CLOCK_TICK_MS;
-                    if let Some(kernel) = GetKernelOption() {
-                        let ticker = kernel.cpuClockTicker.clone();
-                        ticker.Notify(tick as u64);
-                        *processTime = currTime;
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn Atomically(&self, mut f: impl FnMut()) {
-        let _t = self.lastProcessTime.lock();
-        f();
-    }
-}
 
 #[inline]
 pub fn GetKernel() -> Kernel {
-    return KERNEL.lock().clone().unwrap();
+    return SHARESPACE.kernel.lock().clone().unwrap();
 }
 
 #[inline]
 pub fn GetKernelOption() -> Option<Kernel> {
-    return KERNEL.lock().clone();
+    return SHARESPACE.kernel.lock().clone();
 }
 
 #[derive(Default)]
@@ -177,6 +142,15 @@ pub struct KernelInternal {
     pub started: AtomicBool,
 
     pub platform: DefaultPlatform,
+    pub lastProcessTime: QMutex<i64>
+}
+
+impl TimerListenerTrait for KernelInternal {
+    fn Notify(&self, _exp: u64) {
+        self.ProcessData()
+    }
+
+    fn Destroy(&self) {}
 }
 
 impl KernelInternal {
@@ -201,10 +175,23 @@ impl KernelInternal {
             tg: tg.Downgrade(),
         };
 
-        let itimer = Timer::New(&MONOTONIC_CLOCK, &Arc::new(listener));
+        let itimer = Timer::New(&MONOTONIC_CLOCK, TimerListener::ITimerRealListener(Arc::new(listener)));
         tg.lock().itimerRealTimer = itimer;
 
         return tg
+    }
+
+    pub fn ProcessData(&self) {
+        if let Some(mut processTime) = self.lastProcessTime.try_lock() {
+            let currTime = Task::MonoTimeNow().0 / MILLISECOND;
+            if currTime - *processTime >= CLOCK_TICK_MS {
+                let tick = (currTime - *processTime)/CLOCK_TICK_MS;
+                let kernel = self;
+                let ticker = kernel.cpuClockTicker.clone();
+                ticker.Notify(tick as u64);
+                *processTime = currTime;
+            }
+        }
     }
 }
 
@@ -243,6 +230,7 @@ impl Kernel {
             startTime: Task::RealTimeNow(),
             started: AtomicBool::new(false),
             platform: DefaultPlatform::default(),
+            lastProcessTime: QMutex::new(0),
         };
 
         //error!("hasXSAVEOPT is {}", internal.featureSet.lock().UseXsaveopt());
@@ -253,6 +241,24 @@ impl Kernel {
         //error!("X86FeatureOSXSAVE is {}", internal.featureSet.lock().HasFeature(Feature(X86Feature::X86FeatureOSXSAVE as i32)));
 
         return Self(Arc::new(internal))
+    }
+
+    pub fn NewAsyncProcessTimer(&self) -> Timer {
+        let timer = Timer::New(&MONOTONIC_CLOCK, TimerListener::Kernel(self.clone()));
+        let start = MONOTONIC_CLOCK.Now().0;
+        let duration = 10 * MILLISECOND;
+        let next = Time(start + duration);
+        timer.Swap(&Setting {
+            Enabled: true,
+            Next: next,
+            Period: 1 * duration,
+        });
+        return timer;
+    }
+
+    pub fn Atomically(&self, mut f: impl FnMut()) {
+        let _t = self.lastProcessTime.lock();
+        f();
     }
 
     pub fn Start(&self) -> Result<()> {

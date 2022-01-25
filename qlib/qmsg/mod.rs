@@ -13,11 +13,7 @@
 // limitations under the License.
 
 //pub mod output;
-pub mod input;
 pub mod qcall;
-
-pub use super::input::*;
-//pub use super::output::*;
 pub use super::qcall::*;
 
 

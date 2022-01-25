@@ -44,12 +44,16 @@ impl TimeKeeper {
             internal.Init(vdsoParamPageAddr);
         }
 
-        let timer = Timer::Period(&MONOTONIC_CLOCK, &Arc::new(TimerUpdater {}), 60 * SECOND);
+        let timer = Timer::Period(&MONOTONIC_CLOCK, TimerListener::TimerUpdater(TimerUpdater {}), 1 * SECOND);
 
         {
             let mut internal = self.write();
             internal.timer = Some(timer);
         }
+    }
+
+    pub fn Addr(&self) -> u64 {
+        return self as * const _ as u64;
     }
 
     pub fn NewClock(&self, clockId: ClockID) -> Clock {

@@ -15,6 +15,7 @@
 use alloc::sync::Arc;
 use crate::qlib::mutex::*;
 use core::ops::Deref;
+use core::fmt;
 
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
@@ -26,6 +27,10 @@ use super::super::super::threadmgr::task_sched::*;
 use super::super::waiter::*;
 use super::super::super::uid::*;
 use super::super::time::*;
+use super::super::super::fs::timerfd::*;
+use super::super::kernel::*;
+use super::super::timer::TimerUpdater;
+use super::super::posixtimer::*;
 use super::timekeeper::*;
 use super::timer_store::*;
 use super::*;
@@ -44,6 +49,7 @@ pub enum Clock {
     TimeKeeperClock(Arc<TimeKeeperClock>),
     TaskClock(TaskClock),
     ThreadGroupClock(ThreadGroupClock),
+    Dummy,
 }
 
 impl Clock {
@@ -53,6 +59,7 @@ impl Clock {
             Self::TimeKeeperClock(ref c) => c.Now(),
             Self::TaskClock(ref c) => c.Now(),
             Self::ThreadGroupClock(ref c) => c.Now(),
+            Self::Dummy  => panic!("Clock::Dummy Now..."),
         }
     }
 
@@ -76,6 +83,7 @@ impl Clock {
             Self::TimeKeeperClock(ref c) => c.WallTimeUntil(t, now),
             Self::TaskClock(ref c) => c.WallTimeUntil(t, now),
             Self::ThreadGroupClock(ref c) => c.WallTimeUntil(t, now),
+            Self::Dummy  => panic!("Clock::Dummy WallTimeUntil..."),
         }
     }
 }
@@ -90,7 +98,69 @@ impl Waitable for ClockEventsQueue {
     }
 }
 
-pub trait TimerListener: Sync + Send {
+#[derive(Clone)]
+pub enum TimerListener {
+    TimerOperations(Arc<TimerOperationsInternal>),
+    Kernel(Kernel),
+    IntervalTimer(IntervalTimer),
+    TimerUpdater(TimerUpdater),
+    DummyTimerListener(DummyTimerListener),
+    WaitEntryListener(WaitEntryListener),
+    ITimerRealListener(Arc<ITimerRealListener>),
+    KernelCPUClockTicker(Arc<KernelCPUClockTicker>)
+}
+
+impl fmt::Debug for TimerListener {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::TimerOperations(_) => f.debug_struct("TimerOperations").finish(),
+            Self::Kernel(_) => f.debug_struct("Kernel").finish(),
+            Self::IntervalTimer(_) => f.debug_struct("IntervalTimer").finish(),
+            Self::TimerUpdater(_) => f.debug_struct("TimerUpdater").finish(),
+            Self::DummyTimerListener(_) => f.debug_struct("DummyTimerListener").finish(),
+            Self::WaitEntryListener(_) => f.debug_struct("WaitEntryListener").finish(),
+            Self::ITimerRealListener(_) => f.debug_struct("ITimerRealListener").finish(),
+            Self::KernelCPUClockTicker(_)  => f.debug_struct("KernelCPUClockTicker").finish(),
+        }
+    }
+}
+
+impl TimerListener {
+    // Notify is called when its associated Timer expires. exp is the number of
+    // expirations.
+    //
+    // Notify is called with the associated Timer's mutex locked, so Notify
+    // must not take any locks that precede Timer.mu in lock order.
+    //
+    // Preconditions: exp > 0.
+    pub fn Notify(&self, exp: u64) {
+        match self {
+            Self::TimerOperations(tl) => tl.Notify(exp),
+            Self::Kernel(tl) => tl.Notify(exp),
+            Self::IntervalTimer(tl) => tl.Notify(exp),
+            Self::TimerUpdater(tl) => tl.Notify(exp),
+            Self::DummyTimerListener(tl) => tl.Notify(exp),
+            Self::WaitEntryListener(tl) => tl.Notify(exp),
+            Self::ITimerRealListener(tl) => tl.Notify(exp),
+            Self::KernelCPUClockTicker(tl)  => tl.Notify(exp),
+        }
+    }
+
+    pub fn Destroy(&self) {
+        match self {
+            Self::TimerOperations(tl) => tl.Destroy(),
+            Self::Kernel(tl) => tl.Destroy(),
+            Self::IntervalTimer(tl) => tl.Destroy(),
+            Self::TimerUpdater(tl) => tl.Destroy(),
+            Self::DummyTimerListener(tl) => tl.Destroy(),
+            Self::WaitEntryListener(tl) => tl.Destroy(),
+            Self::ITimerRealListener(tl) => tl.Destroy(),
+            Self::KernelCPUClockTicker(tl)  => tl.Destroy(),
+        }
+    }
+}
+
+pub trait TimerListenerTrait: Sync + Send {
     // Notify is called when its associated Timer expires. exp is the number of
     // expirations.
     //
@@ -104,9 +174,10 @@ pub trait TimerListener: Sync + Send {
     fn Destroy(&self);
 }
 
+#[derive(Clone)]
 pub struct DummyTimerListener {}
 
-impl TimerListener for DummyTimerListener {
+impl TimerListenerTrait for DummyTimerListener {
     fn Notify(&self, _exp: u64) {}
     fn Destroy(&self) {}
 }
@@ -247,7 +318,7 @@ pub struct TimerInternal {
     pub clock: Clock,
 
     // listener is notified of expirations. listener is immutable.
-    pub listener: Arc<TimerListener>,
+    pub listener: TimerListener,
 
     // setting is the timer setting. setting is protected by mu.
     pub setting: Setting,
@@ -266,7 +337,7 @@ impl Default for TimerInternal {
         let id = NewUID();
         return Self {
             clock: REALTIME_CLOCK.clone(),
-            listener: Arc::new(DummyTimerListener {}),
+            listener: TimerListener::DummyTimerListener(DummyTimerListener {}),
             setting: Setting::default(),
             paused: true,
 
@@ -279,6 +350,22 @@ impl Default for TimerInternal {
 
 
 impl TimerInternal {
+    pub fn Dummy() -> Self {
+        let id = NewUID();
+        let ret = Self {
+            clock: Clock::Dummy,
+            listener: TimerListener::DummyTimerListener(DummyTimerListener {}),
+            setting: Setting::default(),
+            paused: true,
+
+            Id: id,
+            State: TimerState::default(),
+            Expire: 0,
+        };
+
+        return ret;
+    }
+
     fn NextExpire(&mut self) -> i64 {
         if self.setting.Enabled {
             let now = self.clock.Now();
@@ -326,6 +413,11 @@ impl Drop for Timer {
 }
 
 impl Timer {
+    pub fn Dummy() -> Self {
+        let ret = Self(Arc::new(QMutex::new(TimerInternal::Dummy())));
+        return ret;
+    }
+
     fn Timeout(&self) -> i64 {
         let mut t = self.lock();
 
@@ -344,11 +436,11 @@ impl Timer {
         return t.NextExpire();
     }
 
-    pub fn New<L: TimerListener + 'static>(clock: &Clock, listener: &Arc<L>) -> Self {
+    pub fn New(clock: &Clock, listener: TimerListener) -> Self {
         let id = NewUID();
         let internal = TimerInternal {
             clock: clock.clone(),
-            listener: listener.clone(),
+            listener: listener,
             setting: Setting::default(),
             paused: false,
 
@@ -362,11 +454,11 @@ impl Timer {
         return res;
     }
 
-    pub fn Period<L: TimerListener + 'static>(clock: &Clock, listener: &Arc<L>, duration: Duration) -> Self {
+    pub fn Period(clock: &Clock, listener: TimerListener, duration: Duration) -> Self {
         let id = NewUID();
         let internal = TimerInternal {
             clock: clock.clone(),
-            listener: listener.clone(),
+            listener: listener,
             setting: Setting::default(),
             paused: false,
 
@@ -388,11 +480,11 @@ impl Timer {
         return res;
     }
 
-    pub fn After<L: TimerListener + 'static>(clock: &Clock, listener: &Arc<L>, duration: Duration) -> Self {
+    pub fn After(clock: &Clock, listener: TimerListener, duration: Duration) -> Self {
         let id = NewUID();
         let internal = TimerInternal {
             clock: clock.clone(),
-            listener: listener.clone(),
+            listener: listener,
             setting: Setting::default(),
             paused: false,
 
@@ -610,7 +702,7 @@ impl WaitEntryListener {
     }
 }
 
-impl TimerListener for WaitEntryListener {
+impl TimerListenerTrait for WaitEntryListener {
     fn Notify(&self, _exp: u64) {
         self.entry.Timeout();
     }
@@ -622,7 +714,7 @@ pub struct ITimerRealListener {
     pub tg: ThreadGroupWeak,
 }
 
-impl TimerListener for ITimerRealListener {
+impl TimerListenerTrait for ITimerRealListener {
     fn Notify(&self, _exp: u64) {
         let tg = self.tg.Upgrade().expect("TimerListener::Notify upgrade fail");
         tg.SendSignal(&SignalInfoPriv(Signal::SIGALRM)).expect("TimerListener::Notify fail")

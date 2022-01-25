@@ -1,5 +1,6 @@
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
+use libc::*;
 
 use super::qlib::*;
 use super::qlib::loader::*;
@@ -11,9 +12,13 @@ use super::qlib::control_msg::*;
 use super::qlib::kernel::task::*;
 use super::qlib::perf_tunning::*;
 use super::qlib::vcpu_mgr::*;
+use super::qlib::linux::time::*;
+use super::qlib::kernel::memmgr::pma::*;
 use super::FD_NOTIFIER;
 use super::QUARK_CONFIG;
-use super::KERNEL_IO_THREAD;
+use super::URING_MGR;
+use super::VMS;
+use super::vmspace::*;
 use super::ThreadId;
 
 impl<'a> ShareSpace {
@@ -25,21 +30,6 @@ impl<'a> ShareSpace {
 }
 
 impl<'a> ShareSpace {
-    pub fn AQHostInputCall(&self, item: &HostInputMsg) {
-        loop {
-            if self.QInput.IsFull() {
-                continue;
-            }
-
-            self.QInput.Push(&item).unwrap();
-            break;
-        }
-        //SyncMgr::WakeVcpu(self, TaskIdQ::default());
-
-        //SyncMgr::WakeVcpu(self, TaskIdQ::New(1<<12, 0));
-        KERNEL_IO_THREAD.Wakeup(self);
-    }
-
     pub fn LogFlush(&self, partial: bool) {
         let lock = self.logLock.try_lock();
         if lock.is_none() {
@@ -135,38 +125,6 @@ impl<T: ?Sized> QMutexIntern<T> {
     }
 }
 
-/*
-impl Scheduler {
-    // steal scheduling
-    pub fn GetNext(&self) -> Option<TaskId> {
-        return None
-    }
-
-    pub fn Count(&self) -> u64 {
-        return 0
-    }
-
-    pub fn Print(&self) -> String {
-        return "".to_string();
-    }
-
-    #[inline]
-    pub fn GetNextForCpu(&self, currentCpuId: usize, vcpuId: usize) -> Option<TaskId> {
-        return None
-    }
-
-    pub fn Schedule(&self, taskId: TaskId) {
-    }
-
-    pub fn KScheduleQ(&self, task: TaskId, vcpuId: usize) {
-    }
-
-    pub fn NewTask(&self, taskId: TaskId) -> usize {
-        return 0;
-    }
-}*/
-
-
 #[repr(usize)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PerfType {
@@ -216,4 +174,33 @@ impl CPULocal {
     pub fn CpuId() -> usize {
         return ThreadId() as _;
     }
+}
+
+impl PageMgrInternal {
+    pub fn CopyVsysCallPages(&self) {}
+}
+
+pub fn ClockGetTime(clockId: i32) -> i64 {
+    let ts = Timespec::default();
+    let res = unsafe {
+        clock_gettime(clockId as clockid_t, &ts as *const _ as u64 as *mut timespec) as i64
+    };
+
+    if res == -1 {
+        return errno::errno().0 as i64;
+    } else {
+        return ts.ToNs().unwrap();
+    }
+}
+
+pub fn VcpuFreq() -> i64 {
+    return VMS.lock().GetVcpuFreq();
+}
+
+pub fn NewSocket(fd: i32) -> i64 {
+    return VMSpace::NewSocket(fd)
+}
+
+pub fn UringWake(idx: usize, minCompleted: u64) {
+    URING_MGR.lock().Wake(idx, minCompleted as _).expect("qlib::HYPER CALL_URING_WAKE fail");
 }

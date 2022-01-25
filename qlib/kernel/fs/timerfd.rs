@@ -59,7 +59,7 @@ impl TimerOperationsInternal {
     }
 }
 
-impl TimerListener for TimerOperationsInternal {
+impl TimerListenerTrait for TimerOperationsInternal {
     // Notify implements TimerListener.Notify.
     fn Notify(&self, exp: u64) {
         {
@@ -86,7 +86,7 @@ pub fn NewTimerfd(task: &Task, clockId: i32) -> Result<File> {
         _ => return Err(Error::SysError(SysErr::EINVAL))
     };
 
-    let timer = Timer::New(&clock, &internal);
+    let timer = Timer::New(&clock, TimerListener::TimerOperations(internal.clone()));
 
     let tops = TimerOperations {
         ops: internal,

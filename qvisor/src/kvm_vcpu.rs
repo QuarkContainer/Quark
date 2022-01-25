@@ -328,7 +328,6 @@ impl KVMVcpu {
                         qlib::HYPERCALL_IOWAIT => {
                             if !super::runc::runtime::vm::IsRunning() {
                                 {
-                                    error!("signal debug");
                                     for i in 0..8 {
                                         error!("vcpu[{}] state is {}/{}", i, SHARE_SPACE.GetValue(i, 0), SHARE_SPACE.GetValue(i, 1))
                                     }
@@ -774,17 +773,18 @@ impl CPULocal {
             0
         };
 
-        match sharespace.scheduler.GetNext() {
-            None => (),
-            Some(newTask) => {
-                return Ok(newTask.data)
-            }
-        }
-
         loop {
             self.ToWaiting(sharespace);
             if sharespace.config.read().AsyncPrint() {
                 sharespace.LogFlush(false);
+            }
+
+            match sharespace.scheduler.GetNext() {
+                None => (),
+                Some(newTask) => {
+                    self.ToSearch(sharespace);
+                    return Ok(newTask.data)
+                }
             }
 
             let nfds = unsafe {
@@ -849,6 +849,13 @@ impl CPULocal {
                     if ret < 0 {
                         panic!("KIOThread::Wakeup fail... eventfd is {}, errno is {}",
                                self.eventfd, errno::errno().0);
+                    }
+                }
+
+                match sharespace.scheduler.GetNext() {
+                    None => (),
+                    Some(newTask) => {
+                        return Ok(newTask.data)
                     }
                 }
 

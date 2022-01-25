@@ -20,14 +20,12 @@ use super::task::*;
 use super::SHARESPACE;
 use super::super::task_mgr::*;
 use super::Kernel::HostSpace;
-use super::kernel::kernel::*;
 use super::TSC;
 use super::super::linux_def::*;
 use super::super::vcpu_mgr::*;
 use super::threadmgr::task_sched::*;
 use super::KERNEL_STACK_ALLOCATOR;
 use super::quring::uring_mgr::*;
-use super::guestfdnotifier::GUEST_NOTIFIER;
 use super::Shutdown;
 
 static ACTIVE_TASK: AtomicU32 = AtomicU32::new(0);
@@ -46,9 +44,10 @@ pub fn AddNewCpu() {
     CPULocal::SetCurrentTask(mainTaskId.Addr());
 }
 
-pub fn CreateTask(runFn: TaskFn, para: *const u8, kernel: bool) {
-    let taskId = { TaskStore::CreateTask(runFn, para, kernel) };
+pub fn CreateTask(runFnAddr: u64, para: *const u8, kernel: bool) {
+    let taskId = { TaskStore::CreateTask(runFnAddr, para, kernel) };
     SHARESPACE.scheduler.NewTask(taskId);
+
 }
 
 extern "C" {
@@ -84,12 +83,9 @@ pub fn IOWait() {
 
         let currentTime = TSC.Rdtsc();
         if currentTime - start >= IO_WAIT_CYCLES || Shutdown() {
-            SHARESPACE.kernelIOThreadWaiting.store(true, Ordering::Release);
-
             // after change the state, check again in case new message coming
             if PollAsyncMsg() > 10 && !Shutdown() {
                 start = TSC.Rdtsc();
-                SHARESPACE.kernelIOThreadWaiting.store(false, Ordering::Release);
                 continue;
             }
 
@@ -97,7 +93,6 @@ pub fn IOWait() {
             HostSpace::IOWait();
             //debug!("IOWait wakeup");
             start = TSC.Rdtsc();
-            SHARESPACE.kernelIOThreadWaiting.store(false, Ordering::Release);
         }
     }
 
@@ -125,10 +120,11 @@ pub fn WaitFn() {
                 // while super::ALLOCATOR.Free() {}
 
                 if SHARESPACE.scheduler.GlobalReadyTaskCnt() == 0 {
-                    debug!("vcpu {} sleep", CPULocal::CpuId());
-                    let addr = GUEST_NOTIFIER.VcpuWait();
-                    task = TaskId::New(addr);
-                    debug!("vcpu {} wakeup", CPULocal::CpuId());
+                    debug!("vcpu sleep");
+                    let addr = HostSpace::VcpuWait();
+                    debug!("vcpu wakeup {:x}", addr);
+                    assert!(addr >= 0);
+                    task = TaskId::New(addr as u64);
                 } else {
                     //error!("Waitfd None {}", SHARESPACE.scheduler.Print());
                 }
@@ -137,9 +133,7 @@ pub fn WaitFn() {
             }
 
             Some(newTask) => {
-                //error!("WaitFn newTask1 is {:x?}", &newTask);
                 let current = TaskId::New(CPULocal::CurrentTask());
-                //error!("WaitFn newTask2 is {:x?}", &newTask);
                 CPULocal::Myself().SwitchToRunning();
                 switch(current, newTask);
 
@@ -155,8 +149,6 @@ pub fn WaitFn() {
                     super::Kernel::HostSpace::ExitVM(super::EXIT_CODE.load(QOrdering::SEQ_CST));
                 }
 
-                //error!("WaitFn newTask3");
-
                 // todo: free heap cache
                 //while super::ALLOCATOR.Free() {}
             }
@@ -169,20 +161,8 @@ pub fn PollAsyncMsg() -> usize {
     if Shutdown() {
         return 0;
     }
-    //error!("PollAsyncMsg 1");
-    ASYNC_PROCESS.Process();
-    if Shutdown() {
-        return 0;
-    }
-    //error!("PollAsyncMsg 2");
-    let ret = HostInputProcess();
-    if Shutdown() {
-        return 0;
-    }
 
-    //error!("PollAsyncMsg 3");
-
-    let ret = ret + QUringTrigger();
+    let ret = QUringTrigger();
     if Shutdown() {
         return 0;
     }
@@ -192,22 +172,12 @@ pub fn PollAsyncMsg() -> usize {
 
 #[inline]
 pub fn ProcessOne() -> bool {
-    ASYNC_PROCESS.Process();
-    /*let mut count = 0;
-    while QUringProcessOne() {
-        count += 1;
-    }
-
-    if count > 0 {
-        return true
-    }*/
-
     let count = QUringTrigger();
     if count > 0 {
         return true;
     }
 
-    return HostInputProcessOne(true);
+    return false
 }
 
 pub fn Wait() {
@@ -375,38 +345,6 @@ impl Scheduler {
 pub fn Yield() {
     SHARESPACE.scheduler.Schedule(Task::TaskId());
     Wait();
-}
-
-#[inline]
-pub fn HostInputProcessOne(tryGet: bool) -> bool {
-    let m = if tryGet {
-        SHARESPACE.AQHostInputTryPop()
-    } else {
-        SHARESPACE.AQHostInputPop()
-    };
-
-    match m {
-        None => (),
-        Some(m) => {
-            m.Process();
-            return true;
-        }
-    };
-
-    return false
-}
-
-#[inline]
-pub fn HostInputProcess() -> usize {
-    let mut count = 0;
-    loop {
-        //drain the async message from host
-        if HostInputProcessOne(false) {
-            count += 1;
-        } else {
-            return count
-        }
-    }
 }
 
 pub fn NewTask(taskId: TaskId) {

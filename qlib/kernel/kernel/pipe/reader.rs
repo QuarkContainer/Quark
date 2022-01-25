@@ -148,11 +148,11 @@ impl Waitable for Reader {
     }
 
     fn EventRegister(&self, task: &Task, e: &WaitEntry, mask: EventMask) {
-        return self.queue.EventRegister(task, e, mask)
+        return self.pipe.queue.EventRegister(task, e, mask)
     }
 
     fn EventUnregister(&self, task: &Task, e: &WaitEntry) {
-        return self.queue.EventUnregister(task, e)
+        return self.pipe.queue.EventUnregister(task, e)
     }
 }
 

@@ -578,12 +578,12 @@ impl KernelCPUClockTicker {
     }
 
     pub fn Atomically(&self, f: impl FnMut()) {
-        super::super::kernel::kernel::ASYNC_PROCESS.Atomically(f);
+        super::super::kernel::kernel::GetKernel().Atomically(f);
     }
 }
 
 // Notify implements ktime.TimerListener.Notify.
-impl TimerListener for KernelCPUClockTicker {
+impl TimerListenerTrait for KernelCPUClockTicker {
     fn Notify(&self, exp: u64) {
         // Only increment cpuClock by 1 regardless of the number of expirations.
         // This approximately compensates for cases where thread throttling or bad

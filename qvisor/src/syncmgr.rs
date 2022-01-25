@@ -18,7 +18,6 @@ use libc::*;
 
 use super::vmspace::syscall::*;
 use super::qlib::SysCallID;
-use super::qlib::ShareSpace;
 use super::qlib::MAX_VCPU_COUNT;
 use super::*;
 
@@ -110,17 +109,6 @@ impl SyncMgr {
             //no waiting thread
             return 0
         }
-    }
-
-    pub fn WakeVcpuAll(shareSpace: &ShareSpace) {
-        // working VCPU
-        let vcpuCnt = shareSpace.scheduler.vcpuCnt;
-        for i in 1..vcpuCnt {
-            Self::WakeVcpu(i);
-        }
-
-        // Kernel IO Thread
-        KERNEL_IO_THREAD.Wakeup(shareSpace);
     }
 
     pub fn SharespaceReady(&mut self) -> &mut AtomicU32 {

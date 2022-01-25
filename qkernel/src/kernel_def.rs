@@ -31,9 +31,11 @@ use super::qlib::perf_tunning::*;
 use super::qlib::vcpu_mgr::*;
 use super::qlib::common::*;
 use super::qlib::uring::*;
+use super::qlib::linux_def::*;
 use super::qlib::control_msg::*;
 use super::qlib::mem::list_allocator::*;
 use super::qlib::kernel::task::*;
+use super::qlib::kernel::memmgr::pma::*;
 use super::Kernel::HostSpace;
 use super::syscalls::sys_file::*;
 use super::boot::controller::*;
@@ -239,8 +241,8 @@ pub fn OpenAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
 
 
 pub fn SignalProcess(signalArgs: &SignalArgs) {
-    *MSG.lock() = Some(signalArgs.clone());
-    CreateTask(SignalHandler, 0 as *const u8, false);
+    *SHARESPACE.signalArgs.lock() = Some(signalArgs.clone());
+    CreateTask(SignalHandler as u64, 0 as *const u8, false);
 }
 
 pub fn StartRootContainer(para: *const u8) {
@@ -262,4 +264,25 @@ impl CPULocal {
     pub fn CpuId() -> usize {
         return GetVcpuId();
     }
+}
+
+impl PageMgrInternal {
+    pub fn CopyVsysCallPages(&self) {
+        CopyPage(self.vsyscallPages[0], __vsyscall_page as u64);
+    }
+}
+
+pub fn ClockGetTime(clockId: i32) -> i64 {
+    return HostSpace::KernelGetTime(clockId).unwrap();
+}
+
+pub fn VcpuFreq() -> i64 {
+    return HostSpace::KernelVcpuFreq();
+}
+
+pub fn NewSocket(fd: i32) -> i64 {
+    return HostSpace::NewSocket(fd);
+}
+pub fn UringWake(idx: usize, minCompleted: u64) {
+    HostSpace::UringWake(idx, minCompleted);
 }

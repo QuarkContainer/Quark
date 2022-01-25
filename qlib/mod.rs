@@ -74,6 +74,12 @@ use self::config::*;
 use self::linux_def::*;
 use self::bytestream::*;
 use self::kernel::quring::uring_mgr::QUring;
+use self::kernel::kernel::timer::timekeeper::*;
+use self::kernel::kernel::timer::timer_store::*;
+use self::kernel::kernel::kernel::Kernel;
+use self::kernel::memmgr::pma::*;
+use self::kernel::kernel::futex::*;
+use self::control_msg::SignalArgs;
 use self::object_ref::ObjectRef;
 
 pub fn InitSingleton() {
@@ -524,7 +530,6 @@ pub type ShareSpaceRef = ObjectRef<ShareSpace>;
 #[repr(align(128))]
 #[derive(Default)]
 pub struct ShareSpace {
-    pub QInput: QRingBuf<HostInputMsg>, //QMutex<VecDeque<HostInputMsg>>,
     pub QOutput: QRingBuf<HostOutputMsg>, //QMutex<VecDeque<HostInputMsg>>,
 
     // add this pad can decrease the mariadb start time 25 sec to 12 sec
@@ -538,13 +543,20 @@ pub struct ShareSpace {
     pub hostProcessor: CachePadded<AtomicU64>,
     pub VcpuSearchingCnt: CachePadded<AtomicU64>,
 
-    pub kernelIOThreadWaiting: CachePadded<AtomicBool>,
+    pub shutdown: CachePadded<AtomicBool>,
     pub ioUring: CachePadded<QUring>,
+    pub timerkeeper: CachePadded<TimeKeeper>,
+    pub timerStore: CachePadded<TimerStore>,
+    pub signalArgs: CachePadded<QMutex<Option<SignalArgs>>>,
+    pub futexMgr: CachePadded<FutexMgr>,
+    pub pageMgr: CachePadded<PageMgr>,
     pub config: QRwLock<Config>,
 
     pub logBuf: QMutex<Option<ByteStream>>,
     pub logLock: QMutex<()>,
     pub logfd: AtomicI32,
+    pub signalHandlerAddr: AtomicU64,
+    pub kernel: QMutex<Option<Kernel>>,
 
     pub controlSock: i32,
 
@@ -563,8 +575,40 @@ impl ShareSpace {
         self.ioUring.SetIOUringsAddr(addr);
     }
 
+    pub fn SetSignalHandlerAddr(&self, addr: u64) {
+        self.signalHandlerAddr.store(addr, Ordering::SeqCst);
+    }
+
+    pub fn SignalHandlerAddr(&self) -> u64 {
+        return self.signalHandlerAddr.load(Ordering::Relaxed);
+    }
+
+    pub fn StoreShutdown(&self) {
+        self.shutdown.store(true, Ordering::SeqCst);
+    }
+
+    pub fn Shutdown(&self) -> bool {
+        return self.shutdown.load(Ordering::Relaxed);
+    }
+
+    pub fn GetPageMgrAddr(&self) -> u64 {
+        return self.pageMgr.Addr()
+    }
+
+    pub fn GetFutexMgrAddr(&self) -> u64 {
+        return self.futexMgr.Addr()
+    }
+
     pub fn GetIOUringAddr(&self) -> u64 {
         return self.ioUring.Addr()
+    }
+
+    pub fn GetTimerKeeperAddr(&self) -> u64 {
+        return self.timerkeeper.Addr()
+    }
+
+    pub fn GetTimerStoreAddr(&self) -> u64 {
+        return self.timerStore.Addr()
     }
 
     pub fn Addr(&self) -> u64 {
@@ -585,12 +629,6 @@ impl ShareSpace {
 
     pub fn GetValue(&self, cpuId: usize, idx: usize) -> u64 {
         return self.values[cpuId][idx].load(Ordering::Relaxed);
-    }
-
-    #[inline]
-    pub fn AQHostInputPop(&self) -> Option<HostInputMsg> {
-        let res = self.QInput.Pop();
-        return res;
     }
 
     #[inline]
@@ -631,11 +669,6 @@ impl ShareSpace {
     #[inline]
     pub fn HostProcessor(&self) -> u64 {
         return self.hostProcessor.load(Ordering::SeqCst);
-    }
-
-    #[inline]
-    pub fn AQHostInputTryPop(&self) -> Option<HostInputMsg> {
-        return self.QInput.TryPop();
     }
 
     pub fn SetLogfd(&self, fd: i32) {
@@ -684,10 +717,5 @@ impl ShareSpace {
     #[inline]
     pub fn ReadyTaskCnt(&self, vcpuId: usize) -> u64 {
         return self.scheduler.ReadyTaskCnt(vcpuId) as u64;
-    }
-
-    #[inline]
-    pub fn ReadyAsyncMsgCnt(&self) -> u64 {
-        return self.QInput.Count() as u64;
     }
 }

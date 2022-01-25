@@ -24,12 +24,21 @@ use super::super::super::linux_def::*;
 use super::super::super::linux::futex::*;
 use super::super::task::*;
 use super::super::kernel::waiter::*;
-use super::super::super::singleton::*;
+use super::super::SHARESPACE;
+use super::super::super::object_ref::*;
 
-pub static FUTEX_MGR : Singleton<FutexMgr> = Singleton::<FutexMgr>::New();
+pub type FutexMgrRef = ObjectRef<FutexMgr>;
+pub static FUTEX_MGR: FutexMgrRef = FutexMgrRef::New();
+
+//pub static FUTEX_MGR : Singleton<FutexMgr> = Singleton::<FutexMgr>::New();
+pub unsafe fn InitSingleton() {
+    FUTEX_MGR.SetValue(SHARESPACE.GetFutexMgrAddr());
+}
+
+/*pub static FUTEX_MGR : Singleton<FutexMgr> = Singleton::<FutexMgr>::New();
 pub unsafe fn InitSingleton() {
     FUTEX_MGR.Init(FutexMgr::default());
-}
+}*/
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Clone, Copy)]
 #[repr(i32)]
@@ -332,6 +341,10 @@ impl Deref for FutexMgr {
 }
 
 impl FutexMgr {
+    pub fn Addr(&self) -> u64 {
+        return self as * const _ as u64
+    }
+
     pub fn Fork(&self) -> Self {
         let internal = FutexMgrInternal {
             shared: self.shared.clone(),

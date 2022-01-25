@@ -18,12 +18,12 @@ use core::ops::Deref;
 
 use super::super::super::asm::muldiv64;
 use super::super::super::TSC;
+use super::super::super::super::super::kernel_def::*;
 use super::super::super::super::linux::time::*;
 use super::super::super::super::metric::*;
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
 use super::super::super::super::singleton::*;
-use super::super::super::Kernel::HostSpace;
 use super::sampler::*;
 use super::parameters::*;
 use super::*;
@@ -230,10 +230,10 @@ impl CalibratedClocks {
     }
 
     pub fn Update(&mut self) -> (Parameters, bool, Parameters, bool) {
-        let freq = HostSpace::KernelVcpuFreq() as u64;
+        let freq = VcpuFreq() as u64;
 
         let tsc1 = TSC.Rdtsc();
-        let monotime = HostSpace::KernelGetTime(MONOTONIC).unwrap();
+        let monotime = ClockGetTime(MONOTONIC);
         let tsc2 = TSC.Rdtsc();
 
         let tsc = (tsc1 + tsc2) / 2;
@@ -245,7 +245,7 @@ impl CalibratedClocks {
         };
 
         let tsc1 = TSC.Rdtsc();
-        let realtime = HostSpace::KernelGetTime(REALTIME).unwrap();
+        let realtime = ClockGetTime(REALTIME);
         let tsc2 = TSC.Rdtsc();
 
         let tsc = (tsc1 + tsc2) / 2;
@@ -255,6 +255,9 @@ impl CalibratedClocks {
             BaseRef: realtime,
             BaseCycles: tsc,
         };
+
+        self.monotonic.write().updateParams(&monotonicParams);
+        self.realtime.write().updateParams(&realtimeParams);
 
         return (monotonicParams, true, realtimeParams, true)
     }
