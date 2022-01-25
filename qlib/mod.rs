@@ -543,7 +543,7 @@ pub struct ShareSpace {
     pub hostProcessor: CachePadded<AtomicU64>,
     pub VcpuSearchingCnt: CachePadded<AtomicU64>,
 
-    pub kernelIOThreadWaiting: CachePadded<AtomicBool>,
+    pub shutdown: CachePadded<AtomicBool>,
     pub ioUring: CachePadded<QUring>,
     pub timerkeeper: CachePadded<TimeKeeper>,
     pub timerStore: CachePadded<TimerStore>,
@@ -581,6 +581,14 @@ impl ShareSpace {
 
     pub fn SignalHandlerAddr(&self) -> u64 {
         return self.signalHandlerAddr.load(Ordering::Relaxed);
+    }
+
+    pub fn StoreShutdown(&self) {
+        self.shutdown.store(true, Ordering::SeqCst);
+    }
+
+    pub fn Shutdown(&self) -> bool {
+        return self.shutdown.load(Ordering::Relaxed);
     }
 
     pub fn GetPageMgrAddr(&self) -> u64 {

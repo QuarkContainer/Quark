@@ -12,16 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::sync::atomic::Ordering;
+use libc::*;
 
 use super::super::qlib::ShareSpace;
 use super::super::qlib::common::*;
-//use super::super::qlib::kernel::IOURING;
+use super::super::qlib::linux_def::*;
+use super::super::qlib::kernel::IOURING;
+use super::super::qlib::kernel::TSC;
 use super::super::*;
 
 pub struct KIOThread {
     pub eventfd: i32,
 }
+
+pub const IO_WAIT_CYCLES : i64 = 20_000_000; // 1ms
 
 impl KIOThread {
     pub fn New() -> Self {
@@ -36,47 +40,92 @@ impl KIOThread {
         }
     }
 
-    pub fn Wait(&self, _sharespace: &ShareSpace) -> Result<()> {
+    pub fn Wait(&self, sharespace: &ShareSpace) -> Result<()> {
+        let epfd = unsafe {
+            epoll_create1(0)
+        };
+
+        if epfd == -1 {
+            panic!("CPULocal::Init {} create epollfd fail, error is {}", 0, errno::errno().0);
+        }
+
+        let mut ev = epoll_event {
+            events: EVENT_READ as u32 | EPOLLET as u32,
+            u64: self.eventfd as u64
+        };
+
+        super::VMSpace::UnblockFd(self.eventfd);
+
+        let ret = unsafe {
+            epoll_ctl(epfd, EPOLL_CTL_ADD, self.eventfd, &mut ev as *mut epoll_event)
+        };
+
+        if ret == -1 {
+            panic!("CPULocal::Init {} add eventfd fail, error is {}", 0, errno::errno().0);
+        }
+
+        let mut ev = epoll_event {
+            events: EVENT_READ as u32 | EPOLLET as u32,
+            u64: FD_NOTIFIER.Epollfd() as u64
+        };
+
+        let ret = unsafe {
+            epoll_ctl(epfd, EPOLL_CTL_ADD, FD_NOTIFIER.Epollfd(), &mut ev as *mut epoll_event)
+        };
+
+        if ret == -1 {
+            panic!("CPULocal::Init {} add host epollfd fail, error is {}", 0, errno::errno().0);
+        }
+
+        let mut events = [epoll_event { events: 0, u64: 0 }; 2];
+
         let mut data : u64 = 0;
         loop {
             if !super::super::runc::runtime::vm::IsRunning() {
                 return Err(Error::Exit)
             }
 
-            //IOURING.DrainCompletionQueue();
+            let mut start = TSC.Rdtsc();
 
-            //URING_MGR.lock().Wake(0, 0).expect("qlib::HYPER CALL_URING_WAKE fail");
+            while !sharespace.Shutdown() {
+                if IOURING.DrainCompletionQueue() > 0 {
+                    start = TSC.Rdtsc()
+                }
 
+                if TSC.Rdtsc() - start >= IO_WAIT_CYCLES {
+                    break;
+                }
 
-            //print!("KIOThread complete count is {}/{}/{}",
-            //    sharespace.ReadyAsyncMsgCnt(), URING_MGR.lock().CompletEntries(), data);
-
-            // for the "dd" test long run test, without this, uring might sleep for sometime
-            //log!("iowait workaround");
-            if URING_MGR.lock().CompletEntries() > 0 {
-                return Ok(())
+                match sharespace.TryLockEpollProcess() {
+                    None => {},
+                    Some(_lock) => {
+                        FD_NOTIFIER.HostEpollWait();
+                    }
+                }
             }
 
             let ret = unsafe {
                 libc::read(self.eventfd, &mut data as * mut _ as *mut libc::c_void, 8)
             };
 
-            if ret < 0 {
+            if ret < 0 && errno::errno().0 != SysErr::EAGAIN {
                 panic!("KIOThread::Wakeup fail... eventfd is {}, errno is {}",
                         self.eventfd, errno::errno().0);
             }
+
+            let _nfds = unsafe {
+                epoll_wait(epfd, &mut events[0], 2, -1)
+            };
         }
     }
 
-    pub fn Wakeup(&self, sharespace: &ShareSpace) {
-        if sharespace.kernelIOThreadWaiting.load(Ordering::Acquire) {
-            let val : u64 = 1;
-            let ret = unsafe {
-                libc::write(self.eventfd, &val as * const _ as *const libc::c_void, 8)
-            };
-            if ret < 0 {
-                panic!("KIOThread::Wakeup fail...");
-            }
+    pub fn Wakeup(&self, _sharespace: &ShareSpace) {
+        let val : u64 = 1;
+        let ret = unsafe {
+            libc::write(self.eventfd, &val as * const _ as *const libc::c_void, 8)
+        };
+        if ret < 0 {
+            panic!("KIOThread::Wakeup fail...");
         }
     }
 }

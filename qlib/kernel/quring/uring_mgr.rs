@@ -32,6 +32,7 @@ use super::super::super::uring::util::*;
 use super::super::super::linux_def::*;
 use super::super::super::vcpu_mgr::*;
 use super::super::super::socket_buf::*;
+use super::super::super::super::kernel_def::*;
 use super::super::kernel::waiter::*;
 use super::super::socket::hostinet::socket::*;
 use super::super::Kernel::HostSpace;
@@ -91,7 +92,7 @@ impl IoUring {
                 if want > 0 {
                     flags |= sys::IORING_ENTER_SQ_WAKEUP;
                 } else {
-                    super::super::Kernel::HostSpace::UringWake(idx, 0);
+                    UringWake(idx, 0);
                     return Ok(0)
                 }
             } else if want == 0 {
@@ -608,7 +609,7 @@ impl QUring {
                 {
                     let mut s = self.IOUrings()[idx].sq.lock();
                     if s.freeSlot() < Self::SUBMISSION_QUEUE_FREE_COUNT {
-                        super::super::Kernel::HostSpace::UringWake(idx, 1);
+                        UringWake(idx, 1);
                         print!("AUringCall1: submission full... idx {}", idx);
                         continue;
                     }

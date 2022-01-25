@@ -46,7 +46,7 @@ use super::super::super::runc::runtime::loader::*;
 use super::super::super::kvm_vcpu::*;
 use super::super::super::elf_loader::*;
 use super::super::super::vmspace::*;
-use super::super::super::{VMS, PMA_KEEPER, QUARK_CONFIG, URING_MGR, KERNEL_IO_THREAD};
+use super::super::super::{VMS, PMA_KEEPER, QUARK_CONFIG, URING_MGR, KERNEL_IO_THREAD, THREAD_ID, ThreadId};
 
 lazy_static! {
     static ref EXIT_STATUS : AtomicI32 = AtomicI32::new(-1);
@@ -253,6 +253,7 @@ impl VirtualMachine {
 
             // enable cpuid in host
             vcpu.vcpu.set_cpuid2(&kvm_cpuid).unwrap();
+            VMS.lock().vcpus.push(vcpu.clone());
             vcpus.push(vcpu);
         }
 
@@ -273,6 +274,9 @@ impl VirtualMachine {
         let mut threads = Vec::new();
 
         threads.push(thread::Builder::new().name("0".to_string()).spawn(move || {
+            THREAD_ID.with ( |f| {
+                *f.borrow_mut() = 0;
+            });
             cpu.run().expect("vcpu run fail");
             info!("cpu#{} finish", 0);
         }).unwrap());
@@ -284,9 +288,12 @@ impl VirtualMachine {
             let cpu = self.vcpus[i].clone();
 
             threads.push(thread::Builder::new().name(format!("{}", i)).spawn(move || {
-                info!("cpu#{} start", i);
+                THREAD_ID.with ( |f| {
+                    *f.borrow_mut() = i as i32;
+                });
+                info!("cpu#{} start", ThreadId());
                 cpu.run().expect("vcpu run fail");
-                info!("cpu#{} finish", i);
+                info!("cpu#{} finish", ThreadId());
             }).unwrap());
         }
 

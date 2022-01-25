@@ -40,7 +40,6 @@ pub mod version;
 pub mod loader;
 pub mod guestfdnotifier;
 
-use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicI32;
 use core::sync::atomic::AtomicI64;
 use core::sync::atomic::Ordering;
@@ -63,11 +62,11 @@ pub static LOADER: Singleton<Loader> = Singleton::<Loader>::New();
 pub static KERNEL_STACK_ALLOCATOR: Singleton<AlignedAllocator> =
     Singleton::<AlignedAllocator>::New();
 
-pub static SHUTDOWN: Singleton<AtomicBool> = Singleton::<AtomicBool>::New();
 pub static EXIT_CODE: Singleton<AtomicI32> = Singleton::<AtomicI32>::New();
 
+#[inline]
 pub fn Shutdown() -> bool {
-    return SHUTDOWN.load(self::super::linux_def::QOrdering::RELAXED);
+    return SHARESPACE.Shutdown();
 }
 
 #[derive(Default)]

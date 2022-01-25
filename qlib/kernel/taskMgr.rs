@@ -83,12 +83,9 @@ pub fn IOWait() {
 
         let currentTime = TSC.Rdtsc();
         if currentTime - start >= IO_WAIT_CYCLES || Shutdown() {
-            SHARESPACE.kernelIOThreadWaiting.store(true, Ordering::Release);
-
             // after change the state, check again in case new message coming
             if PollAsyncMsg() > 10 && !Shutdown() {
                 start = TSC.Rdtsc();
-                SHARESPACE.kernelIOThreadWaiting.store(false, Ordering::Release);
                 continue;
             }
 
@@ -96,7 +93,6 @@ pub fn IOWait() {
             HostSpace::IOWait();
             //debug!("IOWait wakeup");
             start = TSC.Rdtsc();
-            SHARESPACE.kernelIOThreadWaiting.store(false, Ordering::Release);
         }
     }
 

@@ -15,6 +15,7 @@
 use alloc::sync::Arc;
 use crate::qlib::mutex::*;
 use core::ops::Deref;
+use core::fmt;
 
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
@@ -107,6 +108,21 @@ pub enum TimerListener {
     WaitEntryListener(WaitEntryListener),
     ITimerRealListener(Arc<ITimerRealListener>),
     KernelCPUClockTicker(Arc<KernelCPUClockTicker>)
+}
+
+impl fmt::Debug for TimerListener {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::TimerOperations(_) => f.debug_struct("TimerOperations").finish(),
+            Self::Kernel(_) => f.debug_struct("Kernel").finish(),
+            Self::IntervalTimer(_) => f.debug_struct("IntervalTimer").finish(),
+            Self::TimerUpdater(_) => f.debug_struct("TimerUpdater").finish(),
+            Self::DummyTimerListener(_) => f.debug_struct("DummyTimerListener").finish(),
+            Self::WaitEntryListener(_) => f.debug_struct("WaitEntryListener").finish(),
+            Self::ITimerRealListener(_) => f.debug_struct("ITimerRealListener").finish(),
+            Self::KernelCPUClockTicker(_)  => f.debug_struct("KernelCPUClockTicker").finish(),
+        }
+    }
 }
 
 impl TimerListener {

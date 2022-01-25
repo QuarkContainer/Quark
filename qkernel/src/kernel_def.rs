@@ -271,3 +271,18 @@ impl PageMgrInternal {
         CopyPage(self.vsyscallPages[0], __vsyscall_page as u64);
     }
 }
+
+pub fn ClockGetTime(clockId: i32) -> i64 {
+    return HostSpace::KernelGetTime(clockId).unwrap();
+}
+
+pub fn VcpuFreq() -> i64 {
+    return HostSpace::KernelVcpuFreq();
+}
+
+pub fn NewSocket(fd: i32) -> i64 {
+    return HostSpace::NewSocket(fd);
+}
+pub fn UringWake(idx: usize, minCompleted: u64) {
+    HostSpace::UringWake(idx, minCompleted);
+}

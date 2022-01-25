@@ -23,6 +23,7 @@ use std::os::unix::io::AsRawFd;
 
 use super::qlib::ShareSpace;
 use super::qlib::kernel::IOURING;
+use super::ThreadId;
 
 lazy_static! {
     pub static ref LOG : Mutex<Log> = Mutex::new(Log::New());
@@ -104,8 +105,7 @@ impl Log {
     }
 
     pub fn Print(&mut self, level: &str, str: &str) {
-        //self.Write(&format!("{} [{}] {}\n", Self::Now(), level, str));
-        self.Write(&format!("[{}] [{}] {}\n", level, std::thread::current().name().unwrap(), str));
+        self.Write(&format!("[{}] [{}] {}\n", level, ThreadId(), str));
     }
 
     pub fn RawPrint(&mut self, level: &str, str: &str) {

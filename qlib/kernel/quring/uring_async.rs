@@ -22,6 +22,7 @@ use core::ops::Deref;
 use super::super::super::linux_def::*;
 use super::super::super::linux_def;
 use super::super::super::common::*;
+use super::super::super::super::kernel_def::*;
 use super::super::super::uring::squeue;
 use super::super::super::uring::opcode::*;
 use super::super::super::uring::opcode;
@@ -37,7 +38,6 @@ use super::super::kernel::timer;
 use super::super::kernel::async_wait::*;
 use super::super::SHARESPACE;
 use super::super::kernel::waiter::qlock::*;
-use super::super::Kernel::HostSpace;
 //use super::super::guestfdnotifier::GUEST_NOTIFIER;
 
 #[repr(align(128))]
@@ -675,7 +675,7 @@ impl AsyncAccept {
             return false;
         }
 
-        HostSpace::NewSocket(result);
+        NewSocket(result);
         let sockBuf = Arc::new(SocketBuff::default());
         let (trigger, hasSpace) = self.acceptQueue.lock().EnqSocket(result, self.addr, self.len, sockBuf);
         if trigger {

@@ -572,8 +572,8 @@ impl ThreadGroup {
     pub fn release(&self) {
         // Timers must be destroyed without holding the TaskSet or signal mutexes
         // since timers send signals with Timer.mu locked.
-        self.lock().itimerRealTimer.Destroy();
-
+        let timer = self.lock().itimerRealTimer.clone();
+        timer.Destroy();
         let mut its = Vec::new();
         let ts = self.TaskSet();
         {
