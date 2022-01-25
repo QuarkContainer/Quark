@@ -19,6 +19,7 @@ use super::QUARK_CONFIG;
 use super::URING_MGR;
 use super::VMS;
 use super::vmspace::*;
+use super::ThreadId;
 
 impl<'a> ShareSpace {
     pub fn AQCall(&self, _msg: &HostOutputMsg) {
@@ -171,7 +172,7 @@ pub unsafe fn CopyPageUnsafe(_to: u64, _from: u64){}
 
 impl CPULocal {
     pub fn CpuId() -> usize {
-        return 0;
+        return ThreadId() as _;
     }
 }
 

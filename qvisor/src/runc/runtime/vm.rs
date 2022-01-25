@@ -275,7 +275,7 @@ impl VirtualMachine {
 
         threads.push(thread::Builder::new().name("0".to_string()).spawn(move || {
             THREAD_ID.with ( |f| {
-                *f.borrow_mut() = 1;
+                *f.borrow_mut() = 0;
             });
             cpu.run().expect("vcpu run fail");
             info!("cpu#{} finish", 0);
