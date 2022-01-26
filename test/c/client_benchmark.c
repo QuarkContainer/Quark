@@ -43,11 +43,22 @@ int main(int argc, char const *argv[])
     {
         buffernum = atoi(argv[4]);
     }
-    printf("buffer size is  is %d\n", buffernum);
+    printf("buffer size is %d\n", buffernum);
+
+    int log = 0;
+    if (argc > 5)
+    {
+        log = strcmp(argv[5], "log") == 0 ? 1 : 0;
+    }
+
+    printf("log is %d\n", log);
+
+
 
     int sock = 0, valread;
     struct sockaddr_in serv_addr; 
     char *hello = "Hello from client"; 
+    
     
 
     char* buffer = malloc(buffernum); 
@@ -88,10 +99,18 @@ int main(int argc, char const *argv[])
 
     for (int i = 0; i < readCount; i++)
     {
-        //printf("before read %d batch\n", i+1);
-        valread = read(sock , buffer, BUFFERNUM);
+        if (log) 
+        {
+            printf("before read %d batch\n", i+1);
+        }
+
+        valread = read(sock , buffer, buffernum);
         //printf("%s\n",buffer );
-        //printf("after read %d batch, read: %d\n", i+1, valread);
+        if(log)
+        {
+            printf("after read %d batch, read: %d\n", i+1, valread);
+        }
+        
     }
     clock_gettime(CLOCK_MONOTONIC, &tend);
     double ns = (double)(tend.tv_sec - tstart.tv_sec) * 1.0e6 + (double)(tend.tv_nsec - tstart.tv_nsec)/1.0e3;

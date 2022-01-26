@@ -68,6 +68,12 @@ int main(int argc, char const *argv[])
         buffernum = atoi(argv[3]);
     }
     printf("buffer len is %d\n", buffernum);
+    int log = 0;
+    if (argc >= 5)
+    {
+        log = strcmp(argv[4], "log") == 0 ? 1 : 0;
+    }
+    printf("log is %d\n", log);
 
 
 
@@ -103,32 +109,44 @@ int main(int argc, char const *argv[])
         exit(EXIT_FAILURE); 
     } 
     printf("listen successfully\n");
-    while ((new_socket = accept(server_fd, (struct sockaddr *)&address,
-                       (socklen_t*)&addrlen))<0) {
-        printf("accept %d", errno);
-    }
-    printf("get connection\n");
-    sleep(1);
-
-    
-
-
-    // printf("before write hello\n");
-    // int n = write(new_socket , hello, strlen(hello));
-    // printf("after write hello\n");
-    // printf("before write\n");
-    // int n = write(new_socket , buffer , 1024*32);
-    // printf("after write %d\n", n);
-
-    for(int i = 0; i < writeCount; i++)
+    while (1)
     {
-        //printf("before write %d batch\n", i+1);
-        int n = write(new_socket , buffer , buffernum);
-        //printf("after write %d batch, write: %d\n", i+1, n);
-        // printf("before write %d hello\n", i);
+        while ((new_socket = accept(server_fd, (struct sockaddr *)&address,
+                        (socklen_t*)&addrlen))<0) {
+            printf("accept %d", errno);
+        }
+        printf("get connection\n");
+        sleep(1);
+
+        
+
+
+        // printf("before write hello\n");
         // int n = write(new_socket , hello, strlen(hello));
-        // printf("after write %d hello\n", i);
+        // printf("after write hello\n");
+        // printf("before write\n");
+        // int n = write(new_socket , buffer , 1024*32);
+        // printf("after write %d\n", n);
+
+        for(int i = 0; i < writeCount; i++)
+        {
+            if (log)
+            {
+                printf("before write %d batch\n", i+1);
+            }
+            
+            int n = write(new_socket , buffer , buffernum);
+            if (log)
+            {
+                printf("after write %d batch, write: %d\n", i+1, n);
+            }
+            // printf("before write %d hello\n", i);
+            // int n = write(new_socket , hello, strlen(hello));
+            // printf("after write %d hello\n", i);
+        }
+
     }
+    
 
     close(new_socket);
     close(server_fd);
