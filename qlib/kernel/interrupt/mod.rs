@@ -137,7 +137,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
         print!("get non page fault exception from kernel ... {:#x?}/ev {:#x?}", sf, ev);
 
         for i in 0..super::CPU_LOCAL.len() {
-            print!("CPU#{} is {:#x?}", i, super::CPU_LOCAL[i]);
+            //print!("CPU#{} is {:#x?}", i, super::CPU_LOCAL[i]);
         }
 
         /*backtracer::trace1(sf.ip, sf.sp, pt.rbp, &mut |frame| {
@@ -149,8 +149,8 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
 
     if PRINT_EXECPTION {
         let map =  currTask.mm.GetSnapshotLocked(currTask, false);
-        error!("ExceptionHandler  .... ev is {:?}, sf is {:x?} errorcode is {:x}, map is {}",
-            ev, sf, errorCode, &map);
+        // error!("ExceptionHandler  .... ev is {:?}, sf is {:x?} errorcode is {:x}, map is {}",
+        //     ev, sf, errorCode, &map);
     }
 
     //currTask.SaveFp();

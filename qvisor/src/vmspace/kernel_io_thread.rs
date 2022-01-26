@@ -87,6 +87,15 @@ impl KIOThread {
 
             let mut start = TSC.Rdtsc();
 
+            let ret = unsafe {
+                libc::read(self.eventfd, &mut data as * mut _ as *mut libc::c_void, 8)
+            };
+
+            if ret < 0 && errno::errno().0 != SysErr::EAGAIN {
+                panic!("KIOThread::Wakeup fail... eventfd is {}, errno is {}",
+                        self.eventfd, errno::errno().0);
+            }
+
             while !sharespace.Shutdown() {
                 if IOURING.DrainCompletionQueue() > 0 {
                     start = TSC.Rdtsc()
@@ -102,15 +111,6 @@ impl KIOThread {
                         FD_NOTIFIER.HostEpollWait();
                     }
                 }
-            }
-
-            let ret = unsafe {
-                libc::read(self.eventfd, &mut data as * mut _ as *mut libc::c_void, 8)
-            };
-
-            if ret < 0 && errno::errno().0 != SysErr::EAGAIN {
-                panic!("KIOThread::Wakeup fail... eventfd is {}, errno is {}",
-                        self.eventfd, errno::errno().0);
             }
 
             let _nfds = unsafe {

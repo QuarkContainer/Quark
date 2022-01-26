@@ -101,10 +101,10 @@ impl SignalStruct {
 }
 
 pub fn SignalProcess(cid: &str, pid: i32, signo: i32, fgProcess: bool) -> Result<()> {
-    info!("Signal sandbox {}", cid);
+    //info!("Signal sandbox {}", cid);
 
     let addr = ControlSocketAddr(cid);
-    info!("SandboxConnect connect address is {}", &addr);
+    //info!("SandboxConnect connect address is {}", &addr);
     let client = UCallClient::Init(&addr)?;
 
     let mut mode = SignalDeliveryMode::DeliverToProcess;
@@ -460,7 +460,7 @@ impl Sandbox {
 
     pub fn SandboxConnect(&self) -> Result<UCallClient> {
         let addr = ControlSocketAddr(&self.ID);
-        info!("SandboxConnect connect address is {}", &addr);
+        //info!("SandboxConnect connect address is {}", &addr);
         let client = UCallClient::Init(&addr)?;
         return Ok(client)
     }

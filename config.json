@@ -16,7 +16,7 @@
   "DedicateUring" : 1,
   "UringSize"     : 64,
   "UringEpollCtl" : false,
-  "EnableRDMA"    : false,
+  "EnableRDMA"    : true,
   "RDMAPort"      : 1,
-  "PerSandboxLog" : false
+  "PerSandboxLog" : true
 }

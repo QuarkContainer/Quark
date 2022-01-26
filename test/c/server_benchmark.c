@@ -9,6 +9,7 @@
 #include <signal.h>
 
 #define PORT 9987
+#define BUFFERNUM 133
 
 void handler1(int sig)
 {
@@ -46,33 +47,35 @@ int main(int argc, char const *argv[])
         exit(EXIT_FAILURE); 
     } 
        
-    // Forcefully attaching socket to the port 8080 
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, 
-                                                  &opt, sizeof(opt))) 
-    { 
-        perror("setsockopt"); 
-        exit(EXIT_FAILURE); 
-    } 
+    // // Forcefully attaching socket to the port 8080 
+    // if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, 
+    //                                               &opt, sizeof(opt))) 
+    // { 
+    //     perror("setsockopt"); 
+    //     exit(EXIT_FAILURE); 
+    // } 
     address.sin_family = AF_INET; 
     address.sin_addr.s_addr = INADDR_ANY; 
     int port = PORT;
-    if (argc == 3)
+    if (argc >= 3)
     {
         port = atoi(argv[2]);
     }
-    else
-    {
-        port = PORT;
-    }
-
     printf("sin_port is %d\n", port);
+    int buffernum = BUFFERNUM;
+    if (argc >= 4)
+    {
+        buffernum = atoi(argv[3]);
+    }
+    printf("buffer len is %d\n", buffernum);
+
+
 
     address.sin_port = htons(port);
     
-    printf("sin_port is %d\n", address.sin_port);
 
-    char buffer[1024 * 32] = {0};
-    memset(buffer, 'a', 1024*32);
+    char* buffer = malloc(buffernum);
+    memset(buffer, 'a', buffernum);
     // int i;
     // printf("n is: %d", 1024*32-1);
     // printf("before write %d\n", strlen(buffer));
@@ -119,9 +122,9 @@ int main(int argc, char const *argv[])
 
     for(int i = 0; i < writeCount; i++)
     {
-        printf("before write %d batch\n", i);
-        int n = write(new_socket , buffer , 1024*32);
-        printf("after write %d batch, write: %d\n", i, n);
+        //printf("before write %d batch\n", i+1);
+        int n = write(new_socket , buffer , buffernum);
+        //printf("after write %d batch, write: %d\n", i+1, n);
         // printf("before write %d hello\n", i);
         // int n = write(new_socket , hello, strlen(hello));
         // printf("after write %d hello\n", i);
@@ -129,6 +132,7 @@ int main(int argc, char const *argv[])
 
     close(new_socket);
     close(server_fd);
+    free(buffer);
 
     return 222;
 } 

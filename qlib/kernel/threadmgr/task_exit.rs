@@ -947,11 +947,11 @@ impl Thread {
 
         //info!("ExitNotify 2 [{:x}]", self.lock().taskId);
         self.exitNotifyLocked();
-        error!("ExitNotify 3 [{:x}]", self.lock().taskId);
+        //error!("ExitNotify 3 [{:x}]", self.lock().taskId);
         let taskCnt = owner.write().DecrTaskCount1();
-        error!("ExitNotify 4 [{:x}], taskcnt is {}", self.lock().taskId, taskCnt);
+        //error!("ExitNotify 4 [{:x}], taskcnt is {}", self.lock().taskId, taskCnt);
         if taskCnt == 0 {
-            error!("ExitNotify shutdown");
+            //error!("ExitNotify shutdown");
             super::super::SHARESPACE.StoreShutdown();
             //PerfStop();
             PerfPrint();

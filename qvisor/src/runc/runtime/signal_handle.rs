@@ -73,7 +73,7 @@ extern fn handle_sigintAct(signal :i32, signInfo: *mut libc::siginfo_t, _: *mut 
             &*(signInfo as u64 as * const SignalFaultInfo)
         };
 
-        error!("get signal {}, action is {:x?}", signal, sigfault);
+        //error!("get signal {}, action is {:x?}", signal, sigfault);
 
 
         let signal = SignalArgs {

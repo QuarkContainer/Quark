@@ -133,7 +133,7 @@ impl IBContext {
             panic!("Failed to open IB device error");
         }
 
-        info!("ibv_open_device succeeded");
+        //info!("ibv_open_device succeeded");
         /* We are now done with device list, free it */
         unsafe { rdmaffi::ibv_free_device_list(device_list) };
 
@@ -386,8 +386,8 @@ impl RDMAContext {
             recv_cq: context.completeQueue.0 as *const _ as *mut _,
             srq: ptr::null::<rdmaffi::ibv_srq>() as *mut _,
             cap: rdmaffi::ibv_qp_cap {
-                max_send_wr: MAX_SEND_WR,
-                max_recv_wr: MAX_RECV_WR,
+                max_send_wr: 1000,//MAX_SEND_WR,
+                max_recv_wr: 1000,//MAX_RECV_WR,
                 max_send_sge: MAX_SEND_SGE,
                 max_recv_sge: MAX_RECV_SGE,
                 max_inline_data: 0,
@@ -456,14 +456,18 @@ impl RDMAContext {
             dlid_path_bits: 0,
         };
 
+        let ret1 = unsafe { rdmaffi::ibv_req_notify_cq(self.CompleteQueue(), 0) };
+        if ret1 != 0 {
+            // TODO: should keep call here?
+            debug!("Couldn't request CQ notification\n");
+        }
+
         loop {
             loop {
                 let poll_result = unsafe { rdmaffi::ibv_poll_cq(self.CompleteQueue(), 1, &mut wc) };
                 if poll_result > 0 {
-                    debug!("Got WC {:x}!", wc.wr_id);
                     self.ProcessWC(&wc);
                 } else if poll_result == 0 {
-                    debug!("No WC!");
                     break;
                 } else {
                     debug!("Error to query CQ!")
@@ -473,24 +477,27 @@ impl RDMAContext {
 
             let mut cq_ptr: *mut rdmaffi::ibv_cq = ptr::null_mut();
             let mut cq_context: *mut std::os::raw::c_void = ptr::null_mut();
-            let mut ret = unsafe {
+            let ret = unsafe {
                 rdmaffi::ibv_get_cq_event(
                     self.CompleteChannel(),
                     &mut cq_ptr, //&mut self.CompleteQueue(),
                     &mut cq_context,
                 )
             };
+
+            let mut ret1 = unsafe { rdmaffi::ibv_req_notify_cq(self.CompleteQueue(), 0) };
+            if ret1 != 0 {
+                // TODO: should keep call here?
+            }
+            
             if ret == -1 {
                 return Ok(());
             }
-            debug!("get completion event ****");
             //TODO: potnetial improvemnt to ack in batch
             unsafe { rdmaffi::ibv_ack_cq_events(cq_ptr, 1) };
-
-            ret = unsafe { rdmaffi::ibv_req_notify_cq(cq_ptr, 0) };
-            if ret != 0 {
+            ret1 = unsafe { rdmaffi::ibv_req_notify_cq(self.CompleteQueue(), 0) };
+            if ret1 != 0 {
                 // TODO: should keep call here?
-                debug!("Couldn't request CQ notification\n");
             }
         }
     }
@@ -516,22 +523,23 @@ impl RDMAContext {
         //         );
         //     }
         // }
+        if wc.status != rdmaffi::ibv_wc_status::IBV_WC_SUCCESS {
+            debug!("work reqeust failed with status: {}, id: {}", wc.status, wc.wr_id);
+        }
         if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RDMA_WRITE {
-            error!("ProcessWC: WriteImm, opcode: {}, wr_id: {}", wc.opcode, wc.wr_id);
             IO_MGR.ProcessRDMAWriteImmFinish(fd);
         }
         else if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RECV_RDMA_WITH_IMM{
             let imm = unsafe { wc.imm_data_invalidated_rkey_union.imm_data };
             let immData = ImmData(imm);
-            error!("ProcessWC: readCount: {}, writeCount: {}, opcode: {}, wr_id: {}", immData.ReadCount(), immData.WriteCount(), wc.opcode, wc.wr_id);
             IO_MGR.ProcessRDMARecvWriteImm(
                 fd,
-                immData.WriteCount() as _,
+                wc.byte_len as _,
                 immData.ReadCount() as _,
             );
         }
         else{
-            error!("ProcessWC: opcode: {}, wr_id: {}", wc.opcode, wc.wr_id);
+            debug!("ProcessWC: opcode: {}, wr_id: {}", wc.opcode, wc.wr_id);
         }
     }
 }
@@ -539,17 +547,17 @@ impl RDMAContext {
 pub struct ImmData(pub u32);
 
 impl ImmData {
-    pub fn New(writeCount: u16, readCount: u16) -> Self {
-        return Self(((writeCount as u32) << 16) | (readCount as u32));
+    pub fn New(readCount: usize) -> Self {
+        return Self(readCount as u32);
     }
 
-    pub fn ReadCount(&self) -> u16 {
-        return (self.0 & 0xffff) as u16;
+    pub fn ReadCount(&self) -> u32 {
+        return self.0
     }
 
-    pub fn WriteCount(&self) -> u16 {
-        return ((self.0 >> 16) & 0xffff) as u16;
-    }
+    // pub fn WriteCount(&self) -> u16 {
+    //     return ((self.0 >> 16) & 0xffff) as u16;
+    // }
 }
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Clone, Copy)]
@@ -675,10 +683,8 @@ impl QueuePair {
             sg_list: &mut sge,
             num_sge: 1,
         };
-        error!("PostRecv: 1");
         let mut bad_wr: *mut rdmaffi::ibv_recv_wr = ptr::null_mut();
         let rc = unsafe { rdmaffi::ibv_post_recv(self.Data(), &mut rw, &mut bad_wr) };
-        error!("PostRecv: 2, rc: {}", rc);
         if rc != 0 {
             return Err(Error::SysError(errno::errno().0));
         }
@@ -693,13 +699,9 @@ impl QueuePair {
         dlid: u16,
         dgid: Gid,
     ) -> Result<()> {
-        error!("RDMA::Setup 1");
         self.ToInit(context)?;
-        error!("RDMA::Setup 2");
         self.ToRtr(context, remote_qpn, dlid, dgid)?;
-        error!("RDMA::Setup 3");
         self.ToRts()?;
-        error!("RDMA::Setup 4");
         return Ok(());
     }
 

@@ -3,7 +3,9 @@
 #include <arpa/inet.h> 
 #include <unistd.h> 
 #include <string.h> 
+#include <time.h>
 #define PORT 9987
+#define BUFFERNUM 1024*32
 
 int main(int argc, char const *argv[]) 
 {
@@ -35,12 +37,20 @@ int main(int argc, char const *argv[])
     {
         port = atoi(argv[3]);
     }
-    printf("add is %d\n", port);
+    printf("port is %d\n", port);
+    int buffernum = BUFFERNUM;
+    if (argc > 4)
+    {
+        buffernum = atoi(argv[4]);
+    }
+    printf("buffer size is  is %d\n", buffernum);
 
     int sock = 0, valread;
     struct sockaddr_in serv_addr; 
     char *hello = "Hello from client"; 
-    char buffer[1024 * 32] = {0}; 
+    
+
+    char* buffer = malloc(buffernum); 
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) 
     { 
         printf("\n Socket creation error \n"); 
@@ -73,16 +83,25 @@ int main(int argc, char const *argv[])
     // printf("read %d\n",valread);
     // printf("after read \n");
 
+    struct timespec tstart={0,0}, tend={0,0};
+    clock_gettime(CLOCK_MONOTONIC, &tstart);
+
     for (int i = 0; i < readCount; i++)
     {
-        printf("before read %d batch\n", i);
-        valread = read(sock , buffer, 1024*32);
+        //printf("before read %d batch\n", i+1);
+        valread = read(sock , buffer, BUFFERNUM);
         //printf("%s\n",buffer );
-        printf("after read %d batch, read: %d\n", i, valread);
+        //printf("after read %d batch, read: %d\n", i+1, valread);
     }
+    clock_gettime(CLOCK_MONOTONIC, &tend);
+    double ns = (double)(tend.tv_sec - tstart.tv_sec) * 1.0e6 + (double)(tend.tv_nsec - tstart.tv_nsec)/1.0e3;
+    printf("time used: %lf\n", ns);
+    double speed = ((double)buffernum * (double)readCount) / (ns);
+    printf("speed is %lf\n", speed);
     
     int ret = close(sock);
     printf("close return value is %d\n", ret);
+    free(buffer);
 
     return 0;
 } 

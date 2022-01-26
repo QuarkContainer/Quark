@@ -225,7 +225,7 @@ impl Container {
     // container to which id unambiguously refers to.
     // Returns ErrNotExist if container doesn't exist.
     pub fn Load(rootDir: &str, id: &str) -> Result<Self> {
-        info!("Load metadata for container {} {}", rootDir, id);
+        //info!("Load metadata for container {} {}", rootDir, id);
         ValidateID(id)?;
 
         let cRoot = findContainerRoot(rootDir, id)?;
@@ -235,7 +235,7 @@ impl Container {
         let _unlock = lockContainerMetadata(&cRoot)?;
 
         let metafile = Join(&cRoot, METADATA_FILENAME);
-        info!("metadatafile is {}", &metafile);
+        //info!("metadatafile is {}", &metafile);
         let mut c: Container = deserialize(&metafile).map_err(|e| Error::Common(format!("Container::Load error is {:?}", e)))?;
 
         // If the status is "Running" or "Created", check that the sandbox
@@ -245,7 +245,7 @@ impl Container {
         if c.Status == Status::Running || c.Status == Status::Created {
             // Check if the sandbox process is still running.
             if !c.isSandboxRunning() {
-                info!("sandbox is not running, marking container as stopped...");
+                //info!("sandbox is not running, marking container as stopped...");
                 c.changeStatus(Status::Stopped);
             } else if c.Status == Status::Running {
                 match c.SignalContainer(0, false) {
@@ -390,7 +390,7 @@ impl Container {
                   userlog: &str,
                   detach: bool,
                   pivot: bool) -> Result<Self> {
-        info!("Create container {} in root dir: {}", id, &conf.RootDir);
+        //info!("Create container {} in root dir: {}", id, &conf.RootDir);
         //debug!("container spec is {:?}", &spec);
         ValidateID(id)?;
 
@@ -435,7 +435,7 @@ impl Container {
             // init container in the sandbox.
             let isRoot = IsRoot(&c.Spec);
             if isRoot {
-                debug!("Creating new sandbox for container {}", id);
+                //debug!("Creating new sandbox for container {}", id);
 
                 // Create and join cgroup before processes are created to ensure they are
                 // part of the cgroup from the start (and all children processes).
@@ -637,7 +637,7 @@ impl Container {
 
     // Start starts running the containerized process inside the sandbox.
     pub fn Start(&mut self, config: &GlobalConfig) -> Result<()> {
-        info!("Start container {}", &self.ID);
+        //info!("Start container {}", &self.ID);
 
         let _unlockRoot = maybeLockRootContainer(&self.Spec, &self.RootContainerDir)?;
 
@@ -682,14 +682,14 @@ impl Container {
     }
 
     pub fn Save(&self) -> Result<()> {
-        info!("Save container {}", &self.ID);
+        //info!("Save container {}", &self.ID);
         let metafile = Join(&self.Root, METADATA_FILENAME);
         serialize(self, &metafile).map_err(|e| Error::Common(format!("Container::Save error is {:?}", e)))?;
         return Ok(())
     }
 
     pub fn Destroy(&mut self) -> Result<()> {
-        info!("Destroy container {}", &self.ID);
+        //info!("Destroy container {}", &self.ID);
 
         // We must perform the following cleanup steps:
         // * stop the container,
@@ -708,12 +708,12 @@ impl Container {
                 errs.push(format!("fail to stop container and uninstall cgroup: {} {:?}", &self.Root, &e));
             }
             Ok(_) => {
-                info!("container process stopped");
+                //info!("container process stopped");
             },
         }
 
         if Path::new(&self.Root).exists() {
-            info!("deleting container root directory...");
+            //info!("deleting container root directory...");
             let res =  fs::remove_dir_all(&self.Root);
                 //.map_err(|e| Error::Common(format!("deleting container root directory {} fail: {:?}", &self.Root, e)));
             match res {
@@ -768,7 +768,7 @@ impl Container {
         let mut cgroup: Option<Cgroup> = None;
 
         if self.Sandbox.is_some() {
-            info!("Destroying container {}", &self.ID);
+            //info!("Destroying container {}", &self.ID);
             let sandbox = self.Sandbox.as_ref().unwrap();
             if sandbox.IsRunning() {
                 sandbox.DestroyContainer(&self.ID)?;

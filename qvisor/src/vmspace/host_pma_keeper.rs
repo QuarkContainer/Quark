@@ -132,7 +132,7 @@ impl HostPMAKeeper {
 
     fn Allocate(&self, len: u64, alignment: u64) -> Result<u64> {
         if len != MemoryDef::PAGE_SIZE_2M {
-            error!("Allocate len is {:x} alignment {:x}", len, alignment);
+            //error!("Allocate len is {:x} alignment {:x}", len, alignment);
         }
 
         if len <= MemoryDef::PAGE_SIZE_2M {

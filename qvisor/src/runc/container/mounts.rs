@@ -323,10 +323,10 @@ fn mount_from(
 
     let dest = format!{"{}{}", rootfs, &m.destination};
 
-    debug!(
-    "mounting {} to {} as {} with data '{}'",
-    &m.source, &m.destination, &m.typ, &d
-    );
+    // debug!(
+    // "mounting {} to {} as {} with data '{}'",
+    // &m.source, &m.destination, &m.typ, &d
+    // );
 
     let src = if m.typ == "bind" {
         let src = canonicalize(&m.source).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
@@ -456,7 +456,7 @@ fn to_sflag(t: LinuxDeviceType) -> Result<SFlag> {
 
 fn mknod_dev(dev: &LinuxDevice) -> Result<()> {
     let f = to_sflag(dev.typ)?;
-    debug!("mknoding {}", &dev.path);
+    //debug!("mknoding {}", &dev.path);
     mknod(
         &dev.path[1..],
         f,
@@ -478,7 +478,7 @@ fn bind_dev(dev: &LinuxDevice) -> Result<()> {
         Mode::from_bits_truncate(0o644),
     ).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
     close(fd).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
-    debug!("bind mounting {}", &dev.path);
+    //debug!("bind mounting {}", &dev.path);
     mount(
         Some(&*dev.path),
         &dev.path[1..],

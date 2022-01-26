@@ -205,7 +205,7 @@ impl VMSpace {
         process.Envs.append(&mut spec.process.env);
 
         //todo: credential fix.
-        error!("LoadProcessKernel: need to study the user mapping handling...");
+        //error!("LoadProcessKernel: need to study the user mapping handling...");
         process.UID = spec.process.user.uid;
         process.GID = spec.process.user.gid;
         process.AdditionalGids.append(&mut spec.process.user.additional_gids);
@@ -1402,12 +1402,12 @@ impl VMSpace {
 
     //map kernel table
     pub fn KernelMap(&mut self, start: Addr, end: Addr, physical: Addr, flags: PageTableFlags) -> Result<bool> {
-        error!("KernelMap start is {:x}, end is {:x}", start.0, end.0);
+        //error!("KernelMap start is {:x}, end is {:x}", start.0, end.0);
         return self.pageTables.Map(start, end, physical, flags, &mut self.allocator, true);
     }
 
     pub fn KernelMapHugeTable(&mut self, start: Addr, end: Addr, physical: Addr, flags: PageTableFlags) -> Result<bool> {
-        error!("KernelMap1G start is {:x}, end is {:x}", start.0, end.0);
+        //error!("KernelMap1G start is {:x}, end is {:x}", start.0, end.0);
         return self.pageTables.MapWith1G(start, end, physical, flags, &mut self.allocator, true);
     }
 

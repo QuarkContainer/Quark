@@ -40,7 +40,7 @@ impl StartCmd {
     }
 
     pub fn Run(&self, gCfg: &GlobalConfig) -> Result<()> {
-        info!("Container:: start ....");
+        //info!("Container:: start ....");
         let id = &self.id;
 
         let mut container = Container::Load(&gCfg.RootDir, id)?;

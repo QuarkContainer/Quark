@@ -59,7 +59,7 @@ impl IOMgr {
             return Err(Error::SysError(errno))
         }
 
-        info!("EpollMgr eventfd = {}", eventfd);
+        //info!("EpollMgr eventfd = {}", eventfd);
 
         let res = Self {
             eventfd: eventfd,

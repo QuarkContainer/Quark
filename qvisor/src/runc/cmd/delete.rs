@@ -48,7 +48,7 @@ impl DeleteCmd {
     }
 
     pub fn Run(&self, gCfg: &GlobalConfig) -> Result<()> {
-        info!("Container:: Delete ....");
+        //info!("Container:: Delete ....");
         let mut container = Container::Load(&gCfg.RootDir, &self.id)?;
 
         if !self.force && container.Status != Status::Created && container.Status != Status::Stopped {

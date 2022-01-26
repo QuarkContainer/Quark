@@ -364,7 +364,7 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
             }
             TaskRunState::RunExitDone => {
                 {
-                    error!("RunExitDone 1 [{:x}] ...", currTask.taskId);
+                    //error!("RunExitDone 1 [{:x}] ...", currTask.taskId);
                     let thread = currTask.Thread();
                     currTask.PerfStop();
                     currTask.SetDummy();
@@ -374,7 +374,7 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                     thread.lock().memoryMgr = currTask.mm.clone();
                     CPULocal::SetPendingFreeStack(currTask.taskId);
 
-                    error!("RunExitDone xxx 2 [{:x}] ...", currTask.taskId);
+                    //error!("RunExitDone xxx 2 [{:x}] ...", currTask.taskId);
                     if !SHARESPACE.config.read().KernelPagetable {
                         KERNEL_PAGETABLE.SwitchTo();
                     }
@@ -481,7 +481,7 @@ pub extern "C" fn rust_main(
     };
 
     if id == 1 {
-        error!("heap start is {:x}", heapStart);
+        //error!("heap start is {:x}", heapStart);
 
         if autoStart {
             CreateTask(StartRootContainer as u64, ptr::null(), false);

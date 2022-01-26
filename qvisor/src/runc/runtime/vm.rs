@@ -80,7 +80,7 @@ pub struct VirtualMachine {
 
 impl VirtualMachine {
     pub fn SetMemRegion(slotId: u32, vm_fd: &VmFd, phyAddr: u64, hostAddr: u64, pageMmapsize: u64) -> Result<()> {
-        info!("SetMemRegion phyAddr = {:x}, hostAddr={:x}; pageMmapsize = {:x} MB", phyAddr, hostAddr, (pageMmapsize >> 20));
+        //info!("SetMemRegion phyAddr = {:x}, hostAddr={:x}; pageMmapsize = {:x} MB", phyAddr, hostAddr, (pageMmapsize >> 20));
 
         // guest_phys_addr must be <512G
         let mem_region = kvm_userspace_memory_region {
@@ -182,7 +182,7 @@ impl VirtualMachine {
         let controlSock = args.ControlSock;
 
         let umask = Self::Umask();
-        info!("reset umask from {:o} to {}, kernelMemRegionSize is {:x}", umask, 0, kernelMemRegionSize);
+        //info!("reset umask from {:o} to {}, kernelMemRegionSize is {:x}", umask, 0, kernelMemRegionSize);
 
         let kvm = unsafe { Kvm::from_raw_fd(kvmfd) };
 
@@ -202,12 +202,12 @@ impl VirtualMachine {
         let heapStartAddr = MemoryDef::PHY_LOWER_ADDR + HEAP_OFFSET;
         PMA_KEEPER.Init(heapStartAddr + kernelMemSize, kernelMemRegionSize * MemoryDef::ONE_GB - HEAP_OFFSET - kernelMemSize);
 
-        info!("set map region start={:x}, end={:x}", MemoryDef::PHY_LOWER_ADDR, MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB);
+        //info!("set map region start={:x}, end={:x}", MemoryDef::PHY_LOWER_ADDR, MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB);
 
         let autoStart;
 
         {
-            info!("kernelMemSize is {:x}", kernelMemSize);
+            //info!("kernelMemSize is {:x}", kernelMemSize);
             let vms = &mut VMS.lock();
             vms.controlSock = controlSock;
             PMA_KEEPER.InitHugePages();
@@ -227,7 +227,7 @@ impl VirtualMachine {
 
         Self::InitShareSpace(cpuCount, controlSock);
 
-        info!("before loadKernel");
+        //info!("before loadKernel");
 
         let entry = elf.LoadKernel(Self::KERNEL_IMAGE)?;
         //let vdsoMap = VDSOMemMap::Init(&"/home/brad/rust/quark/vdso/vdso.so".to_string()).unwrap();
@@ -235,7 +235,7 @@ impl VirtualMachine {
         VMS.lock().vdsoAddr = elf.vdsoStart;
 
         let p = entry as *const u8;
-        info!("entry is 0x{:x}, data at entry is {:x}, heapStartAddr is {:x}", entry, unsafe { *p } , heapStartAddr);
+        //info!("entry is 0x{:x}, data at entry is {:x}, heapStartAddr is {:x}", entry, unsafe { *p } , heapStartAddr);
 
         {
             super::super::super::URING_MGR.lock();
@@ -278,11 +278,11 @@ impl VirtualMachine {
                 *f.borrow_mut() = 0;
             });
             cpu.run().expect("vcpu run fail");
-            info!("cpu#{} finish", 0);
+            //info!("cpu#{} finish", 0);
         }).unwrap());
 
         syncmgr::SyncMgr::WaitShareSpaceReady();
-        info!("shareSpace ready...");
+        //info!("shareSpace ready...");
 
         for i in 1..self.vcpus.len() {
             let cpu = self.vcpus[i].clone();
@@ -291,9 +291,9 @@ impl VirtualMachine {
                 THREAD_ID.with ( |f| {
                     *f.borrow_mut() = i as i32;
                 });
-                info!("cpu#{} start", ThreadId());
+                //info!("cpu#{} start", ThreadId());
                 cpu.run().expect("vcpu run fail");
-                info!("cpu#{} finish", ThreadId());
+                //info!("cpu#{} finish", ThreadId());
             }).unwrap());
         }
 

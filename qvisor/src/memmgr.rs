@@ -349,7 +349,7 @@ impl MappedRegion {
 impl Drop for MappedRegion {
     fn drop(&mut self) {
         unsafe {
-            info!("unmap ptr is {:x}, len is {:x}", self.ptr as u64, self.sz);
+            //info!("unmap ptr is {:x}, len is {:x}", self.ptr as u64, self.sz);
 
             if libc::munmap(self.ptr as *mut libc::c_void, self.sz as usize) != 0 {
                 panic!("munmap: {}", std::io::Error::last_os_error());

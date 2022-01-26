@@ -46,7 +46,6 @@ impl RDMAServerSock {
     }
 
     pub fn Accept(&self, waitinfo: FdWaitInfo) {
-        error!("ServerSock::Accept 1");
         let minefd = self.fd;
         let acceptQueue = self.acceptQueue.clone();
         if acceptQueue.lock().Err() != 0 {
@@ -59,7 +58,6 @@ impl RDMAServerSock {
         while hasSpace {
             let tcpAddr = TcpSockAddr::default();
             let mut len: u32 = TCP_ADDR_LEN as _;
-            error!("ServerSock::Accept 2, fd: {}", minefd);
             let ret = unsafe {
                 accept4(
                     minefd,
@@ -68,8 +66,6 @@ impl RDMAServerSock {
                     SocketFlags::SOCK_NONBLOCK | SocketFlags::SOCK_CLOEXEC,
                 )
             };
-
-            error!("ServerSock::Accept 3, ret: {}", ret);
 
             if ret < 0 {
                 let errno = errno::errno().0;
@@ -287,17 +283,11 @@ impl RDMADataSock {
     }
 
     pub fn RecvRemoteRDMAInfo(&self) -> Result<()> {
-        error!("RDMADataSock::RecvRemoteRDMAInfo 1");
         let mut data = RDMAInfo::default();
         let ret = unsafe { read(self.fd, &mut data as *mut _ as u64 as _, RDMAInfo::Size()) };
-        error!("RDMADataSock::RecvRemoteRDMAInfo 2 ret: {}", ret);
 
         if ret < 0 {
             let errno = errno::errno().0;
-            error!(
-                "RDMADataSock::RecvRemoteRDMAInfo 3 ret: {}, errno: {:x}",
-                ret, errno
-            );
             self.socketBuf.SetErr(errno);
             return Err(Error::SysError(errno));
         }
@@ -309,11 +299,6 @@ impl RDMADataSock {
             RDMAInfo::Size()
         );
 
-        error!(
-            "RDMADataSock::RecvRemoteRDMAInfo 3 ret: {}, data.qp_num {}",
-            ret, &data.qp_num
-        );
-
         *self.remoteRDMAInfo.lock() = data;
 
         return Ok(());
@@ -321,31 +306,24 @@ impl RDMADataSock {
 
     pub const ACK_DATA: u64 = 0x1234567890;
     pub fn SendAck(&self) -> Result<()> {
-        error!("SendAck 1");
         let data: u64 = Self::ACK_DATA;
         let ret = unsafe { write(self.fd, &data as *const _ as u64 as _, 8) };
-        error!("SendAck 2, ret: {}", ret);
         if ret < 0 {
             let errno = errno::errno().0;
-            error!("SendAck 3, ret: {}, errno: {:x}", ret, errno);
             self.socketBuf.SetErr(errno);
             return Err(Error::SysError(errno));
         }
 
         assert!(ret == 8, "SendAck fail ret is {}, expect {}", ret, 8);
-        error!("SendAck 4, ret: {}", ret);
         return Ok(());
     }
 
     pub fn RecvAck(&self) -> Result<()> {
         let mut data = 0;
-        error!("RecvAck 1");
         let ret = unsafe { read(self.fd, &mut data as *mut _ as u64 as _, 8) };
-        error!("RecvAck 2, ret: {}", ret);
 
         if ret < 0 {
             let errno = errno::errno().0;
-            error!("RecvAck 3, ret: {}, errno: {:x}", ret, errno);
             if errno == SysErr::EAGAIN {
                 return Err(Error::SysError(errno));
             }
@@ -366,7 +344,6 @@ impl RDMADataSock {
             Self::ACK_DATA
         );
 
-        error!("RecvAck 4, ret: {}", ret);
         return Ok(());
     }
 
@@ -385,21 +362,17 @@ impl RDMADataSock {
     // after get remote peer's RDMA metadata and need to setup RDMA
     pub fn SetupRDMA(&self) {
         let remoteInfo = self.remoteRDMAInfo.lock();
-        error!("SetupRDMA 1");
         self.qp
             .lock()
             .Setup(&RDMA, remoteInfo.qp_num, remoteInfo.lid, remoteInfo.gid)
             .expect("SetupRDMA fail...");
-        error!("SetupRDMA 2");
         for _i in 0..MAX_RECV_WR {
             let wr = WorkRequestId::New(self.fd);
-            error!("Setup RDMA 2.1, create wr_id: {}", wr.0);
             self.qp
                 .lock()
                 .PostRecv(wr.0, self.localRDMAInfo.raddr, self.localRDMAInfo.rkey)
                 .expect("SetupRDMA PostRecv fail");
         }
-        error!("SetupRDMA 3");
     }
 
     pub fn RDMAWriteImm(
@@ -411,13 +384,8 @@ impl RDMADataSock {
         remoteInfo: &QMutexGuard<RDMAInfo>,
     ) -> Result<()> {
         let wrid = WorkRequestId::New(self.fd);
-        let immData = ImmData::New(writeCount as u16, readCount as u16);
-        error!(
-            "RDMAWriteImm 1, writeCount: {}, readCount: {}, wr_id: {}",
-            writeCount, readCount, wrid.0
-        );
+        let immData = ImmData::New(readCount);
         let rkey = remoteInfo.rkey;
-        error!("RDMAWriteImm 2");
 
         self.qp.lock().WriteImm(
             wrid.0,
@@ -428,16 +396,13 @@ impl RDMADataSock {
             rkey,
             immData.0,
         )?;
-        error!("RDMAWriteImm 3");
         self.writeCount.store(writeCount, QOrdering::RELEASE);
         return Ok(());
     }
 
     // need to be called when the self.writeLock is locked
     pub fn RDMASend(&self) {
-        error!("RDMASend: 1");
         let remoteInfo = self.remoteRDMAInfo.lock();
-        error!("RDMASend, remoteInfo.sending: {}", remoteInfo.sending);
         if remoteInfo.sending == true {
             return; // the sending is ongoing
         }
@@ -446,17 +411,13 @@ impl RDMADataSock {
     }
 
     pub fn RDMASendLocked(&self, mut remoteInfo: QMutexGuard<RDMAInfo>) {
-        error!("RDMASendLocked:0");
         let readCount = self.socketBuf.GetAndClearConsumeReadData();
         let buf = self.socketBuf.writeBuf.lock();
         let (addr, mut len) = buf.GetDataBuf();
-        error!("RDMASendLocked:1 readCount: {}, len: {}, remote freesapce: {}", readCount, len, remoteInfo.freespace);
         if readCount > 0 || len > 0 {
             if len > remoteInfo.freespace as usize {
                 len = remoteInfo.freespace as usize;
             }
-
-            error!("RDMASendLocked:2 readCount: {}, len: {}", readCount, len);
 
             if len != 0 || readCount > 0 {
                 self.RDMAWriteImm(
@@ -470,56 +431,27 @@ impl RDMADataSock {
                 remoteInfo.freespace -= len as u32;
                 remoteInfo.offset = (remoteInfo.offset + len as u32) % remoteInfo.rlen;
                 remoteInfo.sending = true;
-                error!("RDMASendLocked:3 readCount: {}, len: {}, remote freesapce: {}", readCount, len, remoteInfo.freespace);
             }
-            error!("RDMASendLocked:4 readCount: {}, len: {}, remote freesapce: {}", readCount, len, remoteInfo.freespace);
         }
     }
 
     // triggered by the RDMAWriteImmediately finish
     pub fn ProcessRDMAWriteImmFinish(&self, waitinfo: FdWaitInfo) {
-        error!("writelock1 start");
-        defer!(error!("writelock1 finish"));
         let _writelock = self.writeLock.lock();
         let mut remoteInfo = self.remoteRDMAInfo.lock();
         remoteInfo.sending = false;
-
-        error!("ProcessRDMAWriteImmFinish::1");
-        // let wr = WorkRequestId::New(self.fd);
-        // error!("ProcessRDMAWriteImmFinish::2, create wr_id: {}", wr.0);
-
-        // let res = self
-        //     .qp
-        //     .lock()
-        //     .PostRecv(wr.0, self.localRDMAInfo.raddr, self.localRDMAInfo.rkey);
-
-        // match res {
-        //     Ok(()) => {
-        //         error!("ProcessRDMAWriteImmFinish::3, Create RR successfully");
-        //     }
-        //     _ => {
-        //         error!("ProcessRDMAWriteImmFinish::4, fail to create RR");
-        //     }
-        // }
 
         let writeCount = self.writeCount.load(QOrdering::ACQUIRE);
 
         let (trigger, addr, _len) = self
             .socketBuf
             .ConsumeAndGetAvailableWriteBuf(writeCount as usize);
-        error!(
-            "ProcessRDMAWriteImmFinish::3 trigger: {}, addr: {}, _len: {}",
-            trigger, addr, _len
-        );
         if trigger {
             waitinfo.Notify(EVENT_OUT);
         }
 
         if addr != 0 {
             self.RDMASendLocked(remoteInfo)
-        }
-        else{
-            error!("ProcessRDMAWriteImmFinish::3 send finished");
         }
     }
 
@@ -530,39 +462,16 @@ impl RDMADataSock {
         writeConsumeCount: u64,
         waitinfo: FdWaitInfo,
     ) {
-        error!(
-            "ProcessRDMARecvWriteImm: 1, recvCount: {}, writeConsumeCount: {}, waitinfo: {:?}",
-            recvCount, writeConsumeCount, &waitinfo
-        );
         let wr = WorkRequestId::New(self.fd);
-        error!("ProcessRDMARecvWriteImm: 2, create wr_id: {}", wr.0);
 
-        // self.qp
-        //     .lock()
-        //     .PostRecv(wr.0, self.localRDMAInfo.raddr, self.localRDMAInfo.rkey)
-        //     .expect("ProcessRDMARecvWriteImm PostRecv fail");
-
-        let res = self
+        let _res = self
             .qp
             .lock()
             .PostRecv(wr.0, self.localRDMAInfo.raddr, self.localRDMAInfo.rkey);
 
-        match res {
-            Ok(()) => {
-                error!("ProcessRDMARecvWriteImm::3, Create RR successfully");
-            }
-            _ => {
-                error!("ProcessRDMARecvWriteImm::4, fail to create RR");
-            }
-        }
-
         if recvCount > 0 {
             let (trigger, _addr, _len) =
                 self.socketBuf.ProduceAndGetFreeReadBuf(recvCount as usize);
-            error!(
-                "ProcessRDMARecvWriteImm: 5, trigger: {}, _addr: {}, _len: {}",
-                trigger, _addr, _len
-            );
             if trigger {
                 waitinfo.Notify(EVENT_IN);
             }
@@ -571,32 +480,24 @@ impl RDMADataSock {
         if writeConsumeCount > 0 {
             let mut remoteInfo = self.remoteRDMAInfo.lock();
             let trigger = remoteInfo.freespace == 0;
-            error!("ProcessRDMARecvWriteImm::6, freespace: {}, trigger: {}, sending: {}", remoteInfo.freespace, trigger, remoteInfo.sending);
             remoteInfo.freespace += writeConsumeCount as u32;
-            
+
             if trigger && !remoteInfo.sending {
                 self.RDMASendLocked(remoteInfo);
             }
-            
-            
         }
     }
 
     /*********************************** end of rdma integration ****************************/
 
-    pub fn SetReady(&self, waitinfo: FdWaitInfo) {
-        error!("SetReady: 1");
+    pub fn SetReady(&self, _waitinfo: FdWaitInfo) {
         match &self.rdmaType {
             RDMAType::Client(ref addr) => {
                 //let addr = msg as *const _ as u64;
-                error!("SetReady: 2, addr: {:x}", *addr);
                 let msg = PostRDMAConnect::ToRef(*addr);
-                error!("SetReady: 2.1, addr: {:x}, msg: {:x?}", *addr, &msg);
                 msg.Finish(0);
-                error!("SetReady: 3");
             }
             RDMAType::Server(ref serverSock) => {
-                error!("SetReady: 4");
                 let acceptQueue = serverSock.sock.acceptQueue.clone();
                 let (trigger, _tmp) = acceptQueue.lock().EnqSocket(
                     serverSock.fd,
@@ -605,12 +506,8 @@ impl RDMADataSock {
                     serverSock.sockBuf.clone(),
                 );
 
-                error!("SetReady: 5");
-
                 if trigger {
-                    error!("SetReady: 6");
-                    waitinfo.Notify(EVENT_IN);
-                    error!("SetReady: 7");
+                    serverSock.waitInfo.Notify(EVENT_IN);
                 }
             }
             RDMAType::None => {
@@ -618,31 +515,23 @@ impl RDMADataSock {
             }
         }
 
-        error!("SetReady: 8");
         self.SetSocketState(SocketState::Ready);
-        error!("SetReady: 9");
     }
 
     pub fn Read(&self, waitinfo: FdWaitInfo) {
         if !RDMA_ENABLE {
-            error!("RDMADataSock::Read 1, fd: {}", self.fd);
             self.ReadData(waitinfo);
         } else {
             match self.SocketState() {
                 SocketState::WaitingForRemoteMeta => {
                     let _readlock = self.readLock.lock();
-                    error!("RDMADataSock::Read 2, fd: {}", self.fd);
                     self.RecvRemoteRDMAInfo().unwrap();
-                    error!("RDMADataSock::Read 2.1, fd: {}", self.fd);
                     self.SetupRDMA();
-                    error!("RDMADataSock::Read 3, fd: {}", self.fd);
                     self.SendAck().unwrap(); // assume the socket is ready for send
                     self.SetSocketState(SocketState::WaitingForRemoteReady);
-                    error!("RDMADataSock::Read 4, fd: {}", self.fd);
 
                     match self.RecvAck() {
                         Ok(()) => {
-                            error!("RDMADataSock::Read 5, fd: {}", self.fd);
                             let waitinfo = match &self.rdmaType {
                                 RDMAType::Client(_) => waitinfo,
                                 RDMAType::Server(ref serverSock) => serverSock.waitInfo.clone(),
@@ -651,23 +540,17 @@ impl RDMADataSock {
                                 }
                             };
                             self.SetReady(waitinfo);
-                            error!("RDMADataSock::Read 6, fd: {}", self.fd);
                         }
                         _ => (),
                     }
                 }
                 SocketState::WaitingForRemoteReady => {
                     let _readlock = self.readLock.lock();
-                    error!("RDMADataSock::Read 7, fd: {}", self.fd);
                     self.RecvAck().unwrap();
-                    error!("RDMADataSock::Read 8, fd: {}", self.fd);
                     self.SetReady(waitinfo);
-                    error!("RDMADataSock::Read 9, fd: {}", self.fd);
                 }
                 SocketState::Ready => {
-                    error!("RDMADataSock::Read 10, fd: {}", self.fd);
                     self.ReadData(waitinfo);
-                    error!("RDMADataSock::Read 11, fd: {}", self.fd);
                 }
                 _ => {
                     panic!(
@@ -681,20 +564,13 @@ impl RDMADataSock {
 
     //notify rdmadatasocket to sync read buff freespace with peer
     pub fn RDMARead(&self) {
-        error!("writelock2 start");
-        defer!(error!("writelock2 finish"));
         let _writelock = self.writeLock.lock();
         self.RDMASend();
     }
 
     pub fn RDMAWrite(&self) {
-        error!("RDMAWrite: 1");
-        error!("writelock3 start");
-        defer!(error!("writelock3 finish"));
         let _writelock = self.writeLock.lock();
-        error!("RDMAWrite: 2");
         self.RDMASend();
-        error!("RDMAWrite: 3");
     }
 
     pub fn ReadData(&self, waitinfo: FdWaitInfo) {
@@ -704,7 +580,6 @@ impl RDMADataSock {
         let socketBuf = self.socketBuf.clone();
 
         let (mut addr, mut count) = socketBuf.GetFreeReadBuf();
-        error!("RDMADataSock::ReadData: 1, count {}", count);
         if count == 0 {
             // no more space
             return;
@@ -757,32 +632,22 @@ impl RDMADataSock {
 
     pub fn Write(&self, waitinfo: FdWaitInfo) {
         if !RDMA_ENABLE {
-            error!("RDMADataSock::Write 1, fd: {}", self.fd);
             self.WriteData(waitinfo);
         } else {
-            error!("writelock5 start");
-            defer!(error!("writelock5 finish"));
             let _writelock = self.writeLock.lock();
             match self.SocketState() {
                 SocketState::Init => {
-                    error!("RDMADataSock::Write 2, fd: {}", self.fd);
                     self.SendLocalRDMAInfo().unwrap();
-                    error!("RDMADataSock::Write 3, fd: {}", self.fd);
                     self.SetSocketState(SocketState::WaitingForRemoteMeta);
-                    error!("RDMADataSock::Write 4, fd: {}", self.fd);
                 }
                 SocketState::WaitingForRemoteMeta => {
                     //TODO: server side received 4(W) first and 5 (R|W) afterwards. Need more investigation to see why it's different.
-                    error!("RDMADataSock::Write 4.1, fd: {}", self.fd);
                 }
                 SocketState::WaitingForRemoteReady => {
                     //TODO: server side received 4(W) first and 5 (R|W) afterwards. Need more investigation to see why it's different.
-                    error!("RDMADataSock::Write 4.2, fd: {}", self.fd);
                 }
                 SocketState::Ready => {
-                    error!("RDMADataSock::Write 5, fd: {}", self.fd);
                     self.WriteDataLocked(waitinfo);
-                    error!("RDMADataSock::Write 6, fd: {}", self.fd);
                 }
                 _ => {
                     panic!(
@@ -795,24 +660,14 @@ impl RDMADataSock {
     }
 
     pub fn WriteData(&self, waitinfo: FdWaitInfo) {
-        error!("RDMADataSock::WriteData: 0");
-        error!("writelock6 start");
-        defer!(error!("writelock6 finish"));
         let _writelock = self.writeLock.lock();
-        error!("RDMADataSock::WriteData: 1");
         self.WriteDataLocked(waitinfo);
     }
     pub fn WriteDataLocked(&self, waitinfo: FdWaitInfo) {
-        error!("RDMADataSock::WriteData: 0");
-        error!("writelock7 start");
-        defer!(error!("writelock7 finish"));
         //let _writelock = self.writeLock.lock();
-        error!("RDMADataSock::WriteData: 1");
         let fd = self.fd;
         let socketBuf = self.socketBuf.clone();
-        error!("RDMADataSock::WriteData: 2");
         let (mut addr, mut count) = socketBuf.GetAvailableWriteBuf();
-        error!("RDMADataSock::WriteData: 3, count {}", count);
         if count == 0 {
             // no data
             return;
@@ -867,49 +722,19 @@ impl RDMADataSock {
     }
 
     pub fn Notify(&self, eventmask: EventMask, waitinfo: FdWaitInfo) {
-        error!(
-            "RDMASocket:: Notify 1 eventmask: {:x}, fd: {}",
-            eventmask, self.fd
-        );
         let socketBuf = self.socketBuf.clone();
 
         if socketBuf.Error() != 0 {
-            error!(
-                "RDMASocket:: Notify 2 eventmask: {:x}, fd: {}, socketBuff.Error: {:x}",
-                eventmask,
-                self.fd,
-                socketBuf.Error()
-            );
             waitinfo.Notify(EVENT_ERR | EVENT_IN);
-            error!(
-                "RDMASocket:: Notify 3 eventmask: {:x}, fd: {}",
-                eventmask, self.fd
-            );
             return;
         }
 
         if eventmask & EVENT_WRITE != 0 {
-            error!(
-                "RDMASocket:: Notify 4 eventmask: {:x}, fd: {}",
-                eventmask, self.fd
-            );
             self.Write(waitinfo.clone());
-            error!(
-                "RDMASocket:: Notify 5 eventmask: {:x}, fd: {}",
-                eventmask, self.fd
-            );
         }
 
         if eventmask & EVENT_READ != 0 {
-            error!(
-                "RDMASocket:: Notify 6 eventmask: {:x}, fd: {}",
-                eventmask, self.fd
-            );
             self.Read(waitinfo);
-            error!(
-                "RDMASocket:: Notify 7 eventmask: {:x}, fd: {}",
-                eventmask, self.fd
-            );
         }
     }
 }
