@@ -36,7 +36,6 @@ use super::qlib::vcpu_mgr::*;
 use super::qlib::buddyallocator::ZeroPage;
 use super::amd64_def::*;
 use super::URING_MGR;
-use super::QUARK_CONFIG;
 use super::runc::runtime::vm::*;
 
 pub fn AlignedAllocate(size: usize, align: usize, zeroData: bool) -> Result<u64> {
@@ -295,7 +294,8 @@ impl KVMVcpu {
         let mut lastVal: u32 = 0;
         let mut first = true;
 
-        let coreid = core_affinity::CoreId{id: self.id + QUARK_CONFIG.lock().DedicateUring}; // skip core #0 for uring
+        let vcpuCoreId = VMS.lock().ComputeVcpuCoreId(self.id);
+        let coreid = core_affinity::CoreId{id: vcpuCoreId};
         core_affinity::set_for_current(coreid);
 
         info!("start enter guest[{}]: entry is {:x}, stack is {:x}", self.id, self.entry, self.topStackAddr);

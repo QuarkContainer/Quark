@@ -180,6 +180,7 @@ impl VirtualMachine {
 
         let cpuCount = VMSpace::VCPUCount() - cnt;
         VMS.lock().vcpuCount = cpuCount; //VMSpace::VCPUCount();
+        VMS.lock().RandomVcpuMapping();
         let kernelMemRegionSize = QUARK_CONFIG.lock().KernelMemSize;
         let controlSock = args.ControlSock;
 
