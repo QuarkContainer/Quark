@@ -75,6 +75,7 @@ use self::linux_def::*;
 use self::bytestream::*;
 use self::kernel::quring::uring_mgr::QUring;
 use self::kernel::kernel::timer::timekeeper::*;
+use self::kernel::guestfdnotifier::*;
 use self::kernel::kernel::timer::timer_store::*;
 use self::kernel::kernel::kernel::Kernel;
 use self::kernel::memmgr::pma::*;
@@ -547,6 +548,7 @@ pub struct ShareSpace {
     pub ioUring: CachePadded<QUring>,
     pub timerkeeper: CachePadded<TimeKeeper>,
     pub timerStore: CachePadded<TimerStore>,
+    pub guestNotifier: CachePadded<GuestNotifier>,
     pub signalArgs: CachePadded<QMutex<Option<SignalArgs>>>,
     pub futexMgr: CachePadded<FutexMgr>,
     pub pageMgr: CachePadded<PageMgr>,
@@ -581,6 +583,10 @@ impl ShareSpace {
 
     pub fn SignalHandlerAddr(&self) -> u64 {
         return self.signalHandlerAddr.load(Ordering::Relaxed);
+    }
+
+    pub fn GuestNotifierAddr(&self) -> u64 {
+        return self.guestNotifier.Addr();
     }
 
     pub fn StoreShutdown(&self) {

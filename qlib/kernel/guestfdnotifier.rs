@@ -21,13 +21,13 @@ use core::fmt;
 use super::Kernel::HostSpace;
 use super::kernel::waiter::*;
 use super::fs::host::hostinodeop::*;
+use super::super::object_ref::*;
 use super::super::common::*;
 use super::super::linux_def::*;
-use super::super::singleton::*;
 use super::SHARESPACE;
 use super::IOURING;
 
-pub static GUEST_NOTIFIER : Singleton<Notifier> = Singleton::<Notifier>::New();
+pub static GUEST_NOTIFIER : GuestNotifierRef = GuestNotifierRef::New();
 
 pub fn AddFD(fd: i32, iops: &HostInodeOp) {
     GUEST_NOTIFIER.AddFD(fd, iops);
@@ -163,7 +163,7 @@ impl FdWaitInfo {
 
 // notifier holds all the state necessary to issue notifications when IO events
 // occur in the observed FDs.
-pub struct NotifierInternal {
+pub struct GuestNotifierInternal {
     // fdMap maps file descriptors to their notification queues and waiting
     // status.
     fdMap: BTreeMap<i32, FdWaitInfo>,
@@ -178,24 +178,35 @@ pub struct EpollEvent {
     pub U64: u64
 }
 
-pub struct Notifier(QMutex<NotifierInternal>);
+pub type GuestNotifierRef = ObjectRef<GuestNotifier>;
+pub struct GuestNotifier(QMutex<GuestNotifierInternal>);
 
-impl Deref for Notifier {
-    type Target = QMutex<NotifierInternal>;
+impl Deref for GuestNotifier {
+    type Target = QMutex<GuestNotifierInternal>;
 
-    fn deref(&self) -> &QMutex<NotifierInternal> {
+    fn deref(&self) -> &QMutex<GuestNotifierInternal> {
         &self.0
     }
 }
 
-impl Notifier {
+impl Default for GuestNotifier {
+    fn default() -> Self {
+        return Self::New()
+    }
+}
+
+impl GuestNotifier {
     pub fn New() -> Self {
-        let internal = NotifierInternal {
+        let internal = GuestNotifierInternal {
             fdMap: BTreeMap::new(),
             epollfd: 0,
         };
 
         return Self(QMutex::new(internal))
+    }
+
+    pub fn Addr(&self) -> u64 {
+        return self as * const _ as u64
     }
 
     pub fn VcpuWait(&self) -> u64 {
