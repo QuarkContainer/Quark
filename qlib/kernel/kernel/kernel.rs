@@ -246,7 +246,9 @@ impl Kernel {
     pub fn NewAsyncProcessTimer(&self) -> Timer {
         let timer = Timer::New(&MONOTONIC_CLOCK, TimerListener::Kernel(self.clone()));
         let start = MONOTONIC_CLOCK.Now().0;
-        let duration = 10 * MILLISECOND;
+        // need to trigger every 10 millsecond. can't use timer which will keep the system busy
+        // todo: fix this
+        let duration = 1000 * MILLISECOND;
         let next = Time(start + duration);
         timer.Swap(&Setting {
             Enabled: true,

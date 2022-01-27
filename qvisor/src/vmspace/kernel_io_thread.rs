@@ -40,6 +40,27 @@ impl KIOThread {
         }
     }
 
+    pub fn Process(&self, sharespace: &ShareSpace) {
+        let mut start = TSC.Rdtsc();
+
+        while !sharespace.Shutdown() {
+            if IOURING.DrainCompletionQueue() > 0 {
+                start = TSC.Rdtsc()
+            }
+
+            if TSC.Rdtsc() - start >= IO_WAIT_CYCLES {
+                break;
+            }
+
+            match sharespace.TryLockEpollProcess() {
+                None => {},
+                Some(_lock) => {
+                    FD_NOTIFIER.HostEpollWait();
+                }
+            }
+        }
+    }
+
     pub fn Wait(&self, sharespace: &ShareSpace) -> Result<()> {
         let epfd = unsafe {
             epoll_create1(0)
@@ -85,7 +106,7 @@ impl KIOThread {
                 return Err(Error::Exit)
             }
 
-            let mut start = TSC.Rdtsc();
+            self.Process(sharespace);
 
             let ret = unsafe {
                 libc::read(self.eventfd, &mut data as * mut _ as *mut libc::c_void, 8)
@@ -96,22 +117,7 @@ impl KIOThread {
                         self.eventfd, errno::errno().0);
             }
 
-            while !sharespace.Shutdown() {
-                if IOURING.DrainCompletionQueue() > 0 {
-                    start = TSC.Rdtsc()
-                }
-
-                if TSC.Rdtsc() - start >= IO_WAIT_CYCLES {
-                    break;
-                }
-
-                match sharespace.TryLockEpollProcess() {
-                    None => {},
-                    Some(_lock) => {
-                        FD_NOTIFIER.HostEpollWait();
-                    }
-                }
-            }
+            self.Process(sharespace);
 
             let _nfds = unsafe {
                 epoll_wait(epfd, &mut events[0], 2, -1)

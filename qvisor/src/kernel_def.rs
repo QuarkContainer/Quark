@@ -10,6 +10,7 @@ use super::qlib::task_mgr::*;
 use super::qlib::qmsg::*;
 use super::qlib::control_msg::*;
 use super::qlib::kernel::task::*;
+use super::qlib::kernel::Kernel::*;
 use super::qlib::perf_tunning::*;
 use super::qlib::vcpu_mgr::*;
 use super::qlib::linux::time::*;
@@ -22,7 +23,8 @@ use super::vmspace::*;
 use super::ThreadId;
 
 impl<'a> ShareSpace {
-    pub fn AQCall(&self, _msg: &HostOutputMsg) {
+    pub fn AQCall(&self, msg: &HostOutputMsg) {
+        panic!("ShareSpace::AQCall {:x?}", msg);
     }
 
     pub fn Schedule(&self, _taskId: u64) {
@@ -203,4 +205,18 @@ pub fn NewSocket(fd: i32) -> i64 {
 
 pub fn UringWake(idx: usize, minCompleted: u64) {
     URING_MGR.lock().Wake(idx, minCompleted as _).expect("qlib::HYPER CALL_URING_WAKE fail");
+}
+
+impl HostSpace {
+    pub fn Close(fd: i32) -> i64 {
+        return VMSpace::Close(fd);
+    }
+
+    pub fn Call(msg: &mut Msg, _mustAsync: bool) -> u64 {
+        panic!("HostSpace::Call msg {:x?}", msg);
+    }
+
+    pub fn HCall(msg: &mut Msg, _lock: bool) -> u64 {
+        panic!("HostSpace::HCall msg {:x?}", msg);
+    }
 }

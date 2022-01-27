@@ -266,15 +266,6 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn Close(fd: i32) -> i64 {
-        let mut msg = Msg::Close(qcall::Close {
-            fd
-        });
-
-        return HostSpace::HCall(&mut msg, false) as i64;
-
-    }
-
     pub fn Fcntl(fd: i32, cmd: i32, arg: u64) -> i64 {
         let mut msg = Msg::Fcntl(Fcntl {
             fd,
@@ -885,40 +876,6 @@ impl HostSpace {
         });
 
         super::SHARESPACE.AQCall(&msg);
-    }
-
-    fn Call(msg: &mut Msg, _mustAsync: bool) -> u64 {
-        //return Self::HCall(msg, true);
-        let current = Task::Current().GetTaskId();
-
-        let qMsg = QMsg {
-            taskId: current,
-            globalLock: true,
-            ret: 0,
-            msg: msg
-        };
-
-        let addr = &qMsg as *const _ as u64;
-        let om = HostOutputMsg::QCall(addr);
-
-        super::SHARESPACE.AQCall(&om);
-        taskMgr::Wait();
-        return qMsg.ret;
-    }
-
-    fn HCall(msg: &mut Msg, lock: bool) -> u64 {
-        let taskId = Task::Current().GetTaskId();
-
-        let mut event = QMsg {
-            taskId: taskId,
-            globalLock: lock,
-            ret: 0,
-            msg: msg
-        };
-
-        HyperCall64(HYPERCALL_HCALL, &mut event as * const _ as u64, 0, 0);
-
-        return event.ret;
     }
 
     pub fn SyncPrint(level: DebugLevel, str: &str) {

@@ -176,7 +176,7 @@ pub fn SingletonInit() {
         ));
         EXIT_CODE.Init(AtomicI32::new(0));
 
-        guestfdnotifier::GUEST_NOTIFIER.Init(guestfdnotifier::Notifier::New());
+        guestfdnotifier::GUEST_NOTIFIER.SetValue(SHARESPACE.GuestNotifierAddr());
         UID.Init(AtomicU64::new(1));
         perflog::THREAD_COUNTS.Init(QMutex::new(perflog::ThreadPerfCounters::default()));
 

@@ -38,6 +38,7 @@ use super::super::super::qlib::kernel::task;
 use super::super::super::qlib::kernel::IOURING;
 use super::super::super::qlib::kernel::KERNEL_PAGETABLE;
 use super::super::super::qlib::kernel::PAGE_MGR;
+use super::super::super::qlib::kernel::guestfdnotifier::GUEST_NOTIFIER;
 use super::super::super::qlib::kernel::vcpu;
 use super::super::super::qlib::pagetable::AlignedAllocator;
 use super::super::super::print::LOG;
@@ -133,6 +134,7 @@ impl VirtualMachine {
         URING_MGR.lock().Addfd(controlSock).unwrap();
         sharespace.SetIOUringsAddr(URING_MGR.lock().IOUringsAddr());
         IOURING.SetValue(sharespace.GetIOUringAddr());
+        GUEST_NOTIFIER.SetValue(sharespace.GuestNotifierAddr());
 
         unsafe {
             KERNEL_PAGETABLE.SetRoot(VMS.lock().pageTables.GetRoot());
