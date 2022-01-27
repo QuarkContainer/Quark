@@ -1136,8 +1136,7 @@ impl VMSpace {
     pub fn ComputeVcpuCoreId(&self, threadId: usize) -> usize {
         // skip core #0 for uring
         let DedicateUring = QUARK_CONFIG.lock().DedicateUring;
-        let id = (threadId + self.vcpuMappingDelta) % (self.vcpuCount - DedicateUring)
-            + DedicateUring;
+        let id = (threadId + self.vcpuMappingDelta + DedicateUring) % Self::VCPUCount();
 
         return id;
     }
