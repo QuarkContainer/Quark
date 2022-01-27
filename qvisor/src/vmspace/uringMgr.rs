@@ -74,10 +74,12 @@ impl UringMgr {
     }
 
     pub fn Init(&mut self, DedicateUringCnt: usize) {
+        let vcpuMappingDelta = VMS.lock().vcpuMappingDelta;
+
         if DedicateUringCnt == 0 {
             let ring = Builder::default()
                 .setup_sqpoll(10)
-                .setup_sqpoll_cpu(0) // vcpu#0
+                .setup_sqpoll_cpu(0 + vcpuMappingDelta as u32) // vcpu#0
                 //.setup_clamp()
                 .setup_cqsize(self.uringSize as u32 * 2)
                 .build(self.uringSize as u32).expect("InitUring fail");
@@ -87,7 +89,7 @@ impl UringMgr {
             for i in 0..DedicateUringCnt {
                 let ring = Builder::default()
                     .setup_sqpoll(10)
-                    .setup_sqpoll_cpu(i as u32)
+                    .setup_sqpoll_cpu(i as u32 + vcpuMappingDelta as u32)
                     //.setup_iopoll()
                     //.setup_clamp()
                     .setup_cqsize(self.uringSize as u32 * 2)
