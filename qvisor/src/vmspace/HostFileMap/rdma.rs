@@ -1,10 +1,10 @@
 use core::ops::Deref;
+use core::sync::atomic;
+use core::sync::atomic::AtomicU64;
 use rdmaffi;
 use spin::Mutex;
 use std::convert::TryInto;
 use std::ptr;
-use core::sync::atomic::AtomicU64;
-use core::sync::atomic;
 
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
@@ -386,8 +386,8 @@ impl RDMAContext {
             recv_cq: context.completeQueue.0 as *const _ as *mut _,
             srq: ptr::null::<rdmaffi::ibv_srq>() as *mut _,
             cap: rdmaffi::ibv_qp_cap {
-                max_send_wr: 1000,//MAX_SEND_WR,
-                max_recv_wr: 1000,//MAX_RECV_WR,
+                max_send_wr: 1000, //MAX_SEND_WR,
+                max_recv_wr: 1000, //MAX_RECV_WR,
                 max_send_sge: MAX_SEND_SGE,
                 max_recv_sge: MAX_RECV_SGE,
                 max_inline_data: 0,
@@ -434,6 +434,63 @@ impl RDMAContext {
 
     pub fn CompleteChannel(&self) -> *mut rdmaffi::ibv_comp_channel {
         return self.lock().completeChannel.0;
+    }
+
+    pub fn PollCompletionQueueAndProcess(&self) -> Result<()> {
+        let mut wc = rdmaffi::ibv_wc {
+            //TODO: find a better way to initialize
+            wr_id: 0,
+            status: rdmaffi::ibv_wc_status::IBV_WC_SUCCESS,
+            opcode: rdmaffi::ibv_wc_opcode::IBV_WC_BIND_MW,
+            vendor_err: 0,
+            byte_len: 0,
+            imm_data_invalidated_rkey_union: rdmaffi::imm_data_invalidated_rkey_union_t {
+                imm_data: 0,
+            }, //TODO: need double check
+            qp_num: 0,
+            src_qp: 0,
+            wc_flags: 0,
+            pkey_index: 0,
+            slid: 0,
+            sl: 0,
+            dlid_path_bits: 0,
+        };
+
+        loop {
+            let poll_result = unsafe { rdmaffi::ibv_poll_cq(self.CompleteQueue(), 1, &mut wc) };
+            if poll_result > 0 {
+                self.ProcessWC(&wc);
+            } else if poll_result == 0 {
+                return Ok(());
+            } else {
+                debug!("Error to query CQ!")
+                // break;
+            }
+        }
+    }
+
+    pub fn HandleCQEvent(&self) -> Result<()> {
+        let mut cq_ptr: *mut rdmaffi::ibv_cq = ptr::null_mut();
+        let mut cq_context: *mut std::os::raw::c_void = ptr::null_mut();
+        let ret = unsafe {
+            rdmaffi::ibv_get_cq_event(
+                self.CompleteChannel(),
+                &mut cq_ptr, //&mut self.CompleteQueue(),
+                &mut cq_context,
+            )
+        };
+
+        if ret != 0 {
+            error!("Failed to get next CQ event");
+        }
+
+        let ret1 = unsafe { rdmaffi::ibv_req_notify_cq(self.CompleteQueue(), 0) };
+        if ret1 != 0 {
+            // TODO: should keep call here?
+        }
+
+        unsafe { rdmaffi::ibv_ack_cq_events(cq_ptr, 1) };
+        Ok(())
     }
 
     pub fn PollCompletion(&self) -> Result<()> {
@@ -490,9 +547,6 @@ impl RDMAContext {
         unsafe { rdmaffi::ibv_ack_cq_events(cq_ptr, 1) };
         Ok(())
 
-
-
-
         // let ret1 = unsafe { rdmaffi::ibv_req_notify_cq(self.CompleteQueue(), 0) };
         // if ret1 != 0 {
         //     // TODO: should keep call here?
@@ -526,7 +580,7 @@ impl RDMAContext {
         //     if ret1 != 0 {
         //         // TODO: should keep call here?
         //     }
-            
+
         //     if ret == -1 {
         //         return Ok(());
         //     }
@@ -561,23 +615,29 @@ impl RDMAContext {
         //     }
         // }
         if wc.status != rdmaffi::ibv_wc_status::IBV_WC_SUCCESS {
-            error!("ProcessWC::1, work reqeust failed with status: {}, id: {}", wc.status, wc.wr_id);
-        }
-        if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RDMA_WRITE {
-            error!("ProcessWC::2, writeIMM status: {}, id: {}", wc.status, wc.wr_id);
-            IO_MGR.ProcessRDMAWriteImmFinish(fd);
-        }
-        else if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RECV_RDMA_WITH_IMM{
-            let imm = unsafe { wc.imm_data_invalidated_rkey_union.imm_data };
-            let immData = ImmData(imm);
-            error!("ProcessWC::2, recv len:{}, writelen: {}, status: {}, id: {}", wc.byte_len, immData.ReadCount(), wc.status, wc.wr_id);
-            IO_MGR.ProcessRDMARecvWriteImm(
-                fd,
-                wc.byte_len as _,
-                immData.ReadCount() as _,
+            error!(
+                "ProcessWC::1, work reqeust failed with status: {}, id: {}",
+                wc.status, wc.wr_id
             );
         }
-        else{
+        if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RDMA_WRITE {
+            error!(
+                "ProcessWC::2, writeIMM status: {}, id: {}",
+                wc.status, wc.wr_id
+            );
+            IO_MGR.ProcessRDMAWriteImmFinish(fd);
+        } else if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RECV_RDMA_WITH_IMM {
+            let imm = unsafe { wc.imm_data_invalidated_rkey_union.imm_data };
+            let immData = ImmData(imm);
+            error!(
+                "ProcessWC::2, recv len:{}, writelen: {}, status: {}, id: {}",
+                wc.byte_len,
+                immData.ReadCount(),
+                wc.status,
+                wc.wr_id
+            );
+            IO_MGR.ProcessRDMARecvWriteImm(fd, wc.byte_len as _, immData.ReadCount() as _);
+        } else {
             error!("ProcessWC::4, opcode: {}, wr_id: {}", wc.opcode, wc.wr_id);
         }
     }
@@ -591,7 +651,7 @@ impl ImmData {
     }
 
     pub fn ReadCount(&self) -> u32 {
-        return self.0
+        return self.0;
     }
 
     // pub fn WriteCount(&self) -> u16 {
@@ -610,7 +670,7 @@ pub struct WorkRequestId(pub u64);
 
 impl WorkRequestId {
     pub fn New(fd: i32) -> Self {
-        return Self(((fd as u64) << 32) | ( NewUID() as u32 as u64) );
+        return Self(((fd as u64) << 32) | (NewUID() as u32 as u64));
     }
 
     pub fn Fd(&self) -> i32 {

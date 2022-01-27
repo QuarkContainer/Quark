@@ -42,7 +42,7 @@ impl SockInfo {
                 sock.Notify(eventmask, waitinfo)
             }
             Self::RDMAContext => {
-                RDMA.PollCompletion().expect("RDMA.PollCompletion fail");
+                // RDMA.PollCompletion().expect("RDMA.PollCompletion fail");
             }
         }
     }
