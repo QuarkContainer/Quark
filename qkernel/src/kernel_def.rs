@@ -156,10 +156,12 @@ impl<'a> ShareSpace {
         }
 
         if super::SHARESPACE.HostProcessor() == 0 {
-            let vcpuId = super::SHARESPACE.scheduler.WakeOne();
+            /*let vcpuId = super::SHARESPACE.scheduler.WakeOne();
             if vcpuId < 0 &&super::SHARESPACE.NeedHostProcess()  {
                 HyperCall64(HYPERCALL_QCALL, 0, 0, 0);
-            }
+            }*/
+
+            self.scheduler.VcpuArr[0].Wakeup();
         }
     }
 

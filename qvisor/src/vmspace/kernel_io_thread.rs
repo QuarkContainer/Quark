@@ -97,6 +97,7 @@ impl KIOThread {
         }
 
         let mut events = [epoll_event { events: 0, u64: 0 }; 2];
+        sharespace.IncrHostProcessor();
 
         let mut data : u64 = 0;
         loop {
@@ -117,9 +118,15 @@ impl KIOThread {
 
             self.Process(sharespace);
 
+            if sharespace.DecrHostProcessor() == 0 {
+                self.Process(sharespace);
+            }
+
             let _nfds = unsafe {
                 epoll_wait(epfd, &mut events[0], 2, -1)
             };
+
+            sharespace.IncrHostProcessor();
         }
     }
 
