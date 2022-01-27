@@ -103,6 +103,7 @@ pub struct VMSpace {
     pub sharedLoasdOffset: u64,
     pub vdsoAddr: u64,
     pub vcpuCount: usize,
+    pub vcpuMappingDelta: usize,
 
     pub rng: RandGen,
     pub args: Option<Args>,
@@ -1120,6 +1121,26 @@ impl VMSpace {
         return len as i64;
     }
 
+    pub fn GetRandomU8(&mut self) -> u8 {
+        let mut data : [u8; 1]  = [0; 1];
+        self.rng.Fill(&mut data);
+        return data[0]
+    }
+
+    pub fn RandomVcpuMapping(&mut self) {
+        let delta = self.GetRandomU8() as usize;
+        self.vcpuMappingDelta = delta % Self::VCPUCount();
+        error!("RandomVcpuMapping {}", self.vcpuMappingDelta);
+    }
+
+    pub fn ComputeVcpuCoreId(&self, threadId: usize) -> usize {
+        // skip core #0 for uring
+        let DedicateUring = QUARK_CONFIG.lock().DedicateUring;
+        let id = (threadId + self.vcpuMappingDelta + DedicateUring) % Self::VCPUCount();
+
+        return id;
+    }
+
     pub fn Fchdir(fd: i32) -> i64 {
         let fd = match Self::GetOsfd(fd) {
             Some(fd) => fd,
@@ -1499,6 +1520,7 @@ impl VMSpace {
             sharedLoasdOffset: 0x0000_5555_0000_0000,
             vdsoAddr: 0,
             vcpuCount: 0,
+            vcpuMappingDelta: 0,
             rng: RandGen::Init(),
             args: None,
             pivot: false,

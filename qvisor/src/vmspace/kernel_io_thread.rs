@@ -19,6 +19,7 @@ use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::kernel::IOURING;
 use super::super::qlib::kernel::TSC;
+use super::super::kvm_vcpu::*;
 use super::super::*;
 
 pub struct KIOThread {
@@ -48,16 +49,13 @@ impl KIOThread {
                 start = TSC.Rdtsc()
             }
 
+            KVMVcpu::GuestMsgProcess(sharespace);
+
             if TSC.Rdtsc() - start >= IO_WAIT_CYCLES {
                 break;
             }
 
-            match sharespace.TryLockEpollProcess() {
-                None => {},
-                Some(_lock) => {
-                    FD_NOTIFIER.HostEpollWait();
-                }
-            }
+            FD_NOTIFIER.HostEpollWait();
         }
     }
 
@@ -99,6 +97,7 @@ impl KIOThread {
         }
 
         let mut events = [epoll_event { events: 0, u64: 0 }; 2];
+        sharespace.IncrHostProcessor();
 
         let mut data : u64 = 0;
         loop {
@@ -119,9 +118,15 @@ impl KIOThread {
 
             self.Process(sharespace);
 
+            if sharespace.DecrHostProcessor() == 0 {
+                self.Process(sharespace);
+            }
+
             let _nfds = unsafe {
                 epoll_wait(epfd, &mut events[0], 2, -1)
             };
+
+            sharespace.IncrHostProcessor();
         }
     }
 

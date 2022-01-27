@@ -26,7 +26,7 @@ pub struct RandGen {
 
 impl RandGen {
     pub fn Init() -> Self {
-        let fakeRandom = true;
+        let fakeRandom = false;
 
         if !fakeRandom {
             //use auxv AT_RANDOM as seed
