@@ -503,10 +503,10 @@ impl KVMVcpu {
                         }
 
                         qlib::HYPERCALL_QCALL => {
-                            self.GuestMsgProcess(&SHARE_SPACE);
+                            Self::GuestMsgProcess(&SHARE_SPACE);
                             // last processor in host
                             if SHARE_SPACE.DecrHostProcessor() == 0 {
-                                self.GuestMsgProcess(&SHARE_SPACE);
+                                Self::GuestMsgProcess(&SHARE_SPACE);
                             }
                         }
 
@@ -526,15 +526,15 @@ impl KVMVcpu {
                                     None
                                 };
 
-                                qmsg.ret = self.qCall(qmsg.msg);
+                                qmsg.ret = Self::qCall(qmsg.msg);
                             }
 
                             SHARE_SPACE.IncrHostProcessor();
 
-                            self.GuestMsgProcess(&SHARE_SPACE);
+                            Self::GuestMsgProcess(&SHARE_SPACE);
                             // last processor in host
                             if SHARE_SPACE.DecrHostProcessor() == 0 {
-                                self.GuestMsgProcess(&SHARE_SPACE);
+                                Self::GuestMsgProcess(&SHARE_SPACE);
                             }
                         }
 
@@ -609,17 +609,17 @@ impl KVMVcpu {
 
             {
                 sharespace.IncrHostProcessor();
-                self.GuestMsgProcess(sharespace);
+                Self::GuestMsgProcess(sharespace);
 
                 defer!({
                     // last processor in host
                     if sharespace.DecrHostProcessor() == 0 {
-                        self.GuestMsgProcess(sharespace);
+                        Self::GuestMsgProcess(sharespace);
                     }
                 });
 
                 for _ in 0..10 {
-                    self.GuestMsgProcess(sharespace);
+                    Self::GuestMsgProcess(sharespace);
                     //short term workaround, need to change back to unblock my sql scenario.
                     if sharespace.scheduler.GlobalReadyTaskCnt() > 0 {
                         return 0;
@@ -656,7 +656,7 @@ impl KVMVcpu {
         return 0;
     }
 
-    pub fn GuestMsgProcess(&self, sharespace: &'static ShareSpace) {
+    pub fn GuestMsgProcess(sharespace: &ShareSpace) {
         loop  {
             let msg = sharespace.AQHostOutputPop();
 
@@ -678,7 +678,7 @@ impl KVMVcpu {
                             None
                         };
 
-                        qmsg.ret = self.qCall(qmsg.msg);
+                        qmsg.ret = Self::qCall(qmsg.msg);
                     }
 
                     if currTaskId.Addr() != 0 {

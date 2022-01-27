@@ -104,7 +104,6 @@ pub enum Msg {
     Statm(Statm),
     NewSocket(NewSocket),
     HostEpollWaitProcess(HostEpollWaitProcess),
-    VcpuWait(VcpuWait),
     EventfdWrite(EventfdWrite),
     ReadControlMsg(ReadControlMsg),
     WriteControlMsgResp(WriteControlMsgResp),
@@ -711,12 +710,6 @@ pub struct NewSocket {
 
 #[derive(Clone, Default, Debug)]
 pub struct HostEpollWaitProcess {}
-
-#[derive(Clone, Default, Debug)]
-pub struct VcpuWait {
-    pub addr: u64,
-    pub count: usize,
-}
 
 #[derive(Clone, Default, Debug)]
 pub struct NonBlockingPoll {

@@ -64,7 +64,7 @@ pub enum QcallRet {
 
 impl KVMVcpu {
     //return : true(push the result back), false(block wait)
-    pub fn qCall(&self, msg: &'static Msg) -> u64 {
+    pub fn qCall(msg: &'static Msg) -> u64 {
         let mut ret = 0;
 
         match msg {
@@ -297,9 +297,6 @@ impl KVMVcpu {
             },
             Msg::HostEpollWaitProcess(_) => {
                 ret = super::VMSpace::HostEpollWaitProcess() as u64;
-            },
-            Msg::VcpuWait(_) => {
-                ret = self.VcpuWait() as u64;
             },
             Msg::EventfdWrite(msg) => {
                 ret = super::VMSpace::EventfdWrite(msg.fd) as u64;

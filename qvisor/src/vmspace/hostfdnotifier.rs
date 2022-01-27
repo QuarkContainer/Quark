@@ -86,7 +86,7 @@ impl HostFdNotifier {
         return Ok(())
     }
 
-    pub const MAX_EVENTS: usize = 128;
+    pub const MAX_EVENTS: usize = 8;
     pub fn HostEpollWait(&self) -> i64 {
         let mut events = [EpollEvent::default(); Self::MAX_EVENTS];
         let addr = &mut events[0] as * mut _ as u64;
