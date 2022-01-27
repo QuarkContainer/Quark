@@ -78,7 +78,7 @@ impl ThreadPerfCounters {
         }
 
         if sum[0] < 1000 {
-            //error!("PerfPrint::Threads not ready ....");
+            error!("PerfPrint::Threads not ready ....");
             return
         }
 

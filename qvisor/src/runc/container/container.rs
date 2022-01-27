@@ -225,7 +225,7 @@ impl Container {
     // container to which id unambiguously refers to.
     // Returns ErrNotExist if container doesn't exist.
     pub fn Load(rootDir: &str, id: &str) -> Result<Self> {
-        //info!("Load metadata for container {} {}", rootDir, id);
+        info!("Load metadata for container {} {}", rootDir, id);
         ValidateID(id)?;
 
         let cRoot = findContainerRoot(rootDir, id)?;

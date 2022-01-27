@@ -42,7 +42,7 @@ impl RandGen {
                 rng : Seeder::from(slice).make_rng(),
             }
         } else {
-            //error!("use fake random");
+            error!("use fake random");
             let slice : [u8; 16] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
 
             return RandGen {

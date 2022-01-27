@@ -80,13 +80,13 @@ pub struct Master {
 
 impl Master {
     pub fn new(path: *const ::libc::c_char) -> Result<Self> {
-        //info!("before open");
+        info!("before open");
         let res = match Self::open(path, libc::O_RDWR, None) {
             Err(e) => Err(e),
             Ok(fd) => Ok(Master { pty: fd }),
         };
 
-        //info!("after open");
+        info!("after open");
         return res;
     }
 

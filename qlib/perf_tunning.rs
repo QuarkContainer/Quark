@@ -217,12 +217,12 @@ impl CounterSet {
                     line += &format!("{:?}->{}/{} \t", t, val / 100_000, val / (total/1000));
                 }
 
-                //error!("{}", line);
+                error!("{}", line);
             }
         }
 
         if sum[0] < 1000 {
-            //error!("PerfPrint::Kernel not ready ....");
+            error!("PerfPrint::Kernel not ready ....");
             return
         }
 
@@ -233,6 +233,6 @@ impl CounterSet {
             let val = sum[i];
             line += &format!("{:?}->{}/{} \t", t, val / 100_000, val / (sum[0]/1000));
         }
-        //error!("{}", line);
+        error!("{}", line);
     }
 }

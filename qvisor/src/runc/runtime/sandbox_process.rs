@@ -235,7 +235,7 @@ impl SandboxProcess {
             SetID(0, 0)?;
         }
 
-        //error!("EnableNamespace ToEnterNS is {:?}", &self.ToEnterNS);
+        error!("EnableNamespace ToEnterNS is {:?}", &self.ToEnterNS);
 
         for &(space, fd) in &self.ToEnterNS {
             if space == LinuxNamespaceType::mount as i32 {
@@ -495,10 +495,10 @@ fn MountFrom(m: &Mount, rootfs: &str, flags: MsFlags, data: &str, label: &str) -
 
     let dest = format!{"{}{}", rootfs, &m.destination};
 
-    // debug!(
-    // "mounting {} to {} as {} with data '{}'",
-    // &m.source, &m.destination, &m.typ, &d
-    // );
+    debug!(
+    "mounting {} to {} as {} with data '{}'",
+    &m.source, &m.destination, &m.typ, &d
+    );
 
     let src = if m.typ == "bind" {
         let src = canonicalize(&m.source).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;

@@ -142,8 +142,8 @@ impl KVMVcpu {
         let tssIntStackStart = AlignedAllocate(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize, true).unwrap();
         let tssAddr = AlignedAllocate(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize, true).unwrap();
 
-        // info!("the tssIntStackStart is {:x}, tssAddr address is {:x}, idt addr is {:x}, gdt addr is {:x}",
-        //     tssIntStackStart, tssAddr, idtAddr, gdtAddr);
+        info!("the tssIntStackStart is {:x}, tssAddr address is {:x}, idt addr is {:x}, gdt addr is {:x}",
+            tssIntStackStart, tssAddr, idtAddr, gdtAddr);
 
         let vcpu = vm_fd.create_vcpu(id as u64).map_err(|e| Error::IOError(format!("io::error is {:?}", e))).expect("create vcpu fail");
 
@@ -199,7 +199,7 @@ impl KVMVcpu {
         unsafe {
             (*tssSegment).interrupt_stack_table[0] = stack_end;
             (*tssSegment).iomap_base = -1 as i16 as u16;
-            //info!("[{}] the tssSegment stack is {:x}", self.id, self.tssIntStackStart + MemoryDef::INTERRUPT_STACK_PAGES * MemoryDef::PAGE_SIZE);
+            info!("[{}] the tssSegment stack is {:x}", self.id, self.tssIntStackStart + MemoryDef::INTERRUPT_STACK_PAGES * MemoryDef::PAGE_SIZE);
             let (tssLow, tssHigh, limit) = Self::TSStoDescriptor(&(*tssSegment));
 
             gdtTbl[5] = tssLow;
@@ -298,7 +298,7 @@ impl KVMVcpu {
         let coreid = core_affinity::CoreId{id: self.id + QUARK_CONFIG.lock().DedicateUring}; // skip core #0 for uring
         core_affinity::set_for_current(coreid);
 
-        //info!("start enter guest[{}]: entry is {:x}, stack is {:x}", self.id, self.entry, self.topStackAddr);
+        info!("start enter guest[{}]: entry is {:x}, stack is {:x}", self.id, self.entry, self.topStackAddr);
         loop {
             if !super::runc::runtime::vm::IsRunning() {
                 return Ok(())
@@ -306,12 +306,12 @@ impl KVMVcpu {
 
             match self.vcpu.run().expect(&format!("kvm virtual cpu[{}] run failed", self.id)) {
                 VcpuExit::IoIn(addr, data) => {
-                    // info!(
-                    // "[{}]Received an I/O in exit. Address: {:#x}. Data: {:#x}",
-                    // self.id,
-                    // addr,
-                    // data[0],
-                    // );
+                    info!(
+                    "[{}]Received an I/O in exit. Address: {:#x}. Data: {:#x}",
+                    self.id,
+                    addr,
+                    data[0],
+                    );
 
                     let vcpu_sregs = self.vcpu.get_sregs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                     if vcpu_sregs.cs.dpl != 0x0 { // call from user space
@@ -328,9 +328,9 @@ impl KVMVcpu {
                         qlib::HYPERCALL_IOWAIT => {
                             if !super::runc::runtime::vm::IsRunning() {
                                 {
-                                    // for i in 0..8 {
-                                    //     error!("vcpu[{}] state is {}/{}", i, SHARE_SPACE.GetValue(i, 0), SHARE_SPACE.GetValue(i, 1))
-                                    // }
+                                    for i in 0..8 {
+                                        error!("vcpu[{}] state is {}/{}", i, SHARE_SPACE.GetValue(i, 0), SHARE_SPACE.GetValue(i, 1))
+                                    }
                                 }
 
                                 return Ok(())
@@ -342,10 +342,10 @@ impl KVMVcpu {
                                 Err(Error::Exit) => {
                                     if !super::runc::runtime::vm::IsRunning() {
                                         {
-                                            //error!("signal debug");
-                                            // for i in 0..8 {
-                                            //     error!("vcpu[{}] state is {}/{}", i, SHARE_SPACE.GetValue(i, 0), SHARE_SPACE.GetValue(i, 1))
-                                            // }
+                                            error!("signal debug");
+                                            for i in 0..8 {
+                                                error!("vcpu[{}] state is {}/{}", i, SHARE_SPACE.GetValue(i, 0), SHARE_SPACE.GetValue(i, 1))
+                                            }
                                         }
 
                                         return Ok(())
@@ -420,7 +420,7 @@ impl KVMVcpu {
                             let data1 = vcpu_regs.rbx;
                             let data2 = vcpu_regs.rcx;
                             let data3 = vcpu_regs.rdi;
-                            //info!("[{}] get kernel msg [rsp {:x}/rip {:x}]: {:x}, {:x}, {:x}", self.id, vcpu_regs.rsp, vcpu_regs.rip, data1, data2, data3);
+                            info!("[{}] get kernel msg [rsp {:x}/rip {:x}]: {:x}, {:x}, {:x}", self.id, vcpu_regs.rsp, vcpu_regs.rip, data1, data2, data3);
                         }
 
                         qlib::HYPERCALL_OOM => {
@@ -433,7 +433,7 @@ impl KVMVcpu {
                         }
 
                         qlib::HYPERCALL_EXIT => {
-                            //info!("call in HYPERCALL_EXIT");
+                            info!("call in HYPERCALL_EXIT");
                             unsafe { libc::_exit(0) }
                         }
 
@@ -444,7 +444,7 @@ impl KVMVcpu {
                                     first = false;
                                     lastVal = val
                                 } else {
-                                    //info!("get kernel u64 : 0x{:x}{:x}", lastVal, val);
+                                    info!("get kernel u64 : 0x{:x}{:x}", lastVal, val);
                                     first = true;
                                 }
                             }
@@ -555,30 +555,30 @@ impl KVMVcpu {
                     }
                 }
                 VcpuExit::MmioRead(addr, _data) => {
-                    // info!(
-                    // "CPU[{}] Received an MMIO Read Request for the address {:#x}.",
-                    // self.id, addr,
-                    // );
+                    info!(
+                    "CPU[{}] Received an MMIO Read Request for the address {:#x}.",
+                    self.id, addr,
+                    );
                 }
                 VcpuExit::MmioWrite(addr, _data) => {
-                    // info!(
-                    // "[{}] Received an MMIO Write Request to the address {:#x}.",
-                    // self.id,
-                    // addr,
-                    // );
+                    info!(
+                    "[{}] Received an MMIO Write Request to the address {:#x}.",
+                    self.id,
+                    addr,
+                    );
                 }
                 VcpuExit::Hlt => {
-                    //error!("in hlt....");
+                    error!("in hlt....");
                 }
                 VcpuExit::FailEntry => {
-                    //info!("get fail entry***********************************");
+                    info!("get fail entry***********************************");
                     break
                 }
                 VcpuExit::Exception => {
-                    //info!("get exception");
+                    info!("get exception");
                 }
                 VcpuExit::IrqWindowOpen => {
-                    //info!("get VcpuExit::IrqWindowOpen");
+                    info!("get VcpuExit::IrqWindowOpen");
                     //QueueTimer(&self.vcpu);
                     //&self.vcpu.DisableInterruptWindow();
                 }

@@ -167,7 +167,7 @@ fn main() {
             str.push_str(s);
             str.push_str(" ");
         }
-        //info!("commandline args is {}", str);
+        info!("commandline args is {}", str);
     }
 
     let mut args = Parse().unwrap();
