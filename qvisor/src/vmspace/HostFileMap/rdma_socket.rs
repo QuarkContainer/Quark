@@ -414,6 +414,7 @@ impl RDMADataSock {
         let readCount = self.socketBuf.GetAndClearConsumeReadData();
         let buf = self.socketBuf.writeBuf.lock();
         let (addr, mut len) = buf.GetDataBuf();
+        error!("RDMASendLocked::1, readCount: {}, addr: {:x}, len: {}, remote.freespace: {}", readCount, addr, len, remoteInfo.freespace);
         if readCount > 0 || len > 0 {
             if len > remoteInfo.freespace as usize {
                 len = remoteInfo.freespace as usize;
@@ -431,6 +432,7 @@ impl RDMADataSock {
                 remoteInfo.freespace -= len as u32;
                 remoteInfo.offset = (remoteInfo.offset + len as u32) % remoteInfo.rlen;
                 remoteInfo.sending = true;
+                error!("RDMASendLocked::2, writeCount: {}, readCount: {}", len, readCount);
             }
         }
     }
@@ -442,10 +444,12 @@ impl RDMADataSock {
         remoteInfo.sending = false;
 
         let writeCount = self.writeCount.load(QOrdering::ACQUIRE);
+        error!("ProcessRDMAWriteImmFinish::1 writeCount: {}", writeCount);
 
         let (trigger, addr, _len) = self
             .socketBuf
             .ConsumeAndGetAvailableWriteBuf(writeCount as usize);
+        error!("ProcessRDMAWriteImmFinish::2, trigger: {}, addr: {}", trigger, addr);
         if trigger {
             waitinfo.Notify(EVENT_OUT);
         }
@@ -469,9 +473,12 @@ impl RDMADataSock {
             .lock()
             .PostRecv(wr.0, self.localRDMAInfo.raddr, self.localRDMAInfo.rkey);
 
+        error!("ProcessRDMARecvWriteImm::1, recvCount: {}, writeConsumeCount: {}", recvCount, writeConsumeCount);
+
         if recvCount > 0 {
             let (trigger, _addr, _len) =
                 self.socketBuf.ProduceAndGetFreeReadBuf(recvCount as usize);
+            error!("ProcessRDMARecvWriteImm::2, trigger {}", trigger);
             if trigger {
                 waitinfo.Notify(EVENT_IN);
             }
@@ -481,6 +488,8 @@ impl RDMADataSock {
             let mut remoteInfo = self.remoteRDMAInfo.lock();
             let trigger = remoteInfo.freespace == 0;
             remoteInfo.freespace += writeConsumeCount as u32;
+
+            error!("ProcessRDMARecvWriteImm::3, trigger {}, remoteInfo.sending: {}", trigger, remoteInfo.sending);
 
             if trigger && !remoteInfo.sending {
                 self.RDMASendLocked(remoteInfo);

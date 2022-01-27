@@ -456,50 +456,87 @@ impl RDMAContext {
             dlid_path_bits: 0,
         };
 
+        let mut cq_ptr: *mut rdmaffi::ibv_cq = ptr::null_mut();
+        let mut cq_context: *mut std::os::raw::c_void = ptr::null_mut();
+        let ret = unsafe {
+            rdmaffi::ibv_get_cq_event(
+                self.CompleteChannel(),
+                &mut cq_ptr, //&mut self.CompleteQueue(),
+                &mut cq_context,
+            )
+        };
+
+        if ret != 0 {
+            error!("Failed to get next CQ event");
+        }
+
         let ret1 = unsafe { rdmaffi::ibv_req_notify_cq(self.CompleteQueue(), 0) };
         if ret1 != 0 {
             // TODO: should keep call here?
-            debug!("Couldn't request CQ notification\n");
         }
 
         loop {
-            loop {
-                let poll_result = unsafe { rdmaffi::ibv_poll_cq(self.CompleteQueue(), 1, &mut wc) };
-                if poll_result > 0 {
-                    self.ProcessWC(&wc);
-                } else if poll_result == 0 {
-                    break;
-                } else {
-                    debug!("Error to query CQ!")
-                    // break;
-                }
-            }
-
-            let mut cq_ptr: *mut rdmaffi::ibv_cq = ptr::null_mut();
-            let mut cq_context: *mut std::os::raw::c_void = ptr::null_mut();
-            let ret = unsafe {
-                rdmaffi::ibv_get_cq_event(
-                    self.CompleteChannel(),
-                    &mut cq_ptr, //&mut self.CompleteQueue(),
-                    &mut cq_context,
-                )
-            };
-
-            let mut ret1 = unsafe { rdmaffi::ibv_req_notify_cq(self.CompleteQueue(), 0) };
-            if ret1 != 0 {
-                // TODO: should keep call here?
-            }
-            
-            if ret == -1 {
-                return Ok(());
-            }
-            //TODO: potnetial improvemnt to ack in batch
-            unsafe { rdmaffi::ibv_ack_cq_events(cq_ptr, 1) };
-            ret1 = unsafe { rdmaffi::ibv_req_notify_cq(self.CompleteQueue(), 0) };
-            if ret1 != 0 {
-                // TODO: should keep call here?
+            let poll_result = unsafe { rdmaffi::ibv_poll_cq(self.CompleteQueue(), 1, &mut wc) };
+            if poll_result > 0 {
+                self.ProcessWC(&wc);
+            } else if poll_result == 0 {
+                break;
+            } else {
+                debug!("Error to query CQ!")
+                // break;
             }
         }
+
+        unsafe { rdmaffi::ibv_ack_cq_events(cq_ptr, 1) };
+        Ok(())
+
+
+
+
+        // let ret1 = unsafe { rdmaffi::ibv_req_notify_cq(self.CompleteQueue(), 0) };
+        // if ret1 != 0 {
+        //     // TODO: should keep call here?
+        //     debug!("Couldn't request CQ notification\n");
+        // }
+
+        // loop {
+        //     loop {
+        //         let poll_result = unsafe { rdmaffi::ibv_poll_cq(self.CompleteQueue(), 1, &mut wc) };
+        //         if poll_result > 0 {
+        //             self.ProcessWC(&wc);
+        //         } else if poll_result == 0 {
+        //             break;
+        //         } else {
+        //             debug!("Error to query CQ!")
+        //             // break;
+        //         }
+        //     }
+
+        //     let mut cq_ptr: *mut rdmaffi::ibv_cq = ptr::null_mut();
+        //     let mut cq_context: *mut std::os::raw::c_void = ptr::null_mut();
+        //     let ret = unsafe {
+        //         rdmaffi::ibv_get_cq_event(
+        //             self.CompleteChannel(),
+        //             &mut cq_ptr, //&mut self.CompleteQueue(),
+        //             &mut cq_context,
+        //         )
+        //     };
+
+        //     let mut ret1 = unsafe { rdmaffi::ibv_req_notify_cq(self.CompleteQueue(), 0) };
+        //     if ret1 != 0 {
+        //         // TODO: should keep call here?
+        //     }
+            
+        //     if ret == -1 {
+        //         return Ok(());
+        //     }
+        //     //TODO: potnetial improvemnt to ack in batch
+        //     unsafe { rdmaffi::ibv_ack_cq_events(cq_ptr, 1) };
+        //     ret1 = unsafe { rdmaffi::ibv_req_notify_cq(self.CompleteQueue(), 0) };
+        //     if ret1 != 0 {
+        //         // TODO: should keep call here?
+        //     }
+        // }
     }
 
     // call back for
@@ -524,14 +561,16 @@ impl RDMAContext {
         //     }
         // }
         if wc.status != rdmaffi::ibv_wc_status::IBV_WC_SUCCESS {
-            debug!("work reqeust failed with status: {}, id: {}", wc.status, wc.wr_id);
+            error!("ProcessWC::1, work reqeust failed with status: {}, id: {}", wc.status, wc.wr_id);
         }
         if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RDMA_WRITE {
+            error!("ProcessWC::2, writeIMM status: {}, id: {}", wc.status, wc.wr_id);
             IO_MGR.ProcessRDMAWriteImmFinish(fd);
         }
         else if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RECV_RDMA_WITH_IMM{
             let imm = unsafe { wc.imm_data_invalidated_rkey_union.imm_data };
             let immData = ImmData(imm);
+            error!("ProcessWC::2, recv len:{}, writelen: {}, status: {}, id: {}", wc.byte_len, immData.ReadCount(), wc.status, wc.wr_id);
             IO_MGR.ProcessRDMARecvWriteImm(
                 fd,
                 wc.byte_len as _,
@@ -539,7 +578,7 @@ impl RDMAContext {
             );
         }
         else{
-            debug!("ProcessWC: opcode: {}, wr_id: {}", wc.opcode, wc.wr_id);
+            error!("ProcessWC::4, opcode: {}, wr_id: {}", wc.opcode, wc.wr_id);
         }
     }
 }
