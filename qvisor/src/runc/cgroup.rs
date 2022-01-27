@@ -280,7 +280,7 @@ impl Cgroup {
             return Ok(())
         }
 
-        //info!("Creating cgroup {}", &self.Name);
+        info!("Creating cgroup {}", &self.Name);
         self.Own = true;
 
         let mut cgroupCleanup = CgroupCleanup {
@@ -311,10 +311,10 @@ impl Cgroup {
             return
         }
 
-        //info!("Deleting cgroup {}", &self.Name);
+        info!("Deleting cgroup {}", &self.Name);
         for c in &CONTROLLERS {
             let path = self.MakePath(c.0);
-            //info!("Removing cgroup controller for key={} path={}", &c.0, &path);
+            info!("Removing cgroup controller for key={} path={}", &c.0, &path);
 
             // If we try to remove the cgroup too soon after killing the
             // sandbox we might get EBUSY, so we retry for a few seconds
@@ -365,7 +365,7 @@ impl Cgroup {
         // Replace empty undo with the real thing before changes are made to cgroups.
         let undo = move || {
             for path in &undoPaths {
-                //info!("Restoring cgroup {}", &path);
+                info!("Restoring cgroup {}", &path);
                 match SetValue(&path, "cgroup.procs", "0") {
                     Ok(()) => (),
                     Err(e) => info!("Error restoring cgroup {}: {:?}", &path, e),
@@ -376,7 +376,7 @@ impl Cgroup {
         // Now join the cgroups.
         for c in &CONTROLLERS {
             let path = self.MakePath(&c.0);
-            //info!("Joining cgroup {}", &path);
+            info!("Joining cgroup {}", &path);
 
             match SetValue(&path, "cgroup.procs", "0") {
                 Ok(()) => (),

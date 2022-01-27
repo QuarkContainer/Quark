@@ -176,7 +176,7 @@ pub struct Slave {
 impl Slave {
     /// The constructor function `new` returns the Slave interface.
     pub fn new(path: *const ::libc::c_char) -> Result<Self> {
-        //info!("Slave::new");
+        info!("Slave::new");
         match Self::open(path, libc::O_RDWR, None) {
             Err(e) => Err(e),
             Ok(fd) => Ok(Slave { pty: fd }),

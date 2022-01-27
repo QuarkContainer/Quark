@@ -45,7 +45,7 @@ pub fn apply(
             continue;
         };
         // ensure cgroup dir
-        //debug!{"creating cgroup dir {}", &dir};
+        debug!{"creating cgroup dir {}", &dir};
         create_dir_all(&dir).map_err(|e| Error::SystemErr(e.raw_os_error().unwrap()))?;
         // enter cgroups
         for k in key.split(',') {
