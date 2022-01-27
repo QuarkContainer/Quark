@@ -36,7 +36,6 @@ use super::qlib::vcpu_mgr::*;
 use super::qlib::buddyallocator::ZeroPage;
 use super::amd64_def::*;
 use super::URING_MGR;
-use super::QUARK_CONFIG;
 use super::runc::runtime::vm::*;
 
 pub fn AlignedAllocate(size: usize, align: usize, zeroData: bool) -> Result<u64> {
@@ -295,7 +294,8 @@ impl KVMVcpu {
         let mut lastVal: u32 = 0;
         let mut first = true;
 
-        let coreid = core_affinity::CoreId{id: self.id + QUARK_CONFIG.lock().DedicateUring}; // skip core #0 for uring
+        let vcpuCoreId = VMS.lock().ComputeVcpuCoreId(self.id);
+        let coreid = core_affinity::CoreId{id: vcpuCoreId};
         core_affinity::set_for_current(coreid);
 
         info!("start enter guest[{}]: entry is {:x}, stack is {:x}", self.id, self.entry, self.topStackAddr);
@@ -503,10 +503,10 @@ impl KVMVcpu {
                         }
 
                         qlib::HYPERCALL_QCALL => {
-                            self.GuestMsgProcess(&SHARE_SPACE);
+                            Self::GuestMsgProcess(&SHARE_SPACE);
                             // last processor in host
                             if SHARE_SPACE.DecrHostProcessor() == 0 {
-                                self.GuestMsgProcess(&SHARE_SPACE);
+                                Self::GuestMsgProcess(&SHARE_SPACE);
                             }
                         }
 
@@ -526,15 +526,15 @@ impl KVMVcpu {
                                     None
                                 };
 
-                                qmsg.ret = self.qCall(qmsg.msg);
+                                qmsg.ret = Self::qCall(qmsg.msg);
                             }
 
                             SHARE_SPACE.IncrHostProcessor();
 
-                            self.GuestMsgProcess(&SHARE_SPACE);
+                            Self::GuestMsgProcess(&SHARE_SPACE);
                             // last processor in host
                             if SHARE_SPACE.DecrHostProcessor() == 0 {
-                                self.GuestMsgProcess(&SHARE_SPACE);
+                                Self::GuestMsgProcess(&SHARE_SPACE);
                             }
                         }
 
@@ -609,17 +609,17 @@ impl KVMVcpu {
 
             {
                 sharespace.IncrHostProcessor();
-                self.GuestMsgProcess(sharespace);
+                Self::GuestMsgProcess(sharespace);
 
                 defer!({
                     // last processor in host
                     if sharespace.DecrHostProcessor() == 0 {
-                        self.GuestMsgProcess(sharespace);
+                        Self::GuestMsgProcess(sharespace);
                     }
                 });
 
                 for _ in 0..10 {
-                    self.GuestMsgProcess(sharespace);
+                    Self::GuestMsgProcess(sharespace);
                     //short term workaround, need to change back to unblock my sql scenario.
                     if sharespace.scheduler.GlobalReadyTaskCnt() > 0 {
                         return 0;
@@ -656,7 +656,7 @@ impl KVMVcpu {
         return 0;
     }
 
-    pub fn GuestMsgProcess(&self, sharespace: &'static ShareSpace) {
+    pub fn GuestMsgProcess(sharespace: &ShareSpace) {
         loop  {
             let msg = sharespace.AQHostOutputPop();
 
@@ -678,7 +678,7 @@ impl KVMVcpu {
                             None
                         };
 
-                        qmsg.ret = self.qCall(qmsg.msg);
+                        qmsg.ret = Self::qCall(qmsg.msg);
                     }
 
                     if currTaskId.Addr() != 0 {
