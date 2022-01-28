@@ -19,6 +19,7 @@ use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::kernel::IOURING;
 use super::super::qlib::kernel::TSC;
+use super::super::qlib::kernel::ASYNC_PROCESS;
 use super::super::kvm_vcpu::*;
 use super::super::*;
 
@@ -121,6 +122,8 @@ impl KIOThread {
             if sharespace.DecrHostProcessor() == 0 {
                 self.Process(sharespace);
             }
+
+            ASYNC_PROCESS.Process();
 
             let _nfds = unsafe {
                 epoll_wait(epfd, &mut events[0], 2, -1)

@@ -28,7 +28,6 @@ use super::super::waiter::*;
 use super::super::super::uid::*;
 use super::super::time::*;
 use super::super::super::fs::timerfd::*;
-use super::super::kernel::*;
 use super::super::timer::TimerUpdater;
 use super::super::posixtimer::*;
 use super::timekeeper::*;
@@ -101,7 +100,6 @@ impl Waitable for ClockEventsQueue {
 #[derive(Clone)]
 pub enum TimerListener {
     TimerOperations(Arc<TimerOperationsInternal>),
-    Kernel(Kernel),
     IntervalTimer(IntervalTimer),
     TimerUpdater(TimerUpdater),
     DummyTimerListener(DummyTimerListener),
@@ -114,7 +112,6 @@ impl fmt::Debug for TimerListener {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::TimerOperations(_) => f.debug_struct("TimerOperations").finish(),
-            Self::Kernel(_) => f.debug_struct("Kernel").finish(),
             Self::IntervalTimer(_) => f.debug_struct("IntervalTimer").finish(),
             Self::TimerUpdater(_) => f.debug_struct("TimerUpdater").finish(),
             Self::DummyTimerListener(_) => f.debug_struct("DummyTimerListener").finish(),
@@ -136,7 +133,6 @@ impl TimerListener {
     pub fn Notify(&self, exp: u64) {
         match self {
             Self::TimerOperations(tl) => tl.Notify(exp),
-            Self::Kernel(tl) => tl.Notify(exp),
             Self::IntervalTimer(tl) => tl.Notify(exp),
             Self::TimerUpdater(tl) => tl.Notify(exp),
             Self::DummyTimerListener(tl) => tl.Notify(exp),
@@ -149,7 +145,6 @@ impl TimerListener {
     pub fn Destroy(&self) {
         match self {
             Self::TimerOperations(tl) => tl.Destroy(),
-            Self::Kernel(tl) => tl.Destroy(),
             Self::IntervalTimer(tl) => tl.Destroy(),
             Self::TimerUpdater(tl) => tl.Destroy(),
             Self::DummyTimerListener(tl) => tl.Destroy(),

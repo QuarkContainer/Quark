@@ -37,3 +37,4 @@ pub mod platform;
 pub mod aio;
 pub mod signalfd;
 pub mod async_wait;
+pub mod async_process;
