@@ -1,7 +1,7 @@
 use core::fmt;
 
 use super::rdma_socket::*;
-use super::rdma::*;
+//use super::rdma::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::kernel::guestfdnotifier::*;
 

@@ -436,7 +436,7 @@ impl RDMAContext {
         return self.lock().completeChannel.0;
     }
 
-    pub fn PollCompletionQueueAndProcess(&self) -> Result<()> {
+    pub fn PollCompletionQueueAndProcess(&self) -> usize {
         let mut wc = rdmaffi::ibv_wc {
             //TODO: find a better way to initialize
             wr_id: 0,
@@ -456,12 +456,15 @@ impl RDMAContext {
             dlid_path_bits: 0,
         };
 
+        let mut count = 0;
+
         loop {
             let poll_result = unsafe { rdmaffi::ibv_poll_cq(self.CompleteQueue(), 1, &mut wc) };
-            if poll_result > 0 {
+            if poll_result == 1 {
+                count += 1;
                 self.ProcessWC(&wc);
             } else if poll_result == 0 {
-                return Ok(());
+                return count;
             } else {
                 debug!("Error to query CQ!")
                 // break;
@@ -481,7 +484,8 @@ impl RDMAContext {
         };
 
         if ret != 0 {
-            error!("Failed to get next CQ event");
+            //error!("Failed to get next CQ event");
+            return Ok(());
         }
 
         let ret1 = unsafe { rdmaffi::ibv_req_notify_cq(self.CompleteQueue(), 0) };

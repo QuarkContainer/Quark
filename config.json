@@ -8,7 +8,7 @@
   "PrintException": false,
   "KernelPagetable": false,
   "RawTimer"      : false,
-  "PerfDebug"     : false,
+  "PerfDebug"     : true,
   "UringStatx"    : false,
   "FileBufWrite"  : true,
   "MmapRead"      : false,

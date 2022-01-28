@@ -21,6 +21,7 @@ use super::super::qlib::kernel::IOURING;
 use super::super::qlib::kernel::TSC;
 use super::super::kvm_vcpu::*;
 use super::super::*;
+use super::HostFileMap::rdma::*;
 
 pub struct KIOThread {
     pub eventfd: i32,
@@ -45,6 +46,10 @@ impl KIOThread {
         let mut start = TSC.Rdtsc();
 
         while !sharespace.Shutdown() {
+            if RDMA.PollCompletionQueueAndProcess() > 0 {
+                start = TSC.Rdtsc()
+            }
+
             if IOURING.DrainCompletionQueue() > 0 {
                 start = TSC.Rdtsc()
             }
@@ -107,6 +112,7 @@ impl KIOThread {
 
             self.Process(sharespace);
 
+            RDMA.HandleCQEvent()?;
             let ret = unsafe {
                 libc::read(self.eventfd, &mut data as * mut _ as *mut libc::c_void, 8)
             };

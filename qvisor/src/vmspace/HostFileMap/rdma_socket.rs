@@ -534,7 +534,10 @@ impl RDMADataSock {
             match self.SocketState() {
                 SocketState::WaitingForRemoteMeta => {
                     let _readlock = self.readLock.lock();
-                    self.RecvRemoteRDMAInfo().unwrap();
+                    match self.RecvRemoteRDMAInfo() {
+                        Ok(()) => {},
+                        _ => return,
+                    }
                     self.SetupRDMA();
                     self.SendAck().unwrap(); // assume the socket is ready for send
                     self.SetSocketState(SocketState::WaitingForRemoteReady);
@@ -555,7 +558,10 @@ impl RDMADataSock {
                 }
                 SocketState::WaitingForRemoteReady => {
                     let _readlock = self.readLock.lock();
-                    self.RecvAck().unwrap();
+                    match self.RecvAck() {
+                        Ok(()) => {},
+                        _ => return,
+                    }
                     self.SetReady(waitinfo);
                 }
                 SocketState::Ready => {
