@@ -13,16 +13,13 @@
 // limitations under the License.
 
 use alloc::string::String;
-
 use super::task::*;
 use super::qlib::vcpu_mgr::*;
-use super::TSC;
-
-pub const SCALE : i64 = 2_000;
+use super::qlib::kernel::Timestamp;
 
 pub fn PrintPrefix() -> String {
     let now = if super::SHARESPACE.config.read().PerfDebug {
-        TSC.Rdtsc()/SCALE
+        Timestamp()
     } else {
         0
     };

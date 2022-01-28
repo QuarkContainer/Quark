@@ -315,6 +315,8 @@ impl KVMVcpu {
             },
             Msg::SetTscOffset(msg) => {
                 TSC.SetOffset(msg.offset);
+                VcpuFreqInit();
+                error!("Host Vcpu Print timestamp init ...");
                 ret = 0;
             },
         };
