@@ -27,6 +27,7 @@ use super::threadmgr::task_sched::*;
 use super::KERNEL_STACK_ALLOCATOR;
 use super::quring::uring_mgr::*;
 use super::Shutdown;
+use super::ASYNC_PROCESS;
 
 static ACTIVE_TASK: AtomicU32 = AtomicU32::new(0);
 
@@ -120,9 +121,9 @@ pub fn WaitFn() {
                 // while super::ALLOCATOR.Free() {}
 
                 if SHARESPACE.scheduler.GlobalReadyTaskCnt() == 0 {
-                    debug!("vcpu sleep");
+                    //debug!("vcpu sleep");
                     let addr = HostSpace::VcpuWait();
-                    debug!("vcpu wakeup {:x}", addr);
+                    //debug!("vcpu wakeup {:x}", addr);
                     assert!(addr >= 0);
                     task = TaskId::New(addr as u64);
                 } else {
@@ -166,6 +167,9 @@ pub fn PollAsyncMsg() -> usize {
     if Shutdown() {
         return 0;
     }
+
+    ASYNC_PROCESS.Process();
+
     //error!("PollAsyncMsg 4 count {}", ret);
     return ret;
 }
