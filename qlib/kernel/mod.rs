@@ -45,6 +45,7 @@ use core::sync::atomic::AtomicI64;
 use core::sync::atomic::Ordering;
 
 use super::super::ShareSpaceRef;
+use super::super::kernel_def::VcpuFreq;
 use super::control_msg::*;
 use super::singleton::*;
 use super::pagetable::*;
@@ -63,6 +64,26 @@ pub static KERNEL_STACK_ALLOCATOR: Singleton<AlignedAllocator> =
     Singleton::<AlignedAllocator>::New();
 
 pub static EXIT_CODE: Singleton<AtomicI32> = Singleton::<AtomicI32>::New();
+pub static VCPU_FREQ : AtomicI64 = AtomicI64::new(2_000_000_000); // default 2GHZ
+
+#[inline]
+pub fn Timestamp() -> i64 {
+    Scale(TSC.Rdtsc())
+}
+
+#[inline]
+pub fn Scale(tsc: i64) -> i64 {
+    tsc * 1000 /(LoadVcpuFreq() / 1_000)
+}
+
+pub fn VcpuFreqInit() {
+    VCPU_FREQ.store(VcpuFreq(), Ordering::SeqCst);
+}
+
+#[inline]
+pub fn LoadVcpuFreq() -> i64 {
+    return VCPU_FREQ.load(Ordering::Relaxed);
+}
 
 #[inline]
 pub fn Shutdown() -> bool {

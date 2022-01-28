@@ -131,7 +131,8 @@ use self::syscalls::syscalls::*;
 use self::task::*;
 use self::threadmgr::task_sched::*;
 //use self::vcpu::*;
-use self::print::SCALE;
+use self::qlib::kernel::Scale;
+use self::qlib::kernel::VcpuFreqInit;
 use self::quring::*;
 //use self::heap::QAllocator;
 use self::heap::GuestAllocator;
@@ -305,7 +306,7 @@ pub extern "C" fn syscall_handler(
             "({}/{})------Return[{}] res is {:x}: call id {:?} ",
             tid,
             pid,
-            gap / SCALE,
+            Scale(gap),
             res,
             callId
         );
@@ -424,6 +425,7 @@ pub fn InitTsc() {
     let hosttsc3 = Kernel::HostSpace::Rdtsc();
     let tsc3 = TSC.Rdtsc();
     Kernel::HostSpace::SetTscOffset((hosttsc2 + hosttsc3)/2 - (tsc1 + tsc2 + tsc3) / 3);
+    VcpuFreqInit();
 }
 
 #[no_mangle]
