@@ -272,7 +272,7 @@ impl QUring {
     }
 
     pub fn LogFlush(&self) {
-        let uringPrint = super::super::SHARESPACE.config.read().UringPrint();
+        let uringPrint = super::super::SHARESPACE.config.read().Async();
         if !uringPrint {
             return
         }

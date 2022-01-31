@@ -86,7 +86,7 @@ impl Log {
             self.RawWrite(str);
         } else {
             let trigger = self.shareSpace.Log(str.as_bytes());
-            if trigger && self.shareSpace.config.read().UringPrint() {
+            if trigger && self.shareSpace.config.read().Async() {
                 //self.shareSpace.AQHostInputCall(&HostInputMsg::LogFlush);
                 IOURING.LogFlush();
             }
