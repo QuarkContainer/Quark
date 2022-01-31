@@ -28,7 +28,7 @@ pub struct KIOThread {
     pub eventfd: i32,
 }
 
-pub const IO_WAIT_CYCLES : i64 = 10_000_000; // 1ms
+pub const IO_WAIT_CYCLES : i64 = 20_000_000; // 1ms
 
 impl KIOThread {
     pub fn New() -> Self {
@@ -117,7 +117,6 @@ impl KIOThread {
 
             Self::Process(sharespace);
 
-            RDMA.HandleCQEvent()?;
             let ret = unsafe {
                 libc::read(self.eventfd, &mut data as * mut _ as *mut libc::c_void, 8)
             };
@@ -133,6 +132,7 @@ impl KIOThread {
 
             ASYNC_PROCESS.Process();
 
+            RDMA.HandleCQEvent()?;
             let _nfds = unsafe {
                 epoll_wait(epfd, &mut events[0], 2, -1)
             };

@@ -43,7 +43,7 @@ impl SockInfo {
             }
             Self::RDMAContext => {
                 // RDMA.PollCompletion().expect("RDMA.PollCompletion fail");
-                // debug!("RDMAContextEpoll");
+                error!("RDMAContextEpoll");
             }
         }
     }
