@@ -58,10 +58,6 @@ use super::platform::*;
 
 pub static ASYNC_PROCESS_TIMER: Singleton<Timer> = Singleton::<Timer>::New();
 
-pub unsafe fn InitAsyncProcessTimer() {
-    ASYNC_PROCESS_TIMER.Init(GetKernel().NewAsyncProcessTimer());
-}
-
 const CLOCK_TICK_MS : i64 = CLOCK_TICK / MILLISECOND;
 
 #[inline]
@@ -145,14 +141,6 @@ pub struct KernelInternal {
     pub lastProcessTime: QMutex<i64>
 }
 
-impl TimerListenerTrait for KernelInternal {
-    fn Notify(&self, _exp: u64) {
-        self.ProcessData()
-    }
-
-    fn Destroy(&self) {}
-}
-
 impl KernelInternal {
     pub fn newThreadGroup(&self, ns: &PIDNamespace,
                           sh: &SignalHandlers,
@@ -179,19 +167,6 @@ impl KernelInternal {
         tg.lock().itimerRealTimer = itimer;
 
         return tg
-    }
-
-    pub fn ProcessData(&self) {
-        if let Some(mut processTime) = self.lastProcessTime.try_lock() {
-            let currTime = Task::MonoTimeNow().0 / MILLISECOND;
-            if currTime - *processTime >= CLOCK_TICK_MS {
-                let tick = (currTime - *processTime)/CLOCK_TICK_MS;
-                let kernel = self;
-                let ticker = kernel.cpuClockTicker.clone();
-                ticker.Notify(tick as u64);
-                *processTime = currTime;
-            }
-        }
     }
 }
 
@@ -241,21 +216,6 @@ impl Kernel {
         //error!("X86FeatureOSXSAVE is {}", internal.featureSet.lock().HasFeature(Feature(X86Feature::X86FeatureOSXSAVE as i32)));
 
         return Self(Arc::new(internal))
-    }
-
-    pub fn NewAsyncProcessTimer(&self) -> Timer {
-        let timer = Timer::New(&MONOTONIC_CLOCK, TimerListener::Kernel(self.clone()));
-        let start = MONOTONIC_CLOCK.Now().0;
-        // need to trigger every 10 millsecond. can't use timer which will keep the system busy
-        // todo: fix this
-        let duration = 1000 * MILLISECOND;
-        let next = Time(start + duration);
-        timer.Swap(&Setting {
-            Enabled: true,
-            Next: next,
-            Period: 1 * duration,
-        });
-        return timer;
     }
 
     pub fn Atomically(&self, mut f: impl FnMut()) {

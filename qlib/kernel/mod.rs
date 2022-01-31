@@ -53,6 +53,7 @@ use self::taskMgr::*;
 use self::quring::*;
 use self::boot::loader::*;
 use self::memmgr::pma::*;
+use self::kernel::async_process::*;
 
 pub static TSC: Tsc = Tsc::New();
 pub static SHARESPACE: ShareSpaceRef = ShareSpaceRef::New();
@@ -65,6 +66,7 @@ pub static KERNEL_STACK_ALLOCATOR: Singleton<AlignedAllocator> =
 
 pub static EXIT_CODE: Singleton<AtomicI32> = Singleton::<AtomicI32>::New();
 pub static VCPU_FREQ : AtomicI64 = AtomicI64::new(2_000_000_000); // default 2GHZ
+pub static ASYNC_PROCESS: AsyncProcess = AsyncProcess::New();
 
 #[inline]
 pub fn Timestamp() -> i64 {

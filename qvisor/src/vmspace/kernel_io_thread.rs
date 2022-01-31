@@ -19,6 +19,7 @@ use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::kernel::IOURING;
 use super::super::qlib::kernel::TSC;
+use super::super::qlib::kernel::ASYNC_PROCESS;
 use super::super::kvm_vcpu::*;
 use super::super::*;
 use super::HostFileMap::rdma::*;
@@ -27,7 +28,7 @@ pub struct KIOThread {
     pub eventfd: i32,
 }
 
-pub const IO_WAIT_CYCLES : i64 = 20_000_000; // 1ms
+pub const IO_WAIT_CYCLES : i64 = 10_000_000; // 1ms
 
 impl KIOThread {
     pub fn New() -> Self {
@@ -42,7 +43,7 @@ impl KIOThread {
         }
     }
 
-    pub fn Process(&self, sharespace: &ShareSpace) {
+    pub fn Process(sharespace: &ShareSpace) {
         let mut start = TSC.Rdtsc();
 
         while !sharespace.Shutdown() {
@@ -54,13 +55,17 @@ impl KIOThread {
                 start = TSC.Rdtsc()
             }
 
-            KVMVcpu::GuestMsgProcess(sharespace);
+            if KVMVcpu::GuestMsgProcess(sharespace) > 0 {
+                start = TSC.Rdtsc()
+            };
 
             if TSC.Rdtsc() - start >= IO_WAIT_CYCLES {
                 break;
             }
 
-            FD_NOTIFIER.HostEpollWait();
+            if FD_NOTIFIER.HostEpollWait() > 0 {
+                start = TSC.Rdtsc()
+            };
         }
     }
 
@@ -102,15 +107,15 @@ impl KIOThread {
         }
 
         let mut events = [epoll_event { events: 0, u64: 0 }; 2];
-        sharespace.IncrHostProcessor();
 
         let mut data : u64 = 0;
         loop {
+            sharespace.IncrHostProcessor();
             if !super::super::runc::runtime::vm::IsRunning() {
                 return Err(Error::Exit)
             }
 
-            self.Process(sharespace);
+            Self::Process(sharespace);
 
             RDMA.HandleCQEvent()?;
             let ret = unsafe {
@@ -122,17 +127,15 @@ impl KIOThread {
                         self.eventfd, errno::errno().0);
             }
 
-            self.Process(sharespace);
-
             if sharespace.DecrHostProcessor() == 0 {
-                self.Process(sharespace);
+                Self::Process(sharespace);
             }
+
+            ASYNC_PROCESS.Process();
 
             let _nfds = unsafe {
                 epoll_wait(epfd, &mut events[0], 2, -1)
             };
-
-            sharespace.IncrHostProcessor();
         }
     }
 
