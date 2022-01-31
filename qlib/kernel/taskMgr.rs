@@ -72,7 +72,7 @@ fn switch_to(to: TaskId) {
 }
 
 pub const IO_WAIT_CYCLES : i64 = 20_000_000; // 1ms
-pub const WAIT_CYCLES : i64 = 1_00_000; // 1ms
+pub const WAIT_CYCLES : i64 = 1_000_000; // 1ms
 
 pub fn IOWait() {
     let mut start = TSC.Rdtsc();
@@ -176,12 +176,7 @@ pub fn PollAsyncMsg() -> usize {
 
 #[inline]
 pub fn ProcessOne() -> bool {
-    let count = QUringTrigger();
-    if count > 0 {
-        return true;
-    }
-
-    return false
+    return QUringProcessOne()
 }
 
 pub fn Wait() {
@@ -232,6 +227,10 @@ pub fn SwitchToNewTask() -> ! {
 impl Scheduler {
     // steal scheduling
     pub fn GetNext(&self) -> Option<TaskId> {
+        if self.GlobalReadyTaskCnt() == 0 {
+            return None;
+        }
+
         let vcpuId = CPULocal::CpuId() as usize;
         let vcpuCount = self.vcpuCnt;
 

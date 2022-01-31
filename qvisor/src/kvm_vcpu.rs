@@ -15,8 +15,7 @@
 use alloc::alloc::{Layout, alloc};
 use alloc::slice;
 use core::sync::atomic::Ordering;
-use kvm_bindings::kvm_sregs;
-use kvm_bindings::kvm_regs;
+use kvm_bindings::*;
 use kvm_ioctls::VcpuExit;
 use core::mem::size_of;
 use libc::*;
@@ -31,12 +30,17 @@ use super::qlib::task_mgr::*;
 use super::qlib::linux_def::*;
 use super::qlib::pagetable::*;
 use super::qlib::perf_tunning::*;
+//use super::qlib::kernel::TSC;
+//use super::qlib::kernel::IOURING;
 use super::qlib::*;
 use super::qlib::vcpu_mgr::*;
 use super::qlib::buddyallocator::ZeroPage;
 use super::amd64_def::*;
 use super::URING_MGR;
 use super::runc::runtime::vm::*;
+
+
+//use super::vmspace::kernel_io_thread::*;
 
 pub fn AlignedAllocate(size: usize, align: usize, zeroData: bool) -> Result<u64> {
     assert!(size % 8 == 0, "AlignedAllocate get unaligned size {:x}", size);
@@ -541,13 +545,20 @@ impl KVMVcpu {
                         qlib::HYPERCALL_VCPU_WAIT => {
                             let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                             let retAddr = regs.rdi;
-                            let ret = self.VcpuWait();
-                            if ret == -1 {
-                                return Ok(())
-                            }
 
-                            unsafe {
-                                *(retAddr as * mut u64) = ret as u64;
+                            let ret = SHARE_SPACE.scheduler.WaitVcpu(&SHARE_SPACE, self.id, true);
+                            match ret {
+                                Ok(taskId) => {
+                                    unsafe {
+                                        *(retAddr as * mut u64) = taskId as u64;
+                                    }
+                                },
+                                Err(Error::Exit) => {
+                                    return Ok(())
+                                }
+                                Err(e) => {
+                                    panic!("HYPERCALL_HLT wait fail with error {:?}", e);
+                                }
                             }
                         }
 
@@ -602,7 +613,7 @@ impl KVMVcpu {
 
     pub fn VcpuWait(&self) -> i64 {
         let sharespace = &SHARE_SPACE;
-        while sharespace.scheduler.GlobalReadyTaskCnt() == 0 {
+        loop {
             if !super::runc::runtime::vm::IsRunning() {
                 return -1
             }
@@ -617,32 +628,8 @@ impl KVMVcpu {
                         Self::GuestMsgProcess(sharespace);
                     }
                 });
-
-                for _ in 0..10 {
-                    Self::GuestMsgProcess(sharespace);
-                    //short term workaround, need to change back to unblock my sql scenario.
-                    if sharespace.scheduler.GlobalReadyTaskCnt() > 0 {
-                        return 0;
-                    }
-
-                    match sharespace.scheduler.WaitVcpu(sharespace, self.id, false) {
-                        Ok(taskId) => {
-                            if taskId != 0 {
-                                return taskId as i64
-                            }
-                        }
-                        Err(Error::Exit) => return -1,
-                        Err(e) => panic!("HYPERCALL_HLT wait fail with error {:?}", e),
-                    }
-
-                    //std::thread::yield_now();
-                    //std::thread::yield_now();
-                }
             }
 
-            if sharespace.scheduler.GlobalReadyTaskCnt() != 0 {
-                return 0;
-            }
             let ret = sharespace.scheduler.WaitVcpu(sharespace, self.id, true);
             match ret {
                 Ok(taskId) => {
@@ -652,11 +639,10 @@ impl KVMVcpu {
                 Err(e) => panic!("HYPERCALL_HLT wait fail with error {:?}", e),
             }
         }
-
-        return 0;
     }
 
-    pub fn GuestMsgProcess(sharespace: &ShareSpace) {
+    pub fn GuestMsgProcess(sharespace: &ShareSpace) -> usize {
+        let mut count = 0;
         loop  {
             let msg = sharespace.AQHostOutputPop();
 
@@ -665,6 +651,7 @@ impl KVMVcpu {
                     break
                 },
                 Some(HostOutputMsg::QCall(addr)) => {
+                    count += 1;
                     let eventAddr = addr as *mut QMsg; // as &mut qlib::Event;
                     let qmsg = unsafe {
                         &mut (*eventAddr)
@@ -686,12 +673,14 @@ impl KVMVcpu {
                     }
                 }
                 Some(msg) => {
+                    count += 1;
                     //error!("qcall msg is {:x?}", &msg);
                     qcall::AQHostCall(msg, sharespace);
                 }
             }
-
         }
+
+        return count
     }
 }
 
@@ -702,13 +691,25 @@ impl Scheduler {
         }
     }
 
-    pub fn WaitVcpu(&self, sharespace: &ShareSpace, vcpuId: usize, block: bool) -> Result<u64> {
-        self.vcpuWaitMask.fetch_or(1<<vcpuId, Ordering::SeqCst);
-        defer!(self.vcpuWaitMask.fetch_and(!(1<<vcpuId), Ordering::SeqCst););
+    pub fn VcpWaitMaskSet(&self, vcpuId: usize) -> bool {
+        let mask = 1<<vcpuId;
+        let prev = self.vcpuWaitMask.fetch_or(mask, Ordering::SeqCst);
+        return (prev & mask) != 0
+    }
 
+    pub fn VcpWaitMaskClear(&self, vcpuId: usize) -> bool {
+        let mask = 1<<vcpuId;
+        let prev = self.vcpuWaitMask.fetch_and(!(1<<vcpuId), Ordering::SeqCst);
+        return (prev & mask) != 0;
+    }
+
+
+    pub fn WaitVcpu(&self, sharespace: &ShareSpace, vcpuId: usize, block: bool) -> Result<u64> {
         return self.VcpuArr[vcpuId].VcpuWait(sharespace, block);
     }
 }
+
+pub const VCPU_WAIT_CYCLES : i64 = 1_000_000; // 1ms
 
 impl CPULocal {
     pub fn Init(&mut self, vcpuId: usize) {
@@ -764,6 +765,59 @@ impl CPULocal {
         self.data = 1;
     }
 
+    pub fn Process(&self, sharespace: &ShareSpace) -> Option<u64> {
+        match sharespace.scheduler.GetNext() {
+            None => (),
+            Some(newTask) => {
+                return Some(newTask.data)
+            }
+        }
+
+        // process in vcpu worker thread will decease the throughput of redis/etcd benchmark
+        // todo: stdudy and fix
+        /*let mut start = TSC.Rdtsc();
+        while IsRunning() {
+            match sharespace.scheduler.GetNext() {
+                None => (),
+                Some(newTask) => {
+                    return Some(newTask.data)
+                }
+            }
+
+            if IOURING.ProcessOne() {
+                start = TSC.Rdtsc()
+            }
+
+            match sharespace.scheduler.GetNext() {
+                None => (),
+                Some(newTask) => {
+                    return Some(newTask.data)
+                }
+            }
+
+            if KVMVcpu::GuestMsgProcess(sharespace) > 0 {
+                start = TSC.Rdtsc()
+            };
+
+            match sharespace.scheduler.GetNext() {
+                None => (),
+                Some(newTask) => {
+                    return Some(newTask.data)
+                }
+            }
+
+            if TSC.Rdtsc() - start >= VCPU_WAIT_CYCLES {
+                break;
+            }
+
+            if FD_NOTIFIER.HostEpollWait() > 0 {
+                start = TSC.Rdtsc()
+            };
+        }*/
+
+        return None
+    }
+
     pub fn VcpuWait(&self, sharespace: &ShareSpace, block: bool) -> Result<u64> {
         let mut events = [epoll_event { events: 0, u64: 0 }; 2];
 
@@ -773,95 +827,54 @@ impl CPULocal {
             0
         };
 
-        loop {
-            self.ToWaiting(sharespace);
-            if sharespace.config.read().AsyncPrint() {
-                sharespace.LogFlush(false);
-            }
+        sharespace.scheduler.VcpWaitMaskSet(self.vcpuId);
+        defer!(sharespace.scheduler.VcpWaitMaskClear(self.vcpuId););
 
-            match sharespace.scheduler.GetNext() {
-                None => (),
-                Some(newTask) => {
-                    self.ToSearch(sharespace);
-                    return Ok(newTask.data)
-                }
-            }
-
-            let nfds = unsafe {
-                epoll_wait(self.epollfd, &mut events[0], 2, time)
-            };
-            self.ToSearch(sharespace);
-
-            match sharespace.scheduler.GetNext() {
-                None => (),
-                Some(newTask) => {
-                    return Ok(newTask.data)
-                }
-            }
-
-            if !super::runc::runtime::vm::IsRunning() {
-                return Err(Error::Exit)
-            }
-
-            if nfds == -1 {
-                let err = errno::errno().0;
-                return Err(Error::SysError(err))
-            }
-
-            let mut wakeVcpu = false;
-            let mut hasMsg = false;
-
-            if nfds == 0 {
-                return Ok(0)
-            }
-
-            if nfds == 2 {
-                wakeVcpu = true;
-                hasMsg = true;
-            } else {
-                assert!(nfds == 1);
-                let fd = events[0].u64 as i32;
-                if fd == self.eventfd { // ask for the vcpu wake up
-                    wakeVcpu = true;
-                } else {
-                    hasMsg = true;
-                }
-            }
-
-            if hasMsg {
-                self.ToRunning(sharespace);
-                match sharespace.TryLockEpollProcess() {
-                    None => {},
-                    Some(_lock) => {
-                        FD_NOTIFIER.HostEpollWait();
-                    }
-                }
-                self.ToSearch(sharespace);
-            }
-
-            if wakeVcpu {
-                if wakeVcpu {
-                    let mut data : u64 = 0;
-                    let ret = unsafe {
-                        libc::read(self.eventfd, &mut data as * mut _ as *mut libc::c_void, 8)
-                    };
-
-                    if ret < 0 {
-                        panic!("KIOThread::Wakeup fail... eventfd is {}, errno is {}",
-                               self.eventfd, errno::errno().0);
-                    }
-                }
-
-                match sharespace.scheduler.GetNext() {
-                    None => (),
-                    Some(newTask) => {
-                        return Ok(newTask.data)
-                    }
-                }
-
-                return Ok(0)
+        match self.Process(sharespace) {
+            None => (),
+            Some(newTask) => {
+                return Ok(newTask)
             }
         }
+
+        self.ToWaiting(sharespace);
+        defer!(self.ToSearch(sharespace););
+
+        while IsRunning() {
+            match self.Process(sharespace) {
+                None => (),
+                Some(newTask) => {
+                    return Ok(newTask);
+                }
+            }
+
+            if sharespace.scheduler.VcpWaitMaskSet(self.vcpuId) {
+                match self.Process(sharespace) {
+                    None => (),
+                    Some(newTask) => {
+                        return Ok(newTask);
+                    }
+                }
+            }
+
+            let _nfds = unsafe {
+                epoll_wait(self.epollfd, &mut events[0], 2, time)
+            };
+
+            {
+                let mut data: u64 = 0;
+                let ret = unsafe {
+                    libc::read(self.eventfd, &mut data as *mut _ as *mut libc::c_void, 8)
+                };
+
+                if ret < 0 {
+                    panic!("KIOThread::Wakeup fail... eventfd is {}, errno is {}",
+                           self.eventfd, errno::errno().0);
+                }
+            }
+        }
+
+        return Err(Error::Exit)
     }
 
     pub fn Wakeup(&self) {

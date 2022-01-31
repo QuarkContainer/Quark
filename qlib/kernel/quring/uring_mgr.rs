@@ -46,9 +46,9 @@ pub fn QUringTrigger() -> usize {
     return IOURING.DrainCompletionQueue();
 }
 
-/*pub fn QUringProcessOne() -> bool {
+pub fn QUringProcessOne() -> bool {
     return IOURING.ProcessOne();
-}*/
+}
 
 unsafe impl Send for Submission {}
 unsafe impl Sync for Submission {}
@@ -516,24 +516,31 @@ impl QUring {
         self.AUringCallLinked(entry1, entry2);
     }
 
-    /*pub fn ProcessOne(&self) -> bool {
-        let cqe = {
-            let mut clock = match self.completion.try_lock() {
-                None => return false,
-                Some(lock) => lock
-            };
+    pub fn ProcessOne(&self) -> bool {
+        for i in 0..self.UringCount() {
+            let idx = (i + CPULocal::CpuId()) % self.UringCount();
+            loop {
+                if super::super::Shutdown() {
+                    return false;
+                }
 
-            match clock.Next() {
-                None => return false,
-                Some(cqe) => {
-                    cqe
+                let cqe = {
+                    let mut c = self.IOUrings()[idx].cq.lock();
+                    c.next()
+                };
+
+                match cqe {
+                    None => break,
+                    Some(cqe) => {
+                        self.Process(&cqe);
+                        return true
+                    }
                 }
             }
-        };
+        }
 
-        self.Process(&cqe);
-        return true;
-    }*/
+        return false;
+    }
 
     pub fn DrainCompletionQueue(&self) -> usize {
         let mut count = 0;
