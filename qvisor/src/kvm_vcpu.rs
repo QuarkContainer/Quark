@@ -15,8 +15,7 @@
 use alloc::alloc::{Layout, alloc};
 use alloc::slice;
 use core::sync::atomic::Ordering;
-use kvm_bindings::kvm_sregs;
-use kvm_bindings::kvm_regs;
+use kvm_bindings::*;
 use kvm_ioctls::VcpuExit;
 use core::mem::size_of;
 use libc::*;
@@ -31,15 +30,17 @@ use super::qlib::task_mgr::*;
 use super::qlib::linux_def::*;
 use super::qlib::pagetable::*;
 use super::qlib::perf_tunning::*;
-use super::qlib::kernel::TSC;
-use super::qlib::kernel::IOURING;
+//use super::qlib::kernel::TSC;
+//use super::qlib::kernel::IOURING;
 use super::qlib::*;
 use super::qlib::vcpu_mgr::*;
 use super::qlib::buddyallocator::ZeroPage;
 use super::amd64_def::*;
 use super::URING_MGR;
 use super::runc::runtime::vm::*;
-use super::vmspace::kernel_io_thread::*;
+
+
+//use super::vmspace::kernel_io_thread::*;
 
 pub fn AlignedAllocate(size: usize, align: usize, zeroData: bool) -> Result<u64> {
     assert!(size % 8 == 0, "AlignedAllocate get unaligned size {:x}", size);
@@ -708,6 +709,8 @@ impl Scheduler {
     }
 }
 
+pub const VCPU_WAIT_CYCLES : i64 = 1_000_000; // 1ms
+
 impl CPULocal {
     pub fn Init(&mut self, vcpuId: usize) {
         let epfd = unsafe {
@@ -763,8 +766,16 @@ impl CPULocal {
     }
 
     pub fn Process(&self, sharespace: &ShareSpace) -> Option<u64> {
-        let mut start = TSC.Rdtsc();
+        match sharespace.scheduler.GetNext() {
+            None => (),
+            Some(newTask) => {
+                return Some(newTask.data)
+            }
+        }
 
+        // process in vcpu worker thread will decease the throughput of redis/etcd benchmark
+        // todo: stdudy and fix
+        /*let mut start = TSC.Rdtsc();
         while IsRunning() {
             match sharespace.scheduler.GetNext() {
                 None => (),
@@ -773,22 +784,36 @@ impl CPULocal {
                 }
             }
 
-            if IOURING.DrainCompletionQueue() > 0 {
+            if IOURING.ProcessOne() {
                 start = TSC.Rdtsc()
+            }
+
+            match sharespace.scheduler.GetNext() {
+                None => (),
+                Some(newTask) => {
+                    return Some(newTask.data)
+                }
             }
 
             if KVMVcpu::GuestMsgProcess(sharespace) > 0 {
                 start = TSC.Rdtsc()
             };
 
-            if TSC.Rdtsc() - start >= IO_WAIT_CYCLES {
+            match sharespace.scheduler.GetNext() {
+                None => (),
+                Some(newTask) => {
+                    return Some(newTask.data)
+                }
+            }
+
+            if TSC.Rdtsc() - start >= VCPU_WAIT_CYCLES {
                 break;
             }
 
             if FD_NOTIFIER.HostEpollWait() > 0 {
                 start = TSC.Rdtsc()
             };
-        }
+        }*/
 
         return None
     }
