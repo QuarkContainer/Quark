@@ -16,6 +16,7 @@ use super::super::super::IO_MGR;
 use super::super::super::URING_MGR;
 use super::rdma::*;
 use super::socket_info::*;
+use super::super::super::qlib::kernel::TSC;
 
 pub struct RDMAServerSockIntern {
     pub fd: i32,
@@ -74,6 +75,7 @@ impl RDMAServerSock {
                 }
 
                 waitinfo.Notify(EVENT_ERR | EVENT_IN);
+                // debug!("Accept, err: {}", errno);
                 acceptQueue.lock().SetErr(errno);
                 return;
             }
@@ -269,6 +271,7 @@ impl RDMADataSock {
 
         if ret < 0 {
             let errno = errno::errno().0;
+            // debug!("SendLocalRDMAInfo, err: {}", errno);
             self.socketBuf.SetErr(errno);
             return Err(Error::SysError(errno));
         }
@@ -288,9 +291,12 @@ impl RDMADataSock {
 
         if ret < 0 {
             let errno = errno::errno().0;
-            self.socketBuf.SetErr(errno);
+            // debug!("RecvRemoteRDMAInfo, err: {}", errno);
+            //self.socketBuf.SetErr(errno);
             return Err(Error::SysError(errno));
         }
+
+        //self.socketBuf.SetErr(0); //TODO: find a better place
 
         assert!(
             ret == RDMAInfo::Size() as isize,
@@ -310,6 +316,7 @@ impl RDMADataSock {
         let ret = unsafe { write(self.fd, &data as *const _ as u64 as _, 8) };
         if ret < 0 {
             let errno = errno::errno().0;
+            
             self.socketBuf.SetErr(errno);
             return Err(Error::SysError(errno));
         }
@@ -324,9 +331,11 @@ impl RDMADataSock {
 
         if ret < 0 {
             let errno = errno::errno().0;
+            // debug!("RecvAck::1, err: {}", errno);
             if errno == SysErr::EAGAIN {
                 return Err(Error::SysError(errno));
             }
+            // debug!("RecvAck::2, err: {}", errno);
             self.socketBuf.SetErr(errno);
             return Err(Error::SysError(errno));
         }
@@ -414,7 +423,7 @@ impl RDMADataSock {
         let readCount = self.socketBuf.GetAndClearConsumeReadData();
         let buf = self.socketBuf.writeBuf.lock();
         let (addr, mut len) = buf.GetDataBuf();
-        error!("RDMASendLocked::1, readCount: {}, addr: {:x}, len: {}, remote.freespace: {}", readCount, addr, len, remoteInfo.freespace);
+        // debug!("RDMASendLocked::1, readCount: {}, addr: {:x}, len: {}, remote.freespace: {}", readCount, addr, len, remoteInfo.freespace);
         if readCount > 0 || len > 0 {
             if len > remoteInfo.freespace as usize {
                 len = remoteInfo.freespace as usize;
@@ -432,7 +441,7 @@ impl RDMADataSock {
                 remoteInfo.freespace -= len as u32;
                 remoteInfo.offset = (remoteInfo.offset + len as u32) % remoteInfo.rlen;
                 remoteInfo.sending = true;
-                error!("RDMASendLocked::2, writeCount: {}, readCount: {}", len, readCount);
+                // debug!("RDMASendLocked::2, writeCount: {}, readCount: {}", len, readCount);
             }
         }
     }
@@ -444,12 +453,12 @@ impl RDMADataSock {
         remoteInfo.sending = false;
 
         let writeCount = self.writeCount.load(QOrdering::ACQUIRE);
-        error!("ProcessRDMAWriteImmFinish::1 writeCount: {}", writeCount);
+        // debug!("ProcessRDMAWriteImmFinish::1 writeCount: {}", writeCount);
 
         let (trigger, addr, _len) = self
             .socketBuf
             .ConsumeAndGetAvailableWriteBuf(writeCount as usize);
-        error!("ProcessRDMAWriteImmFinish::2, trigger: {}, addr: {}", trigger, addr);
+        // debug!("ProcessRDMAWriteImmFinish::2, trigger: {}, addr: {}", trigger, addr);
         if trigger {
             waitinfo.Notify(EVENT_OUT);
         }
@@ -473,12 +482,12 @@ impl RDMADataSock {
             .lock()
             .PostRecv(wr.0, self.localRDMAInfo.raddr, self.localRDMAInfo.rkey);
 
-        error!("ProcessRDMARecvWriteImm::1, recvCount: {}, writeConsumeCount: {}", recvCount, writeConsumeCount);
+        // debug!("ProcessRDMARecvWriteImm::1, recvCount: {}, writeConsumeCount: {}", recvCount, writeConsumeCount);
 
         if recvCount > 0 {
             let (trigger, _addr, _len) =
                 self.socketBuf.ProduceAndGetFreeReadBuf(recvCount as usize);
-            error!("ProcessRDMARecvWriteImm::2, trigger {}", trigger);
+            // debug!("ProcessRDMARecvWriteImm::2, trigger {}", trigger);
             if trigger {
                 waitinfo.Notify(EVENT_IN);
             }
@@ -489,7 +498,7 @@ impl RDMADataSock {
             let trigger = remoteInfo.freespace == 0;
             remoteInfo.freespace += writeConsumeCount as u32;
 
-            error!("ProcessRDMARecvWriteImm::3, trigger {}, remoteInfo.sending: {}", trigger, remoteInfo.sending);
+            // debug!("ProcessRDMARecvWriteImm::3, trigger {}, remoteInfo.sending: {}", trigger, remoteInfo.sending);
 
             if trigger && !remoteInfo.sending {
                 self.RDMASendLocked(remoteInfo);
@@ -579,13 +588,17 @@ impl RDMADataSock {
 
     //notify rdmadatasocket to sync read buff freespace with peer
     pub fn RDMARead(&self) {
+        let start = TSC.Rdtsc();
         let _writelock = self.writeLock.lock();
         self.RDMASend();
+        error!("RDMARead:: time: {}", TSC.Rdtsc() - start);
     }
 
     pub fn RDMAWrite(&self) {
+        let start = TSC.Rdtsc();
         let _writelock = self.writeLock.lock();
         self.RDMASend();
+        error!("RDMAWrite:: time: {}", TSC.Rdtsc() - start);
     }
 
     pub fn ReadData(&self, waitinfo: FdWaitInfo) {
@@ -616,9 +629,12 @@ impl RDMADataSock {
 
             if len < 0 {
                 let errno = errno::errno().0;
+                // debug!("ReadData::1, err: {}", errno);
                 if errno == SysErr::EAGAIN {
                     return;
                 }
+
+                // debug!("ReadData::2, err: {}", errno);
 
                 socketBuf.SetErr(errno);
                 waitinfo.Notify(EVENT_ERR | EVENT_IN);
@@ -704,9 +720,12 @@ impl RDMADataSock {
 
             if len < 0 {
                 let errno = errno::errno().0;
+                // debug!("WriteDataLocked::1, err: {}", errno);
                 if errno == SysErr::EAGAIN {
                     return;
                 }
+
+                // debug!("WriteDataLocked::2, err: {}", errno);
 
                 socketBuf.SetErr(errno);
                 waitinfo.Notify(EVENT_ERR | EVENT_IN);

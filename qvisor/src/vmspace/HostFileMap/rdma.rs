@@ -9,6 +9,7 @@ use std::ptr;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::IO_MGR;
+use super::super::super::qlib::kernel::TSC;
 
 use lazy_static::lazy_static;
 
@@ -195,7 +196,7 @@ impl IBContext {
     }
 
     pub fn CreateCompleteQueue(&self, cc: &CompleteChannel) -> CompleteQueue {
-        let cq = unsafe { rdmaffi::ibv_create_cq(self.0, 1, ptr::null_mut(), cc.0, 0) };
+        let cq = unsafe { rdmaffi::ibv_create_cq(self.0, 2000, ptr::null_mut(), cc.0, 0) };
 
         if cq.is_null() {
             // TODO: cleanup
@@ -355,7 +356,7 @@ impl Deref for RDMAContext {
 }
 
 pub const MAX_SEND_WR: u32 = 100;
-pub const MAX_RECV_WR: u32 = 100;
+pub const MAX_RECV_WR: u32 = 6;
 pub const MAX_SEND_SGE: u32 = 1;
 pub const MAX_RECV_SGE: u32 = 1;
 
@@ -464,9 +465,13 @@ impl RDMAContext {
                 count += 1;
                 self.ProcessWC(&wc);
             } else if poll_result == 0 {
+                if count != 0 {
+                    // debug!("PollCompletionQueueAndProcess: processed wcs: {}", count);
+                }
+                
                 return count;
             } else {
-                debug!("Error to query CQ!")
+                // debug!("Error to query CQ!")
                 // break;
             }
         }
@@ -484,7 +489,7 @@ impl RDMAContext {
         };
 
         if ret != 0 {
-            //error!("Failed to get next CQ event");
+            //// debug!("Failed to get next CQ event");
             return Ok(());
         }
 
@@ -528,7 +533,7 @@ impl RDMAContext {
         };
 
         if ret != 0 {
-            error!("Failed to get next CQ event");
+            // debug!("Failed to get next CQ event");
         }
 
         let ret1 = unsafe { rdmaffi::ibv_req_notify_cq(self.CompleteQueue(), 0) };
@@ -543,7 +548,7 @@ impl RDMAContext {
             } else if poll_result == 0 {
                 break;
             } else {
-                debug!("Error to query CQ!")
+                // debug!("Error to query CQ!")
                 // break;
             }
         }
@@ -554,7 +559,7 @@ impl RDMAContext {
         // let ret1 = unsafe { rdmaffi::ibv_req_notify_cq(self.CompleteQueue(), 0) };
         // if ret1 != 0 {
         //     // TODO: should keep call here?
-        //     debug!("Couldn't request CQ notification\n");
+        //     // debug!("Couldn't request CQ notification\n");
         // }
 
         // loop {
@@ -565,7 +570,7 @@ impl RDMAContext {
         //         } else if poll_result == 0 {
         //             break;
         //         } else {
-        //             debug!("Error to query CQ!")
+        //             // debug!("Error to query CQ!")
         //             // break;
         //         }
         //     }
@@ -604,13 +609,13 @@ impl RDMAContext {
 
         // match typ {
         //     WorkRequestType::WriteImm => {
-        //         error!("ProcessWC: WriteImm, opcode: {}", wc.opcode);
+        //         // debug!("ProcessWC: WriteImm, opcode: {}", wc.opcode);
         //         IO_MGR.ProcessRDMAWriteImmFinish(fd);
         //     }
         //     WorkRequestType::Recv => {
         //         let imm = unsafe { wc.imm_data_invalidated_rkey_union.imm_data };
         //         let immData = ImmData(imm);
-        //         error!("ProcessWC: readCount: {}, writeCount: {}, opcode: {}", immData.ReadCount(), immData.WriteCount(), wc.opcode);
+        //         // debug!("ProcessWC: readCount: {}, writeCount: {}, opcode: {}", immData.ReadCount(), immData.WriteCount(), wc.opcode);
         //         IO_MGR.ProcessRDMARecvWriteImm(
         //             fd,
         //             immData.WriteCount() as _,
@@ -619,31 +624,34 @@ impl RDMAContext {
         //     }
         // }
         if wc.status != rdmaffi::ibv_wc_status::IBV_WC_SUCCESS {
-            error!(
-                "ProcessWC::1, work reqeust failed with status: {}, id: {}",
-                wc.status, wc.wr_id
-            );
+            // debug!(
+            //     "ProcessWC::1, work reqeust failed with status: {}, id: {}",
+            //     wc.status, wc.wr_id
+            // );
         }
+        let start = TSC.Rdtsc();
         if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RDMA_WRITE {
-            error!(
-                "ProcessWC::2, writeIMM status: {}, id: {}",
-                wc.status, wc.wr_id
-            );
+            // debug!(
+            //     "ProcessWC::2, writeIMM status: {}, id: {}",
+            //     wc.status, wc.wr_id
+            // );
             IO_MGR.ProcessRDMAWriteImmFinish(fd);
         } else if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RECV_RDMA_WITH_IMM {
             let imm = unsafe { wc.imm_data_invalidated_rkey_union.imm_data };
             let immData = ImmData(imm);
-            error!(
-                "ProcessWC::2, recv len:{}, writelen: {}, status: {}, id: {}",
-                wc.byte_len,
-                immData.ReadCount(),
-                wc.status,
-                wc.wr_id
-            );
+            // debug!(
+            //     "ProcessWC::2, recv len:{}, writelen: {}, status: {}, id: {}",
+            //     wc.byte_len,
+            //     immData.ReadCount(),
+            //     wc.status,
+            //     wc.wr_id
+            // );
             IO_MGR.ProcessRDMARecvWriteImm(fd, wc.byte_len as _, immData.ReadCount() as _);
         } else {
-            error!("ProcessWC::4, opcode: {}, wr_id: {}", wc.opcode, wc.wr_id);
+            // debug!("ProcessWC::4, opcode: {}, wr_id: {}", wc.opcode, wc.wr_id);
         }
+        let end = TSC.Rdtsc();
+        debug!("opcode: {}, time used: {}", wc.opcode, end - start);
     }
 }
 

@@ -41,7 +41,9 @@ impl SocketBuff {
     }
 
     pub fn Writev(&self, task: &Task, iovs: &[IoVec]) -> Result<(usize, Option<(u64, usize)>)> {
+        //debug!("Writev::1");
         if self.Error() != 0 {
+            //debug!("Writev::1.1, error: {}", self.Error());
             return Err(Error::SysError(self.Error()));
         }
 
@@ -51,14 +53,18 @@ impl SocketBuff {
             return Err(Error::SysError(SysErr::EPIPE))
         }
 
+        //debug!("Writev::2");
+
         let mut buf = self.writeBuf.lock();
         let dstIovs = buf.GetSpaceIovsVec();
+        //debug!("Writev::3, buffer.len: {}", dstIovs.len());
         if dstIovs.len() == 0 {
             return Err(Error::SysError(SysErr::EAGAIN));
         }
 
         let cnt = task.mm.CopyIovsOutToIovs(task, iovs, &dstIovs)?;
 
+        //debug!("Writev::4, cnt: {}", dstIovs.len());
         if cnt == 0 {
             error!("writev cnt is zero....");
             return Err(Error::SysError(SysErr::EAGAIN));
@@ -66,9 +72,11 @@ impl SocketBuff {
 
         let trigger = buf.Produce(cnt);
         if !trigger {
+            //debug!("Writev::5, cnt: {}", dstIovs.len());
             return Ok((cnt, None))
         } else {
             let (addr, len) = buf.GetDataBuf();
+            //debug!("Writev::6, cnt: {}, addr: {}, len: {}", dstIovs.len(), cnt, len);
             return Ok((cnt, Some((addr, len))))
         }
     }

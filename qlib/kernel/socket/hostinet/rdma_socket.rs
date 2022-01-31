@@ -40,9 +40,12 @@ impl RDMA {
 
     //todo: put ops: &SocketOperations in the write request to make the socket won't be closed before write is finished
     pub fn Write(task: &Task, fd: i32, buf: Arc<SocketBuff>, srcs: &[IoVec]/*, ops: &SocketOperations*/) -> Result<i64> {
+        //debug!("Write::1");
         let (count, writeBuf) = buf.Writev(task, srcs)?;
+        //debug!("Write::2, count: {}", count);
         if writeBuf.is_some() {
             if RDMA_ENABLE {
+                debug!("Write::3, count: {}", count);
                 HostSpace::RDMANotify(fd, RDMANotifyType::RDMAWrite);
             } else {
                 HostSpace::RDMANotify(fd, RDMANotifyType::Write);

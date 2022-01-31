@@ -535,12 +535,14 @@ impl FileOperations for SocketOperations {
     }
 
     fn WriteAt(&self, task: &Task, _f: &File, srcs: &[IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
+        // debug!("WriteAt::1");
         let sockBufType = self.socketBuf.lock().clone();
         match sockBufType {
             SocketBufType::Uring(socketBuf) => {
                 return QUring::SocketSend(task, self.fd, self.queue.clone(), socketBuf, srcs, self)
             }
             SocketBufType::RDMA(socketBuf) => {
+                // debug!("WriteAt::2");
                 let ret = RDMA::Write(task, self.fd, socketBuf, srcs)?;
                 return Ok(ret);
             }

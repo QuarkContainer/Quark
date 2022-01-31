@@ -89,6 +89,8 @@ int main(int argc, char const *argv[])
         return -1; 
     }
 
+    printf("connected!\n");
+
     // printf("before read \n");
     // valread = read(sock , buffer, 1024*32);
     // printf("read %d\n",valread);
