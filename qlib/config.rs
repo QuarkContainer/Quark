@@ -42,11 +42,7 @@ impl Config {
         return self.LogType == LogType::Sync;
     }
 
-    pub fn UringPrint(&self) -> bool {
-        return self.LogType == LogType::UringPrint;
-    }
-
-    pub fn AsyncPrint(&self) -> bool {
+    pub fn Async(&self) -> bool {
         return self.LogType == LogType::Async;
     }
 }
@@ -114,6 +110,5 @@ impl Default for LogLevel {
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum LogType {
     Sync,
-    UringPrint,
-    Async
+    Async,
 }
