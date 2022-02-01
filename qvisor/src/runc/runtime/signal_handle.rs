@@ -55,6 +55,10 @@ pub struct SignalFaultInfo {
 }
 
 extern fn handle_sigintAct(signal :i32, signInfo: *mut libc::siginfo_t, _: *mut libc::c_void) {
+    if signal == 17 { // used for tlb shootdown
+        return
+    }
+
     let console = CONSOLE.load(Ordering::SeqCst);
 
     /*{
@@ -74,7 +78,6 @@ extern fn handle_sigintAct(signal :i32, signInfo: *mut libc::siginfo_t, _: *mut 
         };
 
         error!("get signal {}, action is {:x?}", signal, sigfault);
-
 
         let signal = SignalArgs {
             Signo: signal,

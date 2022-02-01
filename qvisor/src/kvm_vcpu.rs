@@ -14,11 +14,13 @@
 
 use alloc::alloc::{Layout, alloc};
 use alloc::slice;
+use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use kvm_bindings::*;
 use kvm_ioctls::VcpuExit;
 use core::mem::size_of;
 use libc::*;
+use std::os::unix::io::AsRawFd;
 
 use super::*;
 use super::syncmgr::*;
@@ -39,6 +41,13 @@ use super::amd64_def::*;
 use super::URING_MGR;
 use super::runc::runtime::vm::*;
 
+#[repr(C)]
+pub struct SignalMaskStruct {
+    length: u32,
+    mask1: u32,
+    mask2: u32,
+    _pad: u32,
+}
 
 //use super::vmspace::kernel_io_thread::*;
 
@@ -102,6 +111,10 @@ impl RefMgr for HostPageAllocator {
 
 pub struct KVMVcpu {
     pub id: usize,
+    pub cordId: usize,
+    pub threadid: AtomicU64,
+    pub tgid: AtomicU64,
+    pub state: AtomicU64,
     pub vcpuCnt: usize,
     //index in the cpu arrary
     pub vcpu: kvm_ioctls::VcpuFd,
@@ -149,9 +162,14 @@ impl KVMVcpu {
             tssIntStackStart, tssAddr, idtAddr, gdtAddr);
 
         let vcpu = vm_fd.create_vcpu(id as u64).map_err(|e| Error::IOError(format!("io::error is {:?}", e))).expect("create vcpu fail");
+        let vcpuCoreId = VMS.lock().ComputeVcpuCoreId(id);
 
         return Ok(Self {
             id: id,
+            cordId: vcpuCoreId,
+            threadid: AtomicU64::new(0),
+            tgid: AtomicU64::new(0),
+            state: AtomicU64::new(0),
             vcpuCnt,
             vcpu,
             topStackAddr: topStackAddr,
@@ -266,8 +284,56 @@ impl KVMVcpu {
         SHARE_SPACE.scheduler.ScheduleQ(taskId, taskId.Queue());
     }
 
-    pub fn run(&self) -> Result<()> {
+    pub fn Signal(&self, signal: i32) {
+        if self.state.load(Ordering::Relaxed) == 2 {
+            return
+        }
+
+        vmspace::VMSpace::TgKill(self.tgid.load(Ordering::Relaxed) as i32,
+                                 self.threadid.load(Ordering::Relaxed) as i32,
+                                 signal);
+    }
+
+    pub const KVM_SET_SIGNAL_MASK : u64 = 0x4004ae8b;
+    pub fn SignalMask(&self) {
+        let boundSignal = Signal::SIGCHLD;
+        let bounceSignalMask : u64 = 1 << (boundSignal as u64 - 1);
+
+        let data = SignalMaskStruct {
+            length: 8,
+            mask1: (bounceSignalMask & 0xffffffff) as _,
+            mask2: (bounceSignalMask >> 32 ) as _,
+            _pad: 0,
+        };
+
+        let ret = unsafe {
+            ioctl(self.vcpu.as_raw_fd(), Self::KVM_SET_SIGNAL_MASK, &data as * const _ as u64)
+        };
+
+        assert!(ret ==0, "SignalMask ret is {}/{}/{}", ret, errno::errno().0, self.vcpu.as_raw_fd());
+    }
+
+    pub const KVM_INTERRUPT : u64 = 0x4004ae86;
+    pub fn InterruptGuest(&self) {
+        let bounce : u32 = 20;
+        let ret = unsafe {
+            ioctl(self.vcpu.as_raw_fd(), Self::KVM_INTERRUPT, &bounce as * const _ as u64)
+        };
+
+        assert!(ret ==0, "InterruptGuest ret is {}/{}/{}", ret, errno::errno().0, self.vcpu.as_raw_fd());
+    }
+
+    pub fn run(&self, tgid: i32) -> Result<()> {
         self.setup_long_mode()?;
+        let tid = unsafe {
+            gettid()
+        };
+        self.threadid.store(tid as u64, Ordering::SeqCst);
+        self.tgid.store(tgid as u64, Ordering::SeqCst);
+
+        if self.id != 0 {
+            //self.SignalMask();
+        }
 
         let regs: kvm_regs = kvm_regs {
             rflags: KERNEL_FLAGS_SET,
@@ -298,8 +364,7 @@ impl KVMVcpu {
         let mut lastVal: u32 = 0;
         let mut first = true;
 
-        let vcpuCoreId = VMS.lock().ComputeVcpuCoreId(self.id);
-        let coreid = core_affinity::CoreId{id: vcpuCoreId};
+        let coreid = core_affinity::CoreId{id: self.cordId};
         core_affinity::set_for_current(coreid);
 
         info!("start enter guest[{}]: entry is {:x}, stack is {:x}", self.id, self.entry, self.topStackAddr);
@@ -308,7 +373,20 @@ impl KVMVcpu {
                 return Ok(())
             }
 
-            match self.vcpu.run().expect(&format!("kvm virtual cpu[{}] run failed", self.id)) {
+            self.state.store(1, Ordering::SeqCst);
+            let kvmRet = match self.vcpu.run() {
+                Ok(ret) => ret,
+                Err(e) => {
+                    if e.errno() == SysErr::EINTR {
+                        VcpuExit::Intr
+                    } else {
+                        panic!("kvm virtual cpu[{}] run failed: Error {:?}", self.id, e)
+                    }
+                }
+            };
+            self.state.store(2, Ordering::SeqCst);
+
+            match kvmRet {
                 VcpuExit::IoIn(addr, data) => {
                     info!(
                     "[{}]Received an I/O in exit. Address: {:#x}. Data: {:#x}",
@@ -331,11 +409,11 @@ impl KVMVcpu {
                     match addr {
                         qlib::HYPERCALL_IOWAIT => {
                             if !super::runc::runtime::vm::IsRunning() {
-                                {
+                                /*{
                                     for i in 0..8 {
                                         error!("vcpu[{}] state is {}/{}", i, SHARE_SPACE.GetValue(i, 0), SHARE_SPACE.GetValue(i, 1))
                                     }
-                                }
+                                }*/
 
                                 return Ok(())
                             }
@@ -345,12 +423,12 @@ impl KVMVcpu {
                                 Ok(()) => (),
                                 Err(Error::Exit) => {
                                     if !super::runc::runtime::vm::IsRunning() {
-                                        {
+                                        /*{
                                             error!("signal debug");
                                             for i in 0..8 {
                                                 error!("vcpu[{}] state is {}/{}", i, SHARE_SPACE.GetValue(i, 0), SHARE_SPACE.GetValue(i, 1))
                                             }
-                                        }
+                                        }*/
 
                                         return Ok(())
                                     }
@@ -589,11 +667,14 @@ impl KVMVcpu {
                     info!("get exception");
                 }
                 VcpuExit::IrqWindowOpen => {
-                    info!("get VcpuExit::IrqWindowOpen");
-                    //QueueTimer(&self.vcpu);
-                    //&self.vcpu.DisableInterruptWindow();
+                    //info!("get VcpuExit::IrqWindowOpen");
+                    self.InterruptGuest();
+                    self.vcpu.set_kvm_request_interrupt_window(0);
                 }
-
+                VcpuExit::Intr => {
+                    self.vcpu.set_kvm_request_interrupt_window(1);
+                    //info!("get KVM_EXIT_INTR");
+                }
                 r => {
                     let vcpu_sregs = self.vcpu.get_sregs().map_err(|e| Error::IOError(format!("vcpu::error is {:?}", e)))?;
                     let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("vcpu::error is {:?}", e)))?;
@@ -867,8 +948,8 @@ impl CPULocal {
                     libc::read(self.eventfd, &mut data as *mut _ as *mut libc::c_void, 8)
                 };
 
-                if ret < 0 {
-                    panic!("KIOThread::Wakeup fail... eventfd is {}, errno is {}",
+                if ret < 0 && errno::errno().0 != SysErr::EINTR {
+                    panic!("Vcppu::Wakeup fail... eventfd is {}, errno is {}",
                            self.eventfd, errno::errno().0);
                 }
             }
