@@ -278,6 +278,9 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
             thread.forceSignal(Signal(info.Signo), false);
             thread.SendSignal(&info).expect("DivByZeroHandler send signal fail");
         }
+        ExceptionStackVec::VirtualizationException => {
+            error!("get execption VirtualizationException");
+        }
         _ => {
             panic!("ExceptionHandler: get unhanded exception {:?}", ev)
         }

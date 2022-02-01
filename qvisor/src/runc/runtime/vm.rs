@@ -275,12 +275,15 @@ impl VirtualMachine {
         let cpu = self.vcpus[0].clone();
 
         let mut threads = Vec::new();
+        let tgid = unsafe {
+            libc::gettid()
+        };
 
         threads.push(thread::Builder::new().name("0".to_string()).spawn(move || {
             THREAD_ID.with ( |f| {
                 *f.borrow_mut() = 0;
             });
-            cpu.run().expect("vcpu run fail");
+            cpu.run(tgid).expect("vcpu run fail");
             info!("cpu#{} finish", 0);
         }).unwrap());
 
@@ -295,7 +298,7 @@ impl VirtualMachine {
                     *f.borrow_mut() = i as i32;
                 });
                 info!("cpu#{} start", ThreadId());
-                cpu.run().expect("vcpu run fail");
+                cpu.run(tgid).expect("vcpu run fail");
                 info!("cpu#{} finish", ThreadId());
             }).unwrap());
         }

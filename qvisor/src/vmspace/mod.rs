@@ -122,6 +122,10 @@ impl VMSpace {
         return IO_MGR.GetFdByHost(hostfd);
     }
 
+    pub fn SignalThread(&self, vcpuid: usize, signal: i32) {
+        self.vcpus[vcpuid].Signal(signal)
+    }
+
     pub fn GetFdInfo(hostfd: i32) -> Option<FdInfo> {
         return IO_MGR.GetByHost(hostfd);
     }
@@ -259,6 +263,14 @@ impl VMSpace {
         //self.shareSpace.lock().AQHostInputCall(HostMsg::ExecProcess);
 
         return vec.len() as i64
+    }
+
+    pub fn TgKill(tgid: i32, tid: i32, signal: i32) -> i64 {
+        let nr = SysCallID::sys_tgkill as usize;
+        let ret = unsafe {
+            syscall3(nr, tgid as usize, tid as usize, signal as usize) as i32
+        };
+        return ret as _;
     }
 
     pub fn CreateMemfd(len: i64) -> i64 {
