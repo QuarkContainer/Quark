@@ -126,9 +126,6 @@ impl KIOThread {
             }
 
             ASYNC_PROCESS.Process();
-
-            //VMS.lock().SignalThread(1, Signal::SIGCHLD);
-
             let _nfds = unsafe {
                 epoll_wait(epfd, &mut events[0], 2, -1)
             };

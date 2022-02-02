@@ -319,6 +319,9 @@ impl KVMVcpu {
                 error!("Host Vcpu Print timestamp init ...");
                 ret = 0;
             },
+            Msg::TlbShootdown(msg) => {
+                ret = super::VMS.lock().TlbShootdown(msg.vcpuMask) as u64;
+            },
         };
 
         return ret

@@ -19,6 +19,8 @@ use alloc::string::String;
 use alloc::string::ToString;
 use x86_64::structures::paging::PageTableFlags;
 use alloc::vec::Vec;
+use core::sync::atomic::AtomicU64;
+use core::sync::atomic::Ordering;
 
 use crate::qlib::mutex::*;
 
@@ -26,6 +28,7 @@ use super::super::arch::x86_64::context::*;
 use super::super::PAGE_MGR;
 use super::super::uid::*;
 use super::super::KERNEL_PAGETABLE;
+use super::super::asm::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::super::range::*;
@@ -38,6 +41,7 @@ use super::super::super::limits::*;
 use super::super::kernel::aio::aio_context::*;
 use super::super::fs::dirent::*;
 use super::super::mm::*;
+use super::super::Kernel::HostSpace;
 use super::super::super::mem::areaset::*;
 //use super::super::asm::*;
 use super::arch::*;
@@ -130,6 +134,8 @@ pub struct MemoryManagerInternal {
     pub uid: UniqueID,
     pub inited: bool,
 
+    // store whether the vcpu are working on the memory manager
+    pub vcpuMapping: AtomicU64,
     pub mappingLock: Arc<QMutex<()>>,
     pub mapping: QMutex<MMMapping>,
 
@@ -242,6 +248,7 @@ impl MemoryManager {
         let internal = MemoryManagerInternal {
             uid: NewUID(),
             inited: true,
+            vcpuMapping: AtomicU64::new(0),
             mappingLock: Arc::new(QMutex::new(())),
             mapping: QMutex::new(mapping),
             pagetable: QRwLock::new(pagetable),
@@ -259,6 +266,44 @@ impl MemoryManager {
             uid: self.uid,
             data: Arc::downgrade(&self.0)
         }
+    }
+
+    pub fn SetVcpu(&self, vcpu: usize) {
+        assert!(vcpu < 64);
+        self.vcpuMapping.fetch_or(1<<vcpu, Ordering::Release);
+    }
+
+    pub fn TlbShootdown(&self) {
+        if self.pagetable.read().pt.TlbShootdown() {
+            let mask = self.GetVcpuMapping();
+            if mask > 0 {
+                //error!("TlbShootdownVcpuMask ... {:x}", mask);
+
+                // todo: wait for all the vcpu finishing the TLS shootdown?
+                HostSpace::TlbShootdown(mask);
+            }
+        }
+    }
+
+    pub fn ClearVcpu(&self, vcpu: usize) {
+        assert!(vcpu < 64);
+        self.vcpuMapping.fetch_and(!(1<<vcpu), Ordering::Release);
+    }
+
+    pub fn GetVcpuMapping(&self) -> u64 {
+        let mask = self.vcpuMapping.load(Ordering::Acquire);
+        let vcpu = GetVcpuId();
+        return mask & !(1<<vcpu);
+    }
+
+    pub fn VcpuEnter(&self) {
+        let vcpu = GetVcpuId();
+        self.SetVcpu(vcpu);
+    }
+
+    pub fn VcpuLeave(&self) {
+        let vcpu = GetVcpuId();
+        self.ClearVcpu(vcpu);
     }
 
     pub fn MapStackAddr(&self) -> u64 {
@@ -895,6 +940,7 @@ impl MemoryManager {
 
         if permission.Write() {
             // another thread has cow, return
+            Invlpg(pageAddr);
             return;
         }
 
