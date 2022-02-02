@@ -119,6 +119,14 @@ impl HostSpace {
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
+    pub fn TlbShootdown(vcpuMask: u64) -> i64 {
+        let mut msg = Msg::TlbShootdown(TlbShootdown {
+            vcpuMask: vcpuMask
+        });
+
+        return HostSpace::HCall(&mut msg, false) as i64;
+    }
+
     pub fn IORead(fd: i32, iovs: u64, iovcnt: i32) -> i64 {
         let mut msg = Msg::IORead(IORead {
             fd,

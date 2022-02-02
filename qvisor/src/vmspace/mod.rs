@@ -122,6 +122,16 @@ impl VMSpace {
         return IO_MGR.GetFdByHost(hostfd);
     }
 
+    pub fn TlbShootdown(&self, vcpuMask: u64) -> i64 {
+        for i in 0..64 {
+            if (1<<i) & vcpuMask != 0 {
+                self.SignalThread(i, Signal::SIGCHLD);
+            }
+        }
+
+        return 0;
+    }
+
     pub fn SignalThread(&self, vcpuid: usize, signal: i32) {
         self.vcpus[vcpuid].Signal(signal)
     }

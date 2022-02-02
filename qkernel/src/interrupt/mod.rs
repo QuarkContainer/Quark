@@ -26,6 +26,7 @@ use super::asm::*;
 use super::qlib::perf_tunning::*;
 use super::SHARESPACE;
 use super::qlib::singleton::*;
+use super::qlib::pagetable::PageTables;
 
 #[derive(Clone, Copy, Debug)]
 pub enum ExceptionStackVec {
@@ -279,7 +280,9 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
             thread.SendSignal(&info).expect("DivByZeroHandler send signal fail");
         }
         ExceptionStackVec::VirtualizationException => {
-            error!("get execption VirtualizationException");
+            let curr = super::asm::CurrentCr3();
+            PageTables::Switch(curr);
+            return
         }
         _ => {
             panic!("ExceptionHandler: get unhanded exception {:?}", ev)

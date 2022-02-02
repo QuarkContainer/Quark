@@ -226,6 +226,9 @@ pub fn switch(from: TaskId, to: TaskId) {
     }
     toCtx.SetFS();
 
+    fromCtx.mm.VcpuLeave();
+    toCtx.mm.VcpuEnter();
+
     fromCtx.Check();
     toCtx.Check();
     debug!("switch {:x}->{:x}", from.data, to.data);

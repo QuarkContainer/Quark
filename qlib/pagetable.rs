@@ -21,6 +21,7 @@ use x86_64::structures::paging::PageTableFlags;
 use alloc::alloc::{Layout, alloc, dealloc};
 use alloc::vec::Vec;
 use core::sync::atomic::AtomicU64;
+use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 
 use super::common::{Error, Result, Allocator};
@@ -33,25 +34,37 @@ use super::super::asm::*;
 pub struct PageTables {
     //Root page guest physical address
     pub root: AtomicU64,
+    pub tlbshootdown: AtomicBool,
 }
 
 impl PageTables {
     pub fn New(pagePool: &Allocator) -> Result<Self> {
         let root = pagePool.AllocPage(true)?;
         Ok(Self {
-            root: AtomicU64::new(root)
+            root: AtomicU64::new(root),
+            tlbshootdown: AtomicBool::new(false),
         })
+    }
+
+    pub fn TlbShootdown(&self) -> bool {
+        return self.tlbshootdown.swap(false, Ordering::SeqCst)
+    }
+
+    pub fn EnableTlbShootdown(&self) {
+        self.tlbshootdown.store(true, Ordering::Relaxed)
     }
 
     pub fn Clone(&self) -> Self {
         return Self {
-            root: AtomicU64::new(self.GetRoot())
+            root: AtomicU64::new(self.GetRoot()),
+            tlbshootdown: AtomicBool::new(false),
         }
     }
 
     pub fn Init(root: u64) -> Self {
         return Self {
-            root: AtomicU64::new(root)
+            root: AtomicU64::new(root),
+            tlbshootdown: AtomicBool::new(false),
         }
     }
 
@@ -304,7 +317,7 @@ impl PageTables {
 
             pagePool.Ref(phyAddr.0).unwrap();
             if !pteEntry.is_unused() {
-                Self::freeEntry(pteEntry, pagePool)?;
+                self.freeEntry(pteEntry, pagePool)?;
 
                 /*let addr = pteEntry.addr().as_u64();
                 let bit9 = pteEntry.flags() & PageTableFlags::BIT_9 == PageTableFlags::BIT_9;
@@ -448,7 +461,7 @@ impl PageTables {
 
                     // Question: if we also do this for kernel, do we still need this?
                     if !pudEntry.is_unused() {
-                        res = Self::freeEntry(pudEntry, pagePool)?;
+                        res = self.freeEntry(pudEntry, pagePool)?;
                     }
 
                     pudEntry.set_addr(PhysAddr::new(newphysAddr), flags | PageTableFlags::HUGE_PAGE);
@@ -560,7 +573,7 @@ impl PageTables {
                                 continue;
                             }
 
-                            match Self::freeEntry(pteEntry, pagePool) {
+                            match self.freeEntry(pteEntry, pagePool) {
                                 Err(_e) => {
                                     //info!("pagetable::Unmap Error: paddr {:x}, vaddr is {:x}, error is {:x?}",
                                     //    pteEntry.addr().as_u64(), start, e);
@@ -773,10 +786,11 @@ impl PageTables {
         return Ok(())
     }
 
-    fn freeEntry(entry: &mut PageTableEntry,  pagePool: &Allocator) -> Result<bool> {
+    fn freeEntry(&self, entry: &mut PageTableEntry,  pagePool: &Allocator) -> Result<bool> {
         let currAddr = entry.addr().as_u64();
         pagePool.Deref(currAddr)?;
         entry.set_unused();
+        self.EnableTlbShootdown();
         return Ok(true)
     }
 
@@ -843,7 +857,7 @@ impl PageTables {
                                     pagePool.Deref(currAddr)?;
                                     pteEntry.set_flags(PageTableFlags::PRESENT | PageTableFlags::BIT_9);
                                 }*/
-                                res = Self::freeEntry(pteEntry, pagePool)?;
+                                res = self.freeEntry(pteEntry, pagePool)?;
                                 Invlpg(curAddr.0);
                             }
 

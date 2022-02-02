@@ -110,6 +110,12 @@ pub enum Msg {
     UpdateWaitInfo(UpdateWaitInfo),
     Rdtsc(Rdtsc),
     SetTscOffset(SetTscOffset),
+    TlbShootdown(TlbShootdown),
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct TlbShootdown {
+    pub vcpuMask: u64,
 }
 
 #[derive(Clone, Default, Debug)]

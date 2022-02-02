@@ -90,6 +90,7 @@ impl MemoryManager {
 
         self.PopulateVMALocked(task, &vseg, &ar, opts.Precommit, opts.VDSO)?;
 
+        self.TlbShootdown();
         return Ok(ar.Start());
     }
 
@@ -156,7 +157,9 @@ impl MemoryManager {
 
         let ar = Addr(addr).ToRange(length)?;
 
-        return self.RemoveVMAsLocked(&ar);
+        let ret = self.RemoveVMAsLocked(&ar);
+        self.TlbShootdown();
+        return ret;
     }
 
     // MRemap implements the semantics of Linux's mremap(2).
@@ -373,6 +376,7 @@ impl MemoryManager {
         }
 
         self.PopulateVMARemapLocked(task, &vseg, &newAR, &Range::New(oldAddr, oldSize), true)?;
+        self.TlbShootdown();
 
         return Ok(newAR.Start())
     }
@@ -470,6 +474,7 @@ impl MemoryManager {
 
         mapping.vmas.MergeRange(&ar);
         mapping.vmas.MergeAdjacent(&ar);
+        self.TlbShootdown();
 
         return Ok(())
     }
