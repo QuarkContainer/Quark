@@ -176,6 +176,16 @@ impl CPULocal {
     pub fn CpuId() -> usize {
         return ThreadId() as _;
     }
+
+    pub fn Wakeup(&self) {
+        let val : u64 = 8;
+        let ret = unsafe {
+            libc::write(self.eventfd, &val as * const _ as *const libc::c_void, 8)
+        };
+        if ret < 0 {
+            panic!("KIOThread::Wakeup fail...");
+        }
+    }
 }
 
 impl PageMgrInternal {

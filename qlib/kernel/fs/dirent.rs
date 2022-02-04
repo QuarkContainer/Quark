@@ -332,11 +332,14 @@ impl Dirent {
         let child = self.GetCacheChild(name);
         let remove = match child {
             Some(cd) => {
+                //error!("walk 1");
                 let subInode = cd.0.lock().Inode.clone();
                 let mountSource = subInode.lock().MountSource.clone();
                 let mountsourceOpations = mountSource.lock().MountSourceOperations.clone();
                 let mounted = cd.0.lock().mounted;
+                //error!("walk 2");
                 let revalidate = mountsourceOpations.lock().Revalidate(name, &inode, &subInode);
+                //error!("walk 3");
                 if mounted || !revalidate {
                     return Ok(Dirent(cd.clone()))
                 }

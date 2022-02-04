@@ -13,13 +13,15 @@
 // limitations under the License.
 
 use kvm_ioctls::{Kvm, VmFd};
-use kvm_bindings::{kvm_userspace_memory_region, KVM_CAP_X86_DISABLE_EXITS, kvm_enable_cap, KVM_X86_DISABLE_EXITS_HLT, KVM_X86_DISABLE_EXITS_MWAIT};
+//use kvm_bindings::{kvm_userspace_memory_region, KVM_CAP_X86_DISABLE_EXITS, kvm_enable_cap, KVM_X86_DISABLE_EXITS_HLT, KVM_X86_DISABLE_EXITS_MWAIT};
+use kvm_bindings::*;
 use alloc::sync::Arc;
 use std::{thread};
 use core::sync::atomic::AtomicI32;
 use core::sync::atomic::Ordering;
 use lazy_static::lazy_static;
 use std::os::unix::io::FromRawFd;
+use std::os::unix::io::AsRawFd;
 
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::pagetable::{PageTables};
@@ -107,13 +109,37 @@ impl VirtualMachine {
         return umask
     }
 
+    pub const KVM_IOEVENTFD_FLAG_DATAMATCH : u32 = (1 << kvm_ioeventfd_flag_nr_datamatch);
+    pub const KVM_IOEVENTFD_FLAG_PIO       : u32 =(1 << kvm_ioeventfd_flag_nr_pio);
+    pub const KVM_IOEVENTFD_FLAG_DEASSIGN  : u32 =(1 << kvm_ioeventfd_flag_nr_deassign);
+    pub const KVM_IOEVENTFD_FLAG_VIRTIO_CCW_NOTIFY : u32 = (1 << kvm_ioeventfd_flag_nr_virtio_ccw_notify);
+
+    pub const KVM_IOEVENTFD : u64 = 0x4040ae79;
+
+    pub fn IoEventfdAddEvent(vmfd: i32, addr: u64, eventfd: i32) {
+        let kvmIoEvent = kvm_ioeventfd {
+            addr: addr,
+            len: 8,
+            datamatch: 1,
+            fd: eventfd,
+            flags: Self::KVM_IOEVENTFD_FLAG_DATAMATCH,
+            ..Default::default()
+        };
+
+        let ret = unsafe {
+            libc::ioctl(vmfd, Self::KVM_IOEVENTFD, &kvmIoEvent as * const _ as u64)
+        };
+
+        assert!(ret ==0, "IoEventfdAddEvent ret is {}/{}/{}", ret, errno::errno().0, vmfd.as_raw_fd());
+    }
+
     #[cfg(debug_assertions)]
     pub const KERNEL_IMAGE : &'static str = "/usr/local/bin/qkernel_d.bin";
 
     #[cfg(not(debug_assertions))]
     pub const KERNEL_IMAGE : &'static str = "/usr/local/bin/qkernel.bin";
 
-    pub fn InitShareSpace(cpuCount: usize, controlSock: i32) {
+    pub fn InitShareSpace(vmfd: &VmFd, cpuCount: usize, controlSock: i32) {
         SHARE_SPACE_STRUCT.lock().Init(cpuCount, controlSock);
         let spAddr = &(*SHARE_SPACE_STRUCT.lock()) as * const _ as u64;
         SHARE_SPACE.SetValue(spAddr);
@@ -127,6 +153,11 @@ impl VirtualMachine {
         let logfd = super::super::super::print::LOG.lock().Logfd();
         URING_MGR.lock().Init(sharespace.config.read().DedicateUring);
         URING_MGR.lock().Addfd(logfd).unwrap();
+
+        for i in 0..cpuCount {
+            let addr = MemoryDef::KVM_IOEVENTFD_BASEADDR + (i as u64) * 8;
+            Self::IoEventfdAddEvent(vmfd.as_raw_fd(), addr, sharespace.scheduler.VcpuArr[i].eventfd);
+        }
 
         KERNEL_IO_THREAD.Init(sharespace.scheduler.VcpuArr[0].eventfd);
         URING_MGR.lock().SetupEventfd(sharespace.scheduler.VcpuArr[0].eventfd);
@@ -218,6 +249,11 @@ impl VirtualMachine {
             vms.hostAddrTop = MemoryDef::PHY_LOWER_ADDR + 64 * MemoryDef::ONE_MB + 2 * MemoryDef::ONE_GB;
             vms.pageTables = PageTables::New(&vms.allocator)?;
 
+            vms.KernelMap(addr::Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR),
+                          addr::Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR + 0x1000),
+                          addr::Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR),
+                          addr::PageOpts::Zero().SetPresent().SetWrite().SetGlobal().Val())?;
+
             //info!("the pageAllocatorBaseAddr is {:x}, the end of pageAllocator is {:x}", pageAllocatorBaseAddr, pageAllocatorBaseAddr + kernelMemSize);
             vms.KernelMapHugeTable(addr::Addr(MemoryDef::PHY_LOWER_ADDR),
                                    addr::Addr(MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB),
@@ -228,7 +264,7 @@ impl VirtualMachine {
             vms.args = Some(args);
         }
 
-        Self::InitShareSpace(cpuCount, controlSock);
+        Self::InitShareSpace(&vm_fd, cpuCount, controlSock);
 
         info!("before loadKernel");
 

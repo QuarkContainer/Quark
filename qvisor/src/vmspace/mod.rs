@@ -123,17 +123,19 @@ impl VMSpace {
     }
 
     pub fn TlbShootdown(&self, vcpuMask: u64) -> i64 {
+        let mut count = 0;
+
         for i in 0..64 {
             if (1<<i) & vcpuMask != 0 {
-                self.SignalThread(i, Signal::SIGCHLD);
+                if self.vcpus[i].Signal(Signal::SIGCHLD) {
+                    count += 1;
+                }
             }
         }
 
-        return 0;
-    }
-
-    pub fn SignalThread(&self, vcpuid: usize, signal: i32) {
-        self.vcpus[vcpuid].Signal(signal)
+        // work around for tlb shootdown. todo: fix this
+        std::thread::yield_now();
+        return count;
     }
 
     pub fn GetFdInfo(hostfd: i32) -> Option<FdInfo> {
