@@ -136,6 +136,8 @@ pub struct MemoryManagerInternal {
 
     // store whether the vcpu are working on the memory manager
     pub vcpuMapping: AtomicU64,
+    pub tlbShootdownCount: AtomicU64,
+
     pub mappingLock: Arc<QMutex<()>>,
     pub mapping: QMutex<MMMapping>,
 
@@ -206,7 +208,13 @@ impl MemoryManager {
         };
 
         let gap = vmas.FindGap(MemoryDef::PHY_LOWER_ADDR);
-        vmas.Insert(&gap, &Range::New(MemoryDef::PHY_LOWER_ADDR, MemoryDef::PHY_UPPER_ADDR - MemoryDef::PHY_LOWER_ADDR), vma);
+
+        // kernel memory
+        //vmas.Insert(&gap, &Range::New(MemoryDef::PHY_LOWER_ADDR, MemoryDef::PHY_UPPER_ADDR - MemoryDef::PHY_LOWER_ADDR), vma.clone());
+        // KVM_IOEVENTFD RANGE
+        //vmas.Insert(&gap, &Range::New(MemoryDef::KVM_IOEVENTFD_BASEADDR, 0x1000), vma);
+
+        vmas.Insert(&gap, &Range::New(MemoryDef::KVM_IOEVENTFD_BASEADDR, MemoryDef::PHY_UPPER_ADDR - MemoryDef::KVM_IOEVENTFD_BASEADDR), vma.clone());
 
         let mapping = MMMapping {
             vmas: vmas,
@@ -249,6 +257,7 @@ impl MemoryManager {
             uid: NewUID(),
             inited: true,
             vcpuMapping: AtomicU64::new(0),
+            tlbShootdownCount: AtomicU64::new(0),
             mappingLock: Arc::new(QMutex::new(())),
             mapping: QMutex::new(mapping),
             pagetable: QRwLock::new(pagetable),
@@ -268,6 +277,18 @@ impl MemoryManager {
         }
     }
 
+    pub fn AddTlbShootdownCount(&self) {
+        self.tlbShootdownCount.fetch_add(1, Ordering::Release);
+    }
+
+    pub fn TlbShootdownCount(&self) -> u64 {
+        return self.tlbShootdownCount.load(Ordering::Acquire);
+    }
+
+    pub fn ClearTlbShootdownCount(&self) {
+        self.tlbShootdownCount.store(0, Ordering::Release);
+    }
+
     pub fn SetVcpu(&self, vcpu: usize) {
         assert!(vcpu < 64);
         self.vcpuMapping.fetch_or(1<<vcpu, Ordering::Release);
@@ -279,8 +300,22 @@ impl MemoryManager {
             if mask > 0 {
                 //error!("TlbShootdownVcpuMask ... {:x}", mask);
 
+                self.ClearTlbShootdownCount();
                 // todo: wait for all the vcpu finishing the TLS shootdown?
-                HostSpace::TlbShootdown(mask);
+                // the current kvm_interrupt can't interrupt some vcpu, why?
+                let _count = HostSpace::TlbShootdown(mask) as u64;
+
+                /*error!("TlbShootdown wait start {:x}/{}", mask, count);
+                loop {
+                    // wait all other vcpu finish tlb clear
+                    if self.TlbShootdownCount() == count {
+                        break;
+                    }
+
+                    spin_loop();
+                }
+                error!("TlbShootdown wait done {:x}/{}", mask, count);*/
+
             }
         }
     }

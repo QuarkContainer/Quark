@@ -279,11 +279,6 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
             thread.forceSignal(Signal(info.Signo), false);
             thread.SendSignal(&info).expect("DivByZeroHandler send signal fail");
         }
-        ExceptionStackVec::VirtualizationException => {
-            let curr = super::asm::CurrentCr3();
-            PageTables::Switch(curr);
-            return
-        }
         _ => {
             panic!("ExceptionHandler: get unhanded exception {:?}", ev)
         }
@@ -614,8 +609,12 @@ pub extern fn SIMDFPHandler(sf: &mut PtRegs) {
 }
 
 #[no_mangle]
-pub extern fn VirtualizationHandler(sf: &mut PtRegs) {
-    ExceptionHandler(ExceptionStackVec::VirtualizationException, sf, 0);
+pub extern fn VirtualizationHandler(_sf: &mut PtRegs) {
+    let curr = super::asm::CurrentCr3();
+    PageTables::Switch(curr);
+    let currTask = Task::Current();
+    currTask.mm.AddTlbShootdownCount();
+    return;
 }
 
 #[no_mangle]

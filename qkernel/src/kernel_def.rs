@@ -133,14 +133,13 @@ impl ListAllocator {
 
 impl CPULocal {
     pub fn Wakeup(&self) {
-        // the uring eventwrite maynot return successfully, likely linux bug
-        // todo: fix this.
-        //IOURING.EventfdWrite(self.vcpuId, self.eventfd);
-
-        // look like hcall based eventwrite is faster than qcall.
-        // todo: root cause this
-        //super::Kernel::HostSpace::EventfdWriteAsync(self.eventfd);
-        super::Kernel::HostSpace::EventfdWrite(self.eventfd);
+        let vcpuId = self.vcpuId as u64;
+        if vcpuId != 0 {
+            let addr = MemoryDef::KVM_IOEVENTFD_BASEADDR + vcpuId * 8;
+            unsafe {
+                *(addr as * mut u64) = 1;
+            }
+        }
     }
 }
 
@@ -156,11 +155,6 @@ impl<'a> ShareSpace {
         }
 
         if super::SHARESPACE.HostProcessor() == 0 {
-            /*let vcpuId = super::SHARESPACE.scheduler.WakeOne();
-            if vcpuId < 0 &&super::SHARESPACE.NeedHostProcess()  {
-                HyperCall64(HYPERCALL_QCALL, 0, 0, 0);
-            }*/
-
             self.scheduler.VcpuArr[0].Wakeup();
         }
     }

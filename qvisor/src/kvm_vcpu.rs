@@ -284,14 +284,15 @@ impl KVMVcpu {
         SHARE_SPACE.scheduler.ScheduleQ(taskId, taskId.Queue());
     }
 
-    pub fn Signal(&self, signal: i32) {
+    pub fn Signal(&self, signal: i32) -> bool {
         if self.state.load(Ordering::Relaxed) == 2 {
-            return
+            return false
         }
 
         vmspace::VMSpace::TgKill(self.tgid.load(Ordering::Relaxed) as i32,
                                  self.threadid.load(Ordering::Relaxed) as i32,
                                  signal);
+        return true;
     }
 
     pub const KVM_SET_SIGNAL_MASK : u64 = 0x4004ae8b;
@@ -644,16 +645,16 @@ impl KVMVcpu {
                     }
                 }
                 VcpuExit::MmioRead(addr, _data) => {
-                    info!(
-                    "CPU[{}] Received an MMIO Read Request for the address {:#x}.",
-                    self.id, addr,
+                    panic!(
+                        "CPU[{}] Received an MMIO Read Request for the address {:#x}.",
+                        self.id, addr,
                     );
                 }
                 VcpuExit::MmioWrite(addr, _data) => {
-                    info!(
-                    "[{}] Received an MMIO Write Request to the address {:#x}.",
-                    self.id,
-                    addr,
+                    panic!(
+                        "[{}] Received an MMIO Write Request to the address {:#x}.",
+                        self.id,
+                        addr,
                     );
                 }
                 VcpuExit::Hlt => {
@@ -956,16 +957,6 @@ impl CPULocal {
         }
 
         return Err(Error::Exit)
-    }
-
-    pub fn Wakeup(&self) {
-        let val : u64 = 1;
-        let ret = unsafe {
-            libc::write(self.eventfd, &val as * const _ as *const libc::c_void, 8)
-        };
-        if ret < 0 {
-            panic!("KIOThread::Wakeup fail...");
-        }
     }
 }
 
