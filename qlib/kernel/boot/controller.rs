@@ -67,9 +67,6 @@ pub fn HandleSignal(signalArgs: &SignalArgs) {
         }
     };
 
-    // free curent task in the waitfn context
-    CPULocal::SetPendingFreeStack(Task::Current().taskId);
-    super::super::taskMgr::SwitchToNewTask();
 }
 
 pub fn SignalHandler(_ :  *const u8) {
