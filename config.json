@@ -13,7 +13,7 @@
   "FileBufWrite"  : true,
   "MmapRead"      : false,
   "AsyncAccept"   : true,
-  "DedicateUring" : 1,
+  "DedicateUring" : 0,
   "UringSize"     : 64,
   "UringEpollCtl" : true,
   "EnableRDMA"    : false,
