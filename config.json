@@ -18,5 +18,6 @@
   "UringEpollCtl" : true,
   "EnableRDMA"    : false,
   "RDMAPort"      : 1,
-  "PerSandboxLog" : false
+  "PerSandboxLog" : false,
+  "ReserveCpuCount": 1
 }
