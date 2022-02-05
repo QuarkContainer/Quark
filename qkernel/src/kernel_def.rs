@@ -154,7 +154,7 @@ impl<'a> ShareSpace {
             };
         }
 
-        if super::SHARESPACE.HostProcessor() == 0 {
+        if self.HostProcessor() == 0 {
             self.scheduler.VcpuArr[0].Wakeup();
         }
     }

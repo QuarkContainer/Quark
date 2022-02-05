@@ -13,6 +13,8 @@
 // limitations under the License.
 
 use core::mem;
+use core::sync::atomic::AtomicU64;
+use core::sync::atomic::Ordering;
 
 use super::super::qlib::uring::util::*;
 use super::super::qlib::uring::porting::*;
@@ -99,6 +101,8 @@ impl IoUring {
 
         Ok(IoUring {
             fd: Fd(fd),
+            lock: QMutex::new(()),
+            pendingCnt: AtomicU64::new(0),
             sq: QMutex::new(sq),
             cq: QMutex::new(cq),
             params: Parameters(p),
@@ -110,6 +114,34 @@ impl IoUring {
     #[inline]
     pub fn submit(&self) -> Result<usize> {
         self.submitter().submit()
+    }
+
+    #[inline]
+    pub fn HostSubmit(&self) -> Result<usize> {
+        let uringCnt = QUARK_CONFIG.lock().DedicateUring;
+        if uringCnt != 0 {
+            return Ok(0)
+        }
+
+        let _lock = match self.lock.try_lock() {
+            Some(l) => l,
+            None => {
+                //error!("HostSubmit didn't get lock");
+                return Ok(0)
+            },
+        };
+
+        //error!("HostSubmit get lock");
+        let count = self.pendingCnt.swap(0, Ordering::Acquire);
+        if count == 0 {
+            return Ok(0);
+        }
+
+        let ret = unsafe {
+            self.submitter().enter(count as u32, 0, 0)
+        };
+        //error!("HostSubmit_xxx 2");
+        return ret;
     }
 
     /// Initiate and/or complete asynchronous I/O

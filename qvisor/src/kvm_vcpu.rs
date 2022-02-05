@@ -33,7 +33,7 @@ use super::qlib::linux_def::*;
 use super::qlib::pagetable::*;
 use super::qlib::perf_tunning::*;
 //use super::qlib::kernel::TSC;
-//use super::qlib::kernel::IOURING;
+use super::qlib::kernel::IOURING;
 use super::qlib::*;
 use super::qlib::vcpu_mgr::*;
 use super::qlib::buddyallocator::ZeroPage;
@@ -316,12 +316,12 @@ impl KVMVcpu {
 
     pub const KVM_INTERRUPT : u64 = 0x4004ae86;
     pub fn InterruptGuest(&self) {
-        let bounce : u32 = 20;
+        let bounce : u32 = 20; //VirtualizationException
         let ret = unsafe {
             ioctl(self.vcpu.as_raw_fd(), Self::KVM_INTERRUPT, &bounce as * const _ as u64)
         };
 
-        assert!(ret ==0, "InterruptGuest ret is {}/{}/{}", ret, errno::errno().0, self.vcpu.as_raw_fd());
+        assert!(ret == 0, "InterruptGuest ret is {}/{}/{}", ret, errno::errno().0, self.vcpu.as_raw_fd());
     }
 
     pub fn run(&self, tgid: i32) -> Result<()> {
@@ -847,6 +847,24 @@ impl CPULocal {
         self.data = 1;
     }
 
+    pub fn ProcessOnce(sharespace: &ShareSpace) -> usize {
+        let mut count = 0;
+
+        loop {
+            let cnt = IOURING.IOUrings()[0].HostSubmit().unwrap();
+            if cnt == 0 {
+                break;
+            }
+            count += cnt;
+        }
+
+        count += IOURING.DrainCompletionQueue();
+        count += KVMVcpu::GuestMsgProcess(sharespace);
+        count += FD_NOTIFIER.HostEpollWait() as usize;
+
+        return count;
+    }
+
     pub fn Process(&self, sharespace: &ShareSpace) -> Option<u64> {
         match sharespace.scheduler.GetNext() {
             None => (),
@@ -856,7 +874,7 @@ impl CPULocal {
         }
 
         // process in vcpu worker thread will decease the throughput of redis/etcd benchmark
-        // todo: stdudy and fix
+        // todo: study and fix
         /*let mut start = TSC.Rdtsc();
         while IsRunning() {
             match sharespace.scheduler.GetNext() {
@@ -866,35 +884,14 @@ impl CPULocal {
                 }
             }
 
-            if IOURING.ProcessOne() {
+            let count = Self::ProcessOnce(sharespace);
+            if count > 0 {
                 start = TSC.Rdtsc()
             }
 
-            match sharespace.scheduler.GetNext() {
-                None => (),
-                Some(newTask) => {
-                    return Some(newTask.data)
-                }
-            }
-
-            if KVMVcpu::GuestMsgProcess(sharespace) > 0 {
-                start = TSC.Rdtsc()
-            };
-
-            match sharespace.scheduler.GetNext() {
-                None => (),
-                Some(newTask) => {
-                    return Some(newTask.data)
-                }
-            }
-
-            if TSC.Rdtsc() - start >= VCPU_WAIT_CYCLES {
+            if TSC.Rdtsc() - start >= IO_WAIT_CYCLES {
                 break;
             }
-
-            if FD_NOTIFIER.HostEpollWait() > 0 {
-                start = TSC.Rdtsc()
-            };
         }*/
 
         return None
@@ -931,12 +928,14 @@ impl CPULocal {
             }
 
             if sharespace.scheduler.VcpWaitMaskSet(self.vcpuId) {
-                match self.Process(sharespace) {
+                match sharespace.scheduler.GetNext() {
                     None => (),
                     Some(newTask) => {
-                        return Ok(newTask);
+                        return Ok(newTask.data)
                     }
                 }
+
+                //Self::ProcessOnce(sharespace);
             }
 
             let _nfds = unsafe {

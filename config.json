@@ -13,10 +13,11 @@
   "FileBufWrite"  : true,
   "MmapRead"      : false,
   "AsyncAccept"   : true,
-  "DedicateUring" : 1,
+  "DedicateUring" : 0,
   "UringSize"     : 64,
   "UringEpollCtl" : false,
   "EnableRDMA"    : false,
   "RDMAPort"      : 1,
-  "PerSandboxLog" : false
+  "PerSandboxLog" : false,
+  "ReserveCpuCount": 1
 }

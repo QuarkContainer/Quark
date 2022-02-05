@@ -20,6 +20,7 @@ use super::super::qlib::linux_def::*;
 use super::super::qlib::kernel::IOURING;
 use super::super::qlib::kernel::TSC;
 use super::super::qlib::kernel::ASYNC_PROCESS;
+use super::super::runc::runtime::vm::*;
 use super::super::kvm_vcpu::*;
 use super::super::*;
 
@@ -27,7 +28,7 @@ pub struct KIOThread {
     pub eventfd: i32,
 }
 
-pub const IO_WAIT_CYCLES : i64 = 10_000_000; // 1ms
+pub const IO_WAIT_CYCLES : i64 = 100_000_000; // 1ms
 
 impl KIOThread {
     pub fn New() -> Self {
@@ -42,25 +43,32 @@ impl KIOThread {
         }
     }
 
+    pub fn ProcessOnce(sharespace: &ShareSpace) -> usize {
+        let mut count = 0;
+
+        count += IOURING.IOUrings()[0].HostSubmit().unwrap();
+        count += IOURING.DrainCompletionQueue();
+        count += IOURING.IOUrings()[0].HostSubmit().unwrap();
+        count += KVMVcpu::GuestMsgProcess(sharespace);
+        count += IOURING.IOUrings()[0].HostSubmit().unwrap();
+        count += FD_NOTIFIER.HostEpollWait() as usize;
+        count += IOURING.IOUrings()[0].HostSubmit().unwrap();
+
+        return count;
+    }
+
     pub fn Process(sharespace: &ShareSpace) {
         let mut start = TSC.Rdtsc();
 
-        while !sharespace.Shutdown() {
-            if IOURING.DrainCompletionQueue() > 0 {
+        while IsRunning() {
+            let count = Self::ProcessOnce(sharespace);
+            if count > 0 {
                 start = TSC.Rdtsc()
             }
-
-            if KVMVcpu::GuestMsgProcess(sharespace) > 0 {
-                start = TSC.Rdtsc()
-            };
 
             if TSC.Rdtsc() - start >= IO_WAIT_CYCLES {
                 break;
             }
-
-            if FD_NOTIFIER.HostEpollWait() > 0 {
-                start = TSC.Rdtsc()
-            };
         }
     }
 
@@ -122,7 +130,7 @@ impl KIOThread {
             }
 
             if sharespace.DecrHostProcessor() == 0 {
-                Self::Process(sharespace);
+                Self::ProcessOnce(sharespace);
             }
 
             ASYNC_PROCESS.Process();

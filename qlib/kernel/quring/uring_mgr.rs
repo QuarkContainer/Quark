@@ -15,6 +15,7 @@
 use core::sync::atomic;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicUsize;
+use core::sync::atomic::Ordering;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
@@ -38,6 +39,7 @@ use super::super::socket::hostinet::socket::*;
 use super::super::Kernel::HostSpace;
 use super::super::kernel::async_wait::*;
 use super::super::IOURING;
+use super::super::SHARESPACE;
 use super::uring_op::*;
 use super::uring_async::*;
 use super::super::kernel::waiter::qlock::*;
@@ -78,30 +80,22 @@ impl IoUring {
         }
     }
 
-    pub fn SubmitAndWait(&self, idx: usize, want: usize) -> Result<usize> {
-        let len = self.SqLen();
+    pub fn SubmitAndWait(&self, idx: usize, _want: usize) -> Result<usize> {
+        let dedicateUring = SHARESPACE.config.read().DedicateUring;
+        if dedicateUring == 0 {
+            self.pendingCnt.fetch_add(1, Ordering::Release);
 
-        let mut flags = 0;
-
-        if want > 0 {
-            flags |= sys::IORING_ENTER_GETEVENTS;
-        }
-
-        if self.params.0.flags & sys::IORING_SETUP_SQPOLL != 0 {
-            if self.NeedWakeup() {
-                if want > 0 {
-                    flags |= sys::IORING_ENTER_SQ_WAKEUP;
-                } else {
-                    UringWake(idx, 0);
-                    return Ok(0)
-                }
-            } else if want == 0 {
-                // fast poll
-                return Ok(len);
+            if SHARESPACE.HostProcessor() == 0 {
+                SHARESPACE.scheduler.VcpuArr[0].Wakeup();
             }
-        }
 
-        return self.Enter(idx, len as _, want as _, flags)
+            return Ok(0);
+        } else {
+            if self.NeedWakeup() {
+                UringWake(idx, 0);
+            }
+            return Ok(0)
+        }
     }
 
     pub fn Submit(&self, idx: usize) -> Result<usize> {
