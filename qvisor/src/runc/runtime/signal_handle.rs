@@ -19,7 +19,8 @@ use core::sync::atomic::Ordering;
 
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::control_msg::*;
-//use super::super::super::VMS;
+use super::super::super::VMS;
+use super::super::super::ROOT_CONTAINER_ID;
 
 lazy_static! {
     static ref SIGNAL_HANDLE_ENABLE : AtomicBool = AtomicBool::new(false);
@@ -79,9 +80,9 @@ extern fn handle_sigintAct(signal :i32, signInfo: *mut libc::siginfo_t, _: *mut 
 
         error!("get signal {}, action is {:x?}", signal, sigfault);
 
-        let _signal = SignalArgs {
+        let signal = SignalArgs {
             Signo: signal,
-            CID: "".to_string(),
+            CID: ROOT_CONTAINER_ID.lock().clone(),
             PID: 0,
             Mode: if console {
                 SignalDeliveryMode::DeliverToForegroundProcessGroup
@@ -90,7 +91,7 @@ extern fn handle_sigintAct(signal :i32, signInfo: *mut libc::siginfo_t, _: *mut 
             }
         };
 
-        //VMS.lock().Signal(signal);
+        VMS.lock().Signal(signal);
     }
 }
 

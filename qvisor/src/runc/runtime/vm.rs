@@ -49,7 +49,7 @@ use super::super::super::runc::runtime::loader::*;
 use super::super::super::kvm_vcpu::*;
 use super::super::super::elf_loader::*;
 use super::super::super::vmspace::*;
-use super::super::super::{VMS, PMA_KEEPER, QUARK_CONFIG, URING_MGR, KERNEL_IO_THREAD, THREAD_ID, ThreadId};
+use super::super::super::{VMS, ROOT_CONTAINER_ID, PMA_KEEPER, QUARK_CONFIG, URING_MGR, KERNEL_IO_THREAD, THREAD_ID, ThreadId};
 
 lazy_static! {
     static ref EXIT_STATUS : AtomicI32 = AtomicI32::new(-1);
@@ -189,6 +189,7 @@ impl VirtualMachine {
     pub fn Init(args: Args /*args: &Args, kvmfd: i32*/) -> Result<Self> {
         PerfGoto(PerfType::Other);
 
+        *ROOT_CONTAINER_ID.lock() = args.ID.clone();
         if QUARK_CONFIG.lock().PerSandboxLog {
             LOG.lock().Reset(&args.ID[0..12]);
         }

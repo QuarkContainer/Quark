@@ -77,6 +77,9 @@ pub fn SignalHandler(_ :  *const u8) {
             HandleSignal(&msg);
         }
     }
+
+    CPULocal::SetPendingFreeStack(Task::Current().taskId);
+    super::super::taskMgr::SwitchToNewTask();
 }
 
 pub fn ControlMsgHandler(fd: *const u8) {
@@ -116,7 +119,6 @@ pub fn ControlMsgHandler(fd: *const u8) {
         }
         Payload::Signal(signalArgs) => {
             HandleSignal(&signalArgs);
-
             WriteControlMsgResp(fd, &UCallResp::SignalResp);
         }
         Payload::ContainerDestroy(cid) => {
