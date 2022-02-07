@@ -19,7 +19,7 @@ use core::sync::atomic::Ordering;
 
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::control_msg::*;
-use super::super::super::VMS;
+//use super::super::super::VMS;
 
 lazy_static! {
     static ref SIGNAL_HANDLE_ENABLE : AtomicBool = AtomicBool::new(false);
@@ -79,7 +79,7 @@ extern fn handle_sigintAct(signal :i32, signInfo: *mut libc::siginfo_t, _: *mut 
 
         error!("get signal {}, action is {:x?}", signal, sigfault);
 
-        let signal = SignalArgs {
+        let _signal = SignalArgs {
             Signo: signal,
             CID: "".to_string(),
             PID: 0,
@@ -90,7 +90,7 @@ extern fn handle_sigintAct(signal :i32, signInfo: *mut libc::siginfo_t, _: *mut 
             }
         };
 
-        VMS.lock().Signal(signal);
+        //VMS.lock().Signal(signal);
     }
 }
 
