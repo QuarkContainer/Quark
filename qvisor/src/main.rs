@@ -128,6 +128,7 @@ lazy_static! {
     pub static ref SHARE_SPACE_STRUCT: Arc<Mutex<ShareSpace>> =
         Arc::new(Mutex::new(ShareSpace::New()));
     pub static ref VMS: Mutex<VMSpace> = Mutex::new(VMSpace::Init());
+    pub static ref ROOT_CONTAINER_ID: Mutex<String> = Mutex::new(String::new());
     pub static ref PAGE_ALLOCATOR: MemAllocator = MemAllocator::New();
     pub static ref FD_NOTIFIER: HostFdNotifier = HostFdNotifier::New();
     pub static ref IO_MGR: vmspace::HostFileMap::IOMgr =
