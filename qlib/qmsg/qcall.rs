@@ -793,7 +793,6 @@ impl Default for HostOutputMsg {
 #[derive(Clone, Default, Debug, Copy)]
 pub struct WaitFDAsync {
     pub fd: i32,
-    pub op: u32,
     pub mask: EventMask,
 }
 

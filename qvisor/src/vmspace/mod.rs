@@ -1262,7 +1262,7 @@ impl VMSpace {
         return Self::GetRet(ret as i64)
     }
 
-    pub fn WaitFD(fd: i32, _op: u32, mask: EventMask) -> i64 {
+    pub fn WaitFD(fd: i32, mask: EventMask) -> i64 {
         let fdinfo = match Self::GetFdInfo(fd) {
             Some(fdinfo) => fdinfo,
             None => return -SysErr::EBADF as i64,
@@ -1277,14 +1277,6 @@ impl VMSpace {
                 panic!("WaitFD get error {:?}", e);
             }
         }
-
-        /*match FD_NOTIFIER.WaitFd(osfd, op, mask) {
-            Ok(()) => return 0,
-            Err(Error::SysError(syserror)) => return -syserror as i64,
-            Err(e) => {
-                panic!("WaitFD get error {:?}", e);
-            }
-        }*/
     }
 
     pub fn NonBlockingPoll(fd: i32, mask: EventMask) -> i64 {
