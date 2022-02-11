@@ -371,10 +371,13 @@ impl RDMADataSock {
     // after get remote peer's RDMA metadata and need to setup RDMA
     pub fn SetupRDMA(&self) {
         let remoteInfo = self.remoteRDMAInfo.lock();
+        let start = TSC.Rdtsc();
         self.qp
             .lock()
             .Setup(&RDMA, remoteInfo.qp_num, remoteInfo.lid, remoteInfo.gid)
             .expect("SetupRDMA fail...");
+        let d1 = TSC.Rdtsc() - start;
+        let start1 = TSC.Rdtsc();
         for _i in 0..MAX_RECV_WR {
             let wr = WorkRequestId::New(self.fd);
             self.qp
@@ -382,6 +385,9 @@ impl RDMADataSock {
                 .PostRecv(wr.0, self.localRDMAInfo.raddr, self.localRDMAInfo.rkey)
                 .expect("SetupRDMA PostRecv fail");
         }
+        let d2 = TSC.Rdtsc() - start1;
+        let d3 = TSC.Rdtsc() - start;
+        error!("Setup time: set up qp {}, create recv request: {}, total: {}", d1, d2, d3);
     }
 
     pub fn RDMAWriteImm(
@@ -441,7 +447,7 @@ impl RDMADataSock {
                 remoteInfo.freespace -= len as u32;
                 remoteInfo.offset = (remoteInfo.offset + len as u32) % remoteInfo.rlen;
                 remoteInfo.sending = true;
-                // debug!("RDMASendLocked::2, writeCount: {}, readCount: {}", len, readCount);
+                //error!("RDMASendLocked::2, writeCount: {}, readCount: {}", len, readCount);
             }
         }
     }
@@ -591,14 +597,14 @@ impl RDMADataSock {
         let start = TSC.Rdtsc();
         let _writelock = self.writeLock.lock();
         self.RDMASend();
-        error!("RDMARead:: time: {}", TSC.Rdtsc() - start);
+        //error!("RDMARead:: time: {}", TSC.Rdtsc() - start);
     }
 
     pub fn RDMAWrite(&self) {
         let start = TSC.Rdtsc();
         let _writelock = self.writeLock.lock();
         self.RDMASend();
-        error!("RDMAWrite:: time: {}", TSC.Rdtsc() - start);
+        //error!("RDMAWrite:: time: {}", TSC.Rdtsc() - start);
     }
 
     pub fn ReadData(&self, waitinfo: FdWaitInfo) {

@@ -24,6 +24,7 @@ use std::os::unix::io::AsRawFd;
 use super::qlib::ShareSpace;
 use super::qlib::kernel::IOURING;
 use super::qlib::kernel::Timestamp;
+use super::qlib::kernel::RawTimestamp;
 use super::ThreadId;
 
 lazy_static! {
@@ -107,6 +108,7 @@ impl Log {
 
     pub fn Print(&mut self, level: &str, str: &str) {
         let now = Timestamp();
+        //let now = RawTimestamp();
         self.Write(&format!("[{}] [{}/{}] {}\n", level, ThreadId(), now, str));
     }
 

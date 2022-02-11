@@ -28,7 +28,7 @@ pub struct KIOThread {
     pub eventfd: i32,
 }
 
-pub const IO_WAIT_CYCLES : i64 = 20_000_000; // 1ms
+pub const IO_WAIT_CYCLES : i64 = 10_000_000; // 1ms
 
 impl KIOThread {
     pub fn New() -> Self {

@@ -7,19 +7,62 @@
 #include <errno.h>
 #include <wait.h>
 #include <signal.h>
+#include <pthread.h>
 #include <netinet/tcp.h>
 
 #define PORT 9987
 #define BUFFERNUM 133
 
-void handler1(int sig)
+struct config_t
 {
-    char *hello = "Hello from signal\n";
-    //write(1, hello, strlen(hello));
-    printf("sig..... = %d\n", sig);
-    write(1, hello, strlen(hello));
-        /* Flushes the printed string to stdout */
-    fflush(stdout);
+    long long buffer_size;
+    long long bytestotalsent;
+    long long totalbytes;
+    int log;
+};
+
+struct config_t config =
+{
+    32768,
+    0,
+    32768 * 10000,
+    0, // log
+};
+
+char *buffer;
+
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
+void * socketThread(void *arg)
+{
+    //int newSocket = *((int *)arg);
+    int newSocket = (int)arg;
+    if (config.log)
+    {
+        printf("newSocket is: %d\n", newSocket);
+    }
+
+    while (1)
+    {
+        if (config.bytestotalsent >= config.totalbytes)
+        {
+            break;
+        }
+
+        int n = write(newSocket, buffer, config.buffer_size);
+        pthread_mutex_lock(&lock);
+        config.bytestotalsent += n;
+        
+        pthread_mutex_unlock(&lock);
+        if(config.log)
+        {
+            printf("config.bytestotalsent %lld\n", config.bytestotalsent);
+            printf("sock: %d, write %d\n", newSocket, n);
+        }
+    }
+
+    close(newSocket);
+    pthread_exit(NULL);
 }
 
 int main(int argc, char const *argv[]) 
@@ -31,7 +74,7 @@ int main(int argc, char const *argv[])
     char *hello = "Hello from server";
 
     long long writeCount = 1000000;
-    if (argc >1)
+    if (argc >= 2)
     {
         writeCount = atoll(argv[1]);
     }
@@ -57,56 +100,52 @@ int main(int argc, char const *argv[])
     // } 
     address.sin_family = AF_INET; 
     address.sin_addr.s_addr = INADDR_ANY; 
+    
     int buffernum = BUFFERNUM;
-    if (argc >2)
+    if (argc >= 3)
     {
         buffernum = atoi(argv[2]);
     }
     printf("buffer len is %d\n", buffernum);
+    config.buffer_size = buffernum;
 
-    int nodelay = 0;
+    int threadnum = 1;
     if (argc > 3)
     {
-        nodelay = atoi(argv[3]);
+        threadnum = atoi(argv[3]);
+    }
+    printf("thread number is %d\n", threadnum);
+
+    int nodelay = 0;
+    if (argc > 4)
+    {
+        nodelay = atoi(argv[4]);
     }
     printf("nodelay is %d\n", nodelay);
 
     int port = PORT;
-    if (argc >4)
+    if (argc > 5)
     {
-        port = atoi(argv[4]);
+        port = atoi(argv[5]);
     }
     printf("sin_port is %d\n", port);
 
     int log = 0;
-    if (argc >5)
+    if (argc > 6)
     {
-        log = strcmp(argv[5], "log") == 0 ? 1 : 0;
+        log = strcmp(argv[6], "log") == 0 ? 1 : 0;
     }
     printf("log is %d\n", log);
-
+    config.log = log;
 
     address.sin_port = htons(port);
-    
 
-    char* buffer = malloc(buffernum);
+    buffer = malloc(buffernum);
     //memset(buffer, 'a', buffernum);
     for (int i = 0; i < buffernum; i ++)
     {
         buffer[i] = 'A' + random() % 26;
     }
-    // int i;
-    // printf("n is: %d", 1024*32-1);
-    // printf("before write %d\n", strlen(buffer));
-    // printf("edge is %d\n", buffer[1024*32]);
-    // for (i = 1024*32-1; i > 1024*32-10; i--)
-    // {
-    //     printf("i is %d\n", i);
-    //     printf("buffer[%d]: %c\n", i, buffer[i]);
-    // }
-    // printf("before write %d\n", strlen(buffer));
-    // return;
-
        
     // Forcefully attaching socket to the port 8080 
     if (bind(server_fd, (struct sockaddr *)&address,  
@@ -124,65 +163,37 @@ int main(int argc, char const *argv[])
     printf("listen successfully\n");
     long long bytes = buffernum * writeCount;
     printf("bytes is %llu\n", bytes);
-    while (1)
+    config.totalbytes = bytes;
+
+    pthread_t *tid = malloc(sizeof(pthread_t) * threadnum);
+    for(int i=0; i<threadnum; i++)
     {
-        while ((new_socket = accept(server_fd, (struct sockaddr *)&address,
+        if ((new_socket = accept(server_fd, (struct sockaddr *)&address,
                         (socklen_t*)&addrlen))<0) {
             printf("accept %d", errno);
         }
-        printf("get connection\n");
-        //sleep(1);
+        printf("get connection, socket is: %d\n", new_socket);
 
         if (nodelay)
         {
             int one = 1;
             setsockopt(new_socket, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
         }
+        
 
-
-        // printf("before write hello\n");
-        // int n = write(new_socket , hello, strlen(hello));
-        // printf("after write hello\n");
-        // printf("before write\n");
-        // int n = write(new_socket , buffer , 1024*32);
-        // printf("after write %d\n", n);
-
-        bytes = buffernum * writeCount;
-        printf("bytes is %llu\n", bytes);
-        long long i = 0;
-        //for(int i = 0; i < writeCount; i++)
-        while (bytes > 0)
+        //if( pthread_create(&tid[i], NULL, socketThread, &new_socket) != 0 )
+        if( pthread_create(&tid[i], NULL, socketThread, (void*)new_socket) != 0 )
         {
-            if (log)
-            {
-                printf("before write %llu batch\n", i+1);
-            }
-            
-            int n = write(new_socket , buffer , buffernum);
-            bytes -= n;
-            // if (n < buffernum)
-            // {
-            //     printf("write %d th, %d was writtern which is less than %d\n", i, n, buffernum);
-            // }
-            if (log)
-            {
-                printf("after write %llu batch, write: %d\n", i+1, n);
-            }
-
-            i += 1;
-            // printf("before write %d hello\n", i);
-            // int n = write(new_socket , hello, strlen(hello));
-            // printf("after write %d hello\n", i);
+            printf("Failed to create thread\n");
         }
-
-        printf("iteration is %d\n", i);
-
     }
     
+    for (int i=0; i<threadnum; i++)
+    {
+        pthread_join(tid[i], NULL);
+    }
 
-    close(new_socket);
+    sleep(2);
     close(server_fd);
-    free(buffer);
-
-    return 222;
+    free(tid);
 } 

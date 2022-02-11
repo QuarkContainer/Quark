@@ -172,7 +172,7 @@ impl IOMgr {
         let fdInfo = self.GetByHost(fd);
         match fdInfo {
             None => {
-                panic!("ProcessRDMAWriteImmFinish get unexpected fd {}", fd)
+                panic!("ProcessRDMARecvWriteImm get unexpected fd {}", fd)
             },
             Some(fdInfo) => {
                 fdInfo.ProcessRDMARecvWriteImm(recvCount, writeCount);

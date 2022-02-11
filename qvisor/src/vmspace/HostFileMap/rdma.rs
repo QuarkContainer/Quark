@@ -356,7 +356,7 @@ impl Deref for RDMAContext {
 }
 
 pub const MAX_SEND_WR: u32 = 100;
-pub const MAX_RECV_WR: u32 = 6;
+pub const MAX_RECV_WR: u32 = 8192;
 pub const MAX_SEND_SGE: u32 = 1;
 pub const MAX_RECV_SGE: u32 = 1;
 
@@ -387,8 +387,8 @@ impl RDMAContext {
             recv_cq: context.completeQueue.0 as *const _ as *mut _,
             srq: ptr::null::<rdmaffi::ibv_srq>() as *mut _,
             cap: rdmaffi::ibv_qp_cap {
-                max_send_wr: 1000, //MAX_SEND_WR,
-                max_recv_wr: 1000, //MAX_RECV_WR,
+                max_send_wr: 8192, //MAX_SEND_WR,
+                max_recv_wr: 8192, //MAX_RECV_WR,
                 max_send_sge: MAX_SEND_SGE,
                 max_recv_sge: MAX_RECV_SGE,
                 max_inline_data: 0,
@@ -460,15 +460,35 @@ impl RDMAContext {
         let mut count = 0;
 
         loop {
+            // let poll_result = unsafe { rdmaffi::ibv_poll_cq(self.CompleteQueue(), 2, &mut wc) };
+            // let wc_ptr: *const rdmaffi::ibv_wc = &wc;
+            // if poll_result == 2 {
+            //     count += 2;
+            //     //self.ProcessWC(&wc);
+            //     self.ProcessWC(unsafe {&(*wc_ptr.offset(0))});
+            //     self.ProcessWC(unsafe {&(*wc_ptr.offset(1))});
+            // } else if poll_result == 1 {
+            //     // if count > 0 {
+            //     //     error!("PollCompletionQueueAndProcess: processed wcs: {}", count);
+            //     // }
+            //     count += 1;
+            //     self.ProcessWC(unsafe {&(*wc_ptr.offset(0))});
+            //     return count;
+            // } else if poll_result == 0 {
+            //     return count;
+            // } else {
+            //     // debug!("Error to query CQ!")
+            //     // break;
+            // }
+
             let poll_result = unsafe { rdmaffi::ibv_poll_cq(self.CompleteQueue(), 1, &mut wc) };
             if poll_result == 1 {
                 count += 1;
                 self.ProcessWC(&wc);
             } else if poll_result == 0 {
-                if count != 0 {
-                    // debug!("PollCompletionQueueAndProcess: processed wcs: {}", count);
-                }
-                
+                // if count > 0 {
+                //     error!("PollCompletionQueueAndProcess: processed wcs: {}", count);
+                // }
                 return count;
             } else {
                 // debug!("Error to query CQ!")
@@ -624,10 +644,10 @@ impl RDMAContext {
         //     }
         // }
         if wc.status != rdmaffi::ibv_wc_status::IBV_WC_SUCCESS {
-            // debug!(
-            //     "ProcessWC::1, work reqeust failed with status: {}, id: {}",
-            //     wc.status, wc.wr_id
-            // );
+            error!(
+                "ProcessWC::1, work reqeust failed with status: {}, id: {}",
+                wc.status, wc.wr_id
+            );
         }
         let start = TSC.Rdtsc();
         if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RDMA_WRITE {
@@ -651,7 +671,7 @@ impl RDMAContext {
             // debug!("ProcessWC::4, opcode: {}, wr_id: {}", wc.opcode, wc.wr_id);
         }
         let end = TSC.Rdtsc();
-        debug!("opcode: {}, time used: {}", wc.opcode, end - start);
+        //debug!("opcode: {}, time used: {}", wc.opcode, end - start);
     }
 }
 
@@ -778,6 +798,8 @@ impl QueuePair {
         if rc != 0 {
             return Err(Error::SysError(errno::errno().0));
         }
+
+        //error!("RDMAWriteImm");
 
         return Ok(());
     }

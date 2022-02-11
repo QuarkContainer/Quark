@@ -275,7 +275,7 @@ impl VirtualMachine {
         let cpu = self.vcpus[0].clone();
 
         let mut threads = Vec::new();
-
+        info!("shareSpace ready...11");
         threads.push(thread::Builder::new().name("0".to_string()).spawn(move || {
             THREAD_ID.with ( |f| {
                 *f.borrow_mut() = 0;
@@ -286,7 +286,7 @@ impl VirtualMachine {
 
         syncmgr::SyncMgr::WaitShareSpaceReady();
         info!("shareSpace ready...");
-
+        info!("vcpus len: {}", self.vcpus.len());
         for i in 1..self.vcpus.len() {
             let cpu = self.vcpus[i].clone();
 

@@ -1,7 +1,7 @@
 {
-  "DebugLevel"    : "Debug",
+  "DebugLevel"    : "Error",
   "KernelMemSize" : 16,
-  "LogType"       : "Async",
+  "LogType"       : "Sync",
   "LogLevel"      : "Simple",
   "UringIO"       : true,
   "EnableAIO"     : true,
