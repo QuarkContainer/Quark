@@ -320,6 +320,8 @@ pub extern "C" fn syscall_handler(
 
     currTask.RestoreFp();
 
+    currTask.mm.HandleTlbShootdown();
+
     currTask.Check();
     if SHARESPACE.config.read().KernelPagetable {
         currTask.SwitchPageTable();

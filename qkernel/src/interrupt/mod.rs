@@ -18,6 +18,7 @@ mod idt;
 use super::qlib::addr::*;
 use super::task::*;
 use super::qlib::common::*;
+use super::qlib::vcpu_mgr::*;
 use super::qlib::linux_def::*;
 use super::threadmgr::task_sched::*;
 use super::SignalDef::*;
@@ -285,7 +286,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
     }
 
     MainRun(currTask, TaskRunState::RunApp);
-
+    currTask.mm.HandleTlbShootdown();
     ReturnToApp(sf);
 }
 
@@ -583,6 +584,7 @@ pub fn HandleFault(task: &mut Task, user: bool, errorCode: u64, cr2: u64, sf: &m
     thread.forceSignal(Signal(Signal::SIGSEGV), false);
     thread.SendSignal(&info).expect("PageFaultHandler send signal fail");
     MainRun(task, TaskRunState::RunApp);
+    task.mm.HandleTlbShootdown();
 
     ReturnToApp(sf);
 }
@@ -613,7 +615,7 @@ pub extern fn VirtualizationHandler(_sf: &mut PtRegs) {
     let curr = super::asm::CurrentCr3();
     PageTables::Switch(curr);
     let currTask = Task::Current();
-    currTask.mm.AddTlbShootdownCount();
+    currTask.mm.MaskTlbShootdown(CPULocal::CpuId() as u64);
     return;
 }
 
