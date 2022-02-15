@@ -33,6 +33,7 @@ use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::super::range::*;
 use super::super::super::addr::*;
+use super::super::super::vcpu_mgr::CPULocal;
 use super::super::stack::*;
 use super::super::super::auxv::*;
 use super::super::task::*;
@@ -136,7 +137,7 @@ pub struct MemoryManagerInternal {
 
     // store whether the vcpu are working on the memory manager
     pub vcpuMapping: AtomicU64,
-    pub tlbShootdownCount: AtomicU64,
+    pub tlbShootdownMask: AtomicU64,
 
     pub mappingLock: Arc<QMutex<()>>,
     pub mapping: QMutex<MMMapping>,
@@ -257,7 +258,7 @@ impl MemoryManager {
             uid: NewUID(),
             inited: true,
             vcpuMapping: AtomicU64::new(0),
-            tlbShootdownCount: AtomicU64::new(0),
+            tlbShootdownMask: AtomicU64::new(0),
             mappingLock: Arc::new(QMutex::new(())),
             mapping: QMutex::new(mapping),
             pagetable: QRwLock::new(pagetable),
@@ -277,16 +278,16 @@ impl MemoryManager {
         }
     }
 
-    pub fn AddTlbShootdownCount(&self) {
-        self.tlbShootdownCount.fetch_add(1, Ordering::Release);
+    pub fn MaskTlbShootdown(&self, vcpuId: u64) {
+        self.tlbShootdownMask.fetch_or(1 << vcpuId, Ordering::Release);
     }
 
-    pub fn TlbShootdownCount(&self) -> u64 {
-        return self.tlbShootdownCount.load(Ordering::Acquire);
+    pub fn TlbShootdownMask(&self) -> u64 {
+        return self.tlbShootdownMask.load(Ordering::Acquire);
     }
 
-    pub fn ClearTlbShootdownCount(&self) {
-        self.tlbShootdownCount.store(0, Ordering::Release);
+    pub fn ClearTlbShootdownMask(&self) {
+        self.tlbShootdownMask.store(0, Ordering::Release);
     }
 
     pub fn SetVcpu(&self, vcpu: usize) {
@@ -300,22 +301,23 @@ impl MemoryManager {
             if mask > 0 {
                 //error!("TlbShootdownVcpuMask ... {:x}", mask);
 
-                self.ClearTlbShootdownCount();
+                self.ClearTlbShootdownMask();
                 // todo: wait for all the vcpu finishing the TLS shootdown?
                 // the current kvm_interrupt can't interrupt some vcpu, why?
-                let _count = HostSpace::TlbShootdown(mask) as u64;
+                HostSpace::TlbShootdown(mask) as u64;
+                //mask = HostSpace::TlbShootdown(mask) as u64;
 
-                /*error!("TlbShootdown wait start {:x}/{}", mask, count);
-                loop {
+                /*loop {
                     // wait all other vcpu finish tlb clear
-                    if self.TlbShootdownCount() == count {
+                    let waitMask = mask & !self.TlbShootdownMask();
+                    if waitMask == 0 {
                         break;
                     }
 
-                    spin_loop();
-                }
-                error!("TlbShootdown wait done {:x}/{}", mask, count);*/
-
+                    mask = HostSpace::TlbShootdown(waitMask) as u64;
+                    error!("wait for {:b}", mask);
+                    //core::hint::spin_loop();
+                }*/
             }
         }
     }
@@ -415,12 +417,25 @@ impl MemoryManager {
         return Ok(())
     }
 
+    pub fn HandleTlbShootdown(&self) {
+        let vcpId = CPULocal::CpuId() as u64;
+        if self.TlbShootdownMask() & (1<<vcpId) != 0 {
+            let curr = super::super::super::super::asm::CurrentCr3();
+            PageTables::Switch(curr);
+            self.MaskTlbShootdown(vcpId);
+        }
+    }
+
     pub fn MappingReadLock(&self) -> QMutexGuard<()> {
-        return self.mappingLock.lock();
+        let lock = self.mappingLock.lock();
+        self.HandleTlbShootdown();
+        return lock
     }
 
     pub fn MappingWriteLock(&self) -> QMutexGuard<()> {
-        return self.mappingLock.lock();
+        let lock = self.mappingLock.lock();
+        self.HandleTlbShootdown();
+        return lock
     }
 
     pub fn BrkSetup(&self, addr: u64) {
