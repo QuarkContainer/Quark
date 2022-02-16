@@ -320,7 +320,7 @@ impl KVMVcpu {
                 ret = 0;
             },
             Msg::TlbShootdown(msg) => {
-                ret = super::VMS.lock().TlbShootdown(msg.vcpuMask) as u64;
+                ret = SHARE_SPACE.TlbShootdown(msg.vcpuMask) as u64;
             },
         };
 

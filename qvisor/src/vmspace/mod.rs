@@ -122,7 +122,7 @@ impl VMSpace {
         return IO_MGR.GetFdByHost(hostfd);
     }
 
-    pub fn TlbShootdown(&self, vcpuMask: u64) -> i64 {
+    pub fn TlbShootdown(&self, vcpuMask: u64) -> u64 {
         let mut mask = 0;
 
         for i in 0..64 {
@@ -133,8 +133,6 @@ impl VMSpace {
             }
         }
 
-        // work around for tlb shootdown. todo: fix this
-        std::thread::yield_now();
         return mask;
     }
 
