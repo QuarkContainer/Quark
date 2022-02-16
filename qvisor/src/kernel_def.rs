@@ -109,6 +109,24 @@ impl ShareSpace {
         super::vmspace::VMSpace::BlockFd(controlSock);
     }
 
+    pub fn TlbShootdown(&self, vcpuMask: u64) -> i64 {
+        let _l = self.tlbShootdownLock.lock();
+
+        self.ClearTlbShootdownMask();
+        let mut mask = VMS.lock().TlbShootdown(vcpuMask);
+
+        for _ in 0..20 {
+            if mask & !self.TlbShootdownMask() == 0 {
+                return mask as _;
+            }
+            std::thread::yield_now();
+            mask = VMS.lock().TlbShootdown(vcpuMask);
+        }
+
+        error!("TlbShootdown waiting for {:b} timeout", mask & !self.TlbShootdownMask());
+        return mask as _;
+    }
+
     pub fn Yield() {
         std::thread::yield_now();
         std::thread::yield_now();

@@ -558,11 +558,14 @@ pub struct ShareSpace {
     pub logLock: QMutex<()>,
     pub logfd: AtomicI32,
     pub signalHandlerAddr: AtomicU64,
+    pub virtualizationHandlerAddr: AtomicU64,
     pub kernel: QMutex<Option<Kernel>>,
 
     pub controlSock: i32,
 
     pub values: Vec<[AtomicU64; 2]>,
+    pub tlbShootdownLock: QMutex<()>,
+    pub tlbShootdownMask: AtomicU64,
 }
 
 impl ShareSpace {
@@ -571,6 +574,18 @@ impl ShareSpace {
             ioUring: CachePadded::new(QUring::New(MemoryDef::QURING_SIZE)),
             ..Default::default()
         }
+    }
+
+    pub fn MaskTlbShootdown(&self, vcpuId: u64) {
+        self.tlbShootdownMask.fetch_or(1 << vcpuId, Ordering::Release);
+    }
+
+    pub fn TlbShootdownMask(&self) -> u64 {
+        return self.tlbShootdownMask.load(Ordering::Acquire);
+    }
+
+    pub fn ClearTlbShootdownMask(&self) {
+        self.tlbShootdownMask.store(0, Ordering::Release);
     }
 
     pub fn SetIOUringsAddr(&self, addr: u64) {
@@ -583,6 +598,14 @@ impl ShareSpace {
 
     pub fn SignalHandlerAddr(&self) -> u64 {
         return self.signalHandlerAddr.load(Ordering::Relaxed);
+    }
+
+    pub fn SetvirtualizationHandlerAddr(&self, addr: u64) {
+        self.virtualizationHandlerAddr.store(addr, Ordering::SeqCst);
+    }
+
+    pub fn VirtualizationHandlerAddr(&self) -> u64 {
+        return self.virtualizationHandlerAddr.load(Ordering::Relaxed);
     }
 
     pub fn GuestNotifierAddr(&self) -> u64 {

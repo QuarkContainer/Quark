@@ -173,3 +173,30 @@ impl Stack {
         return Ok(l)
     }
 }
+
+
+pub struct KernelStack {
+    pub sp: u64
+}
+
+impl KernelStack {
+    pub fn New(addr: u64) -> Self {
+        return Self {
+            sp: addr
+        }
+    }
+
+    pub fn PushU64(&mut self, val: u64) -> u64 {
+        self.sp = self.sp - 8;
+        unsafe {
+            *(self.sp as * mut u64) = val;
+        }
+        return self.sp
+    }
+
+    pub fn Pad16(&mut self, _task: &Task) -> Result<u64> {
+        let offset = self.sp & 0xf;
+        self.sp -= offset;
+        return Ok(self.sp)
+    }
+}
