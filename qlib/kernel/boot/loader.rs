@@ -55,7 +55,7 @@ impl Process {
     }
 }
 
-#[derive(Eq)]
+#[derive(Eq, Debug)]
 pub struct ExecID {
     pub cid: String,
     pub pid: ThreadID,

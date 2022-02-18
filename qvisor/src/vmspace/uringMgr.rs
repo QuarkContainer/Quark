@@ -78,9 +78,6 @@ impl UringMgr {
 
         if DedicateUringCnt == 0 {
             let ring = Builder::default()
-                .setup_sqpoll(10)
-                .setup_sqpoll_cpu(0 + vcpuMappingDelta as u32) // vcpu#0
-                //.setup_clamp()
                 .setup_cqsize(self.uringSize as u32 * 2)
                 .build(self.uringSize as u32).expect("InitUring fail");
             self.uringfds.push(ring.fd.0);

@@ -122,6 +122,20 @@ impl VMSpace {
         return IO_MGR.GetFdByHost(hostfd);
     }
 
+    pub fn TlbShootdown(&self, vcpuMask: u64) -> u64 {
+        let mut mask = 0;
+
+        for i in 0..64 {
+            if (1<<i) & vcpuMask != 0 {
+                if self.vcpus[i].Signal(Signal::SIGCHLD) {
+                    mask |= 1 << i;
+                }
+            }
+        }
+
+        return mask;
+    }
+
     pub fn GetFdInfo(hostfd: i32) -> Option<FdInfo> {
         return IO_MGR.GetByHost(hostfd);
     }
@@ -259,6 +273,14 @@ impl VMSpace {
         //self.shareSpace.lock().AQHostInputCall(HostMsg::ExecProcess);
 
         return vec.len() as i64
+    }
+
+    pub fn TgKill(tgid: i32, tid: i32, signal: i32) -> i64 {
+        let nr = SysCallID::sys_tgkill as usize;
+        let ret = unsafe {
+            syscall3(nr, tgid as usize, tid as usize, signal as usize) as i32
+        };
+        return ret as _;
     }
 
     pub fn CreateMemfd(len: i64) -> i64 {
@@ -1238,7 +1260,7 @@ impl VMSpace {
         return Self::GetRet(ret as i64)
     }
 
-    pub fn WaitFD(fd: i32, _op: u32, mask: EventMask) -> i64 {
+    pub fn WaitFD(fd: i32, mask: EventMask) -> i64 {
         let fdinfo = match Self::GetFdInfo(fd) {
             Some(fdinfo) => fdinfo,
             None => return -SysErr::EBADF as i64,
@@ -1253,14 +1275,6 @@ impl VMSpace {
                 panic!("WaitFD get error {:?}", e);
             }
         }
-
-        /*match FD_NOTIFIER.WaitFd(osfd, op, mask) {
-            Ok(()) => return 0,
-            Err(Error::SysError(syserror)) => return -syserror as i64,
-            Err(e) => {
-                panic!("WaitFD get error {:?}", e);
-            }
-        }*/
     }
 
     pub fn NonBlockingPoll(fd: i32, mask: EventMask) -> i64 {

@@ -19,6 +19,8 @@ use alloc::string::String;
 use alloc::string::ToString;
 use x86_64::structures::paging::PageTableFlags;
 use alloc::vec::Vec;
+use core::sync::atomic::AtomicU64;
+use core::sync::atomic::Ordering;
 
 use crate::qlib::mutex::*;
 
@@ -26,10 +28,12 @@ use super::super::arch::x86_64::context::*;
 use super::super::PAGE_MGR;
 use super::super::uid::*;
 use super::super::KERNEL_PAGETABLE;
+use super::super::asm::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::super::range::*;
 use super::super::super::addr::*;
+use super::super::super::vcpu_mgr::CPULocal;
 use super::super::stack::*;
 use super::super::super::auxv::*;
 use super::super::task::*;
@@ -38,6 +42,7 @@ use super::super::super::limits::*;
 use super::super::kernel::aio::aio_context::*;
 use super::super::fs::dirent::*;
 use super::super::mm::*;
+use super::super::Kernel::HostSpace;
 use super::super::super::mem::areaset::*;
 //use super::super::asm::*;
 use super::arch::*;
@@ -130,6 +135,10 @@ pub struct MemoryManagerInternal {
     pub uid: UniqueID,
     pub inited: bool,
 
+    // store whether the vcpu are working on the memory manager
+    pub vcpuMapping: AtomicU64,
+    pub tlbShootdownMask: AtomicU64,
+
     pub mappingLock: Arc<QMutex<()>>,
     pub mapping: QMutex<MMMapping>,
 
@@ -200,7 +209,13 @@ impl MemoryManager {
         };
 
         let gap = vmas.FindGap(MemoryDef::PHY_LOWER_ADDR);
-        vmas.Insert(&gap, &Range::New(MemoryDef::PHY_LOWER_ADDR, MemoryDef::PHY_UPPER_ADDR - MemoryDef::PHY_LOWER_ADDR), vma);
+
+        // kernel memory
+        //vmas.Insert(&gap, &Range::New(MemoryDef::PHY_LOWER_ADDR, MemoryDef::PHY_UPPER_ADDR - MemoryDef::PHY_LOWER_ADDR), vma.clone());
+        // KVM_IOEVENTFD RANGE
+        //vmas.Insert(&gap, &Range::New(MemoryDef::KVM_IOEVENTFD_BASEADDR, 0x1000), vma);
+
+        vmas.Insert(&gap, &Range::New(MemoryDef::KVM_IOEVENTFD_BASEADDR, MemoryDef::PHY_UPPER_ADDR - MemoryDef::KVM_IOEVENTFD_BASEADDR), vma.clone());
 
         let mapping = MMMapping {
             vmas: vmas,
@@ -242,6 +257,8 @@ impl MemoryManager {
         let internal = MemoryManagerInternal {
             uid: NewUID(),
             inited: true,
+            vcpuMapping: AtomicU64::new(0),
+            tlbShootdownMask: AtomicU64::new(0),
             mappingLock: Arc::new(QMutex::new(())),
             mapping: QMutex::new(mapping),
             pagetable: QRwLock::new(pagetable),
@@ -259,6 +276,71 @@ impl MemoryManager {
             uid: self.uid,
             data: Arc::downgrade(&self.0)
         }
+    }
+
+    pub fn MaskTlbShootdown(&self, vcpuId: u64) {
+        self.tlbShootdownMask.fetch_or(1 << vcpuId, Ordering::Release);
+    }
+
+    pub fn TlbShootdownMask(&self) -> u64 {
+        return self.tlbShootdownMask.load(Ordering::Acquire);
+    }
+
+    pub fn ClearTlbShootdownMask(&self) {
+        self.tlbShootdownMask.store(0, Ordering::Release);
+    }
+
+    pub fn SetVcpu(&self, vcpu: usize) {
+        assert!(vcpu < 64);
+        self.vcpuMapping.fetch_or(1<<vcpu, Ordering::Release);
+    }
+
+    pub fn TlbShootdown(&self) {
+        if self.pagetable.read().pt.TlbShootdown() {
+            let mask = self.GetVcpuMapping();
+            if mask > 0 {
+                //error!("TlbShootdownVcpuMask ... {:x}", mask);
+
+                self.ClearTlbShootdownMask();
+                // todo: wait for all the vcpu finishing the TLS shootdown?
+                // the current kvm_interrupt can't interrupt some vcpu, why?
+                HostSpace::TlbShootdown(mask) as u64;
+                //mask = HostSpace::TlbShootdown(mask) as u64;
+
+                /*loop {
+                    // wait all other vcpu finish tlb clear
+                    let waitMask = mask & !self.TlbShootdownMask();
+                    if waitMask == 0 {
+                        break;
+                    }
+
+                    mask = HostSpace::TlbShootdown(waitMask) as u64;
+                    error!("wait for {:b}", mask);
+                    //core::hint::spin_loop();
+                }*/
+            }
+        }
+    }
+
+    pub fn ClearVcpu(&self, vcpu: usize) {
+        assert!(vcpu < 64);
+        self.vcpuMapping.fetch_and(!(1<<vcpu), Ordering::Release);
+    }
+
+    pub fn GetVcpuMapping(&self) -> u64 {
+        let mask = self.vcpuMapping.load(Ordering::Acquire);
+        let vcpu = GetVcpuId();
+        return mask & !(1<<vcpu);
+    }
+
+    pub fn VcpuEnter(&self) {
+        let vcpu = GetVcpuId();
+        self.SetVcpu(vcpu);
+    }
+
+    pub fn VcpuLeave(&self) {
+        let vcpu = GetVcpuId();
+        self.ClearVcpu(vcpu);
     }
 
     pub fn MapStackAddr(&self) -> u64 {
@@ -335,12 +417,25 @@ impl MemoryManager {
         return Ok(())
     }
 
+    pub fn HandleTlbShootdown(&self) {
+        let vcpId = CPULocal::CpuId() as u64;
+        if self.TlbShootdownMask() & (1<<vcpId) != 0 {
+            let curr = super::super::super::super::asm::CurrentCr3();
+            PageTables::Switch(curr);
+            self.MaskTlbShootdown(vcpId);
+        }
+    }
+
     pub fn MappingReadLock(&self) -> QMutexGuard<()> {
-        return self.mappingLock.lock();
+        let lock = self.mappingLock.lock();
+        self.HandleTlbShootdown();
+        return lock
     }
 
     pub fn MappingWriteLock(&self) -> QMutexGuard<()> {
-        return self.mappingLock.lock();
+        let lock = self.mappingLock.lock();
+        self.HandleTlbShootdown();
+        return lock
     }
 
     pub fn BrkSetup(&self, addr: u64) {
@@ -895,6 +990,7 @@ impl MemoryManager {
 
         if permission.Write() {
             // another thread has cow, return
+            Invlpg(pageAddr);
             return;
         }
 

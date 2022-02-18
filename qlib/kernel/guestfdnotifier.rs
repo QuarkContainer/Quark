@@ -120,37 +120,18 @@ impl FdWaitInfo {
     }
 
     pub fn UpdateFDSync(&self, fd: i32) -> Result<()> {
-        // let op;
-        // let mask = {
-        //     let mut fi = self.lock();
+        let mask = {
+            let fi = self.lock();
 
-        //     let mask = fi.queue.Events();
+            let mask = fi.queue.Events();
+            if mask == fi.mask {
+                return Ok(())
+            }
 
-        //     if fi.mask == 0 {
-        //         if mask != 0 {
-        //             op = LibcConst::EPOLL_CTL_ADD;
-        //         } else {
-        //             return Ok(())
-        //         }
-        //     } else {
-        //         if mask == 0 {
-        //             op = LibcConst::EPOLL_CTL_DEL;
-        //         } else {
-        //             if mask | fi.mask == fi.mask {
-        //                 return Ok(())
-        //             }
-        //             op = LibcConst::EPOLL_CTL_MOD;
-        //         }
-        //     }
+            mask
+        };
 
-        //     fi.mask = mask;
-
-        //     mask
-        // };
-        // error!("WaitFd1: fd: {}, op: {}, mask: {:x} ", fd, op, mask);
-        // return Self::waitfd(fd, op as u32, mask);
-        let mask = self.lock().queue.Events();
-        return Self::waitfd(fd, 0 as u32, mask);
+        return Self::waitfd(fd, mask);
     }
 
     pub fn Notify(&self, mask: EventMask) {
@@ -158,8 +139,8 @@ impl FdWaitInfo {
         queue.Notify(EventMaskFromLinux(mask as u32));
     }
 
-    fn waitfd(fd: i32, op: u32, mask: EventMask) -> Result<()> {
-        HostSpace::WaitFDAsync(fd, op, mask);
+    fn waitfd(fd: i32, mask: EventMask) -> Result<()> {
+        HostSpace::WaitFDAsync(fd, mask);
 
         return Ok(())
     }
@@ -242,8 +223,8 @@ impl GuestNotifier {
         IOURING.PollHostEpollWaitInit(hostEpollWaitfd);
     }
 
-    fn waitfd(fd: i32, op: u32, mask: EventMask) -> Result<()> {
-        HostSpace::WaitFDAsync(fd, op, mask);
+    fn waitfd(fd: i32, mask: EventMask) -> Result<()> {
+        HostSpace::WaitFDAsync(fd, mask);
 
         return Ok(())
     }

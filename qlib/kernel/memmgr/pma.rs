@@ -243,6 +243,8 @@ impl PageTables {
             }
         }
 
+        ret.MapPage(Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR), Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR), PageOpts::Kernel().Val(), pagePool)?;
+
         {
             let mut lock = pagePool.lock();
             let vsyscallPages = lock.VsyscallPages();

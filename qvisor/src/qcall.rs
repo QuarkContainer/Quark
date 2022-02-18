@@ -30,7 +30,7 @@ pub fn AQHostCall(msg: HostOutputMsg, _shareSpace: &ShareSpace) {
             panic!("AQHostCall Process get Qcall msg...");
         }
         HostOutputMsg::WaitFDAsync(msg) => {
-            let ret = super::VMSpace::WaitFD(msg.fd, msg.op, msg.mask);
+            let ret = super::VMSpace::WaitFD(msg.fd, msg.mask);
             if ret < 0 {
                 // ignore -9 EBADF, when change the Close to HCall, the waitfd is still async call,
                 // there is chance that the WaitFd fired before close
@@ -318,6 +318,9 @@ impl KVMVcpu {
                 VcpuFreqInit();
                 error!("Host Vcpu Print timestamp init ...");
                 ret = 0;
+            },
+            Msg::TlbShootdown(msg) => {
+                ret = SHARE_SPACE.TlbShootdown(msg.vcpuMask) as u64;
             },
         };
 

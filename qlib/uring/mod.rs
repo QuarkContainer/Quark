@@ -29,6 +29,8 @@ use self::util::{Fd, Mmap};
 use self::porting::*;
 use super::common::*;
 
+use core::sync::atomic::AtomicU64;
+
 #[derive(Default)]
 pub struct Submission {
     pub fd: Fd,
@@ -46,6 +48,8 @@ pub struct Completion {
 #[derive(Default)]
 pub struct IoUring {
     pub fd: Fd,
+    pub pendingCnt: AtomicU64,
+    pub lock: QMutex<()>,
     pub params: Parameters,
     pub memory: MemoryMap,
     pub sq: QMutex<SubmissionQueue>,

@@ -20,6 +20,7 @@ use core::sync::atomic::Ordering;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::control_msg::*;
 use super::super::super::VMS;
+use super::super::super::ROOT_CONTAINER_ID;
 
 lazy_static! {
     static ref SIGNAL_HANDLE_ENABLE : AtomicBool = AtomicBool::new(false);
@@ -55,6 +56,10 @@ pub struct SignalFaultInfo {
 }
 
 extern fn handle_sigintAct(signal :i32, signInfo: *mut libc::siginfo_t, _: *mut libc::c_void) {
+    if signal == 17 { // used for tlb shootdown
+        return
+    }
+
     let console = CONSOLE.load(Ordering::SeqCst);
 
     /*{
@@ -75,10 +80,9 @@ extern fn handle_sigintAct(signal :i32, signInfo: *mut libc::siginfo_t, _: *mut 
 
         error!("get signal {}, action is {:x?}", signal, sigfault);
 
-
         let signal = SignalArgs {
             Signo: signal,
-            CID: "".to_string(),
+            CID: ROOT_CONTAINER_ID.lock().clone(),
             PID: 0,
             Mode: if console {
                 SignalDeliveryMode::DeliverToForegroundProcessGroup

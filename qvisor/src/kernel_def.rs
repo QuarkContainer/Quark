@@ -109,6 +109,24 @@ impl ShareSpace {
         super::vmspace::VMSpace::BlockFd(controlSock);
     }
 
+    pub fn TlbShootdown(&self, vcpuMask: u64) -> i64 {
+        let _l = self.tlbShootdownLock.lock();
+
+        self.ClearTlbShootdownMask();
+        let mut mask = VMS.lock().TlbShootdown(vcpuMask);
+
+        for _ in 0..20 {
+            if mask & !self.TlbShootdownMask() == 0 {
+                return mask as _;
+            }
+            std::thread::yield_now();
+            mask = VMS.lock().TlbShootdown(vcpuMask);
+        }
+
+        error!("TlbShootdown waiting for {:b} timeout", mask & !self.TlbShootdownMask());
+        return mask as _;
+    }
+
     pub fn Yield() {
         std::thread::yield_now();
         std::thread::yield_now();
@@ -175,6 +193,16 @@ pub unsafe fn CopyPageUnsafe(_to: u64, _from: u64){}
 impl CPULocal {
     pub fn CpuId() -> usize {
         return ThreadId() as _;
+    }
+
+    pub fn Wakeup(&self) {
+        let val : u64 = 8;
+        let ret = unsafe {
+            libc::write(self.eventfd, &val as * const _ as *const libc::c_void, 8)
+        };
+        if ret < 0 {
+            panic!("KIOThread::Wakeup fail...");
+        }
     }
 }
 

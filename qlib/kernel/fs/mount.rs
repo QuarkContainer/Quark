@@ -339,9 +339,6 @@ impl MountNs {
             return Err(Error::SysError(SysErr::ENOENT))
         }
 
-        //error!("FindDirent 1");
-        //defer!(error!("FindDirent 2"));
-
         let (mut current, mut first, mut remain) = match self.InitPath(root, &wd, path) {
             None => return Ok(root.clone()),
             Some(res) => res
@@ -350,6 +347,9 @@ impl MountNs {
         let mut remainStr;
 
         let mut contexts = Vec::new();
+
+        //error!("FindDirent 1 {}/{}", path, resolve);
+        //defer!(error!("FindDirent end"));
 
         loop {
             let currentInode = current.Inode();
@@ -364,6 +364,7 @@ impl MountNs {
                 })?
             }
 
+            //error!("FindDirent 2 {}", first);
             let next = match current.Walk(task, root, first) {
                 Err(e) => {
                     current.ExtendReference();
@@ -374,6 +375,7 @@ impl MountNs {
 
             if !resolve {
                 if remain != ""  {
+                   // error!("FindDirent 3.1");
                     match self.ResolvePath(task, &next, remainingTraversals)? {
                         ResolveResult::Dirent(d) => current = d,
                         ResolveResult::Path(context) => {
@@ -391,6 +393,7 @@ impl MountNs {
                         }
                     }
                 } else {
+                    //error!("FindDirent 3.2");
                     match contexts.pop() {
                         None => {
                             next.ExtendReference();
@@ -406,6 +409,7 @@ impl MountNs {
             } else {
                 match self.ResolvePath(task, &next, remainingTraversals)? {
                     ResolveResult::Dirent(d) => {
+                        //error!("FindDirent 3.3");
                         current = d;
 
                         if remain == "" {
@@ -423,6 +427,7 @@ impl MountNs {
                         }
                     },
                     ResolveResult::Path(context) => {
+                        //error!("FindDirent 3.4");
                         if remain != "" {
                             contexts.push(remain.to_string());
                         }

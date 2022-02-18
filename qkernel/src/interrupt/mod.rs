@@ -18,6 +18,7 @@ mod idt;
 use super::qlib::addr::*;
 use super::task::*;
 use super::qlib::common::*;
+use super::qlib::vcpu_mgr::*;
 use super::qlib::linux_def::*;
 use super::threadmgr::task_sched::*;
 use super::SignalDef::*;
@@ -26,6 +27,7 @@ use super::asm::*;
 use super::qlib::perf_tunning::*;
 use super::SHARESPACE;
 use super::qlib::singleton::*;
+use super::qlib::pagetable::PageTables;
 
 #[derive(Clone, Copy, Debug)]
 pub enum ExceptionStackVec {
@@ -284,7 +286,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
     }
 
     MainRun(currTask, TaskRunState::RunApp);
-
+    currTask.mm.HandleTlbShootdown();
     ReturnToApp(sf);
 }
 
@@ -582,6 +584,7 @@ pub fn HandleFault(task: &mut Task, user: bool, errorCode: u64, cr2: u64, sf: &m
     thread.forceSignal(Signal(Signal::SIGSEGV), false);
     thread.SendSignal(&info).expect("PageFaultHandler send signal fail");
     MainRun(task, TaskRunState::RunApp);
+    task.mm.HandleTlbShootdown();
 
     ReturnToApp(sf);
 }
@@ -608,8 +611,12 @@ pub extern fn SIMDFPHandler(sf: &mut PtRegs) {
 }
 
 #[no_mangle]
-pub extern fn VirtualizationHandler(sf: &mut PtRegs) {
-    ExceptionHandler(ExceptionStackVec::VirtualizationException, sf, 0);
+pub extern fn VirtualizationHandler(_sf: &mut PtRegs) {
+    let curr = super::asm::CurrentCr3();
+    PageTables::Switch(curr);
+    let currTask = Task::Current();
+    currTask.mm.MaskTlbShootdown(CPULocal::CpuId() as u64);
+    return;
 }
 
 #[no_mangle]

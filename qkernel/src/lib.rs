@@ -97,6 +97,7 @@ use self::qlib::kernel::uid as uid;
 use self::qlib::kernel::vcpu as vcpu;
 use self::qlib::kernel::version as version;
 use self::qlib::kernel::loader as loader;
+use self::interrupt::virtualization_handler;
 
 use vcpu::CPU_LOCAL;
 use self::qlib::kernel::vcpu::*;
@@ -164,6 +165,7 @@ pub fn SingletonInit() {
         vcpu::CPU_LOCAL.Init(&SHARESPACE.scheduler.VcpuArr);
         SHARESPACE.SetSignalHandlerAddr(SignalHandler as u64);
         InitGs(0);
+        SHARESPACE.SetvirtualizationHandlerAddr(virtualization_handler as u64);
         IOURING.SetValue(SHARESPACE.GetIOUringAddr());
 
         // the error! can run after this point
@@ -319,6 +321,8 @@ pub extern "C" fn syscall_handler(
     currTask.PerfGoto(PerfType::User);
 
     currTask.RestoreFp();
+
+    currTask.mm.HandleTlbShootdown();
 
     currTask.Check();
     if SHARESPACE.config.read().KernelPagetable {

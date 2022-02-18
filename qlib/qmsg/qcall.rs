@@ -110,6 +110,12 @@ pub enum Msg {
     UpdateWaitInfo(UpdateWaitInfo),
     Rdtsc(Rdtsc),
     SetTscOffset(SetTscOffset),
+    TlbShootdown(TlbShootdown),
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct TlbShootdown {
+    pub vcpuMask: u64,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -787,7 +793,6 @@ impl Default for HostOutputMsg {
 #[derive(Clone, Default, Debug, Copy)]
 pub struct WaitFDAsync {
     pub fd: i32,
-    pub op: u32,
     pub mask: EventMask,
 }
 
