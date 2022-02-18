@@ -796,6 +796,7 @@ dependencies = [
 [[package]]
 name = "rdma-sys"
 version = "0.1.0"
+source = "git+https://github.com/QuarkContainer/RDMARust.git#95b2aa54bbcd258feb03c0bfdb8679ce3184e05c"
 dependencies = [
  "bindgen",
  "libc",
