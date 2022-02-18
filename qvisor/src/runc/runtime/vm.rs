@@ -322,7 +322,6 @@ impl VirtualMachine {
 
         syncmgr::SyncMgr::WaitShareSpaceReady();
         info!("shareSpace ready...");
-        info!("vcpus len: {}", self.vcpus.len());
         for i in 1..self.vcpus.len() {
             let cpu = self.vcpus[i].clone();
 

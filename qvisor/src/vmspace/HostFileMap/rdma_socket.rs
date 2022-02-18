@@ -75,7 +75,6 @@ impl RDMAServerSock {
                 }
 
                 waitinfo.Notify(EVENT_ERR | EVENT_IN);
-                // debug!("Accept, err: {}", errno);
                 acceptQueue.lock().SetErr(errno);
                 return;
             }
@@ -594,17 +593,13 @@ impl RDMADataSock {
 
     //notify rdmadatasocket to sync read buff freespace with peer
     pub fn RDMARead(&self) {
-        let start = TSC.Rdtsc();
         let _writelock = self.writeLock.lock();
         self.RDMASend();
-        //error!("RDMARead:: time: {}", TSC.Rdtsc() - start);
     }
 
     pub fn RDMAWrite(&self) {
-        let start = TSC.Rdtsc();
         let _writelock = self.writeLock.lock();
         self.RDMASend();
-        //error!("RDMAWrite:: time: {}", TSC.Rdtsc() - start);
     }
 
     pub fn ReadData(&self, waitinfo: FdWaitInfo) {

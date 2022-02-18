@@ -9,7 +9,6 @@ use std::ptr;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::IO_MGR;
-use super::super::super::qlib::kernel::TSC;
 
 use lazy_static::lazy_static;
 
@@ -134,7 +133,7 @@ impl IBContext {
             panic!("Failed to open IB device error");
         }
 
-        //info!("ibv_open_device succeeded");
+        info!("ibv_open_device succeeded");
         /* We are now done with device list, free it */
         unsafe { rdmaffi::ibv_free_device_list(device_list) };
 
@@ -649,7 +648,6 @@ impl RDMAContext {
                 wc.status, wc.wr_id
             );
         }
-        let start = TSC.Rdtsc();
         if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RDMA_WRITE {
             // debug!(
             //     "ProcessWC::2, writeIMM status: {}, id: {}",
@@ -670,8 +668,6 @@ impl RDMAContext {
         } else {
             // debug!("ProcessWC::4, opcode: {}, wr_id: {}", wc.opcode, wc.wr_id);
         }
-        let end = TSC.Rdtsc();
-        //debug!("opcode: {}, time used: {}", wc.opcode, end - start);
     }
 }
 

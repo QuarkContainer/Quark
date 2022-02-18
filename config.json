@@ -8,7 +8,7 @@
   "PrintException": false,
   "KernelPagetable": false,
   "RawTimer"      : false,
-  "PerfDebug"     : true,
+  "PerfDebug"     : false,
   "UringStatx"    : false,
   "FileBufWrite"  : true,
   "MmapRead"      : false,
@@ -16,8 +16,8 @@
   "DedicateUring" : 0,
   "UringSize"     : 64,
   "UringEpollCtl" : true,
-  "EnableRDMA"    : false,
+  "EnableRDMA"    : true,
   "RDMAPort"      : 1,
-  "PerSandboxLog" : false,
+  "PerSandboxLog" : true,
   "ReserveCpuCount": 1
 }

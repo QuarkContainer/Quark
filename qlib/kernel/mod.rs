@@ -73,10 +73,6 @@ pub fn Timestamp() -> i64 {
     Scale(TSC.Rdtsc())
 }
 
-pub fn RawTimestamp() -> i64 {
-    Scale(Tsc::RawRdtsc())
-}
-
 #[inline]
 pub fn Scale(tsc: i64) -> i64 {
     tsc * 1000 /(LoadVcpuFreq() / 1_000)

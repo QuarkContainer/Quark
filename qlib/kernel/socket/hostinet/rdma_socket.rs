@@ -27,12 +27,10 @@ impl RDMA {
                 HostSpace::RDMANotify(fd, RDMANotifyType::Read);
             }
         } else {
-            let dataSize = buf.AddConsumeReadData(cnt as u64) as usize;//buf.readBuf.lock().AvailableDataSize();
+            let dataSize = buf.AddConsumeReadData(cnt as u64) as usize;
             let bufSize = buf.readBuf.lock().BufSize();
             if 2 * dataSize >= bufSize {
-                //error!("RDMARead: before RDMANotify");
                 HostSpace::RDMANotify(fd, RDMANotifyType::RDMARead);
-                //error!("RDMARead: after RDMANotify");
             }
         }
 
@@ -42,15 +40,10 @@ impl RDMA {
 
     //todo: put ops: &SocketOperations in the write request to make the socket won't be closed before write is finished
     pub fn Write(task: &Task, fd: i32, buf: Arc<SocketBuff>, srcs: &[IoVec]/*, ops: &SocketOperations*/) -> Result<i64> {
-        //error!("Write::1");
         let (count, writeBuf) = buf.Writev(task, srcs)?;
-        //error!("Write::2, count: {}", count);
         if writeBuf.is_some() {
             if RDMA_ENABLE {
-                //error!("Write::3, count: {}", count);
-                //error!("RDMAWrite: before RDMANotify");
                 HostSpace::RDMANotify(fd, RDMANotifyType::RDMAWrite);
-                //error!("RDMAWrite: after RDMANotify");
             } else {
                 HostSpace::RDMANotify(fd, RDMANotifyType::Write);
             }
