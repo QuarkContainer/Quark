@@ -101,7 +101,7 @@ pub const NUM_SIGNALS : usize = 32;
 pub fn SignAction() {
     let sig_action = signal::SigAction::new(signal::SigHandler::SigAction(handle_sigintAct),
                                             signal::SaFlags::empty(),
-                                            signal::SigSet::empty());
+                                            signal::SigSet::all());
 
     unsafe {
         signal::sigaction(signal::SIGINT, &sig_action).expect("sigaction set fail");

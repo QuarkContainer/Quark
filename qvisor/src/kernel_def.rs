@@ -113,14 +113,14 @@ impl ShareSpace {
         let _l = self.tlbShootdownLock.lock();
 
         self.ClearTlbShootdownMask();
-        let mut mask = VMS.lock().TlbShootdown(vcpuMask);
+        let mask = VMS.lock().TlbShootdown(vcpuMask);
 
-        for _ in 0..20 {
+        for _ in 0..10_000 { // total 10_000 micro sec
             if mask & !self.TlbShootdownMask() == 0 {
                 return mask as _;
             }
-            std::thread::yield_now();
-            mask = VMS.lock().TlbShootdown(vcpuMask);
+            Self::Yield();
+            //mask = VMS.lock().TlbShootdown(mask & !self.TlbShootdownMask());
         }
 
         error!("TlbShootdown waiting for {:b} timeout", mask & !self.TlbShootdownMask());
@@ -128,12 +128,9 @@ impl ShareSpace {
     }
 
     pub fn Yield() {
-        std::thread::yield_now();
-        std::thread::yield_now();
-        std::thread::yield_now();
-        std::thread::yield_now();
-        std::thread::yield_now();
-        std::thread::yield_now();
+        use std::{thread, time};
+        let dur = time::Duration::new(0, 1000);
+        thread::sleep(dur);
     }
 }
 
