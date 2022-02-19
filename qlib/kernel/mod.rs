@@ -104,6 +104,10 @@ impl Tsc {
         }
     }
 
+    pub fn Scale(tsc: i64) -> i64 {
+        return Scale(tsc)
+    }
+
     #[inline(always)]
     pub fn RawRdtsc() -> i64 {
         let rax: u64;

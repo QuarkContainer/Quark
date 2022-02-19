@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::sync::atomic::Ordering;
 use crate::qlib::mutex::*;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -26,6 +25,7 @@ use super::super::super::usage::cpu::*;
 use super::super::super::linux::time::*;
 use super::super::SignalDef::*;
 use super::super::super::common::*;
+use super::super::Tsc;
 use super::super::super::linux_def::*;
 use super::super::super::vcpu_mgr::*;
 use super::super::task::*;
@@ -83,17 +83,17 @@ impl Default for SchedState {
 pub struct TaskSchedInfoInternal {
     // Timestamp was the value of cpu cycle when this
     // TaskSchedInfo was last updated.
-    pub Timestamp: u64,
+    pub Timestamp: i64,
 
     // State is the current state of the task.
     pub State: SchedState,
 
     // UserTicks is the amount of time the task has spent executing
     // its associated Task's application code, in units of cpu cycle.
-    pub UserTicks: u64,
+    pub UserTicks: i64,
 
     // SysTicks is the amount of time the task has spent executing
-    pub SysTicks: u64,
+    pub SysTicks: i64,
 
     // yieldCount is the number of times the task  has called
     // Task.InterruptibleSleepStart, Task.UninterruptibleSleepStart, or
@@ -102,17 +102,14 @@ pub struct TaskSchedInfoInternal {
 }
 
 impl TaskSchedInfoInternal {
-    // userTicksAt returns the extrapolated value of ts.UserTicks after
-    // Kernel.CPUClockNow() indicates a time of now.
-    //
     // Preconditions: now <= Kernel.CPUClockNow(). (Since Kernel.cpuClock is
     // monotonic, this is satisfied if now is the result of a previous call to
     // Kernel.CPUClockNow().) This requirement exists because otherwise a racing
     // change to t.gosched can cause userTicksAt to adjust stats by too much,
     // making the observed stats non-monotonic.
-    pub fn userTicksAt(&self, now: u64) -> u64 {
+    pub fn userTicksAt(&self, now: i64) -> i64 {
         if self.Timestamp < now && self.State == SchedState::RunningApp {
-            return self.UserTicks + now - self.Timestamp;
+            return self.UserTicks + (now - self.Timestamp);
         }
 
         return self.UserTicks
@@ -122,16 +119,16 @@ impl TaskSchedInfoInternal {
     // Kernel.CPUClockNow() indicates a time of now.
     //
     // Preconditions: As for userTicksAt.
-    pub fn sysTicksAt(&self, now: u64) -> u64 {
+    pub fn sysTicksAt(&self, now: i64) -> i64 {
         if self.Timestamp < now && self.State == SchedState::RunningSys {
-            return self.UserTicks + now - self.Timestamp;
+            return self.SysTicks + (now - self.Timestamp);
         }
 
         return self.SysTicks;
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct TaskSchedInfo(Arc<QMutex<TaskSchedInfoInternal>>);
 
 impl Deref for TaskSchedInfo {
@@ -147,21 +144,21 @@ impl ThreadInternal {
         return *(self.sched.lock())
     }
 
-    pub fn cpuStatsAt(&self, now: u64) -> CPUStats {
+    pub fn cpuStatsAt(&self, now: i64) -> CPUStats {
         let tsched = self.TaskSchedInfo();
 
         let userTime = tsched.userTicksAt(now) as i64;
         let sysTime = tsched.sysTicksAt(now) as i64;
 
         return CPUStats {
-            UserTime: userTime * CLOCK_TICK,
-            SysTime: sysTime * CLOCK_TICK,
+            UserTime: Tsc::Scale(userTime) * 1000,
+            SysTime: Tsc::Scale(sysTime) * 1000,
             VoluntarySwitches: tsched.YieldCount,
         }
     }
 
     pub fn CPUStats(&self) -> CPUStats {
-        let now = GetKernel().CPUClockNow();
+        let now = TSC.Rdtsc();
         return self.cpuStatsAt(now)
     }
 
@@ -247,7 +244,7 @@ impl Thread {
 
             if rlimitCPU.Max != INFINITY {
                 // Check if tg is already over the hard limit.
-                let now = self.lock().k.CPUClockNow();
+                let now = TSC.Rdtsc();
                 let tgcpu = tg.cpuStatsAtLocked(now);
                 let tgProfNow = Time::FromNs(tgcpu.UserTime + tgcpu.SysTime);
                 if !tgProfNow.Before(Time::FromNs(rlimitCPU.Max as i64)) {
@@ -391,7 +388,7 @@ impl ThreadGroupInternal {
 impl ThreadGroup {
     // Preconditions: As for TaskGoroutineSchedInfo.userTicksAt. The TaskSet mutex
     // must be locked.
-    pub fn cpuStatsAtLocked(&self, now: u64) -> CPUStats {
+    pub fn cpuStatsAtLocked(&self, now: i64) -> CPUStats {
         let mut stats = self.lock().exitedCPUStats;
         // Account for live tasks.
         let threads : Vec<Thread> = self.lock().tasks.iter().cloned().collect();
@@ -417,7 +414,7 @@ impl ThreadGroup {
             },
             Some(ref _leader) => {
                 //let now = leader.lock().k.CPUClockNow();
-                let now = GetKernel().CPUClockNow();
+                let now = TSC.Rdtsc();
                 let ret = self.cpuStatsAtLocked(now);
                 return ret;
             }
@@ -584,7 +581,7 @@ impl KernelCPUClockTicker {
 
 // Notify implements ktime.TimerListener.Notify.
 impl TimerListenerTrait for KernelCPUClockTicker {
-    fn Notify(&self, exp: u64) {
+    fn Notify(&self, _exp: u64) {
         // Only increment cpuClock by 1 regardless of the number of expirations.
         // This approximately compensates for cases where thread throttling or bad
         // Go runtime scheduling prevents the kernelCPUClockTicker goroutine, and
@@ -592,7 +589,8 @@ impl TimerListenerTrait for KernelCPUClockTicker {
         // time. It's also necessary to prevent CPU clocks from seeing large
         // discontinuous jumps.
         let kernel = GetKernel();
-        let now = kernel.cpuClock.fetch_add(exp, Ordering::SeqCst);
+        let now = TSC.Rdtsc();
+        //let now = kernel.cpuClock.fetch_add(exp, Ordering::SeqCst);
         let tasks = kernel.tasks.clone();
         let root = tasks.Root();
         let tgs = root.ThreadGroups();
