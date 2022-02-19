@@ -47,7 +47,6 @@ use super::threadmgr::thread::*;
 use super::kernel::waiter::*;
 use super::kernel::futex::*;
 use super::kernel::timer::*;
-use super::kernel::kernel::GetKernelOption;
 use super::memmgr::mm::*;
 use super::perflog::*;
 
@@ -317,15 +316,8 @@ impl Task {
             return
         }
 
-        let kernel = match GetKernelOption() {
-            None => return, //kernel is not initialized
-            Some(k) => k,
-        };
-
-        let now = kernel.CPUClockNow();
+        let now = TSC.Rdtsc();
         let mut t = self.sched.lock();
-        //info!("AccountTaskEnter[{:x}] current state is {:?} -> {:?}, address is {:x}",
-        //    self.taskId, t.State, state, &t.State as * const _ as u64);
         let current = t.State;
 
         match current {
@@ -344,6 +336,32 @@ impl Task {
         t.State = state;
     }
 
+    pub fn AccountTaskLeave(&self, state: SchedState) {
+        //print!("AccountTaskLeave current task is {:x}, state is {:?}", self.taskId, state);
+        if self.taskId == CPULocal::WaitTask() {
+            return
+        }
+
+        let now = TSC.Rdtsc();
+        let mut t = self.sched.lock();
+        //info!("AccountTaskLeave[{:x}] current state is {:?} -> {:?}, now is {}",
+        //    self.taskId, t.State, SchedState::RunningSys, now);
+        if t.State != state &&
+            t.State != SchedState::Nonexistent &&
+            // when doing clone, there is no good way to change new thread stat to runapp. todo: fix this
+            t.State != SchedState::RunningSys {
+            panic!("AccountTaskLeave: Task[{:x}] switching from state {:?} (expected {:?}) to {:?}",
+                   self.taskId, t.State, SchedState::RunningSys, state)
+        }
+
+        if state == SchedState::RunningApp && t.State != SchedState::Nonexistent {
+            t.UserTicks += now - t.Timestamp;
+        }
+
+        t.Timestamp = now;
+        t.State = SchedState::RunningSys;
+    }
+
     pub fn StackOverflowCheck() {
         let rsp = GetRsp();
         let task = rsp & DEFAULT_STACK_MAST;
@@ -353,37 +371,6 @@ impl Task {
             loop {}
             //panic!("TaskAddress panic");
         }
-    }
-
-    pub fn AccountTaskLeave(&self, state: SchedState) {
-        //print!("AccountTaskLeave current task is {:x}, state is {:?}", self.taskId, state);
-        if self.taskId == CPULocal::WaitTask() {
-            return
-        }
-
-        let kernel = match GetKernelOption() {
-            None => return, //kernel is not initialized
-            Some(k) => k,
-        };
-
-        let now = kernel.CPUClockNow();
-        let mut t = self.sched.lock();
-        //info!("AccountTaskLeave[{:x}] current state is {:?} -> {:?}, address is {:x}",
-        //    self.taskId, t.State, SchedState::RunningSys, &t.State as * const _ as u64);
-        if t.State != state &&
-            t.State != SchedState::Nonexistent &&
-            // when doing clone, there is no good way to change new thread stat to runapp. todo: fix this
-            t.State != SchedState::RunningSys {
-            panic!("AccountTaskLeave: Task[{:x}] switching from state {:?} (expected {:?}) to {:?}",
-                   self.taskId, t.State, SchedState::RunningSys, state)
-        }
-
-        if state == SchedState::RunningApp {
-            t.UserTicks += now - t.Timestamp
-        }
-
-        t.Timestamp = now;
-        t.State = SchedState::RunningSys;
     }
 
     // doStop is called to block until the task is not stopped.
