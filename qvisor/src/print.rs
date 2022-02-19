@@ -107,6 +107,7 @@ impl Log {
 
     pub fn Print(&mut self, level: &str, str: &str) {
         let now = Timestamp();
+        //let now = RawTimestamp();
         self.Write(&format!("[{}] [{}/{}] {}\n", level, ThreadId(), now, str));
     }
 

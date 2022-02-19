@@ -16,6 +16,7 @@ use super::super::super::IO_MGR;
 use super::super::super::URING_MGR;
 use super::rdma::*;
 use super::socket_info::*;
+use super::super::super::qlib::kernel::TSC;
 
 pub struct RDMAServerSockIntern {
     pub fd: i32,
@@ -58,7 +59,6 @@ impl RDMAServerSock {
         while hasSpace {
             let tcpAddr = TcpSockAddr::default();
             let mut len: u32 = TCP_ADDR_LEN as _;
-
             let ret = unsafe {
                 accept4(
                     minefd,
@@ -91,6 +91,7 @@ impl RDMAServerSock {
                     addr: tcpAddr,
                     len: len,
                     sockBuf: socketBuf.clone(),
+                    waitInfo: waitinfo.clone(),
                 };
                 RDMAType::Server(sockInfo)
             } else {
@@ -125,6 +126,7 @@ pub struct RDMAServerSocketInfo {
     pub addr: TcpSockAddr,
     pub len: u32,
     pub sockBuf: Arc<SocketBuff>,
+    pub waitInfo: FdWaitInfo,
 }
 
 pub struct RDMADataSockIntern {
@@ -137,7 +139,8 @@ pub struct RDMADataSockIntern {
     pub socketState: AtomicU64,
     pub localRDMAInfo: RDMAInfo,
     pub remoteRDMAInfo: QMutex<RDMAInfo>,
-    pub mr: MemoryRegion,
+    pub readMemoryRegion: MemoryRegion,
+    pub writeMemoryRegion: MemoryRegion,
     pub rdmaType: RDMAType,
     pub writeCount: AtomicUsize, //when run the writeimm, save the write bytes count here
 }
@@ -174,7 +177,7 @@ pub enum SocketState {
 }
 
 pub enum RDMAType {
-    Client(&'static mut PostRDMAConnect),
+    Client(u64),
     Server(RDMAServerSocketInfo),
     None,
 }
@@ -192,10 +195,9 @@ impl Deref for RDMADataSock {
 
 impl RDMADataSock {
     pub fn New(fd: i32, socketBuf: Arc<SocketBuff>, rdmaType: RDMAType) -> Self {
-        let (addr, len) = socketBuf.ReadBuf();
-
         if RDMA_ENABLE {
-            let mr = RDMA
+            let (addr, len) = socketBuf.ReadBuf();
+            let readMR = RDMA
                 .CreateMemoryRegion(addr, len)
                 .expect("RDMADataSock CreateMemoryRegion fail");
             let qp = RDMA.CreateQueuePair().expect("RDMADataSock create QP fail");
@@ -203,7 +205,7 @@ impl RDMADataSock {
             let localRDMAInfo = RDMAInfo {
                 raddr: addr,
                 rlen: len as _,
-                rkey: mr.RKey(),
+                rkey: readMR.RKey(),
                 qp_num: qp.qpNum(),
                 lid: RDMA.Lid(),
                 offset: 0,
@@ -211,6 +213,11 @@ impl RDMADataSock {
                 gid: RDMA.Gid(),
                 sending: false,
             };
+
+            let (waddr, wlen) = socketBuf.WriteBuf();
+            let writeMR = RDMA
+                .CreateMemoryRegion(waddr, wlen)
+                .expect("RDMADataSock CreateMemoryRegion fail");
 
             return Self(Arc::new(RDMADataSockIntern {
                 fd: fd,
@@ -222,12 +229,14 @@ impl RDMADataSock {
                 socketState: AtomicU64::new(0),
                 localRDMAInfo: localRDMAInfo,
                 remoteRDMAInfo: QMutex::new(RDMAInfo::default()),
-                mr: mr,
+                readMemoryRegion: readMR,
+                writeMemoryRegion: writeMR,
                 rdmaType: rdmaType,
                 writeCount: AtomicUsize::new(0),
             }));
         } else {
-            let mr = MemoryRegion::default();
+            let readMR = MemoryRegion::default();
+            let writeMR = MemoryRegion::default();
             let qp = QueuePair::default();
 
             let localRDMAInfo = RDMAInfo::default();
@@ -242,7 +251,8 @@ impl RDMADataSock {
                 socketState: AtomicU64::new(0),
                 localRDMAInfo: localRDMAInfo,
                 remoteRDMAInfo: QMutex::new(RDMAInfo::default()),
-                mr: mr,
+                readMemoryRegion: readMR,
+                writeMemoryRegion: writeMR,
                 rdmaType: rdmaType,
                 writeCount: AtomicUsize::new(0),
             }));
@@ -260,6 +270,7 @@ impl RDMADataSock {
 
         if ret < 0 {
             let errno = errno::errno().0;
+            // debug!("SendLocalRDMAInfo, err: {}", errno);
             self.socketBuf.SetErr(errno);
             return Err(Error::SysError(errno));
         }
@@ -279,9 +290,12 @@ impl RDMADataSock {
 
         if ret < 0 {
             let errno = errno::errno().0;
-            self.socketBuf.SetErr(errno);
+            // debug!("RecvRemoteRDMAInfo, err: {}", errno);
+            //self.socketBuf.SetErr(errno);
             return Err(Error::SysError(errno));
         }
+
+        //self.socketBuf.SetErr(0); //TODO: find a better place
 
         assert!(
             ret == RDMAInfo::Size() as isize,
@@ -299,9 +313,9 @@ impl RDMADataSock {
     pub fn SendAck(&self) -> Result<()> {
         let data: u64 = Self::ACK_DATA;
         let ret = unsafe { write(self.fd, &data as *const _ as u64 as _, 8) };
-
         if ret < 0 {
             let errno = errno::errno().0;
+            
             self.socketBuf.SetErr(errno);
             return Err(Error::SysError(errno));
         }
@@ -316,6 +330,11 @@ impl RDMADataSock {
 
         if ret < 0 {
             let errno = errno::errno().0;
+            // debug!("RecvAck::1, err: {}", errno);
+            if errno == SysErr::EAGAIN {
+                return Err(Error::SysError(errno));
+            }
+            // debug!("RecvAck::2, err: {}", errno);
             self.socketBuf.SetErr(errno);
             return Err(Error::SysError(errno));
         }
@@ -351,18 +370,23 @@ impl RDMADataSock {
     // after get remote peer's RDMA metadata and need to setup RDMA
     pub fn SetupRDMA(&self) {
         let remoteInfo = self.remoteRDMAInfo.lock();
-
+        let start = TSC.Rdtsc();
         self.qp
             .lock()
             .Setup(&RDMA, remoteInfo.qp_num, remoteInfo.lid, remoteInfo.gid)
             .expect("SetupRDMA fail...");
+        let d1 = TSC.Rdtsc() - start;
+        let start1 = TSC.Rdtsc();
         for _i in 0..MAX_RECV_WR {
-            let wr = WorkRequestId::New(self.fd, WorkRequestType::Recv);
+            let wr = WorkRequestId::New(self.fd);
             self.qp
                 .lock()
-                .PostRecv(wr.0)
+                .PostRecv(wr.0, self.localRDMAInfo.raddr, self.localRDMAInfo.rkey)
                 .expect("SetupRDMA PostRecv fail");
         }
+        let d2 = TSC.Rdtsc() - start1;
+        let d3 = TSC.Rdtsc() - start;
+        error!("Setup time: set up qp {}, create recv request: {}, total: {}", d1, d2, d3);
     }
 
     pub fn RDMAWriteImm(
@@ -371,17 +395,17 @@ impl RDMADataSock {
         remoteAddr: u64,
         writeCount: usize,
         readCount: usize,
+        remoteInfo: &QMutexGuard<RDMAInfo>,
     ) -> Result<()> {
-        let wrid = WorkRequestId::New(self.fd, WorkRequestType::WriteImm);
-        let immData = ImmData::New(writeCount as u16, readCount as u16);
-
-        let rkey = self.remoteRDMAInfo.lock().rkey;
+        let wrid = WorkRequestId::New(self.fd);
+        let immData = ImmData::New(readCount);
+        let rkey = remoteInfo.rkey;
 
         self.qp.lock().WriteImm(
             wrid.0,
             localAddr,
             writeCount as u32,
-            self.mr.LKey(),
+            self.writeMemoryRegion.LKey(),
             remoteAddr,
             rkey,
             immData.0,
@@ -404,22 +428,26 @@ impl RDMADataSock {
         let readCount = self.socketBuf.GetAndClearConsumeReadData();
         let buf = self.socketBuf.writeBuf.lock();
         let (addr, mut len) = buf.GetDataBuf();
+        // debug!("RDMASendLocked::1, readCount: {}, addr: {:x}, len: {}, remote.freespace: {}", readCount, addr, len, remoteInfo.freespace);
         if readCount > 0 || len > 0 {
             if len > remoteInfo.freespace as usize {
                 len = remoteInfo.freespace as usize;
             }
 
-            self.RDMAWriteImm(
-                addr,
-                remoteInfo.raddr + remoteInfo.offset as u64,
-                len,
-                readCount as usize,
-            )
-            .expect("RDMAWriteImm fail...");
-
-            remoteInfo.sending = true;
-            remoteInfo.freespace -= len as u32;
-            remoteInfo.offset = (remoteInfo.offset + len as u32) % remoteInfo.rlen;
+            if len != 0 || readCount > 0 {
+                self.RDMAWriteImm(
+                    addr,
+                    remoteInfo.raddr + remoteInfo.offset as u64,
+                    len,
+                    readCount as usize,
+                    &remoteInfo,
+                )
+                .expect("RDMAWriteImm fail...");
+                remoteInfo.freespace -= len as u32;
+                remoteInfo.offset = (remoteInfo.offset + len as u32) % remoteInfo.rlen;
+                remoteInfo.sending = true;
+                //error!("RDMASendLocked::2, writeCount: {}, readCount: {}", len, readCount);
+            }
         }
     }
 
@@ -430,10 +458,12 @@ impl RDMADataSock {
         remoteInfo.sending = false;
 
         let writeCount = self.writeCount.load(QOrdering::ACQUIRE);
+        // debug!("ProcessRDMAWriteImmFinish::1 writeCount: {}", writeCount);
 
         let (trigger, addr, _len) = self
             .socketBuf
             .ConsumeAndGetAvailableWriteBuf(writeCount as usize);
+        // debug!("ProcessRDMAWriteImmFinish::2, trigger: {}, addr: {}", trigger, addr);
         if trigger {
             waitinfo.Notify(EVENT_OUT);
         }
@@ -450,15 +480,19 @@ impl RDMADataSock {
         writeConsumeCount: u64,
         waitinfo: FdWaitInfo,
     ) {
-        let wr = WorkRequestId::New(self.fd, WorkRequestType::Recv);
-        self.qp
+        let wr = WorkRequestId::New(self.fd);
+
+        let _res = self
+            .qp
             .lock()
-            .PostRecv(wr.0)
-            .expect("ProcessRDMARecvWriteImm PostRecv fail");
+            .PostRecv(wr.0, self.localRDMAInfo.raddr, self.localRDMAInfo.rkey);
+
+        // debug!("ProcessRDMARecvWriteImm::1, recvCount: {}, writeConsumeCount: {}", recvCount, writeConsumeCount);
 
         if recvCount > 0 {
             let (trigger, _addr, _len) =
                 self.socketBuf.ProduceAndGetFreeReadBuf(recvCount as usize);
+            // debug!("ProcessRDMARecvWriteImm::2, trigger {}", trigger);
             if trigger {
                 waitinfo.Notify(EVENT_IN);
             }
@@ -466,18 +500,25 @@ impl RDMADataSock {
 
         if writeConsumeCount > 0 {
             let mut remoteInfo = self.remoteRDMAInfo.lock();
+            let trigger = remoteInfo.freespace == 0;
             remoteInfo.freespace += writeConsumeCount as u32;
+
+            // debug!("ProcessRDMARecvWriteImm::3, trigger {}, remoteInfo.sending: {}", trigger, remoteInfo.sending);
+
+            if trigger && !remoteInfo.sending {
+                self.RDMASendLocked(remoteInfo);
+            }
         }
     }
 
     /*********************************** end of rdma integration ****************************/
 
-    pub fn SetReady(&self, waitinfo: FdWaitInfo) {
+    pub fn SetReady(&self, _waitinfo: FdWaitInfo) {
         match &self.rdmaType {
-            RDMAType::Client(ref msg) => {
-                let addr = msg as *const _ as u64;
-                let msg = PostRDMAConnect::ToRef(addr);
-                msg.Finish(0)
+            RDMAType::Client(ref addr) => {
+                //let addr = msg as *const _ as u64;
+                let msg = PostRDMAConnect::ToRef(*addr);
+                msg.Finish(0);
             }
             RDMAType::Server(ref serverSock) => {
                 let acceptQueue = serverSock.sock.acceptQueue.clone();
@@ -489,7 +530,7 @@ impl RDMADataSock {
                 );
 
                 if trigger {
-                    waitinfo.Notify(EVENT_IN);
+                    serverSock.waitInfo.Notify(EVENT_IN);
                 }
             }
             RDMAType::None => {
@@ -507,13 +548,23 @@ impl RDMADataSock {
             match self.SocketState() {
                 SocketState::WaitingForRemoteMeta => {
                     let _readlock = self.readLock.lock();
-                    self.RecvRemoteRDMAInfo().unwrap();
+                    match self.RecvRemoteRDMAInfo() {
+                        Ok(()) => {},
+                        _ => return,
+                    }
                     self.SetupRDMA();
                     self.SendAck().unwrap(); // assume the socket is ready for send
                     self.SetSocketState(SocketState::WaitingForRemoteReady);
 
                     match self.RecvAck() {
                         Ok(()) => {
+                            let waitinfo = match &self.rdmaType {
+                                RDMAType::Client(_) => waitinfo,
+                                RDMAType::Server(ref serverSock) => serverSock.waitInfo.clone(),
+                                _ => {
+                                    panic!("Not right RDMAType");
+                                }
+                            };
                             self.SetReady(waitinfo);
                         }
                         _ => (),
@@ -521,7 +572,10 @@ impl RDMADataSock {
                 }
                 SocketState::WaitingForRemoteReady => {
                     let _readlock = self.readLock.lock();
-                    self.RecvAck().unwrap();
+                    match self.RecvAck() {
+                        Ok(()) => {},
+                        _ => return,
+                    }
                     self.SetReady(waitinfo);
                 }
                 SocketState::Ready => {
@@ -576,9 +630,12 @@ impl RDMADataSock {
 
             if len < 0 {
                 let errno = errno::errno().0;
+                // debug!("ReadData::1, err: {}", errno);
                 if errno == SysErr::EAGAIN {
                     return;
                 }
+
+                // debug!("ReadData::2, err: {}", errno);
 
                 socketBuf.SetErr(errno);
                 waitinfo.Notify(EVENT_ERR | EVENT_IN);
@@ -615,8 +672,14 @@ impl RDMADataSock {
                     self.SendLocalRDMAInfo().unwrap();
                     self.SetSocketState(SocketState::WaitingForRemoteMeta);
                 }
+                SocketState::WaitingForRemoteMeta => {
+                    //TODO: server side received 4(W) first and 5 (R|W) afterwards. Need more investigation to see why it's different.
+                }
+                SocketState::WaitingForRemoteReady => {
+                    //TODO: server side received 4(W) first and 5 (R|W) afterwards. Need more investigation to see why it's different.
+                }
                 SocketState::Ready => {
-                    self.WriteData(waitinfo);
+                    self.WriteDataLocked(waitinfo);
                 }
                 _ => {
                     panic!(
@@ -630,10 +693,12 @@ impl RDMADataSock {
 
     pub fn WriteData(&self, waitinfo: FdWaitInfo) {
         let _writelock = self.writeLock.lock();
-
+        self.WriteDataLocked(waitinfo);
+    }
+    pub fn WriteDataLocked(&self, waitinfo: FdWaitInfo) {
+        //let _writelock = self.writeLock.lock();
         let fd = self.fd;
         let socketBuf = self.socketBuf.clone();
-
         let (mut addr, mut count) = socketBuf.GetAvailableWriteBuf();
         if count == 0 {
             // no data
@@ -656,9 +721,12 @@ impl RDMADataSock {
 
             if len < 0 {
                 let errno = errno::errno().0;
+                // debug!("WriteDataLocked::1, err: {}", errno);
                 if errno == SysErr::EAGAIN {
                     return;
                 }
+
+                // debug!("WriteDataLocked::2, err: {}", errno);
 
                 socketBuf.SetErr(errno);
                 waitinfo.Notify(EVENT_ERR | EVENT_IN);
@@ -697,11 +765,11 @@ impl RDMADataSock {
         }
 
         if eventmask & EVENT_WRITE != 0 {
-            self.Write(waitinfo.clone())
+            self.Write(waitinfo.clone());
         }
 
         if eventmask & EVENT_READ != 0 {
-            self.Read(waitinfo)
+            self.Read(waitinfo);
         }
     }
 }

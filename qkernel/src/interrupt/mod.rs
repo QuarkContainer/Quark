@@ -411,9 +411,6 @@ pub extern fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
 
     if !fromUser {
         print!("Get pagefault from kernel ... {:#x?}/cr2 is {:x}/cr3 is {:x}", ptRegs, cr2, cr3);
-        for i in 0..super::CPU_LOCAL.len() {
-            print!("pagefault CPU#{} is {:#x?}", i, super::CPU_LOCAL[i]);
-        }
         /*backtracer::trace1(sf.ip, sf.sp, pt.rbp, &mut |frame| {
             print!("pagefault frame is {:#x?}", frame);
             true

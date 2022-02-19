@@ -81,6 +81,10 @@ impl SocketBuff {
         return self.readBuf.lock().GetRawBuf();
     }
 
+    pub fn WriteBuf(&self) -> (u64, usize) {
+        return self.writeBuf.lock().GetRawBuf();
+    }
+
     pub fn PendingWriteShutdown(&self) -> bool {
         self.pendingWShutdown.load(Ordering::SeqCst)
     }

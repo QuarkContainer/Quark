@@ -1,4 +1,6 @@
 use core::ops::Deref;
+use core::sync::atomic;
+use core::sync::atomic::AtomicU64;
 use rdmaffi;
 use spin::Mutex;
 use std::convert::TryInto;
@@ -12,6 +14,11 @@ use lazy_static::lazy_static;
 
 lazy_static! {
     pub static ref RDMA: RDMAContext = RDMAContext::default();
+    static ref RDMAUID: AtomicU64 = AtomicU64::new(1);
+}
+
+pub fn NewUID() -> u64 {
+    return RDMAUID.fetch_add(1, atomic::Ordering::SeqCst);
 }
 
 #[derive(Default, Copy, Clone, Debug, Eq, PartialEq, Hash)]
@@ -188,11 +195,15 @@ impl IBContext {
     }
 
     pub fn CreateCompleteQueue(&self, cc: &CompleteChannel) -> CompleteQueue {
-        let cq = unsafe { rdmaffi::ibv_create_cq(self.0, 1, ptr::null_mut(), cc.0, 0) };
+        let cq = unsafe { rdmaffi::ibv_create_cq(self.0, 2000, ptr::null_mut(), cc.0, 0) };
 
         if cq.is_null() {
             // TODO: cleanup
             panic!("ibv_create_cq failed\n");
+        }
+
+        unsafe {
+            rdmaffi::ibv_req_notify_cq(cq, 0);
         }
 
         return CompleteQueue(cq);
@@ -343,8 +354,8 @@ impl Deref for RDMAContext {
     }
 }
 
-pub const MAX_SEND_WR: u32 = 1;
-pub const MAX_RECV_WR: u32 = 4;
+pub const MAX_SEND_WR: u32 = 100;
+pub const MAX_RECV_WR: u32 = 8192;
 pub const MAX_SEND_SGE: u32 = 1;
 pub const MAX_RECV_SGE: u32 = 1;
 
@@ -375,8 +386,8 @@ impl RDMAContext {
             recv_cq: context.completeQueue.0 as *const _ as *mut _,
             srq: ptr::null::<rdmaffi::ibv_srq>() as *mut _,
             cap: rdmaffi::ibv_qp_cap {
-                max_send_wr: MAX_SEND_WR,
-                max_recv_wr: MAX_RECV_WR,
+                max_send_wr: 8192, //MAX_SEND_WR,
+                max_recv_wr: 8192, //MAX_RECV_WR,
                 max_send_sge: MAX_SEND_SGE,
                 max_recv_sge: MAX_RECV_SGE,
                 max_inline_data: 0,
@@ -421,6 +432,95 @@ impl RDMAContext {
         return self.lock().completeQueue.0;
     }
 
+    pub fn CompleteChannel(&self) -> *mut rdmaffi::ibv_comp_channel {
+        return self.lock().completeChannel.0;
+    }
+
+    pub fn PollCompletionQueueAndProcess(&self) -> usize {
+        let mut wc = rdmaffi::ibv_wc {
+            //TODO: find a better way to initialize
+            wr_id: 0,
+            status: rdmaffi::ibv_wc_status::IBV_WC_SUCCESS,
+            opcode: rdmaffi::ibv_wc_opcode::IBV_WC_BIND_MW,
+            vendor_err: 0,
+            byte_len: 0,
+            imm_data_invalidated_rkey_union: rdmaffi::imm_data_invalidated_rkey_union_t {
+                imm_data: 0,
+            }, //TODO: need double check
+            qp_num: 0,
+            src_qp: 0,
+            wc_flags: 0,
+            pkey_index: 0,
+            slid: 0,
+            sl: 0,
+            dlid_path_bits: 0,
+        };
+
+        let mut count = 0;
+
+        loop {
+            // let poll_result = unsafe { rdmaffi::ibv_poll_cq(self.CompleteQueue(), 2, &mut wc) };
+            // let wc_ptr: *const rdmaffi::ibv_wc = &wc;
+            // if poll_result == 2 {
+            //     count += 2;
+            //     //self.ProcessWC(&wc);
+            //     self.ProcessWC(unsafe {&(*wc_ptr.offset(0))});
+            //     self.ProcessWC(unsafe {&(*wc_ptr.offset(1))});
+            // } else if poll_result == 1 {
+            //     // if count > 0 {
+            //     //     error!("PollCompletionQueueAndProcess: processed wcs: {}", count);
+            //     // }
+            //     count += 1;
+            //     self.ProcessWC(unsafe {&(*wc_ptr.offset(0))});
+            //     return count;
+            // } else if poll_result == 0 {
+            //     return count;
+            // } else {
+            //     // debug!("Error to query CQ!")
+            //     // break;
+            // }
+
+            let poll_result = unsafe { rdmaffi::ibv_poll_cq(self.CompleteQueue(), 1, &mut wc) };
+            if poll_result == 1 {
+                count += 1;
+                self.ProcessWC(&wc);
+            } else if poll_result == 0 {
+                // if count > 0 {
+                //     error!("PollCompletionQueueAndProcess: processed wcs: {}", count);
+                // }
+                return count;
+            } else {
+                // debug!("Error to query CQ!")
+                // break;
+            }
+        }
+    }
+
+    pub fn HandleCQEvent(&self) -> Result<()> {
+        let mut cq_ptr: *mut rdmaffi::ibv_cq = ptr::null_mut();
+        let mut cq_context: *mut std::os::raw::c_void = ptr::null_mut();
+        let ret = unsafe {
+            rdmaffi::ibv_get_cq_event(
+                self.CompleteChannel(),
+                &mut cq_ptr, //&mut self.CompleteQueue(),
+                &mut cq_context,
+            )
+        };
+
+        if ret != 0 {
+            //// debug!("Failed to get next CQ event");
+            return Ok(());
+        }
+
+        let ret1 = unsafe { rdmaffi::ibv_req_notify_cq(self.CompleteQueue(), 0) };
+        if ret1 != 0 {
+            // TODO: should keep call here?
+        }
+
+        unsafe { rdmaffi::ibv_ack_cq_events(cq_ptr, 1) };
+        Ok(())
+    }
+
     pub fn PollCompletion(&self) -> Result<()> {
         let mut wc = rdmaffi::ibv_wc {
             //TODO: find a better way to initialize
@@ -441,35 +541,132 @@ impl RDMAContext {
             dlid_path_bits: 0,
         };
 
+        let mut cq_ptr: *mut rdmaffi::ibv_cq = ptr::null_mut();
+        let mut cq_context: *mut std::os::raw::c_void = ptr::null_mut();
+        let ret = unsafe {
+            rdmaffi::ibv_get_cq_event(
+                self.CompleteChannel(),
+                &mut cq_ptr, //&mut self.CompleteQueue(),
+                &mut cq_context,
+            )
+        };
+
+        if ret != 0 {
+            // debug!("Failed to get next CQ event");
+        }
+
+        let ret1 = unsafe { rdmaffi::ibv_req_notify_cq(self.CompleteQueue(), 0) };
+        if ret1 != 0 {
+            // TODO: should keep call here?
+        }
+
         loop {
             let poll_result = unsafe { rdmaffi::ibv_poll_cq(self.CompleteQueue(), 1, &mut wc) };
             if poll_result > 0 {
                 self.ProcessWC(&wc);
+            } else if poll_result == 0 {
+                break;
             } else {
-                return Ok(());
+                // debug!("Error to query CQ!")
+                // break;
             }
         }
+
+        unsafe { rdmaffi::ibv_ack_cq_events(cq_ptr, 1) };
+        Ok(())
+
+        // let ret1 = unsafe { rdmaffi::ibv_req_notify_cq(self.CompleteQueue(), 0) };
+        // if ret1 != 0 {
+        //     // TODO: should keep call here?
+        //     // debug!("Couldn't request CQ notification\n");
+        // }
+
+        // loop {
+        //     loop {
+        //         let poll_result = unsafe { rdmaffi::ibv_poll_cq(self.CompleteQueue(), 1, &mut wc) };
+        //         if poll_result > 0 {
+        //             self.ProcessWC(&wc);
+        //         } else if poll_result == 0 {
+        //             break;
+        //         } else {
+        //             // debug!("Error to query CQ!")
+        //             // break;
+        //         }
+        //     }
+
+        //     let mut cq_ptr: *mut rdmaffi::ibv_cq = ptr::null_mut();
+        //     let mut cq_context: *mut std::os::raw::c_void = ptr::null_mut();
+        //     let ret = unsafe {
+        //         rdmaffi::ibv_get_cq_event(
+        //             self.CompleteChannel(),
+        //             &mut cq_ptr, //&mut self.CompleteQueue(),
+        //             &mut cq_context,
+        //         )
+        //     };
+
+        //     let mut ret1 = unsafe { rdmaffi::ibv_req_notify_cq(self.CompleteQueue(), 0) };
+        //     if ret1 != 0 {
+        //         // TODO: should keep call here?
+        //     }
+
+        //     if ret == -1 {
+        //         return Ok(());
+        //     }
+        //     //TODO: potnetial improvemnt to ack in batch
+        //     unsafe { rdmaffi::ibv_ack_cq_events(cq_ptr, 1) };
+        //     ret1 = unsafe { rdmaffi::ibv_req_notify_cq(self.CompleteQueue(), 0) };
+        //     if ret1 != 0 {
+        //         // TODO: should keep call here?
+        //     }
+        // }
     }
 
     // call back for
     pub fn ProcessWC(&self, wc: &rdmaffi::ibv_wc) {
         let wrid = WorkRequestId(wc.wr_id);
         let fd = wrid.Fd();
-        let typ = wrid.Type();
 
-        match typ {
-            WorkRequestType::WriteImm => {
-                IO_MGR.ProcessRDMAWriteImmFinish(fd);
-            }
-            WorkRequestType::Recv => {
-                let imm = unsafe { wc.imm_data_invalidated_rkey_union.imm_data };
-                let immData = ImmData(imm);
-                IO_MGR.ProcessRDMARecvWriteImm(
-                    fd,
-                    immData.ReadCount() as _,
-                    immData.WriteCount() as _,
-                );
-            }
+        // match typ {
+        //     WorkRequestType::WriteImm => {
+        //         // debug!("ProcessWC: WriteImm, opcode: {}", wc.opcode);
+        //         IO_MGR.ProcessRDMAWriteImmFinish(fd);
+        //     }
+        //     WorkRequestType::Recv => {
+        //         let imm = unsafe { wc.imm_data_invalidated_rkey_union.imm_data };
+        //         let immData = ImmData(imm);
+        //         // debug!("ProcessWC: readCount: {}, writeCount: {}, opcode: {}", immData.ReadCount(), immData.WriteCount(), wc.opcode);
+        //         IO_MGR.ProcessRDMARecvWriteImm(
+        //             fd,
+        //             immData.WriteCount() as _,
+        //             immData.ReadCount() as _,
+        //         );
+        //     }
+        // }
+        if wc.status != rdmaffi::ibv_wc_status::IBV_WC_SUCCESS {
+            error!(
+                "ProcessWC::1, work reqeust failed with status: {}, id: {}",
+                wc.status, wc.wr_id
+            );
+        }
+        if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RDMA_WRITE {
+            // debug!(
+            //     "ProcessWC::2, writeIMM status: {}, id: {}",
+            //     wc.status, wc.wr_id
+            // );
+            IO_MGR.ProcessRDMAWriteImmFinish(fd);
+        } else if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RECV_RDMA_WITH_IMM {
+            let imm = unsafe { wc.imm_data_invalidated_rkey_union.imm_data };
+            let immData = ImmData(imm);
+            // debug!(
+            //     "ProcessWC::2, recv len:{}, writelen: {}, status: {}, id: {}",
+            //     wc.byte_len,
+            //     immData.ReadCount(),
+            //     wc.status,
+            //     wc.wr_id
+            // );
+            IO_MGR.ProcessRDMARecvWriteImm(fd, wc.byte_len as _, immData.ReadCount() as _);
+        } else {
+            // debug!("ProcessWC::4, opcode: {}, wr_id: {}", wc.opcode, wc.wr_id);
         }
     }
 }
@@ -477,17 +674,17 @@ impl RDMAContext {
 pub struct ImmData(pub u32);
 
 impl ImmData {
-    pub fn New(writeCount: u16, readCount: u16) -> Self {
-        return Self(((writeCount as u32) << 16) | (readCount as u32));
+    pub fn New(readCount: usize) -> Self {
+        return Self(readCount as u32);
     }
 
-    pub fn ReadCount(&self) -> u16 {
-        return (self.0 & 0xffff) as u16;
+    pub fn ReadCount(&self) -> u32 {
+        return self.0;
     }
 
-    pub fn WriteCount(&self) -> u16 {
-        return ((self.0 >> 16) & 0xffff) as u16;
-    }
+    // pub fn WriteCount(&self) -> u16 {
+    //     return ((self.0 >> 16) & 0xffff) as u16;
+    // }
 }
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Clone, Copy)]
@@ -500,23 +697,23 @@ pub enum WorkRequestType {
 pub struct WorkRequestId(pub u64);
 
 impl WorkRequestId {
-    pub fn New(fd: i32, typ: WorkRequestType) -> Self {
-        return Self(((fd as u64) << 32) | (typ as u32 as u64));
+    pub fn New(fd: i32) -> Self {
+        return Self(((fd as u64) << 32) | (NewUID() as u32 as u64));
     }
 
     pub fn Fd(&self) -> i32 {
         ((self.0 >> 32) & 0xffff_ffff) as i32
     }
 
-    pub fn Type(&self) -> WorkRequestType {
-        let val = self.0 & 0xffff_ffff;
-        if val == 0 {
-            return WorkRequestType::WriteImm;
-        } else {
-            assert!(val == 1);
-            return WorkRequestType::Recv;
-        }
-    }
+    // pub fn Type(&self) -> WorkRequestType {
+    //     let val = self.0 & 0xffff_ffff;
+    //     if val == 0 {
+    //         return WorkRequestType::WriteImm;
+    //     } else {
+    //         assert!(val == 1);
+    //         return WorkRequestType::Recv;
+    //     }
+    // }
 }
 
 pub struct QueuePair(pub Mutex<*mut rdmaffi::ibv_qp>);
@@ -598,17 +795,23 @@ impl QueuePair {
             return Err(Error::SysError(errno::errno().0));
         }
 
+        //error!("RDMAWriteImm");
+
         return Ok(());
     }
 
-    pub fn PostRecv(&self, wrId: u64) -> Result<()> {
+    pub fn PostRecv(&self, wrId: u64, addr: u64, lkey: u32) -> Result<()> {
+        let mut sge = rdmaffi::ibv_sge {
+            addr: addr,
+            length: 0,
+            lkey: lkey,
+        };
         let mut rw = rdmaffi::ibv_recv_wr {
             wr_id: wrId,
             next: ptr::null_mut(),
-            sg_list: ptr::null_mut(),
+            sg_list: &mut sge,
             num_sge: 1,
         };
-
         let mut bad_wr: *mut rdmaffi::ibv_recv_wr = ptr::null_mut();
         let rc = unsafe { rdmaffi::ibv_post_recv(self.Data(), &mut rw, &mut bad_wr) };
         if rc != 0 {
@@ -785,7 +988,7 @@ impl QueuePair {
         };
 
         attr.qp_state = rdmaffi::ibv_qp_state::IBV_QPS_RTR;
-        attr.path_mtu = rdmaffi::ibv_mtu::IBV_MTU_256;
+        attr.path_mtu = rdmaffi::ibv_mtu::IBV_MTU_4096;
         attr.dest_qp_num = remote_qpn;
         attr.rq_psn = 0;
         attr.max_dest_rd_atomic = 1;

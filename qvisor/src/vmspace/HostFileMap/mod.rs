@@ -59,7 +59,7 @@ impl IOMgr {
             return Err(Error::SysError(errno))
         }
 
-        info!("EpollMgr eventfd = {}", eventfd);
+        //info!("EpollMgr eventfd = {}", eventfd);
 
         let res = Self {
             eventfd: eventfd,
@@ -172,7 +172,7 @@ impl IOMgr {
         let fdInfo = self.GetByHost(fd);
         match fdInfo {
             None => {
-                panic!("ProcessRDMAWriteImmFinish get unexpected fd {}", fd)
+                panic!("ProcessRDMARecvWriteImm get unexpected fd {}", fd)
             },
             Some(fdInfo) => {
                 fdInfo.ProcessRDMARecvWriteImm(recvCount, writeCount);
