@@ -34,7 +34,7 @@ pub const IO_WAIT_CYCLES : i64 = 100_000_000; // 1ms
 impl KIOThread {
     pub fn New() -> Self {
         return Self{
-            eventfd: 0
+            eventfd: 0,
         }
     }
 
@@ -47,7 +47,10 @@ impl KIOThread {
     pub fn ProcessOnce(sharespace: &ShareSpace) -> usize {
         let mut count = 0;
 
-        count += RDMA.PollCompletionQueueAndProcess();
+        if QUARK_CONFIG.lock().EnableRDMA {
+            count += RDMA.PollCompletionQueueAndProcess();
+        }
+        
         count += IOURING.IOUrings()[0].HostSubmit().unwrap();
         count += IOURING.DrainCompletionQueue();
         count += IOURING.IOUrings()[0].HostSubmit().unwrap();
@@ -136,7 +139,9 @@ impl KIOThread {
             }
 
             ASYNC_PROCESS.Process();
-            RDMA.HandleCQEvent()?;
+            if QUARK_CONFIG.lock().EnableRDMA {
+                RDMA.HandleCQEvent()?;
+            }
             let _nfds = unsafe {
                 epoll_wait(epfd, &mut events[0], 2, -1)
             };
