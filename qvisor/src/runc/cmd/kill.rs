@@ -126,7 +126,6 @@ impl KillCmd {
     }
 
     pub fn Run(&self, gCfg: &GlobalConfig) -> Result<()> {
-        info!("Container:: Kill ....");
         let mut signal = if self.sig.len() == 0 {
             "".to_string()
         } else {
@@ -138,9 +137,7 @@ impl KillCmd {
         }
 
         let sig = ParseSignal(&signal)?;
-
         let container = Container::Load(&gCfg.RootDir, &self.id)?;
-
         if self.pid != 0 {
             return container.SignalProcess(sig, self.pid)
         } else {

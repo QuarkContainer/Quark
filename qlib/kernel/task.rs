@@ -397,9 +397,9 @@ impl Task {
         return self.syscallRestartBlock.take();
     }
 
+    // TODO(Cong): double check the semantics of this
     pub fn IsChrooted(&self) -> bool {
-        let kernel = self.Thread().lock().k.clone();
-        let realRoot = kernel.RootDir();
+        let realRoot = self.mountNS.root.clone();
         let root = self.fsContext.RootDirectory();
         return root != realRoot;
     }

@@ -276,6 +276,8 @@ impl Loader {
             Some(&processSpec.TaskCaps()),
             &userns
         );
+        let rootMounts = InitRootFs(Task::Current(), &processSpec.Root).expect("in loader::StartSubContainer, InitRootfs fail");
+        kernel.mounts.write().insert(processSpec.ID.clone(), rootMounts);
 
         //todo: investigate PID namespace and whether we need it.
         let mut createProcessArgs = NewProcess(processSpec, &creds, &kernel);
@@ -319,7 +321,7 @@ impl Loader {
 
 #[derive(Default)]
 pub struct LoaderInternal {
-    // k is the kernel.
+    // kernel is a copy of the kernel info
     pub kernel: Kernel,
 
     // rootProcArgs refers to the root sandbox init task.
@@ -377,12 +379,10 @@ impl LoaderInternal {
         let kernel = Kernel::Init(kernalArgs);
         *SHARESPACE.kernel.lock() = Some(kernel.clone());
 
-        let rootMounts = BootInitRootFs(Task::Current(), &process.Root).expect("in loader::New, InitRootfs fail");
-        *kernel.mounts.write() = Some(rootMounts);
+        let rootMounts = InitRootFs(Task::Current(), &process.Root).expect("in loader::New, InitRootfs fail");
+        kernel.mounts.write().insert(sandboxID.clone(), rootMounts);
 
-        info!("after BootInitRootFs");
         let processArgs = NewProcess(process, &creds, &kernel);
-        info!("after NewProcess");
         self.kernel = kernel;
         self.console = console;
         self.sandboxID = sandboxID;

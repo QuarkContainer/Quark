@@ -28,12 +28,14 @@ use std::fs::{canonicalize, create_dir_all};
 use nix::unistd::{getcwd};
 use serde_json;
 use std::process::{Command, Stdio};
+use procfs;
 
 
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::path::*;
 use super::super::super::util::*;
+use super::super::super::qlib::config::DebugLevel;
 use super::super::super::namespace::*;
 use super::super::super::console::pty::*;
 use super::super::super::console::unix_socket::*;
@@ -51,6 +53,7 @@ use super::loader::*;
 use super::vm::*;
 use super::console::*;
 use super::signal_handle::*;
+use super::super::super::QUARK_CONFIG;
 
 const QUARK_SANDBOX_ROOT_PATH: &str = "/var/lib/quark/";
 
@@ -176,7 +179,7 @@ impl SandboxProcess {
         args.Rootfs = Join(QUARK_SANDBOX_ROOT_PATH, id.as_str());
         args.ControlSock = controlSock;
 
-        let exitStatus = match VirtualMachine::Init(args) {
+        let _exitStatus = match VirtualMachine::Init(args) {
             Ok(mut vm) => {
                 let ret = vm.run().expect("vm.run() fail");
                 ret
@@ -186,19 +189,45 @@ impl SandboxProcess {
                 panic!("error is {:?}", e)
             }
         };
-
+        // TODO(Cong): fix return code of container by implementing the new shim.
+        unsafe{
+            loop {
+                info!("begin sleeping..");
+                libc::sleep(u32::MAX);
+            }
+        }
+        /* 
         unsafe {
             libc::_exit(exitStatus)
         }
+        */
     }
 
     /// Root path for this sandbox on host fs, rootfs for containers running in this sandbox should be mount inside this dir
     fn MakeSandboxRootDirectory(&self) -> Result<()> {
         debug!("Creating the sandboxRootDir at {}", self.SandboxRootDir.as_str());
         match create_dir_all(self.SandboxRootDir.as_str()) {
-            Ok(()) => return Ok(()),
+            Ok(()) => (),
             Err(_e) => return Err(Error::Common(String::from("failed creating directory")))
         }
+        let rbindFlags = libc::MS_REC | libc::MS_BIND;
+
+        // convert sandbox Root Dir to a mount point
+        let ret = Util::Mount(&self.SandboxRootDir, &self.SandboxRootDir, "", rbindFlags | libc::MS_SHARED, "");
+        if  ret < 0 {
+            panic!("InitRootfs: mount sandboxRootDir fails, error is {}", ret);
+        }
+        let rootContainerPath = Join(&self.SandboxRootDir, &self.containerId);
+        match create_dir_all(&rootContainerPath) {
+            Ok(()) => (),
+            Err(_e) => panic!("failed to create dir to mount containerrootPath")
+        };
+        let ret = Util::Mount(&self.Rootfs, &rootContainerPath, "", rbindFlags | libc::MS_SHARED, "");
+        if  ret < 0 {
+            panic!("InitRootfs: mount rootfs fail, error is {}", ret);
+        }
+
+        return Ok(())
     }
 
     pub fn CollectNamespaces(&mut self) -> Result<()> {
@@ -273,6 +302,11 @@ impl SandboxProcess {
             SetNamespace(mountFd, LinuxNamespaceType::mount as i32)?;
             Close(mountFd)?;
         }
+        // Print mountinfo in quark log if the level is debug
+        if QUARK_CONFIG.lock().DebugLevel >= DebugLevel::Debug {
+            let proc = procfs::process::Process::myself().unwrap();
+            debug!("mountinfo from sandbox process: {:?}", proc.mountinfo().expect("failed to read mountinfo inside sandbox mountns"))
+        }
 
         return Ok(())
     }
@@ -290,13 +324,12 @@ impl SandboxProcess {
         if  ret < 0 {
             panic!("InitRootfs: mount sandboxRootDir fails, error is {}", ret);
         }
-        // mount the root container's rootfs as a submount
         let rootContainerPath = Join(&self.SandboxRootDir, &self.containerId);
         match create_dir_all(&rootContainerPath) {
             Ok(()) => (),
             Err(_e) => panic!("failed to create dir to mount containerrootPath")
         };
-        let ret = Util::Mount(&self.Rootfs, &rootContainerPath, "", libc::MS_REC | libc::MS_BIND, "");
+        let ret = Util::Mount(&self.Rootfs, &rootContainerPath, "", rbindFlags, "");
         if  ret < 0 {
             panic!("InitRootfs: mount rootfs fail, error is {}", ret);
         }

@@ -21,7 +21,6 @@ use super::super::super::super::super::common::*;
 use super::super::super::super::super::linux_def::*;
 use super::super::super::super::super::device::*;
 use super::super::super::super::super::auth::*;
-use super::super::super::super::kernel::kernel::*;
 use super::super::super::super::task::*;
 use super::super::super::super::fs::fsutil::file::dynamic_dir_file_operations::*;
 use super::super::super::super::fs::dentry::*;
@@ -114,8 +113,7 @@ impl DynamicDirFileNode for SubTasksFileNode {
         };
 
         if offset == 0 {
-            let kernel = GetKernel();
-            let root = kernel.RootDir();
+            let root = task.mountNS.root.clone();
             let (dot, dotdot) = root.GetDotAttrs(&root);
 
             dirCtx.DirEmit(task, &".".to_string(), &dot)?;

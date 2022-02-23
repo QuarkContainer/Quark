@@ -104,8 +104,7 @@ impl FileOperations for StaticDirFileOperations {
     }
 
     fn ReadDir(&self, task: &Task, f: &File, _offset: i64, serializer: &mut DentrySerializer) -> Result<i64> {
-        let kernel = task.Thread().lock().k.clone();
-        let root = kernel.RootDir();
+        let root = task.Root();
 
         let mut dirCtx = DirCtx {
             Serializer: serializer,

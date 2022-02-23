@@ -18,7 +18,6 @@ use super::super::qlib::linux_def::*;
 use super::super::qlib::qmsg::qcall::StatmInfo;
 use super::super::qlib::usage::memory::*;
 use super::super::syscalls::syscalls::*;
-use super::super::Kernel;
 
 pub fn SysInfo(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg0 as u64;
@@ -30,8 +29,8 @@ pub fn SysInfo(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Err(Error::SysError(-ret as i32))
     }*/
 
-    let mut statm : StatmInfo = StatmInfo::default();
-    // TODO(Cong): bypassing this issue for now, fix before PR
+    let statm : StatmInfo = StatmInfo::default();
+    // TODO(Cong): bypassing this issue for now, fix this...
     //Kernel::HostSpace::Statm(&mut statm);
     info!("pass to here, rss, {}", statm.rss);
 

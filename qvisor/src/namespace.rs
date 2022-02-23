@@ -132,12 +132,12 @@ impl MountNs {
             panic!("chdir fail for rootfs {}", &self.rootfs)
         }
 
-        match create_dir_all("old_root") {
+        match create_dir_all("./old_root") {
             Ok(()) => (),
             Err(_e) => panic!("failed to create dir to put old root")
         };
 
-        let errno = Util::PivotRoot(".", ".");
+        let errno = Util::PivotRoot(".", "./old_root");
         if errno != 0 {
             panic!("pivot fail with errno = {}", errno)
         }
@@ -146,10 +146,12 @@ impl MountNs {
             panic!("chdir fail")
         }
 
+        /*
         // https://man.archlinux.org/man/pivot_root.2.en#pivot_root(&quot;.&quot;,_&quot;.&quot;)
         if Util::Umount2("/", MNT_DETACH) < 0 {
             panic!("UMount2 fail")
         }
+        */
     }
 
     pub fn PivotRoot(&self) {

@@ -285,7 +285,7 @@ impl Container {
     // is SIGKILL, then waits for all processes to exit before returning.
     // SignalContainer returns an error if the container is already stopped.
     pub fn SignalContainer(&self, sig: i32, all: bool) -> Result<()> {
-        info!("Signal container {:?}: {:?}", self.ID, sig);
+        info!("Signal container {:?} with signal: {:?}", self.ID, sig);
         // Signaling container in Stopped state is allowed. When all=false,
         // an error will be returned anyway; when all=true, this allows
         // sending signal to other processes inside the container even
@@ -393,6 +393,7 @@ impl Container {
                   detach: bool,
                   pivot: bool) -> Result<Self> {
         info!("Create container {} in root dir: {}", id, &conf.RootDir);
+        debug!("spec for creating container: {:?}", &spec);
         //debug!("container spec is {:?}", &spec);
         ValidateID(id)?;
 
@@ -838,7 +839,7 @@ impl Container {
             } else {
                 [0, 1, 2]
             };
-            if let Err(e) = self.Sandbox.as_ref().unwrap().StartSubContainer(&self.Spec, config, &self.ID[..], &stdiofds) {
+            if let Err(e) = self.Sandbox.as_ref().unwrap().StartSubContainer(&self.Spec, config, &self.ID[..], &stdiofds, &self.BundleDir) {
                 error!("Failed to start subcontainer, error : {:?}", &e);
                 panic!("{:?}", &e);
             }
@@ -946,13 +947,18 @@ impl Container {
 
         if self.Sandbox.is_some() {
             info!("Destroying container {}", &self.ID);
-            let sandbox = self.Sandbox.as_ref().unwrap();
+            let sandbox = self.Sandbox.as_mut().unwrap();
             if sandbox.IsRunning() {
                 sandbox.DestroyContainer(&self.ID)?;
             }
             // Only uninstall cgroup for sandbox stop.
             if sandbox.IsRootContainer(&self.ID) {
+                let destroyed = sandbox.Destroy();
                 cgroup = self.Sandbox.as_mut().unwrap().Cgroup.take();
+                match destroyed {
+                    Ok(())=> (),
+                    Err(e)=> return Err(e)
+                }
             }
 
             // Only set sandbox to none after it has been told to destroy the container.

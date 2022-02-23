@@ -273,8 +273,7 @@ impl FileOperations for RootProcFile {
         // Get normal directory contents from ramfs dir.
         let mut map = self.iops.dir.Children();
 
-        let kernel = task.Thread().lock().k.clone();
-        let root = kernel.RootDir();
+        let root = task.Root();
 
         let (dot, dotdot) = root.GetDotAttrs(&root);
         map.insert(".".to_string(), dot);

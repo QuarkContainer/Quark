@@ -32,16 +32,10 @@ use super::super::super::inode::*;
 use super::super::super::super::threadmgr::thread::*;
 use super::super::inode::*;
 
-pub fn ForEachMount(thread: &Thread, f: &mut FnMut(&str, &Arc<QMutex<Mount>>)) {
+pub fn ForEachMount(thread: &Thread, mountns: MountNs, f: &mut FnMut(&str, &Arc<QMutex<Mount>>)) {
     let fsctx = thread.lock().fsc.clone();
 
     let rootDir = fsctx.RootDirectory();
-
-    let kernel = thread.lock().k.clone();
-    let mountns = match kernel.mounts.read().clone() {
-        None => return,
-        Some(mountns) => mountns
-    };
 
     let mnt = match mountns.FindMount(&rootDir) {
         None => return,
@@ -84,11 +78,12 @@ pub struct MountInfoFile {
 }
 
 impl MountInfoFile {
-    pub fn GenSnapshot(&self, _task: &Task) -> Vec<u8> {
+    pub fn GenSnapshot(&self, task: &Task) -> Vec<u8> {
         info!("MountInfoFile GenSnapshot...");
         let mut ret = "".to_string();
 
-        ForEachMount(&self.thread, &mut |mountPath: &str, m: &Arc<QMutex<Mount>>| {
+        let mountns = task.mountNS.clone();
+        ForEachMount(&self.thread, mountns,  &mut |mountPath: &str, m: &Arc<QMutex<Mount>>| {
             // Format:
             // 36 35 98:0 /mnt1 /mnt2 rw,noatime master:1 - ext3 /dev/root rw,errors=continue
             // (1)(2)(3)   (4)   (5)      (6)      (7)   (8) (9)   (10)         (11)
@@ -189,10 +184,11 @@ pub struct MountsFile {
 }
 
 impl MountsFile {
-    pub fn GenSnapshot(&self, _task: &Task) -> Vec<u8> {
+    pub fn GenSnapshot(&self, task: &Task) -> Vec<u8> {
         let mut ret = "".to_string();
 
-        ForEachMount(&self.thread, &mut |mountPath: &str, m: &Arc<QMutex<Mount>>| {
+        let mountns = task.mountNS.clone();
+        ForEachMount(&self.thread, mountns, &mut |mountPath: &str, m: &Arc<QMutex<Mount>>| {
             let mroot = m.lock().Root();
             let mountSource = mroot.Inode().lock().MountSource.clone();
             let flags = mountSource.lock().Flags;
