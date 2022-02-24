@@ -20,6 +20,7 @@ use super::task::*;
 use super::qlib::common::*;
 use super::qlib::vcpu_mgr::*;
 use super::qlib::linux_def::*;
+use super::qlib::kernel::TSC;
 use super::threadmgr::task_sched::*;
 use super::SignalDef::*;
 use super::MainRun;
@@ -438,6 +439,14 @@ pub extern fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
         );
     }
 
+    /*defer!({
+        let currTask = Task::Current();
+        currTask.AccountTaskLeave(SchedState::RunningApp);
+        super::qlib::kernel::taskMgr::Yield();
+        currTask.AccountTaskEnter(SchedState::RunningApp);
+        CPULocal::SetKernelStack(currTask.GetKernelSp());
+    });*/
+
     let signal;
     // no need loop, just need to enable break
     loop {
@@ -496,8 +505,9 @@ pub extern fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
                 } else {
                     pageAddr + i * PAGE_SIZE
                 };
+
                 if range.Contains(addr) {
-                    match currTask.mm.InstallPageLocked(currTask, &vma, pageAddr, &range) {
+                    match currTask.mm.InstallPageLocked(currTask, &vma, addr, &range) {
                         Err(_) => {
                             break;
                         }
@@ -611,11 +621,46 @@ pub extern fn SIMDFPHandler(sf: &mut PtRegs) {
 }
 
 #[no_mangle]
-pub extern fn VirtualizationHandler(_sf: &mut PtRegs) {
-    let curr = super::asm::CurrentCr3();
-    PageTables::Switch(curr);
+pub extern fn VirtualizationHandler(ptRegs: &mut PtRegs) {
+    let mask = CPULocal::Myself().ResetInterruptMask();
     let currTask = Task::Current();
-    currTask.mm.MaskTlbShootdown(CPULocal::CpuId() as u64);
+
+    if CPULocal::InterruptByTlbShootdown(mask) {
+        if ptRegs.ss & 0x3 != 0 {
+            // from user
+            let mut rflags = ptRegs.eflags;
+            rflags &= !USER_FLAGS_CLEAR;
+            rflags |= USER_FLAGS_SET;
+            ptRegs.eflags = rflags;
+        }
+
+        let curr = super::asm::CurrentCr3();
+        PageTables::Switch(curr);
+        let currTask = Task::Current();
+        currTask.mm.MaskTlbShootdown(CPULocal::CpuId() as u64);
+    }
+
+    if CPULocal::InterruptByThreadTimeout(mask) {
+        if ptRegs.ss & 0x3 != 0 { // from user
+            let mut rflags = ptRegs.eflags;
+            rflags &= !USER_FLAGS_CLEAR;
+            rflags |= USER_FLAGS_SET;
+            ptRegs.eflags = rflags;
+
+            if SHARESPACE.config.read().KernelPagetable {
+                Task::SetKernelPageTable();
+            }
+
+            currTask.AccountTaskLeave(SchedState::RunningApp);
+            //error!("InterruptByThreadTimeout1 {:x?}", ptRegs);
+            //super::qlib::kernel::taskMgr::Yield();
+            //error!("InterruptByThreadTimeout2 {:x?}", ptRegs);
+            currTask.AccountTaskEnter(SchedState::RunningApp);
+            CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
+        }
+    }
+
+    CPULocal::SetKernelStack(currTask.GetKernelSp());
     return;
 }
 

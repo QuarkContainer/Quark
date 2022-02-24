@@ -311,7 +311,6 @@ impl Task {
     }
 
     pub fn AccountTaskEnter(&self, state: SchedState) {
-        //print!("AccountTaskEnter current task is {:x}", self.taskId);
         if self.taskId == CPULocal::WaitTask() {
             return
         }

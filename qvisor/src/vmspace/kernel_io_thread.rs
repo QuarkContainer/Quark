@@ -54,6 +54,8 @@ impl KIOThread {
         count += FD_NOTIFIER.HostEpollWait() as usize;
         count += IOURING.IOUrings()[0].HostSubmit().unwrap();
 
+        sharespace.CheckVcpuTimeout();
+
         return count;
     }
 
@@ -135,6 +137,8 @@ impl KIOThread {
 
             ASYNC_PROCESS.Process();
             let _nfds = unsafe {
+                // todo: enable preempty scheduling
+                //epoll_wait(epfd, &mut events[0], 2, 10)
                 epoll_wait(epfd, &mut events[0], 2, -1)
             };
         }

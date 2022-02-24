@@ -194,50 +194,6 @@ pub fn IRet(kernelRsp: u64) -> ! {
 }
 
 #[inline]
-pub fn child_clone(userSp: u64) {
-    unsafe {
-        llvm_asm!("
-            mov rbx, [rsp - 16]
-            //fxrstor64 [rbx + 0]
-
-            mov gs:8, rdi
-
-            pop r15
-            pop r14
-            pop r13
-            pop r12
-            pop rbp
-            pop rbx
-
-            pop r11
-            pop r10
-            pop r9
-            pop r8
-            pop rax
-            pop rcx
-            pop rdx
-            pop rsi
-            pop rdi
-
-            add rsp, 6 * 8
-
-            //kernel stack
-            mov gs:0, rsp
-
-            //user stack
-            mov rsp, gs:8
-
-            swapgs
-            .byte 0x48
-            sysret
-        ":
-             : "{rdi}"(userSp)
-             : "memory" : "intel", "volatile");
-    }
-}
-
-
-#[inline]
 pub fn GetRsp() -> u64 {
     let rsp: u64;
     unsafe { llvm_asm!("mov %rsp, $0" : "=r" (rsp) : : "memory" : "volatile" ) };
