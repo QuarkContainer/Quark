@@ -288,6 +288,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
 
     MainRun(currTask, TaskRunState::RunApp);
     currTask.mm.HandleTlbShootdown();
+    currTask.RestoreFp();
     ReturnToApp(sf);
 }
 
@@ -590,6 +591,7 @@ pub fn HandleFault(task: &mut Task, user: bool, errorCode: u64, cr2: u64, sf: &m
     MainRun(task, TaskRunState::RunApp);
     task.mm.HandleTlbShootdown();
 
+    task.RestoreFp();
     ReturnToApp(sf);
 }
 
