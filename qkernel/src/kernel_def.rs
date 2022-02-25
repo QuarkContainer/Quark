@@ -19,6 +19,7 @@ use super::qlib::kernel::asm::*;
 use super::qlib::kernel::taskMgr::*;
 use super::qlib::kernel::threadmgr::task_sched::*;
 use super::qlib::kernel::SHARESPACE;
+use super::qlib::kernel::TSC;
 
 use super::qlib::*;
 use super::qlib::loader::*;
@@ -320,5 +321,29 @@ impl HostSpace {
         HyperCall64(HYPERCALL_HCALL, &mut event as * const _ as u64, 0, 0);
 
         return event.ret;
+    }
+}
+
+#[inline]
+pub fn child_clone(userSp: u64) {
+    let currTask = Task::Current();
+    CPULocal::SetUserStack(userSp);
+    CPULocal::SetKernelStack(currTask.GetKernelSp());
+
+    currTask.AccountTaskEnter(SchedState::RunningApp);
+    let pt = currTask.GetPtRegs();
+
+    let kernalRsp = pt as *const _ as u64;
+    CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
+    SyscallRet(kernalRsp)
+}
+
+extern "C" {
+    pub fn initX86FPState(data: u64, useXsave: bool);
+}
+
+pub fn InitX86FPState(data: u64, useXsave: bool) {
+    unsafe {
+        initX86FPState(data, useXsave)
     }
 }

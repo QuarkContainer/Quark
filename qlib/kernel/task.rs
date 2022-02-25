@@ -238,11 +238,11 @@ impl Task {
     }
 
     pub fn SaveFp(&self) {
-        //self.context.X86fpstate.SaveFp();
+        self.context.X86fpstate.SaveFp();
     }
 
     pub fn RestoreFp(&self) {
-        //self.context.X86fpstate.RestoreFp();
+        self.context.X86fpstate.RestoreFp();
     }
 
     pub fn QueueId(&self) -> usize {
@@ -311,7 +311,6 @@ impl Task {
     }
 
     pub fn AccountTaskEnter(&self, state: SchedState) {
-        //print!("AccountTaskEnter current task is {:x}", self.taskId);
         if self.taskId == CPULocal::WaitTask() {
             return
         }

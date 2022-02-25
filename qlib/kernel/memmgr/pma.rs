@@ -130,7 +130,7 @@ impl PageMgrInternal {
     }
 
     pub fn Deref(&self, addr: u64) {
-        self.allocator.lock().Ref(addr).unwrap();
+        self.allocator.lock().Deref(addr).unwrap();
     }
 
     pub fn VsyscallPages(&mut self) -> &[u64] {

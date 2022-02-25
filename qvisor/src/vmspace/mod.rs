@@ -129,6 +129,7 @@ impl VMSpace {
             if (1<<i) & vcpuMask != 0 {
                 if self.vcpus[i].Signal(Signal::SIGCHLD) {
                     mask |= 1 << i;
+                    SHARE_SPACE.scheduler.VcpuArr[i].InterruptTlbShootdown();
                 }
             }
         }

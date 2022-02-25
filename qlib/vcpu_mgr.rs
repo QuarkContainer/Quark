@@ -14,6 +14,7 @@
 
 use core::sync::atomic::Ordering;
 use core::sync::atomic::AtomicU64;
+use core::sync::atomic::AtomicI64;
 
 use super::ShareSpace;
 use super::mem::list_allocator::*;
@@ -44,6 +45,10 @@ pub struct CPULocal {
     pub eventfd: i32,
     pub epollfd: i32,
     pub allocator: VcpuAllocator,
+
+    // it is the time to enter guest ring3. If it is in ring0, the vale will be zero
+    pub enterAppTimestamp: AtomicI64,
+    pub interruptMask: AtomicU64,
 }
 
 impl CPULocal {
@@ -74,5 +79,44 @@ impl CPULocal {
 
     pub fn IncrUringMsgCnt(&self, cnt: u64) -> u64 {
         return self.uringMsgCount.fetch_add(cnt, Ordering::Relaxed);
+    }
+
+    pub fn ResetEnterAppTimestamp(&self) -> i64 {
+        return self.enterAppTimestamp.swap(0, Ordering::Relaxed)
+    }
+
+    pub fn SetEnterAppTimestamp(&self, val: i64) {
+        self.enterAppTimestamp.store(val,  Ordering::Relaxed)
+    }
+
+    pub fn EnterAppTimestamp(&self) -> i64 {
+        return self.enterAppTimestamp.load(Ordering::Relaxed)
+    }
+
+    pub fn ResetInterruptMask(&self) -> u64 {
+        return self.interruptMask.swap(0, Ordering::SeqCst)
+    }
+
+    pub fn SetInterruptMask(&self, mask: u64) {
+        self.interruptMask.fetch_or(mask,  Ordering::SeqCst);
+    }
+
+    pub const TLB_SHOOTDOWN_MASK : u64 = 1<<0;
+    pub const THREAD_TIMEOUT : u64 = 1<<1;
+
+    pub fn InterruptTlbShootdown(&self) {
+        self.SetInterruptMask(Self::TLB_SHOOTDOWN_MASK);
+    }
+
+    pub fn InterruptThreadTimeout(&self) {
+        self.SetInterruptMask(Self::THREAD_TIMEOUT);
+    }
+
+    pub fn InterruptByTlbShootdown(mask: u64) -> bool {
+        return mask & Self::TLB_SHOOTDOWN_MASK != 0;
+    }
+
+    pub fn InterruptByThreadTimeout(mask: u64) -> bool {
+        return mask & Self::THREAD_TIMEOUT != 0;
     }
 }

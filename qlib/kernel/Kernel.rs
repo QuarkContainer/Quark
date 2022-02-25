@@ -942,6 +942,7 @@ impl HostSpace {
         HyperCall64(HYPERCALL_VCPU_YIELD, 0, 0, 0);
     }
 
+    #[inline]
     pub fn VcpuDebug() {
         HyperCall64(HYPERCALL_VCPU_DEBUG, 0, 0, 0);
     }

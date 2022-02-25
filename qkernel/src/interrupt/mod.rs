@@ -20,6 +20,7 @@ use super::task::*;
 use super::qlib::common::*;
 use super::qlib::vcpu_mgr::*;
 use super::qlib::linux_def::*;
+use super::qlib::kernel::TSC;
 use super::threadmgr::task_sched::*;
 use super::SignalDef::*;
 use super::MainRun;
@@ -155,7 +156,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
             ev, sf, errorCode, &map);
     }
 
-    //currTask.SaveFp();
+    currTask.SaveFp();
 
     match ev {
         ExceptionStackVec::DivideByZero => {
@@ -493,8 +494,9 @@ pub extern fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
                 } else {
                     pageAddr + i * PAGE_SIZE
                 };
+
                 if range.Contains(addr) {
-                    match currTask.mm.InstallPageLocked(currTask, &vma, pageAddr, &range) {
+                    match currTask.mm.InstallPageLocked(currTask, &vma, addr, &range) {
                         Err(_) => {
                             break;
                         }
@@ -556,6 +558,8 @@ pub fn HandleFault(task: &mut Task, user: bool, errorCode: u64, cr2: u64, sf: &m
         panic!();
     }
 
+    task.SaveFp();
+
     let mut info = SignalInfo {
         Signo: signal, //Signal::SIGBUS,
         ..Default::default()
@@ -608,11 +612,46 @@ pub extern fn SIMDFPHandler(sf: &mut PtRegs) {
 }
 
 #[no_mangle]
-pub extern fn VirtualizationHandler(_sf: &mut PtRegs) {
-    let curr = super::asm::CurrentCr3();
-    PageTables::Switch(curr);
+pub extern fn VirtualizationHandler(ptRegs: &mut PtRegs) {
+    let mask = CPULocal::Myself().ResetInterruptMask();
     let currTask = Task::Current();
-    currTask.mm.MaskTlbShootdown(CPULocal::CpuId() as u64);
+
+    if CPULocal::InterruptByTlbShootdown(mask) {
+        if ptRegs.ss & 0x3 != 0 {
+            // from user
+            let mut rflags = ptRegs.eflags;
+            rflags &= !USER_FLAGS_CLEAR;
+            rflags |= USER_FLAGS_SET;
+            ptRegs.eflags = rflags;
+        }
+
+        let curr = super::asm::CurrentCr3();
+        PageTables::Switch(curr);
+        let currTask = Task::Current();
+        currTask.mm.MaskTlbShootdown(CPULocal::CpuId() as u64);
+    }
+
+    if CPULocal::InterruptByThreadTimeout(mask) {
+        if ptRegs.ss & 0x3 != 0 { // from user
+            let mut rflags = ptRegs.eflags;
+            rflags &= !USER_FLAGS_CLEAR;
+            rflags |= USER_FLAGS_SET;
+            ptRegs.eflags = rflags;
+
+            if SHARESPACE.config.read().KernelPagetable {
+                Task::SetKernelPageTable();
+            }
+
+            currTask.AccountTaskLeave(SchedState::RunningApp);
+            currTask.SaveFp();
+            super::qlib::kernel::taskMgr::Yield();
+            currTask.RestoreFp();
+            currTask.AccountTaskEnter(SchedState::RunningApp);
+            CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
+        }
+    }
+
+    CPULocal::SetKernelStack(currTask.GetKernelSp());
     return;
 }
 

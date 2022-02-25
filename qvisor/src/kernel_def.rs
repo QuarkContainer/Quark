@@ -11,7 +11,10 @@ use super::qlib::qmsg::*;
 use super::qlib::control_msg::*;
 use super::qlib::kernel::task::*;
 use super::qlib::kernel::Kernel::*;
+use super::qlib::kernel::TSC;
+use super::qlib::kernel::Tsc;
 use super::qlib::perf_tunning::*;
+use super::qlib::linux_def::*;
 use super::qlib::vcpu_mgr::*;
 use super::qlib::linux::time::*;
 use super::qlib::kernel::memmgr::pma::*;
@@ -132,6 +135,25 @@ impl ShareSpace {
         let dur = time::Duration::new(0, 1000);
         thread::sleep(dur);
     }
+
+    pub fn CheckVcpuTimeout(&self) {
+        let now = TSC.Rdtsc();
+        for i in 1..self.scheduler.VcpuArr.len() {
+            let enterAppTimestamp = self.scheduler.VcpuArr[i].EnterAppTimestamp();
+            if enterAppTimestamp == 0 {
+                continue;
+            }
+
+            //error!("CheckVcpuTimeout {}/{}/{}/{}", i, enterAppTimestamp, now, Tsc::Scale(now - enterAppTimestamp));
+            if Tsc::Scale(now - enterAppTimestamp) * 1000 > CLOCK_TICK {
+                self.scheduler.VcpuArr[i].ResetEnterAppTimestamp();
+                self.scheduler.VcpuArr[i].InterruptThreadTimeout();
+
+                // todo: enable this for preempty schedule
+                VMS.lock().vcpus[i].Signal(Signal::SIGCHLD);
+            }
+        }
+    }
 }
 
 
@@ -245,3 +267,8 @@ impl HostSpace {
         panic!("HostSpace::HCall msg {:x?}", msg);
     }
 }
+
+#[inline]
+pub fn child_clone(_userSp: u64) {}
+
+pub fn InitX86FPState(_data: u64, _useXsave: bool) {}

@@ -19,13 +19,13 @@ use alloc::string::ToString;
 use alloc::vec::Vec;
 
 use super::super::*;
-use super::super::asm::*;
 use super::super::arch::x86_64::context::*;
 use super::super::kernel::ipc_namespace::*;
 use super::super::threadmgr::task_start::*;
 use super::super::threadmgr::thread::*;
 use super::super::SignalDef::*;
 use super::super::super::common::*;
+use super::super::super::super::kernel_def::*;
 use super::super::super::linux_def::*;
 use super::super::super::task_mgr::*;
 //use super::super::syscalls::sys_tls::*;
@@ -33,7 +33,6 @@ use super::super::task::*;
 use super::task_block::*;
 use super::task_stop::*;
 use super::super::perflog::*;
-use super::super::super::super::kernel_def::*;
 
 pub fn IsValidSegmentBase(addr: u64) -> bool {
     return addr < MAX_ADDR64
@@ -647,6 +646,7 @@ pub fn CreateCloneTask(fromTask: &Task, toTask: &mut Task, userSp: u64) {
         toTask.context.rdi = userSp;
         //toTask.context.X86fpstate = Box::new(fromTask.context.X86fpstate.Fork());
         toPtRegs.rax = 0;
+        toPtRegs.rsp = userSp;
 
         *(toTask.context.rsp as *mut u64) = child_clone as u64;
 

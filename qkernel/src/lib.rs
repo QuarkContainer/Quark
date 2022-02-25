@@ -128,6 +128,7 @@ use self::qlib::loader::*;
 use self::qlib::pagetable::*;
 use self::qlib::perf_tunning::*;
 use self::qlib::vcpu_mgr::*;
+use self::qlib::linux::time::*;
 use self::syscalls::syscalls::*;
 use self::task::*;
 use self::threadmgr::task_sched::*;
@@ -272,6 +273,12 @@ pub extern "C" fn syscall_handler(
         );
     }
 
+    let enterAppTimestamp = CPULocal::Myself().ResetEnterAppTimestamp() as i64;
+    let worktime = Tsc::Scale(startTime - enterAppTimestamp) * 1000; // the thread has used up time slot
+    if worktime > CLOCK_TICK {
+        taskMgr::Yield();
+    }
+
     let res;
     let args = SyscallArguments {
         arg0: arg0,
@@ -328,6 +335,8 @@ pub extern "C" fn syscall_handler(
     if SHARESPACE.config.read().KernelPagetable {
         currTask.SwitchPageTable();
     }
+
+    CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
 
     if !(pt.rip == pt.rcx && pt.r11 == pt.eflags) {
         //error!("iret *****, pt is {:x?}", pt);
