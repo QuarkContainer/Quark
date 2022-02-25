@@ -156,7 +156,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
             ev, sf, errorCode, &map);
     }
 
-    //currTask.SaveFp();
+    currTask.SaveFp();
 
     match ev {
         ExceptionStackVec::DivideByZero => {
@@ -439,14 +439,6 @@ pub extern fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
         );
     }
 
-    /*defer!({
-        let currTask = Task::Current();
-        currTask.AccountTaskLeave(SchedState::RunningApp);
-        super::qlib::kernel::taskMgr::Yield();
-        currTask.AccountTaskEnter(SchedState::RunningApp);
-        CPULocal::SetKernelStack(currTask.GetKernelSp());
-    });*/
-
     let signal;
     // no need loop, just need to enable break
     loop {
@@ -569,6 +561,8 @@ pub fn HandleFault(task: &mut Task, user: bool, errorCode: u64, cr2: u64, sf: &m
         panic!();
     }
 
+    task.SaveFp();
+
     let mut info = SignalInfo {
         Signo: signal, //Signal::SIGBUS,
         ..Default::default()
@@ -652,9 +646,9 @@ pub extern fn VirtualizationHandler(ptRegs: &mut PtRegs) {
             }
 
             currTask.AccountTaskLeave(SchedState::RunningApp);
-            //error!("InterruptByThreadTimeout1 {:x?}", ptRegs);
-            //super::qlib::kernel::taskMgr::Yield();
-            //error!("InterruptByThreadTimeout2 {:x?}", ptRegs);
+            currTask.SaveFp();
+            super::qlib::kernel::taskMgr::Yield();
+            currTask.RestoreFp();
             currTask.AccountTaskEnter(SchedState::RunningApp);
             CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
         }

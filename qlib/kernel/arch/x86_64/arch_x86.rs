@@ -18,6 +18,7 @@ use crate::qlib::mutex::*;
 use super::super::super::super::cpuid::*;
 use super::super::super::SignalDef::*;
 use super::super::super::asm::*;
+use super::super::super::super::super::kernel_def::*;
 
 // System-related constants for x86.
 
@@ -86,16 +87,6 @@ pub const USER_DS: u64 = 0x2b; // guest ring 3 data selector
 
 pub const FS_TLS_SEL: u64 = 0x63; // Linux FS thread-local storage selector
 pub const GS_TLS_SEL: u64 = 0x6b; // Linux GS thread-local storage selector
-
-extern "C" {
-    pub fn initX86FPState(data: u64, useXsave: bool);
-}
-
-pub fn InitX86FPState(data: u64, useXsave: bool) {
-    unsafe {
-        initX86FPState(data, useXsave)
-    }
-}
 
 // x86FPState is x86 floating point state.
 #[repr(align(4096))]

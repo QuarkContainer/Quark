@@ -81,6 +81,7 @@ pub const PREFERRED_PIELOAD_ADDR: u64 = MAX_ADDR64 / 3 * 2;
 // This is all "preferred" because the layout min/max address may not
 // allow us to select such a TopDownBase, in which case we have to fall
 // back to a layout that TSAN may not be happy with.
+
 pub const PREFERRED_TOP_DOWN_ALLOC_MIN: u64 = 0x7e8000000000;
 pub const PREFERRED_ALLOCATION_GAP: u64 = 128 << 30; // 128 GB
 pub const PREFERRED_TOP_DOWN_BASE_MIN: u64 = PREFERRED_TOP_DOWN_ALLOC_MIN + PREFERRED_ALLOCATION_GAP;

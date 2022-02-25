@@ -14,7 +14,7 @@ use super::qlib::kernel::Kernel::*;
 use super::qlib::kernel::TSC;
 use super::qlib::kernel::Tsc;
 use super::qlib::perf_tunning::*;
-//use super::qlib::linux_def::*;
+use super::qlib::linux_def::*;
 use super::qlib::vcpu_mgr::*;
 use super::qlib::linux::time::*;
 use super::qlib::kernel::memmgr::pma::*;
@@ -150,7 +150,7 @@ impl ShareSpace {
                 self.scheduler.VcpuArr[i].InterruptThreadTimeout();
 
                 // todo: enable this for preempty schedule
-                //VMS.lock().vcpus[i].Signal(Signal::SIGCHLD);
+                VMS.lock().vcpus[i].Signal(Signal::SIGCHLD);
             }
         }
     }
@@ -270,3 +270,5 @@ impl HostSpace {
 
 #[inline]
 pub fn child_clone(_userSp: u64) {}
+
+pub fn InitX86FPState(_data: u64, _useXsave: bool) {}

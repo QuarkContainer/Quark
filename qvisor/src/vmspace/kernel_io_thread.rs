@@ -135,11 +135,16 @@ impl KIOThread {
                 Self::ProcessOnce(sharespace);
             }
 
+            // when there is ready task, wake up for preemptive schedule
+            let waitTime = if sharespace.scheduler.GlobalReadyTaskCnt() > 0 {
+                10
+            } else {
+                -1
+            };
+
             ASYNC_PROCESS.Process();
             let _nfds = unsafe {
-                // todo: enable preempty scheduling
-                //epoll_wait(epfd, &mut events[0], 2, 10)
-                epoll_wait(epfd, &mut events[0], 2, -1)
+                epoll_wait(epfd, &mut events[0], 2, waitTime)
             };
         }
     }

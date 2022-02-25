@@ -337,3 +337,13 @@ pub fn child_clone(userSp: u64) {
     CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
     SyscallRet(kernalRsp)
 }
+
+extern "C" {
+    pub fn initX86FPState(data: u64, useXsave: bool);
+}
+
+pub fn InitX86FPState(data: u64, useXsave: bool) {
+    unsafe {
+        initX86FPState(data, useXsave)
+    }
+}

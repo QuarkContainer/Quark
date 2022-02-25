@@ -21,6 +21,9 @@ use core::sync::atomic::Ordering;
 use core::sync::atomic::AtomicU64;
 use alloc::string::String;
 use cache_padded::CachePadded;
+use alloc::boxed::Box;
+
+use super::kernel::arch::x86_64::arch_x86::*;
 
 use super::vcpu_mgr::*;
 
@@ -76,8 +79,8 @@ pub struct Context {
 
     pub ready: AtomicU64,
     pub fs: u64,
-    //pub X86fpstate: Box<X86fpstate>,
-    //pub sigFPState: Vec<Box<X86fpstate>>,
+    pub X86fpstate: Box<X86fpstate>,
+    pub sigFPState: Vec<Box<X86fpstate>>,
     // job queue id
     pub queueId: AtomicUsize,
     pub links: Links
@@ -98,8 +101,8 @@ impl Context {
             ready: AtomicU64::new(1),
 
             fs: 0,
-            //X86fpstate: Default::default(),
-            //sigFPState: Default::default(),
+            X86fpstate: Default::default(),
+            sigFPState: Default::default(),
             queueId: AtomicUsize::new(0),
             links: Links::default(),
 
