@@ -251,8 +251,6 @@ pub extern "C" fn syscall_handler(
     //SHARESPACE.SetValue(CPULocal::CpuId(), 0, nr);
     let callId: SysCallID = unsafe { mem::transmute(nr as u64) };
 
-    currTask.SaveFp();
-
     //let tid = currTask.Thread().lock().id;
     let mut tid = 0;
     let mut pid = 0;
@@ -272,6 +270,8 @@ pub extern "C" fn syscall_handler(
             tid, pid, callId, arg0
         );
     }
+
+    currTask.SaveFp();
 
     let enterAppTimestamp = CPULocal::Myself().ResetEnterAppTimestamp() as i64;
     let worktime = Tsc::Scale(startTime - enterAppTimestamp) * 1000; // the thread has used up time slot
