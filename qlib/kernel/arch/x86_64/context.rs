@@ -96,17 +96,17 @@ pub struct Context64 {
 }
 
 impl Context64 {
-    pub fn New() -> Self {
+    /*pub fn New() -> Self {
         return Self {
             state: State {
                 Regs: unsafe {
                     &mut *(0 as *mut PtRegs)
                 },
-                x86FPState: Arc::new(QMutex::new(X86fpstate::New())),
+                x86FPState: Arc::new(QMutex::new(X86fpstate::NewX86FPState())),
             },
             sigFPState: Vec::new(),
         }
-    }
+    }*/
 
     pub fn CopySigFPState(&self) -> Vec<Arc<QMutex<X86fpstate>>> {
         let mut sigfs = Vec::with_capacity(self.sigFPState.len());

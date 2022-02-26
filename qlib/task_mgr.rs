@@ -116,6 +116,16 @@ impl Context {
     pub fn SetReady(&self, val: u64) {
         return self.ready.store(val, Ordering::SeqCst)
     }
+
+    pub fn CopySigFPState(&self) -> Vec<Box<X86fpstate>> {
+        let mut sigfs = Vec::with_capacity(self.sigFPState.len());
+
+        for s in &self.sigFPState {
+            sigfs.push(Box::new(s.Fork()));
+        }
+
+        return sigfs
+    }
 }
 
 #[derive(Default)]

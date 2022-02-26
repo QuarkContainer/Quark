@@ -15,7 +15,7 @@
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 
-//use super::super::arch::x86_64::arch_x86::*;
+use super::super::arch::x86_64::arch_x86::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::task::*;
@@ -1033,9 +1033,8 @@ impl Task {
         }
 
         // create new X86fpstate state
-        /*self.context.sigFPState.push(Box::new(self.context.X86fpstate.Fork()));
-        error!("fpstate push");
-        self.context.X86fpstate = Box::new(X86fpstate::default());*/
+        self.context.sigFPState.push(Box::new(self.context.X86fpstate.Fork()));
+        self.context.X86fpstate = Box::new(X86fpstate::default());
 
         let t = self.Thread();
         let mut mask = t.lock().signalMask;
@@ -1103,14 +1102,13 @@ impl Task {
 
         pt.Set(&uc.MContext);
 
-        /*if self.context.sigFPState.len() > 0 {
+        if self.context.sigFPState.len() > 0 {
             // restore X86fpstate state
             let X86fpstate = self.context.sigFPState.pop().unwrap();
-            error!("fpstate pop");
             self.context.X86fpstate = X86fpstate;
         } else {
             panic!("SignalReturn can't restore X86fpstate");
-        }*/
+        }
 
         let oldMask = uc.MContext.oldmask & !(UNBLOCKED_SIGNALS.0);
         let t = self.Thread();
