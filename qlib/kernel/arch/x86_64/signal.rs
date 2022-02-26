@@ -26,7 +26,7 @@ use super::context::*;
 const FP_XSTATE_MAGIC2_SIZE: usize = 4;
 
 impl Context64 {
-    fn fpuFrameSize(&self) -> (u64, bool) {
+    /*fn fpuFrameSize(&self) -> (u64, bool) {
         let mut size = self.state.x86FPState.lock().size;
         let mut useXsave = false;
         if size > 512 {
@@ -36,7 +36,7 @@ impl Context64 {
         }
 
         return (size as u64, useXsave)
-    }
+    }*/
 
     // SignalSetup implements Context.SignalSetup. (Compare to Linux's
     // arch/x86/kernel/signal.c:__setup_rt_frame().)

@@ -162,6 +162,8 @@ use self::qlib::kernel::*;
 pub fn SingletonInit() {
     unsafe {
         KERNEL_PAGETABLE.Init(PageTables::Init(CurrentCr3()));
+        //init fp state with current fp state as it is brand new vcpu
+        FP_STATE.Reset();
         vcpu::VCPU_COUNT.Init(AtomicUsize::new(0));
         vcpu::CPU_LOCAL.Init(&SHARESPACE.scheduler.VcpuArr);
         SHARESPACE.SetSignalHandlerAddr(SignalHandler as u64);
@@ -328,9 +330,6 @@ pub extern "C" fn syscall_handler(
     currTask.PerfGoto(PerfType::User);
 
     currTask.RestoreFp();
-
-    currTask.mm.HandleTlbShootdown();
-
     currTask.Check();
     if SHARESPACE.config.read().KernelPagetable {
         currTask.SwitchPageTable();

@@ -14,7 +14,7 @@
 
 use core::ptr;
 use alloc::sync::Arc;
-//use alloc::boxed::Box;
+use alloc::boxed::Box;
 use alloc::string::ToString;
 use alloc::vec::Vec;
 
@@ -644,14 +644,12 @@ pub fn CreateCloneTask(fromTask: &Task, toTask: &mut Task, userSp: u64) {
         toTask.context.fs = fromTask.context.fs;
         toTask.context.rsp = toTask.GetPtRegs() as *const _ as u64 - 8;
         toTask.context.rdi = userSp;
-        //toTask.context.X86fpstate = Box::new(fromTask.context.X86fpstate.Fork());
+        toTask.context.X86fpstate = Box::new(fromTask.context.X86fpstate.Fork());
+        toTask.context.sigFPState = fromTask.context.CopySigFPState();
         toPtRegs.rax = 0;
         toPtRegs.rsp = userSp;
 
         *(toTask.context.rsp as *mut u64) = child_clone as u64;
-
-        // put the floattpointer state address in the stack, and the "child_clone" call can restore that
-        //*((toTask.context.rsp - 8) as *mut u64) = toTask.context.X86fpstate.FloatingPointData();
     }
 }
 

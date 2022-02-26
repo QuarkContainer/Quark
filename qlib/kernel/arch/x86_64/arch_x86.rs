@@ -14,11 +14,14 @@
 
 use alloc::sync::Arc;
 use crate::qlib::mutex::*;
+use core::sync::atomic::AtomicUsize;
+use core::sync::atomic::Ordering;
 
 use super::super::super::super::cpuid::*;
 use super::super::super::SignalDef::*;
 use super::super::super::asm::*;
-use super::super::super::super::super::kernel_def::*;
+use super::super::super::FP_STATE;
+//use super::super::super::super::super::kernel_def::*;
 
 // System-related constants for x86.
 
@@ -94,17 +97,17 @@ pub const GS_TLS_SEL: u64 = 0x6b; // Linux GS thread-local storage selector
 #[derive(Debug)]
 pub struct X86fpstate {
     pub data: [u8; 4096],
-    pub size: usize,
+    pub size: AtomicUsize,
 }
 
 impl Default for X86fpstate {
     fn default() -> Self {
-        return Self::NewX86FPState();
+        return Self::Load();
     }
 }
 
 impl X86fpstate {
-    pub fn New() -> Self {
+    fn New() -> Self {
         let (size, _align) = HostFeatureSet().ExtendedStateSize();
 
         if size > 4096 {
@@ -113,21 +116,38 @@ impl X86fpstate {
 
         return Self {
             data: [0; 4096],
-            size: size as usize,
+            size: AtomicUsize::new(size as usize),
         }
     }
 
-    pub fn NewX86FPState() -> Self {
+    pub fn Load() -> Self {
+        return FP_STATE.Fork()
+    }
+
+    pub const fn Init() -> Self {
+        return Self {
+            data: [0; 4096],
+            size: AtomicUsize::new(4096),
+        }
+    }
+
+    pub fn Reset(&self) {
+        let (size, _align) = HostFeatureSet().ExtendedStateSize();
+        self.size.store(size as usize, Ordering::SeqCst);
+        self.SaveFp();
+    }
+
+    /*pub fn NewX86FPState() -> Self {
         let f = Self::New();
 
         InitX86FPState(f.FloatingPointData(), HostFeatureSet().UseXsave());
         return f;
-    }
+    }*/
 
     pub fn Fork(&self) -> Self {
         let mut f = Self::New();
 
-        for i in 0..f.data.len() {
+        for i in 0..self.size.load(Ordering::Relaxed) {
             f.data[i] = self.data[i];
         }
 
