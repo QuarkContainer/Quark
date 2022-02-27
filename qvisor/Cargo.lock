@@ -131,8 +131,7 @@ checksum = "631ae5198c9be5e753e5cc215e1bd73c2b466a3565173db433f52bb9d3e66dba"
 [[package]]
 name = "capabilities"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8aee082d97a2cb85e1282361758d96aa5162967c34a257c6c4d7fa0711a1028f"
+source = "git+https://github.com/gcmurphy/rust-capabilities?rev=bb01f0c6#bb01f0c6fe9866317ae596193cef707c335c0d2c"
 dependencies = [
  "libc",
 ]
