@@ -446,16 +446,6 @@ pub struct ByteStream {
     pub spaceiovs: SocketBufIovs,
 }
 
-/*
-impl Drop for ByteStream {
-    fn drop(&mut self) {
-        let (addr, size) = self.GetRawBuf();
-        let size = size as u64;
-        assert!(size & MemoryDef::PAGE_MASK == 0);
-        self.allocator.Free(addr).expect("ByteStream::drop fail");
-    }
-}*/
-
 impl ByteStream {
     pub fn IsPowerOfTwo(x: u64) -> bool {
         return (x & (x - 1)) == 0;

@@ -55,6 +55,7 @@ pub mod socket_buf;
 pub mod object_ref;
 
 pub mod ringbuf;
+pub mod ring_queue;
 pub mod vcpu_mgr;
 pub mod kernel;
 
@@ -531,7 +532,7 @@ pub type ShareSpaceRef = ObjectRef<ShareSpace>;
 #[repr(align(128))]
 #[derive(Default)]
 pub struct ShareSpace {
-    pub QOutput: QRingBuf<HostOutputMsg>, //QMutex<VecDeque<HostInputMsg>>,
+    pub QOutput: QRingQueue<HostOutputMsg>, //QMutex<VecDeque<HostInputMsg>>,
 
     // add this pad can decrease the mariadb start time 25 sec to 12 sec
     //todo: root cause this. False share?

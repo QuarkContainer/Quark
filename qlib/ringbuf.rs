@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors / 2018 The gVisor Authors.
+// Copyright (c) 2021 Quark Container Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -86,67 +86,10 @@ impl <T> MpScRing <T> {
     }
 }
 
-//single producer multple consumer
-pub struct SpMcRing  <T> {
-    pub consumer: QMutex<Consumer<T>>,
-    pub producer: RefCell<Producer<T>>,
-    pub resource_type: PhantomData<T>,
-}
-
-unsafe impl <T> Sync for SpMcRing<T> {}
-
-impl <T> SpMcRing <T> {
-    pub fn New(size: usize) -> Self {
-        let r = RingBuffer::new(size);
-        let (p, c) = r.split();
-        return Self {
-            consumer: QMutex::new(c),
-            producer: RefCell::new(p),
-            resource_type: PhantomData,
-        }
-    }
-
-    pub fn Push(&self, data: T) -> Result<()> {
-        match self.producer.borrow_mut().push(data) {
-            Ok(()) => return Ok(()),
-            _ => return Err(Error::QueueFull)
-        }
-    }
-
-    pub fn Pop(&self) -> Option<T> {
-        return self.consumer.lock().pop()
-    }
-
-    pub fn TryPop(&self) -> Option<T> {
-        let mut c = match self.consumer.try_lock() {
-            None => return None,
-            Some(d) => d,
-        };
-
-        return c.pop();
-    }
-
-    pub fn Count(&self) -> usize {
-        return self.consumer.lock().len();
-    }
-
-    pub fn IsFull(&self) -> bool {
-        return self.consumer.lock().is_full();
-    }
-
-    pub fn IsEmpty(&self) -> bool {
-        return self.consumer.lock().is_empty();
-    }
-
-    pub fn CountLockless(&self) -> usize {
-        return self.producer.borrow().len();
-    }
-}
-
 #[derive(Default)]
-pub struct QRingBuf<T:Clone>(QMutex<VecDeque<T>>);
+pub struct QRingQueue<T:Clone>(QMutex<VecDeque<T>>);
 
-impl <T:Clone> Deref for QRingBuf <T> {
+impl <T:Clone> Deref for QRingQueue<T> {
     type Target = QMutex<VecDeque<T>>;
 
     fn deref(&self) -> &QMutex<VecDeque<T>> {
@@ -154,7 +97,7 @@ impl <T:Clone> Deref for QRingBuf <T> {
     }
 }
 
-impl <T:Clone> QRingBuf <T> {
+impl <T:Clone> QRingQueue<T> {
     pub fn New(size: usize) -> Self {
         return Self(QMutex::new(VecDeque::with_capacity(size)))
     }
