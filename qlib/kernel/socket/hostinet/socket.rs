@@ -220,7 +220,7 @@ impl SocketOperations {
         let mut controlData: Vec<u8> = vec![0; controlDataLen];
         if self.passInq.load(Ordering::Relaxed) {
             let inqMessage = ControlMessageTCPInq {
-                Size: self.SocketBuf().readBuf.lock().available as u32
+                Size: self.SocketBuf().readBuf.lock().AvailableDataSize() as u32
             };
 
             let (remaining, updated_flags) = inqMessage.EncodeInto(&mut controlData[..], 0);
@@ -602,7 +602,7 @@ impl FileOperations for SocketOperations {
             }
             LibcConst::TIOCINQ => {
                 if self.SocketBufEnabled() {
-                    let v =  self.SocketBuf().readBuf.lock().available as i32;
+                    let v =  self.SocketBuf().readBuf.lock().AvailableDataSize() as i32;
                     task.CopyOutObj(&v, val)?;
                     return Ok(())
                 } else {

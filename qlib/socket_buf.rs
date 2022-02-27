@@ -102,7 +102,7 @@ impl SocketBuff {
     }
 
     pub fn WriteBufAvailableDataSize(&self) -> usize {
-        return self.writeBuf.lock().available;
+        return self.writeBuf.lock().AvailableDataSize();
     }
 
     pub fn Events(&self) -> EventMask {
