@@ -14,6 +14,8 @@
 
 use alloc::slice;
 use alloc::vec::Vec;
+use core::sync::atomic::AtomicU32;
+use core::sync::atomic::Ordering;
 
 use super::common::*;
 use super::pagetable::AlignedAllocator;
@@ -48,8 +50,9 @@ impl SocketBufIovs {
 pub struct ByteStream {
     pub buf: &'static mut [u8],
     /// size of data available to consume by consumer
-    pub available: usize,
-    pub readpos: usize,
+    pub head: AtomicU32,
+    pub tail: AtomicU32,
+    pub ringMask: u32,
     pub dataIovs: SocketBufIovs,
     pub spaceiovs: SocketBufIovs,
     pub allocator: AlignedAllocator,
@@ -79,8 +82,13 @@ impl IOWriter for ByteStream {
 }
 
 impl ByteStream {
+    pub fn IsPowerOfTwo(x: u64) -> bool {
+        return (x & (x - 1)) == 0;
+    }
+
     //allocate page from heap
     pub fn Init(pageCount: u64) -> Self {
+        assert!(Self::IsPowerOfTwo(pageCount), "Bytetream pagecount is not power of two: {}", pageCount);
         let size = pageCount * MemoryDef::PAGE_SIZE;
         let allocator = AlignedAllocator::New(size as usize, MemoryDef::PAGE_SIZE as usize);
         let addr = allocator.Allocate().expect("ByteStream can't allocate memory");
@@ -89,8 +97,9 @@ impl ByteStream {
 
         return Self {
             buf: buf,
-            available: 0,
-            readpos: 0,
+            head: AtomicU32::new(0),
+            tail: AtomicU32::new(0),
+            ringMask: (pageCount as u32 * MemoryDef::PAGE_SIZE as u32) - 1,
             dataIovs: SocketBufIovs::default(),
             spaceiovs: SocketBufIovs::default(),
             allocator: allocator,
@@ -103,47 +112,51 @@ impl ByteStream {
     }
 
     pub fn AvailableSpace(&self) -> usize {
-        return self.buf.len() - self.available;
+        return self.buf.len() - self.AvailableDataSize();
     }
 
     pub fn AvailableDataSize(&self) -> usize {
-        return self.available
+        let head = self.head.load(Ordering::Acquire);
+        let tail = self.tail.load(Ordering::Acquire);
+        return tail.wrapping_sub(head) as usize
     }
 
     pub fn BufSize(&self) -> usize {
         return self.buf.len();
     }
 
+    /****************************************** read *********************************************************/
     //return (initial size is full, how much read)
     pub fn read(&mut self, buf: &mut [u8]) -> Result<(bool, usize)> {
-        let full = self.available == self.buf.len();
+        let head = self.head.load(Ordering::Relaxed);
+        let tail = self.tail.load(Ordering::Acquire);
 
-        let mut readSize = self.available;
+        let mut available = tail.wrapping_sub(head) as usize;
+        let full = available == self.buf.len();
 
-        if readSize > buf.len() {
-            readSize = buf.len();
+        if available > buf.len() {
+            available = buf.len();
         }
 
+        let readpos = (head & self.ringMask) as usize;
         let (firstLen, hasSecond) = {
-            let toEnd = self.buf.len() - self.readpos;
-            if toEnd < readSize {
+            let toEnd = self.buf.len() - readpos;
+            if toEnd < available {
                 (toEnd, true)
             } else {
-                (readSize, false)
+                (available, false)
             }
         };
 
-        buf[0..firstLen].clone_from_slice(&self.buf[self.readpos..self.readpos + firstLen]);
+        buf[0..firstLen].clone_from_slice(&self.buf[readpos..readpos + firstLen]);
 
         if hasSecond {
-            let secondLen = readSize - firstLen;
+            let secondLen = available - firstLen;
             buf[firstLen..firstLen + secondLen].clone_from_slice(&self.buf[0..secondLen])
         }
 
-        self.readpos = (self.readpos + readSize) % self.buf.len();
-        self.available -= readSize;
-
-        return Ok((full, readSize))
+        self.head.store(head.wrapping_add(available as u32), Ordering::Release);
+        return Ok((full, available))
     }
 
     pub fn readViaAddr(&mut self, buf: u64, count: u64) -> (bool, usize) {
@@ -155,28 +168,111 @@ impl ByteStream {
 
     //return addr, len, whethere there is more space
     pub fn GetReadBuf(&mut self) -> Option<(u64, usize, bool)> {
-        let left = self.available;
+        let head = self.head.load(Ordering::Relaxed);
+        let tail = self.tail.load(Ordering::Acquire);
 
-        if self.available == 0 {
+        let available = tail.wrapping_sub(head) as usize;
+
+        if available == 0 {
             return None
         }
 
-        let toEnd = self.buf.len() - self.readpos;
-        if toEnd < left {
-            return Some((&self.buf[0] as *const _ as u64 + self.readpos as u64, toEnd, true))
+        let readpos = (head & self.ringMask) as usize;
+        let toEnd = self.buf.len() - readpos;
+        if toEnd < available {
+            return Some((&self.buf[0] as *const _ as u64 + readpos as u64, toEnd, true))
         } else {
-            return Some((&self.buf[0] as *const _ as u64 + self.readpos as u64, left, false))
+            return Some((&self.buf[0] as *const _ as u64 + readpos as u64, available, false))
         }
     }
 
+    pub fn GetDataBuf(&self) -> (u64, usize) {
+        let head = self.head.load(Ordering::Relaxed);
+        let tail = self.tail.load(Ordering::Acquire);
+
+        let available = tail.wrapping_sub(head) as usize;
+
+        if available == 0 {
+            return (0, 0)
+        }
+
+        let readpos = (head & self.ringMask) as usize;
+        let toEnd = self.buf.len() - readpos;
+        if toEnd < available {
+            return (&self.buf[0] as *const _ as u64 + readpos as u64, toEnd)
+        } else {
+            return (&self.buf[0] as *const _ as u64 + readpos as u64, available)
+        }
+    }
+
+    pub fn PrepareDataIovs(&mut self) {
+        let mut iovs = &mut self.dataIovs.iovs;
+
+        let head = self.head.load(Ordering::Relaxed);
+        let tail = self.tail.load(Ordering::Acquire);
+
+        let available = tail.wrapping_sub(head) as usize;
+
+        if available == 0 {
+            self.dataIovs.cnt = 0;
+            return
+        }
+
+        assert!(iovs.len()>=2);
+        let readPos = (head & self.ringMask) as usize;
+        let toEnd = self.buf.len() - readPos;
+        if toEnd < available {
+            iovs[0].start = &self.buf[readPos as usize] as * const _ as u64;
+            iovs[0].len = toEnd as usize;
+
+            iovs[1].start = &self.buf[0] as *const _ as u64;
+            iovs[1].len = available - toEnd;
+
+            self.dataIovs.cnt = 2;
+        } else {
+            iovs[0].start = &self.buf[readPos as usize] as * const _ as u64;
+            iovs[0].len = available as usize;
+
+            self.dataIovs.cnt = 1;
+        }
+    }
+
+    pub fn GetDataIovs(&mut self) -> (u64, usize) {
+        self.PrepareDataIovs();
+        return self.dataIovs.Address()
+    }
+
+    pub fn GetDataIovsVec(&mut self) -> Vec<IoVec> {
+        self.PrepareDataIovs();
+        return self.dataIovs.Iovs()
+    }
+
+    //consume count data
+    pub fn Consume(&mut self, count: usize) -> bool {
+        let head = self.head.load(Ordering::Relaxed);
+        let tail = self.tail.load(Ordering::Acquire);
+
+        let available = tail.wrapping_sub(head) as usize;
+        let trigger = available == self.buf.len();
+
+        self.head.store(head.wrapping_add(count as u32), Ordering::Release);
+        return trigger
+    }
+
+
+    /****************************************** write *********************************************************/
 
     pub fn GetWriteBuf(&mut self) -> Option<(u64, usize, bool)> {
-        if self.available == self.buf.len() {
+        let head = self.head.load(Ordering::Acquire);
+        let tail = self.tail.load(Ordering::Relaxed);
+
+        let available = tail.wrapping_sub(head) as usize;
+        if available == self.buf.len() {
             return None
         }
 
-        let writePos = (self.readpos + self.available) % self.buf.len();
-        let writeSize = self.buf.len() - self.available;
+        let writePos = (tail & self.ringMask) as usize;
+        let writeSize = self.buf.len() - available;
 
         let toEnd = self.buf.len() - writePos;
         if toEnd < writeSize {
@@ -189,15 +285,19 @@ impl ByteStream {
     pub fn PrepareSpaceIovs(&mut self) {
         let mut iovs = &mut self.spaceiovs.iovs;
 
-        if self.available == self.buf.len() {
+        let head = self.head.load(Ordering::Acquire);
+        let tail = self.tail.load(Ordering::Relaxed);
+        let available = tail.wrapping_sub(head) as usize;
+
+        if available == self.buf.len() {
             self.spaceiovs.cnt = 0;
             return
         }
 
         //error!("GetSpaceIovs available is {}", self.available);
         assert!(iovs.len()>=2);
-        let writePos = (self.readpos + self.available) % self.buf.len();
-        let writeSize = self.buf.len() - self.available;
+        let writePos = (tail & self.ringMask) as usize;
+        let writeSize = self.buf.len() - available;
 
         let toEnd = self.buf.len() - writePos;
 
@@ -228,28 +328,17 @@ impl ByteStream {
         return self.spaceiovs.Iovs();
     }
 
-    pub fn GetDataBuf(&self) -> (u64, usize) {
-        let left = self.available;
-
-        if self.available == 0 {
-            return (0, 0)
-        }
-
-        let toEnd = self.buf.len() - self.readpos;
-        if toEnd < left {
-            return (&self.buf[0] as *const _ as u64 + self.readpos as u64, toEnd)
-        } else {
-            return (&self.buf[0] as *const _ as u64 + self.readpos as u64, left)
-        }
-    }
-
     pub fn GetSpaceBuf(&mut self) -> (u64, usize) {
-        if self.available == self.buf.len() {
+        let head = self.head.load(Ordering::Acquire);
+        let tail = self.tail.load(Ordering::Relaxed);
+
+        let available = tail.wrapping_sub(head) as usize;
+        if available == self.buf.len() {
             return (0, 0)
         }
 
-        let writePos = (self.readpos + self.available) % self.buf.len();
-        let writeSize = self.buf.len() - self.available;
+        let writePos = (tail & self.ringMask) as usize;
+        let writeSize = self.buf.len() - available;
 
         let toEnd = self.buf.len() - writePos;
         if toEnd < writeSize {
@@ -259,66 +348,28 @@ impl ByteStream {
         }
     }
 
-    pub fn PrepareDataIovs(&mut self) {
-        let mut iovs = &mut self.dataIovs.iovs;
-        if self.available == 0 {
-            self.dataIovs.cnt = 0;
-            return
-        }
-
-        assert!(iovs.len()>=2);
-        let readPos = self.readpos;
-        let readSize = self.available;
-
-        let toEnd = self.buf.len() - readPos;
-        if toEnd < readSize {
-            iovs[0].start = &self.buf[readPos as usize] as * const _ as u64;
-            iovs[0].len = toEnd as usize;
-
-            iovs[1].start = &self.buf[0] as *const _ as u64;
-            iovs[1].len = readSize - toEnd;
-
-            self.dataIovs.cnt = 2;
-        } else {
-            iovs[0].start = &self.buf[readPos as usize] as * const _ as u64;
-            iovs[0].len = readSize as usize;
-
-            self.dataIovs.cnt = 1;
-        }
-    }
-
-    pub fn GetDataIovs(&mut self) -> (u64, usize) {
-        self.PrepareDataIovs();
-        return self.dataIovs.Address()
-    }
-
-    pub fn GetDataIovsVec(&mut self) -> Vec<IoVec> {
-        self.PrepareDataIovs();
-        return self.dataIovs.Iovs()
-    }
-
     pub fn Produce(&mut self, count: usize) -> bool {
-        //error!("bytesteam produce available is {}", self.available);
-        let trigger = self.available == 0;
-        self.available += count;
-        return trigger
-    }
+        let head = self.head.load(Ordering::Acquire);
+        let tail = self.tail.load(Ordering::Relaxed);
 
-    //consume count data
-    pub fn Consume(&mut self, count: usize) -> bool {
-        //assert!(self.available >= count, "bytestream Consume available {} count {}", self.available, count);
-        let trigger = self.available == self.buf.len();
-        self.available -= count;
+        let available = tail.wrapping_sub(head) as usize;
 
-        self.readpos = (self.readpos + count) % self.buf.len();
+        let trigger = available == 0;
+        self.tail.store(tail.wrapping_add(count as u32), Ordering::Release);
         return trigger
     }
 
     /// return: write user buffer to socket bytestream and determine whether to trigger async socket ops
     pub fn write(&mut self, buf: &[u8]) -> Result<(bool, usize)> {
-        let empty = self.available == 0;
-        let writePos = (self.readpos + self.available) % self.buf.len();
-        let mut writeSize = self.buf.len() - self.available;
+        let head = self.head.load(Ordering::Acquire);
+        let tail = self.tail.load(Ordering::Relaxed);
+
+        let available = tail.wrapping_sub(head) as usize;
+
+        let empty = available == 0;
+
+        let writePos = (tail & self.ringMask) as usize;
+        let mut writeSize = self.buf.len() - available;
 
         if writeSize > buf.len() {
             writeSize = buf.len();
@@ -340,18 +391,20 @@ impl ByteStream {
             self.buf[0..secondLen].clone_from_slice(&buf[firstLen..firstLen + secondLen]);
         }
 
-        self.available += writeSize;
-        /*if writeSize == 0 {
-            error!("write: available = {:x}, self.readpos = {:x}, len is {}",
-                self.available, self.readpos, buf.len());
-        }*/
+        self.tail.store(tail.wrapping_add(writeSize as u32), Ordering::Release);
         return Ok((empty, writeSize))
     }
 
     pub fn writeFull(&mut self, buf: &[u8]) -> Result<(bool, usize)> {
-        if self.AvailableSpace() < buf.len() {
+        let head = self.head.load(Ordering::Acquire);
+        let tail = self.tail.load(Ordering::Relaxed);
+
+        let available = tail.wrapping_sub(head) as usize;
+        let space = self.buf.len() - available;
+
+        if available < buf.len() {
             let str = alloc::str::from_utf8(buf).unwrap();
-            print!("write full {}/{}/{}", self.AvailableSpace(), buf.len(), str);
+            print!("write full {}/{}/{}", space, buf.len(), str);
             return Err(Error::QueueFull)
         }
 
@@ -364,47 +417,3 @@ impl ByteStream {
         self.write(slice).expect("writeViaAddr fail")
     }
 }
-
-/*
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_ByteStream1() {
-        let buf : [u8; 10] = [0; 10];
-        let addr = &buf[0] as * const _ as u64;
-        let len = buf.len();
-
-        let mut bs = ByteStream::New(addr, len);
-
-        let mut read : [u8; 10] = [0; 10];
-
-        assert!(bs.GetReadBuf()==None);
-
-        assert!(bs.write(&vec![0, 1, 2, 3]).unwrap() == 4);
-        assert!(bs.GetReadBuf()==Some((addr, 4, false)));
-        assert!(bs.GetWriteBuf()==Some((addr+4, 6, false)));
-
-        assert!(bs.read(&mut read[0..3]).unwrap() == 3);
-        assert!(read[0..3] == vec![0, 1, 2][..]);
-        assert!(bs.GetReadBuf()==Some((addr+3, 1, false)));
-        assert!(bs.GetWriteBuf()==Some((addr+4, 6, true)));
-
-        assert!(bs.write(&vec![0, 1, 2, 3]).unwrap() == 4);
-        assert!(bs.GetReadBuf()==Some((addr+3, 5, false)));
-        assert!(bs.GetWriteBuf()==Some((addr+8, 2, true)));
-
-        assert!(bs.write(&vec![0, 1, 2, 3]).unwrap() == 4);
-        assert!(bs.GetReadBuf()==Some((addr+3, 7, true)));
-        assert!(bs.GetWriteBuf()==Some((addr+2, 1, false)));
-
-        assert!(bs.write(&vec![0, 1, 2, 3]).unwrap() == 1);
-        assert!(bs.read(&mut read[0..3]).unwrap() == 3);
-
-        assert!(read[0..3] == vec![3, 0, 1][..]);
-        assert!(bs.read(&mut read[0..10]).unwrap() == 7);
-
-        assert!(read[0..7] == vec![2,3,0,1,2,3,0][..]);
-    }
-}*/

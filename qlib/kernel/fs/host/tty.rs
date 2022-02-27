@@ -530,9 +530,7 @@ impl FileOperations for TTYFileOps {
     fn ReadAt(&self, task: &Task, f: &File, dsts: &mut [IoVec], offset: i64, blocking: bool) -> Result<i64> {
         self.lock().checkChange(task, Signal(Signal::SIGTTIN))?;
 
-        if SHARESPACE.config.read().UringIO  && ENABLE_RINGBUF{
-
-
+        if SHARESPACE.config.read().UringIO  && ENABLE_RINGBUF {
             let fd = self.lock().fd;
             let queue = self.lock().queue.clone();
             let ringBuf = self.lock().buf.clone();
