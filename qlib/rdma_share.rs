@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use core::sync::atomic::AtomicU32;
+use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 
 pub const COUNT: usize = 128;
@@ -111,6 +112,8 @@ pub struct IOMetas {
 }
 
 pub struct ClientShareRegion {
+    pub clientBitmap: AtomicU64, //client sleep bit
+
     // the complete queue
     pub cq: RingQueue<RDMAResp>,
 
@@ -151,6 +154,7 @@ pub struct UDPBuf {
 }
 
 pub struct ShareRegion {
+    pub srvBitmap: AtomicU64, // whether server is sleeping
     pub bitmap: TriggerBitmap,
     pub udpBufs: [UDPBuf; UDP_BUF_COUNT]
 }

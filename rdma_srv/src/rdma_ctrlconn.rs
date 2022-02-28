@@ -38,8 +38,13 @@ pub struct ClusterSubnetInfo {
     pub subnet: u32,
     pub netmask: u32,
     pub vipSubnet: u32,
-    pub vipNetwork: u32,
+    pub vipNetmask: u32,
 }
+
+// cluster: 10.1.0.0/16
+// node1: 10.1.1.0/24
+// node2: 10.1.2.0/24
+// node3: 10.1.3.0/24
 
 // from current design, one node has only one subnet even it can have multiple VPC
 // for one node, different VPC has to use one subnet,

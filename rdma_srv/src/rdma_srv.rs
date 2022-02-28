@@ -25,12 +25,15 @@ use lazy_static::lazy_static;
 
 lazy_static! {
     //pub static ref RDMA_SRV: Mutex<RDMASrv> = RDMASrv::default();
-    //pub static ref RDMA_CTLCONN: CtrlInfo = CtrlInfo::default();
+    //pub static ref RDMA_CTLINFO: CtrlInfo = CtrlInfo::default();
 }
 
 pub struct RDMASrv {
     // unix socket srv fd
-    pub sockfd: i32,
+    pub unixSockfd: i32,
+
+    // tcp socket srv fd
+    pub tcpSockfd: i32,
 
     // eventfd which used by rdma client to trigger RDMA srv
     pub eventfd: i32,
@@ -41,8 +44,12 @@ pub struct RDMASrv {
     // srv memory region shared with all RDMAClient
     pub srvMemRegion: MemRegion,
 
-    // rdma connects: ipaddr --> RDMAConn
+    // rdma connects: remote node ipaddr --> RDMAConn
     pub conns: HashMap<u32, RDMAConn>,
+
+    // todo: tbd: need it?
+    // rdma connects: virtual subnet ipaddr --> RDMAConn
+    // pub vipMapping: HashMap<u32, RDMAConn>,
 
     // rdma channels: channelId --> RDMAChannel
     pub channels: HashMap<u32, RDMAChannel>,
@@ -59,3 +66,17 @@ impl RDMASrv {
 
     }*/
 }
+
+// scenarios:
+// a. init
+// b. input:
+//      1. srv socket accept -> init client connection
+//      2. srv tcp socket accept -> init peer connection
+//      3. client submit queue
+//      4. rdma work complete trigger
+//      5. connection mgr callback
+// c. de-construction
+//      1. connection mgr disconnect
+//      2. tcp connection close
+//      3. rdma connection disconnect (keepalive?)
+// request/response type
