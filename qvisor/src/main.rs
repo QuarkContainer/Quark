@@ -40,28 +40,6 @@ extern crate serde;
 extern crate serde_json;
 
 #[macro_use]
-pub mod asm;
-
-#[macro_use]
-pub mod print;
-
-pub mod amd64_def;
-pub mod console;
-pub mod elf_loader;
-pub mod heap_alloc;
-mod kvm_vcpu;
-mod memmgr;
-pub mod namespace;
-mod qcall;
-pub mod qlib;
-pub mod runc;
-mod syncmgr;
-pub mod ucall;
-pub mod util;
-mod vmspace;
-pub mod kernel_def;
-
-#[macro_use]
 extern crate clap;
 
 #[macro_use]
@@ -82,7 +60,27 @@ extern crate regex;
 extern crate simplelog;
 extern crate tabwriter;
 
-//pub mod kvmlib;
+#[macro_use]
+pub mod asm;
+
+#[macro_use]
+pub mod print;
+
+pub mod amd64_def;
+pub mod console;
+pub mod elf_loader;
+pub mod heap_alloc;
+mod kvm_vcpu;
+mod memmgr;
+pub mod namespace;
+mod qcall;
+pub mod qlib;
+pub mod runc;
+mod syncmgr;
+pub mod ucall;
+pub mod util;
+mod vmspace;
+pub mod kernel_def;
 
 use alloc::sync::Arc;
 use lazy_static::lazy_static;
