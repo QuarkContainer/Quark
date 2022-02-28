@@ -12,14 +12,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use spin::mutex;
+use spin::Mutex;
+use alloc::sync::Arc;
+use alloc::sync::Weak;
+use core::sync::atomic::AtomicU64;
+
+use super::rdma_conn::*;
+use super::rdma_agent::*;
 
 // RDMA Channel
-//use super::qlib::bytestream::*;
+use super::qlib::bytestream::*;
 
-pub struct RDMAChannel {
+pub struct RDMAChannelIntern {
     pub localId: u32,
     pub remoteId: u32,
-    //pub readBuf: Mutex<ByteStream>,
-    //pub writeBuf: Mutex<ByteStream>,
+    pub readBuf: Mutex<ByteStream>,
+    pub writeBuf: Mutex<ByteStream>,
+    pub consumeReadData: &'static AtomicU64,
+
+    // rdma connect to remote node
+    pub conn: RDMAConn,
+
+    // rdma agent connected to rdma client
+    pub agent: RDMAAgent,
+
+    pub vpcId: u32,
+    pub srcIPAddr: u32,
+    pub dstIPAddr: u32,
+    pub srcPort: u16,
+    pub dstPort: u16
 }
+
+pub struct RDMAChannel(Arc<RDMAChannelIntern>);
+pub struct RDMAChannelWeak(Weak<RDMAChannelIntern>);

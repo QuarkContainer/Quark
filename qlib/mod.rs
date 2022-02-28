@@ -55,7 +55,7 @@ pub mod socket_buf;
 pub mod object_ref;
 
 pub mod ringbuf;
-pub mod ring_queue;
+pub mod rdma_share;
 pub mod vcpu_mgr;
 pub mod kernel;
 
