@@ -18,9 +18,7 @@ use spin::Mutex;
 use super::rdma_channel::*;
 
 // RDMA Queue Pair
-pub struct RDMAQueuePair {
-
-}
+pub struct RDMAQueuePair {}
 
 // RDMA connections between 2 nodes
 pub struct RDMAConnInternal {
