@@ -82,3 +82,75 @@ impl <T: 'static + Default + Copy> RingQueue <T> {
         self.tail.store(tail.wrapping_add(1),  Ordering::Release);
     }
 }
+
+#[derive(Default)]
+pub struct RDMAReq {}
+
+#[derive(Default)]
+pub struct RDMAResp {}
+
+pub struct MemRegion {
+    pub addr: u64,
+    pub len: u64,
+}
+
+pub const SOCKET_BUF_SIZE : usize = 64 * 1024; // 64KB
+
+// todo: caculate this to fit ClientShareRegion in 1GB
+pub const IO_BUF_COUNT : usize = 16 * 1024 - 128; // ~16K
+
+pub struct IOBuf {
+    pub read: [u8; SOCKET_BUF_SIZE],
+    pub write: [u8; SOCKET_BUF_SIZE],
+}
+
+pub struct IOMetas {
+    pub readBufAtoms: [AtomicU32; 2],
+    pub writeBufAtoms: [AtomicU32; 2],
+    pub consumeReadData: AtomicU32
+}
+
+pub struct ClientShareRegion {
+    // the complete queue
+    pub cq: RingQueue<RDMAResp>,
+
+    // the submit queue
+    pub sq: RingQueue<RDMAReq>,
+
+    // metadata region for the sockbuf
+    pub ioMetas: [IOMetas; IO_BUF_COUNT],
+
+    // data buf for sockbuf, it will be mapped in the rdma MR
+    pub iobufs:  [IOBuf; IO_BUF_COUNT]
+}
+
+// total 4096 x 8 = 32KB or 8 pages
+// can index about 32K x 8 = 256K containers, hope it is enough
+pub const BITMAP_COUNT : usize = 4096 - 4;
+
+pub struct TriggerBitmap {
+    // one bit map to one l2 bitmap to expedite the notification search
+    pub l1bitmap: [u64; 4],
+
+    // one bit map to one Quark Container
+    pub l2bitmap: [u64; BITMAP_COUNT],
+}
+
+pub const MTU: usize = 1500;
+pub const UDP_BUF_COUNT: usize = 512 * 1024; // 512K udp buff
+
+// udp buf, around 1516 bytes
+pub struct UDPBuf {
+    pub vpcId: u32,
+    pub srcIPAddr: u32,
+    pub dstIPAddr: u32,
+    pub srcPort: u16,
+    pub dstPort: u16,
+
+    pub data: [u8; MTU],
+}
+
+pub struct ShareRegion {
+    pub bitmap: TriggerBitmap,
+    pub udpBufs: [UDPBuf; UDP_BUF_COUNT]
+}

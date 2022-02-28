@@ -64,11 +64,14 @@ pub mod print;
 
 #[macro_use]
 pub mod asm;
-
 pub mod qlib;
+pub mod kernel_def;
+
 pub mod rdma_conn;
 pub mod rdma_channel;
-pub mod kernel_def;
+pub mod rdma_srv;
+pub mod rdma_agent;
+pub mod rdma_ctrlconn;
 
 use self::qlib::ShareSpaceRef;
 pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();

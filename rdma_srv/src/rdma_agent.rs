@@ -13,23 +13,25 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
 
-use super::rdma_channel::*;
+use super::qlib::rdma_share::*;
 
-// RDMA Queue Pair
-pub struct RDMAQueuePair {
+pub struct RDMAAgentIntern {
+    pub id: u32,
 
+    // the unix socket fd between rdma client and RDMASrv
+    pub sockfd: i32,
+
+    // the memfd share memory with rdma client
+    pub client_memfd: i32,
+
+    // the eventfd which send notification to client
+    pub client_eventfd: i32,
+
+    // the memory region shared with client
+    pub shareMemRegion: MemRegion,
+
+    pub shareRegion: &'static mut ClientShareRegion,
 }
 
-// RDMA connections between 2 nodes
-pub struct RDMAConnInternal {
-    pub qps: Vec<RDMAQueuePair>,
-    pub ctrlChan: RDMAControlChannel,
-}
-
-pub struct RDMAConn(Arc<Mutex<RDMAConnInternal>>);
-
-pub struct RDMAControlChannel {
-    pub chan: RDMAChannelWeak,
-}
+pub struct RDMAAgent(Arc<RDMAAgentIntern>);
