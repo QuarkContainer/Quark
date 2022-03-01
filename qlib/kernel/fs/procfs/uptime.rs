@@ -40,11 +40,14 @@ impl ReadonlyFileNode for UptimeFileNode {
         }
 
         let kernel = GetKernel();
-        let startTime = kernel.startTime;
-        let now = task.Now();
 
-        let dur = now.Sub(startTime) / SECOND;
-        let s = format!("{}", dur);
+        // that's weird, the caculation here has to x10
+        // todo: fix this
+        //let val = Task::MonoTimeNow().0 / 1000_1000;
+        let val = Task::MonoTimeNow().0 / 1000_100;
+        let second = val / 1000;
+        let ms = val % 1000 / 10;
+        let s = format!("{}.{} 0.00", second, ms);
         let bytes = s.as_bytes();
         if offset as usize > bytes.len() {
             return Ok(0)
