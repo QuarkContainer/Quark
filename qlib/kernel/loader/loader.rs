@@ -288,14 +288,7 @@ pub fn SetupUserStack(task: &Task,
 
     let l = stack.LoadEnv(task, envv, argv, &auxv)?;
 
-    /*{
-        let mut mmlock = mm.write();
-        mmlock.auxv.append(&mut auxv);
-        mmlock.argv = Range::New(l.ArgvStart, l.ArgvEnd - l.ArgvStart);
-        mmlock.envv = Range::New(l.EnvvStart, l.EvvvEnd - l.EnvvStart)
-    }*/
-
-    task.mm.SetupStack(&l, extraAuxv);
+    task.mm.SetupStack(&l, &auxv);
 
     return Ok(stack.sp);
 }
