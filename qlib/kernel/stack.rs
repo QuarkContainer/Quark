@@ -22,7 +22,7 @@ use super::task::*;
 
 // StackLayout describes the location of the arguments and environment on the
 // stack.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct StackLayout {
     // ArgvStart is the beginning of the argument vector.
     pub ArgvStart: u64,
