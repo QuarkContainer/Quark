@@ -193,8 +193,8 @@ impl VMSpace {
     pub fn VCPUCount() -> usize {
         let mut cpuCount = num_cpus::get();
 
-        if cpuCount < 3 {
-            cpuCount = 3; // at least 3 vcpu (one for kernel io, one for host io and other for process vcpu)
+        if cpuCount < 2 {
+            cpuCount = 2; // at least 2 vcpu (one for host io and the other for process vcpu)
         }
 
         if cpuCount > MAX_VCPU_COUNT {

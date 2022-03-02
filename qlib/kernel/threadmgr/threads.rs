@@ -23,7 +23,6 @@ use alloc::string::ToString;
 use super::super::uid::NewUID;
 use super::super::super::auth::userns::*;
 use super::super::super::usage::io::*;
-use super::super::kernel::time::*;
 use super::super::kernel::waiter::waitgroup::*;
 use super::super::kernel::waiter::queue::*;
 use super::super::threadmgr::task_start::*;
@@ -217,7 +216,7 @@ impl TaskSet {
             exitTracerAcked: false,
             exitParentNotified: false,
             exitParentAcked: false,
-            startTime: Time::default(),
+            startTime: Task::RealTimeNow(),
             containerID: cfg.ContainerID.to_string(),
             ioUsage: IO::default(),
             robust_list_head: 0,

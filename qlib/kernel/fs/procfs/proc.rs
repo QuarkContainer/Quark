@@ -45,6 +45,7 @@ use super::symlink_proc::*;
 use super::dir_proc::*;
 use super::sys::sys::*;
 
+use super::meminfo::*;
 use super::uptime::*;
 use super::cpuinfo::*;
 use super::filesystems::*;
@@ -121,6 +122,7 @@ pub fn NewProc(task: &Task, msrc: &Arc<QMutex<MountSource>>, cgroupControllers: 
     contents.insert("stat".to_string(), NewStatData(task, msrc));
     contents.insert("thread-self".to_string(), NewThreadSelf(task, &pidns, msrc));
     contents.insert("uptime".to_string(), NewUptime(task, msrc));
+    contents.insert("meminfo".to_string(), NewMeminfo(task, msrc));
     contents.insert("sys".to_string(), NewSys(task, msrc));
 
     let iops = Dir::New(task, contents, &ROOT_OWNER, &FilePermissions::FromMode(FileMode(0o0555)));
