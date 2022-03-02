@@ -44,9 +44,10 @@ impl ReadonlyFileNode for MeminfoFileNode {
         // this is just dummy meminfo
         // todo: fix this.
         let gb : u64 = 1024 * 1024 * 1024;
+        s += &format!("MemTotal:       {:08} kB\n", 12 * gb / 1024);
         s += &format!("MemFree:        {:08} kB\n", 8 * gb / 1024);
         s += &format!("MemAvailable:   {:08} kB\n", 4 * gb / 1024);
-        s += &format!("Buffers:               0 kB\n"); // memory usage by block devices
+        s += &format!("Buffers:        {:08} kB\n", 1 * gb / 1024); // memory usage by block devices
         s += &format!("Cached:         {:08} kB\n", 1 * gb / 1024);
         // Emulate a system with no swap, which disables inactivation of anon pages.
         s += &format!("SwapCache:             0 kB\n");
