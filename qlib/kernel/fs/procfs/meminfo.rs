@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
+use alloc::string::ToString;
 use crate::qlib::mutex::*;
 
 use super::super::attr::*;
@@ -21,7 +22,7 @@ use super::super::inode::*;
 use super::super::mount::*;
 use super::super::flags::*;
 use super::super::dirent::*;
-use super::super::super::kernel::kernel::*;
+//use super::super::super::super::linux::time::*;
 use super::super::super::task::*;
 use super::super::super::super::auth::*;
 use super::super::super::super::linux_def::*;
@@ -30,25 +31,41 @@ use super::super::fsutil::inode::simple_file_inode::*;
 use super::super::fsutil::file::readonly_file::*;
 use super::inode::*;
 
-pub struct UptimeFileNode {}
+pub struct MeminfoFileNode {}
 
-impl ReadonlyFileNode for UptimeFileNode {
+impl ReadonlyFileNode for MeminfoFileNode {
     fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], offset: i64, _blocking: bool) -> Result<i64> {
         if offset < 0 {
             return Err(Error::SysError(SysErr::EINVAL))
         }
 
-        let kernel = GetKernel();
-        let startTime = kernel.startTime;
-        let now = task.Now();
+        let mut s = "".to_string();
 
-        // that's weird, the caculation here has to x10
-        // todo: fix this
-        //let val = Task::MonoTimeNow().0 / 1000_1000;
-        let val = now.Sub(startTime) / 1000_100;
-        let second = val / 1000;
-        let ms = val % 1000 / 10;
-        let s = format!("{}.{} 0.00", second, ms);
+        // this is just dummy meminfo
+        // todo: fix this.
+        let gb : u64 = 1024 * 1024 * 1024;
+        s += &format!("MemFree:        {:08} kB\n", 8 * gb / 1024);
+        s += &format!("MemAvailable:   {:08} kB\n", 4 * gb / 1024);
+        s += &format!("Buffers:               0 kB\n"); // memory usage by block devices
+        s += &format!("Cached:         {:08} kB\n", 1 * gb / 1024);
+        // Emulate a system with no swap, which disables inactivation of anon pages.
+        s += &format!("SwapCache:             0 kB\n");
+        s += &format!("Active:         {:08} kB\n", 1 * gb / 1024);
+        s += &format!("Inactive:       {:08} kB\n", 1 * gb / 1024);
+        s += &format!("Active(anon):   {:08} kB\n", 1 * gb / 1024);
+        s += &format!("Inactive(anon):        0 kB\n");
+        s += &format!("Active(file):   {:08} kB\n", 1 * gb / 1024);
+        s += &format!("Inactive(file): {:08} kB\n", 1 * gb / 1024);
+        s += &format!("Unevictable:           0 kB\n");
+        s += &format!("Mlocked:               0 kB\n");
+        s += &format!("SwapTotal:             0 kB\n");
+        s += &format!("SwapFree:              0 kB\n");
+        s += &format!("Dirty:                 0 kB\n");
+        s += &format!("Writeback:             0 kB\n");
+        s += &format!("AnonPages:      {:08} kB\n", 1 * gb / 1024);
+        s += &format!("Mapped:         {:08} kB\n", 1 * gb / 1024);
+        s += &format!("Shmem:          {:08} kB\n", 1 * gb / 1024);
+
         let bytes = s.as_bytes();
         if offset as usize > bytes.len() {
             return Ok(0)
@@ -60,12 +77,12 @@ impl ReadonlyFileNode for UptimeFileNode {
     }
 }
 
-pub struct UptimeInode {}
+pub struct MeminfoInode {}
 
-impl SimpleFileTrait for UptimeInode {
+impl SimpleFileTrait for MeminfoInode {
     fn GetFile(&self, _task: &Task, _dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File> {
         let fops = ReadonlyFileOperations {
-            node: UptimeFileNode{},
+            node: MeminfoFileNode{},
         };
 
         let file = File::New(dirent, &flags, fops);
@@ -73,7 +90,7 @@ impl SimpleFileTrait for UptimeInode {
     }
 }
 
-pub fn NewUptime(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
+pub fn NewMeminfo(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let node = SimpleFileInode::New (
         task,
         &ROOT_OWNER,
@@ -97,7 +114,7 @@ pub fn NewUptime(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         },
         FSMagic::ANON_INODE_FS_MAGIC,
         false,
-        UptimeInode{}
+        MeminfoInode{}
     );
 
     return NewProcInode(&Arc::new(node), msrc, InodeType::SpecialFile, None)
