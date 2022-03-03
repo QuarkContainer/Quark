@@ -1177,6 +1177,12 @@ impl VMSpace {
         return Self::GetRet(ret as i64)
     }
 
+    pub fn Sysinfo(info: u64) -> i64 {
+        unsafe {
+            return Self::GetRet(sysinfo(info as *mut sysinfo) as i64);
+        }
+    }
+
     pub fn Fadvise(fd: i32, offset: u64, len: u64, advice: i32) -> i64 {
         let fd = match Self::GetOsfd(fd) {
             Some(fd) => fd,

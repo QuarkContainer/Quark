@@ -27,6 +27,7 @@ use super::super::super::task::*;
 use super::super::super::super::auth::*;
 use super::super::super::super::linux_def::*;
 use super::super::super::super::common::*;
+use super::super::super::Kernel::HostSpace;
 use super::super::fsutil::inode::simple_file_inode::*;
 use super::super::fsutil::file::readonly_file::*;
 use super::inode::*;
@@ -39,33 +40,38 @@ impl ReadonlyFileNode for MeminfoFileNode {
             return Err(Error::SysError(SysErr::EINVAL))
         }
 
-        let mut s = "".to_string();
+        let mut info : LibcSysinfo = LibcSysinfo::default();
 
-        // this is just dummy meminfo
+        let ret = HostSpace::Sysinfo(&mut info as * mut _ as u64);
+        if ret < 0 {
+            return Err(Error::SysError(-ret as i32))
+        }
+
+        let mut s = "".to_string();
+        // this is just fake meminfo
         // todo: fix this.
-        let gb : u64 = 1024 * 1024 * 1024;
-        s += &format!("MemTotal:       {:08} kB\n", 12 * gb / 1024);
-        s += &format!("MemFree:        {:08} kB\n", 8 * gb / 1024);
-        s += &format!("MemAvailable:   {:08} kB\n", 4 * gb / 1024);
-        s += &format!("Buffers:        {:08} kB\n", 1 * gb / 1024); // memory usage by block devices
-        s += &format!("Cached:         {:08} kB\n", 1 * gb / 1024);
+        s += &format!("MemTotal:       {:08} kB\n", info.totalram / 1024);
+        s += &format!("MemFree:        {:08} kB\n", info.freeram / 1024);
+        s += &format!("MemAvailable:   {:08} kB\n", info.freeram / 1024);
+        s += &format!("Buffers:        {:08} kB\n", info.bufferram / 1024); // memory usage by block devices
+        s += &format!("Cached:         {:08} kB\n", info.totalram /10 / 1024);
         // Emulate a system with no swap, which disables inactivation of anon pages.
         s += &format!("SwapCache:             0 kB\n");
-        s += &format!("Active:         {:08} kB\n", 1 * gb / 1024);
-        s += &format!("Inactive:       {:08} kB\n", 1 * gb / 1024);
-        s += &format!("Active(anon):   {:08} kB\n", 1 * gb / 1024);
+        s += &format!("Active:         {:08} kB\n", info.totalram /10 / 1024);
+        s += &format!("Inactive:       {:08} kB\n", info.totalram /10 / 1024);
+        s += &format!("Active(anon):   {:08} kB\n", info.totalram /10 / 1024);
         s += &format!("Inactive(anon):        0 kB\n");
-        s += &format!("Active(file):   {:08} kB\n", 1 * gb / 1024);
-        s += &format!("Inactive(file): {:08} kB\n", 1 * gb / 1024);
+        s += &format!("Active(file):   {:08} kB\n", info.totalram /10 / 1024);
+        s += &format!("Inactive(file): {:08} kB\n", info.totalram /10 / 1024);
         s += &format!("Unevictable:           0 kB\n");
         s += &format!("Mlocked:               0 kB\n");
         s += &format!("SwapTotal:             0 kB\n");
         s += &format!("SwapFree:              0 kB\n");
         s += &format!("Dirty:                 0 kB\n");
         s += &format!("Writeback:             0 kB\n");
-        s += &format!("AnonPages:      {:08} kB\n", 1 * gb / 1024);
-        s += &format!("Mapped:         {:08} kB\n", 1 * gb / 1024);
-        s += &format!("Shmem:          {:08} kB\n", 1 * gb / 1024);
+        s += &format!("AnonPages:      {:08} kB\n", info.totalram /10 / 1024);
+        s += &format!("Mapped:         {:08} kB\n", info.totalram /10 / 1024);
+        s += &format!("Shmem:          {:08} kB\n", 04);
 
         let bytes = s.as_bytes();
         if offset as usize > bytes.len() {
