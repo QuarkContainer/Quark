@@ -310,6 +310,9 @@ impl KVMVcpu {
             Msg::UpdateWaitInfo(msg) => {
                 ret = super::VMSpace::UpdateWaitInfo(msg.fd, msg.waitinfo.clone()) as u64;
             },
+            Msg::Sysinfo(msg) => {
+                ret = super::VMSpace::Sysinfo(msg.addr) as u64;
+            },
             Msg::Rdtsc(_msg) => {
                 ret = TSC.Rdtsc() as u64;
             },

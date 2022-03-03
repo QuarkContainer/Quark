@@ -77,6 +77,14 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
+    pub fn Sysinfo(addr: u64) -> i64 {
+        let mut msg = Msg::Sysinfo(Sysinfo {
+            addr,
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
     pub fn EventfdWrite(fd: i32) -> i64 {
         let mut msg = Msg::EventfdWrite(EventfdWrite {
             fd,
