@@ -71,7 +71,7 @@ impl ReadonlyFileNode for MeminfoFileNode {
         s += &format!("Writeback:             0 kB\n");
         s += &format!("AnonPages:      {:08} kB\n", info.totalram /10 / 1024);
         s += &format!("Mapped:         {:08} kB\n", info.totalram /10 / 1024);
-        s += &format!("Shmem:          {:08} kB\n", 04);
+        s += &format!("Shmem:          {:08} kB\n", 0);
 
         let bytes = s.as_bytes();
         if offset as usize > bytes.len() {
