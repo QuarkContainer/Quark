@@ -132,13 +132,15 @@ impl ListAllocator {
 
 impl CPULocal {
     pub fn Wakeup(&self) {
-        let vcpuId = self.vcpuId as u64;
+        /*let vcpuId = self.vcpuId as u64;
         if vcpuId != 0 {
             let addr = MemoryDef::KVM_IOEVENTFD_BASEADDR + vcpuId * 8;
             unsafe {
                 *(addr as * mut u64) = 1;
             }
-        }
+        }*/
+
+        super::Kernel::HostSpace::EventfdWrite(self.eventfd);
     }
 }
 
