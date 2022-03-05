@@ -17,7 +17,6 @@ use alloc::vec::Vec;
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::Ordering;
 use alloc::alloc::{Layout, alloc, dealloc};
-use alloc::sync::Arc;
 
 use super::common::*;
 use super::linux_def::*;
@@ -43,11 +42,47 @@ impl SocketBufIovs {
     }
 }
 
-pub trait RingeBufAllocator : Send + Sync {
-    fn AllocHeadTail(&self) -> &'static [AtomicU32];
-    fn FreeHeadTail(&self, data: &'static [AtomicU32]);
-    fn AlllocBuf(&self, size: usize) -> u64;
-    fn FreeBuf(&self, addr: u64, size: usize);
+pub enum RingeBufAllocator {
+    HeapAllocator,
+    ShareAllocator,
+}
+
+impl RingeBufAllocator {
+    pub fn AllocHeadTail(&self) -> &'static [AtomicU32] {
+        match self {
+            Self::HeapAllocator => return HeapAllocator::AllocHeadTail(),
+            _ => {
+                panic!("ShareAllocator call ...");
+            }
+        }
+    }
+
+    pub fn FreeHeadTail(&self, data: &'static [AtomicU32]) {
+        match self {
+            Self::HeapAllocator => return HeapAllocator::FreeHeadTail(data),
+            _ => {
+                panic!("ShareAllocator call ...");
+            }
+        }
+    }
+
+    pub fn AlllocBuf(&self, pageCount: usize) -> u64 {
+        match self {
+            Self::HeapAllocator => return HeapAllocator::AlllocBuf(pageCount),
+            _ => {
+                panic!("ShareAllocator call ...");
+            }
+        }
+    }
+
+    pub fn FreeBuf(&self, addr: u64, size: usize) {
+        match self {
+            Self::HeapAllocator => return HeapAllocator::FreeBuf(addr, size),
+            _ => {
+                panic!("ShareAllocator call ...");
+            }
+        }
+    }
 }
 
 pub fn IsPowerOfTwo(x: usize) -> bool {
@@ -59,8 +94,8 @@ pub struct HeapAllocator {}
 unsafe impl Send for HeapAllocator {}
 unsafe impl Sync for HeapAllocator {}
 
-impl RingeBufAllocator for HeapAllocator {
-    fn AllocHeadTail(&self) -> &'static [AtomicU32] {
+impl HeapAllocator {
+    pub fn AllocHeadTail() -> &'static [AtomicU32] {
         let layout = Layout::from_size_align(8, 8).expect("RingeBufAllocator::AllocHeadTail can't allocate memory");
         let addr = unsafe {
             alloc(layout)
@@ -68,10 +103,12 @@ impl RingeBufAllocator for HeapAllocator {
 
         let ptr = addr as *mut AtomicU32;
         let slice = unsafe { slice::from_raw_parts(ptr, 2 as usize) };
+        slice[0].store(0, Ordering::Release);
+        slice[1].store(0, Ordering::Release);
         return slice
-    }
+     }
 
-    fn FreeHeadTail(&self, data: &'static [AtomicU32]) {
+    pub fn FreeHeadTail(data: &'static [AtomicU32]) {
         assert!(data.len() == 2);
         let addr = &data[0] as * const _ as u64;
         let layout = Layout::from_size_align(8, 8)
@@ -81,7 +118,7 @@ impl RingeBufAllocator for HeapAllocator {
         };
     }
 
-    fn AlllocBuf(&self, pageCount: usize) -> u64 {
+    pub fn AlllocBuf(pageCount: usize) -> u64 {
         assert!(IsPowerOfTwo(pageCount));
         let layout = Layout::from_size_align(pageCount * MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize)
             .expect("RingeBufAllocator::AlllocBuf can't allocate memory");
@@ -92,7 +129,7 @@ impl RingeBufAllocator for HeapAllocator {
         return addr as u64
     }
 
-    fn FreeBuf(&self, addr: u64, size: usize) {
+    pub fn FreeBuf(addr: u64, size: usize) {
         assert!(IsPowerOfTwo(size) && addr % MemoryDef::PAGE_SIZE == 0);
         let layout = Layout::from_size_align(size, MemoryDef::PAGE_SIZE as usize)
             .expect("RingeBufAllocator::FreeBuf can't free memory");
@@ -106,7 +143,7 @@ pub struct RingBuf {
     pub buf: u64,
     pub ringMask: u32,
     pub headtail: &'static [AtomicU32],
-    pub allocator: Arc<RingeBufAllocator>
+    pub allocator: RingeBufAllocator
 }
 
 impl Drop for RingBuf {
@@ -122,7 +159,7 @@ impl RingBuf {
         return (x & (x - 1)) == 0;
     }
 
-    pub fn New(pagecount: usize, allocator: Arc<RingeBufAllocator>) -> Self {
+    pub fn New(pagecount: usize, allocator: RingeBufAllocator) -> Self {
         let headtail = allocator.AllocHeadTail();
         assert!(headtail.len()==2);
         let buf = allocator.AlllocBuf(pagecount);
@@ -454,7 +491,7 @@ impl ByteStream {
     //allocate page from heap
     pub fn Init(pageCount: u64) -> Self {
         assert!(Self::IsPowerOfTwo(pageCount), "Bytetream pagecount is not power of two: {}", pageCount);
-        let allocator = Arc::new(HeapAllocator{});
+        let allocator = RingeBufAllocator::HeapAllocator;
         let buf = RingBuf::New(pageCount as usize, allocator);
 
         return Self {
