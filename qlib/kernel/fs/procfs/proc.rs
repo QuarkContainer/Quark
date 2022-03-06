@@ -31,6 +31,7 @@ use super::super::super::task::*;
 use super::super::super::kernel::kernel::*;
 use super::super::super::kernel::waiter::*;
 use super::super::host::hostinodeop::*;
+use super::super::super::SHARESPACE;
 use super::super::attr::*;
 use super::super::file::*;
 use super::super::flags::*;
@@ -122,7 +123,11 @@ pub fn NewProc(task: &Task, msrc: &Arc<QMutex<MountSource>>, cgroupControllers: 
     contents.insert("stat".to_string(), NewStatData(task, msrc));
     contents.insert("thread-self".to_string(), NewThreadSelf(task, &pidns, msrc));
     contents.insert("uptime".to_string(), NewUptime(task, msrc));
-    contents.insert("meminfo".to_string(), NewMeminfo(task, msrc));
+
+    if SHARESPACE.config.read().EnableMemInfo {
+        contents.insert("meminfo".to_string(), NewMeminfo(task, msrc));
+    }
+
     contents.insert("sys".to_string(), NewSys(task, msrc));
 
     let iops = Dir::New(task, contents, &ROOT_OWNER, &FilePermissions::FromMode(FileMode(0o0555)));
