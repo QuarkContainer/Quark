@@ -50,28 +50,54 @@ impl ReadonlyFileNode for MeminfoFileNode {
         let mut s = "".to_string();
         // this is just fake meminfo
         // todo: fix this.
-        s += &format!("MemTotal:       {:08} kB\n", info.totalram / 1024);
-        s += &format!("MemFree:        {:08} kB\n", info.freeram / 1024);
-        s += &format!("MemAvailable:   {:08} kB\n", info.freeram / 1024);
-        s += &format!("Buffers:        {:08} kB\n", info.bufferram / 1024); // memory usage by block devices
-        s += &format!("Cached:         {:08} kB\n", info.totalram /10 / 1024);
+        s += &format!("MemTotal:       {:>8} kB\n", info.totalram / 1024);
+        s += &format!("MemFree:        {:>8} kB\n", info.freeram / 1024);
+        s += &format!("MemAvailable:   {:>8} kB\n", info.totalram / 5 * 3 / 1024);
+        s += &format!("Buffers:        {:>8} kB\n", info.bufferram / 1024); // memory usage by block devices
+        s += &format!("Cached:         {:>8} kB\n", info.totalram /100 / 1024);
         // Emulate a system with no swap, which disables inactivation of anon pages.
         s += &format!("SwapCache:             0 kB\n");
-        s += &format!("Active:         {:08} kB\n", info.totalram /10 / 1024);
-        s += &format!("Inactive:       {:08} kB\n", info.totalram /10 / 1024);
-        s += &format!("Active(anon):   {:08} kB\n", info.totalram /10 / 1024);
+        s += &format!("Active:         {:>8} kB\n", info.totalram /100 / 1024);
+        s += &format!("Inactive:       {:>8} kB\n", info.totalram /100 / 1024);
+        s += &format!("Active(anon):   {:>8} kB\n", info.totalram /100 / 1024);
         s += &format!("Inactive(anon):        0 kB\n");
-        s += &format!("Active(file):   {:08} kB\n", info.totalram /10 / 1024);
-        s += &format!("Inactive(file): {:08} kB\n", info.totalram /10 / 1024);
+        s += &format!("Active(file):   {:>8} kB\n", info.totalram /100 / 1024);
+        s += &format!("Inactive(file): {:>8} kB\n", info.totalram /100 / 1024);
         s += &format!("Unevictable:           0 kB\n");
         s += &format!("Mlocked:               0 kB\n");
         s += &format!("SwapTotal:             0 kB\n");
         s += &format!("SwapFree:              0 kB\n");
         s += &format!("Dirty:                 0 kB\n");
         s += &format!("Writeback:             0 kB\n");
-        s += &format!("AnonPages:      {:08} kB\n", info.totalram /10 / 1024);
-        s += &format!("Mapped:         {:08} kB\n", info.totalram /10 / 1024);
-        s += &format!("Shmem:          {:08} kB\n", 0);
+        s += &format!("AnonPages:      {:>8} kB\n", info.totalram /100 / 1024);
+        s += &format!("Mapped:         {:>8} kB\n", info.totalram /100 / 1024);
+        s += &format!("Shmem:                 0 kB\n");
+
+        // it always change 0 to 2, that's weird
+        //s += &format!("Shmem:          {} kB\n", 0);
+
+        /*s += &format!("MemTotal:       {:>8} kB\n", 32460972);
+        s += &format!("MemFree:        {:>8} kB\n", 32457036);
+        s += &format!("MemAvailable:   {:>8} kB\n", 32457036);
+        s += &format!("Buffers:        {:>8} kB\n", 0); // memory usage by block devices
+        s += &format!("Cached:         {:>8} kB\n", 3324);
+        // Emulate a system with no swap, which disables inactivation of anon pages.
+        s += &format!("SwapCache:             0 kB\n");
+        s += &format!("Active:         {:>8} kB\n", 2260);
+        s += &format!("Inactive:       {:>8} kB\n", 1664);
+        s += &format!("Active(anon):   {:>8} kB\n", 600);
+        s += &format!("Inactive(anon):        0 kB\n");
+        s += &format!("Active(file):   {:>8} kB\n", 1660);
+        s += &format!("Inactive(file): {:>8} kB\n", 1664);
+        s += &format!("Unevictable:           0 kB\n");
+        s += &format!("Mlocked:               0 kB\n");
+        s += &format!("SwapTotal:             0 kB\n");
+        s += &format!("SwapFree:              0 kB\n");
+        s += &format!("Dirty:                 0 kB\n");
+        s += &format!("Writeback:             0 kB\n");
+        s += &format!("AnonPages:      {:>8} kB\n", 600);
+        s += &format!("Mapped:         {:>8} kB\n", 3324);
+        s += &format!("Shmem:          {:>8} kB\n", 0);*/
 
         let bytes = s.as_bytes();
         if offset as usize > bytes.len() {

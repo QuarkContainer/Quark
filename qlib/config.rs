@@ -36,6 +36,7 @@ pub struct Config {
     pub RDMAPort: u8,
     pub PerSandboxLog: bool,
     pub ReserveCpuCount: usize,
+    pub EnableMemInfo: bool,
 }
 
 impl Config {
@@ -74,6 +75,7 @@ impl Default for Config {
             RDMAPort: 1,
             PerSandboxLog: false,
             ReserveCpuCount: 2,
+            EnableMemInfo: true
         }
     }
 }
