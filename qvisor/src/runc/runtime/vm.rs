@@ -198,12 +198,12 @@ impl VirtualMachine {
 
         let cnt = QUARK_CONFIG.lock().DedicateUring;
 
-        if QUARK_CONFIG.lock().EnableRDMA {
+        /*if QUARK_CONFIG.lock().EnableRDMA {
             // use default rdma device
             let rdmaDeviceName = "";
             let lbPort = QUARK_CONFIG.lock().RDMAPort;
             super::super::super::vmspace::HostFileMap::rdma::RDMA.Init(rdmaDeviceName, lbPort);
-        }
+        }*/
 
         let reserveCpuCount = QUARK_CONFIG.lock().ReserveCpuCount;
         let cpuCount = VMSpace::VCPUCount() - cnt - reserveCpuCount;
