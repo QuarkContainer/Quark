@@ -49,7 +49,7 @@ use super::qlib::addr::{Addr};
 use super::qlib::control_msg::*;
 use super::qlib::qmsg::*;
 use super::qlib::cstring::*;
-use super::qlib::socket_buf::*;
+//use super::qlib::socket_buf::*;
 use super::qlib::perf_tunning::*;
 use super::qlib::kernel::guestfdnotifier::*;
 use super::qlib::kernel::SignalProcess;
@@ -1042,7 +1042,7 @@ impl VMSpace {
     }
 
 
-    pub fn RDMAListen(sockfd: i32, backlog: i32, block: bool, acceptQueue: AcceptQueue) -> i64 {
+    /*pub fn RDMAListen(sockfd: i32, backlog: i32, block: bool, acceptQueue: AcceptQueue) -> i64 {
         let fdInfo = match Self::GetFdInfo(sockfd) {
             Some(fdInfo) => fdInfo,
             None => return -SysErr::EBADF as i64,
@@ -1070,7 +1070,7 @@ impl VMSpace {
         };
 
         fdInfo.PostRDMAConnect(msg);
-    }
+    }*/
 
     pub fn Shutdown(sockfd: i32, how: i32) -> i64 {
         let fdInfo = match Self::GetFdInfo(sockfd) {

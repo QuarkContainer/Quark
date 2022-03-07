@@ -14,9 +14,9 @@
 
 pub mod fdinfo;
 pub mod file_range_mgr;
-pub mod rdma_socket;
+//pub mod rdma_socket;
 pub mod socket_info;
-pub mod rdma;
+//pub mod rdma;
 
 use spin::Mutex;
 use std::collections::BTreeMap;
@@ -98,10 +98,10 @@ impl IOMgr {
         return fd;
     }
 
-    pub fn AddRDMAContext(&self, fd: i32) -> i32{
+    /*pub fn AddRDMAContext(&self, fd: i32) -> i32{
         self.fdTbl.lock().AddRDMAContext(fd).expect("hostfdMap: guest fd alloc fail");
         return fd;
-    }
+    }*/
 
     //ret: true: exist, false: not exist
     pub fn RemoveFd(&self, fd: i32) -> Option<FdInfo> {
@@ -156,7 +156,7 @@ impl IOMgr {
         }
     }
 
-    pub fn ProcessRDMAWriteImmFinish(&self, fd: i32) {
+    /*pub fn ProcessRDMAWriteImmFinish(&self, fd: i32) {
         let fdInfo = self.GetByHost(fd);
         match fdInfo {
             None => {
@@ -178,7 +178,7 @@ impl IOMgr {
                 fdInfo.ProcessRDMARecvWriteImm(recvCount, writeCount);
             }
         }
-    }
+    }*/
 }
 
 //guest fdset for one process
@@ -214,12 +214,12 @@ impl FdTbl {
         return Ok(fdInfo)
     }
 
-    pub fn AddRDMAContext(&mut self, osfd: i32) -> Result<FdInfo> {
+    /*pub fn AddRDMAContext(&mut self, osfd: i32) -> Result<FdInfo> {
         let fdInfo = FdInfo::NewRDMAContext(osfd);
 
         self.map.insert(osfd, fdInfo.clone());
         return Ok(fdInfo)
-    }
+    }*/
 
     pub fn Get(&self, fd: i32) -> Option<FdInfo> {
         match self.map.get(&fd) {
