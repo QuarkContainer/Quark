@@ -9,7 +9,7 @@ use std::ffi::CString;
 use nix::unistd::*;
 use nix::sys::wait::{waitpid, WaitStatus as NixWaitStatus};
 use nix::sys::wait::WaitPidFlag;
-use nix::poll::{poll, EventFlags, PollFd as NixPollFd};
+use nix::poll::{poll, PollFlags as EventFlags, PollFd as NixPollFd};
 use nix::unistd::{close as NixClose, dup2, fork, pipe2, read as NixRead, write, ForkResult};
 use nix::fcntl::{OFlag as NixOFlag};
 use std::fs::{File};
@@ -86,16 +86,13 @@ fn wait_for_child(child: Pid) -> Result<(i32, Option<Signal>)> {
     loop {
         // wait on all children, but only return if we match child.
         let result = match waitpid(Pid::from_raw(-1), None) {
-            Err(::nix::Error::Sys(errno)) => {
+            Err(errno) => {
                 // ignore EINTR as it gets sent when we get a SIGCHLD
                 if errno == Errno::EINTR {
                     continue;
                 }
                 let msg = format!("could not waitpid on {}", child);
                 return Err(Error::Common(msg))
-            }
-            Err(e) => {
-                return Err(Error::Common(format!("reap_children fail {:?}", e)));
             }
             Ok(s) => s,
         };
@@ -183,13 +180,13 @@ pub fn execute_hook(hook: &oci::Hook, state: &oci::State) -> Result<()> {
     debug!("executing hook {:?}", hook);
     let (rfd, wfd) =
         pipe2(NixOFlag::O_CLOEXEC).map_err(|_| Error::Common("failed to create pipe".to_string()))?;
-    match fork().map_err(|_| Error::Common("for fail".to_string()))? {
+    match unsafe {fork()}.map_err(|_| Error::Common("for fail".to_string()))? {
         ForkResult::Child => {
             close(rfd).map_err(|_| Error::Common("could not close rfd".to_string()))?;
             let (rstdin, wstdin) =
                 pipe2(NixOFlag::empty()).map_err(|_| Error::Common("failed to create pipe".to_string()))?;
             // fork second child to execute hook
-            match fork().map_err(|_| Error::Common("for fail".to_string()))? {
+            match unsafe {fork()}.map_err(|_| Error::Common("for fail".to_string()))? {
                 ForkResult::Child => {
                     close(0).map_err(|_| Error::Common("could not close stdin".to_string()))?;
                     dup2(rstdin, 0).map_err(|_| Error::Common("could not dup to stdin".to_string()))?;

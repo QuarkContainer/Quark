@@ -35,7 +35,7 @@ capabilities = { git = "https://github.com/gcmurphy/rust-capabilities", package 
 regex = "1.3.9"
 fs2 = "0.4.3"
 chrono = "0.4"
-nix = "0.11.0"
+nix = "0.23.1"
 num-traits = "^0.2.5"
 scopeguard = { version = "^1.1.0", default-features = false }
 prctl = "1.0.0"
@@ -49,6 +49,11 @@ buddy_system_allocator = "0.8.0"
 core_affinity = "0.5.10"
 cache-padded = "1.1.1"
 #rdmaffi = { git = "https://github.com/QuarkContainer/RDMARust.git", package = "rdma-sys", version = "0.1.0" }
+#containerd-shim = { path = "/home/brad/rust/rust-extensions/crates/shim", package = "containerd-shim", version = "0.2.0" }
+#shim_proto = { git = "https://github.com/containerd/rust-extensions.git", package = "containerd-shim-protos", version = "0.1.2" }
+oci-spec = "0.5.4"
+crossbeam = "0.8.1"
+os_pipe = "1.0.0"
 
 [dependencies.lazy_static]
 version = "1.4"

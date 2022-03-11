@@ -15,7 +15,8 @@
 use alloc::string::ToString;
 use libc::*;
 use alloc::slice;
-use nix::sys::socket::{CmsgSpace, ControlMessage, MsgFlags, sendmsg, recvmsg};
+use nix::sys::socket::{ControlMessage, MsgFlags, sendmsg, recvmsg};
+use nix::sys::socket::ControlMessageOwned;
 use nix::sys::uio::IoVec;
 use std::{thread, time};
 
@@ -141,11 +142,11 @@ impl USocket {
         return Ok(cliSocket)
     }
 
-    const MAX_FILES : usize = 16;
+    const MAX_FILES : usize = 16 * 4;
 
     pub fn ReadWithFds(&self, buf: &mut[u8]) -> Result<(usize, Vec<i32>)> {
         let iovec = [IoVec::from_mut_slice(buf)];
-        let mut space = CmsgSpace::<[i32; Self::MAX_FILES]>::new();
+        let mut space : Vec<u8> = vec![0; Self::MAX_FILES];
 
         loop {
             match recvmsg(self.socket, &iovec, Some(&mut space), MsgFlags::empty()) {
@@ -154,7 +155,7 @@ impl USocket {
 
                     let mut iter = msg.cmsgs();
                     match iter.next() {
-                        Some(ControlMessage::ScmRights(fds)) => {
+                        Some(ControlMessageOwned::ScmRights(fds)) => {
                             return Ok((cnt, fds.to_vec()))
                         }
                         None => {
@@ -163,14 +164,11 @@ impl USocket {
                         _ => break,
                     }
                 },
-                Err(nix::Error::Sys(e)) => {
-                    if e as i32 == EINTR {
+                Err(errno) => {
+                    if errno as i32 == EINTR {
                         continue;
                     }
-                    return Err(Error::IOError(format!("ReadWithFds io::error is {:?}", e)))
-                }
-                Err(e) => {
-                    return Err(Error::IOError(format!("ReadWithFds io::error is {:?}", e)))
+                    return Err(Error::IOError(format!("ReadWithFds io::error is {:?}", errno)))
                 }
             };
 

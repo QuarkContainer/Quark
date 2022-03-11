@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors / 2018 The gVisor Authors.
+// Copyright (c) 2021 Quark Container Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,11 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod container;
-pub mod sandbox;
-pub mod cgroup;
-pub mod oci;
-pub mod specutils;
-pub mod runtime;
-pub mod cmd;
-//pub mod shim;
+use shim_proto::types::task::Status;
+
+pub struct CommonProcess {
+    pub state: Status,
+    pub id: String,
+    pub stdio: Stdio,
+    pub pid: i32,
+    pub io: Option<ProcessIO>,
+    pub exit_code: i32,
+    pub exited_at: Option<OffsetDateTime>,
+    pub wait_chan_tx: Vec<SyncSender<i8>>,
+    pub console: Option<Console>,
+}

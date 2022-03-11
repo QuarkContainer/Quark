@@ -16,6 +16,7 @@ use nix::sys::signal;
 use lazy_static::lazy_static;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
+use core::convert::TryFrom;
 
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::control_msg::*;
@@ -124,7 +125,7 @@ pub fn PrepareHandler() -> Result<()> {
         }
 
         unsafe {
-            signal::sigaction(signal::Signal::from_c_int(i as i32).unwrap(), &sig_action)
+            signal::sigaction(signal::Signal::try_from(i as i32).unwrap(), &sig_action)
                 .map_err(|e| Error::Common(format!("sigaction fail with err {:?} for signal {}", e, i)))?;
         }
     }

@@ -275,6 +275,14 @@ pub enum Error {
     // Wait determines that there are no tasks that can produce a waitable event,
     // Task.Wait returns ECHILD.)
     ErrNoWaitableEvent,
+
+    Unimplemented(String),
+
+    SerdeJson(String),
+    ProtobufError(String),
+
+    InvalidArgument(String),
+    ContainerdShim(String),
 }
 
 impl Error {
