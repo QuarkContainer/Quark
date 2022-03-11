@@ -19,6 +19,7 @@ use alloc::str;
 use lazy_static::lazy_static;
 use spin::Mutex;
 use nix::sys::signal;
+use core::convert::TryFrom;
 
 use super::super::specutils::specutils;
 use super::super::super::qlib::*;
@@ -84,7 +85,7 @@ impl SignalStruct {
             }
 
             unsafe {
-                signal::sigaction(signal::Signal::from_c_int(i as i32).unwrap(), &sig_action)
+                signal::sigaction(signal::Signal::try_from(i as i32).unwrap(), &sig_action)
                     .map_err(|e| Error::Common(format!("sigaction fail with err {:?} for signal {}", e, i)))
                     .unwrap();
             }

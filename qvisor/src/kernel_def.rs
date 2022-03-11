@@ -1,5 +1,6 @@
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
+use std::fmt;
 use libc::*;
 
 use super::qlib::*;
@@ -24,6 +25,14 @@ use super::URING_MGR;
 use super::VMS;
 use super::vmspace::*;
 use super::ThreadId;
+
+impl std::error::Error for Error {}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "SuperError is here!")
+    }
+}
 
 impl<'a> ShareSpace {
     pub fn AQCall(&self, msg: &HostOutputMsg) {
