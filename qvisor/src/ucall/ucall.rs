@@ -38,6 +38,7 @@ pub enum UCallReq {
     ContainerDestroy(Cid),
     CreateSubContainer(CreateArgs),
     StartSubContainer(StartArgs),
+    WaitAll,
 }
 
 impl FileDescriptors for UCallReq {

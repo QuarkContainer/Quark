@@ -19,4 +19,4 @@ pub mod oci;
 pub mod specutils;
 pub mod runtime;
 pub mod cmd;
-//pub mod shim;
+pub mod shim;

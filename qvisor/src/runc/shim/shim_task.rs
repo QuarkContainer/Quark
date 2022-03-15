@@ -12,168 +12,364 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::{Arc};
-use std::path::Path;
-use std::path::PathBuf;
-use nix::unistd::{mkdir, Pid};
-use nix::sys::stat::Mode;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use lazy_static::lazy_static;
+use std::sync::Once;
+//use std::path::Path;
+//use std::path::PathBuf;
+//use nix::unistd::{mkdir, Pid};
+//use nix::sys::stat::Mode;
 
-use containerd_shim::protos::protobuf::{CodedInputStream, Message, RepeatedField};
+//use containerd_shim::protos::protobuf::{CodedInputStream};
 use containerd_shim::TtrpcResult;
+use containerd_shim::Error as TtrpcError;
 use containerd_shim::api;
 use containerd_shim::api::*;
 use containerd_shim::TtrpcContext;
 use containerd_shim::ExitSignal;
 use containerd_shim::Task;
-use containerd_shim::mount::*;
 use containerd_shim::util::*;
-//use containerd_shim::protos::containerd_shim_protos::ttrpc;
+use containerd_shim::protos::protobuf::{Message, SingularPtrField};
+use containerd_shim::protos::protobuf::well_known_types::{Any, Timestamp};
 
-use shim_proto::ttrpc;
+use super::container::*;
 
-use super::super::cmd::config::*;
+use super::super::super::runc::oci::LinuxResources;
+use super::super::super::runc::sandbox::sandbox::*;
 
-//use super::super::super::qlib::common;
-//use containerd_shim::api::*;
+lazy_static! {
+    pub static ref SANDBOX: Mutex<Sandbox> = Mutex::new(Sandbox::default());
+}
 
-#[derive(Default)]
+#[derive(Clone)]
 pub struct ShimTask {
-    namespace: String,
-    exit: Arc<ExitSignal>,
+    pub containers: Arc<Mutex<HashMap<String, CommonContainer>>>,
+    pub namespace: String,
+    pub exit: Arc<ExitSignal>,
+    pub shutdown: Arc<Once>,
+}
+
+impl ShimTask {
+    pub fn New(ns: &str, exit: Arc<ExitSignal>) -> Self {
+        Self {
+            containers: Arc::new(Mutex::new(Default::default())),
+            namespace: ns.to_string(),
+            exit,
+            shutdown: Arc::new(Once::new()),
+        }
+    }
+
+    pub fn Destroy(&self) -> TtrpcResult<()> {
+        let mut containers = self.containers.lock().unwrap();
+        for (_, cont) in containers.iter_mut() {
+            cont.container.Destroy().map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
+        }
+
+        return Ok(())
+    }
+
+    pub fn WaitAll(containers: Arc<Mutex<HashMap<String, CommonContainer>>>) {
+        thread::spawn(move || {
+            let client = SANDBOX.lock().unwrap().WaitAll().unwrap();
+            loop {
+                let resp = match Sandbox::GetWaitAllResp(&client) {
+                    Ok(resp) => resp,
+                    Err(e) => {
+                        error!("ShimTask error with {:?}", e);
+                        return;
+                    }
+                };
+
+                error!("shim WaitAll {:?}", resp);
+
+                Self::Exit(&containers, resp.cid, resp.execId, resp.status as i32)
+            }
+        });
+
+    }
+
+    pub fn Exit(containers: &Arc<Mutex<HashMap<String, CommonContainer>>>, cid: String, execId: String, status: i32) {
+        match containers.lock().unwrap().get_mut(&cid) {
+            None => error!("ShimTask::Exit can't find container {}", cid),
+            Some(cont) => {
+                error!("shim Exit 1 {:?}", cont.init.pid());
+                let bundle = cont.bundle.to_string();
+                if execId.len() == 0 {
+                    // kill all children process if the container has a private PID namespace
+                    if cont.should_kill_all_on_exit(&bundle) {
+                        error!("shim Exit 3 {:?}", cont.init.pid());
+                        cont.kill(None, 9, true).unwrap_or_else(|e| {
+                            error!("failed to kill init's children: {}", e)
+                        });
+                    }
+                    // set exit for init process
+                    error!("shim Exit 4 {:?}", cont.init.pid());
+                    cont.init.common.set_exited(status);
+
+                    // TODO: publish event
+                    return
+                }
+
+                match cont.processes.get_mut(&execId) {
+                    None => {
+                        error!("can't find execId {} in container {}", execId, cid)
+                    }
+                    Some(p) => {
+                        p.set_exited(status);
+                        // TODO: publish event
+                        return
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl Task for ShimTask {
+    fn state(&self, _ctx: &TtrpcContext, req: StateRequest) -> TtrpcResult<StateResponse> {
+        info!("shim: state request for {:?}", &req);
+        let containers = self.containers.lock().unwrap();
+        let container = containers.get(req.id.as_str()).ok_or_else(|| {
+            TtrpcError::NotFoundError(format!("can not find container by id {}", req.id.as_str()))
+        })?;
+        let exec_id = req.exec_id.as_str().none_if(|&x| x.is_empty());
+        let mut resp = container.state(exec_id)
+            .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
+        resp.pid = 123;
+        info!("shim: state resp for {:?}", &resp);
+        Ok(resp)
+    }
+
     fn create(
         &self,
         _ctx: &TtrpcContext,
         req: api::CreateTaskRequest,
     ) -> TtrpcResult<api::CreateTaskResponse> {
-        let bundle = req.bundle.as_str();
-        let mut opts = Options::new();
-        if let Some(any) = req.options.as_ref() {
-            let mut input = CodedInputStream::from_bytes(any.value.as_ref());
-            opts.merge_from(&mut input).map_err(|e|ttrpc::Error::Others(format!("ttrpc error is {:?}", e)))?;
-        }
-        if opts.compute_size() > 0 {
-            debug!("create options: {:?}", &opts);
-        }
-        let mut runtime = opts.binary_name.as_str();
-        write_options(bundle, &opts)?;
-        write_runtime(bundle, runtime)?;
+        info!("shim: Create request for {:?}", &req);
+        // Note: Get containers here is for getting the lock,
+        // to make sure no other threads manipulate the containers metadata;
+        let mut containers = self.containers.lock().unwrap();
 
-        let rootfs_vec = req.get_rootfs().to_vec();
-        let rootfs = if !rootfs_vec.is_empty() {
-            let tmp_rootfs = Path::new(bundle).join("rootfs");
-            if !tmp_rootfs.as_path().exists() {
-                mkdir(tmp_rootfs.as_path(), Mode::from_bits(0o711).unwrap()).map_err(|e|ttrpc::Error::Others(format!("ttrpc error is {:?}", e)))?;
-            }
-            tmp_rootfs
-        } else {
-            PathBuf::new()
-        };
-        let rootfs = rootfs
-            .as_path()
-            .to_str()
-            .ok_or_else(|| ttrpc::Error::Others(format!("failed to convert rootfs to str")))?;
-        for m in rootfs_vec {
-            let mount_type = m.field_type.as_str().none_if(|&x| x.is_empty());
-            let source = m.source.as_str().none_if(|&x| x.is_empty());
-            mount_rootfs(mount_type, source, &m.options.to_vec(), rootfs)?;
-        }
+        let ns = self.namespace.as_str();
+        let id = req.id.as_str();
 
-        let root = Path::new(opts.root.as_str()).join(&self.namespace);
-        let log_buf = Path::new(bundle).join("log.json");
+        let container = ContainerFactory::Create(ns, &req)
+            .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
+        let mut resp = CreateTaskResponse::new();
+        resp.pid = container.pid() as u32;
 
+        let mut sandboxLock = SANDBOX.lock().unwrap();
+        sandboxLock.ID = container.SandboxId();
+        sandboxLock.Pid = container.Pid();
 
-        let config = GlobalConfig {
-            RootDir: root.into_os_string().into_string().unwrap(),
-            DebugLevel: DebugLevel::Info,
-            DebugLog: log_buf.into_os_string().into_string().unwrap(),
-            FileAccess: FileAccessType::default(),
-            Network: NetworkType::default()
-        };
+        Self::WaitAll(self.containers.clone());
 
-        let id = self.req.get_id();
-
-
-        /*let runc = {
-            if runtime.is_empty() {
-                runtime = DEFAULT_COMMAND;
-            }
-            let root = opts.root.as_str();
-            let root = Path::new(if root.is_empty() {
-                DEFAULT_RUNC_ROOT
-            } else {
-                root
-            })
-                .join(ns);
-            let log_buf = Path::new(bundle).join("log.json");
-            GlobalOpts::default()
-                .command(runtime)
-                .root(root)
-                .log(log_buf)
-                .systemd_cgroup(opts.get_systemd_cgroup())
-                .log_json()
-                .build()
-                .map_err(other_error!(e, "unable to create runc instance"))?
-        };
-
-        let id = req.get_id();
-        let stdio = Stdio {
-            stdin: req.get_stdin().to_string(),
-            stdout: req.get_stdout().to_string(),
-            stderr: req.get_stderr().to_string(),
-            terminal: req.get_terminal(),
-        };
-
-        let mut init = InitProcess::new(id, bundle, runc, stdio);
-        init.rootfs = rootfs.to_string();
-        let work_dir = Path::new(bundle).join("work");
-        let work_dir = work_dir
-            .as_path()
-            .to_str()
-            .ok_or_else(|| other!("failed to get work_dir str"))?;
-        init.work_dir = work_dir.to_string();
-        init.io_uid = opts.get_io_uid();
-        init.io_gid = opts.get_io_gid();
-        init.no_pivot_root = opts.get_no_pivot_root();
-        init.no_new_key_ring = opts.get_no_new_keyring();
-        init.criu_work_path = if opts.get_criu_path().is_empty() {
-            work_dir.to_string()
-        } else {
-            opts.get_criu_path().to_string()
-        };
-
-        let config = CreateConfig::default();
-        init.create(&config)?;
-        let container = RuncContainer {
-            common: CommonContainer {
-                id: id.to_string(),
-                bundle: bundle.to_string(),
-                init,
-                processes: Default::default(),
-            },
-        };
-        Ok(container) */
-
-        Ok(api::CreateTaskResponse::default())
+        containers.insert(id.to_string(), container);
+        info!("Create request for {} returns pid {}", id, resp.pid);
+        return Ok(resp);
     }
 
-    fn connect(
-        &self,
-        _ctx: &TtrpcContext,
-        _req: api::ConnectRequest,
-    ) -> TtrpcResult<api::ConnectResponse> {
-        info!("Connect request");
-        Ok(api::ConnectResponse {
-            version: String::from("example"),
-            ..Default::default()
-        })
+    fn start(&self, _ctx: &TtrpcContext, req: StartRequest) -> TtrpcResult<StartResponse> {
+        info!("shim: Start request for {:?}", &req);
+        let mut containers = self.containers.lock().unwrap();
+        let container = containers.get_mut(req.get_id()).ok_or_else(|| {
+            TtrpcError::NotFoundError(format!("can not find container by id {}", req.get_id()))
+        })?;
+        let pid = container.start(req.exec_id.as_str().none_if(|&x| x.is_empty()))
+            .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
+
+        let mut resp = StartResponse::new();
+        resp.pid = pid as u32;
+        info!("Start request for {:?} returns pid {}", req, resp.get_pid());
+        Ok(resp)
     }
 
-    fn shutdown(&self, _ctx: &TtrpcContext, _req: api::ShutdownRequest) -> TtrpcResult<api::Empty> {
-        info!("Shutdown request");
-        self.exit.signal(); // Signal to shutdown shim server
-        Ok(api::Empty::default())
+    fn delete(&self, _ctx: &TtrpcContext, req: DeleteRequest) -> TtrpcResult<DeleteResponse> {
+        info!("shim: Delete request for {:?}", &req);
+        let mut containers = self.containers.lock().unwrap();
+        let container = containers.get_mut(req.get_id()).ok_or_else(|| {
+            TtrpcError::NotFoundError(format!("can not find container by id {}", req.get_id()))
+        })?;
+        let exec_id_opt = req.get_exec_id().none_if(|x| x.is_empty());
+        let (pid, exit_status, exited_at) = container.delete(exec_id_opt)
+            .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
+        if req.get_exec_id().is_empty() {
+            containers.remove(req.id.as_str());
+        }
+        let mut resp = DeleteResponse::new();
+        resp.set_exited_at(exited_at);
+        resp.set_pid(pid as u32);
+        resp.set_exit_status(exit_status);
+        info!(
+        "Delete request for {} {} returns {:?}",
+        req.get_id(),
+        req.get_exec_id(),
+        resp
+        );
+        info!("shim: Delete resp for {:?}", &resp);
+        Ok(resp)
+    }
+
+    fn pids(&self, _ctx: &TtrpcContext, req: PidsRequest) -> TtrpcResult<PidsResponse> {
+        debug!("shim: Pids request for {:?}", req);
+        let containers = self.containers.lock().unwrap();
+        let container = containers.get(req.get_id()).ok_or_else(|| {
+            TtrpcError::Other(format!("can not find container by id {}", req.get_id()))
+        })?;
+
+        let resp = container.pids()
+            .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
+        debug!("shim: Pids resp for {:?}", resp);
+        Ok(resp)
+    }
+
+    fn kill(&self, _ctx: &TtrpcContext, req: KillRequest) -> TtrpcResult<Empty> {
+        info!("shim: Kill request for {:?}", req);
+        let mut containers = self.containers.lock().unwrap();
+        let container = containers.get_mut(req.get_id()).ok_or_else(|| {
+            TtrpcError::NotFoundError(format!("can not find container by id {}", req.get_id()))
+        })?;
+        container.kill(
+            req.exec_id.as_str().none_if(|&x| x.is_empty()),
+            req.signal,
+            req.all,
+        ).map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
+        info!("Kill request for {:?} returns successfully", req);
+        Ok(Empty::new())
+    }
+
+    fn exec(&self, _ctx: &TtrpcContext, req: ExecProcessRequest) -> TtrpcResult<Empty> {
+        info!(
+            "Exec request for id: {} exec_id: {}",
+            req.get_id(),
+            req.get_exec_id()
+        );
+        let mut containers = self.containers.lock().unwrap();
+        let container = containers.get_mut(req.get_id()).ok_or_else(|| {
+            TtrpcError::Other(format!("can not find container by id {}", req.get_id()))
+        })?;
+        container.exec(req)
+            .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
+        Ok(Empty::new())
+    }
+
+    fn resize_pty(&self, _ctx: &TtrpcContext, req: ResizePtyRequest) -> TtrpcResult<Empty> {
+        debug!(
+        "shim: Resize pty request for container {}, exec_id: {}",
+        &req.id, &req.exec_id
+        );
+        let mut containers = self.containers.lock().unwrap();
+        let container = containers.get_mut(req.get_id()).ok_or_else(|| {
+            TtrpcError::Other(format!("can not find container by id {}", req.get_id()))
+        })?;
+        container.resize_pty(
+            req.get_exec_id().none_if(|&x| x.is_empty()),
+            req.height,
+            req.width,
+        ).map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
+        Ok(Empty::new())
+    }
+
+    fn close_io(&self, _ctx: &TtrpcContext, _req: CloseIORequest) -> TtrpcResult<Empty> {
+        // unnecessary close io here since fd was closed automatically after object was destroyed.
+        Ok(Empty::new())
+    }
+
+    fn update(&self, _ctx: &TtrpcContext, req: UpdateTaskRequest) -> TtrpcResult<Empty> {
+        debug!("shim: Update request for {:?}", req);
+        let mut containers = self.containers.lock().unwrap();
+        let container = containers.get_mut(req.get_id()).ok_or_else(|| {
+            TtrpcError::Other(format!("can not find container by id {}", req.get_id()))
+        })?;
+
+        let resources: LinuxResources = serde_json::from_slice(req.get_resources().get_value())
+            .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
+        container.update(&resources)
+            .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
+        Ok(Empty::new())
+    }
+
+    fn wait(&self, _ctx: &TtrpcContext, req: WaitRequest) -> TtrpcResult<WaitResponse> {
+        error!("shim: Wait request for {:?}", req);
+        let mut containers = self.containers.lock().unwrap();
+        let container = containers.get_mut(req.get_id()).ok_or_else(|| {
+            TtrpcError::Other(format!("can not find container by id {}", req.get_id()))
+        })?;
+        let exec_id = req.exec_id.as_str().none_if(|&x| x.is_empty());
+        let state = container.state(exec_id)
+            .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
+        if state.status != Status::RUNNING && state.status != Status::CREATED {
+            let mut resp = WaitResponse::new();
+            resp.exit_status = state.exit_status;
+            resp.exited_at = state.exited_at;
+            info!("Wait request 111 for {:?} status {:?} returns {:?}", req, &state.status, &resp);
+            return Ok(resp);
+        }
+        let rx = container.wait_channel(req.exec_id.as_str().none_if(|&x| x.is_empty()))
+            .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
+        // release the lock before waiting the channel
+        drop(containers);
+
+        rx.recv()
+            .expect_err("wait channel should be closed directly");
+        // get lock again.
+        let mut containers = self.containers.lock().unwrap();
+        let container = containers.get_mut(req.get_id()).ok_or_else(|| {
+            TtrpcError::Other(format!("can not find container by id {}", req.get_id()))
+        })?;
+        let (_, code, exited_at) = container.get_exit_info(exec_id)
+            .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
+        let mut resp = WaitResponse::new();
+        resp.exit_status = code as u32;
+        let mut ts = Timestamp::new();
+        if let Some(ea) = exited_at {
+            ts.seconds = ea.unix_timestamp();
+            ts.nanos = ea.nanosecond() as i32;
+        }
+        resp.exited_at = SingularPtrField::some(ts);
+        error!("Wait request 2222 for {:?} returns {:?}", req, &resp);
+        Ok(resp)
+    }
+
+    fn stats(&self, _ctx: &TtrpcContext, req: StatsRequest) -> TtrpcResult<StatsResponse> {
+        debug!("shim: Stats request for {:?}", req);
+        let containers = self.containers.lock().unwrap();
+        let container = containers.get(req.get_id()).ok_or_else(|| {
+            TtrpcError::Other(format!("can not find container by id {}", req.get_id()))
+        })?;
+        let stats = container.stats()
+            .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
+
+        // marshal to ttrpc Any
+        let mut any = Any::new();
+        let mut data = Vec::new();
+        stats
+            .write_to_vec(&mut data)
+            .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
+        any.set_value(data);
+        any.set_type_url(stats.descriptor().full_name().to_string());
+
+        let mut resp = StatsResponse::new();
+        resp.set_stats(any);
+        debug!("shim: Stats resp for {:?}", resp);
+        Ok(resp)
+    }
+
+    fn shutdown(&self, _ctx: &TtrpcContext, _req: ShutdownRequest) -> TtrpcResult<Empty> {
+        debug!("shim: Shutdown request");
+        let containers = self.containers.lock().unwrap();
+        if containers.len() > 0 {
+            return Ok(Empty::new());
+        }
+
+        //todo: handle this
+        self.shutdown.call_once(|| {
+            self.exit.signal();
+        });
+
+        debug!("shim: Shutdown finish");
+        Ok(Empty::default())
     }
 }

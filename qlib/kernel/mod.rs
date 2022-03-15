@@ -62,6 +62,7 @@ pub static IOURING: IOUringRef = IOUringRef::New();
 pub static KERNEL_PAGETABLE: Singleton<PageTables> = Singleton::<PageTables>::New();
 pub static PAGE_MGR: PageMgrRef = PageMgrRef::New();
 pub static LOADER: Singleton<Loader> = Singleton::<Loader>::New();
+pub static WAIT_CONTAINER_FD: AtomicI32 = AtomicI32::new(-1);
 pub static KERNEL_STACK_ALLOCATOR: Singleton<AlignedAllocator> =
     Singleton::<AlignedAllocator>::New();
 
@@ -69,6 +70,14 @@ pub static EXIT_CODE: Singleton<AtomicI32> = Singleton::<AtomicI32>::New();
 pub static VCPU_FREQ : AtomicI64 = AtomicI64::new(2_000_000_000); // default 2GHZ
 pub static ASYNC_PROCESS: AsyncProcess = AsyncProcess::New();
 pub static FP_STATE: X86fpstate = X86fpstate::Init();
+
+pub fn SetWaitContainerfd(fd: i32) {
+    WAIT_CONTAINER_FD.store(fd, Ordering::SeqCst)
+}
+
+pub fn WaitContainerfd() -> i32 {
+    WAIT_CONTAINER_FD.load(Ordering::SeqCst)
+}
 
 #[inline]
 pub fn Timestamp() -> i64 {

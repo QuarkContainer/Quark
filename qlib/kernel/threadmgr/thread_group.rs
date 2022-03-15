@@ -274,6 +274,7 @@ pub struct ThreadGroupInternal {
     pub execed: bool,
 
     pub containerID: String,
+    pub execId: Option<String>,
 
     pub timerMu: Arc<QMutex<()>>,
     // todo: handle tty

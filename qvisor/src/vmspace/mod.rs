@@ -231,6 +231,7 @@ impl VMSpace {
         process.HostName = spec.hostname.to_string();
 
         process.NumCpu = self.vcpuCount as u32;
+        process.ExecId = Some("".to_string());
 
         for i in 0..process.Stdiofds.len() {
             let osfd = unsafe {
