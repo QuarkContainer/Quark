@@ -32,7 +32,7 @@ use containerd_shim::api::StateResponse;
 use containerd_shim::api::ExecProcessRequest;
 use containerd_shim::protos::protobuf::well_known_types::Timestamp;
 use containerd_shim::util::read_pid_from_file;
-use shim_proto::types::task::Status;
+use containerd_shim::protos::types::task::Status;
 use time::OffsetDateTime;
 
 ioctl_write_ptr_bad!(ioctl_set_winsz, libc::TIOCSWINSZ, libc::winsize);

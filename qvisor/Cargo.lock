@@ -864,7 +864,6 @@ dependencies = [
  "clap",
  "config",
  "containerd-shim",
- "containerd-shim-protos",
  "core_affinity",
  "crossbeam",
  "errno",
