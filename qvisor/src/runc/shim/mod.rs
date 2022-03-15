@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//pub mod util;
-//pub mod service;
-//pub mod shim_task;
-//pub mod process;
-//pub mod io;
+pub mod service;
+pub mod shim_task;
+pub mod process;
+pub mod container_io;
+pub mod container;

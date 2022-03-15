@@ -21,6 +21,7 @@ use super::super::threadmgr::thread::*;
 use super::super::threadmgr::threads::*;
 use super::super::threadmgr::pid_namespace::*;
 use super::super::threadmgr::thread_group::*;
+use super::super::boot::controller::WriteWaitAllResponse;
 use super::super::super::auth::id::*;
 //use super::super::Common::*;
 use super::super::SignalDef::*;
@@ -913,13 +914,15 @@ impl Thread {
 
     pub fn ExitNotify(&self) {
         let tg = self.lock().tg.clone();
+        let cid = tg.lock().containerID.clone();
+        let execId = tg.lock().execId.clone();
+
         let pidns = tg.PIDNamespace();
         let owner = pidns.lock().owner.clone();
         let ownerlock = owner.WriteLock();
 
         self.lock().advanceExitStateLocked(TaskExitState::TaskExitInitiated, TaskExitState::TaskExitZombie);
 
-        //info!("ExitNotify 1 [{:x}]", self.lock().taskId);
         {
             let mut tglock = tg.lock();
             tglock.liveTasks -= 1;
@@ -945,9 +948,10 @@ impl Thread {
             }
         }
 
-        //info!("ExitNotify 2 [{:x}]", self.lock().taskId);
         self.exitNotifyLocked();
-        error!("ExitNotify 3 [{:x}]", self.lock().taskId);
+        if execId.is_some() {
+            WriteWaitAllResponse(cid, execId.clone().unwrap(), tg.ExitStatus().Status() as i32);
+        }
         let taskCnt = owner.write().DecrTaskCount1();
         error!("ExitNotify 4 [{:x}], taskcnt is {}", self.lock().taskId, taskCnt);
         if taskCnt == 0 {

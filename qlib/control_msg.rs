@@ -45,6 +45,9 @@ impl ControlMsg {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct WaitAll {}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct WaitPid {
     pub cid: String,
     pub pid: i32,
@@ -114,6 +117,7 @@ pub enum Payload {
     ContainerDestroy(Cid),
     CreateSubContainer(CreateArgs),
     StartSubContainer(StartArgs),
+    WaitAll,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -140,6 +144,7 @@ pub enum UCallResp {
     ContainerDestroyResp,
     CreateSubContainerResp,
     StartSubContainerResp,
+    WaitAllResp(WaitAllResp),
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -156,4 +161,11 @@ pub struct ProcessInfo {
     pub Time: i64,
     // Executable shortname (e.g. "sh" for /bin/sh)
     pub Cmd: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct WaitAllResp {
+    pub cid: String,
+    pub execId: String,
+    pub status: i32,
 }

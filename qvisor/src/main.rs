@@ -99,6 +99,7 @@ use self::runc::cmd::command::*;
 use self::vmspace::host_pma_keeper::*;
 use self::vmspace::hostfdnotifier::*;
 use self::vmspace::kernel_io_thread::*;
+use self::runc::shim::service::*;
 
 use self::vmspace::uringMgr::*;
 use vmspace::*;
@@ -159,9 +160,12 @@ static GLOBAL: HostAllocator = HostAllocator::New();
 fn main() {
     InitSingleton();
 
+    let cmd;
+
     {
         let mut str = "".to_string();
         let args: Vec<String> = env::args().collect();
+        cmd = args[1].clone();
         for s in &args {
             str.push_str(s);
             str.push_str(" ");
@@ -169,15 +173,22 @@ fn main() {
         info!("commandline args is {}", str);
     }
 
-    let mut args = Parse().unwrap();
-    match Run(&mut args) {
-        Err(e) => {
-            error!("the error is {:?}", e);
-            ::std::process::exit(-1);
-        }
-        Ok(()) => {
-            //error!("successfully ...");
-            ::std::process::exit(0);
+    let shimMode = QUARK_CONFIG.lock().ShimMode;
+    if shimMode == true && &cmd != "boot"  {
+        error!("*********shim mode***************");
+        containerd_shim::run::<Service>("io.containerd.empty.v1", None)
+
+    } else {
+        let mut args = Parse().unwrap();
+        match Run(&mut args) {
+            Err(e) => {
+                error!("the error is {:?}", e);
+                ::std::process::exit(-1);
+            }
+            Ok(()) => {
+                //error!("successfully ...");
+                ::std::process::exit(0);
+            }
         }
     }
 }
