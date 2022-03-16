@@ -164,7 +164,10 @@ impl Task for ShimTask {
         sandboxLock.ID = container.SandboxId();
         sandboxLock.Pid = container.Pid();
 
-        Self::WaitAll(self.containers.clone());
+        let len = containers.len();
+        if len == 0 { // root container
+            Self::WaitAll(self.containers.clone());
+        }
 
         containers.insert(id.to_string(), container);
         info!("Create request for {} returns pid {}", id, resp.pid);

@@ -50,7 +50,7 @@ core_affinity = "0.5.10"
 cache-padded = "1.1.1"
 #rdmaffi = { git = "https://github.com/QuarkContainer/RDMARust.git", package = "rdma-sys", version = "0.1.0" }
 containerd-shim = { path = "/home/brad/rust/rust-extensions/crates/shim", package = "containerd-shim", version = "0.2.0" }
-#containerd-shim = { path = "https://github.com/containerd/rust-extensions.git", package = "containerd-shim", version = "0.2.0" }
+#containerd-shim = { path = "https://github.com/QuarkContainer/rust-extensions.git", package = "containerd-shim", version = "0.2.0" }
 oci-spec = "0.5.4"
 crossbeam = "0.8.1"
 os_pipe = "1.0.0"
