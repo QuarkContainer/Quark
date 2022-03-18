@@ -137,6 +137,9 @@ impl PtyIO {
         unsafe {
             //let tty = self.slave.dup()?;
             let tty = self.slave.pty;
+            if libc::ioctl(tty, libc::TIOCSCTTY) < 0 {
+                error!("could not TIOCSCTTY");
+            };
             cmd.stdin(ProcessStdio::from_raw_fd(tty));
             cmd.stdout(ProcessStdio::from_raw_fd(tty));
             cmd.stderr(ProcessStdio::from_raw_fd(tty));
@@ -341,9 +344,23 @@ pub fn spawn_copy<R: Read + Send + 'static, W: Write + Send + 'static>(
     on_close_opt: Option<Box<dyn FnOnce() + Send + Sync>>,
 ) -> JoinHandle<()> {
     std::thread::spawn(move || {
-        if let Err(e) = std::io::copy(&mut from, &mut to) {
+        /*if let Err(e) = std::io::copy(&mut from, &mut to) {
             debug!("copy io error: {}", e);
+        }*/
+
+        let mut buf = [0; 1024];
+        loop {
+            match from.read(&mut buf) {
+                Err(e) => panic!("spawn_copy e {:?}", e),
+                Ok(cnt) => {
+                    if cnt == 0 {
+                        break;
+                    }
+                    assert!(to.write(&buf[0..cnt]).unwrap()==cnt)
+                }
+            }
         }
+
         if let Some(x) = on_close_opt {
             x()
         };
