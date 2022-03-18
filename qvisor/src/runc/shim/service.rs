@@ -20,10 +20,10 @@ use containerd_shim::util::*;
 use containerd_shim::spawn;
 use containerd_shim::StartOpts;
 use containerd_shim::Config;
-use containerd_shim::RemotePublisher;
 use containerd_shim::Shim;
 use containerd_shim::Result;
 use containerd_shim::protos::protobuf::SingularPtrField;
+use containerd_shim::publisher::RemotePublisher;
 
 //use super::super::super::qlib::common;
 //use super::super::super::qlib::common::*;
@@ -51,7 +51,6 @@ impl Shim for Service {
         _runtime_id: &str,
         id: &str,
         namespace: &str,
-        _publisher: RemotePublisher,
         _config: &mut Config,
     ) -> Self {
         let exit = Arc::new(ExitSignal::default());
@@ -79,7 +78,7 @@ impl Shim for Service {
             None => {}
         }
 
-        let address = spawn(opts, &grouping, Vec::new())?;
+        let (_, address) = spawn(opts, &grouping, Vec::new())?;
         write_address(&address)?;
         info!("Shim Service start_shim end");
         Ok(address.to_string())
@@ -92,7 +91,7 @@ impl Shim for Service {
         let mut resp = DeleteResponse::new();
         // sigkill
         resp.exit_status = 137;
-        resp.exited_at = SingularPtrField::some(get_timestamp()?);
+        resp.exited_at = SingularPtrField::some(timestamp()?);
         info!("Shim Service delete_shim finish");
         Ok(resp)
     }
@@ -103,7 +102,8 @@ impl Shim for Service {
         info!("Shim Service wait finish");
     }
 
-    fn create_task_service(&self) -> Self::T {
+    // todo, handle publisher passed by 
+    fn create_task_service(&self, _publisher: RemotePublisher) -> Self::T {
         return self.task.clone()
     }
 }

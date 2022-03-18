@@ -204,7 +204,8 @@ checksum = "245097e9a4535ee1e3e3931fcfcd55a796a44c643e8596ff6566d68f09b87bbc"
 
 [[package]]
 name = "containerd-shim"
-version = "0.2.0"
+version = "0.3.0"
+source = "git+https://github.com/QuarkContainer/rust-extensions.git#b3ac82d9cc2a2674543118bb282537d132870c1a"
 dependencies = [
  "command-fds",
  "containerd-shim-protos",
@@ -226,7 +227,8 @@ dependencies = [
 
 [[package]]
 name = "containerd-shim-protos"
-version = "0.1.2"
+version = "0.2.0"
+source = "git+https://github.com/QuarkContainer/rust-extensions.git#b3ac82d9cc2a2674543118bb282537d132870c1a"
 dependencies = [
  "protobuf",
  "ttrpc",
