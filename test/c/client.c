@@ -50,7 +50,28 @@ int main(int argc, char const *argv[])
     { 
         printf("\n Socket creation error \n"); 
         return -1; 
-    } 
+    }
+
+    struct sockaddr_in sa;
+    int sa_len;
+    sa_len = sizeof(sa);
+    printf("sa_len: %d\n", sa_len);
+    printf("sock is %d\n", sock);
+    if (getsockname(sock, &sa, &sa_len) == -1) {
+          perror("getsockname() failed");
+          return -1;
+    }
+    printf("Local IP address is: %s\n", inet_ntoa(sa.sin_addr));
+    printf("Local port is: %d\n", (int) ntohs(sa.sin_port));
+
+    int ret = 0;
+    if (getpeername(sock, &sa, &sa_len) == -1) {
+              printf("errorno: %d\n", errno);
+              perror("getsockname() failed");
+              return -1;
+    }
+    printf("Remote IP address is: %s\n", inet_ntoa(sa.sin_addr));
+    printf("Remote port is: %d\n", (int) ntohs(sa.sin_port));
 
     printf("start to connect \n");
     sleep(1);
@@ -59,7 +80,8 @@ int main(int argc, char const *argv[])
     serv_addr.sin_port = htons(PORT); 
        
     // Convert IPv4 and IPv6 addresses from text to binary form 
-    if(inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr)<=0)  
+    //if(inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr)<=0)
+    if(inet_pton(AF_INET, "172.16.1.6", &serv_addr.sin_addr)<=0)
     { 
         printf("\nInvalid address/ Address not supported \n"); 
         return -1; 
@@ -74,9 +96,9 @@ int main(int argc, char const *argv[])
     printf("Accept Remote IP address is: %s\n", inet_ntoa(serv_addr.sin_addr));
     printf("Accept Remote port is: %d\n", (int) ntohs(serv_addr.sin_port));
 
-    struct sockaddr_in sa;
-    int sa_len;
-    sa_len = sizeof(sa);
+    // struct sockaddr_in sa;
+    // int sa_len;
+    // sa_len = sizeof(sa);
     if (getsockname(sock, &sa, &sa_len) == -1) {
           perror("getsockname() failed");
           return -1;

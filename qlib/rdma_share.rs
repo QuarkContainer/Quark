@@ -15,6 +15,7 @@
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
+use std::sync::atomic::AtomicI64;
 
 pub const COUNT: usize = 128;
 pub struct RingQueue <T: 'static + Default> {
@@ -143,6 +144,7 @@ pub const MTU: usize = 1500;
 pub const UDP_BUF_COUNT: usize = 512 * 1024; // 512K udp buff
 
 // udp buf, around 1516 bytes
+#[derive(Copy, Clone)]
 pub struct UDPBuf {
     pub vpcId: u32,
     pub srcIPAddr: u32,
@@ -153,8 +155,34 @@ pub struct UDPBuf {
     pub data: [u8; MTU],
 }
 
+impl Default for UDPBuf {
+    fn default() -> UDPBuf {
+        UDPBuf {
+            vpcId: 0,
+            srcIPAddr: 0,
+            dstIPAddr: 0,
+            srcPort: 0,
+            dstPort: 0,
+            data: [0; MTU]
+        }
+    }
+}
+
 pub struct ShareRegion {
     pub srvBitmap: AtomicU64, // whether server is sleeping
     pub bitmap: TriggerBitmap,
     pub udpBufs: [UDPBuf; UDP_BUF_COUNT]
+}
+
+impl Default for ShareRegion {
+    fn default() -> ShareRegion {
+        ShareRegion {
+            srvBitmap: AtomicU64::new(0),
+            bitmap: TriggerBitmap {
+                l1bitmap: [0; 4],
+                l2bitmap: [0; BITMAP_COUNT]
+            },
+            udpBufs: [UDPBuf::default(); UDP_BUF_COUNT]
+        }
+    }
 }

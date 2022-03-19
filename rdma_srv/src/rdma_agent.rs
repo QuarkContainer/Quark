@@ -19,6 +19,9 @@ use super::qlib::rdma_share::*;
 pub struct RDMAAgentIntern {
     pub id: u32,
 
+    // client id passed when initialize RDMASvcCli, can use container id for container.
+    pub clientId: String,
+
     // the unix socket fd between rdma client and RDMASrv
     pub sockfd: i32,
 
@@ -32,6 +35,8 @@ pub struct RDMAAgentIntern {
     pub shareMemRegion: MemRegion,
 
     pub shareRegion: &'static mut ClientShareRegion,
+
+    // TODO: indexes allocated for io buffer.
 }
 
 pub struct RDMAAgent(Arc<RDMAAgentIntern>);

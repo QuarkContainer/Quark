@@ -1,8 +1,13 @@
 .PHONY: debug release
 
 debug:
-	CARGO_TARGET_DIR=../target cargo build
+	cargo build
+	# CARGO_TARGET_DIR=../target cargo build
 
+clean:
+	cargo clean
+	# CARGO_TARGET_DIR=../target cargo clean
 release:
-	CARGO_TARGET_DIR=../target cargo build --release
+	cargo build --release
+	# CARGO_TARGET_DIR=../target cargo build --release
 

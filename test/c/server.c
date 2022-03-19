@@ -2,7 +2,8 @@
 #include <stdio.h> 
 #include <sys/socket.h> 
 #include <stdlib.h> 
-#include <netinet/in.h> 
+//#include <netinet/in.h> 
+#include <arpa/inet.h>
 #include <string.h>
 #include <errno.h>
 #include <wait.h>
@@ -20,17 +21,45 @@ void handler1(int sig)
     fflush(stdout);
 }
 
+void test()
+{
+    printf("test begin\n");
+    int sock = 0, valread;
+    struct sockaddr_in serv_addr; 
+    char *hello = "Hello from client"; 
+    char buffer[1024] = {0}; 
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) 
+    { 
+        printf("\n Socket creation error \n"); 
+        return -1; 
+    }
+
+    struct sockaddr_in sa;
+    int sa_len;
+    sa_len = sizeof(sa);
+    printf("sa_len: %d\n", sa_len);
+    printf("sock is %d\n", sock);
+    if (getsockname(sock, &sa, &sa_len) == -1) {
+          perror("getsockname() failed");
+          return -1;
+    }
+    printf("Local IP address is: %s\n", inet_ntoa(sa.sin_addr));
+    printf("Local port is: %d\n", (int) ntohs(sa.sin_port));
+    printf("test end\n");
+}
+
 int main(int argc, char const *argv[]) 
 { 
-    int server_fd, new_socket, valread; 
+    //test();
+    int server_fd=0, new_socket, valread; 
     struct sockaddr_in address; 
     int opt = 1; 
     int addrlen = sizeof(address); 
     char buffer[1024] = {0}; 
     char *hello = "Hello from server";
 
-    //write(1, hello, strlen(hello));
-    //printf("sig..... = %d\n", 123);
+    write(1, hello, strlen(hello));
+    printf("sig..... = %d\n", 123);
 
     signal(SIGUSR1, handler1);
     kill(getpid(), SIGUSR1);
@@ -41,6 +70,26 @@ int main(int argc, char const *argv[])
         perror("socket failed"); 
         exit(EXIT_FAILURE); 
     } 
+
+    struct sockaddr_in sa;
+    int sa_len;
+    sa_len = sizeof(sa);
+    memset (&sa, 0, sa_len);
+    printf("sa_len: %d\n", sa_len);
+    printf("sock is %d\n", server_fd);
+    if (getsockname(server_fd, &sa, &sa_len) == -1) {
+          perror("getsockname() failed");
+          return -1;
+    }
+    printf("Local IP address is: %s\n", inet_ntoa(sa.sin_addr));
+    printf("Local port is: %d\n", (int) ntohs(sa.sin_port));
+
+    // if (getpeername(server_fd, &sa, &sa_len) == -1) {
+    //           perror("getsockname() failed");
+    //           return -1;
+    // }
+    // printf("Remote IP address is: %s\n", inet_ntoa(sa.sin_addr));
+    // printf("Remote port is: %d\n", (int) ntohs(sa.sin_port));
        
     // Forcefully attaching socket to the port 8080 
     if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, 
@@ -60,17 +109,52 @@ int main(int argc, char const *argv[])
         perror("bind failed"); 
         exit(EXIT_FAILURE); 
     } 
+    if (getsockname(server_fd, &sa, &sa_len) == -1) {
+          perror("getsockname() failed");
+          return -1;
+    }
+    printf("Local IP address is: %s\n", inet_ntoa(sa.sin_addr));
+    printf("Local port is: %d\n", (int) ntohs(sa.sin_port));
     if (listen(server_fd, 3) < 0) 
     { 
         perror("listen"); 
         exit(EXIT_FAILURE); 
     } 
+    
+    if (getsockname(server_fd, &sa, &sa_len) == -1) {
+          perror("getsockname() failed");
+          return -1;
+    }
+    printf("Local IP address is: %s\n", inet_ntoa(sa.sin_addr));
+    printf("Local port is: %d\n", (int) ntohs(sa.sin_port));
+
+    // if (getpeername(server_fd, &sa, &sa_len) == -1) {
+    //           perror("getsockname() failed");
+    //           return -1;
+    // }
+    // printf("Remote IP address is: %s\n", inet_ntoa(sa.sin_addr));
+    // printf("Remote port is: %d\n", (int) ntohs(sa.sin_port));
     while ((new_socket = accept(server_fd, (struct sockaddr *)&address,
                        (socklen_t*)&addrlen))<0) {
         printf("accept %d", errno);
     }
     printf("get connection\n");
     sleep(1);
+
+    if (getsockname(new_socket, &sa, &sa_len) == -1) {
+          perror("getsockname() failed");
+          return -1;
+    }
+    printf("Local IP address is: %s\n", inet_ntoa(sa.sin_addr));
+    printf("Local port is: %d\n", (int) ntohs(sa.sin_port));
+
+    if (getpeername(new_socket, &sa, &sa_len) == -1) {
+              perror("getsockname() failed");
+              return -1;
+    }
+
+    printf("Remote IP address is: %s\n", inet_ntoa(sa.sin_addr));
+    printf("Remote port is: %d\n", (int) ntohs(sa.sin_port));
 
     int n = write(new_socket , hello , strlen(hello));
     printf("Server::write Hello message sent %d\n", n);

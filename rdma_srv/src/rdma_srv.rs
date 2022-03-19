@@ -20,15 +20,35 @@ use super::rdma_conn::*;
 use super::rdma_channel::*;
 use super::rdma_agent::*;
 use super::rdma_ctrlconn::*;
+use std::mem::MaybeUninit;
 
 use lazy_static::lazy_static;
 
 lazy_static! {
-    //pub static ref RDMA_SRV: Mutex<RDMASrv> = RDMASrv::default();
-    //pub static ref RDMA_CTLINFO: CtrlInfo = CtrlInfo::default();
+    pub static ref RDMA_SRV: Mutex<RDMASrv> = Mutex::new(RDMASrv::New());
+    pub static ref RDMA_CTLINFO: CtrlInfo = CtrlInfo::default();
+    //pub static ref RDMA_SRV_SHARED_REGION: ShareRegion = ShareRegion::default();  
+
+}
+
+#[derive(Clone)]
+pub enum SrvEndPointStatus {
+    Binded,
+    Listening, 
+}
+
+pub struct SrvEndpoint {
+    //pub srvEndpointId: u32, // to be returned as bind
+    pub agentId: u32,
+    pub endpoint: Endpoint,
+    pub status: SrvEndPointStatus, //TODO: double check whether it's needed or not
+    //pub acceptQueue: [RDMAChannel; 5], // hold rdma channel which can be assigned.
 }
 
 pub struct RDMASrv {
+    // epoll fd
+    pub epollFd: i32,
+
     // unix socket srv fd
     pub unixSockfd: i32,
 
@@ -58,13 +78,36 @@ pub struct RDMASrv {
     pub agents: HashMap<u32, RDMAAgent>,
 
     // the bitmap to expedite ready container search
-    pub shareRegion: &'static ShareRegion,
+    //pub shareRegion: &'static ShareRegion,
+
+    // keep track of server endpoint on current node
+    pub srvEndPoints: HashMap<Endpoint, SrvEndpoint>,
+
+    pub currNode: Node,
+
+    //TODO: indexes allocated for io buffer.
 }
 
 impl RDMASrv {
-    /*pub fn New() -> Self {
-
-    }*/
+    pub fn New() -> Self {
+        return Self {
+            epollFd: 0,
+            unixSockfd: 0,
+            tcpSockfd: 0,
+            eventfd: 0,
+            srvMemfd: 0,
+            srvMemRegion: MemRegion {
+                addr: 0,
+                len: 0
+            },
+            conns: HashMap::new(),
+            channels: HashMap::new(),
+            agents: HashMap::new(),
+            //shareRegion: &RDMA_SRV_SHARED_REGION,
+            srvEndPoints: HashMap::new(),
+            currNode: Node::default()
+        }
+    }
 }
 
 // scenarios:

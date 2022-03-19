@@ -23,6 +23,20 @@ use super::rdma_agent::*;
 // RDMA Channel
 use super::qlib::bytestream::*;
 
+pub enum SockStatus {
+    CLOSE_WAIT,
+    CLOSING,
+    ESTABLISHED,
+    SYN_RECEIVED,
+    // ... to simulate TCP status
+}
+
+pub enum DuplexMode {
+    SHUTDOWN_RD,
+    SHUTDOWN_WR,
+    SHUTDOWN_RDWR,
+}
+
 pub struct RDMAChannelIntern {
     pub localId: u32,
     pub remoteId: u32,
@@ -30,18 +44,32 @@ pub struct RDMAChannelIntern {
     pub writeBuf: Mutex<ByteStream>,
     pub consumeReadData: &'static AtomicU64,
 
+    // RDMAInfo: 
+    // let localRDMAInfo = RDMAInfo {
+    //     raddr: addr,
+    //     rlen: len as _,
+    //     rkey: readMR.RKey(),
+    //     offset: 0,
+    //     freespace: len as u32,
+    //     sending: false,
+    // };
+
     // rdma connect to remote node
-    pub conn: RDMAConn,
+    pub conn: Arc<RDMAConn>,
 
     // rdma agent connected to rdma client
-    pub agent: RDMAAgent,
+    pub agent: Arc<RDMAAgent>,
 
     pub vpcId: u32,
     pub srcIPAddr: u32,
     pub dstIPAddr: u32,
     pub srcPort: u16,
-    pub dstPort: u16
+    pub dstPort: u16,
+    pub status: SockStatus,
+    pub duplexMode: DuplexMode,
+    pub ioBufIndex: u32,
 }
 
 pub struct RDMAChannel(Arc<RDMAChannelIntern>);
+
 pub struct RDMAChannelWeak(Weak<RDMAChannelIntern>);
