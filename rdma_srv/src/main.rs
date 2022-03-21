@@ -94,6 +94,7 @@ use rdma_ctrlconn::Node;
 use std::io::Error;
 use std::str::FromStr;
 use std::{env, mem};
+use core::sync::atomic::Ordering;
 
 #[allow(unused_macros)]
 macro_rules! syscall {
@@ -130,7 +131,23 @@ pub enum FdType {
     RDMACompletionChannel,
 }
 
-fn main() -> io::Result<()> {
+fn main() {
+    println!("RDMA Service is starting!");
+    println!("size is: {}", mem::size_of::<qlib::rdma_share::ShareRegion>());
+
+    let shareRegionSize = mem::size_of::<qlib::rdma_share::ShareRegion>();
+    let addr = unsafe {libc::malloc(shareRegionSize)};
+    println!("addr: 0x{:x}", addr as u64);
+    let eventAddr = addr as *mut ShareRegion; // as &mut qlib::Event;
+    let shareRegion = unsafe {
+        &mut (*eventAddr)
+    };
+    RDMA_SRV.lock().shareRegion = shareRegion;
+    shareRegion.srvBitmap.store(64, Ordering::SeqCst);
+    println!("srvBitmap: {}", RDMA_SRV.lock().shareRegion.srvBitmap.load(Ordering::Relaxed));
+}
+
+fn main_backup() -> io::Result<()> {
     println!("RDMA Service is starting!");
     println!("size of RDMAConn: {}", mem::size_of::<RDMAConn>()); 
     //TODO: make devicename and port configurable
@@ -255,7 +272,7 @@ fn main() -> io::Result<()> {
         println!("res is: {}", res);
 
         for ev in &events {
-            print!("u64: {}, events: {:x}", ev.U64, ev.Events);
+            //print!("u64: {}, events: {:x}", ev.U64, ev.Events);
             let event_data = fds.get(&(ev.U64 as i32));
             match event_data {
                 Some(FdType::TCPSocketServer) => {
@@ -301,7 +318,7 @@ fn main() -> io::Result<()> {
                     println!("xx");
                 }
                 None => {
-                    panic!("unexpected fd {} found", ev.U64);
+                    //panic!("unexpected fd {} found", ev.U64);
                 }
             }
         }
