@@ -220,7 +220,7 @@ impl Loader {
 
         //self.processes.insert(ExecID{cid: procArgs.ContainerID.to_string(), pid: tid}, execProc);
         //for the root container, the tid is always 0,
-        self.Lock(task)?.processes.insert(ExecID{cid: procArgs.ContainerID.to_string(), pid: 0}, execProc);
+        self.Lock(task)?.processes.insert(ExecID{cid: procArgs.ContainerID.to_string(), pid: tid}, execProc);
 
         let (entry, userStackAddr, kernelStackAddr) = kernel.LoadProcess(&procArgs.Filename, &procArgs.Envv, &mut procArgs.Argv)?;
         return Ok((tid, entry, userStackAddr, kernelStackAddr))
@@ -557,6 +557,7 @@ pub fn NewProcess(process: Process, creds: &auth::Credentials, k: &Kernel) -> Cr
         ContainerID: process.ID,
         Stdiofds: stdiofds,
         Terminal: process.Terminal,
+        ExecId: process.ExecId.clone(),
         ..Default::default()
     }
 }

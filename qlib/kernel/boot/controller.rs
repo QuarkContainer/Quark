@@ -14,6 +14,7 @@
 
 use alloc::vec::Vec;
 use core::{ptr};
+use alloc::string::String;
 
 use super::super::super::common::*;
 use super::super::super::control_msg::*;
@@ -23,6 +24,8 @@ use super::super::taskMgr;
 use super::super::task::*;
 use super::super::super::super::kernel_def::{StartRootContainer, StartExecProcess, StartSubContainerProcess};
 use super::super::LOADER;
+use super::super::SetWaitContainerfd;
+use super::super::WaitContainerfd;
 use super::super::IOURING;
 use super::super::SHARESPACE;
 use super::process::*;
@@ -174,11 +177,23 @@ pub fn ControlMsgHandler(fd: *const u8) {
             }
 
         }
+        Payload::WaitAll => {
+            SetWaitContainerfd(fd);
+        }
     }
 
     // free curent task in the waitfn context
     CPULocal::SetPendingFreeStack(Task::Current().taskId);
     super::super::taskMgr::SwitchToNewTask();
+}
+
+pub fn WriteWaitAllResponse(cid: String, execId: String, status: i32) {
+    let fd = WaitContainerfd();
+    WriteControlMsgResp(fd, &UCallResp::WaitAllResp(WaitAllResp{
+        cid,
+        execId,
+        status
+    }));
 }
 
 pub fn WriteControlMsgResp(fd: i32, msg: &UCallResp) {

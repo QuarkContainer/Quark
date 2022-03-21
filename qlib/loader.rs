@@ -45,5 +45,6 @@ pub struct Process {
 
     pub Root: String,
     pub Stdiofds: [i32; 3],
+    pub ExecId: Option<String>,
 }
 

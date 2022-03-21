@@ -61,6 +61,7 @@ pub fn ExecProcessHandler(execArgs: &mut ExecArgs, fds: &[i32]) -> Result<Contro
     process.GID = execArgs.KGID.0;
     process.AdditionalGids.append(&mut execArgs.ExtraKGIDs.iter().map(| gid | gid.0).collect());
     process.Terminal = execArgs.Terminal;
+    process.ExecId = Some(execArgs.ExecId.clone());
 
     for i in 0..execArgs.Fds.len() {
         let osfd = execArgs.Fds[i];
@@ -93,6 +94,11 @@ pub fn PsHandler(cid: &str) -> Result<ControlMsg> {
 
 pub fn WaitHandler(cid: &str) -> Result<ControlMsg> {
     let msg = ControlMsg::New(Payload::WaitContainer(cid.to_string()));
+    return Ok(msg)
+}
+
+pub fn WaitAll() -> Result<ControlMsg> {
+    let msg = ControlMsg::New(Payload::WaitAll);
     return Ok(msg)
 }
 
@@ -162,6 +168,7 @@ pub fn ProcessReqHandler(req: &mut UCallReq, fds: &[i32]) -> Result<ControlMsg> 
         UCallReq::ContainerDestroy(cid) => ContainerDestroyHandler(cid)?,
         UCallReq::CreateSubContainer(args) => CreateSubContainerHandler(args, fds)?,
         UCallReq::StartSubContainer(args) => StartSubContainerHandler(args, fds)?,
+        UCallReq::WaitAll => WaitAll()?,
     };
 
     return Ok(msg)

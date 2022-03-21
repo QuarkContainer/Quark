@@ -18,11 +18,11 @@ use core::ops::Deref;
 use libc::*;
 
 use super::socket_info::*;
-use super::rdma_socket::*;
+//use super::rdma_socket::*;
 use super::super::*;
 use super::super::qlib::common::*;
 use super::super::super::util::*;
-use super::super::FD_NOTIFIER;
+//use super::super::FD_NOTIFIER;
 
 #[derive(Clone, Debug)]
 pub struct FdInfo (pub Arc<Mutex<FdInfoIntern>>);
@@ -308,9 +308,9 @@ impl FdInfo {
         return Self(Arc::new(Mutex::new(FdInfoIntern::NewSocket(fd))))
     }
 
-    pub fn NewRDMAContext(fd: i32) -> Self {
+    /*pub fn NewRDMAContext(fd: i32) -> Self {
         return Self(Arc::new(Mutex::new(FdInfoIntern::NewRDMAContext(fd))))
-    }
+    }*/
 
     pub fn IOBufWrite(&self, addr: u64, len: usize, offset: isize) -> i64 {
         let fd = self.lock().fd;
@@ -408,7 +408,7 @@ impl FdInfo {
         return Self::Listen(sockfd, backlog, block);
     }
 
-    pub fn RDMAListen(&self, backlog: i32, block: bool, acceptQueue: AcceptQueue) -> i64 {
+    /*pub fn RDMAListen(&self, backlog: i32, block: bool, acceptQueue: AcceptQueue) -> i64 {
         let sockfd = self.lock().fd;
         let ret = Self::Listen(sockfd, backlog, block);
         if ret < 0 {
@@ -516,7 +516,7 @@ impl FdInfo {
         if !RDMA_ENABLE {
             msg.Finish(0)
         }
-    }
+    }*/
 
     pub fn IOShutdown(&self, how: i32) -> i64 {
         let sockfd = self.lock().fd;
@@ -558,7 +558,7 @@ impl FdInfoIntern {
         return res;
     }
 
-    pub fn NewRDMAContext(fd: i32) -> Self {
+    /*pub fn NewRDMAContext(fd: i32) -> Self {
         let flags = unsafe {
             fcntl(fd, F_GETFL)
         };
@@ -571,7 +571,7 @@ impl FdInfoIntern {
         };
 
         return res;
-    }
+    }*/
 
     pub fn NewSocket(fd: i32) -> Self {
         //info!("New fd {}, hostfd{}: epollable is {}", fd, hostfd, epollable);

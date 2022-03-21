@@ -296,10 +296,13 @@ impl Thread {
 
             let kernel = t.k.clone();
             let limit = tg.lock().limits.clone();
+            let cid = tg.lock().containerID.clone();
             tg = kernel.newThreadGroup(&pidns,
                                        &sh,
                                        opts.sharingOption.TerminationSignal.clone(),
-                                       &limit.GetCopy());
+                                       &limit.GetCopy(),
+                                       &cid,
+                                       &None);
         }
 
         let mut cfg = TaskConfig {

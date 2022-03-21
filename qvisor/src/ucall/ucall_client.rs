@@ -53,4 +53,30 @@ impl UCallClient {
         }
         return Ok(resp);
     }
+
+    pub fn StreamCall(&self, req: &UCallReq) -> Result<()> {
+        let reqArr = serde_json::to_vec(req).map_err(|e|Error::Common(format!("UCallClient ser error is {:?}", e)))?;
+        let fds = req.GetFds();
+        match fds {
+            None => self.sock.WriteLen(reqArr.len(), &[])?,
+            Some(fds) => self.sock.WriteLen(reqArr.len(), fds)?,
+        }
+
+        self.sock.WriteAll(&reqArr)?;
+        return Ok(())
+    }
+
+    pub fn StreamGetRet(&self) -> Result<UCallResp> {
+        let (len, _fds) = self.sock.ReadLen()?;
+        let mut buf : [u8; UCALL_BUF_LEN] = [0; UCALL_BUF_LEN];
+
+        assert!(len < UCALL_BUF_LEN, "UCallClient::Call resp is too long");
+        self.sock.ReadAll(&mut buf[0..len])?;
+        let resp : UCallResp = serde_json::from_slice(&buf[0..len]).map_err(|e|Error::Common(format!("UCallClient deser error is {:?}", e)))?;
+        match resp {
+            UCallResp::UCallRespErr(s) => return Err(Error::Common(s)),
+            _ => (),
+        }
+        return Ok(resp);
+    }
 }

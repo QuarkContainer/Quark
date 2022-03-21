@@ -90,6 +90,15 @@ impl Master {
         return res;
     }
 
+    pub fn dup(&self) -> Result<i32> {
+        unsafe {
+            match libc::dup(self.as_raw_fd()) {
+                -1 => Err(Error::SysError(-errno::errno().0)),
+                d => Ok(d),
+            }
+        }
+    }
+
     /// Change UID and GID of slave pty associated with master pty whose
     /// fd is provided, to the real UID and real GID of the calling thread.
     pub fn grantpt(&self) -> Result<i32> {

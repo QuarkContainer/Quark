@@ -19,8 +19,11 @@ use alloc::str;
 use lazy_static::lazy_static;
 use spin::Mutex;
 use nix::sys::signal;
+use core::convert::TryFrom;
 
 use super::super::specutils::specutils;
+use super::super::super::qlib::auth::id::*;
+use super::super::super::qlib::auth::cap_set::*;
 use super::super::super::qlib::*;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
@@ -32,10 +35,13 @@ use super::super::super::vmspace::limits::CreateLimitSet;
 use super::super::runtime::console::*;
 use super::super::cgroup::*;
 use super::super::oci::*;
+use super::super::oci;
 use super::super::container::container::*;
 use super::super::cmd::config::*;
 use super::super::runtime::sandbox_process::*;
 use super::super::super::qlib::loader;
+
+use super::super::shim::container_io::*;
 
 lazy_static! {
     static ref SIGNAL_STRUCT : Mutex<Option<SignalStruct>> = Mutex::new(None);
@@ -84,7 +90,7 @@ impl SignalStruct {
             }
 
             unsafe {
-                signal::sigaction(signal::Signal::from_c_int(i as i32).unwrap(), &sig_action)
+                signal::sigaction(signal::Signal::try_from(i as i32).unwrap(), &sig_action)
                     .map_err(|e| Error::Common(format!("sigaction fail with err {:?} for signal {}", e, i)))
                     .unwrap();
             }
@@ -195,6 +201,32 @@ impl Sandbox {
         let (pid, console) = process.Execv(terminal, consoleSocket, detach)?;
 
         s.console = console;
+        s.child = true;
+        s.Pid = pid;
+
+        return Ok(s)
+    }
+
+    pub fn New1(id: &str,
+               action: RunAction,
+               conf: &GlobalConfig,
+               bundleDir: &str,
+               io: &ContainerIO,
+               _userlog: &str,
+               cg: Option<Cgroup>,
+               pivot: bool) -> Result<Self> {
+        let mut s = Self {
+            ID: id.to_string(),
+            Cgroup: cg,
+            ..Default::default()
+        };
+
+        //let pid = CreateSandboxProcess(conf, id, bundleDir, ptyfd, autoStart)?;
+
+        let process = SandboxProcess::New(conf, action, id, bundleDir, pivot)?;
+        //let pid = process.Fork()?;
+        let pid = process.Execv1(io)?;
+
         s.child = true;
         s.Pid = pid;
 
@@ -331,6 +363,56 @@ impl Sandbox {
         }
     }
 
+    pub fn Exec1(&self, containerId: &str, execId: &str, process: &oci::Process, stdios: &[i32]) -> Result<i32> {
+        let caps = TaskCaps::default();
+
+        let mut extraKGIDs : Vec<KGID> = Vec::with_capacity(process.user.additional_gids.len());
+        for gid in &process.user.additional_gids {
+            extraKGIDs.push(KGID(*gid))
+        }
+
+        let mut argv = Vec::new();
+        for args in &process.args {
+            argv.push(args.clone())
+        }
+
+        let mut envv = Vec::new();
+        for env in &process.env {
+            envv.push(env.clone())
+        }
+
+        let mut fds = Vec::new();
+        for fd in stdios {
+            fds.push(*fd);
+        }
+
+        let args = ExecArgs {
+            Argv: argv,
+            Envv: envv,
+            Root: "".to_string(),
+            WorkDir: process.cwd.to_string(),
+            KUID: KUID(process.user.uid),
+            KGID: KGID(process.user.gid),
+            ExtraKGIDs: extraKGIDs,
+            Capabilities: caps,
+            Terminal: process.terminal,
+            ContainerID: containerId.to_string(),
+            Detach: false,
+            ConsoleSocket: "".to_string(),
+            ExecId: execId.to_string(),
+            Fds: fds,
+        };
+
+        let client = self.SandboxConnect()?;
+        let req = UCallReq::ExecProcess(args);
+        let pid = match client.Call(&req)? {
+            UCallResp::ExecProcessResp(pid) => pid,
+            resp => panic!("sandbox::Execute get error {:?}", resp),
+        };
+
+        return Ok(pid)
+    }
+
     pub fn Execute(&self, mut args: ExecArgs) -> Result<i32> {
         info!("Executing new process in container {} in sandbox {}", &args.ContainerID, &self.ID);
 
@@ -346,6 +428,21 @@ impl Sandbox {
         };
 
         return Ok(pid)
+    }
+
+    pub fn WaitAll(&self) -> Result<UCallClient> {
+        let client = self.SandboxConnect()?;
+        let req = UCallReq::WaitAll;
+        client.StreamCall(&req)?;
+        return Ok(client)
+    }
+
+    pub fn GetWaitAllResp(client: &UCallClient) -> Result<WaitAllResp> {
+        let resp = match client.StreamGetRet()? {
+            UCallResp::WaitAllResp(resp) => resp,
+            resp => panic!("sandbox::GetWaitAllResp get error {:?}", resp),
+        };
+        return Ok(resp)
     }
 
     pub fn Destroy(&mut self) -> Result<()> {

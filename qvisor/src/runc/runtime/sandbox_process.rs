@@ -41,6 +41,7 @@ use super::super::oci::*;
 use super::super::container::nix_ext::*;
 use super::super::container::mounts::*;
 use super::super::container::container::*;
+use super::super::shim::container_io::*;
 use super::super::cmd::config::*;
 use super::super::specutils::specutils::*;
 use super::super::super::ucall::usocket::*;
@@ -429,6 +430,53 @@ impl SandboxProcess {
 
         return Ok((child.id() as i32, console));
     }
+
+    pub fn Execv1(&self, io: &ContainerIO) -> Result<i32> {
+        use libc::*;
+
+        let mut cmd = Command::new(&ReadLink(EXE_PATH)?);
+        cmd.arg("boot");
+
+        let (fd0, fd1) = Self::CreatePipe()?;
+
+        unsafe {
+            //enable FD_CLOEXEC for pipefd1 so that it will auto close in child process
+            let ret = fcntl(fd1, F_SETFD, FD_CLOEXEC);
+            if ret < 0 {
+                panic!("fcntl fail");
+            }
+        };
+
+        let mut file1 = unsafe {
+            File::from_raw_fd(fd1)
+        };
+
+        cmd.arg("--pipefd");
+        cmd.arg(&format!("{}", fd0));
+
+        io.Set(&mut cmd)?;
+
+        let child = cmd.spawn()
+            .expect("Boot command failed to start");
+
+        {
+            //close fd1
+            let _file0 = unsafe {
+                File::from_raw_fd(fd0)
+            };
+        }
+
+        serde_json::to_writer(&mut file1, &self)
+            .map_err(|e| Error::IOError(format!("To BootCmd io::error is {:?}", e)))?;
+
+        //close files
+        drop(file1);
+
+        self.Parent(child.id() as i32)?;
+
+        return Ok(child.id() as i32);
+    }
+
 
     pub fn StartLog(&self) {
         std::fs::remove_file(&self.conf.DebugLog).ok();

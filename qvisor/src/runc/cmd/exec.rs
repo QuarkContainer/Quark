@@ -246,6 +246,7 @@ impl ExecCmd {
             Detach: self.detach,
             ContainerID: self.id.to_string(),
             ConsoleSocket: self.consoleSocket.to_string(),
+            ExecId: "".to_string(),
             Fds: Vec::new(),
         })
     }
@@ -279,6 +280,7 @@ impl ExecCmd {
             ContainerID: self.id.to_string(),
             Detach: self.detach,
             ConsoleSocket: self.consoleSocket.to_string(),
+            ExecId: "".to_string(),
             Fds: Vec::new(),
         })
     }

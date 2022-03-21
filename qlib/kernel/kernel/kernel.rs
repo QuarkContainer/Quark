@@ -145,12 +145,17 @@ impl KernelInternal {
     pub fn newThreadGroup(&self, ns: &PIDNamespace,
                           sh: &SignalHandlers,
                           terminalSignal: Signal,
-                          limit: &LimitSet) -> ThreadGroup {
+                          limit: &LimitSet,
+                          cid: &str,
+                          execId: &Option<String>
+    ) -> ThreadGroup {
         let internal = ThreadGroupInternal {
             pidns: ns.clone(),
             signalHandlers: sh.clone(),
             terminationSignal: terminalSignal,
             limits: limit.clone(),
+            containerID: cid.to_string(),
+            execId: execId.clone(),
             ..Default::default()
         };
 
@@ -282,7 +287,7 @@ impl Kernel {
         self.extMu.lock();
 
         let root = self.tasks.Root();
-        let tg = self.newThreadGroup(&root, &SignalHandlers::default(), Signal(Signal::SIGCHLD), &args.Limits);
+        let tg = self.newThreadGroup(&root, &SignalHandlers::default(), Signal(Signal::SIGCHLD), &args.Limits, &args.ContainerID, &args.ExecId);
         tg.lock().liveThreads.Add(1);
 
         if args.Filename.as_str() == "" {
@@ -569,4 +574,5 @@ pub struct CreateProcessArgs {
 
     pub Stdiofds: [i32; 3],
     pub Terminal: bool,
+    pub ExecId: Option<String>,
 }

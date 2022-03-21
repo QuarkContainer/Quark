@@ -46,9 +46,10 @@ pub fn AQHostCall(msg: HostOutputMsg, _shareSpace: &ShareSpace) {
                 panic!("Eventfd write fail with error {}", ret)
             }
         }
-        HostOutputMsg::PostRDMAConnect(addr) => {
-            let msgRef = PostRDMAConnect::ToRef(addr);
-            super::VMSpace::PostRDMAConnect(msgRef);
+        HostOutputMsg::PostRDMAConnect(_addr) => {
+            //let msgRef = PostRDMAConnect::ToRef(addr);
+            //super::VMSpace::PostRDMAConnect(msgRef);
+            panic!("PostRDMAConnect qcall not implemented")
         }
     }
 }
@@ -184,11 +185,13 @@ impl KVMVcpu {
             Msg::IOBind(msg) => {
                 ret = super::VMSpace::Bind(msg.sockfd, msg.addr, msg.addrlen, msg.umask) as u64;
             },
-            Msg::RDMAListen(msg) => {
-                ret = super::VMSpace::RDMAListen(msg.sockfd, msg.backlog, msg.block, msg.acceptQueue.clone()) as u64;
+            Msg::RDMAListen(_msg) => {
+                //ret = super::VMSpace::RDMAListen(msg.sockfd, msg.backlog, msg.block, msg.acceptQueue.clone()) as u64;
+                panic!("RDMAListen qcall not implemented")
             },
-            Msg::RDMANotify(msg) => {
-                ret = super::VMSpace::RDMANotify(msg.sockfd, msg.typ) as u64;
+            Msg::RDMANotify(_msg) => {
+                //ret = super::VMSpace::RDMANotify(msg.sockfd, msg.typ) as u64;
+                panic!("RDMANotify qcall not implemented")
             },
             Msg::IOListen(msg) => {
                 ret = super::VMSpace::Listen(msg.sockfd, msg.backlog, msg.block) as u64;
@@ -309,6 +312,9 @@ impl KVMVcpu {
             },
             Msg::UpdateWaitInfo(msg) => {
                 ret = super::VMSpace::UpdateWaitInfo(msg.fd, msg.waitinfo.clone()) as u64;
+            },
+            Msg::Sysinfo(msg) => {
+                ret = super::VMSpace::Sysinfo(msg.addr) as u64;
             },
             Msg::Rdtsc(_msg) => {
                 ret = TSC.Rdtsc() as u64;

@@ -49,7 +49,7 @@ use super::qlib::addr::{Addr};
 use super::qlib::control_msg::*;
 use super::qlib::qmsg::*;
 use super::qlib::cstring::*;
-use super::qlib::socket_buf::*;
+//use super::qlib::socket_buf::*;
 use super::qlib::perf_tunning::*;
 use super::qlib::kernel::guestfdnotifier::*;
 use super::qlib::kernel::SignalProcess;
@@ -193,8 +193,8 @@ impl VMSpace {
     pub fn VCPUCount() -> usize {
         let mut cpuCount = num_cpus::get();
 
-        if cpuCount < 3 {
-            cpuCount = 3; // at least 3 vcpu (one for kernel io, one for host io and other for process vcpu)
+        if cpuCount < 2 {
+            cpuCount = 2; // at least 2 vcpu (one for host io and the other for process vcpu)
         }
 
         if cpuCount > MAX_VCPU_COUNT {
@@ -231,6 +231,7 @@ impl VMSpace {
         process.HostName = spec.hostname.to_string();
 
         process.NumCpu = self.vcpuCount as u32;
+        process.ExecId = Some("".to_string());
 
         for i in 0..process.Stdiofds.len() {
             let osfd = unsafe {
@@ -1042,7 +1043,7 @@ impl VMSpace {
     }
 
 
-    pub fn RDMAListen(sockfd: i32, backlog: i32, block: bool, acceptQueue: AcceptQueue) -> i64 {
+    /*pub fn RDMAListen(sockfd: i32, backlog: i32, block: bool, acceptQueue: AcceptQueue) -> i64 {
         let fdInfo = match Self::GetFdInfo(sockfd) {
             Some(fdInfo) => fdInfo,
             None => return -SysErr::EBADF as i64,
@@ -1070,7 +1071,7 @@ impl VMSpace {
         };
 
         fdInfo.PostRDMAConnect(msg);
-    }
+    }*/
 
     pub fn Shutdown(sockfd: i32, how: i32) -> i64 {
         let fdInfo = match Self::GetFdInfo(sockfd) {
@@ -1175,6 +1176,12 @@ impl VMSpace {
         };
 
         return Self::GetRet(ret as i64)
+    }
+
+    pub fn Sysinfo(info: u64) -> i64 {
+        unsafe {
+            return Self::GetRet(sysinfo(info as *mut sysinfo) as i64);
+        }
     }
 
     pub fn Fadvise(fd: i32, offset: u64, len: u64, advice: i32) -> i64 {

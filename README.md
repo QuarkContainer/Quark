@@ -16,6 +16,9 @@ Quark Container is high performance secure container runtime with following feat
 
 The performance slices is [performance.pdf](doc/performance.pdf). The detail test steps and result is [here](doc/perf_test.md)
 
+## RDMA optimization
+https://docs.google.com/presentation/d/1UcMsW45nNzapWabyhEJ5Ve0hxQ0yYgd0eRtlCydILl8/edit?usp=sharing
+
 ## Architecture
 
 Quark Container takes classic Linux Virtual Machine architecture as below. It includes an HyperVisor named QVisor and a guest kernel named QKernel. Unlike the common Linux Virtual Machine design, in which standard OS image such as Linux/Windows can run on Qumu. QVisor and QKernel are tightly coupled. QVisor only supports QKernel.
@@ -40,7 +43,13 @@ Quark Container's high level design is as below. It handles Container Applicatio
 ### Requirement 
 Quark builds on X86-64 only. Other architecture will be available in the future.
 
-Quark is developed with Rust language. The build needs to install Rust nightly. 
+Quark is developed with Rust language. The build needs to install Rust nightly. Please use current known good version "nightly-2021-12-04-x86_64-unknown-linux-gnu"
+
+```sh
+rustup toolchain install nightly-2021-12-04-x86_64-unknown-linux-gnu
+rustup default nightly-2021-12-04-x86_64-unknown-linux-gnu
+
+```
 
 After installing both Rust and Rust nightly. Please also install "cargo-xbuild" as below.
 ```sh

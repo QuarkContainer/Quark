@@ -27,6 +27,7 @@ pub mod loadavg;
 pub mod mounts;
 pub mod stat;
 pub mod sys;
+pub mod meminfo;
 
 use alloc::sync::Arc;
 use crate::qlib::mutex::*;

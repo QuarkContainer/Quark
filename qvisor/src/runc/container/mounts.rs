@@ -354,7 +354,7 @@ fn mount_from(
         PathBuf::from(&m.source)
     };
 
-    if let Err(::nix::Error::Sys(errno)) =
+    if let Err(errno) =
     mount(Some(&*src), &*dest, Some(&*m.typ), flags, Some(&*d))
         {
             if errno != Errno::EINVAL {
@@ -495,7 +495,7 @@ fn mask_path(path: &str) -> Result<()> {
         return Err(Error::Common(msg))
     }
 
-    if let Err(::nix::Error::Sys(errno)) = mount(
+    if let Err(errno) = mount(
         Some("/dev/null"),
         path,
         None::<&str>,
@@ -518,27 +518,20 @@ fn readonly_path(path: &str) -> Result<()> {
         let msg = format!("invalid readonlyPath: {}", path);
         return Err(Error::Common(msg))
     }
-    if let Err(e) = mount(
+    if let Err(errno) = mount(
         Some(&path[1..]),
         path,
         None::<&str>,
         MsFlags::MS_BIND | MsFlags::MS_REC,
         None::<&str>,
     ) {
-        match e {
-            ::nix::Error::Sys(errno) => {
-                // ignore ENOENT: path to make read only doesn't exist
-                if errno != Errno::ENOENT {
-                    let msg = format!("could not readonly {}", path);
-                    return Err(Error::Common(msg))
-                }
-                debug!("ignoring remount of {} because it doesn't exist", path);
-                return Ok(());
-            }
-            _ => {
-                unreachable!("Supposedly unreachable error {:?}", e);
-            }
+        // ignore ENOENT: path to make read only doesn't exist
+        if errno != Errno::ENOENT {
+            let msg = format!("could not readonly {}", path);
+            return Err(Error::Common(msg))
         }
+        debug!("ignoring remount of {} because it doesn't exist", path);
+        return Ok(());
     }
     mount(
         Some(&path[1..]),
