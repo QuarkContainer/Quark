@@ -220,7 +220,7 @@ impl Loader {
 
         //self.processes.insert(ExecID{cid: procArgs.ContainerID.to_string(), pid: tid}, execProc);
         //for the root container, the tid is always 0,
-        self.Lock(task)?.processes.insert(ExecID{cid: procArgs.ContainerID.to_string(), pid: tid}, execProc);
+        self.Lock(task)?.processes.insert(ExecID{cid: procArgs.ContainerID.to_string(), pid: 0}, execProc);
 
         let (entry, userStackAddr, kernelStackAddr) = kernel.LoadProcess(&procArgs.Filename, &procArgs.Envv, &mut procArgs.Argv)?;
         return Ok((tid, entry, userStackAddr, kernelStackAddr))
