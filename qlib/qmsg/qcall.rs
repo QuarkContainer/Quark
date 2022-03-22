@@ -765,6 +765,7 @@ pub struct WriteControlMsgResp {
     pub fd: i32,
     pub addr: u64,
     pub len: usize,
+    pub close: bool,
 }
 
 pub struct Print<'a> {

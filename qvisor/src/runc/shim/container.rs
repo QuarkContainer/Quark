@@ -191,8 +191,12 @@ impl CommonContainer {
 
     pub fn exec(&mut self, req: ExecProcessRequest) -> Result<()> {
         let exec_id = req.exec_id.to_string();
-        let exec_process = ExecProcess::try_from(req)
+        let mut exec_process = ExecProcess::try_from(req)
             .map_err(|e|Error::Common(format!("{:?}", e)))?;
+
+        let stdio = exec_process.common.stdio.CreateIO()?;
+        exec_process.common.containerIO = stdio;
+
         self.processes.insert(exec_id, exec_process);
         Ok(())
     }
@@ -448,12 +452,12 @@ impl CommonContainer {
                     .get_mut(exec_id)
                     .ok_or_else(|| Error::Common("can not find the exec by id".to_string()))?;
 
-                let stdio = process.common.stdio.CreateIO()?;
-                let fds = stdio.StdioFds()?;
+                let fds = process.common.containerIO.StdioFds()?;
 
                 let pid = self.container.Sandbox.as_ref().unwrap().Exec1(&self.id, exec_id, &process.spec, &fds)?;
-                process.common.containerIO = stdio;
                 process.common.pid = pid;
+                process.common.CopyIO()
+                    .map_err(|e|Error::Common(format!("{:?}", e)))?;
                 return Ok(pid)
             }
             None => {

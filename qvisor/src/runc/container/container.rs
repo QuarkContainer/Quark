@@ -58,7 +58,7 @@ const METADATA_FILENAME : &str = "meta.json";
 // the container state and metadata.
 const METADATA_LOCK_FILENAME : &str = "meta.lock";
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Container {
     // ID is the container ID.
     #[serde(default)]

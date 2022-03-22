@@ -168,7 +168,7 @@ impl VMSpace {
         mns.PivotRoot();
     }
 
-    pub fn WriteControlMsgResp(fd: i32, addr: u64, len: usize) -> i64 {
+    pub fn WriteControlMsgResp(fd: i32, addr: u64, len: usize, close: bool) -> i64 {
         let buf = {
             let ptr = addr as * const u8;
             unsafe { slice::from_raw_parts(ptr, len) }
@@ -185,7 +185,9 @@ impl VMSpace {
             Ok(()) => (),
         }
 
-        usock.Drop();
+        if close {
+            usock.Drop();
+        }
 
         return 0;
     }

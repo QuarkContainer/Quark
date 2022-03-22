@@ -16,7 +16,8 @@ use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::control_msg::*;
 use super::super::qlib::loader;
-use super::super::{IO_MGR};
+use super::super::IO_MGR;
+use super::super::URING_MGR;
 use super::ucall::*;
 use super::usocket::*;
 use super::super::runc::container::container::*;
@@ -65,10 +66,10 @@ pub fn ExecProcessHandler(execArgs: &mut ExecArgs, fds: &[i32]) -> Result<Contro
 
     for i in 0..execArgs.Fds.len() {
         let osfd = execArgs.Fds[i];
-        VMSpace::UnblockFd(osfd);
+        //VMSpace::UnblockFd(osfd);
 
         let hostfd = IO_MGR.AddFile(osfd);
-
+        URING_MGR.lock().Addfd(osfd).unwrap();
         process.Stdiofds[i] = hostfd;
     }
 

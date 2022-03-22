@@ -16,6 +16,8 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use super::super::super::common::*;
+use super::super::LOADER;
+use super::super::ExecID;
 use super::super::super::linux_def::*;
 use super::super::threadmgr::thread::*;
 use super::super::threadmgr::threads::*;
@@ -916,6 +918,7 @@ impl Thread {
         let tg = self.lock().tg.clone();
         let cid = tg.lock().containerID.clone();
         let execId = tg.lock().execId.clone();
+        let tid = tg.ID();
 
         let pidns = tg.PIDNamespace();
         let owner = pidns.lock().owner.clone();
@@ -950,7 +953,9 @@ impl Thread {
 
         self.exitNotifyLocked();
         if execId.is_some() {
-            WriteWaitAllResponse(cid, execId.clone().unwrap(), tg.ExitStatus().Status() as i32);
+            WriteWaitAllResponse(cid.clone(), execId.clone().unwrap(), tg.ExitStatus().Status() as i32);
+            let curr = Task::Current();
+            LOADER.Lock(curr).unwrap().processes.remove(&ExecID{cid: cid, pid: tid});
         }
         let taskCnt = owner.write().DecrTaskCount1();
         error!("ExitNotify 4 [{:x}], taskcnt is {}", self.lock().taskId, taskCnt);
