@@ -205,12 +205,7 @@ impl Task for ShimTask {
         resp.set_exited_at(exited_at);
         resp.set_pid(pid as u32);
         resp.set_exit_status(exit_status);
-        info!(
-        "Delete request for {} {} returns {:?}",
-        req.get_id(),
-        req.get_exec_id(),
-        resp
-        );
+
         info!("shim: Delete resp for {:?}", &resp);
         Ok(resp)
     }
@@ -255,6 +250,8 @@ impl Task for ShimTask {
         })?;
         container.exec(req)
             .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
+
+        error!("shim::exec end...");
         Ok(Empty::new())
     }
 
@@ -275,8 +272,9 @@ impl Task for ShimTask {
         Ok(Empty::new())
     }
 
-    fn close_io(&self, _ctx: &TtrpcContext, _req: CloseIORequest) -> TtrpcResult<Empty> {
+    fn close_io(&self, _ctx: &TtrpcContext, req: CloseIORequest) -> TtrpcResult<Empty> {
         // unnecessary close io here since fd was closed automatically after object was destroyed.
+        error!("shim::close_io req {:?}", &req);
         Ok(Empty::new())
     }
 
@@ -332,7 +330,7 @@ impl Task for ShimTask {
             ts.nanos = ea.nanosecond() as i32;
         }
         resp.exited_at = SingularPtrField::some(ts);
-        error!("Wait request 2222 for {:?} returns {:?}", req, &resp);
+        //error!("shim: Wait response 2222 for {:?} returns {:?}", req, &resp);
         Ok(resp)
     }
 

@@ -49,6 +49,7 @@ pub struct Console {
     pub termios: Termios,
 }
 
+#[derive(Default)]
 pub struct CommonProcess {
     pub state: Status,
     pub id: String,
@@ -58,6 +59,14 @@ pub struct CommonProcess {
     pub exited_at: Option<OffsetDateTime>,
     pub wait_chan_tx: Vec<SyncSender<i8>>,
     pub containerIO: ContainerIO,
+}
+
+impl Drop for CommonProcess {
+    fn drop(&mut self) {
+        self.stdio = ContainerStdio::default();
+        self.containerIO = ContainerIO::default();
+        error!("CommonProcess drop 3 {}", self.id);
+    }
 }
 
 impl CommonProcess {
@@ -137,55 +146,6 @@ impl CommonProcess {
         self.exited_at
     }
 
-    /*fn copy_console(&self, consoleFd: i32) -> Result<Console> {
-        debug!("copy_console: waiting for runtime to send console fd");
-
-        let f = unsafe { File::from_raw_fd(consoleFd) };
-        let termios = tcgetattr(consoleFd)?;
-
-        if !self.stdio.stdin.is_empty() {
-            debug!("copy_console: pipe stdin to console");
-            let f = unsafe { File::from_raw_fd(consoleFd) };
-            let stdin = OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open(self.stdio.stdin.as_str())
-                .map_err(|e| Error::Other(format!( "open stdin  {:?}", e)))?;
-            spawn_copy(stdin, f, None);
-        }
-
-        if !self.stdio.stdout.is_empty() {
-            let f = unsafe { File::from_raw_fd(consoleFd) };
-            debug!("copy_console: pipe stdout from console");
-            let stdout = OpenOptions::new()
-                .write(true)
-                .open(self.stdio.stdout.as_str())
-                .map_err(|e| Error::Other(format!( "open stdout  {:?}", e)))?;
-            // open a read to make sure even if the read end of containerd shutdown,
-            // copy still continue until the restart of containerd succeed
-            let stdout_r = OpenOptions::new()
-                .read(true)
-                .open(self.stdio.stdout.as_str())
-                .map_err(|e| Error::Other(format!( "open stdout for read {:?}", e)))?;
-            spawn_copy(
-                f,
-                stdout,
-                Some(Box::new(move || {
-                    drop(stdout_r);
-                })),
-            );
-        }
-        let console = Console { file: f, termios };
-        Ok(console)
-    }
-
-    fn copy_io(&self) -> Result<()> {
-        if let Some(pio) = self.io.as_ref() {
-            pio.copy(&self.stdio)?;
-        };
-        Ok(())
-    }*/
-
     pub fn set_pid_from_file(&mut self, pid_path: &Path) -> Result<()> {
         let pid = read_pid_from_file(pid_path)?;
         self.pid = pid;
@@ -261,14 +221,6 @@ impl ExecProcess {
         self.common.exited_at()
     }
 
-    /*fn copy_console(&self, consoleFd: i32) -> Result<Console> {
-        self.common.copy_console(consoleFd)
-    }
-
-    fn copy_io(&self) -> Result<()> {
-        self.common.copy_io()
-    }*/
-
     pub fn set_pid_from_file(&mut self, pid_path: &Path) -> Result<()> {
         self.common.set_pid_from_file(pid_path)
     }
@@ -315,6 +267,7 @@ pub fn get_spec_from_request(req: &ExecProcessRequest) -> Result<oci::Process> {
     }
 }
 
+#[derive(Default)]
 pub struct InitProcess {
     pub common: CommonProcess,
     pub bundle: String,

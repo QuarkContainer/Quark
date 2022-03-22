@@ -410,6 +410,12 @@ impl Sandbox {
             resp => panic!("sandbox::Execute get error {:?}", resp),
         };
 
+        for fd in stdios {
+            unsafe {
+                libc::close(*fd);
+            }
+        }
+
         return Ok(pid)
     }
 

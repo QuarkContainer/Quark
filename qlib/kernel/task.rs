@@ -476,14 +476,6 @@ impl Task {
         return Ok(file);
     }
 
-    pub fn NewFDFromHostFd(&mut self, hostfd: i32, isTTY: bool, wouldBlock: bool) -> Result<i32> {
-        let fileOwner = self.FileOwner();
-        let file = File::NewFileFromFd(self, hostfd, &fileOwner, isTTY)?;
-        file.flags.lock().0.NonBlocking = !wouldBlock;
-        let fds = self.NewFDs(0, &[file.clone()], &FDFlags::default())?;
-        return Ok(fds[0]);
-    }
-
     pub fn NewFDFrom(&self, fd: i32, file: &File, flags: &FDFlags) -> Result<i32> {
         //let fds = self.fdTbl.lock().NewFDs(fd, vec![file.clone()], flags)?;
         //return Ok(fds[0])

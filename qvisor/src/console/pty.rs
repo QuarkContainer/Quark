@@ -67,7 +67,7 @@ pub trait Descriptor: AsRawFd {
     /// and panic if a error is occurred.
     fn drop(&self) {
         if self.close().is_err() {
-            unimplemented!();
+            error!("close error {:?}", errno::errno().0);
         }
     }
 }
@@ -77,6 +77,11 @@ pub struct Master {
     pub pty: RawFd,
 }
 
+impl Drop for Master {
+    fn drop(&mut self) {
+        Descriptor::drop(self);
+    }
+}
 
 impl Master {
     pub fn new(path: *const ::libc::c_char) -> Result<Self> {
@@ -219,9 +224,9 @@ impl AsRawFd for Slave {
         self.pty
     }
 }
-/*
+
 impl Drop for Slave {
     fn drop(&mut self) {
         Descriptor::drop(self);
     }
-}*/
+}

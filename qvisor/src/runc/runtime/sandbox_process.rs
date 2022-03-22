@@ -466,6 +466,8 @@ impl SandboxProcess {
             };
         }
 
+        io.CloseAfterStart();
+
         serde_json::to_writer(&mut file1, &self)
             .map_err(|e| Error::IOError(format!("To BootCmd io::error is {:?}", e)))?;
 

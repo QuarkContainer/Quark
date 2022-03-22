@@ -813,11 +813,12 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn WriteControlMsgResp(fd: i32, addr: u64, len: usize) -> i64 {
+    pub fn WriteControlMsgResp(fd: i32, addr: u64, len: usize, close: bool) -> i64 {
         let mut msg = Msg::WriteControlMsgResp(WriteControlMsgResp {
             fd: fd,
             addr: addr,
             len: len,
+            close: close,
         });
 
         return HostSpace::Call(&mut msg, false) as i64;

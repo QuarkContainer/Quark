@@ -528,7 +528,7 @@ fn Print() {
 fn StartExecProcess(fd: i32, process: Process) {
     let (tid, entry, userStackAddr, kernelStackAddr) = { LOADER.ExecProcess(process).unwrap() };
 
-    WriteControlMsgResp(fd, &UCallResp::ExecProcessResp(tid));
+    WriteControlMsgResp(fd, &UCallResp::ExecProcessResp(tid), true);
 
     let currTask = Task::Current();
     currTask.AccountTaskEnter(SchedState::RunningApp);
