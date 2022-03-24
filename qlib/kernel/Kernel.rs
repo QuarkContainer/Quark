@@ -821,7 +821,7 @@ impl HostSpace {
             close: close,
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn UpdateWaitInfo(fd: i32, waitinfo: FdWaitInfo) -> i64 {

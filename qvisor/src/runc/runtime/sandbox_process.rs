@@ -159,10 +159,6 @@ impl SandboxProcess {
 
         PrepareHandler().unwrap();
 
-        let mut config = config::Config::new();
-        // Add 'Setting.toml'
-        config.merge(config::File::new("Setting", config::FileFormat::Toml).required(false)).unwrap();
-
         let kvmfd = Kvm::open_with_cloexec(false).expect("can't open kvm");
         let mut args = Args::default();
         args.ID = id.to_string();

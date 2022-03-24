@@ -12,79 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use ringbuf::*;
 use super::mutex::*;
-use core::cell::RefCell;
-use core::marker::PhantomData;
 use alloc::collections::vec_deque::VecDeque;
 use core::ops::Deref;
 
 use super::common::*;
-
-// multple producer single consumer
-pub struct MpScRing<T> {
-    pub consumer: RefCell<Consumer<T>>,
-    pub producer: QMutex<Producer<T>>,
-    pub resource_type: PhantomData<T>,
-}
-
-unsafe impl <T> Sync for MpScRing<T> {}
-
-impl <T> MpScRing <T> {
-    pub fn New(size: usize) -> Self {
-        let r = RingBuffer::new(size);
-        let (p, c) = r.split();
-        return Self {
-            consumer: RefCell::new(c),
-            producer: QMutex::new(p),
-            resource_type: PhantomData,
-        }
-    }
-
-    pub fn Push(&self, data: T) -> Result<()> {
-        match self.producer.lock().push(data) {
-            Ok(()) => return Ok(()),
-            _ => return Err(Error::QueueFull)
-        }
-    }
-
-    pub fn TryPush(&self, data: T) -> Option<T> {
-        let mut p = match self.producer.try_lock() {
-            None => return Some(data),
-            Some(p) => p
-        };
-
-        if p.is_full() {
-            return Some(data);
-        }
-
-        match p.push(data) {
-            Ok(()) => (),
-            _ => panic!("TryPush fail"),
-        }
-        return None;
-    }
-
-    pub fn Pop(&self) -> Option<T> {
-        return self.consumer.borrow_mut().pop()
-    }
-
-    pub fn Count(&self) -> usize {
-        return self.producer.lock().len();
-    }
-
-    pub fn IsFull(&self) -> bool {
-        return self.producer.lock().is_full();
-    }
-
-    pub fn IsEmpty(&self) -> bool {
-        return self.producer.lock().is_empty();
-    }
-
-    pub fn CountLockless(&self) -> usize {
-        return self.consumer.borrow().len();
-    }
-}
 
 #[derive(Default)]
 pub struct QRingQueue<T:Clone>(QMutex<VecDeque<T>>);
