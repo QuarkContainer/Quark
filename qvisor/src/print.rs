@@ -167,6 +167,14 @@ macro_rules! info {
 }
 
 #[macro_export]
+macro_rules! warn {
+    ($($arg:tt)*) => ({
+        let s = &format!($($arg)*);
+        crate::print::LOG.lock().Print("WARN", &s);
+    });
+}
+
+#[macro_export]
 macro_rules! debug {
     ($($arg:tt)*) => ({
         let s = &format!($($arg)*);

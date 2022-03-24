@@ -51,8 +51,6 @@ extern crate lazy_static;
 extern crate libc;
 extern crate spin;
 extern crate x86_64;
-#[macro_use]
-extern crate log;
 extern crate capabilities;
 extern crate caps;
 extern crate fs2;

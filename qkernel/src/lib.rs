@@ -49,15 +49,12 @@ extern crate scopeguard;
 extern crate lazy_static;
 extern crate spin;
 extern crate x86_64;
-//extern crate pic8259_simple;
 extern crate bit_field;
 extern crate xmas_elf;
 //extern crate linked_list_allocator;
 extern crate buddy_system_allocator;
 #[macro_use]
 extern crate bitflags;
-//#[macro_use]
-extern crate ringbuf;
 extern crate x86;
 
 #[macro_use]
