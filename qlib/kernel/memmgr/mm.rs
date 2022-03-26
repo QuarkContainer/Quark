@@ -1324,6 +1324,8 @@ impl MemoryManager {
             }
         }
 
+        self.HandleTlbShootdown();
+
         return Ok(mm2);
     }
 
