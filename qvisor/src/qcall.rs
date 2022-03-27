@@ -118,19 +118,12 @@ impl KVMVcpu {
             Msg::Fstat(msg) => {
                 ret = super::VMSpace::Fstat(msg.fd, msg.buff) as u64;
             },
-            Msg::BatchFstatat(msg) => {
-                ret = super::VMSpace::BatchFstatat(msg.addr, msg.count) as u64;
-            },
             Msg::Fstatat(msg) => {
                 ret = super::VMSpace::Fstatat(msg.dirfd, msg.pathname, msg.buff, msg.flags) as u64;
             },
             Msg::Fstatfs(msg) => {
                 ret = super::VMSpace::Fstatfs(msg.fd, msg.buf) as u64;
             },
-            Msg::GetDents64(msg) => {
-                ret = super::VMSpace::GetDents64(msg.fd, msg.dirp, msg.count) as u64;
-            },
-
             Msg::TryOpenAt(msg) => {
                 ret = super::VMSpace::TryOpenAt(msg.dirfd, msg.name, msg.addr) as u64;
             },

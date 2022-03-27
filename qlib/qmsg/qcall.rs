@@ -45,10 +45,8 @@ pub enum Msg {
     Lgetxattr(Lgetxattr),
     Fgetxattr(Fgetxattr),
     Fstat(Fstat),
-    BatchFstatat(BatchFstatat),
     Fstatat(Fstatat),
     Fstatfs(Fstatfs),
-    GetDents64(GetDents64),
 
     TryOpenAt(TryOpenAt),
     CreateAt(CreateAt),
@@ -303,9 +301,9 @@ pub struct Fstat {
 #[derive(Debug)]
 pub struct FileType {
     pub pathname: CString,
-    pub mode: u32,
     pub device: u64,
     pub inode: u64,
+    pub dType: u8,
 }
 
 #[derive(Debug)]
@@ -320,24 +318,11 @@ pub struct ReadDir {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct BatchFstatat {
-    pub addr: u64,
-    pub count: usize
-}
-
-#[derive(Clone, Default, Debug)]
 pub struct Fstatat {
     pub dirfd: i32,
     pub pathname: u64,
     pub buff: u64,
     pub flags: i32
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct GetDents64 {
-    pub fd: i32,
-    pub dirp: u64,
-    pub count: u32,
 }
 
 #[derive(Clone, Default, Debug)]

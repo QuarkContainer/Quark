@@ -151,18 +151,6 @@ impl VMSpace {
         return fdInfo.IOReadDir(data)
     }
 
-    pub fn GetDents64(fd: i32, dirp: u64, count: u32) -> i64 {
-        let fd = Self::GetOsfd(fd).expect("GetDents64");
-
-        let nr = SysCallID::sys_getdents64 as usize;
-
-
-        //info!("sys_getdents64 is {}", nr);
-        unsafe {
-            return syscall3(nr, fd as usize, dirp as usize, count as usize) as i64;
-        }
-    }
-
     pub fn Mount(&self, id: &str, rootfs: &str) -> Result<()> {
         let spec = &self.args.as_ref().unwrap().Spec;
         //let rootfs : &str = &spec.root.path;
@@ -838,35 +826,6 @@ impl VMSpace {
         }
 
         return ret
-    }
-
-
-    pub fn BatchFstatat(_addr: u64, _count: usize) -> i64 {
-        /*let mut stat: LibcStat = Default::default();
-
-        let ptr = addr as * mut FileType;
-        let filetypes = unsafe { slice::from_raw_parts_mut(ptr, count) };
-
-        for ft in filetypes {
-            let dirfd = {
-                if ft.dirfd > 0 {
-                    Self::GetOsfd(ft.dirfd).expect("Fstatat")
-                } else {
-                    ft.dirfd
-                }
-            };
-
-            let ret = unsafe {
-                Self::GetRet(libc::fstatat(dirfd, ft.pathname as *const c_char, &mut stat as *mut _ as u64 as *mut stat, AT_SYMLINK_NOFOLLOW) as i64)
-            };
-
-            ft.mode = stat.st_mode;
-            ft.device = stat.st_dev;
-            ft.inode = stat.st_ino;
-            //ft.ret = ret as i32;
-        }*/
-
-        return 0;
     }
 
     pub fn Fstatat(dirfd: i32, pathname: u64, buf: u64, flags: i32) -> i64 {
