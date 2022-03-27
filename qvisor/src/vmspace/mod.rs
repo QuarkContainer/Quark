@@ -48,7 +48,8 @@ use super::qlib::pagetable::{PageTables};
 use super::qlib::addr::{Addr};
 use super::qlib::control_msg::*;
 use super::qlib::qmsg::*;
-use super::qlib::cstring::*;
+use super::qlib::kernel::util::cstring::*;
+use super::qlib::kernel::fs::host::dirent::Dirent64;
 //use super::qlib::socket_buf::*;
 use super::qlib::perf_tunning::*;
 use super::qlib::kernel::guestfdnotifier::*;
@@ -139,6 +140,15 @@ impl VMSpace {
 
     pub fn GetFdInfo(hostfd: i32) -> Option<FdInfo> {
         return IO_MGR.GetByHost(hostfd);
+    }
+
+    pub fn ReadDir(dirfd: i32, data: u64) -> i64 {
+        let fdInfo = match Self::GetFdInfo(dirfd) {
+            Some(info) => info,
+            None => return -SysErr::EBADF as i64,
+        };
+
+        return fdInfo.IOReadDir(data)
     }
 
     pub fn GetDents64(fd: i32, dirp: u64, count: u32) -> i64 {
@@ -831,8 +841,8 @@ impl VMSpace {
     }
 
 
-    pub fn BatchFstatat(addr: u64, count: usize) -> i64 {
-        let mut stat: LibcStat = Default::default();
+    pub fn BatchFstatat(_addr: u64, _count: usize) -> i64 {
+        /*let mut stat: LibcStat = Default::default();
 
         let ptr = addr as * mut FileType;
         let filetypes = unsafe { slice::from_raw_parts_mut(ptr, count) };
@@ -853,8 +863,8 @@ impl VMSpace {
             ft.mode = stat.st_mode;
             ft.device = stat.st_dev;
             ft.inode = stat.st_ino;
-            ft.ret = ret as i32;
-        }
+            //ft.ret = ret as i32;
+        }*/
 
         return 0;
     }

@@ -13,12 +13,14 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 use super::super::task_mgr::*;
 use super::super::linux_def::*;
 use super::super::kernel::guestfdnotifier::*;
 use super::super::socket_buf::*;
 use super::super::config::*;
+use super::super::kernel::util::cstring::*;
 
 #[repr(align(128))]
 #[derive(Clone, Debug)]
@@ -112,6 +114,7 @@ pub enum Msg {
     SetTscOffset(SetTscOffset),
     TlbShootdown(TlbShootdown),
     Sysinfo(Sysinfo),
+    ReadDir(ReadDir),
 }
 
 #[derive(Clone, Default, Debug)]
@@ -297,14 +300,23 @@ pub struct Fstat {
     pub buff: u64,
 }
 
-#[derive(Clone, Default, Debug)]
+#[derive(Debug)]
 pub struct FileType {
-    pub dirfd: i32,
-    pub pathname: u64,
+    pub pathname: CString,
     pub mode: u32,
     pub device: u64,
     pub inode: u64,
-    pub ret: i32,
+}
+
+#[derive(Debug)]
+pub struct FileTypes {
+    pub fileTypes: Vec<FileType>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ReadDir {
+    pub dirfd: i32,
+    pub data: u64,
 }
 
 #[derive(Clone, Default, Debug)]

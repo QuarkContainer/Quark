@@ -20,6 +20,7 @@ use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::task::*;
 
+#[derive(Debug)]
 pub struct CString {
     pub data: Vec<u8>
 }
@@ -35,6 +36,26 @@ impl CString {
         data.push(0);
         return Self {
             data
+        }
+    }
+
+    pub fn Str(&self) -> Result<&str> {
+        return str::from_utf8(&self.data).map_err(|e| Error::Common(format!("{}", e)))
+    }
+
+    pub fn FromAddr(addr: u64) -> Self {
+        let mut data = Vec::new();
+        for i in 0..Self::MAX_STR_LEN {
+            let c = unsafe {
+                *((addr + i as u64) as * const u8)
+            };
+            if c == 0 {
+                break;
+            }
+            data.push(c)
+        }
+        return Self {
+            data: data
         }
     }
 
