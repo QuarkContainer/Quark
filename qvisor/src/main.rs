@@ -184,7 +184,7 @@ fn main() {
                 ::std::process::exit(-1);
             }
             Ok(()) => {
-                //error!("successfully ...");
+                error!("exit successfully ...");
                 ::std::process::exit(0);
             }
         }

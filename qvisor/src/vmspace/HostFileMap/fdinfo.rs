@@ -56,6 +56,82 @@ impl FdInfo {
         return SysRet(ret as i64)
     }
 
+    pub fn ReadDir(dirfd: i32, data: u64) -> i64 {
+        let data = unsafe {
+            &mut *(data as * mut FileTypes)
+        };
+
+        let buf: [u8; 4096 * 16] = [0; 4096 * 16]; // 64KB in stack
+        let res = unsafe {
+            libc::lseek(dirfd, 0, SeekWhence::SEEK_SET) as i32
+        };
+
+        let res = SysRet(res as i64);
+        if res < 0 {
+            if -res == SysErr::ESPIPE as i64 {
+                return -SysErr::ENOTDIR as i64
+            }
+
+            return res
+        }
+
+        loop {
+            let addr = &buf[0] as *const _ as u64;
+            let cnt = Self::GetDents64(dirfd, addr, buf.len() as u32);
+
+            if cnt < 0 {
+                return cnt
+            }
+
+            if cnt == 0 {
+                break;
+            }
+
+            let cnt: u64 = cnt as u64;
+            let mut pos: u64 = 0;
+            while pos < cnt {
+                let name;
+                unsafe {
+                    let d: *const Dirent64 = (addr + pos) as *const Dirent64;
+                    name = (*d).name;
+                    //let str = CString::ToString(task, &name[0] as *const _ as u64).expect("ReadDirAll fail1");
+                    //names.push(CString::New(&str));
+                    //name = CString::New(&str);
+                    pos += (*d).reclen as u64;
+                }
+
+                let mut stat: LibcStat = Default::default();
+
+                let ret = unsafe {
+                    SysRet(libc::fstatat(dirfd, &name[0] as * const _ as u64 as *const c_char, &mut stat as *mut _ as u64 as *mut stat, AT_SYMLINK_NOFOLLOW) as i64)
+                };
+
+                if ret >= 0 {
+                    let ft = FileType {
+                        pathname: CString::FromAddr(&name[0] as *const _ as u64),
+                        mode: stat.st_mode,
+                        device: stat.st_dev,
+                        inode: stat.st_ino,
+                    };
+
+                    error!("ReadDir in host {:?}", str::from_utf8(&ft.pathname.data));
+
+                    data.fileTypes.push(ft);
+                }
+            }
+        }
+
+        return 0;
+    }
+
+    pub fn GetDents64(fd: i32, dirp: u64, count: u32) -> i64 {
+        let nr = SysCallID::sys_getdents64 as usize;
+
+        unsafe {
+            return syscall3(nr, fd as usize, dirp as usize, count as usize) as i64;
+        }
+    }
+
     pub fn Write(fd: i32, iovs: u64, iovcnt: i32) -> i64 {
         let ret = unsafe {
             writev(fd as c_int, iovs as *const iovec, iovcnt) as i64
@@ -311,6 +387,11 @@ impl FdInfo {
     /*pub fn NewRDMAContext(fd: i32) -> Self {
         return Self(Arc::new(Mutex::new(FdInfoIntern::NewRDMAContext(fd))))
     }*/
+
+    pub fn IOReadDir(&self, data: u64) -> i64 {
+        let fd = self.lock().fd;
+        return Self::ReadDir(fd, data)
+    }
 
     pub fn IOBufWrite(&self, addr: u64, len: usize, offset: isize) -> i64 {
         let fd = self.lock().fd;

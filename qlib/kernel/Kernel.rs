@@ -498,6 +498,15 @@ impl HostSpace {
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
+    pub fn ReadDir(dirfd: i32, data: &mut FileTypes) -> i64 {
+        let mut msg = Msg::ReadDir(ReadDir {
+            dirfd,
+            data: data as * const _ as u64,
+        });
+
+        return HostSpace::HCall(&mut msg, false) as i64;
+    }
+
     pub fn GetRandom(buf: u64, len: u64, flags: u32) -> i64 {
         let mut msg = Msg::GetRandom(GetRandom {
             buf,
