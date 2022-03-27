@@ -91,30 +91,41 @@ impl FdInfo {
             let mut pos: u64 = 0;
             while pos < cnt {
                 let name;
+                let dType;
+                let inode;
                 unsafe {
                     let d: *const Dirent64 = (addr + pos) as *const Dirent64;
                     name = (*d).name;
-                    //let str = CString::ToString(task, &name[0] as *const _ as u64).expect("ReadDirAll fail1");
-                    //names.push(CString::New(&str));
-                    //name = CString::New(&str);
+                    dType = (*d).type_;
+                    inode = (*d).ino;
                     pos += (*d).reclen as u64;
                 }
 
-                let mut stat: LibcStat = Default::default();
+                if true {
+                    let mut stat: LibcStat = Default::default();
 
-                let ret = unsafe {
-                    SysRet(libc::fstatat(dirfd, &name[0] as * const _ as u64 as *const c_char, &mut stat as *mut _ as u64 as *mut stat, AT_SYMLINK_NOFOLLOW) as i64)
-                };
-
-                if ret >= 0 {
-                    let ft = FileType {
-                        pathname: CString::FromAddr(&name[0] as *const _ as u64),
-                        mode: stat.st_mode,
-                        device: stat.st_dev,
-                        inode: stat.st_ino,
+                    let ret = unsafe {
+                        SysRet(libc::fstatat(dirfd, &name[0] as * const _ as u64 as *const c_char, &mut stat as *mut _ as u64 as *mut stat, AT_SYMLINK_NOFOLLOW) as i64)
                     };
 
-                    error!("ReadDir in host {:?}", str::from_utf8(&ft.pathname.data));
+                    if ret >= 0 {
+                        let ft = FileType {
+                            pathname: CString::FromAddr(&name[0] as *const _ as u64),
+                            device: stat.st_dev,
+                            inode: stat.st_ino,
+                            dType: dType,
+                        };
+
+                        data.fileTypes.push(ft);
+                    }
+                } else {
+                    // experiment for removing fstatat
+                    let ft = FileType {
+                        pathname: CString::FromAddr(&name[0] as *const _ as u64),
+                        device: 0, //stat.st_dev,
+                        inode: inode,
+                        dType: dType,
+                    };
 
                     data.fileTypes.push(ft);
                 }

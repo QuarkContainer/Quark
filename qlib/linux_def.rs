@@ -532,6 +532,22 @@ impl DType {
     pub const DT_LNK: u8 = 10;
     pub const DT_SOCK: u8 = 12;
     pub const DT_WHT: u8 = 14;
+
+    pub fn ModeType(dtType: u8) -> u16 {
+        match dtType {
+            DType::DT_SOCK => ModeType::S_IFSOCK,
+            DType::DT_LNK => ModeType::S_IFLNK,
+            DType::DT_REG => ModeType::S_IFREG,
+            DType::DT_BLK => ModeType::S_IFBLK,
+            DType::DT_DIR => ModeType::S_IFDIR,
+            DType::DT_CHR => ModeType::S_IFCHR,
+            DType::DT_FIFO => ModeType::S_IFIFO,
+            t => {
+                error!("unknow DTtype {}", t);
+                ModeType::S_IFREG
+            },
+        }
+    }
 }
 
 // mode_t

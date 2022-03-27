@@ -332,10 +332,6 @@ pub fn ReadLinkAt(dirfd: i32, path: &str) -> Result<String> {
     return Ok(String::from_utf8(buf[..ret as usize].to_vec()).unwrap())
 }
 
-pub fn GetDents(fd: i32, buf: u64, count: u32) -> i64 {
-    return HostSpace::GetDents64(fd, buf, count)
-}
-
 pub fn createAt(dirfd: i32, name: &str, flags: i32, perm: u32, uid: u32, gid: u32) -> Result<(i32, LibcStat)> {
     let cstr = CString::New(name);
     let mut fstat = LibcStat::default();

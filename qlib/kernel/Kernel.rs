@@ -340,17 +340,6 @@ impl HostSpace {
         //return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn BatchFstatat(filetypes: &mut [FileType]) -> i64 {
-        let addr = &filetypes[0] as * const _ as u64;
-        let count = filetypes.len();
-        let mut msg = Msg::BatchFstatat(BatchFstatat {
-            addr,
-            count
-        });
-
-        return HostSpace::HCall(&mut msg, false) as i64;
-    }
-
     pub fn Fstatat(dirfd: i32, pathname: u64, buff: u64, flags: i32) -> i64 {
         let mut msg = Msg::Fstatat(Fstatat {
             dirfd,
@@ -486,16 +475,6 @@ impl HostSpace {
         });
 
         return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn GetDents64(fd: i32, dirp: u64, count: u32) -> i64 {
-        let mut msg = Msg::GetDents64(GetDents64 {
-            fd,
-            dirp,
-            count,
-        });
-
-        return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn ReadDir(dirfd: i32, data: &mut FileTypes) -> i64 {

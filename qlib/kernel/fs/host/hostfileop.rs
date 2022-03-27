@@ -79,7 +79,7 @@ impl HostInodeOp {
         let mut entries = BTreeMap::new();
         for ft in &fts.fileTypes {
             let dentry = DentAttr {
-                Type: InodeType(ft.mode),
+                Type: InodeType(DType::ModeType(ft.dType) as u32),
                 InodeId: HOSTFILE_DEVICE.lock().Map(MultiDeviceKey {
                     Device: ft.device,
                     Inode: ft.inode,
