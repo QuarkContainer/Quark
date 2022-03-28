@@ -281,3 +281,8 @@ impl HostSpace {
 pub fn child_clone(_userSp: u64) {}
 
 pub fn InitX86FPState(_data: u64, _useXsave: bool) {}
+
+#[inline]
+pub fn VcpuId() -> usize {
+    return ThreadId() as usize
+}

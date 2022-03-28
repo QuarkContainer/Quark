@@ -14,7 +14,7 @@
 // limitations under the License.
 
 use core::alloc::{GlobalAlloc, Layout};
-use core::sync::atomic::{AtomicBool, AtomicUsize};
+use core::sync::atomic::{AtomicBool, AtomicUsize, AtomicU64};
 use core::sync::atomic::Ordering;
 use core::cmp::max;
 use core::mem::size_of;
@@ -27,6 +27,8 @@ use alloc::string::ToString;
 //use super::buddy_allocator::Heap;
 
 use super::super::mutex::*;
+use super::super::kernel::vcpu::CPU_LOCAL;
+use super::super::super::kernel_def::VcpuId;
 
 pub const CLASS_CNT : usize = 16;
 pub const FREE_THRESHOLD: usize = 30; // when free size less than 30%, need to free buffer
@@ -34,33 +36,134 @@ pub const BUFF_THRESHOLD: usize = 50; // when buff size takes more than 50% of f
 pub const FREE_BATCH: usize = 10; // free 10 blocks each time.
 pub const ORDER : usize = 33;
 
-//pub static GLOBAL_ALLOCATOR : QMutex<Heap<ORDER>> = QMutex::new(Heap::empty());
+pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
-#[derive(Debug)]
-pub struct VcpuAllocator {
-    pub bufs: [CachePadded<QMutex<FreeMemBlockMgr>>; 13],
+#[derive(Default)]
+pub struct GlobalVcpuAllocator {
+    pub init: AtomicBool,
 }
 
-impl Default for VcpuAllocator {
-    fn default() -> Self {
-        let bufs : [CachePadded<QMutex<FreeMemBlockMgr>>; 13] = [
-            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(0, 0))),
-            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(0, 1))),
-            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(0, 2))),
-            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(128, 3))),
-            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(128, 4))),
-            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(128, 5))),
-            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(64, 6))),
-            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(64, 7))),
-            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(64, 8))),
-            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(32, 9))),
-            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(32, 10))),
-            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(16, 11))),
-            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(1024, 12))),
-        ];
-
+impl GlobalVcpuAllocator {
+    pub const fn New() -> Self {
         return Self {
-            bufs
+            init: AtomicBool::new(false),
+        }
+    }
+
+    pub fn Print(&self){
+        error!("GlobalVcpuAllocator {}/{}", VcpuId(), CPU_LOCAL[VcpuId()].allocator.bufs.len())
+    }
+
+    pub fn Initializated(&self) {
+        self.init.store(true, Ordering::Relaxed)
+    }
+}
+
+unsafe impl GlobalAlloc for GlobalVcpuAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        if !self.init.load(Ordering::Relaxed) {
+            return GLOBAL_ALLOCATOR
+                .alloc(layout);
+        }
+        return CPU_LOCAL[VcpuId()].AllocatorMut().alloc(layout)
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        if !self.init.load(Ordering::Relaxed) {
+            return GLOBAL_ALLOCATOR
+                .dealloc(ptr, layout);
+        }
+        return CPU_LOCAL[VcpuId()].AllocatorMut().dealloc(ptr, layout)
+    }
+}
+
+pub const STACK_CNT: usize = 16;
+
+#[derive(Debug, Default)]
+pub struct StackAllocator {
+    pub stack: [u64; 15],
+    pub next: usize
+}
+
+impl StackAllocator {
+    pub fn Push(&mut self, addr: u64) {
+        assert!(self.next < self.stack.len());
+        self.stack[self.next] = addr;
+        self.next = 0;
+    }
+
+    pub fn Pop(&mut self) -> u64 {
+        assert!(self.next != 0);
+        self.next -= 1;
+        return self.stack[self.next];
+    }
+
+    pub fn IsEmpty(&self) -> bool {
+        return self.next == 0
+    }
+
+    pub fn IsFull(&self) -> bool {
+        return self.next == self.stack.len()
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct VcpuAllocator {
+    pub bufs: [StackAllocator; 12],
+}
+
+impl VcpuAllocator {
+    pub fn alloc(&mut self, layout: Layout) -> *mut u8 {
+        let size = max(
+            layout.size().next_power_of_two(),
+            max(layout.align(), size_of::<usize>()),
+        );
+        let class = size.trailing_zeros() as usize;
+        assert!(class >= 3);
+        let idx = class - 3;
+
+        let ret;
+        if idx < self.bufs.len() && !self.bufs[idx].IsEmpty() {
+             ret = self.bufs[idx].Pop();
+        } else {
+            unsafe {
+                ret = GLOBAL_ALLOCATOR
+                    .alloc(layout) as u64
+            };
+        }
+
+        return ret as *mut u8;
+    }
+
+    pub fn dealloc(&mut self, ptr: *mut u8, layout: Layout) {
+        let size = max(
+            layout.size().next_power_of_two(),
+            max(layout.align(), size_of::<usize>()),
+        );
+        let class = size.trailing_zeros() as usize;
+        assert!(class >= 3);
+        let idx = class - 3;
+
+        if idx < self.bufs.len() && !self.bufs[idx].IsFull() {
+            self.bufs[idx].Push(ptr as u64);
+        } else {
+            unsafe {
+                GLOBAL_ALLOCATOR.dealloc(ptr, layout)
+            }
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct HostAllocator {
+    pub listHeapAddr : AtomicU64,
+    pub initialized: AtomicBool
+}
+
+impl HostAllocator {
+    pub fn Allocator(&self) -> &mut ListAllocator {
+        return unsafe {
+            &mut *(self.listHeapAddr.load(Ordering::Relaxed) as * mut ListAllocator)
         }
     }
 }

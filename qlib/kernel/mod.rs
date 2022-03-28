@@ -25,7 +25,6 @@ pub mod tcpip;
 pub mod threadmgr;
 pub mod util;
 pub mod fd;
-pub mod heap;
 pub mod kernel_util;
 pub mod mm;
 pub mod perflog;

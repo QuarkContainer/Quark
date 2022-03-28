@@ -14,6 +14,9 @@
 //
 
 use core::sync::atomic::Ordering;
+use core::alloc::{GlobalAlloc, Layout};
+use core::sync::atomic::AtomicBool;
+use core::sync::atomic::AtomicU64;
 
 use super::qlib::kernel::asm::*;
 use super::qlib::kernel::taskMgr::*;
@@ -348,4 +351,32 @@ pub fn InitX86FPState(data: u64, useXsave: bool) {
     unsafe {
         initX86FPState(data, useXsave)
     }
+}
+
+impl HostAllocator {
+    pub const fn New() -> Self {
+        return Self {
+            listHeapAddr: AtomicU64::new(0),
+            initialized: AtomicBool::new(true),
+        }
+    }
+
+    pub fn Init(&self, heapAddr: u64) {
+        self.listHeapAddr.store(heapAddr, Ordering::SeqCst)
+    }
+}
+
+unsafe impl GlobalAlloc for HostAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        return self.Allocator().alloc(layout)
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        self.Allocator().dealloc(ptr, layout);
+    }
+}
+
+#[inline]
+pub fn VcpuId() -> usize {
+    return CPULocal::CpuId()
 }

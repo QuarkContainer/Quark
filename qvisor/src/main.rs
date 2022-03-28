@@ -86,13 +86,13 @@ use spin::Mutex;
 use std::env;
 use std::cell::RefCell;
 
-use self::heap_alloc::*;
 use self::qlib::addr;
 use self::qlib::buddyallocator::MemAllocator;
 use self::qlib::config::*;
 use self::qlib::qmsg::*;
 use self::qlib::ShareSpace;
 use self::qlib::ShareSpaceRef;
+use self::qlib::mem::list_allocator::*;
 use self::runc::cmd::command::*;
 use self::vmspace::host_pma_keeper::*;
 use self::vmspace::hostfdnotifier::*;
@@ -111,7 +111,7 @@ pub fn AllocatorPrint(_class: usize) -> String {
 
 pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
 
-thread_local!(static THREAD_ID: RefCell<i32> = RefCell::new(-1));
+thread_local!(static THREAD_ID: RefCell<i32> = RefCell::new(0));
 
 pub fn ThreadId() -> i32 {
     let mut i = 0;
@@ -153,7 +153,7 @@ pub fn InitSingleton() {
 }
 
 #[global_allocator]
-static GLOBAL: HostAllocator = HostAllocator::New();
+static ALLOCATOR: HostAllocator = HostAllocator::New();
 
 fn main() {
     InitSingleton();
