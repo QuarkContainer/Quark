@@ -89,7 +89,7 @@ impl StackAllocator {
     pub fn Push(&mut self, addr: u64) {
         assert!(self.next < self.stack.len());
         self.stack[self.next] = addr;
-        self.next = 0;
+        self.next += 1;
     }
 
     pub fn Pop(&mut self) -> u64 {
