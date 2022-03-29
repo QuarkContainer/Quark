@@ -8,7 +8,6 @@ use std::ptr;
 
 use super::qlib::common::*;
 use super::qlib::linux_def::*;
-use super::rdma_srv::RDMA_SRV;
 //use super::super::super::IO_MGR;
 
 use lazy_static::lazy_static;
@@ -664,7 +663,6 @@ impl RDMAContext {
             //     wc.status, wc.wr_id
             // );
             //IO_MGR.ProcessRDMAWriteImmFinish(fd);
-            RDMA_SRV.ProcessRDMAWriteImmFinish(wc.wr_id as u32, wc.qp_num);
         } else if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RECV_RDMA_WITH_IMM {
             let imm = unsafe { wc.imm_data_invalidated_rkey_union.imm_data };
             let immData = ImmData(imm);
@@ -676,7 +674,6 @@ impl RDMAContext {
             //     wc.wr_id
             // );
             //IO_MGR.ProcessRDMARecvWriteImm(fd, wc.byte_len as _, immData.ReadCount() as _);
-            RDMA_SRV.ProcessRDMARecvWriteImm(immData.ReadCount() as _, wc.qp_num, wc.byte_len as _);
         } else {
             // debug!("ProcessWC::4, opcode: {}, wr_id: {}", wc.opcode, wc.wr_id);
         }

@@ -16,7 +16,6 @@ use alloc::sync::Arc;
 use std::collections::HashSet;
 
 use super::qlib::rdma_share::*;
-use super::id_mgr::IdMgr;
 
 pub struct RDMAAgentIntern {
     pub id: u32,
@@ -39,7 +38,8 @@ pub struct RDMAAgentIntern {
     pub shareRegion: &'static mut ClientShareRegion,
 
     pub usedIoIndexes: HashSet<u32>,
-   // TODO: indexes allocated for io buffer.
+
+    // TODO: indexes allocated for io buffer.
 }
 
 pub struct RDMAAgent(Arc<RDMAAgentIntern>);

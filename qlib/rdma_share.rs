@@ -86,10 +86,14 @@ impl <T: 'static + Default + Copy> RingQueue <T> {
 }
 
 #[derive(Default)]
-pub struct RDMAReq {}
+pub struct RDMAReq {
+    pub user_data: u64,
+}
 
 #[derive(Default)]
-pub struct RDMAResp {}
+pub struct RDMAResp {
+    pub user_data: u64,
+}
 
 pub struct MemRegion {
     pub addr: u64,
@@ -99,8 +103,9 @@ pub struct MemRegion {
 pub const SOCKET_BUF_SIZE : usize = 64 * 1024; // 64KB
 
 // todo: caculate this to fit ClientShareRegion in 1GB
-pub const IO_BUF_COUNT : usize = 16 * 1024 - 128; // ~16K
+pub const IO_BUF_COUNT : usize = 7 * 1024; //16 * 1024 - 128; // ~16K
 
+#[repr(align(4096))]
 pub struct IOBuf {
     pub read: [u8; SOCKET_BUF_SIZE],
     pub write: [u8; SOCKET_BUF_SIZE],
@@ -109,7 +114,7 @@ pub struct IOBuf {
 pub struct IOMetas {
     pub readBufAtoms: [AtomicU32; 2],
     pub writeBufAtoms: [AtomicU32; 2],
-    pub consumeReadData: AtomicU32
+    pub consumeReadData: AtomicU64
 }
 
 pub struct ClientShareRegion {
@@ -130,14 +135,14 @@ pub struct ClientShareRegion {
 
 // total 4096 x 8 = 32KB or 8 pages
 // can index about 32K x 8 = 256K containers, hope it is enough
-pub const BITMAP_COUNT : usize = 4096 - 4;
+pub const BITMAP_COUNT : usize = 64 * 8 - 9; //4096 - 4;
 
 pub struct TriggerBitmap {
     // one bit map to one l2 bitmap to expedite the notification search
-    pub l1bitmap: [u64; 4],
+    pub l1bitmap: [u64; 8],
 
     // one bit map to one Quark Container
-    pub l2bitmap: [u64; BITMAP_COUNT],
+    pub l2bitmap: [u64; BITMAP_COUNT], 
 }
 
 pub const MTU: usize = 1500;
@@ -168,10 +173,11 @@ impl Default for UDPBuf {
     }
 }
 
+#[repr(align(4096))]
 pub struct ShareRegion {
     pub srvBitmap: AtomicU64, // whether server is sleeping
     pub bitmap: TriggerBitmap,
-    pub udpBufs: [UDPBuf; UDP_BUF_COUNT]
+    //pub udpBufs: [UDPBuf; UDP_BUF_COUNT]
 }
 
 impl Default for ShareRegion {
@@ -179,10 +185,10 @@ impl Default for ShareRegion {
         ShareRegion {
             srvBitmap: AtomicU64::new(0),
             bitmap: TriggerBitmap {
-                l1bitmap: [0; 4],
+                l1bitmap: [0; 8],
                 l2bitmap: [0; BITMAP_COUNT]
             },
-            udpBufs: [UDPBuf::default(); UDP_BUF_COUNT]
+            //udpBufs: [UDPBuf::default(); UDP_BUF_COUNT]
         }
     }
 }

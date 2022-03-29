@@ -67,7 +67,6 @@ pub mod asm;
 pub mod kernel_def;
 pub mod qlib;
 
-pub mod id_mgr;
 pub mod rdma;
 pub mod rdma_agent;
 pub mod rdma_channel;
@@ -92,17 +91,12 @@ use local_ip_address::local_ip;
 use qlib::linux_def::*;
 use qlib::socket_buf::SocketBuff;
 use qlib::unix_socket::UnixSocket;
-use rdma_channel::RDMAChannel;
-use rdma_conn::*;
+use rdma_conn::RDMAConn;
 use rdma_ctrlconn::Node;
-use spin::Mutex;
 use std::io::Error;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::Arc;
-use std::{env, mem, ptr, thread, time};
-//use qlib::range::{IdMgr, GapMgr};
-use id_mgr::IdMgr;
+use std::{env, mem, ptr};
 
 #[allow(unused_macros)]
 macro_rules! syscall {
@@ -141,50 +135,13 @@ pub enum FdType {
 
 fn main() {
     println!("RDMA Service is starting!");
-    let x = RDMA_SRV.agentIdMgr.lock().AllocId().unwrap();
-    println!("x is: {}", x);
-}
 
-fn id_mgr_test() {
-    // let mut idMgr: IdMgr<u32> = IdMgr::Init(0, 1000);
-    // let mut gapMgr = GapMgr::New(0, 100);
-    // let x = gapMgr.AllocAfter(0, 1, 0).unwrap();
-    // let y = gapMgr.AllocAfter(1, 1, 0).unwrap();
-    // println!("x: {}, y: {}", x, y);
-
-    // let x1 = idMgr.AllocId().unwrap();
-    // let y1 = idMgr.AllocId().unwrap();
-    // let y2 = idMgr.AllocId().unwrap();
-    // idMgr.Remove(y1);
-    // let y4 = idMgr.AllocId().unwrap();
-    // println!("x1: {}, y1: {}, y2: {}, y4: {}", x1, y1, y2, y4);
-    let mut idMgr = IdMgr::Init(1, 1000);
-    let x1 = idMgr.AllocId().unwrap();
-    let x2 = idMgr.AllocId().unwrap();
-    let x3 = idMgr.AllocId().unwrap();
-    let x4 = idMgr.AllocId().unwrap();
-    println!("x1: {}, x2: {}, x3: {}, x4: {}", x1, x2, x3, x4);
-    idMgr.Remove(x3);
-    idMgr.Remove(x2);
-    let x3 = idMgr.AllocId().unwrap();
-    println!("x1: {}, x2: {}, x3: {}, x4: {}", x1, x2, x3, x4);
-    idMgr.Remove(x2);
-    idMgr.Remove(x4);
-    let x2 = idMgr.AllocId().unwrap();
-
-    println!("x1: {}, x2: {}, x3: {}, x4: {}", x1, x2, x3, x4);
-}
-
-fn share_client_region() {
     let path = "/home/qingming/rdma_srv";
-    let fd = unsafe {
-        libc::memfd_create(
-            "Server memfd".as_ptr() as *const i8,
-            libc::MFD_ALLOW_SEALING,
-        )
-    };
+    let cli_sock = UnixSocket::NewClient(path).unwrap();
+    let fd = cli_sock.RecvFd().unwrap();
+    println!("cli_sock: {}, cli_fd: {}", cli_sock.as_raw_fd(), fd);
+
     let size = mem::size_of::<qlib::rdma_share::ClientShareRegion>();
-    let ret = unsafe { libc::ftruncate(fd, size as i64) };
     let addr = unsafe {
         libc::mmap(
             ptr::null_mut(),
@@ -196,14 +153,8 @@ fn share_client_region() {
             0,
         )
     };
-
-    println!("addr: 0x{:x}", addr as u64);
     let eventAddr = addr as *mut ClientShareRegion; // as &mut qlib::Event;
     let clientShareRegion = unsafe { &mut (*eventAddr) };
-    let readBufAtomsAddr = &clientShareRegion.ioMetas[0].readBufAtoms as *const _ as u64;
-    println!("readBufAtomsAddr: 0x{:x}", readBufAtomsAddr);
-    let writeBufAtomsAddr = &clientShareRegion.ioMetas[0].writeBufAtoms as *const _ as u64;
-    println!("readBufAtomsAddr: 0x{:x}", writeBufAtomsAddr);
     let sockBuf = SocketBuff::InitWithShareMemory(
         MemoryDef::DEFAULT_BUF_PAGE_COUNT,
         &clientShareRegion.ioMetas[0].readBufAtoms as *const _ as u64,
@@ -213,22 +164,12 @@ fn share_client_region() {
         &clientShareRegion.iobufs[0].write as *const _ as u64,
     );
 
-    let srv_sock = UnixSocket::NewServer(path).unwrap();
-    let conn_sock = UnixSocket::Accept(srv_sock.as_raw_fd()).unwrap();
-    let c = sockBuf.AddConsumeReadData(6);
-    println!(
-        "conn_sock: {}, srv fd: {}, consumeReadData: {}",
-        conn_sock.as_raw_fd(),
-        fd,
-        c
-    );
-    conn_sock.SendFd(fd).unwrap();
-    let ten_millis = time::Duration::from_secs(2);
-    let now = time::Instant::now();
-
-    thread::sleep(ten_millis);
-    println!("exit");
+    let consumeData = sockBuf.consumeReadData.load(Ordering::Relaxed);
+    println!("consumeData: {}", consumeData);
+    let consumeData = sockBuf.AddConsumeReadData(5);
+    println!("consumeData: {}", consumeData);
 }
+
 fn test() {
     let a = AtomicU32::new(1);
     let addr = &a as *const _ as u64;
@@ -269,8 +210,7 @@ fn test() {
         &clientShareRegion.ioMetas[0].writeBufAtoms as *const _ as u64,
         &clientShareRegion.ioMetas[0].consumeReadData as *const _ as u64,
         &clientShareRegion.iobufs[0].read as *const _ as u64,
-        &clientShareRegion.iobufs[0].write as *const _ as u64,
-    );
+        &clientShareRegion.iobufs[0].write as *const _ as u64);
 
     let consumeReadData = sockBuf.AddConsumeReadData(6);
     println!("consumeReadData: {}", consumeReadData);
@@ -299,20 +239,21 @@ fn test() {
         mem::size_of::<qlib::rdma_share::IOBuf>()
     );
 
-    // let shareRegionSize = mem::size_of::<qlib::rdma_share::ShareRegion>();
-    // let addr = unsafe { libc::malloc(shareRegionSize) };
-    // println!("addr: 0x{:x}", addr as u64);
-    // let eventAddr = addr as *mut ShareRegion; // as &mut qlib::Event;
-    // let shareRegion = unsafe { &mut (*eventAddr) };
-    // RDMA_SRV.shareRegion = shareRegion;
-    // shareRegion.srvBitmap.store(64, Ordering::SeqCst);
-    // println!(
-    //     "srvBitmap: {}",
-    //     RDMA_SRV
-    //     .shareRegion
-    //         .srvBitmap
-    //         .load(Ordering::Relaxed)
-    // );
+    let shareRegionSize = mem::size_of::<qlib::rdma_share::ShareRegion>();
+    let addr = unsafe { libc::malloc(shareRegionSize) };
+    println!("addr: 0x{:x}", addr as u64);
+    let eventAddr = addr as *mut ShareRegion; // as &mut qlib::Event;
+    let shareRegion = unsafe { &mut (*eventAddr) };
+    RDMA_SRV.lock().shareRegion = shareRegion;
+    shareRegion.srvBitmap.store(64, Ordering::SeqCst);
+    println!(
+        "srvBitmap: {}",
+        RDMA_SRV
+            .lock()
+            .shareRegion
+            .srvBitmap
+            .load(Ordering::Relaxed)
+    );
 }
 
 fn main_backup() -> io::Result<()> {
@@ -396,40 +337,9 @@ fn main_backup() -> io::Result<()> {
         epoll_add(epoll_fd, sock_fd, read_write_event(sock_fd as u64))?;
 
         println!("new conn");
-        let controlRegionId = RDMA_SRV.controlBufIdMgr.lock().AllocId().unwrap() as usize; // TODO: should handle no space issue.
-        let sockBuf = Arc::new(SocketBuff::InitWithShareMemory(
-            MemoryDef::DEFAULT_BUF_PAGE_COUNT,
-            &RDMA_SRV.controlRegion.ioMetas[controlRegionId].readBufAtoms as *const _ as u64,
-            &RDMA_SRV.controlRegion.ioMetas[controlRegionId].writeBufAtoms as *const _ as u64,
-            &RDMA_SRV.controlRegion.ioMetas[controlRegionId].consumeReadData as *const _ as u64,
-            &RDMA_SRV.controlRegion.iobufs[controlRegionId].read as *const _ as u64,
-            &RDMA_SRV.controlRegion.iobufs[controlRegionId].write as *const _ as u64,
-        ));
-
-        let rdmaConn = RDMAConn::New(
-            sock_fd,
-            sockBuf.clone(),
-            RDMA_SRV.keys[controlRegionId / 16][1],
-        );
-        let rdmaControlChannel = RDMAChannel::New(
-            0,
-            0,
-            RDMA_SRV.keys[controlRegionId / 16][0],
-            RDMA_SRV.keys[controlRegionId / 16][1],
-            sockBuf.clone(),
-            rdmaConn.clone(),
-        );
-
-        *rdmaConn.ctrlChan.lock() = RDMAControlChannel::New((*rdmaControlChannel.clone()).clone());
-        for qp in rdmaConn.GetQueuePairs() {
-            RDMA_SRV
-                .controlChannels
-                .lock()
-                .insert(qp.qpNum(), rdmaControlChannel.clone());
-        }
-
+        let rdmaconn = RDMAConn::New(sock_fd);
         println!("before insert");
-        RDMA_SRV.conns.lock().insert(node.ipAddr, rdmaConn.clone());
+        RDMA_SRV.lock().conns.insert(node.ipAddr, rdmaconn);
         println!("after insert");
         unsafe {
             let serv_addr: libc::sockaddr_in = libc::sockaddr_in {
@@ -488,47 +398,17 @@ fn main_backup() -> io::Result<()> {
                     println!("stream_fd is: {}", stream_fd);
 
                     let peerIpAddrU32 = cliaddr.sin_addr.s_addr;
-                    fds.insert(stream_fd, FdType::TCPSocketConnect(peerIpAddrU32));
-                    let controlRegionId =
-                        RDMA_SRV.controlBufIdMgr.lock().AllocId().unwrap() as usize; // TODO: should handle no space issue.
-                    let sockBuf = Arc::new(SocketBuff::InitWithShareMemory(
-                        MemoryDef::DEFAULT_BUF_PAGE_COUNT,
-                        &RDMA_SRV.controlRegion.ioMetas[controlRegionId].readBufAtoms as *const _
-                            as u64,
-                        &RDMA_SRV.controlRegion.ioMetas[controlRegionId].writeBufAtoms as *const _
-                            as u64,
-                        &RDMA_SRV.controlRegion.ioMetas[controlRegionId].consumeReadData as *const _
-                            as u64,
-                        &RDMA_SRV.controlRegion.iobufs[controlRegionId].read as *const _ as u64,
-                        &RDMA_SRV.controlRegion.iobufs[controlRegionId].write as *const _ as u64,
-                    ));
 
-                    let rdmaConn = RDMAConn::New(
-                        stream_fd,
-                        sockBuf.clone(),
-                        RDMA_SRV.keys[controlRegionId / 16][1],
-                    );
-                    let rdmaControlChannel = RDMAChannel::New(
-                        0,
-                        0,
-                        RDMA_SRV.keys[controlRegionId / 16][0],
-                        RDMA_SRV.keys[controlRegionId / 16][1],
-                        sockBuf.clone(),
-                        rdmaConn.clone(),
-                    );
-                    *rdmaConn.ctrlChan.lock() =
-                        RDMAControlChannel::New((*rdmaControlChannel.clone()).clone());
-                    for qp in rdmaConn.GetQueuePairs() {
-                        RDMA_SRV
-                            .controlChannels
-                            .lock()
-                            .insert(qp.qpNum(), rdmaControlChannel.clone());
-                    }
-                    RDMA_SRV.conns.lock().insert(peerIpAddrU32, rdmaConn);
+                    fds.insert(stream_fd, FdType::TCPSocketConnect(peerIpAddrU32));
+
+                    RDMA_SRV
+                        .lock()
+                        .conns
+                        .insert(peerIpAddrU32, RDMAConn::New(stream_fd));
                     epoll_add(epoll_fd, stream_fd, read_write_event(stream_fd as u64))?;
                     println!("add stream fd");
                 }
-                Some(FdType::TCPSocketConnect(ipAddr)) => match RDMA_SRV.conns.lock().get(ipAddr) {
+                Some(FdType::TCPSocketConnect(ipAddr)) => match RDMA_SRV.lock().conns.get(ipAddr) {
                     Some(rdmaConn) => {
                         rdmaConn.Notify(ev.Events as u64);
                     }

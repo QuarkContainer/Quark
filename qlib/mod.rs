@@ -58,6 +58,7 @@ pub mod ringbuf;
 pub mod rdma_share;
 pub mod vcpu_mgr;
 pub mod kernel;
+pub mod unix_socket;
 
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicI32;

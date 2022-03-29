@@ -37,7 +37,7 @@ pub struct SocketBuff {
     // if the value >= 0.5 of read buf, we will send the information to the remote peer immediately otherwise,
     // when rdmadata socket send data to peer, it will read and clear the consumeReadData and send the information
     // to the peer in the rdmawrite packet to save rdmawrite call
-    pub consumeReadData: AtomicU64,
+    pub consumeReadData: &'static AtomicU64,
 
     pub readBuf: QMutex<ByteStream>,
     pub writeBuf: QMutex<ByteStream>,
@@ -63,9 +63,32 @@ impl SocketBuff {
             rClosed: AtomicBool::new(false),
             pendingWShutdown: AtomicBool::new(false),
             error: AtomicI32::new(0),
-            consumeReadData: AtomicU64::new(0),
+            consumeReadData: unsafe {
+                let addr = 0 as *mut AtomicU64;
+                &mut (*addr)
+            },
             readBuf: QMutex::new(ByteStream::Init(pageCount)),
             writeBuf: QMutex::new(ByteStream::Init(pageCount)),
+        }
+    }
+
+    pub fn InitWithShareMemory(pageCount: u64, readBufHeadTailAddr: u64, writeBufHeadTailAddr: u64, consumeReadDataAddr: u64, readBufAddr: u64, writeBufAddr: u64) -> Self {
+        let c = unsafe {
+            let addr = consumeReadDataAddr as *mut AtomicU64;
+            &mut (*addr)
+        };
+        //c.store(5, Ordering::Release);
+        return Self {
+            wClosed: AtomicBool::new(false),
+            rClosed: AtomicBool::new(false),
+            pendingWShutdown: AtomicBool::new(false),
+            error: AtomicI32::new(0),
+            consumeReadData: unsafe {
+                let addr = consumeReadDataAddr as *mut AtomicU64;
+                &mut (*addr)
+            },
+            readBuf: QMutex::new(ByteStream::InitWithShareMemory(pageCount, readBufHeadTailAddr, readBufAddr)),
+            writeBuf: QMutex::new(ByteStream::InitWithShareMemory(pageCount, writeBufHeadTailAddr, writeBufAddr)),
         }
     }
 

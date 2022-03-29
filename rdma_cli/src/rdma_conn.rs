@@ -12,22 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::{Arc, Weak};
-use core::mem;
+use alloc::sync::Arc;
+use spin::Mutex;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use libc::*;
-use spin::Mutex;
-use std::ops::{Deref, DerefMut};
+use core::mem;
+use std::ops::Deref;
 
-use super::qlib::common::*;
-use super::rdma::*;
 use super::rdma_channel::*;
+use super::rdma::*;
+use super::qlib::common::*;
 
 use super::qlib::linux_def::*;
-use super::qlib::rdma_share::*;
-use super::qlib::socket_buf::*;
-use super::rdma_srv::RDMA_SRV;
 
 // RDMA Queue Pair
 pub struct RDMAQueuePair {}
@@ -46,15 +43,15 @@ pub enum SocketState {
 #[derive(Clone, Default)]
 #[repr(C)]
 pub struct RDMAInfo {
-    raddr: u64,  /* Read Buffer address */
-    rlen: u32,   /* Read Buffer len */
-    rkey: u32,   /* Read Buffer Remote key */
-    qp_num: u32, /* QP number */
-    lid: u16,    /* LID of the IB port */
+    // raddr: u64,     /* Read Buffer address */
+    // rlen: u32,      /* Read Buffer len */
+    // rkey: u32,      /* Read Buffer Remote key */
+    qp_num: u32,    /* QP number */
+    lid: u16,       /* LID of the IB port */
     // offset: u32,    //read buffer offset
     // freespace: u32, //read buffer free space size
-    gid: Gid, /* gid */
-              // sending: bool,  // the writeimmediately is ongoing
+    gid: Gid,       /* gid */
+    // sending: bool,  // the writeimmediately is ongoing
 }
 
 impl RDMAInfo {
@@ -67,84 +64,40 @@ impl RDMAInfo {
 pub struct RDMAConnInternal {
     pub fd: i32,
     pub qps: Vec<QueuePair>,
-    pub ctrlChan: Mutex<RDMAControlChannel>,
+    pub ctrlChan: Option<RDMAControlChannel>,
     pub socketState: AtomicU64,
     pub localRDMAInfo: RDMAInfo,
     pub remoteRDMAInfo: Mutex<RDMAInfo>,
 }
 
-#[derive(Clone)]
 pub struct RDMAConn(Arc<RDMAConnInternal>);
 
 impl Deref for RDMAConn {
-    type Target = RDMAConnInternal;
+    type Target = Arc<RDMAConnInternal>;
 
-    fn deref(&self) -> &RDMAConnInternal {
+    fn deref(&self) -> &Arc<RDMAConnInternal> {
         &self.0
     }
 }
 
-// impl DerefMut for RDMAConn {
-//     fn deref_mut(&mut self) -> &mut RDMAConnInternal {
-//         &mut self.0
-//     }
-// }
-
 impl RDMAConn {
-    pub fn New(fd: i32, sockBuf: Arc<SocketBuff>, rkey: u32) -> Self {
+    pub fn New(fd: i32) -> Self {
         let qp = RDMA.CreateQueuePair().expect("RDMADataSock create QP fail");
         println!("after create qp");
-        let (addr, len) = sockBuf.ReadBuf();
         let localRDMAInfo = RDMAInfo {
             qp_num: qp.qpNum(),
             lid: RDMA.Lid(),
             gid: RDMA.Gid(),
-            raddr: addr,
-            rlen: len as u32,
-            rkey,
         };
-
-        //TODO: may find a better place to update controlChannels.
-        //RDMA_SRV.controlChannels.lock().insert(qp.qpNum(), rdmaChannel.clone());
-        Self(Arc::new(RDMAConnInternal {
+        return Self(Arc::new(RDMAConnInternal {
             fd: fd,
             qps: vec![qp],
-            ctrlChan: Mutex::new(RDMAControlChannel(Weak::new())),
+            ctrlChan: None,  //TODO: initialize
             socketState: AtomicU64::new(0),
             localRDMAInfo: localRDMAInfo,
             remoteRDMAInfo: Mutex::new(RDMAInfo::default()),
         }))
     }
-    // pub fn New(fd: i32, sockBuf: Arc<SocketBuff>, rdmaChannel: Arc<RDMAChannel>) -> Arc<Self> {
-    //     let qp = RDMA.CreateQueuePair().expect("RDMADataSock create QP fail");
-    //     println!("after create qp");
-    //     let (addr, len) = sockBuf.ReadBuf();
-    //     let localRDMAInfo = RDMAInfo {
-    //         qp_num: qp.qpNum(),
-    //         lid: RDMA.Lid(),
-    //         gid: RDMA.Gid(),
-    //         raddr: addr,
-    //         rlen: len as u32,
-    //         rkey: rdmaChannel.RemoteKey()
-    //     };
-
-    //     //TODO: may find a better place to update controlChannels.
-    //     RDMA_SRV.controlChannels.lock().insert(qp.qpNum(), rdmaChannel.clone());
-    //     let s = Arc::new(Self(RDMAConnInternal {
-    //         fd: fd,
-    //         qps: vec![qp],
-    //         ctrlChan: rdmaChannel.clone(),
-    //         socketState: AtomicU64::new(0),
-    //         localRDMAInfo: localRDMAInfo,
-    //         remoteRDMAInfo: Mutex::new(RDMAInfo::default()),
-    //     }));
-    //     rdmaChannel.SetRDMAConn(s.clone());
-    //     s
-    // }
-
-    // pub fn SetRDMAControlChannel(&mut self, rdmaChannel: Arc<RDMAChannel>) {
-    //     self.ctrlChan = Arc::downgrade(&rdmaChannel);
-    // }
 
     pub fn SetupRDMA(&self) {
         let remoteInfo = self.remoteRDMAInfo.lock();
@@ -160,17 +113,11 @@ impl RDMAConn {
         // }
     }
 
-    pub fn GetQueuePairs(&self) -> &Vec<QueuePair> {
-        &self.qps
-    }
-
     pub fn Read(&self) {
         match self.SocketState() {
             SocketState::WaitingForRemoteMeta => {
                 match self.RecvRemoteRDMAInfo() {
-                    Ok(()) => {
-                        println!("Received remote RDMA Info");
-                    }
+                    Ok(()) => { println!("Received remote RDMA Info"); },
                     _ => return,
                 }
                 println!("SetupRDMA");
@@ -189,7 +136,7 @@ impl RDMAConn {
             }
             SocketState::WaitingForRemoteReady => {
                 match self.RecvAck() {
-                    Ok(()) => {}
+                    Ok(()) => {},
                     _ => return,
                 }
                 self.SetReady();
@@ -293,11 +240,7 @@ impl RDMAConn {
             ret,
             RDMAInfo::Size()
         );
-        self.ctrlChan
-            .lock()
-            .upgrade()
-            .unwrap()
-            .UpdateRemoteRDMAInfo(data.raddr, data.rlen, data.rkey);
+
         *self.remoteRDMAInfo.lock() = data;
 
         return Ok(());
@@ -309,7 +252,7 @@ impl RDMAConn {
         let ret = unsafe { write(self.fd, &data as *const _ as u64 as _, 8) };
         if ret < 0 {
             let errno = errno::errno().0;
-
+            
             return Err(Error::SysError(errno));
         }
 
@@ -359,40 +302,6 @@ impl RDMAConn {
             self.Read();
         }
     }
-
-    pub fn RDMAWriteImm(
-        &self,
-        localAddr: u64,
-        remoteAddr: u64,
-        length: usize,
-        wrId: u64,
-        imm: u32,
-        lkey: u32,
-        rkey: u32,
-    ) -> Result<()> {
-        self.qps[0].WriteImm(wrId, localAddr, length as u32, lkey, remoteAddr, rkey, imm)?;
-        return Ok(());
-    }
-
-    pub fn PostRecv(&self, qpNum: u32, wrId: u64, addr: u64, lkey: u32) -> Result<()> {
-        //TODO: get right qp when multiple QP are used between two physical machines.
-        self.qps[0].PostRecv(wrId, addr, lkey)?;
-        return Ok(());
-    }
 }
 
-pub struct RDMAControlChannel(Weak<RDMAChannelIntern>);
-
-impl Deref for RDMAControlChannel {
-    type Target = Weak<RDMAChannelIntern>;
-
-    fn deref(&self) -> &Weak<RDMAChannelIntern> {
-        &self.0
-    }
-}
-
-impl RDMAControlChannel {
-    pub fn New(rdmaChannelIntern: Arc<RDMAChannelIntern>) -> Self {
-        Self(Arc::downgrade(&rdmaChannelIntern))
-    }
-}
+pub struct RDMAControlChannel(RDMAChannelWeak);
