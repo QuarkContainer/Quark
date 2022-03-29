@@ -420,7 +420,10 @@ fn main_backup() -> io::Result<()> {
             rdmaConn.clone(),
         );
 
-        *rdmaConn.ctrlChan.lock() = RDMAControlChannel::New((*rdmaControlChannel.clone()).clone());
+        let rdmaControlChannel = RDMAControlChannel1::New((*rdmaControlChannel.clone()).clone());
+
+        //*rdmaConn.ctrlChan.lock() = RDMAControlChannel::New((*rdmaControlChannel.clone()).clone());
+        *rdmaConn.ctrlChan.lock() = rdmaControlChannel.clone();
         for qp in rdmaConn.GetQueuePairs() {
             RDMA_SRV
                 .controlChannels
@@ -516,14 +519,18 @@ fn main_backup() -> io::Result<()> {
                         sockBuf.clone(),
                         rdmaConn.clone(),
                     );
-                    *rdmaConn.ctrlChan.lock() =
-                        RDMAControlChannel::New((*rdmaControlChannel.clone()).clone());
+                    let rdmaControlChannel =
+                        RDMAControlChannel1::New((*rdmaControlChannel.clone()).clone());
+
+                    //*rdmaConn.ctrlChan.lock() = RDMAControlChannel::New((*rdmaControlChannel.clone()).clone());
+                    *rdmaConn.ctrlChan.lock() = rdmaControlChannel.clone();
                     for qp in rdmaConn.GetQueuePairs() {
                         RDMA_SRV
                             .controlChannels
                             .lock()
                             .insert(qp.qpNum(), rdmaControlChannel.clone());
                     }
+
                     RDMA_SRV.conns.lock().insert(peerIpAddrU32, rdmaConn);
                     epoll_add(epoll_fd, stream_fd, read_write_event(stream_fd as u64))?;
                     println!("add stream fd");

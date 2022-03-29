@@ -67,7 +67,8 @@ impl RDMAInfo {
 pub struct RDMAConnInternal {
     pub fd: i32,
     pub qps: Vec<QueuePair>,
-    pub ctrlChan: Mutex<RDMAControlChannel>,
+    //pub ctrlChan: Mutex<RDMAControlChannel>,
+    pub ctrlChan: Mutex<RDMAControlChannel1>,
     pub socketState: AtomicU64,
     pub localRDMAInfo: RDMAInfo,
     pub remoteRDMAInfo: Mutex<RDMAInfo>,
@@ -109,7 +110,8 @@ impl RDMAConn {
         Self(Arc::new(RDMAConnInternal {
             fd: fd,
             qps: vec![qp],
-            ctrlChan: Mutex::new(RDMAControlChannel(Weak::new())),
+            //ctrlChan: Mutex::new(RDMAControlChannel(Weak::new())),
+            ctrlChan: Mutex::new(RDMAControlChannel1::default()),
             socketState: AtomicU64::new(0),
             localRDMAInfo: localRDMAInfo,
             remoteRDMAInfo: Mutex::new(RDMAInfo::default()),
@@ -295,6 +297,7 @@ impl RDMAConn {
         );
         self.ctrlChan
             .lock()
+            .chan
             .upgrade()
             .unwrap()
             .UpdateRemoteRDMAInfo(data.raddr, data.rlen, data.rkey);
@@ -378,6 +381,52 @@ impl RDMAConn {
         //TODO: get right qp when multiple QP are used between two physical machines.
         self.qps[0].PostRecv(wrId, addr, lkey)?;
         return Ok(());
+    }
+}
+
+pub struct RDMAControlChannelIntern {
+    pub chan: Weak<RDMAChannelIntern>,
+    pub buf: Vec<u8>,
+}
+
+#[derive(Clone)]
+pub struct RDMAControlChannel1(Arc<RDMAControlChannelIntern>);
+
+impl Default for RDMAControlChannel1 {
+    fn default() -> Self {
+        Self(Arc::new(RDMAControlChannelIntern {
+            chan: Weak::new(),
+            buf: Vec::new()
+        }))
+    }
+}
+
+impl Deref for RDMAControlChannel1 {
+    type Target = Arc<RDMAControlChannelIntern>;
+
+    fn deref(&self) -> &Arc<RDMAControlChannelIntern> {
+        &self.0
+    }
+}
+
+impl RDMAControlChannel1{
+    pub fn New(rdmaChannelIntern: Arc<RDMAChannelIntern>) -> Self {
+        Self(Arc::new(RDMAControlChannelIntern {
+            chan: Arc::downgrade(&rdmaChannelIntern),
+            buf: Vec::with_capacity(1024)
+        }))
+    }
+
+    pub fn ProcessRDMAWriteImmFinish(&self) {
+        println!("ProcessRDMAWriteImmFinish");
+    }
+
+    pub fn ProcessRDMARecvWriteImm(
+        &self,
+        qpNum: u32,
+        recvCount: u64
+    ) {
+        println!("ProcessRDMARecvWriteImm");
     }
 }
 

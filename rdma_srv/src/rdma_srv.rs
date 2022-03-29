@@ -85,7 +85,7 @@ pub struct RDMASrv {
     pub channels: Mutex<HashMap<u32, RDMAChannel>>,
 
     // rdma control channels: qpNum -> RDMAChannel
-    pub controlChannels: Mutex<HashMap<u32, RDMAChannel>>,
+    pub controlChannels: Mutex<HashMap<u32, RDMAControlChannel1>>,
 
     // agents: agentId -> RDMAAgent
     pub agents: Mutex<HashMap<u32, RDMAAgent>>,
