@@ -1,8 +1,8 @@
 use libc;
 use core::alloc::{GlobalAlloc, Layout};
 use core::sync::atomic::AtomicBool;
+use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-
 
 use super::qlib::mem::list_allocator::*;
 use super::qlib::linux_def::MemoryDef;
@@ -10,30 +10,18 @@ use super::qlib::linux_def::MemoryDef;
 pub const KERNEL_HEAP_ORD : usize = 33; // 16GB
 const HEAP_OFFSET: u64 = 1 * MemoryDef::ONE_GB;
 
-#[derive(Debug)]
-pub struct HostAllocator {
-    pub listHeapAddr : u64,
-    pub initialized: AtomicBool
-}
-
 impl HostAllocator {
     pub const fn New() -> Self {
         return Self {
-            listHeapAddr: MemoryDef::PHY_LOWER_ADDR + HEAP_OFFSET,
+            listHeapAddr: AtomicU64::new(MemoryDef::PHY_LOWER_ADDR + HEAP_OFFSET),
             initialized: AtomicBool::new(false)
-        }
-    }
-
-    pub fn Allocator(&self) -> &mut ListAllocator {
-        return unsafe {
-            &mut *(self.listHeapAddr as * mut ListAllocator)
         }
     }
 
     pub fn Init(&self) {
         let heapSize = 1 << KERNEL_HEAP_ORD as usize;
         let addr = unsafe {
-            libc::mmap(self.listHeapAddr as _,
+            libc::mmap(self.listHeapAddr.load(Ordering::Relaxed) as _,
                        heapSize,
                        libc::PROT_READ | libc::PROT_WRITE,
                        libc::MAP_PRIVATE | libc::MAP_ANON | libc::MAP_FIXED,
@@ -45,7 +33,8 @@ impl HostAllocator {
             panic!("mmap: failed to get mapped memory area for heap");
         }
 
-        assert!(self.listHeapAddr == addr, "listHeapAddr is {:x}, addr is {:x}", self.listHeapAddr, addr);
+        assert!(self.listHeapAddr.load(Ordering::Relaxed) == addr,
+            "listHeapAddr is {:x}, addr is {:x}", self.listHeapAddr.load(Ordering::Relaxed), addr);
 
         *self.Allocator() = ListAllocator::Empty();
 

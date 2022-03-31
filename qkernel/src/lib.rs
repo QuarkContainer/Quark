@@ -85,7 +85,6 @@ use self::qlib::kernel::threadmgr as threadmgr;
 use self::qlib::kernel::util as util;
 use self::qlib::kernel::fd as fd;
 use self::qlib::kernel::guestfdnotifier as guestfdnotifier;
-use self::qlib::kernel::heap as heap;
 use self::qlib::kernel::perflog as perflog;
 use self::qlib::kernel::SignalDef as SignalDef;
 use self::qlib::kernel::task as task;
@@ -99,7 +98,6 @@ use self::interrupt::virtualization_handler;
 use vcpu::CPU_LOCAL;
 use self::qlib::kernel::vcpu::*;
 
-use alloc::string::String;
 use core::panic::PanicInfo;
 use core::sync::atomic::AtomicI32;
 use core::sync::atomic::AtomicU64;
@@ -118,6 +116,7 @@ use self::boot::loader::*;
 use self::kernel::timer::*;
 use self::loader::vdso::*;
 use self::qlib::common::*;
+use self::qlib::mem::list_allocator::*;
 use self::qlib::config::*;
 use self::qlib::control_msg::*;
 use self::qlib::linux_def::MemoryDef;
@@ -134,7 +133,6 @@ use self::qlib::kernel::Scale;
 use self::qlib::kernel::VcpuFreqInit;
 use self::quring::*;
 //use self::heap::QAllocator;
-use self::heap::GuestAllocator;
 use self::uid::*;
 
 pub const HEAP_START: usize = 0x70_2000_0000;
@@ -142,17 +140,19 @@ pub const HEAP_SIZE: usize = 0x1000_0000;
 
 //use buddy_system_allocator::*;
 #[global_allocator]
+pub static VCPU_ALLOCATOR: GlobalVcpuAllocator = GlobalVcpuAllocator::New();
+
 //static ALLOCATOR: QAllocator = QAllocator::New();
 //static ALLOCATOR: StackHeap = StackHeap::Empty();
 //static ALLOCATOR: ListAllocator = ListAllocator::Empty();
-static ALLOCATOR: GuestAllocator = GuestAllocator::New();
+//static ALLOCATOR: GuestAllocator = GuestAllocator::New();
 //static ALLOCATOR: BufHeap = BufHeap::Empty();
 //static ALLOCATOR: LockedHeap<33> = LockedHeap::empty();
 
-pub fn AllocatorPrint(_class: usize) -> String {
+/*pub fn AllocatorPrint(_class: usize) -> String {
     let class = 6;
     return ALLOCATOR.Print(class);
-}
+}*/
 
 use self::qlib::kernel::*;
 
@@ -447,14 +447,14 @@ pub extern "C" fn rust_main(
     autoStart: bool,
 ) {
     if id == 0 {
-        ALLOCATOR.Init(heapStart);
+        GLOBAL_ALLOCATOR.Init(heapStart);
         SHARESPACE.SetValue(shareSpaceAddr);
         SingletonInit();
 
+        VCPU_ALLOCATOR.Initializated();
         InitTsc();
         InitTimeKeeper(vdsoParamAddr);
 
-        //Kernel::HostSpace::KernelMsg(0, 0, 1);
         {
             let kpt = &KERNEL_PAGETABLE;
 

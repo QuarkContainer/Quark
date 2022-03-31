@@ -57,6 +57,12 @@ impl CPULocal {
         return unsafe { core::mem::transmute(state) };
     }
 
+    pub fn AllocatorMut(&self) -> &mut VcpuAllocator {
+        return unsafe {
+            &mut *(&self.allocator as * const _ as u64 as * mut VcpuAllocator)
+        }
+    }
+
     pub fn ToSearch(&self, sharespace: &ShareSpace) -> u64 {
         assert!(self.state.load(Ordering::SeqCst)!=VcpuState::Searching as u64, "state is {}", self.state.load(Ordering::SeqCst));
         self.state.store(VcpuState::Searching as u64, Ordering::SeqCst);
