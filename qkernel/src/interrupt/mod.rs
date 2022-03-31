@@ -631,9 +631,11 @@ pub extern fn VirtualizationHandler(ptRegs: &mut PtRegs) {
         PageTables::Switch(curr);
         let currTask = Task::Current();
         currTask.mm.MaskTlbShootdown(CPULocal::CpuId() as u64);
-    }
 
-    if CPULocal::InterruptByThreadTimeout(mask) {
+        CPULocal::SetKernelStack(currTask.GetKernelSp());
+        return;
+
+    } else if CPULocal::InterruptByThreadTimeout(mask) {
         if ptRegs.ss & 0x3 != 0 { // from user
             let mut rflags = ptRegs.eflags;
             rflags &= !USER_FLAGS_CLEAR;
@@ -646,15 +648,22 @@ pub extern fn VirtualizationHandler(ptRegs: &mut PtRegs) {
 
             currTask.AccountTaskLeave(SchedState::RunningApp);
             currTask.SaveFp();
+
             super::qlib::kernel::taskMgr::Yield();
+            MainRun(currTask, TaskRunState::RunApp);
             currTask.RestoreFp();
-            currTask.AccountTaskEnter(SchedState::RunningApp);
+
             CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
+            CPULocal::SetKernelStack(currTask.GetKernelSp());
+
+            let kernalRsp = ptRegs as *const _ as u64;
+            if !(ptRegs.rip == ptRegs.rcx && ptRegs.r11 == ptRegs.eflags) {
+                IRet(kernalRsp)
+            } else {
+                SyscallRet(kernalRsp)
+            }
         }
     }
-
-    CPULocal::SetKernelStack(currTask.GetKernelSp());
-    return;
 }
 
 #[no_mangle]
