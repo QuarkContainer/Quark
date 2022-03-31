@@ -14,31 +14,31 @@
    limitations under the License.
 */
 
-use std::collections::HashMap;
-use std::path::Path;
-use std::path::PathBuf;
-use std::convert::TryFrom;
 use nix::sys::stat::Mode;
 use nix::unistd::mkdir;
-use time::OffsetDateTime;
-use std::sync::mpsc::Receiver;
+use std::collections::HashMap;
+use std::convert::TryFrom;
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::mpsc::sync_channel;
+use std::sync::mpsc::Receiver;
+use time::OffsetDateTime;
 
-use containerd_shim::api::*;
-use containerd_shim::util::*;
-use containerd_shim::mount::*;
-use containerd_shim::protos::protobuf::{CodedInputStream, Message};
-use containerd_shim::protos::protobuf::well_known_types::Timestamp;
-use containerd_shim::protos::cgroups::metrics::Metrics;
-use containerd_shim::util::read_spec_from_file;
-use oci_spec::runtime::LinuxNamespaceType;
 use super::super::super::runc::oci::LinuxResources;
+use containerd_shim::api::*;
+use containerd_shim::mount::*;
+use containerd_shim::protos::cgroups::metrics::Metrics;
+use containerd_shim::protos::protobuf::well_known_types::Timestamp;
+use containerd_shim::protos::protobuf::{CodedInputStream, Message};
+use containerd_shim::util::read_spec_from_file;
+use containerd_shim::util::*;
+use oci_spec::runtime::LinuxNamespaceType;
 
-use super::super::cmd::config::*;
 use super::super::super::qlib::common::*;
+use super::super::cmd::config::*;
 use super::super::container::container::*;
-use super::process::*;
 use super::container_io::*;
+use super::process::*;
 
 #[derive(Clone, Default)]
 pub struct ContainerFactory {}
@@ -49,21 +49,24 @@ impl ContainerFactory {
         let mut opts = Options::new();
         if let Some(any) = req.options.as_ref() {
             let mut input = CodedInputStream::from_bytes(any.value.as_ref());
-            opts.merge_from(&mut input).map_err(|e|Error::Common(format!("ttrpc error is {:?}", e)))?;
+            opts.merge_from(&mut input)
+                .map_err(|e| Error::Common(format!("ttrpc error is {:?}", e)))?;
         }
         if opts.compute_size() > 0 {
             debug!("create options: {:?}", &opts);
         }
         let runtime = opts.binary_name.as_str();
-        write_options(bundle, &opts).map_err(|e| Error::Common(format!("ContainerFactory {:?}", e)))?;
-        write_runtime(bundle, runtime).map_err(|e| Error::Common(format!("ContainerFactory {:?}", e)))?;
+        write_options(bundle, &opts)
+            .map_err(|e| Error::Common(format!("ContainerFactory {:?}", e)))?;
+        write_runtime(bundle, runtime)
+            .map_err(|e| Error::Common(format!("ContainerFactory {:?}", e)))?;
 
         let rootfs_vec = req.get_rootfs().to_vec();
         let rootfs = if !rootfs_vec.is_empty() {
             let tmp_rootfs = Path::new(bundle).join("rootfs");
             if !tmp_rootfs.as_path().exists() {
                 mkdir(tmp_rootfs.as_path(), Mode::from_bits(0o711).unwrap())
-                    .map_err(|e|Error::Common(format!("ttrpc error is {:?}", e)))?;
+                    .map_err(|e| Error::Common(format!("ttrpc error is {:?}", e)))?;
             }
             tmp_rootfs
         } else {
@@ -77,7 +80,7 @@ impl ContainerFactory {
             let mount_type = m.field_type.as_str().none_if(|&x| x.is_empty());
             let source = m.source.as_str().none_if(|&x| x.is_empty());
             mount_rootfs(mount_type, source, &m.options.to_vec(), rootfs)
-                .map_err(|e|Error::Common(format!("ttrpc error is {:?}", e)))?;
+                .map_err(|e| Error::Common(format!("ttrpc error is {:?}", e)))?;
         }
 
         let root = Path::new(opts.root.as_str()).join(ns);
@@ -114,11 +117,12 @@ impl ContainerFactory {
             DebugLevel: DebugLevel::Info,
             DebugLog: log_buf.into_os_string().into_string().unwrap(),
             FileAccess: FileAccessType::default(),
-            Network: NetworkType::default()
+            Network: NetworkType::default(),
         };
 
-        let container = init.Create(&config)
-            .map_err(|e|Error::Common(format!("ttrpc error is {:?}", e)))?;
+        let container = init
+            .Create(&config)
+            .map_err(|e| Error::Common(format!("ttrpc error is {:?}", e)))?;
         let container = CommonContainer {
             id: id.to_string(),
             container: container,
@@ -174,14 +178,13 @@ impl CommonContainer {
     pub fn state(&self, exec_id: Option<&str>) -> Result<StateResponse> {
         let mut resp = match exec_id {
             Some(exec_id) => {
-                let process = self.processes.get(exec_id).ok_or_else(|| {
-                    Error::Common("can not find the exec by id".to_string())
-                })?;
+                let process = self
+                    .processes
+                    .get(exec_id)
+                    .ok_or_else(|| Error::Common("can not find the exec by id".to_string()))?;
                 process.state()
             }
-            None => {
-                self.init.common.state()
-            }
+            None => self.init.common.state(),
         };
 
         resp.bundle = self.bundle.to_string();
@@ -191,8 +194,8 @@ impl CommonContainer {
 
     pub fn exec(&mut self, req: ExecProcessRequest) -> Result<()> {
         let exec_id = req.exec_id.to_string();
-        let mut exec_process = ExecProcess::try_from(req)
-            .map_err(|e|Error::Common(format!("{:?}", e)))?;
+        let mut exec_process =
+            ExecProcess::try_from(req).map_err(|e| Error::Common(format!("{:?}", e)))?;
 
         let stdio = exec_process.common.stdio.CreateIO()?;
         exec_process.common.containerIO = stdio;
@@ -204,9 +207,10 @@ impl CommonContainer {
     pub fn wait_channel(&mut self, exec_id: Option<&str>) -> Result<Receiver<i8>> {
         let process = match exec_id {
             Some(exec_id) => {
-                let p = self.processes.get_mut(exec_id).ok_or_else(|| {
-                    Error::Common("can not find the exec by id".to_string())
-                })?;
+                let p = self
+                    .processes
+                    .get_mut(exec_id)
+                    .ok_or_else(|| Error::Common("can not find the exec by id".to_string()))?;
                 &mut p.common
             }
             None => &mut self.init.common,
@@ -222,15 +226,14 @@ impl CommonContainer {
     pub fn wait(&mut self, exec_id: Option<&str>) -> Result<u32> {
         let pid = match exec_id {
             Some(exec_id) => {
-                let process = self.processes.get(exec_id).ok_or_else(|| {
-                    Error::Common("can not find the exec by id".to_string())
-                })?;
+                let process = self
+                    .processes
+                    .get(exec_id)
+                    .ok_or_else(|| Error::Common("can not find the exec by id".to_string()))?;
 
                 process.pid()
             }
-            None => {
-                self.init.common.pid()
-            }
+            None => self.init.common.pid(),
         };
 
         return self.container.WaitPid(pid, true); // todo: how to clear this?
@@ -242,31 +245,38 @@ impl CommonContainer {
     ) -> Result<(i32, i32, Option<OffsetDateTime>)> {
         match exec_id {
             Some(exec_id) => {
-                let process = self.processes.get(exec_id).ok_or_else(|| {
-                    Error::Common("can not find the exec by id".to_string())
-                })?;
+                let process = self
+                    .processes
+                    .get(exec_id)
+                    .ok_or_else(|| Error::Common("can not find the exec by id".to_string()))?;
 
                 Ok((process.pid(), process.exit_code(), process.exited_at()))
             }
-            None => {
-                Ok((self.init.common.pid(), self.init.common.exit_code(), self.init.common.exited_at()))
-            }
+            None => Ok((
+                self.init.common.pid(),
+                self.init.common.exit_code(),
+                self.init.common.exited_at(),
+            )),
         }
     }
 
     pub fn resize_pty(&mut self, exec_id: Option<&str>, height: u32, width: u32) -> Result<()> {
         match exec_id {
             Some(exec_id) => {
-                let process = self.processes.get_mut(exec_id).ok_or_else(|| {
-                    Error::Common("can not find the exec by id".to_string())
-                })?;
-                process.resize_pty(height, width)
-                    .map_err(|e|Error::Common(format!("{:?}", e)))?;
+                let process = self
+                    .processes
+                    .get_mut(exec_id)
+                    .ok_or_else(|| Error::Common("can not find the exec by id".to_string()))?;
+                process
+                    .resize_pty(height, width)
+                    .map_err(|e| Error::Common(format!("{:?}", e)))?;
                 Ok(())
             }
             None => {
-                self.init.common.resize_pty(height, width)
-                    .map_err(|e|Error::Common(format!("{:?}", e)))?;
+                self.init
+                    .common
+                    .resize_pty(height, width)
+                    .map_err(|e| Error::Common(format!("{:?}", e)))?;
                 Ok(())
             }
         }
@@ -275,9 +285,10 @@ impl CommonContainer {
     pub fn kill(&mut self, exec_id: Option<&str>, signal: u32, all: bool) -> Result<()> {
         match exec_id {
             Some(exec_id) => {
-                let p = self.processes.get(exec_id).ok_or_else(|| {
-                    Error::Common("can not find the exec by id".to_string())
-                })?;
+                let p = self
+                    .processes
+                    .get(exec_id)
+                    .ok_or_else(|| Error::Common("can not find the exec by id".to_string()))?;
                 self.container.SignalProcess(signal as i32, p.pid())?;
             }
             None => {
@@ -285,12 +296,11 @@ impl CommonContainer {
             }
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn delete(&mut self, exec_id_opt: Option<&str>) -> Result<(i32, u32, Timestamp)> {
-        let (pid, code, exit_at) = self
-            .get_exit_info(exec_id_opt)?;
+        let (pid, code, exit_at) = self.get_exit_info(exec_id_opt)?;
         match exec_id_opt {
             Some(exec_id) => {
                 self.processes.remove(exec_id);
@@ -316,11 +326,11 @@ impl CommonContainer {
 
         }*/
 
-        return Err(Error::Unimplemented("CommonContainer::pids".to_string()))
+        return Err(Error::Unimplemented("CommonContainer::pids".to_string()));
     }
 
     pub fn stats(&self) -> Result<Metrics> {
-        return Err(Error::Unimplemented("CommonContainer::pids".to_string()))
+        return Err(Error::Unimplemented("CommonContainer::pids".to_string()));
         /*let mut metrics = Metrics::new();
         // get container main process cgroup
         let path = get_cgroups_relative_paths_by_pid(self.common.init.pid() as u32)?;
@@ -352,7 +362,7 @@ impl CommonContainer {
     }
 
     pub fn update(&mut self, _resources: &LinuxResources) -> Result<()> {
-        return Err(Error::Unimplemented("CommonContainer::pids".to_string()))
+        return Err(Error::Unimplemented("CommonContainer::pids".to_string()));
         /*// get container main process cgroup
         let path = get_cgroups_relative_paths_by_pid(self.common.init.pid() as u32)?;
         let cgroup = Cgroup::load_with_relative_paths(hierarchies::auto(), Path::new("."), path);
@@ -454,11 +464,18 @@ impl CommonContainer {
 
                 let fds = process.common.containerIO.StdioFds()?;
 
-                let pid = self.container.Sandbox.as_ref().unwrap().Exec1(&self.id, exec_id, &process.spec, &fds)?;
+                let pid = self.container.Sandbox.as_ref().unwrap().Exec1(
+                    &self.id,
+                    exec_id,
+                    &process.spec,
+                    &fds,
+                )?;
                 process.common.pid = pid;
-                process.common.CopyIO()
-                    .map_err(|e|Error::Common(format!("{:?}", e)))?;
-                return Ok(pid)
+                process
+                    .common
+                    .CopyIO(&*self.id, pid)
+                    .map_err(|e| Error::Common(format!("{:?}", e)))?;
+                return Ok(pid);
             }
             None => {
                 self.container.StartRootContainer()?;
