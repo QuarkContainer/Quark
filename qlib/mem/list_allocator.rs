@@ -61,7 +61,7 @@ impl GlobalVcpuAllocator {
 
 unsafe impl GlobalAlloc for GlobalVcpuAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        if !self.init.load(Ordering::Relaxed) {
+        if true || !self.init.load(Ordering::Relaxed) {
             return GLOBAL_ALLOCATOR
                 .alloc(layout);
         }
@@ -69,7 +69,7 @@ unsafe impl GlobalAlloc for GlobalVcpuAllocator {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        if !self.init.load(Ordering::Relaxed) {
+        if true || !self.init.load(Ordering::Relaxed) {
             return GLOBAL_ALLOCATOR
                 .dealloc(ptr, layout);
         }
