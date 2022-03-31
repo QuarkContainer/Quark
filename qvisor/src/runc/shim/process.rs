@@ -14,35 +14,34 @@
    limitations under the License.
 */
 
-
-use std::sync::mpsc::SyncSender;
 use std::fs::File;
+use std::sync::mpsc::SyncSender;
 //use std::fs::OpenOptions;
 use std::path::Path;
 //use std::os::unix::io::AsRawFd;
 //use std::os::unix::io::FromRawFd;
+use core::convert::TryFrom;
 use nix::ioctl_write_ptr_bad;
 use nix::sys::termios::Termios;
-use core::convert::TryFrom;
 //use nix::sys::termios::tcgetattr;
 
-use containerd_shim::Result;
-use containerd_shim::Error;
-use containerd_shim::api::StateResponse;
 use containerd_shim::api::ExecProcessRequest;
+use containerd_shim::api::StateResponse;
 use containerd_shim::protos::protobuf::well_known_types::Timestamp;
-use containerd_shim::util::read_pid_from_file;
 use containerd_shim::protos::types::task::Status;
+use containerd_shim::util::read_pid_from_file;
+use containerd_shim::Error;
+use containerd_shim::Result;
 use time::OffsetDateTime;
 
 ioctl_write_ptr_bad!(ioctl_set_winsz, libc::TIOCSWINSZ, libc::winsize);
 
-use super::container_io::*;
-use super::super::container::container::*;
-use super::super::cmd::config::*;
-use super::super::oci::Spec;
-use super::super::oci;
 use super::super::super::qlib::path::*;
+use super::super::cmd::config::*;
+use super::super::container::container::*;
+use super::super::oci;
+use super::super::oci::Spec;
+use super::container_io::*;
 
 pub struct Console {
     pub file: File,
@@ -70,8 +69,10 @@ impl Drop for CommonProcess {
 }
 
 impl CommonProcess {
-    pub fn CopyIO(&self) -> Result<()> {
-        return self.containerIO.CopyIO(&self.stdio)
+    pub fn CopyIO(&self, cid: &str, pid: i32) -> Result<()> {
+        return self
+            .containerIO
+            .CopyIO(&self.stdio, cid, pid)
             .map_err(|e| Error::Other(format!("{:?}", e)));
     }
 
@@ -153,8 +154,10 @@ impl CommonProcess {
     }
 
     pub fn resize_pty(&mut self, height: u32, width: u32) -> Result<()> {
-        return self.containerIO
-            .ResizePty(height, width).map_err(|e| Error::Other(format!("resize_pty {:?}", e)))
+        return self
+            .containerIO
+            .ResizePty(height, width)
+            .map_err(|e| Error::Other(format!("resize_pty {:?}", e)));
     }
 }
 
@@ -248,7 +251,7 @@ impl TryFrom<ExecProcessRequest> for ExecProcess {
                 exit_code: 0,
                 exited_at: None,
                 wait_chan_tx: vec![],
-                containerIO: ContainerIO::None
+                containerIO: ContainerIO::None,
             },
             spec: p,
         };
@@ -308,21 +311,22 @@ impl InitProcess {
     pub fn Create(&self, config: &GlobalConfig) -> Result<Container> {
         let specfile = Join(&self.bundle, "config.json");
         let spec = Spec::load(&specfile).unwrap();
-        let container = Container::Create1(&self.common.id,
-                                           RunAction::Create,
-                                           spec,
-                                           config,
-                                           &self.bundle,
-                                           "",
-                                           &self.common.containerIO,
-                                           !self.no_pivot_root)
-            .map_err(|e| Error::Other(format!("{:?}", e)))?;
-        self.common.CopyIO()?;
-        return Ok(container)
+        let container = Container::Create1(
+            &self.common.id,
+            RunAction::Create,
+            spec,
+            config,
+            &self.bundle,
+            "",
+            &self.common.containerIO,
+            !self.no_pivot_root,
+        )
+        .map_err(|e| Error::Other(format!("{:?}", e)))?;
+        self.common.CopyIO(&*container.ID, 0)?;
+        return Ok(container);
     }
 
     pub fn pid(&self) -> i32 {
         self.common.pid()
     }
 }
-
