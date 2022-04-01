@@ -127,12 +127,20 @@ impl ShareSpace {
         self.ClearTlbShootdownMask();
         let mask = VMS.lock().TlbShootdown(vcpuMask);
 
-        for _ in 0..10_000 { // total 10_000 micro sec
-            if mask & !self.TlbShootdownMask() == 0 {
-                return mask as _;
+        let mut last = TSC.Rdtsc();
+        for _ in 0..200 {
+            loop {
+                Self::Yield();
+                if mask & !self.TlbShootdownMask() == 0 {
+                    return mask as _;
+                }
+                if Tsc::Scale(TSC.Rdtsc() - last) * 1000 > CLOCK_TICK {
+                    last = TSC.Rdtsc();
+                    break;
+                }
             }
-            Self::Yield();
-            //mask = VMS.lock().TlbShootdown(mask & !self.TlbShootdownMask());
+
+            VMS.lock().TlbShootdown(mask & !self.TlbShootdownMask());
         }
 
         error!("TlbShootdown waiting for {:b} timeout", mask & !self.TlbShootdownMask());
@@ -155,8 +163,12 @@ impl ShareSpace {
 
             //error!("CheckVcpuTimeout {}/{}/{}/{}", i, enterAppTimestamp, now, Tsc::Scale(now - enterAppTimestamp));
             if Tsc::Scale(now - enterAppTimestamp) * 1000 > CLOCK_TICK {
-                self.scheduler.VcpuArr[i].ResetEnterAppTimestamp();
+                //self.scheduler.VcpuArr[i].ResetEnterAppTimestamp();
+
+                // retry to send signal for each 2 ms
+                self.scheduler.VcpuArr[i].SetEnterAppTimestamp(enterAppTimestamp + CLOCK_TICK / 5000);
                 self.scheduler.VcpuArr[i].InterruptThreadTimeout();
+                //error!("CheckVcpuTimeout {}/{}/{}/{}", i, enterAppTimestamp, now, Tsc::Scale(now - enterAppTimestamp));
 
                 // todo: enable this for preempty schedule
                 VMS.lock().vcpus[i].Signal(Signal::SIGCHLD);
