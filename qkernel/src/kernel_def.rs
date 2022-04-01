@@ -229,7 +229,7 @@ pub fn switch(from: TaskId, to: TaskId) {
 
     fromCtx.Check();
     toCtx.Check();
-    debug!("switch {:x}->{:x}", from.data, to.data);
+    //debug!("switch {:x}->{:x}", from.data, to.data);
 
     unsafe {
         context_swap(fromCtx.GetContext(), toCtx.GetContext(), 1, 0);

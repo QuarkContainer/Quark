@@ -290,9 +290,25 @@ impl KVMVcpu {
             return false
         }
 
-        vmspace::VMSpace::TgKill(self.tgid.load(Ordering::Relaxed) as i32,
-                                 self.threadid.load(Ordering::Relaxed) as i32,
-                                 signal);
+        loop {
+            let ret = vmspace::VMSpace::TgKill(self.tgid.load(Ordering::Relaxed) as i32,
+                                     self.threadid.load(Ordering::Relaxed) as i32,
+                                     signal);
+
+            if ret == 0 {
+                break;
+            }
+
+            if ret < 0 {
+                let errno = errno::errno().0;
+                if errno == SysErr::EAGAIN {
+                    continue;
+                }
+
+                panic!("vcpu tgkill fail with error {}", errno);
+            }
+        }
+
         return true;
     }
 
