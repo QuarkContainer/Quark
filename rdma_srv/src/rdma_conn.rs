@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::slice;
 use alloc::sync::{Arc, Weak};
 use core::mem;
 use core::sync::atomic::AtomicU64;
@@ -19,15 +20,17 @@ use core::sync::atomic::Ordering;
 use libc::*;
 use spin::Mutex;
 use std::ops::{Deref, DerefMut};
+use std::{env, ptr, thread};
 
 use super::qlib::common::*;
 use super::rdma::*;
 use super::rdma_channel::*;
+use super::rdma_ctrlconn::*;
 
 use super::qlib::linux_def::*;
 use super::qlib::rdma_share::*;
 use super::qlib::socket_buf::*;
-use super::rdma_srv::RDMA_SRV;
+use super::rdma_srv::*;
 
 // RDMA Queue Pair
 pub struct RDMAQueuePair {}
@@ -68,7 +71,7 @@ pub struct RDMAConnInternal {
     pub fd: i32,
     pub qps: Vec<QueuePair>,
     //pub ctrlChan: Mutex<RDMAControlChannel>,
-    pub ctrlChan: Mutex<RDMAControlChannel1>,
+    pub ctrlChan: Mutex<RDMAControlChannel>,
     pub socketState: AtomicU64,
     pub localRDMAInfo: RDMAInfo,
     pub remoteRDMAInfo: Mutex<RDMAInfo>,
@@ -111,7 +114,7 @@ impl RDMAConn {
             fd: fd,
             qps: vec![qp],
             //ctrlChan: Mutex::new(RDMAControlChannel(Weak::new())),
-            ctrlChan: Mutex::new(RDMAControlChannel1::default()),
+            ctrlChan: Mutex::new(RDMAControlChannel::default()),
             socketState: AtomicU64::new(0),
             localRDMAInfo: localRDMAInfo,
             remoteRDMAInfo: Mutex::new(RDMAInfo::default()),
@@ -153,13 +156,11 @@ impl RDMAConn {
         self.qps[0]
             .Setup(&RDMA, remoteInfo.qp_num, remoteInfo.lid, remoteInfo.gid)
             .expect("SetupRDMA fail...");
-        // for _i in 0..MAX_RECV_WR {
-        //     let wr = WorkRequestId::New(self.fd);
-        //     self.qp
-        //         .lock()
-        //         .PostRecv(wr.0, self.localRDMAInfo.raddr, self.localRDMAInfo.rkey)
-        //         .expect("SetupRDMA PostRecv fail");
-        // }
+        for _i in 0..10 {
+            self.qps[0]
+                .PostRecv(0, self.localRDMAInfo.raddr, self.localRDMAInfo.rkey)
+                .expect("SetupRDMA PostRecv fail");
+        }
     }
 
     pub fn GetQueuePairs(&self) -> &Vec<QueuePair> {
@@ -248,7 +249,8 @@ impl RDMAConn {
 
     pub fn SetReady(&self) {
         self.SetSocketState(SocketState::Ready);
-        println!("Ready!!!")
+        println!("Ready!!!");
+        self.ctrlChan.lock().SendData();
     }
 
     pub fn SendLocalRDMAInfo(&self) -> Result<()> {
@@ -295,6 +297,14 @@ impl RDMAConn {
             ret,
             RDMAInfo::Size()
         );
+        match self.ctrlChan.lock().chan.upgrade() {
+            None => {
+                println!("ctrlChann is null")
+            }
+            _ => {
+                println!("ctrlChann is not null")
+            }
+        }
         self.ctrlChan
             .lock()
             .chan
@@ -377,31 +387,51 @@ impl RDMAConn {
         return Ok(());
     }
 
-    pub fn PostRecv(&self, qpNum: u32, wrId: u64, addr: u64, lkey: u32) -> Result<()> {
+    pub fn PostRecv(&self, _qpNum: u32, wrId: u64, addr: u64, lkey: u32) -> Result<()> {
         //TODO: get right qp when multiple QP are used between two physical machines.
         self.qps[0].PostRecv(wrId, addr, lkey)?;
         return Ok(());
     }
 }
 
+pub const CONTROL_MSG_SIZE: usize = 40;
+
 pub struct RDMAControlChannelIntern {
     pub chan: Weak<RDMAChannelIntern>,
-    pub buf: Vec<u8>,
+    // pub readHeadBuf: [u8; 8],
+    // pub readHeadLeft: u32,
+    // pub readBodyBuf: Vec<u8>,
+    // pub readBodyLeft: u32,
+    // pub writeBuf: Vec<u8>,
+    // pub writeLeft: u32,
+    pub readBuf: [u8; CONTROL_MSG_SIZE],
+    pub readLeft: u8,
+    pub writeBuf: [u8; CONTROL_MSG_SIZE],
+    pub writeLeft: Mutex<u8>,
 }
 
 #[derive(Clone)]
-pub struct RDMAControlChannel1(Arc<RDMAControlChannelIntern>);
+pub struct RDMAControlChannel(Arc<RDMAControlChannelIntern>);
 
-impl Default for RDMAControlChannel1 {
+impl Default for RDMAControlChannel {
     fn default() -> Self {
         Self(Arc::new(RDMAControlChannelIntern {
             chan: Weak::new(),
-            buf: Vec::new()
+            // readHeadBuf: [0; 8],
+            // readHeadLeft: 0,
+            // readBodyBuf: Vec::new(),
+            // readBodyLeft: 0,
+            // writeBuf: Vec::new(),
+            // writeLeft: 0,
+            readBuf: [0; CONTROL_MSG_SIZE],
+            readLeft: 0,
+            writeBuf: [0; CONTROL_MSG_SIZE],
+            writeLeft: Mutex::new(0),
         }))
     }
 }
 
-impl Deref for RDMAControlChannel1 {
+impl Deref for RDMAControlChannel {
     type Target = Arc<RDMAControlChannelIntern>;
 
     fn deref(&self) -> &Arc<RDMAControlChannelIntern> {
@@ -409,39 +439,316 @@ impl Deref for RDMAControlChannel1 {
     }
 }
 
-impl RDMAControlChannel1{
+impl RDMAControlChannel {
     pub fn New(rdmaChannelIntern: Arc<RDMAChannelIntern>) -> Self {
         Self(Arc::new(RDMAControlChannelIntern {
             chan: Arc::downgrade(&rdmaChannelIntern),
-            buf: Vec::with_capacity(1024)
+            // readHeadBuf: [0; 8],
+            // readHeadLeft: 0,
+            // readBodyBuf: Vec::new(),
+            // readBodyLeft: 0,
+            // writeBuf: Vec::new(),
+            // writeLeft: 0,
+            readBuf: [0; CONTROL_MSG_SIZE],
+            readLeft: 0,
+            writeBuf: [0; CONTROL_MSG_SIZE],
+            writeLeft: Mutex::new(0),
         }))
     }
 
     pub fn ProcessRDMAWriteImmFinish(&self) {
-        println!("ProcessRDMAWriteImmFinish");
+        self.chan.upgrade().unwrap().ProcessRDMAWriteImmFinish();
     }
 
-    pub fn ProcessRDMARecvWriteImm(
-        &self,
-        qpNum: u32,
-        recvCount: u64
-    ) {
+    pub fn ProcessRDMARecvWriteImm(&self, qpNum: u32, _recvCount: u64) -> Result<()> {
         println!("ProcessRDMARecvWriteImm");
+        let rdmaChannel = self.chan.upgrade().unwrap();
+        let _res = rdmaChannel.conn.PostRecv(
+            qpNum,
+            rdmaChannel.localId as u64,
+            rdmaChannel.raddr,
+            rdmaChannel.rkey,
+        );
+
+        //TODO: handle postRecv error
+        let mut readBuf = rdmaChannel.sockBuf.readBuf.lock();
+        let msgSize = mem::size_of::<ControlMsgBody>();
+        while readBuf.AvailableDataSize() > msgSize {
+            let r: Vec<u8> = Vec::with_capacity(msgSize);
+            let rAddr = r.as_ptr() as u64;
+            let (_trigger, len) = readBuf.readViaAddr(rAddr, msgSize as u64);
+            if len != msgSize {
+                panic!("readViaAddr can't read enough content!");
+            }
+
+            let msg = unsafe { &mut *(rAddr as *mut ControlMsgBody) };
+            match msg {
+                ControlMsgBody::ConnectRequest(msg) => {
+                    self.HandleConnectionRequest(msg);
+                }
+                ControlMsgBody::ConnectResponse(msg) => {
+                    println!("3 remoteChannelId: {}", msg.remoteChannelId);
+                }
+                ControlMsgBody::ConnectConfirm(msg) => {
+                    println!("1 localChannelId: {}", msg.localChannelId);
+                }
+                ControlMsgBody::ConsumedData(msg) => {
+                    println!("3 remoteChannelId: {}", msg.remoteChannelId);
+                }
+            }
+        }
+
+        // let dataBuf = self
+        //     .chan
+        //     .upgrade()
+        //     .unwrap()
+        //     .sockBuf
+        //     .writeBuf
+        //     .lock()
+        //     .GetDataBuf();
+        // println!("dataBuf, addr: 0x{:x}, len: {}", dataBuf.0, dataBuf.1);
+        // let x = dataBuf.0;
+        // let z = unsafe { &mut *(x as *mut u8) };
+        // println!("z: {}", z);
+        // let z = unsafe { &mut *((x + 1) as *mut u8) };
+        // println!("z: {}", z);
+        // let z = unsafe { &mut *((x + 2) as *mut u8) };
+        // println!("z: {}", z);
+        // let controlMsg = unsafe { &mut *(x as *mut ControlMsgBody) };
+        // match controlMsg {
+        //     ControlMsgBody::ConnectConfirm(msg) => {
+        //         println!("1 localChannelId: {}", msg.localChannelId);
+        //     }
+        //     ControlMsgBody::ConnectRequest(msg) => {
+        //         println!("2 port: {}", msg.port);
+        //     }
+        //     ControlMsgBody::ConnectResponse(msg) => {
+        //         println!("3 remoteChannelId: {}", msg.remoteChannelId);
+        //     }
+        // }
+
+        return Ok(());
+    }
+
+    pub fn HandleConnectionRequest(&self, connectionRequest: &mut ConnectRequest) {
+        let endPoint = Endpoint {
+            ipAddr: connectionRequest.dstIpAddr,
+            port: connectionRequest.dstPort,
+        };
+        let mut found = false;
+        let mut agentId = 0;
+        match RDMA_SRV.srvEndPoints.get(&endPoint) {
+            Some(srvEndpoint) => match srvEndpoint.status {
+                SrvEndPointStatus::Listening => {
+                    found = true;
+                    agentId = srvEndpoint.agentId;
+                }
+                _ => {}
+            },
+            None => {}
+        }
+
+        if found {
+            let channelId = RDMA_SRV.channelIdMgr.lock().AllocId();
+            //let rdmaChannel = RDMAChannel::New(localId, remoteId, lkey, rkey, socketBuf, rdmaConn);
+        }
+    }
+
+    //Send msg using control channel
+    //Where to be called:
+    //1. Connect request: Trigger by SQ.
+    //2. Connect Response: Trigger by RecvWriteImm
+    //3. Connect Confirm: Trigger by RecvWriteImm
+    //4. ConsumedData: 1) WriteImmFinish, 2) Read more than half of read buffer.
+    //5. RemoteRecevieReqeustsNum ?? when to send?
+    pub fn SendMsg(&self, msg: ControlMsgBody) -> Result<()> {
+        let rdmaChannel = self.chan.upgrade().unwrap();
+        let mut writeBuf = rdmaChannel.sockBuf.writeBuf.lock();
+        if mem::size_of::<ControlMsgBody>() < writeBuf.AvailableSpace() {
+            return Err(Error::Timeout);
+        }
+        let (trigger, _len) = writeBuf.writeViaAddr(
+            &msg as *const _ as u64,
+            mem::size_of::<ControlMsgBody>() as u64,
+        );
+        if trigger {
+            //TODO: check this is good to call rdmachannel here.
+            rdmaChannel.RDMASend();
+        }
+        // let totalLen = mem::size_of::<ControlMsgBody>();
+        // if writtenLen < totalLen {
+        //     let writeLeft = totalLen - writtenLen;
+        //     *self.writeLeft.lock() = writeLeft as u8;
+        //     let ptr = &self.writeBuf as *const _ as u64 as *mut u8;
+        //     let slice = unsafe { slice::from_raw_parts_mut(ptr, CONTROL_MSG_SIZE) };
+        //     let msgAddr = &msg as *const _ as u64;
+        //     let msgSlice = unsafe { slice::from_raw_parts(msgAddr as *mut u8, CONTROL_MSG_SIZE) };
+        //     slice[0..writeLeft]
+        //         .clone_from_slice(&msgSlice[(CONTROL_MSG_SIZE - writeLeft)..CONTROL_MSG_SIZE]);
+        // }
+        return Ok(());
+    }
+
+    pub fn SendData(&self) {
+        let dataBuf = self
+            .chan
+            .upgrade()
+            .unwrap()
+            .sockBuf
+            .writeBuf
+            .lock()
+            .GetSpaceBuf();
+        println!("dataBuf, addr: 0x{:x}, len: {}", dataBuf.0, dataBuf.1);
+        let x = dataBuf.0;
+        let z = unsafe { &mut *(x as *mut u8) };
+        println!("z: {}", z);
+        let z = unsafe { &mut *((x + 1) as *mut u8) };
+        println!("z: {}", z);
+        let z = unsafe { &mut *((x + 2) as *mut u8) };
+        println!("z: {}", z);
+        // let v: Vec<u8> = vec![101, 102, 103];
+        // self.chan
+        //     .upgrade()
+        //     .unwrap()
+        //     .sockBuf
+        //     .writeBuf
+        //     .lock()
+        //     .writeViaAddr(v.as_ptr() as *const _ as u64, 3);
+        let connectRequest = ControlMsgBody::ConnectRequest(ConnectRequest {
+            remoteChannelId: 123,
+            raddr: 456,
+            rkey: 789,
+            length: 1000,
+            srcIpAddr: 0,
+            srcPort: 80,
+            dstIpAddr: 0,
+            dstPort: 8080,
+        });
+        self.chan
+            .upgrade()
+            .unwrap()
+            .sockBuf
+            .writeBuf
+            .lock()
+            .writeViaAddr(
+                &connectRequest as *const _ as u64,
+                mem::size_of::<ControlMsgBody>() as u64,
+            );
+        self.chan.upgrade().unwrap().RDMASend();
+        println!("After RDMA send");
+        // let ccfd = RDMA.CompleteChannelFd();
+        // println!("ccfd is {}", ccfd);
+        // let mut raw_fd_set = mem::MaybeUninit::<libc::fd_set>::uninit();
+        // unsafe { libc::FD_ZERO(raw_fd_set.as_mut_ptr()) };
+        // let mut fd_set = unsafe { raw_fd_set.assume_init() };
+        //
+        // unsafe {
+        //     libc::FD_SET(ccfd, &mut fd_set);
+        //     println!("before select 1...");
+        //     libc::select(
+        //         ccfd + 1,
+        //         &mut fd_set,
+        //         ptr::null_mut(),
+        //         ptr::null_mut(),
+        //         ptr::null_mut(),
+        //     );
+        //     println!("after select 1...");
+        //     RDMA.PollCompletionQueueAndProcess();
+        // }
+
+        // unsafe {
+        //     let epollfd = libc::epoll_create1(0);
+        //     let mut event = libc::epoll_event {
+        //         events: libc::EPOLLET as u32 | libc::EPOLLIN as u32,
+        //         u64: ccfd as u64,
+        //     };
+        //     epoll_ctl(epollfd, libc::EPOLL_CTL_ADD, ccfd, &mut event);
+        //     let mut events: Vec<libc::epoll_event> = Vec::with_capacity(1024);
+        //     println!("before epoll_wait...");
+        //     let eventNum = epoll_wait(
+        //         epollfd,
+        //         events.as_mut_ptr() as *mut libc::epoll_event,
+        //         1024,
+        //         -1 as libc::c_int,
+        //     );
+        //     events.set_len(eventNum as usize);
+        //     println!("after epoll_wait, event num is: {}, event: {:x}, fd: {}", eventNum, events[0].events, events[0].u64);
+        // }
     }
 }
 
-pub struct RDMAControlChannel(Weak<RDMAChannelIntern>);
+// pub struct RDMAControlChannel(Weak<RDMAChannelIntern>);
 
-impl Deref for RDMAControlChannel {
-    type Target = Weak<RDMAChannelIntern>;
+// impl Deref for RDMAControlChannel {
+//     type Target = Weak<RDMAChannelIntern>;
 
-    fn deref(&self) -> &Weak<RDMAChannelIntern> {
-        &self.0
-    }
+//     fn deref(&self) -> &Weak<RDMAChannelIntern> {
+//         &self.0
+//     }
+// }
+
+// impl RDMAControlChannel {
+//     pub fn New(rdmaChannelIntern: Arc<RDMAChannelIntern>) -> Self {
+//         Self(Arc::downgrade(&rdmaChannelIntern))
+//     }
+// }
+
+/* Control channel protocol: payload */
+
+#[derive(Clone)]
+pub enum ControlMsgBody {
+    ConnectRequest(ConnectRequest),
+    ConnectResponse(ConnectResponse),
+    ConnectConfirm(ConnectConfirm),
+    ConsumedData(ConsumedData),
 }
 
-impl RDMAControlChannel {
-    pub fn New(rdmaChannelIntern: Arc<RDMAChannelIntern>) -> Self {
-        Self(Arc::downgrade(&rdmaChannelIntern))
-    }
+#[derive(Clone)]
+pub struct ConsumedData {
+    remoteChannelId: u32,
+    consumedData: u32,
+}
+
+#[derive(Clone)]
+pub struct ConnectRequest {
+    remoteChannelId: u32,
+    raddr: u64,
+    rkey: u32,
+    length: u32,
+    dstIpAddr: u32,
+    dstPort: u16,
+    srcIpAddr: u32,
+    srcPort: u16,
+}
+
+#[derive(Clone)]
+pub struct ConnectResponse {
+    remoteChannelId: u32,
+    localChannelId: u32,
+    raddr: u64,
+    rkey: u32,
+    length: u32,
+}
+
+#[derive(Clone)]
+pub struct ConnectConfirm {
+    remoteChannelId: u32,
+    localChannelId: u32,
+}
+
+#[repr(u32)]
+pub enum ControlMsgType {
+    ConnectionRequest,
+    ConnectionResponse,
+    ConnectionConfirm,
+}
+
+pub struct ControlMsgHead {
+    msgType: ControlMsgType,
+    length: u32,
+}
+
+pub struct ControlMsg {
+    head: ControlMsgHead,
+    body: ControlMsgBody,
 }

@@ -73,7 +73,7 @@ impl SocketBuff {
     }
 
     pub fn InitWithShareMemory(pageCount: u64, readBufHeadTailAddr: u64, writeBufHeadTailAddr: u64, consumeReadDataAddr: u64, readBufAddr: u64, writeBufAddr: u64) -> Self {
-        let c = unsafe {
+        let _c = unsafe {
             let addr = consumeReadDataAddr as *mut AtomicU64;
             &mut (*addr)
         };

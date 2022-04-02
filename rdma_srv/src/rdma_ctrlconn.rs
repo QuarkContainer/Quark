@@ -104,7 +104,7 @@ pub struct VirtualEp {
     pub dstPort: u16, //target port??
 }
 
-
+#[derive(Eq, Hash, PartialEq)]
 pub struct Endpoint {
     // same as vpcId
     pub ipAddr: u32,

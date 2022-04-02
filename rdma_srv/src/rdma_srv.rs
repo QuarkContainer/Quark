@@ -85,7 +85,8 @@ pub struct RDMASrv {
     pub channels: Mutex<HashMap<u32, RDMAChannel>>,
 
     // rdma control channels: qpNum -> RDMAChannel
-    pub controlChannels: Mutex<HashMap<u32, RDMAControlChannel1>>,
+    pub controlChannels: Mutex<HashMap<u32, RDMAControlChannel>>,
+    pub controlChannels2: Mutex<HashMap<u32, RDMAChannel>>,
 
     // agents: agentId -> RDMAAgent
     pub agents: Mutex<HashMap<u32, RDMAAgent>>,
@@ -121,6 +122,7 @@ impl Drop for RDMASrv {
 
 impl RDMASrv {
     pub fn New() -> Self {
+        println!("RDMASrv::New");
         let controlSize = mem::size_of::<RDMAControlChannelRegion>();
         let contrlAddr = unsafe {
             libc::mmap(
@@ -146,7 +148,7 @@ impl RDMASrv {
             )
         };
         let size = mem::size_of::<ShareRegion>();
-        let ret = unsafe { libc::ftruncate(memfd, size as i64) };
+        let _ret = unsafe { libc::ftruncate(memfd, size as i64) };
         let shareRegionAddr = unsafe {
             libc::mmap(
                 ptr::null_mut(),
@@ -160,7 +162,7 @@ impl RDMASrv {
 
         println!("shareRegionAddr : 0x{:x}, size is: {}", shareRegionAddr as u64, size);
 
-        RDMA.Init("", 1);
+        //RDMA.Init("", 1);
 
         //start from 2M registration.
         let mr = RDMA.CreateMemoryRegion(contrlAddr as u64, 2 * 1024 * 1024).unwrap();
@@ -194,6 +196,7 @@ impl RDMASrv {
             controlBufIdMgr: Mutex::new(IdMgr::Init(0, 16)),
             keys: vec![[mr.LKey(), mr.RKey()]],
             controlChannels: Mutex::new(HashMap::new()),
+            controlChannels2: Mutex::new(HashMap::new()),
         };
     }
 
@@ -250,8 +253,12 @@ impl RDMASrv {
                 }
             }
         }
-        
     }
+
+    // pub fn CreateRDMAChannel(&self, agentId: u32) {
+    //     let channelId = self.channelIdMgr.lock().AllocId();
+
+    // }
 }
 
 // scenarios:

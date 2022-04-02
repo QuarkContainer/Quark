@@ -208,7 +208,8 @@ impl IBContext {
         }
 
         unsafe {
-            rdmaffi::ibv_req_notify_cq(cq, 0);
+            let ret = rdmaffi::ibv_req_notify_cq(cq, 0);
+            println!("ibv_req_notify_cq, ret: {}", ret);
         }
 
         return CompleteQueue(cq);
@@ -325,6 +326,7 @@ impl RDMAContextIntern {
         // start to monitor the complete channel
         //IO_MGR.AddRDMAContext(ccfd);
         //IO_MGR.AddWait(ccfd, EVENT_READ);
+        println!("RDMA ccfd: {}", ccfd);
 
         let completeQueue = ibContext.CreateCompleteQueue(&completeChannel);
         let gid = ibContext.QueryGid(ibPort);
@@ -332,6 +334,13 @@ impl RDMAContextIntern {
         // unblock complete channel fd
         //TODO: unblock fd
         //super::super::VMSpace::UnblockFd(ccfd);
+
+        // unsafe {
+        //     let fd = ccfd;
+        //     let flags = libc::fcntl(fd, Cmd::F_GETFL, 0);
+        //     let ret = libc::fcntl(fd, Cmd::F_SETFL, flags | Flags::O_NONBLOCK);
+        //     assert!(ret == 0, "UnblockFd fail");
+        // }
 
         return Self {
             portAttr: portAttr,
@@ -443,10 +452,13 @@ impl RDMAContext {
     }
 
     pub fn CompleteChannelFd(&self) -> i32 {
-        return self.lock().ccfd;
+        let fd = self.lock().ccfd;
+        println!("XXXX, fd: {} ", fd);
+        return fd
     }
 
     pub fn PollCompletionQueueAndProcess(&self) -> usize {
+        println!("PollCompletionQueueAndProcess");
         let mut wc = rdmaffi::ibv_wc {
             //TODO: find a better way to initialize
             wr_id: 0,
@@ -633,8 +645,9 @@ impl RDMAContext {
 
     // call back for
     pub fn ProcessWC(&self, wc: &rdmaffi::ibv_wc) {
+        println!("ProcessWC 1");
         let wrid = WorkRequestId(wc.wr_id);
-        let fd = wrid.Fd();
+        let _fd = wrid.Fd();
 
         // match typ {
         //     WorkRequestType::WriteImm => {
@@ -807,7 +820,7 @@ impl QueuePair {
             return Err(Error::SysError(errno::errno().0));
         }
 
-        //error!("RDMAWriteImm");
+        println!("QP::WriteImm");
 
         return Ok(());
     }
@@ -829,6 +842,8 @@ impl QueuePair {
         if rc != 0 {
             return Err(Error::SysError(errno::errno().0));
         }
+
+        println!("QP::PostRecv");
 
         return Ok(());
     }

@@ -144,13 +144,16 @@ impl RDMAChannelIntern {
         let writeCount = self.writeCount.load(QOrdering::ACQUIRE);
         // debug!("ProcessRDMAWriteImmFinish::1 writeCount: {}", writeCount);
 
-        let (_trigger, addr, _len) = self
+        let (trigger, addr, _len) = self
             .sockBuf
             .ConsumeAndGetAvailableWriteBuf(writeCount as usize);
-        // debug!("ProcessRDMAWriteImmFinish::2, trigger: {}, addr: {}", trigger, addr);
-        // if trigger {
-        //     waitinfo.Notify(EVENT_OUT);
-        // }
+        
+        if trigger {
+            // waitinfo.Notify(EVENT_OUT);
+            if self.localId != 0 {
+                // TODO: notify 'client' to write via CQ.
+            }
+        }
 
         if addr != 0 {
             self.RDMASendLocked(remoteInfo)
@@ -172,9 +175,10 @@ impl RDMAChannelIntern {
             let (trigger, _addr, _len) =
                 self.sockBuf.ProduceAndGetFreeReadBuf(recvCount as usize);
             // debug!("ProcessRDMARecvWriteImm::2, trigger {}", trigger);
-            // if trigger {
-            //     waitinfo.Notify(EVENT_IN);
-            // }
+            if trigger {
+                // waitinfo.Notify(EVENT_IN);
+                // TODO: notify 'client' via CQ
+            }
         }
 
         // if writeConsumeCount > 0 {
@@ -190,11 +194,22 @@ impl RDMAChannelIntern {
         // }
     }
 
+    pub fn RDMASend(&self) {
+        let remoteInfo = self.remoteRDMAInfo.lock();
+        if remoteInfo.sending == true {
+            return; // the sending is ongoing
+        }
+
+        self.RDMASendLocked(remoteInfo);
+    }
+
     pub fn RDMASendLocked(&self, mut remoteInfo: MutexGuard<RDMAInfo>) {
+        println!("RDMASendLocked 1");
         let readCount = self.sockBuf.GetAndClearConsumeReadData();
         let buf = self.sockBuf.writeBuf.lock();
         let (addr, mut len) = buf.GetDataBuf();
         // debug!("RDMASendLocked::1, readCount: {}, addr: {:x}, len: {}, remote.freespace: {}", readCount, addr, len, remoteInfo.freespace);
+        println!("RDMASendLocked 2, readCount: {}, len: {}", readCount, len);
         if readCount > 0 || len > 0 {
             if len > remoteInfo.freespace as usize {
                 len = remoteInfo.freespace as usize;
@@ -208,6 +223,7 @@ impl RDMAChannelIntern {
                     remoteInfo.rkey,
                 )
                 .expect("RDMAWriteImm fail...");
+                println!("after calling self.RDMAWriteImm");
                 remoteInfo.freespace -= len as u32;
                 remoteInfo.offset = (remoteInfo.offset + len as u32) % remoteInfo.rlen;
                 remoteInfo.sending = true;
