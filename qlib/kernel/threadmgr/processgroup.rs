@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use crate::qlib::mutex::*;
 use core::ops::Deref;
 use core::cmp::*;
@@ -220,13 +221,13 @@ impl ProcessGroup {
         let mut hasStopped = false;
         let originator = self.lock().originator.clone();
         let pidns = originator.PIDNamespace();
-        let owner = pidns.lock().owner.clone();
-        owner.forEachThreadGroupLocked(|tg: &ThreadGroup| {
+        let tgids : Vec<ThreadGroup> = pidns.lock().tgids.keys().cloned().collect();
+        for tg in &tgids {
             match tg.lock().processGroup.clone() {
-                None => return,
+                None => continue,
                 Some(pg) => {
                     if pg != self.clone() {
-                        return
+                        continue
                     }
                 }
             }
@@ -238,18 +239,18 @@ impl ProcessGroup {
                     hasStopped = true;
                 }
             }
-        });
+        }
 
         if !hasStopped {
             return
         }
 
-        owner.forEachThreadGroupLocked(|tg: &ThreadGroup| {
+        for tg in &tgids {
             match tg.lock().processGroup.clone() {
-                None => return,
+                None => continue,
                 Some(pg) => {
                     if pg != self.clone() {
-                        return
+                        continue
                     }
                 }
             }
@@ -261,7 +262,57 @@ impl ProcessGroup {
                 leader.sendSignalLocked(&SignalInfoPriv(Signal::SIGHUP), true).unwrap();
                 leader.sendSignalLocked(&SignalInfoPriv(Signal::SIGCONT), true).unwrap();
             }
+        }
+
+
+        /*error!("handleOrphan xxx 3");
+        owner.forEachThreadGroupLocked(|tg: &ThreadGroup| {
+            error!("handleOrphan 4");
+            match tg.lock().processGroup.clone() {
+                None => return,
+                Some(pg) => {
+                    if pg != self.clone() {
+                        return
+                    }
+                }
+            }
+
+            error!("handleOrphan 5");
+            {
+                let lock = tg.lock().signalLock.clone();
+                let _s = lock.lock();
+                if tg.lock().groupStopComplete {
+                    hasStopped = true;
+                }
+            }
         });
+
+        error!("handleOrphan 6");
+        if !hasStopped {
+            return
+        }
+
+        error!("handleOrphan 7");
+        owner.forEachThreadGroupLocked(|tg: &ThreadGroup| {
+            error!("handleOrphan 8");
+            match tg.lock().processGroup.clone() {
+                None => return,
+                Some(pg) => {
+                    if pg != self.clone() {
+                        return
+                    }
+                }
+            }
+
+            error!("handleOrphan 9");
+            {
+                let lock = tg.lock().signalLock.clone();
+                let _s = lock.lock();
+                let leader = tg.lock().leader.Upgrade().unwrap();
+                leader.sendSignalLocked(&SignalInfoPriv(Signal::SIGHUP), true).unwrap();
+                leader.sendSignalLocked(&SignalInfoPriv(Signal::SIGCONT), true).unwrap();
+            }
+        });*/
     }
 
     pub fn Session(&self) -> Session {

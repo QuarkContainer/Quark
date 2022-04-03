@@ -427,24 +427,138 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysPWritev2, //sys_pwritev2,
     NotImplementSyscall, //sys_pkey_mprotect,
     NotImplementSyscall, //sys_pkey_alloc,//330
-    NotImplementSyscall, //sys_pkey_free,
-    SysStatx, //sys_statx,
+    NotImplementSyscall, //sys_pkey_free, 331
+    SysStatx, //sys_statx, 332
+    NotImplementSyscall, //	333
+    NotImplementSyscall, //	334
+    NotImplementSyscall, //	335
+    NotImplementSyscall, //	336
+    NotImplementSyscall, //	337
+    NotImplementSyscall, //	338
+    NotImplementSyscall, //	339
+    NotImplementSyscall, //	340
+    NotImplementSyscall, //	341
+    NotImplementSyscall, //	342
+    NotImplementSyscall, //	343
+    NotImplementSyscall, //	344
+    NotImplementSyscall, //	345
+    NotImplementSyscall, //	346
+    NotImplementSyscall, //	347
+    NotImplementSyscall, //	348
+    NotImplementSyscall, //	349
+    NotImplementSyscall, //	350
+    NotImplementSyscall, //	351
+    NotImplementSyscall, //	352
+    NotImplementSyscall, //	353
+    NotImplementSyscall, //	354
+    NotImplementSyscall, //	355
+    NotImplementSyscall, //	356
+    NotImplementSyscall, //	357
+    NotImplementSyscall, //	358
+    NotImplementSyscall, //	359
+    NotImplementSyscall, //	360
+    NotImplementSyscall, //	361
+    NotImplementSyscall, //	362
+    NotImplementSyscall, //	363
+    NotImplementSyscall, //	364
+    NotImplementSyscall, //	365
+    NotImplementSyscall, //	366
+    NotImplementSyscall, //	367
+    NotImplementSyscall, //	368
+    NotImplementSyscall, //	369
+    NotImplementSyscall, //	370
+    NotImplementSyscall, //	371
+    NotImplementSyscall, //	372
+    NotImplementSyscall, //	373
+    NotImplementSyscall, //	374
+    NotImplementSyscall, //	375
+    NotImplementSyscall, //	376
+    NotImplementSyscall, //	377
+    NotImplementSyscall, //	378
+    NotImplementSyscall, //	379
+    NotImplementSyscall, //	380
+    NotImplementSyscall, //	381
+    NotImplementSyscall, //	382
+    NotImplementSyscall, //	383
+    NotImplementSyscall, //	384
+    NotImplementSyscall, //	385
+    NotImplementSyscall, //	386
+    NotImplementSyscall, //	387
+    NotImplementSyscall, //	388
+    NotImplementSyscall, //	389
+    NotImplementSyscall, //	390
+    NotImplementSyscall, //	391
+    NotImplementSyscall, //	392
+    NotImplementSyscall, //	393
+    NotImplementSyscall, //	394
+    NotImplementSyscall, //	395
+    NotImplementSyscall, //	396
+    NotImplementSyscall, //	397
+    NotImplementSyscall, //	398
+    NotImplementSyscall, //	399
+    NotImplementSyscall, //	400
+    NotImplementSyscall, //	401
+    NotImplementSyscall, //	402
+    NotImplementSyscall, //	403
+    NotImplementSyscall, //	404
+    NotImplementSyscall, //	405
+    NotImplementSyscall, //	406
+    NotImplementSyscall, //	407
+    NotImplementSyscall, //	408
+    NotImplementSyscall, //	409
+    NotImplementSyscall, //	410
+    NotImplementSyscall, //	411
+    NotImplementSyscall, //	412
+    NotImplementSyscall, //	413
+    NotImplementSyscall, //	414
+    NotImplementSyscall, //	415
+    NotImplementSyscall, //	416
+    NotImplementSyscall, //	417
+    NotImplementSyscall, //	418
+    NotImplementSyscall, //	419
+    NotImplementSyscall, //	420
+    NotImplementSyscall, //	421
+    NotImplementSyscall, //	422
+    NotImplementSyscall, //	423
+    NotImplementSyscall, //	424
+    NotImplementSyscall, //	425
+    NotImplementSyscall, //	426
+    NotImplementSyscall, //	427
+    NotImplementSyscall, //	428
+    NotImplementSyscall, //	429
+    NotImplementSyscall, //	430
+    NotImplementSyscall, //	431
+    NotImplementSyscall, //	432
+    NotImplementSyscall, //	433
+    NotImplementSyscall, //	434
+    NotImplementSyscall, //	435
+    NotImplementSyscall, //	436
+    NotImplementSyscall, //	437
+    NotImplementSyscall, //	438
+    SysNoSys, //	439
+    NotImplementSyscall, //	440
+    NotImplementSyscall, //	441
+    NotImplementSyscall, //	442
 ];
 
-pub fn NotImplementSyscall(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
+pub fn NotImplementSyscall(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    error!("NotImplementSyscall syscall {:x?}", args);
     return Err(Error::SysCallNotImplement)
 }
 
-pub fn SysNoSupport(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
+pub fn SysNoSupport(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    error!("SysNoSupport syscall {:x?}", args);
     return Err(Error::SysError(SysErr::ENODATA));
     //return Err(Error::SysError(SysErr::ENOTSUP));
 }
 
-pub fn SysObsolete(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
+pub fn SysObsolete(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    error!("SysObsolete syscall {:x?}", args);
     return Err(Error::SysError(SysErr::ENOSYS));
     //return Err(Error::SysError(SysErr::ENOTSUP));
 }
 
-pub fn SysNoSys(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
+pub fn SysNoSys(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    error!("No support syscall {:x?}", args);
     return Err(Error::SysError(SysErr::ENOSYS));
 }

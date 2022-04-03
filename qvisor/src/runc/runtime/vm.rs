@@ -73,7 +73,6 @@ pub fn GetExitStatus() -> i32 {
 
 pub const KERNEL_HEAP_ORD : usize = 33; // 16GB
 
-
 pub struct VirtualMachine {
     pub kvm: Kvm,
     pub vmfd: VmFd,
