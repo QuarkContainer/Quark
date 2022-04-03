@@ -243,7 +243,7 @@ pub extern "C" fn syscall_handler(
     let nr = pt.orig_rax;
     assert!(
         nr < SysCallID::maxsupport as u64,
-        "get supported syscall id {:x}",
+        "get unsupported syscall id {:x}",
         nr
     );
 

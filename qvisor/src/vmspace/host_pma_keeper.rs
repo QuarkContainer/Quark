@@ -22,7 +22,6 @@ use super::super::qlib::range::*;
 use super::super::memmgr::*;
 use super::super::IO_MGR;
 
-
 #[derive(Clone, Default)]
 pub struct HostSegment {}
 
@@ -44,12 +43,10 @@ pub struct HostPMAKeeper {
 }
 
 impl HostPMAKeeper {
-    const HUGE_PAGE_RANGE: u64 = 6 * MemoryDef::ONE_GB as u64;
-
     pub fn New() -> Self {
         return Self {
             ranges: Mutex::new(AreaSet::New(0,0)),
-            hugePages: Mutex::new(VecDeque::with_capacity((Self::HUGE_PAGE_RANGE / MemoryDef::PAGE_SIZE_2M) as usize))
+            hugePages: Mutex::new(VecDeque::with_capacity(1000)),
         }
     }
 
@@ -63,14 +60,15 @@ impl HostPMAKeeper {
     }
 
     pub fn Init(&self, start: u64, len: u64) {
-        assert!(len > Self::HUGE_PAGE_RANGE as u64);
         self.ranges.lock().Reset(start, len);
     }
 
     pub fn InitHugePages(&self) {
-        let hugePageStart = self.RangeAllocate(Self::HUGE_PAGE_RANGE, MemoryDef::PAGE_SIZE_2M).unwrap();
+        let hugeLen = (self.ranges.lock().range.Len() / MemoryDef::ONE_GB - 2) * MemoryDef::ONE_GB;
+        //error!("InitHugePages is {:x}", self.ranges.lock().range.Len() / MemoryDef::ONE_GB - 2);
+        let hugePageStart = self.RangeAllocate(hugeLen, MemoryDef::PAGE_SIZE_2M).unwrap();
         let mut addr = hugePageStart;
-        while addr < hugePageStart + Self::HUGE_PAGE_RANGE as u64 {
+        while addr < hugePageStart + hugeLen {
             self.FreeHugePage(addr);
             addr += MemoryDef::PAGE_SIZE_2M;
         }
@@ -137,7 +135,13 @@ impl HostPMAKeeper {
 
         if len <= MemoryDef::PAGE_SIZE_2M {
             assert!(alignment <= MemoryDef::PAGE_SIZE_2M, "Allocate fail .... {:x}/{:x}", len, alignment);
-            let addr = self.AllocHugePage().expect("AllocHugePage fail...");
+            let addr = match self.AllocHugePage() {
+                None => {
+                    error!("AllocHugePage fail...");
+                    panic!("AllocHugePage fail...");
+                }
+                Some(addr) => addr
+            };
             return Ok(addr)
         }
 
