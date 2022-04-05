@@ -260,7 +260,7 @@ impl KVMVcpu {
         vcpu_sregs.cr0 = CR0_PE | CR0_AM | CR0_ET | CR0_PG | CR0_WP; // | CR0_MP | CR0_NE;
         vcpu_sregs.cr3 = VMS.lock().pageTables.GetRoot();
         //vcpu_sregs.cr4 = CR4_PAE | CR4_OSFXSR | CR4_OSXMMEXCPT;
-        vcpu_sregs.cr4 = CR4_PAE | CR4_PGE | CR4_OSFXSR | CR4_OSXMMEXCPT | CR4_FSGSBASE;// | CR4_UMIP ;// CR4_PSE | | CR4_SMEP | CR4_SMAP;
+        vcpu_sregs.cr4 = CR4_PAE | CR4_PGE | CR4_OSFXSR | CR4_OSXMMEXCPT | CR4_FSGSBASE | CR4_OSXSAVE;// | CR4_UMIP ;// CR4_PSE | | CR4_SMEP | CR4_SMAP;
 
         vcpu_sregs.efer = EFER_LME | EFER_LMA | EFER_SCE | EFER_NX;
 
@@ -687,7 +687,7 @@ impl KVMVcpu {
                 VcpuExit::IrqWindowOpen => {
                     //info!("get VcpuExit::IrqWindowOpen");
                     self.InterruptGuest();
-                    self.vcpu.set_kvm_request_interrupt_window(0);
+                    //self.vcpu.set_kvm_request_interrupt_window(0);
                 }
                 VcpuExit::Intr => {
                     //self.vcpu.set_kvm_request_interrupt_window(1);

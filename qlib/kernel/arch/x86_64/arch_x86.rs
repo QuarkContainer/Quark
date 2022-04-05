@@ -15,6 +15,7 @@
 use alloc::sync::Arc;
 use crate::qlib::mutex::*;
 use core::sync::atomic::AtomicUsize;
+use core::sync::atomic::AtomicU32;
 use core::sync::atomic::Ordering;
 
 use super::super::super::super::cpuid::*;
@@ -91,6 +92,14 @@ pub const USER_DS: u64 = 0x2b; // guest ring 3 data selector
 pub const FS_TLS_SEL: u64 = 0x63; // Linux FS thread-local storage selector
 pub const GS_TLS_SEL: u64 = 0x6b; // Linux GS thread-local storage selector
 
+// MXCSR_DEFAULT is the reset value of MXCSR (Intel SDM Vol. 2, Ch. 3.2
+// "LDMXCSR")
+pub const MXCSR_DEFAULT: u32 =	0x1f80;
+
+// MXCSR_OFFSET is the offset in bytes of the MXCSR field from the start of the
+// FXSAVE/XSAVE area. (Intel SDM Vol. 1, Table 10-2 "Format of an FXSAVE Area")
+pub const MXCSR_OFFSET: usize =	24;
+
 // x86FPState is x86 floating point state.
 #[repr(align(4096))]
 #[repr(C)]
@@ -98,6 +107,8 @@ pub const GS_TLS_SEL: u64 = 0x6b; // Linux GS thread-local storage selector
 pub struct X86fpstate {
     pub data: [u8; 4096],
     pub size: AtomicUsize,
+    pub mxcsr: AtomicU32,
+    pub cw: AtomicU32,
 }
 
 impl Default for X86fpstate {
@@ -117,6 +128,8 @@ impl X86fpstate {
         return Self {
             data: [0; 4096],
             size: AtomicUsize::new(size as usize),
+            mxcsr: AtomicU32::new(0),
+            cw: AtomicU32::new(0),
         }
     }
 
@@ -128,12 +141,18 @@ impl X86fpstate {
         return Self {
             data: [0; 4096],
             size: AtomicUsize::new(4096),
+            mxcsr: AtomicU32::new(0),
+            cw: AtomicU32::new(0),
         }
     }
 
     pub fn Reset(&self) {
         let (size, _align) = HostFeatureSet().ExtendedStateSize();
         self.size.store(size as usize, Ordering::SeqCst);
+        /*unsafe {
+            *(&self.data[MXCSR_OFFSET] as * const _ as u64 as * mut u32) = MXCSR_DEFAULT;
+        }
+        self.RestoreFp();*/
         self.SaveFp();
     }
 
@@ -150,6 +169,9 @@ impl X86fpstate {
         for i in 0..self.size.load(Ordering::Relaxed) {
             f.data[i] = self.data[i];
         }
+        f.size.store(self.size.load(Ordering::SeqCst), Ordering::SeqCst);
+        f.mxcsr.store(self.mxcsr.load(Ordering::SeqCst), Ordering::SeqCst);
+        f.cw.store(self.cw.load(Ordering::SeqCst), Ordering::SeqCst);
 
         return f;
     }
@@ -160,10 +182,15 @@ impl X86fpstate {
 
     pub fn SaveFp(&self) {
         SaveFloatingPoint(self.FloatingPointData());
+        stmxcsr(&self.mxcsr as * const _ as u64);
+        FSTCW(&self.cw as * const _ as u64);
+        FNCLEX();
     }
 
     pub fn RestoreFp(&self) {
-        LoadFloatingPoint(self.FloatingPointData())
+        LoadFloatingPoint(self.FloatingPointData());
+        ldmxcsr(&self.mxcsr as * const _ as u64);
+        FLDCW(&self.cw as * const _ as u64);
     }
 }
 

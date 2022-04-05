@@ -317,14 +317,39 @@ pub fn SetRflags(val: u64) {
 pub fn SaveFloatingPoint(addr: u64) {
     fxsave(addr);
     //xsaveopt(addr);
+    //xsave(addr);
+}
+
+pub fn LoadFloatingPoint(addr: u64) {
+    fxrstor(addr);
+    //xrstor(addr);
+}
+
+pub fn xsave(addr: u64) {
+    unsafe {
+        llvm_asm!("\
+            xsave64 [rdi + 0]
+        " : : "{rdi}"(addr)
+        : "memory" : "intel", "volatile")
+    };
 }
 
 pub fn xsaveopt(addr: u64) {
     let negtive1 : u64 = 0xffffffff;
     unsafe {
         llvm_asm!("\
-            xsaveopt [rdi + 0]
-        " : : "{rdi}"(addr), "{rax}"(negtive1), "{rdx}"(negtive1)
+            xsaveopt64 [rdi + 0]
+        " : : "{rdi}"(addr), "{eax}"(negtive1), "{edx}"(negtive1)
+        : "memory" : "intel", "volatile")
+    };
+}
+
+pub fn xrstor(addr: u64) {
+    let negtive1 : u64 = 0xffffffff;
+    unsafe {
+        llvm_asm!("\
+            xrstor64 [rdi + 0]
+        " : : "{rdi}"(addr), "{eax}"(negtive1), "{edx}"(negtive1)
         : "memory" : "intel", "volatile")
     };
 }
@@ -336,10 +361,6 @@ pub fn fxsave(addr: u64) {
         " : : "{rbx}"(addr)
         : "memory" : "intel", "volatile")
     };
-}
-
-pub fn LoadFloatingPoint(addr: u64) {
-    fxrstor(addr);
 }
 
 pub fn fxrstor(addr: u64) {
@@ -371,4 +392,49 @@ pub fn lfence() {
     unsafe { llvm_asm!("
         lfence
     " : : : "memory" : "volatile" ) }
+}
+
+pub fn stmxcsr(addr: u64) {
+    unsafe {
+        llvm_asm!("\
+            STMXCSR [rax]
+        " : : "{rax}"(addr)
+        : "memory" : "intel", "volatile")
+    };
+}
+
+pub fn ldmxcsr(addr: u64) {
+    unsafe {
+        llvm_asm!("\
+            LDMXCSR [rax]
+        " : : "{rax}"(addr)
+        : "memory" : "intel", "volatile")
+    };
+}
+
+pub fn FSTCW(addr: u64) {
+    unsafe {
+        llvm_asm!("\
+            FSTCW [rax]
+        " : : "{rax}"(addr)
+        : "memory" : "intel", "volatile")
+    };
+}
+
+pub fn FLDCW(addr: u64) {
+    unsafe {
+        llvm_asm!("\
+            FLDCW [rax]
+        " : : "{rax}"(addr)
+        : "memory" : "intel", "volatile")
+    };
+}
+
+pub fn FNCLEX() {
+    unsafe {
+        llvm_asm!("\
+            FNCLEX
+        " : :
+        : "memory" : "intel", "volatile")
+    };
 }

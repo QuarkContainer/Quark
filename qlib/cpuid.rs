@@ -538,6 +538,10 @@ impl FeatureSet {
 
         let fs = self;
 
+        //error!("self.HasFeature(Feature(X86Feature::X86FeatureXSAVE as i32) is {}", self.HasFeature(Feature(X86Feature::X86FeatureXSAVE as i32)));
+        //error!("self.HasFeature(Feature(X86Feature::X86FeatureOSXSAVE as i32)) is {}", self.HasFeature(Feature(X86Feature::X86FeatureOSXSAVE as i32)));
+        //error!("self.HasFeature(Feature(X86Feature::X86FeatureXSAVEOPT as i32)) is {}", self.HasFeature(Feature(X86Feature::X86FeatureXSAVEOPT as i32)));
+
         res += &format!("processor\t: {}\n", cpu);
         res += &format!("vendor_id\t: {}\n", fs.VendorID);
         res += &format!("cpu family\t: {}\n", ((fs.ExtendedFamily << 4) & 0xff) | fs.Family);

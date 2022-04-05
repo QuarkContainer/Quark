@@ -9,7 +9,8 @@ edition = "2018"
 [dependencies]
 libc = "0.2.94"
 kvm-bindings = "0.5.0"
-kvm-ioctls = { git = "https://github.com/QuarkContainer/kvm-ioctls.git" }
+kvm-ioctls = "0.11.0"
+#kvm-ioctls = { git = "https://github.com/QuarkContainer/kvm-ioctls.git" }
 xmas-elf = { git = "https://github.com/gz/xmas-elf.git" }
 x86_64 = "0.14.7"
 memmap = "0.7.0"
