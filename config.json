@@ -1,6 +1,6 @@
 {
   "DebugLevel"    : "Error",
-  "KernelMemSize" : 16,
+  "KernelMemSize" : 24,
   "LogType"       : "Sync",
   "LogLevel"      : "Simple",
   "UringIO"       : true,

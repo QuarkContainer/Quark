@@ -446,6 +446,7 @@ pub extern "C" fn rust_main(
     vcpuCnt: u64,
     autoStart: bool,
 ) {
+    self::qlib::kernel::asm::fninit();
     if id == 0 {
         GLOBAL_ALLOCATOR.Init(heapStart);
         SHARESPACE.SetValue(shareSpaceAddr);

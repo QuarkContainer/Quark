@@ -133,10 +133,14 @@ impl PagePool {
     pub fn Allocate(&mut self) -> Result<u64> {
         let addr = self.allocator.Allocate()?;
         ZeroPage(addr as u64);
+        //error!("AllocPage {:x}", addr);
+
         return Ok(addr as u64)
     }
 
     pub fn Free(&mut self, addr: u64) -> Result<()> {
+        //error!("Free {:x}", addr);
+
         return self.allocator.Free(addr);
     }
 }
