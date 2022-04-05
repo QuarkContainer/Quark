@@ -370,6 +370,8 @@ pub struct FreeMemBlockMgr {
     pub count: usize,
     pub reserve: usize,
     pub list: MemList,
+    //pub queue: [bool; 16],
+    //pub idx: usize,
 }
 
 impl FreeMemBlockMgr {
@@ -384,6 +386,8 @@ impl FreeMemBlockMgr {
             reserve: reserve,
             count: 0,
             list: MemList::New(1<<class),
+            //queue: [false; 16],
+            //idx: 0,
         }
     }
 
@@ -396,10 +400,15 @@ impl FreeMemBlockMgr {
             self.count -= 1;
             let ret = self.list.Pop();
 
+            assert!(ret!=0, "self.count is {}, size is {}",
+                self.count, self.size);
             let ptr = ret as * mut MemBlock;
             unsafe {
                 ptr.write(0)
             }
+
+            //self.queue[self.idx%16] = true;
+            //self.idx += 1;
             return Some(ret as * mut u8)
         } else {
             return None
@@ -417,6 +426,8 @@ impl FreeMemBlockMgr {
 
         self.count += 1;
         self.list.Push(ptr as u64);
+        //self.queue[self.idx%16] = false;
+        //self.idx += 1;
     }
 
     fn Free(&mut self, heap: &QMutex<Heap<ORDER>>) {
@@ -448,6 +459,7 @@ type MemBlock = u64;
 #[derive(Debug, Default)]
 pub struct MemList {
     size: u64,
+    count: u64,
     head: MemBlock,
 }
 
@@ -455,6 +467,7 @@ impl MemList {
     pub const fn New(size: usize) -> Self {
         return Self {
             size: size as u64,
+            count: 0,
             head: 0,
         }
     }
@@ -465,6 +478,7 @@ impl MemList {
             panic!("Push next fail");
         }
 
+        self.count += 1;
         let newB = addr as * mut MemBlock;
         unsafe {
             *newB = 0;
@@ -479,8 +493,14 @@ impl MemList {
 
     pub fn Pop(&mut self) -> u64 {
         if self.head == 0 {
+            if self.count != 0 {
+                error!("MemList::pop self.size is {}/{}", self.size, self.count);
+            }
+
             return 0
         }
+
+        self.count -= 1;
 
         let next = self.head;
 

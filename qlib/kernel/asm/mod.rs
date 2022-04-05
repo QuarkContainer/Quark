@@ -82,6 +82,7 @@ pub fn EnterUser(entry: u64, userStackAddr: u64, kernelStackAddr: u64) {
     //PerfGoto(PerfType::User);
     unsafe {
         llvm_asm!("
+            fninit
             //mov gs:0, rsp
             mov gs:0, rdx
 
@@ -434,6 +435,15 @@ pub fn FNCLEX() {
     unsafe {
         llvm_asm!("\
             FNCLEX
+        " : :
+        : "memory" : "intel", "volatile")
+    };
+}
+
+pub fn fninit() {
+    unsafe {
+        llvm_asm!("\
+            fninit
         " : :
         : "memory" : "intel", "volatile")
     };
