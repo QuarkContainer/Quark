@@ -582,11 +582,11 @@ impl QUring {
                     let mut s = self.IOUrings()[idx].sq.lock();
 
                     if s.freeSlot() < Self::SUBMISSION_QUEUE_FREE_COUNT {
-                        super::super::Kernel::HostSpace::UringWake(idx, 1);
+                        //super::super::Kernel::HostSpace::UringWake(idx, 1);
+                        drop(s);
                         print!("UringCall: submission full... idx {}", idx);
-                        //drop(s);
                         //super::super::Kernel::HostSpace::UringWake(1);
-                        //super::super::super::ShareSpace::Yield();
+                        super::super::super::ShareSpace::Yield();
                         continue
                     }
 

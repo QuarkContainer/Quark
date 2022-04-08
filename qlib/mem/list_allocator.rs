@@ -510,6 +510,8 @@ impl MemList {
 
         self.head = *ptr;
 
+        assert!(!(self.head == 0 && self.count != 0),
+               "MemList::pop2 self.size is {}/{}/{:x}", self.size, self.count, next);
         if next % self.size != 0 {
             raw!(0x234, next, self.size as u64);
             panic!("Pop next fail");

@@ -87,8 +87,8 @@ pub fn SysCall(task: &mut Task, nr: u64, args: &SyscallArguments) -> TaskRunStat
             panic!("Sycall not implement syscall is {:?}", callId);
         }
         Err(e) => {
-            info!("Syscall[{}]: get unexpected error {:x?}", nr, e);
-            return TaskRunState::RunExit
+            panic!("Syscall[{}]: get unexpected error {:x?}", nr, e);
+            //return TaskRunState::RunExit
         }
     }
 }

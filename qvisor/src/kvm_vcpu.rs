@@ -582,10 +582,11 @@ impl KVMVcpu {
                         }
 
                         qlib::HYPERCALL_VCPU_YIELD => {
-                            use std::{thread, time};
+                            IOURING.IOUrings()[0].HostSubmit().unwrap();
+                            //use std::{thread, time};
 
-                            let millis10 = time::Duration::from_millis(10);
-                            thread::sleep(millis10);
+                            //let millis10 = time::Duration::from_millis(100);
+                            //thread::sleep(millis10);
                         }
 
                         qlib::HYPERCALL_VCPU_DEBUG => {

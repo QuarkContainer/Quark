@@ -330,6 +330,7 @@ fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
             Err(Error::SysError(SysErr::ETIMEDOUT)) => {
                 return Err(Error::SysError(SysErr::EWOULDBLOCK));
             }
+            Err(Error::ErrInterrupted) => return Err(Error::SysError(SysErr::ERESTARTSYS)),
             Err(e) => {
                 return Err(e);
             }
