@@ -168,142 +168,140 @@ pub fn SysExecve(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         d.MyFullName()
     };
 
-    let (entry, usersp, kernelsp) = {
+    {
+        let t = task.Thread().clone();
+        let tg = t.lock().tg.clone();
+        let pidns = tg.PIDNamespace();
+        let owner = pidns.lock().owner.clone();
+        let signallock = tg.lock().signalLock.clone();
         {
-            let t = task.Thread().clone();
-            let tg = t.lock().tg.clone();
-            let pidns = tg.PIDNamespace();
-            let owner = pidns.lock().owner.clone();
-            let signallock = tg.lock().signalLock.clone();
-            {
-                let ol = owner.WriteLock();
-                let sl = signallock.lock();
+            let ol = owner.WriteLock();
+            let sl = signallock.lock();
 
-                let exiting = tg.lock().exiting;
-                let execing = tg.lock().execing.Upgrade();
+            let exiting = tg.lock().exiting;
+            let execing = tg.lock().execing.Upgrade();
 
-                if exiting || execing.is_some() {
-                    // We lost to a racing group-exit, kill, or exec from another thread
-                    // and should just exit.
-                    return Err(Error::SysError(SysErr::EINTR))
-                }
+            if exiting || execing.is_some() {
+                // We lost to a racing group-exit, kill, or exec from another thread
+                // and should just exit.
+                return Err(Error::SysError(SysErr::EINTR))
+            }
 
-                // Cancel any racing group stops.
-                tg.lock().endGroupStopLocked(false);
+            // Cancel any racing group stops.
+            tg.lock().endGroupStopLocked(false);
 
-                // If the task has any siblings, they have to exit before the exec can
-                // continue.
-                tg.lock().execing = t.Downgrade();
+            // If the task has any siblings, they have to exit before the exec can
+            // continue.
+            tg.lock().execing = t.Downgrade();
 
-                let taskCnt = tg.lock().tasks.len();
-                if taskCnt != 1 {
-                    // "[All] other threads except the thread group leader report death as
-                    // if they exited via _exit(2) with exit code 0." - ptrace(2)
-                    let tasks : Vec<_> = tg.lock().tasks.iter().cloned().collect();
-                    for sibling in &tasks {
-                        if t != sibling.clone() {
-                            sibling.lock().killLocked();
-                        }
+            let taskCnt = tg.lock().tasks.len();
+            if taskCnt != 1 {
+                // "[All] other threads except the thread group leader report death as
+                // if they exited via _exit(2) with exit code 0." - ptrace(2)
+                let tasks : Vec<_> = tg.lock().tasks.iter().cloned().collect();
+                for sibling in &tasks {
+                    if t != sibling.clone() {
+                        sibling.lock().killLocked();
                     }
-                    // The last sibling to exit will wake t.
-                    t.lock().beginInternalStopLocked(&Arc::new(ExecStop {}));
-
-                    core::mem::drop(sl);
-                    core::mem::drop(ol);
-
-                    task.DoStop();
                 }
+                // The last sibling to exit will wake t.
+                t.lock().beginInternalStopLocked(&Arc::new(ExecStop {}));
+
+                core::mem::drop(sl);
+                core::mem::drop(ol);
+                task.DoStop();
             }
-
-            let mut its = Vec::new();
-            {
-                let _l = owner.WriteLock();
-                tg.lock().execing = ThreadWeak::default();
-                if t.lock().killed() {
-                    //return (*runInterrupt)(nil)
-                    return Err(Error::SysError(SysErr::EINTR))
-                }
-
-                t.promoteLocked();
-
-                // "POSIX timers are not preserved (timer_create(2))." - execve(2). Handle
-                // this first since POSIX timers are protected by the signal mutex, which
-                // we're about to change. Note that we have to stop and destroy timers
-                // without holding any mutexes to avoid circular lock ordering.
-                {
-                    let _s = signallock.lock();
-
-                    for (_, it) in &tg.lock().timers {
-                        its.push(it.clone());
-                    }
-
-                    tg.lock().timers.clear();
-                }
-            }
-
-            for it in its {
-                it.DestroyTimer();
-            }
-
-            {
-                let _l = owner.WriteLock();
-                let sh = tg.lock().signalHandlers.clone();
-                // "During an execve(2), the dispositions of handled signals are reset to
-                // the default; the dispositions of ignored signals are left unchanged. ...
-                // [The] signal mask is preserved across execve(2). ... [The] pending
-                // signal set is preserved across an execve(2)." - signal(7)
-                //
-                // Details:
-                //
-                // - If the thread group is sharing its signal handlers with another thread
-                // group via CLONE_SIGHAND, execve forces the signal handlers to be copied
-                // (see Linux's fs/exec.c:de_thread). We're not reference-counting signal
-                // handlers, so we always make a copy.
-                //
-                // - "Disposition" only means sigaction::sa_handler/sa_sigaction; flags,
-                // restorer (if present), and mask are always reset. (See Linux's
-                // fs/exec.c:setup_new_exec => kernel/signal.c:flush_signal_handlers.)
-                tg.lock().signalHandlers = sh.CopyForExec();
-                // "Any alternate signal stack is not preserved (sigaltstack(2))." - execve(2)
-                t.lock().signalStack = SignalStack::default();
-                task.signalStack = SignalStack::default();
-                // "The termination signal is reset to SIGCHLD (see clone(2))."
-                tg.lock().terminationSignal = Signal(Signal::SIGCHLD);
-                // execed indicates that the process can no longer join a process group
-                // in some scenarios (namely, the parent call setpgid(2) on the child).
-                // See the JoinProcessGroup function in sessions.go for more context.
-                tg.lock().execed = true;
-            }
-
-            let fdtbl = t.lock().fdTbl.clone();
-            fdtbl.lock().RemoveCloseOnExec();
-
-            t.ExitRobustList(task);
-
-            t.lock().updateCredsForExecLocked();
-
-            t.UnstopVforkParent();
-
-            SetFs(0);
-            task.context.fs = 0;
-            task.context.X86fpstate = Default::default();
-            task.context.sigFPState = Default::default();
-
-            let newMM = MemoryManager::Init(false);
-            let oldMM = task.mm.clone();
-            task.mm = newMM.clone();
-            task.futexMgr = task.futexMgr.Fork();
-            task.Thread().lock().memoryMgr = newMM;
-            if !SHARESPACE.config.read().KernelPagetable {
-                task.SwitchPageTable();
-            }
-
-            // make the old mm exist before switch pagetable
-            core::mem::drop(oldMM);
         }
 
-        Load(task, &fileName, &mut argv, &envv, &Vec::new())?
-    };
+        let mut its = Vec::new();
+        {
+            let _l = owner.WriteLock();
+            tg.lock().execing = ThreadWeak::default();
+            if t.lock().killed() {
+                //return (*runInterrupt)(nil)
+                return Err(Error::SysError(SysErr::EINTR))
+            }
+
+            t.promoteLocked();
+
+            // "POSIX timers are not preserved (timer_create(2))." - execve(2). Handle
+            // this first since POSIX timers are protected by the signal mutex, which
+            // we're about to change. Note that we have to stop and destroy timers
+            // without holding any mutexes to avoid circular lock ordering.
+            {
+                let _s = signallock.lock();
+
+                for (_, it) in &tg.lock().timers {
+                    its.push(it.clone());
+                }
+
+                tg.lock().timers.clear();
+            }
+        }
+
+        for it in its {
+            it.DestroyTimer();
+        }
+
+        {
+            let _l = owner.WriteLock();
+            let sh = tg.lock().signalHandlers.clone();
+            // "During an execve(2), the dispositions of handled signals are reset to
+            // the default; the dispositions of ignored signals are left unchanged. ...
+            // [The] signal mask is preserved across execve(2). ... [The] pending
+            // signal set is preserved across an execve(2)." - signal(7)
+            //
+            // Details:
+            //
+            // - If the thread group is sharing its signal handlers with another thread
+            // group via CLONE_SIGHAND, execve forces the signal handlers to be copied
+            // (see Linux's fs/exec.c:de_thread). We're not reference-counting signal
+            // handlers, so we always make a copy.
+            //
+            // - "Disposition" only means sigaction::sa_handler/sa_sigaction; flags,
+            // restorer (if present), and mask are always reset. (See Linux's
+            // fs/exec.c:setup_new_exec => kernel/signal.c:flush_signal_handlers.)
+            tg.lock().signalHandlers = sh.CopyForExec();
+            // "Any alternate signal stack is not preserved (sigaltstack(2))." - execve(2)
+            t.lock().signalStack = SignalStack::default();
+            task.signalStack = SignalStack::default();
+            // "The termination signal is reset to SIGCHLD (see clone(2))."
+            tg.lock().terminationSignal = Signal(Signal::SIGCHLD);
+            // execed indicates that the process can no longer join a process group
+            // in some scenarios (namely, the parent call setpgid(2) on the child).
+            // See the JoinProcessGroup function in sessions.go for more context.
+            tg.lock().execed = true;
+        }
+
+        let fdtbl = t.lock().fdTbl.clone();
+        fdtbl.lock().RemoveCloseOnExec();
+
+        t.ExitRobustList(task);
+
+        t.lock().updateCredsForExecLocked();
+
+        t.UnstopVforkParent();
+
+        SetFs(0);
+        task.context.fs = 0;
+        task.context.X86fpstate = Default::default();
+        task.context.sigFPState = Default::default();
+
+        info!("SysExecve 8");
+        let newMM = MemoryManager::Init(false);
+        let oldMM = task.mm.clone();
+        task.mm = newMM.clone();
+        task.futexMgr = task.futexMgr.Fork();
+        task.Thread().lock().memoryMgr = newMM;
+        if !SHARESPACE.config.read().KernelPagetable {
+            task.SwitchPageTable();
+        }
+
+        // make the old mm exist before switch pagetable
+        core::mem::drop(oldMM);
+    }
+
+    let (entry, usersp, kernelsp) = Load(task, &fileName, &mut argv, &envv, &Vec::new())?;
 
     //need to clean object on stack before enter_user as the stack will be destroyed
     task.AccountTaskEnter(SchedState::RunningApp);
@@ -361,6 +359,7 @@ pub fn SysVfork(task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
 
 // Wait4 implements linux syscall wait4(2).
 pub fn SysWait4(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    //error!("SysWait4 {:x?}", args);
     let pid = args.arg0;
     let status = args.arg1;
     let option = args.arg2 as u32;
@@ -371,6 +370,7 @@ pub fn SysWait4(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
 // Waitid implements linux syscall waitid(2).
 pub fn SysWaitid(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    //error!("SysWaitid {:x?}", args);
     let idtype = args.arg0 as i32;
     let id = args.arg1 as i32;
     let infop = args.arg2;

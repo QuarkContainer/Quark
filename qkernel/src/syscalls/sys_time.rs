@@ -192,8 +192,8 @@ pub fn SysNanoSleep(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let dur = ts.ToNs()?;
 
+    Yield();
     if dur < TIMEOUT_PROCESS_TIME {
-        Yield();
         return Ok(0)
     }
 
