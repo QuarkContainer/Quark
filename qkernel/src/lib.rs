@@ -299,9 +299,19 @@ pub extern "C" fn syscall_handler(
     //HostInputProcess();
     //ProcessOne();
 
-    //currTask.PerfGoto(PerfType::KernelHandling);
-    MainRun(currTask, state);
-    //currTask.PerfGofrom(PerfType::KernelHandling);
+    // avoid keep loop in signal processing
+    if nr != SysCallID::sys_rt_sigreturn as u64 {
+        //currTask.PerfGoto(PerfType::KernelHandling);
+        MainRun(currTask, state);
+        //currTask.PerfGofrom(PerfType::KernelHandling);
+    } else {
+        let pt = currTask.GetPtRegs();
+
+        CPULocal::SetUserStack(pt.rsp);
+        CPULocal::SetKernelStack(currTask.GetKernelSp());
+
+        currTask.AccountTaskEnter(SchedState::RunningApp);
+    }
 
     //error!("syscall_handler: {}", ::AllocatorPrint(10));
     if llevel == LogLevel::Simple || llevel == LogLevel::Complex {
