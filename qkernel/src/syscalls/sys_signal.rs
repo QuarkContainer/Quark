@@ -441,9 +441,15 @@ pub fn SysKill(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             let pg = tg.ProcessGroup().unwrap();
             if pidns.IDOfProcessGroup(&pg) == pgid {
                 cnt += 1;
-                // sometime the tgleader is null from bazel test, hard to repro
-                // todo: root cause it and fix it
-                let leader = tg.Leader().unwrap();
+                let leader = match tg.Leader() {
+                    Some(l) => l,
+                    None => {
+                        // sometime the tgleader is null from bazel test, hard to repro
+                        // todo: root cause it and fix it
+                        error!("SysKill: get non tglead for pgid {}", pgid);
+                        return Err(Error::SysError(SysErr::EINVAL))
+                    }
+                };
                 if !mayKill(&t, &leader, Signal(sig)) {
                     lastErr = Err(Error::SysError(SysErr::EPERM));
                     continue

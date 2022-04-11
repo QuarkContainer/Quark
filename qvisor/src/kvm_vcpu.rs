@@ -582,7 +582,9 @@ impl KVMVcpu {
                         }
 
                         qlib::HYPERCALL_VCPU_YIELD => {
-                            IOURING.IOUrings()[0].HostSubmit().unwrap();
+                            //error!("HYPERCALL_VCPU_YIELD1 {}", IOURING.IOUrings()[0].sq.lock().freeSlot());
+                            let _ret = IOURING.IOUrings()[0].HostSubmit().unwrap();
+                            //error!("HYPERCALL_VCPU_YIELD2 {:?}", ret);
                             //use std::{thread, time};
 
                             //let millis10 = time::Duration::from_millis(100);

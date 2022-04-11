@@ -1122,6 +1122,6 @@ impl Task {
             t.lock().interruptSelf();
         }
 
-        return Err(Error::SysCallRetCtrl(TaskRunState::RunApp))
+        return Err(Error::SysCallRetCtrl(TaskRunState::RunSyscallRet))
     }
 }

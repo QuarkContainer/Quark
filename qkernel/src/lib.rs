@@ -299,19 +299,7 @@ pub extern "C" fn syscall_handler(
     //HostInputProcess();
     //ProcessOne();
 
-    // avoid keep loop in signal processing
-    if nr != SysCallID::sys_rt_sigreturn as u64 {
-        //currTask.PerfGoto(PerfType::KernelHandling);
-        MainRun(currTask, state);
-        //currTask.PerfGofrom(PerfType::KernelHandling);
-    } else {
-        let pt = currTask.GetPtRegs();
-
-        CPULocal::SetUserStack(pt.rsp);
-        CPULocal::SetKernelStack(currTask.GetKernelSp());
-
-        currTask.AccountTaskEnter(SchedState::RunningApp);
-    }
+    MainRun(currTask, state);
 
     //error!("syscall_handler: {}", ::AllocatorPrint(10));
     if llevel == LogLevel::Simple || llevel == LogLevel::Complex {
@@ -407,7 +395,7 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                 //panic!("RunExitDone: can't reach here")
             }
             TaskRunState::RunNoneReachAble => panic!("unreadhable TaskRunState::RunNoneReachAble"),
-            TaskRunState::RunSyscallRet => panic!("unreadhable TaskRunState::RunSyscallRet"),
+            TaskRunState::RunSyscallRet => TaskRunState::RunSyscallRet, //panic!("unreadhable TaskRunState::RunSyscallRet"),
         };
 
         if state == TaskRunState::RunSyscallRet {

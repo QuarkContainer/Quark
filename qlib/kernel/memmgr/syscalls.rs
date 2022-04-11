@@ -638,7 +638,7 @@ impl MemoryManager {
             Ok(r) => r
         };
 
-        let _ml = self.MappingReadLock();
+        let _ml = self.MappingWriteLock();
 
         let mapping = self.mapping.lock();
         let mut vseg = mapping.vmas.LowerBoundSeg(ar.Start());
@@ -648,7 +648,7 @@ impl MemoryManager {
                 return Err(Error::SysError(SysErr::EINVAL))
             }
 
-            let mr = ar.Intersect(&vseg.Range());
+            /*let mr = ar.Intersect(&vseg.Range());
             self.pagetable.write().pt.MUnmap(mr.Start(), mr.Len())?;
 
             if let Some(iops) = vma.mappable.clone() {
@@ -657,11 +657,12 @@ impl MemoryManager {
                 // todo: fix the Madvise/MADV_DONTNEED, when there are multiple process MAdviseOp::MADV_DONTNEED
                 // with current implementation, the first Madvise/MADV_DONTNEED will work.
                 iops.MAdvise(fstart, mr.Len(), advise)?;
-            }
+            }*/
 
             vseg = vseg.NextSeg();
         }
 
+        //self.TlbShootdown();
         return Ok(())
     }
 
