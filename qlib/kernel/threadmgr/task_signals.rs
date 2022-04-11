@@ -265,8 +265,9 @@ impl Thread {
         // the old mask, and at least one such signal is pending, we may now need
         // to handle that signal.
         let unblocked = oldMask.0 & !mask.0;
+        let pendingSet = self.lock().pendingSignals.pendingSet.0;
         let tglock = tg.lock();
-        let unblockedPending = unblocked & (self.lock().pendingSignals.pendingSet.0 | tglock.pendingSignals.pendingSet.0);
+        let unblockedPending = unblocked & (pendingSet | tglock.pendingSignals.pendingSet.0);
         if unblockedPending != 0 {
             self.lock().interruptSelf();
         }
@@ -1121,6 +1122,6 @@ impl Task {
             t.lock().interruptSelf();
         }
 
-        return Err(Error::SysCallRetCtrl(TaskRunState::RunApp))
+        return Err(Error::SysCallRetCtrl(TaskRunState::RunSyscallRet))
     }
 }

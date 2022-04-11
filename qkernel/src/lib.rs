@@ -299,9 +299,7 @@ pub extern "C" fn syscall_handler(
     //HostInputProcess();
     //ProcessOne();
 
-    //currTask.PerfGoto(PerfType::KernelHandling);
     MainRun(currTask, state);
-    //currTask.PerfGofrom(PerfType::KernelHandling);
 
     //error!("syscall_handler: {}", ::AllocatorPrint(10));
     if llevel == LogLevel::Simple || llevel == LogLevel::Complex {
@@ -397,7 +395,7 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                 //panic!("RunExitDone: can't reach here")
             }
             TaskRunState::RunNoneReachAble => panic!("unreadhable TaskRunState::RunNoneReachAble"),
-            TaskRunState::RunSyscallRet => panic!("unreadhable TaskRunState::RunSyscallRet"),
+            TaskRunState::RunSyscallRet => TaskRunState::RunSyscallRet, //panic!("unreadhable TaskRunState::RunSyscallRet"),
         };
 
         if state == TaskRunState::RunSyscallRet {

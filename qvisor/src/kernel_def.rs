@@ -162,7 +162,7 @@ impl ShareSpace {
             }
 
             //error!("CheckVcpuTimeout {}/{}/{}/{}", i, enterAppTimestamp, now, Tsc::Scale(now - enterAppTimestamp));
-            if Tsc::Scale(now - enterAppTimestamp) * 1000 > CLOCK_TICK {
+            if Tsc::Scale(now - enterAppTimestamp) * 1000 > 2 * CLOCK_TICK {
                 //self.scheduler.VcpuArr[i].ResetEnterAppTimestamp();
 
                 // retry to send signal for each 2 ms
@@ -176,8 +176,6 @@ impl ShareSpace {
         }
     }
 }
-
-
 
 impl<T: ?Sized> QMutexIntern<T> {
     pub fn GetID() -> u64 {

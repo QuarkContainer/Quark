@@ -795,7 +795,8 @@ impl Thread {
                 pidns = tmp.unwrap();
             }
 
-            tg.lock().exitedCPUStats.Accumulate(&t.lock().CPUStats());
+            let cpuStatus = t.lock().CPUStats();
+            tg.lock().exitedCPUStats.Accumulate(&cpuStatus);
             //tg.lock().ioUsage.Accumulate(t.lock().ioUsage);
             let tc = {
                 let lock = tg.lock().signalLock.clone();
