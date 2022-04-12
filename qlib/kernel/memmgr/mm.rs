@@ -382,6 +382,44 @@ impl MemoryManager {
     }
 
     //Remove virtual memory to the phy mem mapping
+    pub fn MFree(&self, ar: &Range) -> Result<()> {
+        let mut mapping = self.mapping.lock();
+        let (mut vseg, vgap) = mapping.vmas.Find(ar.Start());
+        if vgap.Ok() {
+            vseg = vgap.NextSeg();
+        }
+
+        while vseg.Ok() && vseg.Range().Start() < ar.End() {
+            vseg = mapping.vmas.Isolate(&vseg, &ar);
+            let r = vseg.Range();
+            let vma = vseg.Value();
+
+            if !vma.kernel {
+                if vma.mappable.is_some() {
+                    let mappable = vma.mappable.clone().unwrap();
+                    // todo: fix the Madvise/MADV_DONTNEED, when there are multiple process MAdviseOp::MADV_DONTNEED
+                    // with current implementation, the first Madvise/MADV_DONTNEED will work.
+                    mappable.RemoveMapping(self, &r, vma.offset, vma.CanWriteMappableLocked())?;
+                }
+
+                mapping.usageAS -= r.Len();
+                if vma.mlockMode != MLockMode::MlockNone {
+                    mapping.lockedAS -= r.Len();
+                }
+
+                let mut pt = self.pagetable.write();
+
+                pt.pt.MUnmap(r.Start(), r.Len())?;
+                pt.curRSS -= r.Len();
+            }
+            //let vgap = mapping.vmas.Remove(&vseg);
+            vseg = vgap.NextSeg();
+        }
+
+        return Ok(())
+    }
+
+    //Remove virtual memory to the phy mem mapping
     pub fn RemoveVMAsLocked(&self, ar: &Range) -> Result<()> {
         let mut mapping = self.mapping.lock();
         let (mut vseg, vgap) = mapping.vmas.Find(ar.Start());
@@ -601,44 +639,6 @@ impl MemoryManager {
 
     pub fn SetExecutable(&self, dirent: &Dirent) {
         self.metadata.lock().executable = Some(dirent.clone());
-    }
-
-    //remove all the user vmas, used for execve
-    pub fn Clear(&self) -> Result<()> {
-        let _ml = self.MappingWriteLock();
-
-        let mut pt = self.pagetable.write();
-
-        // if we are clearing memory manager in current pagetable,
-        // need to switch to kernel pagetable to avoid system crash
-        let isCurrent = pt.pt.IsActivePagetable();
-        if isCurrent {
-            super::super::KERNEL_PAGETABLE.SwitchTo();
-        }
-
-        let mut mm = self.mapping.lock();
-        let mut vseg = mm.vmas.FirstSeg();
-
-        while vseg.Ok() {
-            let r = vseg.Range();
-            let vma = vseg.Value();
-
-            if vma.kernel == true {
-                vseg = vseg.NextSeg();
-                continue;
-            }
-
-            if vma.mappable.is_some() {
-                let mappable = vma.mappable.clone().unwrap();
-                mappable.RemoveMapping(self, &r, vma.offset, vma.CanWriteMappableLocked())?;
-            }
-
-            pt.pt.MUnmap(r.Start(), r.Len())?;
-            let vgap = mm.vmas.Remove(&vseg);
-            vseg = vgap.NextSeg();
-        }
-
-        return Ok(())
     }
 
     pub fn MinCore(&self, _task: &Task, r: &Range) -> Vec<u8> {
@@ -1324,7 +1324,7 @@ impl MemoryManager {
             }
         }
 
-        self.HandleTlbShootdown();
+        self.TlbShootdown();
 
         return Ok(mm2);
     }

@@ -632,7 +632,7 @@ impl MemoryManager {
         })
     }
 
-    pub fn MAdvise(&self, _task: &Task, addr: u64, length: u64, advise: i32) -> Result<()> {
+    pub fn MDontneed(&self, _task: &Task, addr: u64, length: u64, advise: i32) -> Result<()> {
         let ar = match Addr(addr).ToRange(length) {
             Err(_) => return Err(Error::SysError(SysErr::EINVAL)),
             Ok(r) => r
@@ -640,29 +640,35 @@ impl MemoryManager {
 
         let _ml = self.MappingWriteLock();
 
-        let mapping = self.mapping.lock();
-        let mut vseg = mapping.vmas.LowerBoundSeg(ar.Start());
-        while vseg.Ok() && vseg.Range().Start() < ar.End() {
-            let vma = vseg.Value();
-            if vma.mlockMode != MLockMode::MlockNone && advise == MAdviseOp::MADV_DONTNEED {
-                return Err(Error::SysError(SysErr::EINVAL))
+        {
+            let mapping = self.mapping.lock();
+            let mut vseg = mapping.vmas.LowerBoundSeg(ar.Start());
+            while vseg.Ok() && vseg.Range().Start() < ar.End() {
+                let vma = vseg.Value();
+                if vma.mlockMode != MLockMode::MlockNone && advise == MAdviseOp::MADV_DONTNEED {
+                    return Err(Error::SysError(SysErr::EINVAL))
+                }
+
+                /*let mr = ar.Intersect(&vseg.Range());
+                self.pagetable.write().pt.MUnmap(mr.Start(), mr.Len())?;
+
+                if let Some(iops) = vma.mappable.clone() {
+                    let fstart = mr.Start() - vseg.Range().Start() + vma.offset;
+
+                    // todo: fix the Madvise/MADV_DONTNEED, when there are multiple process MAdviseOp::MADV_DONTNEED
+                    // with current implementation, the first Madvise/MADV_DONTNEED will work.
+                    iops.MAdvise(fstart, mr.Len(), advise)?;
+                }*/
+
+                vseg = vseg.NextSeg();
             }
-
-            /*let mr = ar.Intersect(&vseg.Range());
-            self.pagetable.write().pt.MUnmap(mr.Start(), mr.Len())?;
-
-            if let Some(iops) = vma.mappable.clone() {
-                let fstart = mr.Start() - vseg.Range().Start() + vma.offset;
-
-                // todo: fix the Madvise/MADV_DONTNEED, when there are multiple process MAdviseOp::MADV_DONTNEED
-                // with current implementation, the first Madvise/MADV_DONTNEED will work.
-                iops.MAdvise(fstart, mr.Len(), advise)?;
-            }*/
-
-            vseg = vseg.NextSeg();
         }
 
-        //self.TlbShootdown();
+        /*let ret = self.MFree(&ar);
+
+        self.TlbShootdown();
+        return ret;*/
+
         return Ok(())
     }
 

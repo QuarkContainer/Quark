@@ -165,7 +165,7 @@ pub fn SysMadvise(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     match adv {
         MAdviseOp::MADV_DONTNEED => {
-            task.mm.MAdvise(task, addr, length, adv)?;
+            task.mm.MDontneed(task, addr, length, adv)?;
         }
         MAdviseOp::MADV_HUGEPAGE | MAdviseOp::MADV_NOHUGEPAGE => {
             //task.mm.MAdvise(task, addr, length, adv)?;
