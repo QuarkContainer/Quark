@@ -17,6 +17,7 @@ use alloc::collections::btree_map::BTreeMap;
 use super::super::super::linux_def::*;
 use super::super::super::common::*;
 use super::super::super::pagetable::*;
+use super::super::super::vcpu_mgr::CPULocal;
 
 pub fn ZeroPage(pageStart: u64) {
     use alloc::slice;
@@ -131,6 +132,14 @@ impl PagePool {
     }
 
     pub fn Allocate(&mut self) -> Result<u64> {
+        match CPULocal::Myself().pageAllocator.lock().AllocPage() {
+            Some(page) => {
+                ZeroPage(page);
+                return Ok(page)
+            },
+            None => (),
+        }
+
         let addr = self.allocator.Allocate()?;
         ZeroPage(addr as u64);
         //error!("AllocPage {:x}", addr);
@@ -139,9 +148,21 @@ impl PagePool {
     }
 
     pub fn Free(&mut self, addr: u64) -> Result<()> {
-        //error!("Free {:x}", addr);
+        CPULocal::Myself().pageAllocator.lock().FreePage(addr);
+        return Ok(());
+        //return self.allocator.Free(addr);
+    }
 
-        return self.allocator.Free(addr);
+    pub fn CheckZeroPage(pageStart: u64) {
+        use alloc::slice;
+        unsafe {
+            let arr = slice::from_raw_parts_mut(pageStart as *mut u64, 512);
+            for i in 0..512 {
+                if arr[i] != 0 {
+                    panic!("alloc non zero page {:x}", pageStart);
+                }
+            }
+        }
     }
 }
 

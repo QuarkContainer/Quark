@@ -23,12 +23,15 @@ use buddy_system_allocator::Heap;
 use cache_padded::CachePadded;
 use alloc::string::String;
 use alloc::string::ToString;
+use alloc::vec::Vec;
 
 //use super::buddy_allocator::Heap;
 
 use super::super::mutex::*;
 use super::super::kernel::vcpu::CPU_LOCAL;
 use super::super::super::kernel_def::VcpuId;
+use super::super::linux_def::*;
+use super::super::pagetable::AlignedAllocator;
 
 pub const CLASS_CNT : usize = 16;
 pub const FREE_THRESHOLD: usize = 30; // when free size less than 30%, need to free buffer
@@ -104,6 +107,36 @@ impl StackAllocator {
 
     pub fn IsFull(&self) -> bool {
         return self.next == self.stack.len()
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct PageAllocator {
+    pub pages: Vec<u64>,
+}
+
+impl PageAllocator {
+    pub const PAGE_CACHE_COUNT : usize = 16;
+
+    pub fn AllocPage(&mut self) -> Option<u64> {
+        return self.pages.pop();
+    }
+
+    pub fn FreePage(&mut self, page: u64) {
+        self.pages.push(page)
+    }
+
+    pub fn Clean(&mut self) {
+        if self.pages.len() <= Self::PAGE_CACHE_COUNT {
+            return
+        }
+
+        while self.pages.len() > Self::PAGE_CACHE_COUNT {
+            let page = self.pages.pop().unwrap();
+            AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize).Free(page).unwrap();
+        }
+
+        self.pages.shrink_to_fit();
     }
 }
 

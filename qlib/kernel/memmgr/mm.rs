@@ -319,6 +319,8 @@ impl MemoryManager {
                     //core::hint::spin_loop();
                 }*/
             }
+
+            CPULocal::Myself().pageAllocator.lock().Clean();
         }
     }
 
