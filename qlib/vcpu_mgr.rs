@@ -15,6 +15,7 @@
 use core::sync::atomic::Ordering;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicI64;
+use spin::Mutex;
 
 use super::ShareSpace;
 use super::mem::list_allocator::*;
@@ -45,6 +46,7 @@ pub struct CPULocal {
     pub eventfd: i32,
     pub epollfd: i32,
     pub allocator: VcpuAllocator,
+    pub pageAllocator: Mutex<PageAllocator>,
 
     // it is the time to enter guest ring3. If it is in ring0, the vale will be zero
     pub enterAppTimestamp: AtomicI64,
