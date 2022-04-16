@@ -40,6 +40,12 @@ impl HostAllocator {
 
         assert!(self.listHeapAddr.load(Ordering::Relaxed) == addr,
             "listHeapAddr is {:x}, addr is {:x}", self.listHeapAddr.load(Ordering::Relaxed), addr);
+
+        *self.Allocator() = ListAllocator::Empty();
+
+        // reserve first 4KB gor the listAllocator
+        self.Allocator().Add(addr as usize + 0x2000, heapSize - 0x2000);
+        self.initialized.store(true, Ordering::Relaxed);
     }
 
     pub fn Clear(&self) -> bool {
