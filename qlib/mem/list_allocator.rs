@@ -19,13 +19,12 @@ use core::sync::atomic::Ordering;
 use core::cmp::max;
 use core::mem::size_of;
 use core::ptr::NonNull;
-use buddy_system_allocator::Heap;
 use cache_padded::CachePadded;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::vec::Vec;
 
-//use super::buddy_allocator::Heap;
+use super::buddy_allocator::Heap;
 
 use super::super::mutex::*;
 use super::super::kernel::vcpu::CPU_LOCAL;
@@ -291,7 +290,7 @@ impl ListAllocator {
     pub fn Add(&self, start: usize, size: usize) {
         let mut start = start;
         let end = start + size;
-        let size = 1 << 28; // 2MB
+        let size = 1 << ORDER; // 2MB
         // note: we can't add full range (>4GB) to the buddyallocator
         while start + size < end {
             self.AddToHead(start, start + size);

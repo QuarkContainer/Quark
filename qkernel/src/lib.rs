@@ -51,8 +51,6 @@ extern crate spin;
 extern crate x86_64;
 extern crate bit_field;
 extern crate xmas_elf;
-//extern crate linked_list_allocator;
-extern crate buddy_system_allocator;
 #[macro_use]
 extern crate bitflags;
 extern crate x86;
