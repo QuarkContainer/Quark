@@ -7,8 +7,9 @@ use core::sync::atomic::Ordering;
 use super::qlib::mem::list_allocator::*;
 use super::qlib::linux_def::MemoryDef;
 
-pub const KERNEL_HEAP_ORD : usize = 33; // 16GB
+pub const KERNEL_HEAP_ORD : usize = 33; // 8GB
 const HEAP_OFFSET: u64 = 1 * MemoryDef::ONE_GB;
+pub const ENABLE_HUGEPAGE : bool = false;
 
 impl HostAllocator {
     pub const fn New() -> Self {
@@ -21,10 +22,14 @@ impl HostAllocator {
     pub fn Init(&self) {
         let heapSize = 1 << KERNEL_HEAP_ORD as usize;
         let addr = unsafe {
+            let mut flags = libc::MAP_PRIVATE | libc::MAP_ANON | libc::MAP_FIXED;
+            if ENABLE_HUGEPAGE {
+                flags |= libc::MAP_HUGE_2MB;
+            }
             libc::mmap(self.listHeapAddr.load(Ordering::Relaxed) as _,
                        heapSize,
                        libc::PROT_READ | libc::PROT_WRITE,
-                       libc::MAP_PRIVATE | libc::MAP_ANON | libc::MAP_FIXED,
+                       flags,
                        -1,
                        0) as u64
         };
@@ -35,12 +40,10 @@ impl HostAllocator {
 
         assert!(self.listHeapAddr.load(Ordering::Relaxed) == addr,
             "listHeapAddr is {:x}, addr is {:x}", self.listHeapAddr.load(Ordering::Relaxed), addr);
+    }
 
-        *self.Allocator() = ListAllocator::Empty();
-
-        // reserve first 4KB gor the listAllocator
-        self.Allocator().Add(addr as usize + 0x2000, heapSize - 0x2000);
-        self.initialized.store(true, Ordering::Relaxed);
+    pub fn Clear(&self) -> bool {
+        return self.Allocator().Free();
     }
 }
 
