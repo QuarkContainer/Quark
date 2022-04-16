@@ -22,7 +22,7 @@ pub mod mapping_set;
 pub mod pma;
 pub mod syscalls;
 pub mod metadata;
-pub mod buf_allocator;
+//pub mod buf_allocator;
 pub mod linked_list;
 
 use alloc::string::String;

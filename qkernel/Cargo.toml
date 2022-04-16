@@ -10,7 +10,6 @@ crate-type = ["staticlib"]
 bit_field = "0.10.1"
 bitflags = "1.2.1"
 x86_64 = "0.14.7"
-
 buddy_system_allocator = "0.8.0"
 #linked_list_allocator = {path = "/home/brad/rust/linked_list_allocator"}
 

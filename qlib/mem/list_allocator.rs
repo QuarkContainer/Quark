@@ -37,7 +37,7 @@ pub const CLASS_CNT : usize = 16;
 pub const FREE_THRESHOLD: usize = 30; // when free size less than 30%, need to free buffer
 pub const BUFF_THRESHOLD: usize = 50; // when buff size takes more than 50% of free size, needs to free
 pub const FREE_BATCH: usize = 10; // free 10 blocks each time.
-pub const ORDER : usize = 33;
+pub const ORDER : usize = 30; //1GB
 
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
@@ -123,7 +123,18 @@ impl PageAllocator {
     }
 
     pub fn FreePage(&mut self, page: u64) {
-        self.pages.push(page)
+        if self.pages.len() > 4096 * 8 {
+            // when there are more than 32K pages, free half of them at first to avoid use too many memory(>2MB) in vec
+            // there is chance the TLB is still in use, todo: find better way to do that
+            let vec2 = self.pages.split_off(4096 * 4);
+            for page in &self.pages {
+                AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize).Free(*page).unwrap();
+            }
+            self.pages = vec2;
+        }
+
+        self.pages.push(page);
+        //AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize).Free(page).unwrap();
     }
 
     pub fn Clean(&mut self) {
@@ -280,7 +291,7 @@ impl ListAllocator {
     pub fn Add(&self, start: usize, size: usize) {
         let mut start = start;
         let end = start + size;
-        let size = 1 << 30; // 1GB
+        let size = 1 << 28; // 2MB
         // note: we can't add full range (>4GB) to the buddyallocator
         while start + size < end {
             self.AddToHead(start, start + size);
@@ -312,7 +323,7 @@ impl ListAllocator {
     }
 
     // ret: true: free some memory, false: no memory freed
-    pub fn Free1(&self) -> bool {
+    pub fn Free(&self) -> bool {
         let mut count = 0;
         for i in 0..self.bufs.len() {
             if !self.NeedFree() || count == FREE_BATCH {
@@ -351,6 +362,10 @@ unsafe impl GlobalAlloc for ListAllocator {
                 self.bufSize.fetch_sub(size, Ordering::Release);
                 return ret.unwrap();
             }
+        }
+
+        if size > 1<<21 {
+            panic!("alloc size is {}", layout.size());
         }
 
         let ret = self

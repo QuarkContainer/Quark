@@ -1006,6 +1006,8 @@ impl CPULocal {
                 //Self::ProcessOnce(sharespace);
             }
 
+            super::ALLOCATOR.Clear();
+
             let _nfds = unsafe {
                 epoll_wait(self.epollfd, &mut events[0], 2, time)
             };

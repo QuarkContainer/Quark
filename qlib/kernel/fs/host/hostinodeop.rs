@@ -615,6 +615,11 @@ impl HostInodeOp {
         let hostIops = self.clone();
 
         let size = IoVec::NumBytes(dsts);
+        let size = if size >= MemoryDef::HUGE_PAGE_SIZE as usize {
+            MemoryDef::HUGE_PAGE_SIZE as usize
+        } else {
+            size
+        };
         let buf = DataBuff::New(size);
 
         let iovs = buf.Iovs();
@@ -690,6 +695,13 @@ impl HostInodeOp {
         let hostIops = self.clone();
 
         let size = IoVec::NumBytes(srcs);
+
+        let size = if size >= MemoryDef::HUGE_PAGE_SIZE as usize {
+            MemoryDef::HUGE_PAGE_SIZE as usize
+        } else {
+            size
+        };
+
         let mut buf = DataBuff::New(size);
         let iovs = buf.Iovs();
 
@@ -753,6 +765,11 @@ impl HostInodeOp {
         let inodeType = hostIops.InodeType();
         if inodeType == InodeType::RegularFile || inodeType == InodeType::SpecialFile {
             let size = IoVec::NumBytes(srcs);
+            let size = if size >= MemoryDef::HUGE_PAGE_SIZE as usize {
+                MemoryDef::HUGE_PAGE_SIZE as usize
+            } else {
+                size
+            };
             let mut buf = DataBuff::New(size);
 
             task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
