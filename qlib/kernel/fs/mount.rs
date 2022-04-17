@@ -348,8 +348,6 @@ impl MountNs {
 
         let mut contexts = Vec::new();
 
-        //error!("FindDirent 1 {}/{}", path, resolve);
-        //defer!(error!("FindDirent end"));
 
         loop {
             let currentInode = current.Inode();
@@ -364,7 +362,6 @@ impl MountNs {
                 })?
             }
 
-            //error!("FindDirent 2 {}", first);
             let next = match current.Walk(task, root, first) {
                 Err(e) => {
                     current.ExtendReference();
@@ -375,7 +372,6 @@ impl MountNs {
 
             if !resolve {
                 if remain != ""  {
-                   // error!("FindDirent 3.1");
                     match self.ResolvePath(task, &next, remainingTraversals)? {
                         ResolveResult::Dirent(d) => current = d,
                         ResolveResult::Path(context) => {
@@ -393,7 +389,6 @@ impl MountNs {
                         }
                     }
                 } else {
-                    //error!("FindDirent 3.2");
                     match contexts.pop() {
                         None => {
                             next.ExtendReference();
@@ -409,7 +404,6 @@ impl MountNs {
             } else {
                 match self.ResolvePath(task, &next, remainingTraversals)? {
                     ResolveResult::Dirent(d) => {
-                        //error!("FindDirent 3.3");
                         current = d;
 
                         if remain == "" {

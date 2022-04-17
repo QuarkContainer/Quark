@@ -82,7 +82,7 @@ pub struct SignalArgs {
     pub Signo: i32,
 
     // PID is the process ID in the given container that will be signaled.
-    // If 0, the root container will be signalled.
+    // If 0, the root process of the container will be signalled.
     pub PID: i32,
 
     // Mode is the signal delivery mode.

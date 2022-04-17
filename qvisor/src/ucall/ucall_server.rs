@@ -129,28 +129,26 @@ pub fn ContainerDestroyHandler(cid: &String) -> Result<ControlMsg> {
 pub fn CreateSubContainerHandler(args: &mut CreateArgs, fds: &[i32]) -> Result<ControlMsg> {
     //set fds back to args, 
     if fds.len() == 1 {
-        args.fds[0] = fds[0]
+        args.fds[0] = fds[0];
+    } else if fds.len() == 3 {
+        args.fds[0] = fds[0];
+        args.fds[1] = fds[1];
+        args.fds[2] = fds[2];
     }
+
+    for i in 0..fds.len() {
+        let osfd = args.fds[i];
+        VMSpace::UnblockFd(osfd);
+
+        let hostfd = IO_MGR.AddFile(osfd);
+        args.fds[i] = hostfd;
+    }
+
     let msg = ControlMsg::New(Payload::CreateSubContainer(args.clone()));
     return Ok(msg)
 }
 
-pub fn StartSubContainerHandler(args: &mut StartArgs, fds: &[i32]) -> Result<ControlMsg> {
-    if fds.len() == 3 {
-        args.process.Stdiofds[0] = fds[0];
-        args.process.Stdiofds[1] = fds[1];
-        args.process.Stdiofds[2] = fds[2];
-    }
-
-    for i in 0..args.process.Stdiofds.len() {
-        let osfd = args.process.Stdiofds[i];
-        VMSpace::UnblockFd(osfd);
-
-        let hostfd = IO_MGR.AddFile(osfd);
-
-        args.process.Stdiofds[i] = hostfd;
-    }
-
+pub fn StartSubContainerHandler(args: &mut StartArgs) -> Result<ControlMsg> {
 
     let msg = ControlMsg::New(Payload::StartSubContainer(args.clone()));
     return Ok(msg);
@@ -168,7 +166,7 @@ pub fn ProcessReqHandler(req: &mut UCallReq, fds: &[i32]) -> Result<ControlMsg> 
         UCallReq::Signal(signalArgs) => SignalHandler(signalArgs)?,
         UCallReq::ContainerDestroy(cid) => ContainerDestroyHandler(cid)?,
         UCallReq::CreateSubContainer(args) => CreateSubContainerHandler(args, fds)?,
-        UCallReq::StartSubContainer(args) => StartSubContainerHandler(args, fds)?,
+        UCallReq::StartSubContainer(args) => StartSubContainerHandler(args)?,
         UCallReq::WaitAll => WaitAll()?,
     };
 

@@ -20,6 +20,7 @@ use lazy_static::lazy_static;
 use spin::Mutex;
 use nix::sys::signal;
 use core::convert::TryFrom;
+use std::os::unix::io::AsRawFd;
 
 use super::super::specutils::specutils;
 use super::super::super::qlib::auth::id::*;
@@ -40,6 +41,7 @@ use super::super::container::container::*;
 use super::super::cmd::config::*;
 use super::super::runtime::sandbox_process::*;
 use super::super::super::qlib::loader;
+use super::super::runtime::fs::FsImageMounter;
 
 use super::super::shim::container_io::*;
 
@@ -302,33 +304,52 @@ impl Sandbox {
     }
 
     /// CreateSubContainer creates a container inside the sandbox
-    pub fn CreateSubContainer(&self, _conf: &GlobalConfig, id: &str, tty: i32) -> Result<()> {
+    pub fn CreateSubContainer(&self, _conf: &GlobalConfig, id: &str,io: &ContainerIO) -> Result<()> {
         // todo: see if we can get rid of globalconfig
-
+        let fds = match io {
+            ContainerIO::PtyIO(pty) => {
+                vec![pty.slave.as_raw_fd()]
+            }
+            ContainerIO::FifoIO(fifo) => {
+                fifo.StdioFds()?.to_vec()
+            }
+            _ => {
+                vec![-1]
+            }
+        };
         let client = self.SandboxConnect()?;
         let createArgs = CreateArgs {
             cid: id.to_string(),
-            fds: vec![tty],
+            fds: fds.clone(),
         };
         let req = UCallReq::CreateSubContainer(createArgs);
         let res = client.Call(&req)?;
+
+        // close fds on qvisor side once it's sent through ucall
+        for fd in fds {
+            unsafe {
+                libc::close(fd);
+            }
+        }
+
         match res {
             UCallResp::CreateSubContainerResp => {
                 return Ok(())
             },
             resp => {
                 error!("CreateSubContainer get unknown resp {:?}", resp);
-                panic!("Failed creating subcontainer");
+                return Err(Error::Common("Failed creating subcontainer".to_string()))
             }
         }
     }
 
-    pub fn StartSubContainer(&self, spec: &Spec, _conf: &GlobalConfig, id: &str, stdios: &[i32]) -> Result<()> {
+    pub fn StartSubContainer(&self, spec: &Spec, id: &str, bundleDir: &str) -> Result<()> {
         debug!("Starting subcontainer {} in sandbox {}", id, &self.ID);
-
+        let mounter = FsImageMounter::New(self.ID.as_str());
+        mounter.MountContainerFs(bundleDir, spec, id)?;
         let client = self.SandboxConnect()?;
         // to avoid sharing the spec structure with qkernel, construct the process spec from oci Spec.
-        let mut process = loader::Process {
+        let process = loader::Process {
             UID: spec.process.user.uid,
             GID: spec.process.user.gid,
             AdditionalGids: spec.process.user.additional_gids.clone(),
@@ -339,12 +360,9 @@ impl Sandbox {
             limitSet: CreateLimitSet(&spec).expect("load limitSet fail").GetInternalCopy(),
             ID: id.to_string(),
             Caps: specutils::Capabilities(false, &spec.process.capabilities),
+            Root: format!("{}{}", "/", id),
             ..Default::default()
         };
-
-        process.Stdiofds[0] = stdios[0];
-        process.Stdiofds[1] = stdios[1];
-        process.Stdiofds[2] = stdios[2];
 
         let startArgs = StartArgs {
             process: process
@@ -455,7 +473,7 @@ impl Sandbox {
         info!("Destroy sandbox {}", &self.ID);
 
         if self.Pid != 0 {
-            info!("Killing sandbox {}", &self.ID);
+            info!("Killing sandbox {} with signal {}", &self.ID, SIGKILL);
             let ret = unsafe {
                 kill(self.Pid, SIGKILL)
             };
@@ -586,7 +604,7 @@ impl Sandbox {
     }
 
     pub fn SignalContainer(&self, cid: &str, signo: i32, all: bool) -> Result<()> {
-        info!("Signal container sandbox {}", &self.ID);
+        info!("Signal container {} inside sandbox {}", cid, &self.ID);
 
         let client = self.SandboxConnect()?;
 

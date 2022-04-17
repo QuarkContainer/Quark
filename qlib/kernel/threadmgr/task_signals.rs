@@ -387,10 +387,12 @@ impl Thread {
     }
 
     pub fn sendSignalLocked(&self, info: &SignalInfo, group: bool) -> Result<()> {
+        info!("sendsignalLocked, signal:{:?}, group:{}", info, group);
         return self.sendSignalTimerLocked(info, group, None);
     }
 
     pub fn sendSignalTimerLocked(&self, info: &SignalInfo, group: bool, timer: Option<IntervalTimer>) -> Result<()> {
+        info!("sendsignalTimerLocked, signal:{:?}", info);
         if self.lock().exitState == TaskExitState::TaskExitDead {
             return Err(Error::SysError(SysErr::ESRCH));
         }
@@ -740,6 +742,7 @@ impl ThreadGroupInternal {
 
 impl ThreadGroup {
     pub fn SendSignal(&self, info: &SignalInfo) -> Result<()> {
+        debug!("sendSignal {:?}", &info);
         let pidns = self.PIDNamespace();
         let owner = pidns.lock().owner.clone();
 
@@ -748,7 +751,14 @@ impl ThreadGroup {
         let _s = lock.lock();
 
         let leader = self.lock().leader.Upgrade();
-        return leader.unwrap().sendSignalLocked(info, true);
+        match leader {
+            None => {
+                return Err(Error::NotExist)
+            },
+            Some(l) => {
+                return l.sendSignalLocked(info, true)
+            }
+        }
     }
 
     // SetSignalAct atomically sets the thread group's signal action for signal sig

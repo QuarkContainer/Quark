@@ -28,12 +28,14 @@ use std::fs::{canonicalize, create_dir_all};
 use nix::unistd::{getcwd};
 use serde_json;
 use std::process::{Command, Stdio};
+use procfs;
 
 
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::path::*;
 use super::super::super::util::*;
+use super::super::super::qlib::config::DebugLevel;
 use super::super::super::namespace::*;
 use super::super::super::console::pty::*;
 use super::super::super::console::unix_socket::*;
@@ -51,6 +53,9 @@ use super::loader::*;
 use super::vm::*;
 use super::console::*;
 use super::signal_handle::*;
+use super::super::super::QUARK_CONFIG;
+
+const QUARK_SANDBOX_ROOT_PATH: &str = "/var/lib/quark/";
 
 pub struct NSRestore {
     pub fd: i32,
@@ -102,6 +107,9 @@ pub struct SandboxProcess {
     pub PCond: Cond,
 
     pub Rootfs: String,
+
+    /// Root path for this sandbox, FS images for containers running in this sandbox should be mount inside this dir
+    pub SandboxRootDir: String,
 }
 
 impl SandboxProcess {
@@ -131,6 +139,7 @@ impl SandboxProcess {
             CCond: Cond::New()?,
             PCond: Cond::New()?,
             Rootfs: "".to_string(),
+            SandboxRootDir: Join(QUARK_SANDBOX_ROOT_PATH,id),
         };
 
         let spec = &process.spec;
@@ -167,7 +176,7 @@ impl SandboxProcess {
         args.AutoStart = self.action == RunAction::Run;
         args.BundleDir = self.bundleDir.to_string();
         args.Pivot = self.pivot;
-        args.Rootfs = self.Rootfs.clone();
+        args.Rootfs = Join(QUARK_SANDBOX_ROOT_PATH, id.as_str());
         args.ControlSock = controlSock;
 
         let exitStatus = match VirtualMachine::Init(args) {
@@ -180,10 +189,37 @@ impl SandboxProcess {
                 panic!("error is {:?}", e)
             }
         };
-
+        
         unsafe {
             libc::_exit(exitStatus)
         }
+    }
+
+    /// Root path for this sandbox on host fs, rootfs for containers running in this sandbox should be mount inside this dir
+    fn MakeSandboxRootDirectory(&self) -> Result<()> {
+        debug!("Creating the sandboxRootDir at {}", self.SandboxRootDir.as_str());
+        match create_dir_all(self.SandboxRootDir.as_str()) {
+            Ok(()) => (),
+            Err(_e) => return Err(Error::Common(String::from("failed creating directory")))
+        }
+        let rbindFlags = libc::MS_REC | libc::MS_BIND;
+
+        // convert sandbox Root Dir to a mount point
+        let ret = Util::Mount(&self.SandboxRootDir, &self.SandboxRootDir, "", rbindFlags | libc::MS_SHARED, "");
+        if  ret < 0 {
+            panic!("InitRootfs: mount sandboxRootDir fails, error is {}", ret);
+        }
+        let rootContainerPath = Join(&self.SandboxRootDir, &self.containerId);
+        match create_dir_all(&rootContainerPath) {
+            Ok(()) => (),
+            Err(_e) => panic!("failed to create dir to mount containerrootPath")
+        };
+        let ret = Util::Mount(&self.Rootfs, &rootContainerPath, "", rbindFlags | libc::MS_SHARED, "");
+        if  ret < 0 {
+            panic!("InitRootfs: mount rootfs fail, error is {}", ret);
+        }
+
+        return Ok(())
     }
 
     pub fn CollectNamespaces(&mut self) -> Result<()> {
@@ -258,26 +294,42 @@ impl SandboxProcess {
             SetNamespace(mountFd, LinuxNamespaceType::mount as i32)?;
             Close(mountFd)?;
         }
+        // Print mountinfo in quark log if the level is debug
+        if QUARK_CONFIG.lock().DebugLevel >= DebugLevel::Debug {
+            let proc = procfs::process::Process::myself().unwrap();
+            debug!("mountinfo from sandbox process: {:?}", proc.mountinfo().expect("failed to read mountinfo inside sandbox mountns"))
+        }
 
         return Ok(())
     }
 
     pub fn InitRootfs(&self) -> Result<()> {
-        let flags = libc::MS_REC | libc::MS_SLAVE;
+        let privateFlags = libc::MS_REC | libc::MS_SLAVE;
+        let rbindFlags = libc::MS_REC | libc::MS_BIND;
 
-        if Util::Mount("","/", "", flags, "") < 0 {
+        // convert the root mount on current host as private, so nothing will be propagated outside current mount ns
+        if Util::Mount("","/", "", privateFlags, "") < 0 {
             panic!("mount root fail")
         }
-
-        //println!("rootfs is {}", &self.Rootfs);
-        let ret = Util::Mount(&self.Rootfs, &self.Rootfs, "", libc::MS_REC | libc::MS_BIND, "");
+        // convert sandbox Root Dir to a mount point
+        let ret = Util::Mount(&self.SandboxRootDir, &self.SandboxRootDir, "", rbindFlags, "");
+        if  ret < 0 {
+            panic!("InitRootfs: mount sandboxRootDir fails, error is {}", ret);
+        }
+        let rootContainerPath = Join(&self.SandboxRootDir, &self.containerId);
+        match create_dir_all(&rootContainerPath) {
+            Ok(()) => (),
+            Err(_e) => panic!("failed to create dir to mount containerrootPath")
+        };
+        let ret = Util::Mount(&self.Rootfs, &rootContainerPath, "", rbindFlags, "");
         if  ret < 0 {
             panic!("InitRootfs: mount rootfs fail, error is {}", ret);
         }
 
         let spec = &self.spec;
         let linux = spec.linux.as_ref().unwrap();
-
+        
+        //these should also show up under rootContainerpath, as it's set as rbind in the parent mount.
         for m in &spec.mounts {
             // TODO: check for nasty destinations involving symlinks and illegal
             //       locations.
@@ -456,7 +508,7 @@ impl SandboxProcess {
             .expect("Boot command failed to start");
 
         {
-            //close fd1
+            //close fd0
             let _file0 = unsafe {
                 File::from_raw_fd(fd0)
             };
@@ -497,7 +549,7 @@ impl SandboxProcess {
 
         let addr = ControlSocketAddr(&self.containerId);
         let controlSock = USocket::CreateServerSocket(&addr).expect("can't create control sock");
-
+        self.MakeSandboxRootDirectory()?;
         self.EnableNamespace()?;
 
         self.Run(controlSock);

@@ -31,6 +31,7 @@ use super::super::fs::mount::*;
 use super::super::fs::overlay::*;
 use super::super::fs::host::util::*;
 use super::super::fs::ramfs::tree::*;
+use super::super::super::linux_def::{SysErr, FilePermissions, FileMode};
 
 use super::*;
 
@@ -57,6 +58,7 @@ fn CreateRootMount(task: &Task, spec: &oci::Spec, config: &config::Config, mount
 
     let ms = MountSource::NewHostMountSource(&rootStr, &ROOT_OWNER, &WhitelistFileSystem::New(), &mf, false);
     let hostRoot = Inode::NewHostInode(&Arc::new(QMutex::new(ms)), fd, &fstat, writeable)?;
+
     let submounts = SubTargets(&"/".to_string(), mounts);
     //submounts.append(&mut vec!["/dev1".to_string(), "/sys".to_string(), "/proc".to_string(), "/tmp".to_string()]);
 
@@ -129,18 +131,19 @@ pub fn InitTestSpec() -> oci::Spec {
     };
 }
 
-pub fn BootInitRootFs(task: &mut Task, root: &str) -> Result<MountNs> {
+pub fn InitRootFs(task: &mut Task, root: &str) -> Result<MountNs> {
    let config = config::Config {
-        //RootDir: "/home/brad/specs/busybox/rootfs".to_string(),
         RootDir: root.to_string(),
-        //RootDir: "/".to_string(),
         Debug: true,
     };
 
-    return SetupRootContainerFS(task, &InitTestSpec(), &config);
+    debug!("init rootfs under {} for container", root);
+
+    return SetupContainerFS(task, &InitTestSpec(), &config);
 }
 
-pub fn SetupRootContainerFS(task: &mut Task, spec: &oci::Spec, conf: &config::Config) -> Result<MountNs> {
+// This function will be used by both root container and subcontainer
+pub fn SetupContainerFS(task: &mut Task, spec: &oci::Spec, conf: &config::Config) -> Result<MountNs> {
     let mounts = CompileMounts(spec);
 
     //error!("SetupRootContainerFS 1.0 mounts[0].destination is {:?}", &mounts[0].destination);
@@ -235,10 +238,39 @@ fn CompileMounts(spec: &oci::Spec) -> Vec<oci::Mount> {
 
 fn MountSubmounts(task: &Task, config: &config::Config, mns: &MountNs, root: &Dirent, mounts: &Vec<oci::Mount>) -> Result<()> {
     for m in mounts {
+        debug!("mounting submounts {:?}", m);
         MountSubmount(task, config, mns, root, m, mounts)?;
     }
 
     //todo: mount tmp
+    return Ok(())
+}
+
+/// This function ensures the mount point for submount to mount exist
+fn MakeMountPoint(task: &Task, mns: &MountNs, root: &Dirent, path: &str) -> Result<()> {
+    let rootInode = root.Inode();
+    if !rootInode.StableAttr().IsDir() {
+        return Err(Error::SysError(SysErr::ENOTDIR))
+    }
+
+    let mut remainingTraversals = 0;
+    let res = mns.FindDirent(task, root, Some(root.clone()), path, &mut remainingTraversals, true);
+
+    match res {
+        Ok(_) => {
+            // The mount point exists already, we are done
+            return Ok(())
+        },
+        _ => {
+
+            let perms = FilePermissions::FromMode(FileMode(u16::from_str_radix("011101110111", 2).unwrap()));
+
+            // remove leading / as CreateDirectory only takes relative path
+            let path = String::from(path);
+            let trimmedPath = path.trim_start_matches('/');
+            root.CreateDirectory(task, root, trimmedPath, &perms)?;
+        }
+    }
     return Ok(())
 }
 
@@ -258,7 +290,7 @@ fn MountSubmount(task: &Task, config: &config::Config, mns: &MountNs, root: &Dir
         info!("adding submount overlay over {}", m.destination);
         inode = AddSubmountOverlay(task, &inode, &submounts)?;
     }
-
+    MakeMountPoint(task, mns, root, &m.destination)?;
     let mut maxTraversals = 0;
     let dirent = mns.FindDirent(task, root, Some(root.clone()), &m.destination, &mut maxTraversals, true)?;
     mns.Mount(&dirent, &inode)?;

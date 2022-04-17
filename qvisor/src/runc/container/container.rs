@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use alloc::string::String;
-use std::os::unix::prelude::AsRawFd;
 use std::time::{SystemTime, UNIX_EPOCH, Duration};
 use std::path::Path;
 use std::env;
@@ -24,7 +23,6 @@ use std::fs::File;
 use fs2::FileExt;
 use std::io::Write;
 use std::fs::OpenOptions;
-//use std::os::unix::io::{AsRawFd};
 
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
@@ -34,14 +32,11 @@ use super::super::super::qlib::auth::cap_set::*;
 use super::super::super::qlib::control_msg::*;
 use super::super::super::ucall::ucall::*;
 //use super::super::super::qlib::util::*;
-use super::super::super::console::pty::*;
-use super::super::super::console::unix_socket::UnixSocket;
 use super::super::oci::*;
 use super::super::cgroup::*;
 use super::super::oci::serialize::*;
 use super::super::cmd::config::*;
 use super::super::cmd::exec::*;
-//use super::super::runtime::console::*;
 use super::super::sandbox::sandbox::*;
 use super::super::specutils::specutils::*;
 use super::status::*;
@@ -285,7 +280,7 @@ impl Container {
     // is SIGKILL, then waits for all processes to exit before returning.
     // SignalContainer returns an error if the container is already stopped.
     pub fn SignalContainer(&self, sig: i32, all: bool) -> Result<()> {
-        info!("Signal container {:?}: {:?}", self.ID, sig);
+        info!("Signal container {:?} with signal: {:?}", self.ID, sig);
         // Signaling container in Stopped state is allowed. When all=false,
         // an error will be returned anyway; when all=true, this allows
         // sending signal to other processes inside the container even
@@ -388,11 +383,13 @@ impl Container {
                   conf: &GlobalConfig,
                   bundleDir: &str,
                   consoleSocket: &str,
+                  // pid is only used by shim, so not needed after switching to new shim
                   pidFile: &str,
                   userlog: &str,
                   detach: bool,
                   pivot: bool) -> Result<Self> {
         info!("Create container {} in root dir: {}", id, &conf.RootDir);
+        debug!("spec for creating container: {:?}", &spec);
         //debug!("container spec is {:?}", &spec);
         ValidateID(id)?;
 
@@ -485,6 +482,8 @@ impl Container {
                     Some(restore) => restore(),
                 }
             } else {
+                panic!("non CRI-compliant runtime should never call subcontainer");
+                /* this is for non oci-compliant (to be specific), and should not call subcontainer
                 let sandboxId = match SandboxID(&c.Spec) {
                     Some(sid) => sid,
                     None => {
@@ -520,6 +519,7 @@ impl Container {
                 if let Err(e) = c.Sandbox.as_ref().unwrap().CreateSubContainer(conf, id, tty) {
                     error!("failed to create subcontainer: {:?}", e);
                 }
+                */
             }
 
             c.changeStatus(Status::Created);
@@ -674,18 +674,7 @@ impl Container {
                 // TODO: create placeholder cgroup paths for subcontainers,
                 // althought it won't take effect, some tools use this for reporting and discovery
 
-                // If the console control socket file is provided, then create a new
-                // pty master/slave pair and send the TTY to the sandbox process.
-                let tty = if c.ConsoleSocket.len() > 0 {
-                    let (master, replicas) = NewPty()?;
-                    let client = UnixSocket::NewClient(&c.ConsoleSocket)?;
-                    client.SendFd(master.as_raw_fd())?;
-                    replicas.as_raw_fd()
-                } else {
-                    -1
-                };
-
-                if let Err(e) = c.Sandbox.as_ref().unwrap().CreateSubContainer(conf, id, tty) {
+                if let Err(e) = c.Sandbox.as_ref().unwrap().CreateSubContainer(conf, id, io) {
                     error!("failed to create subcontainer: {:?}", e);
                 }
             }
@@ -782,7 +771,7 @@ impl Container {
     }
 
     // Start starts running the containerized process inside the sandbox.
-    pub fn StartRootContainer(&mut self) -> Result<()> {
+    pub fn Start(&mut self) -> Result<()> {
         info!("Start container {}", &self.ID);
 
         let _unlockRoot = maybeLockRootContainer(&self.Spec, &self.RootContainerDir)?;
@@ -793,52 +782,13 @@ impl Container {
         // "If any prestart hook fails, the runtime MUST generate an error,
         // stop and destroy the container" -OCI spec.
         if self.Spec.hooks.is_some() {
-            //error!("start hook ...");
             executeHooks(&self.Spec.hooks.as_ref().unwrap().prestart, &self.State())?;
-            //error!("after hook...");
         }
 
         if IsRoot(&self.Spec) {
             self.Sandbox.as_ref().unwrap().StartRootContainer()?;
         } else {
-            panic!("StartRootContainer with non root spec")
-        }
-
-        if self.Spec.hooks.is_some() {
-            executeHooksBestEffort(&self.Spec.hooks.as_ref().unwrap().poststart, &self.State());
-        }
-
-        self.changeStatus(Status::Running);
-        return self.Save()
-    }
-
-    // Start starts running the containerized process inside the sandbox.
-    pub fn Start(&mut self, config: &GlobalConfig) -> Result<()> {
-        info!("Start container {}", &self.ID);
-
-        let _unlockRoot = maybeLockRootContainer(&self.Spec, &self.RootContainerDir)?;
-
-        let _unlock = self.Lock()?;
-
-        self.RequireStatus("start", &[Status::Created])?;
-        // "If any prestart hook fails, the runtime MUST generate an error,
-        // stop and destroy the container" -OCI spec.
-        if self.Spec.hooks.is_some() {
-            //error!("start hook ...");
-            executeHooks(&self.Spec.hooks.as_ref().unwrap().prestart, &self.State())?;
-            //error!("after hook...");
-        }
-
-        if IsRoot(&self.Spec) {
-            self.Sandbox.as_ref().unwrap().StartRootContainer()?;
-        } else {
-            // todo: make sure understand how these are used
-            let stdiofds: [i32;3] = if self.Spec.process.terminal {
-                [-1, -1, -1]
-            } else {
-                [0, 1, 2]
-            };
-            if let Err(e) = self.Sandbox.as_ref().unwrap().StartSubContainer(&self.Spec, config, &self.ID[..], &stdiofds) {
+            if let Err(e) = self.Sandbox.as_ref().unwrap().StartSubContainer(&self.Spec, &self.ID[..], &self.BundleDir) {
                 error!("Failed to start subcontainer, error : {:?}", &e);
                 panic!("{:?}", &e);
             }
@@ -946,13 +896,18 @@ impl Container {
 
         if self.Sandbox.is_some() {
             info!("Destroying container {}", &self.ID);
-            let sandbox = self.Sandbox.as_ref().unwrap();
+            let sandbox = self.Sandbox.as_mut().unwrap();
             if sandbox.IsRunning() {
                 sandbox.DestroyContainer(&self.ID)?;
             }
             // Only uninstall cgroup for sandbox stop.
             if sandbox.IsRootContainer(&self.ID) {
+                let destroyed = sandbox.Destroy();
                 cgroup = self.Sandbox.as_mut().unwrap().Cgroup.take();
+                match destroyed {
+                    Ok(())=> (),
+                    Err(e)=> return Err(e)
+                }
             }
 
             // Only set sandbox to none after it has been told to destroy the container.

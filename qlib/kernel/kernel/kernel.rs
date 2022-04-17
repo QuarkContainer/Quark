@@ -20,6 +20,7 @@ use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 use alloc::string::String;
 use alloc::string::ToString;
+use alloc::collections::btree_map::BTreeMap;
 use core::ops::Deref;
 
 use super::super::uid::NewUID;
@@ -105,8 +106,8 @@ pub struct KernelInternal {
     pub applicationCores: usize,
     //pub useHostCores: bool,
 
-    // mounts holds the state of the virtual filesystem.
-    pub mounts: QRwLock<Option<MountNs>>,
+    // mounts holds the states of the virtual filesystem, one for each container mountNS.
+    pub mounts: QRwLock<BTreeMap<String, MountNs>>,
 
     // globalInit is the thread group whose leader has ID 1 in the root PID
     // namespace. globalInit is stored separately so that it is accessible even
@@ -197,7 +198,7 @@ impl Kernel {
             rootUTSNamespace: args.RootUTSNamespace,
             rootIPCNamespace: args.RootIPCNamespace,
             applicationCores: args.ApplicationCores as usize - 1,
-            mounts: QRwLock::new(None),
+            mounts: QRwLock::new(BTreeMap::new()),
             globalInit: QMutex::new(None),
             cpuClock: AtomicU64::new(0),
             staticInfo: QMutex::new(StaticInfo {
@@ -262,11 +263,6 @@ impl Kernel {
         return TIME_KEEPER.clone()
     }
 
-    pub fn RootDir(&self) -> Dirent {
-        let mns = self.mounts.read().clone().unwrap();
-        return mns.Root();
-    }
-
     pub fn RootPIDNamespace(&self) -> PIDNamespace {
         return self.tasks.Root();
     }
@@ -303,8 +299,9 @@ impl Kernel {
         }
 
         let task = Task::Current();
-        let mns = self.mounts.read().clone().unwrap();
+        let mns = self.mounts.read().get(&args.ContainerID).unwrap().clone();
         let root = mns.Root();
+        // TODO: check this, what is the relationship between task/process/container process
         task.fsContext.SetRootDirectory(&root);
         task.mountNS = mns.clone();
 
@@ -489,7 +486,9 @@ impl<'a> Context for CreateProcessContext<'a> {
             return root
         }
 
-        let root = self.k.mounts.read().as_ref().unwrap().root.clone();
+        let containerID = &self.args.ContainerID;
+
+        let root = self.k.mounts.read().get(containerID).unwrap().root.clone();
 
         return root
     }

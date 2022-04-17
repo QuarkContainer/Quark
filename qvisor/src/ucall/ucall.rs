@@ -53,14 +53,6 @@ impl FileDescriptors for UCallReq {
                     return Some(&args.fds)
                 }
             },
-            UCallReq::StartSubContainer(args) => {
-                let stdios = &args.process.Stdiofds;
-                if stdios[0] != -1 {
-                    return Some(stdios)
-                } else {
-                    return None
-                }
-            }
             _ => return None,
         }
     }

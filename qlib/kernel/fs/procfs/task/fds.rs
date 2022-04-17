@@ -53,8 +53,7 @@ pub struct FdNode {
 
 impl ReadLinkNode for FdNode {
     fn ReadLink(&self, _link: &Symlink, task: &Task, _dir: &Inode) -> Result<String> {
-        let kernel = task.Thread().lock().k.clone();
-        let root = kernel.RootDir();
+        let root = task.Root();
         let file = match self.file.Upgrade() {
             None => return Err(Error::SysError(SysErr::ENOENT)),
             Some(f) => f,

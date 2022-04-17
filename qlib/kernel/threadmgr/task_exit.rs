@@ -919,6 +919,7 @@ impl Thread {
         let tg = self.lock().tg.clone();
         let cid = tg.lock().containerID.clone();
         let execId = tg.lock().execId.clone();
+        let sandboxId = LOADER.lock().sandboxID.clone();
         let tid = tg.ID();
 
         let pidns = tg.PIDNamespace();
@@ -953,8 +954,10 @@ impl Thread {
         }
 
         self.exitNotifyLocked();
-        if execId.is_some() {
-            WriteWaitAllResponse(cid.clone(), execId.clone().unwrap(), tg.ExitStatus().Status() as i32);
+        if execId.is_some() || cid != sandboxId {
+            let execId = execId.unwrap_or_default();
+            info!(" sending exit notification for CID:{}, execID:{}", &cid, &execId);
+            WriteWaitAllResponse(cid.clone(), execId.clone(), tg.ExitStatus().Status() as i32);
             let curr = Task::Current();
             LOADER.Lock(curr).unwrap().processes.remove(&ExecID{cid: cid, pid: tid});
         }

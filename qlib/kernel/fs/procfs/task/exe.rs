@@ -45,8 +45,7 @@ impl ReadLinkNode for ExeNode {
     fn ReadLink(&self, _link: &Symlink, task: &Task, _dir: &Inode) -> Result<String> {
         let exe = self.Executable()?;
 
-        let kernel = task.Thread().lock().k.clone();
-        let root = kernel.RootDir();
+        let root = task.Root();
         let (name, _) = exe.FullName(&root);
         return Ok(name)
     }

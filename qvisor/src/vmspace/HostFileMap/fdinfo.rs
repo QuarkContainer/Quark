@@ -707,6 +707,7 @@ impl FdInfoIntern {
                 // shutdown for socket, without shutdown, it the uring read won't be wake up
                 // todo: handle this elegant
                 shutdown(self.fd, 2);
+                debug!("fdinfo close: {}", self.fd);
                 return close(self.fd)
             }
         }

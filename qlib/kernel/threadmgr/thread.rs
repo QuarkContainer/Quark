@@ -25,7 +25,6 @@ use super::super::SignalDef::*;
 use super::super::memmgr::mm::*;
 use super::super::super::linux_def::*;
 use super::super::super::usage::io::*;
-use super::super::fs::mount::*;
 use super::super::kernel::kernel::*;
 use super::super::kernel::fs_context::*;
 use super::super::kernel::fd_table::*;
@@ -327,9 +326,9 @@ pub struct ThreadInternal {
 
 impl ThreadInternal {
     pub fn IsChrooted(&self) -> bool {
-        let realRoot = self.k.RootDir();
+        let realRoot = self.k.mounts.read().get(&self.containerID).unwrap().root.clone();
         let root = self.fsc.RootDirectory();
-        return root != realRoot;
+        return realRoot == root;
     }
 
     pub fn SetRet(&mut self, ret: u64) {
@@ -406,10 +405,6 @@ impl Thread {
         let tg = self.ThreadGroup();
         let pidns = tg.PIDNamespace();
         return (pidns.IDOfThreadGroup(&tg), pidns.IDOfTask(&self))
-    }
-
-    pub fn MountNamespace(&self) -> MountNs {
-        return GetKernel().mounts.read().clone().unwrap();
     }
 
     pub fn RefCount(&self) -> usize {

@@ -248,8 +248,8 @@ impl VMSpace {
 
             process.Stdiofds[i] = hostfd;
         }
-
-        process.Root = "/".to_string();
+        process.Root = format!("/{}", &process.ID);
+        //process.Root = "/".to_string();
 
         let rootfs = self.args.as_ref().unwrap().Rootfs.to_string();
 

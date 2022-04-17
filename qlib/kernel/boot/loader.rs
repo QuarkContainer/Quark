@@ -88,6 +88,7 @@ pub struct ExecProcess {
     pub tg: ThreadGroup,
     pub tty: Option<TTYFileOps>,
     pub hostTTY: i32,
+    pub stdios: [i32;3]
 }
 
 #[derive(Default)]
@@ -226,11 +227,16 @@ impl Loader {
         return Ok((tid, entry, userStackAddr, kernelStackAddr))
     }
 
-    pub fn CreateSubContainer(&self, cid: String, tty: Vec<i32>) -> Result<()> {
-        let tty = if tty.len() > 0 {
-            tty[0]
+    pub fn CreateSubContainer(&self, cid: String, fds: Vec<i32>) -> Result<()> {
+        let tty = if fds.len() == 0 {
+            fds[0]
         } else {
             -1
+        };
+        let stdios = if fds.len() == 3 {
+            [fds[0], fds[1], fds[2]]
+        } else {
+            [-1, -1, -1]
         };
         let task = Task::Current();
         let execId = ExecID {
@@ -243,7 +249,7 @@ impl Loader {
             return Err(Error::Common("Subcontainer already exists".to_string()));
         }
 
-        self.Lock(task)?.processes.insert(execId, ExecProcess{hostTTY: tty, ..Default::default()});
+        self.Lock(task)?.processes.insert(execId, ExecProcess{hostTTY: tty, stdios:stdios, ..Default::default()});
         return Ok(());        
     }
 
@@ -276,6 +282,8 @@ impl Loader {
             Some(&processSpec.TaskCaps()),
             &userns
         );
+        let rootMounts = InitRootFs(Task::Current(), &processSpec.Root).expect("in loader::StartSubContainer, InitRootfs fail");
+        kernel.mounts.write().insert(processSpec.ID.clone(), rootMounts);
 
         //todo: investigate PID namespace and whether we need it.
         let mut createProcessArgs = NewProcess(processSpec, &creds, &kernel);
@@ -300,8 +308,12 @@ impl Loader {
             ttyops.InitForegroundProcessGroup(&tg.ProcessGroup().unwrap());
             ttyFileOps = Some(ttyops)
         } else {
-            debug!("debugging stdios: {:?}", &createProcessArgs.Stdiofds[..]);
-            task.NewStdFds(&createProcessArgs.Stdiofds[..], false).expect("Task: create std fds");
+            if process.stdios[0] == -1 {
+                error!("stdio fds not provided for non-terminal mode");
+                return Err(Error::Common("missing stdio fds for subcontainer".to_string()));
+            }
+            debug!("using stdios to start subcontainer: {:?}", &process.stdios[..]);
+            task.NewStdFds(&process.stdios[..], false).expect("Task: create std fds");
         }
 
         process.tg = tg;
@@ -319,7 +331,7 @@ impl Loader {
 
 #[derive(Default)]
 pub struct LoaderInternal {
-    // k is the kernel.
+    // kernel is a copy of the kernel info
     pub kernel: Kernel,
 
     // rootProcArgs refers to the root sandbox init task.
@@ -377,12 +389,10 @@ impl LoaderInternal {
         let kernel = Kernel::Init(kernalArgs);
         *SHARESPACE.kernel.lock() = Some(kernel.clone());
 
-        let rootMounts = BootInitRootFs(Task::Current(), &process.Root).expect("in loader::New, InitRootfs fail");
-        *kernel.mounts.write() = Some(rootMounts);
+        let rootMounts = InitRootFs(Task::Current(), &process.Root).expect("in loader::New, InitRootfs fail");
+        kernel.mounts.write().insert(sandboxID.clone(), rootMounts);
 
-        info!("after BootInitRootFs");
         let processArgs = NewProcess(process, &creds, &kernel);
-        info!("after NewProcess");
         self.kernel = kernel;
         self.console = console;
         self.sandboxID = sandboxID;
@@ -450,7 +460,11 @@ impl LoaderInternal {
         return lastErr
     }
 
-    pub fn SignalProcess(&self, cid: String, tgid: ThreadID, signo: i32) -> Result<()> {
+    pub fn SignalProcess(&self, mut cid: String, tgid: ThreadID, signo: i32) -> Result<()> {
+        // if the cid string is empty, by default send to process of the root container
+        if cid.is_empty() {
+            cid = self.sandboxID.clone();
+        }
         match self.ThreadGroupFromID(&ExecID{cid: cid.clone(), pid: tgid}) {
             None => (),
             Some((execTG, _)) => {
@@ -519,18 +533,23 @@ impl LoaderInternal {
 
     pub fn DestroyContainer(&mut self, cid: String) -> Result<()> {
         let l = self;
-
-        match l.ThreadGroupFromIDLocked(&ExecID{cid: cid, pid: 0}) {
+        let execId = ExecID{cid: cid.clone(), pid:0};
+        match l.ThreadGroupFromIDLocked(&execId) {
             Ok(_) => {
-                l.SignalAll(Signal::SIGKILL as i32)
-                    .map_err(|e| Error::Common(format!("sending SIGKILL to all container processes: {:?}", e)))?;
+                match l.SignalProcess(cid, 0, 9) {
+                    Ok(()) => (),
+                    Err(Error::NotExist) => (),
+                    Err(e) => {
+                        return Err(Error::Common(format!("sending SIGKILL to container processes: {:?}", e)))
+                    }
+                }
             }
             Err(_e) => (),
         }
 
-        l.processes.clear();
+        l.processes.remove(&execId);
 
-        info!("Container destroyed");
+        info!("Container {} destroyed", &cid);
         return Ok(())
     }
 }
