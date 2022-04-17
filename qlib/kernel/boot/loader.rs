@@ -536,7 +536,7 @@ impl LoaderInternal {
         let execId = ExecID{cid: cid.clone(), pid:0};
         match l.ThreadGroupFromIDLocked(&execId) {
             Ok(_) => {
-                match l.SignalProcess(cid, 0, 9) {
+                match l.SignalProcess(cid.clone(), 0, 9) {
                     Ok(()) => (),
                     Err(Error::NotExist) => (),
                     Err(e) => {
