@@ -120,9 +120,15 @@ impl ContainerFactory {
             Network: NetworkType::default(),
         };
 
+<<<<<<< HEAD
         let container = init
             .Create(&config)
             .map_err(|e| Error::Common(format!("ttrpc error is {:?}", e)))?;
+=======
+        let container = init.Create(&config)
+            .map_err(|e|Error::Common(format!("ttrpc error is {:?}", e)))?;
+        init.common.pid = container.SandboxPid();
+>>>>>>> 526ad79 (quark-shim support for Task Events & subcontainer)
         let container = CommonContainer {
             id: id.to_string(),
             container: container,
@@ -306,7 +312,8 @@ impl CommonContainer {
                 self.processes.remove(exec_id);
             }
             None => {
-                self.container.Destroy()?;
+                // never return Error for failed destroy
+                self.container.Destroy();
             }
         };
 
@@ -314,7 +321,10 @@ impl CommonContainer {
         if let Some(exit_at) = exit_at {
             time_stamp.set_seconds(exit_at.unix_timestamp());
             time_stamp.set_nanos(exit_at.nanosecond() as i32);
+        } else {
+            return Err(Error::Common("failed to get exit status from container"))
         }
+        
         Ok((pid, code as u32, time_stamp))
     }
 
@@ -478,7 +488,7 @@ impl CommonContainer {
                 return Ok(pid);
             }
             None => {
-                self.container.StartRootContainer()?;
+                self.container.Start()?;
                 self.init.common.set_status(Status::RUNNING);
                 Ok(self.init.common.pid())
             }

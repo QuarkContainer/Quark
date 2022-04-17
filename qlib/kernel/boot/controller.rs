@@ -104,6 +104,8 @@ pub fn ControlMsgHandler(fd: *const u8) {
         msg
     };
 
+    //info!("payload: {:?}", &msg.payload);
+    //defer!(error!("payload handling ends"));
     match msg.payload {
         Payload::Pause => {
             let kernel = LOADER.Lock(task).unwrap().kernel.clone();

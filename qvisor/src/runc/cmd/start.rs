@@ -44,7 +44,7 @@ impl StartCmd {
         let id = &self.id;
 
         let mut container = Container::Load(&gCfg.RootDir, id)?;
-        container.Start(gCfg)?;
+        container.Start()?;
 
         //eprintln!("Application error: teststasdfasfd");
         //::std::process::exit(1);

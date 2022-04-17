@@ -88,6 +88,7 @@ pub struct ExecProcess {
     pub tg: ThreadGroup,
     pub tty: Option<TTYFileOps>,
     pub hostTTY: i32,
+    pub stdios: [i32;3]
 }
 
 #[derive(Default)]
@@ -226,11 +227,16 @@ impl Loader {
         return Ok((tid, entry, userStackAddr, kernelStackAddr))
     }
 
-    pub fn CreateSubContainer(&self, cid: String, tty: Vec<i32>) -> Result<()> {
-        let tty = if tty.len() > 0 {
-            tty[0]
+    pub fn CreateSubContainer(&self, cid: String, fds: Vec<i32>) -> Result<()> {
+        let tty = if fds.len() == 0 {
+            fds[0]
         } else {
             -1
+        };
+        let stdios = if fds.len() == 3 {
+            [fds[0], fds[1], fds[2]]
+        } else {
+            [-1, -1, -1]
         };
         let task = Task::Current();
         let execId = ExecID {
@@ -243,7 +249,7 @@ impl Loader {
             return Err(Error::Common("Subcontainer already exists".to_string()));
         }
 
-        self.Lock(task)?.processes.insert(execId, ExecProcess{hostTTY: tty, ..Default::default()});
+        self.Lock(task)?.processes.insert(execId, ExecProcess{hostTTY: tty, stdios:stdios, ..Default::default()});
         return Ok(());        
     }
 
@@ -302,8 +308,12 @@ impl Loader {
             ttyops.InitForegroundProcessGroup(&tg.ProcessGroup().unwrap());
             ttyFileOps = Some(ttyops)
         } else {
-            debug!("debugging stdios: {:?}", &createProcessArgs.Stdiofds[..]);
-            task.NewStdFds(&createProcessArgs.Stdiofds[..], false).expect("Task: create std fds");
+            if process.stdios[0] == -1 {
+                error!("stdio fds not provided for non-terminal mode");
+                return Err(Error::Common("missing stdio fds for subcontainer".to_string()));
+            }
+            debug!("using stdios to start subcontainer: {:?}", &process.stdios[..]);
+            task.NewStdFds(&process.stdios[..], false).expect("Task: create std fds");
         }
 
         process.tg = tg;
@@ -523,18 +533,23 @@ impl LoaderInternal {
 
     pub fn DestroyContainer(&mut self, cid: String) -> Result<()> {
         let l = self;
-
-        match l.ThreadGroupFromIDLocked(&ExecID{cid: cid, pid: 0}) {
+        let execId = ExecID{cid: cid.clone(), pid:0};
+        match l.ThreadGroupFromIDLocked(&execId) {
             Ok(_) => {
-                l.SignalAll(Signal::SIGKILL as i32)
-                    .map_err(|e| Error::Common(format!("sending SIGKILL to all container processes: {:?}", e)))?;
+                match l.SignalProcess(cid, 0, 9) {
+                    Ok(()) => (),
+                    Err(Error::NotExist) => (),
+                    Err(e) => {
+                        return Err(Error::Common(format!("sending SIGKILL to container processes: {:?}", e)))
+                    }
+                }
             }
             Err(_e) => (),
         }
 
-        l.processes.clear();
+        l.processes.remove(&execId);
 
-        info!("Container destroyed");
+        info!("Container {} destroyed", &cid);
         return Ok(())
     }
 }

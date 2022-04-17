@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::sync::{Arc};
+use std::sync::mpsc::{channel, Receiver};
 
 use containerd_shim::ExitSignal;
 use containerd_shim::api::*;
@@ -22,7 +23,8 @@ use containerd_shim::StartOpts;
 use containerd_shim::Config;
 use containerd_shim::Shim;
 use containerd_shim::Result;
-use containerd_shim::protos::protobuf::SingularPtrField;
+use containerd_shim::protos::protobuf::{Message, SingularPtrField};
+use containerd_shim::protos::ttrpc::context::Context;
 use containerd_shim::publisher::RemotePublisher;
 
 //use super::super::super::qlib::common;
@@ -36,12 +38,11 @@ const GROUP_LABELS: [&str; 2] = [
     "io.containerd.runc.v2.group",
     "io.kubernetes.cri.sandbox-id",
 ];
-
+// Implementation for shim service, see https://github.com/containerd/containerd/blob/main/runtime/v2/README.md
 pub struct Service {
     exit: Arc<ExitSignal>,
     id: String,
     namespace: String,
-    task: ShimTask,
 }
 
 impl Shim for Service {
@@ -58,7 +59,6 @@ impl Shim for Service {
             exit: exit.clone(),
             id: id.to_string(),
             namespace: namespace.to_string(),
-            task: ShimTask::New(namespace, exit)
         }
     }
 
@@ -66,6 +66,7 @@ impl Shim for Service {
         info!("Shim Service start_shim start");
         let mut grouping = opts.id.clone();
         let spec = read_spec_from_file("")?;
+        debug!("spec is {:?}", &spec);
         match spec.annotations() {
             Some(annotations) => {
                 for label in GROUP_LABELS.iter() {
@@ -86,7 +87,8 @@ impl Shim for Service {
 
     fn delete_shim(&mut self) -> Result<DeleteResponse> {
         info!("Shim Service delete_shim start");
-        self.task.Destroy()?;
+        // TODO: revisit this, this should try to read container from pwd and delete
+        //self.task.Destroy()?;
 
         let mut resp = DeleteResponse::new();
         // sigkill
@@ -102,9 +104,22 @@ impl Shim for Service {
         info!("Shim Service wait finish");
     }
 
-    // todo, handle publisher passed by 
-    fn create_task_service(&self, _publisher: RemotePublisher) -> Self::T {
-        return self.task.clone()
+    fn create_task_service(&self, publisher: RemotePublisher) -> Self::T {
+        let (tx, rx) = channel();
+        let task = ShimTask::New(self.namespace.as_str(), self.exit.clone(), tx);
+
+        forward(publisher, self.namespace.clone(), rx);
+        task
     }
+}
+
+fn forward(publisher: RemotePublisher, ns: String, rx: Receiver<(String, Box<dyn Message>)>) {
+    std::thread::spawn(move || {
+        for (topic, e) in rx.iter() {
+            publisher
+                .publish(Context::default(), &topic, &ns, e)
+                .unwrap_or_else(|e| warn!("publish {} to containerd: {}", topic, e));
+        }
+    });
 }
 

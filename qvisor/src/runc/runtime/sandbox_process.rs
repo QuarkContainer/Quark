@@ -179,7 +179,7 @@ impl SandboxProcess {
         args.Rootfs = Join(QUARK_SANDBOX_ROOT_PATH, id.as_str());
         args.ControlSock = controlSock;
 
-        let _exitStatus = match VirtualMachine::Init(args) {
+        let exitStatus = match VirtualMachine::Init(args) {
             Ok(mut vm) => {
                 let ret = vm.run().expect("vm.run() fail");
                 ret
@@ -189,18 +189,10 @@ impl SandboxProcess {
                 panic!("error is {:?}", e)
             }
         };
-        // TODO(Cong): fix return code of container by implementing the new shim.
-        unsafe{
-            loop {
-                info!("begin sleeping..");
-                libc::sleep(u32::MAX);
-            }
-        }
-        /* 
+        
         unsafe {
             libc::_exit(exitStatus)
         }
-        */
     }
 
     /// Root path for this sandbox on host fs, rootfs for containers running in this sandbox should be mount inside this dir
@@ -516,7 +508,7 @@ impl SandboxProcess {
             .expect("Boot command failed to start");
 
         {
-            //close fd1
+            //close fd0
             let _file0 = unsafe {
                 File::from_raw_fd(fd0)
             };
