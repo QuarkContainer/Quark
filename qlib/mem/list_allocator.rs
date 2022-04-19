@@ -35,10 +35,10 @@ use super::super::pagetable::AlignedAllocator;
 pub const CLASS_CNT : usize = 16;
 pub const FREE_THRESHOLD: usize = 30; // when free size less than 30%, need to free buffer
 pub const BUFF_THRESHOLD: usize = 50; // when buff size takes more than 50% of free size, needs to free
-pub const FREE_BATCH: usize = 10; // free 10 blocks each time.
-pub const ORDER : usize = 30; //1GB
+pub const FREE_BATCH: usize = 1024; // free 10 blocks each time.
+pub const ORDER : usize = 33; //1GB
 
-pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
+//pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
 #[derive(Default)]
 pub struct GlobalVcpuAllocator {
@@ -60,7 +60,7 @@ impl GlobalVcpuAllocator {
         self.init.store(true, Ordering::Relaxed)
     }
 }
-
+/*
 unsafe impl GlobalAlloc for GlobalVcpuAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         if true || !self.init.load(Ordering::Relaxed) {
@@ -77,7 +77,7 @@ unsafe impl GlobalAlloc for GlobalVcpuAllocator {
         }
         return CPU_LOCAL[VcpuId()].AllocatorMut().dealloc(ptr, layout)
     }
-}
+}*/
 
 pub const STACK_CNT: usize = 16;
 
@@ -154,8 +154,9 @@ impl PageAllocator {
 pub struct VcpuAllocator {
     pub bufs: [StackAllocator; 12],
 }
-
+/*
 impl VcpuAllocator {
+    #[inline(never)]
     pub fn alloc(&mut self, layout: Layout) -> *mut u8 {
         let size = max(
             layout.size().next_power_of_two(),
@@ -195,7 +196,7 @@ impl VcpuAllocator {
             }
         }
     }
-}
+}*/
 
 #[derive(Debug, Default)]
 pub struct HostAllocator {
@@ -290,11 +291,18 @@ impl ListAllocator {
     pub fn Add(&self, start: usize, size: usize) {
         let mut start = start;
         let end = start + size;
-        let size = 1 << ORDER; // 2MB
+        let order = 22;
+        let size = 1 << order; // 2MB
         // note: we can't add full range (>4GB) to the buddyallocator
+        /*let alignStart = start & !(size - 1);
+        if start != alignStart {
+            self.AddToHead(start, alignStart + size);
+            start = alignStart + size;
+        }*/
+
         while start + size < end {
             self.AddToHead(start, start + size);
-            start  += size;
+            start += size;
         }
 
         if start < end {

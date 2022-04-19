@@ -51,7 +51,7 @@ impl Stack {
     pub fn PushType<T: Copy>(&mut self, task: &Task, data: &T) -> Result<u64> {
         let size = mem::size_of::<T>();
         self.sp -= size as u64;
-        task.CopyOutObj(data, self.sp).unwrap();
+        task.CopyOutObj(data, self.sp).expect(&format!("data {:x}, sp {:x}", data as * const _ as u64, self.sp));
         return Ok(self.sp);
     }
 

@@ -531,6 +531,7 @@ pub extern fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
             }
 
             currTask.mm.CopyOnWriteLocked(pageAddr, &vma);
+            currTask.mm.TlbShootdown();
             if fromUser {
                 //PerfGoto(PerfType::User);
                 currTask.AccountTaskEnter(SchedState::RunningApp);

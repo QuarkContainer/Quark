@@ -44,7 +44,8 @@ impl HostAllocator {
         *self.Allocator() = ListAllocator::Empty();
 
         // reserve first 4KB gor the listAllocator
-        self.Allocator().Add(addr as usize + 0x2000, heapSize - 0x2000);
+        let size = core::mem::size_of::<ListAllocator>();
+        self.Allocator().Add(addr as usize + size, heapSize - size);
         self.initialized.store(true, Ordering::Relaxed);
     }
 
@@ -76,7 +77,7 @@ impl OOMHandler for ListAllocator {
 
 impl ListAllocator {
     pub fn initialize(&self) {
-        let listHeapAddr = MemoryDef::PHY_LOWER_ADDR + HEAP_OFFSET;
+        /*let listHeapAddr = MemoryDef::PHY_LOWER_ADDR + HEAP_OFFSET;
         let heapSize = 1 << KERNEL_HEAP_ORD as usize;
         let address: usize;
         unsafe {
@@ -86,7 +87,7 @@ impl ListAllocator {
                 panic!("mmap: failed to get mapped memory area for heap");
             }
             self.heap.lock().init(address + 0x1000 as usize, heapSize - 0x1000);
-        }
+        }*/
         self.initialized.store(true, Ordering::Relaxed);
     }
 

@@ -1117,6 +1117,7 @@ impl MemoryManager {
         }
 
         let mut addr = Addr(vAddr).RoundDown()?.0;
+        let mut needTLBShootdown = false;
         //error!("FixPermission vaddr {:x} addr {:x} len is {:x}", vAddr, addr, len);
         while addr <= vAddr + len - 1 {
             let (_, permission) = match self.VirtualToPhyLocked(addr) {
@@ -1125,6 +1126,10 @@ impl MemoryManager {
                         Err(_) => {
                             if !allowPartial || addr < vAddr {
                                 return Err(Error::SysError(SysErr::EFAULT))
+                            }
+
+                            if needTLBShootdown {
+                                self.TlbShootdown();
                             }
                             return Ok(addr - vAddr)
                         }
@@ -1144,13 +1149,18 @@ impl MemoryManager {
                         return Err(Error::SysError(SysErr::EFAULT))
                     }
 
+                    if needTLBShootdown {
+                        self.TlbShootdown();
+                    }
+
                     return Ok(addr - vAddr)
                 },
                 Some(vma) => vma.clone(),
             };
 
-            if vma.effectivePerms.Write() && !permission.Write() {
+            if vma.maxPerms.Write() && !permission.Write() {
                 self.CopyOnWriteLocked(addr, &vma);
+                needTLBShootdown = true;
             }
 
             if writeReq && !vma.effectivePerms.Write() {
@@ -1158,12 +1168,18 @@ impl MemoryManager {
                     return Err(Error::SysError(SysErr::EFAULT))
                 }
 
+                if needTLBShootdown {
+                    self.TlbShootdown();
+                }
                 return Ok(addr - vAddr)
             }
 
             addr += MemoryDef::PAGE_SIZE;
         }
 
+        if needTLBShootdown {
+            self.TlbShootdown();
+        }
         return Ok(len);
     }
 

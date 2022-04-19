@@ -380,3 +380,8 @@ unsafe impl GlobalAlloc for HostAllocator {
 pub fn VcpuId() -> usize {
     return CPULocal::CpuId()
 }
+
+pub fn HugepageDontNeed(addr: u64) {
+    let ret = HostSpace::Madvise(addr, MemoryDef::HUGE_PAGE_SIZE as usize, MAdviseOp::MADV_DONTNEED);
+    assert!(ret==0, "HugepageDontNeed fail with {}", ret)
+}

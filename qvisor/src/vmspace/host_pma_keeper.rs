@@ -21,6 +21,7 @@ use super::super::qlib::linux_def::*;
 use super::super::qlib::range::*;
 use super::super::memmgr::*;
 use super::super::IO_MGR;
+use super::super::heap_alloc::ENABLE_HUGEPAGE;
 
 #[derive(Clone, Default)]
 pub struct HostSegment {}
@@ -88,6 +89,20 @@ impl HostPMAKeeper {
                 return Ok(r.Start())
             }
         }
+    }
+
+    pub fn MapHugePage(&self) -> Result<u64> {
+        let mut mo = &mut MapOption::New();
+        let prot = libc::PROT_READ | libc::PROT_WRITE;
+        let len = MemoryDef::PAGE_SIZE_2M;
+        mo = mo.MapAnan().Proto(prot).Len(len);
+        if ENABLE_HUGEPAGE {
+            mo.MapHugeTLB();
+        }
+
+        let start = self.Allocate(len, MemoryDef::PAGE_SIZE_2M)?;
+        mo.Addr(start);
+        return self.Map(&mut mo, &Range::New(start, len));
     }
 
     pub fn MapAnon(&self, len: u64, prot: i32) -> Result<u64> {
