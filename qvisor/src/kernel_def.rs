@@ -296,3 +296,10 @@ pub fn InitX86FPState(_data: u64, _useXsave: bool) {}
 pub fn VcpuId() -> usize {
     return ThreadId() as usize
 }
+
+pub fn HugepageDontNeed(addr: u64) {
+    let ret = unsafe {
+        libc::madvise(addr as _, MemoryDef::HUGE_PAGE_SIZE as usize, MAdviseOp::MADV_DONTNEED)
+    };
+    assert!(ret==0, "HugepageDontNeed::Host fail with {}", ret)
+}

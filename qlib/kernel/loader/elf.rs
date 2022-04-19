@@ -181,7 +181,7 @@ pub fn MapSegment(task: &Task, file: &File, header: &ProgramHeader64, offset: u6
         moptions.Length = endMem.0 - startMem.0;
         moptions.Addr = offset + startMem.0;
         moptions.Fixed = true;
-        moptions.Perms = AccessType(PHFlagsAsPerms(header).0 | MmapProt::PROT_WRITE);
+        moptions.Perms = AccessType(PHFlagsAsPerms(header).0);
         moptions.MaxPerms = AccessType::AnyAccess();
         moptions.Private = true;
         moptions.Offset = fileOffset.0;
@@ -194,7 +194,9 @@ pub fn MapSegment(task: &Task, file: &File, header: &ProgramHeader64, offset: u6
     if adjust + header.file_size < endMem.0 - startMem.0 {
         let cnt = (endMem.0 - startMem.0 - (adjust + header.file_size)) as usize;
         let buf: [u8; 4096] = [0; 4096];
-        task.CopyOutSlice(&buf[0..cnt], addr + adjust + header.file_size, cnt)?;
+        let vaddr = addr + adjust + header.file_size;
+        task.mm.MProtect(Addr(vaddr).RoundDown()?.0, 4096, &AccessType::AnyAccess(), false).unwrap();
+        task.CopyOutSlice(&buf[0..cnt], vaddr, cnt)?;
     }
 
     if header.mem_size > size {

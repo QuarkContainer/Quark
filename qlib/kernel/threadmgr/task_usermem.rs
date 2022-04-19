@@ -55,7 +55,7 @@ impl MemoryManager {
     }
 
     pub fn CopyDataOutLocked(&self, task: &Task, from: u64, vaddr: u64, len: usize) -> Result<()> {
-        self.V2PLocked(task, vaddr, len as u64, &mut task.GetMut().iovs, false)?;
+        self.V2PLocked(task, vaddr, len as u64, &mut task.GetMut().iovs, true)?;
         defer!(task.GetMut().iovs.clear());
         let from : * const u8 = from as * const u8;
         let src = unsafe { slice::from_raw_parts(from, len) };

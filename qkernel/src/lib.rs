@@ -138,7 +138,8 @@ pub const HEAP_SIZE: usize = 0x1000_0000;
 
 //use buddy_system_allocator::*;
 #[global_allocator]
-pub static VCPU_ALLOCATOR: GlobalVcpuAllocator = GlobalVcpuAllocator::New();
+pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
+//pub static VCPU_ALLOCATOR: GlobalVcpuAllocator = GlobalVcpuAllocator::New();
 
 //static ALLOCATOR: QAllocator = QAllocator::New();
 //static ALLOCATOR: StackHeap = StackHeap::Empty();
@@ -449,7 +450,7 @@ pub extern "C" fn rust_main(
         SHARESPACE.SetValue(shareSpaceAddr);
         SingletonInit();
 
-        VCPU_ALLOCATOR.Initializated();
+        //VCPU_ALLOCATOR.Initializated();
         InitTsc();
         InitTimeKeeper(vdsoParamAddr);
 
