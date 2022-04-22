@@ -12,37 +12,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::sync::atomic;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
-use alloc::sync::Arc;
-use alloc::vec::Vec;
 
-use super::super::task::*;
 use super::super::super::common::*;
 use super::super::super::object_ref::*;
-use super::super::taskMgr::*;
-pub use super::super::super::uring::cqueue::CompletionQueue;
 pub use super::super::super::uring::cqueue;
+pub use super::super::super::uring::cqueue::CompletionQueue;
 pub use super::super::super::uring::squeue::SubmissionQueue;
 pub use super::super::super::uring::*;
 use super::super::fs::file::*;
+use super::super::task::*;
+use super::super::taskMgr::*;
 
-use super::super::super::uring::util::*;
-use super::super::super::linux_def::*;
-use super::super::super::vcpu_mgr::*;
-use super::super::super::socket_buf::*;
 use super::super::super::super::kernel_def::*;
+use super::super::super::linux_def::*;
+use super::super::super::socket_buf::*;
+use super::super::super::uring::util::*;
+use super::super::super::vcpu_mgr::*;
+use super::super::kernel::async_wait::*;
+use super::super::kernel::waiter::qlock::*;
 use super::super::kernel::waiter::*;
 use super::super::socket::hostinet::socket::*;
 use super::super::Kernel::HostSpace;
-use super::super::kernel::async_wait::*;
 use super::super::IOURING;
 use super::super::SHARESPACE;
-use super::uring_op::*;
 use super::uring_async::*;
-use super::super::kernel::waiter::qlock::*;
+use super::uring_op::*;
 
 pub fn QUringTrigger() -> usize {
     return IOURING.DrainCompletionQueue();
@@ -76,7 +76,8 @@ impl IoUring {
 
     pub fn NeedWakeup(&self) -> bool {
         unsafe {
-            (*self.sq.lock().flags).load(atomic::Ordering::Acquire) & sys::IORING_SQ_NEED_WAKEUP != 0
+            (*self.sq.lock().flags).load(atomic::Ordering::Acquire) & sys::IORING_SQ_NEED_WAKEUP
+                != 0
         }
     }
 
@@ -94,29 +95,27 @@ impl IoUring {
             if self.NeedWakeup() {
                 UringWake(idx, 0);
             }
-            return Ok(0)
+            return Ok(0);
         }
     }
 
     pub fn Submit(&self, idx: usize) -> Result<usize> {
-        return self.SubmitAndWait(idx, 0)
+        return self.SubmitAndWait(idx, 0);
     }
 
-    pub fn Enter(&self,
-                 idx: usize,
-                 to_submit: u32,
-                 min_complete: u32,
-                 flags: u32
+    pub fn Enter(
+        &self,
+        idx: usize,
+        to_submit: u32,
+        min_complete: u32,
+        flags: u32,
     ) -> Result<usize> {
-        let ret = HostSpace::IoUringEnter(idx,
-                                          to_submit,
-                                          min_complete,
-                                          flags);
+        let ret = HostSpace::IoUringEnter(idx, to_submit, min_complete, flags);
         if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
+            return Err(Error::SysError(-ret as i32));
         }
 
-        return Ok(ret as usize)
+        return Ok(ret as usize);
     }
 
     pub fn Next(&mut self) -> Option<cqueue::Entry> {
@@ -125,7 +124,7 @@ impl IoUring {
     }
 
     pub fn CqLen(&mut self) -> usize {
-        return self.cq.lock().len()
+        return self.cq.lock().len();
     }
 
     pub fn Overflow(&self) -> u32 {
@@ -143,45 +142,42 @@ pub struct QUring {
 }
 
 impl QUring {
-    pub const MAX_URING_COUNT : usize = 8;
+    pub const MAX_URING_COUNT: usize = 8;
 
     pub fn New(size: usize) -> Self {
         let ret = QUring {
             asyncMgr: UringAsyncMgr::New(size),
             uringsAddr: AtomicU64::new(0),
-            uringCount: AtomicUsize::new(0)
+            uringCount: AtomicUsize::new(0),
         };
 
         return ret;
     }
 
     pub fn Addr(&self) -> u64 {
-        return self as * const _ as u64;
+        return self as *const _ as u64;
     }
 
     pub fn SetIOUringsAddr(&self, addr: u64) {
         self.uringsAddr.store(addr, atomic::Ordering::SeqCst);
-        self.uringCount.store(self.IOUrings().len(), atomic::Ordering::SeqCst);
+        self.uringCount
+            .store(self.IOUrings().len(), atomic::Ordering::SeqCst);
     }
 
     #[inline(always)]
     pub fn IOUrings(&self) -> &'static [IoUring] {
         let addr = self.uringsAddr.load(atomic::Ordering::Relaxed);
-        let urings = unsafe {
-            &*(addr as * const Vec<IoUring>)
-        };
+        let urings = unsafe { &*(addr as *const Vec<IoUring>) };
 
         return urings;
     }
 
     pub fn UringCount(&self) -> usize {
-        return self.uringCount.load(atomic::Ordering::Relaxed)
+        return self.uringCount.load(atomic::Ordering::Relaxed);
     }
 
     pub fn TimerRemove(&self, task: &Task, userData: u64) -> i64 {
-        let msg = UringOp::TimerRemove(TimerRemoveOp{
-            userData: userData,
-        });
+        let msg = UringOp::TimerRemove(TimerRemoveOp { userData: userData });
 
         return self.UCall(task, msg);
     }
@@ -203,9 +199,11 @@ impl QUring {
         let future = Future::New(0 as EventMask);
         let ops = UnblockBlockPollAdd::New(fd, flags, wait, &future);
         let timeout = AsyncLinkTimeout::New(0);
-        self.AUCallLinked(AsyncOps::UnblockBlockPollAdd(ops), AsyncOps::AsyncLinkTimeout(timeout));
+        self.AUCallLinked(
+            AsyncOps::UnblockBlockPollAdd(ops),
+            AsyncOps::AsyncLinkTimeout(timeout),
+        );
         return future;
-
     }
 
     pub fn RawTimeout(&self, _task: &Task, timerId: u64, seqNo: u64, ns: i64) -> usize {
@@ -234,9 +232,7 @@ impl QUring {
     }
 
     pub fn SyncAccept(&self, task: &Task, fd: i32) -> i64 {
-        let msg = UringOp::Accept(AcceptOp {
-            fd: fd,
-        });
+        let msg = UringOp::Accept(AcceptOp { fd: fd });
 
         return self.UCall(task, msg);
     }
@@ -252,7 +248,16 @@ impl QUring {
         return self.UCall(task, msg);
     }
 
-    pub fn Splice(&self, task: &Task, fdIn: i32, offsetIn: i64, fdOut: i32, offsetOut: i64, len: u32, flags: u32) -> i64 {
+    pub fn Splice(
+        &self,
+        task: &Task,
+        fdIn: i32,
+        offsetIn: i64,
+        fdOut: i32,
+        offsetOut: i64,
+        len: u32,
+        flags: u32,
+    ) -> i64 {
         let msg = UringOp::Splice(SpliceOp {
             fdIn: fdIn,
             offsetIn: offsetIn,
@@ -268,7 +273,7 @@ impl QUring {
     pub fn LogFlush(&self) {
         let uringPrint = super::super::SHARESPACE.config.read().Async();
         if !uringPrint {
-            return
+            return;
         }
 
         let fd = super::super::SHARESPACE.Logfd();
@@ -282,16 +287,16 @@ impl QUring {
         self.AUCall(AsyncOps::AsyncEventfdWrite(ops));
     }
 
-    pub fn AsyncStatx(&self, dirfd: i32, pathname: u64, flags: i32, mask: u32, mw: &MultiWait) -> Future<Statx> {
+    pub fn AsyncStatx(
+        &self,
+        dirfd: i32,
+        pathname: u64,
+        flags: i32,
+        mask: u32,
+        mw: &MultiWait,
+    ) -> Future<Statx> {
         let future = Future::New(Statx::default());
-        let ops = AsyncStatx::New(
-            dirfd,
-            pathname,
-            flags,
-            mask,
-            future.clone(),
-            mw
-        );
+        let ops = AsyncStatx::New(dirfd, pathname, flags, mask, future.clone(), mw);
 
         self.AUCall(AsyncOps::AsyncStatx(ops));
         return future;
@@ -306,7 +311,15 @@ impl QUring {
         return self.UCall(task, msg);
     }
 
-    pub fn Statx(&self, task: &Task, dirfd: i32, pathname: u64, statxBuf: u64, flags: i32, mask: u32) -> i64 {
+    pub fn Statx(
+        &self,
+        task: &Task,
+        dirfd: i32,
+        pathname: u64,
+        statxBuf: u64,
+        flags: i32,
+        mask: u32,
+    ) -> i64 {
         let msg = UringOp::Statx(StatxOp {
             dirfd: dirfd,
             pathname: pathname,
@@ -322,7 +335,7 @@ impl QUring {
         let acceptOp = AsyncAccept::New(fd, queue.clone(), acceptQueue.clone());
         IOURING.AUCall(AsyncOps::AsyncAccept(acceptOp));
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn Accept(&self, fd: i32, queue: &Queue, acceptQueue: &AcceptQueue) -> Result<AcceptItem> {
@@ -332,7 +345,7 @@ impl QUring {
             IOURING.AUCall(AsyncOps::AsyncAccept(acceptOp));
         }
 
-        return ai
+        return ai;
     }
 
     pub fn PollHostEpollWaitInit(&self, hostEpollWaitfd: i32) {
@@ -346,10 +359,18 @@ impl QUring {
 
         IOURING.AUCall(AsyncOps::AsyncFileRead(readop));
 
-        return Ok(())
+        return Ok(());
     }
 
-    pub fn RingFileWrite(task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, srcs: &[IoVec], fops: Arc<FileOperations>, lockGuard: QAsyncLockGuard) -> Result<i64> {
+    pub fn RingFileWrite(
+        task: &Task,
+        fd: i32,
+        queue: Queue,
+        buf: Arc<SocketBuff>,
+        srcs: &[IoVec],
+        fops: Arc<FileOperations>,
+        lockGuard: QAsyncLockGuard,
+    ) -> Result<i64> {
         let (count, writeBuf) = buf.Writev(task, srcs)?;
 
         if let Some((addr, len)) = writeBuf {
@@ -358,10 +379,17 @@ impl QUring {
             IOURING.AUCall(AsyncOps::AsyncFiletWrite(writeop));
         }
 
-        return Ok(count as i64)
+        return Ok(count as i64);
     }
 
-    pub fn SocketSend(task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, srcs: &[IoVec], ops: &SocketOperations)-> Result<i64> {
+    pub fn SocketSend(
+        task: &Task,
+        fd: i32,
+        queue: Queue,
+        buf: Arc<SocketBuff>,
+        srcs: &[IoVec],
+        ops: &SocketOperations,
+    ) -> Result<i64> {
         let (count, writeBuf) = buf.Writev(task, srcs)?;
 
         if let Some((addr, len)) = writeBuf {
@@ -370,10 +398,17 @@ impl QUring {
             IOURING.AUCall(AsyncOps::AsyncSend(writeop));
         }
 
-        return Ok(count as i64)
+        return Ok(count as i64);
     }
 
-    pub fn RingFileRead(task: &Task, fd: i32, queue: Queue, buf: Arc<SocketBuff>, dsts: &mut [IoVec], isSocket: bool) -> Result<i64> {
+    pub fn RingFileRead(
+        task: &Task,
+        fd: i32,
+        queue: Queue,
+        buf: Arc<SocketBuff>,
+        dsts: &mut [IoVec],
+        isSocket: bool,
+    ) -> Result<i64> {
         let (trigger, cnt) = buf.Readv(task, dsts)?;
 
         if trigger {
@@ -383,20 +418,26 @@ impl QUring {
             IOURING.AUCall(AsyncOps::AsyncFileRead(readop));
         }
 
-        return Ok(cnt as i64)
+        return Ok(cnt as i64);
     }
 
-    pub fn BufFileWrite(&self, fd: i32, buf: DataBuff, offset: i64, lockGuard: QAsyncLockGuard) -> i64 {
+    pub fn BufFileWrite(
+        &self,
+        fd: i32,
+        buf: DataBuff,
+        offset: i64,
+        lockGuard: QAsyncLockGuard,
+    ) -> i64 {
         let len = buf.Len() as i64;
         let writeop = AsyncBufWrite::New(fd, buf, offset, lockGuard);
 
         IOURING.AUCall(AsyncOps::AsyncBufWrite(writeop));
-        return len
+        return len;
     }
 
     pub fn Process(&self, cqe: &cqueue::Entry) {
         if super::super::Shutdown() {
-            return
+            return;
         }
 
         let data = cqe.user_data();
@@ -404,9 +445,7 @@ impl QUring {
 
         // the taskid should be larger than 0x1000 (4K)
         if data > 0x10000 {
-            let call = unsafe {
-                &mut *(data as * mut UringCall)
-            };
+            let call = unsafe { &mut *(data as *mut UringCall) };
 
             call.ret = ret;
             //error!("uring process: call is {:x?}", &call);
@@ -418,7 +457,7 @@ impl QUring {
 
             let rerun = ops.Process(ret, idx);
             if super::super::Shutdown() {
-                return
+                return;
             }
             if !rerun {
                 *ops = AsyncOps::None;
@@ -459,7 +498,7 @@ impl QUring {
                     self.asyncMgr.Print();
                     //error!("AUCall async slots usage up...");
                     print!("AUCall async slots usage up...");
-                },
+                }
                 Some(idx) => {
                     index = idx;
                     break;
@@ -481,7 +520,7 @@ impl QUring {
                     self.asyncMgr.Print();
                     //error!("AUCall async slots usage up...");
                     print!("AUCall async slots usage up...");
-                },
+                }
                 Some(idx) => {
                     index1 = idx;
                     break;
@@ -496,7 +535,7 @@ impl QUring {
                     self.asyncMgr.Print();
                     //error!("AUCall async slots usage up...");
                     print!("AUCall async slots usage up...");
-                },
+                }
                 Some(idx) => {
                     index2 = idx;
                     break;
@@ -527,7 +566,7 @@ impl QUring {
                     None => break,
                     Some(cqe) => {
                         self.Process(&cqe);
-                        return true
+                        return true;
                     }
                 }
             }
@@ -565,15 +604,14 @@ impl QUring {
 
     // we will leave some queue idle to make uring more stable
     // todo: fx this, do we need throttling?
-    pub const SUBMISSION_QUEUE_FREE_COUNT : usize = 10;
+    pub const SUBMISSION_QUEUE_FREE_COUNT: usize = 10;
     pub fn NextUringIdx(cnt: u64) -> usize {
         return CPULocal::NextUringIdx(cnt);
     }
 
     pub fn UringCall(&self, call: &UringCall) {
         let entry = call.SEntry();
-        let entry = entry
-            .user_data(call.Ptr());
+        let entry = entry.user_data(call.Ptr());
 
         //let idx = Self::NextUringIdx(1) % self.UringCount();
         loop {
@@ -587,7 +625,7 @@ impl QUring {
                         //super::super::Kernel::HostSpace::UringWake(1);
                         drop(s);
                         super::super::super::ShareSpace::Yield();
-                        continue
+                        continue;
                     }
 
                     unsafe {
@@ -595,14 +633,15 @@ impl QUring {
                     }
                 }
 
-                self.IOUrings()[idx].Submit(idx).expect("QUringIntern::submit fail");
+                self.IOUrings()[idx]
+                    .Submit(idx)
+                    .expect("QUringIntern::submit fail");
                 return;
             }
         }
-
     }
 
-   pub fn AUringCall(&self, entry: squeue::Entry) {
+    pub fn AUringCall(&self, entry: squeue::Entry) {
         //let idx = Self::NextUringIdx(1) % self.UringCount();
 
         loop {
@@ -624,7 +663,9 @@ impl QUring {
                     }
                 }
 
-                self.IOUrings()[idx].Submit(idx).expect("QUringIntern::submit fail");
+                self.IOUrings()[idx]
+                    .Submit(idx)
+                    .expect("QUringIntern::submit fail");
                 return;
             }
         }
@@ -661,7 +702,9 @@ impl QUring {
                     }
                 }
 
-                self.IOUrings()[idx].Submit(idx).expect("QUringIntern::submit fail");
+                self.IOUrings()[idx]
+                    .Submit(idx)
+                    .expect("QUringIntern::submit fail");
                 return;
             }
         }

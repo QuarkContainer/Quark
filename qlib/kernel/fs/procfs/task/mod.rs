@@ -13,17 +13,17 @@
 // limitations under the License.
 
 pub mod auxvec;
-pub mod task;
-pub mod subtasks;
+pub mod comm;
 pub mod exe;
 pub mod exec_args;
-pub mod comm;
 pub mod fds;
-pub mod uid_pid_map;
 pub mod io;
 pub mod maps;
-pub mod statm;
-pub mod status;
 pub mod mounts;
 pub mod stat;
+pub mod statm;
+pub mod status;
+pub mod subtasks;
+pub mod task;
+pub mod uid_pid_map;
 //pub mod namespace_symlink;

@@ -1,9 +1,9 @@
+use crate::qlib::mutex::*;
+use alloc::boxed::Box;
+use alloc::collections::btree_map::BTreeMap;
 use alloc::string::ToString;
 use alloc::sync::Arc;
-use crate::qlib::mutex::*;
-use alloc::collections::btree_map::BTreeMap;
 use alloc::vec::Vec;
-use alloc::boxed::Box;
 use core::sync::atomic::AtomicI64;
 use core::sync::atomic::Ordering;
 
@@ -11,19 +11,20 @@ use core::sync::atomic::Ordering;
 use super::super::super::common::*;
 use super::super::super::device::*;
 use super::super::super::linux_def::*;
-use super::super::task::*;
+use super::super::super::singleton::*;
+use super::super::fs::dirent::*;
 use super::super::fs::file::*;
 use super::super::fs::filesystems::*;
 use super::super::fs::host::fs::*;
-use super::super::fs::mount::*;
-use super::super::fs::dirent::*;
-use super::super::fs::inode::*;
 use super::super::fs::host::util::*;
-use super::super::super::singleton::*;
+use super::super::fs::inode::*;
+use super::super::fs::mount::*;
+use super::super::task::*;
 
-pub static FAMILIAES : Singleton<QRwLock<Families>> = Singleton::<QRwLock<Families>>::New();
-pub static SOCKET_DEVICE : Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();
-pub static UNIX_SOCKET_DEVICE : Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();
+pub static FAMILIAES: Singleton<QRwLock<Families>> = Singleton::<QRwLock<Families>>::New();
+pub static SOCKET_DEVICE: Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();
+pub static UNIX_SOCKET_DEVICE: Singleton<Arc<QMutex<Device>>> =
+    Singleton::<Arc<QMutex<Device>>>::New();
 
 pub unsafe fn InitSingleton() {
     FAMILIAES.Init(QRwLock::new(Families::New()));
@@ -40,15 +41,25 @@ lazy_static! {
 
 pub trait Provider: Send + Sync {
     fn Socket(&self, task: &Task, stype: i32, protocol: i32) -> Result<Option<Arc<File>>>;
-    fn Pair(&self, task: &Task, stype: i32, protocol: i32) -> Result<Option<(Arc<File>, Arc<File>)>>;
+    fn Pair(
+        &self,
+        task: &Task,
+        stype: i32,
+        protocol: i32,
+    ) -> Result<Option<(Arc<File>, Arc<File>)>>;
 }
 
 pub fn NewSocket(task: &Task, family: i32, stype: i32, protocol: i32) -> Result<Arc<File>> {
-    return FAMILIAES.read().NewSocket(task, family, stype, protocol)
+    return FAMILIAES.read().NewSocket(task, family, stype, protocol);
 }
 
-pub fn NewPair(task: &Task, family: i32, stype: i32, protocol: i32) -> Result<(Arc<File>, Arc<File>)> {
-    return FAMILIAES.read().NewPair(task, family, stype, protocol)
+pub fn NewPair(
+    task: &Task,
+    family: i32,
+    stype: i32,
+    protocol: i32,
+) -> Result<(Arc<File>, Arc<File>)> {
+    return FAMILIAES.read().NewPair(task, family, stype, protocol);
 }
 
 pub struct Families {
@@ -59,7 +70,7 @@ impl Families {
     pub fn New() -> Self {
         return Self {
             map: BTreeMap::new(),
-        }
+        };
     }
 
     pub fn RegisterProvider(&mut self, family: i32, provider: Box<Provider>) {
@@ -71,7 +82,13 @@ impl Families {
         arr.push(provider);
     }
 
-    pub fn NewSocket(&self, task: &Task, family: i32, stype: i32, protocol: i32) -> Result<Arc<File>> {
+    pub fn NewSocket(
+        &self,
+        task: &Task,
+        family: i32,
+        stype: i32,
+        protocol: i32,
+    ) -> Result<Arc<File>> {
         let arr = match self.map.get(&family) {
             None => return Err(Error::SysError(SysErr::EAFNOSUPPORT)),
             Some(a) => a,
@@ -81,14 +98,20 @@ impl Families {
             let s = p.Socket(task, stype, protocol)?;
             match s {
                 None => (),
-                Some(s) => return Ok(s)
+                Some(s) => return Ok(s),
             }
         }
 
-        return Err(Error::SysError(SysErr::EAFNOSUPPORT))
+        return Err(Error::SysError(SysErr::EAFNOSUPPORT));
     }
 
-    pub fn NewPair(&self, task: &Task, family: i32, stype: i32, protocol: i32) -> Result<(Arc<File>, Arc<File>)> {
+    pub fn NewPair(
+        &self,
+        task: &Task,
+        family: i32,
+        stype: i32,
+        protocol: i32,
+    ) -> Result<(Arc<File>, Arc<File>)> {
         let arr = match self.map.get(&family) {
             None => return Err(Error::SysError(SysErr::EAFNOSUPPORT)),
             Some(a) => a,
@@ -98,16 +121,22 @@ impl Families {
             let s = p.Pair(task, stype, protocol)?;
             match s {
                 None => (),
-                Some(s) => return Ok(s)
+                Some(s) => return Ok(s),
             }
         }
 
-        return Err(Error::SysError(SysErr::EAFNOSUPPORT))
+        return Err(Error::SysError(SysErr::EAFNOSUPPORT));
     }
 }
 
 pub fn NewSocketDirent(task: &Task, _d: Arc<QMutex<Device>>, fd: i32) -> Result<Dirent> {
-    let msrc = MountSource::NewHostMountSource(&"/".to_string(), &task.FileOwner(), &WhitelistFileSystem::New(), &MountSourceFlags::default(), false);
+    let msrc = MountSource::NewHostMountSource(
+        &"/".to_string(),
+        &task.FileOwner(),
+        &WhitelistFileSystem::New(),
+        &MountSourceFlags::default(),
+        false,
+    );
 
     let mut fstat = LibcStat::default();
     let ret = Fstat(fd, &mut fstat);
@@ -117,7 +146,7 @@ pub fn NewSocketDirent(task: &Task, _d: Arc<QMutex<Device>>, fd: i32) -> Result<
     let inode = Inode::NewHostInode(&Arc::new(QMutex::new(msrc)), fd, &fstat, true)?;
 
     let name = format!("socket:[{}]", fd);
-    return Ok(Dirent::New(&inode, &name.to_string()))
+    return Ok(Dirent::New(&inode, &name.to_string()));
 }
 
 #[derive(Default)]
@@ -136,10 +165,10 @@ impl SendReceiveTimeout {
     }
 
     pub fn RecvTimeout(&self) -> i64 {
-        return self.recv.load(Ordering::Relaxed)
+        return self.recv.load(Ordering::Relaxed);
     }
 
     pub fn SendTimeout(&self) -> i64 {
-        return self.send.load(Ordering::Relaxed)
+        return self.send.load(Ordering::Relaxed);
     }
 }

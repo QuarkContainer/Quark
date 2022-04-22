@@ -31,13 +31,12 @@ pub enum PerfType {
 }
 
 impl CounterSet {
-    pub const PERM_COUNTER_SET_SIZE : usize = 1;
+    pub const PERM_COUNTER_SET_SIZE: usize = 1;
     pub fn GetPerfId(&self) -> usize {
         0
     }
 
     pub fn PerfType(&self) -> &str {
-        return "PerfPrint::Host"
+        return "PerfPrint::Host";
     }
 }
-

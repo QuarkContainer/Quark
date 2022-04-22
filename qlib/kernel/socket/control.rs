@@ -12,22 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::vec::Vec;
 use alloc::slice;
+use alloc::vec::Vec;
 use core::mem;
 use core::ptr;
 
-use super::super::super::common::*;
-use super::super::super::linux_def::*;
 use super::super::super::auth::id::*;
+use super::super::super::common::*;
 use super::super::super::linux::socket::*;
 use super::super::super::linux::time::*;
-use super::super::kernel::fd_table::*;
-use super::super::threadmgr::thread::*;
+use super::super::super::linux_def::*;
 use super::super::fs::file::*;
+use super::super::kernel::fd_table::*;
 use super::super::task::*;
-use super::unix::transport::unix::*;
+use super::super::threadmgr::thread::*;
 use super::epsocket::epsocket::*;
+use super::unix::transport::unix::*;
 
 /*pub trait SCMRights {
     fn Files(&mut self, task: &Task, max: usize) -> (RightsFiles, bool);
@@ -55,7 +55,7 @@ impl SCMRights {
         let right = self.0.split_off(n);
         let left = self.0.split_off(0);
         self.0 = right;
-        return (Self(left), trunc)
+        return (Self(left), trunc);
     }
 
     // NewSCMRights creates a new SCM_RIGHTS socket control message representation
@@ -67,7 +67,7 @@ impl SCMRights {
             files.push(file);
         }
 
-        return Ok(Self(files))
+        return Ok(Self(files));
     }
 
     pub fn Clone(&self) -> Self {
@@ -76,7 +76,7 @@ impl SCMRights {
             ret.push(f.clone());
         }
 
-        return Self(ret)
+        return Self(ret);
     }
 
     // rightsFDs gets up to the specified maximum number of FDs.
@@ -85,7 +85,13 @@ impl SCMRights {
         let (files, trunc) = self.Files(task, max);
         let mut fds = Vec::with_capacity(files.0.len());
         for i in 0..core::cmp::min(max, files.0.len()) {
-            let fd = match task.NewFDFrom(0, &files.0[i], &FDFlags{CloseOnExec: cloexec}) {
+            let fd = match task.NewFDFrom(
+                0,
+                &files.0[i],
+                &FDFlags {
+                    CloseOnExec: cloexec,
+                },
+            ) {
                 Err(e) => {
                     info!("Error inserting FD: {:?}", e);
                     break;
@@ -97,7 +103,7 @@ impl SCMRights {
             fds.push(fd);
         }
 
-        return (fds, trunc)
+        return (fds, trunc);
     }
 }
 
@@ -115,19 +121,21 @@ impl ScmCredentials {
         let kgid = tcreds.UseGID(GID(creds.GID))?;
         let thread = task.Thread();
         let userns = thread.PIDNamespace().UserNamespace();
-        if creds.PID != thread.ThreadGroup().ID() && !thread.HasCapabilityIn(Capability::CAP_SYS_ADMIN, &userns) {
-            return Err(Error::SysError(SysErr::EPERM))
+        if creds.PID != thread.ThreadGroup().ID()
+            && !thread.HasCapabilityIn(Capability::CAP_SYS_ADMIN, &userns)
+        {
+            return Err(Error::SysError(SysErr::EPERM));
         }
 
         return Ok(Self {
             thread: thread,
             kuid: kuid,
             kgid: kgid,
-        })
+        });
     }
 
     pub fn Clone(&self) -> Self {
-        return Self{
+        return Self {
             thread: self.thread.clone(),
             kuid: self.kuid,
             kgid: self.kgid,
@@ -139,7 +147,7 @@ impl ScmCredentials {
             PID: self.thread.ThreadID(),
             UID: self.kuid.0,
             GID: self.kgid.0,
-        }
+        };
     }
 }
 
@@ -155,48 +163,51 @@ pub fn CopyBytes<'a, T: ?Sized>(src: &T, dst: &'a mut [u8]) -> &'a mut [u8] {
     info!("CopyBytes srclen is {}", srclen);
     assert!(dst.len() >= core::mem::size_of_val(src));
     unsafe {
-        ptr::copy_nonoverlapping(src as * const T as * const u8, dst[..srclen].as_mut_ptr(), srclen);
+        ptr::copy_nonoverlapping(
+            src as *const T as *const u8,
+            dst[..srclen].as_mut_ptr(),
+            srclen,
+        );
     }
 
-    return &mut dst[srclen..]
+    return &mut dst[srclen..];
 }
 
 /// Fills `dst` with `len` zero bytes and returns the remainder of the slice.
 ///
 /// Panics when `len >= dst.len()`.
-pub fn PadBytes<'a> (len: usize, dst: &'a mut [u8]) -> &'a mut [u8] {
+pub fn PadBytes<'a>(len: usize, dst: &'a mut [u8]) -> &'a mut [u8] {
     for pad in &mut dst[..len] {
         *pad = 0
     }
 
-    return &mut dst[len..]
+    return &mut dst[len..];
 }
 
-pub const SCM_RIGHTS      : i32 = 0x1;
-pub const SCM_CREDENTIALS : i32 = 0x2;
-pub const SCM_TIMESTAMP   : i32 = SO_TIMESTAMP;
-pub const SCM_TCP_INQ     : i32 = 0x24; // /* Notify bytes available to read as a cmsg on read */
-
-// A ControlMessageHeader is the header for a socket control message.
-//
-// ControlMessageHeader represents struct cmsghdr from linux/socket.h.
+pub const SCM_RIGHTS: i32 = 0x1;
+pub const SCM_CREDENTIALS: i32 = 0x2;
+pub const SCM_TIMESTAMP: i32 = SO_TIMESTAMP;
+pub const SCM_TCP_INQ: i32 = 0x24; // /* Notify bytes available to read as a cmsg on read */
+                                   // A ControlMessageHeader is the header for a socket control message.
+                                   //
+                                   // ControlMessageHeader represents struct cmsghdr from linux/socket.h.
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]
 pub struct ControlMessageHeader {
-    pub Length : u64,
+    pub Length: u64,
     pub Level: i32,
     pub Type: i32,
 }
 
 // SizeOfControlMessageHeader is the binary size of a ControlMessageHeader
 // struct.
-pub const SIZE_OF_CONTROL_MESSAGE_HEADER : usize = 16;
+pub const SIZE_OF_CONTROL_MESSAGE_HEADER: usize = 16;
 
 // A ControlMessageTCPInq is the control message for TCP
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]
 pub struct ControlMessageTCPInq {
-    pub Size: u32, 
+    pub Size: u32,
 }
 
 impl ControlMessage for ControlMessageTCPInq {
@@ -214,13 +225,13 @@ impl ControlMessage for ControlMessageTCPInq {
         return SCM_TCP_INQ;
     }
 
-    fn EncodeInto<'a> (&self, buf: &'a mut [u8], flags: i32) -> (&'a mut [u8], i32) {
+    fn EncodeInto<'a>(&self, buf: &'a mut [u8], flags: i32) -> (&'a mut [u8], i32) {
         let space = AlignDown(buf.len(), 4);
         let mut flags = flags;
 
-        if space < mem::size_of::<ControlMessageHeader>(){
+        if space < mem::size_of::<ControlMessageHeader>() {
             flags |= MsgType::MSG_CTRUNC;
-            return (buf, flags)
+            return (buf, flags);
         }
 
         let mut length = 4 + mem::size_of::<ControlMessageHeader>();
@@ -240,17 +251,16 @@ impl ControlMessage for ControlMessageTCPInq {
         let buf = if buf.len() >= 4 {
             CopyBytes(&self.Size, buf)
         } else {
-            return (buf, flags)
+            return (buf, flags);
         };
 
         let aligned = AlignUp(length, ALIGNMENT) - length;
         if aligned > buf.len() {
-            return (buf, flags)
+            return (buf, flags);
         }
 
-        return (&mut buf[aligned..], flags)
+        return (&mut buf[aligned..], flags);
     }
-
 }
 
 // A ControlMessageCredentials is an SCM_CREDENTIALS socket control message.
@@ -276,7 +286,7 @@ impl ControlMessageCredentials {
 
 impl ControlMessage for ControlMessageCredentials {
     fn CMsgLevel(&self) -> i32 {
-        return SOL_SOCKET
+        return SOL_SOCKET;
     }
 
     fn Len(&self) -> usize {
@@ -289,13 +299,13 @@ impl ControlMessage for ControlMessageCredentials {
         return SCM_CREDENTIALS;
     }
 
-    fn EncodeInto<'a> (&self, buf: &'a mut [u8], flags: i32) -> (&'a mut [u8], i32) {
+    fn EncodeInto<'a>(&self, buf: &'a mut [u8], flags: i32) -> (&'a mut [u8], i32) {
         let space = AlignDown(buf.len(), 4);
         let mut flags = flags;
 
-        if space < mem::size_of::<ControlMessageHeader>(){
+        if space < mem::size_of::<ControlMessageHeader>() {
             flags |= MsgType::MSG_CTRUNC;
-            return (buf, flags)
+            return (buf, flags);
         }
 
         let mut length = 4 * 3 + mem::size_of::<ControlMessageHeader>();
@@ -315,33 +325,33 @@ impl ControlMessage for ControlMessageCredentials {
         let buf = if buf.len() >= 4 {
             CopyBytes(&self.PID, buf)
         } else {
-            return (buf, flags)
+            return (buf, flags);
         };
 
         let buf = if buf.len() >= 4 {
             CopyBytes(&self.UID, buf)
         } else {
-            return (buf, flags)
+            return (buf, flags);
         };
 
         let buf = if buf.len() >= 4 {
             CopyBytes(&self.GID, buf)
         } else {
-            return (buf, flags)
+            return (buf, flags);
         };
 
         let aligned = AlignUp(length, ALIGNMENT) - length;
         if aligned > buf.len() {
-            return (buf, flags)
+            return (buf, flags);
         }
 
-        return (&mut buf[aligned..], flags)
+        return (&mut buf[aligned..], flags);
     }
 }
 
 // SizeOfControlMessageCredentials is the binary size of a
 // ControlMessageCredentials struct.
-pub const SIZE_OF_CONTROL_MESSAGE_CREDENTIALS : usize = 12;
+pub const SIZE_OF_CONTROL_MESSAGE_CREDENTIALS: usize = 12;
 
 pub trait ControlMessage {
     fn CMsgLevel(&self) -> i32;
@@ -352,10 +362,10 @@ pub trait ControlMessage {
     }
 
     fn CMsgType(&self) -> i32;
-    fn EncodeInto<'a> (&self, buf: &'a mut [u8], flags: i32) -> (&'a mut [u8], i32);
+    fn EncodeInto<'a>(&self, buf: &'a mut [u8], flags: i32) -> (&'a mut [u8], i32);
 }
 
-pub const ALIGNMENT : usize = 8;
+pub const ALIGNMENT: usize = 8;
 
 // A ControlMessageRights is an SCM_RIGHTS socket control message.
 #[derive(Debug, Default, Clone)]
@@ -363,7 +373,7 @@ pub struct ControlMessageRights(pub Vec<i32>);
 
 impl ControlMessage for ControlMessageRights {
     fn CMsgLevel(&self) -> i32 {
-        return SOL_SOCKET
+        return SOL_SOCKET;
     }
 
     fn Len(&self) -> usize {
@@ -376,13 +386,13 @@ impl ControlMessage for ControlMessageRights {
         return SCM_RIGHTS;
     }
 
-    fn EncodeInto<'a> (&self, buf: &'a mut [u8], flags: i32) -> (&'a mut [u8], i32) {
+    fn EncodeInto<'a>(&self, buf: &'a mut [u8], flags: i32) -> (&'a mut [u8], i32) {
         let space = AlignDown(buf.len(), 4);
         let mut flags = flags;
 
         if space < mem::size_of::<ControlMessageHeader>() {
             flags |= MsgType::MSG_CTRUNC;
-            return (buf, flags)
+            return (buf, flags);
         }
 
         let mut length = 4 * self.0.len() + mem::size_of::<ControlMessageHeader>();
@@ -399,14 +409,14 @@ impl ControlMessage for ControlMessageRights {
 
         let buf = CopyBytes(&cmsg, buf);
         let cnt = core::cmp::min(length - mem::size_of::<ControlMessageHeader>(), buf.len());
-        let buf = CopyBytes(&self.0[..cnt/4], buf);
+        let buf = CopyBytes(&self.0[..cnt / 4], buf);
 
         let aligned = AlignUp(length, ALIGNMENT) - length;
         if aligned > buf.len() {
-            return (buf, flags)
+            return (buf, flags);
         }
 
-        return (&mut buf[aligned..], flags)
+        return (&mut buf[aligned..], flags);
     }
 }
 
@@ -416,10 +426,10 @@ pub fn AlignSlice<'a>(buf: &'a mut [u8], align: usize) -> &'a mut [u8] {
         // Linux allows unaligned data if there isn't room for alignment.
         // Since there isn't room for alignment, there isn't room for any
         // additional messages either.
-        return buf
+        return buf;
     }
 
-    return &mut buf[aligned..]
+    return &mut buf[aligned..];
 }
 
 #[derive(Debug, Default, Clone)]
@@ -427,7 +437,7 @@ pub struct ControlMessageTimeStamp(Timeval);
 
 impl ControlMessage for ControlMessageTimeStamp {
     fn CMsgLevel(&self) -> i32 {
-        return SOL_SOCKET
+        return SOL_SOCKET;
     }
 
     fn Len(&self) -> usize {
@@ -440,19 +450,19 @@ impl ControlMessage for ControlMessageTimeStamp {
         return SCM_TIMESTAMP;
     }
 
-    fn EncodeInto<'a> (&self, buf: &'a mut [u8], flags: i32) -> (&'a mut [u8], i32) {
+    fn EncodeInto<'a>(&self, buf: &'a mut [u8], flags: i32) -> (&'a mut [u8], i32) {
         let space = AlignDown(buf.len(), 4);
         let mut flags = flags;
 
         if space < mem::size_of::<ControlMessageHeader>() {
             flags |= MsgType::MSG_CTRUNC;
-            return (buf, flags)
+            return (buf, flags);
         }
 
         let length = 2 * 8 + mem::size_of::<ControlMessageHeader>();
         if length > space {
             flags |= MsgType::MSG_CTRUNC;
-            return (buf, flags)
+            return (buf, flags);
         }
 
         let cmsg = ControlMessageHeader {
@@ -466,10 +476,10 @@ impl ControlMessage for ControlMessageTimeStamp {
 
         let aligned = AlignUp(length, ALIGNMENT) - length;
         if aligned > buf.len() {
-            return (buf, flags)
+            return (buf, flags);
         }
 
-        return (&mut buf[aligned..], flags)
+        return (&mut buf[aligned..], flags);
     }
 }
 
@@ -494,18 +504,18 @@ pub fn CMsgSpace(datalen: usize) -> usize {
 
 // SizeOfControlMessageRight is the size of a single element in
 // ControlMessageRights.
-pub const SIZE_OF_CONTROL_MESSAGE_RIGHT : usize = 4;
+pub const SIZE_OF_CONTROL_MESSAGE_RIGHT: usize = 4;
 
 // SCM_MAX_FD is the maximum number of FDs accepted in a single sendmsg call.
 // From net/scm.h.
-pub const SCM_MAX_FD : usize = 253;
+pub const SCM_MAX_FD: usize = 253;
 
 // SO_ACCEPTCON is defined as __SO_ACCEPTCON in
 // include/uapi/linux/net.h, which represents a listening socket
 // state. Note that this is distinct from SO_ACCEPTCONN, which is a
 // socket option for querying whether a socket is in a listening
 // state.
-pub const SO_ACCEPTCON : i32 = 1 << 16;
+pub const SO_ACCEPTCON: i32 = 1 << 16;
 
 // A ControlMessages represents a collection of socket control messages.
 #[derive(Debug, Default, Clone)]
@@ -517,50 +527,51 @@ pub struct ControlMessages {
 
 impl ControlMessages {
     pub fn Empty(&self) -> bool {
-        return self.Rights.is_none() && self.Credentials.is_none() && self.Timestamps.is_none()
+        return self.Rights.is_none() && self.Credentials.is_none() && self.Timestamps.is_none();
     }
 
-    pub fn ToSCMUnix(&self, task: &Task, ep: &BoundEndpoint, toEp: &Option<BoundEndpoint>) -> Result<SCMControlMessages> {
+    pub fn ToSCMUnix(
+        &self,
+        task: &Task,
+        ep: &BoundEndpoint,
+        toEp: &Option<BoundEndpoint>,
+    ) -> Result<SCMControlMessages> {
         let rights = match self.Rights {
             None => None,
-            Some(ref rights) => {
-                Some(SCMRights::New(task, &rights.0[..])?)
-            }
+            Some(ref rights) => Some(SCMRights::New(task, &rights.0[..])?),
         };
 
         let creds = match self.Credentials {
             None => {
                 if ep.Passcred() || ep.ConnectedPasscred() {
                     MakeCreds(task, None)
-                } else if toEp.is_some() && toEp.as_ref().unwrap().Passcred(){
+                } else if toEp.is_some() && toEp.as_ref().unwrap().Passcred() {
                     MakeCreds(task, None)
                 } else {
                     None
                 }
-            },
-            Some(ref creds) => {
-                Some(ScmCredentials::New(task, &creds)?)
             }
+            Some(ref creds) => Some(ScmCredentials::New(task, &creds)?),
         };
 
         return Ok(SCMControlMessages {
             Rights: rights,
             Credentials: creds,
-        })
+        });
     }
 }
 
 // AlignUp rounds a length up to an alignment. align must be a power of 2.
 pub fn AlignUp(length: usize, align: usize) -> usize {
-    return (length + align - 1) & !(align - 1)
+    return (length + align - 1) & !(align - 1);
 }
 
 // AlignDown rounds a down to an alignment. align must be a power of 2.
 pub fn AlignDown(length: usize, align: usize) -> usize {
-    return length & !(align - 1)
+    return length & !(align - 1);
 }
 
-pub fn Parse(buf : &[u8]) -> Result<ControlMessages> {
+pub fn Parse(buf: &[u8]) -> Result<ControlMessages> {
     let mut fds = ControlMessageRights::default();
     let mut creds = ControlMessageCredentials::default();
     let mut hasCreds = false;
@@ -568,19 +579,20 @@ pub fn Parse(buf : &[u8]) -> Result<ControlMessages> {
     let mut i = 0;
     while i < buf.len() {
         if i + SIZE_OF_CONTROL_MESSAGE_HEADER > buf.len() {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         let h = unsafe {
-            &*(buf[i..i + SIZE_OF_CONTROL_MESSAGE_HEADER].as_ptr() as * const ControlMessageHeader)
+            &*(buf[i..i + SIZE_OF_CONTROL_MESSAGE_HEADER].as_ptr() as *const ControlMessageHeader)
         };
 
-        if (h.Length as usize) < SIZE_OF_CONTROL_MESSAGE_HEADER || h.Length as usize > buf.len() - i {
-            return Err(Error::SysError(SysErr::EINVAL))
+        if (h.Length as usize) < SIZE_OF_CONTROL_MESSAGE_HEADER || h.Length as usize > buf.len() - i
+        {
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         if h.Level != LibcConst::SOL_SOCKET as i32 {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         i += SIZE_OF_CONTROL_MESSAGE_HEADER;
@@ -595,10 +607,10 @@ pub fn Parse(buf : &[u8]) -> Result<ControlMessages> {
 
                 let cnt = fds.0.len();
                 if cnt + numRights > SCM_MAX_FD {
-                    return Err(Error::SysError(SysErr::EINVAL))
+                    return Err(Error::SysError(SysErr::EINVAL));
                 }
 
-                let ptr = &buf[i] as *const _ as * const i32;
+                let ptr = &buf[i] as *const _ as *const i32;
                 assert!(buf[i..].len() >= 4 * numRights);
                 let rights = unsafe { slice::from_raw_parts(ptr, numRights) };
 
@@ -610,21 +622,17 @@ pub fn Parse(buf : &[u8]) -> Result<ControlMessages> {
             }
             SCM_CREDENTIALS => {
                 if length < SIZE_OF_CONTROL_MESSAGE_CREDENTIALS {
-                    return Err(Error::SysError(SysErr::EINVAL))
+                    return Err(Error::SysError(SysErr::EINVAL));
                 }
 
                 assert!(buf[i..].len() >= core::mem::size_of::<ControlMessageCredentials>());
-                let c = unsafe {
-                    &*(&buf[i] as * const _ as * const ControlMessageCredentials)
-                };
+                let c = unsafe { &*(&buf[i] as *const _ as *const ControlMessageCredentials) };
 
                 creds = *c;
                 hasCreds = true;
-                i += AlignUp(length, width) ;
+                i += AlignUp(length, width);
             }
-            _ => {
-                return Err(Error::SysError(SysErr::EINVAL))
-            }
+            _ => return Err(Error::SysError(SysErr::EINVAL)),
         }
     }
 
@@ -639,7 +647,7 @@ pub fn Parse(buf : &[u8]) -> Result<ControlMessages> {
         ret.Rights = Some(rights)
     }
 
-    return Ok(ret)
+    return Ok(ret);
 }
 
 pub fn MakeCreds(task: &Task, _cred: Option<BoundEndpoint>) -> Option<ScmCredentials> {
@@ -662,12 +670,16 @@ pub fn MakeCreds(task: &Task, _cred: Option<BoundEndpoint>) -> Option<ScmCredent
         });
     }
 
-    return None
+    return None;
 }
 
-pub fn NewControlMessage(task: &Task, cred: Option<BoundEndpoint>, rights: Option<SCMRights>) -> SCMControlMessages {
+pub fn NewControlMessage(
+    task: &Task,
+    cred: Option<BoundEndpoint>,
+    rights: Option<SCMRights>,
+) -> SCMControlMessages {
     return SCMControlMessages {
         Credentials: MakeCreds(task, cred),
         Rights: rights,
-    }
+    };
 }

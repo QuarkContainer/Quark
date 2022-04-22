@@ -13,4 +13,3 @@ pub trait FromRawFd {
 pub trait IntoRawFd {
     fn into_raw_fd(self) -> RawFd;
 }
-

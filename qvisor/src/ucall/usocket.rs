@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::slice;
 use alloc::string::ToString;
 use libc::*;
-use alloc::slice;
-use nix::sys::socket::{ControlMessage, MsgFlags, sendmsg, recvmsg};
 use nix::sys::socket::ControlMessageOwned;
+use nix::sys::socket::{recvmsg, sendmsg, ControlMessage, MsgFlags};
 use nix::sys::uio::IoVec;
 use std::{thread, time};
 
 use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
 use super::super::qlib::control_msg::*;
 use super::super::qlib::cstring::*;
+use super::super::qlib::linux_def::*;
 use super::super::URING_MGR;
 use super::ucall::*;
 
@@ -48,9 +48,7 @@ impl USocket {
     // this is designed for the QVisor signal sending to QKernel.
     // As there is no real unix connection setup, the SendResponse won't work
     pub fn DummyUSocket() -> Self {
-        return Self {
-            socket: -1,
-        }
+        return Self { socket: -1 };
     }
 
     pub fn CreateServerSocket(path: &str) -> Result<i32> {
@@ -65,31 +63,31 @@ impl USocket {
             server.sun_path[i] = slice[i] as i8;
         }
 
-        let sock = unsafe {
-            socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0)
-        };
+        let sock = unsafe { socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0) };
 
         if sock < 0 {
             info!("USrvSocket create socket fail");
-            return Err(Error::SysError(errno::errno().0 as i32))
+            return Err(Error::SysError(errno::errno().0 as i32));
         }
 
         let ret = unsafe {
-            bind(sock, &server as * const _ as *const sockaddr, 110 /*sizeof(sockaddr_un)*/)
+            bind(
+                sock,
+                &server as *const _ as *const sockaddr,
+                110, /*sizeof(sockaddr_un)*/
+            )
         };
 
         if ret < 0 {
             info!("USrvSocket bind socket fail");
-            return Err(Error::SysError(errno::errno().0 as i32))
+            return Err(Error::SysError(errno::errno().0 as i32));
         }
 
-        let ret = unsafe {
-            listen(sock, 5)
-        };
+        let ret = unsafe { listen(sock, 5) };
 
         if ret < 0 {
             info!("USrvSocket listen socket fail");
-            return Err(Error::SysError(-errno::errno().0 as i32))
+            return Err(Error::SysError(-errno::errno().0 as i32));
         }
 
         return Ok(sock);
@@ -107,29 +105,33 @@ impl USocket {
             server.sun_path[i] = slice[i] as i8;
         }
 
-        let sock = unsafe {
-            socket(AF_UNIX, SOCK_STREAM, 0)
-        };
+        let sock = unsafe { socket(AF_UNIX, SOCK_STREAM, 0) };
 
         if sock < 0 {
             info!("UCliSocket create socket fail");
-            return Err(Error::SysError(errno::errno().0 as i32))
+            return Err(Error::SysError(errno::errno().0 as i32));
         }
 
-        let cliSocket = Self {
-            socket: sock,
-        };
+        let cliSocket = Self { socket: sock };
 
         let waitCnt = 2;
         for i in 0..waitCnt {
             let ret = unsafe {
-                connect(sock, &server as * const _ as *const sockaddr, 110 /*sizeof(sockaddr_un)*/)
+                connect(
+                    sock,
+                    &server as *const _ as *const sockaddr,
+                    110, /*sizeof(sockaddr_un)*/
+                )
             };
 
             if ret < 0 {
-                info!("UCliSocket connect socket fail, path is {}, error is {}", path, errno::errno().0);
-                if errno::errno().0 != SysErr::ECONNREFUSED || i == waitCnt-1 {
-                    return Err(Error::SysError(errno::errno().0 as i32))
+                info!(
+                    "UCliSocket connect socket fail, path is {}, error is {}",
+                    path,
+                    errno::errno().0
+                );
+                if errno::errno().0 != SysErr::ECONNREFUSED || i == waitCnt - 1 {
+                    return Err(Error::SysError(errno::errno().0 as i32));
                 }
             } else {
                 break;
@@ -139,14 +141,14 @@ impl USocket {
             thread::sleep(hundred_millis);
         }
 
-        return Ok(cliSocket)
+        return Ok(cliSocket);
     }
 
-    const MAX_FILES : usize = 16 * 4;
+    const MAX_FILES: usize = 16 * 4;
 
-    pub fn ReadWithFds(&self, buf: &mut[u8]) -> Result<(usize, Vec<i32>)> {
+    pub fn ReadWithFds(&self, buf: &mut [u8]) -> Result<(usize, Vec<i32>)> {
         let iovec = [IoVec::from_mut_slice(buf)];
-        let mut space : Vec<u8> = vec![0; Self::MAX_FILES];
+        let mut space: Vec<u8> = vec![0; Self::MAX_FILES];
 
         loop {
             match recvmsg(self.socket, &iovec, Some(&mut space), MsgFlags::empty()) {
@@ -158,42 +160,40 @@ impl USocket {
                         Some(ControlMessageOwned::ScmRights(fds)) => {
                             return Ok((cnt, fds.to_vec()))
                         }
-                        None => {
-                            return Ok((cnt, Vec::new()))
-                        }
+                        None => return Ok((cnt, Vec::new())),
                         _ => break,
                     }
-                },
+                }
                 Err(errno) => {
                     if errno as i32 == EINTR {
                         continue;
                     }
-                    return Err(Error::IOError(format!("ReadWithFds io::error is {:?}", errno)))
+                    return Err(Error::IOError(format!(
+                        "ReadWithFds io::error is {:?}",
+                        errno
+                    )));
                 }
             };
-
         }
-        
-        return Err(Error::IOError("ReadWithFds can't get fds".to_string()))
+
+        return Err(Error::IOError("ReadWithFds can't get fds".to_string()));
     }
 
     //read buf.len() data
     pub fn ReadAll(&self, buf: &mut [u8]) -> Result<()> {
         let mut len = buf.len();
         while len > 0 {
-            let cnt = unsafe {
-                read(self.socket, &mut buf[0] as * mut _ as * mut c_void, len)
-            };
+            let cnt = unsafe { read(self.socket, &mut buf[0] as *mut _ as *mut c_void, len) };
 
             if cnt < 0 {
                 info!("UCliSocket read socket fail");
-                return Err(Error::SysError(errno::errno().0 as i32))
+                return Err(Error::SysError(errno::errno().0 as i32));
             }
 
             len -= cnt as usize;
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn WriteWithFds(&self, buf: &[u8], fds: &[i32]) -> Result<usize> {
@@ -209,38 +209,36 @@ impl USocket {
     pub fn WriteAll(&self, buf: &[u8]) -> Result<()> {
         let mut len = buf.len();
         while len > 0 {
-            let cnt = unsafe {
-                write(self.socket, &buf[0] as * const _ as * const c_void, len)
-            };
+            let cnt = unsafe { write(self.socket, &buf[0] as *const _ as *const c_void, len) };
 
             if cnt < 0 {
                 info!("UCliSocket read socket fail");
-                return Err(Error::SysError(-errno::errno().0 as i32))
+                return Err(Error::SysError(-errno::errno().0 as i32));
             }
 
             len -= cnt as usize;
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn WriteLen(&self, len: usize, fds: &[i32]) -> Result<()> {
         let len = len as u32;
-        let ptr = &len as * const _ as * const u8;
+        let ptr = &len as *const _ as *const u8;
         let slice = unsafe { slice::from_raw_parts(ptr, 4) };
 
         let size = self.WriteWithFds(slice, fds)?;
 
         if size == slice.len() {
-            return Ok(())
+            return Ok(());
         }
 
         return self.WriteAll(&slice[size..]);
     }
 
     pub fn ReadLen(&self) -> Result<(usize, Vec<i32>)> {
-        let mut len : u32 = 0;
-        let ptr = &mut len as * mut _ as * mut u8;
+        let mut len: u32 = 0;
+        let ptr = &mut len as *mut _ as *mut u8;
         let slice = unsafe { slice::from_raw_parts_mut(ptr, 4) };
         let (size, fds) = self.ReadWithFds(slice)?;
 
@@ -254,25 +252,25 @@ impl USocket {
 
     pub fn GetReq(&self) -> Result<(UCallReq, Vec<i32>)> {
         let (len, fds) = self.ReadLen()?;
-        let mut buf : [u8; UCALL_BUF_LEN] = [0; UCALL_BUF_LEN];
+        let mut buf: [u8; UCALL_BUF_LEN] = [0; UCALL_BUF_LEN];
 
         assert!(len < UCALL_BUF_LEN, "UCallClient::Call req is too long");
         self.ReadAll(&mut buf[0..len])?;
-        let req : UCallReq = serde_json::from_slice(&buf[0..len])
-            .map_err(|e|Error::Common(format!("UCallSrv deser error is {:?}", e)))?;
+        let req: UCallReq = serde_json::from_slice(&buf[0..len])
+            .map_err(|e| Error::Common(format!("UCallSrv deser error is {:?}", e)))?;
 
-        return Ok((req, fds))
+        return Ok((req, fds));
     }
 
     pub fn SendResp(&self, resp: &UCallResp) -> Result<()> {
         if self.socket == -1 {
-            return Ok(())
+            return Ok(());
         }
 
         let req = serde_json::to_vec(resp)
-            .map_err(|e|Error::Common(format!("UCallSrv ser error is {:?}", e)))?;
+            .map_err(|e| Error::Common(format!("UCallSrv ser error is {:?}", e)))?;
         self.WriteLen(req.len(), &[])?;
         self.WriteAll(&req)?;
-        return Ok(())
+        return Ok(());
     }
 }

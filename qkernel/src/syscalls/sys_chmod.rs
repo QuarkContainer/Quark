@@ -12,43 +12,45 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-use super::super::task::*;
-use super::super::Kernel::HostSpace;
+use super::super::fs::dirent::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
-use super::super::fs::dirent::*;
-use super::super::util::cstring::*;
 use super::super::syscalls::syscalls::*;
+use super::super::task::*;
+use super::super::util::cstring::*;
+use super::super::Kernel::HostSpace;
 use super::sys_file::*;
 
 fn Chmod(task: &Task, d: &Dirent, mode: FileMode) -> Result<()> {
     // Must own file to change mode.
     let mut inode = d.Inode();
     if !inode.CheckOwnership(task) {
-        return Err(Error::SysError(SysErr::EPERM))
+        return Err(Error::SysError(SysErr::EPERM));
     }
 
     let mode = FileMode(mode.0 & (!task.Umask() as u16));
     let p = FilePermissions::FromMode(mode);
     if !inode.SetPermissions(task, d, p) {
-        return Err(Error::SysError(SysErr::EPERM))
+        return Err(Error::SysError(SysErr::EPERM));
     }
 
     // File attribute changed, generate notification.
     //d.InotifyEvent(IN_ATTRIB, 0);
 
-    return Ok(())
+    return Ok(());
 }
 
 fn ChmodAt(task: &Task, fd: i32, addr: u64, mode: FileMode) -> Result<()> {
     let (path, _) = copyInPath(task, addr, false)?;
 
     let mode = FileMode(mode.0 & !(task.Umask() as u16));
-    return fileOpOn(task, fd, &path, true, &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
+    return fileOpOn(task, fd, &path, true, &mut |_root: &Dirent,
+                                                 d: &Dirent,
+                                                 _remainingTraversals: u32|
+     -> Result<()> {
         let ret = Chmod(task, d, mode);
         return ret;
-    })
+    });
 }
 
 // Chmod implements linux syscall chmod(2).
@@ -65,14 +67,14 @@ pub fn SysChmod(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             let (path, _) = copyInPath(task, addr, false)?;
             let path = CString::New(&path);
             let ret = HostSpace::Chmod(path.Ptr(), mode.0 as u32);
-            return Ok(ret)
+            return Ok(ret);
             //return Ok(task.Chmod(addr as u64, mode.0 as u64));
         }
         Err(e) => {
             info!("chmod...error {:?}", e);
-            return Err(e)
+            return Err(e);
         }
-        Ok(()) => return Ok(0)
+        Ok(()) => return Ok(0),
     }
 }
 
@@ -85,7 +87,7 @@ pub fn SysFchmod(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let mode = FileMode(mode as u16);
     Chmod(task, &file.Dirent, mode)?;
-    return Ok(0)
+    return Ok(0);
 }
 
 // Fchmodat implements linux syscall fchmodat(2).
@@ -96,5 +98,5 @@ pub fn SysFchmodat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let mode = FileMode(mode as u16);
     ChmodAt(task, fd, addr, mode)?;
-    return Ok(0)
+    return Ok(0);
 }

@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
-use super::mutex::*;
 use core::ops::Deref;
 use core::u64;
 
 use super::common::*;
-use super::linux_def::*;
 use super::linux::limits::*;
+use super::linux_def::*;
 use super::singleton::*;
 use super::sort_arr::*;
 
@@ -45,26 +45,27 @@ pub enum LimitType {
     Rttime,
 }
 
-pub static FROM_LINUX_RESOURCE : Singleton<SortArr<i32, LimitType>> = Singleton::<SortArr<i32, LimitType>>::New();
+pub static FROM_LINUX_RESOURCE: Singleton<SortArr<i32, LimitType>> =
+    Singleton::<SortArr<i32, LimitType>>::New();
 
 pub unsafe fn InitSingleton() {
     let arr = [
-        (RLIMIT_CPU,        LimitType::CPU),
-        (RLIMIT_FSIZE,      LimitType::FileSize),
-        (RLIMIT_DATA,       LimitType::Data),
-        (RLIMIT_STACK,      LimitType::Stack),
-        (RLIMIT_CORE,       LimitType::Core),
-        (RLIMIT_RSS,        LimitType::Rss),
-        (RLIMIT_NPROC,      LimitType::ProcessCount),
-        (RLIMIT_NOFILE,     LimitType::NumberOfFiles),
-        (RLIMIT_MEMLOCK,    LimitType::MemoryLocked),
-        (RLIMIT_AS,         LimitType::AS),
-        (RLIMIT_LOCKS,      LimitType::Locks),
+        (RLIMIT_CPU, LimitType::CPU),
+        (RLIMIT_FSIZE, LimitType::FileSize),
+        (RLIMIT_DATA, LimitType::Data),
+        (RLIMIT_STACK, LimitType::Stack),
+        (RLIMIT_CORE, LimitType::Core),
+        (RLIMIT_RSS, LimitType::Rss),
+        (RLIMIT_NPROC, LimitType::ProcessCount),
+        (RLIMIT_NOFILE, LimitType::NumberOfFiles),
+        (RLIMIT_MEMLOCK, LimitType::MemoryLocked),
+        (RLIMIT_AS, LimitType::AS),
+        (RLIMIT_LOCKS, LimitType::Locks),
         (RLIMIT_SIGPENDING, LimitType::SignalsPending),
-        (RLIMIT_MSGQUEUE,   LimitType::MessageQueueBytes),
-        (RLIMIT_NICE,       LimitType::Nice),
-        (RLIMIT_RTPRIO,     LimitType::RealTimePriority),
-        (RLIMIT_RTTIME,     LimitType::Rttime),
+        (RLIMIT_MSGQUEUE, LimitType::MessageQueueBytes),
+        (RLIMIT_NICE, LimitType::Nice),
+        (RLIMIT_RTPRIO, LimitType::RealTimePriority),
+        (RLIMIT_RTTIME, LimitType::Rttime),
     ];
 
     FROM_LINUX_RESOURCE.Init(SortArr::New(&arr));
@@ -74,15 +75,15 @@ pub const INFINITY: u64 = u64::MAX;
 
 pub fn FromLinux(rl: u64) -> u64 {
     if rl == RLIM_INFINITY {
-        return INFINITY
+        return INFINITY;
     }
 
-    return rl
+    return rl;
 }
 
 pub fn ToLinux(l: u64) -> u64 {
     if l == INFINITY {
-        return RLIM_INFINITY
+        return RLIM_INFINITY;
     }
 
     return l;
@@ -91,14 +92,19 @@ pub fn ToLinux(l: u64) -> u64 {
 pub fn NewLinuxLimitSet() -> LimitSet {
     let ls = LimitSet::default();
     for (rlt, rl) in &INIT_RLIMITS.0 {
-        let lt = FROM_LINUX_RESOURCE.Get(*rlt).expect(&format!("unknown rlimit type {}", rlt));
-        ls.SetUnchecked(lt, Limit {
-            Cur: FromLinux(rl.Cur),
-            Max: FromLinux(rl.Max),
-        });
+        let lt = FROM_LINUX_RESOURCE
+            .Get(*rlt)
+            .expect(&format!("unknown rlimit type {}", rlt));
+        ls.SetUnchecked(
+            lt,
+            Limit {
+                Cur: FromLinux(rl.Cur),
+                Max: FromLinux(rl.Max),
+            },
+        );
     }
 
-    return ls
+    return ls;
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Eq, PartialEq)]
@@ -112,7 +118,7 @@ impl Default for Limit {
         return Self {
             Cur: INFINITY,
             Max: INFINITY,
-        }
+        };
     }
 }
 
@@ -135,8 +141,8 @@ impl Deref for LimitSet {
 impl Default for LimitSet {
     fn default() -> Self {
         return Self(Arc::new(QMutex::new(LimitSetInternal {
-            data: BTreeMap::new()
-        })))
+            data: BTreeMap::new(),
+        })));
     }
 }
 
@@ -148,9 +154,7 @@ impl LimitSet {
             data.insert(*k, *v);
         }
 
-        return Self(Arc::new(QMutex::new(LimitSetInternal {
-            data: data
-        })))
+        return Self(Arc::new(QMutex::new(LimitSetInternal { data: data })));
     }
 
     pub fn GetInternalCopy(&self) -> LimitSetInternal {
@@ -160,17 +164,13 @@ impl LimitSet {
             data.insert(*k, *v);
         }
 
-        LimitSetInternal {
-            data: data
-        }
+        LimitSetInternal { data: data }
     }
 
     pub fn Get(&self, t: LimitType) -> Limit {
         let internal = self.lock();
         match internal.data.get(&t) {
-            None => {
-                Limit::default()
-            }
+            None => Limit::default(),
             Some(v) => v.clone(),
         }
     }
@@ -178,7 +178,7 @@ impl LimitSet {
     pub fn GetCapped(&self, t: LimitType, max: u64) -> u64 {
         let s = self.Get(t);
         if s.Cur == INFINITY || s.Cur > max {
-            return max
+            return max;
         }
 
         return s.Cur;
@@ -206,12 +206,12 @@ impl LimitSet {
 
                 let old = *l;
                 *l = v;
-                return Ok(old)
+                return Ok(old);
             }
-            None => ()
+            None => (),
         }
 
         internal.data.insert(t, v);
-        return Ok(Limit::default())
+        return Ok(Limit::default());
     }
 }

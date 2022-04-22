@@ -12,93 +12,98 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
-use alloc::vec::Vec;
 use alloc::string::String;
 use alloc::string::ToString;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 
+use super::super::super::super::auth::*;
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
-use super::super::super::super::auth::*;
 use super::super::super::kernel::kernel::*;
 use super::super::super::task::*;
-use super::super::fsutil::file::readonly_file::*;
-use super::super::fsutil::inode::simple_file_inode::*;
 use super::super::attr::*;
+use super::super::dirent::*;
 use super::super::file::*;
 use super::super::flags::*;
-use super::super::dirent::*;
-use super::super::mount::*;
+use super::super::fsutil::file::readonly_file::*;
+use super::super::fsutil::inode::simple_file_inode::*;
 use super::super::inode::*;
+use super::super::mount::*;
 use super::inode::*;
 
 // cpuStats contains the breakdown of CPU time for /proc/stat.
 #[derive(Default, Debug)]
 pub struct CpuStats {
     // user is time spent in userspace tasks with non-positive niceness.
-    pub user : u64,
+    pub user: u64,
 
     // nice is time spent in userspace tasks with positive niceness.
-    pub nice : u64,
+    pub nice: u64,
 
     // system is time spent in non-interrupt kernel context.
-    pub system : u64,
+    pub system: u64,
 
     // idle is time spent idle.
-    pub idle : u64,
+    pub idle: u64,
 
     // ioWait is time spent waiting for IO.
-    pub ioWait : u64,
+    pub ioWait: u64,
 
     // irq is time spent in interrupt context.
-    pub irq : u64,
+    pub irq: u64,
 
     // softirq is time spent in software interrupt context.
-    pub softirq : u64,
+    pub softirq: u64,
 
     // steal is involuntary wait time.
-    pub steal : u64,
+    pub steal: u64,
 
     // guest is time spent in guests with non-positive niceness.
-    pub guest : u64,
+    pub guest: u64,
 
     // guestNice is time spent in guests with positive niceness.
-    pub guestNice : u64,
+    pub guestNice: u64,
 }
 
 impl CpuStats {
     pub fn ToString(&self) -> String {
         let c = self;
-        return format!("{} {} {} {} {} {} {} {} {} {}", 
-                       c.user,
-                       c.nice,
-                       c.system,
-                       c.idle,
-                       c.ioWait,
-                       c.irq,
-                       c.softirq,
-                       c.steal,
-                       c.guest,
-                       c.guestNice);
+        return format!(
+            "{} {} {} {} {} {} {} {} {} {}",
+            c.user,
+            c.nice,
+            c.system,
+            c.idle,
+            c.ioWait,
+            c.irq,
+            c.softirq,
+            c.steal,
+            c.guest,
+            c.guestNice
+        );
     }
 }
 
 pub fn NewStatData(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
-    let v = NewStatDataSimpleFileInode(task, &ROOT_OWNER, &FilePermissions::FromMode(FileMode(0o400)), FSMagic::PROC_SUPER_MAGIC);
-    return NewProcInode(&Arc::new(v), msrc, InodeType::SpecialFile, None)
-
+    let v = NewStatDataSimpleFileInode(
+        task,
+        &ROOT_OWNER,
+        &FilePermissions::FromMode(FileMode(0o400)),
+        FSMagic::PROC_SUPER_MAGIC,
+    );
+    return NewProcInode(&Arc::new(v), msrc, InodeType::SpecialFile, None);
 }
 
-pub fn NewStatDataSimpleFileInode(task: &Task,
-                                 owner: &FileOwner,
-                                 perms: &FilePermissions,
-                                 typ: u64)
-                                 -> SimpleFileInode<StatData> {
-    let fs = StatData{
-        k: GetKernel(),
-    };
-    return SimpleFileInode::New(task, owner, perms, typ, false, fs)
+pub fn NewStatDataSimpleFileInode(
+    task: &Task,
+    owner: &FileOwner,
+    perms: &FilePermissions,
+    typ: u64,
+) -> SimpleFileInode<StatData> {
+    let fs = StatData { k: GetKernel() };
+    return SimpleFileInode::New(task, owner, perms, typ, false, fs);
 }
 
 pub struct StatData {
@@ -114,7 +119,10 @@ impl StatData {
         let cpu = CpuStats::default();
         buf += &format!("cpu {}\n", cpu.ToString());
 
-        info!("todo: fix self.k.ApplicationCores() is {}", self.k.ApplicationCores());
+        info!(
+            "todo: fix self.k.ApplicationCores() is {}",
+            self.k.ApplicationCores()
+        );
         for i in 0..1 as usize {
             buf += &format!("cpu{} {}\n", i, cpu.ToString());
         }
@@ -162,7 +170,13 @@ impl StatData {
 }
 
 impl SimpleFileTrait for StatData {
-    fn GetFile(&self, task: &Task, _dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File> {
+    fn GetFile(
+        &self,
+        task: &Task,
+        _dir: &Inode,
+        dirent: &Dirent,
+        flags: FileFlags,
+    ) -> Result<File> {
         let fops = NewSnapshotReadonlyFileOperations(self.GenSnapshot(task));
         let file = File::New(dirent, &flags, fops);
         return Ok(file);

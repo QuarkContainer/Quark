@@ -74,7 +74,7 @@ impl VectorisedView {
         return Self {
             views: views,
             size: size,
-        }
+        };
     }
 
     // TrimFront removes the first "count" bytes of the vectorised view.
@@ -84,7 +84,7 @@ impl VectorisedView {
             if count < self.views[0].len() {
                 self.size -= count;
                 self.views[0].TrimFront(count);
-                return
+                return;
             }
 
             count -= self.views[0].len();
@@ -108,9 +108,9 @@ impl VectorisedView {
                     self.views = self.views.split_off(i);
                 } else {
                     v.CapLength(length);
-                    self.views = self.views.split_off(i+1);
+                    self.views = self.views.split_off(i + 1);
                 }
-                return
+                return;
             }
             length -= v.len();
         }
@@ -122,7 +122,7 @@ impl VectorisedView {
             return None;
         }
 
-        return Some(&self.views[0])
+        return Some(&self.views[0]);
     }
 
     // RemoveFirst removes the first view of the vectorised view.
@@ -150,12 +150,12 @@ impl VectorisedView {
             data.append(&mut v.0);
         }
 
-        return View(data)
+        return View(data);
     }
 
     // Views returns the slice containing the all views.
     pub fn Views(&self) -> &[View] {
-        return &self.views
+        return &self.views;
     }
 
     // Append appends the views in a vectorised view to this vectorised view.

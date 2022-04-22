@@ -13,29 +13,29 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
-use core::any::Any;
 use alloc::sync::Arc;
+use core::any::Any;
 use core::ops::Deref;
 
-use super::super::fs::host::hostinodeop::*;
-use super::super::fs::anon::*;
-use super::super::fs::attr::*;
-use super::super::fs::flags::*;
-use super::super::fs::dentry::*;
-use super::super::fs::file::*;
-use super::super::fs::dirent::*;
-use super::super::task::*;
-use super::waiter::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
+use super::super::fs::anon::*;
+use super::super::fs::attr::*;
+use super::super::fs::dentry::*;
+use super::super::fs::dirent::*;
+use super::super::fs::file::*;
+use super::super::fs::flags::*;
+use super::super::fs::host::hostinodeop::*;
+use super::super::task::*;
 use super::super::threadmgr::thread::*;
 use super::super::SignalDef::*;
+use super::waiter::*;
 
 // SFD_NONBLOCK is a signalfd(2) flag.
-pub const SFD_NONBLOCK : i32 = 0o00004000;
+pub const SFD_NONBLOCK: i32 = 0o00004000;
 
 // SFD_CLOEXEC is a signalfd(2) flag.
-pub const SFD_CLOEXEC : i32 = 0o02000000;
+pub const SFD_CLOEXEC: i32 = 0o02000000;
 
 #[derive(Debug, Default)]
 #[repr(C)]
@@ -93,19 +93,23 @@ impl SignalOperation {
 
         let intern = SignalOperationInternal {
             target: task.Thread(),
-            mask: QMutex::new(mask)
+            mask: QMutex::new(mask),
         };
 
         let fops = Self(Arc::new(intern));
-        return File::New(&dirent, &FileFlags{
-            Read: true,
-            Write: true,
-            ..Default::default()
-        }, fops);
+        return File::New(
+            &dirent,
+            &FileFlags {
+                Read: true,
+                Write: true,
+                ..Default::default()
+            },
+            fops,
+        );
     }
 
     pub fn Mask(&self) -> SignalSet {
-        return *self.mask.lock()
+        return *self.mask.lock();
     }
 
     pub fn SetMask(&self, mask: SignalSet) {
@@ -117,29 +121,49 @@ impl SpliceOperations for SignalOperation {}
 
 impl FileOperations for SignalOperation {
     fn as_any(&self) -> &Any {
-        return self
+        return self;
     }
 
     fn FopsType(&self) -> FileOpsType {
-        return FileOpsType::SignalOperation
+        return FileOpsType::SignalOperation;
     }
 
     fn Seekable(&self) -> bool {
         return false;
     }
 
-    fn Seek(&self, _task: &Task, _f: &File, _whence: i32, _current: i64, _offset: i64) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ESPIPE))
+    fn Seek(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _whence: i32,
+        _current: i64,
+        _offset: i64,
+    ) -> Result<i64> {
+        return Err(Error::SysError(SysErr::ESPIPE));
     }
 
-    fn ReadDir(&self, _task: &Task, _f: &File, _offset: i64, _serializer: &mut DentrySerializer) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ENOTDIR))
+    fn ReadDir(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _offset: i64,
+        _serializer: &mut DentrySerializer,
+    ) -> Result<i64> {
+        return Err(Error::SysError(SysErr::ENOTDIR));
     }
 
-    fn ReadAt(&self, _task: &Task, _f: &File, dsts: &mut [IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
+    fn ReadAt(
+        &self,
+        _task: &Task,
+        _f: &File,
+        dsts: &mut [IoVec],
+        _offset: i64,
+        _blocking: bool,
+    ) -> Result<i64> {
         let mut info = match self.target.Sigtimedwait(self.Mask(), 0) {
             Ok(info) => info,
-            Err(_) => return Err(Error::SysError(SysErr::EAGAIN))
+            Err(_) => return Err(Error::SysError(SysErr::EAGAIN)),
         };
 
         let mut infoNative = SignalfdSiginfo {
@@ -166,29 +190,43 @@ impl FileOperations for SignalOperation {
             infoNative.addr = sigFault.addr;
         }
 
-        let addr = &infoNative as * const _ as u64;
+        let addr = &infoNative as *const _ as u64;
         let len = core::mem::size_of_val(&infoNative);
 
-        assert!(dsts.len()==1);
+        assert!(dsts.len() == 1);
         let count = dsts[0].CopyFrom(&IoVec::NewFromAddr(addr, len));
 
-        return Ok(count as i64)
+        return Ok(count as i64);
     }
 
-    fn WriteAt(&self, _task: &Task, _f: &File, _srcs: &[IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
-        return Err(Error::SysError(SysErr::EINVAL))
+    fn WriteAt(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _srcs: &[IoVec],
+        _offset: i64,
+        _blocking: bool,
+    ) -> Result<i64> {
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     fn Append(&self, _task: &Task, _f: &File, _srcs: &[IoVec]) -> Result<(i64, i64)> {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    fn Fsync(&self, _task: &Task, _f: &File, _start: i64, _end: i64, _syncType: SyncType) -> Result<()>  {
-        return Err(Error::SysError(SysErr::EINVAL))
+    fn Fsync(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _start: i64,
+        _end: i64,
+        _syncType: SyncType,
+    ) -> Result<()> {
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     fn Flush(&self, _task: &Task, _f: &File) -> Result<()> {
-        return Ok(())
+        return Ok(());
     }
 
     fn UnstableAttr(&self, task: &Task, f: &File) -> Result<UnstableAttr> {
@@ -197,32 +235,38 @@ impl FileOperations for SignalOperation {
     }
 
     fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<()> {
-        return Err(Error::SysError(SysErr::ENOTTY))
+        return Err(Error::SysError(SysErr::ENOTTY));
     }
 
-    fn IterateDir(&self, _task: &Task, _d: &Dirent, _dirCtx: &mut DirCtx, _offset: i32) -> (i32, Result<i64>) {
-        return (0, Err(Error::SysError(SysErr::ENOTDIR)))
+    fn IterateDir(
+        &self,
+        _task: &Task,
+        _d: &Dirent,
+        _dirCtx: &mut DirCtx,
+        _offset: i32,
+    ) -> (i32, Result<i64>) {
+        return (0, Err(Error::SysError(SysErr::ENOTDIR)));
     }
 
     fn Mappable(&self) -> Result<HostInodeOp> {
-        return Err(Error::SysError(SysErr::ENODEV))
+        return Err(Error::SysError(SysErr::ENODEV));
     }
 }
 
 impl Waitable for SignalOperation {
     fn Readiness(&self, _task: &Task, mask: EventMask) -> EventMask {
         if mask & EVENT_IN != 0 && self.target.PendingSignals().0 & self.Mask().0 != 0 {
-            return EVENT_IN
+            return EVENT_IN;
         }
 
-        return 0
+        return 0;
     }
 
     fn EventRegister(&self, task: &Task, e: &WaitEntry, _mask: EventMask) {
         self.target.SignalRegister(task, e, self.mask.lock().0)
     }
 
-    fn EventUnregister(&self, task: &Task,e: &WaitEntry) {
+    fn EventUnregister(&self, task: &Task, e: &WaitEntry) {
         self.target.SignalUnregister(task, e);
     }
 }

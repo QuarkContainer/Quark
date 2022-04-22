@@ -13,10 +13,10 @@
 // limitations under the License.
 //
 
-use core::sync::atomic::Ordering;
 use core::alloc::{GlobalAlloc, Layout};
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicU64;
+use core::sync::atomic::Ordering;
 
 use super::qlib::kernel::asm::*;
 use super::qlib::kernel::taskMgr::*;
@@ -24,24 +24,24 @@ use super::qlib::kernel::threadmgr::task_sched::*;
 use super::qlib::kernel::SHARESPACE;
 use super::qlib::kernel::TSC;
 
-use super::qlib::*;
-use super::qlib::loader::*;
-use super::qlib::qmsg::*;
-use super::qlib::uring::util::*;
-use super::qlib::task_mgr::*;
-use super::qlib::ShareSpace;
-use super::qlib::mutex::*;
-use super::qlib::perf_tunning::*;
-use super::qlib::vcpu_mgr::*;
 use super::qlib::common::*;
-use super::qlib::uring::*;
-use super::qlib::linux_def::*;
-use super::qlib::mem::list_allocator::*;
+use super::qlib::kernel::memmgr::pma::*;
 use super::qlib::kernel::task::*;
 use super::qlib::kernel::taskMgr;
-use super::qlib::kernel::memmgr::pma::*;
-use super::Kernel::HostSpace;
+use super::qlib::linux_def::*;
+use super::qlib::loader::*;
+use super::qlib::mem::list_allocator::*;
+use super::qlib::mutex::*;
+use super::qlib::perf_tunning::*;
+use super::qlib::qmsg::*;
+use super::qlib::task_mgr::*;
+use super::qlib::uring::util::*;
+use super::qlib::uring::*;
+use super::qlib::vcpu_mgr::*;
+use super::qlib::ShareSpace;
+use super::qlib::*;
 use super::syscalls::sys_file::*;
+use super::Kernel::HostSpace;
 
 impl IoUring {
     /// Initiate asynchronous I/O.
@@ -65,7 +65,7 @@ impl IoUring {
                     flags |= sys::IORING_ENTER_SQ_WAKEUP;
                 } else {
                     HostSpace::UringWake(idx, 0);
-                    return Ok(0)
+                    return Ok(0);
                 }
             } else if want == 0 {
                 // fast poll
@@ -81,9 +81,9 @@ impl IoUring {
         idx: usize,
         to_submit: u32,
         min_complete: u32,
-        flag: u32
+        flag: u32,
     ) -> Result<usize> {
-        return io_uring_enter(idx, to_submit, min_complete, flag)
+        return io_uring_enter(idx, to_submit, min_complete, flag);
     }
 
     pub fn sq_len(&self) -> usize {
@@ -96,9 +96,7 @@ impl IoUring {
     }
 
     pub fn sq_need_wakeup(&self) -> bool {
-        unsafe {
-            (*self.sq.lock().flags).load(Ordering::Acquire) & sys::IORING_SQ_NEED_WAKEUP != 0
-        }
+        unsafe { (*self.sq.lock().flags).load(Ordering::Acquire) & sys::IORING_SQ_NEED_WAKEUP != 0 }
     }
 }
 
@@ -111,20 +109,20 @@ pub fn io_uring_enter(
 ) -> Result<usize> {
     let ret = HostSpace::IoUringEnter(idx, to_submit, min_complete, flags);
     if ret < 0 {
-        return Err(Error::SysError(-ret as i32))
+        return Err(Error::SysError(-ret as i32));
     }
 
-    return Ok(ret as usize)
+    return Ok(ret as usize);
 }
 
 impl OOMHandler for ListAllocator {
-    fn handleError(&self, size:u64, alignment:u64) {
+    fn handleError(&self, size: u64, alignment: u64) {
         HostSpace::KernelOOM(size, alignment);
     }
 }
 
 impl ListAllocator {
-    pub fn initialize(&self)-> () {
+    pub fn initialize(&self) -> () {
         self.initialized.store(true, Ordering::Relaxed);
     }
 
@@ -199,14 +197,14 @@ pub enum PerfType {
 }
 
 impl CounterSet {
-    pub const PERM_COUNTER_SET_SIZE : usize = 8;
+    pub const PERM_COUNTER_SET_SIZE: usize = 8;
 
     pub fn GetPerfId(&self) -> usize {
         CPULocal::CpuId() as usize
     }
 
     pub fn PerfType(&self) -> &str {
-        return "PerfPrint::Kernel"
+        return "PerfPrint::Kernel";
     }
 }
 
@@ -240,7 +238,7 @@ pub fn switch(from: TaskId, to: TaskId) {
 }
 
 pub fn OpenAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
-    return openAt(task, dirFd, addr, flags)
+    return openAt(task, dirFd, addr, flags);
 }
 
 pub fn StartRootContainer(para: *const u8) {
@@ -287,9 +285,7 @@ pub fn UringWake(idx: usize, minCompleted: u64) {
 
 impl HostSpace {
     pub fn Close(fd: i32) -> i64 {
-        let mut msg = Msg::Close(qcall::Close {
-            fd
-        });
+        let mut msg = Msg::Close(qcall::Close { fd });
 
         return HostSpace::HCall(&mut msg, false) as i64;
     }
@@ -301,7 +297,7 @@ impl HostSpace {
             taskId: current,
             globalLock: true,
             ret: 0,
-            msg: msg
+            msg: msg,
         };
 
         let addr = &qMsg as *const _ as u64;
@@ -312,7 +308,6 @@ impl HostSpace {
         return qMsg.ret;
     }
 
-
     pub fn HCall(msg: &mut Msg, lock: bool) -> u64 {
         let taskId = Task::Current().GetTaskId();
 
@@ -320,10 +315,10 @@ impl HostSpace {
             taskId: taskId,
             globalLock: lock,
             ret: 0,
-            msg: msg
+            msg: msg,
         };
 
-        HyperCall64(HYPERCALL_HCALL, &mut event as * const _ as u64, 0, 0);
+        HyperCall64(HYPERCALL_HCALL, &mut event as *const _ as u64, 0, 0);
 
         return event.ret;
     }
@@ -348,9 +343,7 @@ extern "C" {
 }
 
 pub fn InitX86FPState(data: u64, useXsave: bool) {
-    unsafe {
-        initX86FPState(data, useXsave)
-    }
+    unsafe { initX86FPState(data, useXsave) }
 }
 
 impl HostAllocator {
@@ -358,7 +351,7 @@ impl HostAllocator {
         return Self {
             listHeapAddr: AtomicU64::new(0),
             initialized: AtomicBool::new(true),
-        }
+        };
     }
 
     pub fn Init(&self, heapAddr: u64) {
@@ -368,7 +361,7 @@ impl HostAllocator {
 
 unsafe impl GlobalAlloc for HostAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        return self.Allocator().alloc(layout)
+        return self.Allocator().alloc(layout);
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
@@ -378,10 +371,14 @@ unsafe impl GlobalAlloc for HostAllocator {
 
 #[inline]
 pub fn VcpuId() -> usize {
-    return CPULocal::CpuId()
+    return CPULocal::CpuId();
 }
 
 pub fn HugepageDontNeed(addr: u64) {
-    let ret = HostSpace::Madvise(addr, MemoryDef::HUGE_PAGE_SIZE as usize, MAdviseOp::MADV_DONTNEED);
-    assert!(ret==0, "HugepageDontNeed fail with {}", ret)
+    let ret = HostSpace::Madvise(
+        addr,
+        MemoryDef::HUGE_PAGE_SIZE as usize,
+        MAdviseOp::MADV_DONTNEED,
+    );
+    assert!(ret == 0, "HugepageDontNeed fail with {}", ret)
 }

@@ -15,12 +15,12 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
-use super::super::task_mgr::*;
-use super::super::linux_def::*;
-use super::super::kernel::guestfdnotifier::*;
-use super::super::socket_buf::*;
 use super::super::config::*;
+use super::super::kernel::guestfdnotifier::*;
 use super::super::kernel::util::cstring::*;
+use super::super::linux_def::*;
+use super::super::socket_buf::*;
+use super::super::task_mgr::*;
 
 #[repr(align(128))]
 #[derive(Clone, Debug)]
@@ -130,7 +130,7 @@ pub struct Rdtsc {}
 
 #[derive(Clone, Default, Debug)]
 pub struct SetTscOffset {
-    pub offset: i64
+    pub offset: i64,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -141,7 +141,7 @@ pub struct UpdateWaitInfo {
 
 #[derive(Clone, Default, Debug)]
 pub struct EventfdWrite {
-    pub fd: i32
+    pub fd: i32,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -149,7 +149,7 @@ pub struct IoUringRegister {
     pub fd: i32,
     pub Opcode: u32,
     pub arg: u64,
-    pub nrArgs: u32
+    pub nrArgs: u32,
 }
 
 #[derive(Clone, Default, Debug, Copy)]
@@ -175,7 +175,6 @@ pub struct MMapFile {
     pub offset: u64,
     pub prot: i32,
 }
-
 
 #[derive(Clone, Default, Debug)]
 pub struct MUnmap {
@@ -322,7 +321,7 @@ pub struct Fstatat {
     pub dirfd: i32,
     pub pathname: u64,
     pub buff: u64,
-    pub flags: i32
+    pub flags: i32,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -500,7 +499,7 @@ pub enum RDMANotifyType {
 
 impl Default for RDMANotifyType {
     fn default() -> Self {
-        return Self::Accept
+        return Self::Accept;
     }
 }
 
@@ -663,13 +662,11 @@ pub struct RDMAAcceptStruct {
 
 impl RDMAAcceptStruct {
     pub fn FromAddr(addr: u64) -> &'static mut Self {
-        return unsafe {
-            &mut *(addr as * mut Self)
-        }
+        return unsafe { &mut *(addr as *mut Self) };
     }
 
     pub fn ToAddr(&self) -> u64 {
-        return self as * const _ as u64;
+        return self as *const _ as u64;
     }
 }
 
@@ -714,7 +711,7 @@ pub struct IOSendMsg {
 
 #[derive(Clone, Default, Debug)]
 pub struct NewSocket {
-    pub fd: i32
+    pub fd: i32,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -734,7 +731,7 @@ pub enum TmpfsFileType {
 
 impl Default for TmpfsFileType {
     fn default() -> Self {
-        return Self::Fifo
+        return Self::Fifo;
     }
 }
 
@@ -771,7 +768,7 @@ pub struct Print<'a> {
 }
 
 #[derive(Debug)]
-pub struct QMsg <'a> {
+pub struct QMsg<'a> {
     pub taskId: TaskId,
     pub globalLock: bool,
     pub ret: u64,
@@ -789,10 +786,9 @@ pub enum HostOutputMsg {
 
 impl Default for HostOutputMsg {
     fn default() -> Self {
-        return Self::Default
+        return Self::Default;
     }
 }
-
 
 #[derive(Clone, Default, Debug, Copy)]
 pub struct WaitFDAsync {
@@ -804,4 +800,3 @@ pub struct WaitFDAsync {
 pub struct EventfdWriteAsync {
     pub fd: i32,
 }
-

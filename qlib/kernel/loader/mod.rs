@@ -13,6 +13,6 @@
 // limitations under the License.
 
 pub mod elf;
+pub mod interpreter;
 pub mod loader;
 pub mod vdso;
-pub mod interpreter;

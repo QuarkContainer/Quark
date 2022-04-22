@@ -12,31 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
-use alloc::vec::Vec;
 use crate::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
-use core::any::Any;
-use core::ops::Deref;
 use alloc::string::String;
 use alloc::string::ToString;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::any::Any;
+use core::ops::Deref;
 
-use super::super::super::task::*;
-use super::super::super::super::singleton::*;
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
+use super::super::super::super::singleton::*;
+use super::super::super::fs::anon::*;
 use super::super::super::fs::attr::*;
-use super::super::super::fs::dirent::*;
 use super::super::super::fs::dentry::*;
+use super::super::super::fs::dirent::*;
 use super::super::super::fs::file::*;
 use super::super::super::fs::flags::*;
 use super::super::super::fs::host::hostinodeop::*;
-use super::super::super::fs::anon::*;
+use super::super::super::task::*;
 use super::super::waiter::*;
 use super::epoll_entry::*;
 use super::epoll_list::*;
 
-pub static CYCLE_MU : Singleton<QMutex<()>> = Singleton::<QMutex<()>>::New();
+pub static CYCLE_MU: Singleton<QMutex<()>> = Singleton::<QMutex<()>>::New();
 pub unsafe fn InitSingleton() {
     CYCLE_MU.Init(QMutex::new(()));
 }
@@ -104,7 +104,7 @@ pub fn NewEventPoll(task: &Task) -> File {
 }
 
 #[derive(Clone, Default)]
-pub struct EventPoll (Arc<EventPollInternal>);
+pub struct EventPoll(Arc<EventPollInternal>);
 
 impl PartialEq for EventPoll {
     fn eq(&self, other: &Self) -> bool {
@@ -127,7 +127,7 @@ impl EventPoll {
                     // the file has been dropped, just remove it
                     lists.readyList.Remove(&entry);
                     continue;
-                },
+                }
                 Some(f) => f,
             };
 
@@ -142,7 +142,7 @@ impl EventPoll {
             entry.lock().state = PollEntryState::Waiting;
         }
 
-        return false
+        return false;
     }
 
     pub fn ReadEvents(&self, task: &Task, max: i32) -> Vec<Event> {
@@ -163,7 +163,7 @@ impl EventPoll {
                 None => {
                     lists.readyList.Remove(&entry);
                     continue;
-                },
+                }
                 Some(f) => f,
             };
 
@@ -261,7 +261,7 @@ impl EventPoll {
             };
 
             if *epollOps == *ep || epollOps.Observes(ep, depthLeft - 1) {
-                return true
+                return true;
             }
         }
 
@@ -269,7 +269,14 @@ impl EventPoll {
     }
 
     // AddEntry adds a new file to the collection of files observed by e.
-    pub fn AddEntry(&self, task: &Task, id: FileIdentifier, flags: EntryFlags, mask: EventMask, data: [i32; 2]) -> Result<()> {
+    pub fn AddEntry(
+        &self,
+        task: &Task,
+        id: FileIdentifier,
+        flags: EntryFlags,
+        mask: EventMask,
+        data: [i32; 2],
+    ) -> Result<()> {
         // Acquire cycle check lock if another event poll is being added.
         let file = match id.File.Upgrade() {
             None => return Err(Error::SysError(SysErr::ENOENT)),
@@ -287,7 +294,7 @@ impl EventPoll {
 
         let mut files = self.files.lock();
         if files.contains_key(&id) {
-            return Err(Error::SysError(SysErr::EEXIST))
+            return Err(Error::SysError(SysErr::EEXIST));
         }
 
         // Check if a cycle would be created. We use 4 as the limit because
@@ -295,13 +302,13 @@ impl EventPoll {
         if ep.is_some() {
             let ep = ep.unwrap();
             if *ep == *self {
-                return Err(Error::SysError(SysErr::EINVAL))
+                return Err(Error::SysError(SysErr::EINVAL));
             }
 
             // Check if a cycle would be created. We use 4 as the limit because
             // that's the value used by linux and we want to emulate it.
             if ep.Observes(self, 4) {
-                return Err(Error::SysError(SysErr::ELOOP))
+                return Err(Error::SysError(SysErr::ELOOP));
             }
         }
 
@@ -327,10 +334,17 @@ impl EventPoll {
         // Initialize the readiness state of the new entry.
         self.InitEntryReadiness(task, &entry);
 
-        return Ok(())
+        return Ok(());
     }
 
-    pub fn UpdateEntry(&self, task: &Task, id: &FileIdentifier, flags: EntryFlags, mask: EventMask, data: [i32; 2]) -> Result<()> {
+    pub fn UpdateEntry(
+        &self,
+        task: &Task,
+        id: &FileIdentifier,
+        flags: EntryFlags,
+        mask: EventMask,
+        data: [i32; 2],
+    ) -> Result<()> {
         let files = self.files.lock();
 
         // Fail if the file doesn't have an entry.
@@ -374,7 +388,7 @@ impl EventPoll {
 
         self.InitEntryReadiness(task, &entry);
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn RemoveEntry(&self, task: &Task, id: &FileIdentifier) -> Result<()> {
@@ -413,7 +427,7 @@ impl EventPoll {
         // Remove file from map, and drop weak reference.
         files.remove(id);
 
-        return Ok(())
+        return Ok(());
     }
 
     // UnregisterEpollWaiters removes the epoll waiter objects from the waiting
@@ -441,7 +455,7 @@ impl Drop for EventPollInternal {
             let task = Task::Current();
             match id.File.Upgrade() {
                 None => (),
-                Some(f) =>  f.EventUnregister(task, &waiter),
+                Some(f) => f.EventUnregister(task, &waiter),
             }
         }
     }
@@ -458,7 +472,7 @@ impl Deref for EventPoll {
 impl Waitable for EventPoll {
     // Readiness determines if the event poll object is currently readable (i.e.,
     // if there are pending events for delivery).
-    fn Readiness(&self, task: &Task,mask: EventMask) -> EventMask {
+    fn Readiness(&self, task: &Task, mask: EventMask) -> EventMask {
         let mut ready = 0;
 
         if (mask & EVENT_IN) != 0 && self.EventsAvailable(task) {
@@ -468,11 +482,11 @@ impl Waitable for EventPoll {
         return ready;
     }
 
-    fn EventRegister(&self, task: &Task,e: &WaitEntry, mask: EventMask) {
+    fn EventRegister(&self, task: &Task, e: &WaitEntry, mask: EventMask) {
         self.queue.EventRegister(task, e, mask)
     }
 
-    fn EventUnregister(&self, task: &Task,e: &WaitEntry) {
+    fn EventUnregister(&self, task: &Task, e: &WaitEntry) {
         self.queue.EventUnregister(task, e)
     }
 }
@@ -485,58 +499,97 @@ impl FileOperations for EventPoll {
     }
 
     fn FopsType(&self) -> FileOpsType {
-        return FileOpsType::EventPoll
+        return FileOpsType::EventPoll;
     }
 
     fn Seekable(&self) -> bool {
         return false;
     }
 
-    fn Seek(&self, _task: &Task, _f: &File, _whence: i32, _current: i64, _offset: i64) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ESPIPE))
+    fn Seek(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _whence: i32,
+        _current: i64,
+        _offset: i64,
+    ) -> Result<i64> {
+        return Err(Error::SysError(SysErr::ESPIPE));
     }
 
-    fn ReadDir(&self, _task: &Task, _f: &File, _offset: i64, _serializer: &mut DentrySerializer) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ENOTDIR))
+    fn ReadDir(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _offset: i64,
+        _serializer: &mut DentrySerializer,
+    ) -> Result<i64> {
+        return Err(Error::SysError(SysErr::ENOTDIR));
     }
 
-    fn ReadAt(&self, _task: &Task, _f: &File, _dsts: &mut [IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ENOSYS))
+    fn ReadAt(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _dsts: &mut [IoVec],
+        _offset: i64,
+        _blocking: bool,
+    ) -> Result<i64> {
+        return Err(Error::SysError(SysErr::ENOSYS));
     }
 
-    fn WriteAt(&self, _task: &Task, _f: &File, _srcs: &[IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ENOSYS))
+    fn WriteAt(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _srcs: &[IoVec],
+        _offset: i64,
+        _blocking: bool,
+    ) -> Result<i64> {
+        return Err(Error::SysError(SysErr::ENOSYS));
     }
 
     fn Append(&self, task: &Task, f: &File, srcs: &[IoVec]) -> Result<(i64, i64)> {
         let n = self.WriteAt(task, f, srcs, 0, false)?;
-        return Ok((n, 0))
+        return Ok((n, 0));
     }
 
-    fn Fsync(&self, _task: &Task, _f: &File, _start: i64, _end: i64, _syncType: SyncType) -> Result<()> {
-        return Ok(())
+    fn Fsync(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _start: i64,
+        _end: i64,
+        _syncType: SyncType,
+    ) -> Result<()> {
+        return Ok(());
     }
 
     fn Flush(&self, _task: &Task, _f: &File) -> Result<()> {
-        return Ok(())
+        return Ok(());
     }
 
     fn UnstableAttr(&self, task: &Task, f: &File) -> Result<UnstableAttr> {
         let inode = f.Dirent.Inode();
         return inode.UnstableAttr(task);
-
     }
 
     fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<()> {
-        return Err(Error::SysError(SysErr::ENOTTY))
+        return Err(Error::SysError(SysErr::ENOTTY));
     }
 
-    fn IterateDir(&self, _task: &Task, _d: &Dirent, _dirCtx: &mut DirCtx, _offset: i32) -> (i32, Result<i64>) {
-        return (0, Err(Error::SysError(SysErr::ENOTDIR)))
+    fn IterateDir(
+        &self,
+        _task: &Task,
+        _d: &Dirent,
+        _dirCtx: &mut DirCtx,
+        _offset: i32,
+    ) -> (i32, Result<i64>) {
+        return (0, Err(Error::SysError(SysErr::ENOTDIR)));
     }
 
     fn Mappable(&self) -> Result<HostInodeOp> {
-        return Err(Error::SysError(SysErr::ENODEV))
+        return Err(Error::SysError(SysErr::ENODEV));
     }
 }
 

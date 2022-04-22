@@ -14,16 +14,16 @@
 
 use alloc::sync::Arc;
 
-use super::super::*;
 use super::super::common::*;
-use super::super::qmsg;
 use super::super::config::*;
-use super::super::qmsg::*;
 use super::super::linux_def::*;
+use super::super::qmsg;
+use super::super::qmsg::*;
 use super::super::socket_buf::*;
+use super::super::*;
+use super::asm::*;
 use super::guestfdnotifier::*;
 use super::task::*;
-use super::asm::*;
 use super::taskMgr;
 
 extern "C" {
@@ -59,9 +59,7 @@ impl HostSpace {
     }
 
     pub fn CreateMemfd(len: i64) -> i64 {
-        let mut msg = Msg::CreateMemfd(CreateMemfd {
-            len: len,
-        });
+        let mut msg = Msg::CreateMemfd(CreateMemfd { len: len });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
@@ -78,17 +76,13 @@ impl HostSpace {
     }
 
     pub fn Sysinfo(addr: u64) -> i64 {
-        let mut msg = Msg::Sysinfo(Sysinfo {
-            addr,
-        });
+        let mut msg = Msg::Sysinfo(Sysinfo { addr });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn EventfdWrite(fd: i32) -> i64 {
-        let mut msg = Msg::EventfdWrite(EventfdWrite {
-            fd,
-        });
+        let mut msg = Msg::EventfdWrite(EventfdWrite { fd });
 
         return HostSpace::HCall(&mut msg, false) as i64;
     }
@@ -105,10 +99,7 @@ impl HostSpace {
     }
 
     pub fn Ftruncate(fd: i32, len: i64) -> i64 {
-        let mut msg = Msg::Ftruncate(Ftruncate {
-            fd,
-            len,
-        });
+        let mut msg = Msg::Ftruncate(Ftruncate { fd, len });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
@@ -120,47 +111,31 @@ impl HostSpace {
     }
 
     pub fn SetTscOffset(offset: i64) -> i64 {
-        let mut msg = Msg::SetTscOffset(SetTscOffset {
-            offset: offset
-        });
+        let mut msg = Msg::SetTscOffset(SetTscOffset { offset: offset });
 
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn TlbShootdown(vcpuMask: u64) -> i64 {
-        let mut msg = Msg::TlbShootdown(TlbShootdown {
-            vcpuMask: vcpuMask
-        });
+        let mut msg = Msg::TlbShootdown(TlbShootdown { vcpuMask: vcpuMask });
 
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn IORead(fd: i32, iovs: u64, iovcnt: i32) -> i64 {
-        let mut msg = Msg::IORead(IORead {
-            fd,
-            iovs,
-            iovcnt,
-        });
+        let mut msg = Msg::IORead(IORead { fd, iovs, iovcnt });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn IOTTYRead(fd: i32, iovs: u64, iovcnt: i32) -> i64 {
-        let mut msg = Msg::IOTTYRead(IOTTYRead {
-            fd,
-            iovs,
-            iovcnt,
-        });
+        let mut msg = Msg::IOTTYRead(IOTTYRead { fd, iovs, iovcnt });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn IOWrite(fd: i32, iovs: u64, iovcnt: i32) -> i64 {
-        let mut msg = Msg::IOWrite(IOWrite {
-            fd,
-            iovs,
-            iovcnt,
-        });
+        let mut msg = Msg::IOWrite(IOWrite { fd, iovs, iovcnt });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
@@ -188,38 +163,30 @@ impl HostSpace {
     }
 
     pub fn IOAppend(fd: i32, iovs: u64, iovcnt: i32) -> (i64, i64) {
-        let mut fileLen : i64 = 0;
+        let mut fileLen: i64 = 0;
         let mut msg = Msg::IOAppend(IOAppend {
             fd,
             iovs,
             iovcnt,
-            fileLenAddr : &mut fileLen as * mut _ as u64,
+            fileLenAddr: &mut fileLen as *mut _ as u64,
         });
 
         let ret = HostSpace::Call(&mut msg, false) as i64;
         if ret < 0 {
-            return (ret, 0)
+            return (ret, 0);
         }
 
-        return (ret, fileLen)
+        return (ret, fileLen);
     }
 
     pub fn IOAccept(fd: i32, addr: u64, addrlen: u64) -> i64 {
-        let mut msg = Msg::IOAccept(IOAccept {
-            fd,
-            addr,
-            addrlen,
-        });
+        let mut msg = Msg::IOAccept(IOAccept { fd, addr, addrlen });
 
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn IOConnect(fd: i32, addr: u64, addrlen: u32) -> i64 {
-        let mut msg = Msg::IOConnect(IOConnect {
-            fd,
-            addr,
-            addrlen,
-        });
+        let mut msg = Msg::IOConnect(IOConnect { fd, addr, addrlen });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
@@ -229,10 +196,10 @@ impl HostSpace {
             fd,
             socketBuf,
             taskId: task.GetTaskId(),
-            ret: 0
+            ret: 0,
         };
 
-        let addr = &mut msg as * mut _ as u64;
+        let addr = &mut msg as *mut _ as u64;
         let om = HostOutputMsg::PostRDMAConnect(addr);
 
         super::SHARESPACE.AQCall(&om);
@@ -263,10 +230,7 @@ impl HostSpace {
     }
 
     pub fn GetTimeOfDay(tv: u64, tz: u64) -> i64 {
-        let mut msg = Msg::GetTimeOfDay(GetTimeOfDay {
-            tv,
-            tz,
-        });
+        let mut msg = Msg::GetTimeOfDay(GetTimeOfDay { tv, tz });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
@@ -283,40 +247,27 @@ impl HostSpace {
     }
 
     pub fn Fcntl(fd: i32, cmd: i32, arg: u64) -> i64 {
-        let mut msg = Msg::Fcntl(Fcntl {
-            fd,
-            cmd,
-            arg,
-        });
+        let mut msg = Msg::Fcntl(Fcntl { fd, cmd, arg });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn IoCtl(fd: i32, cmd: u64, argp: u64) -> i64 {
-        let mut msg = Msg::IoCtl(IoCtl {
-            fd,
-            cmd,
-            argp,
-        });
+        let mut msg = Msg::IoCtl(IoCtl { fd, cmd, argp });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn Fstatfs(fd: i32, buf: u64) -> i64 {
-        let mut msg = Msg::Fstatfs(Fstatfs {
-            fd,
-            buf,
-        });
+        let mut msg = Msg::Fstatfs(Fstatfs { fd, buf });
 
-        return HostSpace::Call(&mut msg, false) as i64
+        return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn NewSocket(fd: i32) -> i64 {
-        let mut msg = Msg::NewSocket(NewSocket {
-            fd
-        });
+        let mut msg = Msg::NewSocket(NewSocket { fd });
 
-        return HostSpace::HCall(&mut msg, true) as i64
+        return HostSpace::HCall(&mut msg, true) as i64;
     }
 
     pub fn FAccessAt(dirfd: i32, pathname: u64, mode: i32, flags: i32) -> i64 {
@@ -324,17 +275,14 @@ impl HostSpace {
             dirfd,
             pathname,
             mode,
-            flags
+            flags,
         });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn Fstat(fd: i32, buff: u64) -> i64 {
-        let mut msg = Msg::Fstat(Fstat {
-            fd,
-            buff,
-        });
+        let mut msg = Msg::Fstat(Fstat { fd, buff });
 
         return Self::HCall(&mut msg, false) as i64;
         //return HostSpace::Call(&mut msg, false) as i64;
@@ -388,7 +336,7 @@ impl HostSpace {
         let mut msg = Msg::Unlinkat(Unlinkat {
             dirfd,
             pathname,
-            flags
+            flags,
         });
 
         return HostSpace::HCall(&mut msg, false) as i64;
@@ -413,9 +361,7 @@ impl HostSpace {
     }
 
     pub fn SyncFs(fd: i32) -> i64 {
-        let mut msg = Msg::SyncFs(SyncFs {
-            fd,
-        });
+        let mut msg = Msg::SyncFs(SyncFs { fd });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
@@ -432,47 +378,31 @@ impl HostSpace {
     }
 
     pub fn FSync(fd: i32) -> i64 {
-        let mut msg = Msg::FSync(FSync {
-            fd,
-        });
+        let mut msg = Msg::FSync(FSync { fd });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn MSync(addr: u64, len: usize, flags: i32) -> i64 {
-        let mut msg = Msg::MSync(MSync {
-            addr,
-            len,
-            flags,
-        });
+        let mut msg = Msg::MSync(MSync { addr, len, flags });
 
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn Madvise(addr: u64, len: usize, advise: i32) -> i64 {
-        let mut msg = Msg::MAdvise(MAdvise {
-            addr,
-            len,
-            advise,
-        });
+        let mut msg = Msg::MAdvise(MAdvise { addr, len, advise });
 
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn FDataSync(fd: i32) -> i64 {
-        let mut msg = Msg::FDataSync(FDataSync {
-            fd,
-        });
+        let mut msg = Msg::FDataSync(FDataSync { fd });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn Seek(fd: i32, offset: i64, whence: i32) -> i64 {
-        let mut msg = Msg::Seek(Seek {
-            fd,
-            offset,
-            whence,
-        });
+        let mut msg = Msg::Seek(Seek { fd, offset, whence });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
@@ -480,25 +410,21 @@ impl HostSpace {
     pub fn ReadDir(dirfd: i32, data: &mut FileTypes) -> i64 {
         let mut msg = Msg::ReadDir(ReadDir {
             dirfd,
-            data: data as * const _ as u64,
+            data: data as *const _ as u64,
         });
 
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn GetRandom(buf: u64, len: u64, flags: u32) -> i64 {
-        let mut msg = Msg::GetRandom(GetRandom {
-            buf,
-            len,
-            flags,
-        });
+        let mut msg = Msg::GetRandom(GetRandom { buf, len, flags });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn Statm(statm: &mut StatmInfo) -> i64 {
         let mut msg = Msg::Statm(Statm {
-            buf: statm as * const _ as u64
+            buf: statm as *const _ as u64,
         });
 
         return HostSpace::Call(&mut msg, false) as i64;
@@ -592,19 +518,13 @@ impl HostSpace {
     }
 
     pub fn RDMANotify(sockfd: i32, typ: RDMANotifyType) -> i64 {
-        let mut msg = Msg::RDMANotify(RDMANotify {
-            sockfd,
-            typ
-        });
+        let mut msg = Msg::RDMANotify(RDMANotify { sockfd, typ });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn Shutdown(sockfd: i32, how: i32) -> i64 {
-        let mut msg = Msg::IOShutdown(IOShutdown {
-            sockfd,
-            how,
-        });
+        let mut msg = Msg::IOShutdown(IOShutdown { sockfd, how });
 
         return HostSpace::HCall(&mut msg, false) as i64;
     }
@@ -635,7 +555,15 @@ impl HostSpace {
         //return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn CreateAt(dirfd: i32, pathName: u64, flags: i32, mode: i32, uid: u32, gid: u32, fstatAddr: u64) -> i64 {
+    pub fn CreateAt(
+        dirfd: i32,
+        pathName: u64,
+        flags: i32,
+        mode: i32,
+        uid: u32,
+        gid: u32,
+        fstatAddr: u64,
+    ) -> i64 {
         let mut msg = Msg::CreateAt(CreateAt {
             dirfd,
             pathName,
@@ -643,7 +571,7 @@ impl HostSpace {
             mode,
             uid,
             gid,
-            fstatAddr
+            fstatAddr,
         });
 
         return HostSpace::HCall(&mut msg, false) as i64;
@@ -660,9 +588,7 @@ impl HostSpace {
     }
 
     pub fn Fchdir(fd: i32) -> i64 {
-        let mut msg = Msg::Fchdir(Fchdir {
-            fd,
-        });
+        let mut msg = Msg::Fchdir(Fchdir { fd });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
@@ -679,29 +605,19 @@ impl HostSpace {
     }
 
     pub fn Mlock2(addr: u64, len: u64, flags: u32) -> i64 {
-        let mut msg = Msg::Mlock2(Mlock2 {
-            addr,
-            len,
-            flags,
-        });
+        let mut msg = Msg::Mlock2(Mlock2 { addr, len, flags });
 
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn MUnlock(addr: u64, len: u64) -> i64 {
-        let mut msg = Msg::MUnlock(MUnlock {
-            addr,
-            len,
-        });
+        let mut msg = Msg::MUnlock(MUnlock { addr, len });
 
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn NonBlockingPoll(fd: i32, mask: EventMask) -> i64 {
-        let mut msg = Msg::NonBlockingPoll(NonBlockingPoll {
-            fd,
-            mask,
-        });
+        let mut msg = Msg::NonBlockingPoll(NonBlockingPoll { fd, mask });
 
         //return HostSpace::Call(&mut msg, false) as i64;
         let ret = Self::HCall(&mut msg, false) as i64;
@@ -718,16 +634,13 @@ impl HostSpace {
     }
 
     pub fn VcpuWait() -> i64 {
-        let mut ret : i64 = 0;
-        HyperCall64(HYPERCALL_VCPU_WAIT, 0, 0, &mut ret as * mut _ as u64);
-        return ret as i64
+        let mut ret: i64 = 0;
+        HyperCall64(HYPERCALL_VCPU_WAIT, 0, 0, &mut ret as *mut _ as u64);
+        return ret as i64;
     }
 
     pub fn NewTmpfsFile(typ: TmpfsFileType, addr: u64) -> i64 {
-        let mut msg = Msg::NewTmpfsFile(NewTmpfsFile {
-            typ,
-            addr,
-        });
+        let mut msg = Msg::NewTmpfsFile(NewTmpfsFile { typ, addr });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
@@ -754,29 +667,19 @@ impl HostSpace {
     }
 
     pub fn FChown(fd: i32, owner: u32, group: u32) -> i64 {
-        let mut msg = Msg::FChown(FChown {
-            fd,
-            owner,
-            group,
-        });
+        let mut msg = Msg::FChown(FChown { fd, owner, group });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn Chmod(pathname: u64, mode: u32) -> i64 {
-        let mut msg = Msg::Chmod(Chmod {
-            pathname,
-            mode,
-        });
+        let mut msg = Msg::Chmod(Chmod { pathname, mode });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn Fchmod(fd: i32, mode: u32) -> i64 {
-        let mut msg = Msg::Fchmod(Fchmod {
-            fd,
-            mode,
-        });
+        let mut msg = Msg::Fchmod(Fchmod { fd, mode });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
@@ -785,18 +688,14 @@ impl HostSpace {
         let mut msg = Msg::SymLinkAt(SymLinkAt {
             oldpath,
             newdirfd,
-            newpath
+            newpath,
         });
 
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn ReadControlMsg(fd: i32, addr: u64, len: usize) -> i64 {
-        let mut msg = Msg::ReadControlMsg(ReadControlMsg {
-            fd,
-            addr,
-            len
-        });
+        let mut msg = Msg::ReadControlMsg(ReadControlMsg { fd, addr, len });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
@@ -821,27 +720,31 @@ impl HostSpace {
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
-
     pub fn Futimens(fd: i32, times: u64) -> i64 {
-        let mut msg = Msg::Futimens(Futimens {
-            fd,
-            times,
-        });
+        let mut msg = Msg::Futimens(Futimens { fd, times });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn GetStdfds(addr: u64) -> i64 {
-        let mut msg = Msg::GetStdfds(GetStdfds {
-            addr
-        });
+        let mut msg = Msg::GetStdfds(GetStdfds { addr });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn MMapFile(len: u64, fd: i32, offset: u64, prot: i32) -> i64 {
-        assert!(len % MemoryDef::PMD_SIZE == 0, "offset is {:x}, len is {:x}", offset, len);
-        assert!(offset % MemoryDef::PMD_SIZE == 0, "offset is {:x}, len is {:x}", offset, len);
+        assert!(
+            len % MemoryDef::PMD_SIZE == 0,
+            "offset is {:x}, len is {:x}",
+            offset,
+            len
+        );
+        assert!(
+            offset % MemoryDef::PMD_SIZE == 0,
+            "offset is {:x}, len is {:x}",
+            offset,
+            len
+        );
         let mut msg = Msg::MMapFile(MMapFile {
             len,
             fd,
@@ -855,38 +758,37 @@ impl HostSpace {
     }
 
     pub fn MUnmap(addr: u64, len: u64) {
-        assert!(addr % MemoryDef::PMD_SIZE == 0, "addr is {:x}, len is {:x}", addr, len);
-        assert!(len % MemoryDef::PMD_SIZE == 0, "addr is {:x}, len is {:x}", addr, len);
-        let mut msg = Msg::MUnmap(qmsg::qcall::MUnmap {
+        assert!(
+            addr % MemoryDef::PMD_SIZE == 0,
+            "addr is {:x}, len is {:x}",
             addr,
-            len,
-        });
+            len
+        );
+        assert!(
+            len % MemoryDef::PMD_SIZE == 0,
+            "addr is {:x}, len is {:x}",
+            addr,
+            len
+        );
+        let mut msg = Msg::MUnmap(qmsg::qcall::MUnmap { addr, len });
 
         HostSpace::HCall(&mut msg, true);
     }
 
     pub fn WaitFDAsync(fd: i32, mask: EventMask) {
-        let msg = HostOutputMsg::WaitFDAsync(WaitFDAsync {
-            fd,
-            mask
-        });
+        let msg = HostOutputMsg::WaitFDAsync(WaitFDAsync { fd, mask });
 
         super::SHARESPACE.AQCall(&msg);
     }
 
     pub fn EventfdWriteAsync(fd: i32) {
-        let msg = HostOutputMsg::EventfdWriteAsync(EventfdWriteAsync {
-            fd,
-        });
+        let msg = HostOutputMsg::EventfdWriteAsync(EventfdWriteAsync { fd });
 
         super::SHARESPACE.AQCall(&msg);
     }
 
     pub fn SyncPrint(level: DebugLevel, str: &str) {
-        let msg = Print {
-            level,
-            str,
-        };
+        let msg = Print { level, str };
 
         HyperCall64(HYPERCALL_PRINT, &msg as *const _ as u64, 0, 0);
     }
@@ -920,7 +822,7 @@ impl HostSpace {
         use self::common::*;
 
         if call.res < 0 {
-            return Err(Error::SysError(-call.res as i32))
+            return Err(Error::SysError(-call.res as i32));
         }
 
         return Ok(call.res);
@@ -952,11 +854,13 @@ impl HostSpace {
 pub fn GetSockOptI32(sockfd: i32, level: i32, optname: i32) -> Result<i32> {
     let mut val: i32 = 0;
     let len: i32 = 4;
-    let res = HostSpace::GetSockOpt(sockfd,
-                                    level,
-                                    optname,
-                                    &mut val as *mut i32 as u64,
-                                    &len as *const i32 as u64) as i32;
+    let res = HostSpace::GetSockOpt(
+        sockfd,
+        level,
+        optname,
+        &mut val as *mut i32 as u64,
+        &len as *const i32 as u64,
+    ) as i32;
 
     if res < 0 {
         return Err(Error::SysError(-res as i32));

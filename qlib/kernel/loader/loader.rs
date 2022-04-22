@@ -16,28 +16,28 @@ use alloc::string::String;
 use alloc::string::ToString;
 use alloc::vec::Vec;
 
-use super::elf::*;
+use super::super::super::addr::*;
+use super::super::super::auxv::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
-use super::super::super::addr::*;
-use super::super::super::range::*;
-use super::super::stack::*;
-use super::super::super::auxv::*;
 use super::super::super::path::*;
+use super::super::super::range::*;
 use super::super::fs::dirent::*;
 use super::super::fs::file::*;
 use super::super::fs::flags::*;
-use super::super::task::*;
 use super::super::kernel::timer::*;
 use super::super::kernel_util::*;
 use super::super::memmgr::*;
+use super::super::stack::*;
+use super::super::task::*;
+use super::elf::*;
 //use super::super::memmgr::mm::*;
 use super::interpreter::*;
 
 // maxLoaderAttempts is the maximum number of attempts to try to load
 // an interpreter scripts, to prevent loops. 6 (initial + 5 changes) is
 // what the Linux kernel allows (fs/exec.c:search_binary_handler).
-pub const MAX_LOADER_ATTEMPTS : usize = 6;
+pub const MAX_LOADER_ATTEMPTS: usize = 6;
 
 pub fn SliceCompare(left: &[u8], right: &[u8]) -> bool {
     if left.len() != right.len() {
@@ -54,20 +54,25 @@ pub fn SliceCompare(left: &[u8], right: &[u8]) -> bool {
 }
 
 pub fn LoadVDSO(task: &mut Task) -> Result<u64> {
-    let vAddr = task.mm.FindAvailableSeg(task, 0, 3 * MemoryDef::PAGE_SIZE)?;
+    let vAddr = task
+        .mm
+        .FindAvailableSeg(task, 0, 3 * MemoryDef::PAGE_SIZE)?;
 
     let vdsoParamPageAddr = GetVDSOParamPageAddr();
     let paramVAddr = MapVDSOParamPage(task, vAddr, vdsoParamPageAddr)?;
     assert!(paramVAddr == vAddr, "LoadVDSO paramVAddr doesn't match");
-    let vdsoVAddr = MapVDSOPage(task, paramVAddr + MemoryDef::PAGE_SIZE, vdsoParamPageAddr + MemoryDef::PAGE_SIZE)?;
-
+    let vdsoVAddr = MapVDSOPage(
+        task,
+        paramVAddr + MemoryDef::PAGE_SIZE,
+        vdsoParamPageAddr + MemoryDef::PAGE_SIZE,
+    )?;
 
     //info!("vdsoParamPageAddr is {:x}, phyaddr is {:x}", vdsoParamPageAddr, task.VirtualToPhy(paramVAddr)?);
     //info!("paramVAddr is {:x}, phyaddr is {:x}", paramVAddr, task.VirtualToPhy(paramVAddr)?);
     //info!("vdsoVAddr is {:x}, phyaddr is {:x}", vdsoVAddr, task.VirtualToPhy(vdsoVAddr)?);
     //info!("paramVAddr is {:x}, vdsoVAddr is {:x}", paramVAddr, vdsoVAddr);
 
-    return Ok(vdsoVAddr)
+    return Ok(vdsoVAddr);
 }
 
 pub fn MapVDSOParamPage(task: &mut Task, virtualAddr: u64, vdsoParamPageAddr: u64) -> Result<u64> {
@@ -108,7 +113,14 @@ pub fn OpenPath(task: &mut Task, filename: &str, maxTraversals: u32) -> Result<(
     let root = fscontex.lock().root.clone();
     let mut remainingTraversals = maxTraversals;
 
-    let d = task.mountNS.FindDirent(task, &root, Some(cwd), filename, &mut remainingTraversals, true)?;
+    let d = task.mountNS.FindDirent(
+        task,
+        &root,
+        Some(cwd),
+        filename,
+        &mut remainingTraversals,
+        true,
+    )?;
 
     let perms = PermMask {
         read: true,
@@ -124,17 +136,28 @@ pub fn OpenPath(task: &mut Task, filename: &str, maxTraversals: u32) -> Result<(
     //
     // N.B. we reject directories below, but we must first reject
     // non-directories passed as directories.
-    if len > 0 && filename.as_bytes()[len-1] == '/' as u8 && inode.StableAttr().IsDir() {
-        return Err(Error::SysError(SysErr::ENOTDIR))
+    if len > 0 && filename.as_bytes()[len - 1] == '/' as u8 && inode.StableAttr().IsDir() {
+        return Err(Error::SysError(SysErr::ENOTDIR));
     }
 
-    let file = inode.GetFile(task, &d, &FileFlags { Read: true, ..Default::default() })?;
+    let file = inode.GetFile(
+        task,
+        &d,
+        &FileFlags {
+            Read: true,
+            ..Default::default()
+        },
+    )?;
 
     return Ok((file, d));
 }
 
 // loadPath resolves filename to a binary and loads it.
-pub fn LoadExecutable(task: &mut Task, filename: &str, argv: &mut Vec<String>) -> Result<(LoadedElf, Dirent, Vec<String>)> {
+pub fn LoadExecutable(
+    task: &mut Task,
+    filename: &str,
+    argv: &mut Vec<String>,
+) -> Result<(LoadedElf, Dirent, Vec<String>)> {
     let mut filename = filename.to_string();
 
     let mut tmp = Vec::new();
@@ -143,7 +166,7 @@ pub fn LoadExecutable(task: &mut Task, filename: &str, argv: &mut Vec<String>) -
 
     for _i in 0..MAX_LOADER_ATTEMPTS {
         let (file, executable) = OpenPath(task, &filename, 40)?;
-        let mut hdr : [u8; 4] = [0; 4];
+        let mut hdr: [u8; 4] = [0; 4];
 
         match ReadAll(task, &file, &mut hdr, 0) {
             Err(e) => {
@@ -152,30 +175,32 @@ pub fn LoadExecutable(task: &mut Task, filename: &str, argv: &mut Vec<String>) -
             }
             Ok(n) => {
                 if n < 4 {
-                    print!("Error loading ELF, there is less than 4 bytes data, cnt is {}", n);
+                    print!(
+                        "Error loading ELF, there is less than 4 bytes data, cnt is {}",
+                        n
+                    );
                     return Err(Error::SysError(SysErr::ENOEXEC));
                 }
-            },
+            }
         }
 
         if SliceCompare(&hdr, ELF_MAGIC.as_bytes()) {
             let loaded = LoadElf(task, &file)?;
-            return Ok((loaded, executable, argv))
+            return Ok((loaded, executable, argv));
         } else if SliceCompare(&hdr[..2], INTERPRETER_SCRIPT_MAGIC.as_bytes()) {
             info!("start to load script {}", filename);
             let (newpath, newargv) = match ParseInterpreterScript(task, &filename, &file, argv) {
                 Err(e) => {
                     info!("Error loading interpreter script: {:?}", e);
-                    return Err(e)
+                    return Err(e);
                 }
-                Ok((p, a)) => (p, a)
+                Ok((p, a)) => (p, a),
             };
 
             filename = newpath;
             argv = newargv;
 
             //info!("load script filename is {} argv is {:?}", &filename, &argv);
-
         } else {
             info!("unknow magic: {:?}", hdr);
             return Err(Error::SysError(SysErr::ENOEXEC));
@@ -185,7 +210,7 @@ pub fn LoadExecutable(task: &mut Task, filename: &str, argv: &mut Vec<String>) -
     return Err(Error::SysError(SysErr::ENOEXEC));
 }
 
-pub const DEFAULT_STACK_SOFT_LIMIT : u64 = 8 *1024 *1024;
+pub const DEFAULT_STACK_SOFT_LIMIT: u64 = 8 * 1024 * 1024;
 
 pub fn CreateStack(task: &Task) -> Result<Range> {
     let stackSize = DEFAULT_STACK_SOFT_LIMIT;
@@ -203,16 +228,22 @@ pub fn CreateStack(task: &Task) -> Result<Range> {
     moptions.GrowsDown = true;
 
     let addr = task.mm.MMap(task, &mut moptions)?;
-    assert!(addr==stackStart);
+    assert!(addr == stackStart);
 
     return Ok(Range::New(stackStart, stackSize));
 }
 
-pub const TASK_COMM_LEN : usize = 16;
+pub const TASK_COMM_LEN: usize = 16;
 
 // Load loads file with filename into memory.
 //return (entry: u64, usersp: u64, kernelsp: u64)
-pub fn Load(task: &mut Task, filename: &str, argv: &mut Vec<String>, envv: &[String], extraAuxv: &[AuxEntry]) -> Result<(u64, u64, u64)> {
+pub fn Load(
+    task: &mut Task,
+    filename: &str,
+    argv: &mut Vec<String>,
+    envv: &[String],
+    extraAuxv: &[AuxEntry],
+) -> Result<(u64, u64, u64)> {
     let vdsoAddr = LoadVDSO(task)?;
 
     let (loaded, executable, tmpArgv) = LoadExecutable(task, filename, argv)?;
@@ -225,7 +256,7 @@ pub fn Load(task: &mut Task, filename: &str, argv: &mut Vec<String>, envv: &[Str
 
     let mut name = Base(&filename);
     if name.len() > TASK_COMM_LEN - 1 {
-        name = &name[0..TASK_COMM_LEN-1];
+        name = &name[0..TASK_COMM_LEN - 1];
     }
 
     task.thread.as_ref().unwrap().lock().name = name.to_string();
@@ -234,7 +265,9 @@ pub fn Load(task: &mut Task, filename: &str, argv: &mut Vec<String>, envv: &[Str
 
     let mut stack = Stack::New(stackRange.End());
 
-    let usersp = SetupUserStack(task, &mut stack, &loaded, filename, &argv, envv, extraAuxv, vdsoAddr)?;
+    let usersp = SetupUserStack(
+        task, &mut stack, &loaded, filename, &argv, envv, extraAuxv, vdsoAddr,
+    )?;
     let kernelsp = Task::TaskId().Addr() + MemoryDef::DEFAULT_STACK_SIZE - 0x10;
     let entry = loaded.entry;
 
@@ -242,14 +275,16 @@ pub fn Load(task: &mut Task, filename: &str, argv: &mut Vec<String>, envv: &[Str
 }
 
 //return: user stack sp
-pub fn SetupUserStack(task: &Task,
-                      stack: &mut Stack,
-                      loaded: &LoadedElf,
-                      _filename: &str,
-                      argv: &[String],
-                      envv: &[String],
-                      extraAuxv: &[AuxEntry],
-                      vdsoAddr: u64) -> Result<u64> {
+pub fn SetupUserStack(
+    task: &Task,
+    stack: &mut Stack,
+    loaded: &LoadedElf,
+    _filename: &str,
+    argv: &[String],
+    envv: &[String],
+    extraAuxv: &[AuxEntry],
+    vdsoAddr: u64,
+) -> Result<u64> {
     /* auxv dagta */
     let x86_64 = stack.PushStr(task, "x86_64")?;
 
@@ -262,21 +297,66 @@ pub fn SetupUserStack(task: &Task,
 
     /*auxv vector*/
     let mut auxv = Vec::new();
-    auxv.push(AuxEntry { Key: AuxVec::AT_NULL, Val: 0 });
-    auxv.push(AuxEntry { Key: AuxVec::AT_PLATFORM, Val: x86_64 });
-    auxv.push(AuxEntry { Key: AuxVec::AT_EXECFN, Val: execfn });
-    auxv.push(AuxEntry { Key: AuxVec::AT_HWCAP2, Val: 0 });
-    auxv.push(AuxEntry { Key: AuxVec::AT_RANDOM, Val: randAddr });
-    auxv.push(AuxEntry { Key: AuxVec::AT_SECURE, Val: 0 });
-    auxv.push(AuxEntry { Key: AuxVec::AT_EGID, Val: 0 });
-    auxv.push(AuxEntry { Key: AuxVec::AT_GID, Val: 0 });
-    auxv.push(AuxEntry { Key: AuxVec::AT_EUID, Val: 0 });
-    auxv.push(AuxEntry { Key: AuxVec::AT_UID, Val: 0 });
-    auxv.push(AuxEntry { Key: AuxVec::AT_FLAGS, Val: 0 });
-    auxv.push(AuxEntry { Key: AuxVec::AT_CLKTCK, Val: 100 });
-    auxv.push(AuxEntry { Key: AuxVec::AT_PAGESZ, Val: 4096 });
-    auxv.push(AuxEntry { Key: AuxVec::AT_HWCAP, Val: 0xbfebfbff });
-    auxv.push(AuxEntry { Key: AuxVec::AT_SYSINFO_EHDR, Val: vdsoAddr });
+    auxv.push(AuxEntry {
+        Key: AuxVec::AT_NULL,
+        Val: 0,
+    });
+    auxv.push(AuxEntry {
+        Key: AuxVec::AT_PLATFORM,
+        Val: x86_64,
+    });
+    auxv.push(AuxEntry {
+        Key: AuxVec::AT_EXECFN,
+        Val: execfn,
+    });
+    auxv.push(AuxEntry {
+        Key: AuxVec::AT_HWCAP2,
+        Val: 0,
+    });
+    auxv.push(AuxEntry {
+        Key: AuxVec::AT_RANDOM,
+        Val: randAddr,
+    });
+    auxv.push(AuxEntry {
+        Key: AuxVec::AT_SECURE,
+        Val: 0,
+    });
+    auxv.push(AuxEntry {
+        Key: AuxVec::AT_EGID,
+        Val: 0,
+    });
+    auxv.push(AuxEntry {
+        Key: AuxVec::AT_GID,
+        Val: 0,
+    });
+    auxv.push(AuxEntry {
+        Key: AuxVec::AT_EUID,
+        Val: 0,
+    });
+    auxv.push(AuxEntry {
+        Key: AuxVec::AT_UID,
+        Val: 0,
+    });
+    auxv.push(AuxEntry {
+        Key: AuxVec::AT_FLAGS,
+        Val: 0,
+    });
+    auxv.push(AuxEntry {
+        Key: AuxVec::AT_CLKTCK,
+        Val: 100,
+    });
+    auxv.push(AuxEntry {
+        Key: AuxVec::AT_PAGESZ,
+        Val: 4096,
+    });
+    auxv.push(AuxEntry {
+        Key: AuxVec::AT_HWCAP,
+        Val: 0xbfebfbff,
+    });
+    auxv.push(AuxEntry {
+        Key: AuxVec::AT_SYSINFO_EHDR,
+        Val: vdsoAddr,
+    });
 
     for e in &loaded.auxv {
         auxv.push(*e)

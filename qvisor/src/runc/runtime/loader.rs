@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::string::String;
 use alloc::boxed::Box;
+use alloc::string::String;
 use alloc::vec::Vec;
 use simplelog::*;
 
@@ -48,4 +48,3 @@ pub struct Args {
 
     pub Rootfs: String,
 }
-

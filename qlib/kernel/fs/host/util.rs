@@ -12,25 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::string::ToString;
-use alloc::string::String;
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::sync::Arc;
 
-use super::super::super::super::common::*;
-use super::super::super::super::linux_def::*;
-use super::super::super::util::cstring::*;
-use super::super::super::super::device::*;
 use super::super::super::super::auth::id::*;
 use super::super::super::super::auth::*;
+use super::super::super::super::common::*;
+use super::super::super::super::device::*;
+use super::super::super::super::linux::time::*;
+use super::super::super::super::linux_def::*;
 use super::super::super::super::qmsg::qcall::TryOpenStruct;
 use super::super::super::kernel::time::*;
-use super::super::super::super::linux::time::*;
+use super::super::super::util::cstring::*;
 
-use super::super::super::Kernel::HostSpace;
-use super::*;
-use super::super::attr::*;
 use super::super::super::super::path;
+use super::super::super::Kernel::HostSpace;
+use super::super::attr::*;
+use super::*;
 
 impl Statx {
     pub fn InodeType(&self) -> InodeType {
@@ -53,7 +53,9 @@ impl Statx {
 
     pub fn WouldBlock(&self) -> bool {
         let iType = self.InodeType();
-        return iType == InodeType::Pipe || iType == InodeType::Socket || iType == InodeType::CharacterDevice;
+        return iType == InodeType::Pipe
+            || iType == InodeType::Socket
+            || iType == InodeType::CharacterDevice;
     }
 
     pub fn StableAttr(&self) -> StableAttr {
@@ -79,20 +81,26 @@ impl Statx {
             BlockSize: self.stx_blksize as i64,
             DeviceFileMajor: major as u16,
             DeviceFileMinor: minor,
-        }
+        };
     }
 
     pub fn Owner(&self, mo: Arc<QMutex<MountSourceOperations>>) -> FileOwner {
         //todo: info!("we don't handle dontTranslateOwnership, fix it");
         //let mut dontTranslateOwnership = mo.lock().as_any().downcast_ref::<SuperOperations>().expect("Owner: not SuperOperations").dontTranslateOwnership;
-        let mounter = mo.lock().as_any().downcast_ref::<SuperOperations>().expect("Owner: not SuperOperations").mounter.clone();
+        let mounter = mo
+            .lock()
+            .as_any()
+            .downcast_ref::<SuperOperations>()
+            .expect("Owner: not SuperOperations")
+            .mounter
+            .clone();
 
         let dontTranslateOwnership = true;
         if dontTranslateOwnership {
             return FileOwner {
                 UID: KUID(self.stx_uid),
                 GID: KGID(self.stx_gid),
-            }
+            };
         }
 
         let mut owner = FileOwner {
@@ -123,8 +131,8 @@ impl Statx {
             AccessTime: Time::FromStatxTimestamp(&self.stx_atime),
             ModificationTime: Time::FromStatxTimestamp(&self.stx_mtime),
             StatusChangeTime: Time::FromStatxTimestamp(&self.stx_ctime),
-            Links: self.stx_nlink as u64
-        }
+            Links: self.stx_nlink as u64,
+        };
     }
 }
 
@@ -148,12 +156,14 @@ pub fn InodeType(st_mode: u32) -> InodeType {
 
 impl LibcStat {
     pub fn InodeType(&self) -> InodeType {
-        return InodeType(self.st_mode)
+        return InodeType(self.st_mode);
     }
 
     pub fn WouldBlock(&self) -> bool {
         let iType = self.InodeType();
-        return iType == InodeType::Pipe || iType == InodeType::Socket || iType == InodeType::CharacterDevice;
+        return iType == InodeType::Pipe
+            || iType == InodeType::Socket
+            || iType == InodeType::CharacterDevice;
     }
 
     pub fn StableAttr(&self) -> StableAttr {
@@ -173,20 +183,26 @@ impl LibcStat {
             BlockSize: self.st_blksize,
             DeviceFileMajor: major,
             DeviceFileMinor: minor,
-        }
+        };
     }
 
     pub fn Owner(&self, mo: Arc<QMutex<MountSourceOperations>>) -> FileOwner {
         //todo: info!("we don't handle dontTranslateOwnership, fix it");
         //let mut dontTranslateOwnership = mo.lock().as_any().downcast_ref::<SuperOperations>().expect("Owner: not SuperOperations").dontTranslateOwnership;
-        let mounter = mo.lock().as_any().downcast_ref::<SuperOperations>().expect("Owner: not SuperOperations").mounter.clone();
+        let mounter = mo
+            .lock()
+            .as_any()
+            .downcast_ref::<SuperOperations>()
+            .expect("Owner: not SuperOperations")
+            .mounter
+            .clone();
 
         let dontTranslateOwnership = true;
         if dontTranslateOwnership {
             return FileOwner {
                 UID: KUID(self.st_uid),
                 GID: KGID(self.st_gid),
-            }
+            };
         }
 
         let mut owner = FileOwner {
@@ -217,8 +233,8 @@ impl LibcStat {
             AccessTime: Time::FromUnix(self.st_atime, self.st_atime_nsec),
             ModificationTime: Time::FromUnix(self.st_mtime, self.st_mtime_nsec),
             StatusChangeTime: Time::FromUnix(self.st_ctime, self.st_ctime_nsec),
-            Links: self.st_nlink
-        }
+            Links: self.st_nlink,
+        };
     }
 }
 
@@ -227,17 +243,17 @@ pub fn TimespecFromTimestamp(t: Time, omit: bool, setSysTime: bool) -> Timespec 
         return Timespec {
             tv_sec: 0,
             tv_nsec: Utime::UTIME_OMIT,
-        }
+        };
     }
 
     if setSysTime {
         return Timespec {
             tv_sec: 0,
             tv_nsec: Utime::UTIME_NOW,
-        }
+        };
     }
 
-    return Timespec::FromNs(t.0)
+    return Timespec::FromNs(t.0);
 }
 
 //if dirfd ==-100, there is no parent
@@ -250,31 +266,31 @@ pub fn TryOpenAt(dirfd: i32, name: &str) -> Result<(i32, bool, LibcStat)> {
     let name = path::Clean(name);
     let fstat = LibcStat::default();
     let mut tryopen = TryOpenStruct {
-        fstat : &fstat,
+        fstat: &fstat,
         writeable: false,
     };
     let cstr = CString::New(&name);
 
-    let ret = HostSpace::TryOpenAt(dirfd, cstr.Ptr(), &mut tryopen as * mut TryOpenStruct as u64);
+    let ret = HostSpace::TryOpenAt(dirfd, cstr.Ptr(), &mut tryopen as *mut TryOpenStruct as u64);
 
     if ret < 0 {
-        return Err(Error::SysError(-ret as i32))
+        return Err(Error::SysError(-ret as i32));
     }
 
-    return Ok((ret as i32, tryopen.writeable, fstat))
+    return Ok((ret as i32, tryopen.writeable, fstat));
 }
 
 pub fn Fstat(fd: i32, fstat: &mut LibcStat) -> i64 {
-    return HostSpace::Fstat(fd, fstat as *mut _ as u64)
+    return HostSpace::Fstat(fd, fstat as *mut _ as u64);
 }
 
 pub fn Fstatat(dirfd: i32, pathname: &str, fstat: &mut LibcStat, flags: i32) -> i64 {
     let cstr = CString::New(pathname);
-    return HostSpace::Fstatat(dirfd, cstr.Ptr(), fstat as *mut _ as u64, flags)
+    return HostSpace::Fstatat(dirfd, cstr.Ptr(), fstat as *mut _ as u64, flags);
 }
 
 pub fn Fcntl(fd: i32, cmd: i32, arg: u64) -> i64 {
-    return HostSpace::Fcntl(fd, cmd, arg)
+    return HostSpace::Fcntl(fd, cmd, arg);
 }
 
 pub fn Mkdirat(fd: i32, name: &str, perm: u32, uid: u32, gid: u32) -> i64 {
@@ -287,35 +303,35 @@ pub fn SymLinkAt(oldpath: &str, newdirfd: i32, newpath: &str) -> i64 {
     let oldpath = CString::New(oldpath);
     let newpath = CString::New(newpath);
 
-    return HostSpace::SymLinkAt(oldpath.Ptr(), newdirfd, newpath.Ptr())
+    return HostSpace::SymLinkAt(oldpath.Ptr(), newdirfd, newpath.Ptr());
 }
 
 pub fn UnLinkAt(dirfd: i32, pathname: &str, flags: i32) -> i64 {
     let cstr = CString::New(pathname);
-    return HostSpace::Unlinkat(dirfd, cstr.Ptr(), flags)
+    return HostSpace::Unlinkat(dirfd, cstr.Ptr(), flags);
 }
 
 pub fn RenameAt(olddirfd: i32, oldpath: &str, newdirfd: i32, newpath: &str) -> i64 {
     let oldpath = CString::New(oldpath);
     let newpath = CString::New(newpath);
 
-    return HostSpace::RenameAt(olddirfd, oldpath.Ptr(), newdirfd, newpath.Ptr())
+    return HostSpace::RenameAt(olddirfd, oldpath.Ptr(), newdirfd, newpath.Ptr());
 }
 
 pub fn Fchmod(fd: i32, mode: u32) -> i64 {
-    return HostSpace::Fchmod(fd, mode)
+    return HostSpace::Fchmod(fd, mode);
 }
 
 pub fn FChown(fd: i32, owner: u32, group: u32) -> i64 {
-    return HostSpace::FChown(fd, owner, group)
+    return HostSpace::FChown(fd, owner, group);
 }
 
 pub fn Ftruncate(fd: i32, size: i64) -> i64 {
-    return HostSpace::Ftruncate(fd, size)
+    return HostSpace::Ftruncate(fd, size);
 }
 
 pub fn Fallocate(fd: i32, mode: i32, offset: i64, len: i64) -> i64 {
-    return HostSpace::Fallocate(fd, mode, offset, len)
+    return HostSpace::Fallocate(fd, mode, offset, len);
 }
 
 pub fn ReadLinkAt(dirfd: i32, path: &str) -> Result<String> {
@@ -325,44 +341,52 @@ pub fn ReadLinkAt(dirfd: i32, path: &str) -> Result<String> {
     let ret = HostSpace::ReadLinkAt(dirfd, cstr.Ptr(), &mut buf[0] as *mut _ as u64, 1024);
 
     if ret < 0 {
-        return Err(Error::SysError(-ret as i32))
+        return Err(Error::SysError(-ret as i32));
     }
 
     assert!(ret < 1024, "ReadLinkAt has no enough buffer");
-    return Ok(String::from_utf8(buf[..ret as usize].to_vec()).unwrap())
+    return Ok(String::from_utf8(buf[..ret as usize].to_vec()).unwrap());
 }
 
-pub fn createAt(dirfd: i32, name: &str, flags: i32, perm: u32, uid: u32, gid: u32) -> Result<(i32, LibcStat)> {
+pub fn createAt(
+    dirfd: i32,
+    name: &str,
+    flags: i32,
+    perm: u32,
+    uid: u32,
+    gid: u32,
+) -> Result<(i32, LibcStat)> {
     let cstr = CString::New(name);
     let mut fstat = LibcStat::default();
 
-    let ret = HostSpace::CreateAt(dirfd,
-                               cstr.Ptr(),
-                               flags,
-                               perm as i32,
-                               uid,
-                               gid,
-                               &mut fstat as * mut _ as u64
+    let ret = HostSpace::CreateAt(
+        dirfd,
+        cstr.Ptr(),
+        flags,
+        perm as i32,
+        uid,
+        gid,
+        &mut fstat as *mut _ as u64,
     ) as i32;
 
     if ret < 0 {
-        return Err(Error::SysError(-ret))
+        return Err(Error::SysError(-ret));
     }
 
-    return Ok((ret, fstat))
+    return Ok((ret, fstat));
 }
 
 pub fn Ioctl(fd: i32, cmd: u64, argp: u64) -> i32 {
-    return HostSpace::IoCtl(fd, cmd, argp) as i32
+    return HostSpace::IoCtl(fd, cmd, argp) as i32;
 }
 
 pub fn Fsync(fd: i32) -> i32 {
-    return HostSpace::FSync(fd) as i32
+    return HostSpace::FSync(fd) as i32;
 }
 
 pub fn SetTimestamps(fd: i32, ts: &InterTimeSpec) -> Result<()> {
     if ts.ATimeOmit && ts.MTimeOmit {
-        return Ok(())
+        return Ok(());
     }
 
     let mut sts: [Timespec; 2] = [Timespec::default(); 2];
@@ -370,15 +394,15 @@ pub fn SetTimestamps(fd: i32, ts: &InterTimeSpec) -> Result<()> {
     sts[0] = TimespecFromTimestamp(ts.ATime, ts.ATimeOmit, ts.ATimeSetSystemTime);
     sts[1] = TimespecFromTimestamp(ts.MTime, ts.MTimeOmit, ts.MTimeSetSystemTime);
 
-    let ret = HostSpace::Futimens(fd, &sts as * const _ as u64);
+    let ret = HostSpace::Futimens(fd, &sts as *const _ as u64);
 
     if ret < 0 {
-        return Err(Error::SysError(-ret as i32))
+        return Err(Error::SysError(-ret as i32));
     }
 
-    return Ok(())
+    return Ok(());
 }
 
 pub fn Seek(fd: i32, offset: i64, whence: i32) -> i64 {
-    return HostSpace::Seek(fd, offset, whence)
+    return HostSpace::Seek(fd, offset, whence);
 }

@@ -13,11 +13,11 @@
 // limitations under the License.
 
 use alloc::string::ToString;
-use std::process::Command;
+use std::collections::HashMap;
 use std::io::Write;
+use std::process::Command;
 use std::process::Stdio;
 use std::{thread, time};
-use std::collections::HashMap;
 
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::path::*;
@@ -42,7 +42,7 @@ pub fn executeHooksBestEffort(hooks: &[Hook], s: &State) {
     for h in hooks {
         match execute_hook(h, s) {
             Ok(_) => (),
-            Err(e) => info!("Failure to execute hook {:?}, err: {:?}", h, e)
+            Err(e) => info!("Failure to execute hook {:?}, err: {:?}", h, e),
         }
     }
 }
@@ -59,7 +59,7 @@ pub fn executeHooks(hooks: &[Hook], s: &State) -> Result<()> {
         }
     }
 
-    return Ok(())
+    return Ok(());
 }
 
 pub fn executeHook(h: &Hook, s: &State) -> Result<()> {
@@ -70,16 +70,21 @@ pub fn executeHook(h: &Hook, s: &State) -> Result<()> {
     }
 
     if !IsAbs(&h.path) {
-        return Err(Error::Common(format!("path for hook is not absolute: {:?}", &h.path)));
+        return Err(Error::Common(format!(
+            "path for hook is not absolute: {:?}",
+            &h.path
+        )));
     }
 
-    let b = s.to_string().map_err(|e| Error::Common(format!("executeHook error is {:?}", e)))?;
+    let b = s
+        .to_string()
+        .map_err(|e| Error::Common(format!("executeHook error is {:?}", e)))?;
 
     info!("Executing state: {}", &b);
 
     let mut envs = HashMap::new();
     for s in &h.env {
-        let ss : Vec<&str> = s.split('=').collect();
+        let ss: Vec<&str> = s.split('=').collect();
         assert!(ss.len() == 0);
         envs.insert(ss[0].to_string(), ss[1].to_string());
     }
@@ -97,7 +102,9 @@ pub fn executeHook(h: &Hook, s: &State) -> Result<()> {
     //error!("Executing envs is {:?}", cmd.get_envs().collect());
 
     let stdin = cmd.stdin.as_mut().expect("Failed to open stdin"); //.map_err(|e| Error::Common(format!("executeHook get stdin error is {:?}", e)))?;
-    stdin.write_all(b.as_bytes()).map_err(|e| Error::Common(format!("executeHook stdin write error is {:?}", e)))?;
+    stdin
+        .write_all(b.as_bytes())
+        .map_err(|e| Error::Common(format!("executeHook stdin write error is {:?}", e)))?;
 
     match h.timeout {
         None => {
@@ -111,19 +118,22 @@ pub fn executeHook(h: &Hook, s: &State) -> Result<()> {
             error!("status: {}", output.status);
             //info!("Execute hook {} success!, status is {:?}", &h.path, &exitStatus);
             info!("stdiout is {}, stderr is {}", stdout, stderr);
-            return Ok(())
-        },
+            return Ok(());
+        }
         Some(timeout) => {
             let ms = timeout * 1000;
-            for _i in 0 .. (ms/10) as usize {
+            for _i in 0..(ms / 10) as usize {
                 match cmd.try_wait() {
                     Ok(Some(status)) => {
                         //let stdout = String::from_utf8_lossy(&cmd.stdout);
                         //let stderr = String::from_utf8_lossy(&cmd.stderr);
 
-                        info!("Execute hook timeout {} success!, status is {:?}", &h.path, &status);
+                        info!(
+                            "Execute hook timeout {} success!, status is {:?}",
+                            &h.path, &status
+                        );
                         //info!("stdiout is {}, stderr is {}", stdout, stderr);
-                        return Ok(())
+                        return Ok(());
                     }
                     Ok(None) => (),
                     Err(e) => {
@@ -140,8 +150,9 @@ pub fn executeHook(h: &Hook, s: &State) -> Result<()> {
     //let stdout = String::from_utf8_lossy(&cmd.stdout);
     //let stderr = String::from_utf8_lossy(&cmd.stderr);
 
-    cmd.kill().map_err(|e| Error::Common(format!("executeHook kill error is {:?}", e)))?;
+    cmd.kill()
+        .map_err(|e| Error::Common(format!("executeHook kill error is {:?}", e)))?;
     //info!("timeout executing hook {}\nstdout: {}\nstderr: {}", h.Path, stdout.String(), stderr.String());
     info!("timeout executing hook {}", &h.path);
-    return Ok(())
+    return Ok(());
 }

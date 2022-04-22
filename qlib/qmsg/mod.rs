@@ -15,5 +15,3 @@
 //pub mod output;
 pub mod qcall;
 pub use super::qcall::*;
-
-

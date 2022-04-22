@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod time;
-pub mod signal;
-pub mod limits;
-pub mod futex;
-pub mod sem;
-pub mod ipc;
-pub mod shm;
-pub mod inotify;
-pub mod netdevice;
-pub mod socket;
-pub mod rusage;
 pub mod fcntl;
+pub mod futex;
+pub mod inotify;
+pub mod ipc;
+pub mod limits;
 pub mod membarrier;
+pub mod netdevice;
+pub mod rusage;
+pub mod sem;
+pub mod shm;
+pub mod signal;
+pub mod socket;
+pub mod time;
 
 pub type TimeID = i32;

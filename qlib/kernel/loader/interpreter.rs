@@ -16,21 +16,26 @@ use alloc::string::String;
 use alloc::string::ToString;
 use alloc::vec::Vec;
 
-use super::elf::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::fs::file::*;
 use super::super::task::*;
+use super::elf::*;
 
 // interpMaxLineLength is the maximum length for the first line of an
 // interpreter script.
 //
 // From execve(2): "A maximum line length of 127 characters is allowed
 // for the first line in a #! executable shell script."
-pub const INTERP_MAX_LINE_LENGTH : usize = 127;
+pub const INTERP_MAX_LINE_LENGTH: usize = 127;
 
-pub fn ParseInterpreterScript(task: &mut Task, fileName: &str, f: &File, mut argv: Vec<String>) -> Result<(String, Vec<String>)> {
-    let mut buf : [u8; INTERP_MAX_LINE_LENGTH] = [0; INTERP_MAX_LINE_LENGTH];
+pub fn ParseInterpreterScript(
+    task: &mut Task,
+    fileName: &str,
+    f: &File,
+    mut argv: Vec<String>,
+) -> Result<(String, Vec<String>)> {
+    let mut buf: [u8; INTERP_MAX_LINE_LENGTH] = [0; INTERP_MAX_LINE_LENGTH];
 
     let n = ReadAll(task, f, &mut buf, 0)?;
     // Allow unexpected EOF, as a valid executable could be only three
@@ -54,13 +59,16 @@ pub fn ParseInterpreterScript(task: &mut Task, fileName: &str, f: &File, mut arg
     }
     let line = &line[idx..];
 
-    let (line, right) = match line.iter().position(|&r| r == '\t' as u8 || r == ' ' as u8 ) {
+    let (line, right) = match line.iter().position(|&r| r == '\t' as u8 || r == ' ' as u8) {
         None => (line, &line[..0]),
         Some(n) => (&line[..n], &line[n..]),
     };
 
     let interp = String::from_utf8(line.to_vec()).unwrap();
-    let arg = String::from_utf8(right.to_vec()).unwrap().trim().to_string();
+    let arg = String::from_utf8(right.to_vec())
+        .unwrap()
+        .trim()
+        .to_string();
 
     if interp.len() == 0 {
         return Err(Error::SysError(SysErr::ENOEXEC));
@@ -87,5 +95,5 @@ pub fn ParseInterpreterScript(task: &mut Task, fileName: &str, f: &File, mut arg
 
     newargv.append(&mut argv);
 
-    return Ok((interp, newargv))
+    return Ok((interp, newargv));
 }

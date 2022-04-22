@@ -12,18 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-use super::super::task::*;
+use super::super::fs::file::*;
+use super::super::fs::host::hostinodeop::*;
 use super::super::kernel::aio::aio_context::*;
 use super::super::kernel::eventfd::*;
 use super::super::kernel::time::*;
 use super::super::kernel::waiter::*;
-use super::super::fs::file::*;
-use super::super::fs::host::hostinodeop::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
-use super::super::syscalls::syscalls::*;
 use super::super::quring::uring_async::*;
+use super::super::syscalls::syscalls::*;
+use super::super::task::*;
 use super::super::IOURING;
 use super::super::SHARESPACE;
 use super::sys_poll::*;
@@ -33,7 +32,7 @@ pub fn SysIoSetup(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let enableAIO = SHARESPACE.config.read().EnableAIO;
 
     if !enableAIO {
-        return Err(Error::SysError(SysErr::ENOSYS))
+        return Err(Error::SysError(SysErr::ENOSYS));
     }
 
     let nrEvents = args.arg0 as i32;
@@ -43,14 +42,14 @@ pub fn SysIoSetup(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     //
     // The context pointer _must_ be zero initially.
     //let idPtr = task.GetTypeMut(idAddr)?;
-    let idIn : u64 = task.CopyInObj(idAddr)?;
+    let idIn: u64 = task.CopyInObj(idAddr)?;
     if idIn != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let id = task.mm.NewAIOContext(task, nrEvents as usize)?;
     task.CopyOutObj(&id, idAddr)?;
-    return Ok(0)
+    return Ok(0);
 }
 
 // IoDestroy implements linux syscall io_destroy(2).
@@ -58,11 +57,11 @@ pub fn SysIoDestroy(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let id = args.arg0 as u64;
 
     if !task.mm.DestroyAIOContext(task, id) {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     // Fixme: Linux blocks until all AIO to the destroyed context is done.
-    return Ok(0)
+    return Ok(0);
 }
 
 // IoGetevents implements linux syscall io_getevents(2).
@@ -75,12 +74,12 @@ pub fn SysIoGetevents(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     // Sanity check arguments.
     if minEvents < 0 || minEvents > events as i32 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let ctx = match task.mm.LookupAIOContext(task, id) {
         None => return Err(Error::SysError(SysErr::EINVAL)),
-        Some(c) => c
+        Some(c) => c,
     };
 
     let timeout = CopyTimespecIntoDuration(task, timespecAddr)?;
@@ -98,14 +97,14 @@ pub fn SysIoGetevents(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 None => return Ok(count as i64),
                 Some(v) => event = v,
             }
-         } else {
+        } else {
             match WaitForRequest(&ctx, task, deadline) {
                 Err(e) => {
-                    if count > 0 || e == Error::SysError(SysErr::ETIMEDOUT){
-                        return Ok(count as i64)
+                    if count > 0 || e == Error::SysError(SysErr::ETIMEDOUT) {
+                        return Ok(count as i64);
                     }
 
-                    return Err(e)
+                    return Err(e);
                 }
                 Ok(v) => event = v,
             }
@@ -114,10 +113,10 @@ pub fn SysIoGetevents(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         match task.CopyOutObj(&event, eventsAddr) {
             Err(e) => {
                 if count > 0 {
-                    return Ok(count as i64)
+                    return Ok(count as i64);
                 }
 
-                return Err(e)
+                return Err(e);
             }
             Ok(()) => (),
         };
@@ -126,13 +125,13 @@ pub fn SysIoGetevents(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         eventsAddr += IOEVENT_SIZE;
     }
 
-    return Ok(events as i64)
+    return Ok(events as i64);
 }
 
 pub fn WaitForRequest(ctx: &AIOContext, task: &Task, dealine: Option<Time>) -> Result<IOEvent> {
     match ctx.PopRequest() {
         None => (),
-        Some(v) => return Ok(v)
+        Some(v) => return Ok(v),
     }
 
     let general = task.blocker.generalEntry.clone();
@@ -143,18 +142,16 @@ pub fn WaitForRequest(ctx: &AIOContext, task: &Task, dealine: Option<Time>) -> R
         match ctx.PopRequest() {
             None => {
                 if ctx.lock().dead {
-                    return Err(Error::SysError(SysErr::EINVAL))
+                    return Err(Error::SysError(SysErr::EINVAL));
                 }
-            },
-            Some(v) => return Ok(v)
+            }
+            Some(v) => return Ok(v),
         }
 
         let err = task.blocker.BlockWithMonoTimer(true, dealine);
         match err {
             Ok(()) => (),
-            Err(e) => {
-                return Err(e)
-            }
+            Err(e) => return Err(e),
         }
     }
 }
@@ -166,30 +163,30 @@ pub fn SysIOSubmit(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     // Sanity check arguments.
     if nrEvents < 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     for i in 0..nrEvents as usize {
-        let cbAddr : u64 = match task.CopyInObj(addr) {
+        let cbAddr: u64 = match task.CopyInObj(addr) {
             Err(e) => {
                 if i > 0 {
                     // Some successful.
-                    return Ok(i as i64)
+                    return Ok(i as i64);
                 }
 
-                return Err(e)
+                return Err(e);
             }
             Ok(ptr) => ptr,
         };
 
         // Copy in this callback.
-        let cb : IOCallback = match task.CopyInObj(cbAddr) {
+        let cb: IOCallback = match task.CopyInObj(cbAddr) {
             Err(e) => {
                 if i > 0 {
                     // Some successful.
-                    return Ok(i as i64)
+                    return Ok(i as i64);
                 }
-                return Err(e)
+                return Err(e);
             }
             Ok(c) => c,
         };
@@ -198,18 +195,18 @@ pub fn SysIOSubmit(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             Err(e) => {
                 if i > 0 {
                     // Partial success.
-                    return Ok(i as i64)
+                    return Ok(i as i64);
                 }
 
-                return Err(e)
+                return Err(e);
             }
-            Ok(()) => ()
+            Ok(()) => (),
         }
 
         addr += 8;
     }
 
-    return Ok(nrEvents as i64)
+    return Ok(nrEvents as i64);
 }
 
 pub fn SubmitCallback(task: &Task, id: u64, cb: &IOCallback, cbAddr: u64) -> Result<()> {
@@ -219,12 +216,8 @@ pub fn SubmitCallback(task: &Task, id: u64, cb: &IOCallback, cbAddr: u64) -> Res
         let eventFile = task.GetFile(cb.resfd as i32)?;
 
         let eventfops = match eventFile.FileOp.as_any().downcast_ref::<EventOperations>() {
-            None => {
-                return Err(Error::SysError(SysErr::EINVAL))
-            }
-            Some(e) => {
-                e.clone()
-            }
+            None => return Err(Error::SysError(SysErr::EINVAL)),
+            Some(e) => e.clone(),
         };
 
         Some(eventfops)
@@ -233,43 +226,43 @@ pub fn SubmitCallback(task: &Task, id: u64, cb: &IOCallback, cbAddr: u64) -> Res
     };
 
     match cb.opcode {
-        IOCB_CMD_PREAD |
-        IOCB_CMD_PWRITE |
-        IOCB_CMD_PREADV |
-        IOCB_CMD_PWRITEV => {
+        IOCB_CMD_PREAD | IOCB_CMD_PWRITE | IOCB_CMD_PREADV | IOCB_CMD_PWRITEV => {
             if cb.offset < 0 {
-                return Err(Error::SysError(SysErr::EINVAL))
+                return Err(Error::SysError(SysErr::EINVAL));
             }
         }
-        _ => ()
+        _ => (),
     }
 
     let ctx = match task.mm.LookupAIOContext(task, id) {
         Some(ctx) => ctx,
-        None => {
-            return Err(Error::SysError(SysErr::EINVAL))
-        }
+        None => return Err(Error::SysError(SysErr::EINVAL)),
     };
 
     if !ctx.Prepare() {
         // Context is busy.
-        return Err(Error::SysError(SysErr::EAGAIN))
+        return Err(Error::SysError(SysErr::EAGAIN));
     }
 
-    return PerformanceCallback(task, &file, cbAddr, cb, &ctx, eventfops)
+    return PerformanceCallback(task, &file, cbAddr, cb, &ctx, eventfops);
 }
 
-pub fn PerformanceCallback(task: &Task, file: &File, cbAddr: u64, cb: &IOCallback, ctx: &AIOContext, eventfops: Option<EventOperations>) -> Result<()> {
+pub fn PerformanceCallback(
+    task: &Task,
+    file: &File,
+    cbAddr: u64,
+    cb: &IOCallback,
+    ctx: &AIOContext,
+    eventfops: Option<EventOperations>,
+) -> Result<()> {
     let inode = file.Dirent.Inode();
     let iops = inode.lock().InodeOp.clone();
     let iops = match iops.as_any().downcast_ref::<HostInodeOp>() {
         None => {
             error!("can't do aio on file type {:?}", file.FileType());
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
-        Some(e) => {
-            e.clone()
-        }
+        Some(e) => e.clone(),
     };
 
     let fd = iops.HostFd();
@@ -307,7 +300,7 @@ pub fn PerformanceCallback(task: &Task, file: &File, cbAddr: u64, cb: &IOCallbac
         }
     }
 
-    return Ok(())
+    return Ok(());
 }
 
 // IoCancel implements linux syscall io_cancel(2).
@@ -315,5 +308,5 @@ pub fn PerformanceCallback(task: &Task, file: &File, cbAddr: u64, cb: &IOCallbac
 // It is not presently supported (ENOSYS indicates no support on this
 // architecture).
 pub fn SysIOCancel(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
-    return Err(Error::SysError(SysErr::ENOSYS))
+    return Err(Error::SysError(SysErr::ENOSYS));
 }

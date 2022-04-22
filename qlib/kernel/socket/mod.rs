@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+pub mod buffer;
+pub mod control;
+pub mod epsocket;
+pub mod hostinet;
 pub mod socket;
 pub mod unix;
-pub mod hostinet;
-pub mod control;
-pub mod buffer;
-pub mod epsocket;
 
 pub fn Init() {
     self::hostinet::Init();

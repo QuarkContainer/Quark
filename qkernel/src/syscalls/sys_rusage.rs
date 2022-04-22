@@ -13,32 +13,24 @@
 // limitations under the License.
 
 use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
 use super::super::qlib::linux::rusage::*;
 use super::super::qlib::linux::time::*;
+use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::Task;
 
 fn GetUsage(task: &Task, which: i32) -> Result<Rusage> {
     let cs = match which {
-        RUSAGE_SELF => {
-            task.Thread().ThreadGroup().CPUStats()
-        }
-        RUSAGE_CHILDREN => {
-            task.Thread().ThreadGroup().JoinedChildCPUStats()
-        }
-        RUSAGE_THREAD => {
-            task.Thread().CPUStats()
-        }
+        RUSAGE_SELF => task.Thread().ThreadGroup().CPUStats(),
+        RUSAGE_CHILDREN => task.Thread().ThreadGroup().JoinedChildCPUStats(),
+        RUSAGE_THREAD => task.Thread().CPUStats(),
         RUSAGE_BOTH => {
             let tg = task.Thread().ThreadGroup();
             let mut cs = tg.CPUStats();
             cs.Accumulate(&tg.JoinedChildCPUStats());
             cs
         }
-        _ => {
-            return Err(Error::SysError(SysErr::EINVAL))
-        }
+        _ => return Err(Error::SysError(SysErr::EINVAL)),
     };
 
     return Ok(Rusage {
@@ -47,7 +39,7 @@ fn GetUsage(task: &Task, which: i32) -> Result<Rusage> {
         NVCSw: cs.VoluntarySwitches as i64,
         MaxRSS: (task.Thread().MaxRSS(which) / 1024) as i64,
         ..Default::default()
-    })
+    });
 }
 
 // Getrusage implements linux syscall getrusage(2).
@@ -71,28 +63,25 @@ fn GetUsage(task: &Task, which: i32) -> Result<Rusage> {
 //	*    long   ru_nsignals;      /* signals received */
 //	y    long   ru_nvcsw;         /* voluntary context switches */
 //	y    long   ru_nivcsw;        /* involuntary context switches */
-
 pub fn SysGetrusage(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let which = args.arg0 as i32;
     let addr = args.arg1 as u64;
 
-    if which != RUSAGE_SELF &&
-        which != RUSAGE_CHILDREN &&
-        which != RUSAGE_THREAD {
-        return Err(Error::SysError(SysErr::EINVAL))
+    if which != RUSAGE_SELF && which != RUSAGE_CHILDREN && which != RUSAGE_THREAD {
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let ru = GetUsage(task, which)?;
     //*task.GetTypeMut(addr)? = ru;
     task.CopyOutObj(&ru, addr)?;
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysTimes(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg0 as u64;
 
     if addr == 0 {
-        return Ok(0)
+        return Ok(0);
     }
 
     let tg = task.Thread().ThreadGroup();
@@ -108,5 +97,5 @@ pub fn SysTimes(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     //*task.GetTypeMut(addr)? = r;
     task.CopyOutObj(&r, addr)?;
-    return Ok(0)
+    return Ok(0);
 }

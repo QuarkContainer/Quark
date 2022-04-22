@@ -29,11 +29,11 @@ impl IPCNamespace {
             userNS: userNS.clone(),
             semphores: semaphore::Registry::New(userNS),
             //shms: shm::Registry::New(userNS)
-        }
+        };
     }
 
     pub fn SemaphoreRegistry(&self) -> semaphore::Registry {
-        return self.semphores.clone()
+        return self.semphores.clone();
     }
 
     /*pub fn ShmRegistry(&self) -> shm::Registry {

@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::mutex::*;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use crate::qlib::mutex::*;
-use core::ops::Deref;
 use core::cmp::*;
+use core::ops::Deref;
 
-use super::super::uid::NewUID;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
+use super::super::uid::NewUID;
 use super::super::SignalDef::*;
-use super::thread_group::*;
+use super::refcounter::*;
 use super::session::*;
 use super::thread::*;
-use super::refcounter::*;
+use super::thread_group::*;
 
 #[derive(Default)]
 pub struct ProcessGroupInternal {
@@ -60,7 +60,7 @@ pub struct ProcessGroupInternal {
 #[derive(Clone, Default)]
 pub struct ProcessGroup {
     pub uid: UniqueID,
-    pub data: Arc<QMutex<ProcessGroupInternal>>
+    pub data: Arc<QMutex<ProcessGroupInternal>>,
 }
 
 impl Deref for ProcessGroup {
@@ -87,7 +87,7 @@ impl PartialOrd for ProcessGroup {
 
 impl PartialEq for ProcessGroup {
     fn eq(&self, other: &Self) -> bool {
-        return self.Uid() == other.Uid()
+        return self.Uid() == other.Uid();
     }
 }
 
@@ -95,7 +95,7 @@ impl Eq for ProcessGroup {}
 
 impl ProcessGroup {
     pub fn Uid(&self) -> UniqueID {
-        return self.uid
+        return self.uid;
     }
 
     pub fn New(id: ProcessGroupID, orginator: ThreadGroup, session: Session) -> Self {
@@ -110,7 +110,7 @@ impl ProcessGroup {
         return Self {
             uid: NewUID(),
             data: Arc::new(QMutex::new(pg)),
-        }
+        };
     }
 
     pub fn Originator(&self) -> ThreadGroup {
@@ -185,9 +185,7 @@ impl ProcessGroup {
                     let mut nslock = ns.lock();
                     let id = match nslock.pgids.get(self) {
                         None => 0,
-                        Some(id) => {
-                            *id
-                        }
+                        Some(id) => *id,
                     };
 
                     nslock.processGroups.remove(&id);
@@ -221,13 +219,13 @@ impl ProcessGroup {
         let mut hasStopped = false;
         let originator = self.lock().originator.clone();
         let pidns = originator.PIDNamespace();
-        let tgids : Vec<ThreadGroup> = pidns.lock().tgids.keys().cloned().collect();
+        let tgids: Vec<ThreadGroup> = pidns.lock().tgids.keys().cloned().collect();
         for tg in &tgids {
             match tg.lock().processGroup.clone() {
                 None => continue,
                 Some(pg) => {
                     if pg != self.clone() {
-                        continue
+                        continue;
                     }
                 }
             }
@@ -242,7 +240,7 @@ impl ProcessGroup {
         }
 
         if !hasStopped {
-            return
+            return;
         }
 
         for tg in &tgids {
@@ -250,7 +248,7 @@ impl ProcessGroup {
                 None => continue,
                 Some(pg) => {
                     if pg != self.clone() {
-                        continue
+                        continue;
                     }
                 }
             }
@@ -259,11 +257,14 @@ impl ProcessGroup {
                 let lock = tg.lock().signalLock.clone();
                 let _s = lock.lock();
                 let leader = tg.lock().leader.Upgrade().unwrap();
-                leader.sendSignalLocked(&SignalInfoPriv(Signal::SIGHUP), true).unwrap();
-                leader.sendSignalLocked(&SignalInfoPriv(Signal::SIGCONT), true).unwrap();
+                leader
+                    .sendSignalLocked(&SignalInfoPriv(Signal::SIGHUP), true)
+                    .unwrap();
+                leader
+                    .sendSignalLocked(&SignalInfoPriv(Signal::SIGCONT), true)
+                    .unwrap();
             }
         }
-
 
         /*error!("handleOrphan xxx 3");
         owner.forEachThreadGroupLocked(|tg: &ThreadGroup| {
@@ -333,11 +334,11 @@ impl ProcessGroup {
                 let infoCopy = *info;
                 match leader.sendSignalLocked(&infoCopy, true) {
                     Err(e) => lastError = Err(e),
-                    _ => ()
+                    _ => (),
                 };
             }
         }
 
-        return lastError
+        return lastError;
     }
 }

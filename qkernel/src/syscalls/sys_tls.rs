@@ -14,25 +14,26 @@
 
 use core::mem;
 
+use super::super::arch::x86_64::context::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
-use super::super::vcpu::*;
 use super::super::task::Task;
-use super::super::arch::x86_64::context::*;
+use super::super::vcpu::*;
 
 pub fn IsValidSegmentBase(addr: u64) -> bool {
-    return addr < MAX_ADDR64
+    return addr < MAX_ADDR64;
 }
 
 pub fn SysArchPrctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let code = args.arg0;
     let addr = args.arg1 as u64;
 
-    if code != PrCtlEnum::ARCH_SET_GS as u64 &&
-        code != PrCtlEnum::ARCH_SET_FS as u64 &&
-        code != PrCtlEnum::ARCH_GET_FS as u64 &&
-        code != PrCtlEnum::ARCH_GET_GS as u64 {
+    if code != PrCtlEnum::ARCH_SET_GS as u64
+        && code != PrCtlEnum::ARCH_SET_FS as u64
+        && code != PrCtlEnum::ARCH_GET_FS as u64
+        && code != PrCtlEnum::ARCH_GET_GS as u64
+    {
         return Err(Error::SysError(SysErr::EINVAL));
     }
 

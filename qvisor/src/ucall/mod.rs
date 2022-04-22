@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod usocket;
-pub mod ucall_client;
 pub mod ucall;
+pub mod ucall_client;
 pub mod ucall_server;
+pub mod usocket;

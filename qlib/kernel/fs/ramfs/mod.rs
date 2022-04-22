@@ -13,7 +13,6 @@
 // limitations under the License.
 
 pub mod dir;
-pub mod tree;
-pub mod symlink;
 pub mod socket;
-
+pub mod symlink;
+pub mod tree;

@@ -14,8 +14,8 @@
 
 #![allow(non_camel_case_types)]
 
-use alloc::string::String;
 use alloc::collections::btree_map::BTreeMap;
+use alloc::string::String;
 use alloc::vec::Vec;
 
 fn is_false(b: &bool) -> bool {
@@ -276,7 +276,6 @@ pub struct LinuxHugepageLimit {
     pub limit: i64,
 }
 
-
 #[derive(Debug)]
 pub struct LinuxInterfacePriority {
     pub name: String,
@@ -437,7 +436,6 @@ pub struct Linux {
 pub type Solaris = Value;
 pub type Windows = Value;
 pub type Value = i32;
-
 
 #[derive(Debug)]
 pub struct Spec {

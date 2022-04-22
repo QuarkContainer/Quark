@@ -24,15 +24,13 @@ pub struct SpecialMapping {
 
 impl SpecialMapping {
     pub fn New(name: String) -> Self {
-        return Self {
-            name: name,
-        }
+        return Self { name: name };
     }
 }
 
 impl Mapping for SpecialMapping {
     fn MappedName(&self, _task: &Task) -> String {
-        return self.name.to_string()
+        return self.name.to_string();
     }
 
     // DeviceID returns the device number shown in /proc/[pid]/maps.

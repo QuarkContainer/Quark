@@ -12,26 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
+use alloc::sync::Arc;
 use core::ops::Deref;
 
+use super::super::super::super::super::kernel_def::*;
+use super::super::super::super::common::*;
+use super::super::super::super::linux::time::*;
+use super::super::super::super::linux_def::*;
+use super::super::super::super::metric::*;
+use super::super::super::super::singleton::*;
 use super::super::super::asm::muldiv64;
 use super::super::super::TSC;
-use super::super::super::super::super::kernel_def::*;
-use super::super::super::super::linux::time::*;
-use super::super::super::super::metric::*;
-use super::super::super::super::common::*;
-use super::super::super::super::linux_def::*;
-use super::super::super::super::singleton::*;
-use super::sampler::*;
 use super::parameters::*;
+use super::sampler::*;
 use super::*;
 
-pub static FALLBACK_METRIC : Singleton<Arc<U64Metric>> = Singleton::<Arc<U64Metric>>::New();
+pub static FALLBACK_METRIC: Singleton<Arc<U64Metric>> = Singleton::<Arc<U64Metric>>::New();
 pub unsafe fn InitSingleton() {
-    FALLBACK_METRIC.Init(NewU64Metric("/time/fallback", false,
-                                      "Incremented when a clock falls back to system calls due to a failed update"));
+    FALLBACK_METRIC.Init(NewU64Metric(
+        "/time/fallback",
+        false,
+        "Incremented when a clock falls back to system calls due to a failed update",
+    ));
 }
 
 // CalibratedClock implements a clock that tracks a reference clock.
@@ -115,7 +118,7 @@ impl CalibratedClock {
             params: Parameters::default(),
             errorNS: 0,
         };
-        return Self(Arc::new(QRwLock::new(internal)))
+        return Self(Arc::new(QRwLock::new(internal)));
     }
 
     // reset forces the clock to restart the calibration process, logging the
@@ -140,7 +143,7 @@ impl CalibratedClock {
         match sample {
             Err(err) => {
                 c.resetLocked(format!("Unable to update calibrated clock: {:?}.", err).as_str());
-                return (Parameters::default(), false)
+                return (Parameters::default(), false);
             }
             Ok(()) => (),
         }
@@ -159,16 +162,26 @@ impl CalibratedClock {
 
         let (minHz, ok) = muldiv64(minCount, nsPerS, refInterval);
         if !ok {
-            c.resetLocked(format!("Unable to update calibrated clock: ({} - {}) * {} / {} overflows.",
-                                  newest.Before, oldest.After, nsPerS, refInterval).as_str());
-            return (Parameters::default(), false)
+            c.resetLocked(
+                format!(
+                    "Unable to update calibrated clock: ({} - {}) * {} / {} overflows.",
+                    newest.Before, oldest.After, nsPerS, refInterval
+                )
+                .as_str(),
+            );
+            return (Parameters::default(), false);
         }
 
         let (maxHz, ok) = muldiv64(maxCount, nsPerS, refInterval);
         if !ok {
-            c.resetLocked(format!("Unable to update calibrated clock: ({} - {}) * {} / {} overflows.",
-                                  newest.After, oldest.Before, nsPerS, refInterval).as_str());
-            return (Parameters::default(), false)
+            c.resetLocked(
+                format!(
+                    "Unable to update calibrated clock: ({} - {}) * {} / {} overflows.",
+                    newest.After, oldest.Before, nsPerS, refInterval
+                )
+                .as_str(),
+            );
+            return (Parameters::default(), false);
         }
 
         c.updateParams(&Parameters {
@@ -177,7 +190,7 @@ impl CalibratedClock {
             BaseCycles: newest.After,
         });
 
-        return (c.params, true)
+        return (c.params, true);
     }
 
     // GetTime returns the current time based on the clock calibration.
@@ -193,7 +206,7 @@ impl CalibratedClock {
             let now = c.sampler.Cycles();
             let (v, ok) = c.params.ComputeTime(now);
             if ok {
-                return Ok(v)
+                return Ok(v);
             }
             now
         };
@@ -202,8 +215,13 @@ impl CalibratedClock {
         // Something is seriously wrong with the clock. Try
         // again with syscalls.
         let parameters = c.params;
-        c.resetLocked(format!("Time computation overflowed. params ={:?}, now = {}.",
-                              &parameters, now).as_str());
+        c.resetLocked(
+            format!(
+                "Time computation overflowed. params ={:?}, now = {}.",
+                &parameters, now
+            )
+            .as_str(),
+        );
         return c.sampler.Syscall();
     }
 }
@@ -219,14 +237,14 @@ impl CalibratedClocks {
         return Self {
             monotonic: CalibratedClock::New(MONOTONIC),
             realtime: CalibratedClock::New(REALTIME),
-        }
+        };
     }
 
     pub fn Update_withSample(&mut self) -> (Parameters, bool, Parameters, bool) {
         let (monotonicParams, monotonicOk) = self.monotonic.Update();
         let (realtimeParams, realtimeOk) = self.realtime.Update();
 
-        return (monotonicParams, monotonicOk, realtimeParams, realtimeOk)
+        return (monotonicParams, monotonicOk, realtimeParams, realtimeOk);
     }
 
     pub fn Update(&mut self) -> (Parameters, bool, Parameters, bool) {
@@ -259,14 +277,14 @@ impl CalibratedClocks {
         self.monotonic.write().updateParams(&monotonicParams);
         self.realtime.write().updateParams(&realtimeParams);
 
-        return (monotonicParams, true, realtimeParams, true)
+        return (monotonicParams, true, realtimeParams, true);
     }
 
     pub fn GetTime(&self, id: ClockID) -> Result<i64> {
         match id {
             MONOTONIC => self.monotonic.GetTime(),
             REALTIME => self.realtime.GetTime(),
-            _ => return Err(Error::SysError(SysErr::EINVAL))
+            _ => return Err(Error::SysError(SysErr::EINVAL)),
         }
     }
 }

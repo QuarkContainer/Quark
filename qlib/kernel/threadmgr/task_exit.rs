@@ -15,21 +15,21 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use super::super::super::common::*;
-use super::super::LOADER;
-use super::super::ExecID;
-use super::super::super::linux_def::*;
-use super::super::threadmgr::thread::*;
-use super::super::threadmgr::threads::*;
-use super::super::threadmgr::pid_namespace::*;
-use super::super::threadmgr::thread_group::*;
-use super::super::boot::controller::WriteWaitAllResponse;
 use super::super::super::auth::id::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
+use super::super::boot::controller::WriteWaitAllResponse;
+use super::super::threadmgr::pid_namespace::*;
+use super::super::threadmgr::thread::*;
+use super::super::threadmgr::thread_group::*;
+use super::super::threadmgr::threads::*;
+use super::super::ExecID;
+use super::super::LOADER;
 //use super::super::Common::*;
-use super::super::SignalDef::*;
-use super::super::task::*;
-use super::task_stop::*;
 use super::super::super::perf_tunning::*;
+use super::super::task::*;
+use super::super::SignalDef::*;
+use super::task_stop::*;
 
 // An ExitStatus is a value communicated from an exiting task or thread group
 // to the party that reaps it.
@@ -49,7 +49,7 @@ impl ExitStatus {
         return ExitStatus {
             Code: code,
             Signo: signo,
-        }
+        };
     }
 
     // Signaled returns true if the ExitStatus indicates that the exiting task or
@@ -68,13 +68,12 @@ impl ExitStatus {
     // exit status of es.
     pub fn ShellExitCode(&self) -> i32 {
         if self.Signaled() {
-            return 128 + self.Signo
+            return 128 + self.Signo;
         }
 
-        return self.Code
+        return self.Code;
     }
 }
-
 
 // TaskExitState represents a step in the task exit path.
 //
@@ -103,7 +102,7 @@ pub enum TaskExitState {
 
 impl core::default::Default for TaskExitState {
     fn default() -> Self {
-        return Self::TaskExitNone
+        return Self::TaskExitNone;
     }
 }
 
@@ -128,11 +127,16 @@ impl ThreadInternal {
             self.endInternalStopLocked();
         }
 
-        self.pendingSignals.Enque(Box::new(SignalInfo {
-            Signo: Signal::SIGKILL,
-            Code: SignalInfo::SIGNAL_INFO_USER,
-            ..Default::default()
-        }), None).expect("killLocked fail");
+        self.pendingSignals
+            .Enque(
+                Box::new(SignalInfo {
+                    Signo: Signal::SIGKILL,
+                    Code: SignalInfo::SIGNAL_INFO_USER,
+                    ..Default::default()
+                }),
+                None,
+            )
+            .expect("killLocked fail");
 
         self.interrupt();
     }
@@ -144,11 +148,11 @@ impl ThreadInternal {
     pub fn killed(&self) -> bool {
         let lock = self.tg.lock().signalLock.clone();
         let _s = lock.lock();
-        return self.killedLocked()
+        return self.killedLocked();
     }
 
     pub fn killedLocked(&self) -> bool {
-        return self.pendingSignals.pendingSet.0 & SignalSet::New(Signal(Signal::SIGKILL)).0 != 0
+        return self.pendingSignals.pendingSet.0 & SignalSet::New(Signal(Signal::SIGKILL)).0 != 0;
     }
 
     // advanceExitStateLocked checks that t's current exit state is oldExit, then
@@ -157,10 +161,15 @@ impl ThreadInternal {
     //
     // Preconditions: The TaskSet mutex must be locked.
     pub fn advanceExitStateLocked(&mut self, oldExit: TaskExitState, newExit: TaskExitState) {
-        info!("advanceExitStateLocked[{}] {:?}=>{:?}", self.id, oldExit, newExit);
+        info!(
+            "advanceExitStateLocked[{}] {:?}=>{:?}",
+            self.id, oldExit, newExit
+        );
         if self.exitState != oldExit {
-            panic!("Transitioning from exit state {:?} to {:?}: unexpected preceding state {:?}",
-                   oldExit, newExit, self.exitState)
+            panic!(
+                "Transitioning from exit state {:?} to {:?}: unexpected preceding state {:?}",
+                oldExit, newExit, self.exitState
+            )
         }
 
         self.exitState = newExit;
@@ -210,7 +219,7 @@ impl Thread {
         let pidns = tg.PIDNamespace();
         let init = match pidns.lock().tasks.get(&INIT_TID) {
             Some(init) => init.clone(),
-            None => return None
+            None => return None,
         };
 
         let inittg = init.lock().tg.clone();
@@ -254,13 +263,13 @@ impl Thread {
             // kernel/exit.c:do_group_exit() =>
             // include/linux/sched.h:signal_group_exit()).
             self.lock().exitStatus = tg.lock().exitStatus;
-            return
+            return;
         }
 
         tg.lock().exiting = true;
         tg.lock().exitStatus = es;
         self.lock().exitStatus = es;
-        let tasks : Vec<Thread> = tg.lock().tasks.iter().cloned().collect();
+        let tasks: Vec<Thread> = tg.lock().tasks.iter().cloned().collect();
         for sibling in &tasks {
             if *sibling != *self {
                 sibling.lock().killLocked();
@@ -284,7 +293,10 @@ impl Thread {
         {
             let _s = lock.lock();
 
-            self.lock().advanceExitStateLocked(TaskExitState::TaskExitNone, TaskExitState::TaskExitInitiated);
+            self.lock().advanceExitStateLocked(
+                TaskExitState::TaskExitNone,
+                TaskExitState::TaskExitInitiated,
+            );
             tg.lock().activeTasks -= 1;
             last = tg.lock().activeTasks == 0;
 
@@ -292,7 +304,7 @@ impl Thread {
             self.setSignalMaskLocked(SignalSet(!0));
 
             if !self.lock().groupStopPending {
-                return last
+                return last;
             }
 
             self.lock().groupStopPending = false;
@@ -308,7 +320,7 @@ impl Thread {
             tgOfParent.lock().eventQueue.Notify(EVENT_CHILD_GROUP_STOP);
         }
 
-        return last
+        return last;
     }
 
     pub fn exitChildren(&self) {
@@ -323,7 +335,7 @@ impl Thread {
             // terminates all of the processes in the namespace via a SIGKILL
             // signal." - pid_namespaces(7)
             pidns.lock().exiting = true;
-            let tgids : Vec<ThreadGroup> = pidns.lock().tgids.keys().cloned().collect();
+            let tgids: Vec<ThreadGroup> = pidns.lock().tgids.keys().cloned().collect();
             for other in &tgids {
                 if *other == self.lock().tg.clone() {
                     continue;
@@ -332,10 +344,15 @@ impl Thread {
                 let _s = lock.lock();
 
                 let leader = other.lock().leader.Upgrade().unwrap();
-                leader.sendSignalLocked(&SignalInfo {
-                    Signo: Signal::SIGKILL,
-                    ..Default::default()
-                }, true).unwrap();
+                leader
+                    .sendSignalLocked(
+                        &SignalInfo {
+                            Signo: Signal::SIGKILL,
+                            ..Default::default()
+                        },
+                        true,
+                    )
+                    .unwrap();
             }
         }
 
@@ -400,18 +417,18 @@ impl Thread {
         let tg = self.lock().tg.clone();
         let leader = tg.lock().leader.Upgrade();
         if Some(self.clone()) != leader {
-            return
+            return;
         }
 
         if oldParent.is_none() && parent.is_none() {
-            return
+            return;
         }
 
         if oldParent.is_some() && parent.is_some() {
             let oldtg = oldParent.clone().unwrap().lock().tg.clone();
             let parenttg = parent.clone().unwrap().lock().tg.clone();
             if oldtg == parenttg {
-                return
+                return;
             }
         }
 
@@ -439,7 +456,7 @@ impl Thread {
             for parent in &parents {
                 let (wr, any) = self.waitParentLocked(opts, parent);
                 if wr.is_some() {
-                    return Ok(wr.unwrap())
+                    return Ok(wr.unwrap());
                 }
 
                 anyWaitableTasks = anyWaitableTasks || any;
@@ -449,18 +466,22 @@ impl Thread {
             let (wr, any) = self.waitParentLocked(opts, self);
             anyWaitableTasks = any;
             if wr.is_some() {
-                return Ok(wr.unwrap())
+                return Ok(wr.unwrap());
             }
         }
 
         if anyWaitableTasks {
-            return Err(Error::ErrNoWaitableEvent)
+            return Err(Error::ErrNoWaitableEvent);
         }
 
-        return Err(Error::SysError(SysErr::ECHILD))
+        return Err(Error::SysError(SysErr::ECHILD));
     }
 
-    pub fn waitParentLocked(&self, opts: &WaitOptions, parent: &Thread) -> (Option<WaitResult>, bool) {
+    pub fn waitParentLocked(
+        &self,
+        opts: &WaitOptions,
+        parent: &Thread,
+    ) -> (Option<WaitResult>, bool) {
         let mut anyWaitableTasks = false;
 
         let parenttg = parent.lock().tg.clone();
@@ -477,13 +498,14 @@ impl Thread {
             // be waited on.
             let childtg = child.lock().tg.clone();
             let childleader = childtg.lock().leader.Upgrade();
-            if opts.Events & EVENT_EXIT != 0 &&
-                Some(child.clone()) == childleader &&
-                !child.lock().exitParentAcked {
+            if opts.Events & EVENT_EXIT != 0
+                && Some(child.clone()) == childleader
+                && !child.lock().exitParentAcked
+            {
                 anyWaitableTasks = true;
                 let wr = self.waitCollectZombieLocked(&child, opts);
                 if wr.is_some() {
-                    return (wr, anyWaitableTasks)
+                    return (wr, anyWaitableTasks);
                 }
             }
 
@@ -501,22 +523,26 @@ impl Thread {
             if opts.Events & EVENT_CHILD_GROUP_STOP != 0 {
                 let wr = self.waitCollectChildGroupStopLocked(&child, opts);
                 if wr.is_some() {
-                    return (wr, anyWaitableTasks)
+                    return (wr, anyWaitableTasks);
                 }
             }
 
             if opts.Events & EVENT_GROUP_CONTINUE != 0 {
                 let wr = self.waitCollectGroupContinueLocked(&child, opts);
                 if wr.is_some() {
-                    return (wr, anyWaitableTasks)
+                    return (wr, anyWaitableTasks);
                 }
             }
         }
 
-        return (None, anyWaitableTasks)
+        return (None, anyWaitableTasks);
     }
 
-    pub fn waitCollectZombieLocked(&self, target: &Thread, opts: &WaitOptions) -> Option<WaitResult> {
+    pub fn waitCollectZombieLocked(
+        &self,
+        target: &Thread,
+        opts: &WaitOptions,
+    ) -> Option<WaitResult> {
         if !target.lock().exitParentNotified {
             return None;
         }
@@ -530,7 +556,8 @@ impl Thread {
         // is otherwise empty. Usually this is caught by the
         // target.exitParentNotified check above, but if t is both (in the thread
         // group of) target's tracer and parent, asPtracer may be true.
-        if targetLead.is_some() && target == targetLead.unwrap() && targetTg.lock().tasksCount != 1 {
+        if targetLead.is_some() && target == targetLead.unwrap() && targetTg.lock().tasksCount != 1
+        {
             return None;
         }
 
@@ -550,7 +577,7 @@ impl Thread {
                 UID: uid,
                 Event: EVENT_EXIT,
                 Status: status,
-            })
+            });
         }
 
         // Surprisingly, the exit status reported by a non-consuming wait can
@@ -564,7 +591,10 @@ impl Thread {
         let targetParent = target.lock().parent.clone();
         let exitParentNotified = target.lock().exitParentNotified;
 
-        assert!(targetParent.is_some(), "waitCollectZombieLocked parent should not be none");
+        assert!(
+            targetParent.is_some(),
+            "waitCollectZombieLocked parent should not be none"
+        );
         let parentTg = targetParent.unwrap().lock().tg.clone();
         let targetLead = targetTg.lock().leader.Upgrade();
         if parentTg != targetTg && exitParentNotified {
@@ -579,7 +609,9 @@ impl Thread {
                 let mut tglock = tg.lock();
                 let targettglock = targetTg.lock();
                 tglock.childCPUStats.Accumulate(&target.CPUStats());
-                tglock.childCPUStats.Accumulate(&targettglock.exitedCPUStats);
+                tglock
+                    .childCPUStats
+                    .Accumulate(&targettglock.exitedCPUStats);
                 tglock.childCPUStats.Accumulate(&targettglock.childCPUStats);
 
                 // Update t's child max resident set size. The size will be the maximum
@@ -603,7 +635,7 @@ impl Thread {
             UID: uid,
             Event: EVENT_EXIT,
             Status: status,
-        })
+        });
     }
 
     // updateRSSLocked updates t.tg.maxRSS.
@@ -618,11 +650,14 @@ impl Thread {
         }
     }
 
-    pub fn waitCollectChildGroupStopLocked(&self, target: &Thread, opts: &WaitOptions) -> Option<WaitResult> {
+    pub fn waitCollectChildGroupStopLocked(
+        &self,
+        target: &Thread,
+        opts: &WaitOptions,
+    ) -> Option<WaitResult> {
         let targetTg = target.ThreadGroup();
         let lock = targetTg.lock().signalLock.clone();
         let _s = lock.lock();
-
 
         if !targetTg.lock().groupStopWaitable {
             return None;
@@ -646,10 +681,14 @@ impl Thread {
             UID: uid,
             Event: EVENT_CHILD_GROUP_STOP,
             Status: ((signal.0 as u32) & 0xff) << 8 | 0x7f,
-        })
+        });
     }
 
-    pub fn waitCollectGroupContinueLocked(&self, target: &Thread, opts: &WaitOptions) -> Option<WaitResult> {
+    pub fn waitCollectGroupContinueLocked(
+        &self,
+        target: &Thread,
+        opts: &WaitOptions,
+    ) -> Option<WaitResult> {
         let tg = target.lock().tg.clone();
         let lock = tg.lock().signalLock.clone();
         let _s = lock.lock();
@@ -675,7 +714,7 @@ impl Thread {
             UID: uid,
             Event: EVENT_GROUP_CONTINUE,
             Status: 0xffff,
-        })
+        });
     }
 
     // exitNotifyLocked is called after changes to t's state that affect exit
@@ -686,7 +725,7 @@ impl Thread {
     pub fn exitNotifyLocked(&self) {
         let t = self.clone();
         if t.lock().exitState != TaskExitState::TaskExitZombie {
-            return
+            return;
         }
 
         let exitTracerNotified = t.lock().exitTracerNotified;
@@ -765,7 +804,10 @@ impl Thread {
                     // or continue, it needs to be notified of the exit, because
                     // there may be no remaining eligible tasks (so that wait
                     // should return ECHILD).
-                    parentTg.lock().eventQueue.Notify(EVENT_EXIT | EVENT_CHILD_GROUP_STOP | EVENT_GROUP_CONTINUE);
+                    parentTg
+                        .lock()
+                        .eventQueue
+                        .Notify(EVENT_EXIT | EVENT_CHILD_GROUP_STOP | EVENT_GROUP_CONTINUE);
                 }
             }
         }
@@ -773,7 +815,8 @@ impl Thread {
         let exitTracerAcked = t.lock().exitTracerAcked;
         let exitParentAcked = t.lock().exitParentAcked;
         if exitTracerAcked && exitParentAcked {
-            t.lock().advanceExitStateLocked(TaskExitState::TaskExitZombie, TaskExitState::TaskExitDead);
+            t.lock()
+                .advanceExitStateLocked(TaskExitState::TaskExitZombie, TaskExitState::TaskExitDead);
 
             let tg = t.lock().tg.clone();
             let mut pidns = tg.PIDNamespace();
@@ -884,7 +927,7 @@ impl Thread {
         let lock = tg.lock().signalLock.clone();
         let _s = lock.lock();
         let tglock = tg.lock();
-        return tglock.exiting && tglock.exitStatus.Signaled()
+        return tglock.exiting && tglock.exitStatus.Signaled();
     }
 
     pub fn ExitMain(&self) {
@@ -926,7 +969,10 @@ impl Thread {
         let owner = pidns.lock().owner.clone();
         let ownerlock = owner.WriteLock();
 
-        self.lock().advanceExitStateLocked(TaskExitState::TaskExitInitiated, TaskExitState::TaskExitZombie);
+        self.lock().advanceExitStateLocked(
+            TaskExitState::TaskExitInitiated,
+            TaskExitState::TaskExitZombie,
+        );
 
         {
             let mut tglock = tg.lock();
@@ -956,13 +1002,24 @@ impl Thread {
         self.exitNotifyLocked();
         if execId.is_some() || cid != sandboxId {
             let execId = execId.unwrap_or_default();
-            info!(" sending exit notification for CID:{}, execID:{}", &cid, &execId);
+            info!(
+                " sending exit notification for CID:{}, execID:{}",
+                &cid, &execId
+            );
             WriteWaitAllResponse(cid.clone(), execId.clone(), tg.ExitStatus().Status() as i32);
             let curr = Task::Current();
-            LOADER.Lock(curr).unwrap().processes.remove(&ExecID{cid: cid, pid: tid});
+            LOADER
+                .Lock(curr)
+                .unwrap()
+                .processes
+                .remove(&ExecID { cid: cid, pid: tid });
         }
         let taskCnt = owner.write().DecrTaskCount1();
-        error!("ExitNotify 4 [{:x}], taskcnt is {}", self.lock().taskId, taskCnt);
+        error!(
+            "ExitNotify 4 [{:x}], taskcnt is {}",
+            self.lock().taskId,
+            taskCnt
+        );
         if taskCnt == 0 {
             error!("ExitNotify shutdown");
             super::super::SHARESPACE.StoreShutdown();
@@ -975,20 +1032,19 @@ impl Thread {
             super::super::PAGE_MGR.PrintRefs();
             super::super::EXIT_CODE.store(exitStatus.ShellExitCode(), QOrdering::SEQ_CST);
         }
-
     }
 }
 
 impl ThreadGroup {
     pub fn anyNonExitingTaskLocked(&self) -> Option<Thread> {
-        let tasks : Vec<_> = self.lock().tasks.iter().cloned().collect();
+        let tasks: Vec<_> = self.lock().tasks.iter().cloned().collect();
         for t in &tasks {
             if t.lock().exitState == TaskExitState::TaskExitNone {
-                return Some(t.clone())
+                return Some(t.clone());
             }
         }
 
-        return None
+        return None;
     }
 
     pub fn ExitStatus(&self) -> ExitStatus {
@@ -1000,7 +1056,7 @@ impl ThreadGroup {
         {
             let tglock = self.lock();
             if tglock.exiting {
-                return tglock.exitStatus
+                return tglock.exitStatus;
             }
         }
 
@@ -1012,7 +1068,7 @@ impl ThreadGroup {
     pub fn TerminationSignal(&self) -> Signal {
         let ts = self.TaskSet();
         let _r = ts.ReadLock();
-        return self.lock().terminationSignal
+        return self.lock().terminationSignal;
     }
 }
 
@@ -1028,7 +1084,7 @@ impl TaskSet {
         let pidns = ts.root.clone().unwrap();
         pidns.lock().exiting = true;
 
-        let threads : Vec<_> = pidns.lock().tids.keys().cloned().collect();
+        let threads: Vec<_> = pidns.lock().tids.keys().cloned().collect();
         for t in &threads {
             let mut t = t.lock();
             let lock = t.tg.lock().signalLock.clone();
@@ -1100,32 +1156,36 @@ pub struct WaitOptions {
 impl WaitOptions {
     // Preconditions: The TaskSet mutex must be locked (for reading or writing).
     pub fn matchesTask(&self, t: &Thread, pidns: &PIDNamespace) -> bool {
-        if self.SpecificTID != 0 { // && self.SpecificTID != *pidns.lock().tids.get(t).unwrap() {
+        if self.SpecificTID != 0 {
+            // && self.SpecificTID != *pidns.lock().tids.get(t).unwrap() {
             let id = match pidns.lock().tids.get(t) {
                 None => {
                     panic!("thread id {} doesn't exist", t.lock().id)
                     //return false
                 }
-                Some(id) => *id
+                Some(id) => *id,
             };
 
             if id != self.SpecificTID {
-                return false
+                return false;
             }
         }
 
         let tg = t.lock().tg.clone();
         let pg = tg.lock().processGroup.clone();
-        if self.SpecificPGID != 0 && pg.is_some() && self.SpecificPGID != *pidns.lock().pgids.get(&pg.unwrap()).unwrap() {
-            return false
+        if self.SpecificPGID != 0
+            && pg.is_some()
+            && self.SpecificPGID != *pidns.lock().pgids.get(&pg.unwrap()).unwrap()
+        {
+            return false;
         }
 
         let leader = tg.lock().leader.Upgrade();
         if Some(t.clone()) == leader && tg.lock().terminationSignal.0 == Signal::SIGCHLD {
-            return self.NonCloneTasks
+            return self.NonCloneTasks;
         }
 
-        return self.CloneTasks
+        return self.CloneTasks;
     }
 }
 
@@ -1190,7 +1250,7 @@ impl Task {
                     //println!("there is no clear_child_tid");
                 }
                 Some(addr) => {
-                    let val : u32 = 0;
+                    let val: u32 = 0;
                     self.CopyOutObj(&val, addr).unwrap();
                     self.futexMgr.Wake(self, addr, false, !0, 1).unwrap();
                 }

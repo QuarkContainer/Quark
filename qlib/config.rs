@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Config {
     pub DebugLevel: DebugLevel,
@@ -78,7 +77,7 @@ impl Default for Config {
             ReserveCpuCount: 2,
             EnableMemInfo: true,
             ShimMode: false,
-        }
+        };
     }
 }
 
@@ -94,7 +93,7 @@ pub enum DebugLevel {
 
 impl Default for DebugLevel {
     fn default() -> Self {
-        return Self::Off
+        return Self::Off;
     }
 }
 
@@ -109,7 +108,7 @@ pub enum LogLevel {
 
 impl Default for LogLevel {
     fn default() -> Self {
-        return Self::None
+        return Self::None;
     }
 }
 

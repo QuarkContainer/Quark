@@ -15,23 +15,21 @@
 use alloc::string::String;
 use alloc::string::ToString;
 
-use super::super::kernel::timer::timer::*;
-use super::super::kernel::kernel::*;
-use super::super::super::linux::time::*;
 use super::super::super::common::*;
+use super::super::super::linux::rusage::*;
+use super::super::super::linux::time::*;
 use super::super::super::linux_def::*;
+use super::super::super::usage::io::*;
+use super::super::kernel::kernel::*;
+use super::super::kernel::timer::timer::*;
 use super::super::threadmgr::thread::*;
 use super::super::threadmgr::thread_group::*;
-use super::super::super::usage::io::*;
-use super::super::super::linux::rusage::*;
 
 impl Thread {
     pub fn Getitimer(&self, id: i32) -> Result<ItimerVal> {
         let tg = self.lock().tg.clone();
         let (tm, olds) = match id {
-            ITIMER_REAL => {
-                tg.lock().itimerRealTimer.Get()
-            }
+            ITIMER_REAL => tg.lock().itimerRealTimer.Get(),
             ITIMER_VIRTUAL => {
                 let tm = tg.UserCPUClock().Now();
                 let lock = tg.lock().signalLock.clone();
@@ -46,17 +44,15 @@ impl Thread {
                 let (s, _) = tg.lock().itimerProfSetting.At(tm);
                 (tm, s)
             }
-            _ => {
-                return Err(Error::SysError(SysErr::EINVAL))
-            }
+            _ => return Err(Error::SysError(SysErr::EINVAL)),
         };
 
         let (oldval, oldiv) = SpecFromSetting(tm, olds);
 
         return Ok(ItimerVal {
             Value: Timeval::FromNs(oldval),
-            Interval: Timeval::FromNs(oldiv)
-        })
+            Interval: Timeval::FromNs(oldiv),
+        });
     }
 
     pub fn Setitimer(&self, id: i32, newitv: &ItimerVal) -> Result<ItimerVal> {
@@ -64,7 +60,11 @@ impl Thread {
         let (tm, olds) = match id {
             ITIMER_REAL => {
                 let timer = tg.lock().itimerRealTimer.clone();
-                let news = Setting::FromSpec(newitv.Value.ToDuration(), newitv.Interval.ToDuration(), &timer.Clock())?;
+                let news = Setting::FromSpec(
+                    newitv.Value.ToDuration(),
+                    newitv.Interval.ToDuration(),
+                    &timer.Clock(),
+                )?;
                 let (tm, olds) = timer.Swap(&news);
                 (tm, olds)
             }
@@ -76,19 +76,22 @@ impl Thread {
                 let mut olds = Setting::default();
                 let mut err = None;
                 ticker.Atomically(|| {
-                    let news = match Setting::FromSpecAt(newitv.Value.ToDuration(), newitv.Interval.ToDuration(), tm) {
+                    let news = match Setting::FromSpecAt(
+                        newitv.Value.ToDuration(),
+                        newitv.Interval.ToDuration(),
+                        tm,
+                    ) {
                         Ok(n) => n,
                         Err(e) => {
                             err = Some(Err(e));
-                            return
-                        },
+                            return;
+                        }
                     };
                     let lock = tg.lock().signalLock.clone();
                     let _s = lock.lock();
                     olds = tg.lock().itimerVirtSetting;
                     tg.lock().itimerVirtSetting = news;
                     tg.lock().updateCPUTimersEnabledLocked();
-
                 });
 
                 match err {
@@ -106,12 +109,16 @@ impl Thread {
                 let mut olds = Setting::default();
                 let mut err = None;
                 ticker.Atomically(|| {
-                    let news = match Setting::FromSpecAt(newitv.Value.ToDuration(), newitv.Interval.ToDuration(), tm) {
+                    let news = match Setting::FromSpecAt(
+                        newitv.Value.ToDuration(),
+                        newitv.Interval.ToDuration(),
+                        tm,
+                    ) {
                         Ok(n) => n,
                         Err(e) => {
                             err = Some(Err(e));
-                            return
-                        },
+                            return;
+                        }
                     };
                     let lock = tg.lock().signalLock.clone();
                     let _s = lock.lock();
@@ -129,17 +136,15 @@ impl Thread {
 
                 (tm, olds)
             }
-            _ => {
-                return Err(Error::SysError(SysErr::EINVAL))
-            }
+            _ => return Err(Error::SysError(SysErr::EINVAL)),
         };
 
         let (oldval, oldiv) = SpecFromSetting(tm, olds);
 
         return Ok(ItimerVal {
             Value: Timeval::FromNs(oldval),
-            Interval: Timeval::FromNs(oldiv)
-        })
+            Interval: Timeval::FromNs(oldiv),
+        });
     }
 
     pub fn Name(&self) -> String {
@@ -159,20 +164,18 @@ impl Thread {
         let pidns = tg.PIDNamespace();
         let owner = pidns.Owner();
 
-        let _= owner.ReadLock();
+        let _ = owner.ReadLock();
 
         match which {
             RUSAGE_SELF | RUSAGE_THREAD => {
                 let mm = self.MemoryManager();
                 let mmMaxRSS = mm.MaxResidentSetSize();
                 if mmMaxRSS > tg.lock().maxRSS {
-                    return mmMaxRSS
+                    return mmMaxRSS;
                 }
-                return tg.lock().maxRSS
+                return tg.lock().maxRSS;
             }
-            RUSAGE_CHILDREN => {
-                tg.lock().childMaxRSS
-            }
+            RUSAGE_CHILDREN => tg.lock().childMaxRSS,
             RUSAGE_BOTH => {
                 let mut maxRSS = tg.lock().maxRSS;
                 if maxRSS < tg.lock().childMaxRSS {
@@ -182,12 +185,12 @@ impl Thread {
                 let mm = self.MemoryManager();
                 let mmMaxRSS = mm.MaxResidentSetSize();
                 if mmMaxRSS > maxRSS {
-                    return mmMaxRSS
+                    return mmMaxRSS;
                 }
 
-                return maxRSS
+                return maxRSS;
             }
-            _ => return 0
+            _ => return 0,
         }
     }
 }

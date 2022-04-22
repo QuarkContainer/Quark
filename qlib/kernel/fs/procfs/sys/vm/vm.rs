@@ -12,21 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
-use alloc::string::ToString;
 use crate::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
+use alloc::string::ToString;
+use alloc::sync::Arc;
 
+use super::super::super::super::super::super::auth::*;
 use super::super::super::super::super::super::common::*;
 use super::super::super::super::super::super::linux_def::*;
-use super::super::super::super::super::super::auth::*;
 use super::super::super::super::super::task::*;
 use super::super::super::super::attr::*;
+use super::super::super::super::dirent::*;
 use super::super::super::super::file::*;
 use super::super::super::super::flags::*;
-use super::super::super::super::dirent::*;
-use super::super::super::super::mount::*;
 use super::super::super::super::inode::*;
+use super::super::super::super::mount::*;
 use super::super::super::super::ramfs::dir::*;
 use super::super::super::dir_proc::*;
 use super::super::super::inode::*;
@@ -34,16 +34,22 @@ use super::mmap_min_addr::*;
 use super::overcommit::*;
 
 // ProcSysDirNode represents a /proc/sys directory.
-pub struct ProcSysDirNode {
-}
+pub struct ProcSysDirNode {}
 
 impl DirDataNode for ProcSysDirNode {
     fn Lookup(&self, d: &Dir, task: &Task, dir: &Inode, name: &str) -> Result<Dirent> {
         return d.Lookup(task, dir, name);
     }
 
-    fn GetFile(&self, d: &Dir, task: &Task, dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File> {
-        return d.GetFile(task, dir, dirent, flags)
+    fn GetFile(
+        &self,
+        d: &Dir,
+        task: &Task,
+        dir: &Inode,
+        dirent: &Dirent,
+        flags: FileFlags,
+    ) -> Result<File> {
+        return d.GetFile(task, dir, dirent, flags);
     }
 }
 
@@ -53,10 +59,14 @@ pub fn NewVm(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     contents.insert("overcommit_memory".to_string(), NewOvercommit(task, msrc));
 
     let taskDir = DirNode {
-        dir: Dir::New(task, contents, &ROOT_OWNER, &FilePermissions::FromMode(FileMode(0o0555))),
-        data: ProcSysDirNode {
-        }
+        dir: Dir::New(
+            task,
+            contents,
+            &ROOT_OWNER,
+            &FilePermissions::FromMode(FileMode(0o0555)),
+        ),
+        data: ProcSysDirNode {},
     };
 
-    return NewProcInode(&Arc::new(taskDir), msrc, InodeType::SpecialDirectory, None)
+    return NewProcInode(&Arc::new(taskDir), msrc, InodeType::SpecialDirectory, None);
 }

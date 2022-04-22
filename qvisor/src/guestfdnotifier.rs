@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::qlib::Common::*;
 use super::qlib::kernel::waiter::*;
+use super::qlib::Common::*;
 
 pub fn Notify(_fd: i32, _mask: u32) {}
 
@@ -21,6 +21,10 @@ pub fn AddFD(_fd: i32, _queue: &Queue) {}
 
 pub fn RemoveFD(_fd: i32) {}
 
-pub fn UpdateFD(_fd: i32) -> Result<()> { return Err(Error::None) }
+pub fn UpdateFD(_fd: i32) -> Result<()> {
+    return Err(Error::None);
+}
 
-pub fn NonBlockingPoll(_fd: i32, _mask: EventMask) -> EventMask { 0 }
+pub fn NonBlockingPoll(_fd: i32, _mask: EventMask) -> EventMask {
+    0
+}

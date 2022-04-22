@@ -12,19 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::collections::vec_deque::VecDeque;
+use alloc::sync::Arc;
+use core::fmt;
+use core::ops::Deref;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicI32;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-use alloc::collections::vec_deque::VecDeque;
-use alloc::sync::Arc;
-use core::ops::Deref;
-use core::fmt;
 
-use super::mutex::*;
 use super::bytestream::*;
-use super::linux_def::*;
 use super::common::*;
+use super::linux_def::*;
+use super::mutex::*;
 
 pub struct SocketBuff {
     pub wClosed: AtomicBool,
@@ -45,14 +45,17 @@ pub struct SocketBuff {
 
 impl fmt::Debug for SocketBuff {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "wClosed {:?}, rClosed {:?}, pendingWShutdown {:?}, error {:?}",
-               self.wClosed, self.wClosed, self.pendingWShutdown, self.error)
+        write!(
+            f,
+            "wClosed {:?}, rClosed {:?}, pendingWShutdown {:?}, error {:?}",
+            self.wClosed, self.wClosed, self.pendingWShutdown, self.error
+        )
     }
 }
 
 impl Default for SocketBuff {
     fn default() -> Self {
-        return SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT)
+        return SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT);
     }
 }
 
@@ -66,15 +69,15 @@ impl SocketBuff {
             consumeReadData: AtomicU64::new(0),
             readBuf: QMutex::new(ByteStream::Init(pageCount)),
             writeBuf: QMutex::new(ByteStream::Init(pageCount)),
-        }
+        };
     }
 
     pub fn AddConsumeReadData(&self, count: u64) -> u64 {
-        return self.consumeReadData.fetch_add(count, Ordering::Relaxed) + count
+        return self.consumeReadData.fetch_add(count, Ordering::Relaxed) + count;
     }
 
     pub fn GetAndClearConsumeReadData(&self) -> u64 {
-        return self.consumeReadData.swap(0, Ordering::Relaxed)
+        return self.consumeReadData.swap(0, Ordering::Relaxed);
     }
 
     pub fn ReadBuf(&self) -> (u64, usize) {
@@ -121,7 +124,7 @@ impl SocketBuff {
             event |= EVENT_ERR;
         }
 
-        return event
+        return event;
     }
 
     pub fn WClosed(&self) -> bool {
@@ -166,7 +169,7 @@ impl SocketBuff {
         let mut r = self.readBuf.lock();
         let trigger = r.Produce(size);
         let (addr, size) = r.GetSpaceBuf();
-        return (trigger, addr, size)
+        return (trigger, addr, size);
     }
 
     pub fn GetAvailableWriteIovs(&self) -> (u64, usize) {
@@ -181,7 +184,7 @@ impl SocketBuff {
         let mut w = self.writeBuf.lock();
         let trigger = w.Consume(size);
         let (addr, size) = w.GetDataBuf();
-        return (trigger, addr, size)
+        return (trigger, addr, size);
     }
 
     pub fn GetAvailableWriteBuf(&self) -> (u64, usize) {
@@ -189,7 +192,7 @@ impl SocketBuff {
     }
 }
 
-pub const TCP_ADDR_LEN : usize = 128;
+pub const TCP_ADDR_LEN: usize = 128;
 
 #[derive(Default, Debug)]
 pub struct AcceptItem {
@@ -199,7 +202,7 @@ pub struct AcceptItem {
     pub sockBuf: Arc<SocketBuff>,
 }
 
-#[derive(Default, Clone,  Debug)]
+#[derive(Default, Clone, Debug)]
 pub struct AcceptQueue(Arc<QMutex<AcceptQueueIntern>>);
 
 impl Deref for AcceptQueue {
@@ -224,7 +227,7 @@ impl AcceptQueueIntern {
     }
 
     pub fn Err(&self) -> i32 {
-        return self.error
+        return self.error;
     }
 
     pub fn SetQueueLen(&mut self, len: usize) {
@@ -232,11 +235,17 @@ impl AcceptQueueIntern {
     }
 
     pub fn HasSpace(&self) -> bool {
-        return self.queue.len() < self.queueLen
+        return self.queue.len() < self.queueLen;
     }
 
     //return: (trigger, hasSpace)
-    pub fn EnqSocket(&mut self, fd: i32, addr: TcpSockAddr, len: u32, sockBuf: Arc<SocketBuff>) -> (bool, bool) {
+    pub fn EnqSocket(
+        &mut self,
+        fd: i32,
+        addr: TcpSockAddr,
+        len: u32,
+        sockBuf: Arc<SocketBuff>,
+    ) -> (bool, bool) {
         let item = AcceptItem {
             fd: fd,
             addr: addr,
@@ -250,20 +259,17 @@ impl AcceptQueueIntern {
         return (trigger, self.queue.len() < self.queueLen);
     }
 
-
     pub fn DeqSocket(&mut self) -> (bool, Result<AcceptItem>) {
         let trigger = self.queue.len() == self.queueLen;
 
         match self.queue.pop_front() {
             None => {
                 if self.error != 0 {
-                    return (false, Err(Error::SysError(self.error)))
+                    return (false, Err(Error::SysError(self.error)));
                 }
-                return (trigger, Err(Error::SysError(SysErr::EAGAIN)))
+                return (trigger, Err(Error::SysError(SysErr::EAGAIN)));
             }
-            Some(item) => {
-                return (trigger, Ok(item))
-            }
+            Some(item) => return (trigger, Ok(item)),
         }
     }
 
@@ -277,7 +283,6 @@ impl AcceptQueueIntern {
             event |= EVENT_ERR;
         }
 
-        return event
+        return event;
     }
 }
-

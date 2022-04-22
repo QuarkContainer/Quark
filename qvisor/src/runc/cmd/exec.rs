@@ -12,31 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use clap::{App, AppSettings, SubCommand, ArgMatches, Arg};
+use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
-use alloc::collections::btree_map::BTreeMap;
-use tempfile::Builder;
+use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use std::fs::File;
-use std::path::Path;
 use std::io::prelude::*;
-use std::{thread, time};
-use std::os::unix::io::FromRawFd;
 use std::os::unix::io::AsRawFd;
-use std::process::{Stdio};
+use std::os::unix::io::FromRawFd;
+use std::path::Path;
+use std::process::Stdio;
+use std::{thread, time};
+use tempfile::Builder;
 
-use super::super::super::qlib::common::*;
-use super::super::super::qlib::auth::id::*;
-use super::super::super::qlib::auth::cap_set::*;
-use super::super::super::qlib::linux::time::*;
-use super::super::cmd::config::*;
-use super::super::oci::*;
-use super::super::specutils::specutils::*;
-use super::super::oci::serialize::*;
-use super::super::container::container::*;
-use super::command::*;
 use super::super::super::console::pty::*;
 use super::super::super::console::unix_socket::*;
+use super::super::super::qlib::auth::cap_set::*;
+use super::super::super::qlib::auth::id::*;
+use super::super::super::qlib::common::*;
+use super::super::super::qlib::linux::time::*;
+use super::super::cmd::config::*;
+use super::super::container::container::*;
+use super::super::oci::serialize::*;
+use super::super::oci::*;
+use super::super::specutils::specutils::*;
+use super::command::*;
 
 #[derive(Default, Debug)]
 pub struct User {
@@ -45,7 +45,7 @@ pub struct User {
 }
 
 #[derive(Default, Debug)]
-pub struct ExecCmd  {
+pub struct ExecCmd {
     pub id: String,
     pub cwd: String,
     pub user: String,
@@ -83,7 +83,10 @@ impl ExecCmd {
             detach: cmd_matches.is_present("detach"),
             processPath: cmd_matches.value_of("process").unwrap().to_string(),
             pid: cmd_matches.value_of("p").unwrap().to_string(),
-            internalPidFile: cmd_matches.value_of("internal-pid-file").unwrap().to_string(),
+            internalPidFile: cmd_matches
+                .value_of("internal-pid-file")
+                .unwrap()
+                .to_string(),
             consoleSocket: cmd_matches.value_of("console-socket").unwrap().to_string(),
             argv: match cmd_matches.values_of("command") {
                 None => Vec::new(),
@@ -95,10 +98,12 @@ impl ExecCmd {
 
         if ret.processPath.len() == 0 && ret.argv.len() == 0 {
             println!("{}", cmd_matches.usage());
-            return Err(Error::Common(format!("either process or command is required")))
+            return Err(Error::Common(format!(
+                "either process or command is required"
+            )));
         }
 
-        return Ok(ret)
+        return Ok(ret);
     }
 
     pub fn SubCommand<'a, 'b>(common: &CommonArgs<'a, 'b>) -> App<'a, 'b> {
@@ -181,11 +186,8 @@ impl ExecCmd {
                     .help("clear the status of the exec'd process upon completion"),
             )
             .setting(AppSettings::TrailingVarArg)
-            .arg(
-                Arg::with_name("command")
-                    .multiple(true),
-            )
-            .about("Run a container") ;
+            .arg(Arg::with_name("command").multiple(true))
+            .about("Run a container");
     }
 
     pub fn ArgsFromCLI(&mut self) -> Result<ExecArgs> {
@@ -197,7 +199,7 @@ impl ExecCmd {
             };
 
             extraKGIDs.push(KGID(kgid));
-        };
+        }
 
         //todo: handle capacities
         let caps = TaskCaps::default();
@@ -208,7 +210,7 @@ impl ExecCmd {
         let mut envv = Vec::new();
         envv.append(&mut self.envv);
 
-        let ids : Vec<&str> = self.user.split(':').collect();
+        let ids: Vec<&str> = self.user.split(':').collect();
         let uid = match ids[0].parse::<u32>() {
             Err(e) => panic!("parsing uid: {} fail, err is {:?}", ids[1], e),
             Ok(id) => id,
@@ -226,11 +228,16 @@ impl ExecCmd {
         };
 
         if self.detach && self.terminal && self.consoleSocket.len() == 0 {
-            return Err(Error::Common("cannot allocate tty if runc will detach without setting console socket".to_string()));
+            return Err(Error::Common(
+                "cannot allocate tty if runc will detach without setting console socket"
+                    .to_string(),
+            ));
         }
 
         if (!self.detach || !self.terminal) && self.consoleSocket.len() > 0 {
-            return Err(Error::Common("annot use console socket if runc will not detach or allocate tty".to_string()));
+            return Err(Error::Common(
+                "annot use console socket if runc will not detach or allocate tty".to_string(),
+            ));
         }
 
         return Ok(ExecArgs {
@@ -248,18 +255,25 @@ impl ExecCmd {
             ConsoleSocket: self.consoleSocket.to_string(),
             ExecId: "".to_string(),
             Fds: Vec::new(),
-        })
+        });
     }
 
     pub fn ArgsFromProcess(&self) -> Result<ExecArgs> {
-        let mut process : Process = deserialize(&self.processPath)
+        let mut process: Process = deserialize(&self.processPath)
             .map_err(|e| Error::Common(format!("deserialize process with error {:?}", e)))?;
 
         //todo: handle caps
         let caps = TaskCaps::default();
 
-        let mut extraKGIDs : Vec<KGID> = Vec::with_capacity(process.user.additional_gids.len());
-        extraKGIDs.append(&mut process.user.additional_gids.iter().map(|id| KGID(*id)).collect());
+        let mut extraKGIDs: Vec<KGID> = Vec::with_capacity(process.user.additional_gids.len());
+        extraKGIDs.append(
+            &mut process
+                .user
+                .additional_gids
+                .iter()
+                .map(|id| KGID(*id))
+                .collect(),
+        );
 
         let mut argv = Vec::new();
         argv.append(&mut process.args);
@@ -282,7 +296,7 @@ impl ExecCmd {
             ConsoleSocket: self.consoleSocket.to_string(),
             ExecId: "".to_string(),
             Fds: Vec::new(),
-        })
+        });
     }
 
     pub fn ParseArgs(&mut self) -> Result<ExecArgs> {
@@ -328,7 +342,7 @@ impl ExecCmd {
 
         let _pid = container.Execute(execArgs, self)?;
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn ExecAndWait(&self, gCfg: &GlobalConfig) -> Result<()> {
@@ -348,7 +362,7 @@ impl ExecCmd {
             cmd.arg(&self.cwd);
         }
 
-        if self.user.len() > 0{
+        if self.user.len() > 0 {
             cmd.arg("--user");
             cmd.arg(&self.user);
         }
@@ -393,8 +407,10 @@ impl ExecCmd {
         // filename in a temp directory.
         let mut pidFile = self.pid.to_string();
         cmd.arg("--pid-file");
-        if pidFile.len() == 0{
-            let tmpDir = Builder::new().prefix("exec-pid-").tempdir()
+        if pidFile.len() == 0 {
+            let tmpDir = Builder::new()
+                .prefix("exec-pid-")
+                .tempdir()
                 .expect("create temp folder exec-pid- fail ");
 
             pidFile = tmpDir.path().join("pid").to_str().unwrap().to_string();
@@ -437,7 +453,7 @@ impl ExecCmd {
         info!("quark exec: before wait for ready");
         WaitForReady(&pidFile, child.id() as i32, 10 * SECOND)?;
         info!("quark exec: after wait for ready");
-        return Ok(())
+        return Ok(());
     }
 }
 
@@ -455,33 +471,40 @@ pub fn WaitForReady(pidfile: &str, pid: i32, timeout: i64) -> Result<()> {
         error!("{} exist", pidfile);
         let mut f = match File::open(pidfile) {
             Err(e) => {
-                return Err(Error::Common(format!("WaitForReady fail to open {} with error {:?}", pidfile, e)));
+                return Err(Error::Common(format!(
+                    "WaitForReady fail to open {} with error {:?}",
+                    pidfile, e
+                )));
             }
             Ok(f) => f,
         };
         let mut pidstr = String::new();
-        f.read_to_string(&mut pidstr).map_err(|e| Error::Common(format!("WaitForReady fail to read {} with error {:?}", pidfile, e)))?;
-        let pidInt = pidstr.parse::<i32>().map_err(|_e| Error::Common(format!("WaitForReady cant covert {} to i32", pidstr)))?;
+        f.read_to_string(&mut pidstr).map_err(|e| {
+            Error::Common(format!(
+                "WaitForReady fail to read {} with error {:?}",
+                pidfile, e
+            ))
+        })?;
+        let pidInt = pidstr
+            .parse::<i32>()
+            .map_err(|_e| Error::Common(format!("WaitForReady cant covert {} to i32", pidstr)))?;
         if pidInt == pid {
-            return Ok(())
+            return Ok(());
         }
 
-        let mut ws : i32 = 0;
-        let child = unsafe {
-            libc::wait4(pid, &mut ws, libc::WNOHANG, 0 as *mut libc::rusage)
-        };
+        let mut ws: i32 = 0;
+        let child = unsafe { libc::wait4(pid, &mut ws, libc::WNOHANG, 0 as *mut libc::rusage) };
 
         if child < 0 {
-            return Err(Error::SysError(errno::errno().0))
+            return Err(Error::SysError(errno::errno().0));
         }
 
         if child == pid {
-            return Err(Error::Common(format!("process {} has terminated", pid)))
+            return Err(Error::Common(format!("process {} has terminated", pid)));
         }
-
     }
 
-    return Err(Error::Common(format!("wait process {} timeout", pid)))
+    return Err(Error::Common(format!("wait process {} timeout", pid)));
 }
 
 // resolveEnvs transforms lists of environment variables into a single list of
@@ -492,7 +515,7 @@ pub fn ResolveEnvs(envs: &[&[String]]) -> Result<Vec<String>> {
 
     for env in envs {
         for str in *env {
-            let parts : Vec<&str> = str.split('=').collect();
+            let parts: Vec<&str> = str.split('=').collect();
             if parts.len() != 2 {
                 return Err(Error::Common(format!("invlid env {}", str)));
             }

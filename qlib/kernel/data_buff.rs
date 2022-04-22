@@ -1,12 +1,12 @@
 use alloc::vec::Vec;
-use  core::slice;
+use core::slice;
 
-use super::super::mem::seq::BlockSeq;
 use super::super::linux_def::*;
+use super::super::mem::seq::BlockSeq;
 use super::BUF_MGR;
 
 pub struct DataBuff {
-    pub buf: Vec<u8>
+    pub buf: Vec<u8>,
 }
 
 impl DataBuff {
@@ -16,9 +16,7 @@ impl DataBuff {
             buf.set_len(size);
         }
 
-        return Self {
-            buf: buf
-        }
+        return Self { buf: buf };
     }
 
     pub fn Zero(&mut self) {
@@ -27,8 +25,8 @@ impl DataBuff {
         }
     }
 
-    pub fn Buf(&mut self) -> &mut[u8] {
-        return &mut self.buf
+    pub fn Buf(&mut self) -> &mut [u8] {
+        return &mut self.buf;
     }
 
     pub fn Ptr(&self) -> u64 {
@@ -36,24 +34,23 @@ impl DataBuff {
     }
 
     pub fn Len(&self) -> usize {
-        return self.buf.len()
+        return self.buf.len();
     }
 
     pub fn IoVec(&self) -> IoVec {
         if self.Len() == 0 {
-            return IoVec::NewFromAddr(0, 0)
+            return IoVec::NewFromAddr(0, 0);
         }
 
         return IoVec {
             start: self.Ptr(),
             len: self.Len(),
-        }
+        };
     }
 
     pub fn Iovs(&self) -> [IoVec; 1] {
-        return [self.IoVec()]
+        return [self.IoVec()];
     }
-
 
     pub fn BlockSeq(&self) -> BlockSeq {
         return BlockSeq::New(&self.buf);
@@ -77,15 +74,13 @@ impl IOBuff {
 
         return Self {
             addr: addr,
-            size: size
-        }
+            size: size,
+        };
     }
 
-    pub fn Buf(&self) -> &'static mut[u8] {
-        let ptr = self.addr as * mut u8;
-        let toSlice = unsafe {
-            slice::from_raw_parts_mut (ptr, self.size)
-        };
+    pub fn Buf(&self) -> &'static mut [u8] {
+        let ptr = self.addr as *mut u8;
+        let toSlice = unsafe { slice::from_raw_parts_mut(ptr, self.size) };
 
         return toSlice;
     }
@@ -95,24 +90,23 @@ impl IOBuff {
     }
 
     pub fn Len(&self) -> usize {
-        return self.size
+        return self.size;
     }
 
     pub fn IoVec(&self) -> IoVec {
         if self.Len() == 0 {
-            return IoVec::NewFromAddr(0, 0)
+            return IoVec::NewFromAddr(0, 0);
         }
 
         return IoVec {
             start: self.Ptr(),
             len: self.Len(),
-        }
+        };
     }
 
     pub fn Iovs(&self) -> [IoVec; 1] {
-        return [self.IoVec()]
+        return [self.IoVec()];
     }
-
 
     pub fn BlockSeq(&self) -> BlockSeq {
         return BlockSeq::NewFromBlock(self.IoVec());

@@ -13,53 +13,53 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
-use alloc::sync::Arc;
-use alloc::vec::Vec;
-use core::sync::atomic::AtomicU64;
-use core::sync::atomic::AtomicBool;
-use core::sync::atomic::Ordering;
+use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::string::ToString;
-use alloc::collections::btree_map::BTreeMap;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::ops::Deref;
+use core::sync::atomic::AtomicBool;
+use core::sync::atomic::AtomicU64;
+use core::sync::atomic::Ordering;
 
-use super::super::uid::NewUID;
-use super::super::super::common::*;
-use super::super::super::linux_def::*;
-use super::super::super::auxv::*;
-use super::super::task::*;
-use super::super::super::cpuid::*;
 use super::super::super::auth::userns::*;
 use super::super::super::auth::*;
+use super::super::super::auxv::*;
+use super::super::super::common::*;
+use super::super::super::cpuid::*;
 use super::super::super::limits::*;
 use super::super::super::linux::time::*;
+use super::super::super::linux_def::*;
 use super::super::super::path::*;
-use super::super::loader::loader::*;
-use super::super::SHARESPACE;
-use super::super::SignalDef::*;
-use super::super::threadmgr::pid_namespace::*;
-use super::super::threadmgr::thread::*;
-use super::super::threadmgr::threads::*;
-use super::super::threadmgr::task_sched::*;
-use super::super::threadmgr::thread_group::*;
-use super::super::fs::mount::*;
-use super::super::fs::dirent::*;
 use super::super::super::singleton::*;
-use super::ipc_namespace::*;
-use super::uts_namespace::*;
-use super::fd_table::*;
-use super::signal_handler::*;
-use super::timer::timer::*;
-use super::timer::timekeeper::*;
-use super::timer::*;
+use super::super::fs::dirent::*;
+use super::super::fs::mount::*;
+use super::super::loader::loader::*;
+use super::super::task::*;
+use super::super::threadmgr::pid_namespace::*;
+use super::super::threadmgr::task_sched::*;
 use super::super::threadmgr::task_start::*;
+use super::super::threadmgr::thread::*;
+use super::super::threadmgr::thread_group::*;
+use super::super::threadmgr::threads::*;
+use super::super::uid::NewUID;
+use super::super::SignalDef::*;
+use super::super::SHARESPACE;
 use super::cpuset::*;
-use super::time::*;
+use super::fd_table::*;
+use super::ipc_namespace::*;
 use super::platform::*;
+use super::signal_handler::*;
+use super::time::*;
+use super::timer::timekeeper::*;
+use super::timer::timer::*;
+use super::timer::*;
+use super::uts_namespace::*;
 
 pub static ASYNC_PROCESS_TIMER: Singleton<Timer> = Singleton::<Timer>::New();
 
-const CLOCK_TICK_MS : i64 = CLOCK_TICK / MILLISECOND;
+const CLOCK_TICK_MS: i64 = CLOCK_TICK / MILLISECOND;
 
 #[inline]
 pub fn GetKernel() -> Kernel {
@@ -139,16 +139,18 @@ pub struct KernelInternal {
     pub started: AtomicBool,
 
     pub platform: DefaultPlatform,
-    pub lastProcessTime: QMutex<i64>
+    pub lastProcessTime: QMutex<i64>,
 }
 
 impl KernelInternal {
-    pub fn newThreadGroup(&self, ns: &PIDNamespace,
-                          sh: &SignalHandlers,
-                          terminalSignal: Signal,
-                          limit: &LimitSet,
-                          cid: &str,
-                          execId: &Option<String>
+    pub fn newThreadGroup(
+        &self,
+        ns: &PIDNamespace,
+        sh: &SignalHandlers,
+        terminalSignal: Signal,
+        limit: &LimitSet,
+        cid: &str,
+        execId: &Option<String>,
     ) -> ThreadGroup {
         let internal = ThreadGroupInternal {
             pidns: ns.clone(),
@@ -162,17 +164,18 @@ impl KernelInternal {
 
         let tg = ThreadGroup {
             uid: NewUID(),
-            data: Arc::new(QMutex::new(internal))
+            data: Arc::new(QMutex::new(internal)),
         };
 
-        let listener = ITimerRealListener {
-            tg: tg.Downgrade(),
-        };
+        let listener = ITimerRealListener { tg: tg.Downgrade() };
 
-        let itimer = Timer::New(&MONOTONIC_CLOCK, TimerListener::ITimerRealListener(Arc::new(listener)));
+        let itimer = Timer::New(
+            &MONOTONIC_CLOCK,
+            TimerListener::ITimerRealListener(Arc::new(listener)),
+        );
         tg.lock().itimerRealTimer = itimer;
 
-        return tg
+        return tg;
     }
 }
 
@@ -221,7 +224,7 @@ impl Kernel {
         //error!("X86FeatureXSAVE is {}", internal.featureSet.lock().HasFeature(Feature(X86Feature::X86FeatureXSAVE as i32)));
         //error!("X86FeatureOSXSAVE is {}", internal.featureSet.lock().HasFeature(Feature(X86Feature::X86FeatureOSXSAVE as i32)));
 
-        return Self(Arc::new(internal))
+        return Self(Arc::new(internal));
     }
 
     pub fn Atomically(&self, mut f: impl FnMut()) {
@@ -233,11 +236,11 @@ impl Kernel {
         let _l = self.extMu.lock();
 
         if self.globalInit.lock().is_none() {
-            return Err(Error::Common(format!("kernel contains no tasks")))
+            return Err(Error::Common(format!("kernel contains no tasks")));
         }
 
         if self.started.load(Ordering::SeqCst) {
-            return Err(Error::Common(format!("kernel already started")))
+            return Err(Error::Common(format!("kernel already started")));
         }
 
         self.started.store(true, Ordering::SeqCst);
@@ -247,7 +250,7 @@ impl Kernel {
             Next: Time(0),
         });*/
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn ApplicationCores(&self) -> u32 {
@@ -260,7 +263,7 @@ impl Kernel {
     }
 
     pub fn TimeKeeper(&self) -> TimeKeeper {
-        return TIME_KEEPER.clone()
+        return TIME_KEEPER.clone();
     }
 
     pub fn RootPIDNamespace(&self) -> PIDNamespace {
@@ -283,16 +286,25 @@ impl Kernel {
         self.extMu.lock();
 
         let root = self.tasks.Root();
-        let tg = self.newThreadGroup(&root, &SignalHandlers::default(), Signal(Signal::SIGCHLD), &args.Limits, &args.ContainerID, &args.ExecId);
+        let tg = self.newThreadGroup(
+            &root,
+            &SignalHandlers::default(),
+            Signal(Signal::SIGCHLD),
+            &args.Limits,
+            &args.ContainerID,
+            &args.ExecId,
+        );
         tg.lock().liveThreads.Add(1);
 
         if args.Filename.as_str() == "" {
             if args.Argv.len() == 0 {
-                return Err(Error::Common("no filename or command provided".to_string()))
+                return Err(Error::Common("no filename or command provided".to_string()));
             }
 
             if !IsAbs(&args.Argv[0]) {
-                return Err(Error::Common(format!("'{}' is not an absolute path", args.Argv[0]).to_string()))
+                return Err(Error::Common(
+                    format!("'{}' is not an absolute path", args.Argv[0]).to_string(),
+                ));
             }
 
             args.Filename = args.Argv[0].to_string();
@@ -306,7 +318,16 @@ impl Kernel {
         task.mountNS = mns.clone();
 
         let mut remainTraversals = MAX_SYMLINK_TRAVERSALS;
-        let cwdDir = mns.FindDirent(task, &root, None, &args.WorkingDirectory, &mut remainTraversals, true).expect("can't get cwd dirent");
+        let cwdDir = mns
+            .FindDirent(
+                task,
+                &root,
+                None,
+                &args.WorkingDirectory,
+                &mut remainTraversals,
+                true,
+            )
+            .expect("can't get cwd dirent");
         task.fsContext.SetWorkDirectory(&cwdDir);
 
         let config = TaskConfig {
@@ -341,7 +362,7 @@ impl Kernel {
             *self.globalInit.lock() = Some(tg.clone());
         }
 
-        return Ok((tg, tgid))
+        return Ok((tg, tgid));
     }
 
     pub fn GlobalInit(&self) -> ThreadGroup {
@@ -350,10 +371,15 @@ impl Kernel {
     }
 
     pub fn CPUClockNow(&self) -> u64 {
-        return self.cpuClock.load(Ordering::SeqCst)
+        return self.cpuClock.load(Ordering::SeqCst);
     }
 
-    pub fn LoadProcess(&self, fileName: &str, envs: &Vec<String>, args: &mut Vec<String>) -> Result<(u64, u64, u64)>  {
+    pub fn LoadProcess(
+        &self,
+        fileName: &str,
+        envs: &Vec<String>,
+        args: &mut Vec<String>,
+    ) -> Result<(u64, u64, u64)> {
         if self.globalInit.lock().is_none() {
             panic!("kernel contains no tasks");
         }
@@ -370,7 +396,6 @@ impl Kernel {
         };
 
         assert!(threads.len() == 1, "ThreadGroup start has multiple threads");*/
-
 
         let task = Task::Current();
         return Load(task, fileName, args, envs, &Vec::new());
@@ -400,18 +425,18 @@ impl Kernel {
         let root = tasks.root.as_ref().unwrap().clone();
         let mut lastErr = Ok(());
 
-        let tgs : Vec<_> = root.lock().tgids.keys().cloned().collect();
+        let tgs: Vec<_> = root.lock().tgids.keys().cloned().collect();
         for tg in &tgs {
             let lock = tg.lock().signalLock.clone();
             let _l = lock.lock();
             let leader = tg.lock().leader.Upgrade();
             match leader.unwrap().sendSignalLocked(info, true) {
                 Err(e) => lastErr = Err(e),
-                Ok(()) => (())
+                Ok(()) => (()),
             }
         }
 
-        return lastErr
+        return lastErr;
     }
 
     pub fn SendContainerSignal(&self, cid: &str, info: &SignalInfo) -> Result<()> {
@@ -422,7 +447,7 @@ impl Kernel {
         let root = tasks.root.as_ref().unwrap().clone();
         let mut lastErr = Ok(());
 
-        let tgs : Vec<_> = root.lock().tgids.keys().cloned().collect();
+        let tgs: Vec<_> = root.lock().tgids.keys().cloned().collect();
         for tg in &tgs {
             let lock = tg.lock().signalLock.clone();
             let _l = lock.lock();
@@ -433,11 +458,11 @@ impl Kernel {
 
             match leader.sendSignalLocked(info, true) {
                 Err(e) => lastErr = Err(e),
-                Ok(()) => (())
+                Ok(()) => (()),
             }
         }
 
-        return lastErr
+        return lastErr;
     }
 }
 
@@ -462,7 +487,7 @@ pub struct CreateProcessContext<'a> {
 
 impl<'a> Context for CreateProcessContext<'a> {
     fn CtxKernel(&self) -> Kernel {
-        return self.k.clone()
+        return self.k.clone();
     }
 
     fn CtxPIDNamespace(&self) -> PIDNamespace {
@@ -470,7 +495,7 @@ impl<'a> Context for CreateProcessContext<'a> {
     }
 
     fn CtxUTSNamespace(&self) -> UTSNamespace {
-        return self.args.UTSNamespace.clone()
+        return self.args.UTSNamespace.clone();
     }
 
     fn CtxIPCNamespace(&self) -> IPCNamespace {
@@ -483,14 +508,14 @@ impl<'a> Context for CreateProcessContext<'a> {
 
     fn CtxRoot(&self) -> Dirent {
         if let Some(root) = self.args.Root.clone() {
-            return root
+            return root;
         }
 
         let containerID = &self.args.ContainerID;
 
         let root = self.k.mounts.read().get(containerID).unwrap().root.clone();
 
-        return root
+        return root;
     }
 }
 

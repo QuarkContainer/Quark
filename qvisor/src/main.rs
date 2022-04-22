@@ -27,7 +27,6 @@
 #![allow(non_snake_case)]
 #![feature(core_intrinsics)]
 
-
 extern crate alloc;
 extern crate bit_field;
 extern crate core_affinity;
@@ -48,15 +47,15 @@ extern crate scopeguard;
 #[macro_use]
 extern crate lazy_static;
 
-extern crate libc;
-extern crate spin;
-extern crate x86_64;
 extern crate capabilities;
 extern crate caps;
 extern crate fs2;
+extern crate libc;
 extern crate regex;
 extern crate simplelog;
+extern crate spin;
 extern crate tabwriter;
+extern crate x86_64;
 
 #[macro_use]
 pub mod asm;
@@ -68,6 +67,7 @@ pub mod amd64_def;
 pub mod console;
 pub mod elf_loader;
 pub mod heap_alloc;
+pub mod kernel_def;
 mod kvm_vcpu;
 mod memmgr;
 pub mod namespace;
@@ -78,26 +78,25 @@ mod syncmgr;
 pub mod ucall;
 pub mod util;
 mod vmspace;
-pub mod kernel_def;
 
 use alloc::sync::Arc;
 use lazy_static::lazy_static;
 use spin::Mutex;
-use std::env;
 use std::cell::RefCell;
+use std::env;
 
 use self::qlib::addr;
 use self::qlib::buddyallocator::MemAllocator;
 use self::qlib::config::*;
+use self::qlib::mem::list_allocator::*;
 use self::qlib::qmsg::*;
 use self::qlib::ShareSpace;
 use self::qlib::ShareSpaceRef;
-use self::qlib::mem::list_allocator::*;
 use self::runc::cmd::command::*;
+use self::runc::shim::service::*;
 use self::vmspace::host_pma_keeper::*;
 use self::vmspace::hostfdnotifier::*;
 use self::vmspace::kernel_io_thread::*;
-use self::runc::shim::service::*;
 
 use self::vmspace::uringMgr::*;
 use vmspace::*;
@@ -172,10 +171,9 @@ fn main() {
     }
 
     let shimMode = QUARK_CONFIG.lock().ShimMode;
-    if shimMode == true && &cmd != "boot"  {
+    if shimMode == true && &cmd != "boot" {
         error!("*********shim mode***************");
         containerd_shim::run::<Service>("io.containerd.empty.v1", None)
-
     } else {
         let mut args = Parse().unwrap();
         match Run(&mut args) {

@@ -12,24 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::sync::atomic::AtomicU64;
-use core::sync::atomic::Ordering;
 use super::mutex::*;
-use alloc::sync::Arc;
+use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::string::ToString;
-use alloc::collections::btree_map::BTreeMap;
+use alloc::sync::Arc;
+use core::sync::atomic::AtomicU64;
+use core::sync::atomic::Ordering;
 
 use super::singleton::*;
 
-pub static ALL_METRICS : Singleton<QMutex<MetricSet>> = Singleton::<QMutex<MetricSet>>::New();
+pub static ALL_METRICS: Singleton<QMutex<MetricSet>> = Singleton::<QMutex<MetricSet>>::New();
 
 pub unsafe fn InitSingleton() {
     ALL_METRICS.Init(QMutex::new(MetricSet::New()));
 }
 
 pub fn NewU64Metric(name: &str, sync: bool, description: &str) -> Arc<U64Metric> {
-    return ALL_METRICS.lock().RegisterU64Metric(name.to_string(), sync, description.to_string())
+    return ALL_METRICS
+        .lock()
+        .RegisterU64Metric(name.to_string(), sync, description.to_string());
 }
 
 pub trait Metric: Send + Sync {
@@ -42,7 +44,7 @@ pub struct U64Metric {
 
 impl Metric for U64Metric {
     fn Value(&self) -> u64 {
-        return self.val.load(Ordering::SeqCst)
+        return self.val.load(Ordering::SeqCst);
     }
 }
 
@@ -50,7 +52,7 @@ impl U64Metric {
     pub fn New() -> Self {
         return Self {
             val: AtomicU64::new(0),
-        }
+        };
     }
 
     pub fn Incr(&self) {
@@ -69,17 +71,20 @@ pub struct MetricData {
 }
 
 pub struct MetricSet {
-    pub m: BTreeMap<String, MetricData>
+    pub m: BTreeMap<String, MetricData>,
 }
 
 impl MetricSet {
     pub fn New() -> Self {
-        return Self {
-            m: BTreeMap::new(),
-        }
+        return Self { m: BTreeMap::new() };
     }
 
-    pub fn RegisterU64Metric(&mut self, name: String, sync: bool, description: String) -> Arc<U64Metric> {
+    pub fn RegisterU64Metric(
+        &mut self,
+        name: String,
+        sync: bool,
+        description: String,
+    ) -> Arc<U64Metric> {
         if self.m.contains_key(&name) {
             panic!("Unable to create metric: {}", name);
         }
@@ -95,4 +100,3 @@ impl MetricSet {
         return metric;
     }
 }
-

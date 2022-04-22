@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::super::task::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
 use super::super::fs::flags::*;
-use super::super::syscalls::syscalls::*;
-use super::super::threadmgr::thread::*;
-use super::super::threadmgr::threads::*;
 use super::super::kernel::fd_table::*;
 use super::super::kernel::signalfd::*;
+use super::super::qlib::common::*;
+use super::super::qlib::linux_def::*;
+use super::super::syscalls::syscalls::*;
+use super::super::task::*;
+use super::super::threadmgr::thread::*;
+use super::super::threadmgr::threads::*;
 use super::super::SignalDef::*;
 use super::sys_poll::*;
 
@@ -45,7 +45,7 @@ fn mayKill(t: &Thread, target: &Thread, sig: Signal) -> bool {
     }
 
     if t.HasCapabilityIn(Capability::CAP_KILL, &target.UserNamespace()) {
-        return true
+        return true;
     }
 
     let creds = t.Credentials();
@@ -55,17 +55,18 @@ fn mayKill(t: &Thread, target: &Thread, sig: Signal) -> bool {
     let tSavedKUID = tcreds.lock().SavedKUID;
     let tRealKUID = tcreds.lock().RealKUID;
     let RealKUID = creds.lock().RealKUID;
-    if EffectiveKUID == tSavedKUID ||
-        EffectiveKUID == tRealKUID ||
-        RealKUID == tSavedKUID ||
-        RealKUID == tRealKUID {
-        return true
+    if EffectiveKUID == tSavedKUID
+        || EffectiveKUID == tRealKUID
+        || RealKUID == tSavedKUID
+        || RealKUID == tRealKUID
+    {
+        return true;
     }
 
     let session = tg.Session();
     let tsession = ttg.Session();
     if sig.0 == Signal::SIGCONT && session == tsession {
-        return true
+        return true;
     }
 
     return false;
@@ -97,7 +98,7 @@ pub fn SysRtSigaction(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         task.CopyOutObj(&oldact, oldSigAction)?;
     }
 
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysRtSigreturn(task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
@@ -156,12 +157,12 @@ pub fn SysSigaltstack(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
     }
 
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysPause(task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
     task.blocker.BlockInterrupt()?;
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysRtSigsuspend(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -177,7 +178,7 @@ pub fn SysRtSigsuspend(task: &mut Task, args: &SyscallArguments) -> Result<i64> 
 
     match task.blocker.block(false, None) {
         Ok(_) => Ok(0),
-        Err(_) => Err(Error::SysError(SysErr::EINTR))
+        Err(_) => Err(Error::SysError(SysErr::EINTR)),
     }
 }
 
@@ -205,7 +206,7 @@ pub fn SysRtSigtimedwait(task: &mut Task, args: &SyscallArguments) -> Result<i64
         task.CopyOutObj::<SignalInfo>(&*si, siginfo)?;
     }
 
-    return Ok(si.Signo as i64)
+    return Ok(si.Signo as i64);
 }
 
 // RtSigqueueinfo implements linux syscall rt_sigqueueinfo(2).
@@ -219,7 +220,7 @@ pub fn SysRtSigqueueinfo(task: &mut Task, args: &SyscallArguments) -> Result<i64
     // We must ensure that the Signo is set (Linux overrides this in the
     // same way), and that the code is in the allowed set. This same logic
     // appears below in RtSigtgqueueinfo and should be kept in sync.
-    let mut info : SignalInfo = task.CopyInObj(infoAddr)?;
+    let mut info: SignalInfo = task.CopyInObj(infoAddr)?;
     info.Signo = sig;
 
     let t = task.Thread();
@@ -229,27 +230,23 @@ pub fn SysRtSigqueueinfo(task: &mut Task, args: &SyscallArguments) -> Result<i64
         // Deliver to the given task's thread group.
         let target = match pidns.TaskWithID(pid) {
             None => return Err(Error::SysError(SysErr::ESRCH)),
-            Some(t) => t
+            Some(t) => t,
         };
 
         // If the sender is not the receiver, it can't use si_codes used by the
         // kernel or SI_TKILL.
         if (info.Code >= 0 || info.Code == SignalInfo::SIGNAL_INFO_TKILL) && target != t {
-            return Err(Error::SysError(SysErr::EPERM))
+            return Err(Error::SysError(SysErr::EPERM));
         }
 
         if !mayKill(&t, &target, Signal(sig)) {
-            return Err(Error::SysError(SysErr::EPERM))
+            return Err(Error::SysError(SysErr::EPERM));
         }
 
         match target.SendGroupSignal(&info) {
-            Err(Error::SysError(SysErr::ESRCH)) => {
-                continue
-            }
-            Err(e) => {
-                return Err(e)
-            }
-            Ok(_) => return Ok(0)
+            Err(Error::SysError(SysErr::ESRCH)) => continue,
+            Err(e) => return Err(e),
+            Ok(_) => return Ok(0),
         }
     }
 }
@@ -263,8 +260,8 @@ pub fn SysRtTgsigqueueinfo(task: &mut Task, args: &SyscallArguments) -> Result<i
 
     // N.B. Inconsistent with man page, linux actually rejects calls with
     // tgid/tid <=0 by EINVAL. This isn't the same for all signal calls.
-    if tgid <=0 || tid <= 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+    if tgid <= 0 || tid <= 0 {
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     // Copy in the info.
@@ -272,7 +269,7 @@ pub fn SysRtTgsigqueueinfo(task: &mut Task, args: &SyscallArguments) -> Result<i
     // We must ensure that the Signo is set (Linux overrides this in the
     // same way), and that the code is in the allowed set. This same logic
     // appears below in RtSigtgqueueinfo and should be kept in sync.
-    let mut info : SignalInfo = task.CopyInObj(infoAddr)?;
+    let mut info: SignalInfo = task.CopyInObj(infoAddr)?;
     info.Signo = sig;
 
     let t = task.Thread();
@@ -281,30 +278,30 @@ pub fn SysRtTgsigqueueinfo(task: &mut Task, args: &SyscallArguments) -> Result<i
     // Deliver to the given task.
     let targetTG = match pidns.ThreadGroupWithID(tgid) {
         None => return Err(Error::SysError(SysErr::ESRCH)),
-        Some(tg) => tg
+        Some(tg) => tg,
     };
 
     let target = match pidns.TaskWithID(tid) {
         None => return Err(Error::SysError(SysErr::ESRCH)),
-        Some(t) => t
+        Some(t) => t,
     };
 
     if target.ThreadGroup() != targetTG {
-        return Err(Error::SysError(SysErr::ESRCH))
+        return Err(Error::SysError(SysErr::ESRCH));
     }
 
     // If the sender is not the receiver, it can't use si_codes used by the
     // kernel or SI_TKILL.
     if (info.Code >= 0 || info.Code == SignalInfo::SIGNAL_INFO_TKILL) && target != t {
-        return Err(Error::SysError(SysErr::EPERM))
+        return Err(Error::SysError(SysErr::EPERM));
     }
 
     if !mayKill(&t, &target, Signal(sig)) {
-        return Err(Error::SysError(SysErr::EPERM))
+        return Err(Error::SysError(SysErr::EPERM));
     }
 
     target.SendSignal(&info)?;
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysKill(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -343,7 +340,7 @@ pub fn SysKill(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             match target.SendGroupSignal(&info) {
                 Err(Error::SysError(SysErr::ESRCH)) => (),
                 Ok(()) => return Ok(0),
-                Err(e) => return Err(e)
+                Err(e) => return Err(e),
             }
         }
     } else if pid == -1 {
@@ -406,13 +403,13 @@ pub fn SysKill(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
         if delivered > 0 {
             if lastErr == Error::None {
-                return Ok(0)
+                return Ok(0);
             } else {
-                return Err(lastErr)
+                return Err(lastErr);
             }
         }
 
-        return Err(Error::SysError(SysErr::ESRCH))
+        return Err(Error::SysError(SysErr::ESRCH));
     } else {
         // "If pid equals 0, then sig is sent to every process in the process
         // group of the calling process."
@@ -426,13 +423,12 @@ pub fn SysKill(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             pgid = pidns.IDOfProcessGroup(&pg);
         }
 
-
         // If pid != -1 (i.e. signalling a process group), the returned error
         // is the last error from any call to group_send_sig_info.
         let tgs = pidns.ThreadGroups();
 
         if tgs.len() == 0 {
-            return Err(Error::SysError(SysErr::ESRCH))
+            return Err(Error::SysError(SysErr::ESRCH));
         }
 
         let mut lastErr = Err(Error::SysError(SysErr::ESRCH));
@@ -447,12 +443,12 @@ pub fn SysKill(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                         // sometime the tgleader is null from bazel test, hard to repro
                         // todo: root cause it and fix it
                         error!("SysKill: get non tglead for pgid {}", pgid);
-                        return Err(Error::SysError(SysErr::EINVAL))
+                        return Err(Error::SysError(SysErr::EINVAL));
                     }
                 };
                 if !mayKill(&t, &leader, Signal(sig)) {
                     lastErr = Err(Error::SysError(SysErr::EPERM));
-                    continue
+                    continue;
                 }
 
                 let mut info = SignalInfo {
@@ -481,10 +477,10 @@ pub fn SysKill(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
 
         if cnt > 0 && lastErr == Err(Error::SysError(SysErr::ESRCH)) {
-            return Ok(0)
+            return Ok(0);
         }
 
-        return lastErr
+        return lastErr;
     }
 }
 
@@ -532,7 +528,7 @@ pub fn SysTkill(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let sigInfo = TkillSignal(&t, &target, Signal(sig));
     target.SendSignal(&sigInfo)?;
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysTgkill(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -542,7 +538,7 @@ pub fn SysTgkill(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     // N.B. Inconsistent with man page, linux actually rejects calls with
     // tgid/tid <=0 by EINVAL. This isn't the same for all signal calls.
-    if tgid <=0 || tid <= 0 {
+    if tgid <= 0 || tid <= 0 {
         return Err(Error::SysError(SysErr::EINVAL));
     }
 
@@ -559,7 +555,7 @@ pub fn SysTgkill(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     };
 
     if target.ThreadGroup() != targetTG {
-        return Err(Error::SysError(SysErr::ESRCH))
+        return Err(Error::SysError(SysErr::ESRCH));
     }
 
     if !mayKill(&t, &target, Signal(sig)) {
@@ -568,7 +564,7 @@ pub fn SysTgkill(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let sigInfo = TkillSignal(&t, &target, Signal(sig));
     target.SendSignal(&sigInfo)?;
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysRestartSyscall(task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
@@ -584,13 +580,19 @@ pub fn SysRestartSyscall(task: &mut Task, _args: &SyscallArguments) -> Result<i6
     }
 }
 
-pub fn SharedSignalfd(task: &Task, fd: i32, sigset: u64, signsetsize: u32, flags: i32) -> Result<i64> {
+pub fn SharedSignalfd(
+    task: &Task,
+    fd: i32,
+    sigset: u64,
+    signsetsize: u32,
+    flags: i32,
+) -> Result<i64> {
     // Copy in the signal mask.
     let mask = CopyInSigSet(task, sigset, signsetsize as usize)?;
 
     // Always check for valid flags, even if not creating.
     if flags & !(SFD_NONBLOCK | SFD_CLOEXEC) != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     // Is this a change to an existing signalfd?
@@ -603,23 +605,30 @@ pub fn SharedSignalfd(task: &Task, fd: i32, sigset: u64, signsetsize: u32, flags
             None => return Err(Error::SysError(SysErr::EINVAL)),
             Some(fops) => {
                 fops.SetMask(mask);
-                return Ok(0)
+                return Ok(0);
             }
         }
     }
 
     // Create a new file.
     let file = SignalOperation::NewSignalFile(task, mask);
-    file.SetFlags(task, SettableFileFlags{
-        NonBlocking: flags & SFD_NONBLOCK != 0,
-        ..Default::default()
-    });
+    file.SetFlags(
+        task,
+        SettableFileFlags {
+            NonBlocking: flags & SFD_NONBLOCK != 0,
+            ..Default::default()
+        },
+    );
 
-    let fd = task.NewFDFrom(0, &file, &FDFlags {
-        CloseOnExec: flags & SFD_CLOEXEC != 0,
-    })?;
+    let fd = task.NewFDFrom(
+        0,
+        &file,
+        &FDFlags {
+            CloseOnExec: flags & SFD_CLOEXEC != 0,
+        },
+    )?;
 
-    return Ok(fd as i64)
+    return Ok(fd as i64);
 }
 
 pub fn SysSignalfd(task: &mut Task, args: &SyscallArguments) -> Result<i64> {

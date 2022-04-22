@@ -65,7 +65,7 @@ impl Default for GlobalConfig {
             DebugLog: String::default(),
             FileAccess: FileAccessType::default(),
             Network: NetworkType::default(),
-        }
+        };
     }
 }
 
@@ -77,7 +77,7 @@ impl GlobalConfig {
             DebugLog: self.DebugLog.to_string(),
             FileAccess: self.FileAccess,
             Network: self.Network,
-        }
+        };
     }
 }
 

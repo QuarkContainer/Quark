@@ -24,7 +24,7 @@ pub struct CapSet(pub u64);
 // A CapSet is a set of capabilities, implemented as a bitset
 impl CapSet {
     pub fn New(cap: u64) -> Self {
-        return Self(1 << cap)
+        return Self(1 << cap);
     }
 
     pub fn NewWithCaps(caps: &Vec<u64>) -> Self {
@@ -34,7 +34,7 @@ impl CapSet {
             mask |= (1 as u64) << cap;
         }
 
-        return Self(mask)
+        return Self(mask);
     }
 }
 
@@ -43,7 +43,7 @@ pub fn MaskOf64(i: usize) -> u64 {
 }
 
 pub fn CapSetOf(cp: u64) -> CapSet {
-    return CapSet(MaskOf64(cp as usize))
+    return CapSet(MaskOf64(cp as usize));
 }
 
 pub fn CapabilitySetOfMany(cps: &[u64]) -> CapSet {
@@ -52,7 +52,7 @@ pub fn CapabilitySetOfMany(cps: &[u64]) -> CapSet {
         cs |= MaskOf64(*cp as usize)
     }
 
-    return CapSet(cs)
+    return CapSet(cs);
 }
 
 // TaskCapabilities represents all the capability sets for a task. Each of these

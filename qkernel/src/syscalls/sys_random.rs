@@ -13,10 +13,10 @@
 // limitations under the License.
 
 use super::super::qlib::common::*;
-use super::super::Kernel::HostSpace;
 use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::Task;
+use super::super::Kernel::HostSpace;
 
 pub fn SysGetRandom(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg0;
@@ -25,7 +25,7 @@ pub fn SysGetRandom(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     // Flags are checked for validity but otherwise ignored. See above.
     if flags & !(_GRND_NONBLOCK | _GRND_RANDOM) != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     if length > core::i32::MAX as u32 {
@@ -36,10 +36,10 @@ pub fn SysGetRandom(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let ret = HostSpace::GetRandom(buf.Ptr(), buf.Len() as u64, flags as u32);
     if ret < 0 {
-        return Err(Error::SysError(-ret as i32))
+        return Err(Error::SysError(-ret as i32));
     }
 
     task.CopyOutSlice(&buf.buf[0..ret as usize], addr, length as usize)?;
 
-    return Ok(ret as i64)
+    return Ok(ret as i64);
 }

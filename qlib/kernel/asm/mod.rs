@@ -58,11 +58,7 @@ pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64) {
 
 #[inline]
 pub fn Hlt() {
-    unsafe {
-        llvm_asm!(
-                "hlt"
-        )
-    }
+    unsafe { llvm_asm!("hlt") }
 }
 
 #[inline]
@@ -204,9 +200,11 @@ pub fn GetRsp() -> u64 {
 #[inline]
 pub fn Invlpg(addr: u64) {
     if !super::SHARESPACE.config.read().KernelPagetable {
-        unsafe { llvm_asm!("
+        unsafe {
+            llvm_asm!("
             invlpg ($0)
-            " :: "r" (addr): "memory" : "volatile" ) };
+            " :: "r" (addr): "memory" : "volatile" )
+        };
     }
 }
 
@@ -228,10 +226,10 @@ pub fn muldiv64(value: u64, multiplier: u64, divisor: u64) -> (u64, bool) {
     let val = value as u128 * multiplier as u128;
     let res = val / divisor as u128;
     if res > core::u64::MAX as u128 {
-        return (0, false)
+        return (0, false);
     }
 
-    return (res as u64, true)
+    return (res as u64, true);
 }
 
 // HostID executes a native CPUID instruction.
@@ -251,7 +249,7 @@ pub fn AsmHostID(axArg: u32, cxArg: u32) -> (u32, u32, u32, u32) {
             : );
     }
 
-    return (ax, bx, cx, dx)
+    return (ax, bx, cx, dx);
 }
 
 #[inline(always)]
@@ -336,7 +334,7 @@ pub fn xsave(addr: u64) {
 }
 
 pub fn xsaveopt(addr: u64) {
-    let negtive1 : u64 = 0xffffffff;
+    let negtive1: u64 = 0xffffffff;
     unsafe {
         llvm_asm!("\
             xsaveopt64 [rdi + 0]
@@ -346,7 +344,7 @@ pub fn xsaveopt(addr: u64) {
 }
 
 pub fn xrstor(addr: u64) {
-    let negtive1 : u64 = 0xffffffff;
+    let negtive1: u64 = 0xffffffff;
     unsafe {
         llvm_asm!("\
             xrstor64 [rdi + 0]
@@ -375,24 +373,30 @@ pub fn fxrstor(addr: u64) {
 
 #[inline(always)]
 pub fn mfence() {
-    unsafe { llvm_asm!("
+    unsafe {
+        llvm_asm!("
         sfence
         lfence
-    " : : : "memory" : "volatile" ) }
+    " : : : "memory" : "volatile" )
+    }
 }
 
 #[inline(always)]
 pub fn sfence() {
-    unsafe { llvm_asm!("
+    unsafe {
+        llvm_asm!("
         sfence
-    " : : : "memory" : "volatile" ) }
+    " : : : "memory" : "volatile" )
+    }
 }
 
 #[inline(always)]
 pub fn lfence() {
-    unsafe { llvm_asm!("
+    unsafe {
+        llvm_asm!("
         lfence
-    " : : : "memory" : "volatile" ) }
+    " : : : "memory" : "volatile" )
+    }
 }
 
 pub fn stmxcsr(addr: u64) {

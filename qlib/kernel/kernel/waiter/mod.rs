@@ -12,22 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod waiter;
-pub mod entry;
-pub mod waitlist;
-pub mod queue;
-pub mod waitgroup;
-pub mod lock;
 pub mod bufchan;
 pub mod chan;
 pub mod cond;
+pub mod entry;
+pub mod lock;
 pub mod qlock;
+pub mod queue;
+pub mod waiter;
+pub mod waitgroup;
+pub mod waitlist;
 
+pub use self::entry::*;
+pub use self::queue::*;
+pub use self::waiter::*;
 use super::super::super::linux_def::*;
 use super::super::task::*;
-pub use self::entry::*;
-pub use self::waiter::*;
-pub use self::queue::*;
 use super::async_wait::*;
 
 use super::super::fs::file::File;
@@ -63,7 +63,7 @@ pub trait Waitable {
     // Implementations should allow for events like EventHUp and EventErr
     // to be returned regardless of whether they are in the input EventMask.
     fn Readiness(&self, _task: &Task, mask: EventMask) -> EventMask {
-        return mask
+        return mask;
     }
 
     // EventRegister registers the given waiter entry to receive
@@ -105,7 +105,7 @@ impl PollStruct {
                         poll.revent = revent;
                         cnt += 1;
                     }
-                },
+                }
             };
         }
 

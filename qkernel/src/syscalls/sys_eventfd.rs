@@ -12,45 +12,51 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::task::*;
 use super::super::fs::flags::*;
 use super::super::kernel::eventfd::*;
 use super::super::kernel::fd_table::*;
+use super::super::qlib::common::*;
+use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
+use super::super::task::*;
 
 pub fn Eventfd2(task: &mut Task, initVal: i32, flags: i32) -> Result<i64> {
     let allOps = EFD_SEMAPHORE | EFD_NONBLOCK | EFD_CLOEXEC;
 
     if flags & !allOps != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let event = NewEventfd(task, initVal as u64, flags & EFD_SEMAPHORE != 0);
-    event.SetFlags(task, SettableFileFlags{
-        NonBlocking: flags & EFD_NONBLOCK != 0,
-        ..Default::default()
-    });
+    event.SetFlags(
+        task,
+        SettableFileFlags {
+            NonBlocking: flags & EFD_NONBLOCK != 0,
+            ..Default::default()
+        },
+    );
     event.flags.lock().0.NonSeekable = true;
 
-    let fd = task.NewFDFrom(0, &event, &FDFlags{
-        CloseOnExec: flags & EFD_CLOEXEC != 0,
-    })?;
+    let fd = task.NewFDFrom(
+        0,
+        &event,
+        &FDFlags {
+            CloseOnExec: flags & EFD_CLOEXEC != 0,
+        },
+    )?;
 
-    return Ok(fd as i64)
+    return Ok(fd as i64);
 }
 
 pub fn SysEventfd2(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let initVal = args.arg0 as i32;
     let flags = args.arg1 as i32;
 
-    return Eventfd2(task, initVal, flags)
+    return Eventfd2(task, initVal, flags);
 }
 
 pub fn SysEventfd(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let initVal = args.arg0 as i32;
 
-    return Eventfd2(task, initVal, 0)
+    return Eventfd2(task, initVal, 0);
 }

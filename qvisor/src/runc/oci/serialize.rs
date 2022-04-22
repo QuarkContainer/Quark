@@ -1,10 +1,10 @@
-use serde_json;
 use serde;
+use serde_json;
 
-use std::fmt;
-use std::io;
 use std::error::Error;
+use std::fmt;
 use std::fs::File;
+use std::io;
 
 #[derive(Debug)]
 pub enum SerializeError {
@@ -61,30 +61,21 @@ pub fn to_writer<W: io::Write, T: serde::Serialize>(
 //     Ok(serde_json::from_reader(reader)?)
 // }
 
-pub fn serialize<T: serde::Serialize>(
-    obj: &T,
-    path: &str,
-) -> Result<(), SerializeError> {
+pub fn serialize<T: serde::Serialize>(obj: &T, path: &str) -> Result<(), SerializeError> {
     let mut file = File::create(path)?;
     Ok(serde_json::to_writer(&mut file, &obj)?)
 }
 
-pub fn deserialize<T: serde::Deserialize>(
-    path: &str,
-) -> Result<T, SerializeError> {
+pub fn deserialize<T: serde::Deserialize>(path: &str) -> Result<T, SerializeError> {
     let file = File::open(path)?;
     Ok(serde_json::from_reader(&file)?)
 }
 
-pub fn to_string<T: serde::Serialize>(
-    obj: &T,
-) -> Result<String, SerializeError> {
+pub fn to_string<T: serde::Serialize>(obj: &T) -> Result<String, SerializeError> {
     Ok(serde_json::to_string(&obj)?)
 }
 
-pub fn from_string<T: serde::Deserialize>(
-    str: &str,
-) -> Result<T, SerializeError> {
+pub fn from_string<T: serde::Deserialize>(str: &str) -> Result<T, SerializeError> {
     let v: T = serde_json::from_str(str)?;
 
     Ok(v)

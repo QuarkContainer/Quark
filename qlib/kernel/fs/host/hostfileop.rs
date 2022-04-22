@@ -13,34 +13,34 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
+use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::string::ToString;
-use alloc::collections::btree_map::BTreeMap;
-use alloc::vec::Vec;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::any::Any;
 
-use super::super::super::guestfdnotifier::*;
-use super::super::super::kernel::waiter::*;
-use super::super::super::super::common::*;
-use super::super::super::super::linux_def::*;
-use super::super::super::super::device::*;
-use super::super::super::super::pagetable::*;
-use super::super::super::super::range::*;
 use super::super::super::super::addr::*;
 use super::super::super::super::bytestream::*;
-use super::super::super::Kernel::HostSpace;
-use super::super::super::task::*;
-use super::super::super::kernel::async_wait::*;
+use super::super::super::super::common::*;
+use super::super::super::super::device::*;
+use super::super::super::super::linux_def::*;
+use super::super::super::super::pagetable::*;
 use super::super::super::super::qmsg::qcall::*;
+use super::super::super::super::range::*;
+use super::super::super::guestfdnotifier::*;
+use super::super::super::kernel::async_wait::*;
+use super::super::super::kernel::waiter::*;
+use super::super::super::task::*;
+use super::super::super::Kernel::HostSpace;
 
-use super::super::file::*;
-use super::super::fsutil::file::*;
+use super::super::attr::*;
 use super::super::dentry::*;
 use super::super::dirent::*;
-use super::super::attr::*;
-use super::super::inode::*;
+use super::super::file::*;
+use super::super::fsutil::file::*;
 use super::super::host::hostinodeop::*;
+use super::super::inode::*;
 
 use super::util::*;
 
@@ -67,14 +67,13 @@ impl HostInodeOp {
         let fd = self.HostFd();
 
         let mut fts = FileTypes {
-            fileTypes: Vec::new()
+            fileTypes: Vec::new(),
         };
 
         let res = HostSpace::ReadDir(fd, &mut fts);
         if res < 0 {
-            return Err(Error::SysError(-res as i32))
+            return Err(Error::SysError(-res as i32));
         }
-
 
         let mut entries = BTreeMap::new();
         for ft in &fts.fileTypes {
@@ -84,7 +83,7 @@ impl HostInodeOp {
                     Device: ft.device,
                     Inode: ft.inode,
                     SecondaryDevice: "".to_string(),
-                })
+                }),
             };
 
             entries.insert(ft.pathname.Str().unwrap().to_string(), dentry);
@@ -96,21 +95,27 @@ impl HostInodeOp {
 
 impl HostFileOp {
     fn ReadDirAll(&self, task: &Task) -> Result<BTreeMap<String, DentAttr>> {
-        return self.InodeOp.ReadDirAll(task)
+        return self.InodeOp.ReadDirAll(task);
     }
 }
 
 impl Waitable for HostFileOp {
-    fn Readiness(&self, _task: &Task,mask: EventMask) -> EventMask {
+    fn Readiness(&self, _task: &Task, mask: EventMask) -> EventMask {
         // somehow, a normal host file could also be polled.
-        assert!(self.InodeOp.lock().WouldBlock, "HostFileOp::EventRegister is not supported");
+        assert!(
+            self.InodeOp.lock().WouldBlock,
+            "HostFileOp::EventRegister is not supported"
+        );
 
         let fd = self.InodeOp.FD();
         return NonBlockingPoll(fd, mask);
     }
 
-    fn EventRegister(&self, task: &Task,e: &WaitEntry, mask: EventMask) {
-        assert!(self.InodeOp.lock().WouldBlock, "HostFileOp::EventRegister is not supported");
+    fn EventRegister(&self, task: &Task, e: &WaitEntry, mask: EventMask) {
+        assert!(
+            self.InodeOp.lock().WouldBlock,
+            "HostFileOp::EventRegister is not supported"
+        );
 
         /*if !self.InodeOp.lock().WouldBlock {
             return
@@ -122,8 +127,11 @@ impl Waitable for HostFileOp {
         UpdateFD(fd).unwrap();
     }
 
-    fn EventUnregister(&self, task: &Task,e: &WaitEntry) {
-        assert!(self.InodeOp.lock().WouldBlock, "HostFileOp::EventRegister is not supported");
+    fn EventUnregister(&self, task: &Task, e: &WaitEntry) {
+        assert!(
+            self.InodeOp.lock().WouldBlock,
+            "HostFileOp::EventRegister is not supported"
+        );
         /*if !self.InodeOp.lock().WouldBlock {
             return
         }*/
@@ -139,11 +147,11 @@ impl SpliceOperations for HostFileOp {}
 
 impl FileOperations for HostFileOp {
     fn as_any(&self) -> &Any {
-        return self
+        return self;
     }
 
     fn FopsType(&self) -> FileOpsType {
-        return FileOpsType::HostFileOp
+        return FileOpsType::HostFileOp;
     }
 
     fn Seekable(&self) -> bool {
@@ -155,10 +163,16 @@ impl FileOperations for HostFileOp {
         let mut cursor = "".to_string();
         let newOffset = SeekWithDirCursor(task, f, whence, current, offset, Some(&mut cursor))?;
         *dirCursor = cursor;
-        return Ok(newOffset)
+        return Ok(newOffset);
     }
 
-    fn ReadDir(&self, task: &Task, file: &File, offset: i64, serializer: &mut DentrySerializer) -> Result<i64> {
+    fn ReadDir(
+        &self,
+        task: &Task,
+        file: &File,
+        offset: i64,
+        serializer: &mut DentrySerializer,
+    ) -> Result<i64> {
         let root = task.Root();
         let mut dirCursor = self.DirCursor.lock();
 
@@ -172,13 +186,27 @@ impl FileOperations for HostFileOp {
         return Ok(res);
     }
 
-    fn ReadAt(&self, task: &Task, f: &File, dsts: &mut [IoVec], offset: i64, blocking: bool) -> Result<i64> {
+    fn ReadAt(
+        &self,
+        task: &Task,
+        f: &File,
+        dsts: &mut [IoVec],
+        offset: i64,
+        blocking: bool,
+    ) -> Result<i64> {
         let hostIops = self.InodeOp.clone();
 
         hostIops.ReadAt(task, f, dsts, offset, blocking)
     }
 
-    fn WriteAt(&self, task: &Task, f: &File, srcs: &[IoVec], offset: i64, blocking: bool) -> Result<i64> {
+    fn WriteAt(
+        &self,
+        task: &Task,
+        f: &File,
+        srcs: &[IoVec],
+        offset: i64,
+        blocking: bool,
+    ) -> Result<i64> {
         let hostIops = self.InodeOp.clone();
 
         hostIops.WriteAt(task, f, srcs, offset, blocking)
@@ -193,7 +221,7 @@ impl FileOperations for HostFileOp {
     fn Fsync(&self, task: &Task, f: &File, start: i64, end: i64, syncType: SyncType) -> Result<()> {
         let hostIops = self.InodeOp.clone();
 
-        return hostIops.Fsync(task, f, start, end, syncType)
+        return hostIops.Fsync(task, f, start, end, syncType);
     }
 
     fn Flush(&self, task: &Task, f: &File) -> Result<()> {
@@ -201,7 +229,7 @@ impl FileOperations for HostFileOp {
             return self.Fsync(task, f, 0, 0, SyncType::SyncAll);
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     fn UnstableAttr(&self, task: &Task, f: &File) -> Result<UnstableAttr> {
@@ -210,23 +238,27 @@ impl FileOperations for HostFileOp {
     }
 
     fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<()> {
-        return Err(Error::SysError(SysErr::ENOTTY))
+        return Err(Error::SysError(SysErr::ENOTTY));
     }
 
-    fn IterateDir(&self, task: &Task, _d: &Dirent, dirCtx: &mut DirCtx, offset: i32) -> (i32, Result<i64>) {
+    fn IterateDir(
+        &self,
+        task: &Task,
+        _d: &Dirent,
+        dirCtx: &mut DirCtx,
+        offset: i32,
+    ) -> (i32, Result<i64>) {
         let entries = match self.ReadDirAll(task) {
             Err(e) => return (offset, Err(e)),
             Ok(entires) => entires,
         };
 
-        let dentryMap = DentMap {
-            Entries: entries,
-        };
+        let dentryMap = DentMap { Entries: entries };
 
         return match dirCtx.ReadDir(task, &dentryMap) {
             Err(e) => (offset, Err(e)),
-            Ok(count) => (offset + count as i32, Ok(0))
-        }
+            Ok(count) => (offset + count as i32, Ok(0)),
+        };
     }
 
     fn Mappable(&self) -> Result<HostInodeOp> {
@@ -238,11 +270,26 @@ impl SockOperations for HostFileOp {}
 
 impl PageTables {
     //Reset the cow page to the orginal file page, it is used for the file truncate
-    pub fn ResetFileMapping(&self, task: &Task, addr: u64, f: &HostInodeOp, fr: &Range, at: &AccessType) -> Result<()> {
+    pub fn ResetFileMapping(
+        &self,
+        task: &Task,
+        addr: u64,
+        f: &HostInodeOp,
+        fr: &Range,
+        at: &AccessType,
+    ) -> Result<()> {
         return self.MapFile(task, addr, f, fr, at, false);
     }
 
-    pub fn MapFile(&self, task: &Task, addr: u64, f: &HostInodeOp, fr: &Range, at: &AccessType, _precommit: bool) -> Result<()> {
+    pub fn MapFile(
+        &self,
+        task: &Task,
+        addr: u64,
+        f: &HostInodeOp,
+        fr: &Range,
+        at: &AccessType,
+        _precommit: bool,
+    ) -> Result<()> {
         let bs = f.MapInternal(task, fr)?;
         let mut addr = addr;
 
@@ -265,7 +312,16 @@ impl PageTables {
         return Ok(());
     }
 
-    pub fn RemapFile(&self, task: &Task, addr: u64, f: &HostInodeOp, fr: &Range, oldar: &Range, at: &AccessType, _precommit: bool) -> Result<()> {
+    pub fn RemapFile(
+        &self,
+        task: &Task,
+        addr: u64,
+        f: &HostInodeOp,
+        fr: &Range,
+        oldar: &Range,
+        at: &AccessType,
+        _precommit: bool,
+    ) -> Result<()> {
         let bs = f.MapInternal(task, fr)?;
         let mut addr = addr;
 
@@ -288,4 +344,3 @@ impl PageTables {
         return Ok(());
     }
 }
-

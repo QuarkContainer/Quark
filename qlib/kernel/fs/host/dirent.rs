@@ -18,5 +18,5 @@ pub struct Dirent64 {
     pub offset: u64,
     pub reclen: u16,
     pub type_: u8,
-    pub name: [u8; 256]
+    pub name: [u8; 256],
 }

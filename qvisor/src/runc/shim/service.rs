@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::{Arc};
 use std::sync::mpsc::{channel, Receiver};
+use std::sync::Arc;
 
-use containerd_shim::ExitSignal;
 use containerd_shim::api::*;
-use containerd_shim::util::*;
-use containerd_shim::spawn;
-use containerd_shim::StartOpts;
-use containerd_shim::Config;
-use containerd_shim::Shim;
-use containerd_shim::Result;
 use containerd_shim::protos::protobuf::{Message, SingularPtrField};
 use containerd_shim::protos::ttrpc::context::Context;
 use containerd_shim::publisher::RemotePublisher;
+use containerd_shim::spawn;
+use containerd_shim::util::*;
+use containerd_shim::Config;
+use containerd_shim::ExitSignal;
+use containerd_shim::Result;
+use containerd_shim::Shim;
+use containerd_shim::StartOpts;
 
 //use super::super::super::qlib::common;
 //use super::super::super::qlib::common::*;
@@ -48,12 +48,7 @@ pub struct Service {
 impl Shim for Service {
     type T = ShimTask;
 
-    fn new(
-        _runtime_id: &str,
-        id: &str,
-        namespace: &str,
-        _config: &mut Config,
-    ) -> Self {
+    fn new(_runtime_id: &str, id: &str, namespace: &str, _config: &mut Config) -> Self {
         let exit = Arc::new(ExitSignal::default());
         Service {
             exit: exit.clone(),
@@ -122,4 +117,3 @@ fn forward(publisher: RemotePublisher, ns: String, rx: Receiver<(String, Box<dyn
         }
     });
 }
-

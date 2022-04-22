@@ -24,6 +24,5 @@ pub fn NewWithSocket(socketPath: &str) -> Result<Master> {
     let client = UnixSocket::NewClient(socketPath)?;
     client.SendFd(master.as_raw_fd())?;
 
-    return Ok(master)
+    return Ok(master);
 }
-

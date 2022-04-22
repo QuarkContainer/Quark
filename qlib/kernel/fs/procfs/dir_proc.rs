@@ -16,24 +16,31 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::any::Any;
 
-use super::super::super::socket::unix::transport::unix::*;
+use super::super::super::super::auth::*;
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
-use super::super::super::super::auth::*;
 use super::super::super::kernel::time::*;
+use super::super::super::socket::unix::transport::unix::*;
 use super::super::super::task::*;
-use super::super::host::hostinodeop::*;
 use super::super::attr::*;
+use super::super::dirent::*;
 use super::super::file::*;
 use super::super::flags::*;
-use super::super::dirent::*;
-use super::super::mount::*;
+use super::super::host::hostinodeop::*;
 use super::super::inode::*;
+use super::super::mount::*;
 use super::super::ramfs::dir::*;
 
 pub trait DirDataNode: Send + Sync {
     fn Lookup(&self, d: &Dir, task: &Task, dir: &Inode, name: &str) -> Result<Dirent>;
-    fn GetFile(&self, d: &Dir, task: &Task, dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File>;
+    fn GetFile(
+        &self,
+        d: &Dir,
+        task: &Task,
+        dir: &Inode,
+        dirent: &Dirent,
+        flags: FileFlags,
+    ) -> Result<File>;
 
     fn Check(&self, d: &Dir, task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {
         return d.Check(task, inode, reqPerms);
@@ -46,9 +53,9 @@ pub struct DirNode<T: 'static + DirDataNode> {
     pub data: T,
 }
 
-impl <T: 'static + DirDataNode> InodeOperations for DirNode <T> {
+impl<T: 'static + DirDataNode> InodeOperations for DirNode<T> {
     fn as_any(&self) -> &Any {
-        return self
+        return self;
     }
 
     fn IopsType(&self) -> IopsType {
@@ -71,11 +78,24 @@ impl <T: 'static + DirDataNode> InodeOperations for DirNode <T> {
         return self.data.Lookup(&self.dir, task, dir, name);
     }
 
-    fn Create(&self, task: &Task, dir: &mut Inode, name: &str, flags: &FileFlags, perms: &FilePermissions) -> Result<File> {
+    fn Create(
+        &self,
+        task: &Task,
+        dir: &mut Inode,
+        name: &str,
+        flags: &FileFlags,
+        perms: &FilePermissions,
+    ) -> Result<File> {
         return self.dir.Create(task, dir, name, flags, perms);
     }
 
-    fn CreateDirectory(&self, task: &Task, dir: &mut Inode, name: &str, perms: &FilePermissions) -> Result<()> {
+    fn CreateDirectory(
+        &self,
+        task: &Task,
+        dir: &mut Inode,
+        name: &str,
+        perms: &FilePermissions,
+    ) -> Result<()> {
         return self.dir.CreateDirectory(task, dir, name, perms);
     }
 
@@ -83,11 +103,23 @@ impl <T: 'static + DirDataNode> InodeOperations for DirNode <T> {
         return self.dir.CreateLink(task, dir, oldname, newname);
     }
 
-    fn CreateHardLink(&self, task: &Task, dir: &mut Inode, target: &Inode, name: &str) -> Result<()> {
+    fn CreateHardLink(
+        &self,
+        task: &Task,
+        dir: &mut Inode,
+        target: &Inode,
+        name: &str,
+    ) -> Result<()> {
         return self.dir.CreateHardLink(task, dir, target, name);
     }
 
-    fn CreateFifo(&self, task: &Task, dir: &mut Inode, name: &str, perms: &FilePermissions) -> Result<()> {
+    fn CreateFifo(
+        &self,
+        task: &Task,
+        dir: &mut Inode,
+        name: &str,
+        perms: &FilePermissions,
+    ) -> Result<()> {
         return self.dir.CreateFifo(task, dir, name, perms);
     }
 
@@ -100,16 +132,40 @@ impl <T: 'static + DirDataNode> InodeOperations for DirNode <T> {
         return self.dir.RemoveDirectory(task, dir, name);
     }
 
-    fn Rename(&self, task: &Task, dir: &mut Inode, oldParent: &Inode, oldname: &str, newParent: &Inode, newname: &str, replacement: bool) -> Result<()> {
-        return self.dir.Rename(task, dir, oldParent, oldname, newParent, newname, replacement);
+    fn Rename(
+        &self,
+        task: &Task,
+        dir: &mut Inode,
+        oldParent: &Inode,
+        oldname: &str,
+        newParent: &Inode,
+        newname: &str,
+        replacement: bool,
+    ) -> Result<()> {
+        return self.dir.Rename(
+            task,
+            dir,
+            oldParent,
+            oldname,
+            newParent,
+            newname,
+            replacement,
+        );
     }
 
-    fn Bind(&self, _task: &Task, _dir: &Inode, _name: &str, _data: &BoundEndpoint, _perms: &FilePermissions) -> Result<Dirent> {
-        return Err(Error::SysError(SysErr::ENOTDIR))
+    fn Bind(
+        &self,
+        _task: &Task,
+        _dir: &Inode,
+        _name: &str,
+        _data: &BoundEndpoint,
+        _perms: &FilePermissions,
+    ) -> Result<Dirent> {
+        return Err(Error::SysError(SysErr::ENOTDIR));
     }
 
     fn BoundEndpoint(&self, _task: &Task, _inode: &Inode, _path: &str) -> Option<BoundEndpoint> {
-        return None
+        return None;
     }
 
     fn GetFile(&self, task: &Task, dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File> {

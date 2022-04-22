@@ -14,14 +14,14 @@
 
 use alloc::boxed::Box;
 
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::task::*;
-use super::super::qlib::linux::time::*;
-use super::super::qlib::linux::futex::*;
 use super::super::kernel::time::*;
-use super::super::threadmgr::task_syscall::*;
+use super::super::qlib::common::*;
+use super::super::qlib::linux::futex::*;
+use super::super::qlib::linux::time::*;
+use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
+use super::super::task::*;
+use super::super::threadmgr::task_syscall::*;
 
 // futexWaitRestartBlock encapsulates the state required to restart futex(2)
 // via restart_syscall(2).
@@ -35,7 +35,14 @@ pub struct FutexWaitRestartBlock {
 
 impl SyscallRestartBlock for FutexWaitRestartBlock {
     fn Restart(&self, task: &mut Task) -> Result<i64> {
-        FutexWaitDuration(task, Some(self.dur), self.addr, self.private, self.val, self.mask)
+        FutexWaitDuration(
+            task,
+            Some(self.dur),
+            self.addr,
+            self.private,
+            self.val,
+            self.mask,
+        )
     }
 }
 
@@ -46,14 +53,21 @@ impl SyscallRestartBlock for FutexWaitRestartBlock {
 //
 // If blocking is interrupted, the syscall is restarted with the original
 // arguments.
-fn FutexWaitAbsolute(task: &mut Task, realtime: bool, ts: Option<Timespec>, addr: u64, private: bool, val: u32, mask: u32) -> Result<i64> {
+fn FutexWaitAbsolute(
+    task: &mut Task,
+    realtime: bool,
+    ts: Option<Timespec>,
+    addr: u64,
+    private: bool,
+    val: u32,
+    mask: u32,
+) -> Result<i64> {
     let waitEntry = task.blocker.generalEntry.clone();
-    task.futexMgr.WaitPrepare(&waitEntry, task, addr, private, val, mask)?;
+    task.futexMgr
+        .WaitPrepare(&waitEntry, task, addr, private, val, mask)?;
 
     let res = match ts {
-        None => {
-            task.blocker.BlockWithRealTimer(true, None)
-        },
+        None => task.blocker.BlockWithRealTimer(true, None),
         Some(ts) => {
             let ns = ts.ToDuration()?;
             if realtime {
@@ -82,9 +96,17 @@ fn FutexWaitAbsolute(task: &mut Task, realtime: bool, ts: Option<Timespec>, addr
 // syscall. If forever is true, the syscall is restarted with the original
 // arguments. If forever is false, duration is a relative timeout and the
 // syscall is restarted with the remaining timeout.
-fn FutexWaitDuration(task: &mut Task, dur: Option<Duration>, addr: u64, private: bool, val: u32, mask: u32) -> Result<i64> {
+fn FutexWaitDuration(
+    task: &mut Task,
+    dur: Option<Duration>,
+    addr: u64,
+    private: bool,
+    val: u32,
+    mask: u32,
+) -> Result<i64> {
     let waitEntry = task.blocker.generalEntry.clone();
-    task.futexMgr.WaitPrepare(&waitEntry, task, addr, private, val, mask)?;
+    task.futexMgr
+        .WaitPrepare(&waitEntry, task, addr, private, val, mask)?;
 
     let (remain, res) = task.blocker.BlockWithMonoTimeout(true, dur);
     task.futexMgr.WaitComplete(&waitEntry);
@@ -101,7 +123,7 @@ fn FutexWaitDuration(task: &mut Task, dur: Option<Duration>, addr: u64, private:
     // The wait duration was absolute, restart with the original arguments.
     if dur.is_none() {
         //wait forever
-        return Err(Error::SysError(SysErr::ERESTARTSYS))
+        return Err(Error::SysError(SysErr::ERESTARTSYS));
     }
 
     let b = Box::new(FutexWaitRestartBlock {
@@ -109,7 +131,7 @@ fn FutexWaitDuration(task: &mut Task, dur: Option<Duration>, addr: u64, private:
         addr: addr,
         private: private,
         val: val,
-        mask: mask
+        mask: mask,
     });
 
     task.SetSyscallRestartBlock(b);
@@ -120,10 +142,12 @@ fn FutexWaitDuration(task: &mut Task, dur: Option<Duration>, addr: u64, private:
 fn FutexLockPI(task: &mut Task, ts: Option<Timespec>, addr: u64, private: bool) -> Result<()> {
     let waitEntry = task.blocker.generalEntry.clone();
     let tid = task.Thread().ThreadID();
-    let locked = task.futexMgr.LockPI(&waitEntry, task, addr, tid as u32, private, false)?;
+    let locked = task
+        .futexMgr
+        .LockPI(&waitEntry, task, addr, tid as u32, private, false)?;
 
     if locked {
-        return Ok(())
+        return Ok(());
     }
 
     let res = match ts {
@@ -145,13 +169,15 @@ fn FutexLockPI(task: &mut Task, ts: Option<Timespec>, addr: u64, private: bool) 
 fn TryLockPid(task: &mut Task, addr: u64, private: bool) -> Result<()> {
     let waitEntry = task.blocker.generalEntry.clone();
     let tid = task.Thread().ThreadID();
-    let locked = task.futexMgr.LockPI(&waitEntry, task, addr, tid as u32, private, true)?;
+    let locked = task
+        .futexMgr
+        .LockPI(&waitEntry, task, addr, tid as u32, private, true)?;
     if !locked {
         task.futexMgr.WaitComplete(&waitEntry);
         return Err(Error::SysError(SysErr::EWOULDBLOCK));
     }
 
-    return Ok(())
+    return Ok(());
 }
 
 // Futex implements linux syscall futex(2).
@@ -198,12 +224,14 @@ pub fn SysFutex(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                     // WAIT_BITSET uses an absolute timeout which is either
                     // CLOCK_MONOTONIC or CLOCK_REALTIME.
                     if mask == 0 {
-                        return Err(Error::SysError(SysErr::EINVAL))
+                        return Err(Error::SysError(SysErr::EINVAL));
                     }
 
-                    return FutexWaitAbsolute(task, realtime, timespec, addr, private, val as u32, mask);
+                    return FutexWaitAbsolute(
+                        task, realtime, timespec, addr, private, val as u32, mask,
+                    );
                 }
-                _ => panic!("not reachable")
+                _ => panic!("not reachable"),
             }
         }
         FUTEX_WAKE | FUTEX_WAKE_BITSET => {
@@ -213,23 +241,21 @@ pub fn SysFutex(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             } else {
                 //info!("FUTEX_WAKE_BITSET...");
                 if mask == 0 {
-                    return Err(Error::SysError(SysErr::EINVAL))
+                    return Err(Error::SysError(SysErr::EINVAL));
                 }
             }
 
             // linux awake 1 waiter when val is 0
-            let n = if val == 0 {
-                1
-            } else {
-                val
-            };
+            let n = if val == 0 { 1 } else { val };
 
             let res = task.futexMgr.Wake(task, addr, private, mask, n)?;
             return Ok(res as i64);
         }
         FUTEX_REQUEUE => {
             //info!("FUTEX_REQUEUE...");
-            let n = task.futexMgr.Requeue(task, addr, naddr, private, val, nreq)?;
+            let n = task
+                .futexMgr
+                .Requeue(task, addr, naddr, private, val, nreq)?;
             return Ok(n as i64);
         }
         FUTEX_CMP_REQUEUE => {
@@ -237,13 +263,17 @@ pub fn SysFutex(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             // 'val3' contains the value to be checked at 'addr' and
             // 'val' is the number of waiters that should be woken up.
             let nval = val3 as u32;
-            let n = task.futexMgr.RequeueCmp(task, addr, naddr, private, nval, val, nreq)?;
+            let n = task
+                .futexMgr
+                .RequeueCmp(task, addr, naddr, private, nval, val, nreq)?;
             return Ok(n as i64);
         }
         FUTEX_WAKE_OP => {
             //info!("FUTEX_WAKE_OP...");
             let op = val3 as u32;
-            let n = task.futexMgr.WakeOp(task, addr, naddr, private, val, nreq, op)?;
+            let n = task
+                .futexMgr
+                .WakeOp(task, addr, naddr, private, val, nreq, op)?;
             return Ok(n as i64);
         }
         FUTEX_LOCK_PI => {
@@ -256,22 +286,20 @@ pub fn SysFutex(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             };
 
             FutexLockPI(task, timespec, addr, private)?;
-            return Ok(0)
+            return Ok(0);
         }
         FUTEX_TRYLOCK_PI => {
             //info!("FUTEX_TRYLOCK_PI...");
             TryLockPid(task, addr, private)?;
-            return Ok(0)
+            return Ok(0);
         }
         FUTEX_UNLOCK_PI => {
             //info!("FUTEX_UNLOCK_PI...");
             let tid = task.Thread().ThreadID();
             task.futexMgr.UnlockPI(task, addr, tid as u32, private)?;
-            return Ok(0)
+            return Ok(0);
         }
         //FUTEX_WAIT_REQUEUE_PI | FUTEX_CMP_REQUEUE_PI
-        _ => {
-            return Err(Error::SysError(SysErr::ENOSYS))
-        }
+        _ => return Err(Error::SysError(SysErr::ENOSYS)),
     }
 }

@@ -14,9 +14,9 @@
 
 use alloc::collections::vec_deque::VecDeque;
 
-use super::super::super::TSC;
 use super::super::super::super::common::*;
 use super::super::super::Kernel::HostSpace;
+use super::super::super::TSC;
 
 use super::*;
 
@@ -37,16 +37,15 @@ pub const MAX_SAMPLES: usize = 11;
 // TSCValue is a value from the TSC.
 pub type TSCValue = i64;
 
-
 // ReferenceNS are nanoseconds in the reference clock domain.
 // int64 gives us ~290 years before this overflows.
 pub type ReferenceNS = i64;
 
 pub fn Magnitude(r: ReferenceNS) -> ReferenceNS {
     if r < 0 {
-        return -r
+        return -r;
     }
-    return r
+    return r;
 }
 
 pub fn Sample(c: ClockID) -> Result<Sample> {
@@ -65,11 +64,11 @@ pub fn Sample(c: ClockID) -> Result<Sample> {
         Ref: time,
     };
 
-    return Ok(res)
+    return Ok(res);
 }
 
 pub fn Cycles() -> TSCValue {
-    return TSC.Rdtsc()
+    return TSC.Rdtsc();
 }
 
 #[derive(Debug, Default, Copy, Clone)]
@@ -81,7 +80,7 @@ pub struct Sample {
 
 impl Sample {
     pub fn Overhead(&self) -> TSCValue {
-        return self.After - self.Before
+        return self.After - self.Before;
     }
 }
 
@@ -104,7 +103,7 @@ impl Sampler {
             clockID: c,
             overhead: DEFAULT_OVERHEAD_CYCLES,
             samples: VecDeque::with_capacity(MAX_SAMPLES),
-        }
+        };
     }
 
     pub fn Reset(&mut self) {
@@ -118,12 +117,15 @@ impl Sampler {
                 let sample = Sample(self.clockID)?;
 
                 if sample.Before > sample.After {
-                    info!("TSC went backwards: {:x} > {:x}", sample.Before, sample.After);
+                    info!(
+                        "TSC went backwards: {:x} > {:x}",
+                        sample.Before, sample.After
+                    );
                     continue;
                 }
 
                 if sample.Overhead() < self.overhead {
-                    return Ok(sample)
+                    return Ok(sample);
                 }
             }
 
@@ -154,19 +156,19 @@ impl Sampler {
         // If the 4 most recent samples all have an overhead less than half the
         // expected overhead, adjust downwards.
         if self.samples.len() < 4 {
-            return Ok(())
+            return Ok(());
         }
 
         for sample in self.samples.iter().skip(self.samples.len() - 4) {
             if sample.Overhead() > self.overhead / 2 {
-                return Ok(())
+                return Ok(());
             }
         }
 
         self.overhead -= self.overhead / 8;
         //info!("Time: Adjusting syscall overhead down to {}", self.overhead);
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn Syscall(&self) -> Result<ReferenceNS> {
@@ -176,14 +178,17 @@ impl Sampler {
     }
 
     pub fn Cycles(&self) -> TSCValue {
-        return TSC.Rdtsc()
+        return TSC.Rdtsc();
     }
 
     pub fn Range(&self) -> Option<(Sample, Sample)> {
         if self.samples.len() < 2 {
-            return None
+            return None;
         }
 
-        return Some((*self.samples.front().unwrap(), *self.samples.back().unwrap()))
+        return Some((
+            *self.samples.front().unwrap(),
+            *self.samples.back().unwrap(),
+        ));
     }
 }

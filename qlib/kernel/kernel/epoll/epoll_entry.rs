@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
+use alloc::sync::Arc;
 use core::ops::Deref;
 
 use super::super::super::super::linux_def::*;
@@ -23,7 +23,7 @@ use super::epoll::*;
 
 pub type EntryFlags = i32;
 
-pub const ONE_SHOT : EntryFlags = 1 << 0;
+pub const ONE_SHOT: EntryFlags = 1 << 0;
 pub const EDGE_TRIGGERED: EntryFlags = 1 << 1;
 
 #[derive(Clone)]
@@ -46,7 +46,7 @@ impl PartialOrd for FileIdentifier {
 
 impl PartialEq for FileIdentifier {
     fn eq(&self, other: &Self) -> bool {
-        return self.File.Upgrade() == other.File.Upgrade()
+        return self.File.Upgrade() == other.File.Upgrade();
     }
 }
 
@@ -107,7 +107,7 @@ impl PollEntry {
     }
 
     pub fn Id(&self) -> i32 {
-        return self.lock().id.Fd
+        return self.lock().id.Fd;
     }
 
     pub fn Reset(&self) {

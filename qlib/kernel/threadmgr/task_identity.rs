@@ -14,14 +14,14 @@
 
 use alloc::vec::Vec;
 
-use super::super::threadmgr::thread::*;
-use super::super::super::auth::*;
+use super::super::super::auth::cap_set::*;
 use super::super::super::auth::id::*;
 use super::super::super::auth::userns::*;
-use super::super::super::auth::cap_set::*;
+use super::super::super::auth::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::task::*;
+use super::super::threadmgr::thread::*;
 
 impl ThreadInternal {
     pub fn setKUIDsUncheckedLocked(&mut self, newR: KUID, newE: KUID, newS: KUID) {
@@ -43,7 +43,9 @@ impl ThreadInternal {
         // previously 0, and as a result of the UID changes all of these IDs have a
         // nonzero value, then all capabilities are cleared from the permitted and
         // effective capability sets." - capabilities(7)
-        if (oldR == root || oldE == root || oldS == root) && (newR != root && newE != root && newS != root) {
+        if (oldR == root || oldE == root || oldS == root)
+            && (newR != root && newE != root && newS != root)
+        {
             // prctl(2): "PR_SET_KEEPCAP: Set the state of the calling thread's
             // "keep capabilities" flag, which determines whether the thread's permitted
             // capability set is cleared when a change is made to the
@@ -98,7 +100,6 @@ impl ThreadInternal {
             self.parentDeathSignal = Signal(0);
         }
     }
-
 
     // updateCredsForExec updates t.creds to reflect an execve().
     //
@@ -264,7 +265,7 @@ impl ThreadInternal {
         // If t just created ns, then t.creds is guaranteed to have CAP_SYS_ADMIN
         // in ns (by rule 3 in auth.Credentials.HasCapability).
         if !t.creds.HasCapabilityIn(Capability::CAP_SYS_ADMIN, ns) {
-            return Err(Error::SysError(SysErr::EPERM))
+            return Err(Error::SysError(SysErr::EPERM));
         }
 
         t.creds = t.creds.Fork();
@@ -284,7 +285,7 @@ impl ThreadInternal {
         // unshare(2), or setns(2)." - user_namespaces(7)
         t.creds.lock().KeepCaps = false;
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn hasCapabilityIn(&self, cp: u64, ns: &UserNameSpace) -> bool {
@@ -302,7 +303,7 @@ impl Thread {
     }
 
     pub fn UserNamespace(&self) -> UserNameSpace {
-        return self.lock().creds.lock().UserNamespace.clone()
+        return self.lock().creds.lock().UserNamespace.clone();
     }
 
     pub fn HasCapabilityIn(&self, cp: u64, ns: &UserNameSpace) -> bool {
@@ -315,13 +316,13 @@ impl Thread {
 
     pub fn SetUID(&self, uid: UID) -> Result<()> {
         if !uid.Ok() {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         let mut t = self.lock();
         let kuid = t.creds.lock().UserNamespace.MapToKUID(uid);
         if !kuid.Ok() {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         // "setuid() sets the effective user ID of the calling process. If the
@@ -330,7 +331,7 @@ impl Thread {
         // set." - setuid(2)
         if t.creds.HasCapability(Capability::CAP_SETUID) {
             t.setKUIDsUncheckedLocked(kuid, kuid, kuid);
-            return Ok(())
+            return Ok(());
         }
 
         // "EPERM: The user is not privileged (Linux: does not have the CAP_SETUID
@@ -340,11 +341,11 @@ impl Thread {
         let suid = t.creds.lock().SavedKUID;
 
         if kuid != ruid && kuid != suid {
-            return Err(Error::SysError(SysErr::EPERM))
+            return Err(Error::SysError(SysErr::EPERM));
         }
 
         t.setKUIDsUncheckedLocked(ruid, kuid, suid);
-        return Ok(())
+        return Ok(());
     }
 
     pub fn SetREUID(&self, r: UID, e: UID) -> Result<()> {
@@ -357,7 +358,7 @@ impl Thread {
         if r.Ok() {
             newR = creds.lock().UserNamespace.MapToKUID(r);
             if !newR.Ok() {
-                return Err(Error::SysError(SysErr::EINVAL))
+                return Err(Error::SysError(SysErr::EINVAL));
             }
         }
 
@@ -365,7 +366,7 @@ impl Thread {
         if e.Ok() {
             newE = creds.lock().UserNamespace.MapToKUID(e);
             if !newE.Ok() {
-                return Err(Error::SysError(SysErr::EINVAL))
+                return Err(Error::SysError(SysErr::EINVAL));
             }
         }
 
@@ -376,12 +377,12 @@ impl Thread {
             // "Unprivileged processes may only set the effective user ID to the
             // real user ID, the effective user ID, or the saved set-user-ID."
             if newE != real && newE != effective && newE != save {
-                return Err(Error::SysError(SysErr::EPERM))
+                return Err(Error::SysError(SysErr::EPERM));
             }
             // "Unprivileged users may only set the real user ID to the real user
             // ID or the effective user ID."
             if newR != real && newR != effective {
-                return Err(Error::SysError(SysErr::EPERM))
+                return Err(Error::SysError(SysErr::EPERM));
             }
         }
 
@@ -394,7 +395,7 @@ impl Thread {
         }
 
         t.setKUIDsUncheckedLocked(newR, newE, newS);
-        return Ok(())
+        return Ok(());
     }
 
     pub fn SetRESUID(&self, r: UID, e: UID, s: UID) -> Result<()> {
@@ -424,13 +425,13 @@ impl Thread {
         }
 
         t.setKUIDsUncheckedLocked(newR, newE, newS);
-        return Ok(())
+        return Ok(());
     }
 
     // SetGID implements the semantics of setgid(2).
     pub fn SetGID(&self, gid: GID) -> Result<()> {
         if !gid.Ok() {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         let mut t = self.lock();
@@ -438,23 +439,23 @@ impl Thread {
 
         let kgid = creds.lock().UserNamespace.MapToKGID(gid);
         if !kgid.Ok() {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         if creds.HasCapability(Capability::CAP_SETGID) {
             t.setKGIDsUncheckedLocked(kgid, kgid, kgid);
-            return Ok(())
+            return Ok(());
         }
 
         let r = creds.lock().RealKGID;
         let s = creds.lock().SavedKGID;
 
         if kgid != r || kgid != s {
-            return Err(Error::SysError(SysErr::EPERM))
+            return Err(Error::SysError(SysErr::EPERM));
         }
 
         t.setKGIDsUncheckedLocked(r, kgid, s);
-        return Ok(())
+        return Ok(());
     }
 
     // SetREGID implements the semantics of setregid(2).
@@ -467,7 +468,7 @@ impl Thread {
         if r.Ok() {
             newR = userns.MapToKGID(r);
             if !newR.Ok() {
-                return Err(Error::SysError(SysErr::EINVAL))
+                return Err(Error::SysError(SysErr::EINVAL));
             }
         }
 
@@ -475,7 +476,7 @@ impl Thread {
         if e.Ok() {
             newE = userns.MapToKGID(e);
             if !newE.Ok() {
-                return Err(Error::SysError(SysErr::EINVAL))
+                return Err(Error::SysError(SysErr::EINVAL));
             }
         }
 
@@ -484,11 +485,11 @@ impl Thread {
         let SavedKGID = creds.lock().SavedKGID;
         if !creds.HasCapability(Capability::CAP_SETGID) {
             if newE.0 != RealKGID.0 && newE.0 != EffectiveKGID.0 && newE.0 != SavedKGID.0 {
-                return Err(Error::SysError(SysErr::EPERM))
+                return Err(Error::SysError(SysErr::EPERM));
             }
 
             if newR.0 != RealKGID.0 && newR.0 != EffectiveKGID.0 {
-                return Err(Error::SysError(SysErr::EPERM))
+                return Err(Error::SysError(SysErr::EPERM));
             }
         }
 
@@ -498,7 +499,7 @@ impl Thread {
         }
 
         t.setKGIDsUncheckedLocked(newR, newE, newS);
-        return Ok(())
+        return Ok(());
     }
 
     // SetRESGID implements the semantics of the setresgid(2) syscall.
@@ -510,7 +511,7 @@ impl Thread {
         if r.Ok() {
             newR = creds.UseGID(r)?;
             if !newR.Ok() {
-                return Err(Error::SysError(SysErr::EINVAL))
+                return Err(Error::SysError(SysErr::EINVAL));
             }
         }
 
@@ -518,7 +519,7 @@ impl Thread {
         if e.Ok() {
             newE = creds.UseGID(e)?;
             if !newE.Ok() {
-                return Err(Error::SysError(SysErr::EINVAL))
+                return Err(Error::SysError(SysErr::EINVAL));
             }
         }
 
@@ -526,19 +527,19 @@ impl Thread {
         if s.Ok() {
             newS = creds.UseGID(s)?;
             if !newS.Ok() {
-                return Err(Error::SysError(SysErr::EINVAL))
+                return Err(Error::SysError(SysErr::EINVAL));
             }
         }
 
         t.setKGIDsUncheckedLocked(newR, newE, newS);
-        return Ok(())
+        return Ok(());
     }
 
     pub fn SetExtraGIDs(&self, gids: &[GID]) -> Result<()> {
         let mut t = self.lock();
         info!("SetExtraGIDs 1");
         if !t.creds.HasCapability(Capability::CAP_SETGID) {
-            return Err(Error::SysError(SysErr::EPERM))
+            return Err(Error::SysError(SysErr::EPERM));
         }
 
         info!("SetExtraGIDs 2");
@@ -547,7 +548,7 @@ impl Thread {
         for gid in gids {
             let kgid = userns.MapToKGID(*gid);
             if !kgid.Ok() {
-                return Err(Error::SysError(SysErr::EINVAL))
+                return Err(Error::SysError(SysErr::EINVAL));
             }
             kgids.push(kgid)
         }
@@ -555,16 +556,21 @@ impl Thread {
         info!("SetExtraGIDs 3");
         t.creds = t.creds.Fork();
         t.creds.lock().ExtraKGIDs = kgids;
-        return Ok(())
+        return Ok(());
     }
 
-    pub fn SetCapabilitySets(&self, permitted: CapSet, inheritable: CapSet, effective: CapSet) -> Result<()> {
+    pub fn SetCapabilitySets(
+        &self,
+        permitted: CapSet,
+        inheritable: CapSet,
+        effective: CapSet,
+    ) -> Result<()> {
         let mut t = self.lock();
 
         // "Permitted: This is a limiting superset for the effective capabilities
         // that the thread may assume." - capabilities(7)
         if effective.0 & !permitted.0 != 0 {
-            return Err(Error::SysError(SysErr::EPERM))
+            return Err(Error::SysError(SysErr::EPERM));
         }
 
         // "It is also a limiting superset for the capabilities that may be added
@@ -574,21 +580,22 @@ impl Thread {
         let PermittedCaps = t.creds.lock().PermittedCaps;
         let BoundingCaps = t.creds.lock().BoundingCaps;
         if !t.creds.HasCapability(Capability::CAP_SETPCAP)
-            && (inheritable.0 & !(inheritable.0 | PermittedCaps.0)) != 0 {
-            return Err(Error::SysError(SysErr::EPERM))
+            && (inheritable.0 & !(inheritable.0 | PermittedCaps.0)) != 0
+        {
+            return Err(Error::SysError(SysErr::EPERM));
         }
 
         // "If a thread drops a capability from its permitted set, it can never
         // reacquire that capability (unless it execve(2)s ..."
         if permitted.0 & !PermittedCaps.0 != 0 {
-            return Err(Error::SysError(SysErr::EPERM))
+            return Err(Error::SysError(SysErr::EPERM));
         }
 
         // "... if a capability is not in the bounding set, then a thread can't add
         // this capability to its inheritable set, even if it was in its permitted
         // capabilities ..."
         if inheritable.0 & !(InheritableCaps.0 | BoundingCaps.0) != 0 {
-            return Err(Error::SysError(SysErr::EPERM))
+            return Err(Error::SysError(SysErr::EPERM));
         }
 
         t.creds = t.creds.Fork();
@@ -599,24 +606,24 @@ impl Thread {
         let task = Task::GetTask(t.taskId);
         task.creds = t.creds.clone();
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn DropBoundingCapability(&self, cp: u64) -> Result<()> {
         let mut t = self.lock();
         if !t.creds.HasCapability(Capability::CAP_SETPCAP) {
-            return Err(Error::SysError(SysErr::EPERM))
+            return Err(Error::SysError(SysErr::EPERM));
         }
 
         t.creds = t.creds.Fork();
         t.creds.lock().BoundingCaps.0 &= !CapSetOf(cp).0;
-        return Ok(())
+        return Ok(());
     }
 
     pub fn SetUserNamespace(&self, ns: &UserNameSpace) -> Result<()> {
         let mut t = self.lock();
 
-        return t.setUserNamespace(ns)
+        return t.setUserNamespace(ns);
     }
 
     // SetKeepCaps will set the keep capabilities flag PR_SET_KEEPCAPS.

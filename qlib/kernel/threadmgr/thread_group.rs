@@ -12,36 +12,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
-use alloc::sync::Weak;
 use crate::qlib::mutex::*;
-use core::ops::Deref;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::collections::btree_set::BTreeSet;
+use alloc::string::String;
+use alloc::sync::Arc;
+use alloc::sync::Weak;
 use alloc::vec::Vec;
 use core::cmp::*;
-use alloc::string::String;
+use core::ops::Deref;
 
 use super::super::super::common::*;
-use super::super::super::linux_def::*;
-use super::super::SignalDef::*;
 use super::super::super::limits::*;
-use super::super::kernel::timer::timer::Timer;
-use super::super::kernel::timer::timer::Setting;
-use super::super::kernel::posixtimer::*;
-use super::super::threadmgr::task_exit::*;
 use super::super::super::linux;
+use super::super::super::linux_def::*;
 use super::super::super::usage::cpu::*;
 use super::super::super::usage::io::*;
+use super::super::kernel::posixtimer::*;
 use super::super::kernel::signal_handler::*;
+use super::super::kernel::timer::timer::Setting;
+use super::super::kernel::timer::timer::Timer;
 use super::super::kernel::waiter::queue::*;
 use super::super::kernel::waiter::waitgroup::*;
+use super::super::threadmgr::task_exit::*;
+use super::super::SignalDef::*;
 
+use super::pid_namespace::*;
+use super::processgroup::*;
+use super::session::*;
 use super::thread::*;
 use super::threads::*;
-use super::session::*;
-use super::processgroup::*;
-use super::pid_namespace::*;
 
 #[derive(Default)]
 pub struct ThreadGroupInternal {
@@ -296,15 +296,15 @@ impl ThreadGroupWeak {
 
         return Some(ThreadGroup {
             uid: self.uid,
-            data: t
-        })
+            data: t,
+        });
     }
 }
 
 #[derive(Clone, Default)]
 pub struct ThreadGroup {
     pub uid: UniqueID,
-    pub data: Arc<QMutex<ThreadGroupInternal>>
+    pub data: Arc<QMutex<ThreadGroupInternal>>,
 }
 
 impl Deref for ThreadGroup {
@@ -351,7 +351,7 @@ impl ThreadGroup {
         return ThreadGroupWeak {
             uid: self.uid,
             data: Arc::downgrade(&self.data),
-        }
+        };
     }
 
     pub fn TimerMu(&self) -> Arc<QMutex<()>> {
@@ -469,7 +469,17 @@ impl ThreadGroup {
             }
         }
 
-        let pg = ProcessGroup::New(id, self.clone(), self.lock().processGroup.clone().unwrap().lock().session.clone());
+        let pg = ProcessGroup::New(
+            id,
+            self.clone(),
+            self.lock()
+                .processGroup
+                .clone()
+                .unwrap()
+                .lock()
+                .session
+                .clone(),
+        );
 
         let leader = self.lock().leader.Upgrade().unwrap();
         if let Some(ref parent) = &leader.lock().parent {
@@ -510,10 +520,15 @@ impl ThreadGroup {
             ns = tmp;
         }
 
-        return Ok(())
+        return Ok(());
     }
 
-    pub fn JoinProcessGroup(&self, pidns: &PIDNamespace, pgid: ProcessGroupID, checkExec: bool) -> Result<()> {
+    pub fn JoinProcessGroup(
+        &self,
+        pidns: &PIDNamespace,
+        pgid: ProcessGroupID,
+        checkExec: bool,
+    ) -> Result<()> {
         let owner = pidns.lock().owner.clone();
         let _r = owner.ReadLock();
 
@@ -523,13 +538,13 @@ impl ThreadGroup {
         };
 
         if checkExec && self.lock().execed {
-            return Err(Error::SysError(SysErr::EACCES))
+            return Err(Error::SysError(SysErr::EACCES));
         }
 
         let session = pg.lock().session.clone();
         let currentPg = self.lock().processGroup.clone().unwrap();
         if session != currentPg.lock().session {
-            return Err(Error::SysError(SysErr::EPERM))
+            return Err(Error::SysError(SysErr::EPERM));
         }
 
         let parentPG = self.parentPG();
@@ -545,7 +560,7 @@ impl ThreadGroup {
 
         pgCurr.decRefWithParent(parentPG);
         self.lock().processGroup = Some(pg);
-        return Ok(())
+        return Ok(());
     }
 
     pub fn Session(&self) -> Option<Session> {
@@ -617,16 +632,16 @@ impl ThreadGroup {
             }
 
             if s.lock().leader == self.clone() {
-                return Err(Error::SysError(SysErr::EPERM))
+                return Err(Error::SysError(SysErr::EPERM));
             }
 
             if s.lock().id == id {
-                return Err(Error::SysError(SysErr::EPERM))
+                return Err(Error::SysError(SysErr::EPERM));
             }
 
             for pg in &s.lock().processGroups {
                 if pg.lock().id == id {
-                    return Err(Error::SysError(SysErr::EPERM))
+                    return Err(Error::SysError(SysErr::EPERM));
                 }
             }
         }
@@ -673,6 +688,6 @@ impl ThreadGroup {
             ns = tmp;
         }
 
-        return Ok(())
+        return Ok(());
     }
 }

@@ -12,33 +12,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::ToString;
+use alloc::sync::Arc;
 
-use super::super::super::super::super::common::*;
-use super::super::super::super::super::linux_def::*;
-use super::super::super::super::super::device::*;
 use super::super::super::super::super::auth::*;
-use super::super::super::super::task::*;
-use super::super::super::super::fs::fsutil::file::dynamic_dir_file_operations::*;
+use super::super::super::super::super::common::*;
+use super::super::super::super::super::device::*;
+use super::super::super::super::super::linux_def::*;
 use super::super::super::super::fs::dentry::*;
+use super::super::super::super::fs::fsutil::file::dynamic_dir_file_operations::*;
 use super::super::super::super::fs::mount::*;
-use super::super::super::attr::*;
-use super::super::super::file::*;
-use super::super::super::flags::*;
-use super::super::super::dirent::*;
-use super::super::super::inode::*;
-use super::super::super::ramfs::dir::*;
+use super::super::super::super::task::*;
 use super::super::super::super::threadmgr::pid_namespace::*;
 use super::super::super::super::threadmgr::thread::*;
-use super::super::proc::*;
+use super::super::super::attr::*;
+use super::super::super::dirent::*;
+use super::super::super::file::*;
+use super::super::super::flags::*;
+use super::super::super::inode::*;
+use super::super::super::ramfs::dir::*;
 use super::super::dir_proc::*;
 use super::super::inode::*;
+use super::super::proc::*;
 
 impl ProcNode {
-    pub fn NewSubTasksDir(&self, task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>) -> Inode {
+    pub fn NewSubTasksDir(
+        &self,
+        task: &Task,
+        thread: &Thread,
+        msrc: &Arc<QMutex<MountSource>>,
+    ) -> Inode {
         let contents = BTreeMap::new();
         let subTasksNode = SubTasksNode {
             thread: thread.clone(),
@@ -46,11 +51,21 @@ impl ProcNode {
         };
 
         let subTaskDir = DirNode {
-            dir: Dir::New(task, contents, &ROOT_OWNER, &FilePermissions::FromMode(FileMode(0o0555))),
-            data: subTasksNode
+            dir: Dir::New(
+                task,
+                contents,
+                &ROOT_OWNER,
+                &FilePermissions::FromMode(FileMode(0o0555)),
+            ),
+            data: subTasksNode,
         };
 
-        return NewProcInode(&Arc::new(subTaskDir), msrc, InodeType::SpecialDirectory, Some(thread.clone()))
+        return NewProcInode(
+            &Arc::new(subTaskDir),
+            msrc,
+            InodeType::SpecialDirectory,
+            Some(thread.clone()),
+        );
     }
 }
 
@@ -74,7 +89,7 @@ impl DirDataNode for SubTasksNode {
         };
 
         if thread.ThreadGroup() != self.thread.ThreadGroup() {
-            return Err(Error::SysError(SysErr::ENOENT))
+            return Err(Error::SysError(SysErr::ENOENT));
         }
 
         let ms = dir.lock().MountSource.clone();
@@ -82,22 +97,33 @@ impl DirDataNode for SubTasksNode {
         return Ok(Dirent::New(&td, name));
     }
 
-    fn GetFile(&self, _d: &Dir, _task: &Task, _dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File> {
+    fn GetFile(
+        &self,
+        _d: &Dir,
+        _task: &Task,
+        _dir: &Inode,
+        dirent: &Dirent,
+        flags: FileFlags,
+    ) -> Result<File> {
         let pidns = self.procNode.lock().pidns.clone();
-        return Ok(File::New(dirent, &flags, NewSubTasksFile(&self.thread, &pidns)))
+        return Ok(File::New(
+            dirent,
+            &flags,
+            NewSubTasksFile(&self.thread, &pidns),
+        ));
     }
 }
 
-
-pub fn NewSubTasksFile(thread: &Thread, pidns: &PIDNamespace) -> DynamicDirFileOperations<SubTasksFileNode> {
+pub fn NewSubTasksFile(
+    thread: &Thread,
+    pidns: &PIDNamespace,
+) -> DynamicDirFileOperations<SubTasksFileNode> {
     let subTaskFile = SubTasksFileNode {
         thread: thread.clone(),
         pidns: pidns.clone(),
     };
 
-    return DynamicDirFileOperations {
-        node: subTaskFile
-    }
+    return DynamicDirFileOperations { node: subTaskFile };
 }
 
 pub struct SubTasksFileNode {
@@ -106,7 +132,13 @@ pub struct SubTasksFileNode {
 }
 
 impl DynamicDirFileNode for SubTasksFileNode {
-    fn ReadDir(&self, task: &Task, _f: &File, offset: i64, serializer: &mut DentrySerializer) -> Result<i64> {
+    fn ReadDir(
+        &self,
+        task: &Task,
+        _f: &File,
+        offset: i64,
+        serializer: &mut DentrySerializer,
+    ) -> Result<i64> {
         let mut dirCtx = DirCtx {
             Serializer: serializer,
             DirCursor: "".to_string(),
@@ -123,7 +155,7 @@ impl DynamicDirFileNode for SubTasksFileNode {
         let tasks = self.thread.ThreadGroup().MemberIDs(&self.pidns);
         let idx = match tasks.binary_search(&(offset as i32)) {
             Ok(i) => i,
-            Err(i) => i
+            Err(i) => i,
         };
 
         if idx == tasks.len() {
@@ -139,9 +171,6 @@ impl DynamicDirFileNode for SubTasksFileNode {
             dirCtx.DirEmit(task, &name, &attr)?;
         }
 
-        return Ok(tid as i64 + 1)
+        return Ok(tid as i64 + 1);
     }
-
 }
-
-

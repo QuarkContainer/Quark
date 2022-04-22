@@ -17,7 +17,7 @@ impl RDMA {
             HostSpace::RDMANotify(fd, RDMANotifyType::Accept);
         }
 
-        return ai
+        return ai;
     }
 
     pub fn Read(task: &Task, fd: i32, buf: Arc<SocketBuff>, dsts: &mut [IoVec]) -> Result<i64> {
@@ -34,12 +34,16 @@ impl RDMA {
             }
         }
 
-
-        return Ok(cnt as i64)
+        return Ok(cnt as i64);
     }
 
     //todo: put ops: &SocketOperations in the write request to make the socket won't be closed before write is finished
-    pub fn Write(task: &Task, fd: i32, buf: Arc<SocketBuff>, srcs: &[IoVec]/*, ops: &SocketOperations*/) -> Result<i64> {
+    pub fn Write(
+        task: &Task,
+        fd: i32,
+        buf: Arc<SocketBuff>,
+        srcs: &[IoVec], /*, ops: &SocketOperations*/
+    ) -> Result<i64> {
         let (count, writeBuf) = buf.Writev(task, srcs)?;
         if writeBuf.is_some() {
             if RDMA_ENABLE {
@@ -49,6 +53,6 @@ impl RDMA {
             }
         }
 
-        return Ok(count as i64)
+        return Ok(count as i64);
     }
 }

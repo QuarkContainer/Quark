@@ -43,7 +43,7 @@ impl Default for WaiterInternal {
             idCnt: 0,
             state: WaitState::default(),
             taskId: TaskId::New(0),
-        }
+        };
     }
 }
 
@@ -75,16 +75,16 @@ impl Waiter {
         }
 
         b.idCnt += 1;
-        return b.idCnt - 1
+        return b.idCnt - 1;
     }
 
-    pub const GENERAL_WAITID : WaiterID = 0;
-    pub const INTERRUPT_WAITID : WaiterID = 1;
-    pub const TIMER_WAITID : WaiterID = 2;
+    pub const GENERAL_WAITID: WaiterID = 0;
+    pub const INTERRUPT_WAITID: WaiterID = 1;
+    pub const TIMER_WAITID: WaiterID = 2;
 
     pub fn NewWaitEntry(&self, waitId: WaiterID, mask: EventMask) -> WaitEntry {
         //let waitId = self.NextWaiterId();
-        return WaitEntry::NewThreadContext(self, waitId, mask)
+        return WaitEntry::NewThreadContext(self, waitId, mask);
     }
 
     pub fn Trigger(&self, id: WaiterID) {
@@ -107,9 +107,9 @@ impl Waiter {
         let b = self.lock();
         let bitmap = b.bitmap & mask;
         if bitmap > 0 {
-            return Some(bitmap.trailing_zeros())
+            return Some(bitmap.trailing_zeros());
         } else {
-            return None
+            return None;
         }
     }
 
@@ -179,4 +179,3 @@ impl Default for WaitState {
         return WaitState::Running;
     }
 }
-

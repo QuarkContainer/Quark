@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use core::i64;
 use core::sync::atomic::AtomicI64;
 use core::sync::atomic::Ordering;
-use core::i64;
 
 pub struct AtomicRefCount {
     refCount: AtomicI64,
@@ -24,7 +24,7 @@ impl Default for AtomicRefCount {
     fn default() -> Self {
         return Self {
             refCount: AtomicI64::new(1),
-        }
+        };
     }
 }
 

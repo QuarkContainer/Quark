@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::super::super::task_mgr::*;
 use super::super::super::linux_def::EpollEvent;
-use super::super::super::uring::squeue;
+use super::super::super::task_mgr::*;
 use super::super::super::uring::opcode::*;
+use super::super::super::uring::squeue;
 
-pub static DEFAULT_MSG : UringOp = UringOp::None;
+pub static DEFAULT_MSG: UringOp = UringOp::None;
 
 #[derive(Clone, Debug, Copy)]
 pub struct UringCall {
@@ -29,10 +29,10 @@ pub struct UringCall {
 impl Default for UringCall {
     fn default() -> Self {
         return Self {
-            taskId : TaskId::default(),
+            taskId: TaskId::default(),
             ret: 0,
             msg: DEFAULT_MSG,
-        }
+        };
     }
 }
 
@@ -43,7 +43,7 @@ pub enum UringCallRetType {
 
 impl UringCall {
     pub fn Ptr(&self) -> u64 {
-        return self as * const _ as u64;
+        return self as *const _ as u64;
     }
 
     pub fn SEntry(&self) -> squeue::Entry {
@@ -82,7 +82,7 @@ impl Default for UringOp {
 
 #[derive(Clone, Debug, Copy)]
 pub struct TimerRemoveOp {
-    pub userData: u64
+    pub userData: u64,
 }
 
 impl TimerRemoveOp {
@@ -103,11 +103,9 @@ pub struct ReadOp {
 
 impl ReadOp {
     pub fn SEntry(&self) -> squeue::Entry {
-        let op = Read::new(types::Fd(self.fd), self.addr as * mut _, self.len)
-            .offset(self.offset);
+        let op = Read::new(types::Fd(self.fd), self.addr as *mut _, self.len).offset(self.offset);
 
-        return op.build()
-            .flags(squeue::Flags::FIXED_FILE);
+        return op.build().flags(squeue::Flags::FIXED_FILE);
     }
 }
 
@@ -121,11 +119,10 @@ pub struct WriteOp {
 
 impl WriteOp {
     pub fn SEntry(&self) -> squeue::Entry {
-        let op = Write::new(types::Fd(self.fd), self.addr as * const _, self.len)
-            .offset(self.offset);
+        let op =
+            Write::new(types::Fd(self.fd), self.addr as *const _, self.len).offset(self.offset);
 
-        return op.build()
-            .flags(squeue::Flags::FIXED_FILE);
+        return op.build().flags(squeue::Flags::FIXED_FILE);
     }
 }
 
@@ -140,9 +137,13 @@ pub struct StatxOp {
 
 impl StatxOp {
     pub fn SEntry(&self) -> squeue::Entry {
-        let op = Statx::new(types::Fd(self.dirfd), self.pathname as * const _, self.statxBuf as * mut types::statx)
-            .flags(self.flags)
-            .mask(self.mask);
+        let op = Statx::new(
+            types::Fd(self.dirfd),
+            self.pathname as *const _,
+            self.statxBuf as *mut types::statx,
+        )
+        .flags(self.flags)
+        .mask(self.mask);
 
         return op.build().flags(squeue::Flags::FIXED_FILE);
     }
@@ -151,20 +152,18 @@ impl StatxOp {
 #[derive(Clone, Debug, Copy)]
 pub struct FsyncOp {
     pub fd: i32,
-    pub dataSyncOnly: bool
+    pub dataSyncOnly: bool,
 }
 
 impl FsyncOp {
     pub fn SEntry(&self) -> squeue::Entry {
         let op = if self.dataSyncOnly {
-            Fsync::new(types::Fd(self.fd))
-                .flags(types::FsyncFlags::DATASYNC)
+            Fsync::new(types::Fd(self.fd)).flags(types::FsyncFlags::DATASYNC)
         } else {
             Fsync::new(types::Fd(self.fd))
         };
 
-        return op.build()
-            .flags(squeue::Flags::FIXED_FILE);
+        return op.build().flags(squeue::Flags::FIXED_FILE);
     }
 }
 
@@ -180,11 +179,16 @@ pub struct SpliceOp {
 
 impl SpliceOp {
     pub fn SEntry(&self) -> squeue::Entry {
-        let op = Splice::new(types::Fixed(self.fdIn as u32), self.offsetIn, types::Fixed(self.fdOut as u32), self.offsetOut, self.len);
+        let op = Splice::new(
+            types::Fixed(self.fdIn as u32),
+            self.offsetIn,
+            types::Fixed(self.fdOut as u32),
+            self.offsetOut,
+            self.len,
+        );
 
         error!("SpliceOp {:x?}", self);
-        return op.build()
-            .flags(squeue::Flags::FIXED_FILE);
+        return op.build().flags(squeue::Flags::FIXED_FILE);
     }
 }
 
@@ -198,22 +202,29 @@ pub struct EpollCtlOp {
 
 impl EpollCtlOp {
     pub fn SEntry(&self) -> squeue::Entry {
-        let op = EpollCtl::new(types::Fd(self.epollfd), types::Fd(self.fd), self.op, &self.ev as * const _ as u64 as * const types::epoll_event);
+        let op = EpollCtl::new(
+            types::Fd(self.epollfd),
+            types::Fd(self.fd),
+            self.op,
+            &self.ev as *const _ as u64 as *const types::epoll_event,
+        );
 
-        return op.build()
-            .flags(squeue::Flags::FIXED_FILE);
+        return op.build().flags(squeue::Flags::FIXED_FILE);
     }
 }
 
 #[derive(Clone, Debug, Copy)]
 pub struct AcceptOp {
-    pub fd : i32,
+    pub fd: i32,
 }
 
 impl AcceptOp {
     pub fn SEntry(&self) -> squeue::Entry {
-        let op = Accept::new(types::Fd(self.fd), &0 as * const _ as u64 as * mut _, &0 as * const _ as u64 as * mut _);
-        return op.build()
-            .flags(squeue::Flags::FIXED_FILE);
+        let op = Accept::new(
+            types::Fd(self.fd),
+            &0 as *const _ as u64 as *mut _,
+            &0 as *const _ as u64 as *mut _,
+        );
+        return op.build().flags(squeue::Flags::FIXED_FILE);
     }
 }

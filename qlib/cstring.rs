@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::vec::Vec;
 use alloc::str;
+use alloc::vec::Vec;
 
 pub struct CString {
-    pub data: Vec<u8>
+    pub data: Vec<u8>,
 }
 
 impl CString {
@@ -28,9 +28,7 @@ impl CString {
         }
 
         data.push(0);
-        return Self {
-            data
-        }
+        return Self { data };
     }
 
     pub fn Ptr(&self) -> u64 {
@@ -42,6 +40,6 @@ impl CString {
     }
 
     pub fn Slice(&self) -> &[u8] {
-        return &self.data[..]
+        return &self.data[..];
     }
 }

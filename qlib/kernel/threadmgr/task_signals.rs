@@ -15,14 +15,14 @@
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 
-use super::super::arch::x86_64::arch_x86::*;
 use super::super::super::common::*;
-use super::super::super::linux_def::*;
-use super::super::task::*;
-use super::super::stack::*;
 use super::super::super::linux::time::*;
+use super::super::super::linux_def::*;
+use super::super::arch::x86_64::arch_x86::*;
 use super::super::kernel::posixtimer::*;
 use super::super::kernel::waiter::*;
+use super::super::stack::*;
+use super::super::task::*;
 use super::super::threadmgr::thread::*;
 use super::super::threadmgr::thread_group::*;
 use super::super::SignalDef::*;
@@ -45,50 +45,47 @@ impl SignalAction {
 
 pub static DEFAULT_ACTION: &'static [u64] = &[
     SignalAction::IGNORE, //0
-    SignalAction::TERM, //1
-    SignalAction::TERM, //2
-    SignalAction::CORE, //3
-    SignalAction::CORE, //4
-    SignalAction::CORE, //5
-    SignalAction::CORE, //6
-    SignalAction::CORE, //7
-    SignalAction::CORE, //8
-    SignalAction::TERM, //9
-    SignalAction::TERM, //10
-    SignalAction::CORE, //11
-    SignalAction::TERM, //12
-    SignalAction::TERM, //13
-    SignalAction::TERM, //14
-    SignalAction::TERM, //15
-    SignalAction::TERM, //16
+    SignalAction::TERM,   //1
+    SignalAction::TERM,   //2
+    SignalAction::CORE,   //3
+    SignalAction::CORE,   //4
+    SignalAction::CORE,   //5
+    SignalAction::CORE,   //6
+    SignalAction::CORE,   //7
+    SignalAction::CORE,   //8
+    SignalAction::TERM,   //9
+    SignalAction::TERM,   //10
+    SignalAction::CORE,   //11
+    SignalAction::TERM,   //12
+    SignalAction::TERM,   //13
+    SignalAction::TERM,   //14
+    SignalAction::TERM,   //15
+    SignalAction::TERM,   //16
     SignalAction::IGNORE, //17
     SignalAction::IGNORE, //18
-    SignalAction::STOP, //19
-    SignalAction::STOP, //20
-    SignalAction::STOP, //21
-    SignalAction::STOP, //22
+    SignalAction::STOP,   //19
+    SignalAction::STOP,   //20
+    SignalAction::STOP,   //21
+    SignalAction::STOP,   //22
     SignalAction::IGNORE, //23
-    SignalAction::CORE, //24
-    SignalAction::CORE, //25
-    SignalAction::TERM, //26
-    SignalAction::TERM, //27
+    SignalAction::CORE,   //24
+    SignalAction::CORE,   //25
+    SignalAction::TERM,   //26
+    SignalAction::TERM,   //27
     SignalAction::IGNORE, //28
-    SignalAction::TERM, //29
-    SignalAction::CORE, //30
-    SignalAction::CORE, //31
+    SignalAction::TERM,   //29
+    SignalAction::CORE,   //30
+    SignalAction::CORE,   //31
 ];
 
 // UnblockableSignals contains the set of signals which cannot be blocked.
-pub static UNBLOCKED_SIGNALS: SignalSet = SignalSet(
-    (1 << Signal::SIGKILL | 1 << Signal::SIGSTOP) >> 1
-);
+pub static UNBLOCKED_SIGNALS: SignalSet =
+    SignalSet((1 << Signal::SIGKILL | 1 << Signal::SIGSTOP) >> 1);
 
 // StopSignals is the set of signals whose default action is SignalActionStop.
 pub static STOP_SIGNALS: SignalSet = SignalSet(
-    (1 << Signal::SIGSTOP |
-        1 << Signal::SIGTSTP |
-        1 << Signal::SIGTTIN |
-        1 << Signal::SIGTTOU) >> 1
+    (1 << Signal::SIGSTOP | 1 << Signal::SIGTSTP | 1 << Signal::SIGTTIN | 1 << Signal::SIGTTOU)
+        >> 1,
 );
 
 // computeAction figures out what to do given a signal number
@@ -160,16 +157,15 @@ impl ThreadInternal {
         }
 
         if tg.groupStopComplete {
-            return false
+            return false;
         }
 
         tg.groupStopComplete = true;
         tg.groupStopWaitable = true;
         tg.groupContNotify = false;
         tg.groupContWaitable = false;
-        return true
+        return true;
     }
-
 
     // canReceiveSignalLocked returns true if t should be interrupted to receive
     // the given signal. canReceiveSignalLocked is analogous to Linux's
@@ -177,7 +173,8 @@ impl ThreadInternal {
     //
     // Preconditions: The signal mutex must be locked.
     pub fn canReceiveSignalLocked(&self, sig: Signal) -> bool {
-        self.SignalQueue.Notify(SignalSet::MakeSignalSet(&[sig]).0  as EventMask);
+        self.SignalQueue
+            .Notify(SignalSet::MakeSignalSet(&[sig]).0 as EventMask);
 
         // - Do not choose tasks that are blocking the signal.
         if SignalSet::New(sig).0 & self.signalMask.0 != 0 {
@@ -228,7 +225,9 @@ impl Thread {
             act.handler = SigAct::SIGNAL_ACT_DEFAULT;
             sh.actions.insert(sig.0, act);
             if blocked {
-                self.setSignalMaskLocked(SignalSet(self.lock().signalMask.0 & !SignalSet::New(sig).0))
+                self.setSignalMaskLocked(SignalSet(
+                    self.lock().signalMask.0 & !SignalSet::New(sig).0,
+                ))
             }
         }
     }
@@ -287,24 +286,36 @@ impl Thread {
         let _s = lock.lock();
 
         if self.lock().groupStopPending {
-            info!("Signal {}: not stopping thread group: lost to racing stop signal", info.Signo);
-            return
+            info!(
+                "Signal {}: not stopping thread group: lost to racing stop signal",
+                info.Signo
+            );
+            return;
         }
 
         let mut tg = tg.lock();
         if !tg.groupStopDequeued {
-            info!("Signal {}: not stopping thread group: lost to racing SIGCONT", info.Signo);
-            return
+            info!(
+                "Signal {}: not stopping thread group: lost to racing SIGCONT",
+                info.Signo
+            );
+            return;
         }
 
         if tg.exiting {
-            info!("Signal {}: not stopping thread group: lost to racing group exit", info.Signo);
-            return
+            info!(
+                "Signal {}: not stopping thread group: lost to racing group exit",
+                info.Signo
+            );
+            return;
         }
 
         if tg.execing.Upgrade().is_some() {
-            info!("Signal {}: not stopping thread group: lost to racing execve", info.Signo);
-            return
+            info!(
+                "Signal {}: not stopping thread group: lost to racing execve",
+                info.Signo
+            );
+            return;
         }
 
         if !tg.groupStopComplete {
@@ -332,7 +343,10 @@ impl Thread {
 
         tg.groupStopPendingCount += add;
 
-        info!("Signal {}: stopping {} threads in thread group", info.Signo, tg.groupStopPendingCount);
+        info!(
+            "Signal {}: stopping {} threads in thread group",
+            info.Signo, tg.groupStopPendingCount
+        );
     }
 
     // SetSignalMask sets t's signal mask.
@@ -362,8 +376,10 @@ impl Thread {
         match sh.lock().actions.get(&Signal::SIGCHLD) {
             None => (),
             Some(act) => {
-                if !(act.handler != SigAct::SIGNAL_ACT_IGNORE && act.flags.0 & SigFlag::SIGNAL_FLAG_NO_CLD_STOP == 0) {
-                    return
+                if !(act.handler != SigAct::SIGNAL_ACT_IGNORE
+                    && act.flags.0 & SigFlag::SIGNAL_FLAG_NO_CLD_STOP == 0)
+                {
+                    return;
                 }
             }
         };
@@ -391,7 +407,12 @@ impl Thread {
         return self.sendSignalTimerLocked(info, group, None);
     }
 
-    pub fn sendSignalTimerLocked(&self, info: &SignalInfo, group: bool, timer: Option<IntervalTimer>) -> Result<()> {
+    pub fn sendSignalTimerLocked(
+        &self,
+        info: &SignalInfo,
+        group: bool,
+        timer: Option<IntervalTimer>,
+    ) -> Result<()> {
         info!("sendsignalTimerLocked, signal:{:?}", info);
         if self.lock().exitState == TaskExitState::TaskExitDead {
             return Err(Error::SysError(SysErr::ESRCH));
@@ -399,7 +420,7 @@ impl Thread {
 
         let sig = Signal(info.Signo);
         if sig.0 == 0 {
-            return Ok(())
+            return Ok(());
         }
 
         if !sig.IsValid() {
@@ -438,13 +459,17 @@ impl Thread {
                 timer.unwrap().lock().signalRejectedLocked();
             }
 
-            return Ok(())
+            return Ok(());
         }
 
         let res = if !group {
-            self.lock().pendingSignals.Enque(Box::new(*info), timer.clone())?
+            self.lock()
+                .pendingSignals
+                .Enque(Box::new(*info), timer.clone())?
         } else {
-            tg.lock().pendingSignals.Enque(Box::new(*info), timer.clone())?
+            tg.lock()
+                .pendingSignals
+                .Enque(Box::new(*info), timer.clone())?
         };
 
         if !res {
@@ -456,7 +481,7 @@ impl Thread {
                 timer.clone().unwrap().lock().signalRejectedLocked();
             }
 
-            return Ok(())
+            return Ok(());
         }
 
         // Find a receiver to notify. Note that the task we choose to notify, if
@@ -467,21 +492,20 @@ impl Thread {
         if canReceiveSignalLocked {
             info!("Thread[{}] Notified of signal {:?}", self.lock().id, sig);
             self.lock().interrupt();
-            return Ok(())
+            return Ok(());
         }
 
         if group {
             let nt = tg.lock().findSignalReceiverLocked(sig);
             if nt.is_some() {
                 nt.unwrap().lock().interrupt();
-                return Ok(())
+                return Ok(());
             }
         }
 
         info!("No task notified of signal {:?}", sig);
-        return Ok(())
+        return Ok(());
     }
-
 
     // PendingSignals returns the set of pending signals.
     pub fn PendingSignals(&self) -> SignalSet {
@@ -547,7 +571,7 @@ impl Thread {
 
             let info = self.lock().dequeueSignalLocked(mask);
             if info.is_some() {
-                return Ok(info.unwrap())
+                return Ok(info.unwrap());
             }
 
             if timeout == 0 {
@@ -574,7 +598,7 @@ impl Thread {
 
             let info = self.lock().dequeueSignalLocked(mask);
             if info.is_some() {
-                return Ok(info.unwrap())
+                return Ok(info.unwrap());
             }
 
             match err {
@@ -582,7 +606,7 @@ impl Thread {
                     return Err(Error::SysError(SysErr::EAGAIN));
                 }
                 Err(e) => return Err(e),
-                e => panic!("TaskExitZombie, unknow return {:?}", e)
+                e => panic!("TaskExitZombie, unknow return {:?}", e),
             }
         }
     }
@@ -590,7 +614,7 @@ impl Thread {
     // SignalMask returns a copy of t's signal mask.
     pub fn SignalMask(&self) -> SignalSet {
         let mask = self.lock().signalMask;
-        return mask
+        return mask;
     }
 
     // SetSavedSignalMask sets the saved signal mask (see Task.savedSignalMask's
@@ -680,7 +704,7 @@ impl ThreadGroupInternal {
     pub fn findSignalReceiverLocked(&self, sig: Signal) -> Option<Thread> {
         for t in &self.tasks {
             if t.lock().canReceiveSignalLocked(sig) {
-                return Some(t.clone())
+                return Some(t.clone());
             }
         }
 
@@ -698,7 +722,7 @@ impl ThreadGroupInternal {
         });
 
         if self.groupStopPendingCount == 0 && !self.groupStopComplete {
-            return
+            return;
         }
 
         /*let mut completeStr = "incomplete";
@@ -752,12 +776,8 @@ impl ThreadGroup {
 
         let leader = self.lock().leader.Upgrade();
         match leader {
-            None => {
-                return Err(Error::NotExist)
-            },
-            Some(l) => {
-                return l.sendSignalLocked(info, true)
-            }
+            None => return Err(Error::NotExist),
+            Some(l) => return l.sendSignalLocked(info, true),
         }
     }
 
@@ -807,7 +827,7 @@ impl ThreadGroup {
             }
         }
 
-        return Ok(oldact)
+        return Ok(oldact);
     }
 }
 
@@ -867,7 +887,9 @@ impl Task {
                 if intr {
                     parent.signalStop(&leader, SignalInfo::CLD_STOPPED, sig.0);
                     let ptg = parent.lock().tg.clone();
-                    ptg.lock().eventQueue.Notify(EVENT_GROUP_CONTINUE | EVENT_CHILD_GROUP_STOP);
+                    ptg.lock()
+                        .eventQueue
+                        .Notify(EVENT_GROUP_CONTINUE | EVENT_CHILD_GROUP_STOP);
                 } else {
                     parent.signalStop(&leader, SignalInfo::CLD_CONTINUED, sig.0);
                     let ptg = parent.lock().tg.clone();
@@ -875,7 +897,7 @@ impl Task {
                 }
             }
 
-            return TaskRunState::RunInterrupt
+            return TaskRunState::RunInterrupt;
         }
 
         // Do we need to enter a group stop or related ptrace stop? This path is
@@ -921,7 +943,7 @@ impl Task {
                 ptg.lock().eventQueue.Notify(EVENT_CHILD_GROUP_STOP);
             }
 
-            return TaskRunState::RunInterrupt
+            return TaskRunState::RunInterrupt;
         }
 
         // Are there signals pending?
@@ -963,7 +985,8 @@ impl Task {
                 if sigact == SignalAction::HANDLER {
                     if sre == SysErr::ERESTARTNOHAND
                         || sre == SysErr::ERESTART_RESTARTBLOCK && !act.flags.IsRestart()
-                        || sre == SysErr::ERESTARTSYS && !act.flags.IsRestart() {
+                        || sre == SysErr::ERESTARTSYS && !act.flags.IsRestart()
+                    {
                         self.SetReturn(-SysErr::EINTR as u64)
                     } else if sre == SysErr::ERESTART_RESTARTBLOCK {
                         self.RestartSyscallWithRestartBlock();
@@ -989,10 +1012,14 @@ impl Task {
                 };*/
 
                 match info.Signo {
-                    Signal::SIGSEGV | Signal::SIGFPE | Signal::SIGILL | Signal::SIGTRAP | Signal::SIGBUS => {
+                    Signal::SIGSEGV
+                    | Signal::SIGFPE
+                    | Signal::SIGILL
+                    | Signal::SIGTRAP
+                    | Signal::SIGBUS => {
                         //ucs.FaultAddr = info.SigFault().addr;
                     }
-                    _ => ()
+                    _ => (),
                 }
                 //Emit(&Event::UncaughtSignal(ucs)).unwrap();
                 self.Thread().PrepareGroupExit(ExitStatus {
@@ -1002,9 +1029,7 @@ impl Task {
 
                 return TaskRunState::RunExit;
             }
-            SignalAction::STOP => {
-                self.Thread().initiateGroupStop(info)
-            }
+            SignalAction::STOP => self.Thread().initiateGroupStop(info),
             SignalAction::IGNORE => {
                 info!("Signal {}: ignored", info.Signo)
             }
@@ -1013,19 +1038,28 @@ impl Task {
                 let res = self.deliverSignalToHandler(info, &act);
                 match res {
                     Err(e) => {
-                        info!("Failed to deliver signal {:?} to user handler: {:?}", info, e);
+                        info!(
+                            "Failed to deliver signal {:?} to user handler: {:?}",
+                            info, e
+                        );
 
-                        self.Thread().forceSignal(Signal(Signal::SIGSEGV), info.Signo == Signal::SIGSEGV);
-                        self.Thread().SendSignal(&SignalInfoPriv(Signal::SIGSEGV)).unwrap();
+                        self.Thread()
+                            .forceSignal(Signal(Signal::SIGSEGV), info.Signo == Signal::SIGSEGV);
+                        self.Thread()
+                            .SendSignal(&SignalInfoPriv(Signal::SIGSEGV))
+                            .unwrap();
                     }
                     Ok(()) => {
                         return TaskRunState::RunSyscallRet;
-                    },
+                    }
                 }
             }
             _ => {
                 //todo: fix this
-                panic!("Unknown signal action {:?}, {}", &info, "todo....................")
+                panic!(
+                    "Unknown signal action {:?}, {}",
+                    &info, "todo...................."
+                )
             }
         }
 
@@ -1039,12 +1073,14 @@ impl Task {
         if sigAct.flags.IsOnStack() && self.signalStack.IsEnable() {
             self.signalStack.SetOnStack();
             if !self.signalStack.Contains(pt.rsp) {
-                userStack = Stack::New(self.signalStack.Top() );
+                userStack = Stack::New(self.signalStack.Top());
             }
         }
 
         // create new X86fpstate state
-        self.context.sigFPState.push(Box::new(self.context.X86fpstate.Fork()));
+        self.context
+            .sigFPState
+            .push(Box::new(self.context.X86fpstate.Fork()));
         self.context.X86fpstate = Box::new(X86fpstate::default());
 
         let t = self.Thread();
@@ -1075,7 +1111,10 @@ impl Task {
 
         let signo = info.Signo as u64;
         let rsp = userStack.PushU64(self, sigAct.restorer)?;
-        info!("=========start enter user, the address is {:?}, rsp is {:x}, signo is {}", sigAct, rsp, signo);
+        info!(
+            "=========start enter user, the address is {:?}, rsp is {:x}, signo is {}",
+            sigAct, rsp, signo
+        );
         let currTask = Task::Current();
         //SetGsOffset(CPULocalType::KernelStack, currTask.GetKernelSp());
         //SetFs(currTask.GetFs());
@@ -1092,7 +1131,7 @@ impl Task {
         regs.rip = regs.rcx;
         regs.eflags = regs.r11;
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn SignalReturn(&mut self, _rt: bool) -> Result<i64> {
@@ -1125,13 +1164,14 @@ impl Task {
         let t = self.Thread();
         t.SetSignalMask(SignalSet(oldMask));
 
-        pt.eflags = (cEflags & !EflagsDef::EFLAGS_RESTOREABLE) | (nEflags & EflagsDef::EFLAGS_RESTOREABLE);
+        pt.eflags =
+            (cEflags & !EflagsDef::EFLAGS_RESTOREABLE) | (nEflags & EflagsDef::EFLAGS_RESTOREABLE);
         pt.orig_rax = core::u64::MAX;
 
         if t.lock().HasSignal() {
             t.lock().interruptSelf();
         }
 
-        return Err(Error::SysCallRetCtrl(TaskRunState::RunSyscallRet))
+        return Err(Error::SysCallRetCtrl(TaskRunState::RunSyscallRet));
     }
 }

@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::mutex::*;
 use alloc::collections::vec_deque::*;
 use alloc::sync::Arc;
-use crate::qlib::mutex::*;
 use core::ops::Deref;
 
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
+use super::super::super::task::*;
 use super::queue::*;
 use super::*;
-use super::super::super::task::*;
 
 // Chan with >=1 chanel size
 pub struct BufChanInternel<T: Sized> {
-    pub buf : VecDeque<T>,
+    pub buf: VecDeque<T>,
     pub space: usize,
     pub queue: Queue,
     pub closed: bool,
@@ -34,7 +34,7 @@ pub struct BufChanInternel<T: Sized> {
 #[derive(Clone)]
 pub struct BufChan<T>(Arc<QMutex<BufChanInternel<T>>>);
 
-impl <T> Deref for BufChan<T> {
+impl<T> Deref for BufChan<T> {
     type Target = Arc<QMutex<BufChanInternel<T>>>;
 
     fn deref(&self) -> &Arc<QMutex<BufChanInternel<T>>> {
@@ -42,7 +42,7 @@ impl <T> Deref for BufChan<T> {
     }
 }
 
-impl <T> BufChan <T> {
+impl<T> BufChan<T> {
     pub fn New(size: usize) -> Self {
         let internel = BufChanInternel {
             buf: VecDeque::with_capacity(size),
@@ -51,7 +51,7 @@ impl <T> BufChan <T> {
             closed: false,
         };
 
-        return Self(Arc::new(QMutex::new(internel)))
+        return Self(Arc::new(QMutex::new(internel)));
     }
 
     // Get the items waiting in the buffer
@@ -64,14 +64,14 @@ impl <T> BufChan <T> {
             {
                 let mut c = self.lock();
                 if c.closed {
-                    return Err(Error::ChanClose)
+                    return Err(Error::ChanClose);
                 }
 
                 if c.space > 0 {
                     c.buf.push_back(data);
                     c.space -= 1;
                     c.queue.Notify(EVENT_IN);
-                    return Ok(())
+                    return Ok(());
                 }
 
                 let block = task.blocker.clone();
@@ -92,14 +92,14 @@ impl <T> BufChan <T> {
         let mut c = self.lock();
 
         if c.closed {
-            return Err(Error::ChanClose)
+            return Err(Error::ChanClose);
         }
 
         if c.space > 0 {
             c.buf.push_back(data);
             c.space -= 1;
             c.queue.Notify(EVENT_IN);
-            return Ok(true)
+            return Ok(true);
         }
 
         return Ok(false);
@@ -111,7 +111,7 @@ impl <T> BufChan <T> {
                 let mut c = self.lock();
 
                 if c.closed {
-                    return Err(Error::ChanClose)
+                    return Err(Error::ChanClose);
                 }
 
                 if c.buf.len() > 0 {
@@ -138,7 +138,7 @@ impl <T> BufChan <T> {
         let mut c = self.lock();
 
         if c.closed {
-            return Err(Error::ChanClose)
+            return Err(Error::ChanClose);
         }
 
         if c.buf.len() > 0 {

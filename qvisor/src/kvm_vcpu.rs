@@ -12,35 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::alloc::{Layout, alloc};
+use alloc::alloc::{alloc, Layout};
 use alloc::slice;
+use core::mem::size_of;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use kvm_bindings::*;
 use kvm_ioctls::VcpuExit;
-use core::mem::size_of;
 use libc::*;
 use std::os::unix::io::AsRawFd;
 
-use super::*;
 use super::syncmgr::*;
+use super::*;
 //use super::kvm_ctl::*;
-use super::qlib::GetTimeCall;
-use super::qlib::linux::time::Timespec;
 use super::qlib::common::*;
-use super::qlib::task_mgr::*;
-use super::qlib::linux_def::*;
 use super::qlib::kernel::stack::*;
+use super::qlib::linux::time::Timespec;
+use super::qlib::linux_def::*;
 use super::qlib::pagetable::*;
 use super::qlib::perf_tunning::*;
+use super::qlib::task_mgr::*;
+use super::qlib::GetTimeCall;
 //use super::qlib::kernel::TSC;
-use super::qlib::kernel::IOURING;
-use super::qlib::*;
-use super::qlib::vcpu_mgr::*;
-use super::qlib::buddyallocator::ZeroPage;
 use super::amd64_def::*;
-use super::URING_MGR;
+use super::qlib::buddyallocator::ZeroPage;
+use super::qlib::kernel::IOURING;
+use super::qlib::vcpu_mgr::*;
+use super::qlib::*;
 use super::runc::runtime::vm::*;
+use super::URING_MGR;
 
 #[repr(C)]
 pub struct SignalMaskStruct {
@@ -53,7 +53,11 @@ pub struct SignalMaskStruct {
 //use super::vmspace::kernel_io_thread::*;
 
 pub fn AlignedAllocate(size: usize, align: usize, zeroData: bool) -> Result<u64> {
-    assert!(size % 8 == 0, "AlignedAllocate get unaligned size {:x}", size);
+    assert!(
+        size % 8 == 0,
+        "AlignedAllocate get unaligned size {:x}",
+        size
+    );
     let layout = Layout::from_size_align(size, align);
     match layout {
         Err(_e) => Err(Error::UnallignedAddress),
@@ -67,7 +71,7 @@ pub fn AlignedAllocate(size: usize, align: usize, zeroData: bool) -> Result<u64>
             }
 
             Ok(addr as u64)
-        }
+        },
     }
 }
 
@@ -78,14 +82,14 @@ pub struct HostPageAllocator {
 impl HostPageAllocator {
     pub fn New() -> Self {
         return Self {
-            allocator: AlignedAllocator::New(0x1000, 0x10000)
-        }
+            allocator: AlignedAllocator::New(0x1000, 0x10000),
+        };
     }
 }
 
 impl Allocator for HostPageAllocator {
     fn AllocPage(&self, _incrRef: bool) -> Result<u64> {
-       let ret = self.allocator.Allocate()?;
+        let ret = self.allocator.Allocate()?;
         ZeroPage(ret);
         return Ok(ret);
     }
@@ -98,7 +102,7 @@ impl Allocator for HostPageAllocator {
 impl RefMgr for HostPageAllocator {
     fn Ref(&self, _addr: u64) -> Result<u64> {
         //panic!("HostPageAllocator doesn't support Ref");
-        return Ok(1)
+        return Ok(1);
     }
 
     fn Deref(&self, _addr: u64) -> Result<u64> {
@@ -139,30 +143,54 @@ pub struct KVMVcpu {
 unsafe impl Send for KVMVcpu {}
 
 impl KVMVcpu {
-    pub fn Init(id: usize,
-                vcpuCnt: usize,
-                vm_fd: &kvm_ioctls::VmFd,
-                entry: u64,
-                pageAllocatorBaseAddr: u64,
-                shareSpaceAddr: u64,
-                autoStart: bool) -> Result<Self> {
+    pub fn Init(
+        id: usize,
+        vcpuCnt: usize,
+        vm_fd: &kvm_ioctls::VmFd,
+        entry: u64,
+        pageAllocatorBaseAddr: u64,
+        shareSpaceAddr: u64,
+        autoStart: bool,
+    ) -> Result<Self> {
         const DEFAULT_STACK_PAGES: u64 = qlib::linux_def::MemoryDef::DEFAULT_STACK_PAGES; //64KB
-        //let stackAddr = pageAlloc.Alloc(DEFAULT_STACK_PAGES)?;
+                                                                                          //let stackAddr = pageAlloc.Alloc(DEFAULT_STACK_PAGES)?;
         let stackSize = DEFAULT_STACK_PAGES << 12;
         let stackAddr = AlignedAllocate(stackSize as usize, stackSize as usize, false).unwrap();
         let topStackAddr = stackAddr + (DEFAULT_STACK_PAGES << 12);
 
+        let gdtAddr = AlignedAllocate(
+            MemoryDef::PAGE_SIZE as usize,
+            MemoryDef::PAGE_SIZE as usize,
+            true,
+        )
+        .unwrap();
+        let idtAddr = AlignedAllocate(
+            MemoryDef::PAGE_SIZE as usize,
+            MemoryDef::PAGE_SIZE as usize,
+            true,
+        )
+        .unwrap();
 
-        let gdtAddr = AlignedAllocate(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize, true).unwrap();
-        let idtAddr = AlignedAllocate(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize, true).unwrap();
-
-        let tssIntStackStart = AlignedAllocate(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize, true).unwrap();
-        let tssAddr = AlignedAllocate(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize, true).unwrap();
+        let tssIntStackStart = AlignedAllocate(
+            MemoryDef::PAGE_SIZE as usize,
+            MemoryDef::PAGE_SIZE as usize,
+            true,
+        )
+        .unwrap();
+        let tssAddr = AlignedAllocate(
+            MemoryDef::PAGE_SIZE as usize,
+            MemoryDef::PAGE_SIZE as usize,
+            true,
+        )
+        .unwrap();
 
         info!("the tssIntStackStart is {:x}, tssAddr address is {:x}, idt addr is {:x}, gdt addr is {:x}",
             tssIntStackStart, tssAddr, idtAddr, gdtAddr);
 
-        let vcpu = vm_fd.create_vcpu(id as u64).map_err(|e| Error::IOError(format!("io::error is {:?}", e))).expect("create vcpu fail");
+        let vcpu = vm_fd
+            .create_vcpu(id as u64)
+            .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))
+            .expect("create vcpu fail");
         let vcpuCoreId = VMS.lock().ComputeVcpuCoreId(id);
 
         return Ok(Self {
@@ -182,13 +210,11 @@ impl KVMVcpu {
             heapStartAddr: pageAllocatorBaseAddr,
             shareSpaceAddr: shareSpaceAddr,
             autoStart: autoStart,
-        })
+        });
     }
 
     fn SetupGDT(&self, sregs: &mut kvm_sregs) {
-        let gdtTbl = unsafe {
-            std::slice::from_raw_parts_mut(self.gdtAddr as *mut u64, 4096 / 8)
-        };
+        let gdtTbl = unsafe { std::slice::from_raw_parts_mut(self.gdtAddr as *mut u64, 4096 / 8) };
 
         let KernelCodeSegment = SegmentDescriptor::default().SetCode64(0, 0, 0);
         let KernelDataSegment = SegmentDescriptor::default().SetData(0, 0xffffffff, 0);
@@ -215,13 +241,20 @@ impl KVMVcpu {
         gdtTbl[3] = UserDataSegment.AsU64();
         gdtTbl[4] = UserCodeSegment64.AsU64();
 
-        let stack_end = x86_64::VirtAddr::from_ptr((self.tssIntStackStart + MemoryDef::INTERRUPT_STACK_PAGES * MemoryDef::PAGE_SIZE) as *const u64);
+        let stack_end = x86_64::VirtAddr::from_ptr(
+            (self.tssIntStackStart + MemoryDef::INTERRUPT_STACK_PAGES * MemoryDef::PAGE_SIZE)
+                as *const u64,
+        );
 
         let tssSegment = self.tssAddr as *mut x86_64::structures::tss::TaskStateSegment;
         unsafe {
             (*tssSegment).interrupt_stack_table[0] = stack_end;
             (*tssSegment).iomap_base = -1 as i16 as u16;
-            info!("[{}] the tssSegment stack is {:x}", self.id, self.tssIntStackStart + MemoryDef::INTERRUPT_STACK_PAGES * MemoryDef::PAGE_SIZE);
+            info!(
+                "[{}] the tssSegment stack is {:x}",
+                self.id,
+                self.tssIntStackStart + MemoryDef::INTERRUPT_STACK_PAGES * MemoryDef::PAGE_SIZE
+            );
             let (tssLow, tssHigh, limit) = Self::TSStoDescriptor(&(*tssSegment));
 
             gdtTbl[5] = tssLow;
@@ -236,17 +269,20 @@ impl KVMVcpu {
     fn TSS(tss: &x86_64::structures::tss::TaskStateSegment) -> (u64, u16) {
         let addr = tss as *const _ as u64;
         let size = (size_of::<x86_64::structures::tss::TaskStateSegment>() - 1) as u64;
-        return (addr, size as u16)
+        return (addr, size as u16);
     }
-
 
     fn TSStoDescriptor(tss: &x86_64::structures::tss::TaskStateSegment) -> (u64, u64, u16) {
         let (tssBase, tssLimit) = Self::TSS(tss);
         let low = SegmentDescriptor::default().Set(
-            tssBase as u32, tssLimit as u32, 0, SEGMENT_DESCRIPTOR_PRESENT |
-            SEGMENT_DESCRIPTOR_ACCESS |
-            SEGMENT_DESCRIPTOR_WRITE |
-            SEGMENT_DESCRIPTOR_EXECUTE);
+            tssBase as u32,
+            tssLimit as u32,
+            0,
+            SEGMENT_DESCRIPTOR_PRESENT
+                | SEGMENT_DESCRIPTOR_ACCESS
+                | SEGMENT_DESCRIPTOR_WRITE
+                | SEGMENT_DESCRIPTOR_EXECUTE,
+        );
 
         let hi = SegmentDescriptor::default().SetHi((tssBase >> 32) as u32);
 
@@ -254,13 +290,17 @@ impl KVMVcpu {
     }
 
     fn setup_long_mode(&self) -> Result<()> {
-        let mut vcpu_sregs = self.vcpu.get_sregs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+        let mut vcpu_sregs = self
+            .vcpu
+            .get_sregs()
+            .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
 
         //vcpu_sregs.cr0 = CR0_PE | CR0_MP | CR0_AM | CR0_ET | CR0_NE | CR0_WP | CR0_PG;
         vcpu_sregs.cr0 = CR0_PE | CR0_AM | CR0_ET | CR0_PG | CR0_WP; // | CR0_MP | CR0_NE;
         vcpu_sregs.cr3 = VMS.lock().pageTables.GetRoot();
         //vcpu_sregs.cr4 = CR4_PAE | CR4_OSFXSR | CR4_OSXMMEXCPT;
-        vcpu_sregs.cr4 = CR4_PAE | CR4_PGE | CR4_OSFXSR | CR4_OSXMMEXCPT | CR4_FSGSBASE | CR4_OSXSAVE;// | CR4_UMIP ;// CR4_PSE | | CR4_SMEP | CR4_SMAP;
+        vcpu_sregs.cr4 =
+            CR4_PAE | CR4_PGE | CR4_OSFXSR | CR4_OSXMMEXCPT | CR4_FSGSBASE | CR4_OSXSAVE; // | CR4_UMIP ;// CR4_PSE | | CR4_SMEP | CR4_SMAP;
 
         vcpu_sregs.efer = EFER_LME | EFER_LMA | EFER_SCE | EFER_NX;
 
@@ -277,7 +317,9 @@ impl KVMVcpu {
         };
 
         self.SetupGDT(&mut vcpu_sregs);
-        self.vcpu.set_sregs(&vcpu_sregs).map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+        self.vcpu
+            .set_sregs(&vcpu_sregs)
+            .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
         Ok(())
     }
 
@@ -287,13 +329,15 @@ impl KVMVcpu {
 
     pub fn Signal(&self, signal: i32) -> bool {
         if self.state.load(Ordering::Relaxed) == 2 {
-            return false
+            return false;
         }
 
         loop {
-            let ret = vmspace::VMSpace::TgKill(self.tgid.load(Ordering::Relaxed) as i32,
-                                     self.threadid.load(Ordering::Relaxed) as i32,
-                                     signal);
+            let ret = vmspace::VMSpace::TgKill(
+                self.tgid.load(Ordering::Relaxed) as i32,
+                self.threadid.load(Ordering::Relaxed) as i32,
+                signal,
+            );
 
             if ret == 0 {
                 break;
@@ -312,40 +356,58 @@ impl KVMVcpu {
         return true;
     }
 
-    pub const KVM_SET_SIGNAL_MASK : u64 = 0x4004ae8b;
+    pub const KVM_SET_SIGNAL_MASK: u64 = 0x4004ae8b;
     pub fn SignalMask(&self) {
         let boundSignal = Signal::SIGCHLD;
-        let bounceSignalMask : u64 = 1 << (boundSignal as u64 - 1);
+        let bounceSignalMask: u64 = 1 << (boundSignal as u64 - 1);
 
         let data = SignalMaskStruct {
             length: 8,
             mask1: (bounceSignalMask & 0xffffffff) as _,
-            mask2: (bounceSignalMask >> 32 ) as _,
+            mask2: (bounceSignalMask >> 32) as _,
             _pad: 0,
         };
 
         let ret = unsafe {
-            ioctl(self.vcpu.as_raw_fd(), Self::KVM_SET_SIGNAL_MASK, &data as * const _ as u64)
+            ioctl(
+                self.vcpu.as_raw_fd(),
+                Self::KVM_SET_SIGNAL_MASK,
+                &data as *const _ as u64,
+            )
         };
 
-        assert!(ret ==0, "SignalMask ret is {}/{}/{}", ret, errno::errno().0, self.vcpu.as_raw_fd());
+        assert!(
+            ret == 0,
+            "SignalMask ret is {}/{}/{}",
+            ret,
+            errno::errno().0,
+            self.vcpu.as_raw_fd()
+        );
     }
 
-    pub const KVM_INTERRUPT : u64 = 0x4004ae86;
+    pub const KVM_INTERRUPT: u64 = 0x4004ae86;
     pub fn InterruptGuest(&self) {
-        let bounce : u32 = 20; //VirtualizationException
+        let bounce: u32 = 20; //VirtualizationException
         let ret = unsafe {
-            ioctl(self.vcpu.as_raw_fd(), Self::KVM_INTERRUPT, &bounce as * const _ as u64)
+            ioctl(
+                self.vcpu.as_raw_fd(),
+                Self::KVM_INTERRUPT,
+                &bounce as *const _ as u64,
+            )
         };
 
-        assert!(ret == 0, "InterruptGuest ret is {}/{}/{}", ret, errno::errno().0, self.vcpu.as_raw_fd());
+        assert!(
+            ret == 0,
+            "InterruptGuest ret is {}/{}/{}",
+            ret,
+            errno::errno().0,
+            self.vcpu.as_raw_fd()
+        );
     }
 
     pub fn run(&self, tgid: i32) -> Result<()> {
         self.setup_long_mode()?;
-        let tid = unsafe {
-            gettid()
-        };
+        let tid = unsafe { gettid() };
         self.threadid.store(tid as u64, Ordering::SeqCst);
         self.tgid.store(tgid as u64, Ordering::SeqCst);
 
@@ -376,19 +438,23 @@ impl KVMVcpu {
             ..Default::default()
         };
 
-        self.vcpu.set_regs(&regs).map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-
+        self.vcpu
+            .set_regs(&regs)
+            .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
 
         let mut lastVal: u32 = 0;
         let mut first = true;
 
-        let coreid = core_affinity::CoreId{id: self.cordId};
+        let coreid = core_affinity::CoreId { id: self.cordId };
         core_affinity::set_for_current(coreid);
 
-        info!("start enter guest[{}]: entry is {:x}, stack is {:x}", self.id, self.entry, self.topStackAddr);
+        info!(
+            "start enter guest[{}]: entry is {:x}, stack is {:x}",
+            self.id, self.entry, self.topStackAddr
+        );
         loop {
             if !super::runc::runtime::vm::IsRunning() {
-                return Ok(())
+                return Ok(());
             }
 
             self.state.store(1, Ordering::SeqCst);
@@ -407,20 +473,29 @@ impl KVMVcpu {
             match kvmRet {
                 VcpuExit::IoIn(addr, data) => {
                     info!(
-                    "[{}]Received an I/O in exit. Address: {:#x}. Data: {:#x}",
-                    self.id,
-                    addr,
-                    data[0],
+                        "[{}]Received an I/O in exit. Address: {:#x}. Data: {:#x}",
+                        self.id, addr, data[0],
                     );
 
-                    let vcpu_sregs = self.vcpu.get_sregs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                    if vcpu_sregs.cs.dpl != 0x0 { // call from user space
-                        panic!("Get VcpuExit::IoIn from guest user space, Abort, vcpu_sregs is {:#x?}", vcpu_sregs)
+                    let vcpu_sregs = self
+                        .vcpu
+                        .get_sregs()
+                        .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                    if vcpu_sregs.cs.dpl != 0x0 {
+                        // call from user space
+                        panic!(
+                            "Get VcpuExit::IoIn from guest user space, Abort, vcpu_sregs is {:#x?}",
+                            vcpu_sregs
+                        )
                     }
                 }
                 VcpuExit::IoOut(addr, data) => {
-                    let vcpu_sregs = self.vcpu.get_sregs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                    if vcpu_sregs.cs.dpl != 0x0 { // call from user space
+                    let vcpu_sregs = self
+                        .vcpu
+                        .get_sregs()
+                        .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                    if vcpu_sregs.cs.dpl != 0x0 {
+                        // call from user space
                         panic!("Get VcpuExit::IoOut from guest user space, Abort, vcpu_sregs is {:#x?}", vcpu_sregs)
                     }
 
@@ -433,7 +508,7 @@ impl KVMVcpu {
                                     }
                                 }*/
 
-                                return Ok(())
+                                return Ok(());
                             }
 
                             //error!("HYPERCALL_IOWAIT sleeping ...");
@@ -448,30 +523,38 @@ impl KVMVcpu {
                                             }
                                         }*/
 
-                                        return Ok(())
+                                        return Ok(());
                                     }
 
-                                    return Ok(())
-                                },
+                                    return Ok(());
+                                }
                                 Err(e) => {
                                     panic!("KERNEL_IO_THREAD get error {:?}", e);
                                 }
                             }
                             //error!("HYPERCALL_IOWAIT waking ...");
-
                         }
                         qlib::HYPERCALL_URING_WAKE => {
-                            let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                            let regs = self
+                                .vcpu
+                                .get_regs()
+                                .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                             let idx = regs.rbx as usize;
                             let minComplete = regs.rcx as usize;
 
-                            URING_MGR.lock().Wake(idx, minComplete).expect("qlib::HYPER CALL_URING_WAKE fail");
+                            URING_MGR
+                                .lock()
+                                .Wake(idx, minComplete)
+                                .expect("qlib::HYPER CALL_URING_WAKE fail");
                         }
                         qlib::HYPERCALL_RELEASE_VCPU => {
                             SyncMgr::WakeShareSpaceReady();
                         }
                         qlib::HYPERCALL_EXIT_VM => {
-                            let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                            let regs = self
+                                .vcpu
+                                .get_regs()
+                                .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                             let exitCode = regs.rbx as i32;
 
                             super::print::LOG.lock().Clear();
@@ -489,16 +572,17 @@ impl KVMVcpu {
                         qlib::HYPERCALL_PANIC => {
                             let vcpu_regs = self.vcpu.get_regs().unwrap();
                             let addr = vcpu_regs.rbx;
-                            let msg = unsafe {
-                                &*(addr as *const Print)
-                            };
+                            let msg = unsafe { &*(addr as *const Print) };
 
                             eprintln!("Application error: {}", msg.str);
                             ::std::process::exit(1);
                         }
 
                         qlib::HYPERCALL_WAKEUP_VCPU => {
-                            let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                            let regs = self
+                                .vcpu
+                                .get_regs()
+                                .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                             let vcpuId = regs.rbx as usize;
 
                             //error!("HYPERCALL_WAKEUP_VCPU vcpu id is {:x}", vcpuId);
@@ -508,9 +592,7 @@ impl KVMVcpu {
                         qlib::HYPERCALL_PRINT => {
                             let vcpu_regs = self.vcpu.get_regs().unwrap();
                             let addr = vcpu_regs.rbx;
-                            let msg = unsafe {
-                                &*(addr as *const Print)
-                            };
+                            let msg = unsafe { &*(addr as *const Print) };
 
                             log!("{}", msg.str);
                         }
@@ -520,15 +602,24 @@ impl KVMVcpu {
                             let data1 = vcpu_regs.rbx;
                             let data2 = vcpu_regs.rcx;
                             let data3 = vcpu_regs.rdi;
-                            info!("[{}] get kernel msg [rsp {:x}/rip {:x}]: {:x}, {:x}, {:x}", self.id, vcpu_regs.rsp, vcpu_regs.rip, data1, data2, data3);
+                            info!(
+                                "[{}] get kernel msg [rsp {:x}/rip {:x}]: {:x}, {:x}, {:x}",
+                                self.id, vcpu_regs.rsp, vcpu_regs.rip, data1, data2, data3
+                            );
                         }
 
                         qlib::HYPERCALL_OOM => {
                             let vcpu_regs = self.vcpu.get_regs().unwrap();
                             let data1 = vcpu_regs.rbx;
                             let data2 = vcpu_regs.rcx;
-                            error!("OOM!!! cpu [{}], size is {:x}, alignment is {:x}", self.id, data1, data2);
-                            eprintln!("OOM!!! cpu [{}], size is {:x}, alignment is {:x}", self.id, data1, data2);
+                            error!(
+                                "OOM!!! cpu [{}], size is {:x}, alignment is {:x}",
+                                self.id, data1, data2
+                            );
+                            eprintln!(
+                                "OOM!!! cpu [{}], size is {:x}, alignment is {:x}",
+                                self.id, data1, data2
+                            );
                             ::std::process::exit(1);
                         }
 
@@ -537,21 +628,22 @@ impl KVMVcpu {
                             unsafe { libc::_exit(0) }
                         }
 
-                        qlib::HYPERCALL_U64 => {
-                            unsafe {
-                                let val = *((data as *const _) as *const u32);
-                                if first {
-                                    first = false;
-                                    lastVal = val
-                                } else {
-                                    info!("get kernel u64 : 0x{:x}{:x}", lastVal, val);
-                                    first = true;
-                                }
+                        qlib::HYPERCALL_U64 => unsafe {
+                            let val = *((data as *const _) as *const u32);
+                            if first {
+                                first = false;
+                                lastVal = val
+                            } else {
+                                info!("get kernel u64 : 0x{:x}{:x}", lastVal, val);
+                                first = true;
                             }
-                        }
+                        },
 
                         qlib::HYPERCALL_GETTIME => {
-                            let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                            let regs = self
+                                .vcpu
+                                .get_regs()
+                                .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                             let data = regs.rbx;
 
                             unsafe {
@@ -560,7 +652,10 @@ impl KVMVcpu {
                                 let clockId = call.clockId;
                                 let ts = Timespec::default();
 
-                                let res = clock_gettime(clockId as clockid_t, &ts as *const _ as u64 as *mut timespec) as i64;
+                                let res = clock_gettime(
+                                    clockId as clockid_t,
+                                    &ts as *const _ as u64 as *mut timespec,
+                                ) as i64;
 
                                 if res == -1 {
                                     call.res = errno::errno().0 as i64;
@@ -571,7 +666,10 @@ impl KVMVcpu {
                         }
 
                         qlib::HYPERCALL_VCPU_FREQ => {
-                            let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                            let regs = self
+                                .vcpu
+                                .get_regs()
+                                .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                             let data = regs.rbx;
 
                             let freq = self.vcpu.get_tsc_khz().unwrap() * 1000;
@@ -592,8 +690,14 @@ impl KVMVcpu {
                         }
 
                         qlib::HYPERCALL_VCPU_DEBUG => {
-                            let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                            let vcpu_sregs = self.vcpu.get_sregs().map_err(|e| Error::IOError(format!("vcpu::error is {:?}", e)))?;
+                            let regs = self
+                                .vcpu
+                                .get_regs()
+                                .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                            let vcpu_sregs = self
+                                .vcpu
+                                .get_sregs()
+                                .map_err(|e| Error::IOError(format!("vcpu::error is {:?}", e)))?;
                             //error!("[{}] HYPERCALL_VCPU_DEBUG regs is {:#x?}", self.id, regs);
                             error!("sregs {:x} is {:x?}", regs.rsp, vcpu_sregs);
                             //error!("vcpus is {:#x?}", &SHARE_SPACE.scheduler.VcpuArr);
@@ -601,7 +705,10 @@ impl KVMVcpu {
                         }
 
                         qlib::HYPERCALL_VCPU_PRINT => {
-                            let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                            let regs = self
+                                .vcpu
+                                .get_regs()
+                                .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                             error!("[{}] HYPERCALL_VCPU_PRINT regs is {:#x?}", self.id, regs);
                         }
 
@@ -614,13 +721,14 @@ impl KVMVcpu {
                         }
 
                         qlib::HYPERCALL_HCALL => {
-                            let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                            let regs = self
+                                .vcpu
+                                .get_regs()
+                                .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                             let addr = regs.rbx;
 
                             let eventAddr = addr as *mut QMsg; // as &mut qlib::Event;
-                            let qmsg = unsafe {
-                                &mut (*eventAddr)
-                            };
+                            let qmsg = unsafe { &mut (*eventAddr) };
 
                             {
                                 let _l = if qmsg.globalLock {
@@ -642,26 +750,25 @@ impl KVMVcpu {
                         }
 
                         qlib::HYPERCALL_VCPU_WAIT => {
-                            let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                            let regs = self
+                                .vcpu
+                                .get_regs()
+                                .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                             let retAddr = regs.rdi;
 
                             let ret = SHARE_SPACE.scheduler.WaitVcpu(&SHARE_SPACE, self.id, true);
                             match ret {
-                                Ok(taskId) => {
-                                    unsafe {
-                                        *(retAddr as * mut u64) = taskId as u64;
-                                    }
+                                Ok(taskId) => unsafe {
+                                    *(retAddr as *mut u64) = taskId as u64;
                                 },
-                                Err(Error::Exit) => {
-                                    return Ok(())
-                                }
+                                Err(Error::Exit) => return Ok(()),
                                 Err(e) => {
                                     panic!("HYPERCALL_HLT wait fail with error {:?}", e);
                                 }
                             }
                         }
 
-                        _ => info!("Unknow hyper call!!!!! address is {}", addr)
+                        _ => info!("Unknow hyper call!!!!! address is {}", addr),
                     }
                 }
                 VcpuExit::MmioRead(addr, _data) => {
@@ -673,8 +780,7 @@ impl KVMVcpu {
                 VcpuExit::MmioWrite(addr, _data) => {
                     panic!(
                         "[{}] Received an MMIO Write Request to the address {:#x}.",
-                        self.id,
-                        addr,
+                        self.id, addr,
                     );
                 }
                 VcpuExit::Hlt => {
@@ -682,7 +788,7 @@ impl KVMVcpu {
                 }
                 VcpuExit::FailEntry => {
                     info!("get fail entry***********************************");
-                    break
+                    break;
                 }
                 VcpuExit::Exception => {
                     info!("get exception");
@@ -696,8 +802,14 @@ impl KVMVcpu {
                     //self.vcpu.set_kvm_request_interrupt_window(1);
                     SHARE_SPACE.MaskTlbShootdown(self.id as _);
 
-                    let mut regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                    let mut sregs = self.vcpu.get_sregs().map_err(|e| Error::IOError(format!("vcpu::error is {:?}", e)))?;
+                    let mut regs = self
+                        .vcpu
+                        .get_regs()
+                        .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                    let mut sregs = self
+                        .vcpu
+                        .get_sregs()
+                        .map_err(|e| Error::IOError(format!("vcpu::error is {:?}", e)))?;
 
                     let ss = sregs.ss.selector as u64;
                     let rsp = regs.rsp;
@@ -709,7 +821,7 @@ impl KVMVcpu {
                     let stackTop = if isUser {
                         self.tssIntStackStart + MemoryDef::PAGE_SIZE - 16
                     } else {
-                        continue
+                        continue;
                     };
 
                     let mut stack = KernelStack::New(stackTop);
@@ -741,19 +853,29 @@ impl KVMVcpu {
                         &sregs.cs,
                     );*/
 
-                    self.vcpu.set_regs(&regs).map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                    self.vcpu.set_sregs(&sregs).map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                    self.vcpu
+                        .set_regs(&regs)
+                        .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                    self.vcpu
+                        .set_sregs(&sregs)
+                        .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                 }
                 r => {
-                    let vcpu_sregs = self.vcpu.get_sregs().map_err(|e| Error::IOError(format!("vcpu::error is {:?}", e)))?;
-                    let regs = self.vcpu.get_regs().map_err(|e| Error::IOError(format!("vcpu::error is {:?}", e)))?;
+                    let vcpu_sregs = self
+                        .vcpu
+                        .get_sregs()
+                        .map_err(|e| Error::IOError(format!("vcpu::error is {:?}", e)))?;
+                    let regs = self
+                        .vcpu
+                        .get_regs()
+                        .map_err(|e| Error::IOError(format!("vcpu::error is {:?}", e)))?;
 
                     error!("Panic: CPU[{}] Unexpected exit reason: {:?}, regs is {:#x?}, sregs is {:#x?}",
                         self.id, r, regs, vcpu_sregs);
                     unsafe {
                         libc::exit(0);
                     }
-                },
+                }
             }
         }
 
@@ -765,7 +887,7 @@ impl KVMVcpu {
         let sharespace = &SHARE_SPACE;
         loop {
             if !super::runc::runtime::vm::IsRunning() {
-                return -1
+                return -1;
             }
 
             {
@@ -782,9 +904,7 @@ impl KVMVcpu {
 
             let ret = sharespace.scheduler.WaitVcpu(sharespace, self.id, true);
             match ret {
-                Ok(taskId) => {
-                    return taskId as i64
-                },
+                Ok(taskId) => return taskId as i64,
                 Err(Error::Exit) => return -1,
                 Err(e) => panic!("HYPERCALL_HLT wait fail with error {:?}", e),
             }
@@ -793,19 +913,15 @@ impl KVMVcpu {
 
     pub fn GuestMsgProcess(sharespace: &ShareSpace) -> usize {
         let mut count = 0;
-        loop  {
+        loop {
             let msg = sharespace.AQHostOutputPop();
 
             match msg {
-                None => {
-                    break
-                },
+                None => break,
                 Some(HostOutputMsg::QCall(addr)) => {
                     count += 1;
                     let eventAddr = addr as *mut QMsg; // as &mut qlib::Event;
-                    let qmsg = unsafe {
-                        &mut (*eventAddr)
-                    };
+                    let qmsg = unsafe { &mut (*eventAddr) };
                     let currTaskId = qmsg.taskId;
 
                     {
@@ -819,7 +935,9 @@ impl KVMVcpu {
                     }
 
                     if currTaskId.Addr() != 0 {
-                        sharespace.scheduler.ScheduleQ(currTaskId, currTaskId.Queue())
+                        sharespace
+                            .scheduler
+                            .ScheduleQ(currTaskId, currTaskId.Queue())
                     }
                 }
                 Some(msg) => {
@@ -830,50 +948,51 @@ impl KVMVcpu {
             }
         }
 
-        return count
+        return count;
     }
 }
 
 impl Scheduler {
-   pub fn Init(&mut self) {
+    pub fn Init(&mut self) {
         for i in 0..self.vcpuCnt {
             self.VcpuArr[i].Init(i);
         }
     }
 
     pub fn VcpWaitMaskSet(&self, vcpuId: usize) -> bool {
-        let mask = 1<<vcpuId;
+        let mask = 1 << vcpuId;
         let prev = self.vcpuWaitMask.fetch_or(mask, Ordering::SeqCst);
-        return (prev & mask) != 0
-    }
-
-    pub fn VcpWaitMaskClear(&self, vcpuId: usize) -> bool {
-        let mask = 1<<vcpuId;
-        let prev = self.vcpuWaitMask.fetch_and(!(1<<vcpuId), Ordering::SeqCst);
         return (prev & mask) != 0;
     }
 
+    pub fn VcpWaitMaskClear(&self, vcpuId: usize) -> bool {
+        let mask = 1 << vcpuId;
+        let prev = self
+            .vcpuWaitMask
+            .fetch_and(!(1 << vcpuId), Ordering::SeqCst);
+        return (prev & mask) != 0;
+    }
 
     pub fn WaitVcpu(&self, sharespace: &ShareSpace, vcpuId: usize, block: bool) -> Result<u64> {
         return self.VcpuArr[vcpuId].VcpuWait(sharespace, block);
     }
 }
 
-pub const VCPU_WAIT_CYCLES : i64 = 1_000_000; // 1ms
+pub const VCPU_WAIT_CYCLES: i64 = 1_000_000; // 1ms
 
 impl CPULocal {
     pub fn Init(&mut self, vcpuId: usize) {
-        let epfd = unsafe {
-            epoll_create1(0)
-        };
+        let epfd = unsafe { epoll_create1(0) };
 
         if epfd == -1 {
-            panic!("CPULocal::Init {} create epollfd fail, error is {}", self.vcpuId, errno::errno().0);
+            panic!(
+                "CPULocal::Init {} create epollfd fail, error is {}",
+                self.vcpuId,
+                errno::errno().0
+            );
         }
 
-        let eventfd = unsafe {
-            libc::eventfd(0, libc::EFD_CLOEXEC)
-        };
+        let eventfd = unsafe { libc::eventfd(0, libc::EFD_CLOEXEC) };
 
         if eventfd < 0 {
             panic!("Vcpu::Init fail...");
@@ -881,28 +1000,39 @@ impl CPULocal {
 
         let mut ev = epoll_event {
             events: EVENT_READ as u32 | EPOLLET as u32,
-            u64: eventfd as u64
+            u64: eventfd as u64,
         };
 
-        let ret = unsafe {
-            epoll_ctl(epfd, EPOLL_CTL_ADD, eventfd, &mut ev as *mut epoll_event)
-        };
+        let ret = unsafe { epoll_ctl(epfd, EPOLL_CTL_ADD, eventfd, &mut ev as *mut epoll_event) };
 
         if ret == -1 {
-            panic!("CPULocal::Init {} add eventfd fail, error is {}", self.vcpuId, errno::errno().0);
+            panic!(
+                "CPULocal::Init {} add eventfd fail, error is {}",
+                self.vcpuId,
+                errno::errno().0
+            );
         }
 
         let mut ev = epoll_event {
             events: EVENT_READ as u32 | EPOLLET as u32,
-            u64: FD_NOTIFIER.Epollfd() as u64
+            u64: FD_NOTIFIER.Epollfd() as u64,
         };
 
         let ret = unsafe {
-            epoll_ctl(epfd, EPOLL_CTL_ADD, FD_NOTIFIER.Epollfd(), &mut ev as *mut epoll_event)
+            epoll_ctl(
+                epfd,
+                EPOLL_CTL_ADD,
+                FD_NOTIFIER.Epollfd(),
+                &mut ev as *mut epoll_event,
+            )
         };
 
         if ret == -1 {
-            panic!("CPULocal::Init {} add host epollfd fail, error is {}", self.vcpuId, errno::errno().0);
+            panic!(
+                "CPULocal::Init {} add host epollfd fail, error is {}",
+                self.vcpuId,
+                errno::errno().0
+            );
         }
 
         let mut uring = URING_MGR.lock();
@@ -936,9 +1066,7 @@ impl CPULocal {
     pub fn Process(&self, sharespace: &ShareSpace) -> Option<u64> {
         match sharespace.scheduler.GetNext() {
             None => (),
-            Some(newTask) => {
-                return Some(newTask.data)
-            }
+            Some(newTask) => return Some(newTask.data),
         }
 
         // process in vcpu worker thread will decease the throughput of redis/etcd benchmark
@@ -962,26 +1090,20 @@ impl CPULocal {
             }
         }*/
 
-        return None
+        return None;
     }
 
     pub fn VcpuWait(&self, sharespace: &ShareSpace, block: bool) -> Result<u64> {
         let mut events = [epoll_event { events: 0, u64: 0 }; 2];
 
-        let time = if block {
-            -1
-        } else {
-            0
-        };
+        let time = if block { -1 } else { 0 };
 
         sharespace.scheduler.VcpWaitMaskSet(self.vcpuId);
         defer!(sharespace.scheduler.VcpWaitMaskClear(self.vcpuId););
 
         match self.Process(sharespace) {
             None => (),
-            Some(newTask) => {
-                return Ok(newTask)
-            }
+            Some(newTask) => return Ok(newTask),
         }
 
         self.ToWaiting(sharespace);
@@ -998,9 +1120,7 @@ impl CPULocal {
             if sharespace.scheduler.VcpWaitMaskSet(self.vcpuId) {
                 match sharespace.scheduler.GetNext() {
                     None => (),
-                    Some(newTask) => {
-                        return Ok(newTask.data)
-                    }
+                    Some(newTask) => return Ok(newTask.data),
                 }
 
                 //Self::ProcessOnce(sharespace);
@@ -1008,9 +1128,7 @@ impl CPULocal {
 
             super::ALLOCATOR.Clear();
 
-            let _nfds = unsafe {
-                epoll_wait(self.epollfd, &mut events[0], 2, time)
-            };
+            let _nfds = unsafe { epoll_wait(self.epollfd, &mut events[0], 2, time) };
 
             {
                 let mut data: u64 = 0;
@@ -1019,13 +1137,15 @@ impl CPULocal {
                 };
 
                 if ret < 0 && errno::errno().0 != SysErr::EINTR {
-                    panic!("Vcppu::Wakeup fail... eventfd is {}, errno is {}",
-                           self.eventfd, errno::errno().0);
+                    panic!(
+                        "Vcppu::Wakeup fail... eventfd is {}, errno is {}",
+                        self.eventfd,
+                        errno::errno().0
+                    );
                 }
             }
         }
 
-        return Err(Error::Exit)
+        return Err(Error::Exit);
     }
 }
-

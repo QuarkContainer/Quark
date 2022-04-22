@@ -21,20 +21,20 @@ pub const GRND_RANDOM: u32 = 0x02;
 pub fn Random(buf: u64, len: u64, flags: u32) -> Result<()> {
     let res = HostSpace::GetRandom(buf, len, flags);
     if res >= 0 {
-        return Ok(())
+        return Ok(());
     }
 
-    return Err(Error::SysError(-res as i32))
+    return Err(Error::SysError(-res as i32));
 }
 
 pub fn RandU64() -> Result<u64> {
     let res: u64 = 0;
     Random(&res as *const _ as u64, 8, GRND_RANDOM)?;
-    return Ok(res)
+    return Ok(res);
 }
 
 pub fn RandU128() -> Result<(u64, u64)> {
     let res: [u64; 2] = [0; 2];
     Random(&res[0] as *const _ as u64, 18, GRND_RANDOM)?;
-    return Ok((res[0], res[1]))
+    return Ok((res[0], res[1]));
 }

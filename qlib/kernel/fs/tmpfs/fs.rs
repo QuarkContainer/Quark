@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
+use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::string::ToString;
-use alloc::collections::btree_map::BTreeMap;
+use alloc::sync::Arc;
 
 use super::super::super::super::auth::id::*;
 use super::super::super::super::common::*;
@@ -29,19 +29,19 @@ use super::super::mount::*;
 use super::tmpfs_dir::*;
 
 // Set initial permissions for the root directory.
-pub const MODE_KEY :&str = "mode";
+pub const MODE_KEY: &str = "mode";
 
 // UID for the root directory.
-pub const ROOT_UIDKEY :&str = "uid";
+pub const ROOT_UIDKEY: &str = "uid";
 
 // GID for the root directory.
-pub const ROOT_GIDKEY :&str = "gid";
+pub const ROOT_GIDKEY: &str = "gid";
 
 // Permissions that exceed modeMask will be rejected.
-pub const MODE_MASK :u16 = 0o1777;
+pub const MODE_MASK: u16 = 0o1777;
 
 // Default permissions are read/write/execute.
-pub const DEFAULT_MODE :u16 = 0o777;
+pub const DEFAULT_MODE: u16 = 0o777;
 
 pub struct TmpfsFileSystem {}
 
@@ -54,7 +54,13 @@ impl Filesystem for TmpfsFileSystem {
         return 0;
     }
 
-    fn Mount(&mut self, task: &Task, _device: &str, flags: &MountSourceFlags, data: &str) -> Result<Inode> {
+    fn Mount(
+        &mut self,
+        task: &Task,
+        _device: &str,
+        flags: &MountSourceFlags,
+        data: &str,
+    ) -> Result<Inode> {
         info!("tmfps file system mount ...");
 
         // Parse generic comma-separated key=value options, this file system expects them.
@@ -70,13 +76,13 @@ impl Filesystem for TmpfsFileSystem {
                     Ok(v) => v,
                     Err(e) => {
                         info!("mode value not parsable 'mode={}': {:?}", m, e);
-                        return Err(Error::SysError(SysErr::EINVAL))
+                        return Err(Error::SysError(SysErr::EINVAL));
                     }
                 };
 
                 if i & !MODE_MASK != 0 {
                     info!("invalid mode {}: must be less than {}", m, MODE_MASK);
-                    return Err(Error::SysError(SysErr::EINVAL))
+                    return Err(Error::SysError(SysErr::EINVAL));
                 }
 
                 perms = FilePermissions::FromMode(FileMode(i as u16))
@@ -94,7 +100,7 @@ impl Filesystem for TmpfsFileSystem {
                     Ok(v) => v,
                     Err(e) => {
                         info!("uid value not parsable 'uid={}': {:?}", uidstr, e);
-                        return Err(Error::SysError(SysErr::EINVAL))
+                        return Err(Error::SysError(SysErr::EINVAL));
                     }
                 };
 
@@ -109,7 +115,7 @@ impl Filesystem for TmpfsFileSystem {
                     Ok(v) => v,
                     Err(e) => {
                         info!("gid value not parsable 'gid={}': {:?}", gidstr, e);
-                        return Err(Error::SysError(SysErr::EINVAL))
+                        return Err(Error::SysError(SysErr::EINVAL));
                     }
                 };
 
@@ -121,13 +127,19 @@ impl Filesystem for TmpfsFileSystem {
         // expecting us to set something we can't set.
         if options.len() > 0 {
             info!("unsupported mount options: {:?}", options);
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         let msrc = MountSource::NewCachingMountSource(self, flags);
 
-        let inode = NewTmpfsDir(task, BTreeMap::new(), &owner, &perms, Arc::new(QMutex::new(msrc)));
-        return Ok(inode)
+        let inode = NewTmpfsDir(
+            task,
+            BTreeMap::new(),
+            &owner,
+            &perms,
+            Arc::new(QMutex::new(msrc)),
+        );
+        return Ok(inode);
     }
 
     fn AllowUserMount(&self) -> bool {

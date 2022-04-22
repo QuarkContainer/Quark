@@ -12,46 +12,46 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
-use alloc::sync::Weak;
-use alloc::vec::Vec;
 use crate::qlib::mutex::*;
 use alloc::string::String;
 use alloc::string::ToString;
+use alloc::sync::Arc;
+use alloc::sync::Weak;
+use alloc::vec::Vec;
 use core::any::Any;
 use core::ops::Deref;
 
-use super::super::uid::*;
-use super::super::kernel::waiter::qlock::*;
-use super::super::kernel::time::*;
-use super::super::super::metric::*;
-use super::super::super::common::*;
 use super::super::super::auth::*;
-use super::super::super::range::*;
-use super::super::kernel::waiter::*;
+use super::super::super::common::*;
 use super::super::super::linux_def::*;
+use super::super::super::metric::*;
+use super::super::super::range::*;
+use super::super::kernel::time::*;
+use super::super::kernel::waiter::qlock::*;
+use super::super::kernel::waiter::*;
+use super::super::uid::*;
 //use super::super::socket::unix::transport::unix::*;
-use super::super::task::*;
-use super::super::memmgr::*;
+use super::super::super::singleton::*;
 use super::super::fs::flags::*;
 use super::super::fs::host::hostfileop::*;
-use super::super::tcpip::tcpip::*;
 use super::super::kernel::fasync::*;
-use super::super::super::singleton::*;
+use super::super::memmgr::*;
+use super::super::task::*;
+use super::super::tcpip::tcpip::*;
 
 use super::attr::*;
 use super::dirent::*;
 //use super::flags::*;
 use super::dentry::*;
-use super::inode::*;
-use super::mount::*;
 use super::filesystems::*;
 use super::host::fs::*;
+use super::host::hostinodeop::*;
 use super::host::tty::*;
 use super::host::util::*;
-use super::host::hostinodeop::*;
+use super::inode::*;
+use super::mount::*;
 
-pub static READS : Singleton<Arc<U64Metric>> = Singleton::<Arc<U64Metric>>::New();
+pub static READS: Singleton<Arc<U64Metric>> = Singleton::<Arc<U64Metric>>::New();
 
 pub unsafe fn InitSingleton() {
     READS.Init(NewU64Metric("/fs/reads", false, "Number of file reads."));
@@ -101,91 +101,112 @@ pub enum SyncType {
 
 pub trait SockOperations: Sync + Send {
     fn Connect(&self, _task: &Task, _socketaddr: &[u8], _blocking: bool) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ENOTSOCK))
+        return Err(Error::SysError(SysErr::ENOTSOCK));
     }
 
-    fn Accept(&self, _task: &Task, _addr: &mut [u8], _addrlen: &mut u32, _flags: i32, _blocking: bool) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ENOTSOCK))
+    fn Accept(
+        &self,
+        _task: &Task,
+        _addr: &mut [u8],
+        _addrlen: &mut u32,
+        _flags: i32,
+        _blocking: bool,
+    ) -> Result<i64> {
+        return Err(Error::SysError(SysErr::ENOTSOCK));
     }
 
     fn Bind(&self, _task: &Task, _sockaddr: &[u8]) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ENOTSOCK))
+        return Err(Error::SysError(SysErr::ENOTSOCK));
     }
 
     fn Listen(&self, _task: &Task, _backlog: i32) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ENOTSOCK))
+        return Err(Error::SysError(SysErr::ENOTSOCK));
     }
 
     fn Shutdown(&self, _task: &Task, _how: i32) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ENOTSOCK))
+        return Err(Error::SysError(SysErr::ENOTSOCK));
     }
 
     fn GetSockOpt(&self, _task: &Task, _level: i32, _name: i32, _addr: &mut [u8]) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ENOTSOCK))
+        return Err(Error::SysError(SysErr::ENOTSOCK));
     }
 
     fn SetSockOpt(&self, _task: &Task, _level: i32, _name: i32, _opt: &[u8]) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ENOTSOCK))
+        return Err(Error::SysError(SysErr::ENOTSOCK));
     }
 
     fn GetSockName(&self, _task: &Task, _socketaddr: &mut [u8]) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ENOTSOCK))
+        return Err(Error::SysError(SysErr::ENOTSOCK));
     }
 
     fn GetPeerName(&self, _task: &Task, _socketaddr: &mut [u8]) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ENOTSOCK))
+        return Err(Error::SysError(SysErr::ENOTSOCK));
     }
 
     //return (receive bytes, msgFlags, (senderAddr, senderAddrLen), controlMessages)
-    fn RecvMsg(&self, _task: &Task, _dst: &mut [IoVec], _flags: i32, _deadline: Option<Time>, _senderRequested: bool, _controlDataLen: usize)
-        -> Result<(i64, i32, Option<(SockAddr, usize)>, Vec<u8>)> {
-        return Err(Error::SysError(SysErr::ENOTSOCK))
+    fn RecvMsg(
+        &self,
+        _task: &Task,
+        _dst: &mut [IoVec],
+        _flags: i32,
+        _deadline: Option<Time>,
+        _senderRequested: bool,
+        _controlDataLen: usize,
+    ) -> Result<(i64, i32, Option<(SockAddr, usize)>, Vec<u8>)> {
+        return Err(Error::SysError(SysErr::ENOTSOCK));
     }
 
-    fn SendMsg(&self, _task: &Task, _src: &[IoVec], _flags: i32, _msgHdr: &mut MsgHdr, _deadline: Option<Time>) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ENOTSOCK))
+    fn SendMsg(
+        &self,
+        _task: &Task,
+        _src: &[IoVec],
+        _flags: i32,
+        _msgHdr: &mut MsgHdr,
+        _deadline: Option<Time>,
+    ) -> Result<i64> {
+        return Err(Error::SysError(SysErr::ENOTSOCK));
     }
 
     fn SetRecvTimeout(&self, _nanoseconds: i64) {
-        return
+        return;
     }
 
     fn RecvTimeout(&self) -> i64 {
-        return 0
+        return 0;
     }
 
     fn SetSendTimeout(&self, _nanoseconds: i64) {
-        return
+        return;
     }
 
     fn SendTimeout(&self) -> i64 {
-        return 0
+        return 0;
     }
 }
 
 pub trait SpliceOperations {
     fn WriteTo(&self, _task: &Task, file: &File, dst: &File, opts: &SpliceOpts) -> Result<i64> {
         if opts.SrcOffset && !file.FileOp.Seekable() {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         if opts.DstOffset && !dst.FileOp.Seekable() {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
-        return Err(Error::SysError(SysErr::ENOSYS))
+        return Err(Error::SysError(SysErr::ENOSYS));
     }
 
     fn ReadFrom(&self, _task: &Task, file: &File, src: &File, opts: &SpliceOpts) -> Result<i64> {
         if opts.DstOffset && !file.FileOp.Seekable() {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         if opts.SrcOffset && !src.FileOp.Seekable() {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
-        return Err(Error::SysError(SysErr::ENOSYS))
+        return Err(Error::SysError(SysErr::ENOSYS));
     }
 }
 
@@ -231,9 +252,29 @@ pub trait FileOperations: Sync + Send + Waitable + SockOperations + SpliceOperat
     fn Seekable(&self) -> bool;
 
     fn Seek(&self, task: &Task, f: &File, whence: i32, current: i64, offset: i64) -> Result<i64>;
-    fn ReadDir(&self, task: &Task, f: &File, offset: i64, serializer: &mut DentrySerializer) -> Result<i64>;
-    fn ReadAt(&self, task: &Task, f: &File, dsts: &mut [IoVec], offset: i64, _blocking: bool) -> Result<i64>;
-    fn WriteAt(&self, task: &Task, f: &File, srcs: &[IoVec], offset: i64, _blocking: bool) -> Result<i64>;
+    fn ReadDir(
+        &self,
+        task: &Task,
+        f: &File,
+        offset: i64,
+        serializer: &mut DentrySerializer,
+    ) -> Result<i64>;
+    fn ReadAt(
+        &self,
+        task: &Task,
+        f: &File,
+        dsts: &mut [IoVec],
+        offset: i64,
+        _blocking: bool,
+    ) -> Result<i64>;
+    fn WriteAt(
+        &self,
+        task: &Task,
+        f: &File,
+        srcs: &[IoVec],
+        offset: i64,
+        _blocking: bool,
+    ) -> Result<i64>;
 
     // atomic operation to append data to seekable file. return (write size, current file len).
     /*
@@ -256,7 +297,13 @@ pub trait FileOperations: Sync + Send + Waitable + SockOperations + SpliceOperat
     fn UnstableAttr(&self, task: &Task, f: &File) -> Result<UnstableAttr>;
     fn Ioctl(&self, task: &Task, f: &File, fd: i32, request: u64, val: u64) -> Result<()>;
 
-    fn IterateDir(&self, task: &Task,d: &Dirent, dirCtx: &mut DirCtx, offset: i32) -> (i32, Result<i64>);
+    fn IterateDir(
+        &self,
+        task: &Task,
+        d: &Dirent,
+        dirCtx: &mut DirCtx,
+        offset: i32,
+    ) -> (i32, Result<i64>);
 
     fn Mappable(&self) -> Result<HostInodeOp>;
 }
@@ -290,7 +337,7 @@ impl FileWeak {
 
 impl File {
     pub fn Downgrade(&self) -> FileWeak {
-        return FileWeak(Arc::downgrade(&self.0))
+        return FileWeak(Arc::downgrade(&self.0));
     }
 }
 
@@ -307,7 +354,9 @@ impl Drop for File {
             let task = Task::Current();
             let lockUniqueID = task.fdTbl.ID();
             lockCtx.BSD.UnlockRegion(task, lockUniqueID, &Range::Max());
-            lockCtx.Posix.UnlockRegion(task, lockUniqueID, &Range::Max());
+            lockCtx
+                .Posix
+                .UnlockRegion(task, lockUniqueID, &Range::Max());
 
             // Only unregister if we are currently registered. There is nothing
             // to register if f.async is nil (this happens when async mode is
@@ -337,7 +386,7 @@ impl PartialOrd for File {
 
 impl PartialEq for File {
     fn eq(&self, other: &Self) -> bool {
-        return self.UniqueId == other.UniqueId
+        return self.UniqueId == other.UniqueId;
     }
 }
 
@@ -352,15 +401,15 @@ impl Deref for File {
 }
 
 impl Waitable for File {
-    fn Readiness(&self, task: &Task,mask: EventMask) -> EventMask {
+    fn Readiness(&self, task: &Task, mask: EventMask) -> EventMask {
         return self.FileOp.Readiness(task, mask);
     }
 
-    fn EventRegister(&self, task: &Task,e: &WaitEntry, mask: EventMask) {
+    fn EventRegister(&self, task: &Task, e: &WaitEntry, mask: EventMask) {
         self.FileOp.EventRegister(task, e, mask);
     }
 
-    fn EventUnregister(&self, task: &Task,e: &WaitEntry) {
+    fn EventUnregister(&self, task: &Task, e: &WaitEntry) {
         self.FileOp.EventUnregister(task, e);
     }
 }
@@ -388,7 +437,7 @@ impl Mapping for File {
 
 impl File {
     pub fn WouldBlock(&self) -> bool {
-        return self.Dirent.Inode().WouldBlock()
+        return self.Dirent.Inode().WouldBlock();
     }
 
     pub fn FileType(&self) -> InodeFileType {
@@ -400,12 +449,12 @@ impl File {
     fn GetFileFlags(fd: i32) -> Result<FileFlags> {
         let ret = Fcntl(fd, Cmd::F_GETFL, 0) as i32;
         if ret < 0 {
-            return Err(Error::SysError(-ret))
+            return Err(Error::SysError(-ret));
         }
 
         let mask = ret as u32;
 
-        return Ok(FileFlags::FromFcntl(mask))
+        return Ok(FileFlags::FromFcntl(mask));
     }
 
     pub fn Blocking(&self) -> bool {
@@ -429,7 +478,7 @@ impl File {
             }
         }
 
-        return f.1.clone()
+        return f.1.clone();
     }
 
     pub fn New<T: FileOperations + 'static>(dirent: &Dirent, flags: &FileFlags, fops: T) -> Self {
@@ -450,7 +499,7 @@ impl File {
 
         let ret = Fstat(fd, &mut fstat) as i32;
         if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
+            return Err(Error::SysError(-ret as i32));
         }
 
         let fileFlags = Self::GetFileFlags(fd)?;
@@ -458,7 +507,9 @@ impl File {
         match fstat.st_mode as u16 & ModeType::S_IFMT {
             ModeType::S_IFSOCK => {
                 if isTTY {
-                    return Err(Error::Common("cannot import host socket as TTY".to_string()))
+                    return Err(Error::Common(
+                        "cannot import host socket as TTY".to_string(),
+                    ));
                 }
 
                 panic!("NewFileFromFd: not support socket fd");
@@ -467,8 +518,15 @@ impl File {
             }
 
             _ => {
-                let msrc = MountSource::NewHostMountSource(&"/".to_string(), mounter, &WhitelistFileSystem::New(), &MountSourceFlags::default(), false);
-                let inode = Inode::NewHostInode(&Arc::new(QMutex::new(msrc)), fd, &fstat, fileFlags.Write)?;
+                let msrc = MountSource::NewHostMountSource(
+                    &"/".to_string(),
+                    mounter,
+                    &WhitelistFileSystem::New(),
+                    &MountSourceFlags::default(),
+                    false,
+                );
+                let inode =
+                    Inode::NewHostInode(&Arc::new(QMutex::new(msrc)), fd, &fstat, fileFlags.Write)?;
                 let name = format!("host:[{}]", inode.lock().StableAttr.InodeId);
                 let dirent = Dirent::New(&inode, &name);
 
@@ -480,15 +538,20 @@ impl File {
                 let wouldBlock = inode.lock().InodeOp.WouldBlock();
 
                 if isTTY {
-                    return Ok(Self::NewTTYFile(&dirent, &fileFlags, fops))
+                    return Ok(Self::NewTTYFile(&dirent, &fileFlags, fops));
                 }
 
-                return Ok(Self::NewHostFile(&dirent, &fileFlags, fops, wouldBlock))
+                return Ok(Self::NewHostFile(&dirent, &fileFlags, fops, wouldBlock));
             }
         }
     }
 
-    pub fn NewHostFile(dirent: &Dirent, flags: &FileFlags, fops: Arc<FileOperations>, wouldBlock: bool) -> Self {
+    pub fn NewHostFile(
+        dirent: &Dirent,
+        flags: &FileFlags,
+        fops: Arc<FileOperations>,
+        wouldBlock: bool,
+    ) -> Self {
         let mut flags = *flags;
 
         if !wouldBlock {
@@ -503,13 +566,13 @@ impl File {
             //offsetLock: QLock::default(),
             offset: QLock::New(0),
             FileOp: fops,
-        }))
+        }));
     }
 
     pub fn NewTTYFile(dirent: &Dirent, flags: &FileFlags, fops: Arc<HostFileOp>) -> Self {
         let ttyfileops = TTYFileOps::New(fops);
 
-        return Self::New(dirent, flags, ttyfileops)
+        return Self::New(dirent, flags, ttyfileops);
     }
 
     pub fn UniqueId(&self) -> u64 {
@@ -528,7 +591,7 @@ impl File {
 
         match &f.1 {
             None => (),
-            Some(ref a) =>{
+            Some(ref a) => {
                 if newFlags.Async && !f.0.Async {
                     a.Register(task, self)
                 }
@@ -553,7 +616,7 @@ impl File {
         let current = *offsetLock;
         let newOffset = fops.Seek(task, self, whence, current, offset)?;
         *offsetLock = newOffset;
-        return Ok(newOffset)
+        return Ok(newOffset);
     }
 
     pub fn ReadDir(&self, task: &Task, serializer: &mut DentrySerializer) -> Result<()> {
@@ -562,7 +625,7 @@ impl File {
 
         let current = *offsetLock;
         *offsetLock = fops.ReadDir(task, self, current, serializer)?;
-        return Ok(())
+        return Ok(());
     }
 
     pub fn Readv(&self, task: &Task, dsts: &mut [IoVec]) -> Result<i64> {
@@ -584,11 +647,11 @@ impl File {
                 *offsetLock = current + n;
             }
 
-            return Ok(n)
+            return Ok(n);
         } else {
             let blocking = self.Blocking();
             let n = fops.ReadAt(task, self, dsts, 0, blocking)?;
-            return Ok(n)
+            return Ok(n);
         }
     }
 
@@ -596,7 +659,7 @@ impl File {
         let fops = self.FileOp.clone();
         let blocking = self.Blocking();
         let n = fops.ReadAt(task, self, dsts, offset, blocking)?;
-        return Ok(n)
+        return Ok(n);
     }
 
     pub fn offsetForAppend(&self, task: &Task) -> Result<i64> {
@@ -606,7 +669,7 @@ impl File {
             Ok(u) => u,
         };
 
-        return Ok(uattr.Size)
+        return Ok(uattr.Size);
     }
 
     // checkLimit checks the offset that the write will be performed at. The
@@ -614,7 +677,7 @@ impl File {
     // integer indicates the new maximum write length.
     pub fn checkLimit(&self, _offset: i64) -> (i64, bool) {
         //todo: implement this
-        return (0, false)
+        return (0, false);
     }
 
     pub fn Writev(&self, task: &Task, srcs: &[IoVec]) -> Result<i64> {
@@ -629,7 +692,7 @@ impl File {
             if self.flags.lock().0.Append {
                 let (cnt, len) = fops.Append(task, self, srcs)?;
                 *offsetLock = len;
-                return Ok(cnt)
+                return Ok(cnt);
             }
 
             let current = *offsetLock;
@@ -645,12 +708,12 @@ impl File {
                 *offsetLock = current + n;
             }
 
-            return Ok(n)
+            return Ok(n);
         } else {
             let blocking = self.Blocking();
             let n = fops.WriteAt(task, self, srcs, 0, blocking)?;
 
-            return Ok(n)
+            return Ok(n);
         }
     }
 
@@ -658,17 +721,17 @@ impl File {
         let fops = self.FileOp.clone();
 
         /*
-        POSIX requires that opening a file with the O_APPEND flag should have
-       no effect on the location at which pwrite() writes data.  However, on
-       Linux, if a file is opened with O_APPEND, pwrite() appends data to
-       the end of the file, regardless of the value of offset.
+         POSIX requires that opening a file with the O_APPEND flag should have
+        no effect on the location at which pwrite() writes data.  However, on
+        Linux, if a file is opened with O_APPEND, pwrite() appends data to
+        the end of the file, regardless of the value of offset.
 
-       //todo: study whether we need to enable this
+        //todo: study whether we need to enable this
 
-        if self.flags.lock().0.Append {
-            let (cnt, _len) = fops.Append(task, self, srcs)?;
-            return Ok(cnt)
-        }*/
+         if self.flags.lock().0.Append {
+             let (cnt, _len) = fops.Append(task, self, srcs)?;
+             return Ok(cnt)
+         }*/
 
         let (limit, ok) = self.checkLimit(offset);
         if ok && limit == 0 {
@@ -678,7 +741,7 @@ impl File {
         let blocking = self.Blocking();
         let n = fops.WriteAt(task, self, srcs, offset, blocking)?;
 
-        return Ok(n)
+        return Ok(n);
     }
 
     pub fn Fsync(&self, task: &Task, start: i64, end: i64, syncType: SyncType) -> Result<()> {

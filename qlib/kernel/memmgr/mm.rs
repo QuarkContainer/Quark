@@ -12,43 +12,43 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
-use alloc::sync::Weak;
-use core::ops::Deref;
 use alloc::string::String;
 use alloc::string::ToString;
-use x86_64::structures::paging::PageTableFlags;
+use alloc::sync::Arc;
+use alloc::sync::Weak;
 use alloc::vec::Vec;
+use core::ops::Deref;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
+use x86_64::structures::paging::PageTableFlags;
 
 use crate::qlib::mutex::*;
 
-use super::super::arch::x86_64::context::*;
-use super::super::PAGE_MGR;
-use super::super::uid::*;
-use super::super::KERNEL_PAGETABLE;
-use super::super::asm::*;
-use super::super::super::common::*;
-use super::super::super::linux_def::*;
-use super::super::super::range::*;
 use super::super::super::addr::*;
-use super::super::super::vcpu_mgr::CPULocal;
-use super::super::stack::*;
 use super::super::super::auxv::*;
-use super::super::task::*;
-use super::super::super::pagetable::*;
+use super::super::super::common::*;
 use super::super::super::limits::*;
-use super::super::kernel::aio::aio_context::*;
-use super::super::fs::dirent::*;
-use super::super::mm::*;
-use super::super::Kernel::HostSpace;
+use super::super::super::linux_def::*;
 use super::super::super::mem::areaset::*;
+use super::super::super::pagetable::*;
+use super::super::super::range::*;
+use super::super::super::vcpu_mgr::CPULocal;
+use super::super::arch::x86_64::context::*;
+use super::super::asm::*;
+use super::super::fs::dirent::*;
+use super::super::kernel::aio::aio_context::*;
+use super::super::mm::*;
+use super::super::stack::*;
+use super::super::task::*;
+use super::super::uid::*;
+use super::super::Kernel::HostSpace;
+use super::super::KERNEL_PAGETABLE;
+use super::super::PAGE_MGR;
 //use super::super::asm::*;
 use super::arch::*;
-use super::vma::*;
 use super::metadata::*;
 use super::syscalls::*;
+use super::vma::*;
 use super::*;
 
 pub struct MMMapping {
@@ -177,13 +177,13 @@ pub struct MemoryManagerWeak {
     pub data: Weak<MemoryManagerInternal>,
 }
 
-impl MemoryManagerWeak{
+impl MemoryManagerWeak {
     pub fn ID(&self) -> UniqueID {
         return self.uid;
     }
 
     pub fn Upgrade(&self) -> MemoryManager {
-        return MemoryManager(self.data.upgrade().expect("MemoryManagerWeak upgrade fail"))
+        return MemoryManager(self.data.upgrade().expect("MemoryManagerWeak upgrade fail"));
     }
 }
 
@@ -215,7 +215,14 @@ impl MemoryManager {
         // KVM_IOEVENTFD RANGE
         //vmas.Insert(&gap, &Range::New(MemoryDef::KVM_IOEVENTFD_BASEADDR, 0x1000), vma);
 
-        vmas.Insert(&gap, &Range::New(MemoryDef::KVM_IOEVENTFD_BASEADDR, MemoryDef::PHY_UPPER_ADDR - MemoryDef::KVM_IOEVENTFD_BASEADDR), vma.clone());
+        vmas.Insert(
+            &gap,
+            &Range::New(
+                MemoryDef::KVM_IOEVENTFD_BASEADDR,
+                MemoryDef::PHY_UPPER_ADDR - MemoryDef::KVM_IOEVENTFD_BASEADDR,
+            ),
+            vma.clone(),
+        );
 
         let mapping = MMMapping {
             vmas: vmas,
@@ -268,18 +275,19 @@ impl MemoryManager {
             aioManager: AIOManager::default(),
         };
 
-        return Self(Arc::new(internal))
+        return Self(Arc::new(internal));
     }
 
     pub fn Downgrade(&self) -> MemoryManagerWeak {
         return MemoryManagerWeak {
             uid: self.uid,
-            data: Arc::downgrade(&self.0)
-        }
+            data: Arc::downgrade(&self.0),
+        };
     }
 
     pub fn MaskTlbShootdown(&self, vcpuId: u64) {
-        self.tlbShootdownMask.fetch_or(1 << vcpuId, Ordering::Release);
+        self.tlbShootdownMask
+            .fetch_or(1 << vcpuId, Ordering::Release);
     }
 
     pub fn TlbShootdownMask(&self) -> u64 {
@@ -292,7 +300,7 @@ impl MemoryManager {
 
     pub fn SetVcpu(&self, vcpu: usize) {
         assert!(vcpu < 64);
-        self.vcpuMapping.fetch_or(1<<vcpu, Ordering::Release);
+        self.vcpuMapping.fetch_or(1 << vcpu, Ordering::Release);
     }
 
     pub fn TlbShootdown(&self) {
@@ -326,13 +334,13 @@ impl MemoryManager {
 
     pub fn ClearVcpu(&self, vcpu: usize) {
         assert!(vcpu < 64);
-        self.vcpuMapping.fetch_and(!(1<<vcpu), Ordering::Release);
+        self.vcpuMapping.fetch_and(!(1 << vcpu), Ordering::Release);
     }
 
     pub fn GetVcpuMapping(&self) -> u64 {
         let mask = self.vcpuMapping.load(Ordering::Acquire);
         let vcpu = GetVcpuId();
-        return mask & !(1<<vcpu);
+        return mask & !(1 << vcpu);
     }
 
     pub fn VcpuEnter(&self) {
@@ -355,8 +363,14 @@ impl MemoryManager {
             meta.auxv.push(*entry);
         }
 
-        meta.argv = Range::New(stackLayout.ArgvStart, stackLayout.ArgvEnd - stackLayout.ArgvStart);
-        meta.envv = Range::New(stackLayout.EnvvStart, stackLayout.EvvvEnd - stackLayout.EnvvStart)
+        meta.argv = Range::New(
+            stackLayout.ArgvStart,
+            stackLayout.ArgvEnd - stackLayout.ArgvStart,
+        );
+        meta.envv = Range::New(
+            stackLayout.EnvvStart,
+            stackLayout.EvvvEnd - stackLayout.EnvvStart,
+        )
     }
 
     pub fn CleanVMAs(&self) -> Result<()> {
@@ -380,7 +394,7 @@ impl MemoryManager {
             vseg = vgap.NextSeg();
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     //Remove virtual memory to the phy mem mapping
@@ -418,7 +432,7 @@ impl MemoryManager {
             vseg = vgap.NextSeg();
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     //Remove virtual memory to the phy mem mapping
@@ -454,12 +468,12 @@ impl MemoryManager {
             vseg = vgap.NextSeg();
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn HandleTlbShootdown(&self) {
         let vcpId = CPULocal::CpuId() as u64;
-        if self.TlbShootdownMask() & (1<<vcpId) != 0 {
+        if self.TlbShootdownMask() & (1 << vcpId) != 0 {
             let curr = super::super::super::super::asm::CurrentCr3();
             PageTables::Switch(curr);
             self.MaskTlbShootdown(vcpId);
@@ -469,19 +483,19 @@ impl MemoryManager {
     pub fn MappingReadLock(&self) -> QMutexGuard<()> {
         let lock = self.mappingLock.lock();
         self.HandleTlbShootdown();
-        return lock
+        return lock;
     }
 
     pub fn MappingWriteLock(&self) -> QMutexGuard<()> {
         let lock = self.mappingLock.lock();
         self.HandleTlbShootdown();
-        return lock
+        return lock;
     }
 
     pub fn BrkSetup(&self, addr: u64) {
         let _ml = self.MappingWriteLock();
         self.mapping.lock().brkInfo = BrkInfo {
-            brkStart : addr,
+            brkStart: addr,
             brkEnd: addr,
             brkMemEnd: addr,
         }
@@ -505,32 +519,30 @@ impl MemoryManager {
         let vss = pt.curRSS;
         let rss = pt.maxRSS;
 
-        let res = format!("{} {} 0 0 0 0 0\n",
-                          vss/MemoryDef::PAGE_SIZE, rss/MemoryDef::PAGE_SIZE);
+        let res = format!(
+            "{} {} 0 0 0 0 0\n",
+            vss / MemoryDef::PAGE_SIZE,
+            rss / MemoryDef::PAGE_SIZE
+        );
 
         return res.as_bytes().to_vec();
     }
 
-    pub const DEV_MINOR_BITS : usize = 20;
+    pub const DEV_MINOR_BITS: usize = 20;
     pub const VSYSCALLEND: u64 = 0xffffffffff601000;
-    pub const VSYSCALL_MAPS_ENTRY : &'static str  = "ffffffffff600000-ffffffffff601000 --xp 00000000 00:00 0                  [vsyscall]\n";
+    pub const VSYSCALL_MAPS_ENTRY: &'static str =
+        "ffffffffff600000-ffffffffff601000 --xp 00000000 00:00 0                  [vsyscall]\n";
 
-    pub fn PrintVma(&self, task: &Task,  vma: &VMA, range: &Range) -> String {
-        let private = if vma.private {
-            "p"
-        } else {
-            "s"
-        };
+    pub fn PrintVma(&self, task: &Task, vma: &VMA, range: &Range) -> String {
+        let private = if vma.private { "p" } else { "s" };
 
         let (dev, inodeId) = match &vma.id {
             None => (0, 0),
-            Some(ref mapping) => {
-                (mapping.DeviceID(), mapping.InodeID())
-            }
+            Some(ref mapping) => (mapping.DeviceID(), mapping.InodeID()),
         };
 
         let devMajor = (dev >> Self::DEV_MINOR_BITS) as u32;
-        let devMinor = (dev & ((1 <<Self::DEV_MINOR_BITS) - 1)) as u32;
+        let devMinor = (dev & ((1 << Self::DEV_MINOR_BITS) - 1)) as u32;
 
         let mut s = if vma.hint.len() == 0 {
             vma.hint.to_string()
@@ -542,15 +554,16 @@ impl MemoryManager {
             }
         };
 
-        let str = format!("{:08x}-{:08x} {}{} {:08x} {:02x}:{:02x} {} ",
-                          range.Start(),
-                          range.End(),
-                          vma.realPerms.String(),
-                          private,
-                          vma.offset,
-                          devMajor,
-                          devMinor,
-                          inodeId
+        let str = format!(
+            "{:08x}-{:08x} {}{} {:08x} {:02x}:{:02x} {} ",
+            range.Start(),
+            range.End(),
+            vma.realPerms.String(),
+            private,
+            vma.offset,
+            devMajor,
+            devMinor,
+            inodeId
         );
 
         if s.len() != 0 && str.len() < 73 {
@@ -578,21 +591,15 @@ impl MemoryManager {
 
             let range = seg.Range();
 
-            let private = if vma.private {
-                "p"
-            } else {
-                "s"
-            };
+            let private = if vma.private { "p" } else { "s" };
 
             let (dev, inodeId) = match &vma.id {
                 None => (0, 0),
-                Some(ref mapping) => {
-                    (mapping.DeviceID(), mapping.InodeID())
-                }
+                Some(ref mapping) => (mapping.DeviceID(), mapping.InodeID()),
             };
 
             let devMajor = (dev >> Self::DEV_MINOR_BITS) as u32;
-            let devMinor = (dev & ((1 <<Self::DEV_MINOR_BITS) - 1)) as u32;
+            let devMinor = (dev & ((1 << Self::DEV_MINOR_BITS) - 1)) as u32;
 
             let mut s = if vma.hint.len() == 0 {
                 vma.hint.to_string()
@@ -604,15 +611,16 @@ impl MemoryManager {
                 }
             };
 
-            let str = format!("{:08x}-{:08x} {}{} {:08x} {:02x}:{:02x} {} ",
-                              range.Start(),
-                              range.End(),
-                              vma.realPerms.String(),
-                              private,
-                              vma.offset,
-                              devMajor,
-                              devMinor,
-                              inodeId
+            let str = format!(
+                "{:08x}-{:08x} {}{} {:08x} {:02x}:{:02x} {} ",
+                range.Start(),
+                range.End(),
+                vma.realPerms.String(),
+                private,
+                vma.offset,
+                devMajor,
+                devMinor,
+                inodeId
             );
 
             if s.len() != 0 && str.len() < 73 {
@@ -664,18 +672,18 @@ impl MemoryManager {
     pub fn Mlock(&self, _task: &Task, addr: u64, len: u64, mode: MLockMode) -> Result<()> {
         let la = match Addr(len + Addr(addr).PageOffset()).RoundUp() {
             Ok(l) => l.0,
-            Err(_) => return Err(Error::SysError(SysErr::EINVAL))
+            Err(_) => return Err(Error::SysError(SysErr::EINVAL)),
         };
 
         let ar = match Addr(addr).RoundDown().unwrap().ToRange(la) {
             Ok(r) => r,
-            Err(_) => return Err(Error::SysError(SysErr::EINVAL))
+            Err(_) => return Err(Error::SysError(SysErr::EINVAL)),
         };
 
         let _ml = self.MappingWriteLock();
 
         if ar.Len() == 0 {
-            return Ok(())
+            return Ok(());
         }
 
         let mut unmapped = false;
@@ -709,7 +717,7 @@ impl MemoryManager {
         mapping.vmas.MergeRange(&ar);
         mapping.vmas.MergeAdjacent(&ar);
         if unmapped {
-            return Err(Error::SysError(SysErr::ENOMEM))
+            return Err(Error::SysError(SysErr::ENOMEM));
         }
 
         // todo: populate the pagetable
@@ -721,7 +729,7 @@ impl MemoryManager {
             // Linux: mm/gup.c:__get_user_pages() returns EFAULT in this
             // case, which is converted to ENOMEM by mlock.
             if !vma.effectivePerms.Any() {
-                return Err(Error::SysError(SysErr::ENOMEM))
+                return Err(Error::SysError(SysErr::ENOMEM));
             }
 
             if let Some(iops) = vma.mappable.clone() {
@@ -736,14 +744,14 @@ impl MemoryManager {
             vseg = vseg.NextSeg()
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     // MLockAll implements the semantics of Linux's mlockall()/munlockall(),
     // depending on opts.
     pub fn MlockAll(&self, _task: &Task, opts: &MLockAllOpts) -> Result<()> {
         if !opts.Current && !opts.Future {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         // todo: fully support opts.Current and opts.Future
@@ -775,21 +783,21 @@ impl MemoryManager {
             vseg = vseg.NextSeg();
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn MSync(&self, _task: &Task, addr: u64, length: u64, opts: &MSyncOpts) -> Result<()> {
         if addr != Addr(addr).RoundDown()?.0 {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         if length == 0 {
-            return Ok(())
+            return Ok(());
         }
 
         let la = match Addr(length).RoundUp() {
             Err(_) => return Err(Error::SysError(SysErr::ENOMEM)),
-            Ok(l) => l.0
+            Ok(l) => l.0,
         };
 
         let ar = Range::New(addr, la);
@@ -800,7 +808,7 @@ impl MemoryManager {
         let mut vseg = mapping.vmas.LowerBoundSeg(ar.Start());
 
         if !vseg.Range().Contains(ar.Start()) {
-            return Err(Error::SysError(SysErr::ENOMEM))
+            return Err(Error::SysError(SysErr::ENOMEM));
         }
 
         let mut unmaped = false;
@@ -818,7 +826,7 @@ impl MemoryManager {
             lastEnd = vseg.Range().End();
             let vma = vseg.Value();
             if opts.Invalidate && vma.mlockMode != MLockMode::MlockNone {
-                return Err(Error::SysError(SysErr::EBUSY))
+                return Err(Error::SysError(SysErr::EBUSY));
             }
 
             // It's only possible to have dirtied the Mappable through a shared
@@ -852,16 +860,21 @@ impl MemoryManager {
         }
 
         if unmaped {
-            return Err(Error::SysError(SysErr::ENOMEM))
+            return Err(Error::SysError(SysErr::ENOMEM));
         }
 
-        return Ok(())
+        return Ok(());
     }
 
-    pub fn SetMmapLayout(&self, minUserAddr: u64, maxUserAddr: u64, r: &LimitSet) -> Result<MmapLayout> {
+    pub fn SetMmapLayout(
+        &self,
+        minUserAddr: u64,
+        maxUserAddr: u64,
+        r: &LimitSet,
+    ) -> Result<MmapLayout> {
         let layout = Context64::NewMmapLayout(minUserAddr, maxUserAddr, r)?;
         *self.layout.lock() = layout;
-        return Ok(layout)
+        return Ok(layout);
     }
 
     pub fn GetRoot(&self) -> u64 {
@@ -875,7 +888,7 @@ impl MemoryManager {
             return None;
         }
 
-        return Some((vseg.Value(), vseg.Range()))
+        return Some((vseg.Value(), vseg.Range()));
     }
 
     pub fn MapPageLocked(&self, vaddr: Addr, phyAddr: Addr, flags: PageTableFlags) -> Result<bool> {
@@ -887,7 +900,7 @@ impl MemoryManager {
         let _ml = self.MappingReadLock();
 
         if vAddr == 0 {
-            return Err(Error::SysError(SysErr::EFAULT))
+            return Err(Error::SysError(SysErr::EFAULT));
         }
 
         let pagetable = self.pagetable.read();
@@ -896,7 +909,7 @@ impl MemoryManager {
 
     pub fn VirtualToPhyLocked(&self, vAddr: u64) -> Result<(u64, AccessType)> {
         if vAddr == 0 {
-            return Err(Error::SysError(SysErr::EFAULT))
+            return Err(Error::SysError(SysErr::EFAULT));
         }
 
         let pagetable = self.pagetable.read();
@@ -906,20 +919,26 @@ impl MemoryManager {
     pub fn InstallPageWithAddrLocked(&self, task: &Task, pageAddr: u64) -> Result<()> {
         let (vma, range) = match self.GetVmaAndRangeLocked(pageAddr) {
             None => return Err(Error::SysError(SysErr::EFAULT)),
-            Some(data) => data
+            Some(data) => data,
         };
 
         return self.InstallPageLocked(task, &vma, pageAddr, &range);
     }
 
-    pub fn InstallPageLocked(&self, task: &Task, vma: &VMA, pageAddr: u64, range: &Range) -> Result<()> {
+    pub fn InstallPageLocked(
+        &self,
+        task: &Task,
+        vma: &VMA,
+        pageAddr: u64,
+        range: &Range,
+    ) -> Result<()> {
         match self.VirtualToPhyLocked(pageAddr) {
             Err(_) => (),
-            Ok(_) => return Ok(())
+            Ok(_) => return Ok(()),
         }
 
         if !vma.effectivePerms.Any() {
-            return Err(Error::SysError(SysErr::EFAULT))
+            return Err(Error::SysError(SysErr::EFAULT));
         }
 
         let exec = vma.effectivePerms.Exec();
@@ -952,8 +971,8 @@ impl MemoryManager {
                     }
                 }
 
-                return Ok(())
-            },
+                return Ok(());
+            }
             None => {
                 //let vmaOffset = pageAddr - range.Start();
                 //let phyAddr = vmaOffset + vma.offset; // offset in the phyAddr
@@ -967,28 +986,45 @@ impl MemoryManager {
                 }
 
                 super::super::PAGE_MGR.DerefPage(phyAddr);
-                return Ok(())
+                return Ok(());
             }
         }
     }
 
     pub fn MapPageWriteLocked(&self, vAddr: u64, pAddr: u64, exec: bool) {
         let pt = self.pagetable.write();
-        pt.pt.MapPage(Addr(vAddr), Addr(pAddr), PageOpts::New(true, true, exec).Val(), &*PAGE_MGR).unwrap();
+        pt.pt
+            .MapPage(
+                Addr(vAddr),
+                Addr(pAddr),
+                PageOpts::New(true, true, exec).Val(),
+                &*PAGE_MGR,
+            )
+            .unwrap();
     }
 
     pub fn MapPageReadLocked(&self, vAddr: u64, pAddr: u64, exec: bool) {
         let pt = self.pagetable.write();
-        pt.pt.MapPage(Addr(vAddr), Addr(pAddr), PageOpts::New(true, false, exec).Val(), &*PAGE_MGR).unwrap();
+        pt.pt
+            .MapPage(
+                Addr(vAddr),
+                Addr(pAddr),
+                PageOpts::New(true, false, exec).Val(),
+                &*PAGE_MGR,
+            )
+            .unwrap();
     }
 
     pub fn EnableWriteLocked(&self, addr: u64, exec: bool) {
         let pt = self.pagetable.write();
-        pt.pt.SetPageFlags(Addr(addr), PageOpts::New(true, true, exec).Val());
+        pt.pt
+            .SetPageFlags(Addr(addr), PageOpts::New(true, true, exec).Val());
     }
 
     pub fn CopyOnWriteLocked(&self, pageAddr: u64, vma: &VMA) {
-        let (phyAddr, permission) = self.VirtualToPhyLocked(pageAddr).expect(&format!("addr is {:x}", pageAddr));
+        let (phyAddr, permission) = self
+            .VirtualToPhyLocked(pageAddr)
+            .expect(&format!("addr is {:x}", pageAddr));
 
         if permission.Write() {
             // another thread has cow, return
@@ -996,8 +1032,10 @@ impl MemoryManager {
             return;
         }
 
-        let refCount = super::super::PAGE_MGR.GetRef(phyAddr)
-            .expect(&format!("CopyOnWrite PAGE_MGR GetRef addr {:x} fail", phyAddr));
+        let refCount = super::super::PAGE_MGR.GetRef(phyAddr).expect(&format!(
+            "CopyOnWrite PAGE_MGR GetRef addr {:x} fail",
+            phyAddr
+        ));
 
         let exec = vma.effectivePerms.Exec();
         if refCount == 1 && vma.mappable.is_none() {
@@ -1020,13 +1058,20 @@ impl MemoryManager {
         //PerfGofrom(PerfType::PageFault);
     }
 
-    pub fn V2P(&self, task: &Task, start: u64, len: u64, output: &mut Vec<IoVec>, writable: bool) -> Result<()> {
+    pub fn V2P(
+        &self,
+        task: &Task,
+        start: u64,
+        len: u64,
+        output: &mut Vec<IoVec>,
+        writable: bool,
+    ) -> Result<()> {
         if len == 0 {
-            return Ok(())
+            return Ok(());
         }
 
         if start == 0 {
-            return Err(Error::SysError(SysErr::EFAULT))
+            return Err(Error::SysError(SysErr::EFAULT));
         }
 
         let _ml = self.MappingWriteLock();
@@ -1034,15 +1079,23 @@ impl MemoryManager {
         return self.V2PLocked(task, start, len, output, writable);
     }
 
-    pub fn V2PLocked(&self, task: &Task, start: u64, len: u64, output: &mut Vec<IoVec>, writable: bool) -> Result<()> {
-        if MemoryDef::PHY_LOWER_ADDR <= start && start <= MemoryDef::PHY_UPPER_ADDR { // Kernel phy address
+    pub fn V2PLocked(
+        &self,
+        task: &Task,
+        start: u64,
+        len: u64,
+        output: &mut Vec<IoVec>,
+        writable: bool,
+    ) -> Result<()> {
+        if MemoryDef::PHY_LOWER_ADDR <= start && start <= MemoryDef::PHY_UPPER_ADDR {
+            // Kernel phy address
             let end = start + len;
             assert!(MemoryDef::PHY_LOWER_ADDR <= end && end <= MemoryDef::PHY_UPPER_ADDR);
             output.push(IoVec {
                 start: start,
-                len: len as usize
+                len: len as usize,
             });
-            return Ok(())
+            return Ok(());
         }
 
         self.FixPermissionLocked(task, start, len, writable, false)?;
@@ -1060,7 +1113,7 @@ impl MemoryManager {
             match self.VirtualToPhyLocked(start) {
                 Err(e) => {
                     info!("convert to phyaddress fail, addr = {:x} e={:?}", start, e);
-                    return Err(Error::SysError(SysErr::EFAULT))
+                    return Err(Error::SysError(SysErr::EFAULT));
                 }
                 Ok((pAddr, _)) => {
                     let iov = IoVec {
@@ -1073,9 +1126,9 @@ impl MemoryManager {
                     };
 
                     let cnt = output.len();
-                    if cnt > 0 && output[cnt-1].End() == iov.start {
+                    if cnt > 0 && output[cnt - 1].End() == iov.start {
                         // use the last entry
-                        output[cnt-1].len += iov.len;
+                        output[cnt - 1].len += iov.len;
                     } else {
                         output.push(iov);
                     }
@@ -1085,7 +1138,7 @@ impl MemoryManager {
             start = next;
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     // check whether the address range is legal.
@@ -1093,14 +1146,21 @@ impl MemoryManager {
     // 2. Whether the read/write permission meet requirement
     // 3. if need cow, fix the page.
     // 4. return max allowed len
-    pub fn FixPermission(&self, task: &Task, vAddr: u64, len: u64, writeReq: bool, allowPartial: bool) -> Result<u64> {
+    pub fn FixPermission(
+        &self,
+        task: &Task,
+        vAddr: u64,
+        len: u64,
+        writeReq: bool,
+        allowPartial: bool,
+    ) -> Result<u64> {
         if core::u64::MAX - vAddr < len || vAddr == 0 {
-            return Err(Error::SysError(SysErr::EFAULT))
+            return Err(Error::SysError(SysErr::EFAULT));
         }
 
         let _ml = self.MappingWriteLock();
 
-        self.FixPermissionLocked(task, vAddr, len ,writeReq, allowPartial)
+        self.FixPermissionLocked(task, vAddr, len, writeReq, allowPartial)
     }
 
     // check whether the address range is legal.
@@ -1108,12 +1168,20 @@ impl MemoryManager {
     // 2. Whether the read/write permission meet requirement
     // 3. if need cow, fix the page.
     // 4. return max allowed len
-    pub fn FixPermissionLocked(&self, task: &Task, vAddr: u64, len: u64, writeReq: bool, allowPartial: bool) -> Result<u64> {
+    pub fn FixPermissionLocked(
+        &self,
+        task: &Task,
+        vAddr: u64,
+        len: u64,
+        writeReq: bool,
+        allowPartial: bool,
+    ) -> Result<u64> {
         // todo: fix the security check issue
-        if MemoryDef::PHY_LOWER_ADDR <= vAddr && vAddr <= MemoryDef::PHY_UPPER_ADDR { // Kernel phy address
+        if MemoryDef::PHY_LOWER_ADDR <= vAddr && vAddr <= MemoryDef::PHY_UPPER_ADDR {
+            // Kernel phy address
             let end = vAddr + len;
             assert!(MemoryDef::PHY_LOWER_ADDR <= end && end <= MemoryDef::PHY_UPPER_ADDR);
-            return Ok(len)
+            return Ok(len);
         }
 
         let mut addr = Addr(vAddr).RoundDown()?.0;
@@ -1125,36 +1193,34 @@ impl MemoryManager {
                     match self.InstallPageWithAddrLocked(task, addr) {
                         Err(_) => {
                             if !allowPartial || addr < vAddr {
-                                return Err(Error::SysError(SysErr::EFAULT))
+                                return Err(Error::SysError(SysErr::EFAULT));
                             }
 
                             if needTLBShootdown {
                                 self.TlbShootdown();
                             }
-                            return Ok(addr - vAddr)
+                            return Ok(addr - vAddr);
                         }
                         Ok(()) => (),
                     }
                     self.VirtualToPhyLocked(addr)?
                 }
-                Err(e) => {
-                    return Err(e)
-                }
+                Err(e) => return Err(e),
                 Ok(ret) => ret,
             };
 
             let (vma, _) = match self.GetVmaAndRangeLocked(addr) {
                 None => {
                     if !allowPartial || addr < vAddr {
-                        return Err(Error::SysError(SysErr::EFAULT))
+                        return Err(Error::SysError(SysErr::EFAULT));
                     }
 
                     if needTLBShootdown {
                         self.TlbShootdown();
                     }
 
-                    return Ok(addr - vAddr)
-                },
+                    return Ok(addr - vAddr);
+                }
                 Some(vma) => vma.clone(),
             };
 
@@ -1165,13 +1231,13 @@ impl MemoryManager {
 
             if writeReq && !vma.effectivePerms.Write() {
                 if !allowPartial || addr < vAddr {
-                    return Err(Error::SysError(SysErr::EFAULT))
+                    return Err(Error::SysError(SysErr::EFAULT));
                 }
 
                 if needTLBShootdown {
                     self.TlbShootdown();
                 }
-                return Ok(addr - vAddr)
+                return Ok(addr - vAddr);
             }
 
             addr += MemoryDef::PAGE_SIZE;
@@ -1183,7 +1249,14 @@ impl MemoryManager {
         return Ok(len);
     }
 
-    pub fn PopulateVMALocked(&self, task: &Task, vmaSeg: &AreaSeg<VMA>, ar: &Range, precommit: bool, vdso: bool) -> Result<()> {
+    pub fn PopulateVMALocked(
+        &self,
+        task: &Task,
+        vmaSeg: &AreaSeg<VMA>,
+        ar: &Range,
+        precommit: bool,
+        vdso: bool,
+    ) -> Result<()> {
         let vma = vmaSeg.Value();
         let mut perms = vma.effectivePerms;
 
@@ -1203,7 +1276,13 @@ impl MemoryManager {
                     //
                 } else {
                     //vdso: the phyaddress has been allocated and the address is vma.offset
-                    self.pagetable.write().pt.MapHost(task, ar.Start(), &IoVec::NewFromAddr(vma.offset, ar.Len() as usize), &perms, true)?;
+                    self.pagetable.write().pt.MapHost(
+                        task,
+                        ar.Start(),
+                        &IoVec::NewFromAddr(vma.offset, ar.Len() as usize),
+                        &perms,
+                        true,
+                    )?;
                 }
             }
             Some(ref mappable) => {
@@ -1218,21 +1297,36 @@ impl MemoryManager {
                 };
 
                 if precommit && segAr.Len() < 0x200000 {
-                    self.pagetable.write().pt.MapFile(task, ar.Start(), &mappable, &Range::New(vma.offset + ar.Start() - segAr.Start(), ar.Len()), &currPerm, precommit)?;
+                    self.pagetable.write().pt.MapFile(
+                        task,
+                        ar.Start(),
+                        &mappable,
+                        &Range::New(vma.offset + ar.Start() - segAr.Start(), ar.Len()),
+                        &currPerm,
+                        precommit,
+                    )?;
                 }
                 self.AddRssLock(ar);
             }
         }
 
-        return Ok(())
+        return Ok(());
     }
 
-    pub fn PopulateVMARemapLocked(&self, task: &Task, vmaSeg: &AreaSeg<VMA>, ar: &Range, oldar: &Range, _precommit: bool) -> Result<()> {
+    pub fn PopulateVMARemapLocked(
+        &self,
+        task: &Task,
+        vmaSeg: &AreaSeg<VMA>,
+        ar: &Range,
+        oldar: &Range,
+        _precommit: bool,
+    ) -> Result<()> {
         //let segAr = vmaSeg.Range();
         let vma = vmaSeg.Value();
         let mut perms = vma.effectivePerms;
 
-        if vma.private & vma.mappable.is_some() { //if it is filemapping and private, need cow.
+        if vma.private & vma.mappable.is_some() {
+            //if it is filemapping and private, need cow.
             perms.ClearWrite();
         }
 
@@ -1245,9 +1339,15 @@ impl MemoryManager {
         };
 
         // todo: change the name to pt.Remap
-        pt.pt.RemapAna(task, &Range::New(ar.Start(), len), oldar.Start(), &perms, true)?;
+        pt.pt.RemapAna(
+            task,
+            &Range::New(ar.Start(), len),
+            oldar.Start(),
+            &perms,
+            true,
+        )?;
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn ApplicationAddrRange(&self) -> Range {
@@ -1285,7 +1385,6 @@ impl MemoryManager {
             ptInternal2.maxRSS = ptInternal1.maxRSS;
             ptInternal2.pt = ptInternal1.pt.Fork(&*PAGE_MGR)?;
 
-
             let mut srcvseg = mappingInternal1.vmas.FirstSeg();
             let mut dstvgap = mappingInternal2.vmas.FirstGap();
 
@@ -1313,11 +1412,16 @@ impl MemoryManager {
                 if vma.mappable.is_some() {
                     let mappable = vma.mappable.clone().unwrap();
 
-                    match mappable.AddMapping(&mm2, &vmaAR, vma.offset, vma.CanWriteMappableLocked()) {
+                    match mappable.AddMapping(
+                        &mm2,
+                        &vmaAR,
+                        vma.offset,
+                        vma.CanWriteMappableLocked(),
+                    ) {
                         Err(e) => {
                             let appRange = mm2.ApplicationAddrRange();
                             mm2.RemoveVMAsLocked(&appRange)?;
-                            return Err(e)
+                            return Err(e);
                         }
                         _ => (),
                     }
@@ -1329,13 +1433,26 @@ impl MemoryManager {
                     //info!("vma kernel is {}, private is {}, hint is {}", vma.kernel, vma.private, vma.hint);
                     if vma.private {
                         //cow
-                        ptInternal1.pt.ForkRange(&ptInternal2.pt, vmaAR.Start(), vmaAR.Len(), &*PAGE_MGR)?;
+                        ptInternal1.pt.ForkRange(
+                            &ptInternal2.pt,
+                            vmaAR.Start(),
+                            vmaAR.Len(),
+                            &*PAGE_MGR,
+                        )?;
                     } else {
-                        ptInternal1.pt.CopyRange(&ptInternal2.pt, vmaAR.Start(), vmaAR.Len(), &*PAGE_MGR)?;
+                        ptInternal1.pt.CopyRange(
+                            &ptInternal2.pt,
+                            vmaAR.Start(),
+                            vmaAR.Len(),
+                            &*PAGE_MGR,
+                        )?;
                     }
                 }
 
-                dstvgap = mappingInternal2.vmas.Insert(&dstvgap, &vmaAR, vma).NextGap();
+                dstvgap = mappingInternal2
+                    .vmas
+                    .Insert(&dstvgap, &vmaAR, vma)
+                    .NextGap();
 
                 let tmp = srcvseg.NextSeg();
                 srcvseg = tmp;
@@ -1413,12 +1530,26 @@ impl MemoryManager {
         return self.uid;
     }
 
-    pub fn V2PIov(&self, task: &Task, start: u64, len: u64, output: &mut Vec<IoVec>, writable: bool) -> Result<()> {
+    pub fn V2PIov(
+        &self,
+        task: &Task,
+        start: u64,
+        len: u64,
+        output: &mut Vec<IoVec>,
+        writable: bool,
+    ) -> Result<()> {
         let _ml = self.MappingWriteLock();
-        return self.V2PIovLocked(task, start, len, output, writable)
+        return self.V2PIovLocked(task, start, len, output, writable);
     }
 
-    pub fn V2PIovLocked(&self, task: &Task, start: u64, len: u64, output: &mut Vec<IoVec>, writable: bool) -> Result<()> {
+    pub fn V2PIovLocked(
+        &self,
+        task: &Task,
+        start: u64,
+        len: u64,
+        output: &mut Vec<IoVec>,
+        writable: bool,
+    ) -> Result<()> {
         self.FixPermissionLocked(task, start, len, writable, false)?;
 
         let mut start = start;
@@ -1434,7 +1565,7 @@ impl MemoryManager {
             match self.VirtualToPhyLocked(start) {
                 Err(e) => {
                     info!("convert to phyaddress fail, addr = {:x} e={:?}", start, e);
-                    return Err(Error::SysError(SysErr::EFAULT))
+                    return Err(Error::SysError(SysErr::EFAULT));
                 }
                 Ok((pAddr, _)) => {
                     output.push(IoVec {
@@ -1445,14 +1576,13 @@ impl MemoryManager {
                             (next - start) as usize
                         }, //iov.len,
                     });
-
                 }
             }
 
             start = next;
         }
 
-        return Ok(())
+        return Ok(());
     }
 }
 
@@ -1463,5 +1593,5 @@ pub struct MLockAllOpts {
     // future mappings to Mode. At least one of Current or Future must be true.
     pub Current: bool,
     pub Future: bool,
-    pub Mode: MLockMode
+    pub Mode: MLockMode,
 }

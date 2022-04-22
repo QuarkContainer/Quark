@@ -12,24 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::ops::Deref;
 use crate::qlib::mutex::*;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use x86_64::structures::paging::{PageTable};
+use core::ops::Deref;
+use x86_64::structures::paging::PageTable;
 use x86_64::structures::paging::PageTableFlags;
 use x86_64::PhysAddr;
 use x86_64::VirtAddr;
 
-use super::super::task::*;
-use super::super::PAGE_MGR;
-use super::super::asm::*;
 use super::super::super::addr::*;
-use super::super::super::range::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
-use super::super::super::pagetable::*;
 use super::super::super::object_ref::*;
+use super::super::super::pagetable::*;
+use super::super::super::range::*;
+use super::super::asm::*;
+use super::super::task::*;
+use super::super::PAGE_MGR;
 use super::pmamgr::*;
 
 pub type PageMgrRef = ObjectRef<PageMgr>;
@@ -57,7 +57,7 @@ impl RefMgr for PageMgr {
 
     fn GetRef(&self, addr: u64) -> Result<u64> {
         let me = self.lock();
-        return me.PagePool().lock().GetRef(addr)
+        return me.PagePool().lock().GetRef(addr);
     }
 }
 
@@ -69,7 +69,7 @@ impl Allocator for PageMgr {
     }
 
     fn FreePage(&self, addr: u64) -> Result<()> {
-        return self.lock().allocator.lock().FreePage(addr)
+        return self.lock().allocator.lock().FreePage(addr);
     }
 }
 
@@ -79,17 +79,17 @@ extern "C" {
 
 impl Default for PageMgr {
     fn default() -> Self {
-        return Self::New()
+        return Self::New();
     }
 }
 
 impl PageMgr {
     pub fn New() -> Self {
-        return Self(QMutex::new(PageMgrInternal::New()))
+        return Self(QMutex::new(PageMgrInternal::New()));
     }
 
     pub fn Addr(&self) -> u64 {
-        return self as * const _ as u64
+        return self as *const _ as u64;
     }
 
     pub fn PrintRefs(&self) {
@@ -113,7 +113,7 @@ impl PageMgrInternal {
             allocator: Arc::new(QMutex::new(PagePool::New())),
             zeroPage: 0,
             vsyscallPages: Vec::new(),
-        }
+        };
     }
 
     fn PagePool(&self) -> Arc<QMutex<PagePool>> {
@@ -165,7 +165,8 @@ impl Drop for PageTables {
 
 impl PageTables {
     pub fn Drop(&self) {
-        self.UnmapAll().expect("FreePageTables::Drop fail at UnmapAll");
+        self.UnmapAll()
+            .expect("FreePageTables::Drop fail at UnmapAll");
         self.SetRoot(0);
     }
 
@@ -175,10 +176,10 @@ impl PageTables {
     // 3. pages for ffffffffff600000
     pub fn Fork(&self, pagePool: &PageMgr) -> Result<Self> {
         let pt = self.NewWithKernelPageTables(pagePool)?;
-        return Ok(pt)
+        return Ok(pt);
     }
 
-    pub fn InitVsyscall(&self, phyAddrs: &[u64]/*4 pages*/) {
+    pub fn InitVsyscall(&self, phyAddrs: &[u64] /*4 pages*/) {
         let vaddr = 0xffffffffff600000;
         let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
         unsafe {
@@ -192,25 +193,37 @@ impl PageTables {
 
             assert!(pgdEntry.is_unused());
             pudTbl = phyAddrs[3] as *mut PageTable;
-            pgdEntry.set_addr(PhysAddr::new(pudTbl as u64), PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE);
+            pgdEntry.set_addr(
+                PhysAddr::new(pudTbl as u64),
+                PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE,
+            );
 
             let pudEntry = &mut (*pudTbl)[p3Idx];
             let pmdTbl: *mut PageTable;
 
             assert!(pudEntry.is_unused());
             pmdTbl = phyAddrs[2] as *mut PageTable;
-            pudEntry.set_addr(PhysAddr::new(pmdTbl as u64), PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE);
+            pudEntry.set_addr(
+                PhysAddr::new(pmdTbl as u64),
+                PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE,
+            );
 
             let pmdEntry = &mut (*pmdTbl)[p2Idx];
             let pteTbl: *mut PageTable;
 
             assert!(pmdEntry.is_unused());
             pteTbl = phyAddrs[1] as *mut PageTable;
-            pmdEntry.set_addr(PhysAddr::new(pteTbl as u64), PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE);
+            pmdEntry.set_addr(
+                PhysAddr::new(pteTbl as u64),
+                PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE,
+            );
 
             let pteEntry = &mut (*pteTbl)[p1Idx];
             assert!(pteEntry.is_unused());
-            pteEntry.set_addr(PhysAddr::new(phyAddrs[0]), PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE);
+            pteEntry.set_addr(
+                PhysAddr::new(phyAddrs[0]),
+                PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE,
+            );
 
             Invlpg(vaddr);
         }
@@ -227,23 +240,34 @@ impl PageTables {
             let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
             let pgdEntry = &(*pt)[0];
             if pgdEntry.is_unused() {
-                return Err(Error::AddressNotMap(0))
+                return Err(Error::AddressNotMap(0));
             }
             let pudTbl = pgdEntry.addr().as_u64() as *const PageTable;
 
             let nPt: *mut PageTable = ret.GetRoot() as *mut PageTable;
             let nPgdEntry = &mut (*nPt)[0];
             let nPudTbl = pagePool.AllocPage(true)? as *mut PageTable;
-            nPgdEntry.set_addr(PhysAddr::new(nPudTbl as u64), PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE);
+            nPgdEntry.set_addr(
+                PhysAddr::new(nPudTbl as u64),
+                PageTableFlags::PRESENT
+                    | PageTableFlags::WRITABLE
+                    | PageTableFlags::USER_ACCESSIBLE,
+            );
 
             for i in MemoryDef::KERNEL_START_P2_ENTRY..MemoryDef::KERNEL_END_P2_ENTRY {
                 //memspace between 256GB to 512GB
                 //copy entry[i]
-                *(&mut (*nPudTbl)[i] as *mut _ as *mut u64) = *(&(*pudTbl)[i] as *const _ as *const u64);
+                *(&mut (*nPudTbl)[i] as *mut _ as *mut u64) =
+                    *(&(*pudTbl)[i] as *const _ as *const u64);
             }
         }
 
-        ret.MapPage(Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR), Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR), PageOpts::Kernel().Val(), pagePool)?;
+        ret.MapPage(
+            Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR),
+            Addr(MemoryDef::KVM_IOEVENTFD_BASEADDR),
+            PageOpts::Kernel().Val(),
+            pagePool,
+        )?;
 
         {
             let mut lock = pagePool.lock();
@@ -251,10 +275,17 @@ impl PageTables {
             ret.MapVsyscall(vsyscallPages);
         }
 
-        return Ok(ret)
+        return Ok(ret);
     }
 
-    pub fn RemapAna(&self, _task: &Task, newAddrRange: &Range, oldStart: u64, at: &AccessType, user: bool) -> Result<()> {
+    pub fn RemapAna(
+        &self,
+        _task: &Task,
+        newAddrRange: &Range,
+        oldStart: u64,
+        at: &AccessType,
+        user: bool,
+    ) -> Result<()> {
         let pageOpts = if user {
             if at.Write() {
                 PageOpts::UserReadWrite().Val()
@@ -271,16 +302,26 @@ impl PageTables {
             }
         };
 
-        self.Remap(Addr(newAddrRange.Start()),
-                   Addr(newAddrRange.End()),
-                   Addr(oldStart),
-                   pageOpts,
-                   &*PAGE_MGR)?;
+        self.Remap(
+            Addr(newAddrRange.Start()),
+            Addr(newAddrRange.End()),
+            Addr(oldStart),
+            pageOpts,
+            &*PAGE_MGR,
+        )?;
 
-        return Ok(())
+        return Ok(());
     }
 
-    pub fn RemapHost(&self, _task: &Task, addr: u64, phyRange: &IoVec, oldar: &Range, at: &AccessType, user: bool) -> Result<()> {
+    pub fn RemapHost(
+        &self,
+        _task: &Task,
+        addr: u64,
+        phyRange: &IoVec,
+        oldar: &Range,
+        at: &AccessType,
+        user: bool,
+    ) -> Result<()> {
         let pageOpts = if user {
             if at.Write() {
                 PageOpts::UserReadWrite().Val()
@@ -297,18 +338,27 @@ impl PageTables {
             }
         };
 
-        self.RemapForFile(Addr(addr),
-                          Addr(addr + phyRange.Len() as u64),
-                          Addr(phyRange.Start()),
-                          Addr(oldar.Start()),
-                          Addr(oldar.End()),
-                          pageOpts,
-                          &*PAGE_MGR)?;
+        self.RemapForFile(
+            Addr(addr),
+            Addr(addr + phyRange.Len() as u64),
+            Addr(phyRange.Start()),
+            Addr(oldar.Start()),
+            Addr(oldar.End()),
+            pageOpts,
+            &*PAGE_MGR,
+        )?;
 
-        return Ok(())
+        return Ok(());
     }
 
-    pub fn MapHost(&self, _task: &Task, addr: u64, phyRange: &IoVec, at: &AccessType, user: bool) -> Result<()> {
+    pub fn MapHost(
+        &self,
+        _task: &Task,
+        addr: u64,
+        phyRange: &IoVec,
+        at: &AccessType,
+        user: bool,
+    ) -> Result<()> {
         let pageOpts = if user {
             if at.Write() {
                 PageOpts::UserReadWrite().Val()
@@ -325,49 +375,50 @@ impl PageTables {
             }
         };
 
-        self.Map(Addr(addr), Addr(addr + phyRange.Len() as u64), Addr(phyRange.Start()), pageOpts, &*PAGE_MGR, !user)?;
+        self.Map(
+            Addr(addr),
+            Addr(addr + phyRange.Len() as u64),
+            Addr(phyRange.Start()),
+            pageOpts,
+            &*PAGE_MGR,
+            !user,
+        )?;
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn PrintZero(&self) {
         let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
 
-        let pgdEntry = unsafe {
-            &(*pt)[0]
-        };
+        let pgdEntry = unsafe { &(*pt)[0] };
 
         assert!(!pgdEntry.is_unused(), "pagetable::Drop page is not mapped");
 
         let pudTblAddr = pgdEntry.addr().as_u64();
         let pudTbl = pudTblAddr as *mut PageTable;
-        let pudEntry = unsafe {
-            &(*pudTbl)[0]
-        };
+        let pudEntry = unsafe { &(*pudTbl)[0] };
         //assert!(!pudEntry.is_unused(), "pagetable::Drop page is not mapped");
 
         let pmdTblAddr = pudEntry.addr().as_u64();
         let pmdTbl = pmdTblAddr as *mut PageTable;
-        let pmdEntry = unsafe {
-            &(*pmdTbl)[0]
-        };
+        let pmdEntry = unsafe { &(*pmdTbl)[0] };
         //assert!(!pmdEntry.is_unused(), "pagetable::Drop page is not mapped");
 
         let pteTblAddr = pmdEntry.addr().as_u64();
 
-        error!("PrintZero pudTblAddr is {:x}, pmdTblAddr is {:x}, pteTblAddr is {:x}",
-            pudTblAddr, pmdTblAddr, pteTblAddr);
+        error!(
+            "PrintZero pudTblAddr is {:x}, pmdTblAddr is {:x}, pteTblAddr is {:x}",
+            pudTblAddr, pmdTblAddr, pteTblAddr
+        );
     }
 
     pub fn UnmapAll(&self) -> Result<()> {
         self.Unmap(MemoryDef::PAGE_SIZE, MemoryDef::PHY_LOWER_ADDR, &*PAGE_MGR)?;
-        self.Unmap(MemoryDef::PHY_UPPER_ADDR , MemoryDef::LOWER_TOP, &*PAGE_MGR)?;
+        self.Unmap(MemoryDef::PHY_UPPER_ADDR, MemoryDef::LOWER_TOP, &*PAGE_MGR)?;
 
         let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
 
-        let pgdEntry = unsafe {
-            &(*pt)[0]
-        };
+        let pgdEntry = unsafe { &(*pt)[0] };
 
         assert!(!pgdEntry.is_unused(), "pagetable::Drop page is not mapped");
 
@@ -375,7 +426,7 @@ impl PageTables {
 
         PAGE_MGR.Deref(pudTblAddr).expect("PageTable::Drop fail");
         PAGE_MGR.Deref(self.GetRoot())?;
-        return Ok(())
+        return Ok(());
     }
 
     pub fn MUnmap(&mut self, addr: u64, len: u64) -> Result<()> {

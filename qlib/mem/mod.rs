@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod block;
-pub mod seq;
-pub mod io;
-pub mod stackvec;
 pub mod areaset;
-pub mod pool;
-pub mod list_allocator;
+pub mod block;
 pub mod buddy_allocator;
+pub mod io;
+pub mod list_allocator;
+pub mod pool;
+pub mod seq;
+pub mod stackvec;

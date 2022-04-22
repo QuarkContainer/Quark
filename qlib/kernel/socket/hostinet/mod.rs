@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+pub mod rdma_socket;
 pub mod socket;
 pub mod socket_buf;
-pub mod rdma_socket;
 
 pub fn Init() {
     self::socket::Init();

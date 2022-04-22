@@ -13,8 +13,8 @@
 // limitations under the License.
 
 pub mod buffer;
-pub mod pipe;
 pub mod node;
-pub mod reader_writer;
+pub mod pipe;
 pub mod reader;
+pub mod reader_writer;
 pub mod writer;

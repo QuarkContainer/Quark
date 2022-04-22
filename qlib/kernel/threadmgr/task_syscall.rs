@@ -28,7 +28,7 @@ pub fn SyscallRestartErrnoFromReturn(rv: u64) -> (SyscallRestartErrno, bool) {
         SysErr::ERESTARTNOINTR => return (SysErr::ERESTARTNOINTR, true),
         SysErr::ERESTARTNOHAND => return (SysErr::ERESTARTNOHAND, true),
         SysErr::ERESTART_RESTARTBLOCK => return (SysErr::ERESTART_RESTARTBLOCK, true),
-        _ => return (0, false)
+        _ => return (0, false),
     }
 }
 
@@ -36,6 +36,6 @@ pub fn SyscallRestartErrnoFromReturn(rv: u64) -> (SyscallRestartErrno, bool) {
 // with a custom function. It encapsulates the state required to restart a
 // syscall across a S/R.
 
-pub trait SyscallRestartBlock : Sync + Send {
+pub trait SyscallRestartBlock: Sync + Send {
     fn Restart(&self, task: &mut Task) -> Result<i64>;
 }

@@ -14,19 +14,19 @@
 
 use alloc::vec::Vec;
 
-use super::super::task::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::addr::*;
-use super::super::qlib::linux::time::*;
-use super::super::SignalDef::*;
-use super::super::syscalls::syscalls::*;
+use super::super::kernel::epoll::epoll::*;
+use super::super::kernel::epoll::epoll_entry::*;
+use super::super::kernel::fd_table::*;
 use super::super::kernel::time::*;
 use super::super::kernel::timer::*;
 use super::super::kernel::waiter::*;
-use super::super::kernel::fd_table::*;
-use super::super::kernel::epoll::epoll::*;
-use super::super::kernel::epoll::epoll_entry::*;
+use super::super::qlib::addr::*;
+use super::super::qlib::common::*;
+use super::super::qlib::linux::time::*;
+use super::super::qlib::linux_def::*;
+use super::super::syscalls::syscalls::*;
+use super::super::task::*;
+use super::super::SignalDef::*;
 
 // CreateEpoll implements the epoll_create(2) linux syscall.
 pub fn CreateEpoll(task: &Task, closeOnExec: bool) -> Result<i64> {
@@ -42,7 +42,14 @@ pub fn CreateEpoll(task: &Task, closeOnExec: bool) -> Result<i64> {
 }
 
 // AddEpoll implements the epoll_ctl(2) linux syscall when op is EPOLL_CTL_ADD.
-pub fn AddEpoll(task: &Task, epfd: i32, fd: i32, flags: EntryFlags, mask: EventMask, userData: [i32; 2]) -> Result<()> {
+pub fn AddEpoll(
+    task: &Task,
+    epfd: i32,
+    fd: i32,
+    flags: EntryFlags,
+    mask: EventMask,
+    userData: [i32; 2],
+) -> Result<()> {
     // Get epoll from the file descriptor.
     let epollfile = task.GetFile(epfd)?;
 
@@ -56,7 +63,7 @@ pub fn AddEpoll(task: &Task, epfd: i32, fd: i32, flags: EntryFlags, mask: EventM
 
     if !inodeOp.WouldBlock() {
         //error!("AddEpoll 1.1 inodetype is {:?}, fopstype is {:?}", inode.InodeType(), fops.FopsType());
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let fops = epollfile.FileOp.clone();
@@ -65,14 +72,27 @@ pub fn AddEpoll(task: &Task, epfd: i32, fd: i32, flags: EntryFlags, mask: EventM
         Some(ep) => ep,
     };
 
-    return ep.AddEntry(task, FileIdentifier {
-        File: file.Downgrade(),
-        Fd: fd,
-    }, flags, mask, userData)
+    return ep.AddEntry(
+        task,
+        FileIdentifier {
+            File: file.Downgrade(),
+            Fd: fd,
+        },
+        flags,
+        mask,
+        userData,
+    );
 }
 
 // UpdateEpoll implements the epoll_ctl(2) linux syscall when op is EPOLL_CTL_MOD.
-pub fn UpdateEpoll(task: &Task, epfd: i32, fd: i32, flags: EntryFlags, mask: EventMask, userData: [i32; 2]) -> Result<()> {
+pub fn UpdateEpoll(
+    task: &Task,
+    epfd: i32,
+    fd: i32,
+    flags: EntryFlags,
+    mask: EventMask,
+    userData: [i32; 2],
+) -> Result<()> {
     // Get epoll from the file descriptor.
     let epollfile = task.GetFile(epfd)?;
 
@@ -93,10 +113,16 @@ pub fn UpdateEpoll(task: &Task, epfd: i32, fd: i32, flags: EntryFlags, mask: Eve
         Some(ep) => ep,
     };
 
-    return ep.UpdateEntry(task, &FileIdentifier {
-        File: file.Downgrade(),
-        Fd: fd,
-    }, flags, mask, userData)
+    return ep.UpdateEntry(
+        task,
+        &FileIdentifier {
+            File: file.Downgrade(),
+            Fd: fd,
+        },
+        flags,
+        mask,
+        userData,
+    );
 }
 
 pub fn RemoveEpoll(task: &Task, epfd: i32, fd: i32) -> Result<()> {
@@ -121,10 +147,13 @@ pub fn RemoveEpoll(task: &Task, epfd: i32, fd: i32) -> Result<()> {
     };
 
     // Try to remove the entry.
-    return ep.RemoveEntry(task, &FileIdentifier {
-        File: file.Downgrade(),
-        Fd: fd,
-    })
+    return ep.RemoveEntry(
+        task,
+        &FileIdentifier {
+            File: file.Downgrade(),
+            Fd: fd,
+        },
+    );
 }
 
 // WaitEpoll implements the epoll_wait(2) linux syscall.
@@ -143,7 +172,7 @@ pub fn WaitEpoll(task: &Task, epfd: i32, max: i32, timeout: i32) -> Result<Vec<E
     let r = ep.ReadEvents(task, max);
     if r.len() != 0 || timeout == 0 {
         super::super::taskMgr::Yield(); // yield vcpu to avoid live lock
-        return Ok(r)
+        return Ok(r);
     }
 
     // We'll have to wait. Set up the timer if a timeout was specified and
@@ -164,7 +193,7 @@ pub fn WaitEpoll(task: &Task, epfd: i32, max: i32, timeout: i32) -> Result<Vec<E
     loop {
         let r = ep.ReadEvents(task, max);
         if r.len() != 0 {
-            return Ok(r)
+            return Ok(r);
         }
 
         //let start = super::super::asm::Rdtsc();
@@ -175,7 +204,7 @@ pub fn WaitEpoll(task: &Task, epfd: i32, max: i32, timeout: i32) -> Result<Vec<E
             Err(e) => {
                 return Err(e);
             }
-            _ => ()
+            _ => (),
         }
 
         //error!("WaitEpoll after block timeout is {}", timeout);
@@ -187,13 +216,13 @@ pub fn SysEpollCreate1(task: &mut Task, args: &SyscallArguments) -> Result<i64> 
     let flags = args.arg0 as i32;
 
     if flags & !LibcConst::EPOLL_CLOEXEC as i32 != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let closeOnExec = flags & LibcConst::EPOLL_CLOEXEC as i32 != 0;
     let fd = CreateEpoll(task, closeOnExec)?;
 
-    return Ok(fd)
+    return Ok(fd);
 }
 
 // EpollCreate implements the epoll_create(2) linux syscall.
@@ -201,12 +230,12 @@ pub fn SysEpollCreate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let size = args.arg0 as i32;
 
     if size <= 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let fd = CreateEpoll(task, false)?;
 
-    return Ok(fd)
+    return Ok(fd);
 }
 
 // EpollCtl implements the epoll_ctl(2) linux syscall.
@@ -219,10 +248,10 @@ pub fn SysEpollCtl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     // Capture the event state if needed.
     let mut flags = 0;
     let mut mask = 0;
-    let mut data : [i32; 2] = [0, 0];
+    let mut data: [i32; 2] = [0, 0];
 
     if op != LibcConst::EPOLL_CTL_DEL as i32 {
-        let e : EpollEvent = task.CopyInObj(eventAddr)?;
+        let e: EpollEvent = task.CopyInObj(eventAddr)?;
 
         if e.Events & LibcConst::EPOLLONESHOT as u32 != 0 {
             flags |= ONE_SHOT;
@@ -243,26 +272,24 @@ pub fn SysEpollCtl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             // See fs/eventpoll.c.
             mask |= EVENT_HUP | EVENT_ERR;
             AddEpoll(task, epfd, fd, flags, mask, data)?;
-            return Ok(0)
+            return Ok(0);
         }
         LibcConst::EPOLL_CTL_DEL => {
             RemoveEpoll(task, epfd, fd)?;
-            return Ok(0)
+            return Ok(0);
         }
         LibcConst::EPOLL_CTL_MOD => {
             // Same as EPOLL_CTL_ADD.
             UpdateEpoll(task, epfd, fd, flags, mask, data)?;
-            return Ok(0)
+            return Ok(0);
         }
-        _ => {
-            return Err(Error::SysError(SysErr::EINVAL))
-        }
+        _ => return Err(Error::SysError(SysErr::EINVAL)),
     }
 }
 
 // copyOutEvents copies epoll events from the kernel to user memory.
 pub fn CopyOutEvents(task: &Task, addr: u64, e: &[Event]) -> Result<()> {
-    let itemLen : usize = 12;
+    let itemLen: usize = 12;
 
     Addr(addr).AddLen((itemLen * e.len()) as u64)?;
 
@@ -275,7 +302,7 @@ pub fn CopyOutEvents(task: &Task, addr: u64, e: &[Event]) -> Result<()> {
         task.CopyOutObj(&e[i], addr + (i * itemLen) as u64)?;
     }
 
-    return Ok(())
+    return Ok(());
 }
 
 // EpollWait implements the epoll_wait(2) linux syscall.
@@ -286,12 +313,8 @@ pub fn SysEpollWait(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let timeout = args.arg3 as i32;
 
     let r = match WaitEpoll(task, epfd, maxEvents, timeout) {
-        Err(Error::SysError(SysErr::ETIMEDOUT)) => {
-            return Ok(0)
-        }
-        Err(e) => {
-            return Err(e)
-        }
+        Err(Error::SysError(SysErr::ETIMEDOUT)) => return Ok(0),
+        Err(e) => return Err(e),
         Ok(r) => r,
     };
 
@@ -299,7 +322,7 @@ pub fn SysEpollWait(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         CopyOutEvents(task, eventAddr, &r)?;
     }
 
-    return Ok(r.len() as i64)
+    return Ok(r.len() as i64);
 }
 
 // EpollPwait implements the epoll_pwait(2) linux syscall.
@@ -316,5 +339,5 @@ pub fn SysPwait(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         thread.SetSavedSignalMask(oldmask);
     }
 
-    return SysEpollWait(task, args)
+    return SysEpollWait(task, args);
 }

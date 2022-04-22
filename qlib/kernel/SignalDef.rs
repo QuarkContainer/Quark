@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::fmt;
-use alloc::collections::linked_list::LinkedList;
 use alloc::boxed::Box;
+use alloc::collections::linked_list::LinkedList;
+use core::fmt;
 
 use super::super::common::*;
 use super::super::linux_def::*;
@@ -26,9 +26,9 @@ use super::task::*;
 //copy from https://elixir.bootlin.com/linux/latest/source/arch/x86/include/uapi/asm/ptrace.h#L18
 pub struct PtRegs {
     /*
- * C ABI says these regs are callee-preserved. They aren't saved on kernel entry
- * unless syscall needs a complete, fully filled "struct pt_regs".
- */
+     * C ABI says these regs are callee-preserved. They aren't saved on kernel entry
+     * unless syscall needs a complete, fully filled "struct pt_regs".
+     */
     pub r15: u64,
     pub r14: u64,
     pub r13: u64,
@@ -160,8 +160,8 @@ impl<'a> Default for SignalInfo {
             Errno: 0,
             Code: 0,
             _r: 0,
-            fields: [0; 128 - 16]
-        }
+            fields: [0; 128 - 16],
+        };
     }
 }
 
@@ -181,7 +181,7 @@ impl SignalInfo {
             Signo: sig.0,
             Code: Self::SIGNAL_INFO_KERNEL,
             ..Default::default()
-        }
+        };
     }
 
     // FixSignalCodeForUser fixes up si_code.
@@ -199,37 +199,27 @@ impl SignalInfo {
 
     pub fn Kill(&self) -> &mut Kill {
         let addr = &self.fields[0] as *const _ as u64;
-        return unsafe {
-            &mut *(addr as *mut Kill)
-        }
+        return unsafe { &mut *(addr as *mut Kill) };
     }
 
     pub fn SigTimer(&mut self) -> &mut SigTimer {
         let addr = &self.fields[0] as *const _ as u64;
-        return unsafe {
-            &mut *(addr as *mut SigTimer)
-        }
+        return unsafe { &mut *(addr as *mut SigTimer) };
     }
 
     pub fn SigRt(&mut self) -> &mut SigRt {
         let addr = &self.fields[0] as *const _ as u64;
-        return unsafe {
-            &mut *(addr as *mut SigRt)
-        }
+        return unsafe { &mut *(addr as *mut SigRt) };
     }
 
     pub fn SigChld(&mut self) -> &mut SigChld {
         let addr = &self.fields[0] as *const _ as u64;
-        return unsafe {
-            &mut *(addr as *mut SigChld)
-        }
+        return unsafe { &mut *(addr as *mut SigChld) };
     }
 
     pub fn SigFault(&self) -> &mut SigFault {
         let addr = &self.fields[0] as *const _ as u64;
-        return unsafe {
-            &mut *(addr as *mut SigFault)
-        }
+        return unsafe { &mut *(addr as *mut SigFault) };
     }
 
     // SignalInfoUser (properly SI_USER) indicates that a signal was sent from
@@ -303,7 +293,7 @@ impl UContext {
             Stack: alt.clone(),
             MContext: SigContext::New(ptRegs, oldMask, cr2, fpstate),
             Sigset: 0,
-        }
+        };
     }
 }
 
@@ -376,7 +366,7 @@ impl SigContext {
             cr2: cr2,
             fpstate: fpstate,
             ..Default::default()
-        }
+        };
     }
 }
 
@@ -428,7 +418,7 @@ impl SigFlag {
     }
 
     pub fn IsNoChildStop(&self) -> bool {
-        return self.0 & Self::SIGNAL_FLAG_NO_CLD_STOP != 0
+        return self.0 & Self::SIGNAL_FLAG_NO_CLD_STOP != 0;
     }
 }
 
@@ -444,7 +434,9 @@ pub struct SigAct {
 
 impl fmt::Debug for SigAct {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "SigAction {{ \n\
+        write!(
+            f,
+            "SigAction {{ \n\
         handler: {:x}, \n\
         flag : {:x}, \n \
         flags::HasRestorer: {}, \n \
@@ -455,16 +447,16 @@ impl fmt::Debug for SigAct {
         flags::IsSigInfo: {}, \n \
         restorer : {:x},  \n\
         mask: {:x},  \n}}",
-               self.handler,
-               self.flags.0,
-               self.flags.HasRestorer(),
-               self.flags.IsOnStack(),
-               self.flags.IsRestart(),
-               self.flags.IsResetHandler(),
-               self.flags.IsNoDefer(),
-               self.flags.IsSigInfo(),
-               self.restorer,
-               self.mask
+            self.handler,
+            self.flags.0,
+            self.flags.HasRestorer(),
+            self.flags.IsOnStack(),
+            self.flags.IsRestart(),
+            self.flags.IsResetHandler(),
+            self.flags.IsNoDefer(),
+            self.flags.IsSigInfo(),
+            self.restorer,
+            self.mask
         )
     }
 }
@@ -479,20 +471,20 @@ impl SigAct {
     pub const SIGNAL_ACT_IGNORE: u64 = 1;
 }
 
-pub const UNMASKABLE_MASK : u64 = 1 << (Signal::SIGKILL - 1) | 1 << (Signal::SIGSTOP - 1);
+pub const UNMASKABLE_MASK: u64 = 1 << (Signal::SIGKILL - 1) | 1 << (Signal::SIGSTOP - 1);
 
 #[derive(Clone, Copy, Debug)]
 pub struct SignalSet(pub u64);
 
 impl Default for SignalSet {
     fn default() -> Self {
-        return Self(0)
+        return Self(0);
     }
 }
 
 impl SignalSet {
     pub fn New(sig: Signal) -> Self {
-        return SignalSet(1 << sig.Index())
+        return SignalSet(1 << sig.Index());
     }
 
     pub fn Add(&mut self, sig: Signal) {
@@ -507,11 +499,11 @@ impl SignalSet {
         for i in 0..64 {
             let idx = 64 - i - 1;
             if self.0 & (1 << idx) != 0 {
-                return idx
+                return idx;
             }
         }
 
-        return 64
+        return 64;
     }
 
     pub fn MakeSignalSet(sigs: &[Signal]) -> Self {
@@ -546,7 +538,7 @@ impl SignalQueue {
 
     pub fn Enque(&mut self, info: Box<SignalInfo>, timer: Option<IntervalTimer>) -> bool {
         if self.signals.len() == Self::RT_SIG_CAP {
-            return false
+            return false;
         }
 
         self.signals.push_back(PendingSignal {
@@ -554,7 +546,7 @@ impl SignalQueue {
             timer: timer,
         });
 
-        return true
+        return true;
     }
 
     pub fn Deque(&mut self) -> Option<PendingSignal> {
@@ -597,20 +589,44 @@ impl fmt::Debug for PendingSignals {
 impl Default for PendingSignals {
     fn default() -> Self {
         return Self {
-            stdSignals : Default::default(),
-            rtSignals : [
-                SignalQueue::default(), SignalQueue::default(), SignalQueue::default(), SignalQueue::default(),
-                SignalQueue::default(), SignalQueue::default(), SignalQueue::default(), SignalQueue::default(),
-                SignalQueue::default(), SignalQueue::default(), SignalQueue::default(), SignalQueue::default(),
-                SignalQueue::default(), SignalQueue::default(), SignalQueue::default(), SignalQueue::default(),
-                SignalQueue::default(), SignalQueue::default(), SignalQueue::default(), SignalQueue::default(),
-                SignalQueue::default(), SignalQueue::default(), SignalQueue::default(), SignalQueue::default(),
-                SignalQueue::default(), SignalQueue::default(), SignalQueue::default(), SignalQueue::default(),
-                SignalQueue::default(), SignalQueue::default(), SignalQueue::default(), SignalQueue::default(),
+            stdSignals: Default::default(),
+            rtSignals: [
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
+                SignalQueue::default(),
                 SignalQueue::default(),
             ],
             pendingSet: Default::default(),
-        }
+        };
     }
 }
 
@@ -635,7 +651,7 @@ impl PendingSignals {
             self.pendingSet.Add(sig);
             return Ok(q.Enque(info, timer));
         } else {
-            return Err(Error::InvalidInput)
+            return Err(Error::InvalidInput);
         }
     }
 
@@ -643,7 +659,7 @@ impl PendingSignals {
         let set = SignalSet(self.pendingSet.0 & !(mask.0));
 
         if set.0 == 0 {
-            return false
+            return false;
         }
 
         return true;
@@ -653,7 +669,7 @@ impl PendingSignals {
         let set = SignalSet(self.pendingSet.0 & !(mask.0));
 
         if set.0 == 0 {
-            return None
+            return None;
         }
 
         let lastOne = set.TailingZero();
@@ -665,9 +681,7 @@ impl PendingSignals {
                 let mut sigInfo = ps.sigInfo;
                 match ps.timer {
                     None => (),
-                    Some(timer) => {
-                        timer.lock().updateDequeuedSignalLocked(&mut sigInfo)
-                    }
+                    Some(timer) => timer.lock().updateDequeuedSignalLocked(&mut sigInfo),
                 }
 
                 return Some(sigInfo);
@@ -685,9 +699,7 @@ impl PendingSignals {
             let mut sigInfo = ps.sigInfo;
             match ps.timer {
                 None => (),
-                Some(timer) => {
-                    timer.lock().updateDequeuedSignalLocked(&mut sigInfo)
-                }
+                Some(timer) => timer.lock().updateDequeuedSignalLocked(&mut sigInfo),
             }
 
             return Some(sigInfo);
@@ -701,7 +713,7 @@ impl PendingSignals {
 
         if sig.0 <= STD_SIGNAL_COUNT as i32 {
             self.stdSignals[sig.Index()] = None;
-            return
+            return;
         }
 
         self.rtSignals[sig.0 as usize - RT_SIGNAL_START].Clear()
@@ -734,7 +746,7 @@ impl Default for SignalStack {
             addr: 0,
             flags: Self::FLAG_DISABLE,
             size: 0,
-        }
+        };
     }
 }
 
@@ -743,7 +755,7 @@ impl SignalStack {
     pub const FLAG_DISABLE: u32 = 2;
 
     pub fn Contains(&self, sp: u64) -> bool {
-        return self.addr < sp && sp <= self.addr + self.size
+        return self.addr < sp && sp <= self.addr + self.size;
     }
 
     pub fn SetOnStack(&mut self) {
@@ -751,11 +763,11 @@ impl SignalStack {
     }
 
     pub fn IsEnable(&self) -> bool {
-        return self.flags & Self::FLAG_DISABLE == 0
+        return self.flags & Self::FLAG_DISABLE == 0;
     }
 
     pub fn Top(&self) -> u64 {
-        return self.addr + self.size
+        return self.addr + self.size;
     }
 }
 
@@ -772,7 +784,7 @@ pub fn SignalInfoPriv(sig: i32) -> SignalInfo {
         Signo: sig,
         Code: SignalInfo::SIGNAL_INFO_KERNEL,
         ..Default::default()
-    }
+    };
 }
 
 // Sigevent represents struct sigevent.
@@ -795,7 +807,6 @@ pub const SIGEV_NONE: i32 = 1;
 pub const SIGEV_THREAD: i32 = 2;
 pub const SIGEV_THREAD_ID: i32 = 4;
 
-
 // copyInSigSetWithSize copies in a structure as below
 //
 //   struct {
@@ -812,8 +823,8 @@ pub struct SigMask {
 }
 
 pub fn CopyInSigSetWithSize(task: &Task, addr: u64) -> Result<(u64, usize)> {
-    let mask : SigMask = task.CopyInObj(addr)?;
-    return Ok((mask.addr, mask.len))
+    let mask: SigMask = task.CopyInObj(addr)?;
+    return Ok((mask.addr, mask.len));
 }
 
 pub const SIGNAL_SET_SIZE: usize = 8;
@@ -824,9 +835,9 @@ pub fn UnblockableSignals() -> SignalSet {
 
 pub fn CopyInSigSet(task: &Task, sigSetAddr: u64, size: usize) -> Result<SignalSet> {
     if size != SIGNAL_SET_SIZE {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    let mask : u64 = task.CopyInObj(sigSetAddr)?;
-    return Ok(SignalSet(mask & !UnblockableSignals().0))
+    let mask: u64 = task.CopyInObj(sigSetAddr)?;
+    return Ok(SignalSet(mask & !UnblockableSignals().0));
 }

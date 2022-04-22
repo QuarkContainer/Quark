@@ -16,8 +16,8 @@ use serde_json;
 
 use super::super::qlib::common::*;
 use super::super::qlib::control_msg::*;
-use super::usocket::*;
 use super::ucall::*;
+use super::usocket::*;
 
 pub struct UCallClient {
     pub sock: USocket,
@@ -26,13 +26,12 @@ pub struct UCallClient {
 impl UCallClient {
     pub fn Init(path: &str) -> Result<Self> {
         let sock = USocket::InitClient(path)?;
-        return Ok(Self {
-            sock: sock,
-        })
+        return Ok(Self { sock: sock });
     }
 
     pub fn Call(&self, req: &UCallReq) -> Result<UCallResp> {
-        let reqArr = serde_json::to_vec(req).map_err(|e|Error::Common(format!("UCallClient ser error is {:?}", e)))?;
+        let reqArr = serde_json::to_vec(req)
+            .map_err(|e| Error::Common(format!("UCallClient ser error is {:?}", e)))?;
         let fds = req.GetFds();
         match fds {
             None => self.sock.WriteLen(reqArr.len(), &[])?,
@@ -42,11 +41,12 @@ impl UCallClient {
         self.sock.WriteAll(&reqArr)?;
 
         let (len, _fds) = self.sock.ReadLen()?;
-        let mut buf : [u8; UCALL_BUF_LEN] = [0; UCALL_BUF_LEN];
+        let mut buf: [u8; UCALL_BUF_LEN] = [0; UCALL_BUF_LEN];
 
         assert!(len < UCALL_BUF_LEN, "UCallClient::Call resp is too long");
         self.sock.ReadAll(&mut buf[0..len])?;
-        let resp : UCallResp = serde_json::from_slice(&buf[0..len]).map_err(|e|Error::Common(format!("UCallClient deser error is {:?}", e)))?;
+        let resp: UCallResp = serde_json::from_slice(&buf[0..len])
+            .map_err(|e| Error::Common(format!("UCallClient deser error is {:?}", e)))?;
         match resp {
             UCallResp::UCallRespErr(s) => return Err(Error::Common(s)),
             _ => (),
@@ -55,7 +55,8 @@ impl UCallClient {
     }
 
     pub fn StreamCall(&self, req: &UCallReq) -> Result<()> {
-        let reqArr = serde_json::to_vec(req).map_err(|e|Error::Common(format!("UCallClient ser error is {:?}", e)))?;
+        let reqArr = serde_json::to_vec(req)
+            .map_err(|e| Error::Common(format!("UCallClient ser error is {:?}", e)))?;
         let fds = req.GetFds();
         match fds {
             None => self.sock.WriteLen(reqArr.len(), &[])?,
@@ -63,16 +64,17 @@ impl UCallClient {
         }
 
         self.sock.WriteAll(&reqArr)?;
-        return Ok(())
+        return Ok(());
     }
 
     pub fn StreamGetRet(&self) -> Result<UCallResp> {
         let (len, _fds) = self.sock.ReadLen()?;
-        let mut buf : [u8; UCALL_BUF_LEN] = [0; UCALL_BUF_LEN];
+        let mut buf: [u8; UCALL_BUF_LEN] = [0; UCALL_BUF_LEN];
 
         assert!(len < UCALL_BUF_LEN, "UCallClient::Call resp is too long");
         self.sock.ReadAll(&mut buf[0..len])?;
-        let resp : UCallResp = serde_json::from_slice(&buf[0..len]).map_err(|e|Error::Common(format!("UCallClient deser error is {:?}", e)))?;
+        let resp: UCallResp = serde_json::from_slice(&buf[0..len])
+            .map_err(|e| Error::Common(format!("UCallClient deser error is {:?}", e)))?;
         match resp {
             UCallResp::UCallRespErr(s) => return Err(Error::Common(s)),
             _ => (),

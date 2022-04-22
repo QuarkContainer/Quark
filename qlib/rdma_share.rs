@@ -17,28 +17,28 @@ use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 
 pub const COUNT: usize = 128;
-pub struct RingQueue <T: 'static + Default> {
+pub struct RingQueue<T: 'static + Default> {
     pub data: [T; COUNT],
     pub ringMask: AtomicU32,
     pub head: AtomicU32,
     pub tail: AtomicU32,
 }
 
-impl <T: 'static + Default + Copy> RingQueue <T> {
+impl<T: 'static + Default + Copy> RingQueue<T> {
     pub fn Init(&self) {
-        self.ringMask.store(COUNT as u32 -1, Ordering::Release);
+        self.ringMask.store(COUNT as u32 - 1, Ordering::Release);
         self.head.store(0, Ordering::Release);
         self.tail.store(0, Ordering::Release);
     }
 
     #[inline]
     pub fn RingMask(&self) -> u32 {
-        return self.ringMask.load(Ordering::Relaxed)
+        return self.ringMask.load(Ordering::Relaxed);
     }
 
     #[inline]
     pub fn Count(&self) -> usize {
-        return self.ringMask.load(Ordering::Relaxed) as usize + 1
+        return self.ringMask.load(Ordering::Relaxed) as usize + 1;
     }
 
     // pop
@@ -47,12 +47,12 @@ impl <T: 'static + Default + Copy> RingQueue <T> {
         let tail = self.tail.load(Ordering::Acquire);
         let available = tail.wrapping_sub(head) as usize;
         if available == 0 {
-            return None
+            return None;
         }
 
         let idx = head & self.RingMask();
         let data = self.data[idx as usize];
-        self.head.store(head.wrapping_add(1),  Ordering::Release);
+        self.head.store(head.wrapping_add(1), Ordering::Release);
         return Some(data);
     }
 
@@ -60,7 +60,7 @@ impl <T: 'static + Default + Copy> RingQueue <T> {
         let head = self.head.load(Ordering::Relaxed);
         let tail = self.tail.load(Ordering::Acquire);
         let available = tail.wrapping_sub(head) as usize;
-        return available
+        return available;
     }
 
     //push
@@ -80,7 +80,7 @@ impl <T: 'static + Default + Copy> RingQueue <T> {
 
         let idx = tail & self.RingMask();
         self.data[idx as usize] = data;
-        self.tail.store(tail.wrapping_add(1),  Ordering::Release);
+        self.tail.store(tail.wrapping_add(1), Ordering::Release);
     }
 }
 
@@ -95,10 +95,10 @@ pub struct MemRegion {
     pub len: u64,
 }
 
-pub const SOCKET_BUF_SIZE : usize = 64 * 1024; // 64KB
+pub const SOCKET_BUF_SIZE: usize = 64 * 1024; // 64KB
 
 // todo: caculate this to fit ClientShareRegion in 1GB
-pub const IO_BUF_COUNT : usize = 16 * 1024 - 128; // ~16K
+pub const IO_BUF_COUNT: usize = 16 * 1024 - 128; // ~16K
 
 pub struct IOBuf {
     pub read: [u8; SOCKET_BUF_SIZE],
@@ -108,7 +108,7 @@ pub struct IOBuf {
 pub struct IOMetas {
     pub readBufAtoms: [AtomicU32; 2],
     pub writeBufAtoms: [AtomicU32; 2],
-    pub consumeReadData: AtomicU32
+    pub consumeReadData: AtomicU32,
 }
 
 pub struct ClientShareRegion {
@@ -124,12 +124,12 @@ pub struct ClientShareRegion {
     pub ioMetas: [IOMetas; IO_BUF_COUNT],
 
     // data buf for sockbuf, it will be mapped in the rdma MR
-    pub iobufs:  [IOBuf; IO_BUF_COUNT]
+    pub iobufs: [IOBuf; IO_BUF_COUNT],
 }
 
 // total 4096 x 8 = 32KB or 8 pages
 // can index about 32K x 8 = 256K containers, hope it is enough
-pub const BITMAP_COUNT : usize = 4096 - 4;
+pub const BITMAP_COUNT: usize = 4096 - 4;
 
 pub struct TriggerBitmap {
     // one bit map to one l2 bitmap to expedite the notification search
@@ -156,5 +156,5 @@ pub struct UDPBuf {
 pub struct ShareRegion {
     pub srvBitmap: AtomicU64, // whether server is sleeping
     pub bitmap: TriggerBitmap,
-    pub udpBufs: [UDPBuf; UDP_BUF_COUNT]
+    pub udpBufs: [UDPBuf; UDP_BUF_COUNT],
 }

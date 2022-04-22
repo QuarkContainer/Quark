@@ -18,15 +18,15 @@ use super::ipc::*;
 use super::time::*;
 
 // shmat(2) flags. Source: include/uapi/linux/shm.h
-pub const SHM_RDONLY: u16 = 0o010000;  // Read-only access.
-pub const SHM_RND: u16 = 0o020000;  // Round attach address to SHMLBA boundary.
-pub const SHM_REMAP: u16 = 0o040000;  // Take-over region on attach.
+pub const SHM_RDONLY: u16 = 0o010000; // Read-only access.
+pub const SHM_RND: u16 = 0o020000; // Round attach address to SHMLBA boundary.
+pub const SHM_REMAP: u16 = 0o040000; // Take-over region on attach.
 pub const SHM_EXEC: u16 = 0o0100000; // Execution access.
 
 // IPCPerm.Mode upper byte flags. Source: include/linux/shm.h
-pub const SHM_DEST: u16 = 0o01000;  // Segment will be destroyed on last detach.
-pub const SHM_LOCKED: u16 = 0o02000;  // Segment will not be swapped.
-pub const SHM_HUGETLB: u16 = 0o04000;  // Segment will use huge TLB pages.
+pub const SHM_DEST: u16 = 0o01000; // Segment will be destroyed on last detach.
+pub const SHM_LOCKED: u16 = 0o02000; // Segment will not be swapped.
+pub const SHM_HUGETLB: u16 = 0o04000; // Segment will use huge TLB pages.
 pub const SHM_NORESERVE: u16 = 0o010000; // Don't check for reservations.
 
 // Additional Linux-only flags for shmctl(2). Source: include/uapi/linux/shm.h

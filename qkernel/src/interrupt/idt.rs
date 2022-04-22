@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-use x86_64::structures::DescriptorTablePointer;
-use x86_64::instructions::tables::lidt;
 use x86_64::addr::VirtAddr;
+use x86_64::instructions::tables::lidt;
+use x86_64::structures::DescriptorTablePointer;
 
 #[allow(missing_debug_implementations)]
 #[derive(Clone)]
@@ -30,7 +29,7 @@ impl Idt {
 
     pub fn set_handler(&mut self, entry: u8, handler: HandlerFunc) -> &mut EntryOptions {
         //self.0[entry as usize] = Entry::new(segmentation::cs().0, handler);
-        self.0[entry as usize] = Entry::new(1<<3, handler);
+        self.0[entry as usize] = Entry::new(1 << 3, handler);
         &mut self.0[entry as usize].options
     }
 

@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::sync::atomic;
 use alloc::slice;
+use core::sync::atomic;
 
 use super::linux_def::*;
 use super::pagetable::*;
@@ -40,10 +40,15 @@ impl Drop for LFByteStream {
 impl LFByteStream {
     // allocate 1<<ord bytes buffer
     pub fn Init(ord: usize) -> Self {
-        assert!(ord > 12, "LFByteStream ord must be large than 12, i.e. one 4KB Page");
+        assert!(
+            ord > 12,
+            "LFByteStream ord must be large than 12, i.e. one 4KB Page"
+        );
         let size = 1 << ord;
         let allocator = AlignedAllocator::New(size as usize, MemoryDef::PAGE_SIZE as usize);
-        let addr = allocator.Allocate().expect("ByteStream can't allocate memory");
+        let addr = allocator
+            .Allocate()
+            .expect("ByteStream can't allocate memory");
         let ptr = addr as *mut u8;
         let buf = unsafe { slice::from_raw_parts_mut(ptr, size as usize) };
 
@@ -53,12 +58,12 @@ impl LFByteStream {
             tail: atomic::AtomicUsize::new(0),
             capacity: size,
             ringMask: size - 1,
-            allocator: allocator
-        }
+            allocator: allocator,
+        };
     }
 
     pub fn GetRawBuf(&self) -> (u64, usize) {
-        return (&self.buf[0] as *const _ as u64, self.buf.len())
+        return (&self.buf[0] as *const _ as u64, self.buf.len());
     }
 
     pub fn AvailableSpace(&self) -> usize {
@@ -88,16 +93,24 @@ impl LFByteStream {
         let available = tail.wrapping_sub(head);
 
         if available == 0 {
-            return None
+            return None;
         }
 
         let readpos = head & self.ringMask;
 
         let toEnd = self.capacity - readpos;
         if toEnd < available {
-            return Some((&self.buf[0] as *const _ as u64 + readpos as u64, toEnd, true))
+            return Some((
+                &self.buf[0] as *const _ as u64 + readpos as u64,
+                toEnd,
+                true,
+            ));
         } else {
-            return Some((&self.buf[0] as *const _ as u64 + readpos as u64, available, false))
+            return Some((
+                &self.buf[0] as *const _ as u64 + readpos as u64,
+                available,
+                false,
+            ));
         }
     }
 
@@ -113,7 +126,7 @@ impl LFByteStream {
         let available = tail.wrapping_sub(head);
 
         if available == self.capacity {
-            return None
+            return None;
         }
 
         let writePos = tail & self.ringMask;
@@ -121,9 +134,17 @@ impl LFByteStream {
 
         let toEnd = self.capacity - writePos;
         if toEnd < writeSize {
-            return Some((&self.buf[0] as *const _ as u64 + writePos as u64, toEnd, true))
+            return Some((
+                &self.buf[0] as *const _ as u64 + writePos as u64,
+                toEnd,
+                true,
+            ));
         } else {
-            return Some((&self.buf[0] as *const _ as u64 + writePos as u64, writeSize, false))
+            return Some((
+                &self.buf[0] as *const _ as u64 + writePos as u64,
+                writeSize,
+                false,
+            ));
         }
     }
 
@@ -159,8 +180,9 @@ impl LFByteStream {
             buf[firstLen..firstLen + secondLen].clone_from_slice(&self.buf[0..secondLen])
         }
 
-        self.head.store(readpos + readSize, atomic::Ordering::Release);
-        return (full, readSize)
+        self.head
+            .store(readpos + readSize, atomic::Ordering::Release);
+        return (full, readSize);
     }
 
     pub fn Write(&mut self, buf: &[u8]) -> (bool, usize) {
@@ -194,6 +216,6 @@ impl LFByteStream {
         }
 
         self.tail.store(tail + writeSize, atomic::Ordering::Release);
-        return (empty, writeSize)
+        return (empty, writeSize);
     }
 }

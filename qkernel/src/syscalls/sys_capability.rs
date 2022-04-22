@@ -12,22 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::super::task::*;
+use super::super::qlib::auth::cap_set::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
-use super::super::qlib::auth::cap_set::*;
-use super::super::threadmgr::thread::*;
 use super::super::syscalls::syscalls::*;
+use super::super::task::*;
+use super::super::threadmgr::thread::*;
 
 pub fn LookupCaps(task: &Task, tid: ThreadID) -> Result<(CapSet, CapSet, CapSet)> {
     if tid < 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let thread = if tid > 0 {
         match task.Thread().PIDNamespace().TaskWithID(tid) {
             None => return Err(Error::SysError(SysErr::ESRCH)),
-            Some(t) => t
+            Some(t) => t,
         }
     } else {
         task.Thread()
@@ -38,7 +38,7 @@ pub fn LookupCaps(task: &Task, tid: ThreadID) -> Result<(CapSet, CapSet, CapSet)
     let inheritable = creds.lock().InheritableCaps;
     let effective = creds.lock().EffectiveCaps;
 
-    return Ok((permitted, inheritable, effective))
+    return Ok((permitted, inheritable, effective));
 }
 
 // Capget implements Linux syscall capget.
@@ -54,7 +54,7 @@ pub fn SysCapget(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     match hdr.Version {
         LINUX_CAPABILITY_VERSION_1 => {
             if dataAddr == 0 {
-                return Ok(0)
+                return Ok(0);
             }
 
             let (p, i, e) = LookupCaps(task, hdr.Pid)?;
@@ -68,13 +68,11 @@ pub fn SysCapget(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             //*task.GetTypeMut(dataAddr)? = data;
             task.CopyOutObj(&data, dataAddr)?;
 
-            return Ok(0)
-
+            return Ok(0);
         }
-        LINUX_CAPABILITY_VERSION_2 |
-        LINUX_CAPABILITY_VERSION_3 => {
+        LINUX_CAPABILITY_VERSION_2 | LINUX_CAPABILITY_VERSION_3 => {
             if dataAddr == 0 {
-                return Ok(0)
+                return Ok(0);
             }
 
             let (p, i, e) = LookupCaps(task, hdr.Pid)?;
@@ -93,7 +91,7 @@ pub fn SysCapget(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
             //*task.GetTypeMut(dataAddr)? = data;
             task.CopyOutObj(&data, dataAddr)?;
-            return Ok(0)
+            return Ok(0);
         }
         _ => {
             hdr.Version = HIGHEST_CAPABILITY_VERSION;
@@ -101,10 +99,10 @@ pub fn SysCapget(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             task.CopyOutObj(&hdr, hdrAddr)?;
 
             if dataAddr != 0 {
-                return Err(Error::SysError(SysErr::EINVAL))
+                return Err(Error::SysError(SysErr::EINVAL));
             }
 
-            return Ok(0)
+            return Ok(0);
         }
     }
 }
@@ -120,7 +118,7 @@ pub fn SysCapet(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         LINUX_CAPABILITY_VERSION_1 => {
             let tid = hdr.Pid;
             if tid != 0 && tid != task.Thread().ThreadID() {
-                return Err(Error::SysError(SysErr::EPERM))
+                return Err(Error::SysError(SysErr::EPERM));
             }
 
             let data = task.CopyInObj::<CapUserData>(dataAddr)?;
@@ -129,30 +127,33 @@ pub fn SysCapet(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             let i = CapSet(data.Inheritable as u64 & ALL_CAP.0);
             let e = CapSet(data.Effective as u64 & ALL_CAP.0);
             task.Thread().SetCapabilitySets(p, i, e)?;
-            return Ok(0)
+            return Ok(0);
         }
-        LINUX_CAPABILITY_VERSION_2 |
-        LINUX_CAPABILITY_VERSION_3 => {
+        LINUX_CAPABILITY_VERSION_2 | LINUX_CAPABILITY_VERSION_3 => {
             let tid = hdr.Pid;
             if tid != 0 && tid != task.Thread().ThreadID() {
-                return Err(Error::SysError(SysErr::EPERM))
+                return Err(Error::SysError(SysErr::EPERM));
             }
 
-            let data : [CapUserData; 2] = task.CopyInObj(dataAddr)?;
-            let p = CapSet((data[0].Permitted as u64 | (data[1].Permitted as u64) << 32) & ALL_CAP.0);
-            let i = CapSet((data[0].Inheritable as u64 | (data[1].Inheritable as u64) << 32) & ALL_CAP.0);
-            let e = CapSet((data[0].Effective as u64 | (data[1].Effective as u64) << 32) & ALL_CAP.0);
+            let data: [CapUserData; 2] = task.CopyInObj(dataAddr)?;
+            let p =
+                CapSet((data[0].Permitted as u64 | (data[1].Permitted as u64) << 32) & ALL_CAP.0);
+            let i = CapSet(
+                (data[0].Inheritable as u64 | (data[1].Inheritable as u64) << 32) & ALL_CAP.0,
+            );
+            let e =
+                CapSet((data[0].Effective as u64 | (data[1].Effective as u64) << 32) & ALL_CAP.0);
             task.Thread().SetCapabilitySets(p, i, e)?;
-            return Ok(0)
+            return Ok(0);
         }
         _ => {
             hdr.Version = HIGHEST_CAPABILITY_VERSION;
             match task.CopyOutObj(&hdr, hdrAddr) {
                 Err(_) => return Err(Error::SysError(SysErr::EINVAL)),
-                Ok(()) => ()
+                Ok(()) => (),
             };
 
-            return Ok(0)
+            return Ok(0);
         }
     }
 }

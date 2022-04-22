@@ -12,16 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-use super::super::kernel::timer::timer::*;
-use super::super::kernel::fd_table::*;
-use super::super::qlib::linux::time::*;
-use super::super::fs::timerfd::*;
 use super::super::fs::flags::*;
-use super::super::task::*;
+use super::super::fs::timerfd::*;
+use super::super::kernel::fd_table::*;
+use super::super::kernel::timer::timer::*;
 use super::super::qlib::common::*;
+use super::super::qlib::linux::time::*;
 use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
+use super::super::task::*;
 
 // TimerfdCreate implements Linux syscall timerfd_create(2).
 pub fn SysTimerfdCreate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -29,22 +28,29 @@ pub fn SysTimerfdCreate(task: &mut Task, args: &SyscallArguments) -> Result<i64>
     let flags = args.arg1 as i32;
 
     if flags & !(TFD_CLOEXEC | TFD_NONBLOCK) != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let f = NewTimerfd(task, clockID)?;
 
-    f.SetFlags(task, SettableFileFlags{
-        NonBlocking: flags & EFD_NONBLOCK != 0,
-        ..Default::default()
-    });
+    f.SetFlags(
+        task,
+        SettableFileFlags {
+            NonBlocking: flags & EFD_NONBLOCK != 0,
+            ..Default::default()
+        },
+    );
     f.flags.lock().0.NonSeekable = true;
 
-    let fd = task.NewFDFrom(0, &f, &FDFlags{
-        CloseOnExec: flags & EFD_CLOEXEC != 0,
-    })?;
+    let fd = task.NewFDFrom(
+        0,
+        &f,
+        &FDFlags {
+            CloseOnExec: flags & EFD_CLOEXEC != 0,
+        },
+    )?;
 
-    return Ok(fd as i64)
+    return Ok(fd as i64);
 }
 
 // TimerfdSettime implements Linux syscall timerfd_settime(2).
@@ -55,7 +61,7 @@ pub fn SysTimerfdSettime(task: &mut Task, args: &SyscallArguments) -> Result<i64
     let oldValAddr = args.arg3 as u64;
 
     if flags & !TFD_TIMER_ABSTIME != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let file = task.GetFile(fd)?;
@@ -65,7 +71,7 @@ pub fn SysTimerfdSettime(task: &mut Task, args: &SyscallArguments) -> Result<i64
         None => return Err(Error::SysError(SysErr::EINVAL)),
     };
 
-    let newVal : Itimerspec = task.CopyInObj(newValAddr)?;
+    let newVal: Itimerspec = task.CopyInObj(newValAddr)?;
     let clock = tf.Clock();
     let newS = Setting::FromItimerspec(&newVal, flags & TFD_TIMER_ABSTIME != 0, &clock)?;
 
@@ -78,7 +84,7 @@ pub fn SysTimerfdSettime(task: &mut Task, args: &SyscallArguments) -> Result<i64
         task.CopyOutObj(&oldVal, oldValAddr)?;
     }
 
-    return Ok(0)
+    return Ok(0);
 }
 
 // TimerfdGettime implements Linux syscall timerfd_gettime(2).
@@ -100,5 +106,5 @@ pub fn SysTimerfdGettime(task: &mut Task, args: &SyscallArguments) -> Result<i64
 
     task.CopyOutObj(&curVal, curValAddr)?;
 
-    return Ok(0)
+    return Ok(0);
 }

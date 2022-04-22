@@ -19,9 +19,9 @@ use core::ops::Deref;
 use super::common::*;
 
 #[derive(Default)]
-pub struct QRingQueue<T:Clone>(QMutex<VecDeque<T>>);
+pub struct QRingQueue<T: Clone>(QMutex<VecDeque<T>>);
 
-impl <T:Clone> Deref for QRingQueue<T> {
+impl<T: Clone> Deref for QRingQueue<T> {
     type Target = QMutex<VecDeque<T>>;
 
     fn deref(&self) -> &QMutex<VecDeque<T>> {
@@ -29,9 +29,9 @@ impl <T:Clone> Deref for QRingQueue<T> {
     }
 }
 
-impl <T:Clone> QRingQueue<T> {
+impl<T: Clone> QRingQueue<T> {
     pub fn New(size: usize) -> Self {
-        return Self(QMutex::new(VecDeque::with_capacity(size)))
+        return Self(QMutex::new(VecDeque::with_capacity(size)));
     }
 
     pub fn Push(&self, data: &T) -> Result<()> {
@@ -48,7 +48,7 @@ impl <T:Clone> QRingQueue<T> {
     pub fn TryPush(&self, data: &T) -> Result<()> {
         let mut p = match self.try_lock() {
             None => return Err(Error::NoData),
-            Some(p) => p
+            Some(p) => p,
         };
 
         if p.len() == p.capacity() {
@@ -60,13 +60,13 @@ impl <T:Clone> QRingQueue<T> {
     }
 
     pub fn Pop(&self) -> Option<T> {
-        return self.lock().pop_front()
+        return self.lock().pop_front();
     }
 
     pub fn TryPop(&self) -> Option<T> {
         let mut p = match self.try_lock() {
             None => return None,
-            Some(p) => p
+            Some(p) => p,
         };
 
         return p.pop_front();

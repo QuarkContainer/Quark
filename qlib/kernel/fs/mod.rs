@@ -12,31 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod inode;
 pub mod dirent;
 pub mod file;
+pub mod inode;
 //pub mod inodeOperations;
-pub mod flags;
+pub mod anon;
 pub mod attr;
-pub mod filesystems;
-pub mod mount;
-pub mod host;
+pub mod copy_up;
 pub mod dentry;
-pub mod lock;
-pub mod ramfs;
+pub mod dev;
+pub mod file_overlay;
+pub mod filesystems;
+pub mod flags;
 pub mod fsutil;
+pub mod host;
+pub mod inode_overlay;
+pub mod lock;
+pub mod mount;
 pub mod mount_overlay;
 pub mod overlay;
-pub mod inode_overlay;
-pub mod copy_up;
-pub mod file_overlay;
-pub mod dev;
-pub mod tty;
 pub mod procfs;
+pub mod ramfs;
 pub mod sys;
-pub mod anon;
 pub mod timerfd;
 pub mod tmpfs;
+pub mod tty;
 
 pub fn Init() {
     self::tty::Init();

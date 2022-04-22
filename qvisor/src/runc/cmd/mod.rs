@@ -12,19 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+pub mod boot;
+pub mod cmd;
 pub mod command;
 pub mod config;
-pub mod run;
 pub mod create;
-pub mod start;
-pub mod wait;
-pub mod list;
-pub mod cmd;
-pub mod boot;
-pub mod exec;
-pub mod pause;
-pub mod resume;
-pub mod ps;
-pub mod kill;
 pub mod delete;
+pub mod exec;
+pub mod kill;
+pub mod list;
+pub mod pause;
+pub mod ps;
+pub mod resume;
+pub mod run;
+pub mod start;
 pub mod state;
+pub mod wait;

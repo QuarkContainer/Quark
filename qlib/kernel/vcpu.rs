@@ -17,12 +17,12 @@ use core::sync::atomic::Ordering;
 
 use super::asm::*;
 //use super::IOURING;
-use super::super::vcpu_mgr::*;
 use super::super::singleton::*;
+use super::super::vcpu_mgr::*;
 use super::SHARESPACE;
 
-pub static VCPU_COUNT : Singleton<AtomicUsize> = Singleton::<AtomicUsize>::New();
-pub static CPU_LOCAL : Singleton<&'static [CPULocal]> = Singleton::<&'static [CPULocal]>::New();
+pub static VCPU_COUNT: Singleton<AtomicUsize> = Singleton::<AtomicUsize>::New();
+pub static CPU_LOCAL: Singleton<&'static [CPULocal]> = Singleton::<&'static [CPULocal]>::New();
 
 pub fn SetVCPCount(cpuCnt: usize) {
     VCPU_COUNT.store(cpuCnt, Ordering::SeqCst)
@@ -93,7 +93,7 @@ pub fn GetGs() -> u64 {
 
 impl CPULocal {
     pub fn Myself() -> &'static Self {
-        return &CPU_LOCAL[Self::CpuId() as usize]
+        return &CPU_LOCAL[Self::CpuId() as usize];
     }
 
     pub fn NextUringIdx(cnt: u64) -> usize {
@@ -142,7 +142,9 @@ impl CPULocal {
     }
 
     pub fn SetPendingFreeStack(stack: u64) {
-        Self::Myself().pendingFreeStack.store(stack, Ordering::SeqCst);
+        Self::Myself()
+            .pendingFreeStack
+            .store(stack, Ordering::SeqCst);
     }
 
     pub fn PendingFreeStack() -> u64 {
@@ -154,7 +156,7 @@ impl CPULocal {
     }
 
     pub fn GetCPUState(cpuId: usize) -> VcpuState {
-        return CPU_LOCAL[cpuId].State()
+        return CPU_LOCAL[cpuId].State();
     }
 
     pub fn SwitchToRunning(&self) {

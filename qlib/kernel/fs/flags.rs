@@ -49,7 +49,7 @@ impl FileFlags {
             Truncate: mask & Flags::O_TRUNC as u32 != 0,
             Path: mask & Flags::O_PATH as u32 != 0,
             ..Default::default()
-        }
+        };
     }
 
     //from the Fcntl GETTFL result
@@ -64,7 +64,7 @@ impl FileFlags {
             Read: accmode == Flags::O_RDONLY as u32 || accmode == Flags::O_RDWR as u32,
             Write: accmode == Flags::O_WRONLY as u32 || accmode == Flags::O_RDWR as u32,
             ..Default::default()
-        }
+        };
     }
 
     pub fn SettableFileFlags(&self) -> SettableFileFlags {
@@ -73,7 +73,7 @@ impl FileFlags {
             NonBlocking: self.NonBlocking,
             Append: self.Append,
             Async: self.Async,
-        }
+        };
     }
 
     pub fn ToLinux(&self) -> i32 {
@@ -134,4 +134,3 @@ pub struct SettableFileFlags {
     pub Append: bool,
     pub Async: bool,
 }
-

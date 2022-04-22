@@ -12,18 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
+use alloc::sync::Arc;
 
 use super::super::super::super::super::task::*;
-use super::super::super::super::mount::*;
 use super::super::super::super::inode::*;
+use super::super::super::super::mount::*;
 use super::super::super::inode::*;
 
 pub fn NewOvercommit(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let overcommmit = format!("{}\n", 0);
 
-    return NewStaticProcInode(task,
-                              msrc,
-                              &Arc::new(overcommmit.as_bytes().to_vec()))
+    return NewStaticProcInode(task, msrc, &Arc::new(overcommmit.as_bytes().to_vec()));
 }

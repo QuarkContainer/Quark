@@ -14,7 +14,7 @@
 
 use alloc::string::String;
 
-pub const IFNAMSIZ : usize = 16;
+pub const IFNAMSIZ: usize = 16;
 
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]
@@ -46,7 +46,7 @@ impl IFReq {
         let len = self.IFName.len();
         let mut idx = len;
         for i in 0..len {
-            if self.IFName[i] == 0{
+            if self.IFName[i] == 0 {
                 idx = i;
             }
         }
@@ -67,19 +67,19 @@ impl IFReq {
 }
 
 // SizeOfIFReq is the binary size of an IFReq struct (40 bytes).
-pub const SIZE_OF_IFREQ : usize = core::mem::size_of::<IFReq>();
+pub const SIZE_OF_IFREQ: usize = core::mem::size_of::<IFReq>();
 
 // IFMap contains interface hardware parameters.
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]
 pub struct IFMap {
-    pub MemStart : u64,
-    pub MemEnd   : u64,
-    pub BaseAddr : u16,
-    pub IRQ      : u8,
-    pub DMA      : u8,
-    pub Port     : u8,
-    pub _pad     : [u8; 3], // Pad to sizeof(struct ifmap).
+    pub MemStart: u64,
+    pub MemEnd: u64,
+    pub BaseAddr: u16,
+    pub IRQ: u8,
+    pub DMA: u8,
+    pub Port: u8,
+    pub _pad: [u8; 3], // Pad to sizeof(struct ifmap).
 }
 
 // IFConf is used to return a list of interfaces and their addresses. See

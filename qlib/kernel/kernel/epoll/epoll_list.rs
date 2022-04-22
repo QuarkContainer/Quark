@@ -34,7 +34,7 @@ impl PollEntryList {
             item = node.lock().next.clone();
         }
 
-        return output
+        return output;
     }
 
     //remove all of the wait entries
@@ -51,7 +51,7 @@ impl PollEntryList {
     }
 
     pub fn Empty(&self) -> bool {
-        return self.head.is_none()
+        return self.head.is_none();
     }
 
     pub fn Front(&self) -> Option<PollEntry> {

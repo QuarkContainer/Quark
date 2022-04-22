@@ -12,32 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::vec::Vec;
-use alloc::sync::Arc;
-use alloc::collections::vec_deque::VecDeque;
-use core::marker::Send;
 use crate::qlib::mutex::*;
+use alloc::collections::vec_deque::VecDeque;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::marker::Send;
 use core::ops::Deref;
 
-use super::super::super::linux_def::*;
-use super::super::super::linux_def;
-use super::super::super::common::*;
 use super::super::super::super::kernel_def::*;
-use super::super::super::uring::squeue;
-use super::super::super::uring::opcode::*;
-use super::super::super::uring::opcode;
+use super::super::super::common::*;
+use super::super::super::linux_def;
+use super::super::super::linux_def::*;
 use super::super::super::socket_buf::*;
+use super::super::super::uring::opcode;
+use super::super::super::uring::opcode::*;
+use super::super::super::uring::squeue;
+use super::super::fs::file::*;
+use super::super::kernel::aio::aio_context::*;
+use super::super::kernel::async_wait::*;
+use super::super::kernel::eventfd::*;
+use super::super::kernel::timer;
+use super::super::kernel::waiter::qlock::*;
 use super::super::kernel::waiter::*;
 use super::super::socket::hostinet::socket::*;
-use super::super::fs::file::*;
 use super::super::task::*;
-use super::super::kernel::aio::aio_context::*;
-use super::super::kernel::eventfd::*;
 use super::super::IOURING;
-use super::super::kernel::timer;
-use super::super::kernel::async_wait::*;
 use super::super::SHARESPACE;
-use super::super::kernel::waiter::qlock::*;
 //use super::super::guestfdnotifier::GUEST_NOTIFIER;
 
 #[repr(align(128))]
@@ -92,7 +92,7 @@ impl AsyncOps {
             AsyncOps::AsyncEpollCtl(ref msg) => return msg.SEntry(),
             AsyncOps::AsyncSend(ref msg) => return msg.SEntry(),
             AsyncOps::PollHostEpollWait(ref msg) => return msg.SEntry(),
-            AsyncOps::None => ()
+            AsyncOps::None => (),
         };
 
         panic!("AsyncOps::None SEntry fail")
@@ -126,7 +126,7 @@ impl AsyncOps {
                 //panic!("AsyncOps::None SEntry fail")
                 panic!("AsyncOps::None SEntry fail result {} id {}", result, id);
                 //return false;
-            },
+            }
         };
 
         if ret {
@@ -160,7 +160,7 @@ impl AsyncOps {
             AsyncOps::AsyncEpollCtl(_) => return 20,
             AsyncOps::AsyncSend(_) => return 21,
             AsyncOps::PollHostEpollWait(_) => return 22,
-            AsyncOps::None => ()
+            AsyncOps::None => (),
         };
 
         return 0;
@@ -187,7 +187,7 @@ impl UringAsyncMgr {
         return Self {
             ops: ops,
             ids: QMutex::new(ids),
-        }
+        };
     }
 
     pub fn Print(&self) {
@@ -210,12 +210,9 @@ impl UringAsyncMgr {
         self.ids.lock().push_back(id as u16);
     }
 
-    pub fn SetOps(&self, id : usize, ops: AsyncOps) -> squeue::Entry {
+    pub fn SetOps(&self, id: usize, ops: AsyncOps) -> squeue::Entry {
         *self.ops[id].lock() = ops;
-        return self.ops[id]
-            .lock()
-            .SEntry()
-            .user_data(id as u64);
+        return self.ops[id].lock().SEntry().user_data(id as u64);
     }
 }
 
@@ -226,23 +223,23 @@ pub struct AsyncEventfdWrite {
 
 impl AsyncEventfdWrite {
     pub fn New(fd: i32) -> Self {
-        return Self {
-            fd: fd,
-            addr: 1,
-        }
+        return Self { fd: fd, addr: 1 };
     }
 
     pub fn SEntry(&self) -> squeue::Entry {
-        let op = Write::new(types::Fd(self.fd), &self.addr as * const _ as u64 as * const u8, 8);
-        return op.build()
-            .flags(squeue::Flags::FIXED_FILE);
+        let op = Write::new(
+            types::Fd(self.fd),
+            &self.addr as *const _ as u64 as *const u8,
+            8,
+        );
+        return op.build().flags(squeue::Flags::FIXED_FILE);
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
         if result < 0 {
             panic!("AsyncEventfdWrite result {}, fd {}", result, self.fd);
         }
-        return false
+        return false;
     }
 }
 
@@ -258,7 +255,7 @@ impl AsyncTimeout {
                 tv_sec: timeout / 1000_000_000,
                 tv_nsec: timeout % 1000_000_000,
             },
-        }
+        };
     }
 
     pub fn SEntry(&self) -> squeue::Entry {
@@ -271,7 +268,7 @@ impl AsyncTimeout {
             timer::Timeout();
         }
 
-        return false
+        return false;
     }
 }
 
@@ -291,7 +288,7 @@ impl AsyncRawTimeout {
                 tv_sec: ns / 1000_000_000,
                 tv_nsec: ns % 1000_000_000,
             },
-        }
+        };
     }
 
     pub fn SEntry(&self) -> squeue::Entry {
@@ -305,19 +302,17 @@ impl AsyncRawTimeout {
             //timer::FireTimer(self.timerId, self.seqNo);
         }
 
-        return false
+        return false;
     }
 }
 
 pub struct AsyncTimerRemove {
-    pub userData: u64
+    pub userData: u64,
 }
 
 impl AsyncTimerRemove {
     pub fn New(userData: u64) -> Self {
-        return Self {
-            userData: userData
-        }
+        return Self { userData: userData };
     }
 
     pub fn SEntry(&self) -> squeue::Entry {
@@ -327,7 +322,7 @@ impl AsyncTimerRemove {
     }
 
     pub fn Process(&mut self, _result: i32) -> bool {
-        return false
+        return false;
     }
 }
 
@@ -342,7 +337,14 @@ pub struct AsyncStatx {
 }
 
 impl AsyncStatx {
-    pub fn New(dirfd: i32, pathname: u64, flags: i32, mask: u32, future: Future<linux_def::Statx>, mw: &MultiWait) -> Self {
+    pub fn New(
+        dirfd: i32,
+        pathname: u64,
+        flags: i32,
+        mask: u32,
+        future: Future<linux_def::Statx>,
+        mw: &MultiWait,
+    ) -> Self {
         mw.AddWait();
         return Self {
             dirfd,
@@ -352,13 +354,17 @@ impl AsyncStatx {
             mask,
             statx: linux_def::Statx::default(),
             mw: mw.clone(),
-        }
+        };
     }
 
     pub fn SEntry(&self) -> squeue::Entry {
-        let op = opcode::Statx::new(types::Fd(self.dirfd), self.pathname as * const _, &self.statx as * const _ as u64 as * mut types::statx)
-            .flags(self.flags)
-            .mask(self.mask);
+        let op = opcode::Statx::new(
+            types::Fd(self.dirfd),
+            self.pathname as *const _,
+            &self.statx as *const _ as u64 as *mut types::statx,
+        )
+        .flags(self.flags)
+        .mask(self.mask);
 
         return op.build();
     }
@@ -372,7 +378,7 @@ impl AsyncStatx {
 
         self.mw.Done();
 
-        return false
+        return false;
     }
 }
 
@@ -390,19 +396,18 @@ impl AsyncTTYWrite {
             fd: fd,
             addr: addr,
             len: len,
-        }
+        };
     }
 
     pub fn SEntry(&self) -> squeue::Entry {
-        let op = Write::new(types::Fd(self.fd), self.addr as * const _, self.len as u32);
+        let op = Write::new(types::Fd(self.fd), self.addr as *const _, self.len as u32);
 
-        return op.build()
-            .flags(squeue::Flags::FIXED_FILE);
+        return op.build().flags(squeue::Flags::FIXED_FILE);
     }
 
     pub fn Process(&mut self, _result: i32) -> bool {
         //error!("AsyncWrite::Process result is {}", result);
-        return false
+        return false;
     }
 }
 
@@ -422,21 +427,20 @@ impl AsyncWritev {
             addr: addr,
             len: len as u32,
             offset: offset,
-        }
+        };
     }
 
     pub fn SEntry(&self) -> squeue::Entry {
-        let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len)
-            .offset(self.offset);
+        let op =
+            Write::new(types::Fd(self.fd), self.addr as *const u8, self.len).offset(self.offset);
 
-        return op.build()
-            .flags(squeue::Flags::FIXED_FILE);
+        return op.build().flags(squeue::Flags::FIXED_FILE);
     }
 
     pub fn Process(&mut self, _result: i32) -> bool {
         // add back when need
         //BUF_MGR.Free(self.addr, self.len as u64);
-        return false
+        return false;
     }
 }
 
@@ -450,16 +454,19 @@ pub struct AsyncBufWrite {
 impl AsyncBufWrite {
     pub fn SEntry(&self) -> squeue::Entry {
         //let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
-        let op = opcode::Write::new(types::Fd(self.fd), self.buf.Ptr() as * const u8, self.buf.Len() as u32)
-            .offset(self.offset);
+        let op = opcode::Write::new(
+            types::Fd(self.fd),
+            self.buf.Ptr() as *const u8,
+            self.buf.Len() as u32,
+        )
+        .offset(self.offset);
 
-        return op.build()
-            .flags(squeue::Flags::FIXED_FILE);
+        return op.build().flags(squeue::Flags::FIXED_FILE);
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
         assert!(result as usize == self.buf.Len());
-        return false
+        return false;
     }
 
     pub fn New(fd: i32, buf: DataBuff, offset: i64, lockGuard: QAsyncLockGuard) -> Self {
@@ -467,13 +474,13 @@ impl AsyncBufWrite {
             fd,
             buf,
             offset,
-            lockGuard
-        }
+            lockGuard,
+        };
     }
 }
 
 pub struct AsyncLogFlush {
-    pub fd : i32,
+    pub fd: i32,
     pub addr: u64,
     pub len: usize,
 }
@@ -481,14 +488,13 @@ pub struct AsyncLogFlush {
 impl AsyncLogFlush {
     pub fn SEntry(&self) -> squeue::Entry {
         //let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
-        let op = opcode::Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32); //.flags(MsgType::MSG_DONTWAIT);
+        let op = opcode::Write::new(types::Fd(self.fd), self.addr as *const u8, self.len as u32); //.flags(MsgType::MSG_DONTWAIT);
 
-        return op.build()
-            .flags(squeue::Flags::FIXED_FILE);
+        return op.build().flags(squeue::Flags::FIXED_FILE);
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
-       if result <= 0 {
+        if result <= 0 {
             panic!("AsyncLogFlush fail {}/{}", result, self.fd)
         }
 
@@ -501,20 +507,16 @@ impl AsyncLogFlush {
         self.addr = addr;
         self.len = len;
 
-        return true
+        return true;
     }
 
     pub fn New(fd: i32, addr: u64, len: usize) -> Self {
-        return Self {
-            fd,
-            addr,
-            len,
-        }
+        return Self { fd, addr, len };
     }
 }
 
 pub struct AsyncSend {
-    pub fd : i32,
+    pub fd: i32,
     pub queue: Queue,
     pub buf: Arc<SocketBuff>,
     pub addr: u64,
@@ -527,15 +529,15 @@ pub struct AsyncSend {
 impl AsyncSend {
     pub fn SEntry(&self) -> squeue::Entry {
         //let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
-        let op = opcode::Send::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
-        return op.build()
-            .flags(squeue::Flags::FIXED_FILE);
+        let op = opcode::Send::new(types::Fd(self.fd), self.addr as *const u8, self.len as u32);
+        return op.build().flags(squeue::Flags::FIXED_FILE);
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
         if result < 0 {
             self.buf.SetErr(-result);
-            self.queue.Notify(EventMaskFromLinux((EVENT_ERR | EVENT_IN) as u32));
+            self.queue
+                .Notify(EventMaskFromLinux((EVENT_ERR | EVENT_IN) as u32));
             return false;
             //return true;
         }
@@ -549,7 +551,7 @@ impl AsyncSend {
             } else {
                 self.queue.Notify(EventMaskFromLinux(EVENT_HUP as u32));
             }
-            return false
+            return false;
         }
 
         let (trigger, addr, len) = self.buf.ConsumeAndGetAvailableWriteBuf(result as usize);
@@ -568,23 +570,30 @@ impl AsyncSend {
         self.addr = addr;
         self.len = len;
 
-        return true
+        return true;
     }
 
-    pub fn New(fd: i32, queue: Queue, buf: Arc<SocketBuff>, addr: u64, len: usize, ops: &SocketOperations) -> Self {
+    pub fn New(
+        fd: i32,
+        queue: Queue,
+        buf: Arc<SocketBuff>,
+        addr: u64,
+        len: usize,
+        ops: &SocketOperations,
+    ) -> Self {
         return Self {
             fd,
             queue,
             buf,
             addr,
             len,
-            ops: ops.clone()
-        }
+            ops: ops.clone(),
+        };
     }
 }
 
 pub struct AsyncFiletWrite {
-    pub fd : i32,
+    pub fd: i32,
     pub queue: Queue,
     pub buf: Arc<SocketBuff>,
     pub addr: u64,
@@ -595,16 +604,16 @@ pub struct AsyncFiletWrite {
 
 impl AsyncFiletWrite {
     pub fn SEntry(&self) -> squeue::Entry {
-        let op = opcode::Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
+        let op = opcode::Write::new(types::Fd(self.fd), self.addr as *const u8, self.len as u32);
 
-        return op.build()
-            .flags(squeue::Flags::FIXED_FILE);
+        return op.build().flags(squeue::Flags::FIXED_FILE);
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
         if result < 0 {
             self.buf.SetErr(-result);
-            self.queue.Notify(EventMaskFromLinux((EVENT_ERR | EVENT_IN) as u32));
+            self.queue
+                .Notify(EventMaskFromLinux((EVENT_ERR | EVENT_IN) as u32));
             return false;
             //return true;
         }
@@ -618,7 +627,7 @@ impl AsyncFiletWrite {
             } else {
                 self.queue.Notify(EventMaskFromLinux(EVENT_HUP as u32));
             }
-            return false
+            return false;
         }
 
         let (trigger, addr, len) = self.buf.ConsumeAndGetAvailableWriteBuf(result as usize);
@@ -637,10 +646,18 @@ impl AsyncFiletWrite {
         self.addr = addr;
         self.len = len;
 
-        return true
+        return true;
     }
 
-    pub fn New(fd: i32, queue: Queue, buf: Arc<SocketBuff>, addr: u64, len: usize, fops: Arc<FileOperations>, lockGuard: QAsyncLockGuard) -> Self {
+    pub fn New(
+        fd: i32,
+        queue: Queue,
+        buf: Arc<SocketBuff>,
+        addr: u64,
+        len: usize,
+        fops: Arc<FileOperations>,
+        lockGuard: QAsyncLockGuard,
+    ) -> Self {
         return Self {
             fd,
             queue,
@@ -649,12 +666,12 @@ impl AsyncFiletWrite {
             len,
             fops,
             lockGuard,
-        }
+        };
     }
 }
 
 pub struct AsyncAccept {
-    pub fd : i32,
+    pub fd: i32,
     pub queue: Queue,
     pub acceptQueue: AcceptQueue,
     pub addr: TcpSockAddr,
@@ -663,21 +680,28 @@ pub struct AsyncAccept {
 
 impl AsyncAccept {
     pub fn SEntry(&self) -> squeue::Entry {
-        let op = Accept::new(types::Fd(self.fd), &self.addr as * const _ as u64 as * mut _, &self.len as * const _ as u64 as * mut _);
-        return op.build()
-            .flags(squeue::Flags::FIXED_FILE);
+        let op = Accept::new(
+            types::Fd(self.fd),
+            &self.addr as *const _ as u64 as *mut _,
+            &self.len as *const _ as u64 as *mut _,
+        );
+        return op.build().flags(squeue::Flags::FIXED_FILE);
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
         if result < 0 {
             self.acceptQueue.lock().SetErr(-result);
-            self.queue.Notify(EventMaskFromLinux((EVENT_ERR | EVENT_IN) as u32));
+            self.queue
+                .Notify(EventMaskFromLinux((EVENT_ERR | EVENT_IN) as u32));
             return false;
         }
 
         NewSocket(result);
         let sockBuf = Arc::new(SocketBuff::default());
-        let (trigger, hasSpace) = self.acceptQueue.lock().EnqSocket(result, self.addr, self.len, sockBuf);
+        let (trigger, hasSpace) = self
+            .acceptQueue
+            .lock()
+            .EnqSocket(result, self.addr, self.len, sockBuf);
         if trigger {
             self.queue.Notify(EventMaskFromLinux(EVENT_IN as u32));
         }
@@ -693,12 +717,12 @@ impl AsyncAccept {
             acceptQueue,
             addr: TcpSockAddr::default(),
             len: 16, //size of TcpSockAddr
-        }
+        };
     }
 }
 
 pub struct AsyncFileRead {
-    pub fd : i32,
+    pub fd: i32,
     pub queue: Queue,
     pub buf: Arc<SocketBuff>,
     pub addr: u64,
@@ -709,20 +733,19 @@ pub struct AsyncFileRead {
 impl AsyncFileRead {
     pub fn SEntry(&self) -> squeue::Entry {
         if self.isSocket {
-            let op = Recv::new(types::Fd(self.fd), self.addr as * mut u8, self.len as u32);
-            return op.build()
-                .flags(squeue::Flags::FIXED_FILE);
+            let op = Recv::new(types::Fd(self.fd), self.addr as *mut u8, self.len as u32);
+            return op.build().flags(squeue::Flags::FIXED_FILE);
         }
 
-        let op = Read::new(types::Fd(self.fd), self.addr as * mut u8, self.len as u32);
-        return op.build()
-            .flags(squeue::Flags::FIXED_FILE);
+        let op = Read::new(types::Fd(self.fd), self.addr as *mut u8, self.len as u32);
+        return op.build().flags(squeue::Flags::FIXED_FILE);
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
         if result < 0 {
             self.buf.SetErr(-result);
-            self.queue.Notify(EventMaskFromLinux((EVENT_ERR | EVENT_IN) as u32));
+            self.queue
+                .Notify(EventMaskFromLinux((EVENT_ERR | EVENT_IN) as u32));
             return false;
         }
 
@@ -732,9 +755,9 @@ impl AsyncFileRead {
             if self.buf.HasReadData() {
                 self.queue.Notify(EventMaskFromLinux(EVENT_IN as u32));
             } else {
-                self.queue.Notify(EventMaskFromLinux(EVENT_HUP as u32)) ;
+                self.queue.Notify(EventMaskFromLinux(EVENT_HUP as u32));
             }
-            return false
+            return false;
         }
 
         let (trigger, addr, len) = self.buf.ProduceAndGetFreeReadBuf(result as usize);
@@ -751,20 +774,27 @@ impl AsyncFileRead {
         return true;
     }
 
-    pub fn New(fd: i32, queue: Queue, buf: Arc<SocketBuff>, addr: u64, len: usize, isSocket: bool) -> Self {
+    pub fn New(
+        fd: i32,
+        queue: Queue,
+        buf: Arc<SocketBuff>,
+        addr: u64,
+        len: usize,
+        isSocket: bool,
+    ) -> Self {
         return Self {
             fd,
             queue,
             buf,
             addr,
             len,
-            isSocket
-        }
+            isSocket,
+        };
     }
 }
 
 pub struct AsycnSendMsgIntern {
-    pub fd : i32,
+    pub fd: i32,
     pub ops: SocketOperations,
     pub remoteAddr: Vec<u8>,
     pub msg: MsgHdr,
@@ -783,10 +813,9 @@ impl Deref for AsycnSendMsg {
 impl AsycnSendMsg {
     pub fn SEntry(&self) -> squeue::Entry {
         let intern = self.lock();
-        let op = SendMsg::new(types::Fd(intern.fd), &intern.msg as * const _ as * const u64);
+        let op = SendMsg::new(types::Fd(intern.fd), &intern.msg as *const _ as *const u64);
 
-        return op.build()
-            .flags(squeue::Flags::FIXED_FILE);
+        return op.build().flags(squeue::Flags::FIXED_FILE);
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
@@ -820,12 +849,12 @@ impl AsycnSendMsg {
         //let sendMsgOp = AsycnSendMsg::New(intern.fd, &intern.ops);
         self.lock().SetIovs(addr, cnt);
 
-        return true
+        return true;
     }
 
     pub fn New(fd: i32, ops: &SocketOperations) -> Self {
         let intern = AsycnSendMsgIntern::New(fd, ops);
-        return Self(QMutex::new(intern))
+        return Self(QMutex::new(intern));
     }
 }
 
@@ -836,19 +865,19 @@ impl AsycnSendMsgIntern {
             ops: ops.clone(),
             remoteAddr: ops.GetRemoteAddr().unwrap(),
             msg: MsgHdr::default(),
-        }
+        };
     }
 
     pub fn SetIovs(&mut self, addr: u64, cnt: usize) {
         self.msg.iov = addr;
         self.msg.iovLen = cnt;
-        self.msg.msgName =  &self.remoteAddr[0] as * const _ as u64;
-        self.msg.nameLen =  self.remoteAddr.len() as u32;
+        self.msg.msgName = &self.remoteAddr[0] as *const _ as u64;
+        self.msg.nameLen = self.remoteAddr.len() as u32;
     }
 }
 
 pub struct AsycnRecvMsgIntern {
-    pub fd : i32,
+    pub fd: i32,
     pub ops: SocketOperations,
     pub remoteAddr: Vec<u8>,
     pub msg: MsgHdr,
@@ -867,10 +896,9 @@ impl Deref for AsycnRecvMsg {
 impl AsycnRecvMsg {
     pub fn SEntry(&self) -> squeue::Entry {
         let intern = self.lock();
-        let op = RecvMsg::new(types::Fd(intern.fd), &intern.msg as * const _ as * const u64);
+        let op = RecvMsg::new(types::Fd(intern.fd), &intern.msg as *const _ as *const u64);
 
-        return op.build()
-            .flags(squeue::Flags::FIXED_FILE);
+        return op.build().flags(squeue::Flags::FIXED_FILE);
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
@@ -888,7 +916,7 @@ impl AsycnRecvMsg {
             if buf.ProduceReadBuf(0) {
                 intern.ops.Notify(EVENT_IN);
             }
-            return false
+            return false;
         }
 
         if buf.ProduceReadBuf(result as usize) {
@@ -899,14 +927,14 @@ impl AsycnRecvMsg {
         let (addr, cnt) = intern.ops.SocketBuf().GetFreeReadIovs();
         self.lock().SetIovs(addr, cnt);
 
-        return true
+        return true;
     }
 }
 
 impl AsycnRecvMsg {
     pub fn New(fd: i32, ops: &SocketOperations) -> Self {
         let intern = AsycnRecvMsgIntern::New(fd, ops);
-        return Self(QMutex::new(intern))
+        return Self(QMutex::new(intern));
     }
 }
 
@@ -925,8 +953,8 @@ impl AsycnRecvMsgIntern {
     pub fn SetIovs(&mut self, addr: u64, cnt: usize) {
         self.msg.iov = addr;
         self.msg.iovLen = cnt;
-        self.msg.msgName =  &self.remoteAddr[0] as * const _ as u64;
-        self.msg.nameLen =  self.remoteAddr.len() as u32;
+        self.msg.msgName = &self.remoteAddr[0] as *const _ as u64;
+        self.msg.nameLen = self.remoteAddr.len() as u32;
     }
 }
 
@@ -942,11 +970,15 @@ pub struct AIOWrite {
 }
 
 impl AIOWrite {
-    pub fn NewWrite(task: &Task, ctx: AIOContext, cb: &IOCallback, cbAddr: u64, eventfops: Option<EventOperations>) -> Result<Self> {
+    pub fn NewWrite(
+        task: &Task,
+        ctx: AIOContext,
+        cb: &IOCallback,
+        cbAddr: u64,
+        eventfops: Option<EventOperations>,
+    ) -> Result<Self> {
         let vec = task.CopyInVec(cb.buf, cb.bytes as usize)?;
-        let buf = DataBuff {
-            buf: vec
-        };
+        let buf = DataBuff { buf: vec };
 
         return Ok(Self {
             fd: cb.fd as i32,
@@ -956,10 +988,16 @@ impl AIOWrite {
             cbData: cb.data,
             ctx: ctx,
             eventfops: eventfops,
-        })
+        });
     }
 
-    pub fn NewWritev(task: &Task, ctx: AIOContext, cb: &IOCallback, cbAddr: u64, eventfops: Option<EventOperations>) -> Result<Self> {
+    pub fn NewWritev(
+        task: &Task,
+        ctx: AIOContext,
+        cb: &IOCallback,
+        cbAddr: u64,
+        eventfops: Option<EventOperations>,
+    ) -> Result<Self> {
         let srcs = task.IovsFromAddr(cb.buf, cb.bytes as usize)?;
         let size = IoVec::NumBytes(&srcs);
         let mut buf = DataBuff::New(size);
@@ -973,15 +1011,18 @@ impl AIOWrite {
             cbData: cb.data,
             ctx: ctx,
             eventfops: eventfops,
-        })
+        });
     }
 
     pub fn SEntry(&self) -> squeue::Entry {
-        let op = Write::new(types::Fd(self.fd), self.buf.Ptr() as * const u8, self.buf.Len() as u32)
-                    .offset(self.offset);
+        let op = Write::new(
+            types::Fd(self.fd),
+            self.buf.Ptr() as *const u8,
+            self.buf.Len() as u32,
+        )
+        .offset(self.offset);
 
-        return op.build()
-            .flags(squeue::Flags::FIXED_FILE);
+        return op.build().flags(squeue::Flags::FIXED_FILE);
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
@@ -1005,7 +1046,7 @@ impl AIOWrite {
             }
         }
 
-        return false
+        return false;
     }
 }
 
@@ -1023,7 +1064,13 @@ pub struct AIORead {
 }
 
 impl AIORead {
-    pub fn NewRead(task: &Task, ctx: AIOContext, cb: &IOCallback, cbAddr: u64, eventfops: Option<EventOperations>) -> Result<Self> {
+    pub fn NewRead(
+        task: &Task,
+        ctx: AIOContext,
+        cb: &IOCallback,
+        cbAddr: u64,
+        eventfops: Option<EventOperations>,
+    ) -> Result<Self> {
         let iov = IoVec::NewFromAddr(cb.buf, cb.bytes as usize);
 
         let iovs = vec![iov];
@@ -1039,10 +1086,16 @@ impl AIORead {
             cbData: cb.data,
             ctx: ctx,
             eventfops: eventfops,
-        })
+        });
     }
 
-    pub fn NewReadv(task: &Task, ctx: AIOContext, cb: &IOCallback, cbAddr: u64, eventfops: Option<EventOperations>) -> Result<Self> {
+    pub fn NewReadv(
+        task: &Task,
+        ctx: AIOContext,
+        cb: &IOCallback,
+        cbAddr: u64,
+        eventfops: Option<EventOperations>,
+    ) -> Result<Self> {
         let iovs = task.IovsFromAddr(cb.buf, cb.bytes as usize)?;
         let size = IoVec::NumBytes(&iovs);
         let buf = DataBuff::New(size as usize);
@@ -1057,22 +1110,26 @@ impl AIORead {
             cbData: cb.data,
             ctx: ctx,
             eventfops: eventfops,
-        })
+        });
     }
 
     pub fn SEntry(&self) -> squeue::Entry {
-        let op = Read::new(types::Fd(self.fd), self.buf.Ptr() as * mut u8, self.buf.Len() as u32)
-            .offset(self.offset);
+        let op = Read::new(
+            types::Fd(self.fd),
+            self.buf.Ptr() as *mut u8,
+            self.buf.Len() as u32,
+        )
+        .offset(self.offset);
 
-
-        return op.build()
-            .flags(squeue::Flags::FIXED_FILE);
+        return op.build().flags(squeue::Flags::FIXED_FILE);
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
         if result > 0 {
             let task = Task::GetTask(self.taskId);
-            let len = task.CopyDataOutToIovs(&self.buf.buf[0..result as usize], &self.iovs).expect("AIORead Process fail ...");
+            let len = task
+                .CopyDataOutToIovs(&self.buf.buf[0..result as usize], &self.iovs)
+                .expect("AIORead Process fail ...");
             assert!(len == result as usize);
         }
 
@@ -1096,7 +1153,7 @@ impl AIORead {
             }
         }
 
-        return false
+        return false;
     }
 }
 
@@ -1111,7 +1168,14 @@ pub struct AIOFsync {
 }
 
 impl AIOFsync {
-    pub fn New(_task: &Task, ctx: AIOContext, cb: &IOCallback, cbAddr: u64, eventfops: Option<EventOperations>, dataSyncOnly: bool) -> Result<Self> {
+    pub fn New(
+        _task: &Task,
+        ctx: AIOContext,
+        cb: &IOCallback,
+        cbAddr: u64,
+        eventfops: Option<EventOperations>,
+        dataSyncOnly: bool,
+    ) -> Result<Self> {
         return Ok(Self {
             fd: cb.fd as i32,
             dataSyncOnly: dataSyncOnly,
@@ -1119,19 +1183,17 @@ impl AIOFsync {
             cbData: cb.data,
             ctx: ctx,
             eventfops: eventfops,
-        })
+        });
     }
 
     pub fn SEntry(&self) -> squeue::Entry {
         let op = if self.dataSyncOnly {
-            Fsync::new(types::Fd(self.fd))
-                .flags(types::FsyncFlags::DATASYNC)
+            Fsync::new(types::Fd(self.fd)).flags(types::FsyncFlags::DATASYNC)
         } else {
             Fsync::new(types::Fd(self.fd))
         };
 
-        return op.build()
-            .flags(squeue::Flags::FIXED_FILE);
+        return op.build().flags(squeue::Flags::FIXED_FILE);
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
@@ -1155,7 +1217,7 @@ impl AIOFsync {
             }
         }
 
-        return false
+        return false;
     }
 }
 
@@ -1181,12 +1243,12 @@ impl AsyncLinkTimeout {
                 tv_sec: timeout / 1000_000_000,
                 tv_nsec: timeout % 1000_000_000,
             },
-        }
+        };
     }
 }
 
 pub struct UnblockBlockPollAdd {
-    pub fd : i32,
+    pub fd: i32,
     pub flags: u32,
     pub wait: MultiWait,
     pub data: Future<EventMask>,
@@ -1196,8 +1258,7 @@ impl UnblockBlockPollAdd {
     pub fn SEntry(&self) -> squeue::Entry {
         let op = opcode::PollAdd::new(types::Fd(self.fd), self.flags);
 
-        return op.build()
-            .flags(squeue::Flags::FIXED_FILE);
+        return op.build().flags(squeue::Flags::FIXED_FILE);
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
@@ -1222,24 +1283,23 @@ impl UnblockBlockPollAdd {
             flags,
             wait: wait.clone(),
             data: data.clone(),
-        }
+        };
     }
 }
 
 pub struct PollHostEpollWait {
-    pub fd : i32,
+    pub fd: i32,
 }
 
 impl PollHostEpollWait {
     pub fn SEntry(&self) -> squeue::Entry {
         let op = opcode::PollAdd::new(types::Fd(self.fd), EVENT_READ as u32);
 
-        return op.build()
-            .flags(squeue::Flags::FIXED_FILE);
+        return op.build().flags(squeue::Flags::FIXED_FILE);
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
-        if result  < 0 {
+        if result < 0 {
             error!("PollHostEpollWait::Process result {}", result);
         }
 
@@ -1255,13 +1315,11 @@ impl PollHostEpollWait {
 
         return false;*/
 
-        return false
+        return false;
     }
 
     pub fn New(fd: i32) -> Self {
-        return Self {
-            fd
-        }
+        return Self { fd };
     }
 }
 
@@ -1291,19 +1349,24 @@ impl AsyncEpollCtl {
                 Events: mask,
                 Data: fd as u64,
             },
-        }
+        };
     }
 
     pub fn SEntry(&self) -> squeue::Entry {
-        let op = EpollCtl::new(types::Fd(self.epollfd), types::Fd(self.fd), self.op, &self.ev as * const _ as u64 as * const types::epoll_event);
+        let op = EpollCtl::new(
+            types::Fd(self.epollfd),
+            types::Fd(self.fd),
+            self.op,
+            &self.ev as *const _ as u64 as *const types::epoll_event,
+        );
 
         return op.build();
-            //.flags(squeue::Flags::FIXED_FILE);
+        //.flags(squeue::Flags::FIXED_FILE);
     }
 
     pub fn Process(&mut self, _result: i32) -> bool {
         //assert!(result >= 0, "AsyncEpollCtl process fail fd is {} {}, {:?}", self.fd, result, self);
 
-        return false
+        return false;
     }
 }

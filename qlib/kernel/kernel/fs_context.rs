@@ -44,12 +44,12 @@ impl FSContext {
             umask: umask,
         };
 
-        return Self(Arc::new(QMutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)));
     }
 
     pub fn Fork(&self) -> Self {
         let me = self.lock();
-        return Self::New(&me.root, &me.cwd, me.umask)
+        return Self::New(&me.root, &me.cwd, me.umask);
     }
 
     pub fn WorkDirectory(&self) -> Dirent {
@@ -69,7 +69,7 @@ impl FSContext {
     }
 
     pub fn Umask(&self) -> u32 {
-        return self.lock().umask
+        return self.lock().umask;
     }
 
     pub fn SwapUmask(&self, mask: u32) -> u32 {

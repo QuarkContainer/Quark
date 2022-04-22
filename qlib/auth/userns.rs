@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::collections::btree_map::BTreeMap;
-use core::ops::Bound::Included;
-use alloc::vec::Vec;
-use alloc::sync::Arc;
-use core::ops::Deref;
 use super::super::mutex::*;
+use alloc::collections::btree_map::BTreeMap;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::ops::Bound::Included;
+use core::ops::Deref;
 
 use super::super::common::*;
 use super::super::linux_def::*;
@@ -49,11 +49,11 @@ impl UserNameSpaceInternal {
     }
 
     pub fn UIPMap(&self) -> Vec<IdMapEntry> {
-        return self.GetIDMap(&self.uidMapToParent)
+        return self.GetIDMap(&self.uidMapToParent);
     }
 
     pub fn GIDMap(&self) -> Vec<IdMapEntry> {
-        return self.GetIDMap(&self.gidMapToParent)
+        return self.GetIDMap(&self.gidMapToParent);
     }
 }
 
@@ -70,7 +70,7 @@ impl Deref for UserNameSpace {
 
 impl PartialEq for UserNameSpace {
     fn eq(&self, other: &Self) -> bool {
-        return Arc::ptr_eq(&self.0, &other.0)
+        return Arc::ptr_eq(&self.0, &other.0);
     }
 }
 
@@ -87,7 +87,7 @@ impl UserNameSpace {
             gidMapToParent: IdMap::All(),
         };
 
-        return Self(Arc::new(QMutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)));
     }
 
     /*pub fn SetUIDMap(&mut self, task: &Task, entries: &Vec<IdMapEntry>) -> Result<()> {
@@ -107,28 +107,32 @@ impl UserNameSpace {
     pub fn trySetUidMap(&mut self, entries: &Vec<IdMapEntry>) -> Result<()> {
         let mut me = self.lock();
         for entry in entries {
-            me.uidMapToParent.AddEntry(entry.FirstFromId, entry.FirstToId, entry.Len)?;
-            me.uidMapFromParent.AddEntry(entry.FirstToId, entry.FirstFromId, entry.Len)?
+            me.uidMapToParent
+                .AddEntry(entry.FirstFromId, entry.FirstToId, entry.Len)?;
+            me.uidMapFromParent
+                .AddEntry(entry.FirstToId, entry.FirstFromId, entry.Len)?
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn trySetGidMap(&mut self, entries: &Vec<IdMapEntry>) -> Result<()> {
         let mut me = self.lock();
         for entry in entries {
-            me.gidMapToParent.AddEntry(entry.FirstFromId, entry.FirstToId, entry.Len)?;
-            me.gidMapFromParent.AddEntry(entry.FirstToId, entry.FirstFromId, entry.Len)?
+            me.gidMapToParent
+                .AddEntry(entry.FirstFromId, entry.FirstToId, entry.Len)?;
+            me.gidMapFromParent
+                .AddEntry(entry.FirstToId, entry.FirstFromId, entry.Len)?
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn MapFromKUID(&self, kuid: KUID) -> UID {
         let me = self.lock();
         match &me.parent {
             None => return UID(kuid.0),
-            Some(parent) => return UID(me.uidMapFromParent.Map(parent.MapFromKUID(kuid).0))
+            Some(parent) => return UID(me.uidMapFromParent.Map(parent.MapFromKUID(kuid).0)),
         }
     }
 
@@ -136,7 +140,7 @@ impl UserNameSpace {
         let me = self.lock();
         match &me.parent {
             None => return GID(kgid.0),
-            Some(parent) => return GID(me.gidMapFromParent.Map(parent.MapFromKGID(kgid).0))
+            Some(parent) => return GID(me.gidMapFromParent.Map(parent.MapFromKGID(kgid).0)),
         }
     }
 
@@ -144,7 +148,7 @@ impl UserNameSpace {
         let me = self.lock();
         match &me.parent {
             None => return KUID(uid.0),
-            Some(parent) => return KUID(me.uidMapToParent.Map(parent.MapToKUID(uid).0))
+            Some(parent) => return KUID(me.uidMapToParent.Map(parent.MapToKUID(uid).0)),
         }
     }
 
@@ -152,7 +156,7 @@ impl UserNameSpace {
         let me = self.lock();
         match &me.parent {
             None => return KGID(gid.0),
-            Some(parent) => return KGID(me.gidMapToParent.Map(parent.MapToKGID(gid).0))
+            Some(parent) => return KGID(me.gidMapToParent.Map(parent.MapToKGID(gid).0)),
         }
     }
 
@@ -196,7 +200,7 @@ impl Default for IdMap {
     fn default() -> Self {
         return Self {
             map: BTreeMap::new(),
-        }
+        };
     }
 }
 
@@ -214,18 +218,21 @@ impl IdMap {
         }
 
         if core::u32::MAX - Len < id {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         //todo: check whether there is overlap
 
-        self.map.insert(FirstFromId, IdMapEntry {
+        self.map.insert(
             FirstFromId,
-            FirstToId,
-            Len,
-        });
+            IdMapEntry {
+                FirstFromId,
+                FirstToId,
+                Len,
+            },
+        );
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn RemoveAll(&mut self) {
@@ -235,13 +242,13 @@ impl IdMap {
     pub fn Map(&self, id: u32) -> u32 {
         for (_, &val) in self.map.range((Included(0), Included(id))).rev() {
             if id < val.FirstFromId || id >= val.FirstFromId + val.Len {
-                return NO_ID
+                return NO_ID;
             }
 
-            return id - val.FirstFromId + val.FirstToId
+            return id - val.FirstFromId + val.FirstToId;
         }
 
-        return NO_ID
+        return NO_ID;
     }
 
     pub fn IsEmpty(&self) -> bool {

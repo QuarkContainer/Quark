@@ -31,14 +31,14 @@ impl<T: Copy + Default> StackVec<T> {
                 len: 0,
                 vec: Vec::with_capacity(0),
                 capacity: cnt,
-            }
+            };
         } else {
             return Self {
                 buf: [T::default(); ON_STACK_COUNT],
                 len: 0,
                 vec: Vec::with_capacity(cnt),
                 capacity: cnt,
-            }
+            };
         }
     }
 
@@ -80,17 +80,17 @@ impl<T: Copy + Default> StackVec<T> {
 
     pub fn Slice(&self) -> &[T] {
         if self.OnStack() {
-            return &self.buf[0..self.len]
+            return &self.buf[0..self.len];
         } else {
-            return &self.vec[0..self.len]
+            return &self.vec[0..self.len];
         }
     }
 
     pub fn SliceMut(&mut self) -> &mut [T] {
         if self.OnStack() {
-            return &mut self.buf[0..self.len]
+            return &mut self.buf[0..self.len];
         } else {
-            return &mut self.vec[0..self.len]
+            return &mut self.vec[0..self.len];
         }
     }
 }

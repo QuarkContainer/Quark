@@ -5,38 +5,38 @@
 
 use libc;
 use nix::errno::Errno;
-use std::ffi::CString;
-use nix::unistd::*;
-use nix::sys::wait::{waitpid, WaitStatus as NixWaitStatus};
+use nix::fcntl::OFlag as NixOFlag;
+use nix::poll::{poll, PollFd as NixPollFd, PollFlags as EventFlags};
 use nix::sys::wait::WaitPidFlag;
-use nix::poll::{poll, PollFlags as EventFlags, PollFd as NixPollFd};
+use nix::sys::wait::{waitpid, WaitStatus as NixWaitStatus};
+use nix::unistd::*;
 use nix::unistd::{close as NixClose, dup2, fork, pipe2, read as NixRead, write, ForkResult};
-use nix::fcntl::{OFlag as NixOFlag};
-use std::fs::{File};
+use std::ffi::CString;
+use std::fs::File;
 use std::os::unix::io::{FromRawFd, RawFd};
 
-use super::super::oci;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
+use super::super::oci;
 
 #[inline]
 pub fn clearenv() -> Result<()> {
     let res = unsafe { libc::clearenv() };
     if res < 0 {
-        return Err(Error::SysError(-res))
+        return Err(Error::SysError(-res));
     }
 
-    return Ok(())
+    return Ok(());
 }
 
 pub fn putenv(string: &CString) -> Result<()> {
     let ptr = string.clone().into_raw();
     let res = unsafe { libc::putenv(ptr as *mut libc::c_char) };
     if res < 0 {
-        return Err(Error::SysError(-res))
+        return Err(Error::SysError(-res));
     }
 
-    return Ok(())
+    return Ok(());
 }
 
 fn do_exec(path: &str, args: &[String], env: &[String]) -> Result<()> {
@@ -92,7 +92,7 @@ fn wait_for_child(child: Pid) -> Result<(i32, Option<Signal>)> {
                     continue;
                 }
                 let msg = format!("could not waitpid on {}", child);
-                return Err(Error::Common(msg))
+                return Err(Error::Common(msg));
             }
             Ok(s) => s,
         };
@@ -116,19 +116,17 @@ fn wait_for_child(child: Pid) -> Result<(i32, Option<Signal>)> {
     }
 }
 
-fn wait_for_pipe_vec(
-    rfd: RawFd,
-    timeout: i32,
-    num: usize,
-) -> Result<Vec<u8>> {
+fn wait_for_pipe_vec(rfd: RawFd, timeout: i32, num: usize) -> Result<Vec<u8>> {
     let mut result = Vec::new();
     while result.len() < num {
-        let pfds =
-            &mut [NixPollFd::new(rfd, EventFlags::POLLIN | EventFlags::POLLHUP)];
+        let pfds = &mut [NixPollFd::new(
+            rfd,
+            EventFlags::POLLIN | EventFlags::POLLHUP,
+        )];
         match poll(pfds, timeout) {
             Err(e) => {
                 if e != ::nix::Error::Sys(Errno::EINTR) {
-                    return Err(Error::Common(format!("unable to poll rfd {:?}", e)))
+                    return Err(Error::Common(format!("unable to poll rfd {:?}", e)));
                 }
                 continue;
             }
@@ -149,13 +147,14 @@ fn wait_for_pipe_vec(
         if !events
             .unwrap()
             .intersects(EventFlags::POLLIN | EventFlags::POLLHUP)
-            {
-                // continue on other events (should not happen)
-                debug!("got a continue on other events {:?}", events);
-                continue;
-            }
+        {
+            // continue on other events (should not happen)
+            debug!("got a continue on other events {:?}", events);
+            continue;
+        }
         let data: &mut [u8] = &mut [0];
-        let n = NixRead(rfd, data).map_err(|e| Error::Common(format!("could not read from rfd {:?}", e)))?;
+        let n = NixRead(rfd, data)
+            .map_err(|e| Error::Common(format!("could not read from rfd {:?}", e)))?;
         if n == 0 {
             // the wfd was closed so close our end
             NixClose(rfd).map_err(|e| Error::Common(format!("could not close rfd {:?}", e)))?;
@@ -178,24 +177,28 @@ fn wait_for_pipe_sig(rfd: RawFd, timeout: i32) -> Result<Option<Signal>> {
 
 pub fn execute_hook(hook: &oci::Hook, state: &oci::State) -> Result<()> {
     debug!("executing hook {:?}", hook);
-    let (rfd, wfd) =
-        pipe2(NixOFlag::O_CLOEXEC).map_err(|_| Error::Common("failed to create pipe".to_string()))?;
-    match unsafe {fork()}.map_err(|_| Error::Common("for fail".to_string()))? {
+    let (rfd, wfd) = pipe2(NixOFlag::O_CLOEXEC)
+        .map_err(|_| Error::Common("failed to create pipe".to_string()))?;
+    match unsafe { fork() }.map_err(|_| Error::Common("for fail".to_string()))? {
         ForkResult::Child => {
             close(rfd).map_err(|_| Error::Common("could not close rfd".to_string()))?;
-            let (rstdin, wstdin) =
-                pipe2(NixOFlag::empty()).map_err(|_| Error::Common("failed to create pipe".to_string()))?;
+            let (rstdin, wstdin) = pipe2(NixOFlag::empty())
+                .map_err(|_| Error::Common("failed to create pipe".to_string()))?;
             // fork second child to execute hook
-            match unsafe {fork()}.map_err(|_| Error::Common("for fail".to_string()))? {
+            match unsafe { fork() }.map_err(|_| Error::Common("for fail".to_string()))? {
                 ForkResult::Child => {
                     close(0).map_err(|_| Error::Common("could not close stdin".to_string()))?;
-                    dup2(rstdin, 0).map_err(|_| Error::Common("could not dup to stdin".to_string()))?;
-                    close(rstdin).map_err(|_| Error::Common("could not close rstdin".to_string()))?;
-                    close(wstdin).map_err(|_| Error::Common("could not close wstdin".to_string()))?;
+                    dup2(rstdin, 0)
+                        .map_err(|_| Error::Common("could not dup to stdin".to_string()))?;
+                    close(rstdin)
+                        .map_err(|_| Error::Common("could not close rstdin".to_string()))?;
+                    close(wstdin)
+                        .map_err(|_| Error::Common("could not close wstdin".to_string()))?;
                     do_exec(&hook.path, &hook.args, &hook.env)?;
                 }
                 ForkResult::Parent { child } => {
-                    close(rstdin).map_err(|_| Error::Common("could not close rstdin".to_string()))?;
+                    close(rstdin)
+                        .map_err(|_| Error::Common("could not close rstdin".to_string()))?;
                     unsafe {
                         // closes the file descriptor autmotaically
                         state
@@ -206,8 +209,9 @@ pub fn execute_hook(hook: &oci::Hook, state: &oci::State) -> Result<()> {
                     if let Some(signal) = sig {
                         // write signal to pipe.
                         let data: &[u8] = &[signal.0 as u8];
-                        write(wfd, data)
-                            .map_err(|_| Error::Common("failed to write signal hook".to_string()))?;
+                        write(wfd, data).map_err(|_| {
+                            Error::Common("failed to write signal hook".to_string())
+                        })?;
                     }
                     close(wfd).map_err(|_| Error::Common("could not close wfd".to_string()))?;
                     std::process::exit(exit_code as i32);
@@ -223,12 +227,12 @@ pub fn execute_hook(hook: &oci::Hook, state: &oci::State) -> Result<()> {
             }
             // a timeout will cause a failure and child will be killed on exit
             if let Some(sig) = wait_for_pipe_sig(rfd, timeout)? {
-                let msg = format!{"hook exited with signal: {:?}", sig};
+                let msg = format! {"hook exited with signal: {:?}", sig};
                 return Err(Error::Common(msg));
             }
             let (exit_code, _) = wait_for_child(child)?;
             if exit_code != 0 {
-                let msg = format!{"hook exited with exit code: {}", exit_code};
+                let msg = format! {"hook exited with exit code: {}", exit_code};
                 return Err(Error::Common(msg));
             }
         }

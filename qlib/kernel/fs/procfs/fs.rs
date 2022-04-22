@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
+use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::string::ToString;
-use alloc::collections::btree_map::BTreeMap;
+use alloc::sync::Arc;
 
 use super::super::super::super::common::*;
 use super::super::super::task::*;
@@ -37,7 +37,13 @@ impl Filesystem for ProcFileSystem {
         return 0;
     }
 
-    fn Mount(&mut self, task: &Task, _device: &str, flags: &MountSourceFlags, data: &str) -> Result<Inode> {
+    fn Mount(
+        &mut self,
+        task: &Task,
+        _device: &str,
+        flags: &MountSourceFlags,
+        data: &str,
+    ) -> Result<Inode> {
         info!("proc file system mount ...");
 
         // Parse generic comma-separated key=value options, this file system expects them.
@@ -47,14 +53,17 @@ impl Filesystem for ProcFileSystem {
         // anything else, see fs/proc/root.c:proc_parse_options. Since we don't know
         // what to do with gid= or hidepid=, we blow up if we get any options.
         if options.len() > 0 {
-            return Err(Error::Common(format!("unsupported mount options: {:?}", &options)))
+            return Err(Error::Common(format!(
+                "unsupported mount options: {:?}",
+                &options
+            )));
         }
 
         let cgroups = BTreeMap::new();
 
         let msrc = MountSource::NewCachingMountSource(self, flags);
         let inode = NewProc(task, &Arc::new(QMutex::new(msrc)), cgroups);
-        return Ok(inode)
+        return Ok(inode);
     }
 
     fn AllowUserMount(&self) -> bool {

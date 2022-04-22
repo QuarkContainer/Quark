@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::vec::Vec;
 use alloc::str;
 use alloc::string::String;
+use alloc::vec::Vec;
 
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
@@ -22,7 +22,7 @@ use super::super::task::*;
 
 #[derive(Debug)]
 pub struct CString {
-    pub data: Vec<u8>
+    pub data: Vec<u8>,
 }
 
 impl CString {
@@ -34,29 +34,23 @@ impl CString {
         }
 
         data.push(0);
-        return Self {
-            data
-        }
+        return Self { data };
     }
 
     pub fn Str(&self) -> Result<&str> {
-        return str::from_utf8(&self.data).map_err(|e| Error::Common(format!("{}", e)))
+        return str::from_utf8(&self.data).map_err(|e| Error::Common(format!("{}", e)));
     }
 
     pub fn FromAddr(addr: u64) -> Self {
         let mut data = Vec::new();
         for i in 0..Self::MAX_STR_LEN {
-            let c = unsafe {
-                *((addr + i as u64) as * const u8)
-            };
+            let c = unsafe { *((addr + i as u64) as *const u8) };
             if c == 0 {
                 break;
             }
             data.push(c)
         }
-        return Self {
-            data: data
-        }
+        return Self { data: data };
     }
 
     pub fn Ptr(&self) -> u64 {
@@ -68,7 +62,7 @@ impl CString {
     }
 
     pub fn Slice(&self) -> &[u8] {
-        return &self.data[..]
+        return &self.data[..];
     }
 
     pub const MAX_STR_LEN: usize = 4096;
@@ -80,7 +74,7 @@ impl CString {
         let (str, err) = task.CopyInString(addr, len);
         match err {
             Err(_) => return Err(Error::SysError(SysErr::EINVAL)),
-            Ok(()) => return Ok(str)
+            Ok(()) => return Ok(str),
         }
     }
 

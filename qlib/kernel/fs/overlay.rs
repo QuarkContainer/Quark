@@ -12,22 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::mutex::*;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
-use crate::qlib::mutex::*;
 use spin::*;
 
-use super::super::super::linux_def::*;
 use super::super::super::common::*;
+use super::super::super::linux_def::*;
 use super::super::super::path::*;
 use super::super::task::*;
 use super::super::uid::NewUID;
+use super::attr::*;
+use super::filesystems::*;
 use super::inode::*;
 use super::mount::*;
 use super::mount_overlay::*;
-use super::filesystems::*;
-use super::attr::*;
 
 pub const XATTR_OVERLAY_PREFIX: &str = "trusted.overlay.";
 pub const XATTR_OVERLAY_WHITEOUT_PREFIX: &str = "trusted.overlay.whiteout.";
@@ -40,22 +40,39 @@ pub fn IsXattrOverlay(name: &str) -> bool {
     return HasPrefix(name, &XATTR_OVERLAY_PREFIX.to_string());
 }
 
-pub fn NewOverlayRoot(task: &Task, upper: &Inode, lower: &Inode, flags: &MountSourceFlags) -> Result<Inode> {
+pub fn NewOverlayRoot(
+    task: &Task,
+    upper: &Inode,
+    lower: &Inode,
+    flags: &MountSourceFlags,
+) -> Result<Inode> {
     if !upper.StableAttr().IsDir() {
-        return Err(Error::Common(format!("upper Inode is a {:?}, not a directory", upper.StableAttr().Type)))
+        return Err(Error::Common(format!(
+            "upper Inode is a {:?}, not a directory",
+            upper.StableAttr().Type
+        )));
     }
 
     if !lower.StableAttr().IsDir() {
-        return Err(Error::Common(format!("lower Inode is a {:?}, not a directory", upper.StableAttr().Type)))
+        return Err(Error::Common(format!(
+            "lower Inode is a {:?}, not a directory",
+            upper.StableAttr().Type
+        )));
     }
 
     if upper.lock().Overlay.is_some() {
-        return Err(Error::Common(format!("cannot nest overlay in upper file of another overlay")));
+        return Err(Error::Common(format!(
+            "cannot nest overlay in upper file of another overlay"
+        )));
     }
 
-    let msrc = NewOverlayMountSource(&upper.lock().MountSource.clone(), &lower.lock().MountSource.clone(), flags);
+    let msrc = NewOverlayMountSource(
+        &upper.lock().MountSource.clone(),
+        &lower.lock().MountSource.clone(),
+        flags,
+    );
     let overlay = OverlayEntry::New(task, Some(upper.clone()), Some(lower.clone()), true)?;
-    return Ok(NewOverlayInode(task, overlay, &msrc))
+    return Ok(NewOverlayInode(task, overlay, &msrc));
 }
 
 pub fn NewOverlayInode(_task: &Task, o: OverlayEntry, msrc: &Arc<QMutex<MountSource>>) -> Inode {
@@ -98,12 +115,20 @@ pub fn NewOverlayInode(_task: &Task, o: OverlayEntry, msrc: &Arc<QMutex<MountSou
         Overlay: Overlay,
     };
 
-    return Inode(Arc::new(QMutex::new(inodeInternal)))
+    return Inode(Arc::new(QMutex::new(inodeInternal)));
 }
 
-pub fn overlayUpperMountSource(overlayMountSource: &Arc<QMutex<MountSource>>) -> Arc<QMutex<MountSource>> {
+pub fn overlayUpperMountSource(
+    overlayMountSource: &Arc<QMutex<MountSource>>,
+) -> Arc<QMutex<MountSource>> {
     let currentOps = overlayMountSource.lock().MountSourceOperations.clone();
-    let upper = currentOps.lock().as_any().downcast_ref::<OverlayMountSourceOperations>().expect("OverlayMountSourceOperations convert fail").upper.clone();
+    let upper = currentOps
+        .lock()
+        .as_any()
+        .downcast_ref::<OverlayMountSourceOperations>()
+        .expect("OverlayMountSourceOperations convert fail")
+        .upper
+        .clone();
     return upper;
 }
 
@@ -114,23 +139,32 @@ pub struct OverlayEntry {
 }
 
 impl OverlayEntry {
-    pub fn New(_task: &Task, upper: Option<Inode>, lower: Option<Inode>, lowerExists: bool) -> Result<Self> {
+    pub fn New(
+        _task: &Task,
+        upper: Option<Inode>,
+        lower: Option<Inode>,
+        lowerExists: bool,
+    ) -> Result<Self> {
         match &lower {
             Some(ref l) => {
                 let t = l.StableAttr().Type;
-                if !(t == InodeType::RegularFile || t == InodeType::Directory || t == InodeType::Symlink || t == InodeType::Socket) {
+                if !(t == InodeType::RegularFile
+                    || t == InodeType::Directory
+                    || t == InodeType::Symlink
+                    || t == InodeType::Socket)
+                {
                     info!("{:?} not supported in lower filesystem", t);
-                    return Err(Error::SysError(SysErr::EINVAL))
+                    return Err(Error::SysError(SysErr::EINVAL));
                 }
             }
-            None => ()
+            None => (),
         }
 
         return Ok(Self {
             LowerExists: lowerExists,
             lower: lower,
             upper: upper,
-        })
+        });
     }
 
     pub fn Inode(&self) -> Inode {

@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::super::mutex::*;
 use alloc::collections::vec_deque::VecDeque;
 use alloc::sync::Arc;
 use core::ops::Deref;
-use super::super::mutex::*;
 
 #[derive(Default)]
 pub struct PoolInternal<T: Default> {
@@ -25,7 +25,7 @@ pub struct PoolInternal<T: Default> {
 
 pub struct Pool<T: Default>(Arc<QMutex<PoolInternal<T>>>);
 
-impl <T: Default> Deref for Pool <T> {
+impl<T: Default> Deref for Pool<T> {
     type Target = Arc<QMutex<PoolInternal<T>>>;
 
     fn deref(&self) -> &Arc<QMutex<PoolInternal<T>>> {
@@ -33,14 +33,14 @@ impl <T: Default> Deref for Pool <T> {
     }
 }
 
-impl <T: Default>  Pool <T> {
+impl<T: Default> Pool<T> {
     pub fn New(size: usize) -> Self {
         let internal = PoolInternal {
             stack: VecDeque::with_capacity(size),
             size: size,
         };
 
-        return Self(Arc::new(QMutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)));
     }
 
     pub fn Pop(&self) -> Option<T> {
@@ -50,7 +50,7 @@ impl <T: Default>  Pool <T> {
     pub fn Push(&self, v: T) {
         let mut p = self.lock();
         if p.stack.len() == p.size {
-            return
+            return;
         }
 
         p.stack.push_front(v);
