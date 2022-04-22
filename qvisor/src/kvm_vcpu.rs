@@ -41,6 +41,8 @@ use super::qlib::vcpu_mgr::*;
 use super::qlib::*;
 use super::runc::runtime::vm::*;
 use super::URING_MGR;
+use crate::qlib::cpuid::XSAVEFeature::{XSAVEFeatureBNDCSR, XSAVEFeatureBNDREGS};
+use crate::qlib::kernel::asm::xgetbv;
 
 #[repr(C)]
 pub struct SignalMaskStruct {
@@ -441,6 +443,8 @@ impl KVMVcpu {
         self.vcpu
             .set_regs(&regs)
             .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+
+        self.kvm_set_xcr0()?;
 
         let mut lastVal: u32 = 0;
         let mut first = true;
@@ -949,6 +953,18 @@ impl KVMVcpu {
         }
 
         return count;
+    }
+
+    pub fn kvm_set_xcr0(&self) -> Result<()> {
+        let xcr0 = xgetbv();
+        let maskedXCR0 = xcr0 & !(XSAVEFeatureBNDREGS as u64 | XSAVEFeatureBNDCSR as u64);
+        let mut xcrs_args = kvm_xcrs::default();
+        xcrs_args.nr_xcrs = 1;
+        xcrs_args.xcrs[0].value = maskedXCR0;
+        self.vcpu
+            .set_xcrs(&xcrs_args)
+            .map_err(|e| Error::IOError(format!("failed to set kvm xcr0, {}", e)))?;
+        Ok(())
     }
 }
 

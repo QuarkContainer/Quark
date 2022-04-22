@@ -315,13 +315,13 @@ pub fn SetRflags(val: u64) {
 
 pub fn SaveFloatingPoint(addr: u64) {
     fxsave(addr);
-    //xsaveopt(addr);
-    //xsave(addr);
+    xsaveopt(addr);
+    xsave(addr);
 }
 
 pub fn LoadFloatingPoint(addr: u64) {
     fxrstor(addr);
-    //xrstor(addr);
+    xrstor(addr);
 }
 
 pub fn xsave(addr: u64) {
@@ -451,4 +451,30 @@ pub fn fninit() {
         " : :
         : "memory" : "intel", "volatile")
     };
+}
+
+pub fn xsetbv(val: u64) {
+    let reg = 0u64;
+    let val_l = val & 0xffff;
+    let val_h = val >> 32;
+    unsafe {
+        llvm_asm!("\
+            xsetbv
+        " : : "{rcx}"(reg), "{edx}"(val_h), "{eax}"(val_l)
+        : "memory" : "intel", "volatile")
+    };
+}
+
+pub fn xgetbv() -> u64 {
+    let reg = 0u64;
+    let val_l: u32;
+    let val_h: u32;
+    unsafe {
+        llvm_asm!("\
+            xgetbv
+        " : "={edx}"(val_h), "={eax}"(val_l) : "{rcx}"(reg)
+        : "memory" : "intel", "volatile")
+    };
+    let val = ((val_h as u64) << 32) | ((val_l as u64) & 0xffff);
+    return val;
 }
