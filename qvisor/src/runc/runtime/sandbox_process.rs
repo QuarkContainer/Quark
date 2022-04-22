@@ -340,15 +340,6 @@ impl SandboxProcess {
         if ret < 0 {
             panic!("InitRootfs: mount sandboxRootDir fails, error is {}", ret);
         }
-        let rootContainerPath = Join(&self.SandboxRootDir, &self.containerId);
-        match create_dir_all(&rootContainerPath) {
-            Ok(()) => (),
-            Err(_e) => panic!("failed to create dir to mount containerrootPath"),
-        };
-        let ret = Util::Mount(&self.Rootfs, &rootContainerPath, "", rbindFlags, "");
-        if ret < 0 {
-            panic!("InitRootfs: mount rootfs fail, error is {}", ret);
-        }
 
         let spec = &self.spec;
         let linux = spec.linux.as_ref().unwrap();
@@ -396,6 +387,16 @@ impl SandboxProcess {
 
         if Util::Chdir(olddir.as_path().to_str().unwrap()) == -1 {
             panic!("chdir fail")
+        }
+
+        let rootContainerPath = Join(&self.SandboxRootDir, &self.containerId);
+        match create_dir_all(&rootContainerPath) {
+            Ok(()) => (),
+            Err(_e) => panic!("failed to create dir to mount containerrootPath"),
+        };
+        let ret = Util::Mount(&self.Rootfs, &rootContainerPath, "", rbindFlags, "");
+        if ret < 0 {
+            panic!("InitRootfs: mount rootfs fail, error is {}", ret);
         }
 
         return Ok(());
