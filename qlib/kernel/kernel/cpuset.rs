@@ -20,7 +20,7 @@ pub const BYTES_PER_LONG: usize = 8; // only for 64-bit architectures
 pub fn CPUSetSize(num: usize) -> usize {
     let bytes = (num + BITS_PER_BYTE - 1) / BITS_PER_BYTE;
     let longs = (bytes + BYTES_PER_LONG - 1) / BYTES_PER_LONG;
-    return longs * BYTES_PER_LONG
+    return longs * BYTES_PER_LONG;
 }
 
 const ONES: [u8; 256] = [
@@ -49,7 +49,7 @@ impl CPUSet {
     // NewCPUSet returns a CPUSet for the given number of CPUs which initially
     // contains no CPUs.
     pub fn New(num: usize) -> Self {
-        return Self(vec![0; CPUSetSize(num)])
+        return Self(vec![0; CPUSetSize(num)]);
     }
 
     // NewFullCPUSet returns a CPUSet for the given number of CPUs, all of which
@@ -68,12 +68,12 @@ impl CPUSet {
             set.0[idx] = (1 << rem) - 1;
         }
 
-        return set
+        return set;
     }
 
     // Size returns the size of 'c' in bytes.
     pub fn Size(&self) -> usize {
-        return self.0.len()
+        return self.0.len();
     }
 
     // NumCPUs returns how many cpus are set in the CPUSet.
@@ -83,7 +83,7 @@ impl CPUSet {
             res += ONES[*v as usize] as usize
         }
 
-        return res
+        return res;
     }
 
     // Copy returns a copy of the CPUSet.
@@ -93,7 +93,7 @@ impl CPUSet {
             dup.push(*v)
         }
 
-        return Self(dup)
+        return Self(dup);
     }
 
     // Set sets the bit corresponding to cpu.

@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use clap::{App, AppSettings, SubCommand, ArgMatches, Arg};
 use alloc::string::String;
+use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use std::io::Write;
 use tabwriter::TabWriter;
 
@@ -26,11 +26,11 @@ use super::command::*;
 #[derive(Debug, PartialEq, Eq)]
 pub enum Format {
     Json,
-    Table
+    Table,
 }
 
 #[derive(Debug)]
-pub struct PsCmd  {
+pub struct PsCmd {
     pub id: String,
     pub format: Format,
 }
@@ -42,11 +42,11 @@ impl PsCmd {
             format: match cmd_matches.value_of("format").unwrap() {
                 "table" => Format::Table,
                 "json" => Format::Json,
-                _ => return Err(Error::Common("invalid format option".to_string()))
-            }
+                _ => return Err(Error::Common("invalid format option".to_string())),
+            },
         };
 
-        return Ok(ret)
+        return Ok(ret);
     }
 
     pub fn SubCommand<'a, 'b>(common: &CommonArgs<'a, 'b>) -> App<'a, 'b> {
@@ -61,7 +61,7 @@ impl PsCmd {
                     .long("format")
                     .short("f"),
             )
-            .about("ps displays the processes running inside a container") ;
+            .about("ps displays the processes running inside a container");
     }
 
     pub fn Run(&mut self, gCfg: &GlobalConfig) -> Result<()> {
@@ -76,7 +76,7 @@ impl PsCmd {
             PrintPIDsJson(&plist);
         }
 
-        return Ok(())
+        return Ok(());
     }
 }
 
@@ -85,14 +85,12 @@ pub fn PrintProcessListToTable(pl: &[ProcessInfo]) {
 
     write!(&mut tw, "UID\tPID\tPPID\tC\tSTIME\tTIME\tCMD\n").unwrap();
     for d in pl {
-        write!(&mut tw, "\n{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
-               d.UID.0,
-               d.PID,
-               d.PPID,
-               d.Utilization,
-               d.STime,
-               d.Time,
-               d.Cmd).unwrap();
+        write!(
+            &mut tw,
+            "\n{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+            d.UID.0, d.PID, d.PPID, d.Utilization, d.STime, d.Time, d.Cmd
+        )
+        .unwrap();
     }
     tw.flush().unwrap();
 

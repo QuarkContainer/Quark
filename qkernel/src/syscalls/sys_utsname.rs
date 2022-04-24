@@ -14,50 +14,51 @@
 
 use alloc::string::String;
 
-use super::super::task::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
-use super::super::version::*;
 use super::super::syscalls::syscalls::*;
+use super::super::task::*;
+use super::super::version::*;
 
 // UTSLen is the maximum length of strings contained in fields of
 // UtsName.
-pub const UTS_LEN : usize = 64;
+pub const UTS_LEN: usize = 64;
 
 #[repr(C)]
 #[derive(Clone, Debug, Copy)]
 pub struct UtsName {
-    pub Sysname    : [u8; UTS_LEN + 1],
-    pub Nodename   : [u8; UTS_LEN + 1],
-    pub Release    : [u8; UTS_LEN + 1],
-    pub Version    : [u8; UTS_LEN + 1],
-    pub Machine    : [u8; UTS_LEN + 1],
-    pub Domainname : [u8; UTS_LEN + 1],
+    pub Sysname: [u8; UTS_LEN + 1],
+    pub Nodename: [u8; UTS_LEN + 1],
+    pub Release: [u8; UTS_LEN + 1],
+    pub Version: [u8; UTS_LEN + 1],
+    pub Machine: [u8; UTS_LEN + 1],
+    pub Domainname: [u8; UTS_LEN + 1],
 }
 
 impl Default for UtsName {
     fn default() -> Self {
         return Self {
-            Sysname     : [0; UTS_LEN + 1],
-            Nodename    : [0; UTS_LEN + 1],
-            Release     : [0; UTS_LEN + 1],
-            Version     : [0; UTS_LEN + 1],
-            Machine     : [0; UTS_LEN + 1],
-            Domainname  : [0; UTS_LEN + 1],
-        }
+            Sysname: [0; UTS_LEN + 1],
+            Nodename: [0; UTS_LEN + 1],
+            Release: [0; UTS_LEN + 1],
+            Version: [0; UTS_LEN + 1],
+            Machine: [0; UTS_LEN + 1],
+            Domainname: [0; UTS_LEN + 1],
+        };
     }
 }
 
 impl UtsName {
     pub fn ToString(&self) -> String {
-        return format!("{{Sysname: {}, Nodename: {}, Release: {}, Version: {}, Machine: {}, Domainname: {}}}",
-                       UtsNameString(&self.Sysname),
-                       UtsNameString(&self.Nodename),
-                       UtsNameString(&self.Release),
-                       UtsNameString(&self.Version),
-                       UtsNameString(&self.Machine),
-                       UtsNameString(&self.Domainname)
-        )
+        return format!(
+            "{{Sysname: {}, Nodename: {}, Release: {}, Version: {}, Machine: {}, Domainname: {}}}",
+            UtsNameString(&self.Sysname),
+            UtsNameString(&self.Nodename),
+            UtsNameString(&self.Release),
+            UtsNameString(&self.Version),
+            UtsNameString(&self.Machine),
+            UtsNameString(&self.Domainname)
+        );
     }
 }
 
@@ -70,7 +71,7 @@ pub fn UtsNameString(s: &[u8; UTS_LEN + 1]) -> String {
         i -= 1;
     }
 
-    let s = &s[..i+1];
+    let s = &s[..i + 1];
     return String::from_utf8(s.to_vec()).unwrap();
 }
 
@@ -114,22 +115,22 @@ pub fn SysSetdomainname(task: &mut Task, args: &SyscallArguments) -> Result<i64>
         let creds = task.Creds();
         let userNS = creds.lock().UserNamespace.clone();
         if !creds.HasCapabilityIn(Capability::CAP_SYS_ADMIN, &userNS) {
-            return Err(Error::SysError(SysErr::EPERM))
+            return Err(Error::SysError(SysErr::EPERM));
         }
     }
 
     if size < 0 || size > UTS_LEN as i32 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let (name, err) = task.CopyInString(nameAddr, UTS_LEN - 1);
     match err {
         Ok(()) => (),
-        Err(e) => return Err(e)
+        Err(e) => return Err(e),
     };
 
     utsns.SetDomainName(name);
-    return Ok(0)
+    return Ok(0);
 }
 
 // Sethostname implements Linux syscall sethostname.
@@ -142,20 +143,20 @@ pub fn SysSethostname(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         let creds = task.Creds();
         let userNS = creds.lock().UserNamespace.clone();
         if !creds.HasCapabilityIn(Capability::CAP_SYS_ADMIN, &userNS) {
-            return Err(Error::SysError(SysErr::EPERM))
+            return Err(Error::SysError(SysErr::EPERM));
         }
     }
 
     if size < 0 || size > UTS_LEN as i32 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let (name, err) = task.CopyInString(nameAddr, UTS_LEN - 1);
     match err {
         Ok(()) => (),
-        Err(e) => return Err(e)
+        Err(e) => return Err(e),
     };
 
     utsns.SetHostName(name);
-    return Ok(0)
+    return Ok(0);
 }

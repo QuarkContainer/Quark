@@ -12,29 +12,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::mutex::*;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
-use crate::qlib::mutex::*;
 use core::any::Any;
 
 use super::super::super::common::*;
 use super::super::task::*;
-use super::mount::*;
-use super::inode::*;
 use super::dirent::*;
 use super::filesystems::*;
+use super::inode::*;
+use super::mount::*;
 
 pub struct OverlayMountSourceOperations {
     pub upper: Arc<QMutex<MountSource>>,
     pub lower: Arc<QMutex<MountSource>>,
 }
 
-pub fn NewOverlayMountSource(upper: &Arc<QMutex<MountSource>>, lower: &Arc<QMutex<MountSource>>, flags: &MountSourceFlags) -> Arc<QMutex<MountSource>> {
-    let mut msrc = MountSource::NewOverlayMountSource(&Arc::new(QMutex::new(OverlayMountSourceOperations {
-        upper: upper.clone(),
-        lower: lower.clone(),
-    })), &OverLayFileSystem {}, flags);
+pub fn NewOverlayMountSource(
+    upper: &Arc<QMutex<MountSource>>,
+    lower: &Arc<QMutex<MountSource>>,
+    flags: &MountSourceFlags,
+) -> Arc<QMutex<MountSource>> {
+    let mut msrc = MountSource::NewOverlayMountSource(
+        &Arc::new(QMutex::new(OverlayMountSourceOperations {
+            upper: upper.clone(),
+            lower: lower.clone(),
+        })),
+        &OverLayFileSystem {},
+        flags,
+    );
 
     let mut size = lower.lock().fscache.MaxSize();
     if size > upper.lock().fscache.MaxSize() {
@@ -42,7 +50,7 @@ pub fn NewOverlayMountSource(upper: &Arc<QMutex<MountSource>>, lower: &Arc<QMute
     }
 
     msrc.fscache.SetMaxSize(size);
-    return Arc::new(QMutex::new(msrc))
+    return Arc::new(QMutex::new(msrc));
 }
 
 impl DirentOperations for OverlayMountSourceOperations {
@@ -53,7 +61,9 @@ impl DirentOperations for OverlayMountSourceOperations {
         };
 
         let p = match &parent.lock().Overlay {
-            None => panic!("trying to revalidate an overlay inode but the parent is not an overlay"),
+            None => {
+                panic!("trying to revalidate an overlay inode but the parent is not an overlay")
+            }
             Some(p) => p.clone(),
         };
 
@@ -67,7 +77,11 @@ impl DirentOperations for OverlayMountSourceOperations {
 
                 let childLower = l.clone();
 
-                if self.lower.lock().Revalidate(name, &parentLower, &childLower) {
+                if self
+                    .lower
+                    .lock()
+                    .Revalidate(name, &parentLower, &childLower)
+                {
                     panic!("an overlay cannot revalidate file objects from the lower fs")
                 }
             }
@@ -89,11 +103,14 @@ impl DirentOperations for OverlayMountSourceOperations {
             _ => panic!("Revalidatef fail"),
         };
 
-        return self.upper.lock().Revalidate(name, &parentUpper, &childUpper)
+        return self
+            .upper
+            .lock()
+            .Revalidate(name, &parentUpper, &childUpper);
     }
 
     fn Keep(&self, dirent: &Dirent) -> bool {
-        return self.upper.lock().Keep(dirent)
+        return self.upper.lock().Keep(dirent);
     }
 
     fn CacheReadDir(&self) -> bool {
@@ -103,14 +120,22 @@ impl DirentOperations for OverlayMountSourceOperations {
 
 impl MountSourceOperations for OverlayMountSourceOperations {
     fn as_any(&self) -> &Any {
-        return self
+        return self;
     }
 
     fn Destroy(&mut self) {}
 
     fn ResetInodeMappings(&mut self) {
-        self.upper.lock().MountSourceOperations.lock().ResetInodeMappings();
-        self.lower.lock().MountSourceOperations.lock().ResetInodeMappings();
+        self.upper
+            .lock()
+            .MountSourceOperations
+            .lock()
+            .ResetInodeMappings();
+        self.lower
+            .lock()
+            .MountSourceOperations
+            .lock()
+            .ResetInodeMappings();
     }
 
     fn SaveInodeMapping(&mut self, _inode: &Inode, _path: &str) {
@@ -129,7 +154,13 @@ impl Filesystem for OverLayFileSystem {
         return 0;
     }
 
-    fn Mount(&mut self, _task: &Task, _device: &str, _flags: &MountSourceFlags, _date: &str) -> Result<Inode> {
+    fn Mount(
+        &mut self,
+        _task: &Task,
+        _device: &str,
+        _flags: &MountSourceFlags,
+        _date: &str,
+    ) -> Result<Inode> {
         panic!("overlayFilesystem.Mount should not be called!");
     }
 
@@ -141,5 +172,3 @@ impl Filesystem for OverLayFileSystem {
         return true;
     }
 }
-
-

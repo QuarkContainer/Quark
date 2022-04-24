@@ -29,7 +29,7 @@ impl DefaultPlatform {
         // be expensive. Not _that_ expensive since we allow super pages, but
         // even though can get out of hand if you're creating multi-terabyte
         // mappings. For this reason, we limit mappings to an arbitrary 16MB.
-        return 16 << 20
+        return 16 << 20;
     }
 
     // MinUserAddress returns the lowest available address.

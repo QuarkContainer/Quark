@@ -12,19 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
 use alloc::string::String;
 use alloc::string::ToString;
+use alloc::sync::Arc;
 use core::any::Any;
 
 use super::super::super::super::common::*;
-use super::super::super::task::*;
 use super::super::super::super::linux_def::*;
+use super::super::super::task::*;
+use super::super::dirent::*;
 use super::super::filesystems::*;
 use super::super::inode::*;
 use super::super::mount::*;
-use super::super::dirent::*;
 use super::dir::*;
 
 pub struct PtsTmpfs {}
@@ -38,15 +38,21 @@ impl Filesystem for PtsTmpfs {
         return 0;
     }
 
-    fn Mount(&mut self, task: &Task, _device: &str, flags: &MountSourceFlags, data: &str) -> Result<Inode> {
+    fn Mount(
+        &mut self,
+        task: &Task,
+        _device: &str,
+        flags: &MountSourceFlags,
+        data: &str,
+    ) -> Result<Inode> {
         if data != "" {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         let mops = Arc::new(QMutex::new(PtsSuperOperations {}));
         let msrc = MountSource::NewPtsMountSource(&mops, self, flags);
         let dir = NewDir(task, &Arc::new(QMutex::new(msrc)));
-        return Ok(dir)
+        return Ok(dir);
     }
 
     fn AllowUserMount(&self) -> bool {
@@ -62,7 +68,7 @@ pub struct PtsSuperOperations {}
 
 impl MountSourceOperations for PtsSuperOperations {
     fn as_any(&self) -> &Any {
-        return self
+        return self;
     }
 
     fn Destroy(&mut self) {}
@@ -72,7 +78,7 @@ impl MountSourceOperations for PtsSuperOperations {
 
 impl DirentOperations for PtsSuperOperations {
     fn Revalidate(&self, _name: &str, _parent: &Inode, _child: &Inode) -> bool {
-        return true
+        return true;
     }
 
     fn Keep(&self, _dirent: &Dirent) -> bool {

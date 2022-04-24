@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
-use super::mutex::*;
 
 use super::common::*;
 
@@ -32,7 +32,7 @@ impl<T: Clone> Default for LinkEntry<T> {
             val: None,
             prev: None,
             next: None,
-        }
+        };
     }
 }
 
@@ -42,28 +42,28 @@ impl<T: Clone> LinkEntry<T> {
             key: key,
             val: Some(val),
             ..Default::default()
-        }
+        };
     }
 
     pub fn Remove(&mut self) -> Result<()> {
         let prev = match self.prev.take() {
             Some(v) => v,
-            None => return Err(Error::Common(format!("prev is null, key is {}", self.key)))
+            None => return Err(Error::Common(format!("prev is null, key is {}", self.key))),
         };
 
         let next = match self.next.take() {
             Some(v) => v,
-            None => return Err(Error::Common(format!("prev is null, key is {}", self.key)))
+            None => return Err(Error::Common(format!("prev is null, key is {}", self.key))),
         };
 
         (*prev).lock().next = Some(next.clone());
         (*next).lock().prev = Some(prev.clone());
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn GetKey(&self) -> u64 {
-        return self.key
+        return self.key;
     }
 }
 
@@ -84,7 +84,7 @@ impl<T: Clone> Default for LinkedList<T> {
             head,
             tail,
             count: 0,
-        }
+        };
     }
 }
 
@@ -165,7 +165,7 @@ impl<T: Clone> LruCache<T> {
             currentSize: 0,
             list: LinkedList::default(),
             map: BTreeMap::new(),
-        }
+        };
     }
 
     pub fn ContainsKey(&self, key: u64) -> bool {
@@ -173,8 +173,12 @@ impl<T: Clone> LruCache<T> {
     }
 
     pub fn Add(&mut self, key: u64, d: T) {
-        assert!(self.currentSize == self.list.count, "LruCache add mismatch, self.currentSize is {}, self.list.count is {}, map",
-            self.currentSize, self.list.count);
+        assert!(
+            self.currentSize == self.list.count,
+            "LruCache add mismatch, self.currentSize is {}, self.list.count is {}, map",
+            self.currentSize,
+            self.list.count
+        );
 
         let exist = if !self.map.contains_key(&key) {
             if self.currentSize >= self.maxSize {
@@ -199,9 +203,7 @@ impl<T: Clone> LruCache<T> {
         };
 
         let entry = match self.map.get_mut(&key) {
-            Some(e) => {
-                e
-            }
+            Some(e) => e,
             None => panic!("impossible"),
         };
 
@@ -210,7 +212,7 @@ impl<T: Clone> LruCache<T> {
                 Err(e) => panic!("Add fail, {:?}", e),
                 Ok(_) => {
                     self.list.Decrease();
-                },
+                }
             }
             self.list.PushFront(entry);
             return;
@@ -222,22 +224,26 @@ impl<T: Clone> LruCache<T> {
 
     //ret: true- exit the item, false-not exist
     pub fn Remove(&mut self, key: u64) -> bool {
-        assert!(self.currentSize == self.list.count, "LruCache add mismatch, self.currentSize is {}, self.list.count is {}",
-               self.currentSize, self.list.count);
+        assert!(
+            self.currentSize == self.list.count,
+            "LruCache add mismatch, self.currentSize is {}, self.list.count is {}",
+            self.currentSize,
+            self.list.count
+        );
         match self.map.remove(&key) {
             Some(e) => {
-                match e.lock().Remove()  {
+                match e.lock().Remove() {
                     Err(e) => panic!("Remove fail, {:?}", e),
                     Ok(_) => {
                         self.list.Decrease();
-                    },
+                    }
                 }
                 self.currentSize -= 1;
-                return true
+                return true;
             }
-            None => ()
+            None => (),
         };
-        return false
+        return false;
     }
 
     pub fn Get(&self, key: u64) -> Option<T> {
@@ -251,7 +257,7 @@ impl<T: Clone> LruCache<T> {
         loop {
             match self.list.PopFront() {
                 None => break,
-                _ => ()
+                _ => (),
             }
         }
 
@@ -260,7 +266,7 @@ impl<T: Clone> LruCache<T> {
     }
 
     pub fn Size(&self) -> u64 {
-        return self.currentSize
+        return self.currentSize;
     }
 
     pub fn MaxSize(&self) -> u64 {

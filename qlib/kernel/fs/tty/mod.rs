@@ -12,17 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod line_discipline;
-pub mod queue;
-mod utf8;
 pub mod dir;
-pub mod terminal;
-pub mod master;
-pub mod slave;
 pub mod fs;
+pub mod line_discipline;
+pub mod master;
+pub mod queue;
+pub mod slave;
+pub mod terminal;
+mod utf8;
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
+use alloc::sync::Arc;
 
 use super::filesystems::*;
 

@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod tmpfs_dir;
-pub mod tmpfs_symlink;
-pub mod tmpfs_socket;
-pub mod tmpfs_file;
-pub mod tmpfs_fifo;
 pub mod fs;
+pub mod tmpfs_dir;
+pub mod tmpfs_fifo;
+pub mod tmpfs_file;
+pub mod tmpfs_socket;
+pub mod tmpfs_symlink;
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
+use alloc::sync::Arc;
 
 use super::filesystems::*;
 

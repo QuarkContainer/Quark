@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
+use alloc::sync::Arc;
 
-use super::super::super::task::*;
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
+use super::super::super::task::*;
 //use super::super::super::mem::seq::*;
 use super::super::host::tty::*;
 use super::queue::*;
@@ -52,19 +52,19 @@ impl LineDiscipline {
             column: 0,
         };
 
-        return ld
+        return ld;
     }
 
     pub fn GetTermios(&self, task: &Task, dstAddr: u64) -> Result<()> {
         let t = self.termios.ToTermios();
         task.CopyOutObj(&t, dstAddr)?;
-        return Ok(())
+        return Ok(());
     }
 
     pub fn SetTermios(&mut self, task: &Task, srcAddr: u64) -> Result<()> {
         let oldCanonEnabled = self.termios.LEnabled(LocalFlags::ICANON);
 
-        let t: Termios =task.CopyInObj(srcAddr)?;
+        let t: Termios = task.CopyInObj(srcAddr)?;
 
         self.termios.FromTermios(&t);
 
@@ -76,27 +76,27 @@ impl LineDiscipline {
 
         //todo: don't understand
         /*
-        // If canonical mode is turned off, move bytes from inQueue's wait
-	// buffer to its read buffer. Anything already in the read buffer is
-	// now readable.
-	if oldCanonEnabled && !l.termios.LEnabled(linux.ICANON) {
-		l.inQueue.pushWaitBuf(l)
-		l.inQueue.readable = true
-		l.slaveWaiter.Notify(waiter.EventIn)
-	}
-        */
+            // If canonical mode is turned off, move bytes from inQueue's wait
+        // buffer to its read buffer. Anything already in the read buffer is
+        // now readable.
+        if oldCanonEnabled && !l.termios.LEnabled(linux.ICANON) {
+            l.inQueue.pushWaitBuf(l)
+            l.inQueue.readable = true
+            l.slaveWaiter.Notify(waiter.EventIn)
+        }
+            */
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn GetWindowSize(&self, task: &Task, dstAddr: u64) -> Result<()> {
         task.CopyOutObj(&self.size, dstAddr)?;
-        return Ok(())
+        return Ok(());
     }
 
     pub fn SetWindowSize(&mut self, task: &Task, srcAddr: u64) -> Result<()> {
         self.size = task.CopyInObj(srcAddr)?;
-        return Ok(())
+        return Ok(());
     }
 
     pub fn InputQueueReadSize(&self, task: &Task, dstAddr: u64) -> Result<()> {
@@ -107,10 +107,10 @@ impl LineDiscipline {
         let n = self.inQueue.lock().Read(dst)?;
 
         if n > 0 {
-            return Ok(n)
+            return Ok(n);
         }
 
-        return Err(Error::SysError(SysErr::EAGAIN))
+        return Err(Error::SysError(SysErr::EAGAIN));
     }
 
     pub fn InputQueueWrite(&mut self, _task: &Task, src: &mut [u8]) -> Result<i64> {
@@ -118,10 +118,10 @@ impl LineDiscipline {
         let n = inQueue.lock().Write(src, self)?;
 
         if n > 0 {
-            return Ok(n)
+            return Ok(n);
         }
 
-        return Err(Error::SysError(SysErr::EAGAIN))
+        return Err(Error::SysError(SysErr::EAGAIN));
     }
 
     pub fn OutputQueueReadSize(&self, task: &Task, dstAddr: u64) -> Result<()> {
@@ -132,10 +132,10 @@ impl LineDiscipline {
         let n = self.outQueue.lock().Read(dst)?;
 
         if n > 0 {
-            return Ok(n)
+            return Ok(n);
         }
 
-        return Err(Error::SysError(SysErr::EAGAIN))
+        return Err(Error::SysError(SysErr::EAGAIN));
     }
 
     pub fn OutputQueueWrite(&mut self, _task: &Task, src: &mut [u8]) -> Result<i64> {
@@ -143,16 +143,16 @@ impl LineDiscipline {
         let n = inQueue.lock().Write(src, self)?;
 
         if n > 0 {
-            return Ok(n)
+            return Ok(n);
         }
 
-        return Err(Error::SysError(SysErr::EAGAIN))
+        return Err(Error::SysError(SysErr::EAGAIN));
     }
 
     pub fn ShouldDiscard(&self, q: &Queue, cBytes: &[u8]) -> bool {
         return self.termios.LEnabled(LocalFlags::ICANON)
             && q.buf.AvailableDataSize() + cBytes.len() > CANON_MAX_BYTES
-            && !self.termios.IsTerminating(cBytes)
+            && !self.termios.IsTerminating(cBytes);
     }
 
     pub fn Peek(&self, b: &[u8]) -> usize {
@@ -162,6 +162,6 @@ impl LineDiscipline {
             size = DecodeUtf8(b);
         }
 
-        return size
+        return size;
     }
 }

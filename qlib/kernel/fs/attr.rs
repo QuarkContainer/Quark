@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::super::super::auth::*;
 use super::super::super::linux_def::*;
 use super::super::kernel::time::*;
 use super::super::task::*;
-use super::super::super::auth::*;
 use super::dentry::*;
-
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum InodeFileType {
@@ -90,7 +89,7 @@ pub enum InodeType {
 
 impl Default for InodeType {
     fn default() -> Self {
-        return InodeType::RegularFile
+        return InodeType::RegularFile;
     }
 }
 
@@ -134,38 +133,38 @@ pub struct StableAttr {
 
 impl StableAttr {
     pub fn IsDir(&self) -> bool {
-        return self.Type == InodeType::Directory || self.Type == InodeType::SpecialDirectory
+        return self.Type == InodeType::Directory || self.Type == InodeType::SpecialDirectory;
     }
 
     pub fn IsFile(&self) -> bool {
-        return self.Type == InodeType::RegularFile || self.Type == InodeType::SpecialFile
+        return self.Type == InodeType::RegularFile || self.Type == InodeType::SpecialFile;
     }
 
     pub fn IsRegular(&self) -> bool {
-        return self.Type == InodeType::RegularFile
+        return self.Type == InodeType::RegularFile;
     }
 
     pub fn IsSymlink(&self) -> bool {
-        return self.Type == InodeType::Symlink
+        return self.Type == InodeType::Symlink;
     }
 
     pub fn IsPipe(&self) -> bool {
-        return self.Type == InodeType::Pipe
+        return self.Type == InodeType::Pipe;
     }
 
     pub fn IsSocket(&self) -> bool {
-        return self.Type == InodeType::Socket
+        return self.Type == InodeType::Socket;
     }
 
     pub fn IsCharDevice(&self) -> bool {
-        return self.Type == InodeType::CharacterDevice
+        return self.Type == InodeType::CharacterDevice;
     }
 
     pub fn DentAttr(&self) -> DentAttr {
         return DentAttr {
             Type: self.Type,
             InodeId: self.InodeId,
-        }
+        };
     }
 }
 
@@ -201,7 +200,7 @@ impl UnstableAttr {
 
     pub fn SetTimestamps(&mut self, task: &Task, ts: &InterTimeSpec) {
         if ts.ATimeOmit && ts.MTimeOmit {
-            return
+            return;
         }
 
         let now = task.Now();
@@ -250,12 +249,11 @@ pub struct AttrMask {
     pub AccessTime: bool,
     pub ModificationTime: bool,
     pub StatusChangeTime: bool,
-    pub Links: bool
+    pub Links: bool,
 }
 
 impl AttrMask {
     pub fn Empty(&self) -> bool {
-        return *self == Self::default()
+        return *self == Self::default();
     }
 }
-

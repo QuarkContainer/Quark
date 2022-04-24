@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::super::super::linux_def::*;
 use super::super::super::linux::time::*;
+use super::super::super::linux_def::*;
 
 pub const MIN_TIME: Time = Time(core::i64::MIN);
 pub const MAX_TIME: Time = Time(core::i64::MAX);
@@ -38,7 +38,7 @@ impl Default for InterTimeSpec {
             MTime: Default::default(),
             MTimeOmit: false,
             MTimeSetSystemTime: true,
-        }
+        };
     }
 }
 
@@ -50,11 +50,11 @@ pub struct Time(pub i64); //how many ns
 
 impl Time {
     pub fn FromNs(ns: i64) -> Self {
-        return Self(ns)
+        return Self(ns);
     }
 
     pub fn FromSec(s: i64) -> Self {
-        return Self(s * 1000_000_000)
+        return Self(s * 1000_000_000);
     }
 
     pub fn FromUnix(s: i64, ns: i64) -> Self {
@@ -67,21 +67,21 @@ impl Time {
             return MAX_TIME.clone();
         }
 
-        return Time(t + ns)
+        return Time(t + ns);
     }
 
     pub fn FromStatxTimestamp(ts: &StatxTimestamp) -> Self {
-        return Self::FromUnix(ts.tv_sec, ts.tv_nsec as i64)
+        return Self::FromUnix(ts.tv_sec, ts.tv_nsec as i64);
     }
 
     pub fn FromTimespec(ts: &Timespec) -> Self {
-        return Self::FromUnix(ts.tv_sec, ts.tv_nsec)
+        return Self::FromUnix(ts.tv_sec, ts.tv_nsec);
     }
 
     pub fn FromTimeval(tv: &Timeval) -> Self {
         let s = tv.Sec;
         let ns = tv.Usec * 1000;
-        return Self::FromUnix(s, ns)
+        return Self::FromUnix(s, ns);
     }
 
     pub fn Nanoseconds(&self) -> i64 {
@@ -96,56 +96,56 @@ impl Time {
         return Timespec {
             tv_sec: self.0 / 1000_000_000,
             tv_nsec: self.0 % 1000_000_000,
-        }
+        };
     }
 
     pub fn Unix(&self) -> (i64, i64) {
-        return (self.0 / 1000_000_000, self.0 % 1000_000_000)
+        return (self.0 / 1000_000_000, self.0 % 1000_000_000);
     }
 
     pub fn TimeT(&self) -> TimeT {
-        return NsecToTimeT(self.0)
+        return NsecToTimeT(self.0);
     }
 
     pub fn Timeval(&self) -> Timeval {
         return Timeval {
             Sec: self.0 / 1000_000_000,
             Usec: (self.0 % 1000_000_000) / 1000,
-        }
+        };
     }
 
     pub fn Add(&self, ns: i64) -> Self {
         if self.0 > 0 && ns > core::i64::MAX - self.0 {
-            return MAX_TIME
+            return MAX_TIME;
         }
 
         if self.0 < 0 && ns < core::i64::MIN - self.0 {
-            return MIN_TIME
+            return MIN_TIME;
         }
 
-        return Self(self.0 + ns)
+        return Self(self.0 + ns);
     }
 
     pub fn AddTime(&self, u: Self) -> Self {
-        return self.Add(u.0)
+        return self.Add(u.0);
     }
 
     pub fn Equal(&self, u: Self) -> bool {
-        return self.0 == u.0
+        return self.0 == u.0;
     }
 
     pub fn Before(&self, u: Self) -> bool {
-        return self.0 < u.0
+        return self.0 < u.0;
     }
 
     pub fn After(&self, u: Self) -> bool {
-        return self.0 > u.0
+        return self.0 > u.0;
     }
 
     pub fn Sub(&self, u: Time) -> Duration {
         let dur = (self.0 - u.0) * NANOSECOND;
         if u.Add(dur).Equal(*self) {
-            return dur
+            return dur;
         } else if self.Before(u) {
             return MIN_DURATION;
         } else {
@@ -154,14 +154,14 @@ impl Time {
     }
 
     pub fn IsMin(&self) -> bool {
-        return self.Equal(MIN_TIME)
+        return self.Equal(MIN_TIME);
     }
 
     pub fn IsZero(&self) -> bool {
-        return self.Equal(ZERO_TIME)
+        return self.Equal(ZERO_TIME);
     }
 
     pub fn StatxTimestamp(&self) -> StatxTimestamp {
-        return StatxTimestamp::FromNs(self.Nanoseconds())
+        return StatxTimestamp::FromNs(self.Nanoseconds());
     }
 }

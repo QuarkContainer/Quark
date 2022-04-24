@@ -12,33 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::mutex::*;
+use alloc::borrow::ToOwned;
+use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
-use crate::qlib::mutex::*;
-use spin::*;
 use core::any::Any;
-use alloc::collections::btree_map::BTreeMap;
-use alloc::borrow::ToOwned;
+use spin::*;
 
-use super::super::kernel::waiter::*;
 use super::super::super::common::*;
-use super::super::task::*;
 use super::super::super::linux_def::*;
-use super::inode::*;
-use super::flags::*;
-use super::file::*;
-use super::dirent::*;
-use super::dentry::*;
+use super::super::kernel::waiter::*;
+use super::super::task::*;
 use super::attr::*;
-use super::overlay::*;
-use super::inode_overlay::*;
+use super::dentry::*;
+use super::dirent::*;
+use super::file::*;
+use super::flags::*;
 use super::host::hostinodeop::*;
+use super::inode::*;
+use super::inode_overlay::*;
+use super::overlay::*;
 
 pub fn OverlayFile(task: &Task, inode: &Inode, flags: &FileFlags) -> Result<File> {
     let dirent = Dirent::NewTransient(inode);
     let f = inode.GetFile(task, &dirent, flags)?;
-    return Ok(f)
+    return Ok(f);
 }
 
 pub struct OverlayFileOperations {
@@ -54,20 +54,25 @@ impl Default for OverlayFileOperations {
             upper: QMutex::new(None),
             lower: QMutex::new(None),
             dirCursor: QMutex::new("".to_owned()),
-            dirCache: QMutex::new(DentMap::default())
-        }
+            dirCache: QMutex::new(DentMap::default()),
+        };
     }
 }
 
 impl OverlayFileOperations {
-    fn OnTop(&self, task: &Task, file: &File, mut func: impl FnMut(&File, Arc<FileOperations>) -> Result<()>) -> Result<()> {
+    fn OnTop(
+        &self,
+        task: &Task,
+        file: &File,
+        mut func: impl FnMut(&File, Arc<FileOperations>) -> Result<()>,
+    ) -> Result<()> {
         let inode = file.Dirent.Inode();
         let overlay = inode.lock().Overlay.as_ref().unwrap().clone();
         let o = overlay.read();
         if o.upper.is_none() {
             let lower = self.lower.lock().as_ref().unwrap().clone();
             let lowerfops = lower.FileOp.clone();
-            return func(&lower, lowerfops)
+            return func(&lower, lowerfops);
         }
 
         {
@@ -81,7 +86,7 @@ impl OverlayFileOperations {
 
         let upper = self.upper.lock().as_ref().unwrap().clone();
         let upperfops = upper.FileOp.clone();
-        return func(&upper, upperfops)
+        return func(&upper, upperfops);
     }
 
     pub fn FileOps(&self) -> Arc<FileOperations> {
@@ -130,11 +135,11 @@ impl SpliceOperations for OverlayFileOperations {}
 
 impl FileOperations for OverlayFileOperations {
     fn as_any(&self) -> &Any {
-        return self
+        return self;
     }
 
     fn FopsType(&self) -> FileOpsType {
-        return FileOpsType::OverlayFileOperations
+        return FileOpsType::OverlayFileOperations;
     }
 
     fn Seekable(&self) -> bool {
@@ -158,7 +163,13 @@ impl FileOperations for OverlayFileOperations {
         return Ok(n);
     }
 
-    fn ReadDir(&self, task: &Task, file: &File, offset: i64, serializer: &mut DentrySerializer) -> Result<i64> {
+    fn ReadDir(
+        &self,
+        task: &Task,
+        file: &File,
+        offset: i64,
+        serializer: &mut DentrySerializer,
+    ) -> Result<i64> {
         let root = task.Root();
         let mut dirCursor = self.dirCursor.lock();
 
@@ -176,7 +187,12 @@ impl FileOperations for OverlayFileOperations {
         }
 
         let inode = dirent.Inode();
-        let o = inode.lock().Overlay.as_ref().expect("OverlayFileOperations:Readdir get none overlay").clone();
+        let o = inode
+            .lock()
+            .Overlay
+            .as_ref()
+            .expect("OverlayFileOperations:Readdir get none overlay")
+            .clone();
         let dirCache = ReaddirEntries(task, o)?;
 
         *self.dirCache.lock() = dirCache;
@@ -186,17 +202,31 @@ impl FileOperations for OverlayFileOperations {
         return Ok(res);
     }
 
-    fn ReadAt(&self, task: &Task, f: &File, dsts: &mut [IoVec], offset: i64, blocking: bool) -> Result<i64> {
+    fn ReadAt(
+        &self,
+        task: &Task,
+        f: &File,
+        dsts: &mut [IoVec],
+        offset: i64,
+        blocking: bool,
+    ) -> Result<i64> {
         let mut n = 0;
         self.OnTop(task, f, |file, ops| -> Result<()> {
             n = ops.ReadAt(task, file, dsts, offset, blocking)?;
-            return Ok(())
+            return Ok(());
         })?;
 
-        return Ok(n)
+        return Ok(n);
     }
 
-    fn WriteAt(&self, task: &Task, f: &File, srcs: &[IoVec], offset: i64, blocking: bool) -> Result<i64> {
+    fn WriteAt(
+        &self,
+        task: &Task,
+        f: &File,
+        srcs: &[IoVec],
+        offset: i64,
+        blocking: bool,
+    ) -> Result<i64> {
         let ops = self.upper.lock().as_ref().unwrap().FileOp.clone();
         let res = ops.WriteAt(task, f, srcs, offset, blocking);
         return res;
@@ -218,7 +248,6 @@ impl FileOperations for OverlayFileOperations {
         return ops.Flush(task, f);
     }
 
-
     fn UnstableAttr(&self, task: &Task, f: &File) -> Result<UnstableAttr> {
         let ops = self.FileOps();
         return ops.UnstableAttr(task, f);
@@ -228,23 +257,29 @@ impl FileOperations for OverlayFileOperations {
         let upper = {
             let upper = self.upper.lock();
             if upper.is_none() {
-                return Err(Error::SysError(SysErr::ENOTTY))
+                return Err(Error::SysError(SysErr::ENOTTY));
             }
 
             upper.as_ref().unwrap().clone()
         };
 
-        return upper.FileOp.Ioctl(task, f, fd, request, val)
+        return upper.FileOp.Ioctl(task, f, fd, request, val);
     }
 
-    fn IterateDir(&self, task: &Task, _d: &Dirent, dirCtx: &mut DirCtx, offset: i32) -> (i32, Result<i64>) {
+    fn IterateDir(
+        &self,
+        task: &Task,
+        _d: &Dirent,
+        dirCtx: &mut DirCtx,
+        offset: i32,
+    ) -> (i32, Result<i64>) {
         let cache = self.dirCache.lock();
         let n = match dirCtx.ReadDir(task, &cache) {
             Err(e) => return (offset, Err(e)),
             Ok(n) => n,
         };
 
-        return (offset + n as i32, Ok(n as i64))
+        return (offset + n as i32, Ok(n as i64));
     }
 
     fn Mappable(&self) -> Result<HostInodeOp> {
@@ -273,7 +308,7 @@ fn ReaddirEntries(task: &Task, o: Arc<RwLock<OverlayEntry>>) -> Result<DentMap> 
         for (name, entry) in lowerEntries {
             if upper.is_some() {
                 if OverlayHasWhiteout(upper.as_ref().unwrap(), &name) {
-                    continue
+                    continue;
                 }
             }
 
@@ -283,17 +318,24 @@ fn ReaddirEntries(task: &Task, o: Arc<RwLock<OverlayEntry>>) -> Result<DentMap> 
         }
     }
 
-    return Ok(DentMap { Entries: entries })
+    return Ok(DentMap { Entries: entries });
 }
 
 pub fn ReaddirOne(task: &Task, d: &Dirent) -> Result<BTreeMap<String, DentAttr>> {
     let inode = d.Inode();
-    let dir = inode.GetFile(task, d, &FileFlags { Read: true, ..Default::default() })?;
+    let dir = inode.GetFile(
+        task,
+        d,
+        &FileFlags {
+            Read: true,
+            ..Default::default()
+        },
+    )?;
 
     let mut serializer = CollectEntriesSerilizer::New();
     dir.ReadDir(task, &mut serializer)?;
 
     serializer.Entries.remove(&".".to_owned());
     serializer.Entries.remove(&"..".to_owned());
-    return Ok(serializer.Entries)
+    return Ok(serializer.Entries);
 }

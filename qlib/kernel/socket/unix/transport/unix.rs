@@ -12,26 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
+use crate::qlib::mutex::*;
 use alloc::string::String;
 use alloc::string::ToString;
-use crate::qlib::mutex::*;
-use core::ops::Deref;
+use alloc::sync::Arc;
 use core::any::Any;
+use core::ops::Deref;
 
-use super::super::super::super::kernel::waiter::*;
-use super::super::super::super::tcpip::tcpip::*;
 use super::super::super::super::super::common::*;
 use super::super::super::super::super::linux_def::*;
 use super::super::super::super::super::mem::seq::*;
-use super::super::super::super::uid::*;
+use super::super::super::super::kernel::waiter::*;
 use super::super::super::super::task::*;
+use super::super::super::super::tcpip::tcpip::*;
+use super::super::super::super::uid::*;
 use super::super::super::buffer::view::*;
 use super::super::super::control::*;
 use super::super::super::hostinet::socket::*;
-use super::queue::*;
 use super::connectioned::*;
 use super::connectionless::*;
+use super::queue::*;
 
 pub const INITIAL_LIMIT: usize = 16 * 1024;
 
@@ -61,7 +61,7 @@ impl SCMControlMessages {
     // Empty returns true iff the ControlMessages does not contain either
     // credentials or rights.
     pub fn Empty(&self) -> bool {
-        return self.Rights.is_none() && self.Credentials.is_none()
+        return self.Rights.is_none() && self.Credentials.is_none();
     }
 
     pub fn Release(&mut self) {
@@ -82,7 +82,7 @@ pub trait Passcred {
     fn Passcred(&self) -> bool;
 }
 
-pub trait PartialEndPoint : Passcred + Sync + Send {
+pub trait PartialEndPoint: Passcred + Sync + Send {
     // GetLocalAddress implements Endpoint.GetLocalAddress.
     fn GetLocalAddress(&self) -> Result<SockAddrUnix>;
 
@@ -90,7 +90,9 @@ pub trait PartialEndPoint : Passcred + Sync + Send {
     fn Type(&self) -> i32;
 }
 
-pub trait Endpoint : PartialEndPoint + Passcred + ConnectedPasscred + Waitable + Sync + Send {
+pub trait Endpoint:
+    PartialEndPoint + Passcred + ConnectedPasscred + Waitable + Sync + Send
+{
     fn as_any(&self) -> &Any;
 
     // Close puts the endpoint in a closed state and frees all resources
@@ -127,14 +129,25 @@ pub trait Endpoint : PartialEndPoint + Passcred + ConnectedPasscred + Waitable +
     // CMTruncated indicates that the numRights hint was used to receive fewer
     // than the total available SCM_RIGHTS FDs. Additional truncation may be
     // required by the caller.
-    fn RecvMsg(&self, data: &mut [IoVec], creds: bool, numRights: u64, peek: bool, addr: Option<&mut SockAddrUnix>)
-               -> Result<(usize, usize, SCMControlMessages, bool)>;
+    fn RecvMsg(
+        &self,
+        data: &mut [IoVec],
+        creds: bool,
+        numRights: u64,
+        peek: bool,
+        addr: Option<&mut SockAddrUnix>,
+    ) -> Result<(usize, usize, SCMControlMessages, bool)>;
 
     // SendMsg writes data and a control message to the endpoint's peer.
     // This method does not block if the data cannot be written.
     //
     // SendMsg does not take ownership of any of its arguments on error.
-    fn SendMsg(&self, data: &[IoVec], c: &SCMControlMessages, to: &Option<BoundEndpoint>) -> Result<usize>;
+    fn SendMsg(
+        &self,
+        data: &[IoVec],
+        c: &SCMControlMessages,
+        to: &Option<BoundEndpoint>,
+    ) -> Result<usize>;
 
     // Connect connects this endpoint directly to another.
     //
@@ -189,18 +202,14 @@ pub enum BoundEndpointWeak {
 impl BoundEndpointWeak {
     pub fn Upgrade(&self) -> Option<BoundEndpoint> {
         match self {
-            BoundEndpointWeak::Connected(ref c) => {
-                match c.Upgrade() {
-                    None => None,
-                    Some(c) => Some(BoundEndpoint::Connected(c)),
-                }
-            }
-            BoundEndpointWeak::ConnectLess(ref c) => {
-                match c.Upgrade() {
-                    None => None,
-                    Some(c) => Some(BoundEndpoint::ConnectLess(c)),
-                }
-            }
+            BoundEndpointWeak::Connected(ref c) => match c.Upgrade() {
+                None => None,
+                Some(c) => Some(BoundEndpoint::Connected(c)),
+            },
+            BoundEndpointWeak::ConnectLess(ref c) => match c.Upgrade() {
+                None => None,
+                Some(c) => Some(BoundEndpoint::ConnectLess(c)),
+            },
         }
     }
 }
@@ -214,12 +223,8 @@ pub enum BoundEndpoint {
 impl BoundEndpoint {
     pub fn RefCount(&self) -> usize {
         match self {
-            BoundEndpoint::Connected(ref c) => {
-                return c.RefCount()
-            }
-            BoundEndpoint::ConnectLess(ref c) => {
-                return c.RefCount()
-            }
+            BoundEndpoint::Connected(ref c) => return c.RefCount(),
+            BoundEndpoint::ConnectLess(ref c) => return c.RefCount(),
         }
     }
 
@@ -234,10 +239,12 @@ impl BoundEndpoint {
         }
     }
 
-    pub fn BidirectionalConnect<T: 'static + ConnectingEndpoint>(&self,
-                                                                 task: &Task,
-                                                                 ce: Arc<T>,
-                                                                 returnConnect: impl Fn(Arc<Receiver>, Arc<ConnectedEndpoint>)) -> Result<()> {
+    pub fn BidirectionalConnect<T: 'static + ConnectingEndpoint>(
+        &self,
+        task: &Task,
+        ce: Arc<T>,
+        returnConnect: impl Fn(Arc<Receiver>, Arc<ConnectedEndpoint>),
+    ) -> Result<()> {
         match self {
             BoundEndpoint::Connected(ref c) => {
                 return c.BidirectionalConnect(task, ce, returnConnect)
@@ -250,56 +257,46 @@ impl BoundEndpoint {
 
     pub fn UnidirectionalConnect(&self) -> Result<UnixConnectedEndpoint> {
         match self {
-            BoundEndpoint::Connected(ref c) => {
-                return c.UnidirectionalConnect()
-            }
-            BoundEndpoint::ConnectLess(ref c) => {
-                return c.UnidirectionalConnect()
-            }
+            BoundEndpoint::Connected(ref c) => return c.UnidirectionalConnect(),
+            BoundEndpoint::ConnectLess(ref c) => return c.UnidirectionalConnect(),
         }
     }
 
     pub fn BaseEndpoint(&self) -> BaseEndpoint {
         match self {
-            BoundEndpoint::Connected(ref c) => {
-                return c.lock().baseEndpoint.clone()
-            }
-            BoundEndpoint::ConnectLess(ref c) => {
-                return BaseEndpoint(c.0.clone())
-            }
+            BoundEndpoint::Connected(ref c) => return c.lock().baseEndpoint.clone(),
+            BoundEndpoint::ConnectLess(ref c) => return BaseEndpoint(c.0.clone()),
         }
     }
 
     pub fn State(&self) -> i32 {
         match self {
-            BoundEndpoint::Connected(ref c) => {
-                return c.State()
-            }
-            BoundEndpoint::ConnectLess(ref c) => {
-                return c.State()
-            }
+            BoundEndpoint::Connected(ref c) => return c.State(),
+            BoundEndpoint::ConnectLess(ref c) => return c.State(),
         }
     }
 }
 
 impl Endpoint for BoundEndpoint {
     fn as_any(&self) -> &Any {
-        return self
+        return self;
     }
 
     fn Close(&self) {
         match self {
-            BoundEndpoint::Connected(ref c) => {
-                return c.Close()
-            }
-            BoundEndpoint::ConnectLess(ref c) => {
-                return c.Close()
-            }
+            BoundEndpoint::Connected(ref c) => return c.Close(),
+            BoundEndpoint::ConnectLess(ref c) => return c.Close(),
         }
     }
 
-    fn RecvMsg(&self, data: &mut [IoVec], creds: bool, numRights: u64, peek: bool, addr: Option<&mut SockAddrUnix>)
-               -> Result<(usize, usize, SCMControlMessages, bool)> {
+    fn RecvMsg(
+        &self,
+        data: &mut [IoVec],
+        creds: bool,
+        numRights: u64,
+        peek: bool,
+        addr: Option<&mut SockAddrUnix>,
+    ) -> Result<(usize, usize, SCMControlMessages, bool)> {
         match self {
             BoundEndpoint::Connected(ref c) => {
                 return c.RecvMsg(data, creds, numRights, peek, addr)
@@ -310,102 +307,71 @@ impl Endpoint for BoundEndpoint {
         }
     }
 
-    fn SendMsg(&self, data: &[IoVec], ctrl: &SCMControlMessages, to: &Option<BoundEndpoint>) -> Result<usize> {
+    fn SendMsg(
+        &self,
+        data: &[IoVec],
+        ctrl: &SCMControlMessages,
+        to: &Option<BoundEndpoint>,
+    ) -> Result<usize> {
         match self {
-            BoundEndpoint::Connected(ref c) => {
-                return c.SendMsg(data, ctrl, to)
-            }
-            BoundEndpoint::ConnectLess(ref c) => {
-                return c.SendMsg(data, ctrl, to)
-            }
+            BoundEndpoint::Connected(ref c) => return c.SendMsg(data, ctrl, to),
+            BoundEndpoint::ConnectLess(ref c) => return c.SendMsg(data, ctrl, to),
         }
     }
 
     fn Connect(&self, task: &Task, server: &BoundEndpoint) -> Result<()> {
         match self {
-            BoundEndpoint::Connected(ref c) => {
-                return c.Connect(task, server)
-            }
-            BoundEndpoint::ConnectLess(ref c) => {
-                return c.Connect(task, server)
-            }
+            BoundEndpoint::Connected(ref c) => return c.Connect(task, server),
+            BoundEndpoint::ConnectLess(ref c) => return c.Connect(task, server),
         }
     }
 
     fn Shutdown(&self, flags: ShutdownFlags) -> Result<()> {
         match self {
-            BoundEndpoint::Connected(ref c) => {
-                return c.Shutdown(flags)
-            }
-            BoundEndpoint::ConnectLess(ref c) => {
-                return c.Shutdown(flags)
-            }
+            BoundEndpoint::Connected(ref c) => return c.Shutdown(flags),
+            BoundEndpoint::ConnectLess(ref c) => return c.Shutdown(flags),
         }
     }
 
     fn Listen(&self, backlog: i32) -> Result<()> {
         match self {
-            BoundEndpoint::Connected(ref c) => {
-                return c.Listen(backlog)
-            }
-            BoundEndpoint::ConnectLess(ref c) => {
-                return c.Listen(backlog)
-            }
+            BoundEndpoint::Connected(ref c) => return c.Listen(backlog),
+            BoundEndpoint::ConnectLess(ref c) => return c.Listen(backlog),
         }
     }
 
     fn Accept(&self) -> Result<ConnectionedEndPoint> {
         match self {
-            BoundEndpoint::Connected(ref c) => {
-                return c.Accept()
-            }
-            BoundEndpoint::ConnectLess(ref c) => {
-                return c.Accept()
-            }
+            BoundEndpoint::Connected(ref c) => return c.Accept(),
+            BoundEndpoint::ConnectLess(ref c) => return c.Accept(),
         }
     }
 
     fn Bind(&self, addr: &SockAddrUnix) -> Result<()> {
         match self {
-            BoundEndpoint::Connected(ref c) => {
-                return c.Bind(addr)
-            }
-            BoundEndpoint::ConnectLess(ref c) => {
-                return c.Bind(addr)
-            }
+            BoundEndpoint::Connected(ref c) => return c.Bind(addr),
+            BoundEndpoint::ConnectLess(ref c) => return c.Bind(addr),
         }
     }
 
     fn GetRemoteAddress(&self) -> Result<SockAddrUnix> {
         match self {
-            BoundEndpoint::Connected(ref c) => {
-                return c.GetRemoteAddress()
-            }
-            BoundEndpoint::ConnectLess(ref c) => {
-                return c.GetRemoteAddress()
-            }
+            BoundEndpoint::Connected(ref c) => return c.GetRemoteAddress(),
+            BoundEndpoint::ConnectLess(ref c) => return c.GetRemoteAddress(),
         }
     }
 
     fn SetSockOpt(&self, opt: &SockOpt) -> Result<()> {
         match self {
-            BoundEndpoint::Connected(ref c) => {
-                return c.SetSockOpt(opt)
-            }
-            BoundEndpoint::ConnectLess(ref c) => {
-                return c.SetSockOpt(opt)
-            }
+            BoundEndpoint::Connected(ref c) => return c.SetSockOpt(opt),
+            BoundEndpoint::ConnectLess(ref c) => return c.SetSockOpt(opt),
         }
     }
 
     fn GetSockOpt(&self, opt: &mut SockOpt) -> Result<()> {
         match self {
-            BoundEndpoint::Connected(ref c) => {
-                return c.GetSockOpt(opt)
-            }
-            BoundEndpoint::ConnectLess(ref c) => {
-                return c.GetSockOpt(opt)
-            }
+            BoundEndpoint::Connected(ref c) => return c.GetSockOpt(opt),
+            BoundEndpoint::ConnectLess(ref c) => return c.GetSockOpt(opt),
         }
     }
 }
@@ -413,23 +379,15 @@ impl Endpoint for BoundEndpoint {
 impl PartialEndPoint for BoundEndpoint {
     fn GetLocalAddress(&self) -> Result<SockAddrUnix> {
         match self {
-            BoundEndpoint::Connected(ref c) => {
-                return c.GetLocalAddress()
-            }
-            BoundEndpoint::ConnectLess(ref c) => {
-                return c.GetLocalAddress()
-            }
+            BoundEndpoint::Connected(ref c) => return c.GetLocalAddress(),
+            BoundEndpoint::ConnectLess(ref c) => return c.GetLocalAddress(),
         }
     }
 
     fn Type(&self) -> i32 {
         match self {
-            BoundEndpoint::Connected(ref c) => {
-                return c.Type()
-            }
-            BoundEndpoint::ConnectLess(ref c) => {
-                return c.Type()
-            }
+            BoundEndpoint::Connected(ref c) => return c.Type(),
+            BoundEndpoint::ConnectLess(ref c) => return c.Type(),
         }
     }
 }
@@ -437,12 +395,8 @@ impl PartialEndPoint for BoundEndpoint {
 impl Passcred for BoundEndpoint {
     fn Passcred(&self) -> bool {
         match self {
-            BoundEndpoint::Connected(ref c) => {
-                return c.Passcred()
-            }
-            BoundEndpoint::ConnectLess(ref c) => {
-                return c.Passcred()
-            }
+            BoundEndpoint::Connected(ref c) => return c.Passcred(),
+            BoundEndpoint::ConnectLess(ref c) => return c.Passcred(),
         }
     }
 }
@@ -450,12 +404,8 @@ impl Passcred for BoundEndpoint {
 impl ConnectedPasscred for BoundEndpoint {
     fn ConnectedPasscred(&self) -> bool {
         match self {
-            BoundEndpoint::Connected(ref c) => {
-                return c.ConnectedPasscred()
-            }
-            BoundEndpoint::ConnectLess(ref c) => {
-                return c.ConnectedPasscred()
-            }
+            BoundEndpoint::Connected(ref c) => return c.ConnectedPasscred(),
+            BoundEndpoint::ConnectLess(ref c) => return c.ConnectedPasscred(),
         }
     }
 }
@@ -463,40 +413,28 @@ impl ConnectedPasscred for BoundEndpoint {
 impl Waitable for BoundEndpoint {
     fn Readiness(&self, task: &Task, mask: EventMask) -> EventMask {
         match self {
-            BoundEndpoint::Connected(ref c) => {
-                return c.Readiness(task, mask)
-            }
-            BoundEndpoint::ConnectLess(ref c) => {
-                return c.Readiness(task, mask)
-            }
+            BoundEndpoint::Connected(ref c) => return c.Readiness(task, mask),
+            BoundEndpoint::ConnectLess(ref c) => return c.Readiness(task, mask),
         }
     }
 
     fn EventRegister(&self, task: &Task, e: &WaitEntry, mask: EventMask) {
         match self {
-            BoundEndpoint::Connected(ref c) => {
-                return c.EventRegister(task, e, mask)
-            }
-            BoundEndpoint::ConnectLess(ref c) => {
-                return c.EventRegister(task, e, mask)
-            }
+            BoundEndpoint::Connected(ref c) => return c.EventRegister(task, e, mask),
+            BoundEndpoint::ConnectLess(ref c) => return c.EventRegister(task, e, mask),
         }
     }
 
     fn EventUnregister(&self, task: &Task, e: &WaitEntry) {
         match self {
-            BoundEndpoint::Connected(ref c) => {
-                return c.EventUnregister(task, e)
-            }
-            BoundEndpoint::ConnectLess(ref c) => {
-                return c.EventUnregister(task, e)
-            }
+            BoundEndpoint::Connected(ref c) => return c.EventUnregister(task, e),
+            BoundEndpoint::ConnectLess(ref c) => return c.EventUnregister(task, e),
         }
     }
 }
 
 // A Receiver can be used to receive Messages.
-pub trait Receiver : Sync + Send {
+pub trait Receiver: Sync + Send {
     fn as_any(&self) -> &Any;
 
     // Recv receives a single message. This method does not block.
@@ -504,8 +442,13 @@ pub trait Receiver : Sync + Send {
     // See Endpoint.RecvMsg for documentation on shared arguments.
     //
     // notify indicates if RecvNotify should be called.
-    fn Recv(&self, data: &mut [IoVec], _creds: bool, _numRights: u64, peek: bool)
-            -> Result<(usize, usize, SCMControlMessages, bool, SockAddrUnix, bool)>;
+    fn Recv(
+        &self,
+        data: &mut [IoVec],
+        _creds: bool,
+        _numRights: u64,
+        peek: bool,
+    ) -> Result<(usize, usize, SCMControlMessages, bool, SockAddrUnix, bool)>;
 
     // RecvNotify notifies the Receiver of a successful Recv. This must not be
     // called while holding any endpoint locks.
@@ -537,14 +480,19 @@ pub trait Receiver : Sync + Send {
     //fn Release(&self);
 }
 
-pub trait ConnectedEndpoint : PartialEndPoint + Sync + Send {
+pub trait ConnectedEndpoint: PartialEndPoint + Sync + Send {
     // Send sends a single message. This method does not block.
     //
     // notify indicates if SendNotify should be called.
     //
     // syserr.ErrWouldBlock can be returned along with a partial write if
     // the caller should block to send the rest of the data.
-    fn Send(&self, data: &[IoVec], controlMessages: &SCMControlMessages, from: &SockAddrUnix) -> Result<(usize, bool)>;
+    fn Send(
+        &self,
+        data: &[IoVec],
+        controlMessages: &SCMControlMessages,
+        from: &SockAddrUnix,
+    ) -> Result<(usize, bool)>;
 
     // SendNotify notifies the ConnectedEndpoint of a successful Send. This
     // must not be called while holding any endpoint locks.
@@ -587,22 +535,25 @@ pub struct QueueReceiver {
     pub readQueue: MsgQueue,
 }
 
-impl QueueReceiver{
+impl QueueReceiver {
     pub fn New(readQueue: MsgQueue) -> Self {
-        return Self {
-            readQueue
-        }
+        return Self { readQueue };
     }
 }
 
 impl Receiver for QueueReceiver {
     fn as_any(&self) -> &Any {
-        return self
+        return self;
     }
 
     //return (copied bytes, datalen, ControlMessages, bool?, FullAddr, notify)
-    fn Recv(&self, data: &mut [IoVec], wantCreds: bool, numRights: u64, peek: bool)
-            -> Result<(usize, usize, SCMControlMessages, bool, SockAddrUnix, bool)> {
+    fn Recv(
+        &self,
+        data: &mut [IoVec],
+        wantCreds: bool,
+        numRights: u64,
+        peek: bool,
+    ) -> Result<(usize, usize, SCMControlMessages, bool, SockAddrUnix, bool)> {
         let (m, notify) = if peek {
             (self.readQueue.Peek()?, false)
         } else {
@@ -634,7 +585,7 @@ impl Receiver for QueueReceiver {
             cmTruncated = true;
         }
 
-        return Ok((copied, msglen, c, cmTruncated, addr, notify))
+        return Ok((copied, msglen, c, cmTruncated, addr, notify));
     }
 
     fn RecvNotify(&self) {
@@ -655,11 +606,11 @@ impl Receiver for QueueReceiver {
     }
 
     fn RecvQueuedSize(&self) -> i64 {
-        return self.readQueue.QueuedSize()
+        return self.readQueue.QueuedSize();
     }
 
     fn RecvMaxQueueSize(&self) -> i64 {
-        return self.readQueue.MaxQueueSize()
+        return self.readQueue.MaxQueueSize();
     }
 }
 
@@ -682,13 +633,13 @@ impl Deref for StreamQueueReceiver {
 }
 
 //return (bytes copied, data, buf)
-pub fn VecCopy<'a> (data: BlockSeq, buf: &mut View, peek: bool) -> (usize, BlockSeq) {
+pub fn VecCopy<'a>(data: BlockSeq, buf: &mut View, peek: bool) -> (usize, BlockSeq) {
     let size = data.CopyOut(&buf.0);
     if !peek {
         //if not peek, consume the data
         buf.TrimFront(size);
     }
-    return (size, data.DropFirst(size as u64))
+    return (size, data.DropFirst(size as u64));
 }
 
 impl StreamQueueReceiver {
@@ -700,18 +651,23 @@ impl StreamQueueReceiver {
             addr: SockAddrUnix::default(),
         };
 
-        return Self(Arc::new(QMutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)));
     }
 }
 
 impl Receiver for StreamQueueReceiver {
     fn as_any(&self) -> &Any {
-        return self
+        return self;
     }
 
     //return (copied bytes, Message, bool?, notify)
-    fn Recv(&self, data: &mut [IoVec], wantCreds: bool, numRights: u64, peek: bool)
-            -> Result<(usize, usize, SCMControlMessages, bool, SockAddrUnix, bool)> {
+    fn Recv(
+        &self,
+        data: &mut [IoVec],
+        wantCreds: bool,
+        numRights: u64,
+        peek: bool,
+    ) -> Result<(usize, usize, SCMControlMessages, bool, SockAddrUnix, bool)> {
         let mut q = self.lock();
 
         let data = BlockSeq::NewFromSlice(data);
@@ -746,7 +702,7 @@ impl Receiver for StreamQueueReceiver {
                 cmTruncated = true;
             }
 
-            return Ok((copied, copied, c, cmTruncated, q.addr.clone(), notify))
+            return Ok((copied, copied, c, cmTruncated, q.addr.clone(), notify));
         }
 
         // Consume data and control message since we are not peeking.
@@ -780,9 +736,9 @@ impl Receiver for StreamQueueReceiver {
                     // We already got some data, so ignore this error. This will
                     // manifest as a short read to the user, which is what Linux
                     // does.
-                    break
-                },
-                Ok((m, n)) => (m, n)
+                    break;
+                }
+                Ok((m, n)) => (m, n),
             };
 
             notify |= n;
@@ -794,18 +750,21 @@ impl Receiver for StreamQueueReceiver {
             if wantCreds {
                 if q.control.Credentials.is_none() != c.Credentials.is_none() {
                     // One message has credentials, the other does not.
-                    break
+                    break;
                 }
 
-                if q.control.Credentials.is_some() && c.Credentials.is_some() && q.control.Credentials != c.Credentials {
+                if q.control.Credentials.is_some()
+                    && c.Credentials.is_some()
+                    && q.control.Credentials != c.Credentials
+                {
                     // Both messages have credentials, but they don't match.
-                    break
+                    break;
                 }
             }
 
             if numRights != 0 && c.Rights.is_some() && q.control.Rights.is_some() {
                 // Both messages have rights.
-                break
+                break;
             }
 
             let (cpd, datatmp) = VecCopy(data, &mut q.buffer, false);
@@ -830,7 +789,7 @@ impl Receiver for StreamQueueReceiver {
             }
         }
 
-        return Ok((copied, copied, c, cmTruncated, q.addr.clone(), notify))
+        return Ok((copied, copied, c, cmTruncated, q.addr.clone(), notify));
     }
 
     fn RecvNotify(&self) {
@@ -869,7 +828,7 @@ impl Receiver for StreamQueueReceiver {
     fn RecvMaxQueueSize(&self) -> i64 {
         // The RecvMaxQueueSize() is the readQueue's MaxQueueSize() plus the largest
         // message we can buffer which is also the largest message we can receive.
-        return 2 * self.lock().readQueue.MaxQueueSize()
+        return 2 * self.lock().readQueue.MaxQueueSize();
     }
 }
 
@@ -884,11 +843,11 @@ pub struct UnixConnectedEndpoint {
 }
 
 impl UnixConnectedEndpoint {
-    pub fn New<T: 'static + PartialEndPoint> (endpoint: Arc<T>, writeQueue: MsgQueue) -> Self {
+    pub fn New<T: 'static + PartialEndPoint>(endpoint: Arc<T>, writeQueue: MsgQueue) -> Self {
         return Self {
             endpoint: endpoint,
             writeQueue: writeQueue,
-        }
+        };
     }
 }
 
@@ -912,7 +871,12 @@ impl PartialEndPoint for UnixConnectedEndpoint {
 
 impl ConnectedEndpoint for UnixConnectedEndpoint {
     // Send implements ConnectedEndpoint.Send.
-    fn Send(&self, data: &[IoVec], controlMessage: &SCMControlMessages, from: &SockAddrUnix) -> Result<(usize, bool)> {
+    fn Send(
+        &self,
+        data: &[IoVec],
+        controlMessage: &SCMControlMessages,
+        from: &SockAddrUnix,
+    ) -> Result<(usize, bool)> {
         let bs = BlockSeq::NewFromSlice(data);
 
         let l = bs.Len();
@@ -927,14 +891,14 @@ impl ConnectedEndpoint for UnixConnectedEndpoint {
             // In Linux, the receiver actually uses a zero-length receive
             // as an indication that the stream was closed.
             if l == 0 {
-                return Ok((0, false))
+                return Ok((0, false));
             }
         }
 
         let v = bs.ToVec();
         let message = Message::New(v, controlMessage.clone(), from.clone());
         let (l, notify) = self.writeQueue.Enqueue(message, truncate)?;
-        return Ok((l, notify))
+        return Ok((l, notify));
     }
 
     // SendNotify implements ConnectedEndpoint.SendNotify.
@@ -970,7 +934,7 @@ impl ConnectedEndpoint for UnixConnectedEndpoint {
     }
 
     fn SendMaxQueueSize(&self) -> i64 {
-        return self.writeQueue.MaxQueueSize() as i64
+        return self.writeQueue.MaxQueueSize() as i64;
     }
 
     fn CloseUnread(&self) {
@@ -1019,7 +983,7 @@ impl Default for BaseEndpointInternal {
             connected: None,
             path: String::default(),
             hostfd: 0,
-        }
+        };
     }
 }
 
@@ -1043,10 +1007,10 @@ impl Deref for BaseEndpoint {
 impl Waitable for BaseEndpoint {
     fn Readiness(&self, task: &Task, mask: EventMask) -> EventMask {
         let q = self.lock().queue.clone();
-        return q.Readiness(task, mask)
+        return q.Readiness(task, mask);
     }
 
-    fn EventRegister(&self, task: &Task,e: &WaitEntry, mask: EventMask) {
+    fn EventRegister(&self, task: &Task, e: &WaitEntry, mask: EventMask) {
         let b = self.lock();
         let queue = b.queue.clone();
         queue.EventRegister(task, e, mask);
@@ -1055,7 +1019,7 @@ impl Waitable for BaseEndpoint {
         }
     }
 
-    fn EventUnregister(&self, task: &Task,e: &WaitEntry) {
+    fn EventUnregister(&self, task: &Task, e: &WaitEntry) {
         let b = self.lock();
         let queue = b.queue.clone();
         queue.EventUnregister(task, e);
@@ -1103,7 +1067,7 @@ impl BaseEndpoint {
             ..Default::default()
         };
 
-        return Self(Arc::new(QMutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)));
     }
 
     pub fn NewWithHostfd(hostfd: i32) -> Self {
@@ -1112,7 +1076,7 @@ impl BaseEndpoint {
             ..Default::default()
         };
 
-        return Self(Arc::new(QMutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)));
     }
 
     // pass the ioctl to the shadow hostfd
@@ -1127,7 +1091,7 @@ impl BaseEndpoint {
     }
 
     pub fn IsBound(&self) -> bool {
-        return self.lock().path.as_str() != ""
+        return self.lock().path.as_str() != "";
     }
 
     pub fn Passcred(&self) -> bool {
@@ -1153,16 +1117,22 @@ impl BaseEndpoint {
     }
 
     // RecvMsg reads data and a control message from the endpoint.
-    pub fn RecvMsg(&self, data: &mut [IoVec], creds: bool, numRights: u64, peek: bool, addr: Option<&mut SockAddrUnix>)
-        -> Result<(usize, usize, SCMControlMessages, bool)> {
+    pub fn RecvMsg(
+        &self,
+        data: &mut [IoVec],
+        creds: bool,
+        numRights: u64,
+        peek: bool,
+        addr: Option<&mut SockAddrUnix>,
+    ) -> Result<(usize, usize, SCMControlMessages, bool)> {
         let e = self.lock();
 
         if e.receiver.is_none() {
-            return Err(Error::SysError(SysErr::ENOTCONN))
+            return Err(Error::SysError(SysErr::ENOTCONN));
         }
 
         let receiver = e.receiver.as_ref().unwrap().clone();
-        let (recvLen, msgLen, cms, cmt , a, notify) = receiver.Recv(data, creds, numRights, peek)?;
+        let (recvLen, msgLen, cms, cmt, a, notify) = receiver.Recv(data, creds, numRights, peek)?;
 
         if notify {
             receiver.RecvNotify();
@@ -1177,15 +1147,20 @@ impl BaseEndpoint {
 
     // SendMsg writes data and a control message to the endpoint's peer.
     // This method does not block if the data cannot be written.
-    pub fn SendMsg(&self, data: &[IoVec], c: &SCMControlMessages, to: &Option<BoundEndpoint>) -> Result<usize> {
+    pub fn SendMsg(
+        &self,
+        data: &[IoVec],
+        c: &SCMControlMessages,
+        to: &Option<BoundEndpoint>,
+    ) -> Result<usize> {
         let e = self.lock();
 
         if !e.Connected() {
-            return Err(Error::SysError(SysErr::ENOTCONN))
+            return Err(Error::SysError(SysErr::ENOTCONN));
         }
 
         if to.is_some() {
-            return Err(Error::SysError(SysErr::EISCONN))
+            return Err(Error::SysError(SysErr::EISCONN));
         }
 
         let addr = SockAddrUnix::New(&e.path);
@@ -1195,106 +1170,110 @@ impl BaseEndpoint {
             e.connected.as_ref().unwrap().SendNotify();
         }
 
-        return Ok(n)
+        return Ok(n);
     }
 
     pub fn SetSockOpt(&self, opt: &SockOpt) -> Result<()> {
         match opt {
             SockOpt::PasscredOption(ref v) => {
                 self.setPasscred(*v != 0);
-                return Ok(())
+                return Ok(());
             }
-            _ => return Ok(())
+            _ => return Ok(()),
         }
     }
 
     pub fn GetSockOpt(&self, opt: &mut SockOpt) -> Result<()> {
         match *opt {
-            SockOpt::ErrorOption => {
-                return Ok(())
-            }
+            SockOpt::ErrorOption => return Ok(()),
             SockOpt::SendQueueSizeOption(_) => {
                 let qs = {
                     let e = self.lock();
                     if !e.Connected() {
-                        return Err(Error::SysError(TcpipErr::ERR_NOT_CONNECTED.sysErr))
+                        return Err(Error::SysError(TcpipErr::ERR_NOT_CONNECTED.sysErr));
                     }
 
                     e.connected.as_ref().unwrap().SendQueuedSize() as i32
                 };
 
                 if qs < 0 {
-                    return Err(Error::SysError(TcpipErr::ERR_QUEUE_SIZE_NOT_SUPPORTED.sysErr))
+                    return Err(Error::SysError(
+                        TcpipErr::ERR_QUEUE_SIZE_NOT_SUPPORTED.sysErr,
+                    ));
                 }
                 *opt = SockOpt::SendQueueSizeOption(qs);
-                return Ok(())
+                return Ok(());
             }
             SockOpt::ReceiveQueueSizeOption(_) => {
                 let qs = {
                     let e = self.lock();
                     if !e.Connected() {
-                        return Err(Error::SysError(TcpipErr::ERR_NOT_CONNECTED.sysErr))
+                        return Err(Error::SysError(TcpipErr::ERR_NOT_CONNECTED.sysErr));
                     }
 
                     e.receiver.as_ref().unwrap().RecvQueuedSize() as i32
                 };
 
                 if qs < 0 {
-                    return Err(Error::SysError(TcpipErr::ERR_QUEUE_SIZE_NOT_SUPPORTED.sysErr))
+                    return Err(Error::SysError(
+                        TcpipErr::ERR_QUEUE_SIZE_NOT_SUPPORTED.sysErr,
+                    ));
                 }
                 *opt = SockOpt::ReceiveQueueSizeOption(qs);
-                return Ok(())
+                return Ok(());
             }
             SockOpt::PasscredOption(_) => {
-                let val = if self.Passcred() {
-                    1
-                } else {
-                    0
-                };
+                let val = if self.Passcred() { 1 } else { 0 };
 
                 *opt = SockOpt::PasscredOption(val);
-                return Ok(())
+                return Ok(());
             }
             SockOpt::SendBufferSizeOption(_) => {
                 let qs = {
                     let e = self.lock();
                     if !e.Connected() {
-                        return Err(Error::SysError(TcpipErr::ERR_NOT_CONNECTED.sysErr))
+                        return Err(Error::SysError(TcpipErr::ERR_NOT_CONNECTED.sysErr));
                     }
 
                     e.connected.as_ref().unwrap().SendMaxQueueSize() as i32
                 };
 
                 if qs < 0 {
-                    return Err(Error::SysError(TcpipErr::ERR_QUEUE_SIZE_NOT_SUPPORTED.sysErr))
+                    return Err(Error::SysError(
+                        TcpipErr::ERR_QUEUE_SIZE_NOT_SUPPORTED.sysErr,
+                    ));
                 }
 
                 *opt = SockOpt::SendBufferSizeOption(qs);
-                return Ok(())
+                return Ok(());
             }
             SockOpt::ReceiveBufferSizeOption(_) => {
                 let qs = {
                     let e = self.lock();
                     if !e.Connected() {
-                        return Err(Error::SysError(TcpipErr::ERR_NOT_CONNECTED.sysErr))
+                        return Err(Error::SysError(TcpipErr::ERR_NOT_CONNECTED.sysErr));
                     }
 
                     e.receiver.as_ref().unwrap().RecvMaxQueueSize() as i32
                 };
 
                 if qs < 0 {
-                    return Err(Error::SysError(TcpipErr::ERR_QUEUE_SIZE_NOT_SUPPORTED.sysErr))
+                    return Err(Error::SysError(
+                        TcpipErr::ERR_QUEUE_SIZE_NOT_SUPPORTED.sysErr,
+                    ));
                 }
 
                 *opt = SockOpt::ReceiveBufferSizeOption(qs);
-                return Ok(())
+                return Ok(());
             }
             SockOpt::KeepaliveEnabledOption(_) => {
                 *opt = SockOpt::KeepaliveEnabledOption(0);
                 return Ok(());
             }
             _ => {
-                return Err(Error::SysError(TcpipErr::ERR_UNKNOWN_PROTOCOL_OPTION.sysErr))
+                return Err(Error::SysError(
+                    TcpipErr::ERR_UNKNOWN_PROTOCOL_OPTION.sysErr,
+                ))
             }
         }
     }
@@ -1305,7 +1284,7 @@ impl BaseEndpoint {
         let (receiver, connected) = {
             let e = self.lock();
             if !e.Connected() {
-                return Err(Error::SysError(TcpipErr::ERR_NOT_CONNECTED.sysErr))
+                return Err(Error::SysError(TcpipErr::ERR_NOT_CONNECTED.sysErr));
             }
 
             let receiver = e.receiver.as_ref().unwrap().clone();
@@ -1322,7 +1301,6 @@ impl BaseEndpoint {
             (receiver, connected)
         };
 
-
         if flags & SHUTDOWN_READ != 0 {
             receiver.CloseNotify();
         }
@@ -1331,13 +1309,13 @@ impl BaseEndpoint {
             connected.CloseNotify();
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     // GetLocalAddress returns the local address of the connected endpoint (if
     // available).
     pub fn GetLocalAddress(&self) -> Result<SockAddrUnix> {
-        return Ok(SockAddrUnix::New(&self.lock().path))
+        return Ok(SockAddrUnix::New(&self.lock().path));
     }
 
     // GetRemoteAddress returns the local address of the connected endpoint (if
@@ -1349,7 +1327,7 @@ impl BaseEndpoint {
             return c.unwrap().GetLocalAddress();
         }
 
-        return Err(Error::SysError(SysErr::ENOTCONN))
+        return Err(Error::SysError(SysErr::ENOTCONN));
     }
 
     // Release implements BoundEndpoint.Release.

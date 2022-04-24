@@ -13,21 +13,21 @@
 // limitations under the License.
 
 use alloc::string::String;
-use std::fs::File;
-use std::io::Write;
-use std::fs::OpenOptions;
-use spin::Mutex;
-use lazy_static::lazy_static;
 use chrono::prelude::*;
+use lazy_static::lazy_static;
+use spin::Mutex;
+use std::fs::File;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::os::unix::io::AsRawFd;
 
-use super::qlib::ShareSpace;
-use super::qlib::kernel::IOURING;
 use super::qlib::kernel::Timestamp;
+use super::qlib::kernel::IOURING;
+use super::qlib::ShareSpace;
 use super::ThreadId;
 
 lazy_static! {
-    pub static ref LOG : Mutex<Log> = Mutex::new(Log::New());
+    pub static ref LOG: Mutex<Log> = Mutex::new(Log::New());
 }
 
 pub struct Log {
@@ -44,24 +44,30 @@ pub fn SetSharespace(sharespace: &'static ShareSpace) {
     LOG.lock().shareSpace = sharespace;
 }
 
-pub const LOG_FILE_DEFAULT : &str = "/var/log/quark/quark.log";
-pub const LOG_FILE_FORMAT : &str = "/var/log/quark/{}.log";
-pub  const TIME_FORMAT: &str = "%H:%M:%S%.3f";
+pub const LOG_FILE_DEFAULT: &str = "/var/log/quark/quark.log";
+pub const LOG_FILE_FORMAT: &str = "/var/log/quark/{}.log";
+pub const TIME_FORMAT: &str = "%H:%M:%S%.3f";
 impl Log {
     pub fn New() -> Self {
-        let file = OpenOptions::new().create(true).append(true).open(LOG_FILE_DEFAULT).expect("Log Open fail");
+        let file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(LOG_FILE_DEFAULT)
+            .expect("Log Open fail");
         return Self {
             file: file,
             syncPrint: true,
-            shareSpace: unsafe {
-                &mut *(0 as * mut ShareSpace)
-            },
-        }
+            shareSpace: unsafe { &mut *(0 as *mut ShareSpace) },
+        };
     }
 
     pub fn Reset(&mut self, name: &str) {
-        let filename = format!( "/var/log/quark/{}.log", name);
-        let file = OpenOptions::new().create(true).append(true).open(filename).expect("Log Open fail");
+        let filename = format!("/var/log/quark/{}.log", name);
+        let file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(filename)
+            .expect("Log Open fail");
         self.file = file;
     }
 
@@ -102,7 +108,7 @@ impl Log {
     }
 
     pub fn Now() -> String {
-        return Local::now().format(TIME_FORMAT).to_string()
+        return Local::now().format(TIME_FORMAT).to_string();
     }
 
     pub fn Print(&mut self, level: &str, str: &str) {
@@ -126,12 +132,10 @@ impl Log {
 
 #[macro_export]
 macro_rules! raw {
- // macth like arm for macro
-    ($a:expr,$b:expr,$c:expr)=>{
-        {
-           error!("raw:: {:x}/{:x}/{:x}", $a, $b, $c);
-        }
-    }
+    // macth like arm for macro
+    ($a:expr,$b:expr,$c:expr) => {{
+        error!("raw:: {:x}/{:x}/{:x}", $a, $b, $c);
+    }};
 }
 
 #[macro_export]

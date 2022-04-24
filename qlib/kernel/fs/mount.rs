@@ -12,31 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::string::String;
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
+use alloc::string::String;
 use alloc::string::ToString;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::any::Any;
+use core::ops::Deref;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-use core::ops::Deref;
 
 //use super::super::super::socket::unix::transport::unix::*;
-use super::super::super::linux_def::*;
+use super::super::super::auth::userns::*;
+use super::super::super::auth::*;
 use super::super::super::common::*;
+use super::super::super::linux_def::*;
+use super::super::super::lrc_cache::*;
 use super::super::super::path::*;
 use super::super::task::*;
-use super::super::super::auth::*;
-use super::super::super::auth::userns::*;
-use super::filesystems::*;
-use super::inode::*;
-use super::host::*;
 use super::dirent::*;
-use super::tty::fs::*;
+use super::filesystems::*;
+use super::host::*;
+use super::inode::*;
 use super::mount_overlay::*;
-use super::super::super::lrc_cache::*;
+use super::tty::fs::*;
 
 pub struct LookupContext {
     pub path: String,
@@ -45,7 +45,7 @@ pub struct LookupContext {
 
 pub enum ResolveResult {
     Dirent(Dirent),
-    Path(LookupContext)
+    Path(LookupContext),
 }
 
 pub struct Mount {
@@ -64,7 +64,7 @@ impl Mount {
             Pid: pid,
             root: root.clone(),
             prev: None,
-        }
+        };
     }
 
     pub fn NewRootMount(id: u64, root: &Dirent) -> Self {
@@ -73,7 +73,7 @@ impl Mount {
             Pid: Self::INVALID_MOUNT_ID,
             root: root.clone(),
             prev: None,
-        }
+        };
     }
 
     pub fn NewUndoMount(root: &Dirent) -> Self {
@@ -82,7 +82,7 @@ impl Mount {
             Pid: Self::INVALID_MOUNT_ID,
             root: root.clone(),
             prev: None,
-        }
+        };
     }
 
     pub fn Root(&self) -> Dirent {
@@ -96,11 +96,14 @@ impl Mount {
 
     pub fn IsUndo(&self) -> bool {
         if self.Id == Self::INVALID_MOUNT_ID {
-            assert!(self.Pid != Self::INVALID_MOUNT_ID, "Undo mount with valid parentID");
+            assert!(
+                self.Pid != Self::INVALID_MOUNT_ID,
+                "Undo mount with valid parentID"
+            );
             return true;
         }
 
-        return false
+        return false;
     }
 }
 
@@ -118,7 +121,7 @@ impl Default for MountNsInternal {
             root: Dirent::default(),
             mounts: QMutex::new(BTreeMap::new()),
             mountId: AtomicU64::new(0),
-        }
+        };
     }
 }
 
@@ -135,7 +138,7 @@ impl Deref for MountNs {
 
 impl MountNs {
     pub fn New(task: &Task, root: &Inode) -> Self {
-        let d = Dirent::New(&root, &"/".to_string());  //(Arc::new(QMutex::new(InterDirent::New(root.clone(), &"/".to_string()))));
+        let d = Dirent::New(&root, &"/".to_string()); //(Arc::new(QMutex::new(InterDirent::New(root.clone(), &"/".to_string()))));
         let mut mounts = BTreeMap::new();
         let rootMount = Arc::new(QMutex::new(Mount::NewRootMount(1, &d)));
         mounts.insert(d.ID(), rootMount);
@@ -165,7 +168,11 @@ impl MountNs {
         let replacement = mountPoint.Mount(inode)?;
 
         let parentMnt = self.FindMount(mountPoint).unwrap();
-        let mut childMnt = Mount::New(self.mountId.fetch_add(1, Ordering::SeqCst), parentMnt.lock().Id, &replacement);
+        let mut childMnt = Mount::New(
+            self.mountId.fetch_add(1, Ordering::SeqCst),
+            parentMnt.lock().Id,
+            &replacement,
+        );
 
         mountPoint.clone().DropExtendedReference();
 
@@ -174,22 +181,20 @@ impl MountNs {
         let prev = mounts.get(&mntId);
 
         let havePre = match prev {
-            Some(_) => {
-                true
-            }
-            _ => false
+            Some(_) => true,
+            _ => false,
         };
 
         if havePre {
             childMnt.prev = Some(prev.unwrap().clone());
             mounts.remove(&mntId);
             mounts.insert(replacement.ID(), Arc::new(QMutex::new(childMnt)));
-            return Ok(())
+            return Ok(());
         }
 
         childMnt.prev = Some(Arc::new(QMutex::new(Mount::NewUndoMount(mountPoint))));
         mounts.insert(replacement.ID(), Arc::new(QMutex::new(childMnt)));
-        return Ok(())
+        return Ok(());
     }
 
     pub fn Unmount(&self, node: &Dirent, detachOnly: bool) -> Result<()> {
@@ -207,7 +212,7 @@ impl MountNs {
 
         let m = node.Inode().lock().MountSource.clone();
         if !detachOnly && Arc::strong_count(&m) != 2 {
-            return Err(Error::SysError(SysErr::EBUSY))
+            return Err(Error::SysError(SysErr::EBUSY));
         }
 
         node.UnMount(&prev.lock().root)?;
@@ -228,7 +233,7 @@ impl MountNs {
 
         mounts.remove(&node.ID());
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn FindMount(&self, d: &Dirent) -> Option<Arc<QMutex<Mount>>> {
@@ -239,7 +244,7 @@ impl MountNs {
 
             match mounts.get(&id) {
                 None => (),
-                Some(mount) => return Some(mount.clone())
+                Some(mount) => return Some(mount.clone()),
             }
 
             let tmp;
@@ -270,7 +275,12 @@ impl MountNs {
         return ret;
     }
 
-    pub fn InitPath<'a> (&self, root: &Dirent, wd: &Option<Dirent>, path: &'a str) -> Option<(Dirent, &'a str, &'a str)> {
+    pub fn InitPath<'a>(
+        &self,
+        root: &Dirent,
+        wd: &Option<Dirent>,
+        path: &'a str,
+    ) -> Option<(Dirent, &'a str, &'a str)> {
         let (mut first, mut remain) = SplitFirst(path);
 
         let mut current = match wd {
@@ -280,7 +290,7 @@ impl MountNs {
 
         while first == "/" {
             if remain == "" {
-                return None
+                return None;
             }
 
             current = root.clone();
@@ -292,74 +302,84 @@ impl MountNs {
         return Some((current, first, remain));
     }
 
-
-    pub fn ResolvePath(&self, task: &Task, current: &Dirent, remainingTraversals: &mut u32) -> Result<ResolveResult> {
+    pub fn ResolvePath(
+        &self,
+        task: &Task,
+        current: &Dirent,
+        remainingTraversals: &mut u32,
+    ) -> Result<ResolveResult> {
         let inode = current.Inode();
         let target = inode.GetLink(task);
 
         match target {
             Ok(target) => {
                 if *remainingTraversals == 0 {
-                    return Err(Error::SysError(SysErr::ELOOP))
+                    return Err(Error::SysError(SysErr::ELOOP));
                 }
 
-                return Ok(ResolveResult::Dirent(target))
+                return Ok(ResolveResult::Dirent(target));
             }
             Err(Error::SysError(SysErr::ENOLINK)) => {
                 return Ok(ResolveResult::Dirent(current.clone()))
             }
             Err(Error::ErrResolveViaReadlink) => {
                 if *remainingTraversals == 0 {
-                    return Err(Error::SysError(SysErr::ELOOP))
+                    return Err(Error::SysError(SysErr::ELOOP));
                 }
 
                 let targetPath = inode.ReadLink(task)?;
                 *remainingTraversals -= 1;
 
                 let wd = match &(current.0).0.lock().Parent {
-                    None => {
-                        None
-                    },
-                    Some(ref wd) => {
-                        Some(wd.clone())
-                    },
+                    None => None,
+                    Some(ref wd) => Some(wd.clone()),
                 };
 
-                return Ok(ResolveResult::Path(LookupContext{
+                return Ok(ResolveResult::Path(LookupContext {
                     path: targetPath,
-                    wd: wd
+                    wd: wd,
                 }));
             }
-            Err(err) => Err(err)
+            Err(err) => Err(err),
         }
     }
 
-    pub fn FindDirent(&self, task: &Task, root: &Dirent, wd: Option<Dirent>, path: &str, remainingTraversals: &mut u32, resolve: bool) -> Result<Dirent> {
+    pub fn FindDirent(
+        &self,
+        task: &Task,
+        root: &Dirent,
+        wd: Option<Dirent>,
+        path: &str,
+        remainingTraversals: &mut u32,
+        resolve: bool,
+    ) -> Result<Dirent> {
         if path.len() == 0 {
-            return Err(Error::SysError(SysErr::ENOENT))
+            return Err(Error::SysError(SysErr::ENOENT));
         }
 
         let (mut current, mut first, mut remain) = match self.InitPath(root, &wd, path) {
             None => return Ok(root.clone()),
-            Some(res) => res
+            Some(res) => res,
         };
 
         let mut remainStr;
 
         let mut contexts = Vec::new();
 
-
         loop {
             let currentInode = current.Inode();
             if !Arc::ptr_eq(&current, root) {
                 if !currentInode.StableAttr().IsDir() {
-                    return Err(Error::SysError(SysErr::ENOTDIR))
+                    return Err(Error::SysError(SysErr::ENOTDIR));
                 }
 
-                currentInode.CheckPermission(task, &PermMask {
-                    execute: true,
-                    ..Default::default()
-                })?
+                currentInode.CheckPermission(
+                    task,
+                    &PermMask {
+                        execute: true,
+                        ..Default::default()
+                    },
+                )?
             }
 
             let next = match current.Walk(task, root, first) {
@@ -371,7 +391,7 @@ impl MountNs {
             };
 
             if !resolve {
-                if remain != ""  {
+                if remain != "" {
                     match self.ResolvePath(task, &next, remainingTraversals)? {
                         ResolveResult::Dirent(d) => current = d,
                         ResolveResult::Path(context) => {
@@ -382,8 +402,11 @@ impl MountNs {
 
                             match self.InitPath(root, &context.wd, remain) {
                                 None => (),
-                                Some((tnext, _tfirst, _tremain)) => {
+                                Some((tnext, tfirst, tremain)) => {
                                     current = tnext;
+                                    first = tfirst;
+                                    remain = tremain;
+                                    continue;
                                 }
                             };
                         }
@@ -392,7 +415,7 @@ impl MountNs {
                     match contexts.pop() {
                         None => {
                             next.ExtendReference();
-                            return Ok(next)
+                            return Ok(next);
                         }
                         Some(path) => {
                             remainStr = path;
@@ -410,7 +433,7 @@ impl MountNs {
                             match contexts.pop() {
                                 None => {
                                     next.ExtendReference();
-                                    return Ok(next)
+                                    return Ok(next);
                                 }
                                 Some(path) => {
                                     remainStr = path;
@@ -419,7 +442,7 @@ impl MountNs {
                                 }
                             }
                         }
-                    },
+                    }
                     ResolveResult::Path(context) => {
                         //error!("FindDirent 3.4");
                         if remain != "" {
@@ -448,7 +471,13 @@ impl MountNs {
         }
     }
 
-    pub fn ResolveExecutablePath(&self, task: &Task, wd: &str, name: &str, paths: &Vec<String>) -> Result<String> {
+    pub fn ResolveExecutablePath(
+        &self,
+        task: &Task,
+        wd: &str,
+        name: &str,
+        paths: &Vec<String>,
+    ) -> Result<String> {
         if IsAbs(name) {
             return Ok(name.to_string());
         }
@@ -461,7 +490,7 @@ impl MountNs {
                 }
 
                 if !IsAbs(&wd) {
-                    return Ok(Join(&wd, name))
+                    return Ok(Join(&wd, name));
                 }
             }
         }
@@ -474,7 +503,9 @@ impl MountNs {
 
             let d = self.FindDirent(task, &root, None, &binPath, &mut traversals, true);
             let d = match d {
-                Err(Error::SysError(SysErr::ENOENT)) | Err(Error::SysError(SysErr::EACCES)) => continue,
+                Err(Error::SysError(SysErr::ENOENT)) | Err(Error::SysError(SysErr::EACCES)) => {
+                    continue
+                }
                 Err(error) => return Err(error),
                 Ok(d) => d,
             };
@@ -484,30 +515,33 @@ impl MountNs {
                 continue;
             }
 
-            let err = inode.CheckPermission(&task, &PermMask {
-                read: true,
-                execute: true,
-                write: false,
-            });
+            let err = inode.CheckPermission(
+                &task,
+                &PermMask {
+                    read: true,
+                    execute: true,
+                    write: false,
+                },
+            );
 
             match err {
                 Err(_) => continue,
                 Ok(_) => (),
             }
 
-            return Ok(Join(&Join(&"/".to_string(), p), name))
+            return Ok(Join(&Join(&"/".to_string(), p), name));
         }
 
-        return Err(Error::SysError(SysErr::ENOENT))
+        return Err(Error::SysError(SysErr::ENOENT));
     }
 }
 
-const PREFIX : &str = "PATH=";
-pub fn GetPath(env : &[String]) -> Vec<String> {
+const PREFIX: &str = "PATH=";
+pub fn GetPath(env: &[String]) -> Vec<String> {
     for e in env {
         if HasPrefix(e, PREFIX) {
             let v = TrimPrefix(e, PREFIX);
-            let ret = v.split(':').map(|s|s.to_string()).collect();
+            let ret = v.split(':').map(|s| s.to_string()).collect();
             return ret;
         }
     }
@@ -523,7 +557,7 @@ pub enum MountOptions {
 
 impl Default for MountOptions {
     fn default() -> Self {
-        return Self::Default
+        return Self::Default;
     }
 }
 
@@ -531,7 +565,7 @@ impl MountOptions {
     pub fn HostOptions(&self) -> Result<Arc<QMutex<SuperOperations>>> {
         match self {
             MountOptions::Host(o) => Ok(o.clone()),
-            _ => Err(Error::InvalidInput)
+            _ => Err(Error::InvalidInput),
         }
     }
 }
@@ -555,17 +589,20 @@ impl Default for MountSource {
             MountSourceOperations: Arc::new(QMutex::new(SimpleMountSourceOperations::default())),
             fscache: LruCache::New(DEFAULT_DIRENT_CACHE_SIZE),
             frozen: Vec::new(),
-        }
+        };
     }
 }
 
 impl DirentOperations for MountSource {
     fn Revalidate(&self, name: &str, parent: &Inode, child: &Inode) -> bool {
-        return self.MountSourceOperations.lock().Revalidate(name, parent, child)
+        return self
+            .MountSourceOperations
+            .lock()
+            .Revalidate(name, parent, child);
     }
 
     fn Keep(&self, dirent: &Dirent) -> bool {
-        return self.MountSourceOperations.lock().Keep(dirent)
+        return self.MountSourceOperations.lock().Keep(dirent);
     }
 
     fn CacheReadDir(&self) -> bool {
@@ -574,7 +611,11 @@ impl DirentOperations for MountSource {
 }
 
 impl MountSource {
-    pub fn New(mops: &Arc<QMutex<MountSourceOperations>>, filesystem: &Filesystem, flags: &MountSourceFlags) -> Self {
+    pub fn New(
+        mops: &Arc<QMutex<MountSourceOperations>>,
+        filesystem: &Filesystem,
+        flags: &MountSourceFlags,
+    ) -> Self {
         /*let mut fsType = "none".to_string();
         if let fs = Some(filesystem) {
             fsType = filesystem.Name()
@@ -587,10 +628,14 @@ impl MountSource {
             MountSourceOperations: mops.clone(),
             fscache: LruCache::New(DEFAULT_DIRENT_CACHE_SIZE),
             frozen: Vec::new(),
-        }
+        };
     }
 
-    pub fn NewPtsMountSource(mops: &Arc<QMutex<PtsSuperOperations>>, filesystem: &Filesystem, flags: &MountSourceFlags) -> Self {
+    pub fn NewPtsMountSource(
+        mops: &Arc<QMutex<PtsSuperOperations>>,
+        filesystem: &Filesystem,
+        flags: &MountSourceFlags,
+    ) -> Self {
         let fsType = filesystem.Name();
         return Self {
             Flags: flags.clone(),
@@ -598,10 +643,14 @@ impl MountSource {
             MountSourceOperations: mops.clone(),
             fscache: LruCache::New(DEFAULT_DIRENT_CACHE_SIZE),
             frozen: Vec::new(),
-        }
+        };
     }
 
-    pub fn NewOverlayMountSource(mops: &Arc<QMutex<OverlayMountSourceOperations>>, filesystem: &Filesystem, flags: &MountSourceFlags) -> Self {
+    pub fn NewOverlayMountSource(
+        mops: &Arc<QMutex<OverlayMountSourceOperations>>,
+        filesystem: &Filesystem,
+        flags: &MountSourceFlags,
+    ) -> Self {
         let fsType = filesystem.Name();
         return Self {
             Flags: flags.clone(),
@@ -609,10 +658,16 @@ impl MountSource {
             MountSourceOperations: mops.clone(),
             fscache: LruCache::New(DEFAULT_DIRENT_CACHE_SIZE),
             frozen: Vec::new(),
-        }
+        };
     }
 
-    pub fn NewHostMountSource(root: &str, mounter: &FileOwner, filesystem: &Filesystem, flags: &MountSourceFlags, dontTranslateOwnership: bool) -> Self {
+    pub fn NewHostMountSource(
+        root: &str,
+        mounter: &FileOwner,
+        filesystem: &Filesystem,
+        flags: &MountSourceFlags,
+        dontTranslateOwnership: bool,
+    ) -> Self {
         let mops = Arc::new(QMutex::new(SuperOperations {
             mountSourceOperations: Default::default(),
             root: root.to_string(),
@@ -704,7 +759,7 @@ impl MountSource {
 
     #[cfg(test)]
     pub fn ContainsKey(&self, key: u64) -> bool {
-        return self.fscache.ContainsKey(key)
+        return self.fscache.ContainsKey(key);
     }
 
     pub fn FlashDirentRefs(&mut self) {
@@ -749,21 +804,21 @@ pub struct SimpleMountSourceOperations {
 
 impl DirentOperations for SimpleMountSourceOperations {
     fn Revalidate(&self, _name: &str, _parent: &Inode, _child: &Inode) -> bool {
-        return self.revalidate
+        return self.revalidate;
     }
 
     fn Keep(&self, _dirent: &Dirent) -> bool {
-        return self.keep
+        return self.keep;
     }
 
     fn CacheReadDir(&self) -> bool {
-        return self.cacheReaddir
+        return self.cacheReaddir;
     }
 }
 
 impl MountSourceOperations for SimpleMountSourceOperations {
     fn as_any(&self) -> &Any {
-        return self
+        return self;
     }
 
     fn Destroy(&mut self) {}
@@ -794,19 +849,19 @@ pub struct FsInfo {
 
 #[cfg(test1)]
 mod tests {
-    use alloc::sync::Arc;
     use crate::qlib::mutex::*;
-    use core::any::Any;
     use alloc::rc::Rc;
+    use alloc::sync::Arc;
+    use core::any::Any;
     use core::cell::RefCell;
     use core::ops::Deref;
 
-    use super::*;
-    use super::super::flags::*;
-    use super::super::dentry::*;
-    use super::super::file::*;
     use super::super::super::auth::*;
     use super::super::super::mem::seq::*;
+    use super::super::dentry::*;
+    use super::super::file::*;
+    use super::super::flags::*;
+    use super::*;
     //use super::super::super::Common::*;
     //use super::super::super::libcDef::*;
 
@@ -819,7 +874,7 @@ mod tests {
             ..Default::default()
         };
 
-        return Inode(Arc::new(QMutex::new(inodeInternal)))
+        return Inode(Arc::new(QMutex::new(inodeInternal)));
     }
 
     fn NewMockInodeOperations() -> MockInodeOperations {
@@ -831,7 +886,7 @@ mod tests {
             ..Default::default()
         };
 
-        return MockInodeOperations(Arc::new(QMutex::new(internal)))
+        return MockInodeOperations(Arc::new(QMutex::new(internal)));
     }
 
     fn NewMockMountSource(cacheSize: u64) -> MountSource {
@@ -844,7 +899,7 @@ mod tests {
             MountSourceOperations: msops,
             fscache: LruCache::New(cacheSize),
             ..Default::default()
-        }
+        };
     }
 
     struct MockMountSourceOps {
@@ -854,7 +909,7 @@ mod tests {
 
     impl DirentOperations for MockMountSourceOps {
         fn Revalidate(&self, _name: &str, _parent: &Inode, _child: &Inode) -> bool {
-            return self.revalidate
+            return self.revalidate;
         }
 
         fn Keep(&self, _dirent: &Dirent) -> bool {
@@ -862,13 +917,13 @@ mod tests {
         }
 
         fn CacheReadDir(&self) -> bool {
-            return self.keep
+            return self.keep;
         }
     }
 
     impl MountSourceOperations for MockMountSourceOps {
         fn as_any(&self) -> &Any {
-            return self
+            return self;
         }
 
         fn Destroy(&mut self) {}
@@ -885,11 +940,11 @@ mod tests {
 
     impl FileOperations for MockFileOperations {
         fn as_any(&self) -> &Any {
-            return self
+            return self;
         }
 
         fn FopsType(&self) -> FileOpsType {
-            return FileOpsType::MockFileOperations
+            return FileOpsType::MockFileOperations;
         }
 
         fn Seekable(&self) -> bool {
@@ -897,43 +952,80 @@ mod tests {
         }
 
         fn Seek(&mut self, _task: &Task, _f: &mut File, _whence: i32, _offset: i64) -> Result<i64> {
-            return Ok(0)
+            return Ok(0);
         }
 
-        fn ReadDir(&self, _task: &Task, _f: &mut File, _serializer: &mut DentrySerializer) -> Result<i64> {
-            return Ok(0)
+        fn ReadDir(
+            &self,
+            _task: &Task,
+            _f: &mut File,
+            _serializer: &mut DentrySerializer,
+        ) -> Result<i64> {
+            return Ok(0);
         }
 
-        fn ReadAt(&self, _task: &Task, _f: &mut File, _dsts: BlockSeq, _offset: i64) -> Result<i64> {
-            return Ok(0)
+        fn ReadAt(
+            &self,
+            _task: &Task,
+            _f: &mut File,
+            _dsts: BlockSeq,
+            _offset: i64,
+        ) -> Result<i64> {
+            return Ok(0);
         }
 
-        fn WriteAt(&self, _task: &Task, _f: &mut File, _srcs: BlockSeq, _offset: i64) -> Result<i64> {
-            return Ok(0)
+        fn WriteAt(
+            &self,
+            _task: &Task,
+            _f: &mut File,
+            _srcs: BlockSeq,
+            _offset: i64,
+        ) -> Result<i64> {
+            return Ok(0);
         }
 
         fn Append(&self, _task: &Task, _f: &File, _srcs: &[IoVec]) -> Result<(i64, i64)> {
-            return Err(Error::SysError(SysErr::ESPIPE))
+            return Err(Error::SysError(SysErr::ESPIPE));
         }
 
-        fn Fsync(&self, _task: &Task, _f: &mut File, _start: i64, _end: i64, _syncType: SyncType) -> Result<()> {
-            return Ok(())
+        fn Fsync(
+            &self,
+            _task: &Task,
+            _f: &mut File,
+            _start: i64,
+            _end: i64,
+            _syncType: SyncType,
+        ) -> Result<()> {
+            return Ok(());
         }
 
         fn Flush(&self, _task: &Task, _f: &mut File) -> Result<()> {
-            return Ok(())
+            return Ok(());
         }
 
         fn UnstableAttr(&self, _task: &Task, _f: &File) -> Result<UnstableAttr> {
-            return Ok(UnstableAttr::default())
+            return Ok(UnstableAttr::default());
         }
 
-        fn Ioctl(&mut self, _task: &Task, _f: &mut File, _fd: i32, _request: u64, _val: u64) -> Result<()> {
-            return Ok(())
+        fn Ioctl(
+            &mut self,
+            _task: &Task,
+            _f: &mut File,
+            _fd: i32,
+            _request: u64,
+            _val: u64,
+        ) -> Result<()> {
+            return Ok(());
         }
 
-        fn IterateDir(&self, _task: &Task,_d: &Dirent, _dirCtx: &mut DirCtx, _offset: i32) -> (i32, Result<i64>) {
-            return (0, Ok(0))
+        fn IterateDir(
+            &self,
+            _task: &Task,
+            _d: &Dirent,
+            _dirCtx: &mut DirCtx,
+            _offset: i32,
+        ) -> (i32, Result<i64>) {
+            return (0, Ok(0));
         }
     }
 
@@ -951,7 +1043,7 @@ mod tests {
 
     impl Default for MockInodeOperations {
         fn default() -> Self {
-            return Self(Arc::new(QMutex::new(Default::default())))
+            return Self(Arc::new(QMutex::new(Default::default())));
         }
     }
 
@@ -965,14 +1057,14 @@ mod tests {
 
     impl InodeOperations for MockInodeOperations {
         fn as_any(&self) -> &Any {
-            return self
+            return self;
         }
 
         fn IopsType(&self) -> IopsType {
             return IopsType::MockInodeOperations;
         }
 
-        fn InodeFileType(&self) -> InodeFileType{
+        fn InodeFileType(&self) -> InodeFileType {
             return InodeFileType::Mock;
         }
 
@@ -987,10 +1079,17 @@ mod tests {
 
             let inode = Inode(Arc::new(QMutex::new(inodeInternal)));
             let dirent = Dirent::New(&inode, name);
-            return Ok(dirent)
+            return Ok(dirent);
         }
 
-        fn Create(&self, _task: &Task, dir: &mut Inode, name: &str, _flags: &FileFlags, _perm: &FilePermissions) -> Result<Arc<QMutex<File>>> {
+        fn Create(
+            &self,
+            _task: &Task,
+            dir: &mut Inode,
+            name: &str,
+            _flags: &FileFlags,
+            _perm: &FilePermissions,
+        ) -> Result<Arc<QMutex<File>>> {
             self.lock().createCalled = true;
             let inodeInternal = InodeIntern {
                 InodeOp: Arc::new(Self::default()),
@@ -1008,67 +1107,111 @@ mod tests {
                 flags: FileFlags::default(),
                 offset: 0,
                 FileOp: Rc::new(RefCell::new(MockFileOperations::default())),
-            })))
+            })));
         }
 
-        fn CreateDirectory(&self, _task: &Task, _dir: &mut Inode, _name: &str, _perm: &FilePermissions) -> Result<()> {
+        fn CreateDirectory(
+            &self,
+            _task: &Task,
+            _dir: &mut Inode,
+            _name: &str,
+            _perm: &FilePermissions,
+        ) -> Result<()> {
             self.lock().createDirectoryCalled = true;
-            return Ok(())
+            return Ok(());
         }
 
-        fn CreateLink(&self, _task: &Task, _dir: &mut Inode, _oldname: &str, _newname: &str) -> Result<()> {
+        fn CreateLink(
+            &self,
+            _task: &Task,
+            _dir: &mut Inode,
+            _oldname: &str,
+            _newname: &str,
+        ) -> Result<()> {
             self.lock().createLinkCalled = true;
-            return Ok(())
+            return Ok(());
         }
 
-        fn CreateHardLink(&self, _task: &Task, _dir: &mut Inode, _target: &Inode, _name: &str) -> Result<()> {
-            return Err(Error::None)
+        fn CreateHardLink(
+            &self,
+            _task: &Task,
+            _dir: &mut Inode,
+            _target: &Inode,
+            _name: &str,
+        ) -> Result<()> {
+            return Err(Error::None);
         }
 
-        fn CreateFifo(&self, _task: &Task, _dir: &mut Inode, _name: &str, _perm: &FilePermissions) -> Result<()> {
-            return Err(Error::None)
+        fn CreateFifo(
+            &self,
+            _task: &Task,
+            _dir: &mut Inode,
+            _name: &str,
+            _perm: &FilePermissions,
+        ) -> Result<()> {
+            return Err(Error::None);
         }
 
         //fn RemoveDirent(&mut self, dir: &mut InodeStruStru, remove: &Arc<QMutex<Dirent>>) -> Result<()> ;
         fn Remove(&self, _task: &Task, _dir: &mut Inode, _name: &str) -> Result<()> {
-            return Ok(())
+            return Ok(());
         }
 
         fn RemoveDirectory(&self, _task: &Task, _dir: &mut Inode, _name: &str) -> Result<()> {
-            return Ok(())
+            return Ok(());
         }
 
-        fn Rename(&self, _task: &Task, _dir: &mut Inode, _oldParent: &Inode, _oldname: &str, _newParent: &Inode, _newname: &str, _replacement: bool) -> Result<()> {
+        fn Rename(
+            &self,
+            _task: &Task,
+            _dir: &mut Inode,
+            _oldParent: &Inode,
+            _oldname: &str,
+            _newParent: &Inode,
+            _newname: &str,
+            _replacement: bool,
+        ) -> Result<()> {
             self.lock().renameCalled = true;
-            return Ok(())
+            return Ok(());
         }
 
-        fn Bind(&self, _task: &Task, _dir: &Inode, _name: &str, _data: &BoundEndpoint, _perms: &FilePermissions) -> Result<Dirent>;
+        fn Bind(
+            &self,
+            _task: &Task,
+            _dir: &Inode,
+            _name: &str,
+            _data: &BoundEndpoint,
+            _perms: &FilePermissions,
+        ) -> Result<Dirent>;
         fn BoundEndpoint(&self, _task: &Task, inode: &Inode, path: &str) -> Option<BoundEndpoint>;
 
-
-        fn GetFile(&self, _dir: &Inode, _dirent: &Dirent, _flags: FileFlags) -> Result<Arc<QMutex<File>>> {
-            return Err(Error::None)
+        fn GetFile(
+            &self,
+            _dir: &Inode,
+            _dirent: &Dirent,
+            _flags: FileFlags,
+        ) -> Result<Arc<QMutex<File>>> {
+            return Err(Error::None);
         }
 
         fn UnstableAttr(&self, _dir: &Inode) -> Result<UnstableAttr> {
-            return Ok(self.lock().UAttr)
+            return Ok(self.lock().UAttr);
         }
 
         fn Getxattr(&self, _dir: &Inode, _name: &str) -> Result<String> {
-            return Err(Error::None)
+            return Err(Error::None);
         }
 
         fn Setxattr(&self, _dir: &mut Inode, _name: &str, _value: &str) -> Result<()> {
-            return Err(Error::None)
+            return Err(Error::None);
         }
 
         fn Listxattr(&self, _dir: &Inode) -> Result<Vec<String>> {
-            return Err(Error::None)
+            return Err(Error::None);
         }
 
         fn Check(&self, task: &Task, dir: &Inode, reqPerms: PermMask) -> Result<bool> {
-            return ContextCanAccessFile(task, dir, reqPerms)
+            return ContextCanAccessFile(task, dir, reqPerms);
         }
 
         fn SetPermissions(&self, _task: &Task, _dir: &mut Inode, _f: FilePermissions) -> bool {
@@ -1076,27 +1219,33 @@ mod tests {
         }
 
         fn SetOwner(&self, _task: &Task, _dir: &mut Inode, _owner: &FileOwner) -> Result<()> {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         fn SetTimestamps(&self, _task: &Task, _dir: &mut Inode, _ts: &InterTimeSpec) -> Result<()> {
-            return Ok(())
+            return Ok(());
         }
 
         fn Truncate(&self, _task: &Task, _dir: &mut Inode, _size: i64) -> Result<()> {
-            return Ok(())
+            return Ok(());
         }
 
-        fn Allocate(&self, _task: &Task, _dir: &mut Inode, _offset: i64, _length: i64) -> Result<()> {
-            return Ok(())
+        fn Allocate(
+            &self,
+            _task: &Task,
+            _dir: &mut Inode,
+            _offset: i64,
+            _length: i64,
+        ) -> Result<()> {
+            return Ok(());
         }
 
-        fn ReadLink(&self, _task: &Task,_dir: &Inode) -> Result<String> {
-            return Err(Error::None)
+        fn ReadLink(&self, _task: &Task, _dir: &Inode) -> Result<String> {
+            return Err(Error::None);
         }
 
         fn GetLink(&self, _task: &Task, _dir: &Inode) -> Result<Dirent> {
-            return Err(Error::SysError(SysErr::ENOLINK))
+            return Err(Error::SysError(SysErr::ENOLINK));
         }
 
         fn AddLink(&self, _task: &Task) {}
@@ -1108,11 +1257,11 @@ mod tests {
         }
 
         fn Sync(&self) -> Result<()> {
-            return Ok(())
+            return Ok(());
         }
 
         fn StatFS(&self, _task: &Task) -> Result<FsInfo> {
-            return Err(Error::SysError(SysErr::ENOSYS))
+            return Err(Error::SysError(SysErr::ENOSYS));
         }
     }
 
@@ -1121,29 +1270,38 @@ mod tests {
         let task = Task::default();
 
         let ms = Arc::new(QMutex::new(NewMockMountSource(100)));
-        let rootInode = NewMockInode(&ms, &StableAttr {
-            Type: InodeType::Directory,
-            ..Default::default()
-        });
+        let rootInode = NewMockInode(
+            &ms,
+            &StableAttr {
+                Type: InodeType::Directory,
+                ..Default::default()
+            },
+        );
 
         let mut mm = MountNs::New(&rootInode);
         let rootDirent = mm.Root();
 
-        let child = rootDirent.Walk(&task, &rootDirent, &"child".to_string()).unwrap();
+        let child = rootDirent
+            .Walk(&task, &rootDirent, &"child".to_string())
+            .unwrap();
         child.ExtendReference();
 
         assert!(ms.lock().ContainsKey(child.lock().Id));
 
         let subms = Arc::new(QMutex::new(NewMockMountSource(100)));
-        let submountInode = NewMockInode(&subms, &StableAttr {
-            Type: InodeType::Directory,
-            ..Default::default()
-        });
-
+        let submountInode = NewMockInode(
+            &subms,
+            &StableAttr {
+                Type: InodeType::Directory,
+                ..Default::default()
+            },
+        );
 
         mm.Mount(&child, &submountInode).unwrap();
 
-        let child2 = rootDirent.Walk(&task, &rootDirent, &"child".to_string()).unwrap();
+        let child2 = rootDirent
+            .Walk(&task, &rootDirent, &"child".to_string())
+            .unwrap();
         child2.ExtendReference();
 
         assert!(!child.lock().Id != child2.lock().Id);

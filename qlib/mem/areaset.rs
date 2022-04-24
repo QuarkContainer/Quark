@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::super::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
-use core::ops::Deref;
-use alloc::sync::Arc;
-use alloc::sync::Weak;
 use alloc::string::String;
 use alloc::string::ToString;
+use alloc::sync::Arc;
+use alloc::sync::Weak;
 use core::ops::Bound::*;
-use super::super::mutex::*;
+use core::ops::Deref;
 
 use super::super::range::*;
 
@@ -51,9 +51,7 @@ impl<T: AreaValue> Area<T> {
 
     pub fn AreaSeg(&self) -> AreaSeg<T> {
         match self {
-            Self::AreaSeg(ref seg) => {
-                seg.clone()
-            }
+            Self::AreaSeg(ref seg) => seg.clone(),
             _ => AreaSeg::default(),
         }
     }
@@ -91,11 +89,11 @@ impl<T: AreaValue> Eq for AreaSeg<T> {}
 
 impl<T: AreaValue> AreaSeg<T> {
     pub fn New(entry: AreaEntry<T>) -> Self {
-        return Self(entry)
+        return Self(entry);
     }
 
     pub fn Value(&self) -> T {
-        return self.0.lock().Value().clone()
+        return self.0.lock().Value().clone();
     }
 
     pub fn SetValue(&self, value: T) {
@@ -105,10 +103,10 @@ impl<T: AreaValue> AreaSeg<T> {
     pub fn NextNonEmpty(&self) -> (AreaSeg<T>, AreaGap<T>) {
         let gap = self.NextGap();
         if gap.Range().Len() != 0 {
-            return (AreaSeg::default(), gap)
+            return (AreaSeg::default(), gap);
         }
 
-        return (gap.NextSeg(), AreaGap::default())
+        return (gap.NextSeg(), AreaGap::default());
     }
 
     pub fn Ok(&self) -> bool {
@@ -128,7 +126,7 @@ impl<T: AreaValue> AreaSeg<T> {
             return AreaGap::default();
         }
 
-        return AreaGap(self.0.clone())
+        return AreaGap(self.0.clone());
     }
 
     pub fn NextSeg(&self) -> AreaSeg<T> {
@@ -136,7 +134,7 @@ impl<T: AreaValue> AreaSeg<T> {
             return self.clone();
         }
 
-        return AreaSeg(self.0.NextEntry().unwrap())
+        return AreaSeg(self.0.NextEntry().unwrap());
     }
 
     pub fn PrevSeg(&self) -> AreaSeg<T> {
@@ -144,7 +142,7 @@ impl<T: AreaValue> AreaSeg<T> {
             return self.clone();
         }
 
-        return AreaSeg(self.0.PrevEntry().unwrap())
+        return AreaSeg(self.0.PrevEntry().unwrap());
     }
 }
 
@@ -153,7 +151,7 @@ pub struct AreaGap<T: AreaValue>(pub AreaEntry<T>); //the entry before the gap
 
 impl<T: AreaValue> AreaGap<T> {
     pub fn New(entry: AreaEntry<T>) -> Self {
-        return Self(entry)
+        return Self(entry);
     }
 
     pub fn Ok(&self) -> bool {
@@ -182,7 +180,7 @@ impl<T: AreaValue> AreaGap<T> {
         }
 
         let prevEntry = self.0.PrevEntry().unwrap(); //Gap's entry can't be tail;
-        return Self(prevEntry)
+        return Self(prevEntry);
     }
 
     pub fn NextGap(&self) -> Self {
@@ -191,7 +189,7 @@ impl<T: AreaValue> AreaGap<T> {
         }
 
         let nextEntry = self.0.NextEntry().unwrap(); //Gap's entry can't be tail;
-        return Self(nextEntry)
+        return Self(nextEntry);
     }
 
     pub fn Range(&self) -> Range {
@@ -221,7 +219,10 @@ pub struct AreaEntryInternal<T: AreaValue> {
 
 impl<T: AreaValue> AreaEntryInternal<T> {
     pub fn Value(&self) -> &T {
-        return self.value.as_ref().expect("AreaEntryInternal get None, it is head/tail")
+        return self
+            .value
+            .as_ref()
+            .expect("AreaEntryInternal get None, it is head/tail");
     }
 }
 
@@ -235,7 +236,7 @@ impl<T: AreaValue> AreaEntryWeak<T> {
             Some(c) => c,
         };
 
-        return Some(AreaEntry(c))
+        return Some(AreaEntry(c));
     }
 }
 
@@ -270,7 +271,7 @@ impl<T: AreaValue> AreaEntry<T> {
             ..Default::default()
         };
 
-        return Self(Arc::new(QMutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)));
     }
 
     pub fn New(start: u64, len: u64, vma: T) -> Self {
@@ -280,14 +281,13 @@ impl<T: AreaValue> AreaEntry<T> {
             ..Default::default()
         };
 
-        return Self(Arc::new(QMutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)));
     }
 
     pub fn Remove(&self) {
         let mut curr = self.lock();
         let prev = curr.prev.take().expect("prev is null");
         let next = curr.next.take().expect("next is null");
-
 
         prev.Upgrade().unwrap().lock().next = Some(next.clone());
         (*next).lock().prev = Some(prev);
@@ -333,7 +333,7 @@ impl<T: AreaValue> AreaEntry<T> {
             let end = next.Range().Start();
             let start = cur.Range().End();
             if start != end {
-                return Some(AreaGap(cur))
+                return Some(AreaGap(cur));
             }
 
             cur = next;
@@ -370,10 +370,10 @@ impl<T: AreaValue> AreaEntry<T> {
             let start = prev.Range().End();
             let end = cur.Range().Start();
             if start != end {
-                return Some(AreaGap(prev))
+                return Some(AreaGap(prev));
             }
             cur = prev
-        };
+        }
 
         return None;
     }
@@ -407,7 +407,7 @@ impl<T: AreaValue> AreaSet<T> {
             head: head,
             tail: tail,
             map: BTreeMap::new(),
-        }
+        };
     }
 
     pub fn Print(&self) -> String {
@@ -486,7 +486,7 @@ impl<T: AreaValue> AreaSet<T> {
     //return last valid seg, i.e. not include head/tail
     pub fn LastSeg(&self) -> AreaSeg<T> {
         let last = self.tail.PrevEntry().unwrap();
-        return AreaSeg(last)
+        return AreaSeg(last);
     }
 
     pub fn FirstGap(&self) -> AreaGap<T> {
@@ -509,9 +509,7 @@ impl<T: AreaValue> AreaSet<T> {
 
         let mut iter = self.map.range((Unbounded, Included(key))).rev();
         let entry = match iter.next() {
-            None => {
-                self.head.clone()
-            },
+            None => self.head.clone(),
             Some((_, v)) => v.clone(),
         };
 
@@ -655,11 +653,19 @@ impl<T: AreaValue> AreaSet<T> {
         let next = gap.NextSeg();
 
         if prev.Ok() && prev.Range().End() > r.Start() {
-            panic!("new segment {:x?} overlaps predecessor {:x?}", r, prev.Range())
+            panic!(
+                "new segment {:x?} overlaps predecessor {:x?}",
+                r,
+                prev.Range()
+            )
         }
 
         if next.Ok() && next.Range().Start() < r.End() {
-            panic!("new segment {:x?} overlaps successor {:x?}", r, next.Range())
+            panic!(
+                "new segment {:x?} overlaps successor {:x?}",
+                r,
+                next.Range()
+            )
         }
 
         //can't enable merge segment as the return merged segment might override the COW page
@@ -711,7 +717,10 @@ impl<T: AreaValue> AreaSet<T> {
     pub fn InsertWithoutMerging(&mut self, gap: &AreaGap<T>, r: &Range, val: T) -> AreaSeg<T> {
         let gr = gap.Range();
         if !gr.IsSupersetOf(r) {
-            panic!("cannot insert segment range {:?} into gap range {:?}", r, gr);
+            panic!(
+                "cannot insert segment range {:?} into gap range {:?}",
+                r, gr
+            );
         }
 
         return self.InsertWithoutMergingUnchecked(gap, r, val);
@@ -720,7 +729,12 @@ impl<T: AreaValue> AreaSet<T> {
     // InsertWithoutMergingUnchecked inserts the given segment into the given gap
     // and returns an iterator to the inserted segment. All existing iterators
     // (including gap, but not including the returned iterator) are invalidated.
-    pub fn InsertWithoutMergingUnchecked(&mut self, gap: &AreaGap<T>, r: &Range, val: T) -> AreaSeg<T> {
+    pub fn InsertWithoutMergingUnchecked(
+        &mut self,
+        gap: &AreaGap<T>,
+        r: &Range,
+        val: T,
+    ) -> AreaSeg<T> {
         let prev = gap.PrevSeg();
         let n = prev.InsertAfter(r, val);
         self.map.insert(r.Start(), n.clone());
@@ -776,7 +790,11 @@ impl<T: AreaValue> AreaSet<T> {
     // If first is not the predecessor of second, Merge panics.
     pub fn Merge(&mut self, first: &AreaSeg<T>, second: &AreaSeg<T>) -> AreaSeg<T> {
         if first.NextSeg() != second.clone() {
-            panic!("attempt to merge non-neighboring segments {:?}, {:?}", first.Range(), second.Range())
+            panic!(
+                "attempt to merge non-neighboring segments {:?}, {:?}",
+                first.Range(),
+                second.Range()
+            )
         }
 
         return self.MergeUnchecked(first, second);
@@ -835,7 +853,7 @@ impl<T: AreaValue> AreaSet<T> {
     pub fn MergeRange(&mut self, r: &Range) {
         let mut seg = self.LowerBoundSeg(r.Start());
         if !seg.Ok() {
-            return
+            return;
         }
 
         let mut next = seg.NextSeg();
@@ -902,7 +920,7 @@ impl<T: AreaValue> AreaSet<T> {
         let seg2 = self.InsertWithoutMergingUnchecked(&gap, &Range::New(split, end2 - split), val2);
 
         let prev = seg2.PrevSeg();
-        return (prev, seg2)
+        return (prev, seg2);
     }
 
     // SplitAt splits the segment straddling split, if one exists. SplitAt returns

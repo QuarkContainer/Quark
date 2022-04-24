@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+pub mod uring_async;
 pub mod uring_mgr;
 pub mod uring_op;
-pub mod uring_async;
 
 pub use uring_mgr::*;

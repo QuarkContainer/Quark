@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
-use core::ops::Deref;
 use alloc::collections::btree_set::BTreeSet;
+use alloc::sync::Arc;
 use core::cmp::*;
+use core::ops::Deref;
 
 use super::super::uid::NewUID;
+use super::processgroup::*;
 use super::thread::*;
 use super::thread_group::*;
-use super::processgroup::*;
 
 #[derive(Default)]
 pub struct SessionInternal {
@@ -34,7 +34,7 @@ pub struct SessionInternal {
 #[derive(Clone, Default)]
 pub struct Session {
     pub uid: UniqueID,
-    pub data: Arc<QMutex<SessionInternal>>
+    pub data: Arc<QMutex<SessionInternal>>,
 }
 
 impl Deref for Session {
@@ -61,7 +61,7 @@ impl PartialOrd for Session {
 
 impl PartialEq for Session {
     fn eq(&self, other: &Self) -> bool {
-        return self.uid == other.uid
+        return self.uid == other.uid;
     }
 }
 
@@ -78,6 +78,6 @@ impl Session {
         return Self {
             uid: NewUID(),
             data: Arc::new(QMutex::new(internal)),
-        }
+        };
     }
 }

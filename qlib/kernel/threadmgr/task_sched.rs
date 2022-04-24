@@ -17,23 +17,23 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::ops::Deref;
 
-use super::super::TSC;
-use super::super::super::limits::*;
-use super::super::threadmgr::thread_group::*;
-use super::super::threadmgr::thread::*;
-use super::super::super::usage::cpu::*;
-use super::super::super::linux::time::*;
-use super::super::SignalDef::*;
 use super::super::super::common::*;
-use super::super::Tsc;
+use super::super::super::limits::*;
+use super::super::super::linux::time::*;
 use super::super::super::linux_def::*;
+use super::super::super::usage::cpu::*;
 use super::super::super::vcpu_mgr::*;
-use super::super::task::*;
-use super::super::kernel::timer::timer::*;
-use super::super::kernel::time::*;
-use super::super::kernel::kernel::*;
-use super::super::kernel::waiter::*;
 use super::super::kernel::cpuset::*;
+use super::super::kernel::kernel::*;
+use super::super::kernel::time::*;
+use super::super::kernel::timer::timer::*;
+use super::super::kernel::waiter::*;
+use super::super::task::*;
+use super::super::threadmgr::thread::*;
+use super::super::threadmgr::thread_group::*;
+use super::super::SignalDef::*;
+use super::super::Tsc;
+use super::super::TSC;
 use super::task_exit::*;
 use super::task_stop::*;
 
@@ -73,7 +73,7 @@ pub enum SchedState {
 
 impl Default for SchedState {
     fn default() -> Self {
-        return Self::Nonexistent
+        return Self::Nonexistent;
     }
 }
 
@@ -112,7 +112,7 @@ impl TaskSchedInfoInternal {
             return self.UserTicks + (now - self.Timestamp);
         }
 
-        return self.UserTicks
+        return self.UserTicks;
     }
 
     // sysTicksAt returns the extrapolated value of ts.SysTicks after
@@ -141,7 +141,7 @@ impl Deref for TaskSchedInfo {
 
 impl ThreadInternal {
     pub fn TaskSchedInfo(&self) -> TaskSchedInfoInternal {
-        return *(self.sched.lock())
+        return *(self.sched.lock());
     }
 
     pub fn cpuStatsAt(&self, now: i64) -> CPUStats {
@@ -154,12 +154,12 @@ impl ThreadInternal {
             UserTime: Tsc::Scale(userTime) * 1000,
             SysTime: Tsc::Scale(sysTime) * 1000,
             VoluntarySwitches: tsched.YieldCount,
-        }
+        };
     }
 
     pub fn CPUStats(&self) -> CPUStats {
         let now = TSC.Rdtsc();
-        return self.cpuStatsAt(now)
+        return self.cpuStatsAt(now);
     }
 
     // StateStatus returns a string representation of the task's current state,
@@ -175,12 +175,8 @@ impl ThreadInternal {
             SchedState::Nonexistent => {
                 let _r = owner.ReadLock();
                 match self.exitState {
-                    TaskExitState::TaskExitZombie => {
-                        return "Z (zombie)"
-                    }
-                    TaskExitState::TaskExitDead => {
-                        return "X (dead)"
-                    }
+                    TaskExitState::TaskExitZombie => return "Z (zombie)",
+                    TaskExitState::TaskExitDead => return "X (dead)",
                     _ => {
                         // The task can't exit before passing through
                         // runExitNotify, so this indicates that the task has been created,
@@ -248,7 +244,11 @@ impl Thread {
                 let tgcpu = tg.cpuStatsAtLocked(now);
                 let tgProfNow = Time::FromNs(tgcpu.UserTime + tgcpu.SysTime);
                 if !tgProfNow.Before(Time::FromNs(rlimitCPU.Max as i64)) {
-                    self.sendSignalLocked(&SignalInfo::SignalInfoPriv(Signal(Signal::SIGKILL)), true).unwrap();
+                    self.sendSignalLocked(
+                        &SignalInfo::SignalInfoPriv(Signal(Signal::SIGKILL)),
+                        true,
+                    )
+                    .unwrap();
                 }
             }
 
@@ -289,7 +289,7 @@ impl Thread {
 
         if self.lock().k.staticInfo.lock().useHostCores {
             // No-op; pretend the mask was immediately changed back.
-            return Ok(())
+            return Ok(());
         }
 
         let tg = self.lock().tg.clone();
@@ -306,17 +306,17 @@ impl Thread {
         let mut t = self.lock();
         t.allowedCPUMask = mask.Copy();
         t.cpu = assignCPU(&mask, rootTID);
-        return Ok(())
+        return Ok(());
     }
 
     // Niceness returns t's niceness.
     pub fn Niceness(&self) -> i32 {
-        return self.lock().niceness
+        return self.lock().niceness;
     }
 
     // Priority returns t's priority.
     pub fn Priority(&self) -> i32 {
-        return self.lock().niceness + 20
+        return self.lock().niceness + 20;
     }
 
     // SetNiceness sets t's niceness to n.
@@ -327,7 +327,7 @@ impl Thread {
     // NumaPolicy returns t's current numa policy.
     pub fn NumaPolicy(&self) -> (i32, u64) {
         let t = self.lock();
-        return (t.numaPolicy, t.numaNodeMask)
+        return (t.numaPolicy, t.numaNodeMask);
     }
 
     // SetNumaPolicy sets t's numa policy.
@@ -374,10 +374,11 @@ impl ThreadGroupInternal {
     // Preconditions: The signal mutex must be locked.
     pub fn updateCPUTimersEnabledLocked(&mut self) {
         let rlimitCPU = self.limits.Get(LimitType::CPU);
-        if self.itimerVirtSetting.Enabled ||
-            self.itimerProfSetting.Enabled ||
-            self.rlimitCPUSoftSetting.Enabled ||
-            rlimitCPU.Max != INFINITY {
+        if self.itimerVirtSetting.Enabled
+            || self.itimerProfSetting.Enabled
+            || self.rlimitCPUSoftSetting.Enabled
+            || rlimitCPU.Max != INFINITY
+        {
             self.cpuTimersEnabled = 1;
         } else {
             self.cpuTimersEnabled = 0;
@@ -391,7 +392,7 @@ impl ThreadGroup {
     pub fn cpuStatsAtLocked(&self, now: i64) -> CPUStats {
         let mut stats = self.lock().exitedCPUStats;
         // Account for live tasks.
-        let threads : Vec<Thread> = self.lock().tasks.iter().cloned().collect();
+        let threads: Vec<Thread> = self.lock().tasks.iter().cloned().collect();
         for t in threads {
             stats.Accumulate(&t.lock().cpuStatsAt(now))
         }
@@ -409,9 +410,7 @@ impl ThreadGroup {
 
         let lead = self.lock().leader.Upgrade();
         match &lead {
-            None => {
-                return CPUStats::default()
-            },
+            None => return CPUStats::default(),
             Some(ref _leader) => {
                 //let now = leader.lock().k.CPUClockNow();
                 let now = TSC.Rdtsc();
@@ -444,7 +443,7 @@ pub struct TaskClock {
 
 impl Waitable for TaskClock {
     fn Readiness(&self, _task: &Task, _mask: EventMask) -> EventMask {
-        return 0
+        return 0;
     }
 }
 
@@ -452,14 +451,14 @@ impl TaskClock {
     pub fn Now(&self) -> Time {
         let stats = self.t.CPUStats();
         if self.includeSys {
-            return Time::FromNs(stats.UserTime + stats.SysTime)
+            return Time::FromNs(stats.UserTime + stats.SysTime);
         }
 
-        return Time::FromNs(stats.UserTime)
+        return Time::FromNs(stats.UserTime);
     }
 
     pub fn WallTimeUntil(&self, t: Time, now: Time) -> Duration {
-        return t.Sub(now)
+        return t.Sub(now);
     }
 }
 
@@ -472,15 +471,15 @@ pub struct ThreadGroupClock {
 
 impl Waitable for ThreadGroupClock {
     fn Readiness(&self, _task: &Task, _mask: EventMask) -> EventMask {
-        return 0
+        return 0;
     }
 
     fn EventRegister(&self, task: &Task, e: &WaitEntry, mask: EventMask) {
-        return self.queue.EventRegister(task, e, mask)
+        return self.queue.EventRegister(task, e, mask);
     }
 
     fn EventUnregister(&self, task: &Task, e: &WaitEntry) {
-        return self.queue.EventUnregister(task, e)
+        return self.queue.EventUnregister(task, e);
     }
 }
 
@@ -489,10 +488,10 @@ impl ThreadGroupClock {
         let stats = self.tg.CPUStats();
         if self.includeSys {
             //error!("ThreadGroupClock usertime is {:x}, SysTime is {:x}", stats.UserTime, stats.SysTime);
-            return Time::FromNs(stats.UserTime + stats.SysTime)
+            return Time::FromNs(stats.UserTime + stats.SysTime);
         }
 
-        return Time::FromNs(stats.UserTime)
+        return Time::FromNs(stats.UserTime);
     }
 
     pub fn WallTimeUntil(&self, t: Time, now: Time) -> Duration {
@@ -500,18 +499,18 @@ impl ThreadGroupClock {
         let n = {
             let _r = ts.ReadLock();
             self.tg.lock().liveTasks as i64
-        } ;
+        };
 
         if n == 0 {
             if t.Before(now) {
-                return 0
+                return 0;
             }
 
             // The timer tick raced with thread group exit, after which no more
             // tasks can enter the thread group. So tgc.Now() will never advance
             // again. Return a large delay; the timer should be stopped long before
             // it comes again anyway.
-            return HOUR
+            return HOUR;
         }
 
         // This is a lower bound on the amount of time that can elapse before an
@@ -520,7 +519,7 @@ impl ThreadGroupClock {
         // this, round up to the nearest ClockTick; CPU usage measurements are
         // limited to this resolution anyway.
         let remaining = t.Sub(now) / n;
-        return ((remaining + CLOCK_TICK - NANOSECOND) / CLOCK_TICK) * CLOCK_TICK
+        return ((remaining + CLOCK_TICK - NANOSECOND) / CLOCK_TICK) * CLOCK_TICK;
     }
 }
 
@@ -531,7 +530,7 @@ impl Thread {
             includeSys: false,
         };
 
-        return Clock::TaskClock(c)
+        return Clock::TaskClock(c);
     }
 
     pub fn CPUClock(&self) -> Clock {
@@ -540,7 +539,7 @@ impl Thread {
             includeSys: true,
         };
 
-        return Clock::TaskClock(c)
+        return Clock::TaskClock(c);
     }
 }
 
@@ -571,7 +570,7 @@ pub struct KernelCPUClockTicker {}
 
 impl KernelCPUClockTicker {
     pub fn New() -> Self {
-        return Self {}
+        return Self {};
     }
 
     pub fn Atomically(&self, f: impl FnMut()) {
@@ -615,7 +614,7 @@ impl TimerListenerTrait for KernelCPUClockTicker {
 
             let mut tgUserTime = tg.lock().exitedCPUStats.UserTime;
             let mut tgSysTime = tg.lock().exitedCPUStats.SysTime;
-            let tasks : Vec<Thread> = tg.lock().tasks.iter().cloned().collect();
+            let tasks: Vec<Thread> = tg.lock().tasks.iter().cloned().collect();
             for t in &tasks {
                 let tsched = t.lock().TaskSchedInfo();
                 tgUserTime += tsched.userTicksAt(now) as i64 * CLOCK_TICK;
@@ -631,7 +630,8 @@ impl TimerListenerTrait for KernelCPUClockTicker {
                     }
                 }
 
-                if tsched.State == SchedState::RunningApp || tsched.State == SchedState::RunningSys {
+                if tsched.State == SchedState::RunningApp || tsched.State == SchedState::RunningSys
+                {
                     // Considered by ITIMER_PROF and RLIMIT_CPU timers.
                     nrProfCandidates += 1;
                     if TSC.Rdtsc() % nrProfCandidates == 0 {
@@ -654,7 +654,14 @@ impl TimerListenerTrait for KernelCPUClockTicker {
                 let (newItimerVirtSetting, exp) = tg.lock().itimerVirtSetting.At(tgVirtNow);
                 tg.lock().itimerVirtSetting = newItimerVirtSetting;
                 if exp != 0 {
-                    virtReceiver.clone().unwrap().sendSignalLocked(&SignalInfo::SignalInfoPriv(Signal(Signal::SIGVTALRM)), true).unwrap();
+                    virtReceiver
+                        .clone()
+                        .unwrap()
+                        .sendSignalLocked(
+                            &SignalInfo::SignalInfoPriv(Signal(Signal::SIGVTALRM)),
+                            true,
+                        )
+                        .unwrap();
                 }
             }
 
@@ -666,20 +673,40 @@ impl TimerListenerTrait for KernelCPUClockTicker {
                 tg.lock().itimerProfSetting = newItimerProfSetting;
                 if exp != 0 {
                     let receiver = profReceiver.clone().unwrap();
-                    receiver.sendSignalLocked(&SignalInfo::SignalInfoPriv(Signal(Signal::SIGPROF)), true).unwrap();
+                    receiver
+                        .sendSignalLocked(
+                            &SignalInfo::SignalInfoPriv(Signal(Signal::SIGPROF)),
+                            true,
+                        )
+                        .unwrap();
                 }
 
                 // RLIMIT_CPU soft limit
                 let (newRlimitCPUSoftSetting, exp) = tg.lock().rlimitCPUSoftSetting.At(tgProfNow);
                 tg.lock().rlimitCPUSoftSetting = newRlimitCPUSoftSetting;
                 if exp != 0 {
-                    profReceiver.clone().unwrap().sendSignalLocked(&SignalInfo::SignalInfoPriv(Signal(Signal::SIGXCPU)), true).unwrap();
+                    profReceiver
+                        .clone()
+                        .unwrap()
+                        .sendSignalLocked(
+                            &SignalInfo::SignalInfoPriv(Signal(Signal::SIGXCPU)),
+                            true,
+                        )
+                        .unwrap();
                 }
 
                 // RLIMIT_CPU hard limit
                 let rlimitCPUMax = tg.lock().limits.Get(LimitType::CPU).Max;
-                if rlimitCPUMax != INFINITY && !tgProfNow.Before(Time::FromSec(rlimitCPUMax as i64)) {
-                    profReceiver.clone().unwrap().sendSignalLocked(&SignalInfo::SignalInfoPriv(Signal(Signal::SIGKILL)), true).unwrap();
+                if rlimitCPUMax != INFINITY && !tgProfNow.Before(Time::FromSec(rlimitCPUMax as i64))
+                {
+                    profReceiver
+                        .clone()
+                        .unwrap()
+                        .sendSignalLocked(
+                            &SignalInfo::SignalInfoPriv(Signal(Signal::SIGKILL)),
+                            true,
+                        )
+                        .unwrap();
                 }
             }
         }

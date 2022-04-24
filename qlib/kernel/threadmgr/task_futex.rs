@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-
 use super::super::super::linux::futex::*;
 use super::super::kernel::futex::*;
 use super::super::task::*;
@@ -32,7 +30,7 @@ impl Thread {
             return;
         }
 
-        let rl : RobustListHead = match task.CopyInObj(addr) {
+        let rl: RobustListHead = match task.CopyInObj(addr) {
             Err(_) => return,
             Ok(p) => p,
         };
@@ -87,7 +85,7 @@ impl Thread {
     }
 
     // wakeRobustListOne wakes a single futex from the robust list.
-    pub fn WakeRobustListOne(&self, task: &Task, addr: u64)  {
+    pub fn WakeRobustListOne(&self, task: &Task, addr: u64) {
         // Bit 0 in address signals PI futex.
         let pi = addr & 1 == 1;
         let addr = addr & !1;
@@ -105,7 +103,7 @@ impl Thread {
         loop {
             // Is this held by someone else?
             if f & FUTEX_TID_MASK != tid {
-                return
+                return;
             }
 
             // This thread is dying and it's holding this futex. We need to
@@ -128,10 +126,12 @@ impl Thread {
                 let private = f & FUTEX_WAITERS != 0;
                 if pi {
                     task.futexMgr.UnlockPI(task, addr, tid, private).ok();
-                    return
+                    return;
                 }
 
-                task.futexMgr.Wake(task, addr, private, FUTEX_BITSET_MATCH_ANY, 1).ok();
+                task.futexMgr
+                    .Wake(task, addr, private, FUTEX_BITSET_MATCH_ANY, 1)
+                    .ok();
             }
 
             return;

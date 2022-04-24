@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::collections::btree_map::BTreeMap;
-use alloc::vec::Vec;
 use crate::qlib::mutex::*;
+use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::ops::Deref;
 
-use super::super::super::linux_def::*;
 use super::super::super::common::*;
+use super::super::super::linux_def::*;
 use super::super::fs::file::*;
 use super::super::uid::*;
 
@@ -31,7 +31,7 @@ pub struct FDFlags {
 impl FDFlags {
     pub fn ToLinuxFileFlags(&self) -> i32 {
         if self.CloseOnExec {
-            return Flags::O_CLOEXEC
+            return Flags::O_CLOEXEC;
         }
 
         return 0;
@@ -39,7 +39,7 @@ impl FDFlags {
 
     pub fn ToLinuxFDFlags(&self) -> u32 {
         if self.CloseOnExec {
-            return LibcConst::FD_CLOEXEC as u32
+            return LibcConst::FD_CLOEXEC as u32;
         }
 
         return 0;
@@ -83,7 +83,7 @@ impl FDTable {
     }
 
     pub fn RefCount(&self) -> usize {
-        return Arc::strong_count(&(self.0).0)
+        return Arc::strong_count(&(self.0).0);
     }
 }
 
@@ -103,13 +103,17 @@ impl FDTableInternal {
         return Self {
             next: 0,
             descTbl: BTreeMap::new(),
-        }
+        };
     }
 
     pub fn Print(&self) {
         for (id, d) in &self.descTbl {
-            info!("FDTableInternal::Print [{}], refcount is {}, id is {}",
-            *id, Arc::strong_count(&d.file.0), d.file.0.UniqueId)
+            info!(
+                "FDTableInternal::Print [{}], refcount is {}, id is {}",
+                *id,
+                Arc::strong_count(&d.file.0),
+                d.file.0.UniqueId
+            )
         }
     }
 
@@ -128,12 +132,12 @@ impl FDTableInternal {
 
     pub fn NewFDFrom(&mut self, fd: i32, file: &File, flags: &FDFlags) -> Result<i32> {
         let fds = self.NewFDs(fd, &[file.clone()], flags)?;
-        return Ok(fds[0])
+        return Ok(fds[0]);
     }
 
     pub fn NewFDs(&mut self, fd: i32, files: &[File], flags: &FDFlags) -> Result<Vec<i32>> {
         if fd < 0 {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         let mut fd = fd;
@@ -154,7 +158,7 @@ impl FDTableInternal {
                     self.set(i, &files[fds.len()], flags);
                     fds.push(i);
                 }
-                _ => ()
+                _ => (),
             }
             i += 1;
         }
@@ -165,28 +169,28 @@ impl FDTableInternal {
                 self.descTbl.remove(i);
             }
 
-            return Err(Error::SysError(SysErr::EMFILE))
+            return Err(Error::SysError(SysErr::EMFILE));
         }
 
         if fd == self.next {
             self.next = fds[fds.len() - 1] + 1;
         }
 
-        return Ok(fds)
+        return Ok(fds);
     }
 
     pub fn NewFDAt(&mut self, fd: i32, file: &File, flags: &FDFlags) -> Result<()> {
         if fd < 0 {
-            return Err(Error::SysError(SysErr::EBADF))
+            return Err(Error::SysError(SysErr::EBADF));
         }
 
         self.set(fd, file, flags);
-        return Ok(())
+        return Ok(());
     }
 
     pub fn Dup(&mut self, fd: i32) -> Result<i32> {
         if fd < 0 {
-            return Err(Error::SysError(SysErr::EBADF))
+            return Err(Error::SysError(SysErr::EBADF));
         }
 
         let (f, flags) = self.Get(fd)?;
@@ -195,27 +199,27 @@ impl FDTableInternal {
 
     pub fn Dup2(&mut self, oldfd: i32, newfd: i32) -> Result<i32> {
         if oldfd < 0 {
-            return Err(Error::SysError(SysErr::EBADF))
+            return Err(Error::SysError(SysErr::EBADF));
         }
 
         if newfd < 0 {
-            return Err(Error::SysError(SysErr::EBADF))
+            return Err(Error::SysError(SysErr::EBADF));
         }
 
         self.Remove(newfd);
 
         let (f, flags) = self.Get(oldfd)?;
         self.NewFDAt(newfd, &f, &flags)?;
-        return Ok(newfd)
+        return Ok(newfd);
     }
 
     pub fn Dup3(&mut self, oldfd: i32, newfd: i32, flags: i32) -> Result<i32> {
         if oldfd < 0 {
-            return Err(Error::SysError(SysErr::EBADF))
+            return Err(Error::SysError(SysErr::EBADF));
         }
 
         if newfd < 0 {
-            return Err(Error::SysError(SysErr::EBADF))
+            return Err(Error::SysError(SysErr::EBADF));
         }
 
         self.Remove(newfd);
@@ -224,12 +228,12 @@ impl FDTableInternal {
         let (f, mut flags) = self.Get(oldfd)?;
         flags.CloseOnExec = closeOnExec;
         self.NewFDAt(newfd, &f, &flags)?;
-        return Ok(newfd)
+        return Ok(newfd);
     }
 
     pub fn SetFlags(&mut self, fd: i32, flags: &FDFlags) -> Result<()> {
         if fd < 0 {
-            return Err(Error::SysError(SysErr::EBADF))
+            return Err(Error::SysError(SysErr::EBADF));
         }
 
         let file = self.descTbl.get_mut(&fd);
@@ -239,7 +243,7 @@ impl FDTableInternal {
             Some(fdesc) => fdesc.flags = flags.clone(),
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn GetFDs(&self) -> Vec<i32> {
@@ -280,7 +284,7 @@ impl FDTableInternal {
             tbl.set(*fd, &file.file, &file.flags)
         }
 
-        return tbl
+        return tbl;
     }
 
     pub fn Remove(&mut self, fd: i32) -> Option<File> {
@@ -296,7 +300,7 @@ impl FDTableInternal {
 
         match file {
             None => return None,
-            Some(f) => return Some(f.file)
+            Some(f) => return Some(f.file),
         }
     }
 

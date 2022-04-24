@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use clap::{App, AppSettings, SubCommand, ArgMatches, Arg};
+use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use serde_json;
-use std::os::unix::io::FromRawFd;
 use std::fs::File;
+use std::os::unix::io::FromRawFd;
 
 use super::super::super::qlib::common::*;
 use super::super::cmd::config::*;
@@ -23,14 +23,19 @@ use super::super::runtime::sandbox_process::*;
 use super::command::*;
 
 #[derive(Debug)]
-pub struct BootCmd  {
+pub struct BootCmd {
     pub pipefd: i32,
 }
 
 impl BootCmd {
     pub fn Init(cmd_matches: &ArgMatches) -> Result<Self> {
         return Ok(Self {
-            pipefd: cmd_matches.value_of("pipefd").unwrap().to_string().parse().unwrap(),
+            pipefd: cmd_matches
+                .value_of("pipefd")
+                .unwrap()
+                .to_string()
+                .parse()
+                .unwrap(),
         });
     }
 
@@ -39,23 +44,21 @@ impl BootCmd {
             .setting(AppSettings::ColoredHelp)
             .arg(
                 Arg::with_name("pipefd")
-                .required(true)
-                .takes_value(true)
-                .long("pipefd")
-                .help("pipe fd with the container parameters")
+                    .required(true)
+                    .takes_value(true)
+                    .long("pipefd")
+                    .help("pipe fd with the container parameters"),
             )
             .about("Create a container (to be started later)");
     }
 
     pub fn Run(&self, _gCfg: &GlobalConfig) -> Result<()> {
-        let pipefile = unsafe {
-            File::from_raw_fd(self.pipefd)
-        };
+        let pipefile = unsafe { File::from_raw_fd(self.pipefd) };
 
-        let process : SandboxProcess = serde_json::from_reader(&pipefile)
+        let process: SandboxProcess = serde_json::from_reader(&pipefile)
             .map_err(|e| Error::IOError(format!("BootCmd io::error is {:?}", e)))?;
 
         process.Child()?;
-        return Ok(())
+        return Ok(());
     }
 }

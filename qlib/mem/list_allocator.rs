@@ -1,4 +1,3 @@
-
 // Copyright (c) 2021 Quark Container Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,30 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::alloc::{GlobalAlloc, Layout};
-use core::sync::atomic::{AtomicBool, AtomicUsize, AtomicU64};
-use core::sync::atomic::Ordering;
-use core::cmp::max;
-use core::mem::size_of;
-use core::ptr::NonNull;
-use cache_padded::CachePadded;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::vec::Vec;
+use cache_padded::CachePadded;
+use core::alloc::{GlobalAlloc, Layout};
+use core::cmp::max;
+use core::mem::size_of;
+use core::ptr::NonNull;
+use core::sync::atomic::Ordering;
+use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize};
 
 use super::buddy_allocator::Heap;
 
-use super::super::mutex::*;
-use super::super::kernel::vcpu::CPU_LOCAL;
 use super::super::super::kernel_def::VcpuId;
+use super::super::kernel::vcpu::CPU_LOCAL;
 use super::super::linux_def::*;
+use super::super::mutex::*;
 use super::super::pagetable::AlignedAllocator;
 
-pub const CLASS_CNT : usize = 16;
+pub const CLASS_CNT: usize = 16;
 pub const FREE_THRESHOLD: usize = 30; // when free size less than 30%, need to free buffer
 pub const BUFF_THRESHOLD: usize = 50; // when buff size takes more than 50% of free size, needs to free
 pub const FREE_BATCH: usize = 1024; // free 10 blocks each time.
-pub const ORDER : usize = 33; //1GB
+pub const ORDER: usize = 33; //1GB
 
 //pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
@@ -49,11 +48,15 @@ impl GlobalVcpuAllocator {
     pub const fn New() -> Self {
         return Self {
             init: AtomicBool::new(false),
-        }
+        };
     }
 
-    pub fn Print(&self){
-        error!("GlobalVcpuAllocator {}/{}", VcpuId(), CPU_LOCAL[VcpuId()].allocator.bufs.len())
+    pub fn Print(&self) {
+        error!(
+            "GlobalVcpuAllocator {}/{}",
+            VcpuId(),
+            CPU_LOCAL[VcpuId()].allocator.bufs.len()
+        )
     }
 
     pub fn Initializated(&self) {
@@ -84,7 +87,7 @@ pub const STACK_CNT: usize = 16;
 #[derive(Debug, Default)]
 pub struct StackAllocator {
     pub stack: [u64; 15],
-    pub next: usize
+    pub next: usize,
 }
 
 impl StackAllocator {
@@ -101,11 +104,11 @@ impl StackAllocator {
     }
 
     pub fn IsEmpty(&self) -> bool {
-        return self.next == 0
+        return self.next == 0;
     }
 
     pub fn IsFull(&self) -> bool {
-        return self.next == self.stack.len()
+        return self.next == self.stack.len();
     }
 }
 
@@ -115,7 +118,7 @@ pub struct PageAllocator {
 }
 
 impl PageAllocator {
-    pub const PAGE_CACHE_COUNT : usize = 16;
+    pub const PAGE_CACHE_COUNT: usize = 16;
 
     pub fn AllocPage(&mut self) -> Option<u64> {
         return self.pages.pop();
@@ -127,7 +130,9 @@ impl PageAllocator {
             // there is chance the TLB is still in use, todo: find better way to do that
             let vec2 = self.pages.split_off(4096 * 4);
             for page in &self.pages {
-                AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize).Free(*page).unwrap();
+                AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize)
+                    .Free(*page)
+                    .unwrap();
             }
             self.pages = vec2;
         }
@@ -138,12 +143,14 @@ impl PageAllocator {
 
     pub fn Clean(&mut self) {
         if self.pages.len() <= Self::PAGE_CACHE_COUNT {
-            return
+            return;
         }
 
         while self.pages.len() > Self::PAGE_CACHE_COUNT {
             let page = self.pages.pop().unwrap();
-            AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize).Free(page).unwrap();
+            AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize)
+                .Free(page)
+                .unwrap();
         }
 
         self.pages.shrink_to_fit();
@@ -200,15 +207,13 @@ impl VcpuAllocator {
 
 #[derive(Debug, Default)]
 pub struct HostAllocator {
-    pub listHeapAddr : AtomicU64,
-    pub initialized: AtomicBool
+    pub listHeapAddr: AtomicU64,
+    pub initialized: AtomicBool,
 }
 
 impl HostAllocator {
     pub fn Allocator(&self) -> &mut ListAllocator {
-        return unsafe {
-            &mut *(self.listHeapAddr.load(Ordering::Relaxed) as * mut ListAllocator)
-        }
+        return unsafe { &mut *(self.listHeapAddr.load(Ordering::Relaxed) as *mut ListAllocator) };
     }
 }
 
@@ -220,11 +225,11 @@ pub struct ListAllocator {
     pub free: AtomicUsize,
     pub bufSize: AtomicUsize,
     //pub errorHandler: Arc<OOMHandler>
-    pub initialized: AtomicBool
+    pub initialized: AtomicBool,
 }
 
 pub trait OOMHandler {
-    fn handleError(&self, a:u64, b:u64) -> ();
+    fn handleError(&self, a: u64, b: u64) -> ();
 }
 
 impl Default for ListAllocator {
@@ -235,7 +240,7 @@ impl Default for ListAllocator {
 
 impl ListAllocator {
     pub const fn Empty() -> Self {
-        let bufs : [CachePadded<QMutex<FreeMemBlockMgr>>; CLASS_CNT] = [
+        let bufs: [CachePadded<QMutex<FreeMemBlockMgr>>; CLASS_CNT] = [
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(0, 0))),
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(0, 1))),
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(0, 2))),
@@ -251,7 +256,7 @@ impl ListAllocator {
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(1024, 12))),
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(16, 13))),
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(8, 14))),
-            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(8, 15)))
+            CachePadded::new(QMutex::new(FreeMemBlockMgr::New(8, 15))),
         ];
 
         return Self {
@@ -260,8 +265,8 @@ impl ListAllocator {
             total: AtomicUsize::new(0),
             free: AtomicUsize::new(0),
             bufSize: AtomicUsize::new(0),
-            initialized: AtomicBool::new(false)
-        }
+            initialized: AtomicBool::new(false),
+        };
     }
 
     pub fn Print(&self, _class: usize) -> String {
@@ -293,12 +298,12 @@ impl ListAllocator {
         let end = start + size;
         let order = 22;
         let size = 1 << order; // 2MB
-        // note: we can't add full range (>4GB) to the buddyallocator
-        /*let alignStart = start & !(size - 1);
-        if start != alignStart {
-            self.AddToHead(start, alignStart + size);
-            start = alignStart + size;
-        }*/
+                               // note: we can't add full range (>4GB) to the buddyallocator
+                               /*let alignStart = start & !(size - 1);
+                               if start != alignStart {
+                                   self.AddToHead(start, alignStart + size);
+                                   start = alignStart + size;
+                               }*/
 
         while start + size < end {
             self.AddToHead(start, start + size);
@@ -322,11 +327,13 @@ impl ListAllocator {
         }*/
 
         if total * FREE_THRESHOLD / 100 > free && // there are too little free memory
-            free * BUFF_THRESHOLD /100 < bufSize { // there are too much bufferred memory
-            return true
+            free * BUFF_THRESHOLD /100 < bufSize
+        {
+            // there are too much bufferred memory
+            return true;
         }
 
-        return false
+        return false;
     }
 
     // ret: true: free some memory, false: no memory freed
@@ -334,12 +341,15 @@ impl ListAllocator {
         let mut count = 0;
         for i in 0..self.bufs.len() {
             if !self.NeedFree() || count == FREE_BATCH {
-                return count > 0
+                return count > 0;
             }
 
             let idx = self.bufs.len() - i - 1; // free from larger size
-            let cnt = self.bufs[idx].lock().FreeMultiple(&self.heap, FREE_BATCH - count);
-            self.bufSize.fetch_sub(cnt * self.bufs[idx].lock().size, Ordering::Release);
+            let cnt = self.bufs[idx]
+                .lock()
+                .FreeMultiple(&self.heap, FREE_BATCH - count);
+            self.bufSize
+                .fetch_sub(cnt * self.bufs[idx].lock().size, Ordering::Release);
             count += cnt;
         }
 
@@ -353,7 +363,7 @@ unsafe impl GlobalAlloc for ListAllocator {
 
         let initialized = self.initialized.load(Ordering::Relaxed);
         if !initialized {
-            self.initialize();      
+            self.initialize();
         }
 
         let size = max(
@@ -371,7 +381,7 @@ unsafe impl GlobalAlloc for ListAllocator {
             }
         }
 
-        if size > 1<<21 {
+        if size > 1 << 21 {
             panic!("alloc size is {}", layout.size());
         }
 
@@ -413,7 +423,9 @@ unsafe impl GlobalAlloc for ListAllocator {
             return self.bufs[class].lock().Dealloc(ptr, &self.heap);
         }
 
-        self.heap.lock().dealloc(NonNull::new_unchecked(ptr), layout)
+        self.heap
+            .lock()
+            .dealloc(NonNull::new_unchecked(ptr), layout)
     }
 }
 
@@ -437,13 +449,13 @@ impl FreeMemBlockMgr {
     /// * `class` - denotes the block size this manager is in charge of. class i means the block is of size 2^i bytes
     pub const fn New(reserve: usize, class: usize) -> Self {
         return Self {
-            size: 1<<class,
+            size: 1 << class,
             reserve: reserve,
             count: 0,
-            list: MemList::New(1<<class),
+            list: MemList::New(1 << class),
             //queue: [false; 16],
             //idx: 0,
-        }
+        };
     }
 
     pub fn Layout(&self) -> Layout {
@@ -455,18 +467,20 @@ impl FreeMemBlockMgr {
             self.count -= 1;
             let ret = self.list.Pop();
 
-            assert!(ret!=0, "self.count is {}, size is {}",
-                self.count, self.size);
-            let ptr = ret as * mut MemBlock;
-            unsafe {
-                ptr.write(0)
-            }
+            assert!(
+                ret != 0,
+                "self.count is {}, size is {}",
+                self.count,
+                self.size
+            );
+            let ptr = ret as *mut MemBlock;
+            unsafe { ptr.write(0) }
 
             //self.queue[self.idx%16] = true;
             //self.idx += 1;
-            return Some(ret as * mut u8)
+            return Some(ret as *mut u8);
         } else {
-            return None
+            return None;
         }
     }
 
@@ -491,7 +505,8 @@ impl FreeMemBlockMgr {
         let addr = self.list.Pop();
 
         unsafe {
-            heap.lock().dealloc(NonNull::new_unchecked(addr as * mut u8), self.Layout());
+            heap.lock()
+                .dealloc(NonNull::new_unchecked(addr as *mut u8), self.Layout());
         }
     }
 
@@ -508,7 +523,6 @@ impl FreeMemBlockMgr {
     }
 }
 
-
 type MemBlock = u64;
 
 #[derive(Debug, Default)]
@@ -524,7 +538,7 @@ impl MemList {
             size: size as u64,
             count: 0,
             head: 0,
-        }
+        };
     }
 
     pub fn Push(&mut self, addr: u64) {
@@ -534,12 +548,12 @@ impl MemList {
         }
 
         self.count += 1;
-        let newB = addr as * mut MemBlock;
+        let newB = addr as *mut MemBlock;
         unsafe {
             *newB = 0;
         }
 
-        let ptr = addr as * mut MemBlock;
+        let ptr = addr as *mut MemBlock;
         unsafe {
             *ptr = self.head;
         }
@@ -552,21 +566,24 @@ impl MemList {
                 error!("MemList::pop self.size is {}/{}", self.size, self.count);
             }
 
-            return 0
+            return 0;
         }
 
         self.count -= 1;
 
         let next = self.head;
 
-        let ptr = unsafe {
-            &mut *(next as * mut MemBlock)
-        };
+        let ptr = unsafe { &mut *(next as *mut MemBlock) };
 
         self.head = *ptr;
 
-        assert!(!(self.head == 0 && self.count != 0),
-               "MemList::pop2 self.size is {}/{}/{:x}", self.size, self.count, next);
+        assert!(
+            !(self.head == 0 && self.count != 0),
+            "MemList::pop2 self.size is {}/{}/{:x}",
+            self.size,
+            self.count,
+            next
+        );
         if next % self.size != 0 {
             raw!(0x234, next, self.size as u64);
             panic!("Pop next fail");

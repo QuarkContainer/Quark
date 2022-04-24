@@ -16,19 +16,19 @@ use alloc::vec::Vec;
 
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
-use super::super::task::*;
 use super::super::kernel::time::*;
+use super::super::task::*;
+use super::attr::*;
 use super::dirent::*;
+use super::file_overlay::*;
+use super::flags::*;
 use super::inode::*;
 use super::overlay::*;
-use super::attr::*;
-use super::flags::*;
-use super::file_overlay::*;
 
 pub fn copyUp(task: &Task, d: &Dirent) -> Result<()> {
     let _a = RENAME.read();
 
-    return CopyUpLockedForRename(task, d)
+    return CopyUpLockedForRename(task, d);
 }
 
 pub fn CopyUpLockedForRename(task: &Task, d: &Dirent) -> Result<()> {
@@ -38,7 +38,7 @@ pub fn CopyUpLockedForRename(task: &Task, d: &Dirent) -> Result<()> {
             let inodelock = inode.lock();
             let overlay = inodelock.Overlay.as_ref().unwrap().read();
             if overlay.upper.is_some() {
-                return Ok(())
+                return Ok(());
             }
         }
 
@@ -73,12 +73,12 @@ fn doCopyup(task: &Task, next: &Dirent) -> Result<()> {
     let t = nextOverlay.lower.as_ref().unwrap().StableAttr().Type;
 
     if !(t == InodeType::RegularFile || t == InodeType::Directory || t == InodeType::Symlink) {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     if nextOverlay.upper.is_some() {
         // We raced with another doCopyUp, no problem.
-        return Ok(())
+        return Ok(());
     }
 
     let parent = next.Parent.as_ref().unwrap().clone();
@@ -94,8 +94,17 @@ fn doCopyup(task: &Task, next: &Dirent) -> Result<()> {
     let nextStableAttr = nextInode.StableAttr().clone();
     match nextStableAttr.Type {
         InodeType::RegularFile => {
-            let childFile = parentUpper.Create(task, &root, &next.Name,
-                                               &FileFlags { Read: true, Write: true, ..Default::default() }, &attrs.Perms)?;
+            let childFile = parentUpper.Create(
+                task,
+                &root,
+                &next.Name,
+                &FileFlags {
+                    Read: true,
+                    Write: true,
+                    ..Default::default()
+                },
+                &attrs.Perms,
+            )?;
             childUpperInode = childFile.Dirent.Inode();
         }
         InodeType::Directory => {
@@ -104,7 +113,7 @@ fn doCopyup(task: &Task, next: &Dirent) -> Result<()> {
                 Err(e) => {
                     info!("copy up failed to lookup directory: {:?}", e);
                     cleanupUpper(task, &mut parentUpper, &next.Name);
-                    return Err(e)
+                    return Err(e);
                 }
                 Ok(n) => n,
             };
@@ -112,7 +121,17 @@ fn doCopyup(task: &Task, next: &Dirent) -> Result<()> {
             childUpperInode = childUpper.Inode();
         }
         InodeType::Symlink => {
-            let childLower = next.Inode.lock().Overlay.as_ref().unwrap().read().lower.as_ref().unwrap().clone();
+            let childLower = next
+                .Inode
+                .lock()
+                .Overlay
+                .as_ref()
+                .unwrap()
+                .read()
+                .lower
+                .as_ref()
+                .unwrap()
+                .clone();
             let link = childLower.ReadLink(task)?;
 
             parentUpper.CreateLink(task, &root, &link, &next.Name)?;
@@ -120,7 +139,7 @@ fn doCopyup(task: &Task, next: &Dirent) -> Result<()> {
                 Err(e) => {
                     info!("copy up failed to lookup directory: {:?}", e);
                     cleanupUpper(task, &mut parentUpper, &next.Name);
-                    return Err(e)
+                    return Err(e);
                 }
                 Ok(n) => n,
             };
@@ -128,7 +147,10 @@ fn doCopyup(task: &Task, next: &Dirent) -> Result<()> {
             childUpperInode = childUpper.Inode();
         }
         _ => {
-            panic!("copy up of invalid type {:?} on {}", nextStableAttr.Type, &next.Name)
+            panic!(
+                "copy up of invalid type {:?} on {}",
+                nextStableAttr.Type, &next.Name
+            )
         }
     }
 
@@ -138,7 +160,7 @@ fn doCopyup(task: &Task, next: &Dirent) -> Result<()> {
 
     //todo: handle map
 
-    return Ok(())
+    return Ok(());
 }
 
 pub fn cleanupUpper(task: &Task, parent: &mut Inode, name: &str) {
@@ -151,11 +173,25 @@ pub fn cleanupUpper(task: &Task, parent: &mut Inode, name: &str) {
 
 fn copyContentsLocked(task: &Task, upper: &Inode, lower: &Inode, size: i64) -> Result<()> {
     if lower.StableAttr().Type != InodeType::RegularFile {
-        return Ok(())
+        return Ok(());
     }
 
-    let upperFile = OverlayFile(task, upper, &FileFlags { Write: true, ..Default::default() })?;
-    let lowerFile = OverlayFile(task, lower, &FileFlags { Read: true, ..Default::default() })?;
+    let upperFile = OverlayFile(
+        task,
+        upper,
+        &FileFlags {
+            Write: true,
+            ..Default::default()
+        },
+    )?;
+    let lowerFile = OverlayFile(
+        task,
+        lower,
+        &FileFlags {
+            Read: true,
+            ..Default::default()
+        },
+    )?;
 
     let buf: [u8; 4096] = [0; 4096];
 
@@ -170,10 +206,13 @@ fn copyContentsLocked(task: &Task, upper: &Inode, lower: &Inode, size: i64) -> R
         let nr = lowerOps.ReadAt(task, &lowerFile, &mut iovs, offset, false)?;
         if nr == 0 {
             if offset != size {
-                panic!("filesystem is in an inconsistent state: wrote only {} bytes of {} sized file", offset, size)
+                panic!(
+                    "filesystem is in an inconsistent state: wrote only {} bytes of {} sized file",
+                    offset, size
+                )
             }
 
-            return Ok(())
+            return Ok(());
         }
 
         let tmpIov = IoVec::New(&buf[..nr as usize]);
@@ -196,11 +235,15 @@ fn copyAttributesLocked(task: &Task, upper: &mut Inode, lower: &Inode) -> Result
 
     let upperInodeOp = upper.lock().InodeOp.clone();
     upperInodeOp.SetOwner(task, upper, &lowerAttr.Owner)?;
-    upperInodeOp.SetTimestamps(task, upper, &InterTimeSpec {
-        ATime: lowerAttr.AccessTime,
-        MTime: lowerAttr.ModificationTime,
-        ..Default::default()
-    })?;
+    upperInodeOp.SetTimestamps(
+        task,
+        upper,
+        &InterTimeSpec {
+            ATime: lowerAttr.AccessTime,
+            MTime: lowerAttr.ModificationTime,
+            ..Default::default()
+        },
+    )?;
 
     for name in &lowerXattr {
         if IsXattrOverlay(name) {
@@ -211,5 +254,5 @@ fn copyAttributesLocked(task: &Task, upper: &mut Inode, lower: &Inode) -> Result
         upperInodeOp.Setxattr(upper, name, &value)?;
     }
 
-    return Ok(())
+    return Ok(());
 }

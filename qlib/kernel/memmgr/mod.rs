@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod vma;
-pub mod mm;
 pub mod arch;
-pub mod pmamgr;
 mod mapping;
-pub mod memmap;
 pub mod mapping_set;
-pub mod pma;
-pub mod syscalls;
+pub mod memmap;
 pub mod metadata;
+pub mod mm;
+pub mod pma;
+pub mod pmamgr;
+pub mod syscalls;
+pub mod vma;
 //pub mod buf_allocator;
 pub mod linked_list;
 
@@ -29,12 +29,12 @@ use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
 
-use super::fs::host::hostinodeop::*;
-use super::super::common::*;
-use super::super::addr::*;
-use super::task::*;
-use super::fs::file::*;
 use self::mapping::*;
+use super::super::addr::*;
+use super::super::common::*;
+use super::fs::file::*;
+use super::fs::host::hostinodeop::*;
+use super::task::*;
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum MLockMode {
@@ -64,7 +64,7 @@ pub enum MLockMode {
 
 impl Default for MLockMode {
     fn default() -> Self {
-        return Self::MlockNone
+        return Self::MlockNone;
     }
 }
 
@@ -169,7 +169,7 @@ impl MMapOpts {
             Mapping: Some(NewAnonMapping(name.to_string())),
             Mappable: None,
             Hint: name.to_string(),
-        })
+        });
     }
 
     pub fn NewFileOptions(file: &File) -> Result<Self> {
@@ -197,10 +197,10 @@ impl MMapOpts {
 
 pub fn NewSharedAnonMapping() -> Arc<Mapping> {
     let m = SpecialMapping::New("/dev/zero (deleted)".to_string());
-    return Arc::new(m)
+    return Arc::new(m);
 }
 
 pub fn NewAnonMapping(name: String) -> Arc<Mapping> {
     let m = SpecialMapping::New(name);
-    return Arc::new(m)
+    return Arc::new(m);
 }

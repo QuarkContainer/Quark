@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
-use core::ops::Deref;
+use alloc::sync::Arc;
 use core::fmt;
+use core::ops::Deref;
 
-use super::super::SignalDef::*;
 use super::super::super::common::*;
-use super::super::super::linux_def::*;
 use super::super::super::linux::time::*;
+use super::super::super::linux_def::*;
 use super::super::threadmgr::thread::*;
-use super::timer::timer::*;
+use super::super::SignalDef::*;
 use super::timer::timer;
+use super::timer::timer::*;
 
 #[derive(Default)]
 pub struct IntervalTimerInternal {
@@ -83,7 +83,7 @@ impl IntervalTimerInternal {
 
     pub fn timerSettingChanged(&mut self) {
         if self.target.is_none() {
-            return
+            return;
         }
 
         let target = self.target.clone().unwrap();
@@ -103,7 +103,7 @@ impl IntervalTimerInternal {
     pub fn updateDequeuedSignalLocked(&mut self, si: &mut SignalInfo) {
         self.sigpending = false;
         if self.sigorphan {
-            return
+            return;
         }
 
         self.overrunLast = self.overrunCur;
@@ -114,7 +114,7 @@ impl IntervalTimerInternal {
     pub fn signalRejectedLocked(&mut self) {
         self.sigpending = false;
         if self.sigorphan {
-            return
+            return;
         }
 
         self.overrunCur += 1;
@@ -137,7 +137,7 @@ impl timer::TimerListenerTrait for IntervalTimer {
         let mut it = self.lock();
 
         if it.target.is_none() {
-            return
+            return;
         }
 
         let target = it.target.clone().unwrap();
@@ -151,7 +151,7 @@ impl timer::TimerListenerTrait for IntervalTimer {
 
         if it.sigpending {
             it.overrunCur += exp;
-            return
+            return;
         }
 
         // sigpending must be set before sendSignalTimerLocked() so that it can be
@@ -196,7 +196,7 @@ impl IntervalTimer {
             ..Default::default()
         };
 
-        return Self(Arc::new(QMutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)));
     }
 
     pub fn DestroyTimer(&self) {
@@ -217,7 +217,7 @@ impl IntervalTimer {
 
 fn saturateI32FromU64(x: u64) -> i32 {
     if x > core::i32::MAX as u64 {
-        return core::i32::MAX
+        return core::i32::MAX;
     }
 
     return x as i32;
@@ -245,7 +245,7 @@ impl Thread {
             }
 
             if tg.nextTimerID == end {
-                return Err(Error::SysError(SysErr::EAGAIN))
+                return Err(Error::SysError(SysErr::EAGAIN));
             }
         }
 
@@ -281,10 +281,10 @@ impl Thread {
                         Some(t) => {
                             let targettg = t.ThreadGroup();
                             if targettg != tg {
-                                return Err(Error::SysError(SysErr::EINVAL))
+                                return Err(Error::SysError(SysErr::EINVAL));
                             }
                             it.lock().target = Some(t.clone())
-                        },
+                        }
                     }
                 };
             }
@@ -298,9 +298,12 @@ impl Thread {
             }
         }
 
-        it.lock().timer = Some(timer::Timer::New(c, TimerListener::IntervalTimer(it.clone())));
+        it.lock().timer = Some(timer::Timer::New(
+            c,
+            TimerListener::IntervalTimer(it.clone()),
+        ));
         tg.lock().timers.insert(id, it);
-        return Ok(id)
+        return Ok(id);
     }
 
     // IntervalTimerDelete implements timer_delete(2).
@@ -317,11 +320,16 @@ impl Thread {
         };
 
         it.DestroyTimer();
-        return Ok(())
+        return Ok(());
     }
 
     // IntervalTimerSettime implements timer_settime(2).
-    pub fn IntervalTimerSettime(&self, id: TimerID, its: &Itimerspec, abs: bool) -> Result<Itimerspec> {
+    pub fn IntervalTimerSettime(
+        &self,
+        id: TimerID,
+        its: &Itimerspec,
+        abs: bool,
+    ) -> Result<Itimerspec> {
         let tg = self.lock().tg.clone();
         let timerMu = tg.TimerMu();
         let _tm = timerMu.lock();
@@ -336,10 +344,10 @@ impl Thread {
         let newS = timer::Setting::FromItimerspec(its, abs, &clock)?;
 
         let (tm, oldS) = timer.SwapAnd(&newS, || {
-             it.lock().timerSettingChanged();
+            it.lock().timerSettingChanged();
         });
         let its = timer::ItimerspecFromSetting(tm, oldS);
-        return Ok(its)
+        return Ok(its);
     }
 
     // IntervalTimerGettime implements timer_gettime(2).
@@ -355,7 +363,7 @@ impl Thread {
 
         let (tm, s) = it.lock().timer.clone().unwrap().Get();
         let its = timer::ItimerspecFromSetting(tm, s);
-        return Ok(its)
+        return Ok(its);
     }
 
     // IntervalTimerGetoverrun implements timer_getoverrun(2).
@@ -375,6 +383,6 @@ impl Thread {
         };
 
         let overrunLast = it.lock().overrunLast;
-        return Ok(saturateI32FromU64(overrunLast))
+        return Ok(saturateI32FromU64(overrunLast));
     }
 }

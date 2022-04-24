@@ -18,15 +18,15 @@ use super::mm::*;
 pub type Dumpability = i32;
 
 // NotDumpable indicates that core dumps should never be created.
-pub const NOT_DUMPABLE : Dumpability = 0;
+pub const NOT_DUMPABLE: Dumpability = 0;
 
 // UserDumpable indicates that core dumps should be created, owned by
 // the current user.
-pub const USER_DUMPABLE : Dumpability = 1;
+pub const USER_DUMPABLE: Dumpability = 1;
 
 // RootDumpable indicates that core dumps should be created, owned by
 // root.
-pub const ROOT_DUMPABLE : Dumpability = 2;
+pub const ROOT_DUMPABLE: Dumpability = 2;
 
 impl MemoryManager {
     pub fn Dumpability(&self) -> Dumpability {

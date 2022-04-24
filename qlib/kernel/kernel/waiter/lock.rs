@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
+use alloc::sync::Arc;
 use core::ops::Deref;
 
-use super::super::super::threadmgr::task_block::*;
 use super::super::super::super::common::*;
+use super::super::super::threadmgr::task_block::*;
 use super::entry::*;
 use super::queue::*;
 use super::*;
@@ -73,16 +73,20 @@ impl QLock {
                 //fast path
                 return Ok(QLockGuard {
                     lock: Some(self.clone()),
-                })
+                });
             }
             match blocker.BlockGeneral() {
                 Err(e) => {
-                    self.lock().queue.EventUnregister(task, &blocker.generalEntry);
-                    return Err(e)
+                    self.lock()
+                        .queue
+                        .EventUnregister(task, &blocker.generalEntry);
+                    return Err(e);
                 }
-                Ok(()) => ()
+                Ok(()) => (),
             }
-            self.lock().queue.EventUnregister(task, &blocker.generalEntry);
+            self.lock()
+                .queue
+                .EventUnregister(task, &blocker.generalEntry);
         }
 
         //return blocker.Qlock(task, self);
@@ -97,14 +101,14 @@ impl Blocker {
                 //fast path
                 return Ok(QLockGuard {
                     lock: Some(l.clone()),
-                })
+                });
             }
             match self.BlockGeneral() {
                 Err(e) => {
                     l.lock().queue.EventUnregister(task, &self.generalEntry);
-                    return Err(e)
+                    return Err(e);
                 }
-                Ok(()) => ()
+                Ok(()) => (),
             }
         }
     }
@@ -112,7 +116,7 @@ impl Blocker {
 
 #[derive(Clone, Default)]
 pub struct QLockGuard {
-    pub lock: Option<QLock>
+    pub lock: Option<QLock>,
 }
 
 impl Drop for QLockGuard {

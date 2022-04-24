@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use clap::{App, AppSettings, SubCommand, ArgMatches, Arg};
 use alloc::string::String;
+use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 
 use super::super::super::qlib::common::*;
 use super::super::cmd::config::*;
@@ -22,7 +22,7 @@ use super::super::container::status::*;
 use super::command::*;
 
 #[derive(Default, Debug)]
-pub struct DeleteCmd  {
+pub struct DeleteCmd {
     pub id: String,
     pub force: bool,
 }
@@ -32,7 +32,7 @@ impl DeleteCmd {
         return Ok(Self {
             id: cmd_matches.value_of("id").unwrap().to_string(),
             force: cmd_matches.is_present("force"),
-        })
+        });
     }
 
     pub fn SubCommand<'a, 'b>(common: &CommonArgs<'a, 'b>) -> App<'a, 'b> {
@@ -51,11 +51,13 @@ impl DeleteCmd {
         info!("Container:: Delete ....");
         let mut container = Container::Load(&gCfg.RootDir, &self.id)?;
 
-        if !self.force && container.Status != Status::Created && container.Status != Status::Stopped {
-            return Err(Error::Common("cannot delete container that is not stopped without --force flag".to_string()));
+        if !self.force && container.Status != Status::Created && container.Status != Status::Stopped
+        {
+            return Err(Error::Common(
+                "cannot delete container that is not stopped without --force flag".to_string(),
+            ));
         }
 
-        return container.Destroy()
+        return container.Destroy();
     }
 }
-

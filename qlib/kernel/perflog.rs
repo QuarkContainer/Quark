@@ -12,22 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
 use core::mem;
-use crate::qlib::mutex::*;
 
 use super::super::perf_tunning::*;
-use super::uid::*;
-use super::task::*;
 use super::super::singleton::*;
+use super::task::*;
+use super::uid::*;
 
-pub static THREAD_COUNTS : Singleton<QMutex<ThreadPerfCounters>> = Singleton::<QMutex<ThreadPerfCounters>>::New();
-
+pub static THREAD_COUNTS: Singleton<QMutex<ThreadPerfCounters>> =
+    Singleton::<QMutex<ThreadPerfCounters>>::New();
 
 #[derive(Default)]
 pub struct ThreadPerfCounters {
-    data: BTreeMap<u64, Arc<Counters>>
+    data: BTreeMap<u64, Arc<Counters>>,
 }
 
 impl ThreadPerfCounters {
@@ -39,7 +39,7 @@ impl ThreadPerfCounters {
     }
 
     pub fn PerfType(&self) -> &str {
-        return "PerfPrint::Thread"
+        return "PerfPrint::Thread";
     }
 
     pub fn Print(&self, onlySum: bool) {
@@ -70,7 +70,7 @@ impl ThreadPerfCounters {
                         continue;
                     }
                     let val = counts.data[i].Val();
-                    line += &format!("{:?}->{}/{} \t", t, val / 100_000, val / (total/1000));
+                    line += &format!("{:?}->{}/{} \t", t, val / 100_000, val / (total / 1000));
                 }
 
                 error!("{}", line);
@@ -79,7 +79,7 @@ impl ThreadPerfCounters {
 
         if sum[0] < 1000 {
             error!("PerfPrint::Threads not ready ....");
-            return
+            return;
         }
 
         let mut line = format!("{} \t", self.PerfType());
@@ -90,7 +90,7 @@ impl ThreadPerfCounters {
                 continue;
             }
             let val = sum[i];
-            line += &format!("{:?}->{}/{} \t", t, val / 100_000, val / (sum[0]/1000));
+            line += &format!("{:?}->{}/{} \t", t, val / 100_000, val / (sum[0] / 1000));
         }
         error!("{}", line);
     }

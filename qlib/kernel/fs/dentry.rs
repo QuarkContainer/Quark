@@ -12,17 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::string::String;
-use alloc::string::ToString;
+use crate::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::collections::btree_map::Range;
-use core::ops::Bound::*;
-use alloc::vec::Vec;
-use crate::qlib::mutex::*;
+use alloc::string::String;
+use alloc::string::ToString;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::ops::Bound::*;
 
-use super::super::super::device::*;
 use super::super::super::common::*;
+use super::super::super::device::*;
 use super::super::task::*;
 use super::attr::*;
 
@@ -36,8 +36,8 @@ impl DentAttr {
     pub fn GenericDentAttr(nt: InodeType, device: &Arc<QMutex<Device>>) -> Self {
         return Self {
             Type: nt,
-            InodeId: device.lock().NextIno()
-        }
+            InodeId: device.lock().NextIno(),
+        };
     }
 }
 
@@ -55,7 +55,7 @@ impl CollectEntriesSerilizer {
     pub fn New() -> Self {
         return Self {
             Entries: BTreeMap::new(),
-        }
+        };
     }
 
     pub fn Order(&self) -> Vec<String> {
@@ -72,7 +72,7 @@ impl CollectEntriesSerilizer {
 impl DentrySerializer for CollectEntriesSerilizer {
     fn CopyOut(&mut self, _task: &Task, name: &str, attr: &DentAttr) -> Result<()> {
         self.Entries.insert(name.to_string(), attr.clone());
-        return Ok(())
+        return Ok(());
     }
 
     fn Written(&self) -> usize {
@@ -82,7 +82,7 @@ impl DentrySerializer for CollectEntriesSerilizer {
 
 pub struct DirCtx<'a> {
     pub Serializer: &'a mut DentrySerializer,
-    pub DirCursor: String
+    pub DirCursor: String,
 }
 
 impl<'a> DirCtx<'a> {
@@ -90,7 +90,7 @@ impl<'a> DirCtx<'a> {
         return Self {
             Serializer: Serializer,
             DirCursor: cursor.to_string(),
-        }
+        };
     }
 
     pub fn DirEmit(&mut self, task: &Task, name: &str, attr: &DentAttr) -> Result<()> {
@@ -109,24 +109,24 @@ impl<'a> DirCtx<'a> {
 
         for (name, attr) in range {
             if *name == "" || *name == "." || *name == ".." {
-                continue
+                continue;
             }
 
             match self.DirEmit(task, name, attr) {
                 Err(error) => {
                     if count > 0 {
-                        return Ok(count)
+                        return Ok(count);
                     }
                     return Err(error);
                 }
-                _ => ()
+                _ => (),
             }
             count += 1;
 
             self.DirCursor = name.clone();
         }
 
-        return Ok(count)
+        return Ok(count);
     }
 }
 
@@ -138,15 +138,13 @@ impl Default for DentMap {
     fn default() -> Self {
         return Self {
             Entries: BTreeMap::new(),
-        }
+        };
     }
 }
 
 impl DentMap {
     pub fn New(entries: BTreeMap<String, DentAttr>) -> Self {
-        return Self {
-            Entries: entries,
-        }
+        return Self { Entries: entries };
     }
 
     pub fn Add(&mut self, name: &str, attr: &DentAttr) {
@@ -158,11 +156,11 @@ impl DentMap {
     }
 
     pub fn GetNext(&self, name: String) -> Range<String, DentAttr> {
-        return self.Entries.range((Excluded(name), Unbounded))
+        return self.Entries.range((Excluded(name), Unbounded));
     }
 
     pub fn GetAll(&self) -> Range<String, DentAttr> {
-        return self.Entries.range((Included("".to_string()), Unbounded))
+        return self.Entries.range((Included("".to_string()), Unbounded));
     }
 
     pub fn Containers(&self, name: &str) -> bool {

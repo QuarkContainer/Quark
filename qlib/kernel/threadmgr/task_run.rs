@@ -15,8 +15,8 @@
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::task::*;
-use super::super::threadmgr::thread::*;
 use super::super::threadmgr::task_syscall::*;
+use super::super::threadmgr::thread::*;
 use super::thread_group::*;
 
 impl ThreadInternal {

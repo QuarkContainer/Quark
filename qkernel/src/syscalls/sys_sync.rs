@@ -12,18 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-use super::super::task::*;
-use super::super::qlib::common::*;
 use super::super::fs::file::*;
 use super::super::fs::host::hostinodeop::*;
-use super::super::Kernel::HostSpace;
+use super::super::qlib::common::*;
 use super::super::syscalls::syscalls::*;
+use super::super::task::*;
+use super::super::Kernel::HostSpace;
 
 // Sync implements linux system call sync(2).
 pub fn SysSync(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
     HostSpace::SysSync();
-    return Ok(0)
+    return Ok(0);
 }
 
 // Syncfs implements linux system call syncfs(2).
@@ -34,12 +33,10 @@ pub fn SysSyncFs(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let inode = file.Dirent.Inode();
     let iops = inode.lock().InodeOp.clone();
     match iops.as_any().downcast_ref::<HostInodeOp>() {
-        None => {
-            return Ok(0)
-        },
+        None => return Ok(0),
         Some(h) => {
             h.SyncFs()?;
-            return Ok(0)
+            return Ok(0);
         }
     }
 }
@@ -55,12 +52,10 @@ pub fn SysSyncFileRange(task: &mut Task, args: &SyscallArguments) -> Result<i64>
     let inode = file.Dirent.Inode();
     let iops = inode.lock().InodeOp.clone();
     match iops.as_any().downcast_ref::<HostInodeOp>() {
-        None => {
-            return Ok(0)
-        },
+        None => return Ok(0),
         Some(h) => {
             h.SyncFileRange(offset, nbytes, uflags)?;
-            return Ok(0)
+            return Ok(0);
         }
     }
 }
@@ -72,7 +67,7 @@ pub fn SysFsync(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let file = task.GetFile(fd)?;
 
     file.Fsync(task, 0, FILE_MAX_OFFSET, SyncType::SyncAll)?;
-    return Ok(0)
+    return Ok(0);
 }
 
 // Fdatasync implements linux syscall fdatasync(2).
@@ -84,5 +79,5 @@ pub fn SysDatasync(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let file = task.GetFile(fd)?;
 
     file.Fsync(task, 0, FILE_MAX_OFFSET, SyncType::SyncData)?;
-    return Ok(0)
+    return Ok(0);
 }

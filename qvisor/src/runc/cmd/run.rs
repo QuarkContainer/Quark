@@ -12,19 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use clap::{App, AppSettings, SubCommand, ArgMatches};
 use alloc::string::String;
+use clap::{App, AppSettings, ArgMatches, SubCommand};
 
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::path::*;
 use super::super::cmd::config::*;
-use super::super::oci::*;
 use super::super::container::container::*;
+use super::super::oci::*;
 use super::command::*;
 
 #[derive(Debug)]
-pub struct RunCmd  {
+pub struct RunCmd {
     pub id: String,
     pub bundleDir: String,
     pub consoleSocket: String,
@@ -42,7 +42,7 @@ impl RunCmd {
             detach: cmd_matches.is_present("detach"),
             pivot: !cmd_matches.is_present("no-pivot"),
             pid: cmd_matches.value_of("p").unwrap().to_string(),
-        })
+        });
     }
 
     pub fn SubCommand<'a, 'b>(common: &CommonArgs<'a, 'b>) -> App<'a, 'b> {
@@ -54,7 +54,7 @@ impl RunCmd {
             .arg(&common.detach_arg)
             .arg(&common.no_pivot_arg)
             .arg(&common.pid_arg)
-            .about("Run a container") ;
+            .about("Run a container");
     }
 
     pub fn Run(&self, gCfg: &GlobalConfig) -> Result<()> {
@@ -70,10 +70,10 @@ impl RunCmd {
             &self.pid,
             "",
             self.detach,
-            self.pivot
+            self.pivot,
         )?;
 
         println!("exit status is {}", WaitStatus(status as u32).ExitStatus());
-        return Ok(())
+        return Ok(());
     }
 }

@@ -13,11 +13,11 @@
 // limitations under the License.
 
 use core::cell::UnsafeCell;
-use core::ops::{Deref, DerefMut};
 use core::fmt;
-use core::sync::atomic::{AtomicU64};
-use core::marker::PhantomData;
 use core::hint::spin_loop;
+use core::marker::PhantomData;
+use core::ops::{Deref, DerefMut};
+use core::sync::atomic::AtomicU64;
 use spin::*;
 
 use super::linux_def::QOrdering;
@@ -70,7 +70,7 @@ impl<T, R> QMutexIntern<T, R> {
 
 #[inline(always)]
 pub fn CmpExchg(addr: u64, old: u64, new: u64) -> u64 {
-    let mut ret : u64;
+    let mut ret: u64;
     unsafe {
         llvm_asm!("
               lock cmpxchgq $2, ($3)
@@ -97,7 +97,7 @@ pub fn WriteOnce(addr: u64, val: u64) {
 }
 
 #[inline(always)]
-pub fn LoadOnce(addr: u64) ->  u64 {
+pub fn LoadOnce(addr: u64) -> u64 {
     let ret: u64;
     unsafe {
         llvm_asm!("
@@ -120,16 +120,16 @@ impl<T: ?Sized> QMutexIntern<T> {
             Err(v) => return v,
         }*/
 
-        return CmpExchg(&self.lock as * const _ as u64, old, new)
+        return CmpExchg(&self.lock as *const _ as u64, old, new);
         //return self.lock.compare_and_swap(old, new, QOrdering::ACQUIRE);
     }
 
     pub fn Addr(&self) -> u64 {
-        return &self.lock as * const _ as u64
+        return &self.lock as *const _ as u64;
     }
 
     pub fn MutexId(&self) -> u64 {
-        return &self.lock as * const _ as u64;
+        return &self.lock as *const _ as u64;
     }
 
     #[inline(always)]
@@ -150,16 +150,16 @@ impl<T: ?Sized> QMutexIntern<T> {
                 return QMutexInternGuard {
                     lock: &self.lock,
                     data: unsafe { &mut *self.data.get() },
-                }
+                };
             }
 
             spin_loop();
         }
 
-        raw!(0x123, val, &self.lock as * const _ as u64);
-        defer!(raw!(0x122, val, &self.lock as * const _ as u64));
+        raw!(0x123, val, &self.lock as *const _ as u64);
+        defer!(raw!(0x122, val, &self.lock as *const _ as u64));
 
-        loop  {
+        loop {
             super::super::asm::mfence();
             //let val = self.lock.compare_and_swap(0, id, QOrdering::ACQUIRE);
             let val = self.CmpExchg(0, id);
@@ -175,7 +175,7 @@ impl<T: ?Sized> QMutexIntern<T> {
         return QMutexInternGuard {
             lock: &self.lock,
             data: unsafe { &mut *self.data.get() },
-        }
+        };
     }
 
     #[inline(always)]
@@ -274,7 +274,6 @@ pub struct QRwLockInternWriteGuard<'a, T: 'a + ?Sized> {
     data: QMutexInternGuard<'a, T>,
 }
 
-
 unsafe impl<T: ?Sized + Send> Send for QRwLockIntern<T> {}
 unsafe impl<T: ?Sized + Send + Sync> Sync for QRwLockIntern<T> {}
 
@@ -282,8 +281,8 @@ impl<T> QRwLockIntern<T> {
     #[inline]
     pub const fn new(data: T) -> Self {
         return Self {
-            data: QMutexIntern::new(data)
-        }
+            data: QMutexIntern::new(data),
+        };
     }
 }
 
@@ -291,25 +290,23 @@ impl<T: ?Sized> QRwLockIntern<T> {
     #[inline]
     pub fn read(&self) -> QRwLockInternReadGuard<T> {
         return QRwLockInternReadGuard {
-            data: self.data.lock()
-        }
+            data: self.data.lock(),
+        };
     }
 
     #[inline]
     pub fn write(&self) -> QRwLockInternWriteGuard<T> {
         super::super::asm::mfence();
         return QRwLockInternWriteGuard {
-            data: self.data.lock()
-        }
+            data: self.data.lock(),
+        };
     }
 
     #[inline]
     pub fn try_read(&self) -> Option<QRwLockInternReadGuard<T>> {
         match self.data.try_lock() {
             None => None,
-            Some(g) => Some(QRwLockInternReadGuard{
-                data: g
-            })
+            Some(g) => Some(QRwLockInternReadGuard { data: g }),
         }
     }
 
@@ -317,9 +314,7 @@ impl<T: ?Sized> QRwLockIntern<T> {
     pub fn try_write(&self) -> Option<QRwLockInternWriteGuard<T>> {
         match self.data.try_lock() {
             None => None,
-            Some(g) => Some(QRwLockInternWriteGuard{
-                data: g
-            })
+            Some(g) => Some(QRwLockInternWriteGuard { data: g }),
         }
     }
 }

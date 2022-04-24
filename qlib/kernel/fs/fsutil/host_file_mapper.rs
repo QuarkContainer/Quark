@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::collections::btree_map::BTreeMap;
 use crate::qlib::mutex::*;
+use alloc::collections::btree_map::BTreeMap;
 
 use super::super::super::super::linux_def::*;
 use super::super::super::super::range::*;
@@ -28,7 +28,7 @@ const CHUNK_SIZE: u64 = 1 << CHUNK_SHIFT;
 const CHUNK_MASK: u64 = CHUNK_SIZE - 1;
 
 fn PagesInChunk(mr: &Range, chunkStart: u64) -> i32 {
-    return (mr.Intersect(&Range::New(chunkStart, CHUNK_SIZE)).Len() / MemoryDef::PAGE_SIZE) as i32
+    return (mr.Intersect(&Range::New(chunkStart, CHUNK_SIZE)).Len() / MemoryDef::PAGE_SIZE) as i32;
 }
 
 pub struct HostFileMapper {
@@ -41,7 +41,7 @@ impl HostFileMapper {
         return Self {
             refs: QMutex::new(BTreeMap::new()),
             mappings: QMutex::new(BTreeMap::new()),
-        }
+        };
     }
 }
 

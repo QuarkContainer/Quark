@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
-use core::ops::Deref;
 use alloc::collections::btree_map::BTreeMap;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::ops::Deref;
 use core::sync::atomic::{AtomicU8, Ordering};
 
 use super::super::super::common::*;
-use super::super::super::linux_def::*;
 use super::super::super::linux::futex::*;
-use super::super::task::*;
-use super::super::kernel::waiter::*;
-use super::super::SHARESPACE;
+use super::super::super::linux_def::*;
 use super::super::super::object_ref::*;
+use super::super::kernel::waiter::*;
+use super::super::task::*;
+use super::super::SHARESPACE;
 
 pub type FutexMgrRef = ObjectRef<FutexMgr>;
 pub static FUTEX_MGR: FutexMgrRef = FutexMgrRef::New();
@@ -61,7 +61,7 @@ pub enum KeyKind {
 
 impl Default for KeyKind {
     fn default() -> Self {
-        return Self::KindPrivate
+        return Self::KindPrivate;
     }
 }
 
@@ -105,18 +105,18 @@ pub trait Target {
 
 impl Target for Task {
     fn SwapU32(&self, addr: u64, new: u32) -> Result<u32> {
-        return self.mm.SwapU32(self, addr, new)
+        return self.mm.SwapU32(self, addr, new);
     }
 
     fn CompareAndSwapU32(&self, addr: u64, old: u32, new: u32) -> Result<u32> {
         let val = self.mm.CompareAndSwapU32(self, addr, old, new)?;
-        return Ok(val)
+        return Ok(val);
     }
 
     fn LoadU32(&self, addr: u64) -> Result<u32> {
-        let val : u32 = self.CopyInObj(addr)?;
+        let val: u32 = self.CopyInObj(addr)?;
 
-        return Ok(val)
+        return Ok(val);
     }
 
     fn GetSharedKey(&self, addr: u64) -> Result<Key> {
@@ -137,7 +137,7 @@ impl Target for Task {
             return Ok(Key {
                 Kind: KeyKind::KindSharedPrivate,
                 Addr: addr,
-            })
+            });
         }
 
         let (phyAdr, _) = self.mm.VirtualToPhyLocked(addr)?;
@@ -145,7 +145,7 @@ impl Target for Task {
         return Ok(Key {
             Kind: KeyKind::KindSharedMappable,
             Addr: phyAdr,
-        })
+        });
     }
 }
 
@@ -157,7 +157,7 @@ fn Check(t: &Target, addr: u64, val: u32) -> Result<()> {
         return Err(Error::SysError(SysErr::EAGAIN));
     }
 
-    return Ok(())
+    return Ok(());
 }
 
 // atomicOp performs a complex operation on the given address.
@@ -185,7 +185,7 @@ fn AtomicOp(t: &Target, addr: u64, opIn: u32) -> Result<bool> {
                 FUTEX_OP_OR => oldVal | opArg,
                 FUTEX_OP_ANDN => oldVal & !opArg,
                 FUTEX_OP_XOR => oldVal ^ opArg,
-                _ => return Err(Error::SysError(SysErr::ENOSYS))
+                _ => return Err(Error::SysError(SysErr::ENOSYS)),
             };
 
             let prev = t.CompareAndSwapU32(addr, oldVal, newVal)?;
@@ -219,10 +219,10 @@ fn Getkey(t: &Target, addr: u64, private: bool) -> Result<Key> {
         return Ok(Key {
             Kind: KeyKind::KindPrivate,
             Addr: addr,
-        })
+        });
     }
 
-    return t.GetSharedKey(addr)
+    return t.GetSharedKey(addr);
 }
 
 pub struct SpinLock {
@@ -234,14 +234,16 @@ impl Default for SpinLock {
     fn default() -> Self {
         return Self {
             lock: AtomicU8::new(0),
-        }
+        };
     }
 }
 
 impl SpinLock {
     pub fn Lock(&self) {
         loop {
-            let old = self.lock.compare_exchange(0, 1, Ordering::SeqCst, Ordering::SeqCst);
+            let old = self
+                .lock
+                .compare_exchange(0, 1, Ordering::SeqCst, Ordering::SeqCst);
             if old == Ok(0) {
                 break;
             }
@@ -342,16 +344,16 @@ impl Deref for FutexMgr {
 
 impl FutexMgr {
     pub fn Addr(&self) -> u64 {
-        return self as * const _ as u64
+        return self as *const _ as u64;
     }
 
     pub fn Fork(&self) -> Self {
         let internal = FutexMgrInternal {
             shared: self.shared.clone(),
-            private: Bucket::default()
+            private: Bucket::default(),
         };
 
-        return Self(Arc::new(internal))
+        return Self(Arc::new(internal));
     }
 
     pub fn lockQueue(&self, k: &Key) -> Option<Queue> {
@@ -436,7 +438,7 @@ impl FutexMgr {
 
         let q1 = self.GetCreateQueues(k1);
         let q2 = self.GetCreateQueues(k2);
-        return (q1, q2)
+        return (q1, q2);
     }
 
     pub fn Wake(&self, t: &Target, addr: u64, private: bool, bitmask: u32, n: i32) -> Result<i32> {
@@ -460,8 +462,17 @@ impl FutexMgr {
         return res;
     }
 
-    pub fn doRequeue(&self, t: &Target, addr: u64, naddr: u64, private: bool,
-                     checkval: bool, val: u32, nwake: i32, nreq: i32) -> Result<i32> {
+    pub fn doRequeue(
+        &self,
+        t: &Target,
+        addr: u64,
+        naddr: u64,
+        private: bool,
+        checkval: bool,
+        val: u32,
+        nwake: i32,
+        nreq: i32,
+    ) -> Result<i32> {
         let k1 = Getkey(t, addr, private)?;
         let k2 = Getkey(t, naddr, private)?;
 
@@ -472,9 +483,9 @@ impl FutexMgr {
                 Err(e) => {
                     self.unlock(&k1);
                     self.unlock(&k2);
-                    return Err(e)
+                    return Err(e);
                 }
-                _ => ()
+                _ => (),
             }
         }
 
@@ -494,27 +505,53 @@ impl FutexMgr {
         self.unlock(&k1);
         self.unlock(&k2);
 
-        return Ok(done)
+        return Ok(done);
     }
 
     // Requeue wakes up to nwake waiters on the given addr, and unconditionally
     // requeues up to nreq waiters on naddr.
-    pub fn Requeue(&self, t: &Target, addr: u64, naddr: u64, private: bool, nwake: i32, nreq: i32) -> Result<i32> {
-        return self.doRequeue(t, addr, naddr, private, false, 0, nwake, nreq)
+    pub fn Requeue(
+        &self,
+        t: &Target,
+        addr: u64,
+        naddr: u64,
+        private: bool,
+        nwake: i32,
+        nreq: i32,
+    ) -> Result<i32> {
+        return self.doRequeue(t, addr, naddr, private, false, 0, nwake, nreq);
     }
 
     // RequeueCmp atomically checks that the addr contains val (via the Target),
     // wakes up to nwake waiters on addr and then unconditionally requeues nreq
     // waiters on naddr.
-    pub fn RequeueCmp(&self, t: &Target, addr: u64, naddr: u64, private: bool, val: u32, nwake: i32, nreq: i32) -> Result<i32> {
-        return self.doRequeue(t, addr, naddr, private, true, val, nwake, nreq)
+    pub fn RequeueCmp(
+        &self,
+        t: &Target,
+        addr: u64,
+        naddr: u64,
+        private: bool,
+        val: u32,
+        nwake: i32,
+        nreq: i32,
+    ) -> Result<i32> {
+        return self.doRequeue(t, addr, naddr, private, true, val, nwake, nreq);
     }
 
     // WakeOp atomically applies op to the memory address addr2, wakes up to nwake1
     // waiters unconditionally from addr1, and, based on the original value at addr2
     // and a comparison encoded in op, wakes up to nwake2 waiters from addr2.
     // It returns the total number of waiters woken.
-    pub fn WakeOp(&self, t: &Target, addr1: u64, addr2: u64, private: bool, nwake1: i32, nwake2: i32, op: u32) -> Result<i32> {
+    pub fn WakeOp(
+        &self,
+        t: &Target,
+        addr1: u64,
+        addr2: u64,
+        private: bool,
+        nwake1: i32,
+        nwake2: i32,
+        op: u32,
+    ) -> Result<i32> {
         let k1 = Getkey(t, addr1, private)?;
         let k2 = Getkey(t, addr2, private)?;
 
@@ -524,9 +561,9 @@ impl FutexMgr {
             Err(e) => {
                 self.unlock(&k1);
                 self.unlock(&k2);
-                return Err(e)
+                return Err(e);
             }
-            Ok(c) => c
+            Ok(c) => c,
         };
 
         // Wake up up to nwake1 entries from the first bucket.
@@ -541,14 +578,22 @@ impl FutexMgr {
         self.unlock(&k1);
         self.unlock(&k2);
 
-        return Ok(done)
+        return Ok(done);
     }
 
     // WaitPrepare atomically checks that addr contains val (via the Checker), then
     // enqueues w to be woken by a send to w.C. If WaitPrepare returns nil, the
     // Waiter must be subsequently removed by calling WaitComplete, whether or not
     // a wakeup is received on w.
-    pub fn WaitPrepare(&self, w: &WaitEntry, t: &Target, addr: u64, private: bool, val: u32, bitmask: u32) -> Result<()> {
+    pub fn WaitPrepare(
+        &self,
+        w: &WaitEntry,
+        t: &Target,
+        addr: u64,
+        private: bool,
+        val: u32,
+        bitmask: u32,
+    ) -> Result<()> {
         let k = Getkey(t, addr, private)?;
 
         w.Clear();
@@ -561,15 +606,15 @@ impl FutexMgr {
         match Check(t, addr, val) {
             Err(e) => {
                 self.unlock(&k);
-                return Err(e)
+                return Err(e);
             }
-            _ => ()
+            _ => (),
         }
 
         q.write().PushBack(&w);
         self.unlock(&k);
 
-        return Ok(())
+        return Ok(());
     }
 
     // WaitComplete must be called when a Waiter previously added by WaitPrepare is
@@ -587,7 +632,7 @@ impl FutexMgr {
             if key != w.lock().context.ThreadContext().key {
                 //the w has been requeued or waked
                 self.unlock(&key);
-                continue
+                continue;
             }
 
             q.write().Remove(w);
@@ -609,7 +654,15 @@ impl FutexMgr {
     // FUTEX_OWNER_DIED is only set by the Linux when robust lists are in use (see
     // exit_robust_list()). Given we don't support robust lists, although handled
     // below, it's never set.
-    pub fn LockPI(&self, w: &WaitEntry, t: &Target, addr: u64, tid: u32, private: bool, retry: bool) -> Result<bool> {
+    pub fn LockPI(
+        &self,
+        w: &WaitEntry,
+        t: &Target,
+        addr: u64,
+        tid: u32,
+        private: bool,
+        retry: bool,
+    ) -> Result<bool> {
         let k = Getkey(t, addr, private)?;
 
         w.Clear();
@@ -622,21 +675,29 @@ impl FutexMgr {
         let success = match self.lockPILocked(w, t, addr, tid, &q, retry) {
             Err(e) => {
                 self.unlock(&k);
-                return Err(e)
+                return Err(e);
             }
             Ok(s) => s,
         };
 
         self.unlock(&k);
-        return Ok(success)
+        return Ok(success);
     }
 
-    fn lockPILocked(&self, w: &WaitEntry, t: &Target, addr: u64, tid: u32, q: &Queue, tryit: bool) -> Result<bool> {
+    fn lockPILocked(
+        &self,
+        w: &WaitEntry,
+        t: &Target,
+        addr: u64,
+        tid: u32,
+        q: &Queue,
+        tryit: bool,
+    ) -> Result<bool> {
         loop {
             let cur = t.LoadU32(addr)?;
 
             if (cur & FUTEX_TID_MASK) == tid {
-                return Err(Error::SysError(SysErr::EDEADLK))
+                return Err(Error::SysError(SysErr::EDEADLK));
             }
 
             if (cur & FUTEX_TID_MASK) == 0 {
@@ -653,16 +714,16 @@ impl FutexMgr {
                     // Linux reacquires the bucket lock on retries, which will re-lookup the
                     // mapping at the futex address. However, retrying while holding the
                     // lock is more efficient and reduces the chance of another conflict.
-                    continue
+                    continue;
                 }
 
-                return Ok(true)
+                return Ok(true);
             }
 
             // Futex is already owned, prepare to wait.
             if tryit {
                 // Caller doesn't want to wait.
-                return Ok(false)
+                return Ok(false);
             }
 
             // Set waiters bit if not set yet.
@@ -676,7 +737,7 @@ impl FutexMgr {
             }
 
             q.write().PushBack(w);
-            return Ok(false)
+            return Ok(false);
         }
     }
 
@@ -692,14 +753,14 @@ impl FutexMgr {
         let err = self.unlockPILocked(t, addr, tid, &q);
 
         self.unlock(&k);
-        return err
+        return err;
     }
 
     fn unlockPILocked(&self, t: &Target, addr: u64, tid: u32, q: &Queue) -> Result<()> {
         let cur = t.LoadU32(addr)?;
 
         if (cur & FUTEX_TID_MASK) != tid {
-            return Err(Error::SysError(SysErr::EPERM))
+            return Err(Error::SysError(SysErr::EPERM));
         }
 
         if q.read().Empty() {
@@ -708,10 +769,10 @@ impl FutexMgr {
             let prev = t.CompareAndSwapU32(addr, cur, 0)?;
 
             if prev != cur {
-                return Err(Error::SysError(SysErr::EAGAIN))
+                return Err(Error::SysError(SysErr::EAGAIN));
             }
 
-            return Ok(())
+            return Ok(());
         }
 
         let next = q.read().Front().unwrap();
@@ -725,10 +786,10 @@ impl FutexMgr {
 
         let prev = t.CompareAndSwapU32(addr, cur, val)?;
         if prev != cur {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         q.write().WakeWaiterLocked(&next, !0);
-        return Ok(())
+        return Ok(());
     }
 }

@@ -32,12 +32,12 @@ impl View {
     pub fn New(size: usize) -> Self {
         let mut data = Vec::with_capacity(size);
         data.resize(size, 0);
-        return Self(data)
+        return Self(data);
     }
 
     // NewViewFromBytes allocates a new buffer and copies in the given bytes.
     pub fn NewFromBytes(b: Vec<u8>) -> Self {
-        return Self(b)
+        return Self(b);
     }
 
     // TrimFront removes the first "count" bytes from the visible section of the
@@ -73,7 +73,7 @@ impl VectorisedView {
         return Self {
             views: views,
             size: size,
-        }
+        };
     }
 
     // TrimFront removes the first "count" bytes of the vectorised view.
@@ -84,7 +84,7 @@ impl VectorisedView {
             if count < self.views[0].len() {
                 self.size -= count;
                 self.views[0].TrimFront(count);
-                return
+                return;
             }
 
             count -= self.views[0].len();
@@ -95,7 +95,7 @@ impl VectorisedView {
     // CapLength irreversibly reduces the length of the vectorised view.
     pub fn CapLength(&mut self, length: usize) {
         if self.size < length {
-            return
+            return;
         }
 
         let mut length = length;
@@ -108,7 +108,7 @@ impl VectorisedView {
                     self.views.truncate(i);
                 } else {
                     self.views[i].CapLength(length);
-                    self.views.truncate(i+1);
+                    self.views.truncate(i + 1);
                 }
             }
 
@@ -125,7 +125,7 @@ impl VectorisedView {
         return Self {
             views: buf,
             size: self.size,
-        }
+        };
     }
 
     // First returns the first view of the vectorised view.
@@ -134,13 +134,13 @@ impl VectorisedView {
             return None;
         }
 
-        return Some(&self.views[0])
+        return Some(&self.views[0]);
     }
 
     // RemoveFirst removes the first view of the vectorised view.
     pub fn RemoveFirst(&mut self) {
         if self.views.len() == 0 {
-            return
+            return;
         }
 
         self.size -= self.views[0].len();
@@ -157,7 +157,7 @@ impl VectorisedView {
     // If the vectorised view contains a single view, that view will be returned
     // directly.
     pub fn ToView(mut self) -> View {
-        if self.views.len() == 1{
+        if self.views.len() == 1 {
             let data = self.views.pop();
             return data.unwrap();
         }
@@ -165,14 +165,14 @@ impl VectorisedView {
         let mut data = Vec::with_capacity(self.size);
         for i in 0..self.views.len() {
             data.append(&mut self.views[i].0)
-        };
+        }
 
-        return View(data)
+        return View(data);
     }
 
     // Views returns the slice containing the all views.
     pub fn Views(&self) -> &Vec<View> {
-        return &self.views
+        return &self.views;
     }
 
     // Append appends the views in a vectorised view to this vectorised view.

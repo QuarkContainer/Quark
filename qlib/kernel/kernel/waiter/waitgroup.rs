@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
+use alloc::sync::Arc;
 use core::ops::Deref;
 use core::sync::atomic::AtomicI32;
 use core::sync::atomic::Ordering;
 
 //use super::super::super::threadmgr::thread::*;
 use super::super::super::threadmgr::task_block::*;
-use super::queue::*;
 use super::entry::*;
+use super::queue::*;
 use super::*;
 
 #[derive(Default)]
@@ -50,7 +50,7 @@ impl WaitGroup {
             mutex: QMutex::new(()),
         };
 
-        return Self(Arc::new(internal))
+        return Self(Arc::new(internal));
     }
 
     // Add adds delta, which may be negative, to the WaitGroup counter.
@@ -74,7 +74,10 @@ impl WaitGroup {
         let val = prev + delta;
 
         if val < 0 {
-            panic!("sync: negative WaitGroup counter prev is {} delta is {}", prev, delta)
+            panic!(
+                "sync: negative WaitGroup counter prev is {} delta is {}",
+                prev, delta
+            )
         }
 
         if val == 0 {
@@ -94,7 +97,7 @@ impl WaitGroup {
     }
 
     //if return == true, it is blocked, otherwise it can return
-    pub fn EventRegister(&self, task: &Task,e: &WaitEntry, mask: EventMask) -> bool {
+    pub fn EventRegister(&self, task: &Task, e: &WaitEntry, mask: EventMask) -> bool {
         let w = self;
         w.mutex.lock();
         if w.cnt.load(Ordering::SeqCst) == 0 {
@@ -113,7 +116,7 @@ impl Blocker {
         let block = wg.EventRegister(task, &self.generalEntry, 1);
         if !block {
             //fast path
-            return
+            return;
         }
 
         return self.BlockGeneralOnly();

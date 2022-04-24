@@ -16,29 +16,29 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use spin::*;
 //use alloc::string::ToString;
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
+use alloc::sync::Arc;
 use core::any::Any;
 use core::ops::Deref;
 
-use super::super::super::common::*;
-use super::super::kernel::time::*;
-use super::super::uid::*;
-use super::super::super::linux_def::*;
 use super::super::super::auth::*;
-use super::super::task::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
+use super::super::kernel::time::*;
 use super::super::socket::unix::transport::unix::*;
+use super::super::task::*;
+use super::super::uid::*;
 
+use super::attr::*;
+use super::dentry::*;
 use super::dirent::*;
 use super::file::*;
-use super::attr::*;
 use super::flags::*;
-use super::dentry::*;
-use super::mount::*;
-use super::overlay::*;
 use super::host::hostinodeop::*;
 use super::inode_overlay::*;
 use super::lock::*;
+use super::mount::*;
+use super::overlay::*;
 
 pub fn ContextCanAccessFile(task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {
     let creds = task.creds.clone();
@@ -56,7 +56,10 @@ pub fn ContextCanAccessFile(task: &Task, inode: &Inode, reqPerms: &PermMask) -> 
     }
 
     //info!("ContextCanAccessFile 2");
-    if inode.StableAttr().IsFile() && reqPerms.execute && inode.lock().MountSource.lock().Flags.NoExec {
+    if inode.StableAttr().IsFile()
+        && reqPerms.execute
+        && inode.lock().MountSource.lock().Flags.NoExec
+    {
         return Ok(false);
     }
 
@@ -68,7 +71,7 @@ pub fn ContextCanAccessFile(task: &Task, inode: &Inode, reqPerms: &PermMask) -> 
     //info!("ContextCanAccessFile 4");
     if inode.StableAttr().IsDir() {
         if CheckCapability(&creds, Capability::CAP_DAC_OVERRIDE, &uattr) {
-            return Ok(true)
+            return Ok(true);
         }
     }
 
@@ -107,7 +110,7 @@ pub enum IopsType {
     PipeIops,
     DirNode,
     SymlinkNode,
-    SimpleFileInode
+    SimpleFileInode,
 }
 
 pub trait InodeOperations: Sync + Send {
@@ -118,16 +121,57 @@ pub trait InodeOperations: Sync + Send {
     fn InodeFileType(&self) -> InodeFileType;
     fn WouldBlock(&self) -> bool;
     fn Lookup(&self, task: &Task, dir: &Inode, name: &str) -> Result<Dirent>;
-    fn Create(&self, task: &Task, dir: &mut Inode, name: &str, flags: &FileFlags, perm: &FilePermissions) -> Result<File>;
-    fn CreateDirectory(&self, task: &Task, dir: &mut Inode, name: &str, perm: &FilePermissions) -> Result<()>;
+    fn Create(
+        &self,
+        task: &Task,
+        dir: &mut Inode,
+        name: &str,
+        flags: &FileFlags,
+        perm: &FilePermissions,
+    ) -> Result<File>;
+    fn CreateDirectory(
+        &self,
+        task: &Task,
+        dir: &mut Inode,
+        name: &str,
+        perm: &FilePermissions,
+    ) -> Result<()>;
     fn CreateLink(&self, task: &Task, dir: &mut Inode, oldname: &str, newname: &str) -> Result<()>;
-    fn CreateHardLink(&self, task: &Task, dir: &mut Inode, target: &Inode, name: &str) -> Result<()>;
-    fn CreateFifo(&self, task: &Task, dir: &mut Inode, name: &str, perm: &FilePermissions) -> Result<()>;
+    fn CreateHardLink(
+        &self,
+        task: &Task,
+        dir: &mut Inode,
+        target: &Inode,
+        name: &str,
+    ) -> Result<()>;
+    fn CreateFifo(
+        &self,
+        task: &Task,
+        dir: &mut Inode,
+        name: &str,
+        perm: &FilePermissions,
+    ) -> Result<()>;
     //fn RemoveDirent(&mut self, dir: &mut InodeStruStru, remove: &Arc<QMutex<Dirent>>) -> Result<()> ;
     fn Remove(&self, task: &Task, dir: &mut Inode, name: &str) -> Result<()>;
     fn RemoveDirectory(&self, task: &Task, dir: &mut Inode, name: &str) -> Result<()>;
-    fn Rename(&self, task: &Task, dir: &mut Inode, oldParent: &Inode, oldname: &str, newParent: &Inode, newname: &str, replacement: bool) -> Result<()>;
-    fn Bind(&self, _task: &Task, _dir: &Inode, _name: &str, _data: &BoundEndpoint, _perms: &FilePermissions) -> Result<Dirent>;
+    fn Rename(
+        &self,
+        task: &Task,
+        dir: &mut Inode,
+        oldParent: &Inode,
+        oldname: &str,
+        newParent: &Inode,
+        newname: &str,
+        replacement: bool,
+    ) -> Result<()>;
+    fn Bind(
+        &self,
+        _task: &Task,
+        _dir: &Inode,
+        _name: &str,
+        _data: &BoundEndpoint,
+        _perms: &FilePermissions,
+    ) -> Result<Dirent>;
     fn BoundEndpoint(&self, _task: &Task, inode: &Inode, path: &str) -> Option<BoundEndpoint>;
     fn GetFile(&self, task: &Task, dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File>;
     fn UnstableAttr(&self, task: &Task, dir: &Inode) -> Result<UnstableAttr>;
@@ -140,7 +184,7 @@ pub trait InodeOperations: Sync + Send {
     fn SetTimestamps(&self, task: &Task, dir: &mut Inode, ts: &InterTimeSpec) -> Result<()>;
     fn Truncate(&self, task: &Task, dir: &mut Inode, size: i64) -> Result<()>;
     fn Allocate(&self, task: &Task, dir: &mut Inode, offset: i64, length: i64) -> Result<()>;
-    fn ReadLink(&self, _task: &Task,dir: &Inode) -> Result<String>;
+    fn ReadLink(&self, _task: &Task, dir: &Inode) -> Result<String>;
     fn GetLink(&self, _task: &Task, dir: &Inode) -> Result<Dirent>;
     fn AddLink(&self, _task: &Task);
     fn DropLink(&self, _task: &Task);
@@ -170,7 +214,7 @@ pub struct Inode(pub Arc<QMutex<InodeIntern>>);
 
 impl Default for Inode {
     fn default() -> Self {
-        return Self(Arc::new(QMutex::new(InodeIntern::New())))
+        return Self(Arc::new(QMutex::new(InodeIntern::New())));
     }
 }
 
@@ -183,7 +227,11 @@ impl Deref for Inode {
 }
 
 impl Inode {
-    pub fn New<T: InodeOperations + 'static>(InodeOp: &Arc<T>, MountSource: &Arc<QMutex<MountSource>>, StableAttr: &StableAttr) -> Self {
+    pub fn New<T: InodeOperations + 'static>(
+        InodeOp: &Arc<T>,
+        MountSource: &Arc<QMutex<MountSource>>,
+        StableAttr: &StableAttr,
+    ) -> Self {
         let inodeInternal = InodeIntern {
             UniqueId: NewUID(),
             InodeOp: InodeOp.clone(),
@@ -193,18 +241,29 @@ impl Inode {
             Overlay: None,
         };
 
-        return Self(Arc::new(QMutex::new(inodeInternal)))
+        return Self(Arc::new(QMutex::new(inodeInternal)));
     }
 
     pub fn WouldBlock(&self) -> bool {
         return self.lock().InodeOp.WouldBlock();
     }
 
-    pub fn NewHostInode(msrc: &Arc<QMutex<MountSource>>, fd: i32, fstat: &LibcStat, writeable: bool) -> Result<Self> {
+    pub fn NewHostInode(
+        msrc: &Arc<QMutex<MountSource>>,
+        fd: i32,
+        fstat: &LibcStat,
+        writeable: bool,
+    ) -> Result<Self> {
         //info!("after fstat: {:?}", fstat.StableAttr());
 
-         //println!("the stable attr is {:?}", &fstat.StableAttr());
-        let iops = HostInodeOp::New(&msrc.lock().MountSourceOperations.clone(), fd, fstat.WouldBlock(), &fstat, writeable);
+        //println!("the stable attr is {:?}", &fstat.StableAttr());
+        let iops = HostInodeOp::New(
+            &msrc.lock().MountSourceOperations.clone(),
+            fd,
+            fstat.WouldBlock(),
+            &fstat,
+            writeable,
+        );
 
         return Ok(Self(Arc::new(QMutex::new(InodeIntern {
             UniqueId: NewUID(),
@@ -213,7 +272,7 @@ impl Inode {
             LockCtx: LockCtx::default(),
             MountSource: msrc.clone(),
             Overlay: None,
-        }))))
+        }))));
     }
 
     pub fn InodeType(&self) -> InodeType {
@@ -229,7 +288,7 @@ impl Inode {
         if isOverlay {
             let overlay = self.lock().Overlay.as_ref().unwrap().clone();
             let (dirent, _) = overlayLookup(task, &overlay, self, name)?;
-            return Ok(dirent)
+            return Ok(dirent);
         }
 
         let iops = self.lock().InodeOp.clone();
@@ -237,7 +296,14 @@ impl Inode {
         return res;
     }
 
-    pub fn Create(&mut self, task: &Task, d: &Dirent, name: &str, flags: &FileFlags, perm: &FilePermissions) -> Result<File> {
+    pub fn Create(
+        &mut self,
+        task: &Task,
+        d: &Dirent,
+        name: &str,
+        flags: &FileFlags,
+        perm: &FilePermissions,
+    ) -> Result<File> {
         let isOverlay = self.lock().Overlay.is_some();
         if isOverlay {
             let overlay = self.lock().Overlay.as_ref().unwrap().clone();
@@ -249,7 +315,13 @@ impl Inode {
         return res;
     }
 
-    pub fn CreateDirectory(&mut self, task: &Task, d: &Dirent, name: &str, perm: &FilePermissions) -> Result<()> {
+    pub fn CreateDirectory(
+        &mut self,
+        task: &Task,
+        d: &Dirent,
+        name: &str,
+        perm: &FilePermissions,
+    ) -> Result<()> {
         let isOverlay = self.lock().Overlay.is_some();
         if isOverlay {
             let overlay = self.lock().Overlay.as_ref().unwrap().clone();
@@ -261,7 +333,13 @@ impl Inode {
         return res;
     }
 
-    pub fn CreateLink(&mut self, task: &Task, d: &Dirent, oldname: &str, newname: &str) -> Result<()> {
+    pub fn CreateLink(
+        &mut self,
+        task: &Task,
+        d: &Dirent,
+        oldname: &str,
+        newname: &str,
+    ) -> Result<()> {
         let isOverlay = self.lock().Overlay.is_some();
         if isOverlay {
             let overlay = self.lock().Overlay.as_ref().unwrap().clone();
@@ -273,7 +351,13 @@ impl Inode {
         return res;
     }
 
-    pub fn CreateHardLink(&mut self, task: &Task, d: &Dirent, target: &Dirent, name: &str) -> Result<()> {
+    pub fn CreateHardLink(
+        &mut self,
+        task: &Task,
+        d: &Dirent,
+        target: &Dirent,
+        name: &str,
+    ) -> Result<()> {
         let isOverlay = self.lock().Overlay.is_some();
         if isOverlay {
             let overlay = self.lock().Overlay.as_ref().unwrap().clone();
@@ -286,7 +370,13 @@ impl Inode {
         return res;
     }
 
-    pub fn CreateFifo(&mut self, task: &Task, d: &Dirent, name: &str, perm: &FilePermissions) -> Result<()> {
+    pub fn CreateFifo(
+        &mut self,
+        task: &Task,
+        d: &Dirent,
+        name: &str,
+        perm: &FilePermissions,
+    ) -> Result<()> {
         let isOverlay = self.lock().Overlay.is_some();
         if isOverlay {
             let overlay = self.lock().Overlay.as_ref().unwrap().clone();
@@ -314,19 +404,33 @@ impl Inode {
             InodeType::Directory | InodeType::SpecialDirectory => {
                 op.RemoveDirectory(task, self, &name)
             }
-            _ => {
-                op.Remove(task, self, &name)
-            }
+            _ => op.Remove(task, self, &name),
         };
 
         return res;
     }
 
-    pub fn Rename(&mut self, task: &Task, oldParent: &Dirent, renamed: &Dirent, newParent: &Dirent, newname: &str, replacement: bool) -> Result<()> {
+    pub fn Rename(
+        &mut self,
+        task: &Task,
+        oldParent: &Dirent,
+        renamed: &Dirent,
+        newParent: &Dirent,
+        newname: &str,
+        replacement: bool,
+    ) -> Result<()> {
         let isOverlay = self.lock().Overlay.is_some();
         if isOverlay {
             let overlay = self.lock().Overlay.as_ref().unwrap().clone();
-            return overlayRename(task, &overlay, oldParent, renamed, newParent, newname, replacement);
+            return overlayRename(
+                task,
+                &overlay,
+                oldParent,
+                renamed,
+                newParent,
+                newname,
+                replacement,
+            );
         }
 
         let oldInode = oldParent.Inode();
@@ -335,11 +439,25 @@ impl Inode {
         let oldname = (renamed.0).0.lock().Name.clone();
 
         let op = self.lock().InodeOp.clone();
-        let res = op.Rename(task, self, &oldInode, &oldname, &newInode, newname, replacement);
+        let res = op.Rename(
+            task,
+            self,
+            &oldInode,
+            &oldname,
+            &newInode,
+            newname,
+            replacement,
+        );
         return res;
     }
 
-    pub fn Bind(&self, task: &Task, name: &str, data: &BoundEndpoint, perms: &FilePermissions) -> Result<Dirent> {
+    pub fn Bind(
+        &self,
+        task: &Task,
+        name: &str,
+        data: &BoundEndpoint,
+        perms: &FilePermissions,
+    ) -> Result<Dirent> {
         let isOverlay = self.lock().Overlay.is_some();
         if isOverlay {
             let overlay = self.lock().Overlay.as_ref().unwrap().clone();
@@ -402,7 +520,7 @@ impl Inode {
     pub fn Setxattr(&mut self, name: &str, value: &str) -> Result<()> {
         let op = self.lock().InodeOp.clone();
         op.Setxattr(self, name, value)?;
-        return Ok(())
+        return Ok(());
     }
 
     pub fn Listxattr(&self) -> Result<Vec<String>> {
@@ -438,7 +556,7 @@ impl Inode {
 
         let op = self.lock().InodeOp.clone();
         op.SetOwner(task, self, owner)?;
-        return Ok(())
+        return Ok(());
     }
 
     pub fn SetTimestamps(&mut self, task: &Task, d: &Dirent, ts: &InterTimeSpec) -> Result<()> {
@@ -450,7 +568,7 @@ impl Inode {
 
         let op = self.lock().InodeOp.clone();
         op.SetTimestamps(task, self, ts)?;
-        return Ok(())
+        return Ok(());
     }
 
     pub fn Truncate(&mut self, task: &Task, d: &Dirent, size: i64) -> Result<()> {
@@ -462,7 +580,7 @@ impl Inode {
 
         let op = self.lock().InodeOp.clone();
         op.Truncate(task, self, size)?;
-        return Ok(())
+        return Ok(());
     }
 
     pub fn Allocate(&mut self, task: &Task, d: &Dirent, offset: i64, length: i64) -> Result<()> {
@@ -534,9 +652,7 @@ impl Inode {
     pub fn StableAttr(&self) -> StableAttr {
         let overlay = self.lock().Overlay.clone();
         match overlay {
-            None => {
-                return self.lock().StableAttr.clone()
-            }
+            None => return self.lock().StableAttr.clone(),
             Some(overlay) => {
                 return overlayStableAttr(&overlay);
             }
@@ -545,14 +661,14 @@ impl Inode {
 
     pub fn CheckPermission(&self, task: &Task, p: &PermMask) -> Result<()> {
         if p.write && self.lock().MountSource.lock().Flags.ReadOnly {
-            return Err(Error::SysError(SysErr::EROFS))
+            return Err(Error::SysError(SysErr::EROFS));
         }
 
         let isOverlay = self.lock().Overlay.is_some();
         if isOverlay {
             let mountSource = self.lock().MountSource.clone();
             if p.write && overlayUpperMountSource(&mountSource).lock().Flags.ReadOnly {
-                return Err(Error::SysError(SysErr::EROFS))
+                return Err(Error::SysError(SysErr::EROFS));
             }
         }
 
@@ -568,10 +684,10 @@ impl Inode {
 
         let op = self.lock().InodeOp.clone();
         if !op.Check(task, self, p)? {
-            return Err(Error::SysError(SysErr::EACCES))
+            return Err(Error::SysError(SysErr::EACCES));
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn CheckOwnership(&mut self, task: &Task) -> bool {
@@ -582,13 +698,18 @@ impl Inode {
         };
 
         let creds = task.creds.lock();
-        info!("CheckOwnership 2, uattr.Owner.UID is {:?}, cred is {:?}", uattr.Owner.UID, &creds);
+        info!(
+            "CheckOwnership 2, uattr.Owner.UID is {:?}, cred is {:?}",
+            uattr.Owner.UID, &creds
+        );
         if uattr.Owner.UID == creds.EffectiveKUID {
             return true;
         }
 
         info!("CheckOwnership 3");
-        if creds.HasCapability(Capability::CAP_FOWNER) && creds.UserNamespace.MapFromKUID(uattr.Owner.UID).Ok() {
+        if creds.HasCapability(Capability::CAP_FOWNER)
+            && creds.UserNamespace.MapFromKUID(uattr.Owner.UID).Ok()
+        {
             return true;
         }
 
@@ -599,7 +720,7 @@ impl Inode {
     pub fn IsVirtual(&self) -> bool {
         let isOverlay = self.lock().Overlay.is_some();
         if isOverlay {
-            return false
+            return false;
         }
 
         let iops = self.lock().InodeOp.clone();
@@ -611,7 +732,14 @@ impl Inode {
     pub fn HasChildren(&self, task: &Task) -> (bool, Result<()>) {
         let d = Dirent::NewTransient(self);
 
-        let file = match self.GetFile(task, &d, &FileFlags { Read: true, ..Default::default() }) {
+        let file = match self.GetFile(
+            task,
+            &d,
+            &FileFlags {
+                Read: true,
+                ..Default::default()
+            },
+        ) {
             Err(e) => return (false, Err(e)),
             Ok(f) => f,
         };
@@ -619,14 +747,14 @@ impl Inode {
         let mut ser = CollectEntriesSerilizer::New();
         match file.ReadDir(task, &mut ser) {
             Err(e) => return (false, Err(e)),
-            _ => ()
+            _ => (),
         }
 
         if ser.Written() > 2 {
-            return (true, Ok(()))
+            return (true, Ok(()));
         }
 
-        return (false, Ok(()))
+        return (false, Ok(()));
     }
 
     pub fn CheckCapability(self: &Self, task: &Task, cp: u64) -> bool {
@@ -637,7 +765,7 @@ impl Inode {
 
         let creds = task.creds.clone();
 
-        return CheckCapability(&creds, cp, &uattr)
+        return CheckCapability(&creds, cp, &uattr);
     }
 
     pub fn StatFS(&self, task: &Task) -> Result<FsInfo> {
@@ -649,7 +777,7 @@ impl Inode {
         }
 
         let inodeOp = self.lock().InodeOp.clone();
-        return inodeOp.StatFS(task)
+        return inodeOp.StatFS(task);
     }
 }
 
@@ -672,7 +800,7 @@ impl Default for InodeIntern {
             LockCtx: LockCtx::default(),
             MountSource: Arc::new(QMutex::new(MountSource::default())),
             Overlay: None,
-        }
+        };
     }
 }
 
@@ -685,11 +813,11 @@ impl InodeIntern {
             LockCtx: LockCtx::default(),
             MountSource: Arc::new(QMutex::new(MountSource::default())),
             Overlay: None,
-        }
+        };
     }
 
     pub fn StableAttr(&self) -> &StableAttr {
-        return &self.StableAttr
+        return &self.StableAttr;
     }
 }
 

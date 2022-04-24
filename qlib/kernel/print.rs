@@ -14,30 +14,33 @@
 
 use alloc::string::String;
 
-use super::task::*;
 use super::super::vcpu_mgr::*;
 use super::asm::*;
+use super::task::*;
 
-pub const SCALE : i64 = 2_000;
+pub const SCALE: i64 = 2_000;
 
 pub fn PrintPrefix() -> String {
     let now = if super::SHARESPACE.config.read().PerfDebug {
-        TSC.Rdtsc()/SCALE
+        TSC.Rdtsc() / SCALE
     } else {
         0
     };
 
-    return format!("[{}/{:x}|{}]", CPULocal::CpuId() , Task::TaskId().Addr(), now);
+    return format!(
+        "[{}/{:x}|{}]",
+        CPULocal::CpuId(),
+        Task::TaskId().Addr(),
+        now
+    );
 }
 
 #[macro_export]
 macro_rules! raw {
- // macth like arm for macro
-    ($a:expr,$b:expr,$c:expr)=>{
-        {
-           $crate::Kernel::HostSpace::KernelMsg($a, $b, $c);
-        }
-    }
+    // macth like arm for macro
+    ($a:expr,$b:expr,$c:expr) => {{
+        $crate::Kernel::HostSpace::KernelMsg($a, $b, $c);
+    }};
 }
 
 #[macro_export]
@@ -129,4 +132,3 @@ macro_rules! debug {
         }
     });
 }
-

@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::mutex::*;
 use alloc::slice;
 use alloc::vec::Vec;
 use core::ops::Deref;
-use super::mutex::*;
 
 //use alloc::string::String;
 
@@ -42,7 +42,7 @@ impl MemAllocatorInternal {
         return Self {
             ba: BuddyAllocator::New(0, 0),
             baseAddr: 0,
-        }
+        };
     }
 
     //baseAddr: is the base memory address
@@ -60,10 +60,7 @@ impl MemAllocatorInternal {
         let addr = ba.allocate(baPages) as u64;
         assert_eq!(addr, 0);
 
-        return Self {
-            ba,
-            baseAddr,
-        }
+        return Self { ba, baseAddr };
     }
 
     pub fn Load(&mut self, baseAddr: u64, ord: u64) {
@@ -106,7 +103,7 @@ impl Deref for MemAllocator {
 
 impl RefMgr for MemAllocator {
     fn Ref(&self, _addr: u64) -> Result<u64> {
-        return Ok(1)
+        return Ok(1);
     }
 
     fn Deref(&self, addr: u64) -> Result<u64> {
@@ -122,25 +119,25 @@ impl RefMgr for MemAllocator {
 impl Allocator for MemAllocator {
     fn AllocPage(&self, _incrRef: bool) -> Result<u64> {
         let res = self.lock().Alloc(1);
-        return res
+        return res;
     }
 
     fn FreePage(&self, addr: u64) -> Result<()> {
         ZeroPage(addr);
-        return self.lock().Free(addr, 1)
+        return self.lock().Free(addr, 1);
     }
 }
 
 impl MemAllocator {
     pub fn New() -> Self {
-        return Self(QMutex::new(MemAllocatorInternal::New()))
+        return Self(QMutex::new(MemAllocatorInternal::New()));
     }
 
     //baseAddr: is the base memory address
     //ord: the memory size is 2^ord pages
     //memory layout: the Buddy Allocator's memory is also allocated by itself.
     pub fn Init(baseAddr: u64, ord: u64) -> Self {
-        return Self(QMutex::new(MemAllocatorInternal::Init(baseAddr, ord)))
+        return Self(QMutex::new(MemAllocatorInternal::Init(baseAddr, ord)));
     }
 
     pub fn Load(&self, baseAddr: u64, ord: u64) {
@@ -192,9 +189,7 @@ impl BuddyAllocator {
     }
 
     fn tree(&self) -> &mut [Node] {
-        unsafe {
-            slice::from_raw_parts_mut(self.root as *mut Node, self.size as usize)
-        }
+        unsafe { slice::from_raw_parts_mut(self.root as *mut Node, self.size as usize) }
     }
 
     fn alloc(&mut self, idx: u64, t_level: u64, c_level: u64) -> isize {
@@ -212,9 +207,7 @@ impl BuddyAllocator {
         let right_child = idx * 2 + 2;
 
         match self.tree()[idx as usize] {
-            Node::Used | Node::Full => {
-                return -1
-            }
+            Node::Used | Node::Full => return -1,
             Node::Unused => {
                 self.tree()[idx as usize] = Node::Split;
                 return self.alloc(left_child, t_level, c_level - 1);
@@ -258,7 +251,7 @@ impl BuddyAllocator {
 
                     return (idx - current_level_offset) as isize * (1 << c_level);
                 } else {
-                    continue
+                    continue;
                 }
             }
 
@@ -266,9 +259,7 @@ impl BuddyAllocator {
             let right_child = idx * 2 + 2;
 
             match self.tree()[idx as usize] {
-                Node::Used | Node::Full => {
-                    continue
-                }
+                Node::Used | Node::Full => continue,
                 Node::Unused => {
                     self.tree()[idx as usize] = Node::Split;
                     stack.push((left_child, c_level - 1));
@@ -317,7 +308,7 @@ impl BuddyAllocator {
 
                     return (idx - current_level_offset) as isize * (1 << c_level);
                 } else {
-                    continue
+                    continue;
                 }
             }
 
@@ -325,9 +316,7 @@ impl BuddyAllocator {
             let right_child = idx * 2 + 2;
 
             match self.tree()[idx as usize] {
-                Node::Used | Node::Full => {
-                    continue
-                }
+                Node::Used | Node::Full => continue,
                 Node::Unused => {
                     self.tree()[idx as usize] = Node::Split;
                     stack[top] = (left_child, c_level - 1);
@@ -351,8 +340,10 @@ impl BuddyAllocator {
         while idx != 0 {
             let left_child = idx * 2 + 1;
             let right_child = idx * 2 + 2;
-            let left_child_used_or_full = self.tree()[left_child as usize] == Node::Full || self.tree()[left_child as usize] == Node::Used;
-            let right_child_used_or_full = self.tree()[right_child as usize] == Node::Full || self.tree()[right_child as usize] == Node::Used;
+            let left_child_used_or_full = self.tree()[left_child as usize] == Node::Full
+                || self.tree()[left_child as usize] == Node::Used;
+            let right_child_used_or_full = self.tree()[right_child as usize] == Node::Full
+                || self.tree()[right_child as usize] == Node::Used;
             if left_child_used_or_full && right_child_used_or_full {
                 self.tree()[idx as usize] = Node::Full;
             }
@@ -372,7 +363,7 @@ impl BuddyAllocator {
         //let c_level = self.levels;
         //return self.alloc(0, requested_level, c_level)
         //todo: move to alloc2 later to use stack on stack
-        return self.alloc2(requested_level)
+        return self.alloc2(requested_level);
     }
 
     pub fn free(&mut self, page_offset: u64, num_pages: u64) -> bool {
@@ -403,7 +394,9 @@ impl BuddyAllocator {
             let left_child = parent * 2 + 1;
             let right_child = parent * 2 + 2;
 
-            if self.tree()[left_child as usize] == Node::Unused && self.tree()[right_child as usize] == Node::Unused {
+            if self.tree()[left_child as usize] == Node::Unused
+                && self.tree()[right_child as usize] == Node::Unused
+            {
                 self.tree()[parent as usize] = Node::Unused;
             } else {
                 self.tree()[parent as usize] = Node::Split;

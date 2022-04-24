@@ -12,22 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
-use core::ops::Bound::*;
 use alloc::vec::Vec;
 use core::cmp::*;
+use core::ops::Bound::*;
 use core::ops::Deref;
-use super::mutex::*;
 
 use super::addr::*;
 use super::common::{Error, Result};
 
-pub const MAX_RANGE : u64 = core::u64::MAX;
+pub const MAX_RANGE: u64 = core::u64::MAX;
 
 #[derive(Copy, Clone, Default, Debug)]
 pub struct Range {
     pub start: u64,
-    pub len: u64
+    pub len: u64,
 }
 
 impl Ord for Range {
@@ -49,7 +49,7 @@ impl PartialOrd for Range {
 
 impl PartialEq for Range {
     fn eq(&self, other: &Self) -> bool {
-        return self.start == other.start && self.len == self.len
+        return self.start == other.start && self.len == self.len;
     }
 }
 
@@ -57,15 +57,18 @@ impl Eq for Range {}
 
 impl Range {
     pub fn New(start: u64, len: u64) -> Self {
-        return Range { start, len }
+        return Range { start, len };
     }
 
     pub fn Max() -> Self {
-        return Range {start: 0, len: MAX_RANGE}
+        return Range {
+            start: 0,
+            len: MAX_RANGE,
+        };
     }
 
     pub fn Start(&self) -> u64 {
-        return self.start
+        return self.start;
     }
 
     pub fn End(&self) -> u64 {
@@ -98,22 +101,22 @@ impl Range {
         }
 
         if self.End() > start && self.End() - start >= len {
-            return Some(start)
+            return Some(start);
         }
 
-        return None
+        return None;
     }
 
     pub fn Contains(&self, x: u64) -> bool {
-        return x >= self.start && x < self.start + self.len
+        return x >= self.start && x < self.start + self.len;
     }
 
     pub fn Overlaps(&self, r: &Range) -> bool {
-        return self.start < r.End() && r.start < self.End()
+        return self.start < r.End() && r.start < self.End();
     }
 
     pub fn IsSupersetOf(&self, r: &Range) -> bool {
-        return self.start <= r.start && self.End() >= r.End()
+        return self.start <= r.start && self.End() >= r.End();
     }
 
     pub fn Intersect(&self, r: &Range) -> Range {
@@ -131,28 +134,28 @@ impl Range {
         return Range {
             start,
             len: end - start,
-        }
+        };
     }
 
     pub fn CanSplitAt(&self, x: u64) -> bool {
-        return self.start < x && x < self.End()
+        return self.start < x && x < self.End();
     }
 
     pub fn IsPageAigned(&self) -> bool {
-        return Addr(self.start).IsPageAligned() && Addr(self.len).IsPageAligned()
+        return Addr(self.start).IsPageAligned() && Addr(self.len).IsPageAligned();
     }
 }
 
 pub struct AreaMgr<T: core::clone::Clone> {
     //<start, (len, val)>
-    pub map: BTreeMap<u64, (u64, T)>
+    pub map: BTreeMap<u64, (u64, T)>,
 }
 
 impl<T: core::clone::Clone> AreaMgr<T> {
     pub fn New() -> Self {
         return AreaMgr {
             map: BTreeMap::new(),
-        }
+        };
     }
 
     pub fn Span(&self) -> u64 {
@@ -175,7 +178,12 @@ impl<T: core::clone::Clone> AreaMgr<T> {
 
     pub fn Print(&self) {
         for (start, (len, _)) in &self.map {
-            info!("AreaMgr: the start is {:x}, len is {:x}, end is {:x}", *start, *len, *start + *len);
+            info!(
+                "AreaMgr: the start is {:x}, len is {:x}, end is {:x}",
+                *start,
+                *len,
+                *start + *len
+            );
         }
     }
 
@@ -187,7 +195,10 @@ impl<T: core::clone::Clone> AreaMgr<T> {
         let mut removes: Vec<u64> = Vec::new();
 
         for (cStart, (cLen, cData)) in self.map.range_mut((Unbounded, Excluded(r.End()))).rev() {
-            let cR = Range { start: *cStart, len: *cLen };
+            let cR = Range {
+                start: *cStart,
+                len: *cLen,
+            };
             if r.Contains(cR.Start()) {
                 removes.push(cR.Start()); //remove the current area
                 if !r.Contains(cR.End()) && cR.End() - r.End() != 0 {
@@ -269,17 +280,17 @@ impl<T: core::clone::Clone> AreaMgr<T> {
             self.Add(*start, *len, &*data);
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn Delete(&mut self, start: u64) -> Result<()> {
         //todo: add more validation
         if !self.map.contains_key(&start) {
-            return Err(Error::InvalidInput)
+            return Err(Error::InvalidInput);
         }
 
         self.map.remove(&start);
-        return Ok(())
+        return Ok(());
     }
 
     //pub fn Get(&self, key: u64) -> Option<(u64, u64, Arc<QRwLock<Box<T>>>)> {
@@ -288,11 +299,14 @@ impl<T: core::clone::Clone> AreaMgr<T> {
         match iter.next() {
             None => return None,
             Some((start, (len, data))) => {
-                let r = Range { start: *start, len: *len };
+                let r = Range {
+                    start: *start,
+                    len: *len,
+                };
                 if !r.Contains(key) {
-                    return None
+                    return None;
                 } else {
-                    return Some((*start, *len, &*data))
+                    return Some((*start, *len, &*data));
                 }
             }
         }
@@ -303,11 +317,14 @@ impl<T: core::clone::Clone> AreaMgr<T> {
         match iter.next() {
             None => return None,
             Some((start, (len, data))) => {
-                let r = Range { start: *start, len: *len };
+                let r = Range {
+                    start: *start,
+                    len: *len,
+                };
                 if !r.Contains(key) {
-                    return None
+                    return None;
                 } else {
-                    return Some((*start, *len, &mut *data))
+                    return Some((*start, *len, &mut *data));
                 }
             }
         }
@@ -315,7 +332,7 @@ impl<T: core::clone::Clone> AreaMgr<T> {
 }
 
 #[derive(Debug, Default)]
-pub struct BufMgr (QMutex<BufMgrIntern>);
+pub struct BufMgr(QMutex<BufMgrIntern>);
 
 impl Deref for BufMgr {
     type Target = QMutex<BufMgrIntern>;
@@ -332,7 +349,7 @@ impl BufMgr {
 
     pub fn New() -> Self {
         let intern = BufMgrIntern::New();
-        return Self(QMutex::new(intern))
+        return Self(QMutex::new(intern));
     }
 
     pub fn Alloc(&self, len: u64) -> Result<u64> {
@@ -365,24 +382,24 @@ impl BufMgrIntern {
             buf.set_len(size);
         }
 
-        let start = &buf[0] as * const _ as u64;
+        let start = &buf[0] as *const _ as u64;
 
         return Self {
             next: start,
             gapMgr: GapMgr::New(start, size as u64),
             buf: buf,
-        }
+        };
     }
 
     pub fn Alloc(&mut self, len: u64) -> Result<u64> {
         match self.gapMgr.AllocAfter(self.next, len, 0) {
             Ok(addr) => {
                 self.next = addr + len;
-                return Ok(addr)
+                return Ok(addr);
             }
             Err(e) => {
                 if self.next == self.gapMgr.range.Start() {
-                    return Err(e)
+                    return Err(e);
                 }
             }
         }
@@ -390,9 +407,9 @@ impl BufMgrIntern {
         match self.gapMgr.AllocAfter(self.gapMgr.range.Start(), len, 0) {
             Ok(addr) => {
                 self.next = addr + len;
-                return Ok(addr)
+                return Ok(addr);
             }
-            Err(e) => return Err(e)
+            Err(e) => return Err(e),
         }
     }
 
@@ -416,7 +433,7 @@ impl GapMgr {
         return GapMgr {
             range: Range { start, len },
             map,
-        }
+        };
     }
 
     pub fn Init(&mut self, start: u64, len: u64) {
@@ -432,29 +449,35 @@ impl GapMgr {
             map.insert(*start, *len);
         }
 
-        return GapMgr {
-            range,
-            map,
-        }
+        return GapMgr { range, map };
     }
 
     pub fn Print(&self) {
-        info!("GapMgr: the full range is {:x} to {:x}", self.range.start, self.range.End());
+        info!(
+            "GapMgr: the full range is {:x} to {:x}",
+            self.range.start,
+            self.range.End()
+        );
         for (start, len) in &self.map {
-            info!("the gap start is {:x}, len is {:x}, end is {:x}", *start, *len, *start + *len);
+            info!(
+                "the gap start is {:x}, len is {:x}, end is {:x}",
+                *start,
+                *len,
+                *start + *len
+            );
         }
     }
 
     //test function
     //return range with (gapStart, gapEnd)
     pub fn Find(&self, key: u64) -> Option<(u64, u64)> {
-        let mut before = self.map.range((Included(self.range.Start()), Included(key)));
+        let mut before = self
+            .map
+            .range((Included(self.range.Start()), Included(key)));
 
         match before.next_back() {
             None => None,
-            Some((start, len)) => {
-                return Some((*start, *start + *len))
-            }
+            Some((start, len)) => return Some((*start, *start + *len)),
         }
     }
 
@@ -468,7 +491,10 @@ impl GapMgr {
         let mut insertLen = 0;
 
         for (gStart, gLen) in self.map.range_mut((Unbounded, Excluded(r.End()))).rev() {
-            let gR = Range { start: *gStart, len: *gLen };
+            let gR = Range {
+                start: *gStart,
+                len: *gLen,
+            };
             if gR.Start() < r.End() && r.End() < gR.End() {
                 needInsert = true;
                 insertStart = r.End();
@@ -516,7 +542,11 @@ impl GapMgr {
                 tmp = addr;
             }
 
-            let ret = Range { start: tmp, len: *gStart + *gLen - tmp }.Alloc(len, aligmentOrd);
+            let ret = Range {
+                start: tmp,
+                len: *gStart + *gLen - tmp,
+            }
+            .Alloc(len, aligmentOrd);
             match ret {
                 Some(start) => {
                     //info!("the start is {}, len is {}, alignment is {}", start, len, aligmentOrd);
@@ -528,7 +558,7 @@ impl GapMgr {
                     cLen = *gLen;
                     break;
                 }
-                _ => ()
+                _ => (),
             }
         }
 
@@ -548,10 +578,10 @@ impl GapMgr {
                 self.map.insert(res + len, cStart + cLen - (res + len));
             }
 
-            return Ok(res)
+            return Ok(res);
         }
 
-        return Err(Error::NoEnoughSpace)
+        return Err(Error::NoEnoughSpace);
     }
 
     pub fn Alloc(&mut self, len: u64, aligmentOrd: u64) -> Result<u64> {
@@ -577,7 +607,7 @@ impl GapMgr {
                     nStart = *bStart;
                 }
             }
-            None => ()
+            None => (),
         }
 
         let mut removeAfter = false;
@@ -591,7 +621,7 @@ impl GapMgr {
                 }
             }
 
-            None => ()
+            None => (),
         }
 
         if removeBefore {
@@ -622,19 +652,17 @@ impl<T: core::clone::Clone> IdMgr<T> {
             start: start,
             len: len,
             last: 0,
-        }
+        };
     }
 
     pub fn AllocId(&mut self) -> Result<u64> {
         let id = match self.gaps.AllocAfter(self.last, 1, 0) {
             Ok(id) => id,
-            _ => {
-                self.gaps.AllocAfter(0, 1, 0)?
-            }
+            _ => self.gaps.AllocAfter(0, 1, 0)?,
         };
 
         self.last = id;
-        return Ok(id)
+        return Ok(id);
     }
 
     pub fn Add(&mut self, id: u64, data: T) {
@@ -653,20 +681,20 @@ impl<T: core::clone::Clone> IdMgr<T> {
     pub fn Get(&self, id: u64) -> Result<&T> {
         match self.map.get(&id) {
             None => return Err(Error::NotExist),
-            Some(data) => return Ok(data)
+            Some(data) => return Ok(data),
         }
     }
 
     pub fn GetMut(&mut self, id: u64) -> Option<&mut T> {
-        return self.map.get_mut(&id)
+        return self.map.get_mut(&id);
     }
 
     pub fn Remove(&mut self, id: u64) -> Option<T> {
         if self.map.contains_key(&id) {
             self.gaps.Free(id, 1);
-            return self.map.remove(&id)
+            return self.map.remove(&id);
         } else {
-            return None
+            return None;
         }
     }
 }

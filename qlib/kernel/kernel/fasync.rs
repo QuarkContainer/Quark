@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
+use alloc::sync::Arc;
 use core::ops::Deref;
 
 use super::super::super::auth::*;
-use super::super::super::linux_def::*;
 use super::super::super::linux::signal::*;
+use super::super::super::linux_def::*;
 use super::super::task::*;
-use super::super::SignalDef::*;
 use super::super::threadmgr::processgroup::*;
-use super::super::threadmgr::thread_group::*;
 use super::super::threadmgr::thread::*;
+use super::super::threadmgr::thread_group::*;
+use super::super::SignalDef::*;
 use super::waiter::entry::*;
 use super::waiter::*;
 
@@ -72,7 +72,7 @@ impl FileAsync {
 
         if t.is_none() {
             // No recipient has been registered.
-            return
+            return;
         }
 
         let t = t.unwrap();
@@ -82,11 +82,12 @@ impl FileAsync {
         let threadC = c.lock();
         let reqC = a.requester.lock();
         // Logic from sigio_perm in fs/fcntl.c.
-        if reqC.EffectiveKUID.0 == 0 ||
-            reqC.EffectiveKUID == threadC.SavedKUID ||
-            reqC.EffectiveKUID == threadC.RealKUID ||
-            reqC.RealKUID == threadC.SavedKUID ||
-            reqC.RealKUID == threadC.RealKUID {
+        if reqC.EffectiveKUID.0 == 0
+            || reqC.EffectiveKUID == threadC.SavedKUID
+            || reqC.EffectiveKUID == threadC.RealKUID
+            || reqC.RealKUID == threadC.SavedKUID
+            || reqC.RealKUID == threadC.RealKUID
+        {
             t.SendSignal(&SignalInfoPriv(SIGIO.0)).unwrap();
         }
     }
@@ -114,7 +115,7 @@ impl FileAsync {
 
         match a.e.lock().context {
             WaitContext::None => panic!("unregistering unregistered file"),
-            _ =>(),
+            _ => (),
         }
 
         w.EventUnregister(task, &a.e);
@@ -125,7 +126,11 @@ impl FileAsync {
     // nil if no one is set to receive signals.
     pub fn Owner(&self) -> (Option<Thread>, Option<ThreadGroup>, Option<ProcessGroup>) {
         let a = self.lock();
-        return (a.recipientT.clone(), a.recipientTG.clone(), a.recipientPG.clone())
+        return (
+            a.recipientT.clone(),
+            a.recipientTG.clone(),
+            a.recipientPG.clone(),
+        );
     }
 
     // SetOwnerTask sets the owner (who will receive signals) to a specified task.

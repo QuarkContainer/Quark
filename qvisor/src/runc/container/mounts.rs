@@ -32,12 +32,7 @@ use super::super::oci::{LinuxDevice, LinuxDeviceType, Mount, Spec};
 use super::cgroups;
 use super::nix_ext::*;
 
-pub fn init_rootfs(
-    spec: &Spec,
-    rootfs: &str,
-    cpath: &str,
-    bind_devices: bool,
-) -> Result<()> {
+pub fn init_rootfs(spec: &Spec, rootfs: &str, cpath: &str, bind_devices: bool) -> Result<()> {
     // set namespace propagation
     let mut flags = MsFlags::MS_REC;
     match spec.linux {
@@ -55,11 +50,8 @@ pub fn init_rootfs(
                 Ok(())
             }
             _ => {
-                let msg = format!(
-                    "invalid propogation value: {}",
-                    linux.rootfs_propagation
-                );
-                return Err(Error::Common(msg))
+                let msg = format!("invalid propogation value: {}", linux.rootfs_propagation);
+                return Err(Error::Common(msg));
             }
         },
         None => {
@@ -68,7 +60,8 @@ pub fn init_rootfs(
         }
     }?;
     let linux = spec.linux.as_ref().unwrap();
-    mount(None::<&str>, "/", None::<&str>, flags, None::<&str>).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
+    mount(None::<&str>, "/", None::<&str>, flags, None::<&str>)
+        .map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
 
     // mount root dir
     mount(
@@ -77,7 +70,8 @@ pub fn init_rootfs(
         None::<&str>,
         MsFlags::MS_BIND | MsFlags::MS_REC,
         None::<&str>,
-    ).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
+    )
+    .map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
 
     for m in &spec.mounts {
         // TODO: check for nasty destinations involving symlinks and illegal
@@ -87,7 +81,7 @@ pub fn init_rootfs(
         //       is no good reason to allow this so we just forbid it
         if !m.destination.starts_with('/') || m.destination.contains("..") {
             let msg = format!("invalid mount destination: {}", m.destination);
-            return Err(Error::Common(msg))
+            return Err(Error::Common(msg));
         }
         let (flags, data) = parse_mount(m);
         if m.typ == "cgroup" {
@@ -120,14 +114,15 @@ pub fn init_rootfs(
 }
 
 pub fn pivot_rootfs<P: ?Sized + NixPath>(path: &P) -> Result<()> {
-    let oldroot =
-        open("/", OFlag::O_DIRECTORY | OFlag::O_RDONLY, Mode::empty()).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
+    let oldroot = open("/", OFlag::O_DIRECTORY | OFlag::O_RDONLY, Mode::empty())
+        .map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
     defer!(close(oldroot).unwrap());
-    let newroot =
-        open(path, OFlag::O_DIRECTORY | OFlag::O_RDONLY, Mode::empty()).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
+    let newroot = open(path, OFlag::O_DIRECTORY | OFlag::O_RDONLY, Mode::empty())
+        .map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
     defer!(close(newroot).unwrap());
     pivot_root(path, path).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
-    umount2("/", MntFlags::MNT_DETACH).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
+    umount2("/", MntFlags::MNT_DETACH)
+        .map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
     fchdir(newroot)?;
     Ok(())
 }
@@ -153,17 +148,16 @@ pub fn finish_rootfs(spec: &Spec) -> Result<()> {
                     None::<&str>,
                     flags | MsFlags::MS_REMOUNT,
                     None::<&str>,
-                ).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
+                )
+                .map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
             }
         }
     }
 
     if spec.root.readonly {
-        let flags = MsFlags::MS_BIND
-            | MsFlags::MS_RDONLY
-            | MsFlags::MS_NODEV
-            | MsFlags::MS_REMOUNT;
-        mount(Some("/"), "/", None::<&str>, flags, None::<&str>).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
+        let flags = MsFlags::MS_BIND | MsFlags::MS_RDONLY | MsFlags::MS_NODEV | MsFlags::MS_REMOUNT;
+        mount(Some("/"), "/", None::<&str>, flags, None::<&str>)
+            .map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
     }
 
     umask(Mode::from_bits_truncate(0o022));
@@ -246,7 +240,7 @@ fn mount_cgroups(
         } else {
             &mount_path[..]
         };
-        let dest = format!{"{}/{}", &m.destination, &base};
+        let dest = format! {"{}/{}", &m.destination, &base};
         let bm = Mount {
             source: source,
             typ: "bind".to_string(),
@@ -263,21 +257,22 @@ fn mount_cgroups(
         for k in key.split(',') {
             if k != key {
                 // try to create a symlink for combined strings
-                let dest = format!{"{}{}/{}", rootfs, &m.destination, &k};
+                let dest = format! {"{}{}/{}", rootfs, &m.destination, &k};
                 symlink(key, &dest).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
             }
         }
     }
     // remount readonly if necessary
     if flags.contains(MsFlags::MS_RDONLY) {
-        let dest = format!{"{}{}", rootfs, &m.destination};
+        let dest = format! {"{}{}", rootfs, &m.destination};
         mount(
             Some(&*dest),
             &*dest,
             None::<&str>,
             cflags | MsFlags::MS_BIND | MsFlags::MS_REMOUNT,
             None::<&str>,
-        ).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
+        )
+        .map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
     }
     Ok(())
 }
@@ -303,33 +298,28 @@ pub fn parse_mount(m: &Mount) -> (MsFlags, String) {
     (flags, data.join(","))
 }
 
-fn mount_from(
-    m: &Mount,
-    rootfs: &str,
-    flags: MsFlags,
-    data: &str,
-    label: &str,
-) -> Result<()> {
+fn mount_from(m: &Mount, rootfs: &str, flags: MsFlags, data: &str, label: &str) -> Result<()> {
     let d;
     if !label.is_empty() && m.typ != "proc" && m.typ != "sysfs" {
         if data.is_empty() {
-            d = format!{"context=\"{}\"", label};
+            d = format! {"context=\"{}\"", label};
         } else {
-            d = format!{"{},context=\"{}\"", data, label};
+            d = format! {"{},context=\"{}\"", data, label};
         }
     } else {
         d = data.to_string();
     }
 
-    let dest = format!{"{}{}", rootfs, &m.destination};
+    let dest = format! {"{}{}", rootfs, &m.destination};
 
     debug!(
-    "mounting {} to {} as {} with data '{}'",
-    &m.source, &m.destination, &m.typ, &d
+        "mounting {} to {} as {} with data '{}'",
+        &m.source, &m.destination, &m.typ, &d
     );
 
     let src = if m.typ == "bind" {
-        let src = canonicalize(&m.source).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
+        let src =
+            canonicalize(&m.source).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
         let dir = if src.is_file() {
             Path::new(&dest).parent().unwrap()
         } else {
@@ -340,11 +330,9 @@ fn mount_from(
         }
         // make sure file exists so we can bind over it
         if src.is_file() {
-            if let Err(e) =
-            OpenOptions::new().create(true).write(true).open(&dest)
-                {
-                    debug!("ignoring touch fail of {:?}: {}", &dest, e)
-                }
+            if let Err(e) = OpenOptions::new().create(true).write(true).open(&dest) {
+                debug!("ignoring touch fail of {:?}: {}", &dest, e)
+            }
         }
         src
     } else {
@@ -354,37 +342,38 @@ fn mount_from(
         PathBuf::from(&m.source)
     };
 
-    if let Err(errno) =
-    mount(Some(&*src), &*dest, Some(&*m.typ), flags, Some(&*d))
-        {
-            if errno != Errno::EINVAL {
-                return Err(Error::SysError(errno as i32))
-            }
-            // try again without mount label
-            mount(Some(&*src), &*dest, Some(&*m.typ), flags, Some(data)).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
-            // warn if label cannot be set
-            if let Err(e) = setfilecon(&dest, label) {
-                warn!{"could not set mount label of {} to {}: {:?}",
-                &m.destination, &label, e};
-            }
+    if let Err(errno) = mount(Some(&*src), &*dest, Some(&*m.typ), flags, Some(&*d)) {
+        if errno != Errno::EINVAL {
+            return Err(Error::SysError(errno as i32));
         }
+        // try again without mount label
+        mount(Some(&*src), &*dest, Some(&*m.typ), flags, Some(data))
+            .map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
+        // warn if label cannot be set
+        if let Err(e) = setfilecon(&dest, label) {
+            warn! {"could not set mount label of {} to {}: {:?}",
+            &m.destination, &label, e};
+        }
+    }
     // remount bind mounts if they have other flags (like MsFlags::MS_RDONLY)
     if flags.contains(MsFlags::MS_BIND)
         && flags.intersects(
-        !(MsFlags::MS_REC
-            | MsFlags::MS_REMOUNT
-            | MsFlags::MS_BIND
-            | MsFlags::MS_PRIVATE
-            | MsFlags::MS_SHARED
-            | MsFlags::MS_SLAVE),
-    ) {
+            !(MsFlags::MS_REC
+                | MsFlags::MS_REMOUNT
+                | MsFlags::MS_BIND
+                | MsFlags::MS_PRIVATE
+                | MsFlags::MS_SHARED
+                | MsFlags::MS_SLAVE),
+        )
+    {
         mount(
             Some(&*dest),
             &*dest,
             None::<&str>,
             flags | MsFlags::MS_REMOUNT,
             None::<&str>,
-        ).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
+        )
+        .map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
     }
     Ok(())
 }
@@ -398,7 +387,8 @@ static SYMLINKS: &'static [(&'static str, &'static str)] = &[
 
 fn default_symlinks() -> Result<()> {
     if Path::new("/proc/kcore").exists() {
-        symlink("/proc/kcore", "dev/kcore").map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
+        symlink("/proc/kcore", "dev/kcore")
+            .map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
     }
     for &(src, dst) in SYMLINKS {
         symlink(src, dst).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
@@ -407,8 +397,7 @@ fn default_symlinks() -> Result<()> {
 }
 
 pub fn create_devices(devices: &[LinuxDevice], bind: bool) -> Result<()> {
-    let op: fn(&LinuxDevice) -> Result<()> =
-        if bind { bind_dev } else { mknod_dev };
+    let op: fn(&LinuxDevice) -> Result<()> = if bind { bind_dev } else { mknod_dev };
     let old = umask(Mode::from_bits_truncate(0o000));
     for dev in super::DEFAULT_DEVICES.iter() {
         op(dev)?;
@@ -416,7 +405,7 @@ pub fn create_devices(devices: &[LinuxDevice], bind: bool) -> Result<()> {
     for dev in devices {
         if !dev.path.starts_with("/dev") || dev.path.contains("..") {
             let msg = format!("{} is not a valid device path", dev.path);
-            return Err(Error::Common(msg))
+            return Err(Error::Common(msg));
         }
         op(dev)?;
     }
@@ -428,7 +417,7 @@ fn ensure_ptmx() -> Result<()> {
     if let Err(e) = remove_file("dev/ptmx") {
         if e.kind() != ::std::io::ErrorKind::NotFound {
             let msg = "could not delete /dev/ptmx".to_string();
-            return Err(Error::Common(msg))
+            return Err(Error::Common(msg));
         }
     }
     symlink("pts/ptmx", "dev/ptmx").map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
@@ -436,10 +425,7 @@ fn ensure_ptmx() -> Result<()> {
 }
 
 fn makedev(major: u64, minor: u64) -> u64 {
-    (minor & 0xff)
-        | ((major & 0xfff) << 8)
-        | ((minor & !0xff) << 12)
-        | ((major & !0xfff) << 32)
+    (minor & 0xff) | ((major & 0xfff) << 8) | ((minor & !0xff) << 12) | ((major & !0xfff) << 32)
 }
 
 fn to_sflag(t: LinuxDeviceType) -> Result<SFlag> {
@@ -449,7 +435,7 @@ fn to_sflag(t: LinuxDeviceType) -> Result<SFlag> {
         LinuxDeviceType::p => SFlag::S_IFIFO,
         LinuxDeviceType::a => {
             let msg = "type a is not allowed for linux device".to_string();
-            return Err(Error::Common(msg))
+            return Err(Error::Common(msg));
         }
     })
 }
@@ -462,12 +448,14 @@ fn mknod_dev(dev: &LinuxDevice) -> Result<()> {
         f,
         Mode::from_bits_truncate(dev.file_mode.unwrap_or(0)),
         makedev(dev.major, dev.minor),
-    ).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
+    )
+    .map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
     chown(
         &dev.path[1..],
         dev.uid.map(|n| Uid::from_raw(n)),
         dev.gid.map(|n| Gid::from_raw(n)),
-    ).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
+    )
+    .map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
     Ok(())
 }
 
@@ -476,7 +464,8 @@ fn bind_dev(dev: &LinuxDevice) -> Result<()> {
         &dev.path[1..],
         OFlag::O_RDWR | OFlag::O_CREAT,
         Mode::from_bits_truncate(0o644),
-    ).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
+    )
+    .map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
     close(fd).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
     debug!("bind mounting {}", &dev.path);
     mount(
@@ -485,14 +474,15 @@ fn bind_dev(dev: &LinuxDevice) -> Result<()> {
         None::<&str>,
         MsFlags::MS_BIND,
         None::<&str>,
-    ).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
+    )
+    .map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
     Ok(())
 }
 
 fn mask_path(path: &str) -> Result<()> {
     if !path.starts_with('/') || path.contains("..") {
         let msg = format!("invalid maskedPath: {}", path);
-        return Err(Error::Common(msg))
+        return Err(Error::Common(msg));
     }
 
     if let Err(errno) = mount(
@@ -505,7 +495,7 @@ fn mask_path(path: &str) -> Result<()> {
         // ignore ENOENT and ENOTDIR: path to mask doesn't exist
         if errno != Errno::ENOENT && errno != Errno::ENOTDIR {
             let msg = format!("could not mask {}", path);
-            return Err(Error::Common(msg))
+            return Err(Error::Common(msg));
         } else {
             debug!("ignoring mask of {} because it doesn't exist", path);
         }
@@ -516,7 +506,7 @@ fn mask_path(path: &str) -> Result<()> {
 fn readonly_path(path: &str) -> Result<()> {
     if !path.starts_with('/') || path.contains("..") {
         let msg = format!("invalid readonlyPath: {}", path);
-        return Err(Error::Common(msg))
+        return Err(Error::Common(msg));
     }
     if let Err(errno) = mount(
         Some(&path[1..]),
@@ -528,7 +518,7 @@ fn readonly_path(path: &str) -> Result<()> {
         // ignore ENOENT: path to make read only doesn't exist
         if errno != Errno::ENOENT {
             let msg = format!("could not readonly {}", path);
-            return Err(Error::Common(msg))
+            return Err(Error::Common(msg));
         }
         debug!("ignoring remount of {} because it doesn't exist", path);
         return Ok(());
@@ -537,11 +527,9 @@ fn readonly_path(path: &str) -> Result<()> {
         Some(&path[1..]),
         &path[1..],
         None::<&str>,
-        MsFlags::MS_BIND
-            | MsFlags::MS_REC
-            | MsFlags::MS_RDONLY
-            | MsFlags::MS_REMOUNT,
+        MsFlags::MS_BIND | MsFlags::MS_REC | MsFlags::MS_RDONLY | MsFlags::MS_REMOUNT,
         None::<&str>,
-    ).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
+    )
+    .map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
     Ok(())
 }

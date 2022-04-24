@@ -1,4 +1,4 @@
- // Copyright (c) 2021 Quark Container Authors / 2018 The gVisor Authors.
+// Copyright (c) 2021 Quark Container Authors / 2018 The gVisor Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,62 +12,66 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::vec::Vec;
 use alloc::boxed::Box;
 use alloc::collections::btree_map::BTreeMap;
+use alloc::vec::Vec;
 
-use super::super::task::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::linux::time::*;
-use super::super::SignalDef::*;
-use super::super::syscalls::syscalls::*;
-use super::super::kernel::waiter::*;
-use super::super::kernel::timer::*;
 use super::super::fs::file::*;
+use super::super::kernel::timer::*;
+use super::super::kernel::waiter::*;
+use super::super::qlib::common::*;
+use super::super::qlib::linux::time::*;
+use super::super::qlib::linux_def::*;
+use super::super::syscalls::syscalls::*;
+use super::super::task::*;
 use super::super::threadmgr::task_syscall::*;
+use super::super::SignalDef::*;
 
 // fileCap is the maximum allowable files for poll & select.
-pub const FILE_CAP : i32 = 1024 * 1024;
+pub const FILE_CAP: i32 = 1024 * 1024;
 
 // SELECT_READ_EVENTS is analogous to the Linux kernel's
 // fs/select.c:POLLIN_SET.
-pub const SELECT_READ_EVENTS : i16 = (LibcConst::EPOLLIN | LibcConst::EPOLLHUP | LibcConst::EPOLLERR) as i16;
+pub const SELECT_READ_EVENTS: i16 =
+    (LibcConst::EPOLLIN | LibcConst::EPOLLHUP | LibcConst::EPOLLERR) as i16;
 
 // SELECT_WRITE_EVENTS is analogous to the Linux kernel's
 // fs/select.c:POLLOUT_SET.
-pub const SELECT_WRITE_EVENTS : i16 = (LibcConst::EPOLLOUT | LibcConst::EPOLLERR) as i16;
+pub const SELECT_WRITE_EVENTS: i16 = (LibcConst::EPOLLOUT | LibcConst::EPOLLERR) as i16;
 
 // SELECT_EXCEPT_EVENTS is analogous to the Linux kernel's
 // fs/select.c:POLLEX_SET.
-pub const SELECT_EXCEPT_EVENTS : i16 = (LibcConst::EPOLLPRI) as i16;
+pub const SELECT_EXCEPT_EVENTS: i16 = (LibcConst::EPOLLPRI) as i16;
 
-pub const TIMEOUT_PROCESS_TIME : i64 = 30_000;
+pub const TIMEOUT_PROCESS_TIME: i64 = 30_000;
 
-pub fn DoSelect(task: &Task, nfds: i32, readfds: u64, writefds: u64, exceptfds: u64, timeout: i64) -> Result<i64> {
+pub fn DoSelect(
+    task: &Task,
+    nfds: i32,
+    readfds: u64,
+    writefds: u64,
+    exceptfds: u64,
+    timeout: i64,
+) -> Result<i64> {
     if nfds == 0 {
         if timeout == 0 {
             super::super::taskMgr::Yield();
-            return Ok(0)
+            return Ok(0);
         }
 
         let (_remain, res) = task.blocker.BlockWithMonoTimeout(false, Some(timeout));
         match res {
-            Err(Error::SysError(SysErr::ETIMEDOUT)) => {
-                return Ok(0)
-            }
+            Err(Error::SysError(SysErr::ETIMEDOUT)) => return Ok(0),
             Err(Error::ErrInterrupted) => {
                 return Err(Error::SysError(SysErr::ERESTARTNOHAND));
             }
-            Err(e) => {
-                return Err(e)
-            }
-            Ok(()) => return Ok(0)
+            Err(e) => return Err(e),
+            Ok(()) => return Ok(0),
         };
     }
 
     if nfds < 0 || nfds > FILE_CAP {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     // Capture all the provided input vectors.
@@ -82,7 +86,7 @@ pub fn DoSelect(task: &Task, nfds: i32, readfds: u64, writefds: u64, exceptfds: 
         r = task.CopyInVec::<u8>(readfds, byteCount)?;
 
         if bitsPartial != 0 {
-            r[byteCount-1] &= !(0xff << bitsPartial)
+            r[byteCount - 1] &= !(0xff << bitsPartial)
         }
     } else {
         for _i in 0..byteCount {
@@ -94,7 +98,7 @@ pub fn DoSelect(task: &Task, nfds: i32, readfds: u64, writefds: u64, exceptfds: 
         w = task.CopyInVec::<u8>(writefds, byteCount)?;
 
         if bitsPartial != 0 {
-            w[byteCount-1] &= !(0xff << bitsPartial)
+            w[byteCount - 1] &= !(0xff << bitsPartial)
         }
     } else {
         for _i in 0..byteCount {
@@ -106,7 +110,7 @@ pub fn DoSelect(task: &Task, nfds: i32, readfds: u64, writefds: u64, exceptfds: 
         e = task.CopyInVec::<u8>(exceptfds, byteCount)?;
 
         if bitsPartial != 0 {
-            e[byteCount-1] &= !(0xff << bitsPartial)
+            e[byteCount - 1] &= !(0xff << bitsPartial)
         }
     } else {
         for _i in 0..byteCount {
@@ -118,21 +122,21 @@ pub fn DoSelect(task: &Task, nfds: i32, readfds: u64, writefds: u64, exceptfds: 
     for i in 0..byteCount {
         let mut v = r[i] | w[i] | e[i];
         while v != 0 {
-            v &= v-1;
+            v &= v - 1;
             fdcnt += 1;
         }
     }
 
     // Build the PollFD array.
     let mut pfd = Vec::with_capacity(fdcnt);
-    let mut fd : i32 = 0;
+    let mut fd: i32 = 0;
     for i in 0..byteCount {
         let rv = r[i];
         let wv = w[i];
         let ev = e[i];
         let v = rv | wv | ev;
 
-        let mut m : u8 = 1;
+        let mut m: u8 = 1;
         for _j in 0..8 {
             if (v & m) != 0 {
                 // Make sure the fd is valid and decrement the reference
@@ -141,8 +145,8 @@ pub fn DoSelect(task: &Task, nfds: i32, readfds: u64, writefds: u64, exceptfds: 
                 // OK. Linux is racy in the same way.
                 let _file = task.GetFile(fd)?;
 
-                let mut mask : i16 = 0;
-                if rv & m !=0 {
+                let mut mask: i16 = 0;
+                if rv & m != 0 {
                     mask |= SELECT_READ_EVENTS;
                 }
 
@@ -180,7 +184,7 @@ pub fn DoSelect(task: &Task, nfds: i32, readfds: u64, writefds: u64, exceptfds: 
         let events = pfd[idx].revents;
         let i = (pfd[idx].fd / 8) as usize;
         let j = (pfd[idx].fd % 8) as usize;
-        let m : u8 = 1 << j;
+        let m: u8 = 1 << j;
         if r[i] & m != 0 {
             if (events & SELECT_READ_EVENTS) != 0 {
                 bitSetCount += 1;
@@ -217,17 +221,16 @@ pub fn DoSelect(task: &Task, nfds: i32, readfds: u64, writefds: u64, exceptfds: 
         task.CopyOutSlice(&e, exceptfds, byteCount)?;
     }
 
-    return Ok(bitSetCount)
+    return Ok(bitSetCount);
 }
 
-
-pub const URING_POLL : bool = false;
+pub const URING_POLL: bool = false;
 
 pub fn PollBlock(task: &Task, pfd: &mut [PollFd], timeout: i64) -> (Duration, Result<usize>) {
     // no fd to wait, just a nansleep
     if pfd.len() == 0 {
         if timeout == 0 {
-            return (0, Ok(0))
+            return (0, Ok(0));
         }
 
         let timeout = if timeout >= 0 {
@@ -238,13 +241,9 @@ pub fn PollBlock(task: &Task, pfd: &mut [PollFd], timeout: i64) -> (Duration, Re
 
         let (remain, res) = task.blocker.BlockWithMonoTimeout(false, Some(timeout));
         match res {
-            Err(Error::SysError(SysErr::ETIMEDOUT)) => {
-                return (0, Ok(0))
-            }
-            Err(e) => {
-                return (remain, Err(e))
-            }
-            Ok(()) => return (remain, Ok(0))
+            Err(Error::SysError(SysErr::ETIMEDOUT)) => return (0, Ok(0)),
+            Err(e) => return (remain, Err(e)),
+            Ok(()) => return (remain, Ok(0)),
         };
     }
 
@@ -262,20 +261,18 @@ pub fn PollBlock(task: &Task, pfd: &mut [PollFd], timeout: i64) -> (Duration, Re
             match task.GetFile(pfd[i].fd) {
                 Err(_) => {
                     pfd[i].revents = PollConst::POLLNVAL as i16;
-                },
-                Ok(f) => {
-                    match waits.get_mut(&f) {
-                        None => {
-                            let r = f.Readiness(task, EventMaskFromLinux(pfd[i].events as u32));
-                            pfd[i].revents = ToLinux(r) as i16 & pfd[i].events;
-                            waits.insert(f, (pfd[i].events, r));
-                        }
-                        Some(t) => {
-                            (*t).0 |= pfd[i].events;
-                            pfd[i].revents = (*t).1 as i16 & pfd[i].events;
-                        }
-                    }
                 }
+                Ok(f) => match waits.get_mut(&f) {
+                    None => {
+                        let r = f.Readiness(task, EventMaskFromLinux(pfd[i].events as u32));
+                        pfd[i].revents = ToLinux(r) as i16 & pfd[i].events;
+                        waits.insert(f, (pfd[i].events, r));
+                    }
+                    Some(t) => {
+                        (*t).0 |= pfd[i].events;
+                        pfd[i].revents = (*t).1 as i16 & pfd[i].events;
+                    }
+                },
             };
 
             if pfd[i].revents != 0 {
@@ -285,18 +282,16 @@ pub fn PollBlock(task: &Task, pfd: &mut [PollFd], timeout: i64) -> (Duration, Re
     }
 
     if n > 0 {
-        return (timeout, Ok(n))
+        return (timeout, Ok(n));
     }
 
     for (f, (mask, _)) in waits.iter() {
         f.EventRegister(task, &general, EventMaskFromLinux(*mask as u32));
     }
 
-    defer!(
-        for f in waits.keys() {
-            f.EventUnregister(task, &general);
-        }
-    );
+    defer!(for f in waits.keys() {
+        f.EventUnregister(task, &general);
+    });
 
     if timeout == 0 {
         return (timeout, Ok(n));
@@ -336,32 +331,32 @@ pub fn PollBlock(task: &Task, pfd: &mut [PollFd], timeout: i64) -> (Duration, Re
 
         timeout = timeoutTmp;
         match res {
-            Err(Error::SysError(SysErr::ETIMEDOUT)) => {
-                return (0, Ok(0))
-            }
-            Err(e) => {
-                return (timeout, Err(e))
-            }
+            Err(Error::SysError(SysErr::ETIMEDOUT)) => return (0, Ok(0)),
+            Err(e) => return (timeout, Err(e)),
             Ok(()) => (),
         };
-
     }
 
-    return (timeout, Ok(n))
+    return (timeout, Ok(n));
 }
 
-pub fn InitReadiness(task: &Task, pfd: &mut PollFd, files: &mut Vec<Option<File>>, entry: &WaitEntry) {
+pub fn InitReadiness(
+    task: &Task,
+    pfd: &mut PollFd,
+    files: &mut Vec<Option<File>>,
+    entry: &WaitEntry,
+) {
     if pfd.fd < 0 {
         pfd.revents = 0;
         files.push(None);
-        return
+        return;
     }
 
     let file = match task.GetFile(pfd.fd) {
         Err(_) => {
             pfd.revents = PollConst::POLLNVAL as i16;
             files.push(None);
-            return
+            return;
         }
         Ok(f) => f,
     };
@@ -383,9 +378,9 @@ pub fn SysSelect(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     // Use a negative Duration to indicate "no timeout".
     let mut timeout = -1 as Duration;
     if timeValAddr != 0 {
-        let timeval : Timeval = task.CopyInObj(timeValAddr)?;
+        let timeval: Timeval = task.CopyInObj(timeValAddr)?;
         if timeval.Sec < 0 || timeval.Usec < 0 {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         timeout = timeval.ToDuration();
@@ -448,7 +443,7 @@ pub fn SysPoll(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let timeout = args.arg2 as i32 as i64 * MILLISECOND;
 
     let n = Poll(task, pfdAddr, nfds, timeout)?;
-    return Ok(n)
+    return Ok(n);
 }
 
 // Ppoll implements linux syscall ppoll(2).
@@ -496,14 +491,14 @@ pub struct PollRestartBlock {
 
 impl SyscallRestartBlock for PollRestartBlock {
     fn Restart(&self, task: &mut Task) -> Result<i64> {
-        return Poll(task, self.pfdAddr, self.nfds, self.timeout)
+        return Poll(task, self.pfdAddr, self.nfds, self.timeout);
     }
 }
 
 pub fn Poll(task: &mut Task, pfdAddr: u64, nfds: u32, timeout: Duration) -> Result<i64> {
     if nfds > 4096 {
         // linux support poll max 4096 fds
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let (remain, res) = DoPoll(task, pfdAddr, nfds, timeout);
@@ -517,10 +512,8 @@ pub fn Poll(task: &mut Task, pfdAddr: u64, nfds: u32, timeout: Duration) -> Resu
             task.SetSyscallRestartBlock(b);
             return Err(Error::SysError(SysErr::ERESTART_RESTARTBLOCK));
         }
-        Err(e) => {
-            return Err(e)
-        }
-        Ok(n) => return Ok(n as i64)
+        Err(e) => return Err(e),
+        Ok(n) => return Ok(n as i64),
     }
 }
 
@@ -528,19 +521,17 @@ pub fn DoPoll(task: &Task, addr: u64, nfds: u32, timeout: Duration) -> (Duration
     //todo: handle fileCap
 
     if (nfds as i32) < 0 {
-        return (0, Err(Error::SysError(SysErr::EINVAL)))
+        return (0, Err(Error::SysError(SysErr::EINVAL)));
     }
 
-    let mut pfd : Vec<PollFd> = if addr != 0 {
+    let mut pfd: Vec<PollFd> = if addr != 0 {
         match task.CopyInVec(addr, nfds as usize) {
-            Err(e) => {
-                return (timeout, Err(e))
-            },
+            Err(e) => return (timeout, Err(e)),
             Ok(pfd) => pfd,
         }
     } else {
         if nfds > 0 {
-            return (timeout, Err(Error::SysError(SysErr::EFAULT)))
+            return (timeout, Err(Error::SysError(SysErr::EFAULT)));
         }
         Vec::new()
     };
@@ -571,12 +562,17 @@ pub fn DoPoll(task: &Task, addr: u64, nfds: u32, timeout: Duration) -> (Duration
         }
     }
 
-    return (remainingTimeout, Ok(n))
+    return (remainingTimeout, Ok(n));
 }
 
-pub fn CopyOutTimevalRemaining(task: &Task, startNs: i64, timeout: Duration, timeValAddr: u64) -> Result<()> {
+pub fn CopyOutTimevalRemaining(
+    task: &Task,
+    startNs: i64,
+    timeout: Duration,
+    timeValAddr: u64,
+) -> Result<()> {
     if timeout < 0 {
-        return Ok(())
+        return Ok(());
     }
 
     let remaining = TimeoutRemain(task, startNs, timeout);
@@ -585,12 +581,17 @@ pub fn CopyOutTimevalRemaining(task: &Task, startNs: i64, timeout: Duration, tim
     //*timeval = tvRemaining;
 
     task.CopyOutObj(&tvRemaining, timeValAddr)?;
-    return Ok(())
+    return Ok(());
 }
 
-pub fn CopyOutTimespecRemaining(task: &Task, startNs: i64, timeout: Duration, timespecAddr: u64) -> Result<()> {
+pub fn CopyOutTimespecRemaining(
+    task: &Task,
+    startNs: i64,
+    timeout: Duration,
+    timespecAddr: u64,
+) -> Result<()> {
     if timeout < 0 {
-        return Ok(())
+        return Ok(());
     }
 
     let remaining = TimeoutRemain(task, startNs, timeout);
@@ -599,14 +600,14 @@ pub fn CopyOutTimespecRemaining(task: &Task, startNs: i64, timeout: Duration, ti
     //*ts = tsRemaining;
 
     task.CopyOutObj(&tsRemaining, timespecAddr)?;
-    return Ok(())
+    return Ok(());
 }
 
 pub fn TimeoutRemain(_task: &Task, startNs: i64, timeout: Duration) -> Duration {
     let now = MonotonicNow();
     let remaining = timeout - (now - startNs);
     if remaining < 0 {
-        return 0
+        return 0;
     }
 
     return remaining;
@@ -615,9 +616,9 @@ pub fn TimeoutRemain(_task: &Task, startNs: i64, timeout: Duration) -> Duration 
 pub fn CopyTimespecIntoDuration(task: &Task, timespecAddr: u64) -> Result<Duration> {
     let mut timeout = -1 as Duration;
     if timespecAddr != 0 {
-        let timespec : Timespec = task.CopyInObj(timespecAddr)?;
+        let timespec: Timespec = task.CopyInObj(timespecAddr)?;
         if !timespec.IsValid() {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         timeout = timespec.ToDuration()?;

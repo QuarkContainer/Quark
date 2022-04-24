@@ -13,20 +13,18 @@
 // limitations under the License.
 
 use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
 use super::super::qlib::control_msg::*;
+use super::super::qlib::linux_def::*;
 use super::super::qlib::loader;
+use super::super::runc::container::container::*;
+use super::super::vmspace::*;
 use super::super::IO_MGR;
 use super::super::URING_MGR;
 use super::ucall::*;
 use super::usocket::*;
-use super::super::runc::container::container::*;
-use super::super::vmspace::*;
 
 pub fn ReadControlMsg(fd: i32) -> Result<ControlMsg> {
-    let usock = USocket {
-        socket: fd,
-    };
+    let usock = USocket { socket: fd };
 
     let (mut req, fds) = match usock.GetReq() {
         Ok((req, fds)) => ((req, fds)),
@@ -34,16 +32,16 @@ pub fn ReadControlMsg(fd: i32) -> Result<ControlMsg> {
             let err = UCallResp::UCallRespErr(format!("{:?}", e));
             usock.SendResp(&err)?;
             usock.Drop();
-            return Err(e)
+            return Err(e);
         }
     };
 
     let msg = ProcessReqHandler(&mut req, &fds);
-    return msg
+    return msg;
 }
 
 pub fn RootContainerStartHandler(start: &RootContainerStart) -> Result<ControlMsg> {
-    let msg = ControlMsg::New(Payload::RootContainerStart(RootProcessStart{
+    let msg = ControlMsg::New(Payload::RootContainerStart(RootProcessStart {
         cid: start.cid.to_string(),
     }));
 
@@ -60,7 +58,9 @@ pub fn ExecProcessHandler(execArgs: &mut ExecArgs, fds: &[i32]) -> Result<Contro
     process.Envs.append(&mut execArgs.Envv);
     process.UID = execArgs.KUID.0;
     process.GID = execArgs.KGID.0;
-    process.AdditionalGids.append(&mut execArgs.ExtraKGIDs.iter().map(| gid | gid.0).collect());
+    process
+        .AdditionalGids
+        .append(&mut execArgs.ExtraKGIDs.iter().map(|gid| gid.0).collect());
     process.Terminal = execArgs.Terminal;
     process.ExecId = Some(execArgs.ExecId.clone());
 
@@ -80,36 +80,38 @@ pub fn ExecProcessHandler(execArgs: &mut ExecArgs, fds: &[i32]) -> Result<Contro
 
 pub fn PauseHandler() -> Result<ControlMsg> {
     let msg = ControlMsg::New(Payload::Pause);
-    return Ok(msg)
+    return Ok(msg);
 }
 
 pub fn UnpauseHandler() -> Result<ControlMsg> {
     let msg = ControlMsg::New(Payload::Unpause);
-    return Ok(msg)
+    return Ok(msg);
 }
 
 pub fn PsHandler(cid: &str) -> Result<ControlMsg> {
     let msg = ControlMsg::New(Payload::Ps(cid.to_string()));
-    return Ok(msg)
+    return Ok(msg);
 }
 
 pub fn WaitHandler(cid: &str) -> Result<ControlMsg> {
     let msg = ControlMsg::New(Payload::WaitContainer(cid.to_string()));
-    return Ok(msg)
+    return Ok(msg);
 }
 
 pub fn WaitAll() -> Result<ControlMsg> {
     let msg = ControlMsg::New(Payload::WaitAll);
-    return Ok(msg)
+    return Ok(msg);
 }
 
 pub fn WaitPidHandler(waitpid: &WaitPid) -> Result<ControlMsg> {
     let msg = ControlMsg::New(Payload::WaitPid(waitpid.clone()));
-    return Ok(msg)
+    return Ok(msg);
 }
 
 pub fn SignalHandler(signalArgs: &SignalArgs) -> Result<ControlMsg> {
-    if signalArgs.Signo == Signal::SIGKILL && signalArgs.Mode == SignalDeliveryMode::DeliverToAllProcesses {
+    if signalArgs.Signo == Signal::SIGKILL
+        && signalArgs.Mode == SignalDeliveryMode::DeliverToAllProcesses
+    {
         unsafe {
             // ucallServer::HandleSignal SIGKILL all processes
             libc::kill(0, 9);
@@ -118,16 +120,16 @@ pub fn SignalHandler(signalArgs: &SignalArgs) -> Result<ControlMsg> {
     }
 
     let msg = ControlMsg::New(Payload::Signal(signalArgs.clone()));
-    return Ok(msg)
+    return Ok(msg);
 }
 
 pub fn ContainerDestroyHandler(cid: &String) -> Result<ControlMsg> {
     let msg = ControlMsg::New(Payload::ContainerDestroy(cid.clone()));
-    return Ok(msg)
+    return Ok(msg);
 }
 
 pub fn CreateSubContainerHandler(args: &mut CreateArgs, fds: &[i32]) -> Result<ControlMsg> {
-    //set fds back to args, 
+    //set fds back to args,
     if fds.len() == 1 {
         args.fds[0] = fds[0];
     } else if fds.len() == 3 {
@@ -145,11 +147,10 @@ pub fn CreateSubContainerHandler(args: &mut CreateArgs, fds: &[i32]) -> Result<C
     }
 
     let msg = ControlMsg::New(Payload::CreateSubContainer(args.clone()));
-    return Ok(msg)
+    return Ok(msg);
 }
 
 pub fn StartSubContainerHandler(args: &mut StartArgs) -> Result<ControlMsg> {
-
     let msg = ControlMsg::New(Payload::StartSubContainer(args.clone()));
     return Ok(msg);
 }
@@ -170,5 +171,5 @@ pub fn ProcessReqHandler(req: &mut UCallReq, fds: &[i32]) -> Result<ControlMsg> 
         UCallReq::WaitAll => WaitAll()?,
     };
 
-    return Ok(msg)
+    return Ok(msg);
 }

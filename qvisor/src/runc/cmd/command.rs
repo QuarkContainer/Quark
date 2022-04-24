@@ -12,26 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::env;
 use clap::{App, AppSettings, Arg};
+use std::env;
 
 use super::super::super::qlib::common::*;
+use super::boot::*;
+use super::cmd::*;
 use super::config;
 use super::config::*;
-use super::run::*;
 use super::create::*;
-use super::start::*;
-use super::list::*;
-use super::cmd::*;
-use super::wait::*;
-use super::boot::*;
-use super::exec::*;
-use super::pause::*;
-use super::resume::*;
-use super::ps::*;
-use super::kill::*;
 use super::delete::*;
+use super::exec::*;
+use super::kill::*;
+use super::list::*;
+use super::pause::*;
+use super::ps::*;
+use super::resume::*;
+use super::run::*;
+use super::start::*;
 use super::state::*;
+use super::wait::*;
 
 fn id_validator(val: String) -> core::result::Result<(), String> {
     if val.contains("..") || val.contains('/') {
@@ -41,10 +41,10 @@ fn id_validator(val: String) -> core::result::Result<(), String> {
 }
 
 fn get_args() -> Vec<String> {
-    return env::args().collect()
+    return env::args().collect();
 }
 
-pub struct CommonArgs <'a, 'b> {
+pub struct CommonArgs<'a, 'b> {
     pub id_arg: Arg<'a, 'b>,
     pub bundle_arg: Arg<'a, 'b>,
     pub consoleSocket_arg: Arg<'a, 'b>,
@@ -57,7 +57,7 @@ pub struct CommonArgs <'a, 'b> {
     pub user_log_arg: Arg<'a, 'b>,
 }
 
-impl <'a, 'b> CommonArgs <'a, 'b> {
+impl<'a, 'b> CommonArgs<'a, 'b> {
     pub fn New() -> Self {
         let id_arg = Arg::with_name("id")
             .required(true)
@@ -114,8 +114,8 @@ impl <'a, 'b> CommonArgs <'a, 'b> {
             pid_arg: pid_arg,
             init_arg: init_arg,
             format_arg: format_arg,
-            user_log_arg: user_log_arg
-        }
+            user_log_arg: user_log_arg,
+        };
     }
 }
 
@@ -161,48 +161,20 @@ pub fn Parse() -> Result<Arguments> {
                 .short("r")
                 .takes_value(true),
         )
-        .subcommand(
-            RunCmd::SubCommand(&common)
-        )
-        .subcommand(
-            CreateCmd::SubCommand(&common)
-        )
-        .subcommand(
-            StartCmd::SubCommand(&common)
-        )
-        .subcommand(
-            WaitCmd::SubCommand(&common)
-        )
-        .subcommand(
-            ListCmd::SubCommand(&common)
-        )
-        .subcommand(
-            CmdCmd::SubCommand(&common)
-        )
-        .subcommand(
-            BootCmd::SubCommand(&common)
-        )
-        .subcommand(
-            ExecCmd::SubCommand(&common)
-        )
-        .subcommand(
-            PauseCmd::SubCommand(&common)
-        )
-        .subcommand(
-            ResumeCmd::SubCommand(&common)
-        )
-        .subcommand(
-            PsCmd::SubCommand(&common)
-        )
-        .subcommand(
-            KillCmd::SubCommand(&common)
-        )
-        .subcommand(
-            DeleteCmd::SubCommand(&common)
-        )
-        .subcommand(
-            StateCmd::SubCommand(&common)
-        )
+        .subcommand(RunCmd::SubCommand(&common))
+        .subcommand(CreateCmd::SubCommand(&common))
+        .subcommand(StartCmd::SubCommand(&common))
+        .subcommand(WaitCmd::SubCommand(&common))
+        .subcommand(ListCmd::SubCommand(&common))
+        .subcommand(CmdCmd::SubCommand(&common))
+        .subcommand(BootCmd::SubCommand(&common))
+        .subcommand(ExecCmd::SubCommand(&common))
+        .subcommand(PauseCmd::SubCommand(&common))
+        .subcommand(ResumeCmd::SubCommand(&common))
+        .subcommand(PsCmd::SubCommand(&common))
+        .subcommand(KillCmd::SubCommand(&common))
+        .subcommand(DeleteCmd::SubCommand(&common))
+        .subcommand(StateCmd::SubCommand(&common))
         .get_matches_from(get_args());
 
     let level = match matches.occurrences_of("v") {
@@ -231,95 +203,67 @@ pub fn Parse() -> Result<Arguments> {
     };
 
     let args = match matches.subcommand() {
-        ("run", Some(cmd_matches)) => {
-            Arguments {
-                config: gConfig,
-                cmd: Command::RunCmd(RunCmd::Init(&cmd_matches)?)
-            }
-        }
-        ("create", Some(cmd_matches)) => {
-            Arguments {
-                config: gConfig,
-                cmd: Command::CreateCmd(CreateCmd::Init(&cmd_matches)?)
-            }
-        }
-        ("start", Some(cmd_matches)) => {
-            Arguments {
-                config: gConfig,
-                cmd: Command::StartCmd(StartCmd::Init(&cmd_matches)?)
-            }
-        }
-        ("list", Some(cmd_matches)) => {
-            Arguments {
-                config: gConfig,
-                cmd: Command::ListCmd(ListCmd::Init(&cmd_matches)?)
-            }
-        }
-        ("cmd", Some(cmd_matches)) => {
-            Arguments {
-                config: gConfig,
-                cmd: Command::CmdCmd(CmdCmd::Init(&cmd_matches)?)
-            }
-        }
-        ("boot", Some(cmd_matches)) => {
-            Arguments {
-                config: gConfig,
-                cmd: Command::BootCmd(BootCmd::Init(&cmd_matches)?)
-            }
-        }
-        ("exec", Some(cmd_matches)) => {
-            Arguments {
-                config: gConfig,
-                cmd: Command::ExecCmd(ExecCmd::Init(&cmd_matches)?)
-            }
-        }
-        ("pause", Some(cmd_matches)) => {
-            Arguments {
-                config: gConfig,
-                cmd: Command::PauseCmd(PauseCmd::Init(&cmd_matches)?)
-            }
-        }
-        ("resume", Some(cmd_matches)) => {
-            Arguments {
-                config: gConfig,
-                cmd: Command::ResumeCmd(ResumeCmd::Init(&cmd_matches)?)
-            }
-        }
-        ("ps", Some(cmd_matches)) => {
-            Arguments {
-                config: gConfig,
-                cmd: Command::PsCmd(PsCmd::Init(&cmd_matches)?)
-            }
-        }
-        ("wait", Some(cmd_matches)) => {
-            Arguments {
-                config: gConfig,
-                cmd: Command::WaitCmd(WaitCmd::Init(&cmd_matches)?)
-            }
-        }
-        ("kill", Some(cmd_matches)) => {
-            Arguments {
-                config: gConfig,
-                cmd: Command::KillCmd(KillCmd::Init(&cmd_matches)?)
-            }
-        }
-        ("delete", Some(cmd_matches)) => {
-            Arguments {
-                config: gConfig,
-                cmd: Command::DeleteCmd(DeleteCmd::Init(&cmd_matches)?)
-            }
-        }
-        ("state", Some(cmd_matches)) => {
-            Arguments {
-                config: gConfig,
-                cmd: Command::StateCmd(StateCmd::Init(&cmd_matches)?)
-            }
-        }
+        ("run", Some(cmd_matches)) => Arguments {
+            config: gConfig,
+            cmd: Command::RunCmd(RunCmd::Init(&cmd_matches)?),
+        },
+        ("create", Some(cmd_matches)) => Arguments {
+            config: gConfig,
+            cmd: Command::CreateCmd(CreateCmd::Init(&cmd_matches)?),
+        },
+        ("start", Some(cmd_matches)) => Arguments {
+            config: gConfig,
+            cmd: Command::StartCmd(StartCmd::Init(&cmd_matches)?),
+        },
+        ("list", Some(cmd_matches)) => Arguments {
+            config: gConfig,
+            cmd: Command::ListCmd(ListCmd::Init(&cmd_matches)?),
+        },
+        ("cmd", Some(cmd_matches)) => Arguments {
+            config: gConfig,
+            cmd: Command::CmdCmd(CmdCmd::Init(&cmd_matches)?),
+        },
+        ("boot", Some(cmd_matches)) => Arguments {
+            config: gConfig,
+            cmd: Command::BootCmd(BootCmd::Init(&cmd_matches)?),
+        },
+        ("exec", Some(cmd_matches)) => Arguments {
+            config: gConfig,
+            cmd: Command::ExecCmd(ExecCmd::Init(&cmd_matches)?),
+        },
+        ("pause", Some(cmd_matches)) => Arguments {
+            config: gConfig,
+            cmd: Command::PauseCmd(PauseCmd::Init(&cmd_matches)?),
+        },
+        ("resume", Some(cmd_matches)) => Arguments {
+            config: gConfig,
+            cmd: Command::ResumeCmd(ResumeCmd::Init(&cmd_matches)?),
+        },
+        ("ps", Some(cmd_matches)) => Arguments {
+            config: gConfig,
+            cmd: Command::PsCmd(PsCmd::Init(&cmd_matches)?),
+        },
+        ("wait", Some(cmd_matches)) => Arguments {
+            config: gConfig,
+            cmd: Command::WaitCmd(WaitCmd::Init(&cmd_matches)?),
+        },
+        ("kill", Some(cmd_matches)) => Arguments {
+            config: gConfig,
+            cmd: Command::KillCmd(KillCmd::Init(&cmd_matches)?),
+        },
+        ("delete", Some(cmd_matches)) => Arguments {
+            config: gConfig,
+            cmd: Command::DeleteCmd(DeleteCmd::Init(&cmd_matches)?),
+        },
+        ("state", Some(cmd_matches)) => Arguments {
+            config: gConfig,
+            cmd: Command::StateCmd(StateCmd::Init(&cmd_matches)?),
+        },
         // We should never reach here because clap already enforces this
-         _ => panic!("command not recognized"),
+        _ => panic!("command not recognized"),
     };
 
-    return Ok(args)
+    return Ok(args);
 }
 
 #[derive(Debug)]
@@ -343,7 +287,7 @@ pub enum Command {
     PsCmd(PsCmd),
     KillCmd(KillCmd),
     DeleteCmd(DeleteCmd),
-    StateCmd(StateCmd)
+    StateCmd(StateCmd),
 }
 
 pub fn Run(args: &mut Arguments) -> Result<()> {
@@ -361,6 +305,6 @@ pub fn Run(args: &mut Arguments) -> Result<()> {
         Command::PsCmd(cmd) => return cmd.Run(&mut args.config),
         Command::KillCmd(cmd) => return cmd.Run(&mut args.config),
         Command::DeleteCmd(cmd) => return cmd.Run(&mut args.config),
-        Command::StateCmd(cmd) => return cmd.Run(&mut args.config)
+        Command::StateCmd(cmd) => return cmd.Run(&mut args.config),
     }
 }

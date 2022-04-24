@@ -15,18 +15,18 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
-use super::super::task::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::socket::socket::*;
+use super::super::task::*;
 //use super::super::socket::control::*;
 //use super::super::socket::control::ControlMessage;
-use super::super::fs::flags::*;
 use super::super::fs::file::*;
+use super::super::fs::flags::*;
 use super::super::kernel::fd_table::*;
-use super::super::syscalls::syscalls::*;
 use super::super::kernel::time::*;
 use super::super::qlib::linux::time::*;
+use super::super::syscalls::syscalls::*;
 //use super::super::qlib::linux::socket::*;
 use super::super::kernel::timer::*;
 
@@ -65,7 +65,7 @@ pub fn SysSocket(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let protocol = args.arg2 as i32;
 
     if stype & !(0xf | SocketFlags::SOCK_CLOEXEC | SocketFlags::SOCK_NONBLOCK) != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let s = NewSocket(task, domain, stype & 0xf, protocol)?;
@@ -77,9 +77,15 @@ pub fn SysSocket(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     s.SetFlags(task, flags);
     s.flags.lock().0.NonSeekable = true;
-    let fd = task.NewFDFrom(0, &s, &FDFlags { CloseOnExec: stype & SocketFlags::SOCK_CLOEXEC != 0 })?;
+    let fd = task.NewFDFrom(
+        0,
+        &s,
+        &FDFlags {
+            CloseOnExec: stype & SocketFlags::SOCK_CLOEXEC != 0,
+        },
+    )?;
 
-    return Ok(fd as i64)
+    return Ok(fd as i64);
 }
 
 pub fn SysSocketPair(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -89,7 +95,7 @@ pub fn SysSocketPair(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let socks = args.arg3 as u64;
 
     if stype & !(0xf | SocketFlags::SOCK_CLOEXEC | SocketFlags::SOCK_NONBLOCK) != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let fileFlags = SettableFileFlags {
@@ -97,7 +103,9 @@ pub fn SysSocketPair(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         ..Default::default()
     };
 
-    let fdFlags = FDFlags { CloseOnExec: stype & SocketFlags::SOCK_CLOEXEC != 0 };
+    let fdFlags = FDFlags {
+        CloseOnExec: stype & SocketFlags::SOCK_CLOEXEC != 0,
+    };
 
     let (s1, s2) = NewPair(task, domain, stype & 0xf, protocol)?;
 
@@ -112,12 +120,12 @@ pub fn SysSocketPair(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let fds = [fd1, fd2];
     task.CopyOutSlice(&fds, socks, 2)?;
 
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn CaptureAddress(task: &Task, addr: u64, addrlen: u32) -> Result<Vec<u8>> {
     if addrlen > MAX_ADDR_LEN {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     //task.CheckPermission(addr, addrlen as u64, false, false)?;
@@ -139,7 +147,7 @@ pub fn SysConnect(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addrlen = args.arg2 as u32;
 
     if addrlen > MAX_ADDR_LEN {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let file = task.GetFile(fd)?;
@@ -148,14 +156,14 @@ pub fn SysConnect(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let sock = file.FileOp.clone();
 
     if addrlen > MAX_ADDR_LEN as u32 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let addrstr = CaptureAddress(task, addr, addrlen)?;
 
     sock.Connect(task, &addrstr, blocking)?;
 
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysAccept4(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -169,7 +177,7 @@ pub fn SysAccept4(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
 pub fn Accept4(task: &Task, fd: i32, addr: u64, addrlen: u64, flags: i32) -> Result<i64> {
     if flags & !(SocketFlags::SOCK_CLOEXEC | SocketFlags::SOCK_NONBLOCK) != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let file = task.GetFile(fd)?;
@@ -184,7 +192,7 @@ pub fn Accept4(task: &Task, fd: i32, addr: u64, addrlen: u64, flags: i32) -> Res
         let len = task.CopyInObj::<i32>(addrlen)?;
 
         if len < 0 {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
         len as u32
     };
@@ -203,12 +211,8 @@ pub fn Accept4(task: &Task, fd: i32, addr: u64, addrlen: u64, flags: i32) -> Res
     let addrstr = &mut addrstr[..len as usize];
 
     let nfd = match sock.Accept(task, addrstr, &mut len, flags, blocking) {
-        Err(Error::ErrInterrupted) => {
-            return Err(Error::SysError(SysErr::ERESTARTSYS))
-        },
-        Err(e) => {
-            return Err(e)
-        },
+        Err(Error::ErrInterrupted) => return Err(Error::SysError(SysErr::ERESTARTSYS)),
+        Err(e) => return Err(e),
         Ok(nfd) => nfd,
     };
 
@@ -218,7 +222,7 @@ pub fn Accept4(task: &Task, fd: i32, addr: u64, addrlen: u64, flags: i32) -> Res
         task.CopyOutObj(&(len as i32), addrlen)?
     }
 
-    return Ok(nfd)
+    return Ok(nfd);
 }
 
 pub fn SysAccept(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -226,7 +230,7 @@ pub fn SysAccept(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg1 as u64;
     let addrlen = args.arg2 as u64;
 
-    return Accept4(task, fd, addr, addrlen, 0)
+    return Accept4(task, fd, addr, addrlen, 0);
 }
 
 pub fn SysBind(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -239,7 +243,7 @@ pub fn SysBind(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let sock = file.FileOp.clone();
 
     if addrlen > MAX_ADDR_LEN as usize {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let addrstr = task.CopyInVec(addr, addrlen as usize)?;
@@ -278,7 +282,7 @@ pub fn SysShutdown(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let how = how as u64;
     if !(how == LibcConst::SHUT_RD || how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR) {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let res = sock.Shutdown(task, how as i32);
@@ -300,7 +304,7 @@ pub fn SysGetSockOpt(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         let optlen = task.CopyInObj::<i32>(optLenAddr)?;
 
         if optlen < 0 {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         optlen
@@ -320,7 +324,7 @@ pub fn SysGetSockOpt(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     //*task.GetTypeMut(optLenAddr)? = len as i32;
     task.CopyOutObj(&(len as i32), optLenAddr)?;
 
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysSetSockOpt(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -334,16 +338,16 @@ pub fn SysSetSockOpt(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let sock = file.FileOp.clone();
 
-    // Linux allows optlen = 0, which is equivalent to optval = 0, 
+    // Linux allows optlen = 0, which is equivalent to optval = 0,
     // see `do_ip_setsockopt` in linux/source/net/ipv4/ip_sockglue.c
     if optLen < 0 || optLen > MAX_OPT_LEN as i32 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let optVal = task.CopyInVec(optValAddr, optLen as usize)?;
     let res = sock.SetSockOpt(task, level, name, &optVal[..optLen as usize])?;
 
-    return Ok(res)
+    return Ok(res);
 }
 
 pub fn SysGetSockName(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -374,7 +378,7 @@ pub fn SysGetSockName(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     task.CopyOutSlice(&buf[..outputlen as usize], addr, outputlen as usize)?;
 
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysGetPeerName(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -399,17 +403,23 @@ pub fn SysGetPeerName(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     task.CopyOutSlice(&buf[..outputlen as usize], addr, addrlen as usize)?;
     //*(task.GetTypeMut::<i32>(addrlen)?) = outputlen as i32;
     task.CopyOutObj(&(outputlen as i32), addrlen)?;
-    return Ok(0)
+    return Ok(0);
 }
 
-fn recvSingleMsg(task: &Task, sock: &Arc<FileOperations>, msgPtr: u64, flags: i32, deadline: Option<Time>) -> Result<i64> {
+fn recvSingleMsg(
+    task: &Task,
+    sock: &Arc<FileOperations>,
+    msgPtr: u64,
+    flags: i32,
+    deadline: Option<Time>,
+) -> Result<i64> {
     //let msg = task.GetTypeMut::<MsgHdr>(msgPtr)?;
 
-    let mut msg : MsgHdr = task.CopyInObj(msgPtr)?;
+    let mut msg: MsgHdr = task.CopyInObj(msgPtr)?;
     if msg.iovLen > UIO_MAXIOV {
-        return Err(Error::SysError(SysErr::EMSGSIZE))
+        return Err(Error::SysError(SysErr::EMSGSIZE));
     }
-    
+
     if msg.msgControl == 0 {
         msg.msgControlLen = 0;
     }
@@ -422,33 +432,39 @@ fn recvSingleMsg(task: &Task, sock: &Arc<FileOperations>, msgPtr: u64, flags: i3
 
     if flags & MsgType::MSG_ERRQUEUE != 0 {
         // Pretend we have an empty error queue.
-        return Err(Error::SysError(SysErr::EAGAIN))
+        return Err(Error::SysError(SysErr::EAGAIN));
     }
 
     // Fast path when no control message nor name buffers are provided.
     if msg.msgControlLen == 0 && msg.nameLen == 0 {
-        let (n, mut mflags, _ , controlMessageBuffer) = sock.RecvMsg(task, &mut dst, flags, deadline, false, 0)?;
+        let (n, mut mflags, _, controlMessageBuffer) =
+            sock.RecvMsg(task, &mut dst, flags, deadline, false, 0)?;
 
         if controlMessageBuffer.len() != 0 {
             mflags |= MsgType::MSG_CTRUNC;
         }
 
         msg.msgFlags = mflags;
-        return Ok(n as i64)
+        return Ok(n as i64);
     }
 
     if msg.msgControlLen > MAX_CONTROL_LEN {
-        return Err(Error::SysError(SysErr::ENOBUFS))
+        return Err(Error::SysError(SysErr::ENOBUFS));
     }
-
 
     let mut addressVec: Vec<u8> = vec![0; msg.nameLen as usize];
     //let mut controlVec: Vec<u8> = vec![0; msg.msgControlLen as usize];
 
+    let (n, mflags, sender, controlMessageBuffer) = sock.RecvMsg(
+        task,
+        &mut dst,
+        flags,
+        deadline,
+        msg.nameLen != 0,
+        msg.msgControlLen,
+    )?;
 
-    let (n, mflags, sender, controlMessageBuffer) = sock.RecvMsg(task, &mut dst, flags, deadline, msg.nameLen!=0, msg.msgControlLen)?;
-
-    /* 
+    /*
      let controlData = &mut controlVec[..];
 
     //todo: handle Timestamp ControlMessage
@@ -507,8 +523,12 @@ fn recvSingleMsg(task: &Task, sock: &Arc<FileOperations>, msgPtr: u64, flags: i3
         task.CopyOutSlice(&addressVec[0..senderLen], msg.msgName, msg.nameLen as usize)?;
         msg.nameLen = senderLen as u32;
     }
-    if msg.msgControl!=0 && msg.msgControlLen!=0 {
-        task.CopyOutSlice(&controlMessageBuffer[0..msg.msgControlLen as usize], msg.msgControl, msg.msgControlLen)?;
+    if msg.msgControl != 0 && msg.msgControlLen != 0 {
+        task.CopyOutSlice(
+            &controlMessageBuffer[0..msg.msgControlLen as usize],
+            msg.msgControl,
+            msg.msgControlLen,
+        )?;
     } else {
         msg.msgControlLen = 0;
     }
@@ -516,18 +536,24 @@ fn recvSingleMsg(task: &Task, sock: &Arc<FileOperations>, msgPtr: u64, flags: i3
     msg.msgFlags = mflags;
 
     task.CopyOutObj(&msg, msgPtr)?;
-    return Ok(n)
+    return Ok(n);
 }
 
-fn sendSingleMsg(task: &Task, sock: &Arc<FileOperations>, msgPtr: u64, flags: i32, deadline: Option<Time>) -> Result<i64> {
+fn sendSingleMsg(
+    task: &Task,
+    sock: &Arc<FileOperations>,
+    msgPtr: u64,
+    flags: i32,
+    deadline: Option<Time>,
+) -> Result<i64> {
     let msg = task.CopyInObj::<MsgHdr>(msgPtr)?;
 
     if msg.msgControlLen > MAX_CONTROL_LEN as usize {
-        return Err(Error::SysError(SysErr::ENOBUFS))
+        return Err(Error::SysError(SysErr::ENOBUFS));
     }
 
     if msg.iovLen > UIO_MAXIOV {
-        return Err(Error::SysError(SysErr::EMSGSIZE))
+        return Err(Error::SysError(SysErr::EMSGSIZE));
     }
 
     let msgVec: Vec<u8> = task.CopyInVec(msg.msgName, msg.nameLen as usize)?;
@@ -558,8 +584,14 @@ pub fn SysRecvMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let sock = file.FileOp.clone();
 
-    if flags & !(MsgType::BASE_RECV_FLAGS | MsgType::MSG_PEEK | MsgType::MSG_CMSG_CLOEXEC | MsgType::MSG_ERRQUEUE) != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+    if flags
+        & !(MsgType::BASE_RECV_FLAGS
+            | MsgType::MSG_PEEK
+            | MsgType::MSG_CMSG_CLOEXEC
+            | MsgType::MSG_ERRQUEUE)
+        != 0
+    {
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     if !file.Blocking() {
@@ -576,7 +608,7 @@ pub fn SysRecvMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     }
 
     let res = recvSingleMsg(task, &sock, msgPtr, flags, deadline)?;
-    return Ok(res)
+    return Ok(res);
 }
 
 pub fn SysRecvMMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -590,8 +622,9 @@ pub fn SysRecvMMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let sock = file.FileOp.clone();
 
-    if flags & !(MsgType::BASE_RECV_FLAGS | MsgType::MSG_CMSG_CLOEXEC | MsgType::MSG_ERRQUEUE) != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+    if flags & !(MsgType::BASE_RECV_FLAGS | MsgType::MSG_CMSG_CLOEXEC | MsgType::MSG_ERRQUEUE) != 0
+    {
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let mut deadline = None;
@@ -619,13 +652,19 @@ pub fn SysRecvMMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     info!("SysRecvMMsg 1 vlen is {}", vlen);
     for i in 0..vlen as usize {
-        res = match recvSingleMsg(task, &sock, &(msgs[i].msgHdr) as *const MsgHdr as u64, flags, deadline) {
+        res = match recvSingleMsg(
+            task,
+            &sock,
+            &(msgs[i].msgHdr) as *const MsgHdr as u64,
+            flags,
+            deadline,
+        ) {
             Err(e) => {
                 if count > 0 {
-                    return Ok(count)
+                    return Ok(count);
                 }
 
-                return Err(e)
+                return Err(e);
             }
             Ok(n) => n,
         };
@@ -639,22 +678,21 @@ pub fn SysRecvMMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     }
 
     if count == 0 {
-        return Err(Error::SysError(-res as i32))
+        return Err(Error::SysError(-res as i32));
     }
 
     task.CopyOutSlice(&msgs, msgPtr, vlen as usize)?;
 
-    return Ok(count)
+    return Ok(count);
 }
 
-pub const BASE_RECV_FLAGS :i32 = MsgType::MSG_OOB
+pub const BASE_RECV_FLAGS: i32 = MsgType::MSG_OOB
     | MsgType::MSG_DONTROUTE
     | MsgType::MSG_DONTWAIT
     | MsgType::MSG_NOSIGNAL
     | MsgType::MSG_WAITALL
     | MsgType::MSG_TRUNC
     | MsgType::MSG_CTRUNC;
-
 
 pub fn SysRecvFrom(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let fd = args.arg0 as i32;
@@ -669,11 +707,11 @@ pub fn SysRecvFrom(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let sock = file.FileOp.clone();
 
     if buflen < 0 {
-        return Err(Error::SysError(-SysErr::EINVAL))
+        return Err(Error::SysError(-SysErr::EINVAL));
     }
 
     if flags & !(BASE_RECV_FLAGS | MsgType::MSG_PEEK | MsgType::MSG_CONFIRM) != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let mut flags = flags;
@@ -709,7 +747,8 @@ pub fn SysRecvFrom(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         flags |= MsgType::MSG_DONTWAIT;
     }
 
-    let (bytes, _, sender, _) = sock.RecvMsg(task, &mut iovs, flags, deadline, nameLenPtr!=0, 0)?;
+    let (bytes, _, sender, _) =
+        sock.RecvMsg(task, &mut iovs, flags, deadline, nameLenPtr != 0, 0)?;
 
     if nameLenPtr != 0 && sender.is_some() {
         let (sender, senderLen) = sender.unwrap();
@@ -730,7 +769,7 @@ pub fn SysRecvFrom(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
     }
 
-    return Ok(bytes as i64)
+    return Ok(bytes as i64);
 }
 
 pub fn SysSendMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -742,8 +781,11 @@ pub fn SysSendMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let sock = file.FileOp.clone();
 
-    if flags & !(MsgType::MSG_DONTWAIT | MsgType::MSG_EOR | MsgType::MSG_MORE | MsgType::MSG_NOSIGNAL) != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+    if flags
+        & !(MsgType::MSG_DONTWAIT | MsgType::MSG_EOR | MsgType::MSG_MORE | MsgType::MSG_NOSIGNAL)
+        != 0
+    {
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     if !file.Blocking() {
@@ -760,7 +802,7 @@ pub fn SysSendMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     }
 
     let res = sendSingleMsg(task, &sock, msgPtr, flags, deadline)?;
-    return Ok(res)
+    return Ok(res);
 }
 
 pub fn SysSendMMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -773,8 +815,11 @@ pub fn SysSendMMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let sock = file.FileOp.clone();
 
-    if flags & !(MsgType::MSG_DONTWAIT | MsgType::MSG_EOR | MsgType::MSG_MORE | MsgType::MSG_NOSIGNAL) != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+    if flags
+        & !(MsgType::MSG_DONTWAIT | MsgType::MSG_EOR | MsgType::MSG_MORE | MsgType::MSG_NOSIGNAL)
+        != 0
+    {
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     if !file.Blocking() {
@@ -795,7 +840,13 @@ pub fn SysSendMMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     //let msgs = task.GetSliceMut::<MMsgHdr>(msgPtr, vlen as usize)?;
     let mut msgs = task.CopyInVec::<MMsgHdr>(msgPtr, vlen as usize)?;
     for i in 0..vlen as usize {
-        res = sendSingleMsg(task, &sock, &(msgs[i].msgHdr) as *const MsgHdr as u64, flags, deadline)?;
+        res = sendSingleMsg(
+            task,
+            &sock,
+            &(msgs[i].msgHdr) as *const MsgHdr as u64,
+            flags,
+            deadline,
+        )?;
 
         if res < 0 {
             break;
@@ -806,12 +857,12 @@ pub fn SysSendMMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     }
 
     if count == 0 {
-        return Err(Error::SysError(-res as i32))
+        return Err(Error::SysError(-res as i32));
     }
 
     task.CopyOutSlice(&msgs, msgPtr, vlen as usize)?;
 
-    return Ok(count)
+    return Ok(count);
 }
 
 pub fn SysSendTo(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -827,7 +878,7 @@ pub fn SysSendTo(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let sock = file.FileOp.clone();
 
     if buflen < 0 {
-        return Err(Error::SysError(-SysErr::EINVAL))
+        return Err(Error::SysError(-SysErr::EINVAL));
     }
 
     task.CheckPermission(bufPtr, buflen as u64, false, false)?;
@@ -865,5 +916,3 @@ pub fn SysSendTo(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let res = sock.SendMsg(task, &iovs, flags, &mut pMsg, deadline)?;
     return Ok(res);
 }
-
-

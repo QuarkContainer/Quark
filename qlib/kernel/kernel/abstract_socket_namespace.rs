@@ -12,18 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
-use core::ops::Deref;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::ops::Deref;
 
-use super::super::socket::unix::transport::unix::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::super::singleton::*;
+use super::super::socket::unix::transport::unix::*;
 
-pub static ABSTRACT_SOCKET : Singleton<AbstractSocketNamespace> = Singleton::<AbstractSocketNamespace>::New();
+pub static ABSTRACT_SOCKET: Singleton<AbstractSocketNamespace> =
+    Singleton::<AbstractSocketNamespace>::New();
 pub unsafe fn InitSingleton() {
     ABSTRACT_SOCKET.Init(AbstractSocketNamespace::default());
 }
@@ -62,9 +63,7 @@ impl AbstractSocketNamespace {
                 a.remove(name);
                 return None;
             }
-            Some(b) => {
-                return Some(b)
-            }
+            Some(b) => return Some(b),
         }
     }
 
@@ -77,19 +76,15 @@ impl AbstractSocketNamespace {
 
         match a.get(&name) {
             None => (),
-            Some(b) => {
-                match b.Upgrade() {
-                    None => {
-                        a.remove(&name);
-                    }
-                    Some(_) => {
-                        return Err(Error::SysError(SysErr::EADDRINUSE))
-                    }
+            Some(b) => match b.Upgrade() {
+                None => {
+                    a.remove(&name);
                 }
-            }
+                Some(_) => return Err(Error::SysError(SysErr::EADDRINUSE)),
+            },
         };
 
         a.insert(name, ep.Downgrade());
-        return Ok(())
+        return Ok(());
     }
 }

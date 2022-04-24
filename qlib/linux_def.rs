@@ -21,7 +21,7 @@ use super::super::kernel_def::*;
 // UNIX_PATH_MAX is the maximum length of the path in an AF_UNIX socket.
 //
 // From uapi/linux/un.h.
-pub const UNIX_PATH_MAX : usize = 108;
+pub const UNIX_PATH_MAX: usize = 108;
 
 #[repr(C)]
 #[derive(Clone, Debug, Copy)]
@@ -32,24 +32,24 @@ pub struct TcpSockAddr {
 impl Default for TcpSockAddr {
     fn default() -> Self {
         return Self {
-            data: [0; UNIX_PATH_MAX + 2]
-        }
+            data: [0; UNIX_PATH_MAX + 2],
+        };
     }
 }
 
 impl TcpSockAddr {
     pub fn Addr(&self) -> u64 {
-        return &self.data[0] as * const _ as u64
+        return &self.data[0] as *const _ as u64;
     }
 }
 
 pub struct QOrdering {}
 impl QOrdering {
-    pub const RELAXED :Ordering = Ordering::Relaxed;
-    pub const RELEASE :Ordering = Ordering::Release;
-    pub const ACQUIRE :Ordering = Ordering::Acquire;
-    pub const ACQ_REL :Ordering = Ordering::AcqRel;
-    pub const SEQ_CST :Ordering = Ordering::SeqCst;
+    pub const RELAXED: Ordering = Ordering::Relaxed;
+    pub const RELEASE: Ordering = Ordering::Release;
+    pub const ACQUIRE: Ordering = Ordering::Acquire;
+    pub const ACQ_REL: Ordering = Ordering::AcqRel;
+    pub const SEQ_CST: Ordering = Ordering::SeqCst;
     /*pub const RELAXED :Ordering = Ordering::SeqCst;
     pub const RELEASE :Ordering = Ordering::SeqCst;
     pub const ACQUIRE :Ordering = Ordering::SeqCst;
@@ -57,41 +57,41 @@ impl QOrdering {
     pub const SEQ_CST :Ordering = Ordering::SeqCst;*/
 }
 
-pub const MLOCK_ONFAULT : u32 = 0x01;
+pub const MLOCK_ONFAULT: u32 = 0x01;
 
-pub const SIOCGIFMEM    : u64 = 0x891f;
-pub const SIOCGIFPFLAGS : u64 = 0x8935;
-pub const SIOCGMIIPHY   : u64 = 0x8947;
-pub const SIOCGMIIREG   : u64 = 0x8948;
+pub const SIOCGIFMEM: u64 = 0x891f;
+pub const SIOCGIFPFLAGS: u64 = 0x8935;
+pub const SIOCGMIIPHY: u64 = 0x8947;
+pub const SIOCGMIIREG: u64 = 0x8948;
 
 //flags for getrandom(2)
-pub const _GRND_NONBLOCK    : i32 = 0x1;
-pub const _GRND_RANDOM      : i32 = 0x2;
+pub const _GRND_NONBLOCK: i32 = 0x1;
+pub const _GRND_RANDOM: i32 = 0x2;
 
 // Policies for get_mempolicy(2)/set_mempolicy(2).
-pub const MPOL_DEFAULT    : i32 = 0;
-pub const MPOL_PREFERRED  : i32 = 1;
-pub const MPOL_BIND       : i32 = 2;
-pub const MPOL_INTERLEAVE : i32 = 3;
-pub const MPOL_LOCAL      : i32 = 4;
-pub const MPOL_MAX        : i32 = 5;
+pub const MPOL_DEFAULT: i32 = 0;
+pub const MPOL_PREFERRED: i32 = 1;
+pub const MPOL_BIND: i32 = 2;
+pub const MPOL_INTERLEAVE: i32 = 3;
+pub const MPOL_LOCAL: i32 = 4;
+pub const MPOL_MAX: i32 = 5;
 
 // Flags for get_mempolicy(2).
-pub const MPOL_F_NODE           : i32 = 1 << 0;
-pub const MPOL_F_ADDR           : i32 = 1 << 1;
-pub const MPOL_F_MEMS_ALLOWED   : i32 = 1 << 2;
+pub const MPOL_F_NODE: i32 = 1 << 0;
+pub const MPOL_F_ADDR: i32 = 1 << 1;
+pub const MPOL_F_MEMS_ALLOWED: i32 = 1 << 2;
 
 // Flags for set_mempolicy(2).
-pub const MPOL_F_RELATIVE_NODES : i32 = 1 << 14;
-pub const MPOL_F_STATIC_NODES   : i32 = 1 << 15;
+pub const MPOL_F_RELATIVE_NODES: i32 = 1 << 14;
+pub const MPOL_F_STATIC_NODES: i32 = 1 << 15;
 
-pub const MPOL_MODE_FLAGS       : i32 = MPOL_F_STATIC_NODES | MPOL_F_RELATIVE_NODES;
+pub const MPOL_MODE_FLAGS: i32 = MPOL_F_STATIC_NODES | MPOL_F_RELATIVE_NODES;
 
 // Flags for mbind(2).
-pub const MPOL_MF_STRICT    : i32 = 1 << 0;
-pub const MPOL_MF_MOVE      : i32 = 1 << 1;
-pub const MPOL_MF_MOVE_ALL  : i32 = 1 << 2;
-pub const MPOL_MF_VALID     : i32 = MPOL_MF_STRICT | MPOL_MF_MOVE | MPOL_MF_MOVE_ALL;
+pub const MPOL_MF_STRICT: i32 = 1 << 0;
+pub const MPOL_MF_MOVE: i32 = 1 << 1;
+pub const MPOL_MF_MOVE_ALL: i32 = 1 << 2;
+pub const MPOL_MF_VALID: i32 = MPOL_MF_STRICT | MPOL_MF_MOVE | MPOL_MF_MOVE_ALL;
 
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]
@@ -178,7 +178,7 @@ impl Signal {
     }
 
     pub fn Maskable(&self) -> bool {
-        return self.0 != Self::SIGKILL && self.0 != Self::SIGSTOP
+        return self.0 != Self::SIGKILL && self.0 != Self::SIGSTOP;
     }
 
     pub fn IsStandard(&self) -> bool {
@@ -217,7 +217,6 @@ pub const EVENT_PENDING_SHUTDOWN: EventMask = 0x20;
 pub const ALL_EVENTS: EventMask = 0x1f;
 pub const EVENT_READ: EventMask = EVENT_IN | EVENT_HUP | EVENT_ERR;
 pub const EVENT_WRITE: EventMask = EVENT_OUT | EVENT_HUP | EVENT_ERR;
-
 
 pub struct SocketSize {}
 
@@ -300,7 +299,7 @@ impl StatxTimestamp {
             tv_sec: nsec / Self::E9,
             tv_nsec: (nsec % Self::E9) as u32,
             __statx_timestamp_pad1: 0,
-        }
+        };
     }
 }
 
@@ -369,9 +368,8 @@ pub struct LibcStatfs {
     pub Flags: u64,
 
     // Spare is unused.
-    pub Spare: [u64; 4]
+    pub Spare: [u64; 4],
 }
-
 
 // Filesystem types used in statfs(2).
 // See linux/magic.h.
@@ -477,35 +475,34 @@ impl Capability {
 // interpreted as a pointer to a single cap_user_data_t. Since capability
 // sets are 64 bits and the "capability sets" in cap_user_data_t are 32
 // bits only, this causes the upper 32 bits to be implicitly 0.
-pub const LINUX_CAPABILITY_VERSION_1 : u32 = 0x19980330;
+pub const LINUX_CAPABILITY_VERSION_1: u32 = 0x19980330;
 
 // LINUX_CAPABILITY_VERSION_2 and LINUX_CAPABILITY_VERSION_3 cause the
 // data pointer to be interpreted as a pointer to an array of 2
 // cap_user_data_t, using the second to store the 32 MSB of each capability
 // set. Versions 2 and 3 are identical, but Linux printk's a warning on use
 // of version 2 due to a userspace API defect.
-pub const LINUX_CAPABILITY_VERSION_2 : u32 = 0x20071026;
-pub const LINUX_CAPABILITY_VERSION_3 : u32 = 0x20080522;
+pub const LINUX_CAPABILITY_VERSION_2: u32 = 0x20071026;
+pub const LINUX_CAPABILITY_VERSION_3: u32 = 0x20080522;
 
 // HIGHEST_CAPABILITY_VERSION is the highest supported
 // LINUX_CAPABILITY_VERSION_* version.
-pub const HIGHEST_CAPABILITY_VERSION : u32 = LINUX_CAPABILITY_VERSION_3;
+pub const HIGHEST_CAPABILITY_VERSION: u32 = LINUX_CAPABILITY_VERSION_3;
 
 // CapUserHeader is equivalent to Linux's cap_user_header_t.
 #[derive(Clone, Copy, Default)]
 pub struct CapUserHeader {
     pub Version: u32,
-    pub Pid:     i32,
+    pub Pid: i32,
 }
 
 // CapUserData is equivalent to Linux's cap_user_data_t.
 #[derive(Clone, Copy, Default)]
 pub struct CapUserData {
-    pub Effective   : u32,
-    pub Permitted   : u32,
-    pub Inheritable : u32,
+    pub Effective: u32,
+    pub Permitted: u32,
+    pub Inheritable: u32,
 }
-
 
 pub struct ATType {}
 
@@ -545,7 +542,7 @@ impl DType {
             t => {
                 error!("unknow DTtype {}", t);
                 ModeType::S_IFREG
-            },
+            }
         }
     }
 }
@@ -600,15 +597,15 @@ pub struct FileMode(pub u16);
 
 impl FileMode {
     pub fn Permission(&self) -> Self {
-        return Self(self.0 & ModeType::PERMISSIONS_MASK)
+        return Self(self.0 & ModeType::PERMISSIONS_MASK);
     }
 
     pub fn FileType(&self) -> Self {
-        return Self(self.0 & ModeType::FILE_TYPE_MASK)
+        return Self(self.0 & ModeType::FILE_TYPE_MASK);
     }
 
     pub fn ExtraBits(&self) -> Self {
-        return Self(self.0 & !(ModeType::PERMISSIONS_MASK | ModeType::FILE_TYPE_MASK))
+        return Self(self.0 & !(ModeType::PERMISSIONS_MASK | ModeType::FILE_TYPE_MASK));
     }
 
     pub fn OtherRead(self) -> bool {
@@ -653,7 +650,7 @@ impl FileMode {
             read: (mode & ModeType::MODE_OTHER_READ) != 0,
             write: (mode & ModeType::MODE_OTHER_WRITE) != 0,
             execute: (mode & ModeType::MODE_OTHER_EXEC) != 0,
-        }
+        };
     }
 
     const MODE_SET_UID: u16 = ModeType::S_ISUID as u16;
@@ -669,7 +666,7 @@ impl FileMode {
             Sticky: self.0 & Self::MODE_STICKY == Self::MODE_STICKY,
             SetUid: self.0 & Self::MODE_SET_UID == Self::MODE_SET_UID,
             SetGid: self.0 & Self::MODE_SET_GID == Self::MODE_SET_GID,
-        }
+        };
     }
 }
 
@@ -714,19 +711,19 @@ impl FilePermissions {
             m |= ModeType::S_ISVTX;
         }
 
-        return m
+        return m;
     }
 
     pub fn AnyExec(&self) -> bool {
-        return self.User.execute | self.Group.execute | self.Other.execute
+        return self.User.execute | self.Group.execute | self.Other.execute;
     }
 
     pub fn AnyWrite(&self) -> bool {
-        return self.User.write | self.Group.write | self.Other.write
+        return self.User.write | self.Group.write | self.Other.write;
     }
 
     pub fn AnyRead(&self) -> bool {
-        return self.User.read | self.Group.read | self.Other.read
+        return self.User.read | self.Group.read | self.Other.read;
     }
 }
 
@@ -1853,7 +1850,7 @@ impl LibcConst {
     pub const TCP_QUICKACK: u64 = 0xc;
     pub const TCP_SYNCNT: u64 = 0x7;
     pub const TCP_WINDOW_CLAMP: u64 = 0xa;
-    pub const TCP_INQ:u64 = 0x24;
+    pub const TCP_INQ: u64 = 0x24;
     pub const TIOCCBRK: u64 = 0x5428;
     pub const TIOCCONS: u64 = 0x541d;
     pub const TIOCEXCL: u64 = 0x540c;
@@ -2048,45 +2045,45 @@ impl PermMask {
 pub struct Flags(pub i32);
 
 impl Flags {
-    pub const O_ACCMODE: i32 = 0o00000003;  //0x00000003;
-    pub const O_RDONLY: i32 = 0o00000000;   //0x00000000;
-    pub const O_WRONLY: i32 = 0o00000001;   //0x00000001;
-    pub const O_RDWR: i32 = 0o00000002;   //0x00000002;
+    pub const O_ACCMODE: i32 = 0o00000003; //0x00000003;
+    pub const O_RDONLY: i32 = 0o00000000; //0x00000000;
+    pub const O_WRONLY: i32 = 0o00000001; //0x00000001;
+    pub const O_RDWR: i32 = 0o00000002; //0x00000002;
 
-    pub const O_CREAT: i32 = 0o00000100;   //0x00000040;
-    pub const O_EXCL: i32 = 0o00000200;   //0x00000080;
-    pub const O_NOCTTY: i32 = 0o00000400;   //0x00000100;
-    pub const O_TRUNC: i32 = 0o00001000;   //0x00000200;
-    pub const O_APPEND: i32 = 0o00002000;   //0x00000400;
-    pub const O_NONBLOCK: i32 = 0o00004000;   //0x00000800;
-    pub const O_DSYNC: i32 = 0o00010000;   //0x00001000;
-    pub const O_ASYNC: i32 = 0o00020000;   //0x00002000;
-    pub const O_DIRECT: i32 = 0o00040000;   //0x00004000;
-    pub const O_LARGEFILE: i32 = 0o00100000;   //0x00008000;
-    pub const O_DIRECTORY: i32 = 0o00200000;   //0x00010000;
-    pub const O_NOFOLLOW: i32 = 0o00400000;   //0x00020000;
-    pub const O_NOATIME: i32 = 0o01000000;   //0x00040000;
-    pub const O_CLOEXEC: i32 = 0o02000000;   //0x00080000;
+    pub const O_CREAT: i32 = 0o00000100; //0x00000040;
+    pub const O_EXCL: i32 = 0o00000200; //0x00000080;
+    pub const O_NOCTTY: i32 = 0o00000400; //0x00000100;
+    pub const O_TRUNC: i32 = 0o00001000; //0x00000200;
+    pub const O_APPEND: i32 = 0o00002000; //0x00000400;
+    pub const O_NONBLOCK: i32 = 0o00004000; //0x00000800;
+    pub const O_DSYNC: i32 = 0o00010000; //0x00001000;
+    pub const O_ASYNC: i32 = 0o00020000; //0x00002000;
+    pub const O_DIRECT: i32 = 0o00040000; //0x00004000;
+    pub const O_LARGEFILE: i32 = 0o00100000; //0x00008000;
+    pub const O_DIRECTORY: i32 = 0o00200000; //0x00010000;
+    pub const O_NOFOLLOW: i32 = 0o00400000; //0x00020000;
+    pub const O_NOATIME: i32 = 0o01000000; //0x00040000;
+    pub const O_CLOEXEC: i32 = 0o02000000; //0x00080000;
     pub const O_SYNC: i32 = 0o04000000;
     pub const O_PATH: i32 = 0o010000000;
     pub const O_TMPFILE: i32 = 0o020000000;
 
     /* high priority request, poll if possible */
-    pub const RWF_HIPRI	    :i32 = 0x00000001;
+    pub const RWF_HIPRI: i32 = 0x00000001;
 
     /* per-IO O_DSYNC */
-    pub const RWF_DSYNC	    :i32 = 0x00000002;
+    pub const RWF_DSYNC: i32 = 0x00000002;
 
     /* per-IO O_SYNC */
-    pub const RWF_SYNC	    :i32 = 0x00000004;
+    pub const RWF_SYNC: i32 = 0x00000004;
 
     /* per-IO, return -EAGAIN if operation would block */
-    pub const RWF_NOWAIT	:i32 = 0x00000008;
+    pub const RWF_NOWAIT: i32 = 0x00000008;
 
     /* per-IO O_APPEND */
-    pub const RWF_APPEND	:i32 = 0x00000010;
+    pub const RWF_APPEND: i32 = 0x00000010;
 
-    pub const RWF_VALID     :i32 = Self::RWF_HIPRI | Self::RWF_DSYNC | Self::RWF_SYNC;
+    pub const RWF_VALID: i32 = Self::RWF_HIPRI | Self::RWF_DSYNC | Self::RWF_SYNC;
 
     //pub fn Direct(&self) -> bool {
     //    return self.0 & Self::O_DIRECT != 0;
@@ -2132,7 +2129,7 @@ impl Flags {
         let mut res = PermMask {
             read: false,
             write: false,
-            execute: false
+            execute: false,
         };
 
         if self.0 & Self::O_TRUNC != 0 {
@@ -2185,13 +2182,13 @@ impl MsgType {
     pub const MSG_FASTOPEN: i32 = 0x20000000;
     pub const MSG_CMSG_CLOEXEC: i32 = 0x40000000;
 
-    pub const BASE_RECV_FLAGS: i32 = Self::MSG_OOB |
-        Self::MSG_DONTROUTE |
-        Self::MSG_DONTWAIT |
-        Self::MSG_NOSIGNAL |
-        Self::MSG_WAITALL |
-        Self::MSG_TRUNC |
-        Self::MSG_CTRUNC;
+    pub const BASE_RECV_FLAGS: i32 = Self::MSG_OOB
+        | Self::MSG_DONTROUTE
+        | Self::MSG_DONTWAIT
+        | Self::MSG_NOSIGNAL
+        | Self::MSG_WAITALL
+        | Self::MSG_TRUNC
+        | Self::MSG_CTRUNC;
 }
 
 pub struct AFType {} //Address Family
@@ -2271,7 +2268,7 @@ pub struct IoVec {
 }
 
 pub struct DataBuff {
-    pub buf: Vec<u8>
+    pub buf: Vec<u8>,
 }
 
 use super::mem::seq::BlockSeq;
@@ -2283,9 +2280,7 @@ impl DataBuff {
             buf.set_len(size);
         }
 
-        return Self {
-            buf: buf
-        }
+        return Self { buf: buf };
     }
 
     pub fn Zero(&mut self) {
@@ -2299,24 +2294,23 @@ impl DataBuff {
     }
 
     pub fn Len(&self) -> usize {
-        return self.buf.len()
+        return self.buf.len();
     }
 
     pub fn IoVec(&self) -> IoVec {
         if self.Len() == 0 {
-            return IoVec::NewFromAddr(0, 0)
+            return IoVec::NewFromAddr(0, 0);
         }
 
         return IoVec {
             start: self.Ptr(),
             len: self.Len(),
-        }
+        };
     }
 
     pub fn Iovs(&self) -> [IoVec; 1] {
-        return [self.IoVec()]
+        return [self.IoVec()];
     }
-
 
     pub fn BlockSeq(&self) -> BlockSeq {
         return BlockSeq::New(&self.buf);
@@ -2430,13 +2424,30 @@ impl EflagsDef {
     // eflagsPtraceMutable is the mask for the set of EFLAGS that may be
     // changed by ptrace(PTRACE_SETREGS). eflagsPtraceMutable is analogous to
     // Linux's FLAG_MASK.
-    pub const EFLAGS_PTRACE_MUTABLE: u64 = Self::EFLAGS_CF | Self::EFLAGS_PF | Self::EFLAGS_AF | Self::EFLAGS_ZF |
-        Self::EFLAGS_SF | Self::EFLAGS_TF | Self::EFLAGS_DF | Self::EFLAGS_OF | Self::EFLAGS_RF | Self::EFLAGS_AC | Self::EFLAGS_NT;
+    pub const EFLAGS_PTRACE_MUTABLE: u64 = Self::EFLAGS_CF
+        | Self::EFLAGS_PF
+        | Self::EFLAGS_AF
+        | Self::EFLAGS_ZF
+        | Self::EFLAGS_SF
+        | Self::EFLAGS_TF
+        | Self::EFLAGS_DF
+        | Self::EFLAGS_OF
+        | Self::EFLAGS_RF
+        | Self::EFLAGS_AC
+        | Self::EFLAGS_NT;
 
     // EFLAGS_Restorable is the mask for the set of EFLAGS_ that may be changed by
     // SignalReturn. EFLAGS_Restorable is analogous to Linux's FIX_EFLAGS_.
-    pub const EFLAGS_RESTOREABLE: u64 = Self::EFLAGS_AC | Self::EFLAGS_OF | Self::EFLAGS_DF | Self::EFLAGS_TF | Self::EFLAGS_SF |
-        Self::EFLAGS_ZF | Self::EFLAGS_AF | Self::EFLAGS_PF | Self::EFLAGS_CF | Self::EFLAGS_RF;
+    pub const EFLAGS_RESTOREABLE: u64 = Self::EFLAGS_AC
+        | Self::EFLAGS_OF
+        | Self::EFLAGS_DF
+        | Self::EFLAGS_TF
+        | Self::EFLAGS_SF
+        | Self::EFLAGS_ZF
+        | Self::EFLAGS_AF
+        | Self::EFLAGS_PF
+        | Self::EFLAGS_CF
+        | Self::EFLAGS_RF;
 }
 
 pub struct IoCtlCmd {}
@@ -2497,9 +2508,10 @@ pub enum ProcessState {
     Stop,
 }
 
-
 impl Default for ProcessState {
-    fn default() -> Self { ProcessState::Running }
+    fn default() -> Self {
+        ProcessState::Running
+    }
 }
 
 #[derive(Clone, PartialEq, Copy, Debug)]
@@ -2515,7 +2527,9 @@ pub enum ThreadState {
 }
 
 impl Default for ThreadState {
-    fn default() -> Self { ThreadState::Runable }
+    fn default() -> Self {
+        ThreadState::Runable
+    }
 }
 
 pub struct TaskEvent {}
@@ -2729,7 +2743,7 @@ impl MemoryDef {
     pub const PGD_SHIFT: usize = 39;
 
     // used for socket/tty buffer
-    pub const DEFAULT_BUF_PAGE_COUNT : u64 = 16;
+    pub const DEFAULT_BUF_PAGE_COUNT: u64 = 16;
 
     pub const PTE_MASK: u64 = 0x1ff << Self::PTE_SHIFT;
     pub const PMD_MASK: u64 = 0x1ff << Self::PMD_SHIFT;
@@ -2761,21 +2775,20 @@ impl MemoryDef {
     pub const QURING_SIZE: usize = 4096;
     pub const DEFAULT_STACK_PAGES: u64 = 32;
 
-    pub const DEFAULT_STACK_SIZE: u64 = Self::DEFAULT_STACK_PAGES * Self::PAGE_SIZE;  //64 KB
-    pub const PAGE_SIZE: u64 = 1 << Self::PAGE_SHIFT;//0x1000;
+    pub const DEFAULT_STACK_SIZE: u64 = Self::DEFAULT_STACK_PAGES * Self::PAGE_SIZE; //64 KB
+    pub const PAGE_SIZE: u64 = 1 << Self::PAGE_SHIFT; //0x1000;
     pub const HUGE_PAGE_SIZE: u64 = 1 << Self::HUGE_PAGE_SHIFT;
     pub const HUGE_PAGE_SIZE_1G: u64 = 1 << Self::HUGE_1GPAGE_SHIFT;
 
     pub const PAGE_MASK: u64 = Self::PAGE_SIZE - 1;
 
-    pub const PAGE_SIZE_4K: u64 = 1 << Self::PAGE_SHIFT;//0x1000;
+    pub const PAGE_SIZE_4K: u64 = 1 << Self::PAGE_SHIFT; //0x1000;
     pub const PAGE_SIZE_2M: u64 = (2 * Self::ONE_MB);
     pub const BLOCK_SIZE: u64 = 64 * Self::ONE_GB;
 
-
     pub const PHY_LOWER_ADDR: u64 = 256 * Self::ONE_GB; // 256 ~ 512GB is Guest kernal space
     pub const PHY_UPPER_ADDR: u64 = Self::PHY_LOWER_ADDR + 256 * Self::ONE_GB; // 256 ~ 512GB is Guest kernal space
-    // start address for memmap and dynamic load address space, there is heap address space between PHY_UPPER_ADDR + VIR_MMAP_START
+                                                                               // start address for memmap and dynamic load address space, there is heap address space between PHY_UPPER_ADDR + VIR_MMAP_START
     pub const VIR_MMAP_START: u64 = Self::PHY_UPPER_ADDR + 128 * Self::ONE_GB; // + 1 * Self::ONE_TB; //start from 1.5 TB
     pub const SHARED_START: u64 = Self::VIR_MMAP_START + 1 * Self::ONE_TB; //start from 2.5 TB
     pub const LOWER_TOP: u64 = 0x0000_8000_0000_0000;
@@ -2981,7 +2994,6 @@ impl SysErr {
     // Task.SetRestartSyscallFn.
     pub const ERESTART_RESTARTBLOCK: i32 = 515;
 }
-
 
 #[repr(C)]
 pub struct RLimit {

@@ -22,38 +22,38 @@ pub fn ioctlGetTermios(fd: i32, termios: &mut Termios) -> Result<()> {
     let ret = Ioctl(fd, IoCtlCmd::TCGETS, termios as *mut Termios as u64);
 
     if ret < 0 {
-        return Err(Error::SysError(-ret))
+        return Err(Error::SysError(-ret));
     }
 
-    return Ok(())
+    return Ok(());
 }
 
 pub fn ioctlSetTermios(fd: i32, req: u64, termios: &Termios) -> Result<()> {
     let ret = Ioctl(fd, req, termios as *const Termios as u64);
 
     if ret < 0 {
-        return Err(Error::SysError(-ret))
+        return Err(Error::SysError(-ret));
     }
 
-    return Ok(())
+    return Ok(());
 }
 
 pub fn ioctlGetWinsize(fd: i32, w: &mut Winsize) -> Result<()> {
     let ret = Ioctl(fd, IoCtlCmd::TIOCGWINSZ, w as *mut Winsize as u64);
 
     if ret < 0 {
-        return Err(Error::SysError(-ret))
+        return Err(Error::SysError(-ret));
     }
 
-    return Ok(())
+    return Ok(());
 }
 
 pub fn ioctlSetWinsize(fd: i32, w: &Winsize) -> Result<()> {
     let ret = Ioctl(fd, IoCtlCmd::TIOCSWINSZ, w as *const Winsize as u64);
 
     if ret < 0 {
-        return Err(Error::SysError(-ret))
+        return Err(Error::SysError(-ret));
     }
 
-    return Ok(())
+    return Ok(());
 }

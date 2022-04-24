@@ -12,74 +12,78 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use lazy_static::lazy_static;
 use alloc::collections::btree_map::BTreeMap;
-use clap::{App, AppSettings, SubCommand, ArgMatches, Arg};
 use alloc::string::String;
+use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
+use lazy_static::lazy_static;
 
-use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::common::*;
+use super::super::super::qlib::linux_def::*;
 use super::super::cmd::config::*;
 use super::super::container::container::*;
 use super::command::*;
-
 
 lazy_static! {
     static ref SIGNAL_MAP: BTreeMap<&'static str, i32> = {
         let mut map = BTreeMap::new();
 
-        map.insert("ABRT",   Signal::SIGABRT);
-        map.insert("ALRM",   Signal::SIGALRM);
-        map.insert("BUS",    Signal::SIGBUS);
-        map.insert("CHLD",   Signal::SIGCHLD);
-        map.insert("CLD",    Signal::SIGCLD);
-        map.insert("CONT",   Signal::SIGCONT);
-        map.insert("FPE",    Signal::SIGFPE);
-        map.insert("HUP",    Signal::SIGHUP);
-        map.insert("ILL",    Signal::SIGILL);
-        map.insert("INT",    Signal::SIGINT);
-        map.insert("IO",     Signal::SIGIO);
-        map.insert("IOT",    Signal::SIGIOT);
-        map.insert("KILL",   Signal::SIGKILL);
-        map.insert("PIPE",   Signal::SIGPIPE);
-        map.insert("POLL",   Signal::SIGPOLL);
-        map.insert("PROF",   Signal::SIGPROF);
-        map.insert("PWR",    Signal::SIGPWR);
-        map.insert("QUIT",   Signal::SIGQUIT);
-        map.insert("SEGV",   Signal::SIGSEGV);
+        map.insert("ABRT", Signal::SIGABRT);
+        map.insert("ALRM", Signal::SIGALRM);
+        map.insert("BUS", Signal::SIGBUS);
+        map.insert("CHLD", Signal::SIGCHLD);
+        map.insert("CLD", Signal::SIGCLD);
+        map.insert("CONT", Signal::SIGCONT);
+        map.insert("FPE", Signal::SIGFPE);
+        map.insert("HUP", Signal::SIGHUP);
+        map.insert("ILL", Signal::SIGILL);
+        map.insert("INT", Signal::SIGINT);
+        map.insert("IO", Signal::SIGIO);
+        map.insert("IOT", Signal::SIGIOT);
+        map.insert("KILL", Signal::SIGKILL);
+        map.insert("PIPE", Signal::SIGPIPE);
+        map.insert("POLL", Signal::SIGPOLL);
+        map.insert("PROF", Signal::SIGPROF);
+        map.insert("PWR", Signal::SIGPWR);
+        map.insert("QUIT", Signal::SIGQUIT);
+        map.insert("SEGV", Signal::SIGSEGV);
         map.insert("STKFLT", Signal::SIGSTKFLT);
-        map.insert("STOP",   Signal::SIGSTOP);
-        map.insert("SYS",    Signal::SIGSYS);
-        map.insert("TERM",   Signal::SIGTERM);
-        map.insert("TRAP",   Signal::SIGTRAP);
-        map.insert("TSTP",   Signal::SIGTSTP);
-        map.insert("TTIN",   Signal::SIGTTIN);
-        map.insert("TTOU",   Signal::SIGTTOU);
-        map.insert("URG",    Signal::SIGURG);
-        map.insert("USR1",   Signal::SIGUSR1);
-        map.insert("USR2",   Signal::SIGUSR2);
+        map.insert("STOP", Signal::SIGSTOP);
+        map.insert("SYS", Signal::SIGSYS);
+        map.insert("TERM", Signal::SIGTERM);
+        map.insert("TRAP", Signal::SIGTRAP);
+        map.insert("TSTP", Signal::SIGTSTP);
+        map.insert("TTIN", Signal::SIGTTIN);
+        map.insert("TTOU", Signal::SIGTTOU);
+        map.insert("URG", Signal::SIGURG);
+        map.insert("USR1", Signal::SIGUSR1);
+        map.insert("USR2", Signal::SIGUSR2);
         map.insert("VTALRM", Signal::SIGVTALRM);
-        map.insert("WINCH",  Signal::SIGWINCH);
-        map.insert("XCPU",   Signal::SIGXCPU);
-        map.insert("XFSZ",   Signal::SIGXFSZ);
+        map.insert("WINCH", Signal::SIGWINCH);
+        map.insert("XCPU", Signal::SIGXCPU);
+        map.insert("XFSZ", Signal::SIGXFSZ);
 
         map
     };
 }
 
 #[derive(Default, Debug)]
-pub struct KillCmd  {
+pub struct KillCmd {
     pub id: String,
     pub all: bool,
     pub pid: i32,
-    pub sig: Vec<String>
+    pub sig: Vec<String>,
 }
 
 impl KillCmd {
     pub fn Init(cmd_matches: &ArgMatches) -> Result<Self> {
         let pidStr = cmd_matches.value_of("pid").unwrap().to_string();
         let pid = match pidStr.parse::<i32>() {
-            Err(_e) => return Err(Error::Common(format!("pid {} cant not be parsed as int type", pidStr))),
+            Err(_e) => {
+                return Err(Error::Common(format!(
+                    "pid {} cant not be parsed as int type",
+                    pidStr
+                )))
+            }
             Ok(v) => v,
         };
 
@@ -97,7 +101,7 @@ impl KillCmd {
             all: cmd_matches.is_present("all"),
             pid: pid,
             sig: sig,
-        })
+        });
     }
 
     pub fn SubCommand<'a, 'b>(common: &CommonArgs<'a, 'b>) -> App<'a, 'b> {
@@ -118,10 +122,7 @@ impl KillCmd {
                     .help("send the specified signal to a specific process"),
             )
             .setting(AppSettings::TrailingVarArg)
-            .arg(
-                Arg::with_name("sig")
-                    .multiple(false),
-            )
+            .arg(Arg::with_name("sig").multiple(false))
             .about("sends a signal to the container");
     }
 
@@ -139,9 +140,9 @@ impl KillCmd {
         let sig = ParseSignal(&signal)?;
         let container = Container::Load(&gCfg.RootDir, &self.id)?;
         if self.pid != 0 {
-            return container.SignalProcess(sig, self.pid)
+            return container.SignalProcess(sig, self.pid);
         } else {
-            return container.SignalContainer(sig, self.all)
+            return container.SignalContainer(sig, self.all);
         }
     }
 }
@@ -151,7 +152,7 @@ pub fn ParseSignal(s: &str) -> Result<i32> {
         Ok(n) => {
             for (_, id) in SIGNAL_MAP.iter() {
                 if n == *id {
-                    return Ok(n)
+                    return Ok(n);
                 }
             }
 

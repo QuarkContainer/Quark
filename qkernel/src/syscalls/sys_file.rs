@@ -15,48 +15,73 @@
 use alloc::string::String;
 use alloc::string::ToString;
 
-use super::super::kernel::time::*;
-use super::super::qlib::linux::time::*;
-use super::super::task::*;
-use super::super::qlib::auth::*;
-use super::super::qlib::auth::id::*;
-use super::super::qlib::auth::cap_set::*;
-use super::super::util::cstring::*;
-use super::super::qlib::range::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::path::*;
-use super::super::qlib::linux::fcntl::*;
 use super::super::fs::dirent::*;
 use super::super::fs::file::*;
 use super::super::fs::flags::*;
 use super::super::fs::inode::*;
 use super::super::fs::lock::*;
-use super::super::kernel::fd_table::*;
 use super::super::kernel::fasync::*;
+use super::super::kernel::fd_table::*;
 use super::super::kernel::pipe::reader::*;
-use super::super::kernel::pipe::writer::*;
 use super::super::kernel::pipe::reader_writer::*;
-use super::super::syscalls::syscalls::*;
+use super::super::kernel::pipe::writer::*;
+use super::super::kernel::time::*;
 use super::super::kernel_def::*;
+use super::super::qlib::auth::cap_set::*;
+use super::super::qlib::auth::id::*;
+use super::super::qlib::auth::*;
+use super::super::qlib::common::*;
+use super::super::qlib::linux::fcntl::*;
+use super::super::qlib::linux::time::*;
+use super::super::qlib::linux_def::*;
+use super::super::qlib::path::*;
+use super::super::qlib::range::*;
+use super::super::syscalls::syscalls::*;
+use super::super::task::*;
+use super::super::util::cstring::*;
 
-fn fileOpAt(task: &Task, dirFd: i32, path: &str,
-            func: &mut FnMut(&Dirent, &Dirent, &str, u32) -> Result<()>) -> Result<()> {
+fn fileOpAt(
+    task: &Task,
+    dirFd: i32,
+    path: &str,
+    func: &mut FnMut(&Dirent, &Dirent, &str, u32) -> Result<()>,
+) -> Result<()> {
     let (dir, name) = SplitLast(path);
 
     if dir == "/" {
-        return func(&task.Root(), &task.Root(), &name.to_string(), MAX_SYMLINK_TRAVERSALS);
+        return func(
+            &task.Root(),
+            &task.Root(),
+            &name.to_string(),
+            MAX_SYMLINK_TRAVERSALS,
+        );
     } else if dir == "." && dirFd == AT_FDCWD {
-        return func(&task.Root(), &task.Workdir(), &name.to_string(), MAX_SYMLINK_TRAVERSALS);
+        return func(
+            &task.Root(),
+            &task.Workdir(),
+            &name.to_string(),
+            MAX_SYMLINK_TRAVERSALS,
+        );
     }
 
-    return fileOpOn(task, dirFd, &dir.to_string(), true, &mut |root: &Dirent, d: &Dirent, remainingTraversals: u32| -> Result<()> {
-        return func(root, d, &name.to_string(), remainingTraversals)
-    });
+    return fileOpOn(
+        task,
+        dirFd,
+        &dir.to_string(),
+        true,
+        &mut |root: &Dirent, d: &Dirent, remainingTraversals: u32| -> Result<()> {
+            return func(root, d, &name.to_string(), remainingTraversals);
+        },
+    );
 }
 
-pub fn fileOpOn(task: &Task, dirFd: i32, path: &str, resolve: bool,
-                func: &mut FnMut(&Dirent, &Dirent, u32) -> Result<()>) -> Result<()> {
+pub fn fileOpOn(
+    task: &Task,
+    dirFd: i32,
+    path: &str,
+    resolve: bool,
+    func: &mut FnMut(&Dirent, &Dirent, u32) -> Result<()>,
+) -> Result<()> {
     let d: Dirent;
     let wd: Dirent;
     let mut rel: Option<Dirent> = None;
@@ -81,7 +106,9 @@ pub fn fileOpOn(task: &Task, dirFd: i32, path: &str, resolve: bool,
     let root = task.Root();
     let mut remainTraversals = MAX_SYMLINK_TRAVERSALS;
 
-    d = task.mountNS.FindDirent(task, &root, rel, path, &mut remainTraversals, resolve)?;
+    d = task
+        .mountNS
+        .FindDirent(task, &root, rel, path, &mut remainTraversals, resolve)?;
 
     /*if resolve {
         d = task.mountNS.FindInode(task, &root, rel, path, &mut remainTraversals)?;
@@ -89,7 +116,7 @@ pub fn fileOpOn(task: &Task, dirFd: i32, path: &str, resolve: bool,
         d = task.mountNS.FindLink(task, &root, rel, path, &mut remainTraversals)?
     }*/
 
-    return func(&root, &d, remainTraversals)
+    return func(&root, &d, remainTraversals);
 }
 
 //return (path, whether it is dir)
@@ -97,12 +124,12 @@ pub fn copyInPath(task: &Task, addr: u64, allowEmpty: bool) -> Result<(String, b
     let str = CString::ToString(task, addr)?;
 
     if &str == "" && !allowEmpty {
-        return Err(Error::SysError(SysErr::ENOENT))
+        return Err(Error::SysError(SysErr::ENOENT));
     }
 
     let (path, dirPath) = TrimTrailingSlashes(&str);
 
-    return Ok((path.to_string(), dirPath))
+    return Ok((path.to_string(), dirPath));
 }
 
 pub fn SysOpenAt(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -113,11 +140,11 @@ pub fn SysOpenAt(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     if flags & Flags::O_CREAT as u32 != 0 {
         let res = createAt(task, dirFd, addr, flags, FileMode(mode as u16))?;
-        return Ok(res as i64)
+        return Ok(res as i64);
     }
 
     let res = openAt(task, dirFd, addr, flags)?;
-    return Ok(res as i64)
+    return Ok(res as i64);
 }
 
 pub fn SysOpen(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -127,89 +154,109 @@ pub fn SysOpen(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     if flags & Flags::O_CREAT as u32 != 0 {
         let res = createAt(task, ATType::AT_FDCWD, addr, flags, FileMode(mode as u16))?;
-        return Ok(res as i64)
+        return Ok(res as i64);
     }
 
     let res = openAt(task, ATType::AT_FDCWD, addr, flags)?;
-    return Ok(res as i64)
+    return Ok(res as i64);
 }
 
 pub fn SysCreate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg0 as u64;
     let mode = args.arg1 as u16 as u32;
 
-    let res = createAt(task, ATType::AT_FDCWD, addr, (Flags::O_WRONLY | Flags::O_TRUNC) as u32, FileMode(mode as u16))?;
-    return Ok(res as i64)
+    let res = createAt(
+        task,
+        ATType::AT_FDCWD,
+        addr,
+        (Flags::O_WRONLY | Flags::O_TRUNC) as u32,
+        FileMode(mode as u16),
+    )?;
+    return Ok(res as i64);
 }
 
 pub fn openAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
     task.PerfGoto(PerfType::Open);
     defer!(task.PerfGofrom(PerfType::Open));
 
-    let (path, dirPath) = copyInPath(task,  addr, false)?;
+    let (path, dirPath) = copyInPath(task, addr, false)?;
 
-    info!("openat path is {}, the perm is {:?}, , current is {}",
-        &path, &PermMask::FromFlags(flags), task.fsContext.WorkDirectory().MyFullName());
+    info!(
+        "openat path is {}, the perm is {:?}, , current is {}",
+        &path,
+        &PermMask::FromFlags(flags),
+        task.fsContext.WorkDirectory().MyFullName()
+    );
 
     let resolve = (flags & Flags::O_NOFOLLOW as u32) == 0;
     let mut fd = -1;
 
-    fileOpOn(task, dirFd, &path, resolve, &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
-        let mut inode = d.Inode();
-        inode.CheckPermission(task, &PermMask::FromFlags(flags))?;
+    fileOpOn(
+        task,
+        dirFd,
+        &path,
+        resolve,
+        &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
+            let mut inode = d.Inode();
+            inode.CheckPermission(task, &PermMask::FromFlags(flags))?;
 
-        if inode.StableAttr().IsSymlink() && !resolve {
-            return Err(Error::SysError(SysErr::ELOOP))
-        }
-
-        let mut fileFlags = FileFlags::FromFlags(flags);
-        fileFlags.LargeFile = true;
-
-        if inode.StableAttr().IsDir() {
-            if fileFlags.Write {
-                return Err(Error::SysError(SysErr::EISDIR))
-            }
-        } else {
-            if fileFlags.Directory {
-                return Err(Error::SysError(SysErr::ENOTDIR))
+            if inode.StableAttr().IsSymlink() && !resolve {
+                return Err(Error::SysError(SysErr::ELOOP));
             }
 
-            if dirPath {
-                return Err(Error::SysError(SysErr::ENOTDIR))
-            }
-        }
+            let mut fileFlags = FileFlags::FromFlags(flags);
+            fileFlags.LargeFile = true;
 
-        if inode.StableAttr().IsSocket() {
-            if !fileFlags.Path {
-                return Err(Error::SysError(SysErr::ENXIO))
-            } else if fileFlags.Read || fileFlags.Write {
-                return Err(Error::SysError(SysErr::ENXIO))
-            }
-        }
-
-        if flags & Flags::O_TRUNC as u32 != 0 {
             if inode.StableAttr().IsDir() {
-                return Err(Error::SysError(SysErr::EISDIR))
+                if fileFlags.Write {
+                    return Err(Error::SysError(SysErr::EISDIR));
+                }
+            } else {
+                if fileFlags.Directory {
+                    return Err(Error::SysError(SysErr::ENOTDIR));
+                }
+
+                if dirPath {
+                    return Err(Error::SysError(SysErr::ENOTDIR));
+                }
             }
 
-            inode.Truncate(task, d, 0)?;
-        }
+            if inode.StableAttr().IsSocket() {
+                if !fileFlags.Path {
+                    return Err(Error::SysError(SysErr::ENXIO));
+                } else if fileFlags.Read || fileFlags.Write {
+                    return Err(Error::SysError(SysErr::ENXIO));
+                }
+            }
 
-        let file = match inode.GetFile(task, &d, &fileFlags) {
-            Err(err) => return Err(ConvertIntr(err, Error::ERESTARTSYS)),
-            Ok(f) => f,
-        };
+            if flags & Flags::O_TRUNC as u32 != 0 {
+                if inode.StableAttr().IsDir() {
+                    return Err(Error::SysError(SysErr::EISDIR));
+                }
 
-        let newFd = task.NewFDFrom(0, &file, &FDFlags {
-            CloseOnExec: flags & Flags::O_CLOEXEC as u32 != 0
-        })?;
+                inode.Truncate(task, d, 0)?;
+            }
 
-        fd = newFd;
+            let file = match inode.GetFile(task, &d, &fileFlags) {
+                Err(err) => return Err(ConvertIntr(err, Error::ERESTARTSYS)),
+                Ok(f) => f,
+            };
 
-        return Ok(())
-    })?;
+            let newFd = task.NewFDFrom(
+                0,
+                &file,
+                &FDFlags {
+                    CloseOnExec: flags & Flags::O_CLOEXEC as u32 != 0,
+                },
+            )?;
 
-    return Ok(fd)
+            fd = newFd;
+
+            return Ok(());
+        },
+    )?;
+
+    return Ok(fd);
 }
 
 // Mknod implements the linux syscall mknod(2).
@@ -221,7 +268,7 @@ pub fn SysMknode(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     //let _dev = args.arg2 as u16 as u32;
 
     mknodeAt(task, ATType::AT_FDCWD, path, FileMode(mode))?;
-    return Ok(0)
+    return Ok(0);
 }
 
 // Mknodat implements the linux syscall mknodat(2).
@@ -234,23 +281,30 @@ pub fn SysMknodeat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     //let _dev = args.arg3 as u16 as u32;
 
     mknodeAt(task, dirFD, path, FileMode(mode))?;
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn mknodeAt(task: &Task, dirFd: i32, addr: u64, mode: FileMode) -> Result<()> {
-    let (path, dirPath) = copyInPath(task,  addr, false)?;
+    let (path, dirPath) = copyInPath(task, addr, false)?;
 
     if dirPath {
-        return Err(Error::SysError(SysErr::ENOENT))
+        return Err(Error::SysError(SysErr::ENOENT));
     }
 
-    return fileOpAt(task, dirFd, &path, &mut |root: &Dirent, d: &Dirent, name: &str, _remainingTraversals: u32| -> Result<()> {
+    return fileOpAt(task, dirFd, &path, &mut |root: &Dirent,
+                                              d: &Dirent,
+                                              name: &str,
+                                              _remainingTraversals: u32|
+     -> Result<()> {
         let inode = d.Inode();
-        inode.CheckPermission(task, &PermMask {
-            write: true,
-            execute: true,
-            ..Default::default()
-        })?;
+        inode.CheckPermission(
+            task,
+            &PermMask {
+                write: true,
+                execute: true,
+                ..Default::default()
+            },
+        )?;
 
         let perms = FilePermissions::FromMode(FileMode(mode.0 & !task.Umask() as u16));
 
@@ -263,28 +317,31 @@ pub fn mknodeAt(task: &Task, dirFd: i32, addr: u64, mode: FileMode) -> Result<()
                 };
 
                 let _file = d.Create(task, root, name, &flags, &perms)?;
-                return Ok(())
+                return Ok(());
             }
             ModeType::MODE_NAMED_PIPE => {
                 return d.CreateFifo(task, root, name, &perms);
             }
-            ModeType::MODE_SOCKET => {
-                return Err(Error::SysError(SysErr::EOPNOTSUPP))
-            }
+            ModeType::MODE_SOCKET => return Err(Error::SysError(SysErr::EOPNOTSUPP)),
             ModeType::MODE_CHARACTER_DEVICE | ModeType::MODE_BLOCK_DEVICE => {
                 return Err(Error::SysError(SysErr::EPERM))
             }
-            _ => return Err(Error::SysError(SysErr::EINVAL))
+            _ => return Err(Error::SysError(SysErr::EINVAL)),
         }
-    })
+    });
 }
 
 pub fn createAt(task: &Task, dirFd: i32, addr: u64, flags: u32, mode: FileMode) -> Result<i32> {
-    let (path, dirPath) = copyInPath(task,  addr, false)?;
+    let (path, dirPath) = copyInPath(task, addr, false)?;
 
-    info!("createAt path is {}, current is {}, flags is {}", &path, task.fsContext.WorkDirectory().MyFullName(), flags);
+    info!(
+        "createAt path is {}, current is {}, flags is {}",
+        &path,
+        task.fsContext.WorkDirectory().MyFullName(),
+        flags
+    );
     if dirPath {
-        return Err(Error::SysError(SysErr::EISDIR))
+        return Err(Error::SysError(SysErr::EISDIR));
     }
 
     let mut fileFlags = FileFlags::FromFlags(flags);
@@ -296,7 +353,11 @@ pub fn createAt(task: &Task, dirFd: i32, addr: u64, flags: u32, mode: FileMode) 
     let mut fd = 0;
     let mnt = task.mountNS.clone();
 
-    fileOpAt(task, dirFd, &path, &mut |root: &Dirent, parent: &Dirent, name: &str, remainingTraversals: u32| -> Result<()> {
+    fileOpAt(task, dirFd, &path, &mut |root: &Dirent,
+                                       parent: &Dirent,
+                                       name: &str,
+                                       remainingTraversals: u32|
+     -> Result<()> {
         let mut found = parent.clone();
 
         let mut remainingTraversals = remainingTraversals;
@@ -307,24 +368,31 @@ pub fn createAt(task: &Task, dirFd: i32, addr: u64, flags: u32, mode: FileMode) 
         loop {
             let parentInode = parent.Inode();
             if !parentInode.StableAttr().IsDir() {
-                return Err(Error::SysError(SysErr::ENOTDIR))
+                return Err(Error::SysError(SysErr::ENOTDIR));
             }
 
-            found = match mnt.FindDirent(task, root, Some(parent.clone()), &name, &mut remainingTraversals, false) {
+            found = match mnt.FindDirent(
+                task,
+                root,
+                Some(parent.clone()),
+                &name,
+                &mut remainingTraversals,
+                false,
+            ) {
                 Ok(d) => d,
                 Err(e) => {
                     err = e;
-                    break
+                    break;
                 }
             };
 
             if flags & Flags::O_EXCL as u32 != 0 {
-                return Err(Error::SysError(SysErr::EEXIST))
+                return Err(Error::SysError(SysErr::EEXIST));
             }
 
             let foundInode = found.Inode();
             if foundInode.StableAttr().IsDir() && fileFlags.Write {
-                return Err(Error::SysError(SysErr::EISDIR))
+                return Err(Error::SysError(SysErr::EISDIR));
             }
 
             if !foundInode.StableAttr().IsSymlink() {
@@ -332,25 +400,23 @@ pub fn createAt(task: &Task, dirFd: i32, addr: u64, flags: u32, mode: FileMode) 
             }
 
             if flags & Flags::O_NOFOLLOW as u32 != 0 {
-                return Err(Error::SysError(SysErr::ELOOP))
+                return Err(Error::SysError(SysErr::ELOOP));
             }
 
             match foundInode.GetLink(task) {
                 Err(Error::ErrResolveViaReadlink) => (),
                 Err(e) => return Err(e),
-                Ok(_) => {
-                    break
-                }
+                Ok(_) => break,
             };
 
             if remainingTraversals == 0 {
-                return Err(Error::SysError(SysErr::ELOOP))
+                return Err(Error::SysError(SysErr::ELOOP));
             }
 
             let path = match foundInode.ReadLink(task) {
                 Err(e) => {
                     err = e;
-                    break
+                    break;
                 }
                 Ok(p) => p,
             };
@@ -358,10 +424,17 @@ pub fn createAt(task: &Task, dirFd: i32, addr: u64, flags: u32, mode: FileMode) 
             remainingTraversals -= 1;
 
             let (newParentPath, newName) = SplitLast(&path);
-            let newParent = match mnt.FindDirent(task, root, Some(parent.clone()), &newParentPath.to_string(), &mut remainingTraversals, true) {
+            let newParent = match mnt.FindDirent(
+                task,
+                root,
+                Some(parent.clone()),
+                &newParentPath.to_string(),
+                &mut remainingTraversals,
+                true,
+            ) {
                 Err(e) => {
                     err = e;
-                    break
+                    break;
                 }
                 Ok(p) => p,
             };
@@ -415,9 +488,13 @@ pub fn createAt(task: &Task, dirFd: i32, addr: u64, flags: u32, mode: FileMode) 
             e => return Err(e)
         };
 
-        let newFd = task.NewFDFrom(0, &newFile, &FDFlags {
-            CloseOnExec: flags & Flags::O_CLOEXEC as u32 != 0,
-        })?;
+        let newFd = task.NewFDFrom(
+            0,
+            &newFile,
+            &FDFlags {
+                CloseOnExec: flags & Flags::O_CLOEXEC as u32 != 0,
+            },
+        )?;
 
         fd = newFd;
 
@@ -427,10 +504,10 @@ pub fn createAt(task: &Task, dirFd: i32, addr: u64, flags: u32, mode: FileMode) 
         // manually queue one here.
         //found.InotifyEvent(linux.IN_OPEN, 0)
 
-        return Ok(())
+        return Ok(());
     })?;
 
-    return Ok(fd)
+    return Ok(fd);
 }
 
 pub fn SysAccess(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -447,8 +524,14 @@ pub fn SysFaccessat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let mode = args.arg2 as u16 as u32;
     let flags = args.arg3 as i32;
 
-    accessAt(task, dirfd, addr, flags & ATType::AT_SYMLINK_NOFOLLOW == 0, mode)?;
-    return Ok(0)
+    accessAt(
+        task,
+        dirfd,
+        addr,
+        flags & ATType::AT_SYMLINK_NOFOLLOW == 0,
+        mode,
+    )?;
+    return Ok(0);
 }
 
 pub fn accessAt(task: &Task, dirFd: i32, addr: u64, resolve: bool, mode: u32) -> Result<()> {
@@ -456,35 +539,44 @@ pub fn accessAt(task: &Task, dirFd: i32, addr: u64, resolve: bool, mode: u32) ->
     const W_OK: u32 = 2;
     const X_OK: u32 = 1;
 
-    let (path, _) = copyInPath(task,  addr, false)?;
+    let (path, _) = copyInPath(task, addr, false)?;
 
     info!("accessAt dirfd is {}, path is {}", dirFd, &path);
     if mode & !(R_OK | W_OK | X_OK) != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    return fileOpOn(task, dirFd, &path.to_string(), resolve, &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
-        {
-            let creds = task.Creds().Fork();
-            let mut creds = creds.lock();
+    return fileOpOn(
+        task,
+        dirFd,
+        &path.to_string(),
+        resolve,
+        &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
+            {
+                let creds = task.Creds().Fork();
+                let mut creds = creds.lock();
 
-            creds.EffectiveKUID = creds.RealKUID;
-            creds.EffectiveKGID = creds.RealKGID;
+                creds.EffectiveKUID = creds.RealKUID;
+                creds.EffectiveKGID = creds.RealKGID;
 
-            if creds.EffectiveKGID.In(&creds.UserNamespace).0 == ROOT_UID.0 {
-                creds.EffectiveCaps = creds.PermittedCaps
-            } else {
-                creds.EffectiveCaps = CapSet::New(0)
+                if creds.EffectiveKGID.In(&creds.UserNamespace).0 == ROOT_UID.0 {
+                    creds.EffectiveCaps = creds.PermittedCaps
+                } else {
+                    creds.EffectiveCaps = CapSet::New(0)
+                }
             }
-        }
 
-        let inode = d.Inode();
-        return inode.CheckPermission(task, &PermMask {
-            read: mode & R_OK != 0,
-            write: mode & W_OK != 0,
-            execute: mode & X_OK != 0,
-        })
-    })
+            let inode = d.Inode();
+            return inode.CheckPermission(
+                task,
+                &PermMask {
+                    read: mode & R_OK != 0,
+                    write: mode & W_OK != 0,
+                    execute: mode & X_OK != 0,
+                },
+            );
+        },
+    );
 }
 
 pub fn SysIoctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -493,7 +585,7 @@ pub fn SysIoctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let val = args.arg2 as u64;
 
     Ioctl(task, fd, request, val)?;
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn Ioctl(task: &mut Task, fd: i32, request: u64, val: u64) -> Result<()> {
@@ -505,18 +597,14 @@ pub fn Ioctl(task: &mut Task, fd: i32, request: u64, val: u64) -> Result<()> {
 
     match request {
         IoCtlCmd::FIONCLEX => {
-            task.SetFlags(fd, &FDFlags {
-                CloseOnExec: false,
-            })?;
+            task.SetFlags(fd, &FDFlags { CloseOnExec: false })?;
 
-            return Ok(())
+            return Ok(());
         }
         IoCtlCmd::FIOCLEX => {
-            task.SetFlags(fd, &FDFlags {
-                CloseOnExec: true,
-            })?;
+            task.SetFlags(fd, &FDFlags { CloseOnExec: true })?;
 
-            return Ok(())
+            return Ok(());
         }
         IoCtlCmd::FIONBIO => {
             let set: u32 = task.CopyInObj(val)?;
@@ -530,7 +618,7 @@ pub fn Ioctl(task: &mut Task, fd: i32, request: u64, val: u64) -> Result<()> {
             }
 
             file.SetFlags(task, flags.SettableFileFlags());
-            return Ok(())
+            return Ok(());
         }
         IoCtlCmd::FIOASYNC => {
             let set: u32 = task.CopyInObj(val)?;
@@ -544,22 +632,20 @@ pub fn Ioctl(task: &mut Task, fd: i32, request: u64, val: u64) -> Result<()> {
             }
 
             file.SetFlags(task, flags.SettableFileFlags());
-            return Ok(())
+            return Ok(());
         }
         IoCtlCmd::FIOSETOWN | IoCtlCmd::SIOCSPGRP => {
-            let set : i32 = task.CopyInObj(val)?;
+            let set: i32 = task.CopyInObj(val)?;
             FSetOwner(task, &file, set)?;
-            return Ok(())
+            return Ok(());
         }
         IoCtlCmd::FIOGETOWN | IoCtlCmd::SIOCGPGRP => {
             let who = FGetOwn(task, &file);
             //*task.GetTypeMut(val)? = who;
             task.CopyOutObj(&who, val)?;
-            return Ok(())
+            return Ok(());
         }
-        _ => {
-            return file.Ioctl(task, fd, request, val)
-        }
+        _ => return file.Ioctl(task, fd, request, val),
     }
 }
 
@@ -576,7 +662,7 @@ pub fn SysGetcwd(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     }
 
     if s.len() >= size {
-        return Err(Error::SysError(SysErr::ERANGE))
+        return Err(Error::SysError(SysErr::ERANGE));
     }
 
     let len = if s.len() + 1 > size {
@@ -586,40 +672,49 @@ pub fn SysGetcwd(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     };
 
     task.CopyOutString(addr, len, &s)?;
-    return Ok(len as i64)
+    return Ok(len as i64);
 }
 
 pub fn SysChroot(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg0 as u64;
 
     if task.Creds().HasCapability(Capability::CAP_SYS_CHROOT) {
-        return Err(Error::SysError(SysErr::EPERM))
+        return Err(Error::SysError(SysErr::EPERM));
     }
 
-    let (path, _) = copyInPath(task,  addr, false)?;
+    let (path, _) = copyInPath(task, addr, false)?;
     let mut dir = task.Root();
 
-    let res = fileOpOn(task, ATType::AT_FDCWD, &path, true, &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
-        let inode = d.Inode();
-        if !inode.StableAttr().IsDir() {
-            return Err(Error::SysError(SysErr::ENOTDIR))
-        }
+    let res = fileOpOn(
+        task,
+        ATType::AT_FDCWD,
+        &path,
+        true,
+        &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
+            let inode = d.Inode();
+            if !inode.StableAttr().IsDir() {
+                return Err(Error::SysError(SysErr::ENOTDIR));
+            }
 
-        inode.CheckPermission(task, &PermMask {
-            execute: true,
-            ..Default::default()
-        })?;
+            inode.CheckPermission(
+                task,
+                &PermMask {
+                    execute: true,
+                    ..Default::default()
+                },
+            )?;
 
-        dir = d.clone();
+            dir = d.clone();
 
-        Ok(())
-    });
+            Ok(())
+        },
+    );
 
     match res {
         Err(e) => return Err(e),
         Ok(_) => {
             task.fsContext.SetRootDirectory(&dir);
-            return Ok(0)
+            return Ok(0);
         }
     }
 }
@@ -627,31 +722,40 @@ pub fn SysChroot(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 pub fn SysChdir(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg0 as u64;
 
-    let (path, _) = copyInPath(task,  addr, false)?;
+    let (path, _) = copyInPath(task, addr, false)?;
     info!("SysChdir path is {}", &path);
     let mut dir = task.Workdir();
 
-    let res = fileOpOn(task, ATType::AT_FDCWD, &path, true, &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
-        let inode = d.Inode();
-        if !inode.StableAttr().IsDir() {
-            return Err(Error::SysError(SysErr::ENOTDIR))
-        }
+    let res = fileOpOn(
+        task,
+        ATType::AT_FDCWD,
+        &path,
+        true,
+        &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
+            let inode = d.Inode();
+            if !inode.StableAttr().IsDir() {
+                return Err(Error::SysError(SysErr::ENOTDIR));
+            }
 
-        inode.CheckPermission(task, &PermMask {
-            execute: true,
-            ..Default::default()
-        })?;
+            inode.CheckPermission(
+                task,
+                &PermMask {
+                    execute: true,
+                    ..Default::default()
+                },
+            )?;
 
-        dir = d.clone();
+            dir = d.clone();
 
-        Ok(())
-    });
+            Ok(())
+        },
+    );
 
     match res {
         Err(e) => Err(e),
         Ok(_) => {
             task.fsContext.SetWorkDirectory(&dir);
-            return Ok(0)
+            return Ok(0);
         }
     }
 }
@@ -665,17 +769,20 @@ pub fn SysFchdir(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let inode = dirent.Inode();
 
     if !inode.StableAttr().IsDir() {
-        return Err(Error::SysError(SysErr::ENOTDIR))
+        return Err(Error::SysError(SysErr::ENOTDIR));
     }
 
-    inode.CheckPermission(task, &PermMask {
-        execute: true,
-        ..Default::default()
-    })?;
+    inode.CheckPermission(
+        task,
+        &PermMask {
+            execute: true,
+            ..Default::default()
+        },
+    )?;
 
     task.fsContext.SetWorkDirectory(&dirent);
 
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysClose(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -697,7 +804,7 @@ pub fn SysDup(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let file = task.GetFile(fd)?;
 
     let newfd = task.NewFDFrom(0, &file, &FDFlags::default())?;
-    return Ok(newfd as i64)
+    return Ok(newfd as i64);
 }
 
 pub fn SysDup2(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -709,7 +816,7 @@ pub fn SysDup2(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Ok(newfd as i64);
     }
 
-    return Dup3(task, oldfd, newfd, 0)
+    return Dup3(task, oldfd, newfd, 0);
 }
 
 pub fn SysDup3(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -721,17 +828,21 @@ pub fn SysDup3(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    return Dup3(task, oldfd, newfd, flags)
+    return Dup3(task, oldfd, newfd, flags);
 }
 
 pub fn Dup3(task: &mut Task, oldfd: i32, newfd: i32, flags: u32) -> Result<i64> {
     let oldFile = task.GetFile(oldfd)?;
 
-    task.NewFDAt(newfd, &oldFile, &FDFlags {
-        CloseOnExec: flags & Flags::O_CLOEXEC as u32 != 0
-    })?;
+    task.NewFDAt(
+        newfd,
+        &oldFile,
+        &FDFlags {
+            CloseOnExec: flags & Flags::O_CLOEXEC as u32 != 0,
+        },
+    )?;
 
-    return Ok(newfd as i64)
+    return Ok(newfd as i64);
 }
 
 pub fn SysLseek(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -739,7 +850,7 @@ pub fn SysLseek(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let offset = args.arg1 as i64;
     let whence = args.arg2 as i32;
     let res = Lseek(task, fd, offset, whence)?;
-    return Ok(res as i64)
+    return Ok(res as i64);
 }
 
 pub fn Lseek(task: &mut Task, fd: i32, offset: i64, whence: i32) -> Result<i64> {
@@ -826,7 +937,7 @@ pub fn FSetOwner(task: &Task, file: &File, who: i32) -> Result<()> {
         }
 
         a.SetOwnerProcessGroup(task, pg);
-        return Ok(())
+        return Ok(());
     }
 
     let tg = task.Thread().PIDNamespace().ThreadGroupWithID(who);
@@ -835,7 +946,7 @@ pub fn FSetOwner(task: &Task, file: &File, who: i32) -> Result<()> {
     }
 
     a.SetOwnerThreadGroup(task, tg);
-    return Ok(())
+    return Ok(());
 }
 
 pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -848,24 +959,27 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     match cmd {
         Cmd::F_DUPFD | Cmd::F_DUPFD_CLOEXEC => {
             let from = val as i32;
-            let fd = task.NewFDFrom(from, &file, &FDFlags {
-                CloseOnExec: cmd == Cmd::F_DUPFD_CLOEXEC
-            })?;
-            return Ok(fd as i64)
+            let fd = task.NewFDFrom(
+                from,
+                &file,
+                &FDFlags {
+                    CloseOnExec: cmd == Cmd::F_DUPFD_CLOEXEC,
+                },
+            )?;
+            return Ok(fd as i64);
         }
-        Cmd::F_GETFD => {
-            Ok(flags.ToLinuxFDFlags() as i64)
-        }
+        Cmd::F_GETFD => Ok(flags.ToLinuxFDFlags() as i64),
         Cmd::F_SETFD => {
             let flags = val as u32;
-            task.SetFlags(fd, &FDFlags {
-                CloseOnExec: flags & LibcConst::FD_CLOEXEC as u32 != 0
-            })?;
+            task.SetFlags(
+                fd,
+                &FDFlags {
+                    CloseOnExec: flags & LibcConst::FD_CLOEXEC as u32 != 0,
+                },
+            )?;
             Ok(0)
         }
-        Cmd::F_GETFL => {
-            Ok(file.Flags().ToLinux() as i64)
-        }
+        Cmd::F_GETFL => Ok(file.Flags().ToLinux() as i64),
         Cmd::F_SETFL => {
             let flags = val as u32;
             file.SetFlags(task, FileFlags::FromFlags(flags).SettableFileFlags());
@@ -878,17 +992,17 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             // hammer by only allowing locks on files and directories.
             //todo: fix this. We can handle if the file is a symbol link fix this
             if !inode.StableAttr().IsFile() && !inode.StableAttr().IsDir() {
-                return Err(Error::SysError(SysErr::EBADF))
+                return Err(Error::SysError(SysErr::EBADF));
             }
 
             let flockAddr = val;
-            let flock : FlockStruct = task.CopyInObj(flockAddr)?;
+            let flock: FlockStruct = task.CopyInObj(flockAddr)?;
 
             let sw = match flock.l_whence {
                 0 => SeekWhence::SEEK_SET,
                 1 => SeekWhence::SEEK_CUR,
                 2 => SeekWhence::SEEK_END,
-                _ => return Err(Error::SysError(SysErr::EINVAL))
+                _ => return Err(Error::SysError(SysErr::EINVAL)),
             };
 
             let offset = match sw {
@@ -898,7 +1012,7 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                     let uattr = inode.UnstableAttr(task)?;
                     uattr.Size
                 }
-                _ => return Err(Error::SysError(SysErr::EINVAL))
+                _ => return Err(Error::SysError(SysErr::EINVAL)),
             };
 
             // Compute the lock range.
@@ -914,79 +1028,75 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             match flock.l_type as u64 {
                 LibcConst::F_RDLCK => {
                     if !fflags.Read {
-                        return Err(Error::SysError(SysErr::EBADF))
+                        return Err(Error::SysError(SysErr::EBADF));
                     }
 
                     let lock = inode.lock().LockCtx.Posix.clone();
                     if cmd == Cmd::F_SETLK {
                         // Non-blocking lock, provide a nil lock.Blocker.
                         if !lock.LockRegion(task, lockUniqueID, LockType::ReadLock, &rng, false)? {
-                            return Err(Error::SysError(SysErr::EAGAIN))
+                            return Err(Error::SysError(SysErr::EAGAIN));
                         }
                     } else {
                         // Blocking lock, pass in the task to satisfy the lock.Blocker interface.
                         if !lock.LockRegion(task, lockUniqueID, LockType::ReadLock, &rng, true)? {
-                            return Err(Error::SysError(SysErr::EINTR))
+                            return Err(Error::SysError(SysErr::EINTR));
                         }
                     }
 
-                    return Ok(0)
+                    return Ok(0);
                 }
                 LibcConst::F_WRLCK => {
                     if !fflags.Write {
-                        return Err(Error::SysError(SysErr::EBADF))
+                        return Err(Error::SysError(SysErr::EBADF));
                     }
 
                     let lock = inode.lock().LockCtx.Posix.clone();
                     if cmd == Cmd::F_SETLK {
                         // Non-blocking lock, provide a nil lock.Blocker.
                         if !lock.LockRegion(task, lockUniqueID, LockType::WriteLock, &rng, false)? {
-                            return Err(Error::SysError(SysErr::EAGAIN))
+                            return Err(Error::SysError(SysErr::EAGAIN));
                         }
                     } else {
                         // Blocking lock, pass in the task to satisfy the lock.Blocker interface.
                         if !lock.LockRegion(task, lockUniqueID, LockType::WriteLock, &rng, true)? {
-                            return Err(Error::SysError(SysErr::EINTR))
+                            return Err(Error::SysError(SysErr::EINTR));
                         }
                     }
 
-                    return Ok(0)
+                    return Ok(0);
                 }
                 LibcConst::F_UNLCK => {
                     let lock = inode.lock().LockCtx.Posix.clone();
                     lock.UnlockRegion(task, lockUniqueID, &rng);
 
-                    return Ok(0)
+                    return Ok(0);
                 }
-                _ => {
-                    return Err(Error::SysError(SysErr::EINVAL))
-                }
+                _ => return Err(Error::SysError(SysErr::EINVAL)),
             }
         }
-        Cmd::F_GETOWN => {
-            return Ok(FGetOwn(task, &file) as i64)
-        }
+        Cmd::F_GETOWN => return Ok(FGetOwn(task, &file) as i64),
         Cmd::F_SETOWN => {
             FSetOwner(task, &file, val as i32)?;
-            return Ok(0)
+            return Ok(0);
         }
         Cmd::F_GETOWN_EX => {
             let addr = val;
             let owner = FGetOwnEx(task, &file);
             //*task.GetTypeMut(addr)? = owner;
             task.CopyOutObj(&owner, addr)?;
-            return Ok(0)
+            return Ok(0);
         }
         Cmd::F_SETOWN_EX => {
             let addr = val;
-            let owner : FOwnerEx = task.CopyInObj(addr)?;
+            let owner: FOwnerEx = task.CopyInObj(addr)?;
             let a = file.Async(task, Some(FileAsync::default())).unwrap();
 
             match owner.Type {
                 F_OWNER_TID => {
                     if owner.PID == 0 {
                         a.Unset(task);
-                        return Ok(0)
+                        return Ok(0);
                     }
 
                     let thread = task.Thread().PIDNamespace().TaskWithID(owner.PID);
@@ -994,14 +1104,14 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                         None => return Err(Error::SysError(SysErr::ESRCH)),
                         Some(thread) => {
                             a.SetOwnerTask(task, Some(thread));
-                            return Ok(0)
+                            return Ok(0);
                         }
                     }
                 }
                 F_OWNER_PID => {
                     if owner.PID == 0 {
                         a.Unset(task);
-                        return Ok(0)
+                        return Ok(0);
                     }
 
                     let tg = task.Thread().PIDNamespace().ThreadGroupWithID(owner.PID);
@@ -1009,14 +1119,14 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                         None => return Err(Error::SysError(SysErr::ESRCH)),
                         Some(tg) => {
                             a.SetOwnerThreadGroup(task, Some(tg));
-                            return Ok(0)
+                            return Ok(0);
                         }
                     }
                 }
                 F_OWNER_PGRP => {
                     if owner.PID == 0 {
                         a.Unset(task);
-                        return Ok(0)
+                        return Ok(0);
                     }
 
                     let pg = task.Thread().PIDNamespace().ProcessGroupWithID(owner.PID);
@@ -1024,11 +1134,11 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                         None => return Err(Error::SysError(SysErr::ESRCH)),
                         Some(pg) => {
                             a.SetOwnerProcessGroup(task, Some(pg));
-                            return Ok(0)
+                            return Ok(0);
                         }
                     }
                 }
-                _ => return Err(Error::SysError(SysErr::EINVAL))
+                _ => return Err(Error::SysError(SysErr::EINVAL)),
             }
         }
         Cmd::F_GET_SEALS => {
@@ -1047,11 +1157,11 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             } else if let Some(ops) = fops.as_any().downcast_ref::<ReaderWriter>() {
                 ops.pipe.clone()
             } else {
-                return Err(Error::SysError(SysErr::EINVAL))
+                return Err(Error::SysError(SysErr::EINVAL));
             };
 
             let n = pipe.PipeSize();
-            return Ok(n as i64)
+            return Ok(n as i64);
         }
         Cmd::F_SETPIPE_SZ => {
             let fops = file.FileOp.clone();
@@ -1063,15 +1173,13 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             } else if let Some(ops) = fops.as_any().downcast_ref::<ReaderWriter>() {
                 ops.pipe.clone()
             } else {
-                return Err(Error::SysError(SysErr::EINVAL))
+                return Err(Error::SysError(SysErr::EINVAL));
             };
 
             let n = pipe.SetPipeSize(val as i64)?;
-            return Ok(n as i64)
+            return Ok(n as i64);
         }
-        _ => {
-            return Err(Error::SysError(SysErr::EINVAL))
-        }
+        _ => return Err(Error::SysError(SysErr::EINVAL)),
     }
 }
 
@@ -1089,69 +1197,80 @@ pub fn SysFadvise64(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let advice = args.arg3 as i32;
 
     if len < 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let file = task.GetFile(fd)?;
 
     let inode = file.Dirent.Inode();
     if inode.StableAttr().IsPipe() {
-        return Err(Error::SysError(SysErr::ESPIPE))
+        return Err(Error::SysError(SysErr::ESPIPE));
     }
 
     match advice {
-        _FADV_NORMAL |
-        _FADV_RANDOM |
-        _FADV_SEQUENTIAL |
-        _FADV_WILLNEED |
-        _FADV_DONTNEED |
-        _FADV_NOREUSE => {
-            return Ok(0)
-        }
-        _ => return Err(Error::SysError(SysErr::EINVAL))
+        _FADV_NORMAL | _FADV_RANDOM | _FADV_SEQUENTIAL | _FADV_WILLNEED | _FADV_DONTNEED
+        | _FADV_NOREUSE => return Ok(0),
+        _ => return Err(Error::SysError(SysErr::EINVAL)),
     }
 }
 
 fn mkdirAt(task: &Task, dirFd: i32, addr: u64, mode: FileMode) -> Result<i64> {
-    let (path, _) = copyInPath(task,  addr, false)?;
+    let (path, _) = copyInPath(task, addr, false)?;
     info!("mkdirAt path is {}", &path);
 
-    fileOpAt(task, dirFd, &path.to_string(), &mut |root: &Dirent, d: &Dirent, name: &str, _remainingTraversals: u32| -> Result<()> {
-        let inode = d.Inode();
-        if !inode.StableAttr().IsDir() {
-            return Err(Error::SysError(SysErr::ENOTDIR))
-        }
-
-        let mut remainingTraversals = MAX_SYMLINK_TRAVERSALS;
-        let res = task.mountNS.FindDirent(task, root, Some(d.clone()), name, &mut remainingTraversals, true);
-
-        match res {
-            Ok(_) => Err(Error::SysError(SysErr::EEXIST)),
-            Err(Error::SysError(SysErr::EACCES)) => return Err(Error::SysError(SysErr::EACCES)),
-            _ => {
-                let perms = {
-                    inode.CheckPermission(task, &PermMask {
-                        write: true,
-                        execute: true,
-                        ..Default::default()
-                    })?;
-
-                    FilePermissions::FromMode(FileMode(mode.0 & !task.Umask() as u16))
-                };
-
-                return d.CreateDirectory(task, root, name, &perms)
+    fileOpAt(
+        task,
+        dirFd,
+        &path.to_string(),
+        &mut |root: &Dirent, d: &Dirent, name: &str, _remainingTraversals: u32| -> Result<()> {
+            let inode = d.Inode();
+            if !inode.StableAttr().IsDir() {
+                return Err(Error::SysError(SysErr::ENOTDIR));
             }
-        }
-    })?;
 
-    return Ok(0)
+            let mut remainingTraversals = MAX_SYMLINK_TRAVERSALS;
+            let res = task.mountNS.FindDirent(
+                task,
+                root,
+                Some(d.clone()),
+                name,
+                &mut remainingTraversals,
+                true,
+            );
+
+            match res {
+                Ok(_) => Err(Error::SysError(SysErr::EEXIST)),
+                Err(Error::SysError(SysErr::EACCES)) => {
+                    return Err(Error::SysError(SysErr::EACCES))
+                }
+                _ => {
+                    let perms = {
+                        inode.CheckPermission(
+                            task,
+                            &PermMask {
+                                write: true,
+                                execute: true,
+                                ..Default::default()
+                            },
+                        )?;
+
+                        FilePermissions::FromMode(FileMode(mode.0 & !task.Umask() as u16))
+                    };
+
+                    return d.CreateDirectory(task, root, name, &perms);
+                }
+            }
+        },
+    )?;
+
+    return Ok(0);
 }
 
 pub fn SysMkdir(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg0 as u64;
     let mode = args.arg1 as u16;
 
-    return mkdirAt(task, ATType::AT_FDCWD, addr, FileMode(mode))
+    return mkdirAt(task, ATType::AT_FDCWD, addr, FileMode(mode));
 }
 
 pub fn SysMkdirat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -1159,76 +1278,89 @@ pub fn SysMkdirat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg1 as u64;
     let mode = args.arg2 as u16;
 
-    return mkdirAt(task, dirfd, addr, FileMode(mode))
+    return mkdirAt(task, dirfd, addr, FileMode(mode));
 }
 
 fn rmdirAt(task: &Task, dirFd: i32, addr: u64) -> Result<i64> {
-    let (path, _) = copyInPath(task,  addr, false)?;
+    let (path, _) = copyInPath(task, addr, false)?;
     info!("rmdirAt path is {}", &path);
 
     if path.as_str() == "/" {
-        return Err(Error::SysError(SysErr::EBUSY))
+        return Err(Error::SysError(SysErr::EBUSY));
     }
 
-    fileOpAt(task, dirFd, &path.to_string(), &mut |root: &Dirent, d: &Dirent, name: &str, _remainingTraversals: u32| -> Result<()> {
-        let inode = d.Inode();
-        if !inode.StableAttr().IsDir() {
-            return Err(Error::SysError(SysErr::ENOTDIR))
-        }
+    fileOpAt(
+        task,
+        dirFd,
+        &path.to_string(),
+        &mut |root: &Dirent, d: &Dirent, name: &str, _remainingTraversals: u32| -> Result<()> {
+            let inode = d.Inode();
+            if !inode.StableAttr().IsDir() {
+                return Err(Error::SysError(SysErr::ENOTDIR));
+            }
 
-        match name {
-            "." => return Err(Error::SysError(SysErr::EINVAL)),
-            ".." => return Err(Error::SysError(SysErr::ENOTEMPTY)),
-            _ => ()
-        }
+            match name {
+                "." => return Err(Error::SysError(SysErr::EINVAL)),
+                ".." => return Err(Error::SysError(SysErr::ENOTEMPTY)),
+                _ => (),
+            }
 
-        d.MayDelete(task, root, name)?;
+            d.MayDelete(task, root, name)?;
 
-        return d.RemoveDirectory(task, root, name)
-    })?;
+            return d.RemoveDirectory(task, root, name);
+        },
+    )?;
 
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysRmdir(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg0 as u64;
-    return rmdirAt(task, ATType::AT_FDCWD, addr)
+    return rmdirAt(task, ATType::AT_FDCWD, addr);
 }
 
 fn symlinkAt(task: &Task, newAddr: u64, dirFd: i32, oldAddr: u64) -> Result<u64> {
-    let (newPath, dirPath) = copyInPath(task,  newAddr, false)?;
+    let (newPath, dirPath) = copyInPath(task, newAddr, false)?;
     if dirPath {
-        return Err(Error::SysError(SysErr::ENOENT))
+        return Err(Error::SysError(SysErr::ENOENT));
     }
 
     let (oldPath, err) = task.CopyInString(oldAddr, PATH_MAX);
     match err {
         Err(e) => return Err(e),
-        _ => ()
+        _ => (),
     }
 
     if oldPath.as_str() == "" {
-        return Err(Error::SysError(SysErr::ENOENT))
+        return Err(Error::SysError(SysErr::ENOENT));
     }
 
     info!("symlinkAt newpath is {}, oldpath is {}", &newPath, &oldPath);
 
-    fileOpAt(task, dirFd, &newPath.to_string(), &mut |root: &Dirent, d: &Dirent, name: &str, _remainingTraversals: u32| -> Result<()> {
-        let inode = d.Inode();
-        if !inode.StableAttr().IsDir() {
-            return Err(Error::SysError(SysErr::ENOTDIR))
-        }
+    fileOpAt(
+        task,
+        dirFd,
+        &newPath.to_string(),
+        &mut |root: &Dirent, d: &Dirent, name: &str, _remainingTraversals: u32| -> Result<()> {
+            let inode = d.Inode();
+            if !inode.StableAttr().IsDir() {
+                return Err(Error::SysError(SysErr::ENOTDIR));
+            }
 
-        inode.CheckPermission(task, &PermMask {
-            write: true,
-            execute: true,
-            ..Default::default()
-        })?;
+            inode.CheckPermission(
+                task,
+                &PermMask {
+                    write: true,
+                    execute: true,
+                    ..Default::default()
+                },
+            )?;
 
-        return d.CreateLink(task, root, &oldPath, name)
-    })?;
+            return d.CreateLink(task, root, &oldPath, name);
+        },
+    )?;
 
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysSymlink(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -1250,31 +1382,42 @@ pub fn SysSymlinkat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
 fn mayLinkAt(task: &Task, target: &mut Inode) -> Result<()> {
     if target.CheckOwnership(task) {
-        return Ok(())
+        return Ok(());
     }
 
     if !target.StableAttr().IsRegular() {
-        return Err(Error::SysError(SysErr::EPERM))
+        return Err(Error::SysError(SysErr::EPERM));
     }
 
-    let res = target.CheckPermission(task, &PermMask {
-        write: true,
-        execute: true,
-        ..Default::default()
-    });
+    let res = target.CheckPermission(
+        task,
+        &PermMask {
+            write: true,
+            execute: true,
+            ..Default::default()
+        },
+    );
 
     match res {
         Err(_) => Err(Error::SysError(SysErr::EPERM)),
-        _ => Ok(())
+        _ => Ok(()),
     }
 }
 
-fn linkAt(task: &Task, oldDirfd: i32, oldAddr: u64, newDirfd: i32, newAddr: u64, resolve: bool, allowEmpty: bool) -> Result<i64> {
-    let (oldPath, _) = copyInPath(task,  oldAddr, allowEmpty)?;
-    let (newPath, dirPath) = copyInPath(task,  newAddr, false)?;
+fn linkAt(
+    task: &Task,
+    oldDirfd: i32,
+    oldAddr: u64,
+    newDirfd: i32,
+    newAddr: u64,
+    resolve: bool,
+    allowEmpty: bool,
+) -> Result<i64> {
+    let (oldPath, _) = copyInPath(task, oldAddr, allowEmpty)?;
+    let (newPath, dirPath) = copyInPath(task, newAddr, false)?;
 
     if dirPath {
-        return Err(Error::SysError(SysErr::ENOENT))
+        return Err(Error::SysError(SysErr::ENOENT));
     }
 
     if allowEmpty && oldPath == "" {
@@ -1283,45 +1426,75 @@ fn linkAt(task: &Task, oldDirfd: i32, oldAddr: u64, newDirfd: i32, newAddr: u64,
         let mut inode = target.Dirent.Inode();
         mayLinkAt(task, &mut inode)?;
 
-        fileOpAt(task, newDirfd, &newPath.to_string(), &mut |root: &Dirent, newParent: &Dirent, name: &str, _remainingTraversals: u32| -> Result<()> {
-            let inode = newParent.Inode();
-            if !inode.StableAttr().IsDir() {
-                return Err(Error::SysError(SysErr::ENOTDIR))
-            }
+        fileOpAt(
+            task,
+            newDirfd,
+            &newPath.to_string(),
+            &mut |root: &Dirent,
+                  newParent: &Dirent,
+                  name: &str,
+                  _remainingTraversals: u32|
+             -> Result<()> {
+                let inode = newParent.Inode();
+                if !inode.StableAttr().IsDir() {
+                    return Err(Error::SysError(SysErr::ENOTDIR));
+                }
 
-            inode.CheckPermission(task, &PermMask {
-                write: true,
-                execute: true,
-                ..Default::default()
-            })?;
+                inode.CheckPermission(
+                    task,
+                    &PermMask {
+                        write: true,
+                        execute: true,
+                        ..Default::default()
+                    },
+                )?;
 
-            return newParent.CreateHardLink(task, root, &target.Dirent.clone(), name)
-        })?;
+                return newParent.CreateHardLink(task, root, &target.Dirent.clone(), name);
+            },
+        )?;
 
-        return Ok(0)
+        return Ok(0);
     };
 
-    fileOpOn(task, oldDirfd, &oldPath.to_string(), resolve, &mut |_root: &Dirent, target: &Dirent, _remainingTraversals: u32| -> Result<()> {
-        let mut inode = target.Inode();
-        mayLinkAt(task, &mut inode)?;
+    fileOpOn(
+        task,
+        oldDirfd,
+        &oldPath.to_string(),
+        resolve,
+        &mut |_root: &Dirent, target: &Dirent, _remainingTraversals: u32| -> Result<()> {
+            let mut inode = target.Inode();
+            mayLinkAt(task, &mut inode)?;
 
-        return fileOpAt(task, newDirfd, &newPath.to_string(), &mut |root: &Dirent, newParent: &Dirent, newName: &str, _remainingTraversals: u32| -> Result<()> {
-            let inode = newParent.Inode();
-            if !inode.StableAttr().IsDir() {
-                return Err(Error::SysError(SysErr::ENOTDIR))
-            }
+            return fileOpAt(
+                task,
+                newDirfd,
+                &newPath.to_string(),
+                &mut |root: &Dirent,
+                      newParent: &Dirent,
+                      newName: &str,
+                      _remainingTraversals: u32|
+                 -> Result<()> {
+                    let inode = newParent.Inode();
+                    if !inode.StableAttr().IsDir() {
+                        return Err(Error::SysError(SysErr::ENOTDIR));
+                    }
 
-            inode.CheckPermission(task, &PermMask {
-                write: true,
-                execute: true,
-                ..Default::default()
-            })?;
+                    inode.CheckPermission(
+                        task,
+                        &PermMask {
+                            write: true,
+                            execute: true,
+                            ..Default::default()
+                        },
+                    )?;
 
-            return newParent.CreateHardLink(task, root, target, newName)
-        });
-    })?;
+                    return newParent.CreateHardLink(task, root, target, newName);
+                },
+            );
+        },
+    )?;
 
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysLink(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -1329,7 +1502,15 @@ pub fn SysLink(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let newAddr = args.arg1 as u64;
 
     let resolve = false;
-    return linkAt(task, ATType::AT_FDCWD, oldAddr, ATType::AT_FDCWD, newAddr, resolve, false)
+    return linkAt(
+        task,
+        ATType::AT_FDCWD,
+        oldAddr,
+        ATType::AT_FDCWD,
+        newAddr,
+        resolve,
+        false,
+    );
 }
 
 pub fn SysLinkat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -1346,7 +1527,7 @@ pub fn SysLinkat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let flags = args.arg4 as i32;
 
     if flags & !(ATType::AT_SYMLINK_FOLLOW | ATType::AT_EMPTY_PATH) != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let resolve = flags & ATType::AT_SYMLINK_FOLLOW == ATType::AT_SYMLINK_FOLLOW;
@@ -1356,48 +1537,61 @@ pub fn SysLinkat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         let creds = task.Creds();
         let userNS = creds.lock().UserNamespace.clone();
         if allowEmpty && !creds.HasCapabilityIn(Capability::CAP_DAC_READ_SEARCH, &userNS) {
-            return Err(Error::SysError(SysErr::ENOENT))
+            return Err(Error::SysError(SysErr::ENOENT));
         }
     }
 
-    return linkAt(task, oldDirfd, oldAddr, newDirfd, newAddr, resolve, allowEmpty)
+    return linkAt(
+        task, oldDirfd, oldAddr, newDirfd, newAddr, resolve, allowEmpty,
+    );
 }
 
 fn readlinkAt(task: &Task, dirFd: i32, addr: u64, bufAddr: u64, size: u32) -> Result<i64> {
-    let (path, dirPath) = copyInPath(task,  addr, false)?;
+    let (path, dirPath) = copyInPath(task, addr, false)?;
     if dirPath {
-        return Err(Error::SysError(SysErr::ENOENT))
+        return Err(Error::SysError(SysErr::ENOENT));
     }
 
     info!("readlinkAt path is {}", &path);
     let mut copied = 0;
     let size = size as usize;
 
-    fileOpOn(task, dirFd, &path, false, &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
-        let inode = d.Inode();
-        inode.CheckPermission(task, &PermMask {
-            read: true,
-            ..Default::default()
-        })?;
+    fileOpOn(
+        task,
+        dirFd,
+        &path,
+        false,
+        &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
+            let inode = d.Inode();
+            inode.CheckPermission(
+                task,
+                &PermMask {
+                    read: true,
+                    ..Default::default()
+                },
+            )?;
 
-        let s = match inode.ReadLink(task) {
-            Err(Error::SysError(SysErr::ENOLINK)) => return Err(Error::SysError(SysErr::EINVAL)),
-            Err(e) => return Err(e),
-            Ok(s) => s,
-        };
+            let s = match inode.ReadLink(task) {
+                Err(Error::SysError(SysErr::ENOLINK)) => {
+                    return Err(Error::SysError(SysErr::EINVAL))
+                }
+                Err(e) => return Err(e),
+                Ok(s) => s,
+            };
 
-        info!("readlinkAt 1 path is {}, target is {}", &path, &s);
-        let mut buffer = s.as_bytes();
-        if buffer.len() > size {
-            buffer = &buffer[..size]
-        }
+            info!("readlinkAt 1 path is {}, target is {}", &path, &s);
+            let mut buffer = s.as_bytes();
+            if buffer.len() > size {
+                buffer = &buffer[..size]
+            }
 
-        task.CopyOutSlice(buffer, bufAddr, buffer.len())?;
-        copied = buffer.len();
-        Ok(())
-    })?;
+            task.CopyOutSlice(buffer, bufAddr, buffer.len())?;
+            copied = buffer.len();
+            Ok(())
+        },
+    )?;
 
-    return Ok(copied as i64)
+    return Ok(copied as i64);
 }
 
 // Readlink implements linux syscall readlink(2).
@@ -1407,7 +1601,7 @@ pub fn SysReadLink(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let size = args.arg2 as u64;
 
     let size = size as u32;
-    return readlinkAt(task, ATType::AT_FDCWD, addr, bufAddr, size)
+    return readlinkAt(task, ATType::AT_FDCWD, addr, bufAddr, size);
 }
 
 // Readlinkat implements linux syscall readlinkat(2).
@@ -1418,41 +1612,46 @@ pub fn SysReadLinkAt(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let size = args.arg3 as u64;
 
     let size = size as u32;
-    return readlinkAt(task, dirfd, addr, bufAddr, size)
+    return readlinkAt(task, dirfd, addr, bufAddr, size);
 }
 
 pub fn ReadLinkAt(task: &Task, dirFd: i32, addr: u64, bufAddr: u64, size: u64) -> Result<i64> {
     let size = size as u32;
 
-    return readlinkAt(task, dirFd, addr, bufAddr, size)
+    return readlinkAt(task, dirFd, addr, bufAddr, size);
 }
 
 fn unlinkAt(task: &Task, dirFd: i32, addr: u64) -> Result<i64> {
-    let (path, dirPath) = copyInPath(task,  addr, false)?;
+    let (path, dirPath) = copyInPath(task, addr, false)?;
 
     info!("unlinkAt path is {}", &path);
     if dirPath {
-        return Err(Error::SysError(SysErr::ENOTDIR))
+        return Err(Error::SysError(SysErr::ENOTDIR));
     }
 
-    fileOpAt(task, dirFd, &path.to_string(), &mut |root: &Dirent, d: &Dirent, name: &str, _remainingTraversals: u32| -> Result<()> {
-        let inode = d.Inode();
-        if !inode.StableAttr().IsDir() {
-            return Err(Error::SysError(SysErr::ENOTDIR))
-        }
+    fileOpAt(
+        task,
+        dirFd,
+        &path.to_string(),
+        &mut |root: &Dirent, d: &Dirent, name: &str, _remainingTraversals: u32| -> Result<()> {
+            let inode = d.Inode();
+            if !inode.StableAttr().IsDir() {
+                return Err(Error::SysError(SysErr::ENOTDIR));
+            }
 
-        d.MayDelete(task, root, name)?;
+            d.MayDelete(task, root, name)?;
 
-        return d.Remove(task, root, name, dirPath)
-    })?;
+            return d.Remove(task, root, name, dirPath);
+        },
+    )?;
 
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysUnlink(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg0 as u64;
 
-    return unlinkAt(task, ATType::AT_FDCWD, addr)
+    return unlinkAt(task, ATType::AT_FDCWD, addr);
 }
 
 pub fn SysUnlinkat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -1461,10 +1660,10 @@ pub fn SysUnlinkat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let flags = args.arg2 as u32;
 
     if flags & ATType::AT_REMOVEDIR as u32 != 0 {
-        return rmdirAt(task, dirfd, addr)
+        return rmdirAt(task, dirfd, addr);
     }
 
-    return unlinkAt(task, dirfd, addr)
+    return unlinkAt(task, dirfd, addr);
 }
 
 pub fn SysTruncate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -1472,34 +1671,43 @@ pub fn SysTruncate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let len = args.arg1 as i64;
 
     if len < 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    let (path, dirPath) = copyInPath(task,  addr, false)?;
+    let (path, dirPath) = copyInPath(task, addr, false)?;
 
     if dirPath {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    fileOpOn(task, ATType::AT_FDCWD, &path, true, &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
-        let mut inode = d.Inode();
-        if inode.StableAttr().IsDir() {
-            return Err(Error::SysError(SysErr::EISDIR))
-        }
+    fileOpOn(
+        task,
+        ATType::AT_FDCWD,
+        &path,
+        true,
+        &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
+            let mut inode = d.Inode();
+            if inode.StableAttr().IsDir() {
+                return Err(Error::SysError(SysErr::EISDIR));
+            }
 
-        if !inode.StableAttr().IsFile() {
-            return Err(Error::SysError(SysErr::EINVAL))
-        }
+            if !inode.StableAttr().IsFile() {
+                return Err(Error::SysError(SysErr::EINVAL));
+            }
 
-        inode.CheckPermission(task, &PermMask {
-            write: true,
-            ..Default::default()
-        })?;
+            inode.CheckPermission(
+                task,
+                &PermMask {
+                    write: true,
+                    ..Default::default()
+                },
+            )?;
 
-        return inode.Truncate(task, d, len)
-    })?;
+            return inode.Truncate(task, d, len);
+        },
+    )?;
 
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysFtruncate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -1508,28 +1716,28 @@ pub fn SysFtruncate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let file = task.GetFile(fd)?;
     if !file.Flags().Write {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let mut inode = file.Dirent.Inode();
     if !inode.StableAttr().IsFile() {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     if len < 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let dirent = file.Dirent.clone();
     inode.Truncate(task, &dirent, len)?;
 
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysUmask(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let mask = args.arg0 as u32;
     let mask = task.fsContext.SwapUmask(mask & 0o777);
-    return Ok(mask as i64)
+    return Ok(mask as i64);
 }
 
 fn chown(task: &Task, d: &Dirent, uid: UID, gid: GID) -> Result<i64> {
@@ -1548,28 +1756,27 @@ fn chown(task: &Task, d: &Dirent, uid: UID, gid: GID) -> Result<i64> {
     if uid.Ok() {
         let kuid = c.UserNamespace.MapToKUID(uid);
         if !kuid.Ok() {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         let isNoop = uattr.Owner.UID == kuid;
         if !(hasCap || (isOwner && isNoop)) {
-            return Err(Error::SysError(SysErr::EPERM))
+            return Err(Error::SysError(SysErr::EPERM));
         }
 
         owner.UID = kuid;
     }
 
-
     if gid.Ok() {
         let kgid = c.UserNamespace.MapToKGID(gid);
         if !kgid.Ok() {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         let isNoop = uattr.Owner.GID == kgid;
         let isMemberGroup = c.InGroup(kgid);
         if !(hasCap || (isOwner && (isNoop || isMemberGroup))) {
-            return Err(Error::SysError(SysErr::EPERM))
+            return Err(Error::SysError(SysErr::EPERM));
         }
 
         owner.GID = kgid;
@@ -1579,32 +1786,49 @@ fn chown(task: &Task, d: &Dirent, uid: UID, gid: GID) -> Result<i64> {
     // the meantime. (Linux holds i_mutex while calling
     // fs/attr.c:notify_change() => inode_operations::setattr =>
     // inode_change_ok().)
-    info!("workaround enable setowner for host inode, the owner is {:?}", &owner);
+    info!(
+        "workaround enable setowner for host inode, the owner is {:?}",
+        &owner
+    );
     let mut inode = d.Inode();
     inode.SetOwner(task, d, &owner)?;
 
     // When the owner or group are changed by an unprivileged user,
     // chown(2) also clears the set-user-ID and set-group-ID bits, but
     // we do not support them.
-    return Ok(0)
+    return Ok(0);
 }
 
-fn chownAt(task: &Task, fd: i32, addr: u64, resolve: bool, allowEmpty: bool, uid: UID, gid: GID) -> Result<i64> {
-    let (path, _) = copyInPath(task,  addr, allowEmpty)?;
+fn chownAt(
+    task: &Task,
+    fd: i32,
+    addr: u64,
+    resolve: bool,
+    allowEmpty: bool,
+    uid: UID,
+    gid: GID,
+) -> Result<i64> {
+    let (path, _) = copyInPath(task, addr, allowEmpty)?;
 
     if path == "" {
         let file = task.GetFile(fd)?;
         let dirent = file.Dirent.clone();
         chown(task, &dirent, uid, gid)?;
-        return Ok(0)
+        return Ok(0);
     }
 
-    fileOpOn(task, fd, &path, resolve, &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
-        chown(task, d, uid, gid)?;
-        Ok(())
-    })?;
+    fileOpOn(
+        task,
+        fd,
+        &path,
+        resolve,
+        &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
+            chown(task, d, uid, gid)?;
+            Ok(())
+        },
+    )?;
 
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysChown(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -1616,7 +1840,7 @@ pub fn SysChown(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let gid = GID(gid as u32);
 
     let ret = chownAt(task, ATType::AT_FDCWD, addr, true, false, uid, gid)?;
-    return Ok(ret as i64)
+    return Ok(ret as i64);
 }
 
 pub fn SysLchown(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -1627,7 +1851,7 @@ pub fn SysLchown(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let uid = UID(uid as u32);
     let gid = GID(gid as u32);
 
-    return chownAt(task, ATType::AT_FDCWD, addr, false, false, uid, gid)
+    return chownAt(task, ATType::AT_FDCWD, addr, false, false, uid, gid);
 }
 
 pub fn SysFchown(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -1638,7 +1862,7 @@ pub fn SysFchown(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let file = task.GetFile(fd)?;
 
     let dirent = file.Dirent.clone();
-    return chown(task, &dirent, uid, gid)
+    return chown(task, &dirent, uid, gid);
 }
 
 pub fn SysFchownat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -1649,50 +1873,59 @@ pub fn SysFchownat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let flags = args.arg4 as i32;
 
     if flags & !(ATType::AT_EMPTY_PATH | ATType::AT_SYMLINK_NOFOLLOW) != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    return chownAt(task, dirfd, addr,
-                   flags & ATType::AT_SYMLINK_NOFOLLOW == 0,
-                   flags & ATType::AT_EMPTY_PATH != 0,
-                   uid, gid);
+    return chownAt(
+        task,
+        dirfd,
+        addr,
+        flags & ATType::AT_SYMLINK_NOFOLLOW == 0,
+        flags & ATType::AT_EMPTY_PATH != 0,
+        uid,
+        gid,
+    );
 }
 
 fn utime(task: &Task, dirfd: i32, addr: u64, ts: &InterTimeSpec, resolve: bool) -> Result<i64> {
     let setTimestamp = &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
         let mut inode = d.Inode();
         if !inode.CheckOwnership(task) {
-            if (ts.ATimeOmit || !ts.ATimeSetSystemTime) && (ts.MTimeOmit || !ts.MTimeSetSystemTime) {
-                return Err(Error::SysError(SysErr::EPERM))
+            if (ts.ATimeOmit || !ts.ATimeSetSystemTime) && (ts.MTimeOmit || !ts.MTimeSetSystemTime)
+            {
+                return Err(Error::SysError(SysErr::EPERM));
             }
 
-            inode.CheckPermission(task, &PermMask {
-                write: true,
-                ..Default::default()
-            })?;
+            inode.CheckPermission(
+                task,
+                &PermMask {
+                    write: true,
+                    ..Default::default()
+                },
+            )?;
         }
 
         inode.SetTimestamps(task, d, ts)?;
 
-        return Ok(())
+        return Ok(());
     };
 
     if addr == 0 && dirfd != ATType::AT_FDCWD {
         if !resolve {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         let f = task.GetFile(dirfd)?;
 
         let root = task.Root().clone();
         setTimestamp(&root, &f.Dirent.clone(), MAX_SYMLINK_TRAVERSALS)?;
-        return Ok(0)
+        return Ok(0);
     }
 
-    let (path, _) = copyInPath(task,  addr, false)?;
+    let (path, _) = copyInPath(task, addr, false)?;
 
     fileOpOn(task, dirfd, &path.to_string(), resolve, setTimestamp)?;
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysUtime(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -1709,7 +1942,7 @@ pub fn SysUtime(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         ts.MTimeSetSystemTime = false;
     }
 
-    return utime(task, ATType::AT_FDCWD, filenameAddr, &ts, true)
+    return utime(task, ATType::AT_FDCWD, filenameAddr, &ts, true);
 }
 
 pub fn SysUtimes(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -1726,12 +1959,14 @@ pub fn SysUtimes(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         ts.MTimeSetSystemTime = false;
     }
 
-    return utime(task, ATType::AT_FDCWD, filenameAddr, &ts, true)
+    return utime(task, ATType::AT_FDCWD, filenameAddr, &ts, true);
 }
 
 // timespecIsValid checks that the timespec is valid for use in utimensat.
 pub fn TimespecIsValid(ts: &Timespec) -> bool {
-    return ts.tv_nsec == Utime::UTIME_OMIT || ts.tv_nsec == Utime::UTIME_NOW || ts.tv_nsec < 1_000_000_000;
+    return ts.tv_nsec == Utime::UTIME_OMIT
+        || ts.tv_nsec == Utime::UTIME_NOW
+        || ts.tv_nsec < 1_000_000_000;
 }
 
 pub fn SysUtimensat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -1746,12 +1981,12 @@ pub fn SysUtimensat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         let times: [Timespec; 2] = task.CopyInObj(timesAddr)?;
 
         if !TimespecIsValid(&times[0]) || !TimespecIsValid(&times[1]) {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         // If both are UTIME_OMIT, this is a noop.
         if times[0].tv_nsec == Utime::UTIME_OMIT && times[1].tv_nsec == Utime::UTIME_OMIT {
-            return Ok(0)
+            return Ok(0);
         }
 
         ts = InterTimeSpec {
@@ -1764,7 +1999,13 @@ pub fn SysUtimensat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
     }
 
-    return utime(task, dirfd, filenameAddr, &ts, flags & ATType::AT_SYMLINK_NOFOLLOW == 0)
+    return utime(
+        task,
+        dirfd,
+        filenameAddr,
+        &ts,
+        flags & ATType::AT_SYMLINK_NOFOLLOW == 0,
+    );
 }
 
 pub fn SysFutimesat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -1778,9 +2019,8 @@ pub fn SysFutimesat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     if timesAddr != 0 {
         let times: [Timeval; 2] = task.CopyInObj(timesAddr)?;
 
-        if times[0].Usec > E6 || times[0].Usec < 0 ||
-            times[1].Usec > E6 || times[1].Usec < 0 {
-            return Err(Error::SysError(SysErr::EINVAL))
+        if times[0].Usec > E6 || times[0].Usec < 0 || times[1].Usec > E6 || times[1].Usec < 0 {
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         ts.ATime = Time::FromTimeval(&times[0]);
@@ -1789,40 +2029,58 @@ pub fn SysFutimesat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         ts.MTimeSetSystemTime = false;
     }
 
-    return utime(task, dirfd, filenameAddr, &ts, true)
+    return utime(task, dirfd, filenameAddr, &ts, true);
 }
 
 fn renameAt(task: &Task, oldDirfd: i32, oldAddr: u64, newDirfd: i32, newAddr: u64) -> Result<i64> {
-    let (newPath, _) = copyInPath(task,  newAddr, false)?;
-    let (oldPath, _) = copyInPath(task,  oldAddr, false)?;
+    let (newPath, _) = copyInPath(task, newAddr, false)?;
+    let (oldPath, _) = copyInPath(task, oldAddr, false)?;
 
     debug!("renameAt old {}, new {}", &oldPath, newPath);
 
-    fileOpAt(task, oldDirfd, &oldPath.to_string(), &mut |_root: &Dirent, oldParent: &Dirent, oldName: &str, _remainingTraversals: u32| -> Result<()> {
-        let inode = oldParent.Inode();
-        if !inode.StableAttr().IsDir() {
-            return Err(Error::SysError(SysErr::ENOTDIR))
-        }
-
-        match oldName {
-            "" | "." | ".." => return Err(Error::SysError(SysErr::EBUSY)),
-            _ => (),
-        }
-
-        return fileOpAt(task, newDirfd, &newPath.to_string(), &mut |root: &Dirent, newParent: &Dirent, newName: &str, _remainingTraversals: u32| -> Result<()> {
-            let inode = newParent.Inode();
+    fileOpAt(
+        task,
+        oldDirfd,
+        &oldPath.to_string(),
+        &mut |_root: &Dirent,
+              oldParent: &Dirent,
+              oldName: &str,
+              _remainingTraversals: u32|
+         -> Result<()> {
+            let inode = oldParent.Inode();
             if !inode.StableAttr().IsDir() {
-                return Err(Error::SysError(SysErr::ENOTDIR))
+                return Err(Error::SysError(SysErr::ENOTDIR));
             }
 
-            match newName {
+            match oldName {
                 "" | "." | ".." => return Err(Error::SysError(SysErr::EBUSY)),
                 _ => (),
             }
 
-            return Dirent::Rename(task, root, oldParent, oldName, newParent, newName)
-        })
-    })?;
+            return fileOpAt(
+                task,
+                newDirfd,
+                &newPath.to_string(),
+                &mut |root: &Dirent,
+                      newParent: &Dirent,
+                      newName: &str,
+                      _remainingTraversals: u32|
+                 -> Result<()> {
+                    let inode = newParent.Inode();
+                    if !inode.StableAttr().IsDir() {
+                        return Err(Error::SysError(SysErr::ENOTDIR));
+                    }
+
+                    match newName {
+                        "" | "." | ".." => return Err(Error::SysError(SysErr::EBUSY)),
+                        _ => (),
+                    }
+
+                    return Dirent::Rename(task, root, oldParent, oldName, newParent, newName);
+                },
+            );
+        },
+    )?;
 
     Ok(0)
 }
@@ -1831,7 +2089,7 @@ pub fn SysRename(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let oldAddr = args.arg0 as u64;
     let newAddr = args.arg1 as u64;
 
-    return renameAt(task, ATType::AT_FDCWD, oldAddr, ATType::AT_FDCWD, newAddr)
+    return renameAt(task, ATType::AT_FDCWD, oldAddr, ATType::AT_FDCWD, newAddr);
 }
 
 pub fn SysRenameat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -1840,7 +2098,7 @@ pub fn SysRenameat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let newDirfd = args.arg2 as i32;
     let newAddr = args.arg3 as u64;
 
-    return renameAt(task, oldDirfd, oldAddr, newDirfd, newAddr)
+    return renameAt(task, oldDirfd, oldAddr, newDirfd, newAddr);
 }
 
 // Fallocate implements linux system call fallocate(2).
@@ -1853,35 +2111,35 @@ pub fn SysFallocate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let file = task.GetFile(fd)?;
 
     if offset < 0 || len <= 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     if mode != 0 {
         //t.Kernel().EmitUnimplementedEvent(t)
-        return Err(Error::SysError(SysErr::ENOTSUP))
+        return Err(Error::SysError(SysErr::ENOTSUP));
     }
 
     if !file.Flags().Write {
-        return Err(Error::SysError(SysErr::EBADF))
+        return Err(Error::SysError(SysErr::EBADF));
     }
 
     let mut inode = file.Dirent.Inode();
     if inode.StableAttr().IsPipe() {
-        return Err(Error::SysError(SysErr::ESPIPE))
+        return Err(Error::SysError(SysErr::ESPIPE));
     }
 
     if inode.StableAttr().IsDir() {
-        return Err(Error::SysError(SysErr::EISDIR))
+        return Err(Error::SysError(SysErr::EISDIR));
     }
 
     if !inode.StableAttr().IsRegular() {
-        return Err(Error::SysError(SysErr::ENODEV))
+        return Err(Error::SysError(SysErr::ENODEV));
     }
 
     let size = offset + len;
 
     if size < 0 {
-        return Err(Error::SysError(SysErr::EFBIG))
+        return Err(Error::SysError(SysErr::EFBIG));
     }
 
     let dirent = file.Dirent.clone();
@@ -1924,12 +2182,12 @@ pub fn SysFlock(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             if nonblocking {
                 // Since we're nonblocking we pass a nil lock.Blocker implementation.
                 if !bsd.LockRegion(task, lockUniqueId, LockType::WriteLock, &rng, false)? {
-                    return Err(Error::SysError(SysErr::EWOULDBLOCK))
+                    return Err(Error::SysError(SysErr::EWOULDBLOCK));
                 }
             } else {
                 // Because we're blocking we will pass the task to satisfy the lock.Blocker interface.
                 if !bsd.LockRegion(task, lockUniqueId, LockType::WriteLock, &rng, true)? {
-                    return Err(Error::SysError(SysErr::EINTR))
+                    return Err(Error::SysError(SysErr::EINTR));
                 }
             }
         }
@@ -1937,25 +2195,23 @@ pub fn SysFlock(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             if nonblocking {
                 // Since we're nonblocking we pass a nil lock.Blocker implementation.
                 if !bsd.LockRegion(task, lockUniqueId, LockType::ReadLock, &rng, false)? {
-                    return Err(Error::SysError(SysErr::EWOULDBLOCK))
+                    return Err(Error::SysError(SysErr::EWOULDBLOCK));
                 }
             } else {
                 // Because we're blocking we will pass the task to satisfy the lock.Blocker interface.
                 if !bsd.LockRegion(task, lockUniqueId, LockType::ReadLock, &rng, true)? {
-                    return Err(Error::SysError(SysErr::EINTR))
+                    return Err(Error::SysError(SysErr::EINTR));
                 }
             }
         }
-        LibcConst::LOCK_UN => {
-            bsd.UnlockRegion(task, lockUniqueId, &rng)
-        }
+        LibcConst::LOCK_UN => bsd.UnlockRegion(task, lockUniqueId, &rng),
         _ => {
             // flock(2): EINVAL operation is invalid.
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
     }
 
-    return Ok(0)
+    return Ok(0);
 }
 
 /*

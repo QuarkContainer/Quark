@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
-use core::sync::atomic::AtomicUsize;
+use alloc::sync::Arc;
 use core::sync::atomic::AtomicU32;
+use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
 
 use super::super::super::super::cpuid::*;
-use super::super::super::SignalDef::*;
 use super::super::super::asm::*;
+use super::super::super::SignalDef::*;
 use super::super::super::FP_STATE;
 //use super::super::super::super::super::kernel_def::*;
 
@@ -69,11 +69,30 @@ pub const EFLAGS_ID: u64 = 1 << 21;
 // EFLAGS_PTRACE_MUTABLE is the mask for the set of EFLAGS that may be
 // changed by ptrace(PTRACE_SETREGS). EFLAGS_PTRACE_MUTABLE is analogous to
 // Linux's FLAG_MASK.
-pub const EFLAGS_PTRACE_MUTABLE: u64 = EFLAGS_CF | EFLAGS_PF | EFLAGS_AF | EFLAGS_ZF | EFLAGS_SF | EFLAGS_TF | EFLAGS_DF | EFLAGS_OF | EFLAGS_RF | EFLAGS_AC | EFLAGS_NT;
+pub const EFLAGS_PTRACE_MUTABLE: u64 = EFLAGS_CF
+    | EFLAGS_PF
+    | EFLAGS_AF
+    | EFLAGS_ZF
+    | EFLAGS_SF
+    | EFLAGS_TF
+    | EFLAGS_DF
+    | EFLAGS_OF
+    | EFLAGS_RF
+    | EFLAGS_AC
+    | EFLAGS_NT;
 
 // EFLAGS_RESTORABLE is the mask for the set of EFLAGS that may be changed by
 // SignalReturn. EFLAGS_RESTORABLE is analogous to Linux's FIX_EFLAGS.
-pub const EFLAGS_RESTORABLE: u64 = EFLAGS_AC | EFLAGS_OF | EFLAGS_DF | EFLAGS_TF | EFLAGS_SF | EFLAGS_ZF | EFLAGS_AF | EFLAGS_PF | EFLAGS_CF | EFLAGS_RF;
+pub const EFLAGS_RESTORABLE: u64 = EFLAGS_AC
+    | EFLAGS_OF
+    | EFLAGS_DF
+    | EFLAGS_TF
+    | EFLAGS_SF
+    | EFLAGS_ZF
+    | EFLAGS_AF
+    | EFLAGS_PF
+    | EFLAGS_CF
+    | EFLAGS_RF;
 
 // TrapInstruction is the x86 trap instruction.
 pub const TRAP_INSTRUCTION: [u8; 1] = [0xcc];
@@ -94,11 +113,11 @@ pub const GS_TLS_SEL: u64 = 0x6b; // Linux GS thread-local storage selector
 
 // MXCSR_DEFAULT is the reset value of MXCSR (Intel SDM Vol. 2, Ch. 3.2
 // "LDMXCSR")
-pub const MXCSR_DEFAULT: u32 =	0x1f80;
+pub const MXCSR_DEFAULT: u32 = 0x1f80;
 
 // MXCSR_OFFSET is the offset in bytes of the MXCSR field from the start of the
 // FXSAVE/XSAVE area. (Intel SDM Vol. 1, Table 10-2 "Format of an FXSAVE Area")
-pub const MXCSR_OFFSET: usize =	24;
+pub const MXCSR_OFFSET: usize = 24;
 
 // x86FPState is x86 floating point state.
 #[repr(align(4096))]
@@ -130,11 +149,11 @@ impl X86fpstate {
             size: AtomicUsize::new(size as usize),
             mxcsr: AtomicU32::new(0),
             cw: AtomicU32::new(0),
-        }
+        };
     }
 
     pub fn Load() -> Self {
-        return FP_STATE.Fork()
+        return FP_STATE.Fork();
     }
 
     pub const fn Init() -> Self {
@@ -143,7 +162,7 @@ impl X86fpstate {
             size: AtomicUsize::new(4096),
             mxcsr: AtomicU32::new(0),
             cw: AtomicU32::new(0),
-        }
+        };
     }
 
     pub fn Reset(&self) {
@@ -169,8 +188,10 @@ impl X86fpstate {
         for i in 0..self.size.load(Ordering::Relaxed) {
             f.data[i] = self.data[i];
         }
-        f.size.store(self.size.load(Ordering::SeqCst), Ordering::SeqCst);
-        f.mxcsr.store(self.mxcsr.load(Ordering::SeqCst), Ordering::SeqCst);
+        f.size
+            .store(self.size.load(Ordering::SeqCst), Ordering::SeqCst);
+        f.mxcsr
+            .store(self.mxcsr.load(Ordering::SeqCst), Ordering::SeqCst);
         f.cw.store(self.cw.load(Ordering::SeqCst), Ordering::SeqCst);
 
         return f;
@@ -182,15 +203,15 @@ impl X86fpstate {
 
     pub fn SaveFp(&self) {
         SaveFloatingPoint(self.FloatingPointData());
-        stmxcsr(&self.mxcsr as * const _ as u64);
-        FSTCW(&self.cw as * const _ as u64);
+        stmxcsr(&self.mxcsr as *const _ as u64);
+        FSTCW(&self.cw as *const _ as u64);
         FNCLEX();
     }
 
     pub fn RestoreFp(&self) {
         LoadFloatingPoint(self.FloatingPointData());
-        ldmxcsr(&self.mxcsr as * const _ as u64);
-        FLDCW(&self.cw as * const _ as u64);
+        ldmxcsr(&self.mxcsr as *const _ as u64);
+        FLDCW(&self.cw as *const _ as u64);
     }
 }
 
@@ -213,12 +234,12 @@ impl State {
         // * CS and SS are set to the standard selectors.
         //
         // That is, SYSRET results in the correct final state.
-        let fastRestore = self.Regs.rcx == self.Regs.rip &&
-            self.Regs.eflags == self.Regs.r11 &&
-            (self.Regs.eflags & EFLAGS_RF) == 0 &&
-            (self.Regs.eflags & EFLAGS_VM) == 0 &&
-            self.Regs.cs == USER_CS &&
-            self.Regs.ss == USER_DS;
+        let fastRestore = self.Regs.rcx == self.Regs.rip
+            && self.Regs.eflags == self.Regs.r11
+            && (self.Regs.eflags & EFLAGS_RF) == 0
+            && (self.Regs.eflags & EFLAGS_VM) == 0
+            && self.Regs.cs == USER_CS
+            && self.Regs.ss == USER_DS;
 
         return !fastRestore;
     }
@@ -227,6 +248,6 @@ impl State {
         return Self {
             Regs: regs,
             x86FPState: Arc::new(QMutex::new(self.x86FPState.lock().Fork())),
-        }
+        };
     }
 }

@@ -12,55 +12,60 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::string::String;
-use libc::*;
-use std::{thread, time};
 use alloc::str;
-use lazy_static::lazy_static;
-use spin::Mutex;
-use nix::sys::signal;
+use alloc::string::String;
 use core::convert::TryFrom;
+use lazy_static::lazy_static;
+use libc::*;
+use nix::sys::signal;
+use spin::Mutex;
 use std::os::unix::io::AsRawFd;
+use std::{thread, time};
 
-use super::super::specutils::specutils;
-use super::super::super::qlib::auth::id::*;
 use super::super::super::qlib::auth::cap_set::*;
-use super::super::super::qlib::*;
+use super::super::super::qlib::auth::id::*;
 use super::super::super::qlib::common::*;
-use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::control_msg::*;
+use super::super::super::qlib::linux_def::*;
+use super::super::super::qlib::loader;
+use super::super::super::qlib::*;
 use super::super::super::ucall::ucall::*;
 use super::super::super::ucall::ucall_client::*;
-use super::super::super::vmspace::syscall::*;
 use super::super::super::vmspace::limits::CreateLimitSet;
-use super::super::runtime::console::*;
+use super::super::super::vmspace::syscall::*;
 use super::super::cgroup::*;
-use super::super::oci::*;
-use super::super::oci;
-use super::super::container::container::*;
 use super::super::cmd::config::*;
-use super::super::runtime::sandbox_process::*;
-use super::super::super::qlib::loader;
+use super::super::container::container::*;
+use super::super::oci;
+use super::super::oci::*;
+use super::super::runtime::console::*;
 use super::super::runtime::fs::FsImageMounter;
+use super::super::runtime::sandbox_process::*;
+use super::super::specutils::specutils;
 
 use super::super::shim::container_io::*;
 
 lazy_static! {
-    static ref SIGNAL_STRUCT : Mutex<Option<SignalStruct>> = Mutex::new(None);
+    static ref SIGNAL_STRUCT: Mutex<Option<SignalStruct>> = Mutex::new(None);
 }
 
-extern fn handle_sigint(signal :i32) {
+extern "C" fn handle_sigint(signal: i32) {
     if SIGNAL_STRUCT.lock().is_none() {
-        return
+        return;
     }
 
     error!("exec signal {}", signal);
 
-    SIGNAL_STRUCT.lock().as_ref().unwrap().SignalProcess(signal).unwrap();
+    SIGNAL_STRUCT
+        .lock()
+        .as_ref()
+        .unwrap()
+        .SignalProcess(signal)
+        .unwrap();
 }
 
 // numSignals is the number of normal (non-realtime) signals on Linux.
-pub const NUM_SIGNALS : usize = 32;
+pub const NUM_SIGNALS: usize = 32;
 
 pub struct SignalStruct {
     pub cid: String,
@@ -76,24 +81,30 @@ impl SignalStruct {
 
         error!("enable forward signal in exec");
         unsafe {
-            libc::ioctl( 0, libc::TIOCSCTTY, 0);
+            libc::ioctl(0, libc::TIOCSCTTY, 0);
         }
 
         *SIGNAL_STRUCT.lock() = Some(data);
 
-        let sig_action = signal::SigAction::new(signal::SigHandler::Handler(handle_sigint),
-                                                signal::SaFlags::empty(),
-                                                signal::SigSet::empty());
+        let sig_action = signal::SigAction::new(
+            signal::SigHandler::Handler(handle_sigint),
+            signal::SaFlags::empty(),
+            signal::SigSet::empty(),
+        );
 
         for i in 1..NUM_SIGNALS {
             if i == 9           //SIGKILL
-                || i == 19 {    //SIGSTOP
-                continue
+                || i == 19
+            {
+                //SIGSTOP
+                continue;
             }
 
             unsafe {
                 signal::sigaction(signal::Signal::try_from(i as i32).unwrap(), &sig_action)
-                    .map_err(|e| Error::Common(format!("sigaction fail with err {:?} for signal {}", e, i)))
+                    .map_err(|e| {
+                        Error::Common(format!("sigaction fail with err {:?} for signal {}", e, i))
+                    })
                     .unwrap();
             }
         }
@@ -120,7 +131,7 @@ pub fn SignalProcess(cid: &str, pid: i32, signo: i32, fgProcess: bool) -> Result
         mode = SignalDeliveryMode::DeliverToForegroundProcessGroup;
     }
 
-    let req = UCallReq::Signal(SignalArgs{
+    let req = UCallReq::Signal(SignalArgs {
         CID: cid.to_string(),
         Signo: signo,
         PID: pid,
@@ -129,9 +140,7 @@ pub fn SignalProcess(cid: &str, pid: i32, signo: i32, fgProcess: bool) -> Result
 
     let resp = client.Call(&req)?;
     match resp {
-        UCallResp::SignalResp => {
-            return Ok(())
-        },
+        UCallResp::SignalResp => return Ok(()),
         resp => {
             panic!("SignalProcess get unknow resp {:?}", resp);
         }
@@ -177,16 +186,18 @@ pub struct Sandbox {
 }
 
 impl Sandbox {
-    pub fn New(id: &str,
-               action: RunAction,
-               spec: &Spec,
-               conf: &GlobalConfig,
-               bundleDir: &str,
-               consoleSocket: &str,
-               _userlog: &str,
-               cg: Option<Cgroup>,
-               detach: bool,
-               pivot: bool) -> Result<Self> {
+    pub fn New(
+        id: &str,
+        action: RunAction,
+        spec: &Spec,
+        conf: &GlobalConfig,
+        bundleDir: &str,
+        consoleSocket: &str,
+        _userlog: &str,
+        cg: Option<Cgroup>,
+        detach: bool,
+        pivot: bool,
+    ) -> Result<Self> {
         let mut s = Self {
             ID: id.to_string(),
             Cgroup: cg,
@@ -206,17 +217,19 @@ impl Sandbox {
         s.child = true;
         s.Pid = pid;
 
-        return Ok(s)
+        return Ok(s);
     }
 
-    pub fn New1(id: &str,
-               action: RunAction,
-               conf: &GlobalConfig,
-               bundleDir: &str,
-               io: &ContainerIO,
-               _userlog: &str,
-               cg: Option<Cgroup>,
-               pivot: bool) -> Result<Self> {
+    pub fn New1(
+        id: &str,
+        action: RunAction,
+        conf: &GlobalConfig,
+        bundleDir: &str,
+        io: &ContainerIO,
+        _userlog: &str,
+        cg: Option<Cgroup>,
+        pivot: bool,
+    ) -> Result<Self> {
         let mut s = Self {
             ID: id.to_string(),
             Cgroup: cg,
@@ -232,7 +245,7 @@ impl Sandbox {
         s.child = true;
         s.Pid = pid;
 
-        return Ok(s)
+        return Ok(s);
     }
 
     pub fn ForwardSignals(&self, pid: i32) {
@@ -248,7 +261,7 @@ impl Sandbox {
 
         unsafe {
             let res = syscall2(nr, buf as usize, size as usize) as i64;
-            return res
+            return res;
         }
     }
 
@@ -277,7 +290,10 @@ impl Sandbox {
     }
 
     pub fn Processes(&self, cid: &str) -> Result<Vec<ProcessInfo>> {
-        info!("Getting processes for container {} in sandbox {}", cid, self.ID);
+        info!(
+            "Getting processes for container {} in sandbox {}",
+            cid, self.ID
+        );
         let client = self.SandboxConnect()?;
 
         let req = UCallReq::Ps(cid.to_string());
@@ -294,7 +310,7 @@ impl Sandbox {
     pub fn StartRootContainer(&self) -> Result<()> {
         let client = self.SandboxConnect()?;
 
-        let req = UCallReq::RootContainerStart(RootContainerStart{
+        let req = UCallReq::RootContainerStart(RootContainerStart {
             cid: self.ID.to_string(),
         });
 
@@ -304,15 +320,18 @@ impl Sandbox {
     }
 
     /// CreateSubContainer creates a container inside the sandbox
-    pub fn CreateSubContainer(&self, _conf: &GlobalConfig, id: &str,io: &ContainerIO) -> Result<()> {
+    pub fn CreateSubContainer(
+        &self,
+        _conf: &GlobalConfig,
+        id: &str,
+        io: &ContainerIO,
+    ) -> Result<()> {
         // todo: see if we can get rid of globalconfig
         let fds = match io {
             ContainerIO::PtyIO(pty) => {
                 vec![pty.slave.as_raw_fd()]
             }
-            ContainerIO::FifoIO(fifo) => {
-                fifo.StdioFds()?.to_vec()
-            }
+            ContainerIO::FifoIO(fifo) => fifo.StdioFds()?.to_vec(),
             _ => {
                 vec![-1]
             }
@@ -333,12 +352,10 @@ impl Sandbox {
         }
 
         match res {
-            UCallResp::CreateSubContainerResp => {
-                return Ok(())
-            },
+            UCallResp::CreateSubContainerResp => return Ok(()),
             resp => {
                 error!("CreateSubContainer get unknown resp {:?}", resp);
-                return Err(Error::Common("Failed creating subcontainer".to_string()))
+                return Err(Error::Common("Failed creating subcontainer".to_string()));
             }
         }
     }
@@ -357,23 +374,24 @@ impl Sandbox {
             Args: spec.process.args.clone(),
             Envs: spec.process.env.clone(),
             Cwd: spec.process.cwd.clone(),
-            limitSet: CreateLimitSet(&spec).expect("load limitSet fail").GetInternalCopy(),
+            limitSet: CreateLimitSet(&spec)
+                .expect("load limitSet fail")
+                .GetInternalCopy(),
             ID: id.to_string(),
             Caps: specutils::Capabilities(false, &spec.process.capabilities),
             Root: format!("{}{}", "/", id),
             ..Default::default()
         };
 
-        let startArgs = StartArgs {
-            process: process
-        };
-        debug!("starting subcontainer with the following args: {:?}", &startArgs);
+        let startArgs = StartArgs { process: process };
+        debug!(
+            "starting subcontainer with the following args: {:?}",
+            &startArgs
+        );
         let req = UCallReq::StartSubContainer(startArgs);
         let res = client.Call(&req)?;
         match res {
-            UCallResp::StartSubContainerResp => {
-                return Ok(())
-            },
+            UCallResp::StartSubContainerResp => return Ok(()),
             resp => {
                 error!("StartSubContainer get unknown resp {:?}", resp);
                 panic!("Failed starting subcontainer");
@@ -381,10 +399,16 @@ impl Sandbox {
         }
     }
 
-    pub fn Exec1(&self, containerId: &str, execId: &str, process: &oci::Process, stdios: &[i32]) -> Result<i32> {
+    pub fn Exec1(
+        &self,
+        containerId: &str,
+        execId: &str,
+        process: &oci::Process,
+        stdios: &[i32],
+    ) -> Result<i32> {
         let caps = TaskCaps::default();
 
-        let mut extraKGIDs : Vec<KGID> = Vec::with_capacity(process.user.additional_gids.len());
+        let mut extraKGIDs: Vec<KGID> = Vec::with_capacity(process.user.additional_gids.len());
         for gid in &process.user.additional_gids {
             extraKGIDs.push(KGID(*gid))
         }
@@ -434,11 +458,14 @@ impl Sandbox {
             }
         }
 
-        return Ok(pid)
+        return Ok(pid);
     }
 
     pub fn Execute(&self, mut args: ExecArgs) -> Result<i32> {
-        info!("Executing new process in container {} in sandbox {}", &args.ContainerID, &self.ID);
+        info!(
+            "Executing new process in container {} in sandbox {}",
+            &args.ContainerID, &self.ID
+        );
 
         args.Fds.push(0);
         args.Fds.push(1);
@@ -451,14 +478,14 @@ impl Sandbox {
             resp => panic!("sandbox::Execute get error {:?}", resp),
         };
 
-        return Ok(pid)
+        return Ok(pid);
     }
 
     pub fn WaitAll(&self) -> Result<UCallClient> {
         let client = self.SandboxConnect()?;
         let req = UCallReq::WaitAll;
         client.StreamCall(&req)?;
-        return Ok(client)
+        return Ok(client);
     }
 
     pub fn GetWaitAllResp(client: &UCallClient) -> Result<WaitAllResp> {
@@ -466,7 +493,7 @@ impl Sandbox {
             UCallResp::WaitAllResp(resp) => resp,
             resp => panic!("sandbox::GetWaitAllResp get error {:?}", resp),
         };
-        return Ok(resp)
+        return Ok(resp);
     }
 
     pub fn Destroy(&mut self) -> Result<()> {
@@ -474,25 +501,27 @@ impl Sandbox {
 
         if self.Pid != 0 {
             info!("Killing sandbox {} with signal {}", &self.ID, SIGKILL);
-            let ret = unsafe {
-                kill(self.Pid, SIGKILL)
-            };
+            let ret = unsafe { kill(self.Pid, SIGKILL) };
 
             if ret < 0 && errno::errno().0 != ESRCH {
-                return Err(Error::Common(format!("killing sandbox {} PID {}: {}",
-                                                 &self.ID, &self.Pid, errno::errno().0)));
+                return Err(Error::Common(format!(
+                    "killing sandbox {} PID {}: {}",
+                    &self.ID,
+                    &self.Pid,
+                    errno::errno().0
+                )));
             }
 
             return self.WaitForStopped();
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn WaitPID(&mut self, cid: &str, pid: i32, clearStatus: bool) -> Result<u32> {
         let client = self.SandboxConnect()?;
 
-        let req = UCallReq::WaitPid(WaitPid{
+        let req = UCallReq::WaitPid(WaitPid {
             cid: cid.to_string(),
             pid: pid,
             clearStatus: clearStatus,
@@ -503,7 +532,7 @@ impl Sandbox {
             UCallResp::WaitPidResp(status) => {
                 info!("WaitPID status is {}", WaitStatus(status).ExitStatus());
                 return Ok(status);
-            },
+            }
             resp => {
                 panic!("WaitPID get unknow resp {:?}", resp);
             }
@@ -528,9 +557,9 @@ impl Sandbox {
                 };
             }
             //the container has exited
-            Err(Error::SysError(SysErr::ECONNREFUSED)) =>{
+            Err(Error::SysError(SysErr::ECONNREFUSED)) => {
                 info!("Wait: connect fail....");
-            },
+            }
             Err(e) => return Err(e),
         }
 
@@ -539,28 +568,33 @@ impl Sandbox {
         // status was, since in most cases that will be the same as the
         // container exit status.
         self.WaitForStopped()?;
-        return Ok(self.status)
+        return Ok(self.status);
     }
 
     pub fn WaitForStopped(&mut self) -> Result<()> {
         info!("self child is {}, pid is {}", self.child, self.Pid);
         let ms = 5 * 1000; //5 sec
-        for _i in 0 .. (ms/10) as usize {
+        for _i in 0..(ms / 10) as usize {
             if self.child {
                 if self.Pid == 0 {
-                    return Ok(())
+                    return Ok(());
                 }
 
                 // The sandbox process is a child of the current process,
                 // so we can wait it and collect its zombie.
                 //info!("start to wait pid {}", self.Pid);
                 let ret = unsafe {
-                    wait4(self.Pid, &mut self.status as * mut _ as * mut i32, WNOHANG, 0 as *mut rusage)
+                    wait4(
+                        self.Pid,
+                        &mut self.status as *mut _ as *mut i32,
+                        WNOHANG,
+                        0 as *mut rusage,
+                    )
                 };
 
                 if ret > 0 {
                     self.Pid = 0;
-                    return Ok(())
+                    return Ok(());
                 }
 
                 if ret < 0 {
@@ -569,7 +603,7 @@ impl Sandbox {
             } else if self.IsRunning() {
                 continue;
             } else {
-                return Ok(())
+                return Ok(());
             }
 
             let ten_millis = time::Duration::from_millis(10);
@@ -583,16 +617,14 @@ impl Sandbox {
         let addr = ControlSocketAddr(&self.ID);
         info!("SandboxConnect connect address is {}", &addr);
         let client = UCallClient::Init(&addr)?;
-        return Ok(client)
+        return Ok(client);
     }
 
     // IsRunning returns true if the sandbox is running.
     pub fn IsRunning(&self) -> bool {
         if self.Pid != 0 {
             // Send a signal 0 to the sandbox process.
-            let ret = unsafe {
-                kill(self.Pid, 0)
-            };
+            let ret = unsafe { kill(self.Pid, 0) };
 
             if ret == 0 {
                 // Succeeded, process is running.
@@ -613,7 +645,7 @@ impl Sandbox {
             mode = SignalDeliveryMode::DeliverToAllProcesses;
         }
 
-        let req = UCallReq::Signal(SignalArgs{
+        let req = UCallReq::Signal(SignalArgs {
             CID: cid.to_string(),
             Signo: signo,
             PID: 0,
@@ -622,9 +654,7 @@ impl Sandbox {
 
         let resp = client.Call(&req)?;
         match resp {
-            UCallResp::SignalResp => {
-                return Ok(())
-            },
+            UCallResp::SignalResp => return Ok(()),
             resp => {
                 panic!("SignalContainer get unknow resp {:?}", resp);
             }
@@ -632,7 +662,7 @@ impl Sandbox {
     }
 
     pub fn SignalProcess(&self, _cid: &str, pid: i32, signo: i32, fgProcess: bool) -> Result<()> {
-        return SignalProcess(&self.ID, pid, signo, fgProcess)
+        return SignalProcess(&self.ID, pid, signo, fgProcess);
     }
 
     pub fn DestroyContainer(&self, cid: &str) -> Result<()> {
@@ -640,9 +670,7 @@ impl Sandbox {
         let req = UCallReq::ContainerDestroy(cid.to_string());
         let resp = client.Call(&req)?;
         match resp {
-            UCallResp::ContainerDestroyResp => {
-                return Ok(())
-            },
+            UCallResp::ContainerDestroyResp => return Ok(()),
             resp => {
                 panic!("DestroyContainer get unknow resp {:?}", resp);
             }
@@ -650,7 +678,6 @@ impl Sandbox {
     }
 
     pub fn IsRootContainer(&self, cid: &str) -> bool {
-        return self.ID.as_str() == cid
+        return self.ID.as_str() == cid;
     }
-
 }

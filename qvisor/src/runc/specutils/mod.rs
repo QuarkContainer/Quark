@@ -13,5 +13,5 @@
 // limitations under the License.
 
 pub mod fs;
-pub mod specutils;
 pub mod namespace;
+pub mod specutils;

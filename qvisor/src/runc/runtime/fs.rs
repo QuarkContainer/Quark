@@ -1,34 +1,33 @@
-use super::super::oci::Spec;
+use super::super::super::namespace::Util;
 use super::super::super::qlib::common::Result;
 use super::super::super::qlib::path::{IsAbs, Join};
-use super::super::super::namespace::Util;
+use super::super::oci::Spec;
 use std::fs::create_dir_all;
 
-const DEFAULT_QUARK_SANDBOX_ROOT_PATH: &str = "/var/lib/quark/"; 
+const DEFAULT_QUARK_SANDBOX_ROOT_PATH: &str = "/var/lib/quark/";
 
 pub struct FsImageMounter {
     pub rootPath: String,
-    pub sandboxId: String
+    pub sandboxId: String,
 }
 
 impl FsImageMounter {
     pub fn NewWithRootPath(sandboxId: &str, rootPath: &str) -> Self {
-        return FsImageMounter{
+        return FsImageMounter {
             rootPath: rootPath.to_string(),
             sandboxId: sandboxId.to_string(),
         };
     }
 
-
     pub fn New(sandboxId: &str) -> Self {
-        return FsImageMounter{
+        return FsImageMounter {
             rootPath: DEFAULT_QUARK_SANDBOX_ROOT_PATH.to_string(),
             sandboxId: sandboxId.to_string(),
         };
     }
 
     fn sandboxRoot(&self) -> String {
-        return Join(&self.rootPath, &self.sandboxId)
+        return Join(&self.rootPath, &self.sandboxId);
     }
 
     // This method mount the fs image specified in spec into the quark sandbox path and made available to qkernel
@@ -44,13 +43,28 @@ impl FsImageMounter {
         let containerFsRootTarget = Join(&self.sandboxRoot(), containerId);
         match create_dir_all(&containerFsRootTarget) {
             Ok(()) => (),
-            Err(_e) => panic!("failed to create dir to mount root for container {}", containerId)
+            Err(_e) => panic!(
+                "failed to create dir to mount root for container {}",
+                containerId
+            ),
         };
 
-        info!("start subcontainer: mounting {} to {}", &containerFsRootSource, &containerFsRootTarget);
-        let ret = Util::Mount(&containerFsRootSource, &containerFsRootTarget, "", rbindFlags, "");
-        if  ret < 0 {
-            panic!("MountContainerFs: mount container rootfs fail, error is {}", ret);
+        info!(
+            "start subcontainer: mounting {} to {}",
+            &containerFsRootSource, &containerFsRootTarget
+        );
+        let ret = Util::Mount(
+            &containerFsRootSource,
+            &containerFsRootTarget,
+            "",
+            rbindFlags,
+            "",
+        );
+        if ret < 0 {
+            panic!(
+                "MountContainerFs: mount container rootfs fail, error is {}",
+                ret
+            );
         }
         return Ok(());
     }

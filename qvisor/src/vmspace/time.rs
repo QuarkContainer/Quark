@@ -14,8 +14,8 @@
 
 use libc::*;
 
-use super::super::qlib::linux::time;
 use super::super::qlib::common::*;
+use super::super::qlib::linux::time;
 
 pub struct HostTime {}
 
@@ -28,10 +28,10 @@ impl HostTime {
         };
 
         if res == -1 {
-            return Err(Error::SysError(errno::errno().0))
+            return Err(Error::SysError(errno::errno().0));
         }
 
-        return Ok(ts.ToNs()?)
+        return Ok(ts.ToNs()?);
     }
 
     pub fn Monotime() -> Result<i64> {
@@ -42,9 +42,9 @@ impl HostTime {
         };
 
         if res == -1 {
-            return Err(Error::SysError(errno::errno().0))
+            return Err(Error::SysError(errno::errno().0));
         }
 
-        return Ok(ts.ToNs()?)
+        return Ok(ts.ToNs()?);
     }
 }

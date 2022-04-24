@@ -12,39 +12,46 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
-use alloc::string::ToString;
 use crate::qlib::mutex::*;
+use alloc::string::ToString;
+use alloc::sync::Arc;
 
 use super::super::attr::*;
+use super::super::dirent::*;
 use super::super::file::*;
+use super::super::flags::*;
 use super::super::inode::*;
 use super::super::mount::*;
-use super::super::flags::*;
-use super::super::dirent::*;
 //use super::super::super::super::linux::time::*;
-use super::super::super::task::*;
 use super::super::super::super::auth::*;
-use super::super::super::super::linux_def::*;
 use super::super::super::super::common::*;
+use super::super::super::super::linux_def::*;
+use super::super::super::task::*;
 use super::super::super::Kernel::HostSpace;
-use super::super::fsutil::inode::simple_file_inode::*;
 use super::super::fsutil::file::readonly_file::*;
+use super::super::fsutil::inode::simple_file_inode::*;
 use super::inode::*;
 
 pub struct MeminfoFileNode {}
 
 impl ReadonlyFileNode for MeminfoFileNode {
-    fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], offset: i64, _blocking: bool) -> Result<i64> {
+    fn ReadAt(
+        &self,
+        task: &Task,
+        _f: &File,
+        dsts: &mut [IoVec],
+        offset: i64,
+        _blocking: bool,
+    ) -> Result<i64> {
         if offset < 0 {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
-        let mut info : LibcSysinfo = LibcSysinfo::default();
+        let mut info: LibcSysinfo = LibcSysinfo::default();
 
-        let ret = HostSpace::Sysinfo(&mut info as * mut _ as u64);
+        let ret = HostSpace::Sysinfo(&mut info as *mut _ as u64);
         if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
+            return Err(Error::SysError(-ret as i32));
         }
 
         let mut s = "".to_string();
@@ -54,23 +61,23 @@ impl ReadonlyFileNode for MeminfoFileNode {
         s += &format!("MemFree:        {:>8} kB\n", info.freeram / 1024);
         s += &format!("MemAvailable:   {:>8} kB\n", info.totalram / 5 * 3 / 1024);
         s += &format!("Buffers:        {:>8} kB\n", info.bufferram / 1024); // memory usage by block devices
-        s += &format!("Cached:         {:>8} kB\n", info.totalram /100 / 1024);
+        s += &format!("Cached:         {:>8} kB\n", info.totalram / 100 / 1024);
         // Emulate a system with no swap, which disables inactivation of anon pages.
         s += &format!("SwapCache:             0 kB\n");
-        s += &format!("Active:         {:>8} kB\n", info.totalram /100 / 1024);
-        s += &format!("Inactive:       {:>8} kB\n", info.totalram /100 / 1024);
-        s += &format!("Active(anon):   {:>8} kB\n", info.totalram /100 / 1024);
+        s += &format!("Active:         {:>8} kB\n", info.totalram / 100 / 1024);
+        s += &format!("Inactive:       {:>8} kB\n", info.totalram / 100 / 1024);
+        s += &format!("Active(anon):   {:>8} kB\n", info.totalram / 100 / 1024);
         s += &format!("Inactive(anon):        0 kB\n");
-        s += &format!("Active(file):   {:>8} kB\n", info.totalram /100 / 1024);
-        s += &format!("Inactive(file): {:>8} kB\n", info.totalram /100 / 1024);
+        s += &format!("Active(file):   {:>8} kB\n", info.totalram / 100 / 1024);
+        s += &format!("Inactive(file): {:>8} kB\n", info.totalram / 100 / 1024);
         s += &format!("Unevictable:           0 kB\n");
         s += &format!("Mlocked:               0 kB\n");
         s += &format!("SwapTotal:             0 kB\n");
         s += &format!("SwapFree:              0 kB\n");
         s += &format!("Dirty:                 0 kB\n");
         s += &format!("Writeback:             0 kB\n");
-        s += &format!("AnonPages:      {:>8} kB\n", info.totalram /100 / 1024);
-        s += &format!("Mapped:         {:>8} kB\n", info.totalram /100 / 1024);
+        s += &format!("AnonPages:      {:>8} kB\n", info.totalram / 100 / 1024);
+        s += &format!("Mapped:         {:>8} kB\n", info.totalram / 100 / 1024);
         s += &format!("Shmem:                 0 kB\n");
 
         // it always change 0 to 2, that's weird
@@ -101,44 +108,50 @@ impl ReadonlyFileNode for MeminfoFileNode {
 
         let bytes = s.as_bytes();
         if offset as usize > bytes.len() {
-            return Ok(0)
+            return Ok(0);
         }
 
         let n = task.CopyDataOutToIovs(&bytes[offset as usize..], dsts)?;
 
-        return Ok(n as i64)
+        return Ok(n as i64);
     }
 }
 
 pub struct MeminfoInode {}
 
 impl SimpleFileTrait for MeminfoInode {
-    fn GetFile(&self, _task: &Task, _dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File> {
+    fn GetFile(
+        &self,
+        _task: &Task,
+        _dir: &Inode,
+        dirent: &Dirent,
+        flags: FileFlags,
+    ) -> Result<File> {
         let fops = ReadonlyFileOperations {
-            node: MeminfoFileNode{},
+            node: MeminfoFileNode {},
         };
 
         let file = File::New(dirent, &flags, fops);
-        return Ok(file)
+        return Ok(file);
     }
 }
 
 pub fn NewMeminfo(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
-    let node = SimpleFileInode::New (
+    let node = SimpleFileInode::New(
         task,
         &ROOT_OWNER,
-        &FilePermissions{
-            User : PermMask {
+        &FilePermissions {
+            User: PermMask {
                 read: true,
                 write: false,
                 execute: false,
             },
-            Group : PermMask {
+            Group: PermMask {
                 read: true,
                 write: false,
                 execute: false,
             },
-            Other : PermMask {
+            Other: PermMask {
                 read: true,
                 write: false,
                 execute: false,
@@ -147,8 +160,8 @@ pub fn NewMeminfo(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         },
         FSMagic::ANON_INODE_FS_MAGIC,
         false,
-        MeminfoInode{}
+        MeminfoInode {},
     );
 
-    return NewProcInode(&Arc::new(node), msrc, InodeType::SpecialFile, None)
+    return NewProcInode(&Arc::new(node), msrc, InodeType::SpecialFile, None);
 }

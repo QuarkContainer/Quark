@@ -14,10 +14,10 @@
 
 use core::mem;
 
-use super::super::TSC;
-use super::super::asm::*;
 use super::super::super::common::*;
+use super::super::asm::*;
 use super::super::Kernel::HostSpace;
+use super::super::TSC;
 use super::timer::*;
 
 #[repr(C)]
@@ -56,21 +56,17 @@ impl VdsoParams {
             if self.ReadSeqReady(seq) {
                 break;
             };
-        };
+        }
 
         if ready == 0 {
             return HostSpace::KernelGetTime(REALTIME);
         }
 
-        let delta = if now < baseCycle {
-            0
-        } else {
-            now - baseCycle
-        };
+        let delta = if now < baseCycle { 0 } else { now - baseCycle };
 
         let nowNs = baseRef + CyclesToNs(frequency, delta);
 
-        return Ok(nowNs)
+        return Ok(nowNs);
     }
 
     pub fn ClockMonotonicTime(&self) -> Result<i64> {
@@ -92,21 +88,17 @@ impl VdsoParams {
             if self.ReadSeqReady(seq) {
                 break;
             };
-        };
+        }
 
         if ready == 0 {
             return HostSpace::KernelGetTime(MONOTONIC);
         }
 
-        let delta = if now < baseCycle {
-            0
-        } else {
-            now - baseCycle
-        };
+        let delta = if now < baseCycle { 0 } else { now - baseCycle };
 
         let nowNs = baseRef + CyclesToNs(frequency, delta);
 
-        return Ok(nowNs)
+        return Ok(nowNs);
     }
 
     fn ReadSeqBegin(&self) -> u64 {
@@ -137,25 +129,25 @@ impl Default for VDSOParamPage {
     fn default() -> VDSOParamPage {
         return unsafe {
             VDSOParamPage {
-                vdsoParams: &mut *(0 as * mut VdsoParams),
+                vdsoParams: &mut *(0 as *mut VdsoParams),
                 //vdsoParams: VdsoParams::default(),
                 seq: 0,
                 paramPageAddr: 0,
             }
-        }
+        };
     }
 }
 
 impl VDSOParamPage {
     pub fn SetParamPageAddr(&mut self, paramPageAddr: u64) {
         unsafe {
-            self.vdsoParams = &mut *(paramPageAddr as * mut VdsoParams);
+            self.vdsoParams = &mut *(paramPageAddr as *mut VdsoParams);
         }
         self.paramPageAddr = paramPageAddr;
     }
 
     pub fn GetParamPageAddr(&self) -> u64 {
-        return self.paramPageAddr
+        return self.paramPageAddr;
     }
 
     fn IncrementSeq(&mut self) -> Result<()> {
@@ -170,7 +162,7 @@ impl VDSOParamPage {
         }
 
         self.seq = next;
-        return Ok(())
+        return Ok(());
     }
 
     pub fn Write(&mut self, para: &VdsoParams) -> Result<()> {

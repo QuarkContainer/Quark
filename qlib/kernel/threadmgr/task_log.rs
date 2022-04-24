@@ -17,4 +17,3 @@
 // maxStackDebugBytes is the maximum number of user stack bytes that may be
 // printed by debugDumpStack.
 pub const GROUP_STOP_COMPLETE: i32 = 1024;
-

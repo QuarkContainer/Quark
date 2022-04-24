@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use lazy_static::lazy_static;
 use alloc::collections::btree_map::BTreeMap;
+use lazy_static::lazy_static;
 
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::linux_def::*;
@@ -83,18 +83,18 @@ lazy_static! {
 
 // OptionsToFlags converts mount options to syscall flags.
 pub fn OptionsToFlags(opts: &[&str]) -> u32 {
-    return optionsToFlags(opts, &OPTIONS_MAP)
+    return optionsToFlags(opts, &OPTIONS_MAP);
 }
 
 // PropOptionsToFlags converts propagation mount options to syscall flags.
 // Propagation options cannot be set other with other options and must be
 // handled separatedly.
 pub fn PropOptionsToFlags(opts: &[&str]) -> u32 {
-    return optionsToFlags(opts, &PROP_OPTIONS_MAP)
+    return optionsToFlags(opts, &PROP_OPTIONS_MAP);
 }
 
 fn optionsToFlags(options: &[&str], source: &BTreeMap<&str, Mapping>) -> u32 {
-    let mut rv : u32 = 0;
+    let mut rv: u32 = 0;
 
     for opt in options {
         match source.get(opt) {
@@ -115,14 +115,20 @@ fn optionsToFlags(options: &[&str], source: &BTreeMap<&str, Mapping>) -> u32 {
 // ValidateMount validates that spec mounts are correct.
 pub fn ValidateMount(mnt: &Mount) -> Result<()> {
     if !IsAbs(&mnt.destination) {
-        return Err(Error::Common(format!("Mount.Destination must be an absolute path: {:?}", mnt)));
+        return Err(Error::Common(format!(
+            "Mount.Destination must be an absolute path: {:?}",
+            mnt
+        )));
     }
 
     if mnt.typ.as_str() == "bind" {
         for o in &mnt.options {
-            let o : &str = o;
+            let o: &str = o;
             if ContainsStr(&*INVALID_OPTIONS, o) {
-                return Err(Error::Common(format!("mount option {:?} is not supported: {:?}", o, mnt)));
+                return Err(Error::Common(format!(
+                    "mount option {:?} is not supported: {:?}",
+                    o, mnt
+                )));
             }
 
             let ok1 = OPTIONS_MAP.contains_key(o);
@@ -134,7 +140,7 @@ pub fn ValidateMount(mnt: &Mount) -> Result<()> {
         }
     }
 
-    return Ok(())
+    return Ok(());
 }
 
 // ValidateRootfsPropagation validates that rootfs propagation options are
@@ -143,8 +149,11 @@ pub fn ValidateRootfsPropagation(opt: &str) -> Result<()> {
     let flags = PropOptionsToFlags(&[opt]);
 
     if flags & (LibcConst::MS_SLAVE as u32 | LibcConst::MS_PRIVATE as u32) == 0 {
-        return Err(Error::Common(format!("root mount propagation option must specify private or slave: {:?}", opt)));
+        return Err(Error::Common(format!(
+            "root mount propagation option must specify private or slave: {:?}",
+            opt
+        )));
     }
 
-    return Ok(())
+    return Ok(());
 }

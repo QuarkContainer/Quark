@@ -24,14 +24,13 @@ pub const fn VirtualAddressBits() -> u32 {
 }
 
 // UserspaceSize is the total size of userspace.
-pub const USERSPACE_SIZE : u64 = 1 << (VirtualAddressBits() as usize - 1);
+pub const USERSPACE_SIZE: u64 = 1 << (VirtualAddressBits() as usize - 1);
 
 // UserspaceSize is the total size of userspace.
-pub const KERNEL_START_ADDRESS : u64 = !0 - (USERSPACE_SIZE - 1);
-
+pub const KERNEL_START_ADDRESS: u64 = !0 - (USERSPACE_SIZE - 1);
 
 // MaximumUserAddress is the largest possible user address.
-pub const  MAXIMUM_USER_ADDRESS: u64 = (USERSPACE_SIZE - 1) & !(MemoryDef::PAGE_SIZE - 1);
+pub const MAXIMUM_USER_ADDRESS: u64 = (USERSPACE_SIZE - 1) & !(MemoryDef::PAGE_SIZE - 1);
 
-pub const MIN_USER_ADDR : u64 = MemoryDef::PAGE_SIZE;
-pub const MAX_USER_ADDR : u64 = MAXIMUM_USER_ADDRESS;
+pub const MIN_USER_ADDR: u64 = MemoryDef::PAGE_SIZE;
+pub const MAX_USER_ADDR: u64 = MAXIMUM_USER_ADDRESS;

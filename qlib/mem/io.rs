@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::seq::*;
 use super::super::common::*;
 use super::super::linux_def::*;
+use super::seq::*;
 
 pub trait IOReader {
     fn Read(&mut self, buf: &mut [u8]) -> Result<i64>;
@@ -116,7 +116,7 @@ impl<'a> IOReader for ToIOReader<'a> {
         let b = IoVec::NewFromSlice(dst);
         let seq = BlockSeq::NewFromBlock(b);
         let n = self.reader.ReadToBlocks(seq)?;
-        return Ok(n)
+        return Ok(n);
     }
 }
 
@@ -129,12 +129,12 @@ impl<'a> IOWriter for ToIOWriter<'a> {
         let b = IoVec::NewFromSlice(src);
         let seq = BlockSeq::NewFromBlock(b);
         let n = WriteFullFromBlocks(self.writer, seq)?;
-        return Ok(n)
+        return Ok(n);
     }
 }
 
 pub struct FromIOReader<'a> {
-    pub reader: &'a mut IOReader
+    pub reader: &'a mut IOReader,
 }
 
 impl<'a> BlockReader for FromIOReader<'a> {
@@ -155,7 +155,7 @@ impl<'a> BlockReader for FromIOReader<'a> {
             let cnt = self.reader.Read(slice)?;
 
             if cnt == 0 {
-                return Ok(done)
+                return Ok(done);
             }
 
             done += cnt;
@@ -166,7 +166,7 @@ impl<'a> BlockReader for FromIOReader<'a> {
 }
 
 pub struct FromIOWriter<'a> {
-    pub writer: &'a mut IOWriter
+    pub writer: &'a mut IOWriter,
 }
 
 impl<'a> BlockWriter for FromIOWriter<'a> {
@@ -185,7 +185,7 @@ impl<'a> BlockWriter for FromIOWriter<'a> {
 
             let cnt = self.writer.Write(slice)?;
             if cnt == 0 {
-                return Ok(done)
+                return Ok(done);
             }
 
             done += cnt;
@@ -219,7 +219,7 @@ impl<'a> BlockReader for FromIOReaderAt<'a> {
             self.offset += cnt;
 
             if cnt == 0 {
-                return Ok(done)
+                return Ok(done);
             }
 
             done += cnt;
@@ -252,7 +252,7 @@ impl<'a> BlockWriter for FromIOWriterAt<'a> {
             self.offset += cnt;
 
             if cnt == 0 {
-                return Ok(done)
+                return Ok(done);
             }
 
             done += cnt;

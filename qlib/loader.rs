@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::vec::Vec;
 use alloc::string::String;
+use alloc::vec::Vec;
 
-use super::limits::*;
 use super::auth::cap_set::*;
+use super::limits::*;
 
 #[derive(Serialize, Deserialize, Default, Debug, Eq, PartialEq, Clone)]
 pub struct Process {
@@ -47,4 +47,3 @@ pub struct Process {
     pub Stdiofds: [i32; 3],
     pub ExecId: Option<String>,
 }
-

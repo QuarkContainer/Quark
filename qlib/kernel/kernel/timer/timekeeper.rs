@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::mutex::*;
 use alloc::sync::Arc;
 use core::ops::Deref;
-use crate::qlib::mutex::*;
 
-use super::super::super::kernel::time::*;
 use super::super::super::super::common::*;
 use super::super::super::super::linux::time::*;
+use super::super::super::kernel::time::*;
 //use super::super::super::super::perf_tunning::*;
 use super::super::vdso::*;
 use super::calibratedClock::*;
@@ -44,7 +44,11 @@ impl TimeKeeper {
             internal.Init(vdsoParamPageAddr);
         }
 
-        let timer = Timer::Period(&MONOTONIC_CLOCK, TimerListener::TimerUpdater(TimerUpdater {}), 1 * SECOND);
+        let timer = Timer::Period(
+            &MONOTONIC_CLOCK,
+            TimerListener::TimerUpdater(TimerUpdater {}),
+            1 * SECOND,
+        );
 
         {
             let mut internal = self.write();
@@ -53,7 +57,7 @@ impl TimeKeeper {
     }
 
     pub fn Addr(&self) -> u64 {
-        return self as * const _ as u64;
+        return self as *const _ as u64;
     }
 
     pub fn NewClock(&self, clockId: ClockID) -> Clock {
@@ -70,7 +74,7 @@ impl TimeKeeper {
     }
 
     pub fn GetTime(&self, c: ClockID) -> Result<i64> {
-        return self.read().GetTime(c)
+        return self.read().GetTime(c);
     }
 
     pub fn BootTime(&self) -> Time {
@@ -125,8 +129,14 @@ impl TimeKeeperInternal {
         //
         let wantMonotonic = 0;
 
-        let nowMonotonic = self.clocks.GetTime(MONOTONIC).expect("Unable to get current monotonic time");
-        let nowRealtime = self.clocks.GetTime(REALTIME).expect("Unable to get current realtime");
+        let nowMonotonic = self
+            .clocks
+            .GetTime(MONOTONIC)
+            .expect("Unable to get current monotonic time");
+        let nowRealtime = self
+            .clocks
+            .GetTime(REALTIME)
+            .expect("Unable to get current realtime");
 
         self.monotonicOffset = wantMonotonic - nowMonotonic;
         self.bootTime = Time::FromNs(nowRealtime);
@@ -179,7 +189,7 @@ impl TimeKeeperInternal {
                     now += self.monotonicOffset;
                 }
 
-                return Ok(now)
+                return Ok(now);
             }
         }
     }
@@ -204,6 +214,6 @@ impl TimeKeeperClock {
     }
 
     pub fn WallTimeUntil(&self, t: Time, now: Time) -> Duration {
-        return t.Sub(now)
+        return t.Sub(now);
     }
 }

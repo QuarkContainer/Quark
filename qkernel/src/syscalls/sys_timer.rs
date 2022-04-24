@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::super::task::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux::time::*;
 use super::super::syscalls::syscalls::*;
+use super::super::task::*;
 use super::super::SignalDef::*;
 use super::sys_time::*;
 
@@ -27,11 +27,11 @@ use super::sys_time::*;
 // However, that hasn't happened as of 3.19, so we continue to support it.
 pub fn CopyItimerValIn(task: &Task, addr: u64) -> Result<ItimerVal> {
     if addr == 0 {
-        return Ok(ItimerVal::default())
+        return Ok(ItimerVal::default());
     }
 
-    let itv : ItimerVal = task.CopyInObj(addr)?;
-    return Ok(itv)
+    let itv: ItimerVal = task.CopyInObj(addr)?;
+    return Ok(itv);
 }
 
 // copyItimerValOut copies an ItimerVal to the untrusted app range.
@@ -39,12 +39,12 @@ pub fn CopyItimerValIn(task: &Task, addr: u64) -> Result<ItimerVal> {
 // A NULL address is allowed, in which case no copy takes place
 pub fn CopyItimerValOut(task: &mut Task, addr: u64, itv: &ItimerVal) -> Result<()> {
     if addr == 0 {
-        return Ok(())
+        return Ok(());
     }
 
     //*task.GetTypeMut(addr)? = *itv;
     task.CopyOutObj(itv, addr)?;
-    return Ok(())
+    return Ok(());
 }
 
 // Getitimer implements linux syscall getitimer(2).
@@ -56,7 +56,7 @@ pub fn SysGetitimer(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let olditv = thread.Getitimer(timerID)?;
 
     CopyItimerValOut(task, val, &olditv)?;
-    return Ok(0)
+    return Ok(0);
 }
 
 // Setitimer implements linux syscall setitimer(2).
@@ -71,17 +71,20 @@ pub fn SysSetitimer(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let olditv = thread.Setitimer(timerID, &newitv)?;
 
     CopyItimerValOut(task, oldVal, &olditv)?;
-    return Ok(0)
+    return Ok(0);
 }
 
 // Alarm implements linux syscall alarm(2).
 pub fn SysAlarm(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let duration = args.arg0 as u32 as i64 * SECOND;
 
-    let olditv = task.Thread().Setitimer(ITIMER_REAL, &ItimerVal{
-        Interval: Timeval::default(),
-        Value: Timeval::FromNs(duration),
-    })?;
+    let olditv = task.Thread().Setitimer(
+        ITIMER_REAL,
+        &ItimerVal {
+            Interval: Timeval::default(),
+            Value: Timeval::FromNs(duration),
+        },
+    )?;
 
     let olddur = olditv.Value.ToDuration();
     let mut secs = olddur / SECOND;
@@ -90,7 +93,7 @@ pub fn SysAlarm(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         secs = 1;
     }
 
-    return Ok(secs)
+    return Ok(secs);
 }
 
 // TimerCreate implements linux syscall timer_create(2).
@@ -112,7 +115,7 @@ pub fn SysTimerCreate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     //*timerID = id;
 
     task.CopyOutObj(&id, timerIDp)?;
-    return Ok(0)
+    return Ok(0);
 }
 
 // TimerSettime implements linux syscall timer_settime(2).
@@ -122,15 +125,17 @@ pub fn SysTimerSettime(task: &mut Task, args: &SyscallArguments) -> Result<i64> 
     let newValAddr = args.arg2 as u64;
     let oldValAddr = args.arg3 as u64;
 
-    let newVal : Itimerspec = task.CopyInObj(newValAddr)?;
+    let newVal: Itimerspec = task.CopyInObj(newValAddr)?;
 
-    let oldVal = task.Thread().IntervalTimerSettime(timerID, &newVal, flags & TIMER_ABSTIME != 0)?;
+    let oldVal =
+        task.Thread()
+            .IntervalTimerSettime(timerID, &newVal, flags & TIMER_ABSTIME != 0)?;
     if oldValAddr != 0 {
         //*task.GetTypeMut(oldValAddr)? = oldVal;
         task.CopyOutObj(&oldVal, oldValAddr)?;
     }
 
-    return Ok(0)
+    return Ok(0);
 }
 
 // TimerGettime implements linux syscall timer_gettime(2).
@@ -141,7 +146,7 @@ pub fn SysTimerGettime(task: &mut Task, args: &SyscallArguments) -> Result<i64> 
     let curVal = task.Thread().IntervalTimerGettime(timerID)?;
     //*task.GetTypeMut(curValAddr)? = curVal;
     task.CopyOutObj(&curVal, curValAddr)?;
-    return Ok(0)
+    return Ok(0);
 }
 
 // TimerGetoverrun implements linux syscall timer_getoverrun(2).
@@ -150,7 +155,7 @@ pub fn SysTimerGetoverrun(task: &mut Task, args: &SyscallArguments) -> Result<i6
 
     let o = task.Thread().IntervalTimerGetoverrun(timerID)?;
 
-    return Ok(o as i64)
+    return Ok(o as i64);
 }
 
 // TimerDelete implements linux syscall timer_delete(2).
@@ -158,5 +163,5 @@ pub fn SysTimerDelete(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let timerID = args.arg0 as i32;
 
     task.Thread().IntervalTimerDelete(timerID)?;
-    return Ok(0)
+    return Ok(0);
 }

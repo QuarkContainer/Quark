@@ -46,10 +46,10 @@ extern crate alloc;
 extern crate scopeguard;
 
 //extern crate rusty_asm;
+extern crate bit_field;
 extern crate lazy_static;
 extern crate spin;
 extern crate x86_64;
-extern crate bit_field;
 extern crate xmas_elf;
 #[macro_use]
 extern crate bitflags;
@@ -65,41 +65,39 @@ mod print;
 mod qlib;
 #[macro_use]
 mod interrupt;
-mod syscalls;
 pub mod backtracer;
 pub mod kernel_def;
+mod syscalls;
 
-use self::qlib::kernel::TSC;
-use self::qlib::kernel::asm as asm;
-use self::qlib::kernel::arch as arch;
-use self::qlib::kernel::boot as boot;
-use self::qlib::kernel::fs as fs;
-use self::qlib::kernel::Kernel as Kernel;
-use self::qlib::kernel::kernel as kernel;
-use self::qlib::kernel::memmgr as memmgr;
-use self::qlib::kernel::quring as quring;
-use self::qlib::kernel::socket as socket;
-use self::qlib::kernel::threadmgr as threadmgr;
-use self::qlib::kernel::util as util;
-use self::qlib::kernel::fd as fd;
-use self::qlib::kernel::guestfdnotifier as guestfdnotifier;
-use self::qlib::kernel::perflog as perflog;
-use self::qlib::kernel::SignalDef as SignalDef;
-use self::qlib::kernel::task as task;
-use self::qlib::kernel::taskMgr as taskMgr;
-use self::qlib::kernel::uid as uid;
-use self::qlib::kernel::vcpu as vcpu;
-use self::qlib::kernel::version as version;
-use self::qlib::kernel::loader as loader;
 use self::interrupt::virtualization_handler;
+use self::qlib::kernel::arch;
+use self::qlib::kernel::asm;
+use self::qlib::kernel::boot;
+use self::qlib::kernel::fd;
+use self::qlib::kernel::fs;
+use self::qlib::kernel::guestfdnotifier;
+use self::qlib::kernel::kernel;
+use self::qlib::kernel::loader;
+use self::qlib::kernel::memmgr;
+use self::qlib::kernel::perflog;
+use self::qlib::kernel::quring;
+use self::qlib::kernel::socket;
+use self::qlib::kernel::task;
+use self::qlib::kernel::taskMgr;
+use self::qlib::kernel::threadmgr;
+use self::qlib::kernel::uid;
+use self::qlib::kernel::util;
+use self::qlib::kernel::vcpu;
+use self::qlib::kernel::version;
+use self::qlib::kernel::Kernel;
+use self::qlib::kernel::SignalDef;
+use self::qlib::kernel::TSC;
 
-use vcpu::CPU_LOCAL;
 use self::qlib::kernel::vcpu::*;
+use vcpu::CPU_LOCAL;
 
 use core::panic::PanicInfo;
-use core::sync::atomic::AtomicI32;
-use core::sync::atomic::AtomicU64;
-use core::sync::atomic::AtomicUsize;
+use core::sync::atomic::{AtomicI32, AtomicU64, AtomicUsize, Ordering};
 use core::{mem, ptr};
 use qlib::mutex::*;
 
@@ -114,15 +112,16 @@ use self::boot::loader::*;
 use self::kernel::timer::*;
 use self::loader::vdso::*;
 use self::qlib::common::*;
-use self::qlib::mem::list_allocator::*;
 use self::qlib::config::*;
 use self::qlib::control_msg::*;
+use self::qlib::cpuid::*;
+use self::qlib::linux::time::*;
 use self::qlib::linux_def::MemoryDef;
 use self::qlib::loader::*;
+use self::qlib::mem::list_allocator::*;
 use self::qlib::pagetable::*;
 use self::qlib::perf_tunning::*;
 use self::qlib::vcpu_mgr::*;
-use self::qlib::linux::time::*;
 use self::syscalls::syscalls::*;
 use self::task::*;
 use self::threadmgr::task_sched::*;
@@ -177,6 +176,16 @@ pub fn SingletonInit() {
             MemoryDef::DEFAULT_STACK_SIZE as usize,
         ));
         EXIT_CODE.Init(AtomicI32::new(0));
+
+        let featureSet = HostFeatureSet();
+        SUPPORT_XSAVE.store(
+            featureSet.HasFeature(Feature(X86Feature::X86FeatureXSAVE as i32)),
+            Ordering::Release,
+        );
+        SUPPORT_XSAVEOPT.store(
+            featureSet.HasFeature(Feature(X86Feature::X86FeatureXSAVEOPT as i32)),
+            Ordering::Release,
+        );
 
         guestfdnotifier::GUEST_NOTIFIER.SetValue(SHARESPACE.GuestNotifierAddr());
         UID.Init(AtomicU64::new(1));
@@ -431,7 +440,7 @@ pub fn InitTsc() {
     let tsc2 = TSC.Rdtsc();
     let hosttsc3 = Kernel::HostSpace::Rdtsc();
     let tsc3 = TSC.Rdtsc();
-    Kernel::HostSpace::SetTscOffset((hosttsc2 + hosttsc3)/2 - (tsc1 + tsc2 + tsc3) / 3);
+    Kernel::HostSpace::SetTscOffset((hosttsc2 + hosttsc3) / 2 - (tsc1 + tsc2 + tsc3) / 3);
     VcpuFreqInit();
 }
 

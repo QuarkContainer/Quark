@@ -12,32 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::sync::mpsc::Sender;
-use std::{thread};
 use lazy_static::lazy_static;
+use std::collections::HashMap;
+use std::sync::mpsc::Sender;
 use std::sync::Once;
+use std::sync::{Arc, Mutex};
+use std::thread;
 //use std::path::Path;
 //use std::path::PathBuf;
 //use nix::unistd::{mkdir, Pid};
 //use nix::sys::stat::Mode;
 
 //use containerd_shim::protos::protobuf::{CodedInputStream};
-use containerd_shim::TtrpcResult;
-use containerd_shim::Error as TtrpcError;
 use containerd_shim::api;
 use containerd_shim::api::*;
-use containerd_shim::TtrpcContext;
+use containerd_shim::event::Event;
+use containerd_shim::protos::cgroups::metrics::Metrics;
+use containerd_shim::protos::events::task::{
+    TaskCreate, TaskDelete, TaskExecAdded, TaskExecStarted, TaskExit, TaskIO, TaskStart,
+};
+use containerd_shim::protos::protobuf::well_known_types::{Any, Timestamp};
+use containerd_shim::protos::protobuf::{Message, SingularPtrField};
+use containerd_shim::protos::ttrpc::Error as TError;
+use containerd_shim::util::*;
+use containerd_shim::Error as TtrpcError;
 use containerd_shim::ExitSignal;
 use containerd_shim::Task;
-use containerd_shim::util::*;
-use containerd_shim::protos::protobuf::{Message, SingularPtrField};
-use containerd_shim::protos::protobuf::well_known_types::{Any, Timestamp};
-use containerd_shim::protos::cgroups::metrics::Metrics;
-use containerd_shim::protos::events::task::{TaskExit, TaskStart, TaskCreate, TaskIO, TaskExecStarted, TaskDelete, TaskExecAdded};
-use containerd_shim::protos::ttrpc::Error as TError;
-use containerd_shim::event::Event;
+use containerd_shim::TtrpcContext;
+use containerd_shim::TtrpcResult;
 
 use super::container::*;
 
@@ -73,10 +75,12 @@ impl ShimTask {
     pub fn Destroy(&self) -> TtrpcResult<()> {
         let mut containers = self.containers.lock().unwrap();
         for (_, cont) in containers.iter_mut() {
-            cont.container.Destroy().map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
+            cont.container
+                .Destroy()
+                .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn WaitAll(&self, containers: Arc<Mutex<HashMap<String, CommonContainer>>>) {
@@ -97,11 +101,16 @@ impl ShimTask {
                 Self::Exit(&tx, &containers, resp.cid, resp.execId, resp.status as i32)
             }
         });
-
     }
 
     // handle exit event of container
-    pub fn Exit(tx: &Arc<Mutex<EventSender>>, containers: &Arc<Mutex<HashMap<String, CommonContainer>>>, cid: String, execId: String, status: i32) {
+    pub fn Exit(
+        tx: &Arc<Mutex<EventSender>>,
+        containers: &Arc<Mutex<HashMap<String, CommonContainer>>>,
+        cid: String,
+        execId: String,
+        status: i32,
+    ) {
         match containers.lock().unwrap().get_mut(&cid) {
             None => error!("ShimTask::Exit can't find container {}", cid),
             Some(cont) => {
@@ -111,32 +120,33 @@ impl ShimTask {
                     // kill all children process if the container has a private PID namespace
                     if cont.should_kill_all_on_exit(&bundle) {
                         error!("shim Exit 3 {:?}", cont.init.pid());
-                        cont.kill(None, 9, true).unwrap_or_else(|e| {
-                            error!("failed to kill init's children: {}", e)
-                        });
+                        cont.kill(None, 9, true)
+                            .unwrap_or_else(|e| error!("failed to kill init's children: {}", e));
                     }
                     // set exit for init process
                     error!("shim Exit 4 {:?}", cont.init.pid());
                     cont.init.common.set_exited(status);
-                    let (_, _, exited_at) = cont.get_exit_info(None)
-                        .unwrap_or_else(|_e| {
-                            error!("failed to get exit info for container {}", &cont.id);
-                            (0, 0, None)
-                        });
+                    let (_, _, exited_at) = cont.get_exit_info(None).unwrap_or_else(|_e| {
+                        error!("failed to get exit info for container {}", &cont.id);
+                        (0, 0, None)
+                    });
                     let mut ts = Timestamp::new();
                     if let Some(ea) = exited_at {
                         ts.seconds = ea.unix_timestamp();
                         ts.nanos = ea.nanosecond() as i32;
                     }
-                    Self::SendEvent(tx, TaskExit {
-                        container_id: cont.id.clone(),
-                        id: cont.id.clone(),
-                        pid: cont.Pid() as u32,
-                        exit_status: status as u32,
-                        exited_at: SingularPtrField::some(ts),
-                        ..Default::default()
-                    });
-                    return
+                    Self::SendEvent(
+                        tx,
+                        TaskExit {
+                            container_id: cont.id.clone(),
+                            id: cont.id.clone(),
+                            pid: cont.Pid() as u32,
+                            exit_status: status as u32,
+                            exited_at: SingularPtrField::some(ts),
+                            ..Default::default()
+                        },
+                    );
+                    return;
                 }
 
                 match cont.processes.get_mut(&execId) {
@@ -146,18 +156,22 @@ impl ShimTask {
                     Some(p) => {
                         p.set_exited(status);
 
-                        let (_, _, exited_at) = cont.get_exit_info(Some(&execId))
-                        .unwrap_or_else(|_e| {
-                            error!("failed to get exit info for container {}, execID {}", &cont.id, &execId);
-                            (0, 0, None)
-                        });
+                        let (_, _, exited_at) =
+                            cont.get_exit_info(Some(&execId)).unwrap_or_else(|_e| {
+                                error!(
+                                    "failed to get exit info for container {}, execID {}",
+                                    &cont.id, &execId
+                                );
+                                (0, 0, None)
+                            });
                         let mut ts = Timestamp::new();
                         if let Some(ea) = exited_at {
                             ts.seconds = ea.unix_timestamp();
                             ts.nanos = ea.nanosecond() as i32;
                         }
 
-                        Self::SendEvent(tx,
+                        Self::SendEvent(
+                            tx,
                             TaskExit {
                                 container_id: cont.id.clone(),
                                 id: execId.clone(),
@@ -165,9 +179,9 @@ impl ShimTask {
                                 exit_status: status as u32,
                                 exited_at: SingularPtrField::some(ts),
                                 ..Default::default()
-                            }
+                            },
                         );
-                        return
+                        return;
                     }
                 }
             }
@@ -191,7 +205,8 @@ impl Task for ShimTask {
             TtrpcError::NotFoundError(format!("can not find container by id {}", req.id.as_str()))
         })?;
         let exec_id = req.exec_id.as_str().none_if(|&x| x.is_empty());
-        let mut resp = container.state(exec_id)
+        let mut resp = container
+            .state(exec_id)
             .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
         resp.pid = 123;
         info!("shim: state resp for {:?}", &resp);
@@ -222,13 +237,15 @@ impl Task for ShimTask {
         sandboxLock.Pid = container.Pid();
 
         let len = containers.len();
-        if len == 0 { // root container
+        if len == 0 {
+            // root container
             self.WaitAll(self.containers.clone());
         }
 
         containers.insert(id.to_string(), container);
 
-        Self::SendEvent(&self.tx, 
+        Self::SendEvent(
+            &self.tx,
             TaskCreate {
                 container_id: id.to_string(),
                 bundle: req.bundle.clone(),
@@ -244,7 +261,7 @@ impl Task for ShimTask {
                 checkpoint: req.checkpoint,
                 pid: pid,
                 ..Default::default()
-            }
+            },
         );
         info!("Create request for {} returns pid {}", id, resp.pid);
         return Ok(resp);
@@ -256,28 +273,31 @@ impl Task for ShimTask {
         let container = containers.get_mut(req.get_id()).ok_or_else(|| {
             TtrpcError::NotFoundError(format!("can not find container by id {}", req.get_id()))
         })?;
-        let pid = container.start(req.exec_id.as_str().none_if(|&x| x.is_empty()))
+        let pid = container
+            .start(req.exec_id.as_str().none_if(|&x| x.is_empty()))
             .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
 
         let mut resp = StartResponse::new();
         resp.pid = pid as u32;
 
         if req.exec_id.is_empty() {
-            Self::SendEvent(&self.tx, 
+            Self::SendEvent(
+                &self.tx,
                 TaskStart {
                     container_id: req.id.to_string(),
                     pid: pid as u32,
                     ..Default::default()
-                }
+                },
             );
         } else {
-            Self::SendEvent(&self.tx, 
+            Self::SendEvent(
+                &self.tx,
                 TaskExecStarted {
                     container_id: req.get_id().to_string(),
                     exec_id: req.exec_id.to_string(),
                     pid: pid as u32,
                     ..Default::default()
-                }
+                },
             );
         };
         info!("Start request for {:?} returns pid {}", req, resp.get_pid());
@@ -291,7 +311,8 @@ impl Task for ShimTask {
             TtrpcError::NotFoundError(format!("can not find container by id {}", req.get_id()))
         })?;
         let exec_id_opt = req.get_exec_id().none_if(|x| x.is_empty());
-        let (pid, exit_status, exited_at) = container.delete(exec_id_opt)
+        let (pid, exit_status, exited_at) = container
+            .delete(exec_id_opt)
             .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
         if req.get_exec_id().is_empty() {
             containers.remove(req.id.as_str());
@@ -301,8 +322,8 @@ impl Task for ShimTask {
         resp.set_pid(pid as u32);
         resp.set_exit_status(exit_status);
 
-
-        Self::SendEvent(&self.tx,
+        Self::SendEvent(
+            &self.tx,
             TaskDelete {
                 container_id: req.get_id().to_string(),
                 pid: pid as u32,
@@ -310,7 +331,7 @@ impl Task for ShimTask {
                 exited_at: SingularPtrField::some(exited_at),
                 id: exec_id_opt.unwrap_or_default().to_string(),
                 ..Default::default()
-            }
+            },
         );
 
         info!("shim: Delete resp for {:?}", &resp);
@@ -324,7 +345,8 @@ impl Task for ShimTask {
             TtrpcError::Other(format!("can not find container by id {}", req.get_id()))
         })?;
 
-        let resp = container.pids()
+        let resp = container
+            .pids()
             .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
         debug!("shim: Pids resp for {:?}", resp);
         Ok(resp)
@@ -340,27 +362,31 @@ impl Task for ShimTask {
         if container.init.common.status() == Status::STOPPED {
             //return TtrpcError::NotFoundError(format!("container {} exit already", req.get_id()))
             toTtrpcError(&format!("container {} exit already", req.get_id()))
-            .map_err(|e| TtrpcError::NotFoundError(format!("{:?}", e)))?
+                .map_err(|e| TtrpcError::NotFoundError(format!("{:?}", e)))?
         };
         if !req.get_exec_id().is_empty() {
-            match  container.processes.get(req.get_exec_id()){
+            match container.processes.get(req.get_exec_id()) {
                 Some(p) => {
                     if p.status() == Status::STOPPED {
-                        toTtrpcError(&format!("exec {} of container {} exit already",req.get_exec_id() , req.get_id()))
+                        toTtrpcError(&format!(
+                            "exec {} of container {} exit already",
+                            req.get_exec_id(),
+                            req.get_id()
+                        ))
                         .map_err(|e| TtrpcError::NotFoundError(format!("{:?}", e)))?
                     }
                 }
-                None => {
-                    toTtrpcError(&format!("exec-id {} not found", req.get_exec_id()))
-                    .map_err(|e| TtrpcError::NotFoundError(format!("{:?}", e)))?
-                }
+                None => toTtrpcError(&format!("exec-id {} not found", req.get_exec_id()))
+                    .map_err(|e| TtrpcError::NotFoundError(format!("{:?}", e)))?,
             }
         }
-        container.kill(
-            req.exec_id.as_str().none_if(|&x| x.is_empty()),
-            req.signal,
-            req.all,
-        ).map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
+        container
+            .kill(
+                req.exec_id.as_str().none_if(|&x| x.is_empty()),
+                req.signal,
+                req.all,
+            )
+            .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
         info!("Kill request for {:?} returns successfully", req);
         Ok(Empty::new())
     }
@@ -377,15 +403,17 @@ impl Task for ShimTask {
         })?;
         let cid = req.get_id().to_string();
         let execId = req.get_exec_id().to_string();
-        container.exec(req)
+        container
+            .exec(req)
             .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
 
-        Self::SendEvent(&self.tx, 
+        Self::SendEvent(
+            &self.tx,
             TaskExecAdded {
                 container_id: cid,
                 exec_id: execId,
                 ..Default::default()
-            }
+            },
         );
         info!("shim::exec end...");
         Ok(Empty::new())
@@ -393,18 +421,20 @@ impl Task for ShimTask {
 
     fn resize_pty(&self, _ctx: &TtrpcContext, req: ResizePtyRequest) -> TtrpcResult<Empty> {
         debug!(
-        "shim: Resize pty request for container {}, exec_id: {}",
-        &req.id, &req.exec_id
+            "shim: Resize pty request for container {}, exec_id: {}",
+            &req.id, &req.exec_id
         );
         let mut containers = self.containers.lock().unwrap();
         let container = containers.get_mut(req.get_id()).ok_or_else(|| {
             TtrpcError::Other(format!("can not find container by id {}", req.get_id()))
         })?;
-        container.resize_pty(
-            req.get_exec_id().none_if(|&x| x.is_empty()),
-            req.height,
-            req.width,
-        ).map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
+        container
+            .resize_pty(
+                req.get_exec_id().none_if(|&x| x.is_empty()),
+                req.height,
+                req.width,
+            )
+            .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
         Ok(Empty::new())
     }
 
@@ -423,7 +453,8 @@ impl Task for ShimTask {
 
         let resources: LinuxResources = serde_json::from_slice(req.get_resources().get_value())
             .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
-        container.update(&resources)
+        container
+            .update(&resources)
             .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
         Ok(Empty::new())
     }
@@ -435,16 +466,21 @@ impl Task for ShimTask {
             TtrpcError::NotFoundError(format!("can not find container by id {}", req.get_id()))
         })?;
         let exec_id = req.exec_id.as_str().none_if(|&x| x.is_empty());
-        let state = container.state(exec_id)
+        let state = container
+            .state(exec_id)
             .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
         if state.status != Status::RUNNING && state.status != Status::CREATED {
             let mut resp = WaitResponse::new();
             resp.exit_status = state.exit_status;
             resp.exited_at = state.exited_at;
-            info!("Wait request 111 for {:?} status {:?} returns {:?}", req, &state.status, &resp);
+            info!(
+                "Wait request 111 for {:?} status {:?} returns {:?}",
+                req, &state.status, &resp
+            );
             return Ok(resp);
         }
-        let rx = container.wait_channel(req.exec_id.as_str().none_if(|&x| x.is_empty()))
+        let rx = container
+            .wait_channel(req.exec_id.as_str().none_if(|&x| x.is_empty()))
             .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
         // release the lock before waiting the channel
         drop(containers);
@@ -456,7 +492,8 @@ impl Task for ShimTask {
         let container = containers.get_mut(req.get_id()).ok_or_else(|| {
             TtrpcError::Other(format!("can not find container by id {}", req.get_id()))
         })?;
-        let (_, code, exited_at) = container.get_exit_info(exec_id)
+        let (_, code, exited_at) = container
+            .get_exit_info(exec_id)
             .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
         let mut resp = WaitResponse::new();
         resp.exit_status = code as u32;
@@ -511,5 +548,5 @@ impl Task for ShimTask {
 }
 
 fn toTtrpcError(message: &str) -> Result<(), TError> {
-    return Err(TError::Others(format!("{}", message)))
+    return Err(TError::Others(format!("{}", message)));
 }

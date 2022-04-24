@@ -12,25 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod seqfile;
-pub mod inode;
-pub mod fs;
-pub mod proc;
-pub mod task;
-pub mod symlink_proc;
 pub mod dir_proc;
+pub mod fs;
+pub mod inode;
+pub mod proc;
+pub mod seqfile;
+pub mod symlink_proc;
+pub mod task;
 
-pub mod uptime;
 pub mod cpuinfo;
 pub mod filesystems;
 pub mod loadavg;
+pub mod meminfo;
 pub mod mounts;
 pub mod stat;
 pub mod sys;
-pub mod meminfo;
+pub mod uptime;
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
+use alloc::sync::Arc;
 
 use super::filesystems::*;
 

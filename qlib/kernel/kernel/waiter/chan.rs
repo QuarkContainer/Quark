@@ -12,19 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
+use alloc::sync::Arc;
 use core::ops::Deref;
 
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
+use super::super::super::task::*;
 use super::queue::*;
 use super::*;
-use super::super::super::task::*;
 
 // Chan with >=1 chanel size
 pub struct ChanInternel<T: Sized> {
-    pub data : Option<T>,
+    pub data: Option<T>,
 
     // is there thread waiting for reading this chan?
     pub waiting: bool,
@@ -35,7 +35,7 @@ pub struct ChanInternel<T: Sized> {
 #[derive(Clone)]
 pub struct Chan<T>(Arc<QMutex<ChanInternel<T>>>);
 
-impl <T> Deref for Chan<T> {
+impl<T> Deref for Chan<T> {
     type Target = Arc<QMutex<ChanInternel<T>>>;
 
     fn deref(&self) -> &Arc<QMutex<ChanInternel<T>>> {
@@ -43,7 +43,7 @@ impl <T> Deref for Chan<T> {
     }
 }
 
-impl <T> Chan <T> {
+impl<T> Chan<T> {
     pub fn New() -> Self {
         let internel = ChanInternel {
             data: None,
@@ -52,7 +52,7 @@ impl <T> Chan <T> {
             closed: false,
         };
 
-        return Self(Arc::new(QMutex::new(internel)))
+        return Self(Arc::new(QMutex::new(internel)));
     }
 
     pub fn Write(&self, task: &Task, data: T) -> Result<()> {
@@ -60,14 +60,14 @@ impl <T> Chan <T> {
             {
                 let mut c = self.lock();
                 if c.closed {
-                    return Err(Error::ChanClose)
+                    return Err(Error::ChanClose);
                 }
 
                 if c.waiting {
                     c.data = Some(data);
                     c.waiting = false;
                     c.queue.Notify(EVENT_IN);
-                    return Ok(())
+                    return Ok(());
                 }
 
                 let block = task.blocker.clone();
@@ -88,14 +88,14 @@ impl <T> Chan <T> {
         let mut c = self.lock();
 
         if c.closed {
-            return Err(Error::ChanClose)
+            return Err(Error::ChanClose);
         }
 
         if c.waiting {
             c.data = Some(data);
             c.waiting = false;
             c.queue.Notify(EVENT_IN);
-            return Ok(true)
+            return Ok(true);
         }
 
         return Ok(false);
@@ -107,7 +107,7 @@ impl <T> Chan <T> {
                 let mut c = self.lock();
 
                 if c.closed {
-                    return Err(Error::ChanClose)
+                    return Err(Error::ChanClose);
                 }
 
                 let data = c.data.take();

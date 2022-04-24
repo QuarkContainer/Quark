@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::collections::vec_deque::VecDeque;
-use alloc::vec::Vec;
 use super::mutex::*;
+use alloc::boxed::Box;
+use alloc::collections::vec_deque::VecDeque;
+use alloc::string::String;
+use alloc::vec::Vec;
+use cache_padded::CachePadded;
 use core::ops::Deref;
+use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
-use core::sync::atomic::AtomicU64;
-use alloc::string::String;
-use cache_padded::CachePadded;
-use alloc::boxed::Box;
 
 use super::kernel::arch::x86_64::arch_x86::*;
 
@@ -29,15 +29,13 @@ use super::vcpu_mgr::*;
 
 #[derive(Debug, Copy, Clone, Default)]
 pub struct TaskId {
-    pub data: u64
+    pub data: u64,
 }
 
 impl TaskId {
     #[inline]
     pub const fn New(addr: u64) -> Self {
-        return Self {
-            data: addr
-        }
+        return Self { data: addr };
     }
 
     #[inline]
@@ -47,9 +45,7 @@ impl TaskId {
 
     #[inline]
     pub fn Context(&self) -> &'static Context {
-        unsafe {
-            return &*(self.data as * const Context)
-        }
+        unsafe { return &*(self.data as *const Context) }
     }
 
     #[inline]
@@ -57,7 +53,6 @@ impl TaskId {
         return self.Context().queueId.load(Ordering::Relaxed) as u64;
     }
 }
-
 
 #[derive(Debug, Default)]
 pub struct Links {
@@ -83,7 +78,7 @@ pub struct Context {
     pub sigFPState: Vec<Box<X86fpstate>>,
     // job queue id
     pub queueId: AtomicUsize,
-    pub links: Links
+    pub links: Links,
 }
 
 impl Context {
@@ -105,16 +100,15 @@ impl Context {
             sigFPState: Default::default(),
             queueId: AtomicUsize::new(0),
             links: Links::default(),
-
-        }
+        };
     }
 
     pub fn Ready(&self) -> u64 {
-        return self.ready.load(Ordering::Acquire)
+        return self.ready.load(Ordering::Acquire);
     }
 
     pub fn SetReady(&self, val: u64) {
-        return self.ready.store(val, Ordering::SeqCst)
+        return self.ready.store(val, Ordering::SeqCst);
     }
 
     pub fn CopySigFPState(&self) -> Vec<Box<X86fpstate>> {
@@ -124,7 +118,7 @@ impl Context {
             sigfs.push(Box::new(s.Fork()));
         }
 
-        return sigfs
+        return sigfs;
     }
 }
 
@@ -139,12 +133,12 @@ pub struct Scheduler {
     pub haltVcpuCnt: AtomicUsize,
 
     pub vcpuWaitMask: AtomicU64,
-    pub VcpuArr : Vec<CPULocal>,
+    pub VcpuArr: Vec<CPULocal>,
 }
 
 impl Scheduler {
     pub fn New(vcpuCount: usize) -> Self {
-        let mut vcpuArr : Vec<CPULocal> = Vec::with_capacity(vcpuCount);
+        let mut vcpuArr: Vec<CPULocal> = Vec::with_capacity(vcpuCount);
         let mut queue: Vec<CachePadded<TaskQueue>> = Vec::with_capacity(vcpuCount);
         for _i in 0..vcpuCount {
             vcpuArr.push(CPULocal::default());
@@ -156,7 +150,7 @@ impl Scheduler {
             queue: queue,
             vcpuCnt: vcpuCount,
             ..Default::default()
-        }
+        };
     }
 
     pub fn DecreaseHaltVcpuCnt(&self) {
@@ -188,7 +182,7 @@ impl Scheduler {
     #[inline(always)]
     pub fn IncReadyTaskCount(&self) -> usize {
         let cnt = self.readyTaskCnt.fetch_add(1, Ordering::SeqCst) + 1;
-        return cnt
+        return cnt;
     }
 
     #[inline(always)]
@@ -207,7 +201,7 @@ impl Scheduler {
         //error!("ScheduleQ task {:x?}, vcpuId {}", task, vcpuId);
         if vcpuId == 0 {
             self.WakeOne();
-            return
+            return;
         }
 
         let state = self.VcpuArr[vcpuId as usize].State();
@@ -240,7 +234,7 @@ impl Scheduler {
             }
 
             if self.WakeIdleCPU(vcpuId) {
-                return vcpuId as i64
+                return vcpuId as i64;
             }
         }
     }
@@ -252,7 +246,7 @@ impl Scheduler {
     }
 
     pub fn WakeIdleCPU(&self, vcpuId: usize) -> bool {
-        let vcpuMask = (1<<vcpuId) as u64;
+        let vcpuMask = (1 << vcpuId) as u64;
         let prev = self.vcpuWaitMask.fetch_and(!vcpuMask, Ordering::Acquire);
 
         let wake = (prev & vcpuMask) != 0;

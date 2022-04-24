@@ -19,7 +19,7 @@ use super::super::super::qlib::range::*;
 
 #[derive(Default, Debug)]
 pub struct RangeMgr {
-    pub map : BTreeMap<Range, bool>,
+    pub map: BTreeMap<Range, bool>,
 }
 
 impl RangeMgr {
@@ -31,13 +31,13 @@ impl RangeMgr {
             // in theory, read of same range doesn't conflict.
             // the implementation is just for performance
             if r == *range {
-                return true
+                return true;
             }
 
             if r.Overlaps(range) {
                 if write {
                     // for write ops, any overlap is conflict
-                    return true
+                    return true;
                 } else {
                     // for read ops, existing write conflict
                     if value {

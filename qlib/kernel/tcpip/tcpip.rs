@@ -14,14 +14,13 @@
 
 use alloc::string::String;
 use alloc::string::ToString;
-use alloc::vec::Vec;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::ops::Deref;
 use core::slice;
 
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
-
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum SockOpt {
@@ -97,22 +96,22 @@ pub enum SockOpt {
     // TTL value for multicast messages. The default is 1.
     MulticastTTLOption(u8),
 
-// AddMembershipOption is used by SetSockOpt/GetSockOpt to join a multicast
-// group identified by the given multicast address, on the interface matching
-// the given interface address.
-//type AddMembershipOption MembershipOption
+    // AddMembershipOption is used by SetSockOpt/GetSockOpt to join a multicast
+    // group identified by the given multicast address, on the interface matching
+    // the given interface address.
+    //type AddMembershipOption MembershipOption
 
-// RemoveMembershipOption is used by SetSockOpt/GetSockOpt to leave a multicast
-// group identified by the given multicast address, on the interface matching
-// the given interface address.
-//type RemoveMembershipOption MembershipOption
+    // RemoveMembershipOption is used by SetSockOpt/GetSockOpt to leave a multicast
+    // group identified by the given multicast address, on the interface matching
+    // the given interface address.
+    //type RemoveMembershipOption MembershipOption
 
-// OutOfBandInlineOption is used by SetSockOpt/GetSockOpt to specify whether
-// TCP out-of-band data is delivered along with the normal in-band data.
+    // OutOfBandInlineOption is used by SetSockOpt/GetSockOpt to specify whether
+    // TCP out-of-band data is delivered along with the normal in-band data.
     OutOfBandInlineOption(i32),
 
-// BroadcastOption is used by SetSockOpt/GetSockOpt to specify whether
-// datagram sockets are allowed to send packets to a broadcast address.
+    // BroadcastOption is used by SetSockOpt/GetSockOpt to specify whether
+    // datagram sockets are allowed to send packets to a broadcast address.
     BroadcastOption(i32),
 }
 
@@ -125,8 +124,8 @@ pub type ShutdownFlags = i32;
 
 // Values of the flags that can be passed to the Shutdown() method. They can
 // be OR'ed together.
-pub const SHUTDOWN_READ : ShutdownFlags = 1;
-pub const SHUTDOWN_WRITE : ShutdownFlags = 2;
+pub const SHUTDOWN_READ: ShutdownFlags = 1;
+pub const SHUTDOWN_WRITE: ShutdownFlags = 2;
 
 // Address is a byte slice cast as a string that represents the address of a
 // network node. Or, in the case of unix endpoints, it may represent a path.
@@ -164,7 +163,7 @@ impl Deref for FullAddr {
 
 impl FullAddr {
     pub fn New(internal: FullAddrInternal) -> Self {
-        return Self(Arc::new(internal))
+        return Self(Arc::new(internal));
     }
 
     pub fn NewWithAddr(addr: &[u8]) -> Self {
@@ -173,7 +172,7 @@ impl FullAddr {
             ..Default::default()
         };
 
-        return Self::New(internal)
+        return Self::New(internal);
     }
 }
 
@@ -183,15 +182,13 @@ impl FullAddr {
 pub fn GetAddr(sfamily: i16, addr: &[u8]) -> Result<SockAddr> {
     // Make sure we have at least 2 bytes for the address family.
     if addr.len() < 2 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    let family = unsafe {
-        &*(&addr[0] as * const u8 as * const i16)
-    };
+    let family = unsafe { &*(&addr[0] as *const u8 as *const i16) };
 
     if *family != sfamily {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     // Get the rest of the fields based on the address family.
@@ -199,7 +196,7 @@ pub fn GetAddr(sfamily: i16, addr: &[u8]) -> Result<SockAddr> {
         AFType::AF_UNIX => {
             let mut path = &addr[2..];
             if path.len() > UNIX_PATH_MAX {
-                return Err(Error::SysError(SysErr::EINVAL))
+                return Err(Error::SysError(SysErr::EINVAL));
             }
             // Drop the terminating NUL (if one exists) and everything after
             // it for filesystem (non-abstract) addresses.
@@ -229,41 +226,35 @@ pub fn GetAddr(sfamily: i16, addr: &[u8]) -> Result<SockAddr> {
         }
         AFType::AF_INET => {
             if addr.len() < SOCK_ADDR_INET_SIZE {
-                return Err(Error::SysError(SysErr::EFAULT))
+                return Err(Error::SysError(SysErr::EFAULT));
             }
 
-            let a = unsafe {
-                & * ((&addr[0]) as * const _ as * const SockAddrInet)
-            };
+            let a = unsafe { &*((&addr[0]) as *const _ as *const SockAddrInet) };
 
             return Ok(SockAddr::Inet(*a));
         }
         AFType::AF_INET6 => {
             if addr.len() < SOCK_ADDR_INET6_SIZE {
-                return Err(Error::SysError(SysErr::EFAULT))
+                return Err(Error::SysError(SysErr::EFAULT));
             }
 
-            let a = unsafe {
-                & * ((&addr[0]) as * const _ as * const SocketAddrInet6)
-            };
+            let a = unsafe { &*((&addr[0]) as *const _ as *const SocketAddrInet6) };
 
             return Ok(SockAddr::Inet6(*a));
         }
         AFType::AF_NETLINK => {
             if addr.len() < SockAddrNetlink::SOCK_ADDR_NETLINK_SIZE {
-                return Err(Error::SysError(SysErr::EFAULT))
+                return Err(Error::SysError(SysErr::EFAULT));
             }
 
-            let a = unsafe {
-                & * ((&addr[0]) as * const _ as * const SockAddrNetlink)
-            };
+            let a = unsafe { &*((&addr[0]) as *const _ as *const SockAddrNetlink) };
 
             return Ok(SockAddr::Netlink(*a));
         }
-        _ => ()
+        _ => (),
     }
 
-    return Err(Error::SysError(SysErr::EAFNOSUPPORT))
+    return Err(Error::SysError(SysErr::EAFNOSUPPORT));
 }
 
 // isLinkLocal determines if the given IPv6 address is link-local. This is the
@@ -285,7 +276,7 @@ pub fn ntohs(v: u16) -> u16 {
 // htons converts a 16-bit number from host byte order to network byte order. It
 // assumes that the host is little endian.
 pub fn htons(v: u16) -> u16 {
-    return ntohs(v)
+    return ntohs(v);
 }
 
 #[derive(Clone, Debug)]
@@ -313,55 +304,53 @@ impl SockAddr {
         let mut buf = Vec::with_capacity(len);
         buf.resize(len, 0);
         self.Marsh(&mut buf, len)?;
-        return Ok(buf)
+        return Ok(buf);
     }
 
     pub fn Marsh(&self, buf: &mut [u8], len: usize) -> Result<()> {
         if buf.len() < len {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         match self {
             SockAddr::Inet(addr) => {
-                let ptr = addr as *const _ as u64 as * const u8;
+                let ptr = addr as *const _ as u64 as *const u8;
                 let slice = unsafe { slice::from_raw_parts(ptr, len) };
 
                 for i in 0..len {
                     buf[i] = slice[i];
                 }
-                return Ok(())
+                return Ok(());
             }
             SockAddr::Inet6(addr) => {
-                let ptr = addr as *const _ as u64 as * const u8;
+                let ptr = addr as *const _ as u64 as *const u8;
                 let slice = unsafe { slice::from_raw_parts(ptr, len) };
 
                 for i in 0..len {
                     buf[i] = slice[i];
                 }
-                return Ok(())
+                return Ok(());
             }
             SockAddr::Unix(addr) => {
                 let native = addr.ToNative();
-                let ptr = &native as *const _ as u64 as * const u8;
+                let ptr = &native as *const _ as u64 as *const u8;
                 let slice = unsafe { slice::from_raw_parts(ptr, len) };
 
                 for i in 0..len {
                     buf[i] = slice[i];
                 }
-                return Ok(())
+                return Ok(());
             }
             SockAddr::Netlink(addr) => {
-                let ptr = addr as *const _ as u64 as * const u8;
+                let ptr = addr as *const _ as u64 as *const u8;
                 let slice = unsafe { slice::from_raw_parts(ptr, len) };
 
                 for i in 0..len {
                     buf[i] = slice[i];
                 }
-                return Ok(())
+                return Ok(());
             }
-            SockAddr::None => {
-                return Err(Error::SysError(SysErr::EINVAL))
-            }
+            SockAddr::None => return Err(Error::SysError(SysErr::EINVAL)),
         }
     }
 }
@@ -378,7 +367,7 @@ pub struct SockAddrInet {
 
 impl SockAddrInet {
     pub fn Len(&self) -> usize {
-        return core::mem::size_of::<SockAddrInet>()
+        return core::mem::size_of::<SockAddrInet>();
     }
 }
 
@@ -395,7 +384,7 @@ pub struct SocketAddrInet6 {
 
 impl SocketAddrInet6 {
     pub fn Len(&self) -> usize {
-        return core::mem::size_of::<SocketAddrInet6>()
+        return core::mem::size_of::<SocketAddrInet6>();
     }
 }
 
@@ -418,7 +407,7 @@ impl Default for SockAddrUnix {
         return Self {
             Family: 0,
             Path: "".to_string(),
-        }
+        };
     }
 }
 
@@ -446,17 +435,17 @@ impl SockAddrUnix {
         // address length is the max. Abstract and empty paths always return
         // the full exact length.
         let l = self.Path.len();
-        if l==0 || self.Path.as_bytes()[0] == 0 || l == UNIX_PATH_MAX {
-            return l+2
+        if l == 0 || self.Path.as_bytes()[0] == 0 || l == UNIX_PATH_MAX {
+            return l + 2;
         }
 
-        return l+3
+        return l + 3;
     }
 
     pub fn ToNative(&self) -> SockAddrUnixNative {
         let mut ret = SockAddrUnixNative {
             Family: AFType::AF_UNIX as u16,
-            Path: [0; UNIX_PATH_MAX]
+            Path: [0; UNIX_PATH_MAX],
         };
 
         let arr = self.Path.as_bytes();
@@ -480,7 +469,7 @@ pub struct SockAddrNetlink {
 }
 
 impl SockAddrNetlink {
-    pub const SOCK_ADDR_NETLINK_SIZE : usize = 12;
+    pub const SOCK_ADDR_NETLINK_SIZE: usize = 12;
 
     pub fn Len(&self) -> usize {
         return Self::SOCK_ADDR_NETLINK_SIZE;

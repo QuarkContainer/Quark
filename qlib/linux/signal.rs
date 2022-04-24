@@ -77,12 +77,12 @@ impl SignalSet {
             res |= s.Mask();
         }
 
-        return Self(res)
+        return Self(res);
     }
 
     pub fn SignalSetOf(sigs: &Signal) -> Self {
         let res = sigs.Mask();
-        return Self(res)
+        return Self(res);
     }
 
     pub fn ForEachSignal(&self, f: fn(sig: &Signal)) {
@@ -110,7 +110,6 @@ pub const SIG_BLOCK: u64 = 0;
 // SIG_UNBLOCK blocks the signals in the set.
 pub const SIG_UNBLOCK: u64 = 1;
 
-
 // Signal actions for rt_sigaction(2), from uapi/asm-generic/signal-defs.h.
 // SIG_SETMASK sets the signal mask to set.
 pub const SIG_SETMASK: u64 = 2;
@@ -120,7 +119,6 @@ pub const SIG_DFL: u64 = 0;
 
 // SIG_IGN ignores the signal.
 pub const SIG_IGN: u64 = 1;
-
 
 // Signal action flags for rt_sigaction(2), from uapi/asm-generic/signal.h
 pub const SA_NOCLDSTOP: u64 = 0x00000001;
@@ -133,7 +131,6 @@ pub const SA_NODEFER: u64 = 0x40000000;
 pub const SA_RESETHAND: u64 = 0x80000000;
 pub const SA_NOMASK: u64 = SA_NODEFER;
 pub const SA_ONESHOT: u64 = SA_RESETHAND;
-
 
 // Signal info types.
 pub const SI_MASK: u64 = 0xffff0000;

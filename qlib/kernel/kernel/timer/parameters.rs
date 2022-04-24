@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::super::super::asm::muldiv64;
-use super::super::super::super::linux::time::*;
 use super::super::super::super::common::*;
+use super::super::super::super::linux::time::*;
+use super::super::super::asm::muldiv64;
 use super::sampler::*;
 use super::*;
 
@@ -84,7 +84,7 @@ impl Parameters {
         // A TSC running at 2GHz takes 201 years to reach 2^63-1. 805 years at
         // 500MHz.
         let (diffNS, ok) = muldiv64(diffCycles as u64, SECOND as u64, self.Frequency);
-        return ((self.BaseRef as u64 + diffNS) as i64, ok)
+        return ((self.BaseRef as u64 + diffNS) as i64, ok);
     }
 }
 
@@ -104,15 +104,23 @@ impl Parameters {
 //   backwards.
 // * newParams.BaseCycles <= now; i.e., the new parameters be computed at or
 //   before now.
-pub fn ErrorAdjust(prevParams: &Parameters, newParams: &Parameters, now: TSCValue) -> Result<(Parameters, ReferenceNS)> {
+pub fn ErrorAdjust(
+    prevParams: &Parameters,
+    newParams: &Parameters,
+    now: TSCValue,
+) -> Result<(Parameters, ReferenceNS)> {
     if newParams.BaseCycles < prevParams.BaseCycles {
-        return Err(Error::Common(format!("TSC went backwards in updated clock params: {} < {}",
-                                         newParams.BaseCycles, prevParams.BaseCycles)))
+        return Err(Error::Common(format!(
+            "TSC went backwards in updated clock params: {} < {}",
+            newParams.BaseCycles, prevParams.BaseCycles
+        )));
     }
 
     if newParams.BaseCycles > now {
-        return Err(Error::Common(format!("parameters contain base cycles later than now: {} > {}",
-                                         newParams.BaseCycles, now)))
+        return Err(Error::Common(format!(
+            "parameters contain base cycles later than now: {} > {}",
+            newParams.BaseCycles, now
+        )));
     }
 
     let intervalNS = APPROX_UPDATE_INTERVAL as i64;
@@ -121,8 +129,10 @@ pub fn ErrorAdjust(prevParams: &Parameters, newParams: &Parameters, now: TSCValu
     // Current time as computed by prevParams.
     let (oldNowNS, ok) = prevParams.ComputeTime(now);
     if !ok {
-        return Err(Error::Common(format!("old now time computation overflowed1. params = {:?}, now = {}",
-                                         prevParams, now)))
+        return Err(Error::Common(format!(
+            "old now time computation overflowed1. params = {:?}, now = {}",
+            prevParams, now
+        )));
     }
 
     // We expect the update ticker to run based on this clock (i.e., it has
@@ -135,8 +145,10 @@ pub fn ErrorAdjust(prevParams: &Parameters, newParams: &Parameters, now: TSCValu
         // The next update time already passed before the new
         // parameters were created! We definitely can't correct the
         // error by then.
-        return Err(Error::Common(format!("old now time computation overflowed2. params = {:?}, now = {}",
-                                         prevParams, now)))
+        return Err(Error::Common(format!(
+            "old now time computation overflowed2. params = {:?}, now = {}",
+            prevParams, now
+        )));
     }
 
     // For what TSC value next will newParams.ComputeTime(next) = nextNS?
@@ -144,10 +156,16 @@ pub fn ErrorAdjust(prevParams: &Parameters, newParams: &Parameters, now: TSCValu
     // Solve ComputeTime for next:
     //
     // next = newParams.Frequency * (nextNS - newParams.BaseRef) + newParams.BaseCycles
-    let (c, ok) = muldiv64(newParams.Frequency, (nextNS - newParams.BaseRef) as u64, nsPerSec);
+    let (c, ok) = muldiv64(
+        newParams.Frequency,
+        (nextNS - newParams.BaseRef) as u64,
+        nsPerSec,
+    );
     if !ok {
-        return Err(Error::Common(format!("{} * ({} - {}) / {} overflows",
-                                         newParams.Frequency, nextNS, newParams.BaseRef, nsPerSec)))
+        return Err(Error::Common(format!(
+            "{} * ({} - {}) / {} overflows",
+            newParams.Frequency, nextNS, newParams.BaseRef, nsPerSec
+        )));
     }
 
     let mut cycles = c as TSCValue;
@@ -157,7 +175,7 @@ pub fn ErrorAdjust(prevParams: &Parameters, newParams: &Parameters, now: TSCValu
         // The next update time already passed now with the new
         // parameters! We can't correct the error in a single period.
         return Err(Error::Common(format!("unable to correct error in single period. oldNowNS = {}, nextNS = {}, now = {}, next = {}",
-                                         oldNowNS, nextNS, now, next)))
+                                         oldNowNS, nextNS, now, next)));
     }
 
     // We want to solve for parameters that satisfy:
@@ -186,8 +204,10 @@ pub fn ErrorAdjust(prevParams: &Parameters, newParams: &Parameters, now: TSCValu
     // adjusted.Frequency = cycles / ns
     let (freq, ok) = muldiv64(cycles as u64, nsPerSec, ns as u64);
     if !ok {
-        return Err(Error::Common(format!("{} * ({} - {}) / {} overflows",
-                                         next, now, nsPerSec, ns)))
+        return Err(Error::Common(format!(
+            "{} * ({} - {}) / {} overflows",
+            next, now, nsPerSec, ns
+        )));
     }
 
     adjusted.Frequency = freq;
@@ -197,10 +217,16 @@ pub fn ErrorAdjust(prevParams: &Parameters, newParams: &Parameters, now: TSCValu
     //
     // oldNowNS = BaseRef + (now - BaseCycles) / Frequency
     // BaseRef = oldNowNS - (now - BaseCycles) / Frequency
-    let (diffNS, ok) = muldiv64((now - adjusted.BaseCycles) as u64, nsPerSec, adjusted.Frequency);
+    let (diffNS, ok) = muldiv64(
+        (now - adjusted.BaseCycles) as u64,
+        nsPerSec,
+        adjusted.Frequency,
+    );
     if !ok {
-        return Err(Error::Common(format!("{} * ({} - {}) / {} overflows",
-                                         now, adjusted.BaseCycles, nsPerSec, adjusted.Frequency)))
+        return Err(Error::Common(format!(
+            "{} * ({} - {}) / {} overflows",
+            now, adjusted.BaseCycles, nsPerSec, adjusted.Frequency
+        )));
     }
 
     adjusted.BaseRef = oldNowNS - diffNS as i64;
@@ -209,14 +235,21 @@ pub fn ErrorAdjust(prevParams: &Parameters, newParams: &Parameters, now: TSCValu
     // new parameters say the current time should be.
     let (newNowNS, ok) = newParams.ComputeTime(now);
     if !ok {
-        return Err(Error::Common(format!("new now time computation overflowed. params = {:?}, now = {}",
-                                         newParams, now)))
+        return Err(Error::Common(format!(
+            "new now time computation overflowed. params = {:?}, now = {}",
+            newParams, now
+        )));
     }
 
     let errorNS = oldNowNS - newNowNS;
-    return Ok((adjusted, errorNS))
+    return Ok((adjusted, errorNS));
 }
 
-pub fn logErrorAdjustement(_clock: ClockID, _errorNS: ReferenceNS, _orig: &Parameters, _adjusted: &Parameters) {
+pub fn logErrorAdjustement(
+    _clock: ClockID,
+    _errorNS: ReferenceNS,
+    _orig: &Parameters,
+    _adjusted: &Parameters,
+) {
     //info!("Clock({}): error: {} ns, adjusted frequency from {} Hz to {} Hz", clock, errorNS, orig.Frequency, adjusted.Frequency)
 }

@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::u64;
 use alloc::string::String;
 use alloc::string::ToString;
+use core::u64;
 use x86_64::structures::paging::PageTableFlags;
 
 use super::common::*;
@@ -44,18 +44,18 @@ pub struct AccessType(pub u64);
 
 impl AccessType {
     pub fn Default() -> Self {
-        return AccessType(0)
+        return AccessType(0);
     }
 
     pub fn NewFromPageFlags(flags: PageTableFlags) -> Self {
         let present = flags & PageTableFlags::PRESENT == PageTableFlags::PRESENT;
         if !present {
-            return Self::New(false, false, false)
+            return Self::New(false, false, false);
         }
 
         let write = flags & PageTableFlags::WRITABLE == PageTableFlags::WRITABLE;
         let exec = flags & PageTableFlags::NO_EXECUTE != PageTableFlags::NO_EXECUTE;
-        return Self::New(present, write, exec)
+        return Self::New(present, write, exec);
     }
 
     pub fn New(read: bool, write: bool, exec: bool) -> Self {
@@ -72,7 +72,7 @@ impl AccessType {
             prot |= MmapProt::PROT_EXEC;
         }
 
-        return Self(prot)
+        return Self(prot);
     }
 
     pub fn String(&self) -> String {
@@ -99,7 +99,7 @@ impl AccessType {
     }
 
     pub fn ReadOnly() -> Self {
-        return AccessType(MmapProt::PROT_READ)
+        return AccessType(MmapProt::PROT_READ);
     }
 
     pub fn ReadWrite() -> Self {
@@ -115,12 +115,18 @@ impl AccessType {
     }
 
     pub fn Any(&self) -> bool {
-        return self.Read() || self.Write() || self.Exec()
+        return self.Read() || self.Write() || self.Exec();
     }
 
-    pub fn Read(&self) -> bool { self.0 & MmapProt::PROT_READ != 0 }
-    pub fn Write(&self) -> bool { self.0 & MmapProt::PROT_WRITE != 0 }
-    pub fn Exec(&self) -> bool { self.0 & MmapProt::PROT_EXEC != 0 }
+    pub fn Read(&self) -> bool {
+        self.0 & MmapProt::PROT_READ != 0
+    }
+    pub fn Write(&self) -> bool {
+        self.0 & MmapProt::PROT_WRITE != 0
+    }
+    pub fn Exec(&self) -> bool {
+        self.0 & MmapProt::PROT_EXEC != 0
+    }
 
     pub fn SetProt(&mut self, prot: u64) {
         self.0 = prot;
@@ -128,12 +134,12 @@ impl AccessType {
 
     pub fn SetRead(&mut self) -> &mut Self {
         self.0 |= MmapProt::PROT_READ;
-        return self
+        return self;
     }
 
     pub fn SetWrite(&mut self) -> &mut Self {
         self.0 |= MmapProt::PROT_WRITE;
-        return self
+        return self;
     }
 
     pub fn ClearWrite(&mut self) -> &mut Self {
@@ -143,11 +149,11 @@ impl AccessType {
 
     pub fn SetExec(&mut self) -> &mut Self {
         self.0 |= MmapProt::PROT_EXEC;
-        return self
+        return self;
     }
 
     pub fn Val(&self) -> u64 {
-        return self.0
+        return self.0;
     }
 
     // Effective returns the set of effective access types allowed by a, even if
@@ -202,19 +208,23 @@ impl PageOpts {
             flags |= PageTableFlags::NO_EXECUTE;
         }
 
-        return Self(flags)
+        return Self(flags);
     }
 
     pub fn All() -> Self {
-        return PageOpts(PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE);
+        return PageOpts(
+            PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
+        );
     }
 
     pub fn Zero() -> Self {
-        return PageOpts(PageTableFlags::PRESENT & PageTableFlags::WRITABLE) //set 0
+        return PageOpts(PageTableFlags::PRESENT & PageTableFlags::WRITABLE); //set 0
     }
 
     pub fn Kernel() -> Self {
-        return PageOpts(PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::GLOBAL);
+        return PageOpts(
+            PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::GLOBAL,
+        );
     }
 
     pub fn UserReadOnly() -> Self {
@@ -226,7 +236,9 @@ impl PageOpts {
     }
 
     pub fn UserReadWrite() -> Self {
-        return PageOpts(PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE | PageTableFlags::WRITABLE);
+        return PageOpts(
+            PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE | PageTableFlags::WRITABLE,
+        );
     }
 
     pub fn KernelReadOnly() -> Self {
@@ -255,29 +267,28 @@ impl PageOpts {
 
     pub fn SetPresent(&mut self) -> &mut Self {
         self.0 |= PageTableFlags::PRESENT;
-        return self
+        return self;
     }
 
     pub fn SetWrite(&mut self) -> &mut Self {
         self.0 |= PageTableFlags::WRITABLE;
-        return self
+        return self;
     }
 
     pub fn SetUserAccess(&mut self) -> &mut Self {
         self.0 |= PageTableFlags::USER_ACCESSIBLE;
-        return self
+        return self;
     }
 
     pub fn SetGlobal(&mut self) -> &mut Self {
         self.0 |= PageTableFlags::GLOBAL;
-        return self
+        return self;
     }
 
     pub fn Val(&self) -> PageTableFlags {
-        return self.0
+        return self.0;
     }
 }
-
 
 #[derive(Debug, Copy, Clone, Default)]
 pub struct Addr(pub u64);
@@ -285,30 +296,32 @@ pub struct Addr(pub u64);
 impl Addr {
     pub fn AddLen(&self, len: u64) -> Result<Addr> {
         if core::u64::MAX - self.0 < len {
-            return Err(Error::SysError(SysErr::EFAULT))
+            return Err(Error::SysError(SysErr::EFAULT));
         }
         let end = self.0 + len;
-        return Ok(Addr(end))
+        return Ok(Addr(end));
     }
 
     pub const fn RoundDown(&self) -> Result<Addr> {
-        return Ok(Addr(self.0 & !(PAGE_SIZE - 1)))
+        return Ok(Addr(self.0 & !(PAGE_SIZE - 1)));
     }
 
     pub const fn RoundUp(&self) -> Result<Addr> {
         if u64::MAX - PAGE_SIZE + 1 < self.0 {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         if self.0 == 0 {
             return Ok(Addr(0));
         }
         let addr = self.0 - 1 + PAGE_SIZE;
-        return Addr(addr).RoundDown()
+        return Addr(addr).RoundDown();
     }
 
     pub fn MustRoundUp(&self) -> Addr {
-        return self.RoundUp().expect(&format!("usermem.Addr({}).RoundUp() wraps", self.0))
+        return self
+            .RoundUp()
+            .expect(&format!("usermem.Addr({}).RoundUp() wraps", self.0));
     }
 
     pub fn PageOffset(&self) -> u64 {
@@ -321,14 +334,14 @@ impl Addr {
 
     pub fn PageAligned(&self) -> Result<()> {
         if !self.IsPageAligned() {
-            return Err(Error::UnallignedAddress)
+            return Err(Error::UnallignedAddress);
         }
 
         Ok(())
     }
 
     pub fn AddPages(&self, pageCount: u32) -> Addr {
-        return Addr(self.0 + pageCount as u64 * PAGE_SIZE)
+        return Addr(self.0 + pageCount as u64 * PAGE_SIZE);
     }
 
     pub fn PageOffsetIdx(&self, addr: Addr) -> Result<u32> {
@@ -338,15 +351,15 @@ impl Addr {
             return Err(Error::AddressNotInRange);
         }
 
-        return Ok(((addr.0 - self.0) / PAGE_SIZE as u64) as u32)
+        return Ok(((addr.0 - self.0) / PAGE_SIZE as u64) as u32);
     }
 
     pub fn Offset(&self, startAddr: Addr) -> Result<Addr> {
         if self.0 < startAddr.0 {
-            return Err(Error::AddressNotInRange)
+            return Err(Error::AddressNotInRange);
         }
 
-        return Ok(Addr(self.0 - startAddr.0))
+        return Ok(Addr(self.0 - startAddr.0));
     }
 
     pub fn ToRange(&self, length: u64) -> Result<Range> {

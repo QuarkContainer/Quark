@@ -113,9 +113,7 @@ impl<const ORDER: usize> Heap<ORDER> {
 
                 // raw!(0x503, class as u64, ret as u64);
                 //raw!(0x504, self.free_list[0x11].top(), self.free_list[0x11].second());
-                let result = NonNull::new(
-                    ret
-                );
+                let result = NonNull::new(ret);
                 if let Some(result) = result {
                     self.user += layout.size();
                     self.allocated += size;
@@ -221,10 +219,10 @@ impl LinkedList {
 
     pub fn second(&self) -> u64 {
         if self.head as u64 == 0 {
-            return 0
+            return 0;
         }
 
-        let item : * const u64 = self.head as * const u64;
+        let item: *const u64 = self.head as *const u64;
         return unsafe { *item as u64 };
     }
 

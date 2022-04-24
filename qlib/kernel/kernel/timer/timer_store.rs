@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::collections::btree_map::BTreeMap;
-use core::cmp::Ordering;
-use core::ops::Deref;
 use crate::qlib::mutex::*;
+use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::cmp::Ordering;
+use core::ops::Deref;
 
 use super::super::super::IOURING;
-use super::*;
 use super::timer::*;
+use super::*;
 
 #[derive(Debug, Copy, Clone)]
 pub struct TimerUnit {
@@ -32,9 +32,9 @@ pub struct TimerUnit {
 impl Ord for TimerUnit {
     fn cmp(&self, other: &Self) -> Ordering {
         if self.expire != other.expire {
-            return self.expire.cmp(&other.expire)
+            return self.expire.cmp(&other.expire);
         } else {
-            return self.timerId.cmp(&other.timerId)
+            return self.timerId.cmp(&other.timerId);
         }
     }
 }
@@ -70,7 +70,7 @@ impl TimerStore {
     }
 
     pub fn Addr(&self) -> u64 {
-        return self as * const _ as u64;
+        return self as *const _ as u64;
     }
 
     pub fn ResetTimer(&self, timer: &Timer, timeout: i64) {
@@ -98,10 +98,10 @@ pub struct TimerStoreIntern {
 
 impl TimerStoreIntern {
     // the timeout need to process a timer, <PROCESS_TIME means the timer will be triggered immediatelyfa
-    pub const PROCESS_TIME : i64 = 30_000;
+    pub const PROCESS_TIME: i64 = 30_000;
 
     pub fn Print(&self) -> String {
-        let keys : Vec<TimerUnit> = self.timerSeq.keys().cloned().collect();
+        let keys: Vec<TimerUnit> = self.timerSeq.keys().cloned().collect();
         return format!("TimerStoreIntern seq is {:#?}", keys);
     }
 
@@ -136,7 +136,7 @@ impl TimerStoreIntern {
             return true;
         }
 
-        return false
+        return false;
     }
 
     pub fn ResetTimer(&mut self, timer: &Timer, timeout: i64) {
@@ -174,27 +174,32 @@ impl TimerStoreIntern {
             expire
         };
         assert!(self.uringExpire == 0);
-        assert!(expire > now, "Expire {}, now {}, expire - now {}", expire, now, expire-now);
+        assert!(
+            expire > now,
+            "Expire {}, now {}, expire - now {}",
+            expire,
+            now,
+            expire - now
+        );
         self.uringExpire = expire;
         self.uringId = IOURING.Timeout(expire, expire - now) as u64;
     }
 
     // return (Expire, Timer)
     pub fn GetFirst(&mut self, now: i64) -> Option<Timer> {
-        if self.nextExpire==0
-            || self.nextExpire > now {
+        if self.nextExpire == 0 || self.nextExpire > now {
             return None;
         }
 
         let timer = match self.timerSeq.pop_first() {
             None => return None,
-            Some((_, timer)) => timer
+            Some((_, timer)) => timer,
         };
 
         match self.timerSeq.first_key_value() {
             None => {
                 self.nextExpire = 0;
-            },
+            }
             Some((tu, _)) => {
                 self.nextExpire = tu.expire;
             }

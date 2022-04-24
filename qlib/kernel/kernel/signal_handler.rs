@@ -12,24 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
-use crate::qlib::mutex::*;
 use core::ops::Deref;
 
-use super::super::SignalDef::*;
 use super::super::super::linux_def::*;
+use super::super::SignalDef::*;
 
 #[derive(Clone, Debug)]
 pub struct SignalHandlersInternal {
-    pub actions: BTreeMap<i32, SigAct>
+    pub actions: BTreeMap<i32, SigAct>,
 }
 
 impl Default for SignalHandlersInternal {
     fn default() -> Self {
         return Self {
             actions: BTreeMap::new(),
-        }
+        };
     }
 }
 
@@ -37,9 +37,7 @@ impl SignalHandlersInternal {
     pub fn GetAct(&mut self, sig: Signal) -> SigAct {
         match self.actions.get(&sig.0) {
             None => SigAct::default(),
-            Some(act) => {
-                *act
-            }
+            Some(act) => *act,
         }
     }
 }
@@ -64,7 +62,7 @@ impl SignalHandlers {
             sh.actions.insert(*i, *act);
         }
 
-        return SignalHandlers(Arc::new(QMutex::new(sh)))
+        return SignalHandlers(Arc::new(QMutex::new(sh)));
     }
 
     pub fn CopyForExec(&self) -> Self {
@@ -73,14 +71,17 @@ impl SignalHandlers {
 
         for (i, act) in &me.actions {
             if act.handler == SigAct::SIGNAL_ACT_IGNORE {
-                sh.actions.insert(*i, SigAct {
-                    handler: SigAct::SIGNAL_ACT_IGNORE,
-                    ..Default::default()
-                });
+                sh.actions.insert(
+                    *i,
+                    SigAct {
+                        handler: SigAct::SIGNAL_ACT_IGNORE,
+                        ..Default::default()
+                    },
+                );
             }
         }
 
-        return SignalHandlers(Arc::new(QMutex::new(sh)))
+        return SignalHandlers(Arc::new(QMutex::new(sh)));
     }
 
     pub fn IsIgored(&self, sig: Signal) -> bool {
@@ -97,9 +98,7 @@ impl SignalHandlers {
 
         let act = match me.actions.get(&sig.0) {
             None => SigAct::default(),
-            Some(act) => {
-                *act
-            }
+            Some(act) => *act,
         };
 
         if act.flags.IsResetHandler() {
@@ -118,10 +117,10 @@ impl SignalHandlers {
             match me.actions.get(&sigNum) {
                 None => unsafe {
                     *(oldAction as *mut SigAct) = SigAct::default();
-                }
+                },
                 Some(old) => unsafe {
                     *(oldAction as *mut SigAct) = *old;
-                }
+                },
             }
         }
 

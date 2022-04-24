@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::string::String;
-use super::task::*;
-use super::qlib::vcpu_mgr::*;
 use super::qlib::kernel::Timestamp;
+use super::qlib::vcpu_mgr::*;
+use super::task::*;
+use alloc::string::String;
 
 pub fn PrintPrefix() -> String {
     let now = if super::SHARESPACE.config.read().PerfDebug {
@@ -24,17 +24,20 @@ pub fn PrintPrefix() -> String {
         0
     };
 
-    return format!("[{}/{:x}|{}]", CPULocal::CpuId() , Task::TaskId().Addr(), now);
+    return format!(
+        "[{}/{:x}|{}]",
+        CPULocal::CpuId(),
+        Task::TaskId().Addr(),
+        now
+    );
 }
 
 #[macro_export]
 macro_rules! raw {
- // macth like arm for macro
-    ($a:expr,$b:expr,$c:expr)=>{
-        {
-           $crate::Kernel::HostSpace::KernelMsg($a, $b, $c);
-        }
-    }
+    // macth like arm for macro
+    ($a:expr,$b:expr,$c:expr) => {{
+        $crate::Kernel::HostSpace::KernelMsg($a, $b, $c);
+    }};
 }
 
 #[macro_export]
@@ -126,4 +129,3 @@ macro_rules! debug {
         }
     });
 }
-

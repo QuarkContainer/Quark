@@ -19,7 +19,7 @@ use super::taskMgr::*;
 
 // SeqCountEpoch tracks writer critical sections in a SeqCount.
 pub struct SeqCountEpoch {
-    pub val: u64
+    pub val: u64,
 }
 
 #[derive(Default, Debug)]
@@ -40,9 +40,7 @@ impl SeqCount {
             epoch = self.epoch.load(Ordering::SeqCst);
         }
 
-        return SeqCountEpoch {
-            val: epoch
-        }
+        return SeqCountEpoch { val: epoch };
     }
 
     // ReadOk returns true if the reader critical section initiated by a previous

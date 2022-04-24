@@ -1,4 +1,3 @@
-
 #[allow(non_camel_case_types)]
 #[derive(Debug, Copy, Clone)]
 pub enum AuxVec {
@@ -80,4 +79,3 @@ pub struct AuxEntry {
     pub Key: AuxVec,
     pub Val: u64,
 }
-

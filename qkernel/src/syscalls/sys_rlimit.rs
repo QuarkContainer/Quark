@@ -16,29 +16,33 @@ use alloc::collections::btree_set::BTreeSet;
 
 //use super::super::Kernel;
 use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
 use super::super::qlib::limits::*;
+use super::super::qlib::linux_def::*;
+use super::super::qlib::singleton::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::Task;
 use super::super::threadmgr::thread::*;
-use super::super::qlib::singleton::*;
 
-pub static SETABLE_LIMITS : Singleton<BTreeSet<LimitType>> = Singleton::<BTreeSet<LimitType>>::New();
+pub static SETABLE_LIMITS: Singleton<BTreeSet<LimitType>> = Singleton::<BTreeSet<LimitType>>::New();
 
 pub unsafe fn InitSingleton() {
-    SETABLE_LIMITS.Init([
-                            LimitType::NumberOfFiles,
-                            LimitType::AS,
-                            LimitType::CPU,
-                            LimitType::Data,
-                            LimitType::FileSize,
-                            LimitType::MemoryLocked,
-                            LimitType::Stack,
-                            // These are not enforced, but we include them here to avoid returning
-                            // EPERM, since some apps expect them to succeed.
-                            LimitType::Core,
-                            LimitType::ProcessCount,
-                        ].iter().cloned().collect()
+    SETABLE_LIMITS.Init(
+        [
+            LimitType::NumberOfFiles,
+            LimitType::AS,
+            LimitType::CPU,
+            LimitType::Data,
+            LimitType::FileSize,
+            LimitType::MemoryLocked,
+            LimitType::Stack,
+            // These are not enforced, but we include them here to avoid returning
+            // EPERM, since some apps expect them to succeed.
+            LimitType::Core,
+            LimitType::ProcessCount,
+        ]
+        .iter()
+        .cloned()
+        .collect(),
     );
 }
 
@@ -51,7 +55,7 @@ pub fn PrLimit64(thread: &Thread, resource: LimitType, newLimit: Option<Limit>) 
     }
 
     if !SETABLE_LIMITS.contains(&resource) {
-        return Err(Error::SysError(SysErr::EPERM))
+        return Err(Error::SysError(SysErr::EPERM));
     }
 
     // "A privileged process (under Linux: one with the CAP_SYS_RESOURCE
@@ -68,7 +72,7 @@ pub fn PrLimit64(thread: &Thread, resource: LimitType, newLimit: Option<Limit>) 
         thread.NotifyRlimitCPUUpdated()
     }
 
-    return Ok(oldLim)
+    return Ok(oldLim);
 }
 
 #[derive(Default, Clone, Copy)]
@@ -81,15 +85,15 @@ impl RLimit64 {
     pub fn ToLimit(&self) -> Limit {
         return Limit {
             Cur: FromLinux(self.Cur),
-            Max: FromLinux(self.Max)
-        }
+            Max: FromLinux(self.Max),
+        };
     }
 
     pub fn FromLimit(lim: &Limit) -> Self {
         return Self {
             Cur: ToLinux(lim.Cur),
             Max: ToLinux(lim.Max),
-        }
+        };
     }
 }
 
@@ -108,7 +112,7 @@ pub fn SysGetrlimit(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     //*task.GetTypeMut(addr)? = rlim;
     task.CopyOutObj(&rlim, addr)?;
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysSetrlimit(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -120,11 +124,11 @@ pub fn SysSetrlimit(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         Some(r) => r,
     };
 
-    let rlim : RLimit64 = task.CopyInObj(addr)?;
+    let rlim: RLimit64 = task.CopyInObj(addr)?;
 
     PrLimit64(&task.Thread(), resource, Some(rlim.ToLimit()))?;
 
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysPrlimit64(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -139,7 +143,7 @@ pub fn SysPrlimit64(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     };
 
     let newlim = if newRlimAddr != 0 {
-        let nrl : RLimit64 = task.CopyInObj(newRlimAddr)?;
+        let nrl: RLimit64 = task.CopyInObj(newRlimAddr)?;
         Some(nrl.ToLimit())
     } else {
         None
@@ -174,13 +178,14 @@ pub fn SysPrlimit64(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             let credlock = cred.lock();
             let tcredlock = tcred.lock();
 
-            if credlock.RealKUID != tcredlock.RealKUID ||
-                credlock.RealKUID != tcredlock.EffectiveKUID ||
-                credlock.RealKUID != tcredlock.SavedKUID ||
-                credlock.RealKGID != tcredlock.RealKGID ||
-                credlock.RealKGID != tcredlock.EffectiveKGID ||
-                credlock.RealKGID != tcredlock.SavedKGID {
-                return Err(Error::SysError(SysErr::EPERM))
+            if credlock.RealKUID != tcredlock.RealKUID
+                || credlock.RealKUID != tcredlock.EffectiveKUID
+                || credlock.RealKUID != tcredlock.SavedKUID
+                || credlock.RealKGID != tcredlock.RealKGID
+                || credlock.RealKGID != tcredlock.EffectiveKGID
+                || credlock.RealKGID != tcredlock.SavedKGID
+            {
+                return Err(Error::SysError(SysErr::EPERM));
             }
         }
     }
@@ -193,7 +198,7 @@ pub fn SysPrlimit64(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         task.CopyOutObj(&rlim, oldRlimAddr)?;
     }
 
-    return Ok(0)
+    return Ok(0);
 }
 
 /*pub fn SysPrlimit64(task: &mut Task, args: &SyscallArguments) -> Result<i64> {

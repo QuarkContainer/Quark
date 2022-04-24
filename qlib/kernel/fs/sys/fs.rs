@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
 use alloc::string::String;
 use alloc::string::ToString;
+use alloc::sync::Arc;
 
 use super::super::super::super::common::*;
 use super::super::super::task::*;
@@ -35,12 +35,18 @@ impl Filesystem for SysFileSystem {
         return 0;
     }
 
-    fn Mount(&mut self, task: &Task, _device: &str, flags: &MountSourceFlags, _data: &str) -> Result<Inode> {
+    fn Mount(
+        &mut self,
+        task: &Task,
+        _device: &str,
+        flags: &MountSourceFlags,
+        _data: &str,
+    ) -> Result<Inode> {
         info!("sysfs file system mount ...");
 
         let msrc = MountSource::NewCachingMountSource(self, flags);
         let inode = NewSys(task, &Arc::new(QMutex::new(msrc)));
-        return Ok(inode)
+        return Ok(inode);
     }
 
     fn AllowUserMount(&self) -> bool {

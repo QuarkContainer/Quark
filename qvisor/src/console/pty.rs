@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::string::ToString;
 use libc;
 use std::io;
 use std::os::unix::io::{AsRawFd, RawFd};
-use alloc::string::ToString;
 
 use super::super::qlib::common::*;
 use super::super::qlib::cstring::*;
@@ -28,27 +28,22 @@ pub fn NewPty() -> Result<(Master, Slave)> {
     master.unlockpt()?;
     let slave = master.NewSlave()?;
 
-    return Ok((master, slave))
+    return Ok((master, slave));
 }
 
 pub fn NewMaster() -> Result<Master> {
     let cstr = CString::New(DEFAULT_PTMX);
-    return Master::new(cstr.Ptr() as * const libc::c_char)
+    return Master::new(cstr.Ptr() as *const libc::c_char);
 }
 
 pub trait Descriptor: AsRawFd {
     /// The constructor function `open` opens the path
     /// and returns the fd.
-    fn open(path: *const libc::c_char,
-            flag: i32,
-            mode: Option<i32>)
-            -> Result<RawFd> {
+    fn open(path: *const libc::c_char, flag: i32, mode: Option<i32>) -> Result<RawFd> {
         unsafe {
             match libc::open(path, flag, mode.unwrap_or_default()) {
                 -1 => Err(Error::SysError(-errno::errno().0)),
-                fd => {
-                    Ok(fd)
-                },
+                fd => Ok(fd),
             }
         }
     }
@@ -155,9 +150,11 @@ impl AsRawFd for Master {
 impl io::Read for Master {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         unsafe {
-            match libc::read(self.as_raw_fd(),
-                             buf.as_mut_ptr() as *mut libc::c_void,
-                             buf.len()) {
+            match libc::read(
+                self.as_raw_fd(),
+                buf.as_mut_ptr() as *mut libc::c_void,
+                buf.len(),
+            ) {
                 -1 => Ok(0),
                 len => Ok(len as usize),
             }
@@ -168,9 +165,11 @@ impl io::Read for Master {
 impl io::Write for Master {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         unsafe {
-            match libc::write(self.as_raw_fd(),
-                              buf.as_ptr() as *const libc::c_void,
-                              buf.len()) {
+            match libc::write(
+                self.as_raw_fd(),
+                buf.as_ptr() as *const libc::c_void,
+                buf.len(),
+            ) {
                 -1 => Err(io::Error::last_os_error()),
                 ret => Ok(ret as usize),
             }

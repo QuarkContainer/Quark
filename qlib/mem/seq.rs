@@ -49,7 +49,7 @@ pub struct BlockSeq {
 impl BlockSeq {
     pub fn New(buf: &[u8]) -> Self {
         let block = IoVec::NewFromSlice(&buf);
-        return Self::NewFromBlock(block)
+        return Self::NewFromBlock(block);
     }
 
     pub fn NewFromBlock(b: IoVec) -> Self {
@@ -64,11 +64,11 @@ impl BlockSeq {
     }
 
     pub fn CopyOutFrom(&self, src: &mut BlockSeqReader) -> Result<usize> {
-        return src.ReadToBlocks(*self)
+        return src.ReadToBlocks(*self);
     }
 
     pub fn CopyInTo(&mut self, dst: &mut BlockSeqWriter) -> Result<usize> {
-        return dst.WriteFromBlocks(*self)
+        return dst.WriteFromBlocks(*self);
     }
 
     pub fn ToVec(&self) -> Vec<u8> {
@@ -87,7 +87,7 @@ impl BlockSeq {
             limit += b.len as u64;
         }
 
-        return Self::blockSeqFromSliceLimited(slice, limit)
+        return Self::blockSeqFromSliceLimited(slice, limit);
     }
 
     pub fn ToIoVecs(&self) -> Vec<IoVec> {
@@ -118,19 +118,19 @@ impl BlockSeq {
         if len == 0 {
             return Self::default();
         } else if len == 1 {
-            return Self::NewFromBlock(slice[0].TakeFirst(limit as usize))
+            return Self::NewFromBlock(slice[0].TakeFirst(limit as usize));
         } else {
             return Self {
                 data: &slice[0] as *const _ as u64,
                 len: len as i32,
                 off: 0,
                 limit: limit,
-            }
+            };
         }
     }
 
     pub fn IsEmpty(&self) -> bool {
-        return self.len == 0
+        return self.len == 0;
     }
 
     pub fn Len(&self) -> usize {
@@ -150,21 +150,21 @@ impl BlockSeq {
     }
 
     pub fn NumBytes(&self) -> u64 {
-        return self.limit
+        return self.limit;
     }
 
     pub fn Head(&self) -> IoVec {
         assert!(self.len != 0, "empty blockseq");
 
         if self.len < 0 {
-            return self.InternalBlock()
+            return self.InternalBlock();
         }
 
-        let b = unsafe {
-            *(self.data as *const IoVec)
-        };
+        let b = unsafe { *(self.data as *const IoVec) };
 
-        return b.DropFirst(self.off as usize).TakeFirst(self.limit as usize)
+        return b
+            .DropFirst(self.off as usize)
+            .TakeFirst(self.limit as usize);
     }
 
     fn InternalBlock(&self) -> IoVec {
@@ -172,14 +172,14 @@ impl BlockSeq {
         return IoVec {
             start: self.data,
             len: self.limit as usize,
-        }
+        };
     }
 
     pub fn Tail(&self) -> Self {
         assert!(self.len != 0, "empty BlockSeq");
 
         if self.len < 0 {
-            return Self::default()
+            return Self::default();
         }
 
         let ptr = self.data as *const IoVec;
@@ -193,16 +193,16 @@ impl BlockSeq {
 
         let tailSlice = SkipEmty(&slice[1..]);
         let tailLimit = self.limit - headLen;
-        return Self::blockSeqFromSliceLimited(tailSlice, tailLimit)
+        return Self::blockSeqFromSliceLimited(tailSlice, tailLimit);
     }
 
     pub fn DropFirst(&self, n: u64) -> Self {
         if n >= self.limit {
-            return Self::default()
+            return Self::default();
         }
 
         if self.len < 0 {
-            return Self::NewFromBlock(self.InternalBlock().DropFirst(n as usize))
+            return Self::NewFromBlock(self.InternalBlock().DropFirst(n as usize));
         }
 
         let ptr = self.data as *const IoVec;
@@ -247,12 +247,12 @@ impl BlockSeq {
 
     pub fn CopyOut(&self, src: &[u8]) -> usize {
         let srcs = BlockSeq::New(src);
-        return Self::Copy(*self, srcs) as usize
+        return Self::Copy(*self, srcs) as usize;
     }
 
     pub fn CopyIn(&self, dst: &mut [u8]) -> usize {
         let dsts = BlockSeq::New(dst);
-        return Self::Copy(dsts, *self) as usize
+        return Self::Copy(dsts, *self) as usize;
     }
 
     pub fn Copy(dsts: Self, srcs: Self) -> i64 {
@@ -316,9 +316,9 @@ fn SkipEmty(slice: &[IoVec]) -> &[IoVec] {
     for i in 0..slice.len() {
         let b = slice[i];
         if b.len != 0 {
-            return &slice[i..]
+            return &slice[i..];
         }
     }
 
-    return &slice[..0]
+    return &slice[..0];
 }

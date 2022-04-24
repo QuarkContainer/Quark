@@ -12,21 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::string::String;
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
+use alloc::string::String;
 use alloc::string::ToString;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use super::super::super::super::common::*;
-use super::super::super::super::path::*;
 use super::super::super::super::linux_def::*;
+use super::super::super::super::path::*;
 use super::super::super::task::*;
+use super::super::filesystems::*;
 use super::super::inode::*;
 use super::super::mount::*;
 use super::util::*;
-use super::super::filesystems::*;
 
 pub const MAX_TRAVERSALS: u32 = 10;
 pub const FILESYSTEM_NAME: &str = "whitelistfs";
@@ -40,9 +40,7 @@ pub struct WhitelistFileSystem {
 
 impl WhitelistFileSystem {
     pub fn New() -> Self {
-        return Self {
-            paths: Vec::new(),
-        }
+        return Self { paths: Vec::new() };
     }
 
     pub fn GenericMountSourceOptions(data: &str) -> BTreeMap<String, String> {
@@ -74,7 +72,7 @@ impl WhitelistFileSystem {
 
 pub fn InstallWhitelist(task: &Task, m: &MountNs, inputPaths: &Vec<String>) -> Result<()> {
     if inputPaths.len() == 0 || (inputPaths.len() == 1 && inputPaths[0].as_str() == "") {
-        return Ok(())
+        return Ok(());
     }
 
     let mut done = BTreeMap::new();
@@ -93,7 +91,9 @@ pub fn InstallWhitelist(task: &Task, m: &MountNs, inputPaths: &Vec<String>) -> R
         i += 1;
 
         if !IsAbs(&p) {
-            return Err(Error::Common("InstallWhitelist: path should not absoluted".to_string()))
+            return Err(Error::Common(
+                "InstallWhitelist: path should not absoluted".to_string(),
+            ));
         }
 
         let s = p.as_bytes();
@@ -152,7 +152,7 @@ pub fn InstallWhitelist(task: &Task, m: &MountNs, inputPaths: &Vec<String>) -> R
 
     m.Freeze();
 
-    return Ok(())
+    return Ok(());
 }
 
 impl Filesystem for WhitelistFileSystem {
@@ -164,7 +164,13 @@ impl Filesystem for WhitelistFileSystem {
         return 0;
     }
 
-    fn Mount(&mut self, task: &Task, _device: &str, flags: &MountSourceFlags, data: &str) -> Result<Inode> {
+    fn Mount(
+        &mut self,
+        task: &Task,
+        _device: &str,
+        flags: &MountSourceFlags,
+        data: &str,
+    ) -> Result<Inode> {
         let mut options = Self::GenericMountSourceOptions(data);
 
         let remove = if let Some(ref wl) = options.get(&WHITELIST_KEY.to_string()) {
@@ -202,7 +208,7 @@ impl Filesystem for WhitelistFileSystem {
         let (fd, writable, _) = TryOpenAt(-100, &rootPath)?;
 
         if fd < 0 {
-            return Err(Error::SysError(-fd))
+            return Err(Error::SysError(-fd));
         }
 
         let mut dontTranslateOwnership = false;
@@ -219,12 +225,13 @@ impl Filesystem for WhitelistFileSystem {
         }
 
         if options.len() > 0 {
-            return Err(Error::Common("unsupported mount options".to_string()))
+            return Err(Error::Common("unsupported mount options".to_string()));
         }
 
         let owner = task.Creds().FileOwner();
 
-        let msrc = MountSource::NewHostMountSource(&rootPath, &owner, self, flags, dontTranslateOwnership);
+        let msrc =
+            MountSource::NewHostMountSource(&rootPath, &owner, self, flags, dontTranslateOwnership);
 
         let mut fstat = LibcStat::default();
         let ret = Fstat(fd, &mut fstat);
@@ -233,11 +240,11 @@ impl Filesystem for WhitelistFileSystem {
         }
         let inode = Inode::NewHostInode(&Arc::new(QMutex::new(msrc)), fd, &fstat, writable)?;
 
-        return Ok(inode)
+        return Ok(inode);
     }
 
     fn AllowUserMount(&self) -> bool {
-        return false
+        return false;
     }
 
     fn AllowUserList(&self) -> bool {

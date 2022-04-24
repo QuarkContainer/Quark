@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use alloc::string::ToString;
 
-use super::super::task::*;
+use super::super::super::addr::*;
 use super::super::super::common::*;
 use super::super::super::range::*;
-use super::super::super::addr::*;
+use super::super::task::*;
 
 // Mappable represents a memory-mappable object, a mutable mapping from uint64
 // offsets to (platform.File, uint64 File offset) pairs.
@@ -34,7 +34,14 @@ pub trait Mappable {
     // lifetime of the mapping.
     //
     // Preconditions: offset+ar.Length() does not overflow.
-    fn AddMapping(&self, task: &Task, ms: &Arc<MappingSpace>, ar: &Range, offset: u64, writeable: bool) -> Result<()>;
+    fn AddMapping(
+        &self,
+        task: &Task,
+        ms: &Arc<MappingSpace>,
+        ar: &Range,
+        offset: u64,
+        writeable: bool,
+    ) -> Result<()>;
 
     // RemoveMapping notifies the Mappable of the removal of a mapping from
     // addresses ar in ms to offsets [offset, offset+ar.Length()) in this
@@ -42,7 +49,14 @@ pub trait Mappable {
     //
     // Preconditions: offset+ar.Length() does not overflow. The removed mapping
     // must exist. writable must match the corresponding call to AddMapping.
-    fn RemoveMapping(&self, task: &Task, ms: &Arc<MappingSpace>, ar: &Range, offset: u64, writeable: bool);
+    fn RemoveMapping(
+        &self,
+        task: &Task,
+        ms: &Arc<MappingSpace>,
+        ar: &Range,
+        offset: u64,
+        writeable: bool,
+    );
 
     // CopyMapping notifies the Mappable of an attempt to copy a mapping in ms
     // from srcAR to dstAR. For most Mappables, this is equivalent to
@@ -55,7 +69,14 @@ pub trait Mappable {
     // Preconditions: offset+srcAR.Length() and offset+dstAR.Length() do not
     // overflow. The mapping at srcAR must exist. writable must match the
     // corresponding call to AddMapping.
-    fn CopyMapping(&self, ms: &Arc<MappingSpace>, srcAR: &Range, dstAR: &Range, offset: u64, writeable: bool) -> Result<()>;
+    fn CopyMapping(
+        &self,
+        ms: &Arc<MappingSpace>,
+        srcAR: &Range,
+        dstAR: &Range,
+        offset: u64,
+        writeable: bool,
+    ) -> Result<()>;
 
     // Translate returns the Mappable's current mappings for at least the range
     // of offsets specified by required, and at most the range of offsets
@@ -76,7 +97,13 @@ pub trait Mappable {
     // Translate synchronize with invalidation.
     //
     // Postconditions: See CheckTranslateResult.
-    fn Translate(&self, ms: &Arc<MappingSpace>, required: &Range, optional: &Range, at: &AccessType) -> (Vec<Translation>, Result<()>);
+    fn Translate(
+        &self,
+        ms: &Arc<MappingSpace>,
+        required: &Range,
+        optional: &Range,
+        at: &AccessType,
+    ) -> (Vec<Translation>, Result<()>);
 
     // InvalidateUnsavable requests that the Mappable invalidate Translations
     // that cannot be preserved across save/restore.
@@ -161,13 +188,23 @@ impl Translation {
 
     // CheckTranslateResult returns an error if (ts, terr) does not satisfy all
     // postconditions for Mappable.Translate(required, optional, at).
-    pub fn CheckTranslateResult(&self, required: &Range, optional: &Range, at: &AccessType, ts: &Vec<Translation>, terr: Result<()>) -> Result<()> {
+    pub fn CheckTranslateResult(
+        &self,
+        required: &Range,
+        optional: &Range,
+        at: &AccessType,
+        ts: &Vec<Translation>,
+        terr: Result<()>,
+    ) -> Result<()> {
         if !Addr(required.Start()).IsPageAligned() || !Addr(required.End()).IsPageAligned() {
             panic!("unaligned required range: {:?}", required);
         }
 
         if !optional.IsSupersetOf(&required) {
-            panic!("optional range {:?} is not a superset of required range {:?}", optional, required);
+            panic!(
+                "optional range {:?} is not a superset of required range {:?}",
+                optional, required
+            );
         }
 
         if !Addr(optional.Start()).IsPageAligned() || !Addr(optional.End()).IsPageAligned() {
@@ -176,37 +213,53 @@ impl Translation {
 
         // The first Translation must include required.Start.
         if ts.len() != 0 && !ts[0].Source.Contains(required.Start()) {
-            return Err(Error::Common(format!("first Translation {:?} does not cover start of required range {:?}", &ts[0].Source, required)));
+            return Err(Error::Common(format!(
+                "first Translation {:?} does not cover start of required range {:?}",
+                &ts[0].Source, required
+            )));
         }
 
         for i in 0..ts.len() {
             let t = &ts[i];
 
             if !Addr(t.Source.Start()).IsPageAligned() || !Addr(t.Source.End()).IsPageAligned() {
-                return Err(Error::Common(format!("Translation {:?} has unaligned Source", t.Source)))
+                return Err(Error::Common(format!(
+                    "Translation {:?} has unaligned Source",
+                    t.Source
+                )));
             }
 
             if !Addr(t.Offset).IsPageAligned() {
-                return Err(Error::Common(format!("Translation {:x} has unaligned Offset", t.Offset)))
+                return Err(Error::Common(format!(
+                    "Translation {:x} has unaligned Offset",
+                    t.Offset
+                )));
             }
 
             // Translations must be contiguous and in increasing order of
             // Translation.Source.
             if i > 0 && ts[i - 1].Source.End() != t.Source.Start() {
-                return Err(Error::Common(format!("Translations {:?} and {:?} are not contiguous",
-                                                 ts[i - 1].Source, t.Source)))
+                return Err(Error::Common(format!(
+                    "Translations {:?} and {:?} are not contiguous",
+                    ts[i - 1].Source,
+                    t.Source
+                )));
             }
 
             // Translations must be constrained to the optional range.
             if !optional.IsSupersetOf(&t.Source) {
-                return Err(Error::Common(format!("Translation {:?} lies outside optional range {:?}",
-                                                 t.Source, optional)))
+                return Err(Error::Common(format!(
+                    "Translation {:?} lies outside optional range {:?}",
+                    t.Source, optional
+                )));
             }
 
             // Each Translation must permit a superset of requested accesses.
             if !t.Perms.SupersetOf(at) {
-                return Err(Error::Common(format!("Translation {:?} does not permit all requested access types {:?}",
-                                                 &t.Perms, at)))
+                return Err(Error::Common(format!(
+                    "Translation {:?} does not permit all requested access types {:?}",
+                    &t.Perms, at
+                )));
             }
         }
 
@@ -221,12 +274,12 @@ impl Translation {
                 let t = &ts[ts.len() - 1];
                 if !t.Source.Contains(required.End() - 1) {
                     return Err(Error::Common(format!("last Translation {:?} does not reach end of required range {:?}, but Translate returned no error",
-                                                     t.Source, required)))
+                                                     t.Source, required)));
                 }
             }
             _ => (),
         }
 
-        return Ok(())
+        return Ok(());
     }
 }

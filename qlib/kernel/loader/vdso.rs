@@ -12,22 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::vec::Vec;
-use alloc::sync::Arc;
-use alloc::slice;
-use core::ops::Deref;
 use crate::qlib::mutex::*;
-use xmas_elf::program::Type;
-use xmas_elf::program::ProgramHeader::{Ph64};
+use alloc::slice;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::ops::Deref;
 pub use xmas_elf::header::HeaderPt2;
+use xmas_elf::program::ProgramHeader::Ph64;
 use xmas_elf::program::ProgramHeader64;
+use xmas_elf::program::Type;
 use xmas_elf::*;
 
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::super::singleton::*;
 
-pub static VDSO : Singleton<Vdso> = Singleton::<Vdso>::New();
+pub static VDSO: Singleton<Vdso> = Singleton::<Vdso>::New();
 
 pub unsafe fn InitSingleton() {
     VDSO.Init(Vdso::default());
@@ -54,19 +54,18 @@ impl VdsoInternal {
 
     pub fn LoadVDSO(&mut self) -> Result<()> {
         let slice = unsafe { slice::from_raw_parts(self.vdsoAddr as *const u8, self.vdsoLen) };
-        let elfFile = ElfFile::new(&slice).map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+        let elfFile =
+            ElfFile::new(&slice).map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
 
         match &elfFile.header.pt2 {
-            HeaderPt2::Header64(pt2) => {
-                match pt2.type_.as_type() {
-                    xmas_elf::header::Type::SharedObject => (),
-                    xmas_elf::header::Type::Executable => {
-                        info!("VDSO::LoadVDSO: invalid vdso format, not sharedobject");
-                        return Err(Error::WrongELFFormat);
-                    },
-                    _ => return Err(Error::WrongELFFormat),
+            HeaderPt2::Header64(pt2) => match pt2.type_.as_type() {
+                xmas_elf::header::Type::SharedObject => (),
+                xmas_elf::header::Type::Executable => {
+                    info!("VDSO::LoadVDSO: invalid vdso format, not sharedobject");
+                    return Err(Error::WrongELFFormat);
                 }
-            }
+                _ => return Err(Error::WrongELFFormat),
+            },
             _ => return Err(Error::WrongELFFormat),
         };
 
@@ -79,7 +78,7 @@ impl VdsoInternal {
             }
         }
 
-        return Ok(())
+        return Ok(());
     }
 }
 
@@ -96,7 +95,9 @@ impl Deref for Vdso {
 
 impl Vdso {
     pub fn Initialization(&self, vdsoParamPageAddr: u64) {
-        self.write().Initialization(vdsoParamPageAddr).expect("VDSO init fail");
+        self.write()
+            .Initialization(vdsoParamPageAddr)
+            .expect("VDSO init fail");
     }
 
     pub fn VDSOAddr(&self) -> u64 {

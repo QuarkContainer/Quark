@@ -12,27 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::mutex::*;
+use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::string::ToString;
-use alloc::collections::btree_map::BTreeMap;
-use alloc::vec::Vec;
 use alloc::sync::Arc;
-use crate::qlib::mutex::*;
+use alloc::vec::Vec;
 
-use super::dir::*;
-use super::super::mount::*;
-use super::super::inode::*;
+use super::super::super::super::auth::*;
+use super::super::super::super::common::*;
+use super::super::super::super::device::*;
+use super::super::super::super::linux_def::*;
 use super::super::super::super::path::*;
-use super::super::attr::*;
 use super::super::super::task::*;
 use super::super::super::uid::NewUID;
-use super::super::super::super::auth::*;
-use super::super::super::super::linux_def::*;
-use super::super::super::super::device::*;
-use super::super::super::super::common::*;
+use super::super::attr::*;
+use super::super::inode::*;
+use super::super::mount::*;
+use super::dir::*;
 
 fn emptyDir(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
-    let dir = Dir::New(task, BTreeMap::new(), &ROOT_OWNER, &FilePermissions::FromMode(FileMode(0o777)));
+    let dir = Dir::New(
+        task,
+        BTreeMap::new(),
+        &ROOT_OWNER,
+        &FilePermissions::FromMode(FileMode(0o777)),
+    );
     let deviceId = PSEUDO_DEVICE.lock().id.DeviceID();
     let inodeId = PSEUDO_DEVICE.lock().NextIno();
     let stableAttr = StableAttr {
@@ -53,7 +58,7 @@ fn emptyDir(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         Overlay: None,
     };
 
-    return Inode(Arc::new(QMutex::new(inodeInternal)))
+    return Inode(Arc::new(QMutex::new(inodeInternal)));
 }
 
 fn makeSubdir(task: &Task, msrc: &Arc<QMutex<MountSource>>, root: &Dir, subDir: &str) {
@@ -62,7 +67,7 @@ fn makeSubdir(task: &Task, msrc: &Arc<QMutex<MountSource>>, root: &Dir, subDir: 
     let arr: Vec<&str> = subDir.split('/').collect();
     for c in arr {
         if c.len() == 0 {
-            continue
+            continue;
         }
 
         let name = c.to_string();
@@ -76,18 +81,36 @@ fn makeSubdir(task: &Task, msrc: &Arc<QMutex<MountSource>>, root: &Dir, subDir: 
             Some(c) => c,
         };
 
-        root = child.lock().InodeOp.as_any().downcast_ref::<Dir>().unwrap().clone();
+        root = child
+            .lock()
+            .InodeOp
+            .as_any()
+            .downcast_ref::<Dir>()
+            .unwrap()
+            .clone();
     }
 }
 
-pub fn MakeDirectoryTree(task: &Task, msrc: &Arc<QMutex<MountSource>>, subDirs: &Vec<String>) -> Result<Inode> {
+pub fn MakeDirectoryTree(
+    task: &Task,
+    msrc: &Arc<QMutex<MountSource>>,
+    subDirs: &Vec<String>,
+) -> Result<Inode> {
     let root = emptyDir(task, msrc);
-    let dir = root.lock().InodeOp.as_any().downcast_ref::<Dir>().unwrap().clone();
+    let dir = root
+        .lock()
+        .InodeOp
+        .as_any()
+        .downcast_ref::<Dir>()
+        .unwrap()
+        .clone();
 
     for subdir in subDirs {
         let subdir = subdir.clone();
         if Clean(&subdir) != subdir {
-            return Err(Error::Common("cannot add subdir at an unclean path".to_string()));
+            return Err(Error::Common(
+                "cannot add subdir at an unclean path".to_string(),
+            ));
         }
 
         if subdir == "" || subdir == "/" {
@@ -97,5 +120,5 @@ pub fn MakeDirectoryTree(task: &Task, msrc: &Arc<QMutex<MountSource>>, subDirs: 
         makeSubdir(task, msrc, &dir, &subdir);
     }
 
-    return Ok(root)
+    return Ok(root);
 }

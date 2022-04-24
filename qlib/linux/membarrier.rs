@@ -12,18 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 // membarrier(2) commands, from include/uapi/linux/membarrier.h.
-pub const MEMBARRIER_CMD_QUERY                                : i32 = 0;
-pub const MEMBARRIER_CMD_GLOBAL                               : i32 = 1 << 0;
-pub const MEMBARRIER_CMD_GLOBAL_EXPEDITED                     : i32 = 1 << 1;
-pub const MEMBARRIER_CMD_REGISTER_GLOBAL_EXPEDITED            : i32 = 1 << 2;
-pub const MEMBARRIER_CMD_PRIVATE_EXPEDITED                    : i32 = 1 << 3;
-pub const MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED           : i32 = 1 << 4;
-pub const MEMBARRIER_CMD_PRIVATE_EXPEDITED_SYNC_CORE          : i32 = 1 << 5;
-pub const MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED_SYNC_CORE : i32 = 1 << 6;
-pub const MEMBARRIER_CMD_PRIVATE_EXPEDITED_RSEQ               : i32 = 1 << 7;
-pub const MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED_RSEQ      : i32 = 1 << 8;
+pub const MEMBARRIER_CMD_QUERY: i32 = 0;
+pub const MEMBARRIER_CMD_GLOBAL: i32 = 1 << 0;
+pub const MEMBARRIER_CMD_GLOBAL_EXPEDITED: i32 = 1 << 1;
+pub const MEMBARRIER_CMD_REGISTER_GLOBAL_EXPEDITED: i32 = 1 << 2;
+pub const MEMBARRIER_CMD_PRIVATE_EXPEDITED: i32 = 1 << 3;
+pub const MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED: i32 = 1 << 4;
+pub const MEMBARRIER_CMD_PRIVATE_EXPEDITED_SYNC_CORE: i32 = 1 << 5;
+pub const MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED_SYNC_CORE: i32 = 1 << 6;
+pub const MEMBARRIER_CMD_PRIVATE_EXPEDITED_RSEQ: i32 = 1 << 7;
+pub const MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED_RSEQ: i32 = 1 << 8;
 
 // membarrier(2) flags, from include/uapi/linux/membarrier.h.
-pub const MEMBARRIER_CMD_FLAG_CPU : u32 = 1 << 0;
+pub const MEMBARRIER_CMD_FLAG_CPU: u32 = 1 << 0;

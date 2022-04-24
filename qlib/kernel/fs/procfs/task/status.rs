@@ -12,40 +12,51 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
-use alloc::vec::Vec;
 use alloc::string::ToString;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 
+use super::super::super::super::super::auth::*;
 use super::super::super::super::super::common::*;
 use super::super::super::super::super::linux_def::*;
-use super::super::super::super::super::auth::*;
 use super::super::super::super::kernel::kernel::*;
-use super::super::super::fsutil::file::readonly_file::*;
-use super::super::super::fsutil::inode::simple_file_inode::*;
 use super::super::super::super::task::*;
+use super::super::super::super::threadmgr::pid_namespace::*;
+use super::super::super::super::threadmgr::thread::*;
 use super::super::super::attr::*;
+use super::super::super::dirent::*;
 use super::super::super::file::*;
 use super::super::super::flags::*;
-use super::super::super::dirent::*;
-use super::super::super::mount::*;
+use super::super::super::fsutil::file::readonly_file::*;
+use super::super::super::fsutil::inode::simple_file_inode::*;
 use super::super::super::inode::*;
-use super::super::super::super::threadmgr::thread::*;
-use super::super::super::super::threadmgr::pid_namespace::*;
+use super::super::super::mount::*;
 use super::super::inode::*;
 
 pub fn NewStatus(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>) -> Inode {
-    let v = NewStatusSimpleFileInode(task, thread, &ROOT_OWNER, &FilePermissions::FromMode(FileMode(0o400)), FSMagic::PROC_SUPER_MAGIC);
-    return NewProcInode(&Arc::new(v), msrc, InodeType::SpecialFile, Some(thread.clone()))
-
+    let v = NewStatusSimpleFileInode(
+        task,
+        thread,
+        &ROOT_OWNER,
+        &FilePermissions::FromMode(FileMode(0o400)),
+        FSMagic::PROC_SUPER_MAGIC,
+    );
+    return NewProcInode(
+        &Arc::new(v),
+        msrc,
+        InodeType::SpecialFile,
+        Some(thread.clone()),
+    );
 }
 
-pub fn NewStatusSimpleFileInode(task: &Task,
-                                thread: &Thread,
-                               owner: &FileOwner,
-                               perms: &FilePermissions,
-                               typ: u64)
-                               -> SimpleFileInode<StatusData> {
+pub fn NewStatusSimpleFileInode(
+    task: &Task,
+    thread: &Thread,
+    owner: &FileOwner,
+    perms: &FilePermissions,
+    typ: u64,
+) -> SimpleFileInode<StatusData> {
     let kernel = GetKernel();
     let pidns = kernel.RootPIDNamespace();
 
@@ -54,7 +65,7 @@ pub fn NewStatusSimpleFileInode(task: &Task,
         pidns: pidns,
     };
 
-    return SimpleFileInode::New(task, owner, perms, typ, false, status)
+    return SimpleFileInode::New(task, owner, perms, typ, false, status);
 }
 
 pub struct StatusData {
@@ -79,7 +90,7 @@ impl StatusData {
             Some(parent) => {
                 let tg = parent.ThreadGroup();
                 self.pidns.IDOfThreadGroup(&tg)
-            },
+            }
         };
         ret += &format!("PPid:\t{}\n", ppid);
         ret += &format!("TracerPid:\t{}\n", 0);
@@ -93,8 +104,8 @@ impl StatusData {
 
         let vss = mm.VirtualMemorySizeLocked();
         let rss = mm.ResidentSetSizeLocked();
-        ret += &format!("VmSize:\t{} kB\n", vss>>10);
-        ret += &format!("VmRSS:\t{} kB\n", rss>>10);
+        ret += &format!("VmSize:\t{} kB\n", vss >> 10);
+        ret += &format!("VmRSS:\t{} kB\n", rss >> 10);
         ret += &format!("Threads:\t{}\n", tg.Count());
 
         let creds = self.thread.Credentials();
@@ -114,7 +125,13 @@ impl StatusData {
 }
 
 impl SimpleFileTrait for StatusData {
-    fn GetFile(&self, task: &Task, _dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File> {
+    fn GetFile(
+        &self,
+        task: &Task,
+        _dir: &Inode,
+        dirent: &Dirent,
+        flags: FileFlags,
+    ) -> Result<File> {
         let fops = NewSnapshotReadonlyFileOperations(self.GenSnapshot(task));
         let file = File::New(dirent, &flags, fops);
         return Ok(file);
