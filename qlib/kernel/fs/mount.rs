@@ -402,8 +402,11 @@ impl MountNs {
 
                             match self.InitPath(root, &context.wd, remain) {
                                 None => (),
-                                Some((tnext, _tfirst, _tremain)) => {
+                                Some((tnext, tfirst, tremain)) => {
                                     current = tnext;
+                                    first = tfirst;
+                                    remain = tremain;
+                                    continue;
                                 }
                             };
                         }
