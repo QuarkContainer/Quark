@@ -14,6 +14,9 @@
 
 //use super::super::perf_tunning::*;
 
+use super::{SUPPORT_XSAVE, SUPPORT_XSAVEOPT};
+use core::sync::atomic::Ordering;
+
 #[inline]
 pub fn WriteMsr(msr: u32, value: u64) {
     unsafe {
@@ -314,14 +317,21 @@ pub fn SetRflags(val: u64) {
 }
 
 pub fn SaveFloatingPoint(addr: u64) {
-    fxsave(addr);
-    xsaveopt(addr);
-    xsave(addr);
+    if SUPPORT_XSAVEOPT.load(Ordering::Acquire) {
+        xsaveopt(addr);
+    } else if SUPPORT_XSAVE.load(Ordering::Acquire) {
+        xsave(addr);
+    } else {
+        fxsave(addr);
+    }
 }
 
 pub fn LoadFloatingPoint(addr: u64) {
-    fxrstor(addr);
-    xrstor(addr);
+    if SUPPORT_XSAVE.load(Ordering::Acquire) {
+        xrstor(addr);
+    } else {
+        fxrstor(addr);
+    }
 }
 
 pub fn xsave(addr: u64) {

@@ -12,6 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use core::sync::atomic::Ordering;
+use core::sync::atomic::{AtomicBool, AtomicI32, AtomicI64};
+
+use super::super::kernel_def::VcpuFreq;
+use super::super::ShareSpaceRef;
+use super::control_msg::*;
+use super::pagetable::*;
+use super::singleton::*;
+
+use self::arch::x86_64::arch_x86::*;
+use self::boot::loader::*;
+use self::kernel::async_process::*;
+use self::memmgr::pma::*;
+use self::quring::*;
+use self::taskMgr::*;
+
 pub mod Kernel;
 pub mod SignalDef;
 pub mod arch;
@@ -39,22 +55,6 @@ pub mod util;
 pub mod vcpu;
 pub mod version;
 
-use core::sync::atomic::AtomicI32;
-use core::sync::atomic::AtomicI64;
-use core::sync::atomic::Ordering;
-
-use self::arch::x86_64::arch_x86::*;
-use self::boot::loader::*;
-use self::kernel::async_process::*;
-use self::memmgr::pma::*;
-use self::quring::*;
-use self::taskMgr::*;
-use super::super::kernel_def::VcpuFreq;
-use super::super::ShareSpaceRef;
-use super::control_msg::*;
-use super::pagetable::*;
-use super::singleton::*;
-
 pub static TSC: Tsc = Tsc::New();
 pub static SHARESPACE: ShareSpaceRef = ShareSpaceRef::New();
 pub static IOURING: IOUringRef = IOUringRef::New();
@@ -69,6 +69,8 @@ pub static EXIT_CODE: Singleton<AtomicI32> = Singleton::<AtomicI32>::New();
 pub static VCPU_FREQ: AtomicI64 = AtomicI64::new(2_000_000_000); // default 2GHZ
 pub static ASYNC_PROCESS: AsyncProcess = AsyncProcess::New();
 pub static FP_STATE: X86fpstate = X86fpstate::Init();
+pub static SUPPORT_XSAVE: AtomicBool = AtomicBool::new(false);
+pub static SUPPORT_XSAVEOPT: AtomicBool = AtomicBool::new(false);
 
 pub fn SetWaitContainerfd(fd: i32) {
     WAIT_CONTAINER_FD.store(fd, Ordering::SeqCst)

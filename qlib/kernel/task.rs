@@ -54,7 +54,6 @@ use super::fs::file::*;
 use super::fs::mount::*;
 use super::kernel::fs_context::*;
 
-use super::super::singleton::*;
 use super::super::SysCallID;
 use super::asm::*;
 

@@ -97,9 +97,7 @@ use self::qlib::kernel::vcpu::*;
 use vcpu::CPU_LOCAL;
 
 use core::panic::PanicInfo;
-use core::sync::atomic::AtomicI32;
-use core::sync::atomic::AtomicU64;
-use core::sync::atomic::AtomicUsize;
+use core::sync::atomic::{AtomicI32, AtomicU64, AtomicUsize, Ordering};
 use core::{mem, ptr};
 use qlib::mutex::*;
 
@@ -116,6 +114,7 @@ use self::loader::vdso::*;
 use self::qlib::common::*;
 use self::qlib::config::*;
 use self::qlib::control_msg::*;
+use self::qlib::cpuid::*;
 use self::qlib::linux::time::*;
 use self::qlib::linux_def::MemoryDef;
 use self::qlib::loader::*;
@@ -177,6 +176,16 @@ pub fn SingletonInit() {
             MemoryDef::DEFAULT_STACK_SIZE as usize,
         ));
         EXIT_CODE.Init(AtomicI32::new(0));
+
+        let featureSet = HostFeatureSet();
+        SUPPORT_XSAVE.store(
+            featureSet.HasFeature(Feature(X86Feature::X86FeatureXSAVE as i32)),
+            Ordering::Release,
+        );
+        SUPPORT_XSAVEOPT.store(
+            featureSet.HasFeature(Feature(X86Feature::X86FeatureXSAVEOPT as i32)),
+            Ordering::Release,
+        );
 
         guestfdnotifier::GUEST_NOTIFIER.SetValue(SHARESPACE.GuestNotifierAddr());
         UID.Init(AtomicU64::new(1));

@@ -444,7 +444,7 @@ impl KVMVcpu {
             .set_regs(&regs)
             .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
 
-        self.kvm_set_xcr0()?;
+        self.SetXCR0()?;
 
         let mut lastVal: u32 = 0;
         let mut first = true;
@@ -955,8 +955,9 @@ impl KVMVcpu {
         return count;
     }
 
-    pub fn kvm_set_xcr0(&self) -> Result<()> {
+    pub fn SetXCR0(&self) -> Result<()> {
         let xcr0 = xgetbv();
+        // mask MPX feature as it is not fully supported in VM yet
         let maskedXCR0 = xcr0 & !(XSAVEFeatureBNDREGS as u64 | XSAVEFeatureBNDCSR as u64);
         let mut xcrs_args = kvm_xcrs::default();
         xcrs_args.nr_xcrs = 1;
