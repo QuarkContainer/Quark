@@ -26,6 +26,7 @@ use super::qlib::common::*;
 use super::rdma::*;
 use super::rdma_channel::*;
 use super::rdma_ctrlconn::*;
+use super::rdma_agent::*;
 
 use super::qlib::linux_def::*;
 use super::qlib::rdma_share::*;
@@ -172,15 +173,15 @@ impl RDMAConn {
             SocketState::WaitingForRemoteMeta => {
                 match self.RecvRemoteRDMAInfo() {
                     Ok(()) => {
-                        println!("Received remote RDMA Info");
+                        // println!("Received remote RDMA Info");
                     }
                     _ => return,
                 }
-                println!("SetupRDMA");
+                // println!("SetupRDMA");
                 self.SetupRDMA();
-                println!("SendAck");
+                // println!("SendAck");
                 self.SendAck().unwrap(); // assume the socket is ready for send
-                println!("Set state WaitingForRemoteReady");
+                // println!("Set state WaitingForRemoteReady");
                 self.SetSocketState(SocketState::WaitingForRemoteReady);
 
                 match self.RecvAck() {
@@ -198,7 +199,7 @@ impl RDMAConn {
                 self.SetReady();
             }
             SocketState::Ready => {
-                println!("Read::Ready");
+                // println!("Read::Ready");
             }
             _ => {
                 panic!(
@@ -213,19 +214,19 @@ impl RDMAConn {
         match self.SocketState() {
             SocketState::Init => {
                 self.SendLocalRDMAInfo().unwrap();
-                println!("local RDMAInfo sent");
+                // println!("local RDMAInfo sent");
                 self.SetSocketState(SocketState::WaitingForRemoteMeta);
             }
             SocketState::WaitingForRemoteMeta => {
-                println!("Write::1");
+                // println!("Write::1");
                 //TODO: server side received 4(W) first and 5 (R|W) afterwards. Need more investigation to see why it's different.
             }
             SocketState::WaitingForRemoteReady => {
-                println!("Write::2");
+                // println!("Write::2");
                 //TODO: server side received 4(W) first and 5 (R|W) afterwards. Need more investigation to see why it's different.
             }
             SocketState::Ready => {
-                println!("Write::Ready");
+                // println!("Write::Ready");
             }
             _ => {
                 panic!(
@@ -249,8 +250,8 @@ impl RDMAConn {
 
     pub fn SetReady(&self) {
         self.SetSocketState(SocketState::Ready);
-        println!("Ready!!!");
-        self.ctrlChan.lock().SendData();
+        // println!("Ready!!!");
+        //self.ctrlChan.lock().SendData();
     }
 
     pub fn SendLocalRDMAInfo(&self) -> Result<()> {
@@ -264,7 +265,7 @@ impl RDMAConn {
 
         if ret < 0 {
             let errno = errno::errno().0;
-            println!("SendLocalRDMAInfo, err: {}", errno);
+            // println!("SendLocalRDMAInfo, err: {}", errno);
             return Err(Error::SysError(errno));
         }
 
@@ -305,12 +306,16 @@ impl RDMAConn {
                 println!("ctrlChann is not null")
             }
         }
+        println!(
+            "RecvRemoteRDMAInfo. raddr: {}, rlen: {}, rkey: {}",
+            data.raddr, data.rlen, data.rkey
+        );
         self.ctrlChan
             .lock()
             .chan
             .upgrade()
             .unwrap()
-            .UpdateRemoteRDMAInfo(data.raddr, data.rlen, data.rkey);
+            .UpdateRemoteRDMAInfo(0, data.raddr, data.rlen, data.rkey);
         *self.remoteRDMAInfo.lock() = data;
 
         return Ok(());
@@ -408,6 +413,7 @@ pub struct RDMAControlChannelIntern {
     pub readLeft: u8,
     pub writeBuf: [u8; CONTROL_MSG_SIZE],
     pub writeLeft: Mutex<u8>,
+    pub curControlMsg: Mutex<ControlMsgBody>,
 }
 
 #[derive(Clone)]
@@ -427,6 +433,7 @@ impl Default for RDMAControlChannel {
             readLeft: 0,
             writeBuf: [0; CONTROL_MSG_SIZE],
             writeLeft: Mutex::new(0),
+            curControlMsg: Mutex::new(ControlMsgBody::DummyMsg),
         }))
     }
 }
@@ -453,15 +460,34 @@ impl RDMAControlChannel {
             readLeft: 0,
             writeBuf: [0; CONTROL_MSG_SIZE],
             writeLeft: Mutex::new(0),
+            curControlMsg: Mutex::new(ControlMsgBody::DummyMsg),
         }))
     }
 
     pub fn ProcessRDMAWriteImmFinish(&self) {
+        // TODOVIP: should control channel handle this?
+        // match *self.curControlMsg.lock() {
+        //     ControlMsgBody::ConnectRequest(msg) => {
+        //         self.HandleConnectRequest(&msg);
+        //     }
+        //     ControlMsgBody::ConnectResponse(msg) => {
+        //         self.HandleConnectResponse(&msg);
+        //     }
+        //     ControlMsgBody::ConnectConfirm(msg) => {
+        //         println!("1 localChannelId: {}", msg.localChannelId);
+        //     }
+        //     ControlMsgBody::ConsumedData(msg) => {
+        //         println!("Write ConsumeData");
+        //     }
+        //     ControlMsgBody::DummyMsg => {
+        //         panic!("Control channel received dummy message!");
+        //     }
+        // }
         self.chan.upgrade().unwrap().ProcessRDMAWriteImmFinish();
     }
 
-    pub fn ProcessRDMARecvWriteImm(&self, qpNum: u32, _recvCount: u64) -> Result<()> {
-        println!("ProcessRDMARecvWriteImm");
+    pub fn ProcessRDMARecvWriteImm(&self, qpNum: u32, recvCount: u64) {
+        // println!("RDMAControlChannel::ProcessRDMARecvWriteImm 1");
         let rdmaChannel = self.chan.upgrade().unwrap();
         let _res = rdmaChannel.conn.PostRecv(
             qpNum,
@@ -470,10 +496,24 @@ impl RDMAControlChannel {
             rdmaChannel.rkey,
         );
 
+        let (_trigger, _addr, _len) = rdmaChannel
+            .sockBuf
+            .ProduceAndGetFreeReadBuf(recvCount as usize);
+
         //TODO: handle postRecv error
         let mut readBuf = rdmaChannel.sockBuf.readBuf.lock();
         let msgSize = mem::size_of::<ControlMsgBody>();
-        while readBuf.AvailableDataSize() > msgSize {
+        // println!("RDMAControlChannel::ProcessRDMARecvWriteImm 2");
+        // println!(
+        //     "readBuf.AvailableDataSize(): {}",
+        //     readBuf.AvailableDataSize()
+        // );
+        // println!(
+        //     "writeBuf.AvailableDataSize(): {}",
+        //     rdmaChannel.sockBuf.writeBuf.lock().AvailableDataSize()
+        // );
+        // println!("msgSize: {}", msgSize);
+        while readBuf.AvailableDataSize() >= msgSize {
             let r: Vec<u8> = Vec::with_capacity(msgSize);
             let rAddr = r.as_ptr() as u64;
             let (_trigger, len) = readBuf.readViaAddr(rAddr, msgSize as u64);
@@ -481,19 +521,30 @@ impl RDMAControlChannel {
                 panic!("readViaAddr can't read enough content!");
             }
 
-            let msg = unsafe { &mut *(rAddr as *mut ControlMsgBody) };
+            let consumedData = rdmaChannel.sockBuf.AddConsumeReadData(len as u64);
+            // println!("RDMAControlChannel::ProcessRDMARecvWriteImm 3");
+            if 2 * consumedData > readBuf.BufSize() as u64 {
+                // println!("Control Channel to send consumed data");
+                rdmaChannel.SendConsumedData();
+            }
+
+            let msg = unsafe { &*(rAddr as *mut ControlMsgBody) };
+            // println!("RDMAControlChannel::ProcessRDMARecvWriteImm 4");
             match msg {
                 ControlMsgBody::ConnectRequest(msg) => {
-                    self.HandleConnectionRequest(msg);
+                    self.HandleConnectRequest(msg);
                 }
                 ControlMsgBody::ConnectResponse(msg) => {
-                    println!("3 remoteChannelId: {}", msg.remoteChannelId);
+                    self.HandleConnectResponse(msg);
                 }
                 ControlMsgBody::ConnectConfirm(msg) => {
-                    println!("1 localChannelId: {}", msg.localChannelId);
+                    // println!("1 localChannelId: {}", msg.localChannelId);
                 }
                 ControlMsgBody::ConsumedData(msg) => {
-                    println!("3 remoteChannelId: {}", msg.remoteChannelId);
+                    self.HandleConsumedData(qpNum, msg);
+                }
+                ControlMsgBody::DummyMsg => {
+                    panic!("Control channel received dummy message!");
                 }
             }
         }
@@ -527,21 +578,80 @@ impl RDMAControlChannel {
         //     }
         // }
 
-        return Ok(());
+        //return Ok(());
     }
 
-    pub fn HandleConnectionRequest(&self, connectionRequest: &mut ConnectRequest) {
+    pub fn HandleConsumedData(&self, qpNum: u32, consumedData: &ConsumedData) {
+        // println!("RDMAControlChannel::HandleConsumedData 1, consumedData: {:?}", consumedData);
+        //  control channel
+        if consumedData.remoteChannelId == 0 {
+            RDMA_SRV
+                .controlChannels2
+                .lock()
+                .get(&qpNum)
+                .unwrap()
+                .ProcessRemoteConsumedData(consumedData.consumedData);
+        } else {
+            match RDMA_SRV.channels.lock().get(&consumedData.remoteChannelId) {
+                Some(rdmaChannel) => {
+                    rdmaChannel.ProcessRemoteConsumedData(consumedData.consumedData);
+                }
+                None => {
+                    println!("Channel id {} is not found!", consumedData.remoteChannelId);
+                }
+            }
+        }
+    }
+
+    pub fn HandleConnectResponse(&self, connectResponse: &ConnectResponse) {
+        // println!("handle Connect Response: {:?}", connectResponse);
+        match RDMA_SRV
+            .channels
+            .lock()
+            .get(&connectResponse.remoteChannelId)
+        {
+            Some(rdmaChannel) => {
+                rdmaChannel.UpdateRemoteRDMAInfo(
+                    connectResponse.localChannelId,
+                    connectResponse.raddr,
+                    connectResponse.rlen,
+                    connectResponse.rkey,
+                );
+                println!("HandleConnectResponse: before SendResponse");
+                rdmaChannel.agent.SendResponse(RDMAResp {
+                    user_data: 0,
+                    msg: RDMARespMsg::RDMAConnect(RDMAConnectResp {
+                        sockfd: rdmaChannel.sockfd,
+                        ioBufIndex: rdmaChannel.ioBufIndex,
+                        channelId: rdmaChannel.localId,
+                    }),
+                })
+            }
+            None => {
+                println!(
+                    "Channel id {} is not found!",
+                    connectResponse.remoteChannelId
+                );
+            }
+        }
+    }
+
+    pub fn HandleConnectRequest(&self, connectRequest: &ConnectRequest) {
+        // println!("HandleConnectRequest 1");
+        // println!("ConnectReqeust: {:?}", connectRequest);
         let endPoint = Endpoint {
-            ipAddr: connectionRequest.dstIpAddr,
-            port: connectionRequest.dstPort,
+            ipAddr: connectRequest.dstIpAddr,
+            port: connectRequest.dstPort,
         };
         let mut found = false;
         let mut agentId = 0;
-        match RDMA_SRV.srvEndPoints.get(&endPoint) {
+        let mut sockfd = 0;
+        match RDMA_SRV.srvEndPoints.lock().get(&endPoint) {
             Some(srvEndpoint) => match srvEndpoint.status {
                 SrvEndPointStatus::Listening => {
                     found = true;
                     agentId = srvEndpoint.agentId;
+                    sockfd = srvEndpoint.sockfd;
                 }
                 _ => {}
             },
@@ -549,8 +659,39 @@ impl RDMAControlChannel {
         }
 
         if found {
-            let channelId = RDMA_SRV.channelIdMgr.lock().AllocId();
-            //let rdmaChannel = RDMAChannel::New(localId, remoteId, lkey, rkey, socketBuf, rdmaConn);
+            println!("HandleConnectRequest 2");
+            let agents = RDMA_SRV.agents.lock();
+            let agent = agents.get(&agentId).unwrap();
+            let rdmaChannel = agent
+                .CreateServerRDMAChannel(connectRequest, self.chan.upgrade().unwrap().conn.clone());
+
+            RDMA_SRV
+                .channels
+                .lock()
+                .insert(rdmaChannel.localId, rdmaChannel.clone());
+
+            self.SendControlMsg(ControlMsgBody::ConnectResponse(ConnectResponse {
+                remoteChannelId: rdmaChannel.remoteRDMAInfo.lock().remoteId,
+                localChannelId: rdmaChannel.localId,
+                raddr: rdmaChannel.raddr,
+                rkey: rdmaChannel.rkey,
+                rlen: rdmaChannel.length,
+            }))
+            .unwrap();
+            // agent.sockInfos.lock().get_mut(&sockfd).unwrap().acceptQueue.lock().EnqSocket(rdmaChannel.localId);
+            
+            agent.SendResponse(RDMAResp {
+                user_data: 0,
+                msg: RDMARespMsg::RDMAAccept(RDMAAcceptResp {
+                    sockfd,
+                    ioBufIndex: rdmaChannel.ioBufIndex,
+                    channelId: rdmaChannel.localId,
+                    dstIpAddr: rdmaChannel.dstIpAddr,
+                    dstPort: rdmaChannel.dstPort
+                })
+            });
+        } else {
+            println!("TODO: no server listening, need ack error back!");
         }
     }
 
@@ -561,20 +702,32 @@ impl RDMAControlChannel {
     //3. Connect Confirm: Trigger by RecvWriteImm
     //4. ConsumedData: 1) WriteImmFinish, 2) Read more than half of read buffer.
     //5. RemoteRecevieReqeustsNum ?? when to send?
-    pub fn SendMsg(&self, msg: ControlMsgBody) -> Result<()> {
+    pub fn SendControlMsg(&self, msg: ControlMsgBody) -> Result<()> {
+        // println!("RDMAControlChannel::SendControlMsg 0");
         let rdmaChannel = self.chan.upgrade().unwrap();
+        // println!("RDMAControlChannel::SendControlMsg 1");
         let mut writeBuf = rdmaChannel.sockBuf.writeBuf.lock();
-        if mem::size_of::<ControlMsgBody>() < writeBuf.AvailableSpace() {
+        // println!(
+        //     "mem::size_of::<ControlMsgBody>(): {}",
+        //     mem::size_of::<ControlMsgBody>()
+        // );
+        // println!("writeBuf.AvailableSpace(): {}", writeBuf.AvailableSpace());
+        if mem::size_of::<ControlMsgBody>() > writeBuf.AvailableSpace() {
             return Err(Error::Timeout);
         }
         let (trigger, _len) = writeBuf.writeViaAddr(
             &msg as *const _ as u64,
             mem::size_of::<ControlMsgBody>() as u64,
         );
+        // println!("RDMAControlChannel::SendControlMsg 2, trigger: {}", trigger);
+        std::mem::drop(writeBuf);
         if trigger {
-            //TODO: check this is good to call rdmachannel here.
+            //TODOVIP: what if rdmaChannel is sending something!
             rdmaChannel.RDMASend();
         }
+
+        //TODOVIP: how to wait???
+        *self.curControlMsg.lock() = msg;
         // let totalLen = mem::size_of::<ControlMsgBody>();
         // if writtenLen < totalLen {
         //     let writeLeft = totalLen - writtenLen;
@@ -598,7 +751,7 @@ impl RDMAControlChannel {
             .writeBuf
             .lock()
             .GetSpaceBuf();
-        println!("dataBuf, addr: 0x{:x}, len: {}", dataBuf.0, dataBuf.1);
+        // println!("dataBuf, addr: 0x{:x}, len: {}", dataBuf.0, dataBuf.1);
         let x = dataBuf.0;
         let z = unsafe { &mut *(x as *mut u8) };
         println!("z: {}", z);
@@ -618,7 +771,7 @@ impl RDMAControlChannel {
             remoteChannelId: 123,
             raddr: 456,
             rkey: 789,
-            length: 1000,
+            rlen: 1000,
             srcIpAddr: 0,
             srcPort: 80,
             dstIpAddr: 0,
@@ -701,33 +854,34 @@ pub enum ControlMsgBody {
     ConnectResponse(ConnectResponse),
     ConnectConfirm(ConnectConfirm),
     ConsumedData(ConsumedData),
+    DummyMsg,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ConsumedData {
-    remoteChannelId: u32,
-    consumedData: u32,
+    pub remoteChannelId: u32,
+    pub consumedData: u32,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ConnectRequest {
-    remoteChannelId: u32,
-    raddr: u64,
-    rkey: u32,
-    length: u32,
-    dstIpAddr: u32,
-    dstPort: u16,
-    srcIpAddr: u32,
-    srcPort: u16,
+    pub remoteChannelId: u32,
+    pub raddr: u64,
+    pub rkey: u32,
+    pub rlen: u32,
+    pub dstIpAddr: u32,
+    pub dstPort: u16,
+    pub srcIpAddr: u32,
+    pub srcPort: u16,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ConnectResponse {
     remoteChannelId: u32,
     localChannelId: u32,
     raddr: u64,
     rkey: u32,
-    length: u32,
+    rlen: u32,
 }
 
 #[derive(Clone)]

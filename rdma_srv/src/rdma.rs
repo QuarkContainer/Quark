@@ -92,14 +92,14 @@ impl IBContext {
     pub fn New(deviceName: &str) -> Self {
         // look for device
         let mut deviceNumber = 0;
-        println!("IBContext::New, 1");
+        // println!("IBContext::New, 1");
         let device_list = unsafe { rdmaffi::ibv_get_device_list(&mut deviceNumber as *mut _) };
         if device_list.is_null() {
             // TODO: clean up
             panic!("ibv_get_device_list failed: {}", errno::errno().0);
         }
 
-        println!("IBContext::New, deviceNumber: {}", deviceNumber);
+        // println!("IBContext::New, deviceNumber: {}", deviceNumber);
         if deviceNumber == 0 {
             // TODO: clean up
             panic!("IB device is not found");
@@ -110,7 +110,7 @@ impl IBContext {
             slice::from_raw_parts_mut(device_list, deviceNumber as usize)
         };
 
-        println!("IBContext::New, len: {}", devices.len());
+        // println!("IBContext::New, len: {}", devices.len());
 
         let mut device = devices[0];
 
@@ -138,7 +138,7 @@ impl IBContext {
             panic!("Failed to open IB device error");
         }
 
-        println!("ibv_open_device succeeded");
+        // println!("ibv_open_device succeeded");
         /* We are now done with device list, free it */
         unsafe { rdmaffi::ibv_free_device_list(device_list) };
 
@@ -209,7 +209,7 @@ impl IBContext {
 
         unsafe {
             let ret = rdmaffi::ibv_req_notify_cq(cq, 0);
-            println!("ibv_req_notify_cq, ret: {}", ret);
+            // println!("ibv_req_notify_cq, ret: {}", ret);
         }
 
         return CompleteQueue(cq);
@@ -326,7 +326,7 @@ impl RDMAContextIntern {
         // start to monitor the complete channel
         //IO_MGR.AddRDMAContext(ccfd);
         //IO_MGR.AddWait(ccfd, EVENT_READ);
-        println!("RDMA ccfd: {}", ccfd);
+        // println!("RDMA ccfd: {}", ccfd);
 
         let completeQueue = ibContext.CreateCompleteQueue(&completeChannel);
         let gid = ibContext.QueryGid(ibPort);
@@ -390,7 +390,7 @@ impl RDMAContext {
     }
 
     pub fn CreateQueuePair(&self) -> Result<QueuePair> {
-        println!("CreateQueuePair 1");
+        // println!("CreateQueuePair 1");
         let context = self.lock();
         //create queue pair
         let mut qp_init_attr = rdmaffi::ibv_qp_init_attr {
@@ -413,7 +413,7 @@ impl RDMAContext {
         let qp =
             unsafe { rdmaffi::ibv_create_qp(context.protectDomain.0, &mut qp_init_attr as *mut _) };
         if qp.is_null() {
-            println!("errorno: {}", errno::errno().0);
+            // println!("errorno: {}", errno::errno().0);
             return Err(Error::SysError(errno::errno().0));
         }
 
@@ -453,12 +453,12 @@ impl RDMAContext {
 
     pub fn CompleteChannelFd(&self) -> i32 {
         let fd = self.lock().ccfd;
-        println!("XXXX, fd: {} ", fd);
+        // println!("XXXX, fd: {} ", fd);
         return fd
     }
 
     pub fn PollCompletionQueueAndProcess(&self) -> usize {
-        println!("PollCompletionQueueAndProcess");
+        // println!("PollCompletionQueueAndProcess");
         let mut wc = rdmaffi::ibv_wc {
             //TODO: find a better way to initialize
             wr_id: 0,
@@ -645,7 +645,7 @@ impl RDMAContext {
 
     // call back for
     pub fn ProcessWC(&self, wc: &rdmaffi::ibv_wc) {
-        println!("ProcessWC 1");
+        // println!("ProcessWC 1");
         let wrid = WorkRequestId(wc.wr_id);
         let _fd = wrid.Fd();
 
@@ -680,6 +680,7 @@ impl RDMAContext {
             RDMA_SRV.ProcessRDMAWriteImmFinish(wc.wr_id as u32, wc.qp_num);
         } else if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RECV_RDMA_WITH_IMM {
             let imm = unsafe { wc.imm_data_invalidated_rkey_union.imm_data };
+            // println!("ProcessWC. received len: {}", wc.byte_len);
             let immData = ImmData(imm);
             // debug!(
             //     "ProcessWC::2, recv len:{}, writelen: {}, status: {}, id: {}",
@@ -820,7 +821,7 @@ impl QueuePair {
             return Err(Error::SysError(errno::errno().0));
         }
 
-        println!("QP::WriteImm");
+        // println!("QP::WriteImm");
 
         return Ok(());
     }
@@ -843,7 +844,7 @@ impl QueuePair {
             return Err(Error::SysError(errno::errno().0));
         }
 
-        println!("QP::PostRecv");
+        // println!("QP::PostRecv");
 
         return Ok(());
     }

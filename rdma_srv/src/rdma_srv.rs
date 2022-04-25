@@ -17,15 +17,16 @@ use std::collections::HashMap;
 
 use super::id_mgr::IdMgr;
 use super::qlib::rdma_share::*;
+use super::rdma::*;
 use super::rdma_agent::*;
 use super::rdma_channel::*;
 use super::rdma_conn::*;
 use super::rdma_ctrlconn::*;
 use lazy_static::lazy_static;
 use std::mem::MaybeUninit;
-use std::{env, mem, ptr, thread, time};
-use super::rdma::*;
 use std::sync::Arc;
+use std::{env, mem, ptr, thread, time};
+use std::ffi::CString;
 
 lazy_static! {
     pub static ref RDMA_SRV: RDMASrv = RDMASrv::New();
@@ -42,6 +43,7 @@ pub enum SrvEndPointStatus {
 pub struct SrvEndpoint {
     //pub srvEndpointId: u32, // to be returned as bind
     pub agentId: u32,
+    pub sockfd: u32,
     pub endpoint: Endpoint,
     pub status: SrvEndPointStatus, //TODO: double check whether it's needed or not
                                    //pub acceptQueue: [RDMAChannel; 5], // hold rdma channel which can be assigned.
@@ -95,8 +97,7 @@ pub struct RDMASrv {
     pub shareRegion: &'static ShareRegion,
 
     // keep track of server endpoint on current node
-    pub srvEndPoints: HashMap<Endpoint, SrvEndpoint>,
-
+    pub srvEndPoints: Mutex<HashMap<Endpoint, SrvEndpoint>>,
     pub currNode: Node,
 
     pub channelIdMgr: Mutex<IdMgr>,
@@ -114,15 +115,22 @@ impl Drop for RDMASrv {
         //TODO: This is not called because it's global static
         println!("drop RDMASrv");
         unsafe {
-            libc::munmap(self.controlChannelRegionAddress.addr as *mut libc::c_void, self.controlChannelRegionAddress.len as usize);
-            libc::munmap(self.srvMemRegion.addr  as *mut libc::c_void, self.srvMemRegion.len as usize);
+            libc::munmap(
+                self.controlChannelRegionAddress.addr as *mut libc::c_void,
+                self.controlChannelRegionAddress.len as usize,
+            );
+            libc::munmap(
+                self.srvMemRegion.addr as *mut libc::c_void,
+                self.srvMemRegion.len as usize,
+            );
         }
-    } 
+    }
 }
 
 impl RDMASrv {
     pub fn New() -> Self {
         println!("RDMASrv::New");
+
         let controlSize = mem::size_of::<RDMAControlChannelRegion>();
         let contrlAddr = unsafe {
             libc::mmap(
@@ -139,14 +147,25 @@ impl RDMASrv {
             println!("failed to mmap control region");
         }
 
-        println!("contrlAddr : 0x{:x}, controlSize is: {}", contrlAddr as u64, controlSize);
+        // println!(
+        //     "contrlAddr : 0x{:x}, controlSize is: {}",
+        //     contrlAddr as u64, controlSize
+        // );
 
+        let memfdname = CString::new("RDMASrvMemFd").expect("CString::new failed for RDMASrvMemFd");
         let memfd = unsafe {
             libc::memfd_create(
-                "Server memfd".as_ptr() as *const i8,
+                memfdname.as_ptr(),
                 libc::MFD_ALLOW_SEALING,
             )
         };
+        // println!("memfd::{}", memfd);
+        if memfd == -1 {
+            panic!(
+                "fail to create memfd, error is: {}",
+                std::io::Error::last_os_error()
+            );
+        }
         let size = mem::size_of::<ShareRegion>();
         let _ret = unsafe { libc::ftruncate(memfd, size as i64) };
         let shareRegionAddr = unsafe {
@@ -160,20 +179,34 @@ impl RDMASrv {
             )
         };
 
-        println!("shareRegionAddr : 0x{:x}, size is: {}", shareRegionAddr as u64, size);
+        if shareRegionAddr as i64 == -1 {
+            panic!(
+                "fail to mmap share region, error is: {}",
+                std::io::Error::last_os_error()
+            );
+        }
+
+        println!(
+            "shareRegionAddr : 0x{:x}, size is: {}",
+            shareRegionAddr as u64, size
+        );
 
         //RDMA.Init("", 1);
 
         //start from 2M registration.
-        let mr = RDMA.CreateMemoryRegion(contrlAddr as u64, 2 * 1024 * 1024).unwrap();
-
+        let mr = RDMA
+            .CreateMemoryRegion(contrlAddr as u64, 2 * 1024 * 1024)
+            .unwrap();
         return Self {
             epollFd: 0,
             unixSockfd: 0,
             tcpSockfd: 0,
-            eventfd: 0,
+            eventfd: unsafe { libc::eventfd(0, 0) },
             srvMemfd: memfd,
-            srvMemRegion: MemRegion { addr: shareRegionAddr as u64, len: size as u64 },
+            srvMemRegion: MemRegion {
+                addr: shareRegionAddr as u64,
+                len: size as u64,
+            },
             conns: Mutex::new(HashMap::new()),
             channels: Mutex::new(HashMap::new()),
             agents: Mutex::new(HashMap::new()),
@@ -181,9 +214,9 @@ impl RDMASrv {
                 let addr = shareRegionAddr as *mut ShareRegion;
                 &mut (*addr)
             },
-            srvEndPoints: HashMap::new(),
+            srvEndPoints: Mutex::new(HashMap::new()),
             currNode: Node::default(),
-            channelIdMgr: Mutex::new(IdMgr::Init(0, 1000)),
+            channelIdMgr: Mutex::new(IdMgr::Init(1, 1000)),
             agentIdMgr: Mutex::new(IdMgr::Init(0, 1000)),
             controlRegion: unsafe {
                 let addr = contrlAddr as *mut RDMAControlChannelRegion;
@@ -202,10 +235,8 @@ impl RDMASrv {
 
     pub fn getRDMAChannel(&self, channelId: u32) -> Option<RDMAChannel> {
         match self.channels.lock().get(&channelId) {
-            None => {
-                None
-            }
-            Some(rdmaChannel) => Some(rdmaChannel.clone())
+            None => None,
+            Some(rdmaChannel) => Some(rdmaChannel.clone()),
         }
     }
 
@@ -213,18 +244,20 @@ impl RDMASrv {
         if channelId != 0 {
             match self.channels.lock().get(&channelId) {
                 None => {
-                    panic!("ProcessRDMAWriteImmFinish get unexpected channelId: {}", channelId)
-                },
+                    panic!(
+                        "ProcessRDMAWriteImmFinish get unexpected channelId: {}",
+                        channelId
+                    );
+                }
                 Some(channel) => {
                     channel.ProcessRDMAWriteImmFinish();
                 }
             }
-        }
-        else{
-            match RDMA_SRV.controlChannels.lock().get(&qpNum) {
+        } else {
+            match self.controlChannels.lock().get(&qpNum) {
                 None => {
-                    panic!("ProcessRDMAWriteImmFinish get unexpected qpNum: {}", qpNum)
-                },
+                    panic!("ProcessRDMAWriteImmFinish get unexpected qpNum: {}", qpNum);
+                }
                 Some(channel) => {
                     channel.ProcessRDMAWriteImmFinish();
                 }
@@ -236,20 +269,39 @@ impl RDMASrv {
         if channelId != 0 {
             match self.channels.lock().get(&channelId) {
                 None => {
-                    panic!("ProcessRDMARecvWriteImm get unexpected channelId: {}", channelId)
-                },
+                    panic!(
+                        "ProcessRDMARecvWriteImm get unexpected channelId: {}",
+                        channelId
+                    );
+                }
+                Some(channel) => {
+                    channel.ProcessRDMARecvWriteImm(qpNum, recvCount as u64);
+                }
+            }
+        } else {
+            match RDMA_SRV.controlChannels.lock().get(&qpNum) {
+                //where lock end??
+                None => {
+                    panic!("ProcessRDMAWriteImmFinish get unexpected qpNum: {}", qpNum);
+                }
                 Some(channel) => {
                     channel.ProcessRDMARecvWriteImm(qpNum, recvCount as u64);
                 }
             }
         }
-        else{
-            match RDMA_SRV.controlChannels.lock().get(&qpNum) { //where lock end??
+    }
+
+    pub fn HandleClientRequest(&self) {
+        let agentIds = self.shareRegion.getAgentIds();
+        // println!("agentIds: {:?}", agentIds);
+        let rdmaAgents = self.agents.lock();
+        for agentId in agentIds.iter() {
+            match rdmaAgents.get(agentId) {
+                Some(rdmaAgent) => {
+                    rdmaAgent.HandleClientRequest();
+                }
                 None => {
-                    panic!("ProcessRDMAWriteImmFinish get unexpected qpNum: {}", qpNum)
-                },
-                Some(channel) => {
-                    channel.ProcessRDMARecvWriteImm(qpNum, recvCount as u64);
+                    println!("RDMA agent with id {} doesn't exist", agentId);
                 }
             }
         }

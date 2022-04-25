@@ -12,13 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{collections::HashMap, str::FromStr};
 use spin::Mutex;
-use std::net::{Ipv4Addr, IpAddr};
+use std::iter::FromIterator;
+use std::net::{IpAddr, Ipv4Addr};
+use std::{collections::HashMap, str::FromStr};
+
+use super::qlib::rdma_share::*;
 
 pub struct CtrlConn {
     // socket fd connect to ConnectionMgr
-    pub sockfd: i32
+    pub sockfd: i32,
 }
 
 pub struct CtrlInfo {
@@ -33,39 +36,53 @@ pub struct CtrlInfo {
 
     // cluster subnet information
     pub clusterSubnetInfo: Mutex<ClusterSubnetInfo>,
+
+    //Pod Ip to Node Ip
+    pub podIpInfo: Mutex<HashMap<u32, u32>>,
 }
 
 impl Default for CtrlInfo {
     fn default() -> CtrlInfo {
-        let mut nodes: HashMap<u32, Node>= HashMap::new();
+        let mut nodes: HashMap<u32, Node> = HashMap::new();
         let subnet = u32::from(Ipv4Addr::from_str("172.16.1.0").unwrap());
         let netmask = u32::from(Ipv4Addr::from_str("255.255.255.0").unwrap());
         let lab1ip = u32::from(Ipv4Addr::from_str("172.16.1.8").unwrap());
         let devip = u32::from(Ipv4Addr::from_str("172.16.1.6").unwrap());
-        nodes.insert(lab1ip, Node {
-            ipAddr: lab1ip,
-            timestamp: 1234,
-            subnet: subnet,
-            netmask: netmask
-        });
+        nodes.insert(
+            lab1ip,
+            Node {
+                ipAddr: lab1ip,
+                timestamp: 1234,
+                subnet: subnet,
+                netmask: netmask,
+            },
+        );
 
-        nodes.insert(devip, Node {
-            ipAddr: devip,
-            timestamp: 5678,
-            subnet: subnet,
-            netmask: netmask
-        });
+        nodes.insert(
+            devip,
+            Node {
+                ipAddr: devip,
+                timestamp: 5678,
+                subnet: subnet,
+                netmask: netmask,
+            },
+        );
 
         CtrlInfo {
             nodes: Mutex::new(nodes),
             subnetmap: Mutex::new(HashMap::new()),
             veps: Mutex::new(HashMap::new()),
-            clusterSubnetInfo: Mutex::new(ClusterSubnetInfo{
+            clusterSubnetInfo: Mutex::new(ClusterSubnetInfo {
                 subnet: 0,
                 netmask: 0,
                 vipSubnet: 0,
                 vipNetmask: 0,
-            })
+            }),
+            //134654144 -> 100733100
+            podIpInfo: Mutex::new(HashMap::from_iter([(
+                u32::from(Ipv4Addr::from_str("192.168.6.8").unwrap()).to_be(),
+                (u32::from(Ipv4Addr::from_str("172.16.1.6").unwrap()).to_be()),
+            )])),
         }
     }
 }
@@ -104,14 +121,7 @@ pub struct VirtualEp {
     pub dstPort: u16, //target port??
 }
 
-#[derive(Eq, Hash, PartialEq)]
-pub struct Endpoint {
-    // same as vpcId
-    pub ipAddr: u32,
-    pub port: u16,
-}
-
 pub struct VirtualEpInfo {
     pub vep: VirtualEp,
-    pub dstEps: Vec<Endpoint>
+    pub dstEps: Vec<Endpoint>,
 }

@@ -92,6 +92,10 @@ impl SocketBuff {
         }
     }
 
+    pub fn NewDummySockBuf() -> Self {
+        SocketBuff::Init(2)
+    }
+
     pub fn AddConsumeReadData(&self, count: u64) -> u64 {
         return self.consumeReadData.fetch_add(count, Ordering::Relaxed) + count
     }

@@ -16,6 +16,9 @@ use alloc::string::ToString;
 use libc::*;
 use std::mem;
 use std::os::unix::io::{AsRawFd, RawFd};
+use nix::sys::socket::{ControlMessage, MsgFlags, sendmsg, recvmsg};
+use nix::sys::socket::ControlMessageOwned;
+use nix::sys::uio::IoVec;
 
 use super::common::*;
 use super::cstring::*;
@@ -39,6 +42,7 @@ impl AsRawFd for UnixSocket {
 impl Drop for UnixSocket {
     fn drop(&mut self) {
         unsafe {
+            println!("close unix domain!!!");
             close(self.0);
         }
     }
@@ -246,5 +250,50 @@ impl UnixSocket {
                 }
             }
         }
+    }
+
+    const MAX_FILES : usize = 16 * 4;
+
+    pub fn ReadWithFds(&self, buf: &mut[u8]) -> Result<(usize, Vec<i32>)> {
+        let iovec = [IoVec::from_mut_slice(buf)];
+        let mut space : Vec<u8> = vec![0; Self::MAX_FILES];
+
+        loop {
+            match recvmsg(self.0, &iovec, Some(&mut space), MsgFlags::empty()) {
+                Ok(msg) => {
+                    let cnt = msg.bytes;
+
+                    let mut iter = msg.cmsgs();
+                    match iter.next() {
+                        Some(ControlMessageOwned::ScmRights(fds)) => {
+                            return Ok((cnt, fds.to_vec()))
+                        }
+                        None => {
+                            println!("cnt: {}", cnt);
+                            return Ok((cnt, Vec::new()))
+                        }
+                        _ => break,
+                    }
+                },
+                Err(errno) => {
+                    if errno as i32 == EINTR {
+                        continue;
+                    }
+                    return Err(Error::IOError(format!("ReadWithFds io::error is {:?}", errno)))
+                }
+            };
+
+        }
+        
+        return Err(Error::IOError("ReadWithFds can't get fds".to_string()))
+    }
+
+    pub fn WriteWithFds(&self, buf: &[u8], fds: &[i32]) -> Result<usize> {
+        let iov = [IoVec::from_slice(&buf)];
+        let cmsg = [ControlMessage::ScmRights(&fds)];
+        let size = sendmsg(self.0, &iov, &cmsg, MsgFlags::empty(), None)
+            .map_err(|e| Error::IOError(format!("WriteWithFds io::error is {:?}", e)))?;
+
+        return Ok(size);
     }
 }

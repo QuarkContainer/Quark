@@ -15,31 +15,38 @@
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-use std::sync::atomic::AtomicI64;
+//use std::sync::atomic::AtomicI64;
+use super::common::*;
+use super::linux_def::*;
+use std::collections::HashSet;
 
-pub const COUNT: usize = 128;
-pub struct RingQueue <T: 'static + Default> {
+pub const COUNT: usize = 65536;
+pub struct RingQueue<T: 'static + Default> {
+    // pub struct RingQueue<T: Default> {
+    // pub struct RingQueue<T: Copy> {
     pub data: [T; COUNT],
     pub ringMask: AtomicU32,
     pub head: AtomicU32,
     pub tail: AtomicU32,
 }
 
-impl <T: 'static + Default + Copy> RingQueue <T> {
+impl<T: 'static + Default + Copy> RingQueue<T> {
+    // impl<T: Default + Copy> RingQueue<T> {
+    //impl<T: Copy> RingQueue<T> {
     pub fn Init(&self) {
-        self.ringMask.store(COUNT as u32 -1, Ordering::Release);
+        self.ringMask.store(COUNT as u32 - 1, Ordering::Release);
         self.head.store(0, Ordering::Release);
         self.tail.store(0, Ordering::Release);
     }
 
     #[inline]
     pub fn RingMask(&self) -> u32 {
-        return self.ringMask.load(Ordering::Relaxed)
+        return self.ringMask.load(Ordering::Relaxed);
     }
 
     #[inline]
     pub fn Count(&self) -> usize {
-        return self.ringMask.load(Ordering::Relaxed) as usize + 1
+        return self.ringMask.load(Ordering::Relaxed) as usize + 1;
     }
 
     // pop
@@ -47,13 +54,14 @@ impl <T: 'static + Default + Copy> RingQueue <T> {
         let head = self.head.load(Ordering::Relaxed);
         let tail = self.tail.load(Ordering::Acquire);
         let available = tail.wrapping_sub(head) as usize;
+        // println!("RingQueue::Pop, available: {}", available);
         if available == 0 {
-            return None
+            return None;
         }
 
         let idx = head & self.RingMask();
         let data = self.data[idx as usize];
-        self.head.store(head.wrapping_add(1),  Ordering::Release);
+        self.head.store(head.wrapping_add(1), Ordering::Release);
         return Some(data);
     }
 
@@ -61,7 +69,7 @@ impl <T: 'static + Default + Copy> RingQueue <T> {
         let head = self.head.load(Ordering::Relaxed);
         let tail = self.tail.load(Ordering::Acquire);
         let available = tail.wrapping_sub(head) as usize;
-        return available
+        return available;
     }
 
     //push
@@ -77,22 +85,132 @@ impl <T: 'static + Default + Copy> RingQueue <T> {
         let head = self.head.load(Ordering::Acquire);
         let tail = self.tail.load(Ordering::Relaxed);
         let available = tail.wrapping_sub(head) as usize;
+        // println!("RingQueue::Push, available: {}, count: {}", available, self.Count());
         assert!(available < self.Count());
 
         let idx = tail & self.RingMask();
         self.data[idx as usize] = data;
-        self.tail.store(tail.wrapping_add(1),  Ordering::Release);
+        self.tail.store(tail.wrapping_add(1), Ordering::Release);
     }
 }
 
-#[derive(Default)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct RDMAReq {
     pub user_data: u64,
+    pub msg: RDMAReqMsg,
 }
 
-#[derive(Default)]
+// impl Default for RDMAReq {
+//     fn default() -> Self {
+//         RDMAReq {
+//             user_data: 0,
+//             msg: unsafe {
+//                 let addr = 0 as *mut RDMAReqMsg;
+//                 &mut (*addr)
+//             },
+//         }
+//     }
+// }
+
+#[derive(Default, Clone, Copy, Debug)]
 pub struct RDMAResp {
     pub user_data: u64,
+    pub msg: RDMARespMsg,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum RDMAReqMsg {
+    RDMAListen(RDMAListenReq),
+    RDMAConnect(RDMAConnectReq),
+    RDMAWrite(RDMAWriteReq),
+    RDMARead(RDMAReadReq),
+    // RDMAAccept(RDMAAcceptReq), //Put connected socket on client side.
+}
+
+impl Default for RDMAReqMsg {
+    fn default() -> Self {
+        RDMAReqMsg::RDMAListen(RDMAListenReq::default())
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum RDMARespMsg {
+    RDMAConnect(RDMAConnectResp),
+    RDMAAccept(RDMAAcceptResp),
+    RDMANotify(RDMANotifyResp),
+}
+
+impl Default for RDMARespMsg {
+    fn default() -> Self {
+        RDMARespMsg::RDMAConnect(RDMAConnectResp::default())
+    }
+}
+
+#[derive(Default, Clone, Copy, Debug)]
+pub struct RDMAConnectResp {
+    pub sockfd: u32,
+    pub ioBufIndex: u32,
+    pub channelId: u32,
+}
+
+#[derive(Default, Clone, Copy, Debug)]
+pub struct RDMAAcceptResp {
+    pub sockfd: u32,
+    pub ioBufIndex: u32,
+    pub channelId: u32,
+    pub dstIpAddr: u32,
+    pub dstPort: u16,
+}
+
+#[derive(Default, Clone, Copy, Debug)]
+pub struct RDMANotifyResp {
+    pub sockfd: u32,
+    pub channelId: u32,
+    pub event: EventMask,
+}
+
+#[derive(Default, Clone, Copy, Debug)]
+pub struct RDMAListenReq {
+    //pub vpcId: u32,
+    pub sockfd: u32,
+    pub ipAddr: u32,
+    pub port: u16,
+    pub waitingLen: i32,
+}
+
+#[derive(Default, Clone, Copy, Debug)]
+pub struct RDMAWriteReq {
+    pub sockfd: u32,
+    pub channelId: u32,
+}
+
+#[derive(Default, Clone, Copy, Debug)]
+pub struct RDMAReadReq {
+    pub sockfd: u32,
+    pub channelId: u32,
+}
+
+#[derive(Default, Clone, Copy, Debug)]
+pub struct RDMAConnectReq {
+    //pub vpcId: u32,
+    pub sockfd: u32,
+    pub dstIpAddr: u32,
+    pub dstPort: u16,
+    pub srcIpAddr: u32,
+    pub srcPort: u16,
+}
+
+#[derive(Default, Clone, Copy, Debug)]
+pub struct RDMAAcceptReq {
+    //pub vpcId: u32,
+    pub sockfd: u32,
+}
+
+#[derive(Clone, Debug)]
+pub struct RDMAListenResp {
+    pub ipAddr: u32,
+    pub port: u16,
+    pub waitingLen: i32,
 }
 
 pub struct MemRegion {
@@ -100,10 +218,10 @@ pub struct MemRegion {
     pub len: u64,
 }
 
-pub const SOCKET_BUF_SIZE : usize = 64 * 1024; // 64KB
+pub const SOCKET_BUF_SIZE: usize = 64 * 1024; // 64KB
 
 // todo: caculate this to fit ClientShareRegion in 1GB
-pub const IO_BUF_COUNT : usize = 7 * 1024; //16 * 1024 - 128; // ~16K
+pub const IO_BUF_COUNT: usize = 7 * 1024; //16 * 1024 - 128; // ~16K
 
 #[repr(align(4096))]
 pub struct IOBuf {
@@ -114,7 +232,7 @@ pub struct IOBuf {
 pub struct IOMetas {
     pub readBufAtoms: [AtomicU32; 2],
     pub writeBufAtoms: [AtomicU32; 2],
-    pub consumeReadData: AtomicU64
+    pub consumeReadData: AtomicU64,
 }
 
 pub struct ClientShareRegion {
@@ -130,19 +248,19 @@ pub struct ClientShareRegion {
     pub ioMetas: [IOMetas; IO_BUF_COUNT],
 
     // data buf for sockbuf, it will be mapped in the rdma MR
-    pub iobufs:  [IOBuf; IO_BUF_COUNT]
+    pub iobufs: [IOBuf; IO_BUF_COUNT],
 }
 
 // total 4096 x 8 = 32KB or 8 pages
 // can index about 32K x 8 = 256K containers, hope it is enough
-pub const BITMAP_COUNT : usize = 64 * 8 - 9; //4096 - 4;
+pub const BITMAP_COUNT: usize = 64 * 8 - 9; //4096 - 4;
 
 pub struct TriggerBitmap {
     // one bit map to one l2 bitmap to expedite the notification search
     pub l1bitmap: [u64; 8],
 
     // one bit map to one Quark Container
-    pub l2bitmap: [u64; BITMAP_COUNT], 
+    pub l2bitmap: [u64; BITMAP_COUNT],
 }
 
 pub const MTU: usize = 1500;
@@ -168,7 +286,7 @@ impl Default for UDPBuf {
             dstIPAddr: 0,
             srcPort: 0,
             dstPort: 0,
-            data: [0; MTU]
+            data: [0; MTU],
         }
     }
 }
@@ -186,9 +304,121 @@ impl Default for ShareRegion {
             srvBitmap: AtomicU64::new(0),
             bitmap: TriggerBitmap {
                 l1bitmap: [0; 8],
-                l2bitmap: [0; BITMAP_COUNT]
+                l2bitmap: [0; BITMAP_COUNT],
             },
             //udpBufs: [UDPBuf::default(); UDP_BUF_COUNT]
         }
+    }
+}
+
+impl ShareRegion {
+    pub fn updateBitmap(&mut self, agentId: u32) {
+        let l2idx = agentId as usize / 64;
+        let l2pos = agentId as usize % 64;
+        let l1idx = l2idx / 64;
+        let l1pos = l2idx % 64;
+
+        self.bitmap.l1bitmap[l1idx] |= 1 << l1pos;
+        self.bitmap.l2bitmap[l2idx] |= 1 << l2pos;
+    }
+
+    pub fn getAgentIds(&self) -> Vec<u32> {
+        let mut agentIds: Vec<u32> = Vec::with_capacity(32192);
+        for l1idx in 0..8 {
+            // println!("l1idx: {}", l1idx);
+            let mut l1 = self.bitmap.l1bitmap[l1idx];
+            // println!("l1: {:x}", l1);
+            for l1pos in 0..64 {
+                if l1 == 0 {
+                    // println!("break for l1idx: {}", l1idx);
+                    break;
+                }
+                if l1 % 2 == 1 {
+                    let l2idx = l1idx * 64 + l1pos;
+                    // println!("l2idx: {}", l2idx);
+                    if l2idx > 502 {
+                        break;
+                    }
+                    let mut l2 = self.bitmap.l2bitmap[l2idx as usize];
+                    // println!("l2: {:x}", l2);
+                    for l2pos in 0..64 {
+                        if l2 == 0 {
+                            // println!("before break, l2pos: {}", l2pos);
+                            break;
+                        }
+                        if l2 % 2 == 1 {
+                            agentIds.push((l2idx * 64 + l2pos) as u32);
+                        }
+                        l2 >>= 1;
+                    }
+                }
+                l1 >>= 1
+            }
+        }
+
+        return agentIds;
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum SockStatus {
+    CLOSE_WAIT,
+    CLOSING,
+    ESTABLISHED,
+    SYN_RECEIVED,
+    LISTENING,
+    CONNECTING,
+    BINDED,
+    // ... to simulate TCP status
+}
+
+#[derive(Clone, Copy)]
+pub enum DuplexMode {
+    SHUTDOWN_RD,
+    SHUTDOWN_WR,
+    SHUTDOWN_RDWR,
+}
+
+#[derive(Eq, Hash, PartialEq)]
+pub struct Endpoint {
+    // same as vpcId
+    pub ipAddr: u32,
+    pub port: u16,
+}
+
+pub struct IdMgr {
+    pub set: HashSet<u32>,
+    pub len: u32,
+    pub start: u32,
+}
+
+impl IdMgr {
+    pub fn Init(start: u32, len: u32) -> Self {
+        return IdMgr {
+            set: HashSet::new(),
+            len: len,
+            start: start,
+        };
+    }
+
+    pub fn AllocId(&mut self) -> Result<u32> {
+        if self.set.len() == self.len as usize {
+            return Err(Error::NoEnoughSpace);
+        }
+        for i in self.start..(self.len + self.start) {
+            if !self.set.contains(&i) {
+                self.set.insert(i);
+                return Ok(i);
+            }
+        }
+        return Err(Error::NoData);
+    }
+
+    pub fn Remove(&mut self, i: u32) {
+        self.set.remove(&i);
+    }
+
+    pub fn AddCapacity(&mut self, i: u32) {
+        self.len += i;
     }
 }

@@ -80,6 +80,7 @@ use crate::rdma_srv::RDMA_CTLINFO;
 use crate::rdma_srv::RDMA_SRV;
 
 use self::qlib::ShareSpaceRef;
+use alloc::slice;
 use std::collections::HashMap;
 use std::io;
 use std::io::prelude::*;
@@ -93,6 +94,8 @@ use local_ip_address::local_ip;
 use qlib::linux_def::*;
 use qlib::socket_buf::SocketBuff;
 use qlib::unix_socket::UnixSocket;
+//use rdma_srv::*;
+use rdma_agent::*;
 use rdma_channel::RDMAChannel;
 use rdma_conn::*;
 use rdma_ctrlconn::Node;
@@ -125,7 +128,8 @@ pub struct EpollEvent {
     pub U64: u64,
 }
 
-const READ_FLAGS: i32 = libc::EPOLLIN;//libc::EPOLLET | libc::EPOLLIN;
+//const READ_FLAGS: i32 = libc::EPOLLIN; //libc::EPOLLET | libc::EPOLLIN;
+const READ_FLAGS: i32 = libc::EPOLLET | libc::EPOLLIN;
 //const READ_FLAGS: i32 = LibcConst::EPOLLET as i32 | libc::EPOLLIN;
 
 //const READ_FLAGS: i32 = libc::EPOLLONESHOT | libc::EPOLLIN | libc::EPOLLOUT;
@@ -135,15 +139,120 @@ const WRITE_FLAGS: i32 = libc::EPOLLET | libc::EPOLLOUT;
 const READ_WRITE_FLAGS: i32 = libc::EPOLLET | libc::EPOLLOUT | libc::EPOLLIN;
 
 pub enum FdType {
-    UnixDomainSocketServer,
-    UnixDomainSocketConnect,
+    UnixDomainSocketServer(UnixSocket),
+    UnixDomainSocketConnect(UnixSocket),
     TCPSocketServer,
     TCPSocketConnect(u32),
     RDMACompletionChannel,
+    SrvEventFd(i32),
 }
 
+// fn main() {
 fn main_test() {
     println!("RDMA Service is starting!");
+    // eventfd_test1();
+    share_client_region();
+}
+
+fn eventfd_test1() {
+    let path = "/home/qingming/rdma_srv";
+    let efd = unsafe { libc::eventfd(0, 0) };
+    println!("efd: {}", efd);
+    let efd1 = unsafe { libc::eventfd(0, 0) };
+    println!("efd: {}", efd1);
+
+    let srv_sock = UnixSocket::NewServer(path).unwrap();
+    let conn_sock = UnixSocket::Accept(srv_sock.as_raw_fd()).unwrap();
+
+    let body = 123;
+    let ptr = &body as *const _ as *const u8;
+    let buf = unsafe { slice::from_raw_parts(ptr, 4) };
+    conn_sock.WriteWithFds(buf, &[efd, efd1]).unwrap();
+    println!("before read...");
+    let u = 0u64;
+    let s = unsafe {
+        libc::read(
+            efd,
+            &u as *const _ as *mut libc::c_void,
+            mem::size_of_val(&u) as usize,
+        )
+    };
+
+    if s == -1 {
+        println!("1 last error: {}", Error::last_os_error());
+    }
+
+    println!("u: {}", u);
+
+    println!("sleeping ...");
+    let ten_millis = time::Duration::from_secs(2);
+    let _now = time::Instant::now();
+
+    thread::sleep(ten_millis);
+    println!("sleeping done...");
+
+    let u = 12u64;
+    let s = unsafe {
+        libc::write(
+            efd1,
+            &u as *const _ as *const libc::c_void,
+            mem::size_of_val(&u) as usize,
+        )
+    };
+
+    if s == -1 {
+        println!("2 last error: {}", Error::last_os_error());
+    }
+
+    println!("exit");
+}
+
+fn eventfd_test() {
+    let path = "/home/qingming/rdma_srv";
+    let efd = unsafe { libc::eventfd(0, 0) };
+    println!("efd: {}", efd);
+
+    let srv_sock = UnixSocket::NewServer(path).unwrap();
+    let conn_sock = UnixSocket::Accept(srv_sock.as_raw_fd()).unwrap();
+
+    conn_sock.SendFd(efd).unwrap();
+    // println!("before read...");
+    // let u = 0u64;
+    // let s = unsafe {
+    //     libc::read(
+    //         efd,
+    //         &u as *const _ as *mut libc::c_void,
+    //         mem::size_of_val(&u) as usize,
+    //     )
+    // };
+
+    // if s == -1 {
+    //     println!("1 last error: {}", Error::last_os_error());
+    // }
+
+    // println!("u: {}", u);
+
+    println!("sleeping ...");
+    let ten_millis = time::Duration::from_secs(2);
+    let _now = time::Instant::now();
+
+    thread::sleep(ten_millis);
+    println!("sleeping done...");
+
+    let u = 12u64;
+    let s = unsafe {
+        libc::write(
+            efd,
+            &u as *const _ as *const libc::c_void,
+            mem::size_of_val(&u) as usize,
+        )
+    };
+
+    if s == -1 {
+        println!("2 last error: {}", Error::last_os_error());
+    }
+
+    println!("exit");
 }
 
 fn memory_op() {
@@ -204,6 +313,7 @@ fn share_client_region() {
             libc::MFD_ALLOW_SEALING,
         )
     };
+    println!("fd: {}", fd);
     let size = mem::size_of::<qlib::rdma_share::ClientShareRegion>();
     let _ret = unsafe { libc::ftruncate(fd, size as i64) };
     let addr = unsafe {
@@ -336,16 +446,67 @@ fn test() {
     // );
 }
 
-//fn main_backup() -> io::Result<()> {
+// fn main_backup() -> io::Result<()> {
 fn main() -> io::Result<()> {
     println!("RDMA Service is starting!");
-    println!("size of RDMAConn: {}", mem::size_of::<RDMAConn>());
-    //TODO: make devicename and port configurable
     RDMA.Init("", 1);
-    println!(
-        "size is: {}",
-        mem::size_of::<qlib::rdma_share::ShareRegion>()
-    );
+    // let test = RDMA_SRV1.eventfd;
+    // println!("test: {}", test);
+    // let test1 = RDMA_SRV.eventfd;
+    // println!("test1: {}", test1);
+    // let fd = unsafe {
+    //     libc::memfd_create(
+    //         "Server memfd1".as_ptr() as *const i8,
+    //         libc::MFD_ALLOW_SEALING,
+    //     )
+    // };
+    // println!("fd: {}", fd);
+
+    // let fd1 = unsafe {
+    //     libc::memfd_create(
+    //         "Server memfd".as_ptr() as *const i8,
+    //         libc::MFD_ALLOW_SEALING,
+    //     )
+    // };
+    // println!("fd1: {}", fd1);
+    // //TOBEDELETE
+    // println!("before create memfd");
+    // let fd2 = unsafe {
+    //     libc::memfd_create(
+    //         "Server memfd".as_ptr() as *const i8,
+    //         libc::MFD_ALLOW_SEALING,
+    //     )
+    // };
+    // println!("fd: {}", fd2);
+    // if fd2 == -1 {
+    //     panic!(
+    //         "fail to create memfd, error is: {}",
+    //         std::io::Error::last_os_error()
+    //     );
+    // }
+
+    // println!("size of RDMAConn: {}", mem::size_of::<RDMAConn>());
+    //TODO: make devicename and port configurable
+    //RDMA.Init("", 1);
+    // println!(
+    //     "ShareRegion size is: {}",
+    //     mem::size_of::<qlib::rdma_share::ShareRegion>()
+    // );
+
+    // //TOBEDELETE
+    // println!("before create memfd");
+    // let memfd2 = unsafe {
+    //     libc::memfd_create(
+    //         "Server memfd".as_ptr() as *const i8,
+    //         libc::MFD_ALLOW_SEALING,
+    //     )
+    // };
+    // if memfd2 == -1 {
+    //     panic!(
+    //         "fail to create memfd, error is: {}",
+    //         std::io::Error::last_os_error()
+    //     );
+    // }
 
     // hashmap for file descriptors so that different handling can be dispatched.
     let mut fds: HashMap<i32, FdType> = HashMap::new();
@@ -368,13 +529,24 @@ fn main() -> io::Result<()> {
     //println!("ret1: {}", ret1);
 
     unblock_fd(ccFd);
-    epoll_add(
-        epoll_fd,
-        ccFd,
-        read_write_event(ccFd as u64),
-    )?;
+    epoll_add(epoll_fd, ccFd, read_write_event(ccFd as u64))?;
 
     //RDMA.HandleCQEvent();
+    //TOBEDELETE
+    // println!("before create memfd");
+    // let memfd = unsafe {
+    //     libc::memfd_create(
+    //         "Server memfd".as_ptr() as *const i8,
+    //         libc::MFD_ALLOW_SEALING,
+    //     )
+    // };
+    // println!("memfd: {}", memfd);
+    // if memfd == -1 {
+    //     panic!(
+    //         "fail to create memfd, error is: {}",
+    //         std::io::Error::last_os_error()
+    //     );
+    // }
 
     unsafe {
         let mut serv_addr: libc::sockaddr_in = libc::sockaddr_in {
@@ -409,12 +581,48 @@ fn main() -> io::Result<()> {
 
         libc::listen(server_fd, 128);
     }
-
-    let local_ip = get_local_ip();
     println!("litener sock fd is {}", server_fd);
 
-    let cur_timestamp = RDMA_CTLINFO.nodes.lock().get(&local_ip).unwrap().timestamp;
-    println!("timestamp is {}", cur_timestamp);
+    // unix domain socket
+
+    let mut unix_sock_path = "/home/qingming/rdma_srv";
+    if args.len() > 1 {
+        unix_sock_path = "/home/qingming/rdma_srv1";
+    }
+    let srv_unix_sock = UnixSocket::NewServer(unix_sock_path).unwrap();
+    let srv_unix_sock_fd = srv_unix_sock.as_raw_fd();
+    fds.insert(
+        srv_unix_sock_fd,
+        FdType::UnixDomainSocketServer(srv_unix_sock),
+    );
+
+    println!("srv_unix_sock: {}", srv_unix_sock_fd);
+    unblock_fd(srv_unix_sock_fd);
+
+    epoll_add(
+        epoll_fd,
+        srv_unix_sock_fd,
+        read_event(srv_unix_sock_fd as u64),
+    )?;
+
+    //TOBEDELETE
+    // println!("before create memfd");
+    // let memfd = unsafe {
+    //     libc::memfd_create(
+    //         "Server memfd".as_ptr() as *const i8,
+    //         libc::MFD_ALLOW_SEALING,
+    //     )
+    // };
+    // println!("memfd: {}", memfd);
+    // if memfd == -1 {
+    //     panic!(
+    //         "fail to create memfd, error is: {}",
+    //         std::io::Error::last_os_error()
+    //     );
+    // }
+
+    // let cur_timestamp = RDMA_CTLINFO.nodes.lock().get(&local_ip).unwrap().timestamp;
+    // println!("timestamp is {}", cur_timestamp);
 
     // connect to other RDMA service on nodes which timestamp is bigger
     // for (ipAddr, node) in RDMA_CTLINFO.nodes.lock().iter() {
@@ -450,7 +658,6 @@ fn main() -> io::Result<()> {
             RDMA_SRV.keys[controlRegionId / 16][1],
         );
         let rdmaChannel = RDMAChannel::New(
-            0,
             0,
             RDMA_SRV.keys[controlRegionId / 16][0],
             RDMA_SRV.keys[controlRegionId / 16][1],
@@ -509,13 +716,35 @@ fn main() -> io::Result<()> {
 
             println!("ret is {}, error: {}", ret, Error::last_os_error());
         }
-        // }
     }
+
+    let mut eventdata: u64 = 0;
+    println!("access RDMA_SRV.eventfd");
+    //TOBEDELETE
+    // let memfd = unsafe {
+    //     libc::memfd_create(
+    //         "Server memfd".as_ptr() as *const i8,
+    //         libc::MFD_ALLOW_SEALING,
+    //     )
+    // };
+    // if memfd == -1 {
+    //     panic!(
+    //         "fail to create memfd, error is: {}",
+    //         std::io::Error::last_os_error()
+    //     );
     // }
+    // println!("self RDMASrv New, memfd {}", memfd);
+    // let x = RDMASrv::New();
+    // println!("access RDMA_SRV.eventfd, memfd: {}", memfd);
+    let srvEventFd = RDMA_SRV.eventfd;
+    epoll_add(epoll_fd, srvEventFd, read_event(srvEventFd as u64))?;
+    unblock_fd(srvEventFd);
+    fds.insert(srvEventFd, FdType::SrvEventFd(srvEventFd));
 
     loop {
         events.clear();
-        println!("in loop");
+        // println!("in loop");
+        RDMA_SRV.shareRegion.srvBitmap.store(1, Ordering::SeqCst);
         let res = match syscall!(epoll_wait(
             epoll_fd,
             events.as_mut_ptr() as *mut libc::epoll_event,
@@ -528,10 +757,10 @@ fn main() -> io::Result<()> {
 
         unsafe { events.set_len(res as usize) };
 
-        println!("res is: {}", res);
+        // println!("res is: {}", res);
 
         for ev in &events {
-            print!("u64: {}, events: {:x}", ev.U64, ev.Events);
+            // print!("u64: {}, events: {:x}", ev.U64, ev.Events);
             let event_data = fds.get(&(ev.U64 as i32));
             match event_data {
                 Some(FdType::TCPSocketServer) => {
@@ -570,7 +799,6 @@ fn main() -> io::Result<()> {
                         RDMA_SRV.keys[controlRegionId / 16][1],
                     );
                     let rdmaChannel = RDMAChannel::New(
-                        0,
                         0,
                         RDMA_SRV.keys[controlRegionId / 16][0],
                         RDMA_SRV.keys[controlRegionId / 16][1],
@@ -621,16 +849,71 @@ fn main() -> io::Result<()> {
                         panic!("no RDMA connection for {} found!", ipAddr)
                     }
                 },
+                Some(FdType::UnixDomainSocketServer(srv_sock)) => {
+                    let conn_sock = UnixSocket::Accept(ev.U64 as i32).unwrap();
+                    let conn_sock_fd = conn_sock.as_raw_fd();
+                    unblock_fd(conn_sock_fd);
+                    fds.insert(conn_sock_fd, FdType::UnixDomainSocketConnect(conn_sock));
+                    epoll_add(epoll_fd, conn_sock_fd, read_event(conn_sock_fd as u64))?;
+                    println!("add unix sock fd: {}", conn_sock_fd);
+                }
+                Some(FdType::UnixDomainSocketConnect(conn_sock)) => {
+                    println!("UnixDomainSocketConnect");
+                    loop {
+                        let mut body = 0;
+                        let ptr = &mut body as *mut _ as *mut u8;
+                        let buf = unsafe { slice::from_raw_parts_mut(ptr, 4) };
+                        let ret = conn_sock.ReadWithFds(buf);
+                        match ret {
+                            Ok((size, _fds)) => {
+                                if size == 0 {
+                                    break;
+                                }
+                                if body == 1 {
+                                    // init
+                                    println!("init!!");
+                                    InitContainer(conn_sock);
+                                } else if body == 2 {
+                                    // terminate
+                                    println!("terminate!!");
+                                }
+                            }
+                            Err(e) => {
+                                break;
+                            }
+                        }
+                    }
+                }
                 Some(FdType::RDMACompletionChannel) => {
-                    println!("Got RDMA completion event");
+                    // println!("Got RDMA completion event");
                     RDMA.PollCompletionQueueAndProcess();
-                    RDMA.HandleCQEvent();
+                    RDMA.HandleCQEvent().unwrap();
                 }
-                Some(FdType::UnixDomainSocketConnect) => {
-                    println!("xx");
-                }
-                Some(FdType::UnixDomainSocketServer) => {
-                    println!("xx");
+                Some(FdType::SrvEventFd(srvEventFd)) => {
+                    // print!("u64: {}, events: {:x}", ev.U64, ev.Events);
+                    // println!("srvEvent notified ****************1");
+                    let ret = unsafe {
+                        libc::read(
+                            *srvEventFd,
+                            &mut eventdata as *mut _ as *mut libc::c_void,
+                            8,
+                        )
+                    };
+                    // println!("after read srvEventFd");
+
+                    if ret < 0 {
+                        println!("error: {}", errno::errno().0);
+                    }
+
+                    if ret < 0 && errno::errno().0 != SysErr::EAGAIN {
+                        panic!(
+                            "Service Wakeup fail... eventfd is {}, errno is {}",
+                            *srvEventFd,
+                            errno::errno().0
+                        );
+                    }
+                    // println!("eventdata: {}", eventdata);
+                    RDMA_SRV.HandleClientRequest();
                 }
                 None => {
                     // panic!("unexpected fd {} found", ev.U64);
@@ -640,6 +923,37 @@ fn main() -> io::Result<()> {
             //println!("Finish processing fd: {}, event: {}", ev.U64, ev.Events);
         }
     }
+}
+
+fn InitContainer(conn_sock: &UnixSocket) {
+    let cliEventFd = unsafe { libc::eventfd(0, 0) };
+    unblock_fd(cliEventFd);
+
+    let rdmaAgentId = RDMA_SRV.agentIdMgr.lock().AllocId().unwrap();
+    let rdmaAgent = RDMAAgent::New(
+        rdmaAgentId,
+        String::new(),
+        conn_sock.as_raw_fd(),
+        cliEventFd,
+    );
+    RDMA_SRV
+        .agents
+        .lock()
+        .insert(rdmaAgentId, rdmaAgent.clone());
+    let body = [123, rdmaAgentId];
+    let ptr = &body as *const _ as *const u8;
+    let buf = unsafe { slice::from_raw_parts(ptr, 8) };
+    conn_sock
+        .WriteWithFds(
+            buf,
+            &[
+                RDMA_SRV.eventfd,
+                RDMA_SRV.srvMemfd,
+                cliEventFd,
+                rdmaAgent.client_memfd,
+            ],
+        )
+        .unwrap();
 }
 
 fn get_local_ip() -> u32 {
@@ -714,6 +1028,9 @@ fn unblock_fd(fd: i32) {
     unsafe {
         let flags = libc::fcntl(fd, Cmd::F_GETFL, 0);
         let ret = libc::fcntl(fd, Cmd::F_SETFL, flags | Flags::O_NONBLOCK);
+        if ret != 0 {
+            println!("fd: {}, last error: {}", fd, Error::last_os_error());
+        }
         assert!(ret == 0, "UnblockFd fail");
     }
 }
