@@ -131,7 +131,7 @@ impl MountInfoFile {
                 ret += "/ ";
 
                 // (5) Mount point (relative to process root).
-                ret += mountPath;
+                ret += &format!("{} ", mountPath);
 
                 // (6) Mount options.
                 let mountSource = mroot.Inode().lock().MountSource.clone();
