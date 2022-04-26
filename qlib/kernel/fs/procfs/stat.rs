@@ -123,7 +123,8 @@ impl StatData {
             "todo: fix self.k.ApplicationCores() is {}",
             self.k.ApplicationCores()
         );
-        for i in 0..1 as usize {
+        let cores = self.k.applicationCores;
+        for i in 0..cores as usize {
             buf += &format!("cpu{} {}\n", i, cpu.ToString());
         }
 

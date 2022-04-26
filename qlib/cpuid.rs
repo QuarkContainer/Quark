@@ -564,7 +564,7 @@ impl FeatureSet {
             "address sizes\t: {} bits physical, {} bits virtual\n",
             46, 48
         );
-        res += &format!("power management:");
+        res += &format!("power management:\n");
         res += &format!("");
         return res;
     }
