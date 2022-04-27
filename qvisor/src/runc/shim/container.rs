@@ -308,7 +308,7 @@ impl CommonContainer {
             }
             None => {
                 // never return Error for failed destroy
-                self.container.Destroy();
+                self.container.Destroy().unwrap();
             }
         };
 

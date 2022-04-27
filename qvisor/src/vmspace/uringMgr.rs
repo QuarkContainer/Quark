@@ -48,7 +48,7 @@ impl Drop for UringMgr {
     }
 }
 
-pub const FDS_SIZE: usize = 8192;
+pub const FDS_SIZE: usize = 1024 * 16;
 
 impl UringMgr {
     pub fn New(size: usize) -> Self {
@@ -79,6 +79,7 @@ impl UringMgr {
         if DedicateUringCnt == 0 {
             let ring = Builder::default()
                 .setup_cqsize(self.uringSize as u32 * 2)
+                .setup_clamp()
                 .build(self.uringSize as u32)
                 .expect("InitUring fail");
             self.uringfds.push(ring.fd.0);
