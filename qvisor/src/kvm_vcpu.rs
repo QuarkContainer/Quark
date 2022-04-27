@@ -1123,6 +1123,7 @@ impl CPULocal {
             Some(newTask) => return Ok(newTask),
         }
 
+        super::ALLOCATOR.Clear();
         self.ToWaiting(sharespace);
         defer!(self.ToSearch(sharespace););
 

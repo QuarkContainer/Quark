@@ -65,8 +65,8 @@ impl Deref for TimerStore {
 }
 
 impl TimerStore {
-    pub fn Trigger(&self) {
-        self.lock().Trigger();
+    pub fn Trigger(&self) -> i64 {
+        return self.lock().Trigger();
     }
 
     pub fn Addr(&self) -> u64 {
@@ -105,26 +105,33 @@ impl TimerStoreIntern {
         return format!("TimerStoreIntern seq is {:#?}", keys);
     }
 
-    pub fn Trigger(&mut self) {
-        let mut now;
-        loop {
-            now = MONOTONIC_CLOCK.Now().0 + Self::PROCESS_TIME;
-            let timer = self.GetFirst(now);
+    pub fn Trigger(&mut self) -> i64 {
+        let mut now = MONOTONIC_CLOCK.Now().0;
+        while now + Self::PROCESS_TIME >= self.nextExpire  {
+            let timer = self.GetFirst(now + Self::PROCESS_TIME);
             match timer {
                 Some(timer) => {
                     timer.Fire(self);
                 }
                 None => break,
             }
+
+            now = MONOTONIC_CLOCK.Now().0;
         }
 
-        if self.nextExpire != self.uringExpire {
+        if self.nextExpire == 0 {
+            return -1;
+        }
+
+        assert!(self.nextExpire > now, "next expire is {}, now is {}", self.nextExpire, now);
+        return self.nextExpire - now;
+        /*if self.nextExpire != self.uringExpire {
             self.RemoveUringTimer();
 
             if self.nextExpire != 0 {
                 self.SetUringTimer(self.nextExpire);
             }
-        }
+        }*/
     }
 
     // return: existing or not

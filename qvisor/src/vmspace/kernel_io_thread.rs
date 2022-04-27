@@ -18,6 +18,7 @@ use super::super::kvm_vcpu::*;
 use super::super::qlib::common::*;
 use super::super::qlib::kernel::ASYNC_PROCESS;
 use super::super::qlib::kernel::IOURING;
+use super::super::qlib::kernel::kernel::timer::TIMER_STORE;
 use super::super::qlib::kernel::TSC;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::ShareSpace;
@@ -48,7 +49,8 @@ impl KIOThread {
         /*if QUARK_CONFIG.lock().EnableRDMA {
             count += RDMA.PollCompletionQueueAndProcess();
         }*/
-
+        count += IOURING.IOUrings()[0].HostSubmit().unwrap();
+        TIMER_STORE.Trigger();
         count += IOURING.IOUrings()[0].HostSubmit().unwrap();
         count += IOURING.DrainCompletionQueue();
         count += IOURING.IOUrings()[0].HostSubmit().unwrap();
@@ -160,18 +162,24 @@ impl KIOThread {
                 Self::ProcessOnce(sharespace);
             }
 
-            // when there is ready task, wake up for preemptive schedule
+            ASYNC_PROCESS.Process();
+            let timeout = TIMER_STORE.Trigger() / 1000 / 1000;
+
+             // when there is ready task, wake up for preemptive schedule
             let waitTime = if sharespace.scheduler.GlobalReadyTaskCnt() > 0 {
-                10
+                if timeout == -1 || timeout > 10 {
+                    10
+                } else {
+                    timeout
+                }
             } else {
-                -1
+                timeout
             };
 
-            ASYNC_PROCESS.Process();
             /*if QUARK_CONFIG.lock().EnableRDMA {
                 RDMA.HandleCQEvent()?;
             }*/
-            let _nfds = unsafe { epoll_wait(epfd, &mut events[0], 2, waitTime) };
+            let _nfds = unsafe { epoll_wait(epfd, &mut events[0], 2, waitTime as i32) };
         }
     }
 

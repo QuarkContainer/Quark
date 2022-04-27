@@ -198,6 +198,8 @@ impl MemoryManager {
             return Err(Error::SysError(SysErr::EFAULT));
         }
 
+        defer!(self.TlbShootdown());
+
         // Behavior matrix:
         //
         // Move     | oldSize = 0 | oldSize < newSize | oldSize = newSize | oldSize > newSize
@@ -629,7 +631,7 @@ impl MemoryManager {
         return Ok(addr);
     }
 
-    pub fn GetSharedFutexKey(&self, _task: &Task, addr: u64) -> Result<Key> {
+    pub fn GetSharedFutexKey(&self, task: &Task, addr: u64) -> Result<Key> {
         let _ml = self.MappingWriteLock();
 
         let ar = match Addr(addr).ToRange(4) {
@@ -651,11 +653,13 @@ impl MemoryManager {
             });
         }
 
-        let (phyAddr, _) = self.VirtualToPhyLocked(addr)?;
+        self.V2PLocked(task, addr, 4, &mut task.GetMut().iovs, true)?;
+        defer!(task.GetMut().iovs.clear());
+        assert!(task.GetMut().iovs.len() == 1);
 
         return Ok(Key {
             Kind: KeyKind::KindSharedMappable,
-            Addr: phyAddr,
+            Addr: task.GetMut().iovs[0].start,
         });
     }
 
