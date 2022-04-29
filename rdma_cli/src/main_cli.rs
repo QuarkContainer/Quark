@@ -204,7 +204,7 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient) {
     let mut events: Vec<EpollEvent> = Vec::with_capacity(1024);
     let mut index = 0;
     let mut randomMsgSize = 7;
-    let count = 100000;
+    let count = 1000000;
     loop {
         events.clear();
         // println!("in loop");
@@ -412,11 +412,11 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient) {
 
                                     let mut writeBuf = sockInfo.sockBuff.writeBuf.lock();
                                     let (trigger, len) = writeBuf.writeViaAddr(rAddr, randomMsgSize);
-                                    // if index % 10000 == 0 {
-                                    //     println!("Client write index: {}, trigger: {}, len: {}", index, trigger, len);
-                                    // }
+                                    if index % 10000 == 0 {
+                                        println!("Client write index: {}, trigger: {}, len: {}", index, trigger, len);
+                                    }
 
-                                    println!("Client write index: {}, trigger: {}, len: {}", index, trigger, len);
+                                    // println!("Client write index: {}, trigger: {}, len: {}", index, trigger, len);
                                     
                                     let sockfd = sockInfo.fd;
                                     std::mem::drop(writeBuf);

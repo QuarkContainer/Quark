@@ -15,18 +15,19 @@
 use alloc::slice;
 use alloc::sync::{Arc, Weak};
 use core::mem;
-use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
+use core::sync::atomic::{AtomicU32, AtomicU64};
 use libc::*;
-use spin::Mutex;
+use spin::{Mutex, MutexGuard};
+use std::collections::VecDeque;
 use std::ops::{Deref, DerefMut};
 use std::{env, ptr, thread};
 
 use super::qlib::common::*;
 use super::rdma::*;
+use super::rdma_agent::*;
 use super::rdma_channel::*;
 use super::rdma_ctrlconn::*;
-use super::rdma_agent::*;
 
 use super::qlib::linux_def::*;
 use super::qlib::rdma_share::*;
@@ -35,6 +36,8 @@ use super::rdma_srv::*;
 
 // RDMA Queue Pair
 pub struct RDMAQueuePair {}
+
+pub const RECV_REQUEST_COUNT: u32 = 3;
 
 #[derive(Debug)]
 #[repr(u64)]
@@ -55,10 +58,8 @@ pub struct RDMAInfo {
     rkey: u32,   /* Read Buffer Remote key */
     qp_num: u32, /* QP number */
     lid: u16,    /* LID of the IB port */
-    // offset: u32,    //read buffer offset
-    // freespace: u32, //read buffer free space size
-    gid: Gid, /* gid */
-              // sending: bool,  // the writeimmediately is ongoing
+    gid: Gid,    /* gid */
+    recvRequestCount: u32,
 }
 
 impl RDMAInfo {
@@ -76,6 +77,10 @@ pub struct RDMAConnInternal {
     pub socketState: AtomicU64,
     pub localRDMAInfo: RDMAInfo,
     pub remoteRDMAInfo: Mutex<RDMAInfo>,
+    pub remoteRecvRequestCount: Mutex<u32>,
+    pub localInsertedRecvRequestCount: AtomicU32,
+    pub requestsQueue: Mutex<VecDeque<u32>>, //currently using channel id
+    pub controlRequestsQueue: Mutex<VecDeque<u32>>, //currently using channel id
 }
 
 #[derive(Clone)]
@@ -89,12 +94,6 @@ impl Deref for RDMAConn {
     }
 }
 
-// impl DerefMut for RDMAConn {
-//     fn deref_mut(&mut self) -> &mut RDMAConnInternal {
-//         &mut self.0
-//     }
-// }
-
 impl RDMAConn {
     pub fn New(fd: i32, sockBuf: Arc<SocketBuff>, rkey: u32) -> Self {
         let qp = RDMA.CreateQueuePair().expect("RDMADataSock create QP fail");
@@ -107,6 +106,7 @@ impl RDMAConn {
             raddr: addr,
             rlen: len as u32,
             rkey,
+            recvRequestCount: RECV_REQUEST_COUNT,
         };
 
         //TODO: may find a better place to update controlChannels.
@@ -119,6 +119,10 @@ impl RDMAConn {
             socketState: AtomicU64::new(0),
             localRDMAInfo: localRDMAInfo,
             remoteRDMAInfo: Mutex::new(RDMAInfo::default()),
+            remoteRecvRequestCount: Mutex::new(0),
+            localInsertedRecvRequestCount: AtomicU32::new(0),
+            requestsQueue: Mutex::new(VecDeque::default()),
+            controlRequestsQueue: Mutex::new(VecDeque::default()),
         }))
     }
     // pub fn New(fd: i32, sockBuf: Arc<SocketBuff>, rdmaChannel: Arc<RDMAChannel>) -> Arc<Self> {
@@ -157,7 +161,7 @@ impl RDMAConn {
         self.qps[0]
             .Setup(&RDMA, remoteInfo.qp_num, remoteInfo.lid, remoteInfo.gid)
             .expect("SetupRDMA fail...");
-        for _i in 0..10 {
+        for _i in 0..RECV_REQUEST_COUNT {
             self.qps[0]
                 .PostRecv(0, self.localRDMAInfo.raddr, self.localRDMAInfo.rkey)
                 .expect("SetupRDMA PostRecv fail");
@@ -181,7 +185,7 @@ impl RDMAConn {
                 self.SetupRDMA();
                 // println!("SendAck");
                 self.SendAck().unwrap(); // assume the socket is ready for send
-                // println!("Set state WaitingForRemoteReady");
+                                         // println!("Set state WaitingForRemoteReady");
                 self.SetSocketState(SocketState::WaitingForRemoteReady);
 
                 match self.RecvAck() {
@@ -316,6 +320,7 @@ impl RDMAConn {
             .upgrade()
             .unwrap()
             .UpdateRemoteRDMAInfo(0, data.raddr, data.rlen, data.rkey);
+        *self.remoteRecvRequestCount.lock() = data.recvRequestCount;
         *self.remoteRDMAInfo.lock() = data;
 
         return Ok(());
@@ -378,6 +383,7 @@ impl RDMAConn {
         }
     }
 
+    //Original write
     pub fn RDMAWriteImm(
         &self,
         localAddr: u64,
@@ -392,9 +398,118 @@ impl RDMAConn {
         return Ok(());
     }
 
+    pub fn RDMAWrite(
+        &self,
+        rdmaChannel: &RDMAChannelIntern,
+        remoteInfo: MutexGuard<ChannelRDMAInfo>,
+    ) {
+        let mut remoteRecvRequestCount = self.remoteRecvRequestCount.lock();
+        // println!(
+        //     "RDMAConn::RDMAWrite, *remoteRecvRequestCount: {}",
+        //     *remoteRecvRequestCount
+        // );
+        if *remoteRecvRequestCount > 0 {
+            *remoteRecvRequestCount -= 1;
+            rdmaChannel.RDMASendLocked(remoteInfo);
+        } else {
+            if rdmaChannel.localId == 0 {
+                self.controlRequestsQueue.lock().push_back(rdmaChannel.localId);
+                // println!("self.controlRequestsQueue.lock(), len: {}", self.controlRequestsQueue.lock().len());
+            } else {
+                self.requestsQueue.lock().push_back(rdmaChannel.localId);
+                // println!("self.requestsQueue.lock(), len: {}", self.requestsQueue.lock().len());
+            }
+
+            println!("RDMAConn::RDMAWrite, inserted channelId: {}", rdmaChannel.localId);
+        }
+    }
+
+    pub fn IncreaseRemoteRequestCount(&self, count: u32) {
+        // println!("IncreaseRemoteRequestCount, count: {} ", count);
+        if count == 0 {
+            return;
+        } else {
+            let mut remoteRecvRequestCount = self.remoteRecvRequestCount.lock();
+            *remoteRecvRequestCount += count;
+            // println!(
+            //     "IncreaseRemoteRequestCount, *remoteRecvRequestCount: {}",
+            //     *remoteRecvRequestCount
+            // );
+            self.ProcessRequestsInQueue(remoteRecvRequestCount);
+        }
+    }
+
+    fn ProcessRequestsInQueue(&self, mut remoteRecvRequestCount: MutexGuard<u32>) {
+        let mut requests = self.controlRequestsQueue.lock();
+        while *remoteRecvRequestCount > 0 {
+            let channelId = requests.pop_front();
+            match channelId {
+                Some(id) => {
+                    if id != 0 {
+                        RDMA_SRV
+                            .channels
+                            .lock()
+                            .get(&id)
+                            .unwrap()
+                            .RDMASendFromConnection();
+                    } else {
+                        RDMA_SRV
+                            .controlChannels2
+                            .lock()
+                            .get(&self.qps[0].qpNum())
+                            .unwrap()
+                            .RDMASendFromConnection();
+                    }
+                    *remoteRecvRequestCount -= 1;
+                }
+                None => {
+                    break;
+                }
+            }
+        }
+        let mut requests = self.requestsQueue.lock();
+        while *remoteRecvRequestCount > 0 {
+            let channelId = requests.pop_front();
+            match channelId {
+                Some(id) => {
+                    if id != 0 {
+                        RDMA_SRV
+                            .channels
+                            .lock()
+                            .get(&id)
+                            .unwrap()
+                            .RDMASendFromConnection();
+                    } else {
+                        RDMA_SRV
+                            .controlChannels2
+                            .lock()
+                            .get(&self.qps[0].qpNum())
+                            .unwrap()
+                            .RDMASendFromConnection();
+                    }
+                    *remoteRecvRequestCount -= 1;
+                }
+                None => {
+                    break;
+                }
+            }
+        }
+    }
+
     pub fn PostRecv(&self, _qpNum: u32, wrId: u64, addr: u64, lkey: u32) -> Result<()> {
         //TODO: get right qp when multiple QP are used between two physical machines.
         self.qps[0].PostRecv(wrId, addr, lkey)?;
+        let prev = self
+            .localInsertedRecvRequestCount
+            .fetch_add(1, Ordering::SeqCst);
+        if prev + 1 >= RECV_REQUEST_COUNT / 2 {
+            println!("PostRecv, prev: {}", prev);
+            self.ctrlChan
+                .lock()
+                .SendControlMsg(ControlMsgBody::RecvRequestCount(RecvRequestCount {
+                    count: self.localInsertedRecvRequestCount.swap(0, Ordering::SeqCst),
+                }));
+        }
         return Ok(());
     }
 }
@@ -532,16 +647,43 @@ impl RDMAControlChannel {
             // println!("RDMAControlChannel::ProcessRDMARecvWriteImm 4");
             match msg {
                 ControlMsgBody::ConnectRequest(msg) => {
+                    self.chan
+                        .upgrade()
+                        .unwrap()
+                        .conn
+                        .IncreaseRemoteRequestCount(msg.recvRequestCount);
                     self.HandleConnectRequest(msg);
                 }
                 ControlMsgBody::ConnectResponse(msg) => {
+                    self.chan
+                        .upgrade()
+                        .unwrap()
+                        .conn
+                        .IncreaseRemoteRequestCount(msg.recvRequestCount);
                     self.HandleConnectResponse(msg);
                 }
                 ControlMsgBody::ConnectConfirm(msg) => {
+                    self.chan
+                        .upgrade()
+                        .unwrap()
+                        .conn
+                        .IncreaseRemoteRequestCount(msg.recvRequestCount);
                     // println!("1 localChannelId: {}", msg.localChannelId);
                 }
                 ControlMsgBody::ConsumedData(msg) => {
+                    self.chan
+                        .upgrade()
+                        .unwrap()
+                        .conn
+                        .IncreaseRemoteRequestCount(msg.recvRequestCount);
                     self.HandleConsumedData(qpNum, msg);
+                }
+                ControlMsgBody::RecvRequestCount(msg) => {
+                    self.chan
+                        .upgrade()
+                        .unwrap()
+                        .conn
+                        .IncreaseRemoteRequestCount(msg.count);
                 }
                 ControlMsgBody::DummyMsg => {
                     panic!("Control channel received dummy message!");
@@ -671,15 +813,22 @@ impl RDMAControlChannel {
                 .insert(rdmaChannel.localId, rdmaChannel.clone());
 
             self.SendControlMsg(ControlMsgBody::ConnectResponse(ConnectResponse {
-                remoteChannelId: rdmaChannel.remoteRDMAInfo.lock().remoteId,
+                remoteChannelId: rdmaChannel.remoteChannelRDMAInfo.lock().remoteId,
                 localChannelId: rdmaChannel.localId,
                 raddr: rdmaChannel.raddr,
                 rkey: rdmaChannel.rkey,
                 rlen: rdmaChannel.length,
+                recvRequestCount: self
+                    .chan
+                    .upgrade()
+                    .unwrap()
+                    .conn
+                    .localInsertedRecvRequestCount
+                    .swap(0, Ordering::SeqCst),
             }))
             .unwrap();
             // agent.sockInfos.lock().get_mut(&sockfd).unwrap().acceptQueue.lock().EnqSocket(rdmaChannel.localId);
-            
+
             agent.SendResponse(RDMAResp {
                 user_data: 0,
                 msg: RDMARespMsg::RDMAAccept(RDMAAcceptResp {
@@ -687,8 +836,8 @@ impl RDMAControlChannel {
                     ioBufIndex: rdmaChannel.ioBufIndex,
                     channelId: rdmaChannel.localId,
                     dstIpAddr: rdmaChannel.dstIpAddr,
-                    dstPort: rdmaChannel.dstPort
-                })
+                    dstPort: rdmaChannel.dstPort,
+                }),
             });
         } else {
             println!("TODO: no server listening, need ack error back!");
@@ -776,6 +925,13 @@ impl RDMAControlChannel {
             srcPort: 80,
             dstIpAddr: 0,
             dstPort: 8080,
+            recvRequestCount: self
+                .chan
+                .upgrade()
+                .unwrap()
+                .conn
+                .localInsertedRecvRequestCount
+                .swap(0, Ordering::SeqCst),
         });
         self.chan
             .upgrade()
@@ -854,6 +1010,7 @@ pub enum ControlMsgBody {
     ConnectResponse(ConnectResponse),
     ConnectConfirm(ConnectConfirm),
     ConsumedData(ConsumedData),
+    RecvRequestCount(RecvRequestCount),
     DummyMsg,
 }
 
@@ -861,6 +1018,12 @@ pub enum ControlMsgBody {
 pub struct ConsumedData {
     pub remoteChannelId: u32,
     pub consumedData: u32,
+    pub recvRequestCount: u32,
+}
+
+#[derive(Clone, Debug)]
+pub struct RecvRequestCount {
+    pub count: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -873,21 +1036,24 @@ pub struct ConnectRequest {
     pub dstPort: u16,
     pub srcIpAddr: u32,
     pub srcPort: u16,
+    pub recvRequestCount: u32,
 }
 
 #[derive(Clone, Debug)]
 pub struct ConnectResponse {
-    remoteChannelId: u32,
-    localChannelId: u32,
-    raddr: u64,
-    rkey: u32,
-    rlen: u32,
+    pub remoteChannelId: u32,
+    pub localChannelId: u32,
+    pub raddr: u64,
+    pub rkey: u32,
+    pub rlen: u32,
+    pub recvRequestCount: u32,
 }
 
 #[derive(Clone)]
 pub struct ConnectConfirm {
-    remoteChannelId: u32,
-    localChannelId: u32,
+    pub remoteChannelId: u32,
+    pub localChannelId: u32,
+    pub recvRequestCount: u32,
 }
 
 #[repr(u32)]

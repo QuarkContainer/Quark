@@ -23,10 +23,10 @@ use super::rdma_channel::*;
 use super::rdma_conn::*;
 use super::rdma_ctrlconn::*;
 use lazy_static::lazy_static;
+use std::ffi::CString;
 use std::mem::MaybeUninit;
 use std::sync::Arc;
 use std::{env, mem, ptr, thread, time};
-use std::ffi::CString;
 
 lazy_static! {
     pub static ref RDMA_SRV: RDMASrv = RDMASrv::New();
@@ -88,6 +88,7 @@ pub struct RDMASrv {
 
     // rdma control channels: qpNum -> RDMAChannel
     pub controlChannels: Mutex<HashMap<u32, RDMAControlChannel>>,
+    // qpNum -> controlChannel's channel
     pub controlChannels2: Mutex<HashMap<u32, RDMAChannel>>,
 
     // agents: agentId -> RDMAAgent
@@ -153,12 +154,7 @@ impl RDMASrv {
         // );
 
         let memfdname = CString::new("RDMASrvMemFd").expect("CString::new failed for RDMASrvMemFd");
-        let memfd = unsafe {
-            libc::memfd_create(
-                memfdname.as_ptr(),
-                libc::MFD_ALLOW_SEALING,
-            )
-        };
+        let memfd = unsafe { libc::memfd_create(memfdname.as_ptr(), libc::MFD_ALLOW_SEALING) };
         // println!("memfd::{}", memfd);
         if memfd == -1 {
             panic!(

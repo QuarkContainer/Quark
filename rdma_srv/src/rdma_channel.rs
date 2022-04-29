@@ -14,8 +14,7 @@
 
 use alloc::sync::Arc;
 use alloc::sync::Weak;
-use core::sync::atomic::AtomicU64;
-use core::sync::atomic::AtomicUsize;
+use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use spin::{Mutex, MutexGuard};
 use std::mem;
 use std::ops::{Deref, DerefMut};
@@ -32,7 +31,7 @@ use super::qlib::socket_buf::SocketBuff;
 
 #[derive(Clone, Default, Debug)]
 #[repr(C)]
-pub struct RDMAInfo {
+pub struct ChannelRDMAInfo {
     pub remoteId: u32,
     pub raddr: u64,     /* Read Buffer address */
     pub rlen: u32,      /* Read Buffer len */
@@ -42,7 +41,7 @@ pub struct RDMAInfo {
     pub sending: bool,  // the writeimmediately is ongoing
 }
 
-impl RDMAInfo {
+impl ChannelRDMAInfo {
     pub fn Size() -> usize {
         return mem::size_of::<Self>();
     }
@@ -61,10 +60,10 @@ pub struct RDMAChannelIntern {
     pub raddr: u64,
     pub length: u32,
     pub writeCount: AtomicUsize, //when run the writeimm, save the write bytes count here
-    pub remoteRDMAInfo: Mutex<RDMAInfo>,
+    pub remoteChannelRDMAInfo: Mutex<ChannelRDMAInfo>,
 
-    // RDMAInfo:
-    // let localRDMAInfo = RDMAInfo {
+    // ChannelRDMAInfo:
+    // let localChannelRDMAInfo = ChannelRDMAInfo {
     //     raddr: addr,
     //     rlen: len as _,
     //     rkey: readMR.RKey(),
@@ -95,7 +94,7 @@ impl RDMAChannelIntern {
     }
 
     pub fn UpdateRemoteRDMAInfo(&self, remoteId: u32, raddr: u64, rlen: u32, rkey: u32) {
-        *self.remoteRDMAInfo.lock() = RDMAInfo {
+        *self.remoteChannelRDMAInfo.lock() = ChannelRDMAInfo {
             remoteId,
             raddr,
             rlen,
@@ -131,7 +130,7 @@ impl RDMAChannelIntern {
 
     pub fn ProcessRDMAWriteImmFinish(&self) {
         // println!("RDMAChannel::ProcessRDMAWriteImmFinish 1");
-        let mut remoteInfo = self.remoteRDMAInfo.lock();
+        let mut remoteInfo = self.remoteChannelRDMAInfo.lock();
         remoteInfo.sending = false;
 
         let writeCount = self.writeCount.load(QOrdering::ACQUIRE);
@@ -165,7 +164,8 @@ impl RDMAChannelIntern {
         }
 
         if addr != 0 {
-            self.RDMASendLocked(remoteInfo)
+            // self.RDMASendLocked(remoteInfo)
+            self.conn.RDMAWrite(self, remoteInfo);
         }
     }
 
@@ -179,6 +179,10 @@ impl RDMAChannelIntern {
                 .SendControlMsg(ControlMsgBody::ConsumedData(ConsumedData {
                     remoteChannelId: remoteChannelId,
                     consumedData: readCount as u32,
+                    recvRequestCount: self
+                        .conn
+                        .localInsertedRecvRequestCount
+                        .swap(0, Ordering::SeqCst),
                 }));
         }
     }
@@ -187,7 +191,7 @@ impl RDMAChannelIntern {
     }
 
     fn GetRemoteChannelId(&self) -> u32 {
-        self.remoteRDMAInfo.lock().remoteId
+        self.remoteChannelRDMAInfo.lock().remoteId
     }
 
     pub fn ProcessRDMARecvWriteImm(&self, qpNum: u32, recvCount: u64) {
@@ -221,7 +225,7 @@ impl RDMAChannelIntern {
 
     pub fn ProcessRemoteConsumedData(&self, consumedCount: u32) {
         // println!("RDMAChannel::ProcessRemoteConsumedData 1");
-        let mut remoteInfo = self.remoteRDMAInfo.lock();
+        let mut remoteInfo = self.remoteChannelRDMAInfo.lock();
         let trigger = remoteInfo.freespace == 0;
         remoteInfo.freespace += consumedCount as u32;
 
@@ -232,7 +236,59 @@ impl RDMAChannelIntern {
 
     pub fn RDMASend(&self) {
         // println!("RDMAChannelIntern::RDMASend 1");
-        let remoteInfo = self.remoteRDMAInfo.lock();
+        let remoteInfo = self.remoteChannelRDMAInfo.lock();
+        // println!("RDMAChannelIntern::RDMASend 2");
+        if remoteInfo.sending == true {
+            return; // the sending is ongoing
+        }
+
+        //self.RDMASendLockedNew(remoteInfo);
+        self.conn.RDMAWrite(self, remoteInfo);
+    }
+
+
+
+    pub fn RDMASendLockedNew(&self, mut remoteInfo: MutexGuard<ChannelRDMAInfo>) {
+        // println!("RDMASendLocked 1");
+        // let readCount = self.sockBuf.GetAndClearConsumeReadData();
+        // println!("RDMASendLocked 2");
+        let buf = self.sockBuf.writeBuf.lock();
+        // println!("RDMASendLocked 3");
+        let (addr, mut len) = buf.GetDataBuf();
+        // debug!("RDMASendLocked::1, readCount: {}, addr: {:x}, len: {}, remote.freespace: {}", readCount, addr, len, remoteInfo.freespace);
+        // println!("RDMASendLocked 4,len: {}, remoteInfo.freespace: {}", len, remoteInfo.freespace);
+        if len > 0 {
+            if len > remoteInfo.freespace as usize {
+                len = remoteInfo.freespace as usize;
+            }
+
+            if len != 0 {
+                // self.conn.RDMAWrite(
+                //     self,
+                //     addr,
+                //     remoteInfo.raddr + remoteInfo.offset as u64,
+                //     len,
+                //     remoteInfo.rkey,
+                //     remoteInfo.remoteId,
+                // );
+                // println!(
+                //     "after calling self.RDMAWriteImm. raddr: {}, rkey: {}, len: {}",
+                //     remoteInfo.raddr + remoteInfo.offset as u64,
+                //     remoteInfo.rkey,
+                //     len
+                // );
+                // remoteInfo.freespace -= len as u32;
+                // remoteInfo.offset = (remoteInfo.offset + len as u32) % remoteInfo.rlen;
+                remoteInfo.sending = true;
+                // println!("RDMASendLocked::5, remoteInfo: {:?}", remoteInfo);
+                //error!("RDMASendLocked::2, writeCount: {}, readCount: {}", len, readCount);
+            }
+        }
+    }
+
+    pub fn RDMASendOriginal(&self) {
+        // println!("RDMAChannelIntern::RDMASend 1");
+        let remoteInfo = self.remoteChannelRDMAInfo.lock();
         // println!("RDMAChannelIntern::RDMASend 2");
         if remoteInfo.sending == true {
             return; // the sending is ongoing
@@ -241,7 +297,12 @@ impl RDMAChannelIntern {
         self.RDMASendLocked(remoteInfo);
     }
 
-    pub fn RDMASendLocked(&self, mut remoteInfo: MutexGuard<RDMAInfo>) {
+    pub fn RDMASendFromConnection(&self) {
+        let remoteInfo = self.remoteChannelRDMAInfo.lock();
+        self.RDMASendLocked(remoteInfo);
+    }
+
+    pub fn RDMASendLocked(&self, mut remoteInfo: MutexGuard<ChannelRDMAInfo>) {
         // println!("RDMASendLocked 1");
         // let readCount = self.sockBuf.GetAndClearConsumeReadData();
         // println!("RDMASendLocked 2");
@@ -342,7 +403,7 @@ impl RDMAChannel {
             rkey,
             raddr: raddr,
             length: len as u32,
-            remoteRDMAInfo: Mutex::new(RDMAInfo::default()),
+            remoteChannelRDMAInfo: Mutex::new(ChannelRDMAInfo::default()),
             writeCount: AtomicUsize::new(0),
             ioBufIndex: 0,
         }))
@@ -376,7 +437,7 @@ impl RDMAChannel {
             rkey,
             raddr: raddr,
             length: len as u32,
-            remoteRDMAInfo: Mutex::new(RDMAInfo {
+            remoteChannelRDMAInfo: Mutex::new(ChannelRDMAInfo {
                 remoteId: connectRequest.remoteChannelId,
                 raddr: connectRequest.raddr,
                 rlen: connectRequest.rlen,
@@ -419,7 +480,7 @@ impl RDMAChannel {
             rkey,
             raddr: raddr,
             length: len as u32,
-            remoteRDMAInfo: Mutex::new(RDMAInfo::default()),
+            remoteChannelRDMAInfo: Mutex::new(ChannelRDMAInfo::default()),
             writeCount: AtomicUsize::new(0),
             ioBufIndex,
         }))
@@ -435,6 +496,10 @@ impl RDMAChannel {
             dstPort: self.dstPort,
             srcIpAddr: self.srcIpAddr,
             srcPort: self.srcPort,
+            recvRequestCount: self
+                .conn
+                .localInsertedRecvRequestCount
+                .swap(0, Ordering::SeqCst),
         }
     }
 
@@ -464,7 +529,7 @@ impl RDMAChannel {
     //         duplexMode: DuplexMode::SHUTDOWN_WR,
     //         lkey,
     //         rkey,
-    //         remoteRDMAInfo: Mutex::new(RDMAInfo::default()),
+    //         remoteChannelRDMAInfo: Mutex::new(ChannelRDMAInfo::default()),
     //         writeCount: AtomicUsize::new(0),
     //     }))
     // }
@@ -473,8 +538,8 @@ impl RDMAChannel {
         self.rkey
     }
 
-    // pub fn UpdateRemoteRDMAInfo(&self, raddr: u64, rlen: u32, rkey: u32) {
-    //     *self.remoteRDMAInfo.lock() = RDMAInfo {
+    // pub fn UpdateRemoteChannelRDMAInfo(&self, raddr: u64, rlen: u32, rkey: u32) {
+    //     *self.remoteChannelRDMAInfo.lock() = ChannelRDMAInfo {
     //         raddr,
     //         rlen,
     //         rkey,
@@ -510,7 +575,7 @@ impl RDMAChannel {
     // }
 
     // pub fn ProcessRDMAWriteImmFinish(&self) {
-    //     let mut remoteInfo = self.remoteRDMAInfo.lock();
+    //     let mut remoteInfo = self.remoteChannelRDMAInfo.lock();
     //     remoteInfo.sending = false;
 
     //     let writeCount = self.writeCount.load(QOrdering::ACQUIRE);
@@ -550,7 +615,7 @@ impl RDMAChannel {
     //     }
 
     //     // if writeConsumeCount > 0 {
-    //     //     let mut remoteInfo = self.remoteRDMAInfo.lock();
+    //     //     let mut remoteInfo = self.remoteChannelRDMAInfo.lock();
     //     //     let trigger = remoteInfo.freespace == 0;
     //     //     remoteInfo.freespace += writeConsumeCount as u32;
 
@@ -562,7 +627,7 @@ impl RDMAChannel {
     //     // }
     // }
 
-    // pub fn RDMASendLocked(&self, mut remoteInfo: MutexGuard<RDMAInfo>) {
+    // pub fn RDMASendLocked(&self, mut remoteInfo: MutexGuard<ChannelRDMAInfo>) {
     //     let readCount = self.sockBuf.GetAndClearConsumeReadData();
     //     let buf = self.sockBuf.writeBuf.lock();
     //     let (addr, mut len) = buf.GetDataBuf();
