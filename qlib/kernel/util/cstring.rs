@@ -73,7 +73,7 @@ impl CString {
     pub fn ToStringWithLen(task: &Task, addr: u64, len: usize) -> Result<String> {
         let (str, err) = task.CopyInString(addr, len);
         match err {
-            Err(_) => return Err(Error::SysError(SysErr::EINVAL)),
+            Err(_) => return Err(Error::SysError(SysErr::EFAULT)),
             Ok(()) => return Ok(str),
         }
     }

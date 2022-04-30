@@ -182,7 +182,7 @@ pub fn openAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
     let (path, dirPath) = copyInPath(task, addr, false)?;
 
     info!(
-        "openat path is {}, the perm is {:?}, , current is {}",
+        "openat path is {}, the perm is {:?}, current is {}",
         &path,
         &PermMask::FromFlags(flags),
         task.fsContext.WorkDirectory().MyFullName()
@@ -514,7 +514,7 @@ pub fn SysAccess(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let pathName = args.arg0 as u64;
     let mode = args.arg1 as u32;
 
-    accessAt(task, ATType::AT_FDCWD, pathName, true, mode)?;
+    accessAt(task, ATType::AT_FDCWD, pathName, mode)?;
     return Ok(0);
 }
 
@@ -522,19 +522,17 @@ pub fn SysFaccessat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let dirfd = args.arg0 as i32;
     let addr = args.arg1 as u64;
     let mode = args.arg2 as u16 as u32;
-    let flags = args.arg3 as i32;
 
     accessAt(
         task,
         dirfd,
         addr,
-        flags & ATType::AT_SYMLINK_NOFOLLOW == 0,
         mode,
     )?;
     return Ok(0);
 }
 
-pub fn accessAt(task: &Task, dirFd: i32, addr: u64, resolve: bool, mode: u32) -> Result<()> {
+pub fn accessAt(task: &Task, dirFd: i32, addr: u64, mode: u32) -> Result<()> {
     const R_OK: u32 = 4;
     const W_OK: u32 = 2;
     const X_OK: u32 = 1;
@@ -550,7 +548,7 @@ pub fn accessAt(task: &Task, dirFd: i32, addr: u64, resolve: bool, mode: u32) ->
         task,
         dirFd,
         &path.to_string(),
-        resolve,
+        true,
         &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
             {
                 let creds = task.Creds().Fork();

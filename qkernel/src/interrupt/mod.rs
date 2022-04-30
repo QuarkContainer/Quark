@@ -462,15 +462,13 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
 
     let PRINT_EXECPTION: bool = SHARESPACE.config.read().PrintException;
     if PRINT_EXECPTION {
-        error!("in PageFaultHandler, cr2: {:x}, cr3: {:x}, isuser = {}, error is {:b}, ss is {:x}, cs == {:x}, eflags = {:x}, new ss is {}",
+        error!("in PageFaultHandler, cr2: {:x}, rip: {:x}, cr3: {:x}, isuser = {}, error is {:b}, eflags = {:x}",
             cr2,
+            ptRegs.rip,
             cr3,
             PageFaultErrorCode::from_bits(errorCode).unwrap() & PageFaultErrorCode::USER_MODE == PageFaultErrorCode::USER_MODE,
             PageFaultErrorCode::from_bits(errorCode).unwrap(),
-            ptRegs.ss,
-            ptRegs.cs,
             ptRegs.eflags,
-            ss
         );
     }
 
