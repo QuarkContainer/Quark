@@ -463,6 +463,10 @@ impl FreeMemBlockMgr {
     }
 
     pub fn Alloc(&mut self) -> Option<*mut u8> {
+        if self.count != self.list.count as usize {
+            error!("FreeMemBlockMgr::Alloc {}/{}/{}", self.size, self.count, self.list.count);
+        }
+
         if self.count > 0 {
             self.count -= 1;
             let ret = self.list.Pop();
@@ -485,14 +489,9 @@ impl FreeMemBlockMgr {
     }
 
     pub fn Dealloc(&mut self, ptr: *mut u8, _heap: &QMutex<Heap<ORDER>>) {
-        /*let size = self.size / 8;
-        unsafe {
-            let toArr = slice::from_raw_parts(ptr as *mut u64, size);
-            for i in 0..size {
-                assert!(toArr[i] == 0);
-            }
-        }*/
-
+        if self.count != self.list.count as usize {
+            error!("FreeMemBlockMgr::Dealloc {}/{}/{}", self.size, self.count, self.list.count);
+        }
         self.count += 1;
         self.list.Push(ptr as u64);
         //self.queue[self.idx%16] = false;
@@ -500,7 +499,10 @@ impl FreeMemBlockMgr {
     }
 
     fn Free(&mut self, heap: &QMutex<Heap<ORDER>>) {
-        assert!(self.count > 0);
+        if self.count != self.list.count as usize {
+            error!("FreeMemBlockMgr::Dealloc {}/{}/{}", self.size, self.count, self.list.count);
+        }
+
         self.count -= 1;
         let addr = self.list.Pop();
 
