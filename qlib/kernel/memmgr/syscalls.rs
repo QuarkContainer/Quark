@@ -695,12 +695,12 @@ impl MemoryManager {
             }
         }
 
-        /*let ret = self.MFree(&ar);
+        let ret = self.MFree(&ar);
 
         self.TlbShootdown();
-        return ret;*/
+        return ret;
 
-        return Ok(());
+        //return Ok(());
     }
 
     pub fn SetDontFork(&self, _task: &Task, addr: u64, length: u64, dontfork: bool) -> Result<()> {

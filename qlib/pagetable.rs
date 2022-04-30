@@ -364,7 +364,6 @@ impl PageTables {
                     pagePool.Deref(addr).unwrap();
                 }*/
                 res = true;
-                Invlpg(vaddr.0);
             }
 
             pteEntry.set_addr(PhysAddr::new(phyAddr.0), flags);
@@ -914,6 +913,7 @@ impl PageTables {
         failFast: bool,
     ) -> Result<()> {
         //info!("MProtoc: start={:x}, end={:x}, flag = {:?}", start.0, end.0, flags);
+        self.EnableTlbShootdown();
         return self.Traverse(
             start,
             end,
@@ -1035,7 +1035,6 @@ impl PageTables {
                                     pteEntry.set_flags(PageTableFlags::PRESENT | PageTableFlags::BIT_9);
                                 }*/
                                 res = self.freeEntry(pteEntry, pagePool)?;
-                                Invlpg(curAddr.0);
                             }
 
                             //info!("set addr: vaddr is {:x}, paddr is {:x}, flags is {:b}", curAddr.0, phyAddr.0, flags.bits());
