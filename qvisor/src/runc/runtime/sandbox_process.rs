@@ -399,6 +399,16 @@ impl SandboxProcess {
             panic!("InitRootfs: mount rootfs fail, error is {}", ret);
         }
 
+        let tmpfolder = Join(&self.SandboxRootDir, "tmp");
+        match create_dir_all(&tmpfolder) {
+            Ok(()) => (),
+            Err(_e) => panic!("failed to create dir to mount containerrootPath"),
+        };
+        let ret = Util::Mount(&self.Rootfs, &tmpfolder, "tmpfs", rbindFlags, "");
+        if ret < 0 {
+            panic!("InitRootfs: mount rootfs fail, error is {}", ret);
+        }
+
         return Ok(());
     }
 
