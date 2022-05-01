@@ -306,6 +306,9 @@ impl MemoryManager {
         };
 
         mapping.usageAS += opts.Length;
+        if opts.MLockMode != MLockMode::MlockNone {
+            mapping.lockedAS += opts.Length;
+        }
 
         let vseg = mapping.vmas.Insert(&gap, &ar, vma);
         let nextvseg = vseg.NextSeg();

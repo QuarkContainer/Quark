@@ -412,7 +412,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     NotImplementSyscall, //sys_finit_module,
     NotImplementSyscall, //sys_sched_setattr,
     NotImplementSyscall, //sys_sched_getattr,
-    NotImplementSyscall, //sys_renameat2,
+    SysNoSupport, //sys_renameat2,
     NotImplementSyscall, //sys_seccomp,
     SysGetRandom,        //sys_getrandom,
     NotImplementSyscall, //sys_memfd_create,

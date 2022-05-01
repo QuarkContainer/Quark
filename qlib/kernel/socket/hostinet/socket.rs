@@ -269,7 +269,7 @@ impl SocketOperations {
         match self.SocketBufType() {
             SocketBufType::Uring(b) => return b,
             SocketBufType::RDMA(b) => return b,
-            _ => panic!("SocketBufType::None has no SockBuff"),
+            _ => panic!("SocketBufType::None has no SockBuff {:?}", self.SocketBufType()),
         }
     }
 
@@ -979,7 +979,8 @@ impl SockOperations for SocketOperations {
     fn Shutdown(&self, task: &Task, how: i32) -> Result<i64> {
         let how = how as u64;
 
-        if how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR {
+        if self.stype == SockType::SOCK_STREAM &&
+            (how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR) {
             if self.SocketBuf().HasWriteData() {
                 self.SocketBuf().SetPendingWriteShutdown();
                 let general = task.blocker.generalEntry.clone();
