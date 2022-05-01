@@ -209,12 +209,12 @@ fn CompileMounts(spec: &oci::Spec) -> Vec<oci::Mount> {
         options: Vec::new(),
     });
 
-    mounts.push(oci::Mount {
+    /*mounts.push(oci::Mount {
         destination: "/tmp".to_string(),
         typ: TMPFS.to_string(),
         source: "".to_string(),
         options: Vec::new(),
-    });
+    });*/
 
     for m in &spec.mounts {
         if !specutils::IsSupportedDevMount(m) {
