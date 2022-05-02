@@ -433,7 +433,7 @@ pub fn ExtractEndpoint(task: &Task, sockAddr: &[u8]) -> Result<BoundEndpoint> {
     // Extract the endpoint if one is there.
     let inode = d.Inode();
     let iops = inode.lock().InodeOp.clone();
-    let fullName = d.MyFullName();
+    let fullName = "/".to_string() + &task.Thread().ContainerID() + &d.MyFullName();
 
     //if it is host unix socket, the ep is in virtual unix
     if iops.InodeType() == InodeType::Socket
@@ -592,7 +592,7 @@ impl SockOperations for UnixSocketOperations {
             if iops.InodeType() == InodeType::Directory
                 && iops.as_any().downcast_ref::<HostInodeOp>().is_some()
             {
-                let fullName = d.MyFullName() + "/" + &name.to_string();
+                let fullName = "/".to_string() + &task.Thread().ContainerID() + &d.MyFullName() + "/" + &name.to_string();
 
                 let hostfd = self.hostfd;
                 let addr = SockAddrUnix::New(&fullName).ToNative();
