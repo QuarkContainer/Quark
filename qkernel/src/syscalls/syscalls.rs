@@ -197,7 +197,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysGetrusage,        //sys_getrusage,
     SysInfo,             //sys_sysinfo,
     SysTimes,            //sys_times,    //100
-    NotImplementSyscall, //sys_ptrace,
+    SysNoSupport,        //sys_ptrace,
     SysGetuid,           //sys_getuid,
     NotImplementSyscall, //sys_syslog,
     SysGetgid,           //sys_getgid,
@@ -336,12 +336,12 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysMbind,            //sys_mbind, just workaround
     SysSetMempolicy,     //sys_set_mempolicy,
     SysGetMempolicy,     //sys_get_mempolicy,
-    NotImplementSyscall, //sys_mq_open,    //240
-    NotImplementSyscall, //sys_mq_unlink,
-    NotImplementSyscall, //sys_mq_timedsend,
-    NotImplementSyscall, //sys_mq_timedreceive,
-    NotImplementSyscall, //sys_mq_notify,
-    NotImplementSyscall, //sys_mq_getsetattr,
+    SysNoSupport,       //sys_mq_open,    //240
+    SysNoSupport,       //sys_mq_unlink,
+    SysNoSupport,       //sys_mq_timedsend,
+    SysNoSupport,       //sys_mq_timedreceive,
+    SysNoSupport,       //sys_mq_notify,
+    SysNoSupport,       //sys_mq_getsetattr,
     NotImplementSyscall, //sys_kexec_load,
     SysWaitid,           //sys_waitid,
     NotImplementSyscall, //sys_add_key,
@@ -537,7 +537,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     NotImplementSyscall, //	438
     SysNoSys,            //	439
     NotImplementSyscall, //	440
-    NotImplementSyscall, //	441
+    SysNoSys, //	441
     NotImplementSyscall, //	442
 ];
 
