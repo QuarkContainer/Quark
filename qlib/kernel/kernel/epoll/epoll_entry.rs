@@ -86,8 +86,9 @@ impl PollEntry {
         let epoll = self.lock().epoll.clone();
         let mut lists = epoll.lists.lock();
 
-        let state = self.SetReady();
+        let state = self.lock().state;
         if state == PollEntryState::Waiting {
+            self.SetReady();
             lists.waitingList.Remove(self);
             lists.readyList.PushBack(self);
 

@@ -166,18 +166,21 @@ impl ThreadInternal {
         tg.groupContWaitable = false;
         return true;
     }
+}
 
+impl Thread {
     // canReceiveSignalLocked returns true if t should be interrupted to receive
     // the given signal. canReceiveSignalLocked is analogous to Linux's
     // kernel/signal.c:wants_signal(), but see below for divergences.
     //
     // Preconditions: The signal mutex must be locked.
     pub fn canReceiveSignalLocked(&self, sig: Signal) -> bool {
-        self.SignalQueue
+        let queue = self.lock().SignalQueue.clone();
+        queue
             .Notify(SignalSet::MakeSignalSet(&[sig]).0 as EventMask);
 
         // - Do not choose tasks that are blocking the signal.
-        if SignalSet::New(sig).0 & self.signalMask.0 != 0 {
+        if SignalSet::New(sig).0 & self.lock().signalMask.0 != 0 {
             return false;
         }
 
@@ -186,7 +189,7 @@ impl ThreadInternal {
         // - No special case for SIGKILL: SIGKILL already interrupted all tasks in the
         // task group via applySignalSideEffects => killLocked.
         // - Do not choose stopped tasks, which cannot handle signals.
-        if self.stop.is_some() {
+        if self.lock().stop.is_some() {
             return false;
         }
 
@@ -198,9 +201,7 @@ impl ThreadInternal {
 
         return true;
     }
-}
 
-impl Thread {
     // forceSignal ensures that the task is not ignoring or blocking the given
     // signal. If unconditional is true, forceSignal takes action even if the
     // signal isn't being ignored or blocked.
@@ -247,7 +248,7 @@ impl Thread {
         let blocked = mask.0 & !oldMask.0;
         let tg = self.ThreadGroup();
         let blockedGroupPending = SignalSet(blocked & tg.lock().pendingSignals.pendingSet.0);
-        if blockedGroupPending.0 != 0 && self.lock().Interrupted(true) {
+        if blockedGroupPending.0 != 0 && self.Interrupted(true) {
             blockedGroupPending.ForEachSignal(|sig| {
                 let nt = tg.lock().findSignalReceiverLocked(sig);
                 if nt.is_some() {
@@ -488,7 +489,7 @@ impl Thread {
         // any, may not be the task that actually dequeues and handles the signal;
         // e.g. a racing signal mask change may cause the notified task to become
         // ineligible, or a racing sibling task may dequeue the signal first.
-        let canReceiveSignalLocked = self.lock().canReceiveSignalLocked(sig);
+        let canReceiveSignalLocked = self.canReceiveSignalLocked(sig);
         if canReceiveSignalLocked {
             info!("Thread[{}] Notified of signal {:?}", self.lock().id, sig);
             self.lock().interrupt();
@@ -509,8 +510,7 @@ impl Thread {
 
     // PendingSignals returns the set of pending signals.
     pub fn PendingSignals(&self) -> SignalSet {
-        let t = self.lock();
-        let tg = t.tg.clone();
+        let tg = self.lock().tg.clone();
         let pidns = tg.PIDNamespace();
         let owner = pidns.lock().owner.clone();
         let _r = owner.read();
@@ -518,7 +518,8 @@ impl Thread {
         let lock = tg.lock().signalLock.clone();
         let _s = lock.lock();
 
-        return SignalSet(t.pendingSignals.pendingSet.0 | tg.lock().pendingSignals.pendingSet.0);
+        let pendingset = self.lock().pendingSignals.pendingSet.0;
+        return SignalSet(pendingset | tg.lock().pendingSignals.pendingSet.0);
     }
 
     // SendSignal sends the given signal to t.
@@ -703,7 +704,7 @@ impl ThreadGroupInternal {
     // Preconditions: The signal mutex must be locked.
     pub fn findSignalReceiverLocked(&self, sig: Signal) -> Option<Thread> {
         for t in &self.tasks {
-            if t.lock().canReceiveSignalLocked(sig) {
+            if t.canReceiveSignalLocked(sig) {
                 return Some(t.clone());
             }
         }

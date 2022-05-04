@@ -25,11 +25,14 @@ use super::super::kernel::waiter::*;
 use super::super::task::*;
 use super::super::threadmgr::thread::*;
 
-impl ThreadInternal {
+impl Thread {
     pub fn Interrupted(&self, clear: bool) -> bool {
-        return self.blocker.Interrupted(clear);
+        let blocker = self.lock().blocker.clone();
+        return blocker.Interrupted(clear);
     }
+}
 
+impl ThreadInternal {
     pub fn HasSignal(&self) -> bool {
         return self.pendingSignals.HasSignal(self.signalMask);
     }
