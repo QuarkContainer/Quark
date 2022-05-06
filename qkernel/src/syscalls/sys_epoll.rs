@@ -63,7 +63,7 @@ pub fn AddEpoll(
 
     if !inodeOp.WouldBlock() {
         //error!("AddEpoll 1.1 inodetype is {:?}, fopstype is {:?}", inode.InodeType(), fops.FopsType());
-        return Err(Error::SysError(SysErr::EINVAL));
+        return Err(Error::SysError(SysErr::EPERM));
     }
 
     let fops = epollfile.FileOp.clone();
