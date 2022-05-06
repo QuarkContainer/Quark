@@ -145,38 +145,8 @@ impl EventPoll {
         return false;
     }
 
-    pub fn ReadyEvents(&self, task: &Task) -> BTreeMap<FileIdentifier, EventMask> {
-        let mut fs = Vec::new();
-        {
-            let lists = self.lists.lock();
-            let mut it = lists.readyList.Front();
-            while it.is_some() {
-                let entry = it.unwrap();
-                let mask = entry.lock().mask;
-                it = entry.Next();
-                let id = entry.lock().id.clone();
-                fs.push((id, mask))
-            }
-        }
-
-        let mut map = BTreeMap::new();
-        for (id, mask) in fs {
-            let file = match id.File.Upgrade() {
-                None => {
-                    continue;
-                }
-                Some(f) => f,
-            };
-            let ready = file.Readiness(task, mask);
-            map.insert(id, ready);
-        }
-
-        return map
-    }
 
     pub fn ReadEvents(&self, task: &Task, max: i32) -> Vec<Event> {
-        let map = self.ReadyEvents(task);
-
         let mut lists = self.lists.lock();
 
         let mut local = PollEntryList::default();
@@ -190,11 +160,16 @@ impl EventPoll {
             // just put it back in the waiting list and move on to the next
             // entry.
             let id = entry.lock().id.clone();
-            let ready = match map.get(&id) {
-                None => continue,
-                Some(ready) => *ready,
+            let file = match id.File.Upgrade() {
+                None => {
+                    lists.readyList.Remove(&entry);
+                    continue;
+                }
+                Some(f) => f,
             };
 
+            let mask = entry.lock().mask;
+            let ready = file.Readiness(task, mask);
             if ready == 0 {
                 lists.readyList.Remove(&entry);
                 lists.waitingList.PushBack(&entry);

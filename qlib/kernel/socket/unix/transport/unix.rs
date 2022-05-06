@@ -1011,20 +1011,20 @@ impl Waitable for BaseEndpoint {
     }
 
     fn EventRegister(&self, task: &Task, e: &WaitEntry, mask: EventMask) {
-        let b = self.lock();
-        let queue = b.queue.clone();
-        queue.EventRegister(task, e, mask);
-        if b.connected.is_some() {
-            b.connected.as_ref().unwrap().EventUpdate();
+        let q = self.lock().queue.clone();
+        q.EventRegister(task, e, mask);
+        let connected = self.lock().connected.clone();
+        if connected.is_some() {
+            connected.as_ref().unwrap().EventUpdate();
         }
     }
 
     fn EventUnregister(&self, task: &Task, e: &WaitEntry) {
-        let b = self.lock();
-        let queue = b.queue.clone();
-        queue.EventUnregister(task, e);
-        if b.connected.is_some() {
-            b.connected.as_ref().unwrap().EventUpdate();
+        let q = self.lock().queue.clone();
+        q.EventUnregister(task, e);
+        let connected = self.lock().connected.clone();
+        if connected.is_some() {
+            connected.as_ref().unwrap().EventUpdate();
         }
     }
 }
@@ -1045,14 +1045,6 @@ impl PartialEndPoint for BaseEndpoint {
     // Type implements Endpoint.Type.
     fn Type(&self) -> i32 {
         panic!("no possible");
-    }
-}
-
-impl ConnectedPasscred for BaseEndpoint {
-    // ConnectedPasscred implements Credentialer.ConnectedPasscred.
-    fn ConnectedPasscred(&self) -> bool {
-        let b = self.lock();
-        return b.connected.is_some() && b.connected.as_ref().unwrap().Passcred();
     }
 }
 
@@ -1099,8 +1091,8 @@ impl BaseEndpoint {
     }
 
     pub fn ConnectedPasscred(&self) -> bool {
-        let e = self.lock();
-        return e.connected.is_some() && e.connected.as_ref().unwrap().Passcred();
+        let connected = self.lock().connected.clone();
+        return connected.is_some() && connected.as_ref().unwrap().Passcred();
     }
 
     fn setPasscred(&self, pc: bool) {
@@ -1153,9 +1145,7 @@ impl BaseEndpoint {
         c: &SCMControlMessages,
         to: &Option<BoundEndpoint>,
     ) -> Result<usize> {
-        let e = self.lock();
-
-        if !e.Connected() {
+        if !self.lock().Connected() {
             return Err(Error::SysError(SysErr::ENOTCONN));
         }
 
@@ -1163,11 +1153,12 @@ impl BaseEndpoint {
             return Err(Error::SysError(SysErr::EISCONN));
         }
 
-        let addr = SockAddrUnix::New(&e.path);
-        let (n, notify) = e.connected.as_ref().unwrap().Send(data, c, &addr)?;
+        let addr = SockAddrUnix::New(&self.lock().path);
+        let ce = self.lock().connected.as_ref().unwrap().clone();
+        let (n, notify) = ce.Send(data, c, &addr)?;
 
         if notify {
-            e.connected.as_ref().unwrap().SendNotify();
+            ce.SendNotify();
         }
 
         return Ok(n);
