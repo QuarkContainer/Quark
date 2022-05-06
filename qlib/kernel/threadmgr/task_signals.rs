@@ -522,6 +522,20 @@ impl Thread {
         return SignalSet(pendingset | tg.lock().pendingSignals.pendingSet.0);
     }
 
+    // PendingSignals returns the set of pending signals without lock. Just for signalfd readiness check.
+    pub fn PendingSignalsNolock(&self) -> SignalSet {
+        let tg = self.lock().tg.clone();
+        let pidns = tg.PIDNamespace();
+        let owner = pidns.lock().owner.clone();
+        let _r = owner.read();
+
+        // it is readonly pendingSignals for readiness check. Even there is inconsistent state, but it is acceptable
+        //let _s = lock.lock();
+
+        let pendingset = self.lock().pendingSignals.pendingSet.0;
+        return SignalSet(pendingset | tg.lock().pendingSignals.pendingSet.0);
+    }
+
     // SendSignal sends the given signal to t.
     //
     // The following errors may be returned:

@@ -379,8 +379,7 @@ impl ConnectingEndpoint for ConnectionedEndPoint {
 
 impl Passcred for ConnectionedEndPoint {
     fn Passcred(&self) -> bool {
-        let e = self;
-        return e.baseEndpoint.Passcred();
+        return self.baseEndpoint.Passcred();
     }
 }
 
@@ -473,7 +472,6 @@ impl Endpoint for ConnectionedEndPoint {
         // sockets ignore the passed endpoint.
         self.TryLock();
         let stype = self.stype;
-        error!("SendMsg 2");
         if stype == SockType::SOCK_STREAM && to.is_some() {
             return Err(Error::SysError(SysErr::EOPNOTSUPP));
         }
@@ -593,9 +591,7 @@ impl Endpoint for ConnectionedEndPoint {
 
 impl ConnectedPasscred for ConnectionedEndPoint {
     fn ConnectedPasscred(&self) -> bool {
-        self.TryLock();
-        let e = self;
-        return e.baseEndpoint.ConnectedPasscred();
+        return self.baseEndpoint.ConnectedPasscred();
     }
 }
 
