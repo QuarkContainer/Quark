@@ -333,7 +333,9 @@ impl FileOperations for UnixSocketOperations {
         _offset: i64,
         _blocking: bool,
     ) -> Result<i64> {
-        let ctrl = if self.ep.ConnectedPasscred() || self.ep.Passcred() {
+        let ConnectedPasscred = self.ep.ConnectedPasscred();
+        let Passcred = self.ep.Passcred();
+        let ctrl = if ConnectedPasscred || Passcred {
             NewControlMessage(task, Some(self.ep.clone()), None)
         } else {
             SCMControlMessages::default()

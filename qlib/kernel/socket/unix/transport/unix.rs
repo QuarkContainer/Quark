@@ -264,7 +264,7 @@ impl BoundEndpoint {
 
     pub fn BaseEndpoint(&self) -> BaseEndpoint {
         match self {
-            BoundEndpoint::Connected(ref c) => return c.lock().baseEndpoint.clone(),
+            BoundEndpoint::Connected(ref c) => return c.baseEndpoint.clone(),
             BoundEndpoint::ConnectLess(ref c) => return BaseEndpoint(c.0.clone()),
         }
     }
