@@ -25,7 +25,7 @@ use super::super::super::range::*;
 use super::super::kernel::waiter::*;
 use super::super::task::*;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum LockType {
     // ReadLock describes a POSIX regional file lock to be taken
     // read only.  There may be multiple of these locks on a single

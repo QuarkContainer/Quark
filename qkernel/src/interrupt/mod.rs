@@ -29,7 +29,7 @@ use super::MainRun;
 use super::SignalDef::*;
 use super::SHARESPACE;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, core::cmp::PartialEq)]
 pub enum ExceptionStackVec {
     DivideByZero,
     Debug,
@@ -135,46 +135,44 @@ pub fn init() {
     IDT.load();
 }
 
-pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) {
+pub fn ExceptionHandler(ev: ExceptionStackVec, ptRegs: &mut PtRegs, errorCode: u64) {
     let PRINT_EXECPTION: bool = SHARESPACE.config.read().PrintException;
 
     let currTask = Task::Current();
 
-    let mut rflags = sf.eflags;
+    let mut rflags = ptRegs.eflags;
     rflags &= !USER_FLAGS_CLEAR;
     rflags |= USER_FLAGS_SET;
-    sf.eflags = rflags;
+    ptRegs.eflags = rflags;
 
     // is this call from user
-    if sf.ss & 0x3 != 0 {
+    if ptRegs.ss & 0x3 != 0 {
         //PerfGofrom(PerfType::User);
         currTask.AccountTaskLeave(SchedState::RunningApp);
     } else {
         print!(
             "get non page fault exception from kernel ... {:#x?}/ev {:#x?}",
-            sf, ev
+            ptRegs, ev
         );
 
         for i in 0..super::CPU_LOCAL.len() {
             print!("CPU#{} is {:#x?}", i, super::CPU_LOCAL[i]);
         }
 
-        /*backtracer::trace1(sf.ip, sf.sp, pt.rbp, &mut |frame| {
-            print!("pagefault frame is {:#x?}", frame);
-            true
-        });*/
         panic!("Get on page fault exception from kernel");
     };
 
     if PRINT_EXECPTION {
         let map = currTask.mm.GetSnapshotLocked(currTask, false);
         error!(
-            "ExceptionHandler  .... ev is {:?}, sf is {:x?} errorcode is {:x}, map is {}",
-            ev, sf, errorCode, &map
+            "ExceptionHandler  .... ev is {:?}, ptRegs is {:x?} errorcode is {:x}, map is {}",
+            ev, ptRegs, errorCode, &map
         );
     }
 
-    currTask.SaveFp();
+    if ev != ExceptionStackVec::X87FloatingPointException &&  ev != ExceptionStackVec::SIMDFloatingPointException {
+        currTask.SaveFp();
+    }
 
     match ev {
         ExceptionStackVec::DivideByZero => {
@@ -185,7 +183,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
             };
 
             let sigfault = info.SigFault();
-            sigfault.addr = sf.rip;
+            sigfault.addr = ptRegs.rip;
 
             let thread = currTask.Thread();
             // Synchronous signal. Send it to ourselves. Assume the signal is
@@ -205,7 +203,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
             };
 
             let sigfault = info.SigFault();
-            sigfault.addr = sf.rip;
+            sigfault.addr = ptRegs.rip;
 
             let thread = currTask.Thread();
             // Synchronous signal. Send it to ourselves. Assume the signal is
@@ -226,7 +224,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
             };
 
             let sigfault = info.SigFault();
-            sigfault.addr = sf.rip;
+            sigfault.addr = ptRegs.rip;
 
             let thread = currTask.Thread();
             // Synchronous signal. Send it to ourselves. Assume the signal is
@@ -246,7 +244,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
             };
 
             let sigfault = info.SigFault();
-            sigfault.addr = sf.rip;
+            sigfault.addr = ptRegs.rip;
             let thread = currTask.Thread();
             thread.forceSignal(Signal(info.Signo), false);
             thread
@@ -265,7 +263,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
             };
 
             let sigfault = info.SigFault();
-            sigfault.addr = sf.rip;
+            sigfault.addr = ptRegs.rip;
             let thread = currTask.Thread();
             thread.forceSignal(Signal(info.Signo), false);
             thread
@@ -275,12 +273,12 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
         ExceptionStackVec::InvalidOpcode => {
             let _ml = currTask.mm.MappingWriteLock();
             let map = currTask.mm.GetSnapshotLocked(currTask, false);
-            let data = unsafe { *(sf.rip as *const u64) };
+            let data = unsafe { *(ptRegs.rip as *const u64) };
 
             print!(
                 "InvalidOpcode: data is {:x}, phyAddr is {:x?}, the map is {}",
                 data,
-                currTask.mm.VirtualToPhyLocked(sf.rip),
+                currTask.mm.VirtualToPhyLocked(ptRegs.rip),
                 &map
             );
 
@@ -291,7 +289,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
             };
 
             let sigfault = info.SigFault(); // ILL_ILLOPC (illegal opcode).
-            sigfault.addr = sf.rip;
+            sigfault.addr = ptRegs.rip;
             let thread = currTask.Thread();
             thread.forceSignal(Signal(info.Signo), false);
             thread
@@ -306,7 +304,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
             };
 
             let sigfault = info.SigFault(); // ILL_ILLOPC (illegal opcode).
-            sigfault.addr = sf.rip;
+            sigfault.addr = ptRegs.rip;
             let thread = currTask.Thread();
             thread.forceSignal(Signal(info.Signo), false);
             thread
@@ -319,9 +317,11 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
     }
 
     MainRun(currTask, TaskRunState::RunApp);
-    currTask.mm.HandleTlbShootdown();
-    currTask.RestoreFp();
-    ReturnToApp(sf);
+    if ev != ExceptionStackVec::X87FloatingPointException &&  ev != ExceptionStackVec::SIMDFloatingPointException {
+        currTask.RestoreFp();
+    }
+
+    ReturnToApp(ptRegs);
 }
 
 pub fn ReturnToApp(pt: &mut PtRegs) -> ! {
