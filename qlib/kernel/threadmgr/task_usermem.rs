@@ -452,7 +452,7 @@ impl Task {
     }
 
     //Copy a slice to user memory
-    pub fn CopyOutSlice<T: Sized + Copy>(&self, src: &[T], dst: u64, len: usize) -> Result<()> {
+    pub fn  CopyOutSlice<T: Sized + Copy>(&self, src: &[T], dst: u64, len: usize) -> Result<()> {
         return self.mm.CopyOutSlice(self, src, dst, len);
     }
 

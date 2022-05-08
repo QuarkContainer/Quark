@@ -16,6 +16,7 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 
 use super::super::super::common::*;
+use super::super::super::cpuid::*;
 use super::super::super::linux::time::*;
 use super::super::super::linux_def::*;
 use super::super::arch::x86_64::arch_x86::*;
@@ -30,6 +31,16 @@ use super::super::SignalDef::*;
 use super::task_exit::*;
 use super::task_stop::*;
 use super::task_syscall::*;
+
+#[derive(Copy, Clone, Default)]
+#[repr(C)]
+pub struct FPSoftwareFrame {
+    pub Magic1: u32,
+    pub ExtendedSize: u32,
+    pub Xfeatures: u64,
+    pub XstateSize: u32,
+    pub Padding: [u32; 7]
+}
 
 #[derive(Copy, Clone, Default)]
 pub struct SignalAction {}
@@ -1081,6 +1092,13 @@ impl Task {
         return TaskRunState::RunInterrupt;
     }
 
+    pub const FP_XSTATE_MAGIC1 : u32 = 0x46505853;
+    pub const FP_XSTATE_MAGIC2 : u32 = 0x46505845;
+    pub const FP_XSTATE_MAGIC2_SIZE: usize = 4;
+    pub const UC_FP_XSTATE : u64       = 1;
+    // xsave features that are always enabled in signal frame fpstate.
+    pub const XFEATURE_MASK_FPSSE : u64 = 0x3;
+
     pub fn deliverSignalToHandler(&mut self, info: &SignalInfo, sigAct: &SigAct) -> Result<()> {
         let pt = self.GetPtRegs();
         let mut userStack = Stack::New(pt.rsp - 128); // red zone
@@ -1092,10 +1110,28 @@ impl Task {
             }
         }
 
-        // create new X86fpstate state
-        self.context
-            .sigFPState
-            .push(Box::new(self.context.X86fpstate.Fork()));
+        let (mut fpSize, fpAlign) = HostFeatureSet().ExtendedStateSize();
+        fpSize += Self::FP_XSTATE_MAGIC2_SIZE as u32;
+        let fpStart = (userStack.sp - fpSize as u64) & !(fpAlign as u64- 1) ;
+
+        userStack.sp = fpStart + fpSize as u64;
+        userStack.PushU32(self, Self::FP_XSTATE_MAGIC2)?;
+        let fpstate = self.context.X86fpstate.Slice();
+        if fpstate.len() > 512 {
+            userStack.PushSlice(self, &self.context.X86fpstate.Slice()[512..])?;
+        }
+
+        let fpsw = FPSoftwareFrame {
+            Magic1: Self::FP_XSTATE_MAGIC1,
+            ExtendedSize: fpSize as u32,
+            Xfeatures: Self::XFEATURE_MASK_FPSSE | HostFeatureSet().ValidXCR0Mask(),
+            XstateSize: fpSize as u32 - Self::FP_XSTATE_MAGIC2_SIZE as u32,
+            ..Default::default()
+        };
+
+        userStack.PushType::<FPSoftwareFrame>(self, &fpsw)?;
+        let fpstateAddr = userStack.PushSlice(self, &fpstate[..464])?;
+
         self.context.X86fpstate = Box::new(X86fpstate::default());
 
         let t = self.Thread();
@@ -1119,7 +1155,8 @@ impl Task {
             cr2 = fault.addr;
         }
 
-        let ctx = UContext::New(pt, mask.0, cr2, 0, &self.signalStack);
+        let mut ctx = UContext::New(pt, mask.0, cr2, fpstateAddr, &self.signalStack);
+        ctx.Flags |= Self::UC_FP_XSTATE;
 
         let sigInfoAddr = userStack.PushType::<SignalInfo>(self, info)?;
         let sigCtxAddr = userStack.PushType::<UContext>(self, &ctx)?;
@@ -1158,6 +1195,15 @@ impl Task {
         let mut sigInfo = SignalInfo::default();
         userStack.PopType::<SignalInfo>(self, &mut sigInfo)?;
 
+        if uc.MContext.fpstate == 0 {
+            self.context.X86fpstate = Box::new(X86fpstate::default());
+        } else {
+            userStack.sp = uc.MContext.fpstate;
+            let slice = self.context.X86fpstate.Slice();
+            userStack.PopSlice(self, slice)?;
+            self.context.X86fpstate.SanitizeUser();
+        }
+
         let alt = uc.Stack;
 
         self.SetSignalStack(alt);
@@ -1166,14 +1212,6 @@ impl Task {
         let nEflags = uc.MContext.eflags;
 
         pt.Set(&uc.MContext);
-
-        if self.context.sigFPState.len() > 0 {
-            // restore X86fpstate state
-            let X86fpstate = self.context.sigFPState.pop().unwrap();
-            self.context.X86fpstate = X86fpstate;
-        } else {
-            panic!("SignalReturn can't restore X86fpstate");
-        }
 
         let oldMask = uc.MContext.oldmask & !(UNBLOCKED_SIGNALS.0);
         let t = self.Thread();
