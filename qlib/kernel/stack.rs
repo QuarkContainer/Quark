@@ -56,6 +56,27 @@ impl Stack {
         return Ok(self.sp);
     }
 
+    pub fn PushSlice(&mut self, task: &Task, data: &[u8]) -> Result<u64> {
+        self.sp -= data.len() as u64;
+        task.CopyOutSlice(data, self.sp, data.len()).expect(&format!(
+            "data {:x}, sp {:x}",
+            &data[0] as *const _ as u64, self.sp
+        ));
+        return Ok(self.sp);
+    }
+
+    pub fn PopSlice(&mut self, task: &Task, data: &mut [u8]) -> Result<u64> {
+        let v : Vec<u8> = task.CopyInVec(self.sp, data.len()).expect(&format!(
+            "data {:x}, sp {:x}",
+            &data[0] as *const _ as u64, self.sp));
+        for i in 0..data.len() {
+            data[i] = v[i];
+        }
+
+        self.sp += data.len() as u64;
+        return Ok(self.sp)
+    }
+
     pub fn PopType<T: Copy>(&mut self, task: &Task, data: &mut T) -> Result<u64> {
         let size = mem::size_of::<T>();
         *data = task.CopyInObj(self.sp)?;

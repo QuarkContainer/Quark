@@ -14,7 +14,6 @@
 
 use crate::qlib::mutex::*;
 use alloc::sync::Arc;
-use core::sync::atomic::AtomicU32;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
 
@@ -126,8 +125,6 @@ pub const MXCSR_OFFSET: usize = 24;
 pub struct X86fpstate {
     pub data: [u8; 4096],
     pub size: AtomicUsize,
-    pub mxcsr: AtomicU32,
-    pub cw: AtomicU32,
 }
 
 impl Default for X86fpstate {
@@ -137,6 +134,43 @@ impl Default for X86fpstate {
 }
 
 impl X86fpstate {
+    // minXstateBytes is the minimum size in bytes of an x86 XSAVE area, equal
+    // to the size of the XSAVE legacy area (512 bytes) plus the size of the
+    // XSAVE header (64 bytes). Equivalently, minXstateBytes is GDB's
+    // X86_XSTATE_SSE_SIZE.
+    pub const MIN_XSTATE_BYTES : usize = 512 + 64;
+
+    // userXstateXCR0Offset is the offset in bytes of the USER_XSTATE_XCR0_WORD
+    // field in Linux's struct user_xstateregs, which is the type manipulated
+    // by ptrace(PTRACE_GET/SETREGSET, NT_X86_XSTATE). Equivalently,
+    // userXstateXCR0Offset is GDB's I386_LINUX_XSAVE_XCR0_OFFSET.
+    pub const USER_XSTATE_XCR0_OFFSET : usize = 464;
+
+    // xstateBVOffset is the offset in bytes of the XSTATE_BV field in an x86
+    // XSAVE area.
+    pub const XSTATE_BVOFFSET : usize = 512;
+
+    // xsaveHeaderZeroedOffset and xsaveHeaderZeroedBytes indicate parts of the
+    // XSAVE header that we coerce to zero: "Bytes 15:8 of the XSAVE header is
+    // a state-component bitmap called XCOMP_BV. ... Bytes 63:16 of the XSAVE
+    // header are reserved." - Intel SDM Vol. 1, Section 13.4.2 "XSAVE Header".
+    // Linux ignores XCOMP_BV, but it's able to recover from XRSTOR #GP
+    // exceptions resulting from invalid values; we aren't. Linux also never
+    // uses the compacted format when doing XSAVE and doesn't even define the
+    // compaction extensions to XSAVE as a CPU feature, so for simplicity we
+    // assume no one is using them.
+    pub const XSAVE_HEADER_ZEROED_OFFSET : usize = 512 + 8;
+    pub const XSAVE_HEADER_ZEROED_BYTES : usize = 64 - 8;
+
+    // mxcsrOffset is the offset in bytes of the MXCSR field from the start of
+    // the FXSAVE area. (Intel SDM Vol. 1, Table 10-2 "Format of an FXSAVE
+    // Area")
+    pub const MXCSR_OFFSET : usize = 24;
+
+    // mxcsrMaskOffset is the offset in bytes of the MXCSR_MASK field from the
+    // start of the FXSAVE area.
+    pub const MXCSR_MASK_OFFSET : usize = 28;
+
     fn New() -> Self {
         let (size, _align) = HostFeatureSet().ExtendedStateSize();
 
@@ -147,8 +181,63 @@ impl X86fpstate {
         return Self {
             data: [0; 4096],
             size: AtomicUsize::new(size as usize),
-            mxcsr: AtomicU32::new(0),
-            cw: AtomicU32::new(0),
+        };
+    }
+
+    pub fn SanitizeUser(&self) {
+        // Force reserved bits in MXCSR to 0. This is consistent with Linux.
+        self.SanitizeMXCSR();
+
+        if self.Size() >= Self::MIN_XSTATE_BYTES {
+            // Users can't enable *more* XCR0 bits than what we, and the CPU, support.
+            let xstateBVAddr = &self.data[Self::XSTATE_BVOFFSET] as * const _ as u64;
+            let mut xstateBV : u64 = unsafe {
+                *(xstateBVAddr as * const u64)
+            };
+
+            xstateBV &= HostFeatureSet().ValidXCR0Mask();
+            unsafe {
+                *(xstateBVAddr as * mut u64) = xstateBV;
+            };
+
+            let addr = &self.data[Self::XSAVE_HEADER_ZEROED_OFFSET] as * const _ as u64;
+            let ptr = addr as *mut u8;
+            let slice = unsafe {
+                core::slice::from_raw_parts_mut(ptr, Self::XSAVE_HEADER_ZEROED_BYTES)
+            };
+
+            for i in 0..Self::XSAVE_HEADER_ZEROED_BYTES {
+                slice[i] = 0;
+            }
+        }
+    }
+
+    pub fn mxcsrMask(&self) -> u32 {
+        let mxcsrAddr = &self.data[Self::MXCSR_MASK_OFFSET] as * const _ as u64;
+        let mxcsrMask : u32 = unsafe {
+            *(mxcsrAddr as * const u32)
+        };
+        return mxcsrMask;
+    }
+
+    pub fn SanitizeMXCSR(&self) {
+        let mxcsrAddr = &self.data[Self::MXCSR_OFFSET] as * const _ as u64;
+        let mxcsr : u32 = unsafe {
+            *(mxcsrAddr as * const u32)
+        };
+
+        let mut mxcsrMask = FP_STATE.mxcsrMask();
+        if mxcsrMask == 0 {
+            // "If the value of the MXCSR_MASK field is 00000000H, then the
+            // MXCSR_MASK value is the default value of 0000FFBFH." - Intel SDM
+            // Vol. 1, Section 11.6.6 "Guidelines for Writing to the MXCSR
+            // Register"
+            mxcsrMask = 0xffbf
+        }
+
+        let mxcsr = mxcsr & mxcsrMask;
+        unsafe {
+            *(mxcsrAddr as * mut u32) = mxcsr;
         };
     }
 
@@ -156,31 +245,28 @@ impl X86fpstate {
         return FP_STATE.Fork();
     }
 
+    pub fn Size(&self) -> usize {
+        return self.size.load(Ordering::SeqCst)
+    }
+
+    pub fn Slice(&self) -> &'static mut [u8] {
+        let ptr = &self.data[0] as * const _ as u64 as *mut u8;
+        let buf = unsafe { core::slice::from_raw_parts_mut(ptr, self.Size()) };
+        return buf
+    }
+
     pub const fn Init() -> Self {
         return Self {
             data: [0; 4096],
             size: AtomicUsize::new(4096),
-            mxcsr: AtomicU32::new(0),
-            cw: AtomicU32::new(0),
         };
     }
 
     pub fn Reset(&self) {
         let (size, _align) = HostFeatureSet().ExtendedStateSize();
         self.size.store(size as usize, Ordering::SeqCst);
-        /*unsafe {
-            *(&self.data[MXCSR_OFFSET] as * const _ as u64 as * mut u32) = MXCSR_DEFAULT;
-        }
-        self.RestoreFp();*/
         self.SaveFp();
     }
-
-    /*pub fn NewX86FPState() -> Self {
-        let f = Self::New();
-
-        InitX86FPState(f.FloatingPointData(), HostFeatureSet().UseXsave());
-        return f;
-    }*/
 
     pub fn Fork(&self) -> Self {
         let mut f = Self::New();
@@ -190,9 +276,6 @@ impl X86fpstate {
         }
         f.size
             .store(self.size.load(Ordering::SeqCst), Ordering::SeqCst);
-        f.mxcsr
-            .store(self.mxcsr.load(Ordering::SeqCst), Ordering::SeqCst);
-        f.cw.store(self.cw.load(Ordering::SeqCst), Ordering::SeqCst);
 
         return f;
     }
@@ -203,15 +286,10 @@ impl X86fpstate {
 
     pub fn SaveFp(&self) {
         SaveFloatingPoint(self.FloatingPointData());
-        stmxcsr(&self.mxcsr as *const _ as u64);
-        FSTCW(&self.cw as *const _ as u64);
-        FNCLEX();
     }
 
     pub fn RestoreFp(&self) {
         LoadFloatingPoint(self.FloatingPointData());
-        ldmxcsr(&self.mxcsr as *const _ as u64);
-        FLDCW(&self.cw as *const _ as u64);
     }
 }
 
