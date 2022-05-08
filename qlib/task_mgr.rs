@@ -75,7 +75,6 @@ pub struct Context {
     pub ready: AtomicU64,
     pub fs: u64,
     pub X86fpstate: Box<X86fpstate>,
-    pub sigFPState: Vec<Box<X86fpstate>>,
     // job queue id
     pub queueId: AtomicUsize,
     pub links: Links,
@@ -97,7 +96,6 @@ impl Context {
 
             fs: 0,
             X86fpstate: Default::default(),
-            sigFPState: Default::default(),
             queueId: AtomicUsize::new(0),
             links: Links::default(),
         };
@@ -109,16 +107,6 @@ impl Context {
 
     pub fn SetReady(&self, val: u64) {
         return self.ready.store(val, Ordering::SeqCst);
-    }
-
-    pub fn CopySigFPState(&self) -> Vec<Box<X86fpstate>> {
-        let mut sigfs = Vec::with_capacity(self.sigFPState.len());
-
-        for s in &self.sigFPState {
-            sigfs.push(Box::new(s.Fork()));
-        }
-
-        return sigfs;
     }
 }
 
