@@ -292,9 +292,7 @@ pub fn SysExecve(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         SetFs(0);
         task.context.fs = 0;
         task.context.X86fpstate = Default::default();
-        task.context.sigFPState = Default::default();
 
-        info!("SysExecve 8");
         let newMM = MemoryManager::Init(false);
         let oldMM = task.mm.clone();
         task.mm = newMM.clone();
