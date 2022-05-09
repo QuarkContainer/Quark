@@ -255,12 +255,20 @@ pub struct ClientShareRegion {
 // can index about 32K x 8 = 256K containers, hope it is enough
 pub const BITMAP_COUNT: usize = 64 * 8 - 9; //4096 - 4;
 
+// pub struct TriggerBitmap {
+//     // one bit map to one l2 bitmap to expedite the notification search
+//     pub l1bitmap: [u64; 8],
+
+//     // one bit map to one Quark Container
+//     pub l2bitmap: [u64; BITMAP_COUNT],
+// }
+
 pub struct TriggerBitmap {
     // one bit map to one l2 bitmap to expedite the notification search
-    pub l1bitmap: [u64; 8],
+    pub l1bitmap: [AtomicU64; 8],
 
     // one bit map to one Quark Container
-    pub l2bitmap: [u64; BITMAP_COUNT],
+    pub l2bitmap: [AtomicU64; BITMAP_COUNT],
 }
 
 pub const MTU: usize = 1500;
@@ -298,18 +306,18 @@ pub struct ShareRegion {
     //pub udpBufs: [UDPBuf; UDP_BUF_COUNT]
 }
 
-impl Default for ShareRegion {
-    fn default() -> ShareRegion {
-        ShareRegion {
-            srvBitmap: AtomicU64::new(0),
-            bitmap: TriggerBitmap {
-                l1bitmap: [0; 8],
-                l2bitmap: [0; BITMAP_COUNT],
-            },
-            //udpBufs: [UDPBuf::default(); UDP_BUF_COUNT]
-        }
-    }
-}
+// impl Default for ShareRegion {
+//     fn default() -> ShareRegion {
+//         ShareRegion {
+//             srvBitmap: AtomicU64::new(0),
+//             bitmap: TriggerBitmap {
+//                 l1bitmap: [AtomicU64::new(0); 8],
+//                 l2bitmap: [AtomicU64::new(0); BITMAP_COUNT],
+//             },
+//             //udpBufs: [UDPBuf::default(); UDP_BUF_COUNT]
+//         }
+//     }
+// }
 
 impl ShareRegion {
     pub fn updateBitmap(&mut self, agentId: u32) {
@@ -318,15 +326,15 @@ impl ShareRegion {
         let l1idx = l2idx / 64;
         let l1pos = l2idx % 64;
 
-        self.bitmap.l1bitmap[l1idx] |= 1 << l1pos;
-        self.bitmap.l2bitmap[l2idx] |= 1 << l2pos;
+        self.bitmap.l1bitmap[l1idx].fetch_or(1 << l1pos, Ordering::SeqCst);
+        self.bitmap.l2bitmap[l2idx].fetch_or(1 << l2pos, Ordering::SeqCst);
     }
 
     pub fn getAgentIds(&self) -> Vec<u32> {
         let mut agentIds: Vec<u32> = Vec::with_capacity(32192);
         for l1idx in 0..8 {
             // println!("l1idx: {}", l1idx);
-            let mut l1 = self.bitmap.l1bitmap[l1idx];
+            let mut l1 = self.bitmap.l1bitmap[l1idx].swap(0, Ordering::SeqCst);
             // println!("l1: {:x}", l1);
             for l1pos in 0..64 {
                 if l1 == 0 {
@@ -339,7 +347,7 @@ impl ShareRegion {
                     if l2idx > 502 {
                         break;
                     }
-                    let mut l2 = self.bitmap.l2bitmap[l2idx as usize];
+                    let mut l2 = self.bitmap.l2bitmap[l2idx as usize].swap(0, Ordering::SeqCst);
                     // println!("l2: {:x}", l2);
                     for l2pos in 0..64 {
                         if l2 == 0 {

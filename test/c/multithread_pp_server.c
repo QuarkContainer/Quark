@@ -51,28 +51,28 @@ void * socketThread(void *arg)
 
     for(int i=0; i<config.count;i++)
     {
+        int readcount = 0;
+        while (readcount < config.buffer_size) {
+            int curreadcount = read(clientsocks[index], recv_buffers[index], config.buffer_size - readcount);
+            // if (config.log)
+            // {
+                printf("sock: %d, cur read: %d\n", clientsocks[index], curreadcount);
+            // }
+            readcount += curreadcount;
+        }
+        
         int writecount = 0;
         while (writecount < config.buffer_size)
         {
             int curwritecount = write(clientsocks[index], send_buffer, config.buffer_size - writecount);
-            if (config.log)
-            {
+            // if (config.log)
+            // {
                 printf("sock: %d, cur write %d\n", clientsocks[index], curwritecount);
-            }
+            // }
             
             writecount += curwritecount;
         }
 
-        int readcount = 0;
-        while (readcount < config.buffer_size) {
-            int curreadcount = read(clientsocks[index], recv_buffers[index], config.buffer_size - readcount);
-            if (config.log)
-            {
-                printf("sock: %d, cur read: %d\n", clientsocks[index], curreadcount);
-            }
-            readcount += curreadcount;
-        }
-        
         // if (readcount == -1)
         // {
         //     perror("read error");

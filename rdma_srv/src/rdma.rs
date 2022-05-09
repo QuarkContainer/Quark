@@ -672,23 +672,23 @@ impl RDMAContext {
             );
         }
         if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RDMA_WRITE {
-            // debug!(
-            //     "ProcessWC::2, writeIMM status: {}, id: {}",
-            //     wc.status, wc.wr_id
-            // );
+            debug!(
+                "ProcessWC::2, writeIMM status: {}, id: {}",
+                wc.status, wc.wr_id
+            );
             //IO_MGR.ProcessRDMAWriteImmFinish(fd);
             RDMA_SRV.ProcessRDMAWriteImmFinish(wc.wr_id as u32, wc.qp_num);
         } else if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RECV_RDMA_WITH_IMM {
             let imm = unsafe { wc.imm_data_invalidated_rkey_union.imm_data };
-            // println!("ProcessWC. received len: {}", wc.byte_len);
+            println!("ProcessWC. received len: {}", wc.byte_len);
             let immData = ImmData(imm);
-            debug!(
-                "ProcessWC::2, recv len:{}, writelen: {}, status: {}, id: {}",
-                wc.byte_len,
-                immData.ReadCount(),
-                wc.status,
-                wc.wr_id
-            );
+            // debug!(
+            //     "ProcessWC::2, recv len:{}, writelen: {}, status: {}, id: {}",
+            //     wc.byte_len,
+            //     immData.ReadCount(),
+            //     wc.status,
+            //     wc.wr_id
+            // );
             //IO_MGR.ProcessRDMARecvWriteImm(fd, wc.byte_len as _, immData.ReadCount() as _);
             RDMA_SRV.ProcessRDMARecvWriteImm(immData.ReadCount() as _, wc.qp_num, wc.byte_len as _);
         } else {

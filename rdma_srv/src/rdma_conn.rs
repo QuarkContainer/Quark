@@ -37,7 +37,7 @@ use super::rdma_srv::*;
 // RDMA Queue Pair
 pub struct RDMAQueuePair {}
 
-pub const RECV_REQUEST_COUNT: u32 = 3;
+pub const RECV_REQUEST_COUNT: u32 = 8;
 
 #[derive(Debug)]
 #[repr(u64)]
@@ -404,37 +404,52 @@ impl RDMAConn {
         remoteInfo: MutexGuard<ChannelRDMAInfo>,
     ) {
         let mut remoteRecvRequestCount = self.remoteRecvRequestCount.lock();
-        // println!(
-        //     "RDMAConn::RDMAWrite, *remoteRecvRequestCount: {}",
-        //     *remoteRecvRequestCount
-        // );
+        println!(
+            "RDMAConn::RDMAWrite, channelId: {}, *remoteRecvRequestCount: {}",
+            rdmaChannel.localId, *remoteRecvRequestCount
+        );
         if *remoteRecvRequestCount > 0 {
             *remoteRecvRequestCount -= 1;
-            rdmaChannel.RDMASendLocked(remoteInfo);
+            println!(
+                "CongestionControl -1,  channelId: {}, *remoteRecvRequestCount: {}",
+                rdmaChannel.localId, *remoteRecvRequestCount
+            );
+            rdmaChannel.RDMASendLocked(remoteInfo, &mut remoteRecvRequestCount);
         } else {
             if rdmaChannel.localId == 0 {
-                self.controlRequestsQueue.lock().push_back(rdmaChannel.localId);
-                // println!("self.controlRequestsQueue.lock(), len: {}", self.controlRequestsQueue.lock().len());
+                self.controlRequestsQueue
+                    .lock()
+                    .push_back(rdmaChannel.localId);
+                println!(
+                    "self.controlRequestsQueue.lock(), len: {}",
+                    self.controlRequestsQueue.lock().len()
+                );
             } else {
                 self.requestsQueue.lock().push_back(rdmaChannel.localId);
-                // println!("self.requestsQueue.lock(), len: {}", self.requestsQueue.lock().len());
+                println!(
+                    "self.requestsQueue.lock(), len: {}",
+                    self.requestsQueue.lock().len()
+                );
             }
 
-            println!("RDMAConn::RDMAWrite, inserted channelId: {}", rdmaChannel.localId);
+            println!(
+                "RDMAConn::RDMAWrite, inserted channelId: {}",
+                rdmaChannel.localId
+            );
         }
     }
 
     pub fn IncreaseRemoteRequestCount(&self, count: u32) {
-        // println!("IncreaseRemoteRequestCount, count: {} ", count);
+        println!("IncreaseRemoteRequestCount, count: {} ", count);
         if count == 0 {
             return;
         } else {
             let mut remoteRecvRequestCount = self.remoteRecvRequestCount.lock();
             *remoteRecvRequestCount += count;
-            // println!(
-            //     "IncreaseRemoteRequestCount, *remoteRecvRequestCount: {}",
-            //     *remoteRecvRequestCount
-            // );
+            println!(
+                "CongestionControl +{}, *remoteRecvRequestCount: {}",
+                count, *remoteRecvRequestCount
+            );
             self.ProcessRequestsInQueue(remoteRecvRequestCount);
         }
     }
@@ -451,14 +466,14 @@ impl RDMAConn {
                             .lock()
                             .get(&id)
                             .unwrap()
-                            .RDMASendFromConnection();
+                            .RDMASendFromConn(&mut remoteRecvRequestCount);
                     } else {
                         RDMA_SRV
                             .controlChannels2
                             .lock()
                             .get(&self.qps[0].qpNum())
                             .unwrap()
-                            .RDMASendFromConnection();
+                            .RDMASendFromConn(&mut remoteRecvRequestCount);
                     }
                     *remoteRecvRequestCount -= 1;
                 }
@@ -478,14 +493,14 @@ impl RDMAConn {
                             .lock()
                             .get(&id)
                             .unwrap()
-                            .RDMASendFromConnection();
+                            .RDMASendFromConn(&mut remoteRecvRequestCount);
                     } else {
                         RDMA_SRV
                             .controlChannels2
                             .lock()
                             .get(&self.qps[0].qpNum())
                             .unwrap()
-                            .RDMASendFromConnection();
+                            .RDMASendFromConn(&mut remoteRecvRequestCount);
                     }
                     *remoteRecvRequestCount -= 1;
                 }
@@ -499,11 +514,11 @@ impl RDMAConn {
     pub fn PostRecv(&self, _qpNum: u32, wrId: u64, addr: u64, lkey: u32) -> Result<()> {
         //TODO: get right qp when multiple QP are used between two physical machines.
         self.qps[0].PostRecv(wrId, addr, lkey)?;
-        let prev = self
+        let current = self
             .localInsertedRecvRequestCount
-            .fetch_add(1, Ordering::SeqCst);
-        if prev + 1 >= RECV_REQUEST_COUNT / 2 {
-            println!("PostRecv, prev: {}", prev);
+            .fetch_add(1, Ordering::SeqCst) + 1;
+        println!("rdma_conn::PostRecv, current: {}", current);
+        if current >= RECV_REQUEST_COUNT / 2 {
             self.ctrlChan
                 .lock()
                 .SendControlMsg(ControlMsgBody::RecvRequestCount(RecvRequestCount {

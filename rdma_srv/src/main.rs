@@ -886,8 +886,9 @@ fn main() -> io::Result<()> {
                 }
                 Some(FdType::RDMACompletionChannel) => {
                     // println!("Got RDMA completion event");
-                    RDMA.PollCompletionQueueAndProcess();
+                    let cnt = RDMA.PollCompletionQueueAndProcess();
                     RDMA.HandleCQEvent().unwrap();
+                    println!("FdType::RDMACompletionChannel, processed {} wcs", cnt);
                 }
                 Some(FdType::SrvEventFd(srvEventFd)) => {
                     // print!("u64: {}, events: {:x}", ev.U64, ev.Events);
@@ -912,7 +913,7 @@ fn main() -> io::Result<()> {
                             errno::errno().0
                         );
                     }
-                    // println!("eventdata: {}", eventdata);
+                    println!("eventdata: {}", eventdata);
                     RDMA_SRV.HandleClientRequest();
                 }
                 None => {

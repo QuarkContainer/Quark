@@ -318,7 +318,7 @@ impl RDMAAgent {
                 }
             }
             RDMAReqMsg::RDMAWrite(msg) => {
-                // println!("RDMAAgent::RDMAReqMsg::RDMAWrite, msg: {:?}", msg);
+                println!("RDMAAgent::RDMAReqMsg::RDMAWrite, msg: {:?}", msg);
                 match RDMA_SRV.channels.lock().get(&msg.channelId) {
                     Some(rdmaChannel) => {
                         rdmaChannel.RDMASend();

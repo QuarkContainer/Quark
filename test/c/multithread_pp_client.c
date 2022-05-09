@@ -51,39 +51,41 @@ void * clientThread(void *arg)
 
     for (int i=0; i<config.count; i++)
     {
+        printf("send %dth data\n", i+1);
         if (config.log)
         {
             printf("client sock is: %d 1\n", clientsocks[index]);
         }
 
-        int readcount = 0;
-        while (readcount < config.buffer_size) {
-            int curreadcount = read(clientsocks[index], recv_buffers[index], config.buffer_size - readcount);
-            if (config.log)
-            {
-                printf("sock: %d, cur read: %d\n", clientsocks[index], curreadcount);
-            }
+        int writecount = 0;
+        while (writecount < config.buffer_size)
+        {
+            int curwritecount = write(clientsocks[index], send_buffer, config.buffer_size - writecount);
+            // if (config.log)
+            // {
+                printf("sock: %d, cur write %d\n", clientsocks[index], curwritecount);
+            // }
             
-            readcount += curreadcount;
+            writecount += curwritecount;
         }
 
         if (config.log)
         {
             printf("client sock is: %d 3\n", clientsocks[index]);
         }
-        
-        int writecount = 0;
-        while (writecount < config.buffer_size)
-        {
-            int curwritecount = write(clientsocks[index], send_buffer, config.buffer_size - writecount);
-            if (config.log)
-            {
-                printf("sock: %d, cur write %d\n", clientsocks[index], curwritecount);
-            }
-            
-            writecount += curwritecount;
-        }
 
+        int readcount = 0;
+        while (readcount < config.buffer_size) {
+            int curreadcount = read(clientsocks[index], recv_buffers[index], config.buffer_size - readcount);
+            // if (config.log)
+            // {
+                printf("sock: %d, cur read: %d\n", clientsocks[index], curreadcount);
+            // }
+            
+            readcount += curreadcount;
+        }
+        
+        
         if (config.log)
         {
             printf("client sock is: %d 4\n", clientsocks[index]);

@@ -394,11 +394,12 @@ impl RDMASvcClient {
     }
 
     pub fn updateBitmapAndWakeUpServerIfNecessary(&self) {
+        println!("updateBitmapAndWakeUpServerIfNecessary 1 ");
         let mut srvShareRegion = self.srvShareRegion.lock();
-        // println!("before updateBitmap");
+        println!("updateBitmapAndWakeUpServerIfNecessary 2 ");
         srvShareRegion.updateBitmap(self.agentId);
         if srvShareRegion.srvBitmap.load(Ordering::Relaxed) == 1 {
-            // println!("before write srvEventFd");
+            println!("before write srvEventFd");
             let data = 16u64;
             let ret = unsafe {
                 libc::write(
@@ -407,13 +408,13 @@ impl RDMASvcClient {
                     mem::size_of_val(&data) as usize,
                 )
             };
-            // println!("ret: {}", ret);
+            println!("ret: {}", ret);
             if ret < 0 {
                 println!("error: {}", std::io::Error::last_os_error());
             }
         } else {
             println!("server is not sleeping");
-            //self.updateBitmapAndWakeUpServerIfNecessary();
+            self.updateBitmapAndWakeUpServerIfNecessary();
         }
     }
 
@@ -482,70 +483,45 @@ impl RDMASvcClient {
         }
     }
 
-    pub fn read(&self, sockfd: u32) -> Result<()> {
+    pub fn read(&self, sockfd: u32, sq: &mut RingQueue<RDMAReq>, channelId: u32) -> Result<()> {
         println!("rdmaSvcCli::read 1");
-        let dataSockFdInfos = self.dataSockFdInfos.lock();
-        println!("rdmaSvcCli::read 2");
-        let sockFdInfo = dataSockFdInfos.get(&sockfd);
-        println!("rdmaSvcCli::read 3");
-        match sockFdInfo {
-            Some(sockInfo) => {
-                println!("rdmaSvcCli::read 4");
-                // let mut cliShareRegion = self.cliShareRegion.lock();
-                let mut sq = &mut self.cliShareRegion.lock().sq;
-                println!("rdmaSvcCli::read 5");
-                if sq.SpaceCount() == 0 {
-                    println!("rdmaSvcCli::read 6");
-                    return Err(Error::NoEnoughSpace);
-                } else {
-                    println!("rdmaSvcCli::read 7");
-                    println!("before push...");
-                    sq.Push(RDMAReq {
-                        user_data: sockfd as u64,
-                        msg: RDMAReqMsg::RDMAWrite(RDMAWriteReq {
-                            sockfd,
-                            channelId: sockInfo.channelId,
-                        }),
-                    });
+        if sq.SpaceCount() == 0 {
+            println!("rdmaSvcCli::read 6");
+            return Err(Error::NoEnoughSpace);
+        } else {
+            println!("rdmaSvcCli::read 7");
+            println!("before push...");
+            sq.Push(RDMAReq {
+                user_data: sockfd as u64,
+                msg: RDMAReqMsg::RDMAWrite(RDMAWriteReq {
+                    sockfd,
+                    channelId: channelId,
+                }),
+            });
 
-                    self.updateBitmapAndWakeUpServerIfNecessary();
-                    Ok(())
-                }
-            }
-            None => return Err(Error::NotExist),
+            self.updateBitmapAndWakeUpServerIfNecessary();
+            Ok(())
         }
     }
 
-    pub fn write(&self, sockfd: u32, sq: &mut RingQueue<RDMAReq>) -> Result<()> {
-        // println!("rdmaSvcCli::write 1");
-        let dataSockFdInfos = self.dataSockFdInfos.lock();
-        // println!("rdmaSvcCli::write 2");
-        let sockFdInfo = dataSockFdInfos.get(&sockfd);
-        // println!("rdmaSvcCli::write 3");
-        match sockFdInfo {
-            Some(sockInfo) => {
-                // println!("rdmaSvcCli::write 4");
-                // let mut cliShareRegion = self.cliShareRegion.lock();
-                // println!("rdmaSvcCli::write 5");
-                if sq.SpaceCount() == 0 {
-                    // println!("rdmaSvcCli::write 6");
-                    return Err(Error::NoEnoughSpace);
-                } else {
-                    // println!("rdmaSvcCli::write 7");
-                    // println!("before push...");
-                    sq.Push(RDMAReq {
-                        user_data: sockfd as u64,
-                        msg: RDMAReqMsg::RDMAWrite(RDMAWriteReq {
-                            sockfd,
-                            channelId: sockInfo.channelId,
-                        }),
-                    });
+    pub fn write(&self, sockfd: u32, sq: &mut RingQueue<RDMAReq>, channelId: u32) -> Result<()> {
+        println!("rdmaSvcCli::write 1, sq.count: {}", sq.DataCount());
+        if sq.SpaceCount() == 0 {
+            // println!("rdmaSvcCli::write 6");
+            return Err(Error::NoEnoughSpace);
+        } else {
+            println!("rdmaSvcCli::write 7");
+            println!("before push...");
+            sq.Push(RDMAReq {
+                user_data: sockfd as u64,
+                msg: RDMAReqMsg::RDMAWrite(RDMAWriteReq {
+                    sockfd,
+                    channelId: channelId,
+                }),
+            });
 
-                    self.updateBitmapAndWakeUpServerIfNecessary();
-                    Ok(())
-                }
-            }
-            None => return Err(Error::NotExist),
+            self.updateBitmapAndWakeUpServerIfNecessary();
+            Ok(())
         }
     }
 

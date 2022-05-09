@@ -203,8 +203,15 @@ fn main() -> io::Result<()> {
 fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient) {
     let mut events: Vec<EpollEvent> = Vec::with_capacity(1024);
     let mut index = 0;
-    let mut randomMsgSize = 7;
-    let count = 1000000;
+    let mut randomMsgSize = 32789; //32768;
+    let count = 10000000;
+    let mut left = randomMsgSize as u64;
+    let rbSize = 65536;
+    let rb: Vec<u8> = Vec::with_capacity(rbSize);
+    let wb: Vec<u8> = Vec::with_capacity(randomMsgSize as usize);
+    let rAddr = rb.as_ptr() as u64;
+    let wAddr = rb.as_ptr() as u64;
+    let mut readData = 0;
     loop {
         events.clear();
         // println!("in loop");
@@ -293,18 +300,15 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient) {
                             let mut left = randomMsgSize as u64;
                             let r: Vec<u8> = Vec::with_capacity(randomMsgSize as usize);
                             let rAddr = r.as_ptr() as u64;
-                            let (trigger, _len) = writeBuf.writeViaAddr(
-                                rAddr,
-                                randomMsgSize,
-                            );
+                            let (trigger, _len) = writeBuf.writeViaAddr(rAddr, randomMsgSize);
                             let sockfd = sockInfo.fd;
-                            std::mem::drop(writeBuf);
-                            std::mem::drop(sockFdInfos);
+                            // std::mem::drop(writeBuf);
+                            // std::mem::drop(sockFdInfos);
                             // std::mem::drop(shareRegion);
                             println!("Writing some data to sockFdInfo 1!");
                             if trigger {
                                 println!("Writing some data to sockFdInfo 1.1!");
-                                rdmaSvcCli.write(sockfd, &mut shareRegion.sq);
+                                rdmaSvcCli.write(sockfd, &mut shareRegion.sq, sockInfo.channelId);
                             }
                         }
                         RDMARespMsg::RDMAAccept(response) => {
@@ -397,41 +401,70 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient) {
                                 /////send RDMAAcceptResp end
 
                                 ////send random size begin
-                                let mut left = randomMsgSize as u64;
-                                let r: Vec<u8> = Vec::with_capacity(randomMsgSize as usize);
-                                let rAddr = r.as_ptr() as u64;
-                                while left != 0 {
-                                    let (trigger, len) = readBuf
-                                        .readViaAddr(rAddr + (randomMsgSize as u64 - left), left);
+
+                                // while left != 0 {
+                                //     let (trigger, len) = readBuf
+                                //         .readViaAddr(rAddr + (randomMsgSize as u64 - left), left);
+                                //     sockInfo.sockBuff.AddConsumeReadData(len as u64);
+                                //     if len != 0 {
+                                //         println!("read len: {}", len);
+                                //     }
+
+                                //     left = left - len as u64;
+                                // }
+                                loop {
+                                    let (trigger, len) = readBuf.readViaAddr(rAddr, rbSize as u64);
                                     sockInfo.sockBuff.AddConsumeReadData(len as u64);
-                                    left = left - len as u64;
-                                }
-
-                                if index < count {
-                                    index = index + 1;
-
-                                    let mut writeBuf = sockInfo.sockBuff.writeBuf.lock();
-                                    let (trigger, len) = writeBuf.writeViaAddr(rAddr, randomMsgSize);
-                                    if index % 10000 == 0 {
-                                        println!("Client write index: {}, trigger: {}, len: {}", index, trigger, len);
-                                    }
-
-                                    // println!("Client write index: {}, trigger: {}, len: {}", index, trigger, len);
-                                    
-                                    let sockfd = sockInfo.fd;
-                                    std::mem::drop(writeBuf);
-                                    // std::mem::drop(channelToSockInfos);
-                                    // std::mem::drop(shareRegion);
-                                    // println!("Writing some data to sockFdInfo 2!");
-                                    if trigger {
-                                        // println!("Writing some data to sockFdInfo 2.1!");
-                                        rdmaSvcCli.write(sockfd, &mut shareRegion.sq);
+                                    readData += len;
+                                    // if len != 0 {
+                                    //     println!("read len: {}, readData: {}", len, readData);
+                                    // }
+                                    // else {
+                                    //     break;
+                                    // }
+                                    if len == 0 {
+                                        break;
                                     }
                                 }
-                                ////send random size end
-                                else {
-                                    println!(">={}", count);
+
+                                if readData >= (randomMsgSize as usize) {
+                                    readData = 0;
+                                    if index < count {
+                                        index = index + 1;
+
+                                        let mut writeBuf = sockInfo.sockBuff.writeBuf.lock();
+                                        let (trigger, len) =
+                                            writeBuf.writeViaAddr(wAddr, randomMsgSize);
+                                        // if index % 10000 == 0 {
+                                        println!(
+                                            "Client write index: {}, trigger: {}, len: {}",
+                                            index, trigger, len
+                                        );
+                                        // }
+
+                                        // println!("Client write index: {}, trigger: {}, len: {}", index, trigger, len);
+
+                                        let sockfd = sockInfo.fd;
+                                        std::mem::drop(writeBuf);
+                                        // std::mem::drop(channelToSockInfos);
+                                        // std::mem::drop(shareRegion);
+                                        // println!("Writing some data to sockFdInfo 2!");
+                                        if trigger {
+                                            // println!("Writing some data to sockFdInfo 2.1!");
+                                            rdmaSvcCli.write(sockfd, &mut shareRegion.sq, sockInfo.channelId);
+                                        }
+                                    }
+                                    ////send random size end
+                                    else {
+                                        println!(">={}", count);
+                                    }
                                 }
+                            }
+                            if response.event & EVENT_OUT != 0 {
+                                // let channelToSockInfos = rdmaSvcCli.channelToSockInfos.lock();
+                                // let sockInfo = channelToSockInfos.get(&response.channelId).unwrap();
+                                // let r: Vec<u8> = Vec::with_capacity(randomMsgSize as usize);
+                                println!("EVENT_OUT is triggered");
                             }
                         }
                     },

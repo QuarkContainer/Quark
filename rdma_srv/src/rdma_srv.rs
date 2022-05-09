@@ -289,7 +289,7 @@ impl RDMASrv {
 
     pub fn HandleClientRequest(&self) {
         let agentIds = self.shareRegion.getAgentIds();
-        // println!("agentIds: {:?}", agentIds);
+        println!("agentIds: {:?}", agentIds);
         let rdmaAgents = self.agents.lock();
         for agentId in agentIds.iter() {
             match rdmaAgents.get(agentId) {
