@@ -411,7 +411,7 @@ impl MemoryManager {
             let vma = vseg.Value();
 
             if !vma.kernel {
-                if vma.mappable.is_some() {
+                /*if vma.mappable.is_some() {
                     let mappable = vma.mappable.clone().unwrap();
                     // todo: fix the Madvise/MADV_DONTNEED, when there are multiple process MAdviseOp::MADV_DONTNEED
                     // with current implementation, the first Madvise/MADV_DONTNEED will work.
@@ -421,7 +421,7 @@ impl MemoryManager {
                 mapping.usageAS -= r.Len();
                 if vma.mlockMode != MLockMode::MlockNone {
                     mapping.lockedAS -= r.Len();
-                }
+                }*/
 
                 let mut pt = self.pagetable.write();
 
