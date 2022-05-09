@@ -343,19 +343,6 @@ impl RingBuf {
         }
     }
 
-    //consume count data
-    pub fn Consume(&self, count: usize) -> bool {
-        let head = self.headtail[0].load(Ordering::Relaxed);
-        let tail = self.headtail[1].load(Ordering::Acquire);
-
-        let available = tail.wrapping_sub(head) as usize;
-        let trigger = available == self.Len();
-
-        self.headtail[0].store(head.wrapping_add(count as u32), Ordering::Release);
-        return trigger
-    }
-
-
     /****************************************** write *********************************************************/
 
     pub fn GetWriteBuf(&self) -> Option<(u64, usize, bool)> {
@@ -434,14 +421,24 @@ impl RingBuf {
         }
     }
 
-    pub fn Produce(&self, count: usize) -> bool {
-        let head = self.headtail[0].load(Ordering::Acquire);
-        let tail = self.headtail[1].load(Ordering::Relaxed);
+    //consume count data
+    pub fn Consume(&self, count: usize) -> bool { //2
+        let head = self.headtail[0].load(Ordering::Relaxed);
+        self.headtail[0].store(head.wrapping_add(count as u32), Ordering::Release);
 
+        let tail = self.headtail[1].load(Ordering::Acquire);
         let available = tail.wrapping_sub(head) as usize;
+        let trigger = available == self.Len();
+        return trigger
+    }
 
-        let trigger = available == 0;
-        self.headtail[1].store(tail.wrapping_add(count as u32), Ordering::Release);
+    pub fn Produce(&self, count: usize) -> bool {
+        let tail = self.headtail[1].load(Ordering::Relaxed);
+        self.headtail[1].store(tail.wrapping_add(count as u32), Ordering::Release);//3
+
+        let head = self.headtail[0].load(Ordering::Acquire);
+        let available = tail.wrapping_sub(head) as usize; //1
+        let trigger = available == 0;//1
         return trigger
     }
 

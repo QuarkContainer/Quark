@@ -368,7 +368,7 @@ impl ShareRegion {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum SockStatus {
     CLOSE_WAIT,
     CLOSING,

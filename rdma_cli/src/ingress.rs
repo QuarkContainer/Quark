@@ -256,6 +256,7 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                     let sockInfo = sockFdInfos.get_mut(sockfd).unwrap();
 
                     if !matches!(sockInfo.status, SockStatus::ESTABLISHED) {
+                        println!("SockInfo status is： {:?}", sockInfo.status);
                         continue;
                     }
                     let mut shareRegion = rdmaSvcCli.cliShareRegion.lock();
@@ -427,28 +428,44 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                                     println!("client connect finished!")
                                 }
                                 RDMARespMsg::RDMANotify(response) => {
-                                    // println!("RDMANotify, response: {:?}", response);
+                                    println!("RDMANotify, response: {:?}", response);
                                     if response.event & EVENT_IN != 0 {
                                         let channelToSockInfos =
                                             rdmaSvcCli.channelToSockInfos.lock();
                                         let sockInfo =
                                             channelToSockInfos.get(&response.channelId).unwrap();
                                         let mut buffer = sockInfo.sockBuff.readBuf.lock();
-                                        let (iovsAddr, iovsCnt) = buffer.GetDataIovs();
 
-                                        let cnt = unsafe {
-                                            libc::writev(
-                                                *sockFdMappings.get(&sockInfo.fd).unwrap(),
-                                                iovsAddr as *const _,
-                                                iovsCnt as i32,
-                                            )
-                                        };
-
-                                        if cnt > 0 {
+                                        let mut totalCnt = 0;
+                                        loop {
+                                            let (iovsAddr, iovsCnt) = buffer.GetDataIovs();
+                                            let ioVec =
+                                                unsafe { &(*(iovsAddr as *const libc::iovec)) };
+                                            println!(
+                                                "RDMANotify::EVENT_IN, data size 1: {}, ioVec.address: {}, ioVec::len: {}, iovsCnt: {}",
+                                                buffer.AvailableDataSize(), ioVec.iov_base as u64, ioVec.iov_len, iovsCnt
+                                            );
+                                            let cnt = unsafe {
+                                                libc::writev(
+                                                    *sockFdMappings.get(&sockInfo.fd).unwrap(),
+                                                    iovsAddr as *const _,
+                                                    iovsCnt as i32,
+                                                )
+                                            };
+                                            if cnt == 0 {
+                                                break;
+                                            }
+                                            totalCnt += cnt;
                                             buffer.Consume(cnt as usize);
-                                            let consumedDataSize =
-                                                sockInfo.sockBuff.AddConsumeReadData(cnt as u64)
-                                                    as usize;
+                                        }
+
+                                        println!("RDMANotify::EVENT_IN, totalCnt: {}", totalCnt);
+
+                                        if totalCnt > 0 {
+                                            let consumedDataSize = sockInfo
+                                                .sockBuff
+                                                .AddConsumeReadData(totalCnt as u64)
+                                                as usize;
                                             let bufSize = buffer.BufSize();
                                             if 2 * consumedDataSize >= bufSize {
                                                 rdmaSvcCli.read(
