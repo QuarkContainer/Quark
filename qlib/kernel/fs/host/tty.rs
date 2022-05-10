@@ -42,7 +42,7 @@ use super::ioctl::*;
 pub const NUM_CONTROL_CHARACTERS: usize = 19;
 pub const DISABLED_CHAR: u8 = 0;
 
-#[derive(Clone, Default, Copy)]
+#[derive(Clone, Default, Copy, Debug)]
 #[repr(C)]
 pub struct Winsize {
     pub Row: u16,
