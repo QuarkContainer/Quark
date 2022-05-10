@@ -840,6 +840,10 @@ impl HostInodeOp {
                 return Err(Error::SysError(-count as i32));
             }
 
+            if inodeType == InodeType::RegularFile {
+                hostIops.UpdateMaxLen(len);
+            }
+
             return Ok((count, len));
         } else {
             let n = self.WriteAt(task, f, srcs, 0, true)?;
