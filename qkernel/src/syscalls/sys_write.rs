@@ -272,6 +272,7 @@ fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
     }
 
     match f.Writev(task, srcs) {
+        Err(Error::ErrInterrupted) => return Err(Error::SysError(SysErr::ERESTARTSYS)),
         Err(e) => {
             if e != Error::SysError(SysErr::EWOULDBLOCK) || f.Flags().NonBlocking {
                 return Err(e);

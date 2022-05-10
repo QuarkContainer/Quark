@@ -253,6 +253,7 @@ fn readv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
     }
 
     match f.Readv(task, dsts) {
+        Err(Error::ErrInterrupted) => return Err(Error::SysError(SysErr::ERESTARTSYS)),
         Err(e) => {
             if e != Error::SysError(SysErr::EWOULDBLOCK) || f.Flags().NonBlocking {
                 return Err(e);

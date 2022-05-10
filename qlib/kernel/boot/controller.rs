@@ -42,6 +42,13 @@ pub fn ControllerProcessHandler() -> Result<()> {
 
 pub fn HandleSignal(signalArgs: &SignalArgs) {
     info!("get signal {:?}", &signalArgs);
+
+    // don't know why the winsz adjustment doesn't work
+    // todo: fix this
+    if signalArgs.Signo == 28 {
+        return;
+    }
+
     let task = Task::Current();
     match signalArgs.Mode {
         SignalDeliveryMode::DeliverToProcess => {
