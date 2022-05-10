@@ -493,7 +493,7 @@ impl RDMASvcClient {
             println!("before push...");
             sq.Push(RDMAReq {
                 user_data: sockfd as u64,
-                msg: RDMAReqMsg::RDMAWrite(RDMAWriteReq {
+                msg: RDMAReqMsg::RDMARead(RDMAReadReq {
                     sockfd,
                     channelId: channelId,
                 }),

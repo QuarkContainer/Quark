@@ -241,59 +241,73 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                     );
                     if ev.Events & EVENT_IN as u32 != 0 {
                         let mut buffer = sockInfo.sockBuff.writeBuf.lock();
-                        let (iovsAddr, iovsCnt) = buffer.GetSpaceIovs();
 
-                        let cnt = unsafe {
-                            libc::readv(
-                                *sockFdMappings.get(&sockInfo.fd).unwrap(),
-                                iovsAddr as *const _,
-                                iovsCnt as i32,
-                            )
-                        };
+                        loop {
+                            let (iovsAddr, iovsCnt) = buffer.GetSpaceIovs();
 
-                        let mut trigger = false;
+                            let cnt = unsafe {
+                                libc::readv(
+                                    *sockFdMappings.get(&sockInfo.fd).unwrap(),
+                                    iovsAddr as *const _,
+                                    iovsCnt as i32,
+                                )
+                            };
 
-                        if cnt > 0 {
-                            trigger = buffer.Produce(cnt as usize);
-                        }
+                            let mut trigger = false;
 
-                        println!(
-                            "FdType::TCPSocketConnect, cnt: {}, trigger: {}",
-                            cnt, trigger
-                        );
+                            if cnt > 0 {
+                                trigger = buffer.Produce(cnt as usize);
+                                if trigger {
+                                    rdmaSvcCli.write(
+                                        sockInfo.fd,
+                                        &mut shareRegion.sq,
+                                        sockInfo.channelId,
+                                    );
+                                }
 
-                        if trigger {
-                            rdmaSvcCli.write(sockInfo.fd, &mut shareRegion.sq, sockInfo.channelId);
-                        }
-                    } else if ev.Events & EVENT_OUT as u32 != 0 {
-                        let mut buffer = sockInfo.sockBuff.readBuf.lock();
-                        let (iovsAddr, iovsCnt) = buffer.GetDataIovs();
-
-                        let cnt = unsafe {
-                            libc::writev(
-                                *sockFdMappings.get(&sockInfo.fd).unwrap(),
-                                iovsAddr as *const _,
-                                iovsCnt as i32,
-                            )
-                        };
-
-                        println!("FdType::TCPSocketConnect, cnt: {}", cnt);
-
-                        if cnt > 0 {
-                            buffer.Consume(cnt as usize);
-                            let consumedDataSize =
-                                sockInfo.sockBuff.AddConsumeReadData(cnt as u64) as usize;
-                            let bufSize = buffer.BufSize();
-                            println!(
-                                "FdType::TCPSocketConnect, cnt: {}, consumedDataSize: {}",
-                                cnt, consumedDataSize
-                            );
-                            if 2 * consumedDataSize >= bufSize {
-                                rdmaSvcCli.read(
-                                    sockInfo.fd,
-                                    &mut shareRegion.sq,
-                                    sockInfo.channelId,
+                                println!(
+                                    "TCPSocketConnect::EVENT_IN, cnt: {}, trigger: {}",
+                                    cnt, trigger
                                 );
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+                    if ev.Events & EVENT_OUT as u32 != 0 {
+                        let mut buffer = sockInfo.sockBuff.readBuf.lock();
+
+                        loop {
+                            let (iovsAddr, iovsCnt) = buffer.GetDataIovs();
+
+                            let cnt = unsafe {
+                                libc::writev(
+                                    *sockFdMappings.get(&sockInfo.fd).unwrap(),
+                                    iovsAddr as *const _,
+                                    iovsCnt as i32,
+                                )
+                            };
+
+                            println!("TCPSocketConnect::EVENT_OUT, cnt: {}", cnt);
+
+                            if cnt > 0 {
+                                buffer.Consume(cnt as usize);
+                                let consumedDataSize =
+                                    sockInfo.sockBuff.AddConsumeReadData(cnt as u64) as usize;
+                                let bufSize = buffer.BufSize();
+                                println!(
+                                    "FdType::TCPSocketConnect, cnt: {}, consumedDataSize: {}",
+                                    cnt, consumedDataSize
+                                );
+                                if 2 * consumedDataSize >= bufSize {
+                                    rdmaSvcCli.read(
+                                        sockInfo.fd,
+                                        &mut shareRegion.sq,
+                                        sockInfo.channelId,
+                                    );
+                                }
+                            } else {
+                                break;
                             }
                         }
                     }
@@ -450,7 +464,6 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                                             channelToSockInfos.get(&response.channelId).unwrap();
                                         let mut buffer = sockInfo.sockBuff.readBuf.lock();
 
-                                        let mut totalRead = 0;
                                         loop {
                                             let (iovsAddr, iovsCnt) = buffer.GetDataIovs();
                                             let ioVec =
@@ -468,69 +481,68 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                                                 )
                                             };
                                             println!("RDMANotify::EVENT_IN, cnt: {}", cnt);
-                                            if cnt == 0 {
-                                                break;
-                                            }
-                                            totalRead += cnt;
-                                            buffer.Consume(cnt as usize);
-                                        }
-
-                                        println!(
-                                            "RDMANotify::EVENT_IN, data size 2: {}",
-                                            buffer.AvailableDataSize()
-                                        );
-
-                                        if totalRead > 0 {
-                                            let consumedDataSize = sockInfo
-                                                .sockBuff
-                                                .AddConsumeReadData(totalRead as u64)
-                                                as usize;
-                                            let bufSize = buffer.BufSize();
-                                            println!(
-                                                "RDMANotify::EVENT_IN, consumedDataSize: {}",
-                                                consumedDataSize
-                                            );
-                                            if 2 * consumedDataSize >= bufSize {
-                                                rdmaSvcCli.read(
-                                                    sockInfo.fd,
-                                                    &mut shareRegion.sq,
-                                                    sockInfo.channelId,
+                                            if cnt > 0 {
+                                                buffer.Consume(cnt as usize);
+                                                let consumedDataSize = sockInfo
+                                                    .sockBuff
+                                                    .AddConsumeReadData(cnt as u64)
+                                                    as usize;
+                                                let bufSize = buffer.BufSize();
+                                                println!(
+                                                    "RDMANotify::EVENT_IN, consumedDataSize: {}",
+                                                    consumedDataSize
                                                 );
+                                                if 2 * consumedDataSize >= bufSize {
+                                                    rdmaSvcCli.read(
+                                                        sockInfo.fd,
+                                                        &mut shareRegion.sq,
+                                                        sockInfo.channelId,
+                                                    );
+                                                }
+                                            } else {
+                                                break;
                                             }
                                         }
                                     }
                                     if response.event & EVENT_OUT != 0 {
-                                        let mut sockFdInfos = rdmaSvcCli.dataSockFdInfos.lock();
+                                        println!("RDMANotify::EVENT_OUT 1");
+                                        let channelToSockInfos =
+                                            rdmaSvcCli.channelToSockInfos.lock();
                                         let sockInfo =
-                                            sockFdInfos.get_mut(&response.sockfd).unwrap();
+                                            channelToSockInfos.get(&response.channelId).unwrap();
                                         let mut writeBuf = sockInfo.sockBuff.writeBuf.lock();
-                                        let (iovsAddr, iovsCnt) = writeBuf.GetSpaceIovs();
 
-                                        let cnt = unsafe {
-                                            libc::readv(
-                                                *sockFdMappings.get(&sockInfo.fd).unwrap(),
-                                                iovsAddr as *const _,
-                                                iovsCnt as i32,
-                                            )
-                                        };
+                                        loop {
+                                            let (iovsAddr, iovsCnt) = writeBuf.GetSpaceIovs();
 
-                                        let mut trigger = false;
+                                            let cnt = unsafe {
+                                                libc::readv(
+                                                    *sockFdMappings.get(&sockInfo.fd).unwrap(),
+                                                    iovsAddr as *const _,
+                                                    iovsCnt as i32,
+                                                )
+                                            };
 
-                                        if cnt > 0 {
-                                            trigger = writeBuf.Produce(cnt as usize);
-                                        }
+                                            let mut trigger = false;
 
-                                        println!(
-                                            "RDMANotify::EVENT_OUT, cnt: {}, trigger: {}",
-                                            cnt, trigger
-                                        );
-
-                                        if trigger {
-                                            rdmaSvcCli.write(
-                                                sockInfo.fd,
-                                                &mut shareRegion.sq,
-                                                sockInfo.channelId,
-                                            );
+                                            if cnt > 0 {
+                                                trigger = writeBuf.Produce(cnt as usize);
+                                                println!(
+                                                    "RDMANotify::EVENT_OUT, cnt: {}, trigger: {}",
+                                                    cnt, trigger
+                                                );
+    
+                                                if trigger {
+                                                    rdmaSvcCli.write(
+                                                        sockInfo.fd,
+                                                        &mut shareRegion.sq,
+                                                        sockInfo.channelId,
+                                                    );
+                                                }
+                                            }
+                                            else {
+                                                break;
+                                            }
                                         }
                                     }
                                 }

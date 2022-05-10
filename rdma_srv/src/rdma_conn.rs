@@ -659,7 +659,7 @@ impl RDMAControlChannel {
             }
 
             let msg = unsafe { &*(rAddr as *mut ControlMsgBody) };
-            // println!("RDMAControlChannel::ProcessRDMARecvWriteImm 4");
+            // println!("RDMAControlChannel::ProcessRDMARecvWriteImm 4, msg: {}", msg);
             match msg {
                 ControlMsgBody::ConnectRequest(msg) => {
                     self.chan
@@ -686,6 +686,7 @@ impl RDMAControlChannel {
                     // println!("1 localChannelId: {}", msg.localChannelId);
                 }
                 ControlMsgBody::ConsumedData(msg) => {
+                    println!("ControlChannel::ConsumedData: {}", msg.consumedData);
                     self.chan
                         .upgrade()
                         .unwrap()
