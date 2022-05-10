@@ -64,7 +64,7 @@ impl PartialOrd for MappingOfRange {
 }
 
 impl MappingOfRange {
-    pub fn invalidate(&self, task: &Task, _invalidatePrivate: bool) {
+    pub fn invalidate(&self, _task: &Task, _invalidatePrivate: bool) {
         //self.MappingSpace.Upgrade().ResetFileMapping(task, &self.AddrRange, invalidatePrivate);
         let start = Addr(self.AddrRange.Start()).RoundUp().unwrap().0;
         let end = Addr(self.AddrRange.End()).RoundUp().unwrap().0;
@@ -73,8 +73,12 @@ impl MappingOfRange {
         }
         self.MappingSpace
             .Upgrade()
-            .MUnmap(task, start, end - start)
+            .MFree(&Range::New(start, end-start))
             .unwrap();
+
+        error!("truncate file and unmap filemap, todo: TLBshootdown")
+        //self.TlbShootdown();
+
     }
 }
 

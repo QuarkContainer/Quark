@@ -461,7 +461,7 @@ impl InodeOperations for Dir {
         return Ok(File(Arc::new(file)));
     }
 
-    fn UnstableAttr(&self, _task: &Task, _dir: &Inode) -> Result<UnstableAttr> {
+    fn UnstableAttr(&self, _task: &Task) -> Result<UnstableAttr> {
         let u = self.read().unstable;
         return Ok(u);
     }

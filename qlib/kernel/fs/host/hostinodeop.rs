@@ -318,11 +318,10 @@ impl HostInodeOpIntern {
 
     // map one page from file offsetFile to phyAddr
     pub fn MapFilePage(&mut self, task: &Task, fileOffset: u64) -> Result<u64> {
-        // todo: handle the file range. The file size could be changed by write, fallcoate, ftruncate
-        /*let filesize = self.lock().size as u64;
+        let filesize = self.size as u64;
         if filesize <= fileOffset {
             return Err(Error::FileMapError)
-        }*/
+        }
 
         let chunkStart = fileOffset & !HUGE_PAGE_MASK;
         self.Fill(task, chunkStart, fileOffset + PAGE_SIZE)?;
@@ -443,13 +442,12 @@ impl HostInodeOpIntern {
         return self.HostFd;
     }
 
-    pub fn Allocate(&self, offset: i64, len: i64) -> Result<()> {
-        let ret = Fallocate(self.HostFd, 0, offset, len) as i32;
-        if ret < 0 {
-            return Err(Error::SysError(-ret));
-        }
+    pub fn BufWriteEnable(&self) -> bool {
+        return SHARESPACE.config.read().FileBufWrite && !self.hasMappable;
+    }
 
-        Ok(())
+    pub fn BufWriteLock(&self) -> QAsyncLock {
+        return self.bufWriteLock.clone();
     }
 
     pub fn WouldBlock(&self) -> bool {
@@ -627,7 +625,7 @@ impl HostInodeOp {
     /*********************************start of fileoperation *******************/
 
     pub fn BufWriteEnable(&self) -> bool {
-        return SHARESPACE.config.read().FileBufWrite && !self.lock().hasMappable;
+        return self.lock().BufWriteEnable();
     }
 
     // ReadEndOffset returns an exclusive end offset for a read operation
@@ -739,7 +737,7 @@ impl HostInodeOp {
     }
 
     pub fn BufWriteLock(&self) -> QAsyncLock {
-        return self.lock().bufWriteLock.clone();
+        return self.lock().BufWriteLock();
     }
 
     pub fn WriteAt(
@@ -840,6 +838,10 @@ impl HostInodeOp {
             let (count, len) = HostSpace::IOAppend(hostIops.HostFd(), iovsAddr, iovcnt);
             if count < 0 {
                 return Err(Error::SysError(-count as i32));
+            }
+
+            if inodeType == InodeType::RegularFile {
+                hostIops.UpdateMaxLen(len);
             }
 
             return Ok((count, len));
@@ -1275,7 +1277,7 @@ impl InodeOperations for HostInodeOp {
         return Ok(File::NewHostFile(dirent, &flags, fops, wouldBlock));
     }
 
-    fn UnstableAttr(&self, task: &Task, _dir: &Inode) -> Result<UnstableAttr> {
+    fn UnstableAttr(&self, task: &Task) -> Result<UnstableAttr> {
         let uringStatx = SHARESPACE.config.read().UringStatx;
 
         if self.BufWriteEnable() {
@@ -1368,9 +1370,10 @@ impl InodeOperations for HostInodeOp {
         return Ok(());
     }
 
-    fn Truncate(&self, task: &Task, dir: &mut Inode, size: i64) -> Result<()> {
-        let uattr = self.UnstableAttr(task, dir)?;
+    fn Truncate(&self, task: &Task, _dir: &mut Inode, size: i64) -> Result<()> {
+        let uattr = self.UnstableAttr(task)?;
         let oldSize = uattr.Size;
+        assert!(oldSize==self.lock().size);
         if size == oldSize {
             return Ok(());
         }
@@ -1400,12 +1403,15 @@ impl InodeOperations for HostInodeOp {
         return Ok(());
     }
 
-    fn Allocate(&self, _task: &Task, _dir: &mut Inode, offset: i64, length: i64) -> Result<()> {
+    fn Allocate(&self, task: &Task, _dir: &mut Inode, offset: i64, length: i64) -> Result<()> {
         let ret = Fallocate(self.HostFd(), 0, offset, length);
 
         if ret < 0 {
             return Err(Error::SysError(-ret as i32));
         }
+
+        let uattr = self.UnstableAttr(task)?;
+        self.lock().size = uattr.Size;
 
         return Ok(());
     }

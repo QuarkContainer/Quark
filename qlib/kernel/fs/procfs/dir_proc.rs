@@ -172,8 +172,8 @@ impl<T: 'static + DirDataNode> InodeOperations for DirNode<T> {
         return self.data.GetFile(&self.dir, task, dir, dirent, flags);
     }
 
-    fn UnstableAttr(&self, task: &Task, dir: &Inode) -> Result<UnstableAttr> {
-        return self.dir.UnstableAttr(task, dir);
+    fn UnstableAttr(&self, task: &Task) -> Result<UnstableAttr> {
+        return self.dir.UnstableAttr(task);
     }
 
     fn Getxattr(&self, dir: &Inode, name: &str) -> Result<String> {

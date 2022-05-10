@@ -161,8 +161,8 @@ impl InodeOperations for TaskOwnedInodeOps {
         return self.iops.GetFile(task, dir, dirent, flags);
     }
 
-    fn UnstableAttr(&self, task: &Task, dir: &Inode) -> Result<UnstableAttr> {
-        let mut unstable = self.iops.UnstableAttr(task, dir)?;
+    fn UnstableAttr(&self, task: &Task) -> Result<UnstableAttr> {
+        let mut unstable = self.iops.UnstableAttr(task)?;
         let creds = self.creds.lock();
         unstable.Owner = FileOwner {
             UID: creds.EffectiveKUID,
@@ -388,7 +388,7 @@ impl InodeOperations for StaticFileInodeOps {
         })));
     }
 
-    fn UnstableAttr(&self, _task: &Task, _dir: &Inode) -> Result<UnstableAttr> {
+    fn UnstableAttr(&self, _task: &Task) -> Result<UnstableAttr> {
         let u = self.read().unstable;
         return Ok(u);
     }

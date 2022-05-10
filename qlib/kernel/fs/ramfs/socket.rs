@@ -196,7 +196,7 @@ impl InodeOperations for SocketInodeOps {
         return Ok(File(Arc::new(f)));
     }
 
-    fn UnstableAttr(&self, _task: &Task, _dir: &Inode) -> Result<UnstableAttr> {
+    fn UnstableAttr(&self, _task: &Task) -> Result<UnstableAttr> {
         let u = self.simpleAttributes.read().unstable;
         return Ok(u);
     }

@@ -301,7 +301,7 @@ impl InodeOperations for SeqFile {
         return Ok(File(Arc::new(internal)));
     }
 
-    fn UnstableAttr(&self, task: &Task, _dir: &Inode) -> Result<UnstableAttr> {
+    fn UnstableAttr(&self, task: &Task) -> Result<UnstableAttr> {
         let mut u = self.write().unstable;
 
         u.ModificationTime = task.Now();

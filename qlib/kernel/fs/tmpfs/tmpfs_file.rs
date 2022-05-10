@@ -193,7 +193,7 @@ impl InodeOperations for TmpfsFileInodeOp {
         return self.inodeops.GetFile(task, dir, dirent, flags);
     }
 
-    fn UnstableAttr(&self, _task: &Task, _dir: &Inode) -> Result<UnstableAttr> {
+    fn UnstableAttr(&self, _task: &Task) -> Result<UnstableAttr> {
         let (size, blocks) = self.inodeops.Size()?;
 
         let mut ret = *self.uattr.lock();
