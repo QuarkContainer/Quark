@@ -76,6 +76,9 @@ impl Range {
             return MAX_RANGE;
         }
 
+        /*if MAX_RANGE - self.len() > self.start {
+            Err(Error::SysError(SysErr::EOVERFLOW))
+        }*/
         return self.start + self.len;
     }
 

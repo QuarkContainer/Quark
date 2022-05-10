@@ -179,8 +179,8 @@ impl InodeOperations for TmpfsFifoInodeOp {
         return self.0.GetFile(task, dir, dirent, flags);
     }
 
-    fn UnstableAttr(&self, task: &Task, dir: &Inode) -> Result<UnstableAttr> {
-        return self.0.UnstableAttr(task, dir);
+    fn UnstableAttr(&self, task: &Task) -> Result<UnstableAttr> {
+        return self.0.UnstableAttr(task);
     }
 
     fn Getxattr(&self, dir: &Inode, name: &str) -> Result<String> {

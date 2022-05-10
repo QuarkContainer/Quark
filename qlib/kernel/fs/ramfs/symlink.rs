@@ -211,7 +211,7 @@ impl InodeOperations for Symlink {
         return Ok(File(Arc::new(file)));
     }
 
-    fn UnstableAttr(&self, _task: &Task, _dir: &Inode) -> Result<UnstableAttr> {
+    fn UnstableAttr(&self, _task: &Task) -> Result<UnstableAttr> {
         let mut internal = self.write();
 
         internal.unstable.Size = internal.Target.len() as i64;

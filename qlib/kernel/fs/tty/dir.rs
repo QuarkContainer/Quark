@@ -291,7 +291,7 @@ impl InodeOperations for DirInodeOperations {
         return Err(Error::SysError(SysErr::EPERM));
     }
 
-    fn UnstableAttr(&self, _task: &Task, _dir: &Inode) -> Result<UnstableAttr> {
+    fn UnstableAttr(&self, _task: &Task) -> Result<UnstableAttr> {
         let u = self.0.lock().unstable;
         return Ok(u);
     }

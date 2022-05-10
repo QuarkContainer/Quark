@@ -191,8 +191,8 @@ impl<T: 'static + ReadLinkNode> InodeOperations for SymlinkNode<T> {
         //return self.link.GetFile(task, dir, dirent, flags);
     }
 
-    fn UnstableAttr(&self, task: &Task, dir: &Inode) -> Result<UnstableAttr> {
-        return self.link.UnstableAttr(task, dir);
+    fn UnstableAttr(&self, task: &Task) -> Result<UnstableAttr> {
+        return self.link.UnstableAttr(task);
     }
 
     fn Getxattr(&self, dir: &Inode, name: &str) -> Result<String> {

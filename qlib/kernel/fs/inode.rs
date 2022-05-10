@@ -174,7 +174,7 @@ pub trait InodeOperations: Sync + Send {
     ) -> Result<Dirent>;
     fn BoundEndpoint(&self, _task: &Task, inode: &Inode, path: &str) -> Option<BoundEndpoint>;
     fn GetFile(&self, task: &Task, dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File>;
-    fn UnstableAttr(&self, task: &Task, dir: &Inode) -> Result<UnstableAttr>;
+    fn UnstableAttr(&self, task: &Task) -> Result<UnstableAttr>;
     fn Getxattr(&self, dir: &Inode, name: &str) -> Result<String>;
     fn Setxattr(&self, dir: &mut Inode, name: &str, value: &str) -> Result<()>;
     fn Listxattr(&self, dir: &Inode) -> Result<Vec<String>>;
@@ -501,7 +501,7 @@ impl Inode {
         }
 
         let op = self.lock().InodeOp.clone();
-        let res = op.UnstableAttr(task, self);
+        let res = op.UnstableAttr(task);
         return res;
     }
 

@@ -235,7 +235,7 @@ impl InodeOperations for PipeIops {
         }
     }
 
-    fn UnstableAttr(&self, _task: &Task, _dir: &Inode) -> Result<UnstableAttr> {
+    fn UnstableAttr(&self, _task: &Task) -> Result<UnstableAttr> {
         let u = self.lock().unstable;
         return Ok(u);
     }
