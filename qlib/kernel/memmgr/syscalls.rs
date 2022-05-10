@@ -57,8 +57,8 @@ impl MemoryManager {
             }
 
             // Offset + length must not overflow.
-            if u64::MAX - opts.Length < opts.Offset {
-                return Err(Error::SysError(SysErr::ENOMEM));
+            if i64::MAX as u64 - opts.Length < opts.Offset {
+                return Err(Error::SysError(SysErr::EOVERFLOW));
             }
         } else if !opts.VDSO {
             //not vdso
