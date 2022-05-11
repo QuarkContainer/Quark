@@ -17,7 +17,6 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use super::super::super::common::*;
-use super::super::super::linux_def::*;
 use super::super::task::*;
 
 #[derive(Debug)]
@@ -73,7 +72,7 @@ impl CString {
     pub fn ToStringWithLen(task: &Task, addr: u64, len: usize) -> Result<String> {
         let (str, err) = task.CopyInString(addr, len);
         match err {
-            Err(_) => return Err(Error::SysError(SysErr::EFAULT)),
+            Err(e) => return Err(e),
             Ok(()) => return Ok(str),
         }
     }

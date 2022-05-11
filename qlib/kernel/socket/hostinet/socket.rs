@@ -1537,10 +1537,6 @@ impl SockOperations for SocketOperations {
             return Err(Error::SysError(SysErr::EINVAL));
         }
 
-        /*defer!(task.GetMut().iovs.clear());
-        task.V2PIovs(srcs, false, &mut task.GetMut().iovs)?;
-        let iovs = &task.GetMut().iovs;*/
-
         let size = IoVec::NumBytes(srcs);
         let mut buf = DataBuff::New(size);
         let iovs = buf.Iovs();
