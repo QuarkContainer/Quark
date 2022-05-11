@@ -16,7 +16,7 @@ use alloc::collections::vec_deque::VecDeque;
 use alloc::slice;
 use alloc::sync::Arc;
 use core::sync::atomic::Ordering;
-use spin::Mutex;
+use spin::{Mutex, MutexGuard};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::net::Ipv4Addr;
@@ -532,4 +532,81 @@ impl RDMASvcClient {
     pub fn shutdown(&self, sockfd: u32, howto: i32) {}
 
     pub fn close(&self, sockfd: u32) {}
+
+    pub fn ReadFromSocket(
+        &self,
+        sockInfo: &DataSock,
+        sockFdMappings: &HashMap<u32, i32>,
+        shareRegion: &mut MutexGuard<&mut ClientShareRegion>,
+    ) {
+        let mut buffer = sockInfo.sockBuff.writeBuf.lock();
+        loop {
+            let (iovsAddr, iovsCnt) = buffer.GetSpaceIovs();
+    
+            let cnt = unsafe {
+                libc::readv(
+                    *sockFdMappings.get(&sockInfo.fd).unwrap(),
+                    iovsAddr as *const _,
+                    iovsCnt as i32,
+                )
+            };
+    
+            let mut trigger = false;
+    
+            if cnt > 0 {
+                trigger = buffer.Produce(cnt as usize);
+                if trigger {
+                    self.write(sockInfo.fd, &mut shareRegion.sq, sockInfo.channelId);
+                }
+    
+                println!(
+                    "TCPSocketConnect::EVENT_IN, cnt: {}, trigger: {}",
+                    cnt, trigger
+                );
+            } else {
+                break;
+            }
+        }
+    }
+    
+    pub fn WriteToSocket(
+        &self,
+        sockInfo: &DataSock,
+        sockFdMappings: &HashMap<u32, i32>,
+        shareRegion: &mut MutexGuard<&mut ClientShareRegion>,
+    ) {
+        let mut buffer = sockInfo.sockBuff.readBuf.lock();
+    
+        loop {
+            let (iovsAddr, iovsCnt) = buffer.GetDataIovs();
+            let ioVec = unsafe { &(*(iovsAddr as *const libc::iovec)) };
+            println!(
+                "data size 1: {}, ioVec.address: {}, ioVec::len: {}, iovsCnt: {}",
+                buffer.AvailableDataSize(),
+                ioVec.iov_base as u64,
+                ioVec.iov_len,
+                iovsCnt
+            );
+    
+            let cnt = unsafe {
+                libc::writev(
+                    *sockFdMappings.get(&sockInfo.fd).unwrap(),
+                    iovsAddr as *const _,
+                    iovsCnt as i32,
+                )
+            };
+            println!("cnt: {}", cnt);
+            if cnt > 0 {
+                buffer.Consume(cnt as usize);
+                let consumedDataSize = sockInfo.sockBuff.AddConsumeReadData(cnt as u64) as usize;
+                let bufSize = buffer.BufSize();
+                println!("consumedDataSize: {}", consumedDataSize);
+                if 2 * consumedDataSize >= bufSize {
+                    self.read(sockInfo.fd, &mut shareRegion.sq, sockInfo.channelId);
+                }
+            } else {
+                break;
+            }
+        }
+    }
 }

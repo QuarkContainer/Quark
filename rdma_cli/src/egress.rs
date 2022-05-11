@@ -99,6 +99,7 @@ use qlib::unix_socket::UnixSocket;
 // use rdma_conn::RDMAConn;
 // use rdma_ctrlconn::Node;
 use rdma_service_client::*;
+use spin::{Mutex, MutexGuard};
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::{env, mem, ptr, thread, time};
@@ -240,76 +241,10 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                         sockfd, ev.Events
                     );
                     if ev.Events & EVENT_IN as u32 != 0 {
-                        let mut buffer = sockInfo.sockBuff.writeBuf.lock();
-
-                        loop {
-                            let (iovsAddr, iovsCnt) = buffer.GetSpaceIovs();
-
-                            let cnt = unsafe {
-                                libc::readv(
-                                    *sockFdMappings.get(&sockInfo.fd).unwrap(),
-                                    iovsAddr as *const _,
-                                    iovsCnt as i32,
-                                )
-                            };
-
-                            let mut trigger = false;
-
-                            if cnt > 0 {
-                                trigger = buffer.Produce(cnt as usize);
-                                if trigger {
-                                    rdmaSvcCli.write(
-                                        sockInfo.fd,
-                                        &mut shareRegion.sq,
-                                        sockInfo.channelId,
-                                    );
-                                }
-
-                                println!(
-                                    "TCPSocketConnect::EVENT_IN, cnt: {}, trigger: {}",
-                                    cnt, trigger
-                                );
-                            } else {
-                                break;
-                            }
-                        }
+                        rdmaSvcCli.ReadFromSocket(sockInfo, &sockFdMappings, &mut shareRegion);
                     }
                     if ev.Events & EVENT_OUT as u32 != 0 {
-                        let mut buffer = sockInfo.sockBuff.readBuf.lock();
-
-                        loop {
-                            let (iovsAddr, iovsCnt) = buffer.GetDataIovs();
-
-                            let cnt = unsafe {
-                                libc::writev(
-                                    *sockFdMappings.get(&sockInfo.fd).unwrap(),
-                                    iovsAddr as *const _,
-                                    iovsCnt as i32,
-                                )
-                            };
-
-                            println!("TCPSocketConnect::EVENT_OUT, cnt: {}", cnt);
-
-                            if cnt > 0 {
-                                buffer.Consume(cnt as usize);
-                                let consumedDataSize =
-                                    sockInfo.sockBuff.AddConsumeReadData(cnt as u64) as usize;
-                                let bufSize = buffer.BufSize();
-                                println!(
-                                    "FdType::TCPSocketConnect, cnt: {}, consumedDataSize: {}",
-                                    cnt, consumedDataSize
-                                );
-                                if 2 * consumedDataSize >= bufSize {
-                                    rdmaSvcCli.read(
-                                        sockInfo.fd,
-                                        &mut shareRegion.sq,
-                                        sockInfo.channelId,
-                                    );
-                                }
-                            } else {
-                                break;
-                            }
-                        }
+                        rdmaSvcCli.WriteToSocket(sockInfo, &sockFdMappings, &mut shareRegion);
                     }
                 }
                 Some(FdType::RDMACompletionChannel) => {}
@@ -462,47 +397,11 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                                             rdmaSvcCli.channelToSockInfos.lock();
                                         let sockInfo =
                                             channelToSockInfos.get(&response.channelId).unwrap();
-                                        let mut buffer = sockInfo.sockBuff.readBuf.lock();
-
-                                        loop {
-                                            let (iovsAddr, iovsCnt) = buffer.GetDataIovs();
-                                            let ioVec =
-                                                unsafe { &(*(iovsAddr as *const libc::iovec)) };
-                                            println!(
-                                                "RDMANotify::EVENT_IN, data size 1: {}, ioVec.address: {}, ioVec::len: {}, iovsCnt: {}",
-                                                buffer.AvailableDataSize(), ioVec.iov_base as u64, ioVec.iov_len, iovsCnt
-                                            );
-
-                                            let cnt = unsafe {
-                                                libc::writev(
-                                                    *sockFdMappings.get(&sockInfo.fd).unwrap(),
-                                                    iovsAddr as *const _,
-                                                    iovsCnt as i32,
-                                                )
-                                            };
-                                            println!("RDMANotify::EVENT_IN, cnt: {}", cnt);
-                                            if cnt > 0 {
-                                                buffer.Consume(cnt as usize);
-                                                let consumedDataSize = sockInfo
-                                                    .sockBuff
-                                                    .AddConsumeReadData(cnt as u64)
-                                                    as usize;
-                                                let bufSize = buffer.BufSize();
-                                                println!(
-                                                    "RDMANotify::EVENT_IN, consumedDataSize: {}",
-                                                    consumedDataSize
-                                                );
-                                                if 2 * consumedDataSize >= bufSize {
-                                                    rdmaSvcCli.read(
-                                                        sockInfo.fd,
-                                                        &mut shareRegion.sq,
-                                                        sockInfo.channelId,
-                                                    );
-                                                }
-                                            } else {
-                                                break;
-                                            }
-                                        }
+                                        rdmaSvcCli.WriteToSocket(
+                                            sockInfo,
+                                            &sockFdMappings,
+                                            &mut shareRegion,
+                                        );
                                     }
                                     if response.event & EVENT_OUT != 0 {
                                         println!("RDMANotify::EVENT_OUT 1");
@@ -510,40 +409,12 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                                             rdmaSvcCli.channelToSockInfos.lock();
                                         let sockInfo =
                                             channelToSockInfos.get(&response.channelId).unwrap();
-                                        let mut writeBuf = sockInfo.sockBuff.writeBuf.lock();
 
-                                        loop {
-                                            let (iovsAddr, iovsCnt) = writeBuf.GetSpaceIovs();
-
-                                            let cnt = unsafe {
-                                                libc::readv(
-                                                    *sockFdMappings.get(&sockInfo.fd).unwrap(),
-                                                    iovsAddr as *const _,
-                                                    iovsCnt as i32,
-                                                )
-                                            };
-
-                                            let mut trigger = false;
-
-                                            if cnt > 0 {
-                                                trigger = writeBuf.Produce(cnt as usize);
-                                                println!(
-                                                    "RDMANotify::EVENT_OUT, cnt: {}, trigger: {}",
-                                                    cnt, trigger
-                                                );
-    
-                                                if trigger {
-                                                    rdmaSvcCli.write(
-                                                        sockInfo.fd,
-                                                        &mut shareRegion.sq,
-                                                        sockInfo.channelId,
-                                                    );
-                                                }
-                                            }
-                                            else {
-                                                break;
-                                            }
-                                        }
+                                        rdmaSvcCli.ReadFromSocket(
+                                            sockInfo,
+                                            &sockFdMappings,
+                                            &mut shareRegion,
+                                        );
                                     }
                                 }
                             },
