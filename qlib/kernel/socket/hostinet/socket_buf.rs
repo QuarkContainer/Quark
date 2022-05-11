@@ -57,7 +57,7 @@ impl SocketBuff {
             return Err(Error::SysError(SysErr::EAGAIN));
         }
 
-        let cnt = task.mm.CopyIovsOutToIovs(task, iovs, &dstIovs)?;
+        let cnt = task.mm.CopyIovsInFromIovs(task, iovs, &dstIovs)?;
 
         if cnt == 0 {
             error!("writev cnt is zero....");

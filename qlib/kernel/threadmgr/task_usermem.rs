@@ -170,6 +170,29 @@ impl MemoryManager {
         return self.CopyDataInFromIovsLocked(task, buf, iovs);
     }
 
+    pub fn CopyIovsInFromIovs(
+        &self,
+        task: &Task,
+        srcIovs: &[IoVec],
+        dstIovs: &[IoVec],
+    ) -> Result<usize> {
+        let _ml = self.MappingWriteLock();
+
+        let mut srcs = srcIovs;
+        let mut count = 0;
+        let mut tmp;
+
+        for iov in dstIovs {
+            let buf = iov.ToSliceMut();
+            let n = self.CopyDataInFromIovsLocked(task, buf, srcs)?;
+            count += n;
+            tmp = Iovs(srcs).DropFirst(n as usize);
+            srcs = &tmp;
+        }
+
+        return Ok(count);
+    }
+
     pub fn CopyIovsOutFromIovs(
         &self,
         task: &Task,
