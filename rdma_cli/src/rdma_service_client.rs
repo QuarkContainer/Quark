@@ -542,7 +542,10 @@ impl RDMASvcClient {
         let mut buffer = sockInfo.sockBuff.writeBuf.lock();
         loop {
             let (iovsAddr, iovsCnt) = buffer.GetSpaceIovs();
-    
+            if iovsCnt == 0 {
+                println!("ReadFromSocket, break because iovsCnt == 0");
+                break;
+            }
             let cnt = unsafe {
                 libc::readv(
                     *sockFdMappings.get(&sockInfo.fd).unwrap(),
@@ -550,25 +553,25 @@ impl RDMASvcClient {
                     iovsCnt as i32,
                 )
             };
-    
-            let mut trigger = false;
-    
+
+            println!("ReadFromSocket, cnt: {}", cnt);
             if cnt > 0 {
-                trigger = buffer.Produce(cnt as usize);
+                let trigger = buffer.Produce(cnt as usize);
+                println!("ReadFromSocket, trigger: {}", trigger);
                 if trigger {
                     self.write(sockInfo.fd, &mut shareRegion.sq, sockInfo.channelId);
                 }
-    
-                println!(
-                    "TCPSocketConnect::EVENT_IN, cnt: {}, trigger: {}",
-                    cnt, trigger
-                );
             } else {
+                println!("ReadFromSocket, break because cnt: {}", cnt);
+                if cnt < 0 {
+                    println!("ReadFromSocket, error: {}", std::io::Error::last_os_error());
+                }
+
                 break;
             }
         }
     }
-    
+
     pub fn WriteToSocket(
         &self,
         sockInfo: &DataSock,
@@ -576,18 +579,23 @@ impl RDMASvcClient {
         shareRegion: &mut MutexGuard<&mut ClientShareRegion>,
     ) {
         let mut buffer = sockInfo.sockBuff.readBuf.lock();
-    
+
         loop {
             let (iovsAddr, iovsCnt) = buffer.GetDataIovs();
             let ioVec = unsafe { &(*(iovsAddr as *const libc::iovec)) };
             println!(
-                "data size 1: {}, ioVec.address: {}, ioVec::len: {}, iovsCnt: {}",
+                "WriteToSocket, data size 1: {}, ioVec.address: {}, ioVec::len: {}, iovsCnt: {}",
                 buffer.AvailableDataSize(),
                 ioVec.iov_base as u64,
                 ioVec.iov_len,
                 iovsCnt
             );
-    
+
+            if iovsCnt == 0 {
+                println!("WriteToSocket, break because iovsCnt == 0");
+                break;
+            }
+
             let cnt = unsafe {
                 libc::writev(
                     *sockFdMappings.get(&sockInfo.fd).unwrap(),
@@ -595,16 +603,21 @@ impl RDMASvcClient {
                     iovsCnt as i32,
                 )
             };
-            println!("cnt: {}", cnt);
+            println!("WriteToSocket, cnt: {}", cnt);
             if cnt > 0 {
                 buffer.Consume(cnt as usize);
                 let consumedDataSize = sockInfo.sockBuff.AddConsumeReadData(cnt as u64) as usize;
                 let bufSize = buffer.BufSize();
-                println!("consumedDataSize: {}", consumedDataSize);
+                println!("WriteToSocket, consumedDataSize: {}", consumedDataSize);
                 if 2 * consumedDataSize >= bufSize {
                     self.read(sockInfo.fd, &mut shareRegion.sq, sockInfo.channelId);
                 }
             } else {
+                println!("WriteToSocket, break because cnt: {}", cnt);
+                if cnt < 0 {
+                    println!("WriteToSocket, error: {}", std::io::Error::last_os_error());
+                }
+
                 break;
             }
         }

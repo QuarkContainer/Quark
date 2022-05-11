@@ -299,36 +299,11 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                                         .lock()
                                         .insert(response.channelId, sockInfo.clone());
 
-                                    let mut writeBuf = sockInfo.sockBuff.writeBuf.lock();
-                                    let (iovsAddr, iovsCnt) = writeBuf.GetSpaceIovs();
-
-                                    let cnt = unsafe {
-                                        libc::readv(
-                                            *sockFdMappings.get(&sockInfo.fd).unwrap(),
-                                            iovsAddr as *const _,
-                                            iovsCnt as i32,
-                                        )
-                                    };
-
-                                    println!(
-                                        "cnt: {}, iovsCnt: {}, iovsAddr: {}",
-                                        cnt, iovsCnt, iovsAddr
+                                    rdmaSvcCli.ReadFromSocket(
+                                        sockInfo,
+                                        &sockFdMappings,
+                                        &mut shareRegion,
                                     );
-
-                                    let mut trigger = false;
-
-                                    if cnt > 0 {
-                                        trigger = writeBuf.Produce(cnt as usize);
-                                    }
-
-                                    if trigger {
-                                        println!("Send data the first time");
-                                        rdmaSvcCli.write(
-                                            sockInfo.fd,
-                                            &mut shareRegion.sq,
-                                            sockInfo.channelId,
-                                        );
-                                    }
                                 }
                                 RDMARespMsg::RDMAAccept(response) => {
                                     println!("response: {:?}", response);
