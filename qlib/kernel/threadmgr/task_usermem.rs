@@ -533,6 +533,29 @@ impl Task {
         return Ok(());
     }
 
+    pub fn GetIOVecPermission(&self, iovs: &[IoVec], writeReq: bool) -> Result<Vec<IoVec>> {
+        let mut output = Vec::new();
+
+        for iov in iovs {
+            match self.CheckPermission(iov.start, iov.len as u64, writeReq, true) {
+                Err(e) => {
+                    if output.len() == 0 {
+                        return Err(e)
+                    }
+                    return Ok(output)
+                }
+                Ok(len) => {
+                    output.push(IoVec {
+                        start: iov.start,
+                        len: len as _
+                    })
+                }
+            }
+        }
+
+        return Ok(output);
+    }
+
     // check whether the address range is legal.
     // 1. whether the range belong to user's space
     // 2. Whether the read/write permission meet requirement
