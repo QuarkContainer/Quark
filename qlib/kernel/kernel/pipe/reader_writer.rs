@@ -46,7 +46,7 @@ impl Drop for ReaderWriter {
         self.pipe.WClose();
 
         // Wake up readers and writers.
-        self.pipe.Notify(EVENT_IN | EVENT_OUT)
+        self.pipe.Notify(READABLE_EVENT | WRITEABLE_EVENT)
     }
 }
 
@@ -108,7 +108,7 @@ impl FileOperations for ReaderWriter {
         let bs = BlockSeq::New(&buf.buf);
         let n = self.pipe.Read(task, bs)?;
         if n > 0 {
-            self.pipe.Notify(EVENT_OUT)
+            self.pipe.Notify(WRITEABLE_EVENT)
         }
 
         task.CopyDataOutToIovs(&buf.buf[0..n], dsts)?;
@@ -130,7 +130,7 @@ impl FileOperations for ReaderWriter {
         let srcs = BlockSeq::New(&buf.buf);
         let n = self.pipe.Write(task, srcs)?;
         if n > 0 {
-            self.pipe.Notify(EVENT_IN)
+            self.pipe.Notify(READABLE_EVENT)
         }
 
         return Ok(n as i64);

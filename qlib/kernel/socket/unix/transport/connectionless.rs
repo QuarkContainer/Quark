@@ -276,13 +276,13 @@ impl Waitable for ConnectionLessEndPoint {
         let e = self.lock();
 
         let mut ready = 0;
-        if mask & EVENT_IN != 0 && e.receiver.as_ref().unwrap().Readable() {
-            ready |= EVENT_IN;
+        if mask & READABLE_EVENT != 0 && e.receiver.as_ref().unwrap().Readable() {
+            ready |= READABLE_EVENT;
         }
 
         if e.Connected() {
-            if mask & EVENT_OUT != 0 && e.connected.as_ref().unwrap().Writable() {
-                ready |= EVENT_OUT;
+            if mask & WRITEABLE_EVENT != 0 && e.connected.as_ref().unwrap().Writable() {
+                ready |= WRITEABLE_EVENT;
             }
         }
 

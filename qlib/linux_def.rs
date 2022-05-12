@@ -205,18 +205,23 @@ pub const EVENTMASK_ALL: EventMask = 0xFFFF;
 
 // Events that waiters can wait on. The meaning is the same as those in the
 // poll() syscall.
-pub const EVENT_IN: EventMask = 0x01; // POLLIN
-pub const EVENT_PRI: EventMask = 0x02; // POLLPRI
-pub const EVENT_OUT: EventMask = 0x04; // POLLOUT
-pub const EVENT_ERR: EventMask = 0x08; // POLLERR
-pub const EVENT_HUP: EventMask = 0x10; // POLLHUP
+pub const EVENT_IN:         EventMask = 0x01; // POLLIN
+pub const EVENT_PRI:        EventMask = 0x02; // POLLPRI
+pub const EVENT_OUT:        EventMask = 0x04; // POLLOUT
+pub const EVENT_ERR:        EventMask = 0x08; // POLLERR
+pub const EVENT_HUP:        EventMask = 0x10; // POLLHUP
+pub const EVENT_RD_NORM:    EventMask = 0x0040; // POLLRDNORM
+pub const EVENT_WR_NORM:    EventMask = 0x0100; // POLLWRNORM
+pub const EVENT_INTERNAL:   EventMask = 0x1000;
 
 // Quark event, when application shutdown the connection, it is used for wait the uring to drain the writing buffer
 pub const EVENT_PENDING_SHUTDOWN: EventMask = 0x20;
 
-pub const ALL_EVENTS: EventMask = 0x1f;
-pub const EVENT_READ: EventMask = EVENT_IN | EVENT_HUP | EVENT_ERR;
-pub const EVENT_WRITE: EventMask = EVENT_OUT | EVENT_HUP | EVENT_ERR;
+pub const ALL_EVENTS: EventMask = 0x1f | EVENT_RD_NORM | EVENT_WR_NORM;
+pub const EVENT_READ: EventMask = EVENT_IN | EVENT_HUP | EVENT_ERR | EVENT_RD_NORM;
+pub const EVENT_WRITE: EventMask = EVENT_OUT | EVENT_HUP | EVENT_ERR | EVENT_WR_NORM;
+pub const READABLE_EVENT: EventMask = EVENT_IN | EVENT_RD_NORM;
+pub const WRITEABLE_EVENT: EventMask = EVENT_OUT | EVENT_WR_NORM;
 
 pub struct SocketSize {}
 

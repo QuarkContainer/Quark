@@ -589,12 +589,12 @@ impl Receiver for QueueReceiver {
     }
 
     fn RecvNotify(&self) {
-        self.readQueue.lock().WriterQueue.Notify(EVENT_OUT)
+        self.readQueue.lock().WriterQueue.Notify(WRITEABLE_EVENT)
     }
 
     fn CloseNotify(&self) {
-        self.readQueue.lock().ReaderQueue.Notify(EVENT_IN);
-        self.readQueue.lock().WriterQueue.Notify(EVENT_OUT);
+        self.readQueue.lock().ReaderQueue.Notify(READABLE_EVENT);
+        self.readQueue.lock().WriterQueue.Notify(WRITEABLE_EVENT);
     }
 
     fn CloseRecv(&self) {
@@ -794,7 +794,7 @@ impl Receiver for StreamQueueReceiver {
 
     fn RecvNotify(&self) {
         let readQueue = self.lock().readQueue.clone();
-        readQueue.lock().WriterQueue.Notify(EVENT_OUT);
+        readQueue.lock().WriterQueue.Notify(WRITEABLE_EVENT);
     }
 
     fn CloseRecv(&self) {
@@ -804,8 +804,8 @@ impl Receiver for StreamQueueReceiver {
 
     fn CloseNotify(&self) {
         let readQueue = self.lock().readQueue.clone();
-        readQueue.lock().ReaderQueue.Notify(EVENT_IN);
-        readQueue.lock().WriterQueue.Notify(EVENT_OUT);
+        readQueue.lock().ReaderQueue.Notify(READABLE_EVENT);
+        readQueue.lock().WriterQueue.Notify(WRITEABLE_EVENT);
     }
 
     fn Readable(&self) -> bool {
@@ -904,7 +904,7 @@ impl ConnectedEndpoint for UnixConnectedEndpoint {
     // SendNotify implements ConnectedEndpoint.SendNotify.
     fn SendNotify(&self) {
         let readerQueue = self.writeQueue.lock().ReaderQueue.clone();
-        readerQueue.Notify(EVENT_IN)
+        readerQueue.Notify(READABLE_EVENT)
     }
 
     // CloseSend implements ConnectedEndpoint.CloseSend.
@@ -915,10 +915,10 @@ impl ConnectedEndpoint for UnixConnectedEndpoint {
     // CloseNotify implements ConnectedEndpoint.CloseNotify.
     fn CloseNotify(&self) {
         let readerQueue = self.writeQueue.lock().ReaderQueue.clone();
-        readerQueue.Notify(EVENT_IN);
+        readerQueue.Notify(READABLE_EVENT);
 
         let writeQueue = self.writeQueue.lock().WriterQueue.clone();
-        writeQueue.Notify(EVENT_OUT);
+        writeQueue.Notify(WRITEABLE_EVENT);
     }
 
     // Writable implements ConnectedEndpoint.Writable.

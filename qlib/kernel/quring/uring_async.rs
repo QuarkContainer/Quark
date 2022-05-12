@@ -537,7 +537,7 @@ impl AsyncSend {
         if result < 0 {
             self.buf.SetErr(-result);
             self.queue
-                .Notify(EventMaskFromLinux((EVENT_ERR | EVENT_IN) as u32));
+                .Notify(EventMaskFromLinux((EVENT_ERR | READABLE_EVENT) as u32));
             return false;
             //return true;
         }
@@ -547,16 +547,16 @@ impl AsyncSend {
         if result == 0 {
             self.buf.SetWClosed();
             if self.buf.ProduceReadBuf(0) {
-                self.queue.Notify(EventMaskFromLinux(EVENT_OUT as u32));
+                self.queue.Notify(EventMaskFromLinux(WRITEABLE_EVENT as u32));
             } else {
-                self.queue.Notify(EventMaskFromLinux(EVENT_HUP as u32));
+                self.queue.Notify(EventMaskFromLinux(WRITEABLE_EVENT as u32));
             }
             return false;
         }
 
         let (trigger, addr, len) = self.buf.ConsumeAndGetAvailableWriteBuf(result as usize);
         if trigger {
-            self.queue.Notify(EventMaskFromLinux(EVENT_OUT as u32));
+            self.queue.Notify(EventMaskFromLinux(WRITEABLE_EVENT as u32));
         }
 
         if addr == 0 {
@@ -613,7 +613,7 @@ impl AsyncFiletWrite {
         if result < 0 {
             self.buf.SetErr(-result);
             self.queue
-                .Notify(EventMaskFromLinux((EVENT_ERR | EVENT_IN) as u32));
+                .Notify(EventMaskFromLinux((EVENT_ERR | READABLE_EVENT) as u32));
             return false;
             //return true;
         }
@@ -623,16 +623,16 @@ impl AsyncFiletWrite {
         if result == 0 {
             self.buf.SetWClosed();
             if self.buf.HasWriteData() {
-                self.queue.Notify(EventMaskFromLinux(EVENT_OUT as u32));
+                self.queue.Notify(EventMaskFromLinux(WRITEABLE_EVENT as u32));
             } else {
-                self.queue.Notify(EventMaskFromLinux(EVENT_HUP as u32));
+                self.queue.Notify(EventMaskFromLinux(WRITEABLE_EVENT as u32));
             }
             return false;
         }
 
         let (trigger, addr, len) = self.buf.ConsumeAndGetAvailableWriteBuf(result as usize);
         if trigger {
-            self.queue.Notify(EventMaskFromLinux(EVENT_OUT as u32));
+            self.queue.Notify(EventMaskFromLinux(WRITEABLE_EVENT as u32));
         }
 
         if addr == 0 {
@@ -692,7 +692,7 @@ impl AsyncAccept {
         if result < 0 {
             self.acceptQueue.lock().SetErr(-result);
             self.queue
-                .Notify(EventMaskFromLinux((EVENT_ERR | EVENT_IN) as u32));
+                .Notify(EventMaskFromLinux((EVENT_ERR | READABLE_EVENT) as u32));
             return false;
         }
 
@@ -703,7 +703,7 @@ impl AsyncAccept {
             .lock()
             .EnqSocket(result, self.addr, self.len, sockBuf);
         if trigger {
-            self.queue.Notify(EventMaskFromLinux(EVENT_IN as u32));
+            self.queue.Notify(EventMaskFromLinux(READABLE_EVENT as u32));
         }
         self.len = 16;
 
@@ -745,7 +745,7 @@ impl AsyncFileRead {
         if result < 0 {
             self.buf.SetErr(-result);
             self.queue
-                .Notify(EventMaskFromLinux((EVENT_ERR | EVENT_IN) as u32));
+                .Notify(EventMaskFromLinux((EVENT_ERR | READABLE_EVENT) as u32));
             return false;
         }
 
@@ -753,7 +753,7 @@ impl AsyncFileRead {
         if result == 0 {
             self.buf.SetRClosed();
             if self.buf.HasReadData() {
-                self.queue.Notify(EventMaskFromLinux(EVENT_IN as u32));
+                self.queue.Notify(EventMaskFromLinux(READABLE_EVENT as u32));
             } else {
                 self.queue.Notify(EventMaskFromLinux(EVENT_HUP as u32));
             }
@@ -762,7 +762,7 @@ impl AsyncFileRead {
 
         let (trigger, addr, len) = self.buf.ProduceAndGetFreeReadBuf(result as usize);
         if trigger {
-            self.queue.Notify(EventMaskFromLinux(EVENT_IN as u32));
+            self.queue.Notify(EventMaskFromLinux(READABLE_EVENT as u32));
         }
 
         if len == 0 {
@@ -823,7 +823,7 @@ impl AsycnSendMsg {
         let buf = intern.ops.SocketBuf();
         if result < 0 {
             buf.SetErr(-result);
-            intern.ops.Notify(EVENT_ERR | EVENT_IN);
+            intern.ops.Notify(EVENT_ERR | READABLE_EVENT);
             return false;
         }
 
@@ -838,7 +838,7 @@ impl AsycnSendMsg {
         }*/
 
         if buf.ConsumeWriteBuf(result as usize) {
-            intern.ops.Notify(EVENT_OUT);
+            intern.ops.Notify(WRITEABLE_EVENT);
         }
 
         let (addr, cnt) = intern.ops.SocketBuf().GetAvailableWriteIovs();
@@ -906,7 +906,7 @@ impl AsycnRecvMsg {
         let buf = intern.ops.SocketBuf();
         if result < 0 {
             buf.SetErr(-result);
-            intern.ops.Notify(EVENT_ERR | EVENT_IN);
+            intern.ops.Notify(EVENT_ERR | READABLE_EVENT);
             return false;
         }
 
@@ -914,13 +914,13 @@ impl AsycnRecvMsg {
         if result == 0 {
             buf.SetRClosed();
             if buf.ProduceReadBuf(0) {
-                intern.ops.Notify(EVENT_IN);
+                intern.ops.Notify(READABLE_EVENT);
             }
             return false;
         }
 
         if buf.ProduceReadBuf(result as usize) {
-            intern.ops.Notify(EVENT_IN);
+            intern.ops.Notify(READABLE_EVENT);
         }
 
         //let recvMsgOp = AsycnRecvMsg::New(intern.fd, &intern.ops);

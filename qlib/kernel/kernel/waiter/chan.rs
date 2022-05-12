@@ -66,12 +66,12 @@ impl<T> Chan<T> {
                 if c.waiting {
                     c.data = Some(data);
                     c.waiting = false;
-                    c.queue.Notify(EVENT_IN);
+                    c.queue.Notify(READABLE_EVENT);
                     return Ok(());
                 }
 
                 let block = task.blocker.clone();
-                c.queue.EventRegister(task, &block.generalEntry, EVENT_OUT);
+                c.queue.EventRegister(task, &block.generalEntry, WRITEABLE_EVENT);
             }
 
             task.blocker.BlockGeneral()?;
@@ -94,7 +94,7 @@ impl<T> Chan<T> {
         if c.waiting {
             c.data = Some(data);
             c.waiting = false;
-            c.queue.Notify(EVENT_IN);
+            c.queue.Notify(READABLE_EVENT);
             return Ok(true);
         }
 
@@ -112,7 +112,7 @@ impl<T> Chan<T> {
 
                 let data = c.data.take();
                 if data.is_some() {
-                    c.queue.Notify(EVENT_OUT);
+                    c.queue.Notify(WRITEABLE_EVENT);
                     return Ok(data.unwrap());
                 }
 

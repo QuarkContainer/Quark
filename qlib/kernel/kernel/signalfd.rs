@@ -255,8 +255,8 @@ impl FileOperations for SignalOperation {
 
 impl Waitable for SignalOperation {
     fn Readiness(&self, _task: &Task, mask: EventMask) -> EventMask {
-        if mask & EVENT_IN != 0 && self.target.PendingSignalsNolock().0 & self.Mask().0 != 0 {
-            return EVENT_IN;
+        if mask & READABLE_EVENT != 0 && self.target.PendingSignalsNolock().0 & self.Mask().0 != 0 {
+            return READABLE_EVENT;
         }
 
         return 0;
