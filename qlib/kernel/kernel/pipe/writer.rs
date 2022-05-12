@@ -133,7 +133,6 @@ impl FileOperations for Writer {
 
         let n = match self.pipe.Write(task, srcs) {
             Err(e) => {
-                //info!("Pipe::WriteAt 2.... e is {:?}", e);
                 return Err(e);
             }
             Ok(n) => n,
