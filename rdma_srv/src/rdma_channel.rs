@@ -53,7 +53,7 @@ pub struct RDMAChannelIntern {
     // pub readBuf: Mutex<ByteStream>,
     // pub writeBuf: Mutex<ByteStream>,
     // pub consumeReadData: &'static AtomicU64,
-    pub sockfd: u32, //TODO: this is used to associate SQE and CQE, need double check it's a proper way to do it or not
+    // pub sockfd: u32, //TODO: this is used to associate SQE and CQE, need double check it's a proper way to do it or not
     pub sockBuf: Arc<SocketBuff>,
     pub lkey: u32,
     pub rkey: u32,
@@ -149,7 +149,7 @@ impl RDMAChannelIntern {
                 self.agent.SendResponse(RDMAResp {
                     user_data: 0,
                     msg: RDMARespMsg::RDMANotify(RDMANotifyResp {
-                        sockfd: self.sockfd,
+                        // sockfd: self.sockfd,
                         channelId: self.localId,
                         event: EVENT_OUT,
                     }),
@@ -206,8 +206,9 @@ impl RDMAChannelIntern {
             let (trigger, _addr, len) = self.sockBuf.ProduceAndGetFreeReadBuf(recvCount as usize);
             debug!("ProcessRDMARecvWriteImm::2, trigger {}", trigger);
             println!(
-                "ProcessRDMARecvWriteImm::3, sockfd: {}, channelId: {}, len: {}, recvCount: {}, trigger: {}",
-                self.sockfd, self.localId, len, recvCount, trigger
+                "ProcessRDMARecvWriteImm::3, channelId: {}, len: {}, recvCount: {}, trigger: {}",
+                // self.sockfd, 
+                self.localId, len, recvCount, trigger
             );
             if trigger {
                 // TODO: notify 'client' via CQ
@@ -215,7 +216,7 @@ impl RDMAChannelIntern {
                 self.agent.SendResponse(RDMAResp {
                     user_data: 0,
                     msg: RDMARespMsg::RDMANotify(RDMANotifyResp {
-                        sockfd: self.sockfd,
+                        // sockfd: self.sockfd,
                         channelId: self.localId,
                         event: EVENT_IN,
                     }),
@@ -405,7 +406,7 @@ impl RDMAChannel {
         let (raddr, len) = socketBuf.ReadBuf();
         Self(Arc::new(RDMAChannelIntern {
             localId: localId,
-            sockfd: 0,
+            // sockfd: 0,
             sockBuf: socketBuf,
             conn: rdmaConn,
             agent: RDMAAgent::NewDummyAgent(),
@@ -439,7 +440,7 @@ impl RDMAChannel {
         let (raddr, len) = socketBuf.ReadBuf();
         Self(Arc::new(RDMAChannelIntern {
             localId: localId,
-            sockfd: 0,
+            // sockfd: 0,
             sockBuf: socketBuf,
             conn: rdmaConn,
             agent: rdmaAgent.clone(),
@@ -470,7 +471,7 @@ impl RDMAChannel {
 
     pub fn CreateClientChannel(
         localId: u32,
-        sockfd: u32,
+        // sockfd: u32,
         lkey: u32,
         rkey: u32,
         socketBuf: Arc<SocketBuff>,
@@ -482,7 +483,7 @@ impl RDMAChannel {
         let (raddr, len) = socketBuf.ReadBuf();
         Self(Arc::new(RDMAChannelIntern {
             localId: localId,
-            sockfd: sockfd,
+            // sockfd: sockfd,
             sockBuf: socketBuf,
             conn: rdmaConn,
             agent: rdmaAgent.clone(),
@@ -503,7 +504,7 @@ impl RDMAChannel {
         }))
     }
 
-    pub fn CreateConnectRequest(&self) -> ConnectRequest {
+    pub fn CreateConnectRequest(&self, sockfd: u32) -> ConnectRequest {
         ConnectRequest {
             remoteChannelId: self.localId,
             raddr: self.raddr,
@@ -517,6 +518,7 @@ impl RDMAChannel {
                 .conn
                 .localInsertedRecvRequestCount
                 .swap(0, Ordering::SeqCst),
+            sockFd: sockfd
         }
     }
 

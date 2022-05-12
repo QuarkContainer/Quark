@@ -81,16 +81,19 @@ impl<T: 'static + Default + Copy> RingQueue<T> {
     }
 
     // precondition: there must be at least one free space
-    pub fn Push(&mut self, data: T) {
+    pub fn Push(&mut self, data: T) -> bool {
         let head = self.head.load(Ordering::Acquire);
         let tail = self.tail.load(Ordering::Relaxed);
         let available = tail.wrapping_sub(head) as usize;
         // println!("RingQueue::Push, available: {}, count: {}", available, self.Count());
-        assert!(available < self.Count());
+        if available == self.Count() {
+            return false;
+        }
 
         let idx = tail & self.RingMask();
         self.data[idx as usize] = data;
         self.tail.store(tail.wrapping_add(1), Ordering::Release);
+        return true;
     }
 }
 
@@ -164,7 +167,7 @@ pub struct RDMAAcceptResp {
 
 #[derive(Default, Clone, Copy, Debug)]
 pub struct RDMANotifyResp {
-    pub sockfd: u32,
+    // pub sockfd: u32,
     pub channelId: u32,
     pub event: EventMask,
 }

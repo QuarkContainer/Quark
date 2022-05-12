@@ -483,45 +483,39 @@ impl RDMASvcClient {
         }
     }
 
-    pub fn read(&self, sockfd: u32, sq: &mut RingQueue<RDMAReq>, channelId: u32) -> Result<()> {
+    pub fn read(&self, sockfd: u32, channelId: u32) -> Result<()> {
         println!("rdmaSvcCli::read 1");
-        if sq.SpaceCount() == 0 {
-            println!("rdmaSvcCli::read 6");
-            return Err(Error::NoEnoughSpace);
-        } else {
-            println!("rdmaSvcCli::read 7");
-            println!("before push...");
-            sq.Push(RDMAReq {
-                user_data: sockfd as u64,
-                msg: RDMAReqMsg::RDMARead(RDMAReadReq {
-                    sockfd,
-                    channelId: channelId,
-                }),
-            });
-
+        if self.cliShareRegion.lock().sq.Push(RDMAReq {
+            user_data: sockfd as u64,
+            msg: RDMAReqMsg::RDMARead(RDMAReadReq {
+                sockfd,
+                channelId: channelId,
+            }),
+        }) {
+            println!("rdmaSvcCli::read 2");
             self.updateBitmapAndWakeUpServerIfNecessary();
             Ok(())
+        } else {
+            println!("rdmaSvcCli::read 3");
+            return Err(Error::NoEnoughSpace);
         }
     }
 
-    pub fn write(&self, sockfd: u32, sq: &mut RingQueue<RDMAReq>, channelId: u32) -> Result<()> {
-        println!("rdmaSvcCli::write 1, sq.count: {}", sq.DataCount());
-        if sq.SpaceCount() == 0 {
-            // println!("rdmaSvcCli::write 6");
-            return Err(Error::NoEnoughSpace);
-        } else {
-            println!("rdmaSvcCli::write 7");
-            println!("before push...");
-            sq.Push(RDMAReq {
-                user_data: sockfd as u64,
-                msg: RDMAReqMsg::RDMAWrite(RDMAWriteReq {
-                    sockfd,
-                    channelId: channelId,
-                }),
-            });
-
+    pub fn write(&self, sockfd: u32, channelId: u32) -> Result<()> {
+        println!("rdmaSvcCli::write 1");
+        if self.cliShareRegion.lock().sq.Push(RDMAReq {
+            user_data: sockfd as u64,
+            msg: RDMAReqMsg::RDMAWrite(RDMAWriteReq {
+                sockfd,
+                channelId: channelId,
+            }),
+        }) {
+            println!("rdmaSvcCli::write 2");
             self.updateBitmapAndWakeUpServerIfNecessary();
             Ok(())
+        } else {
+            println!("rdmaSvcCli::write 3");
+            return Err(Error::NoEnoughSpace);
         }
     }
 
@@ -533,12 +527,8 @@ impl RDMASvcClient {
 
     pub fn close(&self, sockfd: u32) {}
 
-    pub fn ReadFromSocket(
-        &self,
-        sockInfo: &DataSock,
-        sockFdMappings: &HashMap<u32, i32>,
-        shareRegion: &mut MutexGuard<&mut ClientShareRegion>,
-    ) {
+    pub fn ReadFromSocket(&self, sockInfo: &DataSock, sockFdMappings: &HashMap<u32, i32>) {
+        println!("ReadFromSocket, 1");
         let mut buffer = sockInfo.sockBuff.writeBuf.lock();
         loop {
             let (iovsAddr, iovsCnt) = buffer.GetSpaceIovs();
@@ -558,8 +548,9 @@ impl RDMASvcClient {
             if cnt > 0 {
                 let trigger = buffer.Produce(cnt as usize);
                 println!("ReadFromSocket, trigger: {}", trigger);
+                // let mut shareRegion = self.cliShareRegion.lock();
                 if trigger {
-                    self.write(sockInfo.fd, &mut shareRegion.sq, sockInfo.channelId);
+                    self.write(sockInfo.fd, sockInfo.channelId);
                 }
             } else {
                 println!("ReadFromSocket, break because cnt: {}", cnt);
@@ -572,12 +563,7 @@ impl RDMASvcClient {
         }
     }
 
-    pub fn WriteToSocket(
-        &self,
-        sockInfo: &DataSock,
-        sockFdMappings: &HashMap<u32, i32>,
-        shareRegion: &mut MutexGuard<&mut ClientShareRegion>,
-    ) {
+    pub fn WriteToSocket(&self, sockInfo: &DataSock, sockFdMappings: &HashMap<u32, i32>) {
         let mut buffer = sockInfo.sockBuff.readBuf.lock();
 
         loop {
@@ -610,7 +596,8 @@ impl RDMASvcClient {
                 let bufSize = buffer.BufSize();
                 println!("WriteToSocket, consumedDataSize: {}", consumedDataSize);
                 if 2 * consumedDataSize >= bufSize {
-                    self.read(sockInfo.fd, &mut shareRegion.sq, sockInfo.channelId);
+                    // let mut shareRegion = self.cliShareRegion.lock();
+                    self.read(sockInfo.fd, sockInfo.channelId);
                 }
             } else {
                 println!("WriteToSocket, break because cnt: {}", cnt);

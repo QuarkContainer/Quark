@@ -516,7 +516,8 @@ impl RDMAConn {
         self.qps[0].PostRecv(wrId, addr, lkey)?;
         let current = self
             .localInsertedRecvRequestCount
-            .fetch_add(1, Ordering::SeqCst) + 1;
+            .fetch_add(1, Ordering::SeqCst)
+            + 1;
         println!("rdma_conn::PostRecv, current: {}", current);
         if current >= RECV_REQUEST_COUNT / 2 {
             self.ctrlChan
@@ -779,7 +780,8 @@ impl RDMAControlChannel {
                 rdmaChannel.agent.SendResponse(RDMAResp {
                     user_data: 0,
                     msg: RDMARespMsg::RDMAConnect(RDMAConnectResp {
-                        sockfd: rdmaChannel.sockfd,
+                        // sockfd: rdmaChannel.sockfd,
+                        sockfd: connectResponse.remoteSockFd,
                         ioBufIndex: rdmaChannel.ioBufIndex,
                         channelId: rdmaChannel.localId,
                     }),
@@ -841,6 +843,7 @@ impl RDMAControlChannel {
                     .conn
                     .localInsertedRecvRequestCount
                     .swap(0, Ordering::SeqCst),
+                remoteSockFd: connectRequest.sockFd,
             }))
             .unwrap();
             // agent.sockInfos.lock().get_mut(&sockfd).unwrap().acceptQueue.lock().EnqSocket(rdmaChannel.localId);
@@ -948,6 +951,7 @@ impl RDMAControlChannel {
                 .conn
                 .localInsertedRecvRequestCount
                 .swap(0, Ordering::SeqCst),
+            sockFd: 123,
         });
         self.chan
             .upgrade()
@@ -1053,6 +1057,7 @@ pub struct ConnectRequest {
     pub srcIpAddr: u32,
     pub srcPort: u16,
     pub recvRequestCount: u32,
+    pub sockFd: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -1063,6 +1068,7 @@ pub struct ConnectResponse {
     pub rkey: u32,
     pub rlen: u32,
     pub recvRequestCount: u32,
+    pub remoteSockFd: u32,
 }
 
 #[derive(Clone)]

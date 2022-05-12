@@ -66,7 +66,7 @@ pub struct RDMAAgentIntern {
     // TODO: indexes allocated for io buffer.
 
     //sockfd -> sockInfo
-    pub sockInfos: Mutex<HashMap<u32, SockInfo>>,
+    // pub sockInfos: Mutex<HashMap<u32, SockInfo>>,
 }
 
 #[derive(Clone)]
@@ -128,7 +128,7 @@ impl RDMAAgent {
             shareRegion: Mutex::new(shareRegion),
             ioBufIdMgr: Mutex::new(IdMgr::Init(0, 16)),
             keys: vec![[mr.LKey(), mr.RKey()]],
-            sockInfos: Mutex::new(HashMap::new()),
+            // sockInfos: Mutex::new(HashMap::new()),
         }))
     }
 
@@ -146,7 +146,7 @@ impl RDMAAgent {
             },
             ioBufIdMgr: Mutex::new(IdMgr::Init(0, 0)),
             keys: vec![[0, 0]],
-            sockInfos: Mutex::new(HashMap::new()),
+            // sockInfos: Mutex::new(HashMap::new()),
         }))
     }
 
@@ -203,7 +203,7 @@ impl RDMAAgent {
         println!("RDMAAgent::CreateClientRDMAChannel 5");
         let rdmaChannel = RDMAChannel::CreateClientChannel(
             channelId,
-            connectReq.sockfd,
+            // connectReq.sockfd,
             self.keys[ioBufIndex / 16][0],
             self.keys[ioBufIndex / 16][1],
             sockBuf,
@@ -271,16 +271,17 @@ impl RDMAAgent {
                     "insert listening: ipAddr: {}, port: {}",
                     msg.ipAddr, msg.port
                 );
-                self.sockInfos.lock().insert(
-                    msg.sockfd,
-                    SockInfo {
-                        sockfd: msg.sockfd,
-                        status: SockStatus::LISTENING,
-                    },
-                );
+                // self.sockInfos.lock().insert(
+                //     msg.sockfd,
+                //     SockInfo {
+                //         sockfd: msg.sockfd,
+                //         status: SockStatus::LISTENING,
+                //     },
+                // );
             }
             RDMAReqMsg::RDMAConnect(msg) => {
                 println!("connect: ipAddr: {}, port: {}", msg.dstIpAddr, msg.dstPort);
+                //TODOCtrlPlane: need get nodeIp from dstIpAddr
                 match RDMA_CTLINFO.podIpInfo.lock().get(&msg.dstIpAddr) {
                     Some(nodeIpAddr) => {
                         println!("RDMAReqMsg::RDMAConnect 1");
@@ -290,13 +291,13 @@ impl RDMAAgent {
                         let rdmaChannel =
                             self.CreateClientRDMAChannel(&msg, rdmaConn.clone(), shareRegion);
                         println!("RDMAReqMsg::RDMAConnect 3");
-                        self.sockInfos.lock().insert(
-                            msg.sockfd,
-                            SockInfo {
-                                sockfd: msg.sockfd,
-                                status: SockStatus::CONNECTING,
-                            },
-                        );
+                        // self.sockInfos.lock().insert(
+                        //     msg.sockfd,
+                        //     SockInfo {
+                        //         sockfd: msg.sockfd,
+                        //         status: SockStatus::CONNECTING,
+                        //     },
+                        // );
                         println!("RDMAReqMsg::RDMAConnect 4");
                         RDMA_SRV
                             .channels
@@ -304,7 +305,7 @@ impl RDMAAgent {
                             .insert(rdmaChannel.localId, rdmaChannel.clone());
 
                         println!("RDMAReqMsg::RDMAConnect 5");
-                        let connectReqeust = rdmaChannel.CreateConnectRequest();
+                        let connectReqeust = rdmaChannel.CreateConnectRequest(msg.sockfd);
                         println!("ConnectRequest before send: {:?}", connectReqeust);
                         rdmaConn
                             .ctrlChan

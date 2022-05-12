@@ -238,23 +238,29 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient) {
 
         for ev in &events {
             // print!("u64: {}, events: {:x}", ev.U64, ev.Events);
-            let mut shareRegion = rdmaSvcCli.cliShareRegion.lock();
             loop {
-                match shareRegion.cq.Pop() {
+                match rdmaSvcCli.cliShareRegion.lock().cq.Pop() {
                     Some(cq) => match cq.msg {
                         RDMARespMsg::RDMAConnect(response) => {
                             println!("response: {:?}", response);
                             let ioBufIndex = response.ioBufIndex as usize;
                             let mut sockFdInfos = rdmaSvcCli.dataSockFdInfos.lock();
                             let sockInfo = sockFdInfos.get_mut(&response.sockfd).unwrap();
-                            sockInfo.sockBuff = Arc::new(SocketBuff::InitWithShareMemory(
-                                MemoryDef::DEFAULT_BUF_PAGE_COUNT,
-                                &shareRegion.ioMetas[ioBufIndex].readBufAtoms as *const _ as u64,
-                                &shareRegion.ioMetas[ioBufIndex].writeBufAtoms as *const _ as u64,
-                                &shareRegion.ioMetas[ioBufIndex].consumeReadData as *const _ as u64,
-                                &shareRegion.iobufs[ioBufIndex].read as *const _ as u64,
-                                &shareRegion.iobufs[ioBufIndex].write as *const _ as u64,
-                            ));
+                            {
+                                let mut shareRegion = rdmaSvcCli.cliShareRegion.lock();
+                                sockInfo.sockBuff = Arc::new(SocketBuff::InitWithShareMemory(
+                                    MemoryDef::DEFAULT_BUF_PAGE_COUNT,
+                                    &shareRegion.ioMetas[ioBufIndex].readBufAtoms as *const _
+                                        as u64,
+                                    &shareRegion.ioMetas[ioBufIndex].writeBufAtoms as *const _
+                                        as u64,
+                                    &shareRegion.ioMetas[ioBufIndex].consumeReadData as *const _
+                                        as u64,
+                                    &shareRegion.iobufs[ioBufIndex].read as *const _ as u64,
+                                    &shareRegion.iobufs[ioBufIndex].write as *const _ as u64,
+                                ));
+                            }
+
                             sockInfo.channelId = response.channelId;
 
                             rdmaSvcCli
@@ -308,7 +314,7 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient) {
                             println!("Writing some data to sockFdInfo 1!");
                             if trigger {
                                 println!("Writing some data to sockFdInfo 1.1!");
-                                rdmaSvcCli.write(sockfd, &mut shareRegion.sq, sockInfo.channelId);
+                                rdmaSvcCli.write(sockfd, sockInfo.channelId);
                             }
                         }
                         RDMARespMsg::RDMAAccept(response) => {
@@ -318,6 +324,7 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient) {
 
                             let ioBufIndex = response.ioBufIndex as usize;
                             let dataSockFd = rdmaSvcCli.sockIdMgr.lock().AllocId().unwrap();
+                            let mut shareRegion = rdmaSvcCli.cliShareRegion.lock();
                             let dataSockInfo = DataSock {
                                 fd: dataSockFd, //Allocate fd
                                 srcIpAddr: sockInfo.srcIpAddr,
@@ -451,7 +458,7 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient) {
                                         // println!("Writing some data to sockFdInfo 2!");
                                         if trigger {
                                             // println!("Writing some data to sockFdInfo 2.1!");
-                                            rdmaSvcCli.write(sockfd, &mut shareRegion.sq, sockInfo.channelId);
+                                            rdmaSvcCli.write(sockfd, sockInfo.channelId);
                                         }
                                     }
                                     ////send random size end
