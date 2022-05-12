@@ -31,6 +31,7 @@ use super::super::super::fs::flags::*;
 use super::super::super::fs::inode::*;
 use super::super::super::fs::mount::*;
 use super::super::super::task::*;
+use super::super::super::SignalDef::*;
 use super::super::waiter::cond::*;
 use super::super::waiter::*;
 use super::buffer::*;
@@ -423,6 +424,14 @@ impl Pipe {
 
         // Can't write to a pipe with no readers.
         if !self.HasReaders() {
+            let thread = task.Thread();
+            let info = SignalInfo {
+                Signo: Signal::SIGPIPE,
+                ..Default::default()
+            };
+            thread
+                .SendSignal(&info)
+                .expect("SIGPIPE send signal fail");
             return Err(Error::SysError(SysErr::EPIPE));
         }
 
