@@ -271,16 +271,6 @@ fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
         return RepWritev(task, f, srcs);
     }
 
-    match f.Writev(task, srcs) {
-        Err(Error::ErrInterrupted) => return Err(Error::SysError(SysErr::ERESTARTSYS)),
-        Err(e) => {
-            if e != Error::SysError(SysErr::EWOULDBLOCK) || f.Flags().NonBlocking {
-                return Err(e);
-            }
-        }
-        Ok(n) => return Ok(n),
-    };
-
     let mut deadline = None;
 
     let dl = f.FileOp.SendTimeout();
