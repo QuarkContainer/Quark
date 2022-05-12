@@ -14,6 +14,7 @@
 
 use super::super::loader::loader::*;
 use super::super::memmgr::metadata::*;
+use super::super::threadmgr::pid_namespace::*;
 use super::super::qlib::auth::cap_set::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
@@ -298,6 +299,15 @@ pub fn SysPrctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             }
         }
         PR_SET_NO_NEW_PRIVS => {
+            if args.arg1 != 1 || args.arg2 != 0 || args.arg3 != 0 || args.arg4 != 0 {
+                return Err(Error::SysError(SysErr::EINVAL));
+            }
+
+            // PR_SET_NO_NEW_PRIVS is assumed to always be set.
+            // See kernel.Task.updateCredsForExecLocked.
+            return Ok(0);
+        }
+        PR_GET_NO_NEW_PRIVS => {
             if args.arg1 != 0 || args.arg2 != 0 || args.arg3 != 0 || args.arg4 != 0 {
                 return Err(Error::SysError(SysErr::EINVAL));
             }
@@ -340,6 +350,19 @@ pub fn SysPrctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             thread.DropBoundingCapability(cap as u64)?;
             return Ok(0);
         }
+        PR_SET_CHILD_SUBREAPER => {
+            // "If arg2 is nonzero, set the "child subreaper" attribute of
+            // the calling process; if arg2 is zero, unset the attribute."
+            //
+            // only if the task is already TID 1 in the PID namespace,
+            // because it already acts as a subreaper in that case.
+            let isInitTid = thread.PIDNamespace().IDOfTask(&thread) == INIT_TID;
+            if args.arg1 != 0 && isInitTid {
+                return Ok(0)
+            }
+
+            return Err(Error::SysError(SysErr::EINVAL));
+        }
         PR_GET_TIMING
         | PR_SET_TIMING
         | PR_GET_TSC
@@ -351,7 +374,6 @@ pub fn SysPrctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         | PR_MCE_KILL
         | PR_MCE_KILL_GET
         | PR_GET_TID_ADDRESS
-        | PR_SET_CHILD_SUBREAPER
         | PR_GET_CHILD_SUBREAPER
         | PR_GET_THP_DISABLE
         | PR_SET_THP_DISABLE
