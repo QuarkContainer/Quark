@@ -274,7 +274,7 @@ impl Waitable for AIOContext {
         }
 
         if aio.results.len() > 0 {
-            currentMask |= EVENT_IN;
+            currentMask |= READABLE_EVENT;
         }
 
         return mask & currentMask;
@@ -351,6 +351,6 @@ impl AIOContext {
             v.push(r.obj);
         }
 
-        aio.queue.Notify(EVENT_IN);
+        aio.queue.Notify(READABLE_EVENT);
     }
 }

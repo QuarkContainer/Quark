@@ -66,7 +66,7 @@ impl TimerListenerTrait for TimerOperationsInternal {
             *self.val.lock() += exp;
         };
 
-        self.queue.Notify(EVENT_IN);
+        self.queue.Notify(READABLE_EVENT);
     }
 
     // Destroy implements ktime.TimerListener.Destroy.
@@ -157,7 +157,7 @@ impl Waitable for TimerOperations {
         let mut ready = 0;
         let val = *self.ops.val.lock();
         if val != 0 {
-            ready |= EVENT_IN;
+            ready |= READABLE_EVENT;
         }
 
         return mask & ready;

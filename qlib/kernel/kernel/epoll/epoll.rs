@@ -477,8 +477,8 @@ impl Waitable for EventPoll {
     fn Readiness(&self, task: &Task, mask: EventMask) -> EventMask {
         let mut ready = 0;
 
-        if (mask & EVENT_IN) != 0 && self.EventsAvailable(task) {
-            ready |= EVENT_IN
+        if (mask & READABLE_EVENT) != 0 && self.EventsAvailable(task) {
+            ready |= READABLE_EVENT
         };
 
         return ready;

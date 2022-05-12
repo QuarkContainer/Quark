@@ -104,7 +104,7 @@ impl FileAsync {
         }
 
         a.e.lock().context = WaitContext::FileAsync(self.clone());
-        w.EventRegister(task, &a.e, EVENT_IN | EVENT_OUT | EVENT_ERR | EVENT_HUP);
+        w.EventRegister(task, &a.e, READABLE_EVENT | WRITEABLE_EVENT | EVENT_ERR | EVENT_HUP);
     }
 
     // Unregister stops monitoring a file.

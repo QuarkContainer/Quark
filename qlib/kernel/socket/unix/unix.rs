@@ -946,7 +946,7 @@ impl SockOperations for UnixSocketOperations {
         // We'll have to block. Register for notification and keep trying to
         // send all the data.
         let general = task.blocker.generalEntry.clone();
-        self.EventRegister(task, &general, EVENT_OUT);
+        self.EventRegister(task, &general, WRITEABLE_EVENT);
         defer!(self.EventUnregister(task, &general));
 
         let mut total = n;

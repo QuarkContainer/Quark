@@ -770,7 +770,7 @@ impl SockOperations for SocketOperations {
             self.EventRegister(task, &general, EVENT_OUT);
             defer!(self.EventUnregister(task, &general));
 
-            if self.Readiness(task, EVENT_OUT) == 0 {
+            if self.Readiness(task, WRITEABLE_EVENT) == 0 {
                 match task.blocker.BlockWithMonoTimer(true, None) {
                     Err(Error::ErrInterrupted) => {
                         return Err(Error::SysError(SysErr::ERESTARTSYS));

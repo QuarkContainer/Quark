@@ -70,12 +70,12 @@ impl<T> BufChan<T> {
                 if c.space > 0 {
                     c.buf.push_back(data);
                     c.space -= 1;
-                    c.queue.Notify(EVENT_IN);
+                    c.queue.Notify(READABLE_EVENT);
                     return Ok(());
                 }
 
                 let block = task.blocker.clone();
-                c.queue.EventRegister(task, &block.generalEntry, EVENT_OUT);
+                c.queue.EventRegister(task, &block.generalEntry, WRITEABLE_EVENT);
             }
 
             task.blocker.BlockGeneral()?;
@@ -98,7 +98,7 @@ impl<T> BufChan<T> {
         if c.space > 0 {
             c.buf.push_back(data);
             c.space -= 1;
-            c.queue.Notify(EVENT_IN);
+            c.queue.Notify(READABLE_EVENT);
             return Ok(true);
         }
 
@@ -117,7 +117,7 @@ impl<T> BufChan<T> {
                 if c.buf.len() > 0 {
                     let ret = c.buf.pop_front().unwrap();
                     c.space += 1;
-                    c.queue.Notify(EVENT_OUT);
+                    c.queue.Notify(WRITEABLE_EVENT);
                     return Ok(ret);
                 }
 
@@ -144,7 +144,7 @@ impl<T> BufChan<T> {
         if c.buf.len() > 0 {
             let ret = c.buf.pop_front().unwrap();
             c.space += 1;
-            c.queue.Notify(EVENT_OUT);
+            c.queue.Notify(WRITEABLE_EVENT);
             return Ok(Some(ret));
         }
 

@@ -106,7 +106,7 @@ impl FileOperations for Writer {
         let dsts = BlockSeq::NewFromSlice(dsts);
         let n = self.pipe.Read(task, dsts)?;
         if n > 0 {
-            self.pipe.Notify(EVENT_OUT);
+            self.pipe.Notify(WRITEABLE_EVENT);
             return Ok(n as i64);
         }
 
@@ -139,7 +139,7 @@ impl FileOperations for Writer {
         };
 
         if n > 0 {
-            self.pipe.Notify(EVENT_IN);
+            self.pipe.Notify(READABLE_EVENT);
             return Ok(n as i64);
         }
 

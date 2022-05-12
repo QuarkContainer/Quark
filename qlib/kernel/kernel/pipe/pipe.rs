@@ -497,7 +497,7 @@ impl Pipe {
         let mut ready = 0;
 
         if self.HasReaders() && intern.data.len() > 0 {
-            ready |= EVENT_IN;
+            ready |= READABLE_EVENT;
         }
 
         if !self.HasWriters() && intern.hadWriter {
@@ -522,7 +522,7 @@ impl Pipe {
     pub fn WReadinessLocked(&self, intern: &QMutexGuard<PipeInternal>) -> EventMask {
         let mut ready = 0;
         if self.HasWriters() && intern.size < intern.max {
-            ready |= EVENT_OUT;
+            ready |= WRITEABLE_EVENT;
         }
 
         if !self.HasReaders() {

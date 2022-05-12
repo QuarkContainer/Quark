@@ -110,7 +110,7 @@ impl EventOperations {
         // it is possible that a writer is waiting to write the maximum value
         // to the event.
         let queue = self.lock().wq.clone();
-        queue.Notify(EVENT_OUT);
+        queue.Notify(WRITEABLE_EVENT);
 
         let ptr = &val as *const _ as u64 as *const u8;
         let buf = unsafe { slice::from_raw_parts(ptr, 8) };
@@ -146,7 +146,7 @@ impl EventOperations {
         }
 
         let queue = self.lock().wq.clone();
-        queue.Notify(EVENT_IN);
+        queue.Notify(READABLE_EVENT);
 
         return Ok(());
     }
@@ -159,11 +159,11 @@ impl Waitable for EventOperations {
 
         let mut ready = 0;
         if e.val > 0 {
-            ready |= EVENT_IN;
+            ready |= READABLE_EVENT;
         }
 
         if e.val < core::u64::MAX - 1 {
-            ready |= EVENT_OUT;
+            ready |= WRITEABLE_EVENT;
         }
 
         return mask & ready;

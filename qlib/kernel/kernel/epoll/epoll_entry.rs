@@ -92,7 +92,7 @@ impl PollEntry {
             lists.waitingList.Remove(self);
             lists.readyList.PushBack(self);
 
-            epoll.queue.Notify(EVENT_IN);
+            epoll.queue.Notify(READABLE_EVENT);
         }
     }
 

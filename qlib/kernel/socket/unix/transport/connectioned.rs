@@ -338,7 +338,7 @@ impl ConnectionedEndPoint {
 
                 let q = self.baseEndpoint.lock().queue.clone();
                 q.Notify(EVENT_IN);
-                ce.WaiterQueue().Notify(EVENT_OUT);
+                ce.WaiterQueue().Notify(WRITEABLE_EVENT);
 
                 return Ok(());
             }
@@ -602,16 +602,16 @@ impl Waitable for ConnectionedEndPoint {
 
         let mut ready = 0;
         if e.Connected() {
-            if mask & EVENT_IN != 0 && e.baseEndpoint.lock().receiver.as_ref().unwrap().Readable() {
-                ready |= EVENT_IN
+            if mask & READABLE_EVENT != 0 && e.baseEndpoint.lock().receiver.as_ref().unwrap().Readable() {
+                ready |= READABLE_EVENT
             }
-            if mask & EVENT_OUT != 0 && e.baseEndpoint.lock().connected.as_ref().unwrap().Writable()
+            if mask & WRITEABLE_EVENT != 0 && e.baseEndpoint.lock().connected.as_ref().unwrap().Writable()
             {
-                ready |= EVENT_OUT
+                ready |= WRITEABLE_EVENT
             }
         } else if e.Listening() {
-            if mask & EVENT_IN != 0 && e.acceptedChan.lock().as_ref().unwrap().Len() > 0 {
-                ready |= EVENT_IN
+            if mask & READABLE_EVENT != 0 && e.acceptedChan.lock().as_ref().unwrap().Len() > 0 {
+                ready |= READABLE_EVENT
             }
         }
 

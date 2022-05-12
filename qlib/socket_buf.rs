@@ -111,13 +111,13 @@ impl SocketBuff {
     pub fn Events(&self) -> EventMask {
         let mut event = EventMask::default();
         if self.readBuf.lock().AvailableDataSize() > 0 {
-            event |= EVENT_IN;
+            event |= READABLE_EVENT;
         } else if self.RClosed() || self.WClosed() {
-            event |= EVENT_IN
+            event |= READABLE_EVENT
         }
 
         if self.writeBuf.lock().AvailableSpace() > 0 {
-            event |= EVENT_OUT;
+            event |= WRITEABLE_EVENT;
         }
 
         if self.Error() != 0 {
@@ -276,7 +276,7 @@ impl AcceptQueueIntern {
     pub fn Events(&self) -> EventMask {
         let mut event = EventMask::default();
         if self.queue.len() > 0 {
-            event |= EVENT_IN;
+            event |= READABLE_EVENT;
         }
 
         if self.error != 0 {
