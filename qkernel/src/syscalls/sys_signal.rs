@@ -20,7 +20,7 @@ use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::*;
 use super::super::threadmgr::thread::*;
-use super::super::threadmgr::threads::*;
+use super::super::threadmgr::pid_namespace::*;
 use super::super::SignalDef::*;
 use super::sys_poll::*;
 

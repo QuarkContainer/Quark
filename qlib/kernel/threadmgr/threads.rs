@@ -38,8 +38,6 @@ use super::task_sched::*;
 use super::thread::*;
 use super::thread_group::*;
 
-pub const INIT_TID: ThreadID = 1;
-
 #[derive(Clone, Default)]
 pub struct TaskSetInternal {
     pub root: Option<PIDNamespace>,

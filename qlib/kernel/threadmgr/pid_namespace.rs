@@ -27,8 +27,8 @@ use super::thread::*;
 use super::thread_group::*;
 use super::threads::*;
 
-const TASKS_LIMIT: ThreadID = 1 << 16;
-const INIT_TID: ThreadID = 1;
+pub const TASKS_LIMIT: ThreadID = 1 << 16;
+pub const INIT_TID: ThreadID = 1;
 
 #[derive(Default)]
 pub struct PIDNamespaceInternal {
