@@ -87,7 +87,7 @@ pub fn Timestamp() -> i64 {
 
 #[inline]
 pub fn Scale(tsc: i64) -> i64 {
-    tsc * 1000 / (LoadVcpuFreq() / 1_000)
+    (tsc as i128 * 1000_000 / LoadVcpuFreq() as i128) as i64
 }
 
 pub fn VcpuFreqInit() {
