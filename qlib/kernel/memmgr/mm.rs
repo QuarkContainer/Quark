@@ -1032,22 +1032,10 @@ impl MemoryManager {
             return;
         }
 
-        let refCount = super::super::PAGE_MGR.GetRef(phyAddr).expect(&format!(
-            "CopyOnWrite PAGE_MGR GetRef addr {:x} fail",
-            phyAddr
-        ));
-
         let exec = vma.effectivePerms.Exec();
-        if refCount == 1 && vma.mappable.is_none() {
-            //print!("CopyOnWriteLocked enable write ... pageaddr is {:x}", pageAddr);
-            self.EnableWriteLocked(pageAddr, exec);
-        } else {
-            // Copy On Write
-            let page = { super::super::PAGE_MGR.AllocPage(true).unwrap() };
-            CopyPage(page, phyAddr);
-            self.MapPageWriteLocked(pageAddr, page, exec);
-            super::super::PAGE_MGR.DerefPage(page);
-        }
+        let page = { super::super::PAGE_MGR.AllocPage(false).unwrap() };
+        CopyPage(page, phyAddr);
+        self.MapPageWriteLocked(pageAddr, page, exec);
     }
 
     pub fn CopyOnWrite(&self, pageAddr: u64, vma: &VMA) {
@@ -1357,7 +1345,6 @@ impl MemoryManager {
 
     pub fn Fork(&self) -> Result<Self> {
         let _ml = self.MappingWriteLock();
-
         let layout = *self.layout.lock();
         let mmIntern2 = MemoryManagerInternal {
             uid: NewUID(),
