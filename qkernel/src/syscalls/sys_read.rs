@@ -245,8 +245,9 @@ fn RepReadv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
 }
 
 fn readv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
-    let mut iovs = task.GetIOVecPermission(dsts, true)?;
-    let dsts = &mut iovs;
+    //let mut iovs = task.GetIOVecPermission(dsts, true)?;
+    //let dsts = &mut iovs;
+    task.CheckIOVecPermission(dsts, true)?;
 
     let wouldBlock = f.WouldBlock();
     if !wouldBlock {
@@ -331,8 +332,10 @@ fn readv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
 }
 
 fn preadv(task: &Task, f: &File, dsts: &mut [IoVec], offset: i64) -> Result<i64> {
-    let mut iovs = task.GetIOVecPermission(dsts, true)?;
-    let dsts = &mut iovs;
+    //let mut iovs = task.GetIOVecPermission(dsts, true)?;
+    //let dsts = &mut iovs;
+
+    task.CheckIOVecPermission(dsts, true)?;
     match f.Preadv(task, dsts, offset) {
         Err(e) => {
             if e != Error::SysError(SysErr::EWOULDBLOCK) || f.Flags().NonBlocking {
