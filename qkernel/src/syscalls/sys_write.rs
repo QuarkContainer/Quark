@@ -39,7 +39,7 @@ pub fn Write(task: &Task, fd: i32, addr: u64, size: i64) -> Result<i64> {
 
     let file = task.GetFile(fd)?;
 
-    /*let fopsType = file.FileOp.FopsType();
+    let fopsType = file.FileOp.FopsType();
     if fd <= 2 || fopsType == FileOpsType::TTYFileOps {
          use super::super::util::cstring::*;
         let (str, err) = CString::CopyInString(task, addr, size as usize);
@@ -51,7 +51,7 @@ pub fn Write(task: &Task, fd: i32, addr: u64, size: i64) -> Result<i64> {
                  error!("(Data) Write fail: {}", str);
              }
          }
-    }*/
+    }
 
     if !file.Flags().Write {
         return Err(Error::SysError(SysErr::EBADF));
@@ -91,7 +91,7 @@ pub fn Pwrite64(task: &Task, fd: i32, addr: u64, size: i64, offset: i64) -> Resu
 
     let file = task.GetFile(fd)?;
 
-    if offset < 0 {
+    if offset < 0 || core::i64::MAX - offset < size {
         return Err(Error::SysError(SysErr::EINVAL));
     }
 
