@@ -46,7 +46,6 @@ impl MemoryManager {
             let src = iov.start as *const u8;
             let src = unsafe { slice::from_raw_parts(src, iov.len) };
             dst[offset..offset + iov.len].clone_from_slice(src);
-            super::super::asm::sfence();
 
             offset += iov.len;
         }
@@ -64,8 +63,7 @@ impl MemoryManager {
         for iov in &task.GetMut().iovs {
             let dst = iov.start as *mut u8;
             let dst = unsafe { slice::from_raw_parts_mut(dst, iov.len) };
-            super::super::asm::lfence();
-
+            
             dst[0..iov.len].clone_from_slice(&src[offset..offset + iov.len]);
             offset += iov.len;
         }

@@ -14,7 +14,6 @@
 
 use alloc::string::String;
 use alloc::string::ToString;
-use alloc::vec::Vec;
 use cache_padded::CachePadded;
 use core::alloc::{GlobalAlloc, Layout};
 use core::cmp::max;
@@ -22,11 +21,14 @@ use core::mem::size_of;
 use core::ptr::NonNull;
 use core::sync::atomic::Ordering;
 use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize};
+use alloc::collections::vec_deque::VecDeque;
 
 use super::buddy_allocator::Heap;
 
 use super::super::super::kernel_def::VcpuId;
 use super::super::kernel::vcpu::CPU_LOCAL;
+use super::super::kernel::Tsc;
+use super::super::kernel::LoadVcpuFreq;
 use super::super::linux_def::*;
 use super::super::mutex::*;
 use super::super::pagetable::AlignedAllocator;
@@ -38,6 +40,28 @@ pub const FREE_BATCH: usize = 1024; // free 10 blocks each time.
 pub const ORDER: usize = 33; //1GB
 
 //pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
+
+pub fn CheckZeroPage(pageStart: u64) {
+    use alloc::slice;
+    unsafe {
+        let arr = slice::from_raw_parts_mut(pageStart as *mut u64, 512);
+        for i in 0..512 {
+            if arr[i] != 0 {
+                panic!("alloc non zero page {:x}", pageStart);
+            }
+        }
+    }
+}
+
+pub fn SetZeroPage(pageStart: u64) {
+    use alloc::slice;
+    unsafe {
+        let arr = slice::from_raw_parts_mut(pageStart as *mut u64, 512);
+        for i in 0..512 {
+            arr[i] = 0;
+        }
+    }
+}
 
 #[derive(Default)]
 pub struct GlobalVcpuAllocator {
@@ -114,46 +138,59 @@ impl StackAllocator {
 
 #[derive(Debug, Default)]
 pub struct PageAllocator {
-    pub pages: Vec<u64>,
+    pub pages: VecDeque<(u64, i64)>,
 }
 
 impl PageAllocator {
     pub const PAGE_CACHE_COUNT: usize = 16;
+    pub const MAX_PAGE_CACHE_COUNT: usize = 1024 * 16;
 
     pub fn AllocPage(&mut self) -> Option<u64> {
-        return self.pages.pop();
+        match self.pages.pop_front() {
+            None => return None,
+            Some((addr, ts)) => {
+                if self.pages.len() >= Self::MAX_PAGE_CACHE_COUNT {
+                    return Some(addr)
+                }
+
+                //cool down for 100 ms
+                if Tsc::RawRdtsc() - ts > (LoadVcpuFreq() / 10) {
+                    return Some(addr)
+                }
+
+                self.pages.push_front((addr, ts));
+                return None
+            }
+        }
     }
 
     pub fn FreePage(&mut self, page: u64) {
-        if self.pages.len() > 4096 * 8 {
-            // when there are more than 32K pages, free half of them at first to avoid use too many memory(>2MB) in vec
-            // there is chance the TLB is still in use, todo: find better way to do that
-            let vec2 = self.pages.split_off(4096 * 4);
-            for page in &self.pages {
-                AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize)
-                    .Free(*page)
-                    .unwrap();
+        let ts = Tsc::RawRdtsc();
+        while self.pages.len() > Self::PAGE_CACHE_COUNT {
+            match self.AllocPage() {
+                None => break,
+                Some(addr) => {
+                    AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize)
+                        .Free(addr)
+                        .unwrap();
+                }
             }
-            self.pages = vec2;
         }
 
-        self.pages.push(page);
-        //AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize).Free(page).unwrap();
+        self.pages.push_back((page, ts));
     }
 
     pub fn Clean(&mut self) {
-        if self.pages.len() <= Self::PAGE_CACHE_COUNT {
-            return;
-        }
-
         while self.pages.len() > Self::PAGE_CACHE_COUNT {
-            let page = self.pages.pop().unwrap();
-            AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize)
-                .Free(page)
-                .unwrap();
+            match self.AllocPage() {
+                None => break,
+                Some(addr) => {
+                    AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize)
+                        .Free(addr)
+                        .unwrap();
+                }
+            }
         }
-
-        self.pages.shrink_to_fit();
     }
 }
 
