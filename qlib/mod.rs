@@ -120,7 +120,7 @@ pub const HYPERCALL_RELEASE_VCPU: u16 = 24;
 
 pub const DUMMY_TASKID: TaskId = TaskId::New(0xffff_ffff);
 
-pub const MAX_VCPU_COUNT: usize = 16;
+pub const MAX_VCPU_COUNT: usize = 64;
 
 #[allow(non_camel_case_types)]
 #[repr(u64)]
