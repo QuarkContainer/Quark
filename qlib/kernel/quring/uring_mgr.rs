@@ -369,12 +369,11 @@ impl QUring {
         buf: Arc<SocketBuff>,
         srcs: &[IoVec],
         fops: Arc<FileOperations>,
-        lockGuard: QAsyncLockGuard,
     ) -> Result<i64> {
         let (count, writeBuf) = buf.Writev(task, srcs)?;
 
         if let Some((addr, len)) = writeBuf {
-            let writeop = AsyncFiletWrite::New(fd, queue, buf, addr, len, fops, lockGuard);
+            let writeop = AsyncFiletWrite::New(fd, queue, buf, addr, len, fops);
 
             IOURING.AUCall(AsyncOps::AsyncFiletWrite(writeop));
         }
