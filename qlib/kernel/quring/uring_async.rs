@@ -1001,7 +1001,7 @@ impl AIOWrite {
         let srcs = task.IovsFromAddr(cb.buf, cb.bytes as usize)?;
         let size = IoVec::NumBytes(&srcs);
         let mut buf = DataBuff::New(size);
-        task.CopyDataInFromIovs(&mut buf.buf, &srcs)?;
+        task.CopyDataInFromIovs(&mut buf.buf, &srcs, false)?;
 
         return Ok(Self {
             fd: cb.fd as i32,
@@ -1128,7 +1128,7 @@ impl AIORead {
         if result > 0 {
             let task = Task::GetTask(self.taskId);
             let len = task
-                .CopyDataOutToIovs(&self.buf.buf[0..result as usize], &self.iovs)
+                .CopyDataOutToIovs(&self.buf.buf[0..result as usize], &self.iovs, false)
                 .expect("AIORead Process fail ...");
             assert!(len == result as usize);
         }

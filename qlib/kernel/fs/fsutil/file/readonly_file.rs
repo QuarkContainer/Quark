@@ -58,7 +58,7 @@ impl ReadonlyFileNode for SnapshotReadonlyFileNode {
             return Ok(0);
         }
 
-        let n = task.CopyDataOutToIovs(&self.data[offset as usize..], dsts)?;
+        let n = task.CopyDataOutToIovs(&self.data[offset as usize..], dsts, true)?;
 
         return Ok(n as i64);
     }

@@ -523,7 +523,7 @@ pub fn HostIoctlIFConf(task: &Task, hostfd: i32, request: u64, addr: u64) -> Res
     }
 
     task.mm
-        .CopyDataOut(task, ifr.Ptr, ifc.Ptr, ifr.Len as usize)?;
+        .CopyDataOut(task, ifr.Ptr, ifc.Ptr, ifr.Len as usize, false)?;
 
     ifc.Len = ifr.Len;
 
@@ -589,9 +589,11 @@ impl FileOperations for SocketOperations {
             _ => {
                 let size = IoVec::NumBytes(dsts);
                 let buf = DataBuff::New(size);
-                let iovs = buf.Iovs();
+                let iovs = buf.Iovs(size);
                 let ret = IORead(self.fd, &iovs)?;
-                task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
+
+                // handle partial memcopy
+                task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts, false)?;
                 return Ok(ret);
             }
         }
@@ -617,8 +619,8 @@ impl FileOperations for SocketOperations {
             _ => {
                 let size = IoVec::NumBytes(srcs);
                 let mut buf = DataBuff::New(size);
-                let iovs = buf.Iovs();
-                task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
+                let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;
+                let iovs = buf.Iovs(len);
                 return IOWrite(self.fd, &iovs);
             }
         }
@@ -1375,7 +1377,7 @@ impl SockOperations for SocketOperations {
 
         let size = IoVec::NumBytes(dsts);
         let buf = DataBuff::New(size);
-        let iovs = buf.Iovs();
+        let iovs = buf.Iovs(size);
 
         let mut msgHdr = MsgHdr::default();
         if IoVec::NumBytes(dsts) != 0 {
@@ -1450,7 +1452,8 @@ impl SockOperations for SocketOperations {
 
         controlVec.resize(msgHdr.msgControlLen, 0);
 
-        task.CopyDataOutToIovs(&buf.buf[0..res as usize], dsts)?;
+        // todo: need to handle partial copy
+        let _len = task.CopyDataOutToIovs(&buf.buf[0..res as usize], dsts, false)?;
         return Ok((res as i64, msgFlags, senderAddr, controlVec));
     }
 
@@ -1539,9 +1542,8 @@ impl SockOperations for SocketOperations {
 
         let size = IoVec::NumBytes(srcs);
         let mut buf = DataBuff::New(size);
-        let iovs = buf.Iovs();
-
-        task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
+        let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;
+        let iovs = buf.Iovs(len);
 
         if IoVec::NumBytes(srcs) != 0 {
             msgHdr.iov = &iovs[0] as *const _ as u64;

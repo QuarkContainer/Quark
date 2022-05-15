@@ -668,12 +668,14 @@ impl HostInodeOp {
         };
         let buf = DataBuff::New(size);
 
-        let iovs = buf.Iovs();
+        let iovs = buf.Iovs(size);
         let inodeType = self.InodeType();
 
         if inodeType != InodeType::RegularFile && inodeType != InodeType::CharacterDevice {
             let ret = IORead(hostIops.HostFd(), &iovs)?;
-            task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
+
+            // todo: handle partial write
+            task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts, false)?;
             return Ok(ret as i64);
         } else {
             if inodeType == InodeType::RegularFile && SHARESPACE.config.read().MmapRead {
@@ -689,7 +691,7 @@ impl HostInodeOp {
 
                 let srcIovs =
                     intern.MapInternal(task, &Range::New(offset as u64, (end - offset) as u64))?;
-                let count = task.CopyIovsOutToIovs(&srcIovs, dsts)?;
+                let count = task.CopyIovsOutToIovs(&srcIovs, dsts, true)?;
 
                 return Ok(count as i64);
             }
@@ -713,7 +715,7 @@ impl HostInodeOp {
                         return Err(Error::SysError(-ret as i32));
                     }
                 } else if ret >= 0 {
-                    task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
+                    task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts, false)?;
                     return Ok(ret as i64);
                 }
 
@@ -724,14 +726,14 @@ impl HostInodeOp {
 
             let offset = if inodeType == InodeType::CharacterDevice {
                 let ret = IOTTYRead(hostIops.HostFd(), &iovs)?;
-                task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
+                task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts, false)?;
                 return Ok(ret as i64);
             } else {
                 offset
             };
 
             let ret = IOReadAt(hostIops.HostFd(), &iovs, offset as u64)?;
-            task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
+            task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts, false)?;
             return Ok(ret as i64);
         }
     }
@@ -759,9 +761,9 @@ impl HostInodeOp {
         };
 
         let mut buf = DataBuff::New(size);
-        let iovs = buf.Iovs();
+        let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;
+        let iovs = buf.Iovs(len);
 
-        task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
         let inodeType = self.InodeType();
 
         if inodeType != InodeType::RegularFile && inodeType != InodeType::CharacterDevice {
@@ -829,8 +831,8 @@ impl HostInodeOp {
             };
             let mut buf = DataBuff::New(size);
 
-            task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
-            let iovs = buf.Iovs();
+            let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;
+            let iovs = buf.Iovs(len);
 
             let iovsAddr = &iovs[0] as *const _ as u64;
             let iovcnt = 1;

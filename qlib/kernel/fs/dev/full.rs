@@ -334,7 +334,7 @@ impl FileOperations for FullFileOperations {
         let mut buf = DataBuff::New(size);
         buf.Zero();
 
-        let done = task.CopyDataOutToIovs(&buf.buf, dsts)?;
+        let done = task.CopyDataOutToIovs(&buf.buf, dsts, true)?;
         return Ok(done as i64);
     }
 

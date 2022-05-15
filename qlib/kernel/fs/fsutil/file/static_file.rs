@@ -90,7 +90,7 @@ impl FileOperations for StaticFile {
             return Ok(0);
         }
 
-        let n = task.CopyDataOutToIovs(&self.content[offset as usize..], dsts)?;
+        let n = task.CopyDataOutToIovs(&self.content[offset as usize..], dsts, true)?;
         return Ok(n as i64);
     }
 

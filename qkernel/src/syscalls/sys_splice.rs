@@ -113,7 +113,7 @@ pub fn Splice(task: &Task, dst: &File, src: &File, opts: &mut SpliceOpts) -> Res
                     // any mode changes, so should still be more efficient.
 
                     let buf = DataBuff::New(opts.Length as usize);
-                    let mut iovs = buf.Iovs();
+                    let mut iovs = buf.Iovs(opts.Length as usize);
 
                     let srcStart = if opts.SrcOffset { opts.SrcStart } else { 0 };
 

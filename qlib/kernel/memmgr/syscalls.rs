@@ -653,7 +653,7 @@ impl MemoryManager {
             });
         }
 
-        self.V2PLocked(task, addr, 4, &mut task.GetMut().iovs, true)?;
+        self.V2PLocked(task, addr, 4, &mut task.GetMut().iovs, true, false)?;
         defer!(task.GetMut().iovs.clear());
         assert!(task.GetMut().iovs.len() == 1);
 

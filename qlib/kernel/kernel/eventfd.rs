@@ -231,7 +231,7 @@ impl FileOperations for EventOperations {
 
         let buf = DataBuff::New(size);
         self.Read(task, buf.BlockSeq())?;
-        task.CopyDataOutToIovs(&buf.buf, dsts)?;
+        task.CopyDataOutToIovs(&buf.buf, dsts, false)?;
         return Ok(8);
     }
 
@@ -249,9 +249,9 @@ impl FileOperations for EventOperations {
         }
 
         let mut buf = DataBuff::New(size);
-        task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
+        let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;
 
-        self.Write(task, buf.BlockSeq())?;
+        self.Write(task, buf.BlockSeqWithLen(len))?;
         return Ok(8);
     }
 

@@ -103,7 +103,7 @@ impl FileOperations for Reader {
             self.pipe.Notify(WRITEABLE_EVENT)
         }
 
-        task.CopyDataOutToIovs(&buf.buf[0..n], dsts)?;
+        task.CopyDataOutToIovs(&buf.buf[0..n], dsts, false)?;
 
         return Ok(n as i64);
     }
@@ -119,8 +119,8 @@ impl FileOperations for Reader {
         //error!("pipe reader WriteAt id {}, writers is {}", self.pipe.Uid(), self.pipe.Writers());
         let size = IoVec::NumBytes(srcs);
         let mut buf = DataBuff::New(size);
-        task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
-        let n = self.pipe.Write(task, buf.BlockSeq())?;
+        let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;
+        let n = self.pipe.Write(task, buf.BlockSeqWithLen(len))?;
         if n > 0 {
             self.pipe.Notify(READABLE_EVENT)
         }

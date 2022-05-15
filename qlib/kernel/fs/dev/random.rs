@@ -341,9 +341,9 @@ impl FileOperations for RandomFileOperations {
             reader: &mut ioReader,
         };
 
-        let ret = reader.ReadToBlocks(BlockSeq::NewFromSlice(&buf.Iovs()))?;
-        task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
-        return Ok(ret);
+        let ret = reader.ReadToBlocks(BlockSeq::NewFromSlice(&buf.Iovs(len)))?;
+        let ret = task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts, true)?;
+        return Ok(ret as i64);
     }
 
     fn WriteAt(

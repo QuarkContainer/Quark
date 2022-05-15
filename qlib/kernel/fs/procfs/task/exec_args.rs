@@ -201,12 +201,12 @@ impl ReadonlyFileNode for ExecArgReadonlyFileNode {
                 }
                 buf = &ret[..];
 
-                let n = task.CopyDataOutToIovs(buf, dsts)?;
+                let n = task.CopyDataOutToIovs(buf, dsts, true)?;
                 return Ok(n as i64);
             }
         }
 
-        let n = task.CopyDataOutToIovs(buf, dsts)?;
+        let n = task.CopyDataOutToIovs(buf, dsts, true)?;
         return Ok(n as i64);
     }
 }

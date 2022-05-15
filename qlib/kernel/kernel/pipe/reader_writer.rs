@@ -111,7 +111,7 @@ impl FileOperations for ReaderWriter {
             self.pipe.Notify(WRITEABLE_EVENT)
         }
 
-        task.CopyDataOutToIovs(&buf.buf[0..n], dsts)?;
+        task.CopyDataOutToIovs(&buf.buf[0..n], dsts, false)?;
 
         return Ok(n as i64);
     }
@@ -126,8 +126,8 @@ impl FileOperations for ReaderWriter {
     ) -> Result<i64> {
         let size = IoVec::NumBytes(srcs);
         let mut buf = DataBuff::New(size);
-        task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
-        let srcs = BlockSeq::New(&buf.buf);
+        let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;
+        let srcs = BlockSeq::New(&buf.buf[..len]);
         let n = self.pipe.Write(task, srcs)?;
         if n > 0 {
             self.pipe.Notify(READABLE_EVENT)
