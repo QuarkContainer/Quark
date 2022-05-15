@@ -21,7 +21,6 @@ use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
 use super::super::super::super::socket_buf::*;
 use super::super::super::guestfdnotifier::*;
-use super::super::super::kernel::waiter::qlock::*;
 use super::super::super::kernel::waiter::*;
 use super::super::super::quring::QUring;
 use super::super::super::task::*;
@@ -385,7 +384,6 @@ pub struct TTYFileOpsInternal {
     pub fd: i32,
     pub buf: Arc<SocketBuff>,
     pub queue: Queue,
-    pub bufWriteLock: QAsyncLock,
 }
 
 impl TTYFileOpsInternal {
@@ -439,7 +437,6 @@ impl TTYFileOps {
     pub fn New(fops: Arc<HostFileOp>) -> Self {
         let queue = fops.InodeOp.lock().queue.clone();
         let fd = fops.InodeOp.lock().HostFd;
-        let bufWriteLock = fops.InodeOp.lock().bufWriteLock.clone();
         let internal = TTYFileOpsInternal {
             fileOps: fops,
             termios: DEFAULT_SLAVE_TERMIOS,
@@ -448,7 +445,6 @@ impl TTYFileOps {
             fd: fd,
             buf: Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT)),
             queue: queue,
-            bufWriteLock: bufWriteLock,
         };
 
         if SHARESPACE.config.read().UringIO && ENABLE_RINGBUF {
@@ -476,10 +472,6 @@ impl TTYFileOps {
 
     pub fn ForegroundProcessGroup(&self) -> Option<ProcessGroup> {
         return self.lock().fgProcessgroup.clone();
-    }
-
-    pub fn BufWriteLock(&self) -> QAsyncLock {
-        return self.lock().bufWriteLock.clone();
     }
 }
 
@@ -588,7 +580,7 @@ impl FileOperations for TTYFileOps {
             let fd = self.lock().fd;
             let queue = self.lock().queue.clone();
             let ringBuf = self.lock().buf.clone();
-            let lock = self.BufWriteLock().Lock(task);
+
             return QUring::RingFileWrite(
                 task,
                 fd,
@@ -596,7 +588,6 @@ impl FileOperations for TTYFileOps {
                 ringBuf,
                 srcs,
                 Arc::new(self.clone()),
-                lock,
             );
         }
 
@@ -625,11 +616,6 @@ impl FileOperations for TTYFileOps {
     }
 
     fn Flush(&self, task: &Task, f: &File) -> Result<()> {
-        if SHARESPACE.config.read().UringIO && ENABLE_RINGBUF {
-            // try to gain the lock once, release immediately
-            self.BufWriteLock().Lock(task);
-        }
-
         let fops = self.lock().fileOps.clone();
         let res = fops.Flush(task, f);
         return res;

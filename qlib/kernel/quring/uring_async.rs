@@ -599,7 +599,6 @@ pub struct AsyncFiletWrite {
     pub addr: u64,
     pub len: usize,
     pub fops: Arc<FileOperations>,
-    pub lockGuard: QAsyncLockGuard,
 }
 
 impl AsyncFiletWrite {
@@ -656,7 +655,6 @@ impl AsyncFiletWrite {
         addr: u64,
         len: usize,
         fops: Arc<FileOperations>,
-        lockGuard: QAsyncLockGuard,
     ) -> Self {
         return Self {
             fd,
@@ -665,7 +663,6 @@ impl AsyncFiletWrite {
             addr,
             len,
             fops,
-            lockGuard,
         };
     }
 }
