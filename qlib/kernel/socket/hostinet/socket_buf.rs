@@ -25,7 +25,7 @@ impl SocketBuff {
         let mut buf = self.readBuf.lock();
         let srcIovs = buf.GetDataIovsVec();
         if srcIovs.len() > 0 {
-            cnt = task.mm.CopyIovsOutFromIovs(task, &srcIovs, iovs)?;
+            cnt = task.mm.CopyIovsOutFromIovs(task, &srcIovs, iovs, true)?;
             trigger = buf.Consume(cnt);
         }
 
@@ -57,7 +57,7 @@ impl SocketBuff {
             return Err(Error::SysError(SysErr::EAGAIN));
         }
 
-        let cnt = task.mm.CopyIovsInFromIovs(task, iovs, &dstIovs)?;
+        let cnt = task.mm.CopyIovsInFromIovs(task, iovs, &dstIovs, true)?;
 
         if cnt == 0 {
             error!("writev cnt is zero....");

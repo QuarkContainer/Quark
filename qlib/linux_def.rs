@@ -2302,23 +2302,27 @@ impl DataBuff {
         return self.buf.len();
     }
 
-    pub fn IoVec(&self) -> IoVec {
+    pub fn IoVec(&self, len: usize) -> IoVec {
         if self.Len() == 0 {
             return IoVec::NewFromAddr(0, 0);
         }
 
         return IoVec {
             start: self.Ptr(),
-            len: self.Len(),
+            len: len,
         };
     }
 
-    pub fn Iovs(&self) -> [IoVec; 1] {
-        return [self.IoVec()];
+    pub fn Iovs(&self, len: usize) -> [IoVec; 1] {
+        return [self.IoVec(len)];
     }
 
     pub fn BlockSeq(&self) -> BlockSeq {
         return BlockSeq::New(&self.buf);
+    }
+
+    pub fn BlockSeqWithLen(&self, len: usize) -> BlockSeq {
+        return BlockSeq::New(&self.buf[0..len]);
     }
 }
 

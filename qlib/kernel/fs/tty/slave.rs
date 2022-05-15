@@ -399,7 +399,7 @@ impl FileOperations for SlaveFileOperations {
             .lock()
             .InputQueueRead(task, &mut buf[..size as usize])? as usize;
 
-        let res = task.CopyDataOutToIovs(&buf[0..cnt], dsts)?;
+        let res = task.CopyDataOutToIovs(&buf[0..cnt], dsts, false)?;
         assert!(res == cnt, "MasterFileOperations:ReadAt fail");
         return Ok(res as i64);
     }
@@ -414,7 +414,7 @@ impl FileOperations for SlaveFileOperations {
     ) -> Result<i64> {
         let size = IoVec::NumBytes(srcs);
         let mut buf = DataBuff::New(size);
-        task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
+        let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;
 
         let res = self
             .d
@@ -422,7 +422,7 @@ impl FileOperations for SlaveFileOperations {
             .t
             .ld
             .lock()
-            .OutputQueueWrite(task, &mut buf.buf[0..size as usize])?;
+            .OutputQueueWrite(task, &mut buf.buf[0..len as usize])?;
         return Ok(res);
     }
 

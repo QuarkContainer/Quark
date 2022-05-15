@@ -111,7 +111,7 @@ impl ReadonlyFileNode for MeminfoFileNode {
             return Ok(0);
         }
 
-        let n = task.CopyDataOutToIovs(&bytes[offset as usize..], dsts)?;
+        let n = task.CopyDataOutToIovs(&bytes[offset as usize..], dsts, true)?;
 
         return Ok(n as i64);
     }

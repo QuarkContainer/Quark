@@ -1053,6 +1053,7 @@ impl MemoryManager {
         len: u64,
         output: &mut Vec<IoVec>,
         writable: bool,
+        allowPartial: bool,
     ) -> Result<()> {
         if len == 0 {
             return Ok(());
@@ -1064,7 +1065,7 @@ impl MemoryManager {
 
         let _ml = self.MappingWriteLock();
 
-        return self.V2PLocked(task, start, len, output, writable);
+        return self.V2PLocked(task, start, len, output, writable, allowPartial);
     }
 
     pub fn V2PLocked(
@@ -1074,6 +1075,7 @@ impl MemoryManager {
         len: u64,
         output: &mut Vec<IoVec>,
         writable: bool,
+        allowPartial: bool,
     ) -> Result<()> {
         if MemoryDef::PHY_LOWER_ADDR <= start && start <= MemoryDef::PHY_UPPER_ADDR {
             // Kernel phy address
@@ -1086,7 +1088,7 @@ impl MemoryManager {
             return Ok(());
         }
 
-        self.FixPermissionLocked(task, start, len, writable, false)?;
+        let len = self.FixPermissionLocked(task, start, len, writable, allowPartial)?;
 
         let mut start = start;
         let end = start + len;

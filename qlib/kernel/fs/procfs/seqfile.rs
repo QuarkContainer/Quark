@@ -479,7 +479,7 @@ impl FileOperations for SeqFileOperations {
             bs = bs.DropFirst(n as u64);
             if bs.NumBytes() == 0 {
                 file.lastRead = offset;
-                task.CopyDataOutToIovs(&dataBuf.buf[0..done], dsts)?;
+                let done = task.CopyDataOutToIovs(&dataBuf.buf[0..done], dsts, true)?;
                 return Ok(done as i64);
             }
 
@@ -499,14 +499,14 @@ impl FileOperations for SeqFileOperations {
             bs = bs.DropFirst(n as u64);
             if bs.NumBytes() == 0 {
                 file.lastRead = offset;
-                task.CopyDataOutToIovs(&dataBuf.buf[0..done], dsts)?;
+                let done = task.CopyDataOutToIovs(&dataBuf.buf[0..done], dsts, true)?;
                 return Ok(done as i64);
             }
         }
 
         info!("SeqFileOperations ReadAt 5, done = {}", done);
         file.lastRead = offset;
-        task.CopyDataOutToIovs(&dataBuf.buf[0..done], dsts)?;
+        let done = task.CopyDataOutToIovs(&dataBuf.buf[0..done], dsts, true)?;
         return Ok(done as i64);
     }
 

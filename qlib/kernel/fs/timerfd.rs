@@ -229,7 +229,7 @@ impl FileOperations for TimerOperations {
         if val > 0 {
             let ptr = &val as *const _ as u64 as *const u8;
             let buf = unsafe { slice::from_raw_parts(ptr, 8) };
-            task.CopyDataOutToIovs(buf, dsts)?;
+            task.CopyDataOutToIovs(buf, dsts, false)?;
 
             return Ok(8);
         }

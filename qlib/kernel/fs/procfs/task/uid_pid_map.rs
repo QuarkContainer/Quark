@@ -140,7 +140,7 @@ impl ReadonlyFileNode for IdMapReadonlyFileNode {
             return Ok(0);
         }
 
-        let n = task.CopyDataOutToIovs(&buf.as_bytes()[offset as usize..], dsts)?;
+        let n = task.CopyDataOutToIovs(&buf.as_bytes()[offset as usize..], dsts, true)?;
 
         return Ok(n as i64);
     }

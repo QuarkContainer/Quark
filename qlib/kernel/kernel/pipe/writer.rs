@@ -128,8 +128,8 @@ impl FileOperations for Writer {
         //error!("pipe writer WriteAt id {}, writers is {}", self.pipe.Uid(), self.pipe.Writers());
         let size = IoVec::NumBytes(srcs);
         let mut buf = DataBuff::New(size);
-        task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
-        let srcs = BlockSeq::New(&buf.buf);
+        let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;
+        let srcs = BlockSeq::New(&buf.buf[0..len]);
 
         let n = match self.pipe.Write(task, srcs) {
             Err(e) => {
