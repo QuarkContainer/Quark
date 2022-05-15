@@ -143,13 +143,12 @@ pub struct PageAllocator {
 
 impl PageAllocator {
     pub const PAGE_CACHE_COUNT: usize = 16;
-    pub const MAX_PAGE_CACHE_COUNT: usize = 1024 * 16;
+    pub const MAX_PAGE_CACHE_COUNT: usize = 1024 * 1;
 
-    pub fn AllocPage(&mut self) -> Option<u64> {
-        match self.pages.pop_front() {
+    pub fn AllocPage(&mut self) -> Option<u64> { match self.pages.pop_front() {
             None => return None,
             Some((addr, ts)) => {
-                if self.pages.len() >= Self::MAX_PAGE_CACHE_COUNT {
+                if self.pages.len() >= Self::PAGE_CACHE_COUNT {
                     return Some(addr)
                 }
 
