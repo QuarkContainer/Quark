@@ -332,14 +332,14 @@ impl ListAllocator {
     pub fn Add(&self, start: usize, size: usize) {
         let mut start = start;
         let end = start + size;
-        let order = 22;
-        let size = 1 << order; // 2MB
-                               // note: we can't add full range (>4GB) to the buddyallocator
-                               /*let alignStart = start & !(size - 1);
-                               if start != alignStart {
-                                   self.AddToHead(start, alignStart + size);
-                                   start = alignStart + size;
-                               }*/
+        //let order = 22;
+        let size = 1 << ORDER; // 2MB
+       // note: we can't add full range (>4GB) to the buddyallocator
+       /*let alignStart = start & !(size - 1);
+       if start != alignStart {
+           self.AddToHead(start, alignStart + size);
+           start = alignStart + size;
+       }*/
 
         while start + size < end {
             self.AddToHead(start, start + size);
