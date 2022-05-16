@@ -529,6 +529,19 @@ impl Task {
         return self.mm.CopyInVector(self, addr, maxElemSize, maxTotalSize);
     }
 
+    pub fn AdjustIOVecPermission(&self, iovs: &[IoVec], writeReq: bool, allowPartial: bool) -> Result<Vec<IoVec>> {
+        let mut vec = Vec::new();
+        for iov in iovs {
+            let len = self.CheckPermission(iov.start, iov.len as u64, writeReq, allowPartial)?;
+            vec.push(IoVec {
+                start: iov.start,
+                len: len as usize,
+            })
+        }
+
+        return Ok(vec);
+    }
+
     pub fn CheckIOVecPermission(&self, iovs: &[IoVec], writeReq: bool) -> Result<()> {
         for iov in iovs {
             self.CheckPermission(iov.start, iov.len as u64, writeReq, false)?;
