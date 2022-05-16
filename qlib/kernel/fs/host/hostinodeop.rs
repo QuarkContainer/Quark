@@ -715,7 +715,7 @@ impl HostInodeOp {
                         return Err(Error::SysError(-ret as i32));
                     }
                 } else if ret >= 0 {
-                    task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts, false)?;
+                    task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts, true)?;
                     return Ok(ret as i64);
                 }
 
@@ -733,7 +733,7 @@ impl HostInodeOp {
             };
 
             let ret = IOReadAt(hostIops.HostFd(), &iovs, offset as u64)?;
-            task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts, false)?;
+            task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts, true)?;
             return Ok(ret as i64);
         }
     }
