@@ -265,7 +265,9 @@ fn RepWritev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
 }
 
 fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
-    task.CheckIOVecPermission(srcs, false)?;
+    let iovs = task.AdjustIOVecPermission(srcs, false, true)?;
+    let srcs = &iovs;
+
     let wouldBlock = f.WouldBlock();
     if !wouldBlock {
         return RepWritev(task, f, srcs);
@@ -365,7 +367,8 @@ fn RepPwritev(task: &Task, f: &File, srcs: &[IoVec], offset: i64) -> Result<i64>
 }
 
 fn pwritev(task: &Task, f: &File, srcs: &[IoVec], offset: i64) -> Result<i64> {
-    task.CheckIOVecPermission(srcs, false)?;
+    let mut iovs = task.AdjustIOVecPermission(srcs, false, true)?;
+    let srcs = &mut iovs;
 
     let wouldBlock = f.WouldBlock();
     if !wouldBlock {
