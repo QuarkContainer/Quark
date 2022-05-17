@@ -126,7 +126,7 @@ impl RDMAAgent {
             client_eventfd: clientEventfd,
             shareMemRegion: MemRegion { addr: 0, len: 0 },
             shareRegion: Mutex::new(shareRegion),
-            ioBufIdMgr: Mutex::new(IdMgr::Init(0, 16)),
+            ioBufIdMgr: Mutex::new(IdMgr::Init(0, 20)),
             keys: vec![[mr.LKey(), mr.RKey()]],
             // sockInfos: Mutex::new(HashMap::new()),
         }))
@@ -339,6 +339,28 @@ impl RDMAAgent {
                         panic!("RDMAChannel with id {} does not exist!", msg.channelId);
                     }
                 }
+            }
+            RDMAReqMsg::RDMAShutdown(msg) => {
+                println!("RDMAAgent::RDMAReqMsg::RDMAShutdown, msg: {:?}", msg);
+                match RDMA_SRV.channels.lock().get(&msg.channelId) {
+                    Some(rdmaChannel) => {
+                        rdmaChannel.Shutdown(msg.howto);
+                    }
+                    None => {
+                        panic!("RDMAChannel with id {} does not exist!", msg.channelId);
+                    }
+                }
+            }
+            RDMAReqMsg::RDMACloseChannel(msg) => {
+                println!("RDMAAgent::RDMAReqMsg::RDMACloseChannel, msg: {:?}", msg);
+                let rdmaChannel = RDMA_SRV
+                    .channels
+                    .lock()
+                    .get(&msg.channelId)
+                    .unwrap()
+                    .clone();
+
+                rdmaChannel.Close();
             }
         }
     }

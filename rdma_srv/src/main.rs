@@ -585,9 +585,9 @@ fn main() -> io::Result<()> {
 
     // unix domain socket
 
-    let mut unix_sock_path = "/home/qingming/rdma_srv";
+    let mut unix_sock_path = "/tmp/rdma_srv";
     if args.len() > 1 {
-        unix_sock_path = "/home/qingming/rdma_srv1";
+        unix_sock_path = args.get(1).unwrap();//"/tmp/rdma_srv1";
     }
     let srv_unix_sock = UnixSocket::NewServer(unix_sock_path).unwrap();
     let srv_unix_sock_fd = srv_unix_sock.as_raw_fd();

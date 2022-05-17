@@ -37,7 +37,7 @@ use super::rdma_srv::*;
 // RDMA Queue Pair
 pub struct RDMAQueuePair {}
 
-pub const RECV_REQUEST_COUNT: u32 = 8;
+pub const RECV_REQUEST_COUNT: u32 = 32;
 
 #[derive(Debug)]
 #[repr(u64)]
@@ -596,25 +596,7 @@ impl RDMAControlChannel {
     }
 
     pub fn ProcessRDMAWriteImmFinish(&self) {
-        // TODOVIP: should control channel handle this?
-        // match *self.curControlMsg.lock() {
-        //     ControlMsgBody::ConnectRequest(msg) => {
-        //         self.HandleConnectRequest(&msg);
-        //     }
-        //     ControlMsgBody::ConnectResponse(msg) => {
-        //         self.HandleConnectResponse(&msg);
-        //     }
-        //     ControlMsgBody::ConnectConfirm(msg) => {
-        //         println!("1 localChannelId: {}", msg.localChannelId);
-        //     }
-        //     ControlMsgBody::ConsumedData(msg) => {
-        //         println!("Write ConsumeData");
-        //     }
-        //     ControlMsgBody::DummyMsg => {
-        //         panic!("Control channel received dummy message!");
-        //     }
-        // }
-        self.chan.upgrade().unwrap().ProcessRDMAWriteImmFinish();
+        self.chan.upgrade().unwrap().ProcessRDMAWriteImmFinish(false);
     }
 
     pub fn ProcessRDMARecvWriteImm(&self, qpNum: u32, recvCount: u64) {
@@ -678,14 +660,14 @@ impl RDMAControlChannel {
                         .IncreaseRemoteRequestCount(msg.recvRequestCount);
                     self.HandleConnectResponse(msg);
                 }
-                ControlMsgBody::ConnectConfirm(msg) => {
-                    self.chan
-                        .upgrade()
-                        .unwrap()
-                        .conn
-                        .IncreaseRemoteRequestCount(msg.recvRequestCount);
-                    // println!("1 localChannelId: {}", msg.localChannelId);
-                }
+                // ControlMsgBody::ConnectConfirm(msg) => {
+                //     self.chan
+                //         .upgrade()
+                //         .unwrap()
+                //         .conn
+                //         .IncreaseRemoteRequestCount(msg.recvRequestCount);
+                //     // println!("1 localChannelId: {}", msg.localChannelId);
+                // }
                 ControlMsgBody::ConsumedData(msg) => {
                     println!("ControlChannel::ConsumedData: {}", msg.consumedData);
                     self.chan
@@ -770,6 +752,7 @@ impl RDMAControlChannel {
             .get(&connectResponse.remoteChannelId)
         {
             Some(rdmaChannel) => {
+                *rdmaChannel.status.lock() = ChannelStatus::ESTABLISHED;
                 rdmaChannel.UpdateRemoteRDMAInfo(
                     connectResponse.localChannelId,
                     connectResponse.raddr,
@@ -1028,7 +1011,7 @@ impl RDMAControlChannel {
 pub enum ControlMsgBody {
     ConnectRequest(ConnectRequest),
     ConnectResponse(ConnectResponse),
-    ConnectConfirm(ConnectConfirm),
+    // ConnectConfirm(ConnectConfirm),
     ConsumedData(ConsumedData),
     RecvRequestCount(RecvRequestCount),
     DummyMsg,
@@ -1071,12 +1054,12 @@ pub struct ConnectResponse {
     pub remoteSockFd: u32,
 }
 
-#[derive(Clone)]
-pub struct ConnectConfirm {
-    pub remoteChannelId: u32,
-    pub localChannelId: u32,
-    pub recvRequestCount: u32,
-}
+// #[derive(Clone)]
+// pub struct ConnectConfirm {
+//     pub remoteChannelId: u32,
+//     pub localChannelId: u32,
+//     pub recvRequestCount: u32,
+// }
 
 #[repr(u32)]
 pub enum ControlMsgType {

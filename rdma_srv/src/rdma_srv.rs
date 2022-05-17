@@ -237,18 +237,30 @@ impl RDMASrv {
     }
 
     pub fn ProcessRDMAWriteImmFinish(&self, channelId: u32, qpNum: u32) {
+        let finSent = channelId & 0x80000000 == 0x80000000;
+        let channelId = channelId & 0x7FFFFFFF;
         if channelId != 0 {
-            match self.channels.lock().get(&channelId) {
-                None => {
-                    panic!(
-                        "ProcessRDMAWriteImmFinish get unexpected channelId: {}",
-                        channelId
-                    );
-                }
-                Some(channel) => {
-                    channel.ProcessRDMAWriteImmFinish();
-                }
-            }
+            let channel = self.channels.lock().get(&channelId).unwrap().clone();
+            // {
+            //     let channels = self.channels.lock();
+            //     let item1 = channels.get(&channelId).unwrap();
+            //     channel = item1.clone();
+            // }
+
+            channel.ProcessRDMAWriteImmFinish(finSent);
+
+            // match self.channels.lock().get(&channelId) {
+            // match item {
+            //     None => {
+            //         panic!(
+            //             "ProcessRDMAWriteImmFinish get unexpected channelId: {}",
+            //             channelId
+            //         );
+            //     }
+            //     Some(channel) => {
+            //         channel.ProcessRDMAWriteImmFinish(finSent);
+            //     }
+            // }
         } else {
             match self.controlChannels.lock().get(&qpNum) {
                 None => {
@@ -262,6 +274,17 @@ impl RDMASrv {
     }
 
     pub fn ProcessRDMARecvWriteImm(&self, channelId: u32, qpNum: u32, recvCount: u32) {
+        println!(
+            "RDMASrv::ProcessRDMARecvWriteImm, 1 channelId: {}, qpNum: {}, recvCount: {}",
+            channelId, qpNum, recvCount
+        );
+        let finReceived = channelId & 0x80000000 == 0x80000000;
+        let channelId = channelId & 0x7FFFFFFF;
+
+        println!(
+            "RDMASrv::ProcessRDMARecvWriteImm, 2 channelId: {}, finReceived: {}",
+            channelId, finReceived
+        );
         if channelId != 0 {
             match self.channels.lock().get(&channelId) {
                 None => {
@@ -271,7 +294,7 @@ impl RDMASrv {
                     );
                 }
                 Some(channel) => {
-                    channel.ProcessRDMARecvWriteImm(qpNum, recvCount as u64);
+                    channel.ProcessRDMARecvWriteImm(qpNum, recvCount as u64, finReceived);
                 }
             }
         } else {

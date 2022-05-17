@@ -295,14 +295,18 @@ int main(int argc, char const *argv[])
     double latency = ns / (readCount * 2 * threadnum);
     printf("latency is %lf\n", latency);
 
-    printf("before sleep\n");
-    sleep(2);
-    printf("after sleep\n");
+    // printf("before sleep\n");
+    // sleep(2);
+    // printf("after sleep\n");
 
     free(tid);
     for(int i=0; i<threadnum; i++)
     {
-        close(clientsocks[i]);
+        shutdown(clientsocks[i], 1);
+        if (read(clientsocks[i], recv_buffers[i], config.buffer_size) == 0) {
+            printf("read == 0\n");
+            close(clientsocks[i]);
+        }
     }
     free(clientsocks);
     free(send_buffer);

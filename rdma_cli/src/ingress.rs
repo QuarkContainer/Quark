@@ -145,7 +145,7 @@ fn main() -> io::Result<()> {
     let args: Vec<_> = env::args().collect();
     //eventfd_test1();
     let rdmaSvcCli: RDMASvcClient;
-    rdmaSvcCli = RDMASvcClient::initialize("/home/qingming/rdma_srv1");
+    rdmaSvcCli = RDMASvcClient::initialize("/tmp/rdma_srv1");
 
     let cliEventFd = rdmaSvcCli.cliEventFd;
     let srvEventFd = rdmaSvcCli.srvEventFd;
@@ -223,47 +223,57 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
             match event_data {
                 Some(FdType::TCPSocketServer(port)) => {
                     println!("Got connect request to port: {}", port);
-                    let stream_fd;
+                    let mut stream_fd;
                     let mut cliaddr: libc::sockaddr_in = unsafe { mem::zeroed() };
                     let mut len = mem::size_of_val(&cliaddr) as u32;
-                    unsafe {
-                        stream_fd = libc::accept(
-                            ev.U64 as i32,
-                            &mut cliaddr as *mut libc::sockaddr_in as *mut libc::sockaddr,
-                            &mut len,
-                        );
-                    }
-                    unblock_fd(stream_fd);
-                    epoll_add(epoll_fd, stream_fd, read_write_event(stream_fd as u64));
-                    println!("stream_fd is: {}", stream_fd);
+                    loop {
+                        unsafe {
+                            stream_fd = libc::accept(
+                                ev.U64 as i32,
+                                &mut cliaddr as *mut libc::sockaddr_in as *mut libc::sockaddr,
+                                &mut len,
+                            );
+                        }
+                        if stream_fd > 0 {
+                            unblock_fd(stream_fd);
+                            epoll_add(epoll_fd, stream_fd, read_write_event(stream_fd as u64));
+                            println!("stream_fd is: {}", stream_fd);
 
-                    //TODO: use port to map to different node.
-                    let sockfd = rdmaSvcCli.sockIdMgr.lock().AllocId().unwrap();
-                    rdmaSvcCli.connect(
-                        sockfd,
-                        u32::from(Ipv4Addr::from_str("192.168.6.8").unwrap()).to_be(),
-                        16868u16.to_be(),
-                    );
-                    fds.insert(stream_fd, FdType::TCPSocketConnect(sockfd));
-                    sockFdMappings.insert(sockfd, stream_fd);
+                            //TODO: use port to map to different node.
+                            let sockfd = rdmaSvcCli.sockIdMgr.lock().AllocId().unwrap();
+                            rdmaSvcCli.connect(
+                                sockfd,
+                                u32::from(Ipv4Addr::from_str("192.168.6.8").unwrap()).to_be(),
+                                16868u16.to_be(),
+                            );
+                            fds.insert(stream_fd, FdType::TCPSocketConnect(sockfd));
+                            sockFdMappings.insert(sockfd, stream_fd);
+                        }
+                        else {
+                            break;
+                        }
+                    }
                 }
                 Some(FdType::TCPSocketConnect(sockfd)) => {
                     println!(
                         "FdType::TCPSocketConnect, sockfd: {}, ev.Events: {}",
                         sockfd, ev.Events
                     );
-                    let mut sockFdInfos = rdmaSvcCli.dataSockFdInfos.lock();
-                    let sockInfo = sockFdInfos.get_mut(sockfd).unwrap();
+                    let mut sockInfo;
+                    {
+                        let mut sockFdInfos = rdmaSvcCli.dataSockFdInfos.lock();
+                        sockInfo = sockFdInfos.get_mut(sockfd).unwrap().clone();
+                    }
 
-                    if !matches!(sockInfo.status, SockStatus::ESTABLISHED) {
+                    if !matches!(*sockInfo.status.lock(), SockStatus::ESTABLISHED) {
                         println!("SockInfo status is： {:?}", sockInfo.status);
                         continue;
                     }
                     if ev.Events & EVENT_IN as u32 != 0 {
-                        rdmaSvcCli.ReadFromSocket(sockInfo, &sockFdMappings);
+                        rdmaSvcCli.ReadFromSocket(&mut sockInfo, &sockFdMappings);
                     }
                     if ev.Events & EVENT_OUT as u32 != 0 {
-                        rdmaSvcCli.WriteToSocket(sockInfo, &sockFdMappings);
+                        rdmaSvcCli.WriteToSocket(&mut sockInfo, &sockFdMappings);
                     }
                 }
                 Some(FdType::RDMACompletionChannel) => {}
@@ -280,8 +290,15 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                                     let mut sockFdInfos = rdmaSvcCli.dataSockFdInfos.lock();
                                     let sockInfo = sockFdInfos.get_mut(&response.sockfd).unwrap();
                                     {
-                                        let shareRegion = rdmaSvcCli.cliShareRegion.lock();
-                                        sockInfo.sockBuff =
+                                        let mut shareRegion = rdmaSvcCli.cliShareRegion.lock();
+                                        let sockInfo = DataSock::New(
+                                            sockInfo.fd, //Allocate fd
+                                            sockInfo.srcIpAddr,
+                                            sockInfo.srcPort,
+                                            sockInfo.dstIpAddr,
+                                            sockInfo.dstPort,
+                                            SockStatus::ESTABLISHED,
+                                            response.channelId,
                                             Arc::new(SocketBuff::InitWithShareMemory(
                                                 MemoryDef::DEFAULT_BUF_PAGE_COUNT,
                                                 &shareRegion.ioMetas[ioBufIndex].readBufAtoms
@@ -297,11 +314,11 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                                                     as u64,
                                                 &shareRegion.iobufs[ioBufIndex].write as *const _
                                                     as u64,
-                                            ));
+                                            )),
+                                        );
+                                        sockFdInfos.insert(sockInfo.fd, sockInfo);
                                     }
-                                    sockInfo.channelId = response.channelId;
-                                    sockInfo.status = SockStatus::ESTABLISHED;
-
+                                    let sockInfo = sockFdInfos.get_mut(&response.sockfd).unwrap();
                                     rdmaSvcCli
                                         .channelToSockInfos
                                         .lock()
@@ -316,17 +333,16 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
 
                                     let ioBufIndex = response.ioBufIndex as usize;
                                     let dataSockFd = rdmaSvcCli.sockIdMgr.lock().AllocId().unwrap();
-                                    let mut shareRegion = rdmaSvcCli.cliShareRegion.lock();
-                                    let dataSockInfo = DataSock {
-                                        fd: dataSockFd, //Allocate fd
-                                        srcIpAddr: sockInfo.srcIpAddr,
-                                        srcPort: sockInfo.srcPort,
-                                        dstIpAddr: response.dstIpAddr,
-                                        dstPort: response.dstPort,
-                                        status: SockStatus::ESTABLISHED,
-                                        duplexMode: DuplexMode::SHUTDOWN_RDWR,
-                                        channelId: response.channelId,
-                                        sockBuff: Arc::new(SocketBuff::InitWithShareMemory(
+                                    let shareRegion = rdmaSvcCli.cliShareRegion.lock();
+                                    let dataSockInfo = DataSock::New(
+                                        dataSockFd, //Allocate fd
+                                        sockInfo.srcIpAddr,
+                                        sockInfo.srcPort,
+                                        response.dstIpAddr,
+                                        response.dstPort,
+                                        SockStatus::ESTABLISHED,
+                                        response.channelId,
+                                        Arc::new(SocketBuff::InitWithShareMemory(
                                             MemoryDef::DEFAULT_BUF_PAGE_COUNT,
                                             &shareRegion.ioMetas[ioBufIndex].readBufAtoms
                                                 as *const _
@@ -341,7 +357,7 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                                             &shareRegion.iobufs[ioBufIndex].write as *const _
                                                 as u64,
                                         )),
-                                    };
+                                    );
 
                                     rdmaSvcCli
                                         .dataSockFdInfos
@@ -358,19 +374,41 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                                 RDMARespMsg::RDMANotify(response) => {
                                     println!("RDMANotify, response: {:?}", response);
                                     if response.event & EVENT_IN != 0 {
-                                        let channelToSockInfos =
-                                            rdmaSvcCli.channelToSockInfos.lock();
-                                        let sockInfo =
-                                            channelToSockInfos.get(&response.channelId).unwrap();
-                                        rdmaSvcCli.WriteToSocket(sockInfo, &sockFdMappings);
+                                        let mut sockInfo;
+                                        {
+                                            let mut channelToSockInfos =
+                                                rdmaSvcCli.channelToSockInfos.lock();
+                                            sockInfo = channelToSockInfos
+                                                .get_mut(&response.channelId)
+                                                .unwrap()
+                                                .clone();
+                                        }
+                                        rdmaSvcCli.WriteToSocket(&mut sockInfo, &sockFdMappings);
                                     }
                                     if response.event & EVENT_OUT != 0 {
                                         println!("RDMANotify::EVENT_OUT 1");
-                                        let channelToSockInfos =
+                                        let mut channelToSockInfos =
                                             rdmaSvcCli.channelToSockInfos.lock();
-                                        let sockInfo =
-                                            channelToSockInfos.get(&response.channelId).unwrap();
+                                        let sockInfo = channelToSockInfos
+                                            .get_mut(&response.channelId)
+                                            .unwrap();
                                         rdmaSvcCli.ReadFromSocket(sockInfo, &sockFdMappings);
+                                    }
+                                }
+                                RDMARespMsg::RDMAFinNotify(response) => {
+                                    println!("RDMAFinNotify, response: {:?}", response);
+                                    let mut sockInfo;
+                                    {
+                                        let mut channelToSockInfos =
+                                            rdmaSvcCli.channelToSockInfos.lock();
+                                        sockInfo = channelToSockInfos
+                                            .get_mut(&response.channelId)
+                                            .unwrap()
+                                            .clone();
+                                    }
+                                    if response.event & FIN_RECEIVED_FROM_PEER != 0 {
+                                        *sockInfo.finReceived.lock() = true;
+                                        rdmaSvcCli.WriteToSocket(&mut sockInfo, &sockFdMappings);
                                     }
                                 }
                             },

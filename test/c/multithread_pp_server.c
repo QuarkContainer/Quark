@@ -49,15 +49,20 @@ void * socketThread(void *arg)
         printf("newSocket is: %d\n", clientsocks[index]);
     }
 
-    for(int i=0; i<config.count;i++)
+    // for(int i=0; i<config.count;i++)
+    for (;;)
     {
         int readcount = 0;
         while (readcount < config.buffer_size) {
             int curreadcount = read(clientsocks[index], recv_buffers[index], config.buffer_size - readcount);
-            // if (config.log)
-            // {
+            if (config.log)
+            {
                 printf("sock: %d, cur read: %d\n", clientsocks[index], curreadcount);
-            // }
+            }
+            if (curreadcount == 0) {
+                close(clientsocks[index]);
+                return;
+            }
             readcount += curreadcount;
         }
         
@@ -65,10 +70,10 @@ void * socketThread(void *arg)
         while (writecount < config.buffer_size)
         {
             int curwritecount = write(clientsocks[index], send_buffer, config.buffer_size - writecount);
-            // if (config.log)
-            // {
+            if (config.log)
+            {
                 printf("sock: %d, cur write %d\n", clientsocks[index], curwritecount);
-            // }
+            }
             
             writecount += curwritecount;
         }
@@ -233,13 +238,13 @@ int main(int argc, char const *argv[])
         pthread_join(tid[i], NULL);
     }
 
-    printf("before sleep\n");
-    sleep(2);
-    printf("after sleep\n");
-    for(int i=0; i<threadnum; i++)
-    {
-        close(clientsocks[i]);
-    }
+    // printf("before sleep\n");
+    // sleep(2);
+    // printf("after sleep\n");
+    // for(int i=0; i<threadnum; i++)
+    // {
+    //     close(clientsocks[i]);
+    // }
     free(clientsocks);
     close(server_fd);
     free(tid);

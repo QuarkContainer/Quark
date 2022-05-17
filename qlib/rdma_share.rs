@@ -127,6 +127,8 @@ pub enum RDMAReqMsg {
     RDMAConnect(RDMAConnectReq),
     RDMAWrite(RDMAWriteReq),
     RDMARead(RDMAReadReq),
+    RDMAShutdown(RDMAShutdownReq),
+    RDMACloseChannel(RDMACloseChannelReq),
     // RDMAAccept(RDMAAcceptReq), //Put connected socket on client side.
 }
 
@@ -141,6 +143,7 @@ pub enum RDMARespMsg {
     RDMAConnect(RDMAConnectResp),
     RDMAAccept(RDMAAcceptResp),
     RDMANotify(RDMANotifyResp),
+    RDMAFinNotify(RDMAFinNotifyResp),
 }
 
 impl Default for RDMARespMsg {
@@ -172,6 +175,19 @@ pub struct RDMANotifyResp {
     pub event: EventMask,
 }
 
+pub const FIN_RECEIVED_FROM_PEER: EventMask = 0x01;
+pub const FIN_SENT_TO_PEER: EventMask = 0x02;
+// pub const EVENT_OUT: EventMask = 0x04; // POLLOUT
+// pub const EVENT_ERR: EventMask = 0x08; // POLLERR
+// pub const EVENT_HUP: EventMask = 0x10; // POLLHUP
+
+#[derive(Default, Clone, Copy, Debug)]
+pub struct RDMAFinNotifyResp {
+    // pub sockfd: u32,
+    pub channelId: u32,
+    pub event: EventMask,
+}
+
 #[derive(Default, Clone, Copy, Debug)]
 pub struct RDMAListenReq {
     //pub vpcId: u32,
@@ -183,13 +199,25 @@ pub struct RDMAListenReq {
 
 #[derive(Default, Clone, Copy, Debug)]
 pub struct RDMAWriteReq {
-    pub sockfd: u32,
+    // pub sockfd: u32,
+    pub channelId: u32,
+}
+
+#[derive(Default, Clone, Copy, Debug)]
+pub struct RDMAShutdownReq {
+    // pub sockfd: u32,
+    pub channelId: u32,
+    pub howto: u8,
+}
+
+#[derive(Default, Clone, Copy, Debug)]
+pub struct RDMACloseChannelReq {
     pub channelId: u32,
 }
 
 #[derive(Default, Clone, Copy, Debug)]
 pub struct RDMAReadReq {
-    pub sockfd: u32,
+    // pub sockfd: u32,
     pub channelId: u32,
 }
 
@@ -373,6 +401,9 @@ impl ShareRegion {
 
 #[derive(Clone, Copy, Debug)]
 pub enum SockStatus {
+    FIN_READ_FROM_BUFFER, //after reading all stuff to above socket, need a better name.
+    FIN_SENT_TO_SVC, //
+    // FIN_RECEIVED_FROM_PEER,
     CLOSE_WAIT,
     CLOSING,
     ESTABLISHED,
@@ -385,6 +416,7 @@ pub enum SockStatus {
 
 #[derive(Clone, Copy)]
 pub enum DuplexMode {
+    SHUTDOWN_NONE,
     SHUTDOWN_RD,
     SHUTDOWN_WR,
     SHUTDOWN_RDWR,
