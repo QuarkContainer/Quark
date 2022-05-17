@@ -130,7 +130,11 @@ impl PipeInternal {
         if wanted > avail {
             // Is this needed? todo: confirm this
             // if this is must, Pipe::Readfrom needs redesign
-            /*if wanted <= atomicIOBytes {
+
+            // POSIX requires that a write smaller than atomicIOBytes
+            // (PIPE_BUF) be atomic, but requires no atomicity for writes
+            // larger than this.
+            /*if wanted <= 4096 {
                 return Err(Error::SysError(SysErr::EAGAIN))
             }*/
 
@@ -401,11 +405,9 @@ impl Pipe {
         let mut iovs = [dst];
         //let src = BlockSeq::New(&buf);
 
-        let readCount = if opts.SrcOffset {
-            src.Preadv(task, &mut iovs, opts.SrcStart)?
-        } else {
-            src.Readv(task, &mut iovs)?
-        };
+        let sfops = src.FileOp.clone();
+        let blocking = src.Blocking();
+        let readCount = sfops.ReadAt(task, src, &mut iovs, opts.SrcStart, blocking)?;
 
         let src = BlockSeq::New(&buf[0..readCount as usize]);
         let writeCount = self.intern.lock().Write(task, src, self.atomicIOBytes)? as usize;

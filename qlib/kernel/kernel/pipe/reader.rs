@@ -93,8 +93,6 @@ impl FileOperations for Reader {
         _offset: i64,
         _blocking: bool,
     ) -> Result<i64> {
-        //error!("pipe reader readat id {}, reader is {}", self.pipe.Uid(), self.pipe.Readers());
-
         let size = IoVec::NumBytes(dsts);
         let buf = DataBuff::New(size);
         let bs = BlockSeq::New(&buf.buf);
