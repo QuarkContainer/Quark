@@ -352,7 +352,7 @@ pub fn DoSplice(
         // Block until there's data.
         match task.blocker.BlockWithMonoTimer(true, None) {
             Err(Error::ErrInterrupted) => {
-                return Err(Error::SysError(SysErr::ERESTARTNOINTR));
+                return Err(Error::SysError(SysErr::ERESTARTNOHAND));
             }
             Err(e) => {
                 return Err(e);
