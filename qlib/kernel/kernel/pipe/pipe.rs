@@ -121,7 +121,7 @@ impl PipeInternal {
         let wanted = src.NumBytes() as usize;
         let avail = p.Available();
 
-        if avail == 0 {
+        if wanted == 0 {
             return Ok(0);
         }
 
@@ -134,9 +134,9 @@ impl PipeInternal {
             // POSIX requires that a write smaller than atomicIOBytes
             // (PIPE_BUF) be atomic, but requires no atomicity for writes
             // larger than this.
-            /*if wanted <= 4096 {
+            if wanted < 4096 {
                 return Err(Error::SysError(SysErr::EAGAIN))
-            }*/
+            }
 
             // Limit to the available capacity.
             src = src.TakeFirst(avail as u64);
@@ -388,7 +388,7 @@ impl Pipe {
 
             let mut len = p.Available() as usize;
 
-            if len == 0 {
+            if len < 4096 {
                 return Err(Error::SysError(SysErr::EAGAIN));
             }
 
