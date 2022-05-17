@@ -49,6 +49,24 @@ impl<'a> Iovs<'a> {
 
         return res;
     }
+
+    pub fn First(&self, n: usize) -> Vec<IoVec> {
+        let mut n = n;
+        let mut res = Vec::new();
+
+        for i in 0..self.0.len() {
+            let src = self.0[i];
+            if src.Len() < n {
+                res.push(IoVec::NewFromAddr(src.Start(), src.Len()));
+                n -= self.0[i].Len()
+            } else {
+                res.push(IoVec::NewFromAddr(src.Start(), n));
+                break
+            }
+        }
+
+        return res;
+    }
 }
 
 impl IoVec {

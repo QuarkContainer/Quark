@@ -18,6 +18,7 @@ use super::super::kernel::waiter::qlock::*;
 use super::super::kernel::waiter::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
+use super::super::qlib::mem::block::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::*;
 
@@ -112,26 +113,52 @@ pub fn Splice(task: &Task, dst: &File, src: &File, opts: &mut SpliceOpts) -> Res
                     // back to a slow path in this case. This copies without doing
                     // any mode changes, so should still be more efficient.
 
-                    let buf = DataBuff::New(opts.Length as usize);
-                    let mut iovs = buf.Iovs(opts.Length as usize);
-
-                    let srcStart = if opts.SrcOffset { opts.SrcStart } else { 0 };
-
-                    let readn = src
-                        .FileOp
-                        .ReadAt(task, src, &mut iovs[..], srcStart, false)?;
-
-                    if readn != 0 {
-                        let iov = IoVec::NewFromAddr(buf.Ptr(), readn as usize);
-                        let iovs: [IoVec; 1] = [iov];
-
-                        let dstStart = if opts.DstOffset { opts.DstStart } else { 0 };
-
-                        let written = dst.FileOp.WriteAt(task, dst, &iovs, dstStart, false)?;
-                        written
+                    let bufLen = if opts.Length > 2 * MemoryDef::ONE_MB as i64 {
+                        2 * MemoryDef::ONE_MB as i64
                     } else {
-                        0 //EOF
+                        opts.Length
+                    };
+
+                    let buf = DataBuff::New(bufLen as usize);
+                    let mut copyLen = 0;
+                    let srcStart = opts.SrcStart;
+                    let dstStart = opts.DstStart;
+
+                    while copyLen < opts.Length {
+                        let mut iovs = buf.Iovs(bufLen as usize);
+                        let readLen = match ReadAt(task, src, &mut iovs, srcStart + copyLen) {
+                            Err(e) => {
+                                if copyLen > 0 {
+                                    return Ok(copyLen)
+                                }
+                                return Err(e)
+                            }
+                            Ok(n) => {
+                                if n == 0 {
+                                    break;
+                                }
+                                n
+                            }
+                        };
+
+                        let iovs = Iovs(&iovs).First(readLen as usize);
+                        match WriteAt(task, dst, &iovs, dstStart + copyLen) {
+                            Err(e) => {
+                                if copyLen > 0 {
+                                    return Ok(copyLen)
+                                }
+                                return Err(e)
+                            }
+                            Ok(n) => {
+                                copyLen += n;
+                                if n == 0 {
+                                    break;
+                                }
+                            }
+                        };
                     }
+
+                    copyLen
                 }
                 Err(e) => return Err(e),
                 Ok(n) => n,
@@ -154,6 +181,123 @@ pub fn Splice(task: &Task, dst: &File, src: &File, opts: &mut SpliceOpts) -> Res
     return Ok(n);
 }
 
+pub fn RepWriteAt(task: &Task, f: &File, srcs: &[IoVec], offset: i64) -> Result<i64> {
+    let len = Iovs(srcs).Count();
+    let mut count = 0;
+    let mut srcs = srcs;
+    let mut tmp;
+
+    loop {
+        match f.FileOp.WriteAt(task, f, &srcs, offset + count, false) {
+            Err(e) => {
+                if count > 0 {
+                    return Ok(count);
+                }
+
+                return Err(e);
+            }
+            Ok(n) => {
+                count += n;
+                if count == len as i64 {
+                    return Ok(count);
+                }
+
+                tmp = Iovs(srcs).DropFirst(n as usize);
+                srcs = &tmp;
+            }
+        }
+    }
+}
+
+pub fn WriteAt(task: &Task, f: &File, srcs: &[IoVec], offset: i64) -> Result<i64> {
+    let wouldBlock = f.WouldBlock();
+    if !wouldBlock {
+        return RepWriteAt(task, f, srcs,  offset)
+    }
+
+    let general = task.blocker.generalEntry.clone();
+    f.EventRegister(task, &general, EVENT_WRITE);
+    defer!(f.EventUnregister(task, &general));
+
+    let len = Iovs(srcs).Count();
+    let mut count = 0;
+    let mut srcs = srcs;
+    let mut tmp;
+
+    loop {
+        match f.Writev(task, srcs) {
+            Err(Error::SysError(SysErr::EWOULDBLOCK)) => (),
+            Err(e) => {
+                if count > 0 {
+                    return Ok(count);
+                }
+
+                return Err(e);
+            }
+            Ok(n) => {
+                count += n;
+                if count == len as i64 {
+                    return Ok(count);
+                }
+
+                tmp = Iovs(srcs).DropFirst(n as usize);
+                srcs = &tmp;
+            }
+        }
+
+        match task.blocker.BlockWithMonoTimer(true, None) {
+            Err(e) => {
+                if count > 0 {
+                    return Ok(count);
+                }
+                return Err(e);
+            }
+            _ => (),
+        }
+    }
+}
+
+pub fn ReadAt(task: &Task, f: &File, dsts: &mut [IoVec], offset: i64) -> Result<i64> {
+    let wouldBlock = f.WouldBlock();
+    if !wouldBlock {
+       return f
+           .FileOp
+           .ReadAt(task, f, &mut dsts[..], offset, false);
+    }
+
+    let general = task.blocker.generalEntry.clone();
+    f.EventRegister(task, &general, EVENT_READ);
+    defer!(f.EventUnregister(task, &general));
+
+    loop {
+        match f
+            .FileOp
+            .ReadAt(task, f, &mut dsts[..], offset, false) {
+            Err(Error::SysError(SysErr::EWOULDBLOCK)) => (),
+            Err(e) => {
+                return Err(e);
+            }
+            Ok(n) => {
+                return Ok(n)
+            }
+        }
+
+        match task.blocker.BlockWithMonoTimer(true, None) {
+            Err(Error::ErrInterrupted) => {
+                return Err(Error::SysError(SysErr::ERESTARTSYS));
+            }
+            Err(Error::SysError(SysErr::ETIMEDOUT)) => {
+                return Err(Error::SysError(SysErr::EAGAIN));
+            }
+            Err(e) => {
+                return Err(e);
+            }
+            _ => (),
+        }
+    }
+}
+
+
 // doSplice implements a blocking splice operation.
 pub fn DoSplice(
     task: &Task,
@@ -162,12 +306,30 @@ pub fn DoSplice(
     opts: &mut SpliceOpts,
     nonBlocking: bool,
 ) -> Result<i64> {
-    let mut inW = true;
-    let mut outW = true;
-
     let general = task.blocker.generalEntry.clone();
 
     loop {
+        let mut inW = false;
+        let mut outW = false;
+        if !inW && srcFile.Readiness(task, EVENT_READ) == 0 && !srcFile.Flags().NonBlocking {
+            srcFile.EventRegister(task, &general, EVENT_READ);
+            inW = true;
+        } else if !outW && dstFile.Readiness(task, EVENT_WRITE) == 0 && !dstFile.Flags().NonBlocking
+        {
+            dstFile.EventRegister(task, &general, EVENT_WRITE);
+            outW = true;
+        }
+
+        defer!({
+            if inW {
+                srcFile.EventUnregister(task, &general)
+            }
+
+            if outW {
+                dstFile.EventUnregister(task, &general)
+            }
+        });
+
         match Splice(task, dstFile, srcFile, opts) {
             Err(e) => {
                 if e != Error::SysError(SysErr::EWOULDBLOCK) {
@@ -181,18 +343,6 @@ pub fn DoSplice(
             Ok(n) => return Ok(n),
         }
 
-        if !inW && srcFile.Readiness(task, EVENT_READ) == 0 && !srcFile.Flags().NonBlocking {
-            srcFile.EventRegister(task, &general, EVENT_READ);
-            defer!(srcFile.EventUnregister(task, &general));
-
-            inW = true;
-        } else if !outW && dstFile.Readiness(task, EVENT_WRITE) == 0 && !dstFile.Flags().NonBlocking
-        {
-            dstFile.EventRegister(task, &general, EVENT_WRITE);
-            defer!(srcFile.EventUnregister(task, &general));
-
-            outW = true;
-        }
 
         // Was anything registered? If no, everything is non-blocking.
         if !inW && !outW {

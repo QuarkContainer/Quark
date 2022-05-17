@@ -50,14 +50,14 @@ impl Drop for Writer {
 }
 
 impl SpliceOperations for Writer {
-    /*fn ReadFrom(&self, task: &Task, _file: &File, src: &File, opts: &SpliceOpts) -> Result<i64> {
+    fn ReadFrom(&self, task: &Task, _file: &File, src: &File, opts: &SpliceOpts) -> Result<i64> {
         let n = self.pipe.ReadFrom(task, src, opts)?;
         if n > 0 {
-            self.pipe.Notify(EVENT_IN)
+            self.pipe.Notify(READABLE_EVENT)
         }
 
         return Ok(n as i64)
-    }*/
+    }
 }
 
 impl FileOperations for Writer {

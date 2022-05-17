@@ -616,9 +616,9 @@ fn panic(info: &PanicInfo) -> ! {
         print!("panic occurred but can't get location information...");
     }
 
-    for i in 0..CPU_LOCAL.len() {
+    /*for i in 0..CPU_LOCAL.len() {
         error!("CPU  #{} is {:#x?}", i, CPU_LOCAL[i]);
-    }
+    }*/
 
     /*backtracer::trace(&mut |frame| {
         print!("panic frame is {:#x?}", frame);

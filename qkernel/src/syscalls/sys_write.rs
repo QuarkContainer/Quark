@@ -264,7 +264,7 @@ fn RepWritev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
     }
 }
 
-fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
+pub fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
     let iovs = task.AdjustIOVecPermission(srcs, false, true)?;
     let srcs = &iovs;
 
@@ -327,10 +327,21 @@ fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
 
         match task.blocker.BlockWithMonoTimer(true, deadline) {
             Err(Error::SysError(SysErr::ETIMEDOUT)) => {
+                if count > 0 {
+                    return Ok(count);
+                }
                 return Err(Error::SysError(SysErr::EWOULDBLOCK));
             }
-            Err(Error::ErrInterrupted) => return Err(Error::SysError(SysErr::ERESTARTSYS)),
+            Err(Error::ErrInterrupted) => {
+                if count > 0 {
+                    return Ok(count);
+                }
+                return Err(Error::SysError(SysErr::ERESTARTSYS))
+            },
             Err(e) => {
+                if count > 0 {
+                    return Ok(count);
+                }
                 return Err(e);
             }
             _ => (),
