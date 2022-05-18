@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use clap::{App, AppSettings, SubCommand, ArgMatches};
 use alloc::string::String;
+use clap::{App, AppSettings, ArgMatches, SubCommand};
 
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::path::*;
 use super::super::cmd::config::*;
-use super::super::oci::*;
 use super::super::container::container::*;
+use super::super::oci::*;
 use super::command::*;
 
 #[derive(Debug)]
-pub struct CreateCmd  {
+pub struct CreateCmd {
     pub id: String,
     pub bundleDir: String,
     pub consoleSocket: String,
@@ -39,7 +39,7 @@ impl CreateCmd {
             consoleSocket: cmd_matches.value_of("console-socket").unwrap().to_string(),
             pivot: !cmd_matches.is_present("no-pivot"),
             pid: cmd_matches.value_of("p").unwrap().to_string(),
-        })
+        });
     }
 
     pub fn SubCommand<'a, 'b>(common: &CommonArgs<'a, 'b>) -> App<'a, 'b> {
@@ -69,12 +69,12 @@ impl CreateCmd {
             &self.pid,
             "",
             true,
-            self.pivot
+            self.pivot,
         )?;
 
         //eprintln!("Application error: teststasdfasfd");
         //::std::process::exit(1);
 
-        return Ok(())
+        return Ok(());
     }
 }

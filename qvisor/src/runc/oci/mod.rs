@@ -4,7 +4,6 @@ extern crate serde_derive;
 extern crate serde_json;
 extern crate serde;*/
 //extern crate nix;*/
-
 pub mod serialize;
 
 use std::collections::HashMap;
@@ -19,17 +18,20 @@ fn is_false(b: &bool) -> bool {
 }
 
 // VersionMajor is for an API incompatible changes
-const VERSION_MAJOR : i32 = 1;
+const VERSION_MAJOR: i32 = 1;
 // VersionMinor is for functionality in a backwards-compatible manner
-const VERSION_MINOR : i32 = 0;
+const VERSION_MINOR: i32 = 0;
 // VersionPatch is for backwards-compatible bug fixes
-const VERSION_PATCH : i32 = 1;
+const VERSION_PATCH: i32 = 1;
 
 // VersionDev indicates development branch. Releases will be empty string.
-const VERSION_DEV : &str = "-dev";
+const VERSION_DEV: &str = "-dev";
 
 pub fn Version() -> String {
-    format!("{}.{}.{}{}", VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH, VERSION_DEV)
+    format!(
+        "{}.{}.{}{}",
+        VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH, VERSION_DEV
+    )
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -52,15 +54,17 @@ fn is_default<T: Default + PartialEq>(b: &T) -> bool {
     *b == T::default()
 }
 
-
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct User {
     #[serde(default)]
     pub uid: u32,
     #[serde(default)]
     pub gid: u32,
-    #[serde(default, skip_serializing_if = "Vec::is_empty",
-    rename = "additionalGids")]
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        rename = "additionalGids"
+    )]
     pub additional_gids: Vec<u32>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub username: String,
@@ -69,22 +73,22 @@ pub struct User {
 // this converts directly to the correct int
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum LinuxRlimitType {
-    RLIMIT_CPU, // CPU time in sec
-    RLIMIT_FSIZE, // Maximum filesize
-    RLIMIT_DATA, // max data size
-    RLIMIT_STACK, // max stack size
-    RLIMIT_CORE, // max core file size
-    RLIMIT_RSS, // max resident set size
-    RLIMIT_NPROC, // max number of processes
-    RLIMIT_NOFILE, // max number of open files
-    RLIMIT_MEMLOCK, // max locked-in-memory address space
-    RLIMIT_AS, // address space limit
-    RLIMIT_LOCKS, // maximum file locks held
+    RLIMIT_CPU,        // CPU time in sec
+    RLIMIT_FSIZE,      // Maximum filesize
+    RLIMIT_DATA,       // max data size
+    RLIMIT_STACK,      // max stack size
+    RLIMIT_CORE,       // max core file size
+    RLIMIT_RSS,        // max resident set size
+    RLIMIT_NPROC,      // max number of processes
+    RLIMIT_NOFILE,     // max number of open files
+    RLIMIT_MEMLOCK,    // max locked-in-memory address space
+    RLIMIT_AS,         // address space limit
+    RLIMIT_LOCKS,      // maximum file locks held
     RLIMIT_SIGPENDING, // max number of pending signals
-    RLIMIT_MSGQUEUE, // maximum bytes in POSIX mqueues
-    RLIMIT_NICE, // max nice prio allowed to raise to
-    RLIMIT_RTPRIO, // maximum realtime priority
-    RLIMIT_RTTIME, // timeout for RT tasks in us
+    RLIMIT_MSGQUEUE,   // maximum bytes in POSIX mqueues
+    RLIMIT_NICE,       // max nice prio allowed to raise to
+    RLIMIT_RTPRIO,     // maximum realtime priority
+    RLIMIT_RTTIME,     // timeout for RT tasks in us
 }
 
 impl Default for LinuxRlimitType {
@@ -170,8 +174,7 @@ pub struct LinuxCapabilities {
 pub struct Process {
     #[serde(default, skip_serializing_if = "is_false")]
     pub terminal: bool,
-    #[serde(default, skip_serializing_if = "is_default",
-    rename = "consoleSize")]
+    #[serde(default, skip_serializing_if = "is_default", rename = "consoleSize")]
     pub console_size: Box,
     pub user: User,
     pub args: Vec<String>,
@@ -179,29 +182,35 @@ pub struct Process {
     pub env: Vec<String>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub cwd: String,
-    #[serde(default, deserialize_with = "deserialize_capabilities",
-    skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_capabilities",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub capabilities: Option<LinuxCapabilities>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub rlimits: Vec<LinuxRlimit>,
-    #[serde(default, skip_serializing_if = "is_false",
-    rename = "noNewPrivileges")]
+    #[serde(default, skip_serializing_if = "is_false", rename = "noNewPrivileges")]
     pub no_new_privileges: bool,
-    #[serde(default, skip_serializing_if = "String::is_empty",
-    rename = "apparmorProfile")]
+    #[serde(
+        default,
+        skip_serializing_if = "String::is_empty",
+        rename = "apparmorProfile"
+    )]
     pub apparmor_profile: String,
-    #[serde(default, skip_serializing_if = "String::is_empty",
-    rename = "selinuxLabel")]
+    #[serde(
+        default,
+        skip_serializing_if = "String::is_empty",
+        rename = "selinuxLabel"
+    )]
     pub selinux_label: String,
 }
 
 use serde::Deserialize;
 
-fn cap_from_array<D>(
-    a: &[serde_json::Value],
-) -> Result<Vec<LinuxCapabilityType>, D::Error>
-    where
-        D: serde::Deserializer,
+fn cap_from_array<D>(a: &[serde_json::Value]) -> Result<Vec<LinuxCapabilityType>, D::Error>
+where
+    D: serde::Deserializer,
 {
     let mut caps = Vec::new();
     for c in a {
@@ -220,8 +229,8 @@ fn cap_from_object<D>(
     o: &serde_json::Map<String, serde_json::Value>,
     key: &str,
 ) -> Result<Vec<LinuxCapabilityType>, D::Error>
-    where
-        D: serde::Deserializer,
+where
+    D: serde::Deserializer,
 {
     if let Some(v) = o.get(key) {
         match *v {
@@ -237,11 +246,9 @@ fn cap_from_object<D>(
 }
 
 // handle the old case where caps was just a list of caps
-fn deserialize_capabilities<D>(
-    de: D,
-) -> Result<Option<LinuxCapabilities>, D::Error>
-    where
-        D: serde::Deserializer,
+fn deserialize_capabilities<D>(de: D) -> Result<Option<LinuxCapabilities>, D::Error>
+where
+    D: serde::Deserializer,
 {
     let r: serde_json::Value = serde::Deserialize::deserialize(de)?;
     match r {
@@ -259,7 +266,7 @@ fn deserialize_capabilities<D>(
             Ok(Some(capabilities))
         }
         serde_json::Value::Object(o) => {
-            let capabilities = LinuxCapabilities{
+            let capabilities = LinuxCapabilities {
                 bounding: cap_from_object::<D>(&o, "bounding")?,
                 effective: cap_from_object::<D>(&o, "effective")?,
                 inheritable: cap_from_object::<D>(&o, "inheritable")?,
@@ -382,8 +389,7 @@ pub struct LinuxCPU {
     pub quota: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub period: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none",
-    rename = "realtimeRuntime")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "realtimeRuntime")]
     pub realtime_runtime: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "realtimePeriod")]
     pub realtime_period: Option<u64>,
@@ -425,35 +431,47 @@ pub struct LinuxThrottleDevice {
 pub struct LinuxBlockIO {
     #[serde(skip_serializing_if = "Option::is_none", rename = "blkioWeight")]
     pub weight: Option<u16>,
-    #[serde(skip_serializing_if = "Option::is_none",
-    rename = "blkioLeafWeight")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "blkioLeafWeight")]
     pub leaf_weight: Option<u16>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty",
-    rename = "blkioWeightDevice")]
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        rename = "blkioWeightDevice"
+    )]
     pub weight_device: Vec<LinuxWeightDevice>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty",
-    rename = "blkioThrottleReadBpsDevice")]
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        rename = "blkioThrottleReadBpsDevice"
+    )]
     pub throttle_read_bps_device: Vec<LinuxThrottleDevice>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty",
-    rename = "blkioThrottleWriteBpsDevice")]
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        rename = "blkioThrottleWriteBpsDevice"
+    )]
     pub throttle_write_bps_device: Vec<LinuxThrottleDevice>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty",
-    rename = "blkioThrottleReadIOPSDevice")]
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        rename = "blkioThrottleReadIOPSDevice"
+    )]
     pub throttle_read_iops_device: Vec<LinuxThrottleDevice>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty",
-    rename = "blkioThrottleWriteIOPSDevice")]
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        rename = "blkioThrottleWriteIOPSDevice"
+    )]
     pub throttle_write_iops_device: Vec<LinuxThrottleDevice>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct LinuxHugepageLimit {
-    #[serde(default, skip_serializing_if = "String::is_empty",
-    rename = "pageSize")]
+    #[serde(default, skip_serializing_if = "String::is_empty", rename = "pageSize")]
     pub page_size: String,
     #[serde(default)]
     pub limit: i64,
 }
-
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct LinuxInterfacePriority {
@@ -477,8 +495,7 @@ pub struct LinuxResources {
     pub devices: Vec<LinuxDeviceCgroup>,
     // NOTE: spec uses a pointer here, so perhaps this should be an Option, but
     //       false == unset so we don't bother.
-    #[serde(default, skip_serializing_if = "is_false",
-    rename = "disableOOMKiller")]
+    #[serde(default, skip_serializing_if = "is_false", rename = "disableOOMKiller")]
     pub disable_oom_killer: bool,
     // NOTE: spec refers to this as an isize but the range is -1000 to 1000, so
     //       an i32 seems just fine
@@ -492,8 +509,11 @@ pub struct LinuxResources {
     pub pids: Option<LinuxPids>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "blockIO")]
     pub block_io: Option<LinuxBlockIO>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty",
-    rename = "hugepageLimits")]
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        rename = "hugepageLimits"
+    )]
     pub hugepage_limits: Vec<LinuxHugepageLimit>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub network: Option<LinuxNetwork>,
@@ -501,12 +521,12 @@ pub struct LinuxResources {
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Eq, PartialEq)]
 pub enum LinuxNamespaceType {
-    mount = 0x00020000, /* New mount namespace group */
-    cgroup = 0x02000000, /* New cgroup namespace */
-    uts = 0x04000000, /* New utsname namespace */
-    ipc = 0x08000000, /* New ipc namespace */
-    user = 0x10000000, /* New user namespace */
-    pid = 0x20000000, /* New pid namespace */
+    mount = 0x00020000,   /* New mount namespace group */
+    cgroup = 0x02000000,  /* New cgroup namespace */
+    uts = 0x04000000,     /* New utsname namespace */
+    ipc = 0x08000000,     /* New ipc namespace */
+    user = 0x10000000,    /* New user namespace */
+    pid = 0x20000000,     /* New pid namespace */
     network = 0x40000000, /* New network namespace */
 }
 
@@ -587,12 +607,12 @@ impl Default for Arch {
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 #[repr(u32)]
 pub enum LinuxSeccompOperator {
-    SCMP_CMP_NE = 1, /* not equal */
-    SCMP_CMP_LT = 2, /* less than */
-    SCMP_CMP_LE = 3, /* less than or equal */
-    SCMP_CMP_EQ = 4, /* equal */
-    SCMP_CMP_GE = 5, /* greater than or equal */
-    SCMP_CMP_GT = 6, /* greater than */
+    SCMP_CMP_NE = 1,        /* not equal */
+    SCMP_CMP_LT = 2,        /* less than */
+    SCMP_CMP_LE = 3,        /* less than or equal */
+    SCMP_CMP_EQ = 4,        /* equal */
+    SCMP_CMP_GE = 5,        /* greater than or equal */
+    SCMP_CMP_GT = 6,        /* greater than */
     SCMP_CMP_MASKED_EQ = 7, /* masked equality */
 }
 
@@ -636,18 +656,19 @@ pub struct LinuxSeccomp {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Linux {
-    #[serde(default, skip_serializing_if = "Vec::is_empty",
-    rename = "uidMappings")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty", rename = "uidMappings")]
     pub uid_mappings: Vec<LinuxIDMapping>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty",
-    rename = "gidMappings")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty", rename = "gidMappings")]
     pub gid_mappings: Vec<LinuxIDMapping>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub sysctl: HashMap<String, String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resources: Option<LinuxResources>,
-    #[serde(default, skip_serializing_if = "String::is_empty",
-    rename = "cgroupsPath")]
+    #[serde(
+        default,
+        skip_serializing_if = "String::is_empty",
+        rename = "cgroupsPath"
+    )]
     pub cgroups_path: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub namespaces: Vec<LinuxNamespace>,
@@ -655,17 +676,25 @@ pub struct Linux {
     pub devices: Vec<LinuxDevice>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seccomp: Option<LinuxSeccomp>,
-    #[serde(default, skip_serializing_if = "String::is_empty",
-    rename = "rootfsPropagation")]
+    #[serde(
+        default,
+        skip_serializing_if = "String::is_empty",
+        rename = "rootfsPropagation"
+    )]
     pub rootfs_propagation: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty",
-    rename = "maskedPaths")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty", rename = "maskedPaths")]
     pub masked_paths: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty",
-    rename = "readonlyPaths")]
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        rename = "readonlyPaths"
+    )]
     pub readonly_paths: Vec<String>,
-    #[serde(default, skip_serializing_if = "String::is_empty",
-    rename = "mountLabel")]
+    #[serde(
+        default,
+        skip_serializing_if = "String::is_empty",
+        rename = "mountLabel"
+    )]
     pub mount_label: String,
 }
 
@@ -673,11 +702,13 @@ pub struct Linux {
 pub type Solaris = Value;
 pub type Windows = Value;
 
-
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Spec {
-    #[serde(default, skip_serializing_if = "String::is_empty",
-    rename = "ociVersion")]
+    #[serde(
+        default,
+        skip_serializing_if = "String::is_empty",
+        rename = "ociVersion"
+    )]
     pub version: String,
     // NOTE: Platform was removed, but keeping it as an option
     //       to support older docker versions
@@ -726,8 +757,11 @@ impl Spec {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct State {
-    #[serde(default, skip_serializing_if = "String::is_empty",
-    rename = "ociVersion")]
+    #[serde(
+        default,
+        skip_serializing_if = "String::is_empty",
+        rename = "ociVersion"
+    )]
     pub version: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub id: String,
@@ -746,10 +780,7 @@ impl State {
         serialize::to_string(self)
     }
 
-    pub fn to_writer<W: Write>(
-        &self,
-        mut writer: W,
-    ) -> Result<(), serialize::SerializeError> {
+    pub fn to_writer<W: Write>(&self, mut writer: W) -> Result<(), serialize::SerializeError> {
         serialize::to_writer(self, &mut writer)
     }
 }

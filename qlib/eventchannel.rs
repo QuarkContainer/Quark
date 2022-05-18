@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
+use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use super::mutex::*;
-use alloc::string::ToString;
 
 use super::common::*;
 use super::singleton::*;
 
-pub static EMITTERS : Singleton<QMutex<Emitters>> = Singleton::<QMutex<Emitters>>::New();
+pub static EMITTERS: Singleton<QMutex<Emitters>> = Singleton::<QMutex<Emitters>>::New();
 
 pub unsafe fn InitSingleton() {
     EMITTERS.Init(QMutex::new(Emitters(BTreeMap::new())));
@@ -39,7 +39,7 @@ pub struct UncaughtSignal {
 
 #[derive(Clone, Debug)]
 pub enum Event {
-    UncaughtSignal(UncaughtSignal)
+    UncaughtSignal(UncaughtSignal),
 }
 
 pub trait Emitter: Send + Sync {
@@ -72,7 +72,7 @@ pub fn Emit(event: &Event) -> Result<()> {
         EMITTERS.lock().0.remove(&id);
     }
 
-    return Err(Error::Common(errMsg))
+    return Err(Error::Common(errMsg));
 }
 
 pub fn AddEmiiter(e: &Arc<QMutex<Emitter>>) {

@@ -1,5 +1,5 @@
+use core::mem;
 use core::sync::atomic;
-use core::{mem};
 
 use super::porting::*;
 
@@ -29,9 +29,9 @@ impl Mmap {
     }*/
 
     #[inline]
-    pub fn as_mut_ptr(&self) -> * mut u8 {
+    pub fn as_mut_ptr(&self) -> *mut u8 {
         //unsafe {
-            self.addr as * mut u8
+        self.addr as *mut u8
         //}
     }
 }
@@ -65,8 +65,8 @@ impl FromRawFd for Fd {
 impl Drop for Fd {
     fn drop(&mut self) {
         //unsafe {
-            //libc::close(self.0);
-            panic!("todo....")
+        //libc::close(self.0);
+        panic!("todo....")
         //}
     }
 }

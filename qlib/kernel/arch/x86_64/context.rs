@@ -12,21 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::vec::Vec;
-use alloc::sync::Arc;
-use crate::qlib::mutex::*;
-
-use super::super::super::super::limits::*;
-use super::super::super::super::common::*;
-use super::super::super::super::linux_def::*;
-use super::super::super::SignalDef::*;
 use super::super::super::super::addr::*;
-use super::super::super::memmgr::arch::*;
+use super::super::super::super::common::*;
+use super::super::super::super::limits::*;
+use super::super::super::super::linux_def::*;
 use super::super::super::kernel_util::*;
+use super::super::super::memmgr::arch::*;
+use super::super::super::SignalDef::*;
 use super::arch_x86::*;
 
 // These constants come directly from Linux.
-
 
 // MAX_ADDR64 is the maximum userspace address. It is TASK_SIZE in Linux
 // for a 64-bit process.
@@ -84,7 +79,8 @@ pub const PREFERRED_PIELOAD_ADDR: u64 = MAX_ADDR64 / 3 * 2;
 
 pub const PREFERRED_TOP_DOWN_ALLOC_MIN: u64 = 0x7e8000000000;
 pub const PREFERRED_ALLOCATION_GAP: u64 = 128 << 30; // 128 GB
-pub const PREFERRED_TOP_DOWN_BASE_MIN: u64 = PREFERRED_TOP_DOWN_ALLOC_MIN + PREFERRED_ALLOCATION_GAP;
+pub const PREFERRED_TOP_DOWN_BASE_MIN: u64 =
+    PREFERRED_TOP_DOWN_ALLOC_MIN + PREFERRED_ALLOCATION_GAP;
 
 // MIN_MMAP_RAND64 is the smallest we are willing to make the
 // randomization to stay above PREFERRED_TOP_DOWN_BASE_MIN.
@@ -92,7 +88,6 @@ pub const MIN_MMAP_RAND64: u64 = (1 << 26) * MemoryDef::PAGE_SIZE;
 
 pub struct Context64 {
     pub state: State,
-    pub sigFPState: Vec<Arc<QMutex<X86fpstate>>>,
 }
 
 impl Context64 {
@@ -108,22 +103,11 @@ impl Context64 {
         }
     }*/
 
-    pub fn CopySigFPState(&self) -> Vec<Arc<QMutex<X86fpstate>>> {
-        let mut sigfs = Vec::with_capacity(self.sigFPState.len());
-
-        for s in &self.sigFPState {
-            sigfs.push(Arc::new(QMutex::new(s.lock().Fork())));
-        }
-
-        return sigfs
-    }
-
     // Fork returns an exact copy of this context.
     pub fn Fork(&self, regs: &'static mut PtRegs) -> Self {
         return Self {
             state: self.state.Fork(regs),
-            sigFPState: self.CopySigFPState(),
-        }
+        };
     }
 
     // Return returns the current syscall return value.
@@ -160,11 +144,7 @@ impl Context64 {
     pub fn NewMmapLayout(min: u64, max: u64, r: &LimitSet) -> Result<MmapLayout> {
         let min = Addr(min).RoundUp()?.0;
 
-        let mut max = if max > MAX_ADDR64 {
-            MAX_ADDR64
-        } else {
-            max
-        };
+        let mut max = if max > MAX_ADDR64 { MAX_ADDR64 } else { max };
 
         max = Addr(max).RoundDown()?.0;
 
@@ -223,7 +203,7 @@ impl Context64 {
             panic!("Invalid MmapLayout: {:?}", l);
         }
 
-        return Ok(l)
+        return Ok(l);
     }
 
     // PIELoadAddress implements Context.PIELoadAddress.
@@ -232,7 +212,7 @@ impl Context64 {
 
         let max = match Addr(base).AddLen(MAX_MMAP_RAND64) {
             Err(_) => panic!("preferredPIELoadAddr {} too large", base),
-            Ok(addr) => addr.0
+            Ok(addr) => addr.0,
         };
 
         if max > l.MaxAddr {
@@ -245,7 +225,6 @@ impl Context64 {
 
         let addr = base + MMapRand(MAX_MMAP_RAND64)?;
 
-
         return Ok(Addr(addr).RoundDown().unwrap().0);
     }
 }
@@ -253,6 +232,5 @@ impl Context64 {
 // mmapRand returns a random adjustment for randomizing an mmap layout.
 pub fn MMapRand(max: u64) -> Result<u64> {
     let addr = RandU64()? % max;
-    return Ok(Addr(addr).RoundDown().unwrap().0)
+    return Ok(Addr(addr).RoundDown().unwrap().0);
 }
-

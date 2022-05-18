@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use clap::{App, AppSettings, SubCommand, ArgMatches, Arg};
 use alloc::string::String;
+use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 
 use super::super::super::qlib::common::*;
 use super::super::cmd::config::*;
@@ -21,7 +21,7 @@ use super::super::container::container::*;
 use super::command::*;
 
 #[derive(Debug)]
-pub struct WaitCmd  {
+pub struct WaitCmd {
     pub id: String,
     pub pid: i32,
     pub rootPid: i32,
@@ -33,12 +33,22 @@ impl WaitCmd {
         let rootPidStr = cmd_matches.value_of("rootpid").unwrap().to_string();
 
         let pid = match pidStr.parse::<i32>() {
-            Err(_e) => return Err(Error::Common(format!("pid {} cant not be parsed as int type", pidStr))),
+            Err(_e) => {
+                return Err(Error::Common(format!(
+                    "pid {} cant not be parsed as int type",
+                    pidStr
+                )))
+            }
             Ok(v) => v,
         };
 
         let rootPid = match rootPidStr.parse::<i32>() {
-            Err(_e) => return Err(Error::Common(format!("root {} cant not be parsed as int type", rootPidStr))),
+            Err(_e) => {
+                return Err(Error::Common(format!(
+                    "root {} cant not be parsed as int type",
+                    rootPidStr
+                )))
+            }
             Ok(v) => v,
         };
 
@@ -46,7 +56,7 @@ impl WaitCmd {
             id: cmd_matches.value_of("id").unwrap().to_string(),
             pid: pid,
             rootPid: rootPid,
-        })
+        });
     }
 
     pub fn SubCommand<'a, 'b>(common: &CommonArgs<'a, 'b>) -> App<'a, 'b> {
@@ -86,10 +96,11 @@ impl WaitCmd {
         let res;
 
         if rootPid == -1 && pid == -1 {
-            res  = container.Wait()?;
+            res = container.Wait()?;
         } else if rootPid != -1 {
             res = container.WaitRootPID(rootPid, true)?;
-        } else { //pid != -1
+        } else {
+            //pid != -1
             res = container.WaitPid(pid, true)?;
         }
 
@@ -99,7 +110,7 @@ impl WaitCmd {
         };
 
         println!("{:?}", ret);
-        return Ok(())
+        return Ok(());
     }
 }
 

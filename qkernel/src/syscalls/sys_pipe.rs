@@ -12,18 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-use super::super::kernel::pipe::pipe::*;
 use super::super::fs::flags::*;
 use super::super::kernel::fd_table::*;
-use super::super::task::*;
+use super::super::kernel::pipe::pipe::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
+use super::super::task::*;
 
 pub fn Pipe2(task: &mut Task, addr: u64, flags: i32) -> Result<i64> {
     if flags & !(Flags::O_NONBLOCK | Flags::O_CLOEXEC) != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let (r, w) = NewConnectedPipe(task, DEFAULT_PIPE_SIZE, MemoryDef::PAGE_SIZE as usize);
@@ -35,14 +34,22 @@ pub fn Pipe2(task: &mut Task, addr: u64, flags: i32) -> Result<i64> {
 
     //let fds : &mut [i32; 2] = task.GetTypeMut(addr)?;
 
-    let mut fds : [i32; 2] = [0, 0];
-    let rfd = task.NewFDFrom(0, &r, &FDFlags {
-        CloseOnExec: flags & Flags::O_CLOEXEC != 0,
-    })?;
+    let mut fds: [i32; 2] = [0, 0];
+    let rfd = task.NewFDFrom(
+        0,
+        &r,
+        &FDFlags {
+            CloseOnExec: flags & Flags::O_CLOEXEC != 0,
+        },
+    )?;
 
-    let wfd = task.NewFDFrom(0, &w, &FDFlags {
-        CloseOnExec: flags & Flags::O_CLOEXEC != 0,
-    })?;
+    let wfd = task.NewFDFrom(
+        0,
+        &w,
+        &FDFlags {
+            CloseOnExec: flags & Flags::O_CLOEXEC != 0,
+        },
+    )?;
 
     fds[0] = rfd;
     fds[1] = wfd;
@@ -50,7 +57,7 @@ pub fn Pipe2(task: &mut Task, addr: u64, flags: i32) -> Result<i64> {
 
     info!("Pipe2 the fds is {:?}", &fds);
 
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysPipe(task: &mut Task, args: &SyscallArguments) -> Result<i64> {

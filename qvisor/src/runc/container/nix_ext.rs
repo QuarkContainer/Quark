@@ -14,10 +14,10 @@
 
 // Functions in libc that haven't made it into nix yet
 use libc;
-use std::os::unix::io::RawFd;
 use nix::fcntl::{open, OFlag};
 use nix::sys::stat::Mode;
 use nix::unistd::{close, write};
+use std::os::unix::io::RawFd;
 
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::cstring::*;
@@ -100,9 +100,11 @@ pub fn putenv(string: &CString) -> Result<()> {
 const EXEC_PATH: &'static str = "/proc/self/attr/exec";
 
 pub fn setexeccon(label: &str) -> Result<()> {
-    let fd = open(EXEC_PATH, OFlag::O_RDWR, Mode::empty()).map_err(|e| Error::IOError(format!("setexeccon error is {:?}", e)))?;
+    let fd = open(EXEC_PATH, OFlag::O_RDWR, Mode::empty())
+        .map_err(|e| Error::IOError(format!("setexeccon error is {:?}", e)))?;
     defer!(close(fd).unwrap());
-    write(fd, label.as_bytes()).map_err(|e| Error::IOError(format!("setexeccon error is {:?}", e)))?;
+    write(fd, label.as_bytes())
+        .map_err(|e| Error::IOError(format!("setexeccon error is {:?}", e)))?;
     Ok(())
 }
 

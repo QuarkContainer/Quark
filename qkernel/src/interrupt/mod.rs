@@ -12,25 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 mod idt;
 
-use super::qlib::addr::*;
-use super::task::*;
-use super::qlib::common::*;
-use super::qlib::vcpu_mgr::*;
-use super::qlib::linux_def::*;
-use super::qlib::kernel::TSC;
-use super::threadmgr::task_sched::*;
-use super::SignalDef::*;
-use super::MainRun;
 use super::asm::*;
-use super::qlib::perf_tunning::*;
-use super::SHARESPACE;
-use super::qlib::singleton::*;
+use super::qlib::addr::*;
+use super::qlib::common::*;
+use super::qlib::kernel::TSC;
+use super::qlib::linux_def::*;
 use super::qlib::pagetable::PageTables;
+use super::qlib::perf_tunning::*;
+use super::qlib::singleton::*;
+use super::qlib::vcpu_mgr::*;
+use super::task::*;
+use super::threadmgr::task_sched::*;
+use super::MainRun;
+use super::SignalDef::*;
+use super::SHARESPACE;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, core::cmp::PartialEq)]
 pub enum ExceptionStackVec {
     DivideByZero,
     Debug,
@@ -85,7 +84,7 @@ extern "C" {
     pub fn security_handler();
 }
 
-pub static IDT : Singleton<idt::Idt> = Singleton::<idt::Idt>::New();
+pub static IDT: Singleton<idt::Idt> = Singleton::<idt::Idt>::New();
 pub unsafe fn InitSingleton() {
     let mut idt = idt::Idt::new();
 
@@ -93,25 +92,39 @@ pub unsafe fn InitSingleton() {
 
     idt.set_handler(1, debug_handler).set_stack_index(0);
     idt.set_handler(2, nm_handler).set_stack_index(0);
-    idt.set_handler(3, breakpoint_handler).set_stack_index(0).set_privilege_level(3);
+    idt.set_handler(3, breakpoint_handler)
+        .set_stack_index(0)
+        .set_privilege_level(3);
     idt.set_handler(4, overflow_handler).set_stack_index(0);
     idt.set_handler(5, bound_range_handler).set_stack_index(0);
-    idt.set_handler(6, invalid_op_handler).set_stack_index(0).set_privilege_level(3);
-    idt.set_handler(7, device_not_available_handler).set_stack_index(0);
+    idt.set_handler(6, invalid_op_handler)
+        .set_stack_index(0)
+        .set_privilege_level(3);
+    idt.set_handler(7, device_not_available_handler)
+        .set_stack_index(0);
     idt.set_handler(8, double_fault_handler).set_stack_index(0);
 
     idt.set_handler(10, invalid_tss_handler).set_stack_index(0);
-    idt.set_handler(11, segment_not_present_handler).set_stack_index(0);
-    idt.set_handler(12, stack_segment_handler).set_stack_index(0);
-    idt.set_handler(13, gp_handler).set_stack_index(0).set_privilege_level(3);
+    idt.set_handler(11, segment_not_present_handler)
+        .set_stack_index(0);
+    idt.set_handler(12, stack_segment_handler)
+        .set_stack_index(0);
+    idt.set_handler(13, gp_handler)
+        .set_stack_index(0)
+        .set_privilege_level(3);
 
-    idt.set_handler(14, page_fault_handler).set_stack_index(0).set_privilege_level(3);
+    idt.set_handler(14, page_fault_handler)
+        .set_stack_index(0)
+        .set_privilege_level(3);
 
     idt.set_handler(16, x87_fp_handler).set_stack_index(0);
-    idt.set_handler(17, alignment_check_handler).set_stack_index(0);
-    idt.set_handler(18, machine_check_handler).set_stack_index(0);
+    idt.set_handler(17, alignment_check_handler)
+        .set_stack_index(0);
+    idt.set_handler(18, machine_check_handler)
+        .set_stack_index(0);
     idt.set_handler(19, simd_fp_handler).set_stack_index(0);
-    idt.set_handler(20, virtualization_handler).set_stack_index(0);
+    idt.set_handler(20, virtualization_handler)
+        .set_stack_index(0);
 
     idt.set_handler(30, security_handler).set_stack_index(0);
 
@@ -122,52 +135,55 @@ pub fn init() {
     IDT.load();
 }
 
-pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) {
-    let PRINT_EXECPTION : bool = SHARESPACE.config.read().PrintException;
+pub fn ExceptionHandler(ev: ExceptionStackVec, ptRegs: &mut PtRegs, errorCode: u64) {
+    let PRINT_EXECPTION: bool = SHARESPACE.config.read().PrintException;
 
     let currTask = Task::Current();
 
-    let mut rflags = sf.eflags;
+    let mut rflags = ptRegs.eflags;
     rflags &= !USER_FLAGS_CLEAR;
     rflags |= USER_FLAGS_SET;
-    sf.eflags = rflags;
+    ptRegs.eflags = rflags;
 
     // is this call from user
-    if sf.ss & 0x3 != 0 {
+    if ptRegs.ss & 0x3 != 0 {
         //PerfGofrom(PerfType::User);
         currTask.AccountTaskLeave(SchedState::RunningApp);
     } else {
-        print!("get non page fault exception from kernel ... {:#x?}/ev {:#x?}", sf, ev);
+        print!(
+            "get non page fault exception from kernel ... {:#x?}/ev {:#x?}",
+            ptRegs, ev
+        );
 
         for i in 0..super::CPU_LOCAL.len() {
             print!("CPU#{} is {:#x?}", i, super::CPU_LOCAL[i]);
         }
 
-        /*backtracer::trace1(sf.ip, sf.sp, pt.rbp, &mut |frame| {
-            print!("pagefault frame is {:#x?}", frame);
-            true
-        });*/
         panic!("Get on page fault exception from kernel");
     };
 
     if PRINT_EXECPTION {
-        let map =  currTask.mm.GetSnapshotLocked(currTask, false);
-        error!("ExceptionHandler  .... ev is {:?}, sf is {:x?} errorcode is {:x}, map is {}",
-            ev, sf, errorCode, &map);
+        let map = currTask.mm.GetSnapshotLocked(currTask, false);
+        error!(
+            "ExceptionHandler  .... ev is {:?}, ptRegs is {:x?} errorcode is {:x}, map is {}",
+            ev, ptRegs, errorCode, &map
+        );
     }
 
-    currTask.SaveFp();
+    if ev != ExceptionStackVec::X87FloatingPointException &&  ev != ExceptionStackVec::SIMDFloatingPointException {
+        currTask.SaveFp();
+    }
 
     match ev {
         ExceptionStackVec::DivideByZero => {
             let info = SignalInfo {
                 Signo: Signal::SIGFPE,
-                Code: 1,  // FPE_INTDIV (divide by zero).
+                Code: 1, // FPE_INTDIV (divide by zero).
                 ..Default::default()
             };
 
             let sigfault = info.SigFault();
-            sigfault.addr = sf.rip;
+            sigfault.addr = ptRegs.rip;
 
             let thread = currTask.Thread();
             // Synchronous signal. Send it to ourselves. Assume the signal is
@@ -175,17 +191,19 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
             // blocked) like Linux does. Conveniently, this is even the correct
             // behavior for SIGTRAP from single-stepping.
             thread.forceSignal(Signal(info.Signo), false);
-            thread.SendSignal(&info).expect("DivByZeroHandler send signal fail");
+            thread
+                .SendSignal(&info)
+                .expect("DivByZeroHandler send signal fail");
         }
         ExceptionStackVec::Overflow => {
             let info = SignalInfo {
                 Signo: Signal::SIGFPE,
-                Code: 2,  // FPE_INTOVF (integer overflow).
+                Code: 2, // FPE_INTOVF (integer overflow).
                 ..Default::default()
             };
 
             let sigfault = info.SigFault();
-            sigfault.addr = sf.rip;
+            sigfault.addr = ptRegs.rip;
 
             let thread = currTask.Thread();
             // Synchronous signal. Send it to ourselves. Assume the signal is
@@ -193,18 +211,20 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
             // blocked) like Linux does. Conveniently, this is even the correct
             // behavior for SIGTRAP from single-stepping.
             thread.forceSignal(Signal(info.Signo), false);
-            thread.SendSignal(&info).expect("DivByZeroHandler send signal fail");
+            thread
+                .SendSignal(&info)
+                .expect("DivByZeroHandler send signal fail");
         }
-        ExceptionStackVec::X87FloatingPointException |
-        ExceptionStackVec::SIMDFloatingPointException => {
+        ExceptionStackVec::X87FloatingPointException
+        | ExceptionStackVec::SIMDFloatingPointException => {
             let info = SignalInfo {
                 Signo: Signal::SIGFPE,
-                Code: 7,  // FPE_FLTINV (invalid operation).
+                Code: 7, // FPE_FLTINV (invalid operation).
                 ..Default::default()
             };
 
             let sigfault = info.SigFault();
-            sigfault.addr = sf.rip;
+            sigfault.addr = ptRegs.rip;
 
             let thread = currTask.Thread();
             // Synchronous signal. Send it to ourselves. Assume the signal is
@@ -212,10 +232,11 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
             // blocked) like Linux does. Conveniently, this is even the correct
             // behavior for SIGTRAP from single-stepping.
             thread.forceSignal(Signal(info.Signo), false);
-            thread.SendSignal(&info).expect("DivByZeroHandler send signal fail");
+            thread
+                .SendSignal(&info)
+                .expect("DivByZeroHandler send signal fail");
         }
-        ExceptionStackVec::Debug |
-        ExceptionStackVec::Breakpoint => {
+        ExceptionStackVec::Debug | ExceptionStackVec::Breakpoint => {
             let info = SignalInfo {
                 Signo: Signal::SIGTRAP,
                 Code: 1,
@@ -223,17 +244,18 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
             };
 
             let sigfault = info.SigFault();
-            sigfault.addr = sf.rip;
+            sigfault.addr = ptRegs.rip;
             let thread = currTask.Thread();
             thread.forceSignal(Signal(info.Signo), false);
-            thread.SendSignal(&info).expect("DivByZeroHandler send signal fail");
+            thread
+                .SendSignal(&info)
+                .expect("DivByZeroHandler send signal fail");
         }
-        ExceptionStackVec::GeneralProtectionFault |
-        ExceptionStackVec::SegmentNotPresent |
-        ExceptionStackVec::BoundRangeExceeded |
-        ExceptionStackVec::InvalidTSS |
-        ExceptionStackVec::StackSegmentFault
-        => {
+        ExceptionStackVec::GeneralProtectionFault
+        | ExceptionStackVec::SegmentNotPresent
+        | ExceptionStackVec::BoundRangeExceeded
+        | ExceptionStackVec::InvalidTSS
+        | ExceptionStackVec::StackSegmentFault => {
             let info = SignalInfo {
                 Signo: Signal::SIGSEGV,
                 Code: SignalInfo::SIGNAL_INFO_KERNEL,
@@ -241,20 +263,24 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
             };
 
             let sigfault = info.SigFault();
-            sigfault.addr = sf.rip;
+            sigfault.addr = ptRegs.rip;
             let thread = currTask.Thread();
             thread.forceSignal(Signal(info.Signo), false);
-            thread.SendSignal(&info).expect("DivByZeroHandler send signal fail");
+            thread
+                .SendSignal(&info)
+                .expect("DivByZeroHandler send signal fail");
         }
         ExceptionStackVec::InvalidOpcode => {
             let _ml = currTask.mm.MappingWriteLock();
-            let map =  currTask.mm.GetSnapshotLocked(currTask, false);
-            let data = unsafe {
-                *(sf.rip as * const u64)
-            };
+            let map = currTask.mm.GetSnapshotLocked(currTask, false);
+            let data = unsafe { *(ptRegs.rip as *const u64) };
 
-            print!("InvalidOpcode: data is {:x}, phyAddr is {:x?}, the map is {}",
-                   data, currTask.mm.VirtualToPhyLocked(sf.rip), &map);
+            print!(
+                "InvalidOpcode: data is {:x}, phyAddr is {:x?}, the map is {}",
+                data,
+                currTask.mm.VirtualToPhyLocked(ptRegs.rip),
+                &map
+            );
 
             let info = SignalInfo {
                 Signo: Signal::SIGILL,
@@ -263,23 +289,27 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
             };
 
             let sigfault = info.SigFault(); // ILL_ILLOPC (illegal opcode).
-            sigfault.addr = sf.rip;
+            sigfault.addr = ptRegs.rip;
             let thread = currTask.Thread();
             thread.forceSignal(Signal(info.Signo), false);
-            thread.SendSignal(&info).expect("InvalidOpcode send signal fail");
+            thread
+                .SendSignal(&info)
+                .expect("InvalidOpcode send signal fail");
         }
         ExceptionStackVec::AlignmentCheck => {
             let info = SignalInfo {
                 Signo: Signal::SIGBUS,
-                Code: 2,  // BUS_ADRERR (physical address does not exist).
+                Code: 2, // BUS_ADRERR (physical address does not exist).
                 ..Default::default()
             };
 
             let sigfault = info.SigFault(); // ILL_ILLOPC (illegal opcode).
-            sigfault.addr = sf.rip;
+            sigfault.addr = ptRegs.rip;
             let thread = currTask.Thread();
             thread.forceSignal(Signal(info.Signo), false);
-            thread.SendSignal(&info).expect("DivByZeroHandler send signal fail");
+            thread
+                .SendSignal(&info)
+                .expect("DivByZeroHandler send signal fail");
         }
         _ => {
             panic!("ExceptionHandler: get unhanded exception {:?}", ev)
@@ -287,9 +317,11 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, sf: &mut PtRegs, errorCode: u64) 
     }
 
     MainRun(currTask, TaskRunState::RunApp);
-    currTask.mm.HandleTlbShootdown();
-    currTask.RestoreFp();
-    ReturnToApp(sf);
+    if ev != ExceptionStackVec::X87FloatingPointException &&  ev != ExceptionStackVec::SIMDFloatingPointException {
+        currTask.RestoreFp();
+    }
+
+    ReturnToApp(ptRegs);
 }
 
 pub fn ReturnToApp(pt: &mut PtRegs) -> ! {
@@ -298,71 +330,71 @@ pub fn ReturnToApp(pt: &mut PtRegs) -> ! {
 }
 
 #[no_mangle]
-pub extern fn DivByZeroHandler(sf: &mut PtRegs) {
+pub extern "C" fn DivByZeroHandler(sf: &mut PtRegs) {
     ExceptionHandler(ExceptionStackVec::DivideByZero, sf, 0);
 }
 
 #[no_mangle]
-pub extern fn DebugHandler(sf: &mut PtRegs) {
+pub extern "C" fn DebugHandler(sf: &mut PtRegs) {
     ExceptionHandler(ExceptionStackVec::Debug, sf, 0);
 }
 
 #[no_mangle]
-pub extern fn NonmaskableInterrupt(sf: &mut PtRegs) {
+pub extern "C" fn NonmaskableInterrupt(sf: &mut PtRegs) {
     ExceptionHandler(ExceptionStackVec::NMI, sf, 0);
 }
 
 #[no_mangle]
-pub extern fn BreakpointHandler(sf: &mut PtRegs) {
+pub extern "C" fn BreakpointHandler(sf: &mut PtRegs) {
     // breakpoint can only call from user;
     ExceptionHandler(ExceptionStackVec::Breakpoint, sf, 0);
 }
 
 #[no_mangle]
-pub extern fn OverflowHandler(sf: &mut PtRegs) {
+pub extern "C" fn OverflowHandler(sf: &mut PtRegs) {
     ExceptionHandler(ExceptionStackVec::Overflow, sf, 0);
 }
 
 #[no_mangle]
-pub extern fn BoundRangeHandler(sf: &mut PtRegs) {
+pub extern "C" fn BoundRangeHandler(sf: &mut PtRegs) {
     ExceptionHandler(ExceptionStackVec::BoundRangeExceeded, sf, 0);
 }
 
 #[no_mangle]
-pub extern fn InvalidOpcodeHandler(sf: &mut PtRegs) {
+pub extern "C" fn InvalidOpcodeHandler(sf: &mut PtRegs) {
     ExceptionHandler(ExceptionStackVec::InvalidOpcode, sf, 0);
 }
 
 #[no_mangle]
-pub extern fn DeviceNotAvailableHandler(sf: &mut PtRegs) {
+pub extern "C" fn DeviceNotAvailableHandler(sf: &mut PtRegs) {
     ExceptionHandler(ExceptionStackVec::DeviceNotAvailable, sf, 0);
 }
 
 #[no_mangle]
-pub extern fn DoubleFaultHandler(sf: &mut PtRegs, errorCode: u64) {
+pub extern "C" fn DoubleFaultHandler(sf: &mut PtRegs, errorCode: u64) {
     ExceptionHandler(ExceptionStackVec::DoubleFault, sf, errorCode);
 }
 
 //Coprocessor Segment Overrun? skip?
 
 #[no_mangle]
-pub extern fn InvalidTSSHandler(sf: &mut PtRegs, errorCode: u64) {
+pub extern "C" fn InvalidTSSHandler(sf: &mut PtRegs, errorCode: u64) {
     ExceptionHandler(ExceptionStackVec::InvalidTSS, sf, errorCode);
 }
 
 #[no_mangle]
-pub extern fn SegmentNotPresentHandler(sf: &mut PtRegs, errorCode: u64) {
+pub extern "C" fn SegmentNotPresentHandler(sf: &mut PtRegs, errorCode: u64) {
     ExceptionHandler(ExceptionStackVec::SegmentNotPresent, sf, errorCode);
 }
 
 #[no_mangle]
-pub extern fn StackSegmentHandler(sf: &mut PtRegs, errorCode: u64) {
+pub extern "C" fn StackSegmentHandler(sf: &mut PtRegs, errorCode: u64) {
     ExceptionHandler(ExceptionStackVec::StackSegmentFault, sf, errorCode);
 }
 
 // General Protection Fault
 #[no_mangle]
-pub extern fn GPHandler(sf: &mut PtRegs, errorCode: u64) {
+pub extern "C" fn GPHandler(sf: &mut PtRegs, errorCode: u64) {
     ExceptionHandler(ExceptionStackVec::GeneralProtectionFault, sf, errorCode);
 }
 
@@ -378,14 +410,16 @@ bitflags! {
 }
 
 #[no_mangle]
-pub extern fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
+pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
     let cr2: u64;
     unsafe { llvm_asm!("mov %cr2, $0" : "=r" (cr2) ) };
     let cr3: u64;
     unsafe { llvm_asm!("mov %cr3, $0" : "=r" (cr3) ) };
 
     let ss: u16 = 16;
-    unsafe{ llvm_asm!("movw $0, %ss" :: "r" (ss) : "memory");}
+    unsafe {
+        llvm_asm!("movw $0, %ss" :: "r" (ss) : "memory");
+    }
 
     let currTask = Task::Current();
 
@@ -406,13 +440,16 @@ pub extern fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
         false
     };
 
-    if ptRegs.rcx==ptRegs.rip && ptRegs.r11 == ptRegs.eflags {
+    if ptRegs.rcx == ptRegs.rip && ptRegs.r11 == ptRegs.eflags {
         error!("PageFaultHandler full restore wrong...");
         panic!("PageFaultHandler full restore wrong...");
     }
 
     if !fromUser {
-        print!("Get pagefault from kernel ... {:#x?}/cr2 is {:x}/cr3 is {:x}", ptRegs, cr2, cr3);
+        print!(
+            "Get pagefault from kernel ... {:#x?}/cr2 is {:x}/cr3 is {:x}",
+            ptRegs, cr2, cr3
+        );
         /*backtracer::trace1(sf.ip, sf.sp, pt.rbp, &mut |frame| {
             print!("pagefault frame is {:#x?}", frame);
             true
@@ -423,17 +460,15 @@ pub extern fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
     currTask.PerfGoto(PerfType::PageFault);
     defer!(Task::Current().PerfGofrom(PerfType::PageFault));
 
-    let PRINT_EXECPTION : bool = SHARESPACE.config.read().PrintException;
+    let PRINT_EXECPTION: bool = SHARESPACE.config.read().PrintException;
     if PRINT_EXECPTION {
-        error!("in PageFaultHandler, cr2: {:x}, cr3: {:x}, isuser = {}, error is {:b}, ss is {:x}, cs == {:x}, eflags = {:x}, new ss is {}",
+        error!("in PageFaultHandler, cr2: {:x}, rip: {:x}, cr3: {:x}, isuser = {}, error is {:b}, eflags = {:x}",
             cr2,
+            ptRegs.rip,
             cr3,
             PageFaultErrorCode::from_bits(errorCode).unwrap() & PageFaultErrorCode::USER_MODE == PageFaultErrorCode::USER_MODE,
             PageFaultErrorCode::from_bits(errorCode).unwrap(),
-            ptRegs.ss,
-            ptRegs.cs,
             ptRegs.eflags,
-            ss
         );
     }
 
@@ -446,7 +481,7 @@ pub extern fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
             //vmas.lock().Get(cr2) {
             None => {
                 if cr2 > 0x1000 {
-                    let map =  currTask.mm.GetSnapshotLocked(currTask, false);
+                    let map = currTask.mm.GetSnapshotLocked(currTask, false);
                     print!("the map is {}", &map);
                 }
 
@@ -459,26 +494,35 @@ pub extern fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
 
         let errbits = PageFaultErrorCode::from_bits(errorCode).unwrap();
         if vma.kernel == true {
-            let map =  currTask.mm.GetSnapshotLocked(currTask, false);
+            let map = currTask.mm.GetSnapshotLocked(currTask, false);
             error!("the map2 is {}", &map);
 
             signal = Signal::SIGSEGV;
             break;
         }
 
-        if !vma.effectivePerms.Read() { // has no read permission
+        if !vma.effectivePerms.Read() {
+            // has no read permission
             signal = Signal::SIGSEGV;
             break;
         }
 
         let pageAddr = Addr(cr2).RoundDown().unwrap().0;
-        assert!(range.Contains(pageAddr), "PageFaultHandler vaddr is not in the Vma range");
+        assert!(
+            range.Contains(pageAddr),
+            "PageFaultHandler vaddr is not in the Vma range"
+        );
 
         // triggered because pagetable not mapping
-        if errbits & PageFaultErrorCode::PROTECTION_VIOLATION !=  PageFaultErrorCode::PROTECTION_VIOLATION {
+        if errbits & PageFaultErrorCode::PROTECTION_VIOLATION
+            != PageFaultErrorCode::PROTECTION_VIOLATION
+        {
             //error!("InstallPage 1, range is {:x?}, address is {:x}, vma.growsDown is {}",
             //    &range, pageAddr, vma.growsDown);
-            match currTask.mm.InstallPageLocked(currTask, &vma, pageAddr, &range) {
+            match currTask
+                .mm
+                .InstallPageLocked(currTask, &vma, pageAddr, &range)
+            {
                 Err(Error::FileMapError) => {
                     signal = Signal::SIGBUS;
                     break;
@@ -486,7 +530,7 @@ pub extern fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
                 Err(e) => {
                     panic!("PageFaultHandler error is {:?}", e)
                 }
-                _ => ()
+                _ => (),
             };
 
             for i in 1..8 {
@@ -501,7 +545,7 @@ pub extern fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
                         Err(_) => {
                             break;
                         }
-                        _ => ()
+                        _ => (),
                     };
                 } else {
                     break;
@@ -516,7 +560,7 @@ pub extern fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
                 }
             }
 
-            return
+            return;
         }
 
         if vma.private == false {
@@ -531,6 +575,7 @@ pub extern fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
             }
 
             currTask.mm.CopyOnWriteLocked(pageAddr, &vma);
+            currTask.mm.TlbShootdown();
             if fromUser {
                 //PerfGoto(PerfType::User);
                 currTask.AccountTaskEnter(SchedState::RunningApp);
@@ -544,15 +589,22 @@ pub extern fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
             break;
         }
 
-        return
+        return;
     }
 
     HandleFault(currTask, fromUser, errorCode, cr2, ptRegs, signal);
 }
 
-pub fn HandleFault(task: &mut Task, user: bool, errorCode: u64, cr2: u64, sf: &mut PtRegs, signal: i32) -> ! {
+pub fn HandleFault(
+    task: &mut Task,
+    user: bool,
+    errorCode: u64,
+    cr2: u64,
+    sf: &mut PtRegs,
+    signal: i32,
+) -> ! {
     if !user {
-        let map =  task.mm.GetSnapshotLocked(task, false);
+        let map = task.mm.GetSnapshotLocked(task, false);
         print!("unhandle EXCEPTION: page_fault FAULT\n{:#?}, error code is {:?}, cr2 is {:x}, registers is {:#x?}",
                sf, errorCode, cr2, task.GetPtRegs());
         print!("the map 3 is {}", &map);
@@ -569,8 +621,8 @@ pub fn HandleFault(task: &mut Task, user: bool, errorCode: u64, cr2: u64, sf: &m
     let sigfault = info.SigFault();
     sigfault.addr = cr2;
     //let read = errorCode & (1<<1) == 0;
-    let write = errorCode & (1<<1) != 0;
-    let execute = errorCode & (1<<4) != 0;
+    let write = errorCode & (1 << 1) != 0;
+    let execute = errorCode & (1 << 4) != 0;
 
     if !write && !execute {
         info.Code = 1; // SEGV_MAPERR.
@@ -584,7 +636,9 @@ pub fn HandleFault(task: &mut Task, user: bool, errorCode: u64, cr2: u64, sf: &m
     // blocked) like Linux does. Conveniently, this is even the correct
     // behavior for SIGTRAP from single-stepping.
     thread.forceSignal(Signal(Signal::SIGSEGV), false);
-    thread.SendSignal(&info).expect("PageFaultHandler send signal fail");
+    thread
+        .SendSignal(&info)
+        .expect("PageFaultHandler send signal fail");
     MainRun(task, TaskRunState::RunApp);
     task.mm.HandleTlbShootdown();
 
@@ -594,27 +648,27 @@ pub fn HandleFault(task: &mut Task, user: bool, errorCode: u64, cr2: u64, sf: &m
 
 // x87 Floating-Point Exception
 #[no_mangle]
-pub extern fn X87FPHandler(sf: &mut PtRegs) {
+pub extern "C" fn X87FPHandler(sf: &mut PtRegs) {
     ExceptionHandler(ExceptionStackVec::X87FloatingPointException, sf, 0);
 }
 
 #[no_mangle]
-pub extern fn AlignmentCheckHandler(sf: &mut PtRegs, errorCode: u64) {
+pub extern "C" fn AlignmentCheckHandler(sf: &mut PtRegs, errorCode: u64) {
     ExceptionHandler(ExceptionStackVec::AlignmentCheck, sf, errorCode);
 }
 
 #[no_mangle]
-pub extern fn MachineCheckHandler(sf: &mut PtRegs) {
+pub extern "C" fn MachineCheckHandler(sf: &mut PtRegs) {
     ExceptionHandler(ExceptionStackVec::MachineCheck, sf, 0);
 }
 
 #[no_mangle]
-pub extern fn SIMDFPHandler(sf: &mut PtRegs) {
+pub extern "C" fn SIMDFPHandler(sf: &mut PtRegs) {
     ExceptionHandler(ExceptionStackVec::SIMDFloatingPointException, sf, 0);
 }
 
 #[no_mangle]
-pub extern fn VirtualizationHandler(ptRegs: &mut PtRegs) {
+pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
     let mask = CPULocal::Myself().ResetInterruptMask();
     let currTask = Task::Current();
 
@@ -631,10 +685,12 @@ pub extern fn VirtualizationHandler(ptRegs: &mut PtRegs) {
         PageTables::Switch(curr);
         let currTask = Task::Current();
         currTask.mm.MaskTlbShootdown(CPULocal::CpuId() as u64);
-    }
 
-    if CPULocal::InterruptByThreadTimeout(mask) {
-        if ptRegs.ss & 0x3 != 0 { // from user
+        CPULocal::SetKernelStack(currTask.GetKernelSp());
+        return;
+    } else if CPULocal::InterruptByThreadTimeout(mask) {
+        if ptRegs.ss & 0x3 != 0 {
+            // from user
             let mut rflags = ptRegs.eflags;
             rflags &= !USER_FLAGS_CLEAR;
             rflags |= USER_FLAGS_SET;
@@ -646,26 +702,31 @@ pub extern fn VirtualizationHandler(ptRegs: &mut PtRegs) {
 
             currTask.AccountTaskLeave(SchedState::RunningApp);
             currTask.SaveFp();
+
             super::qlib::kernel::taskMgr::Yield();
+            MainRun(currTask, TaskRunState::RunApp);
             currTask.RestoreFp();
-            currTask.AccountTaskEnter(SchedState::RunningApp);
+
             CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
+            CPULocal::SetKernelStack(currTask.GetKernelSp());
+
+            let kernalRsp = ptRegs as *const _ as u64;
+            if !(ptRegs.rip == ptRegs.rcx && ptRegs.r11 == ptRegs.eflags) {
+                IRet(kernalRsp)
+            } else {
+                SyscallRet(kernalRsp)
+            }
         }
     }
-
-    CPULocal::SetKernelStack(currTask.GetKernelSp());
-    return;
 }
 
 #[no_mangle]
-pub extern fn SecurityHandler(sf: &mut PtRegs, errorCode: u64) {
+pub extern "C" fn SecurityHandler(sf: &mut PtRegs, errorCode: u64) {
     ExceptionHandler(ExceptionStackVec::SecurityException, sf, errorCode);
 }
 
 #[no_mangle]
-pub extern fn TripleFaultHandler(sf: &mut PtRegs) {
-    info!("\nTripleFaultHandler: at {:#x}\n{:#?}",
-    sf.rip,
-    sf);
+pub extern "C" fn TripleFaultHandler(sf: &mut PtRegs) {
+    info!("\nTripleFaultHandler: at {:#x}\n{:#?}", sf.rip, sf);
     loop {}
 }

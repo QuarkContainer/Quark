@@ -12,22 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
-use alloc::collections::btree_map::BTreeMap;
 use crate::qlib::mutex::*;
-use core::ops::Deref;
+use alloc::collections::btree_map::BTreeMap;
+use alloc::sync::Arc;
 use core::fmt;
+use core::ops::Deref;
 
-use super::Kernel::HostSpace;
-use super::kernel::waiter::*;
-use super::fs::host::hostinodeop::*;
-use super::super::object_ref::*;
 use super::super::common::*;
 use super::super::linux_def::*;
-use super::SHARESPACE;
+use super::super::object_ref::*;
+use super::fs::host::hostinodeop::*;
+use super::kernel::waiter::*;
+use super::Kernel::HostSpace;
 use super::IOURING;
+use super::SHARESPACE;
 
-pub static GUEST_NOTIFIER : GuestNotifierRef = GuestNotifierRef::New();
+pub static GUEST_NOTIFIER: GuestNotifierRef = GuestNotifierRef::New();
 
 pub fn AddFD(fd: i32, iops: &HostInodeOp) {
     GUEST_NOTIFIER.AddFD(fd, iops);
@@ -42,7 +42,7 @@ pub fn UpdateFD(fd: i32) -> Result<()> {
 }
 
 pub fn NonBlockingPoll(fd: i32, mask: EventMask) -> EventMask {
-    return HostSpace::NonBlockingPoll(fd, mask) as EventMask
+    return HostSpace::NonBlockingPoll(fd, mask) as EventMask;
 }
 
 pub fn Notify(fd: i32, mask: EventMask) {
@@ -76,12 +76,9 @@ impl Deref for FdWaitInfo {
 
 impl FdWaitInfo {
     pub fn New(queue: Queue, mask: EventMask) -> Self {
-        let intern = FdWaitIntern {
-            queue,
-            mask
-        };
+        let intern = FdWaitIntern { queue, mask };
 
-        return Self(Arc::new(QMutex::new(intern)))
+        return Self(Arc::new(QMutex::new(intern)));
     }
 
     pub fn UpdateFDAsync(&self, fd: i32, epollfd: i32) -> Result<()> {
@@ -95,14 +92,14 @@ impl FdWaitInfo {
                 if mask != 0 {
                     op = LibcConst::EPOLL_CTL_ADD;
                 } else {
-                    return Ok(())
+                    return Ok(());
                 }
             } else {
                 if mask == 0 {
                     op = LibcConst::EPOLL_CTL_DEL;
                 } else {
                     if mask | fi.mask == fi.mask {
-                        return Ok(())
+                        return Ok(());
                     }
                     op = LibcConst::EPOLL_CTL_MOD;
                 }
@@ -116,7 +113,7 @@ impl FdWaitInfo {
         let mask = mask | LibcConst::EPOLLET as u64;
 
         IOURING.EpollCtl(epollfd, fd, op as i32, mask as u32);
-        return Ok(())
+        return Ok(());
     }
 
     pub fn UpdateFDSync(&self, fd: i32) -> Result<()> {
@@ -125,7 +122,7 @@ impl FdWaitInfo {
 
             let mask = fi.queue.Events();
             if mask == fi.mask {
-                return Ok(())
+                return Ok(());
             }
 
             mask
@@ -142,7 +139,7 @@ impl FdWaitInfo {
     fn waitfd(fd: i32, mask: EventMask) -> Result<()> {
         HostSpace::WaitFDAsync(fd, mask);
 
-        return Ok(())
+        return Ok(());
     }
 }
 
@@ -160,7 +157,7 @@ pub struct GuestNotifierInternal {
 #[derive(Default, Copy, Clone, Debug)]
 pub struct EpollEvent {
     pub Event: u32,
-    pub U64: u64
+    pub U64: u64,
 }
 
 pub type GuestNotifierRef = ObjectRef<GuestNotifier>;
@@ -176,7 +173,7 @@ impl Deref for GuestNotifier {
 
 impl Default for GuestNotifier {
     fn default() -> Self {
-        return Self::New()
+        return Self::New();
     }
 }
 
@@ -187,11 +184,11 @@ impl GuestNotifier {
             epollfd: 0,
         };
 
-        return Self(QMutex::new(internal))
+        return Self(QMutex::new(internal));
     }
 
     pub fn Addr(&self) -> u64 {
-        return self as * const _ as u64
+        return self as *const _ as u64;
     }
 
     pub fn VcpuWait(&self) -> u64 {
@@ -200,7 +197,7 @@ impl GuestNotifier {
             panic!("ProcessHostEpollWait fail with error {}", ret)
         };
 
-        return ret as u64
+        return ret as u64;
     }
 
     pub fn ProcessHostEpollWait(&self) {
@@ -226,32 +223,30 @@ impl GuestNotifier {
     fn waitfd(fd: i32, mask: EventMask) -> Result<()> {
         HostSpace::WaitFDAsync(fd, mask);
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn UpdateFD(&self, fd: i32) -> Result<()> {
         if SHARESPACE.config.read().UringEpollCtl {
-            return self.UpdateFDAsync(fd)
+            return self.UpdateFDAsync(fd);
         } else {
-            return self.UpdateFDSync(fd)
+            return self.UpdateFDSync(fd);
         }
     }
 
     pub fn FdWaitInfo(&self, fd: i32) -> Option<FdWaitInfo> {
         let fi = match self.lock().fdMap.get(&fd) {
-            None => {
-                return None
-            }
+            None => return None,
             Some(fi) => fi.clone(),
         };
 
-        return Some(fi)
+        return Some(fi);
     }
 
     pub fn UpdateFDAsync(&self, fd: i32) -> Result<()> {
         let fi = match self.FdWaitInfo(fd) {
             None => return Ok(()),
-            Some(fi) => fi
+            Some(fi) => fi,
         };
 
         let epollfd = self.lock().epollfd;
@@ -262,7 +257,7 @@ impl GuestNotifier {
     pub fn UpdateFDSync(&self, fd: i32) -> Result<()> {
         let fi = match self.FdWaitInfo(fd) {
             None => return Ok(()),
-            Some(fi) => fi
+            Some(fi) => fi,
         };
 
         return fi.UpdateFDSync(fd);
@@ -290,7 +285,7 @@ impl GuestNotifier {
     pub fn Notify(&self, fd: i32, mask: EventMask) {
         let fi = match self.FdWaitInfo(fd) {
             None => return,
-            Some(fi) => fi
+            Some(fi) => fi,
         };
 
         fi.Notify(mask);

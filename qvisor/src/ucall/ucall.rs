@@ -14,15 +14,15 @@
 
 use alloc::string::String;
 
-use super::super::runc::container::container::*;
 use super::super::qlib::control_msg::*;
+use super::super::runc::container::container::*;
 
 // ControlSocketAddr generates an abstract unix socket name for the given ID.
 pub fn ControlSocketAddr(id: &str) -> String {
-    return format!("\x00qvisor-sandbox.{}", id)
+    return format!("\x00qvisor-sandbox.{}", id);
 }
 
-pub const UCALL_BUF_LEN : usize = 4096;
+pub const UCALL_BUF_LEN: usize = 4096;
 type Cid = String;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -48,17 +48,9 @@ impl FileDescriptors for UCallReq {
             UCallReq::ExecProcess(args) => return args.GetFds(),
             UCallReq::CreateSubContainer(args) => {
                 if args.fds[0] == -1 {
-                    return None
+                    return None;
                 } else {
-                    return Some(&args.fds)
-                }
-            },
-            UCallReq::StartSubContainer(args) => {
-                let stdios = &args.process.Stdiofds;
-                if stdios[0] != -1 {
-                    return Some(stdios)
-                } else {
-                    return None
+                    return Some(&args.fds);
                 }
             }
             _ => return None,
@@ -68,7 +60,7 @@ impl FileDescriptors for UCallReq {
     fn SetFds(&mut self, fds: &[i32]) {
         match self {
             UCallReq::ExecProcess(ref mut args) => return args.SetFds(fds),
-            _ => ()
+            _ => (),
         }
     }
 }

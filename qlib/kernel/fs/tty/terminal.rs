@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
+use alloc::sync::Arc;
 
 use super::super::host::tty::*;
 use super::dir::*;
@@ -30,7 +30,7 @@ impl Terminal {
         return Self {
             d: d.clone(),
             n: n,
-            ld: Arc::new(QMutex::new(LineDiscipline::New(DEFAULT_SLAVE_TERMIOS)))
-        }
+            ld: Arc::new(QMutex::new(LineDiscipline::New(DEFAULT_SLAVE_TERMIOS))),
+        };
     }
 }

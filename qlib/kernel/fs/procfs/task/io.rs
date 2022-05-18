@@ -12,46 +12,57 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
 use alloc::string::ToString;
-use core::sync::atomic::Ordering;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::sync::atomic::Ordering;
 
+use super::super::super::super::super::auth::*;
 use super::super::super::super::super::common::*;
 use super::super::super::super::super::linux_def::*;
-use super::super::super::super::super::auth::*;
 use super::super::super::super::super::usage::io::*;
-use super::super::super::fsutil::file::readonly_file::*;
-use super::super::super::fsutil::inode::simple_file_inode::*;
 use super::super::super::super::task::*;
-use super::super::super::attr::*;
-use super::super::super::file::*;
-use super::super::super::flags::*;
-use super::super::super::dirent::*;
-use super::super::super::mount::*;
-use super::super::super::inode::*;
+use super::super::super::super::threadmgr::task_acct::*;
 use super::super::super::super::threadmgr::thread::*;
 use super::super::super::super::threadmgr::thread_group::*;
-use super::super::super::super::threadmgr::task_acct::*;
+use super::super::super::attr::*;
+use super::super::super::dirent::*;
+use super::super::super::file::*;
+use super::super::super::flags::*;
+use super::super::super::fsutil::file::readonly_file::*;
+use super::super::super::fsutil::inode::simple_file_inode::*;
+use super::super::super::inode::*;
+use super::super::super::mount::*;
 use super::super::inode::*;
 
 pub fn NewIO(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>) -> Inode {
-    let v = NewIOSimpleFileInode(task, thread, &ROOT_OWNER, &FilePermissions::FromMode(FileMode(0o400)), FSMagic::PROC_SUPER_MAGIC);
-    return NewProcInode(&Arc::new(v), msrc, InodeType::SpecialFile, Some(thread.clone()))
-
+    let v = NewIOSimpleFileInode(
+        task,
+        thread,
+        &ROOT_OWNER,
+        &FilePermissions::FromMode(FileMode(0o400)),
+        FSMagic::PROC_SUPER_MAGIC,
+    );
+    return NewProcInode(
+        &Arc::new(v),
+        msrc,
+        InodeType::SpecialFile,
+        Some(thread.clone()),
+    );
 }
 
-pub fn NewIOSimpleFileInode(task: &Task,
-                              thread: &Thread,
-                              owner: &FileOwner,
-                              perms: &FilePermissions,
-                              typ: u64)
-                              -> SimpleFileInode<IOData> {
+pub fn NewIOSimpleFileInode(
+    task: &Task,
+    thread: &Thread,
+    owner: &FileOwner,
+    perms: &FilePermissions,
+    typ: u64,
+) -> SimpleFileInode<IOData> {
     let tg = thread.ThreadGroup();
-    let io = IOData{tg: tg};
+    let io = IOData { tg: tg };
 
-    return SimpleFileInode::New(task, owner, perms, typ, false, io)
+    return SimpleFileInode::New(task, owner, perms, typ, false, io);
 }
 
 pub struct IOData {
@@ -70,14 +81,23 @@ impl IOData {
         buf += &format!("syscw: {}\n", io.WriteSyscalls.load(Ordering::SeqCst));
         buf += &format!("read_bytes: {}\n", io.BytesRead.load(Ordering::SeqCst));
         buf += &format!("write_bytes: {}\n", io.BytesWritten.load(Ordering::SeqCst));
-        buf += &format!("cancelled_write_bytes: {}\n", io.BytesWriteCancelled.load(Ordering::SeqCst));
+        buf += &format!(
+            "cancelled_write_bytes: {}\n",
+            io.BytesWriteCancelled.load(Ordering::SeqCst)
+        );
 
         return buf.as_bytes().to_vec();
     }
 }
 
 impl SimpleFileTrait for IOData {
-    fn GetFile(&self, _task: &Task, _dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File> {
+    fn GetFile(
+        &self,
+        _task: &Task,
+        _dir: &Inode,
+        dirent: &Dirent,
+        flags: FileFlags,
+    ) -> Result<File> {
         let fops = NewSnapshotReadonlyFileOperations(self.GenSnapshot());
         let file = File::New(dirent, &flags, fops);
         return Ok(file);

@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
+use alloc::sync::Arc;
 use core::ops::Deref;
 
-use super::waitlist::*;
 use super::entry::*;
+use super::waitlist::*;
 use super::*;
 
 #[derive(Default, Clone)]
@@ -32,17 +32,17 @@ impl Deref for Queue {
 }
 
 impl Waitable for Queue {
-    fn Readiness(&self, _task: &Task,_mask: EventMask) -> EventMask {
+    fn Readiness(&self, _task: &Task, _mask: EventMask) -> EventMask {
         return 0;
     }
 
-    fn EventRegister(&self, _task: &Task,e: &WaitEntry, mask: EventMask) {
+    fn EventRegister(&self, _task: &Task, e: &WaitEntry, mask: EventMask) {
         let mut q = self.write();
         e.lock().mask = mask;
         q.PushBack(e)
     }
 
-    fn EventUnregister(&self, _task: &Task,e: &WaitEntry) {
+    fn EventUnregister(&self, _task: &Task, e: &WaitEntry) {
         let mut q = self.write();
         q.Remove(e)
     }

@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod sampler;
-pub mod parameters;
 pub mod calibratedClock;
+pub mod parameters;
+pub mod sampler;
 pub mod timekeeper;
 pub mod timer;
 pub mod timer_store;
@@ -22,16 +22,16 @@ pub mod timer_store;
 //pub use self::raw_timer::*;
 
 use self::timekeeper::*;
-use self::timer_store::*;
 use self::timer::*;
-use super::super::super::singleton::*;
+use self::timer_store::*;
 use super::super::super::object_ref::*;
+use super::super::super::singleton::*;
 use super::super::SHARESPACE;
 
 pub static TIME_KEEPER: TimerKeeperRef = TimerKeeperRef::New();
 
-pub static REALTIME_CLOCK : Singleton<Clock> = Singleton::<Clock>::New();
-pub static MONOTONIC_CLOCK : Singleton<Clock> = Singleton::<Clock>::New();
+pub static REALTIME_CLOCK: Singleton<Clock> = Singleton::<Clock>::New();
+pub static MONOTONIC_CLOCK: Singleton<Clock> = Singleton::<Clock>::New();
 pub static TIMER_STORE: TimerStoreRef = TimerStoreRef::New();
 
 pub unsafe fn InitSingleton() {

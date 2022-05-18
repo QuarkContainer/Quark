@@ -12,23 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::mutex::*;
+use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::sync::Weak;
-use core::ops::Deref;
-use alloc::string::ToString;
 use core::any::Any;
-use crate::qlib::mutex::*;
+use core::ops::Deref;
 
-use super::super::super::super::kernel::waiter::*;
-use super::super::super::super::tcpip::tcpip::*;
 use super::super::super::super::super::common::*;
-use super::super::super::super::super::linux_def::*;
 use super::super::super::super::super::linux::socket::*;
+use super::super::super::super::super::linux_def::*;
+use super::super::super::super::kernel::waiter::*;
 use super::super::super::super::task::*;
+use super::super::super::super::tcpip::tcpip::*;
 //use super::super::super::control::*;
-use super::unix::*;
-use super::queue::*;
 use super::connectioned::*;
+use super::queue::*;
+use super::unix::*;
 
 // connectionlessEndpoint is a unix endpoint for unix sockets that support operating in
 // a conectionless fashon.
@@ -46,7 +46,7 @@ impl ConnectionLessEndPointWeak {
             Some(c) => c,
         };
 
-        return Some(ConnectionLessEndPoint(BaseEndpoint(c)))
+        return Some(ConnectionLessEndPoint(BaseEndpoint(c)));
     }
 }
 
@@ -71,9 +71,10 @@ impl ConnectionLessEndPoint {
     pub fn New(hostfd: i32) -> Self {
         let bep = BaseEndpoint::NewWithHostfd(hostfd);
         let queue = bep.lock().queue.clone();
-        let queueReceiver = QueueReceiver::New(MsgQueue::New(queue, Queue::default(), INITIAL_LIMIT));
+        let queueReceiver =
+            QueueReceiver::New(MsgQueue::New(queue, Queue::default(), INITIAL_LIMIT));
         bep.lock().receiver = Some(Arc::new(queueReceiver));
-        return Self(bep)
+        return Self(bep);
     }
 
     pub fn IsBound(&self) -> bool {
@@ -82,9 +83,9 @@ impl ConnectionLessEndPoint {
 
     pub fn State(&self) -> i32 {
         if self.IsBound() {
-            return SS_UNCONNECTED
+            return SS_UNCONNECTED;
         } else if self.lock().Connected() {
-            return SS_CONNECTING
+            return SS_CONNECTING;
         }
 
         return SS_DISCONNECTING;
@@ -95,11 +96,13 @@ impl ConnectionLessEndPoint {
     }
 
     // BidirectionalConnect implements BoundEndpoint.BidirectionalConnect.
-    pub fn BidirectionalConnect<T: 'static + ConnectingEndpoint>(&self,
-                                                                 _task: &Task,
-                                                                 _ce: Arc<T>,
-                                                                 _returnConnect: impl Fn(Arc<Receiver>, Arc<ConnectedEndpoint>)) -> Result<()> {
-        return Err(Error::SysError(SysErr::ECONNREFUSED))
+    pub fn BidirectionalConnect<T: 'static + ConnectingEndpoint>(
+        &self,
+        _task: &Task,
+        _ce: Arc<T>,
+        _returnConnect: impl Fn(Arc<Receiver>, Arc<ConnectedEndpoint>),
+    ) -> Result<()> {
+        return Err(Error::SysError(SysErr::ECONNREFUSED));
     }
 
     // UnidirectionalConnect implements BoundEndpoint.UnidirectionalConnect.
@@ -116,7 +119,7 @@ impl ConnectionLessEndPoint {
             Some(q) => q.readQueue.clone(),
         };
 
-        return Ok(UnixConnectedEndpoint::New(Arc::new(self.clone()), q))
+        return Ok(UnixConnectedEndpoint::New(Arc::new(self.clone()), q));
     }
 }
 
@@ -128,7 +131,7 @@ impl Passcred for ConnectionLessEndPoint {
 
 impl PartialEndPoint for ConnectionLessEndPoint {
     fn Type(&self) -> i32 {
-        return SockType::SOCK_DGRAM
+        return SockType::SOCK_DGRAM;
     }
 
     // GetLocalAddress returns the bound path.
@@ -139,7 +142,7 @@ impl PartialEndPoint for ConnectionLessEndPoint {
 
 impl Endpoint for ConnectionLessEndPoint {
     fn as_any(&self) -> &Any {
-        return self
+        return self;
     }
 
     // Close puts the endpoint in a closed state and frees all resources associated
@@ -169,14 +172,25 @@ impl Endpoint for ConnectionLessEndPoint {
         }
     }
 
-    fn RecvMsg(&self, data: &mut [IoVec], creds: bool, numRights: u64, peek: bool, addr: Option<&mut SockAddrUnix>)
-               -> Result<(usize, usize, SCMControlMessages, bool)> {
-        return self.0.RecvMsg(data, creds, numRights, peek, addr)
+    fn RecvMsg(
+        &self,
+        data: &mut [IoVec],
+        creds: bool,
+        numRights: u64,
+        peek: bool,
+        addr: Option<&mut SockAddrUnix>,
+    ) -> Result<(usize, usize, SCMControlMessages, bool)> {
+        return self.0.RecvMsg(data, creds, numRights, peek, addr);
     }
 
     // SendMsg writes data and a control message to the specified endpoint.
     // This method does not block if the data cannot be written.
-    fn SendMsg(&self, data: &[IoVec], c: &SCMControlMessages, to: &Option<BoundEndpoint>) -> Result<usize>  {
+    fn SendMsg(
+        &self,
+        data: &[IoVec],
+        c: &SCMControlMessages,
+        to: &Option<BoundEndpoint>,
+    ) -> Result<usize> {
         let tmp = to.clone();
         let to = match tmp {
             None => return self.0.SendMsg(data, c, to),
@@ -194,7 +208,7 @@ impl Endpoint for ConnectionLessEndPoint {
             connected.SendNotify();
         }
 
-        return Ok(n)
+        return Ok(n);
     }
 
     // Connect attempts to connect directly to server.
@@ -202,21 +216,21 @@ impl Endpoint for ConnectionLessEndPoint {
         let connected = server.UnidirectionalConnect()?;
 
         self.lock().connected = Some(Arc::new(connected));
-        return Ok(())
+        return Ok(());
     }
 
     fn Shutdown(&self, flags: ShutdownFlags) -> Result<()> {
-        return self.0.Shutdown(flags)
+        return self.0.Shutdown(flags);
     }
 
     // Listen starts listening on the connection.
     fn Listen(&self, _: i32) -> Result<()> {
-        return Err(Error::SysError(SysErr::EOPNOTSUPP))
+        return Err(Error::SysError(SysErr::EOPNOTSUPP));
     }
 
     // Accept accepts a new connection.
     fn Accept(&self) -> Result<ConnectionedEndPoint> {
-        return Err(Error::SysError(SysErr::EOPNOTSUPP))
+        return Err(Error::SysError(SysErr::EOPNOTSUPP));
     }
 
     // Bind binds the connection.
@@ -231,11 +245,11 @@ impl Endpoint for ConnectionLessEndPoint {
         let mut e = self.lock();
 
         if e.path.len() != 0 {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         e.path = addr.Path.clone();
-        return Ok(())
+        return Ok(());
     }
 
     fn GetRemoteAddress(&self) -> Result<SockAddrUnix> {
@@ -262,13 +276,13 @@ impl Waitable for ConnectionLessEndPoint {
         let e = self.lock();
 
         let mut ready = 0;
-        if mask & EVENT_IN != 0 && e.receiver.as_ref().unwrap().Readable() {
-            ready |= EVENT_IN;
+        if mask & READABLE_EVENT != 0 && e.receiver.as_ref().unwrap().Readable() {
+            ready |= READABLE_EVENT;
         }
 
         if e.Connected() {
-            if mask & EVENT_OUT != 0 && e.connected.as_ref().unwrap().Writable() {
-                ready |= EVENT_OUT;
+            if mask & WRITEABLE_EVENT != 0 && e.connected.as_ref().unwrap().Writable() {
+                ready |= WRITEABLE_EVENT;
             }
         }
 
@@ -279,7 +293,7 @@ impl Waitable for ConnectionLessEndPoint {
         self.0.EventRegister(task, e, mask)
     }
 
-    fn EventUnregister(&self, task: &Task,e: &WaitEntry) {
+    fn EventUnregister(&self, task: &Task, e: &WaitEntry) {
         self.0.EventUnregister(task, e)
     }
 }

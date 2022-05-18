@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use kvm_bindings::*;
 use libc;
 use libc::*;
 use std::os::unix::io::AsRawFd;
-use kvm_bindings::*;
 
 pub const _IOC_NRBITS: c_uint = 8;
 pub const _IOC_TYPEBITS: c_uint = 8;
@@ -119,20 +119,12 @@ pub unsafe fn ioctl_with_val<F: AsRawFd>(fd: &F, req: c_ulong, arg: c_ulong) -> 
 
 /// Run an ioctl with an immutable reference.
 pub unsafe fn ioctl_with_ref<F: AsRawFd, T>(fd: &F, req: c_ulong, arg: &T) -> c_int {
-    libc::ioctl(
-        fd.as_raw_fd(),
-        req,
-        arg as *const T as *const c_void,
-    )
+    libc::ioctl(fd.as_raw_fd(), req, arg as *const T as *const c_void)
 }
 
 /// Run an ioctl with a mutable reference.
 pub unsafe fn ioctl_with_mut_ref<F: AsRawFd, T>(fd: &F, req: c_ulong, arg: &mut T) -> c_int {
-    libc::ioctl(
-        fd.as_raw_fd(),
-        req,
-        arg as *mut T as *mut c_void,
-    )
+    libc::ioctl(fd.as_raw_fd(), req, arg as *mut T as *mut c_void)
 }
 
 /// Run an ioctl with a raw pointer.
@@ -146,9 +138,7 @@ pub unsafe fn ioctl_with_mut_ptr<F: AsRawFd, T>(fd: &F, req: c_ulong, arg: *mut 
 }
 
 pub fn QueueInterrupt(vcpu: &kvm_ioctls::VcpuFd, irq: u32) -> c_int {
-    unsafe {
-        ioctl_with_ptr(vcpu, KVM_INTERRUPT() as c_ulong, &kvm_interrupt { irq })
-    }
+    unsafe { ioctl_with_ptr(vcpu, KVM_INTERRUPT() as c_ulong, &kvm_interrupt { irq }) }
 }
 
 pub fn QueueTimer(vcpu: &kvm_ioctls::VcpuFd) -> c_int {
@@ -157,10 +147,13 @@ pub fn QueueTimer(vcpu: &kvm_ioctls::VcpuFd) -> c_int {
     let mut res = QueueInterrupt(vcpu, 32);
 
     if res != 0 {
-        info!("the io::Error::last_os_error() is {}", std::io::Error::last_os_error());
+        info!(
+            "the io::Error::last_os_error() is {}",
+            std::io::Error::last_os_error()
+        );
         res = std::io::Error::last_os_error().raw_os_error().unwrap();
     }
 
     info!("after enque timer interrupt: res={}", res);
-    return res
+    return res;
 }

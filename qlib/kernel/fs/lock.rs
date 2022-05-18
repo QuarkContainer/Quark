@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::collections::btree_set::BTreeSet;
-use core::ops::Deref;
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
+use alloc::collections::btree_set::BTreeSet;
 use alloc::string::String;
+use alloc::sync::Arc;
+use core::ops::Deref;
 
-use super::super::super::mem::areaset::*;
-use super::super::super::range::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
-use super::super::task::*;
+use super::super::super::mem::areaset::*;
+use super::super::super::range::*;
 use super::super::kernel::waiter::*;
+use super::super::task::*;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum LockType {
     // ReadLock describes a POSIX regional file lock to be taken
     // read only.  There may be multiple of these locks on a single
@@ -75,10 +75,10 @@ impl Lock {
     pub fn IsHeld(&self, uid: UniqueId) -> bool {
         let l = self.lock();
         if l.Writer == Some(uid) {
-            return true
+            return true;
         };
 
-        return l.Readers.contains(&uid)
+        return l.Readers.contains(&uid);
     }
 
     // lock sets uid as a holder of a typed lock on Lock.
@@ -111,7 +111,7 @@ impl Lock {
             LockType::WriteLock => {
                 // If we are already the writer, then this is a no-op.
                 if l.Writer == Some(uid) {
-                    return
+                    return;
                 }
 
                 // We can only upgrade a read lock to a write lock if there
@@ -134,7 +134,6 @@ impl Lock {
             }
         }
     }
-
 }
 
 pub fn MakeLock(uid: UniqueId, t: LockType) -> Lock {
@@ -148,7 +147,7 @@ pub fn MakeLock(uid: UniqueId, t: LockType) -> Lock {
         }
     }
 
-    return Lock(Arc::new(QMutex::new(val)))
+    return Lock(Arc::new(QMutex::new(val)));
 }
 
 impl AreaValue for Lock {
@@ -163,7 +162,7 @@ impl AreaValue for Lock {
 
         for id in v1.Readers.iter() {
             if !v2.Readers.contains(id) {
-                return None
+                return None;
             }
         }
 
@@ -171,7 +170,7 @@ impl AreaValue for Lock {
             return None;
         }
 
-        return Some(val2.clone())
+        return Some(val2.clone());
     }
 
     fn Split(&self, _r: &Range, _split: u64) -> (Self, Self) {
@@ -186,7 +185,7 @@ impl AreaValue for Lock {
 
         v2.Writer = v1.Writer;
 
-        return (self.clone(), Self(Arc::new(QMutex::new(v2))))
+        return (self.clone(), Self(Arc::new(QMutex::new(v2))));
     }
 }
 
@@ -203,7 +202,7 @@ impl Default for LocksInternal {
         return Self {
             locks: AreaSet::New(0, MAX_RANGE),
             queue: Queue::default(),
-        }
+        };
     }
 }
 
@@ -226,7 +225,10 @@ impl LocksInternal {
         let (mut seg, gap) = self.locks.Find(r.Start());
         if gap.Ok() {
             // Fill in the gap and get the next segment to modify.
-            seg = self.locks.Insert(&gap, &gap.Range().Intersect(r), MakeLock(uid, t)).NextSeg();
+            seg = self
+                .locks
+                .Insert(&gap, &gap.Range().Intersect(r), MakeLock(uid, t))
+                .NextSeg();
         } else if seg.Range().Start() < r.Start() {
             let (_, tmp) = self.locks.Split(&seg, r.Start());
             seg = tmp;
@@ -234,7 +236,7 @@ impl LocksInternal {
 
         while seg.Ok() && seg.Range().Start() < r.End() {
             // Split the last one if necessary.
-            if seg.Range().End()  > r.End() {
+            if seg.Range().End() > r.End() {
                 let (tmp, _) = self.locks.SplitUnchecked(&seg, r.End());
                 seg = tmp;
             }
@@ -260,7 +262,7 @@ impl LocksInternal {
     // unlock is always successful.  If uid has no locks held for the range LockRange,
     // unlock is a no-op.
     pub fn Unlock(&mut self, uid: UniqueId, r: &Range) {
-        if r.Len() == 0{
+        if r.Len() == 0 {
             return;
         }
 
@@ -356,8 +358,8 @@ impl LocksInternal {
 
                     // If there is a writer, then it must be the same uid
                     // in order to downgrade the lock to a read lock.
-                    return *(value.lock().Writer.as_ref().unwrap()) == uid
-                })
+                    return *(value.lock().Writer.as_ref().unwrap()) == uid;
+                });
             }
             LockType::WriteLock => {
                 return self.Lockable(r, &|value: &Lock| {
@@ -373,8 +375,8 @@ impl LocksInternal {
 
                     // If the uid is already a writer on this region, then
                     // adding a write lock would be a no-op.
-                    return value.Writer == Some(uid)
-                })
+                    return value.Writer == Some(uid);
+                });
             }
         }
     }
@@ -398,7 +400,14 @@ impl Locks {
     // accquiring the lock in a non-blocking mode or "interrupted" if in a blocking mode.
     // Blocker is the interface used to provide blocking behavior, passing a nil Blocker
     // will result in non-blocking behavior.
-    pub fn LockRegion(&self, task: &Task, uid: UniqueId, t: LockType, r: &Range, block: bool) -> Result<bool> {
+    pub fn LockRegion(
+        &self,
+        task: &Task,
+        uid: UniqueId,
+        t: LockType,
+        r: &Range,
+        block: bool,
+    ) -> Result<bool> {
         loop {
             let mut l = self.lock();
 
@@ -407,10 +416,14 @@ impl Locks {
             // continue blocking.
             let res = l.Lock(uid, t, r);
             if !res && block {
-                l.queue.EventRegister(task, &task.blocker.generalEntry, EVENTMASK_ALL);
+                l.queue
+                    .EventRegister(task, &task.blocker.generalEntry, EVENTMASK_ALL);
                 core::mem::drop(l);
 
-                defer!(self.lock().queue.EventUnregister(task, &task.blocker.generalEntry));
+                defer!(self
+                    .lock()
+                    .queue
+                    .EventUnregister(task, &task.blocker.generalEntry));
 
                 match task.blocker.BlockGeneral() {
                     Err(Error::ErrInterrupted) => return Err(Error::SysError(SysErr::ERESTARTSYS)),
@@ -453,7 +466,7 @@ pub fn ComputeRange(start: i64, length: i64, offset: i64) -> Result<Range> {
     // fcntl(2): "l_start can be a negative number provided the offset
     // does not lie before the start of the file"
     if offset < 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     // fcntl(2): Specifying 0 for l_len has the  special meaning: lock all
@@ -475,11 +488,11 @@ pub fn ComputeRange(start: i64, length: i64, offset: i64) -> Result<Range> {
         // Add to offset using a negative length (subtract).
         offset += length;
         if offset < 0 {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         if signedEnd < offset {
-            return Err(Error::SysError(SysErr::EOVERFLOW))
+            return Err(Error::SysError(SysErr::EOVERFLOW));
         }
         // At this point signedEnd cannot be negative,
         // since we asserted that offset is not negative
@@ -493,5 +506,5 @@ pub fn ComputeRange(start: i64, length: i64, offset: i64) -> Result<Range> {
         end - offset as u64
     };
 
-    return Ok(Range::New(offset as u64, len))
+    return Ok(Range::New(offset as u64, len));
 }

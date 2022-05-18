@@ -13,13 +13,13 @@
 // limitations under the License.
 
 use alloc::vec::Vec;
+use capabilities;
 use std::fs::File;
 use std::os::unix::io::AsRawFd;
-use capabilities;
 
-use super::super::super::qlib::*;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::path::*;
+use super::super::super::qlib::*;
 use super::super::super::vmspace::syscall::*;
 use super::super::oci::*;
 use super::super::runtime::sandbox_process::*;
@@ -27,7 +27,7 @@ use super::super::runtime::sandbox_process::*;
 // nsCloneFlag returns the clone flag that can be used to set a namespace of
 // the given type.
 pub fn nsCloneFlag(nst: LinuxNamespaceType) -> i32 {
-    return nst as i32
+    return nst as i32;
 }
 
 // nsPath returns the path of the namespace for the current process and the
@@ -59,7 +59,7 @@ pub fn GetNS(nst: LinuxNamespaceType, s: &Spec) -> Option<LinuxNamespace> {
             return Some(LinuxNamespace {
                 typ: ns.typ,
                 path: ns.path.to_string(),
-            })
+            });
         }
     }
 
@@ -81,7 +81,7 @@ pub fn FilterNS(filter: &[LinuxNamespaceType], s: &Spec) -> Vec<LinuxNamespace> 
         }
     }
 
-    return out
+    return out;
 }
 
 // setNS sets the namespace of the given type.  It must be called with
@@ -89,15 +89,13 @@ pub fn FilterNS(filter: &[LinuxNamespaceType], s: &Spec) -> Vec<LinuxNamespace> 
 pub fn SetNS(fd: i32, nsType: u32) -> Result<()> {
     let nr = SysCallID::sys_setns as usize;
 
-    let err = unsafe {
-        syscall2(nr, fd as usize, nsType as usize) as i32
-    };
+    let err = unsafe { syscall2(nr, fd as usize, nsType as usize) as i32 };
 
     if err == 0 {
-        return Ok(())
+        return Ok(());
     }
 
-    return Err(Error::SysError(-err))
+    return Err(Error::SysError(-err));
 }
 
 // ApplyNS applies the namespace on the current thread and returns a function
@@ -107,21 +105,28 @@ pub fn SetNS(fd: i32, nsType: u32) -> Result<()> {
 pub fn ApplyNS(ns: &LinuxNamespace) -> Result<NSRestore> {
     info!("Applying namespace {:?} at path {:?}", ns.typ, ns.path);
 
-    let newNs = File::open(&ns.path).map_err(|e|Error::IOError(format!("error opening {:?}: {:?}", ns.path, e)))?;
+    let newNs = File::open(&ns.path)
+        .map_err(|e| Error::IOError(format!("error opening {:?}: {:?}", ns.path, e)))?;
 
     // Store current namespace to restore back.
     let curPath = NsPath(ns.typ);
-    let oldNs = File::open(&curPath).map_err(|e|Error::IOError(format!("error opening {:?}: {:?}", ns.path, e)))?;
+    let oldNs = File::open(&curPath)
+        .map_err(|e| Error::IOError(format!("error opening {:?}: {:?}", ns.path, e)))?;
 
     // Set namespace to the one requested and setup function to restore it back.
     let flag = nsCloneFlag(ns.typ);
-    SetNS(newNs.as_raw_fd(), flag as u32).map_err(|e|Error::IOError(format!("error setting namespace of type {:?} and path {:?}: {:?}", ns.typ, ns.path, e)))?;
+    SetNS(newNs.as_raw_fd(), flag as u32).map_err(|e| {
+        Error::IOError(format!(
+            "error setting namespace of type {:?} and path {:?}: {:?}",
+            ns.typ, ns.path, e
+        ))
+    })?;
 
     return Ok(NSRestore {
         fd: oldNs.as_raw_fd(),
         flag: nsCloneFlag(ns.typ),
         typ: ns.typ,
-    })
+    });
 }
 
 // StartInNS joins or creates the given namespaces and calls Process.Start before
@@ -144,23 +149,29 @@ pub fn StartInNS(subProcess: &mut SandboxProcess, nss: &[LinuxNamespace]) -> Res
     error!("should not reach here, need control sock");
     subProcess.Run(0);
 
-    return Ok(())
+    return Ok(());
 }
 
 // SetUIDGIDMappings sets the given uid/gid mappings from the spec on the process.
 pub fn SetUIDGIDMappings(subProcess: &mut SandboxProcess, s: &Spec) {
     if s.linux.is_none() {
-        return
+        return;
     }
 
     let linux = s.linux.as_ref().unwrap();
     for idMap in &linux.uid_mappings {
-        info!("Mapping host uid {:?} to container uid {:?} (size={:?})", idMap.host_id, idMap.container_id, idMap.size);
+        info!(
+            "Mapping host uid {:?} to container uid {:?} (size={:?})",
+            idMap.host_id, idMap.container_id, idMap.size
+        );
         subProcess.UidMappings.push(*idMap)
     }
 
     for idMap in &linux.gid_mappings {
-        info!("Mapping host gid {:?} to container uid {:?} (size={:?})", idMap.host_id, idMap.container_id, idMap.size);
+        info!(
+            "Mapping host gid {:?} to container uid {:?} (size={:?})",
+            idMap.host_id, idMap.container_id, idMap.size
+        );
         subProcess.GidMappings.push(*idMap)
     }
 }
@@ -173,7 +184,10 @@ pub fn HasCapabilities(cs: &[u32]) -> bool {
     };
 
     for c in cs {
-        if !(caps.check(capabilities::Capability::from(*c), capabilities::Flag::Effective)) {
+        if !(caps.check(
+            capabilities::Capability::from(*c),
+            capabilities::Flag::Effective,
+        )) {
             return false;
         }
     }

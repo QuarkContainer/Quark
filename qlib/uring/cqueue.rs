@@ -29,7 +29,7 @@ impl Default for CompletionQueue {
             overflow: 0 as *const atomic::AtomicU32,
             cqes: 0 as *const sys::io_uring_cqe,
             flags: 0 as *const atomic::AtomicU32,
-        }
+        };
     }
 }
 

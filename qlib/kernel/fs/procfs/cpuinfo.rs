@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
-use alloc::string::ToString;
 use crate::qlib::mutex::*;
+use alloc::string::ToString;
+use alloc::sync::Arc;
 
 use super::super::super::kernel::kernel::*;
 use super::super::super::task::*;
-use super::super::mount::*;
 use super::super::inode::*;
+use super::super::mount::*;
 use super::inode::*;
 
 pub fn NewCPUInfo(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
@@ -31,7 +31,5 @@ pub fn NewCPUInfo(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         cpuInfo += &features.lock().CPUInfo(i as u32);
     }
 
-    return NewStaticProcInode(task,
-                                 msrc,
-                                 &Arc::new(cpuInfo.as_bytes().to_vec()))
+    return NewStaticProcInode(task, msrc, &Arc::new(cpuInfo.as_bytes().to_vec()));
 }

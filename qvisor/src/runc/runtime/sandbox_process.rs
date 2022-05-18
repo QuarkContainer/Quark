@@ -13,44 +13,48 @@
 // limitations under the License.
 
 use alloc::vec::Vec;
-use libc;
-use nix::sys::stat::Mode;
-use nix::fcntl::*;
-use simplelog::*;
-use std::os::unix::io::FromRawFd;
-use std::os::unix::io::AsRawFd;
-use std::fs::File;
 use kvm_ioctls::Kvm;
-use std::fs::OpenOptions;
-use std::path::{Path, PathBuf};
+use libc;
+use nix::fcntl::*;
 use nix::mount::MsFlags;
-use std::fs::{canonicalize, create_dir_all};
-use nix::unistd::{getcwd};
+use nix::sys::stat::Mode;
+use nix::unistd::getcwd;
+use procfs;
 use serde_json;
+use simplelog::*;
+use std::fs::File;
+use std::fs::OpenOptions;
+use std::fs::{canonicalize, create_dir_all};
+use std::os::unix::io::AsRawFd;
+use std::os::unix::io::FromRawFd;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-
-use super::super::super::qlib::common::*;
-use super::super::super::qlib::linux_def::*;
-use super::super::super::qlib::path::*;
-use super::super::super::util::*;
-use super::super::super::namespace::*;
 use super::super::super::console::pty::*;
 use super::super::super::console::unix_socket::*;
-use super::super::oci::*;
-use super::super::container::nix_ext::*;
-use super::super::container::mounts::*;
-use super::super::container::container::*;
-use super::super::shim::container_io::*;
-use super::super::cmd::config::*;
-use super::super::specutils::specutils::*;
-use super::super::super::ucall::usocket::*;
+use super::super::super::namespace::*;
+use super::super::super::qlib::common::*;
+use super::super::super::qlib::config::DebugLevel;
+use super::super::super::qlib::linux_def::*;
+use super::super::super::qlib::path::*;
 use super::super::super::ucall::ucall::*;
-use super::util::*;
-use super::loader::*;
-use super::vm::*;
+use super::super::super::ucall::usocket::*;
+use super::super::super::util::*;
+use super::super::super::QUARK_CONFIG;
+use super::super::cmd::config::*;
+use super::super::container::container::*;
+use super::super::container::mounts::*;
+use super::super::container::nix_ext::*;
+use super::super::oci::*;
+use super::super::shim::container_io::*;
+use super::super::specutils::specutils::*;
 use super::console::*;
+use super::loader::*;
 use super::signal_handle::*;
+use super::util::*;
+use super::vm::*;
+
+const QUARK_SANDBOX_ROOT_PATH: &str = "/var/lib/quark/";
 
 pub struct NSRestore {
     pub fd: i32,
@@ -102,14 +106,19 @@ pub struct SandboxProcess {
     pub PCond: Cond,
 
     pub Rootfs: String,
+
+    /// Root path for this sandbox, FS images for containers running in this sandbox should be mount inside this dir
+    pub SandboxRootDir: String,
 }
 
 impl SandboxProcess {
-    pub fn New(gCfg: &GlobalConfig,
-               action: RunAction,
-               id: &str,
-               bundleDir: &str,
-               pivot: bool) -> Result<Self> {
+    pub fn New(
+        gCfg: &GlobalConfig,
+        action: RunAction,
+        id: &str,
+        bundleDir: &str,
+        pivot: bool,
+    ) -> Result<Self> {
         let specfile = Join(bundleDir, "config.json");
 
         let mut process = SandboxProcess {
@@ -131,6 +140,7 @@ impl SandboxProcess {
             CCond: Cond::New()?,
             PCond: Cond::New()?,
             Rootfs: "".to_string(),
+            SandboxRootDir: Join(QUARK_SANDBOX_ROOT_PATH, id),
         };
 
         let spec = &process.spec;
@@ -143,7 +153,7 @@ impl SandboxProcess {
 
         process.CollectNamespaces()?;
 
-        return Ok(process)
+        return Ok(process);
     }
 
     pub fn Run(&self, controlSock: i32) {
@@ -159,10 +169,6 @@ impl SandboxProcess {
 
         PrepareHandler().unwrap();
 
-        let mut config = config::Config::new();
-        // Add 'Setting.toml'
-        config.merge(config::File::new("Setting", config::FileFormat::Toml).required(false)).unwrap();
-
         let kvmfd = Kvm::open_with_cloexec(false).expect("can't open kvm");
         let mut args = Args::default();
         args.ID = id.to_string();
@@ -171,7 +177,7 @@ impl SandboxProcess {
         args.AutoStart = self.action == RunAction::Run;
         args.BundleDir = self.bundleDir.to_string();
         args.Pivot = self.pivot;
-        args.Rootfs = self.Rootfs.clone();
+        args.Rootfs = Join(QUARK_SANDBOX_ROOT_PATH, id.as_str());
         args.ControlSock = controlSock;
 
         let exitStatus = match VirtualMachine::Init(args) {
@@ -185,9 +191,49 @@ impl SandboxProcess {
             }
         };
 
-        unsafe {
-            libc::_exit(exitStatus)
+        unsafe { libc::_exit(exitStatus) }
+    }
+
+    /// Root path for this sandbox on host fs, rootfs for containers running in this sandbox should be mount inside this dir
+    fn MakeSandboxRootDirectory(&self) -> Result<()> {
+        debug!(
+            "Creating the sandboxRootDir at {}",
+            self.SandboxRootDir.as_str()
+        );
+        match create_dir_all(self.SandboxRootDir.as_str()) {
+            Ok(()) => (),
+            Err(_e) => return Err(Error::Common(String::from("failed creating directory"))),
         }
+        let rbindFlags = libc::MS_REC | libc::MS_BIND;
+
+        // convert sandbox Root Dir to a mount point
+        let ret = Util::Mount(
+            &self.SandboxRootDir,
+            &self.SandboxRootDir,
+            "",
+            rbindFlags | libc::MS_SHARED,
+            "",
+        );
+        if ret < 0 {
+            panic!("InitRootfs: mount sandboxRootDir fails, error is {}", ret);
+        }
+        let rootContainerPath = Join(&self.SandboxRootDir, &self.containerId);
+        match create_dir_all(&rootContainerPath) {
+            Ok(()) => (),
+            Err(_e) => panic!("failed to create dir to mount containerrootPath"),
+        };
+        let ret = Util::Mount(
+            &self.Rootfs,
+            &rootContainerPath,
+            "",
+            rbindFlags | libc::MS_SHARED,
+            "",
+        );
+        if ret < 0 {
+            panic!("InitRootfs: mount rootfs fail, error is {}", ret);
+        }
+
+        return Ok(());
     }
 
     pub fn CollectNamespaces(&mut self) -> Result<()> {
@@ -198,7 +244,7 @@ impl SandboxProcess {
         for ns in nss {
             //don't use os pid namespace as there is pid namespace support in qkernel
             if ns.typ == LinuxNamespaceType::pid {
-                continue
+                continue;
             }
 
             let space = ns.typ as i32;
@@ -219,7 +265,7 @@ impl SandboxProcess {
         }
 
         self.CloneFlags = cf;
-        return Ok(())
+        return Ok(());
     }
 
     pub fn EnableNamespace(&self) -> Result<()> {
@@ -262,26 +308,43 @@ impl SandboxProcess {
             SetNamespace(mountFd, LinuxNamespaceType::mount as i32)?;
             Close(mountFd)?;
         }
+        // Print mountinfo in quark log if the level is debug
+        if QUARK_CONFIG.lock().DebugLevel >= DebugLevel::Debug {
+            let proc = procfs::process::Process::myself().unwrap();
+            debug!(
+                "mountinfo from sandbox process: {:?}",
+                proc.mountinfo()
+                    .expect("failed to read mountinfo inside sandbox mountns")
+            )
+        }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn InitRootfs(&self) -> Result<()> {
-        let flags = libc::MS_REC | libc::MS_SLAVE;
+        let privateFlags = libc::MS_REC | libc::MS_SLAVE;
+        let rbindFlags = libc::MS_REC | libc::MS_BIND;
 
-        if Util::Mount("","/", "", flags, "") < 0 {
+        // convert the root mount on current host as private, so nothing will be propagated outside current mount ns
+        if Util::Mount("", "/", "", privateFlags, "") < 0 {
             panic!("mount root fail")
         }
-
-        //println!("rootfs is {}", &self.Rootfs);
-        let ret = Util::Mount(&self.Rootfs, &self.Rootfs, "", libc::MS_REC | libc::MS_BIND, "");
-        if  ret < 0 {
-            panic!("InitRootfs: mount rootfs fail, error is {}", ret);
+        // convert sandbox Root Dir to a mount point
+        let ret = Util::Mount(
+            &self.SandboxRootDir,
+            &self.SandboxRootDir,
+            "",
+            rbindFlags,
+            "",
+        );
+        if ret < 0 {
+            panic!("InitRootfs: mount sandboxRootDir fails, error is {}", ret);
         }
 
         let spec = &self.spec;
         let linux = spec.linux.as_ref().unwrap();
 
+        //these should also show up under rootContainerpath, as it's set as rbind in the parent mount.
         for m in &spec.mounts {
             // TODO: check for nasty destinations involving symlinks and illegal
             //       locations.
@@ -290,7 +353,7 @@ impl SandboxProcess {
             //       is no good reason to allow this so we just forbid it
             if !m.destination.starts_with('/') || m.destination.contains("..") {
                 let msg = format!("invalid mount destination: {}", m.destination);
-                return Err(Error::Common(msg))
+                return Err(Error::Common(msg));
             }
             let (flags, data) = parse_mount(m);
             if m.typ == "cgroup" {
@@ -326,25 +389,48 @@ impl SandboxProcess {
             panic!("chdir fail")
         }
 
-        return Ok(())
+        let rootContainerPath = Join(&self.SandboxRootDir, &self.containerId);
+        match create_dir_all(&rootContainerPath) {
+            Ok(()) => (),
+            Err(_e) => panic!("failed to create dir to mount containerrootPath"),
+        };
+        let ret = Util::Mount(&self.Rootfs, &rootContainerPath, "", rbindFlags, "");
+        if ret < 0 {
+            panic!("InitRootfs: mount rootfs fail, error is {}", ret);
+        }
+
+        let tmpfolder = Join(&self.SandboxRootDir, "tmp");
+        match create_dir_all(&tmpfolder) {
+            Ok(()) => (),
+            Err(_e) => panic!("failed to create dir to mount containerrootPath"),
+        };
+        let ret = Util::Mount(&self.Rootfs, &tmpfolder, "tmpfs", rbindFlags, "");
+        if ret < 0 {
+            panic!("InitRootfs: mount rootfs fail, error is {}", ret);
+        }
+
+        return Ok(());
     }
 
     pub fn CreatePipe() -> Result<(i32, i32)> {
         use libc::*;
 
-        let mut fds : [i32; 2] = [0, 0];
-        let ret = unsafe {
-            pipe(&mut fds[0] as * mut i32)
-        };
+        let mut fds: [i32; 2] = [0, 0];
+        let ret = unsafe { pipe(&mut fds[0] as *mut i32) };
 
         if ret < 0 {
-            return Err(Error::SysError(errno::errno().0))
+            return Err(Error::SysError(errno::errno().0));
         }
 
         return Ok((fds[0], fds[1]));
     }
 
-    pub fn Execv(&self, terminal: bool, consoleSocket: &str, detach: bool) -> Result<(i32, Console)> {
+    pub fn Execv(
+        &self,
+        terminal: bool,
+        consoleSocket: &str,
+        detach: bool,
+    ) -> Result<(i32, Console)> {
         use libc::*;
 
         let mut cmd = Command::new(&ReadLink(EXE_PATH)?);
@@ -360,9 +446,7 @@ impl SandboxProcess {
             }
         };
 
-        let mut file1 = unsafe {
-            File::from_raw_fd(fd1)
-        };
+        let mut file1 = unsafe { File::from_raw_fd(fd1) };
 
         cmd.arg("--pipefd");
         cmd.arg(&format!("{}", fd0));
@@ -386,21 +470,18 @@ impl SandboxProcess {
                 client.SendFd(master.as_raw_fd())?
             }
         } /*else {
-            if !detach {
-                cmd.stdin(Stdio::piped());
-                cmd.stdout(Stdio::piped());
-                cmd.stderr(Stdio::piped());
-            }
-        }*/
+              if !detach {
+                  cmd.stdin(Stdio::piped());
+                  cmd.stdout(Stdio::piped());
+                  cmd.stderr(Stdio::piped());
+              }
+          }*/
 
-        let child = cmd.spawn()
-            .expect("Boot command failed to start");
+        let child = cmd.spawn().expect("Boot command failed to start");
 
         {
             //close fd1
-            let _file0 = unsafe {
-                File::from_raw_fd(fd0)
-            };
+            let _file0 = unsafe { File::from_raw_fd(fd0) };
         }
 
         serde_json::to_writer(&mut file1, &self)
@@ -447,24 +528,21 @@ impl SandboxProcess {
             }
         };
 
-        let mut file1 = unsafe {
-            File::from_raw_fd(fd1)
-        };
+        let mut file1 = unsafe { File::from_raw_fd(fd1) };
 
         cmd.arg("--pipefd");
         cmd.arg(&format!("{}", fd0));
 
         io.Set(&mut cmd)?;
 
-        let child = cmd.spawn()
-            .expect("Boot command failed to start");
+        let child = cmd.spawn().expect("Boot command failed to start");
 
         {
-            //close fd1
-            let _file0 = unsafe {
-                File::from_raw_fd(fd0)
-            };
+            //close fd0
+            let _file0 = unsafe { File::from_raw_fd(fd0) };
         }
+
+        io.CloseAfterStart();
 
         serde_json::to_writer(&mut file1, &self)
             .map_err(|e| Error::IOError(format!("To BootCmd io::error is {:?}", e)))?;
@@ -477,16 +555,18 @@ impl SandboxProcess {
         return Ok(child.id() as i32);
     }
 
-
     pub fn StartLog(&self) {
         std::fs::remove_file(&self.conf.DebugLog).ok();
 
-        CombinedLogger::init(
-            vec![
-                TermLogger::new(LevelFilter::Error, Config::default(), TerminalMode::Mixed).unwrap(),
-                WriteLogger::new(self.conf.DebugLevel.ToLevelFilter(), Config::default(), File::create(&self.conf.DebugLog).unwrap()),
-            ]
-        ).unwrap();
+        CombinedLogger::init(vec![
+            TermLogger::new(LevelFilter::Error, Config::default(), TerminalMode::Mixed).unwrap(),
+            WriteLogger::new(
+                self.conf.DebugLevel.ToLevelFilter(),
+                Config::default(),
+                File::create(&self.conf.DebugLog).unwrap(),
+            ),
+        ])
+        .unwrap();
     }
 
     pub fn Child(&self) -> Result<()> {
@@ -499,7 +579,7 @@ impl SandboxProcess {
 
         let addr = ControlSocketAddr(&self.containerId);
         let controlSock = USocket::CreateServerSocket(&addr).expect("can't create control sock");
-
+        self.MakeSandboxRootDirectory()?;
         self.EnableNamespace()?;
 
         self.Run(controlSock);
@@ -513,19 +593,13 @@ impl SandboxProcess {
 
         if self.UserNS {
             // write uid/gid map
-            WriteIDMapping(
-                &format!("/proc/{}/uid_map", child),
-                &linux.uid_mappings,
-            )?;
-            WriteIDMapping(
-                &format!("/proc/{}/gid_map", child),
-                &linux.gid_mappings,
-            )?;
+            WriteIDMapping(&format!("/proc/{}/uid_map", child), &linux.uid_mappings)?;
+            WriteIDMapping(&format!("/proc/{}/gid_map", child), &linux.gid_mappings)?;
         }
 
         self.PCond.Notify()?;
 
-        return Ok(())
+        return Ok(());
     }
 }
 
@@ -533,23 +607,24 @@ fn MountFrom(m: &Mount, rootfs: &str, flags: MsFlags, data: &str, label: &str) -
     let d;
     if !label.is_empty() && m.typ != "proc" && m.typ != "sysfs" {
         if data.is_empty() {
-            d = format!{"context=\"{}\"", label};
+            d = format! {"context=\"{}\"", label};
         } else {
-            d = format!{"{},context=\"{}\"", data, label};
+            d = format! {"{},context=\"{}\"", data, label};
         }
     } else {
         d = data.to_string();
     }
 
-    let dest = format!{"{}{}", rootfs, &m.destination};
+    let dest = format! {"{}{}", rootfs, &m.destination};
 
     debug!(
-    "mounting {} to {} as {} with data '{}'",
-    &m.source, &m.destination, &m.typ, &d
+        "mounting {} to {} as {} with data '{}'",
+        &m.source, &m.destination, &m.typ, &d
     );
 
     let src = if m.typ == "bind" {
-        let src = canonicalize(&m.source).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
+        let src =
+            canonicalize(&m.source).map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
         let dir = if src.is_file() {
             Path::new(&dest).parent().unwrap()
         } else {
@@ -560,11 +635,9 @@ fn MountFrom(m: &Mount, rootfs: &str, flags: MsFlags, data: &str, label: &str) -
         }
         // make sure file exists so we can bind over it
         if src.is_file() {
-            if let Err(e) =
-            OpenOptions::new().create(true).write(true).open(&dest)
-                {
-                    debug!("ignoring touch fail of {:?}: {}", &dest, e)
-                }
+            if let Err(e) = OpenOptions::new().create(true).write(true).open(&dest) {
+                debug!("ignoring touch fail of {:?}: {}", &dest, e)
+            }
         }
         src
     } else {
@@ -574,20 +647,32 @@ fn MountFrom(m: &Mount, rootfs: &str, flags: MsFlags, data: &str, label: &str) -
         PathBuf::from(&m.source)
     };
 
-    let ret = Util::Mount(src.as_path().to_str().unwrap(), &dest, &m.typ, flags.bits(), &d);
+    let ret = Util::Mount(
+        src.as_path().to_str().unwrap(),
+        &dest,
+        &m.typ,
+        flags.bits(),
+        &d,
+    );
     if ret < 0 {
         if ret == -SysErr::EINVAL {
-            return Err(Error::SysError(-ret as i32))
+            return Err(Error::SysError(-ret as i32));
         }
 
         // try again without mount label
-        let ret = Util::Mount(src.as_path().to_str().unwrap(), &dest, &m.typ, flags.bits(), "");
+        let ret = Util::Mount(
+            src.as_path().to_str().unwrap(),
+            &dest,
+            &m.typ,
+            flags.bits(),
+            "",
+        );
         if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
+            return Err(Error::SysError(-ret as i32));
         }
 
         if let Err(e) = setfilecon(&dest, label) {
-            warn!{"could not set mount label of {} to {}: {:?}",
+            warn! {"could not set mount label of {} to {}: {:?}",
             &m.destination, &label, e};
         }
     }
@@ -595,18 +680,18 @@ fn MountFrom(m: &Mount, rootfs: &str, flags: MsFlags, data: &str, label: &str) -
     // remount bind mounts if they have other flags (like MsFlags::MS_RDONLY)
     if flags.contains(MsFlags::MS_BIND)
         && flags.intersects(
-        !(MsFlags::MS_REC
-            | MsFlags::MS_REMOUNT
-            | MsFlags::MS_BIND
-            | MsFlags::MS_PRIVATE
-            | MsFlags::MS_SHARED
-            | MsFlags::MS_SLAVE),
-    ) {
+            !(MsFlags::MS_REC
+                | MsFlags::MS_REMOUNT
+                | MsFlags::MS_BIND
+                | MsFlags::MS_PRIVATE
+                | MsFlags::MS_SHARED
+                | MsFlags::MS_SLAVE),
+        )
+    {
         let ret = Util::Mount(&dest, &dest, "", (flags | MsFlags::MS_REMOUNT).bits(), "");
         if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
+            return Err(Error::SysError(-ret as i32));
         }
     }
     Ok(())
 }
-

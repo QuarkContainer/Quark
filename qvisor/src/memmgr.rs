@@ -17,7 +17,7 @@
 
 use std::collections::HashMap;
 
-use super::addr::{Addr};
+use super::addr::Addr;
 use super::qlib::common::Error;
 use super::qlib::common::Result;
 
@@ -50,9 +50,21 @@ pub struct PhyRegion {
 }
 
 impl PhyRegion {
-    pub fn InitAnan(hostBaseAddr: Addr, hostAddrLimit: Addr, len: u64, hugePage: bool) -> Result<PhyRegion> {
+    pub fn InitAnan(
+        hostBaseAddr: Addr,
+        hostAddrLimit: Addr,
+        len: u64,
+        hugePage: bool,
+    ) -> Result<PhyRegion> {
         let mut option = &mut MapOption::New();
-        option = option.Addr(hostBaseAddr.0).Len(len).MapAnan().MapPrivate().ProtoRead().ProtoWrite().ProtoExec();
+        option = option
+            .Addr(hostBaseAddr.0)
+            .Len(len)
+            .MapAnan()
+            .MapPrivate()
+            .ProtoRead()
+            .ProtoWrite()
+            .ProtoExec();
         if hugePage {
             option = option.MapHugeTLB();
         }
@@ -67,7 +79,7 @@ impl PhyRegion {
             fileInfo: None,
             hostBaseAddr: hostBaseAddr,
             mr: mr,
-        })
+        });
     }
 
     fn HostStartAddr(&self) -> Addr {
@@ -79,13 +91,13 @@ impl PhyRegion {
     }
 
     fn Len(&self) -> u64 {
-        return self.mr.Len()
+        return self.mr.Len();
     }
 
     fn IsAnan(&self) -> bool {
         match self.fileInfo {
             None => true,
-            _ => false
+            _ => false,
         }
     }
 }
@@ -102,14 +114,14 @@ impl PhyAddrMgr {
             hostBaseAddr: hostBaseAddr,
             hostAddrLimit: hostBaseAddr.AddLen(len)?,
             regions: HashMap::new(),
-        })
+        });
     }
 
     pub fn PhyToHostAddr(&mut self, phyStartAddr: Addr) -> Result<Addr> {
         if let Some(region) = self.regions.get(&phyStartAddr.0) {
             return Ok(region.HostStartAddr());
         } else {
-            return Err(Error::UnmatchRegion)
+            return Err(Error::UnmatchRegion);
         }
     }
 
@@ -117,10 +129,10 @@ impl PhyAddrMgr {
     pub fn Free(&mut self, start: u64, len: u64) -> Result<()> {
         if let Some(region) = self.regions.get(&start) {
             if region.Len() != len {
-                return Err(Error::UnmatchRegion)
+                return Err(Error::UnmatchRegion);
             }
         } else {
-            return Err(Error::UnmatchRegion)
+            return Err(Error::UnmatchRegion);
         }
 
         self.regions.remove(&start);
@@ -146,8 +158,8 @@ impl MapOption {
             flags: 0,
             proto: libc::PROT_NONE,
             fd: -1,
-            fileOffset: 0
-        }
+            fileOffset: 0,
+        };
     }
 
     pub fn FileId(&mut self, id: i32) -> &mut Self {
@@ -249,7 +261,7 @@ impl MapOption {
             self.proto as libc::c_int,
             self.flags as libc::c_int,
             self.fd as libc::c_int,
-            self.fileOffset as libc::off_t
+            self.fileOffset as libc::off_t,
         )
     }
 
@@ -263,12 +275,7 @@ impl MapOption {
 
         //error!("mmap addr is {:x}, len is {:x}", self.Addr, self.len);
         unsafe {
-            let ret = libc::mmap(addr,
-                                 len,
-                                 prot,
-                                 flags,
-                                 fd,
-                                 offset);
+            let ret = libc::mmap(addr, len, prot, flags, fd, offset);
 
             if (ret as i64) < 0 {
                 Err(Error::SysError(errno::errno().0))
@@ -286,7 +293,7 @@ impl MapOption {
             }
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn MUnmap(addr: u64, len: u64) -> Result<()> {
@@ -297,7 +304,7 @@ impl MapOption {
             }
         }
 
-        return Ok(())
+        return Ok(());
     }
 }
 
@@ -308,16 +315,18 @@ pub struct MappedRegion {
 }
 
 impl MappedRegion {
-    pub fn New(addr: *mut libc::c_void, len: libc::size_t, prot: libc::c_int, flags: libc::c_int, fd: libc::c_int, offset: libc::off_t) -> Result<Self> {
+    pub fn New(
+        addr: *mut libc::c_void,
+        len: libc::size_t,
+        prot: libc::c_int,
+        flags: libc::c_int,
+        fd: libc::c_int,
+        offset: libc::off_t,
+    ) -> Result<Self> {
         //info!("addr is {:x}, len is {:x}, prot is {:x}, flags = {:b}, fd = {}, offset = {}", addr as u64, len, prot, flags, fd, offset);
 
         unsafe {
-            let ret = libc::mmap(addr,
-                                 len,
-                                 prot,
-                                 flags,
-                                 fd,
-                                 offset);
+            let ret = libc::mmap(addr, len, prot, flags, fd, offset);
 
             if (ret as i64) < 0 {
                 Err(Error::SysError(errno::errno().0))
@@ -334,15 +343,15 @@ impl MappedRegion {
         return self.ptr as *mut u8;
     }
     pub fn Start(&self) -> Addr {
-        return Addr(self.ptr as u64)
+        return Addr(self.ptr as u64);
     }
 
     pub fn End(&self) -> Result<Addr> {
-        return self.Start().AddLen(self.sz)
+        return self.Start().AddLen(self.sz);
     }
 
     pub fn Len(&self) -> u64 {
-        return self.sz
+        return self.sz;
     }
 }
 

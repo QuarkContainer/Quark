@@ -19,7 +19,7 @@ use super::super::linux_def::IoVec;
 
 pub struct Iovs<'a>(pub &'a [IoVec]);
 
-impl <'a> Iovs <'a> {
+impl<'a> Iovs<'a> {
     pub fn Count(&self) -> usize {
         let mut count = 0;
         for iov in self.0 {
@@ -49,6 +49,24 @@ impl <'a> Iovs <'a> {
 
         return res;
     }
+
+    pub fn First(&self, n: usize) -> Vec<IoVec> {
+        let mut n = n;
+        let mut res = Vec::new();
+
+        for i in 0..self.0.len() {
+            let src = self.0[i];
+            if src.Len() < n {
+                res.push(IoVec::NewFromAddr(src.Start(), src.Len()));
+                n -= self.0[i].Len()
+            } else {
+                res.push(IoVec::NewFromAddr(src.Start(), n));
+                break
+            }
+        }
+
+        return res;
+    }
 }
 
 impl IoVec {
@@ -56,21 +74,18 @@ impl IoVec {
         return IoVec {
             start: &buf[0] as *const _ as u64,
             len: buf.len(),
-        }
+        };
     }
 
     pub fn NewFromSlice(slice: &[u8]) -> Self {
         return Self {
             start: slice.as_ptr() as u64,
             len: slice.len(),
-        }
+        };
     }
 
     pub fn NewFromAddr(start: u64, len: usize) -> Self {
-        return Self {
-            start,
-            len,
-        }
+        return Self { start, len };
     }
 
     pub fn Start(&self) -> u64 {
@@ -89,7 +104,7 @@ impl IoVec {
         return Self {
             start: self.start + n as u64,
             len: self.len - n,
-        }
+        };
     }
 
     pub fn TakeFirst(&self, n: usize) -> Self {
@@ -98,13 +113,13 @@ impl IoVec {
         }
 
         if n > self.len {
-            return *self
+            return *self;
         }
 
         return Self {
             start: self.start,
             len: n,
-        }
+        };
     }
 
     pub fn ToSliceMut<'a>(&self) -> &'a mut [u8] {
@@ -128,14 +143,14 @@ impl IoVec {
 
         dst[0..len].clone_from_slice(&src[0..len]);
 
-        return len as i64
+        return len as i64;
     }
 
     pub fn Zero(&mut self) -> i64 {
         let slice = self.ToSliceMut();
 
         unsafe {
-            core::ptr::write_bytes(slice.as_mut_ptr() as * mut u8, 0, slice.len());
+            core::ptr::write_bytes(slice.as_mut_ptr() as *mut u8, 0, slice.len());
         }
 
         return slice.len() as i64;
@@ -155,26 +170,22 @@ impl IoVec {
     }
 
     pub fn Copy(from: &[IoVec], to: u64, size: usize) {
-        let ptr = to as * mut u8;
-        let mut toSlice = unsafe {
-            slice::from_raw_parts_mut (ptr, size)
-        };
+        let ptr = to as *mut u8;
+        let mut toSlice = unsafe { slice::from_raw_parts_mut(ptr, size) };
 
         for iov in from {
-            let fromSlice : &[u8] = iov.ToSlice();
+            let fromSlice: &[u8] = iov.ToSlice();
             toSlice[0..iov.len].copy_from_slice(fromSlice);
             toSlice = &mut toSlice[iov.len..];
         }
     }
 
-    pub fn CopySlice(src:&[u8], to: &[IoVec]) {
+    pub fn CopySlice(src: &[u8], to: &[IoVec]) {
         let mut offset = 0;
         let mut idx = 0;
         while offset < src.len() && idx < to.len() {
-            let ptr = to[idx].start as * mut u8;
-            let toSlice = unsafe {
-                slice::from_raw_parts_mut (ptr, to[idx].len)
-            };
+            let ptr = to[idx].start as *mut u8;
+            let toSlice = unsafe { slice::from_raw_parts_mut(ptr, to[idx].len) };
             idx += 1;
 
             let mut len = src.len() - offset;
@@ -182,7 +193,7 @@ impl IoVec {
                 len = toSlice.len()
             }
 
-            toSlice[0..len].copy_from_slice(&src[offset..offset+len]);
+            toSlice[0..len].copy_from_slice(&src[offset..offset + len]);
             offset += len;
         }
     }

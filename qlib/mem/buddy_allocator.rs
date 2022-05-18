@@ -1,3 +1,5 @@
+// this copy and modified from https://github.com/rcore-os/buddy_system_allocator
+
 use core::alloc::Layout;
 use core::cmp::{max, min};
 use core::mem::size_of;
@@ -83,7 +85,7 @@ impl<const ORDER: usize> Heap<ORDER> {
             max(layout.align(), size_of::<usize>()),
         );
 
-        raw!(0x500, self.free_list[0x11].top(), self.free_list[0x11].second());
+        //raw!(0x500, self.free_list[0x11].top(), self.free_list[0x11].second());
 
         let class = size.trailing_zeros() as usize;
         for i in class..self.free_list.len() {
@@ -95,9 +97,9 @@ impl<const ORDER: usize> Heap<ORDER> {
                         unsafe {
                             self.free_list[j - 1]
                                 .push((block as usize + (1 << (j - 1))) as *mut usize);
-                            raw!(0x501, j as u64 -1, block as u64 + (1 << (j - 1)));
+                            //raw!(0x501, j as u64 -1, block as u64 + (1 << (j - 1)));
                             self.free_list[j - 1].push(block);
-                            raw!(0x502, j as u64 -1, block as u64);
+                            //raw!(0x502, j as u64 -1, block as u64);
                         }
                     } else {
                         return Err(());
@@ -109,11 +111,9 @@ impl<const ORDER: usize> Heap<ORDER> {
                     .expect("current block should have free space now")
                     as *mut u8;
 
-                raw!(0x503, class as u64, ret as u64);
-                raw!(0x504, self.free_list[0x11].top(), self.free_list[0x11].second());
-                let result = NonNull::new(
-                    ret
-                );
+                // raw!(0x503, class as u64, ret as u64);
+                //raw!(0x504, self.free_list[0x11].top(), self.free_list[0x11].second());
+                let result = NonNull::new(ret);
                 if let Some(result) = result {
                     self.user += layout.size();
                     self.allocated += size;
@@ -134,7 +134,7 @@ impl<const ORDER: usize> Heap<ORDER> {
         );
         let class = size.trailing_zeros() as usize;
 
-        raw!(0x506, class as u64, ptr.as_ptr() as u64);
+        //raw!(0x506, class as u64, ptr.as_ptr() as u64);
 
         unsafe {
             // Put back into free list
@@ -169,7 +169,7 @@ impl<const ORDER: usize> Heap<ORDER> {
         self.user -= layout.size();
         self.allocated -= size;
 
-        raw!(0x507, self.free_list[0x11].top(), self.free_list[0x11].second());
+        //raw!(0x507, self.free_list[0x11].top(), self.free_list[0x11].second());
     }
 
     /// Return the number of bytes that user requests
@@ -219,10 +219,10 @@ impl LinkedList {
 
     pub fn second(&self) -> u64 {
         if self.head as u64 == 0 {
-            return 0
+            return 0;
         }
 
-        let item : * const u64 = self.head as * const u64;
+        let item: *const u64 = self.head as *const u64;
         return unsafe { *item as u64 };
     }
 

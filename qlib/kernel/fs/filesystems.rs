@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::string::String;
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
+use alloc::string::String;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use super::super::super::common::*;
@@ -27,9 +27,9 @@ pub type FilesystemFlags = i32;
 
 // FilesystemRequiresDev indicates that the file system requires a device name
 // on mount. It is used to construct the output of /proc/filesystems.
-pub const FILESYSTEM_REQUIRES_DEV : FilesystemFlags = 1;
+pub const FILESYSTEM_REQUIRES_DEV: FilesystemFlags = 1;
 
-pub static FILESYSTEMS : Singleton<QMutex<FileSystems>> = Singleton::<QMutex<FileSystems>>::New();
+pub static FILESYSTEMS: Singleton<QMutex<FileSystems>> = Singleton::<QMutex<FileSystems>>::New();
 
 pub unsafe fn InitSingleton() {
     FILESYSTEMS.Init(QMutex::new(FileSystems::New()));
@@ -44,7 +44,7 @@ pub fn RegisterFilesystem<T: Filesystem + 'static>(f: &Arc<QMutex<T>>) {
 }
 
 pub fn GetFilesystems() -> Vec<Arc<QMutex<Filesystem>>> {
-    return FILESYSTEMS.lock().GetFilesystems()
+    return FILESYSTEMS.lock().GetFilesystems();
 }
 
 #[derive(Debug, Clone, Default, Copy)]
@@ -56,14 +56,14 @@ pub struct MountSourceFlags {
 }
 
 pub struct FileSystems {
-    pub registered: BTreeMap<String, Arc<QMutex<Filesystem>>>
+    pub registered: BTreeMap<String, Arc<QMutex<Filesystem>>>,
 }
 
 impl FileSystems {
     pub fn New() -> Self {
         return Self {
             registered: BTreeMap::new(),
-        }
+        };
     }
 
     pub fn RegisterFilesystem<T: Filesystem + 'static>(&mut self, f: &Arc<QMutex<T>>) {
@@ -78,7 +78,7 @@ impl FileSystems {
     pub fn FindFilesystem(&self, name: &str) -> Option<Arc<QMutex<Filesystem>>> {
         match self.registered.get(name) {
             None => None,
-            Some(f) => Some(f.clone())
+            Some(f) => Some(f.clone()),
         }
     }
 
@@ -95,7 +95,13 @@ impl FileSystems {
 pub trait Filesystem: Send {
     fn Name(&self) -> String;
     fn Flags(&self) -> FilesystemFlags;
-    fn Mount(&mut self, task: &Task, device: &str, flags: &MountSourceFlags, data: &str) -> Result<Inode>;
+    fn Mount(
+        &mut self,
+        task: &Task,
+        device: &str,
+        flags: &MountSourceFlags,
+        data: &str,
+    ) -> Result<Inode>;
     fn AllowUserMount(&self) -> bool;
     fn AllowUserList(&self) -> bool;
 }

@@ -12,21 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::vec::Vec;
-use core::{ptr};
 use alloc::string::String;
+use alloc::vec::Vec;
+use core::ptr;
 
+use super::super::super::super::kernel_def::{
+    StartExecProcess, StartRootContainer, StartSubContainerProcess,
+};
 use super::super::super::common::*;
 use super::super::super::control_msg::*;
 use super::super::super::vcpu_mgr::*;
-use super::super::Kernel;
-use super::super::taskMgr;
 use super::super::task::*;
-use super::super::super::super::kernel_def::{StartRootContainer, StartExecProcess, StartSubContainerProcess};
-use super::super::LOADER;
+use super::super::taskMgr;
+use super::super::Kernel;
 use super::super::SetWaitContainerfd;
 use super::super::WaitContainerfd;
 use super::super::IOURING;
+use super::super::LOADER;
 use super::super::SHARESPACE;
 use super::process::*;
 
@@ -40,14 +42,25 @@ pub fn ControllerProcessHandler() -> Result<()> {
 
 pub fn HandleSignal(signalArgs: &SignalArgs) {
     info!("get signal {:?}", &signalArgs);
+
+    // don't know why the winsz adjustment doesn't work
+    // todo: fix this
+    if signalArgs.Signo == 28 {
+        return;
+    }
+
     let task = Task::Current();
     match signalArgs.Mode {
         SignalDeliveryMode::DeliverToProcess => {
-            match LOADER.Lock(task).unwrap().SignalProcess(signalArgs.CID.clone(), signalArgs.PID, signalArgs.Signo) {
+            match LOADER.Lock(task).unwrap().SignalProcess(
+                signalArgs.CID.clone(),
+                signalArgs.PID,
+                signalArgs.Signo,
+            ) {
                 Err(e) => {
                     info!("signal DeliverToProcess fail with error {:?}", e);
                 }
-                Ok(())=> ()
+                Ok(()) => (),
             }
         }
         SignalDeliveryMode::DeliverToAllProcesses => {
@@ -55,24 +68,27 @@ pub fn HandleSignal(signalArgs: &SignalArgs) {
                 Err(e) => {
                     info!("signal DeliverToAllProcesses fail with error {:?}", e);
                 }
-                Ok(())=> ()
+                Ok(()) => (),
             }
         }
         SignalDeliveryMode::DeliverToForegroundProcessGroup => {
-            match LOADER.Lock(task).unwrap().SignalForegroundProcessGroup(signalArgs.CID.clone(), signalArgs.PID, signalArgs.Signo) {
+            match LOADER.Lock(task).unwrap().SignalForegroundProcessGroup(
+                signalArgs.CID.clone(),
+                signalArgs.PID,
+                signalArgs.Signo,
+            ) {
                 Err(_e) => {
                     info!("signal DeliverToForegroundProcessGroup fail with error");
                     //todo: enable the error when ready
                     //info!("signal DeliverToForegroundProcessGroup fail with error {:?}", e);
                 }
-                Ok(())=> ()
+                Ok(()) => (),
             }
         }
     };
-
 }
 
-pub fn SignalHandler(_ :  *const u8) {
+pub fn SignalHandler(_: *const u8) {
     let msg = SHARESPACE.signalArgs.lock().take();
     match msg {
         None => (),
@@ -91,91 +107,91 @@ pub fn ControlMsgHandler(fd: *const u8) {
     let task = Task::Current();
     let msg = {
         let mut buf: [u8; 8192] = [0; 8192];
-        let addr = &mut buf[0] as * mut _ as u64;
+        let addr = &mut buf[0] as *mut _ as u64;
         let ret = Kernel::HostSpace::ReadControlMsg(fd, addr, buf.len());
 
         if ret < 0 {
-            return
+            return;
         }
 
         let size = ret as usize;
 
-        let msg : ControlMsg = serde_json::from_slice(&buf[0..size]).expect(&format!("LoadProcessKernel des fail size is {}", size));
+        let msg: ControlMsg = serde_json::from_slice(&buf[0..size])
+            .expect(&format!("LoadProcessKernel des fail size is {}", size));
         msg
     };
 
+    //info!("payload: {:?}", &msg.payload);
+    //defer!(error!("payload handling ends"));
     match msg.payload {
         Payload::Pause => {
             let kernel = LOADER.Lock(task).unwrap().kernel.clone();
             kernel.Pause();
-            WriteControlMsgResp(fd, &UCallResp::PauseResp);
+            WriteControlMsgResp(fd, &UCallResp::PauseResp, true);
         }
         Payload::Unpause => {
             let kernel = LOADER.Lock(task).unwrap().kernel.clone();
             kernel.Unpause();
-            WriteControlMsgResp(fd, &UCallResp::UnpauseResp);
+            WriteControlMsgResp(fd, &UCallResp::UnpauseResp, true);
         }
         Payload::Ps(cid) => {
             let kernel = LOADER.Lock(task).unwrap().kernel.clone();
             let ps = Processes(&kernel, &cid);
-            WriteControlMsgResp(fd, &UCallResp::PsResp(ps));
+            WriteControlMsgResp(fd, &UCallResp::PsResp(ps), true);
         }
         Payload::Signal(signalArgs) => {
             HandleSignal(&signalArgs);
-            WriteControlMsgResp(fd, &UCallResp::SignalResp);
+            WriteControlMsgResp(fd, &UCallResp::SignalResp, true);
         }
         Payload::ContainerDestroy(cid) => {
             LOADER.Lock(task).unwrap().DestroyContainer(cid).unwrap();
-            WriteControlMsgResp(fd, &UCallResp::ContainerDestroyResp);
+            WriteControlMsgResp(fd, &UCallResp::ContainerDestroyResp, true);
         }
         Payload::RootContainerStart(_) => {
-            WriteControlMsgResp(fd, &UCallResp::RootContainerStartResp);
+            WriteControlMsgResp(fd, &UCallResp::RootContainerStartResp, true);
             StartRootContainer(ptr::null());
         }
         Payload::ExecProcess(process) => {
             StartExecProcess(fd, process);
         }
-        Payload::WaitContainer(cid) => {
-            match LOADER.WaitContainer(cid) {
-                Ok(exitStatus) => {
-                    WriteControlMsgResp(fd, &UCallResp::WaitContainerResp(exitStatus));
-                }
-                Err(e) => {
-                    WriteControlMsgResp(fd, &UCallResp::UCallRespErr(format!("{:?}", e)));
-                }
+        Payload::WaitContainer(cid) => match LOADER.WaitContainer(cid) {
+            Ok(exitStatus) => {
+                WriteControlMsgResp(fd, &UCallResp::WaitContainerResp(exitStatus), true);
             }
-        }
+            Err(e) => {
+                WriteControlMsgResp(fd, &UCallResp::UCallRespErr(format!("{:?}", e)), true);
+            }
+        },
         Payload::WaitPid(waitpid) => {
             match LOADER.WaitPID(waitpid.cid, waitpid.pid, waitpid.clearStatus) {
                 Ok(exitStatus) => {
-                    WriteControlMsgResp(fd, &UCallResp::WaitPidResp(exitStatus));
+                    WriteControlMsgResp(fd, &UCallResp::WaitPidResp(exitStatus), true);
                 }
                 Err(e) => {
-                    WriteControlMsgResp(fd, &UCallResp::UCallRespErr(format!("{:?}", e)));
+                    WriteControlMsgResp(fd, &UCallResp::UCallRespErr(format!("{:?}", e)), true);
                 }
             }
         }
         Payload::CreateSubContainer(createArgs) => {
             match LOADER.CreateSubContainer(createArgs.cid, createArgs.fds) {
                 Ok(()) => {
-                    WriteControlMsgResp(fd, &UCallResp::CreateSubContainerResp);
+                    WriteControlMsgResp(fd, &UCallResp::CreateSubContainerResp, true);
                 }
                 Err(e) => {
-                    WriteControlMsgResp(fd, &UCallResp::UCallRespErr(format!("{:?}", e)));
+                    WriteControlMsgResp(fd, &UCallResp::UCallRespErr(format!("{:?}", e)), true);
                 }
             }
         }
         Payload::StartSubContainer(startArgs) => {
             match LOADER.StartSubContainer(startArgs.process) {
                 Ok((_, entry, userStackAddr, kernelStackAddr)) => {
-                    WriteControlMsgResp(fd, &UCallResp::StartSubContainerResp);
+                    WriteControlMsgResp(fd, &UCallResp::StartSubContainerResp, true);
                     StartSubContainerProcess(entry, userStackAddr, kernelStackAddr);
                 }
                 Err(e) => {
-                    WriteControlMsgResp(fd, &UCallResp::UCallRespErr(format!("{:?}", e)));
+                    WriteControlMsgResp(fd, &UCallResp::UCallRespErr(format!("{:?}", e)), true);
                 }
             }
-
         }
         Payload::WaitAll => {
             SetWaitContainerfd(fd);
@@ -189,17 +205,21 @@ pub fn ControlMsgHandler(fd: *const u8) {
 
 pub fn WriteWaitAllResponse(cid: String, execId: String, status: i32) {
     let fd = WaitContainerfd();
-    WriteControlMsgResp(fd, &UCallResp::WaitAllResp(WaitAllResp{
-        cid,
-        execId,
-        status
-    }));
+    WriteControlMsgResp(
+        fd,
+        &UCallResp::WaitAllResp(WaitAllResp {
+            cid,
+            execId,
+            status,
+        }),
+        false,
+    );
 }
 
-pub fn WriteControlMsgResp(fd: i32, msg: &UCallResp) {
-    let data : Vec<u8> = serde_json::to_vec(&msg).expect("LoadProcessKernel ser fail...");
-    let addr = &data[0] as * const _ as u64;
+pub fn WriteControlMsgResp(fd: i32, msg: &UCallResp, close: bool) {
+    let data: Vec<u8> = serde_json::to_vec(&msg).expect("LoadProcessKernel ser fail...");
+    let addr = &data[0] as *const _ as u64;
     let len = data.len();
 
-    Kernel::HostSpace::WriteControlMsgResp(fd, addr, len);
+    Kernel::HostSpace::WriteControlMsgResp(fd, addr, len, close);
 }

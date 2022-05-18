@@ -15,24 +15,24 @@
 use spin::Mutex;
 use std::collections::VecDeque;
 
-use super::super::qlib::mem::areaset::*;
+use super::super::heap_alloc::ENABLE_HUGEPAGE;
+use super::super::memmgr::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
+use super::super::qlib::mem::areaset::*;
 use super::super::qlib::range::*;
-use super::super::memmgr::*;
 use super::super::IO_MGR;
-
 
 #[derive(Clone, Default)]
 pub struct HostSegment {}
 
 impl AreaValue for HostSegment {
     fn Merge(&self, _r1: &Range, _r2: &Range, _vma2: &HostSegment) -> Option<HostSegment> {
-        return Some(HostSegment {})
+        return Some(HostSegment {});
     }
 
     fn Split(&self, _r: &Range, _split: u64) -> (HostSegment, HostSegment) {
-        return (HostSegment {}, HostSegment {})
+        return (HostSegment {}, HostSegment {});
     }
 }
 
@@ -44,13 +44,11 @@ pub struct HostPMAKeeper {
 }
 
 impl HostPMAKeeper {
-    const HUGE_PAGE_RANGE: u64 = 6 * MemoryDef::ONE_GB as u64;
-
     pub fn New() -> Self {
         return Self {
-            ranges: Mutex::new(AreaSet::New(0,0)),
-            hugePages: Mutex::new(VecDeque::with_capacity((Self::HUGE_PAGE_RANGE / MemoryDef::PAGE_SIZE_2M) as usize))
-        }
+            ranges: Mutex::new(AreaSet::New(0, 0)),
+            hugePages: Mutex::new(VecDeque::with_capacity(1000)),
+        };
     }
 
     pub fn FreeHugePage(&self, addr: u64) {
@@ -63,14 +61,17 @@ impl HostPMAKeeper {
     }
 
     pub fn Init(&self, start: u64, len: u64) {
-        assert!(len > Self::HUGE_PAGE_RANGE as u64);
         self.ranges.lock().Reset(start, len);
     }
 
     pub fn InitHugePages(&self) {
-        let hugePageStart = self.RangeAllocate(Self::HUGE_PAGE_RANGE, MemoryDef::PAGE_SIZE_2M).unwrap();
+        let hugeLen = (self.ranges.lock().range.Len() / MemoryDef::ONE_GB - 2) * MemoryDef::ONE_GB;
+        //error!("InitHugePages is {:x}", self.ranges.lock().range.Len() / MemoryDef::ONE_GB - 2);
+        let hugePageStart = self
+            .RangeAllocate(hugeLen, MemoryDef::PAGE_SIZE_2M)
+            .unwrap();
         let mut addr = hugePageStart;
-        while addr < hugePageStart + Self::HUGE_PAGE_RANGE as u64 {
+        while addr < hugePageStart + hugeLen {
             self.FreeHugePage(addr);
             addr += MemoryDef::PAGE_SIZE_2M;
         }
@@ -84,12 +85,29 @@ impl HostPMAKeeper {
             }
             Ok(addr) => {
                 if addr != r.Start() {
-                    panic!("AreaSet <HostSegment>:: memmap fail to alloc fix address at {:x}", r.Start());
+                    panic!(
+                        "AreaSet <HostSegment>:: memmap fail to alloc fix address at {:x}",
+                        r.Start()
+                    );
                 }
 
-                return Ok(r.Start())
+                return Ok(r.Start());
             }
         }
+    }
+
+    pub fn MapHugePage(&self) -> Result<u64> {
+        let mut mo = &mut MapOption::New();
+        let prot = libc::PROT_READ | libc::PROT_WRITE;
+        let len = MemoryDef::PAGE_SIZE_2M;
+        mo = mo.MapAnan().Proto(prot).Len(len);
+        if ENABLE_HUGEPAGE {
+            mo.MapHugeTLB();
+        }
+
+        let start = self.Allocate(len, MemoryDef::PAGE_SIZE_2M)?;
+        mo.Addr(start);
+        return self.Map(&mut mo, &Range::New(start, len));
     }
 
     pub fn MapAnon(&self, len: u64, prot: i32) -> Result<u64> {
@@ -108,7 +126,12 @@ impl HostPMAKeeper {
 
         //let prot = prot | MmapProt::PROT_WRITE as i32;
 
-        mo = mo.Proto(prot).FileOffset(offset).FileId(osfd).Len(len).MapFixed();
+        mo = mo
+            .Proto(prot)
+            .FileOffset(offset)
+            .FileId(osfd)
+            .Len(len)
+            .MapFixed();
         //mo.MapPrivate();
         mo.MapShare();
         mo.MapLocked();
@@ -127,7 +150,7 @@ impl HostPMAKeeper {
         let seg = ranges.Insert(&gap, &r, HostSegment {});
         assert!(seg.Ok(), "AreaSet <HostSegment>:: insert fail");
 
-        return Ok(start)
+        return Ok(start);
     }
 
     fn Allocate(&self, len: u64, alignment: u64) -> Result<u64> {
@@ -136,9 +159,20 @@ impl HostPMAKeeper {
         }
 
         if len <= MemoryDef::PAGE_SIZE_2M {
-            assert!(alignment <= MemoryDef::PAGE_SIZE_2M, "Allocate fail .... {:x}/{:x}", len, alignment);
-            let addr = self.AllocHugePage().expect("AllocHugePage fail...");
-            return Ok(addr)
+            assert!(
+                alignment <= MemoryDef::PAGE_SIZE_2M,
+                "Allocate fail .... {:x}/{:x}",
+                len,
+                alignment
+            );
+            let addr = match self.AllocHugePage() {
+                None => {
+                    error!("AllocHugePage fail...");
+                    panic!("AllocHugePage fail...");
+                }
+                Some(addr) => addr,
+            };
+            return Ok(addr);
         }
 
         return self.RangeAllocate(len, alignment);
@@ -154,8 +188,11 @@ impl HostPMAKeeper {
         let (seg, _gap) = ranges.Find(r.Start());
 
         if !seg.Ok() || !seg.Range().IsSupersetOf(r) {
-            panic!("AreaSet <HostSegment>::Unmap invalid, remove range {:?} from range {:?}",
-                   r, seg.Range());
+            panic!(
+                "AreaSet <HostSegment>::Unmap invalid, remove range {:?} from range {:?}",
+                r,
+                seg.Range()
+            );
         }
 
         let seg = ranges.Isolate(&seg, r);
@@ -181,7 +218,7 @@ impl AreaSet<HostSegment> {
                 let offset = gr.Start() % alignment;
                 if offset != 0 {
                     if gr.Len() >= len + alignment - offset {
-                        return Ok(gr.Start() + alignment - offset)
+                        return Ok(gr.Start() + alignment - offset);
                     }
                 } else {
                     return Ok(gr.Start());

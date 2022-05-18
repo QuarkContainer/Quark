@@ -13,52 +13,47 @@
 // limitations under the License.
 
 use alloc::string::String;
-use std::os::unix::prelude::AsRawFd;
-use std::time::{SystemTime, UNIX_EPOCH, Duration};
-use std::path::Path;
-use std::env;
 use alloc::vec::Vec;
+use fs2::FileExt;
 use regex::Regex;
+use std::env;
 use std::fs;
 use std::fs::File;
-use fs2::FileExt;
-use std::io::Write;
 use std::fs::OpenOptions;
-//use std::os::unix::io::{AsRawFd};
+use std::io::Write;
+use std::path::Path;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use super::super::super::qlib::auth::cap_set::*;
+use super::super::super::qlib::auth::id::*;
 use super::super::super::qlib::common::*;
+use super::super::super::qlib::control_msg::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::path::*;
-use super::super::super::qlib::auth::id::*;
-use super::super::super::qlib::auth::cap_set::*;
-use super::super::super::qlib::control_msg::*;
 use super::super::super::ucall::ucall::*;
 //use super::super::super::qlib::util::*;
-use super::super::super::console::pty::*;
-use super::super::super::console::unix_socket::UnixSocket;
-use super::super::oci::*;
 use super::super::cgroup::*;
-use super::super::oci::serialize::*;
 use super::super::cmd::config::*;
 use super::super::cmd::exec::*;
-//use super::super::runtime::console::*;
+use super::super::oci::serialize::*;
+use super::super::oci::*;
 use super::super::sandbox::sandbox::*;
 use super::super::specutils::specutils::*;
-use super::status::*;
 use super::hook::*;
+use super::status::*;
 
 use super::super::shim::container_io::*;
 
 // metadataFilename is the name of the metadata file relative to the
 // container root directory that holds sandbox metadata.
-const METADATA_FILENAME : &str = "meta.json";
+const METADATA_FILENAME: &str = "meta.json";
 
 // metadataLockFilename is the name of a lock file in the container
 // root directory that is used to prevent concurrent modifications to
 // the container state and metadata.
-const METADATA_LOCK_FILENAME : &str = "meta.lock";
+const METADATA_LOCK_FILENAME: &str = "meta.lock";
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Container {
     // ID is the container ID.
     #[serde(default)]
@@ -113,7 +108,10 @@ pub fn ContainerList(rootDir: &str) -> Result<Vec<String>> {
     info!("List containers {}", rootDir);
     let path = Path::new(rootDir);
     let mut ret = Vec::new();
-    for entry in path.read_dir().map_err(|e| Error::IOError(format!("List io::error is {:?}", e)))? {
+    for entry in path
+        .read_dir()
+        .map_err(|e| Error::IOError(format!("List io::error is {:?}", e)))?
+    {
         if let Ok(entry) = entry {
             ret.push(entry.file_name().to_str().unwrap().to_string());
         }
@@ -138,7 +136,10 @@ pub fn findContainerRoot(rootDir: &str, partialID: &str) -> Result<String> {
     for id in &ids {
         if HasPrefix(id, partialID) {
             if cRoot.len() == 0 {
-                return Err(Error::Common(format!("id {} is ambiguous and could refer to multiple containers: {}, {}", partialID, cRoot, id)))
+                return Err(Error::Common(format!(
+                    "id {} is ambiguous and could refer to multiple containers: {}, {}",
+                    partialID, cRoot, id
+                )));
             }
 
             cRoot = id.to_string();
@@ -155,22 +156,26 @@ pub fn findContainerRoot(rootDir: &str, partialID: &str) -> Result<String> {
 
 pub fn ValidateID(id: &str) -> Result<()> {
     let re = Regex::new(r"^[\w+-\.]+$").unwrap();
-    if ! re.is_match(id) {
+    if !re.is_match(id) {
         return Err(Error::Common(format!("id {} is not valid", id)));
     }
 
-    return Ok(())
+    return Ok(());
 }
 
 // maybeLockRootContainer locks the sandbox root container. It is used to
 // prevent races to create and delete child container sandboxes.
 pub fn maybeLockRootContainer(spec: &Spec, rootDir: &str) -> Result<FileLockCleanup> {
     if IsRoot(spec) {
-        return Ok(FileLockCleanup::default())
+        return Ok(FileLockCleanup::default());
     }
 
     let sbid = match SandboxID(spec) {
-        None => return Err(Error::Common("no sandbox ID found when locking root container".to_string())),
+        None => {
+            return Err(Error::Common(
+                "no sandbox ID found when locking root container".to_string(),
+            ))
+        }
         Some(id) => id,
     };
 
@@ -184,7 +189,12 @@ pub fn IsRoot(spec: &Spec) -> bool {
 }
 
 pub fn lockContainerMetadata(containerRootDir: &str) -> Result<FileLockCleanup> {
-    fs::create_dir_all(containerRootDir).map_err(|e| Error::IOError(format!("lockContainerMetadata create_dir_all io::error is {:?}", e)))?;
+    fs::create_dir_all(containerRootDir).map_err(|e| {
+        Error::IOError(format!(
+            "lockContainerMetadata create_dir_all io::error is {:?}",
+            e
+        ))
+    })?;
     let f = Join(containerRootDir, METADATA_LOCK_FILENAME);
 
     let file = OpenOptions::new()
@@ -195,10 +205,13 @@ pub fn lockContainerMetadata(containerRootDir: &str) -> Result<FileLockCleanup> 
         .map_err(|e| Error::IOError(format!("lockContainerMetadata open io::error is {:?}", e)))?;
 
     // block until this process can lock the file
-    file.lock_exclusive().map_err(|e| Error::IOError(format!("lockContainerMetadata lock_exclusive io::error is {:?}", e)))?;
-    return Ok(FileLockCleanup{
-        file: Some(file),
-    })
+    file.lock_exclusive().map_err(|e| {
+        Error::IOError(format!(
+            "lockContainerMetadata lock_exclusive io::error is {:?}",
+            e
+        ))
+    })?;
+    return Ok(FileLockCleanup { file: Some(file) });
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Copy)]
@@ -238,7 +251,8 @@ impl Container {
 
         let metafile = Join(&cRoot, METADATA_FILENAME);
         info!("metadatafile is {}", &metafile);
-        let mut c: Container = deserialize(&metafile).map_err(|e| Error::Common(format!("Container::Load error is {:?}", e)))?;
+        let mut c: Container = deserialize(&metafile)
+            .map_err(|e| Error::Common(format!("Container::Load error is {:?}", e)))?;
 
         // If the status is "Running" or "Created", check that the sandbox
         // process still exists, and set it to Stopped if it does not.
@@ -254,9 +268,8 @@ impl Container {
                     Err(_e) => {
                         c.changeStatus(Status::Stopped);
                     }
-                    Ok(_) => ()
+                    Ok(_) => (),
                 }
-
             }
         }
 
@@ -264,28 +277,33 @@ impl Container {
     }
 
     pub fn CreateTime(&self) -> SystemTime {
-        return UNIX_EPOCH.checked_add(Duration::from_secs(self.CreateAt)).unwrap();
+        return UNIX_EPOCH
+            .checked_add(Duration::from_secs(self.CreateAt))
+            .unwrap();
     }
 
     pub fn Lock(&self) -> Result<FileLockCleanup> {
-        return lockContainerMetadata(&Join(&self.Root, &self.ID))
+        return lockContainerMetadata(&Join(&self.Root, &self.ID));
     }
 
     fn RequireStatus(&self, action: &str, statuses: &[Status]) -> Result<()> {
         for s in statuses {
             if self.Status == *s {
-                return Ok(())
+                return Ok(());
             }
         }
 
-        return Err(Error::Common(format!("cannot {} container {} in state {:?}", action, self.ID, self.Status)))
+        return Err(Error::Common(format!(
+            "cannot {} container {} in state {:?}",
+            action, self.ID, self.Status
+        )));
     }
 
     // SignalContainer sends the signal to the container. If all is true and signal
     // is SIGKILL, then waits for all processes to exit before returning.
     // SignalContainer returns an error if the container is already stopped.
     pub fn SignalContainer(&self, sig: i32, all: bool) -> Result<()> {
-        info!("Signal container {:?}: {:?}", self.ID, sig);
+        info!("Signal container {:?} with signal: {:?}", self.ID, sig);
         // Signaling container in Stopped state is allowed. When all=false,
         // an error will be returned anyway; when all=true, this allows
         // sending signal to other processes inside the container even
@@ -293,10 +311,14 @@ impl Container {
         // container cleanup.
         self.RequireStatus("signal", &[Status::Running, Status::Stopped])?;
         if !self.isSandboxRunning() {
-            return Err(Error::Common("sandbox is not running".to_string()))
+            return Err(Error::Common("sandbox is not running".to_string()));
         }
 
-        return self.Sandbox.as_ref().unwrap().SignalContainer(&self.ID, sig, all)
+        return self
+            .Sandbox
+            .as_ref()
+            .unwrap()
+            .SignalContainer(&self.ID, sig, all);
     }
 
     pub fn ForwardSignals(&self, pid: i32) {
@@ -308,13 +330,20 @@ impl Container {
     }
 
     pub fn SignalProcess(&self, sig: i32, pid: i32) -> Result<()> {
-        info!("Signal process {} in container {:?}: {:?}", pid, self.ID, sig);
+        info!(
+            "Signal process {} in container {:?}: {:?}",
+            pid, self.ID, sig
+        );
         self.RequireStatus("signal", &[Status::Running])?;
         if !self.isSandboxRunning() {
-            return Err(Error::Common("sandbox is not running".to_string()))
+            return Err(Error::Common("sandbox is not running".to_string()));
         }
 
-        return self.Sandbox.as_ref().unwrap().SignalProcess(&self.ID, pid, sig, false);
+        return self
+            .Sandbox
+            .as_ref()
+            .unwrap()
+            .SignalProcess(&self.ID, pid, sig, false);
     }
 
     fn changeStatus(&mut self, s: Status) {
@@ -347,10 +376,11 @@ impl Container {
                 }
             }
             Status::Stopped => {
-                if self.Status != Status::Creating &&
-                    self.Status != Status::Created &&
-                    self.Status != Status::Running &&
-                    self.Status != Status::Stopped {
+                if self.Status != Status::Creating
+                    && self.Status != Status::Created
+                    && self.Status != Status::Running
+                    && self.Status != Status::Stopped
+                {
                     panic!("invalid state transition: {:?} => {:?}", self.Status, s)
                 }
             }
@@ -363,18 +393,28 @@ impl Container {
         return self.Sandbox.is_some() && self.Sandbox.as_ref().unwrap().IsRunning();
     }
 
-    pub fn CheckTerminal(action: RunAction, terminal: bool, consoleSocket: &str, detach: bool) -> Result<()> {
+    pub fn CheckTerminal(
+        action: RunAction,
+        terminal: bool,
+        consoleSocket: &str,
+        detach: bool,
+    ) -> Result<()> {
         let detach = detach || action == RunAction::Create;
 
         if detach && terminal && consoleSocket.len() == 0 {
-            return Err(Error::Common("cannot allocate tty if runc will detach without setting console socket".to_string()));
+            return Err(Error::Common(
+                "cannot allocate tty if runc will detach without setting console socket"
+                    .to_string(),
+            ));
         }
 
         if (!detach || !terminal) && consoleSocket.len() > 0 {
-            return Err(Error::Common("annot use console socket if runc will not detach or allocate tty".to_string()));
+            return Err(Error::Common(
+                "annot use console socket if runc will not detach or allocate tty".to_string(),
+            ));
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     //pub fn maybeLockRootContainer(spec: &Spec, rootDir: &str)
@@ -382,17 +422,21 @@ impl Container {
     // Create creates the container in a new Sandbox process, unless the metadata
     // indicates that an existing Sandbox should be used. The caller must call
     // Destroy() on the container.
-    pub fn Create(id: &str,
-                  action: RunAction,
-                  spec: Spec,
-                  conf: &GlobalConfig,
-                  bundleDir: &str,
-                  consoleSocket: &str,
-                  pidFile: &str,
-                  userlog: &str,
-                  detach: bool,
-                  pivot: bool) -> Result<Self> {
+    pub fn Create(
+        id: &str,
+        action: RunAction,
+        spec: Spec,
+        conf: &GlobalConfig,
+        bundleDir: &str,
+        consoleSocket: &str,
+        // pid is only used by shim, so not needed after switching to new shim
+        pidFile: &str,
+        userlog: &str,
+        detach: bool,
+        pivot: bool,
+    ) -> Result<Self> {
         info!("Create container {} in root dir: {}", id, &conf.RootDir);
+        debug!("spec for creating container: {:?}", &spec);
         //debug!("container spec is {:?}", &spec);
         ValidateID(id)?;
 
@@ -410,7 +454,10 @@ impl Container {
             // Check if the container already exists by looking for the metadata
             // file.
             if Path::new(&Join(&containerRoot, METADATA_FILENAME)).exists() {
-                return Err(Error::Common(format!("container with id {} already exists", id)))
+                return Err(Error::Common(format!(
+                    "container with id {} already exists",
+                    id
+                )));
             }
 
             let user = match env::var("USER") {
@@ -425,7 +472,10 @@ impl Container {
                 BundleDir: bundleDir.to_string(),
                 Root: containerRoot,
                 Status: Status::Creating,
-                CreateAt: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+                CreateAt: SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
                 Owner: user,
                 Sandbox: None,
                 RootContainerDir: conf.RootDir.to_string(),
@@ -450,13 +500,16 @@ impl Container {
                 };
 
                 if cg.is_some() {
-                    let ret = cg.as_mut().unwrap().Install(&c.Spec.linux.as_ref().unwrap().resources);
+                    let ret = cg
+                        .as_mut()
+                        .unwrap()
+                        .Install(&c.Spec.linux.as_ref().unwrap().resources);
                     match ret {
                         Err(e) => {
                             c.Destroy()?;
                             return Err(e);
                         }
-                        Ok(_) => ()
+                        Ok(_) => (),
                     }
                 }
 
@@ -465,12 +518,21 @@ impl Container {
                         let restore = cgroup.Join()?;
                         Some(restore)
                     }
-                    None => {
-                        None
-                    },
+                    None => None,
                 };
 
-                let ret = Sandbox::New(id, action, &c.Spec, conf, bundleDir, consoleSocket, userlog, cg, detach, pivot);
+                let ret = Sandbox::New(
+                    id,
+                    action,
+                    &c.Spec,
+                    conf,
+                    bundleDir,
+                    consoleSocket,
+                    userlog,
+                    cg,
+                    detach,
+                    pivot,
+                );
 
                 c.Sandbox = match ret {
                     Err(e) => {
@@ -485,174 +547,8 @@ impl Container {
                     Some(restore) => restore(),
                 }
             } else {
-                let sandboxId = match SandboxID(&c.Spec) {
-                    Some(sid) => sid,
-                    None => {
-                        error!("No sandbox ID found in spec when creating container inside sandbox");
-                        return Err(Error::InvalidInput);
-                    }
-                };
-
-                debug!("Creating new container {} inside exisitng sandbox {}", id, &sandboxId);
-                let rootContainer = match Container::Load(&c.RootContainerDir, &sandboxId) {
-                    Ok(container) => container,
-                    Err(e) => {
-                        error!("failed to load root container: {:?}", &e);
-                        return Err(e);
-                    }
-                };
-                c.Sandbox = rootContainer.Sandbox;
-                
-                // TODO: create placeholder cgroup paths for subcontainers, 
-                // althought it won't take effect, some tools use this for reporting and discovery 
-
-                // If the console control socket file is provided, then create a new
-		        // pty master/slave pair and send the TTY to the sandbox process.
-                let tty = if c.ConsoleSocket.len() > 0 {
-                    let (master, replicas) = NewPty()?;
-                    let client = UnixSocket::NewClient(&c.ConsoleSocket)?;
-                    client.SendFd(master.as_raw_fd())?;
-                    replicas.as_raw_fd()
-                } else {
-                    -1
-                };
-
-                if let Err(e) = c.Sandbox.as_ref().unwrap().CreateSubContainer(conf, id, tty) {
-                    error!("failed to create subcontainer: {:?}", e);
-                }
-            }
-
-            c.changeStatus(Status::Created);
-
-            // Save the metadata file.
-            let ret = c.Save();
-            match ret {
-                Err(e) => {
-                    c.Destroy()?;
-                    return Err(e);
-                }
-                Ok(_) => ()
-            }
-
-            // Write the PID file. Containerd considers the create complete after
-            // this file is created, so it must be the last thing we do.
-            if pidFile.len() != 0 {
-                let id = format!("{}", c.SandboxPid());
-                let ret = Self::WriteStr(pidFile, &id);
-                match ret {
-                    Err(e) => {
-                        c.Destroy()?;
-                        return Err(e);
-                    }
-                    Ok(_) => (),
-                }
-            }
-
-            c
-        };
-
-        return Ok(c)
-    }
-
-    pub fn Create1(id: &str,
-                  action: RunAction,
-                  spec: Spec,
-                  conf: &GlobalConfig,
-                  bundleDir: &str,
-                  userlog: &str,
-                  io: &ContainerIO,
-                  pivot: bool) -> Result<Self> {
-        info!("Create container {} in root dir: {}", id, &conf.RootDir);
-        //debug!("container spec is {:?}", &spec);
-        ValidateID(id)?;
-
-        let _unlockRoot = maybeLockRootContainer(&spec, &conf.RootDir)?;
-
-        // Lock the container metadata file to prevent concurrent creations of
-        // containers with the same id.
-        let containerRoot = Join(&conf.RootDir, id);
-
-        let c = {
-            let _unlock = lockContainerMetadata(&containerRoot)?;
-
-            // Check if the container already exists by looking for the metadata
-            // file.
-            if Path::new(&Join(&containerRoot, METADATA_FILENAME)).exists() {
-                return Err(Error::Common(format!("container with id {} already exists", id)))
-            }
-
-            let user = match env::var("USER") {
-                Err(_) => "".to_string(),
-                Ok(s) => s.to_string(),
-            };
-
-            let mut c = Self {
-                ID: id.to_string(),
-                Spec: spec,
-                ConsoleSocket: "".to_string(),
-                BundleDir: bundleDir.to_string(),
-                Root: containerRoot,
-                Status: Status::Creating,
-                CreateAt: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
-                Owner: user,
-                Sandbox: None,
-                RootContainerDir: conf.RootDir.to_string(),
-            };
-
-            // If the metadata annotations indicate that this container should be
-            // started in an existing sandbox, we must do so. The metadata will
-            // indicate the ID of the sandbox, which is the same as the ID of the
-            // init container in the sandbox.
-            let isRoot = IsRoot(&c.Spec);
-            if isRoot {
-                debug!("Creating new sandbox for container {}", id);
-
-                // Create and join cgroup before processes are created to ensure they are
-                // part of the cgroup from the start (and all children processes).
-                let mut cg = match Cgroup::New(&c.Spec) {
-                    Err(e) => {
-                        c.Destroy()?;
-                        return Err(e);
-                    }
-                    Ok(cg) => cg,
-                };
-
-                if cg.is_some() {
-                    let ret = cg.as_mut().unwrap().Install(&c.Spec.linux.as_ref().unwrap().resources);
-                    match ret {
-                        Err(e) => {
-                            c.Destroy()?;
-                            return Err(e);
-                        }
-                        Ok(_) => ()
-                    }
-                }
-
-                let restore = match &cg {
-                    Some(ref cgroup) => {
-                        let restore = cgroup.Join()?;
-                        Some(restore)
-                    }
-                    None => {
-                        None
-                    },
-                };
-
-                let ret = Sandbox::New1(id, action, conf, bundleDir, io, userlog, cg, pivot);
-
-                c.Sandbox = match ret {
-                    Err(e) => {
-                        c.Destroy()?;
-                        return Err(e);
-                    }
-                    Ok(s) => Some(s),
-                };
-
-                match restore {
-                    None => (),
-                    Some(restore) => restore(),
-                }
-            } else {
+                panic!("non CRI-compliant runtime should never call subcontainer");
+                /* this is for non oci-compliant (to be specific), and should not call subcontainer
                 let sandboxId = match SandboxID(&c.Spec) {
                     Some(sid) => sid,
                     None => {
@@ -688,6 +584,7 @@ impl Container {
                 if let Err(e) = c.Sandbox.as_ref().unwrap().CreateSubContainer(conf, id, tty) {
                     error!("failed to create subcontainer: {:?}", e);
                 }
+                */
             }
 
             c.changeStatus(Status::Created);
@@ -699,28 +596,212 @@ impl Container {
                     c.Destroy()?;
                     return Err(e);
                 }
-                Ok(_) => ()
+                Ok(_) => (),
+            }
+
+            // Write the PID file. Containerd considers the create complete after
+            // this file is created, so it must be the last thing we do.
+            if pidFile.len() != 0 {
+                let id = format!("{}", c.SandboxPid());
+                let ret = Self::WriteStr(pidFile, &id);
+                match ret {
+                    Err(e) => {
+                        c.Destroy()?;
+                        return Err(e);
+                    }
+                    Ok(_) => (),
+                }
             }
 
             c
         };
 
-        return Ok(c)
+        return Ok(c);
+    }
+
+    pub fn Create1(
+        id: &str,
+        action: RunAction,
+        spec: Spec,
+        conf: &GlobalConfig,
+        bundleDir: &str,
+        userlog: &str,
+        io: &ContainerIO,
+        pivot: bool,
+    ) -> Result<Self> {
+        info!("Create container {} in root dir: {}", id, &conf.RootDir);
+        //debug!("container spec is {:?}", &spec);
+        ValidateID(id)?;
+
+        let _unlockRoot = maybeLockRootContainer(&spec, &conf.RootDir)?;
+
+        // Lock the container metadata file to prevent concurrent creations of
+        // containers with the same id.
+        let containerRoot = Join(&conf.RootDir, id);
+
+        let c = {
+            let _unlock = lockContainerMetadata(&containerRoot)?;
+
+            // Check if the container already exists by looking for the metadata
+            // file.
+            if Path::new(&Join(&containerRoot, METADATA_FILENAME)).exists() {
+                return Err(Error::Common(format!(
+                    "container with id {} already exists",
+                    id
+                )));
+            }
+
+            let user = match env::var("USER") {
+                Err(_) => "".to_string(),
+                Ok(s) => s.to_string(),
+            };
+
+            let mut c = Self {
+                ID: id.to_string(),
+                Spec: spec,
+                ConsoleSocket: "".to_string(),
+                BundleDir: bundleDir.to_string(),
+                Root: containerRoot,
+                Status: Status::Creating,
+                CreateAt: SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
+                Owner: user,
+                Sandbox: None,
+                RootContainerDir: conf.RootDir.to_string(),
+            };
+
+            // If the metadata annotations indicate that this container should be
+            // started in an existing sandbox, we must do so. The metadata will
+            // indicate the ID of the sandbox, which is the same as the ID of the
+            // init container in the sandbox.
+            let isRoot = IsRoot(&c.Spec);
+            if isRoot {
+                debug!("Creating new sandbox for container {}", id);
+
+                // Create and join cgroup before processes are created to ensure they are
+                // part of the cgroup from the start (and all children processes).
+                let mut cg = match Cgroup::New(&c.Spec) {
+                    Err(e) => {
+                        c.Destroy()?;
+                        return Err(e);
+                    }
+                    Ok(cg) => cg,
+                };
+
+                if cg.is_some() {
+                    let ret = cg
+                        .as_mut()
+                        .unwrap()
+                        .Install(&c.Spec.linux.as_ref().unwrap().resources);
+                    match ret {
+                        Err(e) => {
+                            c.Destroy()?;
+                            return Err(e);
+                        }
+                        Ok(_) => (),
+                    }
+                }
+
+                let restore = match &cg {
+                    Some(ref cgroup) => {
+                        let restore = cgroup.Join()?;
+                        Some(restore)
+                    }
+                    None => None,
+                };
+
+                let ret = Sandbox::New1(id, action, conf, bundleDir, io, userlog, cg, pivot);
+
+                c.Sandbox = match ret {
+                    Err(e) => {
+                        c.Destroy()?;
+                        return Err(e);
+                    }
+                    Ok(s) => Some(s),
+                };
+
+                match restore {
+                    None => (),
+                    Some(restore) => restore(),
+                }
+            } else {
+                let sandboxId = match SandboxID(&c.Spec) {
+                    Some(sid) => sid,
+                    None => {
+                        error!(
+                            "No sandbox ID found in spec when creating container inside sandbox"
+                        );
+                        return Err(Error::InvalidInput);
+                    }
+                };
+
+                debug!(
+                    "Creating new container {} inside exisitng sandbox {}",
+                    id, &sandboxId
+                );
+                let rootContainer = match Container::Load(&c.RootContainerDir, &sandboxId) {
+                    Ok(container) => container,
+                    Err(e) => {
+                        error!("failed to load root container: {:?}", &e);
+                        return Err(e);
+                    }
+                };
+                c.Sandbox = rootContainer.Sandbox;
+
+                // TODO: create placeholder cgroup paths for subcontainers,
+                // althought it won't take effect, some tools use this for reporting and discovery
+
+                if let Err(e) = c.Sandbox.as_ref().unwrap().CreateSubContainer(conf, id, io) {
+                    error!("failed to create subcontainer: {:?}", e);
+                }
+            }
+
+            c.changeStatus(Status::Created);
+
+            // Save the metadata file.
+            let ret = c.Save();
+            match ret {
+                Err(e) => {
+                    c.Destroy()?;
+                    return Err(e);
+                }
+                Ok(_) => (),
+            }
+
+            c
+        };
+
+        return Ok(c);
     }
 
     // Run is a helper that calls Create + Start + Wait.
-    pub fn Run(id: &str,
-               spec: Spec,
-               conf: &GlobalConfig,
-               bundleDir: &str,
-               consoleSocket: &str,
-               pidFile: &str,
-               userlog: &str,
-               detach: bool,
-               pivot: bool) -> Result<u32> {
+    pub fn Run(
+        id: &str,
+        spec: Spec,
+        conf: &GlobalConfig,
+        bundleDir: &str,
+        consoleSocket: &str,
+        pidFile: &str,
+        userlog: &str,
+        detach: bool,
+        pivot: bool,
+    ) -> Result<u32> {
         info!("Run container {} in root dir: {}", id, &conf.RootDir);
 
-        let mut c = Self::Create(id, RunAction::Run, spec, conf, bundleDir, consoleSocket, pidFile, userlog, detach, pivot)?;
+        let mut c = Self::Create(
+            id,
+            RunAction::Run,
+            spec,
+            conf,
+            bundleDir,
+            consoleSocket,
+            pidFile,
+            userlog,
+            detach,
+            pivot,
+        )?;
         c.changeStatus(Status::Running);
 
         return c.Wait();
@@ -739,17 +820,25 @@ impl Container {
     pub fn WaitRootPID(&mut self, pid: i32, clearStatus: bool) -> Result<u32> {
         info!("Wait on pid {} container {}", pid, &self.ID);
         if !self.isSandboxRunning() {
-            return Err(Error::Common("sandbox is not running".to_string()))
+            return Err(Error::Common("sandbox is not running".to_string()));
         }
 
         let id = self.Sandbox.as_ref().unwrap().ID.to_string();
-        return self.Sandbox.as_mut().unwrap().WaitPID(&id, pid, clearStatus);
+        return self
+            .Sandbox
+            .as_mut()
+            .unwrap()
+            .WaitPID(&id, pid, clearStatus);
     }
 
     pub fn WaitPid(&mut self, pid: i32, clearStatus: bool) -> Result<u32> {
         let id = self.ID.to_string();
 
-        return self.Sandbox.as_mut().unwrap().WaitPID(&id, pid, clearStatus);
+        return self
+            .Sandbox
+            .as_mut()
+            .unwrap()
+            .WaitPID(&id, pid, clearStatus);
     }
 
     pub fn Pause(&mut self) -> Result<()> {
@@ -761,7 +850,7 @@ impl Container {
 
         self.Sandbox.as_ref().unwrap().Pause(&self.ID)?;
         self.changeStatus(Status::Paused);
-        return self.Save()
+        return self.Save();
     }
 
     pub fn Resume(&mut self) -> Result<()> {
@@ -773,7 +862,7 @@ impl Container {
 
         self.Sandbox.as_ref().unwrap().Unpause(&self.ID)?;
         self.changeStatus(Status::Running);
-        return self.Save()
+        return self.Save();
     }
 
     pub fn Processes(&self) -> Result<Vec<ProcessInfo>> {
@@ -782,7 +871,7 @@ impl Container {
     }
 
     // Start starts running the containerized process inside the sandbox.
-    pub fn StartRootContainer(&mut self) -> Result<()> {
+    pub fn Start(&mut self) -> Result<()> {
         info!("Start container {}", &self.ID);
 
         let _unlockRoot = maybeLockRootContainer(&self.Spec, &self.RootContainerDir)?;
@@ -793,52 +882,17 @@ impl Container {
         // "If any prestart hook fails, the runtime MUST generate an error,
         // stop and destroy the container" -OCI spec.
         if self.Spec.hooks.is_some() {
-            //error!("start hook ...");
             executeHooks(&self.Spec.hooks.as_ref().unwrap().prestart, &self.State())?;
-            //error!("after hook...");
         }
 
         if IsRoot(&self.Spec) {
             self.Sandbox.as_ref().unwrap().StartRootContainer()?;
         } else {
-            panic!("StartRootContainer with non root spec")
-        }
-
-        if self.Spec.hooks.is_some() {
-            executeHooksBestEffort(&self.Spec.hooks.as_ref().unwrap().poststart, &self.State());
-        }
-
-        self.changeStatus(Status::Running);
-        return self.Save()
-    }
-
-    // Start starts running the containerized process inside the sandbox.
-    pub fn Start(&mut self, config: &GlobalConfig) -> Result<()> {
-        info!("Start container {}", &self.ID);
-
-        let _unlockRoot = maybeLockRootContainer(&self.Spec, &self.RootContainerDir)?;
-
-        let _unlock = self.Lock()?;
-
-        self.RequireStatus("start", &[Status::Created])?;
-        // "If any prestart hook fails, the runtime MUST generate an error,
-        // stop and destroy the container" -OCI spec.
-        if self.Spec.hooks.is_some() {
-            //error!("start hook ...");
-            executeHooks(&self.Spec.hooks.as_ref().unwrap().prestart, &self.State())?;
-            //error!("after hook...");
-        }
-
-        if IsRoot(&self.Spec) {
-            self.Sandbox.as_ref().unwrap().StartRootContainer()?;
-        } else {
-            // todo: make sure understand how these are used
-            let stdiofds: [i32;3] = if self.Spec.process.terminal {
-                [-1, -1, -1]
-            } else {
-                [0, 1, 2]
-            };
-            if let Err(e) = self.Sandbox.as_ref().unwrap().StartSubContainer(&self.Spec, config, &self.ID[..], &stdiofds) {
+            if let Err(e) = self.Sandbox.as_ref().unwrap().StartSubContainer(
+                &self.Spec,
+                &self.ID[..],
+                &self.BundleDir,
+            ) {
                 error!("Failed to start subcontainer, error : {:?}", &e);
                 panic!("{:?}", &e);
             }
@@ -849,20 +903,23 @@ impl Container {
         }
 
         self.changeStatus(Status::Running);
-        return self.Save()
+        return self.Save();
     }
 
     pub fn WriteStr(file: &str, data: &str) -> Result<()> {
-        let mut file = File::create(file).map_err(|e| Error::Common(format!("Container::Create error is {:?}", e)))?;
-        file.write_all(data.as_bytes()).map_err(|e| Error::Common(format!("Container::Create error is {:?}", e)))?;
-        return Ok(())
+        let mut file = File::create(file)
+            .map_err(|e| Error::Common(format!("Container::Create error is {:?}", e)))?;
+        file.write_all(data.as_bytes())
+            .map_err(|e| Error::Common(format!("Container::Create error is {:?}", e)))?;
+        return Ok(());
     }
 
     pub fn Save(&self) -> Result<()> {
         info!("Save container {}", &self.ID);
         let metafile = Join(&self.Root, METADATA_FILENAME);
-        serialize(self, &metafile).map_err(|e| Error::Common(format!("Container::Save error is {:?}", e)))?;
-        return Ok(())
+        serialize(self, &metafile)
+            .map_err(|e| Error::Common(format!("Container::Save error is {:?}", e)))?;
+        return Ok(());
     }
 
     pub fn Destroy(&mut self) -> Result<()> {
@@ -881,25 +938,33 @@ impl Container {
         let _unlock = maybeLockRootContainer(&self.Spec, &self.RootContainerDir)?;
         match self.Stop() {
             Err(e) => {
-                info!("fail to stop container and uninstall cgroup: {}: {:?}", &self.Root, &e);
-                errs.push(format!("fail to stop container and uninstall cgroup: {} {:?}", &self.Root, &e));
+                info!(
+                    "fail to stop container and uninstall cgroup: {}: {:?}",
+                    &self.Root, &e
+                );
+                errs.push(format!(
+                    "fail to stop container and uninstall cgroup: {} {:?}",
+                    &self.Root, &e
+                ));
             }
             Ok(_) => {
                 info!("container process stopped");
-            },
+            }
         }
 
         if Path::new(&self.Root).exists() {
             info!("deleting container root directory...");
-            let res =  fs::remove_dir_all(&self.Root);
-                //.map_err(|e| Error::Common(format!("deleting container root directory {} fail: {:?}", &self.Root, e)));
+            let res = fs::remove_dir_all(&self.Root);
+            //.map_err(|e| Error::Common(format!("deleting container root directory {} fail: {:?}", &self.Root, e)));
             match res {
                 Err(e) => {
-                    errs.push(format!("deleting container root directory {} fails: {:?}", &self.Root, e));
+                    errs.push(format!(
+                        "deleting container root directory {} fails: {:?}",
+                        &self.Root, e
+                    ));
                 }
-                Ok(_) => ()
+                Ok(_) => (),
             }
-                
         }
 
         self.changeStatus(Status::Stopped);
@@ -908,7 +973,7 @@ impl Container {
         }
 
         if errs.len() == 0 {
-            return Ok(())
+            return Ok(());
         }
 
         let mut errstr = "".to_string();
@@ -917,7 +982,7 @@ impl Container {
             errstr += "\n";
         }
 
-        return Err(Error::Common(errstr))
+        return Err(Error::Common(errstr));
     }
 
     pub fn State(&self) -> State {
@@ -928,11 +993,14 @@ impl Container {
             pid: self.SandboxPid(),
             bundle: self.BundleDir.to_string(),
             ..Default::default()
-        }
+        };
     }
 
     pub fn SandboxPid(&self) -> i32 {
-        match self.RequireStatus("get PID", &[Status::Created, Status::Running, Status::Paused]) {
+        match self.RequireStatus(
+            "get PID",
+            &[Status::Created, Status::Running, Status::Paused],
+        ) {
             Err(_) => return -1,
             Ok(_) => return self.Sandbox.as_ref().unwrap().Pid,
         }
@@ -946,13 +1014,18 @@ impl Container {
 
         if self.Sandbox.is_some() {
             info!("Destroying container {}", &self.ID);
-            let sandbox = self.Sandbox.as_ref().unwrap();
+            let sandbox = self.Sandbox.as_mut().unwrap();
             if sandbox.IsRunning() {
                 sandbox.DestroyContainer(&self.ID)?;
             }
             // Only uninstall cgroup for sandbox stop.
             if sandbox.IsRootContainer(&self.ID) {
+                let destroyed = sandbox.Destroy();
                 cgroup = self.Sandbox.as_mut().unwrap().Cgroup.take();
+                match destroyed {
+                    Ok(()) => (),
+                    Err(e) => return Err(e),
+                }
             }
 
             // Only set sandbox to none after it has been told to destroy the container.
@@ -965,7 +1038,7 @@ impl Container {
             cgroup.as_ref().unwrap().Uninstall();
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn WaitforStopped(&self) -> Result<()> {
@@ -973,7 +1046,7 @@ impl Container {
             return self.SignalContainer(0, false);
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn Execute(&mut self, mut args: ExecArgs, execCmd: &mut ExecCmd) -> Result<u32> {
@@ -1000,11 +1073,13 @@ impl Container {
         }
 
         if execCmd.pid.len() > 0 {
-            let currPid = unsafe {
-                libc::getpid()
-            };
+            let currPid = unsafe { libc::getpid() };
 
-            assert!(currPid>0, "Container execute get current pid fail with error {}", errno::errno().0);
+            assert!(
+                currPid > 0,
+                "Container execute get current pid fail with error {}",
+                errno::errno().0
+            );
             let currPidStr = format!("{}", currPid);
             Self::WriteStr(&execCmd.pid, &currPidStr)?;
         }
@@ -1014,11 +1089,11 @@ impl Container {
         if terminal {
             self.StopSignal();
         }
-        return ret
+        return ret;
     }
 }
 
-pub fn runInCgroup(cg: &Option<Cgroup>, mut f: impl FnMut()-> Result<()>) -> Result<()> {
+pub fn runInCgroup(cg: &Option<Cgroup>, mut f: impl FnMut() -> Result<()>) -> Result<()> {
     if cg.is_none() {
         return f();
     }
@@ -1030,7 +1105,7 @@ pub fn runInCgroup(cg: &Option<Cgroup>, mut f: impl FnMut()-> Result<()>) -> Res
 }
 
 #[derive(Serialize, Deserialize, Default, Debug)]
-pub struct ExecArgs  {
+pub struct ExecArgs {
     pub Argv: Vec<String>,
     pub Envv: Vec<String>,
     pub Root: String,
@@ -1046,12 +1121,12 @@ pub struct ExecArgs  {
     pub ExecId: String,
 
     #[serde(default, skip_serializing, skip_deserializing)]
-    pub Fds: Vec<i32>
+    pub Fds: Vec<i32>,
 }
 
 impl FileDescriptors for ExecArgs {
     fn GetFds(&self) -> Option<&[i32]> {
-        return Some(&self.Fds)
+        return Some(&self.Fds);
     }
 
     fn SetFds(&mut self, fds: &[i32]) {
@@ -1060,5 +1135,3 @@ impl FileDescriptors for ExecArgs {
         }
     }
 }
-
-

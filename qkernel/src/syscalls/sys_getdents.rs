@@ -14,13 +14,13 @@
 
 use alloc::vec::Vec;
 
-use super::super::fs::dentry::*;
 use super::super::fd::*;
-use super::super::task::*;
+use super::super::fs::dentry::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::mem::io::*;
 use super::super::syscalls::syscalls::*;
+use super::super::task::*;
 
 pub fn SysGetDents(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let fd = args.arg0 as i32;
@@ -33,12 +33,12 @@ pub fn SysGetDents(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 pub fn GetDents(task: &Task, fd: i32, addr: u64, size: i32) -> Result<i64> {
     let minSize = Dirent::SmallestDirent() as i32;
     if minSize > size {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let n = getDents(task, fd, addr, size, Serialize)?;
 
-    return Ok(n)
+    return Ok(n);
 }
 
 pub fn SysGetDents64(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -52,22 +52,28 @@ pub fn SysGetDents64(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 pub fn GetDents64(task: &Task, fd: i32, addr: u64, size: i32) -> Result<i64> {
     let minSize = Dirent::SmallestDirent64() as i32;
     if minSize > size {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let n = getDents(task, fd, addr, size, Serialize64)?;
 
-    return Ok(n)
+    return Ok(n);
 }
 
 const WIDTH: u32 = 8;
 
-fn getDents(task: &Task, fd: i32, addr: u64, size: i32, f: fn(&Task, &Dirent, &mut IOWriter) -> Result<i32>) -> Result<i64> {
+fn getDents(
+    task: &Task,
+    fd: i32,
+    addr: u64,
+    size: i32,
+    f: fn(&Task, &Dirent, &mut IOWriter) -> Result<i32>,
+) -> Result<i64> {
     let dir = task.GetFile(fd)?;
 
-    task.CheckPermission(addr, size as u64, true, false)?;
+    let size = task.CheckPermission(addr, size as u64, true, true)? as i32;
 
-    let mut writer : MemBuf = MemBuf::New(size as usize);
+    let mut writer: MemBuf = MemBuf::New(size as usize);
 
     let len = size; // writer.Len() as i32;
     let mut ds = HostDirentSerializer::New(f, &mut writer, WIDTH, len);
@@ -76,10 +82,10 @@ fn getDents(task: &Task, fd: i32, addr: u64, size: i32, f: fn(&Task, &Dirent, &m
         Ok(()) => {
             let buf = &writer.data;
             task.CopyOutSlice(buf, addr, size as usize)?;
-            return Ok(buf.len() as i64)
-        },
+            return Ok(buf.len() as i64);
+        }
         Err(Error::EOF) => return Ok(0),
-        Err(e) => return Err(e)
+        Err(e) => return Err(e),
     }
 }
 
@@ -146,25 +152,25 @@ impl Dirent {
 fn Serialize64(task: &Task, dir: &Dirent, w: &mut IOWriter) -> Result<i32> {
     let addr = &dir.Hdr as *const _ as u64;
     let size = 18; //mem::size_of::<DirentHdr>();
-    //let slice = task.GetSlice::<u8>(addr, size)?;
+                   //let slice = task.GetSlice::<u8>(addr, size)?;
     let buf = task.CopyInVec::<u8>(addr, size)?;
 
     let n1 = w.Write(&buf)?;
     let n3 = w.Write(&[dir.Hdr.Type; 1])?;
     let n2 = w.Write(&dir.Name)?;
-    return Ok((n1 + n2 + n3) as i32)
+    return Ok((n1 + n2 + n3) as i32);
 }
 
 fn Serialize(task: &Task, dir: &Dirent, w: &mut IOWriter) -> Result<i32> {
     let addr = &dir.Hdr as *const _ as u64;
     let size = 18; //mem::size_of::<OldDirentHdr>();
-    //let slice = task.GetSlice::<u8>(addr, size)?;
+                   //let slice = task.GetSlice::<u8>(addr, size)?;
     let buf = task.CopyInVec::<u8>(addr, size)?;
 
     let n1 = w.Write(&buf)?;
     let n2 = w.Write(&dir.Name)?;
     let n3 = w.Write(&[dir.Hdr.Type; 1])?;
-    return Ok((n1 + n2 + n3) as i32)
+    return Ok((n1 + n2 + n3) as i32);
 }
 
 struct HostDirentSerializer<'a> {
@@ -177,15 +183,20 @@ struct HostDirentSerializer<'a> {
 }
 
 impl<'a> HostDirentSerializer<'a> {
-    pub fn New(f: fn(&Task, &Dirent, &mut IOWriter) -> Result<i32>, w: &'a mut IOWriter, width: u32, size: i32) -> Self {
+    pub fn New(
+        f: fn(&Task, &Dirent, &mut IOWriter) -> Result<i32>,
+        w: &'a mut IOWriter,
+        width: u32,
+        size: i32,
+    ) -> Self {
         return Self {
             serialize: f,
             w: w,
             width: width,
             offset: 0,
             written: 0,
-            size: size
-        }
+            size: size,
+        };
     }
 }
 
@@ -200,13 +211,13 @@ impl<'a> DentrySerializer for HostDirentSerializer<'a> {
             Ok(n) => n,
             Err(e) => {
                 self.offset -= 1;
-                return Err(e)
+                return Err(e);
             }
         };
 
         if n as i32 > self.size - self.written {
             self.offset -= 1;
-            return Err(Error::EOF)
+            return Err(Error::EOF);
         }
 
         let b = &writer.data;
@@ -219,10 +230,10 @@ impl<'a> DentrySerializer for HostDirentSerializer<'a> {
         }
 
         self.written += n as i32;
-        return Ok(())
+        return Ok(());
     }
 
     fn Written(&self) -> usize {
-        return self.written as usize
+        return self.written as usize;
     }
 }

@@ -13,7 +13,9 @@
 // limitations under the License.
 
 pub fn LoadCr3(_cr3: u64) {}
-pub fn ReadCr3() -> u64 { 0 }
+pub fn ReadCr3() -> u64 {
+    0
+}
 pub fn HyperCall(_type_: u16, _para1: u64) {}
 pub fn Invlpg(_addr: u64) {}
 pub fn AsmHostID(axArg: u32, cxArg: u32) -> (u32, u32, u32, u32) {
@@ -31,7 +33,7 @@ pub fn AsmHostID(axArg: u32, cxArg: u32) -> (u32, u32, u32, u32) {
             : );
     }
 
-    return (ax, bx, cx, dx)
+    return (ax, bx, cx, dx);
 }
 
 #[inline]
@@ -48,14 +50,18 @@ pub fn mfence() {
 
 #[inline(always)]
 pub fn sfence() {
-    unsafe { llvm_asm!("
+    unsafe {
+        llvm_asm!("
         sfence
-    " : : : "memory" : "volatile" ) }
+    " : : : "memory" : "volatile" )
+    }
 }
 
 #[inline(always)]
 pub fn lfence() {
-    unsafe { llvm_asm!("
+    unsafe {
+        llvm_asm!("
         lfence
-    " : : : "memory" : "volatile" ) }
+    " : : : "memory" : "volatile" )
+    }
 }

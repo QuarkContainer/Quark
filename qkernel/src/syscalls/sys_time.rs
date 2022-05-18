@@ -14,22 +14,22 @@
 
 use alloc::boxed::Box;
 
-use super::super::Kernel::HostSpace;
-use super::super::task::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::syscalls::syscalls::*;
-use super::super::qlib::linux::time::*;
-use super::super::threadmgr::task_syscall::*;
-use super::super::threadmgr::thread::*;
 use super::super::kernel::timer::timer::*;
 use super::super::kernel::timer::*;
-use super::sys_poll::TIMEOUT_PROCESS_TIME;
+use super::super::qlib::common::*;
+use super::super::qlib::linux::time::*;
+use super::super::qlib::linux_def::*;
+use super::super::syscalls::syscalls::*;
+use super::super::task::*;
 use super::super::taskMgr::*;
+use super::super::threadmgr::task_syscall::*;
+use super::super::threadmgr::thread::*;
+use super::super::Kernel::HostSpace;
+use super::sys_poll::TIMEOUT_PROCESS_TIME;
 
 // The most significant 29 bits hold either a pid or a file descriptor.
 pub fn PidOfClockID(c: i32) -> i32 {
-    return !(c >> 3)
+    return !(c >> 3);
 }
 
 // whichCPUClock returns one of CPUCLOCK_PERF, CPUCLOCK_VIRT, CPUCLOCK_SCHED or
@@ -64,7 +64,7 @@ pub fn TargetThread(task: &Task, c: i32) -> Option<Thread> {
         return Some(task.Thread());
     }
 
-    return task.Thread().PIDNamespace().TaskWithID(pid)
+    return task.Thread().PIDNamespace().TaskWithID(pid);
 }
 
 pub fn GetClock(task: &Task, clockId: i32) -> Result<Clock> {
@@ -86,31 +86,27 @@ pub fn GetClock(task: &Task, clockId: i32) -> Result<Clock> {
                     // CPUCLOCK_SCHED is approximated by CPUCLOCK_PROF.
                     return Ok(target.CPUClock());
                 }
-                _ => return Err(Error::SysError(SysErr::EINVAL))
+                _ => return Err(Error::SysError(SysErr::EINVAL)),
             }
         } else {
             let target = targetThread.ThreadGroup();
             match WhichCPUClock(clockId) {
                 CPUCLOCK_VIRT => return Ok(target.UserCPUClock()),
-                CPUCLOCK_PROF |
-                CPUCLOCK_SCHED => {
+                CPUCLOCK_PROF | CPUCLOCK_SCHED => {
                     // CPUCLOCK_SCHED is approximated by CPUCLOCK_PROF.
                     return Ok(target.CPUClock());
                 }
-                _ => return Err(Error::SysError(SysErr::EINVAL))
+                _ => return Err(Error::SysError(SysErr::EINVAL)),
             }
         }
-
     }
 
     match clockId {
-        CLOCK_REALTIME |
-        CLOCK_REALTIME_COARSE=> return Ok(REALTIME_CLOCK.clone()),
+        CLOCK_REALTIME | CLOCK_REALTIME_COARSE => return Ok(REALTIME_CLOCK.clone()),
 
-        CLOCK_MONOTONIC |
-        CLOCK_MONOTONIC_COARSE |
-        CLOCK_MONOTONIC_RAW |
-        CLOCK_BOOTTIME => return Ok(MONOTONIC_CLOCK.clone()),
+        CLOCK_MONOTONIC | CLOCK_MONOTONIC_COARSE | CLOCK_MONOTONIC_RAW | CLOCK_BOOTTIME => {
+            return Ok(MONOTONIC_CLOCK.clone())
+        }
 
         CLOCK_PROCESS_CPUTIME_ID => return Ok(task.Thread().ThreadGroup().CPUClock()),
         CLOCK_THREAD_CPUTIME_ID => return Ok(task.Thread().CPUClock()),
@@ -140,7 +136,7 @@ pub fn SysClockGetRes(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     };
     task.CopyOutObj(&ts, addr)?;
 
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysClockGetTime(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -161,7 +157,7 @@ pub fn SysClockGetTime(task: &mut Task, args: &SyscallArguments) -> Result<i64> 
 }
 
 pub fn SysClockSettime(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
-    return Err(Error::SysError(SysErr::EPERM))
+    return Err(Error::SysError(SysErr::EPERM));
 }
 
 pub fn SysTime(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -169,7 +165,7 @@ pub fn SysTime(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let now = REALTIME_CLOCK.Now().0 / 1_000_000_000;
     if addr == 0 {
-        return Ok(now)
+        return Ok(now);
     }
 
     //let ptr : &mut i64 = task.GetTypeMut(addr)?;
@@ -177,14 +173,14 @@ pub fn SysTime(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     task.CopyOutObj(&now, addr)?;
 
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysNanoSleep(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let req = args.arg0 as u64;
     let rem = args.arg1 as u64;
 
-    let ts : Timespec = task.CopyInObj(req)?;
+    let ts: Timespec = task.CopyInObj(req)?;
 
     if !ts.IsValid() {
         return Err(Error::SysError(SysErr::EINVAL));
@@ -192,14 +188,14 @@ pub fn SysNanoSleep(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let dur = ts.ToNs()?;
 
+    Yield();
     if dur < TIMEOUT_PROCESS_TIME {
-        Yield();
-        return Ok(0)
+        return Ok(0);
     }
 
     let timer = task.blocker.GetTimer(CLOCK_MONOTONIC);
 
-    return NansleepFor(task, timer, dur, rem)
+    return NansleepFor(task, timer, dur, rem);
 }
 
 // SysClockNanosleep implements linux syscall clock_nanosleep(2).
@@ -209,7 +205,7 @@ pub fn SysClockNanosleep(task: &mut Task, args: &SyscallArguments) -> Result<i64
     let addr = args.arg2 as u64;
     let rem = args.arg3 as u64;
 
-    let ts : Timespec = task.CopyInObj(addr)?;
+    let ts: Timespec = task.CopyInObj(addr)?;
 
     if !ts.IsValid() {
         return Err(Error::SysError(SysErr::EINVAL));
@@ -219,9 +215,10 @@ pub fn SysClockNanosleep(task: &mut Task, args: &SyscallArguments) -> Result<i64
 
     // Only allow clock constants also allowed by Linux.
     if clockID >= 0 {
-        if clockID != CLOCK_REALTIME &&
-            clockID != CLOCK_MONOTONIC &&
-            clockID != CLOCK_PROCESS_CPUTIME_ID {
+        if clockID != CLOCK_REALTIME
+            && clockID != CLOCK_MONOTONIC
+            && clockID != CLOCK_PROCESS_CPUTIME_ID
+        {
             return Err(Error::SysError(SysErr::EINVAL));
         }
     }
@@ -235,11 +232,11 @@ pub fn SysClockNanosleep(task: &mut Task, args: &SyscallArguments) -> Result<i64
 
     if dur < TIMEOUT_PROCESS_TIME {
         Yield();
-        return Ok(0)
+        return Ok(0);
     }
 
     let timer = task.blocker.GetTimerWithClock(&clock);
-    return NansleepFor(task, timer, dur, rem)
+    return NansleepFor(task, timer, dur, rem);
 }
 
 pub fn NansleepFor(task: &mut Task, timer: Timer, dur: i64, rem: u64) -> Result<i64> {
@@ -260,12 +257,8 @@ pub fn NansleepFor(task: &mut Task, timer: Timer, dur: i64, rem: u64) -> Result<
             task.SetSyscallRestartBlock(b);
             return Err(Error::SysError(SysErr::ERESTART_RESTARTBLOCK));
         }
-        Err(Error::SysError(SysErr::ETIMEDOUT)) => {
-            return Ok(0)
-        }
-        Err(e) => {
-            return Err(e)
-        }
+        Err(Error::SysError(SysErr::ETIMEDOUT)) => return Ok(0),
+        Err(e) => return Err(e),
         Ok(()) => {
             panic!("NansleepFor:: impossible to get Ok result")
         }
@@ -296,9 +289,12 @@ pub fn SysGettimeofday(task: &mut Task, args: &SyscallArguments) -> Result<i64> 
     let tzAddr = args.arg1 as u64;
 
     let mut timeV = Timeval::default();
-    let mut timezone : [u32; 2] = [0; 2];
+    let mut timezone: [u32; 2] = [0; 2];
 
-    let ret = HostSpace::GetTimeOfDay(&mut timeV as * mut _ as u64, &mut timezone[0] as * mut _ as u64);
+    let ret = HostSpace::GetTimeOfDay(
+        &mut timeV as *mut _ as u64,
+        &mut timezone[0] as *mut _ as u64,
+    );
     if ret < 0 {
         return Err(Error::SysError(-ret as i32));
     }
@@ -317,5 +313,5 @@ pub fn SysGettimeofday(task: &mut Task, args: &SyscallArguments) -> Result<i64> 
         task.CopyOutObj(&timezone, tzAddr)?;
     }
 
-    return Ok(0)
+    return Ok(0);
 }

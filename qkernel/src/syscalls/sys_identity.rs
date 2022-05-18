@@ -15,10 +15,10 @@
 use alloc::vec::Vec;
 
 use super::super::qlib::auth::id::*;
-use super::super::task::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
+use super::super::task::*;
 
 const MAX_NGROUPS: i32 = 65536;
 
@@ -27,7 +27,7 @@ pub fn SysGetuid(task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
     let c = task.Thread().Credentials();
     let userns = c.lock().UserNamespace.clone();
     let ruid = c.lock().RealKUID.In(&userns).OrOverflow();
-    return Ok(ruid.0 as i64)
+    return Ok(ruid.0 as i64);
 }
 
 // Geteuid implements the Linux syscall geteuid.
@@ -35,7 +35,7 @@ pub fn SysGeteuid(task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
     let c = task.Thread().Credentials();
     let userns = c.lock().UserNamespace.clone();
     let euid = c.lock().EffectiveKUID.In(&userns).OrOverflow();
-    return Ok(euid.0 as i64)
+    return Ok(euid.0 as i64);
 }
 
 // Getresuid implements the Linux syscall getresuid.
@@ -53,7 +53,7 @@ pub fn SysGetresuid(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     task.CopyOutObj(&ruid, ruidAddr)?;
     task.CopyOutObj(&euid, euidAddr)?;
     task.CopyOutObj(&suid, suidAddr)?;
-    return Ok(0)
+    return Ok(0);
 }
 
 // Getgid implements the Linux syscall getgid.
@@ -61,7 +61,7 @@ pub fn SysGetgid(task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
     let c = task.Thread().Credentials();
     let userns = c.lock().UserNamespace.clone();
     let rgid = c.lock().RealKGID.In(&userns).OrOverflow();
-    return Ok(rgid.0 as i64)
+    return Ok(rgid.0 as i64);
 }
 
 // Getegid implements the Linux syscall getegid.
@@ -69,7 +69,7 @@ pub fn SysGetegid(task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
     let c = task.Thread().Credentials();
     let userns = c.lock().UserNamespace.clone();
     let egid = c.lock().EffectiveKGID.In(&userns).OrOverflow();
-    return Ok(egid.0 as i64)
+    return Ok(egid.0 as i64);
 }
 
 // Getresgid implements the Linux syscall getresgid.
@@ -87,7 +87,7 @@ pub fn SysGetresgid(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     task.CopyOutObj(&rgid, rgidAddr)?;
     task.CopyOutObj(&egid, egidAddr)?;
     task.CopyOutObj(&sgid, sgidAddr)?;
-    return Ok(0)
+    return Ok(0);
 }
 
 // Setuid implements the Linux syscall setuid.
@@ -190,10 +190,10 @@ pub fn SysSetgroups(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     if size == 0 {
         let zero: [GID; 0] = [GID(0); 0];
         task.Thread().SetExtraGIDs(&zero)?;
-        return Ok(0)
+        return Ok(0);
     }
 
     let gids: Vec<GID> = task.CopyInVec(addr, size as usize)?;
     task.Thread().SetExtraGIDs(&gids[..])?;
-    return Ok(0)
+    return Ok(0);
 }

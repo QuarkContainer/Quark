@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::cmp;
 use alloc::vec::Vec;
+use core::cmp;
 
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
 use super::super::super::super::mem::stackvec::*;
 
 // UIO_MAXIOV is the maximum number of iovecs to pass to the host.
-const MAX_IOVS : usize = UIO_MAXIOV;
+const MAX_IOVS: usize = UIO_MAXIOV;
 
 // copyToMulti copies as many bytes from src to dst as possible.
 pub fn CopytoMulti(dsts: &mut [IoVec], src: &[u8]) {
@@ -61,7 +61,12 @@ pub fn CopyFromMulti(dst: &mut [u8], srcs: &[IoVec]) {
 // the caller must copy to/from bufs as necessary.
 
 //ret: Result<totalLength, Option<intermedatebuf>, PartialWrite>
-pub fn BuildIovec(bufs: &[IoVec], vecs: &mut StackVec<IoVec>, maxlen: usize, truncate: bool) -> Result<(usize, Option<Vec<u8>>, bool)> {
+pub fn BuildIovec(
+    bufs: &[IoVec],
+    vecs: &mut StackVec<IoVec>,
+    maxlen: usize,
+    truncate: bool,
+) -> Result<(usize, Option<Vec<u8>>, bool)> {
     let mut iovsRequired = 0;
     let mut length = 0;
     for b in bufs {
@@ -79,7 +84,7 @@ pub fn BuildIovec(bufs: &[IoVec], vecs: &mut StackVec<IoVec>, maxlen: usize, tru
             stopLen = maxlen;
             partial = true;
         } else {
-            return Err(Error::SysError(SysErr::EMSGSIZE))
+            return Err(Error::SysError(SysErr::EMSGSIZE));
         }
     }
 
@@ -92,12 +97,12 @@ pub fn BuildIovec(bufs: &[IoVec], vecs: &mut StackVec<IoVec>, maxlen: usize, tru
         }
 
         let iovec = IoVec {
-            start: &b[0] as * const _ as u64,
+            start: &b[0] as *const _ as u64,
             len: b.len(),
         };
         vecs.Push(iovec);
 
-        return Ok((stopLen, Some(b), partial))
+        return Ok((stopLen, Some(b), partial));
     }
 
     let mut total = 0;
@@ -111,7 +116,7 @@ pub fn BuildIovec(bufs: &[IoVec], vecs: &mut StackVec<IoVec>, maxlen: usize, tru
         let mut stop = l;
 
         if total + stop > stopLen {
-            stop = stopLen -total;
+            stop = stopLen - total;
         }
 
         let iovec = IoVec {
@@ -127,5 +132,5 @@ pub fn BuildIovec(bufs: &[IoVec], vecs: &mut StackVec<IoVec>, maxlen: usize, tru
         }
     }
 
-    return Ok((total, None, partial))
+    return Ok((total, None, partial));
 }

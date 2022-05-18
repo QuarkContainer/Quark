@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::ops::Deref;
 use super::super::mutex::*;
+use core::ops::Deref;
 //use core::sync::atomic::AtomicU64;
 //use core::sync::atomic::Ordering;
 
@@ -66,14 +66,14 @@ pub enum MemoryKind {
 // directly on a copy of the object obtained from Memory.Copy().
 #[derive(Copy, Clone)]
 pub struct MemoryStats {
-    pub System      : u64,
-    pub Anonymous   : u64,
-    pub PageCache   : u64,
-    pub Tmpfs       : u64,
+    pub System: u64,
+    pub Anonymous: u64,
+    pub PageCache: u64,
+    pub Tmpfs: u64,
     // Lazily updated based on the value in RTMapped.
-    pub Mapped      : u64,
-    pub Ramdiskfs   : u64,
-    pub RTMapped    : u64,
+    pub Mapped: u64,
+    pub Ramdiskfs: u64,
+    pub RTMapped: u64,
 }
 
 pub struct MemoryAccounting(QMutex<MemoryStats>);
@@ -122,7 +122,7 @@ impl MemoryStats {
         total += self.RTMapped;
         total += self.Tmpfs;
         total += self.Ramdiskfs;
-        return total
+        return total;
     }
 }
 
@@ -144,7 +144,7 @@ impl MemoryAccounting {
 
     pub fn Total(&self) -> u64 {
         let m = self.lock();
-        return m.TotalLocked()
+        return m.TotalLocked();
     }
 
     pub fn Copy(&self) -> MemoryStats {

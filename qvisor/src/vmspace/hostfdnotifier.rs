@@ -25,9 +25,8 @@ use super::super::IO_MGR;
 #[derive(Default, Copy, Clone, Debug)]
 pub struct EpollEvent {
     pub Event: u32,
-    pub U64: u64
+    pub U64: u64,
 }
-
 
 pub struct HostFdNotifier {
     //main epoll fd
@@ -36,17 +35,16 @@ pub struct HostFdNotifier {
 
 impl HostFdNotifier {
     pub fn New() -> Self {
-        let epfd = unsafe {
-            epoll_create1(0)
-        };
+        let epfd = unsafe { epoll_create1(0) };
 
         if epfd == -1 {
-            panic!("FdNotifier::New create epollfd fail, error is {}", errno::errno().0);
+            panic!(
+                "FdNotifier::New create epollfd fail, error is {}",
+                errno::errno().0
+            );
         }
 
-        return Self {
-            epollfd: epfd,
-        };
+        return Self { epollfd: epfd };
     }
 
     pub fn Epollfd(&self) -> i32 {
@@ -72,29 +70,25 @@ impl HostFdNotifier {
 
         let mut ev = epoll_event {
             events: mask as u32 | EPOLLET as u32,
-            u64: fd as u64
+            u64: fd as u64,
         };
 
-        let ret = unsafe {
-            epoll_ctl(epollfd, op as i32, fd, &mut ev as *mut epoll_event)
-        };
+        let ret = unsafe { epoll_ctl(epollfd, op as i32, fd, &mut ev as *mut epoll_event) };
 
         if ret == -1 {
-            return Err(Error::SysError(errno::errno().0))
+            return Err(Error::SysError(errno::errno().0));
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub const MAX_EVENTS: usize = 8;
     pub fn HostEpollWait(&self) -> i64 {
         let mut events = [EpollEvent::default(); Self::MAX_EVENTS];
-        let addr = &mut events[0] as * mut _ as u64;
+        let addr = &mut events[0] as *mut _ as u64;
 
         let epollfd = self.epollfd;
-        let nfds = unsafe {
-            epoll_wait(epollfd, addr as _, Self::MAX_EVENTS as i32, 0)
-        };
+        let nfds = unsafe { epoll_wait(epollfd, addr as _, Self::MAX_EVENTS as i32, 0) };
 
         if nfds > 0 {
             for e in &events[0..nfds as usize] {
@@ -105,10 +99,10 @@ impl HostFdNotifier {
         }
 
         if nfds < 0 {
-            return nfds as i64
+            return nfds as i64;
         }
 
-        return 0 as i64
+        return 0 as i64;
     }
 
     pub fn FdNotify(fd: i32, mask: EventMask) {

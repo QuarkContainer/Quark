@@ -17,13 +17,13 @@ use alloc::vec::Vec;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 
-use super::loader::*;
 use super::auth::id::*;
+use super::loader::*;
 use super::singleton::*;
 
 type Cid = String;
 
-pub static MSG_ID : Singleton<AtomicU64> = Singleton::<AtomicU64>::New();
+pub static MSG_ID: Singleton<AtomicU64> = Singleton::<AtomicU64>::New();
 
 pub unsafe fn InitSingleton() {
     MSG_ID.Init(AtomicU64::new(1));
@@ -39,8 +39,8 @@ impl ControlMsg {
     pub fn New(payLoad: Payload) -> Self {
         return Self {
             msgId: MSG_ID.fetch_add(1, Ordering::SeqCst),
-            payload: payLoad
-        }
+            payload: payLoad,
+        };
     }
 }
 
@@ -72,7 +72,7 @@ pub enum SignalDeliveryMode {
     DeliverToForegroundProcessGroup,
 }
 
-/// SignalArgs is payload for Signal control msg to quark sandbox, 
+/// SignalArgs is payload for Signal control msg to quark sandbox,
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SignalArgs {
     // CID is the container ID that will be signaled
@@ -82,13 +82,12 @@ pub struct SignalArgs {
     pub Signo: i32,
 
     // PID is the process ID in the given container that will be signaled.
-    // If 0, the root container will be signalled.
+    // If 0, the root process of the container will be signalled.
     pub PID: i32,
 
     // Mode is the signal delivery mode.
     pub Mode: SignalDeliveryMode,
 }
-
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CreateArgs {
@@ -122,12 +121,12 @@ pub enum Payload {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct RootContainerStart {
-    pub cid: String
+    pub cid: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct RootProcessStart {
-    pub cid: String
+    pub cid: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

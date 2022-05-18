@@ -64,7 +64,7 @@ pub fn DecodeUtf8(p: &[u8]) -> usize {
     let n = p.len();
 
     if n < 1 {
-        return 0
+        return 0;
     }
 
     let p0 = p[0] as usize;
@@ -99,7 +99,7 @@ pub fn DecodeUtf8(p: &[u8]) -> usize {
 
     let b3 = p[3];
     if b3 < LOCB || HICB < b3 {
-        return 1
+        return 1;
     }
 
     return 4;

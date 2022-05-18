@@ -12,6 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod pty;
 pub mod console;
+pub mod pty;
 pub mod unix_socket;

@@ -12,24 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::mutex::*;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use crate::qlib::mutex::*;
 
-use super::super::super::super::super::common::*;
-use super::super::super::super::super::linux_def::*;
 use super::super::super::super::super::addr::*;
 use super::super::super::super::super::auth::*;
-use super::super::super::fsutil::file::readonly_file::*;
+use super::super::super::super::super::common::*;
+use super::super::super::super::super::linux_def::*;
 use super::super::super::super::task::*;
-use super::super::super::file::*;
-use super::super::super::attr::*;
 use super::super::super::super::threadmgr::thread::*;
-use super::super::super::flags::*;
+use super::super::super::attr::*;
 use super::super::super::dirent::*;
-use super::super::super::mount::*;
-use super::super::super::inode::*;
+use super::super::super::file::*;
+use super::super::super::flags::*;
+use super::super::super::fsutil::file::readonly_file::*;
 use super::super::super::fsutil::inode::simple_file_inode::*;
+use super::super::super::inode::*;
+use super::super::super::mount::*;
 use super::super::inode::*;
 
 #[derive(PartialEq, Eq, Copy, Clone)]
@@ -38,22 +38,47 @@ pub enum ExecArgType {
     EnvironExecArg,
 }
 
-pub fn NewExecArg(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>, typ: ExecArgType) -> Inode {
-    let v = NewExecArgSimpleFileInode(task, thread, &ROOT_OWNER, &FilePermissions::FromMode(FileMode(0o400)), FSMagic::PROC_SUPER_MAGIC, typ);
-    return NewProcInode(&Arc::new(v), msrc, InodeType::SpecialFile, Some(thread.clone()))
+pub fn NewExecArg(
+    task: &Task,
+    thread: &Thread,
+    msrc: &Arc<QMutex<MountSource>>,
+    typ: ExecArgType,
+) -> Inode {
+    let v = NewExecArgSimpleFileInode(
+        task,
+        thread,
+        &ROOT_OWNER,
+        &FilePermissions::FromMode(FileMode(0o400)),
+        FSMagic::PROC_SUPER_MAGIC,
+        typ,
+    );
+    return NewProcInode(
+        &Arc::new(v),
+        msrc,
+        InodeType::SpecialFile,
+        Some(thread.clone()),
+    );
 }
 
-pub fn NewExecArgSimpleFileInode(task: &Task,
-                                 thread: &Thread,
-                                 owner: &FileOwner,
-                                 perms: &FilePermissions,
-                                 typ: u64,
-                                 execArgType: ExecArgType)
-                                -> SimpleFileInode<ExecArgSimpleFileTrait> {
-    return SimpleFileInode::New(task, owner, perms, typ, false, ExecArgSimpleFileTrait{
-        typ: execArgType,
-        thread: thread.clone(),
-    })
+pub fn NewExecArgSimpleFileInode(
+    task: &Task,
+    thread: &Thread,
+    owner: &FileOwner,
+    perms: &FilePermissions,
+    typ: u64,
+    execArgType: ExecArgType,
+) -> SimpleFileInode<ExecArgSimpleFileTrait> {
+    return SimpleFileInode::New(
+        task,
+        owner,
+        perms,
+        typ,
+        false,
+        ExecArgSimpleFileTrait {
+            typ: execArgType,
+            thread: thread.clone(),
+        },
+    );
 }
 
 pub struct ExecArgSimpleFileTrait {
@@ -62,20 +87,29 @@ pub struct ExecArgSimpleFileTrait {
 }
 
 impl SimpleFileTrait for ExecArgSimpleFileTrait {
-    fn GetFile(&self, _task: &Task, _dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File> {
+    fn GetFile(
+        &self,
+        _task: &Task,
+        _dir: &Inode,
+        dirent: &Dirent,
+        flags: FileFlags,
+    ) -> Result<File> {
         let fops = NewExecArgReadonlyFileNodeFileOperations(self.typ, &self.thread);
         let file = File::New(dirent, &flags, fops);
         return Ok(file);
     }
 }
 
-pub fn NewExecArgReadonlyFileNodeFileOperations(typ: ExecArgType, thread: &Thread) -> ReadonlyFileOperations<ExecArgReadonlyFileNode> {
+pub fn NewExecArgReadonlyFileNodeFileOperations(
+    typ: ExecArgType,
+    thread: &Thread,
+) -> ReadonlyFileOperations<ExecArgReadonlyFileNode> {
     return ReadonlyFileOperations {
         node: ExecArgReadonlyFileNode {
             thread: thread.clone(),
             typ: typ,
-        }
-    }
+        },
+    };
 }
 
 pub struct ExecArgReadonlyFileNode {
@@ -84,25 +118,28 @@ pub struct ExecArgReadonlyFileNode {
 }
 
 impl ReadonlyFileNode for ExecArgReadonlyFileNode {
-    fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], offset: i64, _blocking: bool) -> Result<i64> {
+    fn ReadAt(
+        &self,
+        task: &Task,
+        _f: &File,
+        dsts: &mut [IoVec],
+        offset: i64,
+        _blocking: bool,
+    ) -> Result<i64> {
         if offset < 0 {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         let mm = self.thread.lock().memoryMgr.clone();
 
         let range = match self.typ {
-            ExecArgType::CmdlineExecArg => {
-                mm.metadata.lock().argv
-            }
-            ExecArgType::EnvironExecArg => {
-                mm.metadata.lock().envv
-            }
+            ExecArgType::CmdlineExecArg => mm.metadata.lock().argv,
+            ExecArgType::EnvironExecArg => mm.metadata.lock().envv,
         };
 
         info!("ExecArgReadonlyFileNode range is {:x?}", &range);
         if range.Start() == 0 || range.End() == 0 {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         let start = match Addr(range.Start()).AddLen(offset as u64) {
@@ -112,16 +149,16 @@ impl ReadonlyFileNode for ExecArgReadonlyFileNode {
 
         let end = range.End();
         if start >= end {
-            return Ok(0)
+            return Ok(0);
         }
 
         let mut length = end - start;
 
-        if length > IoVec::NumBytes(dsts) as u64{
+        if length > IoVec::NumBytes(dsts) as u64 {
             length = IoVec::NumBytes(dsts) as u64;
         }
 
-        let data : Vec<u8> = task.CopyInVec(start, length as usize)?;
+        let data: Vec<u8> = task.CopyInVec(start, length as usize)?;
         let mut buf = &data[..];
 
         // On Linux, if the NUL byte at the end of the argument vector has been
@@ -149,7 +186,7 @@ impl ReadonlyFileNode for ExecArgReadonlyFileNode {
                 let envvData = task.CopyInVec(envv.Start(), lengthEnvv as usize)?;
                 let mut copyNE = envvData.len();
                 for i in 0..envvData.len() {
-                    if envvData[i] == 0{
+                    if envvData[i] == 0 {
                         copyNE = i;
                         break;
                     }
@@ -159,17 +196,17 @@ impl ReadonlyFileNode for ExecArgReadonlyFileNode {
                 for b in buf {
                     ret.push(*b)
                 }
-                for b in &envvData[..copyNE]  {
+                for b in &envvData[..copyNE] {
                     ret.push(*b)
                 }
                 buf = &ret[..];
 
-                let n = task.CopyDataOutToIovs(buf, dsts)?;
-                return Ok(n as i64)
+                let n = task.CopyDataOutToIovs(buf, dsts, true)?;
+                return Ok(n as i64);
             }
         }
 
-        let n = task.CopyDataOutToIovs(buf, dsts)?;
-        return Ok(n as i64)
+        let n = task.CopyDataOutToIovs(buf, dsts, true)?;
+        return Ok(n as i64);
     }
 }

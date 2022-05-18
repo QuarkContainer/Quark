@@ -1,9 +1,9 @@
-use core::sync::atomic::AtomicU64;
 use alloc::sync::Arc;
 use core::ops::Deref;
+use core::sync::atomic::AtomicU64;
 
-use super::super::super::mutex::*;
 use super::super::super::common::*;
+use super::super::super::mutex::*;
 use super::super::super::task_mgr::*;
 //use super::super::taskMgr::*;
 
@@ -14,7 +14,7 @@ pub struct MultiWait(Arc<MultiWaitIntern>);
 
 impl MultiWait {
     pub fn New(taskId: TaskId) -> Self {
-        return Self(Arc::new(MultiWaitIntern::New(taskId)))
+        return Self(Arc::new(MultiWaitIntern::New(taskId)));
     }
 }
 
@@ -36,11 +36,11 @@ impl MultiWaitIntern {
         return Self {
             count: AtomicU64::new(1),
             taskId: taskId,
-        }
+        };
     }
 
     pub fn AddWait(&self) -> u64 {
-        return self.count.fetch_add(1, QOrdering::ACQUIRE) + 1
+        return self.count.fetch_add(1, QOrdering::ACQUIRE) + 1;
     }
 
     pub fn Done(&self) -> u64 {
@@ -56,7 +56,7 @@ impl MultiWaitIntern {
         self.Done();
         //Wait();
         while self.count.load(QOrdering::ACQUIRE) != 0 {
-            while self.count.load(QOrdering::RELAXED) != 0{
+            while self.count.load(QOrdering::RELAXED) != 0 {
                 core::hint::spin_loop();
             }
         }
@@ -64,7 +64,7 @@ impl MultiWaitIntern {
 
     // return the waiting work item count
     pub fn TryWait(&self) -> u64 {
-        return self.count.load(QOrdering::ACQUIRE)
+        return self.count.load(QOrdering::ACQUIRE);
     }
 }
 
@@ -73,10 +73,10 @@ pub struct Future<T: Clone + Copy> {
     data: Arc<QMutex<(Result<T>, bool)>>,
 }
 
-impl <T: Clone + Copy> Future <T> {
+impl<T: Clone + Copy> Future<T> {
     pub fn New(t: T) -> Self {
         return Self {
-            data: Arc::new(QMutex::new((Ok(t), false)))
+            data: Arc::new(QMutex::new((Ok(t), false))),
         };
     }
 
@@ -94,10 +94,10 @@ impl <T: Clone + Copy> Future <T> {
     pub fn TryWait(&self) -> Option<Result<T>> {
         let lock = self.data.lock();
         if lock.1 {
-            return Some(lock.0.clone())
+            return Some(lock.0.clone());
         }
 
-        return None
+        return None;
     }
 
     pub fn Set(&self, t: Result<T>) {

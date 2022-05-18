@@ -12,24 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
+use crate::qlib::mutex::*;
 use alloc::string::String;
 use alloc::string::ToString;
-use crate::qlib::mutex::*;
+use alloc::sync::Arc;
 
 use super::super::super::super::common::*;
 use super::super::super::task::*;
-use super::super::ramfs::symlink::*;
 use super::super::dirent::*;
-use super::super::mount::*;
 use super::super::inode::*;
+use super::super::mount::*;
+use super::super::ramfs::symlink::*;
 use super::symlink_proc::*;
 
 pub struct MountsNode {}
 
 impl ReadLinkNode for MountsNode {
     fn ReadLink(&self, _link: &Symlink, _task: &Task, _dir: &Inode) -> Result<String> {
-        return Ok("self/mounts".to_string())
+        return Ok("self/mounts".to_string());
     }
 
     fn GetLink(&self, link: &Symlink, task: &Task, dir: &Inode) -> Result<Dirent> {
@@ -40,5 +40,5 @@ impl ReadLinkNode for MountsNode {
 pub fn NewMounts(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let node = MountsNode {};
 
-    return SymlinkNode::New(task, msrc, node,  None)
+    return SymlinkNode::New(task, msrc, node, None);
 }

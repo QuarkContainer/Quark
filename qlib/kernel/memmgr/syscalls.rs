@@ -14,15 +14,15 @@
 
 use core::u64;
 
+use super::super::super::addr::*;
+use super::super::super::common::*;
+use super::super::super::linux::limits::*;
+use super::super::super::linux_def::*;
+use super::super::super::range::*;
 use super::super::kernel::futex::*;
 use super::super::memmgr::mm::*;
 use super::super::memmgr::vma::*;
 use super::super::task::*;
-use super::super::super::common::*;
-use super::super::super::linux_def::*;
-use super::super::super::addr::*;
-use super::super::super::range::*;
-use super::super::super::linux::limits::*;
 use super::*;
 
 #[derive(Debug)]
@@ -57,10 +57,11 @@ impl MemoryManager {
             }
 
             // Offset + length must not overflow.
-            if u64::MAX - opts.Length < opts.Offset {
-                return Err(Error::SysError(SysErr::ENOMEM));
+            if i64::MAX as u64 - opts.Length < opts.Offset {
+                return Err(Error::SysError(SysErr::EOVERFLOW));
             }
-        } else if !opts.VDSO { //not vdso
+        } else if !opts.VDSO {
+            //not vdso
             opts.Offset = 0;
         }
 
@@ -115,29 +116,32 @@ impl MemoryManager {
         }
 
         let stackStart = stackEnd - sz;
-        let (vseg, ar) = self.CreateVMAlocked(task, &MMapOpts {
-            Length: sz,
-            Addr: stackStart,
-            Offset: 0,
-            Fixed: true,
-            Unmap: false,
-            Map32Bit: false,
-            Perms: AccessType::ReadWrite(),
-            MaxPerms: AccessType::AnyAccess(),
-            Private: true,
-            VDSO: false,
-            GrowsDown: true,
-            Precommit: false,
-            MLockMode: MLockMode::default(),
-            Kernel: false,
-            Mapping: None,
-            Mappable: None,
-            Hint: "[stack]".to_string(),
-        })?;
+        let (vseg, ar) = self.CreateVMAlocked(
+            task,
+            &MMapOpts {
+                Length: sz,
+                Addr: stackStart,
+                Offset: 0,
+                Fixed: true,
+                Unmap: false,
+                Map32Bit: false,
+                Perms: AccessType::ReadWrite(),
+                MaxPerms: AccessType::AnyAccess(),
+                Private: true,
+                VDSO: false,
+                GrowsDown: true,
+                Precommit: false,
+                MLockMode: MLockMode::default(),
+                Kernel: false,
+                Mapping: None,
+                Mappable: None,
+                Hint: "[stack]".to_string(),
+            },
+        )?;
 
         self.PopulateVMALocked(task, &vseg, &ar, false, false)?;
 
-        return Ok(ar)
+        return Ok(ar);
     }
 
     // MUnmap implements the semantics of Linux's munmap(2).
@@ -163,7 +167,14 @@ impl MemoryManager {
     }
 
     // MRemap implements the semantics of Linux's mremap(2).
-    pub fn MRemap(&self, task: &Task, oldAddr: u64, oldSize: u64, newSize: u64, opts: &MRemapOpts) -> Result<u64> {
+    pub fn MRemap(
+        &self,
+        task: &Task,
+        oldAddr: u64,
+        oldSize: u64,
+        newSize: u64,
+        opts: &MRemapOpts,
+    ) -> Result<u64> {
         let _ml = self.MappingWriteLock();
 
         // "Note that old_address has to be page aligned." - mremap(2)
@@ -186,6 +197,8 @@ impl MemoryManager {
         if !vseg.Ok() {
             return Err(Error::SysError(SysErr::EFAULT));
         }
+
+        defer!(self.TlbShootdown());
 
         // Behavior matrix:
         //
@@ -212,7 +225,7 @@ impl MemoryManager {
                     self.RemoveVMAsLocked(&Range::New(newEnd, oldSize - newSize))?;
                 }
 
-                return Ok(oldAddr)
+                return Ok(oldAddr);
             }
 
             // Handle in-place growing.
@@ -229,34 +242,37 @@ impl MemoryManager {
                 newOffset = vseg.MappableRange().End();
             }
 
-            match self.CreateVMAlocked(task, &MMapOpts {
-                Length: newSize - oldSize,
-                Addr: oldEnd,
-                Offset: newOffset,
-                Fixed: true,
-                Unmap: false,
-                Map32Bit: false,
-                Perms: vma.realPerms,
-                MaxPerms: vma.maxPerms,
-                Private: vma.private,
-                VDSO: false,
-                GrowsDown: vma.growsDown,
-                Precommit: false,
-                MLockMode: MLockMode::default(),
-                Kernel: false,
-                Mapping: vma.id.clone(),
-                Mappable: vma.mappable.clone(),
-                Hint: vma.hint.to_string(),
-            }) {
+            match self.CreateVMAlocked(
+                task,
+                &MMapOpts {
+                    Length: newSize - oldSize,
+                    Addr: oldEnd,
+                    Offset: newOffset,
+                    Fixed: true,
+                    Unmap: false,
+                    Map32Bit: false,
+                    Perms: vma.realPerms,
+                    MaxPerms: vma.maxPerms,
+                    Private: vma.private,
+                    VDSO: false,
+                    GrowsDown: vma.growsDown,
+                    Precommit: false,
+                    MLockMode: MLockMode::default(),
+                    Kernel: false,
+                    Mapping: vma.id.clone(),
+                    Mappable: vma.mappable.clone(),
+                    Hint: vma.hint.to_string(),
+                },
+            ) {
                 Ok((vseg, ar)) => {
-                    self.PopulateVMALocked(task, &vseg, &ar, false, false)?;//to true?
+                    self.PopulateVMALocked(task, &vseg, &ar, false, false)?; //to true?
                     return Ok(oldAddr);
                 }
                 Err(e) => {
                     // In-place growth failed. In the MRemapMayMove case, fall through to
                     // copying/moving below.
                     if opts.Move == MREMAP_NO_MOVE {
-                        return Err(e)
+                        return Err(e);
                     }
                 }
             }
@@ -266,7 +282,8 @@ impl MemoryManager {
         let newAR;
         match opts.Move {
             MREMAP_MAY_MOVE => {
-                let newAddr = self.FindAvailableLocked(newSize, &mut FindAvailableOpts::default())?;
+                let newAddr =
+                    self.FindAvailableLocked(newSize, &mut FindAvailableOpts::default())?;
                 newAR = Range::New(newAddr, newSize);
             }
             MREMAP_MUST_MOVE => {
@@ -341,7 +358,7 @@ impl MemoryManager {
             let vseg = self.mapping.lock().vmas.Insert(&gap, &newAR, vma);
             self.mapping.lock().usageAS += newAR.Len();
             self.PopulateVMALocked(task, &vseg, &newAR, false, false)?;
-            return Ok(newAR.Start())
+            return Ok(newAR.Start());
         }
 
         // Handle moving.
@@ -378,10 +395,16 @@ impl MemoryManager {
         self.PopulateVMARemapLocked(task, &vseg, &newAR, &Range::New(oldAddr, oldSize), true)?;
         self.TlbShootdown();
 
-        return Ok(newAR.Start())
+        return Ok(newAR.Start());
     }
 
-    pub fn MProtect(&self, addr: u64, len: u64, realPerms: &AccessType, growsDown: bool) -> Result<()> {
+    pub fn MProtect(
+        &self,
+        addr: u64,
+        len: u64,
+        realPerms: &AccessType,
+        growsDown: bool,
+    ) -> Result<()> {
         let _ml = self.MappingWriteLock();
 
         if Addr(addr).RoundDown()?.0 != addr {
@@ -389,7 +412,7 @@ impl MemoryManager {
         }
 
         if len == 0 {
-            return Ok(())
+            return Ok(());
         }
 
         let rlen = match Addr(len).RoundUp() {
@@ -460,7 +483,10 @@ impl MemoryManager {
                 end = ar.End();
             }
 
-            self.pagetable.write().pt.MProtect(Addr(range.Start()), Addr(end), pageopts, false)?;
+            self.pagetable
+                .write()
+                .pt
+                .MProtect(Addr(range.Start()), Addr(end), pageopts, false)?;
             if ar.End() <= range.End() {
                 break;
             }
@@ -476,7 +502,7 @@ impl MemoryManager {
         mapping.vmas.MergeAdjacent(&ar);
         self.TlbShootdown();
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn NumaPolicy(&self, addr: u64) -> Result<(i32, u64)> {
@@ -491,14 +517,14 @@ impl MemoryManager {
         }
 
         let vma = vseg.Value();
-        return Ok((vma.numaPolicy, vma.numaNodemask))
+        return Ok((vma.numaPolicy, vma.numaNodemask));
     }
 
     pub fn SetNumaPolicy(&self, addr: u64, len: u64, policy: i32, nodemask: u64) -> Result<()> {
         let _ml = self.MappingWriteLock();
 
         if !Addr(addr).IsPageAligned() {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         // Linux allows this to overflow.
@@ -506,7 +532,7 @@ impl MemoryManager {
         let ar = Range::New(addr, la);
 
         if ar.Len() == 0 {
-            return Ok(())
+            return Ok(());
         }
 
         let mut mapping = self.mapping.lock();
@@ -517,7 +543,7 @@ impl MemoryManager {
             if !vseg.Ok() || lastEnd < vseg.Range().Start() {
                 // "EFAULT: ... there was an unmapped hole in the specified memory
                 // range specified [sic] by addr and len." - mbind(2)
-                return Err(Error::SysError(SysErr::EFAULT))
+                return Err(Error::SysError(SysErr::EFAULT));
             }
             vseg = mapping.vmas.Isolate(&vseg, &ar);
             let mut vma = vseg.Value();
@@ -528,7 +554,7 @@ impl MemoryManager {
             if ar.End() <= lastEnd {
                 mapping.vmas.MergeRange(&ar);
                 mapping.vmas.MergeAdjacent(&ar);
-                return Ok(())
+                return Ok(());
             }
             let (tmpVseg, _) = vseg.NextNonEmpty();
             vseg = tmpVseg;
@@ -569,25 +595,28 @@ impl MemoryManager {
         };
 
         if oldbrkpg < newbrkpg {
-            let (vseg, ar) = self.CreateVMAlocked(task, &MMapOpts {
-                Length: newbrkpg - oldbrkpg,
-                Addr: oldbrkpg,
-                Offset: 0,
-                Fixed: true,
-                Unmap: false,
-                Map32Bit: false,
-                Perms: AccessType::ReadWrite(),
-                MaxPerms: AccessType::AnyAccess(),
-                Private: true,
-                VDSO: false,
-                GrowsDown: false,
-                Precommit: false,
-                MLockMode: MLockMode::default(),
-                Kernel: false,
-                Mapping: None,
-                Mappable: None,
-                Hint: "[Heap]".to_string(),
-            })?;
+            let (vseg, ar) = self.CreateVMAlocked(
+                task,
+                &MMapOpts {
+                    Length: newbrkpg - oldbrkpg,
+                    Addr: oldbrkpg,
+                    Offset: 0,
+                    Fixed: true,
+                    Unmap: false,
+                    Map32Bit: false,
+                    Perms: AccessType::ReadWrite(),
+                    MaxPerms: AccessType::AnyAccess(),
+                    Private: true,
+                    VDSO: false,
+                    GrowsDown: false,
+                    Precommit: false,
+                    MLockMode: MLockMode::default(),
+                    Kernel: false,
+                    Mapping: None,
+                    Mappable: None,
+                    Hint: "[Heap]".to_string(),
+                },
+            )?;
 
             self.PopulateVMALocked(task, &vseg, &ar, false, false)?;
             self.mapping.lock().brkInfo.brkEnd = addr;
@@ -602,7 +631,7 @@ impl MemoryManager {
         return Ok(addr);
     }
 
-    pub fn GetSharedFutexKey(&self, _task: &Task, addr: u64) -> Result<Key> {
+    pub fn GetSharedFutexKey(&self, task: &Task, addr: u64) -> Result<Key> {
         let _ml = self.MappingWriteLock();
 
         let ar = match Addr(addr).ToRange(4) {
@@ -621,54 +650,63 @@ impl MemoryManager {
             return Ok(Key {
                 Kind: KeyKind::KindSharedPrivate,
                 Addr: addr,
-            })
+            });
         }
 
-        let (phyAddr, _) = self.VirtualToPhyLocked(addr)?;
+        self.V2PLocked(task, addr, 4, &mut task.GetMut().iovs, true, false)?;
+        defer!(task.GetMut().iovs.clear());
+        assert!(task.GetMut().iovs.len() == 1);
 
         return Ok(Key {
             Kind: KeyKind::KindSharedMappable,
-            Addr: phyAddr,
-        })
+            Addr: task.GetMut().iovs[0].start,
+        });
     }
 
-    pub fn MAdvise(&self, _task: &Task, addr: u64, length: u64, advise: i32) -> Result<()> {
+    pub fn MDontneed(&self, _task: &Task, addr: u64, length: u64, advise: i32) -> Result<()> {
         let ar = match Addr(addr).ToRange(length) {
             Err(_) => return Err(Error::SysError(SysErr::EINVAL)),
-            Ok(r) => r
+            Ok(r) => r,
         };
 
-        let _ml = self.MappingReadLock();
+        let _ml = self.MappingWriteLock();
 
-        let mapping = self.mapping.lock();
-        let mut vseg = mapping.vmas.LowerBoundSeg(ar.Start());
-        while vseg.Ok() && vseg.Range().Start() < ar.End() {
-            let vma = vseg.Value();
-            if vma.mlockMode != MLockMode::MlockNone && advise == MAdviseOp::MADV_DONTNEED {
-                return Err(Error::SysError(SysErr::EINVAL))
+        {
+            let mapping = self.mapping.lock();
+            let mut vseg = mapping.vmas.LowerBoundSeg(ar.Start());
+            while vseg.Ok() && vseg.Range().Start() < ar.End() {
+                let vma = vseg.Value();
+                if vma.mlockMode != MLockMode::MlockNone && advise == MAdviseOp::MADV_DONTNEED {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                /*let mr = ar.Intersect(&vseg.Range());
+                self.pagetable.write().pt.MUnmap(mr.Start(), mr.Len())?;
+
+                if let Some(iops) = vma.mappable.clone() {
+                    let fstart = mr.Start() - vseg.Range().Start() + vma.offset;
+
+                    // todo: fix the Madvise/MADV_DONTNEED, when there are multiple process MAdviseOp::MADV_DONTNEED
+                    // with current implementation, the first Madvise/MADV_DONTNEED will work.
+                    iops.MAdvise(fstart, mr.Len(), advise)?;
+                }*/
+
+                vseg = vseg.NextSeg();
             }
-
-            let mr = ar.Intersect(&vseg.Range());
-            self.pagetable.write().pt.MUnmap(mr.Start(), mr.Len())?;
-
-            if let Some(iops) = vma.mappable.clone() {
-                let fstart = mr.Start() - vseg.Range().Start() + vma.offset;
-
-                // todo: fix the Madvise/MADV_DONTNEED, when there are multiple process MAdviseOp::MADV_DONTNEED
-                // with current implementation, the first Madvise/MADV_DONTNEED will work.
-                iops.MAdvise(fstart, mr.Len(), advise)?;
-            }
-
-            vseg = vseg.NextSeg();
         }
 
-        return Ok(())
+        let ret = self.MFree(&ar);
+
+        self.TlbShootdown();
+        return ret;
+
+        //return Ok(());
     }
 
     pub fn SetDontFork(&self, _task: &Task, addr: u64, length: u64, dontfork: bool) -> Result<()> {
         let ar = match Addr(addr).ToRange(length) {
             Err(_) => return Err(Error::SysError(SysErr::EINVAL)),
-            Ok(r) => r
+            Ok(r) => r,
         };
 
         let _ml = self.MappingWriteLock();
@@ -688,10 +726,10 @@ impl MemoryManager {
         mapping.vmas.MergeAdjacent(&ar);
 
         if mapping.vmas.SpanRange(&ar) != ar.Len() {
-            return Err(Error::SysError(SysErr::ENOMEM))
+            return Err(Error::SysError(SysErr::ENOMEM));
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn VirtualMemorySizeRangeLocked(&self, ar: &Range) -> u64 {

@@ -12,31 +12,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::sys_file::*;
-use super::super::task::*;
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::device::*;
+use super::super::fs::attr::*;
 use super::super::fs::dirent::*;
 use super::super::fs::file::*;
-use super::super::fs::attr::*;
+use super::super::qlib::common::*;
+use super::super::qlib::device::*;
+use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
+use super::super::task::*;
+use super::sys_file::*;
 
 pub fn SysStat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg0 as u64;
     let statAddr = args.arg1 as u64;
 
-    return Stat(task, addr, statAddr)
+    return Stat(task, addr, statAddr);
 }
 
 pub fn Stat(task: &Task, addr: u64, statAddr: u64) -> Result<i64> {
-    let (path, dirPath) = copyInPath(task,  addr, false)?;
+    let (path, dirPath) = copyInPath(task, addr, false)?;
     info!("Stat path is {}", &path);
 
-    fileOpOn(task, ATType::AT_FDCWD, &path, true, &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
-        return stat(task, d, dirPath, statAddr)
-
-    })?;
+    fileOpOn(
+        task,
+        ATType::AT_FDCWD,
+        &path,
+        true,
+        &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
+            return stat(task, d, dirPath, statAddr);
+        },
+    )?;
 
     return Ok(0);
 }
@@ -47,63 +52,79 @@ pub fn SysFstatat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let statAddr = args.arg2 as u64;
     let flags = args.arg3 as i32;
 
-    return Fstatat(task, fd, addr, statAddr, flags)
+    return Fstatat(task, fd, addr, statAddr, flags);
 }
 
 pub fn Fstatat(task: &Task, fd: i32, addr: u64, statAddr: u64, flags: i32) -> Result<i64> {
-    let (path, dirPath) = copyInPath(task,  addr, flags & ATType::AT_EMPTY_PATH != 0)?;
+    let (path, dirPath) = copyInPath(task, addr, flags & ATType::AT_EMPTY_PATH != 0)?;
 
-    info!("Fstatat path is {} dirPath {}, flags & ATType::AT_SYMLINK_NOFOLLOW {:x}",
-        &path, dirPath, flags & ATType::AT_SYMLINK_NOFOLLOW);
+    info!(
+        "Fstatat path is {} dirPath {}, flags & ATType::AT_SYMLINK_NOFOLLOW {:x}",
+        &path,
+        dirPath,
+        flags & ATType::AT_SYMLINK_NOFOLLOW
+    );
     if path.len() == 0 {
         let file = task.GetFile(fd)?;
 
         fstat(task, &file, statAddr)?;
-        return Ok(0)
+        return Ok(0);
     }
 
     let resolve = dirPath || flags & ATType::AT_SYMLINK_NOFOLLOW == 0;
 
-    let ret = fileOpOn(task, fd, &path, resolve, &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
-        return stat(task, d, dirPath, statAddr)
-    });
+    let ret = fileOpOn(
+        task,
+        fd,
+        &path,
+        resolve,
+        &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
+            return stat(task, d, dirPath, statAddr);
+        },
+    );
 
     match ret {
         Err(e) => {
             //error!("Fstatat fail path is {}, error is {:?}", &path, &e);
-            return Err(e)
+            return Err(e);
         }
-        _ => ()
+        _ => (),
     }
 
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysLstat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg0 as u64;
     let statAddr = args.arg1 as u64;
 
-    return Lstat(task, addr, statAddr)
+    return Lstat(task, addr, statAddr);
 }
 
 pub fn Lstat(task: &Task, addr: u64, statAddr: u64) -> Result<i64> {
-    let (path, dirPath) = copyInPath(task,  addr, false)?;
+    let (path, dirPath) = copyInPath(task, addr, false)?;
 
     info!("Lstat path is {}", &path);
     let resolve = dirPath;
 
-    fileOpOn(task, ATType::AT_FDCWD, &path, resolve, &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
-        return stat(task, d, dirPath, statAddr)
-    })?;
+    fileOpOn(
+        task,
+        ATType::AT_FDCWD,
+        &path,
+        resolve,
+        &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
+            return stat(task, d, dirPath, statAddr);
+        },
+    )?;
 
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysFstat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let fd = args.arg0 as i32;
     let statAddr = args.arg1 as u64;
 
-    return Fstat(task, fd, statAddr)
+    return Fstat(task, fd, statAddr);
 }
 
 pub fn SysStatx(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -114,15 +135,20 @@ pub fn SysStatx(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let statxAddr = args.arg4 as u64;
 
     if mask & StatxMask::STATX__RESERVED != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    if flags & !(ATType::AT_SYMLINK_NOFOLLOW | ATType::AT_EMPTY_PATH | StatxFlags::AT_STATX_SYNC_TYPE as i32) != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+    if flags
+        & !(ATType::AT_SYMLINK_NOFOLLOW
+            | ATType::AT_EMPTY_PATH
+            | StatxFlags::AT_STATX_SYNC_TYPE as i32)
+        != 0
+    {
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     if flags as u32 & StatxFlags::AT_STATX_SYNC_TYPE == StatxFlags::AT_STATX_SYNC_TYPE {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let (path, dirPath) = copyInPath(task, pathAddr, flags & ATType::AT_EMPTY_PATH != 0)?;
@@ -134,33 +160,39 @@ pub fn SysStatx(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         let inode = file.Dirent.Inode();
         let sattr = inode.StableAttr();
         statx(task, &sattr, &uattr, statxAddr)?;
-        return Ok(0)
+        return Ok(0);
     }
 
     let resolve = dirPath || flags & ATType::AT_SYMLINK_NOFOLLOW == 0;
 
-    fileOpOn(task, fd, &path, resolve, &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
-        let inode = d.Inode();
-        let sattr = inode.StableAttr();
+    fileOpOn(
+        task,
+        fd,
+        &path,
+        resolve,
+        &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
+            let inode = d.Inode();
+            let sattr = inode.StableAttr();
 
-        if dirPath && !sattr.IsDir() {
-            return Err(Error::SysError(SysErr::ENOTDIR))
-        }
+            if dirPath && !sattr.IsDir() {
+                return Err(Error::SysError(SysErr::ENOTDIR));
+            }
 
-        let uattr = inode.UnstableAttr(task)?;
+            let uattr = inode.UnstableAttr(task)?;
 
-        statx(task, &sattr, &uattr, statxAddr)?;
-        return Ok(())
-    })?;
+            statx(task, &sattr, &uattr, statxAddr)?;
+            return Ok(());
+        },
+    )?;
 
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn Fstat(task: &Task, fd: i32, statAddr: u64) -> Result<i64> {
     let file = task.GetFile(fd)?;
 
     fstat(task, &file, statAddr)?;
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysStatfs(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -168,19 +200,24 @@ pub fn SysStatfs(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let statfsAddr = args.arg1 as u64;
 
     let res = Statfs(task, addr, statfsAddr)?;
-    return Ok(res as i64)
+    return Ok(res as i64);
 }
 
-
 pub fn Statfs(task: &Task, addr: u64, statfsAddr: u64) -> Result<u64> {
-    let (path, _dirPath) = copyInPath(task,  addr, false)?;
+    let (path, _dirPath) = copyInPath(task, addr, false)?;
 
     info!("Statfs path is {}", &path);
-    fileOpOn(task, ATType::AT_FDCWD, &path, true, &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
-        return statfsImpl(task, d, statfsAddr)
-    })?;
+    fileOpOn(
+        task,
+        ATType::AT_FDCWD,
+        &path,
+        true,
+        &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
+            return statfsImpl(task, d, statfsAddr);
+        },
+    )?;
 
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysFstatfs(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -190,21 +227,21 @@ pub fn SysFstatfs(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let file = task.GetFile(fd)?;
 
     statfsImpl(task, &file.Dirent, statfsAddr)?;
-    return Ok(0)
+    return Ok(0);
 }
 
 fn stat(task: &Task, d: &Dirent, dirPath: bool, statAddr: u64) -> Result<()> {
     let inode = d.Inode();
 
     if dirPath && !inode.StableAttr().IsDir() {
-        return Err(Error::SysError(SysErr::ENOTDIR))
+        return Err(Error::SysError(SysErr::ENOTDIR));
     }
 
     let uattr = inode.UnstableAttr(task)?;
     let sattr = inode.StableAttr();
 
     copyOutStat(task, statAddr, &sattr, &uattr)?;
-    return Ok(())
+    return Ok(());
 }
 
 fn fstat(task: &Task, f: &File, statAddr: u64) -> Result<()> {
@@ -214,13 +251,13 @@ fn fstat(task: &Task, f: &File, statAddr: u64) -> Result<()> {
     let sattr = inode.StableAttr();
 
     copyOutStat(task, statAddr, &sattr, &uattr)?;
-    return Ok(())
+    return Ok(());
 }
 
 fn copyOutStat(task: &Task, statAddr: u64, sattr: &StableAttr, uattr: &UnstableAttr) -> Result<()> {
     //let mut s: &mut LibcStat = task.GetTypeMut(statAddr)?;
 
-    let mut s : LibcStat = LibcStat::default();
+    let mut s: LibcStat = LibcStat::default();
     //*s = LibcStat::default();
     let creds = task.creds.clone();
     let ns = creds.lock().UserNamespace.clone();
@@ -250,7 +287,7 @@ fn copyOutStat(task: &Task, statAddr: u64, sattr: &StableAttr, uattr: &UnstableA
 
     task.CopyOutObj(&s, statAddr)?;
     //info!("copyOutStat stat is {:x?}", s);
-    return Ok(())
+    return Ok(());
 }
 
 fn statx(task: &Task, sattr: &StableAttr, uattr: &UnstableAttr, statxAddr: u64) -> Result<()> {
@@ -288,7 +325,7 @@ fn statx(task: &Task, sattr: &StableAttr, uattr: &UnstableAttr, statxAddr: u64) 
     //*out = s;
 
     task.CopyOutObj(&s, statxAddr)?;
-    return Ok(())
+    return Ok(());
 }
 
 fn statfsImpl(task: &Task, d: &Dirent, addr: u64) -> Result<()> {
@@ -315,5 +352,5 @@ fn statfsImpl(task: &Task, d: &Dirent, addr: u64) -> Result<()> {
 
     task.CopyOutObj(&statfs, addr)?;
 
-    return Ok(())
+    return Ok(());
 }

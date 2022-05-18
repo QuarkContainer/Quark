@@ -12,35 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::vec::Vec;
 use alloc::string::String;
 use alloc::string::ToString;
-use xmas_elf::program::Type;
-use xmas_elf::program::ProgramHeader::{Ph64};
+use alloc::vec::Vec;
 pub use xmas_elf::header::HeaderPt2;
+use xmas_elf::program::ProgramHeader::Ph64;
 use xmas_elf::program::ProgramHeader64;
+use xmas_elf::program::Type;
 use xmas_elf::*;
 
-use super::super::super::common::*;
-use super::super::super::linux_def::*;
 use super::super::super::addr::*;
-use super::super::super::limits::*;
 use super::super::super::auxv::*;
-use super::super::util::cstring::*;
+use super::super::super::common::*;
+use super::super::super::limits::*;
+use super::super::super::linux_def::*;
 use super::super::super::platform::defs_impl::*;
-use super::super::task::*;
+use super::super::arch::x86_64::context::*;
 use super::super::fs::file::*;
 use super::super::memmgr::*;
-use super::super::arch::x86_64::context::*;
+use super::super::task::*;
+use super::super::util::cstring::*;
 
-pub const ELF_MAGIC : &str = "\x7fELF";
+pub const ELF_MAGIC: &str = "\x7fELF";
 pub const INTERPRETER_SCRIPT_MAGIC: &str = "#!";
 
 pub type OS = i32;
-pub const LINUX_OS : OS = 0;
+pub const LINUX_OS: OS = 0;
 
 pub type Arch = i32;
-pub const AMD64 : Arch = 0;
+pub const AMD64: Arch = 0;
 
 // elfInfo contains the metadata needed to load an ELF binary.
 pub struct ElfHeadersInfo {
@@ -66,12 +66,12 @@ pub struct ElfHeadersInfo {
     pub phdrs: Vec<ProgramHeader64>,
 
     // sharedObject is true if the ELF represents a shared object.
-    pub sharedObject: bool
+    pub sharedObject: bool,
 }
 
 // parseHeader parse the ELF header, verifying that this is a supported ELF
 // file and returning the ELF program headers.
-pub fn ParseHeader(task: &mut Task, file: &File) -> Result<ElfHeadersInfo>  {
+pub fn ParseHeader(task: &mut Task, file: &File) -> Result<ElfHeadersInfo> {
     /*let mut moptions = MMapOpts::NewFileOptions(&file)?;
     moptions.Length = 2 * 4096;
     moptions.Fixed = false;
@@ -94,7 +94,8 @@ pub fn ParseHeader(task: &mut Task, file: &File) -> Result<ElfHeadersInfo>  {
         Ok(n) => n,
     };
 
-    let elfFile = ElfFile::new(&buf.buf[0..n]).map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+    let elfFile = ElfFile::new(&buf.buf[0..n])
+        .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
 
     let phdrAddr;
     let phdrSize;
@@ -139,7 +140,7 @@ pub fn ParseHeader(task: &mut Task, file: &File) -> Result<ElfHeadersInfo>  {
         phdrNum: phdrNum as usize,
         phdrs: phdrs,
         sharedObject: isSharedObject,
-    })
+    });
 }
 
 pub fn PHFlagsAsPerms(header: &ProgramHeader64) -> AccessType {
@@ -158,18 +159,26 @@ pub fn PHFlagsAsPerms(header: &ProgramHeader64) -> AccessType {
         perms |= MmapProt::PROT_READ;
     }
 
-    return AccessType(perms)
+    return AccessType(perms);
 }
 
-pub fn MapSegment(task: &Task, file: &File, header: &ProgramHeader64, offset: u64, filesize: i64) -> Result<()> {
+pub fn MapSegment(
+    task: &Task,
+    file: &File,
+    header: &ProgramHeader64,
+    offset: u64,
+    filesize: i64,
+) -> Result<()> {
     let size = header.file_size;
     let startMem = Addr(header.virtual_addr).RoundDown()?;
-    let endMem = Addr(header.virtual_addr).AddLen(header.file_size)?.RoundUp()?;
+    let endMem = Addr(header.virtual_addr)
+        .AddLen(header.file_size)?
+        .RoundUp()?;
 
     let fileOffset = Addr(header.offset).RoundDown()?;
     //info!("MapSegment fileoffset is {:x}, size is {:x}, filesize is {:x}", fileOffset.0, size, filesize);
     if fileOffset.0 + size > filesize as u64 {
-        return Err(Error::SysError(SysErr::ENOEXEC))
+        return Err(Error::SysError(SysErr::ENOEXEC));
     }
 
     let addr = if endMem.0 - startMem.0 == 0 {
@@ -181,7 +190,7 @@ pub fn MapSegment(task: &Task, file: &File, header: &ProgramHeader64, offset: u6
         moptions.Length = endMem.0 - startMem.0;
         moptions.Addr = offset + startMem.0;
         moptions.Fixed = true;
-        moptions.Perms = AccessType(PHFlagsAsPerms(header).0 | MmapProt::PROT_WRITE);
+        moptions.Perms = AccessType(PHFlagsAsPerms(header).0);
         moptions.MaxPerms = AccessType::AnyAccess();
         moptions.Private = true;
         moptions.Offset = fileOffset.0;
@@ -194,7 +203,16 @@ pub fn MapSegment(task: &Task, file: &File, header: &ProgramHeader64, offset: u6
     if adjust + header.file_size < endMem.0 - startMem.0 {
         let cnt = (endMem.0 - startMem.0 - (adjust + header.file_size)) as usize;
         let buf: [u8; 4096] = [0; 4096];
-        task.CopyOutSlice(&buf[0..cnt], addr + adjust + header.file_size, cnt)?;
+        let vaddr = addr + adjust + header.file_size;
+        task.mm
+            .MProtect(
+                Addr(vaddr).RoundDown()?.0,
+                4096,
+                &AccessType::AnyAccess(),
+                false,
+            )
+            .unwrap();
+        task.CopyOutSlice(&buf[0..cnt], vaddr, cnt)?;
     }
 
     if header.mem_size > size {
@@ -212,7 +230,7 @@ pub fn MapSegment(task: &Task, file: &File, header: &ProgramHeader64, offset: u6
         }
     }
 
-    return Ok(())
+    return Ok(());
 }
 
 // loadedELF describes an ELF that has been successfully loaded.
@@ -260,8 +278,8 @@ pub fn ReadAll(task: &mut Task, file: &File, data: &mut [u8], offset: u64) -> Re
     let mut cnt = 0;
 
     while data.len() > 0 {
-        let mut iovecs : [IoVec; 1] = [IoVec {
-            start: &data[0] as * const _ as u64,
+        let mut iovecs: [IoVec; 1] = [IoVec {
+            start: &data[0] as *const _ as u64,
             len: data.len(),
         }];
 
@@ -276,10 +294,15 @@ pub fn ReadAll(task: &mut Task, file: &File, data: &mut [u8], offset: u64) -> Re
         offset += l as u64;
     }
 
-    return Ok(cnt)
+    return Ok(cnt);
 }
 
-pub fn LoadParseElf(task: &mut Task, file: &File, info: &mut ElfHeadersInfo, sharedLoadOffset: u64) -> Result<LoadedElf> {
+pub fn LoadParseElf(
+    task: &mut Task,
+    file: &File,
+    info: &mut ElfHeadersInfo,
+    sharedLoadOffset: u64,
+) -> Result<LoadedElf> {
     let mut first = true;
     let mut start = 0;
     let mut end = 0;
@@ -295,7 +318,9 @@ pub fn LoadParseElf(task: &mut Task, file: &File, info: &mut ElfHeadersInfo, sha
                     return Err(Error::SysError(SysErr::ENOEXEC));
                 }
 
-                if header.file_size > 4096 /*PATH_MAX*/ {
+                if header.file_size > 4096
+                /*PATH_MAX*/
+                {
                     info!("Error: PT_INTERP path too big");
                     return Err(Error::SysError(SysErr::ENOEXEC));
                 }
@@ -318,17 +343,17 @@ pub fn LoadParseElf(task: &mut Task, file: &File, info: &mut ElfHeadersInfo, sha
                     Ok(_) => (),
                 }
 
-                if fileName[fileName.len()-1] != 0 {
+                if fileName[fileName.len() - 1] != 0 {
                     info!("Error: PT_INTERP path not NUL-terminated");
                     return Err(Error::SysError(SysErr::ENOEXEC));
                 }
 
-                interpreter = match String::from_utf8(fileName[0..fileName.len()-1].to_vec()) {
+                interpreter = match String::from_utf8(fileName[0..fileName.len() - 1].to_vec()) {
                     Err(_) => {
                         info!("interpreter name can't covert to utf8");
                         return Err(Error::SysError(SysErr::ENOEXEC));
                     }
-                    Ok (s) => s,
+                    Ok(s) => s,
                 };
 
                 info!("the interpreter is {}", interpreter);
@@ -348,7 +373,10 @@ pub fn LoadParseElf(task: &mut Task, file: &File, info: &mut ElfHeadersInfo, sha
 
                 end = match Addr(vaddr).AddLen(header.mem_size) {
                     Err(_) => {
-                        info!("PT_LOAD header size overflows. {:x} + {:x}", vaddr, header.mem_size);
+                        info!(
+                            "PT_LOAD header size overflows. {:x} + {:x}",
+                            vaddr, header.mem_size
+                        );
                         return Err(Error::SysError(SysErr::ENOEXEC));
                     }
                     Ok(a) => a.0,
@@ -408,10 +436,13 @@ pub fn LoadParseElf(task: &mut Task, file: &File, info: &mut ElfHeadersInfo, sha
 
     let phdrAddr = match Addr(start).AddLen(info.phdrAddr) {
         Err(_) => {
-            info!("ELF start address {:x} + phdr offset {:x} overflows", start, info.phdrAddr);
+            info!(
+                "ELF start address {:x} + phdr offset {:x} overflows",
+                start, info.phdrAddr
+            );
             0
         }
-        Ok(a) => a.0
+        Ok(a) => a.0,
     };
 
     return Ok(LoadedElf {
@@ -428,18 +459,19 @@ pub fn LoadParseElf(task: &mut Task, file: &File, info: &mut ElfHeadersInfo, sha
     });
 }
 
-
 // loadInitialELF loads f into mm.
 pub fn LoadInitalElf(task: &mut Task, file: &File) -> Result<LoadedElf> {
     let mut info = ParseHeader(task, file)?;
 
-    let l = task.mm.SetMmapLayout(MIN_USER_ADDR, MAX_USER_ADDR, &LimitSet::default())?;
+    let l = task
+        .mm
+        .SetMmapLayout(MIN_USER_ADDR, MAX_USER_ADDR, &LimitSet::default())?;
     *task.mm.layout.lock() = l;
 
     let loadAddr = Context64::PIELoadAddress(&l)?;
 
     let le = LoadParseElf(task, file, &mut info, loadAddr)?;
-    return Ok(le)
+    return Ok(le);
 }
 
 // loadInterpreterELF loads f into mm.
@@ -454,22 +486,28 @@ pub fn loadInterpreterELF(task: &mut Task, file: &File, initial: &LoadedElf) -> 
     let mut info = match ParseHeader(task, file) {
         Err(e) => {
             if e == Error::SysError(SysErr::ENOEXEC) {
-                return Err(Error::SysError(SysErr::ELIBBAD))
+                return Err(Error::SysError(SysErr::ELIBBAD));
             }
 
-            return Err(e)
+            return Err(e);
         }
         Ok(i) => i,
     };
 
     if info.os != initial.os {
-        info!("Initial ELF OS {} and interpreter ELF OS {} differ", initial.os, info.os);
-        return Err(Error::SysError(SysErr::ELIBBAD))
+        info!(
+            "Initial ELF OS {} and interpreter ELF OS {} differ",
+            initial.os, info.os
+        );
+        return Err(Error::SysError(SysErr::ELIBBAD));
     }
 
     if info.arch != initial.arch {
-        info!("Initial ELF arch {} and interpreter ELF arch {} differ", initial.arch, info.arch);
-        return Err(Error::SysError(SysErr::ELIBBAD))
+        info!(
+            "Initial ELF arch {} and interpreter ELF arch {} differ",
+            initial.arch, info.arch
+        );
+        return Err(Error::SysError(SysErr::ELIBBAD));
     }
 
     // The interpreter is not given a load offset, as its location does not
@@ -491,29 +529,53 @@ pub fn LoadElf(task: &mut Task, file: &File) -> Result<LoadedElf> {
         let fileName = CString::New(&bin.interpreter);
         let fd = task.Open(fileName.Ptr(), OpenFlags::O_RDONLY as u64, 0); //kernel address is same as phy address
         if (fd as i64) < 0 {
-            info!("LoadElf Error opening interpreter {} with error {}", &bin.interpreter, -fd as i64);
+            info!(
+                "LoadElf Error opening interpreter {} with error {}",
+                &bin.interpreter, -fd as i64
+            );
         }
 
         let interpFile = task.GetFile(fd as i32)?;
         interp = loadInterpreterELF(task, &interpFile, &bin)?;
 
         if interp.interpreter.as_str() != "" {
-            info!("Interpreter requires an interpreter {}", &interp.interpreter);
-            return Err(Error::SysError(SysErr::ENOEXEC))
+            info!(
+                "Interpreter requires an interpreter {}",
+                &interp.interpreter
+            );
+            return Err(Error::SysError(SysErr::ENOEXEC));
         }
     }
 
-    bin.auxv.push(AuxEntry{Key: AuxVec::AT_PHDR, Val: bin.phdrAddr});
-    bin.auxv.push(AuxEntry{Key: AuxVec::AT_PHENT, Val: bin.phdrSize as u64});
-    bin.auxv.push(AuxEntry{Key: AuxVec::AT_PHNUM, Val: bin.phdrNum as u64});
-    bin.auxv.push(AuxEntry{Key: AuxVec::AT_ENTRY, Val: bin.entry});
+    bin.auxv.push(AuxEntry {
+        Key: AuxVec::AT_PHDR,
+        Val: bin.phdrAddr,
+    });
+    bin.auxv.push(AuxEntry {
+        Key: AuxVec::AT_PHENT,
+        Val: bin.phdrSize as u64,
+    });
+    bin.auxv.push(AuxEntry {
+        Key: AuxVec::AT_PHNUM,
+        Val: bin.phdrNum as u64,
+    });
+    bin.auxv.push(AuxEntry {
+        Key: AuxVec::AT_ENTRY,
+        Val: bin.entry,
+    });
 
     if bin.interpreter.as_str() != "" {
-        bin.auxv.push(AuxEntry{Key: AuxVec::AT_BASE, Val: interp.start});
+        bin.auxv.push(AuxEntry {
+            Key: AuxVec::AT_BASE,
+            Val: interp.start,
+        });
         bin.entry = interp.entry;
     } else {
-        bin.auxv.push(AuxEntry{Key: AuxVec::AT_BASE, Val: 0});
+        bin.auxv.push(AuxEntry {
+            Key: AuxVec::AT_BASE,
+            Val: 0,
+        });
     }
 
-    return Ok(bin)
+    return Ok(bin);
 }

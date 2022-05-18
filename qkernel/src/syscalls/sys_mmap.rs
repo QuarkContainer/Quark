@@ -15,15 +15,15 @@
 use alloc::string::ToString;
 use alloc::sync::Arc;
 
-use super::super::task::*;
-use super::super::qlib::common::*;
-use super::super::memmgr::*;
+use super::super::fs::host::hostinodeop::*;
 use super::super::memmgr::mm::*;
 use super::super::memmgr::syscalls::*;
-use super::super::qlib::linux_def::*;
+use super::super::memmgr::*;
 use super::super::qlib::addr::*;
+use super::super::qlib::common::*;
+use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
-use super::super::fs::host::hostinodeop::*;
+use super::super::task::*;
 
 pub fn SysMmap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg0 as u64;
@@ -41,7 +41,7 @@ pub fn SysMmap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     // Require exactly one of MAP_PRIVATE and MAP_SHARED.
     if private == shared {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let mut opts = MMapOpts {
@@ -74,7 +74,7 @@ pub fn SysMmap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
         // mmap unconditionally requires that the FD is readable.
         if !flags.Read {
-            return Err(Error::SysError(SysErr::EACCES))
+            return Err(Error::SysError(SysErr::EACCES));
         }
 
         // MAP_SHARED requires that the FD be writable for PROT_WRITE.
@@ -90,7 +90,7 @@ pub fn SysMmap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 opts.Hint = "/dev/zero".to_string();
             }
             Err(e) => return Err(e),
-            Ok(m) => opts.Mappable = Some(m)
+            Ok(m) => opts.Mappable = Some(m),
         }
     } else if shared {
         let memfdIops = HostInodeOp::NewMemfdIops(len as i64)?;
@@ -98,9 +98,7 @@ pub fn SysMmap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     }
 
     match task.mm.MMap(task, &mut opts) {
-        Ok(addr) => {
-            Ok(addr as i64)
-        },
+        Ok(addr) => Ok(addr as i64),
         Err(e) => Err(e),
     }
 }
@@ -151,11 +149,11 @@ pub fn SysMadvise(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     }
 
     if length == 0 {
-        return Ok(0)
+        return Ok(0);
     }
 
     if length < 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let length = match Addr(length as u64).RoundUp() {
@@ -165,7 +163,7 @@ pub fn SysMadvise(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     match adv {
         MAdviseOp::MADV_DONTNEED => {
-            task.mm.MAdvise(task, addr, length, adv)?;
+            task.mm.MDontneed(task, addr, length, adv)?;
         }
         MAdviseOp::MADV_HUGEPAGE | MAdviseOp::MADV_NOHUGEPAGE => {
             //task.mm.MAdvise(task, addr, length, adv)?;
@@ -176,7 +174,10 @@ pub fn SysMadvise(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         MAdviseOp::MADV_DONTDUMP | MAdviseOp::MADV_DODUMP => {
             // Core dumping isn't implemented, so do nothing
         }
-        MAdviseOp::MADV_NORMAL | MAdviseOp::MADV_RANDOM | MAdviseOp::MADV_SEQUENTIAL | MAdviseOp::MADV_WILLNEED => {
+        MAdviseOp::MADV_NORMAL
+        | MAdviseOp::MADV_RANDOM
+        | MAdviseOp::MADV_SEQUENTIAL
+        | MAdviseOp::MADV_WILLNEED => {
             //task.mm.MAdvise(task, addr, length, adv)?;
         }
         MAdviseOp::MADV_DONTFORK => {
@@ -199,7 +200,7 @@ pub fn SysMadvise(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
     }
 
-    return Ok(0)
+    return Ok(0);
 }
 
 // Mremap implements linux syscall mremap(2).
@@ -224,16 +225,23 @@ pub fn SysMremap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         moveMode = MREMAP_MAY_MOVE
     } else if mayMove && fixed {
         moveMode = MREMAP_MUST_MOVE
-    } else { // !mayMove && fixed
+    } else {
+        // !mayMove && fixed
         // "If MREMAP_FIXED is specified, then MREMAP_MAYMOVE must also be
-		// specified." - mremap(2)
+        // specified." - mremap(2)
         return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    match task.mm.MRemap(task, oldAddr, oldSize, newSize, &MRemapOpts{
-        Move: moveMode,
-        NewAddr: newAddr
-    })  {
+    match task.mm.MRemap(
+        task,
+        oldAddr,
+        oldSize,
+        newSize,
+        &MRemapOpts {
+            Move: moveMode,
+            NewAddr: newAddr,
+        },
+    ) {
         Ok(addr) => return Ok(addr as i64),
         Err(e) => return Err(e),
     }
@@ -244,11 +252,12 @@ pub fn SysMlock(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg0 as u64;
     let length = args.arg1 as i64;
     if length < 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    task.mm.Mlock(task, addr, length as u64, MLockMode::MlockEager)?;
-    return Ok(0)
+    task.mm
+        .Mlock(task, addr, length as u64, MLockMode::MlockEager)?;
+    return Ok(0);
 }
 
 // Mlock2 implements linux syscall mlock2(2).
@@ -258,11 +267,11 @@ pub fn SysMlock2(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let flags = args.arg2 as u32;
 
     if length < 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     if flags & !MLOCK_ONFAULT != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let mut mode = MLockMode::MlockEager;
@@ -271,7 +280,7 @@ pub fn SysMlock2(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     }
 
     task.mm.Mlock(task, addr, length as u64, mode)?;
-    return Ok(0)
+    return Ok(0);
 }
 
 // Munlock implements linux syscall munlock(2).
@@ -280,18 +289,21 @@ pub fn SysMunlock(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let length = args.arg1 as i64;
 
     if length < 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    task.mm.Mlock(task, addr, length as u64, MLockMode::MlockNone)?;
-    return Ok(0)
+    task.mm
+        .Mlock(task, addr, length as u64, MLockMode::MlockNone)?;
+    return Ok(0);
 }
 
 pub fn SysMlockall(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let flags = args.arg0 as u32;
 
-    if flags & !(LibcConst::MCL_CURRENT | LibcConst::MCL_FUTURE | LibcConst::MCL_ONFAULT) as u32 != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+    if flags & !(LibcConst::MCL_CURRENT | LibcConst::MCL_FUTURE | LibcConst::MCL_ONFAULT) as u32
+        != 0
+    {
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let mut mode = MLockMode::MlockEager;
@@ -299,23 +311,29 @@ pub fn SysMlockall(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         mode = MLockMode::MlockLazy;
     }
 
-    task.mm.MlockAll(task, &MLockAllOpts {
-        Current: flags & LibcConst::MCL_CURRENT as u32 != 0,
-        Future: flags & LibcConst::MCL_FUTURE as u32 != 0,
-        Mode: mode,
-    })?;
+    task.mm.MlockAll(
+        task,
+        &MLockAllOpts {
+            Current: flags & LibcConst::MCL_CURRENT as u32 != 0,
+            Future: flags & LibcConst::MCL_FUTURE as u32 != 0,
+            Mode: mode,
+        },
+    )?;
 
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysMunlockall(task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
-    task.mm.MlockAll(task, &MLockAllOpts {
-        Current: true,
-        Future: true,
-        Mode: MLockMode::MlockNone,
-    })?;
+    task.mm.MlockAll(
+        task,
+        &MLockAllOpts {
+            Current: true,
+            Future: true,
+            Mode: MLockMode::MlockNone,
+        },
+    )?;
 
-    return Ok(0)
+    return Ok(0);
 }
 
 // Msync implements Linux syscall msync(2).
@@ -330,21 +348,26 @@ pub fn SysMsync(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     // semantics that are (currently) equivalent to specifying MS_ASYNC." -
     // msync(2)
     if flags & !(LibcConst::MS_ASYNC | LibcConst::MS_SYNC | LibcConst::MS_INVALIDATE) as i32 != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let sync = flags & LibcConst::MS_SYNC as i32 != 0;
     let async = flags & LibcConst::MS_ASYNC as i32 != 0;
     if sync && async {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    task.mm.MSync(task, addr, length, &MSyncOpts {
-        Sync: sync,
-        Invalidate: flags & LibcConst::MS_INVALIDATE as i32 != 0,
-    })?;
+    task.mm.MSync(
+        task,
+        addr,
+        length,
+        &MSyncOpts {
+            Sync: sync,
+            Invalidate: flags & LibcConst::MS_INVALIDATE as i32 != 0,
+        },
+    )?;
 
-    return Ok(0)
+    return Ok(0);
 }
 
 // Mincore implements the syscall mincore(2).
@@ -354,11 +377,11 @@ pub fn SysMincore(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let vec = args.arg2 as u64;
 
     if addr != Addr(addr).RoundDown().unwrap().0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     if length < 0 {
-        return Err(Error::SysError(SysErr::ENOMEM))
+        return Err(Error::SysError(SysErr::ENOMEM));
     }
 
     let length = length as u64;
@@ -368,15 +391,15 @@ pub fn SysMincore(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     // rounded up to the next multiple of the page size." - mincore(2)
     let la = match Addr(length).RoundUp() {
         Ok(l) => l.0,
-        Err(_) => return Err(Error::SysError(SysErr::ENOMEM))
+        Err(_) => return Err(Error::SysError(SysErr::ENOMEM)),
     };
 
     let range = match Addr(addr).ToRange(la) {
         Err(_) => return Err(Error::SysError(SysErr::ENOMEM)),
-        Ok(r) => r
+        Ok(r) => r,
     };
 
     let output = task.mm.MinCore(task, &range);
     task.CopyOutSlice(&output, vec, output.len())?;
-    return Ok(0)
+    return Ok(0);
 }

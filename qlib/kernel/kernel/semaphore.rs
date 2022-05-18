@@ -12,26 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
-use core::ops::Deref;
 use alloc::collections::btree_map::BTreeMap;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::ops::Deref;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 
 use super::super::super::auth::userns::*;
 use super::super::super::auth::*;
-use super::super::super::linux_def::*;
 use super::super::super::common::*;
-use super::super::task::*;
-use super::super::super::linux::sem::*;
 use super::super::super::linux::ipc::*;
+use super::super::super::linux::sem::*;
+use super::super::super::linux_def::*;
 use super::super::super::singleton::*;
+use super::super::task::*;
 //use super::super::fs::attr::*;
 use super::time::*;
 
-pub static WAITER_ID : Singleton<AtomicU64> = Singleton::<AtomicU64>::New();
+pub static WAITER_ID: Singleton<AtomicU64> = Singleton::<AtomicU64>::New();
 pub unsafe fn InitSingleton() {
     WAITER_ID.Init(AtomicU64::new(1));
 }
@@ -66,11 +66,11 @@ impl RegistryInternal {
     fn findByKey(&self, key: i32) -> Option<Set> {
         for (_, v) in &self.semaphores {
             if v.lock().key == key {
-                return Some(v.clone())
+                return Some(v.clone());
             }
         }
 
-        return None
+        return None;
     }
 
     fn totalSems(&self) -> usize {
@@ -83,8 +83,24 @@ impl RegistryInternal {
         return totalSems;
     }
 
-    fn newSet(&mut self, _task: &Task, myself: Registry, key: i32, owner: &FileOwner, creator: &FileOwner, perms: &FilePermissions, nsems: i32) -> Result<Set> {
-        let set = Set::New(myself, key, owner.clone(), creator.clone(), perms.clone(), nsems);
+    fn newSet(
+        &mut self,
+        _task: &Task,
+        myself: Registry,
+        key: i32,
+        owner: &FileOwner,
+        creator: &FileOwner,
+        perms: &FilePermissions,
+        nsems: i32,
+    ) -> Result<Set> {
+        let set = Set::New(
+            myself,
+            key,
+            owner.clone(),
+            creator.clone(),
+            perms.clone(),
+            nsems,
+        );
         let mut me = self;
 
         let mut id = me.lastIDUsed + 1;
@@ -97,14 +113,14 @@ impl RegistryInternal {
                 me.lastIDUsed = id;
                 me.semaphores.insert(id, set.clone());
                 set.lock().id = id;
-                return Ok(set)
+                return Ok(set);
             }
 
             id += 1;
         }
 
         info!("Semaphore map is full, they must be leaking");
-        return Err(Error::SysError(SysErr::ENOMEM))
+        return Err(Error::SysError(SysErr::ENOMEM));
     }
 }
 
@@ -127,13 +143,21 @@ impl Registry {
             lastIDUsed: 0,
         };
 
-        return Self(Arc::new(QMutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)));
     }
 
-    pub fn FindOrCreate(&self, task: &Task, key: i32, nsems: i32,
-                        mode: FileMode, private: bool, create: bool, exclusive: bool) -> Result<Set> {
+    pub fn FindOrCreate(
+        &self,
+        task: &Task,
+        key: i32,
+        nsems: i32,
+        mode: FileMode,
+        private: bool,
+        create: bool,
+        exclusive: bool,
+    ) -> Result<Set> {
         if nsems < 0 || nsems > SEMAPHORES_MAX as i32 {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         let clone = self.clone();
@@ -149,24 +173,24 @@ impl Registry {
 
                         let creds = task.creds.clone();
                         if !set.checkPerms(&creds, &PermMask::FromMode(mode.clone())) {
-                            return Err(Error::SysError(SysErr::EACCES))
+                            return Err(Error::SysError(SysErr::EACCES));
                         }
 
                         if nsems > set.sems.len() as i32 {
-                            return Err(Error::SysError(SysErr::EINVAL))
+                            return Err(Error::SysError(SysErr::EINVAL));
                         }
 
                         if create && exclusive {
-                            return Err(Error::SysError(SysErr::EEXIST))
+                            return Err(Error::SysError(SysErr::EEXIST));
                         }
                     }
 
-                    return Ok(set)
+                    return Ok(set);
                 }
             }
 
             if !create {
-                return Err(Error::SysError(SysErr::ENOENT))
+                return Err(Error::SysError(SysErr::ENOENT));
             }
         }
 
@@ -180,7 +204,7 @@ impl Registry {
 
         let owner = task.FileOwner();
         let perms = FilePermissions::FromMode(mode);
-        return me.newSet(task, clone, key, &owner, &owner, &perms, nsems)
+        return me.newSet(task, clone, key, &owner, &owner, &perms, nsems);
     }
 
     pub fn RemoveId(&self, id: i32, creds: &Credentials) -> Result<()> {
@@ -200,7 +224,7 @@ impl Registry {
         me.semaphores.remove(&set.id);
         set.destroy();
 
-        return Ok(())
+        return Ok(());
     }
 }
 
@@ -224,7 +248,7 @@ impl<'a> SetInternal {
             return None;
         }
 
-        return Some(&mut self.sems[num as usize])
+        return Some(&mut self.sems[num as usize]);
     }
 
     fn findSem(&self, num: i32) -> Option<&Sem> {
@@ -232,22 +256,22 @@ impl<'a> SetInternal {
             return None;
         }
 
-        return Some(&self.sems[num as usize])
+        return Some(&self.sems[num as usize]);
     }
 
     fn checkCredentials(&self, creds: &Credentials) -> bool {
         let creds = creds.lock();
 
-        return self.owner.UID == creds.EffectiveKUID ||
-            self.owner.GID == creds.EffectiveKGID ||
-            self.creator.UID == creds.EffectiveKUID ||
-            self.creator.GID == creds.EffectiveKGID;
+        return self.owner.UID == creds.EffectiveKUID
+            || self.owner.GID == creds.EffectiveKGID
+            || self.creator.UID == creds.EffectiveKUID
+            || self.creator.GID == creds.EffectiveKGID;
     }
 
     fn checkCapability(&self, creds: &Credentials) -> bool {
         let res = creds.HasCapabilityIn(Capability::CAP_IPC_OWNER, &self.registry.lock().userNS);
         let userns = creds.lock().UserNamespace.clone();
-        return res && userns.MapFromKUID(self.owner.UID).Ok()
+        return res && userns.MapFromKUID(self.owner.UID).Ok();
     }
 
     fn checkPerms(&self, creds: &Credentials, reqPerms: &PermMask) -> bool {
@@ -262,7 +286,7 @@ impl<'a> SetInternal {
             return true;
         }
 
-        return self.checkCapability(creds)
+        return self.checkCapability(creds);
     }
 
     fn destroy(&mut self) {
@@ -287,32 +311,32 @@ impl<'a> SetInternal {
             if op.SemOp == 0 {
                 if tmpVals[op.SemNum as usize] != 0 {
                     if op.SemFlag & IPC_NOWAIT != 0 {
-                        return Err(Error::SysError(SysErr::EWOULDBLOCK))
+                        return Err(Error::SysError(SysErr::EWOULDBLOCK));
                     }
 
                     let w = Waiter::New(op.SemOp);
                     let id = w.id;
                     sem.waiters.insert(w.id, w);
-                    return Ok((id, op.SemNum as i32))
+                    return Ok((id, op.SemNum as i32));
                 }
             } else {
                 if op.SemOp < 0 {
                     if -op.SemOp > VALUE_MAX {
-                        return Err(Error::SysError(SysErr::ERANGE))
+                        return Err(Error::SysError(SysErr::ERANGE));
                     }
 
                     if -op.SemOp > tmpVals[op.SemNum as usize] {
                         if op.SemFlag & IPC_NOWAIT != 0 {
-                            return Err(Error::SysError(SysErr::EWOULDBLOCK))
+                            return Err(Error::SysError(SysErr::EWOULDBLOCK));
                         }
 
                         let w = Waiter::New(op.SemOp);
                         let id = w.id;
-                        return Ok((id, op.SemNum as i32))
+                        return Ok((id, op.SemNum as i32));
                     }
                 } else {
                     if tmpVals[op.SemNum as usize] > VALUE_MAX - op.SemOp {
-                        return Err(Error::SysError(SysErr::ERANGE))
+                        return Err(Error::SysError(SysErr::ERANGE));
                     }
                 }
 
@@ -328,7 +352,7 @@ impl<'a> SetInternal {
 
         self.opTime = task.Now();
 
-        return Ok((0, 0))
+        return Ok((0, 0));
     }
 }
 
@@ -344,7 +368,14 @@ impl Deref for Set {
 }
 
 impl Set {
-    pub fn New(r: Registry, key: i32, owner: FileOwner, creator: FileOwner, perms: FilePermissions, nsems: i32) -> Self {
+    pub fn New(
+        r: Registry,
+        key: i32,
+        owner: FileOwner,
+        creator: FileOwner,
+        perms: FilePermissions,
+        nsems: i32,
+    ) -> Self {
         let mut internal = SetInternal {
             registry: r.clone(),
             id: 0,
@@ -362,36 +393,55 @@ impl Set {
             internal.sems.push(Sem::default())
         }
 
-        return Self(Arc::new(QMutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)));
     }
 
     pub fn Size(&self) -> usize {
         return self.lock().sems.len();
     }
 
-    pub fn Change(&self, task: &Task, creds: &Credentials, owner: &FileOwner, perms: &FilePermissions) -> Result<()> {
+    pub fn Change(
+        &self,
+        task: &Task,
+        creds: &Credentials,
+        owner: &FileOwner,
+        perms: &FilePermissions,
+    ) -> Result<()> {
         let mut me = self.lock();
 
         if !me.checkCredentials(creds) && !me.checkCapability(creds) {
-            return Err(Error::SysError(SysErr::EACCES))
+            return Err(Error::SysError(SysErr::EACCES));
         }
 
         me.owner = owner.clone();
         me.perms = perms.clone();
         me.changeTime = task.Now();
 
-        return Ok(())
+        return Ok(());
     }
 
-    pub fn SetVal(&self, task: &Task, num: i32, val: i16, creds: &Credentials, pid: i32) -> Result<()> {
+    pub fn SetVal(
+        &self,
+        task: &Task,
+        num: i32,
+        val: i16,
+        creds: &Credentials,
+        pid: i32,
+    ) -> Result<()> {
         if val < 0 || val > VALUE_MAX {
-            return Err(Error::SysError(SysErr::ERANGE))
+            return Err(Error::SysError(SysErr::ERANGE));
         }
 
         let mut me = self.lock();
 
-        if me.checkPerms(creds, &PermMask { write: true, ..Default::default() }) {
-            return Err(Error::SysError(SysErr::EACCES))
+        if me.checkPerms(
+            creds,
+            &PermMask {
+                write: true,
+                ..Default::default()
+            },
+        ) {
+            return Err(Error::SysError(SysErr::EACCES));
         }
 
         match me.findSem_mut(num) {
@@ -404,24 +454,40 @@ impl Set {
         }
 
         me.changeTime = task.Now();
-        return Ok(())
+        return Ok(());
     }
 
-    pub fn SetValAll(&self, task: &Task, vals: &[i16], creds: &Credentials, pid: i32) -> Result<()> {
+    pub fn SetValAll(
+        &self,
+        task: &Task,
+        vals: &[i16],
+        creds: &Credentials,
+        pid: i32,
+    ) -> Result<()> {
         if vals.len() != self.Size() {
-            panic!("vals length ({}) different that Set.Size() ({})", vals.len(), self.Size());
+            panic!(
+                "vals length ({}) different that Set.Size() ({})",
+                vals.len(),
+                self.Size()
+            );
         }
 
         for val in vals {
             if *val < 0 || *val > VALUE_MAX {
-                return Err(Error::SysError(SysErr::ERANGE))
+                return Err(Error::SysError(SysErr::ERANGE));
             }
         }
 
         let mut me = self.lock();
 
-        if !me.checkPerms(creds, &PermMask { write: true, ..Default::default() }) {
-            return Err(Error::SysError(SysErr::EACCES))
+        if !me.checkPerms(
+            creds,
+            &PermMask {
+                write: true,
+                ..Default::default()
+            },
+        ) {
+            return Err(Error::SysError(SysErr::EACCES));
         }
 
         for i in 0..vals.len() {
@@ -432,27 +498,39 @@ impl Set {
         }
 
         me.changeTime = task.Now();
-        return Ok(())
+        return Ok(());
     }
 
     pub fn GetVal(&self, num: i32, creds: &Credentials) -> Result<i16> {
         let me = self.lock();
 
-        if !me.checkPerms(creds, &PermMask { read: true, ..Default::default() }) {
-            return Err(Error::SysError(SysErr::EACCES))
+        if !me.checkPerms(
+            creds,
+            &PermMask {
+                read: true,
+                ..Default::default()
+            },
+        ) {
+            return Err(Error::SysError(SysErr::EACCES));
         }
 
         match me.findSem(num) {
             None => return Err(Error::SysError(SysErr::ERANGE)),
-            Some(v) => return Ok(v.value)
+            Some(v) => return Ok(v.value),
         }
     }
 
     pub fn GetValAll(&self, creds: &Credentials) -> Result<Vec<i16>> {
         let me = self.lock();
 
-        if !me.checkPerms(creds, &PermMask { read: true, ..Default::default() }) {
-            return Err(Error::SysError(SysErr::EACCES))
+        if !me.checkPerms(
+            creds,
+            &PermMask {
+                read: true,
+                ..Default::default()
+            },
+        ) {
+            return Err(Error::SysError(SysErr::EACCES));
         }
 
         let mut vals = Vec::with_capacity(me.sems.len());
@@ -460,34 +538,46 @@ impl Set {
             vals.push(me.sems[i].value);
         }
 
-        return Ok(vals)
+        return Ok(vals);
     }
 
     pub fn GetPID(&self, num: i32, creds: &Credentials) -> Result<i32> {
         let me = self.lock();
 
-        if !me.checkPerms(creds, &PermMask { read: true, ..Default::default() }) {
-            return Err(Error::SysError(SysErr::EACCES))
+        if !me.checkPerms(
+            creds,
+            &PermMask {
+                read: true,
+                ..Default::default()
+            },
+        ) {
+            return Err(Error::SysError(SysErr::EACCES));
         }
 
         match me.findSem(num) {
             None => return Err(Error::SysError(SysErr::ERANGE)),
-            Some(v) => return Ok(v.pid)
+            Some(v) => return Ok(v.pid),
         }
     }
 
-    pub fn ExecuteOps(&self, task: &Task, ops: &[Sembuf], creds: &Credentials, pid: i32) -> Result<(u64, i32)> {
+    pub fn ExecuteOps(
+        &self,
+        task: &Task,
+        ops: &[Sembuf],
+        creds: &Credentials,
+        pid: i32,
+    ) -> Result<(u64, i32)> {
         let mut me = self.lock();
 
         if me.dead {
-            return Err(Error::SysError(SysErr::EIDRM))
+            return Err(Error::SysError(SysErr::EIDRM));
         }
 
         let mut readonly = true;
 
         for op in ops {
             if me.findSem(op.SemNum as i32).is_none() {
-                return Err(Error::SysError(SysErr::EFBIG))
+                return Err(Error::SysError(SysErr::EFBIG));
             }
 
             if op.SemOp != 0 {
@@ -495,11 +585,18 @@ impl Set {
             }
         }
 
-        if !me.checkPerms(creds, &PermMask { read: readonly, write: !readonly, ..Default::default() }) {
-            return Err(Error::SysError(SysErr::EACCES))
+        if !me.checkPerms(
+            creds,
+            &PermMask {
+                read: readonly,
+                write: !readonly,
+                ..Default::default()
+            },
+        ) {
+            return Err(Error::SysError(SysErr::EACCES));
         }
 
-        return me.executeOps(task, ops, pid)
+        return me.executeOps(task, ops, pid);
     }
 
     pub fn AbortWait(&self, num: i32, id: u64) {
@@ -513,7 +610,7 @@ impl Set {
 pub struct Sem {
     pub value: i16,
     pub pid: i32,
-    pub waiters: BTreeMap<u64, Waiter>
+    pub waiters: BTreeMap<u64, Waiter>,
 }
 
 impl Default for Sem {
@@ -522,7 +619,7 @@ impl Default for Sem {
             value: 0,
             pid: 0,
             waiters: BTreeMap::new(),
-        }
+        };
     }
 }
 
@@ -558,9 +655,8 @@ impl Waiter {
         return Self {
             id: WAITER_ID.fetch_add(1, Ordering::SeqCst),
             value: val,
-        }
+        };
     }
 
     pub fn Trigger(&self) {}
 }
-

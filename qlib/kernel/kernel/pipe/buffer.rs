@@ -16,10 +16,10 @@ use alloc::boxed::Box;
 use core::cell::RefCell;
 use core::ops::Deref;
 
-use super::super::super::super::mem::seq::*;
 use super::super::super::super::common::*;
+use super::super::super::super::mem::seq::*;
 
-pub const BUF_SIZE : usize = 32;
+pub const BUF_SIZE: usize = 32;
 
 /*lazy_static! {
     pub static ref BUF_POOL : Pool<Buffer> = Pool::New(BUF_SIZE);
@@ -29,8 +29,7 @@ pub fn NewBuff() -> Buffer {
     return Buffer::default();
 }
 
-pub fn ReturnBuff(_buf: Buffer) {
-}
+pub fn ReturnBuff(_buf: Buffer) {}
 
 // buffer encapsulates a queueable byte buffer.
 //
@@ -53,7 +52,7 @@ impl Deref for Buffer {
     }
 }
 
-pub const PIPE_BUF_SIZE : usize = 8144;
+pub const PIPE_BUF_SIZE: usize = 8144;
 
 #[repr(C)]
 pub struct BufferIntern {
@@ -62,14 +61,13 @@ pub struct BufferIntern {
     pub write: usize,
 }
 
-
 impl Default for BufferIntern {
     fn default() -> Self {
         return Self {
             data: [0; PIPE_BUF_SIZE],
             read: 0,
             write: 0,
-        }
+        };
     }
 }
 
@@ -88,7 +86,7 @@ impl BufferIntern {
     // This indicates there is no data left to read.
     pub fn Empty(&self) -> bool {
         let b = self;
-        return b.read == b.write
+        return b.read == b.write;
     }
 
     // Full indicates the buffer is full.
@@ -105,7 +103,7 @@ impl BlockSeqReader for Buffer {
         let mut b = self.borrow_mut();
         let n = dsts.CopyOut(&b.data[b.read..b.write]);
         b.read += n;
-        return Ok(n)
+        return Ok(n);
     }
 }
 
@@ -115,6 +113,6 @@ impl BlockSeqWriter for Buffer {
         let write = b.write;
         let n = srcs.CopyIn(&mut b.data[write..]);
         b.write += n;
-        return Ok(n)
+        return Ok(n);
     }
 }

@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod container;
-pub mod status;
-pub mod hook;
 pub mod cgroups;
+pub mod container;
+pub mod exec_hook;
+pub mod hook;
 pub mod mounts;
 pub mod nix_ext;
-pub mod exec_hook;
+pub mod status;
 
 use lazy_static;
-use std::collections::HashMap;
 use nix::sched::CloneFlags;
+use std::collections::HashMap;
 
-use super::oci::LinuxDeviceType;
 use super::oci::LinuxDevice;
+use super::oci::LinuxDeviceType;
 
 lazy_static! {
     static ref DEFAULT_DEVICES: Vec<LinuxDevice> = {

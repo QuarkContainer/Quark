@@ -27,7 +27,7 @@ pub struct UringMgr {
     pub eventfd: i32,
     pub fds: Vec<i32>,
     pub rings: Vec<IoUring>,
-    pub uringSize: usize
+    pub uringSize: usize,
 }
 
 impl Drop for UringMgr {
@@ -48,7 +48,7 @@ impl Drop for UringMgr {
     }
 }
 
-pub const FDS_SIZE : usize = 8192;
+pub const FDS_SIZE: usize = 1024 * 16;
 
 impl UringMgr {
     pub fn New(size: usize) -> Self {
@@ -62,14 +62,14 @@ impl UringMgr {
             eventfd: 0,
             fds: fds,
             rings: Vec::new(),
-            uringSize: size
+            uringSize: size,
         };
 
         return ret;
     }
 
     pub fn IOUringsAddr(&self) -> u64 {
-        let addr = &self.rings as * const Vec<IoUring> as u64;
+        let addr = &self.rings as *const Vec<IoUring> as u64;
         return addr;
     }
 
@@ -79,7 +79,9 @@ impl UringMgr {
         if DedicateUringCnt == 0 {
             let ring = Builder::default()
                 .setup_cqsize(self.uringSize as u32 * 2)
-                .build(self.uringSize as u32).expect("InitUring fail");
+                .setup_clamp()
+                .build(self.uringSize as u32)
+                .expect("InitUring fail");
             self.uringfds.push(ring.fd.0);
             self.rings.push(ring);
         } else {
@@ -90,35 +92,48 @@ impl UringMgr {
                     //.setup_iopoll()
                     //.setup_clamp()
                     .setup_cqsize(self.uringSize as u32 * 2)
-                    .build(self.uringSize as u32).expect("InitUring fail");
+                    .build(self.uringSize as u32)
+                    .expect("InitUring fail");
                 self.uringfds.push(ring.fd.0);
                 self.rings.push(ring);
             }
         }
 
-        self.Register(IORING_REGISTER_FILES, &self.fds[0] as * const _ as u64, self.fds.len() as u32).expect("InitUring register files fail");
+        self.Register(
+            IORING_REGISTER_FILES,
+            &self.fds[0] as *const _ as u64,
+            self.fds.len() as u32,
+        )
+        .expect("InitUring register files fail");
     }
 
     pub fn SetupEventfd(&mut self, eventfd: i32) {
         self.eventfd = eventfd;
 
-        self.Register(IORING_REGISTER_EVENTFD, &self.eventfd as * const _ as u64, 1).expect("InitUring register eventfd fail");
+        self.Register(IORING_REGISTER_EVENTFD, &self.eventfd as *const _ as u64, 1)
+            .expect("InitUring register eventfd fail");
     }
 
-    pub fn Enter(&mut self, idx: usize, toSumbit: u32, minComplete:u32, flags: u32) -> Result<i32> {
+    pub fn Enter(
+        &mut self,
+        idx: usize,
+        toSumbit: u32,
+        minComplete: u32,
+        flags: u32,
+    ) -> Result<i32> {
         let ret = IOUringEnter(self.uringfds[idx], toSumbit, minComplete, flags);
         if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
+            return Err(Error::SysError(-ret as i32));
         }
 
-        return Ok(ret as i32)
+        return Ok(ret as i32);
     }
 
     pub fn CompletEntries(&self) -> usize {
         let mut cnt = 0;
         for r in &self.rings {
             cnt += r.completion().lock().len();
-        };
+        }
 
         return cnt;
     }
@@ -134,7 +149,7 @@ impl UringMgr {
         //error!("uring wake minComplete {} ret {}, free {}", minComplete, ret, self.ring.sq.freeSlot());
         //self.ring.sq.Print();
         if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
+            return Err(Error::SysError(-ret as i32));
         }
 
         return Ok(());
@@ -145,21 +160,21 @@ impl UringMgr {
             self.RegisterOne(*fd, opcode, arg, nrArgs)?;
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn RegisterOne(&self, fd: i32, opcode: u32, arg: u64, nrArgs: u32) -> Result<()> {
         let ret = IOUringRegister(fd, opcode, arg, nrArgs);
         if ret < 0 {
             error!("IOUringRegister get fail {}", ret);
-            return Err(Error::SysError(-ret as i32))
+            return Err(Error::SysError(-ret as i32));
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn UnRegisterFile(&mut self) -> Result<()> {
-        return self.Register(IORING_UNREGISTER_FILES, 0, 0)
+        return self.Register(IORING_UNREGISTER_FILES, 0, 0);
     }
 
     pub fn Addfd(&mut self, fd: i32) -> Result<()> {
@@ -170,12 +185,12 @@ impl UringMgr {
         self.fds[fd as usize] = fd;
 
         let fu = sys::io_uring_files_update {
-            offset : fd as u32,
+            offset: fd as u32,
             resv: 0,
             fds: self.fds[fd as usize..].as_ptr() as _,
         };
 
-        return self.Register(IORING_REGISTER_FILES_UPDATE, &fu as * const _ as u64, 1);
+        return self.Register(IORING_REGISTER_FILES_UPDATE, &fu as *const _ as u64, 1);
     }
 
     pub fn Removefd(&mut self, fd: i32) -> Result<()> {
@@ -186,13 +201,11 @@ impl UringMgr {
 
         self.fds[fd as usize] = -1;
         let fu = sys::io_uring_files_update {
-            offset : fd as u32,
+            offset: fd as u32,
             resv: 0,
             fds: self.fds[fd as usize..].as_ptr() as _,
         };
 
-        return self.Register(IORING_REGISTER_FILES_UPDATE, &fu as * const _ as u64, 1);
+        return self.Register(IORING_REGISTER_FILES_UPDATE, &fu as *const _ as u64, 1);
     }
 }
-
-

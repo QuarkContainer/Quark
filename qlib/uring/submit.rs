@@ -1,14 +1,14 @@
+use core::ptr;
 use core::sync::atomic;
-use core::{ptr};
 
-use super::super::linux_def::IoVec;
 use super::super::common::*;
+use super::super::linux_def::IoVec;
+use super::porting::*;
 use super::register::execute;
 use super::register::Probe;
 use super::squeue::SubmissionQueue;
 use super::sys;
 use super::util::{cast_ptr, unsync_load, Fd};
-use super::porting::*;
 
 #[cfg(feature = "unstable")]
 use super::register::Restriction;
@@ -50,7 +50,7 @@ impl<'a> Submitter<'a> {
         }
     }
 
-     #[cfg(feature = "unstable")]
+    #[cfg(feature = "unstable")]
     pub fn squeue_wait(&self) -> Result<usize> {
         let result = unsafe {
             sys::io_uring_enter(

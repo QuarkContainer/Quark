@@ -12,45 +12,45 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::mutex::*;
+use alloc::string::String;
+use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::sync::Weak;
-use crate::qlib::mutex::*;
-use alloc::string::ToString;
-use alloc::string::String;
+use alloc::vec::Vec;
 use core::any::Any;
 use core::ops::Deref;
-use alloc::vec::Vec;
 
-use super::super::super::socket::unix::transport::unix::*;
-use super::super::super::guestfdnotifier::*;
+use super::super::super::super::addr::*;
+use super::super::super::super::auth::*;
 use super::super::super::super::common::*;
-use super::super::super::super::range::*;
-use super::super::super::memmgr::mapping_set::*;
-use super::super::super::super::mem::areaset::*;
-use super::super::super::kernel::time::*;
 use super::super::super::super::linux::time::*;
 use super::super::super::super::linux_def::*;
-use super::super::super::task::*;
-use super::super::super::super::auth::*;
-use super::super::super::memmgr::mm::*;
-use super::super::super::super::addr::*;
+use super::super::super::super::mem::areaset::*;
+use super::super::super::super::range::*;
+use super::super::super::fd::*;
+use super::super::super::guestfdnotifier::*;
+use super::super::super::kernel::time::*;
+use super::super::super::kernel::waiter::qlock::*;
 use super::super::super::kernel::waiter::queue::*;
+use super::super::super::memmgr::mapping_set::*;
+use super::super::super::memmgr::mm::*;
+use super::super::super::memmgr::*;
+use super::super::super::socket::unix::transport::unix::*;
+use super::super::super::task::*;
 use super::super::super::Kernel::HostSpace;
 use super::super::super::IOURING;
-use super::super::super::memmgr::*;
 use super::super::super::SHARESPACE;
-use super::super::super::fd::*;
 use super::super::attr::*;
-use super::*;
-use super::util::*;
-use super::hostfileop::*;
-use super::super::file::*;
-use super::super::inode::*;
 use super::super::dirent::*;
-use super::super::flags::*;
+use super::super::file::*;
 use super::super::filesystems::*;
+use super::super::flags::*;
+use super::super::inode::*;
 use super::fs::*;
-use super::super::super::kernel::waiter::qlock::*;
+use super::hostfileop::*;
+use super::util::*;
+use super::*;
 
 pub struct MappableInternal {
     //addr mapping from file offset to physical address
@@ -77,7 +77,7 @@ impl MappableInternal {
         while chunkStart < fr.End() {
             let mut refs = match self.chunkrefs.get(&chunkStart) {
                 None => 0,
-                Some(v) => *v
+                Some(v) => *v,
             };
 
             refs += PagesInChunk(fr, chunkStart);
@@ -92,7 +92,7 @@ impl MappableInternal {
         while chunkStart < fr.End() {
             let mut refs = match self.chunkrefs.get(&chunkStart) {
                 None => 0,
-                Some(v) => *v
+                Some(v) => *v,
             };
 
             refs -= PagesInChunk(fr, chunkStart);
@@ -119,12 +119,15 @@ impl MappableInternal {
                 }
                 error!("DecrRefOn 2");*/
                 self.f2pmap.remove(&chunkStart);
-
             } else if refs > 0 {
                 self.chunkrefs.insert(chunkStart, refs);
             } else {
-                panic!("Mappable::DecrRefOn get negative refs {}, pages is {}, fr is {:x?}",
-                       refs, PagesInChunk(fr, chunkStart), fr)
+                panic!(
+                    "Mappable::DecrRefOn get negative refs {}, pages is {}, fr is {:x?}",
+                    refs,
+                    PagesInChunk(fr, chunkStart),
+                    fr
+                )
             }
 
             chunkStart += CHUNK_SIZE;
@@ -133,7 +136,11 @@ impl MappableInternal {
 }
 
 pub fn PagesInChunk(r: &Range, chunkStart: u64) -> i32 {
-    assert!(chunkStart & CHUNK_MASK == 0, "chunkStart is {:x}", chunkStart);
+    assert!(
+        chunkStart & CHUNK_MASK == 0,
+        "chunkStart is {:x}",
+        chunkStart
+    );
     let chunkRange = Range::New(chunkStart, CHUNK_SIZE);
     return (r.Intersect(&chunkRange).Len() / MemoryDef::PAGE_SIZE) as i32;
 }
@@ -145,7 +152,7 @@ impl Default for MappableInternal {
             f2pmap: BTreeMap::new(),
             mapping: AreaSet::New(0, core::u64::MAX),
             chunkrefs: BTreeMap::new(),
-        }
+        };
     }
 }
 
@@ -194,7 +201,7 @@ impl Default for HostInodeOpIntern {
             size: 0,
             bufWriteLock: QAsyncLock::default(),
             hasMappable: false,
-        }
+        };
     }
 }
 
@@ -202,7 +209,7 @@ impl Drop for HostInodeOpIntern {
     fn drop(&mut self) {
         if self.HostFd == -1 {
             //default fd
-            return
+            return;
         }
 
         if SHARESPACE.config.read().MmapRead {
@@ -220,7 +227,13 @@ impl Drop for HostInodeOpIntern {
 }
 
 impl HostInodeOpIntern {
-    pub fn New(mops: &Arc<QMutex<MountSourceOperations>>, fd: i32, wouldBlock: bool, fstat: &LibcStat, writeable: bool) -> Self {
+    pub fn New(
+        mops: &Arc<QMutex<MountSourceOperations>>,
+        fd: i32,
+        wouldBlock: bool,
+        fstat: &LibcStat,
+        writeable: bool,
+    ) -> Self {
         let mut ret = Self {
             mops: mops.clone(),
             HostFd: fd,
@@ -249,7 +262,10 @@ impl HostInodeOpIntern {
 
     //add mapping between physical address and file offset, offset must be hugepage aligned
     pub fn AddPhyMapping(&mut self, phyAddr: u64, offset: u64) {
-        assert!(offset & CHUNK_MASK == 0, "HostMappable::AddPhysicalMap offset should be hugepage aligned");
+        assert!(
+            offset & CHUNK_MASK == 0,
+            "HostMappable::AddPhysicalMap offset should be hugepage aligned"
+        );
 
         let mappable = self.Mappable();
         let mut mappableLock = mappable.lock();
@@ -262,12 +278,11 @@ impl HostInodeOpIntern {
         return mappableLock.IncrRefOn(fr);
     }
 
-    pub fn DecrRefOn(&mut self, fr: &Range, ) {
+    pub fn DecrRefOn(&mut self, fr: &Range) {
         let mappable = self.Mappable();
         let mut mappableLock = mappable.lock();
         return mappableLock.DecrRefOn(fr);
     }
-
 
     //get phyaddress ranges for the file range
     pub fn MapInternal(&mut self, task: &Task, fr: &Range) -> Result<Vec<IoVec>> {
@@ -291,7 +306,10 @@ impl HostInodeOpIntern {
                 endOff = fr.End() - chunkStart;
             }
 
-            res.push(IoVec::NewFromAddr(phyAddr + startOffset, (endOff - startOffset) as usize));
+            res.push(IoVec::NewFromAddr(
+                phyAddr + startOffset,
+                (endOff - startOffset) as usize,
+            ));
             chunkStart += CHUNK_SIZE;
         }
 
@@ -300,11 +318,10 @@ impl HostInodeOpIntern {
 
     // map one page from file offsetFile to phyAddr
     pub fn MapFilePage(&mut self, task: &Task, fileOffset: u64) -> Result<u64> {
-        // todo: handle the file range. The file size could be changed by write, fallcoate, ftruncate
-        /*let filesize = self.lock().size as u64;
+        let filesize = self.size as u64;
         if filesize <= fileOffset {
             return Err(Error::FileMapError)
-        }*/
+        }
 
         let chunkStart = fileOffset & !HUGE_PAGE_MASK;
         self.Fill(task, chunkStart, fileOffset + PAGE_SIZE)?;
@@ -313,7 +330,7 @@ impl HostInodeOpIntern {
         let mappableLock = mappable.lock();
 
         let phyAddr = mappableLock.f2pmap.get(&chunkStart).unwrap();
-        return Ok(phyAddr + (fileOffset - chunkStart))
+        return Ok(phyAddr + (fileOffset - chunkStart));
     }
 
     //fill the holes for the file range by mmap
@@ -337,7 +354,7 @@ impl HostInodeOpIntern {
         for offset in holes {
             self.MMapChunk(offset)?;
         }
-        return Ok(())
+        return Ok(());
     }
 
     pub fn MMapChunk(&mut self, offset: u64) -> Result<u64> {
@@ -351,46 +368,49 @@ impl HostInodeOpIntern {
 
         let phyAddr = self.MapFileChunk(offset, prot)?;
         self.AddPhyMapping(phyAddr, offset);
-        return Ok(phyAddr)
+        return Ok(phyAddr);
     }
 
     pub fn MapFileChunk(&self, offset: u64, prot: i32) -> Result<u64> {
-        assert!(offset & CHUNK_MASK == 0, "MapFile offset must be chunk aligned");
+        assert!(
+            offset & CHUNK_MASK == 0,
+            "MapFile offset must be chunk aligned"
+        );
 
         let fd = self.HostFd();
         let ret = HostSpace::MMapFile(CHUNK_SIZE, fd, offset, prot);
 
         if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
+            return Err(Error::SysError(-ret as i32));
         }
 
         let phyAddr = ret as u64;
 
-        return Ok(phyAddr)
+        return Ok(phyAddr);
     }
 
     /*********************************end of mappable****************************************************************/
 
     pub fn SetMaskedAttributes(&self, mask: &AttrMask, attr: &UnstableAttr) -> Result<()> {
         if mask.Empty() {
-            return Ok(())
+            return Ok(());
         }
 
         if mask.UID || mask.GID {
-            return Err(Error::SysError(SysErr::EPERM))
+            return Err(Error::SysError(SysErr::EPERM));
         }
 
         if mask.Perms {
             let ret = Fchmod(self.HostFd, attr.Perms.LinuxMode()) as i32;
             if ret < 0 {
-                return Err(Error::SysError(-ret))
+                return Err(Error::SysError(-ret));
             }
         }
 
         if mask.Size {
             let ret = Ftruncate(self.HostFd, attr.Size) as i32;
             if ret < 0 {
-                return Err(Error::SysError(-ret))
+                return Err(Error::SysError(-ret));
             }
         }
 
@@ -406,33 +426,32 @@ impl HostInodeOpIntern {
             return SetTimestamps(self.HostFd, &ts);
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn Sync(&self) -> Result<()> {
         let ret = Fsync(self.HostFd);
         if ret < 0 {
-            return Err(Error::SysError(-ret))
+            return Err(Error::SysError(-ret));
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn HostFd(&self) -> i32 {
-        return self.HostFd
+        return self.HostFd;
     }
 
-    pub fn Allocate(&self, offset: i64, len: i64) -> Result<()> {
-        let ret = Fallocate(self.HostFd, 0, offset, len) as i32;
-        if ret < 0 {
-            return Err(Error::SysError(-ret))
-        }
+    pub fn BufWriteEnable(&self) -> bool {
+        return SHARESPACE.config.read().FileBufWrite && !self.hasMappable;
+    }
 
-        Ok(())
+    pub fn BufWriteLock(&self) -> QAsyncLock {
+        return self.bufWriteLock.clone();
     }
 
     pub fn WouldBlock(&self) -> bool {
-        return self.WouldBlock
+        return self.WouldBlock;
     }
 
     pub fn StableAttr(&self) -> StableAttr {
@@ -440,8 +459,8 @@ impl HostInodeOpIntern {
     }
 
     pub fn CanMap(&self) -> bool {
-        return self.sattr.Type == InodeType::RegularFile ||
-            self.sattr.Type == InodeType::SpecialFile;
+        return self.sattr.Type == InodeType::RegularFile
+            || self.sattr.Type == InodeType::SpecialFile;
     }
 
     pub fn InodeType(&self) -> InodeType {
@@ -468,7 +487,7 @@ pub struct HostInodeOp(pub Arc<QMutex<HostInodeOpIntern>>);
 
 impl PartialEq for HostInodeOp {
     fn eq(&self, other: &Self) -> bool {
-        return Arc::ptr_eq(&self.0, &other.0)
+        return Arc::ptr_eq(&self.0, &other.0);
     }
 }
 
@@ -476,7 +495,7 @@ impl Eq for HostInodeOp {}
 
 impl Default for HostInodeOp {
     fn default() -> Self {
-        return Self(Arc::new(QMutex::new(HostInodeOpIntern::default())))
+        return Self(Arc::new(QMutex::new(HostInodeOpIntern::default())));
     }
 }
 
@@ -489,32 +508,52 @@ impl Deref for HostInodeOp {
 }
 
 impl HostInodeOp {
-    pub fn New(mops: &Arc<QMutex<MountSourceOperations>>, fd: i32, wouldBlock: bool, fstat: &LibcStat, writeable: bool) -> Self {
-        let intern = Arc::new(QMutex::new(HostInodeOpIntern::New(mops, fd, wouldBlock, fstat, writeable)));
+    pub fn New(
+        mops: &Arc<QMutex<MountSourceOperations>>,
+        fd: i32,
+        wouldBlock: bool,
+        fstat: &LibcStat,
+        writeable: bool,
+    ) -> Self {
+        let intern = Arc::new(QMutex::new(HostInodeOpIntern::New(
+            mops, fd, wouldBlock, fstat, writeable,
+        )));
 
         let ret = Self(intern);
         AddFD(fd, &ret);
-        return ret
+        return ret;
     }
 
     pub fn NewMemfdIops(len: i64) -> Result<Self> {
         let fd = HostSpace::CreateMemfd(len) as i32;
         if fd < 0 {
-            return Err(Error::SysError(-fd as i32))
+            return Err(Error::SysError(-fd as i32));
         }
 
         let mut fstat = LibcStat::default();
 
         let ret = Fstat(fd, &mut fstat) as i32;
         if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
+            return Err(Error::SysError(-ret as i32));
         }
 
-        let msrc = MountSource::NewHostMountSource(&"/".to_string(), &ROOT_OWNER, &WhitelistFileSystem::New(), &MountSourceFlags::default(), false);
-        let intern = Arc::new(QMutex::new(HostInodeOpIntern::New(&msrc.MountSourceOperations.clone(), fd, false, &fstat, true)));
+        let msrc = MountSource::NewHostMountSource(
+            &"/".to_string(),
+            &ROOT_OWNER,
+            &WhitelistFileSystem::New(),
+            &MountSourceFlags::default(),
+            false,
+        );
+        let intern = Arc::new(QMutex::new(HostInodeOpIntern::New(
+            &msrc.MountSourceOperations.clone(),
+            fd,
+            false,
+            &fstat,
+            true,
+        )));
 
         let ret = Self(intern);
-        return Ok(ret)
+        return Ok(ret);
     }
 
     pub fn SyncFs(&self) -> Result<()> {
@@ -522,10 +561,10 @@ impl HostInodeOp {
 
         let ret = HostSpace::SyncFs(fd);
         if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
+            return Err(Error::SysError(-ret as i32));
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn SyncFileRange(&self, offset: i64, nbytes: i64, flags: u32) -> Result<()> {
@@ -533,18 +572,18 @@ impl HostInodeOp {
 
         let ret = HostSpace::SyncFileRange(fd, offset, nbytes, flags);
         if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
+            return Err(Error::SysError(-ret as i32));
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn Downgrade(&self) -> HostInodeOpWeak {
-        return HostInodeOpWeak(Arc::downgrade(&self.0))
+        return HostInodeOpWeak(Arc::downgrade(&self.0));
     }
 
     pub fn HostFd(&self) -> i32 {
-        return self.lock().HostFd
+        return self.lock().HostFd;
     }
 
     pub fn UpdateMaxLen(&self, size: i64) {
@@ -568,7 +607,7 @@ impl HostInodeOp {
             DirCursor: QMutex::new("".to_string()),
             //Buf: HostFileBuf::None,
         };
-        return Arc::new(hostFileOp)
+        return Arc::new(hostFileOp);
     }
 
     // return (st_size, st_blocks)
@@ -577,16 +616,16 @@ impl HostInodeOp {
         let hostfd = self.lock().HostFd;
         let ret = Fstat(hostfd, &mut s) as i32;
         if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
+            return Err(Error::SysError(-ret as i32));
         }
 
-        return Ok((s.st_size, s.st_blocks))
+        return Ok((s.st_size, s.st_blocks));
     }
 
     /*********************************start of fileoperation *******************/
 
     pub fn BufWriteEnable(&self) -> bool {
-        return SHARESPACE.config.read().FileBufWrite && !self.lock().hasMappable;
+        return self.lock().BufWriteEnable();
     }
 
     // ReadEndOffset returns an exclusive end offset for a read operation
@@ -604,42 +643,57 @@ impl HostInodeOp {
         }
 
         let mut end = offset + len;
-        if end < offset ||end > size {
+        if end < offset || end > size {
             end = size;
         }
 
         return end;
     }
 
-    pub fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], offset: i64, _blocking: bool) -> Result<i64> {
+    pub fn ReadAt(
+        &self,
+        task: &Task,
+        _f: &File,
+        dsts: &mut [IoVec],
+        offset: i64,
+        _blocking: bool,
+    ) -> Result<i64> {
         let hostIops = self.clone();
 
         let size = IoVec::NumBytes(dsts);
+        let size = if size >= MemoryDef::HUGE_PAGE_SIZE as usize {
+            MemoryDef::HUGE_PAGE_SIZE as usize
+        } else {
+            size
+        };
         let buf = DataBuff::New(size);
 
-        let iovs = buf.Iovs();
+        let iovs = buf.Iovs(size);
         let inodeType = self.InodeType();
 
         if inodeType != InodeType::RegularFile && inodeType != InodeType::CharacterDevice {
             let ret = IORead(hostIops.HostFd(), &iovs)?;
-            task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
-            return Ok(ret as i64)
+
+            // todo: handle partial write
+            task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts, false)?;
+            return Ok(ret as i64);
         } else {
-            if inodeType == InodeType::RegularFile && SHARESPACE.config.read().MmapRead  {
+            if inodeType == InodeType::RegularFile && SHARESPACE.config.read().MmapRead {
                 let mut intern = self.lock();
                 if offset > intern.size {
-                    return Ok(0)
+                    return Ok(0);
                 }
 
                 let end = Self::ReadEndOffset(offset, size as i64, intern.size);
-                if end == offset  {
-                    return Ok(0)
+                if end == offset {
+                    return Ok(0);
                 }
 
-                let srcIovs = intern.MapInternal(task, &Range::New(offset as u64, (end - offset) as u64))?;
-                let count = task.CopyIovsOutToIovs(&srcIovs, dsts)?;
+                let srcIovs =
+                    intern.MapInternal(task, &Range::New(offset as u64, (end - offset) as u64))?;
+                let count = task.CopyIovsOutToIovs(&srcIovs, dsts, true)?;
 
-                return Ok(count as i64)
+                return Ok(count as i64);
             }
 
             if SHARESPACE.config.read().UringIO {
@@ -648,19 +702,21 @@ impl HostInodeOp {
                     self.BufWriteLock().Lock(task);
                 }
 
-                let ret = IOURING.Read(task,
-                                       hostIops.HostFd(),
-                                       buf.Ptr(),
-                                       buf.Len() as u32,
-                                       offset as i64);
+                let ret = IOURING.Read(
+                    task,
+                    hostIops.HostFd(),
+                    buf.Ptr(),
+                    buf.Len() as u32,
+                    offset as i64,
+                );
 
                 if ret < 0 {
                     if ret as i32 != -SysErr::EINVAL {
-                        return Err(Error::SysError(-ret as i32))
+                        return Err(Error::SysError(-ret as i32));
                     }
                 } else if ret >= 0 {
-                    task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
-                    return Ok(ret as i64)
+                    task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts, true)?;
+                    return Ok(ret as i64);
                 }
 
                 // if ret == SysErr::EINVAL, the file might be tmpfs file, io_uring can't handle this
@@ -670,35 +726,49 @@ impl HostInodeOp {
 
             let offset = if inodeType == InodeType::CharacterDevice {
                 let ret = IOTTYRead(hostIops.HostFd(), &iovs)?;
-                task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
-                return Ok(ret as i64)
+                task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts, false)?;
+                return Ok(ret as i64);
             } else {
                 offset
             };
 
             let ret = IOReadAt(hostIops.HostFd(), &iovs, offset as u64)?;
-            task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts)?;
-            return Ok(ret as i64)
+            task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts, true)?;
+            return Ok(ret as i64);
         }
     }
 
     pub fn BufWriteLock(&self) -> QAsyncLock {
-        return self.lock().bufWriteLock.clone();
+        return self.lock().BufWriteLock();
     }
 
-    pub fn WriteAt(&self, task: &Task, _f: &File, srcs: &[IoVec], offset: i64, _blocking: bool) -> Result<i64> {
+    pub fn WriteAt(
+        &self,
+        task: &Task,
+        _f: &File,
+        srcs: &[IoVec],
+        offset: i64,
+        _blocking: bool,
+    ) -> Result<i64> {
         let hostIops = self.clone();
 
         let size = IoVec::NumBytes(srcs);
-        let mut buf = DataBuff::New(size);
-        let iovs = buf.Iovs();
 
-        task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
+        let size = if size >= MemoryDef::HUGE_PAGE_SIZE as usize {
+            MemoryDef::HUGE_PAGE_SIZE as usize
+        } else {
+            size
+        };
+
+        let mut buf = DataBuff::New(size);
+        let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;
+        let iovs = buf.Iovs(len);
+
         let inodeType = self.InodeType();
 
         if inodeType != InodeType::RegularFile && inodeType != InodeType::CharacterDevice {
             let ret = IOWrite(hostIops.HostFd(), &iovs)?;
-            return Ok(ret as i64)
+            return Ok(ret as i64);
         } else {
             let offset = if inodeType == InodeType::CharacterDevice {
                 -1
@@ -707,29 +777,30 @@ impl HostInodeOp {
             };
 
             if SHARESPACE.config.read().UringIO {
-                let ret =
-                    if self.BufWriteEnable() {
-                        let lock = self.BufWriteLock().Lock(task);
-                        let count = IOURING.BufFileWrite(hostIops.HostFd(), buf, offset, lock);
-                        count
-                    } else {
-                        IOURING.Write(task,
-                                      hostIops.HostFd(),
-                                      buf.Ptr(),
-                                      buf.Len() as u32,
-                                      offset as i64)
-                    };
+                let ret = if self.BufWriteEnable() {
+                    let lock = self.BufWriteLock().Lock(task);
+                    let count = IOURING.BufFileWrite(hostIops.HostFd(), buf, offset, lock);
+                    count
+                } else {
+                    IOURING.Write(
+                        task,
+                        hostIops.HostFd(),
+                        buf.Ptr(),
+                        buf.Len() as u32,
+                        offset as i64,
+                    )
+                };
 
                 if ret < 0 {
                     if ret as i32 != -SysErr::EINVAL {
-                        return Err(Error::SysError(-ret as i32))
+                        return Err(Error::SysError(-ret as i32));
                     }
                 } else if ret >= 0 {
                     if inodeType != InodeType::CharacterDevice {
                         hostIops.UpdateMaxLen(offset + ret);
                     }
 
-                    return Ok(ret as i64)
+                    return Ok(ret as i64);
                 }
 
                 // if ret == SysErr::EINVAL, the file might be tmpfs file, io_uring can't handle this
@@ -741,7 +812,7 @@ impl HostInodeOp {
                 Err(e) => return Err(e),
                 Ok(ret) => {
                     hostIops.UpdateMaxLen(offset + ret);
-                    return Ok(ret)
+                    return Ok(ret);
                 }
             }
         }
@@ -753,27 +824,43 @@ impl HostInodeOp {
         let inodeType = hostIops.InodeType();
         if inodeType == InodeType::RegularFile || inodeType == InodeType::SpecialFile {
             let size = IoVec::NumBytes(srcs);
+            let size = if size >= MemoryDef::HUGE_PAGE_SIZE as usize {
+                MemoryDef::HUGE_PAGE_SIZE as usize
+            } else {
+                size
+            };
             let mut buf = DataBuff::New(size);
 
-            task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
-            let iovs = buf.Iovs();
+            let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;
+            let iovs = buf.Iovs(len);
 
             let iovsAddr = &iovs[0] as *const _ as u64;
             let iovcnt = 1;
 
             let (count, len) = HostSpace::IOAppend(hostIops.HostFd(), iovsAddr, iovcnt);
             if count < 0 {
-                return Err(Error::SysError(-count as i32))
+                return Err(Error::SysError(-count as i32));
             }
 
-            return Ok((count, len))
+            if inodeType == InodeType::RegularFile {
+                hostIops.UpdateMaxLen(len);
+            }
+
+            return Ok((count, len));
         } else {
             let n = self.WriteAt(task, f, srcs, 0, true)?;
-            return Ok((n, 0))
+            return Ok((n, 0));
         }
     }
 
-    pub fn Fsync(&self, task: &Task, _f: &File, _start: i64, _end: i64, syncType: SyncType) -> Result<()> {
+    pub fn Fsync(
+        &self,
+        task: &Task,
+        _f: &File,
+        _start: i64,
+        _end: i64,
+        syncType: SyncType,
+    ) -> Result<()> {
         let fd = self.HostFd();
         let datasync = if syncType == SyncType::SyncData {
             true
@@ -781,16 +868,14 @@ impl HostInodeOp {
             false
         };
 
-        let ret = if SHARESPACE.config.read().UringIO && self.InodeType() == InodeType::RegularFile {
+        let ret = if SHARESPACE.config.read().UringIO && self.InodeType() == InodeType::RegularFile
+        {
             if self.BufWriteEnable() {
                 // try to gain the lock once, release immediately
                 self.BufWriteLock().Lock(task);
             }
 
-            IOURING.Fsync(task,
-                          fd,
-                          datasync
-            )
+            IOURING.Fsync(task, fd, datasync)
         } else {
             if self.BufWriteEnable() {
                 // try to gain the lock once, release immediately
@@ -805,16 +890,22 @@ impl HostInodeOp {
         };
 
         if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
+            return Err(Error::SysError(-ret as i32));
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     /*********************************start of mappable****************************************************************/
 
     //add mapping between file offset and the <MappingSpace(i.e. memorymanager), Virtual Address>
-    pub fn AddMapping(&self, ms: &MemoryManager, ar: &Range, offset: u64, writeable: bool) -> Result<()> {
+    pub fn AddMapping(
+        &self,
+        ms: &MemoryManager,
+        ar: &Range,
+        offset: u64,
+        writeable: bool,
+    ) -> Result<()> {
         self.lock().hasMappable = true;
 
         // todo: if there is bufwrite ongoing, should we wait for it?
@@ -833,25 +924,40 @@ impl HostInodeOp {
 
         mappableLock.mapping.AddMapping(ms, ar, offset, writeable);
         mappableLock.IncrRefOn(&Range::New(offset, ar.Len()));
-        return Ok(())
+        return Ok(());
     }
 
-    pub fn RemoveMapping(&self, ms: &MemoryManager, ar: &Range, offset: u64, writeable: bool) -> Result<()> {
+    pub fn RemoveMapping(
+        &self,
+        ms: &MemoryManager,
+        ar: &Range,
+        offset: u64,
+        writeable: bool,
+    ) -> Result<()> {
         let mappable = self.lock().Mappable();
         let mut mappableLock = mappable.lock();
 
-        mappableLock.mapping.RemoveMapping(ms, ar, offset, writeable);
+        mappableLock
+            .mapping
+            .RemoveMapping(ms, ar, offset, writeable);
         mappableLock.DecrRefOn(&Range::New(offset, ar.Len()));
-        return Ok(())
+        return Ok(());
     }
 
-    pub fn CopyMapping(&self, ms: &MemoryManager, _srcAr: &Range, dstAR: &Range, offset: u64, writeable: bool) -> Result<()> {
+    pub fn CopyMapping(
+        &self,
+        ms: &MemoryManager,
+        _srcAr: &Range,
+        dstAR: &Range,
+        offset: u64,
+        writeable: bool,
+    ) -> Result<()> {
         return self.AddMapping(ms, dstAR, offset, writeable);
     }
 
     pub fn FD(&self) -> i32 {
         let ret = self.lock().HostFd;
-        return ret
+        return ret;
     }
 
     //get phyaddress ranges for the file range
@@ -861,7 +967,7 @@ impl HostInodeOp {
 
     // map one page from file offsetFile to phyAddr
     pub fn MapFilePage(&self, task: &Task, fileOffset: u64) -> Result<u64> {
-        return self.lock().MapFilePage(task, fileOffset)
+        return self.lock().MapFilePage(task, fileOffset);
     }
 
     pub fn MSync(&self, fr: &Range, msyncType: MSyncType) -> Result<()> {
@@ -869,11 +975,11 @@ impl HostInodeOp {
         for r in &ranges {
             let ret = HostSpace::MSync(r.Start(), r.Len() as usize, msyncType.MSyncFlags());
             if ret < 0 {
-                return Err(Error::SysError(ret as i32))
+                return Err(Error::SysError(ret as i32));
             }
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn MAdvise(&self, start: u64, len: u64, advise: i32) -> Result<()> {
@@ -881,11 +987,11 @@ impl HostInodeOp {
         for r in &ranges {
             let ret = HostSpace::Madvise(r.Start(), r.Len() as usize, advise);
             if ret < 0 {
-                return Err(Error::SysError(ret as i32))
+                return Err(Error::SysError(ret as i32));
             }
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn Mlock(&self, start: u64, len: u64, mode: MLockMode) -> Result<()> {
@@ -895,27 +1001,27 @@ impl HostInodeOp {
                 MLockMode::MlockNone => {
                     let ret = HostSpace::MUnlock(r.Start(), r.Len());
                     if ret < 0 {
-                        return Err(Error::SysError(ret as i32))
+                        return Err(Error::SysError(ret as i32));
                     }
                 }
                 MLockMode::MlockEager => {
                     let flags = 0;
                     let ret = HostSpace::Mlock2(r.Start(), r.Len(), flags);
                     if ret < 0 {
-                        return Err(Error::SysError(ret as i32))
+                        return Err(Error::SysError(ret as i32));
                     }
                 }
                 MLockMode::MlockLazy => {
                     let flags = MLOCK_ONFAULT;
                     let ret = HostSpace::Mlock2(r.Start(), r.Len(), flags);
                     if ret < 0 {
-                        return Err(Error::SysError(ret as i32))
+                        return Err(Error::SysError(ret as i32));
                     }
                 }
             }
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn GetPhyRanges(&self, fr: &Range) -> Vec<Range> {
@@ -967,12 +1073,12 @@ impl InodeOperations for HostInodeOp {
         return self.lock().sattr.Type;
     }
 
-    fn InodeFileType(&self) -> InodeFileType{
+    fn InodeFileType(&self) -> InodeFileType {
         return InodeFileType::Host;
     }
 
     fn WouldBlock(&self) -> bool {
-        return self.lock().WouldBlock
+        return self.lock().WouldBlock;
     }
 
     fn Lookup(&self, _task: &Task, dir: &Inode, name: &str) -> Result<Dirent> {
@@ -985,7 +1091,14 @@ impl InodeOperations for HostInodeOp {
         return ret;
     }
 
-    fn Create(&self, task: &Task, dir: &mut Inode, name: &str, flags: &FileFlags, perm: &FilePermissions) -> Result<File> {
+    fn Create(
+        &self,
+        task: &Task,
+        dir: &mut Inode,
+        name: &str,
+        flags: &FileFlags,
+        perm: &FilePermissions,
+    ) -> Result<File> {
         //let fd = openAt(self.HostFd(), name, (LibcConst::O_RDWR | LibcConst::O_CREAT | LibcConst::O_EXCL) as i32, perm.LinuxMode());
 
         let owner = task.FileOwner();
@@ -996,7 +1109,14 @@ impl InodeOperations for HostInodeOp {
         newFlags.Read = true;
         newFlags.Write = true;
 
-        let (fd, fstat) = createAt(self.HostFd(), name, newFlags.ToLinux() | LibcConst::O_CREAT as i32, perm.LinuxMode(), owner.UID.0, owner.GID.0)?;
+        let (fd, fstat) = createAt(
+            self.HostFd(),
+            name,
+            newFlags.ToLinux() | LibcConst::O_CREAT as i32,
+            perm.LinuxMode(),
+            owner.UID.0,
+            owner.GID.0,
+        )?;
 
         let mountSource = dir.lock().MountSource.clone();
 
@@ -1004,36 +1124,66 @@ impl InodeOperations for HostInodeOp {
         let dirent = Dirent::New(&inode, name);
 
         let file = inode.GetFile(task, &dirent, flags)?;
-        return Ok(file)
+        return Ok(file);
     }
 
-    fn CreateDirectory(&self, task: &Task, _dir: &mut Inode, name: &str, perm: &FilePermissions) -> Result<()> {
+    fn CreateDirectory(
+        &self,
+        task: &Task,
+        _dir: &mut Inode,
+        name: &str,
+        perm: &FilePermissions,
+    ) -> Result<()> {
         let owner = task.FileOwner();
 
-        let ret = Mkdirat(self.HostFd(), name, perm.LinuxMode(), owner.UID.0, owner.GID.0);
+        let ret = Mkdirat(
+            self.HostFd(),
+            name,
+            perm.LinuxMode(),
+            owner.UID.0,
+            owner.GID.0,
+        );
         if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
+            return Err(Error::SysError(-ret as i32));
         }
 
-        return Ok(())
+        return Ok(());
     }
 
-    fn CreateLink(&self, _task: &Task, _dir: &mut Inode, oldname: &str, newname: &str) -> Result<()> {
+    fn CreateLink(
+        &self,
+        _task: &Task,
+        _dir: &mut Inode,
+        oldname: &str,
+        newname: &str,
+    ) -> Result<()> {
         let ret = SymLinkAt(oldname, self.HostFd(), newname);
 
         if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
+            return Err(Error::SysError(-ret as i32));
         }
 
-        return Ok(())
+        return Ok(());
     }
 
-    fn CreateHardLink(&self, _task: &Task, _dir: &mut Inode, _target: &Inode, _name: &str) -> Result<()> {
-        return Err(Error::SysError(SysErr::EPERM))
+    fn CreateHardLink(
+        &self,
+        _task: &Task,
+        _dir: &mut Inode,
+        _target: &Inode,
+        _name: &str,
+    ) -> Result<()> {
+        return Err(Error::SysError(SysErr::EPERM));
     }
 
-    fn CreateFifo(&self, _task: &Task, _dir: &mut Inode, _name: &str, _perm: &FilePermissions) -> Result<()> {
-        return Err(Error::SysError(SysErr::EPERM))
+    fn CreateFifo(
+        &self,
+        _task: &Task,
+        _dir: &mut Inode,
+        _name: &str,
+        _perm: &FilePermissions,
+    ) -> Result<()> {
+        return Err(Error::SysError(SysErr::EPERM));
     }
 
     fn Remove(&self, _task: &Task, _dir: &mut Inode, name: &str) -> Result<()> {
@@ -1042,10 +1192,10 @@ impl InodeOperations for HostInodeOp {
         let ret = UnLinkAt(self.HostFd(), name, flags);
 
         if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
+            return Err(Error::SysError(-ret as i32));
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     fn RemoveDirectory(&self, _task: &Task, _dir: &mut Inode, name: &str) -> Result<()> {
@@ -1054,19 +1204,38 @@ impl InodeOperations for HostInodeOp {
         let ret = UnLinkAt(self.HostFd(), name, flags);
 
         if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
+            return Err(Error::SysError(-ret as i32));
         }
 
-        return Ok(())
+        return Ok(());
     }
 
-    fn Rename(&self, _task: &Task, _dir: &mut Inode, oldParent: &Inode, oldname: &str, newParent: &Inode, newname: &str, _replacement: bool) -> Result<()> {
-        let oldParent = match oldParent.lock().InodeOp.as_any().downcast_ref::<HostInodeOp>() {
+    fn Rename(
+        &self,
+        _task: &Task,
+        _dir: &mut Inode,
+        oldParent: &Inode,
+        oldname: &str,
+        newParent: &Inode,
+        newname: &str,
+        _replacement: bool,
+    ) -> Result<()> {
+        let oldParent = match oldParent
+            .lock()
+            .InodeOp
+            .as_any()
+            .downcast_ref::<HostInodeOp>()
+        {
             Some(p) => p.HostFd(),
             None => panic!("&InodeOp isn't a HostInodeOp!"),
         };
 
-        let newParent = match newParent.lock().InodeOp.as_any().downcast_ref::<HostInodeOp>() {
+        let newParent = match newParent
+            .lock()
+            .InodeOp
+            .as_any()
+            .downcast_ref::<HostInodeOp>()
+        {
             Some(p) => p.HostFd(),
             None => panic!("&InodeOp isn't a HostInodeOp!"),
         };
@@ -1074,30 +1243,43 @@ impl InodeOperations for HostInodeOp {
         let ret = RenameAt(oldParent, oldname, newParent, newname);
 
         if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
+            return Err(Error::SysError(-ret as i32));
         }
 
-        return Ok(())
+        return Ok(());
     }
 
-    fn Bind(&self, _task: &Task, _dir: &Inode, _name: &str, _data: &BoundEndpoint, _perms: &FilePermissions) -> Result<Dirent> {
-        return Err(Error::SysError(SysErr::ENOTDIR))
+    fn Bind(
+        &self,
+        _task: &Task,
+        _dir: &Inode,
+        _name: &str,
+        _data: &BoundEndpoint,
+        _perms: &FilePermissions,
+    ) -> Result<Dirent> {
+        return Err(Error::SysError(SysErr::ENOTDIR));
     }
 
     fn BoundEndpoint(&self, _task: &Task, _inode: &Inode, _path: &str) -> Option<BoundEndpoint> {
-        return None
+        return None;
     }
 
-    fn GetFile(&self, task: &Task, _dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File> {
+    fn GetFile(
+        &self,
+        task: &Task,
+        _dir: &Inode,
+        dirent: &Dirent,
+        flags: FileFlags,
+    ) -> Result<File> {
         let fops = self.GetHostFileOp(task);
 
         let inode = dirent.Inode();
         let wouldBlock = inode.lock().InodeOp.WouldBlock();
 
-        return Ok(File::NewHostFile(dirent, &flags, fops, wouldBlock))
+        return Ok(File::NewHostFile(dirent, &flags, fops, wouldBlock));
     }
 
-    fn UnstableAttr(&self, task: &Task, _dir: &Inode) -> Result<UnstableAttr> {
+    fn UnstableAttr(&self, task: &Task) -> Result<UnstableAttr> {
         let uringStatx = SHARESPACE.config.read().UringStatx;
 
         if self.BufWriteEnable() {
@@ -1111,11 +1293,11 @@ impl InodeOperations for HostInodeOp {
             let hostfd = self.lock().HostFd;
             let ret = Fstat(hostfd, &mut s) as i32;
             if ret < 0 {
-                return Err(Error::SysError(-ret as i32))
+                return Err(Error::SysError(-ret as i32));
             }
 
             let mops = self.lock().mops.clone();
-            return Ok(s.UnstableAttr(&mops))
+            return Ok(s.UnstableAttr(&mops));
         } else {
             let mut s: Statx = Default::default();
             let hostfd = self.lock().HostFd;
@@ -1123,56 +1305,58 @@ impl InodeOperations for HostInodeOp {
             use super::super::super::util::cstring::*;
 
             let str = CString::New("");
-            let ret = IOURING.Statx(task,
-                                    hostfd,
-                                    str.Ptr(),
-                                    &mut s as * mut _ as u64,
-                                    ATType::AT_EMPTY_PATH,
-                                    StatxMask::STATX_BASIC_STATS);
+            let ret = IOURING.Statx(
+                task,
+                hostfd,
+                str.Ptr(),
+                &mut s as *mut _ as u64,
+                ATType::AT_EMPTY_PATH,
+                StatxMask::STATX_BASIC_STATS,
+            );
 
             if ret < 0 {
-                return Err(Error::SysError(-ret as i32))
+                return Err(Error::SysError(-ret as i32));
             }
 
             let mops = self.lock().mops.clone();
-            return Ok(s.UnstableAttr(&mops))
+            return Ok(s.UnstableAttr(&mops));
         }
     }
 
     //fn StableAttr(&self) -> &StableAttr;
     fn Getxattr(&self, _dir: &Inode, _name: &str) -> Result<String> {
-        return Err(Error::SysError(SysErr::EOPNOTSUPP))
+        return Err(Error::SysError(SysErr::EOPNOTSUPP));
     }
 
     fn Setxattr(&self, _dir: &mut Inode, _name: &str, _value: &str) -> Result<()> {
-        return Err(Error::SysError(SysErr::EOPNOTSUPP))
+        return Err(Error::SysError(SysErr::EOPNOTSUPP));
     }
 
     fn Listxattr(&self, _dir: &Inode) -> Result<Vec<String>> {
-        return Err(Error::SysError(SysErr::EOPNOTSUPP))
+        return Err(Error::SysError(SysErr::EOPNOTSUPP));
     }
 
     fn Check(&self, task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {
-        return ContextCanAccessFile(task, inode, reqPerms)
+        return ContextCanAccessFile(task, inode, reqPerms);
     }
 
     fn SetPermissions(&self, _task: &Task, _dir: &mut Inode, f: FilePermissions) -> bool {
-        return Fchmod(self.HostFd(), f.LinuxMode()) == 0
+        return Fchmod(self.HostFd(), f.LinuxMode()) == 0;
     }
 
     fn SetOwner(&self, _task: &Task, _dir: &mut Inode, owner: &FileOwner) -> Result<()> {
         let ret = FChown(self.HostFd(), owner.UID.0, owner.GID.0);
 
         if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
+            return Err(Error::SysError(-ret as i32));
         };
 
-        return Ok(())
+        return Ok(());
     }
 
     fn SetTimestamps(&self, _task: &Task, _dir: &mut Inode, ts: &InterTimeSpec) -> Result<()> {
         if ts.ATimeOmit && ts.MTimeOmit {
-            return Ok(())
+            return Ok(());
         }
 
         let mut sts: [Timespec; 2] = [Timespec::default(); 2];
@@ -1180,25 +1364,30 @@ impl InodeOperations for HostInodeOp {
         sts[0] = TimespecFromTimestamp(ts.ATime, ts.ATimeOmit, ts.ATimeSetSystemTime);
         sts[1] = TimespecFromTimestamp(ts.MTime, ts.MTimeOmit, ts.MTimeSetSystemTime);
 
-        let ret = HostSpace::Futimens(self.HostFd(), &sts as * const _ as u64);
+        let ret = HostSpace::Futimens(self.HostFd(), &sts as *const _ as u64);
         if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
+            return Err(Error::SysError(-ret as i32));
         }
 
-        return Ok(())
+        return Ok(());
     }
 
-    fn Truncate(&self, task: &Task, dir: &mut Inode, size: i64) -> Result<()> {
-        let uattr = self.UnstableAttr(task, dir)?;
+    fn Truncate(&self, task: &Task, _dir: &mut Inode, size: i64) -> Result<()> {
+        let uattr = self.UnstableAttr(task)?;
         let oldSize = uattr.Size;
+        assert!(oldSize==self.lock().size);
         if size == oldSize {
-            return Ok(())
+            return Ok(());
         }
 
         if self.lock().CanMap() {
             if size < oldSize {
                 let mappable = self.Mappable()?.lock().Mappable();
-                let ranges = mappable.lock().mapping.InvalidateRanges(task, &Range::New(size as u64, oldSize as u64 - size as u64), true);
+                let ranges = mappable.lock().mapping.InvalidateRanges(
+                    task,
+                    &Range::New(size as u64, oldSize as u64 - size as u64),
+                    true,
+                );
                 for r in &ranges {
                     r.invalidate(task, true);
                 }
@@ -1208,34 +1397,37 @@ impl InodeOperations for HostInodeOp {
         let ret = Ftruncate(self.HostFd(), size);
 
         if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
+            return Err(Error::SysError(-ret as i32));
         }
 
         self.lock().size = size;
 
-        return Ok(())
+        return Ok(());
     }
 
-    fn Allocate(&self, _task: &Task, _dir: &mut Inode, offset: i64, length: i64) -> Result<()> {
+    fn Allocate(&self, task: &Task, _dir: &mut Inode, offset: i64, length: i64) -> Result<()> {
         let ret = Fallocate(self.HostFd(), 0, offset, length);
 
         if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
+            return Err(Error::SysError(-ret as i32));
         }
 
-        return Ok(())
+        let uattr = self.UnstableAttr(task)?;
+        self.lock().size = uattr.Size;
+
+        return Ok(());
     }
 
-    fn ReadLink(&self, _task: &Task,_dir: &Inode) -> Result<String> {
-        return ReadLinkAt(self.HostFd(), &"".to_string())
+    fn ReadLink(&self, _task: &Task, _dir: &Inode) -> Result<String> {
+        return ReadLinkAt(self.HostFd(), &"".to_string());
     }
 
     fn GetLink(&self, _task: &Task, dir: &Inode) -> Result<Dirent> {
         if !dir.StableAttr().IsSymlink() {
-            return Err(Error::SysError(SysErr::ENOLINK))
+            return Err(Error::SysError(SysErr::ENOLINK));
         }
 
-        return Err(Error::ErrResolveViaReadlink)
+        return Err(Error::ErrResolveViaReadlink);
     }
 
     fn AddLink(&self, _task: &Task) {
@@ -1258,9 +1450,9 @@ impl InodeOperations for HostInodeOp {
         let mut statfs = LibcStatfs::default();
 
         let fd = self.HostFd();
-        let ret = HostSpace::Fstatfs(fd, &mut statfs as * mut _ as u64);
+        let ret = HostSpace::Fstatfs(fd, &mut statfs as *mut _ as u64);
         if ret < 0 {
-            return Err(Error::SysError(-ret as i32))
+            return Err(Error::SysError(-ret as i32));
         }
 
         let mut fsInfo = FsInfo::default();
@@ -1270,16 +1462,15 @@ impl InodeOperations for HostInodeOp {
         fsInfo.TotalFiles = statfs.Files;
         fsInfo.FreeFiles = statfs.FilesFree;
 
-        return Ok(fsInfo)
+        return Ok(fsInfo);
     }
 
     fn Mappable(&self) -> Result<HostInodeOp> {
         let inodeType = self.lock().InodeType();
         if inodeType == InodeType::RegularFile {
-            return Ok(self.clone())
+            return Ok(self.clone());
         } else {
-            return Err(Error::SysError(SysErr::ENODEV))
+            return Err(Error::SysError(SysErr::ENODEV));
         }
     }
 }
-

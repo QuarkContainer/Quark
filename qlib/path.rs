@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use alloc::string::String;
-use alloc::vec::Vec;
 use alloc::string::ToString;
+use alloc::vec::Vec;
 
 use super::common::*;
 
@@ -30,17 +30,13 @@ impl<'a> Lazybuf<'a> {
             s: s.as_bytes(),
             buf: None,
             w: 0,
-        }
+        };
     }
 
     pub fn index(&self, i: usize) -> u8 {
         match &self.buf {
-            Some(ref b) => {
-                return b[i]
-            }
-            None => {
-                return self.s[i]
-            }
+            Some(ref b) => return b[i],
+            None => return self.s[i],
         }
     }
 
@@ -49,13 +45,13 @@ impl<'a> Lazybuf<'a> {
             None => {
                 if self.w < self.s.len() && self.s[self.w] == c {
                     self.w += 1;
-                    return
+                    return;
                 }
 
                 false
             }
 
-            _ => true
+            _ => true,
         };
 
         if !alloc {
@@ -104,7 +100,10 @@ pub fn Clean(path: &str) -> String {
             r += 1;
         } else if path[r] == '.' as u8 && (r + 1 == n || path[r + 1] == '/' as u8) {
             r += 1;
-        } else if path[r] == '.' as u8 && path[r + 1] == '.' as u8 && (r + 2 == n || path[r + 2] == '/' as u8) {
+        } else if path[r] == '.' as u8
+            && path[r + 1] == '.' as u8
+            && (r + 2 == n || path[r + 2] == '/' as u8)
+        {
             r += 2;
             if out.w > dotdot {
                 out.w -= 1;
@@ -143,14 +142,14 @@ pub fn Split<'a>(path: &'a str) -> (&'a str, &'a str) {
 
     match i {
         None => ("", &path[..]),
-        Some(i) => (&path[..i + 1], &path[i + 1..])
+        Some(i) => (&path[..i + 1], &path[i + 1..]),
     }
 }
 
 pub fn Join(path: &str, elem: &str) -> String {
     let res = path.to_string() + &"/" + elem;
 
-    return Clean(&res)
+    return Clean(&res);
 }
 
 pub fn Ext<'a>(path: &'a str) -> &'a str {
@@ -161,16 +160,16 @@ pub fn Ext<'a>(path: &'a str) -> &'a str {
         }
 
         if s[i] == '.' as u8 {
-            return &path[i..]
+            return &path[i..];
         }
     }
 
-    return ""
+    return "";
 }
 
 pub fn Base<'a>(path: &'a str) -> &'a str {
     if path == "" {
-        return "."
+        return ".";
     }
 
     let s = &path.as_bytes()[..];
@@ -194,24 +193,24 @@ pub fn Base<'a>(path: &'a str) -> &'a str {
     }
 
     if l == r {
-        return "/"
+        return "/";
     }
 
-    return &path[l..r + 1]
+    return &path[l..r + 1];
 }
 
 pub fn IsAbs(path: &str) -> bool {
-    return path.len() > 0 && path.as_bytes()[0] == '/' as u8
+    return path.len() > 0 && path.as_bytes()[0] == '/' as u8;
 }
 
 pub fn Dir(path: &str) -> String {
     let (dir, _) = Split(path);
-    return Clean(&dir.to_string())
+    return Clean(&dir.to_string());
 }
 
 pub fn TrimTrailingSlashes<'a>(dir: &'a str) -> (&'a str, bool) {
     if dir.len() == 0 {
-        return (dir, false)
+        return (dir, false);
     }
 
     let s = &dir.as_bytes()[..];
@@ -227,14 +226,14 @@ pub fn TrimTrailingSlashes<'a>(dir: &'a str) -> (&'a str, bool) {
         changed = true;
     }
 
-    return (&dir[..(last + 1) as usize], changed)
+    return (&dir[..(last + 1) as usize], changed);
 }
 
 pub fn LastIndex(path: &str, c: u8) -> i32 {
     for i in 0..path.len() {
         let idx = path.len() - i - 1;
         if path.as_bytes()[idx] == c {
-            return idx as i32
+            return idx as i32;
         }
     }
 
@@ -246,9 +245,9 @@ pub fn SplitLast<'a>(path: &'a str) -> (&'a str, &'a str) {
     let (path, _) = TrimTrailingSlashes(path);
 
     if path == "" {
-        return (&".", &".")
+        return (&".", &".");
     } else if path == "/" {
-        return (&"/", &".")
+        return (&"/", &".");
     }
 
     let mut slash = (path.len() - 1) as isize;
@@ -263,13 +262,13 @@ pub fn SplitLast<'a>(path: &'a str) -> (&'a str, &'a str) {
     }
 
     if slash < 0 {
-        return (&".", path)
+        return (&".", path);
     } else if slash == 0 {
-        return (&"/", &path[1..])
+        return (&"/", &path[1..]);
     } else {
         let slash = slash as usize;
         let (dir, _) = TrimTrailingSlashes(&path[..slash]);
-        return (dir, &path[slash + 1..])
+        return (dir, &path[slash + 1..]);
     }
 }
 
@@ -277,7 +276,7 @@ pub fn SplitLast<'a>(path: &'a str) -> (&'a str, &'a str) {
 pub fn SplitFirst<'a>(path: &'a str) -> (&'a str, &'a str) {
     let (path, _) = TrimTrailingSlashes(path);
     if path == "" {
-        return (&".", &"")
+        return (&".", &"");
     }
 
     let mut slash = 0;
@@ -292,9 +291,9 @@ pub fn SplitFirst<'a>(path: &'a str) -> (&'a str, &'a str) {
     }
 
     if slash >= path.len() {
-        return (path, &"")
+        return (path, &"");
     } else if slash == 0 {
-        return (&"/", &path[1..])
+        return (&"/", &path[1..]);
     } else {
         let current = &path[..slash];
         let mut remain = &path[slash + 1..];
@@ -305,10 +304,9 @@ pub fn SplitFirst<'a>(path: &'a str) -> (&'a str, &'a str) {
             s = &remain.as_bytes()[..];
         }
 
-        return (current, remain)
+        return (current, remain);
     }
 }
-
 
 // IsSubpath checks whether the first path is a (strict) descendent of the
 // second. If it is a subpath, then true is returned along with a clean
@@ -324,34 +322,34 @@ pub fn IsSubpath(subpath: &str, path: &str) -> (String, bool) {
     }
 
     if cleanPath == cleanSubpath {
-        return ("".to_string(), false)
+        return ("".to_string(), false);
     }
 
     if HasPrefix(&cleanSubpath, &cleanPath) {
-        return (TrimPrefix(&cleanSubpath, &cleanPath), true)
+        return (TrimPrefix(&cleanSubpath, &cleanPath), true);
     }
 
-    return ("".to_string(), false)
+    return ("".to_string(), false);
 }
 
 pub fn HasPrefix(s: &str, prefix: &str) -> bool {
-    return s.len() >= prefix.len() && s[..prefix.len()] == prefix[..]
+    return s.len() >= prefix.len() && s[..prefix.len()] == prefix[..];
 }
 
 pub fn TrimPrefix(s: &str, prefix: &str) -> String {
     if HasPrefix(s, prefix) {
-        return s[prefix.len()..].to_string()
+        return s[prefix.len()..].to_string();
     }
 
     return s.to_string();
 }
 
 fn volumeNameLen(_path: &str) -> usize {
-    return 0
+    return 0;
 }
 
 pub fn VolumeName<'a>(path: &'a str) -> &'a str {
-    return &path[..volumeNameLen(path)]
+    return &path[..volumeNameLen(path)];
 }
 
 pub const PATH_SEPARATOR: char = '/';
@@ -376,7 +374,7 @@ pub fn Rel(basepath: &str, targpath: &str) -> Result<String> {
     let mut base = baseStr.as_bytes();
     let mut targ = targStr.as_bytes();
     if targ == base {
-        return Ok(".".to_string())
+        return Ok(".".to_string());
     }
 
     base = &base[baseVol.len()..];
@@ -389,7 +387,7 @@ pub fn Rel(basepath: &str, targpath: &str) -> Result<String> {
     let targSlashed = targ.len() > 0 && targ[0] == PathSeparator as u8;
 
     if baseSlashed != targSlashed || baseVol != targVol {
-        return Err(Error::Common("Rel: can't make".to_string()))
+        return Err(Error::Common("Rel: can't make".to_string()));
     }
 
     let bl = base.len();
@@ -426,7 +424,7 @@ pub fn Rel(basepath: &str, targpath: &str) -> Result<String> {
     }
 
     if &base[b0..bi] == "..".as_bytes() {
-        return Err(Error::Common("Rel: can't make".to_string()))
+        return Err(Error::Common("Rel: can't make".to_string()));
     }
 
     if b0 != bl {
@@ -475,10 +473,10 @@ pub fn Rel(basepath: &str, targpath: &str) -> Result<String> {
             }
         }
 
-        return Ok(String::from_utf8(buf.to_vec()).unwrap())
+        return Ok(String::from_utf8(buf.to_vec()).unwrap());
     }
 
-    return Ok(String::from_utf8(targ[t0..].to_vec()).unwrap())
+    return Ok(String::from_utf8(targ[t0..].to_vec()).unwrap());
 }
 
 #[cfg(test)]
@@ -573,10 +571,7 @@ impl<'a> Path<'a> {
             arr.push(*name)
         }
 
-        return Path {
-            arr,
-            rawArr
-        }
+        return Path { arr, rawArr };
     }
 
     pub fn IsPath(&self) -> bool {
@@ -592,6 +587,6 @@ pub fn ParseBool(str: &str) -> Result<bool> {
     match str {
         "1" | "t" | "T" | "true" | "TRUE" | "True" => Ok(true),
         "0" | "f" | "F" | "false" | "FALSE" | "False" => Ok(false),
-        _ => Err(Error::Common("parse error".to_string()))
+        _ => Err(Error::Common("parse error".to_string())),
     }
 }

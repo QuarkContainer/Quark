@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
+use alloc::sync::Arc;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
 
 use super::super::super::super::cpuid::*;
-use super::super::super::SignalDef::*;
 use super::super::super::asm::*;
+use super::super::super::SignalDef::*;
 use super::super::super::FP_STATE;
 //use super::super::super::super::super::kernel_def::*;
 
@@ -68,11 +68,30 @@ pub const EFLAGS_ID: u64 = 1 << 21;
 // EFLAGS_PTRACE_MUTABLE is the mask for the set of EFLAGS that may be
 // changed by ptrace(PTRACE_SETREGS). EFLAGS_PTRACE_MUTABLE is analogous to
 // Linux's FLAG_MASK.
-pub const EFLAGS_PTRACE_MUTABLE: u64 = EFLAGS_CF | EFLAGS_PF | EFLAGS_AF | EFLAGS_ZF | EFLAGS_SF | EFLAGS_TF | EFLAGS_DF | EFLAGS_OF | EFLAGS_RF | EFLAGS_AC | EFLAGS_NT;
+pub const EFLAGS_PTRACE_MUTABLE: u64 = EFLAGS_CF
+    | EFLAGS_PF
+    | EFLAGS_AF
+    | EFLAGS_ZF
+    | EFLAGS_SF
+    | EFLAGS_TF
+    | EFLAGS_DF
+    | EFLAGS_OF
+    | EFLAGS_RF
+    | EFLAGS_AC
+    | EFLAGS_NT;
 
 // EFLAGS_RESTORABLE is the mask for the set of EFLAGS that may be changed by
 // SignalReturn. EFLAGS_RESTORABLE is analogous to Linux's FIX_EFLAGS.
-pub const EFLAGS_RESTORABLE: u64 = EFLAGS_AC | EFLAGS_OF | EFLAGS_DF | EFLAGS_TF | EFLAGS_SF | EFLAGS_ZF | EFLAGS_AF | EFLAGS_PF | EFLAGS_CF | EFLAGS_RF;
+pub const EFLAGS_RESTORABLE: u64 = EFLAGS_AC
+    | EFLAGS_OF
+    | EFLAGS_DF
+    | EFLAGS_TF
+    | EFLAGS_SF
+    | EFLAGS_ZF
+    | EFLAGS_AF
+    | EFLAGS_PF
+    | EFLAGS_CF
+    | EFLAGS_RF;
 
 // TrapInstruction is the x86 trap instruction.
 pub const TRAP_INSTRUCTION: [u8; 1] = [0xcc];
@@ -91,6 +110,14 @@ pub const USER_DS: u64 = 0x2b; // guest ring 3 data selector
 pub const FS_TLS_SEL: u64 = 0x63; // Linux FS thread-local storage selector
 pub const GS_TLS_SEL: u64 = 0x6b; // Linux GS thread-local storage selector
 
+// MXCSR_DEFAULT is the reset value of MXCSR (Intel SDM Vol. 2, Ch. 3.2
+// "LDMXCSR")
+pub const MXCSR_DEFAULT: u32 = 0x1f80;
+
+// MXCSR_OFFSET is the offset in bytes of the MXCSR field from the start of the
+// FXSAVE/XSAVE area. (Intel SDM Vol. 1, Table 10-2 "Format of an FXSAVE Area")
+pub const MXCSR_OFFSET: usize = 24;
+
 // x86FPState is x86 floating point state.
 #[repr(align(4096))]
 #[repr(C)]
@@ -107,6 +134,43 @@ impl Default for X86fpstate {
 }
 
 impl X86fpstate {
+    // minXstateBytes is the minimum size in bytes of an x86 XSAVE area, equal
+    // to the size of the XSAVE legacy area (512 bytes) plus the size of the
+    // XSAVE header (64 bytes). Equivalently, minXstateBytes is GDB's
+    // X86_XSTATE_SSE_SIZE.
+    pub const MIN_XSTATE_BYTES : usize = 512 + 64;
+
+    // userXstateXCR0Offset is the offset in bytes of the USER_XSTATE_XCR0_WORD
+    // field in Linux's struct user_xstateregs, which is the type manipulated
+    // by ptrace(PTRACE_GET/SETREGSET, NT_X86_XSTATE). Equivalently,
+    // userXstateXCR0Offset is GDB's I386_LINUX_XSAVE_XCR0_OFFSET.
+    pub const USER_XSTATE_XCR0_OFFSET : usize = 464;
+
+    // xstateBVOffset is the offset in bytes of the XSTATE_BV field in an x86
+    // XSAVE area.
+    pub const XSTATE_BVOFFSET : usize = 512;
+
+    // xsaveHeaderZeroedOffset and xsaveHeaderZeroedBytes indicate parts of the
+    // XSAVE header that we coerce to zero: "Bytes 15:8 of the XSAVE header is
+    // a state-component bitmap called XCOMP_BV. ... Bytes 63:16 of the XSAVE
+    // header are reserved." - Intel SDM Vol. 1, Section 13.4.2 "XSAVE Header".
+    // Linux ignores XCOMP_BV, but it's able to recover from XRSTOR #GP
+    // exceptions resulting from invalid values; we aren't. Linux also never
+    // uses the compacted format when doing XSAVE and doesn't even define the
+    // compaction extensions to XSAVE as a CPU feature, so for simplicity we
+    // assume no one is using them.
+    pub const XSAVE_HEADER_ZEROED_OFFSET : usize = 512 + 8;
+    pub const XSAVE_HEADER_ZEROED_BYTES : usize = 64 - 8;
+
+    // mxcsrOffset is the offset in bytes of the MXCSR field from the start of
+    // the FXSAVE area. (Intel SDM Vol. 1, Table 10-2 "Format of an FXSAVE
+    // Area")
+    pub const MXCSR_OFFSET : usize = 24;
+
+    // mxcsrMaskOffset is the offset in bytes of the MXCSR_MASK field from the
+    // start of the FXSAVE area.
+    pub const MXCSR_MASK_OFFSET : usize = 28;
+
     fn New() -> Self {
         let (size, _align) = HostFeatureSet().ExtendedStateSize();
 
@@ -117,18 +181,85 @@ impl X86fpstate {
         return Self {
             data: [0; 4096],
             size: AtomicUsize::new(size as usize),
+        };
+    }
+
+    pub fn SanitizeUser(&self) {
+        // Force reserved bits in MXCSR to 0. This is consistent with Linux.
+        self.SanitizeMXCSR();
+
+        if self.Size() >= Self::MIN_XSTATE_BYTES {
+            // Users can't enable *more* XCR0 bits than what we, and the CPU, support.
+            let xstateBVAddr = &self.data[Self::XSTATE_BVOFFSET] as * const _ as u64;
+            let mut xstateBV : u64 = unsafe {
+                *(xstateBVAddr as * const u64)
+            };
+
+            xstateBV &= HostFeatureSet().ValidXCR0Mask();
+            unsafe {
+                *(xstateBVAddr as * mut u64) = xstateBV;
+            };
+
+            let addr = &self.data[Self::XSAVE_HEADER_ZEROED_OFFSET] as * const _ as u64;
+            let ptr = addr as *mut u8;
+            let slice = unsafe {
+                core::slice::from_raw_parts_mut(ptr, Self::XSAVE_HEADER_ZEROED_BYTES)
+            };
+
+            for i in 0..Self::XSAVE_HEADER_ZEROED_BYTES {
+                slice[i] = 0;
+            }
         }
     }
 
+    pub fn mxcsrMask(&self) -> u32 {
+        let mxcsrAddr = &self.data[Self::MXCSR_MASK_OFFSET] as * const _ as u64;
+        let mxcsrMask : u32 = unsafe {
+            *(mxcsrAddr as * const u32)
+        };
+        return mxcsrMask;
+    }
+
+    pub fn SanitizeMXCSR(&self) {
+        let mxcsrAddr = &self.data[Self::MXCSR_OFFSET] as * const _ as u64;
+        let mxcsr : u32 = unsafe {
+            *(mxcsrAddr as * const u32)
+        };
+
+        let mut mxcsrMask = FP_STATE.mxcsrMask();
+        if mxcsrMask == 0 {
+            // "If the value of the MXCSR_MASK field is 00000000H, then the
+            // MXCSR_MASK value is the default value of 0000FFBFH." - Intel SDM
+            // Vol. 1, Section 11.6.6 "Guidelines for Writing to the MXCSR
+            // Register"
+            mxcsrMask = 0xffbf
+        }
+
+        let mxcsr = mxcsr & mxcsrMask;
+        unsafe {
+            *(mxcsrAddr as * mut u32) = mxcsr;
+        };
+    }
+
     pub fn Load() -> Self {
-        return FP_STATE.Fork()
+        return FP_STATE.Fork();
+    }
+
+    pub fn Size(&self) -> usize {
+        return self.size.load(Ordering::SeqCst)
+    }
+
+    pub fn Slice(&self) -> &'static mut [u8] {
+        let ptr = &self.data[0] as * const _ as u64 as *mut u8;
+        let buf = unsafe { core::slice::from_raw_parts_mut(ptr, self.Size()) };
+        return buf
     }
 
     pub const fn Init() -> Self {
         return Self {
             data: [0; 4096],
             size: AtomicUsize::new(4096),
-        }
+        };
     }
 
     pub fn Reset(&self) {
@@ -137,19 +268,14 @@ impl X86fpstate {
         self.SaveFp();
     }
 
-    /*pub fn NewX86FPState() -> Self {
-        let f = Self::New();
-
-        InitX86FPState(f.FloatingPointData(), HostFeatureSet().UseXsave());
-        return f;
-    }*/
-
     pub fn Fork(&self) -> Self {
         let mut f = Self::New();
 
         for i in 0..self.size.load(Ordering::Relaxed) {
             f.data[i] = self.data[i];
         }
+        f.size
+            .store(self.size.load(Ordering::SeqCst), Ordering::SeqCst);
 
         return f;
     }
@@ -163,7 +289,7 @@ impl X86fpstate {
     }
 
     pub fn RestoreFp(&self) {
-        LoadFloatingPoint(self.FloatingPointData())
+        LoadFloatingPoint(self.FloatingPointData());
     }
 }
 
@@ -186,12 +312,12 @@ impl State {
         // * CS and SS are set to the standard selectors.
         //
         // That is, SYSRET results in the correct final state.
-        let fastRestore = self.Regs.rcx == self.Regs.rip &&
-            self.Regs.eflags == self.Regs.r11 &&
-            (self.Regs.eflags & EFLAGS_RF) == 0 &&
-            (self.Regs.eflags & EFLAGS_VM) == 0 &&
-            self.Regs.cs == USER_CS &&
-            self.Regs.ss == USER_DS;
+        let fastRestore = self.Regs.rcx == self.Regs.rip
+            && self.Regs.eflags == self.Regs.r11
+            && (self.Regs.eflags & EFLAGS_RF) == 0
+            && (self.Regs.eflags & EFLAGS_VM) == 0
+            && self.Regs.cs == USER_CS
+            && self.Regs.ss == USER_DS;
 
         return !fastRestore;
     }
@@ -200,6 +326,6 @@ impl State {
         return Self {
             Regs: regs,
             x86FPState: Arc::new(QMutex::new(self.x86FPState.lock().Fork())),
-        }
+        };
     }
 }

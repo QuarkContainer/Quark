@@ -13,29 +13,29 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
-use core::ops::Deref;
-use core::any::Any;
-use core::slice;
 use alloc::sync::Arc;
+use core::any::Any;
+use core::ops::Deref;
+use core::slice;
 
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::super::mem::seq::*;
-use super::super::task::*;
 use super::super::kernel::waiter::*;
+use super::super::task::*;
 
-use super::super::fs::attr::*;
 use super::super::fs::anon::*;
+use super::super::fs::attr::*;
+use super::super::fs::dentry::*;
+use super::super::fs::dirent::*;
 use super::super::fs::file::*;
 use super::super::fs::flags::*;
-use super::super::fs::dirent::*;
-use super::super::fs::dentry::*;
 use super::super::fs::host::hostinodeop::*;
 
 // Constants for eventfd2(2).
-pub const EFD_SEMAPHORE : i32 = 0x1;
-pub const EFD_CLOEXEC   : i32 = Flags::O_CLOEXEC;
-pub const EFD_NONBLOCK  : i32 = Flags::O_NONBLOCK;
+pub const EFD_SEMAPHORE: i32 = 0x1;
+pub const EFD_CLOEXEC: i32 = Flags::O_CLOEXEC;
+pub const EFD_NONBLOCK: i32 = Flags::O_NONBLOCK;
 
 pub struct EventOperationsInternal {
     // Queue is used to notify interested parties when the event object
@@ -62,11 +62,15 @@ pub fn NewEventfd(task: &Task, initVal: u64, semMode: bool) -> File {
 
     let ops = EventOperations(Arc::new(QMutex::new(internal)));
 
-    return File::New(&dirent, &FileFlags{
-        Read: true,
-        Write: true,
-        ..Default::default()
-    }, ops);
+    return File::New(
+        &dirent,
+        &FileFlags {
+            Read: true,
+            Write: true,
+            ..Default::default()
+        },
+        ops,
+    );
 }
 
 #[derive(Clone)]
@@ -82,13 +86,13 @@ impl Deref for EventOperations {
 
 impl EventOperations {
     pub fn Read(&self, _task: &Task, dst: BlockSeq) -> Result<()> {
-        let val : u64;
+        let val: u64;
 
         {
             let mut e = self.lock();
 
             if e.val == 0 {
-                return Err(Error::SysError(SysErr::EAGAIN))
+                return Err(Error::SysError(SysErr::EAGAIN));
             }
 
             // Update the value based on the mode the event is operating in.
@@ -106,27 +110,27 @@ impl EventOperations {
         // it is possible that a writer is waiting to write the maximum value
         // to the event.
         let queue = self.lock().wq.clone();
-        queue.Notify(EVENT_OUT);
+        queue.Notify(WRITEABLE_EVENT);
 
-        let ptr = &val as * const _ as u64 as * const u8;
+        let ptr = &val as *const _ as u64 as *const u8;
         let buf = unsafe { slice::from_raw_parts(ptr, 8) };
         dst.CopyOut(buf);
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn Write(&self, _task: &Task, src: BlockSeq) -> Result<()> {
-        let mut val : u64 = 0;
-        let ptr = &mut val as * mut _ as u64 as * mut u8;
+        let mut val: u64 = 0;
+        let ptr = &mut val as *mut _ as u64 as *mut u8;
         let buf = unsafe { slice::from_raw_parts_mut(ptr, 8) };
         src.CopyIn(buf);
 
-        return self.Signal(val)
+        return self.Signal(val);
     }
 
     pub fn Signal(&self, val: u64) -> Result<()> {
         if val == core::u64::MAX {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         {
@@ -135,16 +139,16 @@ impl EventOperations {
             // We only allow writes that won't cause the value to go over the max
             // uint64 minus 1.
             if val > core::u64::MAX - 1 - e.val {
-                return Err(Error::SysError(SysErr::EAGAIN))
+                return Err(Error::SysError(SysErr::EAGAIN));
             }
 
             e.val += val;
         }
 
         let queue = self.lock().wq.clone();
-        queue.Notify(EVENT_IN);
+        queue.Notify(READABLE_EVENT);
 
-        return Ok(())
+        return Ok(());
     }
 }
 
@@ -155,14 +159,14 @@ impl Waitable for EventOperations {
 
         let mut ready = 0;
         if e.val > 0 {
-            ready |= EVENT_IN;
+            ready |= READABLE_EVENT;
         }
 
         if e.val < core::u64::MAX - 1 {
-            ready |= EVENT_OUT;
+            ready |= WRITEABLE_EVENT;
         }
 
-        return mask & ready
+        return mask & ready;
     }
 
     fn EventRegister(&self, task: &Task, e: &WaitEntry, mask: EventMask) {
@@ -180,61 +184,95 @@ impl SpliceOperations for EventOperations {}
 
 impl FileOperations for EventOperations {
     fn as_any(&self) -> &Any {
-        return self
+        return self;
     }
 
     fn FopsType(&self) -> FileOpsType {
-        return FileOpsType::EventOperations
+        return FileOpsType::EventOperations;
     }
 
     fn Seekable(&self) -> bool {
         return false;
     }
 
-    fn Seek(&self, _task: &Task, _f: &File, _whence: i32, _current: i64, _offset: i64) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ESPIPE))
+    fn Seek(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _whence: i32,
+        _current: i64,
+        _offset: i64,
+    ) -> Result<i64> {
+        return Err(Error::SysError(SysErr::ESPIPE));
     }
 
-    fn ReadDir(&self, _task: &Task, _f: &File, _offset: i64, _serializer: &mut DentrySerializer) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ENOTDIR))
+    fn ReadDir(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _offset: i64,
+        _serializer: &mut DentrySerializer,
+    ) -> Result<i64> {
+        return Err(Error::SysError(SysErr::ENOTDIR));
     }
 
-    fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
+    fn ReadAt(
+        &self,
+        task: &Task,
+        _f: &File,
+        dsts: &mut [IoVec],
+        _offset: i64,
+        _blocking: bool,
+    ) -> Result<i64> {
         let size = IoVec::NumBytes(dsts);
         if size < 8 {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         let buf = DataBuff::New(size);
         self.Read(task, buf.BlockSeq())?;
-        task.CopyDataOutToIovs(&buf.buf, dsts)?;
-        return Ok(8)
+        task.CopyDataOutToIovs(&buf.buf, dsts, false)?;
+        return Ok(8);
     }
 
-    fn WriteAt(&self, task: &Task, _f: &File, srcs: &[IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
+    fn WriteAt(
+        &self,
+        task: &Task,
+        _f: &File,
+        srcs: &[IoVec],
+        _offset: i64,
+        _blocking: bool,
+    ) -> Result<i64> {
         let size = IoVec::NumBytes(srcs);
         if size < 8 {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         let mut buf = DataBuff::New(size);
-        task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
+        let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;
 
-        self.Write(task, buf.BlockSeq())?;
-        return Ok(8)
+        self.Write(task, buf.BlockSeqWithLen(len))?;
+        return Ok(8);
     }
 
     fn Append(&self, task: &Task, f: &File, srcs: &[IoVec]) -> Result<(i64, i64)> {
         let n = self.WriteAt(task, f, srcs, 0, false)?;
-        return Ok((n, 0))
+        return Ok((n, 0));
     }
 
-    fn Fsync(&self, _task: &Task, _f: &File, _start: i64, _end: i64, _syncType: SyncType) -> Result<()> {
-        return Err(Error::SysError(SysErr::EINVAL))
+    fn Fsync(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _start: i64,
+        _end: i64,
+        _syncType: SyncType,
+    ) -> Result<()> {
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     fn Flush(&self, _task: &Task, _f: &File) -> Result<()> {
-        return Ok(())
+        return Ok(());
     }
 
     fn UnstableAttr(&self, task: &Task, f: &File) -> Result<UnstableAttr> {
@@ -243,15 +281,21 @@ impl FileOperations for EventOperations {
     }
 
     fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<()> {
-        return Err(Error::SysError(SysErr::ENOTTY))
+        return Err(Error::SysError(SysErr::ENOTTY));
     }
 
-    fn IterateDir(&self, _task: &Task, _d: &Dirent, _dirCtx: &mut DirCtx, _offset: i32) -> (i32, Result<i64>) {
-        return (0, Err(Error::SysError(SysErr::ENOTDIR)))
+    fn IterateDir(
+        &self,
+        _task: &Task,
+        _d: &Dirent,
+        _dirCtx: &mut DirCtx,
+        _offset: i32,
+    ) -> (i32, Result<i64>) {
+        return (0, Err(Error::SysError(SysErr::ENOTDIR)));
     }
 
     fn Mappable(&self) -> Result<HostInodeOp> {
-        return Err(Error::SysError(SysErr::ENODEV))
+        return Err(Error::SysError(SysErr::ENODEV));
     }
 }
 

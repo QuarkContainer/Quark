@@ -4,30 +4,30 @@
 //! For more detailed documentation, see manpage.
 
 #![allow(
-non_camel_case_types,
-non_upper_case_globals,
-dead_code,
-non_snake_case
+    non_camel_case_types,
+    non_upper_case_globals,
+    dead_code,
+    non_snake_case
 )]
 
 #[macro_use]
 pub mod util;
 pub mod cqueue;
 pub mod opcode;
+pub mod porting;
 mod register;
 pub mod squeue;
 pub mod submit;
-pub mod porting;
 pub mod sys;
 
-use super::mutex::*;
 pub use self::cqueue::CompletionQueue;
+use self::porting::*;
 pub use self::register::Probe;
 pub use self::squeue::SubmissionQueue;
 pub use self::submit::Submitter;
 use self::util::{Fd, Mmap};
-use self::porting::*;
 use super::common::*;
+use super::mutex::*;
 
 use core::sync::atomic::AtomicU64;
 
@@ -270,5 +270,3 @@ pub fn io_uring_register(
 ) -> Result<i32> {
     return Ok(0);
 }
-
-

@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::mutex::*;
 use alloc::sync::Arc;
 use alloc::sync::Weak;
-use crate::qlib::mutex::*;
-use core::ops::Deref;
 use core::cell::*;
+use core::ops::Deref;
 
-use super::super::futex::*;
 use super::super::epoll::epoll_entry::*;
 use super::super::fasync::*;
+use super::super::futex::*;
 use super::waiter::*;
 use super::*;
 
@@ -34,7 +34,7 @@ pub enum WaitContext {
 
 impl Default for WaitContext {
     fn default() -> Self {
-        return Self::None
+        return Self::None;
     }
 }
 
@@ -58,7 +58,7 @@ impl WaitContext {
         match self {
             WaitContext::EpollContext(p) => {
                 p.CallBack();
-            },
+            }
             WaitContext::ThreadContext(t) => {
                 let context = t.borrow_mut();
                 context.waiter.Trigger(context.waiterID);
@@ -98,7 +98,7 @@ impl WaitEntryWeak {
             Some(c) => c,
         };
 
-        return Some(WaitEntry(c))
+        return Some(WaitEntry(c));
     }
 }
 
@@ -115,7 +115,7 @@ impl Deref for WaitEntry {
 
 impl PartialEq for WaitEntry {
     fn eq(&self, other: &Self) -> bool {
-        return Arc::ptr_eq(&self.0, &other.0)
+        return Arc::ptr_eq(&self.0, &other.0);
     }
 }
 
@@ -135,7 +135,7 @@ impl WaitEntry {
             context: WaitContext::None,
         };
 
-        return Self(Arc::new(QMutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)));
     }
 
     pub fn Timeout(&self) {
@@ -157,7 +157,7 @@ impl WaitEntry {
             context: WaitContext::ThreadContext(RefCell::new(context)),
         };
 
-        return Self(Arc::new(QMutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)));
     }
 
     pub fn ID(&self) -> WaiterID {
@@ -180,7 +180,7 @@ impl WaitEntry {
         let e = self.lock();
         if mask & e.mask != 0 {
             e.context.CallBack();
-            return true
+            return true;
         }
 
         return false;

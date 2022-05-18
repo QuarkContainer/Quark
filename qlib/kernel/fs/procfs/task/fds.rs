@@ -12,39 +12,39 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
-use alloc::string::String;
-use alloc::string::ToString;
 use crate::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::sync::Arc;
 
 use super::super::super::super::super::auth::*;
 use super::super::super::super::super::common::*;
-use super::super::super::super::super::linux_def::*;
 use super::super::super::super::super::device::*;
+use super::super::super::super::super::linux_def::*;
 use super::super::super::super::kernel::fd_table::*;
 use super::super::super::super::task::*;
-use super::super::super::ramfs::dir::*;
-use super::super::super::ramfs::symlink::*;
-use super::super::super::fsutil::file::dynamic_dir_file_operations::*;
+use super::super::super::super::threadmgr::thread::*;
 use super::super::super::attr::*;
+use super::super::super::dentry::*;
+use super::super::super::dirent::*;
 use super::super::super::file::*;
 use super::super::super::flags::*;
-use super::super::super::dirent::*;
-use super::super::super::dentry::*;
-use super::super::super::mount::*;
+use super::super::super::fsutil::file::dynamic_dir_file_operations::*;
 use super::super::super::inode::*;
-use super::super::super::super::threadmgr::thread::*;
-use super::super::symlink_proc::*;
-use super::super::inode::*;
+use super::super::super::mount::*;
+use super::super::super::ramfs::dir::*;
+use super::super::super::ramfs::symlink::*;
 use super::super::dir_proc::*;
+use super::super::inode::*;
+use super::super::symlink_proc::*;
 
 pub fn NewFd(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>, f: &File) -> Inode {
     let node = FdNode {
         file: f.Downgrade(),
     };
 
-    return SymlinkNode::New(task, msrc, node, Some(thread.clone()))
+    return SymlinkNode::New(task, msrc, node, Some(thread.clone()));
 }
 
 pub struct FdNode {
@@ -53,15 +53,14 @@ pub struct FdNode {
 
 impl ReadLinkNode for FdNode {
     fn ReadLink(&self, _link: &Symlink, task: &Task, _dir: &Inode) -> Result<String> {
-        let kernel = task.Thread().lock().k.clone();
-        let root = kernel.RootDir();
+        let root = task.Root();
         let file = match self.file.Upgrade() {
             None => return Err(Error::SysError(SysErr::ENOENT)),
             Some(f) => f,
         };
         let dirent = file.Dirent.clone();
         let (name, _) = dirent.FullName(&root);
-        return Ok(name)
+        return Ok(name);
     }
 
     fn GetLink(&self, _link: &Symlink, _task: &Task, _dir: &Inode) -> Result<Dirent> {
@@ -70,20 +69,31 @@ impl ReadLinkNode for FdNode {
             Some(f) => f,
         };
         let dirent = file.Dirent.clone();
-        return Ok(dirent)
+        return Ok(dirent);
     }
 
-    fn GetFile(&self, _link: &Symlink, _task: &Task, _dir: &Inode, _dirent: &Dirent, _flags: FileFlags) -> Result<File> {
+    fn GetFile(
+        &self,
+        _link: &Symlink,
+        _task: &Task,
+        _dir: &Inode,
+        _dirent: &Dirent,
+        _flags: FileFlags,
+    ) -> Result<File> {
         let file = match self.file.Upgrade() {
             None => return Err(Error::SysError(SysErr::ENOENT)),
             Some(f) => f,
         };
-        return Ok(file)
+        return Ok(file);
     }
 }
 
-fn WalkDescriptors(task: &Task, p: &str, toInode: &mut FnMut(&File, &FDFlags) -> Inode) -> Result<Inode> {
-    let n : i32 = match p.parse() {
+fn WalkDescriptors(
+    task: &Task,
+    p: &str,
+    toInode: &mut FnMut(&File, &FDFlags) -> Inode,
+) -> Result<Inode> {
+    let n: i32 = match p.parse() {
         Err(_) => return Err(Error::SysError(SysErr::ENOENT)),
         Ok(n) => n,
     };
@@ -93,11 +103,11 @@ fn WalkDescriptors(task: &Task, p: &str, toInode: &mut FnMut(&File, &FDFlags) ->
         Ok(f) => f,
     };
 
-    return Ok(toInode(&file, &fdFlags))
+    return Ok(toInode(&file, &fdFlags));
 }
 
 fn WalkDescriptors2(task: &Task, p: &str, msrc: &Arc<QMutex<MountSource>>) -> Result<Inode> {
-    let n : i32 = match p.parse() {
+    let n: i32 = match p.parse() {
         Err(_) => return Err(Error::SysError(SysErr::ENOENT)),
         Ok(n) => n,
     };
@@ -109,7 +119,11 @@ fn WalkDescriptors2(task: &Task, p: &str, msrc: &Arc<QMutex<MountSource>>) -> Re
 
     let flags = file.flags.lock().0.ToLinux() | fdFlags.ToLinuxFileFlags();
     let content = format!("flags:\t{:o}\n", flags);
-    return Ok(NewStaticProcInode(task, msrc, &Arc::new(content.as_bytes().to_vec())))
+    return Ok(NewStaticProcInode(
+        task,
+        msrc,
+        &Arc::new(content.as_bytes().to_vec()),
+    ));
 }
 
 fn ReadDescriptors(task: &Task, c: &mut DirCtx, offset: i64, typ: InodeType) -> Result<i64> {
@@ -122,7 +136,7 @@ fn ReadDescriptors(task: &Task, c: &mut DirCtx, offset: i64, typ: InodeType) -> 
     };
 
     if idx == fdInts.len() {
-        return Ok(offset)
+        return Ok(offset);
     }
 
     fdInts = &fdInts[idx..];
@@ -134,16 +148,16 @@ fn ReadDescriptors(task: &Task, c: &mut DirCtx, offset: i64, typ: InodeType) -> 
         match c.DirEmit(task, &name, &DentAttr::GenericDentAttr(typ, &PROC_DEVICE)) {
             Err(e) => {
                 if i > 0 {
-                    return Ok(fd as i64)
+                    return Ok(fd as i64);
                 }
-                return Err(e)
+                return Err(e);
             }
             Ok(()) => (),
         }
         ret = fd;
     }
 
-    return Ok((ret + 1) as i64)
+    return Ok((ret + 1) as i64);
 }
 
 pub struct FdDirFile {
@@ -152,7 +166,13 @@ pub struct FdDirFile {
 }
 
 impl DynamicDirFileNode for FdDirFile {
-    fn ReadDir(&self, task: &Task, _f: &File, offset: i64, serializer: &mut DentrySerializer) -> Result<i64> {
+    fn ReadDir(
+        &self,
+        task: &Task,
+        _f: &File,
+        offset: i64,
+        serializer: &mut DentrySerializer,
+    ) -> Result<i64> {
         let mut dirCtx = DirCtx {
             Serializer: serializer,
             DirCursor: "".to_string(),
@@ -174,9 +194,7 @@ pub fn NewFdDirFile(IsInfoFile: bool, thread: &Thread) -> DynamicDirFileOperatio
         thread: thread.clone(),
     };
 
-    return DynamicDirFileOperations {
-        node: fdDirFile
-    }
+    return DynamicDirFileOperations { node: fdDirFile };
 }
 
 pub struct FdDirNode {
@@ -191,7 +209,7 @@ impl DirDataNode for FdDirNode {
     // setuid. See fs/proc/fd.c:proc_fd_permission.
     fn Check(&self, _d: &Dir, task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {
         if ContextCanAccessFile(task, inode, reqPerms)? {
-            return Ok(true)
+            return Ok(true);
         }
 
         let thread = match &task.thread {
@@ -210,16 +228,23 @@ impl DirDataNode for FdDirNode {
     fn Lookup(&self, _d: &Dir, task: &Task, dir: &Inode, name: &str) -> Result<Dirent> {
         let msrc = dir.lock().MountSource.clone();
         let inode = WalkDescriptors(task, name, &mut |file: &File, _fdFlags: &FDFlags| {
-            return NewFd(task, &self.thread, &msrc, file)
+            return NewFd(task, &self.thread, &msrc, file);
         })?;
 
-        return Ok(Dirent::New(&inode, name))
+        return Ok(Dirent::New(&inode, name));
     }
 
-    fn GetFile(&self, _d: &Dir, _task: &Task, _dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File> {
+    fn GetFile(
+        &self,
+        _d: &Dir,
+        _task: &Task,
+        _dir: &Inode,
+        dirent: &Dirent,
+        flags: FileFlags,
+    ) -> Result<File> {
         let fops = NewFdDirFile(true, &self.thread);
 
-        return Ok(File::New(dirent, &flags, fops))
+        return Ok(File::New(dirent, &flags, fops));
     }
 }
 
@@ -233,40 +258,66 @@ impl DirDataNode for FdInfoDirNode {
         let inode = WalkDescriptors(task, name, &mut |file: &File, fdFlags: &FDFlags| {
             let flags = file.flags.lock().0.ToLinux() | fdFlags.ToLinuxFileFlags();
             let content = format!("flags:\t0{:o}\n", flags);
-            return NewStaticProcInode(task, &msrc, &Arc::new(content.as_bytes().to_vec()))
-
+            return NewStaticProcInode(task, &msrc, &Arc::new(content.as_bytes().to_vec()));
         })?;
 
-        return Ok(Dirent::New(&inode, name))
+        return Ok(Dirent::New(&inode, name));
     }
 
-    fn GetFile(&self, _d: &Dir, _task: &Task, _dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File> {
+    fn GetFile(
+        &self,
+        _d: &Dir,
+        _task: &Task,
+        _dir: &Inode,
+        dirent: &Dirent,
+        flags: FileFlags,
+    ) -> Result<File> {
         let fops = NewFdDirFile(true, &self.thread);
 
-        return Ok(File::New(dirent, &flags, fops))
+        return Ok(File::New(dirent, &flags, fops));
     }
 }
 
 pub fn NewFdDir(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let contents = BTreeMap::new();
     let f = DirNode {
-        dir: Dir::New(task, contents, &ROOT_OWNER, &FilePermissions::FromMode(FileMode(0o0555))),
+        dir: Dir::New(
+            task,
+            contents,
+            &ROOT_OWNER,
+            &FilePermissions::FromMode(FileMode(0o0555)),
+        ),
         data: FdDirNode {
             thread: thread.clone(),
-        }
+        },
     };
 
-    return NewProcInode(&Arc::new(f), msrc, InodeType::SpecialDirectory, Some(thread.clone()))
+    return NewProcInode(
+        &Arc::new(f),
+        msrc,
+        InodeType::SpecialDirectory,
+        Some(thread.clone()),
+    );
 }
 
 pub fn NewFdInfoDir(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let contents = BTreeMap::new();
     let f = DirNode {
-        dir: Dir::New(task, contents, &ROOT_OWNER, &FilePermissions::FromMode(FileMode(0o0555))),
+        dir: Dir::New(
+            task,
+            contents,
+            &ROOT_OWNER,
+            &FilePermissions::FromMode(FileMode(0o0555)),
+        ),
         data: FdInfoDirNode {
             thread: thread.clone(),
-        }
+        },
     };
 
-    return NewProcInode(&Arc::new(f), msrc, InodeType::SpecialDirectory, Some(thread.clone()))
+    return NewProcInode(
+        &Arc::new(f),
+        msrc,
+        InodeType::SpecialDirectory,
+        Some(thread.clone()),
+    );
 }

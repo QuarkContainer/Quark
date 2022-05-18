@@ -13,31 +13,31 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
+use alloc::sync::Arc;
 use core::any::Any;
 use core::slice;
-use alloc::sync::Arc;
 
 use super::super::super::common::*;
-use super::super::super::linux_def::*;
 use super::super::super::linux::time::*;
-use super::super::task::*;
+use super::super::super::linux_def::*;
 use super::super::kernel::time::*;
+use super::super::kernel::timer::timer::*;
 use super::super::kernel::timer::*;
 use super::super::kernel::waiter::*;
-use super::super::kernel::timer::timer::*;
+use super::super::task::*;
 
-use super::attr::*;
 use super::anon::*;
+use super::attr::*;
+use super::dentry::*;
+use super::dirent::*;
 use super::file::*;
 use super::flags::*;
-use super::dirent::*;
-use super::dentry::*;
 use super::host::hostinodeop::*;
 
 // Constants for eventfd2(2).
-pub const EFD_SEMAPHORE : i32 = 0x1;
-pub const EFD_CLOEXEC   : i32 = Flags::O_CLOEXEC;
-pub const EFD_NONBLOCK  : i32 = Flags::O_NONBLOCK;
+pub const EFD_SEMAPHORE: i32 = 0x1;
+pub const EFD_CLOEXEC: i32 = Flags::O_CLOEXEC;
+pub const EFD_NONBLOCK: i32 = Flags::O_NONBLOCK;
 
 pub struct TimerOperationsInternal {
     // Queue is used to notify interested parties when the event object
@@ -55,7 +55,7 @@ impl TimerOperationsInternal {
         return Self {
             queue: Queue::default(),
             val: QMutex::new(0),
-        }
+        };
     }
 }
 
@@ -66,7 +66,7 @@ impl TimerListenerTrait for TimerOperationsInternal {
             *self.val.lock() += exp;
         };
 
-        self.queue.Notify(EVENT_IN);
+        self.queue.Notify(READABLE_EVENT);
     }
 
     // Destroy implements ktime.TimerListener.Destroy.
@@ -83,7 +83,7 @@ pub fn NewTimerfd(task: &Task, clockId: i32) -> Result<File> {
     let clock = match clockId {
         CLOCK_MONOTONIC => MONOTONIC_CLOCK.clone(),
         CLOCK_REALTIME => REALTIME_CLOCK.clone(),
-        _ => return Err(Error::SysError(SysErr::EINVAL))
+        _ => return Err(Error::SysError(SysErr::EINVAL)),
     };
 
     let timer = Timer::New(&clock, TimerListener::TimerOperations(internal.clone()));
@@ -96,11 +96,15 @@ pub fn NewTimerfd(task: &Task, clockId: i32) -> Result<File> {
     // Timerfds reject writes, but the Write flag must be set in order to
     // ensure that our Writev/Pwritev methods actually get called to return
     // the correct errors.
-    return Ok(File::New(&dirent, &FileFlags{
-        Read: true,
-        Write: true,
-        ..Default::default()
-    }, tops));
+    return Ok(File::New(
+        &dirent,
+        &FileFlags {
+            Read: true,
+            Write: true,
+            ..Default::default()
+        },
+        tops,
+    ));
 }
 
 pub struct TimerOperations {
@@ -153,10 +157,10 @@ impl Waitable for TimerOperations {
         let mut ready = 0;
         let val = *self.ops.val.lock();
         if val != 0 {
-            ready |= EVENT_IN;
+            ready |= READABLE_EVENT;
         }
 
-        return mask & ready
+        return mask & ready;
     }
 
     // EventRegister implements waiter.Waitable.EventRegister.
@@ -176,57 +180,91 @@ impl SpliceOperations for TimerOperations {}
 
 impl FileOperations for TimerOperations {
     fn as_any(&self) -> &Any {
-        return self
+        return self;
     }
 
     fn FopsType(&self) -> FileOpsType {
-        return FileOpsType::TimerOperations
+        return FileOpsType::TimerOperations;
     }
 
     fn Seekable(&self) -> bool {
         return false;
     }
 
-    fn Seek(&self, _task: &Task, _f: &File, _whence: i32, _current: i64, _offset: i64) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ESPIPE))
+    fn Seek(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _whence: i32,
+        _current: i64,
+        _offset: i64,
+    ) -> Result<i64> {
+        return Err(Error::SysError(SysErr::ESPIPE));
     }
 
-    fn ReadDir(&self, _task: &Task, _f: &File, _offset: i64, _serializer: &mut DentrySerializer) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ENOTDIR))
+    fn ReadDir(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _offset: i64,
+        _serializer: &mut DentrySerializer,
+    ) -> Result<i64> {
+        return Err(Error::SysError(SysErr::ENOTDIR));
     }
 
-    fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
+    fn ReadAt(
+        &self,
+        task: &Task,
+        _f: &File,
+        dsts: &mut [IoVec],
+        _offset: i64,
+        _blocking: bool,
+    ) -> Result<i64> {
         if IoVec::NumBytes(dsts) < 8 {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         let val = self.SwapVal(0);
 
         if val > 0 {
-            let ptr = &val as * const _ as u64 as * const u8;
+            let ptr = &val as *const _ as u64 as *const u8;
             let buf = unsafe { slice::from_raw_parts(ptr, 8) };
-            task.CopyDataOutToIovs(buf, dsts)?;
+            task.CopyDataOutToIovs(buf, dsts, false)?;
 
-            return Ok(8)
+            return Ok(8);
         }
 
-        return Err(Error::SysError(SysErr::EAGAIN))
+        return Err(Error::SysError(SysErr::EAGAIN));
     }
 
-    fn WriteAt(&self, _task: &Task, _f: &File, _srcs: &[IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
-        return Err(Error::SysError(SysErr::EINVAL))
+    fn WriteAt(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _srcs: &[IoVec],
+        _offset: i64,
+        _blocking: bool,
+    ) -> Result<i64> {
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     fn Append(&self, _task: &Task, _f: &File, _srcs: &[IoVec]) -> Result<(i64, i64)> {
-        return Err(Error::SysError(SysErr::ESPIPE))
+        return Err(Error::SysError(SysErr::ESPIPE));
     }
 
-    fn Fsync(&self, _task: &Task, _f: &File, _start: i64, _end: i64, _syncType: SyncType) -> Result<()> {
-        return Ok(())
+    fn Fsync(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _start: i64,
+        _end: i64,
+        _syncType: SyncType,
+    ) -> Result<()> {
+        return Ok(());
     }
 
     fn Flush(&self, _task: &Task, _f: &File) -> Result<()> {
-        return Ok(())
+        return Ok(());
     }
 
     fn UnstableAttr(&self, task: &Task, f: &File) -> Result<UnstableAttr> {
@@ -235,15 +273,21 @@ impl FileOperations for TimerOperations {
     }
 
     fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<()> {
-        return Err(Error::SysError(SysErr::ENOTTY))
+        return Err(Error::SysError(SysErr::ENOTTY));
     }
 
-    fn IterateDir(&self, _task: &Task,_d: &Dirent, _dirCtx: &mut DirCtx, _offset: i32) -> (i32, Result<i64>) {
-        return (0, Err(Error::SysError(SysErr::ENOTDIR)))
+    fn IterateDir(
+        &self,
+        _task: &Task,
+        _d: &Dirent,
+        _dirCtx: &mut DirCtx,
+        _offset: i32,
+    ) -> (i32, Result<i64>) {
+        return (0, Err(Error::SysError(SysErr::ENOTDIR)));
     }
 
     fn Mappable(&self) -> Result<HostInodeOp> {
-        return Err(Error::SysError(SysErr::ENODEV))
+        return Err(Error::SysError(SysErr::ENODEV));
     }
 }
 

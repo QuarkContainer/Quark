@@ -107,14 +107,14 @@ impl Timespec {
         return Self {
             tv_sec: sec,
             tv_nsec: nsec,
-        }
+        };
     }
 
     pub fn ToNs(&self) -> Result<i64> {
         if self.tv_sec < 0 || self.tv_nsec < 0 {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
-        return Ok(self.tv_sec * Self::E9 + self.tv_nsec)
+        return Ok(self.tv_sec * Self::E9 + self.tv_nsec);
     }
 
     pub fn ToDuration(&self) -> Result<i64> {
@@ -127,11 +127,11 @@ impl Timespec {
 
     pub fn IsValid(&self) -> bool {
         //return self.tv_nsec == Utime::UTIME_OMIT || self.tv_nsec == Utime::UTIME_NOW || self.tv_nsec < Self::E9;
-        return !(self.tv_sec < 0 || self.tv_nsec <0 || self.tv_nsec >= Self::E9)
+        return !(self.tv_sec < 0 || self.tv_nsec < 0 || self.tv_nsec >= Self::E9);
     }
 }
 
-pub const SIZE_OF_TIMEVAL : usize = 16;
+pub const SIZE_OF_TIMEVAL: usize = 16;
 
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]
@@ -158,16 +158,16 @@ impl Timeval {
         return Self {
             Sec: sec,
             Usec: usec,
-        }
+        };
     }
 
     // ToDuration returns the safe nanosecond representation as a time.Duration.
     pub fn ToDuration(&self) -> Duration {
         if self.Sec > MAX_SEC_IN_DURATION {
-            return core::i64::MAX
+            return core::i64::MAX;
         }
 
-        return self.Sec * Self::E9 + self.Usec * Self::E3
+        return self.Sec * Self::E9 + self.Usec * Self::E3;
     }
 }
 
@@ -196,7 +196,7 @@ pub type ClockT = i64;
 
 // ClockTFromDuration converts time.Duration to clock_t.
 pub fn ClockTFromDuration(d: Duration) -> ClockT {
-    return d / CLOCK_TICK
+    return d / CLOCK_TICK;
 }
 
 // Tms represents struct tms, used by times(2).

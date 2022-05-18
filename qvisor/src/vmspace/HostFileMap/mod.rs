@@ -18,16 +18,16 @@ pub mod file_range_mgr;
 pub mod socket_info;
 //pub mod rdma;
 
+use libc::*;
 use spin::Mutex;
 use std::collections::BTreeMap;
-use libc::*;
 
 use self::fdinfo::*;
 use super::super::qlib::common::*;
-use super::super::qlib::SysCallID;
 use super::super::qlib::linux_def::*;
-use super::syscall::*;
+use super::super::qlib::SysCallID;
 use super::super::*;
+use super::syscall::*;
 
 const START_FD: i32 = 0; //stdin:0, stdout:1, stderr:2
 const MAX_FD: i32 = 65535; //skip stdin, stdout, stderr
@@ -49,14 +49,12 @@ impl IOMgr {
     }
 
     pub fn Init() -> Result<Self> {
-        let eventfd = unsafe {
-            eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)
-        };
+        let eventfd = unsafe { eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK) };
 
         if eventfd == -1 {
             let errno = errno::errno().0;
             error!("EpollMgr create pipe fail");
-            return Err(Error::SysError(errno))
+            return Err(Error::SysError(errno));
         }
 
         //info!("EpollMgr eventfd = {}", eventfd);
@@ -77,24 +75,35 @@ impl IOMgr {
 
         let nr = SysCallID::sys_read as usize;
         let ret = unsafe {
-            syscall3(nr, self.eventfd as usize, &mut data as *mut _ as usize, 8 as usize) as i32
+            syscall3(
+                nr,
+                self.eventfd as usize,
+                &mut data as *mut _ as usize,
+                8 as usize,
+            ) as i32
         };
 
         if ret > 0 || -ret == EAGAIN || -ret == EWOULDBLOCK {
-            return Ok(())
+            return Ok(());
         } else {
-            return Err(Error::SysError(ret))
+            return Err(Error::SysError(ret));
         }
     }
 
     //return guest fd
     pub fn AddFile(&self, fd: i32) -> i32 {
-        self.fdTbl.lock().AddFile(fd).expect("hostfdMap: guest fd alloc fail");
+        self.fdTbl
+            .lock()
+            .AddFile(fd)
+            .expect("hostfdMap: guest fd alloc fail");
         return fd;
     }
 
     pub fn AddSocket(&self, fd: i32) -> i32 {
-        self.fdTbl.lock().AddSocket(fd).expect("hostfdMap: guest fd alloc fail");
+        self.fdTbl
+            .lock()
+            .AddSocket(fd)
+            .expect("hostfdMap: guest fd alloc fail");
         return fd;
     }
 
@@ -111,7 +120,7 @@ impl IOMgr {
 
     pub fn GetFdByHost(&self, fd: i32) -> Option<i32> {
         if self.fdTbl.lock().Contains(fd) {
-            return Some(fd)
+            return Some(fd);
         }
 
         return None;
@@ -119,9 +128,7 @@ impl IOMgr {
 
     pub fn GetByHost(&self, fd: i32) -> Option<FdInfo> {
         match self.fdTbl.lock().Get(fd) {
-            None => {
-                None
-            }
+            None => None,
             Some(fdInfo) => Some(fdInfo.clone()),
         }
     }
@@ -197,21 +204,21 @@ impl FdTbl {
         res.map.insert(1, FdInfo::NewFile(1));
         res.map.insert(2, FdInfo::NewFile(2));
 
-        return res
+        return res;
     }
 
     pub fn AddFile(&mut self, osfd: i32) -> Result<FdInfo> {
         let fdInfo = FdInfo::NewFile(osfd);
 
         self.map.insert(osfd, fdInfo.clone());
-        return Ok(fdInfo)
+        return Ok(fdInfo);
     }
 
     pub fn AddSocket(&mut self, osfd: i32) -> Result<FdInfo> {
         let fdInfo = FdInfo::NewSocket(osfd);
 
         self.map.insert(osfd, fdInfo.clone());
-        return Ok(fdInfo)
+        return Ok(fdInfo);
     }
 
     /*pub fn AddRDMAContext(&mut self, osfd: i32) -> Result<FdInfo> {
@@ -234,6 +241,6 @@ impl FdTbl {
     }
 
     pub fn Contains(&self, fd: i32) -> bool {
-        return self.map.contains_key(&fd)
+        return self.map.contains_key(&fd);
     }
 }

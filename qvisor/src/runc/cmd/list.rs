@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use clap::{App, AppSettings, SubCommand, ArgMatches, Arg};
 use alloc::string::String;
 use chrono::{DateTime, Local};
+use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use std::io::Write;
 use tabwriter::TabWriter;
 
@@ -24,7 +24,7 @@ use super::super::container::container::*;
 use super::command::*;
 
 #[derive(Default, Debug)]
-pub struct ListCmd  {
+pub struct ListCmd {
     pub format: String,
     pub quiet: bool,
 }
@@ -32,9 +32,12 @@ pub struct ListCmd  {
 impl ListCmd {
     pub fn Init(cmd_matches: &ArgMatches) -> Result<Self> {
         return Ok(Self {
-            format: cmd_matches.value_of("format").unwrap_or_default().to_string(),
+            format: cmd_matches
+                .value_of("format")
+                .unwrap_or_default()
+                .to_string(),
             quiet: cmd_matches.is_present("quiet"),
-        })
+        });
     }
 
     pub fn SubCommand<'a, 'b>(common: &CommonArgs<'a, 'b>) -> App<'a, 'b> {
@@ -58,7 +61,7 @@ impl ListCmd {
             for id in ids {
                 info!("{}", id);
             }
-            return Ok(())
+            return Ok(());
         }
 
         let mut containers = Vec::new();
@@ -75,14 +78,17 @@ impl ListCmd {
 
             for c in containers {
                 let datetime: DateTime<Local> = c.CreateTime().into();
-                write!(tw, "{}\t{}\t{:?}\t{}\t{:?}\t{}\n",
-                         &c.ID,
-                         c.SandboxPid(),
-                         &c.Status,
-                         &c.BundleDir,
-                         &datetime,
-                         &c.Owner,
-                ).unwrap();
+                write!(
+                    tw,
+                    "{}\t{}\t{:?}\t{}\t{:?}\t{}\n",
+                    &c.ID,
+                    c.SandboxPid(),
+                    &c.Status,
+                    &c.BundleDir,
+                    &datetime,
+                    &c.Owner,
+                )
+                .unwrap();
             }
 
             tw.flush().unwrap();
@@ -100,6 +106,6 @@ impl ListCmd {
             println!("unknown format {}", self.format);
         }
 
-        return Ok(())
+        return Ok(());
     }
 }

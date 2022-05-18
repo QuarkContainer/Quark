@@ -12,23 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::string::ToString;
+use alloc::sync::Arc;
 
-use super::super::super::super::linux_def::*;
 use super::super::super::super::auth::*;
 use super::super::super::super::device::*;
+use super::super::super::super::linux_def::*;
 use super::super::super::task::*;
 use super::super::attr::*;
-use super::super::mount::*;
 use super::super::inode::*;
+use super::super::mount::*;
 use super::super::ramfs::dir::*;
 use super::devices::*;
 
-pub fn NewFile<T: InodeOperations + 'static>(iops: &Arc<T>, msrc: &Arc<QMutex<MountSource>>) -> Inode {
+pub fn NewFile<T: InodeOperations + 'static>(
+    iops: &Arc<T>,
+    msrc: &Arc<QMutex<MountSource>>,
+) -> Inode {
     let deviceId = SYS_DEVICE.lock().id.DeviceID();
     let inodeId = SYS_DEVICE.lock().NextIno();
 
@@ -44,8 +47,17 @@ pub fn NewFile<T: InodeOperations + 'static>(iops: &Arc<T>, msrc: &Arc<QMutex<Mo
     return Inode::New(iops, msrc, &sattr);
 }
 
-pub fn NewDir(task: &Task, msrc: &Arc<QMutex<MountSource>>, contents: BTreeMap<String, Inode>) -> Inode {
-    let d = Dir::New(task, contents, &ROOT_OWNER, &FilePermissions::FromMode(FileMode(0o0555)));
+pub fn NewDir(
+    task: &Task,
+    msrc: &Arc<QMutex<MountSource>>,
+    contents: BTreeMap<String, Inode>,
+) -> Inode {
+    let d = Dir::New(
+        task,
+        contents,
+        &ROOT_OWNER,
+        &FilePermissions::FromMode(FileMode(0o0555)),
+    );
 
     let deviceId = SYS_DEVICE.lock().id.DeviceID();
     let inodeId = SYS_DEVICE.lock().NextIno();
@@ -68,7 +80,10 @@ pub fn NewSys(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     content.insert("bus".to_string(), NewDir(task, msrc, BTreeMap::new()));
 
     let mut classContent = BTreeMap::new();
-    classContent.insert("power_supply".to_string(), NewDir(task, msrc, BTreeMap::new()));
+    classContent.insert(
+        "power_supply".to_string(),
+        NewDir(task, msrc, BTreeMap::new()),
+    );
     content.insert("class".to_string(), NewDir(task, msrc, classContent));
 
     content.insert("dev".to_string(), NewDir(task, msrc, BTreeMap::new()));
@@ -79,5 +94,5 @@ pub fn NewSys(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     content.insert("module".to_string(), NewDir(task, msrc, BTreeMap::new()));
     content.insert("power".to_string(), NewDir(task, msrc, BTreeMap::new()));
 
-    return NewDir(task, msrc, content)
+    return NewDir(task, msrc, content);
 }

@@ -12,17 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
-use alloc::vec::Vec;
 use crate::qlib::mutex::*;
 use alloc::collections::btree_set::BTreeSet;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::cmp::Ordering;
 use core::ops::Deref;
 
-use super::super::super::mem::areaset::*;
-use super::super::memmgr::mm::*;
 use super::super::super::addr::*;
+use super::super::super::mem::areaset::*;
 use super::super::super::range::*;
+use super::super::memmgr::mm::*;
 use super::super::task::*;
 
 // MappingOfRange represents a mapping of a MappableRange.
@@ -36,13 +36,13 @@ pub struct MappingOfRange {
 impl Ord for MappingOfRange {
     fn cmp(&self, other: &Self) -> Ordering {
         if self.MappingSpace.ID() != other.MappingSpace.ID() {
-            return self.MappingSpace.ID().cmp(&other.MappingSpace.ID())
+            return self.MappingSpace.ID().cmp(&other.MappingSpace.ID());
         } else if self.AddrRange.Start() != other.AddrRange.Start() {
-            return self.AddrRange.Start().cmp(&other.AddrRange.Start())
+            return self.AddrRange.Start().cmp(&other.AddrRange.Start());
         } else if self.AddrRange.End() != other.AddrRange.End() {
-            return self.AddrRange.End().cmp(&other.AddrRange.End())
+            return self.AddrRange.End().cmp(&other.AddrRange.End());
         } else {
-            return self.Writeable.cmp(&other.Writeable)
+            return self.Writeable.cmp(&other.Writeable);
         }
     }
 }
@@ -51,9 +51,9 @@ impl Eq for MappingOfRange {}
 
 impl PartialEq for MappingOfRange {
     fn eq(&self, other: &Self) -> bool {
-        return self.AddrRange.Start() == other.AddrRange.Start() &&
-            self.AddrRange.End() == other.AddrRange.End() &&
-            self.Writeable == other.Writeable;
+        return self.AddrRange.Start() == other.AddrRange.Start()
+            && self.AddrRange.End() == other.AddrRange.End()
+            && self.Writeable == other.Writeable;
     }
 }
 
@@ -64,14 +64,21 @@ impl PartialOrd for MappingOfRange {
 }
 
 impl MappingOfRange {
-    pub fn invalidate(&self, task: &Task, _invalidatePrivate: bool) {
+    pub fn invalidate(&self, _task: &Task, _invalidatePrivate: bool) {
         //self.MappingSpace.Upgrade().ResetFileMapping(task, &self.AddrRange, invalidatePrivate);
         let start = Addr(self.AddrRange.Start()).RoundUp().unwrap().0;
         let end = Addr(self.AddrRange.End()).RoundUp().unwrap().0;
         if start >= end {
-            return
+            return;
         }
-        self.MappingSpace.Upgrade().MUnmap(task, start, end - start).unwrap();
+        self.MappingSpace
+            .Upgrade()
+            .MFree(&Range::New(start, end-start))
+            .unwrap();
+
+        error!("truncate file and unmap filemap, todo: TLBshootdown")
+        //self.TlbShootdown();
+
     }
 }
 
@@ -131,7 +138,7 @@ impl AreaValue for MappingsOfRange {
             }
         }
 
-        return Some(merged)
+        return Some(merged);
     }
 
     fn Split(&self, r: &Range, split: u64) -> (Self, Self) {
@@ -169,7 +176,7 @@ impl AreaValue for MappingsOfRange {
             m2.lock().insert(k2);
         }
 
-        return (m1, m2)
+        return (m1, m2);
     }
 }
 
@@ -180,7 +187,13 @@ impl AreaValue for MappingsOfRange {
 // indicating that ms maps addresses [0x4000, 0x6000) to MappableRange [0x0,
 // 0x2000). Then for subsetRange = [0x1000, 0x2000), subsetMapping returns a
 // MappingOfRange for which AddrRange = [0x5000, 0x6000).
-fn SubsetMapping(wholeRange: &Range, subsetRange: &Range, ms: &MemoryManagerWeak, addr: u64, writeable: bool) -> MappingOfRange {
+fn SubsetMapping(
+    wholeRange: &Range,
+    subsetRange: &Range,
+    ms: &MemoryManagerWeak,
+    addr: u64,
+    writeable: bool,
+) -> MappingOfRange {
     if !wholeRange.IsSupersetOf(&subsetRange) {
         panic!("{:?} is not a superset of {:?}", wholeRange, subsetRange);
     }
@@ -195,7 +208,7 @@ fn SubsetMapping(wholeRange: &Range, subsetRange: &Range, ms: &MemoryManagerWeak
             len: subsetRange.Len(),
         },
         Writeable: writeable,
-    }
+    };
 }
 
 impl AreaSet<MappingsOfRange> {
@@ -203,7 +216,13 @@ impl AreaSet<MappingsOfRange> {
     // previously had no mappings.
     //
     // Preconditions: As for Mappable.AddMapping.
-    pub fn AddMapping(&mut self, ms: &MemoryManager, ar: &Range, offset: u64, writeable: bool) -> Vec<Range> {
+    pub fn AddMapping(
+        &mut self,
+        ms: &MemoryManager,
+        ar: &Range,
+        offset: u64,
+        writeable: bool,
+    ) -> Vec<Range> {
         let mr = Range::New(offset, ar.Len());
         let mut mapped = Vec::new();
 
@@ -212,7 +231,13 @@ impl AreaSet<MappingsOfRange> {
             if seg.Ok() && seg.Range().Start() < mr.End() {
                 seg = self.Isolate(&seg, &mr);
                 let val = seg.Value();
-                val.lock().insert(SubsetMapping(&mr, &seg.Range(), &ms.Downgrade(), ar.Start(), writeable));
+                val.lock().insert(SubsetMapping(
+                    &mr,
+                    &seg.Range(),
+                    &ms.Downgrade(),
+                    ar.Start(),
+                    writeable,
+                ));
                 let (stmp, gtmp) = seg.NextNonEmpty();
                 seg = stmp;
                 gap = gtmp;
@@ -223,7 +248,7 @@ impl AreaSet<MappingsOfRange> {
                 seg = self.Insert(&gap, &gapMR, MappingsOfRange::New());
                 gap = AreaGap::default();
             } else {
-                return mapped
+                return mapped;
             }
         }
     }
@@ -232,13 +257,23 @@ impl AreaSet<MappingsOfRange> {
     // MappableRanges that now have no mappings.
     //
     // Preconditions: As for Mappable.RemoveMapping.
-    pub fn RemoveMapping(&mut self, ms: &MemoryManager, ar: &Range, offset: u64, writeable: bool) -> Vec<Range> {
+    pub fn RemoveMapping(
+        &mut self,
+        ms: &MemoryManager,
+        ar: &Range,
+        offset: u64,
+        writeable: bool,
+    ) -> Vec<Range> {
         let mr = Range::New(offset, ar.Len());
         let mut unmapped = Vec::new();
 
         let mut seg = self.FindSeg(mr.Start());
         if !seg.Ok() {
-            panic!("MappingSet.RemoveMapping({:?}): no segment containing {:x}", mr, mr.Start());
+            panic!(
+                "MappingSet.RemoveMapping({:?}): no segment containing {:x}",
+                mr,
+                mr.Start()
+            );
         }
 
         while seg.Ok() && seg.Range().Start() < mr.End() {
@@ -247,7 +282,13 @@ impl AreaSet<MappingsOfRange> {
 
             // Remove this part of the mapping.
             let mappings = seg.Value();
-            mappings.lock().remove(&SubsetMapping(&mr, &seg.Range(), &ms.Downgrade(), ar.Start(), writeable));
+            mappings.lock().remove(&SubsetMapping(
+                &mr,
+                &seg.Range(),
+                &ms.Downgrade(),
+                ar.Start(),
+                writeable,
+            ));
 
             let len = mappings.lock().len();
             if len == 0 {
@@ -263,13 +304,24 @@ impl AreaSet<MappingsOfRange> {
     }
 
     // Invalidate calls MappingSpace.Invalidate for all mappings of offsets in mr.
-    pub fn InvalidateRanges(&mut self, _task: &Task, mr: &Range, _invalidatePrivate: bool) -> Vec<MappingOfRange> {
+    pub fn InvalidateRanges(
+        &mut self,
+        _task: &Task,
+        mr: &Range,
+        _invalidatePrivate: bool,
+    ) -> Vec<MappingOfRange> {
         let mut ranges = Vec::new();
         let mut seg = self.LowerBoundSeg(mr.Start());
         while seg.Ok() && seg.Range().Start() < mr.End() {
             let segMR = seg.Range();
             for m in seg.Value().lock().iter() {
-                let region = SubsetMapping(&segMR, &segMR.Intersect(mr), &m.MappingSpace, m.AddrRange.Start(), m.Writeable);
+                let region = SubsetMapping(
+                    &segMR,
+                    &segMR.Intersect(mr),
+                    &m.MappingSpace,
+                    m.AddrRange.Start(),
+                    m.Writeable,
+                );
                 ranges.push(region);
             }
 

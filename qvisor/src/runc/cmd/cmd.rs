@@ -12,21 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use clap::{App, AppSettings, SubCommand, ArgMatches, Arg};
 use alloc::string::String;
-use kvm_ioctls::Kvm;
 use alloc::vec::Vec;
+use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
+use kvm_ioctls::Kvm;
 use std::fs;
 
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::config::*;
 use super::super::cmd::config::*;
-use super::super::runtime::vm::*;
 use super::super::runtime::loader::*;
+use super::super::runtime::vm::*;
 use super::command::*;
 
 #[derive(Debug)]
-pub struct CmdCmd  {
+pub struct CmdCmd {
     pub cmd: Vec<String>,
 }
 
@@ -37,7 +37,7 @@ impl CmdCmd {
                 None => Vec::new(),
                 Some(iter) => iter.map(|s| s.to_string()).collect(),
             },
-        })
+        });
     }
 
     pub fn SubCommand<'a, 'b>(_common: &CommonArgs<'a, 'b>) -> App<'a, 'b> {
@@ -67,21 +67,21 @@ impl CmdCmd {
             Ok(mut vm) => {
                 vm.run().expect("vm.run() fail");
             }
-            Err(e) => info!("error is {:?}", e)
+            Err(e) => info!("error is {:?}", e),
         }
 
-        return Ok(())
+        return Ok(());
     }
 }
 
 impl Config {
-    pub const CONFIG_FILE : &'static str = "/etc/quark/config.json";
+    pub const CONFIG_FILE: &'static str = "/etc/quark/config.json";
 
     // if the config file exist, load file and return true; otherwise return false
     pub fn Load(&mut self) -> bool {
         let contents = match fs::read_to_string(Self::CONFIG_FILE) {
             Ok(c) => c,
-            _ => return false
+            _ => return false,
         };
 
         let config = serde_json::from_str(&contents).expect("configuration wrong format");

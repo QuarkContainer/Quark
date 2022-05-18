@@ -12,59 +12,56 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::string::ToString;
-use alloc::vec::Vec;
-use core::ptr;
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
-use core::mem;
 use alloc::boxed::Box;
-use core::sync::atomic::Ordering;
+use alloc::string::ToString;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::mem;
 use core::ops::Deref;
+use core::ptr;
+use core::sync::atomic::Ordering;
 
 //use super::arch::x86_64::arch_x86::*;
 use super::super::super::kernel_def::*;
-use super::super::linux_def::*;
-use super::super::vcpu_mgr::*;
-use super::super::common::*;
-use super::SignalDef::*;
-use super::*;
-use super::vcpu::*;
 use super::super::auth::*;
-use super::super::task_mgr::*;
+use super::super::common::*;
+use super::super::linux_def::*;
 use super::super::perf_tunning::*;
-use super::kernel::time::*;
+use super::super::task_mgr::*;
 use super::super::usage::io::*;
+use super::super::vcpu_mgr::*;
 use super::fs::dirent::*;
-use super::kernel::uts_namespace::*;
-use super::kernel::ipc_namespace::*;
 use super::kernel::fd_table::*;
-use super::threadmgr::task_exit::*;
-use super::threadmgr::task_block::*;
-use super::threadmgr::task_syscall::*;
-use super::threadmgr::task_sched::*;
-use super::threadmgr::thread::*;
-use super::kernel::waiter::*;
 use super::kernel::futex::*;
+use super::kernel::ipc_namespace::*;
+use super::kernel::time::*;
 use super::kernel::timer::*;
+use super::kernel::uts_namespace::*;
+use super::kernel::waiter::*;
 use super::memmgr::mm::*;
 use super::perflog::*;
+use super::threadmgr::task_block::*;
+use super::threadmgr::task_exit::*;
+use super::threadmgr::task_sched::*;
+use super::threadmgr::task_syscall::*;
+use super::threadmgr::thread::*;
+use super::vcpu::*;
+use super::SignalDef::*;
+use super::*;
 
 use super::fs::file::*;
 use super::fs::mount::*;
 use super::kernel::fs_context::*;
 
-use super::asm::*;
-use super::super::singleton::*;
 use super::super::SysCallID;
+use super::asm::*;
 
 const DEFAULT_STACK_SIZE: usize = MemoryDef::DEFAULT_STACK_SIZE as usize;
 pub const DEFAULT_STACK_PAGES: u64 = DEFAULT_STACK_SIZE as u64 / (4 * 1024);
 pub const DEFAULT_STACK_MAST: u64 = !(DEFAULT_STACK_SIZE as u64 - 1);
 
-
-pub static DUMMY_TASK : Singleton<DummyTask> = Singleton::<DummyTask>::New();
-
+pub static DUMMY_TASK: Singleton<DummyTask> = Singleton::<DummyTask>::New();
 
 pub unsafe fn InitSingleton() {
     DUMMY_TASK.Init(DummyTask::default());
@@ -82,13 +79,13 @@ impl Deref for DummyTask {
 
 impl Default for DummyTask {
     fn default() -> Self {
-        return Self (Arc::new(QRwLock::new(Task::DummyTask())))
+        return Self(Arc::new(QRwLock::new(Task::DummyTask())));
     }
 }
 
 impl DummyTask {
     pub fn Addr(&self) -> u64 {
-        return self as * const _ as u64
+        return self as *const _ as u64;
     }
 }
 
@@ -96,7 +93,7 @@ pub struct TaskStore {}
 
 impl TaskStore {
     pub fn New() -> Self {
-        return TaskStore {}
+        return TaskStore {};
     }
 
     pub fn CreateTask(runFnAddr: u64, para: *const u8, kernel: bool) -> TaskId {
@@ -144,7 +141,7 @@ pub struct Guard(u64);
 
 impl Default for Guard {
     fn default() -> Self {
-        return Self(Self::MAGIC_GUILD)
+        return Self(Self::MAGIC_GUILD);
     }
 }
 
@@ -168,7 +165,6 @@ impl Drop for Task {
         info!("Task::Drop...");
     }
 }
-
 
 #[repr(C)]
 pub struct Task {
@@ -207,7 +203,7 @@ unsafe impl Sync for Task {}
 
 impl Default for Task {
     fn default() -> Self {
-        return Self::DummyTask()
+        return Self::DummyTask();
     }
 }
 
@@ -246,15 +242,15 @@ impl Task {
     }
 
     pub fn QueueId(&self) -> usize {
-        return self.context.queueId.load(Ordering::Acquire)
+        return self.context.queueId.load(Ordering::Acquire);
     }
 
     pub fn SetQueueId(&self, queueId: usize) {
-        return self.context.queueId.store(queueId, Ordering::Release)
+        return self.context.queueId.store(queueId, Ordering::Release);
     }
 
     #[inline(always)]
-    pub fn TaskAddress() -> u64{
+    pub fn TaskAddress() -> u64 {
         let rsp = GetRsp();
         let task = rsp & DEFAULT_STACK_MAST;
         if rsp - task < 0x2000 {
@@ -270,16 +266,16 @@ impl Task {
         let creds = Credentials::default();
         let userns = creds.lock().UserNamespace.clone();
 
-        let futexMgr =FutexMgr::default();
+        let futexMgr = FutexMgr::default();
         let mm = MemoryManager::Init(true);
-        let mountNS =  MountNs::default();
+        let mountNS = MountNs::default();
         let fsContext = FSContext::default();
         let utsns = UTSNamespace::New("".to_string(), "".to_string(), userns.clone());
         let ipcns = IPCNamespace::New(&userns);
         let fdTbl = FDTable::default();
         let blocker = Blocker::Dummy();
 
-        let  ret = Task {
+        let ret = Task {
             context: Context::New(),
             taskId: 0,
             //mm: MemoryMgr::default(),
@@ -312,7 +308,7 @@ impl Task {
 
     pub fn AccountTaskEnter(&self, state: SchedState) {
         if self.taskId == CPULocal::WaitTask() {
-            return
+            return;
         }
 
         let now = TSC.Rdtsc();
@@ -338,7 +334,7 @@ impl Task {
     pub fn AccountTaskLeave(&self, state: SchedState) {
         //print!("AccountTaskLeave current task is {:x}, state is {:?}", self.taskId, state);
         if self.taskId == CPULocal::WaitTask() {
-            return
+            return;
         }
 
         let now = TSC.Rdtsc();
@@ -348,9 +344,15 @@ impl Task {
         if t.State != state &&
             t.State != SchedState::Nonexistent &&
             // when doing clone, there is no good way to change new thread stat to runapp. todo: fix this
-            t.State != SchedState::RunningSys {
-            panic!("AccountTaskLeave: Task[{:x}] switching from state {:?} (expected {:?}) to {:?}",
-                   self.taskId, t.State, SchedState::RunningSys, state)
+            t.State != SchedState::RunningSys
+        {
+            panic!(
+                "AccountTaskLeave: Task[{:x}] switching from state {:?} (expected {:?}) to {:?}",
+                self.taskId,
+                t.State,
+                SchedState::RunningSys,
+                state
+            )
         }
 
         if state == SchedState::RunningApp && t.State != SchedState::Nonexistent {
@@ -380,7 +382,7 @@ impl Task {
         };
 
         if thread.lock().stopCount.Count() == 0 {
-            return
+            return;
         }
 
         let stopCount = thread.lock().stopCount.clone();
@@ -397,9 +399,9 @@ impl Task {
         return self.syscallRestartBlock.take();
     }
 
+    // TODO(Cong): double check the semantics of this
     pub fn IsChrooted(&self) -> bool {
-        let kernel = self.Thread().lock().k.clone();
-        let realRoot = kernel.RootDir();
+        let realRoot = self.mountNS.root.clone();
         let root = self.fsContext.RootDirectory();
         return root != realRoot;
     }
@@ -443,11 +445,11 @@ impl Task {
     }
 
     pub fn NewFDs(&mut self, fd: i32, file: &[File], flags: &FDFlags) -> Result<Vec<i32>> {
-        return self.fdTbl.lock().NewFDs(fd, file, flags)
+        return self.fdTbl.lock().NewFDs(fd, file, flags);
     }
 
     pub fn NewFDAt(&mut self, fd: i32, file: &File, flags: &FDFlags) -> Result<()> {
-        return self.fdTbl.lock().NewFDAt(fd, file, flags)
+        return self.fdTbl.lock().NewFDAt(fd, file, flags);
     }
 
     pub fn FileOwner(&self) -> FileOwner {
@@ -466,7 +468,7 @@ impl Task {
             file.flags.lock().0.NonBlocking = false; //need to clean the stdio nonblocking
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn NewFileFromHostFd(&mut self, fd: i32, hostfd: i32, isTTY: bool) -> Result<File> {
@@ -476,26 +478,16 @@ impl Task {
         return Ok(file);
     }
 
-    pub fn NewFDFromHostFd(&mut self, hostfd: i32, isTTY: bool, wouldBlock: bool) -> Result<i32> {
-        let fileOwner = self.FileOwner();
-        let file = File::NewFileFromFd(self, hostfd, &fileOwner, isTTY)?;
-        file.flags.lock().0.NonBlocking = !wouldBlock;
-        let fds = self.NewFDs(0, &[file.clone()], &FDFlags::default())?;
-        return Ok(fds[0]);
-    }
-
     pub fn NewFDFrom(&self, fd: i32, file: &File, flags: &FDFlags) -> Result<i32> {
         //let fds = self.fdTbl.lock().NewFDs(fd, vec![file.clone()], flags)?;
         //return Ok(fds[0])
-        return self.fdTbl.lock().NewFDFrom(fd, file, flags)
+        return self.fdTbl.lock().NewFDFrom(fd, file, flags);
     }
 
     pub fn RemoveFile(&self, fd: i32) -> Result<File> {
         match self.fdTbl.lock().Remove(fd) {
             None => return Err(Error::SysError(SysErr::EBADF)),
-            Some(f) => {
-                return Ok(f)
-            },
+            Some(f) => return Ok(f),
         }
     }
 
@@ -516,7 +508,11 @@ impl Task {
     }
 
     pub fn Dup3(&mut self, oldfd: u64, newfd: u64, flags: u64) -> i64 {
-        match self.fdTbl.lock().Dup3(oldfd as i32, newfd as i32, flags as i32) {
+        match self
+            .fdTbl
+            .lock()
+            .Dup3(oldfd as i32, newfd as i32, flags as i32)
+        {
             Ok(fd) => fd as i64,
             Err(Error::SysError(e)) => -e as i64,
             Err(e) => panic!("unsupport error {:?}", e),
@@ -533,16 +529,12 @@ impl Task {
 
     #[inline(always)]
     pub fn GetPtr(&self) -> &'static mut Task {
-        return unsafe {
-            &mut *(self.taskId as *mut Task)
-        }
+        return unsafe { &mut *(self.taskId as *mut Task) };
     }
 
     #[inline(always)]
     pub fn GetMut(&self) -> &'static mut Task {
-        return unsafe {
-            &mut *(self.taskId as *mut Task)
-        }
+        return unsafe { &mut *(self.taskId as *mut Task) };
     }
 
     #[inline(always)]
@@ -554,9 +546,7 @@ impl Task {
     pub fn GetPtRegs(&self) -> &'static mut PtRegs {
         //let addr = self.kernelsp - mem::size_of::<PtRegs>() as u64;
         let addr = self.GetKernelSp() - mem::size_of::<PtRegs>() as u64;
-        return unsafe {
-            &mut *(addr as *mut PtRegs)
-        }
+        return unsafe { &mut *(addr as *mut PtRegs) };
     }
 
     #[inline(always)]
@@ -567,7 +557,7 @@ impl Task {
 
     #[inline(always)]
     pub fn Return(&self) -> u64 {
-        return self.GetPtRegs().rax
+        return self.GetPtRegs().rax;
     }
 
     const SYSCALL_WIDTH: u64 = 2;
@@ -617,7 +607,7 @@ impl Task {
     }
 
     pub fn GetTaskId(&self) -> TaskId {
-        return TaskId::New(self.taskId)
+        return TaskId::New(self.taskId);
     }
 
     pub fn Create(runFnAddr: u64, para: *const u8, kernel: bool) -> &'static mut Self {
@@ -649,38 +639,40 @@ impl Task {
         //put Task on the task as Linux
         let taskPtr = s_ptr as *mut Task;
         unsafe {
+            ptr::write(
+                taskPtr,
+                Task {
+                    context: ctx,
+                    taskId: s_ptr as u64,
+                    mm: mm,
+                    tidInfo: Default::default(),
+                    isWaitThread: false,
+                    signalStack: Default::default(),
+                    mountNS: MountNs::default(),
+                    creds: creds.clone(),
+                    utsns: utsns,
+                    ipcns: ipcns,
 
-            ptr::write(taskPtr, Task {
-                context: ctx,
-                taskId: s_ptr as u64,
-                mm: mm,
-                tidInfo: Default::default(),
-                isWaitThread: false,
-                signalStack: Default::default(),
-                mountNS: MountNs::default(),
-                creds: creds.clone(),
-                utsns: utsns,
-                ipcns: ipcns,
+                    fsContext: FSContext::default(),
 
-                fsContext: FSContext::default(),
-
-                fdTbl: FDTable::default(),
-                blocker: blocker,
-                thread: None,
-                haveSyscallReturn: false,
-                syscallRestartBlock: None,
-                futexMgr: futexMgr,
-                ioUsage: ioUsage,
-                sched: TaskSchedInfo::default(),
-                iovs: Vec::with_capacity(4),
-                perfcounters: perfcounters,
-                guard: Guard::default(),
-            });
+                    fdTbl: FDTable::default(),
+                    blocker: blocker,
+                    thread: None,
+                    haveSyscallReturn: false,
+                    syscallRestartBlock: None,
+                    futexMgr: futexMgr,
+                    ioUsage: ioUsage,
+                    sched: TaskSchedInfo::default(),
+                    iovs: Vec::with_capacity(4),
+                    perfcounters: perfcounters,
+                    guard: Guard::default(),
+                },
+            );
 
             let new = &mut *taskPtr;
             new.PerfGoto(PerfType::Blocked);
             new.PerfGoto(PerfType::Kernel);
-            return &mut (*taskPtr)
+            return &mut (*taskPtr);
         }
     }
 
@@ -709,9 +701,7 @@ impl Task {
                     return Ok(wr);
                 }
                 Err(Error::ErrNoWaitableEvent) => {}
-                Err(e) => {
-                    return Err(e)
-                }
+                Err(e) => return Err(e),
             };
 
             match self.blocker.BlockGeneral() {
@@ -738,7 +728,7 @@ impl Task {
                 //println!("there is no clear_child_tid");
             }
             Some(addr) => {
-                let val : i32 = 0;
+                let val: i32 = 0;
                 self.CopyOutObj(&val, addr).ok();
             }
         }
@@ -752,34 +742,37 @@ impl Task {
             let creds = Credentials::default();
             let userns = creds.lock().UserNamespace.clone();
             let dummyTask = DUMMY_TASK.read();
-            ptr::write(taskPtr, Task {
-                context: Context::New(),
-                taskId: baseStackAddr,
-                mm: dummyTask.mm.clone(),
-                tidInfo: Default::default(),
-                isWaitThread: true,
-                signalStack: Default::default(),
-                mountNS: MountNs::default(),
-                creds: creds.clone(),
-                utsns: UTSNamespace::New("".to_string(), "".to_string(), userns.clone()),
-                ipcns: IPCNamespace::New(&userns),
+            ptr::write(
+                taskPtr,
+                Task {
+                    context: Context::New(),
+                    taskId: baseStackAddr,
+                    mm: dummyTask.mm.clone(),
+                    tidInfo: Default::default(),
+                    isWaitThread: true,
+                    signalStack: Default::default(),
+                    mountNS: MountNs::default(),
+                    creds: creds.clone(),
+                    utsns: UTSNamespace::New("".to_string(), "".to_string(), userns.clone()),
+                    ipcns: IPCNamespace::New(&userns),
 
-                fsContext: FSContext::default(),
+                    fsContext: FSContext::default(),
 
-                fdTbl: FDTable::default(),
-                blocker: Blocker::New(baseStackAddr),
-                thread: None,
-                haveSyscallReturn: false,
-                syscallRestartBlock: None,
-                futexMgr: FUTEX_MGR.clone(),
-                ioUsage: dummyTask.ioUsage.clone(),
-                sched: TaskSchedInfo::default(),
-                iovs: Vec::new(),
-                perfcounters: None,
-                guard: Guard::default(),
-            });
+                    fdTbl: FDTable::default(),
+                    blocker: Blocker::New(baseStackAddr),
+                    thread: None,
+                    haveSyscallReturn: false,
+                    syscallRestartBlock: None,
+                    futexMgr: FUTEX_MGR.clone(),
+                    ioUsage: dummyTask.ioUsage.clone(),
+                    sched: TaskSchedInfo::default(),
+                    iovs: Vec::new(),
+                    perfcounters: None,
+                    guard: Guard::default(),
+                },
+            );
 
-            return &mut (*taskPtr)
+            return &mut (*taskPtr);
         }
     }
 
@@ -822,12 +815,12 @@ impl Task {
             alt.flags |= SignalStack::FLAG_ON_STACK
         }
 
-        return alt
+        return alt;
     }
 
     pub fn OnSignalStack(&self, alt: &SignalStack) -> bool {
         let sp = self.GetPtRegs().rsp;
-        return alt.Contains(sp)
+        return alt.Contains(sp);
     }
 
     pub fn SetSignalStack(&mut self, alt: SignalStack) -> bool {

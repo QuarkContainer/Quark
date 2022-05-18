@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::os::unix::io::{AsRawFd, RawFd};
+use alloc::string::ToString;
 use libc::*;
 use std::mem;
-use alloc::string::ToString;
+use std::os::unix::io::{AsRawFd, RawFd};
 
 use super::super::qlib::common::*;
 use super::super::qlib::cstring::*;
@@ -57,33 +57,33 @@ impl UnixSocket {
             server.sun_path[i] = slice[i] as i8;
         }
 
-        let sock = unsafe {
-            socket(AF_UNIX, SOCK_STREAM, 0)
-        };
+        let sock = unsafe { socket(AF_UNIX, SOCK_STREAM, 0) };
 
         if sock < 0 {
             info!("USrvSocket create socket fail");
-            return Err(Error::SysError(-errno::errno().0 as i32))
+            return Err(Error::SysError(-errno::errno().0 as i32));
         }
 
         let srvSock = Self(sock);
 
         let ret = unsafe {
-            bind(sock, &server as * const _ as *const sockaddr, 110 /*sizeof(sockaddr_un)*/)
+            bind(
+                sock,
+                &server as *const _ as *const sockaddr,
+                110, /*sizeof(sockaddr_un)*/
+            )
         };
 
         if ret < 0 {
             info!("USrvSocket bind socket fail");
-            return Err(Error::SysError(-errno::errno().0 as i32))
+            return Err(Error::SysError(-errno::errno().0 as i32));
         }
 
-        let ret = unsafe {
-            listen(sock, 1)
-        };
+        let ret = unsafe { listen(sock, 1) };
 
         if ret < 0 {
             info!("USrvSocket listen socket fail");
-            return Err(Error::SysError(-errno::errno().0 as i32))
+            return Err(Error::SysError(-errno::errno().0 as i32));
         }
 
         return Ok(srvSock);
@@ -101,27 +101,29 @@ impl UnixSocket {
             server.sun_path[i] = slice[i] as i8;
         }
 
-        let sock = unsafe {
-            socket(AF_UNIX, SOCK_STREAM, 0)
-        };
+        let sock = unsafe { socket(AF_UNIX, SOCK_STREAM, 0) };
 
         if sock < 0 {
             info!("UCliSocket create socket fail");
-            return Err(Error::SysError(-errno::errno().0 as i32))
+            return Err(Error::SysError(-errno::errno().0 as i32));
         }
 
         let cliSocket = Self(sock);
 
         let ret = unsafe {
-            connect(sock, &server as * const _ as *const sockaddr, 110 /*sizeof(sockaddr_un)*/)
+            connect(
+                sock,
+                &server as *const _ as *const sockaddr,
+                110, /*sizeof(sockaddr_un)*/
+            )
         };
 
         if ret < 0 {
             info!("UCliSocket connect socket fail, path is {}", path);
-            return Err(Error::SysError(-errno::errno().0 as i32))
+            return Err(Error::SysError(-errno::errno().0 as i32));
         }
 
-        return Ok(cliSocket)
+        return Ok(cliSocket);
     }
 
     pub fn SendFd(&self, fd: RawFd) -> Result<()> {
@@ -191,22 +193,24 @@ impl UnixSocket {
             let rv = libc::recvmsg(self.0, &mut msg, 0);
             match rv {
                 0 => Err(Error::Common("UnExpected Eof".to_string())),
-                rv if rv < 0 => {
-                    return Err(Error::SysError(-errno::errno().0))
-                },
+                rv if rv < 0 => return Err(Error::SysError(-errno::errno().0)),
                 rv if rv == mem::size_of::<c_int>() as isize => {
-                    let hdr: *mut libc::cmsghdr = if msg.msg_controllen >= mem::size_of::<libc::cmsghdr>() as _ {
-                        msg.msg_control as *mut libc::cmsghdr
-                    } else {
-                        return Err(Error::Common("bad control msg (header)".to_string()))
-                    };
+                    let hdr: *mut libc::cmsghdr =
+                        if msg.msg_controllen >= mem::size_of::<libc::cmsghdr>() as _ {
+                            msg.msg_control as *mut libc::cmsghdr
+                        } else {
+                            return Err(Error::Common("bad control msg (header)".to_string()));
+                        };
 
-                    if (*hdr).cmsg_level != libc::SOL_SOCKET || (*hdr).cmsg_type != libc::SCM_RIGHTS {
-                        return Err(Error::Common("bad control msg (level)".to_string()))
+                    if (*hdr).cmsg_level != libc::SOL_SOCKET || (*hdr).cmsg_type != libc::SCM_RIGHTS
+                    {
+                        return Err(Error::Common("bad control msg (level)".to_string()));
                     }
 
-                    if msg.msg_controllen != libc::CMSG_SPACE(mem::size_of::<c_int>() as u32) as usize {
-                        return Err(Error::Common("bad control msg (len)".to_string()))
+                    if msg.msg_controllen
+                        != libc::CMSG_SPACE(mem::size_of::<c_int>() as u32) as usize
+                    {
+                        return Err(Error::Common("bad control msg (len)".to_string()));
                     }
 
                     #[allow(clippy::cast_ptr_alignment)]
@@ -214,11 +218,11 @@ impl UnixSocket {
                     if libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC) < 0 {
                         return Err(Error::SysError(-errno::errno().0));
                     }
-                    return Ok(fd)
+                    return Ok(fd);
                 }
                 _ => {
                     return Err(Error::Common("bad control msg (ret code)".to_string()));
-                },
+                }
             }
         }
     }

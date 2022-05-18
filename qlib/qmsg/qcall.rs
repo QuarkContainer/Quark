@@ -13,12 +13,14 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 
-use super::super::task_mgr::*;
-use super::super::linux_def::*;
-use super::super::kernel::guestfdnotifier::*;
-use super::super::socket_buf::*;
 use super::super::config::*;
+use super::super::kernel::guestfdnotifier::*;
+use super::super::kernel::util::cstring::*;
+use super::super::linux_def::*;
+use super::super::socket_buf::*;
+use super::super::task_mgr::*;
 
 #[repr(align(128))]
 #[derive(Clone, Debug)]
@@ -43,10 +45,8 @@ pub enum Msg {
     Lgetxattr(Lgetxattr),
     Fgetxattr(Fgetxattr),
     Fstat(Fstat),
-    BatchFstatat(BatchFstatat),
     Fstatat(Fstatat),
     Fstatfs(Fstatfs),
-    GetDents64(GetDents64),
 
     TryOpenAt(TryOpenAt),
     CreateAt(CreateAt),
@@ -112,6 +112,7 @@ pub enum Msg {
     SetTscOffset(SetTscOffset),
     TlbShootdown(TlbShootdown),
     Sysinfo(Sysinfo),
+    ReadDir(ReadDir),
 }
 
 #[derive(Clone, Default, Debug)]
@@ -129,7 +130,7 @@ pub struct Rdtsc {}
 
 #[derive(Clone, Default, Debug)]
 pub struct SetTscOffset {
-    pub offset: i64
+    pub offset: i64,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -140,7 +141,7 @@ pub struct UpdateWaitInfo {
 
 #[derive(Clone, Default, Debug)]
 pub struct EventfdWrite {
-    pub fd: i32
+    pub fd: i32,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -148,7 +149,7 @@ pub struct IoUringRegister {
     pub fd: i32,
     pub Opcode: u32,
     pub arg: u64,
-    pub nrArgs: u32
+    pub nrArgs: u32,
 }
 
 #[derive(Clone, Default, Debug, Copy)]
@@ -174,7 +175,6 @@ pub struct MMapFile {
     pub offset: u64,
     pub prot: i32,
 }
-
 
 #[derive(Clone, Default, Debug)]
 pub struct MUnmap {
@@ -297,20 +297,23 @@ pub struct Fstat {
     pub buff: u64,
 }
 
-#[derive(Clone, Default, Debug)]
+#[derive(Debug)]
 pub struct FileType {
-    pub dirfd: i32,
-    pub pathname: u64,
-    pub mode: u32,
+    pub pathname: CString,
     pub device: u64,
     pub inode: u64,
-    pub ret: i32,
+    pub dType: u8,
 }
 
-#[derive(Clone, Default, Debug)]
-pub struct BatchFstatat {
-    pub addr: u64,
-    pub count: usize
+#[derive(Debug)]
+pub struct FileTypes {
+    pub fileTypes: Vec<FileType>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ReadDir {
+    pub dirfd: i32,
+    pub data: u64,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -318,14 +321,7 @@ pub struct Fstatat {
     pub dirfd: i32,
     pub pathname: u64,
     pub buff: u64,
-    pub flags: i32
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct GetDents64 {
-    pub fd: i32,
-    pub dirp: u64,
-    pub count: u32,
+    pub flags: i32,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -503,7 +499,7 @@ pub enum RDMANotifyType {
 
 impl Default for RDMANotifyType {
     fn default() -> Self {
-        return Self::Accept
+        return Self::Accept;
     }
 }
 
@@ -666,13 +662,11 @@ pub struct RDMAAcceptStruct {
 
 impl RDMAAcceptStruct {
     pub fn FromAddr(addr: u64) -> &'static mut Self {
-        return unsafe {
-            &mut *(addr as * mut Self)
-        }
+        return unsafe { &mut *(addr as *mut Self) };
     }
 
     pub fn ToAddr(&self) -> u64 {
-        return self as * const _ as u64;
+        return self as *const _ as u64;
     }
 }
 
@@ -717,7 +711,7 @@ pub struct IOSendMsg {
 
 #[derive(Clone, Default, Debug)]
 pub struct NewSocket {
-    pub fd: i32
+    pub fd: i32,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -737,7 +731,7 @@ pub enum TmpfsFileType {
 
 impl Default for TmpfsFileType {
     fn default() -> Self {
-        return Self::Fifo
+        return Self::Fifo;
     }
 }
 
@@ -765,6 +759,7 @@ pub struct WriteControlMsgResp {
     pub fd: i32,
     pub addr: u64,
     pub len: usize,
+    pub close: bool,
 }
 
 pub struct Print<'a> {
@@ -773,7 +768,7 @@ pub struct Print<'a> {
 }
 
 #[derive(Debug)]
-pub struct QMsg <'a> {
+pub struct QMsg<'a> {
     pub taskId: TaskId,
     pub globalLock: bool,
     pub ret: u64,
@@ -791,10 +786,9 @@ pub enum HostOutputMsg {
 
 impl Default for HostOutputMsg {
     fn default() -> Self {
-        return Self::Default
+        return Self::Default;
     }
 }
-
 
 #[derive(Clone, Default, Debug, Copy)]
 pub struct WaitFDAsync {
@@ -806,4 +800,3 @@ pub struct WaitFDAsync {
 pub struct EventfdWriteAsync {
     pub fd: i32,
 }
-

@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::vec::Vec;
 use super::super::mutex::*;
+use alloc::vec::Vec;
 
-use super::userns::*;
 use super::super::singleton::*;
+use super::userns::*;
 
-pub static HOST_AUTH_ID : Singleton<QMutex<HostAuthID>> = Singleton::<QMutex<HostAuthID>>::New();
+pub static HOST_AUTH_ID: Singleton<QMutex<HostAuthID>> = Singleton::<QMutex<HostAuthID>>::New();
 
 pub unsafe fn InitSingleton() {
     HOST_AUTH_ID.Init(QMutex::new(HostAuthID::New()));
@@ -29,15 +29,15 @@ pub struct UID(pub u32);
 
 impl UID {
     pub fn Ok(&self) -> bool {
-        return self.0 != NO_ID
+        return self.0 != NO_ID;
     }
 
     pub fn OrOverflow(&self) -> Self {
         if self.Ok() {
-            return self.clone()
+            return self.clone();
         }
 
-        return OVERFLOW_UID.clone()
+        return OVERFLOW_UID.clone();
     }
 }
 
@@ -46,15 +46,15 @@ pub struct GID(pub u32);
 
 impl GID {
     pub fn Ok(&self) -> bool {
-        return self.0 != NO_ID
+        return self.0 != NO_ID;
     }
 
     pub fn OrOverflow(&self) -> Self {
         if self.Ok() {
-            return self.clone()
+            return self.clone();
         }
 
-        return OVERFLOW_GID.clone()
+        return OVERFLOW_GID.clone();
     }
 }
 
@@ -63,17 +63,17 @@ pub struct KUID(pub u32);
 
 impl KUID {
     pub fn Ok(&self) -> bool {
-        return self.0 != NO_ID
+        return self.0 != NO_ID;
     }
 
     pub fn In(&self, ns: &UserNameSpace) -> UID {
-        return ns.MapFromKUID(*self)
+        return ns.MapFromKUID(*self);
     }
 }
 
 impl Default for KUID {
     fn default() -> Self {
-        return NOBODY_KUID
+        return NOBODY_KUID;
     }
 }
 
@@ -82,17 +82,17 @@ pub struct KGID(pub u32);
 
 impl KGID {
     pub fn Ok(&self) -> bool {
-        return self.0 != NO_ID
+        return self.0 != NO_ID;
     }
 
     pub fn In(&self, ns: &UserNameSpace) -> GID {
-        return ns.MapFromKGID(*self)
+        return ns.MapFromKGID(*self);
     }
 }
 
 impl Default for KGID {
     fn default() -> Self {
-        return NOBODY_KGID
+        return NOBODY_KGID;
     }
 }
 
@@ -120,6 +120,6 @@ impl HostAuthID {
         return Self {
             uid: 0,
             gids: Vec::new(),
-        }
+        };
     }
 }

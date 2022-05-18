@@ -12,29 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::mutex::*;
 use alloc::sync::Arc;
 use core::any::Any;
-use crate::qlib::mutex::*;
 use core::ops::Deref;
 
-use super::super::super::kernel::waiter::*;
-use super::super::super::kernel::waiter::qlock::*;
-use super::super::super::guestfdnotifier::*;
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
 use super::super::super::super::socket_buf::*;
+use super::super::super::guestfdnotifier::*;
+use super::super::super::kernel::waiter::*;
+use super::super::super::quring::QUring;
 use super::super::super::task::*;
 use super::super::super::threadmgr::processgroup::*;
 use super::super::super::threadmgr::session::*;
 use super::super::super::SHARESPACE;
-use super::super::super::quring::QUring;
 
-use super::super::file::*;
-use super::super::dirent::*;
 use super::super::attr::*;
 use super::super::dentry::*;
-use super::super::inode::*;
+use super::super::dirent::*;
+use super::super::file::*;
 use super::super::host::hostinodeop::*;
+use super::super::inode::*;
 use super::hostfileop::*;
 
 use super::ioctl::*;
@@ -42,7 +41,7 @@ use super::ioctl::*;
 pub const NUM_CONTROL_CHARACTERS: usize = 19;
 pub const DISABLED_CHAR: u8 = 0;
 
-#[derive(Clone, Default, Copy)]
+#[derive(Clone, Default, Copy, Debug)]
 #[repr(C)]
 pub struct Winsize {
     pub Row: u16,
@@ -217,27 +216,27 @@ impl ControlFlagIndex {
 }
 
 pub const fn ControlCharacter(c: char) -> u8 {
-    return c as u8 - 'A' as u8 + 1
+    return c as u8 - 'A' as u8 + 1;
 }
 
 pub const DEFAULT_CONTROL_CHARACTERS: [u8; NUM_CONTROL_CHARACTERS] = [
-    ControlCharacter('C'), // VINTR = ^C
+    ControlCharacter('C'),  // VINTR = ^C
     ControlCharacter('\\'), // VQUIT = ^\
-    '\x7f' as u8, // VERASE = DEL
-    ControlCharacter('U'), // VKILL = ^U
-    ControlCharacter('D'), // VEOF = ^D
-    0, // VTIME
-    1, // VMIN
-    0, // VSWTC
-    ControlCharacter('Q'), // VSTART = ^Q
-    ControlCharacter('S'), // VSTOP = ^S
-    ControlCharacter('Z'), // VSUSP = ^Z
-    0, // VEOL
-    ControlCharacter('R'), // VREPRINT = ^R
-    ControlCharacter('O'), // VDISCARD = ^O
-    ControlCharacter('W'), // VWERASE = ^W
-    ControlCharacter('V'), // VLNEXT = ^V
-    0, // VEOL2
+    '\x7f' as u8,           // VERASE = DEL
+    ControlCharacter('U'),  // VKILL = ^U
+    ControlCharacter('D'),  // VEOF = ^D
+    0,                      // VTIME
+    1,                      // VMIN
+    0,                      // VSWTC
+    ControlCharacter('Q'),  // VSTART = ^Q
+    ControlCharacter('S'),  // VSTOP = ^S
+    ControlCharacter('Z'),  // VSUSP = ^Z
+    0,                      // VEOL
+    ControlCharacter('R'),  // VREPRINT = ^R
+    ControlCharacter('O'),  // VDISCARD = ^O
+    ControlCharacter('W'),  // VWERASE = ^W
+    ControlCharacter('V'),  // VLNEXT = ^V
+    0,                      // VEOL2
     0,
     0,
 ];
@@ -257,8 +256,14 @@ pub const DEFAULT_SLAVE_TERMIOS: KernelTermios = KernelTermios {
     InputFlags: InputFlags::ICRNL | InputFlags::IXON,
     OutputFlags: OutputFlags::OPOST | OutputFlags::ONLCR,
     ControlFlags: ControlFlags::B38400 | ControlFlags::CS8 | ControlFlags::CREAD,
-    LocalFlags: LocalFlags::ISIG | LocalFlags::ICANON | LocalFlags::ECHO
-        | LocalFlags::ECHOE | LocalFlags::ECHOK | LocalFlags::ECHOCTL | LocalFlags::ECHOKE | LocalFlags::IEXTEN,
+    LocalFlags: LocalFlags::ISIG
+        | LocalFlags::ICANON
+        | LocalFlags::ECHO
+        | LocalFlags::ECHOE
+        | LocalFlags::ECHOK
+        | LocalFlags::ECHOCTL
+        | LocalFlags::ECHOKE
+        | LocalFlags::IEXTEN,
     LineDiscipline: 0,
     ControlCharacters: DEFAULT_CONTROL_CHARACTERS,
     InputSpeed: 38400,
@@ -331,7 +336,7 @@ impl KernelTermios {
             LocalFlags: self.LocalFlags,
             LineDiscipline: self.LineDiscipline,
             ControlCharacters: self.ControlCharacters,
-        }
+        };
     }
 
     pub fn FromTermios(&mut self, term: &Termios) {
@@ -366,8 +371,8 @@ impl KernelTermios {
     }
 
     pub fn IsEOF(&self, c: u8) -> bool {
-        return c == self.ControlCharacters[Self::VEOF as usize] &&
-            self.ControlCharacters[Self::VEOF as usize] == DISABLED_CHAR
+        return c == self.ControlCharacters[Self::VEOF as usize]
+            && self.ControlCharacters[Self::VEOF as usize] == DISABLED_CHAR;
     }
 }
 
@@ -379,12 +384,11 @@ pub struct TTYFileOpsInternal {
     pub fd: i32,
     pub buf: Arc<SocketBuff>,
     pub queue: Queue,
-    pub bufWriteLock: QAsyncLock,
 }
 
 impl TTYFileOpsInternal {
     fn checkChange(&self, _task: &Task, _sig: Signal) -> Result<()> {
-        return Ok(())
+        return Ok(());
         /*let thread = match &task.thread {
             // No task? Linux does not have an analog for this case, but
             // tty_check_change is more of a blacklist of cases than a
@@ -427,13 +431,12 @@ impl Deref for TTYFileOps {
     }
 }
 
-pub const ENABLE_RINGBUF : bool = true;
+pub const ENABLE_RINGBUF: bool = true;
 
 impl TTYFileOps {
     pub fn New(fops: Arc<HostFileOp>) -> Self {
         let queue = fops.InodeOp.lock().queue.clone();
         let fd = fops.InodeOp.lock().HostFd;
-        let bufWriteLock = fops.InodeOp.lock().bufWriteLock.clone();
         let internal = TTYFileOpsInternal {
             fileOps: fops,
             termios: DEFAULT_SLAVE_TERMIOS,
@@ -442,14 +445,19 @@ impl TTYFileOps {
             fd: fd,
             buf: Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT)),
             queue: queue,
-            bufWriteLock: bufWriteLock,
         };
 
         if SHARESPACE.config.read().UringIO && ENABLE_RINGBUF {
-            QUring::BufSockInit(internal.fd, internal.queue.clone(), internal.buf.clone(), false).unwrap();
+            QUring::BufSockInit(
+                internal.fd,
+                internal.queue.clone(),
+                internal.buf.clone(),
+                false,
+            )
+            .unwrap();
         }
 
-        return Self(Arc::new(QMutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)));
     }
 
     pub fn InitForegroundProcessGroup(&self, pg: &ProcessGroup) {
@@ -465,23 +473,19 @@ impl TTYFileOps {
     pub fn ForegroundProcessGroup(&self) -> Option<ProcessGroup> {
         return self.lock().fgProcessgroup.clone();
     }
-
-    pub fn BufWriteLock(&self) -> QAsyncLock {
-        return self.lock().bufWriteLock.clone();
-    }
 }
 
 impl Waitable for TTYFileOps {
-    fn Readiness(&self, task: &Task,mask: EventMask) -> EventMask {
+    fn Readiness(&self, task: &Task, mask: EventMask) -> EventMask {
         if SHARESPACE.config.read().UringIO && ENABLE_RINGBUF {
-            return self.lock().buf.Events() & mask
+            return self.lock().buf.Events() & mask;
         }
 
         let fops = self.lock().fileOps.clone();
-        return fops.Readiness(task, mask)
+        return fops.Readiness(task, mask);
     }
 
-    fn EventRegister(&self, task: &Task,e: &WaitEntry, mask: EventMask) {
+    fn EventRegister(&self, task: &Task, e: &WaitEntry, mask: EventMask) {
         let queue = self.lock().queue.clone();
         queue.EventRegister(task, e, mask);
         let fd = self.lock().fd;
@@ -490,7 +494,7 @@ impl Waitable for TTYFileOps {
         };
     }
 
-    fn EventUnregister(&self, task: &Task,e: &WaitEntry) {
+    fn EventUnregister(&self, task: &Task, e: &WaitEntry) {
         let queue = self.lock().queue.clone();
         queue.EventUnregister(task, e);
         let fd = self.lock().fd;
@@ -508,7 +512,7 @@ impl FileOperations for TTYFileOps {
     }
 
     fn FopsType(&self) -> FileOpsType {
-        return FileOpsType::TTYFileOps
+        return FileOpsType::TTYFileOps;
     }
 
     fn Seekable(&self) -> bool {
@@ -521,16 +525,29 @@ impl FileOperations for TTYFileOps {
         return res;
     }
 
-    fn ReadDir(&self, task: &Task, f: &File, offset: i64, serializer: &mut DentrySerializer) -> Result<i64> {
+    fn ReadDir(
+        &self,
+        task: &Task,
+        f: &File,
+        offset: i64,
+        serializer: &mut DentrySerializer,
+    ) -> Result<i64> {
         let fops = self.lock().fileOps.clone();
         let res = fops.ReadDir(task, f, offset, serializer);
         return res;
     }
 
-    fn ReadAt(&self, task: &Task, f: &File, dsts: &mut [IoVec], offset: i64, blocking: bool) -> Result<i64> {
+    fn ReadAt(
+        &self,
+        task: &Task,
+        f: &File,
+        dsts: &mut [IoVec],
+        offset: i64,
+        blocking: bool,
+    ) -> Result<i64> {
         self.lock().checkChange(task, Signal(Signal::SIGTTIN))?;
 
-        if SHARESPACE.config.read().UringIO  && ENABLE_RINGBUF {
+        if SHARESPACE.config.read().UringIO && ENABLE_RINGBUF {
             let fd = self.lock().fd;
             let queue = self.lock().queue.clone();
             let ringBuf = self.lock().buf.clone();
@@ -544,7 +561,14 @@ impl FileOperations for TTYFileOps {
         return res;
     }
 
-    fn WriteAt(&self, task: &Task, f: &File, srcs: &[IoVec], offset: i64, blocking: bool) -> Result<i64> {
+    fn WriteAt(
+        &self,
+        task: &Task,
+        f: &File,
+        srcs: &[IoVec],
+        offset: i64,
+        blocking: bool,
+    ) -> Result<i64> {
         {
             let t = self.lock();
             if t.termios.LEnabled(LocalFlags::TOSTOP) {
@@ -553,16 +577,18 @@ impl FileOperations for TTYFileOps {
         }
 
         if SHARESPACE.config.read().UringIO && ENABLE_RINGBUF {
-           /* let size = IoVec::NumBytes(srcs);
-            let mut buf = DataBuff::New(size);
-            task.CopyDataInFromIovs(&mut buf.buf, &srcs)?;
-            let iovs = buf.Iovs();*/
-
             let fd = self.lock().fd;
             let queue = self.lock().queue.clone();
             let ringBuf = self.lock().buf.clone();
-            let lock = self.BufWriteLock().Lock(task);
-            return QUring::RingFileWrite(task, fd, queue, ringBuf, srcs, Arc::new(self.clone()), lock)
+
+            return QUring::RingFileWrite(
+                task,
+                fd,
+                queue,
+                ringBuf,
+                srcs,
+                Arc::new(self.clone()),
+            );
         }
 
         let fops = self.lock().fileOps.clone();
@@ -590,11 +616,6 @@ impl FileOperations for TTYFileOps {
     }
 
     fn Flush(&self, task: &Task, f: &File) -> Result<()> {
-        if SHARESPACE.config.read().UringIO && ENABLE_RINGBUF {
-            // try to gain the lock once, release immediately
-            self.BufWriteLock().Lock(task);
-        }
-
         let fops = self.lock().fileOps.clone();
         let res = fops.Flush(task, f);
         return res;
@@ -608,8 +629,15 @@ impl FileOperations for TTYFileOps {
 
     fn Ioctl(&self, task: &Task, _f: &File, _fd: i32, request: u64, val: u64) -> Result<()> {
         let fops = self.lock().fileOps.clone();
-        let fd = fops.as_any().downcast_ref::<HostFileOp>().expect("Ioctl: not Hostfilop")
-            .InodeOp.as_any().downcast_ref::<HostInodeOp>().expect("Ioctl: not HostInodeOp").HostFd();
+        let fd = fops
+            .as_any()
+            .downcast_ref::<HostFileOp>()
+            .expect("Ioctl: not Hostfilop")
+            .InodeOp
+            .as_any()
+            .downcast_ref::<HostInodeOp>()
+            .expect("Ioctl: not HostInodeOp")
+            .HostFd();
         let ioctl = request;
 
         match ioctl {
@@ -617,7 +645,7 @@ impl FileOperations for TTYFileOps {
                 let mut term = Termios::default();
                 ioctlGetTermios(fd, &mut term)?;
                 task.CopyOutObj(&term, val)?;
-                return Ok(())
+                return Ok(());
             }
 
             IoCtlCmd::TCSETS | IoCtlCmd::TCSETSW | IoCtlCmd::TCSETSF => {
@@ -626,7 +654,7 @@ impl FileOperations for TTYFileOps {
                 let t: Termios = task.CopyInObj(val)?;
                 ioctlSetTermios(fd, ioctl, &t)?;
                 self.lock().termios.FromTermios(&t);
-                return Ok(())
+                return Ok(());
             }
             IoCtlCmd::TIOCGPGRP => {
                 let thread = task.Thread();
@@ -640,7 +668,7 @@ impl FileOperations for TTYFileOps {
 
                 task.CopyOutObj(&pgid, val)?;
 
-                return Ok(())
+                return Ok(());
             }
             IoCtlCmd::TIOCSPGRP => {
                 let thread = match &task.thread {
@@ -652,7 +680,9 @@ impl FileOperations for TTYFileOps {
                 match t.checkChange(task, Signal(Signal::SIGTTOU)) {
                     // drivers/tty/tty_io.c:tiocspgrp() converts -EIO from
                     // tty_check_change() to -ENOTTY.
-                    Err(Error::SysError(SysErr::EIO)) => return Err(Error::SysError(SysErr::ENOTTY)),
+                    Err(Error::SysError(SysErr::EIO)) => {
+                        return Err(Error::SysError(SysErr::ENOTTY))
+                    }
                     Err(e) => return Err(e),
                     Ok(()) => (),
                 }
@@ -676,64 +706,68 @@ impl FileOperations for TTYFileOps {
 
                 // Check that new process group is in the TTY session.
                 if pg.Session() != t.session.clone().unwrap() {
-                    return Err(Error::SysError(SysErr::EPERM))
+                    return Err(Error::SysError(SysErr::EPERM));
                 }
 
                 t.fgProcessgroup = Some(pg);
-                return Ok(())
+                return Ok(());
             }
             IoCtlCmd::TIOCGWINSZ => {
                 let mut win = Winsize::default();
                 ioctlGetWinsize(fd, &mut win)?;
                 task.CopyOutObj(&win, val)?;
-                return Ok(())
+                return Ok(());
             }
             IoCtlCmd::TIOCSWINSZ => {
                 let w: Winsize = task.CopyInObj(val)?;
-                return ioctlSetWinsize(fd, &w)
+                return ioctlSetWinsize(fd, &w);
             }
-            IoCtlCmd::TIOCSETD |
-            IoCtlCmd::TIOCSBRK |
-            IoCtlCmd::TIOCCBRK |
-            IoCtlCmd::TCSBRK |
-            IoCtlCmd::TCSBRKP |
-            IoCtlCmd::TIOCSTI |
-            IoCtlCmd::TIOCCONS |
-            IoCtlCmd::FIONBIO |
-            IoCtlCmd::TIOCEXCL |
-            IoCtlCmd::TIOCNXCL |
-            IoCtlCmd::TIOCGEXCL |
-            IoCtlCmd::TIOCNOTTY |
-            IoCtlCmd::TIOCSCTTY |
-            IoCtlCmd::TIOCGSID |
-            IoCtlCmd::TIOCGETD |
-            IoCtlCmd::TIOCVHANGUP |
-            IoCtlCmd::TIOCGDEV |
-            IoCtlCmd::TIOCMGET |
-            IoCtlCmd::TIOCMSET |
-            IoCtlCmd::TIOCMBIC |
-            IoCtlCmd::TIOCMBIS |
-            IoCtlCmd::TIOCGICOUNT |
-            IoCtlCmd::TCFLSH |
-            IoCtlCmd::TIOCSSERIAL |
-            IoCtlCmd::TIOCGPTPEER => {
+            IoCtlCmd::TIOCSETD
+            | IoCtlCmd::TIOCSBRK
+            | IoCtlCmd::TIOCCBRK
+            | IoCtlCmd::TCSBRK
+            | IoCtlCmd::TCSBRKP
+            | IoCtlCmd::TIOCSTI
+            | IoCtlCmd::TIOCCONS
+            | IoCtlCmd::FIONBIO
+            | IoCtlCmd::TIOCEXCL
+            | IoCtlCmd::TIOCNXCL
+            | IoCtlCmd::TIOCGEXCL
+            | IoCtlCmd::TIOCNOTTY
+            | IoCtlCmd::TIOCSCTTY
+            | IoCtlCmd::TIOCGSID
+            | IoCtlCmd::TIOCGETD
+            | IoCtlCmd::TIOCVHANGUP
+            | IoCtlCmd::TIOCGDEV
+            | IoCtlCmd::TIOCMGET
+            | IoCtlCmd::TIOCMSET
+            | IoCtlCmd::TIOCMBIC
+            | IoCtlCmd::TIOCMBIS
+            | IoCtlCmd::TIOCGICOUNT
+            | IoCtlCmd::TCFLSH
+            | IoCtlCmd::TIOCSSERIAL
+            | IoCtlCmd::TIOCGPTPEER => {
                 //not implmentated
-                return Err(Error::SysError(SysErr::ENOTTY))
+                return Err(Error::SysError(SysErr::ENOTTY));
             }
-            _ => {
-                return Err(Error::SysError(SysErr::ENOTTY))
-            }
+            _ => return Err(Error::SysError(SysErr::ENOTTY)),
         }
     }
 
-    fn IterateDir(&self, task: &Task,d: &Dirent, dirCtx: &mut DirCtx, offset: i32) -> (i32, Result<i64>) {
+    fn IterateDir(
+        &self,
+        task: &Task,
+        d: &Dirent,
+        dirCtx: &mut DirCtx,
+        offset: i32,
+    ) -> (i32, Result<i64>) {
         let fops = self.lock().fileOps.clone();
 
         return fops.IterateDir(task, d, dirCtx, offset);
     }
 
     fn Mappable(&self) -> Result<HostInodeOp> {
-        return Err(Error::SysError(SysErr::ENODEV))
+        return Err(Error::SysError(SysErr::ENODEV));
     }
 }
 

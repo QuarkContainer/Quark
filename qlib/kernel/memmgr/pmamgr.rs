@@ -14,9 +14,10 @@
 
 use alloc::collections::btree_map::BTreeMap;
 
-use super::super::super::linux_def::*;
 use super::super::super::common::*;
+use super::super::super::linux_def::*;
 use super::super::super::pagetable::*;
+use super::super::super::vcpu_mgr::CPULocal;
 
 pub fn ZeroPage(pageStart: u64) {
     use alloc::slice;
@@ -55,10 +56,11 @@ impl PagePool {
     }
 
     pub fn Ref(&mut self, addr: u64) -> Result<u64> {
-        assert!(addr & (MemoryDef::PAGE_SIZE-1) == 0);
+        assert!(addr & (MemoryDef::PAGE_SIZE - 1) == 0);
         let refcount = match self.refs.get_mut(&addr) {
-            None => { // the address is not allocated from PagePool
-                return Ok(1)
+            None => {
+                // the address is not allocated from PagePool
+                return Ok(1);
             }
             Some(v) => {
                 *v += 1;
@@ -67,14 +69,15 @@ impl PagePool {
         };
 
         self.refCount += 1;
-        return Ok(refcount as u64)
+        return Ok(refcount as u64);
     }
 
     pub fn Deref(&mut self, addr: u64) -> Result<u64> {
-        assert!(addr & (MemoryDef::PAGE_SIZE-1) == 0);
+        assert!(addr & (MemoryDef::PAGE_SIZE - 1) == 0);
         let refcount = match self.refs.get_mut(&addr) {
-            None => { // the address is not allocated from PagePool
-                return Ok(1)
+            None => {
+                // the address is not allocated from PagePool
+                return Ok(1);
             }
             Some(v) => {
                 assert!(*v >= 1, "deref fail: addresss is {:x}", addr);
@@ -88,20 +91,19 @@ impl PagePool {
             self.refs.remove(&addr);
             self.Free(addr)?;
         }
-        return Ok(refcount as u64)
+        return Ok(refcount as u64);
     }
 
     pub fn GetRef(&self, addr: u64) -> Result<u64> {
         let refcount = match self.refs.get(&addr) {
-            None => { // the address is not allocated from PagePool
-                return Ok(0)
+            None => {
+                // the address is not allocated from PagePool
+                return Ok(0);
             }
-            Some(v) => {
-                *v
-            }
+            Some(v) => *v,
         };
 
-        return Ok(refcount as u64)
+        return Ok(refcount as u64);
     }
 
     pub fn AllocPage(&mut self, incrRef: bool) -> Result<u64> {
@@ -113,11 +115,11 @@ impl PagePool {
             self.refs.insert(addr, 0);
         }
 
-        return Ok(addr)
+        return Ok(addr);
     }
 
     pub fn FreePage(&mut self, addr: u64) -> Result<()> {
-        return self.Free(addr)
+        return self.Free(addr);
     }
 
     //unitSize: how many pages for each unit
@@ -126,18 +128,44 @@ impl PagePool {
             refs: BTreeMap::new(),
             //the PagePool won't be free. fake a always nonzero refcount
             refCount: 1,
-            allocator: AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize),
+            allocator: AlignedAllocator::New(
+                MemoryDef::PAGE_SIZE as usize,
+                MemoryDef::PAGE_SIZE as usize,
+            ),
         };
     }
 
     pub fn Allocate(&mut self) -> Result<u64> {
+        match CPULocal::Myself().pageAllocator.lock().AllocPage() {
+            Some(page) => {
+                ZeroPage(page);
+                return Ok(page);
+            }
+            None => (),
+        }
+
         let addr = self.allocator.Allocate()?;
         ZeroPage(addr as u64);
-        return Ok(addr as u64)
+        //error!("AllocPage {:x}", addr);
+
+        return Ok(addr as u64);
     }
 
     pub fn Free(&mut self, addr: u64) -> Result<()> {
-        return self.allocator.Free(addr);
+        CPULocal::Myself().pageAllocator.lock().FreePage(addr);
+        return Ok(());
+        //return self.allocator.Free(addr);
+    }
+
+    pub fn CheckZeroPage(pageStart: u64) {
+        use alloc::slice;
+        unsafe {
+            let arr = slice::from_raw_parts_mut(pageStart as *mut u64, 512);
+            for i in 0..512 {
+                if arr[i] != 0 {
+                    panic!("alloc non zero page {:x}", pageStart);
+                }
+            }
+        }
     }
 }
-

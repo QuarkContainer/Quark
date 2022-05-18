@@ -12,29 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::sync::Weak;
-use core::ops::Deref;
 use core::any::Any;
-use alloc::string::ToString;
+use core::ops::Deref;
 
 use crate::qlib::mutex::*;
 
-use super::super::super::super::kernel::waiter::*;
-use super::super::super::super::kernel::waiter::bufchan::*;
-use super::super::super::super::tcpip::tcpip::*;
 use super::super::super::super::super::common::*;
 use super::super::super::super::super::linux::socket::*;
 use super::super::super::super::super::linux_def::*;
+use super::super::super::super::kernel::waiter::bufchan::*;
+use super::super::super::super::kernel::waiter::*;
 use super::super::super::super::task::*;
+use super::super::super::super::tcpip::tcpip::*;
 use super::super::super::super::uid::*;
 //use super::super::super::control::*;
-use super::unix::*;
 use super::queue::*;
+use super::unix::*;
 
 // A ConnectingEndpoint is a connectioned unix endpoint that is attempting to
 // establish a bidirectional connection with a BoundEndpoint.
-pub trait ConnectingEndpoint : PartialEndPoint {
+pub trait ConnectingEndpoint: PartialEndPoint {
     fn Lock(&self) -> QMutexGuard<()>;
 
     fn as_any(&self) -> &Any;
@@ -90,7 +90,7 @@ pub struct ConnectionedEndPointInternal {
     // have another associated connectionedEndpoint.
     //
     // If nil, then no listen call has been made.
-    pub acceptedChan: Option<BufChan<ConnectionedEndPoint>>,
+    pub acceptedChan: QMutex<Option<BufChan<ConnectionedEndPoint>>>,
 }
 
 impl ConnectionedEndPointInternal {
@@ -103,15 +103,16 @@ impl ConnectionedEndPointInternal {
     // listening).
     pub fn IsBound(&self) -> bool {
         let e = self;
-        return e.baseEndpoint.lock().path.len() != 0 && e.acceptedChan.is_none();
+        return e.baseEndpoint.lock().path.len() != 0 && e.acceptedChan.lock().is_none();
     }
 
     pub fn Listening(&self) -> bool {
-        return self.acceptedChan.is_some()
+        return self.acceptedChan.lock().is_some();
     }
 }
+
 #[derive(Clone)]
-pub struct ConnectionedEndPointWeak(Weak<(QMutex<ConnectionedEndPointInternal>, QMutex<()>)>);
+pub struct ConnectionedEndPointWeak(Weak<(ConnectionedEndPointInternal, QMutex<()>)>);
 
 impl ConnectionedEndPointWeak {
     pub fn Upgrade(&self) -> Option<ConnectionedEndPoint> {
@@ -120,12 +121,12 @@ impl ConnectionedEndPointWeak {
             Some(c) => c,
         };
 
-        return Some(ConnectionedEndPoint(c))
+        return Some(ConnectionedEndPoint(c));
     }
 }
 
 #[derive(Clone)]
-pub struct ConnectionedEndPoint(Arc<(QMutex<ConnectionedEndPointInternal>, QMutex<()>)>);
+pub struct ConnectionedEndPoint(Arc<(ConnectionedEndPointInternal, QMutex<()>)>);
 
 impl ConnectionedEndPoint {
     pub fn Downgrade(&self) -> ConnectionedEndPointWeak {
@@ -134,16 +135,16 @@ impl ConnectionedEndPoint {
 }
 
 impl Deref for ConnectionedEndPoint {
-    type Target = QMutex<ConnectionedEndPointInternal>;
+    type Target = ConnectionedEndPointInternal;
 
-    fn deref(&self) -> &QMutex<ConnectionedEndPointInternal> {
+    fn deref(&self) -> &ConnectionedEndPointInternal {
         &(self.0).0
     }
 }
 
 impl PartialEq for ConnectionedEndPoint {
     fn eq(&self, other: &Self) -> bool {
-        return Arc::ptr_eq(&self.0, &other.0)
+        return Arc::ptr_eq(&self.0, &other.0);
     }
 }
 
@@ -156,10 +157,10 @@ impl ConnectionedEndPoint {
             id: NewUID(),
             stype: stype,
             backlog: 0,
-            acceptedChan: None,
+            acceptedChan: QMutex::new(None),
         };
 
-        return Self(Arc::new((QMutex::new(internal), QMutex::new(()))))
+        return Self(Arc::new((internal, QMutex::new(()))));
     }
 
     pub fn RefCount(&self) -> usize {
@@ -167,8 +168,8 @@ impl ConnectionedEndPoint {
     }
 
     pub fn State(&self) -> i32 {
-        if self.lock().Connected() {
-            return SS_CONNECTED
+        if self.Connected() {
+            return SS_CONNECTED;
         }
 
         return SS_UNCONNECTED;
@@ -180,46 +181,57 @@ impl ConnectionedEndPoint {
             id: NewUID(),
             stype: stype,
             backlog: 0,
-            acceptedChan: None,
+            acceptedChan: QMutex::new(None),
         };
 
-        return Self(Arc::new((QMutex::new(internal), QMutex::new(()))))
+        return Self(Arc::new((internal, QMutex::new(()))));
     }
 
     pub fn NewPair(stype: i32, hostfd1: i32, hostfd2: i32) -> (Self, Self) {
         let a = Self::New(stype, hostfd1);
         let b = Self::New(stype, hostfd2);
 
-        let aq = a.lock().baseEndpoint.lock().queue.clone();
-        let bq = b.lock().baseEndpoint.lock().queue.clone();
+        let aq = a.baseEndpoint.lock().queue.clone();
+        let bq = b.baseEndpoint.lock().queue.clone();
 
         let q1 = MsgQueue::New(aq.clone(), bq.clone(), INITIAL_LIMIT);
         let q2 = MsgQueue::New(bq.clone(), aq.clone(), INITIAL_LIMIT);
 
         if stype == SockType::SOCK_STREAM {
-            a.lock().baseEndpoint.lock().receiver = Some(Arc::new(StreamQueueReceiver::New(q1.clone())));
-            b.lock().baseEndpoint.lock().receiver = Some(Arc::new(StreamQueueReceiver::New(q2.clone())));
+            a.baseEndpoint.lock().receiver =
+                Some(Arc::new(StreamQueueReceiver::New(q1.clone())));
+            b.baseEndpoint.lock().receiver =
+                Some(Arc::new(StreamQueueReceiver::New(q2.clone())));
         } else {
-            a.lock().baseEndpoint.lock().receiver = Some(Arc::new(QueueReceiver{readQueue: q1.clone()}));
-            b.lock().baseEndpoint.lock().receiver = Some(Arc::new(QueueReceiver{readQueue: q2.clone()}));
+            a.baseEndpoint.lock().receiver = Some(Arc::new(QueueReceiver {
+                readQueue: q1.clone(),
+            }));
+            b.baseEndpoint.lock().receiver = Some(Arc::new(QueueReceiver {
+                readQueue: q2.clone(),
+            }));
         }
 
-        a.lock().baseEndpoint.lock().connected = Some(Arc::new(UnixConnectedEndpoint {
+        a.baseEndpoint.lock().connected = Some(Arc::new(UnixConnectedEndpoint {
             endpoint: Arc::new(b.clone()),
             writeQueue: q2,
         }));
 
-        b.lock().baseEndpoint.lock().connected = Some(Arc::new(UnixConnectedEndpoint {
+        b.baseEndpoint.lock().connected = Some(Arc::new(UnixConnectedEndpoint {
             endpoint: Arc::new(a.clone()),
             writeQueue: q1,
         }));
 
-        return (a, b)
+        return (a, b);
     }
 
     // NewExternal creates a new externally backed Endpoint. It behaves like a
     // socketpair.
-    pub fn NewExternal(stype: i32, queue: Queue, receiver: Arc<Receiver>, connected: Arc<ConnectedEndpoint>) -> Self {
+    pub fn NewExternal(
+        stype: i32,
+        queue: Queue,
+        receiver: Arc<Receiver>,
+        connected: Arc<ConnectedEndpoint>,
+    ) -> Self {
         let baseEndpoint = BaseEndpoint::New(queue, receiver, connected);
 
         let internal = ConnectionedEndPointInternal {
@@ -227,30 +239,31 @@ impl ConnectionedEndPoint {
             id: NewUID(),
             stype: stype,
             backlog: 0,
-            acceptedChan: None,
+            acceptedChan: QMutex::new(None),
         };
 
-        return Self(Arc::new((QMutex::new(internal), QMutex::new(()))))
+        return Self(Arc::new((internal, QMutex::new(()))));
     }
 
     pub fn TryLock(&self) -> Option<QMutexGuard<()>> {
-        return (self.0).1.try_lock()
+        return (self.0).1.try_lock();
     }
 
     // isBound returns true iff the connectionedEndpoint is bound (but not
     // listening).
     pub fn IsBound(&self) -> bool {
         self.TryLock();
-        let e = self.lock();
-        return e.IsBound();
+        return (self.0).0.IsBound();
     }
 
-    pub fn BidirectionalConnect<T: 'static + ConnectingEndpoint>(&self,
-                                                                 task: &Task,
-                                                                 ce: Arc<T>,
-                                                                 returnConnect: impl Fn(Arc<Receiver>, Arc<ConnectedEndpoint>)) -> Result<()> {
-        if ce.Type() != self.lock().stype {
-            return Err(Error::SysError(SysErr::EPROTOTYPE))
+    pub fn BidirectionalConnect<T: 'static + ConnectingEndpoint>(
+        &self,
+        task: &Task,
+        ce: Arc<T>,
+        returnConnect: impl Fn(Arc<Receiver>, Arc<ConnectedEndpoint>),
+    ) -> Result<()> {
+        if ce.Type() != self.stype {
+            return Err(Error::SysError(SysErr::EPROTOTYPE));
         }
 
         // Check if ce is e to avoid a deadlock.
@@ -258,7 +271,7 @@ impl ConnectionedEndPoint {
             None => (),
             Some(e) => {
                 if e.clone() == *self {
-                    return Err(Error::SysError(TcpipErr::ERR_INVALID_ENDPOINT_STATE.sysErr))
+                    return Err(Error::SysError(TcpipErr::ERR_INVALID_ENDPOINT_STATE.sysErr));
                 }
             }
         }
@@ -272,43 +285,47 @@ impl ConnectionedEndPoint {
 
         // Check connecting state.
         if ce.Connected() {
-            return Err(Error::SysError(TcpipErr::ERR_ALREADY_CONNECTED.sysErr))
+            return Err(Error::SysError(TcpipErr::ERR_ALREADY_CONNECTED.sysErr));
         }
 
         if ce.Listening() {
-            return Err(Error::SysError(TcpipErr::ERR_INVALID_ENDPOINT_STATE.sysErr))
+            return Err(Error::SysError(TcpipErr::ERR_INVALID_ENDPOINT_STATE.sysErr));
         }
 
         // Check bound state.
         if !self.Listening() {
-            return Err(Error::SysError(TcpipErr::ERR_CONNECTION_REFUSED.sysErr))
+            return Err(Error::SysError(TcpipErr::ERR_CONNECTION_REFUSED.sysErr));
         }
 
         // Create a newly bound connectionedEndpoint.
         let baseEndPoint = BaseEndpoint::default();
-        baseEndPoint.lock().path = self.lock().baseEndpoint.lock().path.to_string();
-        let stype = self.lock().stype;
+        baseEndPoint.lock().path = self.baseEndpoint.lock().path.to_string();
+        let stype = self.stype;
         let ne = ConnectionedEndPoint::NewWithBaseEndpoint(baseEndPoint, stype);
 
         let readq = ce.WaiterQueue();
-        let writeq = ne.lock().baseEndpoint.lock().queue.clone();
+        let writeq = ne.baseEndpoint.lock().queue.clone();
         let readQueue = MsgQueue::New(readq.clone(), writeq.clone(), INITIAL_LIMIT);
-        ne.lock().baseEndpoint.lock().connected = Some(Arc::new(UnixConnectedEndpoint::New(ce.clone(), readQueue.clone())));
+        ne.baseEndpoint.lock().connected = Some(Arc::new(UnixConnectedEndpoint::New(
+            ce.clone(),
+            readQueue.clone(),
+        )));
 
         let writeQueue = MsgQueue::New(writeq.clone(), readq.clone(), INITIAL_LIMIT);
-        if self.lock().stype == SockType::SOCK_STREAM {
-            ne.lock().baseEndpoint.lock().receiver = Some(Arc::new(StreamQueueReceiver::New(writeQueue.clone())))
+        if self.stype == SockType::SOCK_STREAM {
+            ne.baseEndpoint.lock().receiver =
+                Some(Arc::new(StreamQueueReceiver::New(writeQueue.clone())))
         } else {
             let receiver = QueueReceiver::New(writeQueue.clone());
-            ne.lock().baseEndpoint.lock().receiver = Some(Arc::new(receiver));
+            ne.baseEndpoint.lock().receiver = Some(Arc::new(receiver));
         }
 
-        let chan = self.lock().acceptedChan.clone().unwrap();
+        let chan = self.acceptedChan.lock().clone().unwrap();
         match chan.Write(task, ne.clone()) {
             Err(_) => return Err(Error::SysError(SysErr::ECONNREFUSED)),
             Ok(()) => {
                 let connected = UnixConnectedEndpoint::New(Arc::new(ne), writeQueue);
-                if self.lock().stype == SockType::SOCK_STREAM {
+                if self.stype == SockType::SOCK_STREAM {
                     let receive = StreamQueueReceiver::New(readQueue.clone());
                     returnConnect(Arc::new(receive), Arc::new(connected));
                 } else {
@@ -319,77 +336,67 @@ impl ConnectionedEndPoint {
                 core::mem::drop(lock2);
                 core::mem::drop(lock1);
 
-                let q = self.lock().baseEndpoint.lock().queue.clone();
+                let q = self.baseEndpoint.lock().queue.clone();
                 q.Notify(EVENT_IN);
-                ce.WaiterQueue().Notify(EVENT_OUT);
+                ce.WaiterQueue().Notify(WRITEABLE_EVENT);
 
-                return Ok(())
+                return Ok(());
             }
         }
     }
 
     // UnidirectionalConnect implements BoundEndpoint.UnidirectionalConnect.
     pub fn UnidirectionalConnect(&self) -> Result<UnixConnectedEndpoint> {
-        return Err(Error::SysError(SysErr::ECONNREFUSED))
+        return Err(Error::SysError(SysErr::ECONNREFUSED));
     }
 }
 
 impl ConnectingEndpoint for ConnectionedEndPoint {
     fn Lock(&self) -> QMutexGuard<()> {
-        return (self.0).1.lock()
+        return (self.0).1.lock();
     }
 
     fn as_any(&self) -> &Any {
-        return self
+        return self;
     }
 
     fn ID(&self) -> u64 {
-        self.TryLock();
-        return self.lock().id;
+        return self.id;
     }
 
     fn Connected(&self) -> bool {
-        self.TryLock();
-        return self.lock().Connected();
+        return (self.0).0.Connected();
     }
 
     fn Listening(&self) -> bool {
-        self.TryLock();
-        return self.lock().Listening();
+        return (self.0).0.Listening();
     }
 
     fn WaiterQueue(&self) -> Queue {
-        self.TryLock();
-        return self.lock().baseEndpoint.lock().queue.clone();
+        return self.baseEndpoint.lock().queue.clone();
     }
 }
 
 impl Passcred for ConnectionedEndPoint {
     fn Passcred(&self) -> bool {
-        self.TryLock();
-        let e = self.lock();
-        return e.baseEndpoint.Passcred();
+        return self.baseEndpoint.Passcred();
     }
 }
 
 impl PartialEndPoint for ConnectionedEndPoint {
     fn Type(&self) -> i32 {
-        self.TryLock();
-        return self.lock().stype;
+        return self.stype;
     }
-
 
     // GetLocalAddress returns the bound path.
     fn GetLocalAddress(&self) -> Result<SockAddrUnix> {
-        self.TryLock();
-        let e = self.lock();
-        return e.baseEndpoint.GetLocalAddress();
+        return self.baseEndpoint.GetLocalAddress();
     }
 }
 
 impl Endpoint for ConnectionedEndPoint {
     fn as_any(&self) -> &Any {
-        return self
+        return self;
     }
 
     fn Close(&self) {
@@ -398,7 +405,7 @@ impl Endpoint for ConnectionedEndPoint {
 
         {
             self.TryLock();
-            let mut e = self.lock();
+            let e = self;
 
             if e.Connected() {
                 let mut baseEndpoint = e.baseEndpoint.lock();
@@ -418,7 +425,7 @@ impl Endpoint for ConnectionedEndPoint {
                 baseEndpoint.path = "".to_string();
             } else if e.Listening() {
                 {
-                    let chan = e.acceptedChan.take().unwrap();
+                    let chan = e.acceptedChan.lock().take().unwrap();
                     chan.Close();
                     for n in &chan.lock().buf {
                         n.Close();
@@ -439,47 +446,60 @@ impl Endpoint for ConnectionedEndPoint {
         }
     }
 
-    fn RecvMsg(&self, data: &mut [IoVec], creds: bool, numRights: u64, peek: bool, addr: Option<&mut SockAddrUnix>)
-               -> Result<(usize, usize, SCMControlMessages, bool)> {
+    fn RecvMsg(
+        &self,
+        data: &mut [IoVec],
+        creds: bool,
+        numRights: u64,
+        peek: bool,
+        addr: Option<&mut SockAddrUnix>,
+    ) -> Result<(usize, usize, SCMControlMessages, bool)> {
         self.TryLock();
-        return self.lock().baseEndpoint.RecvMsg(data, creds, numRights, peek, addr)
+        return self
+            .baseEndpoint
+            .RecvMsg(data, creds, numRights, peek, addr);
     }
-
 
     // SendMsg writes data and a control message to the endpoint's peer.
     // This method does not block if the data cannot be written.
-    fn SendMsg(&self, data: &[IoVec], c: &SCMControlMessages, to: &Option<BoundEndpoint>) -> Result<usize>  {
+    fn SendMsg(
+        &self,
+        data: &[IoVec],
+        c: &SCMControlMessages,
+        to: &Option<BoundEndpoint>,
+    ) -> Result<usize> {
         // Stream sockets do not support specifying the endpoint. Seqpacket
         // sockets ignore the passed endpoint.
         self.TryLock();
-        let e = self.lock();
-        if e.stype == SockType::SOCK_STREAM && to.is_some() {
-            return Err(Error::SysError(SysErr::EOPNOTSUPP))
+        let stype = self.stype;
+        if stype == SockType::SOCK_STREAM && to.is_some() {
+            return Err(Error::SysError(SysErr::EOPNOTSUPP));
         }
 
-        return e.baseEndpoint.SendMsg(data, c, to);
+        let baseEndpoint = self.baseEndpoint.clone();
+        return baseEndpoint.SendMsg(data, c, to);
     }
 
     fn Shutdown(&self, flags: ShutdownFlags) -> Result<()> {
         self.TryLock();
-        return self.lock().baseEndpoint.Shutdown(flags)
+        return self.baseEndpoint.Shutdown(flags);
     }
 
     // Connect attempts to directly connect to another Endpoint.
     // Implements Endpoint.Connect.
     fn Connect(&self, task: &Task, server: &BoundEndpoint) -> Result<()> {
         let returnConnect = |r: Arc<Receiver>, ce: Arc<ConnectedEndpoint>| {
-            self.lock().baseEndpoint.lock().receiver = Some(r);
-            self.lock().baseEndpoint.lock().connected = Some(ce);
+            self.baseEndpoint.lock().receiver = Some(r);
+            self.baseEndpoint.lock().connected = Some(ce);
         };
 
-        return server.BidirectionalConnect(task, Arc::new(self.clone()), returnConnect)
+        return server.BidirectionalConnect(task, Arc::new(self.clone()), returnConnect);
     }
 
     // Listen starts listening on the connection.
     fn Listen(&self, backlog: i32) -> Result<()> {
         self.TryLock();
-        let mut e = self.lock();
+        let e = self;
 
         if e.Listening() {
             // Adjust the size of the channel iff we can fix existing
@@ -487,10 +507,10 @@ impl Endpoint for ConnectionedEndPoint {
             let newChan = BufChan::New(backlog as usize);
 
             {
-                let origChan = e.acceptedChan.clone().unwrap();
+                let origChan = e.acceptedChan.lock().clone().unwrap();
                 let mut origChanLock = origChan.lock();
                 if origChanLock.buf.len() > backlog as usize {
-                    return Err(Error::SysError(SysErr::EINVAL))
+                    return Err(Error::SysError(SysErr::EINVAL));
                 }
 
                 let mut newChanLock = newChan.lock();
@@ -501,29 +521,29 @@ impl Endpoint for ConnectionedEndPoint {
                 }
             }
 
-            e.acceptedChan = Some(newChan);
-            return Ok(())
+            *e.acceptedChan.lock() = Some(newChan);
+            return Ok(());
         }
 
         if !e.IsBound() {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
-        e.acceptedChan = Some(BufChan::New(backlog as usize));
-        return Ok(())
+        *e.acceptedChan.lock() = Some(BufChan::New(backlog as usize));
+        return Ok(());
     }
 
     // Accept accepts a new connection.
     fn Accept(&self) -> Result<ConnectionedEndPoint> {
         self.TryLock();
-        let e = self.lock();
+        let e = self;
         if !e.Listening() {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
-        match e.acceptedChan.as_ref().unwrap().TryRead()? {
+        match e.acceptedChan.lock().as_ref().unwrap().TryRead()? {
             None => return Err(Error::SysError(SysErr::EWOULDBLOCK)),
-            Some(ep) => Ok(ep)
+            Some(ep) => Ok(ep),
         }
     }
 
@@ -537,63 +557,61 @@ impl Endpoint for ConnectionedEndPoint {
     // is invalid (the empty string).
     fn Bind(&self, addr: &SockAddrUnix) -> Result<()> {
         self.TryLock();
-        let e = self.lock();
+        let e = self;
         if e.IsBound() || e.Listening() {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         if addr.Path.len() == 0 {
             // The empty string is not permitted.
-            return Err(Error::SysError(SysErr::EADDRNOTAVAIL))
+            return Err(Error::SysError(SysErr::EADDRNOTAVAIL));
         }
 
         e.baseEndpoint.lock().path = addr.Path.clone();
-        return Ok(())
+        return Ok(());
     }
 
     fn GetRemoteAddress(&self) -> Result<SockAddrUnix> {
         self.TryLock();
-        return self.lock().baseEndpoint.GetRemoteAddress();
+        return self.baseEndpoint.GetRemoteAddress();
     }
 
     fn SetSockOpt(&self, opt: &SockOpt) -> Result<()> {
         self.TryLock();
-        let e = self.lock();
+        let e = self;
         return e.baseEndpoint.SetSockOpt(opt);
     }
 
     fn GetSockOpt(&self, opt: &mut SockOpt) -> Result<()> {
         self.TryLock();
-        let e = self.lock();
+        let e = self;
         return e.baseEndpoint.GetSockOpt(opt);
     }
 }
 
 impl ConnectedPasscred for ConnectionedEndPoint {
     fn ConnectedPasscred(&self) -> bool {
-        self.TryLock();
-        let e = self.lock();
-        return e.baseEndpoint.ConnectedPasscred();
+        return self.baseEndpoint.ConnectedPasscred();
     }
 }
-
 
 impl Waitable for ConnectionedEndPoint {
     fn Readiness(&self, _task: &Task, mask: EventMask) -> EventMask {
         self.TryLock();
-        let e = self.lock();
+        let e = self;
 
         let mut ready = 0;
         if e.Connected() {
-            if mask & EVENT_IN != 0 && e.baseEndpoint.lock().receiver.as_ref().unwrap().Readable() {
-                ready |= EVENT_IN
+            if mask & READABLE_EVENT != 0 && e.baseEndpoint.lock().receiver.as_ref().unwrap().Readable() {
+                ready |= READABLE_EVENT
             }
-            if mask & EVENT_OUT != 0 && e.baseEndpoint.lock().connected.as_ref().unwrap().Writable() {
-                ready |= EVENT_OUT
+            if mask & WRITEABLE_EVENT != 0 && e.baseEndpoint.lock().connected.as_ref().unwrap().Writable()
+            {
+                ready |= WRITEABLE_EVENT
             }
         } else if e.Listening() {
-            if mask & EVENT_IN != 0 && e.acceptedChan.as_ref().unwrap().Len() > 0 {
-                ready |= EVENT_IN
+            if mask & READABLE_EVENT != 0 && e.acceptedChan.lock().as_ref().unwrap().Len() > 0 {
+                ready |= READABLE_EVENT
             }
         }
 
@@ -602,11 +620,11 @@ impl Waitable for ConnectionedEndPoint {
 
     fn EventRegister(&self, task: &Task, e: &WaitEntry, mask: EventMask) {
         self.TryLock();
-        self.lock().baseEndpoint.EventRegister(task, e, mask)
+        self.baseEndpoint.EventRegister(task, e, mask)
     }
 
-    fn EventUnregister(&self, task: &Task,e: &WaitEntry) {
+    fn EventUnregister(&self, task: &Task, e: &WaitEntry) {
         self.TryLock();
-        self.lock().baseEndpoint.EventUnregister(task, e)
+        self.baseEndpoint.EventUnregister(task, e)
     }
 }

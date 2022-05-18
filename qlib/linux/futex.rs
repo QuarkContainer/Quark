@@ -31,7 +31,6 @@ pub const FUTEX_CMP_REQUEUE_PI: i32 = 12;
 pub const FUTEX_PRIVATE_FLAG: i32 = 128;
 pub const FUTEX_CLOCK_REALTIME: i32 = 256;
 
-
 // These are flags are from <linux/futex.h> and are used in  FUTEX_WAKE_OP
 // to define the operations.
 pub const FUTEX_OP_SET: u32 = 0;
@@ -55,16 +54,16 @@ pub const FUTEX_WAITERS: u32 = 0x80000000;
 pub const FUTEX_OWNER_DIED: u32 = 0x40000000;
 
 // FUTEX_BITSET_MATCH_ANY has all bits set.
-pub const FUTEX_BITSET_MATCH_ANY : u32 = 0xffffffff;
+pub const FUTEX_BITSET_MATCH_ANY: u32 = 0xffffffff;
 
 // ROBUST_LIST_LIMIT protects against a deliberately circular list.
-pub const ROBUST_LIST_LIMIT : u32 = 2048;
+pub const ROBUST_LIST_LIMIT: u32 = 2048;
 
 // RobustListHead corresponds to Linux's struct robust_list_head.
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
-pub struct RobustListHead  {
-    pub List          : u64,
-    pub FutexOffset   : u64,
-    pub ListOpPending : u64,
+pub struct RobustListHead {
+    pub List: u64,
+    pub FutexOffset: u64,
+    pub ListOpPending: u64,
 }

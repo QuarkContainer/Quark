@@ -12,33 +12,40 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
+use crate::qlib::mutex::*;
 use alloc::string::String;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::any::Any;
-use crate::qlib::mutex::*;
 
-use super::super::super::socket::unix::transport::unix::*;
+use super::super::super::super::auth::*;
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
-use super::super::super::super::auth::*;
-use super::super::super::threadmgr::thread::*;
 use super::super::super::kernel::time::*;
+use super::super::super::socket::unix::transport::unix::*;
 use super::super::super::task::*;
-use super::super::host::hostinodeop::*;
+use super::super::super::threadmgr::thread::*;
 use super::super::attr::*;
+use super::super::dirent::*;
 use super::super::file::*;
 use super::super::flags::*;
-use super::super::dirent::*;
-use super::super::mount::*;
+use super::super::host::hostinodeop::*;
 use super::super::inode::*;
+use super::super::mount::*;
 use super::super::ramfs::symlink::*;
 use super::inode::*;
 
-pub trait ReadLinkNode : Send + Sync {
+pub trait ReadLinkNode: Send + Sync {
     fn ReadLink(&self, link: &Symlink, task: &Task, _dir: &Inode) -> Result<String>;
     fn GetLink(&self, link: &Symlink, task: &Task, dir: &Inode) -> Result<Dirent>;
-    fn GetFile(&self, link: &Symlink, task: &Task, dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File> {
+    fn GetFile(
+        &self,
+        link: &Symlink,
+        task: &Task,
+        dir: &Inode,
+        dirent: &Dirent,
+        flags: FileFlags,
+    ) -> Result<File> {
         return link.GetFile(task, dir, dirent, flags);
     }
 }
@@ -48,20 +55,25 @@ pub struct SymlinkNode<T: 'static + ReadLinkNode> {
     pub node: T,
 }
 
-impl <T: 'static + ReadLinkNode> SymlinkNode<T> {
-    pub fn New(task: &Task, msrc: &Arc<QMutex<MountSource>>, node: T, thread: Option<Thread>) -> Inode {
+impl<T: 'static + ReadLinkNode> SymlinkNode<T> {
+    pub fn New(
+        task: &Task,
+        msrc: &Arc<QMutex<MountSource>>,
+        node: T,
+        thread: Option<Thread>,
+    ) -> Inode {
         let link = Self {
             link: Symlink::New(task, &ROOT_OWNER, ""),
             node: node,
         };
 
-        return NewProcInode(&Arc::new(link), msrc, InodeType::Symlink, thread)
+        return NewProcInode(&Arc::new(link), msrc, InodeType::Symlink, thread);
     }
 }
 
-impl <T: 'static + ReadLinkNode> InodeOperations for SymlinkNode<T> {
+impl<T: 'static + ReadLinkNode> InodeOperations for SymlinkNode<T> {
     fn as_any(&self) -> &Any {
-        return self
+        return self;
     }
 
     fn IopsType(&self) -> IopsType {
@@ -84,11 +96,24 @@ impl <T: 'static + ReadLinkNode> InodeOperations for SymlinkNode<T> {
         return self.link.Lookup(task, dir, name);
     }
 
-    fn Create(&self, task: &Task, dir: &mut Inode, name: &str, flags: &FileFlags, perms: &FilePermissions) -> Result<File> {
+    fn Create(
+        &self,
+        task: &Task,
+        dir: &mut Inode,
+        name: &str,
+        flags: &FileFlags,
+        perms: &FilePermissions,
+    ) -> Result<File> {
         return self.link.Create(task, dir, name, flags, perms);
     }
 
-    fn CreateDirectory(&self, task: &Task, dir: &mut Inode, name: &str, perms: &FilePermissions) -> Result<()> {
+    fn CreateDirectory(
+        &self,
+        task: &Task,
+        dir: &mut Inode,
+        name: &str,
+        perms: &FilePermissions,
+    ) -> Result<()> {
         return self.link.CreateDirectory(task, dir, name, perms);
     }
 
@@ -96,11 +121,23 @@ impl <T: 'static + ReadLinkNode> InodeOperations for SymlinkNode<T> {
         return self.link.CreateLink(task, dir, oldname, newname);
     }
 
-    fn CreateHardLink(&self, task: &Task, dir: &mut Inode, target: &Inode, name: &str) -> Result<()> {
+    fn CreateHardLink(
+        &self,
+        task: &Task,
+        dir: &mut Inode,
+        target: &Inode,
+        name: &str,
+    ) -> Result<()> {
         return self.link.CreateHardLink(task, dir, target, name);
     }
 
-    fn CreateFifo(&self, task: &Task, dir: &mut Inode, name: &str, perms: &FilePermissions) -> Result<()> {
+    fn CreateFifo(
+        &self,
+        task: &Task,
+        dir: &mut Inode,
+        name: &str,
+        perms: &FilePermissions,
+    ) -> Result<()> {
         return self.link.CreateFifo(task, dir, name, perms);
     }
 
@@ -113,16 +150,40 @@ impl <T: 'static + ReadLinkNode> InodeOperations for SymlinkNode<T> {
         return self.link.RemoveDirectory(task, dir, name);
     }
 
-    fn Rename(&self, task: &Task, dir: &mut Inode, oldParent: &Inode, oldname: &str, newParent: &Inode, newname: &str, replacement: bool) -> Result<()> {
-        return self.link.Rename(task, dir, oldParent, oldname, newParent, newname, replacement);
+    fn Rename(
+        &self,
+        task: &Task,
+        dir: &mut Inode,
+        oldParent: &Inode,
+        oldname: &str,
+        newParent: &Inode,
+        newname: &str,
+        replacement: bool,
+    ) -> Result<()> {
+        return self.link.Rename(
+            task,
+            dir,
+            oldParent,
+            oldname,
+            newParent,
+            newname,
+            replacement,
+        );
     }
 
-    fn Bind(&self, _task: &Task, _dir: &Inode, _name: &str, _data: &BoundEndpoint, _perms: &FilePermissions) -> Result<Dirent> {
-        return Err(Error::SysError(SysErr::ENOTDIR))
+    fn Bind(
+        &self,
+        _task: &Task,
+        _dir: &Inode,
+        _name: &str,
+        _data: &BoundEndpoint,
+        _perms: &FilePermissions,
+    ) -> Result<Dirent> {
+        return Err(Error::SysError(SysErr::ENOTDIR));
     }
 
     fn BoundEndpoint(&self, _task: &Task, _inode: &Inode, _path: &str) -> Option<BoundEndpoint> {
-        return None
+        return None;
     }
 
     fn GetFile(&self, task: &Task, dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File> {
@@ -130,8 +191,8 @@ impl <T: 'static + ReadLinkNode> InodeOperations for SymlinkNode<T> {
         //return self.link.GetFile(task, dir, dirent, flags);
     }
 
-    fn UnstableAttr(&self, task: &Task, dir: &Inode) -> Result<UnstableAttr> {
-        return self.link.UnstableAttr(task, dir);
+    fn UnstableAttr(&self, task: &Task) -> Result<UnstableAttr> {
+        return self.link.UnstableAttr(task);
     }
 
     fn Getxattr(&self, dir: &Inode, name: &str) -> Result<String> {
@@ -171,7 +232,7 @@ impl <T: 'static + ReadLinkNode> InodeOperations for SymlinkNode<T> {
     }
 
     fn ReadLink(&self, task: &Task, dir: &Inode) -> Result<String> {
-        return self.node.ReadLink(&self.link, task, dir)
+        return self.node.ReadLink(&self.link, task, dir);
     }
 
     fn GetLink(&self, task: &Task, dir: &Inode) -> Result<Dirent> {

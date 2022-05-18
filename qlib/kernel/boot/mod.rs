@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod fs;
-pub mod oci;
 pub mod config;
-pub mod specutils;
-pub mod loader;
 pub mod controller;
+pub mod fs;
+pub mod loader;
+pub mod oci;
 pub mod process;
-
+pub mod specutils;

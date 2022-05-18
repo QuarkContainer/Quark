@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
+use alloc::sync::Arc;
 
-use super::super::task::*;
 use super::super::super::auth::*;
 use super::super::super::device::*;
 use super::super::super::linux_def::*;
-use super::fsutil::inode::simple_file_inode::*;
+use super::super::task::*;
 use super::attr::*;
+use super::fsutil::inode::simple_file_inode::*;
 use super::inode::*;
 use super::mount::*;
 
@@ -37,12 +37,14 @@ pub fn NewAnonInode(task: &Task) -> Inode {
         ..Default::default()
     };
 
-    let iops = SimpleFileInode::New(task,
-                                    &ROOT_OWNER,
-                                    &perm,
-                                    FSMagic::ANON_INODE_FS_MAGIC,
-                                    true,
-                                    SimpleFileNode{});
+    let iops = SimpleFileInode::New(
+        task,
+        &ROOT_OWNER,
+        &perm,
+        FSMagic::ANON_INODE_FS_MAGIC,
+        true,
+        SimpleFileNode {},
+    );
 
     let deviceId = PSEUDO_DEVICE.lock().id.DeviceID();
     let inodeId = PSEUDO_DEVICE.lock().NextIno();
@@ -56,7 +58,9 @@ pub fn NewAnonInode(task: &Task) -> Inode {
         DeviceFileMinor: 0,
     };
 
-    return Inode::New(&Arc::new(iops),
-                      &Arc::new(QMutex::new(MountSource::NewPseudoMountSource())),
-                      &sattr);
+    return Inode::New(
+        &Arc::new(iops),
+        &Arc::new(QMutex::new(MountSource::NewPseudoMountSource())),
+        &sattr,
+    );
 }

@@ -40,21 +40,19 @@ pub fn Processes(k: &Kernel, containerID: &str) -> Vec<ProcessInfo> {
         let mut ppid = 0;
         match lead.Parent() {
             None => (),
-            Some(p) => {
-                ppid = root.IDOfThreadGroup(&p.ThreadGroup())
-            }
+            Some(p) => ppid = root.IDOfThreadGroup(&p.ThreadGroup()),
         }
 
-        ret.push(ProcessInfo{
-            UID:   lead.Credentials().lock().EffectiveKUID,
-            PID:   pid,
-            PPID:  ppid,
+        ret.push(ProcessInfo {
+            UID: lead.Credentials().lock().EffectiveKUID,
+            PID: pid,
+            PPID: ppid,
             STime: lead.StartTime().0,
-            Utilization:     0,
-            Time:  0,
-            Cmd:   lead.Name(),
+            Utilization: 0,
+            Time: 0,
+            Cmd: lead.Name(),
         })
     }
 
-    return ret
+    return ret;
 }

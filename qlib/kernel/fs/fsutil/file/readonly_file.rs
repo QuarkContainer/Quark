@@ -12,29 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::any::Any;
-use alloc::vec::Vec;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::any::Any;
 
-use super::super::super::file::*;
+use super::super::super::super::super::common::*;
+use super::super::super::super::super::linux_def::*;
+use super::super::super::super::kernel::waiter::*;
+use super::super::super::super::task::*;
 use super::super::super::attr::*;
 use super::super::super::dentry::*;
 use super::super::super::dirent::*;
-use super::super::super::super::kernel::waiter::*;
-use super::super::super::super::super::common::*;
-use super::super::super::super::super::linux_def::*;
-use super::super::super::super::task::*;
+use super::super::super::file::*;
 use super::super::super::host::hostinodeop::*;
 use super::*;
 
-pub fn NewSnapshotReadonlyFileOperations(data: Vec<u8>) -> ReadonlyFileOperations<SnapshotReadonlyFileNode> {
+pub fn NewSnapshotReadonlyFileOperations(
+    data: Vec<u8>,
+) -> ReadonlyFileOperations<SnapshotReadonlyFileNode> {
     let node = SnapshotReadonlyFileNode {
-        data: Arc::new(data)
+        data: Arc::new(data),
     };
 
-    return ReadonlyFileOperations {
-        node: node,
-    }
+    return ReadonlyFileOperations { node: node };
 }
 
 pub struct SnapshotReadonlyFileNode {
@@ -42,52 +42,64 @@ pub struct SnapshotReadonlyFileNode {
 }
 
 impl ReadonlyFileNode for SnapshotReadonlyFileNode {
-    fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], offset: i64, _blocking: bool) -> Result<i64> {
+    fn ReadAt(
+        &self,
+        task: &Task,
+        _f: &File,
+        dsts: &mut [IoVec],
+        offset: i64,
+        _blocking: bool,
+    ) -> Result<i64> {
         if offset < 0 {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         if offset as usize > self.data.len() {
-            return Ok(0)
+            return Ok(0);
         }
 
-        let n = task.CopyDataOutToIovs(&self.data[offset as usize ..], dsts)?;
+        let n = task.CopyDataOutToIovs(&self.data[offset as usize..], dsts, true)?;
 
-        return Ok(n as i64)
+        return Ok(n as i64);
     }
 }
 
-pub trait ReadonlyFileNode : Send + Sync {
-    fn ReadAt(&self, _task: &Task, _f: &File, _dsts: &mut [IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
-        return Err(Error::SysError(SysErr::EINVAL))
+pub trait ReadonlyFileNode: Send + Sync {
+    fn ReadAt(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _dsts: &mut [IoVec],
+        _offset: i64,
+        _blocking: bool,
+    ) -> Result<i64> {
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 }
 
-pub struct ReadonlyFileOperations <T: 'static + ReadonlyFileNode> {
+pub struct ReadonlyFileOperations<T: 'static + ReadonlyFileNode> {
     pub node: T,
 }
 
-impl <T: 'static + ReadonlyFileNode> Waitable for ReadonlyFileOperations <T> {
-    fn Readiness(&self, _task: &Task,mask: EventMask) -> EventMask {
-        return mask
+impl<T: 'static + ReadonlyFileNode> Waitable for ReadonlyFileOperations<T> {
+    fn Readiness(&self, _task: &Task, mask: EventMask) -> EventMask {
+        return mask;
     }
 
-    fn EventRegister(&self, _task: &Task,_e: &WaitEntry, _mask: EventMask) {
-    }
+    fn EventRegister(&self, _task: &Task, _e: &WaitEntry, _mask: EventMask) {}
 
-    fn EventUnregister(&self, _task: &Task,_e: &WaitEntry) {
-    }
+    fn EventUnregister(&self, _task: &Task, _e: &WaitEntry) {}
 }
 
-impl <T: 'static + ReadonlyFileNode> SpliceOperations for ReadonlyFileOperations <T> {}
+impl<T: 'static + ReadonlyFileNode> SpliceOperations for ReadonlyFileOperations<T> {}
 
-impl <T: 'static + ReadonlyFileNode> FileOperations for ReadonlyFileOperations <T> {
+impl<T: 'static + ReadonlyFileNode> FileOperations for ReadonlyFileOperations<T> {
     fn as_any(&self) -> &Any {
-        return self
+        return self;
     }
 
     fn FopsType(&self) -> FileOpsType {
-        return FileOpsType::ReadonlyFileOperations
+        return FileOpsType::ReadonlyFileOperations;
     }
 
     fn Seekable(&self) -> bool {
@@ -95,32 +107,59 @@ impl <T: 'static + ReadonlyFileNode> FileOperations for ReadonlyFileOperations <
     }
 
     fn Seek(&self, task: &Task, f: &File, whence: i32, current: i64, offset: i64) -> Result<i64> {
-        return SeekWithDirCursor(task, f, whence, current, offset, None)
+        return SeekWithDirCursor(task, f, whence, current, offset, None);
     }
 
-    fn ReadDir(&self, _task: &Task, _f: &File, _offset: i64, _serializer: &mut DentrySerializer) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ENOTDIR))
+    fn ReadDir(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _offset: i64,
+        _serializer: &mut DentrySerializer,
+    ) -> Result<i64> {
+        return Err(Error::SysError(SysErr::ENOTDIR));
     }
 
-    fn ReadAt(&self, task: &Task, f: &File, dsts: &mut [IoVec], offset: i64, blocking: bool) -> Result<i64> {
+    fn ReadAt(
+        &self,
+        task: &Task,
+        f: &File,
+        dsts: &mut [IoVec],
+        offset: i64,
+        blocking: bool,
+    ) -> Result<i64> {
         return self.node.ReadAt(task, f, dsts, offset, blocking);
     }
 
-    fn WriteAt(&self, _task: &Task, _f: &File, _srcs: &[IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
-        return Err(Error::SysError(SysErr::EINVAL))
+    fn WriteAt(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _srcs: &[IoVec],
+        _offset: i64,
+        _blocking: bool,
+    ) -> Result<i64> {
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     fn Append(&self, task: &Task, f: &File, srcs: &[IoVec]) -> Result<(i64, i64)> {
         let n = self.WriteAt(task, f, srcs, 0, false)?;
-        return Ok((n, 0))
+        return Ok((n, 0));
     }
 
-    fn Fsync(&self, _task: &Task, _f: &File, _start: i64, _end: i64, _syncType: SyncType) -> Result<()> {
-        return Ok(())
+    fn Fsync(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _start: i64,
+        _end: i64,
+        _syncType: SyncType,
+    ) -> Result<()> {
+        return Ok(());
     }
 
     fn Flush(&self, _task: &Task, _f: &File) -> Result<()> {
-        return Ok(())
+        return Ok(());
     }
 
     fn UnstableAttr(&self, task: &Task, f: &File) -> Result<UnstableAttr> {
@@ -129,16 +168,22 @@ impl <T: 'static + ReadonlyFileNode> FileOperations for ReadonlyFileOperations <
     }
 
     fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<()> {
-        return Err(Error::SysError(SysErr::ENOTTY))
+        return Err(Error::SysError(SysErr::ENOTTY));
     }
 
-    fn IterateDir(&self, _task: &Task, _d: &Dirent, _dirCtx: &mut DirCtx, _offset: i32) -> (i32, Result<i64>) {
-        return (0, Err(Error::SysError(SysErr::ENOTDIR)))
+    fn IterateDir(
+        &self,
+        _task: &Task,
+        _d: &Dirent,
+        _dirCtx: &mut DirCtx,
+        _offset: i32,
+    ) -> (i32, Result<i64>) {
+        return (0, Err(Error::SysError(SysErr::ENOTDIR)));
     }
 
     fn Mappable(&self) -> Result<HostInodeOp> {
-        return Err(Error::SysError(SysErr::ENODEV))
+        return Err(Error::SysError(SysErr::ENODEV));
     }
 }
 
-impl <T: 'static + ReadonlyFileNode> SockOperations for ReadonlyFileOperations <T> {}
+impl<T: 'static + ReadonlyFileNode> SockOperations for ReadonlyFileOperations<T> {}

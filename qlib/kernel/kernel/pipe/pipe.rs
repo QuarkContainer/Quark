@@ -12,56 +12,69 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::mutex::*;
+use alloc::collections::linked_list::LinkedList;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::ops::Deref;
 use core::sync::atomic::AtomicI64;
 use core::sync::atomic::Ordering;
-use alloc::collections::linked_list::LinkedList;
-use alloc::vec::Vec;
-use crate::qlib::mutex::*;
-use alloc::sync::Arc;
-use core::ops::Deref;
 
-use super::super::waiter::*;
+use super::super::super::super::common::*;
+use super::super::super::super::device::*;
+use super::super::super::super::linux_def::*;
+use super::super::super::super::mem::seq::*;
 use super::super::super::fs::attr::*;
 use super::super::super::fs::dirent::*;
-use super::super::super::fs::inode::*;
-use super::super::super::fs::mount::*;
 use super::super::super::fs::file::*;
 use super::super::super::fs::flags::*;
+use super::super::super::fs::inode::*;
+use super::super::super::fs::mount::*;
 use super::super::super::task::*;
-use super::super::super::super::common::*;
-use super::super::super::super::linux_def::*;
-use super::super::super::super::device::*;
-use super::super::super::super::mem::seq::*;
+use super::super::super::SignalDef::*;
 use super::super::waiter::cond::*;
+use super::super::waiter::*;
 use super::buffer::*;
 use super::node::*;
-use super::reader_writer::*;
 use super::reader::*;
+use super::reader_writer::*;
 use super::writer::*;
 
 // MinimumPipeSize is a hard limit of the minimum size of a pipe.
-pub const MINIMUM_PIPE_SIZE : usize = MemoryDef::PAGE_SIZE as usize;
+pub const MINIMUM_PIPE_SIZE: usize = MemoryDef::PAGE_SIZE as usize;
 
 // DefaultPipeSize is the system-wide default size of a pipe in bytes.
-pub const DEFAULT_PIPE_SIZE : usize = 16 * MemoryDef::PAGE_SIZE as usize;
+pub const DEFAULT_PIPE_SIZE: usize = 16 * MemoryDef::PAGE_SIZE as usize;
 
 // MaximumPipeSize is a hard limit on the maximum size of a pipe.
 // It corresponds to fs/pipe.c:pipe_max_size.
-pub const MAXIMUM_PIPE_SIZE : usize = 1048576;
+pub const MAXIMUM_PIPE_SIZE: usize = 1048576;
 
 // atomicIOBytes is the maximum number of bytes that the pipe will
 // guarantee atomic reads or writes atomically.
 // It corresponds to limits.h:PIPE_BUF.
-pub const ATOMIC_IO_BYTES : usize = 4096;
+pub const ATOMIC_IO_BYTES: usize = 4096;
 
 // NewConnectedPipe initializes a pipe and returns a pair of objects
 // representing the read and write ends of the pipe.
 pub fn NewConnectedPipe(task: &Task, sizeBytes: usize, atomicIOBytes: usize) -> (File, File) {
     let p = Pipe::New(task, false, sizeBytes, atomicIOBytes);
-    let r = p.Open(task, &FileFlags {Read: true, ..Default::default()});
-    let w = p.Open(task, &FileFlags {Write: true, ..Default::default()});
+    let r = p.Open(
+        task,
+        &FileFlags {
+            Read: true,
+            ..Default::default()
+        },
+    );
+    let w = p.Open(
+        task,
+        &FileFlags {
+            Write: true,
+            ..Default::default()
+        },
+    );
 
-    return (r, w)
+    return (r, w);
 }
 
 // Pipe is an encapsulation of a platform-independent pipe.
@@ -108,8 +121,8 @@ impl PipeInternal {
         let wanted = src.NumBytes() as usize;
         let avail = p.Available();
 
-        if avail == 0 {
-            return Ok(0)
+        if wanted == 0 {
+            return Ok(0);
         }
 
         //info!("pipe::write id is {} wanted is {}, avail is {}, size is {}, max is {}",
@@ -117,9 +130,13 @@ impl PipeInternal {
         if wanted > avail {
             // Is this needed? todo: confirm this
             // if this is must, Pipe::Readfrom needs redesign
-            /*if wanted <= atomicIOBytes {
+
+            // POSIX requires that a write smaller than atomicIOBytes
+            // (PIPE_BUF) be atomic, but requires no atomicity for writes
+            // larger than this.
+            if wanted < 4096 {
                 return Err(Error::SysError(SysErr::EAGAIN))
-            }*/
+            }
 
             // Limit to the available capacity.
             src = src.TakeFirst(avail as u64);
@@ -141,10 +158,10 @@ impl PipeInternal {
 
         if wanted > done {
             // Partial write due to full pipe.
-            return Ok(done)
+            return Ok(done);
         }
 
-        return Ok(done)
+        return Ok(done);
     }
 }
 
@@ -155,7 +172,6 @@ pub struct PipeIn {
     //
     // This value is immutable.
     pub isNamed: bool,
-
 
     // atomicIOBytes is the maximum number of bytes that the pipe will
     // guarantee atomic reads or writes atomically.
@@ -177,14 +193,13 @@ pub struct PipeIn {
 
     pub rWakeup: Cond,
     pub wWakeup: Cond,
-
 }
 
 #[derive(Clone)]
 pub struct Pipe(Arc<PipeIn>);
 
 impl Deref for Pipe {
-    type Target =Arc<PipeIn>;
+    type Target = Arc<PipeIn>;
 
     fn deref(&self) -> &Arc<PipeIn> {
         &self.0
@@ -200,11 +215,7 @@ impl Pipe {
             sizeBytes
         };
 
-        let mut atomicIOBytes = if atomicIOBytes == 0 {
-            1
-        } else {
-            atomicIOBytes
-        };
+        let mut atomicIOBytes = if atomicIOBytes == 0 { 1 } else { atomicIOBytes };
 
         if atomicIOBytes > sizeBytes {
             atomicIOBytes = sizeBytes;
@@ -218,8 +229,8 @@ impl Pipe {
             writers: AtomicI64::new(0),
             rWakeup: Cond::default(),
             wWakeup: Cond::default(),
-            intern: QMutex::new(PipeInternal{
-                id : super::super::super::uid::NewUID(),
+            intern: QMutex::new(PipeInternal {
+                id: super::super::super::uid::NewUID(),
                 max: sizeBytes,
                 ..Default::default()
             }),
@@ -228,7 +239,11 @@ impl Pipe {
         // Build the fs.Dirent of this pipe, shared by all fs.Files associated
         // with this pipe.
         let perms = FilePermissions {
-            User: PermMask {read: true, write: true, execute: false},
+            User: PermMask {
+                read: true,
+                write: true,
+                execute: false,
+            },
             ..Default::default()
         };
 
@@ -249,7 +264,7 @@ impl Pipe {
         let dirent = Dirent::New(&inode, &format!("pipe:[{}]", inodeId));
         p.intern.lock().dirent = Some(dirent);
 
-        return p
+        return p;
     }
 
     pub fn Notify(&self, mask: EventMask) {
@@ -275,17 +290,17 @@ impl Pipe {
         if flags.Read && flags.Write {
             self.ROpen();
             self.WOpen();
-            let rw = ReaderWriter {pipe: self.clone()};
+            let rw = ReaderWriter { pipe: self.clone() };
             let dirent = self.intern.lock().dirent.clone().unwrap();
             return File::New(&dirent, flags, rw);
         } else if flags.Read {
             self.ROpen();
-            let r = Reader {pipe: self.clone()};
+            let r = Reader { pipe: self.clone() };
             let dirent = self.intern.lock().dirent.clone().unwrap();
             return File::New(&dirent, flags, r);
         } else if flags.Write {
             self.WOpen();
-            let w = Writer {pipe: self.clone()};
+            let w = Writer { pipe: self.clone() };
             let dirent = self.intern.lock().dirent.clone().unwrap();
             return File::New(&dirent, flags, w);
         } else {
@@ -301,7 +316,7 @@ impl Pipe {
     pub fn Read(&self, _task: &Task, dst: BlockSeq) -> Result<usize> {
         // Don't block for a zero-length read even if the pipe is empty.
         if dst.NumBytes() == 0 {
-            return Ok(0)
+            return Ok(0);
         }
 
         let mut p = self.intern.lock();
@@ -311,10 +326,10 @@ impl Pipe {
         if p.size == 0 {
             if !self.HasWriters() {
                 // There are no writers, return EOF.
-                return Ok(0)
+                return Ok(0);
             }
 
-            return Err(Error::SysError(SysErr::EAGAIN))
+            return Err(Error::SysError(SysErr::EAGAIN));
         }
 
         // Limit how much we consume.
@@ -352,29 +367,29 @@ impl Pipe {
             }
         }
 
-        return Ok(done)
+        return Ok(done);
     }
 
     pub fn ReadFrom(&self, task: &Task, src: &File, opts: &SpliceOpts) -> Result<usize> {
         if opts.DstOffset {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         if opts.SrcOffset && !src.FileOp.Seekable() {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         let len = {
             let p = self.intern.lock();
             // Can't write to a pipe with no readers.
             if !self.HasReaders() {
-                return Err(Error::SysError(SysErr::EPIPE))
+                return Err(Error::SysError(SysErr::EPIPE));
             }
 
             let mut len = p.Available() as usize;
 
-            if len == 0 {
-                return Err(Error::SysError(SysErr::EAGAIN))
+            if len < 4096 {
+                return Err(Error::SysError(SysErr::EAGAIN));
             }
 
             if len > opts.Length as usize {
@@ -384,24 +399,21 @@ impl Pipe {
             len
         };
 
-
         let mut buf = Vec::with_capacity(len);
         buf.resize(len, 0);
         let dst = IoVec::New(&buf);
         let mut iovs = [dst];
         //let src = BlockSeq::New(&buf);
 
-        let readCount = if opts.SrcOffset {
-            src.Preadv(task, &mut iovs, opts.SrcStart)?
-        } else {
-            src.Readv(task, &mut iovs)?
-        };
+        let sfops = src.FileOp.clone();
+        let blocking = src.Blocking();
+        let readCount = sfops.ReadAt(task, src, &mut iovs, opts.SrcStart, blocking)?;
 
         let src = BlockSeq::New(&buf[0..readCount as usize]);
         let writeCount = self.intern.lock().Write(task, src, self.atomicIOBytes)? as usize;
 
         assert!(readCount as usize == writeCount);
-        return Ok(writeCount)
+        return Ok(writeCount);
     }
 
     // write writes data from sv into the pipe and returns the number of bytes
@@ -414,10 +426,18 @@ impl Pipe {
 
         // Can't write to a pipe with no readers.
         if !self.HasReaders() {
-            return Err(Error::SysError(SysErr::EPIPE))
+            let thread = task.Thread();
+            let info = SignalInfo {
+                Signo: Signal::SIGPIPE,
+                ..Default::default()
+            };
+            thread
+                .SendSignal(&info)
+                .expect("SIGPIPE send signal fail");
+            return Err(Error::SysError(SysErr::EPIPE));
         }
 
-        return p.Write(task, src, self.atomicIOBytes)
+        return p.Write(task, src, self.atomicIOBytes);
     }
 
     // rOpen signals a new reader of the pipe.
@@ -437,7 +457,10 @@ impl Pipe {
         //error!("pipe [{}] rclose readers is {}", self.Uid(), readers);
 
         if readers <= 0 {
-            panic!("Refcounting bug, pipe has negative readers: {}", readers-1)
+            panic!(
+                "Refcounting bug, pipe has negative readers: {}",
+                readers - 1
+            )
         }
 
         if readers == 1 {
@@ -450,7 +473,10 @@ impl Pipe {
         let writers = self.writers.fetch_sub(1, Ordering::SeqCst);
         //error!("pipe [{}] WClose readers is {}", self.Uid(), writers);
         if writers <= 0 {
-            panic!("Refcounting bug, pipe has negative writers: {}", writers-1)
+            panic!(
+                "Refcounting bug, pipe has negative writers: {}",
+                writers - 1
+            )
         }
 
         if writers == 1 {
@@ -473,7 +499,7 @@ impl Pipe {
         let mut ready = 0;
 
         if self.HasReaders() && intern.data.len() > 0 {
-            ready |= EVENT_IN;
+            ready |= READABLE_EVENT;
         }
 
         if !self.HasWriters() && intern.hadWriter {
@@ -491,14 +517,14 @@ impl Pipe {
     // ready for reading.
     pub fn RReadiness(&self) -> EventMask {
         let intern = self.intern.lock();
-        return self.RReadinessLocked(&intern)
+        return self.RReadinessLocked(&intern);
     }
 
     // wReadinessLocked calculates the write readiness.
     pub fn WReadinessLocked(&self, intern: &QMutexGuard<PipeInternal>) -> EventMask {
         let mut ready = 0;
         if self.HasWriters() && intern.size < intern.max {
-            ready |= EVENT_OUT;
+            ready |= WRITEABLE_EVENT;
         }
 
         if !self.HasReaders() {
@@ -512,14 +538,14 @@ impl Pipe {
     // pipe is ready for IO.
     pub fn RWReadiness(&self) -> EventMask {
         let intern = self.intern.lock();
-        return self.RReadinessLocked(&intern) | self.WReadinessLocked(&intern)
+        return self.RReadinessLocked(&intern) | self.WReadinessLocked(&intern);
     }
 
     // wReadiness returns a mask that states whether the write end of the pipe
     // is ready for writing.
     pub fn WReadiness(&self) -> EventMask {
         let intern = self.intern.lock();
-        return self.WReadinessLocked(&intern)
+        return self.WReadinessLocked(&intern);
     }
 
     // queued returns the amount of queued data.
@@ -533,9 +559,9 @@ impl Pipe {
     }
 
     // SetPipeSize implements PipeSize.SetPipeSize.
-    pub fn SetPipeSize(&self, size: i64) -> Result<usize>  {
+    pub fn SetPipeSize(&self, size: i64) -> Result<usize> {
         if size < 0 {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         let mut size = size as usize;
@@ -544,15 +570,15 @@ impl Pipe {
         }
 
         if size > MAXIMUM_PIPE_SIZE {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         let mut intern = self.intern.lock();
         if size < intern.size {
-            return Err(Error::SysError(SysErr::EBUSY))
+            return Err(Error::SysError(SysErr::EBUSY));
         }
 
         intern.max = size;
-        return Ok(size)
+        return Ok(size);
     }
 }

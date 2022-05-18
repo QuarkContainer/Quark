@@ -15,8 +15,8 @@
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::task::*;
-use super::super::threadmgr::thread::*;
 use super::super::threadmgr::task_syscall::*;
+use super::super::threadmgr::thread::*;
 use super::thread_group::*;
 
 impl ThreadInternal {
@@ -31,7 +31,7 @@ impl Task {
         let t = self.Thread();
 
         //if the task has been interrupted
-        if t.lock().Interrupted(true) {
+        if t.Interrupted(true) {
             // Checkpointing instructs tasks to stop by sending an interrupt, so we
             // must check for stops before entering runInterrupt (instead of
             // tail-calling it).
@@ -62,7 +62,7 @@ impl Task {
         if haveSavedSignalMask {
             let savedSignalMask = t.lock().savedSignalMask;
             t.SetSignalMask(savedSignalMask);
-            if t.lock().Interrupted(true) {
+            if t.Interrupted(true) {
                 return TaskRunState::RunInterrupt;
             }
         }

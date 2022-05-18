@@ -12,23 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
-use core::ops::Deref;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::ops::Deref;
 
+use super::super::super::auth::userns::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
-use super::super::super::auth::userns::*;
+use super::processgroup::*;
 use super::session::*;
 use super::thread::*;
-use super::threads::*;
 use super::thread_group::*;
-use super::processgroup::*;
+use super::threads::*;
 
-const TASKS_LIMIT: ThreadID = 1 << 16;
-const INIT_TID: ThreadID = 1;
+pub const TASKS_LIMIT: ThreadID = 1 << 16;
+pub const INIT_TID: ThreadID = 1;
 
 #[derive(Default)]
 pub struct PIDNamespaceInternal {
@@ -40,18 +40,14 @@ pub struct PIDNamespaceInternal {
     pub tasks: BTreeMap<ThreadID, Thread>,
     pub tids: BTreeMap<Thread, ThreadID>,
     //Thread unique id to thread id of this namespace
-
     pub tgids: BTreeMap<ThreadGroup, ThreadID>,
     //Threadgroup uid to Threadgroup id of this namespace
-
     pub sessions: BTreeMap<SessionID, Session>,
     pub sids: BTreeMap<Session, SessionID>,
     //Session uid to Session id of this namespace
-
     pub processGroups: BTreeMap<ProcessGroupID, ProcessGroup>,
     pub pgids: BTreeMap<ProcessGroup, ProcessGroupID>,
     //ProcessGroup uid to ProcessGroup id of this namespace
-
     pub exiting: bool,
 }
 
@@ -68,7 +64,7 @@ impl Deref for PIDNamespace {
 
 impl PartialEq for PIDNamespace {
     fn eq(&self, other: &Self) -> bool {
-        return Arc::ptr_eq(&self.0, &other.0)
+        return Arc::ptr_eq(&self.0, &other.0);
     }
 }
 
@@ -91,7 +87,7 @@ impl PIDNamespace {
             exiting: false,
         };
 
-        return Self(Arc::new(QMutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)));
     }
 
     pub fn Count(&self) -> usize {
@@ -104,7 +100,7 @@ impl PIDNamespace {
 
     pub fn NewChild(&self, userns: &UserNameSpace) -> Self {
         let owner = self.lock().owner.clone();
-        return Self::New(&owner, Some(self.clone()), userns)
+        return Self::New(&owner, Some(self.clone()), userns);
     }
 
     // TaskWithID returns the task with thread ID tid in PID namespace ns. If no
@@ -163,7 +159,7 @@ impl PIDNamespace {
     pub fn IDOfTaskLocked(&self, t: &Thread) -> ThreadID {
         match self.lock().tids.get(t) {
             None => 0,
-            Some(tid) => *tid
+            Some(tid) => *tid,
         }
     }
 
@@ -176,7 +172,7 @@ impl PIDNamespace {
         return match self.lock().tgids.get(tg) {
             None => 0,
             Some(id) => *id,
-        }
+        };
     }
 
     // Tasks returns a snapshot of the tasks in ns.
@@ -231,7 +227,7 @@ impl PIDNamespace {
         return match me.sessions.get(&id) {
             None => None,
             Some(s) => Some(s.clone()),
-        }
+        };
     }
 
     pub fn IDOfProcessGroup(&self, pg: &ProcessGroup) -> ProcessGroupID {
@@ -250,13 +246,13 @@ impl PIDNamespace {
         let _r = owner.ReadLock();
 
         let me = self.lock();
-        let keys : Vec<i32> = me.processGroups.keys().cloned().collect();
+        let keys: Vec<i32> = me.processGroups.keys().cloned().collect();
         info!("ProcessGroupWithID key is {:?}", keys);
 
         return match me.processGroups.get(&id) {
             None => None,
             Some(pg) => Some(pg.clone()),
-        }
+        };
     }
 
     // allocateTID returns an unused ThreadID from ns.
@@ -264,7 +260,7 @@ impl PIDNamespace {
         let mut me = self.lock();
 
         if me.exiting {
-            return Err(Error::SysError(SysErr::ENOMEM))
+            return Err(Error::SysError(SysErr::ENOMEM));
         }
 
         let mut tid = me.last;
@@ -277,11 +273,11 @@ impl PIDNamespace {
 
             if !me.tasks.contains_key(&tid) {
                 me.last = tid;
-                return Ok(tid)
+                return Ok(tid);
             }
 
             if tid == me.last {
-                return Err(Error::SysError(SysErr::EAGAIN))
+                return Err(Error::SysError(SysErr::EAGAIN));
             }
         }
     }

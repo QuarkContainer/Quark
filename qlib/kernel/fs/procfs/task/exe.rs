@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
-use alloc::string::String;
 use crate::qlib::mutex::*;
+use alloc::string::String;
+use alloc::sync::Arc;
 
 use super::super::super::super::super::common::*;
 use super::super::super::super::super::linux_def::*;
 use super::super::super::super::task::*;
-use super::super::super::ramfs::symlink::*;
-use super::super::super::dirent::*;
-use super::super::super::mount::*;
-use super::super::super::inode::*;
 use super::super::super::super::threadmgr::thread::*;
+use super::super::super::dirent::*;
+use super::super::super::inode::*;
+use super::super::super::mount::*;
+use super::super::super::ramfs::symlink::*;
 use super::super::symlink_proc::*;
 
 pub struct ExeNode {
@@ -36,7 +36,7 @@ impl ExeNode {
         let ret = mm.metadata.lock().executable.clone();
         match ret {
             None => return Err(Error::SysError(SysErr::ENOENT)),
-            Some(d) => Ok(d)
+            Some(d) => Ok(d),
         }
     }
 }
@@ -45,10 +45,9 @@ impl ReadLinkNode for ExeNode {
     fn ReadLink(&self, _link: &Symlink, task: &Task, _dir: &Inode) -> Result<String> {
         let exe = self.Executable()?;
 
-        let kernel = task.Thread().lock().k.clone();
-        let root = kernel.RootDir();
+        let root = task.Root();
         let (name, _) = exe.FullName(&root);
-        return Ok(name)
+        return Ok(name);
     }
 
     fn GetLink(&self, link: &Symlink, task: &Task, dir: &Inode) -> Result<Dirent> {
@@ -58,8 +57,8 @@ impl ReadLinkNode for ExeNode {
 
 pub fn NewExe(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let node = ExeNode {
-        thread: thread.clone()
+        thread: thread.clone(),
     };
 
-    return SymlinkNode::New(task, msrc, node, Some(thread.clone()))
+    return SymlinkNode::New(task, msrc, node, Some(thread.clone()));
 }

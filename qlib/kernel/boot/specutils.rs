@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::vec::Vec;
 use alloc::string::ToString;
+use alloc::vec::Vec;
 
 use super::super::super::path::*;
 use super::*;
@@ -29,9 +29,20 @@ pub fn ContainsStr(strs: &Vec<&str>, str: &str) -> bool {
 }
 
 pub fn IsSupportedDevMount(m: &oci::Mount) -> bool {
-    let existingDevices = vec!["/dev/fd", "/dev/stdin", "/dev/stdout", "/dev/stderr",
-                               "/dev/null", "/dev/zero", "/dev/full", "/dev/random",
-                               "/dev/urandom", "/dev/shm", "/dev/pts", "/dev/ptmx"];
+    let existingDevices = vec![
+        "/dev/fd",
+        "/dev/stdin",
+        "/dev/stdout",
+        "/dev/stderr",
+        "/dev/null",
+        "/dev/zero",
+        "/dev/full",
+        "/dev/random",
+        "/dev/urandom",
+        "/dev/shm",
+        "/dev/pts",
+        "/dev/ptmx",
+    ];
 
     let dst = Clean(&m.destination);
     if dst.as_str() == "dev" {
@@ -40,9 +51,9 @@ pub fn IsSupportedDevMount(m: &oci::Mount) -> bool {
 
     for dev in existingDevices {
         if dst.as_str() == dev || HasPrefix(&dst, &(dev.to_string() + "/")) {
-            return false
+            return false;
         }
     }
 
-    return true
+    return true;
 }

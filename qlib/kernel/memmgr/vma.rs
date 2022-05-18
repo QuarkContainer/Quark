@@ -12,22 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use alloc::string::String;
 use alloc::string::ToString;
+use alloc::sync::Arc;
 use core::fmt;
 
-use super::super::fs::host::hostinodeop::*;
+use super::super::super::addr::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
+use super::super::fs::host::hostinodeop::*;
 use super::super::task::*;
-use super::super::super::addr::*;
 //use super::super::task::*;
-use super::*;
-use super::super::super::range::*;
 use super::super::super::mem::areaset::*;
-use super::mm::*;
+use super::super::super::range::*;
 use super::arch::*;
+use super::mm::*;
+use super::*;
 
 // map32Start/End are the bounds to which MAP_32BIT mappings are constrained,
 // and are equivalent to Linux's MAP32_BASE and MAP32_MAX respectively.
@@ -41,7 +41,6 @@ pub struct FindAvailableOpts {
     // - Addr must be page-aligned.
     //
     // - Unmap allows existing guard pages in the returned range.
-
     pub Addr: u64,
     pub Fixed: bool,
     pub Unmap: bool,
@@ -50,7 +49,12 @@ pub struct FindAvailableOpts {
 }
 
 impl MemoryManager {
-    pub fn FindLowestAvailableLocked(&self, length: u64, alignment: u64, bounds: &Range) -> Result<u64> {
+    pub fn FindLowestAvailableLocked(
+        &self,
+        length: u64,
+        alignment: u64,
+        bounds: &Range,
+    ) -> Result<u64> {
         let mapping = self.mapping.lock();
         let mut gap = mapping.vmas.LowerBoundGap(bounds.Start());
 
@@ -61,12 +65,12 @@ impl MemoryManager {
                 let offset = gr.Start() % alignment;
                 if offset != 0 {
                     if gr.Len() >= length + alignment - offset {
-                        return Ok(gr.Start() + (alignment - offset))
+                        return Ok(gr.Start() + (alignment - offset));
                     }
                 }
 
                 // Either aligned perfectly, or can't align it.
-                return Ok(gr.Start())
+                return Ok(gr.Start());
             }
 
             let tmp = gap.NextGap();
@@ -76,7 +80,12 @@ impl MemoryManager {
         return Err(Error::SysError(SysErr::ENOMEM));
     }
 
-    pub fn FindHighestAvailableLocked(&self, length: u64, alignment: u64, bounds: &Range) -> Result<u64> {
+    pub fn FindHighestAvailableLocked(
+        &self,
+        length: u64,
+        alignment: u64,
+        bounds: &Range,
+    ) -> Result<u64> {
         let mapping = self.mapping.lock();
         let mut gap = mapping.vmas.UpperBoundGap(bounds.End());
 
@@ -88,12 +97,12 @@ impl MemoryManager {
                 let offset = gr.Start() % alignment;
                 if offset != 0 {
                     if gr.Start() >= start - offset {
-                        return Ok(start - offset)
+                        return Ok(start - offset);
                     }
                 }
 
                 // Either aligned perfectly, or can't align it.
-                return Ok(start)
+                return Ok(start);
             }
 
             let tmp = gap.NextGap();
@@ -117,7 +126,12 @@ impl MemoryManager {
     //
     // Preconditions: mm.mappingMu must be locked for reading; it may be
     // temporarily unlocked. ar.Length() != 0.
-    pub fn GetVMAsLocked(&self, r: &Range, at: &AccessType, ignorePermissions: bool) -> (AreaSeg<VMA>, AreaGap<VMA>, Result<()>) {
+    pub fn GetVMAsLocked(
+        &self,
+        r: &Range,
+        at: &AccessType,
+        ignorePermissions: bool,
+    ) -> (AreaSeg<VMA>, AreaGap<VMA>, Result<()>) {
         let mapping = self.mapping.lock();
         let (mut vbegin, mut vgap) = mapping.vmas.Find(r.Start());
 
@@ -153,7 +167,7 @@ impl MemoryManager {
             addr = vseg.Range().End();
             vgap = vseg.NextGap();
             if addr >= r.End() {
-                return (vbegin, vgap, Ok(()))
+                return (vbegin, vgap, Ok(()));
             }
 
             vseg = vseg.NextSeg();
@@ -175,7 +189,8 @@ impl MemoryManager {
         };
 
         if opts.Map32Bit {
-            allowedRange = allowedRange.Intersect(&Range::New(MAP32_START, MAP32_END - MAP32_START));
+            allowedRange =
+                allowedRange.Intersect(&Range::New(MAP32_START, MAP32_END - MAP32_START));
         }
 
         // Does the provided suggestion work?
@@ -188,16 +203,16 @@ impl MemoryManager {
 
                     let vgap = self.mapping.lock().vmas.FindGap(r.Start());
                     if vgap.Ok() && vgap.AvailableRange().IsSupersetOf(&r) {
-                        return Ok(r.Start())
+                        return Ok(r.Start());
                     }
                 }
             }
-            Err(_) => ()
+            Err(_) => (),
         }
 
         // Fixed mappings accept only the requested address.
         if opts.Fixed {
-            return Err(Error::SysError(SysErr::ENOMEM))
+            return Err(Error::SysError(SysErr::ENOMEM));
         }
 
         // Prefer hugepage alignment if a hugepage or more is requested.
@@ -212,17 +227,26 @@ impl MemoryManager {
 
         let layout = *self.layout.lock();
         if layout.DefaultDirection == MMAP_BOTTOM_UP {
-            return self.FindLowestAvailableLocked(length, alignment,
-                                                  &Range::New(layout.BottomUpBase, layout.MaxAddr - layout.BottomUpBase));
+            return self.FindLowestAvailableLocked(
+                length,
+                alignment,
+                &Range::New(layout.BottomUpBase, layout.MaxAddr - layout.BottomUpBase),
+            );
         }
 
-        return self.FindHighestAvailableLocked(length, alignment,
-                                               &Range::New(layout.MinAddr, layout.TopDownBase - layout.MinAddr));
+        return self.FindHighestAvailableLocked(
+            length,
+            alignment,
+            &Range::New(layout.MinAddr, layout.TopDownBase - layout.MinAddr),
+        );
     }
 
     pub fn CreateVMAlocked(&self, _task: &Task, opts: &MMapOpts) -> Result<(AreaSeg<VMA>, Range)> {
         if opts.MaxPerms != opts.MaxPerms.Effective() {
-            panic!("Non-effective MaxPerms {:?} cannot be enforced", opts.MaxPerms);
+            panic!(
+                "Non-effective MaxPerms {:?} cannot be enforced",
+                opts.MaxPerms
+            );
         }
 
         // Find a useable range.
@@ -255,7 +279,12 @@ impl MemoryManager {
 
         if opts.Mappable.is_some() {
             let mappable = opts.Mappable.clone().unwrap();
-            mappable.AddMapping(self, &ar, opts.Offset, !opts.Private && opts.MaxPerms.Write())?;
+            mappable.AddMapping(
+                self,
+                &ar,
+                opts.Offset,
+                !opts.Private && opts.MaxPerms.Write(),
+            )?;
         }
 
         let vma = VMA {
@@ -277,11 +306,17 @@ impl MemoryManager {
         };
 
         mapping.usageAS += opts.Length;
+        if opts.MLockMode != MLockMode::MlockNone {
+            mapping.lockedAS += opts.Length;
+        }
 
         let vseg = mapping.vmas.Insert(&gap, &ar, vma);
         let nextvseg = vseg.NextSeg();
-        assert!(vseg.Range().End() <= nextvseg.Range().Start(), "vseg end < vseg.next.start");
-        return Ok((vseg, ar))
+        assert!(
+            vseg.Range().End() <= nextvseg.Range().Start(),
+            "vseg end < vseg.next.start"
+        );
+        return Ok((vseg, ar));
     }
 
     //find free seg with enough len
@@ -299,7 +334,6 @@ impl MemoryManager {
         let addr = self.FindAvailableLocked(len, &mut findopts)?;
         return Ok(addr);
     }
-
 }
 
 #[derive(Clone, Default)]
@@ -385,7 +419,7 @@ impl VMA {
             numaNodemask: 0,
         };
 
-        return copy
+        return copy;
     }
 
     // canWriteMappableLocked returns true if it is possible for vma.mappable to be
@@ -411,11 +445,11 @@ impl AreaSeg<VMA> {
 
     //virtual address range to mappable range
     pub fn MappableRangeOf(&self, r: &Range) -> Range {
-        return Range::New(self.MappableOffsetAt(r.Start()), r.Len())
+        return Range::New(self.MappableOffsetAt(r.Start()), r.Len());
     }
 
     pub fn MappableRange(&self) -> Range {
-        return self.MappableRangeOf(&self.Range())
+        return self.MappableRangeOf(&self.Range());
     }
 
     //mappable offset to virtual address
@@ -429,7 +463,7 @@ impl AreaSeg<VMA> {
     //mappable range to virtual range
     pub fn AddrRangeOf(&self, r: &Range) -> Range {
         let start = self.AddrRangeAt(r.Start());
-        return Range::New(start, r.Len())
+        return Range::New(start, r.Len());
     }
 
     //find first area which range.end is large than addr
@@ -455,7 +489,7 @@ impl AreaGap<VMA> {
 
         //no next
         if !next.Ok() || !next.lock().Value().growsDown {
-            return r
+            return r;
         }
 
         // Exclude guard pages.
@@ -463,7 +497,7 @@ impl AreaGap<VMA> {
             return Range::New(r.Start(), 0);
         }
 
-        return Range::New(r.Start(), r.Len() - GUARD_BYTES)
+        return Range::New(r.Start(), r.Len() - GUARD_BYTES);
     }
 }
 
@@ -482,22 +516,23 @@ impl AreaValue for VMA {
             return None;
         }
 
-        if vma1.mappable != vma2.mappable ||
-            vma1.realPerms != vma2.realPerms ||
-            vma1.maxPerms != vma2.maxPerms ||
-            vma1.effectivePerms != vma2.effectivePerms ||
-            vma1.private != vma2.private ||
-            vma1.growsDown != vma2.growsDown ||
-            vma1.dontfork != vma2.dontfork ||
-            vma1.mlockMode != vma2.mlockMode ||
-            vma1.kernel != vma2.kernel ||
-            vma1.numaPolicy != vma2.numaPolicy ||
-            vma1.numaNodemask != vma2.numaNodemask ||
-            vma1.hint != vma2.hint {
+        if vma1.mappable != vma2.mappable
+            || vma1.realPerms != vma2.realPerms
+            || vma1.maxPerms != vma2.maxPerms
+            || vma1.effectivePerms != vma2.effectivePerms
+            || vma1.private != vma2.private
+            || vma1.growsDown != vma2.growsDown
+            || vma1.dontfork != vma2.dontfork
+            || vma1.mlockMode != vma2.mlockMode
+            || vma1.kernel != vma2.kernel
+            || vma1.numaPolicy != vma2.numaPolicy
+            || vma1.numaNodemask != vma2.numaNodemask
+            || vma1.hint != vma2.hint
+        {
             return None;
         }
 
-        return Some(vma1.Copy())
+        return Some(vma1.Copy());
     }
 
     fn Split(&self, r: &Range, split: u64) -> (VMA, VMA) {
@@ -506,6 +541,6 @@ impl AreaValue for VMA {
 
         v2.offset += split - r.Start();
 
-        return (v.clone(), v2)
+        return (v.clone(), v2);
     }
 }

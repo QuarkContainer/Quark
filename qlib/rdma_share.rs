@@ -22,9 +22,8 @@ use alloc::collections::btree_set::BTreeSet;
 use alloc::vec::Vec;
 
 pub const COUNT: usize = 65536;
+
 pub struct RingQueue<T: 'static + Default> {
-    // pub struct RingQueue<T: Default> {
-    // pub struct RingQueue<T: Copy> {
     pub data: [T; COUNT],
     pub ringMask: AtomicU32,
     pub head: AtomicU32,
@@ -32,8 +31,6 @@ pub struct RingQueue<T: 'static + Default> {
 }
 
 impl<T: 'static + Default + Copy> RingQueue<T> {
-    // impl<T: Default + Copy> RingQueue<T> {
-    //impl<T: Copy> RingQueue<T> {
     pub fn Init(&self) {
         self.ringMask.store(COUNT as u32 - 1, Ordering::Release);
         self.head.store(0, Ordering::Release);
@@ -264,7 +261,7 @@ pub struct IOBuf {
 pub struct IOMetas {
     pub readBufAtoms: [AtomicU32; 2],
     pub writeBufAtoms: [AtomicU32; 2],
-    pub consumeReadData: AtomicU64,
+    pub consumeReadData: AtomicU32,
 }
 
 pub struct ClientShareRegion {

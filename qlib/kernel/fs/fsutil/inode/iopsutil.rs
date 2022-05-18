@@ -17,19 +17,19 @@ use alloc::vec::Vec;
 //use alloc::string::ToString;
 use alloc::sync::Arc;
 
-use super::super::super::super::super::common::*;
-use super::super::super::super::kernel::time::*;
-use super::super::super::super::super::linux_def::*;
 use super::super::super::super::super::auth::*;
+use super::super::super::super::super::common::*;
+use super::super::super::super::super::linux_def::*;
+use super::super::super::super::kernel::time::*;
 use super::super::super::super::task::*;
 
-use super::super::super::inode::*;
+use super::super::super::attr::*;
 use super::super::super::dirent::*;
 use super::super::super::file::*;
-use super::super::super::attr::*;
 use super::super::super::flags::*;
-use super::super::super::mount::*;
 use super::super::super::host::hostinodeop::*;
+use super::super::super::inode::*;
+use super::super::super::mount::*;
 use super::super::file::fileopsutil::*;
 
 pub enum InodeOpsData {
@@ -40,152 +40,342 @@ pub type GetFileOp = fn(_data: &InodeOpsData, task: &Task) -> Result<Arc<FileOpe
 pub type InodeTypeFn = fn(_data: &InodeOpsData) -> InodeType;
 pub type WouldBlock = fn(_data: &InodeOpsData) -> bool;
 pub type Lookup = fn(_data: &InodeOpsData, task: &Task, dir: &Inode, name: &str) -> Result<Dirent>;
-pub type Create = fn(_data: &InodeOpsData, task: &Task, dir: &mut Inode, name: &str, flags: &FileFlags, perm: &FilePermissions) -> Result<File>;
-pub type CreateDirectory = fn(_data: &InodeOpsData, task: &Task, dir: &mut Inode, name: &str, perm: &FilePermissions) -> Result<()>;
-pub type CreateLink = fn(_data: &InodeOpsData, task: &Task, dir: &mut Inode, oldname: &str, newname: &str) -> Result<()>;
-pub type CreateHardLink = fn(_data: &InodeOpsData, task: &Task, dir: &mut Inode, target: &Inode, name: &str) -> Result<()>;
-pub type CreateFifo = fn(_data: &InodeOpsData, task: &Task, dir: &mut Inode, name: &str, perm: &FilePermissions) -> Result<()>;
+pub type Create = fn(
+    _data: &InodeOpsData,
+    task: &Task,
+    dir: &mut Inode,
+    name: &str,
+    flags: &FileFlags,
+    perm: &FilePermissions,
+) -> Result<File>;
+pub type CreateDirectory = fn(
+    _data: &InodeOpsData,
+    task: &Task,
+    dir: &mut Inode,
+    name: &str,
+    perm: &FilePermissions,
+) -> Result<()>;
+pub type CreateLink = fn(
+    _data: &InodeOpsData,
+    task: &Task,
+    dir: &mut Inode,
+    oldname: &str,
+    newname: &str,
+) -> Result<()>;
+pub type CreateHardLink = fn(
+    _data: &InodeOpsData,
+    task: &Task,
+    dir: &mut Inode,
+    target: &Inode,
+    name: &str,
+) -> Result<()>;
+pub type CreateFifo = fn(
+    _data: &InodeOpsData,
+    task: &Task,
+    dir: &mut Inode,
+    name: &str,
+    perm: &FilePermissions,
+) -> Result<()>;
 //pub type RemoveDirent(&mut self, dir: &mut InodeStruStru, remove: &Arc<QMutex<Dirent>>) -> Result<()> ;
 pub type Remove = fn(_data: &InodeOpsData, task: &Task, dir: &mut Inode, name: &str) -> Result<()>;
-pub type RemoveDirectory = fn(_data: &InodeOpsData, task: &Task, dir: &mut Inode, name: &str) -> Result<()>;
-pub type Rename = fn(_data: &InodeOpsData, task: &Task, dir: &mut Inode, oldParent: &Inode, oldname: &str, newParent: &Inode, newname: &str, replacement: bool) -> Result<()>;
-pub type GetFile = fn(_data: &InodeOpsData, task: &Task, dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File>;
-pub type UnstableAttrFn= fn(_data: &InodeOpsData, task: &Task, dir: &Inode) -> Result<UnstableAttr>;
+pub type RemoveDirectory =
+    fn(_data: &InodeOpsData, task: &Task, dir: &mut Inode, name: &str) -> Result<()>;
+pub type Rename = fn(
+    _data: &InodeOpsData,
+    task: &Task,
+    dir: &mut Inode,
+    oldParent: &Inode,
+    oldname: &str,
+    newParent: &Inode,
+    newname: &str,
+    replacement: bool,
+) -> Result<()>;
+pub type GetFile = fn(
+    _data: &InodeOpsData,
+    task: &Task,
+    dir: &Inode,
+    dirent: &Dirent,
+    flags: FileFlags,
+) -> Result<File>;
+pub type UnstableAttrFn =
+    fn(_data: &InodeOpsData, task: &Task, dir: &Inode) -> Result<UnstableAttr>;
 pub type Getxattr = fn(_data: &InodeOpsData, dir: &Inode, name: &str) -> Result<String>;
-pub type Setxattr = fn(_data: &InodeOpsData, dir: &mut Inode, name: &str, value: &str) -> Result<()>;
+pub type Setxattr =
+    fn(_data: &InodeOpsData, dir: &mut Inode, name: &str, value: &str) -> Result<()>;
 pub type Listxattr = fn(_data: &InodeOpsData, dir: &Inode) -> Result<Vec<String>>;
-pub type Check = fn(_data: &InodeOpsData, task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool>;
-pub type SetPermissions = fn(_data: &InodeOpsData, task: &Task, dir: &mut Inode, f: FilePermissions) -> bool;
-pub type SetOwner = fn(_data: &InodeOpsData, task: &Task, dir: &mut Inode, owner: &FileOwner) -> Result<()>;
-pub type SetTimestamps = fn(_data: &InodeOpsData, task: &Task, dir: &mut Inode, ts: &InterTimeSpec) -> Result<()>;
+pub type Check =
+    fn(_data: &InodeOpsData, task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool>;
+pub type SetPermissions =
+    fn(_data: &InodeOpsData, task: &Task, dir: &mut Inode, f: FilePermissions) -> bool;
+pub type SetOwner =
+    fn(_data: &InodeOpsData, task: &Task, dir: &mut Inode, owner: &FileOwner) -> Result<()>;
+pub type SetTimestamps =
+    fn(_data: &InodeOpsData, task: &Task, dir: &mut Inode, ts: &InterTimeSpec) -> Result<()>;
 pub type Truncate = fn(_data: &InodeOpsData, task: &Task, dir: &mut Inode, size: i64) -> Result<()>;
-pub type Allocate = fn(_data: &InodeOpsData, task: &Task, dir: &mut Inode, offset: i64, length: i64) -> Result<()>;
-pub type ReadLink = fn(_data: &InodeOpsData, _task: &Task,dir: &Inode) -> Result<String>;
+pub type Allocate =
+    fn(_data: &InodeOpsData, task: &Task, dir: &mut Inode, offset: i64, length: i64) -> Result<()>;
+pub type ReadLink = fn(_data: &InodeOpsData, _task: &Task, dir: &Inode) -> Result<String>;
 pub type GetLink = fn(_data: &InodeOpsData, _task: &Task, dir: &Inode) -> Result<Dirent>;
 pub type AddLink = fn(_data: &InodeOpsData, _task: &Task);
 pub type DropLink = fn(_data: &InodeOpsData, _task: &Task);
 pub type IsVirtual = fn(_data: &InodeOpsData) -> bool;
 pub type Sync = fn(_data: &InodeOpsData) -> Result<()>;
 pub type StatFS = fn(_data: &InodeOpsData, task: &Task) -> Result<FsInfo>;
-pub type Mmap = fn(_data: &InodeOpsData, task: &Task, len: u64, hugePage: bool, offset: u64, share: bool, prot: u64) -> Result<u64>;
+pub type Mmap = fn(
+    _data: &InodeOpsData,
+    task: &Task,
+    len: u64,
+    hugePage: bool,
+    offset: u64,
+    share: bool,
+    prot: u64,
+) -> Result<u64>;
 pub type Mappable = fn(_data: &InodeOpsData) -> Option<HostInodeOp>;
 
-fn InodeNotDirectory_Lookup(_data: &InodeOpsData, _task: &Task, _dir: &Inode, _name: &str) -> Result<Dirent> {
-    return Err(Error::SysError(SysErr::ENOTDIR))
+fn InodeNotDirectory_Lookup(
+    _data: &InodeOpsData,
+    _task: &Task,
+    _dir: &Inode,
+    _name: &str,
+) -> Result<Dirent> {
+    return Err(Error::SysError(SysErr::ENOTDIR));
 }
 
-fn InodeNotDirectory_Create(_data: &InodeOpsData, _task: &Task, _dir: &mut Inode, _name: &str, _flags: &FileFlags, _perm: &FilePermissions) -> Result<File> {
-    return Err(Error::SysError(SysErr::ENOTDIR))
+fn InodeNotDirectory_Create(
+    _data: &InodeOpsData,
+    _task: &Task,
+    _dir: &mut Inode,
+    _name: &str,
+    _flags: &FileFlags,
+    _perm: &FilePermissions,
+) -> Result<File> {
+    return Err(Error::SysError(SysErr::ENOTDIR));
 }
 
-fn InodeNotDirectory_CreateDirectory(_data: &InodeOpsData, _task: &Task, _dir: &mut Inode, _name: &str, _perm: &FilePermissions) -> Result<()> {
-    return Err(Error::SysError(SysErr::ENOTDIR))
+fn InodeNotDirectory_CreateDirectory(
+    _data: &InodeOpsData,
+    _task: &Task,
+    _dir: &mut Inode,
+    _name: &str,
+    _perm: &FilePermissions,
+) -> Result<()> {
+    return Err(Error::SysError(SysErr::ENOTDIR));
 }
 
-fn InodeNotDirectory_CreateLink(_data: &InodeOpsData, _task: &Task, _dir: &mut Inode, _oldname: &str, _newname: &str) -> Result<()> {
-    return Err(Error::SysError(SysErr::ENOTDIR))
+fn InodeNotDirectory_CreateLink(
+    _data: &InodeOpsData,
+    _task: &Task,
+    _dir: &mut Inode,
+    _oldname: &str,
+    _newname: &str,
+) -> Result<()> {
+    return Err(Error::SysError(SysErr::ENOTDIR));
 }
 
-fn InodeNotDirectory_CreateHardLink(_data: &InodeOpsData, _task: &Task, _dir: &mut Inode, _target: &Inode, _name: &str) -> Result<()> {
-    return Err(Error::SysError(SysErr::ENOTDIR))
+fn InodeNotDirectory_CreateHardLink(
+    _data: &InodeOpsData,
+    _task: &Task,
+    _dir: &mut Inode,
+    _target: &Inode,
+    _name: &str,
+) -> Result<()> {
+    return Err(Error::SysError(SysErr::ENOTDIR));
 }
 
-fn InodeNotDirectory_CreateFifo(_data: &InodeOpsData, _task: &Task, _dir: &mut Inode, _name: &str, _perm: &FilePermissions) -> Result<()> {
-    return Err(Error::SysError(SysErr::ENOTDIR))
+fn InodeNotDirectory_CreateFifo(
+    _data: &InodeOpsData,
+    _task: &Task,
+    _dir: &mut Inode,
+    _name: &str,
+    _perm: &FilePermissions,
+) -> Result<()> {
+    return Err(Error::SysError(SysErr::ENOTDIR));
 }
 
-fn InodeNotDirectory_Remove(_data: &InodeOpsData, _task: &Task, _dir: &mut Inode, _name: &str) -> Result<()> {
-    return Err(Error::SysError(SysErr::ENOTDIR))
+fn InodeNotDirectory_Remove(
+    _data: &InodeOpsData,
+    _task: &Task,
+    _dir: &mut Inode,
+    _name: &str,
+) -> Result<()> {
+    return Err(Error::SysError(SysErr::ENOTDIR));
 }
 
-fn InodeNotDirectory_RemoveDirectory(_data: &InodeOpsData, _task: &Task, _dir: &mut Inode, _name: &str) -> Result<()> {
-    return Err(Error::SysError(SysErr::ENOTDIR))
+fn InodeNotDirectory_RemoveDirectory(
+    _data: &InodeOpsData,
+    _task: &Task,
+    _dir: &mut Inode,
+    _name: &str,
+) -> Result<()> {
+    return Err(Error::SysError(SysErr::ENOTDIR));
 }
 
-fn InodeNotDirectory_Rename(_data: &InodeOpsData, _task: &Task, _dir: &mut Inode, _oldParent: &Inode, _oldname: &str, _newParent: &Inode, _newname: &str, _replacement: bool) -> Result<()> {
-    return Err(Error::SysError(SysErr::EINVAL))
+fn InodeNotDirectory_Rename(
+    _data: &InodeOpsData,
+    _task: &Task,
+    _dir: &mut Inode,
+    _oldParent: &Inode,
+    _oldname: &str,
+    _newParent: &Inode,
+    _newname: &str,
+    _replacement: bool,
+) -> Result<()> {
+    return Err(Error::SysError(SysErr::EINVAL));
 }
 
-fn InodeNotTruncatable_Truncate(_data: &InodeOpsData, _task: &Task, _dir: &mut Inode, _size: i64) -> Result<()> {
-    return Err(Error::SysError(SysErr::EINVAL))
+fn InodeNotTruncatable_Truncate(
+    _data: &InodeOpsData,
+    _task: &Task,
+    _dir: &mut Inode,
+    _size: i64,
+) -> Result<()> {
+    return Err(Error::SysError(SysErr::EINVAL));
 }
 
-fn InodeIsDirTruncate_Truncate(_data: &InodeOpsData, _task: &Task, _dir: &mut Inode, _size: i64) -> Result<()> {
-    return Err(Error::SysError(SysErr::EISDIR))
+fn InodeIsDirTruncate_Truncate(
+    _data: &InodeOpsData,
+    _task: &Task,
+    _dir: &mut Inode,
+    _size: i64,
+) -> Result<()> {
+    return Err(Error::SysError(SysErr::EISDIR));
 }
 
-fn InodeNoopTruncate_Truncate(_data: &InodeOpsData, _task: &Task, _dir: &mut Inode, _size: i64) -> Result<()> {
-    return Ok(())
+fn InodeNoopTruncate_Truncate(
+    _data: &InodeOpsData,
+    _task: &Task,
+    _dir: &mut Inode,
+    _size: i64,
+) -> Result<()> {
+    return Ok(());
 }
 
-fn InodeNotRenameable_Rename(_data: &InodeOpsData, _task: &Task, _dir: &mut Inode, _oldParent: &Inode, _oldname: &str, _newParent: &Inode, _newname: &str, _replacement: bool) -> Result<()> {
-    return Err(Error::SysError(SysErr::EINVAL))
+fn InodeNotRenameable_Rename(
+    _data: &InodeOpsData,
+    _task: &Task,
+    _dir: &mut Inode,
+    _oldParent: &Inode,
+    _oldname: &str,
+    _newParent: &Inode,
+    _newname: &str,
+    _replacement: bool,
+) -> Result<()> {
+    return Err(Error::SysError(SysErr::EINVAL));
 }
 
-fn InodeNotOpenable_GetFile(_data: &InodeOpsData, _task: &Task, _dir: &Inode, _dirent: &Dirent, _flags: FileFlags) -> Result<File> {
-    return Err(Error::SysError(SysErr::EIO))
+fn InodeNotOpenable_GetFile(
+    _data: &InodeOpsData,
+    _task: &Task,
+    _dir: &Inode,
+    _dirent: &Dirent,
+    _flags: FileFlags,
+) -> Result<File> {
+    return Err(Error::SysError(SysErr::EIO));
 }
 
 fn InodeNotVirtual_IsVirtual(_data: &InodeOpsData) -> bool {
-    return false
+    return false;
 }
 
 fn InodeVirtual_IsVirtual(_data: &InodeOpsData) -> bool {
-    return true
+    return true;
 }
 
-fn InodeNotSymlink_ReadLink(_data: &InodeOpsData, _task: &Task,_dir: &Inode) -> Result<String> {
-    return Err(Error::SysError(SysErr::ENOLINK))
+fn InodeNotSymlink_ReadLink(_data: &InodeOpsData, _task: &Task, _dir: &Inode) -> Result<String> {
+    return Err(Error::SysError(SysErr::ENOLINK));
 }
 
 fn InodeNotSymlink_GetLink(_data: &InodeOpsData, _task: &Task, _dir: &Inode) -> Result<Dirent> {
-    return Err(Error::SysError(SysErr::ENOLINK))
+    return Err(Error::SysError(SysErr::ENOLINK));
 }
 
-fn InodeNotSymlink_AddLink(_data: &InodeOpsData, _task: &Task) {
+fn InodeNotSymlink_AddLink(_data: &InodeOpsData, _task: &Task) {}
+
+fn InodeNotSymlink_DropLink(_data: &InodeOpsData, _task: &Task) {}
+
+fn InodeNoExtendedAttributes_Getxattr(
+    _data: &InodeOpsData,
+    _dir: &Inode,
+    _name: &str,
+) -> Result<String> {
+    return Err(Error::SysError(SysErr::EOPNOTSUPP));
 }
 
-fn InodeNotSymlink_DropLink(_data: &InodeOpsData, _task: &Task) {
-}
-
-fn InodeNoExtendedAttributes_Getxattr(_data: &InodeOpsData, _dir: &Inode, _name: &str) -> Result<String> {
-    return Err(Error::SysError(SysErr::EOPNOTSUPP))
-}
-
-fn InodeNoExtendedAttributes_Setxattr(_data: &InodeOpsData, _dir: &mut Inode, _name: &str, _value: &str) -> Result<()> {
-    return Err(Error::SysError(SysErr::EOPNOTSUPP))
+fn InodeNoExtendedAttributes_Setxattr(
+    _data: &InodeOpsData,
+    _dir: &mut Inode,
+    _name: &str,
+    _value: &str,
+) -> Result<()> {
+    return Err(Error::SysError(SysErr::EOPNOTSUPP));
 }
 
 fn InodeNoExtendedAttributes_Listxattr(_data: &InodeOpsData, _dir: &Inode) -> Result<Vec<String>> {
-    return Err(Error::SysError(SysErr::EOPNOTSUPP))
+    return Err(Error::SysError(SysErr::EOPNOTSUPP));
 }
 
-fn InodeGenericChecker_Check(_data: &InodeOpsData, task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {
-    return ContextCanAccessFile(task, inode, reqPerms)
+fn InodeGenericChecker_Check(
+    _data: &InodeOpsData,
+    task: &Task,
+    inode: &Inode,
+    reqPerms: &PermMask,
+) -> Result<bool> {
+    return ContextCanAccessFile(task, inode, reqPerms);
 }
 
-fn InodeDenyWriteChecker_Check(_data: &InodeOpsData, task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {
+fn InodeDenyWriteChecker_Check(
+    _data: &InodeOpsData,
+    task: &Task,
+    inode: &Inode,
+    reqPerms: &PermMask,
+) -> Result<bool> {
     if reqPerms.write {
-        return Ok(false)
+        return Ok(false);
     }
 
-    return ContextCanAccessFile(task, inode, reqPerms)
+    return ContextCanAccessFile(task, inode, reqPerms);
 }
 
-fn InodeNotAllocatable_Allocate(_data: &InodeOpsData, _task: &Task, _dir: &mut Inode, _offset: i64, _length: i64) -> Result<()> {
-    return Err(Error::SysError(SysErr::EOPNOTSUPP))
+fn InodeNotAllocatable_Allocate(
+    _data: &InodeOpsData,
+    _task: &Task,
+    _dir: &mut Inode,
+    _offset: i64,
+    _length: i64,
+) -> Result<()> {
+    return Err(Error::SysError(SysErr::EOPNOTSUPP));
 }
 
-fn InodeNoopAllocate_Allocate(_data: &InodeOpsData, _task: &Task, _dir: &mut Inode, _offset: i64, _length: i64) -> Result<()> {
-    return Ok(())
+fn InodeNoopAllocate_Allocate(
+    _data: &InodeOpsData,
+    _task: &Task,
+    _dir: &mut Inode,
+    _offset: i64,
+    _length: i64,
+) -> Result<()> {
+    return Ok(());
 }
 
-fn InodeIsDirAllocate_Allocate(_data: &InodeOpsData, _task: &Task, _dir: &mut Inode, _offset: i64, _length: i64) -> Result<()> {
-    return Err(Error::SysError(SysErr::EISDIR))
+fn InodeIsDirAllocate_Allocate(
+    _data: &InodeOpsData,
+    _task: &Task,
+    _dir: &mut Inode,
+    _offset: i64,
+    _length: i64,
+) -> Result<()> {
+    return Err(Error::SysError(SysErr::EISDIR));
 }
 
-fn InodeNotMappable_Mmap(_data: &InodeOpsData, _task: &Task, _len: u64, _hugePage: bool, _offset: u64, _share: bool, _prot: u64) -> Result<u64> {
-    return Err(Error::SysError(SysErr::EACCES))
+fn InodeNotMappable_Mmap(
+    _data: &InodeOpsData,
+    _task: &Task,
+    _len: u64,
+    _hugePage: bool,
+    _offset: u64,
+    _share: bool,
+    _prot: u64,
+) -> Result<u64> {
+    return Err(Error::SysError(SysErr::EACCES));
 }
 
 fn InodeNotMappable_Mappable(_data: &InodeOpsData) -> Option<HostInodeOp> {
@@ -193,39 +383,58 @@ fn InodeNotMappable_Mappable(_data: &InodeOpsData) -> Option<HostInodeOp> {
 }
 
 fn InodeNotInodeType_InodeType(_data: &InodeOpsData) -> InodeType {
-    return InodeType::None
+    return InodeType::None;
 }
 
 fn InodeWouldBlock_WouldBlock(_data: &InodeOpsData) -> bool {
-    return false
+    return false;
 }
 
-fn InodeDefault_UnstableAttr(_data: &InodeOpsData, _task: &Task, _dir: &Inode) -> Result<UnstableAttr> {
-    return Err(Error::SysError(SysErr::ENOSYS))
+fn InodeDefault_UnstableAttr(
+    _data: &InodeOpsData,
+    _task: &Task,
+    _dir: &Inode,
+) -> Result<UnstableAttr> {
+    return Err(Error::SysError(SysErr::ENOSYS));
 }
 
-fn InodeNoop_SetPermissions(_data: &InodeOpsData, _task: &Task, _dir: &mut Inode, _f: FilePermissions) -> bool {
-    return true
+fn InodeNoop_SetPermissions(
+    _data: &InodeOpsData,
+    _task: &Task,
+    _dir: &mut Inode,
+    _f: FilePermissions,
+) -> bool {
+    return true;
 }
 
-fn InodeDefault_SetOwner(_data: &InodeOpsData, _task: &Task, _dir: &mut Inode, _owner: &FileOwner) -> Result<()> {
-    return Err(Error::SysError(SysErr::ENOSYS))
+fn InodeDefault_SetOwner(
+    _data: &InodeOpsData,
+    _task: &Task,
+    _dir: &mut Inode,
+    _owner: &FileOwner,
+) -> Result<()> {
+    return Err(Error::SysError(SysErr::ENOSYS));
 }
 
-fn InodeDefault_SetTimestamps(_data: &InodeOpsData, _task: &Task, _dir: &mut Inode, _ts: &InterTimeSpec) -> Result<()> {
-    return Err(Error::SysError(SysErr::ENOSYS))
+fn InodeDefault_SetTimestamps(
+    _data: &InodeOpsData,
+    _task: &Task,
+    _dir: &mut Inode,
+    _ts: &InterTimeSpec,
+) -> Result<()> {
+    return Err(Error::SysError(SysErr::ENOSYS));
 }
 
 fn InodeDefault_StatFS(_data: &InodeOpsData, _task: &Task) -> Result<FsInfo> {
-    return Err(Error::SysError(SysErr::ENOSYS))
+    return Err(Error::SysError(SysErr::ENOSYS));
 }
 
 fn InodeDefault_Sync(_data: &InodeOpsData) -> Result<()> {
-    return Err(Error::SysError(SysErr::ENOSYS))
+    return Err(Error::SysError(SysErr::ENOSYS));
 }
 
 fn InodeDefault_GetFileOp(_data: &InodeOpsData, _task: &Task) -> Result<Arc<FileOperations>> {
-    return Ok(Arc::new(FileOptionsUtil::default()))
+    return Ok(Arc::new(FileOptionsUtil::default()));
 }
 
 pub struct InodeOpsUtil {
@@ -302,7 +511,7 @@ impl Default for InodeOpsUtil {
             statFS: InodeDefault_StatFS,
             mmap: InodeNotMappable_Mmap,
             mappable: InodeNotMappable_Mappable,
-        }
+        };
     }
 }
 

@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-use super::super::task::*;
 use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
 use super::super::qlib::linux::membarrier::*;
+use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
+use super::super::task::*;
 
 // Membarrier implements syscall membarrier(2).
 pub fn SysMembarrier(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -27,15 +26,13 @@ pub fn SysMembarrier(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     match cmd {
         MEMBARRIER_CMD_QUERY => {
             if flags != 0 {
-                return Err(Error::SysError(SysErr::EINVAL))
+                return Err(Error::SysError(SysErr::EINVAL));
             }
 
             let supportedCommands = 0;
-            return Ok(supportedCommands)
+            return Ok(supportedCommands);
         }
         // todo: enable membarrier
-        _ => {
-            return Err(Error::SysError(SysErr::EINVAL))
-        }
+        _ => return Err(Error::SysError(SysErr::EINVAL)),
     }
 }

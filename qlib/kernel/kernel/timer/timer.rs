@@ -12,24 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
-use core::ops::Deref;
+use alloc::sync::Arc;
 use core::fmt;
+use core::ops::Deref;
 
 use super::super::super::super::common::*;
-use super::super::super::super::linux_def::*;
 use super::super::super::super::linux::time::*;
-use super::super::super::SignalDef::*;
-use super::super::super::task::*;
-use super::super::super::threadmgr::thread_group::*;
-use super::super::super::threadmgr::task_sched::*;
-use super::super::waiter::*;
-use super::super::super::uid::*;
-use super::super::time::*;
+use super::super::super::super::linux_def::*;
 use super::super::super::fs::timerfd::*;
-use super::super::timer::TimerUpdater;
+use super::super::super::task::*;
+use super::super::super::threadmgr::task_sched::*;
+use super::super::super::threadmgr::thread_group::*;
+use super::super::super::uid::*;
+use super::super::super::SignalDef::*;
 use super::super::posixtimer::*;
+use super::super::time::*;
+use super::super::timer::TimerUpdater;
+use super::super::waiter::*;
 use super::timekeeper::*;
 use super::timer_store::*;
 use super::*;
@@ -58,7 +58,7 @@ impl Clock {
             Self::TimeKeeperClock(ref c) => c.Now(),
             Self::TaskClock(ref c) => c.Now(),
             Self::ThreadGroupClock(ref c) => c.Now(),
-            Self::Dummy  => panic!("Clock::Dummy Now..."),
+            Self::Dummy => panic!("Clock::Dummy Now..."),
         }
     }
 
@@ -82,7 +82,7 @@ impl Clock {
             Self::TimeKeeperClock(ref c) => c.WallTimeUntil(t, now),
             Self::TaskClock(ref c) => c.WallTimeUntil(t, now),
             Self::ThreadGroupClock(ref c) => c.WallTimeUntil(t, now),
-            Self::Dummy  => panic!("Clock::Dummy WallTimeUntil..."),
+            Self::Dummy => panic!("Clock::Dummy WallTimeUntil..."),
         }
     }
 }
@@ -93,7 +93,7 @@ pub struct ClockEventsQueue {
 
 impl Waitable for ClockEventsQueue {
     fn Readiness(&self, _task: &Task, _mask: EventMask) -> EventMask {
-        return 0
+        return 0;
     }
 }
 
@@ -105,7 +105,7 @@ pub enum TimerListener {
     DummyTimerListener(DummyTimerListener),
     WaitEntryListener(WaitEntryListener),
     ITimerRealListener(Arc<ITimerRealListener>),
-    KernelCPUClockTicker(Arc<KernelCPUClockTicker>)
+    KernelCPUClockTicker(Arc<KernelCPUClockTicker>),
 }
 
 impl fmt::Debug for TimerListener {
@@ -117,7 +117,7 @@ impl fmt::Debug for TimerListener {
             Self::DummyTimerListener(_) => f.debug_struct("DummyTimerListener").finish(),
             Self::WaitEntryListener(_) => f.debug_struct("WaitEntryListener").finish(),
             Self::ITimerRealListener(_) => f.debug_struct("ITimerRealListener").finish(),
-            Self::KernelCPUClockTicker(_)  => f.debug_struct("KernelCPUClockTicker").finish(),
+            Self::KernelCPUClockTicker(_) => f.debug_struct("KernelCPUClockTicker").finish(),
         }
     }
 }
@@ -138,7 +138,7 @@ impl TimerListener {
             Self::DummyTimerListener(tl) => tl.Notify(exp),
             Self::WaitEntryListener(tl) => tl.Notify(exp),
             Self::ITimerRealListener(tl) => tl.Notify(exp),
-            Self::KernelCPUClockTicker(tl)  => tl.Notify(exp),
+            Self::KernelCPUClockTicker(tl) => tl.Notify(exp),
         }
     }
 
@@ -150,7 +150,7 @@ impl TimerListener {
             Self::DummyTimerListener(tl) => tl.Destroy(),
             Self::WaitEntryListener(tl) => tl.Destroy(),
             Self::ITimerRealListener(tl) => tl.Destroy(),
-            Self::KernelCPUClockTicker(tl)  => tl.Destroy(),
+            Self::KernelCPUClockTicker(tl) => tl.Destroy(),
         }
     }
 }
@@ -194,12 +194,12 @@ pub struct Setting {
 
 impl Setting {
     pub fn FromSpec(value: Duration, interval: Duration, c: &Clock) -> Result<Self> {
-        return Self::FromSpecAt(value, interval, c.Now())
+        return Self::FromSpecAt(value, interval, c.Now());
     }
 
     pub fn FromSpecAt(value: Duration, interval: Duration, now: Time) -> Result<Self> {
         if value < 0 {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         if value == 0 {
@@ -207,19 +207,19 @@ impl Setting {
                 Enabled: false,
                 Next: Time(0),
                 Period: interval,
-            })
+            });
         }
 
         return Ok(Self {
             Enabled: true,
             Next: now.Add(value),
             Period: interval,
-        })
+        });
     }
 
     pub fn FromAbsSpec(value: Time, interval: Duration) -> Result<Self> {
         if value.Before(ZERO_TIME) {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         if value.IsZero() {
@@ -227,14 +227,14 @@ impl Setting {
                 Enabled: false,
                 Next: Time(0),
                 Period: interval,
-            })
+            });
         }
 
         return Ok(Self {
             Enabled: true,
             Next: value,
             Period: interval,
-        })
+        });
     }
 
     pub fn FromItimerspec(its: &Itimerspec, abs: bool, c: &Clock) -> Result<Self> {
@@ -242,7 +242,7 @@ impl Setting {
             return Self::FromAbsSpec(Time::FromTimespec(&its.Value), its.Interval.ToDuration()?);
         }
 
-        return Self::FromSpec(its.Value.ToDuration()?, its.Interval.ToDuration()?, c)
+        return Self::FromSpec(its.Value.ToDuration()?, its.Interval.ToDuration()?, c);
     }
 
     // At returns an updated Setting and a number of expirations after the
@@ -254,30 +254,30 @@ impl Setting {
     // Timer.clock.Now() to be called without holding Timer.mu.
     pub fn At(mut self, now: Time) -> (Self, u64) {
         if !self.Enabled {
-            return (self, 0)
+            return (self, 0);
         }
 
         if self.Next.After(now) {
-            return (self, 0)
+            return (self, 0);
         }
 
         if self.Period == 0 {
             self.Enabled = false;
-            return (self, 1)
+            return (self, 1);
         }
 
         let exp = 1 + (now.Sub(self.Next) as u64) / (self.Period as u64);
         self.Next = self.Next.Add(self.Period * exp as i64);
-        return (self, exp)
+        return (self, exp);
     }
 }
 
 pub fn SpecFromSetting(now: Time, s: Setting) -> (Duration, Duration) {
     if !s.Enabled {
-        return (0, s.Period)
+        return (0, s.Period);
     }
 
-    return (s.Next.Sub(now), s.Period)
+    return (s.Next.Sub(now), s.Period);
 }
 
 pub fn ItimerspecFromSetting(now: Time, s: Setting) -> Itimerspec {
@@ -285,7 +285,7 @@ pub fn ItimerspecFromSetting(now: Time, s: Setting) -> Itimerspec {
     return Itimerspec {
         Interval: Timespec::FromNs(iv),
         Value: Timespec::FromNs(val),
-    }
+    };
 }
 
 #[derive(Eq, PartialEq, Clone, Copy, Debug)]
@@ -300,7 +300,6 @@ impl Default for TimerState {
         return Self::Stopped;
     }
 }
-
 
 // Timer is an optionally-periodic timer driven by sampling a user-specified
 // Clock. Timer's semantics support the requirements of Linux's interval timers
@@ -339,10 +338,9 @@ impl Default for TimerInternal {
             Id: id,
             State: TimerState::default(),
             Expire: 0,
-        }
+        };
     }
 }
-
 
 impl TimerInternal {
     pub fn Dummy() -> Self {
@@ -374,9 +372,9 @@ impl TimerInternal {
                 delta = 10;
             }
 
-            return delta
+            return delta;
         } else {
-            return 0
+            return 0;
         }
     }
 
@@ -384,7 +382,7 @@ impl TimerInternal {
         return TimerUnit {
             timerId: self.Id,
             expire: self.Expire,
-        }
+        };
     }
 }
 
@@ -469,7 +467,7 @@ impl Timer {
         res.Swap(&Setting {
             Enabled: true,
             Period: duration,
-            Next: now.Add(duration)
+            Next: now.Add(duration),
         });
 
         return res;
@@ -495,7 +493,7 @@ impl Timer {
         res.Swap(&Setting {
             Enabled: true,
             Period: 0,
-            Next: now.Add(duration)
+            Next: now.Add(duration),
         });
 
         return res;
@@ -568,7 +566,7 @@ impl Timer {
         }
 
         self.Reset(delta);
-        return (now, s)
+        return (now, s);
     }
 
     // Swap atomically changes the Timer's Setting and returns the Timer's previous
@@ -623,7 +621,7 @@ impl Timer {
         }
 
         self.Reset(delta);
-        return (now, oldS)
+        return (now, oldS);
     }
 
     // Atomically invokes f atomically with respect to expirations of t; that is, t
@@ -646,7 +644,7 @@ impl Timer {
     pub fn Stop(&self) -> bool {
         let state = self.lock().State;
         if state != TimerState::Running {
-            return false
+            return false;
         }
 
         self.lock().State = TimerState::Stopped;
@@ -691,9 +689,7 @@ pub struct WaitEntryListener {
 
 impl WaitEntryListener {
     pub fn New(e: &WaitEntry) -> Self {
-        return Self {
-            entry: e.clone(),
-        }
+        return Self { entry: e.clone() };
     }
 }
 
@@ -711,8 +707,12 @@ pub struct ITimerRealListener {
 
 impl TimerListenerTrait for ITimerRealListener {
     fn Notify(&self, _exp: u64) {
-        let tg = self.tg.Upgrade().expect("TimerListener::Notify upgrade fail");
-        tg.SendSignal(&SignalInfoPriv(Signal::SIGALRM)).expect("TimerListener::Notify fail")
+        let tg = self
+            .tg
+            .Upgrade()
+            .expect("TimerListener::Notify upgrade fail");
+        tg.SendSignal(&SignalInfoPriv(Signal::SIGALRM))
+            .expect("TimerListener::Notify fail")
     }
 
     fn Destroy(&self) {}

@@ -13,41 +13,41 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
+use alloc::sync::Arc;
+use core::cell::UnsafeCell;
 use core::ops::Deref;
 use core::ops::DerefMut;
-use core::cell::UnsafeCell;
-use alloc::sync::Arc;
 
 use super::super::super::super::common::*;
 use super::queue::*;
 use super::*;
 
 #[derive(Default)]
-pub struct QLock <T: ?Sized> {
+pub struct QLock<T: ?Sized> {
     pub locked: QMutex<bool>,
     pub queue: Queue,
     pub data: UnsafeCell<T>,
 }
 
-pub struct QLockGuard <'a, T: ?Sized + 'a> {
-    pub lock: &'a QLock<T>
+pub struct QLockGuard<'a, T: ?Sized + 'a> {
+    pub lock: &'a QLock<T>,
 }
 
 // Same unsafe impls as `std::sync::QMutex`
 unsafe impl<T: ?Sized + Send> Sync for QLock<T> {}
 unsafe impl<T: ?Sized + Send> Send for QLock<T> {}
 
-impl <T> QLock <T> {
+impl<T> QLock<T> {
     pub fn New(data: T) -> Self {
         return Self {
             locked: QMutex::new(false),
             queue: Queue::default(),
             data: UnsafeCell::new(data),
-        }
+        };
     }
 }
 
-impl <T: ?Sized> QLock <T> {
+impl<T: ?Sized> QLock<T> {
     pub fn Unlock(&self) {
         let mut l = self.locked.lock();
         assert!(*l == true, "QLock::Unlock misrun");
@@ -62,7 +62,7 @@ impl <T: ?Sized> QLock <T> {
         loop {
             match self.Lock(task) {
                 Err(_) => continue,
-                Ok(ret) => return ret
+                Ok(ret) => return ret,
             }
         }
     }
@@ -86,17 +86,15 @@ impl <T: ?Sized> QLock <T> {
 
             if !block {
                 //fast path
-                return Ok(QLockGuard {
-                    lock: self,
-                })
+                return Ok(QLockGuard { lock: self });
             }
 
             match blocker.BlockGeneral() {
                 Err(e) => {
                     self.queue.EventUnregister(task, &blocker.generalEntry);
-                    return Err(e)
+                    return Err(e);
                 }
-                Ok(()) => ()
+                Ok(()) => (),
             }
 
             self.queue.EventUnregister(task, &blocker.generalEntry);
@@ -104,27 +102,23 @@ impl <T: ?Sized> QLock <T> {
     }
 }
 
-impl <'a, T: ?Sized + 'a> Deref for QLockGuard <'a, T> {
+impl<'a, T: ?Sized + 'a> Deref for QLockGuard<'a, T> {
     type Target = T;
 
-    fn deref (&self) -> & T {
-        let data = unsafe {
-            &mut *self.lock.data.get()
-        };
-        & *data
+    fn deref(&self) -> &T {
+        let data = unsafe { &mut *self.lock.data.get() };
+        &*data
     }
 }
 
-impl <'a, T: ?Sized + 'a> DerefMut for QLockGuard <'a, T> {
-    fn deref_mut (&mut self) -> &mut T {
-        let data = unsafe {
-            &mut *self.lock.data.get()
-        };
+impl<'a, T: ?Sized + 'a> DerefMut for QLockGuard<'a, T> {
+    fn deref_mut(&mut self) -> &mut T {
+        let data = unsafe { &mut *self.lock.data.get() };
         &mut *data
     }
 }
 
-impl <'a, T: ?Sized + 'a> Drop for QLockGuard <'a, T> {
+impl<'a, T: ?Sized + 'a> Drop for QLockGuard<'a, T> {
     fn drop(&mut self) {
         self.lock.Unlock();
     }
@@ -147,7 +141,7 @@ impl QAsyncLock {
         loop {
             match self.Block(task) {
                 Err(_) => continue,
-                Ok(ret) => return ret
+                Ok(ret) => return ret,
             }
         }
     }
@@ -174,15 +168,15 @@ impl QAsyncLock {
                 return Ok(QAsyncLockGuard {
                     locked: self.locked.clone(),
                     queue: self.queue.clone(),
-                })
+                });
             }
 
             match blocker.BlockGeneral() {
                 Err(e) => {
                     self.queue.EventUnregister(task, &blocker.generalEntry);
-                    return Err(e)
+                    return Err(e);
                 }
-                Ok(()) => ()
+                Ok(()) => (),
             }
 
             self.queue.EventUnregister(task, &blocker.generalEntry);
@@ -208,12 +202,12 @@ impl Drop for QAsyncLockGuard {
 pub enum RWState {
     NoLock,
     Write,
-    Read(u32)
+    Read(u32),
 }
 
 impl Default for RWState {
     fn default() -> Self {
-        return Self::NoLock
+        return Self::NoLock;
     }
 }
 
@@ -240,7 +234,7 @@ impl QAsyncRwLock {
         loop {
             match self.BlockRead(task) {
                 Err(_) => continue,
-                Ok(ret) => return ret
+                Ok(ret) => return ret,
             }
         }
     }
@@ -249,7 +243,7 @@ impl QAsyncRwLock {
         loop {
             match self.BlockWrite(task) {
                 Err(_) => continue,
-                Ok(ret) => return ret
+                Ok(ret) => return ret,
             }
         }
     }
@@ -267,7 +261,7 @@ impl QAsyncRwLock {
                         true
                     }
                     RWState::Read(count) => {
-                        *l = RWState::Read(count+1);
+                        *l = RWState::Read(count + 1);
                         true
                     }
                     RWState::Write => {
@@ -282,15 +276,15 @@ impl QAsyncRwLock {
                 return Ok(QAsyncReadLockGuard {
                     locked: self.locked.clone(),
                     queue: self.queue.clone(),
-                })
+                });
             }
 
             match blocker.BlockGeneral() {
                 Err(e) => {
                     self.queue.EventUnregister(task, &blocker.generalEntry);
-                    return Err(e)
+                    return Err(e);
                 }
-                Ok(()) => ()
+                Ok(()) => (),
             }
 
             self.queue.EventUnregister(task, &blocker.generalEntry);
@@ -325,15 +319,15 @@ impl QAsyncRwLock {
                 return Ok(QAsyncWriteLockGuard {
                     locked: self.locked.clone(),
                     queue: self.queue.clone(),
-                })
+                });
             }
 
             match blocker.BlockGeneral() {
                 Err(e) => {
                     self.queue.EventUnregister(task, &blocker.generalEntry);
-                    return Err(e)
+                    return Err(e);
                 }
-                Ok(()) => ()
+                Ok(()) => (),
             }
 
             self.queue.EventUnregister(task, &blocker.generalEntry);
@@ -353,7 +347,7 @@ impl QAsyncReadLockGuard {
                     *l = RWState::NoLock;
                     self.queue.Notify(!0);
                 } else {
-                    *l = RWState::Read(count-1)
+                    *l = RWState::Read(count - 1)
                 }
             }
             RWState::Write => {
@@ -377,7 +371,10 @@ impl QAsyncWriteLockGuard {
                 panic!("QAsyncWriteLockGuard unlock found RWState::NoLock");
             }
             RWState::Read(count) => {
-                panic!("QAsyncWriteLockGuard unlock found RWState::Read count = {}", count);
+                panic!(
+                    "QAsyncWriteLockGuard unlock found RWState::Read count = {}",
+                    count
+                );
             }
             RWState::Write => {
                 *l = RWState::NoLock;

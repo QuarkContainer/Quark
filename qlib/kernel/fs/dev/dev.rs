@@ -12,26 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::ToString;
+use alloc::sync::Arc;
 
+use super::super::super::super::auth::*;
 use super::super::super::super::device::*;
 use super::super::super::super::linux_def::*;
-use super::super::super::super::auth::*;
-use super::super::super::uid::NewUID;
 use super::super::super::task::*;
-use super::super::mount::*;
-use super::super::inode::*;
+use super::super::super::uid::NewUID;
 use super::super::attr::*;
+use super::super::inode::*;
+use super::super::mount::*;
 use super::super::ramfs::dir::*;
 use super::super::ramfs::symlink::*;
-use super::null::*;
-use super::zero::*;
 use super::full::*;
+use super::null::*;
 use super::random::*;
 use super::tty::*;
+use super::zero::*;
 
 const MEM_DEV_MAJOR: u16 = 1;
 
@@ -51,7 +51,7 @@ fn NewTTYDevice(iops: &Arc<TTYDevice>, msrc: &Arc<QMutex<MountSource>>) -> Inode
         DeviceId: deviceId,
         InodeId: inodeId,
         BlockSize: MemoryDef::PAGE_SIZE as i64,
-        DeviceFileMajor: 5 ,
+        DeviceFileMajor: 5,
         DeviceFileMinor: 0,
     };
 
@@ -64,7 +64,7 @@ fn NewTTYDevice(iops: &Arc<TTYDevice>, msrc: &Arc<QMutex<MountSource>>) -> Inode
         Overlay: None,
     };
 
-    return Inode(Arc::new(QMutex::new(inodeInternal)))
+    return Inode(Arc::new(QMutex::new(inodeInternal)));
 }
 
 fn NewNullDevice(iops: &Arc<NullDevice>, msrc: &Arc<QMutex<MountSource>>) -> Inode {
@@ -89,7 +89,7 @@ fn NewNullDevice(iops: &Arc<NullDevice>, msrc: &Arc<QMutex<MountSource>>) -> Ino
         Overlay: None,
     };
 
-    return Inode(Arc::new(QMutex::new(inodeInternal)))
+    return Inode(Arc::new(QMutex::new(inodeInternal)));
 }
 
 fn NewZeroDevice(iops: &Arc<ZeroDevice>, msrc: &Arc<QMutex<MountSource>>) -> Inode {
@@ -114,7 +114,7 @@ fn NewZeroDevice(iops: &Arc<ZeroDevice>, msrc: &Arc<QMutex<MountSource>>) -> Ino
         Overlay: None,
     };
 
-    return Inode(Arc::new(QMutex::new(inodeInternal)))
+    return Inode(Arc::new(QMutex::new(inodeInternal)));
 }
 
 fn NewFullDevice(iops: &Arc<FullDevice>, msrc: &Arc<QMutex<MountSource>>) -> Inode {
@@ -139,7 +139,7 @@ fn NewFullDevice(iops: &Arc<FullDevice>, msrc: &Arc<QMutex<MountSource>>) -> Ino
         Overlay: None,
     };
 
-    return Inode(Arc::new(QMutex::new(inodeInternal)))
+    return Inode(Arc::new(QMutex::new(inodeInternal)));
 }
 
 fn NewRandomDevice(iops: &Arc<RandomDevice>, msrc: &Arc<QMutex<MountSource>>, minor: u32) -> Inode {
@@ -164,11 +164,16 @@ fn NewRandomDevice(iops: &Arc<RandomDevice>, msrc: &Arc<QMutex<MountSource>>, mi
         Overlay: None,
     };
 
-    return Inode(Arc::new(QMutex::new(inodeInternal)))
+    return Inode(Arc::new(QMutex::new(inodeInternal)));
 }
 
 fn NewDirectory(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
-    let iops = Dir::New(task, BTreeMap::new(), &ROOT_OWNER, &FilePermissions::FromMode(FileMode(0o0555)));
+    let iops = Dir::New(
+        task,
+        BTreeMap::new(),
+        &ROOT_OWNER,
+        &FilePermissions::FromMode(FileMode(0o0555)),
+    );
 
     let deviceId = PROC_DEVICE.lock().id.DeviceID();
     let inodeId = PROC_DEVICE.lock().NextIno();
@@ -191,7 +196,7 @@ fn NewDirectory(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         Overlay: None,
     };
 
-    return Inode(Arc::new(QMutex::new(inodeInternal)))
+    return Inode(Arc::new(QMutex::new(inodeInternal)));
 }
 
 fn NewSymlink(task: &Task, target: &str, msrc: &Arc<QMutex<MountSource>>) -> Inode {
@@ -218,28 +223,72 @@ fn NewSymlink(task: &Task, target: &str, msrc: &Arc<QMutex<MountSource>>) -> Ino
         Overlay: None,
     };
 
-    return Inode(Arc::new(QMutex::new(inodeInternal)))
+    return Inode(Arc::new(QMutex::new(inodeInternal)));
 }
 
 pub fn NewDev(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let mut contents = BTreeMap::new();
 
-    contents.insert("fd".to_string(), NewSymlink(task, &"/proc/self/fd".to_string(), msrc));
-    contents.insert("stdin".to_string(), NewSymlink(task, &"/proc/self/fd/0".to_string(), msrc));
-    contents.insert("stdout".to_string(), NewSymlink(task, &"/proc/self/fd/1".to_string(), msrc));
-    contents.insert("stderr".to_string(), NewSymlink(task, &"/proc/self/fd/2".to_string(), msrc));
+    contents.insert(
+        "fd".to_string(),
+        NewSymlink(task, &"/proc/self/fd".to_string(), msrc),
+    );
+    contents.insert(
+        "stdin".to_string(),
+        NewSymlink(task, &"/proc/self/fd/0".to_string(), msrc),
+    );
+    contents.insert(
+        "stdout".to_string(),
+        NewSymlink(task, &"/proc/self/fd/1".to_string(), msrc),
+    );
+    contents.insert(
+        "stderr".to_string(),
+        NewSymlink(task, &"/proc/self/fd/2".to_string(), msrc),
+    );
 
-    contents.insert("null".to_string(), NewNullDevice(&Arc::new(NullDevice::New(task, &ROOT_OWNER, &FileMode(0o0666))), msrc));
-    contents.insert("zero".to_string(), NewZeroDevice(&Arc::new(ZeroDevice::New(task, &ROOT_OWNER, &FileMode(0o0666))), msrc));
-    contents.insert("full".to_string(), NewFullDevice(&Arc::new(FullDevice::New(task, &ROOT_OWNER, &FileMode(0o0666))), msrc));
+    contents.insert(
+        "null".to_string(),
+        NewNullDevice(
+            &Arc::new(NullDevice::New(task, &ROOT_OWNER, &FileMode(0o0666))),
+            msrc,
+        ),
+    );
+    contents.insert(
+        "zero".to_string(),
+        NewZeroDevice(
+            &Arc::new(ZeroDevice::New(task, &ROOT_OWNER, &FileMode(0o0666))),
+            msrc,
+        ),
+    );
+    contents.insert(
+        "full".to_string(),
+        NewFullDevice(
+            &Arc::new(FullDevice::New(task, &ROOT_OWNER, &FileMode(0o0666))),
+            msrc,
+        ),
+    );
 
     // This is not as good as /dev/random in linux because go
     // runtime uses sys_random and /dev/urandom internally.
     // According to 'man 4 random', this will be sufficient unless
     // application uses this to generate long-lived GPG/SSL/SSH
     // keys.
-    contents.insert("random".to_string(), NewRandomDevice(&Arc::new(RandomDevice::New(task, &ROOT_OWNER, &FileMode(0o0666))), msrc, RANDOM_DEV_MINOR));
-    contents.insert("urandom".to_string(), NewRandomDevice(&Arc::new(RandomDevice::New(task, &ROOT_OWNER, &FileMode(0o0666))), msrc, URANDOM_DEV_MINOR));
+    contents.insert(
+        "random".to_string(),
+        NewRandomDevice(
+            &Arc::new(RandomDevice::New(task, &ROOT_OWNER, &FileMode(0o0666))),
+            msrc,
+            RANDOM_DEV_MINOR,
+        ),
+    );
+    contents.insert(
+        "urandom".to_string(),
+        NewRandomDevice(
+            &Arc::new(RandomDevice::New(task, &ROOT_OWNER, &FileMode(0o0666))),
+            msrc,
+            URANDOM_DEV_MINOR,
+        ),
+    );
 
     // A devpts is typically mounted at /dev/pts to provide
     // pseudoterminal support. Place an empty directory there for
@@ -255,12 +304,20 @@ pub fn NewDev(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     //
     // If no devpts is mounted, this will simply be a dangling
     // symlink, which is fine.
-    contents.insert("ptmx".to_string(), NewSymlink(task, &"pts/ptmx".to_string(), msrc));
+    contents.insert(
+        "ptmx".to_string(),
+        NewSymlink(task, &"pts/ptmx".to_string(), msrc),
+    );
 
     let ttyDevice = TTYDevice::New(task, &ROOT_OWNER, &FileMode(0o0666));
     contents.insert("tty".to_string(), NewTTYDevice(&Arc::new(ttyDevice), msrc));
 
-    let iops = Dir::New(task, contents, &ROOT_OWNER, &FilePermissions::FromMode(FileMode(0o0555)));
+    let iops = Dir::New(
+        task,
+        contents,
+        &ROOT_OWNER,
+        &FilePermissions::FromMode(FileMode(0o0555)),
+    );
 
     let deviceId = DEV_DEVICE.lock().id.DeviceID();
     let inodeId = DEV_DEVICE.lock().NextIno();
@@ -283,5 +340,5 @@ pub fn NewDev(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         Overlay: None,
     };
 
-    return Inode(Arc::new(QMutex::new(inodeInternal)))
+    return Inode(Arc::new(QMutex::new(inodeInternal)));
 }

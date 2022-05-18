@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use clap::{App, AppSettings, SubCommand, ArgMatches};
 use alloc::string::String;
+use clap::{App, AppSettings, ArgMatches, SubCommand};
 
 use super::super::super::qlib::common::*;
 use super::super::cmd::config::*;
@@ -21,7 +21,7 @@ use super::super::container::container::*;
 use super::command::*;
 
 #[derive(Debug)]
-pub struct StartCmd  {
+pub struct StartCmd {
     pub id: String,
 }
 
@@ -29,7 +29,7 @@ impl StartCmd {
     pub fn Init(cmd_matches: &ArgMatches) -> Result<Self> {
         return Ok(Self {
             id: cmd_matches.value_of("id").unwrap().to_string(),
-        })
+        });
     }
 
     pub fn SubCommand<'a, 'b>(common: &CommonArgs<'a, 'b>) -> App<'a, 'b> {
@@ -44,11 +44,11 @@ impl StartCmd {
         let id = &self.id;
 
         let mut container = Container::Load(&gCfg.RootDir, id)?;
-        container.Start(gCfg)?;
+        container.Start()?;
 
         //eprintln!("Application error: teststasdfasfd");
         //::std::process::exit(1);
 
-        return Ok(())
+        return Ok(());
     }
 }

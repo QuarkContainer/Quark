@@ -12,17 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::mutex::*;
+use alloc::vec::Vec;
+use core::mem;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-use alloc::vec::Vec;
-use super::mutex::*;
-use core::mem;
 
-use super::kernel::TSC;
 pub use super::super::kernel_def::*;
+use super::kernel::TSC;
 use super::singleton::*;
 
-pub static COUNTS : Singleton<CounterSet> = Singleton::<CounterSet>::New();
+pub static COUNTS: Singleton<CounterSet> = Singleton::<CounterSet>::New();
 
 pub unsafe fn InitSingleton() {
     COUNTS.Init(CounterSet::default());
@@ -55,7 +55,7 @@ impl Default for Counter {
         return Self {
             count: AtomicU64::new(0),
             lastVal: AtomicU64::new(0),
-        }
+        };
     }
 }
 
@@ -68,7 +68,10 @@ impl Counter {
         let currentVal = TSC.Rdtsc() as u64;
         let lastVal = self.lastVal.load(Ordering::SeqCst);
         if lastVal != 0 {
-            self.count.fetch_add(currentVal - self.lastVal.load(Ordering::SeqCst), Ordering::SeqCst);
+            self.count.fetch_add(
+                currentVal - self.lastVal.load(Ordering::SeqCst),
+                Ordering::SeqCst,
+            );
             self.lastVal.store(0, Ordering::SeqCst);
         }
     }
@@ -78,13 +81,12 @@ impl Counter {
 
         let last = self.lastVal.load(Ordering::SeqCst);
         if last == 0 {
-            return ret
+            return ret;
         } else {
             ret + (TSC.Rdtsc() as u64 - last)
         }
     }
 }
-
 
 #[derive(Debug)]
 pub struct Counters {
@@ -122,13 +124,12 @@ impl Counters {
         {
             let mut state = self.state.lock();
             if state.len() > 0 {
-                top = Some(state[state.len()-1])
+                top = Some(state[state.len() - 1])
             } else {
                 top = None;
             }
             state.push(typ);
         };
-
 
         if let Some(t) = top {
             self.Leave(t)
@@ -143,16 +144,20 @@ impl Counters {
         {
             let mut state = self.state.lock();
             current = state.pop().expect("Counters::Gofrom pop fail");
-            top = state[state.len()-1]
+            top = state[state.len() - 1]
         };
 
         if current != typ {
             // work around for clone, the state can't chagne to PerfType::User with current implementation
             // todo: fix this
-            if typ == PerfType::User { //|| typ == PerfType::Idle {
+            if typ == PerfType::User {
+                //|| typ == PerfType::Idle {
                 self.state.lock().push(current);
             } else {
-                panic!("Counters[{}]::Gofrom fail current stat is {:?}, expect {:?}", id, current, typ)
+                panic!(
+                    "Counters[{}]::Gofrom fail current stat is {:?}, expect {:?}",
+                    id, current, typ
+                )
             }
         }
 
@@ -171,7 +176,7 @@ impl Counters {
 
 #[derive(Default)]
 pub struct CounterSet {
-    pub data: [Counters; Self::PERM_COUNTER_SET_SIZE]
+    pub data: [Counters; Self::PERM_COUNTER_SET_SIZE],
 }
 
 impl CounterSet {
@@ -214,7 +219,7 @@ impl CounterSet {
                 for i in 1..PerfType::End as usize {
                     let t: PerfType = unsafe { mem::transmute(i) };
                     let val = counts.data[i].Val();
-                    line += &format!("{:?}->{}/{} \t", t, val / 100_000, val / (total/1000));
+                    line += &format!("{:?}->{}/{} \t", t, val / 100_000, val / (total / 1000));
                 }
 
                 error!("{}", line);
@@ -223,7 +228,7 @@ impl CounterSet {
 
         if sum[0] < 1000 {
             error!("PerfPrint::Kernel not ready ....");
-            return
+            return;
         }
 
         let mut line = format!("{} \t", self.PerfType());
@@ -231,7 +236,7 @@ impl CounterSet {
         for i in 1..PerfType::End as usize {
             let t: PerfType = unsafe { mem::transmute(i) };
             let val = sum[i];
-            line += &format!("{:?}->{}/{} \t", t, val / 100_000, val / (sum[0]/1000));
+            line += &format!("{:?}->{}/{} \t", t, val / 100_000, val / (sum[0] / 1000));
         }
         error!("{}", line);
     }

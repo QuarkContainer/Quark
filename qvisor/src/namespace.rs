@@ -12,21 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::io::prelude::*;
-use std::fs::OpenOptions;
-use std::string::String;
-use std::ffi::CString;
 use libc::*;
+use std::ffi::CString;
+use std::fs::{create_dir_all, OpenOptions};
+use std::io::prelude::*;
+use std::string::String;
 
-use super::vmspace::syscall::*;
 use super::qlib::SysCallID;
+use super::vmspace::syscall::*;
 
 pub fn GetRet(ret: i32) -> i32 {
     if ret == -1 {
-        return -errno::errno().0
+        return -errno::errno().0;
     }
 
-    return ret
+    return ret;
 }
 
 pub struct Util {}
@@ -34,7 +34,11 @@ pub struct Util {}
 impl Util {
     fn WriteFile(filename: &str, str: &str) {
         //let mut file = File::open(filename).expect("Open file fail");
-        let mut file = OpenOptions::new().write(true).truncate(true).open(&filename).expect("Open file fail");
+        let mut file = OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(&filename)
+            .expect("Open file fail");
         file.write_all(str.as_bytes()).expect("write all fail");
     }
 
@@ -44,57 +48,57 @@ impl Util {
         let fstype = CString::new(fstype.clone()).expect("CString::new fstype failed");
         let data = CString::new(data.clone()).expect("CString::new fstype failed");
 
-        let srcAddr = if src.as_bytes().len() ==0  {
+        let srcAddr = if src.as_bytes().len() == 0 {
             0 as *const c_char
         } else {
             src.as_ptr()
         };
 
-        let targetAddr = if target.as_bytes().len() ==0  {
+        let targetAddr = if target.as_bytes().len() == 0 {
             0 as *const c_char
         } else {
             target.as_ptr()
         };
 
-        let fstypeAddr = if fstype.as_bytes().len() ==0  {
+        let fstypeAddr = if fstype.as_bytes().len() == 0 {
             0 as *const c_char
         } else {
             fstype.as_ptr()
         };
 
-        let dataAddr = if data.as_bytes().len() ==0  {
+        let dataAddr = if data.as_bytes().len() == 0 {
             0 as *const c_void
         } else {
             data.as_ptr() as *const c_void
         };
 
         return unsafe {
-            GetRet(mount(srcAddr, targetAddr, fstypeAddr, flags, dataAddr as *const c_void))
-        }
+            GetRet(mount(
+                srcAddr,
+                targetAddr,
+                fstypeAddr,
+                flags,
+                dataAddr as *const c_void,
+            ))
+        };
     }
 
     pub fn Umount2(target: &str, flags: i32) -> i32 {
         let target = CString::new(target.clone()).expect("CString::new target failed");
 
-        return unsafe {
-            GetRet(umount2(target.as_ptr(), flags))
-        }
+        return unsafe { GetRet(umount2(target.as_ptr(), flags)) };
     }
 
     pub fn Chdir(dir: &str) -> i32 {
         let dir = CString::new(dir.clone()).expect("CString::new src failed");
 
-        return unsafe {
-            GetRet(chdir(dir.as_ptr()))
-        }
+        return unsafe { GetRet(chdir(dir.as_ptr())) };
     }
 
     pub fn Mkdir(path: &str, mode: u32) -> i32 {
         let path = CString::new(path.clone()).expect("CString::new src failed");
 
-        return unsafe {
-            GetRet(mkdir(path.as_ptr(), mode))
-        }
+        return unsafe { GetRet(mkdir(path.as_ptr(), mode)) };
     }
 
     pub fn PivotRoot(newRoot: &str, putOld: &str) -> i32 {
@@ -103,11 +107,12 @@ impl Util {
 
         let nr = SysCallID::sys_pivot_root as usize;
         unsafe {
-            return GetRet(syscall2(nr, newRoot.as_ptr() as usize, putOld.as_ptr() as usize) as i32);
+            return GetRet(
+                syscall2(nr, newRoot.as_ptr() as usize, putOld.as_ptr() as usize) as i32,
+            );
         }
     }
 }
-
 
 pub struct MountNs {
     pub rootfs: String,
@@ -115,9 +120,41 @@ pub struct MountNs {
 
 impl MountNs {
     pub fn New(rootfs: String) -> Self {
-        return Self {
-            rootfs: rootfs
+        return Self { rootfs: rootfs };
+    }
+
+    /*
+        this mounts the host's root path to a /old_root directory when pivoting
+        this is an adhoc change to make qvisor able to mount further container fs images to the sandboxRootDir
+        and made these available to current sandbox once get a "StartSubContainer" ucall (for k8s integration).
+        Otherwise, these path won't be available to the mountNS.
+        Notice this might be a big security problem,
+    */
+    pub fn PivotRoot2(&self) {
+        if Util::Chdir(&self.rootfs) < 0 {
+            panic!("chdir fail for rootfs {}", &self.rootfs)
         }
+
+        match create_dir_all("./old_root") {
+            Ok(()) => (),
+            Err(_e) => panic!("failed to create dir to put old root"),
+        };
+
+        let errno = Util::PivotRoot(".", "./old_root");
+        if errno != 0 {
+            panic!("pivot fail with errno = {}", errno)
+        }
+
+        if Util::Chdir("/") < 0 {
+            panic!("chdir fail")
+        }
+
+        /*
+        // https://man.archlinux.org/man/pivot_root.2.en#pivot_root(&quot;.&quot;,_&quot;.&quot;)
+        if Util::Umount2("/", MNT_DETACH) < 0 {
+            panic!("UMount2 fail")
+        }
+        */
     }
 
     pub fn PivotRoot(&self) {
@@ -140,6 +177,7 @@ impl MountNs {
             panic!("chdir fail")
         }
 
+        // https://man.archlinux.org/man/pivot_root.2.en#pivot_root(&quot;.&quot;,_&quot;.&quot;)
         if Util::Umount2("/", MNT_DETACH) < 0 {
             panic!("UMount2 fail")
         }
@@ -148,7 +186,7 @@ impl MountNs {
     pub fn PivotRoot1(&self) {
         let flags = MS_REC | MS_SLAVE;
 
-        if Util::Mount("","/", "", flags, "") < 0 {
+        if Util::Mount("", "/", "", flags, "") < 0 {
             panic!("mount root fail")
         }
 
@@ -180,7 +218,14 @@ impl MountNs {
             panic!("mkdir put_old fail")
         }
 
-        if Util::Mount(&"proc".to_string(), &proc, &"proc".to_string(), 0, &"".to_string()) < 0 {
+        if Util::Mount(
+            &"proc".to_string(),
+            &proc,
+            &"proc".to_string(),
+            0,
+            &"".to_string(),
+        ) < 0
+        {
             panic!("mount rootfs fail")
         }
     }
@@ -198,7 +243,7 @@ impl UserNs {
             pid: pid,
             uid: uid,
             gid: uid,
-        }
+        };
     }
 
     pub fn Set(&self) {

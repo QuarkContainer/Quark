@@ -6,13 +6,13 @@ use core::mem;
 //use std::os::unix::io::RawFd;
 use super::super::linux_def::TcpSockAddr;
 
+use super::porting::*;
 use super::squeue::Entry;
 use super::sys;
-use super::porting::*;
 
 pub mod sealed {
-    use super::types::{Fd, Fixed};
     use super::super::porting::*;
+    use super::types::{Fd, Fixed};
 
     #[derive(Debug)]
     pub enum Target {
@@ -51,9 +51,9 @@ pub mod sealed {
 }
 
 pub mod types {
+    use super::super::porting::*;
     use super::sys;
     use bitflags::bitflags;
-    use super::super::porting::*;
     //use std::os::unix::io::RawFd;
 
     pub use super::sys::__kernel_rwf_t as RwFlags;

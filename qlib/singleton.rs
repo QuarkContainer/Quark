@@ -1,24 +1,24 @@
-use core::mem::MaybeUninit;
 use core::cell::UnsafeCell;
-use core::ops::Deref;
 use core::fmt;
+use core::mem::MaybeUninit;
+use core::ops::Deref;
 
 pub struct Singleton<T> {
     data: UnsafeCell<MaybeUninit<T>>,
 }
 
-impl <T> Deref for Singleton<T> {
+impl<T> Deref for Singleton<T> {
     type Target = T;
 
     fn deref(&self) -> &T {
-        unsafe {
-            self.force_get()
-        }
+        unsafe { self.force_get() }
     }
 }
 
 impl<T> Default for Singleton<T> {
-    fn default() -> Self { Self::New() }
+    fn default() -> Self {
+        Self::New()
+    }
 }
 
 impl<T: fmt::Debug> fmt::Debug for Singleton<T> {
@@ -38,11 +38,11 @@ impl<T: fmt::Debug> fmt::Debug for Singleton<T> {
 unsafe impl<T: Send + Sync> Sync for Singleton<T> {}
 unsafe impl<T: Send> Send for Singleton<T> {}
 
-impl <T> Singleton<T> {
+impl<T> Singleton<T> {
     pub const fn New() -> Self {
         return Self {
-            data: UnsafeCell::new(MaybeUninit::uninit())
-        }
+            data: UnsafeCell::new(MaybeUninit::uninit()),
+        };
     }
 
     pub unsafe fn Init(&self, data: T) {

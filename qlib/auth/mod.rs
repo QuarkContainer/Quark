@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use super::mutex::*;
+use alloc::sync::Arc;
 use core::ops::Deref;
 
-pub mod id;
 pub mod cap_set;
+pub mod id;
 pub mod userns;
 
 use alloc::vec::Vec;
@@ -25,8 +25,8 @@ use alloc::vec::Vec;
 use super::common::*;
 use super::linux_def::*;
 //use super::fs::inode::*;
-use self::id::*;
 use self::cap_set::*;
+use self::id::*;
 use self::userns::*;
 
 #[derive(Debug)]
@@ -57,18 +57,18 @@ impl CredentialsInternal {
 
         for extraKGID in &self.ExtraKGIDs {
             if *extraKGID == kgid {
-                return true
+                return true;
             }
         }
 
-        return false
+        return false;
     }
 
     pub fn HasCapabilityIn(&self, cp: u64, ns: &UserNameSpace) -> bool {
         let mut ns = ns.clone();
         loop {
             if Arc::ptr_eq(&self.UserNamespace, &ns) {
-                return CapSet::New(cp).0 & self.EffectiveCaps.0 != 0
+                return CapSet::New(cp).0 & self.EffectiveCaps.0 != 0;
             }
 
             let tmp: UserNameSpace;
@@ -76,13 +76,15 @@ impl CredentialsInternal {
                 let nsInternal = ns.lock();
 
                 if let Some(parent) = &nsInternal.parent {
-                    if Arc::ptr_eq(&self.UserNamespace, &parent.clone()) && self.EffectiveKUID.0 == nsInternal.owner.0 {
+                    if Arc::ptr_eq(&self.UserNamespace, &parent.clone())
+                        && self.EffectiveKUID.0 == nsInternal.owner.0
+                    {
                         return true;
                     } else {
                         tmp = parent.clone();
                     }
                 } else {
-                    return false
+                    return false;
                 }
             }
 
@@ -91,7 +93,7 @@ impl CredentialsInternal {
     }
 
     pub fn HasCapability(&self, cp: u64) -> bool {
-        return self.HasCapabilityIn(cp, &self.UserNamespace.clone())
+        return self.HasCapabilityIn(cp, &self.UserNamespace.clone());
     }
 
     fn copy(&self) -> Self {
@@ -116,7 +118,7 @@ impl CredentialsInternal {
             UserNamespace: self.UserNamespace.clone(),
         };
 
-        return internal
+        return internal;
     }
 }
 
@@ -125,7 +127,7 @@ pub struct Credentials(Arc<QMutex<CredentialsInternal>>);
 
 impl PartialEq for Credentials {
     fn eq(&self, other: &Self) -> bool {
-        return Arc::ptr_eq(&self.0, &other.0)
+        return Arc::ptr_eq(&self.0, &other.0);
     }
 }
 
@@ -139,7 +141,7 @@ impl Deref for Credentials {
 
 impl Default for Credentials {
     fn default() -> Self {
-        return Self::NewRootCredentials(UserNameSpace::NewRootUserNamespace())
+        return Self::NewRootCredentials(UserNameSpace::NewRootUserNamespace());
     }
 }
 
@@ -163,7 +165,7 @@ impl Credentials {
             UserNamespace: UserNameSpace::NewRootUserNamespace(),
         };
 
-        return Self(Arc::new(QMutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)));
     }
 
     pub fn NewRootCredentials(userns: UserNameSpace) -> Self {
@@ -185,10 +187,16 @@ impl Credentials {
             UserNamespace: userns,
         };
 
-        return Self(Arc::new(QMutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)));
     }
 
-    pub fn NewUserCredentials(kuid: KUID, kgid: KGID, extraKGIDs: &[KGID], caps: Option<&TaskCaps>, userns: &UserNameSpace) -> Self {
+    pub fn NewUserCredentials(
+        kuid: KUID,
+        kgid: KGID,
+        extraKGIDs: &[KGID],
+        caps: Option<&TaskCaps>,
+        userns: &UserNameSpace,
+    ) -> Self {
         let res = Self::NewRootCredentials(userns.clone());
 
         {
@@ -233,11 +241,11 @@ impl Credentials {
     fn copy(&self) -> Self {
         let internal = self.lock().copy();
 
-        return Self(Arc::new(QMutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)));
     }
 
     pub fn Fork(&self) -> Self {
-        return self.copy()
+        return self.copy();
     }
 
     pub fn FileOwner(&self) -> FileOwner {
@@ -245,22 +253,22 @@ impl Credentials {
         return FileOwner {
             UID: me.EffectiveKUID,
             GID: me.EffectiveKGID,
-        }
+        };
     }
 
     pub fn InGroup(&self, kgid: KGID) -> bool {
         let me = self.lock();
-        return me.InGroup(kgid)
+        return me.InGroup(kgid);
     }
 
     pub fn HasCapabilityIn(&self, cp: u64, ns: &UserNameSpace) -> bool {
         let me = self.lock();
-        return me.HasCapabilityIn(cp, ns)
+        return me.HasCapabilityIn(cp, ns);
     }
 
     pub fn HasCapability(&self, cp: u64) -> bool {
         let me = self.lock();
-        return me.HasCapability(cp)
+        return me.HasCapability(cp);
     }
 
     pub fn UseUID(&self, uid: UID) -> Result<KUID> {
@@ -268,18 +276,18 @@ impl Credentials {
 
         let kuid = me.UserNamespace.MapToKUID(uid);
         if !kuid.Ok() {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         if me.HasCapability(Capability::CAP_SETUID) {
-            return Ok(kuid)
+            return Ok(kuid);
         }
 
         if kuid == me.RealKUID || kuid == me.EffectiveKUID || kuid == me.SavedKUID {
-            return Ok(kuid)
+            return Ok(kuid);
         }
 
-        return Err(Error::SysError(SysErr::EPERM))
+        return Err(Error::SysError(SysErr::EPERM));
     }
 
     pub fn UseGID(&self, gid: GID) -> Result<KGID> {
@@ -287,18 +295,18 @@ impl Credentials {
 
         let kgid = me.UserNamespace.MapToKGID(gid);
         if !kgid.Ok() {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         if me.HasCapability(Capability::CAP_SETGID) {
-            return Ok(kgid)
+            return Ok(kgid);
         }
 
         if kgid == me.RealKGID || kgid == me.EffectiveKGID || kgid == me.SavedKGID {
-            return Ok(kgid)
+            return Ok(kgid);
         }
 
-        return Err(Error::SysError(SysErr::EPERM))
+        return Err(Error::SysError(SysErr::EPERM));
     }
 
     pub fn NewChildUserNamespace(&self) -> Result<UserNameSpace> {
@@ -307,7 +315,7 @@ impl Credentials {
         if ns.Depth() >= MAX_USER_NAMESPACE_DEPTH {
             // "... Calls to unshare(2) or clone(2) that would cause this limit to
             // be exceeded fail with the error EUSERS." - user_namespaces(7)
-            return Err(Error::SysError(SysErr::EUSERS))
+            return Err(Error::SysError(SysErr::EUSERS));
         }
 
         // "EPERM: CLONE_NEWUSER was specified in flags, but either the effective
@@ -317,7 +325,7 @@ impl Credentials {
         // process are mapped to user IDs and group IDs in the user namespace of
         // the calling process at the time of the call." - unshare(2)
         if !self.lock().EffectiveKUID.In(&ns).Ok() {
-            return Err(Error::SysError(SysErr::EPERM))
+            return Err(Error::SysError(SysErr::EPERM));
         }
 
         let internal = UserNameSpaceInternal {
@@ -326,7 +334,7 @@ impl Credentials {
             ..Default::default()
         };
 
-        return Ok(UserNameSpace(Arc::new(QMutex::new(internal))))
+        return Ok(UserNameSpace(Arc::new(QMutex::new(internal))));
     }
 }
 

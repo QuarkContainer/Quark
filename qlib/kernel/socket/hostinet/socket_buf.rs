@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::super::super::super::linux_def::*;
 use super::super::super::super::common::*;
+use super::super::super::super::linux_def::*;
 use super::super::super::super::socket_buf::*;
 use super::super::super::task::Task;
 
@@ -25,18 +25,18 @@ impl SocketBuff {
         let mut buf = self.readBuf.lock();
         let srcIovs = buf.GetDataIovsVec();
         if srcIovs.len() > 0 {
-            cnt = task.mm.CopyIovsOutFromIovs(task, &srcIovs, iovs)?;
+            cnt = task.mm.CopyIovsOutFromIovs(task, &srcIovs, iovs, true)?;
             trigger = buf.Consume(cnt);
         }
 
         if cnt > 0 {
-            return Ok((trigger, cnt))
+            return Ok((trigger, cnt));
         } else if self.Error() != 0 {
             return Err(Error::SysError(self.Error()));
         } else if self.RClosed() {
-            return Ok((false, 0))
+            return Ok((false, 0));
         } else {
-            return Err(Error::SysError(SysErr::EAGAIN))
+            return Err(Error::SysError(SysErr::EAGAIN));
         }
     }
 
@@ -48,7 +48,7 @@ impl SocketBuff {
         if self.WClosed() {
             error!("writev it is closed");
             //return Ok((0, None))
-            return Err(Error::SysError(SysErr::EPIPE))
+            return Err(Error::SysError(SysErr::EPIPE));
         }
 
         let mut buf = self.writeBuf.lock();
@@ -57,7 +57,7 @@ impl SocketBuff {
             return Err(Error::SysError(SysErr::EAGAIN));
         }
 
-        let cnt = task.mm.CopyIovsOutToIovs(task, iovs, &dstIovs)?;
+        let cnt = task.mm.CopyIovsInFromIovs(task, iovs, &dstIovs, true)?;
 
         if cnt == 0 {
             error!("writev cnt is zero....");
@@ -66,10 +66,10 @@ impl SocketBuff {
 
         let trigger = buf.Produce(cnt);
         if !trigger {
-            return Ok((cnt, None))
+            return Ok((cnt, None));
         } else {
             let (addr, len) = buf.GetDataBuf();
-            return Ok((cnt, Some((addr, len))))
+            return Ok((cnt, Some((addr, len))));
         }
     }
 }

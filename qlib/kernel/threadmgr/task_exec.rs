@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::task_stop::*;
 use super::super::threadmgr::thread::*;
+use super::task_stop::*;
 
 pub struct ExecStop {}
 
@@ -23,7 +23,7 @@ impl TaskStop for ExecStop {
     }
 
     fn Killable(&self) -> bool {
-        return true
+        return true;
     }
 }
 
@@ -39,7 +39,7 @@ impl Thread {
         let tg = t.lock().tg.clone();
         let oldLeader = tg.lock().leader.Upgrade().unwrap();
         if t == oldLeader {
-            return
+            return;
         }
 
         // Swap the leader's TIDs with the execing task's. The latter will be
@@ -65,7 +65,6 @@ impl Thread {
 
             pidns = temp.unwrap();
         }
-
 
         // Inherit the old leader's start time.
         let oldStartTime = oldLeader.StartTime();

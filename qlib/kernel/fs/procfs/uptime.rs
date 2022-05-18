@@ -12,30 +12,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
+use alloc::sync::Arc;
 
-use super::super::attr::*;
-use super::super::file::*;
-use super::super::inode::*;
-use super::super::mount::*;
-use super::super::flags::*;
-use super::super::dirent::*;
+use super::super::super::super::auth::*;
+use super::super::super::super::common::*;
+use super::super::super::super::linux_def::*;
 use super::super::super::kernel::kernel::*;
 use super::super::super::task::*;
-use super::super::super::super::auth::*;
-use super::super::super::super::linux_def::*;
-use super::super::super::super::common::*;
-use super::super::fsutil::inode::simple_file_inode::*;
+use super::super::attr::*;
+use super::super::dirent::*;
+use super::super::file::*;
+use super::super::flags::*;
 use super::super::fsutil::file::readonly_file::*;
+use super::super::fsutil::inode::simple_file_inode::*;
+use super::super::inode::*;
+use super::super::mount::*;
 use super::inode::*;
 
 pub struct UptimeFileNode {}
 
 impl ReadonlyFileNode for UptimeFileNode {
-    fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], offset: i64, _blocking: bool) -> Result<i64> {
+    fn ReadAt(
+        &self,
+        task: &Task,
+        _f: &File,
+        dsts: &mut [IoVec],
+        offset: i64,
+        _blocking: bool,
+    ) -> Result<i64> {
         if offset < 0 {
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         let kernel = GetKernel();
@@ -48,44 +55,50 @@ impl ReadonlyFileNode for UptimeFileNode {
         let s = format!("{}.{} 0.00", second, ms);
         let bytes = s.as_bytes();
         if offset as usize > bytes.len() {
-            return Ok(0)
+            return Ok(0);
         }
 
-        let n = task.CopyDataOutToIovs(&bytes[offset as usize..], dsts)?;
+        let n = task.CopyDataOutToIovs(&bytes[offset as usize..], dsts, true)?;
 
-        return Ok(n as i64)
+        return Ok(n as i64);
     }
 }
 
 pub struct UptimeInode {}
 
 impl SimpleFileTrait for UptimeInode {
-    fn GetFile(&self, _task: &Task, _dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File> {
+    fn GetFile(
+        &self,
+        _task: &Task,
+        _dir: &Inode,
+        dirent: &Dirent,
+        flags: FileFlags,
+    ) -> Result<File> {
         let fops = ReadonlyFileOperations {
-            node: UptimeFileNode{},
+            node: UptimeFileNode {},
         };
 
         let file = File::New(dirent, &flags, fops);
-        return Ok(file)
+        return Ok(file);
     }
 }
 
 pub fn NewUptime(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
-    let node = SimpleFileInode::New (
+    let node = SimpleFileInode::New(
         task,
         &ROOT_OWNER,
-        &FilePermissions{
-            User : PermMask {
+        &FilePermissions {
+            User: PermMask {
                 read: true,
                 write: false,
                 execute: false,
             },
-            Group : PermMask {
+            Group: PermMask {
                 read: true,
                 write: false,
                 execute: false,
             },
-            Other : PermMask {
+            Other: PermMask {
                 read: true,
                 write: false,
                 execute: false,
@@ -94,8 +107,8 @@ pub fn NewUptime(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         },
         FSMagic::ANON_INODE_FS_MAGIC,
         false,
-        UptimeInode{}
+        UptimeInode {},
     );
 
-    return NewProcInode(&Arc::new(node), msrc, InodeType::SpecialFile, None)
+    return NewProcInode(&Arc::new(node), msrc, InodeType::SpecialFile, None);
 }

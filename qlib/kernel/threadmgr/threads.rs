@@ -12,33 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
-use spin::*;
 use crate::qlib::mutex::*;
-use core::ops::Deref;
 use alloc::collections::btree_set::BTreeSet;
-use alloc::vec::Vec;
 use alloc::string::ToString;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::ops::Deref;
+use spin::*;
 
-use super::super::uid::NewUID;
 use super::super::super::auth::userns::*;
-use super::super::super::usage::io::*;
-use super::super::kernel::waiter::waitgroup::*;
-use super::super::kernel::waiter::queue::*;
-use super::super::threadmgr::task_start::*;
-use super::super::kernel::kernel::*;
 use super::super::super::common::*;
-use super::super::task::*;
 use super::super::super::linux_def::*;
+use super::super::super::usage::io::*;
+use super::super::kernel::kernel::*;
+use super::super::kernel::waiter::queue::*;
+use super::super::kernel::waiter::waitgroup::*;
+use super::super::task::*;
+use super::super::threadmgr::task_start::*;
+use super::super::uid::NewUID;
 use super::super::SignalDef::*;
-use super::thread::*;
-use super::thread_group::*;
+use super::pid_namespace::*;
 use super::session::*;
 use super::task_exit::*;
 use super::task_sched::*;
-use super::pid_namespace::*;
-
-pub const INIT_TID: ThreadID = 1;
+use super::thread::*;
+use super::thread_group::*;
 
 #[derive(Clone, Default)]
 pub struct TaskSetInternal {
@@ -73,7 +71,7 @@ impl TaskSetInternal {
                         }
                     }
 
-                    return Err(e)
+                    return Err(e);
                 }
                 Ok(id) => id,
             };
@@ -99,7 +97,7 @@ impl TaskSetInternal {
             pidns = tmp;
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     pub fn IncrTaskCount(&mut self) -> i32 {
@@ -130,12 +128,15 @@ impl Deref for TaskSet {
 
 impl TaskSet {
     pub fn New() -> Self {
-        let ts = Self(Arc::new(RwLock::new(TaskSetInternal {
-            root: None,
-            sessions: BTreeSet::new(),
-            stopCount: 0,
-            taskCount: 0,
-        })), Arc::new(RwLock::new(())));
+        let ts = Self(
+            Arc::new(RwLock::new(TaskSetInternal {
+                root: None,
+                sessions: BTreeSet::new(),
+                stopCount: 0,
+                taskCount: 0,
+            })),
+            Arc::new(RwLock::new(())),
+        );
 
         let userns = UserNameSpace::NewRootUserNamespace();
         ts.write().root = Some(PIDNamespace::New(&ts, None, &userns));
@@ -160,7 +161,7 @@ impl TaskSet {
     // Preconditions: ts.mu must be locked (for reading or writing).
     pub fn forEachThreadGroupLocked(&self, mut f: impl FnMut(&ThreadGroup)) {
         let root = self.Root();
-        let tgids : Vec<ThreadGroup> = root.lock().tgids.keys().cloned().collect();
+        let tgids: Vec<ThreadGroup> = root.lock().tgids.keys().cloned().collect();
         for tg in &tgids {
             f(tg)
         }
@@ -224,7 +225,7 @@ impl TaskSet {
 
         let t = Thread {
             uid: NewUID(),
-            data: Arc::new(QMutex::new(internal))
+            data: Arc::new(QMutex::new(internal)),
         };
 
         if fromContext {
@@ -247,7 +248,7 @@ impl TaskSet {
                     // doesn't matter too much since the caller will exit before it returns
                     // to userspace. If the caller isn't in the same thread group, then
                     // we're in uncharted territory and can return whatever we want.
-                    return Err(Error::SysError(SysErr::EINTR))
+                    return Err(Error::SysError(SysErr::EINTR));
                 }
             }
 
@@ -275,7 +276,10 @@ impl TaskSet {
             if parentPG.is_none() {
                 tg.createSession().unwrap();
             } else {
-                parentPG.as_ref().unwrap().incRefWithParent(parentPG.clone());
+                parentPG
+                    .as_ref()
+                    .unwrap()
+                    .incRefWithParent(parentPG.clone());
                 tg.lock().processGroup = parentPG;
             }
         }
@@ -287,6 +291,6 @@ impl TaskSet {
 
         t.lock().stopCount.Add(self.read().stopCount);
 
-        return Ok(t)
+        return Ok(t);
     }
 }

@@ -15,21 +15,21 @@
 use core::any::Any;
 use core::ops::Deref;
 
-use super::super::super::fs::host::hostinodeop::*;
+use super::super::super::super::common::*;
+use super::super::super::super::linux_def::*;
+use super::super::super::super::mem::seq::*;
 use super::super::super::fs::attr::*;
 use super::super::super::fs::dentry::*;
-use super::super::super::fs::file::*;
 use super::super::super::fs::dirent::*;
+use super::super::super::fs::file::*;
+use super::super::super::fs::host::hostinodeop::*;
 use super::super::super::kernel::waiter::*;
 use super::super::super::task::*;
-use super::super::super::super::linux_def::*;
-use super::super::super::super::common::*;
-use super::super::super::super::mem::seq::*;
 use super::pipe::*;
 
 #[derive(Clone)]
 pub struct Reader {
-    pub pipe: Pipe
+    pub pipe: Pipe,
 }
 
 impl Deref for Reader {
@@ -45,7 +45,7 @@ impl Drop for Reader {
         self.pipe.RClose();
 
         // Wake up writers.
-        self.pipe.Notify(EVENT_OUT)
+        self.pipe.Notify(WRITEABLE_EVENT)
     }
 }
 
@@ -53,65 +53,97 @@ impl SpliceOperations for Reader {}
 
 impl FileOperations for Reader {
     fn as_any(&self) -> &Any {
-        return self
+        return self;
     }
 
     fn FopsType(&self) -> FileOpsType {
-        return FileOpsType::Reader
+        return FileOpsType::Reader;
     }
 
     fn Seekable(&self) -> bool {
         return false;
     }
 
-    fn Seek(&self, _task: &Task, _f: &File, _whence: i32, _current: i64, _offset: i64) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ESPIPE))
+    fn Seek(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _whence: i32,
+        _current: i64,
+        _offset: i64,
+    ) -> Result<i64> {
+        return Err(Error::SysError(SysErr::ESPIPE));
     }
 
-    fn ReadDir(&self, _task: &Task, _f: &File, _offset: i64, _serializer: &mut DentrySerializer) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ENOTDIR))
+    fn ReadDir(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _offset: i64,
+        _serializer: &mut DentrySerializer,
+    ) -> Result<i64> {
+        return Err(Error::SysError(SysErr::ENOTDIR));
     }
 
-    fn ReadAt(&self, task: &Task, _f: &File, dsts: &mut [IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
-        //error!("pipe reader readat id {}, reader is {}", self.pipe.Uid(), self.pipe.Readers());
-
+    fn ReadAt(
+        &self,
+        task: &Task,
+        _f: &File,
+        dsts: &mut [IoVec],
+        _offset: i64,
+        _blocking: bool,
+    ) -> Result<i64> {
         let size = IoVec::NumBytes(dsts);
         let buf = DataBuff::New(size);
         let bs = BlockSeq::New(&buf.buf);
         let n = self.pipe.Read(task, bs)?;
         if n > 0 {
-            self.pipe.Notify(EVENT_OUT)
+            self.pipe.Notify(WRITEABLE_EVENT)
         }
 
-        task.CopyDataOutToIovs(&buf.buf[0..n], dsts)?;
+        task.CopyDataOutToIovs(&buf.buf[0..n], dsts, false)?;
 
-        return Ok(n as i64)
+        return Ok(n as i64);
     }
 
-    fn WriteAt(&self, task: &Task, _f: &File, srcs: &[IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
+    fn WriteAt(
+        &self,
+        task: &Task,
+        _f: &File,
+        srcs: &[IoVec],
+        _offset: i64,
+        _blocking: bool,
+    ) -> Result<i64> {
         //error!("pipe reader WriteAt id {}, writers is {}", self.pipe.Uid(), self.pipe.Writers());
         let size = IoVec::NumBytes(srcs);
         let mut buf = DataBuff::New(size);
-        task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
-        let n = self.pipe.Write(task, buf.BlockSeq())?;
+        let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;
+        let n = self.pipe.Write(task, buf.BlockSeqWithLen(len))?;
         if n > 0 {
-            self.pipe.Notify(EVENT_IN)
+            self.pipe.Notify(READABLE_EVENT)
         }
 
-        return Ok(n as i64)
+        return Ok(n as i64);
     }
 
     fn Append(&self, task: &Task, f: &File, srcs: &[IoVec]) -> Result<(i64, i64)> {
         let n = self.WriteAt(task, f, srcs, 0, false)?;
-        return Ok((n, 0))
+        return Ok((n, 0));
     }
 
-    fn Fsync(&self, _task: &Task, _f: &File, _start: i64, _end: i64, _syncType: SyncType) -> Result<()> {
-        return Err(Error::SysError(SysErr::EINVAL))
+    fn Fsync(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _start: i64,
+        _end: i64,
+        _syncType: SyncType,
+    ) -> Result<()> {
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     fn Flush(&self, _task: &Task, _f: &File) -> Result<()> {
-        return Ok(())
+        return Ok(());
     }
 
     fn UnstableAttr(&self, task: &Task, f: &File) -> Result<UnstableAttr> {
@@ -128,31 +160,37 @@ impl FileOperations for Reader {
             }
 
             task.CopyOutObj(&v, val)?;
-            return Ok(())
+            return Ok(());
         }
-        return Err(Error::SysError(SysErr::ENOTTY))
+        return Err(Error::SysError(SysErr::ENOTTY));
     }
 
-    fn IterateDir(&self, _task: &Task, _d: &Dirent, _dirCtx: &mut DirCtx, _offset: i32) -> (i32, Result<i64>) {
-        return (0, Err(Error::SysError(SysErr::ENOTDIR)))
+    fn IterateDir(
+        &self,
+        _task: &Task,
+        _d: &Dirent,
+        _dirCtx: &mut DirCtx,
+        _offset: i32,
+    ) -> (i32, Result<i64>) {
+        return (0, Err(Error::SysError(SysErr::ENOTDIR)));
     }
 
     fn Mappable(&self) -> Result<HostInodeOp> {
-        return Err(Error::SysError(SysErr::ENODEV))
+        return Err(Error::SysError(SysErr::ENODEV));
     }
 }
 
 impl Waitable for Reader {
     fn Readiness(&self, _task: &Task, mask: EventMask) -> EventMask {
-        return self.pipe.RReadiness() & mask
+        return self.pipe.RReadiness() & mask;
     }
 
     fn EventRegister(&self, task: &Task, e: &WaitEntry, mask: EventMask) {
-        return self.pipe.queue.EventRegister(task, e, mask)
+        return self.pipe.queue.EventRegister(task, e, mask);
     }
 
     fn EventUnregister(&self, task: &Task, e: &WaitEntry) {
-        return self.pipe.queue.EventUnregister(task, e)
+        return self.pipe.queue.EventUnregister(task, e);
     }
 }
 

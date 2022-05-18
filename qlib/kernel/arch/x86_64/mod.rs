@@ -12,6 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod context;
 pub mod arch_x86;
+pub mod context;
 pub mod signal;

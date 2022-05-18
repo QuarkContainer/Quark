@@ -12,23 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::string::String;
-use alloc::collections::btree_map::BTreeMap;
-use core::cmp::Ordering;
-use alloc::sync::Arc;
 use super::mutex::*;
+use alloc::collections::btree_map::BTreeMap;
+use alloc::string::String;
+use alloc::sync::Arc;
+use core::cmp::Ordering;
 
 use super::singleton::*;
 
-pub static SIMPLE_DEVICES : Singleton<QMutex<Registry>> = Singleton::<QMutex<Registry>>::New();
-pub static HOSTFILE_DEVICE : Singleton<QMutex<MultiDevice>> = Singleton::<QMutex<MultiDevice>>::New();
-pub static PSEUDO_DEVICE : Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();
-pub static DEV_DEVICE : Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();
-pub static PTS_DEVICE : Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();
-pub static PROC_DEVICE : Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();
-pub static SHM_DEVICE : Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();
-pub static SYS_DEVICE : Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();
-pub static TMPFS_DEVICE : Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();
+pub static SIMPLE_DEVICES: Singleton<QMutex<Registry>> = Singleton::<QMutex<Registry>>::New();
+pub static HOSTFILE_DEVICE: Singleton<QMutex<MultiDevice>> =
+    Singleton::<QMutex<MultiDevice>>::New();
+pub static PSEUDO_DEVICE: Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();
+pub static DEV_DEVICE: Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();
+pub static PTS_DEVICE: Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();
+pub static PROC_DEVICE: Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();
+pub static SHM_DEVICE: Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();
+pub static SYS_DEVICE: Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();
+pub static TMPFS_DEVICE: Singleton<Arc<QMutex<Device>>> = Singleton::<Arc<QMutex<Device>>>::New();
 
 pub unsafe fn InitSingleton() {
     SIMPLE_DEVICES.Init(QMutex::new(Registry::New()));
@@ -68,13 +69,13 @@ impl Device {
     }
 
     pub fn DeviceID(&self) -> u64 {
-        return self.id.DeviceID()
+        return self.id.DeviceID();
     }
 }
 
 pub struct Registry {
     pub last: u32,
-    pub devices: BTreeMap<ID, Arc<QMutex<Device>>>
+    pub devices: BTreeMap<ID, Arc<QMutex<Device>>>,
 }
 
 impl Registry {
@@ -82,7 +83,7 @@ impl Registry {
         return Self {
             last: 0,
             devices: BTreeMap::new(),
-        }
+        };
     }
 
     fn newAnonID(&mut self) -> ID {
@@ -90,7 +91,7 @@ impl Registry {
         return ID {
             Major: 0,
             Minor: self.last,
-        }
+        };
     }
 
     pub fn NewAnonDevice(&mut self) -> Arc<QMutex<Device>> {
@@ -115,18 +116,20 @@ impl ID {
         return ID {
             Major: ((rdev >> 8) & 0xfff) as u16,
             Minor: (rdev & 0xff) | ((rdev >> 20) << 8),
-        }
+        };
     }
 
     // Bits 7:0   - minor bits 7:0
     // Bits 19:8  - major bits 11:0
     // Bits 31:20 - minor bits 19:8
     pub fn MakeDeviceID(&self) -> u32 {
-        return (self.Minor & 0xff) | ((self.Major as u32 & 0xfff) << 8) | ((self.Minor >> 8) << 20);
+        return (self.Minor & 0xff)
+            | ((self.Major as u32 & 0xfff) << 8)
+            | ((self.Minor >> 8) << 20);
     }
 
     pub fn DeviceID(&self) -> u64 {
-        return self.MakeDeviceID() as u64
+        return self.MakeDeviceID() as u64;
     }
 }
 
@@ -142,7 +145,7 @@ impl Ord for ID {
             return MinorCmp;
         }
 
-        return Ordering::Equal
+        return Ordering::Equal;
     }
 }
 
@@ -182,7 +185,7 @@ impl Ord for MultiDeviceKey {
             return InodeCmp;
         }
 
-        return Ordering::Equal
+        return Ordering::Equal;
     }
 }
 
@@ -194,9 +197,9 @@ impl PartialOrd for MultiDeviceKey {
 
 impl PartialEq for MultiDeviceKey {
     fn eq(&self, other: &Self) -> bool {
-        self.Device == other.Device &&
-            self.SecondaryDevice == other.SecondaryDevice &&
-            self.Inode == other.Inode
+        self.Device == other.Device
+            && self.SecondaryDevice == other.SecondaryDevice
+            && self.Inode == other.Inode
     }
 }
 
@@ -214,13 +217,13 @@ impl MultiDevice {
             last: 0,
             cache: BTreeMap::new(),
             rcache: BTreeMap::new(),
-        }
+        };
     }
 
     pub fn Map(&mut self, key: MultiDeviceKey) -> u64 {
         match self.cache.get(&key) {
             Some(id) => return *id,
-            None => ()
+            None => (),
         }
 
         let mut idx = self.last + 1;
@@ -239,24 +242,24 @@ impl MultiDevice {
     }
 
     pub fn DeviceID(&self) -> u64 {
-        return self.id.DeviceID()
+        return self.id.DeviceID();
     }
 }
 
 pub fn NewAnonDevice() -> Arc<QMutex<Device>> {
-    return SIMPLE_DEVICES.lock().NewAnonDevice()
+    return SIMPLE_DEVICES.lock().NewAnonDevice();
 }
 
 pub fn NewAnonMultiDevice() -> MultiDevice {
-    return MultiDevice::New(SIMPLE_DEVICES.lock().newAnonID())
+    return MultiDevice::New(SIMPLE_DEVICES.lock().newAnonID());
 }
 
 pub fn MakeDeviceID(major: u16, minor: u32) -> u32 {
-    return (minor & 0xff) | (((major as u32 & 0xfff) << 8) | ((minor >> 8) << 20))
+    return (minor & 0xff) | (((major as u32 & 0xfff) << 8) | ((minor >> 8) << 20));
 }
 
 pub fn DecodeDeviceId(rdev: u32) -> (u16, u32) {
     let major = ((rdev >> 8) & 0xfff) as u16;
     let minor = (rdev & 0xff) | ((rdev >> 20) << 8);
-    return (major, minor)
+    return (major, minor);
 }

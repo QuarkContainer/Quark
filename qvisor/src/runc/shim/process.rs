@@ -14,41 +14,41 @@
    limitations under the License.
 */
 
-
-use std::sync::mpsc::SyncSender;
 use std::fs::File;
+use std::sync::mpsc::SyncSender;
 //use std::fs::OpenOptions;
 use std::path::Path;
 //use std::os::unix::io::AsRawFd;
 //use std::os::unix::io::FromRawFd;
+use core::convert::TryFrom;
 use nix::ioctl_write_ptr_bad;
 use nix::sys::termios::Termios;
-use core::convert::TryFrom;
 //use nix::sys::termios::tcgetattr;
 
-use containerd_shim::Result;
-use containerd_shim::Error;
-use containerd_shim::api::StateResponse;
 use containerd_shim::api::ExecProcessRequest;
+use containerd_shim::api::StateResponse;
 use containerd_shim::protos::protobuf::well_known_types::Timestamp;
-use containerd_shim::util::read_pid_from_file;
 use containerd_shim::protos::types::task::Status;
+use containerd_shim::util::read_pid_from_file;
+use containerd_shim::Error;
+use containerd_shim::Result;
 use time::OffsetDateTime;
 
 ioctl_write_ptr_bad!(ioctl_set_winsz, libc::TIOCSWINSZ, libc::winsize);
 
-use super::container_io::*;
-use super::super::container::container::*;
-use super::super::cmd::config::*;
-use super::super::oci::Spec;
-use super::super::oci;
 use super::super::super::qlib::path::*;
+use super::super::cmd::config::*;
+use super::super::container::container::*;
+use super::super::oci;
+use super::super::oci::Spec;
+use super::container_io::*;
 
 pub struct Console {
     pub file: File,
     pub termios: Termios,
 }
 
+#[derive(Default)]
 pub struct CommonProcess {
     pub state: Status,
     pub id: String,
@@ -60,9 +60,19 @@ pub struct CommonProcess {
     pub containerIO: ContainerIO,
 }
 
+impl Drop for CommonProcess {
+    fn drop(&mut self) {
+        self.stdio = ContainerStdio::default();
+        self.containerIO = ContainerIO::default();
+        error!("CommonProcess drop 3 {}", self.id);
+    }
+}
+
 impl CommonProcess {
-    pub fn CopyIO(&self) -> Result<()> {
-        return self.containerIO.CopyIO(&self.stdio)
+    pub fn CopyIO(&self, cid: &str, pid: i32) -> Result<()> {
+        return self
+            .containerIO
+            .CopyIO(&self.stdio, cid, pid)
             .map_err(|e| Error::Other(format!("{:?}", e)));
     }
 
@@ -137,55 +147,6 @@ impl CommonProcess {
         self.exited_at
     }
 
-    /*fn copy_console(&self, consoleFd: i32) -> Result<Console> {
-        debug!("copy_console: waiting for runtime to send console fd");
-
-        let f = unsafe { File::from_raw_fd(consoleFd) };
-        let termios = tcgetattr(consoleFd)?;
-
-        if !self.stdio.stdin.is_empty() {
-            debug!("copy_console: pipe stdin to console");
-            let f = unsafe { File::from_raw_fd(consoleFd) };
-            let stdin = OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open(self.stdio.stdin.as_str())
-                .map_err(|e| Error::Other(format!( "open stdin  {:?}", e)))?;
-            spawn_copy(stdin, f, None);
-        }
-
-        if !self.stdio.stdout.is_empty() {
-            let f = unsafe { File::from_raw_fd(consoleFd) };
-            debug!("copy_console: pipe stdout from console");
-            let stdout = OpenOptions::new()
-                .write(true)
-                .open(self.stdio.stdout.as_str())
-                .map_err(|e| Error::Other(format!( "open stdout  {:?}", e)))?;
-            // open a read to make sure even if the read end of containerd shutdown,
-            // copy still continue until the restart of containerd succeed
-            let stdout_r = OpenOptions::new()
-                .read(true)
-                .open(self.stdio.stdout.as_str())
-                .map_err(|e| Error::Other(format!( "open stdout for read {:?}", e)))?;
-            spawn_copy(
-                f,
-                stdout,
-                Some(Box::new(move || {
-                    drop(stdout_r);
-                })),
-            );
-        }
-        let console = Console { file: f, termios };
-        Ok(console)
-    }
-
-    fn copy_io(&self) -> Result<()> {
-        if let Some(pio) = self.io.as_ref() {
-            pio.copy(&self.stdio)?;
-        };
-        Ok(())
-    }*/
-
     pub fn set_pid_from_file(&mut self, pid_path: &Path) -> Result<()> {
         let pid = read_pid_from_file(pid_path)?;
         self.pid = pid;
@@ -193,8 +154,10 @@ impl CommonProcess {
     }
 
     pub fn resize_pty(&mut self, height: u32, width: u32) -> Result<()> {
-        return self.containerIO
-            .ResizePty(height, width).map_err(|e| Error::Other(format!("resize_pty {:?}", e)))
+        return self
+            .containerIO
+            .ResizePty(height, width)
+            .map_err(|e| Error::Other(format!("resize_pty {:?}", e)));
     }
 }
 
@@ -261,14 +224,6 @@ impl ExecProcess {
         self.common.exited_at()
     }
 
-    /*fn copy_console(&self, consoleFd: i32) -> Result<Console> {
-        self.common.copy_console(consoleFd)
-    }
-
-    fn copy_io(&self) -> Result<()> {
-        self.common.copy_io()
-    }*/
-
     pub fn set_pid_from_file(&mut self, pid_path: &Path) -> Result<()> {
         self.common.set_pid_from_file(pid_path)
     }
@@ -296,7 +251,7 @@ impl TryFrom<ExecProcessRequest> for ExecProcess {
                 exit_code: 0,
                 exited_at: None,
                 wait_chan_tx: vec![],
-                containerIO: ContainerIO::None
+                containerIO: ContainerIO::None,
             },
             spec: p,
         };
@@ -315,6 +270,7 @@ pub fn get_spec_from_request(req: &ExecProcessRequest) -> Result<oci::Process> {
     }
 }
 
+#[derive(Default)]
 pub struct InitProcess {
     pub common: CommonProcess,
     pub bundle: String,
@@ -355,21 +311,22 @@ impl InitProcess {
     pub fn Create(&self, config: &GlobalConfig) -> Result<Container> {
         let specfile = Join(&self.bundle, "config.json");
         let spec = Spec::load(&specfile).unwrap();
-        let container = Container::Create1(&self.common.id,
-                                           RunAction::Create,
-                                           spec,
-                                           config,
-                                           &self.bundle,
-                                           "",
-                                           &self.common.containerIO,
-                                           !self.no_pivot_root)
-            .map_err(|e| Error::Other(format!("{:?}", e)))?;
-        self.common.CopyIO()?;
-        return Ok(container)
+        let container = Container::Create1(
+            &self.common.id,
+            RunAction::Create,
+            spec,
+            config,
+            &self.bundle,
+            "",
+            &self.common.containerIO,
+            !self.no_pivot_root,
+        )
+        .map_err(|e| Error::Other(format!("{:?}", e)))?;
+        self.common.CopyIO(&*container.ID, 0)?;
+        return Ok(container);
     }
 
     pub fn pid(&self) -> i32 {
         self.common.pid()
     }
 }
-

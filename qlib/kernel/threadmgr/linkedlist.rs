@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::mutex::*;
 use alloc::sync::Arc;
 use alloc::sync::Weak;
-use crate::qlib::mutex::*;
 use core::ops::Deref;
 use core::ops::DerefMut;
 
@@ -36,7 +36,7 @@ impl<T> Default for LinkedList<T> {
             head: head,
             tail: tail,
             count: 0,
-        }
+        };
     }
 }
 
@@ -54,14 +54,14 @@ impl<T> LinkedList<T> {
         return match &self.head.lock().next {
             None => None,
             Some(ref e) => Some(e.clone()),
-        }
+        };
     }
 
     pub fn Back(&self) -> Option<Arc<QMutex<LinkEntry<T>>>> {
         return match &self.tail.lock().prev {
             None => None,
             Some(ref e) => Some(e.upgrade().unwrap().clone()),
-        }
+        };
     }
 
     pub fn PushFront(&mut self, entry: Arc<QMutex<LinkEntry<T>>>) {
@@ -140,7 +140,7 @@ impl<T> Default for LinkEntry<T> {
             prev: None,
             next: None,
             data: None,
-        }
+        };
     }
 }
 
@@ -150,7 +150,7 @@ impl<T> LinkEntry<T> {
             prev: None,
             next: None,
             data: Some(data),
-        }
+        };
     }
 
     pub fn Remove(&mut self) {

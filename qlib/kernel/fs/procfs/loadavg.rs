@@ -12,41 +12,45 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 
+use super::super::super::super::auth::*;
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
-use super::super::super::super::auth::*;
 use super::super::super::task::*;
-use super::super::fsutil::file::readonly_file::*;
-use super::super::fsutil::inode::simple_file_inode::*;
 use super::super::attr::*;
+use super::super::dirent::*;
 use super::super::file::*;
 use super::super::flags::*;
-use super::super::dirent::*;
-use super::super::mount::*;
+use super::super::fsutil::file::readonly_file::*;
+use super::super::fsutil::inode::simple_file_inode::*;
 use super::super::inode::*;
+use super::super::mount::*;
 use super::inode::*;
 
 pub fn NewLoadAvg(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
-    let v = NewLoadAvgSimpleFileInode(task, &ROOT_OWNER, &FilePermissions::FromMode(FileMode(0o400)), FSMagic::PROC_SUPER_MAGIC);
-    return NewProcInode(&Arc::new(v), msrc, InodeType::SpecialFile, None)
-
+    let v = NewLoadAvgSimpleFileInode(
+        task,
+        &ROOT_OWNER,
+        &FilePermissions::FromMode(FileMode(0o400)),
+        FSMagic::PROC_SUPER_MAGIC,
+    );
+    return NewProcInode(&Arc::new(v), msrc, InodeType::SpecialFile, None);
 }
 
-pub fn NewLoadAvgSimpleFileInode(task: &Task,
-                                    owner: &FileOwner,
-                                    perms: &FilePermissions,
-                                    typ: u64)
-                                    -> SimpleFileInode<LoadAvgData> {
-    let fs = LoadAvgData{};
-    return SimpleFileInode::New(task, owner, perms, typ, false, fs)
+pub fn NewLoadAvgSimpleFileInode(
+    task: &Task,
+    owner: &FileOwner,
+    perms: &FilePermissions,
+    typ: u64,
+) -> SimpleFileInode<LoadAvgData> {
+    let fs = LoadAvgData {};
+    return SimpleFileInode::New(task, owner, perms, typ, false, fs);
 }
 
-pub struct LoadAvgData {
-}
+pub struct LoadAvgData {}
 
 impl LoadAvgData {
     pub fn GenSnapshot(&self, _task: &Task) -> Vec<u8> {
@@ -56,7 +60,13 @@ impl LoadAvgData {
 }
 
 impl SimpleFileTrait for LoadAvgData {
-    fn GetFile(&self, task: &Task, _dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File> {
+    fn GetFile(
+        &self,
+        task: &Task,
+        _dir: &Inode,
+        dirent: &Dirent,
+        flags: FileFlags,
+    ) -> Result<File> {
         let fops = NewSnapshotReadonlyFileOperations(self.GenSnapshot(task));
         let file = File::New(dirent, &flags, fops);
         return Ok(file);

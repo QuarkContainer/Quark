@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use clap::{App, AppSettings, SubCommand, ArgMatches};
+use clap::{App, AppSettings, ArgMatches, SubCommand};
 
 use super::super::super::qlib::common::*;
-use super::config::GlobalConfig;
-use super::command::CommonArgs;
 use super::super::container::container::Container;
+use super::command::CommonArgs;
+use super::config::GlobalConfig;
 use serde_json;
 use std::io::{self, Write};
 
@@ -28,9 +28,9 @@ pub struct StateCmd {
 
 impl StateCmd {
     pub fn Init(cmd_matches: &ArgMatches) -> Result<Self> {
-        return Ok (Self {
+        return Ok(Self {
             id: cmd_matches.value_of("id").unwrap().to_string(),
-        })
+        });
     }
 
     pub fn SubCommand<'a, 'b>(common: &CommonArgs<'a, 'b>) -> App<'a, 'b> {
@@ -39,7 +39,7 @@ impl StateCmd {
             .about("Query the state properties of a container, as defined by OCI")
             .arg(&common.id_arg);
     }
-    
+
     pub fn Run(&self, gCfg: &GlobalConfig) -> Result<()> {
         info!("Container:: state ....");
         let id = &self.id;
@@ -54,12 +54,9 @@ impl StateCmd {
                     return Err(Error::IOError(e.to_string()));
                 }
             }
-            Err(e) => {
-                return Err(Error::Common(e.to_string()))
-            }
+            Err(e) => return Err(Error::Common(e.to_string())),
         }
-        
-        return Ok(())
+
+        return Ok(());
     }
 }
-

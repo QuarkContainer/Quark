@@ -43,7 +43,7 @@ impl ThreadInternal {
         let _s = lock.lock();
 
         self.beginInternalStopLocked(s);
-        return
+        return;
     }
 
     pub fn beginInternalStopLocked<T: TaskStop + 'static>(&mut self, s: &Arc<T>) {
@@ -139,11 +139,11 @@ impl TaskSet {
         }
 
         if ts.root.is_none() {
-            return
+            return;
         }
 
         let pidns = ts.root.clone().unwrap();
-        let threads : Vec<_> = pidns.lock().tids.keys().cloned().collect();
+        let threads: Vec<_> = pidns.lock().tids.keys().cloned().collect();
         for t in &threads {
             {
                 let tg = t.lock().tg.clone();
@@ -170,11 +170,11 @@ impl TaskSet {
         }
 
         if ts.root.is_none() {
-            return
+            return;
         }
 
         let pidns = ts.root.clone().unwrap();
-        let threads : Vec<_> = pidns.lock().tids.keys().cloned().collect();
+        let threads: Vec<_> = pidns.lock().tids.keys().cloned().collect();
         for t in &threads {
             let tg = t.lock().tg.clone();
             let lock = tg.lock().signalLock.clone();

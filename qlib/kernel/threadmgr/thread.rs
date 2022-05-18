@@ -12,36 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
-use alloc::sync::Weak;
-use alloc::string::String;
-use alloc::string::ToString;
 use crate::qlib::mutex::*;
 use alloc::collections::btree_set::BTreeSet;
-use core::ops::Deref;
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::sync::Arc;
+use alloc::sync::Weak;
 use core::cmp::*;
+use core::ops::Deref;
 
-use super::super::SignalDef::*;
-use super::super::memmgr::mm::*;
+use super::super::super::auth::*;
 use super::super::super::linux_def::*;
 use super::super::super::usage::io::*;
-use super::super::fs::mount::*;
-use super::super::kernel::kernel::*;
-use super::super::kernel::fs_context::*;
-use super::super::kernel::fd_table::*;
-use super::super::kernel::uts_namespace::*;
-use super::super::kernel::ipc_namespace::*;
-use super::super::kernel::waiter::queue::*;
-use super::super::threadmgr::task_stop::*;
-use super::super::threadmgr::task_exit::*;
-use super::super::threadmgr::task_block::*;
-use super::super::threadmgr::task_sched::*;
-use super::super::kernel::time::*;
 use super::super::kernel::cpuset::*;
+use super::super::kernel::fd_table::*;
+use super::super::kernel::fs_context::*;
+use super::super::kernel::ipc_namespace::*;
+use super::super::kernel::kernel::*;
+use super::super::kernel::time::*;
+use super::super::kernel::uts_namespace::*;
+use super::super::kernel::waiter::queue::*;
 use super::super::kernel::waiter::waitgroup::*;
-use super::super::super::auth::*;
-use super::thread_group::*;
+use super::super::memmgr::mm::*;
+use super::super::threadmgr::task_block::*;
+use super::super::threadmgr::task_exit::*;
+use super::super::threadmgr::task_sched::*;
+use super::super::threadmgr::task_stop::*;
+use super::super::SignalDef::*;
 use super::pid_namespace::*;
+use super::thread_group::*;
 use super::threads::*;
 
 pub type UniqueID = u64;
@@ -327,9 +326,16 @@ pub struct ThreadInternal {
 
 impl ThreadInternal {
     pub fn IsChrooted(&self) -> bool {
-        let realRoot = self.k.RootDir();
+        let realRoot = self
+            .k
+            .mounts
+            .read()
+            .get(&self.containerID)
+            .unwrap()
+            .root
+            .clone();
         let root = self.fsc.RootDirectory();
-        return root != realRoot;
+        return realRoot == root;
     }
 
     pub fn SetRet(&mut self, ret: u64) {
@@ -353,7 +359,7 @@ impl ThreadWeak {
         return Some(Thread {
             uid: self.uid,
             data: t,
-        })
+        });
     }
 }
 
@@ -368,7 +374,7 @@ impl Clone for Thread {
         return Self {
             uid: self.Uid(),
             data: self.data.clone(),
-        }
+        };
     }
 }
 
@@ -394,7 +400,7 @@ impl PartialOrd for Thread {
 
 impl PartialEq for Thread {
     fn eq(&self, other: &Self) -> bool {
-        return self.Uid() == other.Uid()
+        return self.Uid() == other.Uid();
     }
 }
 
@@ -405,11 +411,7 @@ impl Thread {
     pub fn IDs(&self) -> (i32, i32) {
         let tg = self.ThreadGroup();
         let pidns = tg.PIDNamespace();
-        return (pidns.IDOfThreadGroup(&tg), pidns.IDOfTask(&self))
-    }
-
-    pub fn MountNamespace(&self) -> MountNs {
-        return GetKernel().mounts.read().clone().unwrap();
+        return (pidns.IDOfThreadGroup(&tg), pidns.IDOfTask(&self));
     }
 
     pub fn RefCount(&self) -> usize {
@@ -432,7 +434,7 @@ impl Thread {
         return ThreadWeak {
             uid: self.uid,
             data: Arc::downgrade(&self.data),
-        }
+        };
     }
 
     pub fn Kernel(&self) -> Kernel {
@@ -440,7 +442,7 @@ impl Thread {
     }
 
     pub fn Uid(&self) -> UniqueID {
-        return self.uid
+        return self.uid;
     }
 
     pub fn ThreadGroup(&self) -> ThreadGroup {
@@ -469,7 +471,7 @@ impl Thread {
 
     pub fn ThreadID(&self) -> ThreadID {
         let ns = self.PIDNamespace();
-        return ns.IDOfTask(self)
+        return ns.IDOfTask(self);
     }
 
     pub fn StartTime(&self) -> Time {

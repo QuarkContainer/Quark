@@ -14,6 +14,9 @@
 
 //use super::super::perf_tunning::*;
 
+use super::{SUPPORT_XSAVE, SUPPORT_XSAVEOPT};
+use core::sync::atomic::Ordering;
+
 #[inline]
 pub fn WriteMsr(msr: u32, value: u64) {
     unsafe {
@@ -58,11 +61,7 @@ pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64) {
 
 #[inline]
 pub fn Hlt() {
-    unsafe {
-        llvm_asm!(
-                "hlt"
-        )
-    }
+    unsafe { llvm_asm!("hlt") }
 }
 
 #[inline]
@@ -82,6 +81,7 @@ pub fn EnterUser(entry: u64, userStackAddr: u64, kernelStackAddr: u64) {
     //PerfGoto(PerfType::User);
     unsafe {
         llvm_asm!("
+            fninit
             //mov gs:0, rsp
             mov gs:0, rdx
 
@@ -203,9 +203,11 @@ pub fn GetRsp() -> u64 {
 #[inline]
 pub fn Invlpg(addr: u64) {
     if !super::SHARESPACE.config.read().KernelPagetable {
-        unsafe { llvm_asm!("
+        unsafe {
+            llvm_asm!("
             invlpg ($0)
-            " :: "r" (addr): "memory" : "volatile" ) };
+            " :: "r" (addr): "memory" : "volatile" )
+        };
     }
 }
 
@@ -227,10 +229,10 @@ pub fn muldiv64(value: u64, multiplier: u64, divisor: u64) -> (u64, bool) {
     let val = value as u128 * multiplier as u128;
     let res = val / divisor as u128;
     if res > core::u64::MAX as u128 {
-        return (0, false)
+        return (0, false);
     }
 
-    return (res as u64, true)
+    return (res as u64, true);
 }
 
 // HostID executes a native CPUID instruction.
@@ -250,7 +252,7 @@ pub fn AsmHostID(axArg: u32, cxArg: u32) -> (u32, u32, u32, u32) {
             : );
     }
 
-    return (ax, bx, cx, dx)
+    return (ax, bx, cx, dx);
 }
 
 #[inline(always)]
@@ -315,16 +317,48 @@ pub fn SetRflags(val: u64) {
 }
 
 pub fn SaveFloatingPoint(addr: u64) {
-    fxsave(addr);
-    //xsaveopt(addr);
+    if SUPPORT_XSAVEOPT.load(Ordering::Acquire) {
+        xsaveopt(addr);
+    } else if SUPPORT_XSAVE.load(Ordering::Acquire) {
+        xsave(addr);
+    } else {
+        fxsave(addr);
+    }
+}
+
+pub fn LoadFloatingPoint(addr: u64) {
+    if SUPPORT_XSAVE.load(Ordering::Acquire) {
+        xrstor(addr);
+    } else {
+        fxrstor(addr);
+    }
+}
+
+pub fn xsave(addr: u64) {
+    unsafe {
+        llvm_asm!("\
+            xsave64 [rdi + 0]
+        " : : "{rdi}"(addr)
+        : "memory" : "intel", "volatile")
+    };
 }
 
 pub fn xsaveopt(addr: u64) {
-    let negtive1 : u64 = 0xffffffff;
+    let negtive1: u64 = 0xffffffff;
     unsafe {
         llvm_asm!("\
-            xsaveopt [rdi + 0]
-        " : : "{rdi}"(addr), "{rax}"(negtive1), "{rdx}"(negtive1)
+            xsaveopt64 [rdi + 0]
+        " : : "{rdi}"(addr), "{eax}"(negtive1), "{edx}"(negtive1)
+        : "memory" : "intel", "volatile")
+    };
+}
+
+pub fn xrstor(addr: u64) {
+    let negtive1: u64 = 0xffffffff;
+    unsafe {
+        llvm_asm!("\
+            xrstor64 [rdi + 0]
+        " : : "{rdi}"(addr), "{eax}"(negtive1), "{edx}"(negtive1)
         : "memory" : "intel", "volatile")
     };
 }
@@ -338,10 +372,6 @@ pub fn fxsave(addr: u64) {
     };
 }
 
-pub fn LoadFloatingPoint(addr: u64) {
-    fxrstor(addr);
-}
-
 pub fn fxrstor(addr: u64) {
     unsafe {
         llvm_asm!("\
@@ -353,22 +383,108 @@ pub fn fxrstor(addr: u64) {
 
 #[inline(always)]
 pub fn mfence() {
-    unsafe { llvm_asm!("
+    unsafe {
+        llvm_asm!("
         sfence
         lfence
-    " : : : "memory" : "volatile" ) }
+    " : : : "memory" : "volatile" )
+    }
 }
 
 #[inline(always)]
 pub fn sfence() {
-    unsafe { llvm_asm!("
+    unsafe {
+        llvm_asm!("
         sfence
-    " : : : "memory" : "volatile" ) }
+    " : : : "memory" : "volatile" )
+    }
 }
 
 #[inline(always)]
 pub fn lfence() {
-    unsafe { llvm_asm!("
+    unsafe {
+        llvm_asm!("
         lfence
-    " : : : "memory" : "volatile" ) }
+    " : : : "memory" : "volatile" )
+    }
+}
+
+pub fn stmxcsr(addr: u64) {
+    unsafe {
+        llvm_asm!("\
+            STMXCSR [rax]
+        " : : "{rax}"(addr)
+        : "memory" : "intel", "volatile")
+    };
+}
+
+pub fn ldmxcsr(addr: u64) {
+    unsafe {
+        llvm_asm!("\
+            LDMXCSR [rax]
+        " : : "{rax}"(addr)
+        : "memory" : "intel", "volatile")
+    };
+}
+
+pub fn FSTCW(addr: u64) {
+    unsafe {
+        llvm_asm!("\
+            FSTCW [rax]
+        " : : "{rax}"(addr)
+        : "memory" : "intel", "volatile")
+    };
+}
+
+pub fn FLDCW(addr: u64) {
+    unsafe {
+        llvm_asm!("\
+            FLDCW [rax]
+        " : : "{rax}"(addr)
+        : "memory" : "intel", "volatile")
+    };
+}
+
+pub fn FNCLEX() {
+    unsafe {
+        llvm_asm!("\
+            FNCLEX
+        " : :
+        : "memory" : "intel", "volatile")
+    };
+}
+
+pub fn fninit() {
+    unsafe {
+        llvm_asm!("\
+            fninit
+        " : :
+        : "memory" : "intel", "volatile")
+    };
+}
+
+pub fn xsetbv(val: u64) {
+    let reg = 0u64;
+    let val_l = val & 0xffff;
+    let val_h = val >> 32;
+    unsafe {
+        llvm_asm!("\
+            xsetbv
+        " : : "{rcx}"(reg), "{edx}"(val_h), "{eax}"(val_l)
+        : "memory" : "intel", "volatile")
+    };
+}
+
+pub fn xgetbv() -> u64 {
+    let reg = 0u64;
+    let val_l: u32;
+    let val_h: u32;
+    unsafe {
+        llvm_asm!("\
+            xgetbv
+        " : "={edx}"(val_h), "={eax}"(val_l) : "{rcx}"(reg)
+        : "memory" : "intel", "volatile")
+    };
+    let val = ((val_h as u64) << 32) | ((val_l as u64) & 0xffff);
+    return val;
 }

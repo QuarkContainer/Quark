@@ -28,7 +28,7 @@ impl Default for SubmissionQueue {
             sqes: 0 as *mut sys::io_uring_sqe,
             dropped: 0 as *const atomic::AtomicU32,
             flags: 0 as *const atomic::AtomicU32,
-        }
+        };
     }
 }
 

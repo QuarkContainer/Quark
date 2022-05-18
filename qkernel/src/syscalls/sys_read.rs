@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::super::kernel::waiter::*;
-use super::super::kernel::timer::*;
-use super::super::kernel::time::*;
 use super::super::fs::file::*;
-use super::super::task::*;
-use super::super::qlib::common::*;
-use super::super::qlib::mem::block::*;
-use super::super::qlib::linux_def::*;
-use super::super::syscalls::syscalls::*;
+use super::super::kernel::time::*;
+use super::super::kernel::timer::*;
+use super::super::kernel::waiter::*;
 use super::super::kernel_def::*;
+use super::super::qlib::common::*;
+use super::super::qlib::linux_def::*;
+use super::super::qlib::mem::block::*;
+use super::super::syscalls::syscalls::*;
+use super::super::task::*;
 
 pub fn SysRead(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let fd = args.arg0 as i32;
@@ -30,7 +30,7 @@ pub fn SysRead(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let n = Read(task, fd, addr, size)?;
     task.ioUsage.AccountReadSyscall(n);
-    return Ok(n)
+    return Ok(n);
 }
 
 pub fn Read(task: &Task, fd: i32, addr: u64, size: i64) -> Result<i64> {
@@ -40,15 +40,15 @@ pub fn Read(task: &Task, fd: i32, addr: u64, size: i64) -> Result<i64> {
     let file = task.GetFile(fd)?;
 
     if !file.Flags().Read {
-        return Err(Error::SysError(SysErr::EBADF))
+        return Err(Error::SysError(SysErr::EBADF));
     }
 
     if size < 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     if size == 0 {
-        return Ok(0)
+        return Ok(0);
     }
 
     let iov = IoVec::NewFromAddr(addr, size as usize);
@@ -64,7 +64,7 @@ pub fn Read(task: &Task, fd: i32, addr: u64, size: i64) -> Result<i64> {
         info!("(Data)Read({}): {}", n, str);
     }*/
 
-    return Ok(n)
+    return Ok(n);
 }
 
 pub fn SysPread64(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -75,7 +75,7 @@ pub fn SysPread64(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let n = Pread64(task, fd, addr, size, offset)?;
     task.ioUsage.AccountReadSyscall(n);
-    return Ok(n)
+    return Ok(n);
 }
 
 pub fn Pread64(task: &Task, fd: i32, addr: u64, size: i64, offset: i64) -> Result<i64> {
@@ -85,28 +85,28 @@ pub fn Pread64(task: &Task, fd: i32, addr: u64, size: i64, offset: i64) -> Resul
     let file = task.GetFile(fd)?;
 
     if offset < 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     if !file.Flags().Pread {
-        return Err(Error::SysError(SysErr::ESPIPE))
+        return Err(Error::SysError(SysErr::ESPIPE));
     }
 
     if !file.Flags().Read {
-        return Err(Error::SysError(SysErr::EBADF))
+        return Err(Error::SysError(SysErr::EBADF));
     }
 
     if size < 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     if size == 0 {
-        return Ok(0)
+        return Ok(0);
     }
 
     let iov = IoVec::NewFromAddr(addr, size as usize);
     let mut iovs: [IoVec; 1] = [iov];
-    return preadv(task, &file, &mut iovs, offset)
+    return preadv(task, &file, &mut iovs, offset);
 }
 
 pub fn SysReadv(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -116,18 +116,18 @@ pub fn SysReadv(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let n = Readv(task, fd, addr, iovcnt)?;
     task.ioUsage.AccountReadSyscall(n);
-    return Ok(n)
+    return Ok(n);
 }
 
 pub fn Readv(task: &Task, fd: i32, addr: u64, iovcnt: i32) -> Result<i64> {
     let file = task.GetFile(fd)?;
 
     if !file.Flags().Read {
-        return Err(Error::SysError(SysErr::EBADF))
+        return Err(Error::SysError(SysErr::EBADF));
     }
 
     if iovcnt < 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let mut dsts = task.IovsFromAddr(addr, iovcnt as usize)?;
@@ -143,7 +143,7 @@ pub fn SysPreadv(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let n = Preadv(task, fd, addr, iovcnt, offset)?;
     task.ioUsage.AccountReadSyscall(n);
-    return Ok(n)
+    return Ok(n);
 }
 
 pub fn SysPreadv2(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -161,13 +161,13 @@ pub fn SysPreadv2(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let flags = args.arg5 as i32;
 
     if offset < -1 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
     // Check flags field.
     // Note: qkernel does not implement the RWF_HIPRI feature, but the flag is
     // accepted as a valid flag argument for preadv2.
     if flags & !(Flags::RWF_VALID) != 0 {
-        return Err(Error::SysError(SysErr::EOPNOTSUPP))
+        return Err(Error::SysError(SysErr::EOPNOTSUPP));
     }
 
     if offset == -1 {
@@ -178,30 +178,30 @@ pub fn SysPreadv2(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let n = Preadv(task, fd, addr, iovcnt, offset)?;
     task.ioUsage.AccountReadSyscall(n);
-    return Ok(n)
+    return Ok(n);
 }
 
 pub fn Preadv(task: &Task, fd: i32, addr: u64, iovcnt: i32, offset: i64) -> Result<i64> {
     let file = task.GetFile(fd)?;
 
     if offset < 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     if !file.Flags().Pread {
-        return Err(Error::SysError(SysErr::ESPIPE))
+        return Err(Error::SysError(SysErr::ESPIPE));
     }
 
     if !file.Flags().Read {
-        return Err(Error::SysError(SysErr::EBADF))
+        return Err(Error::SysError(SysErr::EBADF));
     }
 
     if iovcnt < 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     if iovcnt == 0 {
-        return Ok(0)
+        return Ok(0);
     }
 
     let mut dsts = task.IovsFromAddr(addr, iovcnt as usize)?;
@@ -218,10 +218,10 @@ fn RepReadv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
         match f.Readv(task, dsts) {
             Err(e) => {
                 if count > 0 {
-                    return Ok(count)
+                    return Ok(count);
                 }
 
-                return Err(e)
+                return Err(e);
             }
             Ok(n) => {
                 if n == 0 {
@@ -230,13 +230,13 @@ fn RepReadv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
 
                 count += n;
                 if count == len as i64 {
-                    return Ok(count)
+                    return Ok(count);
                 }
 
                 tmp = Iovs(dsts).DropFirst(n as usize);
 
                 if tmp.len() == 0 {
-                    return Ok(count)
+                    return Ok(count);
                 }
                 dsts = &mut tmp;
             }
@@ -245,22 +245,22 @@ fn RepReadv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
 }
 
 fn readv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
-    task.CheckIOVecPermission(dsts, true)?;
+    let mut iovs = task.AdjustIOVecPermission(dsts, true, true)?;
+    let dsts = &mut iovs;
 
     let wouldBlock = f.WouldBlock();
     if !wouldBlock {
-        return RepReadv(task, f, dsts)
+        return RepReadv(task, f, dsts);
     }
 
     match f.Readv(task, dsts) {
+        Err(Error::ErrInterrupted) => return Err(Error::SysError(SysErr::ERESTARTSYS)),
         Err(e) => {
             if e != Error::SysError(SysErr::EWOULDBLOCK) || f.Flags().NonBlocking {
                 return Err(e);
             }
         }
-        Ok(n) => {
-            return Ok(n)
-        }
+        Ok(n) => return Ok(n),
     };
 
     let mut deadline = None;
@@ -289,13 +289,13 @@ fn readv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
             match f.Readv(task, dsts) {
                 Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
                     if count > 0 {
-                        return Ok(count)
+                        return Ok(count);
                     }
                     break;
-                },
+                }
                 Err(e) => {
                     if count > 0 {
-                        return Ok(count)
+                        return Ok(count);
                     }
                     return Err(e);
                 }
@@ -306,7 +306,7 @@ fn readv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
 
                     count += n;
                     if count == len as i64 {
-                        return Ok(count)
+                        return Ok(count);
                     }
 
                     tmp = Iovs(dsts).DropFirst(n as usize);
@@ -325,22 +325,22 @@ fn readv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
             Err(e) => {
                 return Err(e);
             }
-            _ => ()
+            _ => (),
         }
     }
 }
 
 fn preadv(task: &Task, f: &File, dsts: &mut [IoVec], offset: i64) -> Result<i64> {
-    task.CheckIOVecPermission(dsts, true)?;
+    let mut iovs = task.AdjustIOVecPermission(dsts, true, true)?;
+    let dsts = &mut iovs;
+
     match f.Preadv(task, dsts, offset) {
         Err(e) => {
             if e != Error::SysError(SysErr::EWOULDBLOCK) || f.Flags().NonBlocking {
                 return Err(e);
             }
         }
-        Ok(n) => {
-            return Ok(n)
-        }
+        Ok(n) => return Ok(n),
     };
 
     let general = task.blocker.generalEntry.clone();
@@ -363,7 +363,7 @@ fn preadv(task: &Task, f: &File, dsts: &mut [IoVec], offset: i64) -> Result<i64>
             Err(e) => {
                 return Err(e);
             }
-            _ => ()
+            _ => (),
         }
     }
 }

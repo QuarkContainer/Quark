@@ -158,3 +158,8 @@ impl ListAllocator {
     pub fn Check(&self) {
     }
 }
+
+#[inline]
+pub fn VcpuId() -> usize {
+    return CPULocal::CpuId();
+}

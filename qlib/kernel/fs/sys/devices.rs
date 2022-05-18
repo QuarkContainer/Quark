@@ -12,43 +12,47 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
-use alloc::vec::Vec;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::ToString;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 
+use super::super::super::super::auth::*;
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
-use super::super::super::super::auth::*;
 use super::super::super::kernel::kernel::*;
 use super::super::super::task::*;
-use super::super::fsutil::file::readonly_file::*;
-use super::super::fsutil::inode::simple_file_inode::*;
+use super::super::dirent::*;
 use super::super::file::*;
 use super::super::flags::*;
-use super::super::dirent::*;
-use super::super::mount::*;
+use super::super::fsutil::file::readonly_file::*;
+use super::super::fsutil::inode::simple_file_inode::*;
 use super::super::inode::*;
+use super::super::mount::*;
 use super::sys::*;
 
 pub fn NewPossible(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
-    let v = NewPossibleSimpleFileInode(task, &ROOT_OWNER, &FilePermissions::FromMode(FileMode(0o400)), FSMagic::PROC_SUPER_MAGIC);
-    return NewFile(&Arc::new(v), msrc)
-
+    let v = NewPossibleSimpleFileInode(
+        task,
+        &ROOT_OWNER,
+        &FilePermissions::FromMode(FileMode(0o400)),
+        FSMagic::PROC_SUPER_MAGIC,
+    );
+    return NewFile(&Arc::new(v), msrc);
 }
 
-pub fn NewPossibleSimpleFileInode(task: &Task,
-                                 owner: &FileOwner,
-                                 perms: &FilePermissions,
-                                 typ: u64)
-                                 -> SimpleFileInode<PossibleData> {
-    let fs = PossibleData{};
-    return SimpleFileInode::New(task, owner, perms, typ, false, fs)
+pub fn NewPossibleSimpleFileInode(
+    task: &Task,
+    owner: &FileOwner,
+    perms: &FilePermissions,
+    typ: u64,
+) -> SimpleFileInode<PossibleData> {
+    let fs = PossibleData {};
+    return SimpleFileInode::New(task, owner, perms, typ, false, fs);
 }
 
-pub struct PossibleData {
-}
+pub struct PossibleData {}
 
 impl PossibleData {
     pub fn GenSnapshot(&self, _task: &Task) -> Vec<u8> {
@@ -61,7 +65,13 @@ impl PossibleData {
 }
 
 impl SimpleFileTrait for PossibleData {
-    fn GetFile(&self, task: &Task, _dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File> {
+    fn GetFile(
+        &self,
+        task: &Task,
+        _dir: &Inode,
+        dirent: &Dirent,
+        flags: FileFlags,
+    ) -> Result<File> {
         let fops = NewSnapshotReadonlyFileOperations(self.GenSnapshot(task));
         let file = File::New(dirent, &flags, fops);
         return Ok(file);
@@ -82,7 +92,7 @@ pub fn NewCPU(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         m.insert(name, NewDir(task, msrc, BTreeMap::new()));
     }
 
-    return NewDir(task, msrc, m)
+    return NewDir(task, msrc, m);
 }
 
 pub fn NewSystemDir(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
@@ -90,12 +100,12 @@ pub fn NewSystemDir(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
 
     m.insert("cpu".to_string(), NewCPU(task, msrc));
     //m.insert("node".to_string(), NewCPU(task, msrc));
-    return NewDir(task, msrc, m)
+    return NewDir(task, msrc, m);
 }
 
 pub fn NewDevicesDir(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let mut m = BTreeMap::new();
 
     m.insert("system".to_string(), NewSystemDir(task, msrc));
-    return NewDir(task, msrc, m)
+    return NewDir(task, msrc, m);
 }

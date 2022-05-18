@@ -12,30 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::ptr;
-use alloc::sync::Arc;
 use alloc::boxed::Box;
 use alloc::string::ToString;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::ptr;
 
-use super::super::*;
+use super::super::super::super::kernel_def::*;
+use super::super::super::common::*;
+use super::super::super::linux_def::*;
+use super::super::super::task_mgr::*;
 use super::super::arch::x86_64::context::*;
 use super::super::kernel::ipc_namespace::*;
 use super::super::threadmgr::task_start::*;
 use super::super::threadmgr::thread::*;
 use super::super::SignalDef::*;
-use super::super::super::common::*;
-use super::super::super::super::kernel_def::*;
-use super::super::super::linux_def::*;
-use super::super::super::task_mgr::*;
+use super::super::*;
 //use super::super::syscalls::sys_tls::*;
+use super::super::perflog::*;
 use super::super::task::*;
 use super::task_block::*;
 use super::task_stop::*;
-use super::super::perflog::*;
 
 pub fn IsValidSegmentBase(addr: u64) -> bool {
-    return addr < MAX_ADDR64
+    return addr < MAX_ADDR64;
 }
 
 const DEFAULT_STACK_SIZE: usize = MemoryDef::DEFAULT_STACK_SIZE as usize;
@@ -150,7 +150,14 @@ pub struct CloneOptions {
 impl CloneOptions {
     const EXIT_SIGNAL_MASK: i32 = 0xff;
 
-    pub fn New(flags: u64, cStack: u64, pTid: u64, cTid: u64, tls: u64, hasChildPIdNamespace: bool) -> Result<Self> {
+    pub fn New(
+        flags: u64,
+        cStack: u64,
+        pTid: u64,
+        cTid: u64,
+        tls: u64,
+        hasChildPIdNamespace: bool,
+    ) -> Result<Self> {
         let flags = flags as i32;
         let opts = CloneOptions {
             sharingOption: SharingOptions {
@@ -201,7 +208,9 @@ impl CloneOptions {
             return Err(Error::SysError(SysErr::EINVAL));
         }
 
-        if !opts.sharingOption.NewThreadGroup && (opts.sharingOption.NewPIDNamespace || hasChildPIdNamespace) {
+        if !opts.sharingOption.NewThreadGroup
+            && (opts.sharingOption.NewPIDNamespace || hasChildPIdNamespace)
+        {
             return Err(Error::SysError(SysErr::EINVAL));
         }
         // The two different ways of specifying a new PID namespace are
@@ -210,7 +219,9 @@ impl CloneOptions {
             return Err(Error::SysError(SysErr::EINVAL));
         }
 
-        if opts.sharingOption.NewUserNamespace && (!opts.sharingOption.NewThreadGroup || !opts.sharingOption.NewFSContext) {
+        if opts.sharingOption.NewUserNamespace
+            && (!opts.sharingOption.NewThreadGroup || !opts.sharingOption.NewFSContext)
+        {
             return Err(Error::SysError(SysErr::EINVAL));
         }
 
@@ -230,7 +241,7 @@ impl Thread {
 
         if opts.sharingOption.NewUserNamespace {
             if t.IsChrooted() {
-                return Err(Error::SysError(SysErr::EPERM))
+                return Err(Error::SysError(SysErr::EPERM));
             }
 
             userns = creds.NewChildUserNamespace()?;
@@ -238,8 +249,10 @@ impl Thread {
 
         if opts.sharingOption.NewPIDNamespace
             || opts.sharingOption.NewNetworkNamespace
-            || opts.sharingOption.NewUTSNamespace && !creds.HasCapabilityIn(Capability::CAP_SYS_ADMIN, &userns) {
-            return Err(Error::SysError(SysErr::EPERM))
+            || opts.sharingOption.NewUTSNamespace
+                && !creds.HasCapabilityIn(Capability::CAP_SYS_ADMIN, &userns)
+        {
+            return Err(Error::SysError(SysErr::EPERM));
         }
 
         let mut utsns = t.utsns.clone();
@@ -259,11 +272,7 @@ impl Thread {
             memoryMgr = newMM;
         }
 
-        let vforkParent = if opts.Vfork {
-            Some(self.clone())
-        } else {
-            None
-        };
+        let vforkParent = if opts.Vfork { Some(self.clone()) } else { None };
 
         let mut fsc = t.fsc.clone();
         if opts.sharingOption.NewFSContext {
@@ -297,12 +306,14 @@ impl Thread {
             let kernel = t.k.clone();
             let limit = tg.lock().limits.clone();
             let cid = tg.lock().containerID.clone();
-            tg = kernel.newThreadGroup(&pidns,
-                                       &sh,
-                                       opts.sharingOption.TerminationSignal.clone(),
-                                       &limit.GetCopy(),
-                                       &cid,
-                                       &None);
+            tg = kernel.newThreadGroup(
+                &pidns,
+                &sh,
+                opts.sharingOption.TerminationSignal.clone(),
+                &limit.GetCopy(),
+                &cid,
+                &None,
+            );
         }
 
         let mut cfg = TaskConfig {
@@ -346,7 +357,8 @@ impl Thread {
         nt.lock().name = name;
 
         if userns != creds.lock().UserNamespace.clone() {
-            nt.SetUserNamespace(&userns).expect("Task.Clone: SetUserNamespace failed: ")
+            nt.SetUserNamespace(&userns)
+                .expect("Task.Clone: SetUserNamespace failed: ")
         }
 
         if opts.Vfork {
@@ -354,7 +366,7 @@ impl Thread {
             self.MaybeBeginVforkStop(&nt);
         }
 
-        return Ok(nt)
+        return Ok(nt);
     }
 
     pub fn MaybeBeginVforkStop(&self, child: &Thread) {
@@ -426,9 +438,7 @@ impl Task {
             self.CopyOutObj(&pid, pTid)?;
         }
 
-        let cTask = unsafe {
-            &mut (*childTask)
-        };
+        let cTask = unsafe { &mut (*childTask) };
 
         if opts.ChildClearTID == true {
             cTask.SetClearTID(cTid);
@@ -493,32 +503,35 @@ impl Task {
 
             let ioUsage = nt.lock().ioUsage.clone();
 
-            ptr::write_volatile(taskPtr, Self {
-                context: Context::New(),
-                taskId: s_ptr as u64,
-                mm: mm,
-                tidInfo: Default::default(),
-                isWaitThread: false,
-                signalStack: signalStack,
-                mountNS: task.mountNS.clone(),
-                // Arc::new(QMutex::new(Default::default())),
-                creds: creds,
-                utsns: utsns,
-                ipcns: ipcns,
-                fsContext: fsContext,
-                fdTbl: fdTbl,
-                blocker: blocker,
-                //Blocker::New(s_ptr as u64),
-                thread: Some(nt.clone()),
-                haveSyscallReturn: false,
-                syscallRestartBlock: None,
-                futexMgr: futexMgr,
-                ioUsage: ioUsage,
-                sched: sched,
-                iovs: Vec::with_capacity(4),
-                perfcounters: Some(THREAD_COUNTS.lock().NewCounters()),
-                guard: Guard::default(),
-            });
+            ptr::write_volatile(
+                taskPtr,
+                Self {
+                    context: Context::New(),
+                    taskId: s_ptr as u64,
+                    mm: mm,
+                    tidInfo: Default::default(),
+                    isWaitThread: false,
+                    signalStack: signalStack,
+                    mountNS: task.mountNS.clone(),
+                    // Arc::new(QMutex::new(Default::default())),
+                    creds: creds,
+                    utsns: utsns,
+                    ipcns: ipcns,
+                    fsContext: fsContext,
+                    fdTbl: fdTbl,
+                    blocker: blocker,
+                    //Blocker::New(s_ptr as u64),
+                    thread: Some(nt.clone()),
+                    haveSyscallReturn: false,
+                    syscallRestartBlock: None,
+                    futexMgr: futexMgr,
+                    ioUsage: ioUsage,
+                    sched: sched,
+                    iovs: Vec::with_capacity(4),
+                    perfcounters: Some(THREAD_COUNTS.lock().NewCounters()),
+                    guard: Guard::default(),
+                },
+            );
         }
 
         let curr = Self::Current();
@@ -586,7 +599,7 @@ impl Task {
         let mut tlock = t.lock();
         if opts.NewNetworkNamespace {
             if !haveCapSysAdmin {
-                return Err(Error::SysError(SysErr::EPERM))
+                return Err(Error::SysError(SysErr::EPERM));
             }
 
             tlock.netns = true;
@@ -594,7 +607,7 @@ impl Task {
 
         if opts.NewUTSNamespace {
             if !haveCapSysAdmin {
-                return Err(Error::SysError(SysErr::EPERM))
+                return Err(Error::SysError(SysErr::EPERM));
             }
 
             let userns = creds.lock().UserNamespace.clone();
@@ -605,7 +618,7 @@ impl Task {
 
         if opts.NewIPCNamespace {
             if !haveCapSysAdmin {
-                return Err(Error::SysError(SysErr::EPERM))
+                return Err(Error::SysError(SysErr::EPERM));
             }
 
             let userns = creds.lock().UserNamespace.clone();
@@ -625,7 +638,7 @@ impl Task {
             tlock.fsc = self.fsContext.clone();
         }
 
-        return Ok(())
+        return Ok(());
     }
 }
 
@@ -648,14 +661,12 @@ pub fn CreateCloneTask(fromTask: &Task, toTask: &mut Task, userSp: u64) {
         toTask.context.rsp = toTask.GetPtRegs() as *const _ as u64 - 8;
         toTask.context.rdi = userSp;
         toTask.context.X86fpstate = Box::new(fromTask.context.X86fpstate.Fork());
-        toTask.context.sigFPState = fromTask.context.CopySigFPState();
         toPtRegs.rax = 0;
         toPtRegs.rsp = userSp;
 
         *(toTask.context.rsp as *mut u64) = child_clone as u64;
     }
 }
-
 
 pub struct VforkStop {}
 

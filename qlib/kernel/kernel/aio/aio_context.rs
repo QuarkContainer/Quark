@@ -12,21 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::collections::vec_deque::VecDeque;
+use crate::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
-use alloc::sync::Arc;
+use alloc::collections::vec_deque::VecDeque;
 use alloc::string::String;
 use alloc::string::ToString;
-use crate::qlib::mutex::*;
-use core::ops::Deref;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::ops::Deref;
 
 use super::super::super::super::addr::*;
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
-use super::super::super::task::*;
-use super::super::super::memmgr::*;
 use super::super::super::memmgr::mm::*;
+use super::super::super::memmgr::*;
+use super::super::super::task::*;
 use super::super::waiter::*;
 
 pub struct AIOMapping {}
@@ -37,7 +37,7 @@ impl Mapping for AIOMapping {
     }
 
     fn DeviceID(&self) -> u64 {
-        return 0
+        return 0;
     }
 
     fn InodeID(&self) -> u64 {
@@ -106,7 +106,7 @@ impl AIOManager {
         let a = self.lock();
         match a.contexts.get(&id) {
             None => None,
-            Some(c) => Some(c.clone())
+            Some(c) => Some(c.clone()),
         }
     }
 }
@@ -131,7 +131,7 @@ impl MemoryManager {
             Precommit: false,
             MLockMode: MLockMode::default(),
             Kernel: false,
-            Mapping: Some(Arc::new(AIOMapping{})),
+            Mapping: Some(Arc::new(AIOMapping {})),
             Mappable: None,
             Hint: "".to_string(),
         };
@@ -145,10 +145,10 @@ impl MemoryManager {
         let ret = self.aioManager.NewAIOContext(events, id);
         if !ret {
             self.MUnmap(task, addr, AIOContext::AIO_RINGBUF_SIZE)?;
-            return Err(Error::SysError(SysErr::EINVAL))
+            return Err(Error::SysError(SysErr::EINVAL));
         }
 
-        return Ok(id)
+        return Ok(id);
     }
 
     // DestroyAIOContext destroys an asynchronous I/O context. It returns false if
@@ -179,26 +179,26 @@ impl MemoryManager {
 
         // Protect against 'ids' that are inaccessible (Linux also reads 4 bytes
         // from id).
-        let _buf : [u8; 4] = match task.CopyInObj(id) {
+        let _buf: [u8; 4] = match task.CopyInObj(id) {
             Err(_) => return None,
             Ok(t) => t,
         };
 
-        return Some(aioCtx)
+        return Some(aioCtx);
     }
 }
 
 // I/O commands.
-pub const IOCB_CMD_PREAD   : u16 = 0;
-pub const IOCB_CMD_PWRITE  : u16 = 1;
-pub const IOCB_CMD_FSYNC   : u16 = 2;
-pub const IOCB_CMD_FDSYNC  : u16 = 3;
-pub const IOCB_CMD_NOOP    : u16 = 6;
-pub const IOCB_CMD_PREADV  : u16 = 7;
-pub const IOCB_CMD_PWRITEV : u16 = 8;
+pub const IOCB_CMD_PREAD: u16 = 0;
+pub const IOCB_CMD_PWRITE: u16 = 1;
+pub const IOCB_CMD_FSYNC: u16 = 2;
+pub const IOCB_CMD_FDSYNC: u16 = 3;
+pub const IOCB_CMD_NOOP: u16 = 6;
+pub const IOCB_CMD_PREADV: u16 = 7;
+pub const IOCB_CMD_PWRITEV: u16 = 8;
 
 // I/O flags.
-pub const IOCB_FLAG_RESFD : i32 = 1;
+pub const IOCB_FLAG_RESFD: i32 = 1;
 
 // ioCallback describes an I/O request.
 //
@@ -229,13 +229,13 @@ pub struct IOCallback {
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy)]
 pub struct IOEvent {
-    pub data    : u64,
-    pub obj     : u64,
-    pub result  : i64,
-    pub result2 : i64,
+    pub data: u64,
+    pub obj: u64,
+    pub result: i64,
+    pub result2: i64,
 }
 
-pub const IOEVENT_SIZE : u64 = 32; // sizeof(IOEvent)
+pub const IOEVENT_SIZE: u64 = 32; // sizeof(IOEvent)
 
 #[derive(Default)]
 pub struct AIOContextIntern {
@@ -274,7 +274,7 @@ impl Waitable for AIOContext {
         }
 
         if aio.results.len() > 0 {
-            currentMask |= EVENT_IN;
+            currentMask |= READABLE_EVENT;
         }
 
         return mask & currentMask;
@@ -292,8 +292,8 @@ impl Waitable for AIOContext {
 }
 
 impl AIOContext {
-    pub const AIO_RING_SIZE : u64 = 32;
-    pub const AIO_RINGBUF_SIZE : u64 = MemoryDef::PAGE_SIZE; //Addr(Self::AIO_RING_SIZE).RoundUp().unwrap().0;
+    pub const AIO_RING_SIZE: u64 = 32;
+    pub const AIO_RINGBUF_SIZE: u64 = MemoryDef::PAGE_SIZE; //Addr(Self::AIO_RING_SIZE).RoundUp().unwrap().0;
 
     pub fn New(events: usize) -> Self {
         let intern = AIOContextIntern {
@@ -301,7 +301,7 @@ impl AIOContext {
             ..Default::default()
         };
 
-        return Self(Arc::new(QMutex::new(intern)))
+        return Self(Arc::new(QMutex::new(intern)));
     }
 
     // destroy marks the context dead.
@@ -310,7 +310,6 @@ impl AIOContext {
         aio.dead = true;
         aio.queue.Notify(EVENT_HUP);
     }
-
 
     // Prepare reserves space for a new request, returning true if available.
     // Returns false if the context is busy.
@@ -322,9 +321,8 @@ impl AIOContext {
 
         aio.outstanding += 1;
 
-        return true
+        return true;
     }
-
 
     // PopRequest pops a completed request if available, this function does not do
     // any blocking. Returns false if no request is available.
@@ -353,6 +351,6 @@ impl AIOContext {
             v.push(r.obj);
         }
 
-        aio.queue.Notify(EVENT_IN);
+        aio.queue.Notify(READABLE_EVENT);
     }
 }

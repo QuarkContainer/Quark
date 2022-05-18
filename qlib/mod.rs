@@ -12,77 +12,76 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate rusty_asm;
 extern crate alloc;
 extern crate spin;
 
 //#[macro_use]
 //pub mod macros;
-pub mod common;
 pub mod addr;
+pub mod auxv;
+pub mod buddyallocator;
+pub mod common;
+pub mod linux_def;
 pub mod pagetable;
 pub mod range;
-pub mod linux_def;
-pub mod buddyallocator;
-pub mod auxv;
 //pub mod Process;
-pub mod bytestream;
-pub mod lockfreebytestream;
-pub mod config;
-pub mod device;
-pub mod cstring;
-pub mod mem;
-pub mod lrc_cache;
-pub mod metric;
-pub mod linux;
-pub mod limits;
-pub mod usage;
-pub mod cpuid;
-pub mod eventchannel;
-pub mod qmsg;
-pub mod task_mgr;
-pub mod loader;
-pub mod platform;
-pub mod path;
 pub mod auth;
+pub mod bytestream;
+pub mod config;
 pub mod control_msg;
-pub mod perf_tunning;
-pub mod uring;
-pub mod singleton;
+pub mod cpuid;
+pub mod cstring;
+pub mod device;
+pub mod eventchannel;
+pub mod limits;
+pub mod linux;
+pub mod loader;
+pub mod lockfreebytestream;
+pub mod lrc_cache;
+pub mod mem;
+pub mod metric;
 pub mod mutex;
-pub mod sort_arr;
-pub mod socket_buf;
 pub mod object_ref;
+pub mod path;
+pub mod perf_tunning;
+pub mod platform;
+pub mod qmsg;
+pub mod singleton;
+pub mod socket_buf;
+pub mod sort_arr;
+pub mod task_mgr;
+pub mod uring;
+pub mod usage;
 
-pub mod ringbuf;
-pub mod rdma_share;
-pub mod vcpu_mgr;
 pub mod kernel;
+pub mod rdma_share;
+pub mod ringbuf;
+pub mod vcpu_mgr;
 
-use core::sync::atomic::AtomicU64;
-use core::sync::atomic::AtomicI32;
-use core::sync::atomic::AtomicBool;
-use core::sync::atomic::Ordering;
 use self::mutex::*;
-use cache_padded::CachePadded;
 use alloc::vec::Vec;
+use cache_padded::CachePadded;
+use core::sync::atomic::AtomicBool;
+use core::sync::atomic::AtomicI32;
+use core::sync::atomic::AtomicU64;
+use core::sync::atomic::Ordering;
 
-use super::asm::*;
-use self::task_mgr::*;
+use self::bytestream::*;
+use self::config::*;
+use self::control_msg::SignalArgs;
+use self::kernel::guestfdnotifier::*;
+use self::kernel::kernel::futex::*;
+use self::kernel::kernel::kernel::Kernel;
+use self::kernel::kernel::timer::timekeeper::*;
+use self::kernel::kernel::timer::timer_store::*;
+use self::kernel::memmgr::pma::*;
+use self::kernel::quring::uring_mgr::QUring;
+use self::linux_def::*;
+use self::object_ref::ObjectRef;
 use self::qmsg::*;
 use self::ringbuf::*;
-use self::config::*;
-use self::linux_def::*;
-use self::bytestream::*;
-use self::kernel::quring::uring_mgr::QUring;
-use self::kernel::kernel::timer::timekeeper::*;
-use self::kernel::guestfdnotifier::*;
-use self::kernel::kernel::timer::timer_store::*;
-use self::kernel::kernel::kernel::Kernel;
-use self::kernel::memmgr::pma::*;
-use self::kernel::kernel::futex::*;
-use self::control_msg::SignalArgs;
-use self::object_ref::ObjectRef;
+use self::task_mgr::*;
+use super::asm::*;
 
 pub fn InitSingleton() {
     unsafe {
@@ -121,7 +120,7 @@ pub const HYPERCALL_RELEASE_VCPU: u16 = 24;
 
 pub const DUMMY_TASKID: TaskId = TaskId::New(0xffff_ffff);
 
-pub const MAX_VCPU_COUNT: usize = 16;
+pub const MAX_VCPU_COUNT: usize = 64;
 
 #[allow(non_camel_case_types)]
 #[repr(u64)]
@@ -494,7 +493,116 @@ pub enum SysCallID {
     sys_pkey_free,
     sys_statx,
 
-    maxsupport,
+    syscall_333,
+    syscall_334,
+    syscall_335,
+    syscall_336,
+    syscall_337,
+    syscall_338,
+    syscall_339,
+    syscall_340,
+    syscall_341,
+    syscall_342,
+    syscall_343,
+    syscall_344,
+    syscall_345,
+    syscall_346,
+    syscall_347,
+    syscall_348,
+    syscall_349,
+    syscall_350,
+    syscall_351,
+    syscall_352,
+    syscall_353,
+    syscall_354,
+    syscall_355,
+    syscall_356,
+    syscall_357,
+    syscall_358,
+    syscall_359,
+    syscall_360,
+    syscall_361,
+    syscall_362,
+    syscall_363,
+    syscall_364,
+    syscall_365,
+    syscall_366,
+    syscall_367,
+    syscall_368,
+    syscall_369,
+    syscall_370,
+    syscall_371,
+    syscall_372,
+    syscall_373,
+    syscall_374,
+    syscall_375,
+    syscall_376,
+    syscall_377,
+    syscall_378,
+    syscall_379,
+    syscall_380,
+    syscall_381,
+    syscall_382,
+    syscall_383,
+    syscall_384,
+    syscall_385,
+    syscall_386,
+    syscall_387,
+    syscall_388,
+    syscall_389,
+    syscall_390,
+    syscall_391,
+    syscall_392,
+    syscall_393,
+    syscall_394,
+    syscall_395,
+    syscall_396,
+    syscall_397,
+    syscall_398,
+    syscall_399,
+    syscall_400,
+    syscall_401,
+    syscall_402,
+    syscall_403,
+    syscall_404,
+    syscall_405,
+    syscall_406,
+    syscall_407,
+    syscall_408,
+    syscall_409,
+    syscall_410,
+    syscall_411,
+    syscall_412,
+    syscall_413,
+    syscall_414,
+    syscall_415,
+    syscall_416,
+    syscall_417,
+    syscall_418,
+    syscall_419,
+    syscall_420,
+    syscall_421,
+    syscall_422,
+    syscall_423,
+    syscall_424,
+    syscall_425,
+    syscall_426,
+    syscall_427,
+    syscall_428,
+    syscall_429,
+    syscall_430,
+    syscall_431,
+    syscall_432,
+    syscall_433,
+    syscall_434,
+    syscall_435,
+    syscall_436,
+    syscall_437,
+    syscall_438,
+    syscall_439, //sys_openat2
+    syscall_440,
+    syscall_441, //epoll_pwait2
+    maxsupport = 442,
 }
 
 #[derive(Clone, Default, Debug, Copy)]
@@ -523,7 +631,7 @@ pub struct LoadAddr {
 #[derive(Clone, Default, Debug)]
 pub struct Str {
     pub addr: u64,
-    pub len: u32
+    pub len: u32,
 }
 
 pub type ShareSpaceRef = ObjectRef<ShareSpace>;
@@ -574,11 +682,12 @@ impl ShareSpace {
         return ShareSpace {
             ioUring: CachePadded::new(QUring::New(MemoryDef::QURING_SIZE)),
             ..Default::default()
-        }
+        };
     }
 
     pub fn MaskTlbShootdown(&self, vcpuId: u64) {
-        self.tlbShootdownMask.fetch_or(1 << vcpuId, Ordering::Release);
+        self.tlbShootdownMask
+            .fetch_or(1 << vcpuId, Ordering::Release);
     }
 
     pub fn TlbShootdownMask(&self) -> u64 {
@@ -622,27 +731,27 @@ impl ShareSpace {
     }
 
     pub fn GetPageMgrAddr(&self) -> u64 {
-        return self.pageMgr.Addr()
+        return self.pageMgr.Addr();
     }
 
     pub fn GetFutexMgrAddr(&self) -> u64 {
-        return self.futexMgr.Addr()
+        return self.futexMgr.Addr();
     }
 
     pub fn GetIOUringAddr(&self) -> u64 {
-        return self.ioUring.Addr()
+        return self.ioUring.Addr();
     }
 
     pub fn GetTimerKeeperAddr(&self) -> u64 {
-        return self.timerkeeper.Addr()
+        return self.timerkeeper.Addr();
     }
 
     pub fn GetTimerStoreAddr(&self) -> u64 {
-        return self.timerStore.Addr()
+        return self.timerStore.Addr();
     }
 
     pub fn Addr(&self) -> u64 {
-        return self as * const _ as u64;
+        return self as *const _ as u64;
     }
 
     pub fn TryLockEpollProcess(&self) -> Option<QMutexGuard<()>> {
@@ -683,7 +792,10 @@ impl ShareSpace {
 
     #[inline]
     pub fn NeedHostProcess(&self) -> bool {
-        match self.hostProcessor.compare_exchange(0, 1, Ordering::SeqCst, Ordering::SeqCst) {
+        match self
+            .hostProcessor
+            .compare_exchange(0, 1, Ordering::SeqCst, Ordering::SeqCst)
+        {
             Ok(_) => return true,
             Err(_) => return false,
         }
@@ -714,12 +826,10 @@ impl ShareSpace {
             let ret = self.logBuf.lock().as_mut().unwrap().writeFull(buf);
             match ret {
                 Err(_) => {
-                    print!("log is full ... retry {}", i+1);
+                    print!("log is full ... retry {}", i + 1);
                     Self::Yield();
                 }
-                Ok((trigger, _)) => {
-                    return trigger
-                }
+                Ok((trigger, _)) => return trigger,
             }
         }
 
@@ -730,13 +840,13 @@ impl ShareSpace {
         let mut lock = self.logBuf.lock();
         lock.as_mut().unwrap().Consume(cnt);
         let (addr, len) = lock.as_mut().unwrap().GetDataBuf();
-        return (addr, len)
+        return (addr, len);
     }
 
     pub fn GetDataBuf(&self) -> (u64, usize) {
         let mut lock = self.logBuf.lock();
         let (addr, len) = lock.as_mut().unwrap().GetDataBuf();
-        return (addr, len)
+        return (addr, len);
     }
 
     pub fn ReadLog(&self, buf: &mut [u8]) -> usize {

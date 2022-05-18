@@ -62,7 +62,7 @@ impl IO {
     }
 
     pub fn WriteSyscallAddr(&self) -> u64 {
-        return &self.WriteSyscalls as * const _ as u64;
+        return &self.WriteSyscalls as *const _ as u64;
     }
 
     pub fn AccountWriteSyscall(&self, bytes: i64) {
@@ -85,12 +85,21 @@ impl IO {
     }
 
     pub fn Accumulate(&self, io: &IO) {
-        self.CharsRead.fetch_add(io.CharsRead.load(Ordering::SeqCst), Ordering::SeqCst);
-        self.CharsWritten.fetch_add(io.CharsWritten.load(Ordering::SeqCst), Ordering::SeqCst);
-        self.ReadSyscalls.fetch_add(io.ReadSyscalls.load(Ordering::SeqCst), Ordering::SeqCst);
-        self.WriteSyscalls.fetch_add(io.WriteSyscalls.load(Ordering::SeqCst), Ordering::SeqCst);
-        self.BytesRead.fetch_add(io.BytesRead.load(Ordering::SeqCst), Ordering::SeqCst);
-        self.BytesWritten.fetch_add(io.BytesWritten.load(Ordering::SeqCst), Ordering::SeqCst);
-        self.BytesWriteCancelled.fetch_add(io.BytesWriteCancelled.load(Ordering::SeqCst), Ordering::SeqCst);
+        self.CharsRead
+            .fetch_add(io.CharsRead.load(Ordering::SeqCst), Ordering::SeqCst);
+        self.CharsWritten
+            .fetch_add(io.CharsWritten.load(Ordering::SeqCst), Ordering::SeqCst);
+        self.ReadSyscalls
+            .fetch_add(io.ReadSyscalls.load(Ordering::SeqCst), Ordering::SeqCst);
+        self.WriteSyscalls
+            .fetch_add(io.WriteSyscalls.load(Ordering::SeqCst), Ordering::SeqCst);
+        self.BytesRead
+            .fetch_add(io.BytesRead.load(Ordering::SeqCst), Ordering::SeqCst);
+        self.BytesWritten
+            .fetch_add(io.BytesWritten.load(Ordering::SeqCst), Ordering::SeqCst);
+        self.BytesWriteCancelled.fetch_add(
+            io.BytesWriteCancelled.load(Ordering::SeqCst),
+            Ordering::SeqCst,
+        );
     }
 }

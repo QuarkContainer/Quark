@@ -12,21 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::slice;
 use std::fs::File;
-use xmas_elf::program::ProgramHeader::{Ph64};
+use std::slice;
+use xmas_elf::program::ProgramHeader::Ph64;
 use xmas_elf::program::Type;
 //use xmas_elf::program::{ProgramIter, SegmentData, Type};
 //use xmas_elf::sections::SectionData;
-use xmas_elf::*;
 use memmap::Mmap;
 use std::os::unix::io::AsRawFd;
+use xmas_elf::*;
 
+pub use xmas_elf::header::HeaderPt2;
 pub use xmas_elf::program::{Flags, ProgramHeader, ProgramHeader64};
 pub use xmas_elf::sections::Rela;
 pub use xmas_elf::symbol_table::{Entry, Entry64};
 pub use xmas_elf::{P32, P64};
-pub use xmas_elf::header::HeaderPt2;
 
 use super::addr::Addr;
 
@@ -35,7 +35,7 @@ use super::addr::Addr;
 use super::qlib::common::Error;
 use super::qlib::common::Result;
 
-use super::memmgr::{MappedRegion, MapOption};
+use super::memmgr::{MapOption, MappedRegion};
 
 pub struct KernelELF {
     pub startAddr: Addr,
@@ -56,7 +56,7 @@ impl KernelELF {
             vdsoStart: 0,
             vdsoLen: 0,
             vdsomr: None,
-        })
+        });
     }
 
     pub fn StartAddr(&self) -> Addr {
@@ -68,8 +68,10 @@ impl KernelELF {
     }
 
     pub fn LoadKernel(&mut self, fileName: &str) -> Result<u64> {
-        let f = File::open(fileName).map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-        let mmap = unsafe { Mmap::map(&f).map_err(|e| Error::IOError(format!("io::error is {:?}", e)))? };
+        let f =
+            File::open(fileName).map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+        let mmap =
+            unsafe { Mmap::map(&f).map_err(|e| Error::IOError(format!("io::error is {:?}", e)))? };
         let fd = f.as_raw_fd();
 
         let mut startAddr: Addr = Addr(0xfffff_fffff_fffff);
@@ -87,15 +89,20 @@ impl KernelELF {
             if let Ph64(header) = p {
                 if header.get_type().map_err(Error::ELFLoadError)? == Type::Load {
                     let startMem = Addr(header.virtual_addr).RoundDown()?;
-                    let endMem = Addr(header.virtual_addr).AddLen(header.file_size)?.RoundUp()?;
-                    let pageOffset = Addr(header.virtual_addr).0 - Addr(header.virtual_addr).RoundDown()?.0;
+                    let endMem = Addr(header.virtual_addr)
+                        .AddLen(header.file_size)?
+                        .RoundUp()?;
+                    let pageOffset =
+                        Addr(header.virtual_addr).0 - Addr(header.virtual_addr).RoundDown()?.0;
                     let len = Addr(header.file_size).RoundUp()?.0;
 
                     if startMem.0 < startAddr.0 {
                         startAddr = startMem;
                     }
 
-                    let end = Addr(header.virtual_addr).AddLen(header.mem_size)?.RoundUp()?;
+                    let end = Addr(header.virtual_addr)
+                        .AddLen(header.mem_size)?
+                        .RoundUp()?;
                     if endAddr.0 < endMem.0 {
                         endAddr = end;
                     }
@@ -120,7 +127,12 @@ impl KernelELF {
 
                     if adjust + header.file_size < endMem.0 - startMem.0 {
                         let cnt = (endMem.0 - startMem.0 - (adjust + header.file_size)) as usize;
-                        let target = unsafe { slice::from_raw_parts_mut((startMem.0 + adjust + header.file_size) as *mut u8, cnt) };
+                        let target = unsafe {
+                            slice::from_raw_parts_mut(
+                                (startMem.0 + adjust + header.file_size) as *mut u8,
+                                cnt,
+                            )
+                        };
 
                         for i in 0..cnt {
                             target[i] = 0;
@@ -151,23 +163,32 @@ impl KernelELF {
         self.startAddr = startAddr;
         self.endAddr = endAddr;
 
-        return Ok(entry)
+        return Ok(entry);
     }
 
     pub fn LoadVDSO(&mut self, fileName: &String) -> Result<()> {
-        let f = File::open(fileName).map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-        let mmap = unsafe { Mmap::map(&f).map_err(|e| Error::IOError(format!("io::error is {:?}", e)))? };
+        let f =
+            File::open(fileName).map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+        let mmap =
+            unsafe { Mmap::map(&f).map_err(|e| Error::IOError(format!("io::error is {:?}", e)))? };
         let len = mmap.len();
 
         assert!(Addr(len as u64).RoundUp()?.0 == 2 * 4096);
 
         let mut option = &mut MapOption::New();
-        option = option.Addr(self.EndAddr().0).Len(3 * 4096).MapAnan().MapPrivate().ProtoRead().ProtoWrite().ProtoExec();
+        option = option
+            .Addr(self.EndAddr().0)
+            .Len(3 * 4096)
+            .MapAnan()
+            .MapPrivate()
+            .ProtoRead()
+            .ProtoWrite()
+            .ProtoExec();
         let mr = option.Map()?;
         //let mr = MappedRegion::Init(self.startAddr, self.endAddr.0 - self.startAddr.0, false, libc::PROT_READ |  libc::PROT_WRITE |  libc::PROT_EXEC)?;
         let hostAddr = mr.ptr as u64;
         if hostAddr != self.EndAddr().0 {
-            return Err(Error::AddressDoesMatch)
+            return Err(Error::AddressDoesMatch);
         }
 
         let target = unsafe { slice::from_raw_parts_mut((hostAddr + 4096) as *mut u8, len) };
@@ -178,7 +199,6 @@ impl KernelELF {
         self.vdsoLen = 3 * 4096;
         self.vdsomr = Some(mr);
 
-        return Ok(())
+        return Ok(());
     }
 }
-

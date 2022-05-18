@@ -13,19 +13,19 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use spin::Mutex;
 use core::ops::Deref;
 use libc::*;
+use spin::Mutex;
 
 use super::socket_info::*;
 //use super::rdma_socket::*;
-use super::super::*;
-use super::super::qlib::common::*;
 use super::super::super::util::*;
+use super::super::qlib::common::*;
+use super::super::*;
 //use super::super::FD_NOTIFIER;
 
 #[derive(Clone, Debug)]
-pub struct FdInfo (pub Arc<Mutex<FdInfoIntern>>);
+pub struct FdInfo(pub Arc<Mutex<FdInfoIntern>>);
 
 impl Deref for FdInfo {
     type Target = Arc<Mutex<FdInfoIntern>>;
@@ -45,35 +45,124 @@ impl FdInfo {
     }
 
     pub fn BufWrite(fd: i32, addr: u64, len: usize, offset: isize) -> i64 {
-        let ret = unsafe{
+        let ret = unsafe {
             if offset < 0 {
                 write(fd as c_int, addr as *const c_void, len as size_t)
             } else {
-                pwrite(fd as c_int, addr as *const c_void, len as size_t, offset as off_t)
+                pwrite(
+                    fd as c_int,
+                    addr as *const c_void,
+                    len as size_t,
+                    offset as off_t,
+                )
             }
         };
 
-        return SysRet(ret as i64)
+        return SysRet(ret as i64);
+    }
+
+    pub fn ReadDir(dirfd: i32, data: u64) -> i64 {
+        let data = unsafe { &mut *(data as *mut FileTypes) };
+
+        let buf: [u8; 4096 * 16] = [0; 4096 * 16]; // 64KB in stack
+        let res = unsafe { libc::lseek(dirfd, 0, SeekWhence::SEEK_SET) as i32 };
+
+        let res = SysRet(res as i64);
+        if res < 0 {
+            if -res == SysErr::ESPIPE as i64 {
+                return -SysErr::ENOTDIR as i64;
+            }
+
+            return res;
+        }
+
+        loop {
+            let addr = &buf[0] as *const _ as u64;
+            let cnt = Self::GetDents64(dirfd, addr, buf.len() as u32);
+
+            if cnt < 0 {
+                return cnt;
+            }
+
+            if cnt == 0 {
+                break;
+            }
+
+            let cnt: u64 = cnt as u64;
+            let mut pos: u64 = 0;
+            while pos < cnt {
+                let name;
+                let dType;
+                let inode;
+                unsafe {
+                    let d: *const Dirent64 = (addr + pos) as *const Dirent64;
+                    name = (*d).name;
+                    dType = (*d).type_;
+                    inode = (*d).ino;
+                    pos += (*d).reclen as u64;
+                }
+
+                if true {
+                    let mut stat: LibcStat = Default::default();
+
+                    let ret = unsafe {
+                        SysRet(libc::fstatat(
+                            dirfd,
+                            &name[0] as *const _ as u64 as *const c_char,
+                            &mut stat as *mut _ as u64 as *mut stat,
+                            AT_SYMLINK_NOFOLLOW,
+                        ) as i64)
+                    };
+
+                    if ret >= 0 {
+                        let ft = FileType {
+                            pathname: CString::FromAddr(&name[0] as *const _ as u64),
+                            device: stat.st_dev,
+                            inode: stat.st_ino,
+                            dType: dType,
+                        };
+
+                        data.fileTypes.push(ft);
+                    }
+                } else {
+                    // experiment for removing fstatat
+                    let ft = FileType {
+                        pathname: CString::FromAddr(&name[0] as *const _ as u64),
+                        device: 0, //stat.st_dev,
+                        inode: inode,
+                        dType: dType,
+                    };
+
+                    data.fileTypes.push(ft);
+                }
+            }
+        }
+
+        return 0;
+    }
+
+    pub fn GetDents64(fd: i32, dirp: u64, count: u32) -> i64 {
+        let nr = SysCallID::sys_getdents64 as usize;
+
+        unsafe {
+            return syscall3(nr, fd as usize, dirp as usize, count as usize) as i64;
+        }
     }
 
     pub fn Write(fd: i32, iovs: u64, iovcnt: i32) -> i64 {
-        let ret = unsafe {
-            writev(fd as c_int, iovs as *const iovec, iovcnt) as i64
-        };
+        let ret = unsafe { writev(fd as c_int, iovs as *const iovec, iovcnt) as i64 };
 
-        return SysRet(ret as i64)
+        return SysRet(ret as i64);
     }
 
     pub fn Append(fd: i32, iovs: u64, iovcnt: i32, fileLenAddr: u64) -> i64 {
-        let end = unsafe {
-            lseek(fd as c_int, 0, libc::SEEK_END)
-        };
+        let end = unsafe { lseek(fd as c_int, 0, libc::SEEK_END) };
 
         if end < 0 {
             panic!("IOAppend lseek fail")
         }
 
-        let size = unsafe{
+        let size = unsafe {
             //todo: don't know why RWF_APPEND doesn't work. need to fix.
             //syscall5(nr, fd as usize, iovs as usize, iovcnt as usize, -1 as i32 as usize, Flags::RWF_APPEND as usize) as i64
             pwritev(fd as c_int, iovs as *const iovec, iovcnt, end as i64) as i64
@@ -81,12 +170,10 @@ impl FdInfo {
 
         //error!("IOAppend: end is {:x}, size is {:x}, new end is {:x}", end, size, end + size);
         if size < 0 {
-            return SysRet(size as i64)
+            return SysRet(size as i64);
         }
 
-        unsafe {
-            *(fileLenAddr as * mut i64) = (end + size) as i64
-        }
+        unsafe { *(fileLenAddr as *mut i64) = (end + size) as i64 }
 
         return size;
 
@@ -122,11 +209,11 @@ impl FdInfo {
             }
         };
 
-        return SysRet(ret as i64)
+        return SysRet(ret as i64);
     }
 
     pub fn WriteAt(fd: i32, iovs: u64, iovcnt: i32, offset: u64) -> i64 {
-        let ret = unsafe{
+        let ret = unsafe {
             if offset as i64 == -1 {
                 writev(fd as c_int, iovs as *const iovec, iovcnt) as i64
             } else {
@@ -134,7 +221,7 @@ impl FdInfo {
             }
         };
 
-        return SysRet(ret as i64)
+        return SysRet(ret as i64);
     }
 
     pub fn IoCtl(fd: i32, cmd: u64, argp: u64) -> i64 {
@@ -145,44 +232,41 @@ impl FdInfo {
         ioctl(-1, TIOCGPGRP, 0x7ffdf82a0a14)    = -1 EBADF (Bad file descriptor)
         */
         if fd == 2 {
-            return -SysErr::ENOTTY as i64
+            return -SysErr::ENOTTY as i64;
         }
 
         //error!("IoCtl fd is {}, cmd is {:x}, argp is {:x}", fd, cmd, argp);
 
-        let ret = unsafe{
-            ioctl(fd as c_int, cmd, argp)
-        };
+        let ret = unsafe { ioctl(fd as c_int, cmd, argp) };
 
         return SysRet(ret as i64);
     }
 
     pub fn FSync(fd: i32, dataSync: bool) -> i64 {
         let ret = if dataSync {
-            unsafe{
-                fsync(fd)
-            }
+            unsafe { fsync(fd) }
         } else {
-            unsafe{
-                fdatasync(fd)
-            }
+            unsafe { fdatasync(fd) }
         };
 
         return SysRet(ret as i64);
     }
 
     pub fn Seek(fd: i32, offset: i64, whence: i32) -> i64 {
-        let ret = unsafe {
-            libc::lseek(fd, offset, whence)
-        };
+        let ret = unsafe { libc::lseek(fd, offset, whence) };
 
-        return SysRet(ret as i64)
+        return SysRet(ret as i64);
     }
 
     ///////////////////////////socket operation//////////////////////////////
     pub fn Accept(sockfd: i32, addr: u64, addrlen: u64) -> i64 {
-        let newfd = unsafe{
-            accept4(sockfd, addr as  *mut sockaddr, addrlen as  *mut socklen_t, SocketFlags::SOCK_NONBLOCK | SocketFlags::SOCK_CLOEXEC)
+        let newfd = unsafe {
+            accept4(
+                sockfd,
+                addr as *mut sockaddr,
+                addrlen as *mut socklen_t,
+                SocketFlags::SOCK_NONBLOCK | SocketFlags::SOCK_CLOEXEC,
+            )
         };
 
         if newfd < 0 {
@@ -195,65 +279,67 @@ impl FdInfo {
     }
 
     pub fn Connect(sockfd: i32, addr: u64, addrlen: u32) -> i64 {
-        let ret = unsafe{
-            connect(sockfd, addr as *const sockaddr, addrlen as socklen_t)
-        };
+        let ret = unsafe { connect(sockfd, addr as *const sockaddr, addrlen as socklen_t) };
 
-        return SysRet(ret as i64)
+        return SysRet(ret as i64);
     }
 
     pub fn RecvMsg(sockfd: i32, msghdr: u64, flags: i32) -> i64 {
-        let ret = unsafe{
-            recvmsg(sockfd, msghdr as *mut msghdr, flags as c_int)
-        };
+        let ret = unsafe { recvmsg(sockfd, msghdr as *mut msghdr, flags as c_int) };
 
         return SysRet(ret as i64);
     }
 
     pub fn SendMsg(sockfd: i32, msghdr: u64, flags: i32) -> i64 {
-        let ret = unsafe{
-            sendmsg(sockfd, msghdr as *mut msghdr, flags as c_int)
-        };
+        let ret = unsafe { sendmsg(sockfd, msghdr as *mut msghdr, flags as c_int) };
 
         return SysRet(ret as i64);
     }
 
     pub fn GetSockName(sockfd: i32, addr: u64, addrlen: u64) -> i64 {
-        let ret = unsafe{
-            getsockname(sockfd, addr as *mut sockaddr, addrlen as *mut socklen_t)
-        };
+        let ret = unsafe { getsockname(sockfd, addr as *mut sockaddr, addrlen as *mut socklen_t) };
 
-        return SysRet(ret as i64)
+        return SysRet(ret as i64);
     }
 
     pub fn GetPeerName(sockfd: i32, addr: u64, addrlen: u64) -> i64 {
-        let ret = unsafe{
-            getpeername(sockfd, addr as *mut sockaddr, addrlen as *mut socklen_t)
-        };
+        let ret = unsafe { getpeername(sockfd, addr as *mut sockaddr, addrlen as *mut socklen_t) };
 
-        return SysRet(ret as i64)
+        return SysRet(ret as i64);
     }
 
     pub fn GetSockOpt(sockfd: i32, level: i32, optname: i32, optval: u64, optlen: u64) -> i64 {
-        let ret = unsafe{
-            getsockopt(sockfd, level, optname, optval as *mut c_void, optlen as *mut socklen_t)
+        let ret = unsafe {
+            getsockopt(
+                sockfd,
+                level,
+                optname,
+                optval as *mut c_void,
+                optlen as *mut socklen_t,
+            )
         };
 
-        return SysRet(ret as i64)
+        return SysRet(ret as i64);
     }
 
     pub fn SetSockOpt(sockfd: i32, level: i32, optname: i32, optval: u64, optlen: u32) -> i64 {
-        let ret = unsafe{
-            setsockopt(sockfd, level, optname, optval as *const c_void, optlen as socklen_t)
+        let ret = unsafe {
+            setsockopt(
+                sockfd,
+                level,
+                optname,
+                optval as *const c_void,
+                optlen as socklen_t,
+            )
         };
 
-        return SysRet(ret as i64)
+        return SysRet(ret as i64);
     }
 
     pub fn Bind(sockfd: i32, sockaddr: u64, addrlen: u32, umask: u32) -> i64 {
         // use global lock to avoid race condition
         //let _ = GLOCK.lock();
-        let ret = unsafe{
+        let ret = unsafe {
             let oldUmask = libc::umask(umask);
             let ret = bind(sockfd, sockaddr as *const sockaddr, addrlen as socklen_t);
             libc::umask(oldUmask);
@@ -264,9 +350,7 @@ impl FdInfo {
     }
 
     pub fn Listen(sockfd: i32, backlog: i32, block: bool) -> i64 {
-        let ret = unsafe{
-            listen(sockfd, backlog)
-        };
+        let ret = unsafe { listen(sockfd, backlog) };
 
         if block {
             VMSpace::BlockFd(sockfd);
@@ -276,11 +360,9 @@ impl FdInfo {
     }
 
     pub fn Shutdown(sockfd: i32, how: i32) -> i64 {
-        let ret = unsafe{
-            shutdown(sockfd, how)
-        };
+        let ret = unsafe { shutdown(sockfd, how) };
 
-        return SysRet(ret as i64)
+        return SysRet(ret as i64);
     }
 
     ///////////////////////////socket operation//////////////////////////////
@@ -288,7 +370,7 @@ impl FdInfo {
 
 impl FdInfo {
     pub fn NewFile(fd: i32) -> Self {
-        return Self(Arc::new(Mutex::new(FdInfoIntern::NewFile(fd))))
+        return Self(Arc::new(Mutex::new(FdInfoIntern::NewFile(fd))));
     }
 
     pub fn Notify(&self, mask: EventMask) {
@@ -305,36 +387,41 @@ impl FdInfo {
     }
 
     pub fn NewSocket(fd: i32) -> Self {
-        return Self(Arc::new(Mutex::new(FdInfoIntern::NewSocket(fd))))
+        return Self(Arc::new(Mutex::new(FdInfoIntern::NewSocket(fd))));
     }
 
     /*pub fn NewRDMAContext(fd: i32) -> Self {
         return Self(Arc::new(Mutex::new(FdInfoIntern::NewRDMAContext(fd))))
     }*/
 
+    pub fn IOReadDir(&self, data: u64) -> i64 {
+        let fd = self.lock().fd;
+        return Self::ReadDir(fd, data);
+    }
+
     pub fn IOBufWrite(&self, addr: u64, len: usize, offset: isize) -> i64 {
         let fd = self.lock().fd;
-        return Self::BufWrite(fd, addr, len, offset)
+        return Self::BufWrite(fd, addr, len, offset);
     }
 
     pub fn IOWrite(&self, iovs: u64, iovcnt: i32) -> i64 {
         let fd = self.lock().fd;
-        return Self::Write(fd, iovs, iovcnt)
+        return Self::Write(fd, iovs, iovcnt);
     }
 
     pub fn IOAppend(&self, iovs: u64, iovcnt: i32, fileLenAddr: u64) -> i64 {
         let fd = self.lock().fd;
-        return Self::Append(fd, iovs, iovcnt, fileLenAddr)
+        return Self::Append(fd, iovs, iovcnt, fileLenAddr);
     }
 
     pub fn IOReadAt(&self, iovs: u64, iovcnt: i32, offset: u64) -> i64 {
         let fd = self.lock().fd;
-        return Self::ReadAt(fd, iovs, iovcnt, offset)
+        return Self::ReadAt(fd, iovs, iovcnt, offset);
     }
 
     pub fn IOWriteAt(&self, iovs: u64, iovcnt: i32, offset: u64) -> i64 {
         let fd = self.lock().fd;
-        return Self::WriteAt(fd, iovs, iovcnt, offset)
+        return Self::WriteAt(fd, iovs, iovcnt, offset);
     }
 
     pub fn IOFcntl(&self, cmd: i32, _arg: u64) -> i64 {
@@ -544,15 +631,13 @@ impl Drop for FdInfoIntern {
 
 impl FdInfoIntern {
     pub fn NewFile(fd: i32) -> Self {
-        let flags = unsafe {
-            fcntl(fd, F_GETFL)
-        };
+        let flags = unsafe { fcntl(fd, F_GETFL) };
 
         let res = Self {
             fd: fd,
             waitInfo: FdWaitInfo::default(),
             flags: Flags(flags),
-            sockInfo: Mutex::new(SockInfo::File)
+            sockInfo: Mutex::new(SockInfo::File),
         };
 
         return res;
@@ -575,15 +660,13 @@ impl FdInfoIntern {
 
     pub fn NewSocket(fd: i32) -> Self {
         //info!("New fd {}, hostfd{}: epollable is {}", fd, hostfd, epollable);
-        let flags = unsafe {
-            fcntl(fd, F_GETFL)
-        };
+        let flags = unsafe { fcntl(fd, F_GETFL) };
 
         let res = Self {
             fd: fd,
             waitInfo: FdWaitInfo::default(),
             flags: Flags(flags),
-            sockInfo: Mutex::new(SockInfo::Socket)
+            sockInfo: Mutex::new(SockInfo::Socket),
         };
 
         return res;
@@ -598,11 +681,17 @@ impl FdInfoIntern {
         let mut len: u32 = 8;
 
         let ret = unsafe {
-            getsockopt(self.fd, SOL_SOCKET, SO_ERROR, &mut err as *mut _ as *mut c_void, &mut len as *mut socklen_t)
+            getsockopt(
+                self.fd,
+                SOL_SOCKET,
+                SO_ERROR,
+                &mut err as *mut _ as *mut c_void,
+                &mut len as *mut socklen_t,
+            )
         };
 
         if ret == -1 {
-            return Err(Error::SysError(errno::errno().0))
+            return Err(Error::SysError(errno::errno().0));
         }
 
         return Ok(err);
@@ -615,7 +704,8 @@ impl FdInfoIntern {
                 // shutdown for socket, without shutdown, it the uring read won't be wake up
                 // todo: handle this elegant
                 shutdown(self.fd, 2);
-                return close(self.fd)
+                //debug!("fdinfo close: {}", self.fd);
+                return close(self.fd);
             }
         }
 
@@ -623,17 +713,17 @@ impl FdInfoIntern {
     }
 
     pub fn GetFlags(&mut self) -> i32 {
-        return self.Flags().0
+        return self.Flags().0;
     }
 
     pub fn RemoveWait(&mut self, mask: EventMask) -> Result<()> {
         let mask = self.waitInfo.lock().mask & !mask;
-        return self.WaitFd(mask)
+        return self.WaitFd(mask);
     }
 
     pub fn AddWait(&mut self, mask: EventMask) -> Result<()> {
         let mask = self.waitInfo.lock().mask | mask;
-        return self.WaitFd(mask)
+        return self.WaitFd(mask);
     }
 
     pub fn WaitFd(&mut self, mask: EventMask) -> Result<()> {
@@ -641,7 +731,7 @@ impl FdInfoIntern {
         {
             let mut wi = self.waitInfo.lock();
             if mask == wi.mask {
-                return Ok(())
+                return Ok(());
             }
 
             if wi.mask == 0 {

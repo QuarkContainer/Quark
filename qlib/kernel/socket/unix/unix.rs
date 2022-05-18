@@ -12,32 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::any::Any;
-use alloc::sync::Arc;
-use alloc::vec::Vec;
-use core::sync::atomic::AtomicI64;
-use core::sync::atomic::Ordering;
+use crate::qlib::mutex::*;
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::string::ToString;
-use crate::qlib::mutex::*;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use core::any::Any;
 use core::ops::*;
-use alloc::boxed::Box;
+use core::sync::atomic::AtomicI64;
+use core::sync::atomic::Ordering;
 
-use super::super::socket::*;
 use super::super::super::fs::attr::*;
-use super::super::super::fs::file::*;
-use super::super::super::fs::flags::*;
 use super::super::super::fs::dentry::*;
 use super::super::super::fs::dirent::*;
+use super::super::super::fs::file::*;
+use super::super::super::fs::flags::*;
+use super::super::socket::*;
 //use super::super::super::fs::attr::*;
-use super::super::super::fs::host::hostinodeop::*;
-use super::super::super::kernel::fd_table::*;
-use super::super::super::kernel::abstract_socket_namespace::*;
-use super::super::super::kernel::waiter::*;
-use super::super::super::kernel::time::*;
 use super::super::super::super::common::*;
-use super::super::super::super::linux_def::*;
 use super::super::super::super::linux::socket::*;
+use super::super::super::super::linux_def::*;
+use super::super::super::fs::host::hostinodeop::*;
+use super::super::super::kernel::abstract_socket_namespace::*;
+use super::super::super::kernel::fd_table::*;
+use super::super::super::kernel::time::*;
+use super::super::super::kernel::waiter::*;
 use super::super::super::task::*;
 //use super::super::super::super::mem::io::*;
 use super::super::super::super::mem::seq::*;
@@ -45,12 +45,12 @@ use super::super::super::super::path::*;
 //use super::super::super::Kernel;
 use super::super::super::Kernel::HostSpace;
 //use super::super::super::fd::*;
-use super::super::super::tcpip::tcpip::*;
-use super::transport::unix::*;
-use super::transport::connectioned::*;
-use super::transport::connectionless::*;
 use super::super::super::socket::control::*;
 use super::super::super::socket::epsocket::epsocket::*;
+use super::super::super::tcpip::tcpip::*;
+use super::transport::connectioned::*;
+use super::transport::connectionless::*;
+use super::transport::unix::*;
 
 pub fn NewUnixSocket(task: &Task, ep: BoundEndpoint, stype: i32, hostfd: i32) -> Result<File> {
     //assert!(family == AFType::AF_UNIX, "NewUnixSocket family is not AF_UNIX");
@@ -61,7 +61,11 @@ pub fn NewUnixSocket(task: &Task, ep: BoundEndpoint, stype: i32, hostfd: i32) ->
         ..Default::default()
     };
 
-    return Ok(File::New(&dirent, &fileFlags, UnixSocketOperations::New(ep, stype, hostfd)))
+    return Ok(File::New(
+        &dirent,
+        &fileFlags,
+        UnixSocketOperations::New(ep, stype, hostfd),
+    ));
 }
 
 pub struct UnixSocketOperations {
@@ -109,7 +113,7 @@ impl UnixSocketOperations {
     pub fn GetPeer(&self, _task: &Task) -> Result<(SockAddr, u32)> {
         let addr = self.ep.GetRemoteAddress()?;
         let l = addr.Len();
-        return Ok((SockAddr::Unix(addr), l as u32))
+        return Ok((SockAddr::Unix(addr), l as u32));
     }
 
     // GetSockName implements the linux syscall getsockname(2) for sockets backed by
@@ -118,7 +122,7 @@ impl UnixSocketOperations {
         let addr = self.ep.GetLocalAddress()?;
 
         let l = addr.Len();
-        return Ok((SockAddr::Unix(addr), l as u32))
+        return Ok((SockAddr::Unix(addr), l as u32));
     }
 
     // blockingAccept implements a blocking version of accept(2), that is, if no
@@ -142,29 +146,37 @@ impl UnixSocketOperations {
         }
     }
 
-    fn encodeControlMsg(&self, task: &Task, mut ctrls: SCMControlMessages, controlDataLen: usize, mflags: &mut i32, cloexec: bool) -> Vec<u8> {
+    fn encodeControlMsg(
+        &self,
+        task: &Task,
+        mut ctrls: SCMControlMessages,
+        controlDataLen: usize,
+        mflags: &mut i32,
+        cloexec: bool,
+    ) -> Vec<u8> {
         // fill this with logic currently in sys_socket.....
         let mut controlVec: Vec<u8> = vec![0; controlDataLen];
         let controlData = &mut controlVec[..];
 
         let mut opt = SockOpt::PasscredOption(0);
-        
+
         let controlData = if let Ok(_) = self.ep.GetSockOpt(&mut opt) {
             match opt {
                 SockOpt::PasscredOption(0) => controlData,
                 _ => match ctrls.Credentials {
                     // Edge case: user set SO_PASSCRED but the sender didn't set it in control massage
                     None => {
-                        let (data, flags) = ControlMessageCredentials::Empty().EncodeInto(controlData, *mflags);
+                        let (data, flags) =
+                            ControlMessageCredentials::Empty().EncodeInto(controlData, *mflags);
                         *mflags = flags;
                         data
-                    },
+                    }
                     Some(ref creds) => {
                         let (data, flags) = creds.Credentials().EncodeInto(controlData, *mflags);
                         *mflags = flags;
                         data
-                    },
-                }
+                    }
+                },
             }
         } else {
             controlData
@@ -173,7 +185,8 @@ impl UnixSocketOperations {
         let controlData = match ctrls.Rights {
             None => controlData,
             Some(ref mut rights) => {
-                let maxFDs = (controlData.len() as isize - SIZE_OF_CONTROL_MESSAGE_HEADER as isize) / 4;
+                let maxFDs =
+                    (controlData.len() as isize - SIZE_OF_CONTROL_MESSAGE_HEADER as isize) / 4;
                 if maxFDs < 0 {
                     *mflags |= MsgType::MSG_CTRUNC;
                     controlData
@@ -182,10 +195,11 @@ impl UnixSocketOperations {
                     if trunc {
                         *mflags |= MsgType::MSG_CTRUNC;
                     }
-                    let (controlData, _) = ControlMessageRights(fds).EncodeInto(controlData, *mflags);
+                    let (controlData, _) =
+                        ControlMessageRights(fds).EncodeInto(controlData, *mflags);
                     controlData
                 }
-            },
+            }
         };
 
         let new_size = controlDataLen - controlData.len();
@@ -206,7 +220,7 @@ impl Passcred for UnixSocketOperations {
     }
 }
 
-impl ConnectedPasscred  for UnixSocketOperations {
+impl ConnectedPasscred for UnixSocketOperations {
     fn ConnectedPasscred(&self) -> bool {
         return self.ep.ConnectedPasscred();
     }
@@ -221,7 +235,7 @@ impl Waitable for UnixSocketOperations {
         self.ep.EventRegister(task, e, mask)
     }
 
-    fn EventUnregister(&self, task: &Task,e: &WaitEntry) {
+    fn EventUnregister(&self, task: &Task, e: &WaitEntry) {
         self.ep.EventUnregister(task, e)
     }
 }
@@ -237,12 +251,12 @@ pub fn ExtractPath(sockAddr: &[u8]) -> Result<Vec<u8>> {
 
     if p.len() == 0 {
         // Not allowed.
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    if p[p.len()-1] == '/' as u8 {
+    if p[p.len() - 1] == '/' as u8 {
         // Weird, they tried to bind '/a/b/c/'?
-        return Err(Error::SysError(SysErr::EISDIR))
+        return Err(Error::SysError(SysErr::EISDIR));
     }
 
     return Ok(p);
@@ -256,26 +270,46 @@ impl FileOperations for UnixSocketOperations {
     }
 
     fn FopsType(&self) -> FileOpsType {
-        return FileOpsType::UnixSocketOperations
+        return FileOpsType::UnixSocketOperations;
     }
 
     fn Seekable(&self) -> bool {
         return false;
     }
 
-    fn Seek(&self, _task: &Task, _f: &File, _whence: i32, _current: i64, _offset: i64) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ESPIPE))
+    fn Seek(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _whence: i32,
+        _current: i64,
+        _offset: i64,
+    ) -> Result<i64> {
+        return Err(Error::SysError(SysErr::ESPIPE));
     }
 
-    fn ReadDir(&self, _task: &Task, _f: &File, _offset: i64, _serializer: &mut DentrySerializer) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ENOTDIR))
+    fn ReadDir(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _offset: i64,
+        _serializer: &mut DentrySerializer,
+    ) -> Result<i64> {
+        return Err(Error::SysError(SysErr::ENOTDIR));
     }
 
-    fn ReadAt(&self, _task: &Task, _f: &File, dsts: &mut [IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
+    fn ReadAt(
+        &self,
+        _task: &Task,
+        _f: &File,
+        dsts: &mut [IoVec],
+        _offset: i64,
+        _blocking: bool,
+    ) -> Result<i64> {
         let count = IoVec::NumBytes(dsts);
 
         if count == 0 {
-            return Ok(0)
+            return Ok(0);
         }
 
         match self.ep.RecvMsg(dsts, false, 0, false, None) {
@@ -284,17 +318,24 @@ impl FileOperations for UnixSocketOperations {
                 /*if self.IsPacket() {
                     return Err(Error::SysError(SysErr::EAGAIN))
                 }*/
-                return Ok(0)
+                return Ok(0);
             }
             Err(e) => return Err(e),
-            Ok((n, _, _, _)) => {
-                return Ok(n as i64)
-            }
+            Ok((n, _, _, _)) => return Ok(n as i64),
         }
     }
 
-    fn WriteAt(&self, task: &Task, _f: &File, srcs: &[IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
-        let ctrl = if self.ep.ConnectedPasscred() || self.ep.Passcred() {
+    fn WriteAt(
+        &self,
+        task: &Task,
+        _f: &File,
+        srcs: &[IoVec],
+        _offset: i64,
+        _blocking: bool,
+    ) -> Result<i64> {
+        let ConnectedPasscred = self.ep.ConnectedPasscred();
+        let Passcred = self.ep.Passcred();
+        let ctrl = if ConnectedPasscred || Passcred {
             NewControlMessage(task, Some(self.ep.clone()), None)
         } else {
             SCMControlMessages::default()
@@ -304,26 +345,33 @@ impl FileOperations for UnixSocketOperations {
 
         if count == 0 {
             let nInt = self.ep.SendMsg(srcs, &ctrl, &None)?;
-            return Ok(nInt as i64)
+            return Ok(nInt as i64);
         }
 
         match self.ep.SendMsg(srcs, &ctrl, &None) {
             Err(e) => return Err(e),
-            Ok(n) => return Ok(n as i64)
+            Ok(n) => return Ok(n as i64),
         }
     }
 
     fn Append(&self, task: &Task, f: &File, srcs: &[IoVec]) -> Result<(i64, i64)> {
         let n = self.WriteAt(task, f, srcs, 0, false)?;
-        return Ok((n, 0))
+        return Ok((n, 0));
     }
 
-    fn Fsync(&self, _task: &Task, _f: &File, _start: i64, _end: i64, _syncType: SyncType) -> Result<()> {
-        return Err(Error::SysError(SysErr::EINVAL))
+    fn Fsync(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _start: i64,
+        _end: i64,
+        _syncType: SyncType,
+    ) -> Result<()> {
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     fn Flush(&self, _task: &Task, _f: &File) -> Result<()> {
-        return Ok(())
+        return Ok(());
     }
 
     fn UnstableAttr(&self, task: &Task, f: &File) -> Result<UnstableAttr> {
@@ -332,15 +380,21 @@ impl FileOperations for UnixSocketOperations {
     }
 
     fn Ioctl(&self, task: &Task, _f: &File, fd: i32, request: u64, val: u64) -> Result<()> {
-        return Ioctl(task, &self.ep, fd, request, val)
+        return Ioctl(task, &self.ep, fd, request, val);
     }
 
-    fn IterateDir(&self, _task: &Task, _d: &Dirent, _dirCtx: &mut DirCtx, _offset: i32) -> (i32, Result<i64>) {
-        return (0, Err(Error::SysError(SysErr::ENOTDIR)))
+    fn IterateDir(
+        &self,
+        _task: &Task,
+        _d: &Dirent,
+        _dirCtx: &mut DirCtx,
+        _offset: i32,
+    ) -> (i32, Result<i64>) {
+        return (0, Err(Error::SysError(SysErr::ENOTDIR)));
     }
 
     fn Mappable(&self) -> Result<HostInodeOp> {
-        return Err(Error::SysError(SysErr::ENODEV))
+        return Err(Error::SysError(SysErr::ENODEV));
     }
 }
 
@@ -359,7 +413,7 @@ pub fn ExtractEndpoint(task: &Task, sockAddr: &[u8]) -> Result<BoundEndpoint> {
             Some(ep) => ep,
         };
 
-        return Ok(ep)
+        return Ok(ep);
     }
 
     let path = String::from_utf8(path).unwrap();
@@ -368,23 +422,31 @@ pub fn ExtractEndpoint(task: &Task, sockAddr: &[u8]) -> Result<BoundEndpoint> {
     let root = task.fsContext.RootDirectory();
     let cwd = task.fsContext.WorkDirectory();
     let mut remainingTraversals = 10; //DefaultTraversalLimit
-    let mns = task.Thread().MountNamespace();
-    let d = mns.FindDirent(task, &root, Some(cwd), &path, &mut remainingTraversals, true)?;
+    let mns = task.mountNS.clone();
+    let d = mns.FindDirent(
+        task,
+        &root,
+        Some(cwd),
+        &path,
+        &mut remainingTraversals,
+        true,
+    )?;
 
     // Extract the endpoint if one is there.
     let inode = d.Inode();
     let iops = inode.lock().InodeOp.clone();
-    let fullName = d.MyFullName();
+    let fullName = "/".to_string() + &task.Thread().ContainerID() + &d.MyFullName();
 
     //if it is host unix socket, the ep is in virtual unix
     if iops.InodeType() == InodeType::Socket
-        && iops.as_any().downcast_ref::<HostInodeOp>().is_some() {
+        && iops.as_any().downcast_ref::<HostInodeOp>().is_some()
+    {
         let ep = match BoundEndpoint(&fullName.into_bytes()) {
             None => return Err(Error::SysError(SysErr::ECONNREFUSED)),
             Some(ep) => ep,
         };
 
-        return Ok(ep)
+        return Ok(ep);
     }
 
     let ep = match inode.BoundEndpoint(task, &path) {
@@ -392,7 +454,7 @@ pub fn ExtractEndpoint(task: &Task, sockAddr: &[u8]) -> Result<BoundEndpoint> {
         Some(ep) => ep,
     };
 
-    return Ok(ep)
+    return Ok(ep);
 }
 
 impl SockOperations for UnixSocketOperations {
@@ -406,20 +468,27 @@ impl SockOperations for UnixSocketOperations {
                 // instead of ErrWrongProtocolForSocket.
                 let path = ExtractPath(socketaddr)?;
                 if path[0] == 0 {
-                    return Err(Error::SysError(SysErr::ECONNREFUSED))
+                    return Err(Error::SysError(SysErr::ECONNREFUSED));
                 } else {
-                    return Err(Error::SysError(SysErr::EPROTOTYPE))
+                    return Err(Error::SysError(SysErr::EPROTOTYPE));
                 }
             }
             Err(e) => return Err(e),
             _ => (),
         }
-        return Ok(0)
+        return Ok(0);
     }
 
     // Accept implements the linux syscall accept(2) for sockets backed by
     // a transport.Endpoint.
-    fn Accept(&self, task: &Task, addr: &mut [u8], addrlen: &mut u32, flags: i32, blocking: bool) -> Result<i64> {
+    fn Accept(
+        &self,
+        task: &Task,
+        addr: &mut [u8],
+        addrlen: &mut u32,
+        flags: i32,
+        blocking: bool,
+    ) -> Result<i64> {
         let ep = match self.ep.Accept() {
             Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
                 if !blocking {
@@ -436,7 +505,7 @@ impl SockOperations for UnixSocketOperations {
 
         let fd = HostSpace::Socket(AFType::AF_UNIX, self.stype, 0) as i32;
         if fd < 0 {
-            return Err(Error::SysError(-fd))
+            return Err(Error::SysError(-fd));
         }
 
         let ns = NewUnixSocket(task, ep, self.stype, fd)?;
@@ -498,13 +567,23 @@ impl SockOperations for UnixSocketOperations {
                 };
 
                 let mut remainingTraversals = 10;
-                d = task.Thread().MountNamespace().FindDirent(task, &root, Some(cwd), &subpath.to_string(), &mut remainingTraversals, true)?;
+                d = task.mountNS.clone().FindDirent(
+                    task,
+                    &root,
+                    Some(cwd),
+                    &subpath.to_string(),
+                    &mut remainingTraversals,
+                    true,
+                )?;
                 name = &p[lastSlash as usize + 1..];
             }
 
             // Create the socket.
             let permisson = FilePermissions {
-                User: PermMask {read: true, ..Default::default()},
+                User: PermMask {
+                    read: true,
+                    ..Default::default()
+                },
                 ..Default::default()
             };
 
@@ -513,16 +592,21 @@ impl SockOperations for UnixSocketOperations {
 
             //if it is host folder, create shadow host unix socket bind
             if iops.InodeType() == InodeType::Directory
-                && iops.as_any().downcast_ref::<HostInodeOp>().is_some() {
-
-                let fullName = d.MyFullName() + "/" + &name.to_string();
+                && iops.as_any().downcast_ref::<HostInodeOp>().is_some()
+            {
+                let fullName = "/".to_string() + &task.Thread().ContainerID() + &d.MyFullName() + "/" + &name.to_string();
 
                 let hostfd = self.hostfd;
                 let addr = SockAddrUnix::New(&fullName).ToNative();
 
-                let ret = HostSpace::Bind(hostfd, &addr as * const _ as u64, (UNIX_PATH_MAX + 2) as u32, task.Umask());
+                let ret = HostSpace::Bind(
+                    hostfd,
+                    &addr as *const _ as u64,
+                    (UNIX_PATH_MAX + 2) as u32,
+                    task.Umask(),
+                );
                 if ret < 0 {
-                    return Err(Error::SysError(-ret as i32))
+                    return Err(Error::SysError(-ret as i32));
                 }
 
                 // handle the host unix socket as virtual unix socket
@@ -536,7 +620,7 @@ impl SockOperations for UnixSocketOperations {
             }
         }
 
-        return Ok(0)
+        return Ok(0);
     }
 
     fn Listen(&self, _task: &Task, backlog: i32) -> Result<i64> {
@@ -548,18 +632,27 @@ impl SockOperations for UnixSocketOperations {
         let f = ConvertShutdown(how)?;
 
         self.ep.Shutdown(f)?;
-        return Ok(0)
+        return Ok(0);
     }
 
     fn GetSockOpt(&self, task: &Task, level: i32, name: i32, opt: &mut [u8]) -> Result<i64> {
-        let ret = GetSockOpt(task, self, &self.ep, AFType::AF_UNIX, self.ep.Type(), level, name, opt.len())?;
+        let ret = GetSockOpt(
+            task,
+            self,
+            &self.ep,
+            AFType::AF_UNIX,
+            self.ep.Type(),
+            level,
+            name,
+            opt.len(),
+        )?;
         let size = ret.Marsh(opt)?;
-        return Ok(size as i64)
+        return Ok(size as i64);
     }
 
     fn SetSockOpt(&self, task: &Task, level: i32, name: i32, opt: &[u8]) -> Result<i64> {
         SetSockOpt(task, self, &self.ep, level, name, opt)?;
-        return Ok(0)
+        return Ok(0);
     }
 
     fn GetSockName(&self, _task: &Task, socketaddr: &mut [u8]) -> Result<i64> {
@@ -568,7 +661,7 @@ impl SockOperations for UnixSocketOperations {
         let l = addr.Len();
         SockAddr::Unix(addr).Marsh(socketaddr, l)?;
 
-        return Ok(l as i64)
+        return Ok(l as i64);
     }
 
     fn GetPeerName(&self, _task: &Task, socketaddr: &mut [u8]) -> Result<i64> {
@@ -577,11 +670,18 @@ impl SockOperations for UnixSocketOperations {
         let l = addr.Len();
         SockAddr::Unix(addr).Marsh(socketaddr, l as usize)?;
 
-        return Ok(l as i64)
+        return Ok(l as i64);
     }
 
-    fn RecvMsg(&self, task: &Task, dsts: &mut [IoVec], flags: i32, deadline: Option<Time>, senderRequested: bool, controlDataLen: usize)
-               -> Result<(i64, i32, Option<(SockAddr, usize)>, Vec<u8>)>  {
+    fn RecvMsg(
+        &self,
+        task: &Task,
+        dsts: &mut [IoVec],
+        flags: i32,
+        deadline: Option<Time>,
+        senderRequested: bool,
+        controlDataLen: usize,
+    ) -> Result<(i64, i32, Option<(SockAddr, usize)>, Vec<u8>)> {
         let trunc = flags & MsgType::MSG_TRUNC != 0;
         let peek = flags & MsgType::MSG_PEEK != 0;
         let dontWait = flags & MsgType::MSG_DONTWAIT != 0;
@@ -612,30 +712,35 @@ impl SockOperations for UnixSocketOperations {
 
         let mut unixAddr = SockAddrUnix::default();
 
-        let mut total : i64 = 0;
+        let mut total: i64 = 0;
         let mut sender = None;
         let mut outputctrls = SCMControlMessages::default();
-        let mut ControlVec = self.encodeControlMsg(task, outputctrls, controlDataLen, &mut msgFlags, cloexec);
+        let mut ControlVec =
+            self.encodeControlMsg(task, outputctrls, controlDataLen, &mut msgFlags, cloexec);
         let size = IoVec::NumBytes(dsts);
         let buf = DataBuff::New(size);
 
         let mut bs = BlockSeqToIoVecs(buf.BlockSeq());
-        match self.ep.RecvMsg(&mut bs, wantCreds, numRights as u64, peek, Some(&mut unixAddr)) {
+        match self.ep.RecvMsg(
+            &mut bs,
+            wantCreds,
+            numRights as u64,
+            peek,
+            Some(&mut unixAddr),
+        ) {
             Err(Error::SysError(SysErr::EAGAIN)) => {
                 if dontWait {
-                    return Err(Error::SysError(SysErr::EAGAIN))
+                    return Err(Error::SysError(SysErr::EAGAIN));
                 }
             }
             Err(Error::ErrClosedForReceive) => {
                 if self.IsPacket() {
-                    return Err(Error::SysError(SysErr::EAGAIN))
+                    return Err(Error::SysError(SysErr::EAGAIN));
                 }
-                task.CopyDataOutToIovs(&buf.buf[0..total as usize], dsts)?;
-                return Ok((total, msgFlags, sender, ControlVec))
+                let len = task.CopyDataOutToIovs(&buf.buf[0..total as usize], dsts, false)?;
+                return Ok((len as i64, msgFlags, sender, ControlVec));
             }
-            Err(e) => {
-                return Err(e)
-            }
+            Err(e) => return Err(e),
             Ok((mut n, ms, ctrls, ctrunc)) => {
                 sender = if senderRequested {
                     let fromLen = unixAddr.Len();
@@ -645,7 +750,13 @@ impl SockOperations for UnixSocketOperations {
                 };
 
                 outputctrls = ctrls;
-                ControlVec = self.encodeControlMsg(task, outputctrls, controlDataLen, &mut msgFlags, cloexec);
+                ControlVec = self.encodeControlMsg(
+                    task,
+                    outputctrls,
+                    controlDataLen,
+                    &mut msgFlags,
+                    cloexec,
+                );
                 if ctrunc {
                     msgFlags |= MsgType::MSG_CTRUNC;
                 }
@@ -669,8 +780,8 @@ impl SockOperations for UnixSocketOperations {
                         n = ms;
                     }
 
-                    task.CopyDataOutToIovs(&buf.buf[0..n as usize], dsts)?;
-                    return Ok((n as i64, msgFlags, sender, ControlVec))
+                    let len = task.CopyDataOutToIovs(&buf.buf[0..n as usize], dsts, false)?;
+                    return Ok((len as i64, msgFlags, sender, ControlVec));
                 }
 
                 let seq = seq.DropFirst(n as u64);
@@ -685,20 +796,26 @@ impl SockOperations for UnixSocketOperations {
 
         loop {
             let mut unixAddr = SockAddrUnix::default();
-            match self.ep.RecvMsg(&mut bs, wantCreds, numRights as u64, peek, Some(&mut unixAddr)) {
+            match self.ep.RecvMsg(
+                &mut bs,
+                wantCreds,
+                numRights as u64,
+                peek,
+                Some(&mut unixAddr),
+            ) {
                 Err(Error::SysError(SysErr::EAGAIN)) => (),
                 Err(Error::ErrClosedForReceive) => {
-                    task.CopyDataOutToIovs(&buf.buf[0..total as usize], dsts)?;
-                    return Ok((total as i64, msgFlags, sender, ControlVec))
+                    let len = task.CopyDataOutToIovs(&buf.buf[0..total as usize], dsts, false)?;
+                    return Ok((len as i64, msgFlags, sender, ControlVec));
                 }
                 Err(e) => {
                     if total > 0 {
-                        task.CopyDataOutToIovs(&buf.buf[0..total as usize], dsts)?;
-                        return Ok((total as i64, msgFlags, sender, ControlVec))
+                        let len = task.CopyDataOutToIovs(&buf.buf[0..total as usize], dsts, false)?;
+                        return Ok((len as i64, msgFlags, sender, ControlVec));
                     }
 
-                    return Err(e)
-                },
+                    return Err(e);
+                }
                 Ok((n, ms, ctrls, ctrunc)) => {
                     let sender = if senderRequested {
                         let fromLen = unixAddr.Len();
@@ -732,9 +849,15 @@ impl SockOperations for UnixSocketOperations {
                         if self.IsPacket() && n < ms {
                             msgFlags |= MsgType::MSG_TRUNC;
                         }
-                        let ControlVector = self.encodeControlMsg(task, ctrls, controlDataLen, &mut msgFlags, cloexec);
-                        task.CopyDataOutToIovs(&buf.buf[0..total as usize], dsts)?;
-                        return Ok((total, msgFlags, sender, ControlVector))
+                        let ControlVector = self.encodeControlMsg(
+                            task,
+                            ctrls,
+                            controlDataLen,
+                            &mut msgFlags,
+                            cloexec,
+                        );
+                        let len = task.CopyDataOutToIovs(&buf.buf[0..total as usize], dsts, false)?;
+                        return Ok((len as i64, msgFlags, sender, ControlVector));
                     }
 
                     let seq = seq.DropFirst(n as u64);
@@ -745,24 +868,31 @@ impl SockOperations for UnixSocketOperations {
             match task.blocker.BlockWithMonoTimer(true, deadline) {
                 Err(Error::SysError(SysErr::ETIMEDOUT)) => {
                     if total > 0 {
-                        task.CopyDataOutToIovs(&buf.buf[0..total as usize], dsts)?;
-                        return Ok((total as i64, msgFlags, sender, ControlVec))
+                        let len = task.CopyDataOutToIovs(&buf.buf[0..total as usize], dsts, false)?;
+                        return Ok((len as i64, msgFlags, sender, ControlVec));
                     }
-                    return Err(Error::SysError(SysErr::EAGAIN))
+                    return Err(Error::SysError(SysErr::EAGAIN));
                 }
                 Err(e) => return Err(e),
-                _ =>(),
+                _ => (),
             }
         }
     }
 
-    fn SendMsg(&self, task: &Task, srcs: &[IoVec], flags: i32, msgHdr: &mut MsgHdr, deadline: Option<Time>) -> Result<i64> {
+    fn SendMsg(
+        &self,
+        task: &Task,
+        srcs: &[IoVec],
+        flags: i32,
+        msgHdr: &mut MsgHdr,
+        deadline: Option<Time>,
+    ) -> Result<i64> {
         let to: Vec<u8> = if msgHdr.msgName != 0 {
             if self.stype == SockType::SOCK_SEQPACKET {
                 Vec::new()
             } else if self.stype == SockType::SOCK_STREAM {
                 if self.State() == SS_CONNECTED {
-                    return Err(Error::SysError(SysErr::EISCONN))
+                    return Err(Error::SysError(SysErr::EISCONN));
                 }
 
                 return Err(Error::SysError(SysErr::EOPNOTSUPP));
@@ -787,7 +917,7 @@ impl SockOperations for UnixSocketOperations {
         };
 
         let ctrlMsg = if controlVec.len() > 0 {
-             Parse(&controlVec)?
+            Parse(&controlVec)?
         } else {
             ControlMessages::default()
         };
@@ -796,27 +926,27 @@ impl SockOperations for UnixSocketOperations {
 
         let size = IoVec::NumBytes(srcs);
         let mut buf = DataBuff::New(size);
-        task.CopyDataInFromIovs(&mut buf.buf, srcs)?;
-        let n = match self.ep.SendMsg(&buf.Iovs(), &scmCtrlMsg, &toEp) {
+        let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;
+        let n = match self.ep.SendMsg(&buf.Iovs(len), &scmCtrlMsg, &toEp) {
             Err(Error::SysError(SysErr::EAGAIN)) => {
                 if flags & MsgType::MSG_DONTWAIT != 0 {
-                    return Err(Error::SysError(SysErr::EAGAIN))
+                    return Err(Error::SysError(SysErr::EAGAIN));
                 }
                 0
             }
             Err(e) => return Err(e),
             Ok(n) => {
                 if flags & MsgType::MSG_DONTWAIT != 0 {
-                    return Ok(n as i64)
+                    return Ok(n as i64);
                 }
                 n
-            },
+            }
         };
 
         // We'll have to block. Register for notification and keep trying to
         // send all the data.
         let general = task.blocker.generalEntry.clone();
-        self.EventRegister(task, &general, EVENT_OUT);
+        self.EventRegister(task, &general, WRITEABLE_EVENT);
         defer!(self.EventUnregister(task, &general));
 
         let mut total = n;
@@ -827,16 +957,14 @@ impl SockOperations for UnixSocketOperations {
             let left = bs.DropFirst(total as u64);
             let srcs = left.ToIoVecs();
             let n = match self.ep.SendMsg(&srcs, &scmCtrlMsg, &toEp) {
-                Err(Error::SysError(SysErr::EAGAIN)) => {
-                    0
-                }
+                Err(Error::SysError(SysErr::EAGAIN)) => 0,
                 Err(e) => {
                     if total > 0 {
-                        return Ok(total as i64)
+                        return Ok(total as i64);
                     }
-                    return Err(e)
-                },
-                Ok(n) => n
+                    return Err(e);
+                }
+                Ok(n) => n,
             };
 
             total += n;
@@ -848,11 +976,11 @@ impl SockOperations for UnixSocketOperations {
                 Err(e) => {
                     return Err(e);
                 }
-                _ => ()
+                _ => (),
             }
         }
 
-        return Ok(total as i64)
+        return Ok(total as i64);
     }
 
     fn SetRecvTimeout(&self, ns: i64) {
@@ -864,26 +992,25 @@ impl SockOperations for UnixSocketOperations {
     }
 
     fn RecvTimeout(&self) -> i64 {
-        return self.recv.load(Ordering::Relaxed)
+        return self.recv.load(Ordering::Relaxed);
     }
 
     fn SendTimeout(&self) -> i64 {
-        return self.send.load(Ordering::Relaxed)
+        return self.send.load(Ordering::Relaxed);
     }
 }
 
-pub struct UnixSocketProvider {
-}
+pub struct UnixSocketProvider {}
 
 impl Provider for UnixSocketProvider {
     fn Socket(&self, task: &Task, stype: i32, protocol: i32) -> Result<Option<Arc<File>>> {
         if protocol != 0 && protocol != AFType::AF_UNIX {
-            return Err(Error::SysError(SysErr::EPROTONOSUPPORT))
+            return Err(Error::SysError(SysErr::EPROTONOSUPPORT));
         }
 
         let fd = HostSpace::Socket(AFType::AF_UNIX, stype, protocol) as i32;
         if fd < 0 {
-            return Err(Error::SysError(-fd))
+            return Err(Error::SysError(-fd));
         }
 
         // Create the endpoint and socket.
@@ -891,41 +1018,46 @@ impl Provider for UnixSocketProvider {
             SockType::SOCK_DGRAM => {
                 let ep = ConnectionLessEndPoint::New(fd);
                 let ep = BoundEndpoint::ConnectLess(ep);
-                return Ok(Some(Arc::new(NewUnixSocket(task, ep, stype, fd)?)))
+                return Ok(Some(Arc::new(NewUnixSocket(task, ep, stype, fd)?)));
             }
             SockType::SOCK_SEQPACKET => {
                 let ep = ConnectionedEndPoint::New(stype, fd);
                 let ep = BoundEndpoint::Connected(ep);
-                return Ok(Some(Arc::new(NewUnixSocket(task, ep, stype, fd)?)))
+                return Ok(Some(Arc::new(NewUnixSocket(task, ep, stype, fd)?)));
             }
             SockType::SOCK_STREAM => {
                 let ep = ConnectionedEndPoint::New(stype, fd);
                 let ep = BoundEndpoint::Connected(ep);
-                return Ok(Some(Arc::new(NewUnixSocket(task, ep, stype, fd)?)))
+                return Ok(Some(Arc::new(NewUnixSocket(task, ep, stype, fd)?)));
             }
-            _ => return Err(Error::SysError(SysErr::EINVAL))
+            _ => return Err(Error::SysError(SysErr::EINVAL)),
         }
     }
 
-    fn Pair(&self, task: &Task, stype: i32, protocol: i32) -> Result<Option<(Arc<File>, Arc<File>)>> {
+    fn Pair(
+        &self,
+        task: &Task,
+        stype: i32,
+        protocol: i32,
+    ) -> Result<Option<(Arc<File>, Arc<File>)>> {
         if protocol != 0 && protocol != AFType::AF_UNIX {
-            return Err(Error::SysError(SysErr::EPROTONOSUPPORT))
+            return Err(Error::SysError(SysErr::EPROTONOSUPPORT));
         }
 
         match stype {
             SockType::SOCK_STREAM => (),
             SockType::SOCK_DGRAM | SockType::SOCK_SEQPACKET => (),
-            _ => return Err(Error::SysError(SysErr::EINVAL))
+            _ => return Err(Error::SysError(SysErr::EINVAL)),
         }
 
         let fd1 = HostSpace::Socket(AFType::AF_UNIX, stype, protocol) as i32;
         if fd1 < 0 {
-            return Err(Error::SysError(-fd1))
+            return Err(Error::SysError(-fd1));
         }
 
         let fd2 = HostSpace::Socket(AFType::AF_UNIX, stype, protocol) as i32;
         if fd2 < 0 {
-            return Err(Error::SysError(-fd2))
+            return Err(Error::SysError(-fd2));
         }
 
         // Create the endpoints and sockets.
@@ -935,10 +1067,12 @@ impl Provider for UnixSocketProvider {
         let s1 = NewUnixSocket(task, ep1, stype, fd1)?;
         let s2 = NewUnixSocket(task, ep2, stype, fd2)?;
 
-        return Ok(Some((Arc::new(s1), Arc::new(s2))))
+        return Ok(Some((Arc::new(s1), Arc::new(s2))));
     }
 }
 
 pub fn Init() {
-    FAMILIAES.write().RegisterProvider(AFType::AF_UNIX, Box::new(UnixSocketProvider { }))
+    FAMILIAES
+        .write()
+        .RegisterProvider(AFType::AF_UNIX, Box::new(UnixSocketProvider {}))
 }

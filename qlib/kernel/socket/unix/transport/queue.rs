@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
-use core::ops::Deref;
 use alloc::collections::linked_list::LinkedList;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::ops::Deref;
 
 use super::super::super::super::super::common::*;
 use super::super::super::super::super::linux_def::*;
@@ -59,7 +59,7 @@ impl Message {
             Address: Address,
         };
 
-        return Self(Arc::new(QMutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)));
     }
 
     pub fn Length(&self) -> usize {
@@ -85,7 +85,6 @@ impl PartialEq for Message {
 }
 
 impl Eq for Message {}
-
 
 pub struct MsgQueueInternal {
     pub ReaderQueue: Queue,
@@ -142,7 +141,7 @@ impl MsgQueue {
             dataList: LinkedList::new(),
         };
 
-        return Self(Arc::new(QMutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)));
     }
 
     // Close closes q for reading and writing. It is immediately not writable and
@@ -201,7 +200,7 @@ impl MsgQueue {
 
         if q.closed {
             //return Err(Error::ErrClosedForReceive)
-            return Err(Error::SysError(SysErr::EPIPE))
+            return Err(Error::SysError(SysErr::EPIPE));
         }
 
         let free = q.limit - q.used;
@@ -211,7 +210,7 @@ impl MsgQueue {
         if l > free && truncate {
             if free == 0 {
                 // Message can't fit right now.
-                return Err(Error::SysError(SysErr::EAGAIN))
+                return Err(Error::SysError(SysErr::EAGAIN));
             }
 
             e.Truncate(free);
@@ -221,19 +220,19 @@ impl MsgQueue {
 
         if l > q.limit {
             // Message is too big to ever fit.
-            return Err(Error::SysError(SysErr::EMSGSIZE))
+            return Err(Error::SysError(SysErr::EMSGSIZE));
         }
 
         if l > free {
             // Message can't fit right now.
-            return Err(Error::SysError(SysErr::EAGAIN))
+            return Err(Error::SysError(SysErr::EAGAIN));
         }
 
         let notify = q.dataList.front().is_none();
         q.used += l;
         q.dataList.push_back(e);
 
-        return Ok((l, notify))
+        return Ok((l, notify));
     }
 
     // Dequeue removes the first entry in the data queue, if one exists.
@@ -247,12 +246,12 @@ impl MsgQueue {
         if q.dataList.front().is_none() {
             if q.closed {
                 if q.unread {
-                    return Err(Error::SysError(SysErr::ECONNRESET))
+                    return Err(Error::SysError(SysErr::ECONNRESET));
                 } else {
-                    return Err(Error::ErrClosedForReceive)
+                    return Err(Error::ErrClosedForReceive);
                 }
             } else {
-                return Err(Error::SysError(SysErr::EAGAIN))
+                return Err(Error::SysError(SysErr::EAGAIN));
             }
         }
 
@@ -263,7 +262,7 @@ impl MsgQueue {
 
         notify = notify && q.BufWritable();
 
-        return Ok((e, notify))
+        return Ok((e, notify));
     }
 
     // Peek returns the first entry in the data queue, if one exists.
@@ -273,16 +272,16 @@ impl MsgQueue {
         if q.dataList.front().is_none() {
             if q.closed {
                 if q.unread {
-                    return Err(Error::SysError(SysErr::ECONNRESET))
+                    return Err(Error::SysError(SysErr::ECONNRESET));
                 } else {
-                    return Err(Error::ErrClosedForReceive)
+                    return Err(Error::ErrClosedForReceive);
                 }
             } else {
-                return Err(Error::SysError(SysErr::EAGAIN))
+                return Err(Error::SysError(SysErr::EAGAIN));
             }
         }
 
-        return Ok(q.dataList.front().unwrap().clone())
+        return Ok(q.dataList.front().unwrap().clone());
     }
 
     // QueuedSize returns the number of bytes currently in the queue, that is, the

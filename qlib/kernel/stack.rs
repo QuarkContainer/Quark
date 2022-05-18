@@ -38,21 +38,43 @@ pub struct StackLayout {
 }
 
 pub struct Stack {
-    pub sp: u64
+    pub sp: u64,
 }
 
 impl Stack {
     pub fn New(addr: u64) -> Self {
-        return Stack {
-            sp: addr
-        }
+        return Stack { sp: addr };
     }
 
     pub fn PushType<T: Copy>(&mut self, task: &Task, data: &T) -> Result<u64> {
         let size = mem::size_of::<T>();
         self.sp -= size as u64;
-        task.CopyOutObj(data, self.sp).unwrap();
+        task.CopyOutObj(data, self.sp).expect(&format!(
+            "data {:x}, sp {:x}",
+            data as *const _ as u64, self.sp
+        ));
         return Ok(self.sp);
+    }
+
+    pub fn PushSlice(&mut self, task: &Task, data: &[u8]) -> Result<u64> {
+        self.sp -= data.len() as u64;
+        task.CopyOutSlice(data, self.sp, data.len()).expect(&format!(
+            "data {:x}, sp {:x}",
+            &data[0] as *const _ as u64, self.sp
+        ));
+        return Ok(self.sp);
+    }
+
+    pub fn PopSlice(&mut self, task: &Task, data: &mut [u8]) -> Result<u64> {
+        let v : Vec<u8> = task.CopyInVec(self.sp, data.len()).expect(&format!(
+            "data {:x}, sp {:x}",
+            &data[0] as *const _ as u64, self.sp));
+        for i in 0..data.len() {
+            data[i] = v[i];
+        }
+
+        self.sp += data.len() as u64;
+        return Ok(self.sp)
     }
 
     pub fn PopType<T: Copy>(&mut self, task: &Task, data: &mut T) -> Result<u64> {
@@ -67,43 +89,49 @@ impl Stack {
         let len = str.len();
         self.sp = self.sp - len as u64 - 1;
         task.CopyOutString(self.sp, len + 1, str)?;
-        return Ok(self.sp)
+        return Ok(self.sp);
     }
 
     pub fn PushU64(&mut self, task: &Task, val: u64) -> Result<u64> {
         self.sp = self.sp - 8;
         task.CopyOutObj(&val, self.sp)?;
-        return Ok(self.sp)
+        return Ok(self.sp);
     }
 
     pub fn PushU32(&mut self, task: &Task, val: u32) -> Result<u64> {
         self.sp = self.sp - 4;
         task.CopyOutObj(&val, self.sp)?;
-        return Ok(self.sp)
+        return Ok(self.sp);
     }
 
     pub fn PushU16(&mut self, task: &Task, val: u16) -> Result<u64> {
         self.sp = self.sp - 2;
         task.CopyOutObj(&val, self.sp)?;
-        return Ok(self.sp)
+        return Ok(self.sp);
     }
 
     pub fn PushU8(&mut self, task: &Task, val: u8) -> Result<u64> {
         self.sp = self.sp - 1;
         task.CopyOutObj(&val, self.sp)?;
-        return Ok(self.sp)
+        return Ok(self.sp);
     }
 
     pub fn Pad16(&mut self, _task: &Task) -> Result<u64> {
         let offset = self.sp & 0xf;
         self.sp -= offset;
-        return Ok(self.sp)
+        return Ok(self.sp);
     }
 
     // LoadEnv pushes the given args, env and aux vector to the stack using the
     // well-known format for a new executable. It returns the start and end
     // of the argument and environment vectors.
-    pub fn LoadEnv(&mut self, task: &Task, envs: &[String], args: &[String], auxv: &[AuxEntry]) -> Result<StackLayout> {
+    pub fn LoadEnv(
+        &mut self,
+        task: &Task,
+        envs: &[String],
+        args: &[String],
+        auxv: &[AuxEntry],
+    ) -> Result<StackLayout> {
         let mut l = StackLayout::default();
 
         // Make sure we start with a 16-byte alignment.
@@ -170,33 +198,30 @@ impl Stack {
 
         /*argc*/
         self.PushU64(task, argAddrs.len() as u64)?;
-        return Ok(l)
+        return Ok(l);
     }
 }
 
-
 pub struct KernelStack {
-    pub sp: u64
+    pub sp: u64,
 }
 
 impl KernelStack {
     pub fn New(addr: u64) -> Self {
-        return Self {
-            sp: addr
-        }
+        return Self { sp: addr };
     }
 
     pub fn PushU64(&mut self, val: u64) -> u64 {
         self.sp = self.sp - 8;
         unsafe {
-            *(self.sp as * mut u64) = val;
+            *(self.sp as *mut u64) = val;
         }
-        return self.sp
+        return self.sp;
     }
 
     pub fn Pad16(&mut self, _task: &Task) -> Result<u64> {
         let offset = self.sp & 0xf;
         self.sp -= offset;
-        return Ok(self.sp)
+        return Ok(self.sp);
     }
 }

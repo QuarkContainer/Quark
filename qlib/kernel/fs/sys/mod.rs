@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod sys;
-pub mod fs;
 pub mod devices;
+pub mod fs;
+pub mod sys;
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
+use alloc::sync::Arc;
 
 use super::filesystems::*;
 

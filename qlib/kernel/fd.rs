@@ -14,10 +14,10 @@
 
 use alloc::vec::Vec;
 
-use super::Kernel::HostSpace;
 use super::super::common::*;
 use super::super::linux_def::*;
 use super::super::mem::io::*;
+use super::Kernel::HostSpace;
 
 pub struct MemBuf {
     pub data: Vec<u8>,
@@ -29,7 +29,7 @@ impl MemBuf {
         return Self {
             data: Vec::with_capacity(size),
             offset: 0,
-        }
+        };
     }
 
     pub fn Len(&self) -> usize {
@@ -52,7 +52,7 @@ impl IOReader for MemBuf {
 
         self.offset += len;
 
-        return Ok(len as i64)
+        return Ok(len as i64);
     }
 }
 
@@ -62,13 +62,13 @@ impl IOWriter for MemBuf {
             self.data.push(buf[i])
         }
 
-        return Ok(buf.len() as i64)
+        return Ok(buf.len() as i64);
     }
 }
 
 pub fn IORead(fd: i32, buf: &[IoVec]) -> Result<i64> {
     if buf.len() == 0 {
-        return Ok(0)
+        return Ok(0);
     }
 
     let iovsAddr = &buf[0] as *const _ as u64;
@@ -77,15 +77,15 @@ pub fn IORead(fd: i32, buf: &[IoVec]) -> Result<i64> {
     let ret = HostSpace::IORead(fd, iovsAddr, iovcnt);
 
     if ret < 0 {
-        return Err(Error::SysError(-ret as i32))
+        return Err(Error::SysError(-ret as i32));
     }
 
-    return Ok(ret)
+    return Ok(ret);
 }
 
 pub fn IOReadAt(fd: i32, buf: &[IoVec], offset: u64) -> Result<i64> {
     if buf.len() == 0 {
-        return Ok(0)
+        return Ok(0);
     }
 
     let iovsAddr = &buf[0] as *const _ as u64;
@@ -97,15 +97,15 @@ pub fn IOReadAt(fd: i32, buf: &[IoVec], offset: u64) -> Result<i64> {
     let ret = HostSpace::IOReadAt(fd, iovsAddr, iovcnt, offset);
 
     if ret < 0 {
-        return Err(Error::SysError(-ret as i32))
+        return Err(Error::SysError(-ret as i32));
     }
 
-    return Ok(ret)
+    return Ok(ret);
 }
 
 pub fn IOTTYRead(fd: i32, buf: &[IoVec]) -> Result<i64> {
     if buf.len() == 0 {
-        return Ok(0)
+        return Ok(0);
     }
 
     let iovsAddr = &buf[0] as *const _ as u64;
@@ -117,15 +117,15 @@ pub fn IOTTYRead(fd: i32, buf: &[IoVec]) -> Result<i64> {
     let ret = HostSpace::IOTTYRead(fd, iovsAddr, iovcnt);
 
     if ret < 0 {
-        return Err(Error::SysError(-ret as i32))
+        return Err(Error::SysError(-ret as i32));
     }
 
-    return Ok(ret)
+    return Ok(ret);
 }
 
 pub fn IOWrite(fd: i32, buf: &[IoVec]) -> Result<i64> {
     if buf.len() == 0 {
-        return Ok(0)
+        return Ok(0);
     }
 
     let iovsAddr = &buf[0] as *const _ as u64;
@@ -133,15 +133,15 @@ pub fn IOWrite(fd: i32, buf: &[IoVec]) -> Result<i64> {
     let ret = HostSpace::IOWrite(fd, iovsAddr, iovcnt);
 
     if ret < 0 {
-        return Err(Error::SysError(-ret as i32))
+        return Err(Error::SysError(-ret as i32));
     }
 
-    return Ok(ret)
+    return Ok(ret);
 }
 
 pub fn IOWriteAt(fd: i32, buf: &[IoVec], offset: u64) -> Result<i64> {
     if buf.len() == 0 {
-        return Ok(0)
+        return Ok(0);
     }
 
     let iovsAddr = &buf[0] as *const _ as u64;
@@ -152,10 +152,10 @@ pub fn IOWriteAt(fd: i32, buf: &[IoVec], offset: u64) -> Result<i64> {
     let ret = HostSpace::IOWriteAt(fd, iovsAddr, iovcnt, offset);
 
     if ret < 0 {
-        return Err(Error::SysError(-ret as i32))
+        return Err(Error::SysError(-ret as i32));
     }
 
-    return Ok(ret)
+    return Ok(ret);
 }
 
 pub struct RangeReader<'a> {
@@ -166,20 +166,12 @@ pub struct RangeReader<'a> {
 
 impl<'a> RangeReader<'a> {
     pub fn NewOffsetReader(r: &'a mut IOReaderAt, off: i64) -> Self {
-        return Self {
-            r,
-            off,
-            limit: -1,
-        }
+        return Self { r, off, limit: -1 };
     }
 
     pub fn New(r: &'a mut IOReaderAt, off: i64, limit: i64) -> Self {
         assert!(off <= limit, "RangeReader");
-        return Self {
-            r,
-            off,
-            limit,
-        }
+        return Self { r, off, limit };
     }
 }
 
@@ -196,7 +188,7 @@ impl<'a> IOReader for RangeReader<'a> {
         let cnt = self.r.ReadAt(buf, self.off)?;
         self.off += cnt;
 
-        return Ok(cnt)
+        return Ok(cnt);
     }
 }
 
@@ -208,20 +200,12 @@ pub struct RangeWriter<'a> {
 
 impl<'a> RangeWriter<'a> {
     pub fn NewOffsetWriter(w: &'a mut IOWriterAt, off: i64) -> Self {
-        return Self {
-            w,
-            off,
-            limit: -1,
-        }
+        return Self { w, off, limit: -1 };
     }
 
     pub fn New(w: &'a mut IOWriterAt, off: i64, limit: i64) -> Self {
         assert!(off <= limit, "RangeWriter");
-        return Self {
-            w,
-            off,
-            limit,
-        }
+        return Self { w, off, limit };
     }
 }
 
@@ -238,6 +222,6 @@ impl<'a> IOWriter for RangeWriter<'a> {
         let cnt = self.w.WriteAt(buf, self.off)?;
         self.off += cnt;
 
-        return Ok(cnt)
+        return Ok(cnt);
     }
 }

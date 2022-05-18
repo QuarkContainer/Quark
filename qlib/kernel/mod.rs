@@ -12,49 +12,48 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod asm;
-pub mod arch;
-pub mod boot;
-pub mod fs;
+use core::sync::atomic::Ordering;
+use core::sync::atomic::{AtomicBool, AtomicI32, AtomicI64};
+
+use super::super::kernel_def::VcpuFreq;
+use super::super::ShareSpaceRef;
+use super::control_msg::*;
+use super::pagetable::*;
+use super::singleton::*;
+
+use self::arch::x86_64::arch_x86::*;
+use self::boot::loader::*;
+use self::kernel::async_process::*;
+use self::memmgr::pma::*;
+use self::quring::*;
+use self::taskMgr::*;
+
 pub mod Kernel;
-pub mod kernel;
-pub mod memmgr;
-pub mod quring;
-pub mod socket;
-pub mod tcpip;
-pub mod threadmgr;
-pub mod util;
+pub mod SignalDef;
+pub mod arch;
+pub mod asm;
+pub mod boot;
 pub mod fd;
-pub mod heap;
+pub mod fs;
+pub mod guestfdnotifier;
+pub mod kernel;
 pub mod kernel_util;
+pub mod loader;
+pub mod memmgr;
 pub mod mm;
 pub mod perflog;
+pub mod quring;
 pub mod seqcount;
-pub mod SignalDef;
+pub mod socket;
 pub mod stack;
 pub mod task;
 pub mod taskMgr;
+pub mod tcpip;
+pub mod threadmgr;
 pub mod uid;
+pub mod util;
 pub mod vcpu;
 pub mod version;
-pub mod loader;
-pub mod guestfdnotifier;
-
-use core::sync::atomic::AtomicI32;
-use core::sync::atomic::AtomicI64;
-use core::sync::atomic::Ordering;
-
-use super::super::ShareSpaceRef;
-use super::super::kernel_def::VcpuFreq;
-use super::control_msg::*;
-use super::singleton::*;
-use super::pagetable::*;
-use self::taskMgr::*;
-use self::quring::*;
-use self::boot::loader::*;
-use self::memmgr::pma::*;
-use self::kernel::async_process::*;
-use self::arch::x86_64::arch_x86::*;
 
 pub static TSC: Tsc = Tsc::New();
 pub static SHARESPACE: ShareSpaceRef = ShareSpaceRef::New();
@@ -67,9 +66,11 @@ pub static KERNEL_STACK_ALLOCATOR: Singleton<AlignedAllocator> =
     Singleton::<AlignedAllocator>::New();
 
 pub static EXIT_CODE: Singleton<AtomicI32> = Singleton::<AtomicI32>::New();
-pub static VCPU_FREQ : AtomicI64 = AtomicI64::new(2_000_000_000); // default 2GHZ
+pub static VCPU_FREQ: AtomicI64 = AtomicI64::new(2_000_000_000); // default 2GHZ
 pub static ASYNC_PROCESS: AsyncProcess = AsyncProcess::New();
 pub static FP_STATE: X86fpstate = X86fpstate::Init();
+pub static SUPPORT_XSAVE: AtomicBool = AtomicBool::new(false);
+pub static SUPPORT_XSAVEOPT: AtomicBool = AtomicBool::new(false);
 
 pub fn SetWaitContainerfd(fd: i32) {
     WAIT_CONTAINER_FD.store(fd, Ordering::SeqCst)
@@ -86,7 +87,7 @@ pub fn Timestamp() -> i64 {
 
 #[inline]
 pub fn Scale(tsc: i64) -> i64 {
-    tsc * 1000 /(LoadVcpuFreq() / 1_000)
+    (tsc as i128 * 1000_000 / LoadVcpuFreq() as i128) as i64
 }
 
 pub fn VcpuFreqInit() {
@@ -110,13 +111,13 @@ pub struct Tsc {
 
 impl Tsc {
     pub const fn New() -> Self {
-        return  Self {
-            offset: AtomicI64::new(0)
-        }
+        return Self {
+            offset: AtomicI64::new(0),
+        };
     }
 
     pub fn Scale(tsc: i64) -> i64 {
-        return Scale(tsc)
+        return Scale(tsc);
     }
 
     #[inline(always)]

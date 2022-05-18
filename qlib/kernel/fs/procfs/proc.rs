@@ -12,47 +12,47 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::string::ToString;
+use alloc::sync::Arc;
 use core::any::Any;
 use core::ops::Deref;
 
-use super::super::super::super::common::*;
-use super::super::super::super::linux_def::*;
 use super::super::super::super::auth::*;
+use super::super::super::super::common::*;
 use super::super::super::super::device::*;
+use super::super::super::super::linux_def::*;
 use super::super::super::super::task_mgr::*;
-use super::super::super::fs::fsutil::file::*;
 use super::super::super::fs::dentry::*;
-use super::super::super::task::*;
+use super::super::super::fs::fsutil::file::*;
 use super::super::super::kernel::kernel::*;
 use super::super::super::kernel::waiter::*;
-use super::super::host::hostinodeop::*;
+use super::super::super::task::*;
+use super::super::super::threadmgr::pid_namespace::*;
 use super::super::super::SHARESPACE;
 use super::super::attr::*;
+use super::super::dirent::*;
 use super::super::file::*;
 use super::super::flags::*;
-use super::super::dirent::*;
-use super::super::mount::*;
+use super::super::host::hostinodeop::*;
 use super::super::inode::*;
+use super::super::mount::*;
 use super::super::ramfs::dir::*;
 use super::super::ramfs::symlink::*;
-use super::super::super::threadmgr::pid_namespace::*;
+use super::dir_proc::*;
 use super::inode::*;
 use super::symlink_proc::*;
-use super::dir_proc::*;
 use super::sys::sys::*;
 
-use super::meminfo::*;
-use super::uptime::*;
 use super::cpuinfo::*;
 use super::filesystems::*;
 use super::loadavg::*;
+use super::meminfo::*;
 use super::mounts::*;
 use super::stat::*;
+use super::uptime::*;
 
 pub struct ProcNodeInternal {
     pub kernel: Kernel,
@@ -80,7 +80,7 @@ impl DirDataNode for ProcNode {
 
         let tid = match name.parse::<i32>() {
             Ok(tid) => tid,
-            _ => return Err(err)
+            _ => return Err(err),
         };
 
         let otherThread = match self.lock().pidns.TaskWithID(tid) {
@@ -93,23 +93,31 @@ impl DirDataNode for ProcNode {
         let ms = dir.lock().MountSource.clone();
         let td = self.NewTaskDir(&otherTask, &otherThread, &ms, true);
 
-        return Ok(Dirent::New(&td, name))
+        return Ok(Dirent::New(&td, name));
     }
 
-    fn GetFile(&self, d: &Dir, _task: &Task, _dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File> {
+    fn GetFile(
+        &self,
+        d: &Dir,
+        _task: &Task,
+        _dir: &Inode,
+        dirent: &Dirent,
+        flags: FileFlags,
+    ) -> Result<File> {
         let p = DirNode {
             dir: d.clone(),
-            data: self.clone()
+            data: self.clone(),
         };
 
-        return Ok(File::New(dirent, &flags, RootProcFile{
-            iops: p,
-        }))
+        return Ok(File::New(dirent, &flags, RootProcFile { iops: p }));
     }
-
 }
 
-pub fn NewProc(task: &Task, msrc: &Arc<QMutex<MountSource>>, cgroupControllers: BTreeMap<String, String>) -> Inode {
+pub fn NewProc(
+    task: &Task,
+    msrc: &Arc<QMutex<MountSource>>,
+    cgroupControllers: BTreeMap<String, String>,
+) -> Inode {
     let mut contents = BTreeMap::new();
 
     let kernel = GetKernel();
@@ -130,7 +138,12 @@ pub fn NewProc(task: &Task, msrc: &Arc<QMutex<MountSource>>, cgroupControllers: 
 
     contents.insert("sys".to_string(), NewSys(task, msrc));
 
-    let iops = Dir::New(task, contents, &ROOT_OWNER, &FilePermissions::FromMode(FileMode(0o0555)));
+    let iops = Dir::New(
+        task,
+        contents,
+        &ROOT_OWNER,
+        &FilePermissions::FromMode(FileMode(0o0555)),
+    );
     let kernel = GetKernel();
     let pidns = kernel.RootPIDNamespace();
 
@@ -142,10 +155,10 @@ pub fn NewProc(task: &Task, msrc: &Arc<QMutex<MountSource>>, cgroupControllers: 
 
     let p = DirNode {
         dir: iops,
-        data: ProcNode(Arc::new(QMutex::new(proc)))
+        data: ProcNode(Arc::new(QMutex::new(proc))),
     };
 
-    return NewProcInode(&Arc::new(p), msrc, InodeType::SpecialDirectory, None)
+    return NewProcInode(&Arc::new(p), msrc, InodeType::SpecialDirectory, None);
 }
 
 pub struct ProcessSelfNode {
@@ -160,7 +173,7 @@ impl ReadLinkNode for ProcessSelfNode {
 
         let str = format!("{}", tgid);
 
-        return Ok(str)
+        return Ok(str);
     }
 
     fn GetLink(&self, link: &Symlink, task: &Task, dir: &Inode) -> Result<Dirent> {
@@ -173,7 +186,7 @@ pub fn NewProcessSelf(task: &Task, pidns: &PIDNamespace, msrc: &Arc<QMutex<Mount
         pidns: pidns.clone(),
     };
 
-    return SymlinkNode::New(task, msrc, node, None)
+    return SymlinkNode::New(task, msrc, node, None);
 }
 
 pub struct ThreadSelfNode {
@@ -189,7 +202,7 @@ impl ReadLinkNode for ThreadSelfNode {
 
         let str = format!("{}/task/{}", tgid, tid);
 
-        return Ok(str)
+        return Ok(str);
     }
 
     fn GetLink(&self, link: &Symlink, task: &Task, dir: &Inode) -> Result<Dirent> {
@@ -202,7 +215,7 @@ pub fn NewThreadSelf(task: &Task, pidns: &PIDNamespace, msrc: &Arc<QMutex<MountS
         pidns: pidns.clone(),
     };
 
-    return SymlinkNode::New(task, msrc, node, None)
+    return SymlinkNode::New(task, msrc, node, None);
 }
 
 pub struct RootProcFile {
@@ -215,11 +228,11 @@ impl SpliceOperations for RootProcFile {}
 
 impl FileOperations for RootProcFile {
     fn as_any(&self) -> &Any {
-        return self
+        return self;
     }
 
     fn FopsType(&self) -> FileOpsType {
-        return FileOpsType::RootProcFile
+        return FileOpsType::RootProcFile;
     }
 
     fn Seekable(&self) -> bool {
@@ -227,44 +240,70 @@ impl FileOperations for RootProcFile {
     }
 
     fn Seek(&self, task: &Task, f: &File, whence: i32, current: i64, offset: i64) -> Result<i64> {
-        return SeekWithDirCursor(task, f, whence, current, offset, None)
+        return SeekWithDirCursor(task, f, whence, current, offset, None);
     }
 
-    fn ReadAt(&self, _task: &Task, _f: &File, _dsts: &mut [IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ENOSYS))
+    fn ReadAt(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _dsts: &mut [IoVec],
+        _offset: i64,
+        _blocking: bool,
+    ) -> Result<i64> {
+        return Err(Error::SysError(SysErr::ENOSYS));
     }
 
-    fn WriteAt(&self, _task: &Task, _f: &File, _srcs: &[IoVec], _offset: i64, _blocking: bool) -> Result<i64> {
-        return Err(Error::SysError(SysErr::ENOSYS))
+    fn WriteAt(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _srcs: &[IoVec],
+        _offset: i64,
+        _blocking: bool,
+    ) -> Result<i64> {
+        return Err(Error::SysError(SysErr::ENOSYS));
     }
 
     fn Append(&self, _task: &Task, _f: &File, _srcs: &[IoVec]) -> Result<(i64, i64)> {
-        return Err(Error::SysError(SysErr::ENOSYS))
+        return Err(Error::SysError(SysErr::ENOSYS));
     }
 
-    fn Fsync(&self, _task: &Task, _f: &File, _start: i64, _end: i64, _syncType: SyncType) -> Result<()> {
-        return Ok(())
+    fn Fsync(
+        &self,
+        _task: &Task,
+        _f: &File,
+        _start: i64,
+        _end: i64,
+        _syncType: SyncType,
+    ) -> Result<()> {
+        return Ok(());
     }
 
     fn Flush(&self, _task: &Task, _f: &File) -> Result<()> {
-        return Ok(())
+        return Ok(());
     }
 
     fn Ioctl(&self, _task: &Task, _f: &File, _fd: i32, _request: u64, _val: u64) -> Result<()> {
-        return Err(Error::SysError(SysErr::ENOTTY))
+        return Err(Error::SysError(SysErr::ENOTTY));
     }
 
     fn UnstableAttr(&self, task: &Task, f: &File) -> Result<UnstableAttr> {
         let inode = f.Dirent.Inode().clone();
         return inode.UnstableAttr(task);
-
     }
 
     fn Mappable(&self) -> Result<HostInodeOp> {
-        return Err(Error::SysError(SysErr::ENODEV))
+        return Err(Error::SysError(SysErr::ENODEV));
     }
 
-    fn ReadDir(&self, task: &Task, _f: &File, offset: i64, serializer: &mut DentrySerializer) -> Result<i64> {
+    fn ReadDir(
+        &self,
+        task: &Task,
+        _f: &File,
+        offset: i64,
+        serializer: &mut DentrySerializer,
+    ) -> Result<i64> {
         let mut dirCtx = DirCtx {
             Serializer: serializer,
             DirCursor: "".to_string(),
@@ -273,8 +312,7 @@ impl FileOperations for RootProcFile {
         // Get normal directory contents from ramfs dir.
         let mut map = self.iops.dir.Children();
 
-        let kernel = task.Thread().lock().k.clone();
-        let root = kernel.RootDir();
+        let root = task.Root();
 
         let (dot, dotdot) = root.GetDotAttrs(&root);
         map.insert(".".to_string(), dot);
@@ -284,12 +322,15 @@ impl FileOperations for RootProcFile {
         for tg in &pidns.ThreadGroups() {
             if tg.Leader().is_some() {
                 let name = format!("{}", tg.ID());
-                map.insert(name, DentAttr::GenericDentAttr(InodeType::SpecialDirectory, &PROC_DEVICE));
+                map.insert(
+                    name,
+                    DentAttr::GenericDentAttr(InodeType::SpecialDirectory, &PROC_DEVICE),
+                );
             }
         }
 
         if offset > map.len() as i64 {
-            return Ok(offset)
+            return Ok(offset);
         }
 
         let mut cnt = 0;
@@ -301,13 +342,18 @@ impl FileOperations for RootProcFile {
             cnt += 1;
         }
 
-        return Ok(map.len() as i64)
+        return Ok(map.len() as i64);
     }
 
-    fn IterateDir(&self, _task: &Task, _d: &Dirent, _dirCtx: &mut DirCtx, _offset: i32) -> (i32, Result<i64>) {
-        return (0, Err(Error::SysError(SysErr::ENOTDIR)))
+    fn IterateDir(
+        &self,
+        _task: &Task,
+        _d: &Dirent,
+        _dirCtx: &mut DirCtx,
+        _offset: i32,
+    ) -> (i32, Result<i64>) {
+        return (0, Err(Error::SysError(SysErr::ENOTDIR)));
     }
 }
 
 impl SockOperations for RootProcFile {}
-

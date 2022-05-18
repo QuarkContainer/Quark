@@ -12,30 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::string::String;
-use alloc::vec::Vec;
-use alloc::sync::Arc;
 use crate::qlib::mutex::*;
+use alloc::string::String;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::any::Any;
 
-use super::super::super::socket::unix::transport::unix::*;
-use super::super::super::super::common::*;
-use super::super::super::super::linux_def::*;
 use super::super::super::super::auth::*;
+use super::super::super::super::common::*;
 use super::super::super::super::device::*;
+use super::super::super::super::linux_def::*;
 use super::super::super::kernel::time::*;
+use super::super::super::socket::unix::transport::unix::*;
 use super::super::super::task::*;
 use super::super::attr::*;
-use super::super::mount::*;
-use super::super::flags::*;
-use super::super::file::*;
-use super::super::inode::*;
 use super::super::dirent::*;
+use super::super::file::*;
+use super::super::flags::*;
 use super::super::host::hostinodeop::*;
+use super::super::inode::*;
+use super::super::mount::*;
 use super::super::ramfs::symlink::*;
 use super::tmpfs_dir::*;
 
-pub fn NewTmpfsSymlink(task: &Task, target: &str, owner: &FileOwner, msrc: &Arc<QMutex<MountSource>>) -> Inode {
+pub fn NewTmpfsSymlink(
+    task: &Task,
+    target: &str,
+    owner: &FileOwner,
+    msrc: &Arc<QMutex<MountSource>>,
+) -> Inode {
     let s = Symlink::New(task, owner, target);
     let s = TmpfsSymlink(s);
 
@@ -50,14 +55,14 @@ pub fn NewTmpfsSymlink(task: &Task, target: &str, owner: &FileOwner, msrc: &Arc<
         DeviceFileMinor: 0,
     };
 
-    return Inode::New(&Arc::new(s), msrc, &attr)
+    return Inode::New(&Arc::new(s), msrc, &attr);
 }
 
 pub struct TmpfsSymlink(Symlink);
 
 impl InodeOperations for TmpfsSymlink {
     fn as_any(&self) -> &Any {
-        return self
+        return self;
     }
 
     fn IopsType(&self) -> IopsType {
@@ -68,7 +73,7 @@ impl InodeOperations for TmpfsSymlink {
         return self.0.InodeType();
     }
 
-    fn InodeFileType(&self) -> InodeFileType{
+    fn InodeFileType(&self) -> InodeFileType {
         return InodeFileType::TmpfsSymlink;
     }
 
@@ -77,123 +82,164 @@ impl InodeOperations for TmpfsSymlink {
     }
 
     fn Lookup(&self, task: &Task, dir: &Inode, name: &str) -> Result<Dirent> {
-        return self.0.Lookup(task, dir, name)
+        return self.0.Lookup(task, dir, name);
     }
 
-    fn Create(&self, task: &Task, dir: &mut Inode, name: &str, flags: &FileFlags, perm: &FilePermissions) -> Result<File> {
-        return self.0.Create(task, dir, name, flags, perm)
+    fn Create(
+        &self,
+        task: &Task,
+        dir: &mut Inode,
+        name: &str,
+        flags: &FileFlags,
+        perm: &FilePermissions,
+    ) -> Result<File> {
+        return self.0.Create(task, dir, name, flags, perm);
     }
 
-    fn CreateDirectory(&self, task: &Task, dir: &mut Inode, name: &str, perm: &FilePermissions) -> Result<()> {
-        return self.0.CreateDirectory(task, dir, name, perm)
+    fn CreateDirectory(
+        &self,
+        task: &Task,
+        dir: &mut Inode,
+        name: &str,
+        perm: &FilePermissions,
+    ) -> Result<()> {
+        return self.0.CreateDirectory(task, dir, name, perm);
     }
 
     fn CreateLink(&self, task: &Task, dir: &mut Inode, oldname: &str, newname: &str) -> Result<()> {
-        return self.0.CreateLink(task, dir, oldname, newname)
+        return self.0.CreateLink(task, dir, oldname, newname);
     }
 
-    fn CreateHardLink(&self, task: &Task, dir: &mut Inode, target: &Inode, name: &str) -> Result<()> {
-        return self.0.CreateHardLink(task, dir, target, name)
+    fn CreateHardLink(
+        &self,
+        task: &Task,
+        dir: &mut Inode,
+        target: &Inode,
+        name: &str,
+    ) -> Result<()> {
+        return self.0.CreateHardLink(task, dir, target, name);
     }
 
-    fn CreateFifo(&self, task: &Task, dir: &mut Inode, name: &str, perm: &FilePermissions) -> Result<()> {
-        return self.0.CreateFifo(task, dir, name, perm)
+    fn CreateFifo(
+        &self,
+        task: &Task,
+        dir: &mut Inode,
+        name: &str,
+        perm: &FilePermissions,
+    ) -> Result<()> {
+        return self.0.CreateFifo(task, dir, name, perm);
     }
 
     //fn RemoveDirent(&mut self, dir: &mut InodeStruStru, remove: &Arc<QMutex<Dirent>>) -> Result<()> ;
     fn Remove(&self, task: &Task, dir: &mut Inode, name: &str) -> Result<()> {
-        return self.0.Remove(task, dir, name)
+        return self.0.Remove(task, dir, name);
     }
 
-    fn RemoveDirectory(&self, task: &Task, dir: &mut Inode, name: &str) -> Result<()>{
-        return self.0.RemoveDirectory(task, dir, name)
+    fn RemoveDirectory(&self, task: &Task, dir: &mut Inode, name: &str) -> Result<()> {
+        return self.0.RemoveDirectory(task, dir, name);
     }
 
-    fn Rename(&self, task: &Task, _dir: &mut Inode, oldParent: &Inode, oldname: &str, newParent: &Inode, newname: &str, replacement: bool) -> Result<()> {
-        return TmpfsRename(task, oldParent, oldname, newParent, newname, replacement)
+    fn Rename(
+        &self,
+        task: &Task,
+        _dir: &mut Inode,
+        oldParent: &Inode,
+        oldname: &str,
+        newParent: &Inode,
+        newname: &str,
+        replacement: bool,
+    ) -> Result<()> {
+        return TmpfsRename(task, oldParent, oldname, newParent, newname, replacement);
     }
 
-    fn Bind(&self, task: &Task, dir: &Inode, name: &str, data: &BoundEndpoint, perms: &FilePermissions) -> Result<Dirent> {
-        return self.0.Bind(task, dir, name, data, perms)
+    fn Bind(
+        &self,
+        task: &Task,
+        dir: &Inode,
+        name: &str,
+        data: &BoundEndpoint,
+        perms: &FilePermissions,
+    ) -> Result<Dirent> {
+        return self.0.Bind(task, dir, name, data, perms);
     }
 
     fn BoundEndpoint(&self, task: &Task, inode: &Inode, path: &str) -> Option<BoundEndpoint> {
-        return self.0.BoundEndpoint(task, inode, path)
+        return self.0.BoundEndpoint(task, inode, path);
     }
 
     fn GetFile(&self, task: &Task, dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File> {
-        return self.0.GetFile(task, dir, dirent, flags)
+        return self.0.GetFile(task, dir, dirent, flags);
     }
 
-    fn UnstableAttr(&self, task: &Task, dir: &Inode) -> Result<UnstableAttr> {
-        return self.0.UnstableAttr(task, dir)
+    fn UnstableAttr(&self, task: &Task) -> Result<UnstableAttr> {
+        return self.0.UnstableAttr(task);
     }
 
     fn Getxattr(&self, dir: &Inode, name: &str) -> Result<String> {
-        return self.0.Getxattr(dir, name)
+        return self.0.Getxattr(dir, name);
     }
 
     fn Setxattr(&self, dir: &mut Inode, name: &str, value: &str) -> Result<()> {
-        return self.0.Setxattr(dir, name, value)
+        return self.0.Setxattr(dir, name, value);
     }
 
     fn Listxattr(&self, dir: &Inode) -> Result<Vec<String>> {
-        return self.0.Listxattr(dir)
+        return self.0.Listxattr(dir);
     }
 
     fn Check(&self, task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {
-        return self.0.Check(task, inode, reqPerms)
+        return self.0.Check(task, inode, reqPerms);
     }
 
     fn SetPermissions(&self, task: &Task, dir: &mut Inode, f: FilePermissions) -> bool {
-        return self.0.SetPermissions(task, dir, f)
+        return self.0.SetPermissions(task, dir, f);
     }
 
     fn SetOwner(&self, task: &Task, dir: &mut Inode, owner: &FileOwner) -> Result<()> {
-        return self.0.SetOwner(task, dir, owner)
+        return self.0.SetOwner(task, dir, owner);
     }
 
     fn SetTimestamps(&self, task: &Task, dir: &mut Inode, ts: &InterTimeSpec) -> Result<()> {
-        return self.0.SetTimestamps(task, dir, ts)
+        return self.0.SetTimestamps(task, dir, ts);
     }
 
     fn Truncate(&self, task: &Task, dir: &mut Inode, size: i64) -> Result<()> {
-        return self.0.Truncate(task, dir, size)
+        return self.0.Truncate(task, dir, size);
     }
 
     fn Allocate(&self, task: &Task, dir: &mut Inode, offset: i64, length: i64) -> Result<()> {
-        return self.0.Allocate(task, dir, offset, length)
+        return self.0.Allocate(task, dir, offset, length);
     }
 
-    fn ReadLink(&self, task: &Task,dir: &Inode) -> Result<String> {
-        return self.0.ReadLink(task, dir)
+    fn ReadLink(&self, task: &Task, dir: &Inode) -> Result<String> {
+        return self.0.ReadLink(task, dir);
     }
 
     fn GetLink(&self, task: &Task, dir: &Inode) -> Result<Dirent> {
-        return self.0.GetLink(task, dir)
+        return self.0.GetLink(task, dir);
     }
 
     fn AddLink(&self, task: &Task) {
-        return self.0.AddLink(task)
+        return self.0.AddLink(task);
     }
 
     fn DropLink(&self, task: &Task) {
-        return self.0.DropLink(task)
+        return self.0.DropLink(task);
     }
 
     fn IsVirtual(&self) -> bool {
-        return self.0.IsVirtual()
+        return self.0.IsVirtual();
     }
 
     fn Sync(&self) -> Result<()> {
-        return self.0.Sync()
+        return self.0.Sync();
     }
 
     fn StatFS(&self, _task: &Task) -> Result<FsInfo> {
-        return Ok(TMPFS_FSINFO)
+        return Ok(TMPFS_FSINFO);
     }
 
     fn Mappable(&self) -> Result<HostInodeOp> {
-        return self.0.Mappable()
+        return self.0.Mappable();
     }
 }

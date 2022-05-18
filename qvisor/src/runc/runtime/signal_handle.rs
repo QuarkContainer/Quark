@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use nix::sys::signal;
-use lazy_static::lazy_static;
+use core::convert::TryFrom;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
-use core::convert::TryFrom;
+use lazy_static::lazy_static;
+use nix::sys::signal;
 
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::control_msg::*;
-use super::super::super::VMS;
 use super::super::super::ROOT_CONTAINER_ID;
+use super::super::super::VMS;
 
 lazy_static! {
-    static ref SIGNAL_HANDLE_ENABLE : AtomicBool = AtomicBool::new(false);
-    static ref CONSOLE : AtomicBool = AtomicBool::new(false);
+    static ref SIGNAL_HANDLE_ENABLE: AtomicBool = AtomicBool::new(false);
+    static ref CONSOLE: AtomicBool = AtomicBool::new(false);
 }
 
 pub fn StartSignalHandle() {
@@ -39,7 +39,6 @@ pub fn StopSignalHandle() {
 pub fn SetConole(terminal: bool) {
     CONSOLE.store(terminal, Ordering::SeqCst);
 }
-
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
@@ -56,9 +55,10 @@ pub struct SignalFaultInfo {
     pub lsb: u16,
 }
 
-extern fn handle_sigintAct(signal :i32, signInfo: *mut libc::siginfo_t, _: *mut libc::c_void) {
-    if signal == 17 { // used for tlb shootdown
-        return
+extern "C" fn handle_sigintAct(signal: i32, signInfo: *mut libc::siginfo_t, _: *mut libc::c_void) {
+    if signal == 17 {
+        // used for tlb shootdown
+        return;
     }
 
     let console = CONSOLE.load(Ordering::SeqCst);
@@ -75,9 +75,7 @@ extern fn handle_sigintAct(signal :i32, signInfo: *mut libc::siginfo_t, _: *mut 
     }*/
 
     if SIGNAL_HANDLE_ENABLE.load(Ordering::Relaxed) {
-        let sigfault: &SignalFaultInfo = unsafe {
-            &*(signInfo as u64 as * const SignalFaultInfo)
-        };
+        let sigfault: &SignalFaultInfo = unsafe { &*(signInfo as u64 as *const SignalFaultInfo) };
 
         error!("get signal {}, action is {:x?}", signal, sigfault);
 
@@ -89,7 +87,7 @@ extern fn handle_sigintAct(signal :i32, signInfo: *mut libc::siginfo_t, _: *mut 
                 SignalDeliveryMode::DeliverToForegroundProcessGroup
             } else {
                 SignalDeliveryMode::DeliverToProcess
-            }
+            },
         };
 
         VMS.lock().Signal(signal);
@@ -97,12 +95,14 @@ extern fn handle_sigintAct(signal :i32, signInfo: *mut libc::siginfo_t, _: *mut 
 }
 
 // numSignals is the number of normal (non-realtime) signals on Linux.
-pub const NUM_SIGNALS : usize = 32;
+pub const NUM_SIGNALS: usize = 32;
 
 pub fn SignAction() {
-    let sig_action = signal::SigAction::new(signal::SigHandler::SigAction(handle_sigintAct),
-                                            signal::SaFlags::empty(),
-                                            signal::SigSet::all());
+    let sig_action = signal::SigAction::new(
+        signal::SigHandler::SigAction(handle_sigintAct),
+        signal::SaFlags::empty(),
+        signal::SigSet::all(),
+    );
 
     unsafe {
         signal::sigaction(signal::SIGINT, &sig_action).expect("sigaction set fail");
@@ -111,24 +111,29 @@ pub fn SignAction() {
 
 pub fn PrepareHandler() -> Result<()> {
     unsafe {
-        libc::ioctl( 0, libc::TIOCSCTTY, 0);
+        libc::ioctl(0, libc::TIOCSCTTY, 0);
     }
 
-    let sig_action = signal::SigAction::new(signal::SigHandler::SigAction(handle_sigintAct),
-                                            signal::SaFlags::empty(),
-                                            signal::SigSet::empty());
+    let sig_action = signal::SigAction::new(
+        signal::SigHandler::SigAction(handle_sigintAct),
+        signal::SaFlags::empty(),
+        signal::SigSet::empty(),
+    );
 
     for i in 1..NUM_SIGNALS {
         if i == 9           //SIGKILL
-            || i == 19 {    //SIGSTOP
-            continue
+            || i == 19
+        {
+            //SIGSTOP
+            continue;
         }
 
         unsafe {
-            signal::sigaction(signal::Signal::try_from(i as i32).unwrap(), &sig_action)
-                .map_err(|e| Error::Common(format!("sigaction fail with err {:?} for signal {}", e, i)))?;
+            signal::sigaction(signal::Signal::try_from(i as i32).unwrap(), &sig_action).map_err(
+                |e| Error::Common(format!("sigaction fail with err {:?} for signal {}", e, i)),
+            )?;
         }
     }
 
-    return Ok(())
+    return Ok(());
 }

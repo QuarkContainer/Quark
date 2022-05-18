@@ -13,32 +13,32 @@
 // limitations under the License.
 
 use alloc::string::String;
-use alloc::vec::Vec;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 
+pub use xmas_elf::header::HeaderPt2;
 pub use xmas_elf::program::{Flags, ProgramHeader, ProgramHeader64};
 pub use xmas_elf::sections::Rela;
 pub use xmas_elf::symbol_table::{Entry, Entry64};
 pub use xmas_elf::{P32, P64};
-pub use xmas_elf::header::HeaderPt2;
 
 use super::super::asm::*;
+use super::super::kernel::cpuset::*;
 use super::super::loader::loader::*;
-use super::super::taskMgr::*;
-use super::super::task::*;
-use super::super::SignalDef::*;
-use super::super::vcpu::*;
-use super::super::qlib::LoadAddr;
+use super::super::memmgr::mm::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
+use super::super::qlib::LoadAddr;
 use super::super::syscalls::syscalls::*;
-use super::super::kernel::cpuset::*;
-use super::super::threadmgr::thread::*;
-use super::super::threadmgr::task_exit::*;
-use super::super::threadmgr::task_exec::*;
+use super::super::task::*;
+use super::super::taskMgr::*;
 use super::super::threadmgr::task_clone::*;
+use super::super::threadmgr::task_exec::*;
+use super::super::threadmgr::task_exit::*;
 use super::super::threadmgr::task_sched::*;
-use super::super::memmgr::mm::*;
+use super::super::threadmgr::thread::*;
+use super::super::vcpu::*;
+use super::super::SignalDef::*;
 use super::super::SHARESPACE;
 
 #[derive(Default, Debug)]
@@ -50,7 +50,7 @@ pub struct ElfInfo {
     pub phdrAddr: u64,
     pub phdrSize: usize,
     pub phdrNum: usize,
-    pub addrs: Vec<LoadAddr>
+    pub addrs: Vec<LoadAddr>,
 }
 
 // Getppid implements linux syscall getppid(2).
@@ -65,19 +65,19 @@ pub fn SysGetPpid(task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
     let pidns = t.PIDNamespace();
     let ptg = parent.ThreadGroup();
     let pid = pidns.IDOfThreadGroup(&ptg);
-    return Ok(pid as i64)
+    return Ok(pid as i64);
 }
 
 // Getpid implements linux syscall getpid(2).
 pub fn SysGetPid(task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
     let pid = task.Thread().ThreadGroup().ID();
-    return Ok(pid as i64)
+    return Ok(pid as i64);
 }
 
 // Gettid implements linux syscall gettid(2).
 pub fn SysGetTid(task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
     let tid = task.Thread().ThreadID();
-    return Ok(tid as i64)
+    return Ok(tid as i64);
 }
 
 pub fn SysSetRobustList(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -137,7 +137,7 @@ pub fn SysExecve(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let (fileName, err) = task.CopyInString(filenameAddr, PATH_MAX);
     match err {
         Err(e) => return Err(e),
-        _ => ()
+        _ => (),
     }
 
     info!("SysExecve file name is {}", &fileName);
@@ -164,144 +164,149 @@ pub fn SysExecve(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         let cwd = fscontex.lock().cwd.clone();
         let root = fscontex.lock().root.clone();
         let mut remainingTraversals = 40;
-        let d = task.mountNS.FindDirent(task, &root, Some(cwd), &fileName, &mut remainingTraversals, true)?;
+        let d = task.mountNS.FindDirent(
+            task,
+            &root,
+            Some(cwd),
+            &fileName,
+            &mut remainingTraversals,
+            true,
+        )?;
         d.MyFullName()
     };
 
-    let (entry, usersp, kernelsp) = {
+    {
+        let t = task.Thread().clone();
+        let tg = t.lock().tg.clone();
+        let pidns = tg.PIDNamespace();
+        let owner = pidns.lock().owner.clone();
+        let signallock = tg.lock().signalLock.clone();
         {
-            let t = task.Thread().clone();
-            let tg = t.lock().tg.clone();
-            let pidns = tg.PIDNamespace();
-            let owner = pidns.lock().owner.clone();
-            let signallock = tg.lock().signalLock.clone();
-            {
-                let ol = owner.WriteLock();
-                let sl = signallock.lock();
+            let ol = owner.WriteLock();
+            let sl = signallock.lock();
 
-                let exiting = tg.lock().exiting;
-                let execing = tg.lock().execing.Upgrade();
+            let exiting = tg.lock().exiting;
+            let execing = tg.lock().execing.Upgrade();
 
-                if exiting || execing.is_some() {
-                    // We lost to a racing group-exit, kill, or exec from another thread
-                    // and should just exit.
-                    return Err(Error::SysError(SysErr::EINTR))
-                }
+            if exiting || execing.is_some() {
+                // We lost to a racing group-exit, kill, or exec from another thread
+                // and should just exit.
+                return Err(Error::SysError(SysErr::EINTR));
+            }
 
-                // Cancel any racing group stops.
-                tg.lock().endGroupStopLocked(false);
+            // Cancel any racing group stops.
+            tg.lock().endGroupStopLocked(false);
 
-                // If the task has any siblings, they have to exit before the exec can
-                // continue.
-                tg.lock().execing = t.Downgrade();
+            // If the task has any siblings, they have to exit before the exec can
+            // continue.
+            tg.lock().execing = t.Downgrade();
 
-                let taskCnt = tg.lock().tasks.len();
-                if taskCnt != 1 {
-                    // "[All] other threads except the thread group leader report death as
-                    // if they exited via _exit(2) with exit code 0." - ptrace(2)
-                    let tasks : Vec<_> = tg.lock().tasks.iter().cloned().collect();
-                    for sibling in &tasks {
-                        if t != sibling.clone() {
-                            sibling.lock().killLocked();
-                        }
+            let taskCnt = tg.lock().tasks.len();
+            if taskCnt != 1 {
+                // "[All] other threads except the thread group leader report death as
+                // if they exited via _exit(2) with exit code 0." - ptrace(2)
+                let tasks: Vec<_> = tg.lock().tasks.iter().cloned().collect();
+                for sibling in &tasks {
+                    if t != sibling.clone() {
+                        sibling.lock().killLocked();
                     }
-                    // The last sibling to exit will wake t.
-                    t.lock().beginInternalStopLocked(&Arc::new(ExecStop {}));
-
-                    core::mem::drop(sl);
-                    core::mem::drop(ol);
-
-                    task.DoStop();
                 }
+                // The last sibling to exit will wake t.
+                t.lock().beginInternalStopLocked(&Arc::new(ExecStop {}));
+
+                core::mem::drop(sl);
+                core::mem::drop(ol);
+                task.DoStop();
             }
-
-            let mut its = Vec::new();
-            {
-                let _l = owner.WriteLock();
-                tg.lock().execing = ThreadWeak::default();
-                if t.lock().killed() {
-                    //return (*runInterrupt)(nil)
-                    return Err(Error::SysError(SysErr::EINTR))
-                }
-
-                t.promoteLocked();
-
-                // "POSIX timers are not preserved (timer_create(2))." - execve(2). Handle
-                // this first since POSIX timers are protected by the signal mutex, which
-                // we're about to change. Note that we have to stop and destroy timers
-                // without holding any mutexes to avoid circular lock ordering.
-                {
-                    let _s = signallock.lock();
-
-                    for (_, it) in &tg.lock().timers {
-                        its.push(it.clone());
-                    }
-
-                    tg.lock().timers.clear();
-                }
-            }
-
-            for it in its {
-                it.DestroyTimer();
-            }
-
-            {
-                let _l = owner.WriteLock();
-                let sh = tg.lock().signalHandlers.clone();
-                // "During an execve(2), the dispositions of handled signals are reset to
-                // the default; the dispositions of ignored signals are left unchanged. ...
-                // [The] signal mask is preserved across execve(2). ... [The] pending
-                // signal set is preserved across an execve(2)." - signal(7)
-                //
-                // Details:
-                //
-                // - If the thread group is sharing its signal handlers with another thread
-                // group via CLONE_SIGHAND, execve forces the signal handlers to be copied
-                // (see Linux's fs/exec.c:de_thread). We're not reference-counting signal
-                // handlers, so we always make a copy.
-                //
-                // - "Disposition" only means sigaction::sa_handler/sa_sigaction; flags,
-                // restorer (if present), and mask are always reset. (See Linux's
-                // fs/exec.c:setup_new_exec => kernel/signal.c:flush_signal_handlers.)
-                tg.lock().signalHandlers = sh.CopyForExec();
-                // "Any alternate signal stack is not preserved (sigaltstack(2))." - execve(2)
-                t.lock().signalStack = SignalStack::default();
-                task.signalStack = SignalStack::default();
-                // "The termination signal is reset to SIGCHLD (see clone(2))."
-                tg.lock().terminationSignal = Signal(Signal::SIGCHLD);
-                // execed indicates that the process can no longer join a process group
-                // in some scenarios (namely, the parent call setpgid(2) on the child).
-                // See the JoinProcessGroup function in sessions.go for more context.
-                tg.lock().execed = true;
-            }
-
-            let fdtbl = t.lock().fdTbl.clone();
-            fdtbl.lock().RemoveCloseOnExec();
-
-            t.ExitRobustList(task);
-
-            t.lock().updateCredsForExecLocked();
-
-            t.UnstopVforkParent();
-
-            SetFs(0);
-            task.context.fs = 0;
-
-            let newMM = MemoryManager::Init(false);
-            let oldMM = task.mm.clone();
-            task.mm = newMM.clone();
-            task.futexMgr = task.futexMgr.Fork();
-            task.Thread().lock().memoryMgr = newMM;
-            if !SHARESPACE.config.read().KernelPagetable {
-                task.SwitchPageTable();
-            }
-
-            // make the old mm exist before switch pagetable
-            core::mem::drop(oldMM);
         }
 
-        Load(task, &fileName, &mut argv, &envv, &Vec::new())?
-    };
+        let mut its = Vec::new();
+        {
+            let _l = owner.WriteLock();
+            tg.lock().execing = ThreadWeak::default();
+            if t.lock().killed() {
+                //return (*runInterrupt)(nil)
+                return Err(Error::SysError(SysErr::EINTR));
+            }
+
+            t.promoteLocked();
+
+            // "POSIX timers are not preserved (timer_create(2))." - execve(2). Handle
+            // this first since POSIX timers are protected by the signal mutex, which
+            // we're about to change. Note that we have to stop and destroy timers
+            // without holding any mutexes to avoid circular lock ordering.
+            {
+                let _s = signallock.lock();
+
+                for (_, it) in &tg.lock().timers {
+                    its.push(it.clone());
+                }
+
+                tg.lock().timers.clear();
+            }
+        }
+
+        for it in its {
+            it.DestroyTimer();
+        }
+
+        {
+            let _l = owner.WriteLock();
+            let sh = tg.lock().signalHandlers.clone();
+            // "During an execve(2), the dispositions of handled signals are reset to
+            // the default; the dispositions of ignored signals are left unchanged. ...
+            // [The] signal mask is preserved across execve(2). ... [The] pending
+            // signal set is preserved across an execve(2)." - signal(7)
+            //
+            // Details:
+            //
+            // - If the thread group is sharing its signal handlers with another thread
+            // group via CLONE_SIGHAND, execve forces the signal handlers to be copied
+            // (see Linux's fs/exec.c:de_thread). We're not reference-counting signal
+            // handlers, so we always make a copy.
+            //
+            // - "Disposition" only means sigaction::sa_handler/sa_sigaction; flags,
+            // restorer (if present), and mask are always reset. (See Linux's
+            // fs/exec.c:setup_new_exec => kernel/signal.c:flush_signal_handlers.)
+            tg.lock().signalHandlers = sh.CopyForExec();
+            // "Any alternate signal stack is not preserved (sigaltstack(2))." - execve(2)
+            t.lock().signalStack = SignalStack::default();
+            task.signalStack = SignalStack::default();
+            // "The termination signal is reset to SIGCHLD (see clone(2))."
+            tg.lock().terminationSignal = Signal(Signal::SIGCHLD);
+            // execed indicates that the process can no longer join a process group
+            // in some scenarios (namely, the parent call setpgid(2) on the child).
+            // See the JoinProcessGroup function in sessions.go for more context.
+            tg.lock().execed = true;
+        }
+
+        let fdtbl = t.lock().fdTbl.clone();
+        fdtbl.lock().RemoveCloseOnExec();
+
+        t.ExitRobustList(task);
+
+        t.lock().updateCredsForExecLocked();
+
+        t.UnstopVforkParent();
+
+        SetFs(0);
+        task.context.fs = 0;
+        task.context.X86fpstate = Default::default();
+
+        let newMM = MemoryManager::Init(false);
+        let oldMM = task.mm.clone();
+        task.mm = newMM.clone();
+        task.futexMgr = task.futexMgr.Fork();
+        task.Thread().lock().memoryMgr = newMM;
+        if !SHARESPACE.config.read().KernelPagetable {
+            task.SwitchPageTable();
+        }
+
+        // make the old mm exist before switch pagetable
+        core::mem::drop(oldMM);
+    }
+
+    let (entry, usersp, kernelsp) = Load(task, &fileName, &mut argv, &envv, &Vec::new())?;
 
     //need to clean object on stack before enter_user as the stack will be destroyed
     task.AccountTaskEnter(SchedState::RunningApp);
@@ -310,7 +315,7 @@ pub fn SysExecve(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     //won't reach here
 
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn SysExit(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -343,22 +348,29 @@ pub fn SysClone(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let tls = args.arg4;
 
     let pid = task.Clone(flags, cStack, pTid, cTid, tls)?;
-    return Ok(pid as i64)
+    return Ok(pid as i64);
 }
 
 // Fork implements Linux syscall fork(2).
 pub fn SysFork(task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
     let pid = task.Clone(Signal::SIGCHLD as u64, 0, 0, 0, 0)?;
-    return Ok(pid as i64)
+    return Ok(pid as i64);
 }
 
 pub fn SysVfork(task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
-    let pid = task.Clone(LibcConst::CLONE_VM | LibcConst::CLONE_VFORK |Signal::SIGCHLD as u64, 0, 0, 0, 0)?;
-    return Ok(pid as i64)
+    let pid = task.Clone(
+        LibcConst::CLONE_VM | LibcConst::CLONE_VFORK | Signal::SIGCHLD as u64,
+        0,
+        0,
+        0,
+        0,
+    )?;
+    return Ok(pid as i64);
 }
 
 // Wait4 implements linux syscall wait4(2).
 pub fn SysWait4(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    //error!("SysWait4 {:x?}", args);
     let pid = args.arg0;
     let status = args.arg1;
     let option = args.arg2 as u32;
@@ -369,26 +381,29 @@ pub fn SysWait4(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
 // Waitid implements linux syscall waitid(2).
 pub fn SysWaitid(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    //error!("SysWaitid {:x?}", args);
     let idtype = args.arg0 as i32;
     let id = args.arg1 as i32;
     let infop = args.arg2;
     let options = args.arg3 as u32;
     let _rusageAddr = args.arg4;
 
-    if options & !(WaitOption::WNOHANG |
-        WaitOption::WEXITED |
-        WaitOption::WSTOPPED |
-        WaitOption::WCONTINUED |
-        WaitOption::WNOWAIT |
-        WaitOption::WNOTHREAD |
-        WaitOption::WALL |
-        WaitOption::WCLONE
-    ) != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+    if options
+        & !(WaitOption::WNOHANG
+            | WaitOption::WEXITED
+            | WaitOption::WSTOPPED
+            | WaitOption::WCONTINUED
+            | WaitOption::WNOWAIT
+            | WaitOption::WNOTHREAD
+            | WaitOption::WALL
+            | WaitOption::WCLONE)
+        != 0
+    {
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     if options & (WaitOption::WEXITED | WaitOption::WSTOPPED | WaitOption::WCONTINUED) == 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let mut wopts = WaitOptions {
@@ -404,9 +419,7 @@ pub fn SysWaitid(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         IDType::P_PGID => {
             wopts.SpecificPGID = id;
         }
-        _ => {
-            return Err(Error::SysError(SysErr::EINVAL))
-        }
+        _ => return Err(Error::SysError(SysErr::EINVAL)),
     }
 
     parseCommonWaitOptions(&mut wopts, options)?;
@@ -431,7 +444,7 @@ pub fn SysWaitid(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 task.CopyOutObj(&si, infop)?;
             }
 
-            return Ok(0)
+            return Ok(0);
         }
         Err(e) => return Err(e),
         Ok(wr) => wr,
@@ -443,7 +456,7 @@ pub fn SysWaitid(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     }*/
 
     if infop == 0 {
-        return Ok(0)
+        return Ok(0);
     }
 
     let mut si = SignalInfo {
@@ -486,12 +499,20 @@ pub fn SysWaitid(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     si.Code = siCode;
 
     task.CopyOutObj(&si, infop)?;
-    return Ok(0)
+    return Ok(0);
 }
 
 pub fn wait4(task: &Task, pid: i32, statusAddr: u64, options: u32, _rusage: u64) -> Result<i64> {
-    if options & !(WaitOption::WNOHANG | WaitOption::WUNTRACED | WaitOption::WCONTINUED | WaitOption::WNOTHREAD | WaitOption::WALL | WaitOption::WCLONE) != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
+    if options
+        & !(WaitOption::WNOHANG
+            | WaitOption::WUNTRACED
+            | WaitOption::WCONTINUED
+            | WaitOption::WNOTHREAD
+            | WaitOption::WALL
+            | WaitOption::WCLONE)
+        != 0
+    {
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     let mut wopts = WaitOptions {
@@ -539,7 +560,7 @@ pub fn wait4(task: &Task, pid: i32, statusAddr: u64, options: u32, _rusage: u64)
 
     }*/
 
-    return Ok(wr.TID as i64)
+    return Ok(wr.TID as i64);
 }
 
 pub fn parseCommonWaitOptions(wopts: &mut WaitOptions, options: u32) -> Result<()> {
@@ -552,7 +573,7 @@ pub fn parseCommonWaitOptions(wopts: &mut WaitOptions, options: u32) -> Result<(
         wopts.CloneTasks = true;
         wopts.NonCloneTasks = true;
     } else {
-        return Err(Error::SysError(SysErr::EINVAL))
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     if options & WaitOption::WCONTINUED != 0 {
@@ -567,7 +588,7 @@ pub fn parseCommonWaitOptions(wopts: &mut WaitOptions, options: u32) -> Result<(
         wopts.SiblingChildren = true;
     }
 
-    return Ok(())
+    return Ok(());
 }
 
 // SetTidAddress implements linux syscall set_tid_address(2).
@@ -618,7 +639,7 @@ pub fn SysUnshare(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 pub fn SysScheduleYield(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
     Yield();
 
-    return Ok(0)
+    return Ok(0);
 }
 
 // SchedSetaffinity implements linux syscall sched_setaffinity(2).
@@ -648,7 +669,7 @@ pub fn SysSchedSetaffinity(task: &mut Task, args: &SyscallArguments) -> Result<i
     }
 
     t.SetCPUMask(mask)?;
-    return Ok(0)
+    return Ok(0);
 }
 
 // SchedGetaffinity implements linux syscall sched_getaffinity(2).
@@ -687,7 +708,7 @@ pub fn SysSchedGetaffinity(task: &mut Task, args: &SyscallArguments) -> Result<i
     // NOTE: The syscall interface is slightly different than the glibc
     // interface. The raw sched_getaffinity syscall returns the number of
     // bytes used to represent a cpu mask.
-    return Ok(mask.Size() as i64)
+    return Ok(mask.Size() as i64);
 }
 
 // Getcpu implements linux syscall getcpu(2).
@@ -735,8 +756,10 @@ pub fn SysSetpgid(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
 
         // Setpgid only operates on child threadgroups.
-        if tg != task.Thread().ThreadGroup() &&
-            (tgLeader.Parent().is_none() || tgLeader.Parent().unwrap().ThreadGroup() != task.Thread().ThreadGroup()) {
+        if tg != task.Thread().ThreadGroup()
+            && (tgLeader.Parent().is_none()
+                || tgLeader.Parent().unwrap().ThreadGroup() != task.Thread().ThreadGroup())
+        {
             return Err(Error::SysError(SysErr::EINVAL));
         }
     }
@@ -758,10 +781,10 @@ pub fn SysSetpgid(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             Err(e) => {
                 let pg = tg.ProcessGroup().unwrap();
                 if pidns.IDOfProcessGroup(&pg) == defaultPGID {
-                    return Ok(0)
+                    return Ok(0);
                 }
 
-                return Err(e)
+                return Err(e);
             }
             _ => (),
         }
@@ -771,16 +794,16 @@ pub fn SysSetpgid(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             Err(e) => {
                 let pg = tg.ProcessGroup().unwrap();
                 if pidns.IDOfProcessGroup(&pg) == pgid {
-                    return Ok(0)
+                    return Ok(0);
                 }
-                return Err(e)
+                return Err(e);
             }
-            Ok(_) => ()
+            Ok(_) => (),
         }
     }
 
     // Success.
-    return Ok(0)
+    return Ok(0);
 }
 
 // Getpgrp implements the linux syscall getpgrp(2).
@@ -790,14 +813,14 @@ pub fn SysGetpgrp(task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
     let pg = tg.ProcessGroup().unwrap();
     let pgid = pidns.IDOfProcessGroup(&pg);
 
-    return Ok(pgid as i64)
+    return Ok(pgid as i64);
 }
 
 // Getpgid implements the linux syscall getpgid(2).
 pub fn SysGetpgid(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let tid = args.arg0 as i32;
     if tid == 0 {
-        return SysGetpgrp(task, args)
+        return SysGetpgrp(task, args);
     }
 
     let pidns = task.Thread().PIDNamespace();
@@ -810,14 +833,14 @@ pub fn SysGetpgid(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let pg = tg.ProcessGroup().unwrap();
     let id = pidns.IDOfProcessGroup(&pg);
 
-    return Ok(id as i64)
+    return Ok(id as i64);
 }
 
 // Setsid implements the linux syscall setsid(2).
 pub fn SysSetsid(task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
     let tg = task.Thread().ThreadGroup();
     tg.CreateSessoin()?;
-    return Ok(0)
+    return Ok(0);
 }
 
 // Getsid implements the linux syscall getsid(2).
@@ -883,9 +906,13 @@ pub fn SysSetpriority(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     // In the kernel's implementation, values outside the range
     // of [-20, 19] are truncated to these minimum and maximum
     // values.
-    if niceval < -20 /* min niceval */ {
+    if niceval < -20
+    /* min niceval */
+    {
         niceval = -20
-    } else if niceval > 19 /* max niceval */ {
+    } else if niceval > 19
+    /* max niceval */
+    {
         niceval = 19
     }
 

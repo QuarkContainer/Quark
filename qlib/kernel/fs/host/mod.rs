@@ -12,26 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod util;
 pub mod dirent;
-pub mod hostinodeop;
+pub mod fs;
 pub mod hostfileop;
-pub mod tty;
+pub mod hostinodeop;
 pub mod ioctl;
 pub mod socket_iovec;
-pub mod fs;
+pub mod tty;
+pub mod util;
 //pub mod control;
 
+use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::string::ToString;
-use alloc::collections::btree_map::BTreeMap;
 use core::any::Any;
 
-use super::super::super::auth::*;
-use super::mount::*;
-use super::inode::*;
-use super::dirent::*;
 use self::hostinodeop::*;
+use super::super::super::auth::*;
+use super::dirent::*;
+use super::inode::*;
+use super::mount::*;
 
 pub struct SuperOperations {
     pub mountSourceOperations: SimpleMountSourceOperations,
@@ -43,7 +43,7 @@ pub struct SuperOperations {
 
 impl DirentOperations for SuperOperations {
     fn Revalidate(&self, _name: &str, _parent: &Inode, _child: &Inode) -> bool {
-        return self.mountSourceOperations.revalidate
+        return self.mountSourceOperations.revalidate;
     }
 
     fn Keep(&self, _dirent: &Dirent) -> bool {
@@ -54,13 +54,13 @@ impl DirentOperations for SuperOperations {
     }
 
     fn CacheReadDir(&self) -> bool {
-        return self.mountSourceOperations.cacheReaddir
+        return self.mountSourceOperations.cacheReaddir;
     }
 }
 
 impl MountSourceOperations for SuperOperations {
     fn as_any(&self) -> &Any {
-        return self
+        return self;
     }
 
     fn Destroy(&mut self) {}
@@ -70,7 +70,13 @@ impl MountSourceOperations for SuperOperations {
     }
 
     fn SaveInodeMapping(&mut self, inode: &Inode, path: &str) {
-        let sattr = inode.lock().InodeOp.as_any().downcast_ref::<HostInodeOp>().expect("ReadDirAll: not HostInodeOp").StableAttr();
+        let sattr = inode
+            .lock()
+            .InodeOp
+            .as_any()
+            .downcast_ref::<HostInodeOp>()
+            .expect("ReadDirAll: not HostInodeOp")
+            .StableAttr();
         self.inodeMapping.insert(sattr.InodeId, path.to_string());
     }
 }
@@ -78,34 +84,33 @@ impl MountSourceOperations for SuperOperations {
 #[cfg(test1)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
-    use tempfile::Builder;
-    use alloc::sync::Arc;
     use crate::qlib::mutex::*;
+    use alloc::sync::Arc;
     use std::fs::*;
     use std::str;
+    use tempfile::Builder;
 
     use self::util::*;
     use super::*;
     //use super::super::mount::*;
     //use super::super::attr::*;
     //use super::super::inode::*;
-    use super::super::ramfs::tree::*;
-    use super::super::dentry::*;
-    use super::super::path::*;
-    use super::super::flags::*;
-    use super::super::filesystems::*;
-    use super::super::super::task::*;
-    use super::super::super::util::*;
-    use super::super::super::Common::*;
     use super::super::super::libcDef::*;
     use super::super::super::syscalls::sys_file;
     use super::super::super::syscalls::sys_read;
-    use super::super::super::syscalls::sys_write;
     use super::super::super::syscalls::sys_stat;
+    use super::super::super::syscalls::sys_write;
+    use super::super::super::task::*;
+    use super::super::super::util::*;
+    use super::super::super::Common::*;
+    use super::super::dentry::*;
+    use super::super::filesystems::*;
+    use super::super::flags::*;
+    use super::super::path::*;
+    use super::super::ramfs::tree::*;
 
     fn newTestMountNamespace() -> Result<(MountNs, String)> {
         //let p = Builder::new().prefix("root").tempdir().unwrap();
-
 
         //let rootStr = p.path().to_str().unwrap().to_string();
         let root = "/tmp/root";
@@ -115,15 +120,21 @@ mod tests {
 
         let fd = OpenAt(-100, &rootStr);
         if fd < 0 {
-            return Err(Error::SysError(-fd))
+            return Err(Error::SysError(-fd));
         }
 
-        let ms = MountSource::NewHostMountSource(&rootStr, &ROOT_OWNER, &WhitelistFileSystem::New(), &MountSourceFlags::default(), false);
+        let ms = MountSource::NewHostMountSource(
+            &rootStr,
+            &ROOT_OWNER,
+            &WhitelistFileSystem::New(),
+            &MountSourceFlags::default(),
+            false,
+        );
         let root = Inode::NewHostInode(&Arc::new(QMutex::new(ms)), fd)?;
 
         let mm = MountNs::New(&root);
 
-        return Ok((Arc::new(QMutex::new(mm)), rootStr))
+        return Ok((Arc::new(QMutex::new(mm)), rootStr));
     }
 
     // createTestDirs populates the root with some test files and directories.
@@ -137,27 +148,102 @@ mod tests {
     fn createTestDirs(m: &MountNs, task: &Task) -> Result<()> {
         let r = m.lock().Root().clone();
 
-        r.CreateDirectory(task, &r, &"a".to_string(), &FilePermissions::FromMode(FileMode(0o777)))?;
+        r.CreateDirectory(
+            task,
+            &r,
+            &"a".to_string(),
+            &FilePermissions::FromMode(FileMode(0o777)),
+        )?;
         let a = r.Walk(task, &r, &"a".to_string())?;
-        let _a1 = a.Create(task, &r, &"a1.txt".to_string(), &FileFlags { Read: true, Write: true, ..Default::default() }, &FilePermissions::FromMode(FileMode(0o666)))?;
-        let _a2 = a.Create(task, &r, &"a2.txt".to_string(), &FileFlags { Read: true, Write: true, ..Default::default() }, &FilePermissions::FromMode(FileMode(0o666)))?;
+        let _a1 = a.Create(
+            task,
+            &r,
+            &"a1.txt".to_string(),
+            &FileFlags {
+                Read: true,
+                Write: true,
+                ..Default::default()
+            },
+            &FilePermissions::FromMode(FileMode(0o666)),
+        )?;
+        let _a2 = a.Create(
+            task,
+            &r,
+            &"a2.txt".to_string(),
+            &FileFlags {
+                Read: true,
+                Write: true,
+                ..Default::default()
+            },
+            &FilePermissions::FromMode(FileMode(0o666)),
+        )?;
 
-        r.CreateDirectory(task, &r, &"b".to_string(), &FilePermissions::FromMode(FileMode(0o0777)))?;
+        r.CreateDirectory(
+            task,
+            &r,
+            &"b".to_string(),
+            &FilePermissions::FromMode(FileMode(0o0777)),
+        )?;
         let b = r.Walk(task, &r, &"b".to_string())?;
-        let _b1 = b.Create(task, &r, &"b1.txt".to_string(), &FileFlags { Read: true, Write: true, ..Default::default() }, &FilePermissions::FromMode(FileMode(0o666)))?;
+        let _b1 = b.Create(
+            task,
+            &r,
+            &"b1.txt".to_string(),
+            &FileFlags {
+                Read: true,
+                Write: true,
+                ..Default::default()
+            },
+            &FilePermissions::FromMode(FileMode(0o666)),
+        )?;
 
-        b.CreateDirectory(task, &r, &"c".to_string(), &FilePermissions::FromMode(FileMode(0o0777)))?;
+        b.CreateDirectory(
+            task,
+            &r,
+            &"c".to_string(),
+            &FilePermissions::FromMode(FileMode(0o0777)),
+        )?;
         let c = b.Walk(task, &r, &"c".to_string())?;
-        let _c1 = c.Create(task, &r, &"c1.txt".to_string(), &FileFlags { Read: true, Write: true, ..Default::default() }, &FilePermissions::FromMode(FileMode(0o666)))?;
+        let _c1 = c.Create(
+            task,
+            &r,
+            &"c1.txt".to_string(),
+            &FileFlags {
+                Read: true,
+                Write: true,
+                ..Default::default()
+            },
+            &FilePermissions::FromMode(FileMode(0o666)),
+        )?;
 
-        r.CreateDirectory(task, &r, &"symlinks".to_string(), &FilePermissions::FromMode(FileMode(0o0777)))?;
+        r.CreateDirectory(
+            task,
+            &r,
+            &"symlinks".to_string(),
+            &FilePermissions::FromMode(FileMode(0o0777)),
+        )?;
         let symlinks = r.Walk(task, &r, &"symlinks".to_string())?;
-        let _normal = symlinks.Create(task, &r, &"normal.txt".to_string(), &FileFlags { Read: true, Write: true, ..Default::default() }, &FilePermissions::FromMode(FileMode(0o666)))?;
+        let _normal = symlinks.Create(
+            task,
+            &r,
+            &"normal.txt".to_string(),
+            &FileFlags {
+                Read: true,
+                Write: true,
+                ..Default::default()
+            },
+            &FilePermissions::FromMode(FileMode(0o666)),
+        )?;
 
-        symlinks.CreateLink(task, &r, &"/symlinks/normal.txt".to_string(), &"to_normal.txt".to_string())?;
+        symlinks.CreateLink(
+            task,
+            &r,
+            &"/symlinks/normal.txt".to_string(),
+            &"to_normal.txt".to_string(),
+        )?;
         symlinks.CreateLink(task, &r, &"/symlinks".to_string(), &"recursive".to_string())?;
 
-        return Ok(())
+        return Ok(());
     }
 
     fn allPaths(task: &Task, m: &MountNs, base: &str) -> Result<Vec<String>> {
@@ -166,13 +252,21 @@ mod tests {
 
         let mut maxTravelsals = 1;
 
-        let d = m.lock().FindLink(&task, &root, None, &base, &mut maxTravelsals)?;
+        let d = m
+            .lock()
+            .FindLink(&task, &root, None, &base, &mut maxTravelsals)?;
 
         let inode = d.lock().Inode.clone();
         let sattr = inode.StableAttr();
 
         if sattr.IsDir() {
-            let dir = inode.GetFile(&d, &FileFlags { Read: true, ..Default::default() })?;
+            let dir = inode.GetFile(
+                &d,
+                &FileFlags {
+                    Read: true,
+                    ..Default::default()
+                },
+            )?;
             let iter = dir.lock().FileOp.clone();
             let mut serializer = CollectEntriesSerilizer::New();
             let mut dirCtx = DirCtx::New(&mut serializer);
@@ -191,7 +285,7 @@ mod tests {
             }
         }
 
-        return Ok(paths)
+        return Ok(paths);
     }
 
     pub struct TestCase {
@@ -249,19 +343,29 @@ mod tests {
         let _ = File::create(&blacklisted).unwrap();
 
         let mut hostFS = WhitelistFileSystem::New();
-        let data = format!("{}={},{}={}", ROOT_PATH_KEY, rootPath.path().to_str().unwrap(),
-                           WHITELIST_KEY, whitelisted.as_path().to_str().unwrap());
+        let data = format!(
+            "{}={},{}={}",
+            ROOT_PATH_KEY,
+            rootPath.path().to_str().unwrap(),
+            WHITELIST_KEY,
+            whitelisted.as_path().to_str().unwrap()
+        );
 
         let mut task = Task::default();
 
-        let inode = hostFS.Mount(&task, &"".to_owned(), &MountSourceFlags::default(), &data).unwrap();
+        let inode = hostFS
+            .Mount(&task, &"".to_owned(), &MountSourceFlags::default(), &data)
+            .unwrap();
         let mm = Arc::new(QMutex::new(MountNs::New(&inode)));
 
         hostFS.InstallWhitelist(&task, &mm).unwrap();
 
         let rootDir = mm.lock().Root();
 
-        println!("after install withlist: children count is {}", &rootDir.lock().Children.len());
+        println!(
+            "after install withlist: children count is {}",
+            &rootDir.lock().Children.len()
+        );
 
         println!("get rootdir");
         task.root = rootDir.clone();
@@ -294,16 +398,20 @@ mod tests {
     // /symlinks/recursive -> /symlinks
     #[test]
     fn TestReadPath() {
-        let subdirs = vec![("/a".to_string(), true),
-                           ("/b/c".to_string(), true),
-                           ("/symlinks".to_string(), true),
-                           ("/a/a1.txt".to_string(), false),
-                           ("/b/b1.txt".to_string(), false),
-                           ("/symlinks/normal.txt".to_string(), false),
-                           ("/symlinks/to_normal.txt".to_string(), false),
-                           ("/symlinks/recursive".to_string(), false),
-                           ("/symlinks/recursive/normal.txt".to_string(), false),
-                           ("/symlinks/recursive/recursive/normal.txt".to_string(), false),
+        let subdirs = vec![
+            ("/a".to_string(), true),
+            ("/b/c".to_string(), true),
+            ("/symlinks".to_string(), true),
+            ("/a/a1.txt".to_string(), false),
+            ("/b/b1.txt".to_string(), false),
+            ("/symlinks/normal.txt".to_string(), false),
+            ("/symlinks/to_normal.txt".to_string(), false),
+            ("/symlinks/recursive".to_string(), false),
+            ("/symlinks/recursive/normal.txt".to_string(), false),
+            (
+                "/symlinks/recursive/recursive/normal.txt".to_string(),
+                false,
+            ),
         ];
 
         let (mm, _) = newTestMountNamespace().unwrap();
@@ -315,19 +423,32 @@ mod tests {
 
         for p in &subdirs {
             let mut maxTraversals = 2;
-            let dirent = mm.lock().FindLink(&task, &task.root, None, &p.0, &mut maxTraversals).unwrap();
+            let dirent = mm
+                .lock()
+                .FindLink(&task, &task.root, None, &p.0, &mut maxTraversals)
+                .unwrap();
             assert!(dirent.lock().Inode.StableAttr().IsDir() == p.1)
         }
 
         let mut maxTraversals = 2;
-        let mp = mm.lock().FindLink(&task, &task.root, None, &"/symlinks".to_string(), &mut maxTraversals).unwrap();
+        let mp = mm
+            .lock()
+            .FindLink(
+                &task,
+                &task.root,
+                None,
+                &"/symlinks".to_string(),
+                &mut maxTraversals,
+            )
+            .unwrap();
 
-        let memdirs = vec!["/tmp".to_string(),
-                           "/tmp/a/b".to_string(),
-                           "/tmp/a/c/d".to_string(),
-                           "/tmp/c".to_string(),
-                           "/proc".to_string(),
-                           "/dev/a/b".to_string(),
+        let memdirs = vec![
+            "/tmp".to_string(),
+            "/tmp/a/b".to_string(),
+            "/tmp/a/c/d".to_string(),
+            "/tmp/c".to_string(),
+            "/proc".to_string(),
+            "/dev/a/b".to_string(),
         ];
 
         let mount = MountSource::NewPseudoMountSource();
@@ -348,7 +469,10 @@ mod tests {
 
         for p in &expectdir {
             let mut maxTraversals = 2;
-            let dirent = mm.lock().FindLink(&task, &task.root, None, &p.0, &mut maxTraversals).unwrap();
+            let dirent = mm
+                .lock()
+                .FindLink(&task, &task.root, None, &p.0, &mut maxTraversals)
+                .unwrap();
             assert!(dirent.lock().Inode.StableAttr().IsDir() == p.1)
         }
     }
@@ -372,8 +496,10 @@ mod tests {
         createTestDirs(&mm, &task).unwrap();
 
         let cstr = CString::New(&"/a/a1.txt".to_string());
-        let fd1 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
-        let fd2 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
+        let fd1 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
+        let fd2 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
 
         assert!(fd1 == 0);
         assert!(fd2 == 1);
@@ -402,7 +528,8 @@ mod tests {
 
         createTestDirs(&mm, &task).unwrap();
         let cstr = CString::New(&"/a".to_string());
-        let fd0 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
+        let fd0 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
 
         let filename = CString::New(&"a1.txt".to_string());
         let fd1 = sys_file::openAt(&task, fd0, filename.Ptr(), Flags::O_RDWR as u32).unwrap();
@@ -435,10 +562,18 @@ mod tests {
 
         createTestDirs(&mm, &task).unwrap();
         let cstr = CString::New(&"/a".to_string());
-        let fd0 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
+        let fd0 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
 
         let filename = CString::New(&"/a/a.txt".to_string());
-        let fd1 = sys_file::createAt(&task, ATType::AT_FDCWD, filename.Ptr(), Flags::O_RDWR as u32, FileMode(0o777)).unwrap();
+        let fd1 = sys_file::createAt(
+            &task,
+            ATType::AT_FDCWD,
+            filename.Ptr(),
+            Flags::O_RDWR as u32,
+            FileMode(0o777),
+        )
+        .unwrap();
 
         assert!(fd1 == 1);
 
@@ -469,11 +604,19 @@ mod tests {
 
         createTestDirs(&mm, &task).unwrap();
         let cstr = CString::New(&"/a".to_string());
-        let fd0 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
+        let fd0 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
 
         println!("start create, the fd0 is {}---------------------", fd0);
         let filename = CString::New(&"xxx.txt".to_string());
-        let fd1 = sys_file::createAt(&task, fd0, filename.Ptr(), Flags::O_RDWR as u32, FileMode(0o777)).unwrap();
+        let fd1 = sys_file::createAt(
+            &task,
+            fd0,
+            filename.Ptr(),
+            Flags::O_RDWR as u32,
+            FileMode(0o777),
+        )
+        .unwrap();
 
         assert!(fd1 == 1);
 
@@ -546,7 +689,8 @@ mod tests {
 
         let str = "/b/c".to_string();
         let cstr = CString::New(&str);
-        let fd0 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
+        let fd0 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
 
         sys_file::fchdir(&mut task, fd0).unwrap();
 
@@ -576,7 +720,8 @@ mod tests {
         println!("**************after chroot");
 
         let cstr = CString::New(&"/c".to_string());
-        let fd0 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
+        let fd0 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
 
         let filename = CString::New(&"c1.txt".to_string());
         let fd1 = sys_file::openAt(&task, fd0, filename.Ptr(), Flags::O_RDWR as u32).unwrap();
@@ -610,8 +755,10 @@ mod tests {
         createTestDirs(&mm, &task).unwrap();
 
         let cstr = CString::New(&"/a/a1.txt".to_string());
-        let fd1 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
-        let fd2 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
+        let fd1 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
+        let fd2 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
 
         assert!(fd1 == 0);
         assert!(fd2 == 1);
@@ -647,8 +794,10 @@ mod tests {
         createTestDirs(&mm, &task).unwrap();
 
         let cstr = CString::New(&"/a/a1.txt".to_string());
-        let fd1 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
-        let fd2 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
+        let fd1 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
+        let fd2 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
 
         assert!(fd1 == 0);
         assert!(fd2 == 1);
@@ -682,8 +831,10 @@ mod tests {
         createTestDirs(&mm, &task).unwrap();
 
         let cstr = CString::New(&"/a/a1.txt".to_string());
-        let fd1 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
-        let fd2 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
+        let fd1 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
+        let fd2 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
 
         assert!(fd1 == 0);
         assert!(fd2 == 1);
@@ -722,8 +873,10 @@ mod tests {
         createTestDirs(&mm, &task).unwrap();
 
         let cstr = CString::New(&"/a/a1.txt".to_string());
-        let fd1 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
-        let fd2 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
+        let fd1 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
+        let fd2 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
 
         assert!(fd1 == 0);
         assert!(fd2 == 1);
@@ -766,8 +919,10 @@ mod tests {
         createTestDirs(&mm, &task).unwrap();
 
         let cstr = CString::New(&"/a/a1.txt".to_string());
-        let fd1 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
-        let fd2 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
+        let fd1 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
+        let fd2 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
 
         assert!(fd1 == 0);
         assert!(fd2 == 1);
@@ -775,7 +930,8 @@ mod tests {
         let flag = sys_file::Fcntl(&mut task, fd2, Cmd::F_GETFL, 0).unwrap() as i32;
         assert!(flag & Flags::O_NONBLOCK != Flags::O_NONBLOCK);
 
-        let res = sys_file::Fcntl(&mut task, fd2, Cmd::F_SETFL, Flags::O_NONBLOCK as u64).unwrap() as i32;
+        let res =
+            sys_file::Fcntl(&mut task, fd2, Cmd::F_SETFL, Flags::O_NONBLOCK as u64).unwrap() as i32;
         assert!(res == 0);
 
         let flag = sys_file::Fcntl(&mut task, fd2, Cmd::F_GETFL, 0).unwrap() as i32;
@@ -796,11 +952,19 @@ mod tests {
         let res = sys_file::Mkdir(&task, cstr.Ptr(), 0o777).unwrap();
         assert!(res == 0);
 
-        let fd0 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
+        let fd0 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
         assert!(fd0 == 0);
 
         let filename = CString::New(&"/a/new/a.txt".to_string());
-        let fd1 = sys_file::createAt(&task, ATType::AT_FDCWD, filename.Ptr(), Flags::O_RDWR as u32, FileMode(0o777)).unwrap();
+        let fd1 = sys_file::createAt(
+            &task,
+            ATType::AT_FDCWD,
+            filename.Ptr(),
+            Flags::O_RDWR as u32,
+            FileMode(0o777),
+        )
+        .unwrap();
 
         assert!(fd1 == 1);
 
@@ -822,7 +986,8 @@ mod tests {
         createTestDirs(&mm, &task).unwrap();
 
         let cstr = CString::New(&"/a".to_string());
-        let fd0 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
+        let fd0 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
         assert!(fd0 == 0);
 
         let cstr = CString::New(&"new".to_string());
@@ -833,7 +998,14 @@ mod tests {
         assert!(fd1 == 1);
 
         let filename = CString::New(&"a.txt".to_string());
-        let fd2 = sys_file::createAt(&task, fd1, filename.Ptr(), Flags::O_RDWR as u32, FileMode(0o777)).unwrap();
+        let fd2 = sys_file::createAt(
+            &task,
+            fd1,
+            filename.Ptr(),
+            Flags::O_RDWR as u32,
+            FileMode(0o777),
+        )
+        .unwrap();
 
         assert!(fd2 == 2);
 
@@ -864,13 +1036,20 @@ mod tests {
         createTestDirs(&mm, &task).unwrap();
 
         let cstr = CString::New(&"/a/a1.txt".to_string());
-        let fd1 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
+        let fd1 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
 
         let newPath = CString::New(&"/b/link.txt".to_string());
         let res = sys_file::Symlink(&task, newPath.Ptr(), cstr.Ptr()).unwrap();
         assert!(res == 0);
 
-        let fd2 = sys_file::openAt(&task, ATType::AT_FDCWD, newPath.Ptr(), Flags::O_RDONLY as u32).unwrap();
+        let fd2 = sys_file::openAt(
+            &task,
+            ATType::AT_FDCWD,
+            newPath.Ptr(),
+            Flags::O_RDONLY as u32,
+        )
+        .unwrap();
 
         assert!(fd1 == 0);
         assert!(fd2 == 1);
@@ -900,7 +1079,8 @@ mod tests {
         createTestDirs(&mm, &task).unwrap();
 
         let cstr = CString::New(&"/a/a1.txt".to_string());
-        let fd1 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
+        let fd1 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
 
         let oldfolder = CString::New(&"/a".to_string());
         let newfolder = CString::New(&"/d".to_string());
@@ -908,7 +1088,13 @@ mod tests {
         assert!(res == 0);
 
         let newPath = CString::New(&"/d/a1.txt".to_string());
-        let fd2 = sys_file::openAt(&task, ATType::AT_FDCWD, newPath.Ptr(), Flags::O_RDONLY as u32).unwrap();
+        let fd2 = sys_file::openAt(
+            &task,
+            ATType::AT_FDCWD,
+            newPath.Ptr(),
+            Flags::O_RDONLY as u32,
+        )
+        .unwrap();
 
         assert!(fd1 == 0);
         assert!(fd2 == 1);
@@ -938,7 +1124,8 @@ mod tests {
         createTestDirs(&mm, &task).unwrap();
 
         let cstr = CString::New(&"/b".to_string());
-        let fd0 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
+        let fd0 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
         assert!(fd0 == 0);
 
         let cstr = CString::New(&"/a/a1.txt".to_string());
@@ -946,20 +1133,24 @@ mod tests {
         let res = sys_file::Symlinkat(&task, newPath.Ptr(), fd0, cstr.Ptr()).unwrap();
         assert!(res == 0);
 
-        let fd1 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
+        let fd1 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
         let cstr = CString::New(&"/b/link.txt".to_string());
 
         let mut buf: [u8; 1024] = [0; 1024];
-        let size = sys_file::ReadLink(&task, cstr.Ptr(), &mut buf[0] as *mut _ as u64, 1024).unwrap();
+        let size =
+            sys_file::ReadLink(&task, cstr.Ptr(), &mut buf[0] as *mut _ as u64, 1024).unwrap();
         assert!(size > 0);
         assert!(str::from_utf8(&buf[..size as usize]).unwrap() == "/a/a1.txt");
 
         let mut buf: [u8; 1024] = [0; 1024];
-        let size = sys_file::ReadLinkAt(&task, fd0, cstr.Ptr(), &mut buf[0] as *mut _ as u64, 1024).unwrap();
+        let size = sys_file::ReadLinkAt(&task, fd0, cstr.Ptr(), &mut buf[0] as *mut _ as u64, 1024)
+            .unwrap();
         assert!(size > 0);
         assert!(str::from_utf8(&buf[..size as usize]).unwrap() == "/a/a1.txt");
 
-        let fd2 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
+        let fd2 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
 
         assert!(fd1 == 1);
         assert!(fd2 == 2);
@@ -989,7 +1180,8 @@ mod tests {
         createTestDirs(&mm, &task).unwrap();
 
         let cstr = CString::New(&"/a/a1.txt".to_string());
-        let _fd1 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
+        let _fd1 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
 
         let newPath = CString::New(&"/b/link.txt".to_string());
         let res = sys_file::Link(&task, cstr.Ptr(), newPath.Ptr());
@@ -1007,8 +1199,10 @@ mod tests {
         createTestDirs(&mm, &task).unwrap();
 
         let cstr = CString::New(&"/a/a1.txt".to_string());
-        let fd1 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
-        let fd2 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
+        let fd1 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
+        let fd2 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
 
         assert!(fd1 == 0);
         assert!(fd2 == 1);
@@ -1043,8 +1237,10 @@ mod tests {
         createTestDirs(&mm, &task).unwrap();
 
         let cstr = CString::New(&"/a/a1.txt".to_string());
-        let fd1 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
-        let fd2 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
+        let fd1 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
+        let fd2 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
 
         assert!(fd1 == 0);
         assert!(fd2 == 1);
@@ -1121,7 +1317,6 @@ mod tests {
 
         println!("the atime is {}, mtime is {}", stat.st_atime, stat.st_mtime);
 
-
         let _utime = Utime {
             Actime: stat.st_atime + 100,
             Modtime: stat.st_mtime + 100,
@@ -1144,7 +1339,8 @@ mod tests {
         createTestDirs(&mm, &task).unwrap();
 
         let cstr = CString::New(&"/a/a1.txt".to_string());
-        let fd1 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
+        let fd1 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
 
         assert!(fd1 == 0);
 
@@ -1160,7 +1356,13 @@ mod tests {
         let res = sys_file::Rename(&task, oldname.Ptr(), newname.Ptr()).unwrap();
         assert!(res == 0);
 
-        let fd2 = sys_file::openAt(&task, ATType::AT_FDCWD, newname.Ptr(), Flags::O_RDONLY as u32).unwrap();
+        let fd2 = sys_file::openAt(
+            &task,
+            ATType::AT_FDCWD,
+            newname.Ptr(),
+            Flags::O_RDONLY as u32,
+        )
+        .unwrap();
         assert!(fd2 == 0);
         let buf: [u8; 100] = [0; 100];
         let cnt = sys_read::Read(&task, fd2, &buf[0] as *const _ as u64, buf.len() as i64).unwrap();
@@ -1180,7 +1382,8 @@ mod tests {
         createTestDirs(&mm, &task).unwrap();
 
         let cstr = CString::New(&"/a/a1.txt".to_string());
-        let fd1 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
+        let fd1 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
 
         assert!(fd1 == 0);
 
@@ -1196,7 +1399,13 @@ mod tests {
         let res = sys_file::Rename(&task, oldname.Ptr(), newname.Ptr()).unwrap();
         assert!(res == 0);
 
-        let fd2 = sys_file::openAt(&task, ATType::AT_FDCWD, newname.Ptr(), Flags::O_RDONLY as u32).unwrap();
+        let fd2 = sys_file::openAt(
+            &task,
+            ATType::AT_FDCWD,
+            newname.Ptr(),
+            Flags::O_RDONLY as u32,
+        )
+        .unwrap();
         assert!(fd2 == 0);
         let buf: [u8; 100] = [0; 100];
         let cnt = sys_read::Read(&task, fd2, &buf[0] as *const _ as u64, buf.len() as i64).unwrap();
@@ -1216,7 +1425,8 @@ mod tests {
         createTestDirs(&mm, &task).unwrap();
 
         let cstr = CString::New(&"/a/a1.txt".to_string());
-        let fd1 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
+        let fd1 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
 
         assert!(fd1 == 0);
 
@@ -1232,7 +1442,13 @@ mod tests {
         let res = sys_file::Rename(&task, oldname.Ptr(), newname.Ptr()).unwrap();
         assert!(res == 0);
 
-        let fd2 = sys_file::openAt(&task, ATType::AT_FDCWD, newname.Ptr(), Flags::O_RDONLY as u32).unwrap();
+        let fd2 = sys_file::openAt(
+            &task,
+            ATType::AT_FDCWD,
+            newname.Ptr(),
+            Flags::O_RDONLY as u32,
+        )
+        .unwrap();
         assert!(fd2 == 0);
         let buf: [u8; 100] = [0; 100];
         let cnt = sys_read::Read(&task, fd2, &buf[0] as *const _ as u64, buf.len() as i64).unwrap();
@@ -1240,7 +1456,6 @@ mod tests {
         assert!(cstr.data[..] == buf[0..cnt as usize]);
         sys_file::close(&task, fd2).unwrap();
     }
-
 
     #[test]
     fn TestRename4() {
@@ -1253,7 +1468,8 @@ mod tests {
         createTestDirs(&mm, &task).unwrap();
 
         let cstr = CString::New(&"/a/a1.txt".to_string());
-        let fd1 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
+        let fd1 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDWR as u32).unwrap();
 
         assert!(fd1 == 0);
 
@@ -1266,20 +1482,29 @@ mod tests {
 
         println!("**************************before renameat111");
         let cstr = CString::New(&"/a".to_string());
-        let fd0 = sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
+        let fd0 =
+            sys_file::openAt(&task, ATType::AT_FDCWD, cstr.Ptr(), Flags::O_RDONLY as u32).unwrap();
 
         let oldname = CString::New(&"a1.txt".to_string());
         let newname = CString::New(&"/d.txt".to_string());
         println!("**************************before renameat");
-        let res = sys_file::Renameat(&task, fd0, oldname.Ptr(), ATType::AT_FDCWD, newname.Ptr()).unwrap();
+        let res =
+            sys_file::Renameat(&task, fd0, oldname.Ptr(), ATType::AT_FDCWD, newname.Ptr()).unwrap();
         println!("***************************after renameat");
         assert!(res == 0);
         sys_file::close(&task, fd0).unwrap();
 
-        let fd2 = sys_file::openAt(&task, ATType::AT_FDCWD, newname.Ptr(), Flags::O_RDONLY as u32).unwrap();
+        let fd2 = sys_file::openAt(
+            &task,
+            ATType::AT_FDCWD,
+            newname.Ptr(),
+            Flags::O_RDONLY as u32,
+        )
+        .unwrap();
         assert!(fd2 == 0);
         let buf: [u8; 100] = [0; 100];
-        let cnt = sys_read::Read(&task, fd2, &buf[0] as *const _ as u64, buf.len() as i64).unwrap() as usize;
+        let cnt = sys_read::Read(&task, fd2, &buf[0] as *const _ as u64, buf.len() as i64).unwrap()
+            as usize;
         println!("cnt is {}, len is {}", cnt, data.Len());
 
         //todo: the value is same, but the assert fail. Fix it.
@@ -1290,9 +1515,7 @@ mod tests {
     }
 
     pub fn Dup(oldfd: i32) -> i64 {
-        return unsafe {
-            libc::dup(oldfd) as i64
-        };
+        return unsafe { libc::dup(oldfd) as i64 };
     }
 
     #[test]

@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::mutex::*;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
-use crate::qlib::mutex::*;
 use core::ops::Deref;
 
 use super::super::super::auth::userns::*;
@@ -43,10 +43,10 @@ impl UTSNamespace {
         let internal = UTSNamespaceInternal {
             hostName: hostName,
             domainName: domainName,
-            userns: userns
+            userns: userns,
         };
 
-        return Self(Arc::new(QMutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)));
     }
 
     pub fn HostName(&self) -> String {
@@ -77,6 +77,6 @@ impl UTSNamespace {
             userns: userns.clone(),
         };
 
-        return Self(Arc::new(QMutex::new(internal)))
+        return Self(Arc::new(QMutex::new(internal)));
     }
 }

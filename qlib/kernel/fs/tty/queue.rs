@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::super::super::task::*;
+use super::super::super::super::bytestream::*;
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
-use super::super::super::super::bytestream::*;
+use super::super::super::task::*;
 use super::super::host::tty::*;
 use super::line_discipline::*;
 
@@ -34,7 +34,7 @@ impl Queue {
             buf: ByteStream::Init(WAIT_BUF_DEFAULT_PAGE_COUNT),
             transform: inputQTransform,
             readable: false,
-        }
+        };
     }
 
     pub fn NewOutputQueue() -> Self {
@@ -42,7 +42,7 @@ impl Queue {
             buf: ByteStream::Init(WAIT_BUF_DEFAULT_PAGE_COUNT),
             transform: outputQTransform,
             readable: false,
-        }
+        };
     }
 
     pub fn ReableSize(&self, task: &Task, dstAddr: u64) -> Result<()> {
@@ -53,12 +53,12 @@ impl Queue {
         };
 
         task.CopyOutObj(&size, dstAddr)?;
-        return Ok(())
+        return Ok(());
     }
 
     pub fn Read(&mut self, dst: &mut [u8]) -> Result<i64> {
         if !self.readable {
-            return Err(Error::SysError(SysErr::EAGAIN))
+            return Err(Error::SysError(SysErr::EAGAIN));
         }
 
         let mut dst = dst;
@@ -72,16 +72,16 @@ impl Queue {
             self.readable = false;
         }
 
-        return Ok(n as i64)
+        return Ok(n as i64);
     }
 
     pub fn Write(&mut self, src: &mut [u8], l: &mut LineDiscipline) -> Result<i64> {
         if self.buf.AvailableSpace() == 0 {
-            return Err(Error::SysError(SysErr::EAGAIN))
+            return Err(Error::SysError(SysErr::EAGAIN));
         }
 
         let n = (self.transform)(l, self, src);
-        return Ok(n as i64)
+        return Ok(n as i64);
     }
 }
 
@@ -91,7 +91,7 @@ pub fn outputQTransform(l: &mut LineDiscipline, q: &mut Queue, buf: &mut [u8]) -
         if q.buf.AvailableDataSize() > 0 {
             q.readable = true;
         }
-        return len
+        return len;
     }
 
     let mut ret = 0;
@@ -120,7 +120,7 @@ pub fn outputQTransform(l: &mut LineDiscipline, q: &mut Queue, buf: &mut [u8]) -
             }
             '\r' => {
                 if l.termios.OEnabled(OutputFlags::ONOCR) {
-                    continue
+                    continue;
                 }
 
                 if l.termios.OEnabled(OutputFlags::OCRNL) {

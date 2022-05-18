@@ -40,7 +40,7 @@ impl WaitList {
     }
 
     pub fn Empty(&self) -> bool {
-        return self.head.is_none()
+        return self.head.is_none();
     }
 
     pub fn Front(&self) -> Option<WaitEntry> {
@@ -52,7 +52,10 @@ impl WaitList {
     }
 
     pub fn PushFront(&mut self, e: &WaitEntry) {
-        assert!(e.InitState(), "waitlist PushFront WaitEntry is not in init statue");
+        assert!(
+            e.InitState(),
+            "waitlist PushFront WaitEntry is not in init statue"
+        );
         //e.Reset();
 
         if self.head.is_none() {
@@ -68,7 +71,10 @@ impl WaitList {
     }
 
     pub fn PushBack(&mut self, e: &WaitEntry) {
-        assert!(e.InitState(), "waitlist PushBack WaitEntry is not in init statue");
+        assert!(
+            e.InitState(),
+            "waitlist PushBack WaitEntry is not in init statue"
+        );
         //e.Reset();
 
         if self.head.is_none() {
@@ -100,7 +106,7 @@ impl WaitList {
             //tail
             self.tail = match &e.lock().prev {
                 None => None,
-                Some(ref p) => p.Upgrade()
+                Some(ref p) => p.Upgrade(),
             };
         } else {
             let lock = e.lock();

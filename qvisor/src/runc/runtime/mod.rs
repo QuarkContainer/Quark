@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod loader;
-pub mod vm;
-pub mod sandbox_process;
-pub mod util;
 pub mod console;
+pub mod fs;
+pub mod loader;
+pub mod sandbox_process;
 pub mod signal_handle;
+pub mod util;
+pub mod vm;
