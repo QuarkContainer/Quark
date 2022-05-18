@@ -147,7 +147,7 @@ impl ShareAllocator {
      }
 
     pub fn FreeHeadTail(_data: &'static [AtomicU32]) {
-        println!("ShareAllocator::FreeHeadTail");
+        // println!("ShareAllocator::FreeHeadTail");
     }
 
     pub fn AlllocBuf(addr: u64) -> u64 {
@@ -156,7 +156,7 @@ impl ShareAllocator {
 
     pub fn FreeBuf(addr: u64, size: usize) {
         assert!(IsPowerOfTwo(size) && addr % MemoryDef::PAGE_SIZE == 0);
-        println!("ShareAllocator::FreeBuf");
+        // println!("ShareAllocator::FreeBuf");
     }
 }
 
@@ -519,7 +519,7 @@ impl ByteStream {
 
     //allocate page from heap
     pub fn Init(pageCount: u64) -> Self {
-        println!("pageCount: {}", pageCount);
+        // println!("pageCount: {}", pageCount);
         assert!(Self::IsPowerOfTwo(pageCount), "Bytetream pagecount is not power of two: {}", pageCount);
         let allocator = RingeBufAllocator::HeapAllocator;
         let buf = RingBuf::New(pageCount as usize, allocator);

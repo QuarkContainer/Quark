@@ -141,7 +141,6 @@ fn main() -> io::Result<()> {
     rdmaSvcCli = RDMASvcClient::initialize(unix_sock_path);
 
     let cliEventFd = rdmaSvcCli.cliEventFd;
-    let srvEventFd = rdmaSvcCli.srvEventFd;
     unblock_fd(cliEventFd);
     unblock_fd(rdmaSvcCli.srvEventFd);
 
@@ -157,7 +156,7 @@ fn main() -> io::Result<()> {
     epoll_add(epoll_fd, server_fd, read_write_event(server_fd as u64))?;
     unsafe {
         // TODO: need mapping 6666 -> (172.16.1.6:8888) for testing purpose, late should come from control plane
-        let mut serv_addr: libc::sockaddr_in = libc::sockaddr_in {
+        let serv_addr: libc::sockaddr_in = libc::sockaddr_in {
             sin_family: libc::AF_INET as u16,
             sin_port: 6666u16.to_be(),
             sin_addr: libc::in_addr {
@@ -229,12 +228,12 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                         }
                         if stream_fd > 0 {
                             unblock_fd(stream_fd);
-                            epoll_add(epoll_fd, stream_fd, read_write_event(stream_fd as u64));
+                            let _ret = epoll_add(epoll_fd, stream_fd, read_write_event(stream_fd as u64));
                             println!("stream_fd is: {}", stream_fd);
 
                             //TODO: use port to map to different (ip, port), hardcode for testing purpose, should come from control plane in the future
                             let sockfd = rdmaSvcCli.sockIdMgr.lock().AllocId().unwrap();
-                            rdmaSvcCli.connect(
+                            let _ret = rdmaSvcCli.connect(
                                 sockfd,
                                 u32::from(Ipv4Addr::from_str("192.168.6.8").unwrap()).to_be(),
                                 16868u16.to_be(),
@@ -247,10 +246,10 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                     }
                 }
                 Some(FdType::TCPSocketConnect(sockfd)) => {
-                    println!(
-                        "FdType::TCPSocketConnect, sockfd: {}, ev.Events: {}",
-                        sockfd, ev.Events
-                    );
+                    // println!(
+                    //     "FdType::TCPSocketConnect, sockfd: {}, ev.Events: {}",
+                    //     sockfd, ev.Events
+                    // );
                     let mut sockInfo;
                     {
                         let mut sockFdInfos = rdmaSvcCli.dataSockFdInfos.lock();
@@ -282,7 +281,7 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                                     let mut sockFdInfos = rdmaSvcCli.dataSockFdInfos.lock();
                                     let sockInfo = sockFdInfos.get_mut(&response.sockfd).unwrap();
                                     {
-                                        let mut shareRegion = rdmaSvcCli.cliShareRegion.lock();
+                                        let shareRegion = rdmaSvcCli.cliShareRegion.lock();
                                         let sockInfo = DataSock::New(
                                             sockInfo.fd, //Allocate fd
                                             sockInfo.srcIpAddr,
@@ -570,13 +569,13 @@ fn share_client_region() {
 }
 
 fn get_local_ip() -> u32 {
-    let my_local_ip = local_ip().unwrap();
+    let _my_local_ip = local_ip().unwrap();
 
     // println!("This is my local IP address: {:?}", my_local_ip);
 
     let network_interfaces = list_afinet_netifas().unwrap();
 
-    for (name, ip) in network_interfaces.iter() {
+    for (_name, _ip) in network_interfaces.iter() {
         //println!("{}:\t{:?}", name, ip);
     }
 

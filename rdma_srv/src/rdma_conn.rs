@@ -827,8 +827,8 @@ impl RDMAControlChannel {
                     .localInsertedRecvRequestCount
                     .swap(0, Ordering::SeqCst),
                 remoteSockFd: connectRequest.sockFd,
-            }))
-            .unwrap();
+            }));
+            // .unwrap();
             // agent.sockInfos.lock().get_mut(&sockfd).unwrap().acceptQueue.lock().EnqSocket(rdmaChannel.localId);
 
             agent.SendResponse(RDMAResp {
@@ -853,7 +853,7 @@ impl RDMAControlChannel {
     //3. Connect Confirm: Trigger by RecvWriteImm
     //4. ConsumedData: 1) WriteImmFinish, 2) Read more than half of read buffer.
     //5. RemoteRecevieReqeustsNum ?? when to send?
-    pub fn SendControlMsg(&self, msg: ControlMsgBody) -> Result<()> {
+    pub fn SendControlMsg(&self, msg: ControlMsgBody) { //-> Result<()> {
         // println!("RDMAControlChannel::SendControlMsg 0");
         let rdmaChannel = self.chan.upgrade().unwrap();
         // println!("RDMAControlChannel::SendControlMsg 1");
@@ -863,9 +863,9 @@ impl RDMAControlChannel {
         //     mem::size_of::<ControlMsgBody>()
         // );
         // println!("writeBuf.AvailableSpace(): {}", writeBuf.AvailableSpace());
-        if mem::size_of::<ControlMsgBody>() > writeBuf.AvailableSpace() {
-            return Err(Error::Timeout);
-        }
+        // if mem::size_of::<ControlMsgBody>() > writeBuf.AvailableSpace() {
+        //     return Err(Error::Timeout);
+        // }
         let (trigger, _len) = writeBuf.writeViaAddr(
             &msg as *const _ as u64,
             mem::size_of::<ControlMsgBody>() as u64,
@@ -873,24 +873,12 @@ impl RDMAControlChannel {
         // println!("RDMAControlChannel::SendControlMsg 2, trigger: {}", trigger);
         std::mem::drop(writeBuf);
         if trigger {
-            //TODOVIP: what if rdmaChannel is sending something!
             rdmaChannel.RDMASend();
         }
 
         //TODOVIP: how to wait???
         *self.curControlMsg.lock() = msg;
-        // let totalLen = mem::size_of::<ControlMsgBody>();
-        // if writtenLen < totalLen {
-        //     let writeLeft = totalLen - writtenLen;
-        //     *self.writeLeft.lock() = writeLeft as u8;
-        //     let ptr = &self.writeBuf as *const _ as u64 as *mut u8;
-        //     let slice = unsafe { slice::from_raw_parts_mut(ptr, CONTROL_MSG_SIZE) };
-        //     let msgAddr = &msg as *const _ as u64;
-        //     let msgSlice = unsafe { slice::from_raw_parts(msgAddr as *mut u8, CONTROL_MSG_SIZE) };
-        //     slice[0..writeLeft]
-        //         .clone_from_slice(&msgSlice[(CONTROL_MSG_SIZE - writeLeft)..CONTROL_MSG_SIZE]);
-        // }
-        return Ok(());
+        // return Ok(());
     }
 
     pub fn SendData(&self) {

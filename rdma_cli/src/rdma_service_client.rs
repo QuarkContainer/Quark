@@ -384,7 +384,7 @@ impl RDMASvcClient {
         self.sockIPPorts
             .lock()
             .insert(sockfd, Endpoint { ipAddr, port });
-        let mut sockFdInfo = ServerSock {
+        let sockFdInfo = ServerSock {
             srcIpAddr: ipAddr,
             srcPort: port,
             fd: sockfd,
@@ -567,9 +567,9 @@ impl RDMASvcClient {
         }
     }
 
-    pub fn getsockname(&self, sockfd: u32) {}
+    pub fn getsockname(&self, _sockfd: u32) {}
 
-    pub fn getpeername(&self, sockfd: u32) {}
+    pub fn getpeername(&self, _sockfd: u32) {}
 
     pub fn shutdown(&self, channelId: u32, howto: u8) -> Result<()> {
         println!(
@@ -620,7 +620,7 @@ impl RDMASvcClient {
                 println!("ReadFromSocket, trigger: {}", trigger);
                 // let mut shareRegion = self.cliShareRegion.lock();
                 if trigger {
-                    self.write(*sockInfo.channelId.lock());
+                    let _ret = self.write(*sockInfo.channelId.lock());
                 }
             } else {
                 println!("ReadFromSocket, break because cnt: {}", cnt);
@@ -629,7 +629,7 @@ impl RDMASvcClient {
                 } else if cnt == 0 {
                     //TODO:
                     println!("ReadFromSocket, cnt == 0 1");
-                    self.shutdown(*sockInfo.channelId.lock(), 1);
+                    let _ret = self.shutdown(*sockInfo.channelId.lock(), 1);
                     println!("ReadFromSocket, cnt == 0 2");
                     if matches!(*sockInfo.status.lock(), SockStatus::FIN_READ_FROM_BUFFER) {
                         println!("ReadFromSocket, close socket");
@@ -645,7 +645,7 @@ impl RDMASvcClient {
                         println!("ReadFromSocket, cnt == 0 5");
                         self.sockIdMgr.lock().Remove(sockInfo.fd);
                         // Send close to svc
-                        self.SentMsgToSvc(RDMAReqMsg::RDMACloseChannel(RDMACloseChannelReq {
+                        let _ret = self.SentMsgToSvc(RDMAReqMsg::RDMACloseChannel(RDMACloseChannelReq {
                             channelId: *sockInfo.channelId.lock(),
                         }));
                     } else {
@@ -692,7 +692,7 @@ impl RDMASvcClient {
                         self.dataSockFdInfos.lock().remove(&sockInfo.fd);
                         println!("WriteToSocket, close socket 4");
                         self.sockIdMgr.lock().Remove(sockInfo.fd);
-                        self.SentMsgToSvc(RDMAReqMsg::RDMACloseChannel(RDMACloseChannelReq {
+                        let _ret = self.SentMsgToSvc(RDMAReqMsg::RDMACloseChannel(RDMACloseChannelReq {
                             channelId: *sockInfo.channelId.lock(),
                         }));
                     } else if !matches!(*sockInfo.status.lock(), SockStatus::FIN_READ_FROM_BUFFER) {
@@ -721,7 +721,7 @@ impl RDMASvcClient {
                 println!("WriteToSocket, consumedDataSize: {}", consumedDataSize);
                 if 2 * consumedDataSize >= bufSize {
                     // let mut shareRegion = self.cliShareRegion.lock();
-                    self.read(*sockInfo.channelId.lock());
+                    let _ret = self.read(*sockInfo.channelId.lock());
                 }
             } else {
                 println!("WriteToSocket, break because cnt: {}", cnt);

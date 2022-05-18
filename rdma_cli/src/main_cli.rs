@@ -84,13 +84,14 @@ pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
 use crate::qlib::rdma_share::*;
 use local_ip_address::list_afinet_netifas;
 use local_ip_address::local_ip;
+use qlib::common::*;
 use qlib::linux_def::*;
 use qlib::socket_buf::SocketBuff;
-use unix_socket::UnixSocket;
 use rdma_service_client::*;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::{env, mem, ptr, thread, time};
+use unix_socket::UnixSocket;
 
 #[allow(unused_macros)]
 macro_rules! syscall {
@@ -139,7 +140,6 @@ fn main() -> io::Result<()> {
     }
 
     let cliEventFd = rdmaSvcCli.cliEventFd;
-    let srvEventFd = rdmaSvcCli.srvEventFd;
     unblock_fd(cliEventFd);
     unblock_fd(rdmaSvcCli.srvEventFd);
 
@@ -150,7 +150,7 @@ fn main() -> io::Result<()> {
         //100733100, 58433
         //134654144
         let serverSockFd = rdmaSvcCli.sockIdMgr.lock().AllocId().unwrap();
-        rdmaSvcCli.bind(
+        let _ret = rdmaSvcCli.bind(
             serverSockFd,
             //u32::from(Ipv4Addr::from_str("172.16.1.6").unwrap()).to_be(),
             u32::from(Ipv4Addr::from_str("192.168.6.8").unwrap()).to_be(),
@@ -159,7 +159,7 @@ fn main() -> io::Result<()> {
         let ten_millis = time::Duration::from_secs(1);
         let _now = time::Instant::now();
         thread::sleep(ten_millis);
-        rdmaSvcCli.listen(serverSockFd, 5);
+        let _ret = rdmaSvcCli.listen(serverSockFd, 5);
         rdmaSvcCli
             .cliShareRegion
             .lock()
@@ -167,7 +167,7 @@ fn main() -> io::Result<()> {
             .store(1, Ordering::SeqCst);
         wait(epoll_fd, &rdmaSvcCli);
     } else {
-        rdmaSvcCli.connect(
+        let _ret = rdmaSvcCli.connect(
             rdmaSvcCli.sockIdMgr.lock().AllocId().unwrap(),
             u32::from(Ipv4Addr::from_str("192.168.6.8").unwrap()).to_be(),
             16868u16.to_be(),
@@ -192,12 +192,10 @@ fn main() -> io::Result<()> {
 fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient) {
     let mut events: Vec<EpollEvent> = Vec::with_capacity(1024);
     let mut index = 0;
-    let mut randomMsgSize = 32789; //32768;
+    let randomMsgSize = 32789; //32768;
     let count = 10000000;
-    let mut left = randomMsgSize as u64;
     let rbSize = 65536;
     let rb: Vec<u8> = Vec::with_capacity(rbSize);
-    let wb: Vec<u8> = Vec::with_capacity(randomMsgSize as usize);
     let rAddr = rb.as_ptr() as u64;
     let wAddr = rb.as_ptr() as u64;
     let mut readData = 0;
@@ -225,7 +223,7 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient) {
 
         // println!("res is: {}", res);
 
-        for ev in &events {
+        for _ev in &events {
             // print!("u64: {}, events: {:x}", ev.U64, ev.Events);
             loop {
                 match rdmaSvcCli.cliShareRegion.lock().cq.Pop() {
@@ -236,7 +234,7 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient) {
                             let mut sockFdInfos = rdmaSvcCli.dataSockFdInfos.lock();
                             let sockInfo = sockFdInfos.get_mut(&response.sockfd).unwrap();
                             {
-                                let mut shareRegion = rdmaSvcCli.cliShareRegion.lock();
+                                let shareRegion = rdmaSvcCli.cliShareRegion.lock();
                                 let sockInfo = DataSock::New(
                                     sockInfo.fd, //Allocate fd
                                     sockInfo.srcIpAddr,
@@ -300,18 +298,16 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient) {
                             // }
                             ////Send RDMAAcceptResp end
 
-                            let mut left = randomMsgSize as u64;
                             let r: Vec<u8> = Vec::with_capacity(randomMsgSize as usize);
                             let rAddr = r.as_ptr() as u64;
                             let (trigger, _len) = writeBuf.writeViaAddr(rAddr, randomMsgSize);
-                            let sockfd = sockInfo.fd;
                             // std::mem::drop(writeBuf);
                             // std::mem::drop(sockFdInfos);
                             // std::mem::drop(shareRegion);
                             println!("Writing some data to sockFdInfo 1!");
                             if trigger {
                                 println!("Writing some data to sockFdInfo 1.1!");
-                                rdmaSvcCli.write(*sockInfo.channelId.lock());
+                                let _ret = rdmaSvcCli.write(*sockInfo.channelId.lock());
                             }
                         }
                         RDMARespMsg::RDMAAccept(response) => {
@@ -321,7 +317,7 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient) {
 
                             let ioBufIndex = response.ioBufIndex as usize;
                             let dataSockFd = rdmaSvcCli.sockIdMgr.lock().AllocId().unwrap();
-                            let mut shareRegion = rdmaSvcCli.cliShareRegion.lock();
+                            let shareRegion = rdmaSvcCli.cliShareRegion.lock();
                             let dataSockInfo = DataSock::New(
                                 dataSockFd, //Allocate fd
                                 sockInfo.srcIpAddr,
@@ -416,7 +412,7 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient) {
                                 //     left = left - len as u64;
                                 // }
                                 loop {
-                                    let (trigger, len) = readBuf.readViaAddr(rAddr, rbSize as u64);
+                                    let (_trigger, len) = readBuf.readViaAddr(rAddr, rbSize as u64);
                                     sockInfo.sockBuff.AddConsumeReadData(len as u64);
                                     readData += len;
                                     // if len != 0 {
@@ -447,14 +443,13 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient) {
 
                                         // println!("Client write index: {}, trigger: {}, len: {}", index, trigger, len);
 
-                                        let sockfd = sockInfo.fd;
                                         std::mem::drop(writeBuf);
                                         // std::mem::drop(channelToSockInfos);
                                         // std::mem::drop(shareRegion);
                                         // println!("Writing some data to sockFdInfo 2!");
                                         if trigger {
                                             // println!("Writing some data to sockFdInfo 2.1!");
-                                            rdmaSvcCli.write(*sockInfo.channelId.lock());
+                                            let _ret = rdmaSvcCli.write(*sockInfo.channelId.lock());
                                         }
                                     }
                                     ////send random size end
@@ -637,13 +632,13 @@ fn share_client_region() {
 }
 
 fn get_local_ip() -> u32 {
-    let my_local_ip = local_ip().unwrap();
+    let _my_local_ip = local_ip().unwrap();
 
     // println!("This is my local IP address: {:?}", my_local_ip);
 
     let network_interfaces = list_afinet_netifas().unwrap();
 
-    for (name, ip) in network_interfaces.iter() {
+    for (_name, _ip) in network_interfaces.iter() {
         //println!("{}:\t{:?}", name, ip);
     }
 

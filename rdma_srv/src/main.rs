@@ -835,7 +835,7 @@ fn main() -> io::Result<()> {
                         panic!("no RDMA connection for {} found!", ipAddr)
                     }
                 },
-                Some(FdType::UnixDomainSocketServer(srv_sock)) => {
+                Some(FdType::UnixDomainSocketServer(_srv_sock)) => {
                     let conn_sock = UnixSocket::Accept(ev.U64 as i32).unwrap();
                     let conn_sock_fd = conn_sock.as_raw_fd();
                     unblock_fd(conn_sock_fd);
@@ -865,6 +865,7 @@ fn main() -> io::Result<()> {
                                 }
                             }
                             Err(e) => {
+                                println!("Error to read fds: {:?}", e);
                                 break;
                             }
                         }

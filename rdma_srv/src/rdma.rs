@@ -208,7 +208,7 @@ impl IBContext {
         }
 
         unsafe {
-            let ret = rdmaffi::ibv_req_notify_cq(cq, 0);
+            let _ret = rdmaffi::ibv_req_notify_cq(cq, 0);
             // println!("ibv_req_notify_cq, ret: {}", ret);
         }
 

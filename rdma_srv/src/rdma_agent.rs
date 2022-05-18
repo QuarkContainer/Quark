@@ -82,7 +82,6 @@ impl Deref for RDMAAgent {
 
 impl RDMAAgent {
     pub fn New(id: u32, clientId: String, connSock: i32, clientEventfd: i32) -> Self {
-        let path = "/home/qingming/rdma_srv";
         println!("RDMAAgent::New 1");
         let memfdname = CString::new("RDMASrvMemFd").expect("CString::new failed for RDMASrvMemFd");
         let memfd = unsafe { libc::memfd_create(memfdname.as_ptr(), libc::MFD_ALLOW_SEALING) };
@@ -310,8 +309,8 @@ impl RDMAAgent {
                         rdmaConn
                             .ctrlChan
                             .lock()
-                            .SendControlMsg(ControlMsgBody::ConnectRequest(connectReqeust))
-                            .expect("fail to send msg");
+                            .SendControlMsg(ControlMsgBody::ConnectRequest(connectReqeust));
+                            // .expect("fail to send msg");
                     }
                     None => {
                         println!("TODO: return error as no ip mapping is found");

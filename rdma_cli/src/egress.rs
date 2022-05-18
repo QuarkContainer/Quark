@@ -132,13 +132,10 @@ pub enum FdType {
 fn main() -> io::Result<()> {
     println!("RDMASvc Client...");
     let mut fds: HashMap<i32, FdType> = HashMap::new();
-    let args: Vec<_> = env::args().collect();
-    //eventfd_test1();
     let rdmaSvcCli: RDMASvcClient;
     rdmaSvcCli = RDMASvcClient::initialize("/tmp/rdma_srv");
 
     let cliEventFd = rdmaSvcCli.cliEventFd;
-    let srvEventFd = rdmaSvcCli.srvEventFd;
     unblock_fd(cliEventFd);
     unblock_fd(rdmaSvcCli.srvEventFd);
 
@@ -150,7 +147,7 @@ fn main() -> io::Result<()> {
     //100733100, 58433
     //134654144
     let serverSockFd = rdmaSvcCli.sockIdMgr.lock().AllocId().unwrap();
-    rdmaSvcCli.bind(
+    let _ret = rdmaSvcCli.bind(
         serverSockFd,
         //u32::from(Ipv4Addr::from_str("172.16.1.6").unwrap()).to_be(),
         u32::from(Ipv4Addr::from_str("192.168.6.8").unwrap()).to_be(),
@@ -159,7 +156,7 @@ fn main() -> io::Result<()> {
     // let ten_millis = time::Duration::from_secs(1);
     // let _now = time::Instant::now();
     // thread::sleep(ten_millis);
-    rdmaSvcCli.listen(serverSockFd, 5);
+    let _ret = rdmaSvcCli.listen(serverSockFd, 5);
     rdmaSvcCli
         .cliShareRegion
         .lock()
@@ -243,7 +240,7 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                                     let mut sockFdInfos = rdmaSvcCli.dataSockFdInfos.lock();
                                     let sockInfo = sockFdInfos.get_mut(&response.sockfd).unwrap();
                                     {
-                                        let mut shareRegion = rdmaSvcCli.cliShareRegion.lock();
+                                        let shareRegion = rdmaSvcCli.cliShareRegion.lock();
                                         let sockInfo = DataSock::New(
                                             sockInfo.fd, //Allocate fd
                                             sockInfo.srcIpAddr,
@@ -328,7 +325,7 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                                     println!("sock_fd is {}", sock_fd);
                                     unblock_fd(sock_fd);
                                     fds.insert(sock_fd, FdType::TCPSocketConnect(dataSockFd));
-                                    epoll_add(epoll_fd, sock_fd, read_write_event(sock_fd as u64));
+                                    let _ret = epoll_add(epoll_fd, sock_fd, read_write_event(sock_fd as u64));
 
                                     unsafe {
                                         //TODO: this should be use control plane data: egressPort -> (ipAddr, port)
@@ -572,13 +569,13 @@ fn share_client_region() {
 }
 
 fn get_local_ip() -> u32 {
-    let my_local_ip = local_ip().unwrap();
+    let _my_local_ip = local_ip().unwrap();
 
     // println!("This is my local IP address: {:?}", my_local_ip);
 
     let network_interfaces = list_afinet_netifas().unwrap();
 
-    for (name, ip) in network_interfaces.iter() {
+    for (_name, _ip) in network_interfaces.iter() {
         //println!("{}:\t{:?}", name, ip);
     }
 

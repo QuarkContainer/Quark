@@ -18,7 +18,8 @@ use core::sync::atomic::Ordering;
 //use std::sync::atomic::AtomicI64;
 use super::common::*;
 use super::linux_def::*;
-use std::collections::HashSet;
+use alloc::collections::btree_set::BTreeSet;
+use alloc::vec::Vec;
 
 pub const COUNT: usize = 65536;
 pub struct RingQueue<T: 'static + Default> {
@@ -399,10 +400,11 @@ impl ShareRegion {
     }
 }
 
+#[allow(non_camel_case_types)]
 #[derive(Clone, Copy, Debug)]
 pub enum SockStatus {
     FIN_READ_FROM_BUFFER, //after reading all stuff to above socket, need a better name.
-    FIN_SENT_TO_SVC, //
+    FIN_SENT_TO_SVC,      //
     // FIN_RECEIVED_FROM_PEER,
     CLOSE_WAIT,
     CLOSING,
@@ -414,6 +416,7 @@ pub enum SockStatus {
     // ... to simulate TCP status
 }
 
+#[allow(non_camel_case_types)]
 #[derive(Clone, Copy)]
 pub enum DuplexMode {
     SHUTDOWN_NONE,
@@ -430,7 +433,7 @@ pub struct Endpoint {
 }
 
 pub struct IdMgr {
-    pub set: HashSet<u32>,
+    pub set: BTreeSet<u32>,
     pub len: u32,
     pub start: u32,
 }
@@ -438,7 +441,7 @@ pub struct IdMgr {
 impl IdMgr {
     pub fn Init(start: u32, len: u32) -> Self {
         return IdMgr {
-            set: HashSet::new(),
+            set: BTreeSet::new(),
             len: len,
             start: start,
         };
