@@ -74,6 +74,7 @@ pub mod rdma_channel;
 pub mod rdma_conn;
 pub mod rdma_ctrlconn;
 pub mod rdma_srv;
+pub mod unix_socket;
 
 use crate::qlib::bytestream::ByteStream;
 use crate::rdma_srv::RDMA_CTLINFO;
@@ -93,7 +94,7 @@ use local_ip_address::list_afinet_netifas;
 use local_ip_address::local_ip;
 use qlib::linux_def::*;
 use qlib::socket_buf::SocketBuff;
-use qlib::unix_socket::UnixSocket;
+use unix_socket::UnixSocket;
 //use rdma_srv::*;
 use rdma_agent::*;
 use rdma_channel::RDMAChannel;
@@ -628,6 +629,7 @@ fn main() -> io::Result<()> {
     // for (ipAddr, node) in RDMA_CTLINFO.nodes.lock().iter() {
     //     if cur_timestamp < node.timestamp {
     if args.len() > 1 {
+        //TODO: this is hardcoded for testing purpose, should come from control plane.
         let node = Node {
             //ipAddr: u32::from(Ipv4Addr::from_str("6.1.16.172").unwrap()),
             ipAddr: u32::from(Ipv4Addr::from_str("172.16.1.6").unwrap()).to_be(),
@@ -702,7 +704,7 @@ fn main() -> io::Result<()> {
         unsafe {
             let serv_addr: libc::sockaddr_in = libc::sockaddr_in {
                 sin_family: libc::AF_INET as u16,
-                sin_port: 8888u16.to_be(),
+                sin_port: 8888u16.to_be(), //8888 is the port for RDMASvc to shake hands
                 sin_addr: libc::in_addr {
                     s_addr: node.ipAddr,
                 },
@@ -719,23 +721,7 @@ fn main() -> io::Result<()> {
     }
 
     let mut eventdata: u64 = 0;
-    println!("access RDMA_SRV.eventfd");
-    //TOBEDELETE
-    // let memfd = unsafe {
-    //     libc::memfd_create(
-    //         "Server memfd".as_ptr() as *const i8,
-    //         libc::MFD_ALLOW_SEALING,
-    //     )
-    // };
-    // if memfd == -1 {
-    //     panic!(
-    //         "fail to create memfd, error is: {}",
-    //         std::io::Error::last_os_error()
-    //     );
-    // }
-    // println!("self RDMASrv New, memfd {}", memfd);
-    // let x = RDMASrv::New();
-    // println!("access RDMA_SRV.eventfd, memfd: {}", memfd);
+
     let srvEventFd = RDMA_SRV.eventfd;
     epoll_add(epoll_fd, srvEventFd, read_event(srvEventFd as u64))?;
     unblock_fd(srvEventFd);

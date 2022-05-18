@@ -67,16 +67,8 @@ pub mod asm;
 pub mod kernel_def;
 pub mod qlib;
 
-//pub mod rdma_bak;
-//pub mod rdma_agent;
-// pub mod rdma_channel;
-// pub mod rdma_conn;
-// pub mod rdma_ctrlconn;
 pub mod rdma_service_client;
-// pub mod rdma_srv;
-
-// use crate::rdma_srv::RDMA_CTLINFO;
-// use crate::rdma_srv::RDMA_SRV;
+pub mod unix_socket;
 
 use self::qlib::ShareSpaceRef;
 use alloc::slice;
@@ -90,14 +82,11 @@ use std::net::{IpAddr, Ipv4Addr, TcpListener, TcpStream};
 use std::os::unix::io::{AsRawFd, RawFd};
 pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
 use crate::qlib::rdma_share::*;
-// use crate::rdma_bak::RDMA;
 use local_ip_address::list_afinet_netifas;
 use local_ip_address::local_ip;
 use qlib::linux_def::*;
 use qlib::socket_buf::SocketBuff;
-use qlib::unix_socket::UnixSocket;
-// use rdma_conn::RDMAConn;
-// use rdma_ctrlconn::Node;
+use unix_socket::UnixSocket;
 use rdma_service_client::*;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -145,7 +134,11 @@ fn main() -> io::Result<()> {
     let args: Vec<_> = env::args().collect();
     //eventfd_test1();
     let rdmaSvcCli: RDMASvcClient;
-    rdmaSvcCli = RDMASvcClient::initialize("/tmp/rdma_srv1");
+    let mut unix_sock_path = "/tmp/rdma_srv";
+    if args.len() > 1 {
+        unix_sock_path = args.get(1).unwrap(); //"/tmp/rdma_srv1";
+    }
+    rdmaSvcCli = RDMASvcClient::initialize(unix_sock_path);
 
     let cliEventFd = rdmaSvcCli.cliEventFd;
     let srvEventFd = rdmaSvcCli.srvEventFd;
@@ -163,7 +156,7 @@ fn main() -> io::Result<()> {
     unblock_fd(server_fd);
     epoll_add(epoll_fd, server_fd, read_write_event(server_fd as u64))?;
     unsafe {
-        // TODO: need mapping 6666 -> (172.16.1.6:8888) from centrol datastore
+        // TODO: need mapping 6666 -> (172.16.1.6:8888) for testing purpose, late should come from control plane
         let mut serv_addr: libc::sockaddr_in = libc::sockaddr_in {
             sin_family: libc::AF_INET as u16,
             sin_port: 6666u16.to_be(),
@@ -239,7 +232,7 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                             epoll_add(epoll_fd, stream_fd, read_write_event(stream_fd as u64));
                             println!("stream_fd is: {}", stream_fd);
 
-                            //TODO: use port to map to different node.
+                            //TODO: use port to map to different (ip, port), hardcode for testing purpose, should come from control plane in the future
                             let sockfd = rdmaSvcCli.sockIdMgr.lock().AllocId().unwrap();
                             rdmaSvcCli.connect(
                                 sockfd,
@@ -248,8 +241,7 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                             );
                             fds.insert(stream_fd, FdType::TCPSocketConnect(sockfd));
                             sockFdMappings.insert(sockfd, stream_fd);
-                        }
-                        else {
+                        } else {
                             break;
                         }
                     }

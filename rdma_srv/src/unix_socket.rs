@@ -20,8 +20,8 @@ use nix::sys::socket::{ControlMessage, MsgFlags, sendmsg, recvmsg};
 use nix::sys::socket::ControlMessageOwned;
 use nix::sys::uio::IoVec;
 
-use super::common::*;
-use super::cstring::*;
+use super::qlib::common::*;
+use super::qlib::cstring::*;
 
 #[repr(C)]
 union HeaderAlignedBuf {

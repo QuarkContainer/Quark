@@ -67,16 +67,8 @@ pub mod asm;
 pub mod kernel_def;
 pub mod qlib;
 
-//pub mod rdma_bak;
-//pub mod rdma_agent;
-// pub mod rdma_channel;
-// pub mod rdma_conn;
-// pub mod rdma_ctrlconn;
 pub mod rdma_service_client;
-// pub mod rdma_srv;
-
-// use crate::rdma_srv::RDMA_CTLINFO;
-// use crate::rdma_srv::RDMA_SRV;
+pub mod unix_socket;
 
 use self::qlib::ShareSpaceRef;
 use alloc::slice;
@@ -90,14 +82,11 @@ use std::net::{IpAddr, Ipv4Addr, TcpListener, TcpStream};
 use std::os::unix::io::{AsRawFd, RawFd};
 pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
 use crate::qlib::rdma_share::*;
-// use crate::rdma_bak::RDMA;
 use local_ip_address::list_afinet_netifas;
 use local_ip_address::local_ip;
 use qlib::linux_def::*;
 use qlib::socket_buf::SocketBuff;
-use qlib::unix_socket::UnixSocket;
-// use rdma_conn::RDMAConn;
-// use rdma_ctrlconn::Node;
+use unix_socket::UnixSocket;
 use rdma_service_client::*;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};

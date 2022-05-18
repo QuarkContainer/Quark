@@ -67,16 +67,8 @@ pub mod asm;
 pub mod kernel_def;
 pub mod qlib;
 
-//pub mod rdma_bak;
-//pub mod rdma_agent;
-// pub mod rdma_channel;
-// pub mod rdma_conn;
-// pub mod rdma_ctrlconn;
 pub mod rdma_service_client;
-// pub mod rdma_srv;
-
-// use crate::rdma_srv::RDMA_CTLINFO;
-// use crate::rdma_srv::RDMA_SRV;
+pub mod unix_socket;
 
 use self::qlib::ShareSpaceRef;
 use alloc::slice;
@@ -90,14 +82,11 @@ use std::net::{IpAddr, Ipv4Addr, TcpListener, TcpStream};
 use std::os::unix::io::{AsRawFd, RawFd};
 pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
 use crate::qlib::rdma_share::*;
-// use crate::rdma_bak::RDMA;
 use local_ip_address::list_afinet_netifas;
 use local_ip_address::local_ip;
 use qlib::linux_def::*;
 use qlib::socket_buf::SocketBuff;
-use qlib::unix_socket::UnixSocket;
-// use rdma_conn::RDMAConn;
-// use rdma_ctrlconn::Node;
+use unix_socket::UnixSocket;
 use rdma_service_client::*;
 use spin::{Mutex, MutexGuard};
 use std::str::FromStr;
@@ -183,16 +172,6 @@ fn main() -> io::Result<()> {
 
 fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType>) {
     let mut events: Vec<EpollEvent> = Vec::with_capacity(1024);
-    let mut index = 0;
-    let mut randomMsgSize = 32768; //32789; //32768;
-    let count = 10; //10000000;
-    let mut left = randomMsgSize as u64;
-    let rbSize = 65536;
-    let rb: Vec<u8> = Vec::with_capacity(rbSize);
-    let wb: Vec<u8> = Vec::with_capacity(randomMsgSize as usize);
-    let rAddr = rb.as_ptr() as u64;
-    let wAddr = rb.as_ptr() as u64;
-    let mut readData = 0;
 
     // mapping between sockfd maintained by rdmaSvcCli and fd for connecting to external server.
     let mut sockFdMappings: HashMap<u32, i32> = HashMap::new();
@@ -224,7 +203,7 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
             // print!("u64: {}, events: {:x}", ev.U64, ev.Events);
             let event_data = fds.get(&(ev.U64 as i32));
             match event_data {
-                Some(FdType::TCPSocketServer(port)) => {
+                Some(FdType::TCPSocketServer(_port)) => {
                     println!("Egress gateway doesn't have this type!");
                 }
                 Some(FdType::TCPSocketConnect(sockfd)) => {
@@ -239,10 +218,10 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                     //     return;
                     // }
                     println!("SockInfo.status is {:?}", sockInfo.status);
-                    println!(
-                        "FdType::TCPSocketConnect, sockfd: {}, ev.Events: {}",
-                        sockfd, ev.Events
-                    );
+                    // println!(
+                    //     "FdType::TCPSocketConnect, sockfd: {}, ev.Events: {}",
+                    //     sockfd, ev.Events
+                    // );
                     if ev.Events & EVENT_IN as u32 != 0 {
                         rdmaSvcCli.ReadFromSocket(&mut sockInfo, &sockFdMappings);
                     }
@@ -307,7 +286,7 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
 
                                     let ioBufIndex = response.ioBufIndex as usize;
                                     let dataSockFd = rdmaSvcCli.sockIdMgr.lock().AllocId().unwrap();
-                                    let mut shareRegion = rdmaSvcCli.cliShareRegion.lock();
+                                    let shareRegion = rdmaSvcCli.cliShareRegion.lock();
                                     let dataSockInfo = DataSock::New(
                                         dataSockFd, //Allocate fd
                                         sockInfo.srcIpAddr,
@@ -352,12 +331,14 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                                     epoll_add(epoll_fd, sock_fd, read_write_event(sock_fd as u64));
 
                                     unsafe {
+                                        //TODO: this should be use control plane data: egressPort -> (ipAddr, port)
                                         let serv_addr: libc::sockaddr_in = libc::sockaddr_in {
                                             sin_family: libc::AF_INET as u16,
                                             sin_port: 25028u16.to_be(),
                                             sin_addr: libc::in_addr {
                                                 s_addr: u32::from(
-                                                    Ipv4Addr::from_str("172.16.1.6").unwrap(),
+                                                    // Ipv4Addr::from_str("172.16.1.6").unwrap(),
+                                                    Ipv4Addr::from_str("127.0.0.1").unwrap()
                                                 )
                                                 .to_be(),
                                             },

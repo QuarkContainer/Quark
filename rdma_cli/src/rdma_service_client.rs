@@ -29,7 +29,7 @@ use super::qlib::common::*;
 use super::qlib::linux_def::*;
 use super::qlib::rdma_share::*;
 use super::qlib::socket_buf::*;
-use super::qlib::unix_socket::*;
+use super::unix_socket::UnixSocket;
 
 pub enum SockType {
     TBD,

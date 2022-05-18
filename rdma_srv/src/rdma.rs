@@ -813,15 +813,16 @@ impl QueuePair {
             },
         };
 
+        println!("QP::WriteImm 1");
         let mut bad_wr: *mut rdmaffi::ibv_send_wr = ptr::null_mut();
 
         let rc = unsafe { rdmaffi::ibv_post_send(self.Data(), &mut sw, &mut bad_wr) };
-
+        println!("QP::WriteImm 2");
         if rc != 0 {
             return Err(Error::SysError(errno::errno().0));
         }
 
-        // println!("QP::WriteImm");
+        println!("QP::WriteImm 3");
 
         return Ok(());
     }
