@@ -353,9 +353,7 @@ impl Drop for File {
             let lockCtx = inode.lock().LockCtx.clone();
             let task = Task::Current();
 
-            // work around mysql startup issue. Todo: fix this
-            //let lockUniqueID = self.UniqueId();
-            let lockUniqueID = task.fdTbl.ID();
+            let lockUniqueID = self.UniqueId();
             lockCtx.BSD.UnlockRegion(task, lockUniqueID, &Range::Max());
             lockCtx
                 .Posix

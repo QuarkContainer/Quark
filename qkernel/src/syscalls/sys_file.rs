@@ -1016,8 +1016,8 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             // Compute the lock range.
             let rng = ComputeRange(flock.l_start, flock.l_len, offset)?;
 
-            // The lock uid is that of the Task's FDTable.
-            let lockUniqueID = task.fdTbl.ID();
+            // The lock uid is that of the file's UniqueId.
+            let lockUniqueID = file.UniqueId();
 
             // These locks don't block; execute the non-blocking operation using the inode's lock
             // context directly.
