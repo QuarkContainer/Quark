@@ -631,6 +631,9 @@ impl Thread {
                 Err(Error::SysError(SysErr::ETIMEDOUT)) => {
                     return Err(Error::SysError(SysErr::EAGAIN));
                 }
+                Err(Error::ErrInterrupted) => {
+                    return Err(Error::SysError(SysErr::ERESTARTNOHAND));
+                }
                 Err(e) => return Err(e),
                 e => panic!("TaskExitZombie, unknow return {:?}", e),
             }
