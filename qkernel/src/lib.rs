@@ -339,7 +339,7 @@ pub extern "C" fn syscall_handler(
     }
 
     CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
-
+    currTask.mm.HandleTlbShootdown();
     if !(pt.rip == pt.rcx && pt.r11 == pt.eflags) {
         //error!("iret *****, pt is {:x?}", pt);
         IRet(kernalRsp)
