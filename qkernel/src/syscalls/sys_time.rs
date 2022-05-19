@@ -193,9 +193,11 @@ pub fn SysNanoSleep(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Ok(0);
     }
 
-    let timer = task.blocker.GetTimer(CLOCK_MONOTONIC);
+    let clock = GetClock(task, CLOCK_MONOTONIC)?;
 
-    return NansleepFor(task, timer, dur, rem);
+    let now = clock.Now();
+    let end = now.0 + dur;
+    return NansleepUntil(task, clock, end, rem, true);
 }
 
 // SysClockNanosleep implements linux syscall clock_nanosleep(2).
@@ -211,7 +213,7 @@ pub fn SysClockNanosleep(task: &mut Task, args: &SyscallArguments) -> Result<i64
         return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    let mut dur = ts.ToNs()?;
+    let input = ts.ToNs()?;
 
     // Only allow clock constants also allowed by Linux.
     if clockID >= 0 {
@@ -225,21 +227,28 @@ pub fn SysClockNanosleep(task: &mut Task, args: &SyscallArguments) -> Result<i64
 
     let clock = GetClock(task, clockID)?;
 
+    let end;
     if flags & TIMER_ABSTIME != 0 {
+        end = input;
+    } else {
         let now = clock.Now();
-        dur = dur - now.0;
+        end = now.0 + input;
     }
+
+    return NansleepUntil(task, clock, end, rem, flags & TIMER_ABSTIME == 0);
+}
+
+pub fn NansleepUntil(task: &mut Task, clock: Clock, end: i64, rem: u64, needRestartBlock: bool) -> Result<i64> {
+    let timer = task.blocker.GetTimerWithClock(&clock);
+
+    let now = clock.Now();
+    let dur = end -now.0;
 
     if dur < TIMEOUT_PROCESS_TIME {
         Yield();
         return Ok(0);
     }
 
-    let timer = task.blocker.GetTimerWithClock(&clock);
-    return NansleepFor(task, timer, dur, rem);
-}
-
-pub fn NansleepFor(task: &mut Task, timer: Timer, dur: i64, rem: u64) -> Result<i64> {
     let (remaining, res) = task.blocker.BlockWithTimeout(timer, false, Some(dur));
 
     if rem != 0 && remaining != 0 {
@@ -250,8 +259,13 @@ pub fn NansleepFor(task: &mut Task, timer: Timer, dur: i64, rem: u64) -> Result<
 
     match res {
         Err(Error::ErrInterrupted) => {
+            if !needRestartBlock {
+                return Err(Error::SysError(SysErr::ERESTART));
+            }
+
             let b = Box::new(NanosleepRestartBlock {
-                dur: remaining,
+                clock: clock,
+                end: end,
                 rem: rem,
             });
             task.SetSyscallRestartBlock(b);
@@ -266,21 +280,14 @@ pub fn NansleepFor(task: &mut Task, timer: Timer, dur: i64, rem: u64) -> Result<
 }
 
 pub struct NanosleepRestartBlock {
-    pub dur: Duration,
+    pub clock: Clock,
+    pub end: i64,
     pub rem: u64,
 }
 
 impl SyscallRestartBlock for NanosleepRestartBlock {
     fn Restart(&self, task: &mut Task) -> Result<i64> {
-        if self.rem != 0 {
-            //let ts : &mut Timespec = task.GetTypeMut(self.rem)?;
-            //*ts = Timespec::FromNs(self.dur);
-            let ts = Timespec::FromNs(self.dur);
-            task.CopyOutObj(&ts, self.rem)?;
-        }
-
-        return Err(Error::SysError(SysErr::EINTR));
-        //return NansleepFor(task, self.dur, self.rem)
+        return NansleepUntil(task, self.clock.clone(), self.end, self.rem, true);
     }
 }
 

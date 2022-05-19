@@ -1166,6 +1166,10 @@ impl MemoryManager {
         writeReq: bool,
         allowPartial: bool,
     ) -> Result<u64> {
+        if (vAddr as i64) < 0 {
+            return Err(Error::SysError(SysErr::EFAULT));
+        }
+
         // todo: fix the security check issue
         if MemoryDef::PHY_LOWER_ADDR <= vAddr && vAddr <= MemoryDef::PHY_UPPER_ADDR {
             // Kernel phy address
