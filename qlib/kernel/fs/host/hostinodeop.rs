@@ -661,11 +661,11 @@ impl HostInodeOp {
         let hostIops = self.clone();
 
         let size = IoVec::NumBytes(dsts);
-        /*let size = if size >= MemoryDef::HUGE_PAGE_SIZE as usize {
+        let size = if size >= MemoryDef::HUGE_PAGE_SIZE as usize {
             MemoryDef::HUGE_PAGE_SIZE as usize
         } else {
             size
-        };*/
+        };
         let buf = DataBuff::New(size);
 
         let iovs = buf.Iovs(size);
