@@ -564,12 +564,14 @@ impl Task {
     pub fn RestartSyscall(&self) {
         let pt = self.GetPtRegs();
         pt.rcx -= Self::SYSCALL_WIDTH;
+        pt.rip = pt.rcx;
         pt.rax = pt.orig_rax;
     }
 
     pub fn RestartSyscallWithRestartBlock(&self) {
         let pt = self.GetPtRegs();
         pt.rcx -= Self::SYSCALL_WIDTH;
+        pt.rip = pt.rcx;
         pt.rax = SysCallID::sys_restart_syscall as u64;
     }
 
