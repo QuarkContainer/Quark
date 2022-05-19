@@ -598,6 +598,9 @@ impl Task {
     }
 
     pub fn IovsFromAddr(&self, iovs: u64, iovsnum: usize) -> Result<Vec<IoVec>> {
+        if iovsnum > UIO_MAXIOV {
+            return Err(Error::SysError(SysErr::EINVAL))
+        }
         return self.mm.CopyInVec(self, iovs, iovsnum);
     }
 
