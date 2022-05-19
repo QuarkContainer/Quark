@@ -19,7 +19,6 @@ use super::qlib::addr::*;
 use super::qlib::common::*;
 use super::qlib::kernel::TSC;
 use super::qlib::linux_def::*;
-use super::qlib::pagetable::PageTables;
 use super::qlib::perf_tunning::*;
 use super::qlib::singleton::*;
 use super::qlib::vcpu_mgr::*;
@@ -170,7 +169,9 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, ptRegs: &mut PtRegs, errorCode: u
         );
     }
 
-    if ev != ExceptionStackVec::X87FloatingPointException &&  ev != ExceptionStackVec::SIMDFloatingPointException {
+    if ev != ExceptionStackVec::X87FloatingPointException
+        && ev != ExceptionStackVec::SIMDFloatingPointException
+    {
         currTask.SaveFp();
     }
 
@@ -317,10 +318,13 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, ptRegs: &mut PtRegs, errorCode: u
     }
 
     MainRun(currTask, TaskRunState::RunApp);
-    if ev != ExceptionStackVec::X87FloatingPointException &&  ev != ExceptionStackVec::SIMDFloatingPointException {
+    if ev != ExceptionStackVec::X87FloatingPointException
+        && ev != ExceptionStackVec::SIMDFloatingPointException
+    {
         currTask.RestoreFp();
     }
 
+    currTask.mm.HandleTlbShootdown();
     ReturnToApp(ptRegs);
 }
 
@@ -681,11 +685,7 @@ pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
             ptRegs.eflags = rflags;
         }
 
-        let curr = super::asm::CurrentCr3();
-        PageTables::Switch(curr);
-        let currTask = Task::Current();
-        currTask.mm.MaskTlbShootdown(CPULocal::CpuId() as u64);
-
+        currTask.mm.HandleTlbShootdown();
         CPULocal::SetKernelStack(currTask.GetKernelSp());
         return;
     } else if CPULocal::InterruptByThreadTimeout(mask) {
@@ -705,11 +705,11 @@ pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
 
             super::qlib::kernel::taskMgr::Yield();
             MainRun(currTask, TaskRunState::RunApp);
+            // do we need to handle tlb shootdown here?
+            currTask.mm.HandleTlbShootdown();
             currTask.RestoreFp();
-
             CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
             CPULocal::SetKernelStack(currTask.GetKernelSp());
-
             let kernalRsp = ptRegs as *const _ as u64;
             if !(ptRegs.rip == ptRegs.rcx && ptRegs.r11 == ptRegs.eflags) {
                 IRet(kernalRsp)

@@ -295,6 +295,7 @@ pub fn SysExecve(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
         let newMM = MemoryManager::Init(false);
         let oldMM = task.mm.clone();
+        newMM.SetVcpu(GetVcpuId());
         task.mm = newMM.clone();
         task.futexMgr = task.futexMgr.Fork();
         task.Thread().lock().memoryMgr = newMM;
