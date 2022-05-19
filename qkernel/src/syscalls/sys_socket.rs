@@ -614,7 +614,7 @@ pub fn SysRecvMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 pub fn SysRecvMMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let fd = args.arg0 as i32;
     let msgPtr = args.arg1 as u64;
-    let vlen = args.arg2 as u32;
+    let vlen = args.arg2 as i32;
     let mut flags = args.arg3 as i32;
     let timeout = args.arg4 as u64;
 
@@ -625,6 +625,16 @@ pub fn SysRecvMMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     if flags & !(MsgType::BASE_RECV_FLAGS | MsgType::MSG_CMSG_CLOEXEC | MsgType::MSG_ERRQUEUE) != 0
     {
         return Err(Error::SysError(SysErr::EINVAL));
+    }
+
+    if vlen < 0 {
+        return Err(Error::SysError(SysErr::EINVAL))
+    }
+
+    let mut vlen = vlen as u32;
+
+    if vlen > UIO_MAXIOV as u32 {
+        vlen = UIO_MAXIOV as u32;
     }
 
     let mut deadline = None;
@@ -808,7 +818,7 @@ pub fn SysSendMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 pub fn SysSendMMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let fd = args.arg0 as i32;
     let msgPtr = args.arg1 as u64;
-    let vlen = args.arg2 as u32;
+    let vlen = args.arg2 as i32;
     let mut flags = args.arg3 as i32;
 
     let file = task.GetFile(fd)?;
@@ -820,6 +830,16 @@ pub fn SysSendMMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         != 0
     {
         return Err(Error::SysError(SysErr::EINVAL));
+    }
+
+    if vlen < 0 {
+        return Err(Error::SysError(SysErr::EINVAL))
+    }
+
+    let mut vlen = vlen as u32;
+
+    if vlen > UIO_MAXIOV as u32 {
+        vlen = UIO_MAXIOV as u32;
     }
 
     if !file.Blocking() {
