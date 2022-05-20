@@ -22,12 +22,14 @@ use super::super::uid::NewUID;
 use super::processgroup::*;
 use super::thread::*;
 use super::thread_group::*;
+use qlib::kernel::threadmgr::pid_namespace::PIDNamespace;
+use qlib::kernel::threadmgr::refcounter::AtomicRefCount;
 
 #[derive(Default)]
 pub struct SessionInternal {
     pub id: SessionID,
     pub leader: ThreadGroup,
-
+    pub refs: AtomicRefCount,
     pub processGroups: BTreeSet<ProcessGroup>,
 }
 
@@ -69,15 +71,40 @@ impl Eq for Session {}
 
 impl Session {
     pub fn New(id: SessionID, leader: ThreadGroup) -> Self {
-        let internal = SessionInternal {
+        let mut internal = SessionInternal {
             id: id,
             leader: leader,
+            refs: Default::default(),
             processGroups: BTreeSet::new(),
         };
-
         return Self {
             uid: NewUID(),
             data: Arc::new(QMutex::new(internal)),
         };
+    }
+
+    pub fn DecRef(&self) {
+        let mut needRemove = false;
+        self.data
+            .lock()
+            .refs
+            .DecRefWithDesctructor(|| needRemove = true);
+        let id = self.data.lock().id;
+        let mut pidns = self.data.lock().leader.lock().pidns.clone();
+        if needRemove {
+            loop {
+                pidns.lock().sids.remove(self);
+                pidns.lock().sessions.remove(&id);
+                match pidns.lock().parent.clone() {
+                    None => break,
+                    Some(ns) => pidns = ns,
+                };
+            }
+            pidns.lock().owner.write().sessions.remove(self);
+        }
+    }
+
+    pub fn IncRef(&self) {
+        self.data.lock().refs.IncRef();
     }
 }
