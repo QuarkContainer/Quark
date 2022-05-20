@@ -501,6 +501,7 @@ impl ThreadGroup {
 
         let oldPg = self.lock().processGroup.clone().unwrap();
         oldPg.decRefWithParent(oldParentPG);
+        oldPg.lock().session.IncRef();
         self.lock().processGroup = Some(pg.clone());
 
         let sessionTmp = pg.lock().session.clone();
