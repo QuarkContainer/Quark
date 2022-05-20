@@ -307,25 +307,11 @@ impl MemoryManager {
         if self.pagetable.read().pt.TlbShootdown() {
             let mask = self.GetVcpuMapping();
             if mask > 0 {
-                //error!("TlbShootdownVcpuMask ... {:x}", mask);
-
                 self.ClearTlbShootdownMask();
-                // todo: wait for all the vcpu finishing the TLS shootdown?
-                // the current kvm_interrupt can't interrupt some vcpu, why?
+                // no need to flush tlb for the vcpu itself,
+                // as it already flushed the specific entry when pagetable changed.
+                self.MaskTlbShootdown(CPULocal::CpuId() as u64);
                 HostSpace::TlbShootdown(mask) as u64;
-                //mask = HostSpace::TlbShootdown(mask) as u64;
-
-                /*loop {
-                    // wait all other vcpu finish tlb clear
-                    let waitMask = mask & !self.TlbShootdownMask();
-                    if waitMask == 0 {
-                        break;
-                    }
-
-                    mask = HostSpace::TlbShootdown(waitMask) as u64;
-                    error!("wait for {:b}", mask);
-                    //core::hint::spin_loop();
-                }*/
             }
 
             CPULocal::Myself().pageAllocator.lock().Clean();
@@ -471,9 +457,11 @@ impl MemoryManager {
         return Ok(());
     }
 
+    // SHOULD be called before return to user space,
+    // to make sure the tlb flushed
     pub fn HandleTlbShootdown(&self) {
         let vcpId = CPULocal::CpuId() as u64;
-        if self.TlbShootdownMask() & (1 << vcpId) != 0 {
+        if self.TlbShootdownMask() & (1 << vcpId) == 0 {
             let curr = super::super::super::super::asm::CurrentCr3();
             PageTables::Switch(curr);
             self.MaskTlbShootdown(vcpId);
@@ -482,13 +470,11 @@ impl MemoryManager {
 
     pub fn MappingReadLock(&self) -> QMutexGuard<()> {
         let lock = self.mappingLock.lock();
-        self.HandleTlbShootdown();
         return lock;
     }
 
     pub fn MappingWriteLock(&self) -> QMutexGuard<()> {
         let lock = self.mappingLock.lock();
-        self.HandleTlbShootdown();
         return lock;
     }
 
