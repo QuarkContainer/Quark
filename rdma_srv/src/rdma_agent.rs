@@ -82,7 +82,6 @@ impl Deref for RDMAAgent {
 
 impl RDMAAgent {
     pub fn New(id: u32, clientId: String, connSock: i32, clientEventfd: i32) -> Self {
-        println!("RDMAAgent::New 1");
         let memfdname = CString::new("RDMASrvMemFd").expect("CString::new failed for RDMASrvMemFd");
         let memfd = unsafe { libc::memfd_create(memfdname.as_ptr(), libc::MFD_ALLOW_SEALING) };
         let size = mem::size_of::<ClientShareRegion>();
@@ -97,13 +96,6 @@ impl RDMAAgent {
                 0,
             )
         };
-
-        println!("addr: 0x{:x}", addr as u64);
-
-        // Send srv fd to client.
-        // let srv_sock = UnixSocket::NewServer(path).unwrap();
-        // let conn_sock = UnixSocket::Accept(srv_sock.as_raw_fd()).unwrap();
-        // conn_sock.SendFd(fd).unwrap();
 
         //start from 2M registration.
         let mr = RDMA
@@ -127,7 +119,6 @@ impl RDMAAgent {
             shareRegion: Mutex::new(shareRegion),
             ioBufIdMgr: Mutex::new(IdMgr::Init(0, 20)),
             keys: vec![[mr.LKey(), mr.RKey()]],
-            // sockInfos: Mutex::new(HashMap::new()),
         }))
     }
 
@@ -145,7 +136,6 @@ impl RDMAAgent {
             },
             ioBufIdMgr: Mutex::new(IdMgr::Init(0, 0)),
             keys: vec![[0, 0]],
-            // sockInfos: Mutex::new(HashMap::new()),
         }))
     }
 
@@ -184,13 +174,8 @@ impl RDMAAgent {
         rdmaConn: RDMAConn,
         shareRegion: &ClientShareRegion,
     ) -> RDMAChannel {
-        println!("RDMAAgent::CreateClientRDMAChannel 1");
         let channelId = RDMA_SRV.channelIdMgr.lock().AllocId().unwrap();
-        println!("RDMAAgent::CreateClientRDMAChannel 2");
         let ioBufIndex = self.ioBufIdMgr.lock().AllocId().unwrap() as usize;
-        println!("RDMAAgent::CreateClientRDMAChannel 3");
-        // let shareRegion = self.shareRegion.lock();
-        println!("RDMAAgent::CreateClientRDMAChannel 4");
         let sockBuf = Arc::new(SocketBuff::InitWithShareMemory(
             MemoryDef::DEFAULT_BUF_PAGE_COUNT,
             &shareRegion.ioMetas[ioBufIndex].readBufAtoms as *const _ as u64,
@@ -199,10 +184,9 @@ impl RDMAAgent {
             &shareRegion.iobufs[ioBufIndex].read as *const _ as u64,
             &shareRegion.iobufs[ioBufIndex].write as *const _ as u64,
         ));
-        println!("RDMAAgent::CreateClientRDMAChannel 5");
+
         let rdmaChannel = RDMAChannel::CreateClientChannel(
             channelId,
-            // connectReq.sockfd,
             self.keys[ioBufIndex / 16][0],
             self.keys[ioBufIndex / 16][1],
             sockBuf,
@@ -229,9 +213,7 @@ impl RDMAAgent {
 
     pub fn SendResponse(&self, response: RDMAResp) {
         let mut shareRegion = self.shareRegion.lock();
-        // println!("RDMAAgent::SendResponse: {:?} before", response);
         shareRegion.cq.Push(response);
-        // println!("RDMAAgent::SendResponse: {:?}", response);
         if shareRegion.clientBitmap.load(Ordering::SeqCst) == 1 {
             let data = 16u64;
             let ret = unsafe {
@@ -241,7 +223,6 @@ impl RDMAAgent {
                     mem::size_of_val(&data) as usize,
                 )
             };
-            // println!("RDMAAgent::SendResponse, ret: {}", ret);
             if ret < 0 {
                 println!("error: {}", std::io::Error::last_os_error());
             }
@@ -266,46 +247,21 @@ impl RDMAAgent {
                         status: SrvEndPointStatus::Listening,
                     },
                 );
-                println!(
-                    "insert listening: ipAddr: {}, port: {}",
-                    msg.ipAddr, msg.port
-                );
-                // self.sockInfos.lock().insert(
-                //     msg.sockfd,
-                //     SockInfo {
-                //         sockfd: msg.sockfd,
-                //         status: SockStatus::LISTENING,
-                //     },
-                // );
             }
             RDMAReqMsg::RDMAConnect(msg) => {
-                println!("connect: ipAddr: {}, port: {}", msg.dstIpAddr, msg.dstPort);
                 //TODOCtrlPlane: need get nodeIp from dstIpAddr
                 match RDMA_CTLINFO.podIpInfo.lock().get(&msg.dstIpAddr) {
                     Some(nodeIpAddr) => {
-                        println!("RDMAReqMsg::RDMAConnect 1");
                         let conns = RDMA_SRV.conns.lock();
                         let rdmaConn = conns.get(nodeIpAddr).unwrap();
-                        println!("RDMAReqMsg::RDMAConnect 2");
                         let rdmaChannel =
                             self.CreateClientRDMAChannel(&msg, rdmaConn.clone(), shareRegion);
-                        println!("RDMAReqMsg::RDMAConnect 3");
-                        // self.sockInfos.lock().insert(
-                        //     msg.sockfd,
-                        //     SockInfo {
-                        //         sockfd: msg.sockfd,
-                        //         status: SockStatus::CONNECTING,
-                        //     },
-                        // );
-                        println!("RDMAReqMsg::RDMAConnect 4");
                         RDMA_SRV
                             .channels
                             .lock()
                             .insert(rdmaChannel.localId, rdmaChannel.clone());
 
-                        println!("RDMAReqMsg::RDMAConnect 5");
                         let connectReqeust = rdmaChannel.CreateConnectRequest(msg.sockfd);
-                        println!("ConnectRequest before send: {:?}", connectReqeust);
                         rdmaConn
                             .ctrlChan
                             .lock()
@@ -318,7 +274,6 @@ impl RDMAAgent {
                 }
             }
             RDMAReqMsg::RDMAWrite(msg) => {
-                println!("RDMAAgent::RDMAReqMsg::RDMAWrite, msg: {:?}", msg);
                 match RDMA_SRV.channels.lock().get(&msg.channelId) {
                     Some(rdmaChannel) => {
                         rdmaChannel.RDMASend();
@@ -329,7 +284,6 @@ impl RDMAAgent {
                 }
             }
             RDMAReqMsg::RDMARead(msg) => {
-                println!("RDMAAgent::RDMAReqMsg::RDMARead, msg: {:?}", msg);
                 match RDMA_SRV.channels.lock().get(&msg.channelId) {
                     Some(rdmaChannel) => {
                         rdmaChannel.SendConsumedData();
@@ -340,7 +294,6 @@ impl RDMAAgent {
                 }
             }
             RDMAReqMsg::RDMAShutdown(msg) => {
-                println!("RDMAAgent::RDMAReqMsg::RDMAShutdown, msg: {:?}", msg);
                 match RDMA_SRV.channels.lock().get(&msg.channelId) {
                     Some(rdmaChannel) => {
                         rdmaChannel.Shutdown(msg.howto);
@@ -351,7 +304,6 @@ impl RDMAAgent {
                 }
             }
             RDMAReqMsg::RDMACloseChannel(msg) => {
-                println!("RDMAAgent::RDMAReqMsg::RDMACloseChannel, msg: {:?}", msg);
                 let rdmaChannel = RDMA_SRV
                     .channels
                     .lock()

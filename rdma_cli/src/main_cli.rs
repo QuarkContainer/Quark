@@ -67,7 +67,7 @@ pub mod asm;
 pub mod kernel_def;
 pub mod qlib;
 
-pub mod rdma_service_client;
+pub mod common;
 pub mod unix_socket;
 
 use self::qlib::ShareSpaceRef;
@@ -87,7 +87,7 @@ use local_ip_address::local_ip;
 use qlib::common::*;
 use qlib::linux_def::*;
 use qlib::socket_buf::SocketBuff;
-use rdma_service_client::*;
+use common::*;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::{env, mem, ptr, thread, time};

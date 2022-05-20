@@ -95,7 +95,6 @@ use local_ip_address::local_ip;
 use qlib::linux_def::*;
 use qlib::socket_buf::SocketBuff;
 use unix_socket::UnixSocket;
-//use rdma_srv::*;
 use rdma_agent::*;
 use rdma_channel::RDMAChannel;
 use rdma_conn::*;
@@ -106,7 +105,6 @@ use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::{env, mem, ptr, thread, time};
-//use qlib::range::{IdMgr, GapMgr};
 use id_mgr::IdMgr;
 
 #[allow(unused_macros)]
@@ -873,9 +871,9 @@ fn main() -> io::Result<()> {
                 }
                 Some(FdType::RDMACompletionChannel) => {
                     // println!("Got RDMA completion event");
-                    let cnt = RDMA.PollCompletionQueueAndProcess();
+                    let _cnt = RDMA.PollCompletionQueueAndProcess();
                     RDMA.HandleCQEvent().unwrap();
-                    println!("FdType::RDMACompletionChannel, processed {} wcs", cnt);
+                    // println!("FdType::RDMACompletionChannel, processed {} wcs", cnt);
                 }
                 Some(FdType::SrvEventFd(srvEventFd)) => {
                     // print!("u64: {}, events: {:x}", ev.U64, ev.Events);
@@ -900,7 +898,7 @@ fn main() -> io::Result<()> {
                             errno::errno().0
                         );
                     }
-                    println!("eventdata: {}", eventdata);
+                    // println!("eventdata: {}", eventdata);
                     RDMA_SRV.HandleClientRequest();
                 }
                 None => {

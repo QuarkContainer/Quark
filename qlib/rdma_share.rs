@@ -261,7 +261,7 @@ pub struct IOBuf {
 pub struct IOMetas {
     pub readBufAtoms: [AtomicU32; 2],
     pub writeBufAtoms: [AtomicU32; 2],
-    pub consumeReadData: AtomicU32,
+    pub consumeReadData: AtomicU64,
 }
 
 pub struct ClientShareRegion {

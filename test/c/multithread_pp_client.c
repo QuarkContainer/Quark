@@ -51,7 +51,7 @@ void * clientThread(void *arg)
 
     for (int i=0; i<config.count; i++)
     {
-        printf("send %dth data\n", i+1);
+        // printf("thread %dth, send %dth data\n", index+1, i+1);
         if (config.log)
         {
             printf("client sock is: %d 1\n", clientsocks[index]);
@@ -61,10 +61,10 @@ void * clientThread(void *arg)
         while (writecount < config.buffer_size)
         {
             int curwritecount = write(clientsocks[index], send_buffer, config.buffer_size - writecount);
-            // if (config.log)
-            // {
+            if (config.log)
+            {
                 printf("sock: %d, cur write %d\n", clientsocks[index], curwritecount);
-            // }
+            }
             
             writecount += curwritecount;
         }
@@ -77,10 +77,10 @@ void * clientThread(void *arg)
         int readcount = 0;
         while (readcount < config.buffer_size) {
             int curreadcount = read(clientsocks[index], recv_buffers[index], config.buffer_size - readcount);
-            // if (config.log)
-            // {
+            if (config.log)
+            {
                 printf("sock: %d, cur read: %d\n", clientsocks[index], curreadcount);
-            // }
+            }
             
             readcount += curreadcount;
         }

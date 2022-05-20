@@ -672,23 +672,23 @@ impl RDMAContext {
             );
         }
         if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RDMA_WRITE {
-            debug!(
-                "ProcessWC::2, writeIMM status: {}, id: {}",
-                wc.status, wc.wr_id
-            );
+            // debug!(
+            //     "ProcessWC::2, writeIMM status: {}, id: {}",
+            //     wc.status, wc.wr_id
+            // );
             //IO_MGR.ProcessRDMAWriteImmFinish(fd);
             RDMA_SRV.ProcessRDMAWriteImmFinish(wc.wr_id as u32, wc.qp_num);
         } else if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RECV_RDMA_WITH_IMM {
             let imm = unsafe { wc.imm_data_invalidated_rkey_union.imm_data };
-            println!("ProcessWC. received len: {}", wc.byte_len);
+            // println!("ProcessWC. received len: {}", wc.byte_len);
             let immData = ImmData(imm);
-            debug!(
-                "ProcessWC::2, recv len:{}, writelen: {}, status: {}, id: 0x{:x}",
-                wc.byte_len,
-                immData.ReadCount(),
-                wc.status,
-                wc.wr_id
-            );
+            // debug!(
+            //     "ProcessWC::2, recv len:{}, writelen: {}, status: {}, id: 0x{:x}",
+            //     wc.byte_len,
+            //     immData.ReadCount(),
+            //     wc.status,
+            //     wc.wr_id
+            // );
             //IO_MGR.ProcessRDMARecvWriteImm(fd, wc.byte_len as _, immData.ReadCount() as _);
             RDMA_SRV.ProcessRDMARecvWriteImm(immData.ReadCount() as _, wc.qp_num, wc.byte_len as _);
         } else {
@@ -813,17 +813,12 @@ impl QueuePair {
             },
         };
 
-        println!("QP::WriteImm 1");
         let mut bad_wr: *mut rdmaffi::ibv_send_wr = ptr::null_mut();
 
         let rc = unsafe { rdmaffi::ibv_post_send(self.Data(), &mut sw, &mut bad_wr) };
-        println!("QP::WriteImm 2");
         if rc != 0 {
             return Err(Error::SysError(errno::errno().0));
         }
-
-        println!("QP::WriteImm 3");
-
         return Ok(());
     }
 

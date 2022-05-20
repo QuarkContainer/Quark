@@ -274,17 +274,17 @@ impl RDMASrv {
     }
 
     pub fn ProcessRDMARecvWriteImm(&self, channelId: u32, qpNum: u32, recvCount: u32) {
-        println!(
-            "RDMASrv::ProcessRDMARecvWriteImm, 1 channelId: {}, qpNum: {}, recvCount: {}",
-            channelId, qpNum, recvCount
-        );
+        // println!(
+        //     "RDMASrv::ProcessRDMARecvWriteImm, 1 channelId: {}, qpNum: {}, recvCount: {}",
+        //     channelId, qpNum, recvCount
+        // );
         let finReceived = channelId & 0x80000000 == 0x80000000;
         let channelId = channelId & 0x7FFFFFFF;
 
-        println!(
-            "RDMASrv::ProcessRDMARecvWriteImm, 2 channelId: {}, finReceived: {}",
-            channelId, finReceived
-        );
+        // println!(
+        //     "RDMASrv::ProcessRDMARecvWriteImm, 2 channelId: {}, finReceived: {}",
+        //     channelId, finReceived
+        // );
         if channelId != 0 {
             match self.channels.lock().get(&channelId) {
                 None => {
@@ -312,7 +312,7 @@ impl RDMASrv {
 
     pub fn HandleClientRequest(&self) {
         let agentIds = self.shareRegion.getAgentIds();
-        println!("agentIds: {:?}", agentIds);
+        // println!("agentIds: {:?}", agentIds);
         let rdmaAgents = self.agents.lock();
         for agentId in agentIds.iter() {
             match rdmaAgents.get(agentId) {

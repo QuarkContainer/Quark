@@ -19,10 +19,17 @@ use core::sync::atomic::Ordering;
 use spin::{Mutex, MutexGuard};
 use std::collections::HashMap;
 use std::collections::HashSet;
+// use std::io;
+// use std::io::prelude::*;
+// use std::io::Error;
 use std::net::Ipv4Addr;
 use std::ops::{Deref, DerefMut};
+use std::os::unix::io::{AsRawFd, RawFd};
 use std::str::FromStr;
 use std::{env, mem, ptr, thread, time};
+
+use local_ip_address::list_afinet_netifas;
+use local_ip_address::local_ip;
 
 use super::qlib::bytestream::*;
 use super::qlib::common::*;
@@ -357,10 +364,7 @@ impl RDMASvcClient {
         let mut body = [0, 0];
         let ptr = &mut body as *mut _ as *mut u8;
         let buf = unsafe { slice::from_raw_parts_mut(ptr, 8) };
-        let (size, fds) = cli_sock.ReadWithFds(buf).unwrap();
-        if body[0] == 123 {
-            println!("size: {}, fds: {:?}, agentId: {}", size, fds, body[1]);
-        }
+        let (_size, fds) = cli_sock.ReadWithFds(buf).unwrap();
 
         let rdmaSvcCli = RDMASvcClient::New(fds[0], fds[1], fds[2], fds[3], body[1], cli_sock);
         rdmaSvcCli
@@ -403,7 +407,6 @@ impl RDMASvcClient {
                 if cliShareRegion.sq.SpaceCount() == 0 {
                     return Err(Error::NoEnoughSpace);
                 } else {
-                    println!("before push...");
                     let mut sockFdInfos = self.serverSockFdInfos.lock();
                     let sockFdInfo = sockFdInfos.get_mut(&sockfd).unwrap();
                     sockFdInfo.status = SockStatus::LISTENING;
@@ -431,12 +434,12 @@ impl RDMASvcClient {
     }
 
     pub fn updateBitmapAndWakeUpServerIfNecessary(&self) {
-        println!("updateBitmapAndWakeUpServerIfNecessary 1 ");
+        // println!("updateBitmapAndWakeUpServerIfNecessary 1 ");
         let mut srvShareRegion = self.srvShareRegion.lock();
-        println!("updateBitmapAndWakeUpServerIfNecessary 2 ");
+        // println!("updateBitmapAndWakeUpServerIfNecessary 2 ");
         srvShareRegion.updateBitmap(self.agentId);
         if srvShareRegion.srvBitmap.load(Ordering::Relaxed) == 1 {
-            println!("before write srvEventFd");
+            // println!("before write srvEventFd");
             let data = 16u64;
             let ret = unsafe {
                 libc::write(
@@ -445,12 +448,12 @@ impl RDMASvcClient {
                     mem::size_of_val(&data) as usize,
                 )
             };
-            println!("ret: {}", ret);
+            // println!("ret: {}", ret);
             if ret < 0 {
                 println!("error: {}", std::io::Error::last_os_error());
             }
         } else {
-            println!("server is not sleeping");
+            // println!("server is not sleeping");
             self.updateBitmapAndWakeUpServerIfNecessary();
         }
     }
@@ -460,8 +463,6 @@ impl RDMASvcClient {
         if cliShareRegion.sq.SpaceCount() == 0 {
             return Err(Error::NoEnoughSpace);
         } else {
-            println!("before push...");
-
             // TODO: figure out srcIpAddr, srcPort: 101099712, 57921
             let sockInfo = DataSock::New(
                 sockfd,
@@ -520,35 +521,35 @@ impl RDMASvcClient {
     }
 
     pub fn read(&self, channelId: u32) -> Result<()> {
-        println!("rdmaSvcCli::read 1");
+        // println!("rdmaSvcCli::read 1");
         if self.cliShareRegion.lock().sq.Push(RDMAReq {
             user_data: 0,
             msg: RDMAReqMsg::RDMARead(RDMAReadReq {
                 channelId: channelId,
             }),
         }) {
-            println!("rdmaSvcCli::read 2");
+            // println!("rdmaSvcCli::read 2");
             self.updateBitmapAndWakeUpServerIfNecessary();
             Ok(())
         } else {
-            println!("rdmaSvcCli::read 3");
+            // println!("rdmaSvcCli::read 3");
             return Err(Error::NoEnoughSpace);
         }
     }
 
     pub fn write(&self, channelId: u32) -> Result<()> {
-        println!("rdmaSvcCli::write 1");
+        // println!("rdmaSvcCli::write 1");
         if self.cliShareRegion.lock().sq.Push(RDMAReq {
             user_data: 0,
             msg: RDMAReqMsg::RDMAWrite(RDMAWriteReq {
                 channelId: channelId,
             }),
         }) {
-            println!("rdmaSvcCli::write 2");
+            // println!("rdmaSvcCli::write 2");
             self.updateBitmapAndWakeUpServerIfNecessary();
             Ok(())
         } else {
-            println!("rdmaSvcCli::write 3");
+            // println!("rdmaSvcCli::write 3");
             return Err(Error::NoEnoughSpace);
         }
     }
@@ -572,10 +573,10 @@ impl RDMASvcClient {
     pub fn getpeername(&self, _sockfd: u32) {}
 
     pub fn shutdown(&self, channelId: u32, howto: u8) -> Result<()> {
-        println!(
-            "rdmaSvcCli::shutdown 1, channelId: {}, howto: {}",
-            channelId, howto
-        );
+        // println!(
+        //     "rdmaSvcCli::shutdown 1, channelId: {}, howto: {}",
+        //     channelId, howto
+        // );
         if self.cliShareRegion.lock().sq.Push(RDMAReq {
             user_data: 0,
             msg: RDMAReqMsg::RDMAShutdown(RDMAShutdownReq {
@@ -583,11 +584,11 @@ impl RDMASvcClient {
                 howto,
             }),
         }) {
-            println!("rdmaSvcCli::shutdown 2");
+            // println!("rdmaSvcCli::shutdown 2");
             self.updateBitmapAndWakeUpServerIfNecessary();
             Ok(())
         } else {
-            println!("rdmaSvcCli::shutdown 3");
+            // println!("rdmaSvcCli::shutdown 3");
             return Err(Error::NoEnoughSpace);
         }
     }
@@ -598,12 +599,12 @@ impl RDMASvcClient {
 
     ///// ReadFromSocket and WriteToSocket are mainly for ingress and egress
     pub fn ReadFromSocket(&self, sockInfo: &mut DataSock, sockFdMappings: &HashMap<u32, i32>) {
-        println!("ReadFromSocket, 1");
+        // println!("ReadFromSocket, 1");
         let mut buffer = sockInfo.sockBuff.writeBuf.lock();
         loop {
             let (iovsAddr, iovsCnt) = buffer.GetSpaceIovs();
             if iovsCnt == 0 {
-                println!("ReadFromSocket, break because iovsCnt == 0");
+                // println!("ReadFromSocket, break because iovsCnt == 0");
                 break;
             }
             let cnt = unsafe {
@@ -614,43 +615,44 @@ impl RDMASvcClient {
                 )
             };
 
-            println!("ReadFromSocket, cnt: {}", cnt);
+            // println!("ReadFromSocket, cnt: {}", cnt);
             if cnt > 0 {
                 let trigger = buffer.Produce(cnt as usize);
-                println!("ReadFromSocket, trigger: {}", trigger);
+                // println!("ReadFromSocket, trigger: {}", trigger);
                 // let mut shareRegion = self.cliShareRegion.lock();
                 if trigger {
                     let _ret = self.write(*sockInfo.channelId.lock());
                 }
             } else {
-                println!("ReadFromSocket, break because cnt: {}", cnt);
+                // println!("ReadFromSocket, break because cnt: {}", cnt);
                 if cnt < 0 {
-                    println!("ReadFromSocket, error: {}", std::io::Error::last_os_error());
+                    // println!("ReadFromSocket, error: {}", std::io::Error::last_os_error());
                 } else if cnt == 0 {
                     //TODO:
-                    println!("ReadFromSocket, cnt == 0 1");
+                    // println!("ReadFromSocket, cnt == 0 1");
                     let _ret = self.shutdown(*sockInfo.channelId.lock(), 1);
-                    println!("ReadFromSocket, cnt == 0 2");
+                    // println!("ReadFromSocket, cnt == 0 2");
                     if matches!(*sockInfo.status.lock(), SockStatus::FIN_READ_FROM_BUFFER) {
-                        println!("ReadFromSocket, close socket");
+                        // println!("ReadFromSocket, close socket");
                         unsafe { libc::close(*sockFdMappings.get(&sockInfo.fd).unwrap()) };
 
                         // clean up
-                        println!("ReadFromSocket, cnt == 0 3");
+                        // println!("ReadFromSocket, cnt == 0 3");
                         self.channelToSockInfos
                             .lock()
                             .remove(&sockInfo.channelId.lock());
-                        println!("ReadFromSocket, cnt == 0 4");
+                        // println!("ReadFromSocket, cnt == 0 4");
                         self.dataSockFdInfos.lock().remove(&sockInfo.fd);
-                        println!("ReadFromSocket, cnt == 0 5");
+                        // println!("ReadFromSocket, cnt == 0 5");
                         self.sockIdMgr.lock().Remove(sockInfo.fd);
                         // Send close to svc
-                        let _ret = self.SentMsgToSvc(RDMAReqMsg::RDMACloseChannel(RDMACloseChannelReq {
-                            channelId: *sockInfo.channelId.lock(),
-                        }));
+                        let _ret =
+                            self.SentMsgToSvc(RDMAReqMsg::RDMACloseChannel(RDMACloseChannelReq {
+                                channelId: *sockInfo.channelId.lock(),
+                            }));
                     } else {
                         *sockInfo.status.lock() = SockStatus::FIN_SENT_TO_SVC;
-                        println!("ReadFromSocket, sockInfo.status = SockStatus::FIN_SENT_TO_SVC, sockfd: {}", sockInfo.fd);
+                        // println!("ReadFromSocket, sockInfo.status = SockStatus::FIN_SENT_TO_SVC, sockfd: {}", sockInfo.fd);
                     }
                 }
 
@@ -661,45 +663,46 @@ impl RDMASvcClient {
 
     pub fn WriteToSocket(&self, sockInfo: &mut DataSock, sockFdMappings: &HashMap<u32, i32>) {
         let mut buffer = sockInfo.sockBuff.readBuf.lock();
-        println!(
-            "WriteToSocket, 1, sockfd: {}, status: {:?}",
-            sockInfo.fd, sockInfo.status
-        );
+        // println!(
+        //     "WriteToSocket, 1, sockfd: {}, status: {:?}",
+        //     sockInfo.fd, sockInfo.status
+        // );
         loop {
             let (iovsAddr, iovsCnt) = buffer.GetDataIovs();
-            let ioVec = unsafe { &(*(iovsAddr as *const libc::iovec)) };
-            println!(
-                "WriteToSocket, data size 1: {}, ioVec.address: {}, ioVec::len: {}, iovsCnt: {}",
-                buffer.AvailableDataSize(),
-                ioVec.iov_base as u64,
-                ioVec.iov_len,
-                iovsCnt
-            );
+            // let ioVec = unsafe { &(*(iovsAddr as *const libc::iovec)) };
+            // println!(
+            //     "WriteToSocket, data size 1: {}, ioVec.address: {}, ioVec::len: {}, iovsCnt: {}",
+            //     buffer.AvailableDataSize(),
+            //     ioVec.iov_base as u64,
+            //     ioVec.iov_len,
+            //     iovsCnt
+            // );
 
             if iovsCnt == 0 {
-                println!("WriteToSocket, break because iovsCnt == 0");
+                // println!("WriteToSocket, break because iovsCnt == 0");
                 if *sockInfo.finReceived.lock() {
                     if matches!(*sockInfo.status.lock(), SockStatus::FIN_SENT_TO_SVC) {
-                        println!("WriteToSocket, close socket 1");
+                        // println!("WriteToSocket, close socket 1");
                         unsafe { libc::close(*sockFdMappings.get(&sockInfo.fd).unwrap()) };
 
                         // clean up
-                        println!("WriteToSocket, close socket 2");
+                        // println!("WriteToSocket, close socket 2");
                         self.channelToSockInfos
                             .lock()
                             .remove(&sockInfo.channelId.lock());
-                        println!("WriteToSocket, close socket 3");
+                        // println!("WriteToSocket, close socket 3");
                         self.dataSockFdInfos.lock().remove(&sockInfo.fd);
-                        println!("WriteToSocket, close socket 4");
+                        // println!("WriteToSocket, close socket 4");
                         self.sockIdMgr.lock().Remove(sockInfo.fd);
-                        let _ret = self.SentMsgToSvc(RDMAReqMsg::RDMACloseChannel(RDMACloseChannelReq {
-                            channelId: *sockInfo.channelId.lock(),
-                        }));
+                        let _ret =
+                            self.SentMsgToSvc(RDMAReqMsg::RDMACloseChannel(RDMACloseChannelReq {
+                                channelId: *sockInfo.channelId.lock(),
+                            }));
                     } else if !matches!(*sockInfo.status.lock(), SockStatus::FIN_READ_FROM_BUFFER) {
                         unsafe {
                             libc::shutdown(*sockFdMappings.get(&sockInfo.fd).unwrap(), 1);
                         }
-                        println!("WriteToSocket, shutdown socket");
+                        // println!("WriteToSocket, shutdown socket");
                         *sockInfo.status.lock() = SockStatus::FIN_READ_FROM_BUFFER;
                     }
                 }
@@ -713,24 +716,160 @@ impl RDMASvcClient {
                     iovsCnt as i32,
                 )
             };
-            println!("WriteToSocket, cnt: {}", cnt);
+            // println!("WriteToSocket, cnt: {}", cnt);
             if cnt > 0 {
                 buffer.Consume(cnt as usize);
                 let consumedDataSize = sockInfo.sockBuff.AddConsumeReadData(cnt as u64) as usize;
+                // println!(
+                //     "WriteToSocket::Consume, channelId: {}, sockfd: {}, cnt: {}",
+                //     sockInfo.channelId.lock(),
+                //     sockInfo.fd,
+                //     cnt
+                // );
                 let bufSize = buffer.BufSize();
-                println!("WriteToSocket, consumedDataSize: {}", consumedDataSize);
+                // println!("WriteToSocket, consumedDataSize: {}", consumedDataSize);
                 if 2 * consumedDataSize >= bufSize {
                     // let mut shareRegion = self.cliShareRegion.lock();
                     let _ret = self.read(*sockInfo.channelId.lock());
                 }
             } else {
-                println!("WriteToSocket, break because cnt: {}", cnt);
+                // println!("WriteToSocket, break because cnt: {}", cnt);
                 if cnt < 0 {
-                    println!("WriteToSocket, error: {}", std::io::Error::last_os_error());
+                    // println!("WriteToSocket, error: {}", std::io::Error::last_os_error());
                 }
 
                 break;
             }
         }
     }
+}
+
+#[allow(unused_macros)]
+#[macro_export]
+macro_rules! syscall {
+    ($fn: ident ( $($arg: expr),* $(,)* ) ) => {{
+        let res = unsafe { libc::$fn($($arg, )*) };
+        if res == -1 {
+            Err(std::io::Error::last_os_error())
+        } else {
+            Ok(res)
+        }
+    }};
+}
+
+#[repr(C)]
+#[repr(packed)]
+#[derive(Default, Copy, Clone, Debug)]
+pub struct EpollEvent {
+    pub Events: u32,
+    pub U64: u64,
+}
+
+pub static READ_FLAGS: i32 = libc::EPOLLET | libc::EPOLLIN;
+//const READ_FLAGS: i32 = libc::EPOLLONESHOT | libc::EPOLLIN | libc::EPOLLOUT;
+pub static WRITE_FLAGS: i32 = libc::EPOLLET | libc::EPOLLOUT;
+//const WRITE_FLAGS: i32 = libc::EPOLLONESHOT | libc::EPOLLIN | libc::EPOLLOUT;
+
+pub const READ_WRITE_FLAGS: i32 = libc::EPOLLET | libc::EPOLLOUT | libc::EPOLLIN;
+
+pub enum FdType {
+    TCPSocketServer(u16),  //port
+    TCPSocketConnect(u32), //sockfd maintained by RDMASvcCli
+    ClientEvent,
+}
+
+pub fn get_local_ip() -> u32 {
+    let _my_local_ip = local_ip().unwrap();
+
+    // println!("This is my local IP address: {:?}", my_local_ip);
+
+    let network_interfaces = list_afinet_netifas().unwrap();
+
+    for (_name, _ip) in network_interfaces.iter() {
+        //println!("{}:\t{:?}", name, ip);
+    }
+
+    return u32::from(Ipv4Addr::from_str("172.16.1.6").unwrap());
+}
+
+pub fn epoll_create() -> std::io::Result<RawFd> {
+    let fd = syscall!(epoll_create1(0))?;
+    if let Ok(flags) = syscall!(fcntl(fd, libc::F_GETFD)) {
+        let _ = syscall!(fcntl(fd, libc::F_SETFD, flags | libc::FD_CLOEXEC));
+    }
+
+    Ok(fd)
+}
+
+pub fn read_event(key: u64) -> libc::epoll_event {
+    libc::epoll_event {
+        events: READ_FLAGS as u32,
+        u64: key,
+    }
+}
+
+pub fn write_event(key: u64) -> libc::epoll_event {
+    libc::epoll_event {
+        events: WRITE_FLAGS as u32,
+        u64: key,
+    }
+}
+
+pub fn read_write_event(key: u64) -> libc::epoll_event {
+    libc::epoll_event {
+        events: READ_WRITE_FLAGS as u32,
+        u64: key,
+    }
+}
+
+pub fn close(fd: RawFd) {
+    let _ = syscall!(close(fd));
+}
+
+pub fn epoll_add(epoll_fd: RawFd, fd: RawFd, mut event: libc::epoll_event) -> std::io::Result<()> {
+    syscall!(epoll_ctl(epoll_fd, libc::EPOLL_CTL_ADD, fd, &mut event))?;
+    Ok(())
+}
+
+pub fn epoll_modify(epoll_fd: RawFd, fd: RawFd, mut event: libc::epoll_event) -> std::io::Result<()> {
+    syscall!(epoll_ctl(epoll_fd, libc::EPOLL_CTL_MOD, fd, &mut event))?;
+    Ok(())
+}
+
+pub fn epoll_delete(epoll_fd: RawFd, fd: RawFd) -> std::io::Result<()> {
+    syscall!(epoll_ctl(
+        epoll_fd,
+        libc::EPOLL_CTL_DEL,
+        fd,
+        std::ptr::null_mut()
+    ))?;
+    Ok(())
+}
+
+pub fn unblock_fd(fd: i32) {
+    unsafe {
+        let flags = libc::fcntl(fd, Cmd::F_GETFL, 0);
+        let ret = libc::fcntl(fd, Cmd::F_SETFL, flags | Flags::O_NONBLOCK);
+        assert!(ret == 0, "UnblockFd fail");
+    }
+}
+
+pub fn init(path: &str) -> RDMASvcClient {
+    let cli_sock = UnixSocket::NewClient(path).unwrap();
+
+    let body = 1;
+    let ptr = &body as *const _ as *const u8;
+    let buf = unsafe { slice::from_raw_parts(ptr, 4) };
+    cli_sock.WriteWithFds(buf, &[]).unwrap();
+
+    let mut body = [0, 0];
+    let ptr = &mut body as *mut _ as *mut u8;
+    let buf = unsafe { slice::from_raw_parts_mut(ptr, 8) };
+    let (size, fds) = cli_sock.ReadWithFds(buf).unwrap();
+    if body[0] == 123 {
+        println!("size: {}, fds: {:?}, agentId: {}", size, fds, body[1]);
+    }
+
+    let rdmaSvcCli = RDMASvcClient::New(fds[0], fds[1], fds[2], fds[3], body[1], cli_sock);
+    rdmaSvcCli
 }
