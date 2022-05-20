@@ -44,43 +44,36 @@ impl SocketBufIovs {
 
 pub enum RingeBufAllocator {
     HeapAllocator,
-    ShareAllocator,
+    //ShareAllocator {headTailAddr: u64, bufAddr: u64},
+    ShareAllocator (u64, u64),
 }
 
 impl RingeBufAllocator {
     pub fn AllocHeadTail(&self) -> &'static [AtomicU32] {
         match self {
             Self::HeapAllocator => return HeapAllocator::AllocHeadTail(),
-            _ => {
-                panic!("ShareAllocator call ...");
-            }
+            Self::ShareAllocator(headTailAddr, _) => return ShareAllocator::AllocHeadTail(*headTailAddr)
         }
     }
 
     pub fn FreeHeadTail(&self, data: &'static [AtomicU32]) {
         match self {
             Self::HeapAllocator => return HeapAllocator::FreeHeadTail(data),
-            _ => {
-                panic!("ShareAllocator call ...");
-            }
+            Self::ShareAllocator(_, _) => return ShareAllocator::FreeHeadTail(data)
         }
     }
 
     pub fn AlllocBuf(&self, pageCount: usize) -> u64 {
         match self {
             Self::HeapAllocator => return HeapAllocator::AlllocBuf(pageCount),
-            _ => {
-                panic!("ShareAllocator call ...");
-            }
+            Self::ShareAllocator(_, buffAddr) => return ShareAllocator::AlllocBuf(*buffAddr)
         }
     }
 
     pub fn FreeBuf(&self, addr: u64, size: usize) {
         match self {
             Self::HeapAllocator => return HeapAllocator::FreeBuf(addr, size),
-            _ => {
-                panic!("ShareAllocator call ...");
-            }
+            Self::ShareAllocator(_, _) => return ShareAllocator::FreeBuf(addr, size)
         }
     }
 }
@@ -135,6 +128,34 @@ impl HeapAllocator {
     }
 }
 
+pub struct ShareAllocator {}
+
+unsafe impl Send for ShareAllocator {}
+unsafe impl Sync for ShareAllocator {}
+
+impl ShareAllocator {
+    pub fn AllocHeadTail(headTailAddr: u64) -> &'static [AtomicU32] {
+        let ptr = headTailAddr as *mut AtomicU32;
+        let slice = unsafe { slice::from_raw_parts(ptr, 2 as usize) };
+        slice[0].store(0, Ordering::Release);
+        slice[1].store(0, Ordering::Release);
+        return slice
+     }
+
+    pub fn FreeHeadTail(_data: &'static [AtomicU32]) {
+        // println!("ShareAllocator::FreeHeadTail");
+    }
+
+    pub fn AlllocBuf(addr: u64) -> u64 {
+        return addr
+    }
+
+    pub fn FreeBuf(addr: u64, size: usize) {
+        assert!(IsPowerOfTwo(size) && addr % MemoryDef::PAGE_SIZE == 0);
+        // println!("ShareAllocator::FreeBuf");
+    }
+}
+
 pub struct RingBuf {
     pub buf: u64,
     pub ringMask: u32,
@@ -166,6 +187,18 @@ impl RingBuf {
             allocator: allocator,
         };
     }
+
+    // pub fn NewFromShareMemory(pagecount: usize, allocator: RingeBufAllocator) -> Self {
+    //     let headtail = allocator.AllocHeadTail();
+    //     assert!(headtail.len()==2);
+        
+    //     return Self {
+    //         buf: bufAddr,
+    //         ringMask: (pagecount * MemoryDef::PAGE_SIZE as usize - 1) as u32,
+    //         headtail: headtail,
+    //         allocator: allocator
+    //     }
+    // }
 
     //return (bufAddr, bufSize)
     pub fn GetRawBuf(&self) -> (u64, usize) {
@@ -307,17 +340,15 @@ impl RingBuf {
     }
 
     //consume count data
-    pub fn Consume(&self, count: usize) -> bool {
+    pub fn Consume(&self, count: usize) -> bool { //2
         let head = self.headtail[0].load(Ordering::Relaxed);
-        let tail = self.headtail[1].load(Ordering::Acquire);
+        self.headtail[0].store(head.wrapping_add(count as u32), Ordering::Release);
 
+        let tail = self.headtail[1].load(Ordering::Acquire);
         let available = tail.wrapping_sub(head) as usize;
         let trigger = available == self.Len();
-
-        self.headtail[0].store(head.wrapping_add(count as u32), Ordering::Release);
-        return trigger;
+        return trigger
     }
-
     /****************************************** write *********************************************************/
 
     pub fn GetWriteBuf(&self) -> Option<(u64, usize, bool)> {
@@ -397,14 +428,13 @@ impl RingBuf {
     }
 
     pub fn Produce(&self, count: usize) -> bool {
-        let head = self.headtail[0].load(Ordering::Acquire);
         let tail = self.headtail[1].load(Ordering::Relaxed);
-
-        let available = tail.wrapping_sub(head) as usize;
-
-        let trigger = available == 0;
         self.headtail[1].store(tail.wrapping_add(count as u32), Ordering::Release);
-        return trigger;
+
+        let head = self.headtail[0].load(Ordering::Acquire);
+        let available = tail.wrapping_sub(head) as usize;
+        let trigger = available == 0;
+        return trigger
     }
 
     /// return: write user buffer to socket bytestream and determine whether to trigger async socket ops
@@ -490,6 +520,18 @@ impl ByteStream {
             pageCount
         );
         let allocator = RingeBufAllocator::HeapAllocator;
+        let buf = RingBuf::New(pageCount as usize, allocator);
+
+        return Self {
+            buf: buf,
+            dataIovs: SocketBufIovs::default(),
+            spaceiovs: SocketBufIovs::default(),
+        };
+    }
+
+    pub fn InitWithShareMemory(pageCount: u64, headTailAddr: u64, bufAddr: u64) -> Self {
+        assert!(Self::IsPowerOfTwo(pageCount), "Bytetream pagecount is not power of two: {}", pageCount);
+        let allocator = RingeBufAllocator::ShareAllocator(headTailAddr, bufAddr);
         let buf = RingBuf::New(pageCount as usize, allocator);
 
         return Self {

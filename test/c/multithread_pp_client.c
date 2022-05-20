@@ -51,27 +51,12 @@ void * clientThread(void *arg)
 
     for (int i=0; i<config.count; i++)
     {
+        // printf("thread %dth, send %dth data\n", index+1, i+1);
         if (config.log)
         {
             printf("client sock is: %d 1\n", clientsocks[index]);
         }
 
-        int readcount = 0;
-        while (readcount < config.buffer_size) {
-            int curreadcount = read(clientsocks[index], recv_buffers[index], config.buffer_size - readcount);
-            if (config.log)
-            {
-                printf("sock: %d, cur read: %d\n", clientsocks[index], curreadcount);
-            }
-            
-            readcount += curreadcount;
-        }
-
-        if (config.log)
-        {
-            printf("client sock is: %d 3\n", clientsocks[index]);
-        }
-        
         int writecount = 0;
         while (writecount < config.buffer_size)
         {
@@ -84,6 +69,23 @@ void * clientThread(void *arg)
             writecount += curwritecount;
         }
 
+        if (config.log)
+        {
+            printf("client sock is: %d 3\n", clientsocks[index]);
+        }
+
+        int readcount = 0;
+        while (readcount < config.buffer_size) {
+            int curreadcount = read(clientsocks[index], recv_buffers[index], config.buffer_size - readcount);
+            if (config.log)
+            {
+                printf("sock: %d, cur read: %d\n", clientsocks[index], curreadcount);
+            }
+            
+            readcount += curreadcount;
+        }
+        
+        
         if (config.log)
         {
             printf("client sock is: %d 4\n", clientsocks[index]);
@@ -293,14 +295,18 @@ int main(int argc, char const *argv[])
     double latency = ns / (readCount * 2 * threadnum);
     printf("latency is %lf\n", latency);
 
-    printf("before sleep\n");
-    sleep(2);
-    printf("after sleep\n");
+    // printf("before sleep\n");
+    // sleep(2);
+    // printf("after sleep\n");
 
     free(tid);
     for(int i=0; i<threadnum; i++)
     {
-        close(clientsocks[i]);
+        shutdown(clientsocks[i], 1);
+        if (read(clientsocks[i], recv_buffers[i], config.buffer_size) == 0) {
+            printf("read == 0\n");
+            close(clientsocks[i]);
+        }
     }
     free(clientsocks);
     free(send_buffer);

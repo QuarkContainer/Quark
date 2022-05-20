@@ -599,7 +599,7 @@ impl RDMADataSock {
 
     pub fn RDMAWrite(&self) {
         let _writelock = self.writeLock.lock();
-        self.RDMASend();
+        self.RDMARead();
     }
 
     pub fn ReadData(&self, waitinfo: FdWaitInfo) {
