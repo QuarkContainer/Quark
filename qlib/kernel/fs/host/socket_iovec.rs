@@ -19,9 +19,6 @@ use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
 use super::super::super::super::mem::stackvec::*;
 
-// UIO_MAXIOV is the maximum number of iovecs to pass to the host.
-const MAX_IOVS: usize = UIO_MAXIOV;
-
 // copyToMulti copies as many bytes from src to dst as possible.
 pub fn CopytoMulti(dsts: &mut [IoVec], src: &[u8]) {
     let mut src = src;
@@ -88,7 +85,7 @@ pub fn BuildIovec(
         }
     }
 
-    if iovsRequired > MAX_IOVS {
+    if iovsRequired > UIO_MAXIOV {
         // The kernel will reject our call if we pass this many iovs.
         // Use a single intermediate buffer instead.
         let mut b = Vec::with_capacity(stopLen);

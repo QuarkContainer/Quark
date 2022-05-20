@@ -94,6 +94,12 @@ impl FileOperations for Reader {
         _blocking: bool,
     ) -> Result<i64> {
         let size = IoVec::NumBytes(dsts);
+        let size = if size >= MemoryDef::HUGE_PAGE_SIZE as usize {
+            MemoryDef::HUGE_PAGE_SIZE as usize
+        } else {
+            size
+        };
+
         let buf = DataBuff::New(size);
         let bs = BlockSeq::New(&buf.buf);
         let n = self.pipe.Read(task, bs)?;
