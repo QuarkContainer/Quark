@@ -1015,9 +1015,9 @@ impl Container {
         if self.Sandbox.is_some() {
             info!("Destroying container {}", &self.ID);
             let sandbox = self.Sandbox.as_mut().unwrap();
-            if sandbox.IsRunning() {
-                sandbox.DestroyContainer(&self.ID)?;
-            }
+                
+            sandbox.DestroyContainer(&self.ID)?;
+            
             // Only uninstall cgroup for sandbox stop.
             if sandbox.IsRootContainer(&self.ID) {
                 let destroyed = sandbox.Destroy();

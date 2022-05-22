@@ -276,6 +276,8 @@ pub struct ThreadGroupInternal {
     pub containerID: String,
     pub execId: Option<String>,
 
+    // root track whether this threadgroup is directly started by container provisioning
+    pub root: bool,
     pub timerMu: Arc<QMutex<()>>,
     // todo: handle tty
     //pub tty: Option<TTY>

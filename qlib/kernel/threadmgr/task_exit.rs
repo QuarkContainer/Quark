@@ -962,7 +962,7 @@ impl Thread {
         let tg = self.lock().tg.clone();
         let cid = tg.lock().containerID.clone();
         let execId = tg.lock().execId.clone();
-        let sandboxId = LOADER.lock().sandboxID.clone();
+        let isRootProcess = tg.lock().root;
         let tid = tg.ID();
 
         let pidns = tg.PIDNamespace();
@@ -979,6 +979,7 @@ impl Thread {
             tglock.liveTasks -= 1;
             tglock.liveThreads.Add(-1);
 
+            error!("living task count:{}", tglock.liveTasks);
             // Check if this completes a sibling's execve.
             if tglock.execing.Upgrade().is_some() && tglock.liveTasks == 1 {
                 // execing blocks the addition of new tasks to the thread group, so
@@ -1000,7 +1001,7 @@ impl Thread {
         }
 
         self.exitNotifyLocked();
-        if execId.is_some() || cid != sandboxId {
+        if isRootProcess && tg.lock().liveTasks == 0 {
             let execId = execId.unwrap_or_default();
             info!(
                 " sending exit notification for CID:{}, execID:{}",

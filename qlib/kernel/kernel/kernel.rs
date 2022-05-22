@@ -294,7 +294,12 @@ impl Kernel {
             &args.ContainerID,
             &args.ExecId,
         );
-        tg.lock().liveThreads.Add(1);
+
+        {
+            let mut tglock = tg.lock();
+            tglock.liveThreads.Add(1);
+            tglock.root = true;
+        }
 
         if args.Filename.as_str() == "" {
             if args.Argv.len() == 0 {
