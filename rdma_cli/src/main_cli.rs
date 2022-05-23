@@ -68,6 +68,7 @@ pub mod kernel_def;
 pub mod qlib;
 
 pub mod common;
+pub mod rdma_svc_cli;
 pub mod unix_socket;
 
 use self::qlib::ShareSpaceRef;
@@ -88,6 +89,7 @@ use qlib::common::*;
 use qlib::linux_def::*;
 use qlib::socket_buf::SocketBuff;
 use common::*;
+use rdma_svc_cli::*;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::{env, mem, ptr, thread, time};

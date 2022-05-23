@@ -68,6 +68,7 @@ pub mod kernel_def;
 pub mod qlib;
 
 pub mod common;
+pub mod rdma_svc_cli;
 pub mod unix_socket;
 
 use self::qlib::ShareSpaceRef;
@@ -87,6 +88,7 @@ use qlib::linux_def::*;
 use qlib::socket_buf::SocketBuff;
 use common::*;
 use common::EpollEvent;
+use rdma_svc_cli::*;
 use spin::{Mutex, MutexGuard};
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -250,6 +252,7 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                                                 as u64,
                                         )),
                                     );
+                                    // println!("RDMARespMsg::RDMAAccept, sockfd: {}, channelId: {}", dataSockFd, response.channelId);
 
                                     rdmaSvcCli
                                         .dataSockFdInfos

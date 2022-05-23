@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::fileinfo::*;
 use super::qlib::*;
 use super::qlib::loader::*;
 use super::qlib::mutex::*;
@@ -162,4 +163,10 @@ impl ListAllocator {
 #[inline]
 pub fn VcpuId() -> usize {
     return CPULocal::CpuId();
+}
+
+impl IOMgr {
+    pub fn Init() -> Result<Self> {
+        return Err(Error::Common(format!("IOMgr can't init in kernel")))
+    }
 }

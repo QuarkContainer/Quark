@@ -68,6 +68,7 @@ pub mod kernel_def;
 pub mod qlib;
 
 pub mod common;
+pub mod rdma_svc_cli;
 pub mod unix_socket;
 
 use self::qlib::ShareSpaceRef;
@@ -87,6 +88,7 @@ use qlib::socket_buf::SocketBuff;
 use unix_socket::UnixSocket;
 use common::*;
 use common::EpollEvent;
+use rdma_svc_cli::*;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::{env, mem, ptr, thread, time};
@@ -99,7 +101,7 @@ fn main() -> io::Result<()> {
     if args.len() > 1 {
         unix_sock_path = args.get(1).unwrap(); //"/tmp/rdma_srv1";
     }
-    rdmaSvcCli = RDMASvcClient::initialize(unix_sock_path);
+    rdmaSvcCli = RDMASvcClient::initialize(unix_sock_path); //TODO: add 2 address from quark.
 
     let cliEventFd = rdmaSvcCli.cliEventFd;
     unblock_fd(cliEventFd);
@@ -186,7 +188,7 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                             let _ret = epoll_add(epoll_fd, stream_fd, read_write_event(stream_fd as u64));
 
                             //TODO: use port to map to different (ip, port), hardcode for testing purpose, should come from control plane in the future
-                            let sockfd = rdmaSvcCli.sockIdMgr.lock().AllocId().unwrap();
+                            let sockfd = rdmaSvcCli.sockIdMgr.lock().AllocId().unwrap(); //TODO: rename sockfd
                             let _ret = rdmaSvcCli.connect(
                                 sockfd,
                                 u32::from(Ipv4Addr::from_str("192.168.6.8").unwrap()).to_be(),
@@ -225,6 +227,7 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                                     let ioBufIndex = response.ioBufIndex as usize;
                                     let mut sockFdInfos = rdmaSvcCli.dataSockFdInfos.lock();
                                     let sockInfo = sockFdInfos.get_mut(&response.sockfd).unwrap();
+                                    // println!("RDMARespMsg::RDMAConnect, sockfd: {}, channelId: {}", sockInfo.fd, response.channelId);
                                     {
                                         let shareRegion = rdmaSvcCli.cliShareRegion.lock();
                                         let sockInfo = DataSock::New(
@@ -254,6 +257,7 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                                         );
                                         sockFdInfos.insert(sockInfo.fd, sockInfo);
                                     }
+
                                     let sockInfo = sockFdInfos.get_mut(&response.sockfd).unwrap();
                                     rdmaSvcCli
                                         .channelToSockInfos
