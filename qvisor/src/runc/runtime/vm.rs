@@ -57,8 +57,6 @@ lazy_static! {
     static ref EXIT_STATUS: AtomicI32 = AtomicI32::new(-1);
 }
 
-const HEAP_OFFSET: u64 = 1 * MemoryDef::ONE_GB;
-
 #[inline]
 pub fn IsRunning() -> bool {
     return EXIT_STATUS.load(Ordering::Relaxed) == -1;
@@ -267,12 +265,12 @@ impl VirtualMachine {
             MemoryDef::PHY_LOWER_ADDR,
             kernelMemRegionSize * MemoryDef::ONE_GB,
         )?;
-        let memOrd = KERNEL_HEAP_ORD;
-        let kernelMemSize = 1 << memOrd;
-        let heapStartAddr = MemoryDef::PHY_LOWER_ADDR + HEAP_OFFSET;
+
+        let heapStartAddr = MemoryDef::HEAP_OFFSET;
+
         PMA_KEEPER.Init(
-            heapStartAddr + kernelMemSize,
-            kernelMemRegionSize * MemoryDef::ONE_GB - HEAP_OFFSET - kernelMemSize,
+            MemoryDef::FILE_MAP_OFFSET,
+            MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB - MemoryDef::FILE_MAP_OFFSET
         );
 
         info!(
@@ -284,7 +282,6 @@ impl VirtualMachine {
         let autoStart;
 
         {
-            info!("kernelMemSize is {:x}", kernelMemSize);
             let vms = &mut VMS.lock();
             vms.controlSock = controlSock;
             PMA_KEEPER.InitHugePages();

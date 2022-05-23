@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::collections::btree_map::BTreeMap;
-
 use crate::qlib::common::*;
 use crate::qlib::linux_def::*;
 use crate::qlib::fileinfo::*;
@@ -36,15 +34,6 @@ pub fn NonBlockingPoll(fd: i32, mask: EventMask) -> EventMask {
 
 pub fn Notify(fd: i32, mask: EventMask) {
     GlobalIOMgr().Notify(fd, mask);
-}
-
-// notifier holds all the state necessary to issue notifications when IO events
-// occur in the observed FDs.
-pub struct GuestNotifierInternal {
-    // fdMap maps file descriptors to their notification queues and waiting
-    // status.
-    fdMap: BTreeMap<i32, FdWaitInfo>,
-    pub epollfd: i32,
 }
 
 #[repr(C)]

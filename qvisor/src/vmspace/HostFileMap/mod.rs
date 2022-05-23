@@ -104,11 +104,6 @@ impl IOMgr {
         return fd;
     }
 
-    /*pub fn AddRDMAContext(&self, fd: i32) -> i32{
-        self.fdTbl.lock().AddRDMAContext(fd).expect("hostfdMap: guest fd alloc fail");
-        return fd;
-    }*/
-
     //ret: true: exist, false: not exist
     pub fn RemoveFd(&self, fd: i32) -> Option<FdInfo> {
         let fdInfo = self.fdTbl.lock().Remove(fd);
@@ -142,32 +137,7 @@ impl IOMgr {
             }
         }
     }
-
-    /*pub fn ProcessRDMAWriteImmFinish(&self, fd: i32) {
-        let fdInfo = self.GetByHost(fd);
-        match fdInfo {
-            None => {
-                panic!("ProcessRDMAWriteImmFinish get unexpected fd {}", fd)
-            },
-            Some(fdInfo) => {
-                fdInfo.ProcessRDMAWriteImmFinish();
-            }
-        }
-    }
-
-    pub fn ProcessRDMARecvWriteImm(&self, fd: i32, recvCount: u64, writeCount: u64) {
-        let fdInfo = self.GetByHost(fd);
-        match fdInfo {
-            None => {
-                panic!("ProcessRDMARecvWriteImm get unexpected fd {}", fd)
-            },
-            Some(fdInfo) => {
-                fdInfo.ProcessRDMARecvWriteImm(recvCount, writeCount);
-            }
-        }
-    }*/
 }
-
 
 impl FdTbl {
     pub fn New() -> Self {

@@ -661,6 +661,7 @@ pub struct ShareSpace {
     pub signalArgs: CachePadded<QMutex<Option<SignalArgs>>>,
     pub futexMgr: CachePadded<FutexMgr>,
     pub pageMgr: CachePadded<PageMgr>,
+    pub ioMgr: CachePadded<IOMgr>,
     pub config: QRwLock<Config>,
 
     pub logBuf: QMutex<Option<ByteStream>>,
@@ -676,14 +677,13 @@ pub struct ShareSpace {
     pub tlbShootdownLock: QMutex<()>,
     pub tlbShootdownMask: AtomicU64,
 
-    pub ioMgr: IOMgr,
 }
 
 impl ShareSpace {
     pub fn New() -> Self {
         return ShareSpace {
             ioUring: CachePadded::new(QUring::New(MemoryDef::QURING_SIZE)),
-            ioMgr: IOMgr::Init().unwrap(),
+            ioMgr: CachePadded::new(IOMgr::Init().unwrap()),
             ..Default::default()
         };
     }
