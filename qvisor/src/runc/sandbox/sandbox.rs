@@ -665,14 +665,26 @@ impl Sandbox {
         return SignalProcess(&self.ID, pid, signo, fgProcess);
     }
 
-    pub fn DestroyContainer(&self, cid: &str) -> Result<()> {
+    // Destroy container handles root container as well as subcontainer
+    pub fn DestroyContainer(&mut self, cid: &str) -> Result<()> {
+        if self.IsRootContainer(cid) {
+            info!("destroying root container by destroying sandbox");
+            return self.Destroy()
+        }
+
+        info!("destroying subcontainer, cid: {}, sandboxId: {}", cid, &self.ID);
+
         let client = self.SandboxConnect()?;
         let req = UCallReq::ContainerDestroy(cid.to_string());
         let resp = client.Call(&req)?;
         match resp {
             UCallResp::ContainerDestroyResp => return Ok(()),
             resp => {
-                panic!("DestroyContainer get unknow resp {:?}", resp);
+                if self.IsRunning() {
+                    panic!("DestroyContainer get unknow resp {:?}", resp);
+                } else {
+                    return Ok(())
+                }
             }
         }
     }

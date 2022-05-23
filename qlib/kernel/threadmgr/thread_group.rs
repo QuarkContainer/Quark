@@ -276,6 +276,8 @@ pub struct ThreadGroupInternal {
     pub containerID: String,
     pub execId: Option<String>,
 
+    // root track whether this threadgroup is directly started by container provisioning
+    pub root: bool,
     pub timerMu: Arc<QMutex<()>>,
     // todo: handle tty
     //pub tty: Option<TTY>
@@ -501,6 +503,7 @@ impl ThreadGroup {
 
         let oldPg = self.lock().processGroup.clone().unwrap();
         oldPg.decRefWithParent(oldParentPG);
+        oldPg.lock().session.IncRef();
         self.lock().processGroup = Some(pg.clone());
 
         let sessionTmp = pg.lock().session.clone();

@@ -15,6 +15,8 @@
 use core::sync::atomic::Ordering;
 use core::sync::atomic::{AtomicBool, AtomicI32, AtomicI64};
 
+use crate::qlib::fileinfo::*;
+
 use super::super::kernel_def::VcpuFreq;
 use super::super::ShareSpaceRef;
 use super::control_msg::*;
@@ -78,6 +80,10 @@ pub fn SetWaitContainerfd(fd: i32) {
 
 pub fn WaitContainerfd() -> i32 {
     WAIT_CONTAINER_FD.load(Ordering::SeqCst)
+}
+
+pub fn GlobalIOMgr<'a>() -> &'a IOMgr {
+    return &SHARESPACE.ioMgr;
 }
 
 #[inline]

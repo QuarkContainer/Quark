@@ -52,6 +52,7 @@ pub mod sort_arr;
 pub mod task_mgr;
 pub mod uring;
 pub mod usage;
+pub mod fileinfo;
 
 pub mod kernel;
 pub mod rdma_share;
@@ -69,7 +70,6 @@ use core::sync::atomic::Ordering;
 use self::bytestream::*;
 use self::config::*;
 use self::control_msg::SignalArgs;
-use self::kernel::guestfdnotifier::*;
 use self::kernel::kernel::futex::*;
 use self::kernel::kernel::kernel::Kernel;
 use self::kernel::kernel::timer::timekeeper::*;
@@ -82,6 +82,7 @@ use self::qmsg::*;
 use self::ringbuf::*;
 use self::task_mgr::*;
 use super::asm::*;
+use self::fileinfo::*;
 
 pub fn InitSingleton() {
     unsafe {
@@ -657,7 +658,6 @@ pub struct ShareSpace {
     pub ioUring: CachePadded<QUring>,
     pub timerkeeper: CachePadded<TimeKeeper>,
     pub timerStore: CachePadded<TimerStore>,
-    pub guestNotifier: CachePadded<GuestNotifier>,
     pub signalArgs: CachePadded<QMutex<Option<SignalArgs>>>,
     pub futexMgr: CachePadded<FutexMgr>,
     pub pageMgr: CachePadded<PageMgr>,
@@ -675,12 +675,15 @@ pub struct ShareSpace {
     pub values: Vec<[AtomicU64; 2]>,
     pub tlbShootdownLock: QMutex<()>,
     pub tlbShootdownMask: AtomicU64,
+
+    pub ioMgr: IOMgr,
 }
 
 impl ShareSpace {
     pub fn New() -> Self {
         return ShareSpace {
             ioUring: CachePadded::new(QUring::New(MemoryDef::QURING_SIZE)),
+            ioMgr: IOMgr::Init().unwrap(),
             ..Default::default()
         };
     }
@@ -716,10 +719,6 @@ impl ShareSpace {
 
     pub fn VirtualizationHandlerAddr(&self) -> u64 {
         return self.virtualizationHandlerAddr.load(Ordering::Relaxed);
-    }
-
-    pub fn GuestNotifierAddr(&self) -> u64 {
-        return self.guestNotifier.Addr();
     }
 
     pub fn StoreShutdown(&self) {

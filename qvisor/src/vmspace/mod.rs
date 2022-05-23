@@ -37,6 +37,9 @@ use std::str;
 use tempfile::tempfile;
 use x86_64::structures::paging::PageTableFlags;
 
+use crate::qlib::fileinfo::*;
+use crate::vmspace::kernel::GlobalIOMgr;
+
 use super::qlib::addr::Addr;
 use super::qlib::common::{Error, Result};
 use super::qlib::control_msg::*;
@@ -54,11 +57,9 @@ use super::runc::specutils::specutils::*;
 use self::limits::*;
 use self::random::*;
 use self::syscall::*;
-use self::HostFileMap::fdinfo::*;
 use super::kvm_vcpu::HostPageAllocator;
 use super::kvm_vcpu::KVMVcpu;
 use super::namespace::MountNs;
-use super::qlib::kernel::guestfdnotifier::*;
 use super::qlib::kernel::SignalProcess;
 use super::qlib::perf_tunning::*;
 use super::runc::runtime::signal_handle::*;
@@ -120,7 +121,7 @@ unsafe impl Send for VMSpace {}
 impl VMSpace {
     ///////////start of file operation//////////////////////////////////////////////
     pub fn GetOsfd(hostfd: i32) -> Option<i32> {
-        return IO_MGR.GetFdByHost(hostfd);
+        return GlobalIOMgr().GetFdByHost(hostfd);
     }
 
     pub fn TlbShootdown(&self, vcpuMask: u64) -> u64 {
@@ -139,7 +140,7 @@ impl VMSpace {
     }
 
     pub fn GetFdInfo(hostfd: i32) -> Option<FdInfo> {
-        return IO_MGR.GetByHost(hostfd);
+        return GlobalIOMgr().GetByHost(hostfd);
     }
 
     pub fn ReadDir(dirfd: i32, data: u64) -> i64 {
@@ -244,7 +245,7 @@ impl VMSpace {
                 return osfd as i64;
             }
 
-            let hostfd = IO_MGR.AddFile(osfd);
+            let hostfd = GlobalIOMgr().AddFile(osfd);
 
             process.Stdiofds[i] = hostfd;
         }
@@ -307,7 +308,7 @@ impl VMSpace {
             return Self::GetRet(ret as i64);
         }
 
-        let hostfd = IO_MGR.AddFile(fd);
+        let hostfd = GlobalIOMgr().AddFile(fd);
         return hostfd as i64;
     }
 
@@ -495,7 +496,7 @@ impl VMSpace {
         }
 
         tryOpenAt.writeable = writeable;
-        let hostfd = IO_MGR.AddFile(fd);
+        let hostfd = GlobalIOMgr().AddFile(fd);
 
         if tryOpenAt.fstat.IsRegularFile() {
             URING_MGR.lock().Addfd(hostfd).unwrap();
@@ -549,7 +550,7 @@ impl VMSpace {
                 return Self::GetRet(ret as i64) as i32;
             }
 
-            let hostfd = IO_MGR.AddFile(osfd);
+            let hostfd = GlobalIOMgr().AddFile(osfd);
 
             URING_MGR.lock().Addfd(osfd).unwrap();
 
@@ -558,7 +559,7 @@ impl VMSpace {
     }
 
     pub fn Close(fd: i32) -> i64 {
-        let info = IO_MGR.RemoveFd(fd);
+        let info = GlobalIOMgr().RemoveFd(fd);
 
         URING_MGR.lock().Removefd(fd).unwrap();
         let res = if info.is_some() {
@@ -672,7 +673,7 @@ impl VMSpace {
     }
 
     pub fn NewSocket(fd: i32) -> i64 {
-        IO_MGR.AddSocket(fd);
+        GlobalIOMgr().AddSocket(fd);
         URING_MGR.lock().Addfd(fd).unwrap();
         return 0;
     }
@@ -993,7 +994,7 @@ impl VMSpace {
             return Self::GetRet(fd as i64);
         }
 
-        let hostfd = IO_MGR.AddSocket(fd);
+        let hostfd = GlobalIOMgr().AddSocket(fd);
         URING_MGR.lock().Addfd(fd).unwrap();
         return Self::GetRet(hostfd as i64);
     }
@@ -1336,7 +1337,7 @@ impl VMSpace {
             return Self::GetRet(ret as i64);
         }
 
-        let guestfd = IO_MGR.AddFile(fd);
+        let guestfd = GlobalIOMgr().AddFile(fd);
 
         return guestfd as i64;
     }
@@ -1492,7 +1493,7 @@ impl VMSpace {
 
             Self::UnblockFd(osfd);
 
-            let hostfd = IO_MGR.AddFile(osfd);
+            let hostfd = GlobalIOMgr().AddFile(osfd);
             stdfds[i] = hostfd;
         }
 

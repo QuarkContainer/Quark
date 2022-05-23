@@ -15,8 +15,9 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
+use crate::qlib::fileinfo::*;
+
 use super::super::config::*;
-use super::super::kernel::guestfdnotifier::*;
 use super::super::kernel::util::cstring::*;
 use super::super::linux_def::*;
 use super::super::socket_buf::*;

@@ -15,14 +15,15 @@
 pub mod fdinfo;
 pub mod file_range_mgr;
 //pub mod rdma_socket;
-pub mod socket_info;
 //pub mod rdma;
 
 use libc::*;
 use spin::Mutex;
 use std::collections::BTreeMap;
+use core::sync::atomic::AtomicI32;
 
-use self::fdinfo::*;
+use crate::qlib::fileinfo::*;
+
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::SysCallID;
@@ -33,11 +34,6 @@ const START_FD: i32 = 0; //stdin:0, stdout:1, stderr:2
 const MAX_FD: i32 = 65535; //skip stdin, stdout, stderr
 
 //map between guest/process fd to host fd
-pub struct IOMgr {
-    //guest hostfd to fdInfo
-    pub fdTbl: Mutex<FdTbl>,
-    pub eventfd: i32,
-}
 
 impl IOMgr {
     pub fn Print(&self) {
@@ -61,6 +57,7 @@ impl IOMgr {
 
         let res = Self {
             eventfd: eventfd,
+            epollfd: AtomicI32::new(0),
             fdTbl: Mutex::new(FdTbl::New()),
         };
 
@@ -126,23 +123,6 @@ impl IOMgr {
         return None;
     }
 
-    pub fn GetByHost(&self, fd: i32) -> Option<FdInfo> {
-        match self.fdTbl.lock().Get(fd) {
-            None => None,
-            Some(fdInfo) => Some(fdInfo.clone()),
-        }
-    }
-
-    pub fn Notify(&self, fd: i32, mask: EventMask) {
-        let fdInfo = self.GetByHost(fd);
-        match fdInfo {
-            None => (),
-            Some(fdInfo) => {
-                fdInfo.Notify(mask);
-            }
-        }
-    }
-
     pub fn AddWait(&self, fd: i32, mask: EventMask) {
         let fdInfo = self.GetByHost(fd);
         match fdInfo {
@@ -188,11 +168,6 @@ impl IOMgr {
     }*/
 }
 
-//guest fdset for one process
-#[derive(Debug, Clone)]
-pub struct FdTbl {
-    pub map: BTreeMap<i32, FdInfo>,
-}
 
 impl FdTbl {
     pub fn New() -> Self {
@@ -219,28 +194,5 @@ impl FdTbl {
 
         self.map.insert(osfd, fdInfo.clone());
         return Ok(fdInfo);
-    }
-
-    /*pub fn AddRDMAContext(&mut self, osfd: i32) -> Result<FdInfo> {
-        let fdInfo = FdInfo::NewRDMAContext(osfd);
-
-        self.map.insert(osfd, fdInfo.clone());
-        return Ok(fdInfo)
-    }*/
-
-    pub fn Get(&self, fd: i32) -> Option<FdInfo> {
-        match self.map.get(&fd) {
-            None => None,
-            Some(fdInfo) => Some(fdInfo.clone()),
-        }
-    }
-
-    pub fn Remove(&mut self, fd: i32) -> Option<FdInfo> {
-        //self.gaps.Free(fd as u64, 1);
-        self.map.remove(&fd)
-    }
-
-    pub fn Contains(&self, fd: i32) -> bool {
-        return self.map.contains_key(&fd);
     }
 }

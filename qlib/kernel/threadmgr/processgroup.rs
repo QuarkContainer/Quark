@@ -199,6 +199,8 @@ impl ProcessGroup {
 
                 ns = tmp;
             }
+            self.lock().session.lock().processGroups.remove(self);
+            self.lock().session.DecRef();
         }
 
         if alive {

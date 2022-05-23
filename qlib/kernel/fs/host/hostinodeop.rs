@@ -221,7 +221,6 @@ impl Drop for HostInodeOpIntern {
             }
         }
 
-        RemoveFD(self.HostFd);
         HostSpace::Close(self.HostFd);
     }
 }
@@ -520,7 +519,7 @@ impl HostInodeOp {
         )));
 
         let ret = Self(intern);
-        AddFD(fd, &ret);
+        SetWaitInfo(fd, ret.lock().queue.clone());
         return ret;
     }
 

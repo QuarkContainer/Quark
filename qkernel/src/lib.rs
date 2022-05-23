@@ -69,13 +69,13 @@ pub mod backtracer;
 pub mod kernel_def;
 mod syscalls;
 
+use crate::qlib::kernel::GlobalIOMgr;
 use self::interrupt::virtualization_handler;
 use self::qlib::kernel::arch;
 use self::qlib::kernel::asm;
 use self::qlib::kernel::boot;
 use self::qlib::kernel::fd;
 use self::qlib::kernel::fs;
-use self::qlib::kernel::guestfdnotifier;
 use self::qlib::kernel::kernel;
 use self::qlib::kernel::loader;
 use self::qlib::kernel::memmgr;
@@ -187,7 +187,6 @@ pub fn SingletonInit() {
             Ordering::Release,
         );
 
-        guestfdnotifier::GUEST_NOTIFIER.SetValue(SHARESPACE.GuestNotifierAddr());
         UID.Init(AtomicU64::new(1));
         perflog::THREAD_COUNTS.Init(QMutex::new(perflog::ThreadPerfCounters::default()));
 
@@ -339,7 +338,7 @@ pub extern "C" fn syscall_handler(
     }
 
     CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
-
+    currTask.mm.HandleTlbShootdown();
     if !(pt.rip == pt.rcx && pt.r11 == pt.eflags) {
         //error!("iret *****, pt is {:x?}", pt);
         IRet(kernalRsp)
@@ -472,7 +471,7 @@ pub extern "C" fn rust_main(
             kpt.InitVsyscall(vsyscallPages);
         }
 
-        self::guestfdnotifier::GUEST_NOTIFIER.InitPollHostEpoll(SHARESPACE.HostHostEpollfd());
+        GlobalIOMgr().InitPollHostEpoll(SHARESPACE.HostHostEpollfd());
         SetVCPCount(vcpuCnt as usize);
         VDSO.Initialization(vdsoParamAddr);
 
