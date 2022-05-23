@@ -8,19 +8,18 @@ use super::qlib::linux_def::MemoryDef;
 use super::qlib::mem::list_allocator::*;
 
 pub const KERNEL_HEAP_ORD: usize = 33; // 8GB
-const HEAP_OFFSET: u64 = 1 * MemoryDef::ONE_GB;
 pub const ENABLE_HUGEPAGE: bool = false;
 
 impl HostAllocator {
     pub const fn New() -> Self {
         return Self {
-            listHeapAddr: AtomicU64::new(MemoryDef::PHY_LOWER_ADDR + HEAP_OFFSET),
+            listHeapAddr: AtomicU64::new(MemoryDef::HEAP_OFFSET),
             initialized: AtomicBool::new(false),
         };
     }
 
     pub fn Init(&self) {
-        let heapSize = 1 << KERNEL_HEAP_ORD as usize;
+        let heapSize = MemoryDef::HEAP_SIZE as usize;
         let addr = unsafe {
             let mut flags = libc::MAP_PRIVATE | libc::MAP_ANON | libc::MAP_FIXED;
             if ENABLE_HUGEPAGE {
