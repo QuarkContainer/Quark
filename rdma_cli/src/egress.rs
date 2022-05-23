@@ -250,6 +250,7 @@ fn wait(epoll_fd: i32, rdmaSvcCli: &RDMASvcClient, fds: &mut HashMap<i32, FdType
                                                 as u64,
                                         )),
                                     );
+                                    // println!("RDMARespMsg::RDMAAccept, sockfd: {}, channelId: {}", dataSockFd, response.channelId);
 
                                     rdmaSvcCli
                                         .dataSockFdInfos

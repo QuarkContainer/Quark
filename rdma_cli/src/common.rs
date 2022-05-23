@@ -265,19 +265,21 @@ pub struct RDMASvcCliIntern {
 
     // sockfd -> sockFdInfo
     // pub sockFdInfos: Mutex<HashMap<u32, RDMASockFdInfo>>,
-    pub serverSockFdInfos: Mutex<HashMap<u32, ServerSock>>,
+    pub serverSockFdInfos: Mutex<HashMap<u32, ServerSock>>, // TODO: quark will maitain separate.
 
-    pub dataSockFdInfos: Mutex<HashMap<u32, DataSock>>,
+    pub dataSockFdInfos: Mutex<HashMap<u32, DataSock>>, // TODO: quark will maitain separate.
 
     // ipaddr -> set of used ports
-    pub usedPorts: Mutex<HashMap<u32, HashSet<u16>>>,
+    pub usedPorts: Mutex<HashMap<u32, HashSet<u16>>>, // TOBEDELETE
 
-    pub sockIPPorts: Mutex<HashMap<u32, Endpoint>>,
+    pub sockIPPorts: Mutex<HashMap<u32, Endpoint>>, // TOBEDELETE
 
-    pub sockIdMgr: Mutex<IdMgr>,
+    pub sockIdMgr: Mutex<IdMgr>, //RDMAId.
 
     pub channelToSockInfos: Mutex<HashMap<u32, DataSock>>,
 }
+
+//TODO: implement default
 
 impl Deref for RDMASvcClient {
     type Target = Arc<RDMASvcCliIntern>;
@@ -598,6 +600,7 @@ impl RDMASvcClient {
     }
 
     ///// ReadFromSocket and WriteToSocket are mainly for ingress and egress
+    /// TODO: extract readv and notify
     pub fn ReadFromSocket(&self, sockInfo: &mut DataSock, sockFdMappings: &HashMap<u32, i32>) {
         // println!("ReadFromSocket, 1");
         let mut buffer = sockInfo.sockBuff.writeBuf.lock();
@@ -720,12 +723,12 @@ impl RDMASvcClient {
             if cnt > 0 {
                 buffer.Consume(cnt as usize);
                 let consumedDataSize = sockInfo.sockBuff.AddConsumeReadData(cnt as u64) as usize;
-                // println!(
-                //     "WriteToSocket::Consume, channelId: {}, sockfd: {}, cnt: {}",
-                //     sockInfo.channelId.lock(),
-                //     sockInfo.fd,
-                //     cnt
-                // );
+                println!(
+                    "WriteToSocket::Consume, channelId: {}, sockfd: {}, cnt: {}",
+                    sockInfo.channelId.lock(),
+                    sockInfo.fd,
+                    cnt
+                );
                 let bufSize = buffer.BufSize();
                 // println!("WriteToSocket, consumedDataSize: {}", consumedDataSize);
                 if 2 * consumedDataSize >= bufSize {

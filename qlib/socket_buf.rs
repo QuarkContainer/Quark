@@ -76,20 +76,17 @@ impl SocketBuff {
     }
 
     pub fn InitWithShareMemory(pageCount: u64, readBufHeadTailAddr: u64, writeBufHeadTailAddr: u64, consumeReadDataAddr: u64, readBufAddr: u64, writeBufAddr: u64) -> Self {
-        let _c = unsafe {
+        let consumeReadData = unsafe {
             let addr = consumeReadDataAddr as *mut AtomicU64;
             &mut (*addr)
         };
-        //c.store(5, Ordering::Release);
+        consumeReadData.store(0, Ordering::Release);
         return Self {
             wClosed: AtomicBool::new(false),
             rClosed: AtomicBool::new(false),
             pendingWShutdown: AtomicBool::new(false),
             error: AtomicI32::new(0),
-            consumeReadData: unsafe {
-                let addr = consumeReadDataAddr as *mut AtomicU64;
-                &mut (*addr)
-            },
+            consumeReadData,
             readBuf: QMutex::new(ByteStream::InitWithShareMemory(pageCount, readBufHeadTailAddr, readBufAddr)),
             writeBuf: QMutex::new(ByteStream::InitWithShareMemory(pageCount, writeBufHeadTailAddr, writeBufAddr)),
         }
