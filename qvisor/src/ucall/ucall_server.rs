@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::qlib::kernel::GlobalIOMgr;
+
 use super::super::qlib::common::*;
 use super::super::qlib::control_msg::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::loader;
 use super::super::runc::container::container::*;
 use super::super::vmspace::*;
-use super::super::IO_MGR;
 use super::super::URING_MGR;
 use super::ucall::*;
 use super::usocket::*;
@@ -68,7 +69,7 @@ pub fn ExecProcessHandler(execArgs: &mut ExecArgs, fds: &[i32]) -> Result<Contro
         let osfd = execArgs.Fds[i];
         //VMSpace::UnblockFd(osfd);
 
-        let hostfd = IO_MGR.AddFile(osfd);
+        let hostfd = GlobalIOMgr().AddFile(osfd);
         URING_MGR.lock().Addfd(osfd).unwrap();
         process.Stdiofds[i] = hostfd;
     }
@@ -142,7 +143,7 @@ pub fn CreateSubContainerHandler(args: &mut CreateArgs, fds: &[i32]) -> Result<C
         let osfd = args.fds[i];
         VMSpace::UnblockFd(osfd);
 
-        let hostfd = IO_MGR.AddFile(osfd);
+        let hostfd = GlobalIOMgr().AddFile(osfd);
         args.fds[i] = hostfd;
     }
 

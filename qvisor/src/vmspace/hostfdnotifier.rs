@@ -14,11 +14,12 @@
 
 use libc::*;
 
+use crate::qlib::kernel::GlobalIOMgr;
+
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 //use super::super::qlib::qmsg::input::*;
 //use super::super::SHARE_SPACE;
-use super::super::IO_MGR;
 
 #[repr(C)]
 #[repr(packed)]
@@ -106,6 +107,6 @@ impl HostFdNotifier {
     }
 
     pub fn FdNotify(fd: i32, mask: EventMask) {
-        IO_MGR.Notify(fd, mask);
+        GlobalIOMgr().Notify(fd, mask);
     }
 }

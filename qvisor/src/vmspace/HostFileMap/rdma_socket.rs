@@ -81,7 +81,7 @@ impl RDMAServerSock {
 
             let fd = ret;
 
-            IO_MGR.AddSocket(fd);
+            IO_MGR().AddSocket(fd);
             let socketBuf = Arc::new(SocketBuff::default());
 
             let rdmaType = if super::rdma_socket::RDMA_ENABLE {
@@ -99,11 +99,11 @@ impl RDMAServerSock {
             };
 
             let rdmaSocket = RDMADataSock::New(fd, socketBuf.clone(), rdmaType);
-            let fdInfo = IO_MGR.GetByHost(fd).unwrap();
+            let fdInfo = IO_MGR().GetByHost(fd).unwrap();
             *fdInfo.lock().sockInfo.lock() = SockInfo::RDMADataSocket(rdmaSocket);
 
             URING_MGR.lock().Addfd(fd).unwrap();
-            IO_MGR.AddWait(fd, EVENT_READ | EVENT_WRITE);
+            IO_MGR().AddWait(fd, EVENT_READ | EVENT_WRITE);
 
             if !super::rdma_socket::RDMA_ENABLE {
                 let (trigger, tmp) = acceptQueue.lock().EnqSocket(fd, tcpAddr, len, socketBuf);

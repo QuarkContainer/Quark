@@ -13,35 +13,22 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use core::ops::Deref;
 use libc::*;
 use spin::Mutex;
 
-use super::socket_info::*;
+use crate::qlib::fileinfo::*;
+use crate::qlib::kernel::GlobalIOMgr;
+
+//use super::socket_info::*;
 //use super::rdma_socket::*;
 use super::super::super::util::*;
 use super::super::qlib::common::*;
 use super::super::*;
 //use super::super::FD_NOTIFIER;
 
-#[derive(Clone, Debug)]
-pub struct FdInfo(pub Arc<Mutex<FdInfoIntern>>);
-
-impl Deref for FdInfo {
-    type Target = Arc<Mutex<FdInfoIntern>>;
-
-    fn deref(&self) -> &Arc<Mutex<FdInfoIntern>> {
-        &self.0
-    }
-}
-
 impl FdInfo {
     pub fn SockInfo(&self) -> SockInfo {
         return self.lock().sockInfo.lock().clone();
-    }
-
-    pub fn UpdateWaitInfo(&self, waitInfo: FdWaitInfo) {
-        self.lock().waitInfo = waitInfo
     }
 
     pub fn BufWrite(fd: i32, addr: u64, len: usize, offset: isize) -> i64 {
@@ -273,7 +260,7 @@ impl FdInfo {
             return SysRet(newfd as i64);
         }
 
-        let hostfd = IO_MGR.AddSocket(newfd);
+        let hostfd = GlobalIOMgr().AddSocket(newfd);
         URING_MGR.lock().Addfd(newfd).unwrap();
         return SysRet(hostfd as i64);
     }
@@ -373,6 +360,10 @@ impl FdInfo {
         return Self(Arc::new(Mutex::new(FdInfoIntern::NewFile(fd))));
     }
 
+    pub fn NewSocket(fd: i32) -> Self {
+        return Self(Arc::new(Mutex::new(FdInfoIntern::NewSocket(fd))));
+    }
+
     pub fn Notify(&self, mask: EventMask) {
         let sockInfo = self.SockInfo();
         sockInfo.Notify(mask, self.WaitInfo());
@@ -385,14 +376,6 @@ impl FdInfo {
     pub fn Fd(&self) -> i32 {
         return self.lock().fd;
     }
-
-    pub fn NewSocket(fd: i32) -> Self {
-        return Self(Arc::new(Mutex::new(FdInfoIntern::NewSocket(fd))));
-    }
-
-    /*pub fn NewRDMAContext(fd: i32) -> Self {
-        return Self(Arc::new(Mutex::new(FdInfoIntern::NewRDMAContext(fd))))
-    }*/
 
     pub fn IOReadDir(&self, data: u64) -> i64 {
         let fd = self.lock().fd;
@@ -613,15 +596,6 @@ impl FdInfo {
     ///////////////////////////socket operation//////////////////////////////
 }
 
-#[derive(Debug)]
-pub struct FdInfoIntern {
-    pub fd: i32,
-    pub waitInfo: FdWaitInfo,
-
-    pub flags: Flags,
-    pub sockInfo: Mutex<SockInfo>,
-}
-
 impl Drop for FdInfoIntern {
     fn drop(&mut self) {
         //error!("in fdInfo drop: guest fd is {}, fd is {}", self.hostfd, self.fd);
@@ -642,21 +616,6 @@ impl FdInfoIntern {
 
         return res;
     }
-
-    /*pub fn NewRDMAContext(fd: i32) -> Self {
-        let flags = unsafe {
-            fcntl(fd, F_GETFL)
-        };
-
-        let res = Self {
-            fd: fd,
-            waitInfo: FdWaitInfo::default(),
-            flags: Flags(flags),
-            sockInfo: Mutex::new(SockInfo::RDMAContext)
-        };
-
-        return res;
-    }*/
 
     pub fn NewSocket(fd: i32) -> Self {
         //info!("New fd {}, hostfd{}: epollable is {}", fd, hostfd, epollable);
@@ -698,7 +657,7 @@ impl FdInfoIntern {
     }
 
     pub fn Close(&self) -> i32 {
-        let _ioMgr = IO_MGR.fdTbl.lock(); //global lock
+        let _ioMgr = GlobalIOMgr().fdTbl.lock(); //global lock
         if self.fd >= 0 {
             unsafe {
                 // shutdown for socket, without shutdown, it the uring read won't be wake up
