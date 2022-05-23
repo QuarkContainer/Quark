@@ -12,33 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
-use alloc::sync::Arc;
-use core::fmt;
-use core::ops::Deref;
 
-use super::super::common::*;
-use super::super::linux_def::*;
-use super::super::object_ref::*;
-use super::fs::host::hostinodeop::*;
-use super::kernel::waiter::*;
-use super::Kernel::HostSpace;
-use super::IOURING;
-use super::SHARESPACE;
+use crate::qlib::common::*;
+use crate::qlib::linux_def::*;
+use crate::qlib::fileinfo::*;
+use crate::qlib::kernel::Kernel::HostSpace;
+use crate::qlib::kernel::SHARESPACE;
+use crate::qlib::kernel::GlobalIOMgr;
+use crate::qlib::kernel::kernel::waiter::Queue;
 
-pub static GUEST_NOTIFIER: GuestNotifierRef = GuestNotifierRef::New();
-
-pub fn AddFD(fd: i32, iops: &HostInodeOp) {
-    GUEST_NOTIFIER.AddFD(fd, iops);
-}
-
-pub fn RemoveFD(fd: i32) {
-    GUEST_NOTIFIER.RemoveFD(fd);
+pub fn SetWaitInfo(fd: i32, queue: Queue) {
+    GlobalIOMgr().SetWaitInfo(fd, queue);
 }
 
 pub fn UpdateFD(fd: i32) -> Result<()> {
-    return GUEST_NOTIFIER.UpdateFD(fd);
+    return GlobalIOMgr().UpdateFD(fd);
 }
 
 pub fn NonBlockingPoll(fd: i32, mask: EventMask) -> EventMask {
@@ -46,101 +35,7 @@ pub fn NonBlockingPoll(fd: i32, mask: EventMask) -> EventMask {
 }
 
 pub fn Notify(fd: i32, mask: EventMask) {
-    GUEST_NOTIFIER.Notify(fd, mask);
-}
-
-#[derive(Default)]
-pub struct FdWaitIntern {
-    pub queue: Queue,
-    pub mask: EventMask,
-}
-
-impl fmt::Debug for FdWaitIntern {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("FdWaitInfo")
-            .field("mask", &self.mask)
-            .finish()
-    }
-}
-
-#[derive(Default, Clone, Debug)]
-pub struct FdWaitInfo(Arc<QMutex<FdWaitIntern>>);
-
-impl Deref for FdWaitInfo {
-    type Target = Arc<QMutex<FdWaitIntern>>;
-
-    fn deref(&self) -> &Arc<QMutex<FdWaitIntern>> {
-        &self.0
-    }
-}
-
-impl FdWaitInfo {
-    pub fn New(queue: Queue, mask: EventMask) -> Self {
-        let intern = FdWaitIntern { queue, mask };
-
-        return Self(Arc::new(QMutex::new(intern)));
-    }
-
-    pub fn UpdateFDAsync(&self, fd: i32, epollfd: i32) -> Result<()> {
-        let op;
-        let mask = {
-            let mut fi = self.lock();
-
-            let mask = fi.queue.Events();
-
-            if fi.mask == 0 {
-                if mask != 0 {
-                    op = LibcConst::EPOLL_CTL_ADD;
-                } else {
-                    return Ok(());
-                }
-            } else {
-                if mask == 0 {
-                    op = LibcConst::EPOLL_CTL_DEL;
-                } else {
-                    if mask | fi.mask == fi.mask {
-                        return Ok(());
-                    }
-                    op = LibcConst::EPOLL_CTL_MOD;
-                }
-            }
-
-            fi.mask = mask;
-
-            mask
-        };
-
-        let mask = mask | LibcConst::EPOLLET as u64;
-
-        IOURING.EpollCtl(epollfd, fd, op as i32, mask as u32);
-        return Ok(());
-    }
-
-    pub fn UpdateFDSync(&self, fd: i32) -> Result<()> {
-        let mask = {
-            let fi = self.lock();
-
-            let mask = fi.queue.Events();
-            if mask == fi.mask {
-                return Ok(());
-            }
-
-            mask
-        };
-
-        return Self::waitfd(fd, mask);
-    }
-
-    pub fn Notify(&self, mask: EventMask) {
-        let queue = self.lock().queue.clone();
-        queue.Notify(EventMaskFromLinux(mask as u32));
-    }
-
-    fn waitfd(fd: i32, mask: EventMask) -> Result<()> {
-        HostSpace::WaitFDAsync(fd, mask);
-
-        return Ok(());
-    }
+    GlobalIOMgr().Notify(fd, mask);
 }
 
 // notifier holds all the state necessary to issue notifications when IO events
@@ -160,37 +55,7 @@ pub struct EpollEvent {
     pub U64: u64,
 }
 
-pub type GuestNotifierRef = ObjectRef<GuestNotifier>;
-pub struct GuestNotifier(QMutex<GuestNotifierInternal>);
-
-impl Deref for GuestNotifier {
-    type Target = QMutex<GuestNotifierInternal>;
-
-    fn deref(&self) -> &QMutex<GuestNotifierInternal> {
-        &self.0
-    }
-}
-
-impl Default for GuestNotifier {
-    fn default() -> Self {
-        return Self::New();
-    }
-}
-
-impl GuestNotifier {
-    pub fn New() -> Self {
-        let internal = GuestNotifierInternal {
-            fdMap: BTreeMap::new(),
-            epollfd: 0,
-        };
-
-        return Self(QMutex::new(internal));
-    }
-
-    pub fn Addr(&self) -> u64 {
-        return self as *const _ as u64;
-    }
-
+impl IOMgr {
     pub fn VcpuWait(&self) -> u64 {
         let ret = HostSpace::VcpuWait();
         if ret < 0 {
@@ -215,11 +80,6 @@ impl GuestNotifier {
         }
     }
 
-    pub fn InitPollHostEpoll(&self, hostEpollWaitfd: i32) {
-        self.lock().epollfd = hostEpollWaitfd;
-        IOURING.PollHostEpollWaitInit(hostEpollWaitfd);
-    }
-
     fn waitfd(fd: i32, mask: EventMask) -> Result<()> {
         HostSpace::WaitFDAsync(fd, mask);
 
@@ -235,12 +95,12 @@ impl GuestNotifier {
     }
 
     pub fn FdWaitInfo(&self, fd: i32) -> Option<FdWaitInfo> {
-        let fi = match self.lock().fdMap.get(&fd) {
-            None => return None,
-            Some(fi) => fi.clone(),
+        let fdInfo = match self.GetByHost(fd) {
+            Some(info) => info,
+            None => return None
         };
 
-        return Some(fi);
+        return Some(fdInfo.lock().waitInfo.clone());
     }
 
     pub fn UpdateFDAsync(&self, fd: i32) -> Result<()> {
@@ -249,7 +109,7 @@ impl GuestNotifier {
             Some(fi) => fi,
         };
 
-        let epollfd = self.lock().epollfd;
+        let epollfd = self.Epollfd();
 
         return fi.UpdateFDAsync(fd, epollfd);
     }
@@ -263,23 +123,18 @@ impl GuestNotifier {
         return fi.UpdateFDSync(fd);
     }
 
-    pub fn AddFD(&self, fd: i32, iops: &HostInodeOp) {
-        let mut n = self.lock();
+    pub fn SetWaitInfo(&self, fd: i32, queue: Queue) {
+        let waitinfo = FdWaitInfo::New(queue, 0);
 
-        let queue = iops.lock().queue.clone();
+        let fdInfo = match self.GetByHost(fd) {
+            Some(info) => info,
+            None => {
+                panic!("UpdateWaitInfo panic...")
+            }
+        };
 
-        if n.fdMap.contains_key(&fd) {
-            panic!("GUEST_NOTIFIER::AddFD fd {} added twice", fd);
-        }
-
-        let waitinfo = FdWaitInfo::New(queue.clone(), 0);
-        n.fdMap.insert(fd, waitinfo.clone());
-        HostSpace::UpdateWaitInfo(fd, waitinfo);
-    }
-
-    pub fn RemoveFD(&self, fd: i32) {
-        let mut n = self.lock();
-        n.fdMap.remove(&fd);
+        fdInfo.UpdateWaitInfo(waitinfo);
+        return;
     }
 
     pub fn Notify(&self, fd: i32, mask: EventMask) {

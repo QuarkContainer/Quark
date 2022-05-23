@@ -318,8 +318,8 @@ impl RDMAContextIntern {
         let ccfd = unsafe { (*completeChannel.0).fd };
 
         // start to monitor the complete channel
-        IO_MGR.AddRDMAContext(ccfd);
-        IO_MGR.AddWait(ccfd, EVENT_READ);
+        IO_MGR().AddRDMAContext(ccfd);
+        IO_MGR().AddWait(ccfd, EVENT_READ);
 
         let completeQueue = ibContext.CreateCompleteQueue(&completeChannel);
         let gid = ibContext.QueryGid(ibPort);
@@ -629,13 +629,13 @@ impl RDMAContext {
         // match typ {
         //     WorkRequestType::WriteImm => {
         //         // debug!("ProcessWC: WriteImm, opcode: {}", wc.opcode);
-        //         IO_MGR.ProcessRDMAWriteImmFinish(fd);
+        //         IO_MGR().ProcessRDMAWriteImmFinish(fd);
         //     }
         //     WorkRequestType::Recv => {
         //         let imm = unsafe { wc.imm_data_invalidated_rkey_union.imm_data };
         //         let immData = ImmData(imm);
         //         // debug!("ProcessWC: readCount: {}, writeCount: {}, opcode: {}", immData.ReadCount(), immData.WriteCount(), wc.opcode);
-        //         IO_MGR.ProcessRDMARecvWriteImm(
+        //         IO_MGR().ProcessRDMARecvWriteImm(
         //             fd,
         //             immData.WriteCount() as _,
         //             immData.ReadCount() as _,
@@ -653,7 +653,7 @@ impl RDMAContext {
             //     "ProcessWC::2, writeIMM status: {}, id: {}",
             //     wc.status, wc.wr_id
             // );
-            IO_MGR.ProcessRDMAWriteImmFinish(fd);
+            IO_MGR().ProcessRDMAWriteImmFinish(fd);
         } else if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RECV_RDMA_WITH_IMM {
             let imm = unsafe { wc.imm_data_invalidated_rkey_union.imm_data };
             let immData = ImmData(imm);
@@ -664,7 +664,7 @@ impl RDMAContext {
             //     wc.status,
             //     wc.wr_id
             // );
-            IO_MGR.ProcessRDMARecvWriteImm(fd, wc.byte_len as _, immData.ReadCount() as _);
+            IO_MGR().ProcessRDMARecvWriteImm(fd, wc.byte_len as _, immData.ReadCount() as _);
         } else {
             // debug!("ProcessWC::4, opcode: {}, wr_id: {}", wc.opcode, wc.wr_id);
         }

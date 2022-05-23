@@ -28,7 +28,6 @@ use super::super::super::kvm_vcpu::*;
 use super::super::super::print::LOG;
 use super::super::super::qlib::addr;
 use super::super::super::qlib::common::*;
-use super::super::super::qlib::kernel::guestfdnotifier::GUEST_NOTIFIER;
 use super::super::super::qlib::kernel::kernel::futex;
 use super::super::super::qlib::kernel::kernel::timer;
 use super::super::super::qlib::kernel::task;
@@ -193,7 +192,6 @@ impl VirtualMachine {
         URING_MGR.lock().Addfd(controlSock).unwrap();
         sharespace.SetIOUringsAddr(URING_MGR.lock().IOUringsAddr());
         IOURING.SetValue(sharespace.GetIOUringAddr());
-        GUEST_NOTIFIER.SetValue(sharespace.GuestNotifierAddr());
 
         unsafe {
             KERNEL_PAGETABLE.SetRoot(VMS.lock().pageTables.GetRoot());

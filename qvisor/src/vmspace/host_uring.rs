@@ -16,6 +16,7 @@ use core::mem;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 
+use crate::vmspace::kernel::GlobalIOMgr;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::mutex::QMutex;
@@ -99,7 +100,7 @@ impl IoUring {
             return Err(Error::SysError(-fd));
         }
 
-        let _hostfd = IO_MGR.AddFile(fd);
+        let _hostfd = GlobalIOMgr().AddFile(fd);
         let (mm, sq, cq) = Self::SetupQueue(fd, &p)?;
 
         Ok(IoUring {

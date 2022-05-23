@@ -18,6 +18,8 @@ use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 
+use crate::qlib::fileinfo::*;
+
 use super::qlib::kernel::asm::*;
 use super::qlib::kernel::taskMgr::*;
 use super::qlib::kernel::threadmgr::task_sched::*;
@@ -382,4 +384,10 @@ pub fn HugepageDontNeed(addr: u64) {
         MAdviseOp::MADV_DONTNEED,
     );
     assert!(ret == 0, "HugepageDontNeed fail with {}", ret)
+}
+
+impl IOMgr {
+    pub fn Init() -> Result<Self> {
+        return Err(Error::Common(format!("IOMgr can't init in kernel")))
+    }
 }

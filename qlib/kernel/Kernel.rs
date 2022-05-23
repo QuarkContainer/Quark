@@ -22,7 +22,6 @@ use super::super::qmsg::*;
 use super::super::socket_buf::*;
 use super::super::*;
 use super::asm::*;
-use super::guestfdnotifier::*;
 use super::task::*;
 use super::taskMgr;
 
