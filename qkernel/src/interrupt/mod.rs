@@ -135,6 +135,7 @@ pub fn init() {
 }
 
 pub fn ExceptionHandler(ev: ExceptionStackVec, ptRegs: &mut PtRegs, errorCode: u64) {
+    CPULocal::Myself().SetMode(VcpuMode::Kernel);
     let PRINT_EXECPTION: bool = SHARESPACE.config.read().PrintException;
 
     let currTask = Task::Current();
@@ -325,6 +326,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, ptRegs: &mut PtRegs, errorCode: u
     }
 
     currTask.mm.HandleTlbShootdown();
+    CPULocal::Myself().SetMode(VcpuMode::User);
     ReturnToApp(ptRegs);
 }
 
@@ -424,7 +426,7 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
     unsafe {
         llvm_asm!("movw $0, %ss" :: "r" (ss) : "memory");
     }
-
+    CPULocal::Myself().SetMode(VcpuMode::Kernel);
     let currTask = Task::Current();
 
     // is this call from user
@@ -563,7 +565,7 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
                     currTask.SwitchPageTable();
                 }
             }
-
+            CPULocal::Myself().SetMode(VcpuMode::User);
             return;
         }
 
@@ -592,7 +594,7 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
             signal = Signal::SIGSEGV;
             break;
         }
-
+        CPULocal::Myself().SetMode(VcpuMode::User);
         return;
     }
 
@@ -647,6 +649,7 @@ pub fn HandleFault(
     task.mm.HandleTlbShootdown();
 
     task.RestoreFp();
+    CPULocal::Myself().SetMode(VcpuMode::User);
     ReturnToApp(sf);
 }
 
@@ -673,6 +676,7 @@ pub extern "C" fn SIMDFPHandler(sf: &mut PtRegs) {
 
 #[no_mangle]
 pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
+    CPULocal::Myself().SetMode(VcpuMode::Kernel);
     let mask = CPULocal::Myself().ResetInterruptMask();
     let currTask = Task::Current();
 
@@ -687,6 +691,9 @@ pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
 
         currTask.mm.HandleTlbShootdown();
         CPULocal::SetKernelStack(currTask.GetKernelSp());
+        if ptRegs.ss & 0x3 != 0 {
+            CPULocal::Myself().SetMode(VcpuMode::User);
+        }
         return;
     } else if CPULocal::InterruptByThreadTimeout(mask) {
         if ptRegs.ss & 0x3 != 0 {
@@ -710,6 +717,7 @@ pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
             currTask.RestoreFp();
             CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
             CPULocal::SetKernelStack(currTask.GetKernelSp());
+            CPULocal::Myself().SetMode(VcpuMode::User);
             let kernalRsp = ptRegs as *const _ as u64;
             if !(ptRegs.rip == ptRegs.rcx && ptRegs.r11 == ptRegs.eflags) {
                 IRet(kernalRsp)

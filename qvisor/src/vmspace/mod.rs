@@ -124,21 +124,6 @@ impl VMSpace {
         return GlobalIOMgr().GetFdByHost(hostfd);
     }
 
-    pub fn TlbShootdown(&self, vcpuMask: u64) -> u64 {
-        let mut mask = 0;
-
-        for i in 0..64 {
-            if (1 << i) & vcpuMask != 0 {
-                if self.vcpus[i].Signal(Signal::SIGCHLD) {
-                    mask |= 1 << i;
-                    SHARE_SPACE.scheduler.VcpuArr[i].InterruptTlbShootdown();
-                }
-            }
-        }
-
-        return mask;
-    }
-
     pub fn GetFdInfo(hostfd: i32) -> Option<FdInfo> {
         return GlobalIOMgr().GetByHost(hostfd);
     }

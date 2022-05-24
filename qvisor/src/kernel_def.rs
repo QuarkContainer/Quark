@@ -1,6 +1,7 @@
 use cache_padded::CachePadded;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
+use crossbeam::sync::WaitGroup;
 use libc::*;
 use std::fmt;
 
@@ -27,6 +28,8 @@ use super::FD_NOTIFIER;
 use super::QUARK_CONFIG;
 use super::URING_MGR;
 use super::VMS;
+use crate::kvm_vcpu::KVMVcpuState;
+use crate::SHARE_SPACE;
 
 impl std::error::Error for Error {}
 
@@ -127,33 +130,21 @@ impl ShareSpace {
         super::vmspace::VMSpace::BlockFd(controlSock);
     }
 
-    pub fn TlbShootdown(&self, vcpuMask: u64) -> i64 {
-        let _l = self.tlbShootdownLock.lock();
-
-        self.ClearTlbShootdownMask();
-        let mask = VMS.lock().TlbShootdown(vcpuMask);
-
-        let mut last = TSC.Rdtsc();
-        for _ in 0..200 {
-            loop {
-                Self::Yield();
-                if mask & !self.TlbShootdownMask() == 0 {
-                    return mask as _;
-                }
-                if Tsc::Scale(TSC.Rdtsc() - last) * 1000 > CLOCK_TICK {
-                    last = TSC.Rdtsc();
-                    break;
-                }
+    pub fn TlbShootdown(&self, vcpuMask: u64) -> u64 {
+        let wg = WaitGroup::new();
+        let vcpu_len = self.scheduler.VcpuArr.len();
+        for i in 1..vcpu_len {
+            let cpu = VMS.lock().vcpus[i].clone();
+            if ((1 << i) & vcpuMask != 0)
+                && SHARE_SPACE.scheduler.VcpuArr[i].GetMode() == VcpuMode::User
+                && cpu.state.load(Ordering::Acquire) == (KVMVcpuState::GUEST as u64)
+            {
+                SHARE_SPACE.scheduler.VcpuArr[i].InterruptTlbShootdown();
+                cpu.interrupt(Some(wg.clone()))
             }
-
-            VMS.lock().TlbShootdown(mask & !self.TlbShootdownMask());
         }
-
-        error!(
-            "TlbShootdown waiting for {:b} timeout",
-            mask & !self.TlbShootdownMask()
-        );
-        return mask as _;
+        wg.wait();
+        return 0;
     }
 
     pub fn Yield() {
@@ -179,9 +170,8 @@ impl ShareSpace {
                     .SetEnterAppTimestamp(enterAppTimestamp + CLOCK_TICK / 5000);
                 self.scheduler.VcpuArr[i].InterruptThreadTimeout();
                 //error!("CheckVcpuTimeout {}/{}/{}/{}", i, enterAppTimestamp, now, Tsc::Scale(now - enterAppTimestamp));
-
-                // todo: enable this for preempty schedule
-                VMS.lock().vcpus[i].Signal(Signal::SIGCHLD);
+                let vcpu = VMS.lock().vcpus[i].clone();
+                vcpu.interrupt(None);
             }
         }
     }
