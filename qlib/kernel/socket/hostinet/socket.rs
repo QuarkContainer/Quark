@@ -578,6 +578,9 @@ impl FileOperations for SocketOperations {
         let sockBufType = self.socketBuf.lock().clone();
         match sockBufType {
             SocketBufType::Uring(socketBuf) => {
+                if self.SocketBuf().RClosed() {
+                    return Err(Error::SysError(SysErr::ESPIPE))
+                }
                 let ret =
                     QUring::RingFileRead(task, self.fd, self.queue.clone(), socketBuf, dsts, true)?;
                 return Ok(ret);
@@ -610,6 +613,10 @@ impl FileOperations for SocketOperations {
         let sockBufType = self.socketBuf.lock().clone();
         match sockBufType {
             SocketBufType::Uring(socketBuf) => {
+                if self.SocketBuf().WClosed() {
+                    return Err(Error::SysError(SysErr::ESPIPE))
+                }
+
                 return QUring::SocketSend(task, self.fd, self.queue.clone(), socketBuf, srcs, self)
             }
             SocketBufType::RDMA(socketBuf) => {
@@ -741,7 +748,9 @@ impl SockOperations for SocketOperations {
         ) as i32;
         if res == 0 {
             self.SetRemoteAddr(socketaddr.to_vec())?;
-            self.PostConnect(task);
+            if self.stype == SockType::SOCK_STREAM {
+                self.PostConnect(task);
+            }
 
             return Ok(0);
         }
@@ -805,7 +814,9 @@ impl SockOperations for SocketOperations {
         }
 
         self.SetRemoteAddr(socketaddr.to_vec())?;
-        self.PostConnect(task);
+        if self.stype == SockType::SOCK_STREAM {
+            self.PostConnect(task);
+        }
 
         return Ok(0);
     }
@@ -999,6 +1010,14 @@ impl SockOperations for SocketOperations {
             let res = Kernel::HostSpace::Shutdown(self.fd, how as i32);
             if res < 0 {
                 return Err(Error::SysError(-res as i32));
+            }
+
+            if self.stype == SockType::SOCK_STREAM && (how == LibcConst::SHUT_RD || how == LibcConst::SHUT_RDWR) {
+                self.SocketBuf().SetRClosed();
+            }
+
+            if self.stype == SockType::SOCK_STREAM && (how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR) {
+                self.SocketBuf().SetWClosed();
             }
 
             return Ok(res);
