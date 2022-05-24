@@ -2797,7 +2797,25 @@ impl MemoryDef {
 
     pub const PHY_LOWER_ADDR: u64 = 256 * Self::ONE_GB; // 256 ~ 512GB is Guest kernal space
     pub const PHY_UPPER_ADDR: u64 = Self::PHY_LOWER_ADDR + 256 * Self::ONE_GB; // 256 ~ 512GB is Guest kernal space
-                                                                               // start address for memmap and dynamic load address space, there is heap address space between PHY_UPPER_ADDR + VIR_MMAP_START
+
+    // memory layout
+    // PHY_LOWER_ADDR: qkernel image 512MB
+    pub const QKERNEL_IMAGE_SIZE: u64 = 512 * Self::ONE_MB;
+    // RDMA Local share memory
+    pub const RDMA_LOCAL_SHARE_OFFSET: u64 = Self::PHY_LOWER_ADDR + Self::QKERNEL_IMAGE_SIZE;
+    pub const RDMA_LOCAL_SHARE_SIZE: u64 = 1024 * Self::ONE_MB; // 1GB
+    // RDMA global share memory
+    pub const RDMA_GLOBAL_SHARE_OFFSET: u64 = Self::RDMA_LOCAL_SHARE_OFFSET + Self::RDMA_LOCAL_SHARE_SIZE;
+    pub const RDMA_GLOBAL_SHARE_SIZE: u64 = 2 * Self::ONE_MB;
+    // heap
+    pub const HEAP_OFFSET: u64 = Self::RDMA_GLOBAL_SHARE_OFFSET + Self::RDMA_GLOBAL_SHARE_SIZE;
+    pub const HEAP_SIZE: u64 = 8 * Self::ONE_GB;
+
+    // file map area
+    pub const FILE_MAP_OFFSET: u64 = Self::HEAP_OFFSET + Self::HEAP_SIZE;
+
+
+    // start address for memmap and dynamic load address space, there is heap address space between PHY_UPPER_ADDR + VIR_MMAP_START
     pub const VIR_MMAP_START: u64 = Self::PHY_UPPER_ADDR + 128 * Self::ONE_GB; // + 1 * Self::ONE_TB; //start from 1.5 TB
     pub const SHARED_START: u64 = Self::VIR_MMAP_START + 1 * Self::ONE_TB; //start from 2.5 TB
     pub const LOWER_TOP: u64 = 0x0000_8000_0000_0000;

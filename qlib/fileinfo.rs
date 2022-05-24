@@ -132,7 +132,6 @@ impl FdTbl {
 
 #[derive(Default)]
 pub struct IOMgr {
-    //guest hostfd to fdInfo
     pub fdTbl: Mutex<FdTbl>,
     pub eventfd: i32,
     pub epollfd: AtomicI32,
