@@ -66,10 +66,6 @@ codegen-units = 1
 debug-assertions = false
 
 [[bin]]
-name = "rdma_cli"
-path = "src/main_cli.rs"
-
-[[bin]]
 name = "rdma_ingress"
 path = "src/ingress.rs"
 

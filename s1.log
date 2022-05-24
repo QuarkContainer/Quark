@@ -1,0 +1,30 @@
+RDMA Service is starting!
+server_fd is 7
+RDMA CCFd: 5
+litener sock fd is 7
+srv_unix_sock: 8
+sock_fd is 9
+new conn
+RDMASrv::New
+shareRegionAddr : 0x7fa2be4e8000, size is: 4096
+after create qp
+ctrlChann is null
+ctrlChann is not null
+before insert
+after insert
+ret is -1, error: Operation now in progress (os error 115)
+RDMAConn::Notify 1
+RDMAConn::Notify 2
+RDMAConn::Notify 1
+RDMAConn::Notify 2
+RDMAConn::Notify 3
+ctrlChann is not null
+RecvRemoteRDMAInfo. raddr: 140590543945728, rlen: 65536, rkey: 385215
+RDMAConn::Notify 1
+RDMAConn::Notify 2
+RDMAConn::Notify 3
+add unix sock fd: 12
+UnixDomainSocketConnect
+cnt: 4
+init!!
+Error to read fds: IOError("ReadWithFds io::error is EAGAIN")
