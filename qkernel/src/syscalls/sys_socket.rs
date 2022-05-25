@@ -445,6 +445,8 @@ fn recvSingleMsg(
         }
 
         msg.msgFlags = mflags;
+        task.CopyOutObj(&msg, msgPtr)?;
+
         return Ok(n as i64);
     }
 
