@@ -2280,7 +2280,13 @@ use super::mem::seq::BlockSeq;
 
 impl DataBuff {
     pub fn New(size: usize) -> Self {
-        let mut buf = Vec::with_capacity(size);
+        // allocate memory even size is zero. So that Ptr() can get valid address
+        let count = if size > 0 {
+            size
+        } else {
+            1
+        };
+        let mut buf = Vec::with_capacity(count);
         unsafe {
             buf.set_len(size);
         }
@@ -2303,10 +2309,6 @@ impl DataBuff {
     }
 
     pub fn IoVec(&self, len: usize) -> IoVec {
-        if self.Len() == 0 {
-            return IoVec::NewFromAddr(0, 0);
-        }
-
         return IoVec {
             start: self.Ptr(),
             len: len,
