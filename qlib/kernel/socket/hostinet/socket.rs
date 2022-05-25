@@ -1400,12 +1400,7 @@ impl SockOperations for SocketOperations {
         let iovs = buf.Iovs(size);
 
         let mut msgHdr = MsgHdr::default();
-        if IoVec::NumBytes(dsts) != 0 {
-            msgHdr.iov = &iovs[0] as *const _ as u64;
-        } else {
-            msgHdr.iov = ptr::null::<IoVec>() as u64;
-        }
-
+        msgHdr.iov = &iovs[0] as *const _ as u64;
         msgHdr.iovLen = iovs.len();
 
         let mut addr: [u8; SIZEOF_SOCKADDR] = [0; SIZEOF_SOCKADDR];
@@ -1574,11 +1569,7 @@ impl SockOperations for SocketOperations {
         let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;
         let iovs = buf.Iovs(len);
 
-        if IoVec::NumBytes(srcs) != 0 {
-            msgHdr.iov = &iovs[0] as *const _ as u64;
-        } else {
-            msgHdr.iov = ptr::null::<IoVec>() as u64;
-        }
+        msgHdr.iov = &iovs[0] as *const _ as u64;
         msgHdr.iovLen = iovs.len();
         msgHdr.msgFlags = 0;
 
