@@ -1247,11 +1247,12 @@ impl SockOperations for SocketOperations {
         senderRequested: bool,
         controlDataLen: usize,
     ) -> Result<(i64, i32, Option<(SockAddr, usize)>, Vec<u8>)> {
-        //let family = self.family;
-        //let stype = self.stype;
 
-        //error!("RecvMsg ... host socket  fd {} {}/{}/{}/{}", self.fd, flags & MsgType::MSG_DONTWAIT, self.SocketBufEnabled(), family, stype);
         if self.SocketBufEnabled() {
+            if self.SocketBuf().RClosed() {
+                return Err(Error::SysError(SysErr::ESPIPE))
+            }
+
             let controlDataLen = 0;
 
             let len = IoVec::NumBytes(dsts);
@@ -1472,7 +1473,12 @@ impl SockOperations for SocketOperations {
         controlVec.resize(msgHdr.msgControlLen, 0);
 
         // todo: need to handle partial copy
-        let _len = task.CopyDataOutToIovs(&buf.buf[0..res as usize], dsts, false)?;
+        let count = if res < buf.buf.len() as i32 {
+            res
+        } else {
+            buf.buf.len() as i32
+        };
+        let _len = task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts, false)?;
         return Ok((res as i64, msgFlags, senderAddr, controlVec));
     }
 
@@ -1485,6 +1491,10 @@ impl SockOperations for SocketOperations {
         deadline: Option<Time>,
     ) -> Result<i64> {
         if self.SocketBufEnabled() {
+            if self.SocketBuf().WClosed() {
+                return Err(Error::SysError(SysErr::ESPIPE))
+            }
+
             if msgHdr.msgName != 0 || msgHdr.msgControl != 0 {
                 panic!("Hostnet Socketbuf doesn't supprot MsgHdr");
             }
