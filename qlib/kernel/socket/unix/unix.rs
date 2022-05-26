@@ -805,12 +805,28 @@ impl SockOperations for UnixSocketOperations {
             ) {
                 Err(Error::SysError(SysErr::EAGAIN)) => (),
                 Err(Error::ErrClosedForReceive) => {
-                    let len = task.CopyDataOutToIovs(&buf.buf[0..total as usize], dsts, false)?;
+                    let count = if total > buf.buf.len() as i64 {
+                        buf.buf.len() as i64
+                    } else {
+                        total
+                    };
+                    if trunc {
+                        return Ok((total as i64, msgFlags, sender, ControlVec));
+                    }
+                    let len = task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts, false)?;
                     return Ok((len as i64, msgFlags, sender, ControlVec));
                 }
                 Err(e) => {
                     if total > 0 {
-                        let len = task.CopyDataOutToIovs(&buf.buf[0..total as usize], dsts, false)?;
+                        let count = if total > buf.buf.len() as i64 {
+                            buf.buf.len() as i64
+                        } else {
+                            total
+                        };
+                        if trunc {
+                            return Ok((total as i64, msgFlags, sender, ControlVec));
+                        }
+                        let len = task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts, false)?;
                         return Ok((len as i64, msgFlags, sender, ControlVec));
                     }
 
@@ -856,7 +872,16 @@ impl SockOperations for UnixSocketOperations {
                             &mut msgFlags,
                             cloexec,
                         );
-                        let len = task.CopyDataOutToIovs(&buf.buf[0..total as usize], dsts, false)?;
+                        let count = if total > buf.buf.len() as i64 {
+                            buf.buf.len() as i64
+                        } else {
+                            total
+                        };
+                        let len = task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts, false)?;
+
+                        if trunc {
+                            return Ok((total as i64, msgFlags, sender, ControlVector));
+                        }
                         return Ok((len as i64, msgFlags, sender, ControlVector));
                     }
 
@@ -942,6 +967,9 @@ impl SockOperations for UnixSocketOperations {
                 n
             }
         };
+
+        // only send control message once
+        let scmCtrlMsg = SCMControlMessages::default();
 
         // We'll have to block. Register for notification and keep trying to
         // send all the data.

@@ -578,6 +578,9 @@ impl FileOperations for SocketOperations {
         let sockBufType = self.socketBuf.lock().clone();
         match sockBufType {
             SocketBufType::Uring(socketBuf) => {
+                if self.SocketBuf().RClosed() {
+                    return Err(Error::SysError(SysErr::ESPIPE))
+                }
                 let ret =
                     QUring::RingFileRead(task, self.fd, self.queue.clone(), socketBuf, dsts, true)?;
                 return Ok(ret);
@@ -610,6 +613,10 @@ impl FileOperations for SocketOperations {
         let sockBufType = self.socketBuf.lock().clone();
         match sockBufType {
             SocketBufType::Uring(socketBuf) => {
+                if self.SocketBuf().WClosed() {
+                    return Err(Error::SysError(SysErr::ESPIPE))
+                }
+
                 return QUring::SocketSend(task, self.fd, self.queue.clone(), socketBuf, srcs, self)
             }
             SocketBufType::RDMA(socketBuf) => {
@@ -741,7 +748,9 @@ impl SockOperations for SocketOperations {
         ) as i32;
         if res == 0 {
             self.SetRemoteAddr(socketaddr.to_vec())?;
-            self.PostConnect(task);
+            if self.stype == SockType::SOCK_STREAM {
+                self.PostConnect(task);
+            }
 
             return Ok(0);
         }
@@ -805,7 +814,9 @@ impl SockOperations for SocketOperations {
         }
 
         self.SetRemoteAddr(socketaddr.to_vec())?;
-        self.PostConnect(task);
+        if self.stype == SockType::SOCK_STREAM {
+            self.PostConnect(task);
+        }
 
         return Ok(0);
     }
@@ -1001,6 +1012,14 @@ impl SockOperations for SocketOperations {
                 return Err(Error::SysError(-res as i32));
             }
 
+            if self.stype == SockType::SOCK_STREAM && (how == LibcConst::SHUT_RD || how == LibcConst::SHUT_RDWR) {
+                self.SocketBuf().SetRClosed();
+            }
+
+            if self.stype == SockType::SOCK_STREAM && (how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR) {
+                self.SocketBuf().SetWClosed();
+            }
+
             return Ok(res);
         }
 
@@ -1144,6 +1163,16 @@ impl SockOperations for SocketOperations {
 
         let opt = &opt[..optlen];*/
 
+        if (level as u64) == LibcConst::SOL_SOCKET && (name as u64) == LibcConst::SO_SNDTIMEO {
+            if opt.len() >= SocketSize::SIZEOF_TIMEVAL {
+                let timeVal = task.CopyInObj::<Timeval>(&opt[0] as *const _ as u64)?;
+                self.SetSendTimeout(timeVal.ToDuration() as i64);
+            } else {
+                //TODO: to be aligned with Linux, Linux allows shorter length for this flag.
+                return Err(Error::SysError(SysErr::EINVAL));
+            }
+        }
+
         if (level as u64) == LibcConst::SOL_SOCKET && (name as u64) == LibcConst::SO_RCVTIMEO {
             if opt.len() >= SocketSize::SIZEOF_TIMEVAL {
                 let timeVal = task.CopyInObj::<Timeval>(&opt[0] as *const _ as u64)?;
@@ -1228,11 +1257,27 @@ impl SockOperations for SocketOperations {
         senderRequested: bool,
         controlDataLen: usize,
     ) -> Result<(i64, i32, Option<(SockAddr, usize)>, Vec<u8>)> {
-        //let family = self.family;
-        //let stype = self.stype;
 
-        //error!("RecvMsg ... host socket  fd {} {}/{}/{}/{}", self.fd, flags & MsgType::MSG_DONTWAIT, self.SocketBufEnabled(), family, stype);
+        //todo: we don't support MSG_ERRQUEUE
+        if flags
+            & !(MsgType::MSG_DONTWAIT
+            | MsgType::MSG_PEEK
+            | MsgType::MSG_TRUNC
+            | MsgType::MSG_CTRUNC
+            | MsgType::MSG_WAITALL)
+            != 0
+            {
+                return Err(Error::SysError(SysErr::EINVAL));
+            }
+
+        let waitall = (flags & MsgType::MSG_WAITALL) != 0;
+        let dontwait = (flags & MsgType::MSG_DONTWAIT) != 0;
+
         if self.SocketBufEnabled() {
+            if self.SocketBuf().RClosed() {
+                return Err(Error::SysError(SysErr::ESPIPE))
+            }
+
             let controlDataLen = 0;
 
             let len = IoVec::NumBytes(dsts);
@@ -1241,49 +1286,6 @@ impl SockOperations for SocketOperations {
             let mut count = 0;
             let mut tmp;
             let socketType = self.SocketBufType();
-
-            loop {
-                match self.ReadFromBuf(task, socketType.clone(), iovs) {
-                    Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
-                        if flags & MsgType::MSG_DONTWAIT != 0 {
-                            if count > 0 {
-                                let (retFlags, controlData) =
-                                    self.prepareControlMessage(controlDataLen);
-                                return Ok((count as i64, retFlags, None, controlData));
-                            }
-
-                            return Err(Error::SysError(SysErr::EWOULDBLOCK));
-                        }
-
-                        break;
-                    }
-                    Err(e) => {
-                        if count > 0 {
-                            let (retFlags, controlData) =
-                                self.prepareControlMessage(controlDataLen);
-                            return Ok((count as i64, retFlags, None, controlData));
-                        }
-                        return Err(e);
-                    }
-                    Ok(n) => {
-                        if n == 0 {
-                            let (retFlags, controlData) =
-                                self.prepareControlMessage(controlDataLen);
-                            return Ok((count, retFlags, None, controlData));
-                        }
-
-                        count += n;
-                        if count == len as i64 {
-                            let (retFlags, controlData) =
-                                self.prepareControlMessage(controlDataLen);
-                            return Ok((count as i64, retFlags, None, controlData));
-                        }
-
-                        tmp = Iovs(iovs).DropFirst(n as usize);
-                        iovs = &mut tmp;
-                    }
-                }
-            }
 
             let general = task.blocker.generalEntry.clone();
             self.EventRegister(task, &general, EVENT_READ);
@@ -1294,8 +1296,19 @@ impl SockOperations for SocketOperations {
                     match self.ReadFromBuf(task, socketType.clone(), iovs) {
                         Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
                             if count > 0 {
+                                if dontwait || !waitall {
+                                    break 'main;
+                                }
+                            }
+
+                            if count == len as i64 {
                                 break 'main;
                             }
+
+                            if count == 0 && dontwait {
+                                return Err(Error::SysError(SysErr::EWOULDBLOCK));
+                            }
+
                             break;
                         }
                         Err(e) => {
@@ -1353,18 +1366,6 @@ impl SockOperations for SocketOperations {
             return Ok((count as i64, retFlags, senderAddr, controlData));
         }
 
-        //todo: we don't support MSG_ERRQUEUE
-        if flags
-            & !(MsgType::MSG_DONTWAIT
-                | MsgType::MSG_PEEK
-                | MsgType::MSG_TRUNC
-                | MsgType::MSG_CTRUNC
-                | MsgType::MSG_WAITALL)
-            != 0
-        {
-            return Err(Error::SysError(SysErr::EINVAL));
-        }
-
         /*
         if IoVec::NumBytes(dsts) == 0 {
             return Ok((0, 0, None, SCMControlMessages::default()))
@@ -1380,12 +1381,7 @@ impl SockOperations for SocketOperations {
         let iovs = buf.Iovs(size);
 
         let mut msgHdr = MsgHdr::default();
-        if IoVec::NumBytes(dsts) != 0 {
-            msgHdr.iov = &iovs[0] as *const _ as u64;
-        } else {
-            msgHdr.iov = ptr::null::<IoVec>() as u64;
-        }
-
+        msgHdr.iov = &iovs[0] as *const _ as u64;
         msgHdr.iovLen = iovs.len();
 
         let mut addr: [u8; SIZEOF_SOCKADDR] = [0; SIZEOF_SOCKADDR];
@@ -1453,7 +1449,12 @@ impl SockOperations for SocketOperations {
         controlVec.resize(msgHdr.msgControlLen, 0);
 
         // todo: need to handle partial copy
-        let _len = task.CopyDataOutToIovs(&buf.buf[0..res as usize], dsts, false)?;
+        let count = if res < buf.buf.len() as i32 {
+            res
+        } else {
+            buf.buf.len() as i32
+        };
+        let _len = task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts, false)?;
         return Ok((res as i64, msgFlags, senderAddr, controlVec));
     }
 
@@ -1466,6 +1467,10 @@ impl SockOperations for SocketOperations {
         deadline: Option<Time>,
     ) -> Result<i64> {
         if self.SocketBufEnabled() {
+            if self.SocketBuf().WClosed() {
+                return Err(Error::SysError(SysErr::ESPIPE))
+            }
+
             if msgHdr.msgName != 0 || msgHdr.msgControl != 0 {
                 panic!("Hostnet Socketbuf doesn't supprot MsgHdr");
             }
@@ -1475,10 +1480,21 @@ impl SockOperations for SocketOperations {
             let mut srcs = srcs;
             let mut tmp;
             let socketType = self.SocketBufType();
+            let general = task.blocker.generalEntry.clone();
+            self.EventRegister(task, &general, EVENT_WRITE);
+            defer!(self.EventUnregister(task, &general));
+
             loop {
                 loop {
                     match self.WriteToBuf(task, socketType.clone(), srcs) {
                         Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
+                            if flags & MsgType::MSG_DONTWAIT != 0 {
+                                if count > 0 {
+                                    return Ok(count);
+                                }
+                                return Err(Error::SysError(SysErr::EWOULDBLOCK));
+                            }
+
                             if count > 0 {
                                 return Ok(count);
                             }
@@ -1506,10 +1522,6 @@ impl SockOperations for SocketOperations {
                         }
                     }
                 }
-
-                let general = task.blocker.generalEntry.clone();
-                self.EventRegister(task, &general, EVENT_WRITE);
-                defer!(self.EventUnregister(task, &general));
 
                 match task.blocker.BlockWithMonoTimer(true, deadline) {
                     Err(Error::SysError(SysErr::ETIMEDOUT)) => {
@@ -1545,11 +1557,7 @@ impl SockOperations for SocketOperations {
         let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;
         let iovs = buf.Iovs(len);
 
-        if IoVec::NumBytes(srcs) != 0 {
-            msgHdr.iov = &iovs[0] as *const _ as u64;
-        } else {
-            msgHdr.iov = ptr::null::<IoVec>() as u64;
-        }
+        msgHdr.iov = &iovs[0] as *const _ as u64;
         msgHdr.iovLen = iovs.len();
         msgHdr.msgFlags = 0;
 
