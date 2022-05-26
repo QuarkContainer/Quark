@@ -1,5 +1,5 @@
 [package]
-name = "rdma_srv"
+name = "rdma_cli"
 version = "0.1.0"
 authors = ["Yulin Sun <yulin.sun@quarksoft.io>"]
 edition = "2018"

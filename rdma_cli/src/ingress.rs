@@ -68,8 +68,8 @@ pub mod kernel_def;
 pub mod qlib;
 
 pub mod common;
-pub mod rdma_svc_cli;
-pub mod unix_socket;
+pub mod rdma_def;
+pub mod unix_socket_def;
 
 use self::qlib::ShareSpaceRef;
 use alloc::slice;
@@ -87,11 +87,11 @@ use common::EpollEvent;
 use common::*;
 use qlib::linux_def::*;
 use qlib::socket_buf::SocketBuff;
-use rdma_svc_cli::*;
+use qlib::rdma_svc_cli::*;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::{env, mem, ptr, thread, time};
-use unix_socket::UnixSocket;
+use qlib::unix_socket::UnixSocket;
 
 fn main() -> io::Result<()> {
     let mut fds: HashMap<i32, FdType> = HashMap::new();

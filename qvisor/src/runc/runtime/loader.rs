@@ -47,4 +47,6 @@ pub struct Args {
     pub ControlSock: i32,
 
     pub Rootfs: String,
+
+    pub RDMASvcCliSock: i32,
 }

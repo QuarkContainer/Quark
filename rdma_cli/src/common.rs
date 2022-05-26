@@ -35,9 +35,11 @@ use super::qlib::bytestream::*;
 use super::qlib::common::*;
 use super::qlib::linux_def::*;
 use super::qlib::rdma_share::*;
+use super::qlib::rdma_svc_cli::*;
 use super::qlib::socket_buf::*;
-use super::rdma_svc_cli::*;
-use super::unix_socket::UnixSocket;
+use super::qlib::unix_socket::UnixSocket;
+use super::rdma_def::*;
+use super::unix_socket_def::*;
 
 pub enum SockType {
     TBD,
@@ -308,18 +310,8 @@ impl GatewayClient {
 
     pub fn initialize(path: &str) -> Self {
         let cli_sock = UnixSocket::NewClient(path).unwrap();
-
-        let body = 1;
-        let ptr = &body as *const _ as *const u8;
-        let buf = unsafe { slice::from_raw_parts(ptr, 4) };
-        cli_sock.WriteWithFds(buf, &[]).unwrap();
-
-        let mut body = [0, 0];
-        let ptr = &mut body as *mut _ as *mut u8;
-        let buf = unsafe { slice::from_raw_parts_mut(ptr, 8) };
-        let (_size, fds) = cli_sock.ReadWithFds(buf).unwrap();
-
-        let rdmaSvcCli = RDMASvcClient::New(fds[0], fds[1], fds[2], fds[3], body[1], cli_sock);
+        let rdmaSvcCli =
+            RDMASvcClient::initialize(cli_sock, 0, 0);
         let res = GatewayClient::New(rdmaSvcCli);
         res
     }

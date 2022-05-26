@@ -14,14 +14,15 @@
 
 use alloc::string::ToString;
 use libc::*;
+use nix::sys::socket::ControlMessageOwned;
+use nix::sys::socket::{recvmsg, sendmsg, ControlMessage, MsgFlags};
+use nix::sys::uio::IoVec;
 use std::mem;
 use std::os::unix::io::{AsRawFd, RawFd};
-use nix::sys::socket::{ControlMessage, MsgFlags, sendmsg, recvmsg};
-use nix::sys::socket::ControlMessageOwned;
-use nix::sys::uio::IoVec;
 
 use super::qlib::common::*;
 use super::qlib::cstring::*;
+use super::qlib::unix_socket::*;
 
 #[repr(C)]
 union HeaderAlignedBuf {
@@ -30,20 +31,20 @@ union HeaderAlignedBuf {
     align: libc::cmsghdr,
 }
 
-pub struct UnixSocket(RawFd);
-
 impl AsRawFd for UnixSocket {
     /// The accessor function `as_raw_fd` returns the fd.
     fn as_raw_fd(&self) -> RawFd {
-        self.0
+        self.fd
     }
 }
 
 impl Drop for UnixSocket {
     fn drop(&mut self) {
         unsafe {
-            println!("close unix domain!!!");
-            close(self.0);
+            if self.fd != -1 {
+                error!("close unix domain!!!");
+                close(self.fd);
+            }
         }
     }
 }
@@ -68,7 +69,7 @@ impl UnixSocket {
             return Err(Error::SysError(-errno::errno().0 as i32));
         }
 
-        let srvSock = Self(sock);
+        let srvSock = Self { fd: sock };
 
         let ret = unsafe {
             bind(
@@ -111,10 +112,10 @@ impl UnixSocket {
             return Err(Error::SysError(-errno::errno().0 as i32));
         }
 
-        return Ok(Self(conn));
+        return Ok(Self { fd: conn });
     }
 
-    pub fn NewClient(path: &str) -> Result<Self> {
+    pub fn NewClient(path: &str) -> Result<i32> {
         let mut server = sockaddr_un {
             sun_family: AF_UNIX as u16,
             sun_path: [0; 108],
@@ -133,7 +134,7 @@ impl UnixSocket {
             return Err(Error::SysError(-errno::errno().0 as i32));
         }
 
-        let cliSocket = Self(sock);
+        // let cliSocket = Self { fd: sock };
 
         let ret = unsafe {
             connect(
@@ -148,7 +149,7 @@ impl UnixSocket {
             return Err(Error::SysError(-errno::errno().0 as i32));
         }
 
-        return Ok(cliSocket);
+        return Ok(sock);
     }
 
     pub fn SendFd(&self, fd: RawFd) -> Result<()> {
@@ -188,7 +189,7 @@ impl UnixSocket {
             );
         }
 
-        let rv = unsafe { libc::sendmsg(self.0, &msg, 0) };
+        let rv = unsafe { libc::sendmsg(self.fd, &msg, 0) };
         if rv < 0 {
             return Err(Error::SysError(-errno::errno().0));
         }
@@ -215,7 +216,7 @@ impl UnixSocket {
         };
 
         unsafe {
-            let rv = libc::recvmsg(self.0, &mut msg, 0);
+            let rv = libc::recvmsg(self.fd, &mut msg, 0);
             match rv {
                 0 => Err(Error::Common("UnExpected Eof".to_string())),
                 rv if rv < 0 => return Err(Error::SysError(-errno::errno().0)),
@@ -252,14 +253,14 @@ impl UnixSocket {
         }
     }
 
-    const MAX_FILES : usize = 16 * 4;
+    const MAX_FILES: usize = 16 * 4;
 
-    pub fn ReadWithFds(&self, buf: &mut[u8]) -> Result<(usize, Vec<i32>)> {
+    pub fn ReadWithFds(&self, buf: &mut [u8]) -> Result<(usize, Vec<i32>)> {
         let iovec = [IoVec::from_mut_slice(buf)];
-        let mut space : Vec<u8> = vec![0; Self::MAX_FILES];
+        let mut space: Vec<u8> = vec![0; Self::MAX_FILES];
 
         loop {
-            match recvmsg(self.0, &iovec, Some(&mut space), MsgFlags::empty()) {
+            match recvmsg(self.fd, &iovec, Some(&mut space), MsgFlags::empty()) {
                 Ok(msg) => {
                     let cnt = msg.bytes;
 
@@ -270,28 +271,30 @@ impl UnixSocket {
                         }
                         None => {
                             println!("cnt: {}", cnt);
-                            return Ok((cnt, Vec::new()))
+                            return Ok((cnt, Vec::new()));
                         }
                         _ => break,
                     }
-                },
+                }
                 Err(errno) => {
                     if errno as i32 == EINTR {
                         continue;
                     }
-                    return Err(Error::IOError(format!("ReadWithFds io::error is {:?}", errno)))
+                    return Err(Error::IOError(format!(
+                        "ReadWithFds io::error is {:?}",
+                        errno
+                    )));
                 }
             };
-
         }
-        
-        return Err(Error::IOError("ReadWithFds can't get fds".to_string()))
+
+        return Err(Error::IOError("ReadWithFds can't get fds".to_string()));
     }
 
     pub fn WriteWithFds(&self, buf: &[u8], fds: &[i32]) -> Result<usize> {
         let iov = [IoVec::from_slice(&buf)];
         let cmsg = [ControlMessage::ScmRights(&fds)];
-        let size = sendmsg(self.0, &iov, &cmsg, MsgFlags::empty(), None)
+        let size = sendmsg(self.fd, &iov, &cmsg, MsgFlags::empty(), None)
             .map_err(|e| Error::IOError(format!("WriteWithFds io::error is {:?}", e)))?;
 
         return Ok(size);

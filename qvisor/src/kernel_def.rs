@@ -1,3 +1,4 @@
+use cache_padded::CachePadded;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use libc::*;
@@ -16,6 +17,7 @@ use super::qlib::loader::*;
 use super::qlib::mutex::*;
 use super::qlib::perf_tunning::*;
 use super::qlib::qmsg::*;
+use super::qlib::rdma_svc_cli::*;
 use super::qlib::task_mgr::*;
 use super::qlib::vcpu_mgr::*;
 use super::qlib::*;
@@ -93,11 +95,19 @@ impl<'a> ShareSpace {
 }
 
 impl ShareSpace {
-    pub fn Init(&mut self, vcpuCount: usize, controlSock: i32) {
+    pub fn Init(&mut self, vcpuCount: usize, controlSock: i32, rdmaSvcCliSock: i32) {
         *self.config.write() = *QUARK_CONFIG.lock();
         let mut values = Vec::with_capacity(vcpuCount);
         for _i in 0..vcpuCount {
             values.push([AtomicU64::new(0), AtomicU64::new(0)])
+        }
+
+        if self.config.read().EnableRDMA {
+            self.rdmaSvcCli = CachePadded::new(RDMASvcClient::initialize(
+                rdmaSvcCliSock,
+                MemoryDef::RDMA_LOCAL_SHARE_OFFSET,
+                MemoryDef::RDMA_GLOBAL_SHARE_OFFSET,
+            ));
         }
 
         let SyncLog = self.config.read().SyncPrint();

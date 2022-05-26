@@ -66,6 +66,8 @@ pub mod print;
 pub mod asm;
 pub mod kernel_def;
 pub mod qlib;
+// #[path = "../../qlib/mod.rs"]
+// pub mod qlib;
 
 pub mod id_mgr;
 pub mod rdma;
@@ -73,8 +75,9 @@ pub mod rdma_agent;
 pub mod rdma_channel;
 pub mod rdma_conn;
 pub mod rdma_ctrlconn;
+pub mod rdma_def;
 pub mod rdma_srv;
-pub mod unix_socket;
+pub mod unix_socket_def;
 
 use crate::qlib::bytestream::ByteStream;
 use crate::rdma_srv::RDMA_CTLINFO;
@@ -90,11 +93,12 @@ use std::os::unix::io::{AsRawFd, RawFd};
 pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
 use crate::qlib::rdma_share::*;
 use crate::rdma::RDMA;
+use id_mgr::IdMgr;
 use local_ip_address::list_afinet_netifas;
 use local_ip_address::local_ip;
 use qlib::linux_def::*;
 use qlib::socket_buf::SocketBuff;
-use unix_socket::UnixSocket;
+use qlib::unix_socket::UnixSocket;
 use rdma_agent::*;
 use rdma_channel::RDMAChannel;
 use rdma_conn::*;
@@ -105,7 +109,6 @@ use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::{env, mem, ptr, thread, time};
-use id_mgr::IdMgr;
 
 #[allow(unused_macros)]
 macro_rules! syscall {
@@ -586,7 +589,7 @@ fn main() -> io::Result<()> {
 
     let mut unix_sock_path = "/tmp/rdma_srv";
     if args.len() > 1 {
-        unix_sock_path = args.get(1).unwrap();//"/tmp/rdma_srv1";
+        unix_sock_path = args.get(1).unwrap(); //"/tmp/rdma_srv1";
     }
     let srv_unix_sock = UnixSocket::NewServer(unix_sock_path).unwrap();
     let srv_unix_sock_fd = srv_unix_sock.as_raw_fd();

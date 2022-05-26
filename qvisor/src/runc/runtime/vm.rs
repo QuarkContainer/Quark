@@ -153,8 +153,12 @@ impl VirtualMachine {
     #[cfg(not(debug_assertions))]
     pub const KERNEL_IMAGE: &'static str = "/usr/local/bin/qkernel.bin";
 
-    pub fn InitShareSpace(vmfd: &VmFd, cpuCount: usize, controlSock: i32) {
-        SHARE_SPACE_STRUCT.lock().Init(cpuCount, controlSock);
+    pub fn InitShareSpace(vmfd: &VmFd, cpuCount: usize, controlSock: i32, rdmaSvcCliSock: i32) {
+        SHARE_SPACE_STRUCT
+            .lock()
+            .Init(cpuCount, controlSock, rdmaSvcCliSock);
+
+        error!("VM::InitShareSpace, after call init 1");
         let spAddr = &(*SHARE_SPACE_STRUCT.lock()) as *const _ as u64;
         SHARE_SPACE.SetValue(spAddr);
         SHARESPACE.SetValue(spAddr);
@@ -208,6 +212,7 @@ impl VirtualMachine {
         let syncPrint = sharespace.config.read().SyncPrint();
         super::super::super::print::SetSharespace(sharespace);
         super::super::super::print::SetSyncPrint(syncPrint);
+        error!("VM::InitShareSpace, after call init 2");
     }
 
     pub fn Init(args: Args /*args: &Args, kvmfd: i32*/) -> Result<Self> {
@@ -235,6 +240,7 @@ impl VirtualMachine {
         VMS.lock().RandomVcpuMapping();
         let kernelMemRegionSize = QUARK_CONFIG.lock().KernelMemSize;
         let controlSock = args.ControlSock;
+        let rdmaSvcCliSock = args.RDMASvcCliSock;
 
         let umask = Self::Umask();
         info!(
@@ -270,7 +276,8 @@ impl VirtualMachine {
 
         PMA_KEEPER.Init(
             MemoryDef::FILE_MAP_OFFSET,
-            MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB - MemoryDef::FILE_MAP_OFFSET
+            MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB
+                - MemoryDef::FILE_MAP_OFFSET,
         );
 
         info!(
@@ -317,7 +324,7 @@ impl VirtualMachine {
             vms.args = Some(args);
         }
 
-        Self::InitShareSpace(&vm_fd, cpuCount, controlSock);
+        Self::InitShareSpace(&vm_fd, cpuCount, controlSock, rdmaSvcCliSock);
 
         info!("before loadKernel");
 

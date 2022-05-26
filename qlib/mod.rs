@@ -59,6 +59,9 @@ pub mod rdma_share;
 pub mod ringbuf;
 pub mod vcpu_mgr;
 
+pub mod rdma_svc_cli;
+pub mod unix_socket;
+
 use self::mutex::*;
 use alloc::vec::Vec;
 use cache_padded::CachePadded;
@@ -83,6 +86,7 @@ use self::ringbuf::*;
 use self::task_mgr::*;
 use super::asm::*;
 use self::fileinfo::*;
+use self::rdma_svc_cli::*;
 
 pub fn InitSingleton() {
     unsafe {
@@ -663,6 +667,7 @@ pub struct ShareSpace {
     pub pageMgr: CachePadded<PageMgr>,
     pub ioMgr: CachePadded<IOMgr>,
     pub config: QRwLock<Config>,
+    pub rdmaSvcCli: CachePadded<RDMASvcClient>,
 
     pub logBuf: QMutex<Option<ByteStream>>,
     pub logLock: QMutex<()>,

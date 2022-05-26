@@ -27,7 +27,7 @@ use super::qlib::common::*;
 use super::qlib::linux_def::*;
 use super::qlib::rdma_share::*;
 use super::qlib::socket_buf::SocketBuff;
-use super::unix_socket::UnixSocket;
+use super::qlib::unix_socket::UnixSocket;
 use super::rdma::*;
 use super::rdma_channel::*;
 use super::rdma_conn::*;

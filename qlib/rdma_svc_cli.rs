@@ -1,14 +1,10 @@
-use alloc::slice;
 use alloc::sync::Arc;
+use core::ops::Deref;
 use core::sync::atomic::Ordering;
-use spin::{Mutex, MutexGuard};
-use std::net::Ipv4Addr;
-use std::ops::{Deref, DerefMut};
-use std::str::FromStr;
-use std::{env, mem, ptr, thread, time};
+use spin::Mutex;
 
-use super::qlib::common::*;
-use super::qlib::rdma_share::*;
+use super::common::*;
+use super::rdma_share::*;
 use super::unix_socket::UnixSocket;
 
 pub struct RDMASvcCliIntern {
@@ -42,112 +38,38 @@ pub struct RDMASvcCliIntern {
     pub srvShareRegion: Mutex<&'static mut ShareRegion>,
 }
 
-//TODO: implement default
-
 impl Deref for RDMASvcClient {
     type Target = Arc<RDMASvcCliIntern>;
 
     fn deref(&self) -> &Arc<RDMASvcCliIntern> {
-        &self.0
+        &self.intern
     }
 }
 
-pub struct RDMASvcClient(Arc<RDMASvcCliIntern>);
+pub struct RDMASvcClient {
+    pub intern: Arc<RDMASvcCliIntern>,
+}
+
+impl Default for RDMASvcClient {
+    fn default() -> Self {
+        Self {
+            intern: Arc::new(RDMASvcCliIntern {
+                agentId: 0,
+                cliSock: UnixSocket { fd: -1 },
+                cliMemFd: 0,
+                srvMemFd: 0,
+                srvEventFd: 0,
+                cliEventFd: 0,
+                cliMemRegion: MemRegion { addr: 0, len: 0 },
+                cliShareRegion: unsafe { Mutex::new(&mut (*(0 as *mut ClientShareRegion))) },
+                srvMemRegion: MemRegion { addr: 0, len: 0 },
+                srvShareRegion: unsafe { Mutex::new(&mut (*(0 as *mut ShareRegion))) },
+            }),
+        }
+    }
+}
 
 impl RDMASvcClient {
-    pub fn New(
-        srvEventFd: i32,
-        srvMemFd: i32,
-        cliEventFd: i32,
-        cliMemFd: i32,
-        agentId: u32,
-        cliSock: UnixSocket,
-    ) -> Self {
-        let cliShareSize = mem::size_of::<ClientShareRegion>();
-        let cliShareAddr = unsafe {
-            libc::mmap(
-                ptr::null_mut(),
-                cliShareSize,
-                libc::PROT_READ | libc::PROT_WRITE,
-                libc::MAP_SHARED,
-                cliMemFd,
-                0,
-            )
-        };
-        let cliShareRegion = unsafe { &mut (*(cliShareAddr as *mut ClientShareRegion)) };
-
-        let cliShareRegion = Mutex::new(cliShareRegion);
-
-        let srvShareSize = mem::size_of::<ShareRegion>();
-        let srvShareAddr = unsafe {
-            libc::mmap(
-                ptr::null_mut(),
-                srvShareSize,
-                libc::PROT_READ | libc::PROT_WRITE,
-                libc::MAP_SHARED,
-                srvMemFd,
-                0,
-            )
-        };
-        let srvShareRegion = unsafe { &mut (*(srvShareAddr as *mut ShareRegion)) };
-        let srvShareRegion = Mutex::new(srvShareRegion);
-        Self(Arc::new(RDMASvcCliIntern {
-            agentId,
-            cliSock,
-            cliMemFd,
-            srvMemFd,
-            srvEventFd,
-            cliEventFd,
-            cliMemRegion: MemRegion {
-                addr: cliShareAddr as u64,
-                len: cliShareSize as u64,
-            },
-            cliShareRegion,
-            srvMemRegion: MemRegion {
-                addr: srvShareAddr as u64,
-                len: srvShareSize as u64,
-            },
-            srvShareRegion,
-        }))
-    }
-
-    pub fn init(path: &str) -> RDMASvcClient {
-        let cli_sock = UnixSocket::NewClient(path).unwrap();
-
-        let body = 1;
-        let ptr = &body as *const _ as *const u8;
-        let buf = unsafe { slice::from_raw_parts(ptr, 4) };
-        cli_sock.WriteWithFds(buf, &[]).unwrap();
-
-        let mut body = [0, 0];
-        let ptr = &mut body as *mut _ as *mut u8;
-        let buf = unsafe { slice::from_raw_parts_mut(ptr, 8) };
-        let (size, fds) = cli_sock.ReadWithFds(buf).unwrap();
-        if body[0] == 123 {
-            println!("size: {}, fds: {:?}, agentId: {}", size, fds, body[1]);
-        }
-
-        let rdmaSvcCli = RDMASvcClient::New(fds[0], fds[1], fds[2], fds[3], body[1], cli_sock);
-        rdmaSvcCli
-    }
-
-    pub fn initialize(path: &str) -> Self {
-        let cli_sock = UnixSocket::NewClient(path).unwrap();
-
-        let body = 1;
-        let ptr = &body as *const _ as *const u8;
-        let buf = unsafe { slice::from_raw_parts(ptr, 4) };
-        cli_sock.WriteWithFds(buf, &[]).unwrap();
-
-        let mut body = [0, 0];
-        let ptr = &mut body as *mut _ as *mut u8;
-        let buf = unsafe { slice::from_raw_parts_mut(ptr, 8) };
-        let (_size, fds) = cli_sock.ReadWithFds(buf).unwrap();
-
-        let rdmaSvcCli = RDMASvcClient::New(fds[0], fds[1], fds[2], fds[3], body[1], cli_sock);
-        rdmaSvcCli
-    }
-
     pub fn listen(&self, sockfd: u32, endpoint: &Endpoint, waitingLen: i32) -> Result<()> {
         let res = self.SentMsgToSvc(RDMAReqMsg::RDMAListen(RDMAListenReq {
             sockfd: sockfd,
@@ -163,7 +85,7 @@ impl RDMASvcClient {
             sockfd,
             dstIpAddr: ipAddr,
             dstPort: port,
-            srcIpAddr: u32::from(Ipv4Addr::from_str("192.168.6.6").unwrap()).to_be(),
+            srcIpAddr: 101099712, //u32::from(Ipv4Addr::from_str("192.168.6.6").unwrap()).to_be(),
             srcPort: 16866u16.to_be(),
         }));
         res
@@ -231,18 +153,7 @@ impl RDMASvcClient {
         srvShareRegion.updateBitmap(self.agentId);
         if srvShareRegion.srvBitmap.load(Ordering::Relaxed) == 1 {
             // println!("before write srvEventFd");
-            let data = 16u64;
-            let ret = unsafe {
-                libc::write(
-                    self.srvEventFd,
-                    &data as *const _ as *const libc::c_void,
-                    mem::size_of_val(&data) as usize,
-                )
-            };
-            // println!("ret: {}", ret);
-            if ret < 0 {
-                println!("error: {}", std::io::Error::last_os_error());
-            }
+            self.wakeupSvc();
         } else {
             // println!("server is not sleeping");
             self.updateBitmapAndWakeUpServerIfNecessary();
