@@ -257,7 +257,9 @@ pub fn GetSockOptSocket(
             ep.GetSockOpt(&mut opt)?;
 
             match opt {
-                SockOpt::SendBufferSizeOption(v) => return Ok(SockOptResult::I32(v)),
+                SockOpt::SendBufferSizeOption(v) => {
+                    return Ok(SockOptResult::I32(v))
+                },
                 _ => (),
             }
         }
@@ -391,6 +393,82 @@ pub fn GetSockOpt(
     }
 }
 
+// The minimum size of the send/receive buffers.
+pub const MINIMUM_BUFFER_SIZE : usize = 4 << 10; // 4 KiB (match default in linux)
+
+// The default size of the send/receive buffers.
+pub const DEFAULT_BUFFER_SIZE : usize = 208 << 10; // 208 KiB  (default in linux for net.core.wmem_default)
+
+// The maximum permitted size for the send/receive buffers.
+pub const MAX_BUFFER_SIZE : usize = 4 << 20; // 4 MiB 4 MiB (default in linux for net.core.wmem_max)
+
+pub struct SendBufferSizeOption {
+    pub Min: usize,
+    pub Default: usize,
+    pub Max: usize
+}
+
+// getSendBufferLimits implements tcpip.GetSendBufferLimits.
+//
+// AF_UNIX sockets buffer sizes are not tied to the networking stack/namespace
+// in linux but are bound by net.core.(wmem|rmem)_(max|default).
+//
+// In gVisor net.core sysctls today are not exposed or if exposed are currently
+// tied to the networking stack in use. This makes it complicated for AF_UNIX
+// when we are in a new namespace w/ no networking stack. As a result for now we
+// define default/max values here in the unix socket implementation itself.
+pub fn GetSendBufferLimits() -> SendBufferSizeOption {
+    return SendBufferSizeOption {
+        Min: MINIMUM_BUFFER_SIZE,
+        Default: DEFAULT_BUFFER_SIZE,
+        Max: MAX_BUFFER_SIZE
+    }
+}
+
+// getReceiveBufferLimits implements tcpip.GetReceiveBufferLimits.
+//
+// We define min, max and default values for unix socket implementation. Unix
+// sockets do not use receive buffer.
+pub fn GetReceiveBufferLimits() -> SendBufferSizeOption {
+    return SendBufferSizeOption {
+        Min: MINIMUM_BUFFER_SIZE,
+        Default: DEFAULT_BUFFER_SIZE,
+        Max: MAX_BUFFER_SIZE
+    }
+}
+
+pub fn SendBufferLimits() -> (usize, usize) {
+    let opt = GetSendBufferLimits();
+    return (opt.Min, opt.Max)
+}
+
+pub fn ReceiveBufferLimits() -> (usize, usize) {
+    let opt = GetReceiveBufferLimits();
+    return (opt.Min, opt.Max)
+}
+
+pub fn clampBufSize(newsz: usize, min: usize, max: usize, ignoreMax: bool) -> usize {
+    // packetOverheadFactor is used to multiply the value provided by the user on
+    // a setsockopt(2) for setting the send/receive buffer sizes sockets.
+    const PACKET_OVERHEAD_FACTOR : usize = 2;
+
+    let mut newsz = newsz;
+    if !ignoreMax && newsz > max {
+        newsz = max;
+    }
+
+    if newsz < i32::MAX as usize / PACKET_OVERHEAD_FACTOR {
+        newsz *= PACKET_OVERHEAD_FACTOR;
+        if newsz < min {
+            newsz = min
+        }
+    } else {
+        newsz = i32::MAX as usize
+    }
+
+    return newsz
+}
+
 // setSockOptSocket implements SetSockOpt when level is SOL_SOCKET.
 pub fn SetSockOptSocket(
     _task: &Task,
@@ -407,8 +485,9 @@ pub fn SetSockOptSocket(
 
             assert!(optVal.len() >= 4);
             let val = unsafe { *(&optVal[0] as *const _ as u64 as *const i32) };
-
-            return ep.SetSockOpt(&SockOpt::SendBufferSizeOption(val));
+            let (min, max) = SendBufferLimits();
+            let clamped = clampBufSize(val as usize, min, max, false) as i32;
+            return ep.SetSockOpt(&SockOpt::SendBufferSizeOption(clamped));
         }
         SO_RCVBUF => {
             if optVal.len() < SIZEOF_I32 {
@@ -417,8 +496,10 @@ pub fn SetSockOptSocket(
 
             assert!(optVal.len() >= 4);
             let val = unsafe { *(&optVal[0] as *const _ as u64 as *const i32) };
+            let (min, max) = ReceiveBufferLimits();
+            let clamped = clampBufSize(val as usize, min, max, false) as i32;
 
-            return ep.SetSockOpt(&SockOpt::ReceiveBufferSizeOption(val));
+            return ep.SetSockOpt(&SockOpt::ReceiveBufferSizeOption(clamped));
         }
         SO_REUSEADDR => {
             if optVal.len() < SIZEOF_I32 {
