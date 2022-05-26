@@ -273,7 +273,7 @@ pub fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
         return RepWritev(task, f, srcs);
     }
 
-    match f.Writev(task, srcs) {
+    /*match f.Writev(task, srcs) {
         Err(Error::ErrInterrupted) => return Err(Error::SysError(SysErr::ERESTARTSYS)),
         Err(e) => {
             if e != Error::SysError(SysErr::EWOULDBLOCK) || f.Flags().NonBlocking {
@@ -281,7 +281,7 @@ pub fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
             }
         }
         Ok(n) => return Ok(n),
-    };
+    };*/
 
     let mut deadline = None;
 
@@ -306,7 +306,14 @@ pub fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
     let mut tmp;
     loop {
         match f.Writev(task, srcs) {
-            Err(Error::SysError(SysErr::EWOULDBLOCK)) => (),
+            Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
+                if f.Flags().NonBlocking {
+                    if count > 0 {
+                        return Ok(count);
+                    }
+                    return Err(Error::SysError(SysErr::EWOULDBLOCK))
+                }
+            },
             Err(e) => {
                 if count > 0 {
                     return Ok(count);

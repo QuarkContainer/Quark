@@ -968,6 +968,9 @@ impl SockOperations for UnixSocketOperations {
             }
         };
 
+        // only send control message once
+        let scmCtrlMsg = SCMControlMessages::default();
+
         // We'll have to block. Register for notification and keep trying to
         // send all the data.
         let general = task.blocker.generalEntry.clone();
