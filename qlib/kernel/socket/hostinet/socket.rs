@@ -1163,6 +1163,16 @@ impl SockOperations for SocketOperations {
 
         let opt = &opt[..optlen];*/
 
+        if (level as u64) == LibcConst::SOL_SOCKET && (name as u64) == LibcConst::SO_SNDTIMEO {
+            if opt.len() >= SocketSize::SIZEOF_TIMEVAL {
+                let timeVal = task.CopyInObj::<Timeval>(&opt[0] as *const _ as u64)?;
+                self.SetSendTimeout(timeVal.ToDuration() as i64);
+            } else {
+                //TODO: to be aligned with Linux, Linux allows shorter length for this flag.
+                return Err(Error::SysError(SysErr::EINVAL));
+            }
+        }
+
         if (level as u64) == LibcConst::SOL_SOCKET && (name as u64) == LibcConst::SO_RCVTIMEO {
             if opt.len() >= SocketSize::SIZEOF_TIMEVAL {
                 let timeVal = task.CopyInObj::<Timeval>(&opt[0] as *const _ as u64)?;
@@ -1248,6 +1258,21 @@ impl SockOperations for SocketOperations {
         controlDataLen: usize,
     ) -> Result<(i64, i32, Option<(SockAddr, usize)>, Vec<u8>)> {
 
+        //todo: we don't support MSG_ERRQUEUE
+        if flags
+            & !(MsgType::MSG_DONTWAIT
+            | MsgType::MSG_PEEK
+            | MsgType::MSG_TRUNC
+            | MsgType::MSG_CTRUNC
+            | MsgType::MSG_WAITALL)
+            != 0
+            {
+                return Err(Error::SysError(SysErr::EINVAL));
+            }
+
+        let waitall = (flags & MsgType::MSG_WAITALL) != 0;
+        let dontwait = (flags & MsgType::MSG_DONTWAIT) != 0;
+
         if self.SocketBufEnabled() {
             if self.SocketBuf().RClosed() {
                 return Err(Error::SysError(SysErr::ESPIPE))
@@ -1262,49 +1287,6 @@ impl SockOperations for SocketOperations {
             let mut tmp;
             let socketType = self.SocketBufType();
 
-            loop {
-                match self.ReadFromBuf(task, socketType.clone(), iovs) {
-                    Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
-                        if flags & MsgType::MSG_DONTWAIT != 0 {
-                            if count > 0 {
-                                let (retFlags, controlData) =
-                                    self.prepareControlMessage(controlDataLen);
-                                return Ok((count as i64, retFlags, None, controlData));
-                            }
-
-                            return Err(Error::SysError(SysErr::EWOULDBLOCK));
-                        }
-
-                        break;
-                    }
-                    Err(e) => {
-                        if count > 0 {
-                            let (retFlags, controlData) =
-                                self.prepareControlMessage(controlDataLen);
-                            return Ok((count as i64, retFlags, None, controlData));
-                        }
-                        return Err(e);
-                    }
-                    Ok(n) => {
-                        if n == 0 {
-                            let (retFlags, controlData) =
-                                self.prepareControlMessage(controlDataLen);
-                            return Ok((count, retFlags, None, controlData));
-                        }
-
-                        count += n;
-                        if count == len as i64 {
-                            let (retFlags, controlData) =
-                                self.prepareControlMessage(controlDataLen);
-                            return Ok((count as i64, retFlags, None, controlData));
-                        }
-
-                        tmp = Iovs(iovs).DropFirst(n as usize);
-                        iovs = &mut tmp;
-                    }
-                }
-            }
-
             let general = task.blocker.generalEntry.clone();
             self.EventRegister(task, &general, EVENT_READ);
             defer!(self.EventUnregister(task, &general));
@@ -1314,8 +1296,19 @@ impl SockOperations for SocketOperations {
                     match self.ReadFromBuf(task, socketType.clone(), iovs) {
                         Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
                             if count > 0 {
+                                if dontwait || !waitall {
+                                    break 'main;
+                                }
+                            }
+
+                            if count == len as i64 {
                                 break 'main;
                             }
+
+                            if count == 0 && dontwait {
+                                return Err(Error::SysError(SysErr::EWOULDBLOCK));
+                            }
+
                             break;
                         }
                         Err(e) => {
@@ -1371,18 +1364,6 @@ impl SockOperations for SocketOperations {
 
             let (retFlags, controlData) = self.prepareControlMessage(controlDataLen);
             return Ok((count as i64, retFlags, senderAddr, controlData));
-        }
-
-        //todo: we don't support MSG_ERRQUEUE
-        if flags
-            & !(MsgType::MSG_DONTWAIT
-                | MsgType::MSG_PEEK
-                | MsgType::MSG_TRUNC
-                | MsgType::MSG_CTRUNC
-                | MsgType::MSG_WAITALL)
-            != 0
-        {
-            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         /*
@@ -1499,10 +1480,21 @@ impl SockOperations for SocketOperations {
             let mut srcs = srcs;
             let mut tmp;
             let socketType = self.SocketBufType();
+            let general = task.blocker.generalEntry.clone();
+            self.EventRegister(task, &general, EVENT_WRITE);
+            defer!(self.EventUnregister(task, &general));
+
             loop {
                 loop {
                     match self.WriteToBuf(task, socketType.clone(), srcs) {
                         Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
+                            if flags & MsgType::MSG_DONTWAIT != 0 {
+                                if count > 0 {
+                                    return Ok(count);
+                                }
+                                return Err(Error::SysError(SysErr::EWOULDBLOCK));
+                            }
+
                             if count > 0 {
                                 return Ok(count);
                             }
@@ -1530,10 +1522,6 @@ impl SockOperations for SocketOperations {
                         }
                     }
                 }
-
-                let general = task.blocker.generalEntry.clone();
-                self.EventRegister(task, &general, EVENT_WRITE);
-                defer!(self.EventUnregister(task, &general));
 
                 match task.blocker.BlockWithMonoTimer(true, deadline) {
                     Err(Error::SysError(SysErr::ETIMEDOUT)) => {

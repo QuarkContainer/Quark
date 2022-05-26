@@ -27,6 +27,8 @@ use super::buddy_allocator::Heap;
 
 use super::super::super::kernel_def::VcpuId;
 use super::super::kernel::vcpu::CPU_LOCAL;
+use super::super::kernel::Tsc;
+use super::super::kernel::LoadVcpuFreq;
 use super::super::linux_def::*;
 use super::super::mutex::*;
 use super::super::pagetable::AlignedAllocator;
@@ -75,9 +77,9 @@ impl GlobalVcpuAllocator {
 
     pub fn Print(&self) {
         error!(
-            "GlobalVcpuAllocator {}/{}",
-            VcpuId(),
-            CPU_LOCAL[VcpuId()].allocator.bufs.len()
+        "GlobalVcpuAllocator {}/{}",
+        VcpuId(),
+        CPU_LOCAL[VcpuId()].allocator.bufs.len()
         )
     }
 
@@ -136,35 +138,50 @@ impl StackAllocator {
 
 #[derive(Debug, Default)]
 pub struct PageAllocator {
-    pub pages: VecDeque<u64>,
+    pub pages: VecDeque<(u64, i64)>,
 }
 
 impl PageAllocator {
     pub const PAGE_CACHE_COUNT: usize = 16;
-    pub const PAGE_CACHE_MAX_COUNT: usize = 128;
+    pub const MAX_PAGE_CACHE_COUNT: usize = 1024 * 1;
 
-    pub fn AllocPage(&mut self) -> Option<u64> {
-        match self.pages.pop_front() {
-            None => return None,
-            Some(addr) => {
+    pub fn AllocPage(&mut self) -> Option<u64> { match self.pages.pop_front() {
+        None => return None,
+        Some((addr, ts)) => {
+            if self.pages.len() >= Self::PAGE_CACHE_COUNT {
                 return Some(addr)
             }
+
+            //cool down for 100 ms
+            if Tsc::RawRdtsc() - ts > (LoadVcpuFreq() / 10) {
+                return Some(addr)
+            }
+
+            self.pages.push_front((addr, ts));
+            return None
         }
+    }
     }
 
     pub fn FreePage(&mut self, page: u64) {
-        if self.pages.len() >= Self::PAGE_CACHE_MAX_COUNT {
-            AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize)
-                .Free(page)
-                .unwrap();
-        } else {
-            self.pages.push_front(page);
+        let ts = Tsc::RawRdtsc();
+        while self.pages.len() > Self::PAGE_CACHE_COUNT {
+            match self.AllocPage() {
+                None => break,
+                Some(addr) => {
+                    AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize)
+                        .Free(addr)
+                        .unwrap();
+                }
+            }
         }
+
+        self.pages.push_back((page, ts));
     }
 
     pub fn Clean(&mut self) {
         while self.pages.len() > Self::PAGE_CACHE_COUNT {
-            match self.pages.pop_back() {
+            match self.AllocPage() {
                 None => break,
                 Some(addr) => {
                     AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize)
@@ -317,12 +334,12 @@ impl ListAllocator {
         let end = start + size;
         //let order = 22;
         let size = 1 << ORDER; // 2MB
-       // note: we can't add full range (>4GB) to the buddyallocator
-       /*let alignStart = start & !(size - 1);
-       if start != alignStart {
-           self.AddToHead(start, alignStart + size);
-           start = alignStart + size;
-       }*/
+        // note: we can't add full range (>4GB) to the buddyallocator
+        /*let alignStart = start & !(size - 1);
+        if start != alignStart {
+            self.AddToHead(start, alignStart + size);
+            start = alignStart + size;
+        }*/
 
         while start + size < end {
             self.AddToHead(start, start + size);
@@ -347,10 +364,10 @@ impl ListAllocator {
 
         if total * FREE_THRESHOLD / 100 > free && // there are too little free memory
             free * BUFF_THRESHOLD /100 < bufSize
-        {
-            // there are too much bufferred memory
-            return true;
-        }
+            {
+                // there are too much bufferred memory
+                return true;
+            }
 
         return false;
     }
@@ -491,10 +508,10 @@ impl FreeMemBlockMgr {
             let ret = self.list.Pop();
 
             assert!(
-                ret != 0,
-                "self.count is {}, size is {}",
-                self.count,
-                self.size
+            ret != 0,
+            "self.count is {}, size is {}",
+            self.count,
+            self.size
             );
             let ptr = ret as *mut MemBlock;
             unsafe { ptr.write(0) }
@@ -599,11 +616,11 @@ impl MemList {
         self.head = *ptr;
 
         assert!(
-            !(self.head == 0 && self.count != 0),
-            "MemList::pop2 self.size is {}/{}/{:x}",
-            self.size,
-            self.count,
-            next
+        !(self.head == 0 && self.count != 0),
+        "MemList::pop2 self.size is {}/{}/{:x}",
+        self.size,
+        self.count,
+        next
         );
         if next % self.size != 0 {
             raw!(0x234, next, self.size as u64);
