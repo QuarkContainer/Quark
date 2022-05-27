@@ -59,8 +59,8 @@ impl<T> BufChan<T> {
         return self.lock().buf.len();
     }
 
-    pub fn Write(&self, task: &Task, data: T) -> Result<()> {
-        loop {
+    pub fn Write(&self, _task: &Task, data: T) -> Result<()> {
+        /*loop {
             {
                 let mut c = self.lock();
                 if c.closed {
@@ -84,7 +84,20 @@ impl<T> BufChan<T> {
                 let block = task.blocker.clone();
                 c.queue.EventUnregister(task, &block.generalEntry);
             }
+        }*/
+        let mut c = self.lock();
+        if c.closed {
+            return Err(Error::ChanClose);
         }
+
+        if c.space > 0 {
+            c.buf.push_back(data);
+            c.space -= 1;
+            c.queue.Notify(READABLE_EVENT);
+            return Ok(());
+        }
+
+        return Err(Error::SysError(SysErr::EAGAIN))
     }
 
     //unblock write, return true if write successfully. otherwise false.

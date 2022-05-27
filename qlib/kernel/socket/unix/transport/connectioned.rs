@@ -322,7 +322,10 @@ impl ConnectionedEndPoint {
 
         let chan = self.acceptedChan.lock().clone().unwrap();
         match chan.Write(task, ne.clone()) {
-            Err(_) => return Err(Error::SysError(SysErr::ECONNREFUSED)),
+            Err(e) => {
+                //return Err(Error::SysError(SysErr::ECONNREFUSED))
+                return Err(e)
+            },
             Ok(()) => {
                 let connected = UnixConnectedEndpoint::New(Arc::new(ne), writeQueue);
                 if self.stype == SockType::SOCK_STREAM {
