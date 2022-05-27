@@ -765,7 +765,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rdma_srv"
+name = "rdma_cli"
 version = "0.1.0"
 dependencies = [
  "bit_field 0.9.0",

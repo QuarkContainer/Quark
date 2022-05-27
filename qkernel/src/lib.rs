@@ -67,6 +67,7 @@ mod qlib;
 mod interrupt;
 pub mod backtracer;
 pub mod kernel_def;
+pub mod rdma_def;
 mod syscalls;
 
 use crate::qlib::kernel::GlobalIOMgr;

@@ -73,9 +73,11 @@ mod memmgr;
 pub mod namespace;
 mod qcall;
 pub mod qlib;
+pub mod rdma_def;
 pub mod runc;
 mod syncmgr;
 pub mod ucall;
+pub mod unix_socket_def;
 pub mod util;
 mod vmspace;
 
