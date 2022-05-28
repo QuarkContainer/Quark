@@ -287,13 +287,13 @@ impl VMSpace {
         return ret as _;
     }
 
-    pub fn CreateMemfd(len: i64) -> i64 {
+    pub fn CreateMemfd(len: i64, flags: u32) -> i64 {
         let uid = NewUID();
         let path = format!("/tmp/memfd_{}", uid);
         let cstr = CString::New(&path);
 
         let nr = SysCallID::sys_memfd_create as usize;
-        let fd = unsafe { syscall2(nr, cstr.Ptr() as *const c_char as usize, 0) as i32 };
+        let fd = unsafe { syscall2(nr, cstr.Ptr() as *const c_char as usize, flags as usize) as i32 };
 
         if fd < 0 {
             return Self::GetRet(fd as i64);

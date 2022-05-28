@@ -578,9 +578,9 @@ impl FileOperations for SocketOperations {
         let sockBufType = self.socketBuf.lock().clone();
         match sockBufType {
             SocketBufType::Uring(socketBuf) => {
-                if self.SocketBuf().RClosed() {
+                /*if self.SocketBuf().RClosed() {
                     return Err(Error::SysError(SysErr::ESPIPE))
-                }
+                }*/
                 let ret =
                     QUring::RingFileRead(task, self.fd, self.queue.clone(), socketBuf, dsts, true)?;
                 return Ok(ret);
@@ -1274,11 +1274,20 @@ impl SockOperations for SocketOperations {
         let dontwait = (flags & MsgType::MSG_DONTWAIT) != 0;
 
         if self.SocketBufEnabled() {
-            if self.SocketBuf().RClosed() {
-                return Err(Error::SysError(SysErr::ESPIPE))
-            }
-
             let controlDataLen = 0;
+
+            if self.SocketBuf().RClosed() {
+                let senderAddr = if senderRequested {
+                    let addr = self.remoteAddr.lock().as_ref().unwrap().clone();
+                    let l = addr.Len();
+                    Some((addr, l))
+                } else {
+                    None
+                };
+
+                let (retFlags, controlData) = self.prepareControlMessage(controlDataLen);
+                return Ok((0 as i64, retFlags, senderAddr, controlData));
+            }
 
             let len = IoVec::NumBytes(dsts);
             let mut iovs = dsts;
@@ -1398,17 +1407,19 @@ impl SockOperations for SocketOperations {
             msgHdr.msgControl = ptr::null::<u8>() as u64;
         }
 
+        let general = task.blocker.generalEntry.clone();
+        self.EventRegister(task, &general, EVENT_READ);
+        defer!(self.EventUnregister(task, &general));
+
         let mut res = Kernel::HostSpace::IORecvMsg(
             self.fd,
             &mut msgHdr as *mut _ as u64,
             flags | MsgType::MSG_DONTWAIT,
             false,
         ) as i32;
-        while res == -SysErr::EWOULDBLOCK && flags & MsgType::MSG_DONTWAIT == 0 {
-            let general = task.blocker.generalEntry.clone();
 
-            self.EventRegister(task, &general, EVENT_READ);
-            defer!(self.EventUnregister(task, &general));
+        while res == -SysErr::EWOULDBLOCK && flags & MsgType::MSG_DONTWAIT == 0 {
+
             match task.blocker.BlockWithMonoTimer(true, deadline) {
                 Err(Error::ErrInterrupted) => {
                     return Err(Error::SysError(SysErr::ERESTARTSYS));

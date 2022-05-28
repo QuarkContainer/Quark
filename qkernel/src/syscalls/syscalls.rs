@@ -44,6 +44,7 @@ use super::super::syscalls::sys_timerfd::*;
 use super::super::syscalls::sys_tls::*;
 use super::super::syscalls::sys_utsname::*;
 use super::super::syscalls::sys_write::*;
+use super::super::syscalls::sys_memfd::*;
 
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
@@ -415,7 +416,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysNoSupport, //sys_renameat2,
     NotImplementSyscall, //sys_seccomp,
     SysGetRandom,        //sys_getrandom,
-    NotImplementSyscall, //sys_memfd_create,
+    SysMemfdCreate,     //sys_memfd_create,
     NotImplementSyscall, //sys_kexec_file_load,//320
     NotImplementSyscall, //sys_bpf,
     NotImplementSyscall, //sys_stub_execveat,

@@ -78,7 +78,7 @@ impl KVMVcpu {
                 ret = super::VMSpace::GetStdfds(msg.addr) as u64;
             }
             Msg::CreateMemfd(msg) => {
-                ret = super::VMSpace::CreateMemfd(msg.len) as u64;
+                ret = super::VMSpace::CreateMemfd(msg.len, msg.flags) as u64;
             }
             //Syscall
             Msg::Fallocate(msg) => {
