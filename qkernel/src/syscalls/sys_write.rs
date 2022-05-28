@@ -268,6 +268,11 @@ pub fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
     let iovs = task.AdjustIOVecPermission(srcs, false, true)?;
     let srcs = &iovs;
 
+    let len = Iovs(srcs).Count();
+    if len == 0 {
+        return Ok(0)
+    }
+
     let wouldBlock = f.WouldBlock();
     if !wouldBlock {
         return RepWritev(task, f, srcs);
@@ -300,7 +305,6 @@ pub fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
     f.EventRegister(task, &general, EVENT_WRITE);
     defer!(f.EventUnregister(task, &general));
 
-    let len = Iovs(srcs).Count();
     let mut count = 0;
     let mut srcs = srcs;
     let mut tmp;
@@ -323,7 +327,7 @@ pub fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
             }
             Ok(n) => {
                 count += n;
-                if count == len as i64 {
+                if count == len as i64 || f.Flags().NonBlocking {
                     return Ok(count);
                 }
 
