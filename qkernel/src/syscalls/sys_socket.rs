@@ -260,13 +260,20 @@ pub fn SysListen(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let sock = file.FileOp.clone();
     let mut backlog = backlog;
-    if backlog <= 0 {
-        backlog = MIN_LISTEN_BACKLOG as i32;
-    }
 
     if backlog >= MAX_LISTEN_BACKLOG as i32 {
         backlog = MAX_LISTEN_BACKLOG as i32;
     }
+
+    // Accept one more than the configured listen backlog to keep in parity with
+    // Linux. Ref, because of missing equality check here:
+    // https://github.com/torvalds/linux/blob/7acac4b3196/include/net/sock.h#L937
+    //
+    // In case of unix domain sockets, the following check
+    // https://github.com/torvalds/linux/blob/7d6beb71da3/net/unix/af_unix.c#L1293
+    // will allow 1 connect through since it checks for a receive queue len >
+    // backlog and not >=.
+    let backlog = backlog + 1;
 
     let res = sock.Listen(task, backlog);
     return res;
@@ -662,7 +669,7 @@ pub fn SysRecvMMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     //let msgs = task.GetSliceMut::<MMsgHdr>(msgPtr, vlen as usize)?;
     let mut msgs = task.CopyInVec::<MMsgHdr>(msgPtr, vlen as usize)?;
 
-    info!("SysRecvMMsg 1 vlen is {}", vlen);
+    //info!("SysRecvMMsg 1 vlen is {}", vlen);
     for i in 0..vlen as usize {
         res = match recvSingleMsg(
             task,
@@ -673,7 +680,7 @@ pub fn SysRecvMMsg(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         ) {
             Err(e) => {
                 if count > 0 {
-                    return Ok(count);
+                    break;
                 }
 
                 return Err(e);

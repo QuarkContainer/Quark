@@ -780,8 +780,14 @@ impl SockOperations for UnixSocketOperations {
                         n = ms;
                     }
 
-                    let len = task.CopyDataOutToIovs(&buf.buf[0..n as usize], dsts, false)?;
-                    return Ok((len as i64, msgFlags, sender, ControlVec));
+                    let count = if (n as usize) < buf.buf.len() {
+                        n as usize
+                    } else {
+                        buf.buf.len()
+                    };
+
+                    let _len = task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts, false)?;
+                    return Ok((n as i64, msgFlags, sender, ControlVec));
                 }
 
                 let seq = seq.DropFirst(n as u64);
