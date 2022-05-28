@@ -40,7 +40,7 @@ pub fn SysMemfdCreate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         _ => (),
     }
 
-    let file = File::NewMemfdFile(task, &fileName, &task.FileOwner())?;
+    let file = File::NewMemfdFile(task, &fileName, &task.FileOwner(), flags)?;
     let fd = task.NewFDFrom(
         0,
         &file,
