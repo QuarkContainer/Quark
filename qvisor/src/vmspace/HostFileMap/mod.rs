@@ -14,7 +14,7 @@
 
 pub mod fdinfo;
 pub mod file_range_mgr;
-//pub mod rdma_socket;
+pub mod socket_info;
 //pub mod rdma;
 
 use libc::*;

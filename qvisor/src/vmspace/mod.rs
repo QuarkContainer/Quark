@@ -53,7 +53,7 @@ use super::qlib::*;
 use super::runc::container::mounts::*;
 use super::runc::runtime::loader::*;
 use super::runc::specutils::specutils::*;
-//use super::qlib::socket_buf::*;
+use super::qlib::socket_buf::*;
 use self::limits::*;
 use self::random::*;
 use self::syscall::*;
@@ -1053,7 +1053,7 @@ impl VMSpace {
         return fdInfo.IOListen(backlog, block);
     }
 
-    /*pub fn RDMAListen(sockfd: i32, backlog: i32, block: bool, acceptQueue: AcceptQueue) -> i64 {
+    pub fn RDMAListen(sockfd: i32, backlog: i32, block: bool, acceptQueue: AcceptQueue) -> i64 {
         let fdInfo = match Self::GetFdInfo(sockfd) {
             Some(fdInfo) => fdInfo,
             None => return -SysErr::EBADF as i64,
@@ -1081,7 +1081,7 @@ impl VMSpace {
         };
 
         fdInfo.PostRDMAConnect(msg);
-    }*/
+    }
 
     pub fn Shutdown(sockfd: i32, how: i32) -> i64 {
         let fdInfo = match Self::GetFdInfo(sockfd) {

@@ -12,27 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use alloc::collections::BTreeMap;
+use alloc::sync::Arc;
 use core::fmt;
 use core::ops::Deref;
-use spin::Mutex;
 use core::sync::atomic::AtomicI32;
 use core::sync::atomic::Ordering;
+use spin::Mutex;
 
 use crate::qlib::common::*;
 use crate::qlib::kernel::kernel::waiter::*;
-use crate::qlib::kernel::IOURING;
-use crate::qlib::*;
 use crate::qlib::kernel::Kernel::HostSpace;
+use crate::qlib::kernel::IOURING;
+use crate::qlib::rdmasocket::*;
+use crate::qlib::*;
 
 #[derive(Clone)]
 pub enum SockInfo {
-    File, // it is not socket
-    Socket, // normal socket
-    //RDMAServerSocket(RDMAServerSock), //
-    //RDMADataSocket(RDMADataSock), //
-    //RDMAContext,
+    File,                             // it is not socket
+    Socket,                           // normal socket
+    RDMAServerSocket(RDMAServerSock), //
+    RDMADataSocket(RDMADataSock),     //
+    RDMAContext,
 }
 
 impl fmt::Debug for SockInfo {
@@ -40,9 +41,9 @@ impl fmt::Debug for SockInfo {
         match self {
             Self::File => write!(f, "SockInfo::File"),
             Self::Socket => write!(f, "SockInfo::Socket"),
-            //Self::RDMAServerSocket(_) => write!(f, "SockInfo::RDMAServerSocket"),
-            //Self::RDMADataSocket(_) => write!(f, "SockInfo::RDMADataSocket"),
-            //Self::RDMAContext => write!(f, "SockInfo::RDMAContext"),
+            Self::RDMAServerSocket(_) => write!(f, "SockInfo::RDMAServerSocket"),
+            Self::RDMADataSocket(_) => write!(f, "SockInfo::RDMADataSocket"),
+            Self::RDMAContext => write!(f, "SockInfo::RDMAContext"),
         }
     }
 }
@@ -55,20 +56,16 @@ impl SockInfo {
             }
             Self::Socket => {
                 waitinfo.Notify(eventmask);
-            } /*Self::RDMAServerSocket(ref sock) => {
-                  sock.Notify(eventmask, waitinfo)
-              }
-              Self::RDMADataSocket(ref sock) => {
-                  sock.Notify(eventmask, waitinfo)
-              }
-              Self::RDMAContext => {
-                  //RDMA.PollCompletion().expect("RDMA.PollCompletion fail");
-                  //error!("RDMAContextEpoll");
-              }*/
+            }
+            Self::RDMAServerSocket(ref sock) => sock.Notify(eventmask, waitinfo),
+            Self::RDMADataSocket(ref sock) => sock.Notify(eventmask, waitinfo),
+            Self::RDMAContext => {
+                //RDMA.PollCompletion().expect("RDMA.PollCompletion fail");
+                //error!("RDMAContextEpoll");
+            }
         }
     }
 }
-
 
 #[derive(Debug)]
 pub struct FdInfoIntern {
@@ -79,8 +76,7 @@ pub struct FdInfoIntern {
     pub sockInfo: Mutex<SockInfo>,
 }
 
-impl FdInfoIntern {
-}
+impl FdInfoIntern {}
 
 #[derive(Clone, Debug)]
 pub struct FdInfo(pub Arc<Mutex<FdInfoIntern>>);
@@ -97,7 +93,6 @@ impl FdInfo {
     pub fn UpdateWaitInfo(&self, waitInfo: FdWaitInfo) {
         self.lock().waitInfo = waitInfo
     }
-
 }
 
 #[derive(Default, Debug, Clone)]
@@ -144,7 +139,7 @@ impl IOMgr {
     }
 
     pub fn Epollfd(&self) -> i32 {
-        return self.epollfd.load(Ordering::Relaxed)
+        return self.epollfd.load(Ordering::Relaxed);
     }
 
     pub fn GetByHost(&self, fd: i32) -> Option<FdInfo> {
@@ -154,7 +149,6 @@ impl IOMgr {
         }
     }
 }
-
 
 #[derive(Default)]
 pub struct FdWaitIntern {
@@ -249,4 +243,3 @@ impl FdWaitInfo {
         return Ok(());
     }
 }
-

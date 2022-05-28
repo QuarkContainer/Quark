@@ -1,6 +1,7 @@
 use alloc::sync::Arc;
 
 use super::super::super::super::common::*;
+use super::super::super::super::kernel::GlobalRDMASvcCli;
 use super::super::super::super::linux_def::*;
 use super::super::super::super::qmsg::qcall::*;
 use super::super::super::super::socket_buf::*;
@@ -30,7 +31,8 @@ impl RDMA {
             let dataSize = buf.AddConsumeReadData(cnt as u64) as usize;
             let bufSize = buf.readBuf.lock().BufSize();
             if 2 * dataSize >= bufSize {
-                HostSpace::RDMANotify(fd, RDMANotifyType::RDMARead);
+                // HostSpace::RDMANotify(fd, RDMANotifyType::RDMARead);
+                let _ret = GlobalRDMASvcCli().read(1);
             }
         }
 

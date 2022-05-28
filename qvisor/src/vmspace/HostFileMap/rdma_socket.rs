@@ -12,9 +12,9 @@ use super::super::super::qlib::kernel::guestfdnotifier::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::qmsg::qcall::*;
 use super::super::super::qlib::socket_buf::*;
-use super::super::super::IO_MGR;
+use super::super::super::qlib::GlobalIOMgr;
 use super::super::super::URING_MGR;
-use super::rdma::*;
+// use super::rdma::*;
 use super::socket_info::*;
 use super::super::super::qlib::kernel::TSC;
 
@@ -99,11 +99,11 @@ impl RDMAServerSock {
             };
 
             let rdmaSocket = RDMADataSock::New(fd, socketBuf.clone(), rdmaType);
-            let fdInfo = IO_MGR().GetByHost(fd).unwrap();
+            let fdInfo = GlobalIOMgr().GetByHost(fd).unwrap();
             *fdInfo.lock().sockInfo.lock() = SockInfo::RDMADataSocket(rdmaSocket);
 
             URING_MGR.lock().Addfd(fd).unwrap();
-            IO_MGR().AddWait(fd, EVENT_READ | EVENT_WRITE);
+            GlobalIOMgr().AddWait(fd, EVENT_READ | EVENT_WRITE);
 
             if !super::rdma_socket::RDMA_ENABLE {
                 let (trigger, tmp) = acceptQueue.lock().EnqSocket(fd, tcpAddr, len, socketBuf);
