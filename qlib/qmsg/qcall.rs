@@ -206,6 +206,7 @@ pub struct Statm {
 #[derive(Clone, Default, Debug)]
 pub struct CreateMemfd {
     pub len: i64,
+    pub flags: u32
 }
 
 #[derive(Clone, Default, Debug)]

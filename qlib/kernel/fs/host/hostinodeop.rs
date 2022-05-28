@@ -524,7 +524,7 @@ impl HostInodeOp {
     }
 
     pub fn NewMemfdIops(len: i64) -> Result<Self> {
-        let fd = HostSpace::CreateMemfd(len) as i32;
+        let fd = HostSpace::CreateMemfd(len, 0) as i32;
         if fd < 0 {
             return Err(Error::SysError(-fd as i32));
         }

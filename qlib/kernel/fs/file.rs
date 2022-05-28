@@ -548,8 +548,8 @@ impl File {
         }
     }
 
-    pub fn NewMemfdFile(task: &Task, name: &str, mounter: &FileOwner) -> Result<Self> {
-        let fd = HostSpace::CreateMemfd(0) as i32;
+    pub fn NewMemfdFile(task: &Task, name: &str, mounter: &FileOwner, flags: u32) -> Result<Self> {
+        let fd = HostSpace::CreateMemfd(0, flags) as i32;
         if fd < 0 {
             return Err(Error::SysError(-fd as i32));
         }
