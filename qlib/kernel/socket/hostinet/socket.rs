@@ -1274,11 +1274,20 @@ impl SockOperations for SocketOperations {
         let dontwait = (flags & MsgType::MSG_DONTWAIT) != 0;
 
         if self.SocketBufEnabled() {
-            if self.SocketBuf().RClosed() {
-                return Err(Error::SysError(SysErr::ESPIPE))
-            }
-
             let controlDataLen = 0;
+
+            if self.SocketBuf().RClosed() {
+                let senderAddr = if senderRequested {
+                    let addr = self.remoteAddr.lock().as_ref().unwrap().clone();
+                    let l = addr.Len();
+                    Some((addr, l))
+                } else {
+                    None
+                };
+
+                let (retFlags, controlData) = self.prepareControlMessage(controlDataLen);
+                return Ok((0 as i64, retFlags, senderAddr, controlData));
+            }
 
             let len = IoVec::NumBytes(dsts);
             let mut iovs = dsts;
