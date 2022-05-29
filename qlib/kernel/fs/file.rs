@@ -438,6 +438,14 @@ impl Mapping for File {
 }
 
 impl File {
+    pub fn Readable(&self) -> bool {
+        return self.flags.lock().0.Read;
+    }
+
+    pub fn Writable(&self) -> bool {
+        return self.flags.lock().0.Write;
+    }
+
     pub fn WouldBlock(&self) -> bool {
         return self.Dirent.Inode().WouldBlock();
     }

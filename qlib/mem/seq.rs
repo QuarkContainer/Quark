@@ -27,6 +27,7 @@ pub trait BlockSeqReader {
     // not be returned if ReadToBlocks successfully reads dsts.NumBytes()
     // bytes.)
     fn ReadToBlocks(&mut self, dsts: BlockSeq) -> Result<usize>;
+    fn CopyToBlocks(&self, dsts: BlockSeq) -> Result<usize>;
 }
 
 pub trait BlockSeqWriter {
@@ -65,6 +66,10 @@ impl BlockSeq {
 
     pub fn CopyOutFrom(&self, src: &mut BlockSeqReader) -> Result<usize> {
         return src.ReadToBlocks(*self);
+    }
+
+    pub fn CopyOutFromWithoutConsume(&self, src: &BlockSeqReader) -> Result<usize> {
+        return src.CopyToBlocks(*self);
     }
 
     pub fn CopyInTo(&mut self, dst: &mut BlockSeqWriter) -> Result<usize> {

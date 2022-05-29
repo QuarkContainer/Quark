@@ -19,8 +19,12 @@ use super::super::kernel::waiter::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::mem::block::*;
+use super::super::qlib::addr::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::*;
+use kernel::pipe::node::PipeIops;
+use qlib::mem::seq::BlockSeq;
+use kernel::pipe::pipe::Pipe;
 
 // Splice moves data to this file, directly from another.
 //
@@ -451,6 +455,163 @@ pub fn SysSplice(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     }
 
     return DoSplice(task, &dst, &src, &mut opts, nonBlocking);
+}
+
+pub fn SysTee(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let inFD = args.arg0 as i32;
+    let outFD = args.arg1 as i32;
+    let count = args.arg2 as i64;
+    let flags = args.arg3 as i32;
+
+    let MAX_RW_COUNT = Addr(i32::MAX as u64).RoundDown().unwrap().0 as i64;
+
+    if count == 0 {
+        return Ok(0)
+    }
+
+    let count = if count > MAX_RW_COUNT {
+        MAX_RW_COUNT
+    } else {
+        count
+    };
+
+    if count < 0 {
+        return Err(Error::SysError(SysErr::EINVAL));
+    }
+
+    // Check for invalid flags.
+    if flags & !(SPLICE_F_MOVE | SPLICE_F_NONBLOCK | SPLICE_F_MORE | SPLICE_F_GIFT) != 0 {
+        return Err(Error::SysError(SysErr::EINVAL));
+    }
+
+    let dst = task.GetFile(outFD)?;
+    let src = task.GetFile(inFD)?;
+
+    if !dst.Writable() || !src.Readable() {
+        return Err(Error::SysError(SysErr::EINVAL));
+    }
+
+    let srcInode = src.Dirent.Inode();
+    let srcAttr = srcInode.StableAttr();
+    let dstInode = dst.Dirent.Inode();
+    let dstAttr = dstInode.StableAttr();
+
+    if !srcAttr.IsPipe() || !dstAttr.IsPipe() {
+        return Err(Error::SysError(SysErr::EINVAL));
+    }
+
+    // The operation is non-blocking if anything is non-blocking.
+    //
+    // N.B. This is a rather simplistic heuristic that avoids some
+    // poor edge case behavior since the exact semantics here are
+    // underspecified and vary between versions of Linux itself.
+    let nonblock = !dst.WouldBlock() || !src.WouldBlock() || flags & SPLICE_F_NONBLOCK != 0;
+
+    let srcIops = srcInode.lock().InodeOp.clone();
+    let dstIops = dstInode.lock().InodeOp.clone();
+
+    let srcIops = srcIops.as_any().downcast_ref::<PipeIops>().unwrap();
+    let dstIops = dstIops.as_any().downcast_ref::<PipeIops>().unwrap();
+
+    let srcPipe = srcIops.lock().p.clone();
+    let dstPipe = dstIops.lock().p.clone();
+
+    if srcPipe == dstPipe {
+        return Err(Error::SysError(SysErr::EINVAL));
+    }
+
+    let srcTmp = QLock::New(0);
+    let dstTmp = QLock::New(0);
+
+    let mut _srcLock = srcTmp.Lock(task)?;
+    let mut _dstLock = dstTmp.Lock(task)?;
+    if dst.UniqueId() < src.UniqueId() {
+        _dstLock = dst.offset.Lock(task)?;
+        _srcLock = src.offset.Lock(task)?;
+    } else if dst.UniqueId() > src.UniqueId() {
+        _srcLock = src.offset.Lock(task)?;
+        _dstLock = dst.offset.Lock(task)?;
+    } else {
+        _srcLock = src.offset.Lock(task)?;
+    }
+
+    let bufLen = if count > 2 * MemoryDef::ONE_MB as i64 {
+        2 * MemoryDef::ONE_MB as i64
+    } else {
+        count
+    };
+
+    let buf = DataBuff::New(bufLen as usize);
+    let bs = BlockSeq::New(&buf.buf);
+
+    let n = ReadWithoutConsume(task, &src, &srcPipe, bs, !nonblock)?;
+
+    let iovs = buf.Iovs(n as usize);
+
+    let count = WritePipe(task, &dst, &iovs, !nonblock)?;
+    return Ok(count)
+}
+
+pub fn ReadWithoutConsume(task: &Task, f: &File, p: &Pipe, bs: BlockSeq, blocking: bool) -> Result<i64> {
+    let general = task.blocker.generalEntry.clone();
+    f.EventRegister(task, &general, EVENT_READ);
+    defer!(f.EventUnregister(task, &general));
+
+    loop {
+        match p
+            .ReadWithoutConsume(task, bs) {
+            Err(Error::SysError(SysErr::EAGAIN)) => {
+                if !blocking {
+                    return Err(Error::SysError(SysErr::EAGAIN))
+                }
+            },
+            Err(e) => {
+                return Err(e);
+            }
+            Ok(n) => {
+                return Ok(n as i64)
+            }
+        }
+
+        match task.blocker.BlockWithMonoTimer(true, None) {
+            Err(Error::ErrInterrupted) => {
+                return Err(Error::SysError(SysErr::ERESTARTSYS));
+            }
+            Err(e) => {
+                return Err(e);
+            }
+            _ => (),
+        }
+    }
+}
+
+pub fn WritePipe(task: &Task, f: &File, srcs: &[IoVec], blocking: bool) -> Result<i64> {
+    let general = task.blocker.generalEntry.clone();
+    f.EventRegister(task, &general, EVENT_WRITE);
+    defer!(f.EventUnregister(task, &general));
+
+    loop {
+        match f.Writev(task, srcs) {
+            Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
+                if !blocking {
+                    return Err(Error::SysError(SysErr::EAGAIN))
+                }
+            },
+            Err(e) => {
+                return Err(e);
+            }
+            Ok(n) => {
+                return Ok(n)
+            }
+        }
+
+        match task.blocker.BlockWithMonoTimer(true, None) {
+            Err(e) => {
+                return Err(e);
+            }
+            _ => (),
+        }
+    }
 }
 
 pub fn SysSendfile(task: &mut Task, args: &SyscallArguments) -> Result<i64> {

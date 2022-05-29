@@ -373,7 +373,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysSetRobustList,    //sys_set_robust_list,
     SysGetRobustList,    //sys_get_robust_list,
     SysSplice,           //sys_splice,
-    NotImplementSyscall, //sys_tee,
+    SysTee,              //sys_tee,
     SysSyncFileRange,    //sys_sync_file_range,
     NotImplementSyscall, //sys_vmsplice,
     NotImplementSyscall, //sys_move_pages,
