@@ -47,3 +47,4 @@ pub mod sys_utsname;
 pub mod sys_write;
 pub mod syscalls;
 pub mod sys_memfd;
+pub mod sys_sched;
