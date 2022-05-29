@@ -19,6 +19,7 @@ use alloc::vec::Vec;
 use core::ops::Deref;
 use core::sync::atomic::AtomicI64;
 use core::sync::atomic::Ordering;
+use core::cmp::PartialEq;
 
 use super::super::super::super::common::*;
 use super::super::super::super::device::*;
@@ -206,6 +207,12 @@ impl Deref for Pipe {
     }
 }
 
+impl PartialEq for Pipe {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
 // NewPipe initializes and returns a pipe.
 impl Pipe {
     pub fn New(task: &Task, isNamed: bool, sizeBytes: usize, atomicIOBytes: usize) -> Self {
@@ -307,6 +314,61 @@ impl Pipe {
             // Precondition violated.
             panic!("invalid pipe flags")
         }
+    }
+
+    pub fn ReadWithoutConsume(&self, _task: &Task, dst: BlockSeq) -> Result<usize> {
+        // Don't block for a zero-length read even if the pipe is empty.
+        if dst.NumBytes() == 0 {
+            return Ok(0);
+        }
+
+        let p = self.intern.lock();
+        let mut dst = dst;
+        if p.size == 0 {
+            if !self.HasWriters() {
+                // There are no writers, return EOF.
+                return Ok(0);
+            }
+
+            return Err(Error::SysError(SysErr::EAGAIN));
+        }
+
+        let mut iter = p.data.iter();
+        let mut data = iter.next();
+
+        // Limit how much we consume.
+        if dst.NumBytes() as usize > p.size {
+            dst = dst.TakeFirst(p.size as u64);
+        }
+
+        let mut done = 0;
+        while dst.NumBytes() > 0 {
+            let mut needPop = false;
+            let n;
+            {
+                // Pop the first buffer.
+                let first = match data {
+                    None => break,
+                    Some(f) => f,
+                };
+
+                // Copy user data.
+                n = dst.CopyOutFromWithoutConsume(first)?;
+                done += n;
+                dst = dst.DropFirst(n as u64);
+
+                // Empty buffer?
+                if first.Count() == n {
+                    needPop = true;
+                }
+            }
+
+            if needPop {
+                data = iter.next();
+            }
+        }
+
+        return Ok(done);
     }
 
     // read reads data from the pipe into dst and returns the number of bytes
