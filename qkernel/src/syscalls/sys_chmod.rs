@@ -35,7 +35,7 @@ fn Chmod(task: &Task, d: &Dirent, mode: FileMode) -> Result<()> {
     }
 
     // File attribute changed, generate notification.
-    //d.InotifyEvent(IN_ATTRIB, 0);
+    d.InotifyEvent(InotifyEvent::IN_ATTRIB, 0);
 
     return Ok(());
 }

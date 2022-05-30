@@ -33,6 +33,7 @@ use super::super::dentry::*;
 use super::super::dirent::*;
 use super::super::file::*;
 use super::super::flags::*;
+use super::super::inotify::*;
 use super::super::host::hostinodeop::*;
 use super::super::inode::*;
 use super::super::mount::*;
@@ -78,6 +79,7 @@ pub fn NewMasterNode(
         InodeOp: Arc::new(iops),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
+        Watches: Watches::default(),
         MountSource: msrc,
         Overlay: None,
     };

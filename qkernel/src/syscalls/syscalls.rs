@@ -46,6 +46,7 @@ use super::super::syscalls::sys_utsname::*;
 use super::super::syscalls::sys_write::*;
 use super::super::syscalls::sys_memfd::*;
 use super::super::syscalls::sys_sched::*;
+use super::super::syscalls::sys_inotify::*;
 
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
@@ -351,9 +352,9 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     NotImplementSyscall, //sys_keyctl,    //250
     NotImplementSyscall, //sys_ioprio_set,
     NotImplementSyscall, //sys_ioprio_get,
-    NotImplementSyscall, //sys_inotify_init,
-    NotImplementSyscall, //sys_inotify_add_watch,
-    NotImplementSyscall, //sys_inotify_rm_watch,
+    SysInotifyInit, //sys_inotify_init,
+    SysInotifyAddWatch, //sys_inotify_add_watch,
+    SysInotifyRmWatch, //sys_inotify_rm_watch,
     NotImplementSyscall, //sys_migrate_pages,
     SysOpenAt,           //sys_openat,
     SysMkdirat,          //sys_mkdirat,
@@ -392,7 +393,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysEpollCreate1,     //sys_epoll_create1,
     SysDup3,             //sys_dup3,
     SysPipe2,            //sys_pipe2,
-    NotImplementSyscall, //sys_inotify_init1,
+    SysInotifyInit1,     //sys_inotify_init1,
     SysPreadv,           //sys_preadv,
     SysPwritev,          //sys_pwritev,
     SysRtTgsigqueueinfo, //sys_rt_tgsigqueueinfo,

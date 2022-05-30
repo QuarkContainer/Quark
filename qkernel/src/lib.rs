@@ -85,7 +85,6 @@ use self::qlib::kernel::socket;
 use self::qlib::kernel::task;
 use self::qlib::kernel::taskMgr;
 use self::qlib::kernel::threadmgr;
-use self::qlib::kernel::uid;
 use self::qlib::kernel::util;
 use self::qlib::kernel::vcpu;
 use self::qlib::kernel::version;
@@ -97,7 +96,7 @@ use self::qlib::kernel::vcpu::*;
 use vcpu::CPU_LOCAL;
 
 use core::panic::PanicInfo;
-use core::sync::atomic::{AtomicI32, AtomicU64, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicI32, AtomicUsize, Ordering};
 use core::{mem, ptr};
 use qlib::mutex::*;
 
@@ -130,7 +129,6 @@ use self::qlib::kernel::Scale;
 use self::qlib::kernel::VcpuFreqInit;
 use self::quring::*;
 //use self::heap::QAllocator;
-use self::uid::*;
 
 pub const HEAP_START: usize = 0x70_2000_0000;
 pub const HEAP_SIZE: usize = 0x1000_0000;
@@ -138,6 +136,7 @@ pub const HEAP_SIZE: usize = 0x1000_0000;
 //use buddy_system_allocator::*;
 #[global_allocator]
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
+
 //pub static VCPU_ALLOCATOR: GlobalVcpuAllocator = GlobalVcpuAllocator::New();
 
 //static ALLOCATOR: QAllocator = QAllocator::New();
@@ -187,7 +186,6 @@ pub fn SingletonInit() {
             Ordering::Release,
         );
 
-        UID.Init(AtomicU64::new(1));
         perflog::THREAD_COUNTS.Init(QMutex::new(perflog::ThreadPerfCounters::default()));
 
         fs::file::InitSingleton();

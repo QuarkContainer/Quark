@@ -19,7 +19,12 @@ use super::qlib::singleton::*;
 
 pub type UniqueID = u64;
 pub static UID: Singleton<AtomicU64> = Singleton::<AtomicU64>::New();
+pub static INOTIFY_COOKIE: Singleton<AtomicU32> = Singleton::<AtomicU32>::New();
 
 pub fn NewUID() -> u64 {
     return UID.fetch_add(1, atomic::Ordering::SeqCst);
+}
+
+pub fn NewInotifyCookie() -> u64 {
+    return INOTIFY_COOKIE.fetch_add(1, atomic::Ordering::SeqCst);
 }

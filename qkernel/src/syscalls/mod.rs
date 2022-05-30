@@ -48,3 +48,4 @@ pub mod sys_write;
 pub mod syscalls;
 pub mod sys_memfd;
 pub mod sys_sched;
+pub mod sys_inotify;

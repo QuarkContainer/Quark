@@ -35,6 +35,7 @@ use super::super::dentry::*;
 use super::super::dirent::*;
 use super::super::file::*;
 use super::super::flags::*;
+use super::super::inotify::*;
 use super::super::fsutil::file::*;
 use super::super::host::hostinodeop::*;
 use super::super::inode::*;
@@ -100,6 +101,7 @@ pub fn NewDir(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         InodeOp: Arc::new(d),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
+        Watches: Watches::default(),
         MountSource: msrc.clone(),
         Overlay: None,
     };
