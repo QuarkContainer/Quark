@@ -432,7 +432,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     NotImplementSyscall, //sys_pkey_free, 331
     SysStatx,            //sys_statx, 332
     NotImplementSyscall, //	333
-    NotImplementSyscall, //	334
+    SysNoSys,            //	334
     NotImplementSyscall, //	335
     NotImplementSyscall, //	336
     NotImplementSyscall, //	337
@@ -539,7 +539,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     NotImplementSyscall, //	438
     SysNoSys,            //	439
     NotImplementSyscall, //	440
-    SysNoSys, //	441
+    SysNoSys,            //	441
     NotImplementSyscall, //	442
 ];
 
@@ -561,7 +561,7 @@ pub fn SysObsolete(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 }
 
 pub fn SysNoSys(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {
-    error!("No support syscall {:x?}", args);
+    error!("************No support syscall {:x?}", args);
     return Err(Error::SysError(SysErr::ENOSYS));
 }
 
