@@ -18,6 +18,28 @@ use core::sync::atomic::Ordering;
 
 use super::super::kernel_def::*;
 
+// Scheduling policies, exposed by sched_getscheduler(2)/sched_setscheduler(2).
+pub struct Sched {}
+
+impl Sched {
+    pub const SCHED_NORMAL      :i32 = 0;
+    pub const SCHED_FIFO        :i32 = 1;
+    pub const SCHED_RR          :i32 = 2;
+    pub const SCHED_BATCH       :i32 = 3;
+    pub const SCHED_IDLE        :i32 = 5;
+    pub const SCHED_DEADLINE    :i32 = 6;
+    pub const SCHED_MICROQ      :i32 = 16;
+
+    // SCHED_RESET_ON_FORK is a flag that indicates that the process is
+    // reverted back to SCHED_NORMAL on fork.
+    pub const SCHED_RESET_ON_FORK :i32 = 0x40000000;
+
+    pub const PRIO_PGRP    :i32 = 0x1;
+    pub const PRIO_PROCESS :i32 = 0x0;
+    pub const PRIO_USER    :i32 = 0x2;
+}
+
+
 // UNIX_PATH_MAX is the maximum length of the path in an AF_UNIX socket.
 //
 // From uapi/linux/un.h.
