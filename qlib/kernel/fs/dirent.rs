@@ -348,7 +348,7 @@ impl Dirent {
 
                 let dirent = Dirent(cd);
                 let inode = dirent.Inode();
-                inode.lock().Watches.Unpin(&dirent);
+                inode.Watches().Unpin(&dirent);
 
                 false
             }
@@ -451,7 +451,7 @@ impl Dirent {
 
         self.AddChild(&child);
         child.ExtendReference();
-        inode.lock().Watches.Notify(name,
+        inode.Watches().Notify(name,
                                     InotifyEvent::IN_CREATE,
                                     0);
 
@@ -501,7 +501,7 @@ impl Dirent {
         return self.genericCreate(task, root, newname, &mut || -> Result<()> {
             let mut inode = self.Inode();
             inode.CreateLink(task, self, oldname, newname)?;
-            inode.lock().Watches.Notify(newname,
+            inode.Watches().Notify(newname,
                                         InotifyEvent::IN_CREATE,
                                         0);
             return Ok(())
@@ -527,10 +527,10 @@ impl Dirent {
 
         return self.genericCreate(task, root, name, &mut || -> Result<()> {
             inode.CreateHardLink(task, self, &target, name)?;
-            targetInode.lock().Watches.Notify(name,
+            targetInode.Watches().Notify(name,
                                               InotifyEvent::IN_ATTRIB,
                                               0);
-            inode.lock().Watches.Notify(name,
+            inode.Watches().Notify(name,
                                         InotifyEvent::IN_CREATE,
                                         0);
             return Ok(())
@@ -547,7 +547,7 @@ impl Dirent {
         return self.genericCreate(task, root, name, &mut || -> Result<()> {
             let mut inode = self.Inode();
             let ret = inode.CreateDirectory(task, self, name, perms);
-            inode.lock().Watches.Notify(name,
+            inode.Watches().Notify(name,
                                         InotifyEvent::IN_ISDIR | InotifyEvent::IN_CREATE,
                                         0);
             return ret;
@@ -580,7 +580,7 @@ impl Dirent {
 
         let inode = self.Inode();
         let childDir = inode.Lookup(task, name)?;
-        inode.lock().Watches.Notify(name,
+        inode.Watches().Notify(name,
                                     InotifyEvent::IN_CREATE,
                                     0);
 
@@ -597,7 +597,7 @@ impl Dirent {
         return self.genericCreate(task, root, name, &mut || -> Result<()> {
             let mut inode = self.Inode();
             inode.CreateFifo(task, self, name, perms)?;
-            inode.lock().Watches.Notify(name,
+            inode.Watches().Notify(name,
                                         InotifyEvent::IN_CREATE,
                                         0);
             return Ok(())
@@ -748,7 +748,7 @@ impl Dirent {
         inode.Remove(task, self, &child)?;
 
         // Link count changed, this only applies to non-directory nodes.
-        childInode.lock().Watches.Notify("", InotifyEvent::IN_ATTRIB, 0);
+        childInode.Watches().Notify("", InotifyEvent::IN_ATTRIB, 0);
 
         (self.0).0.lock().Children.remove(name);
         child.DropExtendedReference();
@@ -758,9 +758,9 @@ impl Dirent {
         // watches on the underlying inode will be destroyed, since the underlying
         // inode may have other links. If this was the last link, the events for the
         // watch removal will be queued by the inode destructor.
-        childInode.lock().Watches.MarkUnlinked();
-        childInode.lock().Watches.Unpin(&child);
-        inode.lock().Watches.Notify("", InotifyEvent::IN_DELETE, 0);
+        childInode.Watches().MarkUnlinked();
+        childInode.Watches().Unpin(&child);
+        inode.Watches().Notify("", InotifyEvent::IN_DELETE, 0);
 
         return Ok(());
     }
@@ -798,9 +798,9 @@ impl Dirent {
 
         // Finally, let inotify know the child is being unlinked. Drop any extra
         // refs from inotify to this child dirent.
-        childInode.lock().Watches.MarkUnlinked();
-        childInode.lock().Watches.Unpin(&child);
-        inode.lock().Watches.Notify("",
+        childInode.Watches().MarkUnlinked();
+        childInode.Watches().Unpin(&child);
+        inode.Watches().Notify("",
                                     InotifyEvent::IN_ISDIR | InotifyEvent::IN_DELETE,
                                     0);
 
@@ -944,24 +944,24 @@ impl Dirent {
         }
 
         let cookie = NewInotifyCookie();
-        oldParent.Inode().lock().Watches.Notify(
+        oldParent.Inode().Watches().Notify(
             oldName,
             ev | InotifyEvent::IN_MOVED_FROM,
             cookie);
-        newParent.Inode().lock().Watches.Notify(
+        newParent.Inode().Watches().Notify(
             newName,
             ev | InotifyEvent::IN_MOVED_TO,
             cookie);
 
         // Somewhat surprisingly, self move events do not have a cookie.
-        renamed.Inode().lock().Watches.Notify(
+        renamed.Inode().Watches().Notify(
             "",
             InotifyEvent::IN_MOVE_SELF,
             0);
 
         renamed.DropExtendedReference();
 
-        renamed.Inode().lock().Watches.Unpin(&renamed);
+        renamed.Inode().Watches().Unpin(&renamed);
 
         renamed.flush();
 
@@ -1051,6 +1051,29 @@ impl Dirent {
         p.Children
             .insert(newName.to_string(), Arc::downgrade(&renamed.0));
 
+        // Queue inotify events for the rename.
+        let mut ev : u32 = 0;
+        if newInode.StableAttr().IsDir() {
+            ev |=  InotifyEvent::IN_ISDIR;
+        }
+
+        let cookie = NewInotifyCookie();
+
+        inode.Watches().Notify(
+            oldName,
+            ev | InotifyEvent::IN_MOVED_FROM,
+            cookie);
+        inode.Watches().Notify(
+            newName,
+            ev | InotifyEvent::IN_MOVED_TO,
+            cookie);
+
+        // Somewhat surprisingly, self move events do not have a cookie.
+        newInode.Watches().Notify(
+            "",
+            InotifyEvent::IN_MOVE_SELF,
+            0);
+
         renamed.DropExtendedReference();
         renamed.flush();
 
@@ -1138,11 +1161,11 @@ impl Dirent {
             None => (),
             Some(p) => {
                 let name = (p.0).0.lock().Name.clone();
-                p.Inode().lock().Watches.Notify(&name, event, cookie);
+                p.Inode().Watches().Notify(&name, event, cookie);
             }
         }
 
-        inode.lock().Watches.Notify("", event, cookie);
+        inode.Watches().Notify("", event, cookie);
     }
 
     pub fn ExtendReference(&self) {

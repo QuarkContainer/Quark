@@ -82,7 +82,7 @@ pub fn NewSlaveNode(
         InodeOp: Arc::new(iops),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
-        Watches: Watches::default(),
+        watches: Watches::default(),
         MountSource: msrc,
         Overlay: None,
     };

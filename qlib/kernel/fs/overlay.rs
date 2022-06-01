@@ -112,7 +112,7 @@ pub fn NewOverlayInode(_task: &Task, o: OverlayEntry, msrc: &Arc<QMutex<MountSou
         InodeOp: inodeOptions,
         StableAttr: inode.StableAttr(),
         LockCtx: LockCtx::default(),
-        Watches: Watches::default(),
+        watches: Watches::default(),
         MountSource: msrc.clone(),
         Overlay: Overlay,
     };

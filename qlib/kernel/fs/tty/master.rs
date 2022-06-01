@@ -79,7 +79,7 @@ pub fn NewMasterNode(
         InodeOp: Arc::new(iops),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
-        Watches: Watches::default(),
+        watches: Watches::default(),
         MountSource: msrc,
         Overlay: None,
     };

@@ -41,6 +41,7 @@ pub const INOTIFY_EVENT_BASE_SIZE: usize = 16;
 
 // Event represents a struct inotify_event from linux.
 #[repr(C)]
+#[derive(Debug)]
 pub struct Event {
     pub wd: i32,
     pub mask: u32,
@@ -204,18 +205,22 @@ impl Watch {
 
     // Notify queues a new event on this watch.
     pub fn Notify(&self, name: &str, events: u32, cookie: u32) {
-        let w = self.lock();
-        if w.mask & events == 0 {
-            // We weren't watching for this event.
-            return;
-        }
+        let (owner, wd, matchedEvents) = {
+            let w = self.lock();
+            if w.mask & events == 0 {
+                // We weren't watching for this event.
+                return;
+            }
 
-        // Event mask should include bits matched from the watch plus all control
-        // event bits.
-        let unmaskableBits = !InotifyEvent::IN_ALL_EVENTS;
-        let effectiveMask = unmaskableBits | w.mask;
-        let matchedEvents = effectiveMask & events;
-        w.owner.QueueEvent(Event::New(w.wd, name, matchedEvents, cookie))
+            // Event mask should include bits matched from the watch plus all control
+            // event bits.
+            let unmaskableBits = !InotifyEvent::IN_ALL_EVENTS;
+            let effectiveMask = unmaskableBits | w.mask;
+            let matchedEvents = effectiveMask & events;
+            (w.owner.clone(), w.wd, matchedEvents)
+        };
+
+        owner.QueueEvent(Event::New(wd, name, matchedEvents, cookie))
     }
 
     // Pin acquires a new ref on dirent, which pins the dirent in memory while
@@ -260,13 +265,13 @@ pub struct WatchesIntern {
     pub unlinked: bool,
 }
 
-#[derive(Default)]
-pub struct Watches(QRwLock<WatchesIntern>);
+#[derive(Default, Clone)]
+pub struct Watches(Arc<QRwLock<WatchesIntern>>);
 
 impl Deref for Watches {
-    type Target = QRwLock<WatchesIntern>;
+    type Target = Arc<QRwLock<WatchesIntern>>;
 
-    fn deref(&self) -> &QRwLock<WatchesIntern> {
+    fn deref(&self) -> &Arc<QRwLock<WatchesIntern>> {
         &self.0
     }
 }
@@ -329,25 +334,35 @@ impl Watches {
 
     // Notify queues a new event with all watches in this set.
     pub fn Notify(&self, name: &str, events: u32, cookie: u32) {
-        let ws = self.read();
-        for (_, w) in &ws.ws {
-            if name.len() != 0 && ws.unlinked && !w.NotifyParentAfterUnlink() {
-                // IN_EXCL_UNLINK - By default, when watching events on the children
-                // of a directory, events are generated for children even after they
-                // have been unlinked from the directory. This can result in large
-                // numbers of uninteresting events for some applications (e.g., if
-                // watching /tmp, in which many applications create temporary files
-                // whose names are immediately unlinked). Specifying IN_EXCL_UNLINK
-                // changes the default behavior, so that events are not generated
-                // for children after they have been unlinked from the watched
-                // directory.  -- inotify(7)
-                //
-                // We know we're dealing with events for a parent when the name
-                // isn't empty.
-                continue;
+        let mut watchArr = Vec::new();
+        {
+            let ws = self.read();
+            for (_, w) in &ws.ws {
+                name, events, cookie, ws.unlinked, w.NotifyParentAfterUnlink());
+                if name.len() != 0 && ws.unlinked && !w.NotifyParentAfterUnlink() {
+                    // IN_EXCL_UNLINK - By default, when watching events on the children
+                    // of a directory, events are generated for children even after they
+                    // have been unlinked from the directory. This can result in large
+                    // numbers of uninteresting events for some applications (e.g., if
+                    // watching /tmp, in which many applications create temporary files
+                    // whose names are immediately unlinked). Specifying IN_EXCL_UNLINK
+                    // changes the default behavior, so that events are not generated
+                    // for children after they have been unlinked from the watched
+                    // directory.  -- inotify(7)
+                    //
+                    // We know we're dealing with events for a parent when the name
+                    // isn't empty.
+                    continue;
+                }
+                watchArr.push(w.clone());
+
             }
+        }
+
+        for w in &watchArr {
             w.Notify(name, events, cookie);
         }
+
     }
 
     // Unpin unpins dirent from all watches in this set.
@@ -419,7 +434,9 @@ impl Deref for Inotify {
 
 impl Drop for Inotify {
     fn drop(&mut self) {
-        self.Release();
+        if Arc::strong_count(&self.0) == 1 {
+            self.Release();
+        }
     }
 }
 
@@ -438,7 +455,7 @@ impl Inotify {
         let ws = self.watches.lock();
         for (_, w) in &ws.watches {
             let inode = w.lock().target.clone();
-            inode.lock().Watches.Remove(w.Id());
+            inode.Watches().Remove(w.Id());
         }
     }
 
@@ -481,7 +498,7 @@ impl Inotify {
         // memory. This ref is dropped during either watch removal, target
         // destruction, or inotify instance destruction. See callers of Watch.Unpin.
         watch.Pin(target);
-        target.Inode().lock().Watches.Add(&watch);
+        target.Inode().Watches().Add(&watch);
         return watch
     }
 
@@ -510,7 +527,7 @@ impl Inotify {
         // add/remove watches on target.
         let _events = self.events.lock();
 
-        let watch = target.Inode().lock().Watches.Lookup(self.id);
+        let watch = target.Inode().Watches().Lookup(self.id);
         match watch {
             None => (),
             Some(w) => {
@@ -551,7 +568,7 @@ impl Inotify {
             let target = watch.lock().target.clone();
             watchId = watch.Id();
             // Remove the watch from the watch target.
-            target.lock().Watches.Remove(watchId);
+            target.Watches().Remove(watchId);
         }
 
         self.QueueEvent(Event::New(watch.lock().wd, "", InotifyEvent::IN_IGNORED, 0));

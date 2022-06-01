@@ -444,7 +444,6 @@ impl MountNs {
                         }
                     }
                     ResolveResult::Path(context) => {
-                        //error!("FindDirent 3.4");
                         if remain != "" {
                             contexts.push(remain.to_string());
                         }

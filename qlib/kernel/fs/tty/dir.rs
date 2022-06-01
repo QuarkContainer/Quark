@@ -101,7 +101,7 @@ pub fn NewDir(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         InodeOp: Arc::new(d),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
-        Watches: Watches::default(),
+        watches: Watches::default(),
         MountSource: msrc.clone(),
         Overlay: None,
     };

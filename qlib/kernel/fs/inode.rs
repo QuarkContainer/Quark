@@ -230,20 +230,20 @@ impl Deref for Inode {
 impl Drop for Inode {
     fn drop(&mut self) {
         if Arc::strong_count(&self.0) == 1 {
-            let i = self.lock();
+            let watches = self.Watches();
 
             // If this inode is being destroyed because it was unlinked, queue a
             // deletion event. This may not be the case for inodes being revalidated.
-            let unlinked = i.Watches.read().unlinked;
+            let unlinked = watches.read().unlinked;
             if unlinked {
-                i.Watches.Notify("", InotifyEvent::IN_DELETE_SELF, 0)
+                watches.Notify("", InotifyEvent::IN_DELETE_SELF, 0);
             }
 
             // Remove references from the watch owners to the watches on this inode,
             // since the watches are about to be GCed. Note that we don't need to worry
             // about the watch pins since if there were any active pins, this inode
             // wouldn't be in the destructor.
-            i.Watches.TargetDestroyed();
+            watches.TargetDestroyed();
         }
     }
 }
@@ -259,7 +259,7 @@ impl Inode {
             InodeOp: InodeOp.clone(),
             StableAttr: StableAttr.clone(),
             LockCtx: LockCtx::default(),
-            Watches: Watches::default(),
+            watches: Watches::default(),
             MountSource: MountSource.clone(),
             Overlay: None,
         };
@@ -293,7 +293,7 @@ impl Inode {
             InodeOp: Arc::new(iops),
             StableAttr: fstat.StableAttr(),
             LockCtx: LockCtx::default(),
-            Watches: Watches::default(),
+            watches: Watches::default(),
             MountSource: msrc.clone(),
             Overlay: None,
         }))));
@@ -803,6 +803,10 @@ impl Inode {
         let inodeOp = self.lock().InodeOp.clone();
         return inodeOp.StatFS(task);
     }
+
+    pub fn Watches(&self) -> Watches {
+        return self.lock().watches.clone();
+    }
 }
 
 //#[derive(Clone, Default, Debug, Copy)]
@@ -811,7 +815,7 @@ pub struct InodeIntern {
     pub InodeOp: Arc<InodeOperations>,
     pub StableAttr: StableAttr,
     pub LockCtx: LockCtx,
-    pub Watches: Watches,
+    pub watches: Watches,
     pub MountSource: Arc<QMutex<MountSource>>,
     pub Overlay: Option<Arc<RwLock<OverlayEntry>>>,
 }
@@ -823,7 +827,7 @@ impl Default for InodeIntern {
             InodeOp: Arc::new(HostInodeOp::default()),
             StableAttr: Default::default(),
             LockCtx: LockCtx::default(),
-            Watches: Watches::default(),
+            watches: Watches::default(),
             MountSource: Arc::new(QMutex::new(MountSource::default())),
             Overlay: None,
         };
@@ -837,7 +841,7 @@ impl InodeIntern {
             InodeOp: Arc::new(HostInodeOp::default()),
             StableAttr: Default::default(),
             LockCtx: LockCtx::default(),
-            Watches: Watches::default(),
+            watches: Watches::default(),
             MountSource: Arc::new(QMutex::new(MountSource::default())),
             Overlay: None,
         };

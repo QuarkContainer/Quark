@@ -61,7 +61,7 @@ fn NewTTYDevice(iops: &Arc<TTYDevice>, msrc: &Arc<QMutex<MountSource>>) -> Inode
         InodeOp: iops.clone(),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
-        Watches: Watches::default(),
+        watches: Watches::default(),
         MountSource: msrc.clone(),
         Overlay: None,
     };
@@ -87,7 +87,7 @@ fn NewNullDevice(iops: &Arc<NullDevice>, msrc: &Arc<QMutex<MountSource>>) -> Ino
         InodeOp: iops.clone(),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
-        Watches: Watches::default(),
+        watches: Watches::default(),
         MountSource: msrc.clone(),
         Overlay: None,
     };
@@ -113,7 +113,7 @@ fn NewZeroDevice(iops: &Arc<ZeroDevice>, msrc: &Arc<QMutex<MountSource>>) -> Ino
         InodeOp: iops.clone(),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
-        Watches: Watches::default(),
+        watches: Watches::default(),
         MountSource: msrc.clone(),
         Overlay: None,
     };
@@ -139,7 +139,7 @@ fn NewFullDevice(iops: &Arc<FullDevice>, msrc: &Arc<QMutex<MountSource>>) -> Ino
         InodeOp: iops.clone(),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
-        Watches: Watches::default(),
+        watches: Watches::default(),
         MountSource: msrc.clone(),
         Overlay: None,
     };
@@ -165,7 +165,7 @@ fn NewRandomDevice(iops: &Arc<RandomDevice>, msrc: &Arc<QMutex<MountSource>>, mi
         InodeOp: iops.clone(),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
-        Watches: Watches::default(),
+        watches: Watches::default(),
         MountSource: msrc.clone(),
         Overlay: None,
     };
@@ -198,7 +198,7 @@ fn NewDirectory(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         InodeOp: Arc::new(iops),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
-        Watches: Watches::default(),
+        watches: Watches::default(),
         MountSource: msrc.clone(),
         Overlay: None,
     };
@@ -226,7 +226,7 @@ fn NewSymlink(task: &Task, target: &str, msrc: &Arc<QMutex<MountSource>>) -> Ino
         InodeOp: Arc::new(iops),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
-        Watches: Watches::default(),
+        watches: Watches::default(),
         MountSource: msrc.clone(),
         Overlay: None,
     };
@@ -344,7 +344,7 @@ pub fn NewDev(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         InodeOp: Arc::new(iops),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
-        Watches: Watches::default(),
+        watches: Watches::default(),
         MountSource: msrc.clone(),
         Overlay: None,
     };
