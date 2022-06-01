@@ -98,11 +98,24 @@ impl BufferIntern {
     }
 }
 
+impl Buffer {
+    pub fn Count(&self) -> usize {
+        let b = self.borrow();
+        return b.write-b.read;
+    }
+}
+
 impl BlockSeqReader for Buffer {
     fn ReadToBlocks(&mut self, dsts: BlockSeq) -> Result<usize> {
         let mut b = self.borrow_mut();
         let n = dsts.CopyOut(&b.data[b.read..b.write]);
         b.read += n;
+        return Ok(n);
+    }
+
+    fn CopyToBlocks(&self, dsts: BlockSeq) -> Result<usize> {
+        let b = self.borrow();
+        let n = dsts.CopyOut(&b.data[b.read..b.write]);
         return Ok(n);
     }
 }

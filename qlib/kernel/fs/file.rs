@@ -38,6 +38,7 @@ use super::super::kernel::fasync::*;
 use super::super::memmgr::*;
 use super::super::task::*;
 use super::super::tcpip::tcpip::*;
+use crate::qlib::kernel::Kernel::HostSpace;
 
 use super::attr::*;
 use super::dirent::*;
@@ -437,6 +438,14 @@ impl Mapping for File {
 }
 
 impl File {
+    pub fn Readable(&self) -> bool {
+        return self.flags.lock().0.Read;
+    }
+
+    pub fn Writable(&self) -> bool {
+        return self.flags.lock().0.Write;
+    }
+
     pub fn WouldBlock(&self) -> bool {
         return self.Dirent.Inode().WouldBlock();
     }
@@ -545,6 +554,41 @@ impl File {
                 return Ok(Self::NewHostFile(&dirent, &fileFlags, fops, wouldBlock));
             }
         }
+    }
+
+    pub fn NewMemfdFile(task: &Task, name: &str, mounter: &FileOwner, flags: u32) -> Result<Self> {
+        let fd = HostSpace::CreateMemfd(0, flags) as i32;
+        if fd < 0 {
+            return Err(Error::SysError(-fd as i32));
+        }
+
+        let mut fstat = LibcStat::default();
+        let ret = Fstat(fd, &mut fstat) as i32;
+        if ret < 0 {
+            return Err(Error::SysError(-ret as i32));
+        }
+
+        let fileFlags = Self::GetFileFlags(fd)?;
+        let msrc = MountSource::NewHostMountSource(
+            &"/".to_string(),
+            mounter,
+            &WhitelistFileSystem::New(),
+            &MountSourceFlags::default(),
+            false,
+        );
+
+        let inode =
+            Inode::NewHostInode(&Arc::new(QMutex::new(msrc)), fd, &fstat, fileFlags.Write)?;
+        let name = format!("memfd:{}", name);
+        let dirent = Dirent::New(&inode, &name);
+
+        let iops = inode.lock().InodeOp.clone();
+        let hostiops = iops.as_any().downcast_ref::<HostInodeOp>().unwrap();
+
+        //let fops = iops.GetFileOp(task)?;
+        let fops = hostiops.GetHostFileOp(task);
+        let wouldBlock = inode.lock().InodeOp.WouldBlock();
+        return Ok(Self::NewHostFile(&dirent, &fileFlags, fops, wouldBlock));
     }
 
     pub fn NewHostFile(

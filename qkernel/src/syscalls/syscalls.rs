@@ -44,6 +44,8 @@ use super::super::syscalls::sys_timerfd::*;
 use super::super::syscalls::sys_tls::*;
 use super::super::syscalls::sys_utsname::*;
 use super::super::syscalls::sys_write::*;
+use super::super::syscalls::sys_memfd::*;
+use super::super::syscalls::sys_sched::*;
 
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
@@ -238,12 +240,12 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     NotImplementSyscall, //sys_sysfs,
     SysGetpriority,      //sys_getpriority,    //140
     SysSetpriority,      //sys_setpriority,
-    NotImplementSyscall, //sys_sched_setparam,
-    NotImplementSyscall, //sys_sched_getparam	,
-    NotImplementSyscall, //sys_sched_setscheduler,
-    NotImplementSyscall, //sys_sched_getscheduler,
-    NotImplementSyscall, //sys_sched_get_priority_max,
-    NotImplementSyscall, //sys_sched_get_priority_min,
+    SysCapErr,           //sys_sched_setparam,
+    SysSchedGetparam,    //sys_sched_getparam	,
+    SysSchedSetscheduler,//sys_sched_setscheduler,
+    SysSchedGetscheduler, //sys_sched_getscheduler,
+    SysSchedGetPriorityMax,//sys_sched_get_priority_max,
+    SysSchedGetPriorityMin,//sys_sched_get_priority_min,
     NotImplementSyscall, //sys_sched_rr_get_interval,
     SysMlock,            //sys_mlock,
     SysMunlock,          //sys_munlock,    //150
@@ -372,7 +374,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysSetRobustList,    //sys_set_robust_list,
     SysGetRobustList,    //sys_get_robust_list,
     SysSplice,           //sys_splice,
-    NotImplementSyscall, //sys_tee,
+    SysTee,              //sys_tee,
     SysSyncFileRange,    //sys_sync_file_range,
     NotImplementSyscall, //sys_vmsplice,
     NotImplementSyscall, //sys_move_pages,
@@ -415,7 +417,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysNoSupport, //sys_renameat2,
     NotImplementSyscall, //sys_seccomp,
     SysGetRandom,        //sys_getrandom,
-    NotImplementSyscall, //sys_memfd_create,
+    SysMemfdCreate,     //sys_memfd_create,
     NotImplementSyscall, //sys_kexec_file_load,//320
     NotImplementSyscall, //sys_bpf,
     NotImplementSyscall, //sys_stub_execveat,
@@ -561,4 +563,9 @@ pub fn SysObsolete(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 pub fn SysNoSys(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     error!("************No support syscall {:x?}", args);
     return Err(Error::SysError(SysErr::ENOSYS));
+}
+
+pub fn SysCapErr(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
+    return Err(Error::SysError(SysErr::EPERM));
+    //return Err(Error::SysError(SysErr::ENOSYS));
 }
