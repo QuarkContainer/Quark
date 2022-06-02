@@ -179,6 +179,17 @@ impl Scheduler {
         return cnt;
     }
 
+    pub fn AllTasks(&self) -> Vec<TaskId> {
+        let mut ret = Vec::new();
+        for i in 0..8 {
+            for t in self.queue[i].lock().iter() {
+                ret.push(*t)
+            }
+        }
+
+        return ret;
+    }
+
     pub fn ScheduleQ(&self, task: TaskId, vcpuId: u64) {
         let _cnt = {
             let mut queue = self.queue[vcpuId as usize].lock();
@@ -199,17 +210,6 @@ impl Scheduler {
         } else if state == VcpuState::Running {
             self.WakeOne();
         }
-    }
-
-    pub fn AllTasks(&self) -> Vec<TaskId> {
-        let mut ret = Vec::new();
-        for i in 0..8 {
-            for t in self.queue[i].lock().iter() {
-                ret.push(*t)
-            }
-        }
-
-        return ret;
     }
 
     pub fn WakeOne(&self) -> i64 {
@@ -234,7 +234,7 @@ impl Scheduler {
     }
 
     pub fn WakeIdleCPU(&self, vcpuId: usize) -> bool {
-        let vcpuMask = (1 << vcpuId) as u64;
+        let vcpuMask = 1u64 << vcpuId;
         let prev = self.vcpuWaitMask.fetch_and(!vcpuMask, Ordering::Acquire);
 
         let wake = (prev & vcpuMask) != 0;
