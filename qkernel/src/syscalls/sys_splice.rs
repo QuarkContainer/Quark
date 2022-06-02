@@ -349,7 +349,8 @@ pub fn DoSplice(
                     // On Linux, inotify behavior is not very consistent with splice(2). We try
                     // our best to emulate Linux for very basic calls to splice, where for some
                     // reason, events are generated for output files, but not input files.
-                    dstFile.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0)
+                    srcFile.Dirent.InotifyEvent(InotifyEvent::IN_ACCESS, 0);
+                    dstFile.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0);
                 }
                 return Ok(n)
             },
@@ -562,7 +563,8 @@ pub fn SysTee(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         // On Linux, inotify behavior is not very consistent with splice(2). We try
         // our best to emulate Linux for very basic calls to splice, where for some
         // reason, events are generated for output files, but not input files.
-        dst.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0)
+        src.Dirent.InotifyEvent(InotifyEvent::IN_ACCESS, 0);
+        dst.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0);
     }
     return Ok(count)
 }

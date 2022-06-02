@@ -146,6 +146,9 @@ pub fn SysExecve(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     //todo: handle SysExecve gracelly
     info!("SysExecve workaround, will handle gracefully");
+    if argv.len() == 0 {
+        argv.push(fileName.clone())
+    };
     let mut cmd = format!("");
     for arg in &argv {
         cmd += &arg;

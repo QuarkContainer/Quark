@@ -760,7 +760,12 @@ impl Dirent {
         // watch removal will be queued by the inode destructor.
         childInode.Watches().MarkUnlinked();
         childInode.Watches().Unpin(&child);
-        inode.Watches().Notify("", InotifyEvent::IN_DELETE, 0);
+
+        // trigger inode destroy
+        drop(child);
+        drop(childInode);
+
+        inode.Watches().Notify(name, InotifyEvent::IN_DELETE, 0);
 
         return Ok(());
     }
@@ -800,7 +805,7 @@ impl Dirent {
         // refs from inotify to this child dirent.
         childInode.Watches().MarkUnlinked();
         childInode.Watches().Unpin(&child);
-        inode.Watches().Notify("",
+        inode.Watches().Notify(name,
                                     InotifyEvent::IN_ISDIR | InotifyEvent::IN_DELETE,
                                     0);
 
@@ -1160,7 +1165,7 @@ impl Dirent {
         match parent {
             None => (),
             Some(p) => {
-                let name = (p.0).0.lock().Name.clone();
+                let name = (self.0).0.lock().Name.clone();
                 p.Inode().Watches().Notify(&name, event, cookie);
             }
         }

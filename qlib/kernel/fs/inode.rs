@@ -20,6 +20,7 @@ use crate::qlib::mutex::*;
 use alloc::sync::Arc;
 use core::any::Any;
 use core::ops::Deref;
+use alloc::sync::Weak;
 
 use super::super::super::auth::*;
 use super::super::super::common::*;
@@ -211,6 +212,15 @@ pub struct LockCtx {
 }
 
 #[derive(Clone)]
+pub struct InodeWeak (pub Weak<QMutex<InodeIntern>>);
+
+impl InodeWeak {
+    pub fn Upgrade(&self) -> Inode {
+        return Inode(self.0.upgrade().expect("InodeWeak upgrade fail"))
+    }
+}
+
+#[derive(Clone)]
 pub struct Inode(pub Arc<QMutex<InodeIntern>>);
 
 impl Default for Inode {
@@ -249,6 +259,10 @@ impl Drop for Inode {
 }
 
 impl Inode {
+    pub fn Downgrade(&self) -> InodeWeak {
+        return InodeWeak(Arc::downgrade(&self.0));
+    }
+
     pub fn New<T: InodeOperations + 'static>(
         InodeOp: &Arc<T>,
         MountSource: &Arc<QMutex<MountSource>>,

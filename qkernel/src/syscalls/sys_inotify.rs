@@ -107,7 +107,7 @@ pub fn SysInotifyAddWatch(task: &mut Task, args: &SyscallArguments) -> Result<i6
         &path,
         resolve,
         &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
-            let onlyDir = mask & InotifyEvent::IN_ONLYDIR as i32 == 0;
+            let onlyDir = mask & InotifyEvent::IN_ONLYDIR as i32 != 0;
             let inode = d.Inode();
             if onlyDir && !inode.StableAttr().IsDir() {
                 return Err(Error::SysError(SysErr::ENOTDIR))

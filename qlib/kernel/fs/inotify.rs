@@ -20,6 +20,7 @@ use alloc::collections::btree_set::BTreeSet;
 use spin::Mutex;
 use core::ops::Deref;
 use core::any::Any;
+use alloc::string::String;
 
 use crate::qlib::mutex::*;
 use crate::qlib::kernel::kernel::waiter::*;
@@ -158,7 +159,7 @@ pub struct WatchIntern {
     // The inode being watched. Note that we don't directly hold a reference on
     // this inode. Instead we hold a reference on the dirent(s) containing the
     // inode, which we record in pins.
-    pub target: Inode,
+    pub target: InodeWeak,
 
     // unpinned indicates whether we have a hard reference on target. This field
     // may only be modified through atomic ops.
@@ -184,16 +185,20 @@ impl Deref for Watch {
     }
 }
 
-impl Drop for Watch {
-    fn drop(&mut self) {
-        self.Destroy();
-    }
-}
-
 impl Watch {
     // ID returns the id of the inotify instance that owns this watch.
     pub fn Id(&self) -> u64 {
         return self.lock().owner.id;
+    }
+
+    pub fn ToString(&self) -> String {
+        let w = self.lock();
+        let mut output = format!("watch {}/{}:", w.owner.id, w.wd);
+        for d in &w.pins {
+            output = format!("{} {}", output, d.ID());
+        }
+
+        return output;
     }
 
     // NotifyParentAfterUnlink indicates whether the parent of the watched object
@@ -220,7 +225,7 @@ impl Watch {
             (w.owner.clone(), w.wd, matchedEvents)
         };
 
-        owner.QueueEvent(Event::New(wd, name, matchedEvents, cookie))
+        owner.QueueEvent(Event::New(wd, name, matchedEvents, cookie));
     }
 
     // Pin acquires a new ref on dirent, which pins the dirent in memory while
@@ -338,7 +343,6 @@ impl Watches {
         {
             let ws = self.read();
             for (_, w) in &ws.ws {
-                name, events, cookie, ws.unlinked, w.NotifyParentAfterUnlink());
                 if name.len() != 0 && ws.unlinked && !w.NotifyParentAfterUnlink() {
                     // IN_EXCL_UNLINK - By default, when watching events on the children
                     // of a directory, events are generated for children even after they
@@ -454,7 +458,7 @@ impl Inotify {
     pub fn Release(&self) {
         let ws = self.watches.lock();
         for (_, w) in &ws.watches {
-            let inode = w.lock().target.clone();
+            let inode = w.lock().target.Upgrade();
             inode.Watches().Remove(w.Id());
         }
     }
@@ -486,7 +490,7 @@ impl Inotify {
         let watch = Watch(Arc::new(Mutex::new(WatchIntern {
             owner: self.clone(),
             wd: wd,
-            target: target.Inode(),
+            target: target.Inode().Downgrade(),
             unpinned: 0,
             mask: mask,
             pins: BTreeSet::new(),
@@ -565,7 +569,7 @@ impl Inotify {
                 Some(w) => w
             };
 
-            let target = watch.lock().target.clone();
+            let target = watch.lock().target.Upgrade();
             watchId = watch.Id();
             // Remove the watch from the watch target.
             target.Watches().Remove(watchId);
