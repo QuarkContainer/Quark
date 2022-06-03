@@ -288,11 +288,8 @@ fn readv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
         loop {
             match f.Readv(task, dsts) {
                 Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
-                    if f.Flags().NonBlocking {
-                        if count > 0 {
-                            return Ok(count);
-                        }
-                        return Err(Error::SysError(SysErr::EWOULDBLOCK))
+                    if count > 0 {
+                        return Ok(count);
                     }
                     break;
                 }
