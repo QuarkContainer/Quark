@@ -31,12 +31,13 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use super::super::super::console::pty::*;
-use super::super::super::console::unix_socket::*;
+use super::super::super::console::unix_socket::UnixSocket;
 use super::super::super::namespace::*;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::config::DebugLevel;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::path::*;
+use super::super::super::qlib::unix_socket;
 use super::super::super::ucall::ucall::*;
 use super::super::super::ucall::usocket::*;
 use super::super::super::util::*;
@@ -156,7 +157,7 @@ impl SandboxProcess {
         return Ok(process);
     }
 
-    pub fn Run(&self, controlSock: i32) {
+    pub fn Run(&self, controlSock: i32, rdmaSvcCliSock: i32) {
         let id = &self.containerId;
         let sid = unsafe {
             //signal (SIGHUP, SIG_IGN);
@@ -179,6 +180,7 @@ impl SandboxProcess {
         args.Pivot = self.pivot;
         args.Rootfs = Join(QUARK_SANDBOX_ROOT_PATH, id.as_str());
         args.ControlSock = controlSock;
+        args.RDMASvcCliSock = rdmaSvcCliSock;
 
         let exitStatus = match VirtualMachine::Init(args) {
             Ok(mut vm) => {
@@ -579,10 +581,14 @@ impl SandboxProcess {
 
         let addr = ControlSocketAddr(&self.containerId);
         let controlSock = USocket::CreateServerSocket(&addr).expect("can't create control sock");
+        let mut rdmaSvcCliSock = 0;
+        if QUARK_CONFIG.lock().EnableRDMA {
+            rdmaSvcCliSock = unix_socket::UnixSocket::NewClient("/tmp/rdma_srv").unwrap();
+        }
         self.MakeSandboxRootDirectory()?;
         self.EnableNamespace()?;
 
-        self.Run(controlSock);
+        self.Run(controlSock, rdmaSvcCliSock);
         panic!("Child: should never reach here");
     }
 

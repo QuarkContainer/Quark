@@ -1,5 +1,5 @@
 [package]
-name = "rdma_srv"
+name = "rdma_cli"
 version = "0.1.0"
 authors = ["Yulin Sun <yulin.sun@quarksoft.io>"]
 edition = "2018"
@@ -64,10 +64,6 @@ overflow-checks = false
 lto = true
 codegen-units = 1
 debug-assertions = false
-
-[[bin]]
-name = "rdma_cli"
-path = "src/main_cli.rs"
 
 [[bin]]
 name = "rdma_ingress"

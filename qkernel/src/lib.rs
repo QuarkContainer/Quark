@@ -67,9 +67,9 @@ mod qlib;
 mod interrupt;
 pub mod backtracer;
 pub mod kernel_def;
+pub mod rdma_def;
 mod syscalls;
 
-use crate::qlib::kernel::GlobalIOMgr;
 use self::interrupt::virtualization_handler;
 use self::qlib::kernel::arch;
 use self::qlib::kernel::asm;
@@ -91,6 +91,7 @@ use self::qlib::kernel::version;
 use self::qlib::kernel::Kernel;
 use self::qlib::kernel::SignalDef;
 use self::qlib::kernel::TSC;
+use crate::qlib::kernel::GlobalIOMgr;
 
 use self::qlib::kernel::vcpu::*;
 use vcpu::CPU_LOCAL;
@@ -223,7 +224,7 @@ pub extern "C" fn syscall_handler(
     arg4: u64,
     arg5: u64,
 ) -> ! {
-    //PerfGofrom(PerfType::User);
+    CPULocal::Myself().SetMode(VcpuMode::Kernel);
 
     let currTask = task::Task::Current();
     currTask.PerfGofrom(PerfType::User);
@@ -334,9 +335,9 @@ pub extern "C" fn syscall_handler(
     if SHARESPACE.config.read().KernelPagetable {
         currTask.SwitchPageTable();
     }
-
-    CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
     currTask.mm.HandleTlbShootdown();
+    CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
+    CPULocal::Myself().SetMode(VcpuMode::User);
     if !(pt.rip == pt.rcx && pt.r11 == pt.eflags) {
         //error!("iret *****, pt is {:x?}", pt);
         IRet(kernalRsp)

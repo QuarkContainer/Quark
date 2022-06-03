@@ -17,16 +17,18 @@ use alloc::slice;
 use core::mem::size_of;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
+use crossbeam::sync::WaitGroup;
 use kvm_bindings::*;
 use kvm_ioctls::VcpuExit;
 use libc::*;
+use nix::sys::signal;
 use std::os::unix::io::AsRawFd;
 
 use super::syncmgr::*;
 use super::*;
 //use super::kvm_ctl::*;
 use super::qlib::common::*;
-use super::qlib::kernel::stack::*;
+//use super::qlib::kernel::stack::*;
 use super::qlib::linux::time::Timespec;
 use super::qlib::linux_def::*;
 use super::qlib::pagetable::*;
@@ -43,6 +45,7 @@ use super::runc::runtime::vm::*;
 use super::URING_MGR;
 use crate::qlib::cpuid::XSAVEFeature::{XSAVEFeatureBNDCSR, XSAVEFeatureBNDREGS};
 use crate::qlib::kernel::asm::xgetbv;
+use std::sync::atomic::fence;
 
 #[repr(C)]
 pub struct SignalMaskStruct {
@@ -116,6 +119,13 @@ impl RefMgr for HostPageAllocator {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Copy)]
+#[repr(u64)]
+pub enum KVMVcpuState {
+    HOST,
+    GUEST,
+}
+
 pub struct KVMVcpu {
     pub id: usize,
     pub cordId: usize,
@@ -138,6 +148,7 @@ pub struct KVMVcpu {
     pub shareSpaceAddr: u64,
 
     pub autoStart: bool,
+    pub interrupting: Mutex<(bool, Vec<WaitGroup>)>,
     //the pipe id to notify io_mgr
 }
 
@@ -200,7 +211,7 @@ impl KVMVcpu {
             cordId: vcpuCoreId,
             threadid: AtomicU64::new(0),
             tgid: AtomicU64::new(0),
-            state: AtomicU64::new(0),
+            state: AtomicU64::new(KVMVcpuState::HOST as u64),
             vcpuCnt,
             vcpu,
             topStackAddr: topStackAddr,
@@ -212,6 +223,7 @@ impl KVMVcpu {
             heapStartAddr: pageAllocatorBaseAddr,
             shareSpaceAddr: shareSpaceAddr,
             autoStart: autoStart,
+            interrupting: Mutex::new((false, Vec::new())),
         });
     }
 
@@ -329,11 +341,7 @@ impl KVMVcpu {
         SHARE_SPACE.scheduler.ScheduleQ(taskId, taskId.Queue());
     }
 
-    pub fn Signal(&self, signal: i32) -> bool {
-        if self.state.load(Ordering::Relaxed) == 2 {
-            return false;
-        }
-
+    pub fn Signal(&self, signal: i32) {
         loop {
             let ret = vmspace::VMSpace::TgKill(
                 self.tgid.load(Ordering::Relaxed) as i32,
@@ -354,8 +362,6 @@ impl KVMVcpu {
                 panic!("vcpu tgkill fail with error {}", errno);
             }
         }
-
-        return true;
     }
 
     pub const KVM_SET_SIGNAL_MASK: u64 = 0x4004ae8b;
@@ -408,14 +414,11 @@ impl KVMVcpu {
     }
 
     pub fn run(&self, tgid: i32) -> Result<()> {
+        SetExitSignal();
         self.setup_long_mode()?;
         let tid = unsafe { gettid() };
         self.threadid.store(tid as u64, Ordering::SeqCst);
         self.tgid.store(tgid as u64, Ordering::SeqCst);
-
-        if self.id != 0 {
-            //self.SignalMask();
-        }
 
         let regs: kvm_regs = kvm_regs {
             rflags: KERNEL_FLAGS_SET,
@@ -461,12 +464,19 @@ impl KVMVcpu {
                 return Ok(());
             }
 
-            self.state.store(1, Ordering::SeqCst);
+            self.state
+                .store(KVMVcpuState::GUEST as u64, Ordering::Release);
+            fence(Ordering::Acquire);
             let kvmRet = match self.vcpu.run() {
                 Ok(ret) => ret,
                 Err(e) => {
                     if e.errno() == SysErr::EINTR {
-                        VcpuExit::Intr
+                        self.vcpu.set_kvm_immediate_exit(0);
+                        if self.vcpu.get_ready_for_interrupt_injection() > 0 {
+                            VcpuExit::IrqWindowOpen
+                        } else {
+                            VcpuExit::Intr
+                        }
                     } else {
                         let regs = self
                             .vcpu
@@ -477,7 +487,8 @@ impl KVMVcpu {
                     }
                 }
             };
-            self.state.store(2, Ordering::SeqCst);
+            self.state
+                .store(KVMVcpuState::HOST as u64, Ordering::Release);
 
             match kvmRet {
                 VcpuExit::IoIn(addr, data) => {
@@ -804,70 +815,96 @@ impl KVMVcpu {
                 }
                 VcpuExit::IrqWindowOpen => {
                     //info!("get VcpuExit::IrqWindowOpen");
-                    self.InterruptGuest();
-                    //self.vcpu.set_kvm_request_interrupt_window(0);
-                }
-                VcpuExit::Intr => {
-                    //self.vcpu.set_kvm_request_interrupt_window(1);
-                    SHARE_SPACE.MaskTlbShootdown(self.id as _);
-
-                    let mut regs = self
-                        .vcpu
-                        .get_regs()
-                        .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                    let mut sregs = self
+                    let sregs = self
                         .vcpu
                         .get_sregs()
                         .map_err(|e| Error::IOError(format!("vcpu::error is {:?}", e)))?;
-
                     let ss = sregs.ss.selector as u64;
-                    let rsp = regs.rsp;
-                    let rflags = regs.rflags;
-                    let cs = sregs.cs.selector as u64;
-                    let rip = regs.rip;
-                    let isUser = (ss & 0x3) != 0;
-
-                    let stackTop = if isUser {
-                        self.tssIntStackStart + MemoryDef::PAGE_SIZE - 16
+                    // ignore the signal if it is in kernel mode
+                    if (ss & 0x3) != 0 {
+                        self.InterruptGuest();
+                    }
+                    self.vcpu.set_kvm_request_interrupt_window(0);
+                    fence(Ordering::Release);
+                    let mut interrupting = self.interrupting.lock();
+                    interrupting.1.clear();
+                    interrupting.0 = false;
+                }
+                VcpuExit::Intr => {
+                    let sregs = self
+                        .vcpu
+                        .get_sregs()
+                        .map_err(|e| Error::IOError(format!("vcpu::error is {:?}", e)))?;
+                    let ss = sregs.ss.selector as u64;
+                    // ignore the signal if it is in kernel mode
+                    if (ss & 0x3) != 0 {
+                        self.vcpu.set_kvm_request_interrupt_window(1);
+                        fence(Ordering::Release);
                     } else {
-                        continue;
-                    };
+                        let mut interrupting = self.interrupting.lock();
+                        interrupting.1.clear();
+                        interrupting.0 = false;
+                    }
 
-                    let mut stack = KernelStack::New(stackTop);
-                    stack.PushU64(ss);
-                    stack.PushU64(rsp);
-                    stack.PushU64(rflags);
-                    stack.PushU64(cs);
-                    stack.PushU64(rip);
-
-                    regs.rsp = stack.sp;
-                    regs.rip = SHARE_SPACE.VirtualizationHandlerAddr();
-                    regs.rflags = 0x2;
-
-                    sregs.ss.selector = 0x10;
-                    sregs.ss.dpl = 0;
-                    sregs.cs.selector = 0x8;
-                    sregs.cs.dpl = 0;
-
-                    /*error!("VcpuExit::Intr ss is {:x}/{:x}/{:x}/{:x}/{:x}/{}/{:x}/{:#x?}/{:#x?}",
-                        //self.vcpu.get_ready_for_interrupt_injection(),
-                        ss,
-                        rsp,
-                        rflags,
-                        cs,
-                        rip,
-                        isUser,
-                        stackTop,
-                        &sregs.ss,
-                        &sregs.cs,
-                    );*/
-
-                    self.vcpu
-                        .set_regs(&regs)
-                        .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                    self.vcpu
-                        .set_sregs(&sregs)
-                        .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                    //     SHARE_SPACE.MaskTlbShootdown(self.id as _);
+                    //
+                    //     let mut regs = self
+                    //         .vcpu
+                    //         .get_regs()
+                    //         .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                    //     let mut sregs = self
+                    //         .vcpu
+                    //         .get_sregs()
+                    //         .map_err(|e| Error::IOError(format!("vcpu::error is {:?}", e)))?;
+                    //
+                    //     let ss = sregs.ss.selector as u64;
+                    //     let rsp = regs.rsp;
+                    //     let rflags = regs.rflags;
+                    //     let cs = sregs.cs.selector as u64;
+                    //     let rip = regs.rip;
+                    //     let isUser = (ss & 0x3) != 0;
+                    //
+                    //     let stackTop = if isUser {
+                    //         self.tssIntStackStart + MemoryDef::PAGE_SIZE - 16
+                    //     } else {
+                    //         continue;
+                    //     };
+                    //
+                    //     let mut stack = KernelStack::New(stackTop);
+                    //     stack.PushU64(ss);
+                    //     stack.PushU64(rsp);
+                    //     stack.PushU64(rflags);
+                    //     stack.PushU64(cs);
+                    //     stack.PushU64(rip);
+                    //
+                    //     regs.rsp = stack.sp;
+                    //     regs.rip = SHARE_SPACE.VirtualizationHandlerAddr();
+                    //     regs.rflags = 0x2;
+                    //
+                    //     sregs.ss.selector = 0x10;
+                    //     sregs.ss.dpl = 0;
+                    //     sregs.cs.selector = 0x8;
+                    //     sregs.cs.dpl = 0;
+                    //
+                    //     /*error!("VcpuExit::Intr ss is {:x}/{:x}/{:x}/{:x}/{:x}/{}/{:x}/{:#x?}/{:#x?}",
+                    //         //self.vcpu.get_ready_for_interrupt_injection(),
+                    //         ss,
+                    //         rsp,
+                    //         rflags,
+                    //         cs,
+                    //         rip,
+                    //         isUser,
+                    //         stackTop,
+                    //         &sregs.ss,
+                    //         &sregs.cs,
+                    //     );*/
+                    //
+                    //     self.vcpu
+                    //         .set_regs(&regs)
+                    //         .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                    //     self.vcpu
+                    //         .set_sregs(&sregs)
+                    //         .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                 }
                 r => {
                     let vcpu_sregs = self
@@ -971,6 +1008,17 @@ impl KVMVcpu {
             .set_xcrs(&xcrs_args)
             .map_err(|e| Error::IOError(format!("failed to set kvm xcr0, {}", e)))?;
         Ok(())
+    }
+
+    pub fn interrupt(&self, waitGroup: Option<WaitGroup>) {
+        let mut interrupting = self.interrupting.lock();
+        if let Some(wg) = waitGroup {
+            interrupting.1.push(wg);
+        }
+        if !interrupting.0 {
+            interrupting.0 = true;
+            self.Signal(Signal::SIGCHLD);
+        }
     }
 }
 
@@ -1170,5 +1218,36 @@ impl CPULocal {
         }
 
         return Err(Error::Exit);
+    }
+}
+
+// SetVmExitSigAction set SIGCHLD as the vm exit signal,
+// the signal handler will set_kvm_immediate_exit to 1,
+// which will force the vcpu running exit with Intr.
+pub fn SetExitSignal() {
+    let sig_action = signal::SigAction::new(
+        signal::SigHandler::Handler(handleSigChild),
+        signal::SaFlags::empty(),
+        signal::SigSet::empty(),
+    );
+
+    unsafe {
+        signal::sigaction(signal::Signal::SIGCHLD, &sig_action).expect("sigaction set fail");
+        let mut sigset = signal::SigSet::empty();
+        signal::pthread_sigmask(signal::SigmaskHow::SIG_BLOCK, None, Some(&mut sigset))
+            .expect("sigmask set fail");
+        sigset.remove(signal::Signal::SIGCHLD);
+        signal::pthread_sigmask(signal::SigmaskHow::SIG_SETMASK, Some(&sigset), None)
+            .expect("sigmask set fail");
+    }
+}
+
+extern "C" fn handleSigChild(signal: i32) {
+    if signal == Signal::SIGCHLD {
+        // used for tlb shootdown
+        if let Some(vcpu) = LocalVcpu() {
+            vcpu.vcpu.set_kvm_immediate_exit(1);
+            fence(Ordering::Release);
+        }
     }
 }

@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::sync::atomic::AtomicI64;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
+use core::sync::atomic::{AtomicI64, AtomicU8};
 use spin::Mutex;
 
 use super::mem::list_allocator::*;
@@ -26,6 +26,13 @@ pub enum VcpuState {
     Searching,
     Waiting,
     Running,
+}
+
+#[derive(Clone, Debug, PartialEq, Copy)]
+#[repr(u8)]
+pub enum VcpuMode {
+    Kernel,
+    User,
 }
 
 #[derive(Debug, Default)]
@@ -51,6 +58,7 @@ pub struct CPULocal {
     // it is the time to enter guest ring3. If it is in ring0, the vale will be zero
     pub enterAppTimestamp: AtomicI64,
     pub interruptMask: AtomicU64,
+    pub mode: AtomicU8,
 }
 
 impl CPULocal {
@@ -112,6 +120,15 @@ impl CPULocal {
 
     pub fn EnterAppTimestamp(&self) -> i64 {
         return self.enterAppTimestamp.load(Ordering::Relaxed);
+    }
+
+    pub fn SetMode(&self, mode: VcpuMode) {
+        return self.mode.store(mode as u8, Ordering::Release);
+    }
+
+    pub fn GetMode(&self) -> VcpuMode {
+        let mode = self.mode.load(Ordering::Acquire);
+        return unsafe { core::mem::transmute(mode) };
     }
 
     pub fn ResetInterruptMask(&self) -> u64 {

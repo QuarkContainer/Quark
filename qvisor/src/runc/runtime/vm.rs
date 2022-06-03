@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use kvm_ioctls::{Kvm, VmFd};
+use kvm_ioctls::{Cap, Kvm, VmFd};
 //use kvm_bindings::{kvm_userspace_memory_region, KVM_CAP_X86_DISABLE_EXITS, kvm_enable_cap, KVM_X86_DISABLE_EXITS_HLT, KVM_X86_DISABLE_EXITS_MWAIT};
 use alloc::sync::Arc;
 use core::sync::atomic::AtomicI32;
@@ -50,7 +50,7 @@ use super::super::super::SHARE_SPACE;
 use super::super::super::SHARE_SPACE_STRUCT;
 use super::super::super::{
     ThreadId, KERNEL_IO_THREAD, PMA_KEEPER, QUARK_CONFIG, ROOT_CONTAINER_ID, THREAD_ID, URING_MGR,
-    VMS,
+    VCPU, VMS,
 };
 
 lazy_static! {
@@ -153,8 +153,12 @@ impl VirtualMachine {
     #[cfg(not(debug_assertions))]
     pub const KERNEL_IMAGE: &'static str = "/usr/local/bin/qkernel.bin";
 
-    pub fn InitShareSpace(vmfd: &VmFd, cpuCount: usize, controlSock: i32) {
-        SHARE_SPACE_STRUCT.lock().Init(cpuCount, controlSock);
+    pub fn InitShareSpace(vmfd: &VmFd, cpuCount: usize, controlSock: i32, rdmaSvcCliSock: i32) {
+        SHARE_SPACE_STRUCT
+            .lock()
+            .Init(cpuCount, controlSock, rdmaSvcCliSock);
+
+        error!("VM::InitShareSpace, after call init 1");
         let spAddr = &(*SHARE_SPACE_STRUCT.lock()) as *const _ as u64;
         SHARE_SPACE.SetValue(spAddr);
         SHARESPACE.SetValue(spAddr);
@@ -208,6 +212,7 @@ impl VirtualMachine {
         let syncPrint = sharespace.config.read().SyncPrint();
         super::super::super::print::SetSharespace(sharespace);
         super::super::super::print::SetSyncPrint(syncPrint);
+        error!("VM::InitShareSpace, after call init 2");
     }
 
     pub fn Init(args: Args /*args: &Args, kvmfd: i32*/) -> Result<Self> {
@@ -235,6 +240,7 @@ impl VirtualMachine {
         VMS.lock().RandomVcpuMapping();
         let kernelMemRegionSize = QUARK_CONFIG.lock().KernelMemSize;
         let controlSock = args.ControlSock;
+        let rdmaSvcCliSock = args.RDMASvcCliSock;
 
         let umask = Self::Umask();
         info!(
@@ -256,6 +262,9 @@ impl VirtualMachine {
         cap.cap = KVM_CAP_X86_DISABLE_EXITS;
         cap.args[0] = (KVM_X86_DISABLE_EXITS_HLT | KVM_X86_DISABLE_EXITS_MWAIT) as u64;
         vm_fd.enable_cap(&cap).unwrap();
+        if !kvm.check_extension(Cap::ImmediateExit) {
+            panic!("KVM_CAP_IMMEDIATE_EXIT not supported");
+        }
 
         let mut elf = KernelELF::New()?;
         Self::SetMemRegion(
@@ -270,7 +279,8 @@ impl VirtualMachine {
 
         PMA_KEEPER.Init(
             MemoryDef::FILE_MAP_OFFSET,
-            MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB - MemoryDef::FILE_MAP_OFFSET
+            MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB
+                - MemoryDef::FILE_MAP_OFFSET,
         );
 
         info!(
@@ -317,7 +327,7 @@ impl VirtualMachine {
             vms.args = Some(args);
         }
 
-        Self::InitShareSpace(&vm_fd, cpuCount, controlSock);
+        Self::InitShareSpace(&vm_fd, cpuCount, controlSock, rdmaSvcCliSock);
 
         info!("before loadKernel");
 
@@ -351,7 +361,6 @@ impl VirtualMachine {
                 SHARE_SPACE.Value(),
                 autoStart,
             )?);
-
             // enable cpuid in host
             vcpu.vcpu.set_cpuid2(&kvm_cpuid).unwrap();
             VMS.lock().vcpus.push(vcpu.clone());
@@ -374,13 +383,15 @@ impl VirtualMachine {
 
         let mut threads = Vec::new();
         let tgid = unsafe { libc::gettid() };
-
         threads.push(
             thread::Builder::new()
                 .name("0".to_string())
                 .spawn(move || {
                     THREAD_ID.with(|f| {
                         *f.borrow_mut() = 0;
+                    });
+                    VCPU.with(|f| {
+                        *f.borrow_mut() = Some(cpu.clone());
                     });
                     cpu.run(tgid).expect("vcpu run fail");
                     info!("cpu#{} finish", 0);
@@ -399,6 +410,9 @@ impl VirtualMachine {
                     .spawn(move || {
                         THREAD_ID.with(|f| {
                             *f.borrow_mut() = i as i32;
+                        });
+                        VCPU.with(|f| {
+                            *f.borrow_mut() = Some(cpu.clone());
                         });
                         info!("cpu#{} start", ThreadId());
                         cpu.run(tgid).expect("vcpu run fail");

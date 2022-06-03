@@ -147,7 +147,7 @@ pub fn StartInNS(subProcess: &mut SandboxProcess, nss: &[LinuxNamespace]) -> Res
     }
 
     error!("should not reach here, need control sock");
-    subProcess.Run(0);
+    subProcess.Run(0, -1);
 
     return Ok(());
 }

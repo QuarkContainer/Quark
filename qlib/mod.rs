@@ -33,6 +33,7 @@ pub mod cpuid;
 pub mod cstring;
 pub mod device;
 pub mod eventchannel;
+pub mod fileinfo;
 pub mod limits;
 pub mod linux;
 pub mod loader;
@@ -52,12 +53,14 @@ pub mod sort_arr;
 pub mod task_mgr;
 pub mod uring;
 pub mod usage;
-pub mod fileinfo;
 
 pub mod kernel;
 pub mod rdma_share;
 pub mod ringbuf;
 pub mod vcpu_mgr;
+
+pub mod rdma_svc_cli;
+pub mod unix_socket;
 
 use self::mutex::*;
 use alloc::vec::Vec;
@@ -71,6 +74,7 @@ use core::sync::atomic::Ordering;
 use self::bytestream::*;
 use self::config::*;
 use self::control_msg::SignalArgs;
+use self::fileinfo::*;
 use self::kernel::kernel::futex::*;
 use self::kernel::kernel::kernel::Kernel;
 use self::kernel::kernel::timer::timekeeper::*;
@@ -80,10 +84,10 @@ use self::kernel::quring::uring_mgr::QUring;
 use self::linux_def::*;
 use self::object_ref::ObjectRef;
 use self::qmsg::*;
+use self::rdma_svc_cli::*;
 use self::ringbuf::*;
 use self::task_mgr::*;
 use super::asm::*;
-use self::fileinfo::*;
 
 pub fn InitSingleton() {
     unsafe {
@@ -664,6 +668,7 @@ pub struct ShareSpace {
     pub pageMgr: CachePadded<PageMgr>,
     pub ioMgr: CachePadded<IOMgr>,
     pub config: QRwLock<Config>,
+    pub rdmaSvcCli: CachePadded<RDMASvcClient>,
 
     pub logBuf: QMutex<Option<ByteStream>>,
     pub logLock: QMutex<()>,
@@ -677,9 +682,9 @@ pub struct ShareSpace {
     pub values: Vec<[AtomicU64; 2]>,
     pub tlbShootdownLock: QMutex<()>,
     pub tlbShootdownMask: AtomicU64,
-
     pub uid: AtomicU64,
     pub inotifyCookie: AtomicU32,
+    pub waitMask: AtomicU64,
 }
 
 impl ShareSpace {
@@ -704,12 +709,21 @@ impl ShareSpace {
             .fetch_or(1 << vcpuId, Ordering::Release);
     }
 
+    pub fn UnmaskTlbShootdown(&self, vcpuId: u64) {
+        self.tlbShootdownMask
+            .fetch_and(!(1 << vcpuId), Ordering::Release);
+    }
+
     pub fn TlbShootdownMask(&self) -> u64 {
         return self.tlbShootdownMask.load(Ordering::Acquire);
     }
 
     pub fn ClearTlbShootdownMask(&self) {
         self.tlbShootdownMask.store(0, Ordering::Release);
+    }
+
+    pub fn SetTlbShootdownMask(&self, mask: u64) {
+        self.tlbShootdownMask.store(mask, Ordering::Release);
     }
 
     pub fn SetIOUringsAddr(&self, addr: u64) {

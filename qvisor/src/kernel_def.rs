@@ -1,5 +1,7 @@
+use cache_padded::CachePadded;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
+use crossbeam::sync::WaitGroup;
 use libc::*;
 use std::fmt;
 
@@ -16,6 +18,7 @@ use super::qlib::loader::*;
 use super::qlib::mutex::*;
 use super::qlib::perf_tunning::*;
 use super::qlib::qmsg::*;
+use super::qlib::rdma_svc_cli::*;
 use super::qlib::task_mgr::*;
 use super::qlib::vcpu_mgr::*;
 use super::qlib::*;
@@ -25,6 +28,8 @@ use super::FD_NOTIFIER;
 use super::QUARK_CONFIG;
 use super::URING_MGR;
 use super::VMS;
+use crate::kvm_vcpu::KVMVcpuState;
+use crate::SHARE_SPACE;
 
 impl std::error::Error for Error {}
 
@@ -93,11 +98,19 @@ impl<'a> ShareSpace {
 }
 
 impl ShareSpace {
-    pub fn Init(&mut self, vcpuCount: usize, controlSock: i32) {
+    pub fn Init(&mut self, vcpuCount: usize, controlSock: i32, rdmaSvcCliSock: i32) {
         *self.config.write() = *QUARK_CONFIG.lock();
         let mut values = Vec::with_capacity(vcpuCount);
         for _i in 0..vcpuCount {
             values.push([AtomicU64::new(0), AtomicU64::new(0)])
+        }
+
+        if self.config.read().EnableRDMA {
+            self.rdmaSvcCli = CachePadded::new(RDMASvcClient::initialize(
+                rdmaSvcCliSock,
+                MemoryDef::RDMA_LOCAL_SHARE_OFFSET,
+                MemoryDef::RDMA_GLOBAL_SHARE_OFFSET,
+            ));
         }
 
         let SyncLog = self.config.read().SyncPrint();
@@ -117,33 +130,21 @@ impl ShareSpace {
         super::vmspace::VMSpace::BlockFd(controlSock);
     }
 
-    pub fn TlbShootdown(&self, vcpuMask: u64) -> i64 {
-        let _l = self.tlbShootdownLock.lock();
-
-        self.ClearTlbShootdownMask();
-        let mask = VMS.lock().TlbShootdown(vcpuMask);
-
-        let mut last = TSC.Rdtsc();
-        for _ in 0..200 {
-            loop {
-                Self::Yield();
-                if mask & !self.TlbShootdownMask() == 0 {
-                    return mask as _;
-                }
-                if Tsc::Scale(TSC.Rdtsc() - last) * 1000 > CLOCK_TICK {
-                    last = TSC.Rdtsc();
-                    break;
-                }
+    pub fn TlbShootdown(&self, vcpuMask: u64) -> u64 {
+        let wg = WaitGroup::new();
+        let vcpu_len = self.scheduler.VcpuArr.len();
+        for i in 1..vcpu_len {
+            let cpu = VMS.lock().vcpus[i].clone();
+            if ((1 << i) & vcpuMask != 0)
+                && SHARE_SPACE.scheduler.VcpuArr[i].GetMode() == VcpuMode::User
+                && cpu.state.load(Ordering::Acquire) == (KVMVcpuState::GUEST as u64)
+            {
+                SHARE_SPACE.scheduler.VcpuArr[i].InterruptTlbShootdown();
+                cpu.interrupt(Some(wg.clone()))
             }
-
-            VMS.lock().TlbShootdown(mask & !self.TlbShootdownMask());
         }
-
-        error!(
-            "TlbShootdown waiting for {:b} timeout",
-            mask & !self.TlbShootdownMask()
-        );
-        return mask as _;
+        wg.wait();
+        return 0;
     }
 
     pub fn Yield() {
@@ -169,9 +170,8 @@ impl ShareSpace {
                     .SetEnterAppTimestamp(enterAppTimestamp + CLOCK_TICK / 5000);
                 self.scheduler.VcpuArr[i].InterruptThreadTimeout();
                 //error!("CheckVcpuTimeout {}/{}/{}/{}", i, enterAppTimestamp, now, Tsc::Scale(now - enterAppTimestamp));
-
-                // todo: enable this for preempty schedule
-                VMS.lock().vcpus[i].Signal(Signal::SIGCHLD);
+                let vcpu = VMS.lock().vcpus[i].clone();
+                vcpu.interrupt(None);
             }
         }
     }

@@ -50,6 +50,8 @@ use super::metadata::*;
 use super::syscalls::*;
 use super::vma::*;
 use super::*;
+use crate::qlib::kernel::SHARESPACE;
+use crate::qlib::vcpu_mgr::VcpuMode;
 
 pub struct MMMapping {
     pub vmas: AreaSet<VMA>,
@@ -290,6 +292,12 @@ impl MemoryManager {
             .fetch_or(1 << vcpuId, Ordering::Release);
     }
 
+    pub fn UnmaskTlbShootdown(&self, vcpuId: u64) -> u64 {
+        return self
+            .tlbShootdownMask
+            .fetch_and(!(1 << vcpuId), Ordering::Release);
+    }
+
     pub fn TlbShootdownMask(&self) -> u64 {
         return self.tlbShootdownMask.load(Ordering::Acquire);
     }
@@ -307,11 +315,19 @@ impl MemoryManager {
         if self.pagetable.read().pt.TlbShootdown() {
             let mask = self.GetVcpuMapping();
             if mask > 0 {
-                self.ClearTlbShootdownMask();
-                // no need to flush tlb for the vcpu itself,
-                // as it already flushed the specific entry when pagetable changed.
-                self.MaskTlbShootdown(CPULocal::CpuId() as u64);
-                HostSpace::TlbShootdown(mask) as u64;
+                self.tlbShootdownMask.fetch_or(mask, Ordering::Release);
+                let mut interrupt_mask = 0u64;
+                let vcpu_len = SHARESPACE.scheduler.VcpuArr.len();
+                for i in 0..vcpu_len {
+                    if (1 << i) & mask != 0 {
+                        if SHARESPACE.scheduler.VcpuArr[i].GetMode() == VcpuMode::User {
+                            interrupt_mask = interrupt_mask | (1 << i);
+                        }
+                    }
+                }
+                if interrupt_mask != 0 {
+                    HostSpace::TlbShootdown(interrupt_mask);
+                }
             }
 
             CPULocal::Myself().pageAllocator.lock().Clean();
@@ -460,11 +476,10 @@ impl MemoryManager {
     // SHOULD be called before return to user space,
     // to make sure the tlb flushed
     pub fn HandleTlbShootdown(&self) {
-        let vcpId = CPULocal::CpuId() as u64;
-        if self.TlbShootdownMask() & (1 << vcpId) == 0 {
+        let vcpuId = CPULocal::CpuId() as u64;
+        if self.UnmaskTlbShootdown(vcpuId) & (1 << vcpuId) != 0 {
             let curr = super::super::super::super::asm::CurrentCr3();
             PageTables::Switch(curr);
-            self.MaskTlbShootdown(vcpId);
         }
     }
 
