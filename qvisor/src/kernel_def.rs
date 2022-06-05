@@ -123,7 +123,7 @@ impl ShareSpace {
         self.values = values;
 
         self.scheduler.Init();
-        self.SetLogfd(super::print::LOG.lock().Logfd());
+        self.SetLogfd(super::print::LOG.Logfd());
         self.hostEpollfd
             .store(FD_NOTIFIER.Epollfd(), Ordering::SeqCst);
         self.controlSock = controlSock;
@@ -167,7 +167,7 @@ impl ShareSpace {
 
                 // retry to send signal for each 2 ms
                 self.scheduler.VcpuArr[i]
-                    .SetEnterAppTimestamp(enterAppTimestamp + CLOCK_TICK / 5000);
+                    .SetEnterAppTimestamp(enterAppTimestamp + CLOCK_TICK / 5);
                 self.scheduler.VcpuArr[i].InterruptThreadTimeout();
                 //error!("CheckVcpuTimeout {}/{}/{}/{}", i, enterAppTimestamp, now, Tsc::Scale(now - enterAppTimestamp));
                 let vcpu = VMS.lock().vcpus[i].clone();

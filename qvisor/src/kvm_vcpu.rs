@@ -577,7 +577,7 @@ impl KVMVcpu {
                                 .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                             let exitCode = regs.rbx as i32;
 
-                            super::print::LOG.lock().Clear();
+                            super::print::LOG.Clear();
                             PerfPrint();
 
                             SetExitStatus(exitCode);
