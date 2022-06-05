@@ -15,38 +15,42 @@
 use alloc::string::String;
 use chrono::prelude::*;
 use lazy_static::lazy_static;
-use spin::Mutex;
-use std::fs::File;
 use std::fs::OpenOptions;
-use std::io::Write;
-use std::os::unix::io::AsRawFd;
+use std::os::unix::io::IntoRawFd;
+use core::sync::atomic::AtomicBool;
+use core::sync::atomic::AtomicI32;
+use core::sync::atomic::Ordering;
 
 use super::qlib::kernel::Timestamp;
 use super::qlib::kernel::IOURING;
-use super::qlib::ShareSpace;
+use super::qlib::kernel::SHARESPACE;
 use super::ThreadId;
 
 lazy_static! {
-    pub static ref LOG: Mutex<Log> = Mutex::new(Log::New());
+    pub static ref LOG: Log = Log::New();
 }
 
 pub struct Log {
-    pub file: File,
-    pub syncPrint: bool,
-    pub shareSpace: &'static ShareSpace,
+    pub fd: AtomicI32,
+    pub syncPrint: AtomicBool,
 }
 
 pub fn SetSyncPrint(syncPrint: bool) {
-    LOG.lock().SetSyncPrint(syncPrint);
-}
-
-pub fn SetSharespace(sharespace: &'static ShareSpace) {
-    LOG.lock().shareSpace = sharespace;
+    LOG.SetSyncPrint(syncPrint);
 }
 
 pub const LOG_FILE_DEFAULT: &str = "/var/log/quark/quark.log";
 pub const LOG_FILE_FORMAT: &str = "/var/log/quark/{}.log";
 pub const TIME_FORMAT: &str = "%H:%M:%S%.3f";
+
+impl Drop for Log {
+    fn drop(&mut self) {
+        unsafe {
+            libc::close(self.Logfd());
+        }
+    }
+}
+
 impl Log {
     pub fn New() -> Self {
         let file = OpenOptions::new()
@@ -55,44 +59,48 @@ impl Log {
             .open(LOG_FILE_DEFAULT)
             .expect("Log Open fail");
         return Self {
-            file: file,
-            syncPrint: true,
-            shareSpace: unsafe { &mut *(0 as *mut ShareSpace) },
+            fd: AtomicI32::new(file.into_raw_fd()),
+            syncPrint: AtomicBool::new(true),
         };
     }
 
-    pub fn Reset(&mut self, name: &str) {
+    pub fn Reset(&self, name: &str) {
         let filename = format!("/var/log/quark/{}.log", name);
         let file = OpenOptions::new()
             .create(true)
             .append(true)
             .open(filename)
             .expect("Log Open fail");
-        self.file = file;
-    }
 
-    pub fn SetSharespace(&mut self, sharespace: &'static ShareSpace) {
-        self.shareSpace = sharespace;
+        unsafe {
+            libc::close(self.Logfd());
+        }
+
+        self.fd.store(file.into_raw_fd(), Ordering::SeqCst);
     }
 
     pub fn Logfd(&self) -> i32 {
-        return self.file.as_raw_fd();
+        return self.fd.load(Ordering::Relaxed);
     }
 
-    pub fn SetSyncPrint(&mut self, syncPrint: bool) {
-        self.syncPrint = syncPrint;
+    pub fn SyncPrint(&self) -> bool {
+        return self.syncPrint.load(Ordering::Relaxed);
     }
 
-    pub fn RawWrite(&mut self, str: &str) {
-        self.WriteBytes(str.as_bytes());
+    pub fn SetSyncPrint(&self, syncPrint: bool) {
+        self.syncPrint.store(syncPrint, Ordering::SeqCst);
     }
 
-    pub fn Write(&mut self, str: &str) {
-        if self.syncPrint {
-            self.RawWrite(str);
+    pub fn RawWrite(&self, str: &str) {
+        self.WriteAll(str.as_bytes());
+    }
+
+    pub fn Write(&self, str: &str) {
+        if self.SyncPrint() {
+            self.WriteAll(str.as_bytes());
         } else {
-            let trigger = self.shareSpace.Log(str.as_bytes());
-            if trigger && self.shareSpace.config.read().Async() {
+            let trigger = SHARESPACE.Log(str.as_bytes());
+            if trigger && SHARESPACE.config.read().Async() {
                 //self.shareSpace.AQHostInputCall(&HostInputMsg::LogFlush);
                 IOURING.LogFlush();
             }
@@ -100,32 +108,48 @@ impl Log {
     }
 
     pub fn Flush(&self, partial: bool) {
-        self.shareSpace.LogFlush(partial);
+        SHARESPACE.LogFlush(partial);
     }
 
-    pub fn WriteBytes(&mut self, buf: &[u8]) {
-        self.file.write_all(buf).expect("log write fail");
+    fn write(&self, buf: &[u8]) -> i32 {
+        let ret = unsafe {
+            libc::write(self.Logfd(), &buf[0] as * const _ as u64 as * const _, buf.len() as _)
+        };
+
+        if ret < 0 {
+            panic!("log write fail ...")
+        }
+
+        return ret as i32;
+    }
+
+    pub fn WriteAll(&self, buf: &[u8]) {
+        let mut count = 0;
+        while count < buf.len() {
+            let n = self.write(&buf[count..]);
+            count += n as usize;
+        }
     }
 
     pub fn Now() -> String {
         return Local::now().format(TIME_FORMAT).to_string();
     }
 
-    pub fn Print(&mut self, level: &str, str: &str) {
+    pub fn Print(&self, level: &str, str: &str) {
         let now = Timestamp();
         //let now = RawTimestamp();
         self.Write(&format!("[{}] [{}/{}] {}\n", level, ThreadId(), now, str));
     }
 
-    pub fn RawPrint(&mut self, level: &str, str: &str) {
+    pub fn RawPrint(&self, level: &str, str: &str) {
         //self.Write(&format!("{} [{}] {}\n", Self::Now(), level, str));
         self.RawWrite(&format!("[{}] {}\n", level, str));
     }
 
-    pub fn Clear(&mut self) {
-        if !self.syncPrint {
-            self.shareSpace.LogFlush(false);
-            self.syncPrint = true;
+    pub fn Clear(&self) {
+        if !self.SyncPrint() {
+            SHARESPACE.LogFlush(false);
+            self.SetSyncPrint(true);
         }
     }
 }
@@ -142,7 +166,7 @@ macro_rules! raw {
 macro_rules! log {
     ($($arg:tt)*) => ({
         let s = &format!($($arg)*);
-        crate::print::LOG.lock().RawWrite(&format!("{}\n",&s));
+        crate::print::LOG.RawWrite(&format!("{}\n",&s));
     });
 }
 
@@ -150,7 +174,7 @@ macro_rules! log {
 macro_rules! print {
     ($($arg:tt)*) => ({
         let s = &format!($($arg)*);
-        crate::print::LOG.lock().RawPrint("Print", &s);
+        crate::print::LOG.RawPrint("Print", &s);
     });
 }
 
@@ -158,7 +182,7 @@ macro_rules! print {
 macro_rules! error {
     ($($arg:tt)*) => ({
         let s = &format!($($arg)*);
-        crate::print::LOG.lock().Print("ERROR", &s);
+        crate::print::LOG.Print("ERROR", &s);
     });
 }
 
@@ -166,7 +190,7 @@ macro_rules! error {
 macro_rules! info {
     ($($arg:tt)*) => ({
         let s = &format!($($arg)*);
-        crate::print::LOG.lock().Print("INFO", &s);
+        crate::print::LOG.Print("INFO", &s);
     });
 }
 
@@ -174,7 +198,7 @@ macro_rules! info {
 macro_rules! warn {
     ($($arg:tt)*) => ({
         let s = &format!($($arg)*);
-        crate::print::LOG.lock().Print("WARN", &s);
+        crate::print::LOG.Print("WARN", &s);
     });
 }
 
@@ -182,6 +206,6 @@ macro_rules! warn {
 macro_rules! debug {
     ($($arg:tt)*) => ({
         let s = &format!($($arg)*);
-        crate::print::LOG.lock().Print("DEBUG", &s);
+        crate::print::LOG.Print("DEBUG", &s);
     });
 }
