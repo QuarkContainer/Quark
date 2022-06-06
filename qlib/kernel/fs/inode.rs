@@ -215,8 +215,11 @@ pub struct LockCtx {
 pub struct InodeWeak (pub Weak<QMutex<InodeIntern>>);
 
 impl InodeWeak {
-    pub fn Upgrade(&self) -> Inode {
-        return Inode(self.0.upgrade().expect("InodeWeak upgrade fail"))
+    pub fn Upgrade(&self) -> Option<Inode> {
+        return match self.0.upgrade() {
+            None => None,
+            Some(n) => Some(Inode(n))
+        }
     }
 }
 

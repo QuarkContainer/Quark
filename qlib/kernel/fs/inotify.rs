@@ -459,7 +459,10 @@ impl Inotify {
         let ws = self.watches.lock();
         for (_, w) in &ws.watches {
             let inode = w.lock().target.Upgrade();
-            inode.Watches().Remove(w.Id());
+            match inode {
+                None => (),
+                Some(i) => i.Watches().Remove(w.Id())
+            }
         }
     }
 
@@ -570,9 +573,11 @@ impl Inotify {
             };
 
             let target = watch.lock().target.Upgrade();
-            watchId = watch.Id();
-            // Remove the watch from the watch target.
-            target.Watches().Remove(watchId);
+            if let Some(target) = target {
+                watchId = watch.Id();
+                // Remove the watch from the watch target.
+                target.Watches().Remove(watchId);
+            }
         }
 
         self.QueueEvent(Event::New(watch.lock().wd, "", InotifyEvent::IN_IGNORED, 0));
