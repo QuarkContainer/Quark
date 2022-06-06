@@ -361,19 +361,6 @@ impl Drop for File {
                 .Posix
                 .UnlockRegion(task, lockUniqueID, &Range::Max());
 
-            let d = self.Dirent.clone();
-            let mut ev = 0;
-            if d.Inode().StableAttr().IsDir() {
-                ev |= InotifyEvent::IN_ISDIR;
-            }
-
-            if self.Flags().Write {
-                ev |= InotifyEvent::IN_CLOSE_WRITE;
-            } else {
-                ev |= InotifyEvent::IN_CLOSE_NOWRITE;
-            }
-            d.InotifyEvent(ev, 0);
-
             // Only unregister if we are currently registered. There is nothing
             // to register if f.async is nil (this happens when async mode is
             // enabled without setting an owner). Also, we unregister during

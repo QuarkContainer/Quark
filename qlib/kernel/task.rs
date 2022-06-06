@@ -444,10 +444,6 @@ impl Task {
         return self.fdTbl.lock().SetFlags(fd, flags);
     }
 
-    pub fn NewFDs(&mut self, fd: i32, file: &[File], flags: &FDFlags) -> Result<Vec<i32>> {
-        return self.fdTbl.lock().NewFDs(fd, file, flags);
-    }
-
     pub fn NewFDAt(&mut self, fd: i32, file: &File, flags: &FDFlags) -> Result<()> {
         return self.fdTbl.lock().NewFDAt(fd, file, flags);
     }
