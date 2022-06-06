@@ -37,6 +37,7 @@ pub mod sys;
 pub mod timerfd;
 pub mod tmpfs;
 pub mod tty;
+pub mod inotify;
 
 pub fn Init() {
     self::tty::Init();

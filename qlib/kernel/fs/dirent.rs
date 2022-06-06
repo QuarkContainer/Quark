@@ -58,6 +58,18 @@ impl Deref for Dirent {
     }
 }
 
+impl Ord for Dirent {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.1.cmp(&other.1)
+    }
+}
+
+impl PartialOrd for Dirent {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl PartialEq for Dirent {
     fn eq(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.0, &other.0)
@@ -334,6 +346,10 @@ impl Dirent {
                     return Ok(Dirent(cd.clone()));
                 }
 
+                let dirent = Dirent(cd);
+                let inode = dirent.Inode();
+                inode.Watches().Unpin(&dirent);
+
                 false
             }
             None => true,
@@ -435,6 +451,9 @@ impl Dirent {
 
         self.AddChild(&child);
         child.ExtendReference();
+        inode.Watches().Notify(name,
+                                    InotifyEvent::IN_CREATE,
+                                    0);
 
         return Ok(file);
     }
@@ -481,7 +500,11 @@ impl Dirent {
     ) -> Result<()> {
         return self.genericCreate(task, root, newname, &mut || -> Result<()> {
             let mut inode = self.Inode();
-            return inode.CreateLink(task, self, oldname, newname);
+            inode.CreateLink(task, self, oldname, newname)?;
+            inode.Watches().Notify(newname,
+                                        InotifyEvent::IN_CREATE,
+                                        0);
+            return Ok(())
         });
     }
 
@@ -503,7 +526,14 @@ impl Dirent {
         }
 
         return self.genericCreate(task, root, name, &mut || -> Result<()> {
-            return inode.CreateHardLink(task, self, &target, name);
+            inode.CreateHardLink(task, self, &target, name)?;
+            targetInode.Watches().Notify(name,
+                                              InotifyEvent::IN_ATTRIB,
+                                              0);
+            inode.Watches().Notify(name,
+                                        InotifyEvent::IN_CREATE,
+                                        0);
+            return Ok(())
         });
     }
 
@@ -517,6 +547,9 @@ impl Dirent {
         return self.genericCreate(task, root, name, &mut || -> Result<()> {
             let mut inode = self.Inode();
             let ret = inode.CreateDirectory(task, self, name, perms);
+            inode.Watches().Notify(name,
+                                        InotifyEvent::IN_ISDIR | InotifyEvent::IN_CREATE,
+                                        0);
             return ret;
         });
     }
@@ -547,6 +580,9 @@ impl Dirent {
 
         let inode = self.Inode();
         let childDir = inode.Lookup(task, name)?;
+        inode.Watches().Notify(name,
+                                    InotifyEvent::IN_CREATE,
+                                    0);
 
         return Ok(childDir);
     }
@@ -560,7 +596,11 @@ impl Dirent {
     ) -> Result<()> {
         return self.genericCreate(task, root, name, &mut || -> Result<()> {
             let mut inode = self.Inode();
-            return inode.CreateFifo(task, self, name, perms);
+            inode.CreateFifo(task, self, name, perms)?;
+            inode.Watches().Notify(name,
+                                        InotifyEvent::IN_CREATE,
+                                        0);
+            return Ok(())
         });
     }
 
@@ -707,8 +747,25 @@ impl Dirent {
 
         inode.Remove(task, self, &child)?;
 
+        // Link count changed, this only applies to non-directory nodes.
+        childInode.Watches().Notify("", InotifyEvent::IN_ATTRIB, 0);
+
         (self.0).0.lock().Children.remove(name);
         child.DropExtendedReference();
+
+        // Finally, let inotify know the child is being unlinked. Drop any extra
+        // refs from inotify to this child dirent. This doesn't necessarily mean the
+        // watches on the underlying inode will be destroyed, since the underlying
+        // inode may have other links. If this was the last link, the events for the
+        // watch removal will be queued by the inode destructor.
+        childInode.Watches().MarkUnlinked();
+        childInode.Watches().Unpin(&child);
+
+        // trigger inode destroy
+        drop(child);
+        drop(childInode);
+
+        inode.Watches().Notify(name, InotifyEvent::IN_DELETE, 0);
 
         return Ok(());
     }
@@ -743,6 +800,14 @@ impl Dirent {
         (self.0).0.lock().Children.remove(name);
 
         child.DropExtendedReference();
+
+        // Finally, let inotify know the child is being unlinked. Drop any extra
+        // refs from inotify to this child dirent.
+        childInode.Watches().MarkUnlinked();
+        childInode.Watches().Unpin(&child);
+        inode.Watches().Notify(name,
+                                    InotifyEvent::IN_ISDIR | InotifyEvent::IN_DELETE,
+                                    0);
 
         return Ok(());
     }
@@ -877,7 +942,32 @@ impl Dirent {
             .Children
             .insert(newName.to_string(), Arc::downgrade(&renamed));
 
+        // Queue inotify events for the rename.
+        let mut ev : u32 = 0;
+        if newInode.StableAttr().IsDir() {
+            ev |=  InotifyEvent::IN_ISDIR;
+        }
+
+        let cookie = NewInotifyCookie();
+        oldParent.Inode().Watches().Notify(
+            oldName,
+            ev | InotifyEvent::IN_MOVED_FROM,
+            cookie);
+        newParent.Inode().Watches().Notify(
+            newName,
+            ev | InotifyEvent::IN_MOVED_TO,
+            cookie);
+
+        // Somewhat surprisingly, self move events do not have a cookie.
+        renamed.Inode().Watches().Notify(
+            "",
+            InotifyEvent::IN_MOVE_SELF,
+            0);
+
         renamed.DropExtendedReference();
+
+        renamed.Inode().Watches().Unpin(&renamed);
+
         renamed.flush();
 
         return Ok(());
@@ -966,6 +1056,29 @@ impl Dirent {
         p.Children
             .insert(newName.to_string(), Arc::downgrade(&renamed.0));
 
+        // Queue inotify events for the rename.
+        let mut ev : u32 = 0;
+        if newInode.StableAttr().IsDir() {
+            ev |=  InotifyEvent::IN_ISDIR;
+        }
+
+        let cookie = NewInotifyCookie();
+
+        inode.Watches().Notify(
+            oldName,
+            ev | InotifyEvent::IN_MOVED_FROM,
+            cookie);
+        inode.Watches().Notify(
+            newName,
+            ev | InotifyEvent::IN_MOVED_TO,
+            cookie);
+
+        // Somewhat surprisingly, self move events do not have a cookie.
+        newInode.Watches().Notify(
+            "",
+            InotifyEvent::IN_MOVE_SELF,
+            0);
+
         renamed.DropExtendedReference();
         renamed.flush();
 
@@ -1030,6 +1143,34 @@ impl Dirent {
         }
 
         return Err(Error::SysError(SysErr::EPERM));
+    }
+
+    // InotifyEvent notifies all watches on the inode for this dirent and its parent
+    // of potential events. The events may not actually propagate up to the user,
+    // depending on the event masks. InotifyEvent automatically provides the name of
+    // the current dirent as the subject of the event as required, and adds the
+    // IN_ISDIR flag for dirents that refer to directories.
+    pub fn InotifyEvent(&self, event: u32, cookie: u32) {
+        let _ = RENAME.read();
+
+        let mut event = event;
+
+        let inode = self.Inode();
+        if inode.StableAttr().IsDir() {
+            event |= InotifyEvent::IN_ISDIR;
+        }
+
+        // The ordering below is important, Linux always notifies the parent first.
+        let parent = (self.0).0.lock().Parent.clone();
+        match parent {
+            None => (),
+            Some(p) => {
+                let name = (self.0).0.lock().Name.clone();
+                p.Inode().Watches().Notify(&name, event, cookie);
+            }
+        }
+
+        inode.Watches().Notify("", event, cookie);
     }
 
     pub fn ExtendReference(&self) {

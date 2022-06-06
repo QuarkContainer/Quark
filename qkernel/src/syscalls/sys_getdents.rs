@@ -82,6 +82,7 @@ fn getDents(
         Ok(()) => {
             let buf = &writer.data;
             task.CopyOutSlice(buf, addr, size as usize)?;
+            dir.Dirent.InotifyEvent(InotifyEvent::IN_ACCESS, 0);
             return Ok(buf.len() as i64);
         }
         Err(Error::EOF) => return Ok(0),

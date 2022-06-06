@@ -75,7 +75,7 @@ impl FDTable {
     }
 
     pub fn Clear(&self) {
-        self.lock().descTbl.clear();
+        self.lock().RemoveAll();
     }
 
     pub fn Count(&self) -> usize {
@@ -106,6 +106,21 @@ impl FDTableInternal {
         };
     }
 
+    pub fn Drop(&self, file: &File) {
+        let d = file.Dirent.clone();
+        let mut ev = 0;
+        if d.Inode().StableAttr().IsDir() {
+            ev |= InotifyEvent::IN_ISDIR;
+        }
+
+        if file.Flags().Write {
+            ev |= InotifyEvent::IN_CLOSE_WRITE;
+        } else {
+            ev |= InotifyEvent::IN_CLOSE_NOWRITE;
+        }
+        d.InotifyEvent(ev, 0);
+    }
+
     pub fn Print(&self) {
         for (id, d) in &self.descTbl {
             info!(
@@ -127,15 +142,58 @@ impl FDTableInternal {
             flags: flags.clone(),
         };
 
-        self.descTbl.insert(fd, fdesc);
+        match self.descTbl.insert(fd, fdesc) {
+            None => (),
+            Some(f) => self.Drop(&f.file),
+        }
     }
 
-    pub fn NewFDFrom(&mut self, fd: i32, file: &File, flags: &FDFlags) -> Result<i32> {
-        let fds = self.NewFDs(fd, &[file.clone()], flags)?;
+    pub fn NewFDFrom1(&mut self, fd: i32, file: &File, flags: &FDFlags) -> Result<i32> {
+        let fds = self.NewFDs1(fd, &[file.clone()], flags)?;
         return Ok(fds[0]);
     }
 
-    pub fn NewFDs(&mut self, fd: i32, files: &[File], flags: &FDFlags) -> Result<Vec<i32>> {
+    pub fn NewFDFrom(&mut self, fd: i32, files: &File, flags: &FDFlags) -> Result<i32> {
+        if fd < 0 {
+            return Err(Error::SysError(SysErr::EINVAL));
+        }
+
+        let mut fd = fd;
+        let mut reset = false;
+        if fd < self.next {
+            fd = self.next;
+            reset = true;
+        }
+
+        let end = core::i32::MAX;
+
+        let mut found = false;
+        for i in fd..end {
+            let curr = self.descTbl.get(&i);
+
+            match curr {
+                None => {
+                    self.set(i, &files, flags);
+                    fd = i;
+                    found = true;
+                    break;
+                }
+                _ => (),
+            }
+        }
+
+        if !found {
+            return Err(Error::SysError(SysErr::EMFILE));
+        }
+
+        if reset {
+            self.next = fd + 1;
+        }
+
+        return Ok(fd);
+    }
+
+    pub fn NewFDs1(&mut self, fd: i32, files: &[File], flags: &FDFlags) -> Result<Vec<i32>> {
         if fd < 0 {
             return Err(Error::SysError(SysErr::EINVAL));
         }
@@ -300,7 +358,10 @@ impl FDTableInternal {
 
         match file {
             None => return None,
-            Some(f) => return Some(f.file),
+            Some(f) => return {
+                self.Drop(&f.file);
+                Some(f.file)
+            },
         }
     }
 
@@ -314,7 +375,7 @@ impl FDTableInternal {
 
         for fd in &removed {
             let desc = self.descTbl.remove(fd).unwrap();
-            inotifyFileClose(&desc.file);
+            self.Drop(&desc.file);
         }
     }
 
@@ -326,11 +387,8 @@ impl FDTableInternal {
 
         for fd in &removed {
             let desc = self.descTbl.remove(fd).unwrap();
-            inotifyFileClose(&desc.file);
+            self.Drop(&desc.file);
         }
     }
 }
 
-pub fn inotifyFileClose(_f: &File) {
-    //todo: will implement it later
-}

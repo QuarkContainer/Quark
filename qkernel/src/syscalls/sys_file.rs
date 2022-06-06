@@ -110,12 +110,6 @@ pub fn fileOpOn(
         .mountNS
         .FindDirent(task, &root, rel, path, &mut remainTraversals, resolve)?;
 
-    /*if resolve {
-        d = task.mountNS.FindInode(task, &root, rel, path, &mut remainTraversals)?;
-    } else {
-        d = task.mountNS.FindLink(task, &root, rel, path, &mut remainTraversals)?
-    }*/
-
     return func(&root, &d, remainTraversals);
 }
 
@@ -251,6 +245,8 @@ pub fn openAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
             )?;
 
             fd = newFd;
+
+            d.InotifyEvent(InotifyEvent::IN_OPEN, 0);
 
             return Ok(());
         },
@@ -502,7 +498,9 @@ pub fn createAt(task: &Task, dirFd: i32, addr: u64, flags: u32, mode: FileMode) 
         // automatically queued when the dirent is found. The open
         // events are implemented at the syscall layer so we need to
         // manually queue one here.
-        //found.InotifyEvent(linux.IN_OPEN, 0)
+        let newDirent = newFile.Dirent.clone();
+        newDirent.InotifyEvent(InotifyEvent::IN_OPEN, 0);
+        //found.InotifyEvent(InotifyEvent::IN_OPEN, 0);
 
         return Ok(());
     })?;
@@ -1701,7 +1699,11 @@ pub fn SysTruncate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 },
             )?;
 
-            return inode.Truncate(task, d, len);
+            inode.Truncate(task, d, len)?;
+
+            // File length modified, generate notification.
+            d.InotifyEvent(InotifyEvent::IN_MODIFY, 0);
+            return Ok(())
         },
     )?;
 
@@ -1728,6 +1730,9 @@ pub fn SysFtruncate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let dirent = file.Dirent.clone();
     inode.Truncate(task, &dirent, len)?;
+
+    // File length modified, generate notification.
+    file.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0);
 
     return Ok(0);
 }
@@ -1904,6 +1909,15 @@ fn utime(task: &Task, dirfd: i32, addr: u64, ts: &InterTimeSpec, resolve: bool) 
         }
 
         inode.SetTimestamps(task, d, ts)?;
+
+        // File attribute changed, generate notification.
+        if ts.ATimeOmit {
+            d.InotifyEvent(InotifyEvent::IN_MODIFY, 0);
+        } else if ts.MTimeOmit {
+            d.InotifyEvent(InotifyEvent::IN_ACCESS, 0);
+        } else {
+            d.InotifyEvent(InotifyEvent::IN_ATTRIB, 0);
+        }
 
         return Ok(());
     };
@@ -2142,6 +2156,8 @@ pub fn SysFallocate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let dirent = file.Dirent.clone();
     inode.Allocate(task, &dirent, offset, len)?;
+
+    file.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0);
 
     Ok(0)
 }

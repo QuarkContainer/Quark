@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::sync::atomic;
-use core::sync::atomic::AtomicU64;
-
-use super::super::singleton::*;
+use crate::qlib::kernel::SHARESPACE;
 
 pub type UniqueID = u64;
-pub static UID: Singleton<AtomicU64> = Singleton::<AtomicU64>::New();
 
 pub fn NewUID() -> u64 {
-    return UID.fetch_add(1, atomic::Ordering::SeqCst);
+    return SHARESPACE.NewUID();
+}
+
+pub fn NewInotifyCookie() -> u32 {
+    return SHARESPACE.NewInotifyCookie();
 }

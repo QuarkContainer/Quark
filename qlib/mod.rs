@@ -67,6 +67,7 @@ use alloc::vec::Vec;
 use cache_padded::CachePadded;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicI32;
+use core::sync::atomic::AtomicU32;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 
@@ -681,6 +682,8 @@ pub struct ShareSpace {
     pub values: Vec<[AtomicU64; 2]>,
     pub tlbShootdownLock: QMutex<()>,
     pub tlbShootdownMask: AtomicU64,
+    pub uid: AtomicU64,
+    pub inotifyCookie: AtomicU32,
     pub waitMask: AtomicU64,
 }
 
@@ -691,6 +694,14 @@ impl ShareSpace {
             ioMgr: CachePadded::new(IOMgr::Init().unwrap()),
             ..Default::default()
         };
+    }
+
+    pub fn NewUID(&self) -> u64 {
+        return self.uid.fetch_add(1, Ordering::SeqCst) + 1;
+    }
+
+    pub fn NewInotifyCookie(&self) -> u32 {
+        return self.inotifyCookie.fetch_add(1, Ordering::SeqCst) + 1;
     }
 
     pub fn MaskTlbShootdown(&self, vcpuId: u64) {

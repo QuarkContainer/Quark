@@ -246,7 +246,7 @@ fn RepWritev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
         match f.Writev(task, srcs) {
             Err(e) => {
                 if count > 0 {
-                    return Ok(count);
+                    break;
                 }
 
                 return Err(e);
@@ -254,7 +254,7 @@ fn RepWritev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
             Ok(n) => {
                 count += n;
                 if count == len as i64 {
-                    return Ok(count);
+                    break;
                 }
 
                 tmp = Iovs(srcs).DropFirst(n as usize);
@@ -262,6 +262,11 @@ fn RepWritev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
             }
         }
     }
+
+    if count > 0 {
+        f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0)
+    }
+    return Ok(count);
 }
 
 pub fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
@@ -313,14 +318,14 @@ pub fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
             Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
                 if f.Flags().NonBlocking {
                     if count > 0 {
-                        return Ok(count);
+                        break;
                     }
                     return Err(Error::SysError(SysErr::EWOULDBLOCK))
                 }
             },
             Err(e) => {
                 if count > 0 {
-                    return Ok(count);
+                    break;
                 }
 
                 return Err(e);
@@ -328,7 +333,7 @@ pub fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
             Ok(n) => {
                 count += n;
                 if count == len as i64 || f.Flags().NonBlocking {
-                    return Ok(count);
+                    break;
                 }
 
                 tmp = Iovs(srcs).DropFirst(n as usize);
@@ -339,25 +344,30 @@ pub fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
         match task.blocker.BlockWithMonoTimer(true, deadline) {
             Err(Error::SysError(SysErr::ETIMEDOUT)) => {
                 if count > 0 {
-                    return Ok(count);
+                    break;
                 }
                 return Err(Error::SysError(SysErr::EWOULDBLOCK));
             }
             Err(Error::ErrInterrupted) => {
                 if count > 0 {
-                    return Ok(count);
+                    break;
                 }
                 return Err(Error::SysError(SysErr::ERESTARTSYS))
             },
             Err(e) => {
                 if count > 0 {
-                    return Ok(count);
+                    break;
                 }
                 return Err(e);
             }
             _ => (),
         }
     }
+
+    if count > 0 {
+        f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0)
+    }
+    return Ok(count);
 }
 
 fn RepPwritev(task: &Task, f: &File, srcs: &[IoVec], offset: i64) -> Result<i64> {
@@ -370,7 +380,7 @@ fn RepPwritev(task: &Task, f: &File, srcs: &[IoVec], offset: i64) -> Result<i64>
         match f.Pwritev(task, srcs, offset + count) {
             Err(e) => {
                 if count > 0 {
-                    return Ok(count);
+                    break;
                 }
 
                 return Err(e);
@@ -378,7 +388,7 @@ fn RepPwritev(task: &Task, f: &File, srcs: &[IoVec], offset: i64) -> Result<i64>
             Ok(n) => {
                 count += n;
                 if count == len as i64 {
-                    return Ok(count);
+                    break;
                 }
 
                 tmp = Iovs(srcs).DropFirst(n as usize);
@@ -386,6 +396,12 @@ fn RepPwritev(task: &Task, f: &File, srcs: &[IoVec], offset: i64) -> Result<i64>
             }
         }
     }
+
+    if count > 0 {
+        f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0)
+    }
+
+    return Ok(count);
 }
 
 fn pwritev(task: &Task, f: &File, srcs: &[IoVec], offset: i64) -> Result<i64> {
@@ -403,7 +419,12 @@ fn pwritev(task: &Task, f: &File, srcs: &[IoVec], offset: i64) -> Result<i64> {
                 return Err(e);
             }
         }
-        Ok(n) => return Ok(n),
+        Ok(n) => {
+            if n > 0 {
+                f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0)
+            }
+            return Ok(n)
+        },
     };
 
     let general = task.blocker.generalEntry.clone();
@@ -418,6 +439,9 @@ fn pwritev(task: &Task, f: &File, srcs: &[IoVec], offset: i64) -> Result<i64> {
                 return Err(e);
             }
             Ok(n) => {
+                if n > 0 {
+                    f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0)
+                }
                 return Ok(n);
             }
         }

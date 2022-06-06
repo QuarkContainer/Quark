@@ -218,30 +218,36 @@ fn RepReadv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
         match f.Readv(task, dsts) {
             Err(e) => {
                 if count > 0 {
-                    return Ok(count);
+                    break;
                 }
 
                 return Err(e);
             }
             Ok(n) => {
                 if n == 0 {
-                    return Ok(count);
+                    break;
                 }
 
                 count += n;
                 if count == len as i64 {
-                    return Ok(count);
+                    break;
                 }
 
                 tmp = Iovs(dsts).DropFirst(n as usize);
 
                 if tmp.len() == 0 {
-                    return Ok(count);
+                    break;
                 }
                 dsts = &mut tmp;
             }
         }
     }
+
+    if count > 0 {
+        // Queue notification if we read anything.
+        f.Dirent.InotifyEvent(InotifyEvent::IN_ACCESS, 0);
+    }
+    return Ok(count);
 }
 
 fn readv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
@@ -260,7 +266,11 @@ fn readv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
                 return Err(e);
             }
         }
-        Ok(n) => return Ok(n),
+        Ok(n) => {
+            // Queue notification if we read anything.
+            f.Dirent.InotifyEvent(InotifyEvent::IN_ACCESS, 0);
+            return Ok(n)
+        },
     };
 
     let mut deadline = None;
@@ -295,6 +305,8 @@ fn readv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
                 }
                 Err(e) => {
                     if count > 0 {
+                        // Queue notification if we read anything.
+                        f.Dirent.InotifyEvent(InotifyEvent::IN_ACCESS, 0);
                         return Ok(count);
                     }
                     return Err(e);
@@ -306,6 +318,8 @@ fn readv(task: &Task, f: &File, dsts: &mut [IoVec]) -> Result<i64> {
 
                     count += n;
                     if count == len as i64 || f.Flags().NonBlocking {
+                        // Queue notification if we read anything.
+                        f.Dirent.InotifyEvent(InotifyEvent::IN_ACCESS, 0);
                         return Ok(count);
                     }
 
@@ -340,7 +354,13 @@ fn preadv(task: &Task, f: &File, dsts: &mut [IoVec], offset: i64) -> Result<i64>
                 return Err(e);
             }
         }
-        Ok(n) => return Ok(n),
+        Ok(n) => {
+            if n > 0 {
+                // Queue notification if we read anything.
+                f.Dirent.InotifyEvent(InotifyEvent::IN_ACCESS, 0)
+            }
+            return Ok(n)
+        },
     };
 
     let general = task.blocker.generalEntry.clone();
@@ -355,6 +375,10 @@ fn preadv(task: &Task, f: &File, dsts: &mut [IoVec], offset: i64) -> Result<i64>
                 return Err(e);
             }
             Ok(n) => {
+                if n > 0 {
+                    // Queue notification if we read anything.
+                    f.Dirent.InotifyEvent(InotifyEvent::IN_ACCESS, 0)
+                }
                 return Ok(n);
             }
         }

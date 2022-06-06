@@ -505,6 +505,10 @@ impl Task {
         return self.mm.CopyOutObj(self, src, dst);
     }
 
+    pub fn CopyDataOut(&self, from: u64, vaddr: u64, len: usize, allowPartial: bool) -> Result<()> {
+        return self.mm.CopyDataOut(self, from, vaddr, len, allowPartial);
+    }
+
     //Copy an str to user memory
     pub fn CopyOutString(&self, vAddr: u64, len: usize, s: &str) -> Result<()> {
         let str = CString::New(s);
