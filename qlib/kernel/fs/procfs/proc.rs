@@ -31,7 +31,6 @@ use super::super::super::kernel::kernel::*;
 use super::super::super::kernel::waiter::*;
 use super::super::super::task::*;
 use super::super::super::threadmgr::pid_namespace::*;
-use super::super::super::SHARESPACE;
 use super::super::attr::*;
 use super::super::dirent::*;
 use super::super::file::*;
@@ -131,10 +130,7 @@ pub fn NewProc(
     contents.insert("stat".to_string(), NewStatData(task, msrc));
     contents.insert("thread-self".to_string(), NewThreadSelf(task, &pidns, msrc));
     contents.insert("uptime".to_string(), NewUptime(task, msrc));
-
-    if SHARESPACE.config.read().EnableMemInfo {
-        contents.insert("meminfo".to_string(), NewMeminfo(task, msrc));
-    }
+    contents.insert("meminfo".to_string(), NewMeminfo(task, msrc));
 
     contents.insert("sys".to_string(), NewSys(task, msrc));
 
