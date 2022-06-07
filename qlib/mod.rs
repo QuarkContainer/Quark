@@ -667,24 +667,24 @@ pub struct ShareSpace {
     pub futexMgr: CachePadded<FutexMgr>,
     pub pageMgr: CachePadded<PageMgr>,
     pub ioMgr: CachePadded<IOMgr>,
-    pub config: QRwLock<Config>,
+    pub config: CachePadded<QRwLock<Config>>,
     pub rdmaSvcCli: CachePadded<RDMASvcClient>,
 
-    pub logBuf: QMutex<Option<ByteStream>>,
-    pub logLock: QMutex<()>,
-    pub logfd: AtomicI32,
-    pub signalHandlerAddr: AtomicU64,
-    pub virtualizationHandlerAddr: AtomicU64,
-    pub kernel: QMutex<Option<Kernel>>,
+    pub logBuf: CachePadded<QMutex<Option<ByteStream>>>,
+    pub logLock: CachePadded<QMutex<()>>,
+    pub logfd: CachePadded<AtomicI32>,
+    pub signalHandlerAddr: CachePadded<AtomicU64>,
+    pub virtualizationHandlerAddr: CachePadded<AtomicU64>,
+    pub kernel: CachePadded<QMutex<Option<Kernel>>>,
+    pub tlbShootdownLock: CachePadded<QMutex<()>>,
+    pub tlbShootdownMask: CachePadded<AtomicU64>,
+    pub uid: CachePadded<AtomicU64>,
+    pub inotifyCookie: CachePadded<AtomicU32>,
+    pub waitMask: CachePadded<AtomicU64>,
 
     pub controlSock: i32,
 
     pub values: Vec<[AtomicU64; 2]>,
-    pub tlbShootdownLock: QMutex<()>,
-    pub tlbShootdownMask: AtomicU64,
-    pub uid: AtomicU64,
-    pub inotifyCookie: AtomicU32,
-    pub waitMask: AtomicU64,
 }
 
 impl ShareSpace {

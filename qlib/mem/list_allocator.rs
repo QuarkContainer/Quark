@@ -27,8 +27,6 @@ use super::buddy_allocator::Heap;
 
 use super::super::super::kernel_def::VcpuId;
 use super::super::kernel::vcpu::CPU_LOCAL;
-use super::super::kernel::Tsc;
-use super::super::kernel::LoadVcpuFreq;
 use super::super::linux_def::*;
 use super::super::mutex::*;
 use super::super::pagetable::AlignedAllocator;
@@ -138,50 +136,35 @@ impl StackAllocator {
 
 #[derive(Debug, Default)]
 pub struct PageAllocator {
-    pub pages: VecDeque<(u64, i64)>,
+    pub pages: VecDeque<u64>,
 }
 
 impl PageAllocator {
     pub const PAGE_CACHE_COUNT: usize = 16;
-    pub const MAX_PAGE_CACHE_COUNT: usize = 1024 * 1;
+    pub const PAGE_CACHE_MAX_COUNT: usize = 128;
 
-    pub fn AllocPage(&mut self) -> Option<u64> { match self.pages.pop_front() {
-        None => return None,
-        Some((addr, ts)) => {
-            if self.pages.len() >= Self::PAGE_CACHE_COUNT {
+    pub fn AllocPage(&mut self) -> Option<u64> {
+        match self.pages.pop_front() {
+            None => return None,
+            Some(addr) => {
                 return Some(addr)
             }
-
-            //cool down for 100 ms
-            if Tsc::RawRdtsc() - ts > (LoadVcpuFreq() / 10) {
-                return Some(addr)
-            }
-
-            self.pages.push_front((addr, ts));
-            return None
         }
-    }
     }
 
     pub fn FreePage(&mut self, page: u64) {
-        let ts = Tsc::RawRdtsc();
-        while self.pages.len() > Self::PAGE_CACHE_COUNT {
-            match self.AllocPage() {
-                None => break,
-                Some(addr) => {
-                    AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize)
-                        .Free(addr)
-                        .unwrap();
-                }
-            }
+        if self.pages.len() >= Self::PAGE_CACHE_MAX_COUNT {
+            AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize)
+                .Free(page)
+                .unwrap();
+        } else {
+            self.pages.push_front(page);
         }
-
-        self.pages.push_back((page, ts));
     }
 
     pub fn Clean(&mut self) {
         while self.pages.len() > Self::PAGE_CACHE_COUNT {
-            match self.AllocPage() {
+            match self.pages.pop_back() {
                 None => break,
                 Some(addr) => {
                     AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize)
