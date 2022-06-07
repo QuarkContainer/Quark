@@ -107,18 +107,20 @@ impl FDTableInternal {
     }
 
     pub fn Drop(&self, file: &File) {
-        let d = file.Dirent.clone();
-        let mut ev = 0;
-        if d.Inode().StableAttr().IsDir() {
-            ev |= InotifyEvent::IN_ISDIR;
-        }
+        if Arc::strong_count(&file.0) == 1 {
+            let d = file.Dirent.clone();
+            let mut ev = 0;
+            if d.Inode().StableAttr().IsDir() {
+                ev |= InotifyEvent::IN_ISDIR;
+            }
 
-        if file.Flags().Write {
-            ev |= InotifyEvent::IN_CLOSE_WRITE;
-        } else {
-            ev |= InotifyEvent::IN_CLOSE_NOWRITE;
+            if file.Flags().Write {
+                ev |= InotifyEvent::IN_CLOSE_WRITE;
+            } else {
+                ev |= InotifyEvent::IN_CLOSE_NOWRITE;
+            }
+            d.InotifyEvent(ev, 0);
         }
-        d.InotifyEvent(ev, 0);
     }
 
     pub fn Print(&self) {
