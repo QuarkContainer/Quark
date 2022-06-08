@@ -305,7 +305,7 @@ impl KVMVcpu {
                 ret =
                     match URING_MGR
                         .lock()
-                        .Enter(msg.idx, msg.toSubmit, msg.minComplete, msg.flags)
+                        .Enter(msg.toSubmit, msg.minComplete, msg.flags)
                     {
                         Ok(v) => v as u64,
                         Err(Error::SysError(v)) => -v as i64 as u64,

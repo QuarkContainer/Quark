@@ -44,8 +44,8 @@ impl HostSpace {
         HyperCall64(HYPERCALL_HLT, 0, 0, 0);
     }
 
-    pub fn UringWake(idx: usize, minCompleted: u64) {
-        HyperCall64(HYPERCALL_URING_WAKE, idx as u64, minCompleted, 0);
+    pub fn UringWake(minCompleted: u64) {
+        HyperCall64(HYPERCALL_URING_WAKE, minCompleted, 0, 0);
     }
 
     pub fn LoadProcessKernel(processAddr: u64, len: usize) -> i64 {
@@ -644,9 +644,8 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn IoUringEnter(idx: usize, toSubmit: u32, minComplete: u32, flags: u32) -> i64 {
+    pub fn IoUringEnter(toSubmit: u32, minComplete: u32, flags: u32) -> i64 {
         let mut msg = Msg::IoUringEnter(IoUringEnter {
-            idx,
             toSubmit,
             minComplete,
             flags,
