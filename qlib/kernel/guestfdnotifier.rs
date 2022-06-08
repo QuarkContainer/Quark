@@ -16,7 +16,6 @@ use crate::qlib::common::*;
 use crate::qlib::linux_def::*;
 use crate::qlib::fileinfo::*;
 use crate::qlib::kernel::Kernel::HostSpace;
-use crate::qlib::kernel::SHARESPACE;
 use crate::qlib::kernel::GlobalIOMgr;
 use crate::qlib::kernel::kernel::waiter::Queue;
 
@@ -69,18 +68,8 @@ impl IOMgr {
         }
     }
 
-    fn waitfd(fd: i32, mask: EventMask) -> Result<()> {
-        HostSpace::WaitFDAsync(fd, mask);
-
-        return Ok(());
-    }
-
     pub fn UpdateFD(&self, fd: i32) -> Result<()> {
-        if SHARESPACE.config.read().UringEpollCtl {
-            return self.UpdateFDAsync(fd);
-        } else {
-            return self.UpdateFDSync(fd);
-        }
+        return self.UpdateFDAsync(fd);
     }
 
     pub fn FdWaitInfo(&self, fd: i32) -> Option<FdWaitInfo> {
@@ -101,15 +90,6 @@ impl IOMgr {
         let epollfd = self.Epollfd();
 
         return fi.UpdateFDAsync(fd, epollfd);
-    }
-
-    pub fn UpdateFDSync(&self, fd: i32) -> Result<()> {
-        let fi = match self.FdWaitInfo(fd) {
-            None => return Ok(()),
-            Some(fi) => fi,
-        };
-
-        return fi.UpdateFDSync(fd);
     }
 
     pub fn SetWaitInfo(&self, fd: i32, queue: Queue) {

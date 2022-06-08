@@ -780,7 +780,6 @@ pub struct QMsg<'a> {
 pub enum HostOutputMsg {
     Default,
     QCall(u64),
-    WaitFDAsync(WaitFDAsync),
     EventfdWriteAsync(EventfdWriteAsync),
     PostRDMAConnect(u64),
 }
@@ -789,12 +788,6 @@ impl Default for HostOutputMsg {
     fn default() -> Self {
         return Self::Default;
     }
-}
-
-#[derive(Clone, Default, Debug, Copy)]
-pub struct WaitFDAsync {
-    pub fd: i32,
-    pub mask: EventMask,
 }
 
 #[derive(Clone, Default, Debug, Copy)]
