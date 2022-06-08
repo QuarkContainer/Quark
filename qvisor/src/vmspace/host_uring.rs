@@ -122,11 +122,6 @@ impl IoUring {
 
     #[inline]
     pub fn HostSubmit(&self) -> Result<usize> {
-        let uringCnt = QUARK_CONFIG.lock().DedicateUring;
-        if uringCnt != 0 {
-            return Ok(0);
-        }
-
         let _lock = match self.lock.try_lock() {
             Some(l) => l,
             None => {

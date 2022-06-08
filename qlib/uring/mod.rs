@@ -84,6 +84,10 @@ unsafe impl Send for IoUring {}
 unsafe impl Sync for IoUring {}
 
 impl IoUring {
+    pub fn Addr(&self) -> u64 {
+        return self as * const _ as u64;
+    }
+
     #[inline]
     pub fn submitter(&self) -> Submitter<'_> {
         Submitter::new(&self.fd, self.params.0.flags, &self.sq.lock())

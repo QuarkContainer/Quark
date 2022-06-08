@@ -171,7 +171,8 @@ impl VirtualMachine {
         let logfd = super::super::super::print::LOG.lock().Logfd();
         URING_MGR
             .lock()
-            .Init(sharespace.config.read().DedicateUring);
+            .Init();
+
         URING_MGR.lock().Addfd(logfd).unwrap();
 
         for i in 0..cpuCount {
@@ -225,8 +226,6 @@ impl VirtualMachine {
 
         let kvmfd = args.KvmFd;
 
-        let cnt = QUARK_CONFIG.lock().DedicateUring;
-
         /*if QUARK_CONFIG.lock().EnableRDMA {
             // use default rdma device
             let rdmaDeviceName = "";
@@ -235,7 +234,7 @@ impl VirtualMachine {
         }*/
 
         let reserveCpuCount = QUARK_CONFIG.lock().ReserveCpuCount;
-        let cpuCount = VMSpace::VCPUCount() - cnt - reserveCpuCount;
+        let cpuCount = VMSpace::VCPUCount() - reserveCpuCount;
         VMS.lock().vcpuCount = cpuCount; //VMSpace::VCPUCount();
         VMS.lock().RandomVcpuMapping();
         let kernelMemRegionSize = QUARK_CONFIG.lock().KernelMemSize;
