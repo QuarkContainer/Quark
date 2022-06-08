@@ -773,12 +773,6 @@ impl HostSpace {
         HostSpace::HCall(&mut msg, true);
     }
 
-    pub fn WaitFDAsync(fd: i32, mask: EventMask) {
-        let msg = HostOutputMsg::WaitFDAsync(WaitFDAsync { fd, mask });
-
-        super::SHARESPACE.AQCall(&msg);
-    }
-
     pub fn EventfdWriteAsync(fd: i32) {
         let msg = HostOutputMsg::EventfdWriteAsync(EventfdWriteAsync { fd });
 

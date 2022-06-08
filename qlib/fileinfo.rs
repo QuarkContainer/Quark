@@ -24,7 +24,6 @@ use crate::qlib::common::*;
 use crate::qlib::kernel::kernel::waiter::*;
 use crate::qlib::kernel::IOURING;
 use crate::qlib::*;
-use crate::qlib::kernel::Kernel::HostSpace;
 
 #[derive(Clone)]
 pub enum SockInfo {
@@ -223,30 +222,9 @@ impl FdWaitInfo {
         return Ok(());
     }
 
-    pub fn UpdateFDSync(&self, fd: i32) -> Result<()> {
-        let mask = {
-            let fi = self.lock();
-
-            let mask = fi.queue.Events();
-            if mask == fi.mask {
-                return Ok(());
-            }
-
-            mask
-        };
-
-        return Self::waitfd(fd, mask);
-    }
-
     pub fn Notify(&self, mask: EventMask) {
         let queue = self.lock().queue.clone();
         queue.Notify(EventMaskFromLinux(mask as u32));
-    }
-
-    fn waitfd(fd: i32, mask: EventMask) -> Result<()> {
-        HostSpace::WaitFDAsync(fd, mask);
-
-        return Ok(());
     }
 }
 

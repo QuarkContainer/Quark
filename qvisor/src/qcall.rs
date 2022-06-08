@@ -29,19 +29,6 @@ pub fn AQHostCall(msg: HostOutputMsg, _shareSpace: &ShareSpace) {
         HostOutputMsg::QCall(_addr) => {
             panic!("AQHostCall Process get Qcall msg...");
         }
-        HostOutputMsg::WaitFDAsync(msg) => {
-            let ret = super::VMSpace::WaitFD(msg.fd, msg.mask);
-            if ret < 0 {
-                // ignore -9 EBADF, when change the Close to HCall, the waitfd is still async call,
-                // there is chance that the WaitFd fired before close
-                if ret != -9 {
-                    error!(
-                        "WaitFD fail err is {}, fd is {:x?}, errorno is {}",
-                        ret, &msg, ret
-                    );
-                }
-            }
-        }
         HostOutputMsg::EventfdWriteAsync(msg) => {
             let ret = super::VMSpace::EventfdWrite(msg.fd);
             if ret < 0 {

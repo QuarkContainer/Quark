@@ -12,7 +12,6 @@
   "FileBufWrite"  : true,
   "MmapRead"      : false,
   "AsyncAccept"   : true,
-  "UringEpollCtl" : true,
   "EnableRDMA"    : false,
   "RDMAPort"      : 1,
   "PerSandboxLog" : false,
