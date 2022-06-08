@@ -155,7 +155,6 @@ pub struct IoUringRegister {
 
 #[derive(Clone, Default, Debug, Copy)]
 pub struct IoUringEnter {
-    pub idx: usize,
     pub toSubmit: u32,
     pub minComplete: u32,
     pub flags: u32,

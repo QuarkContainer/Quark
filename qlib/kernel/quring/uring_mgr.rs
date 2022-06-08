@@ -78,7 +78,7 @@ impl IoUring {
         }
     }
 
-    pub fn SubmitAndWait(&self, _idx: usize, _want: usize) -> Result<usize> {
+    pub fn SubmitAndWait(&self, _want: usize) -> Result<usize> {
         self.pendingCnt.fetch_add(1, Ordering::Release);
 
         if SHARESPACE.HostProcessor() == 0 {
@@ -88,18 +88,17 @@ impl IoUring {
         return Ok(0);
     }
 
-    pub fn Submit(&self, idx: usize) -> Result<usize> {
-        return self.SubmitAndWait(idx, 0);
+    pub fn Submit(&self) -> Result<usize> {
+        return self.SubmitAndWait(0);
     }
 
     pub fn Enter(
         &self,
-        idx: usize,
         to_submit: u32,
         min_complete: u32,
         flags: u32,
     ) -> Result<usize> {
-        let ret = HostSpace::IoUringEnter(idx, to_submit, min_complete, flags);
+        let ret = HostSpace::IoUringEnter(to_submit, min_complete, flags);
         if ret < 0 {
             return Err(Error::SysError(-ret as i32));
         }
@@ -583,7 +582,6 @@ impl QUring {
         let entry = call.SEntry();
         let entry = entry.user_data(call.Ptr());
 
-        //let idx = Self::NextUringIdx(1) % self.UringCount();
         loop {
             {
                 let mut s = self.IOUring().sq.lock();
@@ -603,15 +601,13 @@ impl QUring {
             }
 
             self.IOUring()
-                .Submit(0)
+                .Submit()
                 .expect("QUringIntern::submit fail");
             return;
         }
     }
 
     pub fn AUringCall(&self, entry: squeue::Entry) {
-        //let idx = Self::NextUringIdx(1) % self.UringCount();
-
         loop {
             {
                 let mut s = self.IOUring().sq.lock();
@@ -631,15 +627,13 @@ impl QUring {
             }
 
             self.IOUring()
-                .Submit(0)
+                .Submit()
                 .expect("QUringIntern::submit fail");
             return;
         }
     }
 
     pub fn AUringCallLinked(&self, entry1: squeue::Entry, entry2: squeue::Entry) {
-        //let idx = Self::NextUringIdx(2) % self.UringCount();
-
         loop {
             {
                 let mut s = self.IOUring().sq.lock();
@@ -668,7 +662,7 @@ impl QUring {
             }
 
             self.IOUring()
-                .Submit(0)
+                .Submit()
                 .expect("QUringIntern::submit fail");
             return;
         }

@@ -559,12 +559,11 @@ impl KVMVcpu {
                                 .vcpu
                                 .get_regs()
                                 .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                            let idx = regs.rbx as usize;
-                            let minComplete = regs.rcx as usize;
+                            let minComplete = regs.rbx as usize;
 
                             URING_MGR
                                 .lock()
-                                .Wake(idx, minComplete)
+                                .Wake(minComplete)
                                 .expect("qlib::HYPER CALL_URING_WAKE fail");
                         }
                         qlib::HYPERCALL_RELEASE_VCPU => {

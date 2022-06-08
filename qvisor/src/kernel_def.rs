@@ -270,10 +270,10 @@ pub fn NewSocket(fd: i32) -> i64 {
     return VMSpace::NewSocket(fd);
 }
 
-pub fn UringWake(idx: usize, minCompleted: u64) {
+pub fn UringWake(minCompleted: u64) {
     URING_MGR
         .lock()
-        .Wake(idx, minCompleted as _)
+        .Wake(minCompleted as _)
         .expect("qlib::HYPER CALL_URING_WAKE fail");
 }
 

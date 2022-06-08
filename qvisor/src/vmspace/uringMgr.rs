@@ -96,7 +96,6 @@ impl UringMgr {
 
     pub fn Enter(
         &mut self,
-        _idx: usize,
         toSumbit: u32,
         minComplete: u32,
         flags: u32,
@@ -113,7 +112,7 @@ impl UringMgr {
         return self.ring.as_ref().unwrap().completion().lock().len();
     }
 
-    pub fn Wake(&self, _idx: usize, minComplete: usize) -> Result<()> {
+    pub fn Wake(&self, minComplete: usize) -> Result<()> {
         let fd = self.uringfd;
         let ret = if minComplete == 0 {
             IOUringEnter(fd, 1, minComplete as u32, IORING_ENTER_SQ_WAKEUP)
