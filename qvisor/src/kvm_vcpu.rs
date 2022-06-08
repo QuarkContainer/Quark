@@ -700,8 +700,7 @@ impl KVMVcpu {
                         }
 
                         qlib::HYPERCALL_VCPU_YIELD => {
-                            //error!("HYPERCALL_VCPU_YIELD1 {}", IOURING.IOUrings()[0].sq.lock().freeSlot());
-                            let _ret = IOURING.IOUrings()[0].HostSubmit().unwrap();
+                            let _ret = IOURING.IOUring().HostSubmit().unwrap();
                             //error!("HYPERCALL_VCPU_YIELD2 {:?}", ret);
                             //use std::{thread, time};
 
@@ -1119,7 +1118,7 @@ impl CPULocal {
         let mut count = 0;
 
         loop {
-            let cnt = IOURING.IOUrings()[0].HostSubmit().unwrap();
+            let cnt = IOURING.IOUring().HostSubmit().unwrap();
             if cnt == 0 {
                 break;
             }

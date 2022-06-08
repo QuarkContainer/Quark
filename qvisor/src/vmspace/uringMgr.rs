@@ -23,19 +23,17 @@ use super::host_uring::*;
 
 //#[derive(Debug)]
 pub struct UringMgr {
-    pub uringfds: Vec<i32>,
+    pub uringfd: i32,
     pub eventfd: i32,
     pub fds: Vec<i32>,
-    pub rings: Vec<IoUring>,
+    pub ring: Option<IoUring>,
     pub uringSize: usize,
 }
 
 impl Drop for UringMgr {
     fn drop(&mut self) {
-        for fd in &self.uringfds {
-            unsafe {
-                libc::close(*fd);
-            }
+        unsafe {
+            libc::close(self.uringfd);
         }
 
         for fd in &self.fds {
@@ -58,10 +56,10 @@ impl UringMgr {
         }
 
         let ret = Self {
-            uringfds: Vec::new(),
+            uringfd: -1,
             eventfd: 0,
             fds: fds,
-            rings: Vec::new(),
+            ring: None,
             uringSize: size,
         };
 
@@ -69,35 +67,17 @@ impl UringMgr {
     }
 
     pub fn IOUringsAddr(&self) -> u64 {
-        let addr = &self.rings as *const Vec<IoUring> as u64;
-        return addr;
+        return self.ring.as_ref().unwrap().Addr();
     }
 
-    pub fn Init(&mut self, DedicateUringCnt: usize) {
-        let vcpuMappingDelta = VMS.lock().vcpuMappingDelta;
-
-        if DedicateUringCnt == 0 {
-            let ring = Builder::default()
-                .setup_cqsize(self.uringSize as u32 * 2)
-                .setup_clamp()
-                .build(self.uringSize as u32)
-                .expect("InitUring fail");
-            self.uringfds.push(ring.fd.0);
-            self.rings.push(ring);
-        } else {
-            for i in 0..DedicateUringCnt {
-                let ring = Builder::default()
-                    .setup_sqpoll(10)
-                    .setup_sqpoll_cpu(i as u32 + vcpuMappingDelta as u32)
-                    //.setup_iopoll()
-                    //.setup_clamp()
-                    .setup_cqsize(self.uringSize as u32 * 2)
-                    .build(self.uringSize as u32)
-                    .expect("InitUring fail");
-                self.uringfds.push(ring.fd.0);
-                self.rings.push(ring);
-            }
-        }
+    pub fn Init(&mut self) {
+        let ring = Builder::default()
+            .setup_cqsize(self.uringSize as u32 * 2)
+            .setup_clamp()
+            .build(self.uringSize as u32)
+            .expect("InitUring fail");
+        self.uringfd = ring.fd.0;
+        self.ring = Some(ring);
 
         self.Register(
             IORING_REGISTER_FILES,
@@ -116,12 +96,12 @@ impl UringMgr {
 
     pub fn Enter(
         &mut self,
-        idx: usize,
+        _idx: usize,
         toSumbit: u32,
         minComplete: u32,
         flags: u32,
     ) -> Result<i32> {
-        let ret = IOUringEnter(self.uringfds[idx], toSumbit, minComplete, flags);
+        let ret = IOUringEnter(self.uringfd, toSumbit, minComplete, flags);
         if ret < 0 {
             return Err(Error::SysError(-ret as i32));
         }
@@ -130,16 +110,11 @@ impl UringMgr {
     }
 
     pub fn CompletEntries(&self) -> usize {
-        let mut cnt = 0;
-        for r in &self.rings {
-            cnt += r.completion().lock().len();
-        }
-
-        return cnt;
+        return self.ring.as_ref().unwrap().completion().lock().len();
     }
 
-    pub fn Wake(&self, idx: usize, minComplete: usize) -> Result<()> {
-        let fd = self.uringfds[idx];
+    pub fn Wake(&self, _idx: usize, minComplete: usize) -> Result<()> {
+        let fd = self.uringfd;
         let ret = if minComplete == 0 {
             IOUringEnter(fd, 1, minComplete as u32, IORING_ENTER_SQ_WAKEUP)
         } else {
@@ -156,8 +131,9 @@ impl UringMgr {
     }
 
     pub fn Register(&self, opcode: u32, arg: u64, nrArgs: u32) -> Result<()> {
-        for fd in &self.uringfds {
-            self.RegisterOne(*fd, opcode, arg, nrArgs)?;
+        // it is inited
+        if self.uringfd != -1 {
+            self.RegisterOne(self.uringfd, opcode, arg, nrArgs)?;
         }
 
         return Ok(());
