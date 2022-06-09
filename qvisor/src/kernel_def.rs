@@ -1,7 +1,7 @@
 use cache_padded::CachePadded;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-use crossbeam::sync::WaitGroup;
+//use crossbeam::sync::WaitGroup;
 use libc::*;
 use std::fmt;
 
@@ -22,6 +22,7 @@ use super::qlib::rdma_svc_cli::*;
 use super::qlib::task_mgr::*;
 use super::qlib::vcpu_mgr::*;
 use super::qlib::*;
+use super::vmspace::vcp_wait::*;
 use super::vmspace::*;
 use super::ThreadId;
 use super::FD_NOTIFIER;
@@ -123,7 +124,7 @@ impl ShareSpace {
         self.values = values;
 
         self.scheduler.Init();
-        self.SetLogfd(super::print::LOG.lock().Logfd());
+        self.SetLogfd(super::print::LOG.Logfd());
         self.hostEpollfd
             .store(FD_NOTIFIER.Epollfd(), Ordering::SeqCst);
         self.controlSock = controlSock;
@@ -131,7 +132,47 @@ impl ShareSpace {
     }
 
     pub fn TlbShootdown(&self, vcpuMask: u64) -> u64 {
-        let wg = WaitGroup::new();
+        let waiter = VCPU_WAIT.NewWaiter(vcpuMask);
+        let vcpu_len = self.scheduler.VcpuArr.len();
+        let mut bitmap = 0;
+        for i in 1..vcpu_len {
+            let cpu = VMS.lock().vcpus[i].clone();
+            if ((1 << i) & vcpuMask != 0)
+                && SHARE_SPACE.scheduler.VcpuArr[i].GetMode() == VcpuMode::User
+                && cpu.state.load(Ordering::Acquire) == (KVMVcpuState::GUEST as u64)
+                {
+                    bitmap |= 1 << i;
+                    SHARE_SPACE.scheduler.VcpuArr[i].InterruptTlbShootdown();
+                    cpu.interrupt(None);
+                } else {
+                // don't need to wait this vcpu
+                VCPU_WAIT.Wakeup(i);
+            }
+        }
+
+        for _ in 0..10 {
+            match waiter.Wait(100) {
+                Ok(()) => {
+                    break
+                },
+                _ => {
+                    for i in 0..vcpu_len {
+                        if bitmap & (1<<i) != 0 {
+                            let cpu = VMS.lock().vcpus[i].clone();
+                            cpu.interrupt(None)
+                        }
+                    }
+
+                }
+            }
+        }
+
+
+        waiter.Clear();
+        return 0;
+
+
+        /*let wg = WaitGroup::new();
         let vcpu_len = self.scheduler.VcpuArr.len();
         for i in 1..vcpu_len {
             let cpu = VMS.lock().vcpus[i].clone();
@@ -144,7 +185,7 @@ impl ShareSpace {
             }
         }
         wg.wait();
-        return 0;
+        return 0;*/
     }
 
     pub fn Yield() {

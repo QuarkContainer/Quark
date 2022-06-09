@@ -23,6 +23,7 @@ pub mod random;
 pub mod syscall;
 pub mod time;
 pub mod uringMgr;
+pub mod vcp_wait;
 
 use core::sync::atomic;
 use core::sync::atomic::AtomicU64;

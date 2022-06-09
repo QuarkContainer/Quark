@@ -23,6 +23,7 @@ use kvm_ioctls::VcpuExit;
 use libc::*;
 use nix::sys::signal;
 use std::os::unix::io::AsRawFd;
+use std::sync::atomic::fence;
 
 use super::syncmgr::*;
 use super::*;
@@ -45,7 +46,7 @@ use super::runc::runtime::vm::*;
 use super::URING_MGR;
 use crate::qlib::cpuid::XSAVEFeature::{XSAVEFeatureBNDCSR, XSAVEFeatureBNDREGS};
 use crate::qlib::kernel::asm::xgetbv;
-use std::sync::atomic::fence;
+use crate::vcp_wait::VCPU_WAIT;
 
 #[repr(C)]
 pub struct SignalMaskStruct {
@@ -576,7 +577,7 @@ impl KVMVcpu {
                                 .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                             let exitCode = regs.rbx as i32;
 
-                            super::print::LOG.lock().Clear();
+                            super::print::LOG.Clear();
                             PerfPrint();
 
                             SetExitStatus(exitCode);
@@ -824,9 +825,11 @@ impl KVMVcpu {
                     }
                     self.vcpu.set_kvm_request_interrupt_window(0);
                     fence(Ordering::Release);
-                    let mut interrupting = self.interrupting.lock();
+                    VCPU_WAIT.Wakeup(self.id as usize);
+
+                    /*let mut interrupting = self.interrupting.lock();
                     interrupting.1.clear();
-                    interrupting.0 = false;
+                    interrupting.0 = false;*/
                 }
                 VcpuExit::Intr => {
                     let sregs = self
@@ -839,9 +842,10 @@ impl KVMVcpu {
                         self.vcpu.set_kvm_request_interrupt_window(1);
                         fence(Ordering::Release);
                     } else {
-                        let mut interrupting = self.interrupting.lock();
+                        VCPU_WAIT.Wakeup(self.id as usize);
+                        /*let mut interrupting = self.interrupting.lock();
                         interrupting.1.clear();
-                        interrupting.0 = false;
+                        interrupting.0 = false;*/
                     }
 
                     //     SHARE_SPACE.MaskTlbShootdown(self.id as _);
@@ -1008,15 +1012,16 @@ impl KVMVcpu {
         Ok(())
     }
 
-    pub fn interrupt(&self, waitGroup: Option<WaitGroup>) {
-        let mut interrupting = self.interrupting.lock();
+    pub fn interrupt(&self, _waitGroup: Option<WaitGroup>) {
+        self.Signal(Signal::SIGCHLD);
+        /*let mut interrupting = self.interrupting.lock();
         if let Some(wg) = waitGroup {
             interrupting.1.push(wg);
         }
         if !interrupting.0 {
             interrupting.0 = true;
             self.Signal(Signal::SIGCHLD);
-        }
+        }*/
     }
 }
 

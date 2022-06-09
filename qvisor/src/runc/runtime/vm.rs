@@ -168,7 +168,7 @@ impl VirtualMachine {
         }
 
         let sharespace = SHARE_SPACE.Ptr();
-        let logfd = super::super::super::print::LOG.lock().Logfd();
+        let logfd = super::super::super::print::LOG.Logfd();
         URING_MGR
             .lock()
             .Init();
@@ -211,7 +211,6 @@ impl VirtualMachine {
         }
 
         let syncPrint = sharespace.config.read().SyncPrint();
-        super::super::super::print::SetSharespace(sharespace);
         super::super::super::print::SetSyncPrint(syncPrint);
         error!("VM::InitShareSpace, after call init 2");
     }
@@ -221,7 +220,7 @@ impl VirtualMachine {
 
         *ROOT_CONTAINER_ID.lock() = args.ID.clone();
         if QUARK_CONFIG.lock().PerSandboxLog {
-            LOG.lock().Reset(&args.ID[0..12]);
+            LOG.Reset(&args.ID[0..12]);
         }
 
         let kvmfd = args.KvmFd;
