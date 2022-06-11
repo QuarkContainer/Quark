@@ -136,6 +136,7 @@ pub fn init() {
 
 pub fn ExceptionHandler(ev: ExceptionStackVec, ptRegs: &mut PtRegs, errorCode: u64) {
     CPULocal::Myself().SetMode(VcpuMode::Kernel);
+    SHARESPACE.vcpuBitmap.Wakeup(CPULocal::CpuId() as usize);
     let PRINT_EXECPTION: bool = SHARESPACE.config.read().PrintException;
 
     let currTask = Task::Current();
@@ -326,6 +327,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, ptRegs: &mut PtRegs, errorCode: u
     }
 
     currTask.mm.HandleTlbShootdown();
+    SHARESPACE.vcpuBitmap.Wakeup(CPULocal::CpuId() as usize);
     CPULocal::Myself().SetMode(VcpuMode::User);
     ReturnToApp(ptRegs);
 }
@@ -427,6 +429,7 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
         llvm_asm!("movw $0, %ss" :: "r" (ss) : "memory");
     }
     CPULocal::Myself().SetMode(VcpuMode::Kernel);
+    SHARESPACE.vcpuBitmap.Wakeup(CPULocal::CpuId() as usize);
     let currTask = Task::Current();
 
     // is this call from user
@@ -482,6 +485,7 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
     // no need loop, just need to enable break
     loop {
         let _ml = currTask.mm.MappingWriteLock();
+        defer!(error!("pagefault end"));
 
         let (vma, range) = match currTask.mm.GetVmaAndRangeLocked(cr2) {
             //vmas.lock().Get(cr2) {
@@ -565,6 +569,7 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
                     currTask.SwitchPageTable();
                 }
             }
+            SHARESPACE.vcpuBitmap.Wakeup(CPULocal::CpuId() as usize);
             CPULocal::Myself().SetMode(VcpuMode::User);
             return;
         }
@@ -594,6 +599,7 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
             signal = Signal::SIGSEGV;
             break;
         }
+        SHARESPACE.vcpuBitmap.Wakeup(CPULocal::CpuId() as usize);
         CPULocal::Myself().SetMode(VcpuMode::User);
         return;
     }
@@ -649,6 +655,7 @@ pub fn HandleFault(
     task.mm.HandleTlbShootdown();
 
     task.RestoreFp();
+    //SHARESPACE.vcpuBitmap.Wakeup(CPULocal::CpuId() as usize);
     CPULocal::Myself().SetMode(VcpuMode::User);
     ReturnToApp(sf);
 }

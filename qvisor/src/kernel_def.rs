@@ -1,10 +1,11 @@
 use cache_padded::CachePadded;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-//use crossbeam::sync::WaitGroup;
+use crossbeam::sync::WaitGroup;
 use libc::*;
 use std::fmt;
 
+use crate::syscall::syscall6;
 use super::qlib::common::*;
 use super::qlib::control_msg::*;
 use super::qlib::kernel::memmgr::pma::*;
@@ -22,7 +23,7 @@ use super::qlib::rdma_svc_cli::*;
 use super::qlib::task_mgr::*;
 use super::qlib::vcpu_mgr::*;
 use super::qlib::*;
-use super::vmspace::vcp_wait::*;
+use super::qlib::vcp_bitmap::*;
 use super::vmspace::*;
 use super::ThreadId;
 use super::FD_NOTIFIER;
@@ -31,6 +32,7 @@ use super::URING_MGR;
 use super::VMS;
 use crate::kvm_vcpu::KVMVcpuState;
 use crate::SHARE_SPACE;
+use crate::TLB_LOCK;
 
 impl std::error::Error for Error {}
 
@@ -132,45 +134,44 @@ impl ShareSpace {
     }
 
     pub fn TlbShootdown(&self, vcpuMask: u64) -> u64 {
-        let waiter = VCPU_WAIT.NewWaiter(vcpuMask);
+        error!("TlbShootdown 1 {:x}", vcpuMask);
+        let _l = TLB_LOCK.lock();
+        error!("TlbShootdown 2");
+        let vcpuId = ThreadId();
+        SHARE_SPACE.vcpuBitmap.InitWait(vcpuId, vcpuMask);
         let vcpu_len = self.scheduler.VcpuArr.len();
-        let mut bitmap = 0;
-        for i in 1..vcpu_len {
-            let cpu = VMS.lock().vcpus[i].clone();
-            if ((1 << i) & vcpuMask != 0)
-                && SHARE_SPACE.scheduler.VcpuArr[i].GetMode() == VcpuMode::User
-                && cpu.state.load(Ordering::Acquire) == (KVMVcpuState::GUEST as u64)
-                {
-                    bitmap |= 1 << i;
-                    SHARE_SPACE.scheduler.VcpuArr[i].InterruptTlbShootdown();
-                    cpu.interrupt(None);
-                } else {
-                // don't need to wait this vcpu
-                VCPU_WAIT.Wakeup(i);
-            }
-        }
 
         for _ in 0..10 {
-            match waiter.Wait(100) {
-                Ok(()) => {
-                    break
-                },
-                _ => {
-                    for i in 0..vcpu_len {
-                        if bitmap & (1<<i) != 0 {
-                            let cpu = VMS.lock().vcpus[i].clone();
-                            cpu.interrupt(None)
-                        }
+            let bitmap = SHARE_SPACE.vcpuBitmap.Bitmap();
+            for i in 1..vcpu_len {
+                let cpu = VMS.lock().vcpus[i].clone();
+                if (1 << i) & bitmap != 0 {
+                    if SHARE_SPACE.scheduler.VcpuArr[i].GetMode() == VcpuMode::User
+                        && cpu.state.load(Ordering::Acquire) == (KVMVcpuState::GUEST as u64) {
+                        SHARE_SPACE.scheduler.VcpuArr[i].InterruptTlbShootdown();
+                        error!("TlbShootdown 2.2 interrupt {}", i);
+                        cpu.interrupt(None);
+                    } else {
+                        error!("TlbShootdown 2.2 wakeup {}/{:x}", i, (1 << i) & vcpuMask);
+                        SHARE_SPACE.vcpuBitmap.Wakeup(i);
                     }
-
                 }
             }
+
+            error!("TlbShootdown 3");
+            match SHARE_SPACE.vcpuBitmap.Wait(vcpuId as i32, 100) {
+                Ok(()) => break,
+                Err(Error::SysError(SysErr::ETIMEDOUT)) => (),
+                Err(e) => {
+                    panic!("TlbShootdown fail {:?}", e);
+                }
+            }
+            error!("TlbShootdown 4");
         }
 
-
-        waiter.Clear();
+        SHARE_SPACE.vcpuBitmap.Clear();
+        error!("TlbShootdown 5 {:x}", SHARE_SPACE.vcpuBitmap.Bitmap());
         return 0;
-
 
         /*let wg = WaitGroup::new();
         let vcpu_len = self.scheduler.VcpuArr.len();
@@ -351,4 +352,45 @@ pub fn HugepageDontNeed(addr: u64) {
         )
     };
     assert!(ret == 0, "HugepageDontNeed::Host fail with {}", ret)
+}
+
+impl VcpuBitmap {
+    pub fn FutexWake(&self) -> i64 {
+        let addr = self.FutexAddr();
+        let nr = SysCallID::sys_futex as usize;
+        let ret = unsafe {
+            syscall6(nr,
+                     addr as usize,
+                     (libc::FUTEX_PRIVATE_FLAG | libc::FUTEX_WAKE) as usize,
+                     1,
+                     0,
+                     0,
+                     0) as i64
+        };
+        assert!(ret>=0);
+        return ret
+    }
+
+    // timeout: how many ms
+    pub fn FutexWait(&self, val: i32, timeout: i32) -> i64 {
+        let addr = self.FutexAddr();
+
+        let timespec = Timespec::FromNs((timeout as i64) * 1000_000);
+
+        let nr = SysCallID::sys_futex as usize;
+        let ret = unsafe {
+            syscall6(nr,
+                     addr as usize,
+                     (libc::FUTEX_PRIVATE_FLAG | libc::FUTEX_WAIT) as usize,
+                     val as usize,
+                     &timespec as * const _ as usize,
+                     0,
+                     0) as i64 };
+
+        if ret < 0 && ret != -11 {
+            error!("FutexWake wait 2 {}", ret);
+        }
+
+        return ret as i64
+    }
 }

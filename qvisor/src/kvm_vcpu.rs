@@ -46,7 +46,6 @@ use super::runc::runtime::vm::*;
 use super::URING_MGR;
 use crate::qlib::cpuid::XSAVEFeature::{XSAVEFeatureBNDCSR, XSAVEFeatureBNDREGS};
 use crate::qlib::kernel::asm::xgetbv;
-use crate::vcp_wait::VCPU_WAIT;
 
 #[repr(C)]
 pub struct SignalMaskStruct {
@@ -468,11 +467,20 @@ impl KVMVcpu {
             self.state
                 .store(KVMVcpuState::GUEST as u64, Ordering::Release);
             fence(Ordering::Acquire);
-            let kvmRet = match self.vcpu.run() {
+            let kvmRet = self.vcpu.run();
+            self.state
+                .store(KVMVcpuState::HOST as u64, Ordering::Release);
+            let kvmRet = match kvmRet {
                 Ok(ret) => ret,
                 Err(e) => {
+                    error!("kvmrun is {:?}", &e);
                     if e.errno() == SysErr::EINTR {
                         self.vcpu.set_kvm_immediate_exit(0);
+                        if SHARE_SPACE.scheduler.VcpuArr[self.id as usize].GetMode() != VcpuMode::User {
+                            SHARE_SPACE.vcpuBitmap.Wakeup(self.id as usize);
+                            continue
+                        }
+
                         if self.vcpu.get_ready_for_interrupt_injection() > 0 {
                             VcpuExit::IrqWindowOpen
                         } else {
@@ -488,8 +496,6 @@ impl KVMVcpu {
                     }
                 }
             };
-            self.state
-                .store(KVMVcpuState::HOST as u64, Ordering::Release);
 
             match kvmRet {
                 VcpuExit::IoIn(addr, data) => {
@@ -813,6 +819,12 @@ impl KVMVcpu {
                     info!("get exception");
                 }
                 VcpuExit::IrqWindowOpen => {
+                    error!("VcpuExit::IrqWindowOpen");
+                    if SHARE_SPACE.scheduler.VcpuArr[self.id as usize].GetMode() != VcpuMode::User {
+                        SHARE_SPACE.vcpuBitmap.Wakeup(self.id as usize);
+                        continue
+                    }
+
                     //info!("get VcpuExit::IrqWindowOpen");
                     let sregs = self
                         .vcpu
@@ -825,13 +837,19 @@ impl KVMVcpu {
                     }
                     self.vcpu.set_kvm_request_interrupt_window(0);
                     fence(Ordering::Release);
-                    VCPU_WAIT.Wakeup(self.id as usize);
+                    SHARE_SPACE.vcpuBitmap.Wakeup(self.id as usize);
 
                     /*let mut interrupting = self.interrupting.lock();
                     interrupting.1.clear();
                     interrupting.0 = false;*/
                 }
                 VcpuExit::Intr => {
+                    error!("VcpuExit::Intr");
+                    if SHARE_SPACE.scheduler.VcpuArr[self.id as usize].GetMode() != VcpuMode::User {
+                        SHARE_SPACE.vcpuBitmap.Wakeup(self.id as usize);
+                        continue
+                    }
+
                     let sregs = self
                         .vcpu
                         .get_sregs()
@@ -842,7 +860,7 @@ impl KVMVcpu {
                         self.vcpu.set_kvm_request_interrupt_window(1);
                         fence(Ordering::Release);
                     } else {
-                        VCPU_WAIT.Wakeup(self.id as usize);
+                        SHARE_SPACE.vcpuBitmap.Wakeup(self.id as usize);
                         /*let mut interrupting = self.interrupting.lock();
                         interrupting.1.clear();
                         interrupting.0 = false;*/
@@ -1012,16 +1030,16 @@ impl KVMVcpu {
         Ok(())
     }
 
-    pub fn interrupt(&self, _waitGroup: Option<WaitGroup>) {
-        self.Signal(Signal::SIGCHLD);
-        /*let mut interrupting = self.interrupting.lock();
+    pub fn interrupt(&self, waitGroup: Option<WaitGroup>) {
+        //self.Signal(Signal::SIGCHLD);
+        let mut interrupting = self.interrupting.lock();
         if let Some(wg) = waitGroup {
             interrupting.1.push(wg);
         }
         if !interrupting.0 {
             interrupting.0 = true;
             self.Signal(Signal::SIGCHLD);
-        }*/
+        }
     }
 }
 
@@ -1245,7 +1263,15 @@ pub fn SetExitSignal() {
     }
 }
 
+// **********This is in signal handler context, no memory allocation incldues error! allowed*************************
 extern "C" fn handleSigChild(signal: i32) {
+    let vcpu = ThreadId() as usize;
+    error!("handleSigChild");
+    if SHARE_SPACE.scheduler.VcpuArr[vcpu].GetMode() != VcpuMode::User {
+        SHARE_SPACE.vcpuBitmap.Wakeup(vcpu);
+        return
+    }
+
     if signal == Signal::SIGCHLD {
         // used for tlb shootdown
         if let Some(vcpu) = LocalVcpu() {

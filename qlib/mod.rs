@@ -53,6 +53,7 @@ pub mod sort_arr;
 pub mod task_mgr;
 pub mod uring;
 pub mod usage;
+pub mod vcp_bitmap;
 
 pub mod kernel;
 pub mod rdma_share;
@@ -88,6 +89,7 @@ use self::rdma_svc_cli::*;
 use self::ringbuf::*;
 use self::task_mgr::*;
 use super::asm::*;
+use self::vcp_bitmap::VcpuBitmap;
 
 pub fn InitSingleton() {
     unsafe {
@@ -681,6 +683,7 @@ pub struct ShareSpace {
     pub uid: CachePadded<AtomicU64>,
     pub inotifyCookie: CachePadded<AtomicU32>,
     pub waitMask: CachePadded<AtomicU64>,
+    pub vcpuBitmap: CachePadded<VcpuBitmap>,
 
     pub controlSock: i32,
 

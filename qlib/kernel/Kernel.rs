@@ -121,6 +121,12 @@ impl HostSpace {
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
+    pub fn TlbShootdownWake() -> i64 {
+        let mut msg = Msg::TlbShootdownWake(TlbShootdownWake {});
+
+        return HostSpace::HCall(&mut msg, false) as i64;
+    }
+
     pub fn IORead(fd: i32, iovs: u64, iovcnt: i32) -> i64 {
         let mut msg = Msg::IORead(IORead { fd, iovs, iovcnt });
 

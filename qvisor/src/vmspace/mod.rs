@@ -20,10 +20,9 @@ pub mod hostfdnotifier;
 pub mod kernel_io_thread;
 pub mod limits;
 pub mod random;
-pub mod syscall;
 pub mod time;
 pub mod uringMgr;
-pub mod vcp_wait;
+pub mod syscall;
 
 use core::sync::atomic;
 use core::sync::atomic::AtomicU64;

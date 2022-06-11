@@ -339,6 +339,9 @@ impl KVMVcpu {
             Msg::TlbShootdown(msg) => {
                 ret = SHARE_SPACE.TlbShootdown(msg.vcpuMask);
             }
+            Msg::TlbShootdownWake(_msg) => {
+                ret = SHARE_SPACE.vcpuBitmap.FutexWake() as u64;
+            }
         };
 
         return ret;

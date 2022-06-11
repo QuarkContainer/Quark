@@ -152,6 +152,7 @@ lazy_static! {
     };
     pub static ref KERNEL_IO_THREAD: KIOThread = KIOThread::New();
     pub static ref GLOCK: Mutex<()> = Mutex::new(());
+    pub static ref TLB_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 }
 
 pub const LOG_FILE: &'static str = "/var/log/quark/quark.log";

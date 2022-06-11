@@ -41,6 +41,7 @@ use super::qlib::uring::util::*;
 use super::qlib::uring::*;
 use super::qlib::vcpu_mgr::*;
 use super::qlib::ShareSpace;
+use super::qlib::vcp_bitmap::*;
 use super::qlib::*;
 use super::syscalls::sys_file::*;
 use super::Kernel::HostSpace;
@@ -387,5 +388,17 @@ pub fn HugepageDontNeed(addr: u64) {
 impl IOMgr {
     pub fn Init() -> Result<Self> {
         return Err(Error::Common(format!("IOMgr can't init in kernel")))
+    }
+}
+
+impl VcpuBitmap {
+    pub fn FutexWake(&self) {
+        error!("kernel wake ...");
+        HostSpace::TlbShootdownWake();
+    }
+
+    // timeout: how many ms
+    pub fn FutexWait(&self, _val: i32, _timeout: i32) -> i64 {
+        return 0;
     }
 }

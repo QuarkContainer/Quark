@@ -225,6 +225,7 @@ pub extern "C" fn syscall_handler(
     arg5: u64,
 ) -> ! {
     CPULocal::Myself().SetMode(VcpuMode::Kernel);
+    SHARESPACE.vcpuBitmap.Wakeup(CPULocal::CpuId() as usize);
 
     let currTask = task::Task::Current();
     currTask.PerfGofrom(PerfType::User);
@@ -337,6 +338,7 @@ pub extern "C" fn syscall_handler(
     }
     currTask.mm.HandleTlbShootdown();
     CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
+    //SHARESPACE.vcpuBitmap.Wakeup(CPULocal::CpuId() as usize);
     CPULocal::Myself().SetMode(VcpuMode::User);
     if !(pt.rip == pt.rcx && pt.r11 == pt.eflags) {
         //error!("iret *****, pt is {:x?}", pt);

@@ -112,6 +112,7 @@ pub enum Msg {
     Rdtsc(Rdtsc),
     SetTscOffset(SetTscOffset),
     TlbShootdown(TlbShootdown),
+    TlbShootdownWake(TlbShootdownWake),
     Sysinfo(Sysinfo),
     ReadDir(ReadDir),
 }
@@ -120,6 +121,9 @@ pub enum Msg {
 pub struct TlbShootdown {
     pub vcpuMask: u64,
 }
+
+#[derive(Clone, Default, Debug)]
+pub struct TlbShootdownWake {}
 
 #[derive(Clone, Default, Debug)]
 pub struct Sysinfo {
