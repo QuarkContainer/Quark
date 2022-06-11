@@ -415,6 +415,48 @@ impl HostSpace {
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
+    pub fn FSetXattr(fd: i32, name: u64, value: u64, size: usize, flags: u32) -> i64 {
+        let mut msg = Msg::FSetXattr(FSetXattr {
+            fd,
+            name,
+            value,
+            size,
+            flags
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
+    pub fn FGetXattr(fd: i32, name: u64, value: u64, size: usize) -> i64 {
+        let mut msg = Msg::FGetXattr(FGetXattr {
+            fd,
+            name,
+            value,
+            size,
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
+    pub fn FRemoveXattr(fd: i32, name: u64) -> i64 {
+        let mut msg = Msg::FRemoveXattr(FRemoveXattr {
+            fd,
+            name,
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
+    pub fn FListXattr(fd: i32, list: u64, size: usize) -> i64 {
+        let mut msg = Msg::FListXattr(FListXattr {
+            fd,
+            list,
+            size,
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
     pub fn GetRandom(buf: u64, len: u64, flags: u32) -> i64 {
         let mut msg = Msg::GetRandom(GetRandom { buf, len, flags });
 

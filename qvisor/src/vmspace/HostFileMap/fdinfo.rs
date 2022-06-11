@@ -245,6 +245,27 @@ impl FdInfo {
         return SysRet(ret as i64);
     }
 
+    pub fn FSetXattr(fd: i32, name: u64, value: u64, size: usize, flags: u32) -> i64 {
+        let ret = unsafe { libc::fsetxattr(fd, name as _, value as _, size, flags as _) };
+        return SysRet(ret as i64);
+    }
+
+
+    pub fn FGetXattr(fd: i32, name: u64, value: u64, size: usize) -> i64 {
+        let ret = unsafe { libc::fgetxattr(fd, name as _, value as _, size) };
+        return SysRet(ret as i64);
+    }
+
+    pub fn FRemoveXattr(fd: i32, name: u64) -> i64 {
+        let ret = unsafe { libc::fremovexattr(fd, name as _) };
+        return SysRet(ret as i64);
+    }
+
+    pub fn FListXattr(fd: i32, list: u64, size: usize) -> i64 {
+        let ret = unsafe { libc::flistxattr(fd, list as _, size) };
+        return SysRet(ret as i64);
+    }
+
     ///////////////////////////socket operation//////////////////////////////
     pub fn Accept(sockfd: i32, addr: u64, addrlen: u64) -> i64 {
         let newfd = unsafe {
@@ -425,6 +446,27 @@ impl FdInfo {
     pub fn IOSeek(&self, offset: i64, whence: i32) -> i64 {
         let fd = self.lock().fd;
         return Self::Seek(fd, offset, whence);
+    }
+
+    pub fn IOFSetXattr(&self, name: u64, value: u64, size: usize, flags: u32) -> i64 {
+        let fd = self.lock().fd;
+        return Self::FSetXattr(fd, name, value, size, flags);
+    }
+
+
+    pub fn IOFGetXattr(&self, name: u64, value: u64, size: usize) -> i64 {
+        let fd = self.lock().fd;
+        return Self::FGetXattr(fd, name, value, size);
+    }
+
+    pub fn IOFRemoveXattr(&self, name: u64) -> i64 {
+        let fd = self.lock().fd;
+        return Self::FRemoveXattr(fd, name);
+    }
+
+    pub fn IOFListXattr(&self, list: u64, size: usize) -> i64 {
+        let fd = self.lock().fd;
+        return Self::FListXattr(fd, list, size);
     }
 
     ///////////////////////////socket operation//////////////////////////////

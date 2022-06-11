@@ -114,6 +114,41 @@ pub enum Msg {
     TlbShootdown(TlbShootdown),
     Sysinfo(Sysinfo),
     ReadDir(ReadDir),
+    FSetXattr(FSetXattr),
+    FGetXattr(FGetXattr),
+    FRemoveXattr(FRemoveXattr),
+    FListXattr(FListXattr),
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct FSetXattr {
+    pub fd: i32,
+    pub name: u64,
+    pub value: u64,
+    pub size: usize,
+    pub flags: u32,
+}
+
+
+#[derive(Clone, Default, Debug)]
+pub struct FGetXattr {
+    pub fd: i32,
+    pub name: u64,
+    pub value: u64,
+    pub size: usize,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct FRemoveXattr {
+    pub fd: i32,
+    pub name: u64,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct FListXattr {
+    pub fd: i32,
+    pub list: u64,
+    pub size: usize,
 }
 
 #[derive(Clone, Default, Debug)]
