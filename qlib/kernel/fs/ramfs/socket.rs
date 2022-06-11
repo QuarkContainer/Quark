@@ -205,8 +205,8 @@ impl InodeOperations for SocketInodeOps {
         return self.simpleExtendedAttribute.Getxattr(dir, name);
     }
 
-    fn Setxattr(&self, dir: &mut Inode, name: &str, value: &str) -> Result<()> {
-        return self.simpleExtendedAttribute.Setxattr(dir, name, value);
+    fn Setxattr(&self, dir: &mut Inode, name: &str, value: &str, flags: u32) -> Result<()> {
+        return self.simpleExtendedAttribute.Setxattr(dir, name, value, flags);
     }
 
     fn Listxattr(&self, dir: &Inode) -> Result<Vec<String>> {

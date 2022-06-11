@@ -75,7 +75,7 @@ impl InodeSimpleExtendedAttributes {
         }
     }
 
-    fn Setxattr(&self, _dir: &mut Inode, name: &str, value: &str) -> Result<()> {
+    fn Setxattr(&self, _dir: &mut Inode, name: &str, value: &str, flags: u32) -> Result<()> {
         self.write().xattrs.insert(name.to_string(), value.to_string());
         return Ok(())
     }
@@ -246,7 +246,7 @@ impl InodeNoExtendedAttributes {
         return Err(Error::SysError(SysErr::EOPNOTSUPP))
     }
 
-    fn Setxattr(&self, _dir: &mut Inode, _name: &str, _value: &str) -> Result<()> {
+    fn Setxattr(&self, _dir: &mut Inode, _name: &str, _value: &str, _flags: u32) -> Result<()> {
         return Err(Error::SysError(SysErr::EOPNOTSUPP))
     }
 

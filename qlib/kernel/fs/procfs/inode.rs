@@ -176,8 +176,8 @@ impl InodeOperations for TaskOwnedInodeOps {
         return self.iops.Getxattr(dir, name);
     }
 
-    fn Setxattr(&self, dir: &mut Inode, name: &str, value: &str) -> Result<()> {
-        return self.iops.Setxattr(dir, name, value);
+    fn Setxattr(&self, dir: &mut Inode, name: &str, value: &str, flags: u32) -> Result<()> {
+        return self.iops.Setxattr(dir, name, value, flags);
     }
 
     fn Listxattr(&self, dir: &Inode) -> Result<Vec<String>> {
@@ -397,7 +397,7 @@ impl InodeOperations for StaticFileInodeOps {
         return Err(Error::SysError(SysErr::EOPNOTSUPP));
     }
 
-    fn Setxattr(&self, _dir: &mut Inode, _name: &str, _value: &str) -> Result<()> {
+    fn Setxattr(&self, _dir: &mut Inode, _name: &str, _value: &str, _flags: u32) -> Result<()> {
         return Err(Error::SysError(SysErr::EOPNOTSUPP));
     }
 

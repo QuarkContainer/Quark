@@ -244,7 +244,7 @@ impl InodeOperations for PipeIops {
         return Err(Error::SysError(SysErr::EOPNOTSUPP));
     }
 
-    fn Setxattr(&self, _dir: &mut Inode, _name: &str, _value: &str) -> Result<()> {
+    fn Setxattr(&self, _dir: &mut Inode, _name: &str, _value: &str, _flags: u32) -> Result<()> {
         return Err(Error::SysError(SysErr::EOPNOTSUPP));
     }
 

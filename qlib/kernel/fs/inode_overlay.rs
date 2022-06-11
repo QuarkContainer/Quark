@@ -44,7 +44,7 @@ pub fn OverlayHasWhiteout(parent: &Inode, name: &str) -> bool {
 }
 
 pub fn overlayCreateWhiteout(parent: &mut Inode, name: &str) -> Result<()> {
-    return parent.Setxattr(&XattrOverlayWhiteout(name), &"y".to_string());
+    return parent.Setxattr(&XattrOverlayWhiteout(name), &"y".to_string(), 0);
 }
 
 pub fn overlayLookup(

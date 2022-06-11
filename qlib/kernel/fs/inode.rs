@@ -178,7 +178,7 @@ pub trait InodeOperations: Sync + Send {
     fn GetFile(&self, task: &Task, dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File>;
     fn UnstableAttr(&self, task: &Task) -> Result<UnstableAttr>;
     fn Getxattr(&self, dir: &Inode, name: &str) -> Result<String>;
-    fn Setxattr(&self, dir: &mut Inode, name: &str, value: &str) -> Result<()>;
+    fn Setxattr(&self, dir: &mut Inode, name: &str, value: &str, flags: u32) -> Result<()>;
     fn Listxattr(&self, dir: &Inode) -> Result<Vec<String>>;
     fn Check(&self, task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool>;
     fn SetPermissions(&self, task: &Task, dir: &mut Inode, f: FilePermissions) -> bool;
@@ -558,9 +558,9 @@ impl Inode {
         return res;
     }
 
-    pub fn Setxattr(&mut self, name: &str, value: &str) -> Result<()> {
+    pub fn Setxattr(&mut self, name: &str, value: &str, flags: u32) -> Result<()> {
         let op = self.lock().InodeOp.clone();
-        op.Setxattr(self, name, value)?;
+        op.Setxattr(self, name, value, flags)?;
         return Ok(());
     }
 

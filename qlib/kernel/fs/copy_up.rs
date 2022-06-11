@@ -251,7 +251,7 @@ fn copyAttributesLocked(task: &Task, upper: &mut Inode, lower: &Inode) -> Result
         }
 
         let value = lower.Getxattr(name)?;
-        upperInodeOp.Setxattr(upper, name, &value)?;
+        upperInodeOp.Setxattr(upper, name, &value, 0)?;
     }
 
     return Ok(());

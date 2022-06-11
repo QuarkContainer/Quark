@@ -226,7 +226,7 @@ impl InodeOperations for Symlink {
         }
     }
 
-    fn Setxattr(&self, _dir: &mut Inode, name: &str, value: &str) -> Result<()> {
+    fn Setxattr(&self, _dir: &mut Inode, name: &str, value: &str, _flags: u32) -> Result<()> {
         self.write()
             .xattrs
             .insert(name.to_string(), value.to_string());

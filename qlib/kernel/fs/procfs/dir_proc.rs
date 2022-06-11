@@ -180,8 +180,8 @@ impl<T: 'static + DirDataNode> InodeOperations for DirNode<T> {
         return self.dir.Getxattr(dir, name);
     }
 
-    fn Setxattr(&self, dir: &mut Inode, name: &str, value: &str) -> Result<()> {
-        return self.dir.Setxattr(dir, name, value);
+    fn Setxattr(&self, dir: &mut Inode, name: &str, value: &str, flags: u32) -> Result<()> {
+        return self.dir.Setxattr(dir, name, value, flags);
     }
 
     fn Listxattr(&self, dir: &Inode) -> Result<Vec<String>> {

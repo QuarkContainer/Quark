@@ -199,8 +199,8 @@ impl<T: 'static + ReadLinkNode> InodeOperations for SymlinkNode<T> {
         return self.link.Getxattr(dir, name);
     }
 
-    fn Setxattr(&self, dir: &mut Inode, name: &str, value: &str) -> Result<()> {
-        return self.link.Setxattr(dir, name, value);
+    fn Setxattr(&self, dir: &mut Inode, name: &str, value: &str, flags: u32) -> Result<()> {
+        return self.link.Setxattr(dir, name, value, flags);
     }
 
     fn Listxattr(&self, dir: &Inode) -> Result<Vec<String>> {
