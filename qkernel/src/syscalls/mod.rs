@@ -49,3 +49,4 @@ pub mod syscalls;
 pub mod sys_memfd;
 pub mod sys_sched;
 pub mod sys_inotify;
+pub mod sys_xattr;

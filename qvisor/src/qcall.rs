@@ -108,15 +108,6 @@ impl KVMVcpu {
             Msg::Close(msg) => {
                 ret = super::VMSpace::Close(msg.fd) as u64;
             }
-            Msg::Getxattr(msg) => {
-                ret = super::VMSpace::Getxattr(msg.path, msg.name, msg.value, msg.size) as u64;
-            }
-            Msg::Lgetxattr(msg) => {
-                ret = super::VMSpace::Lgetxattr(msg.path, msg.name, msg.value, msg.size) as u64;
-            }
-            Msg::Fgetxattr(msg) => {
-                ret = super::VMSpace::Fgetxattr(msg.fd, msg.name, msg.value, msg.size) as u64;
-            }
             Msg::Fstat(msg) => {
                 ret = super::VMSpace::Fstat(msg.fd, msg.buff) as u64;
             }

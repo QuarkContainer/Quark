@@ -172,16 +172,16 @@ impl InodeOperations for TaskOwnedInodeOps {
         return Ok(unstable);
     }
 
-    fn Getxattr(&self, dir: &Inode, name: &str) -> Result<String> {
-        return self.iops.Getxattr(dir, name);
+    fn Getxattr(&self, dir: &Inode, name: &str, size: usize) -> Result<Vec<u8>> {
+        return self.iops.Getxattr(dir, name, size);
     }
 
-    fn Setxattr(&self, dir: &mut Inode, name: &str, value: &str, flags: u32) -> Result<()> {
+    fn Setxattr(&self, dir: &mut Inode, name: &str, value: &[u8], flags: u32) -> Result<()> {
         return self.iops.Setxattr(dir, name, value, flags);
     }
 
-    fn Listxattr(&self, dir: &Inode) -> Result<Vec<String>> {
-        return self.iops.Listxattr(dir);
+    fn Listxattr(&self, dir: &Inode, size: usize) -> Result<Vec<String>> {
+        return self.iops.Listxattr(dir, size);
     }
 
     fn Check(&self, task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {
@@ -393,15 +393,15 @@ impl InodeOperations for StaticFileInodeOps {
         return Ok(u);
     }
 
-    fn Getxattr(&self, _dir: &Inode, _name: &str) -> Result<String> {
+    fn Getxattr(&self, _dir: &Inode, _name: &str, _size: usize) -> Result<Vec<u8>> {
         return Err(Error::SysError(SysErr::EOPNOTSUPP));
     }
 
-    fn Setxattr(&self, _dir: &mut Inode, _name: &str, _value: &str, _flags: u32) -> Result<()> {
+    fn Setxattr(&self, _dir: &mut Inode, _name: &str, _value: &[u8], _flags: u32) -> Result<()> {
         return Err(Error::SysError(SysErr::EOPNOTSUPP));
     }
 
-    fn Listxattr(&self, _dir: &Inode) -> Result<Vec<String>> {
+    fn Listxattr(&self, _dir: &Inode, _size: usize) -> Result<Vec<String>> {
         return Err(Error::SysError(SysErr::EOPNOTSUPP));
     }
 

@@ -18,6 +18,23 @@ use core::sync::atomic::Ordering;
 
 use super::super::kernel_def::*;
 
+pub struct Xattr {}
+
+impl Xattr {
+    pub const XATTR_NAME_MAX : usize = 255;
+    pub const XATTR_SIZE_MAX : usize = 65536;
+    pub const XATTR_LIST_MAX : usize = 65536;
+
+    pub const XATTR_CREATE  : u32 = 1;
+    pub const XATTR_REPLACE : u32 = 2;
+
+    pub const XATTR_TRUSTED_PREFIX     : &'static str = "trusted.";
+    pub const XATTR_TRUSTED_PREFIX_LEN : usize = Self::XATTR_TRUSTED_PREFIX.len();
+
+    pub const XATTR_USER_PREFIX     : &'static str = "user.";
+    pub const XATTR_USER_PREFIX_LEN : usize = Self::XATTR_USER_PREFIX.len();
+}
+
 pub struct InotifyEvent {}
 
 impl InotifyEvent {

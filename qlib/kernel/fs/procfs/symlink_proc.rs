@@ -195,16 +195,16 @@ impl<T: 'static + ReadLinkNode> InodeOperations for SymlinkNode<T> {
         return self.link.UnstableAttr(task);
     }
 
-    fn Getxattr(&self, dir: &Inode, name: &str) -> Result<String> {
-        return self.link.Getxattr(dir, name);
+    fn Getxattr(&self, dir: &Inode, name: &str, size: usize) -> Result<Vec<u8>> {
+        return self.link.Getxattr(dir, name, size);
     }
 
-    fn Setxattr(&self, dir: &mut Inode, name: &str, value: &str, flags: u32) -> Result<()> {
+    fn Setxattr(&self, dir: &mut Inode, name: &str, value: &[u8], flags: u32) -> Result<()> {
         return self.link.Setxattr(dir, name, value, flags);
     }
 
-    fn Listxattr(&self, dir: &Inode) -> Result<Vec<String>> {
-        return self.link.Listxattr(dir);
+    fn Listxattr(&self, dir: &Inode, size: usize) -> Result<Vec<String>> {
+        return self.link.Listxattr(dir, size);
     }
 
     fn Check(&self, task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {

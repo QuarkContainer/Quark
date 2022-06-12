@@ -298,39 +298,6 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn Getxattr(path: u64, name: u64, value: u64, size: u64) -> i64 {
-        let mut msg = Msg::Getxattr(Getxattr {
-            path,
-            name,
-            value,
-            size,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn Lgetxattr(path: u64, name: u64, value: u64, size: u64) -> i64 {
-        let mut msg = Msg::Lgetxattr(Lgetxattr {
-            path,
-            name,
-            value,
-            size,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn Fgetxattr(fd: i32, name: u64, value: u64, size: u64) -> i64 {
-        let mut msg = Msg::Fgetxattr(Fgetxattr {
-            fd,
-            name,
-            value,
-            size,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
     pub fn Unlinkat(dirfd: i32, pathname: u64, flags: i32) -> i64 {
         let mut msg = Msg::Unlinkat(Unlinkat {
             dirfd,

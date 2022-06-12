@@ -183,16 +183,16 @@ impl InodeOperations for TmpfsFifoInodeOp {
         return self.0.UnstableAttr(task);
     }
 
-    fn Getxattr(&self, dir: &Inode, name: &str) -> Result<String> {
-        return self.0.Getxattr(dir, name);
+    fn Getxattr(&self, dir: &Inode, name: &str, size: usize) -> Result<Vec<u8>> {
+        return self.0.Getxattr(dir, name, size);
     }
 
-    fn Setxattr(&self, dir: &mut Inode, name: &str, value: &str, flags: u32) -> Result<()> {
+    fn Setxattr(&self, dir: &mut Inode, name: &str, value: &[u8], flags: u32) -> Result<()> {
         return self.0.Setxattr(dir, name, value, flags);
     }
 
-    fn Listxattr(&self, dir: &Inode) -> Result<Vec<String>> {
-        return self.0.Listxattr(dir);
+    fn Listxattr(&self, dir: &Inode, size: usize) -> Result<Vec<String>> {
+        return self.0.Listxattr(dir, size);
     }
 
     fn Check(&self, task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {

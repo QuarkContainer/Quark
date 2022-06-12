@@ -80,7 +80,7 @@ impl SeqGenerationCounter {
 }
 
 pub struct SeqFileInternal {
-    pub xattrs: BTreeMap<String, String>,
+    pub xattrs: BTreeMap<String, Vec<u8>>,
 
     pub fsType: u64,
     pub unstable: UnstableAttr,
@@ -308,27 +308,34 @@ impl InodeOperations for SeqFile {
         return Ok(u);
     }
 
-    fn Getxattr(&self, _dir: &Inode, name: &str) -> Result<String> {
+    fn Getxattr(&self, _dir: &Inode, name: &str, _size: usize) -> Result<Vec<u8>> {
         match self.read().xattrs.get(name) {
             None => Err(Error::SysError(SysErr::ENOATTR)),
             Some(s) => Ok(s.clone()),
         }
     }
 
-    fn Setxattr(&self, _dir: &mut Inode, name: &str, value: &str, _flags: u32) -> Result<()> {
+    fn Setxattr(&self, _dir: &mut Inode, name: &str, value: &[u8], _flags: u32) -> Result<()> {
         self.write()
             .xattrs
-            .insert(name.to_string(), value.to_string());
+            .insert(name.to_string(), value.to_vec());
         return Ok(());
     }
 
-    fn Listxattr(&self, _dir: &Inode) -> Result<Vec<String>> {
+    fn Listxattr(&self, _dir: &Inode, _size: usize) -> Result<Vec<String>> {
         let mut res = Vec::new();
         for (name, _) in &self.read().xattrs {
             res.push(name.clone());
         }
 
         return Ok(res);
+    }
+
+    fn Removexattr(&self, _dir: &Inode, name: &str) -> Result<()> {
+        match self.write().xattrs.remove(name) {
+            None => return Err(Error::SysError(SysErr::ENOATTR)),
+            Some(_) => return Ok(())
+        }
     }
 
     fn Check(&self, task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {

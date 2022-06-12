@@ -28,6 +28,7 @@ use super::super::super::super::linux::time::*;
 use super::super::super::super::linux_def::*;
 use super::super::super::super::mem::areaset::*;
 use super::super::super::super::range::*;
+use super::super::super::util::cstring::*;
 use super::super::super::fd::*;
 use super::super::super::guestfdnotifier::*;
 use super::super::super::kernel::time::*;
@@ -1301,8 +1302,6 @@ impl InodeOperations for HostInodeOp {
             let mut s: Statx = Default::default();
             let hostfd = self.lock().HostFd;
 
-            use super::super::super::util::cstring::*;
-
             let str = CString::New("");
             let ret = IOURING.Statx(
                 task,
@@ -1323,16 +1322,73 @@ impl InodeOperations for HostInodeOp {
     }
 
     //fn StableAttr(&self) -> &StableAttr;
-    fn Getxattr(&self, _dir: &Inode, _name: &str) -> Result<String> {
-        return Err(Error::SysError(SysErr::EOPNOTSUPP));
+    fn Getxattr(&self, _dir: &Inode, name: &str, _size: usize) -> Result<Vec<u8>> {
+        let str = CString::New(name);
+        let val : &mut[u8; Xattr::XATTR_NAME_MAX]= &mut [0; Xattr::XATTR_NAME_MAX];
+        let ret  = HostSpace::FGetXattr(self.FD(),
+                                        str.Ptr(),
+                                        &val[0] as * const _ as u64,
+                                        val.len()) as i32;
+        if ret < 0 {
+            return Err(Error::SysError(-ret))
+        };
+
+        return Ok(val[0..ret as usize].to_vec())
     }
 
-    fn Setxattr(&self, _dir: &mut Inode, _name: &str, _value: &str, _flags: u32) -> Result<()> {
-        return Err(Error::SysError(SysErr::EOPNOTSUPP));
+    fn Setxattr(&self, _dir: &mut Inode, name: &str, value: &[u8], flags: u32) -> Result<()> {
+        let name = CString::New(name);
+        let addr = if value.len() == 0 {
+            0
+        } else {
+            &value[0] as * const _ as u64
+        };
+
+        let ret  = HostSpace::FSetXattr(self.FD(),
+                                        name.Ptr(),
+                                        addr,
+                                        value.len(),
+                                        flags) as i32;
+
+        if ret < 0 {
+            return Err(Error::SysError(-ret))
+        };
+
+        return Ok(())
     }
 
-    fn Listxattr(&self, _dir: &Inode) -> Result<Vec<String>> {
-        return Err(Error::SysError(SysErr::EOPNOTSUPP));
+    fn Listxattr(&self, _dir: &Inode, _size: usize) -> Result<Vec<String>> {
+        let val : &mut[u8; Xattr::XATTR_NAME_MAX]= &mut [0; Xattr::XATTR_NAME_MAX];
+        let ret  = HostSpace::FListXattr(self.FD(),
+                                         &val[0] as * const _ as u64,
+                                         val.len()) as i32;
+        if ret < 0 {
+            return Err(Error::SysError(-ret))
+        };
+
+        let mut res = Vec::new();
+        let mut cur = 0;
+        for i in 0..ret as usize {
+            if val[i] == 0 {
+                let str = String::from_utf8(val[cur..i].to_vec()).map_err(|e| Error::Common(format!("Getxattr fail {}", e)))?;
+                res.push(str);
+                cur = i+1;
+            }
+        }
+
+        return Ok(res)
+    }
+
+    fn Removexattr(&self, _dir: &Inode, name: &str) -> Result<()> {
+        let name = CString::New(name);
+        let ret  = HostSpace::FRemoveXattr(self.FD(),
+                                        name.Ptr()) as i32;
+
+        if ret < 0 {
+            return Err(Error::SysError(-ret))
+        };
+
+        return Ok(())
     }
 
     fn Check(&self, task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {
