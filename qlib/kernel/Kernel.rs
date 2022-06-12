@@ -298,39 +298,6 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn Getxattr(path: u64, name: u64, value: u64, size: u64) -> i64 {
-        let mut msg = Msg::Getxattr(Getxattr {
-            path,
-            name,
-            value,
-            size,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn Lgetxattr(path: u64, name: u64, value: u64, size: u64) -> i64 {
-        let mut msg = Msg::Lgetxattr(Lgetxattr {
-            path,
-            name,
-            value,
-            size,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn Fgetxattr(fd: i32, name: u64, value: u64, size: u64) -> i64 {
-        let mut msg = Msg::Fgetxattr(Fgetxattr {
-            fd,
-            name,
-            value,
-            size,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
     pub fn Unlinkat(dirfd: i32, pathname: u64, flags: i32) -> i64 {
         let mut msg = Msg::Unlinkat(Unlinkat {
             dirfd,
@@ -413,6 +380,48 @@ impl HostSpace {
         });
 
         return HostSpace::HCall(&mut msg, false) as i64;
+    }
+
+    pub fn FSetXattr(fd: i32, name: u64, value: u64, size: usize, flags: u32) -> i64 {
+        let mut msg = Msg::FSetXattr(FSetXattr {
+            fd,
+            name,
+            value,
+            size,
+            flags
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
+    pub fn FGetXattr(fd: i32, name: u64, value: u64, size: usize) -> i64 {
+        let mut msg = Msg::FGetXattr(FGetXattr {
+            fd,
+            name,
+            value,
+            size,
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
+    pub fn FRemoveXattr(fd: i32, name: u64) -> i64 {
+        let mut msg = Msg::FRemoveXattr(FRemoveXattr {
+            fd,
+            name,
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
+    pub fn FListXattr(fd: i32, list: u64, size: usize) -> i64 {
+        let mut msg = Msg::FListXattr(FListXattr {
+            fd,
+            list,
+            size,
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn GetRandom(buf: u64, len: u64, flags: u32) -> i64 {

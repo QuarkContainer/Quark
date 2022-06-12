@@ -37,7 +37,7 @@ use super::super::inode::*;
 use super::file::*;
 
 pub struct InodeSimpleExtendedAttributesInternal {
-    pub xattrs: BTreeMap<String, String>,
+    pub xattrs: BTreeMap<String, Vec<u8>>,
 }
 
 impl Default for InodeSimpleExtendedAttributesInternal {
@@ -65,27 +65,34 @@ impl Deref for InodeSimpleExtendedAttributes {
 }
 
 impl InodeSimpleExtendedAttributes {
-    pub fn Getxattr(&self, _dir: &Inode, name: &str) -> Result<String> {
+    pub fn Getxattr(&self, _dir: &Inode, name: &str, _size: usize) -> Result<Vec<u8>> {
         match self.read().xattrs.get(name) {
             None => Err(Error::SysError(SysErr::ENOATTR)),
             Some(s) => Ok(s.clone()),
         }
     }
 
-    pub fn Setxattr(&self, _dir: &mut Inode, name: &str, value: &str) -> Result<()> {
+    pub fn Setxattr(&self, _dir: &mut Inode, name: &str, value: &[u8], _flags: u32) -> Result<()> {
         self.write()
             .xattrs
-            .insert(name.to_string(), value.to_string());
+            .insert(name.to_string(), value.to_vec());
         return Ok(());
     }
 
-    pub fn Listxattr(&self, _dir: &Inode) -> Result<Vec<String>> {
+    pub fn Listxattr(&self, _dir: &Inode, _size: usize) -> Result<Vec<String>> {
         let mut res = Vec::new();
         for (name, _) in &self.read().xattrs {
             res.push(name.clone());
         }
 
         return Ok(res);
+    }
+
+    pub fn Removexattr(&self, _dir: &Inode, name: &str) -> Result<()> {
+        match self.write().xattrs.remove(name) {
+            None => return Err(Error::SysError(SysErr::ENOATTR)),
+            Some(_) => return Ok(())
+        }
     }
 }
 
@@ -296,15 +303,15 @@ impl InodeNotSymlink {
 pub struct InodeNoExtendedAttributes {}
 
 impl InodeNoExtendedAttributes {
-    fn Getxattr(&self, _dir: &Inode, _name: &str) -> Result<String> {
+    fn Getxattr(&self, _dir: &Inode, _name: &str, _size: usize) -> Result<Vec<u8>> {
         return Err(Error::SysError(SysErr::EOPNOTSUPP));
     }
 
-    fn Setxattr(&self, _dir: &mut Inode, _name: &str, _value: &str) -> Result<()> {
+    fn Setxattr(&self, _dir: &mut Inode, _name: &str, _value: &[u8], _flags: u32) -> Result<()> {
         return Err(Error::SysError(SysErr::EOPNOTSUPP));
     }
 
-    fn Listxattr(&self, _dir: &Inode) -> Result<Vec<String>> {
+    fn Listxattr(&self, _dir: &Inode, _size: usize) -> Result<Vec<String>> {
         return Err(Error::SysError(SysErr::EOPNOTSUPP));
     }
 }

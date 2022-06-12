@@ -47,6 +47,7 @@ use super::super::syscalls::sys_write::*;
 use super::super::syscalls::sys_memfd::*;
 use super::super::syscalls::sys_sched::*;
 use super::super::syscalls::sys_inotify::*;
+use super::super::syscalls::sys_xattr::*;
 
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
@@ -287,18 +288,18 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     NotImplementSyscall, //sys_security,
     SysGetTid,           //sys_gettid,
     NotImplementSyscall, //sys_readahead,
-    SysNoSupport,        //sys_setxattr,
-    SysNoSupport,        //sys_lsetxattr,
-    SysNoSupport,        //sys_fsetxattr,    //190
-    SysNoSupport,        //sys_getxattr,
-    SysNoSupport,        //sys_lgetxattr,
-    SysNoSupport,        //sys_fgetxattr,
-    SysNoSupport,        //sys_listxattr,
-    SysNoSupport,        //sys_llistxattr,
-    SysNoSupport,        //sys_flistxattr,
-    SysNoSupport,        //sys_removexattr,
-    SysNoSupport,        //sys_lremovexattr,
-    SysNoSupport,        //sys_fremovexattr,
+    SysSetXattr,         //sys_setxattr,
+    SysLSetXattr,        //sys_lsetxattr,
+    SysFSetXattr,        //sys_fsetxattr,    //190
+    SysGetXattr,         //sys_getxattr,
+    SysLGetXattr,        //sys_lgetxattr,
+    SysFGetXattr,        //sys_fgetxattr,
+    SysListXattr,        //sys_listxattr,
+    SysLListXattr,       //sys_llistxattr,
+    SysFListXattr,       //sys_flistxattr,
+    SysRemoveXattr,      //sys_removexattr,
+    SysLRemoveXattr,     //sys_lremovexattr,
+    SysFRemoveXattr,     //sys_fremovexattr,
     SysTkill,            //sys_tkill,    //200
     SysTime,             //sys_time,
     SysFutex,            //sys_futex,

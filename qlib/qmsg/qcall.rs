@@ -42,9 +42,6 @@ pub enum Msg {
     Fcntl(Fcntl),
     Close(Close),
 
-    Getxattr(Getxattr),
-    Lgetxattr(Lgetxattr),
-    Fgetxattr(Fgetxattr),
     Fstat(Fstat),
     Fstatat(Fstatat),
     Fstatfs(Fstatfs),
@@ -114,6 +111,41 @@ pub enum Msg {
     TlbShootdown(TlbShootdown),
     Sysinfo(Sysinfo),
     ReadDir(ReadDir),
+    FSetXattr(FSetXattr),
+    FGetXattr(FGetXattr),
+    FRemoveXattr(FRemoveXattr),
+    FListXattr(FListXattr),
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct FSetXattr {
+    pub fd: i32,
+    pub name: u64,
+    pub value: u64,
+    pub size: usize,
+    pub flags: u32,
+}
+
+
+#[derive(Clone, Default, Debug)]
+pub struct FGetXattr {
+    pub fd: i32,
+    pub name: u64,
+    pub value: u64,
+    pub size: usize,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct FRemoveXattr {
+    pub fd: i32,
+    pub name: u64,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct FListXattr {
+    pub fd: i32,
+    pub list: u64,
+    pub size: usize,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -240,30 +272,6 @@ pub struct IoCtl {
 pub struct GetTimeOfDay {
     pub tv: u64,
     pub tz: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Getxattr {
-    pub path: u64,
-    pub name: u64,
-    pub value: u64,
-    pub size: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Lgetxattr {
-    pub path: u64,
-    pub name: u64,
-    pub value: u64,
-    pub size: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Fgetxattr {
-    pub fd: i32,
-    pub name: u64,
-    pub value: u64,
-    pub size: u64,
 }
 
 #[derive(Clone, Default, Debug)]

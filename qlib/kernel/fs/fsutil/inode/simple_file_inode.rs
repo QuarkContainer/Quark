@@ -123,15 +123,15 @@ impl<T: 'static + SimpleFileTrait> InodeOperations for SimpleFileInode<T> {
         return ContextCanAccessFile(task, inode, reqPerms);
     }
 
-    fn Getxattr(&self, _dir: &Inode, _name: &str) -> Result<String> {
+    fn Getxattr(&self, _dir: &Inode, _name: &str, _size: usize) -> Result<Vec<u8>> {
         return Err(Error::SysError(SysErr::EOPNOTSUPP));
     }
 
-    fn Setxattr(&self, _dir: &mut Inode, _name: &str, _value: &str) -> Result<()> {
+    fn Setxattr(&self, _dir: &mut Inode, _name: &str, _value: &[u8], _flags: u32) -> Result<()> {
         return Err(Error::SysError(SysErr::EOPNOTSUPP));
     }
 
-    fn Listxattr(&self, _dir: &Inode) -> Result<Vec<String>> {
+    fn Listxattr(&self, _dir: &Inode, _size: usize) -> Result<Vec<String>> {
         return Err(Error::SysError(SysErr::EOPNOTSUPP));
     }
 

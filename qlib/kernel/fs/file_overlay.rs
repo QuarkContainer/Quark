@@ -307,7 +307,7 @@ fn ReaddirEntries(task: &Task, o: Arc<RwLock<OverlayEntry>>) -> Result<DentMap> 
         let lowerEntries = ReaddirOne(task, &Dirent::NewTransient(lower.as_ref().unwrap()))?;
         for (name, entry) in lowerEntries {
             if upper.is_some() {
-                if OverlayHasWhiteout(upper.as_ref().unwrap(), &name) {
+                if OverlayHasWhiteout(task, upper.as_ref().unwrap(), &name) {
                     continue;
                 }
             }

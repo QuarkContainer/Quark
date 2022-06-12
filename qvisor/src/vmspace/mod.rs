@@ -765,6 +765,43 @@ impl VMSpace {
         return fdInfo.IOSeek(offset, whence);
     }
 
+    pub fn FSetXattr(fd: i32, name: u64, value: u64, size: usize, flags: u32) -> i64 {
+        let fdInfo = match Self::GetFdInfo(fd) {
+            Some(fdInfo) => fdInfo,
+            None => return -SysErr::EBADF as i64,
+        };
+
+        return fdInfo.IOFSetXattr(name, value, size, flags);
+    }
+
+
+    pub fn FGetXattr(fd: i32, name: u64, value: u64, size: usize) -> i64 {
+        let fdInfo = match Self::GetFdInfo(fd) {
+            Some(fdInfo) => fdInfo,
+            None => return -SysErr::EBADF as i64,
+        };
+
+        return fdInfo.IOFGetXattr(name, value, size);
+    }
+
+    pub fn FRemoveXattr(fd: i32, name: u64) -> i64 {
+        let fdInfo = match Self::GetFdInfo(fd) {
+            Some(fdInfo) => fdInfo,
+            None => return -SysErr::EBADF as i64,
+        };
+
+        return fdInfo.IOFRemoveXattr(name);
+    }
+
+    pub fn FListXattr(fd: i32, list: u64, size: usize) -> i64 {
+        let fdInfo = match Self::GetFdInfo(fd) {
+            Some(fdInfo) => fdInfo,
+            None => return -SysErr::EBADF as i64,
+        };
+
+        return fdInfo.IOFListXattr(list, size);
+    }
+
     pub fn ReadLinkAt(dirfd: i32, path: u64, buf: u64, bufsize: u64) -> i64 {
         //info!("ReadLinkAt: the path is {}", Self::GetStr(path));
 
