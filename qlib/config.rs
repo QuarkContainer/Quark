@@ -32,6 +32,7 @@ pub struct Config {
     pub PerSandboxLog: bool,
     pub ReserveCpuCount: usize,
     pub ShimMode: bool,
+    pub EnableInotify: bool,
 }
 
 impl Config {
@@ -67,6 +68,7 @@ impl Default for Config {
             PerSandboxLog: false,
             ReserveCpuCount: 2,
             ShimMode: false,
+            EnableInotify: false,
         };
     }
 }
