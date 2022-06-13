@@ -344,6 +344,7 @@ fn share_client_region() {
         &clientShareRegion.ioMetas[0].consumeReadData as *const _ as u64,
         &clientShareRegion.iobufs[0].read as *const _ as u64,
         &clientShareRegion.iobufs[0].write as *const _ as u64,
+        true,
     );
 
     let srv_sock = UnixSocket::NewServer(path).unwrap();
@@ -403,6 +404,7 @@ fn test() {
         &clientShareRegion.ioMetas[0].consumeReadData as *const _ as u64,
         &clientShareRegion.iobufs[0].read as *const _ as u64,
         &clientShareRegion.iobufs[0].write as *const _ as u64,
+        true,
     );
 
     let consumeReadData = sockBuf.AddConsumeReadData(6);
@@ -633,7 +635,7 @@ fn main() -> io::Result<()> {
         //TODO: this is hardcoded for testing purpose, should come from control plane.
         let node = Node {
             //ipAddr: u32::from(Ipv4Addr::from_str("6.1.16.172").unwrap()),
-            ipAddr: u32::from(Ipv4Addr::from_str("172.16.1.6").unwrap()).to_be(),
+            ipAddr: u32::from(Ipv4Addr::from_str("172.16.1.43").unwrap()).to_be(),
             timestamp: 0,
             subnet: u32::from(Ipv4Addr::from_str("172.16.1.0").unwrap()),
             netmask: u32::from(Ipv4Addr::from_str("255.255.255.0").unwrap()),
@@ -653,6 +655,7 @@ fn main() -> io::Result<()> {
             &RDMA_SRV.controlRegion.ioMetas[controlRegionId].consumeReadData as *const _ as u64,
             &RDMA_SRV.controlRegion.iobufs[controlRegionId].read as *const _ as u64,
             &RDMA_SRV.controlRegion.iobufs[controlRegionId].write as *const _ as u64,
+            true,
         ));
 
         let rdmaConn = RDMAConn::New(
@@ -778,6 +781,7 @@ fn main() -> io::Result<()> {
                             as u64,
                         &RDMA_SRV.controlRegion.iobufs[controlRegionId].read as *const _ as u64,
                         &RDMA_SRV.controlRegion.iobufs[controlRegionId].write as *const _ as u64,
+                        true,
                     ));
 
                     let rdmaConn = RDMAConn::New(

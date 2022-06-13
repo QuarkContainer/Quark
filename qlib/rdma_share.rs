@@ -21,7 +21,7 @@ use super::linux_def::*;
 use alloc::collections::btree_set::BTreeSet;
 use alloc::vec::Vec;
 
-pub const COUNT: usize = 65536;
+pub const COUNT: usize = 1024;
 
 pub struct RingQueue<T: 'static + Default> {
     pub data: [T; COUNT],
@@ -252,18 +252,21 @@ pub const SOCKET_BUF_SIZE: usize = 64 * 1024; // 64KB
 // todo: caculate this to fit ClientShareRegion in 1GB
 pub const IO_BUF_COUNT: usize = 7 * 1024; //16 * 1024 - 128; // ~16K
 
-#[repr(align(4096))]
+#[repr(align(0x10000))]
+#[repr(C)]
 pub struct IOBuf {
     pub read: [u8; SOCKET_BUF_SIZE],
     pub write: [u8; SOCKET_BUF_SIZE],
 }
 
+#[repr(C)]
 pub struct IOMetas {
     pub readBufAtoms: [AtomicU32; 2],
     pub writeBufAtoms: [AtomicU32; 2],
     pub consumeReadData: AtomicU64,
 }
 
+#[repr(C)]
 pub struct ClientShareRegion {
     pub clientBitmap: AtomicU64, //client sleep bit
 
@@ -422,7 +425,7 @@ pub enum DuplexMode {
     SHUTDOWN_RDWR,
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Default)]
 pub struct Endpoint {
     // same as vpcId
     pub ipAddr: u32,

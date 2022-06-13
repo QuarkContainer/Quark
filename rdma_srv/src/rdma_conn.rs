@@ -37,7 +37,7 @@ use super::rdma_srv::*;
 // RDMA Queue Pair
 pub struct RDMAQueuePair {}
 
-pub const RECV_REQUEST_COUNT: u32 = 32;
+pub const RECV_REQUEST_COUNT: u32 = 64;
 
 #[derive(Debug)]
 #[repr(u64)]

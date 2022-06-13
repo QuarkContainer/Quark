@@ -145,7 +145,7 @@ lazy_static! {
     pub static ref GLOCK: Mutex<()> = Mutex::new(());
 }
 
-pub const LOG_FILE: &'static str = "/var/log/quark/quark.log";
+pub const LOG_FILE: &'static str = "/var/log/quark/quark.log"; //"/home/qingming/code/Quark/quark.log";
 
 pub fn InitSingleton() {
     self::qlib::InitSingleton();

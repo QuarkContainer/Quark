@@ -142,13 +142,15 @@ impl RDMAChannelIntern {
             .ConsumeAndGetAvailableWriteBuf(writeCount as usize);
 
         if finSent {
-            if matches!(*self.status.lock(), ChannelStatus::CLOSE_REQUESTED_FROM_CLIENT) {
+            if matches!(
+                *self.status.lock(),
+                ChannelStatus::CLOSE_REQUESTED_FROM_CLIENT
+            ) {
                 // println!("ProcessRDMAWriteImmFinish::2");
                 RDMA_SRV.channels.lock().remove(&self.localId);
                 RDMA_SRV.channelIdMgr.lock().Remove(self.localId);
                 self.agent.ioBufIdMgr.lock().Remove(self.ioBufIndex);
                 // println!("ProcessRDMAWriteImmFinish::3, remove channel from RDMA_SRV");
-
             } else {
                 // println!("ProcessRDMAWriteImmFinish::4");
                 *self.status.lock() = ChannelStatus::FIN_SENT_TO_PEER;
@@ -279,6 +281,19 @@ impl RDMAChannelIntern {
                         event: EVENT_IN,
                     }),
                 });
+                // if self.localId == 1 {
+                //     debug!("ProcessRDMARecvWriteImm sleep 2 sec");
+                //     let ten_millis = std::time::Duration::from_millis(2000);
+                //     std::thread::sleep(ten_millis);
+                //     self.agent.SendResponse(RDMAResp {
+                //         user_data: 0,
+                //         msg: RDMARespMsg::RDMANotify(RDMANotifyResp {
+                //             // sockfd: self.sockfd,
+                //             channelId: self.localId,
+                //             event: EVENT_IN,
+                //         }),
+                //     });
+                // }
             } else {
                 // println!("ProcessRDMARecvWriteImm 4, trigger: {}", trigger);
             }

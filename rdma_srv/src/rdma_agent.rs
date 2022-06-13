@@ -97,14 +97,23 @@ impl RDMAAgent {
             )
         };
 
-        //start from 2M registration.
-        let mr = RDMA
-            .CreateMemoryRegion(addr as u64, 2 * 1024 * 1024)
-            .unwrap();
         let shareRegion = unsafe {
             let addr = addr as *mut ClientShareRegion;
             &mut (*addr)
         };
+
+        //start from 2M registration.
+        let mr = RDMA
+            .CreateMemoryRegion(&shareRegion.iobufs as *const _ as u64, 2 * 1024 * 1024)
+            .unwrap();
+        // debug!("RDMAAgent::New shareRegion: size: {}, addr: {:x}, clientBit: {:x}, cq: {:x}, sq: {:x} ioMeta: {:x}, buff: {:x}",
+        //  size,
+        //  shareRegion as *const _ as u64,
+        //  &(shareRegion.clientBitmap) as *const _ as u64,
+        //  &(shareRegion.cq) as *const _ as u64,
+        //  &(shareRegion.sq) as *const _ as u64,
+        //  &(shareRegion.ioMetas) as *const _ as u64,
+        //  &(shareRegion.iobufs) as *const _ as u64);
 
         shareRegion.sq.Init();
         shareRegion.cq.Init();
@@ -115,7 +124,10 @@ impl RDMAAgent {
             sockfd: connSock,
             client_memfd: memfd,
             client_eventfd: clientEventfd,
-            shareMemRegion: MemRegion { addr: 0, len: 0 },
+            shareMemRegion: MemRegion {
+                addr: addr as u64,
+                len: size as u64,
+            },
             shareRegion: Mutex::new(shareRegion),
             ioBufIdMgr: Mutex::new(IdMgr::Init(0, 20)),
             keys: vec![[mr.LKey(), mr.RKey()]],
@@ -154,7 +166,10 @@ impl RDMAAgent {
             &shareRegion.ioMetas[ioBufIndex].consumeReadData as *const _ as u64,
             &shareRegion.iobufs[ioBufIndex].read as *const _ as u64,
             &shareRegion.iobufs[ioBufIndex].write as *const _ as u64,
+            true,
         ));
+        let readBufAddr = &shareRegion.iobufs[ioBufIndex].read as *const _ as u64;
+
         let rdmaChannel = RDMAChannel::CreateRDMAChannel(
             channelId,
             self.keys[ioBufIndex / 16][0],
@@ -183,6 +198,7 @@ impl RDMAAgent {
             &shareRegion.ioMetas[ioBufIndex].consumeReadData as *const _ as u64,
             &shareRegion.iobufs[ioBufIndex].read as *const _ as u64,
             &shareRegion.iobufs[ioBufIndex].write as *const _ as u64,
+            true,
         ));
 
         let rdmaChannel = RDMAChannel::CreateClientChannel(
@@ -213,6 +229,49 @@ impl RDMAAgent {
 
     pub fn SendResponse(&self, response: RDMAResp) {
         let mut shareRegion = self.shareRegion.lock();
+        // if matches!(response.msg, RDMARespMsg::RDMANotify(_)) {
+        //     let mut readBufHeadTailAddr = &shareRegion.ioMetas as *const _ as u64 - 24;
+        //     let mut i = 1;
+        //     loop {
+        //         // unsafe {
+        //         //     *(readBufHeadTailAddr as *mut u32) = i;
+        //         //     *((readBufHeadTailAddr + 4) as *mut u32) = i + 1;
+        //         //     *((readBufHeadTailAddr + 8) as *mut u32) = i + 2;
+        //         //     *((readBufHeadTailAddr + 12) as *mut u32) = i + 3;
+        //         //     *((readBufHeadTailAddr + 16) as *mut u64) = i as u64 + 4;
+        //         // }
+
+        //         i += 5;
+                
+        //         debug!(
+        //             "RDMARespMsg::RDMANotify, readBufHeadTailAddr: {:x}, readHead: {}, readTail: {}, writehead: {}, writeTail: {}, consumedData: {}",
+        //             readBufHeadTailAddr,
+        //             unsafe { *(readBufHeadTailAddr as *const u32) },
+        //             unsafe { *((readBufHeadTailAddr + 4) as *const u32) },
+        //             unsafe { *((readBufHeadTailAddr + 8) as *const u32) },
+        //             unsafe { *((readBufHeadTailAddr + 12) as *const u32) },
+        //             unsafe { *((readBufHeadTailAddr + 16) as *const u64) }
+        //         );
+        //         readBufHeadTailAddr += 24;
+        //         if readBufHeadTailAddr > (&shareRegion.iobufs as *const _ as u64) {
+        //             break;
+        //         }
+        //     }
+        //     let mut i = 0;
+        //     readBufHeadTailAddr = &shareRegion.iobufs as *const _ as u64;
+        //     loop {
+        //         debug!(
+        //             "RDMARespMsg::RDMANotify, buf: {:x}, val: {}",
+        //             readBufHeadTailAddr,
+        //             unsafe { *((readBufHeadTailAddr + i) as *const u8) },
+        //         );
+        //         i += 1;
+        //         if i > 16 {
+        //             break;
+        //         }
+        //     }
+        // }
+
         shareRegion.cq.Push(response);
         if shareRegion.clientBitmap.load(Ordering::SeqCst) == 1 {
             let data = 16u64;
@@ -247,6 +306,10 @@ impl RDMAAgent {
                         status: SrvEndPointStatus::Listening,
                     },
                 );
+                println!(
+                    "RDMAAgent::RDMAListen, ipAddr: {}, port: {}",
+                    msg.ipAddr, msg.port
+                );
             }
             RDMAReqMsg::RDMAConnect(msg) => {
                 //TODOCtrlPlane: need get nodeIp from dstIpAddr
@@ -266,43 +329,37 @@ impl RDMAAgent {
                             .ctrlChan
                             .lock()
                             .SendControlMsg(ControlMsgBody::ConnectRequest(connectReqeust));
-                            // .expect("fail to send msg");
+                        // .expect("fail to send msg");
                     }
                     None => {
                         println!("TODO: return error as no ip mapping is found");
                     }
                 }
             }
-            RDMAReqMsg::RDMAWrite(msg) => {
-                match RDMA_SRV.channels.lock().get(&msg.channelId) {
-                    Some(rdmaChannel) => {
-                        rdmaChannel.RDMASend();
-                    }
-                    None => {
-                        panic!("RDMAChannel with id {} does not exist!", msg.channelId);
-                    }
+            RDMAReqMsg::RDMAWrite(msg) => match RDMA_SRV.channels.lock().get(&msg.channelId) {
+                Some(rdmaChannel) => {
+                    rdmaChannel.RDMASend();
                 }
-            }
-            RDMAReqMsg::RDMARead(msg) => {
-                match RDMA_SRV.channels.lock().get(&msg.channelId) {
-                    Some(rdmaChannel) => {
-                        rdmaChannel.SendConsumedData();
-                    }
-                    None => {
-                        panic!("RDMAChannel with id {} does not exist!", msg.channelId);
-                    }
+                None => {
+                    panic!("RDMAChannel with id {} does not exist!", msg.channelId);
                 }
-            }
-            RDMAReqMsg::RDMAShutdown(msg) => {
-                match RDMA_SRV.channels.lock().get(&msg.channelId) {
-                    Some(rdmaChannel) => {
-                        rdmaChannel.Shutdown(msg.howto);
-                    }
-                    None => {
-                        panic!("RDMAChannel with id {} does not exist!", msg.channelId);
-                    }
+            },
+            RDMAReqMsg::RDMARead(msg) => match RDMA_SRV.channels.lock().get(&msg.channelId) {
+                Some(rdmaChannel) => {
+                    rdmaChannel.SendConsumedData();
                 }
-            }
+                None => {
+                    panic!("RDMAChannel with id {} does not exist!", msg.channelId);
+                }
+            },
+            RDMAReqMsg::RDMAShutdown(msg) => match RDMA_SRV.channels.lock().get(&msg.channelId) {
+                Some(rdmaChannel) => {
+                    rdmaChannel.Shutdown(msg.howto);
+                }
+                None => {
+                    panic!("RDMAChannel with id {} does not exist!", msg.channelId);
+                }
+            },
             RDMAReqMsg::RDMACloseChannel(msg) => {
                 let rdmaChannel = RDMA_SRV
                     .channels

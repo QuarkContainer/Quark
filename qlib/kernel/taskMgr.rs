@@ -17,6 +17,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 
 use super::super::super::kernel_def::*;
 use super::super::linux_def::*;
+use super::super::kernel::GlobalRDMASvcCli;
 use super::super::task_mgr::*;
 use super::super::vcpu_mgr::*;
 use super::quring::uring_mgr::*;
@@ -164,7 +165,8 @@ pub fn PollAsyncMsg() -> usize {
         return 0;
     }
 
-    let ret = QUringTrigger();
+    let mut ret = QUringTrigger();
+    // ret += GlobalRDMASvcCli().DrainCompletionQueue();
     if Shutdown() {
         return 0;
     }

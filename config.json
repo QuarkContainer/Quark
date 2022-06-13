@@ -1,5 +1,5 @@
 {
-  "DebugLevel"    : "Info",
+  "DebugLevel"    : "Error",
   "KernelMemSize" : 24,
   "LogType"       : "Sync",
   "LogLevel"      : "Simple",
@@ -16,10 +16,10 @@
   "DedicateUring" : 0,
   "UringSize"     : 64,
   "UringEpollCtl" : true,
-  "EnableRDMA"    : false,
+  "EnableRDMA"    : true,
   "RDMAPort"      : 1,
   "PerSandboxLog" : false,
-  "ReserveCpuCount": 1,
+  "ReserveCpuCount": 6,
   "EnableMemInfo" : true,
   "ShimMode"      : false
 }

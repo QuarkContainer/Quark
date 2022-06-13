@@ -442,7 +442,6 @@ impl GatewayClient {
                 )
             };
 
-            // println!("ReadFromSocket, cnt: {}", cnt);
             if cnt > 0 {
                 let trigger = buffer.Produce(cnt as usize);
                 // println!("ReadFromSocket, trigger: {}", trigger);

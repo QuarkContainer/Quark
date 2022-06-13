@@ -75,21 +75,42 @@ impl SocketBuff {
         };
     }
 
-    pub fn InitWithShareMemory(pageCount: u64, readBufHeadTailAddr: u64, writeBufHeadTailAddr: u64, consumeReadDataAddr: u64, readBufAddr: u64, writeBufAddr: u64) -> Self {
+    pub fn InitWithShareMemory(
+        pageCount: u64,
+        readBufHeadTailAddr: u64,
+        writeBufHeadTailAddr: u64,
+        consumeReadDataAddr: u64,
+        readBufAddr: u64,
+        writeBufAddr: u64,
+        init: bool
+    ) -> Self {
         let consumeReadData = unsafe {
             let addr = consumeReadDataAddr as *mut AtomicU64;
             &mut (*addr)
         };
-        consumeReadData.store(0, Ordering::Release);
+        if init {
+            consumeReadData.store(0, Ordering::Release);
+        }
+        
         return Self {
             wClosed: AtomicBool::new(false),
             rClosed: AtomicBool::new(false),
             pendingWShutdown: AtomicBool::new(false),
             error: AtomicI32::new(0),
             consumeReadData,
-            readBuf: QMutex::new(ByteStream::InitWithShareMemory(pageCount, readBufHeadTailAddr, readBufAddr)),
-            writeBuf: QMutex::new(ByteStream::InitWithShareMemory(pageCount, writeBufHeadTailAddr, writeBufAddr)),
-        }
+            readBuf: QMutex::new(ByteStream::InitWithShareMemory(
+                pageCount,
+                readBufHeadTailAddr,
+                readBufAddr,
+                init,
+            )),
+            writeBuf: QMutex::new(ByteStream::InitWithShareMemory(
+                pageCount,
+                writeBufHeadTailAddr,
+                writeBufAddr,
+                init,
+            )),
+        };
     }
 
     pub fn NewDummySockBuf() -> Self {

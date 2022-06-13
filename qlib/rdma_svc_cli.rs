@@ -1,10 +1,16 @@
+use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use core::ops::Deref;
 use core::sync::atomic::Ordering;
 use spin::Mutex;
 
 use super::common::*;
+use super::fileinfo::*;
+use super::kernel::GlobalIOMgr;
+use super::linux_def::*;
 use super::rdma_share::*;
+use super::rdmasocket::*;
+use super::socket_buf::*;
 use super::unix_socket::UnixSocket;
 
 pub struct RDMASvcCliIntern {
@@ -36,6 +42,8 @@ pub struct RDMASvcCliIntern {
 
     // the bitmap to expedite ready container search
     pub srvShareRegion: Mutex<&'static mut ShareRegion>,
+
+    pub channelToSocketMappings: Mutex<BTreeMap<u32, i32>>,
 }
 
 impl Deref for RDMASvcClient {
@@ -64,6 +72,7 @@ impl Default for RDMASvcClient {
                 cliShareRegion: unsafe { Mutex::new(&mut (*(0 as *mut ClientShareRegion))) },
                 srvMemRegion: MemRegion { addr: 0, len: 0 },
                 srvShareRegion: unsafe { Mutex::new(&mut (*(0 as *mut ShareRegion))) },
+                channelToSocketMappings: Mutex::new(BTreeMap::new()),
             }),
         }
     }
@@ -172,5 +181,216 @@ impl RDMASvcClient {
         } else {
             return Err(Error::NoEnoughSpace);
         }
+    }
+
+    pub fn DrainCompletionQueue(&self) -> usize {
+        self.cliShareRegion
+            .lock()
+            .clientBitmap
+            .store(0, Ordering::Release);
+        let mut count = 0;
+        count += self.ProcessRDMASvcMessage();
+        self.cliShareRegion
+            .lock()
+            .clientBitmap
+            .store(1, Ordering::Release);
+        count += self.ProcessRDMASvcMessage();
+        count
+    }
+
+    pub fn ProcessRDMASvcMessage(&self) -> usize {
+        let mut count = 0;
+        loop {
+            let request = self.cliShareRegion.lock().cq.Pop();
+            count += 1;
+            match request {
+                Some(cq) => match cq.msg {
+                    RDMARespMsg::RDMAConnect(response) => {
+                        debug!("RDMARespMsg::RDMAConnect, response: {:?}", response);
+                        let fdInfo = GlobalIOMgr().GetByHost(response.sockfd as i32).unwrap();
+                        let fdInfoLock = fdInfo.lock();
+                        let sockInfo = fdInfoLock.sockInfo.lock().clone();
+
+                        match sockInfo {
+                            SockInfo::Socket(_) => {
+                                let ioBufIndex = response.ioBufIndex as usize;
+                                let shareRegion = self.cliShareRegion.lock();
+                                let sockBuf = Arc::new(SocketBuff::InitWithShareMemory(
+                                    MemoryDef::DEFAULT_BUF_PAGE_COUNT,
+                                    &shareRegion.ioMetas[ioBufIndex].readBufAtoms as *const _
+                                        as u64,
+                                    &shareRegion.ioMetas[ioBufIndex].writeBufAtoms as *const _
+                                        as u64,
+                                    &shareRegion.ioMetas[ioBufIndex].consumeReadData as *const _
+                                        as u64,
+                                    &shareRegion.iobufs[ioBufIndex].read as *const _ as u64,
+                                    &shareRegion.iobufs[ioBufIndex].write as *const _ as u64,
+                                    false,
+                                ));
+
+                                let dataSock = RDMADataSock::New(
+                                    response.sockfd as i32, //Allocate fd
+                                    // 0, //TODO: need udpate
+                                    // 0, //TODO: need update
+                                    // response.dstIpAddr,
+                                    // response.dstPort,
+                                    // SockStatus::ESTABLISHED,
+                                    // response.channelId,
+                                    sockBuf.clone(),
+                                    response.channelId,
+                                );
+                                self.channelToSocketMappings
+                                    .lock()
+                                    .insert(response.channelId, response.sockfd as i32);
+
+                                *fdInfoLock.sockInfo.lock() = SockInfo::RDMADataSocket(dataSock);
+                                fdInfoLock.waitInfo.Notify(EVENT_OUT);
+                            }
+                            _ => {
+                                panic!("SockInfo is not correct type");
+                            }
+                        }
+                    }
+                    RDMARespMsg::RDMAAccept(response) => {
+                        debug!("RDMARespMsg::RDMAAccept, response: {:?}", response);
+
+                        let fdInfo = GlobalIOMgr().GetByHost(response.sockfd as i32).unwrap();
+                        let fdInfoLock = fdInfo.lock();
+                        let sockInfo = fdInfoLock.sockInfo.lock().clone();
+
+                        match sockInfo {
+                            SockInfo::RDMAServerSocket(rdmaServerSock) => {
+                                // let fd = unsafe { libc::socket(AFType::AF_INET, SOCK_STREAM, 0) };
+                                let fd = self.CreateSocket() as i32;
+                                let ioBufIndex = response.ioBufIndex as usize;
+                                let shareRegion = self.cliShareRegion.lock();
+                                let sockBuf = Arc::new(SocketBuff::InitWithShareMemory(
+                                    MemoryDef::DEFAULT_BUF_PAGE_COUNT,
+                                    &shareRegion.ioMetas[ioBufIndex].readBufAtoms as *const _
+                                        as u64,
+                                    &shareRegion.ioMetas[ioBufIndex].writeBufAtoms as *const _
+                                        as u64,
+                                    &shareRegion.ioMetas[ioBufIndex].consumeReadData as *const _
+                                        as u64,
+                                    &shareRegion.iobufs[ioBufIndex].read as *const _ as u64,
+                                    &shareRegion.iobufs[ioBufIndex].write as *const _ as u64,
+                                    false,
+                                ));
+
+                                let dataSock = RDMADataSock::New(
+                                    fd, //Allocate fd
+                                    // 0, //TODO: need udpate
+                                    // 0, //TODO: need update
+                                    // response.dstIpAddr,
+                                    // response.dstPort,
+                                    // SockStatus::ESTABLISHED,
+                                    // response.channelId,
+                                    sockBuf.clone(),
+                                    response.channelId,
+                                );
+
+                                // GlobalIOMgr().AddSocket(fd);
+                                let fdInfo = GlobalIOMgr().GetByHost(fd as i32).unwrap();
+                                let fdInfoLock1 = fdInfo.lock();
+                                *fdInfoLock1.sockInfo.lock() = SockInfo::RDMADataSocket(dataSock);
+
+                                let (trigger, _tmp) = rdmaServerSock.acceptQueue.lock().EnqSocket(
+                                    fd,
+                                    TcpSockAddr::default(),
+                                    0, //TCP_ADDR_LEN as _,
+                                    sockBuf,
+                                );
+                                self.channelToSocketMappings
+                                    .lock()
+                                    .insert(response.channelId, fd);
+                                if trigger {
+                                    fdInfoLock.waitInfo.Notify(EVENT_IN);
+                                }
+                            }
+                            _ => {
+                                panic!("SockInfo is not correct type");
+                            }
+                        }
+                    }
+                    RDMARespMsg::RDMANotify(response) => {
+                        debug!("RDMARespMsg::RDMANotify, response: {:?}", response);
+                        if response.event & EVENT_IN != 0 {
+                            let mut channelToSocketMappings = self.channelToSocketMappings.lock();
+                            let sockFd = channelToSocketMappings
+                                .get_mut(&response.channelId)
+                                .unwrap();
+                            GlobalIOMgr()
+                                .GetByHost(*sockFd)
+                                .unwrap()
+                                .lock()
+                                .waitInfo
+                                .Notify(EVENT_IN);
+                            // let shareRegion = self.cliShareRegion.lock();
+                            // let readBufAddr = &shareRegion.iobufs as *const _ as u64;
+                            // let mut readBufHeadTailAddr = &shareRegion.ioMetas as *const _ as u64 - 24;
+                            // debug!(
+                            //     "RDMARespMsg::RDMANotify readBufAddr: {:x}, first byte: {}",
+                            //     readBufAddr,
+                            //     unsafe { *(readBufAddr as *const u8) }
+                            // );
+                            // loop {
+                            //     debug!(
+                            //         "RDMARespMsg::RDMANotify, readBufHeadTailAddr: {:x}, readHead: {}, readTail: {}, writehead: {}, writeTail: {}, consumedData: {}",
+                            //         readBufHeadTailAddr,
+                            //         unsafe { *(readBufHeadTailAddr as *const u32) },
+                            //         unsafe { *((readBufHeadTailAddr + 4) as *const u32) },
+                            //         unsafe { *((readBufHeadTailAddr + 8) as *const u32) },
+                            //         unsafe { *((readBufHeadTailAddr + 12) as *const u32) },
+                            //         unsafe { *((readBufHeadTailAddr + 16) as *const u64) }
+                            //     );
+                            //     readBufHeadTailAddr += 24;
+                            //     if readBufHeadTailAddr > (&shareRegion.iobufs as *const _ as u64) {
+                            //         break;
+                            //     }
+                            // }
+                            // let mut i = 0;
+                            // readBufHeadTailAddr = &shareRegion.iobufs as *const _ as u64;
+                            // loop {
+                            //     debug!(
+                            //         "RDMARespMsg::RDMANotify, buf: {:x}, val: {}",
+                            //         readBufHeadTailAddr,
+                            //         unsafe { *((readBufHeadTailAddr + i) as *const u8) },
+                            //     );
+                            //     i += 1;
+                            //     if i > 16 {
+                            //         break;
+                            //     }
+                            // }
+                        }
+                        if response.event & EVENT_OUT != 0 {
+                            let mut channelToSocketMappings = self.channelToSocketMappings.lock();
+                            let sockFd = channelToSocketMappings
+                                .get_mut(&response.channelId)
+                                .unwrap();
+                            GlobalIOMgr()
+                                .GetByHost(*sockFd)
+                                .unwrap()
+                                .lock()
+                                .waitInfo
+                                .Notify(EVENT_OUT);
+                        }
+                    }
+                    RDMARespMsg::RDMAFinNotify(response) => {
+                        // debug!("RDMARespMsg::RDMAFinNotify, response: {:?}", response);
+                        // let mut channelToSockInfos = gatewayCli.channelToSockInfos.lock();
+                        // let sockInfo = channelToSockInfos.get_mut(&response.channelId).unwrap();
+                        // if response.event & FIN_RECEIVED_FROM_PEER != 0 {
+                        //     *sockInfo.finReceived.lock() = true;
+                        //     gatewayCli.WriteToSocket(sockInfo, &sockFdMappings);
+                        // }
+                    }
+                },
+                None => {
+                    count -= 1;
+                    break;
+                }
+            }
+        }
+        count
     }
 }

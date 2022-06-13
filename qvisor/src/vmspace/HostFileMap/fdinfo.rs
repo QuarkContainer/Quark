@@ -487,7 +487,7 @@ impl FdInfo {
         }
 
         match self.SockInfo() {
-            SockInfo::Socket => {
+            SockInfo::Socket(_socketInfo) => {
                 let rdmaSocket = RDMAServerSock::New(sockfd, acceptQueue);
                 *self.lock().sockInfo.lock() = SockInfo::RDMAServerSocket(rdmaSocket);
                 self.lock()
@@ -575,16 +575,16 @@ impl FdInfo {
     pub fn PostRDMAConnect(&self, msg: &mut PostRDMAConnect) {
         let sockfd = self.Fd();
         match self.SockInfo() {
-            SockInfo::Socket => {
+            SockInfo::Socket(_) => {
                 let sockBuf = msg.socketBuf.clone();
-                let rdmaType = if RDMA_ENABLE {
+                let _rdmaType = if RDMA_ENABLE {
                     let addr = msg as *const _ as u64;
                     RDMAType::Client(addr)
                 } else {
                     RDMAType::None
                 };
 
-                let rdmaSocket = RDMADataSock::New(sockfd, sockBuf, rdmaType, 1);
+                let rdmaSocket = RDMADataSock::New(sockfd, sockBuf, 1);
                 *self.lock().sockInfo.lock() = SockInfo::RDMADataSocket(rdmaSocket);
                 self.lock()
                     .AddWait(EVENT_READ | EVENT_WRITE)
@@ -643,7 +643,7 @@ impl FdInfoIntern {
             fd: fd,
             waitInfo: FdWaitInfo::default(),
             flags: Flags(flags),
-            sockInfo: Mutex::new(SockInfo::Socket),
+            sockInfo: Mutex::new(SockInfo::Socket(SocketInfo::default())),
         };
 
         return res;

@@ -1,6 +1,9 @@
 use alloc::sync::Arc;
 
+use crate::qlib::kernel::GlobalIOMgr;
+
 use super::super::super::super::common::*;
+use super::super::super::super::fileinfo::SockInfo;
 use super::super::super::super::kernel::GlobalRDMASvcCli;
 use super::super::super::super::linux_def::*;
 use super::super::super::super::qmsg::qcall::*;
@@ -32,7 +35,18 @@ impl RDMA {
             let bufSize = buf.readBuf.lock().BufSize();
             if 2 * dataSize >= bufSize {
                 // HostSpace::RDMANotify(fd, RDMANotifyType::RDMARead);
-                let _ret = GlobalRDMASvcCli().read(1);
+                let fdInfo = GlobalIOMgr().GetByHost(fd).unwrap();
+                let fdInfoLock = fdInfo.lock();
+                let sockInfo = fdInfoLock.sockInfo.lock().clone();
+
+                match sockInfo {
+                    SockInfo::RDMADataSocket(rdmaDataScoket) => {
+                        let _ret = GlobalRDMASvcCli().read(rdmaDataScoket.channelId);
+                    }
+                    _ => {
+                        panic!("")
+                    }
+                }
             }
         }
 
@@ -49,7 +63,19 @@ impl RDMA {
         let (count, writeBuf) = buf.Writev(task, srcs)?;
         if writeBuf.is_some() {
             if RDMA_ENABLE {
-                HostSpace::RDMANotify(fd, RDMANotifyType::RDMAWrite);
+                // HostSpace::RDMANotify(fd, RDMANotifyType::RDMAWrite);
+                let fdInfo = GlobalIOMgr().GetByHost(fd).unwrap();
+                let fdInfoLock = fdInfo.lock();
+                let sockInfo = fdInfoLock.sockInfo.lock().clone();
+
+                match sockInfo {
+                    SockInfo::RDMADataSocket(rdmaDataScoket) => {
+                        let _ret = GlobalRDMASvcCli().write(rdmaDataScoket.channelId);
+                    }
+                    _ => {
+                        panic!("")
+                    }
+                }
             } else {
                 HostSpace::RDMANotify(fd, RDMANotifyType::Write);
             }

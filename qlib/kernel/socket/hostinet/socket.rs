@@ -24,8 +24,11 @@ use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicI64;
 use core::sync::atomic::Ordering;
 
+use crate::qlib::rdma_share::Endpoint;
+use crate::qlib::rdmasocket::RDMAServerSock;
 //use super::super::*;
 use super::super::super::super::common::*;
+use super::super::super::super::fileinfo::*;
 use super::super::super::super::linux::netdevice::*;
 use super::super::super::super::linux::time::Timeval;
 use super::super::super::super::linux_def::*;
@@ -44,8 +47,11 @@ use super::super::super::kernel::fd_table::*;
 use super::super::super::kernel::time::*;
 use super::super::super::kernel::waiter::*;
 use super::super::super::quring::QUring;
+// use super::super::super::rdmasocket::*;
 use super::super::super::task::*;
 use super::super::super::tcpip::tcpip::*;
+use super::super::super::GlobalIOMgr;
+use super::super::super::GlobalRDMASvcCli;
 use super::super::super::Kernel;
 use super::super::super::Kernel::HostSpace;
 use super::super::super::IOURING;
@@ -269,7 +275,10 @@ impl SocketOperations {
         match self.SocketBufType() {
             SocketBufType::Uring(b) => return b,
             SocketBufType::RDMA(b) => return b,
-            _ => panic!("SocketBufType::None has no SockBuff {:?}", self.SocketBufType()),
+            _ => panic!(
+                "SocketBufType::None has no SockBuff {:?}",
+                self.SocketBufType()
+            ),
         }
     }
 
@@ -289,12 +298,21 @@ impl SocketOperations {
         }
     }
 
-    pub fn PostConnect(&self, task: &Task) {
-        let socketBuf = self.SocketBufType().Connect();
-        *self.socketBuf.lock() = socketBuf.clone();
+    pub fn PostConnect(&self, _task: &Task) {
+        let enableRDMA = SHARESPACE.config.read().EnableRDMA
+            && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
+            && self.stype == SockType::SOCK_STREAM;
+
+        let socketBuf;
+        if enableRDMA {
+            socketBuf = self.socketBuf.lock().clone();
+        } else {
+            socketBuf = self.SocketBufType().Connect();
+            *self.socketBuf.lock() = socketBuf.clone();
+        }
 
         match socketBuf {
-            SocketBufType::RDMA(buf) => {
+            SocketBufType::RDMA(_buf) => {
                 assert!(
                     (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
                         && self.stype == SockType::SOCK_STREAM,
@@ -302,7 +320,18 @@ impl SocketOperations {
                     self.family,
                     self.stype
                 );
-                HostSpace::PostRDMAConnect(task, self.fd, buf);
+                // HostSpace::PostRDMAConnect(task, self.fd, buf);
+                let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
+                let fdInfoLock = fdInfo.lock();
+                let sockInfo = fdInfoLock.sockInfo.lock().clone();
+                match sockInfo {
+                    SockInfo::RDMADataSocket(rdmaSocket) => {
+                        *self.socketBuf.lock() = SocketBufType::RDMA(rdmaSocket.socketBuf.clone());
+                    }
+                    _ => {
+                        panic!("Incorrect sockInfo")
+                    }
+                }
             }
             SocketBufType::Uring(buf) => {
                 assert!(
@@ -614,10 +643,17 @@ impl FileOperations for SocketOperations {
         match sockBufType {
             SocketBufType::Uring(socketBuf) => {
                 if self.SocketBuf().WClosed() {
-                    return Err(Error::SysError(SysErr::ESPIPE))
+                    return Err(Error::SysError(SysErr::ESPIPE));
                 }
 
-                return QUring::SocketSend(task, self.fd, self.queue.clone(), socketBuf, srcs, self)
+                return QUring::SocketSend(
+                    task,
+                    self.fd,
+                    self.queue.clone(),
+                    socketBuf,
+                    srcs,
+                    self,
+                );
             }
             SocketBufType::RDMA(socketBuf) => {
                 let ret = RDMA::Write(task, self.fd, socketBuf, srcs)?;
@@ -741,18 +777,29 @@ impl SockOperations for SocketOperations {
             socketaddr = &socketaddr[..SIZEOF_SOCKADDR]
         }
 
-        let res = Kernel::HostSpace::IOConnect(
-            self.fd,
-            &socketaddr[0] as *const _ as u64,
-            socketaddr.len() as u32,
-        ) as i32;
-        if res == 0 {
-            self.SetRemoteAddr(socketaddr.to_vec())?;
-            if self.stype == SockType::SOCK_STREAM {
-                self.PostConnect(task);
-            }
+        let enableRDMA = SHARESPACE.config.read().EnableRDMA
+            && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
+            && self.stype == SockType::SOCK_STREAM;
+        let res;
+        if enableRDMA {
+            let _ret = GlobalRDMASvcCli().connect(self.fd as u32, 134654144, 58433); //192.168.6.8, 58433
+            let socketBuf = self.SocketBufType().Connect();
+            *self.socketBuf.lock() = socketBuf.clone();
+            res = -SysErr::EINPROGRESS;
+        } else {
+            res = Kernel::HostSpace::IOConnect(
+                self.fd,
+                &socketaddr[0] as *const _ as u64,
+                socketaddr.len() as u32,
+            ) as i32;
+            if res == 0 {
+                self.SetRemoteAddr(socketaddr.to_vec())?;
+                if self.stype == SockType::SOCK_STREAM {
+                    self.PostConnect(task);
+                }
 
-            return Ok(0);
+                return Ok(0);
+            }
         }
 
         let blocking = if blocking {
@@ -781,7 +828,7 @@ impl SockOperations for SocketOperations {
             self.EventRegister(task, &general, EVENT_OUT);
             defer!(self.EventUnregister(task, &general));
 
-            if self.Readiness(task, WRITEABLE_EVENT) == 0 {
+            // if self.Readiness(task, WRITEABLE_EVENT) == 0 {
                 match task.blocker.BlockWithMonoTimer(true, None) {
                     Err(Error::ErrInterrupted) => {
                         return Err(Error::SysError(SysErr::ERESTARTSYS));
@@ -792,7 +839,7 @@ impl SockOperations for SocketOperations {
                     }
                     _ => (),
                 }
-            }
+            // }
         }
 
         let mut val: i32 = 0;
@@ -882,6 +929,13 @@ impl SockOperations for SocketOperations {
             *addrlen = len as u32;
         }
 
+        // hard code workaround
+        let enableRDMA = SHARESPACE.config.read().EnableRDMA
+            && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
+            && self.stype == SockType::SOCK_STREAM;
+        if enableRDMA {
+            len = 0;
+        }
         let fd = acceptItem.fd;
 
         let remoteAddr = &acceptItem.addr.data[0..len];
@@ -933,6 +987,19 @@ impl SockOperations for SocketOperations {
             return Err(Error::SysError(-res as i32));
         }
 
+        let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
+
+        let enableRDMA = SHARESPACE.config.read().EnableRDMA
+            && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
+            && self.stype == SockType::SOCK_STREAM;
+        //TODO: remember ipAddr and port, hardcoded for now.
+        if enableRDMA {
+            *fdInfo.lock().sockInfo.lock() = SockInfo::Socket(SocketInfo {
+                ipAddr: 134654144,
+                port: 58433,
+            }); //192.168.6.8:16868
+        }
+
         return Ok(res);
     }
 
@@ -964,7 +1031,27 @@ impl SockOperations for SocketOperations {
         acceptQueue.lock().SetQueueLen(len as usize);
 
         let res = if enableRDMA {
-            Kernel::HostSpace::RDMAListen(self.fd, backlog, asyncAccept, acceptQueue.clone())
+            // Kernel::HostSpace::RDMAListen(self.fd, backlog, asyncAccept, acceptQueue.clone())
+            let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
+            let rdmaSocket = RDMAServerSock::New(self.fd, acceptQueue.clone());
+            let socketInfo = fdInfo.lock().sockInfo.lock().clone();
+
+            *fdInfo.lock().sockInfo.lock() = SockInfo::RDMAServerSocket(rdmaSocket);
+            let endpoint;
+            match socketInfo {
+                SockInfo::Socket(socketInfo) => {
+                    endpoint = Endpoint {
+                        ipAddr: socketInfo.ipAddr,
+                        port: socketInfo.port,
+                    };
+                }
+                _ => {
+                    panic!("RDMA Listen with wrong state");
+                }
+            }
+
+            let _ret = GlobalRDMASvcCli().listen(self.fd as u32, &endpoint, backlog);
+            0
         } else {
             Kernel::HostSpace::Listen(self.fd, backlog, asyncAccept)
         };
@@ -992,8 +1079,9 @@ impl SockOperations for SocketOperations {
     fn Shutdown(&self, task: &Task, how: i32) -> Result<i64> {
         let how = how as u64;
 
-        if self.stype == SockType::SOCK_STREAM &&
-            (how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR) {
+        if self.stype == SockType::SOCK_STREAM
+            && (how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR)
+        {
             if self.SocketBuf().HasWriteData() {
                 self.SocketBuf().SetPendingWriteShutdown();
                 let general = task.blocker.generalEntry.clone();
@@ -1012,11 +1100,15 @@ impl SockOperations for SocketOperations {
                 return Err(Error::SysError(-res as i32));
             }
 
-            if self.stype == SockType::SOCK_STREAM && (how == LibcConst::SHUT_RD || how == LibcConst::SHUT_RDWR) {
+            if self.stype == SockType::SOCK_STREAM
+                && (how == LibcConst::SHUT_RD || how == LibcConst::SHUT_RDWR)
+            {
                 self.SocketBuf().SetRClosed();
             }
 
-            if self.stype == SockType::SOCK_STREAM && (how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR) {
+            if self.stype == SockType::SOCK_STREAM
+                && (how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR)
+            {
                 self.SocketBuf().SetWClosed();
             }
 
@@ -1257,18 +1349,17 @@ impl SockOperations for SocketOperations {
         senderRequested: bool,
         controlDataLen: usize,
     ) -> Result<(i64, i32, Option<(SockAddr, usize)>, Vec<u8>)> {
-
         //todo: we don't support MSG_ERRQUEUE
         if flags
             & !(MsgType::MSG_DONTWAIT
-            | MsgType::MSG_PEEK
-            | MsgType::MSG_TRUNC
-            | MsgType::MSG_CTRUNC
-            | MsgType::MSG_WAITALL)
+                | MsgType::MSG_PEEK
+                | MsgType::MSG_TRUNC
+                | MsgType::MSG_CTRUNC
+                | MsgType::MSG_WAITALL)
             != 0
-            {
-                return Err(Error::SysError(SysErr::EINVAL));
-            }
+        {
+            return Err(Error::SysError(SysErr::EINVAL));
+        }
 
         let waitall = (flags & MsgType::MSG_WAITALL) != 0;
         let dontwait = (flags & MsgType::MSG_DONTWAIT) != 0;
@@ -1419,7 +1510,6 @@ impl SockOperations for SocketOperations {
         ) as i32;
 
         while res == -SysErr::EWOULDBLOCK && flags & MsgType::MSG_DONTWAIT == 0 {
-
             match task.blocker.BlockWithMonoTimer(true, deadline) {
                 Err(Error::ErrInterrupted) => {
                     return Err(Error::SysError(SysErr::ERESTARTSYS));

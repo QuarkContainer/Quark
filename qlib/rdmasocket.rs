@@ -63,7 +63,7 @@ pub struct RDMAServerSocketInfo {
 pub struct RDMADataSockIntern {
     pub fd: i32,
     pub socketBuf: Arc<SocketBuff>,
-    pub rdmaType: RDMAType,
+    // pub rdmaType: RDMAType,
     pub channelId: u32,
 }
 
@@ -85,19 +85,20 @@ impl Deref for RDMADataSock {
 }
 
 impl RDMADataSock {
-    pub fn New(fd: i32, socketBuf: Arc<SocketBuff>, rdmaType: RDMAType, channelId: u32) -> Self {
+    // pub fn New(fd: i32, socketBuf: Arc<SocketBuff>, rdmaType: RDMAType, channelId: u32) -> Self {
+        pub fn New(fd: i32, socketBuf: Arc<SocketBuff>, channelId: u32) -> Self {
         if RDMA_ENABLE {
             return Self(Arc::new(RDMADataSockIntern {
                 fd: fd,
                 socketBuf: socketBuf,
-                rdmaType: rdmaType,
+                // rdmaType: rdmaType,
                 channelId,
             }));
         } else {
             return Self(Arc::new(RDMADataSockIntern {
                 fd: fd,
                 socketBuf: socketBuf,
-                rdmaType: rdmaType,
+                // rdmaType: rdmaType,
                 channelId,
             }));
         }

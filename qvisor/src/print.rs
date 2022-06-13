@@ -44,7 +44,7 @@ pub fn SetSharespace(sharespace: &'static ShareSpace) {
     LOG.lock().shareSpace = sharespace;
 }
 
-pub const LOG_FILE_DEFAULT: &str = "/var/log/quark/quark.log";
+pub const LOG_FILE_DEFAULT: &str = "/home/qingming/code/Quark/quark.log";//"/var/log/quark/quark.log";
 pub const LOG_FILE_FORMAT: &str = "/var/log/quark/{}.log";
 pub const TIME_FORMAT: &str = "%H:%M:%S%.3f";
 impl Log {

@@ -450,6 +450,7 @@ impl KVMVcpu {
         let mut first = true;
 
         let coreid = core_affinity::CoreId { id: self.cordId };
+        // print cpu id
         core_affinity::set_for_current(coreid);
 
         info!(
