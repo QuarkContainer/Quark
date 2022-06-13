@@ -402,7 +402,9 @@ impl HostSpace {
             size,
         });
 
-        return HostSpace::Call(&mut msg, false) as i64;
+        // FGetXattr has to be hcall as it will also be called by
+        // inode::lookup --> OverlayHasWhiteout which might be called by create and hold a lock
+        return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn FRemoveXattr(fd: i32, name: u64) -> i64 {
