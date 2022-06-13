@@ -67,6 +67,35 @@ pub fn Read(task: &Task, fd: i32, addr: u64, size: i64) -> Result<i64> {
     return Ok(n);
 }
 
+// Readahead implements readahead(2).
+pub fn SysReadahead(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let fd = args.arg0 as i32;
+    let offset = args.arg1 as i64;
+    let size = args.arg2 as i64;
+
+    let file = task.GetFile(fd)?;
+
+    // Check that the file is readable.
+    if !file.Flags().Read {
+        return Err(Error::SysError(SysErr::EBADF));
+    }
+
+    // Check that the size is valid.
+    if size < 0 {
+        return Err(Error::SysError(SysErr::EINVAL));
+    }
+
+    // Check that the offset is legitimate and does not overflow.
+    if offset < 0 || i64::MAX - offset < size {
+        return Err(Error::SysError(SysErr::EINVAL));
+    }
+
+    // Return EINVAL; if the underlying file type does not support readahead,
+    // then Linux will return EINVAL to indicate as much. In the future, we
+    // may extend this function to actually support readahead hints.
+    return Err(Error::SysError(SysErr::EINVAL));
+}
+
 pub fn SysPread64(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let fd = args.arg0 as i32;
     let addr = args.arg1 as u64;

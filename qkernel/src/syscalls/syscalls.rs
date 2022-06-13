@@ -234,8 +234,8 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysSigaltstack,      //sys_sigaltstack,
     SysUtime,            //sys_utime,
     SysMknode,           //sys_mknod,
-    NotImplementSyscall, //sys_uselib,
-    NotImplementSyscall, //sys_personality,
+    SysObsolete,         //sys_uselib,
+    SysInvalid,          //sys_personality,
     NotImplementSyscall, //sys_ustat,
     SysStatfs,           //sys_statfs,
     SysFstatfs,          //sys_fstatfs,
@@ -248,46 +248,46 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysSchedGetscheduler, //sys_sched_getscheduler,
     SysSchedGetPriorityMax,//sys_sched_get_priority_max,
     SysSchedGetPriorityMin,//sys_sched_get_priority_min,
-    NotImplementSyscall, //sys_sched_rr_get_interval,
+    SysNoPermission,     //sys_sched_rr_get_interval,
     SysMlock,            //sys_mlock,
     SysMunlock,          //sys_munlock,    //150
     SysMlockall,         //sys_mlockall,
     SysMunlockall,       //sys_munlockall,
-    NotImplementSyscall, //sys_vhangup,
-    NotImplementSyscall, //sys_modify_ldt,
-    NotImplementSyscall, //sys_pivot_root,
-    NotImplementSyscall, //sys__sysctl,
+    SysCapErr,           //sys_vhangup,
+    SysNoPermission,     //sys_modify_ldt,
+    SysNoPermission,     //sys_pivot_root,
+    SysNoPermission,     //sys__sysctl,
     SysPrctl,            //sys_prctl,
     SysArchPrctl,        //sys_arch_prctl,
     NotImplementSyscall, //sys_adjtimex,
     SysSetrlimit,        //sys_setrlimit, // 160
     SysChroot,           //sys_chroot,
     SysSync,             //sys_sync,
-    NotImplementSyscall, //sys_acct,
-    NotImplementSyscall, //sys_settimeofday,
+    SysCapErr,           //sys_acct,
+    SysCapErr,           //sys_settimeofday,
     NotImplementSyscall, //sys_mount,
     NotImplementSyscall, //sys_umount2,
-    NotImplementSyscall, //sys_swapon,
-    NotImplementSyscall, //sys_swapoff,
-    NotImplementSyscall, //sys_reboot,
+    SysCapErr,           //sys_swapon,
+    SysCapErr,           //sys_swapoff,
+    SysCapErr,           //sys_reboot,
     SysSethostname,      //sys_sethostname,    //170
     SysSetdomainname,    //sys_setdomainname,
-    NotImplementSyscall, //sys_iopl,
-    NotImplementSyscall, //sys_ioperm,
-    NotImplementSyscall, //sys_create_module,
-    NotImplementSyscall, //sys_init_module,
-    NotImplementSyscall, //sys_delete_module,
-    NotImplementSyscall, //sys_get_kernel_syms,
-    NotImplementSyscall, //sys_query_module,
-    NotImplementSyscall, //sys_quotactl,
-    NotImplementSyscall, //sys_nfsservctl,    //180
-    NotImplementSyscall, //sys_getpmsg,
-    NotImplementSyscall, //sys_putpmsg,
-    NotImplementSyscall, //sys_afs_syscall,
-    NotImplementSyscall, //sys_tuxcall,
-    NotImplementSyscall, //sys_security,
+    SysCapErr,           //sys_iopl,
+    SysCapErr,           //sys_ioperm,
+    SysCapErr,           //sys_create_module,
+    SysCapErr,           //sys_init_module,
+    SysCapErr,           //sys_delete_module,
+    SysNoSys,            //sys_get_kernel_syms, Not supported in Linux > 2.6
+    SysNoSys,            //sys_query_module,    Not supported in Linux > 2.6
+    SysCapErr,           //sys_quotactl,
+    SysNoSys,            //sys_nfsservctl,    //180 Removed after Linux 3.1
+    SysNoSys,            //sys_getpmsg,         Not implemented in Linux.
+    SysNoSys,            //sys_putpmsg,         Not implemented in Linux.
+    SysNoSys,            //sys_afs_syscall,     Not implemented in Linux.
+    SysNoSys,            //sys_tuxcall,         Not implemented in Linux.
+    SysNoSys,            //sys_security,        Not implemented in Linux.
     SysGetTid,           //sys_gettid,
-    NotImplementSyscall, //sys_readahead,
+    SysReadahead,        //sys_readahead,
     SysSetXattr,         //sys_setxattr,
     SysLSetXattr,        //sys_lsetxattr,
     SysFSetXattr,        //sys_fsetxattr,    //190
@@ -554,6 +554,15 @@ pub fn SysNoSupport(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     error!("SysNoSupport syscall {:x?}", args);
     return Err(Error::SysError(SysErr::ENODATA));
     //return Err(Error::SysError(SysErr::ENOTSUP));
+}
+
+pub fn SysInvalid(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
+    return Err(Error::SysError(SysErr::EINVAL));
+    //return Err(Error::SysError(SysErr::ENOTSUP));
+}
+
+pub fn SysNoPermission(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
+    return Err(Error::SysError(SysErr::EPERM));
 }
 
 pub fn SysObsolete(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {
