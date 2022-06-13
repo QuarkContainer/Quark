@@ -305,18 +305,18 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysFutex,            //sys_futex,
     SysSchedSetaffinity, //sys_sched_setaffinity,
     SysSchedGetaffinity, //sys_sched_getaffinity,
-    NotImplementSyscall, //sys_set_thread_area,
+    SysNoSys,            //sys_set_thread_area,     Expected to return ENOSYS on 64-bit
     SysIoSetup,          //sys_io_setup,
     SysIoDestroy,        //sys_io_destroy,
     SysIoGetevents,      //sys_io_getevents,
     SysIOSubmit,         //sys_io_submit,
     SysIOCancel,         //sys_io_cancel,    //210
-    NotImplementSyscall, //sys_get_thread_area,
-    NotImplementSyscall, //sys_lookup_dcookie,
+    SysNoSys,            //sys_get_thread_area,     Expected to return ENOSYS on 64-bit
+    SysCapErr,           //sys_lookup_dcookie,      CAP_SYS_ADMIN
     SysEpollCreate,      //sys_epoll_create,
-    NotImplementSyscall, //sys_epoll_ctl_old,
-    NotImplementSyscall, //sys_epoll_wait_old,
-    NotImplementSyscall, //sys_remap_file_pages,
+    SysNoSys,            //sys_epoll_ctl_old,       Deprecated
+    SysNoSys,            //sys_epoll_wait_old,      Deprecated
+    SysNoSys,            //sys_remap_file_pages,    Deprecated since Linux 3.16.
     SysGetDents64,       //sys_getdents64,
     SysSetTidAddr,       //sys_set_tid_address,
     SysRestartSyscall,   //sys_restart_syscall,
@@ -336,7 +336,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysEpollCtl,         //sys_epoll_ctl,
     SysTgkill,           //sys_tgkill,
     SysUtimes,           //sys_utimes,
-    NotImplementSyscall, //sys_vserver,
+    SysNoSys,            //sys_vserver,             Not implemented by Linux
     SysMbind,            //sys_mbind, just workaround
     SysSetMempolicy,     //sys_set_mempolicy,
     SysGetMempolicy,     //sys_get_mempolicy,
@@ -346,17 +346,17 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysNoSupport,       //sys_mq_timedreceive,
     SysNoSupport,       //sys_mq_notify,
     SysNoSupport,       //sys_mq_getsetattr,
-    NotImplementSyscall, //sys_kexec_load,
+    SysCapErr,           //sys_kexec_load,          CAP_SYS_BOOT
     SysWaitid,           //sys_waitid,
-    NotImplementSyscall, //sys_add_key,
-    NotImplementSyscall, //sys_request_key,
-    NotImplementSyscall, //sys_keyctl,    //250
-    NotImplementSyscall, //sys_ioprio_set,
-    NotImplementSyscall, //sys_ioprio_get,
+    SysNoAccess,        //sys_add_key,              Not available to user.
+    SysNoAccess,        //sys_request_key,          Not available to user.
+    SysNoAccess,        //sys_keyctl,    //250      Not available to user.
+    SysCapErr,          //sys_ioprio_set,           CAP_SYS_ADMIN
+    SysCapErr,          //sys_ioprio_get,           CAP_SYS_ADMIN
     SysInotifyInit, //sys_inotify_init,
     SysInotifyAddWatch, //sys_inotify_add_watch,
     SysInotifyRmWatch, //sys_inotify_rm_watch,
-    NotImplementSyscall, //sys_migrate_pages,
+    SysCapErr,          //sys_migrate_pages,        CAP_SYS_NICE
     SysOpenAt,           //sys_openat,
     SysMkdirat,          //sys_mkdirat,
     SysMknodeat,         //sys_mknodat,
@@ -379,7 +379,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysTee,              //sys_tee,
     SysSyncFileRange,    //sys_sync_file_range,
     NotImplementSyscall, //sys_vmsplice,
-    NotImplementSyscall, //sys_move_pages,
+    SysCapErr,           //sys_move_pages,          CAP_SYS_NICE
     SysUtimensat,        //sys_utimensat,    //280
     SysPwait,            //sys_epoll_pwait,
     SysSignalfd,         //sys_signalfd,
@@ -398,34 +398,37 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysPreadv,           //sys_preadv,
     SysPwritev,          //sys_pwritev,
     SysRtTgsigqueueinfo, //sys_rt_tgsigqueueinfo,
-    NotImplementSyscall, //sys_perf_event_open,
+    SysNoDev,            //sys_perf_event_open,     No support for perf counters
     SysRecvMMsg,         //sys_recvmmsg,
-    NotImplementSyscall, //sys_fanotify_init,  //300
-    NotImplementSyscall, //sys_fanotify_mark,
+    SysNoSys,            //sys_fanotify_init,  //300 Needs CONFIG_FANOTIFY
+    SysNoSys,            //sys_fanotify_mark,       Needs CONFIG_FANOTIFY
     SysPrlimit64,        //sys_prlimit64,
-    NotImplementSyscall, //sys_name_to_handle_at,
-    NotImplementSyscall, //sys_open_by_handle_at,
-    NotImplementSyscall, //sys_clock_adjtime,
+    SysOpNotSupport,     //sys_name_to_handle_at,
+    SysOpNotSupport,     //sys_open_by_handle_at,
+    SysCapErr,           //sys_clock_adjtime,       CAP_SYS_TIME
     SysSyncFs,           //sys_syncfs,
     SysSendMMsg,         //sys_sendmmsg,
-    NotImplementSyscall, //sys_setns,
+    SysOpNotSupport,     //sys_setns,               Needs filesystem support
     SysGetcpu,           //sys_getcpu,
-    NotImplementSyscall, //sys_process_vm_readv,//310
-    NotImplementSyscall, //sys_process_vm_writev,
-    NotImplementSyscall, //sys_kcmp,
-    NotImplementSyscall, //sys_finit_module,
-    NotImplementSyscall, //sys_sched_setattr,
-    NotImplementSyscall, //sys_sched_getattr,
-    SysNoSupport, //sys_renameat2,
+    SysNoSys,            //sys_process_vm_readv,//310 Need ptrace
+    SysNoSys,            //sys_process_vm_writev,
+    SysCapErr,           //sys_kcmp,                CAP_SYS_PTRACE
+    SysCapErr,           //sys_finit_module,        CAP_SYS_MODULE
+    SysNoSys,            //sys_sched_setattr,       implement scheduler?
+    SysNoSys,            //sys_sched_getattr,       implement scheduler?
+    SysNoSupport,        //sys_renameat2,
     NotImplementSyscall, //sys_seccomp,
     SysGetRandom,        //sys_getrandom,
-    SysMemfdCreate,     //sys_memfd_create,
-    NotImplementSyscall, //sys_kexec_file_load,//320
-    NotImplementSyscall, //sys_bpf,
+    SysMemfdCreate,      //sys_memfd_create,
+    SysCapErr,           //sys_kexec_file_load,//320    CAP_SYS_BOOT
+    SysCapErr,           //sys_bpf,                 CAP_SYS_ADMIN
     NotImplementSyscall, //sys_stub_execveat,
     NotImplementSyscall, //sys_userfaultfd,
     SysMembarrier,       //sys_membarrier,
     SysMlock2,           //mlock2,
+
+    // Syscalls implemented after 325 are "backports" from versions
+    // of Linux after 4.4.
     SysNoSys,            //sys_copy_file_range,
     SysPreadv2,          //sys_preadv2,
     SysPWritev2,         //sys_pwritev2,
@@ -435,6 +438,8 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysStatx,            //sys_statx, 332
     NotImplementSyscall, //	333
     SysNoSys,            //	334
+
+    ///////////////////////////////////////////////////////////////////////////////////////
     NotImplementSyscall, //	335
     NotImplementSyscall, //	336
     NotImplementSyscall, //	337
@@ -524,6 +529,9 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     NotImplementSyscall, //	421
     NotImplementSyscall, //	422
     NotImplementSyscall, //	423
+    ////////////////////////////////////////////////////////////////////////////
+
+    // Linux skips ahead to syscall 424 to sync numbers between arches.
     NotImplementSyscall, //	424
     NotImplementSyscall, //	425
     NotImplementSyscall, //	426
@@ -556,6 +564,10 @@ pub fn SysNoSupport(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     //return Err(Error::SysError(SysErr::ENOTSUP));
 }
 
+pub fn SysNoAccess(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
+    return Err(Error::SysError(SysErr::EACCES));
+}
+
 pub fn SysInvalid(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
     return Err(Error::SysError(SysErr::EINVAL));
     //return Err(Error::SysError(SysErr::ENOTSUP));
@@ -571,9 +583,16 @@ pub fn SysObsolete(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     //return Err(Error::SysError(SysErr::ENOTSUP));
 }
 
-pub fn SysNoSys(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {
-    error!("************No support syscall {:x?}", args);
+pub fn SysNoSys(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
     return Err(Error::SysError(SysErr::ENOSYS));
+}
+
+pub fn SysNoDev(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
+    return Err(Error::SysError(SysErr::ENODEV));
+}
+
+pub fn SysOpNotSupport(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
+    return Err(Error::SysError(SysErr::EOPNOTSUPP));
 }
 
 pub fn SysCapErr(_task: &mut Task, _args: &SyscallArguments) -> Result<i64> {
