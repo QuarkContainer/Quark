@@ -7,6 +7,6 @@ impl RDMASvcClient {
     }
 
     pub fn CreateSocket(&self) -> i64 {
-        super::Kernel::HostSpace::Socket(AFType::AF_INET, 1, 0)
+        super::Kernel::HostSpace::UnblockedSocket(AFType::AF_INET, 1, 0)
     }
 }

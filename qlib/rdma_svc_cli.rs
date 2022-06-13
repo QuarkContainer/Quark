@@ -206,7 +206,7 @@ impl RDMASvcClient {
             match request {
                 Some(cq) => match cq.msg {
                     RDMARespMsg::RDMAConnect(response) => {
-                        debug!("RDMARespMsg::RDMAConnect, response: {:?}", response);
+                        // debug!("RDMARespMsg::RDMAConnect, response: {:?}", response);
                         let fdInfo = GlobalIOMgr().GetByHost(response.sockfd as i32).unwrap();
                         let fdInfoLock = fdInfo.lock();
                         let sockInfo = fdInfoLock.sockInfo.lock().clone();
@@ -252,7 +252,7 @@ impl RDMASvcClient {
                         }
                     }
                     RDMARespMsg::RDMAAccept(response) => {
-                        debug!("RDMARespMsg::RDMAAccept, response: {:?}", response);
+                        // debug!("RDMARespMsg::RDMAAccept, response: {:?}", response);
 
                         let fdInfo = GlobalIOMgr().GetByHost(response.sockfd as i32).unwrap();
                         let fdInfoLock = fdInfo.lock();
@@ -313,18 +313,24 @@ impl RDMASvcClient {
                         }
                     }
                     RDMARespMsg::RDMANotify(response) => {
-                        debug!("RDMARespMsg::RDMANotify, response: {:?}", response);
+                        // debug!("RDMARespMsg::RDMANotify, response: {:?}", response);
                         if response.event & EVENT_IN != 0 {
                             let mut channelToSocketMappings = self.channelToSocketMappings.lock();
-                            let sockFd = channelToSocketMappings
-                                .get_mut(&response.channelId)
-                                .unwrap();
-                            GlobalIOMgr()
-                                .GetByHost(*sockFd)
-                                .unwrap()
-                                .lock()
-                                .waitInfo
-                                .Notify(EVENT_IN);
+                            let sockFd = channelToSocketMappings.get_mut(&response.channelId);
+                            match sockFd {
+                                Some(fd) => {
+                                    GlobalIOMgr()
+                                        .GetByHost(*fd)
+                                        .unwrap()
+                                        .lock()
+                                        .waitInfo
+                                        .Notify(EVENT_IN);
+                                }
+                                None => {
+                                    info!("channelId: {} is not found", response.channelId);
+                                }
+                            }
+
                             // let shareRegion = self.cliShareRegion.lock();
                             // let readBufAddr = &shareRegion.iobufs as *const _ as u64;
                             // let mut readBufHeadTailAddr = &shareRegion.ioMetas as *const _ as u64 - 24;
