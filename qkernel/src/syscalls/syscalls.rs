@@ -422,7 +422,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysMemfdCreate,      //	319 sys_memfd_create,
     SysCapErr,           //	320 sys_kexec_file_load    CAP_SYS_BOOT
     SysCapErr,           //	321 sys_bpf,                 CAP_SYS_ADMIN
-    NotImplementSyscall, //	322 sys_stub_execveat,
+    SysExecveat,         //	322 sys_stub_execveat,
     NotImplementSyscall, //	323 sys_userfaultfd,
     SysMembarrier,       //	324 sys_membarrier,
     SysMlock2,           //	325 mlock2,
@@ -550,7 +550,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysNoSys,            //	439 sys_faccessat2
     NotImplementSyscall, //	440 sys_process_madvise
     SysPwait2,           //	441 sys_epoll_pwait2
-    NotImplementSyscall, //	442 sys_mount_setattr
+    NotImplementSyscall, //	442 sys_mouLoad(nt_setattr
     NotImplementSyscall, //	443 sys_quotactl_fd
     NotImplementSyscall, //	444 sys_landlock_create_ruleset
     NotImplementSyscall, //	445 sys_landlock_add_rule
