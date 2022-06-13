@@ -27,6 +27,7 @@ use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::*;
 use super::super::SignalDef::*;
+use super::sys_poll::CopyTimespecIntoDuration;
 
 // CreateEpoll implements the epoll_create(2) linux syscall.
 pub fn CreateEpoll(task: &Task, closeOnExec: bool) -> Result<i64> {
@@ -157,7 +158,7 @@ pub fn RemoveEpoll(task: &Task, epfd: i32, fd: i32) -> Result<()> {
 }
 
 // WaitEpoll implements the epoll_wait(2) linux syscall.
-pub fn WaitEpoll(task: &Task, epfd: i32, max: i32, timeout: i32) -> Result<Vec<Event>> {
+pub fn WaitEpoll(task: &Task, epfd: i32, max: i32, timeout: i64) -> Result<Vec<Event>> {
     // Get epoll from the file descriptor.
     let epollfile = task.GetFile(epfd)?;
 
@@ -181,7 +182,7 @@ pub fn WaitEpoll(task: &Task, epfd: i32, max: i32, timeout: i32) -> Result<Vec<E
 
     if timeout > 0 {
         let now = MonotonicNow();
-        deadline = Some(Time(now + timeout as i64 * MILLISECOND));
+        deadline = Some(Time(now + timeout));
     }
 
     let general = task.blocker.generalEntry.clone();
@@ -310,7 +311,7 @@ pub fn SysEpollWait(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let epfd = args.arg0 as i32;
     let eventAddr = args.arg1 as u64;
     let maxEvents = args.arg2 as i32;
-    let timeout = args.arg3 as i32;
+    let timeout = args.arg3 as i64 * MILLISECOND;
 
     let r = match WaitEpoll(task, epfd, maxEvents, timeout) {
         Err(Error::SysError(SysErr::ETIMEDOUT)) => return Ok(0),
@@ -340,4 +341,42 @@ pub fn SysPwait(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     }
 
     return SysEpollWait(task, args);
+}
+
+// EpollPwait2 implements the epoll_pwait(2) linux syscall.
+pub fn SysPwait2(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let epfd = args.arg0 as i32;
+    let eventAddr = args.arg1 as u64;
+    let maxEvents = args.arg2 as i32;
+    let timeoutPtr = args.arg3 as u64;
+    let maskAddr = args.arg4 as u64;
+    let maskSize = args.arg5 as u32;
+
+    let haveTimeout = timeoutPtr != 0;
+
+    let mut timeout = -1;
+    if haveTimeout {
+        timeout = CopyTimespecIntoDuration(task, timeoutPtr)?;
+    }
+
+    if maskAddr != 0 {
+        let mask = CopyInSigSet(task, maskAddr, maskSize as usize)?;
+
+        let thread = task.Thread();
+        let oldmask = thread.SignalMask();
+        thread.SetSignalMask(mask);
+        thread.SetSavedSignalMask(oldmask);
+    }
+
+    let r = match WaitEpoll(task, epfd, maxEvents, timeout) {
+        Err(Error::SysError(SysErr::ETIMEDOUT)) => return Ok(0),
+        Err(e) => return Err(e),
+        Ok(r) => r,
+    };
+
+    if r.len() != 0 {
+        CopyOutEvents(task, eventAddr, &r)?;
+    }
+
+    return Ok(r.len() as i64);
 }
