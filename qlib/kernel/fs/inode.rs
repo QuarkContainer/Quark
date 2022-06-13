@@ -29,6 +29,7 @@ use super::super::kernel::time::*;
 use super::super::socket::unix::transport::unix::*;
 use super::super::task::*;
 use super::super::uid::*;
+use super::super::SHARESPACE;
 
 use super::attr::*;
 use super::dentry::*;
@@ -246,20 +247,22 @@ impl Deref for Inode {
 impl Drop for Inode {
     fn drop(&mut self) {
         if Arc::strong_count(&self.0) == 1 {
-            let watches = self.Watches();
+            if SHARESPACE.config.read().EnableInotify {
+                let watches = self.Watches();
 
-            // If this inode is being destroyed because it was unlinked, queue a
-            // deletion event. This may not be the case for inodes being revalidated.
-            let unlinked = watches.read().unlinked;
-            if unlinked {
-                watches.Notify("", InotifyEvent::IN_DELETE_SELF, 0);
+                // If this inode is being destroyed because it was unlinked, queue a
+                // deletion event. This may not be the case for inodes being revalidated.
+                let unlinked = watches.read().unlinked;
+                if unlinked {
+                    watches.Notify("", InotifyEvent::IN_DELETE_SELF, 0);
+                }
+
+                // Remove references from the watch owners to the watches on this inode,
+                // since the watches are about to be GCed. Note that we don't need to worry
+                // about the watch pins since if there were any active pins, this inode
+                // wouldn't be in the destructor.
+                watches.TargetDestroyed();
             }
-
-            // Remove references from the watch owners to the watches on this inode,
-            // since the watches are about to be GCed. Note that we don't need to worry
-            // about the watch pins since if there were any active pins, this inode
-            // wouldn't be in the destructor.
-            watches.TargetDestroyed();
         }
     }
 }
