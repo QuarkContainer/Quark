@@ -226,8 +226,8 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     NotImplementSyscall, //sys_setfsgid,
     SysGetsid,           //sys_getsid,
     SysCapget,           //sys_capget,
-    SysCapet,            //sys_capset,
-    NotImplementSyscall, //sys_rt_sigpending,
+    SysCapSet,           //sys_capset,
+    SysRtSigpending,     //sys_rt_sigpending,
     SysRtSigtimedwait,   //sys_rt_sigtimedwait,
     SysRtSigqueueinfo,   //sys_rt_sigqueueinfo,
     SysRtSigsuspend,     //sys_rt_sigsuspend,  //130

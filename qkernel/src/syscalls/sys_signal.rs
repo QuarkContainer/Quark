@@ -182,6 +182,14 @@ pub fn SysRtSigsuspend(task: &mut Task, args: &SyscallArguments) -> Result<i64> 
     }
 }
 
+pub fn SysRtSigpending(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let addr = args.arg0 as u64;
+
+    let pending = task.Thread().PendingSignals();
+    task.CopyOutObj(&pending.0, addr)?;
+    return Ok(0)
+}
+
 // RtSigtimedwait implements linux syscall rt_sigtimedwait(2).
 pub fn SysRtSigtimedwait(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let sigset = args.arg0 as u64;
