@@ -351,6 +351,7 @@ pub fn Execvat(task: &mut Task, dirfd: i32, filenameAddr: u64, argvAddr: u64, en
     return Ok(0);
 }
 
+// Execveat implements linux syscall execveat(2).
 pub fn SysExecveat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let dirfd = args.arg0 as i32;
     let filenameAddr = args.arg1 as u64;
@@ -361,6 +362,7 @@ pub fn SysExecveat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     return Execvat(task, dirfd, filenameAddr, argvAddr, envvAddr, flags);
 }
 
+// Execve implements linux syscall execve(2).
 pub fn SysExecve(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let filenameAddr = args.arg0 as u64;
     let argvAddr = args.arg1 as u64;
