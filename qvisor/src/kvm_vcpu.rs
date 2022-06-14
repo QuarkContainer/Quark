@@ -17,7 +17,6 @@ use alloc::slice;
 use core::mem::size_of;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-use crossbeam::sync::WaitGroup;
 use kvm_bindings::*;
 use kvm_ioctls::VcpuExit;
 use libc::*;
@@ -45,7 +44,7 @@ use super::runc::runtime::vm::*;
 use super::URING_MGR;
 use crate::qlib::cpuid::XSAVEFeature::{XSAVEFeatureBNDCSR, XSAVEFeatureBNDREGS};
 use crate::qlib::kernel::asm::xgetbv;
-use std::sync::atomic::fence;
+use std::sync::atomic::{fence, AtomicBool};
 
 #[repr(C)]
 pub struct SignalMaskStruct {
@@ -148,7 +147,7 @@ pub struct KVMVcpu {
     pub shareSpaceAddr: u64,
 
     pub autoStart: bool,
-    pub interrupting: Mutex<(bool, Vec<WaitGroup>)>,
+    pub interrupting: AtomicBool,
     //the pipe id to notify io_mgr
 }
 
@@ -223,7 +222,7 @@ impl KVMVcpu {
             heapStartAddr: pageAllocatorBaseAddr,
             shareSpaceAddr: shareSpaceAddr,
             autoStart: autoStart,
-            interrupting: Mutex::new((false, Vec::new())),
+            interrupting: AtomicBool::new(false),
         });
     }
 
@@ -812,38 +811,14 @@ impl KVMVcpu {
                     info!("get exception");
                 }
                 VcpuExit::IrqWindowOpen => {
-                    //info!("get VcpuExit::IrqWindowOpen");
-                    let sregs = self
-                        .vcpu
-                        .get_sregs()
-                        .map_err(|e| Error::IOError(format!("vcpu::error is {:?}", e)))?;
-                    let ss = sregs.ss.selector as u64;
-                    // ignore the signal if it is in kernel mode
-                    if (ss & 0x3) != 0 {
-                        self.InterruptGuest();
-                    }
+                    self.InterruptGuest();
                     self.vcpu.set_kvm_request_interrupt_window(0);
                     fence(Ordering::Release);
-                    let mut interrupting = self.interrupting.lock();
-                    interrupting.1.clear();
-                    interrupting.0 = false;
+                    self.interrupting.store(false, Ordering::Release);
                 }
                 VcpuExit::Intr => {
-                    let sregs = self
-                        .vcpu
-                        .get_sregs()
-                        .map_err(|e| Error::IOError(format!("vcpu::error is {:?}", e)))?;
-                    let ss = sregs.ss.selector as u64;
-                    // ignore the signal if it is in kernel mode
-                    if (ss & 0x3) != 0 {
-                        self.vcpu.set_kvm_request_interrupt_window(1);
-                        fence(Ordering::Release);
-                    } else {
-                        let mut interrupting = self.interrupting.lock();
-                        interrupting.1.clear();
-                        interrupting.0 = false;
-                    }
-
+                    self.vcpu.set_kvm_request_interrupt_window(1);
+                    fence(Ordering::Release);
                     //     SHARE_SPACE.MaskTlbShootdown(self.id as _);
                     //
                     //     let mut regs = self
@@ -1008,13 +983,8 @@ impl KVMVcpu {
         Ok(())
     }
 
-    pub fn interrupt(&self, waitGroup: Option<WaitGroup>) {
-        let mut interrupting = self.interrupting.lock();
-        if let Some(wg) = waitGroup {
-            interrupting.1.push(wg);
-        }
-        if !interrupting.0 {
-            interrupting.0 = true;
+    pub fn interrupt(&self) {
+        if self.interrupting.swap(true, Ordering::AcqRel) == false {
             self.Signal(Signal::SIGCHLD);
         }
     }

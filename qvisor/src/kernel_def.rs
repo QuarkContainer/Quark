@@ -1,7 +1,6 @@
 use cache_padded::CachePadded;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-use crossbeam::sync::WaitGroup;
 use libc::*;
 use std::fmt;
 
@@ -28,7 +27,6 @@ use super::FD_NOTIFIER;
 use super::QUARK_CONFIG;
 use super::URING_MGR;
 use super::VMS;
-use crate::kvm_vcpu::KVMVcpuState;
 use crate::SHARE_SPACE;
 
 impl std::error::Error for Error {}
@@ -131,19 +129,16 @@ impl ShareSpace {
     }
 
     pub fn TlbShootdown(&self, vcpuMask: u64) -> u64 {
-        let wg = WaitGroup::new();
         let vcpu_len = self.scheduler.VcpuArr.len();
         for i in 1..vcpu_len {
-            let cpu = VMS.lock().vcpus[i].clone();
             if ((1 << i) & vcpuMask != 0)
                 && SHARE_SPACE.scheduler.VcpuArr[i].GetMode() == VcpuMode::User
-                && cpu.state.load(Ordering::Acquire) == (KVMVcpuState::GUEST as u64)
             {
+                let cpu = VMS.lock().vcpus[i].clone();
                 SHARE_SPACE.scheduler.VcpuArr[i].InterruptTlbShootdown();
-                cpu.interrupt(Some(wg.clone()))
+                cpu.interrupt();
             }
         }
-        wg.wait();
         return 0;
     }
 
@@ -166,12 +161,11 @@ impl ShareSpace {
                 //self.scheduler.VcpuArr[i].ResetEnterAppTimestamp();
 
                 // retry to send signal for each 2 ms
-                self.scheduler.VcpuArr[i]
-                    .SetEnterAppTimestamp(enterAppTimestamp + CLOCK_TICK / 5);
+                self.scheduler.VcpuArr[i].SetEnterAppTimestamp(enterAppTimestamp + CLOCK_TICK / 5);
                 self.scheduler.VcpuArr[i].InterruptThreadTimeout();
                 //error!("CheckVcpuTimeout {}/{}/{}/{}", i, enterAppTimestamp, now, Tsc::Scale(now - enterAppTimestamp));
                 let vcpu = VMS.lock().vcpus[i].clone();
-                vcpu.interrupt(None);
+                vcpu.interrupt();
             }
         }
     }

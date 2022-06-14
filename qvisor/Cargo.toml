@@ -53,7 +53,6 @@ containerd-shim = { git = "https://github.com/QuarkContainer/rust-extensions.git
 oci-spec = "0.5.4"
 os_pipe = "1.0.0"
 time = { version = "0.3.7", features = ["serde", "std"] }
-crossbeam = "0.8.0"
 
 [dependencies.lazy_static]
 version = "1.4"
