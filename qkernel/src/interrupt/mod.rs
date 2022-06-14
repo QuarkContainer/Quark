@@ -325,8 +325,8 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, ptRegs: &mut PtRegs, errorCode: u
         currTask.RestoreFp();
     }
 
-    currTask.mm.HandleTlbShootdown();
     CPULocal::Myself().SetMode(VcpuMode::User);
+    currTask.mm.HandleTlbShootdown();
     ReturnToApp(ptRegs);
 }
 
@@ -566,6 +566,7 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
                 }
             }
             CPULocal::Myself().SetMode(VcpuMode::User);
+            currTask.mm.HandleTlbShootdown();
             return;
         }
 
@@ -595,6 +596,7 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
             break;
         }
         CPULocal::Myself().SetMode(VcpuMode::User);
+        currTask.mm.HandleTlbShootdown();
         return;
     }
 
@@ -646,10 +648,10 @@ pub fn HandleFault(
         .SendSignal(&info)
         .expect("PageFaultHandler send signal fail");
     MainRun(task, TaskRunState::RunApp);
+    CPULocal::Myself().SetMode(VcpuMode::User);
     task.mm.HandleTlbShootdown();
 
     task.RestoreFp();
-    CPULocal::Myself().SetMode(VcpuMode::User);
     ReturnToApp(sf);
 }
 
@@ -689,11 +691,11 @@ pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
             ptRegs.eflags = rflags;
         }
 
-        currTask.mm.HandleTlbShootdown();
         CPULocal::SetKernelStack(currTask.GetKernelSp());
         if ptRegs.ss & 0x3 != 0 {
             CPULocal::Myself().SetMode(VcpuMode::User);
         }
+        currTask.mm.HandleTlbShootdown();
         return;
     } else if CPULocal::InterruptByThreadTimeout(mask) {
         if ptRegs.ss & 0x3 != 0 {
@@ -712,12 +714,11 @@ pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
 
             super::qlib::kernel::taskMgr::Yield();
             MainRun(currTask, TaskRunState::RunApp);
-            // do we need to handle tlb shootdown here?
+            CPULocal::Myself().SetMode(VcpuMode::User);
             currTask.mm.HandleTlbShootdown();
             currTask.RestoreFp();
             CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
             CPULocal::SetKernelStack(currTask.GetKernelSp());
-            CPULocal::Myself().SetMode(VcpuMode::User);
             let kernalRsp = ptRegs as *const _ as u64;
             if !(ptRegs.rip == ptRegs.rcx && ptRegs.r11 == ptRegs.eflags) {
                 IRet(kernalRsp)

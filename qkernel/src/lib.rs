@@ -335,9 +335,9 @@ pub extern "C" fn syscall_handler(
     if SHARESPACE.config.read().KernelPagetable {
         currTask.SwitchPageTable();
     }
+    CPULocal::Myself().SetMode(VcpuMode::User);
     currTask.mm.HandleTlbShootdown();
     CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
-    CPULocal::Myself().SetMode(VcpuMode::User);
     if !(pt.rip == pt.rcx && pt.r11 == pt.eflags) {
         //error!("iret *****, pt is {:x?}", pt);
         IRet(kernalRsp)
