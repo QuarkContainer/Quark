@@ -48,6 +48,7 @@ use super::super::syscalls::sys_memfd::*;
 use super::super::syscalls::sys_sched::*;
 use super::super::syscalls::sys_inotify::*;
 use super::super::syscalls::sys_xattr::*;
+use super::super::syscalls::sys_sem::*;
 
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
@@ -164,9 +165,9 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysWait4,            // 061 sys_wait4,
     SysKill,             // 062 sys_kill,
     SysUname,            // 063 sys_uname,
-    NotImplementSyscall, // 064 sys_semget,
-    NotImplementSyscall, // 065 sys_semop,
-    NotImplementSyscall, // 066 sys_semctl,
+    SysSemgetl,          // 064 sys_semget,
+    SysSemop,            // 065 sys_semop,
+    SysSemctl,           // 066 sys_semctl,
     NotImplementSyscall, // 067 sys_shmdt,
     NotImplementSyscall, // 068 sys_msgget,
     NotImplementSyscall, // 069 sys_msgsnd,
@@ -320,7 +321,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysGetDents64,       // 217 sys_getdents64,
     SysSetTidAddr,       // 218 sys_set_tid_address,
     SysRestartSyscall,   // 219 sys_restart_syscall,
-    NotImplementSyscall, // 220 sys_semtimedop,
+    SysSemtimedop,       // 220 sys_semtimedop,
     SysFadvise64,        // 221 sys_fadvise64,
     SysTimerCreate,      // 222 sys_timer_create,
     SysTimerSettime,     // 223 sys_timer_settime,

@@ -213,6 +213,10 @@ impl Task {
         self.guard.Check();
     }
 
+    pub fn IPCNamespace(&self) -> IPCNamespace {
+        return self.ipcns.clone();
+    }
+
     //clean object on stack
     pub fn SetDummy(&mut self) {
         let dummyTask = DUMMY_TASK.read();
