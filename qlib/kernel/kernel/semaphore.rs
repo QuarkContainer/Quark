@@ -18,7 +18,6 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::ops::Deref;
 use core::sync::atomic::AtomicU64;
-use core::sync::atomic::Ordering;
 
 use super::super::super::auth::userns::*;
 use super::super::super::auth::*;
@@ -28,6 +27,8 @@ use super::super::super::linux::sem::*;
 use super::super::super::linux_def::*;
 use super::super::super::singleton::*;
 use super::super::task::*;
+use super::super::uid::*;
+use super::waiter::*;
 //use super::super::fs::attr::*;
 use super::time::*;
 
@@ -36,17 +37,17 @@ pub unsafe fn InitSingleton() {
     WAITER_ID.Init(AtomicU64::new(1));
 }
 
-pub const VALUE_MAX: i16 = 32767; // SEMVMX
-
-// semaphoresMax is "maximum number of semaphores per semaphore ID" (SEMMSL).
-pub const SEMAPHORES_MAX: u16 = 32000;
+pub const VALUE_MAX: i16 = SEMMNI as i16; // SEMVMX
 
 // setMax is "system-wide limit on the number of semaphore sets" (SEMMNI).
-pub const SETS_MAX: u16 = 32000;
+pub const SETS_MAX: u32 = SEMMNI;
+
+// semaphoresMax is "maximum number of semaphores per semaphore ID" (SEMMSL).
+pub const SEMAPHORES_MAX: u32 = SEMMSL;
 
 // semaphoresTotalMax is "system-wide limit on the number of semaphores"
 // (SEMMNS = SEMMNI*SEMMSL).
-pub const SEMAPHORES_TOTAL_MAX: u64 = 1024000000;
+pub const SEMAPHORES_TOTAL_MAX: u32 = SEMMNS;
 
 #[derive(Default)]
 pub struct RegistryInternal {
@@ -56,7 +57,7 @@ pub struct RegistryInternal {
 }
 
 impl RegistryInternal {
-    fn findByID(&self, id: i32) -> Option<Set> {
+    pub fn findByID(&self, id: i32) -> Option<Set> {
         match self.semaphores.get(&id) {
             None => None,
             Some(s) => Some(s.clone()),
@@ -73,6 +74,17 @@ impl RegistryInternal {
         return None;
     }
 
+    pub fn HighestIndex(&mut self) -> i32 {
+        let mut last = 0;
+        error!("HighestIndex {:?}", self.semaphores.keys());
+        for (i, _) in self.semaphores.iter().rev() {
+            last = *i;
+            break;
+        }
+
+        return last;
+    }
+
     fn totalSems(&self) -> usize {
         let mut totalSems = 0;
 
@@ -85,7 +97,7 @@ impl RegistryInternal {
 
     fn newSet(
         &mut self,
-        _task: &Task,
+        task: &Task,
         myself: Registry,
         key: i32,
         owner: &FileOwner,
@@ -94,6 +106,7 @@ impl RegistryInternal {
         nsems: i32,
     ) -> Result<Set> {
         let set = Set::New(
+            task,
             myself,
             key,
             owner.clone(),
@@ -111,8 +124,9 @@ impl RegistryInternal {
 
             if !me.semaphores.contains_key(&id) {
                 me.lastIDUsed = id;
-                me.semaphores.insert(id, set.clone());
+                error!("newSet ...");
                 set.lock().id = id;
+                me.semaphores.insert(id, set.clone());
                 return Ok(set);
             }
 
@@ -199,12 +213,39 @@ impl Registry {
         }
 
         if me.semaphores.len() >= SETS_MAX as usize {
-            return Err(Error::SysError(SysErr::EINVAL));
+            return Err(Error::SysError(SysErr::ENOSPC));
+        }
+
+        if me.totalSems() > SEMAPHORES_TOTAL_MAX as usize - nsems as usize {
+            return Err(Error::SysError(SysErr::ENOSPC));
         }
 
         let owner = task.FileOwner();
         let perms = FilePermissions::FromMode(mode);
         return me.newSet(task, clone, key, &owner, &owner, &perms, nsems);
+    }
+
+    pub fn IPCInfo(&self) -> SemInfo {
+        return SemInfo {
+            SemMap: SEMMAP,
+            SemMni: SEMMNI,
+            SemMns: SEMMNS,
+            SemMnu: SEMMNU,
+            SemMsl: SEMMSL,
+            SemOpm: SEMOPM,
+            SemUme: SEMUME,
+            SemUsz: SEMUSZ,
+            SemVmx: SEMVMX,
+            SemAem: SEMAEM,
+        }
+    }
+
+    pub fn SemInfo(&self) -> SemInfo {
+        let me = self.lock();
+        let mut info = self.IPCInfo();
+        info.SemUsz = me.semaphores.len() as _;
+        info.SemAem = me.totalSems() as _;
+        return info
     }
 
     pub fn RemoveId(&self, id: i32, creds: &Credentials) -> Result<()> {
@@ -252,11 +293,15 @@ impl<'a> SetInternal {
     }
 
     fn findSem(&self, num: i32) -> Option<&Sem> {
-        if num < 0 || num as usize > self.sems.len() {
+        if num < 0 || num as usize >= self.sems.len() {
             return None;
         }
 
         return Some(&self.sems[num as usize]);
+    }
+
+    fn Size(&self) -> i32 {
+        return self.sems.len() as _
     }
 
     fn checkCredentials(&self, creds: &Credentials) -> bool {
@@ -292,15 +337,17 @@ impl<'a> SetInternal {
     fn destroy(&mut self) {
         self.dead = true;
         for s in &mut self.sems {
-            for (_, w) in &s.waiters {
-                w.Trigger();
-            }
-
-            s.waiters.clear();
+            s.queue.Notify(EVENT_IN);
         }
     }
 
-    fn executeOps(&mut self, task: &Task, ops: &[Sembuf], pid: i32) -> Result<(u64, i32)> {
+    // ret Ok(n): if n >= 0, waiting on sems[n], if n == -1 success
+    fn executeOps(&mut self, task: &Task, ops: &[Sembuf], e: &WaitEntry, pid: i32) -> Result<(u64, i32)> {
+        // Did it race with a removal operation?
+        if self.dead {
+            return Err(Error::SysError(SysErr::EIDRM));
+        }
+
         let mut tmpVals = Vec::with_capacity(self.sems.len());
         for i in 0..self.sems.len() {
             tmpVals.push(self.sems[i].value)
@@ -314,10 +361,11 @@ impl<'a> SetInternal {
                         return Err(Error::SysError(SysErr::EWOULDBLOCK));
                     }
 
-                    let w = Waiter::New(op.SemOp);
-                    let id = w.id;
-                    sem.waiters.insert(w.id, w);
-                    return Ok((id, op.SemNum as i32));
+                    let waiterId = NewUID();
+                    sem.waiters.insert(waiterId, op.SemOp);
+
+                    sem.queue.EventRegister(task, e, EVENT_READ);
+                    return Ok((waiterId, op.SemNum as _))
                 }
             } else {
                 if op.SemOp < 0 {
@@ -330,9 +378,10 @@ impl<'a> SetInternal {
                             return Err(Error::SysError(SysErr::EWOULDBLOCK));
                         }
 
-                        let w = Waiter::New(op.SemOp);
-                        let id = w.id;
-                        return Ok((id, op.SemNum as i32));
+                        let waiterId = NewUID();
+                        sem.waiters.insert(waiterId, op.SemOp);
+                        sem.queue.EventRegister(task, e, READABLE_EVENT);
+                        return Ok((waiterId, op.SemNum as _))
                     }
                 } else {
                     if tmpVals[op.SemNum as usize] > VALUE_MAX - op.SemOp {
@@ -352,7 +401,8 @@ impl<'a> SetInternal {
 
         self.opTime = task.Now();
 
-        return Ok((0, 0));
+        // -1 means success
+        return Ok((0, -1));
     }
 }
 
@@ -369,6 +419,7 @@ impl Deref for Set {
 
 impl Set {
     pub fn New(
+        task: &Task,
         r: Registry,
         key: i32,
         owner: FileOwner,
@@ -384,7 +435,7 @@ impl Set {
             owner: owner,
             perms: perms,
             opTime: Time::default(),
-            changeTime: Time::default(),
+            changeTime: task.Now(),
             sems: Vec::with_capacity(nsems as usize),
             dead: false,
         };
@@ -396,8 +447,60 @@ impl Set {
         return Self(Arc::new(QMutex::new(internal)));
     }
 
+    pub fn Id(&self) -> i32 {
+        return self.lock().id;
+    }
+
     pub fn Size(&self) -> usize {
         return self.lock().sems.len();
+    }
+
+    pub fn GetStat(&self, creds: &Credentials) -> Result<SemidDS> {
+        return self.semStat(creds, &PermMask {
+            read: true,
+            ..Default::default()
+        })
+    }
+
+    pub fn GetStatAny(&self, creds: &Credentials) -> Result<SemidDS> {
+        return self.semStat(creds, &PermMask {
+            ..Default::default()
+        })
+    }
+
+    pub fn semStat(&self, creds: &Credentials, permMask: &PermMask) -> Result<SemidDS> {
+        let me = self.lock();
+
+        // "The calling process must have read permission on the semaphore set."
+        if !me.checkPerms(
+            creds,
+            permMask,
+        ) {
+            return Err(Error::SysError(SysErr::EACCES));
+        }
+
+        let UID = creds.lock().UserNamespace.MapFromKUID(me.owner.UID).0;
+        let GID = creds.lock().UserNamespace.MapFromKGID(me.owner.GID).0;
+        let CUID = creds.lock().UserNamespace.MapFromKUID(me.creator.UID).0;
+        let CGID = creds.lock().UserNamespace.MapFromKGID(me.creator.GID).0;
+        let ds = SemidDS {
+            SemPerm: IPCPerm {
+                Key: me.key as u32,
+                UID: UID,
+                GID: GID,
+                CUID: CUID,
+                CGID: CGID,
+                Mode: me.perms.LinuxMode() as _,
+                Seq: 0,
+                ..Default::default()
+            },
+            SemOTime: me.opTime.TimeT(),
+            SemCTime: me.changeTime.TimeT(),
+            SemNSems: me.Size() as _,
+            ..Default::default()
+        };
+
+        return Ok(ds)
     }
 
     pub fn Change(
@@ -434,7 +537,7 @@ impl Set {
 
         let mut me = self.lock();
 
-        if me.checkPerms(
+        if !me.checkPerms(
             creds,
             &PermMask {
                 write: true,
@@ -460,7 +563,7 @@ impl Set {
     pub fn SetValAll(
         &self,
         task: &Task,
-        vals: &[i16],
+        vals: &[u16],
         creds: &Credentials,
         pid: i32,
     ) -> Result<()> {
@@ -473,7 +576,7 @@ impl Set {
         }
 
         for val in vals {
-            if *val < 0 || *val > VALUE_MAX {
+            if *val > VALUE_MAX as _ {
                 return Err(Error::SysError(SysErr::ERANGE));
             }
         }
@@ -492,7 +595,7 @@ impl Set {
 
         for i in 0..vals.len() {
             let sem = &mut me.sems[i];
-            sem.value = vals[i];
+            sem.value = vals[i] as i16;
             sem.pid = pid;
             sem.wakeWaiters();
         }
@@ -534,7 +637,7 @@ impl Set {
         }
 
         let mut vals = Vec::with_capacity(me.sems.len());
-        for i in 0..vals.len() {
+        for i in 0..me.sems.len() {
             vals.push(me.sems[i].value);
         }
 
@@ -560,11 +663,68 @@ impl Set {
         }
     }
 
+    pub fn GetZeroWaiters(&self, num: i32, creds: &Credentials) -> Result<u16> {
+        let me = self.lock();
+
+        if !me.checkPerms(
+            creds,
+            &PermMask {
+                read: true,
+                ..Default::default()
+            },
+        ) {
+            return Err(Error::SysError(SysErr::EACCES));
+        }
+
+        let sem = match me.findSem(num) {
+            None => return Err(Error::SysError(SysErr::ERANGE)),
+            Some(v) => v
+        };
+
+        let mut semzcnt = 0;
+        for (_key, val) in &sem.waiters {
+            if *val == 0 {
+                semzcnt += 1;
+            }
+        }
+
+        return Ok(semzcnt)
+    }
+
+    pub fn GetNegativeWaiters(&self, num: i32, creds: &Credentials) -> Result<u16> {
+        let me = self.lock();
+
+        if !me.checkPerms(
+            creds,
+            &PermMask {
+                read: true,
+                ..Default::default()
+            },
+        ) {
+            return Err(Error::SysError(SysErr::EACCES));
+        }
+
+        let sem = match me.findSem(num) {
+            None => return Err(Error::SysError(SysErr::ERANGE)),
+            Some(v) => v
+        };
+
+        let mut semzcnt = 0;
+        for (_key, val) in &sem.waiters {
+            if *val < 0 {
+                semzcnt += 1;
+            }
+        }
+
+        return Ok(semzcnt)
+    }
+
     pub fn ExecuteOps(
         &self,
         task: &Task,
         ops: &[Sembuf],
         creds: &Credentials,
+        e: &WaitEntry,
         pid: i32,
     ) -> Result<(u64, i32)> {
         let mut me = self.lock();
@@ -596,21 +756,22 @@ impl Set {
             return Err(Error::SysError(SysErr::EACCES));
         }
 
-        return me.executeOps(task, ops, pid);
+        return me.executeOps(task, ops, e, pid);
     }
 
-    pub fn AbortWait(&self, num: i32, id: u64) {
+    pub fn AbortWait(&self, task: &Task, waiterid: u64, num: i32, e: &WaitEntry) {
         let mut me = self.lock();
-
-        let sem = &mut me.sems[num as usize];
-        sem.waiters.remove(&id);
+        me.sems[num as usize].waiters.remove(&waiterid);
+        let queue = me.sems[num as usize].queue.clone();
+        queue.EventUnregister(task, e)
     }
 }
 
 pub struct Sem {
     pub value: i16,
     pub pid: i32,
-    pub waiters: BTreeMap<u64, Waiter>,
+    pub queue: Queue,
+    pub waiters: BTreeMap<u64, i16>,
 }
 
 impl Default for Sem {
@@ -618,6 +779,7 @@ impl Default for Sem {
         return Self {
             value: 0,
             pid: 0,
+            queue: Queue::default(),
             waiters: BTreeMap::new(),
         };
     }
@@ -626,37 +788,6 @@ impl Default for Sem {
 impl Sem {
     // wakeWaiters goes over all waiters and checks which of them can be notified.
     pub fn wakeWaiters(&mut self) {
-        // Note that this will release all waiters waiting for 0 too.
-        let mut ids = Vec::new();
-
-        for (id, w) in &self.waiters {
-            if self.value < w.value {
-                continue;
-            }
-
-            w.Trigger();
-            ids.push(*id);
-        }
-
-        for id in ids {
-            self.waiters.remove(&id);
-        }
+        self.queue.Notify(EVENT_IN);
     }
-}
-
-#[derive(Default, Clone)]
-pub struct Waiter {
-    pub id: u64,
-    pub value: i16,
-}
-
-impl Waiter {
-    pub fn New(val: i16) -> Self {
-        return Self {
-            id: WAITER_ID.fetch_add(1, Ordering::SeqCst),
-            value: val,
-        };
-    }
-
-    pub fn Trigger(&self) {}
 }
