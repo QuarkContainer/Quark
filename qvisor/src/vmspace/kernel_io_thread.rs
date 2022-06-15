@@ -55,9 +55,7 @@ impl KIOThread {
         let mut count = 0;
 
         if QUARK_CONFIG.lock().EnableRDMA {
-            // count += RDMA.PollCompletionQueueAndProcess();
-            // count += ProcessRDMASvcMessage();
-            count += GlobalRDMASvcCli().DrainCompletionQueue();
+            count += GlobalRDMASvcCli().ProcessRDMASvcMessage();
         }
         count += IOURING.IOUrings()[0].HostSubmit().unwrap();
         TIMER_STORE.Trigger();
@@ -178,6 +176,9 @@ impl KIOThread {
             if !super::super::runc::runtime::vm::IsRunning() {
                 return Err(Error::Exit);
             }
+            if QUARK_CONFIG.lock().EnableRDMA {
+                GlobalRDMASvcCli().cliShareRegion.lock().clientBitmap.store(0, Ordering::Release);
+            }
 
             Self::Process(sharespace);
 
@@ -210,6 +211,10 @@ impl KIOThread {
                 }
             }
 
+            if QUARK_CONFIG.lock().EnableRDMA {
+                GlobalRDMASvcCli().cliShareRegion.lock().clientBitmap.store(1, Ordering::Release);
+            }
+
             if sharespace.DecrHostProcessor() == 0 {
                 Self::ProcessOnce(sharespace);
             }
@@ -231,9 +236,6 @@ impl KIOThread {
             /*if QUARK_CONFIG.lock().EnableRDMA {
                 RDMA.HandleCQEvent()?;
             }*/
-            // if QUARK_CONFIG.lock().EnableRDMA {
-            //     GlobalRDMASvcCli().cliShareRegion.lock().clientBitmap.store(1, Ordering::Release);
-            // }
             let _nfds = unsafe { epoll_wait(epfd, &mut events[0], 3, waitTime as i32) };
         }
     }

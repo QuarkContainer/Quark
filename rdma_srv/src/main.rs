@@ -96,6 +96,7 @@ use crate::rdma::RDMA;
 use id_mgr::IdMgr;
 use local_ip_address::list_afinet_netifas;
 use local_ip_address::local_ip;
+use qlib::kernel::TSC;
 use qlib::linux_def::*;
 use qlib::socket_buf::SocketBuff;
 use qlib::unix_socket::UnixSocket;
@@ -139,6 +140,8 @@ const WRITE_FLAGS: i32 = libc::EPOLLET | libc::EPOLLOUT;
 //const WRITE_FLAGS: i32 = libc::EPOLLONESHOT | libc::EPOLLIN | libc::EPOLLOUT;
 
 const READ_WRITE_FLAGS: i32 = libc::EPOLLET | libc::EPOLLOUT | libc::EPOLLIN;
+
+pub const IO_WAIT_CYCLES: i64 = 100_000_000; // 1ms
 
 pub enum FdType {
     UnixDomainSocketServer(UnixSocket),
@@ -516,7 +519,6 @@ fn main() -> io::Result<()> {
     let mut fds: HashMap<i32, FdType> = HashMap::new();
 
     let epoll_fd = epoll_create().expect("can create epoll queue");
-    let mut events: Vec<EpollEvent> = Vec::with_capacity(1024);
 
     let args: Vec<_> = env::args().collect();
     let server_fd = unsafe { libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0) };
@@ -730,11 +732,35 @@ fn main() -> io::Result<()> {
     epoll_add(epoll_fd, srvEventFd, read_event(srvEventFd as u64))?;
     unblock_fd(srvEventFd);
     fds.insert(srvEventFd, FdType::SrvEventFd(srvEventFd));
+    let mut events: Vec<EpollEvent> = Vec::with_capacity(1024);
 
     loop {
         events.clear();
         // println!("in loop");
-        RDMA_SRV.shareRegion.srvBitmap.store(1, Ordering::SeqCst);
+        let ret = unsafe {
+            libc::read(
+                RDMA_SRV.eventfd,
+                &mut eventdata as *mut _ as *mut libc::c_void,
+                8,
+            )
+        };
+
+        // if ret < 0 {
+        //     println!("error: {}", errno::errno().0);
+        // }
+
+        if ret < 0 && errno::errno().0 != SysErr::EAGAIN {
+            panic!(
+                "Service Wakeup fail... eventfd is {}, errno is {}",
+                RDMA_SRV.eventfd,
+                errno::errno().0
+            );
+        }
+
+        RDMA_SRV.shareRegion.srvBitmap.store(1, Ordering::Release);
+        RDMA.HandleCQEvent().unwrap();
+        RDMAProcessOnce();
+        // println!("Before sleep");
         let res = match syscall!(epoll_wait(
             epoll_fd,
             events.as_mut_ptr() as *mut libc::epoll_event,
@@ -746,9 +772,9 @@ fn main() -> io::Result<()> {
         };
 
         unsafe { events.set_len(res as usize) };
-
+        RDMA_SRV.shareRegion.srvBitmap.store(0, Ordering::Release);
         // println!("res is: {}", res);
-
+        RDMAProcess();
         for ev in &events {
             // print!("u64: {}, events: {:x}", ev.U64, ev.Events);
             let event_data = fds.get(&(ev.U64 as i32));
@@ -878,44 +904,68 @@ fn main() -> io::Result<()> {
                 }
                 Some(FdType::RDMACompletionChannel) => {
                     // println!("Got RDMA completion event");
-                    let _cnt = RDMA.PollCompletionQueueAndProcess();
-                    RDMA.HandleCQEvent().unwrap();
+                    // let _cnt = RDMA.PollCompletionQueueAndProcess();
+                    // RDMAProcess();
+                    // RDMA.HandleCQEvent().unwrap();
                     // println!("FdType::RDMACompletionChannel, processed {} wcs", cnt);
                 }
                 Some(FdType::SrvEventFd(srvEventFd)) => {
                     // print!("u64: {}, events: {:x}", ev.U64, ev.Events);
                     // println!("srvEvent notified ****************1");
-                    let ret = unsafe {
-                        libc::read(
-                            *srvEventFd,
-                            &mut eventdata as *mut _ as *mut libc::c_void,
-                            8,
-                        )
-                    };
-                    // println!("after read srvEventFd");
+                    // RDMAProcess();
+                    // let ret = unsafe {
+                    //     libc::read(
+                    //         *srvEventFd,
+                    //         &mut eventdata as *mut _ as *mut libc::c_void,
+                    //         16,
+                    //     )
+                    // };
+                    // println!("after read srvEventFd, ret is: {}", ret);
 
-                    if ret < 0 {
-                        println!("error: {}", errno::errno().0);
-                    }
+                    // if ret < 0 {
+                    //     println!("error: {}", errno::errno().0);
+                    // }
 
-                    if ret < 0 && errno::errno().0 != SysErr::EAGAIN {
-                        panic!(
-                            "Service Wakeup fail... eventfd is {}, errno is {}",
-                            *srvEventFd,
-                            errno::errno().0
-                        );
-                    }
+                    // if ret < 0 && errno::errno().0 != SysErr::EAGAIN {
+                    //     panic!(
+                    //         "Service Wakeup fail... eventfd is {}, errno is {}",
+                    //         *srvEventFd,
+                    //         errno::errno().0
+                    //     );
+                    // }
                     // println!("eventdata: {}", eventdata);
-                    RDMA_SRV.HandleClientRequest();
+                    // RDMA_SRV.HandleClientRequest();
                 }
                 None => {
                     // panic!("unexpected fd {} found", ev.U64);
                 }
             }
-
             //println!("Finish processing fd: {}, event: {}", ev.U64, ev.Events);
         }
     }
+}
+
+fn RDMAProcess() {
+    // let mut start = TSC.Rdtsc();
+    loop {
+        let count = RDMAProcessOnce();
+        // if count > 0 {
+        //     start = TSC.Rdtsc();
+        // }
+        // if TSC.Rdtsc() - start >= (IO_WAIT_CYCLES) {
+        //     break;
+        // }
+        if count == 0 {
+            break;
+        }
+    }
+}
+
+fn RDMAProcessOnce() -> usize {
+    let mut count = 0;
+    count += RDMA.PollCompletionQueueAndProcess();
+    count += RDMA_SRV.HandleClientRequest();
+    count
 }
 
 fn InitContainer(conn_sock: &UnixSocket) {

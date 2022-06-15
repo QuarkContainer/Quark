@@ -160,12 +160,12 @@ impl RDMASvcClient {
         let mut srvShareRegion = self.srvShareRegion.lock();
         // println!("updateBitmapAndWakeUpServerIfNecessary 2 ");
         srvShareRegion.updateBitmap(self.agentId);
-        if srvShareRegion.srvBitmap.load(Ordering::Relaxed) == 1 {
+        if srvShareRegion.srvBitmap.load(Ordering::Acquire) == 1 {
             // println!("before write srvEventFd");
             self.wakeupSvc();
         } else {
             // println!("server is not sleeping");
-            self.updateBitmapAndWakeUpServerIfNecessary();
+            // self.updateBitmapAndWakeUpServerIfNecessary();
         }
     }
 

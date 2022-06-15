@@ -189,6 +189,12 @@ impl RDMAChannelIntern {
         //     self.localId
         // );
         if self.localId != 0 {
+            // if 2 * self.sockBuf.consumeReadData.load(Ordering::Acquire)
+            //     > self.sockBuf.readBuf.lock().BufSize() as u64
+            // if 2 * self.sockBuf.consumeReadData.load(Ordering::Relaxed) > 65536 as u64 {
+            //     // println!("Control Channel to send consumed data");
+            //     self.SendConsumedDataInternal(remoteInfo.remoteId);
+            // }
             self.SendConsumedDataInternal(remoteInfo.remoteId);
         } else {
             // TODO: is it needed to send consumedData for control channel here, not now!

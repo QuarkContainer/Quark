@@ -57,6 +57,7 @@ void * clientThread(void *arg)
         
         if (config.log)
         {
+            printf("thread %dth, send %dth data\n", index+1, i+1);
             printf("client sock is: %d 1\n", clientsocks[index]);
         }
 

@@ -670,6 +670,9 @@ impl RDMAControlChannel {
                 ControlMsgBody::DummyMsg => {
                     panic!("Control channel received dummy message!");
                 }
+                ControlMsgBody::ConsumedDataGroup(msg) => {
+                    println!("ConsumedDataGroup, msg: {:?}", msg);
+                }
             }
         }
    }
@@ -895,6 +898,7 @@ pub enum ControlMsgBody {
     ConnectRequest(ConnectRequest),
     ConnectResponse(ConnectResponse),
     // ConnectConfirm(ConnectConfirm),
+    ConsumedDataGroup(ConsumedDataGroup),
     ConsumedData(ConsumedData),
     RecvRequestCount(RecvRequestCount),
     DummyMsg,
@@ -905,6 +909,18 @@ pub struct ConsumedData {
     pub remoteChannelId: u32,
     pub consumedData: u32,
     pub recvRequestCount: u32,
+}
+
+#[derive(Clone, Debug)]
+pub struct ConsumedDataGroup {
+    pub consumeData: [ConsumeDataItem; 6],
+    pub recvRequestCount: u32,
+}
+
+#[derive(Clone, Debug)]
+pub struct ConsumeDataItem {
+    pub remoteChannelId: u32,
+    pub consumedData: u32,
 }
 
 #[derive(Clone, Debug)]

@@ -310,20 +310,22 @@ impl RDMASrv {
         }
     }
 
-    pub fn HandleClientRequest(&self) {
+    pub fn HandleClientRequest(&self) -> usize {
         let agentIds = self.shareRegion.getAgentIds();
         // println!("agentIds: {:?}", agentIds);
         let rdmaAgents = self.agents.lock();
+        let mut count = 0;
         for agentId in agentIds.iter() {
             match rdmaAgents.get(agentId) {
                 Some(rdmaAgent) => {
-                    rdmaAgent.HandleClientRequest();
+                    count += rdmaAgent.HandleClientRequest();
                 }
                 None => {
                     println!("RDMA agent with id {} doesn't exist", agentId);
                 }
             }
         }
+        count
     }
 
     // pub fn CreateRDMAChannel(&self, agentId: u32) {

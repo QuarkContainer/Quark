@@ -187,10 +187,11 @@ impl RDMAAgent {
         &self,
         connectReq: &RDMAConnectReq,
         rdmaConn: RDMAConn,
-        shareRegion: &ClientShareRegion,
+        // shareRegion: &ClientShareRegion,
     ) -> RDMAChannel {
         let channelId = RDMA_SRV.channelIdMgr.lock().AllocId().unwrap();
         let ioBufIndex = self.ioBufIdMgr.lock().AllocId().unwrap() as usize;
+        let shareRegion = self.shareRegion.lock();
         let sockBuf = Arc::new(SocketBuff::InitWithShareMemory(
             MemoryDef::DEFAULT_BUF_PAGE_COUNT,
             &shareRegion.ioMetas[ioBufIndex].readBufAtoms as *const _ as u64,
@@ -214,17 +215,21 @@ impl RDMAAgent {
         rdmaChannel
     }
 
-    pub fn HandleClientRequest(&self) {
+    pub fn HandleClientRequest(&self) -> usize {
+        let mut count = 0;
         loop {
-            let shareRegion = self.shareRegion.lock();
-            match shareRegion.sq.Pop() {
-                Some(rdmaRequest) => self.HandleClientRequestInternal(rdmaRequest, &shareRegion),
+            let request = self.shareRegion.lock().sq.Pop();
+            count += 1;
+            match request {
+                Some(rdmaRequest) => self.HandleClientRequestInternal(rdmaRequest),
                 None => {
+                    count -= 1;
                     // println!("No more request for agent: {}", self.id);
                     break;
                 }
             }
         }
+        count
     }
 
     pub fn SendResponse(&self, response: RDMAResp) {
@@ -273,7 +278,7 @@ impl RDMAAgent {
         // }
 
         shareRegion.cq.Push(response);
-        if shareRegion.clientBitmap.load(Ordering::SeqCst) == 1 {
+        if shareRegion.clientBitmap.load(Ordering::Acquire) == 1 {
             let data = 16u64;
             let ret = unsafe {
                 libc::write(
@@ -288,7 +293,7 @@ impl RDMAAgent {
         }
     }
 
-    fn HandleClientRequestInternal(&self, rdmaReq: RDMAReq, shareRegion: &ClientShareRegion) {
+    fn HandleClientRequestInternal(&self, rdmaReq: RDMAReq) {
         match rdmaReq.msg {
             RDMAReqMsg::RDMAListen(msg) => {
                 RDMA_SRV.srvEndPoints.lock().insert(
@@ -318,7 +323,7 @@ impl RDMAAgent {
                         let conns = RDMA_SRV.conns.lock();
                         let rdmaConn = conns.get(nodeIpAddr).unwrap();
                         let rdmaChannel =
-                            self.CreateClientRDMAChannel(&msg, rdmaConn.clone(), shareRegion);
+                            self.CreateClientRDMAChannel(&msg, rdmaConn.clone());
                         RDMA_SRV
                             .channels
                             .lock()
