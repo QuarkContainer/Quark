@@ -13,14 +13,14 @@
 // limitations under the License.
 
 use super::semaphore;
-//use super::shm;
+use super::shm;
 use super::super::super::auth::userns::*;
 
 #[derive(Clone, Default)]
 pub struct IPCNamespace {
     pub userNS: UserNameSpace,
     pub semphores: semaphore::Registry,
-    //pub shms: shm::Registry,
+    pub shms: shm::Registry,
 }
 
 impl IPCNamespace {
@@ -28,7 +28,7 @@ impl IPCNamespace {
         return Self {
             userNS: userNS.clone(),
             semphores: semaphore::Registry::New(userNS),
-            //shms: shm::Registry::New(userNS)
+            shms: shm::Registry::New(userNS)
         };
     }
 
@@ -36,7 +36,7 @@ impl IPCNamespace {
         return self.semphores.clone();
     }
 
-    /*pub fn ShmRegistry(&self) -> shm::Registry {
+    pub fn ShmRegistry(&self) -> shm::Registry {
         return self.shms.clone()
-    }*/
+    }
 }

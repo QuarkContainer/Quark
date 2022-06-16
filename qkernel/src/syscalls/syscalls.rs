@@ -49,6 +49,7 @@ use super::super::syscalls::sys_sched::*;
 use super::super::syscalls::sys_inotify::*;
 use super::super::syscalls::sys_xattr::*;
 use super::super::syscalls::sys_sem::*;
+use super::super::syscalls::sys_shm::*;
 
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
@@ -130,9 +131,9 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysMsync,            // 026 sys_msync,
     SysMincore,          // 027 sys_mincore,
     SysMadvise,          // 028 sys_madvise,
-    NotImplementSyscall, // 029 sys_shmget,
-    NotImplementSyscall, // 030 sys_shmat,
-    NotImplementSyscall, // 031 sys_shmctl,
+    SysShmget,           // 029 sys_shmget,
+    SysShmat,            // 030 sys_shmat,
+    SysShmctl,           // 031 sys_shmctl,
     SysDup,              // 032 sys_dup,
     SysDup2,             // 033 sys_dup2,
     SysPause,            // 034 sys_pause,
@@ -168,7 +169,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysSemgetl,          // 064 sys_semget,
     SysSemop,            // 065 sys_semop,
     SysSemctl,           // 066 sys_semctl,
-    NotImplementSyscall, // 067 sys_shmdt,
+    SysShmdt,            // 067 sys_shmdt,
     NotImplementSyscall, // 068 sys_msgget,
     NotImplementSyscall, // 069 sys_msgsnd,
     NotImplementSyscall, // 070 sys_msgrcv,
