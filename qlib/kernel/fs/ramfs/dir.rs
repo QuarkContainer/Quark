@@ -551,7 +551,7 @@ impl InodeOperations for Dir {
         return Err(Error::SysError(SysErr::ENOSYS));
     }
 
-    fn Mappable(&self) -> Result<HostInodeOp> {
+    fn Mappable(&self) -> Result<HostIopsMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }
@@ -681,7 +681,7 @@ impl FileOperations for DirFileOperation {
         return (offset + n as i32, Ok(n as i64));
     }
 
-    fn Mappable(&self) -> Result<HostInodeOp> {
+    fn Mappable(&self) -> Result<HostIopsMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }

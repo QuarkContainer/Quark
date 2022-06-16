@@ -313,7 +313,7 @@ impl InodeOperations for PipeIops {
         });
     }
 
-    fn Mappable(&self) -> Result<HostInodeOp> {
+    fn Mappable(&self) -> Result<HostIopsMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }

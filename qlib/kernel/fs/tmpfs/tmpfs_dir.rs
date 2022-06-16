@@ -350,7 +350,7 @@ impl InodeOperations for TmpfsDir {
         return Ok(TMPFS_FSINFO);
     }
 
-    fn Mappable(&self) -> Result<HostInodeOp> {
+    fn Mappable(&self) -> Result<HostIopsMappable> {
         return self.0.Mappable();
     }
 }

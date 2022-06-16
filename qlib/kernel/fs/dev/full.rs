@@ -276,7 +276,7 @@ impl InodeOperations for FullDevice {
         return Err(Error::SysError(SysErr::ENOSYS));
     }
 
-    fn Mappable(&self) -> Result<HostInodeOp> {
+    fn Mappable(&self) -> Result<HostIopsMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }
@@ -387,7 +387,7 @@ impl FileOperations for FullFileOperations {
         return (0, Err(Error::SysError(SysErr::ENOTDIR)));
     }
 
-    fn Mappable(&self) -> Result<HostInodeOp> {
+    fn Mappable(&self) -> Result<HostIopsMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }

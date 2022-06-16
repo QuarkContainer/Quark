@@ -289,7 +289,7 @@ impl FileOperations for RootProcFile {
         return inode.UnstableAttr(task);
     }
 
-    fn Mappable(&self) -> Result<HostInodeOp> {
+    fn Mappable(&self) -> Result<HostIopsMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 

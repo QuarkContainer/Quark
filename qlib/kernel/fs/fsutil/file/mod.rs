@@ -13,7 +13,7 @@
 // limitations under the License.
 
 pub mod dynamic_dir_file_operations;
-pub mod fileopsutil;
+//pub mod fileopsutil;
 pub mod no_readwrite_file;
 pub mod readonly_file;
 pub mod static_dir_file_operations;

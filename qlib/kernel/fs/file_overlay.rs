@@ -282,7 +282,7 @@ impl FileOperations for OverlayFileOperations {
         return (offset + n as i32, Ok(n as i64));
     }
 
-    fn Mappable(&self) -> Result<HostInodeOp> {
+    fn Mappable(&self) -> Result<HostIopsMappable> {
         let ops = self.FileOps();
         return ops.Mappable();
     }

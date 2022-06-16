@@ -17,9 +17,7 @@ use crate::qlib::mutex::*;
 use core::ops::Deref;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
-use core::fmt::Debug;
 
-use super::super::PAGE_MGR;
 use super::super::super::auth::userns::*;
 use super::super::super::auth::*;
 use super::super::super::auth::id::*;
@@ -30,6 +28,7 @@ use super::super::task::*;
 use super::super::super::range::*;
 use super::super::super::device::*;
 use super::super::memmgr::*;
+use super::super::fs::host::hostinodeop::*;
 use super::super::super::linux::ipc::*;
 use super::super::super::linux::shm::*;
 use super::time::*;
@@ -37,7 +36,7 @@ use super::time::*;
 type Key = i32;
 type ID = i32;
 
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct RegistryInternal {
     pub userNS: UserNameSpace,
     pub shms: BTreeMap<ID, Shm>,
@@ -48,7 +47,7 @@ pub struct RegistryInternal {
 
 impl RegistryInternal {}
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default)]
 pub struct Registry(Arc<QMutex<RegistryInternal>>);
 
 impl Deref for Registry {
@@ -150,12 +149,12 @@ impl Registry {
 
     fn newShm(&self, task: &Task, pid: i32, key: Key, creator: &FileOwner, perms: &FilePermissions, size: u64) -> Result<Shm> {
         let effectiveSize = Addr(size).MustRoundUp().0;
-        let addr = PAGE_MGR.MapAnon(effectiveSize)?;
-        let fr = Range::New(addr, effectiveSize);
+        let fr = Range::New(0, effectiveSize);
 
-        PAGE_MGR.RefRange(&fr)?;
+        let memfdIops = HostInodeOp::NewMemfdIops(size as _)?;
 
         let shm = Shm(Arc::new(QMutex::new(ShmInternal {
+            memfdIops: memfdIops,
             registry: self.clone(),
             id: 0,
             creator: *creator,
@@ -195,7 +194,6 @@ impl Registry {
             return Ok(shm)
         }
 
-        info!("Shm ids exhuasted, they may be leaking");
         return Err(Error::SysError(SysErr::ENOSPC));
     }
 
@@ -226,7 +224,8 @@ impl Registry {
         let s = s.lock();
 
         if s.key == IPC_PRIVATE {
-            panic!("Attempted to remove {:?} from the registry whose key is still associated", s);
+            //panic!("Attempted to remove {:?} from the registry whose key is still associated", s);
+            panic!("Attempted to remove Shm from the registry whose key is still associated");
         }
 
         me.shms.remove(&s.id);
@@ -234,8 +233,10 @@ impl Registry {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ShmInternal {
+    pub memfdIops: HostInodeOp,
+
     pub registry: Registry,
     pub id: ID,
     pub creator: FileOwner,
@@ -288,7 +289,7 @@ impl ShmInternal {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Shm(Arc<QMutex<ShmInternal>>);
 
 impl Deref for Shm {
@@ -298,6 +299,14 @@ impl Deref for Shm {
         &self.0
     }
 }
+
+impl PartialEq for Shm {
+    fn eq(&self, other: &Self) -> bool {
+        return Arc::ptr_eq(&self.0, &other.0);
+    }
+}
+
+impl Eq for Shm {}
 
 impl Mapping for Shm {
     fn MappedName(&self, _task: &Task) -> String {
@@ -314,6 +323,10 @@ impl Mapping for Shm {
 }
 
 impl Shm {
+    pub fn HostIops(&self) -> HostInodeOp {
+        return self.lock().memfdIops.clone();
+    }
+
     pub fn DecRef(&self) {
         {
             let mut me = self.lock();
@@ -412,8 +425,6 @@ impl Shm {
     }
 
     pub fn destroy(&self) {
-        let me = self.lock();
-        PAGE_MGR.DerefRange(&me.fr).unwrap();
         let registry = self.lock().registry.clone();
         registry.remove(self)
     }
