@@ -240,7 +240,7 @@ impl<T: 'static + DirDataNode> InodeOperations for DirNode<T> {
         return self.dir.StatFS(task);
     }
 
-    fn Mappable(&self) -> Result<HostInodeOp> {
+    fn Mappable(&self) -> Result<HostIopsMappable> {
         return self.dir.Mappable();
     }
 }

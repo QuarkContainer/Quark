@@ -17,19 +17,19 @@ use crate::qlib::mutex::*;
 use core::ops::Deref;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
-use core::fmt::Debug;
 
-use super::super::PAGE_MGR;
 use super::super::super::auth::userns::*;
 use super::super::super::auth::*;
 use super::super::super::auth::id::*;
 use super::super::super::addr::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
+use super::super::memmgr::mm::MemoryManager;
 use super::super::task::*;
 use super::super::super::range::*;
 use super::super::super::device::*;
 use super::super::memmgr::*;
+use super::super::fs::host::hostinodeop::*;
 use super::super::super::linux::ipc::*;
 use super::super::super::linux::shm::*;
 use super::time::*;
@@ -37,7 +37,7 @@ use super::time::*;
 type Key = i32;
 type ID = i32;
 
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct RegistryInternal {
     pub userNS: UserNameSpace,
     pub shms: BTreeMap<ID, Shm>,
@@ -48,7 +48,7 @@ pub struct RegistryInternal {
 
 impl RegistryInternal {}
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default)]
 pub struct Registry(Arc<QMutex<RegistryInternal>>);
 
 impl Deref for Registry {
@@ -150,12 +150,12 @@ impl Registry {
 
     fn newShm(&self, task: &Task, pid: i32, key: Key, creator: &FileOwner, perms: &FilePermissions, size: u64) -> Result<Shm> {
         let effectiveSize = Addr(size).MustRoundUp().0;
-        let addr = PAGE_MGR.MapAnon(effectiveSize)?;
-        let fr = Range::New(addr, effectiveSize);
+        let fr = Range::New(0, effectiveSize);
 
-        PAGE_MGR.RefRange(&fr)?;
+        let memfdIops = HostInodeOp::NewMemfdIops(size as _)?;
 
         let shm = Shm(Arc::new(QMutex::new(ShmInternal {
+            memfdIops: memfdIops,
             registry: self.clone(),
             id: 0,
             creator: *creator,
@@ -171,7 +171,6 @@ impl Registry {
             creatorPID: pid,
             lastAttachDetachPID: 0,
             pendingDestruction: false,
-            refCount: 0,
         })));
 
         let mut me = self.lock();
@@ -195,7 +194,6 @@ impl Registry {
             return Ok(shm)
         }
 
-        info!("Shm ids exhuasted, they may be leaking");
         return Err(Error::SysError(SysErr::ENOSPC));
     }
 
@@ -226,7 +224,8 @@ impl Registry {
         let s = s.lock();
 
         if s.key == IPC_PRIVATE {
-            panic!("Attempted to remove {:?} from the registry whose key is still associated", s);
+            //panic!("Attempted to remove {:?} from the registry whose key is still associated", s);
+            panic!("Attempted to remove Shm from the registry whose key is still associated");
         }
 
         me.shms.remove(&s.id);
@@ -234,8 +233,10 @@ impl Registry {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ShmInternal {
+    pub memfdIops: HostInodeOp,
+
     pub registry: Registry,
     pub id: ID,
     pub creator: FileOwner,
@@ -251,11 +252,11 @@ pub struct ShmInternal {
     pub creatorPID: i32,
     pub lastAttachDetachPID: i32,
     pub pendingDestruction: bool,
-
-    pub refCount: i64,
 }
 
 impl ShmInternal {
+    // checkOwnership verifies whether a segment may be accessed by ctx as an
+    // owner. See ipc/util.c:ipcctl_pre_down_nolock() in Linux.
     pub fn checkOwnership(&self, task: &Task) -> bool {
         let creds = task.creds.clone();
         let effectiveKUID = creds.lock().EffectiveKUID;
@@ -269,6 +270,8 @@ impl ShmInternal {
         return creds.HasCapabilityIn(Capability::CAP_SYS_ADMIN, &userns)
     }
 
+    // checkPermissions verifies whether a segment is accessible by ctx for access
+    // described by req. See ipc/util.c:ipcperms() in Linux.
     pub fn checkPermission(&self, task: &Task, req: &PermMask) -> bool {
         let creds = task.creds.clone();
 
@@ -288,7 +291,7 @@ impl ShmInternal {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Shm(Arc<QMutex<ShmInternal>>);
 
 impl Deref for Shm {
@@ -298,6 +301,14 @@ impl Deref for Shm {
         &self.0
     }
 }
+
+impl PartialEq for Shm {
+    fn eq(&self, other: &Self) -> bool {
+        return Arc::ptr_eq(&self.0, &other.0);
+    }
+}
+
+impl Eq for Shm {}
 
 impl Mapping for Shm {
     fn MappedName(&self, _task: &Task) -> String {
@@ -314,23 +325,30 @@ impl Mapping for Shm {
 }
 
 impl Shm {
-    pub fn DecRef(&self) {
-        {
-            let mut me = self.lock();
-            me.refCount -= 1;
-            if me.refCount != 0 {
-                return
-            }
-        }
-
-        self.destroy()
+    pub fn Id(&self) -> ID {
+        return self.lock().id
     }
+
+    pub fn HostIops(&self) -> HostInodeOp {
+        return self.lock().memfdIops.clone();
+    }
+
 
     pub fn EffectiveSize(&self) -> u64 {
         return self.lock().effectiveSize;
     }
 
+    pub fn AttachCount(&self) -> usize {
+        let mut attachCount = Arc::strong_count(&self.0) - 1; //sub the current reference;
+        let me = self.lock();
+        if !me.pendingDestruction {
+            attachCount -= 2; //one more shms, one for keytoshms
+        }
+        return attachCount/2; // one for mappable, one for mapping
+    }
+
     pub fn IPCStat(&self, task: &Task) -> Result<ShmidDS> {
+        let attachCount = self.AttachCount();
         let me = self.lock();
 
         if !me.checkPermission(task, &PermMask { read: true, ..Default::default() }) {
@@ -360,7 +378,7 @@ impl Shm {
             ShmCtime: me.changeTime.TimeT(),
             ShmCpid: me.creatorPID,
             ShmLpid: me.lastAttachDetachPID,
-            ShmNattach: me.refCount,
+            ShmNattach: attachCount as _,
             ..Default::default()
         };
 
@@ -394,9 +412,10 @@ impl Shm {
     }
 
     pub fn MarkDestroyed(&self) {
-        self.lock().registry.dissociateKey(self);
+        let registry = self.lock().registry.clone();
+        registry.dissociateKey(self);
 
-        let needDec = {
+        let _needDec = {
             let mut me = self.lock();
             if !me.pendingDestruction {
                 me.pendingDestruction = true;
@@ -405,17 +424,57 @@ impl Shm {
                 false
             }
         };
-
-        if needDec {
-            self.DecRef()
-        }
     }
 
-    pub fn destroy(&self) {
-        let me = self.lock();
-        PAGE_MGR.DerefRange(&me.fr).unwrap();
+     pub fn destroy(&self) {
         let registry = self.lock().registry.clone();
         registry.remove(self)
+    }
+
+    // ConfigureAttach creates an mmap configuration for the segment with the
+    // requested attach options.
+    //
+    // Postconditions: The returned MMapOpts are valid only as long as a reference
+    // continues to be held on s.
+    pub fn ConfigureAttach(&self, task: &Task, addr: u64, opts: &AttachOpts) -> Result<MMapOpts> {
+        let attachCount = self.AttachCount();
+        let me = self.lock();
+        if me.pendingDestruction && attachCount == 0 {
+            return Err(Error::SysError(SysErr::EIDRM))
+        }
+
+        if !me.checkPermission(task, &PermMask {
+            read: true,
+            write: !opts.ReadOnly,
+            execute: opts.Execute
+        }) {
+            // "The calling process does not have the required permissions for the
+            // requested attach type, and does not have the CAP_IPC_OWNER capability
+            // in the user namespace that governs its IPC namespace." - man shmat(2)
+            return Err(Error::SysError(SysErr::EACCES))
+        }
+
+        let mmapOpts = MMapOpts {
+            Length: me.size,
+            Addr: addr,
+            Offset: 0,
+            Fixed: opts.Remap,
+            Unmap: opts.Remap,
+            Map32Bit: false,
+            Perms: AccessType::New(true, !opts.ReadOnly, opts.Execute),
+            MaxPerms: AccessType::AnyAccess(),
+            Private: false,
+            VDSO: false,
+            GrowsDown: false,
+            Precommit: false,
+            MLockMode: MLockMode::MlockNone,
+            Kernel: false,
+            Mapping: Some(Arc::new(self.clone())),
+            Mappable: Some(HostIopsMappable::FromShm(self.clone())),
+            Hint: format!(""),
+        };
+
+        return Ok(mmapOpts)
     }
 }
 
@@ -423,4 +482,76 @@ pub struct AttachOpts {
     pub Execute: bool,
     pub ReadOnly: bool,
     pub Remap: bool,
+}
+
+impl MemoryManager {
+    // DetachShm unmaps a sysv shared memory segment.
+    pub fn DetachShm(&self, task: &Task, addr: u64) -> Result<()> {
+        if addr != Addr(addr).RoundDown().unwrap().0 {
+            // "... shmaddr is not aligned on a page boundary." - man shmdt(2)
+            return Err(Error::SysError(SysErr::EINVAL))
+        }
+
+        let _ml = self.MappingWriteLock();
+        let mut mapping = self.mapping.lock();
+        let (mut vseg, vgap) = mapping.vmas.Find(addr);
+        if vgap.Ok() {
+            vseg = vgap.NextSeg();
+        }
+
+        let mut detached = None;
+        while vseg.Ok() {
+            let vma = vseg.Value();
+            match vma.mappable {
+                None => (),
+                Some(mappable) => {
+                    match mappable {
+                        HostIopsMappable::HostIops(_) => (),
+                        HostIopsMappable::Shm(shm) => {
+                            if vseg.Range().Start() - addr == vma.offset {
+                                detached = Some(shm.clone());
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            vseg = vseg.NextSeg();
+        }
+
+        let detached = match detached {
+            None => {
+                // There is no shared memory segment attached at addr.
+                return Err(Error::SysError(SysErr::EINVAL))
+            }
+            Some(shm) => shm,
+        };
+
+        detached.lock().detachTime = task.Now();
+
+        let end = addr + detached.EffectiveSize();
+        while vseg.Ok() && vseg.Range().End() <= end {
+            let vma = vseg.Value();
+            if vma.mappable == Some(HostIopsMappable::FromShm(detached.clone())) &&
+                vseg.Range().Start() - addr == vma.offset {
+                let r = vseg.Range();
+                mapping.usageAS -= r.Len();
+                if vma.mlockMode != MLockMode::MlockNone {
+                    mapping.lockedAS -= r.Len();
+                }
+
+                let mut pt = self.pagetable.write();
+
+                pt.pt.MUnmap(r.Start(), r.Len())?;
+                pt.curRSS -= r.Len();
+                let vgap = mapping.vmas.Remove(&vseg);
+                vseg = vgap.NextSeg();
+            } else {
+                vseg = vseg.NextSeg();
+            }
+        }
+
+        self.TlbShootdown();
+        return Ok(())
+    }
 }

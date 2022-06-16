@@ -21,7 +21,7 @@ pub mod waiter;
 //pub mod ktime;
 pub mod semaphore;
 pub mod uts_namespace;
-//pub mod shm;
+pub mod shm;
 pub mod abstract_socket_namespace;
 pub mod aio;
 pub mod async_process;

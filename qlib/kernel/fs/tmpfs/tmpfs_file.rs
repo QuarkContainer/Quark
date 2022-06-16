@@ -269,7 +269,7 @@ impl InodeOperations for TmpfsFileInodeOp {
         return Ok(TMPFS_FSINFO);
     }
 
-    fn Mappable(&self) -> Result<HostInodeOp> {
+    fn Mappable(&self) -> Result<HostIopsMappable> {
         return self.inodeops.Mappable();
     }
 }

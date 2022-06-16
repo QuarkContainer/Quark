@@ -32,6 +32,7 @@ use super::super::super::util::cstring::*;
 use super::super::super::fd::*;
 use super::super::super::guestfdnotifier::*;
 use super::super::super::kernel::time::*;
+pub use super::super::super::memmgr::vma::HostIopsMappable;
 use super::super::super::kernel::waiter::qlock::*;
 use super::super::super::kernel::waiter::queue::*;
 use super::super::super::memmgr::mapping_set::*;
@@ -1437,7 +1438,7 @@ impl InodeOperations for HostInodeOp {
 
         if self.lock().CanMap() {
             if size < oldSize {
-                let mappable = self.Mappable()?.lock().Mappable();
+                let mappable = self.Mappable()?.HostIops().lock().Mappable();
                 let ranges = mappable.lock().mapping.InvalidateRanges(
                     task,
                     &Range::New(size as u64, oldSize as u64 - size as u64),
@@ -1520,10 +1521,10 @@ impl InodeOperations for HostInodeOp {
         return Ok(fsInfo);
     }
 
-    fn Mappable(&self) -> Result<HostInodeOp> {
+    fn Mappable(&self) -> Result<HostIopsMappable> {
         let inodeType = self.lock().InodeType();
         if inodeType == InodeType::RegularFile {
-            return Ok(self.clone());
+            return Ok(HostIopsMappable::FromHostIops(self.clone()));
         } else {
             return Err(Error::SysError(SysErr::ENODEV));
         }

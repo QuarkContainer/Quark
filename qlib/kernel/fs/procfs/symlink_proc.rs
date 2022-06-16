@@ -259,7 +259,7 @@ impl<T: 'static + ReadLinkNode> InodeOperations for SymlinkNode<T> {
         return self.link.StatFS(task);
     }
 
-    fn Mappable(&self) -> Result<HostInodeOp> {
+    fn Mappable(&self) -> Result<HostIopsMappable> {
         return self.link.Mappable();
     }
 }

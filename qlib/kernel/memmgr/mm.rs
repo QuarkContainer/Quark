@@ -389,7 +389,7 @@ impl MemoryManager {
             if !vma.kernel {
                 if vma.mappable.is_some() {
                     let mappable = vma.mappable.clone().unwrap();
-                    mappable.RemoveMapping(self, &r, vma.offset, vma.CanWriteMappableLocked())?;
+                    mappable.HostIops().RemoveMapping(self, &r, vma.offset, vma.CanWriteMappableLocked())?;
                 }
             }
             let vgap = mapping.vmas.Remove(&vseg);
@@ -453,7 +453,7 @@ impl MemoryManager {
             if !vma.kernel {
                 if vma.mappable.is_some() {
                     let mappable = vma.mappable.clone().unwrap();
-                    mappable.RemoveMapping(self, &r, vma.offset, vma.CanWriteMappableLocked())?;
+                    mappable.HostIops().RemoveMapping(self, &r, vma.offset, vma.CanWriteMappableLocked())?;
                 }
 
                 mapping.usageAS -= r.Len();
@@ -739,7 +739,7 @@ impl MemoryManager {
 
                 // todo: fix the Munlock, when there are multiple process lock/unlock a memory range.
                 // with current implementation, the first unlock will work.
-                iops.Mlock(fstart, mr.Len(), mode)?;
+                iops.HostIops().Mlock(fstart, mr.Len(), mode)?;
             }
 
             vseg = vseg.NextSeg()
@@ -778,7 +778,7 @@ impl MemoryManager {
 
                 // todo: fix the Munlock, when there are multiple process lock/unlock a memory range.
                 // with current implementation, the first unlock will work.
-                iops.Mlock(fstart, mr.Len(), mode)?;
+                iops.HostIops().Mlock(fstart, mr.Len(), mode)?;
             }
 
             vseg = vseg.NextSeg();
@@ -845,7 +845,7 @@ impl MemoryManager {
                 let mr = ar.Intersect(&vseg.Range());
 
                 let fstart = mr.Start() - vseg.Range().Start() + vma.offset;
-                fops.MSync(&Range::New(fstart, mr.Len()), msyncType)?;
+                fops.HostIops().MSync(&Range::New(fstart, mr.Len()), msyncType)?;
 
                 if lastEnd >= ar.End() {
                     break;
@@ -947,7 +947,7 @@ impl MemoryManager {
             Some(ref mappable) => {
                 let vmaOffset = pageAddr - range.Start();
                 let fileOffset = vmaOffset + vma.offset; // offset in the file
-                let phyAddr = mappable.MapFilePage(task, fileOffset)?;
+                let phyAddr = mappable.HostIops().MapFilePage(task, fileOffset)?;
                 //error!("fault 2.1, vma.mappable.is_some() is {}, vaddr is {:x}, paddr is {:x}",
                 //      vma.mappable.is_some(), pageAddr, phyAddr);
 
@@ -1295,7 +1295,7 @@ impl MemoryManager {
                     self.pagetable.write().pt.MapFile(
                         task,
                         ar.Start(),
-                        &mappable,
+                        &mappable.HostIops(),
                         &Range::New(vma.offset + ar.Start() - segAr.Start(), ar.Len()),
                         &currPerm,
                         precommit,
@@ -1406,7 +1406,7 @@ impl MemoryManager {
                 if vma.mappable.is_some() {
                     let mappable = vma.mappable.clone().unwrap();
 
-                    match mappable.AddMapping(
+                    match mappable.HostIops().AddMapping(
                         &mm2,
                         &vmaAR,
                         vma.offset,

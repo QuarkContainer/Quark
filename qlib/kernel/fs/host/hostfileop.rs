@@ -265,7 +265,7 @@ impl FileOperations for HostFileOp {
         };
     }
 
-    fn Mappable(&self) -> Result<HostInodeOp> {
+    fn Mappable(&self) -> Result<HostIopsMappable> {
         return self.InodeOp.Mappable();
     }
 }

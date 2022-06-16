@@ -186,7 +186,7 @@ impl FileOperations for ReaderWriter {
         return (0, Err(Error::SysError(SysErr::ENOTDIR)));
     }
 
-    fn Mappable(&self) -> Result<HostInodeOp> {
+    fn Mappable(&self) -> Result<HostIopsMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }

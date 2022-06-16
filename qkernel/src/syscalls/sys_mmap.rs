@@ -17,6 +17,7 @@ use alloc::sync::Arc;
 
 use super::super::fs::host::hostinodeop::*;
 use super::super::memmgr::mm::*;
+use super::super::memmgr::vma::*;
 use super::super::memmgr::syscalls::*;
 use super::super::memmgr::*;
 use super::super::qlib::addr::*;
@@ -94,7 +95,7 @@ pub fn SysMmap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
     } else if shared {
         let memfdIops = HostInodeOp::NewMemfdIops(len as i64)?;
-        opts.Mappable = Some(memfdIops);
+        opts.Mappable = Some(HostIopsMappable::FromHostIops(memfdIops));
     }
 
     match task.mm.MMap(task, &mut opts) {

@@ -339,7 +339,7 @@ impl MemoryManager {
             // Inform the Mappable, if any, of the new mapping.
             let mappable = vma.mappable.clone().unwrap();
             let offsetat = vseg.MappableOffsetAt(oldAR.Start());
-            mappable.CopyMapping(self, &oldAR, &newAR, offsetat, vma.CanWriteMappableLocked())?;
+            mappable.HostIops().CopyMapping(self, &oldAR, &newAR, offsetat, vma.CanWriteMappableLocked())?;
         }
 
         if oldSize == 0 {
@@ -389,7 +389,7 @@ impl MemoryManager {
         // oldAR is no longer mapped.
         if vma.mappable.is_some() {
             let mappable = vma.mappable.clone().unwrap();
-            mappable.RemoveMapping(self, &oldAR, vma.offset, vma.CanWriteMappableLocked())?;
+            mappable.HostIops().RemoveMapping(self, &oldAR, vma.offset, vma.CanWriteMappableLocked())?;
         }
 
         self.PopulateVMARemapLocked(task, &vseg, &newAR, &Range::New(oldAddr, oldSize), true)?;

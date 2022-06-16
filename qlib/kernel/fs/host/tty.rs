@@ -766,7 +766,7 @@ impl FileOperations for TTYFileOps {
         return fops.IterateDir(task, d, dirCtx, offset);
     }
 
-    fn Mappable(&self) -> Result<HostInodeOp> {
+    fn Mappable(&self) -> Result<HostIopsMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }

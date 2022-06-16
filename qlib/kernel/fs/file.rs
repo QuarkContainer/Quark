@@ -307,7 +307,7 @@ pub trait FileOperations: Sync + Send + Waitable + SockOperations + SpliceOperat
         offset: i32,
     ) -> (i32, Result<i64>);
 
-    fn Mappable(&self) -> Result<HostInodeOp>;
+    fn Mappable(&self) -> Result<HostIopsMappable>;
 }
 
 pub struct FileInternal {
@@ -457,7 +457,7 @@ impl File {
         return inode.lock().InodeOp.InodeFileType();
     }
 
-    fn GetFileFlags(fd: i32) -> Result<FileFlags> {
+    pub fn GetFileFlags(fd: i32) -> Result<FileFlags> {
         let ret = Fcntl(fd, Cmd::F_GETFL, 0) as i32;
         if ret < 0 {
             return Err(Error::SysError(-ret));
@@ -472,7 +472,7 @@ impl File {
         return !self.flags.lock().0.NonBlocking;
     }
 
-    pub fn Mappable(&self) -> Result<HostInodeOp> {
+    pub fn Mappable(&self) -> Result<HostIopsMappable> {
         return self.FileOp.Mappable();
     }
 
