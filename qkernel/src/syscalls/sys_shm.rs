@@ -69,6 +69,9 @@ pub fn SysShmat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     })?;
 
     let addr = task.mm.MMap(task, &mut opts)?;
+    let pid = task.Thread().ThreadGroup().ID();
+    segment.lock().lastAttachDetachPID = pid;
+    segment.lock().attachTime = task.Now();
     return Ok(addr as _)
 }
 

@@ -342,9 +342,9 @@ impl Shm {
         let mut attachCount = Arc::strong_count(&self.0) - 1; //sub the current reference;
         let me = self.lock();
         if !me.pendingDestruction {
-            attachCount -= 1;
+            attachCount -= 2; //one more shms, one for keytoshms
         }
-        return attachCount;
+        return attachCount/2; // one for mappable, one for mapping
     }
 
     pub fn IPCStat(&self, task: &Task) -> Result<ShmidDS> {
@@ -412,7 +412,8 @@ impl Shm {
     }
 
     pub fn MarkDestroyed(&self) {
-        self.lock().registry.dissociateKey(self);
+        let registry = self.lock().registry.clone();
+        registry.dissociateKey(self);
 
         let _needDec = {
             let mut me = self.lock();
@@ -485,7 +486,7 @@ pub struct AttachOpts {
 
 impl MemoryManager {
     // DetachShm unmaps a sysv shared memory segment.
-    pub fn DetachShm(&self, _task: &Task, addr: u64) -> Result<()> {
+    pub fn DetachShm(&self, task: &Task, addr: u64) -> Result<()> {
         if addr != Addr(addr).RoundDown().unwrap().0 {
             // "... shmaddr is not aligned on a page boundary." - man shmdt(2)
             return Err(Error::SysError(SysErr::EINVAL))
@@ -525,6 +526,8 @@ impl MemoryManager {
             }
             Some(shm) => shm,
         };
+
+        detached.lock().detachTime = task.Now();
 
         let end = addr + detached.EffectiveSize();
         while vseg.Ok() && vseg.Range().End() <= end {
