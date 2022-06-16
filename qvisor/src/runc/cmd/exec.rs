@@ -262,8 +262,7 @@ impl ExecCmd {
         let mut process: Process = deserialize(&self.processPath)
             .map_err(|e| Error::Common(format!("deserialize process with error {:?}", e)))?;
 
-        //todo: handle caps
-        let caps = TaskCaps::default();
+        let caps = Capabilities(false, &process.capabilities);
 
         let mut extraKGIDs: Vec<KGID> = Vec::with_capacity(process.user.additional_gids.len());
         extraKGIDs.append(
