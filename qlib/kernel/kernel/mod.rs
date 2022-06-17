@@ -38,3 +38,4 @@ pub mod pipe;
 pub mod platform;
 pub mod signal_handler;
 pub mod signalfd;
+pub mod msgqueue;

@@ -50,6 +50,7 @@ use super::super::syscalls::sys_inotify::*;
 use super::super::syscalls::sys_xattr::*;
 use super::super::syscalls::sys_sem::*;
 use super::super::syscalls::sys_shm::*;
+use super::super::syscalls::sys_msgqueue::*;
 
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
@@ -170,10 +171,10 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysSemop,            // 065 sys_semop,
     SysSemctl,           // 066 sys_semctl,
     SysShmdt,            // 067 sys_shmdt,
-    NotImplementSyscall, // 068 sys_msgget,
-    NotImplementSyscall, // 069 sys_msgsnd,
-    NotImplementSyscall, // 070 sys_msgrcv,
-    NotImplementSyscall, // 071 sys_msgctl,
+    SysMsgget,           // 068 sys_msgget,
+    SysMsgsnd,           // 069 sys_msgsnd,
+    SysMsgrcv,           // 070 sys_msgrcv,
+    SysMsgctl,           // 071 sys_msgctl,
     SysFcntl,            // 072 sys_fcntl,
     SysFlock,            // 073 sys_flock,
     SysFsync,            // 074 sys_fsync,
