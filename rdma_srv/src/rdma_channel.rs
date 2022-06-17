@@ -195,7 +195,7 @@ impl RDMAChannelIntern {
             //     // println!("Control Channel to send consumed data");
             //     self.SendConsumedDataInternal(remoteInfo.remoteId);
             // }
-            self.SendConsumedDataInternal(remoteInfo.remoteId);
+            // self.SendConsumedDataInternal(remoteInfo.remoteId);
         } else {
             // TODO: is it needed to send consumedData for control channel here, not now!
         }

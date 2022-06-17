@@ -85,7 +85,7 @@ use crate::rdma_srv::RDMA_SRV;
 
 use self::qlib::ShareSpaceRef;
 use alloc::slice;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io;
 use std::io::prelude::*;
 use std::net::{IpAddr, Ipv4Addr, TcpListener, TcpStream};
@@ -759,7 +759,7 @@ fn main() -> io::Result<()> {
 
         RDMA_SRV.shareRegion.srvBitmap.store(1, Ordering::Release);
         RDMA.HandleCQEvent().unwrap();
-        RDMAProcessOnce();
+        RDMAProcessOnce(&mut HashMap::new());
         // println!("Before sleep");
         let res = match syscall!(epoll_wait(
             epoll_fd,
@@ -946,26 +946,48 @@ fn main() -> io::Result<()> {
 }
 
 fn RDMAProcess() {
-    // let mut start = TSC.Rdtsc();
+    let mut start = TSC.Rdtsc();
+    let mut channels: HashMap<u32, HashSet<u32>> = HashMap::new();
     loop {
-        let count = RDMAProcessOnce();
-        // if count > 0 {
-        //     start = TSC.Rdtsc();
-        // }
-        // if TSC.Rdtsc() - start >= (IO_WAIT_CYCLES) {
-        //     break;
-        // }
-        if count == 0 {
+        let count = RDMAProcessOnce(&mut channels);
+        if count > 0 {
+            start = TSC.Rdtsc();
+        }
+        if TSC.Rdtsc() - start >= (IO_WAIT_CYCLES/100) {
             break;
         }
+        // if count == 0 {
+        //     break;
+        // }
     }
+    // if channels.len() != 0 {
+    //     debug!("RDMAProcess, channels: {}", channels.len());
+    // }
+    // SendConsumedData(&mut channels);
 }
 
-fn RDMAProcessOnce() -> usize {
+fn RDMAProcessOnce(channels: &mut HashMap<u32, HashSet<u32>>) -> usize {
     let mut count = 0;
-    count += RDMA.PollCompletionQueueAndProcess();
+    // let mut channels: HashMap<u32, HashSet<u32>> = HashMap::new();
+    count += RDMA.PollCompletionQueueAndProcess(channels);
+    // debug!("RDMAProcessOnce, channels: {:?}", channels);
+    // if channels.len() !=0 {
+    //     debug!("RDMAProcessOnce, channels: {}", channels.len());
+    // }
+    // SendConsumedData(&mut channels);
     count += RDMA_SRV.HandleClientRequest();
     count
+}
+
+fn SendConsumedData(channels: &mut HashMap<u32, HashSet<u32>>) {
+    for (k, v) in channels.into_iter() {
+        RDMA_SRV
+            .controlChannels
+            .lock()
+            .get(k)
+            .unwrap()
+            .SendConsumeDataGroup(v);
+    }
 }
 
 fn InitContainer(conn_sock: &UnixSocket) {

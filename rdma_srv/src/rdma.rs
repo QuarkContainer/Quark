@@ -5,6 +5,7 @@ use rdmaffi;
 use spin::Mutex;
 use std::convert::TryInto;
 use std::ptr;
+use std::collections::{HashMap, HashSet};
 
 use super::qlib::common::*;
 use super::qlib::linux_def::*;
@@ -457,7 +458,7 @@ impl RDMAContext {
         return fd
     }
 
-    pub fn PollCompletionQueueAndProcess(&self) -> usize {
+    pub fn PollCompletionQueueAndProcess(&self, channels: &mut HashMap<u32, HashSet<u32>>) -> usize {
         // println!("PollCompletionQueueAndProcess");
         let mut wc = rdmaffi::ibv_wc {
             //TODO: find a better way to initialize
@@ -505,7 +506,7 @@ impl RDMAContext {
             let poll_result = unsafe { rdmaffi::ibv_poll_cq(self.CompleteQueue(), 1, &mut wc) };
             if poll_result == 1 {
                 count += 1;
-                self.ProcessWC(&wc);
+                self.ProcessWC(&wc, channels);
             } else if poll_result == 0 {
                 // if count > 0 {
                 //     error!("PollCompletionQueueAndProcess: processed wcs: {}", count);
@@ -585,7 +586,7 @@ impl RDMAContext {
         loop {
             let poll_result = unsafe { rdmaffi::ibv_poll_cq(self.CompleteQueue(), 1, &mut wc) };
             if poll_result > 0 {
-                self.ProcessWC(&wc);
+                self.ProcessWC(&wc, &mut HashMap::new());
             } else if poll_result == 0 {
                 break;
             } else {
@@ -644,7 +645,7 @@ impl RDMAContext {
     }
 
     // call back for
-    pub fn ProcessWC(&self, wc: &rdmaffi::ibv_wc) {
+    pub fn ProcessWC(&self, wc: &rdmaffi::ibv_wc, channels: &mut HashMap<u32, HashSet<u32>>) {
         // println!("ProcessWC 1");
         let wrid = WorkRequestId(wc.wr_id);
         let _fd = wrid.Fd();
@@ -677,6 +678,17 @@ impl RDMAContext {
             //     wc.status, wc.wr_id
             // );
             //IO_MGR.ProcessRDMAWriteImmFinish(fd);
+            // channels.insert(wc.wr_id as u32);
+            // let channelId = wc.wr_id as u32 & 0x7FFFFFFF;
+            // if channelId != 0 {
+            //     if channels.contains_key(&wc.qp_num) {
+            //         channels.get_mut(&wc.qp_num).unwrap().insert(channelId);
+            //     }
+            //     else {
+            //         channels.insert(wc.qp_num, vec![channelId].into_iter().collect());
+            //     }
+            // }
+
             RDMA_SRV.ProcessRDMAWriteImmFinish(wc.wr_id as u32, wc.qp_num);
         } else if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RECV_RDMA_WITH_IMM {
             let imm = unsafe { wc.imm_data_invalidated_rkey_union.imm_data };
@@ -690,6 +702,17 @@ impl RDMAContext {
             //     wc.wr_id
             // );
             //IO_MGR.ProcessRDMARecvWriteImm(fd, wc.byte_len as _, immData.ReadCount() as _);
+            // debug!("ProcessWC imm: {}", imm);
+            // channels.insert(imm);
+            let channelId = imm & 0x7FFFFFFF;
+            if channelId != 0 {
+                if channels.contains_key(&wc.qp_num) {
+                    channels.get_mut(&wc.qp_num).unwrap().insert(channelId);
+                }
+                else {
+                    channels.insert(wc.qp_num, vec![channelId].into_iter().collect());
+                }
+            }
             RDMA_SRV.ProcessRDMARecvWriteImm(immData.ReadCount() as _, wc.qp_num, wc.byte_len as _);
         } else {
             // debug!("ProcessWC::4, opcode: {}, wr_id: {}", wc.opcode, wc.wr_id);

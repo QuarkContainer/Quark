@@ -295,7 +295,9 @@ int main(int argc, char const *argv[])
     printf("bytes received: %lld, bytes sent: %lld\n", totalbytes, totalbytes);
     printf("time used: %lf\n", ns);
     double speed = (2 * totalbytes) / (ns);
-    printf("speed is %lf\n", speed);
+    printf("throughput is %lf\n", speed);
+    double pps = (2 * totalbytes * 1024 * 1024) / (ns)/config.buffer_size;
+    printf("pps is %lf\n", pps);
     double latency = ns / (readCount * 2 * threadnum);
     printf("latency is %lf\n", latency);
 
