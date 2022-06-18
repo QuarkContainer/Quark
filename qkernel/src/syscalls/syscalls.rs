@@ -404,7 +404,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysRtTgsigqueueinfo, // 297 sys_rt_tgsigqueueinfo,
     SysNoDev,            // 298 sys_perf_event_open,     No support for perf counters
     SysRecvMMsg,         // 299 sys_recvmmsg,
-    SysNoSys,            //	300 sys_fanotify_init,  //300 Needs CONFIG_FANOTIFY
+    SysNoSys,            //	300 sys_fanotify_init,       Needs CONFIG_FANOTIFY
     SysNoSys,            //	309 sys_fanotify_mark,       Needs CONFIG_FANOTIFY
     SysPrlimit64,        //	308 sys_prlimit64,
     SysOpNotSupport,     //	307 sys_name_to_handle_at,

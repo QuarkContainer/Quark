@@ -97,6 +97,12 @@ impl HostSpace {
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
+    pub fn HostMemoryBarrier() -> i64 {
+        let mut msg = Msg::HostMemoryBarrier(HostMemoryBarrier {});
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
     pub fn Ftruncate(fd: i32, len: i64) -> i64 {
         let mut msg = Msg::Ftruncate(Ftruncate { fd, len });
 

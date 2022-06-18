@@ -49,6 +49,7 @@ use super::qlib::linux_def::*;
 use super::qlib::pagetable::PageTables;
 use super::qlib::qmsg::*;
 use super::qlib::task_mgr::*;
+use super::qlib::linux::membarrier::*;
 use super::qlib::*;
 use super::runc::container::mounts::*;
 use super::runc::runtime::loader::*;
@@ -113,6 +114,8 @@ pub struct VMSpace {
     pub waitingMsgCall: Option<WaitingMsgCall>,
     pub controlSock: i32,
     pub vcpus: Vec<Arc<KVMVcpu>>,
+    pub haveMembarrierGlobal: bool,
+    pub haveMembarrierPrivateExpedited: bool,
 }
 
 unsafe impl Sync for VMSpace {}
@@ -1548,7 +1551,57 @@ impl VMSpace {
         return freq as i64;
     }
 
+    pub fn Membarrier(cmd: i32) -> i32 {
+        let nr = SysCallID::sys_membarrier as usize;
+        let ret = unsafe { syscall3(nr, cmd as usize, 0 as usize/*flag*/, 0 as usize/*unused*/) as i32 };
+        return ret as _;
+    }
+
+    pub fn HostMemoryBarrier() -> i64 {
+        let haveMembarrierPrivateExpedited = VMS.lock().haveMembarrierPrivateExpedited;
+        let cmd = if haveMembarrierPrivateExpedited {
+            MEMBARRIER_CMD_PRIVATE_EXPEDITED
+        } else {
+            MEMBARRIER_CMD_GLOBAL
+        };
+
+        return Self::Membarrier(cmd) as _
+    }
+
+    //return (haveMembarrierGlobal, haveMembarrierPrivateExpedited)
+    pub fn MembarrierInit() -> (bool, bool) {
+        let supported = Self::Membarrier(MEMBARRIER_CMD_QUERY);
+        if supported < 0 {
+            return (false, false)
+        }
+
+        let mut haveMembarrierGlobal = false;
+        let mut haveMembarrierPrivateExpedited = false;
+        // We don't use MEMBARRIER_CMD_GLOBAL_EXPEDITED because this sends IPIs to
+        // all CPUs running tasks that have previously invoked
+        // MEMBARRIER_CMD_REGISTER_GLOBAL_EXPEDITED, which presents a DOS risk.
+        // (MEMBARRIER_CMD_GLOBAL is synchronize_rcu(), i.e. it waits for an RCU
+        // grace period to elapse without bothering other CPUs.
+        // MEMBARRIER_CMD_PRIVATE_EXPEDITED sends IPIs only to CPUs running tasks
+        // sharing the caller's MM.)
+        if supported & MEMBARRIER_CMD_GLOBAL != 0 {
+            haveMembarrierGlobal = true;
+        }
+
+        let req = MEMBARRIER_CMD_PRIVATE_EXPEDITED | MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED;
+        if supported & req == req {
+            let ret = Self::Membarrier(MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED);
+            if ret >= 0 {
+                haveMembarrierPrivateExpedited = true;
+            }
+        }
+
+        return (haveMembarrierGlobal, haveMembarrierPrivateExpedited)
+    }
+
     pub fn Init() -> Self {
+        let (haveMembarrierGlobal, haveMembarrierPrivateExpedited) = Self::MembarrierInit();
+
         return VMSpace {
             allocator: HostPageAllocator::New(),
             pageTables: PageTables::default(),
@@ -1563,6 +1616,8 @@ impl VMSpace {
             waitingMsgCall: None,
             controlSock: -1,
             vcpus: Vec::new(),
+            haveMembarrierGlobal: haveMembarrierGlobal,
+            haveMembarrierPrivateExpedited: haveMembarrierPrivateExpedited,
         };
     }
 }

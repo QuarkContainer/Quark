@@ -19,6 +19,7 @@ use alloc::sync::Weak;
 use alloc::vec::Vec;
 use core::ops::Deref;
 use core::sync::atomic::AtomicU64;
+use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 use x86_64::structures::paging::PageTableFlags;
 
@@ -151,6 +152,7 @@ pub struct MemoryManagerInternal {
 
     pub layout: QMutex<MmapLayout>,
     pub aioManager: AIOManager,
+    pub membarrierPrivateEnabled: AtomicBool,
 }
 
 #[derive(Clone)]
@@ -275,9 +277,22 @@ impl MemoryManager {
             metadata: QMutex::new(metadata),
             layout: QMutex::new(layout),
             aioManager: AIOManager::default(),
+            membarrierPrivateEnabled: AtomicBool::new(false),
         };
 
         return Self(Arc::new(internal));
+    }
+
+    pub fn EnableMembarrierPrivate(&self) {
+        return self
+            .membarrierPrivateEnabled
+            .store(false, Ordering::Release);
+    }
+
+    pub fn IsMembarrierPrivateEnabled(&self) -> bool {
+        return self
+            .membarrierPrivateEnabled
+            .load(Ordering::Acquire);
     }
 
     pub fn Downgrade(&self) -> MemoryManagerWeak {

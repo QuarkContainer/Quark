@@ -115,7 +115,11 @@ pub enum Msg {
     FGetXattr(FGetXattr),
     FRemoveXattr(FRemoveXattr),
     FListXattr(FListXattr),
+    HostMemoryBarrier(HostMemoryBarrier)
 }
+
+#[derive(Clone, Default, Debug)]
+pub struct HostMemoryBarrier{}
 
 #[derive(Clone, Default, Debug)]
 pub struct FSetXattr {

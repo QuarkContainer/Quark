@@ -125,6 +125,7 @@ impl ShareSpace {
         self.hostEpollfd
             .store(FD_NOTIFIER.Epollfd(), Ordering::SeqCst);
         self.controlSock = controlSock;
+        self.supportMemoryBarrier = VMS.lock().haveMembarrierGlobal;
         super::vmspace::VMSpace::BlockFd(controlSock);
     }
 
