@@ -71,7 +71,7 @@ pub type Key = i32;
 // ID is a kernel identifier for IPC objects.
 pub type ID = i32;
 
-pub struct MechanismIntern <T: Clone + Object> {
+pub struct MechanismIntern <T: Object> {
     // UserNS owning the IPC namespace this registry belongs to. Immutable.
     pub userNS: UserNameSpace,
 
@@ -90,13 +90,19 @@ pub struct MechanismIntern <T: Clone + Object> {
     // Perms is the access permissions the IPC object.
     pub perms: FilePermissions,
 
-    pub object: T,
+    pub obj: T,
 }
 
 #[derive(Clone)]
-pub struct Mechanism<T: Clone + Object> (Arc<QMutex<MechanismIntern<T>>>);
+pub struct Mechanism<T: Object> (Arc<QMutex<MechanismIntern<T>>>);
 
-impl <T: Clone + Object> Deref for Mechanism<T> {
+impl <T: Object> From<Arc<QMutex<MechanismIntern<T>>>> for Mechanism<T> {
+    fn from(intern: Arc<QMutex<MechanismIntern<T>>>) -> Self {
+        Mechanism(intern)
+    }
+}
+
+impl <T: Object> Deref for Mechanism<T> {
     type Target = Arc<QMutex<MechanismIntern<T>>>;
 
     fn deref(&self) -> &Arc<QMutex<MechanismIntern<T>>> {
@@ -104,17 +110,7 @@ impl <T: Clone + Object> Deref for Mechanism<T> {
     }
 }
 
-impl <T: Clone + Object> Mechanism <T> {
-    pub fn Object(&self) -> T {
-        return self.lock().object.clone();
-    }
-}
-
-impl <T: Clone + Object> MechanismIntern <T> {
-    pub fn Object(&self) -> T {
-        return self.object.clone();
-    }
-
+impl <'a, T: Object> MechanismIntern <T> {
     pub fn checkOwnership(&self, creds: &Credentials) -> bool {
         let effectiveKUID = creds.lock().EffectiveKUID;
 
@@ -175,7 +171,7 @@ impl <T: Clone + Object> MechanismIntern <T> {
     }
 }
 
-impl <T: Clone + Object> Mechanism <T> {
+impl <T: Object> Mechanism <T> {
     pub fn New(userns: UserNameSpace,
                key: Key,
                creator: &FileOwner,
@@ -189,7 +185,7 @@ impl <T: Clone + Object> Mechanism <T> {
             creator: *creator,
             owner: *owner,
             perms: *perms,
-            object: obj
+            obj: obj
         };
 
         return Self(Arc::new(QMutex::new(intern)))
@@ -201,11 +197,11 @@ impl <T: Clone + Object> Mechanism <T> {
 }
 
 pub trait Object {
-    fn Destory(&self);
+    fn Destory(&mut self);
 }
 
 #[derive(Default)]
-pub struct RegistryInternal<T: Clone + Object> {
+pub struct RegistryInternal<T: Object> {
     // UserNS owning the IPC namespace this registry belongs to. Immutable.
     pub userNS: UserNameSpace,
 
@@ -219,7 +215,7 @@ pub struct RegistryInternal<T: Clone + Object> {
     pub lastIDUsed: i32,
 }
 
-impl <T: Clone + Object> RegistryInternal <T> {
+impl <T: Object> RegistryInternal <T> {
     pub fn New(userNS: &UserNameSpace) -> Self {
         return Self {
             userNS: userNS.clone(),
@@ -268,10 +264,10 @@ impl <T: Clone + Object> RegistryInternal <T> {
     pub fn Remove(&mut self, id: ID, creds: &Credentials) -> Result<()> {
         let mech = match self.objects.get(&id) {
             None => return Err(Error::SysError(SysErr::EINVAL)),
-            Some(m) => m.clone(),
+            Some(m) => Mechanism::from(m.0.clone()),
         };
 
-        let mechLock = mech.lock();
+        let mut mechLock = mech.lock();
         if !mechLock.checkOwnership(&creds) {
             return Err(Error::SysError(SysErr::EPERM));
         }
@@ -280,7 +276,7 @@ impl <T: Clone + Object> RegistryInternal <T> {
         self.keyToID.remove(&key);
         self.objects.remove(&id);
 
-        mechLock.object.Destory();
+        mechLock.obj.Destory();
 
         return Ok(())
     }
@@ -298,17 +294,22 @@ impl <T: Clone + Object> RegistryInternal <T> {
         let me = self;
         match me.keyToID.get(&key) {
             Some(id) => {
-                let mech = me.objects.get(id).unwrap().clone();
-                let mechclone = mech.clone();
-                let mechlock = mech.lock();
+                let mech : Mechanism<T> = match me.objects.get(id) {
+                    None  => panic!("abc"),
+                    Some(m) => Mechanism::from(m.0.clone())
+                };
+                {
+                    let mechlock = mech.lock();
 
-                let creds = task.creds.clone();
-                if !mechlock.checkPermission(&creds, &PermMask::FromMode(mode)) {
-                    // The [calling process / user] does not have permission to access
-                    // the set, and does not have the CAP_IPC_OWNER capability in the
-                    // user namespace that governs its IPC namespace.
-                    return Err(Error::SysError(SysErr::EINVAL))
+                    let creds = task.creds.clone();
+                    if !mechlock.checkPermission(&creds, &PermMask::FromMode(mode)) {
+                        // The [calling process / user] does not have permission to access
+                        // the set, and does not have the CAP_IPC_OWNER capability in the
+                        // user namespace that governs its IPC namespace.
+                        return Err(Error::SysError(SysErr::EINVAL))
+                    }
                 }
+
 
                 if create && exclusive {
                     // IPC_CREAT and IPC_EXCL were specified, but an object already
@@ -316,7 +317,7 @@ impl <T: Clone + Object> RegistryInternal <T> {
                     return Err(Error::SysError(SysErr::EEXIST))
                 }
 
-                return Ok(Some(mechclone))
+                return Ok(Some(mech))
             }
             None => ()
         }
@@ -333,7 +334,7 @@ impl <T: Clone + Object> RegistryInternal <T> {
     pub fn FindById(&self, id: ID) -> Option<Mechanism<T>> {
         return match self.objects.get(&id) {
             None => None,
-            Some(m) => Some(m.clone())
+            Some(m) => Some(Mechanism::from(m.0.clone()))
         }
     }
 
@@ -374,9 +375,9 @@ impl <T: Clone + Object> RegistryInternal <T> {
 }
 
 #[derive(Clone)]
-pub struct Registry<T: Clone + Object> (Arc<QMutex<RegistryInternal<T>>>);
+pub struct Registry<T: Object> (Arc<QMutex<RegistryInternal<T>>>);
 
-impl <T: Clone + Object> Deref for Registry <T> {
+impl <T: Object> Deref for Registry <T> {
     type Target = Arc<QMutex<RegistryInternal<T>>>;
 
     fn deref(&self) -> &Arc<QMutex<RegistryInternal<T>>> {
@@ -384,7 +385,7 @@ impl <T: Clone + Object> Deref for Registry <T> {
     }
 }
 
-impl <T: Clone + Object> Registry <T> {
+impl <T: Object> Registry <T> {
     pub fn New(userNS: &UserNameSpace) -> Self {
         let intern = RegistryInternal {
             userNS: userNS.clone(),
