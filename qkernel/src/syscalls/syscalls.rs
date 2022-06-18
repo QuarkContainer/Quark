@@ -240,7 +240,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysMknode,           // 133 sys_mknod,
     SysObsolete,         // 134 sys_uselib,
     SysInvalid,          // 135 sys_personality,
-    NotImplementSyscall, // 136 sys_ustat, //Needs filesystem support.
+    NotImplementSyscall, // 136 sys_ustat,
     SysStatfs,           // 137 sys_statfs,
     SysFstatfs,          // 138 sys_fstatfs,
     NotImplementSyscall, // 139 sys_sysfs,
@@ -263,7 +263,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysNoPermission,     // 156 sys__sysctl,
     SysPrctl,            // 157 sys_prctl,
     SysArchPrctl,        // 158 sys_arch_prctl,
-    SysCapErr,           // 159 sys_adjtimex,               CAP_SYS_TIME
+    NotImplementSyscall, // 159 sys_adjtimex,
     SysSetrlimit,        // 160 sys_setrlimit,
     SysChroot,           // 161 sys_chroot,
     SysSync,             // 162 sys_sync,
