@@ -52,3 +52,4 @@ pub mod sys_inotify;
 pub mod sys_xattr;
 pub mod sys_sem;
 pub mod sys_shm;
+pub mod sys_msgqueue;
