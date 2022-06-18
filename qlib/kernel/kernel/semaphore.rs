@@ -50,13 +50,13 @@ pub const SEMAPHORES_MAX: u32 = SEMMSL;
 pub const SEMAPHORES_TOTAL_MAX: u32 = SEMMNS;
 
 #[derive(Default)]
-pub struct RegistryInternal {
+pub struct SemRegistryInternal {
     pub userNS: UserNameSpace,
     pub semaphores: BTreeMap<i32, Set>,
     pub lastIDUsed: i32,
 }
 
-impl RegistryInternal {
+impl SemRegistryInternal {
     pub fn findByID(&self, id: i32) -> Option<Set> {
         match self.semaphores.get(&id) {
             None => None,
@@ -98,7 +98,7 @@ impl RegistryInternal {
     fn newSet(
         &mut self,
         task: &Task,
-        myself: Registry,
+        myself: SemRegistry,
         key: i32,
         owner: &FileOwner,
         creator: &FileOwner,
@@ -139,19 +139,19 @@ impl RegistryInternal {
 }
 
 #[derive(Clone, Default)]
-pub struct Registry(Arc<QMutex<RegistryInternal>>);
+pub struct SemRegistry(Arc<QMutex<SemRegistryInternal>>);
 
-impl Deref for Registry {
-    type Target = Arc<QMutex<RegistryInternal>>;
+impl Deref for SemRegistry {
+    type Target = Arc<QMutex<SemRegistryInternal>>;
 
-    fn deref(&self) -> &Arc<QMutex<RegistryInternal>> {
+    fn deref(&self) -> &Arc<QMutex<SemRegistryInternal>> {
         &self.0
     }
 }
 
-impl Registry {
+impl SemRegistry {
     pub fn New(userNS: &UserNameSpace) -> Self {
-        let internal = RegistryInternal {
+        let internal = SemRegistryInternal {
             userNS: userNS.clone(),
             semaphores: BTreeMap::new(),
             lastIDUsed: 0,
@@ -270,7 +270,7 @@ impl Registry {
 }
 
 pub struct SetInternal {
-    pub registry: Registry,
+    pub registry: SemRegistry,
     pub id: i32,
     pub key: i32,
     pub creator: FileOwner,
@@ -420,7 +420,7 @@ impl Deref for Set {
 impl Set {
     pub fn New(
         task: &Task,
-        r: Registry,
+        r: SemRegistry,
         key: i32,
         owner: FileOwner,
         creator: FileOwner,

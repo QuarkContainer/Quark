@@ -27,41 +27,39 @@ use super::super::super::linux_def::*;
 use super::super::memmgr::mm::MemoryManager;
 use super::super::task::*;
 use super::super::super::range::*;
-use super::super::super::device::*;
+use super::super::super::device::SHM_DEVICE;
 use super::super::memmgr::*;
 use super::super::fs::host::hostinodeop::*;
 use super::super::super::linux::ipc::*;
 use super::super::super::linux::shm::*;
 use super::time::*;
-
-type Key = i32;
-type ID = i32;
+use super::ipc_namespace::*;
 
 #[derive(Default)]
-pub struct RegistryInternal {
+pub struct ShmRegistryInternal {
     pub userNS: UserNameSpace,
     pub shms: BTreeMap<ID, Shm>,
     pub keysToShms: BTreeMap<Key, Shm>,
-    pub totalPages: u64,
     pub lastIDUsed: ID,
+    pub totalPages: u64,
 }
 
-impl RegistryInternal {}
+impl ShmRegistryInternal {}
 
 #[derive(Clone, Default)]
-pub struct Registry(Arc<QMutex<RegistryInternal>>);
+pub struct ShmRegistry(Arc<QMutex<ShmRegistryInternal>>);
 
-impl Deref for Registry {
-    type Target = Arc<QMutex<RegistryInternal>>;
+impl Deref for ShmRegistry {
+    type Target = Arc<QMutex<ShmRegistryInternal>>;
 
-    fn deref(&self) -> &Arc<QMutex<RegistryInternal>> {
+    fn deref(&self) -> &Arc<QMutex<ShmRegistryInternal>> {
         &self.0
     }
 }
 
-impl Registry {
+impl ShmRegistry {
     pub fn New(userNS: &UserNameSpace) -> Self {
-        let internal = RegistryInternal {
+        let internal = ShmRegistryInternal {
             userNS: userNS.clone(),
             shms: BTreeMap::new(),
             keysToShms: BTreeMap::new(),
@@ -237,7 +235,7 @@ impl Registry {
 pub struct ShmInternal {
     pub memfdIops: HostInodeOp,
 
-    pub registry: Registry,
+    pub registry: ShmRegistry,
     pub id: ID,
     pub creator: FileOwner,
     pub size: u64,

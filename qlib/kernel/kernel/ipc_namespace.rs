@@ -31,8 +31,8 @@ use super::msgqueue;
 #[derive(Clone)]
 pub struct IPCNamespace {
     pub userNS: UserNameSpace,
-    pub semphores: semaphore::Registry,
-    pub shms: shm::Registry,
+    pub semphores: semaphore::SemRegistry,
+    pub shms: shm::ShmRegistry,
     pub queues: msgqueue::MQRegistry,
 }
 
@@ -46,17 +46,17 @@ impl IPCNamespace {
     pub fn New(userNS: &UserNameSpace) -> Self {
         return Self {
             userNS: userNS.clone(),
-            semphores: semaphore::Registry::New(userNS),
-            shms: shm::Registry::New(userNS),
+            semphores: semaphore::SemRegistry::New(userNS),
+            shms: shm::ShmRegistry::New(userNS),
             queues: msgqueue::MQRegistry::New(userNS),
         };
     }
 
-    pub fn SemaphoreRegistry(&self) -> semaphore::Registry {
+    pub fn SemaphoreRegistry(&self) -> semaphore::SemRegistry {
         return self.semphores.clone();
     }
 
-    pub fn ShmRegistry(&self) -> shm::Registry {
+    pub fn ShmRegistry(&self) -> shm::ShmRegistry {
         return self.shms.clone()
     }
 
