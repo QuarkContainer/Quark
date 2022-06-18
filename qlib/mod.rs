@@ -651,7 +651,6 @@ pub struct ShareSpace {
     // add this pad can decrease the mariadb start time 25 sec to 12 sec
     //todo: root cause this. False share?
     //pub pad: [u64; 8],
-    pub hostEpollfd: AtomicI32,
     pub hostEpollProcessing: CachePadded<QMutex<()>>,
 
     pub scheduler: task_mgr::Scheduler,
@@ -682,7 +681,9 @@ pub struct ShareSpace {
     pub inotifyCookie: CachePadded<AtomicU32>,
     pub waitMask: CachePadded<AtomicU64>,
 
+    pub supportMemoryBarrier: bool,
     pub controlSock: i32,
+    pub hostEpollfd: AtomicI32,
 
     pub values: Vec<[AtomicU64; 2]>,
 }

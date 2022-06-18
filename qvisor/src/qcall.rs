@@ -342,6 +342,9 @@ impl KVMVcpu {
             Msg::TlbShootdown(msg) => {
                 ret = SHARE_SPACE.TlbShootdown(msg.vcpuMask);
             }
+            Msg::HostMemoryBarrier(_) => {
+                VMSpace::HostMemoryBarrier();
+            }
         };
 
         return ret;
