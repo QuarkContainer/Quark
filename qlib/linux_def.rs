@@ -2106,6 +2106,9 @@ impl Cmd {
     pub const F_GETPIPE_SZ: i32 = 1024 + 8;
     pub const F_ADD_SEALS: i32 = 1024 + 9;
     pub const F_GET_SEALS: i32 = 1024 + 10;
+
+    pub const CLOSE_RANGE_UNSHARE : i32 = 1 << 1;
+    pub const CLOSE_RANGE_CLOEXEC : i32 = 1 << 2;
 }
 
 #[derive(Debug, Clone, Copy, Default)]

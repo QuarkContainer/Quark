@@ -282,7 +282,7 @@ impl Thread {
 
         let mut fdTbl = t.fdTbl.clone();
         if opts.sharingOption.NewFiles {
-            let newFDTbl = fdTbl.Fork();
+            let newFDTbl = fdTbl.Fork(i32::MAX);
             fdTbl = newFDTbl;
         }
 
@@ -544,6 +544,11 @@ impl Task {
         return Ok((cPid, taskPtr));
     }
 
+    pub fn UnshareFdTable(&mut self, maxFd: i32) {
+        let newfdtbl = self.fdTbl.Fork(maxFd);
+        self.fdTbl = newfdtbl;
+    }
+
     pub fn Unshare(&mut self, opts: &SharingOptions) -> Result<()> {
         // In Linux unshare(2), NewThreadGroup implies NewSignalHandlers and
         // NewSignalHandlers implies NewAddressSpace. All three flags are no-ops if
@@ -628,7 +633,7 @@ impl Task {
 
         if opts.NewFiles {
             let fdtbl = self.fdTbl.clone();
-            self.fdTbl = fdtbl.Fork();
+            self.fdTbl = fdtbl.Fork(i32::MAX);
             tlock.fdTbl = self.fdTbl.clone();
         }
 

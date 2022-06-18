@@ -781,6 +781,60 @@ pub fn SysFchdir(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     return Ok(0);
 }
 
+// CloseRange implements linux syscall close_range(2).
+pub fn SysCloseRange(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let first = args.arg0 as i32;
+    let last = args.arg1 as i32;
+    let flags = args.arg2 as i32;
+
+    if first < 0 || last <0 || first > last {
+        return Err(Error::SysError(SysErr::EINVAL));
+    }
+
+    if flags & !(Cmd::CLOSE_RANGE_CLOEXEC | Cmd::CLOSE_RANGE_UNSHARE) != 0 {
+        return Err(Error::SysError(SysErr::EINVAL));
+    }
+
+    let cloexec = flags & Cmd::CLOSE_RANGE_CLOEXEC != 0;
+    let unshare = flags & Cmd::CLOSE_RANGE_UNSHARE != 0;
+
+    if unshare {
+        // If possible, we don't want to copy FDs to the new unshared table, because those FDs will
+        // be promptly closed and no longer used. So in the case where we know the range extends all
+        // the way to the end of the FdTable, we can simply copy the FdTable only up to the start of
+        // the range that we are closing.
+        let lastfd = task.fdTbl.lock().GetLastFd();
+        if !cloexec && last > lastfd {
+            task.UnshareFdTable(first);
+        } else {
+            task.UnshareFdTable(i32::MAX);
+        }
+    }
+
+    if cloexec {
+        let flagToApply = FDFlags {
+            CloseOnExec: true,
+        };
+
+        task.fdTbl.lock().SetFlagsForRange(first, last+1, flagToApply)?;
+        return Ok(0)
+    }
+
+    let files = task.fdTbl.lock().RemoveRange(first, last+1);
+    for f in files {
+        match f.Flush(task) {
+            Ok(_) => (),
+            Err(_) => {
+                // Per the close_range(2) documentation, errors upon closing file descriptors are ignored.
+            }
+        }
+    }
+
+    return Ok(0)
+}
+
+
+// Close implements linux syscall close(2).
 pub fn SysClose(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let fd = args.arg0 as i32;
     close(task, fd)?;
@@ -2228,26 +2282,3 @@ pub fn SysFlock(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     return Ok(0);
 }
 
-/*
-pub fn MemfdCreate(task: &Task, addr: u64, flags: u64) -> Result<u64> {
-    let memfdPrefix     = "/memfd:";
-    let memfdAllFlags   = MfdType::MFD_CLOEXEC | MfdType::MFD_ALLOW_SEALING;
-    let memfdMaxNameLen = NAME_MAX - memfdPrefix.len() + 1;
-
-    let flags = flags as u32;
-
-    if flags & !memfdAllFlags != 0 {
-        return Err(Error::SysError(SysErr::EINVAL))
-    }
-
-    let allowSeals = flags & MfdType::MFD_ALLOW_SEALING != 0;
-    let cloExec = flags & MfdType::MFD_CLOEXEC != 0;
-
-    let name = task.CopyInString(addr, PATH_MAX - memfdPrefix.len())?;
-
-    if name.len() > memfdMaxNameLen {
-        return Err(Error::SysError(SysErr::EINVAL))
-    }
-
-    let name = memfdPrefix.to_string() + &name;
-}*/

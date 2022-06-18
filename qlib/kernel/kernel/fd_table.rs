@@ -17,6 +17,7 @@ use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::ops::Deref;
+use core::ops::Bound::*;
 
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
@@ -68,8 +69,9 @@ impl FDTable {
         return (self.0).1;
     }
 
-    pub fn Fork(&self) -> FDTable {
-        let internal = self.lock().Fork();
+    // Fork returns an independent FDTable, cloning all FDs up to maxFds (non-inclusive).
+    pub fn Fork(&self, maxFds: i32) -> FDTable {
+        let internal = self.lock().Fork(maxFds);
 
         return FDTable((Arc::new(QMutex::new(internal)), NewUID()));
     }
@@ -104,6 +106,26 @@ impl FDTableInternal {
             next: 0,
             descTbl: BTreeMap::new(),
         };
+    }
+
+    pub fn GetLastFd(&self) -> i32 {
+        for (i, _) in self.descTbl.iter().rev() {
+            return *i;
+        }
+
+        return 0;
+    }
+
+    pub fn SetFlagsForRange(&mut self, startfd: i32, endfd: i32, flags: FDFlags) -> Result<()> {
+        if startfd < 0 || startfd >= endfd {
+            return Err(Error::SysError(SysErr::EINVAL));
+        }
+
+        for (_, d) in self.descTbl.range_mut((Included(&startfd), Excluded(&endfd))) {
+            d.flags = flags.clone();
+        }
+
+        return Ok(())
     }
 
     pub fn Drop(&self, file: &File) {
@@ -334,17 +356,38 @@ impl FDTableInternal {
         }
     }
 
-    pub fn Fork(&self) -> FDTableInternal {
+    // Fork returns an independent FDTable, cloning all FDs up to maxFds (non-inclusive).
+    pub fn Fork(&self, maxFds: i32) -> FDTableInternal {
         let mut tbl = FDTableInternal {
             next: self.next,
             descTbl: BTreeMap::new(),
         };
 
         for (fd, file) in &self.descTbl {
+            if *fd >= maxFds {
+                break;
+            }
             tbl.set(*fd, &file.file, &file.flags)
         }
 
         return tbl;
+    }
+
+    pub fn RemoveRange(&mut self, startfd: i32, endfd: i32) -> Vec<File> {
+        let mut ids = Vec::new();
+        for (fd, _) in self.descTbl.range((Included(&startfd), Excluded(&endfd))) {
+            ids.push(*fd)
+        };
+
+        let mut ret = Vec::new();
+        for fd in ids {
+            match self.Remove(fd) {
+                None => error!("impossible in RemoveRange"),
+                Some(f)=> ret.push(f)
+            }
+        }
+
+        return ret;
     }
 
     pub fn Remove(&mut self, fd: i32) -> Option<File> {
