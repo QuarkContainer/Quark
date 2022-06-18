@@ -55,7 +55,7 @@ impl MQRegistryIntern {
                     key: Key,
                     creator: &FileOwner,
                     perms: &FilePermissions) -> Result<Mechanism<MsgQueue>> {
-        let intern = MsgQueueIntern {
+        let queue = MsgQueue {
             registry: r.clone(),
             dead: false,
             senders: Queue::default(),
@@ -69,9 +69,8 @@ impl MQRegistryIntern {
             sendPID: 0,
             receivePID: 0
         };
-        let queue = MsgQueue(Arc::new(QMutex::new(intern)));
         let mec = Mechanism::New(self.userNS.clone(), key, creator, creator, perms, queue);
-        self.0.Register(mec.clone())?;
+        self.0.Register(Mechanism::from(mec.clone()))?;
         return Ok(mec)
     }
 }
@@ -163,10 +162,10 @@ impl MQRegistry {
 
         let mut messages = 0;
         let mut bytes = 0;
-        me.ForAllObjects(&mut |q : &Mechanism<MsgQueue>| {
-            let q = q.Object();
-            messages += q.lock().messages.len();
-            bytes += q.lock().byteCount;
+        me.ForAllObjects(&mut |m : &Mechanism<MsgQueue>| {
+            let q = &m.lock().obj;
+            messages += q.messages.len();
+            bytes += q.byteCount;
         });
 
         return MsgInfo {
@@ -184,25 +183,47 @@ impl MQRegistry {
 }
 
 // Queue represents a SysV message queue, described by sysvipc(7).
-#[derive(Clone)]
-pub struct MsgQueue(Arc<QMutex<MsgQueueIntern>>);
+pub struct MsgQueue {
+    // registry is the registry owning this queue. Immutable.
+    pub registry: MQRegistry,
 
-impl Deref for MsgQueue {
-    type Target = Arc<QMutex<MsgQueueIntern>>;
+    // dead is set to true when a queue is removed from the registry and should
+    // not be used. Operations on the queue should check dead, and return
+    // EIDRM if set to true.
+    pub dead: bool,
 
-    fn deref(&self) -> &Arc<QMutex<MsgQueueIntern>> {
-        &self.0
-    }
-}
+    // senders holds a queue of blocked message senders. Senders are notified
+    // when enough space is available in the queue to insert their message.
+    pub senders: Queue,
 
-impl Object for MsgQueue {
-    fn Destory(&self) {
-        let mut q = self.lock();
-        q.dead = true;
+    // receivers holds a queue of blocked receivers. Receivers are notified
+    // when a new message is inserted into the queue and can be received.
+    pub receivers: Queue,
 
-        q.senders.Notify(EVENT_OUT);
-        q.receivers.Notify(EVENT_IN);
-    }
+    // messages is an array of sent messages.
+    pub messages: VecDeque<Message>,
+
+    // sendTime is the last time a msgsnd was perfomed.
+    pub sendTime: Time,
+
+    // receiveTime is the last time a msgrcv was performed.
+    pub receiveTime: Time,
+
+    // changeTime is the last time the queue was modified using msgctl.
+    pub changeTime: Time,
+
+    // byteCount is the current number of message bytes in the queue.
+    pub byteCount: u64,
+
+    // maxBytes is the maximum allowed number of bytes in the queue, and is also
+    // used as a limit for the number of total possible messages.
+    pub maxBytes: u64,
+
+    // sendPID is the PID of the process that performed the last msgsnd.
+    pub sendPID: i32,
+
+    // receivePID is the PID of the process that performed the last msgrcv.
+    pub receivePID: i32,
 }
 
 impl Mechanism<MsgQueue> {
@@ -224,7 +245,7 @@ impl Mechanism<MsgQueue> {
         // Slow path: at this point, the queue was found to be full, and we were
         // asked to block.
         let general = task.blocker.generalEntry.clone();
-        let senders = self.Object().lock().senders.clone();
+        let senders = self.lock().obj.senders.clone();
 
         senders.EventRegister(task, &general, EVENT_WRITE);
         defer!(senders.EventUnregister(task, &general));
@@ -248,7 +269,7 @@ impl Mechanism<MsgQueue> {
     }
 
     pub fn Copy(&self, mType: i64) -> Result<Message> {
-        return self.Object().lock().Copy(mType);
+        return self.lock().obj.Copy(mType);
     }
 
     // push appends a message to the queue's message list and notifies waiting
@@ -260,10 +281,7 @@ impl Mechanism<MsgQueue> {
             return Err(Error::SysError(SysErr::EINVAL));
         }
 
-        let q = self.Object();
-        let mech = self.lock();
-        let mut q = q.lock();
-
+        let mut mech = self.lock();
         if !mech.checkPermission(cred, &PermMask {
             write: true,
             ..Default::default()
@@ -273,6 +291,8 @@ impl Mechanism<MsgQueue> {
             // namespace that governs its IPC namespace.
             return Err(Error::SysError(SysErr::EACCES));
         }
+
+        let q = &mut mech.obj;
 
         // Queue was removed while the process was waiting.
         if q.dead {
@@ -340,7 +360,7 @@ impl Mechanism<MsgQueue> {
         // Slow path: at this point, the queue was found to be full, and we were
         // asked to block.
         let general = task.blocker.generalEntry.clone();
-        let receivers = self.Object().lock().receivers.clone();
+        let receivers = self.lock().obj.receivers.clone();
 
         receivers.EventRegister(task, &general, EVENT_READ);
         defer!(receivers.EventUnregister(task, &general));
@@ -377,10 +397,7 @@ impl Mechanism<MsgQueue> {
                except: bool,
                pid: i32) -> Result<Message> {
 
-        let q = self.Object();
-        let mech = self.lock();
-        let mut q = q.lock();
-
+        let mut mech = self.lock();
         if !mech.checkPermission(creds, &PermMask {
             read: true,
             ..Default::default()
@@ -390,6 +407,8 @@ impl Mechanism<MsgQueue> {
             // namespace that governs its IPC namespace.
             return Err(Error::SysError(SysErr::EACCES));
         }
+
+        let q = &mut mech.obj;
 
         // Queue was removed while the process was waiting.
         if q.dead {
@@ -444,9 +463,7 @@ impl Mechanism<MsgQueue> {
 
     // Set modifies some values of the queue. See msgctl(IPC_SET).
     pub fn Set(&self, task: &Task, ds: &MsqidDS) -> Result<()> {
-        let q = self.Object();
         let mut mech = self.lock();
-        let mut q = q.lock();
 
         let creds = task.creds.clone();
         if ds.MsgQbytes > MAX_QUEUE_BYTES as _
@@ -459,6 +476,7 @@ impl Mechanism<MsgQueue> {
 
         mech.Set(task, &ds.MsgPerm)?;
 
+        let q = &mut mech.obj;
         q.maxBytes = ds.MsgQbytes;
         q.changeTime = task.Now();
         return Ok(())
@@ -477,9 +495,8 @@ impl Mechanism<MsgQueue> {
     }
 
     pub fn stat(&self, task: &Task, mask: &PermMask) -> Result<MsqidDS> {
-        let q = self.Object();
         let mech = self.lock();
-        let q = q.lock();
+        let q = &mech.obj;
 
         let creds = task.creds.clone();
         if !mech.checkPermission(&creds, mask) {
@@ -517,50 +534,16 @@ impl Mechanism<MsgQueue> {
     }
 }
 
-pub struct MsgQueueIntern {
-    // registry is the registry owning this queue. Immutable.
-    pub registry: MQRegistry,
+impl Object for MsgQueue {
+    fn Destory(&mut self) {
+        self.dead = true;
 
-    // dead is set to true when a queue is removed from the registry and should
-    // not be used. Operations on the queue should check dead, and return
-    // EIDRM if set to true.
-    pub dead: bool,
-
-    // senders holds a queue of blocked message senders. Senders are notified
-    // when enough space is available in the queue to insert their message.
-    pub senders: Queue,
-
-    // receivers holds a queue of blocked receivers. Receivers are notified
-    // when a new message is inserted into the queue and can be received.
-    pub receivers: Queue,
-
-    // messages is an array of sent messages.
-    pub messages: VecDeque<Message>,
-
-    // sendTime is the last time a msgsnd was perfomed.
-    pub sendTime: Time,
-
-    // receiveTime is the last time a msgrcv was performed.
-    pub receiveTime: Time,
-
-    // changeTime is the last time the queue was modified using msgctl.
-    pub changeTime: Time,
-
-    // byteCount is the current number of message bytes in the queue.
-    pub byteCount: u64,
-
-    // maxBytes is the maximum allowed number of bytes in the queue, and is also
-    // used as a limit for the number of total possible messages.
-    pub maxBytes: u64,
-
-    // sendPID is the PID of the process that performed the last msgsnd.
-    pub sendPID: i32,
-
-    // receivePID is the PID of the process that performed the last msgrcv.
-    pub receivePID: i32,
+        self.senders.Notify(EVENT_OUT);
+        self.receivers.Notify(EVENT_IN);
+    }
 }
 
-impl MsgQueueIntern {
+impl MsgQueue {
     // Copy copies a message from the queue without deleting it. If no message
     // exists, an error is returned. See msgrcv(MSG_COPY).
     pub fn Copy(&self, mType: i64) -> Result<Message> {
@@ -624,7 +607,6 @@ impl MsgQueueIntern {
         }
         return Some(self.messages[mType as usize].clone());
     }
-
 }
 
 // Message represents a message exchanged through a Queue via msgsnd(2) and
