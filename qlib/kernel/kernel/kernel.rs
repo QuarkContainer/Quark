@@ -56,6 +56,7 @@ use super::timer::timekeeper::*;
 use super::timer::timer::*;
 use super::timer::*;
 use super::uts_namespace::*;
+use super::syslog::*;
 
 pub static ASYNC_PROCESS_TIMER: Singleton<Timer> = Singleton::<Timer>::New();
 
@@ -140,6 +141,9 @@ pub struct KernelInternal {
 
     pub platform: DefaultPlatform,
     pub lastProcessTime: QMutex<i64>,
+
+    // syslog is the kernel log.
+    pub syslog: SysLog,
 }
 
 impl KernelInternal {
@@ -215,6 +219,7 @@ impl Kernel {
             started: AtomicBool::new(false),
             platform: DefaultPlatform::default(),
             lastProcessTime: QMutex::new(0),
+            syslog: SysLog::default(),
         };
 
         //error!("hasXSAVEOPT is {}", internal.featureSet.lock().UseXsaveopt());
@@ -225,6 +230,10 @@ impl Kernel {
         //error!("X86FeatureOSXSAVE is {}", internal.featureSet.lock().HasFeature(Feature(X86Feature::X86FeatureOSXSAVE as i32)));
 
         return Self(Arc::new(internal));
+    }
+
+    pub fn Syslog(&self) -> SysLog {
+        return self.syslog.clone();
     }
 
     pub fn Atomically(&self, mut f: impl FnMut()) {
