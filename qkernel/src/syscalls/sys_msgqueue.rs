@@ -74,9 +74,9 @@ pub fn SysMsgrcv(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let flags = args.arg4 as i32;
 
     let wait = (flags as i16) & IPC_NOWAIT != IPC_NOWAIT;
-    let except = flags & MSG_EXCEPT != MSG_EXCEPT;
-    let truncate = flags & MSG_NOERROR != MSG_NOERROR;
-    let msgCopy = flags & MSG_COPY != MSG_COPY;
+    let except = flags & MSG_EXCEPT == MSG_EXCEPT;
+    let truncate = flags & MSG_NOERROR == MSG_NOERROR;
+    let msgCopy = flags & MSG_COPY == MSG_COPY;
 
     let msg = Receive(task, id, mType, size, msgCopy, wait, truncate, except)?;
     let size = msg.Size();
