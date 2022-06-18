@@ -51,6 +51,7 @@ use super::super::syscalls::sys_xattr::*;
 use super::super::syscalls::sys_sem::*;
 use super::super::syscalls::sys_shm::*;
 use super::super::syscalls::sys_msgqueue::*;
+use super::super::syscalls::sys_syslog::*;
 
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
@@ -206,7 +207,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysTimes,            // 100 sys_times,
     SysNoSupport,        // 101 sys_ptrace,
     SysGetuid,           // 102 sys_getuid,
-    NotImplementSyscall, // 103 sys_syslog,
+    SysSysLog,           // 103 sys_syslog,
     SysGetgid,           // 104 sys_getgid,
     SysSetuid,           // 105 sys_setuid,
     SysSetgid,           // 106 sys_setgid,

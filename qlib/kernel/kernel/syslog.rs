@@ -12,31 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-pub mod fd_table;
-pub mod posixtimer;
-pub mod time;
-pub mod timer;
-pub mod vdso;
-pub mod waiter;
-//pub mod ktime;
-pub mod semaphore;
-pub mod uts_namespace;
-pub mod shm;
-pub mod abstract_socket_namespace;
-pub mod aio;
-pub mod async_process;
-pub mod async_wait;
-pub mod cpuset;
-pub mod epoll;
-pub mod eventfd;
-pub mod fasync;
-pub mod fs_context;
-pub mod futex;
-pub mod ipc_namespace;
-pub mod kernel;
-pub mod pipe;
-pub mod platform;
-pub mod signal_handler;
-pub mod signalfd;
-pub mod msgqueue;
-pub mod syslog;
+// syslog represents a glboal qkernel log.
+//
+// Currently, it contains only dummy messages for a dmesg
+
+use alloc::vec::Vec;
+
+#[derive(Clone, Default)]
+pub struct SysLog {}
+
+impl SysLog {
+    pub fn Log(&self) -> Vec<u8> {
+        let str = format!("{} \n {}\n", "qukernel starting ...", "quark syslog pending ...");
+        return str.into_bytes();
+    }
+}
