@@ -240,7 +240,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysMknode,           // 133 sys_mknod,
     SysObsolete,         // 134 sys_uselib,
     SysInvalid,          // 135 sys_personality,
-    NotImplementSyscall, // 136 sys_ustat,
+    SysNoSys,            // 136 sys_ustat,      Needs filesystem support.
     SysStatfs,           // 137 sys_statfs,
     SysFstatfs,          // 138 sys_fstatfs,
     NotImplementSyscall, // 139 sys_sysfs,
@@ -263,7 +263,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysNoPermission,     // 156 sys__sysctl,
     SysPrctl,            // 157 sys_prctl,
     SysArchPrctl,        // 158 sys_arch_prctl,
-    NotImplementSyscall, // 159 sys_adjtimex,
+    SysCapErr,           // 159 sys_adjtimex,       CAP_SYS_TIME
     SysSetrlimit,        // 160 sys_setrlimit,
     SysChroot,           // 161 sys_chroot,
     SysSync,             // 162 sys_sync,
@@ -443,95 +443,95 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
 
     //don't use numbers 334 through 423
     ///////////////////////////////////////////////////////////////////////////////////////
-    NotImplementSyscall, //	335
-    NotImplementSyscall, //	336
-    NotImplementSyscall, //	337
-    NotImplementSyscall, //	338
-    NotImplementSyscall, //	339
-    NotImplementSyscall, //	340
-    NotImplementSyscall, //	341
-    NotImplementSyscall, //	342
-    NotImplementSyscall, //	343
-    NotImplementSyscall, //	344
-    NotImplementSyscall, //	345
-    NotImplementSyscall, //	346
-    NotImplementSyscall, //	347
-    NotImplementSyscall, //	348
-    NotImplementSyscall, //	349
-    NotImplementSyscall, //	350
-    NotImplementSyscall, //	351
-    NotImplementSyscall, //	352
-    NotImplementSyscall, //	353
-    NotImplementSyscall, //	354
-    NotImplementSyscall, //	355
-    NotImplementSyscall, //	356
-    NotImplementSyscall, //	357
-    NotImplementSyscall, //	358
-    NotImplementSyscall, //	359
-    NotImplementSyscall, //	360
-    NotImplementSyscall, //	361
-    NotImplementSyscall, //	362
-    NotImplementSyscall, //	363
-    NotImplementSyscall, //	364
-    NotImplementSyscall, //	365
-    NotImplementSyscall, //	366
-    NotImplementSyscall, //	367
-    NotImplementSyscall, //	368
-    NotImplementSyscall, //	369
-    NotImplementSyscall, //	370
-    NotImplementSyscall, //	371
-    NotImplementSyscall, //	372
-    NotImplementSyscall, //	373
-    NotImplementSyscall, //	374
-    NotImplementSyscall, //	375
-    NotImplementSyscall, //	376
-    NotImplementSyscall, //	377
-    NotImplementSyscall, //	378
-    NotImplementSyscall, //	379
-    NotImplementSyscall, //	380
-    NotImplementSyscall, //	381
-    NotImplementSyscall, //	382
-    NotImplementSyscall, //	383
-    NotImplementSyscall, //	384
-    NotImplementSyscall, //	385
-    NotImplementSyscall, //	386
-    NotImplementSyscall, //	387
-    NotImplementSyscall, //	388
-    NotImplementSyscall, //	389
-    NotImplementSyscall, //	390
-    NotImplementSyscall, //	391
-    NotImplementSyscall, //	392
-    NotImplementSyscall, //	393
-    NotImplementSyscall, //	394
-    NotImplementSyscall, //	395
-    NotImplementSyscall, //	396
-    NotImplementSyscall, //	397
-    NotImplementSyscall, //	398
-    NotImplementSyscall, //	399
-    NotImplementSyscall, //	400
-    NotImplementSyscall, //	401
-    NotImplementSyscall, //	402
-    NotImplementSyscall, //	403
-    NotImplementSyscall, //	404
-    NotImplementSyscall, //	405
-    NotImplementSyscall, //	406
-    NotImplementSyscall, //	407
-    NotImplementSyscall, //	408
-    NotImplementSyscall, //	409
-    NotImplementSyscall, //	410
-    NotImplementSyscall, //	411
-    NotImplementSyscall, //	412
-    NotImplementSyscall, //	413
-    NotImplementSyscall, //	414
-    NotImplementSyscall, //	415
-    NotImplementSyscall, //	416
-    NotImplementSyscall, //	417
-    NotImplementSyscall, //	418
-    NotImplementSyscall, //	419
-    NotImplementSyscall, //	420
-    NotImplementSyscall, //	421
-    NotImplementSyscall, //	422
-    NotImplementSyscall, //	423
+    NotExisting,         //	335
+    NotExisting,         //	336
+    NotExisting,         //	337
+    NotExisting,         //	338
+    NotExisting,         //	339
+    NotExisting,         //	340
+    NotExisting,         //	341
+    NotExisting,         //	342
+    NotExisting,         //	343
+    NotExisting,         //	344
+    NotExisting,         //	345
+    NotExisting,         //	346
+    NotExisting,         //	347
+    NotExisting,         //	348
+    NotExisting,         //	349
+    NotExisting,         //	350
+    NotExisting,         //	351
+    NotExisting,         //	352
+    NotExisting,         //	353
+    NotExisting,         //	354
+    NotExisting,         //	355
+    NotExisting,         //	356
+    NotExisting,         //	357
+    NotExisting,         //	358
+    NotExisting,         //	359
+    NotExisting,         //	360
+    NotExisting,         //	361
+    NotExisting,         //	362
+    NotExisting,         //	363
+    NotExisting,         //	364
+    NotExisting,         //	365
+    NotExisting,         //	366
+    NotExisting,         //	367
+    NotExisting,         //	368
+    NotExisting,         //	369
+    NotExisting,         //	370
+    NotExisting,         //	371
+    NotExisting,         //	372
+    NotExisting,         //	373
+    NotExisting,         //	374
+    NotExisting,         //	375
+    NotExisting,         //	376
+    NotExisting,         //	377
+    NotExisting,         //	378
+    NotExisting,         //	379
+    NotExisting,         //	380
+    NotExisting,         //	381
+    NotExisting,         //	382
+    NotExisting,         //	383
+    NotExisting,         //	384
+    NotExisting,         //	385
+    NotExisting,         //	386
+    NotExisting,         //	387
+    NotExisting,         //	388
+    NotExisting,         //	389
+    NotExisting,         //	390
+    NotExisting,         //	391
+    NotExisting,         //	392
+    NotExisting,         //	393
+    NotExisting,         //	394
+    NotExisting,         //	395
+    NotExisting,         //	396
+    NotExisting,         //	397
+    NotExisting,         //	398
+    NotExisting,         //	399
+    NotExisting,         //	400
+    NotExisting,         //	401
+    NotExisting,         //	402
+    NotExisting,         //	403
+    NotExisting,         //	404
+    NotExisting,         //	405
+    NotExisting,         //	406
+    NotExisting,         //	407
+    NotExisting,         //	408
+    NotExisting,         //	409
+    NotExisting,         //	410
+    NotExisting,         //	411
+    NotExisting,         //	412
+    NotExisting,         //	413
+    NotExisting,         //	414
+    NotExisting,         //	415
+    NotExisting,         //	416
+    NotExisting,         //	417
+    NotExisting,         //	418
+    NotExisting,         //	419
+    NotExisting,         //	420
+    NotExisting,         //	421
+    NotExisting,         //	422
+    NotExisting,         //	423
     ////////////////////////////////////////////////////////////////////////////
     //don't use numbers 334 through 423
 
@@ -569,6 +569,10 @@ pub fn NotImplementSyscall(_task: &mut Task, args: &SyscallArguments) -> Result<
     error!("NotImplementSyscall syscall {:x?}", args);
     return Err(Error::SysCallNotImplement);
 }
+
+pub fn NotExisting(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    panic!("NotExisting syscall {:x?}", args);
+ }
 
 pub fn SysNoSupport(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     error!("SysNoSupport syscall {:x?}", args);

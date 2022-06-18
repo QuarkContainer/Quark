@@ -22,7 +22,7 @@ use spin::Mutex;
 use std::os::unix::io::AsRawFd;
 use std::{thread, time};
 
-use super::super::super::qlib::auth::cap_set::*;
+//use super::super::super::qlib::auth::cap_set::*;
 use super::super::super::qlib::auth::id::*;
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::control_msg::*;
@@ -406,7 +406,7 @@ impl Sandbox {
         process: &oci::Process,
         stdios: &[i32],
     ) -> Result<i32> {
-        let caps = TaskCaps::default();
+        let caps = specutils::Capabilities(false, &process.capabilities);
 
         let mut extraKGIDs: Vec<KGID> = Vec::with_capacity(process.user.additional_gids.len());
         for gid in &process.user.additional_gids {
