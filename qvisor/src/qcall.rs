@@ -328,7 +328,7 @@ impl KVMVcpu {
                 ret = super::VMSpace::Sysinfo(msg.addr) as u64;
             }
             Msg::ReadDir(msg) => {
-                ret = super::VMSpace::ReadDir(msg.dirfd, msg.data) as u64;
+                ret = super::VMSpace::ReadDir(msg.dirfd, msg.addr, msg.len, msg.reset) as u64;
             }
             Msg::Rdtsc(_msg) => {
                 ret = TSC.Rdtsc() as u64;
