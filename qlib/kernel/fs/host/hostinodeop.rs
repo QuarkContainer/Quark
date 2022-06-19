@@ -21,6 +21,7 @@ use alloc::vec::Vec;
 use core::any::Any;
 use core::ops::Deref;
 
+use crate::qlib::kernel::fs::host::dirent::Dirent64;
 use super::super::super::super::addr::*;
 use super::super::super::super::auth::*;
 use super::super::super::super::common::*;
@@ -28,6 +29,7 @@ use super::super::super::super::linux::time::*;
 use super::super::super::super::linux_def::*;
 use super::super::super::super::mem::areaset::*;
 use super::super::super::super::range::*;
+use super::super::super::super::device::*;
 use super::super::super::util::cstring::*;
 use super::super::super::fd::*;
 use super::super::super::guestfdnotifier::*;
@@ -45,6 +47,7 @@ use super::super::super::IOURING;
 use super::super::super::SHARESPACE;
 use super::super::attr::*;
 use super::super::dirent::*;
+use super::super::dentry::*;
 use super::super::file::*;
 use super::super::filesystems::*;
 use super::super::flags::*;
@@ -187,6 +190,7 @@ pub struct HostInodeOpIntern {
     pub mappable: Option<Mappable>,
     pub bufWriteLock: QAsyncLock,
     pub hasMappable: bool,
+    pub readdirCache: Option<DentMap>,
 }
 
 impl Default for HostInodeOpIntern {
@@ -203,6 +207,7 @@ impl Default for HostInodeOpIntern {
             size: 0,
             bufWriteLock: QAsyncLock::default(),
             hasMappable: false,
+            readdirCache: None,
         };
     }
 }
@@ -247,6 +252,7 @@ impl HostInodeOpIntern {
             size: fstat.st_size,
             bufWriteLock: QAsyncLock::default(),
             hasMappable: false,
+            readdirCache: None,
         };
 
         if ret.CanMap() {
@@ -254,6 +260,98 @@ impl HostInodeOpIntern {
         }
 
         return ret;
+    }
+
+    pub fn ReadDirAll(&self, _task: &Task) -> Result<DentMap> {
+        let fd = self.HostFd();
+
+        let mut buf: [u8; 4096 * 4] = [0; 4096 * 4]; // 16KB in stack
+
+        let deviceId = self.sattr.DeviceId;
+        let mut entries = BTreeMap::new();
+        let mut reset = true;
+        loop {
+            let res = HostSpace::ReadDir(fd, &mut buf, reset);
+            if res < 0 {
+                return Err(Error::SysError(-res as i32));
+            }
+
+            reset = false;
+
+            if res == 0 {
+                break;
+            }
+
+            let addr = &buf[0] as * const _ as u64;
+            let cnt: u64 = res as u64;
+            let mut pos: u64 = 0;
+            while pos < cnt {
+                let name;
+                let dType;
+                let inode;
+                unsafe {
+                    let d: *const Dirent64 = (addr + pos) as *const Dirent64;
+                    name = (*d).name;
+                    dType = (*d).type_;
+                    inode = (*d).ino;
+                    pos += (*d).reclen as u64;
+                }
+
+                // Construct the key to find the virtual inode.
+                // Directory entries reside on the same Device
+                // and SecondaryDevice as their parent.
+                let dentry = DentAttr {
+                    Type: InodeType(DType::ModeType(dType) as u32),
+                    InodeId: HOSTFILE_DEVICE.lock().Map(MultiDeviceKey {
+                        Device: deviceId, //ft.deviceId,
+                        Inode: inode,
+                        SecondaryDevice: "".to_string(),
+                        // todo: do we need this?
+                        //SecondaryDevice: f.inodeOperations.fileState.key.SecondaryDevice,
+
+                    }),
+                };
+
+                let pathname = CString::FromAddr(&name[0] as *const _ as u64);
+                entries.insert(pathname.Str().unwrap().to_string(), dentry);
+            }
+        }
+
+        return Ok(DentMap::New(entries));
+    }
+
+    pub fn IterateDir(
+        &mut self,
+        task: &Task,
+        dirCtx: &mut DirCtx,
+        offset: i32,
+    ) -> (i32, Result<i64>) {
+        if SHARESPACE.config.read().ReaddirCache {
+            if self.readdirCache.is_none() {
+                let dentryMap = match self.ReadDirAll(task) {
+                    Err(e) => return (offset, Err(e)),
+                    Ok(entires) => entires,
+                };
+
+                self.readdirCache = Some(dentryMap);
+            }
+
+            return match dirCtx.ReadDir(task, self.readdirCache.as_ref().unwrap()) {
+                Err(e) => (offset, Err(e)),
+                Ok(count) => (offset + count as i32, Ok(0)),
+            };
+        } else {
+            let dentryMap = match self.ReadDirAll(task) {
+                Err(e) => return (offset, Err(e)),
+                Ok(entires) => entires,
+            };
+
+            return match dirCtx.ReadDir(task, &dentryMap) {
+                Err(e) => (offset, Err(e)),
+                Ok(count) => (offset + count as i32, Ok(0)),
+            };
+        }
+
     }
 
     /*********************************start of mappable****************************************************************/
@@ -1119,6 +1217,8 @@ impl InodeOperations for HostInodeOp {
             owner.GID.0,
         )?;
 
+        self.lock().readdirCache = None;
+
         let mountSource = dir.lock().MountSource.clone();
 
         let inode = Inode::NewHostInode(&mountSource, fd, &fstat, true)?;
@@ -1148,6 +1248,8 @@ impl InodeOperations for HostInodeOp {
             return Err(Error::SysError(-ret as i32));
         }
 
+        self.lock().readdirCache = None;
+
         return Ok(());
     }
 
@@ -1164,6 +1266,7 @@ impl InodeOperations for HostInodeOp {
             return Err(Error::SysError(-ret as i32));
         }
 
+        self.lock().readdirCache = None;
         return Ok(());
     }
 
@@ -1196,6 +1299,7 @@ impl InodeOperations for HostInodeOp {
             return Err(Error::SysError(-ret as i32));
         }
 
+        self.lock().readdirCache = None;
         return Ok(());
     }
 
@@ -1208,6 +1312,7 @@ impl InodeOperations for HostInodeOp {
             return Err(Error::SysError(-ret as i32));
         }
 
+        self.lock().readdirCache = None;
         return Ok(());
     }
 
@@ -1227,7 +1332,7 @@ impl InodeOperations for HostInodeOp {
             .as_any()
             .downcast_ref::<HostInodeOp>()
         {
-            Some(p) => p.HostFd(),
+            Some(p) => p.clone(),
             None => panic!("&InodeOp isn't a HostInodeOp!"),
         };
 
@@ -1237,16 +1342,18 @@ impl InodeOperations for HostInodeOp {
             .as_any()
             .downcast_ref::<HostInodeOp>()
         {
-            Some(p) => p.HostFd(),
+            Some(p) => p.clone(),
             None => panic!("&InodeOp isn't a HostInodeOp!"),
         };
 
-        let ret = RenameAt(oldParent, oldname, newParent, newname);
+        let ret = RenameAt(oldParent.HostFd(), oldname, newParent.HostFd(), newname);
 
         if ret < 0 {
             return Err(Error::SysError(-ret as i32));
         }
 
+        oldParent.lock().readdirCache = None;
+        newParent.lock().readdirCache = None;
         return Ok(());
     }
 

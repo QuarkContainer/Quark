@@ -48,84 +48,22 @@ impl FdInfo {
         return SysRet(ret as i64);
     }
 
-    pub fn ReadDir(dirfd: i32, data: u64) -> i64 {
-        let data = unsafe { &mut *(data as *mut FileTypes) };
+    pub fn ReadDir(dirfd: i32, addr: u64, len: usize, reset: bool) -> i64 {
+        if reset {
+            let res = unsafe { libc::lseek(dirfd, 0, SeekWhence::SEEK_SET) as i32 };
 
-        let buf: [u8; 4096 * 16] = [0; 4096 * 16]; // 64KB in stack
-        let res = unsafe { libc::lseek(dirfd, 0, SeekWhence::SEEK_SET) as i32 };
-
-        let res = SysRet(res as i64);
-        if res < 0 {
-            if -res == SysErr::ESPIPE as i64 {
-                return -SysErr::ENOTDIR as i64;
-            }
-
-            return res;
-        }
-
-        loop {
-            let addr = &buf[0] as *const _ as u64;
-            let cnt = Self::GetDents64(dirfd, addr, buf.len() as u32);
-
-            if cnt < 0 {
-                return cnt;
-            }
-
-            if cnt == 0 {
-                break;
-            }
-
-            let cnt: u64 = cnt as u64;
-            let mut pos: u64 = 0;
-            while pos < cnt {
-                let name;
-                let dType;
-                let inode;
-                unsafe {
-                    let d: *const Dirent64 = (addr + pos) as *const Dirent64;
-                    name = (*d).name;
-                    dType = (*d).type_;
-                    inode = (*d).ino;
-                    pos += (*d).reclen as u64;
+            let res = SysRet(res as i64);
+            if res < 0 {
+                if -res == SysErr::ESPIPE as i64 {
+                    return -SysErr::ENOTDIR as i64;
                 }
 
-                if true {
-                    let mut stat: LibcStat = Default::default();
-
-                    let ret = unsafe {
-                        SysRet(libc::fstatat(
-                            dirfd,
-                            &name[0] as *const _ as u64 as *const c_char,
-                            &mut stat as *mut _ as u64 as *mut stat,
-                            AT_SYMLINK_NOFOLLOW,
-                        ) as i64)
-                    };
-
-                    if ret >= 0 {
-                        let ft = FileType {
-                            pathname: CString::FromAddr(&name[0] as *const _ as u64),
-                            device: stat.st_dev,
-                            inode: stat.st_ino,
-                            dType: dType,
-                        };
-
-                        data.fileTypes.push(ft);
-                    }
-                } else {
-                    // experiment for removing fstatat
-                    let ft = FileType {
-                        pathname: CString::FromAddr(&name[0] as *const _ as u64),
-                        device: 0, //stat.st_dev,
-                        inode: inode,
-                        dType: dType,
-                    };
-
-                    data.fileTypes.push(ft);
-                }
+                return res;
             }
         }
 
-        return 0;
+        let ret = Self::GetDents64(dirfd, addr, len as u32);
+        return ret;
     }
 
     pub fn GetDents64(fd: i32, dirp: u64, count: u32) -> i64 {
@@ -398,9 +336,9 @@ impl FdInfo {
         return self.lock().fd;
     }
 
-    pub fn IOReadDir(&self, data: u64) -> i64 {
+    pub fn IOReadDir(&self, addr: u64, len: usize, reset: bool) -> i64 {
         let fd = self.lock().fd;
-        return Self::ReadDir(fd, data);
+        return Self::ReadDir(fd, addr, len, reset);
     }
 
     pub fn IOBufWrite(&self, addr: u64, len: usize, offset: isize) -> i64 {

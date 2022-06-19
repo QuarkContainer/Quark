@@ -43,7 +43,6 @@ use crate::vmspace::kernel::GlobalIOMgr;
 use super::qlib::addr::Addr;
 use super::qlib::common::{Error, Result};
 use super::qlib::control_msg::*;
-use super::qlib::kernel::fs::host::dirent::Dirent64;
 use super::qlib::kernel::util::cstring::*;
 use super::qlib::linux_def::*;
 use super::qlib::pagetable::PageTables;
@@ -131,13 +130,13 @@ impl VMSpace {
         return GlobalIOMgr().GetByHost(hostfd);
     }
 
-    pub fn ReadDir(dirfd: i32, data: u64) -> i64 {
+    pub fn ReadDir(dirfd: i32, addr: u64, len: usize, reset: bool) -> i64 {
         let fdInfo = match Self::GetFdInfo(dirfd) {
             Some(info) => info,
             None => return -SysErr::EBADF as i64,
         };
 
-        return fdInfo.IOReadDir(data);
+        return fdInfo.IOReadDir(addr, len, reset);
     }
 
     pub fn Mount(&self, id: &str, rootfs: &str) -> Result<()> {

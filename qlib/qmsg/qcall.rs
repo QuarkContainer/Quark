@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use alloc::vec::Vec;
 
 use crate::qlib::fileinfo::*;
 
@@ -318,15 +317,12 @@ pub struct FileType {
     pub dType: u8,
 }
 
-#[derive(Debug)]
-pub struct FileTypes {
-    pub fileTypes: Vec<FileType>,
-}
-
 #[derive(Clone, Debug)]
 pub struct ReadDir {
     pub dirfd: i32,
-    pub data: u64,
+    pub addr: u64,
+    pub len: usize,
+    pub reset: bool,
 }
 
 #[derive(Clone, Default, Debug)]

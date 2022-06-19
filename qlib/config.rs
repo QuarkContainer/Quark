@@ -33,6 +33,7 @@ pub struct Config {
     pub ReserveCpuCount: usize,
     pub ShimMode: bool,
     pub EnableInotify: bool,
+    pub ReaddirCache: bool,
 }
 
 impl Config {
@@ -69,6 +70,7 @@ impl Default for Config {
             ReserveCpuCount: 2,
             ShimMode: false,
             EnableInotify: false,
+            ReaddirCache: true,
         };
     }
 }

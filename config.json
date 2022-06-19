@@ -17,5 +17,6 @@
   "PerSandboxLog" : false,
   "ReserveCpuCount": 1,
   "ShimMode"      : false,
-  "EnableInotify" : false
+  "EnableInotify" : false,
+  "ReaddirCache"  : true
 }

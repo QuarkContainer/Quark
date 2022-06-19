@@ -379,10 +379,12 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn ReadDir(dirfd: i32, data: &mut FileTypes) -> i64 {
+    pub fn ReadDir(dirfd: i32, data: &mut [u8], reset: bool) -> i64 {
         let mut msg = Msg::ReadDir(ReadDir {
             dirfd,
-            data: data as *const _ as u64,
+            addr: &mut data[0] as *mut _ as u64,
+            len: data.len(),
+            reset: reset,
         });
 
         return HostSpace::HCall(&mut msg, false) as i64;
