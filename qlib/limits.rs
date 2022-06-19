@@ -194,13 +194,13 @@ impl LimitSet {
 
         match internal.data.get_mut(&t) {
             Some(l) => {
-                info!("current is {:?}, the neww is {:?}", l, &v);
+                //info!("current is {:?}, the new is {:?}", l, &v);
                 if l.Max < v.Max && !privileged {
                     return Err(Error::SysError(SysErr::EPERM));
                 }
 
                 info!("Set ....");
-                if l.Cur > v.Max {
+                if v.Cur > v.Max {
                     return Err(Error::SysError(SysErr::EINVAL));
                 }
 
