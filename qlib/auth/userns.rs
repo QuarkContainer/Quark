@@ -160,6 +160,23 @@ impl UserNameSpace {
         }
     }
 
+    pub fn Parent(&self) -> Option<UserNameSpace> {
+        match &self.lock().parent {
+            None => return None,
+            Some(p) => return Some(p.clone())
+        }
+    }
+
+    pub fn Root(&self) -> UserNameSpace {
+        let mut cur = self.clone();
+        loop {
+            match cur.Parent() {
+                None => return cur,
+                Some(p) => cur = p,
+            }
+        }
+    }
+
     pub fn Depth(&self) -> usize {
         let mut i = 0;
         let mut ns = self.clone();

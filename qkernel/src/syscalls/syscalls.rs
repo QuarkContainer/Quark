@@ -78,6 +78,22 @@ pub fn SysCall(task: &mut Task, nr: u64, args: &SyscallArguments) -> TaskRunStat
             task.SetReturn(ret);
             return state;
         }
+        Err(Error::ErrExceedsFileSizeLimit) => {
+            match task.HandleExceedsFileSizeLimit() {
+                Err(Error::SysError(e)) => {
+                    task.haveSyscallReturn = true;
+                    task.SetReturn(-e as u64);
+                }
+                Err(e) => {
+                    panic!("ErrExceedsFileSizeLimit get unexpected error {:?}", e)
+                }
+                Ok(()) => {
+                    panic!("ErrExceedsFileSizeLimit impossbile")
+                }
+            }
+
+            return TaskRunState::RunApp;
+        }
         Err(Error::SysCallRetCtrl(state)) => {
             return state;
         }

@@ -21,6 +21,8 @@ use core::ops::Bound::*;
 
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
+use super::super::super::limits::*;
+use super::super::task::*;
 use super::super::fs::file::*;
 use super::super::uid::*;
 
@@ -172,14 +174,21 @@ impl FDTableInternal {
         }
     }
 
-    pub fn NewFDFrom1(&mut self, fd: i32, file: &File, flags: &FDFlags) -> Result<i32> {
-        let fds = self.NewFDs1(fd, &[file.clone()], flags)?;
-        return Ok(fds[0]);
-    }
-
-    pub fn NewFDFrom(&mut self, fd: i32, files: &File, flags: &FDFlags) -> Result<i32> {
+    pub fn NewFDFrom(&mut self, task: &Task, fd: i32, files: &File, flags: &FDFlags) -> Result<i32> {
         if fd < 0 {
             return Err(Error::SysError(SysErr::EINVAL));
+        }
+
+        // Default limit.
+        let mut end = i32::MAX;
+
+        let lim = task.Thread().ThreadGroup().Limits().Get(LimitType::NumberOfFiles).Cur;
+        if lim != u64::MAX {
+            end = lim as i32;
+        }
+
+        if fd + 1 > end {
+            return Err(Error::SysError(SysErr::EMFILE));
         }
 
         let mut fd = fd;
@@ -188,8 +197,6 @@ impl FDTableInternal {
             fd = self.next;
             reset = true;
         }
-
-        let end = core::i32::MAX;
 
         let mut found = false;
         for i in fd..end {
@@ -217,69 +224,30 @@ impl FDTableInternal {
         return Ok(fd);
     }
 
-    pub fn NewFDs1(&mut self, fd: i32, files: &[File], flags: &FDFlags) -> Result<Vec<i32>> {
-        if fd < 0 {
-            return Err(Error::SysError(SysErr::EINVAL));
-        }
-
-        let mut fd = fd;
-        if fd < self.next {
-            fd = self.next;
-        }
-
-        let end = core::i32::MAX;
-
-        let mut fds = Vec::new();
-        let mut i = fd;
-
-        while i < end && fds.len() < files.len() {
-            let fd = self.descTbl.get(&i);
-
-            match fd {
-                None => {
-                    self.set(i, &files[fds.len()], flags);
-                    fds.push(i);
-                }
-                _ => (),
-            }
-            i += 1;
-        }
-
-        //fail, undo the change
-        if fds.len() < files.len() {
-            for i in &fds {
-                self.descTbl.remove(i);
-            }
-
-            return Err(Error::SysError(SysErr::EMFILE));
-        }
-
-        if fd == self.next {
-            self.next = fds[fds.len() - 1] + 1;
-        }
-
-        return Ok(fds);
-    }
-
-    pub fn NewFDAt(&mut self, fd: i32, file: &File, flags: &FDFlags) -> Result<()> {
+    pub fn NewFDAt(&mut self, task: &Task, fd: i32, file: &File, flags: &FDFlags) -> Result<()> {
         if fd < 0 {
             return Err(Error::SysError(SysErr::EBADF));
+        }
+
+        let lim = task.Thread().ThreadGroup().Limits().Get(LimitType::NumberOfFiles).Cur;
+        if fd as u64 >= lim {
+            return Err(Error::SysError(SysErr::EMFILE));
         }
 
         self.set(fd, file, flags);
         return Ok(());
     }
 
-    pub fn Dup(&mut self, fd: i32) -> Result<i32> {
+    pub fn Dup(&mut self, task: &Task, fd: i32) -> Result<i32> {
         if fd < 0 {
             return Err(Error::SysError(SysErr::EBADF));
         }
 
         let (f, flags) = self.Get(fd)?;
-        return self.NewFDFrom(0, &f, &flags);
+        return self.NewFDFrom(task, 0, &f, &flags);
     }
 
-    pub fn Dup2(&mut self, oldfd: i32, newfd: i32) -> Result<i32> {
+    pub fn Dup2(&mut self, task: &Task, oldfd: i32, newfd: i32) -> Result<i32> {
         if oldfd < 0 {
             return Err(Error::SysError(SysErr::EBADF));
         }
@@ -291,11 +259,11 @@ impl FDTableInternal {
         self.Remove(newfd);
 
         let (f, flags) = self.Get(oldfd)?;
-        self.NewFDAt(newfd, &f, &flags)?;
+        self.NewFDAt(task, newfd, &f, &flags)?;
         return Ok(newfd);
     }
 
-    pub fn Dup3(&mut self, oldfd: i32, newfd: i32, flags: i32) -> Result<i32> {
+    pub fn Dup3(&mut self, task: &Task, oldfd: i32, newfd: i32, flags: i32) -> Result<i32> {
         if oldfd < 0 {
             return Err(Error::SysError(SysErr::EBADF));
         }
@@ -309,7 +277,7 @@ impl FDTableInternal {
 
         let (f, mut flags) = self.Get(oldfd)?;
         flags.CloseOnExec = closeOnExec;
-        self.NewFDAt(newfd, &f, &flags)?;
+        self.NewFDAt(task, newfd, &f, &flags)?;
         return Ok(newfd);
     }
 

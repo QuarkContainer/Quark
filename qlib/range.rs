@@ -668,6 +668,15 @@ impl<T: core::clone::Clone> IdMgr<T> {
         return Ok(id);
     }
 
+    pub fn NewFrom(&mut self, id: u64) -> Option<u64> {
+        match self.gaps.AllocAfter(id, 1, 0) {
+            Ok(id) => return Some(id),
+            _ => ()
+        };
+
+        return None
+    }
+
     pub fn Add(&mut self, id: u64, data: T) {
         /*let id = match self.gaps.AllocAfter(self.last, 1, 0) {
             Ok(id) => id,

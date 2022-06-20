@@ -683,9 +683,25 @@ impl MemoryManager {
         return res;
     }
 
+    pub fn mlockedBytesRangeLocked(&self, mr: &Range) -> u64 {
+        let mut total = 0;
+        let mapping = self.mapping.lock();
+        let mut seg = mapping.vmas.LowerBoundSeg(mr.Start());
+        while seg.Ok() && seg.Range().Start() < mr.End() {
+            let vma = seg.Value();
+            if vma.mlockMode != MLockMode::MlockNone {
+                let segMR = seg.Range();
+                total += segMR.Intersect(&mr).Len();
+            }
+            seg = seg.NextSeg();
+        }
+
+        return total;
+    }
+
     // MLock implements the semantics of Linux's mlock()/mlock2()/munlock(),
     // depending on mode.
-    pub fn Mlock(&self, _task: &Task, addr: u64, len: u64, mode: MLockMode) -> Result<()> {
+    pub fn Mlock(&self, task: &Task, addr: u64, len: u64, mode: MLockMode) -> Result<()> {
         let la = match Addr(len + Addr(addr).PageOffset()).RoundUp() {
             Ok(l) => l.0,
             Err(_) => return Err(Error::SysError(SysErr::EINVAL)),
@@ -697,6 +713,22 @@ impl MemoryManager {
         };
 
         let _ml = self.MappingWriteLock();
+
+        if mode != MLockMode::MlockNone {
+            let creds = task.creds.clone();
+            let userns = creds.lock().UserNamespace.Root();
+            if !creds.HasCapabilityIn(Capability::CAP_IPC_LOCK, &userns) {
+                let mlockLimit = task.Thread().ThreadGroup().Limits().Get(LimitType::MemoryLocked).Cur;
+                if mlockLimit == 0 {
+                    return Err(Error::SysError(SysErr::EPERM))
+                }
+
+                let newLockedAS = self.mapping.lock().lockedAS + ar.Len() + self.mlockedBytesRangeLocked(&ar);
+                if newLockedAS > mlockLimit {
+                    return Err(Error::SysError(SysErr::EPERM))
+                }
+            }
+        }
 
         if ar.Len() == 0 {
             return Ok(());
@@ -765,7 +797,7 @@ impl MemoryManager {
 
     // MLockAll implements the semantics of Linux's mlockall()/munlockall(),
     // depending on opts.
-    pub fn MlockAll(&self, _task: &Task, opts: &MLockAllOpts) -> Result<()> {
+    pub fn MlockAll(&self, task: &Task, opts: &MLockAllOpts) -> Result<()> {
         if !opts.Current && !opts.Future {
             return Err(Error::SysError(SysErr::EINVAL));
         }
@@ -774,6 +806,23 @@ impl MemoryManager {
         // it is not supported now
         let mode = opts.Mode;
         let _ml = self.MappingWriteLock();
+
+        if opts.Current {
+            if mode != MLockMode::MlockNone {
+                let creds = task.creds.clone();
+                let userns = creds.lock().UserNamespace.Root();
+                if !creds.HasCapabilityIn(Capability::CAP_IPC_LOCK, &userns) {
+                    let mlockLimit = task.Thread().ThreadGroup().Limits().Get(LimitType::MemoryLocked).Cur;
+                    if mlockLimit == 0 {
+                        return Err(Error::SysError(SysErr::EPERM))
+                    }
+
+                    if self.mapping.lock().vmas.Span() > mlockLimit {
+                        return Err(Error::SysError(SysErr::EPERM))
+                    }
+                }
+            }
+        }
 
         let mapping = self.mapping.lock();
         let mut vseg = mapping.vmas.FirstSeg();

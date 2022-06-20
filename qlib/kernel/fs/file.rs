@@ -24,7 +24,9 @@ use core::ops::Deref;
 use super::super::super::auth::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
+use super::super::super::limits::*;
 use super::super::super::metric::*;
+use super::super::super::mem::block::*;
 use super::super::super::range::*;
 use super::super::kernel::time::*;
 use super::super::kernel::waiter::qlock::*;
@@ -721,8 +723,19 @@ impl File {
     // checkLimit checks the offset that the write will be performed at. The
     // returned boolean indicates that the write must be limited. The returned
     // integer indicates the new maximum write length.
-    pub fn checkLimit(&self, _offset: i64) -> (i64, bool) {
-        //todo: implement this
+    pub fn checkLimit(&self, task: &Task, offset: i64) -> (i64, bool) {
+        if self.Dirent.Inode().StableAttr().IsRegular() {
+            // Enforce size limits.
+            let fileSizeLimit = task.Thread().ThreadGroup().Limits().Get(LimitType::FileSize).Cur;
+            if fileSizeLimit <= i64::MAX as _ {
+                if offset >= fileSizeLimit as i64 {
+                    return (0, true)
+                }
+
+                return (fileSizeLimit as i64 - offset, true)
+            }
+        }
+
         return (0, false);
     }
 
@@ -743,13 +756,21 @@ impl File {
 
             let current = *offsetLock;
 
-            let (limit, ok) = self.checkLimit(current);
+            let (limit, ok) = self.checkLimit(task, current);
             if ok && limit == 0 {
-                return Err(Error::ErrExceedsFileSizeLimit);
+                return Err(Error::ErrExceedsFileSizeLimit)
             }
 
             let blocking = self.Blocking();
-            let n = fops.WriteAt(task, self, srcs, current, blocking)?;
+            let n = if ok {
+                let iovs = Iovs(srcs).First(limit as _);
+                let srcs = &iovs;
+
+                fops.WriteAt(task, self, srcs, current, blocking)?
+            } else {
+                fops.WriteAt(task, self, srcs, current, blocking)?
+            };
+
             if n > 0 {
                 *offsetLock = current + n;
             }
@@ -779,13 +800,20 @@ impl File {
              return Ok(cnt)
          }*/
 
-        let (limit, ok) = self.checkLimit(offset);
+        let (limit, ok) = self.checkLimit(task, offset);
         if ok && limit == 0 {
-            return Err(Error::ErrExceedsFileSizeLimit);
+            return Err(Error::ErrExceedsFileSizeLimit)
         }
 
         let blocking = self.Blocking();
-        let n = fops.WriteAt(task, self, srcs, offset, blocking)?;
+        let n = if ok {
+            let iovs = Iovs(srcs).First(limit as _);
+            let srcs = &iovs;
+
+            fops.WriteAt(task, self, srcs, offset, blocking)?
+        } else {
+            fops.WriteAt(task, self, srcs, offset, blocking)?
+        };
 
         return Ok(n);
     }

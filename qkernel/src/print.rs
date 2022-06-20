@@ -111,6 +111,26 @@ macro_rules! info {
 }
 
 #[macro_export]
+macro_rules! warn {
+    ($($arg:tt)*) => ({
+        if $crate::SHARESPACE.config.read().DebugLevel >= $crate::qlib::config::DebugLevel::Info {
+            //$crate::qlib::perf_tunning::PerfGoto($crate::qlib::perf_tunning::PerfType::Print);
+            let prefix = $crate::print::PrintPrefix();
+            let s = &format!($($arg)*);
+
+            if $crate::SHARESPACE.config.read().SyncPrint() {
+                let str = format!("[WARN] {} {}", prefix, s);
+                $crate::Kernel::HostSpace::SyncPrint($crate::qlib::config::DebugLevel::Error, &str);
+            } else {
+                 let str = format!("[WARN] {} {}\n", prefix, s);
+                 $crate::Kernel::HostSpace::Kprint(&str);
+            }
+            //$crate::qlib::perf_tunning::PerfGofrom($crate::qlib::perf_tunning::PerfType::Print);
+        }
+    });
+}
+
+#[macro_export]
 macro_rules! debug {
     ($($arg:tt)*) => ({
         if $crate::SHARESPACE.config.read().DebugLevel >= $crate::qlib::config::DebugLevel::Debug {

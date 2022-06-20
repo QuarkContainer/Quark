@@ -264,6 +264,40 @@ impl MRemapType {
     pub const MREMAP_FIXED: i32 = 1 << 1;
 }
 
+pub struct SignaCode {}
+
+impl SignaCode {
+    // SI_USER is sent by kill, sigsend, raise.
+    pub const SI_USER : i32 = 0;
+
+    // SI_KERNEL is sent by the kernel from somewhere.
+    pub const SI_KERNEL : i32 = 0x80;
+
+    // SI_QUEUE is sent by sigqueue.
+    pub const SI_QUEUE : i32 = -1;
+
+    // SI_TIMER is sent by timer expiration.
+    pub const SI_TIMER : i32 = -2;
+
+    // SI_MESGQ is sent by real time mesq state change.
+    pub const SI_MESGQ : i32 = -3;
+
+    // SI_ASYNCIO is sent by AIO completion.
+    pub const SI_ASYNCIO : i32 = -4;
+
+    // SI_SIGIO is sent by queued SIGIO.
+    pub const SI_SIGIO : i32 = -5;
+
+    // SI_TKILL is sent by tkill system call.
+    pub const SI_TKILL : i32 = -6;
+
+    // SI_DETHREAD is sent by execve() killing subsidiary threads.
+    pub const SI_DETHREAD : i32 = -7;
+
+    // SI_ASYNCNL is sent by glibc async name lookup completion.
+    pub const SI_ASYNCNL : i32 = -60;
+}
+
 #[derive(Copy, Clone, Default, Debug)]
 pub struct Signal(pub i32);
 

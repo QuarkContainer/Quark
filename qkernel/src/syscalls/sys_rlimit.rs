@@ -200,24 +200,3 @@ pub fn SysPrlimit64(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     return Ok(0);
 }
-
-/*pub fn SysPrlimit64(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
-    let pid = args.arg0;
-    let resource = args.arg1 as u64;
-    let newLimit = args.arg2 as u64;
-    let oldLimit = args.arg3 as u64;
-
-    let newLimit = if let Ok(newLimit) = task.CheckedV2P(newLimit) {
-        newLimit
-    } else {
-        return Err(Error::SysError(SysErr::EINVAL));
-    };
-
-    let oldLimit = if let Ok(oldLimit) = task.CheckedV2P(oldLimit) {
-        oldLimit
-    } else {
-        return Err(Error::SysError(SysErr::EINVAL));
-    };
-
-    return Ok(Kernel::HostSpace::PRLimit(pid as i32, resource as i32, newLimit, oldLimit));
-}*/

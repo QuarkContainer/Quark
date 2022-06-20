@@ -875,7 +875,32 @@ impl TaskStop for GroupStop {
     }
 }
 
+pub fn SignalInfoNoInfo(signo: Signal, sender: &Thread, receiver: &Thread) -> SignalInfo {
+    let info = SignalInfo {
+        Signo: signo.0,
+        Code: SignaCode::SI_USER,
+        ..Default::default()
+    };
+
+    let senderTg =  sender.ThreadGroup();
+    let senderPid = senderTg.PIDNamespace().IDOfThreadGroup(&senderTg);
+    let recUserns = receiver.UserNamespace();
+    let receiverUid = sender.Credentials().lock().RealKUID.In(&recUserns).OrOverflow();
+
+    info.Kill().pid = senderPid;
+    info.Kill().uid = receiverUid.0 as _;
+    return info
+}
+
 impl Task {
+    pub fn HandleExceedsFileSizeLimit(&self) -> Result<()> {
+        let thread = self.Thread();
+        let info = SignalInfoNoInfo(Signal(Signal::SIGXFSZ), &thread, &thread);
+        self.Thread().SendSignal(&info)?;
+
+        return Err(Error::SysError(SysErr::EFBIG));
+    }
+
     pub fn RunInterrupt(&mut self) -> TaskRunState {
         let task = self;
         // Interrupts are de-duplicated (if t is interrupted twice before
