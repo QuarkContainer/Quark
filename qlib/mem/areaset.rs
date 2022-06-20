@@ -532,7 +532,7 @@ impl<T: AreaValue> AreaSet<T> {
         return area.AreaSeg();
     }
 
-    // LowerBoundSegment returns the segment with the lowest range that contains a
+    // LowerBoundSeg returns the segment with the lowest range that contains a
     // key greater than or equal to min. If no such segment exists,
     // LowerBoundSegment returns a terminal iterator.
     pub fn LowerBoundSeg(&self, key: u64) -> AreaSeg<T> {

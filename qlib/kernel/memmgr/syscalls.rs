@@ -231,6 +231,23 @@ impl MemoryManager {
         // occupies at least part of the destination. Thus the NoMove case always
         // fails and the MayMove case always falls back to copying.
 
+        let vma = vseg.Value();
+        if newSize > oldSize && vma.mlockMode != MLockMode::MlockNone {
+            // Check against RLIMIT_MEMLOCK. Unlike mmap, mlock, and mlockall,
+            // mremap in Linux does not check mm/mlock.c:can_do_mlock() and
+            // therefore does not return EPERM if RLIMIT_MEMLOCK is 0 and
+            // !CAP_IPC_LOCK.
+            let creds = task.creds.clone();
+            let userns = creds.lock().UserNamespace.Root();
+            if !creds.HasCapabilityIn(Capability::CAP_IPC_LOCK, &userns) {
+                let mlockLimit = task.Thread().ThreadGroup().Limits().Get(LimitType::MemoryLocked).Cur;
+                let newLockedAS = self.mapping.lock().lockedAS - oldSize + newSize;
+                if newLockedAS > mlockLimit {
+                    return Err(Error::SysError(SysErr::EPERM))
+                }
+            }
+        }
+
         if opts.Move != MREMAP_MUST_MOVE {
             // Handle no-ops and in-place shrinking. These cases don't care if
             // [oldAddr, oldEnd) maps to a single vma, or is even mapped at all

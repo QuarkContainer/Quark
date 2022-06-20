@@ -20,6 +20,7 @@ use core::fmt;
 use super::super::super::addr::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
+use super::super::super::limits::*;
 use super::super::fs::host::hostinodeop::*;
 use super::super::task::*;
 use super::super::kernel::shm::*;
@@ -241,7 +242,7 @@ impl MemoryManager {
         );
     }
 
-    pub fn CreateVMAlocked(&self, _task: &Task, opts: &MMapOpts) -> Result<(AreaSeg<VMA>, Range)> {
+    pub fn CreateVMAlocked(&self, task: &Task, opts: &MMapOpts) -> Result<(AreaSeg<VMA>, Range)> {
         if opts.MaxPerms != opts.MaxPerms.Effective() {
             panic!(
                 "Non-effective MaxPerms {:?} cannot be enforced",
@@ -261,11 +262,27 @@ impl MemoryManager {
 
         let ar = Range::New(addr, opts.Length);
 
-        // todo: Check against RLIMIT_AS.
-        /*let mut newUsageAS = self.usageAS + opts.Length;
+        let mut newUsageAS = self.mapping.lock().usageAS + opts.Length;
         if opts.Unmap {
-            newUsageAS -= self.vmas.SpanRange(&ar);
-        }*/
+            newUsageAS -= self.mapping.lock().vmas.SpanRange(&ar);
+        }
+
+        let limitAS = task.Thread().ThreadGroup().Limits().Get(LimitType::AS).Cur;
+        if newUsageAS > limitAS {
+            return Err(Error::SysError(SysErr::EPERM))
+        }
+
+        if opts.MLockMode != MLockMode::MlockNone {
+            let mlockLimit = task.Thread().ThreadGroup().Limits().Get(LimitType::MemoryLocked).Cur;
+            if mlockLimit == 0 {
+                return Err(Error::SysError(SysErr::EPERM))
+            }
+
+            let newLockedAS = self.mapping.lock().lockedAS + ar.Len() + self.mlockedBytesRangeLocked(&ar);
+            if newLockedAS > mlockLimit {
+                return Err(Error::SysError(SysErr::EPERM))
+            }
+        }
 
         // Remove overwritten mappings. This ordering is consistent with Linux:
         // compare Linux's mm/mmap.c:mmap_region() => do_munmap(),
