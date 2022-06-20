@@ -199,7 +199,6 @@ impl LimitSet {
                     return Err(Error::SysError(SysErr::EPERM));
                 }
 
-                info!("Set ....");
                 if v.Cur > v.Max {
                     return Err(Error::SysError(SysErr::EINVAL));
                 }

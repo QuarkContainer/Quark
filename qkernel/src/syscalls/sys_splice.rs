@@ -90,9 +90,9 @@ pub fn Splice(task: &Task, dst: &File, src: &File, opts: &mut SpliceOpts) -> Res
         }
 
         // Enforce file limits.
-        let (limit, ok) = dst.checkLimit(opts.DstStart);
+        let (limit, ok) = dst.checkLimit(task, opts.DstStart);
         if ok && limit == 0 {
-            return Err(Error::ErrExceedsFileSizeLimit);
+            return Err(Error::ErrExceedsFileSizeLimit)
         } else if ok && limit < opts.DstStart {
             opts.Length = limit; // Cap the write.
         }

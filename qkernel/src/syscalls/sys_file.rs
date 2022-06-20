@@ -31,6 +31,7 @@ use super::super::qlib::auth::cap_set::*;
 use super::super::qlib::auth::id::*;
 use super::super::qlib::auth::*;
 use super::super::qlib::common::*;
+use super::super::qlib::limits::*;
 use super::super::qlib::linux::fcntl::*;
 use super::super::qlib::linux::time::*;
 use super::super::qlib::linux_def::*;
@@ -1730,6 +1731,11 @@ pub fn SysTruncate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Err(Error::SysError(SysErr::EINVAL));
     }
 
+    let rlimitSize = task.Thread().ThreadGroup().Limits().Get(LimitType::FileSize).Cur;
+    if len as u64 > rlimitSize {
+        return Err(Error::ErrExceedsFileSizeLimit)
+    }
+
     fileOpOn(
         task,
         ATType::AT_FDCWD,
@@ -1780,6 +1786,11 @@ pub fn SysFtruncate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     if len < 0 {
         return Err(Error::SysError(SysErr::EINVAL));
+    }
+
+    let rlimitSize = task.Thread().ThreadGroup().Limits().Get(LimitType::FileSize).Cur;
+    if len as u64 > rlimitSize {
+        return Err(Error::ErrExceedsFileSizeLimit)
     }
 
     let dirent = file.Dirent.clone();
@@ -2206,6 +2217,11 @@ pub fn SysFallocate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     if size < 0 {
         return Err(Error::SysError(SysErr::EFBIG));
+    }
+
+    let rlimitSize = task.Thread().ThreadGroup().Limits().Get(LimitType::FileSize).Cur;
+    if len as u64 > rlimitSize {
+        return Err(Error::ErrExceedsFileSizeLimit)
     }
 
     let dirent = file.Dirent.clone();
