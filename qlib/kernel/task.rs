@@ -449,7 +449,7 @@ impl Task {
     }
 
     pub fn NewFDAt(&mut self, fd: i32, file: &File, flags: &FDFlags) -> Result<()> {
-        return self.fdTbl.lock().NewFDAt(fd, file, flags);
+        return self.fdTbl.lock().NewFDAt(self, fd, file, flags);
     }
 
     pub fn FileOwner(&self) -> FileOwner {
@@ -481,7 +481,7 @@ impl Task {
     pub fn NewFDFrom(&self, fd: i32, file: &File, flags: &FDFlags) -> Result<i32> {
         //let fds = self.fdTbl.lock().NewFDs(fd, vec![file.clone()], flags)?;
         //return Ok(fds[0])
-        return self.fdTbl.lock().NewFDFrom(fd, file, flags);
+        return self.fdTbl.lock().NewFDFrom(self, fd, file, flags);
     }
 
     pub fn RemoveFile(&self, fd: i32) -> Result<File> {
@@ -492,7 +492,7 @@ impl Task {
     }
 
     pub fn Dup(&mut self, oldfd: u64) -> i64 {
-        match self.fdTbl.lock().Dup(oldfd as i32) {
+        match self.fdTbl.lock().Dup(self, oldfd as i32) {
             Ok(fd) => fd as i64,
             Err(Error::SysError(e)) => -e as i64,
             Err(e) => panic!("unsupport error {:?}", e),
@@ -500,7 +500,7 @@ impl Task {
     }
 
     pub fn Dup2(&mut self, oldfd: u64, newfd: u64) -> i64 {
-        match self.fdTbl.lock().Dup2(oldfd as i32, newfd as i32) {
+        match self.fdTbl.lock().Dup2(self, oldfd as i32, newfd as i32) {
             Ok(fd) => fd as i64,
             Err(Error::SysError(e)) => -e as i64,
             Err(e) => panic!("unsupport error {:?}", e),
@@ -511,7 +511,7 @@ impl Task {
         match self
             .fdTbl
             .lock()
-            .Dup3(oldfd as i32, newfd as i32, flags as i32)
+            .Dup3(self, oldfd as i32, newfd as i32, flags as i32)
         {
             Ok(fd) => fd as i64,
             Err(Error::SysError(e)) => -e as i64,
