@@ -16,9 +16,6 @@ Quark Container is high performance secure container runtime with following feat
 
 The performance slices is [performance.pdf](doc/performance.pdf). The detail test steps and result is [here](doc/perf_test.md)
 
-## RDMA optimization
-https://docs.google.com/presentation/d/1UcMsW45nNzapWabyhEJ5Ve0hxQ0yYgd0eRtlCydILl8/edit?usp=sharing
-
 ## Architecture
 
 Quark Container takes classic Linux Virtual Machine architecture as below. It includes an HyperVisor named QVisor and a guest kernel named QKernel. Unlike the common Linux Virtual Machine design, in which standard OS image such as Linux/Windows can run on Qumu. QVisor and QKernel are tightly coupled. QVisor only supports QKernel.
