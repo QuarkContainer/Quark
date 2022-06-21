@@ -95,7 +95,8 @@ impl StatusData {
         ret += &format!("PPid:\t{}\n", ppid);
         ret += &format!("TracerPid:\t{}\n", 0);
 
-        let fds = self.thread.lock().fdTbl.Count();
+        let fdTbl = self.thread.lock().fdTbl.clone();
+        let fds = fdTbl.Count();
         ret += &format!("FDSize:\t{}\n", fds);
 
         let mm = self.thread.lock().memoryMgr.clone();

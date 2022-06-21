@@ -12,12 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::vec::Vec;
 use core::cmp::*;
 use core::ops::Bound::*;
-use core::ops::Deref;
 
 use super::addr::*;
 use super::common::{Error, Result};
@@ -334,6 +332,7 @@ impl<T: core::clone::Clone> AreaMgr<T> {
     }
 }
 
+/*
 #[derive(Debug, Default)]
 pub struct BufMgr(QMutex<BufMgrIntern>);
 
@@ -421,6 +420,7 @@ impl BufMgrIntern {
         self.gapMgr.Free(start, len)
     }
 }
+*/
 
 #[derive(Debug, Clone, Default)]
 pub struct GapMgr {
@@ -533,7 +533,8 @@ impl GapMgr {
         let mut cStart = 0;
         let mut cLen = 0;
 
-        for (gStart, gLen) in self.map.range((Included(addr), Unbounded)).rev() {
+
+        for (gStart, gLen) in self.map.range((Included(self.range.start), Unbounded)) {
             //todo: optimize
             if *gStart + *gLen < addr + len || *gLen < len {
                 continue;
@@ -656,6 +657,10 @@ impl<T: core::clone::Clone> IdMgr<T> {
             len: len,
             last: 0,
         };
+    }
+
+    pub fn Take(&mut self, start: u64, len: u64) {
+        self.gaps.Take(start, len);
     }
 
     pub fn AllocId(&mut self) -> Result<u64> {

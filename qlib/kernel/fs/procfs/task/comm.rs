@@ -112,7 +112,7 @@ impl ReadonlyFileNode for CommReadonlyFileNode {
         }
 
         let buf = self.thread.lock().name.to_string() + "\n";
-        info!("CommReadonlyFileNode buf is {}", &buf);
+        //info!("CommReadonlyFileNode buf is {}", &buf);
         if offset as usize > buf.len() {
             return Ok(0);
         }

@@ -22,6 +22,7 @@ use core::ops::Bound::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::super::limits::*;
+use super::super::super::range::*;
 use super::super::task::*;
 use super::super::fs::file::*;
 use super::super::uid::*;
@@ -71,6 +72,80 @@ impl FDTable {
         return (self.0).1;
     }
 
+    pub fn Dup(&self, task: &Task, fd: i32) -> Result<i32> {
+        if fd < 0 {
+            return Err(Error::SysError(SysErr::EBADF));
+        }
+
+        let (f, flags) = self.lock().Get(fd)?;
+        return self.NewFDFrom(task, 0, &f, &flags);
+    }
+
+    pub fn Dup2(&self, task: &Task, oldfd: i32, newfd: i32) -> Result<i32> {
+        if oldfd < 0 {
+            return Err(Error::SysError(SysErr::EBADF));
+        }
+
+        if newfd < 0 {
+            return Err(Error::SysError(SysErr::EBADF));
+        }
+
+        let (f, flags) = self.lock().Get(oldfd)?;
+        self.NewFDAt(task, newfd, &f, &flags)?;
+        return Ok(newfd);
+    }
+
+    pub fn Dup3(&self, task: &Task, oldfd: i32, newfd: i32, flags: i32) -> Result<i32> {
+        if oldfd < 0 {
+            return Err(Error::SysError(SysErr::EBADF));
+        }
+
+        if newfd < 0 {
+            return Err(Error::SysError(SysErr::EBADF));
+        }
+
+        let closeOnExec = Flags(flags).CloseOnExec();
+
+
+        let (f, mut flags) = self.lock().Get(oldfd)?;
+        flags.CloseOnExec = closeOnExec;
+        self.NewFDAt(task, newfd, &f, &flags)?;
+        return Ok(newfd);
+    }
+
+    pub fn NewFDFrom(&self, task: &Task, fd: i32, file: &File, flags: &FDFlags) -> Result<i32> {
+        if fd < 0 {
+            return Err(Error::SysError(SysErr::EINVAL));
+        }
+
+        // Default limit.
+        let mut end = i32::MAX;
+
+        let lim = task.Thread().ThreadGroup().Limits().Get(LimitType::NumberOfFiles).Cur;
+        if lim != u64::MAX {
+            end = lim as i32;
+        }
+
+        if fd + 1 > end {
+            return Err(Error::SysError(SysErr::EMFILE));
+        }
+
+        return self.lock().NewFDFrom(task, fd, file, flags);
+    }
+
+    pub fn NewFDAt(&self, task: &Task, fd: i32, file: &File, flags: &FDFlags) -> Result<()> {
+        if fd < 0 {
+            return Err(Error::SysError(SysErr::EBADF));
+        }
+
+        let lim = task.Thread().ThreadGroup().Limits().Get(LimitType::NumberOfFiles).Cur;
+        if fd as u64 >= lim {
+            return Err(Error::SysError(SysErr::EMFILE));
+        }
+
+        return self.lock().NewFDAt(task, fd, file, flags);
+    }
+
     // Fork returns an independent FDTable, cloning all FDs up to maxFds (non-inclusive).
     pub fn Fork(&self, maxFds: i32) -> FDTable {
         let internal = self.lock().Fork(maxFds);
@@ -92,7 +167,7 @@ impl FDTable {
 }
 
 pub struct FDTableInternal {
-    pub next: i32,
+    pub gaps: GapMgr,
     pub descTbl: BTreeMap<i32, Descriptor>,
 }
 
@@ -105,7 +180,7 @@ impl Default for FDTableInternal {
 impl FDTableInternal {
     pub fn New() -> Self {
         return Self {
-            next: 0,
+            gaps: GapMgr::New(0, i32::MAX as u64),
             descTbl: BTreeMap::new(),
         };
     }
@@ -174,111 +249,21 @@ impl FDTableInternal {
         }
     }
 
-    pub fn NewFDFrom(&mut self, task: &Task, fd: i32, files: &File, flags: &FDFlags) -> Result<i32> {
-        if fd < 0 {
-            return Err(Error::SysError(SysErr::EINVAL));
-        }
+    fn NewFDFrom(&mut self, _task: &Task, fd: i32, files: &File, flags: &FDFlags) -> Result<i32> {
+        let newfd = match self.gaps.AllocAfter(fd as u64, 1, 0) {
+            Err(_) => return Err(Error::SysError(SysErr::EMFILE)),
+            Ok(newfd) => newfd as i32,
+        };
 
-        // Default limit.
-        let mut end = i32::MAX;
+        self.set(newfd, &files, flags);
 
-        let lim = task.Thread().ThreadGroup().Limits().Get(LimitType::NumberOfFiles).Cur;
-        if lim != u64::MAX {
-            end = lim as i32;
-        }
-
-        if fd + 1 > end {
-            return Err(Error::SysError(SysErr::EMFILE));
-        }
-
-        let mut fd = fd;
-        let mut reset = false;
-        if fd < self.next {
-            fd = self.next;
-            reset = true;
-        }
-
-        let mut found = false;
-        for i in fd..end {
-            let curr = self.descTbl.get(&i);
-
-            match curr {
-                None => {
-                    self.set(i, &files, flags);
-                    fd = i;
-                    found = true;
-                    break;
-                }
-                _ => (),
-            }
-        }
-
-        if !found {
-            return Err(Error::SysError(SysErr::EMFILE));
-        }
-
-        if reset {
-            self.next = fd + 1;
-        }
-
-        return Ok(fd);
+        return Ok(newfd);
     }
 
-    pub fn NewFDAt(&mut self, task: &Task, fd: i32, file: &File, flags: &FDFlags) -> Result<()> {
-        if fd < 0 {
-            return Err(Error::SysError(SysErr::EBADF));
-        }
-
-        let lim = task.Thread().ThreadGroup().Limits().Get(LimitType::NumberOfFiles).Cur;
-        if fd as u64 >= lim {
-            return Err(Error::SysError(SysErr::EMFILE));
-        }
-
+    fn NewFDAt(&mut self, _task: &Task, fd: i32, file: &File, flags: &FDFlags) -> Result<()> {
+        self.gaps.Take(fd as u64, 1);
         self.set(fd, file, flags);
         return Ok(());
-    }
-
-    pub fn Dup(&mut self, task: &Task, fd: i32) -> Result<i32> {
-        if fd < 0 {
-            return Err(Error::SysError(SysErr::EBADF));
-        }
-
-        let (f, flags) = self.Get(fd)?;
-        return self.NewFDFrom(task, 0, &f, &flags);
-    }
-
-    pub fn Dup2(&mut self, task: &Task, oldfd: i32, newfd: i32) -> Result<i32> {
-        if oldfd < 0 {
-            return Err(Error::SysError(SysErr::EBADF));
-        }
-
-        if newfd < 0 {
-            return Err(Error::SysError(SysErr::EBADF));
-        }
-
-        self.Remove(newfd);
-
-        let (f, flags) = self.Get(oldfd)?;
-        self.NewFDAt(task, newfd, &f, &flags)?;
-        return Ok(newfd);
-    }
-
-    pub fn Dup3(&mut self, task: &Task, oldfd: i32, newfd: i32, flags: i32) -> Result<i32> {
-        if oldfd < 0 {
-            return Err(Error::SysError(SysErr::EBADF));
-        }
-
-        if newfd < 0 {
-            return Err(Error::SysError(SysErr::EBADF));
-        }
-
-        self.Remove(newfd);
-        let closeOnExec = Flags(flags).CloseOnExec();
-
-        let (f, mut flags) = self.Get(oldfd)?;
-        flags.CloseOnExec = closeOnExec;
-        self.NewFDAt(task, newfd, &f, &flags)?;
-        return Ok(newfd);
     }
 
     pub fn SetFlags(&mut self, fd: i32, flags: &FDFlags) -> Result<()> {
@@ -327,7 +312,7 @@ impl FDTableInternal {
     // Fork returns an independent FDTable, cloning all FDs up to maxFds (non-inclusive).
     pub fn Fork(&self, maxFds: i32) -> FDTableInternal {
         let mut tbl = FDTableInternal {
-            next: self.next,
+            gaps: GapMgr::New(0, i32::MAX as u64),
             descTbl: BTreeMap::new(),
         };
 
@@ -335,6 +320,7 @@ impl FDTableInternal {
             if *fd >= maxFds {
                 break;
             }
+            tbl.gaps.Take(*fd as u64, 1);
             tbl.set(*fd, &file.file, &file.flags)
         }
 
@@ -363,10 +349,7 @@ impl FDTableInternal {
             return None;
         }
 
-        if fd < self.next {
-            self.next = fd;
-        }
-
+        self.gaps.Free(fd as u64, 1);
         let file = self.descTbl.remove(&fd);
 
         match file {
@@ -387,6 +370,7 @@ impl FDTableInternal {
         }
 
         for fd in &removed {
+            self.gaps.Free(*fd as u64, 1);
             let desc = self.descTbl.remove(fd).unwrap();
             self.Drop(&desc.file);
         }
@@ -399,6 +383,7 @@ impl FDTableInternal {
         }
 
         for fd in &removed {
+            self.gaps.Free(*fd as u64, 1);
             let desc = self.descTbl.remove(fd).unwrap();
             self.Drop(&desc.file);
         }
