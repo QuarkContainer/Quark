@@ -575,6 +575,9 @@ fn main() -> io::Result<()> {
             };
         }
 
+        let mut enable = 1;
+        let _res = libc::setsockopt(server_fd, libc::SOL_SOCKET, libc::SO_REUSEADDR, &mut enable as *mut _ as  *mut libc::c_void, 4);
+
         let result = libc::bind(
             server_fd,
             &serv_addr as *const libc::sockaddr_in as *const libc::sockaddr,
@@ -663,12 +666,12 @@ fn main() -> io::Result<()> {
         let rdmaConn = RDMAConn::New(
             sock_fd,
             sockBuf.clone(),
-            RDMA_SRV.keys[controlRegionId / 16][1],
+            RDMA_SRV.keys[controlRegionId / 1024][1],
         );
         let rdmaChannel = RDMAChannel::New(
             0,
-            RDMA_SRV.keys[controlRegionId / 16][0],
-            RDMA_SRV.keys[controlRegionId / 16][1],
+            RDMA_SRV.keys[controlRegionId / 1024][0],
+            RDMA_SRV.keys[controlRegionId / 1024][1],
             sockBuf.clone(),
             rdmaConn.clone(),
         );
@@ -759,7 +762,8 @@ fn main() -> io::Result<()> {
 
         RDMA_SRV.shareRegion.srvBitmap.store(1, Ordering::Release);
         RDMA.HandleCQEvent().unwrap();
-        RDMAProcessOnce(&mut HashMap::new());
+        // RDMAProcessOnce(&mut HashMap::new());
+        RDMAProcessOnce();
         // println!("Before sleep");
         let res = match syscall!(epoll_wait(
             epoll_fd,
@@ -813,12 +817,12 @@ fn main() -> io::Result<()> {
                     let rdmaConn = RDMAConn::New(
                         stream_fd,
                         sockBuf.clone(),
-                        RDMA_SRV.keys[controlRegionId / 16][1],
+                        RDMA_SRV.keys[controlRegionId / 1024][1],
                     );
                     let rdmaChannel = RDMAChannel::New(
                         0,
-                        RDMA_SRV.keys[controlRegionId / 16][0],
-                        RDMA_SRV.keys[controlRegionId / 16][1],
+                        RDMA_SRV.keys[controlRegionId / 1024][0],
+                        RDMA_SRV.keys[controlRegionId / 1024][1],
                         sockBuf.clone(),
                         rdmaConn.clone(),
                     );
@@ -903,7 +907,7 @@ fn main() -> io::Result<()> {
                     }
                 }
                 Some(FdType::RDMACompletionChannel) => {
-                    // println!("Got RDMA completion event");
+                    println!("Got RDMA completion event");
                     // let _cnt = RDMA.PollCompletionQueueAndProcess();
                     // RDMAProcess();
                     // RDMA.HandleCQEvent().unwrap();
@@ -947,13 +951,14 @@ fn main() -> io::Result<()> {
 
 fn RDMAProcess() {
     let mut start = TSC.Rdtsc();
-    let mut channels: HashMap<u32, HashSet<u32>> = HashMap::new();
+    // let mut channels: HashMap<u32, HashSet<u32>> = HashMap::new();
     loop {
-        let count = RDMAProcessOnce(&mut channels);
+        // let count = RDMAProcessOnce(&mut channels);
+        let count = RDMAProcessOnce();
         if count > 0 {
             start = TSC.Rdtsc();
         }
-        if TSC.Rdtsc() - start >= (IO_WAIT_CYCLES/100) {
+        if TSC.Rdtsc() - start >= (IO_WAIT_CYCLES) {
             break;
         }
         // if count == 0 {
@@ -966,14 +971,15 @@ fn RDMAProcess() {
     // SendConsumedData(&mut channels);
 }
 
-fn RDMAProcessOnce(channels: &mut HashMap<u32, HashSet<u32>>) -> usize {
+// fn RDMAProcessOnce(channels: &mut HashMap<u32, HashSet<u32>>) -> usize {
+fn RDMAProcessOnce() -> usize {
     let mut count = 0;
-    // let mut channels: HashMap<u32, HashSet<u32>> = HashMap::new();
-    count += RDMA.PollCompletionQueueAndProcess(channels);
+    let mut channels: HashMap<u32, HashSet<u32>> = HashMap::new();
+    count += RDMA.PollCompletionQueueAndProcess(& mut channels);
     // debug!("RDMAProcessOnce, channels: {:?}", channels);
-    // if channels.len() !=0 {
-    //     debug!("RDMAProcessOnce, channels: {}", channels.len());
-    // }
+    if channels.len() > 1 {
+        debug!("RDMAProcessOnce, channels: {}", channels.len());
+    }
     // SendConsumedData(&mut channels);
     count += RDMA_SRV.HandleClientRequest();
     count

@@ -104,7 +104,7 @@ impl RDMAAgent {
 
         //start from 2M registration.
         let mr = RDMA
-            .CreateMemoryRegion(&shareRegion.iobufs as *const _ as u64, 2 * 1024 * 1024)
+            .CreateMemoryRegion(&shareRegion.iobufs as *const _ as u64, 2 * 64 * 1024 * 1024)
             .unwrap();
         // debug!("RDMAAgent::New shareRegion: size: {}, addr: {:x}, clientBit: {:x}, cq: {:x}, sq: {:x} ioMeta: {:x}, buff: {:x}",
         //  size,
@@ -129,7 +129,7 @@ impl RDMAAgent {
                 len: size as u64,
             },
             shareRegion: Mutex::new(shareRegion),
-            ioBufIdMgr: Mutex::new(IdMgr::Init(0, 20)),
+            ioBufIdMgr: Mutex::new(IdMgr::Init(0, 1024)),
             keys: vec![[mr.LKey(), mr.RKey()]],
         }))
     }
@@ -172,8 +172,8 @@ impl RDMAAgent {
 
         let rdmaChannel = RDMAChannel::CreateRDMAChannel(
             channelId,
-            self.keys[ioBufIndex / 16][0],
-            self.keys[ioBufIndex / 16][1],
+            self.keys[ioBufIndex / 1024][0],
+            self.keys[ioBufIndex / 1024][1],
             sockBuf,
             rdmaConn,
             connectRequest,
@@ -204,8 +204,8 @@ impl RDMAAgent {
 
         let rdmaChannel = RDMAChannel::CreateClientChannel(
             channelId,
-            self.keys[ioBufIndex / 16][0],
-            self.keys[ioBufIndex / 16][1],
+            self.keys[ioBufIndex / 1024][0],
+            self.keys[ioBufIndex / 1024][1],
             sockBuf,
             rdmaConn,
             &connectReq,
@@ -351,6 +351,7 @@ impl RDMAAgent {
             },
             RDMAReqMsg::RDMARead(msg) => match RDMA_SRV.channels.lock().get(&msg.channelId) {
                 Some(rdmaChannel) => {
+                    // debug!("RDMAReqMsg::RDMARead, channel id: {}", rdmaChannel.localId);
                     rdmaChannel.SendConsumedData();
                 }
                 None => {

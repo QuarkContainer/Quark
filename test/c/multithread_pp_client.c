@@ -310,7 +310,7 @@ int main(int argc, char const *argv[])
     {
         shutdown(clientsocks[i], 1);
         if (read(clientsocks[i], recv_buffers[i], config.buffer_size) == 0) {
-            printf("read == 0\n");
+            // printf("read == 0\n");
             close(clientsocks[i]);
         }
     }

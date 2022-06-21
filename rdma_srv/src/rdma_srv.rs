@@ -222,7 +222,7 @@ impl RDMASrv {
                 addr: contrlAddr as u64,
                 len: controlSize as u64,
             },
-            controlBufIdMgr: Mutex::new(IdMgr::Init(0, 16)),
+            controlBufIdMgr: Mutex::new(IdMgr::Init(0, 1024)),
             keys: vec![[mr.LKey(), mr.RKey()]],
             controlChannels: Mutex::new(HashMap::new()),
             controlChannels2: Mutex::new(HashMap::new()),
@@ -318,6 +318,7 @@ impl RDMASrv {
         for agentId in agentIds.iter() {
             match rdmaAgents.get(agentId) {
                 Some(rdmaAgent) => {
+                    // rdmaAgent
                     count += rdmaAgent.HandleClientRequest();
                 }
                 None => {
