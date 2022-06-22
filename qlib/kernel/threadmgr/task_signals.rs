@@ -908,12 +908,20 @@ impl Task {
         // so early exits from this function must re-enter the runInterrupt state
         // to check for more interrupt-signaled conditions.
 
+        error!("RunInterrupt 1");
+        defer!(error!("RunInterrupt end"));
         let t = task.Thread();
+        error!("RunInterrupt 1.0");
         let tg = t.lock().tg.clone();
+        error!("RunInterrupt 1.1");
         let lock = tg.lock().signalLock.clone();
+        error!("RunInterrupt 1.2");
         let locker = lock.lock();
 
+        error!("RunInterrupt 1.3");
         let pidns = tg.PIDNamespace();
+        error!("RunInterrupt 1.4");
+
         let owner = pidns.lock().owner.clone();
 
         // Did we just leave a group stop?

@@ -422,6 +422,7 @@ impl BufMgrIntern {
 }
 */
 
+/*
 #[derive(Debug, Clone, Default)]
 pub struct GapMgr {
     pub range: Range,
@@ -715,3 +716,4 @@ impl<T: core::clone::Clone> IdMgr<T> {
         }
     }
 }
+*/
