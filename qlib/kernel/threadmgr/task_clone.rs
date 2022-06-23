@@ -665,6 +665,7 @@ pub fn CreateCloneTask(fromTask: &Task, toTask: &mut Task, userSp: u64) {
         toTask.context.fs = fromTask.context.fs;
         toTask.context.rsp = toTask.GetPtRegs() as *const _ as u64 - 8;
         toTask.context.rdi = userSp;
+        toTask.context.savefpsate = true;
         toTask.context.X86fpstate = Box::new(fromTask.context.X86fpstate.Fork());
         toPtRegs.rax = 0;
         toPtRegs.rsp = userSp;

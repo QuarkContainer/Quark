@@ -276,7 +276,7 @@ pub extern "C" fn syscall_handler(
         );
     }
 
-    currTask.SaveFp();
+    //currTask.SaveFp();
 
     let enterAppTimestamp = CPULocal::Myself().ResetEnterAppTimestamp() as i64;
     let worktime = Tsc::Scale(startTime - enterAppTimestamp) * 1000; // the thread has used up time slot

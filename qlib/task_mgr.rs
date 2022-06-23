@@ -74,6 +74,7 @@ pub struct Context {
 
     pub ready: AtomicU64,
     pub fs: u64,
+    pub savefpsate: bool,
     pub X86fpstate: Box<X86fpstate>,
     // job queue id
     pub queueId: AtomicUsize,
@@ -95,6 +96,7 @@ impl Context {
             ready: AtomicU64::new(1),
 
             fs: 0,
+            savefpsate: false,
             X86fpstate: Default::default(),
             queueId: AtomicUsize::new(0),
             links: Links::default(),

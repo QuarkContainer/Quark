@@ -137,6 +137,9 @@ pub fn WaitFn() {
             Some(newTask) => {
                 let current = TaskId::New(CPULocal::CurrentTask());
                 CPULocal::Myself().SwitchToRunning();
+                if !Task::Current().context.savefpsate {
+                    Task::Current().SaveFp();
+                }
                 switch(current, newTask);
 
                 let pendingFreeStack = CPULocal::PendingFreeStack();
@@ -192,6 +195,9 @@ pub fn Wait() {
             //let vcpuId = newTask.GetTask().queueId;
             //assert!(CPULocal::CpuId()==vcpuId, "cpu {}, target cpu {}", CPULocal::CpuId(), vcpuId);
 
+            if !Task::Current().context.savefpsate {
+                Task::Current().SaveFp();
+            }
             CPULocal::Myself().SwitchToRunning();
             if current.data != newTask.data {
                 switch(current, newTask);
