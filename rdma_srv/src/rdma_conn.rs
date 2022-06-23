@@ -421,16 +421,16 @@ impl RDMAConn {
                 self.controlRequestsQueue
                     .lock()
                     .push_back(rdmaChannel.localId);
-                println!(
-                    "self.controlRequestsQueue.lock(), len: {}",
-                    self.controlRequestsQueue.lock().len()
-                );
+                // println!(
+                //     "self.controlRequestsQueue.lock(), len: {}",
+                //     self.controlRequestsQueue.lock().len()
+                // );
             } else {
                 self.requestsQueue.lock().push_back(rdmaChannel.localId);
-                println!(
-                    "self.requestsQueue.lock(), len: {}",
-                    self.requestsQueue.lock().len()
-                );
+                // println!(
+                //     "self.requestsQueue.lock(), len: {}",
+                //     self.requestsQueue.lock().len()
+                // );
             }
 
             // println!(

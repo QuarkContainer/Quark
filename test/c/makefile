@@ -12,6 +12,10 @@ epoll_client: epoll_client.c
 	gcc -o epollc epoll_client.c
 epoll_server: epoll_server.c
 	gcc -o epolls epoll_server.c
+epoll_pp_client: epoll_pp_client.c
+	gcc -o epc epoll_pp_client.c
+epoll_pp_server: epoll_pp_server.c
+	gcc -o eps epoll_pp_server.c
 multithread_client: multithread_client.c
 	gcc -pthread -o mc multithread_client.c
 multithread_server: multithread_server.c
