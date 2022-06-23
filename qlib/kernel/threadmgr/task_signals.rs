@@ -908,19 +908,12 @@ impl Task {
         // so early exits from this function must re-enter the runInterrupt state
         // to check for more interrupt-signaled conditions.
 
-        error!("RunInterrupt 1");
-        defer!(error!("RunInterrupt end"));
         let t = task.Thread();
-        error!("RunInterrupt 1.0");
         let tg = t.lock().tg.clone();
-        error!("RunInterrupt 1.1");
         let lock = tg.lock().signalLock.clone();
-        error!("RunInterrupt 1.2");
         let locker = lock.lock();
 
-        error!("RunInterrupt 1.3");
         let pidns = tg.PIDNamespace();
-        error!("RunInterrupt 1.4");
 
         let owner = pidns.lock().owner.clone();
 
@@ -1152,6 +1145,9 @@ impl Task {
 
         userStack.sp = fpStart + fpSize as u64;
         userStack.PushU32(self, Self::FP_XSTATE_MAGIC2)?;
+        if !self.context.savefpsate {
+            self.SaveFp();
+        }
         let fpstate = self.context.X86fpstate.Slice();
         if fpstate.len() > 512 {
             userStack.PushSlice(self, &self.context.X86fpstate.Slice()[512..])?;
@@ -1238,6 +1234,7 @@ impl Task {
             let slice = self.context.X86fpstate.Slice();
             userStack.PopSlice(self, slice)?;
             self.context.X86fpstate.SanitizeUser();
+            self.context.savefpsate = true;
         }
 
         let alt = uc.Stack;

@@ -237,12 +237,16 @@ impl Task {
         self.ioUsage = dummyTask.ioUsage.clone();
     }
 
-    pub fn SaveFp(&self) {
+    pub fn SaveFp(&mut self) {
         self.context.X86fpstate.SaveFp();
+        self.context.savefpsate = true;
     }
 
-    pub fn RestoreFp(&self) {
-        self.context.X86fpstate.RestoreFp();
+    pub fn RestoreFp(&mut self) {
+        if self.context.savefpsate {
+            self.context.X86fpstate.RestoreFp();
+            self.context.savefpsate = false;
+        }
     }
 
     pub fn QueueId(&self) -> usize {

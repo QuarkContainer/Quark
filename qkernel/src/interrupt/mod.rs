@@ -619,7 +619,7 @@ pub fn HandleFault(
         panic!();
     }
 
-    task.SaveFp();
+    //task.SaveFp();
 
     let mut info = SignalInfo {
         Signo: signal, //Signal::SIGBUS,
@@ -710,7 +710,7 @@ pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
             }
 
             currTask.AccountTaskLeave(SchedState::RunningApp);
-            currTask.SaveFp();
+            //currTask.SaveFp();
 
             super::qlib::kernel::taskMgr::Yield();
             MainRun(currTask, TaskRunState::RunApp);
