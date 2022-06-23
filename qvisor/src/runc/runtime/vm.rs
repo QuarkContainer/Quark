@@ -12,16 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use kvm_ioctls::{Cap, Kvm, VmFd};
 //use kvm_bindings::{kvm_userspace_memory_region, KVM_CAP_X86_DISABLE_EXITS, kvm_enable_cap, KVM_X86_DISABLE_EXITS_HLT, KVM_X86_DISABLE_EXITS_MWAIT};
 use alloc::sync::Arc;
-use core::sync::atomic::AtomicI32;
-use core::sync::atomic::Ordering;
-use kvm_bindings::*;
-use lazy_static::lazy_static;
+use core::sync::atomic::{AtomicI32, AtomicU64, Ordering};
 use std::os::unix::io::AsRawFd;
 use std::os::unix::io::FromRawFd;
 use std::thread;
+
+use kvm_bindings::*;
+use kvm_ioctls::{Cap, Kvm, VmFd};
+use lazy_static::lazy_static;
+use nix::sys::signal;
+
+use crate::qlib::MAX_VCPU_COUNT;
 
 use super::super::super::elf_loader::*;
 use super::super::super::kvm_vcpu::*;
@@ -55,6 +58,7 @@ use super::super::super::{
 
 lazy_static! {
     static ref EXIT_STATUS: AtomicI32 = AtomicI32::new(-1);
+    static ref DUMP: AtomicU64 = AtomicU64::new(0);
 }
 
 #[inline]
@@ -68,6 +72,20 @@ pub fn SetExitStatus(status: i32) {
 
 pub fn GetExitStatus() -> i32 {
     return EXIT_STATUS.load(Ordering::Acquire);
+}
+
+pub fn Dump(id: usize) -> bool {
+    assert!(id < MAX_VCPU_COUNT);
+    return DUMP.load(Ordering::Acquire) & (0x1 << id) > 0;
+}
+
+pub fn SetDumpAll() {
+    DUMP.store(u64::MAX, Ordering::Release);
+}
+
+pub fn ClearDump(id: usize) {
+    assert!(id < MAX_VCPU_COUNT);
+    DUMP.fetch_and(!(0x1 << id), Ordering::Release);
 }
 
 pub struct VirtualMachine {
@@ -167,9 +185,7 @@ impl VirtualMachine {
 
         let sharespace = SHARE_SPACE.Ptr();
         let logfd = super::super::super::print::LOG.Logfd();
-        URING_MGR
-            .lock()
-            .Init();
+        URING_MGR.lock().Init();
 
         URING_MGR.lock().Addfd(logfd).unwrap();
 
@@ -376,7 +392,7 @@ impl VirtualMachine {
 
     pub fn run(&mut self) -> Result<i32> {
         let cpu = self.vcpus[0].clone();
-
+        SetSigusr1Handler();
         let mut threads = Vec::new();
         let tgid = unsafe { libc::gettid() };
         threads.push(
@@ -435,4 +451,28 @@ impl VirtualMachine {
     pub fn PrintQ(shareSpace: &ShareSpace, vcpuId: u64) -> String {
         return shareSpace.scheduler.PrintQ(vcpuId);
     }
+}
+
+fn SetSigusr1Handler() {
+    let sig_action = signal::SigAction::new(
+        signal::SigHandler::Handler(handleSigusr1),
+        signal::SaFlags::empty(),
+        signal::SigSet::empty(),
+    );
+    unsafe {
+        signal::sigaction(signal::Signal::SIGUSR1, &sig_action)
+            .expect("sigusr1 sigaction set fail");
+    }
+}
+
+extern "C" fn handleSigusr1(_signal: i32) {
+    SetDumpAll();
+    let vms = VMS.lock();
+    for vcpu in &vms.vcpus {
+        if vcpu.state.load(Ordering::Acquire) == KVMVcpuState::HOST as u64 {
+            vcpu.dump().unwrap_or_default();
+        }
+        vcpu.Signal(Signal::SIGCHLD);
+    }
+    drop(vms);
 }

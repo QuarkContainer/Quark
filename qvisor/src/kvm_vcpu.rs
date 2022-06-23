@@ -17,34 +17,36 @@ use alloc::slice;
 use core::mem::size_of;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
+use std::os::unix::io::AsRawFd;
+use std::sync::atomic::{fence, AtomicBool};
+
 use kvm_bindings::*;
 use kvm_ioctls::VcpuExit;
 use libc::*;
 use nix::sys::signal;
-use std::os::unix::io::AsRawFd;
 
-use super::syncmgr::*;
+use crate::qlib::cpuid::XSAVEFeature::{XSAVEFeatureBNDCSR, XSAVEFeatureBNDREGS};
+use crate::qlib::kernel::asm::xgetbv;
+
 use super::*;
+//use super::qlib::kernel::TSC;
+use super::amd64_def::*;
+use super::qlib::buddyallocator::ZeroPage;
+use super::qlib::*;
 //use super::kvm_ctl::*;
 use super::qlib::common::*;
+use super::qlib::kernel::IOURING;
+use super::qlib::GetTimeCall;
 //use super::qlib::kernel::stack::*;
 use super::qlib::linux::time::Timespec;
 use super::qlib::linux_def::*;
 use super::qlib::pagetable::*;
 use super::qlib::perf_tunning::*;
 use super::qlib::task_mgr::*;
-use super::qlib::GetTimeCall;
-//use super::qlib::kernel::TSC;
-use super::amd64_def::*;
-use super::qlib::buddyallocator::ZeroPage;
-use super::qlib::kernel::IOURING;
 use super::qlib::vcpu_mgr::*;
-use super::qlib::*;
 use super::runc::runtime::vm::*;
+use super::syncmgr::*;
 use super::URING_MGR;
-use crate::qlib::cpuid::XSAVEFeature::{XSAVEFeatureBNDCSR, XSAVEFeatureBNDREGS};
-use crate::qlib::kernel::asm::xgetbv;
-use std::sync::atomic::{fence, AtomicBool};
 
 #[repr(C)]
 pub struct SignalMaskStruct {
@@ -471,6 +473,7 @@ impl KVMVcpu {
                 Err(e) => {
                     if e.errno() == SysErr::EINTR {
                         self.vcpu.set_kvm_immediate_exit(0);
+                        self.dump()?;
                         if self.vcpu.get_ready_for_interrupt_injection() > 0 {
                             VcpuExit::IrqWindowOpen
                         } else {
@@ -987,6 +990,42 @@ impl KVMVcpu {
         if self.interrupting.swap(true, Ordering::AcqRel) == false {
             self.Signal(Signal::SIGCHLD);
         }
+    }
+
+    pub fn dump(&self) -> Result<()> {
+        if !Dump(self.id) {
+            return Ok(());
+        }
+        defer!(ClearDump(self.id));
+        let regs = self
+            .vcpu
+            .get_regs()
+            .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+        let sregs = self
+            .vcpu
+            .get_sregs()
+            .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+        error!("vcpu regs: {:#x?}", regs);
+        let ss = sregs.ss.selector as u64;
+        let isUser = (ss & 0x3) != 0;
+        if isUser {
+            error!("vcpu {} is in user mode, skip", self.id);
+            return Ok(());
+        }
+        let kernelMemRegionSize = QUARK_CONFIG.lock().KernelMemSize;
+        let mut frames = String::new();
+        crate::qlib::backtracer::trace(regs.rip, regs.rsp, regs.rbp, &mut |frame| {
+            frames.push_str(&format!("{:#x?}\n", frame));
+            if frame.rbp < MemoryDef::PHY_LOWER_ADDR
+                || frame.rbp >= MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB
+            {
+                false
+            } else {
+                true
+            }
+        });
+        error!("vcpu {} stack: {}", self.id, frames);
+        Ok(())
     }
 }
 

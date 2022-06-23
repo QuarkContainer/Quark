@@ -14,9 +14,9 @@
 
 #[derive(Debug, Clone)]
 pub struct Frame {
-    rbp: u64,
-    rsp: u64,
-    rip: u64,
+    pub rbp: u64,
+    pub rsp: u64,
+    pub rip: u64,
 }
 
 impl Frame {
