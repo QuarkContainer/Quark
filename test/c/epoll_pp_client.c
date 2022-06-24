@@ -325,7 +325,6 @@ static void add_event2(int epollfd,int fd, int index, int state)
     epoll_ctl(epollfd,EPOLL_CTL_ADD,fd,&ev);
 }
 
-
 static void delete_event(int epollfd,int fd,int state)
 {
     struct epoll_event ev;

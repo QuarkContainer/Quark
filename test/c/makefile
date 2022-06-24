@@ -24,6 +24,10 @@ multithread_pp_client: multithread_pp_client.c
 	gcc -pthread -o mpc multithread_pp_client.c
 multithread_pp_server: multithread_pp_server.c
 	gcc -pthread -o mps multithread_pp_server.c
+multithread_epoll_pp_client: multithread_epoll_pp_client.c
+	gcc -pthread -o mepc multithread_epoll_pp_client.c
+multithread_epoll_pp_server: multithread_epoll_pp_server.c
+	gcc -pthread -o meps multithread_epoll_pp_server.c
 server_benchmark: server_benchmark.c
 	gcc -o serverb server_benchmark.c
 client_benchmark: client_benchmark.c

@@ -958,7 +958,7 @@ fn RDMAProcess() {
         if count > 0 {
             start = TSC.Rdtsc();
         }
-        if TSC.Rdtsc() - start >= (IO_WAIT_CYCLES) {
+        if TSC.Rdtsc() - start >= (IO_WAIT_CYCLES/100) {
             break;
         }
         // if count == 0 {
