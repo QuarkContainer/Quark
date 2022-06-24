@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use spin::Mutex;
-use std::collections::HashMap;
-
 use super::id_mgr::IdMgr;
 use super::qlib::rdma_share::*;
 use super::rdma::*;
@@ -22,7 +19,10 @@ use super::rdma_agent::*;
 use super::rdma_channel::*;
 use super::rdma_conn::*;
 use super::rdma_ctrlconn::*;
+use core::sync::atomic::Ordering;
 use lazy_static::lazy_static;
+use spin::Mutex;
+use std::collections::HashMap;
 use std::ffi::CString;
 use std::mem::MaybeUninit;
 use std::sync::Arc;
@@ -310,22 +310,69 @@ impl RDMASrv {
         }
     }
 
+    // pub fn HandleClientRequest(&self) -> usize {
+    //     let agentIds = self.shareRegion.getAgentIds();
+    //     // println!("agentIds: {:?}", agentIds);
+    //     let rdmaAgents = self.agents.lock();
+    //     let mut count = 0;
+    //     for agentId in agentIds.iter() {
+    //         match rdmaAgents.get(agentId) {
+    //             Some(rdmaAgent) => {
+    //                 // rdmaAgent
+    //                 count += rdmaAgent.HandleClientRequest();
+    //             }
+    //             None => {
+    //                 println!("RDMA agent with id {} doesn't exist", agentId);
+    //             }
+    //         }
+    //     }
+    //     count
+    // }
+
     pub fn HandleClientRequest(&self) -> usize {
-        let agentIds = self.shareRegion.getAgentIds();
-        // println!("agentIds: {:?}", agentIds);
-        let rdmaAgents = self.agents.lock();
         let mut count = 0;
-        for agentId in agentIds.iter() {
-            match rdmaAgents.get(agentId) {
-                Some(rdmaAgent) => {
-                    // rdmaAgent
-                    count += rdmaAgent.HandleClientRequest();
+        for l1idx in 0..8 {
+            // println!("l1idx: {}", l1idx);
+            let mut l1 = self.shareRegion.bitmap.l1bitmap[l1idx].swap(0, Ordering::SeqCst);
+            // println!("l1: {:x}", l1);
+            for l1pos in 0..64 {
+                if l1 == 0 {
+                    // println!("break for l1idx: {}", l1idx);
+                    break;
                 }
-                None => {
-                    println!("RDMA agent with id {} doesn't exist", agentId);
+                if l1 % 2 == 1 {
+                    let l2idx = l1idx * 64 + l1pos;
+                    // println!("l2idx: {}", l2idx);
+                    if l2idx > 502 {
+                        break;
+                    }
+                    let mut l2 = self.shareRegion.bitmap.l2bitmap[l2idx as usize].swap(0, Ordering::SeqCst);
+                    // println!("l2: {:x}", l2);
+                    for l2pos in 0..64 {
+                        if l2 == 0 {
+                            // println!("before break, l2pos: {}", l2pos);
+                            break;
+                        }
+                        if l2 % 2 == 1 {
+                            let agentId = (l2idx * 64 + l2pos) as u32;
+                            let rdmaAgents = self.agents.lock();
+                            match rdmaAgents.get(&agentId) {
+                                Some(rdmaAgent) => {
+                                    // rdmaAgent
+                                    count += rdmaAgent.HandleClientRequest();
+                                }
+                                None => {
+                                    println!("RDMA agent with id {} doesn't exist", agentId);
+                                }
+                            }
+                        }
+                        l2 >>= 1;
+                    }
                 }
+                l1 >>= 1
             }
         }
+
         count
     }
 

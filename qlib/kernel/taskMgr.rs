@@ -167,7 +167,7 @@ pub fn PollAsyncMsg() -> usize {
 
     let mut ret = QUringTrigger();
     // ret += GlobalRDMASvcCli().DrainCompletionQueue();
-    // ret += GlobalRDMASvcCli().ProcessRDMASvcMessage();
+    ret += GlobalRDMASvcCli().ProcessRDMASvcMessage();
     if Shutdown() {
         return 0;
     }

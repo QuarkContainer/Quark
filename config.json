@@ -19,7 +19,7 @@
   "EnableRDMA"    : true,
   "RDMAPort"      : 1,
   "PerSandboxLog" : false,
-  "ReserveCpuCount": 6,
+  "ReserveCpuCount": 1,
   "EnableMemInfo" : true,
   "ShimMode"      : false
 }
