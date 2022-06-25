@@ -44,6 +44,7 @@ char **recv_buffers;
 int *clientsocks;
 // int *readNum;
 int *epollfds;
+int *readCountLeft;
 
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -53,6 +54,14 @@ static void add_event(int epollfd,int fd,int state)
     ev.events = state;
     ev.data.fd = fd;
     epoll_ctl(epollfd,EPOLL_CTL_ADD,fd,&ev);
+}
+
+static void add_event2(int epollfd, int fd, int index, int state)
+{
+    struct epoll_event ev;
+    ev.events = state;
+    ev.data.u32 = index;
+    epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev);
 }
 
 void *socketThread(void *arg)
@@ -86,14 +95,16 @@ void *socketThread(void *arg)
         }
         for (int i = 0; i < ret; i++)
         {
-            int fd = events[i].data.fd;
+            int idx = events[i].data.u32;
+            int fd = clientsocks[idx];
+
             // printf(" i: %d, ret: %d\n", i, ret);
             if (config.log)
             {
                 // printf("fd: %d got notification\n", fd);
             }
 
-            int nread = read(fd, recv_buffers[index], config.buffer_size);
+            int nread = read(fd, recv_buffers[index], readCountLeft[idx]);
 
             if (nread == 0)
             {
@@ -106,11 +117,19 @@ void *socketThread(void *arg)
             // printf("**** i: %d, ret: %d\n", i, ret);
 
 
-            if (nread == -1 || nread != config.buffer_size)
+            if (nread == -1)
             {
                 printf("Error printed by perror, nread: %d\n", nread);
                 return;
             }
+
+            if (nread < readCountLeft[idx])
+            {
+                readCountLeft[idx] -= nread;
+                continue;
+            }
+
+            readCountLeft[idx] = config.buffer_size;
 
             int nwrite = write(fd, send_buffer, config.buffer_size);
 
@@ -252,6 +271,7 @@ int main(int argc, char const *argv[])
     int connectionNum = coreNum * threadnum;
     pthread_t *tid = malloc(sizeof(pthread_t) * coreNum);
     clientsocks = malloc(connectionNum * sizeof(int));
+    readCountLeft = malloc(connectionNum * sizeof(int));
     // readNum = malloc(connectionNum * sizeof(int));
     epollfds = malloc(coreNum * sizeof(int));
     for (int i = 0; i < connectionNum; i++)
@@ -270,6 +290,7 @@ int main(int argc, char const *argv[])
         }
 
         clientsocks[i] = new_socket;
+        readCountLeft[i] = config.buffer_size;
         // readNum[i] = 0;
     }
 
@@ -279,7 +300,7 @@ int main(int argc, char const *argv[])
         for (int j = 0; j < threadnum; j++)
         {
             int idx = i * threadnum + j;
-            add_event(epollfds[i], clientsocks[idx], EPOLLIN|EPOLLET);
+            add_event2(epollfds[i], clientsocks[idx], idx, EPOLLIN|EPOLLET);
             // printf("epollfd: %d watches sock: %d\n", epollfds[i], clientsocks[idx]);
         }
     }

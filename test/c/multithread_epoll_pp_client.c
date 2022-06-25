@@ -46,6 +46,8 @@ char *send_buffer;
 int *clientsocks;
 int *epollfds;
 int *readNum;
+int *readCountLeft;
+int *writeCountLeft;
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
 static void add_event2(int epollfd, int fd, int index, int state)
@@ -100,17 +102,26 @@ void *clientThread(void *arg)
                 printf("fd: %d got notification\n", fd);
             }
 
-            int nread = read(fd, recv_buffers[index], config.buffer_size);
+            int nread = read(fd, recv_buffers[index], readCountLeft[idx]);
             if (config.log)
             {
                 printf("read %d \n", nread);
             }
 
-            if (nread == -1 || nread != config.buffer_size)
+            if (nread == -1)
             {
                 perror("Error printed by perror");
                 return;
             }
+
+            if (nread < readCountLeft[idx])
+            {
+                readCountLeft[idx] -= nread;
+                continue;
+            }
+
+            readCountLeft[idx] = config.buffer_size;
+
             readNum[idx] += 1;
             if (readNum[idx] == config.count)
             {
@@ -227,6 +238,8 @@ int main(int argc, char const *argv[])
     int connectionNum = coreNum * threadnum;
     clientsocks = malloc(connectionNum * sizeof(int));
     readNum = malloc(connectionNum * sizeof(int));
+    readCountLeft = malloc(connectionNum * sizeof(int));
+    writeCountLeft = malloc(connectionNum * sizeof(int));
     epollfds = malloc(coreNum * sizeof(int));
 
     config.totalbytes = config.buffer_size * readCount;
@@ -276,6 +289,9 @@ int main(int argc, char const *argv[])
 
         printf("connected! used time: %f\n", cws);
         clientsocks[i] = sock;
+        readNum[i] = 0;
+        readCountLeft[i] = config.buffer_size;
+        writeCountLeft[i] = config.buffer_size;
     }
 
     for (int i = 0; i < coreNum; i++)
