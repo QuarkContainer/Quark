@@ -116,8 +116,7 @@ impl KernelELF {
                         .FileOffset(Addr(header.offset).RoundDown()?.0)
                         .MapPrivate()
                         .ProtoRead()
-                        .ProtoWrite()
-                        .ProtoExec();
+                        .ProtoWrite();
 
                     let mr = option.Map()?;
                     assert!(mr.ptr == startMem.0 + pageOffset);

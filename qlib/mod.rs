@@ -53,6 +53,7 @@ pub mod sort_arr;
 pub mod task_mgr;
 pub mod uring;
 pub mod usage;
+pub mod backtracer;
 
 pub mod kernel;
 pub mod rdma_share;
