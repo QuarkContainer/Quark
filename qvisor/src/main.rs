@@ -161,7 +161,7 @@ pub fn InitSingleton() {
 }
 
 #[global_allocator]
-static ALLOCATOR: HostAllocator = HostAllocator::New();
+pub static ALLOCATOR: HostAllocator = HostAllocator::New();
 
 fn main() {
     InitSingleton();

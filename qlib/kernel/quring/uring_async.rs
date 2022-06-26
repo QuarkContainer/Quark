@@ -171,6 +171,11 @@ impl AsyncOps {
 pub struct UringAsyncMgr {
     pub ops: Vec<QMutex<AsyncOps>>,
     pub ids: QMutex<VecDeque<u16>>,
+
+    // It might not be ok to free AsyncOps in Qvisor (Some drop function will use qkernel's version).
+    // That's weird rust compiler behavior. So we have to store the idx here
+    // and wait for qkernel to clear it.
+    pub freeids: QMutex<VecDeque<u16>>,
 }
 
 unsafe impl Sync for UringAsyncMgr {}
@@ -187,7 +192,18 @@ impl UringAsyncMgr {
         return Self {
             ops: ops,
             ids: QMutex::new(ids),
+            freeids: QMutex::new(VecDeque::new()),
         };
+    }
+
+    pub fn Clear(&self) {
+        loop {
+            let id = match self.freeids.lock().pop_front() {
+                None => break,
+                Some(id) => id
+            };
+            self.freeSlot(id as _);
+        }
     }
 
     pub fn Print(&self) {
@@ -200,13 +216,15 @@ impl UringAsyncMgr {
     }
 
     pub fn AllocSlot(&self) -> Option<usize> {
+        self.Clear();
         match self.ids.lock().pop_front() {
             None => None,
             Some(id) => Some(id as usize),
         }
     }
 
-    pub fn FreeSlot(&self, id: usize) {
+    pub fn freeSlot(&self, id: usize) {
+        *self.ops[id].lock() = AsyncOps::None;
         self.ids.lock().push_back(id as u16);
     }
 
@@ -448,7 +466,7 @@ pub struct AsyncBufWrite {
     pub fd: i32,
     pub buf: DataBuff,
     pub offset: i64,
-    pub lockGuard: QAsyncLockGuard,
+    pub lockGuard: Option<QAsyncLockGuard>,
 }
 
 impl AsyncBufWrite {
@@ -466,6 +484,7 @@ impl AsyncBufWrite {
 
     pub fn Process(&mut self, result: i32) -> bool {
         assert!(result as usize == self.buf.Len(), "result is {}, self.buf.len() is {}", result, self.buf.Len());
+        self.lockGuard = None;
         return false;
     }
 
@@ -474,7 +493,7 @@ impl AsyncBufWrite {
             fd,
             buf,
             offset,
-            lockGuard,
+            lockGuard: Some(lockGuard),
         };
     }
 }

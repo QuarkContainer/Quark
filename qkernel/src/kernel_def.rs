@@ -25,6 +25,8 @@ use super::qlib::kernel::taskMgr::*;
 use super::qlib::kernel::threadmgr::task_sched::*;
 use super::qlib::kernel::SHARESPACE;
 use super::qlib::kernel::TSC;
+use super::qlib::kernel::vcpu::*;
+use super::qlib::kernel::quring::uring_async::UringAsyncMgr;
 
 use super::qlib::common::*;
 use super::qlib::kernel::memmgr::pma::*;
@@ -387,5 +389,30 @@ pub fn HugepageDontNeed(addr: u64) {
 impl IOMgr {
     pub fn Init() -> Result<Self> {
         return Err(Error::Common(format!("IOMgr can't init in kernel")))
+    }
+}
+
+
+unsafe impl GlobalAlloc for GlobalVcpuAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        if !self.init.load(Ordering::Relaxed) {
+            return GLOBAL_ALLOCATOR
+                .alloc(layout);
+        }
+        return CPU_LOCAL[VcpuId()].AllocatorMut().alloc(layout)
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        if !self.init.load(Ordering::Relaxed) {
+            return GLOBAL_ALLOCATOR
+                .dealloc(ptr, layout);
+        }
+        return CPU_LOCAL[VcpuId()].AllocatorMut().dealloc(ptr, layout)
+    }
+}
+
+impl UringAsyncMgr {
+    pub fn FreeSlot(&self, id: usize) {
+        self.freeSlot(id);
     }
 }

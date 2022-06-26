@@ -4,6 +4,7 @@ use core::sync::atomic::Ordering;
 use libc::*;
 use std::fmt;
 
+use super::qlib::kernel::quring::uring_async::UringAsyncMgr;
 use super::qlib::common::*;
 use super::qlib::control_msg::*;
 use super::qlib::kernel::memmgr::pma::*;
@@ -305,4 +306,10 @@ pub fn HugepageDontNeed(addr: u64) {
         )
     };
     assert!(ret == 0, "HugepageDontNeed::Host fail with {}", ret)
+}
+
+impl UringAsyncMgr {
+    pub fn FreeSlot(&self, id: usize) {
+        self.freeids.lock().push_back(id as _);
+    }
 }

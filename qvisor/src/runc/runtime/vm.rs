@@ -70,8 +70,6 @@ pub fn GetExitStatus() -> i32 {
     return EXIT_STATUS.load(Ordering::Acquire);
 }
 
-pub const KERNEL_HEAP_ORD: usize = 33; // 8GB
-
 pub struct VirtualMachine {
     pub kvm: Kvm,
     pub vmfd: VmFd,

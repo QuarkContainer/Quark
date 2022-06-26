@@ -7,7 +7,6 @@ use libc;
 use super::qlib::linux_def::MemoryDef;
 use super::qlib::mem::list_allocator::*;
 
-pub const KERNEL_HEAP_ORD: usize = 33; // 8GB
 pub const ENABLE_HUGEPAGE: bool = false;
 
 impl HostAllocator {
