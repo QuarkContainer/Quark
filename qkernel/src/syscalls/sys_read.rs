@@ -16,7 +16,7 @@ use super::super::fs::file::*;
 use super::super::kernel::time::*;
 use super::super::kernel::timer::*;
 use super::super::kernel::waiter::*;
-use super::super::kernel_def::*;
+//use super::super::kernel_def::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::mem::block::*;
@@ -34,8 +34,8 @@ pub fn SysRead(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 }
 
 pub fn Read(task: &Task, fd: i32, addr: u64, size: i64) -> Result<i64> {
-    task.PerfGoto(PerfType::Read);
-    defer!(task.PerfGofrom(PerfType::Read));
+    //task.PerfGoto(PerfType::Read);
+   // defer!(task.PerfGofrom(PerfType::Read));
 
     let file = task.GetFile(fd)?;
 
@@ -108,8 +108,8 @@ pub fn SysPread64(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 }
 
 pub fn Pread64(task: &Task, fd: i32, addr: u64, size: i64, offset: i64) -> Result<i64> {
-    task.PerfGoto(PerfType::Read);
-    defer!(task.PerfGofrom(PerfType::Read));
+    //task.PerfGoto(PerfType::Read);
+    //defer!(task.PerfGofrom(PerfType::Read));
 
     let file = task.GetFile(fd)?;
 

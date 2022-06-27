@@ -187,8 +187,6 @@ pub fn Execvat(task: &mut Task, dirfd: i32, filenameAddr: u64, argvAddr: u64, en
     let mut argv = task.CopyInVector(argvAddr, EXEC_MAX_ELEM_SIZE, EXEC_MAX_TOTAL_SIZE as i32)?;
     let envv = task.CopyInVector(envvAddr, EXEC_MAX_ELEM_SIZE, EXEC_MAX_TOTAL_SIZE as i32)?;
 
-    //todo: handle SysExecve gracelly
-    info!("SysExecve workaround, will handle gracefully");
     if argv.len() == 0 {
         argv.push(fileName.clone())
     };
@@ -327,6 +325,7 @@ pub fn Execvat(task: &mut Task, dirfd: i32, filenameAddr: u64, argvAddr: u64, en
 
         let newMM = MemoryManager::Init(false);
         let oldMM = task.mm.clone();
+        *newMM.metadata.lock() = oldMM.metadata.lock().Fork();
         newMM.SetVcpu(GetVcpuId());
         task.mm = newMM.clone();
         task.futexMgr = task.futexMgr.Fork();

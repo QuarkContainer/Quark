@@ -19,7 +19,7 @@ use super::qlib::addr::*;
 use super::qlib::common::*;
 use super::qlib::kernel::TSC;
 use super::qlib::linux_def::*;
-use super::qlib::perf_tunning::*;
+//use super::qlib::perf_tunning::*;
 use super::qlib::singleton::*;
 use super::qlib::vcpu_mgr::*;
 use super::task::*;
@@ -463,8 +463,8 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
         panic!("Get pagefault from kernel .");
     }
 
-    currTask.PerfGoto(PerfType::PageFault);
-    defer!(Task::Current().PerfGofrom(PerfType::PageFault));
+    //currTask.PerfGoto(PerfType::PageFault);
+    //defer!(Task::Current().PerfGofrom(PerfType::PageFault));
 
     let PRINT_EXECPTION: bool = SHARESPACE.config.read().PrintException;
     if PRINT_EXECPTION {

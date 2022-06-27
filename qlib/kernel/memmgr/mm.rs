@@ -113,6 +113,23 @@ pub struct MMMetadata {
     pub dumpability: Dumpability,
 }
 
+impl MMMetadata {
+    pub fn Fork(&self) -> Self {
+        let mut auxv = Vec::new();
+        for a in &self.auxv {
+            auxv.push(*a)
+        };
+
+        return Self {
+            argv: self.argv,
+            envv: self.envv,
+            auxv: auxv,
+            executable: self.executable.clone(),
+            dumpability: self.dumpability
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct MMPagetable {
     pub pt: PageTables,
@@ -1421,6 +1438,7 @@ impl MemoryManager {
             uid: NewUID(),
             inited: true,
             layout: QMutex::new(layout),
+            metadata: QMutex::new(self.metadata.lock().Fork()),
             ..Default::default()
         };
 

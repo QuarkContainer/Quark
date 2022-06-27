@@ -672,9 +672,9 @@ impl Task {
                 },
             );
 
-            let new = &mut *taskPtr;
-            new.PerfGoto(PerfType::Blocked);
-            new.PerfGoto(PerfType::Kernel);
+            //let new = &mut *taskPtr;
+            //new.PerfGoto(PerfType::Blocked);
+            //new.PerfGoto(PerfType::Kernel);
             return &mut (*taskPtr);
         }
     }

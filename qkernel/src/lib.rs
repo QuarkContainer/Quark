@@ -120,7 +120,7 @@ use self::qlib::linux_def::MemoryDef;
 use self::qlib::loader::*;
 use self::qlib::mem::list_allocator::*;
 use self::qlib::pagetable::*;
-use self::qlib::perf_tunning::*;
+//use self::qlib::perf_tunning::*;
 use self::qlib::vcpu_mgr::*;
 use self::syscalls::syscalls::*;
 use self::task::*;
@@ -228,9 +228,9 @@ pub extern "C" fn syscall_handler(
     CPULocal::Myself().SetMode(VcpuMode::Kernel);
 
     let currTask = task::Task::Current();
-    currTask.PerfGofrom(PerfType::User);
+    //currTask.PerfGofrom(PerfType::User);
 
-    currTask.PerfGoto(PerfType::Kernel);
+    //currTask.PerfGoto(PerfType::Kernel);
 
     if SHARESPACE.config.read().KernelPagetable {
         Task::SetKernelPageTable();
@@ -298,9 +298,9 @@ pub extern "C" fn syscall_handler(
     let currTask = task::Task::Current();
     currTask.DoStop();
 
-    currTask.PerfGoto(PerfType::SysCall);
+    //currTask.PerfGoto(PerfType::SysCall);
     let state = SysCall(currTask, nr, &args);
-    currTask.PerfGofrom(PerfType::SysCall);
+    //currTask.PerfGofrom(PerfType::SysCall);
 
     res = currTask.Return();
     //HostInputProcess();
@@ -328,8 +328,8 @@ pub extern "C" fn syscall_handler(
     let kernalRsp = pt as *const _ as u64;
 
     //PerfGoto(PerfType::User);
-    currTask.PerfGofrom(PerfType::Kernel);
-    currTask.PerfGoto(PerfType::User);
+    //currTask.PerfGofrom(PerfType::Kernel);
+    //currTask.PerfGoto(PerfType::User);
 
     currTask.RestoreFp();
     currTask.Check();
@@ -381,7 +381,7 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                 {
                     error!("RunExitDone 1 [{:x}] ...", currTask.taskId);
                     let thread = currTask.Thread();
-                    currTask.PerfStop();
+                    //currTask.PerfStop();
                     currTask.SetDummy();
 
                     thread.lock().fdTbl = currTask.fdTbl.clone();

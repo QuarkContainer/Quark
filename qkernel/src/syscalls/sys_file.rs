@@ -26,7 +26,7 @@ use super::super::kernel::pipe::reader::*;
 use super::super::kernel::pipe::reader_writer::*;
 use super::super::kernel::pipe::writer::*;
 use super::super::kernel::time::*;
-use super::super::kernel_def::*;
+//use super::super::kernel_def::*;
 use super::super::qlib::auth::cap_set::*;
 use super::super::qlib::auth::id::*;
 use super::super::qlib::auth::*;
@@ -171,8 +171,8 @@ pub fn SysCreate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 }
 
 pub fn openAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
-    task.PerfGoto(PerfType::Open);
-    defer!(task.PerfGofrom(PerfType::Open));
+    //task.PerfGoto(PerfType::Open);
+    //defer!(task.PerfGofrom(PerfType::Open));
 
     let (path, dirPath) = copyInPath(task, addr, false)?;
 
