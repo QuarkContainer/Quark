@@ -537,8 +537,8 @@ impl Task {
         let curr = Self::Current();
         let new = unsafe { &mut *taskPtr };
 
-        new.PerfGoto(PerfType::Blocked);
-        new.PerfGoto(PerfType::User);
+        //new.PerfGoto(PerfType::Blocked);
+        //new.PerfGoto(PerfType::User);
         CreateCloneTask(curr, new, userSp);
 
         return Ok((cPid, taskPtr));

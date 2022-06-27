@@ -212,7 +212,7 @@ impl CounterSet {
 
 #[inline]
 pub fn switch(from: TaskId, to: TaskId) {
-    Task::Current().PerfGoto(PerfType::Blocked);
+    //Task::Current().PerfGoto(PerfType::Blocked);
     Task::Current().AccountTaskEnter(SchedState::Blocked);
 
     CPULocal::SetCurrentTask(to.Addr());
@@ -235,7 +235,7 @@ pub fn switch(from: TaskId, to: TaskId) {
         context_swap(fromCtx.GetContext(), toCtx.GetContext(), 1, 0);
     }
 
-    Task::Current().PerfGofrom(PerfType::Blocked);
+    //Task::Current().PerfGofrom(PerfType::Blocked);
     Task::Current().AccountTaskLeave(SchedState::Blocked);
 }
 

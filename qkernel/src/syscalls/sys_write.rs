@@ -16,7 +16,7 @@ use super::super::fs::file::*;
 use super::super::kernel::time::*;
 use super::super::kernel::timer::*;
 use super::super::kernel::waiter::*;
-use super::super::kernel_def::*;
+//use super::super::kernel_def::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::mem::block::*;
@@ -86,8 +86,8 @@ pub fn SysPwrite64(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 }
 
 pub fn Pwrite64(task: &Task, fd: i32, addr: u64, size: i64, offset: i64) -> Result<i64> {
-    task.PerfGoto(PerfType::Write);
-    defer!(task.PerfGofrom(PerfType::Write));
+    //task.PerfGoto(PerfType::Write);
+    //defer!(task.PerfGofrom(PerfType::Write));
 
     let file = task.GetFile(fd)?;
 
