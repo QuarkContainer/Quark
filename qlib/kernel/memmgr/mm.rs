@@ -526,7 +526,7 @@ impl MemoryManager {
     }
 
     pub fn BrkSetup(&self, addr: u64) {
-        let _ml = self.MappingWriteLock();
+        let _ml = self.MappingReadLock();
         self.mapping.lock().brkInfo = BrkInfo {
             brkStart: addr,
             brkEnd: addr,
@@ -685,7 +685,7 @@ impl MemoryManager {
     }
 
     pub fn MinCore(&self, _task: &Task, r: &Range) -> Vec<u8> {
-        let _ml = self.MappingWriteLock();
+        let _ml = self.MappingReadLock();
 
         let mut res = Vec::with_capacity((r.Len() / MemoryDef::PAGE_SIZE) as usize);
         let mut addr = r.Start();
@@ -1145,14 +1145,15 @@ impl MemoryManager {
             return Err(Error::SysError(SysErr::EFAULT));
         }
 
-        let _ml = self.MappingWriteLock();
+        let rl = self.MappingReadLock();
 
-        return self.V2PLocked(task, start, len, output, writable, allowPartial);
+        return self.V2PLocked(task, &rl, start, len, output, writable, allowPartial);
     }
 
     pub fn V2PLocked(
         &self,
         task: &Task,
+        rlock: &QUpgradableLockGuard,
         start: u64,
         len: u64,
         output: &mut Vec<IoVec>,
@@ -1170,7 +1171,7 @@ impl MemoryManager {
             return Ok(());
         }
 
-        let len = self.FixPermissionLocked(task, start, len, writable, allowPartial)?;
+        let len = self.FixPermissionLocked(task, rlock, start, len, writable, allowPartial)?;
 
         let mut start = start;
         let end = start + len;
@@ -1230,9 +1231,9 @@ impl MemoryManager {
             return Err(Error::SysError(SysErr::EFAULT));
         }
 
-        let _ml = self.MappingWriteLock();
+        let rl = self.MappingReadLock();
 
-        self.FixPermissionLocked(task, vAddr, len, writeReq, allowPartial)
+        self.FixPermissionLocked(task, &rl, vAddr, len, writeReq, allowPartial)
     }
 
     // check whether the address range is legal.
@@ -1243,11 +1244,20 @@ impl MemoryManager {
     pub fn FixPermissionLocked(
         &self,
         task: &Task,
+        rlock: &QUpgradableLockGuard,
         vAddr: u64,
         len: u64,
         writeReq: bool,
         allowPartial: bool,
     ) -> Result<u64> {
+        assert!(!rlock.Writable());
+
+        defer!({
+            if rlock.Writable() {
+                rlock.Downgrade()
+            }
+        });
+
         if (vAddr as i64) < 0 {
             return Err(Error::SysError(SysErr::EFAULT));
         }
@@ -1266,6 +1276,9 @@ impl MemoryManager {
         while addr <= vAddr + len - 1 {
             let (_, permission) = match self.VirtualToPhyLocked(addr) {
                 Err(Error::AddressNotMap(_)) => {
+                    if !rlock.Writable() {
+                        rlock.Upgrade();
+                    }
                     match self.InstallPageWithAddrLocked(task, addr) {
                         Err(_) => {
                             if !allowPartial || addr < vAddr {
@@ -1301,6 +1314,9 @@ impl MemoryManager {
             };
 
             if vma.maxPerms.Write() && !permission.Write() {
+                if !rlock.Writable() {
+                    rlock.Upgrade();
+                }
                 self.CopyOnWriteLocked(addr, &vma);
                 needTLBShootdown = true;
             }
@@ -1614,19 +1630,20 @@ impl MemoryManager {
         output: &mut Vec<IoVec>,
         writable: bool,
     ) -> Result<()> {
-        let _ml = self.MappingWriteLock();
-        return self.V2PIovLocked(task, start, len, output, writable);
+        let rl = self.MappingReadLock();
+        return self.V2PIovLocked(task, &rl, start, len, output, writable);
     }
 
     pub fn V2PIovLocked(
         &self,
         task: &Task,
+        rlock: &QUpgradableLockGuard,
         start: u64,
         len: u64,
         output: &mut Vec<IoVec>,
         writable: bool,
     ) -> Result<()> {
-        self.FixPermissionLocked(task, start, len, writable, false)?;
+        self.FixPermissionLocked(task, rlock, start, len, writable, false)?;
 
         let mut start = start;
         let end = start + len;

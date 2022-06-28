@@ -416,12 +416,12 @@ impl QUpgradableLock {
 
     #[inline(always)]
     pub fn ForceDecrRead(&self) -> u64 {
-        return self.lock.fetch_sub(READER, Ordering::Acquire);
+        return self.lock.fetch_sub(READER, Ordering::Release);
     }
 
     #[inline]
     pub fn Read(&self) -> QUpgradableLockGuard {
-        //error!("RWLock {}: Read 1 ", self.id);
+        //error!("RWLock {}: Read 1 {:x}", self.id, self.Value());
         loop {
             match self.TryRead() {
                 None => spin_loop(),
@@ -451,14 +451,18 @@ impl QUpgradableLock {
         }
     }
 
+    pub fn Value(&self) -> u64 {
+        return self.lock.load(Ordering::Acquire);
+    }
+
     #[inline]
     pub fn TryWrite(&self) -> Option<QUpgradableLockGuard> {
         return self.TryWriteIntern(true)
     }
 
     pub fn Write(&self) -> QUpgradableLockGuard {
-        //error!("RWLock {}: Write 1", self.id);
-        //defer!(error!("RWLock {}: Write 2", self.id));
+        //error!("RWLock {}: Write 1 {:x}", self.id, self.Value());
+        //defer!(error!("RWLock {}: Write 2 {:x}", self.id, self.Value()));
         loop {
             match self.TryWrite() {
                 None => spin_loop(),
@@ -481,7 +485,7 @@ impl QUpgradableLock {
 impl Drop for QUpgradableLockGuard {
     fn drop(&mut self) {
         if self.Writable() {
-            //error!("RWLock {}: write free ", self.lock.id);
+            //error!("RWLock {}: write free {:x}", self.lock.id, self.lock.Value());
             self.lock.lock.fetch_and(!(WRITER | UPGRADED), Ordering::Release);
         } else {
             let _cnt = self.lock.ForceDecrRead();
@@ -507,7 +511,9 @@ impl QUpgradableLockGuard {
     }
 
     pub fn Upgrade(&self) {
+        //error!("RWLock {}: Upgrade1 {:x}", self.lock.id, self.lock.Value());
         assert!(!self.Writable());
+        self.lock.ForceDecrRead();
         loop {
             if self.lock.TryUpgrade() {
                 break
@@ -516,7 +522,7 @@ impl QUpgradableLockGuard {
             }
         }
 
-        self.lock.ForceDecrRead();
+        //error!("RWLock {}: Upgrade2 {:x}", self.lock.id, self.lock.Value());
         loop {
             if self.TryUpgradeToWriteIntern() {
                 break
@@ -524,14 +530,19 @@ impl QUpgradableLockGuard {
                 spin_loop()
             }
         }
+        //error!("RWLock {}: Upgrade3 {:x}", self.lock.id, self.lock.Value());
 
         self.write.store(true, Ordering::Release)
     }
 
     pub fn Downgrade(&self) {
         assert!(self.Writable());
-        self.lock.lock.store(READER, Ordering::Release);
-        self.write.store(false, Ordering::Release)
+        //error!("RWLock {}: Downgrade1 {:x}", self.lock.id, self.lock.Value());
+        self.lock.ForceIncrRead();
+        self.lock.lock.fetch_and(!(UPGRADED | WRITER), Ordering::Release);
+        self.write.store(false, Ordering::Release);
+        //error!("RWLock {}: Downgrade2 {:x}", self.lock.id, self.lock.Value());
+
     }
 }
 

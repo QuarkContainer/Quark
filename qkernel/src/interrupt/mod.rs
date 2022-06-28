@@ -273,7 +273,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, ptRegs: &mut PtRegs, errorCode: u
                 .expect("DivByZeroHandler send signal fail");
         }
         ExceptionStackVec::InvalidOpcode => {
-            let _ml = currTask.mm.MappingWriteLock();
+            let _ml = currTask.mm.MappingReadLock();
             let map = currTask.mm.GetSnapshotLocked(currTask, false);
             let data = unsafe { *(ptRegs.rip as *const u64) };
 
