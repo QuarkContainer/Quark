@@ -72,7 +72,8 @@ fn switch_to(to: TaskId) {
     }
 }
 
-pub const IO_WAIT_CYCLES: i64 = 20_000_000; // 1ms
+pub const IO_WAIT_CYCLES: i64 = 20_000_000;
+
 pub const WAIT_CYCLES: i64 = 1_000_000; // 1ms
 
 pub fn IOWait() {
@@ -299,8 +300,13 @@ impl Scheduler {
 
         let count = self.queue[vcpuId].lock().len();
         for _ in 0..count {
+            // hold the queue lock while checking the fields in the task,
+            // to make sure the fields is read from memory but not cache.
+            let mut queue = match self.queue[vcpuId].try_lock() {
+                None => continue,
+                Some(q) => q,
+            };
             let task = {
-                let mut queue = self.queue[vcpuId].lock();
                 let task = queue.pop_front();
                 if task.is_none() {
                     return None;
@@ -330,6 +336,7 @@ impl Scheduler {
                 } else {
                     if count > 1 {
                         // current CPU has more task, try to wake other vcpu to handle
+                        core::mem::drop(queue);
                         self.WakeOne();
                     }
                 }
@@ -338,7 +345,9 @@ impl Scheduler {
                 return task;
             }
 
-            self.ScheduleQ(taskId, vcpuId as u64);
+            // has to unlock the queue lock, before calling ScheduleQ
+            queue.push_back(taskId);
+            self.IncReadyTaskCount();
         }
 
         return None;

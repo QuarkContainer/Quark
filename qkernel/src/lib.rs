@@ -65,7 +65,6 @@ mod print;
 mod qlib;
 #[macro_use]
 mod interrupt;
-pub mod backtracer;
 pub mod kernel_def;
 pub mod rdma_def;
 mod syscalls;
