@@ -31,19 +31,57 @@ pub const SEM_STAT_ANY: i32 = 20;
 
 pub const SEM_UNDO: i32 = 0x1000;
 
+pub const SEMMNI: u32 = 32000;
+pub const SEMMSL: u32 = 32000;
+pub const SEMMNS: u32 = SEMMNI * SEMMSL;
+pub const SEMOPM: u32 = 500;
+pub const SEMVMX: u32 = 32767;
+pub const SEMAEM: u32 = SEMVMX;
+
+pub const SEMUME: u32 = SEMOPM;
+pub const SEMMNU: u32 = SEMMNS;
+pub const SEMMAP: u32 = SEMMNS;
+pub const SEMUSZ: u32 = 20;
+
 // SemidDS is equivalent to struct semid64_ds.
+#[repr(C)]
+#[derive(Clone, Copy, Default, Debug)]
 pub struct SemidDS {
     pub SemPerm: IPCPerm,
     pub SemOTime: TimeT,
+    pub unused1: u64,
     pub SemCTime: TimeT,
+    pub unused2: u64,
     pub SemNSems: u64,
     pub unused3: u64,
     pub unused4: u64,
 }
 
 // Sembuf is equivalent to struct sembuf.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
 pub struct Sembuf {
     pub SemNum: u16,
     pub SemOp: i16,
     pub SemFlag: i16,
+}
+
+// SemInfo is equivalent to struct seminfo.
+//
+// Source: include/uapi/linux/sem.h
+//
+// +marshal
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct SemInfo {
+    pub SemMap: u32,
+    pub SemMni: u32,
+    pub SemMns: u32,
+    pub SemMnu: u32,
+    pub SemMsl: u32,
+    pub SemOpm: u32,
+    pub SemUme: u32,
+    pub SemUsz: u32,
+    pub SemVmx: u32,
+    pub SemAem: u32,
 }

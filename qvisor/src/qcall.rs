@@ -29,19 +29,6 @@ pub fn AQHostCall(msg: HostOutputMsg, _shareSpace: &ShareSpace) {
         HostOutputMsg::QCall(_addr) => {
             panic!("AQHostCall Process get Qcall msg...");
         }
-        HostOutputMsg::WaitFDAsync(msg) => {
-            let ret = super::VMSpace::WaitFD(msg.fd, msg.mask);
-            if ret < 0 {
-                // ignore -9 EBADF, when change the Close to HCall, the waitfd is still async call,
-                // there is chance that the WaitFd fired before close
-                if ret != -9 {
-                    error!(
-                        "WaitFD fail err is {}, fd is {:x?}, errorno is {}",
-                        ret, &msg, ret
-                    );
-                }
-            }
-        }
         HostOutputMsg::EventfdWriteAsync(msg) => {
             let ret = super::VMSpace::EventfdWrite(msg.fd);
             if ret < 0 {
@@ -94,6 +81,18 @@ impl KVMVcpu {
             Msg::Seek(msg) => {
                 ret = super::VMSpace::Seek(msg.fd, msg.offset, msg.whence) as u64;
             }
+            Msg::FSetXattr(msg) => {
+                ret = super::VMSpace::FSetXattr(msg.fd, msg.name, msg.value, msg.size, msg.flags) as u64;
+            }
+            Msg::FGetXattr(msg) => {
+                ret = super::VMSpace::FGetXattr(msg.fd, msg.name, msg.value, msg.size) as u64;
+            }
+            Msg::FRemoveXattr(msg) => {
+                ret = super::VMSpace::FRemoveXattr(msg.fd, msg.name) as u64;
+            }
+            Msg::FListXattr(msg) => {
+                ret = super::VMSpace::FListXattr(msg.fd, msg.list, msg.size) as u64;
+            }
             Msg::ReadLinkAt(msg) => {
                 ret = super::VMSpace::ReadLinkAt(msg.dirfd, msg.path, msg.buf, msg.bufsize) as u64;
             }
@@ -108,15 +107,6 @@ impl KVMVcpu {
             }
             Msg::Close(msg) => {
                 ret = super::VMSpace::Close(msg.fd) as u64;
-            }
-            Msg::Getxattr(msg) => {
-                ret = super::VMSpace::Getxattr(msg.path, msg.name, msg.value, msg.size) as u64;
-            }
-            Msg::Lgetxattr(msg) => {
-                ret = super::VMSpace::Lgetxattr(msg.path, msg.name, msg.value, msg.size) as u64;
-            }
-            Msg::Fgetxattr(msg) => {
-                ret = super::VMSpace::Fgetxattr(msg.fd, msg.name, msg.value, msg.size) as u64;
             }
             Msg::Fstat(msg) => {
                 ret = super::VMSpace::Fstat(msg.fd, msg.buff) as u64;
@@ -305,7 +295,7 @@ impl KVMVcpu {
                 ret =
                     match URING_MGR
                         .lock()
-                        .Enter(msg.idx, msg.toSubmit, msg.minComplete, msg.flags)
+                        .Enter(msg.toSubmit, msg.minComplete, msg.flags)
                     {
                         Ok(v) => v as u64,
                         Err(Error::SysError(v)) => -v as i64 as u64,
@@ -338,7 +328,7 @@ impl KVMVcpu {
                 ret = super::VMSpace::Sysinfo(msg.addr) as u64;
             }
             Msg::ReadDir(msg) => {
-                ret = super::VMSpace::ReadDir(msg.dirfd, msg.data) as u64;
+                ret = super::VMSpace::ReadDir(msg.dirfd, msg.addr, msg.len, msg.reset) as u64;
             }
             Msg::Rdtsc(_msg) => {
                 ret = TSC.Rdtsc() as u64;
@@ -350,7 +340,10 @@ impl KVMVcpu {
                 ret = 0;
             }
             Msg::TlbShootdown(msg) => {
-                ret = SHARE_SPACE.TlbShootdown(msg.vcpuMask) as u64;
+                ret = SHARE_SPACE.TlbShootdown(msg.vcpuMask);
+            }
+            Msg::HostMemoryBarrier(_) => {
+                VMSpace::HostMemoryBarrier();
             }
         };
 

@@ -30,10 +30,10 @@ pub const SHM_HUGETLB: u16 = 0o04000; // Segment will use huge TLB pages.
 pub const SHM_NORESERVE: u16 = 0o010000; // Don't check for reservations.
 
 // Additional Linux-only flags for shmctl(2). Source: include/uapi/linux/shm.h
-pub const SHM_LOCK: u16 = 11;
-pub const SHM_UNLOCK: u16 = 12;
-pub const SHM_STAT: u16 = 13;
-pub const SHM_INFO: u16 = 14;
+pub const SHM_LOCK: i32 = 11;
+pub const SHM_UNLOCK: i32 = 12;
+pub const SHM_STAT: i32 = 13;
+pub const SHM_INFO: i32 = 14;
 
 // SHM defaults as specified by linux. Source: include/uapi/linux/shm.h
 pub const SHMMIN: u64 = 1;
@@ -45,7 +45,7 @@ pub const SHMSEG: u64 = 4096;
 // ShmidDS is equivalent to struct shmid64_ds. Source:
 // include/uapi/asm-generic/shmbuf.h
 #[repr(C)]
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Copy)]
 pub struct ShmidDS {
     pub ShmPerm: IPCPerm,
     pub ShmSegsz: u64,
@@ -62,7 +62,7 @@ pub struct ShmidDS {
 
 // ShmParams is equivalent to struct shminfo. Source: include/uapi/linux/shm.h
 #[repr(C)]
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Copy)]
 pub struct ShmParams {
     pub ShmMax: u64,
     pub ShmMin: u64,
@@ -73,7 +73,7 @@ pub struct ShmParams {
 
 // ShmInfo is equivalent to struct shm_info. Source: include/uapi/linux/shm.h
 #[repr(C)]
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Copy)]
 pub struct ShmInfo {
     pub UsedIDs: i32,
     // Number of currently existing segments.

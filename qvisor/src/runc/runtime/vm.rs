@@ -12,16 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use kvm_ioctls::{Kvm, VmFd};
 //use kvm_bindings::{kvm_userspace_memory_region, KVM_CAP_X86_DISABLE_EXITS, kvm_enable_cap, KVM_X86_DISABLE_EXITS_HLT, KVM_X86_DISABLE_EXITS_MWAIT};
 use alloc::sync::Arc;
-use core::sync::atomic::AtomicI32;
-use core::sync::atomic::Ordering;
-use kvm_bindings::*;
-use lazy_static::lazy_static;
+use core::sync::atomic::{AtomicI32, AtomicU64, Ordering};
 use std::os::unix::io::AsRawFd;
 use std::os::unix::io::FromRawFd;
 use std::thread;
+
+use kvm_bindings::*;
+use kvm_ioctls::{Cap, Kvm, VmFd};
+use lazy_static::lazy_static;
+use nix::sys::signal;
+
+use crate::qlib::MAX_VCPU_COUNT;
 
 use super::super::super::elf_loader::*;
 use super::super::super::kvm_vcpu::*;
@@ -50,11 +53,12 @@ use super::super::super::SHARE_SPACE;
 use super::super::super::SHARE_SPACE_STRUCT;
 use super::super::super::{
     ThreadId, KERNEL_IO_THREAD, PMA_KEEPER, QUARK_CONFIG, ROOT_CONTAINER_ID, THREAD_ID, URING_MGR,
-    VMS,
+    VCPU, VMS,
 };
 
 lazy_static! {
     static ref EXIT_STATUS: AtomicI32 = AtomicI32::new(-1);
+    static ref DUMP: AtomicU64 = AtomicU64::new(0);
 }
 
 #[inline]
@@ -70,7 +74,19 @@ pub fn GetExitStatus() -> i32 {
     return EXIT_STATUS.load(Ordering::Acquire);
 }
 
-pub const KERNEL_HEAP_ORD: usize = 33; // 8GB
+pub fn Dump(id: usize) -> bool {
+    assert!(id < MAX_VCPU_COUNT);
+    return DUMP.load(Ordering::Acquire) & (0x1 << id) > 0;
+}
+
+pub fn SetDumpAll() {
+    DUMP.store(u64::MAX, Ordering::Release);
+}
+
+pub fn ClearDump(id: usize) {
+    assert!(id < MAX_VCPU_COUNT);
+    DUMP.fetch_and(!(0x1 << id), Ordering::Release);
+}
 
 pub struct VirtualMachine {
     pub kvm: Kvm,
@@ -168,10 +184,9 @@ impl VirtualMachine {
         }
 
         let sharespace = SHARE_SPACE.Ptr();
-        let logfd = super::super::super::print::LOG.lock().Logfd();
-        URING_MGR
-            .lock()
-            .Init(sharespace.config.read().DedicateUring);
+        let logfd = super::super::super::print::LOG.Logfd();
+        URING_MGR.lock().Init();
+
         URING_MGR.lock().Addfd(logfd).unwrap();
 
         for i in 0..cpuCount {
@@ -210,7 +225,6 @@ impl VirtualMachine {
         }
 
         let syncPrint = sharespace.config.read().SyncPrint();
-        super::super::super::print::SetSharespace(sharespace);
         super::super::super::print::SetSyncPrint(syncPrint);
         error!("VM::InitShareSpace, after call init 2");
     }
@@ -220,12 +234,10 @@ impl VirtualMachine {
 
         *ROOT_CONTAINER_ID.lock() = args.ID.clone();
         if QUARK_CONFIG.lock().PerSandboxLog {
-            LOG.lock().Reset(&args.ID[0..12]);
+            LOG.Reset(&args.ID[0..12]);
         }
 
         let kvmfd = args.KvmFd;
-
-        let cnt = QUARK_CONFIG.lock().DedicateUring;
 
         /*if QUARK_CONFIG.lock().EnableRDMA {
             // use default rdma device
@@ -235,7 +247,7 @@ impl VirtualMachine {
         }*/
 
         let reserveCpuCount = QUARK_CONFIG.lock().ReserveCpuCount;
-        let cpuCount = VMSpace::VCPUCount() - cnt - reserveCpuCount;
+        let cpuCount = VMSpace::VCPUCount() - reserveCpuCount;
         VMS.lock().vcpuCount = cpuCount; //VMSpace::VCPUCount();
         VMS.lock().RandomVcpuMapping();
         let kernelMemRegionSize = QUARK_CONFIG.lock().KernelMemSize;
@@ -262,6 +274,9 @@ impl VirtualMachine {
         cap.cap = KVM_CAP_X86_DISABLE_EXITS;
         cap.args[0] = (KVM_X86_DISABLE_EXITS_HLT | KVM_X86_DISABLE_EXITS_MWAIT) as u64;
         vm_fd.enable_cap(&cap).unwrap();
+        if !kvm.check_extension(Cap::ImmediateExit) {
+            panic!("KVM_CAP_IMMEDIATE_EXIT not supported");
+        }
 
         let mut elf = KernelELF::New()?;
         Self::SetMemRegion(
@@ -358,7 +373,6 @@ impl VirtualMachine {
                 SHARE_SPACE.Value(),
                 autoStart,
             )?);
-
             // enable cpuid in host
             vcpu.vcpu.set_cpuid2(&kvm_cpuid).unwrap();
             VMS.lock().vcpus.push(vcpu.clone());
@@ -378,16 +392,18 @@ impl VirtualMachine {
 
     pub fn run(&mut self) -> Result<i32> {
         let cpu = self.vcpus[0].clone();
-
+        SetSigusr1Handler();
         let mut threads = Vec::new();
         let tgid = unsafe { libc::gettid() };
-
         threads.push(
             thread::Builder::new()
                 .name("0".to_string())
                 .spawn(move || {
                     THREAD_ID.with(|f| {
                         *f.borrow_mut() = 0;
+                    });
+                    VCPU.with(|f| {
+                        *f.borrow_mut() = Some(cpu.clone());
                     });
                     cpu.run(tgid).expect("vcpu run fail");
                     info!("cpu#{} finish", 0);
@@ -406,6 +422,9 @@ impl VirtualMachine {
                     .spawn(move || {
                         THREAD_ID.with(|f| {
                             *f.borrow_mut() = i as i32;
+                        });
+                        VCPU.with(|f| {
+                            *f.borrow_mut() = Some(cpu.clone());
                         });
                         info!("cpu#{} start", ThreadId());
                         cpu.run(tgid).expect("vcpu run fail");
@@ -432,4 +451,28 @@ impl VirtualMachine {
     pub fn PrintQ(shareSpace: &ShareSpace, vcpuId: u64) -> String {
         return shareSpace.scheduler.PrintQ(vcpuId);
     }
+}
+
+fn SetSigusr1Handler() {
+    let sig_action = signal::SigAction::new(
+        signal::SigHandler::Handler(handleSigusr1),
+        signal::SaFlags::empty(),
+        signal::SigSet::empty(),
+    );
+    unsafe {
+        signal::sigaction(signal::Signal::SIGUSR1, &sig_action)
+            .expect("sigusr1 sigaction set fail");
+    }
+}
+
+extern "C" fn handleSigusr1(_signal: i32) {
+    SetDumpAll();
+    let vms = VMS.lock();
+    for vcpu in &vms.vcpus {
+        if vcpu.state.load(Ordering::Acquire) == KVMVcpuState::HOST as u64 {
+            vcpu.dump().unwrap_or_default();
+        }
+        vcpu.Signal(Signal::SIGCHLD);
+    }
+    drop(vms);
 }

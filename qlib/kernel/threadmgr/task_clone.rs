@@ -282,7 +282,7 @@ impl Thread {
 
         let mut fdTbl = t.fdTbl.clone();
         if opts.sharingOption.NewFiles {
-            let newFDTbl = fdTbl.Fork();
+            let newFDTbl = fdTbl.Fork(i32::MAX);
             fdTbl = newFDTbl;
         }
 
@@ -537,11 +537,16 @@ impl Task {
         let curr = Self::Current();
         let new = unsafe { &mut *taskPtr };
 
-        new.PerfGoto(PerfType::Blocked);
-        new.PerfGoto(PerfType::User);
+        //new.PerfGoto(PerfType::Blocked);
+        //new.PerfGoto(PerfType::User);
         CreateCloneTask(curr, new, userSp);
 
         return Ok((cPid, taskPtr));
+    }
+
+    pub fn UnshareFdTable(&mut self, maxFd: i32) {
+        let newfdtbl = self.fdTbl.Fork(maxFd);
+        self.fdTbl = newfdtbl;
     }
 
     pub fn Unshare(&mut self, opts: &SharingOptions) -> Result<()> {
@@ -628,7 +633,7 @@ impl Task {
 
         if opts.NewFiles {
             let fdtbl = self.fdTbl.clone();
-            self.fdTbl = fdtbl.Fork();
+            self.fdTbl = fdtbl.Fork(i32::MAX);
             tlock.fdTbl = self.fdTbl.clone();
         }
 
@@ -660,6 +665,7 @@ pub fn CreateCloneTask(fromTask: &Task, toTask: &mut Task, userSp: u64) {
         toTask.context.fs = fromTask.context.fs;
         toTask.context.rsp = toTask.GetPtRegs() as *const _ as u64 - 8;
         toTask.context.rdi = userSp;
+        toTask.context.savefpsate = true;
         toTask.context.X86fpstate = Box::new(fromTask.context.X86fpstate.Fork());
         toPtRegs.rax = 0;
         toPtRegs.rsp = userSp;

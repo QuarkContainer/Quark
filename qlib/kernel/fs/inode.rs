@@ -20,6 +20,7 @@ use crate::qlib::mutex::*;
 use alloc::sync::Arc;
 use core::any::Any;
 use core::ops::Deref;
+use alloc::sync::Weak;
 
 use super::super::super::auth::*;
 use super::super::super::common::*;
@@ -28,6 +29,7 @@ use super::super::kernel::time::*;
 use super::super::socket::unix::transport::unix::*;
 use super::super::task::*;
 use super::super::uid::*;
+use super::super::SHARESPACE;
 
 use super::attr::*;
 use super::dentry::*;
@@ -39,6 +41,7 @@ use super::inode_overlay::*;
 use super::lock::*;
 use super::mount::*;
 use super::overlay::*;
+use super::inotify::*;
 
 pub fn ContextCanAccessFile(task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {
     let creds = task.creds.clone();
@@ -175,9 +178,12 @@ pub trait InodeOperations: Sync + Send {
     fn BoundEndpoint(&self, _task: &Task, inode: &Inode, path: &str) -> Option<BoundEndpoint>;
     fn GetFile(&self, task: &Task, dir: &Inode, dirent: &Dirent, flags: FileFlags) -> Result<File>;
     fn UnstableAttr(&self, task: &Task) -> Result<UnstableAttr>;
-    fn Getxattr(&self, dir: &Inode, name: &str) -> Result<String>;
-    fn Setxattr(&self, dir: &mut Inode, name: &str, value: &str) -> Result<()>;
-    fn Listxattr(&self, dir: &Inode) -> Result<Vec<String>>;
+    fn Getxattr(&self, dir: &Inode, name: &str, size: usize) -> Result<Vec<u8>>;
+    fn Setxattr(&self, dir: &mut Inode, name: &str, value: &[u8], flags: u32) -> Result<()>;
+    fn Removexattr(&self, _dir: &Inode, _name: &str) -> Result<()> {
+        return Err(Error::SysError(SysErr::EOPNOTSUPP));
+    }
+    fn Listxattr(&self, dir: &Inode, size: usize) -> Result<Vec<String>>;
     fn Check(&self, task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool>;
     fn SetPermissions(&self, task: &Task, dir: &mut Inode, f: FilePermissions) -> bool;
     fn SetOwner(&self, task: &Task, dir: &mut Inode, owner: &FileOwner) -> Result<()>;
@@ -191,7 +197,7 @@ pub trait InodeOperations: Sync + Send {
     fn IsVirtual(&self) -> bool;
     fn Sync(&self) -> Result<()>;
     fn StatFS(&self, task: &Task) -> Result<FsInfo>;
-    fn Mappable(&self) -> Result<HostInodeOp>;
+    fn Mappable(&self) -> Result<HostIopsMappable>;
 }
 
 // LockCtx is an Inode's lock context and contains different personalities of locks; both
@@ -207,6 +213,18 @@ pub struct LockCtx {
 
     // BSD is a set of BSD-style advisory file wide locks, see flock(2).
     pub BSD: Locks,
+}
+
+#[derive(Clone)]
+pub struct InodeWeak (pub Weak<QMutex<InodeIntern>>);
+
+impl InodeWeak {
+    pub fn Upgrade(&self) -> Option<Inode> {
+        return match self.0.upgrade() {
+            None => None,
+            Some(n) => Some(Inode(n))
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -226,7 +244,34 @@ impl Deref for Inode {
     }
 }
 
+impl Drop for Inode {
+    fn drop(&mut self) {
+        if Arc::strong_count(&self.0) == 1 {
+            if SHARESPACE.config.read().EnableInotify {
+                let watches = self.Watches();
+
+                // If this inode is being destroyed because it was unlinked, queue a
+                // deletion event. This may not be the case for inodes being revalidated.
+                let unlinked = watches.read().unlinked;
+                if unlinked {
+                    watches.Notify("", InotifyEvent::IN_DELETE_SELF, 0);
+                }
+
+                // Remove references from the watch owners to the watches on this inode,
+                // since the watches are about to be GCed. Note that we don't need to worry
+                // about the watch pins since if there were any active pins, this inode
+                // wouldn't be in the destructor.
+                watches.TargetDestroyed();
+            }
+        }
+    }
+}
+
 impl Inode {
+    pub fn Downgrade(&self) -> InodeWeak {
+        return InodeWeak(Arc::downgrade(&self.0));
+    }
+
     pub fn New<T: InodeOperations + 'static>(
         InodeOp: &Arc<T>,
         MountSource: &Arc<QMutex<MountSource>>,
@@ -237,6 +282,7 @@ impl Inode {
             InodeOp: InodeOp.clone(),
             StableAttr: StableAttr.clone(),
             LockCtx: LockCtx::default(),
+            watches: Watches::default(),
             MountSource: MountSource.clone(),
             Overlay: None,
         };
@@ -270,6 +316,7 @@ impl Inode {
             InodeOp: Arc::new(iops),
             StableAttr: fstat.StableAttr(),
             LockCtx: LockCtx::default(),
+            watches: Watches::default(),
             MountSource: msrc.clone(),
             Overlay: None,
         }))));
@@ -505,34 +552,52 @@ impl Inode {
         return res;
     }
 
-    pub fn Getxattr(&self, name: &str) -> Result<String> {
+    pub fn Getxattr(&self, task: &Task, name: &str, size: usize) -> Result<Vec<u8>> {
         let isOverlay = self.lock().Overlay.is_some();
         if isOverlay {
             let overlay = self.lock().Overlay.as_ref().unwrap().clone();
-            return overlayGetxattr(&overlay, name);
+            return overlayGetxattr(task, &overlay, name, size);
         }
 
         let op = self.lock().InodeOp.clone();
-        let res = op.Getxattr(self, name);
+        let res = op.Getxattr(self, name, size);
         return res;
     }
 
-    pub fn Setxattr(&mut self, name: &str, value: &str) -> Result<()> {
+    pub fn Setxattr(&mut self, task: &Task, d: &Dirent, name: &str, value: &[u8], flags: u32) -> Result<()> {
+        let isOverlay = self.lock().Overlay.is_some();
+        if isOverlay {
+            let overlay = self.lock().Overlay.as_ref().unwrap().clone();
+            return overlaySetxattr(task, &overlay, d, name, value, flags);
+        }
+
         let op = self.lock().InodeOp.clone();
-        op.Setxattr(self, name, value)?;
+        op.Setxattr(self, name, value, flags)?;
         return Ok(());
     }
 
-    pub fn Listxattr(&self) -> Result<Vec<String>> {
+    pub fn Listxattr(&self, size: usize) -> Result<Vec<String>> {
         let isOverlay = self.lock().Overlay.is_some();
         if isOverlay {
             let overlay = self.lock().Overlay.as_ref().unwrap().clone();
-            return overlayListxattr(&overlay);
+            return overlayListxattr(&overlay, size);
         }
 
         let op = self.lock().InodeOp.clone();
-        let res = op.Listxattr(self);
+        let res = op.Listxattr(self, size);
         return res;
+    }
+
+    pub fn Removexattr(&mut self, task: &Task, d: &Dirent, name: &str) -> Result<()> {
+        let isOverlay = self.lock().Overlay.is_some();
+        if isOverlay {
+            let overlay = self.lock().Overlay.as_ref().unwrap().clone();
+            return overlayRemovexattr(task, &overlay, d, name);
+        }
+
+        let op = self.lock().InodeOp.clone();
+        op.Removexattr(self, name)?;
+        return Ok(());
     }
 
     pub fn SetPermissions(&mut self, task: &Task, d: &Dirent, f: FilePermissions) -> bool {
@@ -779,6 +844,10 @@ impl Inode {
         let inodeOp = self.lock().InodeOp.clone();
         return inodeOp.StatFS(task);
     }
+
+    pub fn Watches(&self) -> Watches {
+        return self.lock().watches.clone();
+    }
 }
 
 //#[derive(Clone, Default, Debug, Copy)]
@@ -787,6 +856,7 @@ pub struct InodeIntern {
     pub InodeOp: Arc<InodeOperations>,
     pub StableAttr: StableAttr,
     pub LockCtx: LockCtx,
+    pub watches: Watches,
     pub MountSource: Arc<QMutex<MountSource>>,
     pub Overlay: Option<Arc<RwLock<OverlayEntry>>>,
 }
@@ -798,6 +868,7 @@ impl Default for InodeIntern {
             InodeOp: Arc::new(HostInodeOp::default()),
             StableAttr: Default::default(),
             LockCtx: LockCtx::default(),
+            watches: Watches::default(),
             MountSource: Arc::new(QMutex::new(MountSource::default())),
             Overlay: None,
         };
@@ -811,6 +882,7 @@ impl InodeIntern {
             InodeOp: Arc::new(HostInodeOp::default()),
             StableAttr: Default::default(),
             LockCtx: LockCtx::default(),
+            watches: Watches::default(),
             MountSource: Arc::new(QMutex::new(MountSource::default())),
             Overlay: None,
         };

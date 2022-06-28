@@ -19,6 +19,7 @@ use alloc::sync::Weak;
 use alloc::vec::Vec;
 use core::ops::Deref;
 use core::sync::atomic::AtomicU64;
+use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 use x86_64::structures::paging::PageTableFlags;
 
@@ -50,6 +51,8 @@ use super::metadata::*;
 use super::syscalls::*;
 use super::vma::*;
 use super::*;
+use crate::qlib::kernel::SHARESPACE;
+use crate::qlib::vcpu_mgr::VcpuMode;
 
 pub struct MMMapping {
     pub vmas: AreaSet<VMA>,
@@ -110,6 +113,23 @@ pub struct MMMetadata {
     pub dumpability: Dumpability,
 }
 
+impl MMMetadata {
+    pub fn Fork(&self) -> Self {
+        let mut auxv = Vec::new();
+        for a in &self.auxv {
+            auxv.push(*a)
+        };
+
+        return Self {
+            argv: self.argv,
+            envv: self.envv,
+            auxv: auxv,
+            executable: self.executable.clone(),
+            dumpability: self.dumpability
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct MMPagetable {
     pub pt: PageTables,
@@ -139,7 +159,7 @@ pub struct MemoryManagerInternal {
     pub vcpuMapping: AtomicU64,
     pub tlbShootdownMask: AtomicU64,
 
-    pub mappingLock: Arc<QMutex<()>>,
+    pub mappingLock: QUpgradableLock,
     pub mapping: QMutex<MMMapping>,
 
     pub pagetable: QRwLock<MMPagetable>,
@@ -149,6 +169,7 @@ pub struct MemoryManagerInternal {
 
     pub layout: QMutex<MmapLayout>,
     pub aioManager: AIOManager,
+    pub membarrierPrivateEnabled: AtomicBool,
 }
 
 #[derive(Clone)]
@@ -266,16 +287,29 @@ impl MemoryManager {
             inited: true,
             vcpuMapping: AtomicU64::new(0),
             tlbShootdownMask: AtomicU64::new(0),
-            mappingLock: Arc::new(QMutex::new(())),
+            mappingLock: QUpgradableLock::default(),
             mapping: QMutex::new(mapping),
             pagetable: QRwLock::new(pagetable),
             metadataLock: Arc::new(QMutex::new(())),
             metadata: QMutex::new(metadata),
             layout: QMutex::new(layout),
             aioManager: AIOManager::default(),
+            membarrierPrivateEnabled: AtomicBool::new(false),
         };
 
         return Self(Arc::new(internal));
+    }
+
+    pub fn EnableMembarrierPrivate(&self) {
+        return self
+            .membarrierPrivateEnabled
+            .store(false, Ordering::Release);
+    }
+
+    pub fn IsMembarrierPrivateEnabled(&self) -> bool {
+        return self
+            .membarrierPrivateEnabled
+            .load(Ordering::Acquire);
     }
 
     pub fn Downgrade(&self) -> MemoryManagerWeak {
@@ -288,6 +322,12 @@ impl MemoryManager {
     pub fn MaskTlbShootdown(&self, vcpuId: u64) {
         self.tlbShootdownMask
             .fetch_or(1 << vcpuId, Ordering::Release);
+    }
+
+    pub fn UnmaskTlbShootdown(&self, vcpuId: u64) -> u64 {
+        return self
+            .tlbShootdownMask
+            .fetch_and(!(1 << vcpuId), Ordering::Release);
     }
 
     pub fn TlbShootdownMask(&self) -> u64 {
@@ -307,11 +347,19 @@ impl MemoryManager {
         if self.pagetable.read().pt.TlbShootdown() {
             let mask = self.GetVcpuMapping();
             if mask > 0 {
-                self.ClearTlbShootdownMask();
-                // no need to flush tlb for the vcpu itself,
-                // as it already flushed the specific entry when pagetable changed.
-                self.MaskTlbShootdown(CPULocal::CpuId() as u64);
-                HostSpace::TlbShootdown(mask) as u64;
+                self.tlbShootdownMask.fetch_or(mask, Ordering::Release);
+                let mut interrupt_mask = 0u64;
+                let vcpu_len = SHARESPACE.scheduler.VcpuArr.len();
+                for i in 0..vcpu_len {
+                    if (1 << i) & mask != 0 {
+                        if SHARESPACE.scheduler.VcpuArr[i].GetMode() == VcpuMode::User {
+                            interrupt_mask = interrupt_mask | (1 << i);
+                        }
+                    }
+                }
+                if interrupt_mask != 0 {
+                    HostSpace::TlbShootdown(interrupt_mask);
+                }
             }
 
             CPULocal::Myself().pageAllocator.lock().Clean();
@@ -373,7 +421,7 @@ impl MemoryManager {
             if !vma.kernel {
                 if vma.mappable.is_some() {
                     let mappable = vma.mappable.clone().unwrap();
-                    mappable.RemoveMapping(self, &r, vma.offset, vma.CanWriteMappableLocked())?;
+                    mappable.HostIops().RemoveMapping(self, &r, vma.offset, vma.CanWriteMappableLocked())?;
                 }
             }
             let vgap = mapping.vmas.Remove(&vseg);
@@ -437,7 +485,7 @@ impl MemoryManager {
             if !vma.kernel {
                 if vma.mappable.is_some() {
                     let mappable = vma.mappable.clone().unwrap();
-                    mappable.RemoveMapping(self, &r, vma.offset, vma.CanWriteMappableLocked())?;
+                    mappable.HostIops().RemoveMapping(self, &r, vma.offset, vma.CanWriteMappableLocked())?;
                 }
 
                 mapping.usageAS -= r.Len();
@@ -460,26 +508,25 @@ impl MemoryManager {
     // SHOULD be called before return to user space,
     // to make sure the tlb flushed
     pub fn HandleTlbShootdown(&self) {
-        let vcpId = CPULocal::CpuId() as u64;
-        if self.TlbShootdownMask() & (1 << vcpId) == 0 {
+        let vcpuId = CPULocal::CpuId() as u64;
+        if self.UnmaskTlbShootdown(vcpuId) & (1 << vcpuId) != 0 {
             let curr = super::super::super::super::asm::CurrentCr3();
             PageTables::Switch(curr);
-            self.MaskTlbShootdown(vcpId);
         }
     }
 
-    pub fn MappingReadLock(&self) -> QMutexGuard<()> {
-        let lock = self.mappingLock.lock();
+    pub fn MappingReadLock(&self) -> QUpgradableLockGuard {
+        let lock = self.mappingLock.Read();
         return lock;
     }
 
-    pub fn MappingWriteLock(&self) -> QMutexGuard<()> {
-        let lock = self.mappingLock.lock();
+    pub fn MappingWriteLock(&self) -> QUpgradableLockGuard {
+        let lock = self.mappingLock.Write();
         return lock;
     }
 
     pub fn BrkSetup(&self, addr: u64) {
-        let _ml = self.MappingWriteLock();
+        let _ml = self.MappingReadLock();
         self.mapping.lock().brkInfo = BrkInfo {
             brkStart: addr,
             brkEnd: addr,
@@ -638,7 +685,7 @@ impl MemoryManager {
     }
 
     pub fn MinCore(&self, _task: &Task, r: &Range) -> Vec<u8> {
-        let _ml = self.MappingWriteLock();
+        let _ml = self.MappingReadLock();
 
         let mut res = Vec::with_capacity((r.Len() / MemoryDef::PAGE_SIZE) as usize);
         let mut addr = r.Start();
@@ -653,9 +700,25 @@ impl MemoryManager {
         return res;
     }
 
+    pub fn mlockedBytesRangeLocked(&self, mr: &Range) -> u64 {
+        let mut total = 0;
+        let mapping = self.mapping.lock();
+        let mut seg = mapping.vmas.LowerBoundSeg(mr.Start());
+        while seg.Ok() && seg.Range().Start() < mr.End() {
+            let vma = seg.Value();
+            if vma.mlockMode != MLockMode::MlockNone {
+                let segMR = seg.Range();
+                total += segMR.Intersect(&mr).Len();
+            }
+            seg = seg.NextSeg();
+        }
+
+        return total;
+    }
+
     // MLock implements the semantics of Linux's mlock()/mlock2()/munlock(),
     // depending on mode.
-    pub fn Mlock(&self, _task: &Task, addr: u64, len: u64, mode: MLockMode) -> Result<()> {
+    pub fn Mlock(&self, task: &Task, addr: u64, len: u64, mode: MLockMode) -> Result<()> {
         let la = match Addr(len + Addr(addr).PageOffset()).RoundUp() {
             Ok(l) => l.0,
             Err(_) => return Err(Error::SysError(SysErr::EINVAL)),
@@ -667,6 +730,22 @@ impl MemoryManager {
         };
 
         let _ml = self.MappingWriteLock();
+
+        if mode != MLockMode::MlockNone {
+            let creds = task.creds.clone();
+            let userns = creds.lock().UserNamespace.Root();
+            if !creds.HasCapabilityIn(Capability::CAP_IPC_LOCK, &userns) {
+                let mlockLimit = task.Thread().ThreadGroup().Limits().Get(LimitType::MemoryLocked).Cur;
+                if mlockLimit == 0 {
+                    return Err(Error::SysError(SysErr::EPERM))
+                }
+
+                let newLockedAS = self.mapping.lock().lockedAS + ar.Len() + self.mlockedBytesRangeLocked(&ar);
+                if newLockedAS > mlockLimit {
+                    return Err(Error::SysError(SysErr::EPERM))
+                }
+            }
+        }
 
         if ar.Len() == 0 {
             return Ok(());
@@ -724,7 +803,7 @@ impl MemoryManager {
 
                 // todo: fix the Munlock, when there are multiple process lock/unlock a memory range.
                 // with current implementation, the first unlock will work.
-                iops.Mlock(fstart, mr.Len(), mode)?;
+                iops.HostIops().Mlock(fstart, mr.Len(), mode)?;
             }
 
             vseg = vseg.NextSeg()
@@ -735,7 +814,7 @@ impl MemoryManager {
 
     // MLockAll implements the semantics of Linux's mlockall()/munlockall(),
     // depending on opts.
-    pub fn MlockAll(&self, _task: &Task, opts: &MLockAllOpts) -> Result<()> {
+    pub fn MlockAll(&self, task: &Task, opts: &MLockAllOpts) -> Result<()> {
         if !opts.Current && !opts.Future {
             return Err(Error::SysError(SysErr::EINVAL));
         }
@@ -744,6 +823,23 @@ impl MemoryManager {
         // it is not supported now
         let mode = opts.Mode;
         let _ml = self.MappingWriteLock();
+
+        if opts.Current {
+            if mode != MLockMode::MlockNone {
+                let creds = task.creds.clone();
+                let userns = creds.lock().UserNamespace.Root();
+                if !creds.HasCapabilityIn(Capability::CAP_IPC_LOCK, &userns) {
+                    let mlockLimit = task.Thread().ThreadGroup().Limits().Get(LimitType::MemoryLocked).Cur;
+                    if mlockLimit == 0 {
+                        return Err(Error::SysError(SysErr::EPERM))
+                    }
+
+                    if self.mapping.lock().vmas.Span() > mlockLimit {
+                        return Err(Error::SysError(SysErr::EPERM))
+                    }
+                }
+            }
+        }
 
         let mapping = self.mapping.lock();
         let mut vseg = mapping.vmas.FirstSeg();
@@ -763,7 +859,7 @@ impl MemoryManager {
 
                 // todo: fix the Munlock, when there are multiple process lock/unlock a memory range.
                 // with current implementation, the first unlock will work.
-                iops.Mlock(fstart, mr.Len(), mode)?;
+                iops.HostIops().Mlock(fstart, mr.Len(), mode)?;
             }
 
             vseg = vseg.NextSeg();
@@ -830,7 +926,7 @@ impl MemoryManager {
                 let mr = ar.Intersect(&vseg.Range());
 
                 let fstart = mr.Start() - vseg.Range().Start() + vma.offset;
-                fops.MSync(&Range::New(fstart, mr.Len()), msyncType)?;
+                fops.HostIops().MSync(&Range::New(fstart, mr.Len()), msyncType)?;
 
                 if lastEnd >= ar.End() {
                     break;
@@ -932,7 +1028,7 @@ impl MemoryManager {
             Some(ref mappable) => {
                 let vmaOffset = pageAddr - range.Start();
                 let fileOffset = vmaOffset + vma.offset; // offset in the file
-                let phyAddr = mappable.MapFilePage(task, fileOffset)?;
+                let phyAddr = mappable.HostIops().MapFilePage(task, fileOffset)?;
                 //error!("fault 2.1, vma.mappable.is_some() is {}, vaddr is {:x}, paddr is {:x}",
                 //      vma.mappable.is_some(), pageAddr, phyAddr);
 
@@ -1049,14 +1145,15 @@ impl MemoryManager {
             return Err(Error::SysError(SysErr::EFAULT));
         }
 
-        let _ml = self.MappingWriteLock();
+        let rl = self.MappingReadLock();
 
-        return self.V2PLocked(task, start, len, output, writable, allowPartial);
+        return self.V2PLocked(task, &rl, start, len, output, writable, allowPartial);
     }
 
     pub fn V2PLocked(
         &self,
         task: &Task,
+        rlock: &QUpgradableLockGuard,
         start: u64,
         len: u64,
         output: &mut Vec<IoVec>,
@@ -1074,7 +1171,7 @@ impl MemoryManager {
             return Ok(());
         }
 
-        let len = self.FixPermissionLocked(task, start, len, writable, allowPartial)?;
+        let len = self.FixPermissionLocked(task, rlock, start, len, writable, allowPartial)?;
 
         let mut start = start;
         let end = start + len;
@@ -1134,9 +1231,9 @@ impl MemoryManager {
             return Err(Error::SysError(SysErr::EFAULT));
         }
 
-        let _ml = self.MappingWriteLock();
+        let rl = self.MappingReadLock();
 
-        self.FixPermissionLocked(task, vAddr, len, writeReq, allowPartial)
+        self.FixPermissionLocked(task, &rl, vAddr, len, writeReq, allowPartial)
     }
 
     // check whether the address range is legal.
@@ -1147,11 +1244,20 @@ impl MemoryManager {
     pub fn FixPermissionLocked(
         &self,
         task: &Task,
+        rlock: &QUpgradableLockGuard,
         vAddr: u64,
         len: u64,
         writeReq: bool,
         allowPartial: bool,
     ) -> Result<u64> {
+        assert!(!rlock.Writable());
+
+        defer!({
+            if rlock.Writable() {
+                rlock.Downgrade()
+            }
+        });
+
         if (vAddr as i64) < 0 {
             return Err(Error::SysError(SysErr::EFAULT));
         }
@@ -1170,6 +1276,9 @@ impl MemoryManager {
         while addr <= vAddr + len - 1 {
             let (_, permission) = match self.VirtualToPhyLocked(addr) {
                 Err(Error::AddressNotMap(_)) => {
+                    if !rlock.Writable() {
+                        rlock.Upgrade();
+                    }
                     match self.InstallPageWithAddrLocked(task, addr) {
                         Err(_) => {
                             if !allowPartial || addr < vAddr {
@@ -1205,6 +1314,9 @@ impl MemoryManager {
             };
 
             if vma.maxPerms.Write() && !permission.Write() {
+                if !rlock.Writable() {
+                    rlock.Upgrade();
+                }
                 self.CopyOnWriteLocked(addr, &vma);
                 needTLBShootdown = true;
             }
@@ -1280,7 +1392,7 @@ impl MemoryManager {
                     self.pagetable.write().pt.MapFile(
                         task,
                         ar.Start(),
-                        &mappable,
+                        &mappable.HostIops(),
                         &Range::New(vma.offset + ar.Start() - segAr.Start(), ar.Len()),
                         &currPerm,
                         precommit,
@@ -1342,6 +1454,7 @@ impl MemoryManager {
             uid: NewUID(),
             inited: true,
             layout: QMutex::new(layout),
+            metadata: QMutex::new(self.metadata.lock().Fork()),
             ..Default::default()
         };
 
@@ -1391,7 +1504,7 @@ impl MemoryManager {
                 if vma.mappable.is_some() {
                     let mappable = vma.mappable.clone().unwrap();
 
-                    match mappable.AddMapping(
+                    match mappable.HostIops().AddMapping(
                         &mm2,
                         &vmaAR,
                         vma.offset,
@@ -1517,19 +1630,20 @@ impl MemoryManager {
         output: &mut Vec<IoVec>,
         writable: bool,
     ) -> Result<()> {
-        let _ml = self.MappingWriteLock();
-        return self.V2PIovLocked(task, start, len, output, writable);
+        let rl = self.MappingReadLock();
+        return self.V2PIovLocked(task, &rl, start, len, output, writable);
     }
 
     pub fn V2PIovLocked(
         &self,
         task: &Task,
+        rlock: &QUpgradableLockGuard,
         start: u64,
         len: u64,
         output: &mut Vec<IoVec>,
         writable: bool,
     ) -> Result<()> {
-        self.FixPermissionLocked(task, start, len, writable, false)?;
+        self.FixPermissionLocked(task, rlock, start, len, writable, false)?;
 
         let mut start = start;
         let end = start + len;

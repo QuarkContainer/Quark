@@ -30,10 +30,10 @@ use alloc::string::ToString;
 use alloc::sync::Arc;
 
 use self::mapping::*;
+use self::vma::*;
 use super::super::addr::*;
 use super::super::common::*;
 use super::fs::file::*;
-use super::fs::host::hostinodeop::*;
 use super::task::*;
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
@@ -144,7 +144,7 @@ pub struct MMapOpts {
 
     pub Mapping: Option<Arc<Mapping>>,
 
-    pub Mappable: Option<HostInodeOp>,
+    pub Mappable: Option<HostIopsMappable>,
 
     pub Hint: String,
 }

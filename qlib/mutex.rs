@@ -12,15 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::sync::Arc;
 use core::cell::UnsafeCell;
 use core::fmt;
 use core::hint::spin_loop;
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
+use core::sync::atomic::Ordering;
 use core::sync::atomic::AtomicU64;
+use core::sync::atomic::AtomicBool;
 use spin::*;
 
 use super::linux_def::QOrdering;
+use super::kernel::uid::*;
 //use super::super::asm::*;
 
 pub struct Spin;
@@ -346,6 +350,202 @@ impl<T: ?Sized + Default> Default for QRwLockIntern<T> {
         Self::new(Default::default())
     }
 }
+
+const READER: u64 = 1 << 2;
+const UPGRADED: u64 = 1 << 1;
+const WRITER: u64 = 1;
+
+#[inline(always)]
+fn compare_exchange(
+    atomic: &AtomicU64,
+    current: u64,
+    new: u64,
+    success: Ordering,
+    failure: Ordering,
+    strong: bool,
+) -> Result<u64, u64> {
+    if strong {
+        atomic.compare_exchange(current, new, success, failure)
+    } else {
+        atomic.compare_exchange_weak(current, new, success, failure)
+    }
+}
+
+#[derive(Clone)]
+pub struct QUpgradableLock {
+    lock: Arc<AtomicU64>,
+    id: u64,
+}
+
+impl Default for QUpgradableLock {
+    fn default() -> Self {
+        return Self {
+            lock: Default::default(),
+            id: NewUID(),
+        }
+    }
+}
+
+pub struct QUpgradableLockGuard {
+    lock: QUpgradableLock,
+    write: AtomicBool,
+}
+
+impl QUpgradableLock {
+    #[inline(always)]
+    pub fn TryRead(&self) -> Option<QUpgradableLockGuard> {
+        let value = self.lock.fetch_add(READER, Ordering::Acquire);
+
+        if value & (WRITER | UPGRADED) != 0 {
+            // Lock is taken, undo.
+            self.lock.fetch_sub(READER, Ordering::Release);
+            None
+        } else {
+            //error!("RWLock {}: Read 2 cnt {:x}", self.id, value);
+            Some(QUpgradableLockGuard {
+                lock: self.clone(),
+                write: AtomicBool::new(false),
+            })
+        }
+    }
+
+    #[inline(always)]
+    pub fn ForceIncrRead(&self) -> u64 {
+        return (self.lock.fetch_add(READER, Ordering::Acquire) >> 2) + 1;
+    }
+
+    #[inline(always)]
+    pub fn ForceDecrRead(&self) -> u64 {
+        return self.lock.fetch_sub(READER, Ordering::Release);
+    }
+
+    #[inline]
+    pub fn Read(&self) -> QUpgradableLockGuard {
+        //error!("RWLock {}: Read 1 {:x}", self.id, self.Value());
+        loop {
+            match self.TryRead() {
+                None => spin_loop(),
+                Some(g) => return g,
+            }
+        }
+    }
+
+    #[inline(always)]
+    pub fn TryWriteIntern(&self, strong: bool) -> Option<QUpgradableLockGuard> {
+        if compare_exchange(
+            &self.lock,
+            0,
+            WRITER,
+            Ordering::Acquire,
+            Ordering::Relaxed,
+            strong,
+        )
+            .is_ok()
+            {
+                Some(QUpgradableLockGuard {
+                    lock: self.clone(),
+                    write: AtomicBool::new(true),
+                })
+            } else {
+            None
+        }
+    }
+
+    pub fn Value(&self) -> u64 {
+        return self.lock.load(Ordering::Acquire);
+    }
+
+    #[inline]
+    pub fn TryWrite(&self) -> Option<QUpgradableLockGuard> {
+        return self.TryWriteIntern(true)
+    }
+
+    pub fn Write(&self) -> QUpgradableLockGuard {
+        //error!("RWLock {}: Write 1 {:x}", self.id, self.Value());
+        //defer!(error!("RWLock {}: Write 2 {:x}", self.id, self.Value()));
+        loop {
+            match self.TryWrite() {
+                None => spin_loop(),
+                Some(g) => return g,
+            }
+        }
+    }
+
+    pub fn TryUpgrade(&self) -> bool {
+        if self.lock.fetch_or(UPGRADED, Ordering::Acquire) & (WRITER | UPGRADED) == 0 {
+            return true
+        } else {
+            // We can't unflip the UPGRADED bit back just yet as there is another upgradeable or write lock.
+            // When they unlock, they will clear the bit.
+            return false
+        }
+    }
+}
+
+impl Drop for QUpgradableLockGuard {
+    fn drop(&mut self) {
+        if self.Writable() {
+            //error!("RWLock {}: write free {:x}", self.lock.id, self.lock.Value());
+            self.lock.lock.fetch_and(!(WRITER | UPGRADED), Ordering::Release);
+        } else {
+            let _cnt = self.lock.ForceDecrRead();
+            //error!("RWLock {}: read free {:x}", self.lock.id, cnt);
+        }
+    }
+}
+
+impl QUpgradableLockGuard {
+    pub fn Writable(&self) -> bool {
+        return self.write.load(Ordering::Acquire);
+    }
+
+    pub fn TryUpgradeToWriteIntern(&self) -> bool {
+        return compare_exchange(
+            &self.lock.lock,
+            UPGRADED,
+            WRITER,
+            Ordering::Acquire,
+            Ordering::Relaxed,
+            true,
+        ).is_ok();
+    }
+
+    pub fn Upgrade(&self) {
+        //error!("RWLock {}: Upgrade1 {:x}", self.lock.id, self.lock.Value());
+        assert!(!self.Writable());
+        self.lock.ForceDecrRead();
+        loop {
+            if self.lock.TryUpgrade() {
+                break
+            } else {
+                spin_loop()
+            }
+        }
+
+        //error!("RWLock {}: Upgrade2 {:x}", self.lock.id, self.lock.Value());
+        loop {
+            if self.TryUpgradeToWriteIntern() {
+                break
+            } else {
+                spin_loop()
+            }
+        }
+        //error!("RWLock {}: Upgrade3 {:x}", self.lock.id, self.lock.Value());
+
+        self.write.store(true, Ordering::Release)
+    }
+
+    pub fn Downgrade(&self) {
+        assert!(self.Writable());
+        //error!("RWLock {}: Downgrade1 {:x}", self.lock.id, self.lock.Value());
+        self.lock.ForceIncrRead();
+        self.lock.lock.fetch_and(!(UPGRADED | WRITER), Ordering::Release);
+        self.write.store(false, Ordering::Release);
+        //error!("RWLock {}: Downgrade2 {:x}", self.lock.id, self.lock.Value());
+
+    }
+}
+
 
 //////////////////////////////////////////////////////////////////
 

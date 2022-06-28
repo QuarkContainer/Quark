@@ -18,6 +18,121 @@ use core::sync::atomic::Ordering;
 
 use super::super::kernel_def::*;
 
+pub struct Xattr {}
+
+impl Xattr {
+    pub const XATTR_NAME_MAX : usize = 255;
+    pub const XATTR_SIZE_MAX : usize = 65536;
+    pub const XATTR_LIST_MAX : usize = 65536;
+
+    pub const XATTR_CREATE  : u32 = 1;
+    pub const XATTR_REPLACE : u32 = 2;
+
+    pub const XATTR_TRUSTED_PREFIX     : &'static str = "trusted.";
+    pub const XATTR_TRUSTED_PREFIX_LEN : usize = Self::XATTR_TRUSTED_PREFIX.len();
+
+    pub const XATTR_USER_PREFIX     : &'static str = "user.";
+    pub const XATTR_USER_PREFIX_LEN : usize = Self::XATTR_USER_PREFIX.len();
+}
+
+pub struct InotifyEvent {}
+
+impl InotifyEvent {
+    // Inotify events observable by userspace. These directly correspond to
+    // filesystem operations and there may only be a single of them per inotify
+    // event read from an inotify fd.
+
+    // IN_ACCESS indicates a file was accessed.
+    pub const IN_ACCESS : u32 = 0x00000001;
+    // IN_MODIFY indicates a file was modified.
+    pub const IN_MODIFY : u32 = 0x00000002;
+    // IN_ATTRIB indicates a watch target's metadata changed.
+    pub const IN_ATTRIB : u32 = 0x00000004;
+    // IN_CLOSE_WRITE indicates a writable file was closed.
+    pub const IN_CLOSE_WRITE : u32 = 0x00000008;
+    // IN_CLOSE_NOWRITE indicates a non-writable file was closed.
+    pub const IN_CLOSE_NOWRITE : u32 = 0x00000010;
+    // IN_OPEN indicates a file was opened.
+    pub const IN_OPEN : u32 = 0x00000020;
+    // IN_MOVED_FROM indicates a file was moved from X.
+    pub const IN_MOVED_FROM : u32 = 0x00000040;
+    // IN_MOVED_TO indicates a file was moved to Y.
+    pub const IN_MOVED_TO : u32 = 0x00000080;
+    // IN_CREATE indicates a file was created in a watched directory.
+    pub const IN_CREATE : u32 = 0x00000100;
+    // IN_DELETE indicates a file was deleted in a watched directory.
+    pub const IN_DELETE : u32 = 0x00000200;
+    // IN_DELETE_SELF indicates a watch target itself was deleted.
+    pub const IN_DELETE_SELF : u32 = 0x00000400;
+    // IN_MOVE_SELF indicates a watch target itself was moved.
+    pub const IN_MOVE_SELF : u32 = 0x00000800;
+    // IN_ALL_EVENTS is a mask for all observable userspace events.
+    pub const IN_ALL_EVENTS : u32 = 0x00000fff;
+
+
+    // Inotify control events. These may be present in their own events, or ORed
+    // with other observable events.
+
+    // IN_UNMOUNT indicates the backing filesystem was unmounted.
+    pub const IN_UNMOUNT : u32 = 0x00002000;
+    // IN_Q_OVERFLOW indicates the event queued overflowed.
+    pub const IN_Q_OVERFLOW : u32 = 0x00004000;
+    // IN_IGNORED indicates a watch was removed, either implicitly or through
+    // inotify_rm_watch(2).
+    pub const IN_IGNORED : u32 = 0x00008000;
+    // IN_ISDIR indicates the subject of an event was a directory.
+    pub const IN_ISDIR : u32 = 0x40000000;
+
+
+    // Feature flags for inotify_add_watch(2).
+    // IN_ONLYDIR indicates that a path should be watched only if it's a
+    // directory.
+    pub const IN_ONLYDIR : u32 = 0x01000000;
+    // IN_DONT_FOLLOW indicates that the watch path shouldn't be resolved if
+    // it's a symlink.
+    pub const IN_DONT_FOLLOW : u32 = 0x02000000;
+    // IN_EXCL_UNLINK indicates events to this watch from unlinked objects
+    // should be filtered out.
+    pub const IN_EXCL_UNLINK : u32 = 0x04000000;
+    // IN_MASK_ADD indicates the provided mask should be ORed into any existing
+    // watch on the provided path.
+    pub const IN_MASK_ADD : u32 = 0x20000000;
+    // IN_ONESHOT indicates the watch should be removed after one event.
+    pub const IN_ONESHOT : u32 = 0x80000000;
+
+    // IN_CLOEXEC is an alias for O_CLOEXEC. It indicates that the inotify
+    // fd should be closed on exec(2) and friends.
+    pub const IN_CLOEXEC : u32 = 0x00080000;
+    // IN_NONBLOCK is an alias for O_NONBLOCK. It indicates I/O syscall on the
+    // inotify fd should not block.
+    pub const IN_NONBLOCK : u32 = 0x00000800;
+
+    // ALL_INOTIFY_BITS contains all the bits for all possible inotify events. It's
+    // defined in the Linux source at "include/linux/inotify.h".
+    pub const ALL_INOTIFY_BITS : u32 =
+            Self::IN_ACCESS |
+            Self::IN_MODIFY |
+            Self::IN_ATTRIB |
+            Self::IN_CLOSE_WRITE |
+            Self::IN_CLOSE_NOWRITE |
+            Self::IN_OPEN |
+            Self::IN_MOVED_FROM |
+            Self::IN_MOVED_TO |
+            Self::IN_CREATE |
+            Self::IN_DELETE |
+            Self::IN_DELETE_SELF |
+            Self::IN_MOVE_SELF |
+            Self::IN_UNMOUNT |
+            Self::IN_Q_OVERFLOW |
+            Self::IN_IGNORED |
+            Self::IN_ONLYDIR |
+            Self::IN_DONT_FOLLOW |
+            Self::IN_EXCL_UNLINK |
+            Self::IN_MASK_ADD |
+            Self::IN_ISDIR |
+            Self::IN_ONESHOT;
+}
+
 // Scheduling policies, exposed by sched_getscheduler(2)/sched_setscheduler(2).
 pub struct Sched {}
 
@@ -147,6 +262,40 @@ pub struct MRemapType {}
 impl MRemapType {
     pub const MREMAP_MAYMOVE: i32 = 1 << 0;
     pub const MREMAP_FIXED: i32 = 1 << 1;
+}
+
+pub struct SignaCode {}
+
+impl SignaCode {
+    // SI_USER is sent by kill, sigsend, raise.
+    pub const SI_USER : i32 = 0;
+
+    // SI_KERNEL is sent by the kernel from somewhere.
+    pub const SI_KERNEL : i32 = 0x80;
+
+    // SI_QUEUE is sent by sigqueue.
+    pub const SI_QUEUE : i32 = -1;
+
+    // SI_TIMER is sent by timer expiration.
+    pub const SI_TIMER : i32 = -2;
+
+    // SI_MESGQ is sent by real time mesq state change.
+    pub const SI_MESGQ : i32 = -3;
+
+    // SI_ASYNCIO is sent by AIO completion.
+    pub const SI_ASYNCIO : i32 = -4;
+
+    // SI_SIGIO is sent by queued SIGIO.
+    pub const SI_SIGIO : i32 = -5;
+
+    // SI_TKILL is sent by tkill system call.
+    pub const SI_TKILL : i32 = -6;
+
+    // SI_DETHREAD is sent by execve() killing subsidiary threads.
+    pub const SI_DETHREAD : i32 = -7;
+
+    // SI_ASYNCNL is sent by glibc async name lookup completion.
+    pub const SI_ASYNCNL : i32 = -60;
 }
 
 #[derive(Copy, Clone, Default, Debug)]
@@ -1991,6 +2140,9 @@ impl Cmd {
     pub const F_GETPIPE_SZ: i32 = 1024 + 8;
     pub const F_ADD_SEALS: i32 = 1024 + 9;
     pub const F_GET_SEALS: i32 = 1024 + 10;
+
+    pub const CLOSE_RANGE_UNSHARE : i32 = 1 << 1;
+    pub const CLOSE_RANGE_CLOEXEC : i32 = 1 << 2;
 }
 
 #[derive(Debug, Clone, Copy, Default)]

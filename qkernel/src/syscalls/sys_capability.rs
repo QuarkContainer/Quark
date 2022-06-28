@@ -108,7 +108,7 @@ pub fn SysCapget(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 }
 
 // Capset implements Linux syscall capset.
-pub fn SysCapet(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+pub fn SysCapSet(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let hdrAddr = args.arg0 as u64;
     let dataAddr = args.arg1 as u64;
 

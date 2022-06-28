@@ -39,7 +39,7 @@ pub struct FPSoftwareFrame {
     pub ExtendedSize: u32,
     pub Xfeatures: u64,
     pub XstateSize: u32,
-    pub Padding: [u32; 7]
+    pub Padding: [u32; 7],
 }
 
 #[derive(Copy, Clone, Default)]
@@ -187,8 +187,7 @@ impl Thread {
     // Preconditions: The signal mutex must be locked.
     pub fn canReceiveSignalLocked(&self, sig: Signal) -> bool {
         let queue = self.lock().SignalQueue.clone();
-        queue
-            .Notify(SignalSet::MakeSignalSet(&[sig]).0 as EventMask);
+        queue.Notify(SignalSet::MakeSignalSet(&[sig]).0 as EventMask);
 
         // - Do not choose tasks that are blocking the signal.
         if SignalSet::New(sig).0 & self.lock().signalMask.0 != 0 {
@@ -277,8 +276,8 @@ impl Thread {
         // to handle that signal.
         let unblocked = oldMask.0 & !mask.0;
         let pendingSet = self.lock().pendingSignals.pendingSet.0;
-        let tglock = tg.lock();
-        let unblockedPending = unblocked & (pendingSet | tglock.pendingSignals.pendingSet.0);
+        let tgPendingSet = tg.lock().pendingSignals.pendingSet.0;
+        let unblockedPending = unblocked & (pendingSet | tgPendingSet);
         if unblockedPending != 0 {
             self.lock().interruptSelf();
         }
@@ -875,7 +874,37 @@ impl TaskStop for GroupStop {
     }
 }
 
+pub fn SignalInfoNoInfo(signo: Signal, sender: &Thread, receiver: &Thread) -> SignalInfo {
+    let info = SignalInfo {
+        Signo: signo.0,
+        Code: SignaCode::SI_USER,
+        ..Default::default()
+    };
+
+    let senderTg = sender.ThreadGroup();
+    let senderPid = senderTg.PIDNamespace().IDOfThreadGroup(&senderTg);
+    let recUserns = receiver.UserNamespace();
+    let receiverUid = sender
+        .Credentials()
+        .lock()
+        .RealKUID
+        .In(&recUserns)
+        .OrOverflow();
+
+    info.Kill().pid = senderPid;
+    info.Kill().uid = receiverUid.0 as _;
+    return info;
+}
+
 impl Task {
+    pub fn HandleExceedsFileSizeLimit(&self) -> Result<()> {
+        let thread = self.Thread();
+        let info = SignalInfoNoInfo(Signal(Signal::SIGXFSZ), &thread, &thread);
+        self.Thread().SendSignal(&info)?;
+
+        return Err(Error::SysError(SysErr::EFBIG));
+    }
+
     pub fn RunInterrupt(&mut self) -> TaskRunState {
         let task = self;
         // Interrupts are de-duplicated (if t is interrupted twice before
@@ -885,11 +914,11 @@ impl Task {
 
         let t = task.Thread();
         let tg = t.lock().tg.clone();
+        let pidns = tg.PIDNamespace();
+
+        let owner = pidns.lock().owner.clone();
         let lock = tg.lock().signalLock.clone();
         let locker = lock.lock();
-
-        let pidns = tg.PIDNamespace();
-        let owner = pidns.lock().owner.clone();
 
         // Did we just leave a group stop?
         let groupContNotify = tg.lock().groupContNotify;
@@ -1095,12 +1124,12 @@ impl Task {
         return TaskRunState::RunInterrupt;
     }
 
-    pub const FP_XSTATE_MAGIC1 : u32 = 0x46505853;
-    pub const FP_XSTATE_MAGIC2 : u32 = 0x46505845;
+    pub const FP_XSTATE_MAGIC1: u32 = 0x46505853;
+    pub const FP_XSTATE_MAGIC2: u32 = 0x46505845;
     pub const FP_XSTATE_MAGIC2_SIZE: usize = 4;
-    pub const UC_FP_XSTATE : u64       = 1;
+    pub const UC_FP_XSTATE: u64 = 1;
     // xsave features that are always enabled in signal frame fpstate.
-    pub const XFEATURE_MASK_FPSSE : u64 = 0x3;
+    pub const XFEATURE_MASK_FPSSE: u64 = 0x3;
 
     pub fn deliverSignalToHandler(&mut self, info: &SignalInfo, sigAct: &SigAct) -> Result<()> {
         let pt = self.GetPtRegs();
@@ -1115,10 +1144,13 @@ impl Task {
 
         let (mut fpSize, fpAlign) = HostFeatureSet().ExtendedStateSize();
         fpSize += Self::FP_XSTATE_MAGIC2_SIZE as u32;
-        let fpStart = (userStack.sp - fpSize as u64) & !(fpAlign as u64- 1) ;
+        let fpStart = (userStack.sp - fpSize as u64) & !(fpAlign as u64 - 1);
 
         userStack.sp = fpStart + fpSize as u64;
         userStack.PushU32(self, Self::FP_XSTATE_MAGIC2)?;
+        if !self.context.savefpsate {
+            self.SaveFp();
+        }
         let fpstate = self.context.X86fpstate.Slice();
         if fpstate.len() > 512 {
             userStack.PushSlice(self, &self.context.X86fpstate.Slice()[512..])?;
@@ -1205,6 +1237,7 @@ impl Task {
             let slice = self.context.X86fpstate.Slice();
             userStack.PopSlice(self, slice)?;
             self.context.X86fpstate.SanitizeUser();
+            self.context.savefpsate = true;
         }
 
         let alt = uc.Stack;

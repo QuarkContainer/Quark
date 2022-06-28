@@ -27,8 +27,6 @@ use super::buddy_allocator::Heap;
 
 use super::super::super::kernel_def::VcpuId;
 use super::super::kernel::vcpu::CPU_LOCAL;
-use super::super::kernel::Tsc;
-use super::super::kernel::LoadVcpuFreq;
 use super::super::linux_def::*;
 use super::super::mutex::*;
 use super::super::pagetable::AlignedAllocator;
@@ -39,7 +37,7 @@ pub const BUFF_THRESHOLD: usize = 50; // when buff size takes more than 50% of f
 pub const FREE_BATCH: usize = 1024; // free 10 blocks each time.
 pub const ORDER: usize = 33; //1GB
 
-//pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
+pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
 pub fn CheckZeroPage(pageStart: u64) {
     use alloc::slice;
@@ -87,10 +85,11 @@ impl GlobalVcpuAllocator {
         self.init.store(true, Ordering::Relaxed)
     }
 }
+
 /*
 unsafe impl GlobalAlloc for GlobalVcpuAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        if true || !self.init.load(Ordering::Relaxed) {
+        if !self.init.load(Ordering::Relaxed) {
             return GLOBAL_ALLOCATOR
                 .alloc(layout);
         }
@@ -98,7 +97,7 @@ unsafe impl GlobalAlloc for GlobalVcpuAllocator {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        if true || !self.init.load(Ordering::Relaxed) {
+        if !self.init.load(Ordering::Relaxed) {
             return GLOBAL_ALLOCATOR
                 .dealloc(ptr, layout);
         }
@@ -106,12 +105,63 @@ unsafe impl GlobalAlloc for GlobalVcpuAllocator {
     }
 }*/
 
-pub const STACK_CNT: usize = 16;
-
 #[derive(Debug, Default)]
+pub struct PageAllocator {
+    pub pages: VecDeque<u64>,
+}
+
+impl PageAllocator {
+    pub const PAGE_CACHE_COUNT: usize = 16;
+    pub const PAGE_CACHE_MAX_COUNT: usize = 128;
+
+    pub fn AllocPage(&mut self) -> Option<u64> {
+        match self.pages.pop_front() {
+            None => return None,
+            Some(addr) => {
+                return Some(addr)
+            }
+        }
+    }
+
+    pub fn FreePage(&mut self, page: u64) {
+        if self.pages.len() >= Self::PAGE_CACHE_MAX_COUNT {
+            AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize)
+                .Free(page)
+                .unwrap();
+        } else {
+            self.pages.push_front(page);
+        }
+    }
+
+    pub fn Clean(&mut self) {
+        while self.pages.len() > Self::PAGE_CACHE_COUNT {
+            match self.pages.pop_back() {
+                None => break,
+                Some(addr) => {
+                    AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize)
+                        .Free(addr)
+                        .unwrap();
+                }
+            }
+        }
+    }
+}
+
+pub const STACK_CNT: usize = 64;
+
+#[derive(Debug)]
 pub struct StackAllocator {
-    pub stack: [u64; 15],
+    pub stack: [u64; STACK_CNT - 1],
     pub next: usize,
+}
+
+impl Default for StackAllocator {
+    fn default() -> Self {
+        return Self {
+            stack: [0; STACK_CNT - 1],
+            next: 0
+        }
+    }
 }
 
 impl StackAllocator {
@@ -137,67 +187,10 @@ impl StackAllocator {
 }
 
 #[derive(Debug, Default)]
-pub struct PageAllocator {
-    pub pages: VecDeque<(u64, i64)>,
-}
-
-impl PageAllocator {
-    pub const PAGE_CACHE_COUNT: usize = 16;
-    pub const MAX_PAGE_CACHE_COUNT: usize = 1024 * 1;
-
-    pub fn AllocPage(&mut self) -> Option<u64> { match self.pages.pop_front() {
-        None => return None,
-        Some((addr, ts)) => {
-            if self.pages.len() >= Self::PAGE_CACHE_COUNT {
-                return Some(addr)
-            }
-
-            //cool down for 100 ms
-            if Tsc::RawRdtsc() - ts > (LoadVcpuFreq() / 10) {
-                return Some(addr)
-            }
-
-            self.pages.push_front((addr, ts));
-            return None
-        }
-    }
-    }
-
-    pub fn FreePage(&mut self, page: u64) {
-        let ts = Tsc::RawRdtsc();
-        while self.pages.len() > Self::PAGE_CACHE_COUNT {
-            match self.AllocPage() {
-                None => break,
-                Some(addr) => {
-                    AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize)
-                        .Free(addr)
-                        .unwrap();
-                }
-            }
-        }
-
-        self.pages.push_back((page, ts));
-    }
-
-    pub fn Clean(&mut self) {
-        while self.pages.len() > Self::PAGE_CACHE_COUNT {
-            match self.AllocPage() {
-                None => break,
-                Some(addr) => {
-                    AlignedAllocator::New(MemoryDef::PAGE_SIZE as usize, MemoryDef::PAGE_SIZE as usize)
-                        .Free(addr)
-                        .unwrap();
-                }
-            }
-        }
-    }
-}
-
-#[derive(Debug, Default)]
 pub struct VcpuAllocator {
-    pub bufs: [StackAllocator; 12],
+    pub bufs: [StackAllocator; 8],
 }
-/*
+
 impl VcpuAllocator {
     #[inline(never)]
     pub fn alloc(&mut self, layout: Layout) -> *mut u8 {
@@ -239,7 +232,7 @@ impl VcpuAllocator {
             }
         }
     }
-}*/
+}
 
 #[derive(Debug, Default)]
 pub struct HostAllocator {

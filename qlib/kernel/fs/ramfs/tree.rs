@@ -29,6 +29,7 @@ use super::super::super::uid::NewUID;
 use super::super::attr::*;
 use super::super::inode::*;
 use super::super::mount::*;
+use super::super::inotify::*;
 use super::dir::*;
 
 fn emptyDir(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
@@ -54,6 +55,7 @@ fn emptyDir(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         InodeOp: Arc::new(dir),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
+        watches: Watches::default(),
         MountSource: msrc.clone(),
         Overlay: None,
     };

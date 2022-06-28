@@ -16,6 +16,7 @@ use core::u64;
 
 use super::super::super::addr::*;
 use super::super::super::common::*;
+use super::super::super::limits::*;
 use super::super::super::linux::limits::*;
 use super::super::super::linux_def::*;
 use super::super::super::range::*;
@@ -105,7 +106,24 @@ impl MemoryManager {
         // process stack must be mapped up-front.
         const MAX_STACK_SIZE: u64 = 128 << 20; //128 MB
 
-        let sz = DEFAULT_STACK_SOFT_LIMIT;
+        let lim = task.Thread().ThreadGroup().Limits().Get(LimitType::Stack).Cur;
+
+        let sz = match Addr(lim).RoundUp() {
+            Err(_) => {
+                // RLIM_INFINITY rounds up to 0.
+                DEFAULT_STACK_SOFT_LIMIT
+            }
+            Ok(stackSize) => {
+                if stackSize.0 > DEFAULT_STACK_SOFT_LIMIT {
+                    warn!("Capping stack size from RLIMIT_STACK of {} down to {}.", stackSize.0, DEFAULT_STACK_SOFT_LIMIT);
+                    DEFAULT_STACK_SOFT_LIMIT
+                } else if stackSize.0 == 0 {
+                    return Err(Error::SysError(SysErr::ENOMEM));
+                } else {
+                    stackSize.0
+                }
+            }
+        };
 
         //todo: add random
         // stackEnd := mm.layout.MaxAddr - usermem.Addr(mrand.Int63n(int64(mm.layout.MaxStackRand))).RoundDown()
@@ -212,6 +230,23 @@ impl MemoryManager {
         // [1] In-place growth is impossible because the vma at oldAddr already
         // occupies at least part of the destination. Thus the NoMove case always
         // fails and the MayMove case always falls back to copying.
+
+        let vma = vseg.Value();
+        if newSize > oldSize && vma.mlockMode != MLockMode::MlockNone {
+            // Check against RLIMIT_MEMLOCK. Unlike mmap, mlock, and mlockall,
+            // mremap in Linux does not check mm/mlock.c:can_do_mlock() and
+            // therefore does not return EPERM if RLIMIT_MEMLOCK is 0 and
+            // !CAP_IPC_LOCK.
+            let creds = task.creds.clone();
+            let userns = creds.lock().UserNamespace.Root();
+            if !creds.HasCapabilityIn(Capability::CAP_IPC_LOCK, &userns) {
+                let mlockLimit = task.Thread().ThreadGroup().Limits().Get(LimitType::MemoryLocked).Cur;
+                let newLockedAS = self.mapping.lock().lockedAS - oldSize + newSize;
+                if newLockedAS > mlockLimit {
+                    return Err(Error::SysError(SysErr::EPERM))
+                }
+            }
+        }
 
         if opts.Move != MREMAP_MUST_MOVE {
             // Handle no-ops and in-place shrinking. These cases don't care if
@@ -339,7 +374,7 @@ impl MemoryManager {
             // Inform the Mappable, if any, of the new mapping.
             let mappable = vma.mappable.clone().unwrap();
             let offsetat = vseg.MappableOffsetAt(oldAR.Start());
-            mappable.CopyMapping(self, &oldAR, &newAR, offsetat, vma.CanWriteMappableLocked())?;
+            mappable.HostIops().CopyMapping(self, &oldAR, &newAR, offsetat, vma.CanWriteMappableLocked())?;
         }
 
         if oldSize == 0 {
@@ -389,7 +424,7 @@ impl MemoryManager {
         // oldAR is no longer mapped.
         if vma.mappable.is_some() {
             let mappable = vma.mappable.clone().unwrap();
-            mappable.RemoveMapping(self, &oldAR, vma.offset, vma.CanWriteMappableLocked())?;
+            mappable.HostIops().RemoveMapping(self, &oldAR, vma.offset, vma.CanWriteMappableLocked())?;
         }
 
         self.PopulateVMARemapLocked(task, &vseg, &newAR, &Range::New(oldAddr, oldSize), true)?;
@@ -506,7 +541,7 @@ impl MemoryManager {
     }
 
     pub fn NumaPolicy(&self, addr: u64) -> Result<(i32, u64)> {
-        let _ml = self.MappingWriteLock();
+        let _ml = self.MappingReadLock();
         return self.NumaPolicyLocked(addr);
     }
 
@@ -587,6 +622,12 @@ impl MemoryManager {
             return Err(Error::SysError(SysErr::EINVAL));
         }
 
+        let lim = task.Thread().ThreadGroup().Limits().Get(LimitType::Data).Cur;
+        let brkStart = self.mapping.lock().brkInfo.brkStart;
+        if (addr - brkStart) as u64 > lim {
+            return Err(Error::SysError(SysErr::ENOMEM));
+        }
+
         let oldbrkpg = Addr(self.mapping.lock().brkInfo.brkEnd).RoundUp()?.0;
 
         let newbrkpg = match Addr(addr).RoundUp() {
@@ -632,7 +673,7 @@ impl MemoryManager {
     }
 
     pub fn GetSharedFutexKey(&self, task: &Task, addr: u64) -> Result<Key> {
-        let _ml = self.MappingWriteLock();
+        let rl = self.MappingReadLock();
 
         let ar = match Addr(addr).ToRange(4) {
             Ok(r) => r,
@@ -653,7 +694,7 @@ impl MemoryManager {
             });
         }
 
-        self.V2PLocked(task, addr, 4, &mut task.GetMut().iovs, true, false)?;
+        self.V2PLocked(task, &rl, addr, 4, &mut task.GetMut().iovs, true, false)?;
         defer!(task.GetMut().iovs.clear());
         assert!(task.GetMut().iovs.len() == 1);
 

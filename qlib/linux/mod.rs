@@ -25,5 +25,6 @@ pub mod shm;
 pub mod signal;
 pub mod socket;
 pub mod time;
+pub mod msgqueue;
 
 pub type TimeID = i32;

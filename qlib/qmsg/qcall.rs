@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
-use alloc::vec::Vec;
 
 use crate::qlib::fileinfo::*;
 
@@ -42,9 +41,6 @@ pub enum Msg {
     Fcntl(Fcntl),
     Close(Close),
 
-    Getxattr(Getxattr),
-    Lgetxattr(Lgetxattr),
-    Fgetxattr(Fgetxattr),
     Fstat(Fstat),
     Fstatat(Fstatat),
     Fstatfs(Fstatfs),
@@ -114,6 +110,45 @@ pub enum Msg {
     TlbShootdown(TlbShootdown),
     Sysinfo(Sysinfo),
     ReadDir(ReadDir),
+    FSetXattr(FSetXattr),
+    FGetXattr(FGetXattr),
+    FRemoveXattr(FRemoveXattr),
+    FListXattr(FListXattr),
+    HostMemoryBarrier(HostMemoryBarrier)
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct HostMemoryBarrier{}
+
+#[derive(Clone, Default, Debug)]
+pub struct FSetXattr {
+    pub fd: i32,
+    pub name: u64,
+    pub value: u64,
+    pub size: usize,
+    pub flags: u32,
+}
+
+
+#[derive(Clone, Default, Debug)]
+pub struct FGetXattr {
+    pub fd: i32,
+    pub name: u64,
+    pub value: u64,
+    pub size: usize,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct FRemoveXattr {
+    pub fd: i32,
+    pub name: u64,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct FListXattr {
+    pub fd: i32,
+    pub list: u64,
+    pub size: usize,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -155,7 +190,6 @@ pub struct IoUringRegister {
 
 #[derive(Clone, Default, Debug, Copy)]
 pub struct IoUringEnter {
-    pub idx: usize,
     pub toSubmit: u32,
     pub minComplete: u32,
     pub flags: u32,
@@ -244,30 +278,6 @@ pub struct GetTimeOfDay {
 }
 
 #[derive(Clone, Default, Debug)]
-pub struct Getxattr {
-    pub path: u64,
-    pub name: u64,
-    pub value: u64,
-    pub size: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Lgetxattr {
-    pub path: u64,
-    pub name: u64,
-    pub value: u64,
-    pub size: u64,
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct Fgetxattr {
-    pub fd: i32,
-    pub name: u64,
-    pub value: u64,
-    pub size: u64,
-}
-
-#[derive(Clone, Default, Debug)]
 pub struct ReadLinkAt {
     pub dirfd: i32,
     pub path: u64,
@@ -307,15 +317,12 @@ pub struct FileType {
     pub dType: u8,
 }
 
-#[derive(Debug)]
-pub struct FileTypes {
-    pub fileTypes: Vec<FileType>,
-}
-
 #[derive(Clone, Debug)]
 pub struct ReadDir {
     pub dirfd: i32,
-    pub data: u64,
+    pub addr: u64,
+    pub len: usize,
+    pub reset: bool,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -781,7 +788,6 @@ pub struct QMsg<'a> {
 pub enum HostOutputMsg {
     Default,
     QCall(u64),
-    WaitFDAsync(WaitFDAsync),
     EventfdWriteAsync(EventfdWriteAsync),
     PostRDMAConnect(u64),
 }
@@ -790,12 +796,6 @@ impl Default for HostOutputMsg {
     fn default() -> Self {
         return Self::Default;
     }
-}
-
-#[derive(Clone, Default, Debug, Copy)]
-pub struct WaitFDAsync {
-    pub fd: i32,
-    pub mask: EventMask,
 }
 
 #[derive(Clone, Default, Debug, Copy)]

@@ -176,16 +176,16 @@ impl<T: 'static + DirDataNode> InodeOperations for DirNode<T> {
         return self.dir.UnstableAttr(task);
     }
 
-    fn Getxattr(&self, dir: &Inode, name: &str) -> Result<String> {
-        return self.dir.Getxattr(dir, name);
+    fn Getxattr(&self, dir: &Inode, name: &str, size: usize) -> Result<Vec<u8>> {
+        return self.dir.Getxattr(dir, name, size);
     }
 
-    fn Setxattr(&self, dir: &mut Inode, name: &str, value: &str) -> Result<()> {
-        return self.dir.Setxattr(dir, name, value);
+    fn Setxattr(&self, dir: &mut Inode, name: &str, value: &[u8], flags: u32) -> Result<()> {
+        return self.dir.Setxattr(dir, name, value, flags);
     }
 
-    fn Listxattr(&self, dir: &Inode) -> Result<Vec<String>> {
-        return self.dir.Listxattr(dir);
+    fn Listxattr(&self, dir: &Inode, size: usize) -> Result<Vec<String>> {
+        return self.dir.Listxattr(dir, size);
     }
 
     fn Check(&self, task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {
@@ -240,7 +240,7 @@ impl<T: 'static + DirDataNode> InodeOperations for DirNode<T> {
         return self.dir.StatFS(task);
     }
 
-    fn Mappable(&self) -> Result<HostInodeOp> {
+    fn Mappable(&self) -> Result<HostIopsMappable> {
         return self.dir.Mappable();
     }
 }

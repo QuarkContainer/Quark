@@ -33,6 +33,7 @@ pub mod cpuid;
 pub mod cstring;
 pub mod device;
 pub mod eventchannel;
+pub mod fileinfo;
 pub mod limits;
 pub mod linux;
 pub mod loader;
@@ -52,7 +53,7 @@ pub mod sort_arr;
 pub mod task_mgr;
 pub mod uring;
 pub mod usage;
-pub mod fileinfo;
+pub mod backtracer;
 
 pub mod kernel;
 pub mod rdma_share;
@@ -68,12 +69,14 @@ use alloc::vec::Vec;
 use cache_padded::CachePadded;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicI32;
+use core::sync::atomic::AtomicU32;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 
 use self::bytestream::*;
 use self::config::*;
 use self::control_msg::SignalArgs;
+use self::fileinfo::*;
 use self::kernel::kernel::futex::*;
 use self::kernel::kernel::kernel::Kernel;
 use self::kernel::kernel::timer::timekeeper::*;
@@ -83,11 +86,10 @@ use self::kernel::quring::uring_mgr::QUring;
 use self::linux_def::*;
 use self::object_ref::ObjectRef;
 use self::qmsg::*;
+use self::rdma_svc_cli::*;
 use self::ringbuf::*;
 use self::task_mgr::*;
 use super::asm::*;
-use self::fileinfo::*;
-use self::rdma_svc_cli::*;
 
 pub fn InitSingleton() {
     unsafe {
@@ -590,25 +592,34 @@ pub enum SysCallID {
     syscall_421,
     syscall_422,
     syscall_423,
-    syscall_424,
-    syscall_425,
-    syscall_426,
-    syscall_427,
-    syscall_428,
-    syscall_429,
-    syscall_430,
-    syscall_431,
-    syscall_432,
-    syscall_433,
-    syscall_434,
-    syscall_435,
-    syscall_436,
-    syscall_437,
-    syscall_438,
-    syscall_439, //sys_openat2
-    syscall_440,
-    syscall_441, //epoll_pwait2
-    maxsupport = 442,
+    sys_pidfd_send_signal,
+    sys_io_uring_setup,
+    sys_io_uring_enter,
+    sys_io_uring_register,
+    sys_open_tree,
+    sys_move_mount,
+    sys_fsopen,
+    sys_fsconfig,
+    sys_fsmount,
+    sys_fspick,
+    sys_pidfd_open,
+    sys_clone3,
+    sys_close_range,
+    sys_openat2,
+    sys_pidfd_getfd,
+    sys_faccessat2,
+    sys_process_madvise,
+    sys_epoll_pwait2,
+    nt_setattr,
+    sys_quotactl_fd,
+    sys_landlock_create_ruleset,
+    sys_landlock_add_rule,
+    sys_landlock_restrict_self,
+    sys_memfd_secret,
+    sys_process_mrelease,
+    sys_futex_waitv,
+    sys_set_mempolicy_home_node,
+    maxsupport = 451,
 }
 
 #[derive(Clone, Default, Debug, Copy)]
@@ -651,7 +662,6 @@ pub struct ShareSpace {
     // add this pad can decrease the mariadb start time 25 sec to 12 sec
     //todo: root cause this. False share?
     //pub pad: [u64; 8],
-    pub hostEpollfd: AtomicI32,
     pub hostEpollProcessing: CachePadded<QMutex<()>>,
 
     pub scheduler: task_mgr::Scheduler,
@@ -667,22 +677,26 @@ pub struct ShareSpace {
     pub futexMgr: CachePadded<FutexMgr>,
     pub pageMgr: CachePadded<PageMgr>,
     pub ioMgr: CachePadded<IOMgr>,
-    pub config: QRwLock<Config>,
+    pub config: CachePadded<QRwLock<Config>>,
     pub rdmaSvcCli: CachePadded<RDMASvcClient>,
 
-    pub logBuf: QMutex<Option<ByteStream>>,
-    pub logLock: QMutex<()>,
-    pub logfd: AtomicI32,
-    pub signalHandlerAddr: AtomicU64,
-    pub virtualizationHandlerAddr: AtomicU64,
-    pub kernel: QMutex<Option<Kernel>>,
+    pub logBuf: CachePadded<QMutex<Option<ByteStream>>>,
+    pub logLock: CachePadded<QMutex<()>>,
+    pub logfd: CachePadded<AtomicI32>,
+    pub signalHandlerAddr: CachePadded<AtomicU64>,
+    pub virtualizationHandlerAddr: CachePadded<AtomicU64>,
+    pub kernel: CachePadded<QMutex<Option<Kernel>>>,
+    pub tlbShootdownLock: CachePadded<QMutex<()>>,
+    pub tlbShootdownMask: CachePadded<AtomicU64>,
+    pub uid: CachePadded<AtomicU64>,
+    pub inotifyCookie: CachePadded<AtomicU32>,
+    pub waitMask: CachePadded<AtomicU64>,
 
+    pub supportMemoryBarrier: bool,
     pub controlSock: i32,
+    pub hostEpollfd: AtomicI32,
 
     pub values: Vec<[AtomicU64; 2]>,
-    pub tlbShootdownLock: QMutex<()>,
-    pub tlbShootdownMask: AtomicU64,
-
 }
 
 impl ShareSpace {
@@ -694,9 +708,22 @@ impl ShareSpace {
         };
     }
 
+    pub fn NewUID(&self) -> u64 {
+        return self.uid.fetch_add(1, Ordering::SeqCst) + 1;
+    }
+
+    pub fn NewInotifyCookie(&self) -> u32 {
+        return self.inotifyCookie.fetch_add(1, Ordering::SeqCst) + 1;
+    }
+
     pub fn MaskTlbShootdown(&self, vcpuId: u64) {
         self.tlbShootdownMask
             .fetch_or(1 << vcpuId, Ordering::Release);
+    }
+
+    pub fn UnmaskTlbShootdown(&self, vcpuId: u64) {
+        self.tlbShootdownMask
+            .fetch_and(!(1 << vcpuId), Ordering::Release);
     }
 
     pub fn TlbShootdownMask(&self) -> u64 {
@@ -705,6 +732,10 @@ impl ShareSpace {
 
     pub fn ClearTlbShootdownMask(&self) {
         self.tlbShootdownMask.store(0, Ordering::Release);
+    }
+
+    pub fn SetTlbShootdownMask(&self, mask: u64) {
+        self.tlbShootdownMask.store(mask, Ordering::Release);
     }
 
     pub fn SetIOUringsAddr(&self, addr: u64) {

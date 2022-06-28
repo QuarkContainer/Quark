@@ -20,9 +20,9 @@ pub const IPC_STAT: i32 = 2;
 pub const IPC_INFO: i32 = 3;
 
 // resource get request flags. Source: include/uapi/linux/ipc.h
-pub const IPC_CREAT: i16 = 00001000;
-pub const IPC_EXCL: i16 = 00002000;
-pub const IPC_NOWAIT: i16 = 00004000;
+pub const IPC_CREAT: i16 = 0o01000;
+pub const IPC_EXCL: i16 = 0o002000;
+pub const IPC_NOWAIT: i16 = 0o004000;
 
 pub const IPC_PRIVATE: i32 = 0;
 
@@ -32,7 +32,7 @@ pub const IPC_PRIVATE: i32 = 0;
 
 // IPCPerm is equivalent to struct ipc64_perm.
 #[repr(C)]
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Copy)]
 pub struct IPCPerm {
     pub Key: u32,
     pub UID: u32,

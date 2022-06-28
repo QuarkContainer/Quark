@@ -44,8 +44,8 @@ impl HostSpace {
         HyperCall64(HYPERCALL_HLT, 0, 0, 0);
     }
 
-    pub fn UringWake(idx: usize, minCompleted: u64) {
-        HyperCall64(HYPERCALL_URING_WAKE, idx as u64, minCompleted, 0);
+    pub fn UringWake(minCompleted: u64) {
+        HyperCall64(HYPERCALL_URING_WAKE, minCompleted, 0, 0);
     }
 
     pub fn LoadProcessKernel(processAddr: u64, len: usize) -> i64 {
@@ -95,6 +95,12 @@ impl HostSpace {
         });
 
         return HostSpace::HCall(&mut msg, false) as i64;
+    }
+
+    pub fn HostMemoryBarrier() -> i64 {
+        let mut msg = Msg::HostMemoryBarrier(HostMemoryBarrier {});
+
+        return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn Ftruncate(fd: i32, len: i64) -> i64 {
@@ -298,39 +304,6 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn Getxattr(path: u64, name: u64, value: u64, size: u64) -> i64 {
-        let mut msg = Msg::Getxattr(Getxattr {
-            path,
-            name,
-            value,
-            size,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn Lgetxattr(path: u64, name: u64, value: u64, size: u64) -> i64 {
-        let mut msg = Msg::Lgetxattr(Lgetxattr {
-            path,
-            name,
-            value,
-            size,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn Fgetxattr(fd: i32, name: u64, value: u64, size: u64) -> i64 {
-        let mut msg = Msg::Fgetxattr(Fgetxattr {
-            fd,
-            name,
-            value,
-            size,
-        });
-
-        return HostSpace::Call(&mut msg, false) as i64;
-    }
-
     pub fn Unlinkat(dirfd: i32, pathname: u64, flags: i32) -> i64 {
         let mut msg = Msg::Unlinkat(Unlinkat {
             dirfd,
@@ -406,13 +379,59 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn ReadDir(dirfd: i32, data: &mut FileTypes) -> i64 {
+    pub fn ReadDir(dirfd: i32, data: &mut [u8], reset: bool) -> i64 {
         let mut msg = Msg::ReadDir(ReadDir {
             dirfd,
-            data: data as *const _ as u64,
+            addr: &mut data[0] as *mut _ as u64,
+            len: data.len(),
+            reset: reset,
         });
 
         return HostSpace::HCall(&mut msg, false) as i64;
+    }
+
+    pub fn FSetXattr(fd: i32, name: u64, value: u64, size: usize, flags: u32) -> i64 {
+        let mut msg = Msg::FSetXattr(FSetXattr {
+            fd,
+            name,
+            value,
+            size,
+            flags
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
+    pub fn FGetXattr(fd: i32, name: u64, value: u64, size: usize) -> i64 {
+        let mut msg = Msg::FGetXattr(FGetXattr {
+            fd,
+            name,
+            value,
+            size,
+        });
+
+        // FGetXattr has to be hcall as it will also be called by
+        // inode::lookup --> OverlayHasWhiteout which might be called by create and hold a lock
+        return HostSpace::HCall(&mut msg, false) as i64;
+    }
+
+    pub fn FRemoveXattr(fd: i32, name: u64) -> i64 {
+        let mut msg = Msg::FRemoveXattr(FRemoveXattr {
+            fd,
+            name,
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
+    pub fn FListXattr(fd: i32, list: u64, size: usize) -> i64 {
+        let mut msg = Msg::FListXattr(FListXattr {
+            fd,
+            list,
+            size,
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
     }
 
     pub fn GetRandom(buf: u64, len: u64, flags: u32) -> i64 {
@@ -654,9 +673,8 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn IoUringEnter(idx: usize, toSubmit: u32, minComplete: u32, flags: u32) -> i64 {
+    pub fn IoUringEnter(toSubmit: u32, minComplete: u32, flags: u32) -> i64 {
         let mut msg = Msg::IoUringEnter(IoUringEnter {
-            idx,
             toSubmit,
             minComplete,
             flags,
@@ -782,12 +800,6 @@ impl HostSpace {
         let mut msg = Msg::MUnmap(qmsg::qcall::MUnmap { addr, len });
 
         HostSpace::HCall(&mut msg, true);
-    }
-
-    pub fn WaitFDAsync(fd: i32, mask: EventMask) {
-        let msg = HostOutputMsg::WaitFDAsync(WaitFDAsync { fd, mask });
-
-        super::SHARESPACE.AQCall(&msg);
     }
 
     pub fn EventfdWriteAsync(fd: i32) {

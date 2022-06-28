@@ -28,6 +28,7 @@ use super::super::loader::loader::*;
 use super::super::memmgr::mm::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
+use super::super::qlib::path::*;
 use super::super::qlib::LoadAddr;
 use super::super::syscalls::syscalls::*;
 use super::super::task::*;
@@ -129,11 +130,53 @@ const EXEC_MAX_TOTAL_SIZE: usize = 2 * 1024 * 1024;
 // ExecMaxElemSize is the maximum length of a single argv or envv entry.
 const EXEC_MAX_ELEM_SIZE: usize = 32 * MemoryDef::PAGE_SIZE as usize;
 
-pub fn SysExecve(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
-    let filenameAddr = args.arg0 as u64;
-    let argvAddr = args.arg1 as u64;
-    let envvAddr = args.arg2 as u64;
+pub fn ExecvFilleName(task: &mut Task, dirfd: i32, filename: &str, flags: i32) -> Result<String> {
+    if flags & !(ATType::AT_EMPTY_PATH | ATType::AT_SYMLINK_NOFOLLOW) != 0 {
+        return Err(Error::SysError(SysErr::EINVAL))
+    }
 
+    let atEmptyPath = flags & ATType::AT_EMPTY_PATH != 0;
+
+    let resolveFinal = flags & ATType::AT_SYMLINK_NOFOLLOW != 0;
+
+    let cwd;
+    if dirfd == ATType::AT_FDCWD || IsAbs(filename) {
+        let fscontex = task.fsContext.clone();
+        cwd = fscontex.lock().cwd.clone();
+    } else {
+        let f = task.GetFile(dirfd)?;
+        cwd = f.Dirent.clone();
+        let inode = cwd.Inode();
+        if atEmptyPath && filename.len() == 0 {
+            inode.CheckPermission(task, &PermMask {
+                read: true,
+                execute: true,
+                ..Default::default()
+            })?;
+            return Ok(f.Dirent.MyFullName())
+        } else {
+            if !inode.StableAttr().IsDir() {
+                return Err(Error::SysError(SysErr::ENOTDIR))
+            }
+        }
+    };
+
+    let fscontex = task.fsContext.clone();
+    let root = fscontex.lock().root.clone();
+    let mut remainingTraversals = 40;
+    let d = task.mountNS.FindDirent(
+        task,
+        &root,
+        Some(cwd),
+        filename,
+        &mut remainingTraversals,
+        resolveFinal,
+    )?;
+
+    return Ok(d.MyFullName())
+}
+
+pub fn Execvat(task: &mut Task, dirfd: i32, filenameAddr: u64, argvAddr: u64, envvAddr: u64, flags: i32) -> Result<i64> {
     let (fileName, err) = task.CopyInString(filenameAddr, PATH_MAX);
     match err {
         Err(e) => return Err(e),
@@ -144,8 +187,9 @@ pub fn SysExecve(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let mut argv = task.CopyInVector(argvAddr, EXEC_MAX_ELEM_SIZE, EXEC_MAX_TOTAL_SIZE as i32)?;
     let envv = task.CopyInVector(envvAddr, EXEC_MAX_ELEM_SIZE, EXEC_MAX_TOTAL_SIZE as i32)?;
 
-    //todo: handle SysExecve gracelly
-    info!("SysExecve workaround, will handle gracefully");
+    if argv.len() == 0 {
+        argv.push(fileName.clone())
+    };
     let mut cmd = format!("");
     for arg in &argv {
         cmd += &arg;
@@ -159,21 +203,7 @@ pub fn SysExecve(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     }
     info!("in the execve: the cmd is {} \n envs is {:?}", &cmd, &envs);
 
-    let fileName = {
-        let fscontex = task.fsContext.clone();
-        let cwd = fscontex.lock().cwd.clone();
-        let root = fscontex.lock().root.clone();
-        let mut remainingTraversals = 40;
-        let d = task.mountNS.FindDirent(
-            task,
-            &root,
-            Some(cwd),
-            &fileName,
-            &mut remainingTraversals,
-            true,
-        )?;
-        d.MyFullName()
-    };
+    let fileName = ExecvFilleName(task, dirfd, &fileName, flags)?;
 
     {
         let t = task.Thread().clone();
@@ -295,6 +325,7 @@ pub fn SysExecve(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
         let newMM = MemoryManager::Init(false);
         let oldMM = task.mm.clone();
+        *newMM.metadata.lock() = oldMM.metadata.lock().Fork();
         newMM.SetVcpu(GetVcpuId());
         task.mm = newMM.clone();
         task.futexMgr = task.futexMgr.Fork();
@@ -317,6 +348,26 @@ pub fn SysExecve(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     //won't reach here
 
     return Ok(0);
+}
+
+// Execveat implements linux syscall execveat(2).
+pub fn SysExecveat(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let dirfd = args.arg0 as i32;
+    let filenameAddr = args.arg1 as u64;
+    let argvAddr = args.arg2 as u64;
+    let envvAddr = args.arg3 as u64;
+    let flags = args.arg4 as i32;
+
+    return Execvat(task, dirfd, filenameAddr, argvAddr, envvAddr, flags);
+}
+
+// Execve implements linux syscall execve(2).
+pub fn SysExecve(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
+    let filenameAddr = args.arg0 as u64;
+    let argvAddr = args.arg1 as u64;
+    let envvAddr = args.arg2 as u64;
+
+    return Execvat(task, ATType::AT_FDCWD, filenameAddr, argvAddr, envvAddr, 0);
 }
 
 pub fn SysExit(task: &mut Task, args: &SyscallArguments) -> Result<i64> {

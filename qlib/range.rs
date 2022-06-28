@@ -12,12 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::vec::Vec;
 use core::cmp::*;
 use core::ops::Bound::*;
-use core::ops::Deref;
 
 use super::addr::*;
 use super::common::{Error, Result};
@@ -334,6 +332,7 @@ impl<T: core::clone::Clone> AreaMgr<T> {
     }
 }
 
+/*
 #[derive(Debug, Default)]
 pub struct BufMgr(QMutex<BufMgrIntern>);
 
@@ -421,7 +420,9 @@ impl BufMgrIntern {
         self.gapMgr.Free(start, len)
     }
 }
+*/
 
+/*
 #[derive(Debug, Clone, Default)]
 pub struct GapMgr {
     pub range: Range,
@@ -533,7 +534,8 @@ impl GapMgr {
         let mut cStart = 0;
         let mut cLen = 0;
 
-        for (gStart, gLen) in self.map.range((Included(addr), Unbounded)).rev() {
+
+        for (gStart, gLen) in self.map.range((Included(self.range.start), Unbounded)) {
             //todo: optimize
             if *gStart + *gLen < addr + len || *gLen < len {
                 continue;
@@ -658,6 +660,10 @@ impl<T: core::clone::Clone> IdMgr<T> {
         };
     }
 
+    pub fn Take(&mut self, start: u64, len: u64) {
+        self.gaps.Take(start, len);
+    }
+
     pub fn AllocId(&mut self) -> Result<u64> {
         let id = match self.gaps.AllocAfter(self.last, 1, 0) {
             Ok(id) => id,
@@ -666,6 +672,15 @@ impl<T: core::clone::Clone> IdMgr<T> {
 
         self.last = id;
         return Ok(id);
+    }
+
+    pub fn NewFrom(&mut self, id: u64) -> Option<u64> {
+        match self.gaps.AllocAfter(id, 1, 0) {
+            Ok(id) => return Some(id),
+            _ => ()
+        };
+
+        return None
     }
 
     pub fn Add(&mut self, id: u64, data: T) {
@@ -701,3 +716,4 @@ impl<T: core::clone::Clone> IdMgr<T> {
         }
     }
 }
+*/

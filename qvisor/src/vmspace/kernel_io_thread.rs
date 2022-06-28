@@ -57,15 +57,15 @@ impl KIOThread {
         if QUARK_CONFIG.lock().EnableRDMA {
             count += GlobalRDMASvcCli().ProcessRDMASvcMessage();
         }
-        count += IOURING.IOUrings()[0].HostSubmit().unwrap();
+        count += IOURING.IOUring().HostSubmit().unwrap();
         TIMER_STORE.Trigger();
-        count += IOURING.IOUrings()[0].HostSubmit().unwrap();
+        count += IOURING.IOUring().HostSubmit().unwrap();
         count += IOURING.DrainCompletionQueue();
-        count += IOURING.IOUrings()[0].HostSubmit().unwrap();
+        count += IOURING.IOUring().HostSubmit().unwrap();
         count += KVMVcpu::GuestMsgProcess(sharespace);
-        count += IOURING.IOUrings()[0].HostSubmit().unwrap();
+        count += IOURING.IOUring().HostSubmit().unwrap();
         count += FD_NOTIFIER.HostEpollWait() as usize;
-        count += IOURING.IOUrings()[0].HostSubmit().unwrap();
+        count += IOURING.IOUring().HostSubmit().unwrap();
 
         sharespace.CheckVcpuTimeout();
 

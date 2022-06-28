@@ -4,6 +4,7 @@ use core::sync::atomic::Ordering;
 use libc::*;
 use std::fmt;
 
+use super::qlib::kernel::quring::uring_async::UringAsyncMgr;
 use super::qlib::common::*;
 use super::qlib::control_msg::*;
 use super::qlib::kernel::memmgr::pma::*;
@@ -27,6 +28,7 @@ use super::FD_NOTIFIER;
 use super::QUARK_CONFIG;
 use super::URING_MGR;
 use super::VMS;
+use crate::SHARE_SPACE;
 
 impl std::error::Error for Error {}
 
@@ -120,40 +122,26 @@ impl ShareSpace {
         self.values = values;
 
         self.scheduler.Init();
-        self.SetLogfd(super::print::LOG.lock().Logfd());
+        self.SetLogfd(super::print::LOG.Logfd());
         self.hostEpollfd
             .store(FD_NOTIFIER.Epollfd(), Ordering::SeqCst);
         self.controlSock = controlSock;
+        self.supportMemoryBarrier = VMS.lock().haveMembarrierGlobal;
         super::vmspace::VMSpace::BlockFd(controlSock);
     }
 
-    pub fn TlbShootdown(&self, vcpuMask: u64) -> i64 {
-        let _l = self.tlbShootdownLock.lock();
-
-        self.ClearTlbShootdownMask();
-        let mask = VMS.lock().TlbShootdown(vcpuMask);
-
-        let mut last = TSC.Rdtsc();
-        for _ in 0..200 {
-            loop {
-                Self::Yield();
-                if mask & !self.TlbShootdownMask() == 0 {
-                    return mask as _;
-                }
-                if Tsc::Scale(TSC.Rdtsc() - last) * 1000 > CLOCK_TICK {
-                    last = TSC.Rdtsc();
-                    break;
-                }
+    pub fn TlbShootdown(&self, vcpuMask: u64) -> u64 {
+        let vcpu_len = self.scheduler.VcpuArr.len();
+        for i in 1..vcpu_len {
+            if ((1 << i) & vcpuMask != 0)
+                && SHARE_SPACE.scheduler.VcpuArr[i].GetMode() == VcpuMode::User
+            {
+                let cpu = VMS.lock().vcpus[i].clone();
+                SHARE_SPACE.scheduler.VcpuArr[i].InterruptTlbShootdown();
+                cpu.interrupt();
             }
-
-            VMS.lock().TlbShootdown(mask & !self.TlbShootdownMask());
         }
-
-        error!(
-            "TlbShootdown waiting for {:b} timeout",
-            mask & !self.TlbShootdownMask()
-        );
-        return mask as _;
+        return 0;
     }
 
     pub fn Yield() {
@@ -175,13 +163,11 @@ impl ShareSpace {
                 //self.scheduler.VcpuArr[i].ResetEnterAppTimestamp();
 
                 // retry to send signal for each 2 ms
-                self.scheduler.VcpuArr[i]
-                    .SetEnterAppTimestamp(enterAppTimestamp + CLOCK_TICK / 5000);
+                self.scheduler.VcpuArr[i].SetEnterAppTimestamp(enterAppTimestamp + CLOCK_TICK / 5);
                 self.scheduler.VcpuArr[i].InterruptThreadTimeout();
                 //error!("CheckVcpuTimeout {}/{}/{}/{}", i, enterAppTimestamp, now, Tsc::Scale(now - enterAppTimestamp));
-
-                // todo: enable this for preempty schedule
-                VMS.lock().vcpus[i].Signal(Signal::SIGCHLD);
+                let vcpu = VMS.lock().vcpus[i].clone();
+                vcpu.interrupt();
             }
         }
     }
@@ -280,10 +266,10 @@ pub fn NewSocket(fd: i32) -> i64 {
     return VMSpace::NewSocket(fd);
 }
 
-pub fn UringWake(idx: usize, minCompleted: u64) {
+pub fn UringWake(minCompleted: u64) {
     URING_MGR
         .lock()
-        .Wake(idx, minCompleted as _)
+        .Wake(minCompleted as _)
         .expect("qlib::HYPER CALL_URING_WAKE fail");
 }
 
@@ -320,4 +306,10 @@ pub fn HugepageDontNeed(addr: u64) {
         )
     };
     assert!(ret == 0, "HugepageDontNeed::Host fail with {}", ret)
+}
+
+impl UringAsyncMgr {
+    pub fn FreeSlot(&self, id: usize) {
+        self.freeids.lock().push_back(id as _);
+    }
 }

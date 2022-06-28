@@ -19,7 +19,7 @@ use super::qlib::addr::*;
 use super::qlib::common::*;
 use super::qlib::kernel::TSC;
 use super::qlib::linux_def::*;
-use super::qlib::perf_tunning::*;
+//use super::qlib::perf_tunning::*;
 use super::qlib::singleton::*;
 use super::qlib::vcpu_mgr::*;
 use super::task::*;
@@ -135,6 +135,7 @@ pub fn init() {
 }
 
 pub fn ExceptionHandler(ev: ExceptionStackVec, ptRegs: &mut PtRegs, errorCode: u64) {
+    CPULocal::Myself().SetMode(VcpuMode::Kernel);
     let PRINT_EXECPTION: bool = SHARESPACE.config.read().PrintException;
 
     let currTask = Task::Current();
@@ -272,7 +273,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, ptRegs: &mut PtRegs, errorCode: u
                 .expect("DivByZeroHandler send signal fail");
         }
         ExceptionStackVec::InvalidOpcode => {
-            let _ml = currTask.mm.MappingWriteLock();
+            let _ml = currTask.mm.MappingReadLock();
             let map = currTask.mm.GetSnapshotLocked(currTask, false);
             let data = unsafe { *(ptRegs.rip as *const u64) };
 
@@ -324,6 +325,7 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, ptRegs: &mut PtRegs, errorCode: u
         currTask.RestoreFp();
     }
 
+    CPULocal::Myself().SetMode(VcpuMode::User);
     currTask.mm.HandleTlbShootdown();
     ReturnToApp(ptRegs);
 }
@@ -424,7 +426,7 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
     unsafe {
         llvm_asm!("movw $0, %ss" :: "r" (ss) : "memory");
     }
-
+    CPULocal::Myself().SetMode(VcpuMode::Kernel);
     let currTask = Task::Current();
 
     // is this call from user
@@ -461,8 +463,8 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
         panic!("Get pagefault from kernel .");
     }
 
-    currTask.PerfGoto(PerfType::PageFault);
-    defer!(Task::Current().PerfGofrom(PerfType::PageFault));
+    //currTask.PerfGoto(PerfType::PageFault);
+    //defer!(Task::Current().PerfGofrom(PerfType::PageFault));
 
     let PRINT_EXECPTION: bool = SHARESPACE.config.read().PrintException;
     if PRINT_EXECPTION {
@@ -563,7 +565,8 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
                     currTask.SwitchPageTable();
                 }
             }
-
+            CPULocal::Myself().SetMode(VcpuMode::User);
+            currTask.mm.HandleTlbShootdown();
             return;
         }
 
@@ -592,7 +595,8 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
             signal = Signal::SIGSEGV;
             break;
         }
-
+        CPULocal::Myself().SetMode(VcpuMode::User);
+        currTask.mm.HandleTlbShootdown();
         return;
     }
 
@@ -615,7 +619,7 @@ pub fn HandleFault(
         panic!();
     }
 
-    task.SaveFp();
+    //task.SaveFp();
 
     let mut info = SignalInfo {
         Signo: signal, //Signal::SIGBUS,
@@ -644,6 +648,7 @@ pub fn HandleFault(
         .SendSignal(&info)
         .expect("PageFaultHandler send signal fail");
     MainRun(task, TaskRunState::RunApp);
+    CPULocal::Myself().SetMode(VcpuMode::User);
     task.mm.HandleTlbShootdown();
 
     task.RestoreFp();
@@ -673,6 +678,7 @@ pub extern "C" fn SIMDFPHandler(sf: &mut PtRegs) {
 
 #[no_mangle]
 pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
+    CPULocal::Myself().SetMode(VcpuMode::Kernel);
     let mask = CPULocal::Myself().ResetInterruptMask();
     let currTask = Task::Current();
 
@@ -685,8 +691,11 @@ pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
             ptRegs.eflags = rflags;
         }
 
-        currTask.mm.HandleTlbShootdown();
         CPULocal::SetKernelStack(currTask.GetKernelSp());
+        if ptRegs.ss & 0x3 != 0 {
+            CPULocal::Myself().SetMode(VcpuMode::User);
+        }
+        currTask.mm.HandleTlbShootdown();
         return;
     } else if CPULocal::InterruptByThreadTimeout(mask) {
         if ptRegs.ss & 0x3 != 0 {
@@ -701,11 +710,11 @@ pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
             }
 
             currTask.AccountTaskLeave(SchedState::RunningApp);
-            currTask.SaveFp();
+            //currTask.SaveFp();
 
             super::qlib::kernel::taskMgr::Yield();
             MainRun(currTask, TaskRunState::RunApp);
-            // do we need to handle tlb shootdown here?
+            CPULocal::Myself().SetMode(VcpuMode::User);
             currTask.mm.HandleTlbShootdown();
             currTask.RestoreFp();
             CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());

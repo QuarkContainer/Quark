@@ -14,9 +14,9 @@
 
 #[derive(Debug, Clone)]
 pub struct Frame {
-    rbp: u64,
-    rsp: u64,
-    rip: u64,
+    pub rbp: u64,
+    pub rsp: u64,
+    pub rip: u64,
 }
 
 impl Frame {
@@ -61,14 +61,16 @@ pub fn trace_from(mut curframe: Frame, cb: &mut dyn FnMut(&Frame) -> bool) {
 }
 
 #[inline(always)]
-pub fn trace1(rip: u64, rsp: u64, rbp: u64, cb: &mut dyn FnMut(&Frame) -> bool) {
+pub fn trace(rip: u64, rsp: u64, rbp: u64, cb: &mut dyn FnMut(&Frame) -> bool) {
     let curframe = Frame::new(rbp, rsp, rip);
     trace_from(curframe, cb);
 }
 
+/*
 #[inline(always)]
 pub fn trace(cb: &mut dyn FnMut(&Frame) -> bool) {
     use x86::current::registers;
     let curframe = Frame::new(registers::rbp(), registers::rsp(), registers::rip());
     trace_from(curframe.clone(), cb);
 }
+*/

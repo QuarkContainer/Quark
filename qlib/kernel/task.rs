@@ -213,6 +213,10 @@ impl Task {
         self.guard.Check();
     }
 
+    pub fn IPCNamespace(&self) -> IPCNamespace {
+        return self.ipcns.clone();
+    }
+
     //clean object on stack
     pub fn SetDummy(&mut self) {
         let dummyTask = DUMMY_TASK.read();
@@ -233,12 +237,16 @@ impl Task {
         self.ioUsage = dummyTask.ioUsage.clone();
     }
 
-    pub fn SaveFp(&self) {
+    pub fn SaveFp(&mut self) {
         self.context.X86fpstate.SaveFp();
+        self.context.savefpsate = true;
     }
 
-    pub fn RestoreFp(&self) {
-        self.context.X86fpstate.RestoreFp();
+    pub fn RestoreFp(&mut self) {
+        if self.context.savefpsate {
+            self.context.X86fpstate.RestoreFp();
+            self.context.savefpsate = false;
+        }
     }
 
     pub fn QueueId(&self) -> usize {
@@ -444,12 +452,8 @@ impl Task {
         return self.fdTbl.lock().SetFlags(fd, flags);
     }
 
-    pub fn NewFDs(&mut self, fd: i32, file: &[File], flags: &FDFlags) -> Result<Vec<i32>> {
-        return self.fdTbl.lock().NewFDs(fd, file, flags);
-    }
-
     pub fn NewFDAt(&mut self, fd: i32, file: &File, flags: &FDFlags) -> Result<()> {
-        return self.fdTbl.lock().NewFDAt(fd, file, flags);
+        return self.fdTbl.NewFDAt(self, fd, file, flags);
     }
 
     pub fn FileOwner(&self) -> FileOwner {
@@ -479,9 +483,7 @@ impl Task {
     }
 
     pub fn NewFDFrom(&self, fd: i32, file: &File, flags: &FDFlags) -> Result<i32> {
-        //let fds = self.fdTbl.lock().NewFDs(fd, vec![file.clone()], flags)?;
-        //return Ok(fds[0])
-        return self.fdTbl.lock().NewFDFrom(fd, file, flags);
+        return self.fdTbl.NewFDFrom(self, fd, file, flags);
     }
 
     pub fn RemoveFile(&self, fd: i32) -> Result<File> {
@@ -492,7 +494,7 @@ impl Task {
     }
 
     pub fn Dup(&mut self, oldfd: u64) -> i64 {
-        match self.fdTbl.lock().Dup(oldfd as i32) {
+        match self.fdTbl.Dup(self, oldfd as i32) {
             Ok(fd) => fd as i64,
             Err(Error::SysError(e)) => -e as i64,
             Err(e) => panic!("unsupport error {:?}", e),
@@ -500,7 +502,7 @@ impl Task {
     }
 
     pub fn Dup2(&mut self, oldfd: u64, newfd: u64) -> i64 {
-        match self.fdTbl.lock().Dup2(oldfd as i32, newfd as i32) {
+        match self.fdTbl.Dup2(self, oldfd as i32, newfd as i32) {
             Ok(fd) => fd as i64,
             Err(Error::SysError(e)) => -e as i64,
             Err(e) => panic!("unsupport error {:?}", e),
@@ -510,8 +512,7 @@ impl Task {
     pub fn Dup3(&mut self, oldfd: u64, newfd: u64, flags: u64) -> i64 {
         match self
             .fdTbl
-            .lock()
-            .Dup3(oldfd as i32, newfd as i32, flags as i32)
+            .Dup3(self, oldfd as i32, newfd as i32, flags as i32)
         {
             Ok(fd) => fd as i64,
             Err(Error::SysError(e)) => -e as i64,
@@ -671,9 +672,9 @@ impl Task {
                 },
             );
 
-            let new = &mut *taskPtr;
-            new.PerfGoto(PerfType::Blocked);
-            new.PerfGoto(PerfType::Kernel);
+            //let new = &mut *taskPtr;
+            //new.PerfGoto(PerfType::Blocked);
+            //new.PerfGoto(PerfType::Kernel);
             return &mut (*taskPtr);
         }
     }

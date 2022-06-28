@@ -13,26 +13,21 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
-use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
-use alloc::vec::Vec;
 use core::any::Any;
 
 use super::super::super::super::addr::*;
 use super::super::super::super::bytestream::*;
 use super::super::super::super::common::*;
-use super::super::super::super::device::*;
 use super::super::super::super::linux_def::*;
 use super::super::super::super::pagetable::*;
-use super::super::super::super::qmsg::qcall::*;
 use super::super::super::super::range::*;
 use super::super::super::guestfdnotifier::*;
 use super::super::super::kernel::async_wait::*;
 use super::super::super::kernel::waiter::*;
 use super::super::super::task::*;
-use super::super::super::Kernel::HostSpace;
 
 use super::super::attr::*;
 use super::super::dentry::*;
@@ -41,8 +36,6 @@ use super::super::file::*;
 use super::super::fsutil::file::*;
 use super::super::host::hostinodeop::*;
 use super::super::inode::*;
-
-use super::util::*;
 
 pub enum HostFileBuf {
     None,
@@ -60,43 +53,6 @@ pub struct FutureFileType {
     pub dirfd: i32,
     pub pathname: u64,
     pub future: Future<Statx>,
-}
-
-impl HostInodeOp {
-    fn ReadDirAll(&self, _task: &Task) -> Result<BTreeMap<String, DentAttr>> {
-        let fd = self.HostFd();
-
-        let mut fts = FileTypes {
-            fileTypes: Vec::new(),
-        };
-
-        let res = HostSpace::ReadDir(fd, &mut fts);
-        if res < 0 {
-            return Err(Error::SysError(-res as i32));
-        }
-
-        let mut entries = BTreeMap::new();
-        for ft in &fts.fileTypes {
-            let dentry = DentAttr {
-                Type: InodeType(DType::ModeType(ft.dType) as u32),
-                InodeId: HOSTFILE_DEVICE.lock().Map(MultiDeviceKey {
-                    Device: ft.device,
-                    Inode: ft.inode,
-                    SecondaryDevice: "".to_string(),
-                }),
-            };
-
-            entries.insert(ft.pathname.Str().unwrap().to_string(), dentry);
-        }
-
-        return Ok(entries);
-    }
-}
-
-impl HostFileOp {
-    fn ReadDirAll(&self, task: &Task) -> Result<BTreeMap<String, DentAttr>> {
-        return self.InodeOp.ReadDirAll(task);
-    }
 }
 
 impl Waitable for HostFileOp {
@@ -252,20 +208,10 @@ impl FileOperations for HostFileOp {
         dirCtx: &mut DirCtx,
         offset: i32,
     ) -> (i32, Result<i64>) {
-        let entries = match self.ReadDirAll(task) {
-            Err(e) => return (offset, Err(e)),
-            Ok(entires) => entires,
-        };
-
-        let dentryMap = DentMap { Entries: entries };
-
-        return match dirCtx.ReadDir(task, &dentryMap) {
-            Err(e) => (offset, Err(e)),
-            Ok(count) => (offset + count as i32, Ok(0)),
-        };
+        return self.InodeOp.lock().IterateDir(task, dirCtx, offset);
     }
 
-    fn Mappable(&self) -> Result<HostInodeOp> {
+    fn Mappable(&self) -> Result<HostIopsMappable> {
         return self.InodeOp.Mappable();
     }
 }

@@ -227,7 +227,7 @@ fn copyContentsLocked(task: &Task, upper: &Inode, lower: &Inode, size: i64) -> R
 
 fn copyAttributesLocked(task: &Task, upper: &mut Inode, lower: &Inode) -> Result<()> {
     let lowerAttr = lower.UnstableAttr(task)?;
-    let lowerXattr = match lower.Listxattr() {
+    let lowerXattr = match lower.Listxattr(Xattr::XATTR_SIZE_MAX) {
         Err(Error::SysError(SysErr::EOPNOTSUPP)) => Vec::new(),
         Ok(a) => a,
         Err(e) => return Err(e),
@@ -250,8 +250,8 @@ fn copyAttributesLocked(task: &Task, upper: &mut Inode, lower: &Inode) -> Result
             continue;
         }
 
-        let value = lower.Getxattr(name)?;
-        upperInodeOp.Setxattr(upper, name, &value)?;
+        let value = lower.Getxattr(task, name, Xattr::XATTR_SIZE_MAX)?;
+        upperInodeOp.Setxattr(upper, name, &value, 0)?;
     }
 
     return Ok(());

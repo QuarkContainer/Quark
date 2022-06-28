@@ -250,6 +250,11 @@ int main(int argc, char const *argv[])
         recv_buffers[i] = malloc(config.buffer_size);
     }
 
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0) {
+        perror("setsockopt failed"); 
+        exit(EXIT_FAILURE); 
+    }
+
     // Forcefully attaching socket to the port 8080
     if (bind(server_fd, (struct sockaddr *)&address,
              sizeof(address)) < 0)

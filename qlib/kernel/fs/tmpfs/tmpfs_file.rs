@@ -202,16 +202,16 @@ impl InodeOperations for TmpfsFileInodeOp {
         return Ok(ret);
     }
 
-    fn Getxattr(&self, dir: &Inode, name: &str) -> Result<String> {
-        return self.inodeops.Getxattr(dir, name);
+    fn Getxattr(&self, dir: &Inode, name: &str, size: usize) -> Result<Vec<u8>> {
+        return self.inodeops.Getxattr(dir, name, size);
     }
 
-    fn Setxattr(&self, dir: &mut Inode, name: &str, value: &str) -> Result<()> {
-        return self.inodeops.Setxattr(dir, name, value);
+    fn Setxattr(&self, dir: &mut Inode, name: &str, value: &[u8], flags: u32) -> Result<()> {
+        return self.inodeops.Setxattr(dir, name, value, flags);
     }
 
-    fn Listxattr(&self, dir: &Inode) -> Result<Vec<String>> {
-        return self.inodeops.Listxattr(dir);
+    fn Listxattr(&self, dir: &Inode, size: usize) -> Result<Vec<String>> {
+        return self.inodeops.Listxattr(dir, size);
     }
 
     fn Check(&self, task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {
@@ -269,7 +269,7 @@ impl InodeOperations for TmpfsFileInodeOp {
         return Ok(TMPFS_FSINFO);
     }
 
-    fn Mappable(&self) -> Result<HostInodeOp> {
+    fn Mappable(&self) -> Result<HostIopsMappable> {
         return self.inodeops.Mappable();
     }
 }

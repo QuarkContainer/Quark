@@ -59,6 +59,7 @@ pub fn ExecProcessHandler(execArgs: &mut ExecArgs, fds: &[i32]) -> Result<Contro
     process.Envs.append(&mut execArgs.Envv);
     process.UID = execArgs.KUID.0;
     process.GID = execArgs.KGID.0;
+    process.Caps = execArgs.Capabilities;
     process
         .AdditionalGids
         .append(&mut execArgs.ExtraKGIDs.iter().map(|gid| gid.0).collect());

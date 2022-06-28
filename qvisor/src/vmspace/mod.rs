@@ -43,12 +43,12 @@ use crate::vmspace::kernel::GlobalIOMgr;
 use super::qlib::addr::Addr;
 use super::qlib::common::{Error, Result};
 use super::qlib::control_msg::*;
-use super::qlib::kernel::fs::host::dirent::Dirent64;
 use super::qlib::kernel::util::cstring::*;
 use super::qlib::linux_def::*;
 use super::qlib::pagetable::PageTables;
 use super::qlib::qmsg::*;
 use super::qlib::task_mgr::*;
+use super::qlib::linux::membarrier::*;
 use super::qlib::*;
 use super::runc::container::mounts::*;
 use super::runc::runtime::loader::*;
@@ -113,6 +113,8 @@ pub struct VMSpace {
     pub waitingMsgCall: Option<WaitingMsgCall>,
     pub controlSock: i32,
     pub vcpus: Vec<Arc<KVMVcpu>>,
+    pub haveMembarrierGlobal: bool,
+    pub haveMembarrierPrivateExpedited: bool,
 }
 
 unsafe impl Sync for VMSpace {}
@@ -124,32 +126,17 @@ impl VMSpace {
         return GlobalIOMgr().GetFdByHost(hostfd);
     }
 
-    pub fn TlbShootdown(&self, vcpuMask: u64) -> u64 {
-        let mut mask = 0;
-
-        for i in 0..64 {
-            if (1 << i) & vcpuMask != 0 {
-                if self.vcpus[i].Signal(Signal::SIGCHLD) {
-                    mask |= 1 << i;
-                    SHARE_SPACE.scheduler.VcpuArr[i].InterruptTlbShootdown();
-                }
-            }
-        }
-
-        return mask;
-    }
-
     pub fn GetFdInfo(hostfd: i32) -> Option<FdInfo> {
         return GlobalIOMgr().GetByHost(hostfd);
     }
 
-    pub fn ReadDir(dirfd: i32, data: u64) -> i64 {
+    pub fn ReadDir(dirfd: i32, addr: u64, len: usize, reset: bool) -> i64 {
         let fdInfo = match Self::GetFdInfo(dirfd) {
             Some(info) => info,
             None => return -SysErr::EBADF as i64,
         };
 
-        return fdInfo.IOReadDir(data);
+        return fdInfo.IOReadDir(addr, len, reset);
     }
 
     pub fn Mount(&self, id: &str, rootfs: &str) -> Result<()> {
@@ -780,6 +767,43 @@ impl VMSpace {
         return fdInfo.IOSeek(offset, whence);
     }
 
+    pub fn FSetXattr(fd: i32, name: u64, value: u64, size: usize, flags: u32) -> i64 {
+        let fdInfo = match Self::GetFdInfo(fd) {
+            Some(fdInfo) => fdInfo,
+            None => return -SysErr::EBADF as i64,
+        };
+
+        return fdInfo.IOFSetXattr(name, value, size, flags);
+    }
+
+
+    pub fn FGetXattr(fd: i32, name: u64, value: u64, size: usize) -> i64 {
+        let fdInfo = match Self::GetFdInfo(fd) {
+            Some(fdInfo) => fdInfo,
+            None => return -SysErr::EBADF as i64,
+        };
+
+        return fdInfo.IOFGetXattr(name, value, size);
+    }
+
+    pub fn FRemoveXattr(fd: i32, name: u64) -> i64 {
+        let fdInfo = match Self::GetFdInfo(fd) {
+            Some(fdInfo) => fdInfo,
+            None => return -SysErr::EBADF as i64,
+        };
+
+        return fdInfo.IOFRemoveXattr(name);
+    }
+
+    pub fn FListXattr(fd: i32, list: u64, size: usize) -> i64 {
+        let fdInfo = match Self::GetFdInfo(fd) {
+            Some(fdInfo) => fdInfo,
+            None => return -SysErr::EBADF as i64,
+        };
+
+        return fdInfo.IOFListXattr(list, size);
+    }
+
     pub fn ReadLinkAt(dirfd: i32, path: u64, buf: u64, bufsize: u64) -> i64 {
         //info!("ReadLinkAt: the path is {}", Self::GetStr(path));
 
@@ -1170,9 +1194,7 @@ impl VMSpace {
     }
 
     pub fn ComputeVcpuCoreId(&self, threadId: usize) -> usize {
-        // skip core #0 for uring
-        let DedicateUring = QUARK_CONFIG.lock().DedicateUring;
-        let id = (threadId + self.vcpuMappingDelta + DedicateUring) % Self::VCPUCount();
+        let id = (threadId + self.vcpuMappingDelta) % Self::VCPUCount();
 
         return id;
     }
@@ -1260,23 +1282,6 @@ impl VMSpace {
         let ret = unsafe { write(fd, &val as *const _ as _, 8) };
 
         return Self::GetRet(ret as i64);
-    }
-
-    pub fn WaitFD(fd: i32, mask: EventMask) -> i64 {
-        let fdinfo = match Self::GetFdInfo(fd) {
-            Some(fdinfo) => fdinfo,
-            None => return -SysErr::EBADF as i64,
-        };
-
-        let ret = fdinfo.lock().WaitFd(mask);
-
-        match ret {
-            Ok(()) => return 0,
-            Err(Error::SysError(syserror)) => return -syserror as i64,
-            Err(e) => {
-                panic!("WaitFD get error {:?}", e);
-            }
-        }
     }
 
     pub fn NonBlockingPoll(fd: i32, mask: EventMask) -> i64 {
@@ -1545,7 +1550,57 @@ impl VMSpace {
         return freq as i64;
     }
 
+    pub fn Membarrier(cmd: i32) -> i32 {
+        let nr = SysCallID::sys_membarrier as usize;
+        let ret = unsafe { syscall3(nr, cmd as usize, 0 as usize/*flag*/, 0 as usize/*unused*/) as i32 };
+        return ret as _;
+    }
+
+    pub fn HostMemoryBarrier() -> i64 {
+        let haveMembarrierPrivateExpedited = VMS.lock().haveMembarrierPrivateExpedited;
+        let cmd = if haveMembarrierPrivateExpedited {
+            MEMBARRIER_CMD_PRIVATE_EXPEDITED
+        } else {
+            MEMBARRIER_CMD_GLOBAL
+        };
+
+        return Self::Membarrier(cmd) as _
+    }
+
+    //return (haveMembarrierGlobal, haveMembarrierPrivateExpedited)
+    pub fn MembarrierInit() -> (bool, bool) {
+        let supported = Self::Membarrier(MEMBARRIER_CMD_QUERY);
+        if supported < 0 {
+            return (false, false)
+        }
+
+        let mut haveMembarrierGlobal = false;
+        let mut haveMembarrierPrivateExpedited = false;
+        // We don't use MEMBARRIER_CMD_GLOBAL_EXPEDITED because this sends IPIs to
+        // all CPUs running tasks that have previously invoked
+        // MEMBARRIER_CMD_REGISTER_GLOBAL_EXPEDITED, which presents a DOS risk.
+        // (MEMBARRIER_CMD_GLOBAL is synchronize_rcu(), i.e. it waits for an RCU
+        // grace period to elapse without bothering other CPUs.
+        // MEMBARRIER_CMD_PRIVATE_EXPEDITED sends IPIs only to CPUs running tasks
+        // sharing the caller's MM.)
+        if supported & MEMBARRIER_CMD_GLOBAL != 0 {
+            haveMembarrierGlobal = true;
+        }
+
+        let req = MEMBARRIER_CMD_PRIVATE_EXPEDITED | MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED;
+        if supported & req == req {
+            let ret = Self::Membarrier(MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED);
+            if ret >= 0 {
+                haveMembarrierPrivateExpedited = true;
+            }
+        }
+
+        return (haveMembarrierGlobal, haveMembarrierPrivateExpedited)
+    }
+
     pub fn Init() -> Self {
+        let (haveMembarrierGlobal, haveMembarrierPrivateExpedited) = Self::MembarrierInit();
+
         return VMSpace {
             allocator: HostPageAllocator::New(),
             pageTables: PageTables::default(),
@@ -1560,6 +1615,8 @@ impl VMSpace {
             waitingMsgCall: None,
             controlSock: -1,
             vcpus: Vec::new(),
+            haveMembarrierGlobal: haveMembarrierGlobal,
+            haveMembarrierPrivateExpedited: haveMembarrierPrivateExpedited,
         };
     }
 }

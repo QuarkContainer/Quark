@@ -25,6 +25,8 @@ use super::qlib::kernel::taskMgr::*;
 use super::qlib::kernel::threadmgr::task_sched::*;
 use super::qlib::kernel::SHARESPACE;
 use super::qlib::kernel::TSC;
+use super::qlib::kernel::vcpu::*;
+use super::qlib::kernel::quring::uring_async::UringAsyncMgr;
 
 use super::qlib::common::*;
 use super::qlib::kernel::memmgr::pma::*;
@@ -48,11 +50,11 @@ use super::Kernel::HostSpace;
 impl IoUring {
     /// Initiate asynchronous I/O.
     #[inline]
-    pub fn submit(&self, idx: usize) -> Result<usize> {
-        self.submit_and_wait(idx, 0)
+    pub fn submit(&self) -> Result<usize> {
+        self.submit_and_wait(0)
     }
 
-    pub fn submit_and_wait(&self, idx: usize, want: usize) -> Result<usize> {
+    pub fn submit_and_wait(&self, want: usize) -> Result<usize> {
         let len = self.sq_len();
 
         let mut flags = 0;
@@ -66,7 +68,7 @@ impl IoUring {
                 if want > 0 {
                     flags |= sys::IORING_ENTER_SQ_WAKEUP;
                 } else {
-                    HostSpace::UringWake(idx, 0);
+                    HostSpace::UringWake(0);
                     return Ok(0);
                 }
             } else if want == 0 {
@@ -75,17 +77,16 @@ impl IoUring {
             }
         }
 
-        unsafe { self.enter(idx, len as _, want as _, flags) }
+        unsafe { self.enter(len as _, want as _, flags) }
     }
 
     pub unsafe fn enter(
         &self,
-        idx: usize,
         to_submit: u32,
         min_complete: u32,
         flag: u32,
     ) -> Result<usize> {
-        return io_uring_enter(idx, to_submit, min_complete, flag);
+        return io_uring_enter(to_submit, min_complete, flag);
     }
 
     pub fn sq_len(&self) -> usize {
@@ -103,13 +104,12 @@ impl IoUring {
 }
 
 pub fn io_uring_enter(
-    idx: usize,
     to_submit: u32,
     min_complete: u32,
     flags: u32,
     //sig: *const sigset_t,
 ) -> Result<usize> {
-    let ret = HostSpace::IoUringEnter(idx, to_submit, min_complete, flags);
+    let ret = HostSpace::IoUringEnter(to_submit, min_complete, flags);
     if ret < 0 {
         return Err(Error::SysError(-ret as i32));
     }
@@ -212,7 +212,7 @@ impl CounterSet {
 
 #[inline]
 pub fn switch(from: TaskId, to: TaskId) {
-    Task::Current().PerfGoto(PerfType::Blocked);
+    //Task::Current().PerfGoto(PerfType::Blocked);
     Task::Current().AccountTaskEnter(SchedState::Blocked);
 
     CPULocal::SetCurrentTask(to.Addr());
@@ -235,7 +235,7 @@ pub fn switch(from: TaskId, to: TaskId) {
         context_swap(fromCtx.GetContext(), toCtx.GetContext(), 1, 0);
     }
 
-    Task::Current().PerfGofrom(PerfType::Blocked);
+    //Task::Current().PerfGofrom(PerfType::Blocked);
     Task::Current().AccountTaskLeave(SchedState::Blocked);
 }
 
@@ -281,8 +281,8 @@ pub fn VcpuFreq() -> i64 {
 pub fn NewSocket(fd: i32) -> i64 {
     return HostSpace::NewSocket(fd);
 }
-pub fn UringWake(idx: usize, minCompleted: u64) {
-    HostSpace::UringWake(idx, minCompleted);
+pub fn UringWake(minCompleted: u64) {
+    HostSpace::UringWake(minCompleted);
 }
 
 impl HostSpace {
@@ -389,5 +389,30 @@ pub fn HugepageDontNeed(addr: u64) {
 impl IOMgr {
     pub fn Init() -> Result<Self> {
         return Err(Error::Common(format!("IOMgr can't init in kernel")))
+    }
+}
+
+
+unsafe impl GlobalAlloc for GlobalVcpuAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        if !self.init.load(Ordering::Relaxed) {
+            return GLOBAL_ALLOCATOR
+                .alloc(layout);
+        }
+        return CPU_LOCAL[VcpuId()].AllocatorMut().alloc(layout)
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        if !self.init.load(Ordering::Relaxed) {
+            return GLOBAL_ALLOCATOR
+                .dealloc(ptr, layout);
+        }
+        return CPU_LOCAL[VcpuId()].AllocatorMut().dealloc(ptr, layout)
+    }
+}
+
+impl UringAsyncMgr {
+    pub fn FreeSlot(&self, id: usize) {
+        self.freeSlot(id);
     }
 }

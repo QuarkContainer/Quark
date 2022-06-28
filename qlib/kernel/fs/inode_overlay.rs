@@ -36,15 +36,22 @@ use super::inode::*;
 use super::mount::*;
 use super::overlay::*;
 
-pub fn OverlayHasWhiteout(parent: &Inode, name: &str) -> bool {
-    match parent.Getxattr(&XattrOverlayWhiteout(name)) {
-        Ok(s) => return s.as_str() == "y",
+pub fn OverlayHasWhiteout(task: &Task, parent: &Inode, name: &str) -> bool {
+    match parent.Getxattr(task, &XattrOverlayWhiteout(name), 1) {
+        Ok(s) => {
+            if s.len() != 0 {
+                return false
+            }
+
+            return s[0] == 'y' as u8;
+        },
         _ => return false,
     }
 }
 
 pub fn overlayCreateWhiteout(parent: &mut Inode, name: &str) -> Result<()> {
-    return parent.Setxattr(&XattrOverlayWhiteout(name), &"y".to_string());
+    let iops = parent.lock().InodeOp.clone();
+    return iops.Setxattr(parent, &XattrOverlayWhiteout(name), &"y".to_string().as_bytes(), 0);
 }
 
 pub fn overlayLookup(
@@ -74,7 +81,7 @@ pub fn overlayLookup(
             Err(e) => return Err(e),
         }
 
-        if OverlayHasWhiteout(&upper, name) {
+        if OverlayHasWhiteout(task, &upper, name) {
             if upperInode.is_none() {
                 return Err(Error::SysError(SysErr::ENOENT));
             }
@@ -517,7 +524,7 @@ pub fn overlayStableAttr(o: &Arc<RwLock<OverlayEntry>>) -> StableAttr {
     }
 }
 
-pub fn overlayGetxattr(o: &Arc<RwLock<OverlayEntry>>, name: &str) -> Result<String> {
+pub fn overlayGetxattr(task: &Task, o: &Arc<RwLock<OverlayEntry>>, name: &str, size: usize) -> Result<Vec<u8>> {
     if HasPrefix(name, &XATTR_OVERLAY_PREFIX.to_string()) {
         return Err(Error::SysError(SysErr::ENODATA));
     }
@@ -525,21 +532,39 @@ pub fn overlayGetxattr(o: &Arc<RwLock<OverlayEntry>>, name: &str) -> Result<Stri
     let overlay = o.read();
     if overlay.upper.is_some() {
         let upperInode = overlay.upper.as_ref().unwrap().clone();
-        return upperInode.Getxattr(name);
+        return upperInode.Getxattr(task, name, size);
     } else {
         let lowerInode = overlay.lower.as_ref().unwrap().clone();
-        return lowerInode.Getxattr(name);
+        return lowerInode.Getxattr(task, name, size);
     }
 }
 
-pub fn overlayListxattr(o: &Arc<RwLock<OverlayEntry>>) -> Result<Vec<String>> {
+pub fn overlaySetxattr(task: &Task,
+                       o: &Arc<RwLock<OverlayEntry>>,
+                       d: &Dirent,
+                       name: &str,
+                       value: &[u8],
+                       flags: u32) -> Result<()> {
+    if HasPrefix(name, &XATTR_OVERLAY_PREFIX.to_string()) {
+        return Err(Error::SysError(SysErr::ENODATA));
+    }
+
+    copyUp(task, d)?;
+
+    let overlay = o.read();
+    let mut upperInode = overlay.upper.as_ref().unwrap().clone();
+    let upperInodeOps = upperInode.lock().InodeOp.clone();
+    return upperInodeOps.Setxattr(&mut upperInode, name, value, flags);
+}
+
+pub fn overlayListxattr(o: &Arc<RwLock<OverlayEntry>>, size: usize) -> Result<Vec<String>> {
     let overlay = o.read();
     let names = if overlay.upper.is_some() {
         let upperInode = overlay.upper.as_ref().unwrap().clone();
-        upperInode.Listxattr()?
+        upperInode.Listxattr(size)?
     } else {
         let lowerInode = overlay.lower.as_ref().unwrap().clone();
-        lowerInode.Listxattr()?
+        lowerInode.Listxattr(size)?
     };
 
     let overlayPrefix = XATTR_OVERLAY_PREFIX.to_string();
@@ -552,6 +577,23 @@ pub fn overlayListxattr(o: &Arc<RwLock<OverlayEntry>>) -> Result<Vec<String>> {
     }
 
     return Ok(res);
+}
+
+pub fn overlayRemovexattr(task: &Task,
+                          o: &Arc<RwLock<OverlayEntry>>,
+                          d: &Dirent,
+                          name: &str) -> Result<()> {
+    // Don't allow changes to overlay xattrs through a removexattr syscall.
+    if IsXattrOverlay(name) {
+        return Err(Error::SysError(SysErr::EPERM))
+    }
+
+    copyUp(task, d)?;
+
+    let overlay = o.read();
+    let mut upperInode = overlay.upper.as_ref().unwrap().clone();
+    let upperInodeOps = upperInode.lock().InodeOp.clone();
+    return upperInodeOps.Removexattr(&mut upperInode, name);
 }
 
 pub fn overlayCheck(task: &Task, o: &Arc<RwLock<OverlayEntry>>, p: &PermMask) -> Result<()> {

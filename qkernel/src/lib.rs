@@ -65,12 +65,10 @@ mod print;
 mod qlib;
 #[macro_use]
 mod interrupt;
-pub mod backtracer;
 pub mod kernel_def;
 pub mod rdma_def;
 mod syscalls;
 
-use crate::qlib::kernel::GlobalIOMgr;
 use self::interrupt::virtualization_handler;
 use self::qlib::kernel::arch;
 use self::qlib::kernel::asm;
@@ -86,19 +84,19 @@ use self::qlib::kernel::socket;
 use self::qlib::kernel::task;
 use self::qlib::kernel::taskMgr;
 use self::qlib::kernel::threadmgr;
-use self::qlib::kernel::uid;
 use self::qlib::kernel::util;
 use self::qlib::kernel::vcpu;
 use self::qlib::kernel::version;
 use self::qlib::kernel::Kernel;
 use self::qlib::kernel::SignalDef;
 use self::qlib::kernel::TSC;
+use crate::qlib::kernel::GlobalIOMgr;
 
 use self::qlib::kernel::vcpu::*;
 use vcpu::CPU_LOCAL;
 
 use core::panic::PanicInfo;
-use core::sync::atomic::{AtomicI32, AtomicU64, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicI32, AtomicUsize, Ordering};
 use core::{mem, ptr};
 use qlib::mutex::*;
 
@@ -121,7 +119,7 @@ use self::qlib::linux_def::MemoryDef;
 use self::qlib::loader::*;
 use self::qlib::mem::list_allocator::*;
 use self::qlib::pagetable::*;
-use self::qlib::perf_tunning::*;
+//use self::qlib::perf_tunning::*;
 use self::qlib::vcpu_mgr::*;
 use self::syscalls::syscalls::*;
 use self::task::*;
@@ -131,15 +129,16 @@ use self::qlib::kernel::Scale;
 use self::qlib::kernel::VcpuFreqInit;
 use self::quring::*;
 //use self::heap::QAllocator;
-use self::uid::*;
 
 pub const HEAP_START: usize = 0x70_2000_0000;
 pub const HEAP_SIZE: usize = 0x1000_0000;
 
 //use buddy_system_allocator::*;
+//#[global_allocator]
+//pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
+
 #[global_allocator]
-pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
-//pub static VCPU_ALLOCATOR: GlobalVcpuAllocator = GlobalVcpuAllocator::New();
+pub static VCPU_ALLOCATOR: GlobalVcpuAllocator = GlobalVcpuAllocator::New();
 
 //static ALLOCATOR: QAllocator = QAllocator::New();
 //static ALLOCATOR: StackHeap = StackHeap::Empty();
@@ -188,7 +187,6 @@ pub fn SingletonInit() {
             Ordering::Release,
         );
 
-        UID.Init(AtomicU64::new(1));
         perflog::THREAD_COUNTS.Init(QMutex::new(perflog::ThreadPerfCounters::default()));
 
         fs::file::InitSingleton();
@@ -226,12 +224,12 @@ pub extern "C" fn syscall_handler(
     arg4: u64,
     arg5: u64,
 ) -> ! {
-    //PerfGofrom(PerfType::User);
+    CPULocal::Myself().SetMode(VcpuMode::Kernel);
 
     let currTask = task::Task::Current();
-    currTask.PerfGofrom(PerfType::User);
+    //currTask.PerfGofrom(PerfType::User);
 
-    currTask.PerfGoto(PerfType::Kernel);
+    //currTask.PerfGoto(PerfType::Kernel);
 
     if SHARESPACE.config.read().KernelPagetable {
         Task::SetKernelPageTable();
@@ -278,7 +276,7 @@ pub extern "C" fn syscall_handler(
         );
     }
 
-    currTask.SaveFp();
+    //currTask.SaveFp();
 
     let enterAppTimestamp = CPULocal::Myself().ResetEnterAppTimestamp() as i64;
     let worktime = Tsc::Scale(startTime - enterAppTimestamp) * 1000; // the thread has used up time slot
@@ -299,9 +297,9 @@ pub extern "C" fn syscall_handler(
     let currTask = task::Task::Current();
     currTask.DoStop();
 
-    currTask.PerfGoto(PerfType::SysCall);
+    //currTask.PerfGoto(PerfType::SysCall);
     let state = SysCall(currTask, nr, &args);
-    currTask.PerfGofrom(PerfType::SysCall);
+    //currTask.PerfGofrom(PerfType::SysCall);
 
     res = currTask.Return();
     //HostInputProcess();
@@ -329,17 +327,17 @@ pub extern "C" fn syscall_handler(
     let kernalRsp = pt as *const _ as u64;
 
     //PerfGoto(PerfType::User);
-    currTask.PerfGofrom(PerfType::Kernel);
-    currTask.PerfGoto(PerfType::User);
+    //currTask.PerfGofrom(PerfType::Kernel);
+    //currTask.PerfGoto(PerfType::User);
 
     currTask.RestoreFp();
     currTask.Check();
     if SHARESPACE.config.read().KernelPagetable {
         currTask.SwitchPageTable();
     }
-
-    CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
+    CPULocal::Myself().SetMode(VcpuMode::User);
     currTask.mm.HandleTlbShootdown();
+    CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
     if !(pt.rip == pt.rcx && pt.r11 == pt.eflags) {
         //error!("iret *****, pt is {:x?}", pt);
         IRet(kernalRsp)
@@ -382,7 +380,7 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                 {
                     error!("RunExitDone 1 [{:x}] ...", currTask.taskId);
                     let thread = currTask.Thread();
-                    currTask.PerfStop();
+                    //currTask.PerfStop();
                     currTask.SetDummy();
 
                     thread.lock().fdTbl = currTask.fdTbl.clone();
@@ -459,7 +457,7 @@ pub extern "C" fn rust_main(
         SHARESPACE.SetValue(shareSpaceAddr);
         SingletonInit();
 
-        //VCPU_ALLOCATOR.Initializated();
+        VCPU_ALLOCATOR.Initializated();
         InitTsc();
         InitTimeKeeper(vdsoParamAddr);
 

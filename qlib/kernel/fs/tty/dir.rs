@@ -35,6 +35,7 @@ use super::super::dentry::*;
 use super::super::dirent::*;
 use super::super::file::*;
 use super::super::flags::*;
+use super::super::inotify::*;
 use super::super::fsutil::file::*;
 use super::super::host::hostinodeop::*;
 use super::super::inode::*;
@@ -100,6 +101,7 @@ pub fn NewDir(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         InodeOp: Arc::new(d),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
+        watches: Watches::default(),
         MountSource: msrc.clone(),
         Overlay: None,
     };
@@ -296,15 +298,15 @@ impl InodeOperations for DirInodeOperations {
         return Ok(u);
     }
 
-    fn Getxattr(&self, _dir: &Inode, _name: &str) -> Result<String> {
+    fn Getxattr(&self, _dir: &Inode, _name: &str, _size: usize) -> Result<Vec<u8>> {
         return Err(Error::SysError(SysErr::EOPNOTSUPP));
     }
 
-    fn Setxattr(&self, _dir: &mut Inode, _name: &str, _value: &str) -> Result<()> {
+    fn Setxattr(&self, _dir: &mut Inode, _name: &str, _value: &[u8], _flags: u32) -> Result<()> {
         return Err(Error::SysError(SysErr::EOPNOTSUPP));
     }
 
-    fn Listxattr(&self, _dir: &Inode) -> Result<Vec<String>> {
+    fn Listxattr(&self, _dir: &Inode, _size: usize) -> Result<Vec<String>> {
         return Err(Error::SysError(SysErr::EOPNOTSUPP));
     }
 
@@ -370,7 +372,7 @@ impl InodeOperations for DirInodeOperations {
         });
     }
 
-    fn Mappable(&self) -> Result<HostInodeOp> {
+    fn Mappable(&self) -> Result<HostIopsMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }
@@ -504,7 +506,7 @@ impl FileOperations for DirFileOperations {
         };
     }
 
-    fn Mappable(&self) -> Result<HostInodeOp> {
+    fn Mappable(&self) -> Result<HostIopsMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }
