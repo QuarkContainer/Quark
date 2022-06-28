@@ -159,7 +159,7 @@ pub struct MemoryManagerInternal {
     pub vcpuMapping: AtomicU64,
     pub tlbShootdownMask: AtomicU64,
 
-    pub mappingLock: Arc<QMutex<()>>,
+    pub mappingLock: QUpgradableLock,
     pub mapping: QMutex<MMMapping>,
 
     pub pagetable: QRwLock<MMPagetable>,
@@ -287,7 +287,7 @@ impl MemoryManager {
             inited: true,
             vcpuMapping: AtomicU64::new(0),
             tlbShootdownMask: AtomicU64::new(0),
-            mappingLock: Arc::new(QMutex::new(())),
+            mappingLock: QUpgradableLock::default(),
             mapping: QMutex::new(mapping),
             pagetable: QRwLock::new(pagetable),
             metadataLock: Arc::new(QMutex::new(())),
@@ -515,13 +515,13 @@ impl MemoryManager {
         }
     }
 
-    pub fn MappingReadLock(&self) -> QMutexGuard<()> {
-        let lock = self.mappingLock.lock();
+    pub fn MappingReadLock(&self) -> QUpgradableLockGuard {
+        let lock = self.mappingLock.Read();
         return lock;
     }
 
-    pub fn MappingWriteLock(&self) -> QMutexGuard<()> {
-        let lock = self.mappingLock.lock();
+    pub fn MappingWriteLock(&self) -> QUpgradableLockGuard {
+        let lock = self.mappingLock.Write();
         return lock;
     }
 
