@@ -66,12 +66,12 @@ impl CalibratedClockInternal {
         FALLBACK_METRIC.Incr();
     }
 
-    pub fn updateParams(&mut self, actual: &Parameters) {
+    pub fn updateParams(&mut self, actual: &Parameters) -> bool {
         if !self.ready {
             // At initial calibration there is nothing to correct.
             self.params = *actual;
             self.ready = true;
-            return;
+            return true;
         }
 
         let (newParams, errorNS) = match ErrorAdjust(&self.params, actual, actual.BaseCycles) {
@@ -80,7 +80,7 @@ impl CalibratedClockInternal {
                 // Something is very wrong. Reset and try again from the
                 // beginning.
                 self.resetLocked(format!("Unable to update params: {:?}.", err).as_str());
-                return;
+                return false;
             }
         };
 
@@ -91,11 +91,12 @@ impl CalibratedClockInternal {
             // We should never get such extreme error, something is very
             // wrong. Reset everything and start again.
             self.resetLocked("Extreme clock error.");
-            return;
+            return false;
         }
 
         self.params = newParams;
         self.errorNS = errorNS;
+        return true
     }
 }
 
@@ -274,10 +275,13 @@ impl CalibratedClocks {
             BaseCycles: tsc,
         };
 
-        self.monotonic.write().updateParams(&monotonicParams);
-        self.realtime.write().updateParams(&realtimeParams);
+        let monotonicOk = self.monotonic.write().updateParams(&monotonicParams);
+        let realtimeOk = self.realtime.write().updateParams(&realtimeParams);
 
-        return (monotonicParams, true, realtimeParams, true);
+        let monotonicParams = self.monotonic.read().params;
+        let realtimeParams = self.realtime.read().params;
+
+        return (monotonicParams, monotonicOk, realtimeParams, realtimeOk);
     }
 
     pub fn GetTime(&self, id: ClockID) -> Result<i64> {

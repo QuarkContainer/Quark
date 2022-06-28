@@ -541,7 +541,7 @@ impl MemoryManager {
     }
 
     pub fn NumaPolicy(&self, addr: u64) -> Result<(i32, u64)> {
-        let _ml = self.MappingWriteLock();
+        let _ml = self.MappingReadLock();
         return self.NumaPolicyLocked(addr);
     }
 
@@ -673,7 +673,7 @@ impl MemoryManager {
     }
 
     pub fn GetSharedFutexKey(&self, task: &Task, addr: u64) -> Result<Key> {
-        let _ml = self.MappingWriteLock();
+        let rl = self.MappingReadLock();
 
         let ar = match Addr(addr).ToRange(4) {
             Ok(r) => r,
@@ -694,7 +694,7 @@ impl MemoryManager {
             });
         }
 
-        self.V2PLocked(task, addr, 4, &mut task.GetMut().iovs, true, false)?;
+        self.V2PLocked(task, &rl, addr, 4, &mut task.GetMut().iovs, true, false)?;
         defer!(task.GetMut().iovs.clear());
         assert!(task.GetMut().iovs.len() == 1);
 
