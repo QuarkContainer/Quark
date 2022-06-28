@@ -136,13 +136,13 @@ impl PagePool {
     }
 
     pub fn Allocate(&mut self) -> Result<u64> {
-        match CPULocal::Myself().pageAllocator.lock().AllocPage() {
-            Some(page) => {
-                ZeroPage(page);
-                return Ok(page);
-            }
-            None => (),
-        }
+        // match CPULocal::Myself().pageAllocator.lock().AllocPage() {
+        //     Some(page) => {
+        //         ZeroPage(page);
+        //         return Ok(page);
+        //     }
+        //     None => (),
+        // }
 
         let addr = self.allocator.Allocate()?;
         ZeroPage(addr as u64);

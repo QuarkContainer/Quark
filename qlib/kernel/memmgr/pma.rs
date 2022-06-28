@@ -31,6 +31,7 @@ use super::super::asm::*;
 use super::super::task::*;
 use super::super::PAGE_MGR;
 use super::pmamgr::*;
+use crate::qlib::vcpu_mgr::CPULocal;
 
 pub type PageMgrRef = ObjectRef<PageMgr>;
 
@@ -63,13 +64,22 @@ impl RefMgr for PageMgr {
 
 impl Allocator for PageMgr {
     fn AllocPage(&self, incrRef: bool) -> Result<u64> {
+        match CPULocal::Myself().pageAllocator.lock().AllocPage() {
+            Some(page) => {
+                ZeroPage(page);
+                return Ok(page);
+            }
+            None => (),
+        }
         let addr = self.lock().allocator.lock().AllocPage(incrRef)?;
         //error!("PageMgr allocpage ... incrRef is {}, addr is {:x}", incrRef, addr);
         return Ok(addr);
     }
 
     fn FreePage(&self, addr: u64) -> Result<()> {
-        return self.lock().allocator.lock().FreePage(addr);
+        CPULocal::Myself().pageAllocator.lock().FreePage(addr);
+        return Ok(());
+        //return self.lock().allocator.lock().FreePage(addr);
     }
 }
 
