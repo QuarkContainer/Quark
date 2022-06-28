@@ -563,7 +563,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     NotImplementSyscall, //	432 sys_fsmount
     NotImplementSyscall, //	433 sys_fspick
     NotImplementSyscall, //	434 sys_pidfd_open
-    NotImplementSyscall, //	435 sys_clone3
+    SysNoSys,            //	435 sys_clone3
     SysCloseRange,       //	436 sys_close_range
     NotImplementSyscall, //	437 sys_openat2
     NotImplementSyscall, //	438 sys_pidfd_getfd
