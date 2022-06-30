@@ -80,7 +80,7 @@ int main(int argc, char const *argv[])
 
     int ret = 0;
     if (getpeername(sock, &sa, &sa_len) == -1) {
-              printf("errorno: %d\n", errno);
+              //printf("errorno: %d\n", errno);
               perror("getsockname() failed");
               return -1;
     }

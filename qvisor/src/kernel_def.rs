@@ -238,8 +238,8 @@ impl CPULocal {
     }
 }
 
-impl PageMgrInternal {
-    pub fn CopyVsysCallPages(&self) {}
+impl PageMgr {
+    pub fn CopyVsysCallPages(&self, _addr: u64) {}
 }
 
 pub fn ClockGetTime(clockId: i32) -> i64 {
