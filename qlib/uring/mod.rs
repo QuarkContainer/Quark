@@ -20,6 +20,7 @@ pub mod squeue;
 pub mod submit;
 pub mod sys;
 
+use alloc::collections::vec_deque::VecDeque;
 pub use self::cqueue::CompletionQueue;
 use self::porting::*;
 pub use self::register::Probe;
@@ -54,6 +55,8 @@ pub struct IoUring {
     pub memory: MemoryMap,
     pub sq: QMutex<SubmissionQueue>,
     pub cq: QMutex<CompletionQueue>,
+    pub submitq: QMutex<VecDeque<squeue::Entry>>,
+    pub completeq: QMutex<VecDeque<cqueue::Entry>>,
 }
 
 impl IoUring {

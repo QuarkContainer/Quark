@@ -529,15 +529,20 @@ impl QUring {
         self.AUringCallLinked(entry1, entry2);
     }
 
+    pub fn NextCompleteEntry(&self) -> Option<cqueue::Entry> {
+        if super::super::SHARESPACE.config.read().UringBuf {
+            return self.IOUring().completeq.lock().pop_front();
+        } else {
+            return self.IOUring().cq.lock().next();
+        }
+    }
+
     pub fn ProcessOne(&self) -> bool {
         if super::super::Shutdown() {
             return false;
         }
 
-        let cqe = {
-            let mut c = self.IOUring().cq.lock();
-            c.next()
-        };
+        let cqe = self.NextCompleteEntry();
 
         match cqe {
             None => return false,
@@ -555,10 +560,7 @@ impl QUring {
                 return 0;
             }
 
-            let cqe = {
-                let mut c = self.IOUring().cq.lock();
-                c.next()
-            };
+            let cqe = self.NextCompleteEntry();
 
             match cqe {
                 None => break,
@@ -583,34 +585,16 @@ impl QUring {
         let entry = call.SEntry();
         let entry = entry.user_data(call.Ptr());
 
-        loop {
-            {
-                let mut s = self.IOUring().sq.lock();
 
-                if s.freeSlot() < Self::SUBMISSION_QUEUE_FREE_COUNT {
-                    //super::super::Kernel::HostSpace::UringWake(idx, 1);
-                    error!("UringCall: submission full... freeSlot {}", s.freeSlot());
-                    //super::super::Kernel::HostSpace::UringWake(1);
-                    drop(s);
-                    super::super::super::ShareSpace::Yield();
-                    continue;
-                }
-
-                unsafe {
-                    s.push(entry).ok().expect("UringCall push fail");
-                }
-            }
-
-            self.IOUring()
-                .Submit()
-                .expect("QUringIntern::submit fail");
-            return;
-        }
+        self.UringPush(entry);
     }
 
-    pub fn AUringCall(&self, entry: squeue::Entry) {
-        loop {
-            {
+    pub fn UringPush(&self, entry: squeue::Entry) {
+        if super::super::SHARESPACE.config.read().UringBuf {
+            let mut s = self.IOUring().submitq.lock();
+            s.push_back(entry);
+        } else {
+            loop {
                 let mut s = self.IOUring().sq.lock();
                 if s.freeSlot() < Self::SUBMISSION_QUEUE_FREE_COUNT {
                     drop(s);
@@ -625,18 +609,28 @@ impl QUring {
                         Err(_) => panic!("AUringCall submission queue is full"),
                     }
                 }
-            }
 
-            self.IOUring()
-                .Submit()
-                .expect("QUringIntern::submit fail");
-            return;
+                break;
+            }
         }
+
+        self.IOUring()
+            .Submit()
+            .expect("QUringIntern::submit fail");
+        return;
+    }
+
+    pub fn AUringCall(&self, entry: squeue::Entry) {
+        self.UringPush(entry);
     }
 
     pub fn AUringCallLinked(&self, entry1: squeue::Entry, entry2: squeue::Entry) {
-        loop {
-            {
+        if super::super::SHARESPACE.config.read().UringBuf {
+            let mut s = self.IOUring().submitq.lock();
+            s.push_back(entry1.flags(squeue::Flags::IO_LINK));
+            s.push_back(entry2);
+        } else {
+            loop {
                 let mut s = self.IOUring().sq.lock();
                 if s.freeSlot() < Self::SUBMISSION_QUEUE_FREE_COUNT + 1 {
                     drop(s);
@@ -660,12 +654,14 @@ impl QUring {
                         }
                     }
                 }
-            }
 
-            self.IOUring()
-                .Submit()
-                .expect("QUringIntern::submit fail");
-            return;
+                break;
+            }
         }
+
+        self.IOUring()
+            .Submit()
+            .expect("QUringIntern::submit fail");
+        return;
     }
 }
