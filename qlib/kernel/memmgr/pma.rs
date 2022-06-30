@@ -32,6 +32,9 @@ use super::super::task::*;
 use super::super::PAGE_MGR;
 use super::pmamgr::*;
 use crate::qlib::vcpu_mgr::CPULocal;
+use alloc::collections::BTreeMap;
+use bitflags::_core::sync::atomic::Ordering;
+use core::sync::atomic::AtomicU64;
 
 pub type PageMgrRef = ObjectRef<PageMgr>;
 
@@ -47,18 +50,53 @@ impl Deref for PageMgr {
 
 impl RefMgr for PageMgr {
     fn Ref(&self, addr: u64) -> Result<u64> {
-        let me = self.lock();
-        return me.PagePool().lock().Ref(addr);
+        assert!(addr & (MemoryDef::PAGE_SIZE - 1) == 0);
+        let mut refs = self.lock().refs.clone();
+        let refcount = match refs.lock().get_mut(&addr) {
+            None => {
+                // the address is not allocated from PagePool
+                return Ok(1);
+            }
+            Some(v) => {
+                *v += 1;
+                *v
+            }
+        };
+        return Ok(refcount as u64);
     }
 
     fn Deref(&self, addr: u64) -> Result<u64> {
-        let me = self.lock();
-        return me.PagePool().lock().Deref(addr);
+        assert!(addr & (MemoryDef::PAGE_SIZE - 1) == 0);
+        let _refs = self.lock().refs.clone();
+        let mut refs = _refs.lock();
+        let refcount = match refs.get_mut(&addr) {
+            None => {
+                // the address is not allocated from PagePool
+                return Ok(1);
+            }
+            Some(v) => {
+                assert!(*v >= 1, "deref fail: addresss is {:x}", addr);
+                *v -= 1;
+                *v
+            }
+        };
+        if refcount == 0 {
+            refs.remove(&addr);
+            CPULocal::Myself().pageAllocator.lock().FreePage(addr);
+        }
+        return Ok(refcount as u64);
     }
 
     fn GetRef(&self, addr: u64) -> Result<u64> {
-        let me = self.lock();
-        return me.PagePool().lock().GetRef(addr);
+        let refcount = match self.lock().refs.lock().get(&addr) {
+            None => {
+                // the address is not allocated from PagePool
+                return Ok(0);
+            }
+            Some(v) => *v,
+        };
+
+        return Ok(refcount as u64);
     }
 }
 
@@ -71,7 +109,16 @@ impl Allocator for PageMgr {
             }
             None => (),
         }
-        let addr = self.lock().allocator.lock().AllocPage(incrRef)?;
+        let allocator = self.lock().allocator.clone();
+        let addr = allocator.lock().AllocPage(incrRef)?;
+        let _refs = self.lock().refs.clone();
+        let mut refs = _refs.lock();
+        if incrRef {
+            refs.insert(addr, 1);
+        } else {
+            refs.insert(addr, 0);
+        }
+
         //error!("PageMgr allocpage ... incrRef is {}, addr is {:x}", incrRef, addr);
         return Ok(addr);
     }
@@ -107,7 +154,15 @@ impl PageMgr {
     }
 
     pub fn DerefPage(&self, addr: u64) {
-        self.lock().allocator.lock().Deref(addr).unwrap();
+        self.Deref(addr);
+    }
+
+    pub fn VsyscallPages(&self) -> Vec<u64> {
+        let pages = self.lock().VsyscallPagesInternal();
+        for p in &pages {
+            self.Ref(*p);
+        }
+        return pages;
     }
 }
 
@@ -115,6 +170,7 @@ pub struct PageMgrInternal {
     pub allocator: Arc<QMutex<PagePool>>,
     pub zeroPage: u64,
     pub vsyscallPages: Vec<u64>,
+    pub refs: Arc<QMutex<BTreeMap<u64, u32>>>,
 }
 
 impl PageMgrInternal {
@@ -123,6 +179,7 @@ impl PageMgrInternal {
             allocator: Arc::new(QMutex::new(PagePool::New())),
             zeroPage: 0,
             vsyscallPages: Vec::new(),
+            refs: Arc::new(Default::default()),
         };
     }
 
@@ -130,20 +187,20 @@ impl PageMgrInternal {
         return self.allocator.clone();
     }
 
-    pub fn ZeroPage(&mut self) -> u64 {
-        if self.zeroPage == 0 {
-            self.zeroPage = self.allocator.lock().AllocPage(false).unwrap();
-        }
+    // pub fn ZeroPage(&mut self) -> u64 {
+    //     if self.zeroPage == 0 {
+    //         self.zeroPage = self.allocator.lock().AllocPage(false).unwrap();
+    //     }
+    //
+    //     self.allocator.lock().Ref(self.zeroPage).unwrap();
+    //     return self.zeroPage;
+    // }
 
-        self.allocator.lock().Ref(self.zeroPage).unwrap();
-        return self.zeroPage;
-    }
+    // pub fn Deref(&self, addr: u64) {
+    //     self.allocator.lock().Deref(addr).unwrap();
+    // }
 
-    pub fn Deref(&self, addr: u64) {
-        self.allocator.lock().Deref(addr).unwrap();
-    }
-
-    pub fn VsyscallPages(&mut self) -> &[u64] {
+    pub fn VsyscallPagesInternal(&mut self) -> Vec<u64> {
         if self.vsyscallPages.len() == 0 {
             for _i in 0..4 {
                 let addr = self.allocator.lock().AllocPage(true).unwrap();
@@ -153,11 +210,7 @@ impl PageMgrInternal {
             self.CopyVsysCallPages();
         }
 
-        for p in &mut self.vsyscallPages {
-            self.allocator.lock().Ref(*p).unwrap();
-        }
-
-        return &self.vsyscallPages;
+        return self.vsyscallPages.clone();
     }
 }
 
@@ -280,9 +333,8 @@ impl PageTables {
         )?;
 
         {
-            let mut lock = pagePool.lock();
-            let vsyscallPages = lock.VsyscallPages();
-            ret.MapVsyscall(vsyscallPages);
+            let vsyscallPages = pagePool.VsyscallPages();
+            ret.MapVsyscall(&vsyscallPages);
         }
 
         return Ok(ret);

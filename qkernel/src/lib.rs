@@ -464,10 +464,9 @@ pub extern "C" fn rust_main(
         {
             let kpt = &KERNEL_PAGETABLE;
 
-            let mut lock = PAGE_MGR.lock();
-            let vsyscallPages = lock.VsyscallPages();
+            let vsyscallPages = PAGE_MGR.VsyscallPages();
 
-            kpt.InitVsyscall(vsyscallPages);
+            kpt.InitVsyscall(&vsyscallPages);
         }
 
         GlobalIOMgr().InitPollHostEpoll(SHARESPACE.HostHostEpollfd());
