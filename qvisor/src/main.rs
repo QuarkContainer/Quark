@@ -147,8 +147,13 @@ lazy_static! {
         Mutex::new(config)
     };
     pub static ref URING_MGR: Arc<Mutex<UringMgr>> = {
-        const URING_QUEUE_SIZE : usize = 64;
-        Arc::new(Mutex::new(UringMgr::New(URING_QUEUE_SIZE)))
+        let uringQueueSize = if QUARK_CONFIG.lock().UringBuf {
+            1024
+        } else {
+            64
+        };
+
+        Arc::new(Mutex::new(UringMgr::New(uringQueueSize)))
     };
     pub static ref KERNEL_IO_THREAD: KIOThread = KIOThread::New();
     pub static ref GLOCK: Mutex<()> = Mutex::new(());

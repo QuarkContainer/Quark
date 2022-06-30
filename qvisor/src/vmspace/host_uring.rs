@@ -14,7 +14,7 @@
 
 use core::mem;
 use core::sync::atomic::AtomicU64;
-use core::sync::atomic::Ordering;
+use alloc::collections::VecDeque;
 
 use crate::vmspace::kernel::GlobalIOMgr;
 use super::super::qlib::common::*;
@@ -50,6 +50,16 @@ impl IoUring {
         IoUring::with_params(entries, Default::default())
     }
 
+    pub fn SubmitEntry(&self, count: usize) -> Result<usize> {
+        let ret = IOUringEnter(self.fd.as_raw_fd(), count as _, 0, 0);
+
+        if ret < 0 {
+            return Err(Error::SysError(-ret as i32));
+        }
+
+        return Ok(ret as usize);
+    }
+
     fn SetupQueue(
         fd: i32,
         p: &sys::io_uring_params,
@@ -59,6 +69,9 @@ impl IoUring {
             p.cq_off.cqes as usize + p.cq_entries as usize * mem::size_of::<sys::io_uring_cqe>();
         let sqe_len = p.sq_entries as usize * mem::size_of::<sys::io_uring_sqe>();
         let sqe_mmap = Mmap::new(fd, sys::IORING_OFF_SQES as _, sqe_len)?;
+
+        //error!("is_feature_nodrop is {}", p.features & sys::IORING_FEAT_NODROP != 0);
+        //error!("is_feature_submit_stable is {}", p.features & sys::IORING_FEAT_SUBMIT_STABLE != 0);
 
         if p.features & sys::IORING_FEAT_SINGLE_MMAP != 0 {
             let scq_mmap = Mmap::new(
@@ -109,6 +122,8 @@ impl IoUring {
             pendingCnt: AtomicU64::new(0),
             sq: QMutex::new(sq),
             cq: QMutex::new(cq),
+            submitq: QMutex::new(VecDeque::with_capacity(16)),
+            completeq: QMutex::new(VecDeque::with_capacity(16)),
             params: Parameters(p),
             memory: mm,
         })
@@ -120,25 +135,79 @@ impl IoUring {
         self.submitter().submit()
     }
 
-    #[inline]
-    pub fn HostSubmit(&self) -> Result<usize> {
-        let _lock = match self.lock.try_lock() {
-            Some(l) => l,
-            None => {
-                //error!("HostSubmit didn't get lock");
-                return Ok(0);
-            }
-        };
+    pub fn CopyCompleteEntry(&self) -> usize {
+        let mut count = 0;
 
-        //error!("HostSubmit get lock");
-        let count = self.pendingCnt.swap(0, Ordering::Acquire);
-        if count == 0 {
-            return Ok(0);
+        let mut cq = self.cq.lock();
+        let mut completeq = self.completeq.lock();
+
+        loop {
+            let cqe = cq.next();
+            match cqe {
+                None => break,
+                Some(cqe) => {
+                    count += 1;
+                    completeq.push_back(cqe);
+                }
+            }
         }
 
-        let ret = unsafe { self.submitter().enter(count as u32, 0, 0) };
-        //error!("HostSubmit_xxx 2");
-        return ret;
+        return count
+    }
+
+    #[inline]
+    pub fn HostSubmit(&self) -> Result<usize> {
+        if QUARK_CONFIG.lock().UringBuf {
+            self.CopyCompleteEntry();
+
+            let mut count = 0;
+            {
+                let mut sq = self.sq.lock();
+                let mut submitq = self.submitq.lock();
+                if sq.dropped()!=0 {
+                    error!("uring fail dropped {}", sq.dropped());
+                }
+
+                if sq.cq_overflow() {
+                    error!("uring fail overflow")
+                }
+                assert!(sq.dropped()==0, "dropped {}", sq.dropped());
+                assert!(!sq.cq_overflow());
+
+                while sq.freeSlot() > 0 {
+                    let entry = match submitq.pop_front() {
+                        None => break,
+                        Some(e) => e,
+                    };
+
+                    unsafe {
+                        match sq.push(entry) {
+                            Ok(_) => (),
+                            Err(_) => panic!("AUringCall submission queue is full"),
+                        }
+                    }
+
+                    count += 1;
+                }
+            }
+
+            if count > 0 {
+                let ret = self.SubmitEntry(count)?;
+                return Ok(ret);
+            } else {
+                return Ok(0)
+            }
+
+        } else {
+            let sq = self.sq.lock();
+            let count = sq.len();
+            if count > 0 {
+                let ret = self.SubmitEntry(count)?;
+                return Ok(ret);
+            } else {
+                return Ok(0)
+            }
+        }
     }
 
     /// Initiate and/or complete asynchronous I/O
@@ -248,9 +317,6 @@ pub fn IOUringRegister(fd: i32, Opcode: u32, arg: u64, nrArgs: u32) -> i64 {
             nrArgs as usize,
         ) as i64
     };
-    if res < 0 {
-        return SysRet(res);
-    }
 
     return res;
 }
@@ -267,9 +333,6 @@ pub fn IOUringEnter(fd: i32, toSubmit: u32, minComplete: u32, flags: u32) -> i64
             core::mem::size_of::<libc::sigset_t>() as usize,
         ) as i64
     };
-    if res < 0 {
-        return SysRet(res);
-    }
 
     return res;
 }
