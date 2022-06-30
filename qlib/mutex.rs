@@ -18,13 +18,15 @@ use core::fmt;
 use core::hint::spin_loop;
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
-use core::sync::atomic::Ordering;
-use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicBool;
+use core::sync::atomic::AtomicU64;
+use core::sync::atomic::Ordering;
+
 use spin::*;
 
-use super::linux_def::QOrdering;
 use super::kernel::uid::*;
+use super::linux_def::QOrdering;
+
 //use super::super::asm::*;
 
 pub struct Spin;
@@ -382,7 +384,7 @@ impl Default for QUpgradableLock {
         return Self {
             lock: Default::default(),
             id: NewUID(),
-        }
+        };
     }
 }
 
@@ -394,6 +396,9 @@ pub struct QUpgradableLockGuard {
 impl QUpgradableLock {
     #[inline(always)]
     pub fn TryRead(&self) -> Option<QUpgradableLockGuard> {
+        if self.lock.load(Ordering::Acquire) & (WRITER | UPGRADED) != 0 {
+            return None;
+        }
         let value = self.lock.fetch_add(READER, Ordering::Acquire);
 
         if value & (WRITER | UPGRADED) != 0 {
@@ -440,13 +445,13 @@ impl QUpgradableLock {
             Ordering::Relaxed,
             strong,
         )
-            .is_ok()
-            {
-                Some(QUpgradableLockGuard {
-                    lock: self.clone(),
-                    write: AtomicBool::new(true),
-                })
-            } else {
+        .is_ok()
+        {
+            Some(QUpgradableLockGuard {
+                lock: self.clone(),
+                write: AtomicBool::new(true),
+            })
+        } else {
             None
         }
     }
@@ -457,7 +462,7 @@ impl QUpgradableLock {
 
     #[inline]
     pub fn TryWrite(&self) -> Option<QUpgradableLockGuard> {
-        return self.TryWriteIntern(true)
+        return self.TryWriteIntern(true);
     }
 
     pub fn Write(&self) -> QUpgradableLockGuard {
@@ -473,11 +478,11 @@ impl QUpgradableLock {
 
     pub fn TryUpgrade(&self) -> bool {
         if self.lock.fetch_or(UPGRADED, Ordering::Acquire) & (WRITER | UPGRADED) == 0 {
-            return true
+            return true;
         } else {
             // We can't unflip the UPGRADED bit back just yet as there is another upgradeable or write lock.
             // When they unlock, they will clear the bit.
-            return false
+            return false;
         }
     }
 }
@@ -486,7 +491,9 @@ impl Drop for QUpgradableLockGuard {
     fn drop(&mut self) {
         if self.Writable() {
             //error!("RWLock {}: write free {:x}", self.lock.id, self.lock.Value());
-            self.lock.lock.fetch_and(!(WRITER | UPGRADED), Ordering::Release);
+            self.lock
+                .lock
+                .fetch_and(!(WRITER | UPGRADED), Ordering::Release);
         } else {
             let _cnt = self.lock.ForceDecrRead();
             //error!("RWLock {}: read free {:x}", self.lock.id, cnt);
@@ -507,7 +514,8 @@ impl QUpgradableLockGuard {
             Ordering::Acquire,
             Ordering::Relaxed,
             true,
-        ).is_ok();
+        )
+        .is_ok();
     }
 
     pub fn Upgrade(&self) {
@@ -516,7 +524,7 @@ impl QUpgradableLockGuard {
         self.lock.ForceDecrRead();
         loop {
             if self.lock.TryUpgrade() {
-                break
+                break;
             } else {
                 spin_loop()
             }
@@ -525,7 +533,7 @@ impl QUpgradableLockGuard {
         //error!("RWLock {}: Upgrade2 {:x}", self.lock.id, self.lock.Value());
         loop {
             if self.TryUpgradeToWriteIntern() {
-                break
+                break;
             } else {
                 spin_loop()
             }
@@ -539,13 +547,13 @@ impl QUpgradableLockGuard {
         assert!(self.Writable());
         //error!("RWLock {}: Downgrade1 {:x}", self.lock.id, self.lock.Value());
         self.lock.ForceIncrRead();
-        self.lock.lock.fetch_and(!(UPGRADED | WRITER), Ordering::Release);
+        self.lock
+            .lock
+            .fetch_and(!(UPGRADED | WRITER), Ordering::Release);
         self.write.store(false, Ordering::Release);
         //error!("RWLock {}: Downgrade2 {:x}", self.lock.id, self.lock.Value());
-
     }
 }
-
 
 //////////////////////////////////////////////////////////////////
 
