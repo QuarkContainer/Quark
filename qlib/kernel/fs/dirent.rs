@@ -433,7 +433,7 @@ impl Dirent {
         flags: &FileFlags,
         perms: &FilePermissions,
     ) -> Result<File> {
-        let _a = RENAME.write();
+        let _a = RENAME.read();
 
         if self.exists(task, root, name) {
             return Err(Error::SysError(SysErr::EEXIST));
@@ -468,7 +468,7 @@ impl Dirent {
         name: &str,
         create: &mut FnMut() -> Result<()>,
     ) -> Result<()> {
-        let _a = RENAME.write();
+        let _a = RENAME.read();
 
         if self.exists(task, root, name) {
             return Err(Error::SysError(SysErr::EEXIST));
