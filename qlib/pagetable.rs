@@ -14,6 +14,7 @@
 
 use alloc::alloc::{alloc, dealloc, Layout};
 use alloc::vec::Vec;
+use alloc::sync::Arc;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
@@ -271,7 +272,7 @@ impl PageTables {
         return Ok(());
     }
 
-    pub fn MapVsyscall(&self, phyAddrs: &[u64] /*4 pages*/) {
+    pub fn MapVsyscall(&self, phyAddrs: Arc<Vec<u64>> /*4 pages*/) {
         let vaddr = 0xffffffffff600000;
         let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
         unsafe {

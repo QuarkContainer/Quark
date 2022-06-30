@@ -264,9 +264,9 @@ impl CPULocal {
     }
 }
 
-impl PageMgrInternal {
-    pub fn CopyVsysCallPages(&self) {
-        CopyPage(self.vsyscallPages[0], __vsyscall_page as u64);
+impl PageMgr {
+    pub fn CopyVsysCallPages(&self, addr: u64) {
+        CopyPage(addr, __vsyscall_page as u64);
     }
 }
 
