@@ -21,7 +21,6 @@ use super::super::task::*;
 use super::super::LoadVcpuFreq;
 use super::super::TSC;
 use super::kernel::*;
-use super::timer::timer::*;
 
 pub struct AsyncProcess {
     pub lastTsc: AtomicI64,
@@ -55,8 +54,8 @@ impl AsyncProcess {
             self.lastTsc.store(curr, Ordering::Relaxed);
             if let Some(mut processTime) = self.lastProcessTime.try_lock() {
                 let currTime = Task::MonoTimeNow().0 / MILLISECOND;
-                if currTime - *processTime >= CyclesPerTick() {
-                    let tick = (currTime - *processTime) / CyclesPerTick();
+                if currTime - *processTime >= CLOCK_TICK_MS {
+                    let tick = (currTime - *processTime) / CLOCK_TICK_MS;
                     if let Some(kernel) = GetKernelOption() {
                         let ticker = kernel.cpuClockTicker.clone();
                         ticker.Notify(tick as u64);

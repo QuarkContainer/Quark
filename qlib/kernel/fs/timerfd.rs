@@ -82,6 +82,7 @@ pub fn NewTimerfd(task: &Task, clockId: i32) -> Result<File> {
 
     let clock = match clockId {
         CLOCK_MONOTONIC => MONOTONIC_CLOCK.clone(),
+        CLOCK_BOOTTIME => MONOTONIC_CLOCK.clone(),
         CLOCK_REALTIME => REALTIME_CLOCK.clone(),
         _ => return Err(Error::SysError(SysErr::EINVAL)),
     };
