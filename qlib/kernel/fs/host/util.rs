@@ -16,6 +16,7 @@ use crate::qlib::mutex::*;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 use super::super::super::super::auth::id::*;
 use super::super::super::super::auth::*;
@@ -26,10 +27,14 @@ use super::super::super::super::linux_def::*;
 use super::super::super::super::qmsg::qcall::TryOpenStruct;
 use super::super::super::kernel::time::*;
 use super::super::super::util::cstring::*;
+use super::super::super::task::*;
 
 use super::super::super::super::path;
 use super::super::super::Kernel::HostSpace;
 use super::super::attr::*;
+use super::super::super::SHARESPACE;
+use super::super::super::IOURING;
+use super::diriops::*;
 use super::*;
 
 impl Statx {
@@ -405,4 +410,201 @@ pub fn SetTimestamps(fd: i32, ts: &InterTimeSpec) -> Result<()> {
 
 pub fn Seek(fd: i32, offset: i64, whence: i32) -> i64 {
     return HostSpace::Seek(fd, offset, whence);
+}
+
+pub fn SetMaskedAttributes(fd: i32, mask: &AttrMask, attr: &UnstableAttr) -> Result<()> {
+    if mask.Empty() {
+        return Ok(());
+    }
+
+    if mask.UID || mask.GID {
+        return Err(Error::SysError(SysErr::EPERM));
+    }
+
+    if mask.Perms {
+        let ret = Fchmod(fd, attr.Perms.LinuxMode()) as i32;
+        if ret < 0 {
+            return Err(Error::SysError(-ret));
+        }
+    }
+
+    if mask.Size {
+        let ret = Ftruncate(fd, attr.Size) as i32;
+        if ret < 0 {
+            return Err(Error::SysError(-ret));
+        }
+    }
+
+    if mask.AccessTime || mask.ModificationTime {
+        let ts = InterTimeSpec {
+            ATime: attr.AccessTime,
+            ATimeOmit: !mask.AccessTime,
+            MTime: attr.ModificationTime,
+            MTimeOmit: !mask.ModificationTime,
+            ..Default::default()
+        };
+
+        return SetTimestamps(fd, &ts);
+    }
+
+    return Ok(());
+}
+
+pub fn Rename(
+    _task: &Task,
+    _dir: &mut Inode,
+    oldParent: &Inode,
+    oldname: &str,
+    newParent: &Inode,
+    newname: &str,
+    _replacement: bool,
+) -> Result<()> {
+    let oldParent = match oldParent
+        .lock()
+        .InodeOp
+        .as_any()
+        .downcast_ref::<HostDirOp>()
+        {
+            Some(p) => p.clone(),
+            None => panic!("&InodeOp isn't a HostInodeOp!"),
+        };
+
+    let newParent = match newParent
+        .lock()
+        .InodeOp
+        .as_any()
+        .downcast_ref::<HostDirOp>()
+        {
+            Some(p) => p.clone(),
+            None => panic!("&InodeOp isn't a HostInodeOp!"),
+        };
+
+    let ret = RenameAt(oldParent.HostFd(), oldname, newParent.HostFd(), newname);
+
+    if ret < 0 {
+        return Err(Error::SysError(-ret as i32));
+    }
+
+    oldParent.lock().readdirCache = None;
+    newParent.lock().readdirCache = None;
+    return Ok(());
+}
+
+pub fn UnstableAttr(hostfd: i32, task: &Task, mo: &Arc<QMutex<MountSourceOperations>>) -> Result<UnstableAttr> {
+    let uringStatx = SHARESPACE.config.read().UringStatx;
+
+    // the statx uring call sometime become very slow. todo: root cause this.
+    if !uringStatx {
+        let mut s: LibcStat = Default::default();
+        let ret = Fstat(hostfd, &mut s) as i32;
+        if ret < 0 {
+            return Err(Error::SysError(-ret as i32));
+        }
+
+        return Ok(s.UnstableAttr(mo));
+    } else {
+        let mut s: Statx = Default::default();
+        let str = CString::New("");
+        let ret = IOURING.Statx(
+            task,
+            hostfd,
+            str.Ptr(),
+            &mut s as *mut _ as u64,
+            ATType::AT_EMPTY_PATH,
+            StatxMask::STATX_BASIC_STATS,
+        );
+
+        if ret < 0 {
+            return Err(Error::SysError(-ret as i32));
+        }
+
+        return Ok(s.UnstableAttr(mo));
+    }
+}
+
+pub fn Getxattr(fd: i32, name: &str) -> Result<Vec<u8>> {
+    let str = CString::New(name);
+    let val : &mut[u8; Xattr::XATTR_NAME_MAX]= &mut [0; Xattr::XATTR_NAME_MAX];
+    let ret  = HostSpace::FGetXattr(fd,
+                                    str.Ptr(),
+                                    &val[0] as * const _ as u64,
+                                    val.len()) as i32;
+    if ret < 0 {
+        return Err(Error::SysError(-ret))
+    };
+
+    return Ok(val[0..ret as usize].to_vec())
+}
+
+pub fn Setxattr(fd: i32, name: &str, value: &[u8], flags: u32) -> Result<()> {
+    let name = CString::New(name);
+    let addr = if value.len() == 0 {
+        0
+    } else {
+        &value[0] as * const _ as u64
+    };
+
+    let ret  = HostSpace::FSetXattr(fd,
+                                    name.Ptr(),
+                                    addr,
+                                    value.len(),
+                                    flags) as i32;
+
+    if ret < 0 {
+        return Err(Error::SysError(-ret))
+    };
+
+    return Ok(())
+}
+
+pub fn Listxattr(fd: i32) -> Result<Vec<String>> {
+    let val : &mut[u8; Xattr::XATTR_NAME_MAX]= &mut [0; Xattr::XATTR_NAME_MAX];
+    let ret  = HostSpace::FListXattr(fd,
+                                     &val[0] as * const _ as u64,
+                                     val.len()) as i32;
+    if ret < 0 {
+        return Err(Error::SysError(-ret))
+    };
+
+    let mut res = Vec::new();
+    let mut cur = 0;
+    for i in 0..ret as usize {
+        if val[i] == 0 {
+            let str = String::from_utf8(val[cur..i].to_vec()).map_err(|e| Error::Common(format!("Getxattr fail {}", e)))?;
+            res.push(str);
+            cur = i+1;
+        }
+    }
+
+    return Ok(res)
+}
+
+pub fn Removexattr(fd: i32, name: &str) -> Result<()> {
+    let name = CString::New(name);
+    let ret  = HostSpace::FRemoveXattr(fd,
+                                       name.Ptr()) as i32;
+
+    if ret < 0 {
+        return Err(Error::SysError(-ret))
+    };
+
+    return Ok(())
+}
+
+pub fn StatFS(fd: i32) -> Result<FsInfo> {
+    let mut statfs = LibcStatfs::default();
+
+    let ret = HostSpace::Fstatfs(fd, &mut statfs as *mut _ as u64);
+    if ret < 0 {
+        return Err(Error::SysError(-ret as i32));
+    }
+
+    let mut fsInfo = FsInfo::default();
+    fsInfo.Type = statfs.Type;
+    fsInfo.TotalBlocks = statfs.Blocks;
+    fsInfo.FreeBlocks = statfs.BlocksFree;
+    fsInfo.TotalFiles = statfs.Files;
+    fsInfo.FreeFiles = statfs.FilesFree;
+
+    return Ok(fsInfo);
 }

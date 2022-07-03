@@ -24,11 +24,9 @@ use core::ops::Deref;
 use super::super::super::super::addr::*;
 use super::super::super::super::auth::*;
 use super::super::super::super::common::*;
-use super::super::super::super::linux::time::*;
 use super::super::super::super::linux_def::*;
 use super::super::super::super::mem::areaset::*;
 use super::super::super::super::range::*;
-use super::super::super::util::cstring::*;
 use super::super::super::fd::*;
 use super::super::super::guestfdnotifier::*;
 use super::super::super::kernel::time::*;
@@ -51,7 +49,6 @@ use super::super::flags::*;
 use super::super::inode::*;
 use super::fs::*;
 use super::hostfileop::*;
-use super::diriops::*;
 use super::util::*;
 use super::*;
 
@@ -394,41 +391,7 @@ impl HostInodeOpIntern {
     /*********************************end of mappable****************************************************************/
 
     pub fn SetMaskedAttributes(&self, mask: &AttrMask, attr: &UnstableAttr) -> Result<()> {
-        if mask.Empty() {
-            return Ok(());
-        }
-
-        if mask.UID || mask.GID {
-            return Err(Error::SysError(SysErr::EPERM));
-        }
-
-        if mask.Perms {
-            let ret = Fchmod(self.HostFd, attr.Perms.LinuxMode()) as i32;
-            if ret < 0 {
-                return Err(Error::SysError(-ret));
-            }
-        }
-
-        if mask.Size {
-            let ret = Ftruncate(self.HostFd, attr.Size) as i32;
-            if ret < 0 {
-                return Err(Error::SysError(-ret));
-            }
-        }
-
-        if mask.AccessTime || mask.ModificationTime {
-            let ts = InterTimeSpec {
-                ATime: attr.AccessTime,
-                ATimeOmit: !mask.AccessTime,
-                MTime: attr.ModificationTime,
-                MTimeOmit: !mask.ModificationTime,
-                ..Default::default()
-            };
-
-            return SetTimestamps(self.HostFd, &ts);
-        }
-
-        return Ok(());
+        return SetMaskedAttributes(self.HostFd, mask, attr);
     }
 
     pub fn Sync(&self) -> Result<()> {
@@ -1148,43 +1111,15 @@ impl InodeOperations for HostInodeOp {
 
     fn Rename(
         &self,
-        _task: &Task,
-        _dir: &mut Inode,
+        task: &Task,
+        dir: &mut Inode,
         oldParent: &Inode,
         oldname: &str,
         newParent: &Inode,
         newname: &str,
-        _replacement: bool,
+        replacement: bool,
     ) -> Result<()> {
-        let oldParent = match oldParent
-            .lock()
-            .InodeOp
-            .as_any()
-            .downcast_ref::<HostDirOp>()
-        {
-            Some(p) => p.clone(),
-            None => panic!("&InodeOp isn't a HostInodeOp!"),
-        };
-
-        let newParent = match newParent
-            .lock()
-            .InodeOp
-            .as_any()
-            .downcast_ref::<HostDirOp>()
-        {
-            Some(p) => p.clone(),
-            None => panic!("&InodeOp isn't a HostInodeOp!"),
-        };
-
-        let ret = RenameAt(oldParent.HostFd(), oldname, newParent.HostFd(), newname);
-
-        if ret < 0 {
-            return Err(Error::SysError(-ret as i32));
-        }
-
-        oldParent.lock().readdirCache = None;
-        newParent.lock().readdirCache = None;
-        return Ok(());
+        return Rename(task, dir, oldParent, oldname, newParent, newname, replacement);
     }
 
     fn Bind(
@@ -1207,6 +1142,8 @@ impl InodeOperations for HostInodeOp {
         task: &Task,
         _dir: &Inode,
         dirent: &Dirent,
+
+
         flags: FileFlags,
     ) -> Result<File> {
         let fops = self.GetHostFileOp(task);
@@ -1218,115 +1155,32 @@ impl InodeOperations for HostInodeOp {
     }
 
     fn UnstableAttr(&self, task: &Task) -> Result<UnstableAttr> {
-        let uringStatx = SHARESPACE.config.read().UringStatx;
-
         if self.BufWriteEnable() {
             // try to gain the lock once, release immediately
             self.BufWriteLock().Lock(task);
         }
 
-        // the statx uring call sometime become very slow. todo: root cause this.
-        if !uringStatx {
-            let mut s: LibcStat = Default::default();
-            let hostfd = self.lock().HostFd;
-            let ret = Fstat(hostfd, &mut s) as i32;
-            if ret < 0 {
-                return Err(Error::SysError(-ret as i32));
-            }
+        let mops = self.lock().mops.clone();
+        let fd = self.HostFd();
 
-            let mops = self.lock().mops.clone();
-            return Ok(s.UnstableAttr(&mops));
-        } else {
-            let mut s: Statx = Default::default();
-            let hostfd = self.lock().HostFd;
-
-            let str = CString::New("");
-            let ret = IOURING.Statx(
-                task,
-                hostfd,
-                str.Ptr(),
-                &mut s as *mut _ as u64,
-                ATType::AT_EMPTY_PATH,
-                StatxMask::STATX_BASIC_STATS,
-            );
-
-            if ret < 0 {
-                return Err(Error::SysError(-ret as i32));
-            }
-
-            let mops = self.lock().mops.clone();
-            return Ok(s.UnstableAttr(&mops));
-        }
+        return UnstableAttr(fd, task, &mops)
     }
 
     //fn StableAttr(&self) -> &StableAttr;
     fn Getxattr(&self, _dir: &Inode, name: &str, _size: usize) -> Result<Vec<u8>> {
-        let str = CString::New(name);
-        let val : &mut[u8; Xattr::XATTR_NAME_MAX]= &mut [0; Xattr::XATTR_NAME_MAX];
-        let ret  = HostSpace::FGetXattr(self.FD(),
-                                        str.Ptr(),
-                                        &val[0] as * const _ as u64,
-                                        val.len()) as i32;
-        if ret < 0 {
-            return Err(Error::SysError(-ret))
-        };
-
-        return Ok(val[0..ret as usize].to_vec())
+        return Getxattr(self.HostFd(), name)
     }
 
     fn Setxattr(&self, _dir: &mut Inode, name: &str, value: &[u8], flags: u32) -> Result<()> {
-        let name = CString::New(name);
-        let addr = if value.len() == 0 {
-            0
-        } else {
-            &value[0] as * const _ as u64
-        };
-
-        let ret  = HostSpace::FSetXattr(self.FD(),
-                                        name.Ptr(),
-                                        addr,
-                                        value.len(),
-                                        flags) as i32;
-
-        if ret < 0 {
-            return Err(Error::SysError(-ret))
-        };
-
-        return Ok(())
+        return Setxattr(self.HostFd(), name, value, flags)
     }
 
     fn Listxattr(&self, _dir: &Inode, _size: usize) -> Result<Vec<String>> {
-        let val : &mut[u8; Xattr::XATTR_NAME_MAX]= &mut [0; Xattr::XATTR_NAME_MAX];
-        let ret  = HostSpace::FListXattr(self.FD(),
-                                         &val[0] as * const _ as u64,
-                                         val.len()) as i32;
-        if ret < 0 {
-            return Err(Error::SysError(-ret))
-        };
-
-        let mut res = Vec::new();
-        let mut cur = 0;
-        for i in 0..ret as usize {
-            if val[i] == 0 {
-                let str = String::from_utf8(val[cur..i].to_vec()).map_err(|e| Error::Common(format!("Getxattr fail {}", e)))?;
-                res.push(str);
-                cur = i+1;
-            }
-        }
-
-        return Ok(res)
+        return Listxattr(self.HostFd())
     }
 
     fn Removexattr(&self, _dir: &Inode, name: &str) -> Result<()> {
-        let name = CString::New(name);
-        let ret  = HostSpace::FRemoveXattr(self.FD(),
-                                        name.Ptr()) as i32;
-
-        if ret < 0 {
-            return Err(Error::SysError(-ret))
-        };
-
-        return Ok(())
+        return Removexattr(self.HostFd(), name)
     }
 
     fn Check(&self, task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {
@@ -1348,21 +1202,7 @@ impl InodeOperations for HostInodeOp {
     }
 
     fn SetTimestamps(&self, _task: &Task, _dir: &mut Inode, ts: &InterTimeSpec) -> Result<()> {
-        if ts.ATimeOmit && ts.MTimeOmit {
-            return Ok(());
-        }
-
-        let mut sts: [Timespec; 2] = [Timespec::default(); 2];
-
-        sts[0] = TimespecFromTimestamp(ts.ATime, ts.ATimeOmit, ts.ATimeSetSystemTime);
-        sts[1] = TimespecFromTimestamp(ts.MTime, ts.MTimeOmit, ts.MTimeSetSystemTime);
-
-        let ret = HostSpace::Futimens(self.HostFd(), &sts as *const _ as u64);
-        if ret < 0 {
-            return Err(Error::SysError(-ret as i32));
-        }
-
-        return Ok(());
+        return SetTimestamps(self.HostFd(), ts);
     }
 
     fn Truncate(&self, task: &Task, _dir: &mut Inode, size: i64) -> Result<()> {
@@ -1440,22 +1280,7 @@ impl InodeOperations for HostInodeOp {
     }
 
     fn StatFS(&self, _task: &Task) -> Result<FsInfo> {
-        let mut statfs = LibcStatfs::default();
-
-        let fd = self.HostFd();
-        let ret = HostSpace::Fstatfs(fd, &mut statfs as *mut _ as u64);
-        if ret < 0 {
-            return Err(Error::SysError(-ret as i32));
-        }
-
-        let mut fsInfo = FsInfo::default();
-        fsInfo.Type = statfs.Type;
-        fsInfo.TotalBlocks = statfs.Blocks;
-        fsInfo.FreeBlocks = statfs.BlocksFree;
-        fsInfo.TotalFiles = statfs.Files;
-        fsInfo.FreeFiles = statfs.FilesFree;
-
-        return Ok(fsInfo);
+        return StatFS(self.HostFd())
     }
 
     fn Mappable(&self) -> Result<HostIopsMappable> {
