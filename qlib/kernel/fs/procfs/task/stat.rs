@@ -23,6 +23,7 @@ use super::super::super::super::super::common::*;
 use super::super::super::super::super::limits::*;
 use super::super::super::super::super::linux::time::*;
 use super::super::super::super::super::linux_def::*;
+use super::super::super::super::super::kernel::*;
 use super::super::super::super::task::*;
 use super::super::super::super::threadmgr::pid_namespace::*;
 use super::super::super::super::threadmgr::thread::*;
@@ -123,15 +124,15 @@ impl StatData {
         };
         output += &format!(
             "{} {} ",
-            ClockTFromDuration(cputime.UserTime),
-            ClockTFromDuration(cputime.SysTime)
+            ClockTFromDuration(Tsc::Scale(cputime.UserTime) * 1000),
+            ClockTFromDuration(Tsc::Scale(cputime.SysTime) * 1000)
         );
 
         let cputime = self.t.ThreadGroup().JoinedChildCPUStats();
         output += &format!(
             "{} {} ",
-            ClockTFromDuration(cputime.UserTime),
-            ClockTFromDuration(cputime.SysTime)
+            ClockTFromDuration(Tsc::Scale(cputime.UserTime) * 1000),
+            ClockTFromDuration(Tsc::Scale(cputime.SysTime) * 1000)
         );
 
         output += &format!("{} {} ", self.t.Priority(), self.t.Niceness());

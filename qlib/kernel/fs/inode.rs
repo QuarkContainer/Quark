@@ -37,6 +37,7 @@ use super::dirent::*;
 use super::file::*;
 use super::flags::*;
 use super::host::hostinodeop::*;
+use super::host::diriops::*;
 use super::inode_overlay::*;
 use super::lock::*;
 use super::mount::*;
@@ -96,6 +97,7 @@ pub enum IopsType {
     TTYDevice,
     ZeroDevice,
     HostInodeOp,
+    HostDirOp,
     TaskOwnedInodeOps,
     StaticFileInodeOps,
     SeqFile,
@@ -303,23 +305,42 @@ impl Inode {
         //info!("after fstat: {:?}", fstat.StableAttr());
 
         //println!("the stable attr is {:?}", &fstat.StableAttr());
-        let iops = HostInodeOp::New(
-            &msrc.lock().MountSourceOperations.clone(),
-            fd,
-            fstat.WouldBlock(),
-            &fstat,
-            writeable,
-        );
+        let inodeType = fstat.InodeType();
+        if inodeType == InodeType::Directory || inodeType == InodeType::SpecialDirectory {
+            let iops = HostDirOp::New(
+                &msrc.lock().MountSourceOperations.clone(),
+                fd,
+                &fstat
+            );
 
-        return Ok(Self(Arc::new(QMutex::new(InodeIntern {
-            UniqueId: NewUID(),
-            InodeOp: Arc::new(iops),
-            StableAttr: fstat.StableAttr(),
-            LockCtx: LockCtx::default(),
-            watches: Watches::default(),
-            MountSource: msrc.clone(),
-            Overlay: None,
-        }))));
+            return Ok(Self(Arc::new(QMutex::new(InodeIntern {
+                UniqueId: NewUID(),
+                InodeOp: Arc::new(iops),
+                StableAttr: fstat.StableAttr(),
+                LockCtx: LockCtx::default(),
+                watches: Watches::default(),
+                MountSource: msrc.clone(),
+                Overlay: None,
+            }))));
+        } else {
+            let iops =HostInodeOp::New(
+                &msrc.lock().MountSourceOperations.clone(),
+                fd,
+                fstat.WouldBlock(),
+                &fstat,
+                writeable,
+            );
+
+            return Ok(Self(Arc::new(QMutex::new(InodeIntern {
+                UniqueId: NewUID(),
+                InodeOp: Arc::new(iops),
+                StableAttr: fstat.StableAttr(),
+                LockCtx: LockCtx::default(),
+                watches: Watches::default(),
+                MountSource: msrc.clone(),
+                Overlay: None,
+            }))));
+        }
     }
 
     pub fn InodeType(&self) -> InodeType {
@@ -442,7 +463,7 @@ impl Inode {
             return overlayRemove(task, &overlay, d, remove);
         }
 
-        let name = (remove.0).0.lock().Name.clone();
+        let name = remove.Name();
         let removeInode = remove.Inode();
         let typ = removeInode.StableAttr().Type;
         let op = self.lock().InodeOp.clone();
@@ -483,7 +504,7 @@ impl Inode {
         let oldInode = oldParent.Inode();
         let newInode = newParent.Inode();
 
-        let oldname = (renamed.0).0.lock().Name.clone();
+        let oldname = renamed.Name();
 
         let op = self.lock().InodeOp.clone();
         let res = op.Rename(

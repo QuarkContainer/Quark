@@ -122,6 +122,7 @@ impl Tsc {
         };
     }
 
+    // return : count of us
     pub fn Scale(tsc: i64) -> i64 {
         return Scale(tsc);
     }

@@ -203,12 +203,12 @@ impl FileOperations for HostFileOp {
 
     fn IterateDir(
         &self,
-        task: &Task,
+        _task: &Task,
         _d: &Dirent,
-        dirCtx: &mut DirCtx,
-        offset: i32,
+        _dirCtx: &mut DirCtx,
+        _offset: i32,
     ) -> (i32, Result<i64>) {
-        return self.InodeOp.lock().IterateDir(task, dirCtx, offset);
+        return (0, Err(Error::SysError(SysErr::ENOTDIR)))
     }
 
     fn Mappable(&self) -> Result<HostIopsMappable> {

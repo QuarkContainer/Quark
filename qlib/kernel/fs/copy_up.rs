@@ -34,7 +34,7 @@ pub fn copyUp(task: &Task, d: &Dirent) -> Result<()> {
 pub fn CopyUpLockedForRename(task: &Task, d: &Dirent) -> Result<()> {
     loop {
         {
-            let inode = (d.0).0.lock().Inode.clone();
+            let inode = d.inode.clone();
             let inodelock = inode.lock();
             let overlay = inodelock.Overlay.as_ref().unwrap().read();
             if overlay.upper.is_some() {
@@ -49,12 +49,11 @@ pub fn CopyUpLockedForRename(task: &Task, d: &Dirent) -> Result<()> {
 
 fn findNextCopyup(_task: &Task, d: &Dirent) -> Dirent {
     let mut next = d.clone();
-    let mut parent = (next.0).0.lock().Parent.as_ref().unwrap().clone();
+    let mut parent = next.Parent().as_ref().unwrap().clone();
 
     loop {
         {
-            let parentlock = (parent.0).0.lock();
-            let inodeLock = parentlock.Inode.lock();
+            let inodeLock = parent.inode.lock();
             let overlay = inodeLock.Overlay.as_ref().unwrap().read();
             if overlay.upper.is_some() {
                 return next;
@@ -62,13 +61,12 @@ fn findNextCopyup(_task: &Task, d: &Dirent) -> Dirent {
         }
 
         next = parent;
-        parent = (next.0).0.lock().Parent.as_ref().unwrap().clone();
+        parent = next.Parent().as_ref().unwrap().clone();
     }
 }
 
 fn doCopyup(task: &Task, next: &Dirent) -> Result<()> {
-    let next = (next.0).0.lock();
-    let nextInode = next.Inode.lock();
+    let nextInode = next.inode.lock();
     let nextOverlay = nextInode.Overlay.as_ref().unwrap().read();
     let t = nextOverlay.lower.as_ref().unwrap().StableAttr().Type;
 
@@ -81,7 +79,7 @@ fn doCopyup(task: &Task, next: &Dirent) -> Result<()> {
         return Ok(());
     }
 
-    let parent = next.Parent.as_ref().unwrap().clone();
+    let parent = next.Parent().as_ref().unwrap().clone();
 
     let attrs = nextOverlay.lower.as_ref().unwrap().UnstableAttr(task)?;
 
@@ -97,7 +95,7 @@ fn doCopyup(task: &Task, next: &Dirent) -> Result<()> {
             let childFile = parentUpper.Create(
                 task,
                 &root,
-                &next.Name,
+                &next.Name(),
                 &FileFlags {
                     Read: true,
                     Write: true,
@@ -108,11 +106,11 @@ fn doCopyup(task: &Task, next: &Dirent) -> Result<()> {
             childUpperInode = childFile.Dirent.Inode();
         }
         InodeType::Directory => {
-            parentUpper.CreateDirectory(task, &root, &next.Name, &attrs.Perms)?;
-            let childUpper = match parentUpper.Lookup(task, &next.Name) {
+            parentUpper.CreateDirectory(task, &root, &next.Name(), &attrs.Perms)?;
+            let childUpper = match parentUpper.Lookup(task, &next.Name()) {
                 Err(e) => {
                     info!("copy up failed to lookup directory: {:?}", e);
-                    cleanupUpper(task, &mut parentUpper, &next.Name);
+                    cleanupUpper(task, &mut parentUpper, &next.Name());
                     return Err(e);
                 }
                 Ok(n) => n,
@@ -122,7 +120,7 @@ fn doCopyup(task: &Task, next: &Dirent) -> Result<()> {
         }
         InodeType::Symlink => {
             let childLower = next
-                .Inode
+                .inode
                 .lock()
                 .Overlay
                 .as_ref()
@@ -134,11 +132,11 @@ fn doCopyup(task: &Task, next: &Dirent) -> Result<()> {
                 .clone();
             let link = childLower.ReadLink(task)?;
 
-            parentUpper.CreateLink(task, &root, &link, &next.Name)?;
-            let childUpper = match parentUpper.Lookup(task, &next.Name) {
+            parentUpper.CreateLink(task, &root, &link, &next.Name())?;
+            let childUpper = match parentUpper.Lookup(task, &next.Name()) {
                 Err(e) => {
                     info!("copy up failed to lookup directory: {:?}", e);
-                    cleanupUpper(task, &mut parentUpper, &next.Name);
+                    cleanupUpper(task, &mut parentUpper, &next.Name());
                     return Err(e);
                 }
                 Ok(n) => n,
@@ -149,7 +147,7 @@ fn doCopyup(task: &Task, next: &Dirent) -> Result<()> {
         _ => {
             panic!(
                 "copy up of invalid type {:?} on {}",
-                nextStableAttr.Type, &next.Name
+                nextStableAttr.Type, &next.Name()
             )
         }
     }
