@@ -107,7 +107,6 @@ impl Dirent {
                 Name: name.to_string(),
                 Parent: None,
                 Children: BTreeMap::new(),
-                frozen: false,
                 mounted: false,
             }),
             NewUID(),
@@ -120,7 +119,6 @@ impl Dirent {
             Name: "transient".to_string(),
             Parent: None,
             Children: BTreeMap::new(),
-            frozen: false,
             mounted: false,
         });
         return Self(Arc::new((iDirent, NewUID())));
@@ -241,35 +239,6 @@ impl Dirent {
         }
     }
 
-    pub fn Freeze(&self) {
-        {
-            let mut d = (self.0).0.lock();
-
-            if d.frozen {
-                return;
-            }
-
-            d.frozen = true;
-
-            //add extra refence to avoid free
-            let msrc = d.Inode.lock().MountSource.clone();
-            msrc.lock().Froze(self);
-
-            //self.Froze();
-
-            for (_, w) in &d.Children {
-                match w.upgrade() {
-                    None => {
-                        //println!("in freeze: weak pointer");
-                    }
-                    Some(d) => Dirent(d).Freeze(),
-                }
-            }
-        }
-
-        self.flush();
-    }
-
     pub fn DescendantOf(&self, p: &Dirent) -> bool {
         let mut d = self.clone();
         let p = p.clone();
@@ -373,17 +342,13 @@ impl Dirent {
             (self.0).0.lock().Children.remove(name);
         }
 
-        let frozen = (self.0).0.lock().frozen;
-        if frozen && !inode.IsVirtual() {
-            return Err(Error::SysError(SysErr::ENOENT));
-        }
-
         let c = match inode.Lookup(task, name) {
             Err(Error::SysError(SysErr::ENOENT)) => {
-                let negative = Arc::downgrade(&(NEGATIVE_DIRENT.0));
-                (self.0).0.lock().Children.insert(String::from(name), negative);
 
-                //self.addChild(String::from(name), &NEGATIVE_DIRENT);
+                // why the negative doesn't work? todo: fix this
+                //let negative = Arc::downgrade(&(NEGATIVE_DIRENT.0));
+                //(self.0).0.lock().Children.insert(String::from(name), negative);
+
                 return Err(Error::SysError(SysErr::ENOENT))
             }
             Err(e) => return Err(e),
@@ -419,7 +384,6 @@ impl Dirent {
             "Add child request the child has no parent"
         );
         child.0.lock().Parent = Some(self.clone());
-        child.0.lock().frozen = (self.0).0.lock().frozen;
 
         return self.addChild(name, child);
     }
@@ -468,13 +432,7 @@ impl Dirent {
             return Err(Error::SysError(SysErr::EEXIST));
         }
 
-        let frozen = (self.0).0.lock().frozen;
-
         let mut inode = self.Inode();
-        if frozen && inode.IsVirtual() {
-            return Err(Error::SysError(SysErr::ENOENT));
-        }
-
         let file = inode.Create(task, self, name, flags, perms)?;
 
         let child = file.Dirent.clone();
@@ -503,23 +461,7 @@ impl Dirent {
             return Err(Error::SysError(SysErr::EEXIST));
         }
 
-        let fronzon = (self.0).0.lock().frozen;
-
-        let inode = self.Inode();
-        if fronzon && inode.IsVirtual() {
-            return Err(Error::SysError(SysErr::ENOENT));
-        }
-
-        let remove = match (self.0).0.lock().Children.get(name) {
-            Some(_) => true,
-
-            None => false,
-        };
-
-        if remove {
-            (self.0).0.lock().Children.remove(name);
-        }
-
+        (self.0).0.lock().Children.remove(name);
         return create();
     }
 
@@ -738,11 +680,6 @@ impl Dirent {
         }
 
         let parent = self.Parent().unwrap();
-        let parentInode = parent.Inode();
-        if (parent.0).0.lock().frozen && !parentInode.IsVirtual() {
-            return Err(Error::SysError(SysErr::ENOENT));
-        }
-
         let replacement = Arc::new((
             QMutex::new(InterDirent::New(inode.clone(), &(self.0).0.lock().Name)),
             NewUID(),
@@ -759,11 +696,6 @@ impl Dirent {
         let parent = self
             .Parent()
             .expect("unmount required the parent is not none");
-        let parentInode = parent.Inode();
-        if (parent.0).0.lock().frozen && !parentInode.IsVirtual() {
-            return Err(Error::SysError(SysErr::ENOENT));
-        }
-
         let old = parent.AddChild(replace.Name(), &replace.0);
 
         match old {
@@ -778,10 +710,6 @@ impl Dirent {
 
     pub fn Remove(&self, task: &Task, root: &Dirent, name: &str, dirPath: bool) -> Result<()> {
         let mut inode = self.Inode();
-
-        if (self.0).0.lock().frozen && !inode.IsVirtual() {
-            return Err(Error::SysError(SysErr::ENOENT));
-        }
 
         let child = self.Walk(task, root, name)?;
         let childInode = child.Inode();
@@ -828,10 +756,6 @@ impl Dirent {
 
     pub fn RemoveDirectory(&self, task: &Task, root: &Dirent, name: &str) -> Result<()> {
         let mut inode = self.Inode();
-        if (self.0).0.lock().frozen && !inode.IsVirtual() {
-            return Err(Error::SysError(SysErr::ENOENT));
-        }
-
         if name == "." {
             return Err(Error::SysError(SysErr::EINVAL));
         }
@@ -907,14 +831,6 @@ impl Dirent {
 
         let oldInode = oldParent.Inode();
         let newInode = newParent.Inode();
-
-        if (oldParent.0).0.lock().frozen && !oldInode.IsVirtual() {
-            return Err(Error::SysError(SysErr::ENOENT));
-        }
-
-        if (newParent.0).0.lock().frozen && !newInode.IsVirtual() {
-            return Err(Error::SysError(SysErr::ENOENT));
-        }
 
         oldInode.CheckPermission(
             task,
@@ -1041,10 +957,6 @@ impl Dirent {
         newName: &str,
     ) -> Result<()> {
         let inode = parent.Inode();
-
-        if (parent.0).0.lock().frozen && !inode.IsVirtual() {
-            return Err(Error::SysError(SysErr::ENOENT));
-        }
 
         inode.CheckPermission(
             task,
@@ -1292,10 +1204,6 @@ fn direntReadDir(
         return (offset, Ok(0));
     }
 
-    if (d.0).0.lock().frozen {
-        return d.readdirFrozen(task, root, offset, dirCtx);
-    }
-
     let (dot, dotdot) = d.GetDotAttrs(root);
 
     if offset == 0 {
@@ -1336,7 +1244,6 @@ pub struct InterDirent {
     pub Parent: Option<Dirent>,
     pub Children: BTreeMap<String, Weak<(QMutex<InterDirent>, u64)>>,
 
-    pub frozen: bool,
     pub mounted: bool,
 }
 
@@ -1347,7 +1254,6 @@ impl Default for InterDirent {
             Name: "".to_string(),
             Parent: None,
             Children: BTreeMap::new(),
-            frozen: false,
             mounted: false,
         };
     }
@@ -1360,7 +1266,6 @@ impl InterDirent {
             Name: name.to_string(),
             Parent: None,
             Children: BTreeMap::new(),
-            frozen: false,
             mounted: false,
         };
     }
@@ -1371,7 +1276,6 @@ impl InterDirent {
             Name: "transient".to_string(),
             Parent: None,
             Children: BTreeMap::new(),
-            frozen: false,
             mounted: false,
         };
     }

@@ -179,13 +179,6 @@ impl FileOperations for OverlayFileOperations {
         };
 
         let dirent = file.Dirent.clone();
-        let frozen = (dirent.0).0.lock().frozen;
-        if frozen {
-            let res = DirentReadDir(task, &dirent, self, &root, &mut dirCtx, offset)?;
-            *dirCursor = dirCtx.DirCursor;
-            return Ok(res);
-        }
-
         let inode = dirent.Inode();
         let o = inode
             .lock()

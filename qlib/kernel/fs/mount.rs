@@ -160,10 +160,6 @@ impl MountNs {
         return self.root.clone();
     }
 
-    pub fn Freeze(&self) {
-        self.root.Freeze()
-    }
-
     pub fn Mount(&self, mountPoint: &Dirent, inode: &Inode) -> Result<()> {
         let replacement = mountPoint.Mount(inode)?;
 

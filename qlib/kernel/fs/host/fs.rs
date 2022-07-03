@@ -150,8 +150,6 @@ pub fn InstallWhitelist(task: &Task, m: &MountNs, inputPaths: &Vec<String>) -> R
         }
     }
 
-    m.Freeze();
-
     return Ok(());
 }
 
