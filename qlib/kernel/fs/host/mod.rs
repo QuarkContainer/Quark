@@ -20,6 +20,8 @@ pub mod ioctl;
 pub mod socket_iovec;
 pub mod tty;
 pub mod util;
+pub mod diriops;
+pub mod hostdirfops;
 //pub mod control;
 
 use alloc::collections::btree_map::BTreeMap;

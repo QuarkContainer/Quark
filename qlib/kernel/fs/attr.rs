@@ -21,6 +21,7 @@ use super::dentry::*;
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum InodeFileType {
     Host,
+    HostDir,
     Mock,
     Full,
     Null,

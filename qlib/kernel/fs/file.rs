@@ -228,6 +228,7 @@ pub enum FileOpsType {
     StaticDirFileOperations,
     StaticFile,
     HostFileOp,
+    HostDirOp,
     TTYFileOps,
     RootProcFile,
     SeqFileOperations,
