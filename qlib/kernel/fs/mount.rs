@@ -244,7 +244,7 @@ impl MountNs {
             }
 
             let tmp;
-            match &(d.0).0.lock().Parent {
+            match &d.main.lock().Parent {
                 None => return None,
                 Some(ref p) => tmp = p.clone(),
             }
@@ -326,7 +326,7 @@ impl MountNs {
                 let targetPath = inode.ReadLink(task)?;
                 *remainingTraversals -= 1;
 
-                let wd = match &(current.0).0.lock().Parent {
+                let wd = match &current.main.lock().Parent {
                     None => None,
                     Some(ref wd) => Some(wd.clone()),
                 };

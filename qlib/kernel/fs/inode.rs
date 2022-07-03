@@ -463,7 +463,7 @@ impl Inode {
             return overlayRemove(task, &overlay, d, remove);
         }
 
-        let name = (remove.0).0.lock().Name.clone();
+        let name = remove.Name();
         let removeInode = remove.Inode();
         let typ = removeInode.StableAttr().Type;
         let op = self.lock().InodeOp.clone();
@@ -504,7 +504,7 @@ impl Inode {
         let oldInode = oldParent.Inode();
         let newInode = newParent.Inode();
 
-        let oldname = (renamed.0).0.lock().Name.clone();
+        let oldname = renamed.Name();
 
         let op = self.lock().InodeOp.clone();
         let res = op.Rename(
