@@ -23,6 +23,7 @@ use core::cmp::Eq;
 use core::cmp::PartialEq;
 use core::ops::Deref;
 use spin::*;
+use lazy_static::lazy_static;
 
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
@@ -36,6 +37,10 @@ use super::file::*;
 use super::flags::*;
 use super::inode::*;
 use super::mount::*;
+
+lazy_static! {
+    pub static ref NEGATIVE_DIRENT: Dirent = Dirent::default();
+}
 
 pub static RENAME: Singleton<RwLock<()>> = Singleton::<RwLock<()>>::New();
 pub unsafe fn InitSingleton() {
@@ -313,6 +318,10 @@ impl Dirent {
         return None;
     }
 
+    pub fn IsNegative(&self) -> bool {
+        return Arc::ptr_eq(&self.0, &NEGATIVE_DIRENT.0)
+    }
+
     fn walk(&self, task: &Task, root: &Dirent, name: &str) -> Result<Dirent> {
         let inode = self.Inode();
         if !inode.StableAttr().IsDir() {
@@ -335,7 +344,12 @@ impl Dirent {
         let child = self.GetCacheChild(name);
         let remove = match child {
             Some(cd) => {
-                let mounted = cd.0.lock().mounted;
+                let dirent = Dirent(cd);
+                if dirent.IsNegative() {
+                    return Err(Error::SysError(SysErr::ENOENT))
+                }
+
+                let mounted = (dirent.0).0.lock().mounted;
                 /*let subInode = cd.0.lock().Inode.clone();
                 let mountSource = subInode.lock().MountSource.clone();
                 let mountsourceOpations = mountSource.lock().MountSourceOperations.clone();*/
@@ -344,10 +358,9 @@ impl Dirent {
                 // work around now. and todo: fix it
                 let revalidate = false; //mountsourceOpations.lock().Revalidate(name, &inode, &subInode);
                 if mounted || !revalidate {
-                    return Ok(Dirent(cd.clone()));
+                    return Ok(dirent);
                 }
 
-                let dirent = Dirent(cd);
                 let inode = dirent.Inode();
                 inode.Watches().Unpin(&dirent);
 
@@ -365,11 +378,21 @@ impl Dirent {
             return Err(Error::SysError(SysErr::ENOENT));
         }
 
-        let c = inode.Lookup(task, name)?;
+        let c = match inode.Lookup(task, name) {
+            Err(Error::SysError(SysErr::ENOENT)) => {
+                let negative = Arc::downgrade(&(NEGATIVE_DIRENT.0));
+                (self.0).0.lock().Children.insert(String::from(name), negative);
+
+                //self.addChild(String::from(name), &NEGATIVE_DIRENT);
+                return Err(Error::SysError(SysErr::ENOENT))
+            }
+            Err(e) => return Err(e),
+            Ok(c) => c,
+        };
 
         assert!(&(c.0).0.lock().Name == name, "lookup get mismatch name");
 
-        self.AddChild(&c);
+        self.AddChild(String::from(name), &c);
 
         return Ok(c);
     }
@@ -388,6 +411,7 @@ impl Dirent {
 
     pub fn AddChild(
         &self,
+        name: String,
         child: &Arc<(QMutex<InterDirent>, u64)>,
     ) -> Option<Weak<(QMutex<InterDirent>, u64)>> {
         assert!(
@@ -397,11 +421,16 @@ impl Dirent {
         child.0.lock().Parent = Some(self.clone());
         child.0.lock().frozen = (self.0).0.lock().frozen;
 
-        return self.addChild(child);
+        return self.addChild(name, child);
+    }
+
+    pub fn Name(&self) -> String {
+        return (self.0).0.lock().Name.clone()
     }
 
     pub fn addChild(
         &self,
+        name: String,
         child: &Arc<(QMutex<InterDirent>, u64)>,
     ) -> Option<Weak<(QMutex<InterDirent>, u64)>> {
         assert!(
@@ -409,7 +438,7 @@ impl Dirent {
             "Dirent addChild assumes the child already belongs to the parent"
         );
 
-        let name = child.0.lock().Name.clone();
+        //let name = child.0.lock().Name.clone();
         //println!("addChild the name is {}", name);
         return (self.0)
             .0
@@ -450,7 +479,7 @@ impl Dirent {
 
         let child = file.Dirent.clone();
 
-        self.AddChild(&child);
+        self.AddChild(String::from(name), &child);
         child.ExtendReference();
         if SHARESPACE.config.read().EnableInotify {
             inode.Watches().Notify(name,
@@ -509,6 +538,8 @@ impl Dirent {
                                             InotifyEvent::IN_CREATE,
                                             0);
             }
+            (self.0).0.lock().Children.remove(oldname);
+            (self.0).0.lock().Children.remove(newname);
             return Ok(())
         });
     }
@@ -532,12 +563,12 @@ impl Dirent {
 
         return self.genericCreate(task, root, name, &mut || -> Result<()> {
             inode.CreateHardLink(task, self, &target, name)?;
+            (self.0).0.lock().Children.remove(name);
+
             if SHARESPACE.config.read().EnableInotify {
                 targetInode.Watches().Notify(name,
                                              InotifyEvent::IN_ATTRIB,
                                              0);
-            }
-            if SHARESPACE.config.read().EnableInotify {
                 inode.Watches().Notify(name,
                                        InotifyEvent::IN_CREATE,
                                        0);
@@ -561,6 +592,8 @@ impl Dirent {
                                        InotifyEvent::IN_ISDIR | InotifyEvent::IN_CREATE,
                                        0);
             }
+
+            (self.0).0.lock().Children.remove(name);
             return ret;
         });
     }
@@ -576,7 +609,7 @@ impl Dirent {
         let result = self.genericCreate(task, root, name, &mut || -> Result<()> {
             let inode = self.Inode();
             let childDir = inode.Bind(task, name, data, perms)?;
-            self.AddChild(&childDir);
+            self.AddChild(String::from(name), &childDir);
             childDir.ExtendReference();
             return Ok(());
         });
@@ -610,6 +643,7 @@ impl Dirent {
         return self.genericCreate(task, root, name, &mut || -> Result<()> {
             let mut inode = self.Inode();
             inode.CreateFifo(task, self, name, perms)?;
+            (self.0).0.lock().Children.remove(name);
             if SHARESPACE.config.read().EnableInotify {
                 inode.Watches().Notify(name,
                                        InotifyEvent::IN_CREATE,
@@ -715,7 +749,8 @@ impl Dirent {
         ));
         replacement.0.lock().mounted = true;
 
-        parent.AddChild(&replacement);
+        let name = String::from(&(self.0).0.lock().Name);
+        parent.AddChild(name, &replacement);
 
         return Ok(Dirent(replacement));
     }
@@ -729,7 +764,7 @@ impl Dirent {
             return Err(Error::SysError(SysErr::ENOENT));
         }
 
-        let old = parent.addChild(&replace.0);
+        let old = parent.AddChild(replace.Name(), &replace.0);
 
         match old {
             None => panic!("mount must mount over an existing dirent"),
