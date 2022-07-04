@@ -34,6 +34,7 @@ use super::super::super::super::common::*;
 use super::super::super::super::linux::socket::*;
 use super::super::super::super::linux_def::*;
 use super::super::super::fs::host::hostinodeop::*;
+use super::super::super::fs::host::diriops::*;
 use super::super::super::kernel::abstract_socket_namespace::*;
 use super::super::super::kernel::fd_table::*;
 use super::super::super::kernel::time::*;
@@ -592,7 +593,7 @@ impl SockOperations for UnixSocketOperations {
 
             //if it is host folder, create shadow host unix socket bind
             if iops.InodeType() == InodeType::Directory
-                && iops.as_any().downcast_ref::<HostInodeOp>().is_some()
+                && iops.as_any().downcast_ref::<HostDirOp>().is_some()
             {
                 let fullName = "/".to_string() + &task.Thread().ContainerID() + &d.MyFullName() + "/" + &name.to_string();
 
