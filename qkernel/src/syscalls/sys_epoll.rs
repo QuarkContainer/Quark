@@ -177,6 +177,11 @@ pub fn WaitEpoll(task: &Task, epfd: i32, max: i32, timeout: i64) -> Result<Vec<E
 
     if timeout == 0 {
         super::super::taskMgr::Yield(); // yield vcpu to avoid live lock
+        return Ok(r);
+    }
+
+    if timeout == 0 {
+        super::super::taskMgr::Yield(); // yield vcpu to avoid live lock
         return Ok(r)
     }
 
