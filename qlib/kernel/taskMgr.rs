@@ -213,6 +213,7 @@ pub fn Wait() {
         if currentTime - start >= WAIT_CYCLES {
             let current = TaskId::New(CPULocal::CurrentTask());
             let waitTask = TaskId::New(CPULocal::WaitTask());
+            SHARESPACE.scheduler.ExitTaskContext();
             switch(current, waitTask);
             break;
         } else {
@@ -235,25 +236,20 @@ pub fn SwitchToNewTask() -> ! {
 }
 
 impl Scheduler {
-    // steal scheduling
-    pub fn GetNext(&self) -> Option<TaskId> {
+    pub fn ExitTaskContext(&self) {
         let vcpuId = CPULocal::CpuId() as usize;
-        let vcpuCount = self.vcpuCnt;
+        self.queue[vcpuId].SetWoringTask(TaskId::New(0));
+    }
 
-        match self.queue[vcpuId].Next() {
-            None => (),
-            Some(t) => return Some(t),
-        }
-
+    pub fn Steal(&self, vcpuId: usize) -> Option<TaskId> {
         if self.GlobalReadyTaskCnt() == 0 {
             return None;
         }
 
+        let vcpuCount = self.vcpuCnt;
         match self.queue[0].Steal() {
             None => (),
             Some(t) => {
-                self.queue[vcpuId].SetWoringTask(t);
-                self.DecReadyTaskCount();
                 return Some(t)
             },
         }
@@ -263,14 +259,39 @@ impl Scheduler {
             match self.queue[idx].Steal() {
                 None => (),
                 Some(t) => {
-                    self.queue[vcpuId].SetWoringTask(t);
-                    self.DecReadyTaskCount();
                     return Some(t)
                 },
             }
         }
 
         return None;
+    }
+
+    // steal scheduling
+    pub fn GetNext(&self) -> Option<TaskId> {
+        let vcpuId = CPULocal::CpuId() as usize;
+
+        match self.queue[vcpuId].Next() {
+            None => (),
+            Some((t, global)) => {
+                //error!("Next ... {:x?}/{}", t, global);
+                if global {
+                    self.DecReadyTaskCount();
+                }
+                return Some(t)
+            },
+        }
+
+        match self.Steal(vcpuId) {
+            None => return None,
+            Some(t) => {
+                //error!("stealing ... {:x?}", t);
+                self.queue[vcpuId].SetWoringTask(t);
+                t.GetTask().SetQueueId(vcpuId);
+                self.DecReadyTaskCount();
+                return Some(t)
+            }
+        }
     }
 
     pub fn Print(&self) -> String {

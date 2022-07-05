@@ -282,22 +282,21 @@ impl TaskQueue {
     }
 
     // used by the vcpu owner to get next task
-    pub fn Next(&self) -> Option<TaskId> {
+    pub fn Next(&self) -> Option<(TaskId, bool)> {
         let mut data = self.data.lock();
         if data.workingTaskReady {
             data.workingTaskReady = false;
-            return Some(data.workingTask)
+            return Some((data.workingTask, false))
         }
 
         match data.queue.pop_front() {
             None => {
-                data.workingTask = TaskId::New(0); // clean current working task
                 return None
             },
             Some(taskId) => {
                 self.queueSize.fetch_sub(1, Ordering::Release);
                 data.workingTask = taskId;
-                return Some(taskId)
+                return Some((taskId, true));
             }
         }
     }
@@ -335,6 +334,7 @@ impl TaskQueue {
 
     // return whether it is put in global available queue
     pub fn Enqueue(&self, task: TaskId, cpuAff: bool) -> bool {
+        //error!("Enqueue {:x?}/{}", task, cpuAff);
         let mut data = self.data.lock();
 
         if cpuAff && task == data.workingTask {
