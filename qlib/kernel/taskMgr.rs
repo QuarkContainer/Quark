@@ -119,18 +119,11 @@ pub fn WaitFn() {
             None => {
                 SHARESPACE.scheduler.IncreaseHaltVcpuCnt();
 
-                // if there is memory needs free and freed, continue free them
-                // while super::ALLOCATOR.Free() {}
-
-                if SHARESPACE.scheduler.GlobalReadyTaskCnt() == 0 {
-                    //debug!("vcpu sleep");
-                    let addr = HostSpace::VcpuWait();
-                    //debug!("vcpu wakeup {:x}", addr);
-                    assert!(addr >= 0);
-                    task = TaskId::New(addr as u64);
-                } else {
-                    //error!("Waitfd None {}", SHARESPACE.scheduler.Print());
-                }
+                //debug!("vcpu sleep");
+                let addr = HostSpace::VcpuWait();
+                //debug!("vcpu wakeup {:x}", addr);
+                assert!(addr >= 0);
+                task = TaskId::New(addr as u64);
 
                 SHARESPACE.scheduler.DecreaseHaltVcpuCnt();
             }
@@ -290,11 +283,11 @@ impl Scheduler {
         match self.Steal(vcpuId) {
             None => return None,
             Some(t) => {
+                self.DecReadyTaskCount();
                 //error!("stealing ... {:x?}", t);
                 let task = match self.queue[vcpuId].SwapWoringTask(t) {
                     None => {
                         t.GetTask().SetQueueId(vcpuId);
-                        self.DecReadyTaskCount();
                         t
                     },
                     Some(task) => {
@@ -311,8 +304,9 @@ impl Scheduler {
         let mut str = alloc::string::String::new();
         let vcpuCount = self.vcpuCnt;
         for i in 0..vcpuCount {
-            if self.queue[i].Len() > 0 {
-                str += &format!("{}:{}", i, self.queue[i].ToString());
+            let hasWorking = self.queue[i].data.lock().workingTaskReady;
+            if self.queue[i].Len() > 0 || hasWorking {
+                str += &format!("{}:{:x?}", i, &self.queue[i]);
             }
         }
 

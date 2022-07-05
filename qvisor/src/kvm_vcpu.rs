@@ -1183,7 +1183,7 @@ impl CPULocal {
         self.ToWaiting(sharespace);
         defer!(self.ToSearch(sharespace););
 
-        while IsRunning() {
+        while !sharespace.Shutdown() {
             match self.Process(sharespace) {
                 None => (),
                 Some(newTask) => {

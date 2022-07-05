@@ -155,11 +155,6 @@ impl Scheduler {
         return self.haltVcpuCnt.load(Ordering::Acquire);
     }
 
-    #[inline(always)]
-    pub fn GlobalReadyTaskCnt(&self) -> usize {
-        self.readyTaskCnt.load(Ordering::Acquire)
-    }
-
     pub fn ReadyTaskCnt(&self, vcpuId: usize) -> u64 {
         //return self.readyTaskCnt.load(Ordering::SeqCst) as u64
         return self.queue[vcpuId].Len();
@@ -167,6 +162,11 @@ impl Scheduler {
 
     pub fn PrintQ(&self, vcpuId: u64) -> String {
         return format!("{:x?}", self.queue[vcpuId as usize]);
+    }
+
+    #[inline(always)]
+    pub fn GlobalReadyTaskCnt(&self) -> usize {
+        self.readyTaskCnt.load(Ordering::Acquire)
     }
 
     #[inline(always)]
