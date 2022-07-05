@@ -19,7 +19,7 @@ use super::qlib::addr::*;
 use super::qlib::common::*;
 use super::qlib::kernel::TSC;
 use super::qlib::linux_def::*;
-//use super::qlib::perf_tunning::*;
+use super::qlib::backtracer;
 use super::qlib::singleton::*;
 use super::qlib::vcpu_mgr::*;
 use super::task::*;
@@ -456,10 +456,10 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
             "Get pagefault from kernel ... {:#x?}/cr2 is {:x}/cr3 is {:x}",
             ptRegs, cr2, cr3
         );
-        /*backtracer::trace1(sf.ip, sf.sp, pt.rbp, &mut |frame| {
+        backtracer::trace(ptRegs.rip, ptRegs.rsp, ptRegs.rbp, &mut |frame| {
             print!("pagefault frame is {:#x?}", frame);
             true
-        });*/
+        });
         panic!("Get pagefault from kernel .");
     }
 

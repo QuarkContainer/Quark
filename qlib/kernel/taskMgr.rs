@@ -188,9 +188,9 @@ pub fn Wait() {
     CPULocal::Myself().ToSearch(&SHARESPACE);
     let start = TSC.Rdtsc();
 
+    let vcpuId = CPULocal::CpuId() as usize;
+    let mut next = SHARESPACE.scheduler.GetNext();
     loop {
-        let next = { SHARESPACE.scheduler.GetNext() };
-
         if let Some(newTask) = next {
             let current = TaskId::New(CPULocal::CurrentTask());
             //let vcpuId = newTask.GetTask().queueId;
@@ -213,15 +213,24 @@ pub fn Wait() {
         if currentTime - start >= WAIT_CYCLES {
             let current = TaskId::New(CPULocal::CurrentTask());
             let waitTask = TaskId::New(CPULocal::WaitTask());
-            SHARESPACE.scheduler.ExitTaskContext();
-            switch(current, waitTask);
-            break;
+
+            let oldTask = SHARESPACE.scheduler.queue[vcpuId].ResetWorkingTask();
+
+            match oldTask {
+                None => {
+                    switch(current, waitTask);
+                    break;
+                }
+                Some(t) => next = Some(t),
+            }
         } else {
             if PollAsyncMsg() == 0 {
                 unsafe {
                     llvm_asm!("pause" :::: "volatile");
                 }
             }
+
+            next = SHARESPACE.scheduler.GetNext();
         }
     }
 }
@@ -236,11 +245,6 @@ pub fn SwitchToNewTask() -> ! {
 }
 
 impl Scheduler {
-    pub fn ExitTaskContext(&self) {
-        let vcpuId = CPULocal::CpuId() as usize;
-        self.queue[vcpuId].SetWoringTask(TaskId::New(0));
-    }
-
     pub fn Steal(&self, vcpuId: usize) -> Option<TaskId> {
         if self.GlobalReadyTaskCnt() == 0 {
             return None;
@@ -254,7 +258,8 @@ impl Scheduler {
             },
         }
 
-        for i in 0..vcpuCount {
+        // skip the current vcpu
+        for i in 1..vcpuCount {
             let idx = (i + vcpuId) % vcpuCount;
             match self.queue[idx].Steal() {
                 None => (),
@@ -286,10 +291,18 @@ impl Scheduler {
             None => return None,
             Some(t) => {
                 //error!("stealing ... {:x?}", t);
-                self.queue[vcpuId].SetWoringTask(t);
-                t.GetTask().SetQueueId(vcpuId);
-                self.DecReadyTaskCount();
-                return Some(t)
+                let task = match self.queue[vcpuId].SwapWoringTask(t) {
+                    None => {
+                        t.GetTask().SetQueueId(vcpuId);
+                        self.DecReadyTaskCount();
+                        t
+                    },
+                    Some(task) => {
+                        self.Schedule(t, true); // reschedule the task
+                        task
+                    }
+                };
+                return Some(task)
             }
         }
     }

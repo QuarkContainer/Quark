@@ -301,8 +301,28 @@ impl TaskQueue {
         }
     }
 
-    pub fn SetWoringTask(&self, task: TaskId) {
-        self.data.lock().workingTask = task;
+    pub fn ResetWorkingTask(&self) -> Option<TaskId> {
+        let mut data = self.data.lock();
+        if data.workingTaskReady {
+            data.workingTaskReady = false;
+            return Some(data.workingTask)
+        } else {
+            data.workingTask = TaskId::New(0);
+            return None
+        }
+    }
+
+    // return: None: No working task fouond
+    // Some(task) => there is workingtask set,
+     pub fn SwapWoringTask(&self, task: TaskId) -> Option<TaskId> {
+        let mut data = self.data.lock();
+        if data.workingTaskReady {
+            data.workingTaskReady = false;
+            return Some(data.workingTask);
+        } else {
+            data.workingTask = task;
+            return None
+        }
     }
 
     // try to steal task from other vcpu's queue
