@@ -16,8 +16,8 @@ use alloc::string::String;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use super::super::super::kernel_def::*;
-use super::super::linux_def::*;
 use super::super::kernel::GlobalRDMASvcCli;
+use super::super::linux_def::*;
 use super::super::task_mgr::*;
 use super::super::vcpu_mgr::*;
 use super::quring::uring_mgr::*;
@@ -171,7 +171,9 @@ pub fn PollAsyncMsg() -> usize {
 
     let mut ret = QUringTrigger();
     // ret += GlobalRDMASvcCli().DrainCompletionQueue();
-    ret += GlobalRDMASvcCli().ProcessRDMASvcMessage();
+    if SHARESPACE.config.read().EnableRDMA {
+        ret += GlobalRDMASvcCli().ProcessRDMASvcMessage();
+    }
     if Shutdown() {
         return 0;
     }
