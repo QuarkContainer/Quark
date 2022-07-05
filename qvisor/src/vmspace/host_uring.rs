@@ -14,6 +14,7 @@
 
 use core::mem;
 use core::sync::atomic::AtomicU64;
+use core::sync::atomic::Ordering;
 use alloc::collections::VecDeque;
 
 use crate::vmspace::kernel::GlobalIOMgr;
@@ -199,14 +200,13 @@ impl IoUring {
             }
 
         } else {
-            let sq = self.sq.lock();
-            let count = sq.len();
-            if count > 0 {
-                let ret = self.SubmitEntry(count)?;
-                return Ok(ret);
-            } else {
-                return Ok(0)
+            let count = self.pendingCnt.swap(0, Ordering::Acquire);
+            if count == 0 {
+                return Ok(0);
             }
+
+            let ret = self.SubmitEntry(count as _)?;
+            return Ok(ret);
         }
     }
 
