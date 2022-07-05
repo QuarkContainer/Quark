@@ -99,7 +99,11 @@ impl Waiter {
             b.state = WaitState::Running;
             //info!("Waiter::trigger 2 taskid is {:x?}, stat is {:?}, id is {}, bitmap is {:x}",
             //    b.taskId, b.state, id, b.bitmap);
-            SHARESPACE.scheduler.Schedule(b.taskId);
+            if id == Self::TIMER_WAITID {
+                SHARESPACE.scheduler.Schedule(b.taskId, false);
+            } else {
+                SHARESPACE.scheduler.Schedule(b.taskId, true);
+            }
         }
     }
 

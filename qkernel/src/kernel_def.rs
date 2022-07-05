@@ -163,10 +163,6 @@ impl<'a> ShareSpace {
         }
     }
 
-    pub fn Schedule(&self, taskId: u64) {
-        self.scheduler.Schedule(TaskId::New(taskId));
-    }
-
     pub fn Yield() {
         HostSpace::VcpuYield();
     }

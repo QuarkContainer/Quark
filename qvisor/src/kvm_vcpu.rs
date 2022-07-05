@@ -338,10 +338,6 @@ impl KVMVcpu {
         Ok(())
     }
 
-    pub fn Schedule(&self, taskId: TaskId) {
-        SHARE_SPACE.scheduler.ScheduleQ(taskId, taskId.Queue());
-    }
-
     pub fn Signal(&self, signal: i32) {
         loop {
             let ret = vmspace::VMSpace::TgKill(
@@ -959,7 +955,7 @@ impl KVMVcpu {
                     if currTaskId.Addr() != 0 {
                         sharespace
                             .scheduler
-                            .ScheduleQ(currTaskId, currTaskId.Queue())
+                            .ScheduleQ(currTaskId, currTaskId.Queue(), true)
                     }
                 }
                 Some(msg) => {
@@ -1187,7 +1183,7 @@ impl CPULocal {
         self.ToWaiting(sharespace);
         defer!(self.ToSearch(sharespace););
 
-        while IsRunning() {
+        while !sharespace.Shutdown() {
             match self.Process(sharespace) {
                 None => (),
                 Some(newTask) => {

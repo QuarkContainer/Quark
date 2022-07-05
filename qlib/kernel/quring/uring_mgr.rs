@@ -428,7 +428,7 @@ impl QUring {
 
             call.ret = ret;
             //error!("uring process: call is {:x?}", &call);
-            ScheduleQ(call.taskId);
+            ScheduleQ(call.taskId, true);
         } else {
             let idx = data as usize;
             let rerun = {

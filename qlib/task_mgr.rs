@@ -18,16 +18,16 @@ use alloc::collections::vec_deque::VecDeque;
 use alloc::string::String;
 use alloc::vec::Vec;
 use cache_padded::CachePadded;
-use core::ops::Deref;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
+use core::cmp::PartialEq;
 
 use super::kernel::arch::x86_64::arch_x86::*;
 
 use super::vcpu_mgr::*;
 
-#[derive(Debug, Copy, Clone, Default)]
+#[derive(Debug, Copy, Clone, Default, PartialEq)]
 pub struct TaskId {
     pub data: u64,
 }
@@ -155,18 +155,18 @@ impl Scheduler {
         return self.haltVcpuCnt.load(Ordering::Acquire);
     }
 
-    #[inline(always)]
-    pub fn GlobalReadyTaskCnt(&self) -> usize {
-        self.readyTaskCnt.load(Ordering::Acquire)
-    }
-
     pub fn ReadyTaskCnt(&self, vcpuId: usize) -> u64 {
         //return self.readyTaskCnt.load(Ordering::SeqCst) as u64
         return self.queue[vcpuId].Len();
     }
 
     pub fn PrintQ(&self, vcpuId: u64) -> String {
-        return format!("{:x?}", self.queue[vcpuId as usize].lock());
+        return format!("{:x?}", self.queue[vcpuId as usize]);
+    }
+
+    #[inline(always)]
+    pub fn GlobalReadyTaskCnt(&self) -> usize {
+        self.readyTaskCnt.load(Ordering::Acquire)
     }
 
     #[inline(always)]
@@ -181,23 +181,11 @@ impl Scheduler {
         return cnt;
     }
 
-    pub fn AllTasks(&self) -> Vec<TaskId> {
-        let mut ret = Vec::new();
-        for i in 0..8 {
-            for t in self.queue[i].lock().iter() {
-                ret.push(*t)
-            }
+
+    pub fn ScheduleQ(&self, task: TaskId, vcpuId: u64, cpuAff: bool) {
+        if self.queue[vcpuId as usize].Enqueue(task, cpuAff) {
+            self.IncReadyTaskCount();
         }
-
-        return ret;
-    }
-
-    pub fn ScheduleQ(&self, task: TaskId, vcpuId: u64) {
-        let _cnt = {
-            let mut queue = self.queue[vcpuId as usize].lock();
-            queue.push_back(task);
-            self.IncReadyTaskCount()
-        };
 
         //error!("ScheduleQ task {:x?}, vcpuId {}", task, vcpuId);
         if vcpuId == 0 {
@@ -256,14 +244,27 @@ impl Scheduler {
     }
 }
 
-pub struct TaskQueue(pub QMutex<VecDeque<TaskId>>);
+#[derive(Debug)]
+pub struct TaskQueueIntern{
+    pub workingTask: TaskId,
+    pub workingTaskReady: bool,
+    pub queue: VecDeque<TaskId>
+}
 
-impl Deref for TaskQueue {
-    type Target = QMutex<VecDeque<TaskId>>;
-
-    fn deref(&self) -> &QMutex<VecDeque<TaskId>> {
-        &self.0
+impl Default for TaskQueueIntern {
+    fn default() -> Self {
+        return Self {
+            workingTask: TaskId::New(0),
+            workingTaskReady: false,
+            queue: VecDeque::with_capacity(8),
+        }
     }
+}
+
+#[derive(Debug)]
+pub struct TaskQueue{
+    pub queueSize: AtomicUsize,
+    pub data: QMutex<TaskQueueIntern>
 }
 
 impl Default for TaskQueue {
@@ -274,22 +275,103 @@ impl Default for TaskQueue {
 
 impl TaskQueue {
     pub fn New() -> Self {
-        return TaskQueue(QMutex::new(VecDeque::with_capacity(128)));
+        return Self {
+            queueSize: AtomicUsize::new(0),
+            data: QMutex::new(TaskQueueIntern::default())
+        }
     }
 
-    pub fn Dequeue(&self) -> Option<TaskId> {
-        return self.lock().pop_front();
+    // used by the vcpu owner to get next task
+    pub fn Next(&self) -> Option<(TaskId, bool)> {
+        let mut data = self.data.lock();
+        if data.workingTaskReady {
+            data.workingTaskReady = false;
+            return Some((data.workingTask, false))
+        }
+
+        match data.queue.pop_front() {
+            None => {
+                return None
+            },
+            Some(taskId) => {
+                self.queueSize.fetch_sub(1, Ordering::Release);
+                data.workingTask = taskId;
+                return Some((taskId, true));
+            }
+        }
     }
 
-    pub fn Enqueue(&self, task: TaskId) {
-        self.lock().push_back(task);
+    pub fn ResetWorkingTask(&self) -> Option<TaskId> {
+        let mut data = self.data.lock();
+        if data.workingTaskReady {
+            data.workingTaskReady = false;
+            return Some(data.workingTask)
+        } else {
+            data.workingTask = TaskId::New(0);
+            return None
+        }
+    }
+
+    // return: None: No working task fouond
+    // Some(task) => there is workingtask set,
+     pub fn SwapWoringTask(&self, task: TaskId) -> Option<TaskId> {
+        let mut data = self.data.lock();
+        if data.workingTaskReady {
+            data.workingTaskReady = false;
+            return Some(data.workingTask);
+        } else {
+            data.workingTask = task;
+            return None
+        }
+    }
+
+    // try to steal task from other vcpu's queue
+    pub fn Steal(&self) -> Option<TaskId> {
+        if self.queueSize.load(Ordering::Acquire) == 0 {
+            return None;
+        }
+
+        match self.data.try_lock() {
+            None => return None,
+            Some(mut data) => {
+                for _ in 0..data.queue.len() {
+                    match data.queue.pop_front() {
+                        None => panic!("TaskQueue none task"),
+                        Some(taskId) => {
+                            if taskId.GetTask().context.Ready() != 0 {
+                                self.queueSize.fetch_sub(1, Ordering::Release);
+                                return Some(taskId)
+                            }
+                            data.queue.push_back(taskId)
+                        }
+                    }
+                }
+            }
+        }
+
+        return None;
+    }
+
+    // return whether it is put in global available queue
+    pub fn Enqueue(&self, task: TaskId, cpuAff: bool) -> bool {
+        //error!("Enqueue {:x?}/{}", task, cpuAff);
+        let mut data = self.data.lock();
+
+        if cpuAff && task == data.workingTask {
+            data.workingTaskReady = true;
+            return false;
+        }
+
+        data.queue.push_back(task);
+        self.queueSize.fetch_add(1, Ordering::Release);
+        return true;
     }
 
     pub fn ToString(&self) -> String {
-        return format!("{:x?} ", self.lock());
+        return format!("{:x?} ", self);
     }
 
     pub fn Len(&self) -> u64 {
-        return self.lock().len() as u64;
+        return self.queueSize.load(Ordering::Acquire) as u64
     }
 }
