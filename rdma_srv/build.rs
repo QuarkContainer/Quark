@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[derive(Clone)]
-pub struct UnixSocket{
-    pub fd: i32,
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tonic_build::compile_protos("src/svc_client/quarkcmsvc.proto")?;
+    Ok(())
 }

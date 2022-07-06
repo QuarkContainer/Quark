@@ -380,6 +380,10 @@ impl RDMASrv {
     //     let channelId = self.channelIdMgr.lock().AllocId();
 
     // }
+
+    pub fn ExistsConnection(&self, ip: &u32) -> bool {
+        self.conns.lock().contains_key(ip)
+    }
 }
 
 // scenarios:

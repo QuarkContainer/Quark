@@ -382,7 +382,7 @@ impl RDMASvcClient {
                         }
                     }
                     RDMARespMsg::RDMAFinNotify(response) => {
-                        // debug!("RDMARespMsg::RDMAFinNotify, response: {:?}", response);
+                        debug!("RDMARespMsg::RDMAFinNotify, response: {:?}", response);
                         // let mut channelToSockInfos = gatewayCli.channelToSockInfos.lock();
                         // let sockInfo = channelToSockInfos.get_mut(&response.channelId).unwrap();
                         // if response.event & FIN_RECEIVED_FROM_PEER != 0 {

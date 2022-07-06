@@ -120,7 +120,7 @@ fn main() -> io::Result<()> {
     let serverSockFd = gatewayCli.sockIdMgr.lock().AllocId().unwrap();
     let _ret = gatewayCli.bind(
         serverSockFd,
-        u32::from(Ipv4Addr::from_str("192.168.6.8").unwrap()).to_be(),
+        u32::from(Ipv4Addr::from_str("30.0.0.5").unwrap()).to_be(),
         16868u16.to_be(),
     );
 
