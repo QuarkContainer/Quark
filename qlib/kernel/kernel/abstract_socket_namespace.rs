@@ -90,7 +90,7 @@ impl AbstractSocketNamespace {
                 // We never delete a map entry apart from a socket's destructor (although the
                 // map entry may be overwritten). Therefore, a socket should exist, even if it
                 // may not be the one we expect.
-                panic!("expected socket to exist at {:?} in abstract socket namespace", name);
+                return
             }
             Some(b) => b.clone(),
         };
