@@ -28,6 +28,7 @@ use super::super::super::super::linux_def::*;
 use super::super::super::super::mem::areaset::*;
 use super::super::super::super::range::*;
 use super::super::super::fd::*;
+use super::super::super::task::*;
 use super::super::super::guestfdnotifier::*;
 use super::super::super::kernel::time::*;
 pub use super::super::super::memmgr::vma::HostIopsMappable;
@@ -37,7 +38,6 @@ use super::super::super::memmgr::mapping_set::*;
 use super::super::super::memmgr::mm::*;
 use super::super::super::memmgr::*;
 use super::super::super::socket::unix::transport::unix::*;
-use super::super::super::task::*;
 use super::super::super::Kernel::HostSpace;
 use super::super::super::IOURING;
 use super::super::super::SHARESPACE;
@@ -211,6 +211,14 @@ impl Drop for HostInodeOpIntern {
             //default fd
             return;
         }
+
+        let task = Task::Current();
+
+        let _l = if self.BufWriteEnable() {
+            Some(self.BufWriteLock().Lock(task))
+        } else {
+            None
+        };
 
         if SHARESPACE.config.read().MmapRead {
             match self.mappable.take() {
