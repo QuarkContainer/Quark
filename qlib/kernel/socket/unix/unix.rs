@@ -415,7 +415,7 @@ pub fn ExtractEndpoint(task: &Task, sockAddr: &[u8]) -> Result<BoundEndpoint> {
     //info!("unix socket path is {}", String::from_utf8(path.to_vec()).unwrap());
 
     // Is it abstract?
-    if path[0] == 0 {
+    if true || path[0] == 0 {
         let ep = match ABSTRACT_SOCKET.BoundEndpoint(&path) {
             None => return Err(Error::SysError(SysErr::ECONNREFUSED)),
             Some(ep) => ep,
@@ -481,7 +481,9 @@ impl SockOperations for UnixSocketOperations {
                     return Err(Error::SysError(SysErr::EPROTOTYPE));
                 }
             }
-            Err(e) => return Err(e),
+            Err(e) => {
+                return Err(e)
+            },
             _ => (),
         }
         return Ok(0);
@@ -618,7 +620,8 @@ impl SockOperations for UnixSocketOperations {
                 }
 
                 // handle the host unix socket as virtual unix socket
-                ABSTRACT_SOCKET.Bind(fullName.into_bytes(), &bep)?;
+                let currentName = d.MyFullName() + "/" + &name.to_string();
+                ABSTRACT_SOCKET.Bind(currentName.into_bytes(), &bep)?;
                 *(self.name.lock()) = Some(p.into_bytes());
             } else {
                 match d.Bind(task, &root, &name.to_string(), &bep, &permisson) {
