@@ -25,16 +25,9 @@ use super::super::socket::unix::transport::unix::*;
 
 pub static ABSTRACT_SOCKET: Singleton<AbstractSocketNamespace> =
     Singleton::<AbstractSocketNamespace>::New();
+
 pub unsafe fn InitSingleton() {
     ABSTRACT_SOCKET.Init(AbstractSocketNamespace::default());
-}
-
-pub fn BoundEndpoint(name: &Vec<u8>) -> Option<BoundEndpoint> {
-    return ABSTRACT_SOCKET.BoundEndpoint(name);
-}
-
-pub fn Bind(name: Vec<u8>, ep: &BoundEndpoint) -> Result<()> {
-    return ABSTRACT_SOCKET.Bind(name, ep);
 }
 
 #[derive(Clone, Default)]
@@ -86,5 +79,34 @@ impl AbstractSocketNamespace {
 
         a.insert(name, ep.Downgrade());
         return Ok(());
+    }
+
+    // Remove removes the specified socket at name from the abstract socket
+    // namespace, if it has not yet been replaced.
+    pub fn Remove(&self, name: &Vec<u8>, ep: &BoundEndpoint) {
+        let mut a = self.lock();
+        let weak = match a.get(name) {
+            None => {
+                // We never delete a map entry apart from a socket's destructor (although the
+                // map entry may be overwritten). Therefore, a socket should exist, even if it
+                // may not be the one we expect.
+                panic!("expected socket to exist at {:?} in abstract socket namespace", name);
+            }
+            Some(b) => b.clone(),
+        };
+
+        let boundep = match weak.Upgrade() {
+            None => {
+                // We never delete a map entry apart from a socket's destructor (although the
+                // map entry may be overwritten). Therefore, a socket should exist, even if it
+                // may not be the one we expect.
+                panic!("expected socket to exist at {:?} in abstract socket namespace", name);
+            }
+            Some(b) => b,
+        };
+
+        if boundep == *ep {
+            a.remove(name);
+        }
     }
 }

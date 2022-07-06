@@ -211,6 +211,13 @@ impl UnixSocketOperations {
 
 impl Drop for UnixSocketOperations {
     fn drop(&mut self) {
+       match *self.name.lock() {
+            None => (),
+            Some(ref name) => {
+                ABSTRACT_SOCKET.Remove(name, &self.ep);
+            }
+        }
+
         self.ep.Close();
     }
 }
@@ -409,7 +416,7 @@ pub fn ExtractEndpoint(task: &Task, sockAddr: &[u8]) -> Result<BoundEndpoint> {
 
     // Is it abstract?
     if path[0] == 0 {
-        let ep = match BoundEndpoint(&path) {
+        let ep = match ABSTRACT_SOCKET.BoundEndpoint(&path) {
             None => return Err(Error::SysError(SysErr::ECONNREFUSED)),
             Some(ep) => ep,
         };
@@ -442,7 +449,7 @@ pub fn ExtractEndpoint(task: &Task, sockAddr: &[u8]) -> Result<BoundEndpoint> {
     if iops.InodeType() == InodeType::Socket
         && iops.as_any().downcast_ref::<HostInodeOp>().is_some()
     {
-        let ep = match BoundEndpoint(&fullName.into_bytes()) {
+        let ep = match ABSTRACT_SOCKET.BoundEndpoint(&fullName.into_bytes()) {
             None => return Err(Error::SysError(SysErr::ECONNREFUSED)),
             Some(ep) => ep,
         };
@@ -542,7 +549,7 @@ impl SockOperations for UnixSocketOperations {
 
         // Is it abstract?
         if p[0] == 0 {
-            Bind(p.clone(), &bep)?;
+            ABSTRACT_SOCKET.Bind(p.clone(), &bep)?;
             *(self.name.lock()) = Some(p);
         } else {
             let p = String::from_utf8(p).unwrap();
@@ -611,7 +618,7 @@ impl SockOperations for UnixSocketOperations {
                 }
 
                 // handle the host unix socket as virtual unix socket
-                Bind(fullName.into_bytes(), &bep)?;
+                ABSTRACT_SOCKET.Bind(fullName.into_bytes(), &bep)?;
                 *(self.name.lock()) = Some(p.into_bytes());
             } else {
                 match d.Bind(task, &root, &name.to_string(), &bep, &permisson) {

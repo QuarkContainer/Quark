@@ -214,7 +214,7 @@ impl BoundEndpointWeak {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum BoundEndpoint {
     Connected(ConnectionedEndPoint),
     ConnectLess(ConnectionLessEndPoint),
@@ -1003,6 +1003,14 @@ impl Deref for BaseEndpoint {
         &self.0
     }
 }
+
+impl PartialEq for BaseEndpoint {
+    fn eq(&self, other: &Self) -> bool {
+        return Arc::ptr_eq(&self.0, &other.0);
+    }
+}
+
+impl Eq for BaseEndpoint {}
 
 impl Waitable for BaseEndpoint {
     fn Readiness(&self, task: &Task, mask: EventMask) -> EventMask {

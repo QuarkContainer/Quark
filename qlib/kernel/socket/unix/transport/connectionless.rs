@@ -56,7 +56,7 @@ impl ConnectionLessEndPoint {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct ConnectionLessEndPoint(BaseEndpoint);
 
 impl Deref for ConnectionLessEndPoint {

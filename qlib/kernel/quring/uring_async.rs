@@ -483,7 +483,8 @@ impl AsyncBufWrite {
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
-        assert!(result as usize == self.buf.Len(), "result is {}, self.buf.len() is {}", result, self.buf.Len());
+        assert!(result as usize == self.buf.Len(), "result is {}, self.buf.len() is {}, fd is {}",
+            result, self.buf.Len(), self.fd);
         self.lockGuard = None;
         return false;
     }
