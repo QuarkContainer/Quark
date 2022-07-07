@@ -278,7 +278,7 @@ impl RDMAChannelIntern {
             // );
             if trigger {
                 // TODO: notify 'client' via CQ
-                // println!("ProcessRDMARecvWriteImm: before SendResponse");
+                // println!("ProcessRDMARecvWriteImm: send EVENT_IN, recvCount: {}", recvCount);
                 self.agent.SendResponse(RDMAResp {
                     user_data: 0,
                     msg: RDMARespMsg::RDMANotify(RDMANotifyResp {

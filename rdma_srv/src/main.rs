@@ -740,28 +740,30 @@ fn main() -> io::Result<()> {
     loop {
         events.clear();
         // println!("in loop");
-        let ret = unsafe {
-            libc::read(
-                RDMA_SRV.eventfd,
-                &mut eventdata as *mut _ as *mut libc::c_void,
-                8,
-            )
-        };
+        // let ret = unsafe {
+        //     libc::read(
+        //         RDMA_SRV.eventfd,
+        //         &mut eventdata as *mut _ as *mut libc::c_void,
+        //         8,
+        //     )
+        // };
 
-        // if ret < 0 {
-        //     println!("error: {}", errno::errno().0);
+        // println!("read eventfd, ret: {}", ret);
+
+        // // if ret < 0 {
+        // //     println!("error: {}", errno::errno().0);
+        // // }
+
+        // if ret < 0 && errno::errno().0 != SysErr::EAGAIN {
+        //     panic!(
+        //         "Service Wakeup fail... eventfd is {}, errno is {}",
+        //         RDMA_SRV.eventfd,
+        //         errno::errno().0
+        //     );
         // }
 
-        if ret < 0 && errno::errno().0 != SysErr::EAGAIN {
-            panic!(
-                "Service Wakeup fail... eventfd is {}, errno is {}",
-                RDMA_SRV.eventfd,
-                errno::errno().0
-            );
-        }
-
         RDMA_SRV.shareRegion.srvBitmap.store(1, Ordering::Release);
-        RDMA.HandleCQEvent().unwrap();
+        // RDMA.HandleCQEvent().unwrap();
         // RDMAProcessOnce(&mut HashMap::new());
         RDMAProcessOnce();
         // println!("Before sleep");
@@ -910,33 +912,34 @@ fn main() -> io::Result<()> {
                     println!("Got RDMA completion event");
                     // let _cnt = RDMA.PollCompletionQueueAndProcess();
                     // RDMAProcess();
-                    // RDMA.HandleCQEvent().unwrap();
+                    RDMA.HandleCQEvent().unwrap();
+                    // RDMAProcessOnce();
                     // println!("FdType::RDMACompletionChannel, processed {} wcs", cnt);
                 }
                 Some(FdType::SrvEventFd(srvEventFd)) => {
                     // print!("u64: {}, events: {:x}", ev.U64, ev.Events);
-                    // println!("srvEvent notified ****************1");
+                    println!("srvEvent notified ****************1");
                     // RDMAProcess();
-                    // let ret = unsafe {
-                    //     libc::read(
-                    //         *srvEventFd,
-                    //         &mut eventdata as *mut _ as *mut libc::c_void,
-                    //         16,
-                    //     )
-                    // };
-                    // println!("after read srvEventFd, ret is: {}", ret);
+                    let ret = unsafe {
+                        libc::read(
+                            *srvEventFd,
+                            &mut eventdata as *mut _ as *mut libc::c_void,
+                            16,
+                        )
+                    };
+                    println!("after read srvEventFd, ret is: {}", ret);
 
-                    // if ret < 0 {
-                    //     println!("error: {}", errno::errno().0);
-                    // }
+                    if ret < 0 {
+                        println!("error: {}", errno::errno().0);
+                    }
 
-                    // if ret < 0 && errno::errno().0 != SysErr::EAGAIN {
-                    //     panic!(
-                    //         "Service Wakeup fail... eventfd is {}, errno is {}",
-                    //         *srvEventFd,
-                    //         errno::errno().0
-                    //     );
-                    // }
+                    if ret < 0 && errno::errno().0 != SysErr::EAGAIN {
+                        panic!(
+                            "Service Wakeup fail... eventfd is {}, errno is {}",
+                            *srvEventFd,
+                            errno::errno().0
+                        );
+                    }
                     // println!("eventdata: {}", eventdata);
                     // RDMA_SRV.HandleClientRequest();
                 }

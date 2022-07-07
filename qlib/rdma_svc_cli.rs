@@ -161,7 +161,6 @@ impl RDMASvcClient {
         // println!("updateBitmapAndWakeUpServerIfNecessary 2 ");
         srvShareRegion.updateBitmap(self.agentId);
         if srvShareRegion.srvBitmap.load(Ordering::Acquire) == 1 {
-            // println!("before write srvEventFd");
             self.wakeupSvc();
         } else {
             // println!("server is not sleeping");
