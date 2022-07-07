@@ -626,6 +626,23 @@ pub enum FdType {
     ClientEvent,
 }
 
+#[derive(Clone)]
+pub enum Srv_FdType {
+    UnixDomainSocketServer(UnixSocket),
+    UnixDomainSocketConnect(UnixSocket),
+    TCPSocketServer,
+    TCPSocketConnect(u32),
+    RDMACompletionChannel,
+    SrvEventFd(i32),
+    NodeEventFd(NodeEvent),
+}
+
+#[derive(Clone)]
+pub struct NodeEvent{
+    pub is_delete: bool,
+    pub ip: u32,
+}
+
 pub fn get_local_ip() -> u32 {
     let _my_local_ip = local_ip().unwrap();
 

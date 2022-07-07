@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[derive(Clone)]
-pub struct UnixSocket{
-    pub fd: i32,
-}
+pub const EVENT_TYPE_SET: &str = "set";
+pub const EVENT_TYPE_DELETE: &str = "delete";
+
+pub const GRPC_SERVER_ADDRESS: &str = "http://[::1]:51051";

@@ -193,7 +193,7 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient, fds: &mut HashMap<i32, FdType
                             let sockfd = gatewayCli.sockIdMgr.lock().AllocId().unwrap(); //TODO: rename sockfd
                             let _ret = gatewayCli.connect(
                                 sockfd,
-                                u32::from(Ipv4Addr::from_str("192.168.6.8").unwrap()).to_be(),
+                                u32::from(Ipv4Addr::from_str("30.0.0.5").unwrap()).to_be(),
                                 16868u16.to_be(),
                             );
                             fds.insert(stream_fd, FdType::TCPSocketConnect(sockfd));
