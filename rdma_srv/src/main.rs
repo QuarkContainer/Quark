@@ -532,13 +532,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     RDMA_CTLINFO.fds_insert(server_fd, Srv_FdType::TCPSocketServer);
     epoll_add(epoll_fd, server_fd, read_write_event(server_fd as u64))?;
 
-    tokio::spawn(async {
-        let mut node_informer = NodeInformer::new();
-        match node_informer.run().await {
-            Err(e) => println!("Error to handle nodes: {:?}", e),
-            Ok(_) => (),
-        };
-    });
+    if RDMA_CTLINFO.isK8s {
+        tokio::spawn(async {
+            let mut node_informer = NodeInformer::new();
+            match node_informer.run().await {
+                Err(e) => println!("Error to handle nodes: {:?}", e),
+                Ok(_) => (),
+            };
+        });
+    }
 
     //watch RDMA event
     let ccFd = RDMA.CompleteChannelFd();
@@ -578,6 +580,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
 
         if args.len() > 1 {
+            if !RDMA_CTLINFO.isK8s {
+                let ipAddr = u32::from(Ipv4Addr::from_str("10.218.233.29").unwrap()).to_be();
+                SetupConnection(&ipAddr);
+            }
+
             serv_addr = libc::sockaddr_in {
                 sin_family: libc::AF_INET as u16,
                 sin_port: 8889u16.to_be(),

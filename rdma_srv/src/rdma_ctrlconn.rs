@@ -53,37 +53,30 @@ pub struct CtrlInfo {
     pub timestamp: Mutex<u64>,
 
     pub epoll_fd: Mutex<RawFd>,
+
+    pub isK8s: bool,
 }
 
 impl Default for CtrlInfo {
-    fn default() -> CtrlInfo {
-        let nodes: HashMap<u32, Node> = HashMap::new();
-        // let subnet = u32::from(Ipv4Addr::from_str("172.16.1.0").unwrap());
-        // let netmask = u32::from(Ipv4Addr::from_str("255.255.255.0").unwrap());
-        // let lab1ip = u32::from(Ipv4Addr::from_str("172.16.1.8").unwrap());
-        // let devip = u32::from(Ipv4Addr::from_str("172.16.1.6").unwrap());
-        // nodes.insert(
-        //     lab1ip,
-        //     Node {
-        //         ipAddr: lab1ip,
-        //         timestamp: 1234,
-        //         subnet: subnet,
-        //         netmask: netmask,
-        //     },
-        // );
+    fn default() -> CtrlInfo {        
+        let mut nodes: HashMap<u32, Node> = HashMap::new();
 
-        // nodes.insert(
-        //     devip,
-        //     Node {
-        //         ipAddr: devip,
-        //         timestamp: 5678,
-        //         subnet: subnet,
-        //         netmask: netmask,
-        //     },
-        // );
+        let isK8s = false;
+        if !isK8s {
+            let lab1ip = u32::from(Ipv4Addr::from_str("10.218.233.29").unwrap()).to_be();
+            let node = Node {
+                hostname: String::from("lab 1"),
+                ipAddr: lab1ip,
+                timestamp: 0,
+                subnet: u32::from(Ipv4Addr::from_str("172.16.1.0").unwrap()),
+                netmask: u32::from(Ipv4Addr::from_str("255.255.255.0").unwrap()),
+                resource_version: 0,
+            };
+            nodes.insert(lab1ip, node);
+        }
 
         CtrlInfo {
-            nodes: Mutex::new(nodes), // todo Hong: add a global variable to decide whether to add some test data for nodes
+            nodes: Mutex::new(nodes),
             subnetmap: Mutex::new(HashMap::new()),
             veps: Mutex::new(HashMap::new()),
             clusterSubnetInfo: Mutex::new(ClusterSubnetInfo {
@@ -95,12 +88,13 @@ impl Default for CtrlInfo {
             //134654144 -> 100733100
             podIpInfo: Mutex::new(HashMap::from_iter([(
                 u32::from(Ipv4Addr::from_str("30.0.0.5").unwrap()).to_be(),
-                (u32::from(Ipv4Addr::from_str("172.16.1.29").unwrap()).to_be()),
+                (u32::from(Ipv4Addr::from_str("10.218.233.29").unwrap()).to_be()),
             )])),
             fds: Mutex::new(HashMap::new()),
             hostname: Mutex::new(String::new()),
             timestamp: Mutex::new(0),
             epoll_fd: Mutex::new(0),
+            isK8s: isK8s,
         }
     }
 }
@@ -147,6 +141,9 @@ impl CtrlInfo{
 
     pub fn get_node_ip_by_pod_ip(&self, ip: &u32) -> Option<u32> {
         for (_, node) in self.nodes.lock().iter() {
+            if !self.isK8s {
+                return Some(node.ipAddr);
+            }
             if node.netmask.to_be() & *ip == node.subnet.to_be() {
                 return Some(node.ipAddr);
             }            
