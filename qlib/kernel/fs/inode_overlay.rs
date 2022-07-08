@@ -406,6 +406,7 @@ pub fn overlayBind(
     task: &Task,
     o: &Arc<RwLock<OverlayEntry>>,
     name: &str,
+    parent: &Dirent,
     data: &BoundEndpoint,
     perm: &FilePermissions,
 ) -> Result<Dirent> {
@@ -423,7 +424,7 @@ pub fn overlayBind(
 
     let inode = d.Inode();
 
-    let msrc = inode.lock().MountSource.clone();
+    let msrc = parent.Inode().lock().MountSource.clone();
     // Create a new overlay entry and dirent for the socket.
     let entry = OverlayEntry::New(task, Some(inode), None, false)?;
 

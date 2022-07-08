@@ -140,7 +140,9 @@ pub fn NewUnixSocketInode(task: &Task,
         DeviceFileMinor: 0,
     };
 
-    return Inode::New(&Arc::new(iops), msrc, &attr);
+    let inode = Inode::New(&Arc::new(iops), msrc, &attr);
+
+    return inode;
 }
 
 
@@ -646,6 +648,17 @@ impl SockOperations for UnixSocketOperations {
             // Create the socket.
             let permisson = FilePermissions {
                 User: PermMask {
+                    write: true,
+                    read: true,
+                    ..Default::default()
+                },
+                Group: PermMask {
+                    write: true,
+                    read: true,
+                    ..Default::default()
+                },
+                Other: PermMask {
+                    write: true,
                     read: true,
                     ..Default::default()
                 },
