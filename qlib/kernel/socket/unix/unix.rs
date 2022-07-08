@@ -646,6 +646,16 @@ impl SockOperations for UnixSocketOperations {
             }
 
             // Create the socket.
+            /*let permisson = FilePermissions {
+                User: PermMask {
+                    read: true,
+                    ..Default::default()
+                },
+                ..Default::default()
+            };*/
+
+            // todo: check for right solution
+
             let permisson = FilePermissions {
                 User: PermMask {
                     write: true,

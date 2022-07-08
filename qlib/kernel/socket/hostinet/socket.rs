@@ -610,6 +610,11 @@ impl FileOperations for SocketOperations {
         _offset: i64,
         _blocking: bool,
     ) -> Result<i64> {
+        let size = IoVec::NumBytes(srcs);
+        if size == 0 {
+            return Ok(0)
+        }
+
         let sockBufType = self.socketBuf.lock().clone();
         match sockBufType {
             SocketBufType::Uring(socketBuf) => {

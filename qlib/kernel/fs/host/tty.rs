@@ -576,6 +576,11 @@ impl FileOperations for TTYFileOps {
             }
         }
 
+        let size = IoVec::NumBytes(srcs);
+        if size == 0 {
+            return Ok(0)
+        }
+
         if SHARESPACE.config.read().UringIO && ENABLE_RINGBUF {
             let fd = self.lock().fd;
             let queue = self.lock().queue.clone();

@@ -726,6 +726,9 @@ impl HostInodeOp {
         let hostIops = self.clone();
 
         let size = IoVec::NumBytes(srcs);
+        if size == 0 {
+            return Ok(0)
+        }
 
         let size = if size >= MemoryDef::HUGE_PAGE_SIZE as usize {
             MemoryDef::HUGE_PAGE_SIZE as usize

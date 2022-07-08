@@ -274,9 +274,6 @@ pub fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
     let srcs = &iovs;
 
     let len = Iovs(srcs).Count();
-    if len == 0 {
-        return Ok(0)
-    }
 
     let wouldBlock = f.WouldBlock();
     if !wouldBlock {
