@@ -632,7 +632,7 @@ impl Dirent {
     ) -> Result<Dirent> {
         let result = self.genericCreate(task, root, name, &mut || -> Result<()> {
             let inode = self.Inode();
-            let childDir = inode.Bind(task, name, data, perms)?;
+            let childDir = inode.Bind(task, self, name, data, perms)?;
             self.AddChild(String::from(name), &childDir);
             childDir.ExtendReference();
             return Ok(());

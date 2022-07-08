@@ -415,6 +415,9 @@ impl FileOperations for SlaveFileOperations {
         _blocking: bool,
     ) -> Result<i64> {
         let size = IoVec::NumBytes(srcs);
+        if size == 0 {
+            return Ok(0)
+        }
         let mut buf = DataBuff::New(size);
         let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;
 

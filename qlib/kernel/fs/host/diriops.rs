@@ -32,6 +32,7 @@ pub use super::super::super::memmgr::vma::HostIopsMappable;
 use super::super::super::socket::unix::transport::unix::*;
 use super::super::super::task::*;
 use super::super::super::Kernel::HostSpace;
+use super::super::super::socket::unix::unix::*;
 use super::super::super::SHARESPACE;
 use super::super::attr::*;
 use super::super::dirent::*;
@@ -43,6 +44,7 @@ use super::hostdirfops::*;
 use super::util::*;
 use super::*;
 
+pub const MAX_FILENAME_LEN : usize = (1 << 16) - 1;
 
 pub struct HostDirOpIntern {
     pub mops: Arc<QMutex<MountSourceOperations>>,
@@ -51,6 +53,7 @@ pub struct HostDirOpIntern {
     pub sattr: StableAttr,
     pub errorcode: i64,
 
+    pub overrides: BTreeMap<String, Inode>,
     pub readdirCache: Option<DentMap>,
 }
 
@@ -61,6 +64,7 @@ impl Default for HostDirOpIntern {
             HostFd: -1,
             sattr: StableAttr::default(),
             errorcode: 0,
+            overrides: BTreeMap::new(),
             readdirCache: None,
         };
     }
@@ -83,15 +87,14 @@ impl HostDirOpIntern {
         fd: i32,
         fstat: &LibcStat,
     ) -> Self {
-        let ret = Self {
+        return Self {
             mops: mops.clone(),
             HostFd: fd,
             sattr: fstat.StableAttr(),
             errorcode: 0,
             readdirCache: None,
+            overrides: BTreeMap::new(),
         };
-
-        return ret;
     }
 
     pub fn ReadDirAll(&self, _task: &Task) -> Result<DentMap> {
@@ -353,7 +356,18 @@ impl InodeOperations for HostDirOp {
     }
 
     fn Lookup(&self, _task: &Task, parent: &Inode, name: &str) -> Result<Dirent> {
-        let (fd, writeable, fstat) = TryOpenAt(self.HostFd(), name)?;
+        let (fd, writeable, fstat) = match TryOpenAt(self.HostFd(), name) {
+            Err(Error::SysError(SysErr::ENOENT)) => {
+                let inode = match self.lock().overrides.get(name) {
+                    None => return Err(Error::SysError(SysErr::ENOENT)),
+                    Some(i) => i.clone(),
+                };
+
+                return Ok(Dirent::New(&inode, name));
+            }
+            Err(e) => return Err(e),
+            Ok(d) => d,
+        };
 
         let ms = parent.lock().MountSource.clone();
         let inode = Inode::NewHostInode(&ms, fd, &fstat, writeable)?;
@@ -463,6 +477,11 @@ impl InodeOperations for HostDirOp {
     }
 
     fn Remove(&self, _task: &Task, _dir: &mut Inode, name: &str) -> Result<()> {
+        match self.lock().overrides.remove(name) {
+            None => (),
+            Some(_) => return Ok(())
+        }
+
         let flags = 0; //ATType::AT_REMOVEDIR
 
         let ret = UnLinkAt(self.HostFd(), name, flags);
@@ -503,13 +522,22 @@ impl InodeOperations for HostDirOp {
 
     fn Bind(
         &self,
-        _task: &Task,
-        _dir: &Inode,
-        _name: &str,
-        _data: &BoundEndpoint,
-        _perms: &FilePermissions,
+        task: &Task,
+        dir: &Inode,
+        name: &str,
+        ep: &BoundEndpoint,
+        perms: &FilePermissions,
     ) -> Result<Dirent> {
-        return Err(Error::SysError(SysErr::ENOTDIR));
+        if name.len() > MAX_FILENAME_LEN {
+            return Err(Error::SysError(SysErr::ENAMETOOLONG));
+        }
+
+        let msrc = dir.lock().MountSource.clone();
+        let inode = NewUnixSocketInode(task, ep, &task.FileOwner(), perms, &msrc);
+        let dirent = Dirent::New(&inode, name);
+        self.lock().overrides.insert(String::from(name), inode);
+
+        return Ok(dirent)
     }
 
     fn BoundEndpoint(&self, _task: &Task, _inode: &Inode, _path: &str) -> Option<BoundEndpoint> {

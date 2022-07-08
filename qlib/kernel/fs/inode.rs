@@ -522,6 +522,7 @@ impl Inode {
     pub fn Bind(
         &self,
         task: &Task,
+        parent: &Dirent,
         name: &str,
         data: &BoundEndpoint,
         perms: &FilePermissions,
@@ -529,7 +530,7 @@ impl Inode {
         let isOverlay = self.lock().Overlay.is_some();
         if isOverlay {
             let overlay = self.lock().Overlay.as_ref().unwrap().clone();
-            return overlayBind(task, &overlay, name, data, perms);
+            return overlayBind(task, &overlay, name, parent, data, perms);
         }
 
         let op = self.lock().InodeOp.clone();

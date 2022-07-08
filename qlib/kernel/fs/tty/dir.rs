@@ -497,7 +497,7 @@ impl FileOperations for DirFileOperations {
             .di
             .as_any()
             .downcast_ref::<DirInodeOperations>()
-            .expect("OverlayMountSourceOperations convert fail")
+            .expect("DirInodeOperations convert fail")
             .lock();
 
         return match dirCtx.ReadDir(task, &ops.dentryMap) {

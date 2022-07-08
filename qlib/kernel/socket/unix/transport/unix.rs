@@ -28,7 +28,6 @@ use super::super::super::super::tcpip::tcpip::*;
 use super::super::super::super::uid::*;
 use super::super::super::buffer::view::*;
 use super::super::super::control::*;
-use super::super::super::hostinet::socket::*;
 use super::connectioned::*;
 use super::connectionless::*;
 use super::queue::*;
@@ -968,9 +967,6 @@ pub struct BaseEndpointInternal {
 
     // linger is used for SO_LINGER socket option.
     //pub linger: LingerOption,
-
-    // an virutal host fd to handle IOCTL: SIOCGIFCONF call
-    pub hostfd: i32,
 }
 
 impl Default for BaseEndpointInternal {
@@ -982,7 +978,6 @@ impl Default for BaseEndpointInternal {
             receiver: None,
             connected: None,
             path: String::default(),
-            hostfd: 0,
         };
     }
 }
@@ -1070,15 +1065,7 @@ impl BaseEndpoint {
         return Self(Arc::new(QMutex::new(internal)));
     }
 
-    pub fn NewWithHostfd(hostfd: i32) -> Self {
-        let internal = BaseEndpointInternal {
-            hostfd: hostfd,
-            ..Default::default()
-        };
-
-        return Self(Arc::new(QMutex::new(internal)));
-    }
-
+    /*
     // pass the ioctl to the shadow hostfd
     pub fn HostIoctlIFReq(&self, task: &Task, request: u64, addr: u64) -> Result<()> {
         let hostfd = self.lock().hostfd;
@@ -1088,7 +1075,7 @@ impl BaseEndpoint {
     pub fn HostIoctlIFConf(&self, task: &Task, request: u64, addr: u64) -> Result<()> {
         let hostfd = self.lock().hostfd;
         return HostIoctlIFConf(task, hostfd, request, addr);
-    }
+    }*/
 
     pub fn IsBound(&self) -> bool {
         return self.lock().path.as_str() != "";
