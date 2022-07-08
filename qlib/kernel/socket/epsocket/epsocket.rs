@@ -11,7 +11,7 @@ pub fn Ioctl(task: &Task, ep: &BoundEndpoint, _fd: i32, request: u64, val: u64) 
     let flags = request as i32;
 
     match flags as u64 {
-        LibcConst::SIOCGIFFLAGS
+        /*LibcConst::SIOCGIFFLAGS
         | LibcConst::SIOCGIFBRDADDR
         | LibcConst::SIOCGIFDSTADDR
         | LibcConst::SIOCGIFHWADDR
@@ -34,7 +34,7 @@ pub fn Ioctl(task: &Task, ep: &BoundEndpoint, _fd: i32, request: u64, val: u64) 
             bep.HostIoctlIFConf(task, request, addr)?;
 
             return Ok(());
-        }
+        }*/
         LibcConst::TIOCINQ => {
             let mut v = SockOpt::ReceiveQueueSizeOption(0);
             ep.GetSockOpt(&mut v)?;

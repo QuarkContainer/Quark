@@ -2153,6 +2153,14 @@ pub struct PermMask {
 }
 
 impl PermMask {
+    pub fn NewReadWrite() -> Self {
+        return Self {
+            read: true,
+            write: true,
+            execute: false,
+        }
+    }
+
     pub fn FromFlags(mask: u32) -> Self {
         let mut res = PermMask::default();
         if mask & Flags::O_TRUNC as u32 != 0 {

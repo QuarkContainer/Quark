@@ -33,8 +33,12 @@ use super::super::socket::*;
 use super::super::super::super::common::*;
 use super::super::super::super::linux::socket::*;
 use super::super::super::super::linux_def::*;
+use super::super::super::super::device::*;
+use super::super::super::super::auth::*;
 use super::super::super::fs::host::hostinodeop::*;
-use super::super::super::fs::host::diriops::*;
+use super::super::super::fs::inode::*;
+use super::super::super::fs::fsutil::inode::*;
+use super::super::super::fs::mount::*;
 use super::super::super::kernel::abstract_socket_namespace::*;
 use super::super::super::kernel::fd_table::*;
 use super::super::super::kernel::time::*;
@@ -43,9 +47,6 @@ use super::super::super::task::*;
 //use super::super::super::super::mem::io::*;
 use super::super::super::super::mem::seq::*;
 use super::super::super::super::path::*;
-//use super::super::super::Kernel;
-use super::super::super::Kernel::HostSpace;
-//use super::super::super::fd::*;
 use super::super::super::socket::control::*;
 use super::super::super::socket::epsocket::epsocket::*;
 use super::super::super::tcpip::tcpip::*;
@@ -53,9 +54,9 @@ use super::transport::connectioned::*;
 use super::transport::connectionless::*;
 use super::transport::unix::*;
 
-pub fn NewUnixSocket(task: &Task, ep: BoundEndpoint, stype: i32, hostfd: i32) -> Result<File> {
+pub fn NewUnixSocket(task: &Task, ep: BoundEndpoint, stype: i32) -> Result<File> {
     //assert!(family == AFType::AF_UNIX, "NewUnixSocket family is not AF_UNIX");
-    let dirent = NewSocketDirent(task, UNIX_SOCKET_DEVICE.clone(), hostfd)?;
+    let dirent = NewUnixSocketDummyDirent(task, UNIX_SOCKET_DEVICE.clone())?;
     let fileFlags = FileFlags {
         Read: true,
         Write: true,
@@ -65,28 +66,100 @@ pub fn NewUnixSocket(task: &Task, ep: BoundEndpoint, stype: i32, hostfd: i32) ->
     return Ok(File::New(
         &dirent,
         &fileFlags,
-        UnixSocketOperations::New(ep, stype, hostfd),
+        UnixSocketOperations::New(ep, stype),
     ));
 }
+
+pub fn NewUnixSocketDummyDirent(task: &Task,
+                                d: Arc<QMutex<Device>>) -> Result<Dirent> {
+    let ino = d.lock().NextIno();
+
+    let iops = SimpleFileInode::New(task,
+                                    &task.FileOwner(),
+                                    &FilePermissions{User: PermMask::NewReadWrite(), ..Default::default()},
+                                    FSMagic::SOCKFS_MAGIC,
+                                    true,
+                                    Dummy{});
+
+    let deviceId = d.lock().DeviceID();
+    let inodeId = d.lock().NextIno();
+    let attr = StableAttr {
+        Type: InodeType::Socket,
+        DeviceId: deviceId,
+        InodeId: inodeId,
+        BlockSize: MemoryDef::PAGE_SIZE as i64,
+        DeviceFileMajor: 0,
+        DeviceFileMinor: 0,
+    };
+
+    let msrc = MountSource::NewPseudoMountSource();
+    let inode = Inode::New(&Arc::new(iops), &Arc::new(QMutex::new(msrc)), &attr);
+
+    let name = format!("socket:[{}]", ino);
+    return Ok(Dirent::New(&inode, &name.to_string()));
+}
+
+pub fn NewUnixSocketDirent(task: &Task,
+                           ep: &BoundEndpoint) -> Result<Dirent> {
+    let msrc = MountSource::NewPseudoMountSource();
+    let iops = SocketInodeOps::New(task,
+                                   ep,
+                                   &task.FileOwner(),
+                                   &FilePermissions{User: PermMask::NewReadWrite(), ..Default::default()});
+    let deviceId = UNIX_SOCKET_DEVICE.lock().DeviceID();
+    let inodeId = UNIX_SOCKET_DEVICE.lock().NextIno();
+    let attr = StableAttr {
+        Type: InodeType::Socket,
+        DeviceId: deviceId,
+        InodeId: inodeId,
+        BlockSize: MemoryDef::PAGE_SIZE as i64,
+        DeviceFileMajor: 0,
+        DeviceFileMinor: 0,
+    };
+
+    let inode = Inode::New(&Arc::new(iops), &Arc::new(QMutex::new(msrc)), &attr);
+
+    let name = format!("socket:[{}]", inodeId);
+    return Ok(Dirent::New(&inode, &name.to_string()));
+}
+
+pub fn NewUnixSocketInode(task: &Task,
+                          ep: &BoundEndpoint,
+                          owner: &FileOwner,
+                          perms: &FilePermissions,
+                          msrc: &Arc<QMutex<MountSource>>) -> Inode {
+    let iops = SocketInodeOps::New(task, ep, owner, perms);
+    let deviceId = UNIX_SOCKET_DEVICE.lock().DeviceID();
+    let inodeId = UNIX_SOCKET_DEVICE.lock().NextIno();
+    let attr = StableAttr {
+        Type: InodeType::Socket,
+        DeviceId: deviceId,
+        InodeId: inodeId,
+        BlockSize: MemoryDef::PAGE_SIZE as i64,
+        DeviceFileMajor: 0,
+        DeviceFileMinor: 0,
+    };
+
+    return Inode::New(&Arc::new(iops), msrc, &attr);
+}
+
 
 pub struct UnixSocketOperations {
     pub ep: BoundEndpoint,
     pub stype: i32,
     pub send: AtomicI64,
     pub recv: AtomicI64,
-    pub name: QMutex<Option<Vec<u8>>>,
-    pub hostfd: i32,
+    pub name: QMutex<Option<Vec<u8>>>
 }
 
 impl UnixSocketOperations {
-    pub fn New(ep: BoundEndpoint, stype: i32, hostfd: i32) -> Self {
+    pub fn New(ep: BoundEndpoint, stype: i32) -> Self {
         let ret = Self {
             ep: ep,
             stype: stype,
             send: AtomicI64::new(0),
             recv: AtomicI64::new(0),
             name: QMutex::new(None),
-            hostfd: hostfd,
         };
 
         return ret;
@@ -415,7 +488,7 @@ pub fn ExtractEndpoint(task: &Task, sockAddr: &[u8]) -> Result<BoundEndpoint> {
     //info!("unix socket path is {}", String::from_utf8(path.to_vec()).unwrap());
 
     // Is it abstract?
-    if true || path[0] == 0 {
+    if path[0] == 0 {
         let ep = match ABSTRACT_SOCKET.BoundEndpoint(&path) {
             None => return Err(Error::SysError(SysErr::ECONNREFUSED)),
             Some(ep) => ep,
@@ -443,26 +516,13 @@ pub fn ExtractEndpoint(task: &Task, sockAddr: &[u8]) -> Result<BoundEndpoint> {
     // Extract the endpoint if one is there.
     let inode = d.Inode();
     let iops = inode.lock().InodeOp.clone();
-    let fullName = "/".to_string() + &task.Thread().ContainerID() + &d.MyFullName();
 
-    //if it is host unix socket, the ep is in virtual unix
-    if iops.InodeType() == InodeType::Socket
-        && iops.as_any().downcast_ref::<HostInodeOp>().is_some()
-    {
-        let ep = match ABSTRACT_SOCKET.BoundEndpoint(&fullName.into_bytes()) {
-            None => return Err(Error::SysError(SysErr::ECONNREFUSED)),
-            Some(ep) => ep,
-        };
-
-        return Ok(ep);
-    }
-
-    let ep = match inode.BoundEndpoint(task, &path) {
+    match iops.as_any().downcast_ref::<SocketInodeOps>() {
         None => return Err(Error::SysError(SysErr::ECONNREFUSED)),
-        Some(ep) => ep,
-    };
-
-    return Ok(ep);
+        Some(iops) => {
+            return Ok(iops.ep.clone());
+        }
+    }
 }
 
 impl SockOperations for UnixSocketOperations {
@@ -513,12 +573,7 @@ impl SockOperations for UnixSocketOperations {
 
         let ep = BoundEndpoint::Connected(ep);
 
-        let fd = HostSpace::Socket(AFType::AF_UNIX, self.stype, 0) as i32;
-        if fd < 0 {
-            return Err(Error::SysError(-fd));
-        }
-
-        let ns = NewUnixSocket(task, ep, self.stype, fd)?;
+        let ns = NewUnixSocket(task, ep, self.stype)?;
         ns.flags.lock().0.NonSeekable = true;
         if flags & SocketFlags::SOCK_NONBLOCK != 0 {
             let mut fflags = ns.Flags();
@@ -597,37 +652,10 @@ impl SockOperations for UnixSocketOperations {
                 ..Default::default()
             };
 
-            let inode = d.Inode();
-            let iops = inode.lock().InodeOp.clone();
 
-            //if it is host folder, create shadow host unix socket bind
-            if iops.InodeType() == InodeType::Directory
-                && iops.as_any().downcast_ref::<HostDirOp>().is_some()
-            {
-                let fullName = "/".to_string() + &task.Thread().ContainerID() + &d.MyFullName() + "/" + &name.to_string();
-
-                let hostfd = self.hostfd;
-                let addr = SockAddrUnix::New(&fullName).ToNative();
-
-                let ret = HostSpace::Bind(
-                    hostfd,
-                    &addr as *const _ as u64,
-                    (UNIX_PATH_MAX + 2) as u32,
-                    task.Umask(),
-                );
-                if ret < 0 {
-                    return Err(Error::SysError(-ret as i32));
-                }
-
-                // handle the host unix socket as virtual unix socket
-                let currentName = d.MyFullName() + "/" + &name.to_string();
-                ABSTRACT_SOCKET.Bind(currentName.into_bytes(), &bep)?;
-                *(self.name.lock()) = Some(p.into_bytes());
-            } else {
-                match d.Bind(task, &root, &name.to_string(), &bep, &permisson) {
-                    Err(_) => return Err(Error::SysError(SysErr::EADDRINUSE)),
-                    Ok(_) => (),
-                }
+            match d.Bind(task, &root, &name.to_string(), &bep, &permisson) {
+                Err(_) => return Err(Error::SysError(SysErr::EADDRINUSE)),
+                Ok(_) => (),
             }
         }
 
@@ -1045,6 +1073,242 @@ impl SockOperations for UnixSocketOperations {
     }
 }
 
+pub struct Dummy{}
+
+impl SimpleFileTrait for Dummy {}
+
+
+pub struct SocketInodeOps {
+    pub ep: BoundEndpoint,
+    pub simpleAttributes: Arc<InodeSimpleAttributes>,
+    pub simpleExtendedAttribute: Arc<InodeSimpleExtendedAttributes>,
+}
+
+impl SocketInodeOps {
+    pub fn New(
+        task: &Task,
+        ep: &BoundEndpoint,
+        owner: &FileOwner,
+        perms: &FilePermissions,
+    ) -> Self {
+        return Self {
+            ep: ep.clone(),
+            simpleAttributes: Arc::new(InodeSimpleAttributes::New(
+                task,
+                owner,
+                perms,
+                FSMagic::SOCKFS_MAGIC,
+            )),
+            simpleExtendedAttribute: Arc::new(InodeSimpleExtendedAttributes::default()),
+        };
+    }
+}
+
+impl InodeOperations for SocketInodeOps {
+    fn as_any(&self) -> &Any {
+        return self;
+    }
+
+    fn IopsType(&self) -> IopsType {
+        return IopsType::SocketInodeOps;
+    }
+
+    fn InodeType(&self) -> InodeType {
+        return InodeType::Socket;
+    }
+
+    fn InodeFileType(&self) -> InodeFileType {
+        return InodeFileType::Socket;
+    }
+
+    fn WouldBlock(&self) -> bool {
+        return true;
+    }
+
+    fn Lookup(&self, _task: &Task, _dir: &Inode, _name: &str) -> Result<Dirent> {
+        return Err(Error::SysError(SysErr::ENOTDIR));
+    }
+
+    fn Create(
+        &self,
+        _task: &Task,
+        _dir: &mut Inode,
+        _name: &str,
+        _flags: &FileFlags,
+        _perm: &FilePermissions,
+    ) -> Result<File> {
+        return Err(Error::SysError(SysErr::ENOTDIR));
+    }
+
+    fn CreateDirectory(
+        &self,
+        _task: &Task,
+        _dir: &mut Inode,
+        _name: &str,
+        _perm: &FilePermissions,
+    ) -> Result<()> {
+        return Err(Error::SysError(SysErr::ENOTDIR));
+    }
+
+    fn Bind(
+        &self,
+        _task: &Task,
+        _dir: &Inode,
+        _name: &str,
+        _data: &BoundEndpoint,
+        _perms: &FilePermissions,
+    ) -> Result<Dirent> {
+        return Err(Error::SysError(SysErr::ENOTDIR));
+    }
+
+    fn BoundEndpoint(&self, _task: &Task, _inode: &Inode, _path: &str) -> Option<BoundEndpoint> {
+        return Some(self.ep.clone());
+    }
+
+    fn CreateLink(
+        &self,
+        _task: &Task,
+        _dir: &mut Inode,
+        _oldname: &str,
+        _newname: &str,
+    ) -> Result<()> {
+        return Err(Error::SysError(SysErr::ENOTDIR));
+    }
+
+    fn CreateHardLink(
+        &self,
+        _task: &Task,
+        _dir: &mut Inode,
+        _target: &Inode,
+        _name: &str,
+    ) -> Result<()> {
+        return Err(Error::SysError(SysErr::ENOTDIR));
+    }
+
+    fn CreateFifo(
+        &self,
+        _task: &Task,
+        _dir: &mut Inode,
+        _name: &str,
+        _perm: &FilePermissions,
+    ) -> Result<()> {
+        return Err(Error::SysError(SysErr::ENOTDIR));
+    }
+
+    fn Remove(&self, _task: &Task, _dir: &mut Inode, _name: &str) -> Result<()> {
+        return Err(Error::SysError(SysErr::ENOTDIR));
+    }
+
+    fn RemoveDirectory(&self, _task: &Task, _dir: &mut Inode, _name: &str) -> Result<()> {
+        return Err(Error::SysError(SysErr::ENOTDIR));
+    }
+
+    fn Rename(
+        &self,
+        _task: &Task,
+        _dir: &mut Inode,
+        _oldParent: &Inode,
+        _oldname: &str,
+        _newParent: &Inode,
+        _newname: &str,
+        _replacement: bool,
+    ) -> Result<()> {
+        return Err(Error::SysError(SysErr::EINVAL));
+    }
+
+    fn GetFile(
+        &self,
+        _task: &Task,
+        _dir: &Inode,
+        _dirent: &Dirent,
+        _flags: FileFlags,
+    ) -> Result<File> {
+        return Err(Error::SysError(SysErr::ENXIO))
+    }
+
+    fn UnstableAttr(&self, _task: &Task) -> Result<UnstableAttr> {
+        let u = self.simpleAttributes.read().unstable;
+        return Ok(u);
+    }
+
+    fn Getxattr(&self, dir: &Inode, name: &str, size: usize) -> Result<Vec<u8>> {
+        return self.simpleExtendedAttribute.Getxattr(dir, name, size);
+    }
+
+    fn Setxattr(&self, dir: &mut Inode, name: &str, value: &[u8], flags: u32) -> Result<()> {
+        return self.simpleExtendedAttribute.Setxattr(dir, name, value, flags);
+    }
+
+    fn Listxattr(&self, dir: &Inode, size: usize) -> Result<Vec<String>> {
+        return self.simpleExtendedAttribute.Listxattr(dir, size);
+    }
+
+    fn Check(&self, task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {
+        return ContextCanAccessFile(task, inode, reqPerms);
+    }
+
+    fn SetPermissions(&self, task: &Task, _dir: &mut Inode, p: FilePermissions) -> bool {
+        self.simpleAttributes
+            .write()
+            .unstable
+            .SetPermissions(task, &p);
+        return true;
+    }
+
+    fn SetOwner(&self, task: &Task, _dir: &mut Inode, owner: &FileOwner) -> Result<()> {
+        self.simpleAttributes.write().unstable.SetOwner(task, owner);
+        return Ok(());
+    }
+
+    fn SetTimestamps(&self, task: &Task, _dir: &mut Inode, ts: &InterTimeSpec) -> Result<()> {
+        self.simpleAttributes
+            .write()
+            .unstable
+            .SetTimestamps(task, ts);
+        return Ok(());
+    }
+
+    fn Truncate(&self, _task: &Task, _dir: &mut Inode, _size: i64) -> Result<()> {
+        return Ok(());
+    }
+
+    fn Allocate(&self, _task: &Task, _dir: &mut Inode, _offset: i64, _length: i64) -> Result<()> {
+        return Ok(());
+    }
+
+    fn ReadLink(&self, _task: &Task, _dir: &Inode) -> Result<String> {
+        return Err(Error::SysError(SysErr::ENOLINK));
+    }
+
+    fn GetLink(&self, _task: &Task, _dir: &Inode) -> Result<Dirent> {
+        return Err(Error::SysError(SysErr::ENOLINK));
+    }
+
+    fn AddLink(&self, _task: &Task) {
+        self.simpleAttributes.write().unstable.Links += 1;
+    }
+
+    fn DropLink(&self, _task: &Task) {
+        self.simpleAttributes.write().unstable.Links -= 1;
+    }
+
+    fn IsVirtual(&self) -> bool {
+        return true;
+    }
+
+    fn Sync(&self) -> Result<()> {
+        return Err(Error::SysError(SysErr::ENOSYS));
+    }
+
+    fn StatFS(&self, _task: &Task) -> Result<FsInfo> {
+        return Err(Error::SysError(SysErr::ENOSYS));
+    }
+
+    fn Mappable(&self) -> Result<HostIopsMappable> {
+        return Err(Error::SysError(SysErr::ENODEV));
+    }
+}
+
 pub struct UnixSocketProvider {}
 
 impl Provider for UnixSocketProvider {
@@ -1053,27 +1317,22 @@ impl Provider for UnixSocketProvider {
             return Err(Error::SysError(SysErr::EPROTONOSUPPORT));
         }
 
-        let fd = HostSpace::Socket(AFType::AF_UNIX, stype, protocol) as i32;
-        if fd < 0 {
-            return Err(Error::SysError(-fd));
-        }
-
         // Create the endpoint and socket.
         match stype {
             SockType::SOCK_DGRAM => {
-                let ep = ConnectionLessEndPoint::New(fd);
+                let ep = ConnectionLessEndPoint::New();
                 let ep = BoundEndpoint::ConnectLess(ep);
-                return Ok(Some(Arc::new(NewUnixSocket(task, ep, stype, fd)?)));
+                return Ok(Some(Arc::new(NewUnixSocket(task, ep, stype)?)));
             }
             SockType::SOCK_SEQPACKET => {
-                let ep = ConnectionedEndPoint::New(stype, fd);
+                let ep = ConnectionedEndPoint::New(stype);
                 let ep = BoundEndpoint::Connected(ep);
-                return Ok(Some(Arc::new(NewUnixSocket(task, ep, stype, fd)?)));
+                return Ok(Some(Arc::new(NewUnixSocket(task, ep, stype)?)));
             }
             SockType::SOCK_STREAM => {
-                let ep = ConnectionedEndPoint::New(stype, fd);
+                let ep = ConnectionedEndPoint::New(stype);
                 let ep = BoundEndpoint::Connected(ep);
-                return Ok(Some(Arc::new(NewUnixSocket(task, ep, stype, fd)?)));
+                return Ok(Some(Arc::new(NewUnixSocket(task, ep, stype)?)));
             }
             _ => return Err(Error::SysError(SysErr::EINVAL)),
         }
@@ -1095,22 +1354,12 @@ impl Provider for UnixSocketProvider {
             _ => return Err(Error::SysError(SysErr::EINVAL)),
         }
 
-        let fd1 = HostSpace::Socket(AFType::AF_UNIX, stype, protocol) as i32;
-        if fd1 < 0 {
-            return Err(Error::SysError(-fd1));
-        }
-
-        let fd2 = HostSpace::Socket(AFType::AF_UNIX, stype, protocol) as i32;
-        if fd2 < 0 {
-            return Err(Error::SysError(-fd2));
-        }
-
         // Create the endpoints and sockets.
-        let (ep1, ep2) = ConnectionedEndPoint::NewPair(stype, fd1, fd2);
+        let (ep1, ep2) = ConnectionedEndPoint::NewPair(stype);
         let ep1 = BoundEndpoint::Connected(ep1);
         let ep2 = BoundEndpoint::Connected(ep2);
-        let s1 = NewUnixSocket(task, ep1, stype, fd1)?;
-        let s2 = NewUnixSocket(task, ep2, stype, fd2)?;
+        let s1 = NewUnixSocket(task, ep1, stype)?;
+        let s2 = NewUnixSocket(task, ep2, stype)?;
 
         return Ok(Some((Arc::new(s1), Arc::new(s2))));
     }

@@ -68,8 +68,8 @@ impl Deref for ConnectionLessEndPoint {
 }
 
 impl ConnectionLessEndPoint {
-    pub fn New(hostfd: i32) -> Self {
-        let bep = BaseEndpoint::NewWithHostfd(hostfd);
+    pub fn New() -> Self {
+        let bep = BaseEndpoint::default();
         let queue = bep.lock().queue.clone();
         let queueReceiver =
             QueueReceiver::New(MsgQueue::New(queue, Queue::default(), INITIAL_LIMIT));

@@ -151,9 +151,9 @@ impl PartialEq for ConnectionedEndPoint {
 impl Eq for ConnectionedEndPoint {}
 
 impl ConnectionedEndPoint {
-    pub fn New(stype: i32, hostfd: i32) -> Self {
+    pub fn New(stype: i32) -> Self {
         let internal = ConnectionedEndPointInternal {
-            baseEndpoint: BaseEndpoint::NewWithHostfd(hostfd),
+            baseEndpoint: BaseEndpoint::default(),
             id: NewUID(),
             stype: stype,
             backlog: 0,
@@ -187,9 +187,9 @@ impl ConnectionedEndPoint {
         return Self(Arc::new((internal, QMutex::new(()))));
     }
 
-    pub fn NewPair(stype: i32, hostfd1: i32, hostfd2: i32) -> (Self, Self) {
-        let a = Self::New(stype, hostfd1);
-        let b = Self::New(stype, hostfd2);
+    pub fn NewPair(stype: i32) -> (Self, Self) {
+        let a = Self::New(stype);
+        let b = Self::New(stype);
 
         let aq = a.baseEndpoint.lock().queue.clone();
         let bq = b.baseEndpoint.lock().queue.clone();
