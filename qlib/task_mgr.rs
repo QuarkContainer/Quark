@@ -20,6 +20,7 @@ use alloc::vec::Vec;
 use cache_padded::CachePadded;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::AtomicUsize;
+use core::sync::atomic::AtomicIsize;
 use core::sync::atomic::Ordering;
 use core::cmp::PartialEq;
 
@@ -119,7 +120,9 @@ pub struct Scheduler {
     pub queue: Vec<CachePadded<TaskQueue>>,
     pub vcpuCnt: usize,
     pub taskCnt: AtomicUsize,
-    pub readyTaskCnt: AtomicUsize,
+
+    // use AtomicIsize instead of usize to handle the race condition
+    pub readyTaskCnt: AtomicIsize,
     pub haltVcpuCnt: AtomicUsize,
 
     pub vcpuWaitMask: AtomicU64,
@@ -165,18 +168,18 @@ impl Scheduler {
     }
 
     #[inline(always)]
-    pub fn GlobalReadyTaskCnt(&self) -> usize {
+    pub fn GlobalReadyTaskCnt(&self) -> isize {
         self.readyTaskCnt.load(Ordering::Acquire)
     }
 
     #[inline(always)]
-    pub fn IncReadyTaskCount(&self) -> usize {
+    pub fn IncReadyTaskCount(&self) -> isize {
         let cnt = self.readyTaskCnt.fetch_add(1, Ordering::SeqCst) + 1;
         return cnt;
     }
 
     #[inline(always)]
-    pub fn DecReadyTaskCount(&self) -> usize {
+    pub fn DecReadyTaskCount(&self) -> isize {
         let cnt = self.readyTaskCnt.fetch_sub(1, Ordering::SeqCst) - 1;
         return cnt;
     }
