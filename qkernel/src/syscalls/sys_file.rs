@@ -251,7 +251,7 @@ pub fn openAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
         resolve,
         &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
             let mut inode = d.Inode();
-            let mut fileFlags = FileFlags::FromFlags(flags);
+            let fileFlags = FileFlags::FromFlags(flags);
 
             if !fileFlags.Path {
                 inode.CheckPermission(task, &PermMask::FromFlags(flags))?;
@@ -261,7 +261,8 @@ pub fn openAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
                 return Err(Error::SysError(SysErr::ELOOP));
             }
 
-            fileFlags.LargeFile = true;
+            // Linux always adds the O_LARGEFILE flag when running in 64-bit mode.
+            //fileFlags.LargeFile = true;
 
             if inode.StableAttr().IsDir() {
                 if fileFlags.Write {
@@ -403,7 +404,8 @@ pub fn createAt(task: &Task, dirFd: i32, addr: u64, flags: u32, mode: FileMode) 
     }
 
     let mut fileFlags = FileFlags::FromFlags(flags);
-    fileFlags.LargeFile = true;
+    // Linux always adds the O_LARGEFILE flag when running in 64-bit mode.
+    //fileFlags.LargeFile = true;
 
     // the io_uring write will fail with EAGAIN even for disk file. Work around to make sure the file is opened without nonblocking
     fileFlags.NonBlocking = false;
@@ -1076,10 +1078,6 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let (file, flags) = task.GetFileAll(fd)?;
 
-    if file.Flags().Path {
-        return Err(Error::SysError(SysErr::EBADF));
-    }
-
     match cmd {
         Cmd::F_DUPFD | Cmd::F_DUPFD_CLOEXEC => {
             let from = val as i32;
@@ -1103,8 +1101,14 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             )?;
             Ok(0)
         }
-        Cmd::F_GETFL => Ok(file.Flags().ToLinux() as i64),
+        Cmd::F_GETFL => {
+            Ok(file.Flags().ToLinux() as i64)
+        },
         Cmd::F_SETFL => {
+            if file.Flags().Path {
+                return Err(Error::SysError(SysErr::EBADF));
+            }
+
             let flags = val as u32;
             file.SetFlags(task, FileFlags::FromFlags(flags).SettableFileFlags());
             Ok(0)
@@ -1199,12 +1203,23 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 _ => return Err(Error::SysError(SysErr::EINVAL)),
             }
         }
-        Cmd::F_GETOWN => return Ok(FGetOwn(task, &file) as i64),
+        Cmd::F_GETOWN => {
+            if file.Flags().Path {
+                return Err(Error::SysError(SysErr::EBADF));
+            }
+            return Ok(FGetOwn(task, &file) as i64)
+        },
         Cmd::F_SETOWN => {
+            if file.Flags().Path {
+                return Err(Error::SysError(SysErr::EBADF));
+            }
             FSetOwner(task, &file, val as i32)?;
             return Ok(0);
         }
         Cmd::F_GETOWN_EX => {
+            if file.Flags().Path {
+                return Err(Error::SysError(SysErr::EBADF));
+            }
             let addr = val;
             let owner = FGetOwnEx(task, &file);
             //*task.GetTypeMut(addr)? = owner;
@@ -1212,6 +1227,9 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Ok(0);
         }
         Cmd::F_SETOWN_EX => {
+            if file.Flags().Path {
+                return Err(Error::SysError(SysErr::EBADF));
+            }
             let addr = val;
             let owner: FOwnerEx = task.CopyInObj(addr)?;
             let a = file.Async(task, Some(FileAsync::default())).unwrap();

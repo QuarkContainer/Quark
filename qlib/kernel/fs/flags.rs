@@ -30,6 +30,7 @@ pub struct FileFlags {
     pub LargeFile: bool,
     pub NonSeekable: bool,
     pub Truncate: bool,
+    pub NoFollow: bool,
     pub Path: bool,
 }
 
@@ -47,6 +48,7 @@ impl FileFlags {
             Async: mask & Flags::O_ASYNC as u32 != 0,
             LargeFile: mask & Flags::O_LARGEFILE as u32 != 0,
             Truncate: mask & Flags::O_TRUNC as u32 != 0,
+            NoFollow: mask & Flags::O_NOFOLLOW as u32 != 0,
             Path: mask & Flags::O_PATH as u32 != 0,
             ..Default::default()
         };
@@ -115,12 +117,20 @@ impl FileFlags {
             mask |= Flags::O_TRUNC;
         }
 
-        if self.Read && self.Write {
-            mask |= Flags::O_RDWR;
-        } else if self.Write {
-            mask |= Flags::O_WRONLY;
-        } else if self.Read {
-            mask |= Flags::O_RDONLY;
+        if self.NoFollow {
+            mask |= Flags::O_NOFOLLOW;
+        }
+
+        if !self.Path {
+            if self.Read && self.Write {
+                mask |= Flags::O_RDWR;
+            } else if self.Write {
+                mask |= Flags::O_WRONLY;
+            } else if self.Read {
+                mask |= Flags::O_RDONLY;
+            }
+        } else {
+            mask |= Flags::O_PATH;
         }
 
         return mask;

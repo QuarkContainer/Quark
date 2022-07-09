@@ -2251,8 +2251,8 @@ impl Flags {
     pub const O_NOFOLLOW: i32 = 0o00400000; //0x00020000;
     pub const O_NOATIME: i32 = 0o01000000; //0x00040000;
     pub const O_CLOEXEC: i32 = 0o02000000; //0x00080000;
-    pub const O_SYNC: i32 = 0o04000000;
-    pub const O_PATH: i32 = 0o010000000;
+    pub const O_SYNC: i32 = 0o04000000; //0x00100000;
+    pub const O_PATH: i32 = 0o010000000; //0x00200000;
     pub const O_TMPFILE: i32 = 0o020000000;
 
     /* high priority request, poll if possible */

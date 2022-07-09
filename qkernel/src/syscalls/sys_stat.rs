@@ -190,9 +190,6 @@ pub fn SysStatx(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
 pub fn Fstat(task: &Task, fd: i32, statAddr: u64) -> Result<i64> {
     let file = task.GetFile(fd)?;
-    if file.Flags().Path {
-        return Err(Error::SysError(SysErr::EBADF));
-    }
 
     fstat(task, &file, statAddr)?;
     return Ok(0);
@@ -228,9 +225,6 @@ pub fn SysFstatfs(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let statfsAddr = args.arg1 as u64;
 
     let file = task.GetFile(fd)?;
-    if file.Flags().Path {
-        return Err(Error::SysError(SysErr::EBADF));
-    }
 
     statfsImpl(task, &file.Dirent, statfsAddr)?;
     return Ok(0);
