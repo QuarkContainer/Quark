@@ -78,6 +78,10 @@ pub fn SysMmap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Err(Error::SysError(SysErr::EACCES));
         }
 
+        if file.Flags().Path {
+            return Err(Error::SysError(SysErr::EBADF));
+        }
+
         // MAP_SHARED requires that the FD be writable for PROT_WRITE.
         if shared && !flags.Write {
             opts.MaxPerms.ClearWrite();
