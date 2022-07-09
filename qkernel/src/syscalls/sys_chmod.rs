@@ -84,6 +84,9 @@ pub fn SysFchmod(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let mode = args.arg1 as u16 as u32;
 
     let file = task.GetFile(fd)?;
+    if file.Flags().Path {
+        return Err(Error::SysError(SysErr::EBADF));
+    }
 
     let mode = FileMode(mode as u16);
     Chmod(task, &file.Dirent, mode)?;

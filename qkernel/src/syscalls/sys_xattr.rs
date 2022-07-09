@@ -44,6 +44,10 @@ pub fn SysFGetXattr(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     // Return EBADF if the fd was opened with O_PATH.
     let file = task.GetFile(fd)?;
 
+    if file.Flags().Path {
+        return Err(Error::SysError(SysErr::EBADF));
+    }
+
     let n = GetXAttr(task, &file.Dirent, nameAddr, valueAddr, size as usize)?;
     return Ok(n)
 }
@@ -132,8 +136,11 @@ pub fn SysFSetXattr(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let size = args.arg3 as u64;
     let flags = args.arg4 as u32;
 
-    // Return EBADF if the fd was opened with O_PATH.
     let file = task.GetFile(fd)?;
+    if file.Flags().Path {
+        return Err(Error::SysError(SysErr::EBADF));
+    }
+
     SetXAttr(task, &file.Dirent, nameAddr, valueAddr, size as usize, flags)?;
     return Ok(0)
 }
@@ -247,8 +254,10 @@ pub fn SysFListXattr(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let listAddr = args.arg1 as u64;
     let size = args.arg2 as u32 as u64;
 
-    // Return EBADF if the fd was opened with O_PATH.
     let file = task.GetFile(fd)?;
+    if file.Flags().Path {
+        return Err(Error::SysError(SysErr::EBADF));
+    }
 
     let n = ListXAttr(task, &file.Dirent, listAddr, size as usize)?;
     return Ok(n)
@@ -348,8 +357,11 @@ pub fn SysFRemoveXattr(task: &mut Task, args: &SyscallArguments) -> Result<i64> 
     let fd = args.arg0 as i32;
     let nameAddr = args.arg1 as u64;
 
-    // Return EBADF if the fd was opened with O_PATH.
     let file = task.GetFile(fd)?;
+    if file.Flags().Path {
+        return Err(Error::SysError(SysErr::EBADF));
+    }
+
     RemoveAttr(task, &file.Dirent, nameAddr)?;
     return Ok(0)
 }

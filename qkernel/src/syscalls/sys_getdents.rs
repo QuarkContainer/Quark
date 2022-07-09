@@ -71,6 +71,10 @@ fn getDents(
 ) -> Result<i64> {
     let dir = task.GetFile(fd)?;
 
+    if dir.Flags().Path {
+        return Err(Error::SysError(SysErr::EBADF));
+    }
+
     let size = task.CheckPermission(addr, size as u64, true, true)? as i32;
 
     let mut writer: MemBuf = MemBuf::New(size as usize);

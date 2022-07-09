@@ -39,7 +39,7 @@ pub fn Read(task: &Task, fd: i32, addr: u64, size: i64) -> Result<i64> {
 
     let file = task.GetFile(fd)?;
 
-    if !file.Flags().Read {
+    if !file.Flags().Read || file.Flags().Path {
         return Err(Error::SysError(SysErr::EBADF));
     }
 
@@ -76,7 +76,7 @@ pub fn SysReadahead(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let file = task.GetFile(fd)?;
 
     // Check that the file is readable.
-    if !file.Flags().Read {
+    if !file.Flags().Read || file.Flags().Path {
         return Err(Error::SysError(SysErr::EBADF));
     }
 
@@ -121,7 +121,7 @@ pub fn Pread64(task: &Task, fd: i32, addr: u64, size: i64, offset: i64) -> Resul
         return Err(Error::SysError(SysErr::ESPIPE));
     }
 
-    if !file.Flags().Read {
+    if !file.Flags().Read || file.Flags().Path {
         return Err(Error::SysError(SysErr::EBADF));
     }
 
@@ -151,7 +151,7 @@ pub fn SysReadv(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 pub fn Readv(task: &Task, fd: i32, addr: u64, iovcnt: i32) -> Result<i64> {
     let file = task.GetFile(fd)?;
 
-    if !file.Flags().Read {
+    if !file.Flags().Read || file.Flags().Path {
         return Err(Error::SysError(SysErr::EBADF));
     }
 
@@ -199,6 +199,10 @@ pub fn SysPreadv2(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Err(Error::SysError(SysErr::EOPNOTSUPP));
     }
 
+    if flags & Flags::O_PATH != 0 {
+        return Err(Error::SysError(SysErr::EBADF));
+    }
+
     if offset == -1 {
         let n = Readv(task, fd, addr, iovcnt)?;
         task.ioUsage.AccountWriteSyscall(n);
@@ -221,7 +225,7 @@ pub fn Preadv(task: &Task, fd: i32, addr: u64, iovcnt: i32, offset: i64) -> Resu
         return Err(Error::SysError(SysErr::ESPIPE));
     }
 
-    if !file.Flags().Read {
+    if !file.Flags().Read || file.Flags().Path {
         return Err(Error::SysError(SysErr::EBADF));
     }
 

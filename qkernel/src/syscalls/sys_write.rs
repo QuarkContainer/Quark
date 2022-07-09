@@ -53,7 +53,7 @@ pub fn Write(task: &Task, fd: i32, addr: u64, size: i64) -> Result<i64> {
          }
     }*/
 
-    if !file.Flags().Write {
+    if !file.Flags().Write || file.Flags().Path {
         return Err(Error::SysError(SysErr::EBADF));
     }
 
@@ -99,7 +99,7 @@ pub fn Pwrite64(task: &Task, fd: i32, addr: u64, size: i64, offset: i64) -> Resu
         return Err(Error::SysError(SysErr::ESPIPE));
     }
 
-    if !file.Flags().Write {
+    if !file.Flags().Write || file.Flags().Path {
         return Err(Error::SysError(SysErr::EBADF));
     }
 
@@ -182,7 +182,7 @@ pub fn SysWritev(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 pub fn Writev(task: &Task, fd: i32, addr: u64, iovcnt: i32) -> Result<i64> {
     let file = task.GetFile(fd)?;
 
-    if !file.Flags().Write {
+    if !file.Flags().Write || file.Flags().Path {
         return Err(Error::SysError(SysErr::EBADF));
     }
 
@@ -220,7 +220,7 @@ pub fn Pwritev(task: &Task, fd: i32, addr: u64, iovcnt: i32, offset: i64) -> Res
         return Err(Error::SysError(SysErr::ESPIPE));
     }
 
-    if !file.Flags().Write {
+    if !file.Flags().Write || file.Flags().Path {
         return Err(Error::SysError(SysErr::EBADF));
     }
 
