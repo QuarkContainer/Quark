@@ -133,7 +133,7 @@ impl FileOperations for HostDirFops {
         return self.DirOp.lock().IterateDir(task, dirCtx, offset);
     }
 
-    fn Mappable(&self) -> Result<HostIopsMappable> {
+    fn Mappable(&self) -> Result<MMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }

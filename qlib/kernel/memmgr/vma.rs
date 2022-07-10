@@ -24,6 +24,7 @@ use super::super::super::limits::*;
 use super::super::fs::host::hostinodeop::*;
 use super::super::task::*;
 use super::super::kernel::shm::*;
+use super::super::kernel::aio::aio_context::*;
 use super::super::super::mem::areaset::*;
 use super::super::super::range::*;
 use super::arch::*;
@@ -294,15 +295,12 @@ impl MemoryManager {
         let mut mapping = self.mapping.lock();
         let gap = mapping.vmas.FindGap(ar.Start());
 
-        if opts.Mappable.is_some() {
-            let mappable = opts.Mappable.clone().unwrap();
-            mappable.HostIops().AddMapping(
-                self,
-                &ar,
-                opts.Offset,
-                !opts.Private && opts.MaxPerms.Write(),
-            )?;
-        }
+        opts.Mappable.AddMapping(
+            self,
+            &ar,
+            opts.Offset,
+            !opts.Private && opts.MaxPerms.Write(),
+        )?;
 
         let vma = VMA {
             mappable: opts.Mappable.clone(),
@@ -354,12 +352,20 @@ impl MemoryManager {
 }
 
 #[derive(Clone, PartialEq)]
-pub enum HostIopsMappable {
+pub enum MMappable {
     HostIops(HostInodeOp),
-    Shm(Shm)
+    Shm(Shm),
+    AIOMappable,
+    None,
 }
 
-impl HostIopsMappable {
+impl Default for MMappable {
+    fn default() -> Self {
+        return Self::None
+    }
+}
+
+impl MMappable {
     pub fn FromHostIops(iops: HostInodeOp) -> Self {
         return Self::HostIops(iops)
     }
@@ -368,17 +374,110 @@ impl HostIopsMappable {
         return Self::Shm(shm)
     }
 
-    pub fn HostIops(&self) -> HostInodeOp {
+    pub fn HostIops(&self) -> Option<HostInodeOp> {
         match self {
-            Self::HostIops(iops) => iops.clone(),
-            Self::Shm(shm) => shm.HostIops(),
+            Self::HostIops(iops) => Some(iops.clone()),
+            Self::Shm(shm) => Some(shm.HostIops()),
+            Self::AIOMappable => None,
+            Self::None => None,
+        }
+    }
+
+    pub fn AddMapping(
+        &self,
+        ms: &MemoryManager,
+        ar: &Range,
+        offset: u64,
+        writable: bool,
+    ) -> Result<()> {
+        match self {
+            Self::HostIops(iops) => {
+                return iops.AddMapping(ms, ar, offset, writable);
+            },
+            Self::Shm(shm) => {
+                return shm.HostIops().AddMapping(ms, ar, offset, writable);
+            },
+            Self::AIOMappable => {
+                return AIOMappable::AddMapping(ms, ar, offset, writable);
+            },
+            Self::None => {
+                return Ok(())
+            },
+        }
+    }
+
+    pub fn RemoveMapping(
+        &self,
+        ms: &MemoryManager,
+        ar: &Range,
+        offset: u64,
+        writable: bool,
+    ) -> Result<()> {
+        match self {
+            Self::HostIops(iops) => {
+                return iops.RemoveMapping(ms, ar, offset, writable);
+            },
+            Self::Shm(shm) => {
+                return shm.HostIops().RemoveMapping(ms, ar, offset, writable);
+            },
+            Self::AIOMappable => {
+                return AIOMappable::RemoveMapping(ms, ar, offset, writable);
+            },
+            Self::None => {
+                return Ok(())
+            },
+        }
+    }
+
+    pub fn CopyMapping(
+        &self,
+        ms: &MemoryManager,
+        srcAr: &Range,
+        dstAR: &Range,
+        offset: u64,
+        writable: bool,
+    ) -> Result<()> {
+        match self {
+            Self::HostIops(iops) => {
+                return iops.CopyMapping(ms, srcAr, dstAR, offset, writable);
+            },
+            Self::Shm(shm) => {
+                return shm.HostIops().CopyMapping(ms, srcAr, dstAR, offset, writable);
+            },
+            Self::AIOMappable => {
+                return AIOMappable::CopyMapping(ms, srcAr, dstAR, offset, writable);
+            },
+            Self::None => {
+                return Ok(())
+            },
+        }
+    }
+
+    pub fn MSync(
+        &self,
+        fr: &Range,
+        msyncType: MSyncType
+    ) -> Result<()> {
+        match self {
+            Self::HostIops(iops) => {
+                return iops.MSync(fr, msyncType);
+            },
+            Self::Shm(shm) => {
+                return shm.HostIops().MSync(fr, msyncType);
+            },
+            Self::AIOMappable => {
+                return AIOMappable::MSync(fr, msyncType);
+            },
+            Self::None => {
+                return Ok(())
+            },
         }
     }
 }
 
 #[derive(Clone, Default)]
 pub struct VMA {
-    pub mappable: Option<HostIopsMappable>,
+    pub mappable: MMappable,
     pub offset: u64, //file offset when the mappable is not null, phyaddr for other
     pub fixed: bool,
 
@@ -552,7 +651,7 @@ pub fn MaxKey() -> u64 {
 impl AreaValue for VMA {
     fn Merge(&self, r1: &Range, _r2: &Range, vma2: &VMA) -> Option<VMA> {
         let vma1 = self;
-        if vma1.mappable.is_some() && vma1.offset + r1.Len() != vma2.offset {
+        if vma1.mappable.HostIops().is_some() && vma1.offset + r1.Len() != vma2.offset {
             return None;
         }
 

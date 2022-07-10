@@ -251,7 +251,7 @@ pub fn openAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
         resolve,
         &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
             let mut inode = d.Inode();
-            let fileFlags = FileFlags::FromFlags(flags);
+            let mut fileFlags = FileFlags::FromFlags(flags);
 
             if !fileFlags.Path {
                 inode.CheckPermission(task, &PermMask::FromFlags(flags))?;
@@ -262,7 +262,9 @@ pub fn openAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
             }
 
             // Linux always adds the O_LARGEFILE flag when running in 64-bit mode.
-            //fileFlags.LargeFile = true;
+            if !fileFlags.Path {
+                fileFlags.LargeFile = true;
+            }
 
             if inode.StableAttr().IsDir() {
                 if fileFlags.Write {
@@ -405,7 +407,9 @@ pub fn createAt(task: &Task, dirFd: i32, addr: u64, flags: u32, mode: FileMode) 
 
     let mut fileFlags = FileFlags::FromFlags(flags);
     // Linux always adds the O_LARGEFILE flag when running in 64-bit mode.
-    //fileFlags.LargeFile = true;
+    if !fileFlags.Path {
+        fileFlags.LargeFile = true;
+    }
 
     // the io_uring write will fail with EAGAIN even for disk file. Work around to make sure the file is opened without nonblocking
     fileFlags.NonBlocking = false;

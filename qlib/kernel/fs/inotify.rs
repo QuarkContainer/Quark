@@ -26,7 +26,7 @@ use crate::qlib::mutex::*;
 use crate::qlib::kernel::kernel::waiter::*;
 use crate::qlib::kernel::fs::dentry::*;
 use crate::qlib::kernel::fs::attr::UnstableAttr;
-use crate::qlib::kernel::memmgr::vma::HostIopsMappable;
+use crate::qlib::kernel::memmgr::vma::MMappable;
 use super::super::task::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
@@ -733,7 +733,7 @@ impl FileOperations for Inotify {
         return (0, Ok(0));
     }
 
-    fn Mappable(&self) -> Result<HostIopsMappable> {
+    fn Mappable(&self) -> Result<MMappable> {
         return Err(Error::SysError(SysErr::ENODEV))
     }
 }

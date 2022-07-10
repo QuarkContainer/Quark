@@ -61,7 +61,7 @@ pub fn SysMmap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         MLockMode: MLockMode::default(),
         Kernel: false,
         Mapping: None,
-        Mappable: None,
+        Mappable: MMappable::None,
         Hint: "".to_string(),
     };
 
@@ -91,15 +91,15 @@ pub fn SysMmap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
         match file.Mappable() {
             Err(Error::ErrDevZeroMap) => {
-                opts.Mappable = None;
+                opts.Mappable = MMappable::None;
                 opts.Hint = "/dev/zero".to_string();
             }
             Err(e) => return Err(e),
-            Ok(m) => opts.Mappable = Some(m),
+            Ok(m) => opts.Mappable = m,
         }
     } else if shared {
         let memfdIops = HostInodeOp::NewMemfdIops(len as i64)?;
-        opts.Mappable = Some(HostIopsMappable::FromHostIops(memfdIops));
+        opts.Mappable = MMappable::FromHostIops(memfdIops);
     }
 
     match task.mm.MMap(task, &mut opts) {

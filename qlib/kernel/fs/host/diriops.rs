@@ -28,7 +28,7 @@ use super::super::super::super::linux_def::*;
 use super::super::super::super::device::*;
 use super::super::super::util::cstring::*;
 use super::super::super::kernel::time::*;
-pub use super::super::super::memmgr::vma::HostIopsMappable;
+pub use super::super::super::memmgr::vma::MMappable;
 use super::super::super::socket::unix::transport::unix::*;
 use super::super::super::task::*;
 use super::super::super::Kernel::HostSpace;
@@ -645,7 +645,7 @@ impl InodeOperations for HostDirOp {
         return StatFS(self.HostFd())
     }
 
-    fn Mappable(&self) -> Result<HostIopsMappable> {
+    fn Mappable(&self) -> Result<MMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }

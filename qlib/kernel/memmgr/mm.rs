@@ -212,7 +212,7 @@ impl MemoryManager {
     pub fn Init(kernel: bool) -> Self {
         let mut vmas = AreaSet::New(0, MemoryDef::LOWER_TOP);
         let vma = VMA {
-            mappable: None,
+            mappable: MMappable::None,
             offset: 0,
             fixed: true,
             realPerms: AccessType::ReadWrite(),
@@ -419,10 +419,7 @@ impl MemoryManager {
             let vma = vseg.Value();
 
             if !vma.kernel {
-                if vma.mappable.is_some() {
-                    let mappable = vma.mappable.clone().unwrap();
-                    mappable.HostIops().RemoveMapping(self, &r, vma.offset, vma.CanWriteMappableLocked())?;
-                }
+                vma.mappable.RemoveMapping(self, &r, vma.offset, vma.CanWriteMappableLocked())?;
             }
             let vgap = mapping.vmas.Remove(&vseg);
             vseg = vgap.NextSeg();
@@ -483,10 +480,7 @@ impl MemoryManager {
             let vma = vseg.Value();
 
             if !vma.kernel {
-                if vma.mappable.is_some() {
-                    let mappable = vma.mappable.clone().unwrap();
-                    mappable.HostIops().RemoveMapping(self, &r, vma.offset, vma.CanWriteMappableLocked())?;
-                }
+                vma.mappable.RemoveMapping(self, &r, vma.offset, vma.CanWriteMappableLocked())?;
 
                 mapping.usageAS -= r.Len();
                 if vma.mlockMode != MLockMode::MlockNone {
@@ -797,13 +791,13 @@ impl MemoryManager {
                 return Err(Error::SysError(SysErr::ENOMEM));
             }
 
-            if let Some(iops) = vma.mappable.clone() {
+            if let Some(iops) = vma.mappable.HostIops() {
                 let mr = ar.Intersect(&vseg.Range());
                 let fstart = mr.Start() - vseg.Range().Start() + vma.offset;
 
                 // todo: fix the Munlock, when there are multiple process lock/unlock a memory range.
                 // with current implementation, the first unlock will work.
-                iops.HostIops().Mlock(fstart, mr.Len(), mode)?;
+                iops.Mlock(fstart, mr.Len(), mode)?;
             }
 
             vseg = vseg.NextSeg()
@@ -853,13 +847,13 @@ impl MemoryManager {
                 continue;
             }
 
-            if let Some(iops) = vma.mappable.clone() {
+            if let Some(iops) = vma.mappable.HostIops() {
                 let mr = vseg.Range();
                 let fstart = mr.Start() - vseg.Range().Start() + vma.offset;
 
                 // todo: fix the Munlock, when there are multiple process lock/unlock a memory range.
                 // with current implementation, the first unlock will work.
-                iops.HostIops().Mlock(fstart, mr.Len(), mode)?;
+                iops.Mlock(fstart, mr.Len(), mode)?;
             }
 
             vseg = vseg.NextSeg();
@@ -914,19 +908,19 @@ impl MemoryManager {
             // It's only possible to have dirtied the Mappable through a shared
             // mapping. Don't check if the mapping is writable, because mprotect
             // may have changed this, and also because Linux doesn't.
-            if vma.mappable.is_some() && !vma.private {
+            if vma.mappable.HostIops().is_some() && !vma.private {
                 let msyncType = if opts.Sync {
                     MSyncType::MsSync
                 } else {
                     MSyncType::MsAsync
                 };
 
-                let fops = vma.mappable.clone().unwrap();
+                let fops = vma.mappable.HostIops().unwrap();
 
                 let mr = ar.Intersect(&vseg.Range());
 
                 let fstart = mr.Start() - vseg.Range().Start() + vma.offset;
-                fops.HostIops().MSync(&Range::New(fstart, mr.Len()), msyncType)?;
+                fops.MSync(&Range::New(fstart, mr.Len()), msyncType)?;
 
                 if lastEnd >= ar.End() {
                     break;
@@ -1024,11 +1018,11 @@ impl MemoryManager {
         }
 
         let exec = vma.effectivePerms.Exec();
-        match &vma.mappable {
-            Some(ref mappable) => {
+        match &vma.mappable.HostIops() {
+            Some(iops) => {
                 let vmaOffset = pageAddr - range.Start();
                 let fileOffset = vmaOffset + vma.offset; // offset in the file
-                let phyAddr = mappable.HostIops().MapFilePage(task, fileOffset)?;
+                let phyAddr = iops.MapFilePage(task, fileOffset)?;
                 //error!("fault 2.1, vma.mappable.is_some() is {}, vaddr is {:x}, paddr is {:x}",
                 //      vma.mappable.is_some(), pageAddr, phyAddr);
 
@@ -1354,13 +1348,13 @@ impl MemoryManager {
 
         //if it is filemapping and private, need cow.
         // if it is anon share, first marks it as writeable. When clone, mark it as readonly.
-        if vma.private & vma.mappable.is_some() {
+        if vma.private & vma.mappable.HostIops().is_some() {
             perms.ClearWrite();
         }
 
         self.pagetable.write().pt.MUnmap(ar.Start(), ar.Len())?;
         let segAr = vmaSeg.Range();
-        match &vma.mappable {
+        match &vma.mappable.HostIops() {
             None => {
                 //anonymous mapping
                 self.AddRssLock(ar);
@@ -1377,7 +1371,7 @@ impl MemoryManager {
                     )?;
                 }
             }
-            Some(ref mappable) => {
+            Some(iops) => {
                 //host file mapping
                 // the map file mapfile cost is high. Only pre-commit it when the size < 4MB.
                 // todo: improve that later
@@ -1392,7 +1386,7 @@ impl MemoryManager {
                     self.pagetable.write().pt.MapFile(
                         task,
                         ar.Start(),
-                        &mappable.HostIops(),
+                        &iops,
                         &Range::New(vma.offset + ar.Start() - segAr.Start(), ar.Len()),
                         &currPerm,
                         precommit,
@@ -1417,7 +1411,7 @@ impl MemoryManager {
         let vma = vmaSeg.Value();
         let mut perms = vma.effectivePerms;
 
-        if vma.private & vma.mappable.is_some() {
+        if vma.private & vma.mappable.HostIops().is_some() {
             //if it is filemapping and private, need cow.
             perms.ClearWrite();
         }
@@ -1501,22 +1495,18 @@ impl MemoryManager {
 
                 let vmaAR = srcvseg.Range();
 
-                if vma.mappable.is_some() {
-                    let mappable = vma.mappable.clone().unwrap();
-
-                    match mappable.HostIops().AddMapping(
-                        &mm2,
-                        &vmaAR,
-                        vma.offset,
-                        vma.CanWriteMappableLocked(),
-                    ) {
-                        Err(e) => {
-                            let appRange = mm2.ApplicationAddrRange();
-                            mm2.RemoveVMAsLocked(&appRange)?;
-                            return Err(e);
-                        }
-                        _ => (),
+                match vma.mappable.AddMapping(
+                    &mm2,
+                    &vmaAR,
+                    vma.offset,
+                    vma.CanWriteMappableLocked(),
+                ) {
+                    Err(e) => {
+                        let appRange = mm2.ApplicationAddrRange();
+                        mm2.RemoveVMAsLocked(&appRange)?;
+                        return Err(e);
                     }
+                    _ => (),
                 }
 
                 vma.mlockMode = MLockMode::MlockNone;

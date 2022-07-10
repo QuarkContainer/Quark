@@ -199,7 +199,7 @@ pub trait InodeOperations: Sync + Send {
     fn IsVirtual(&self) -> bool;
     fn Sync(&self) -> Result<()>;
     fn StatFS(&self, task: &Task) -> Result<FsInfo>;
-    fn Mappable(&self) -> Result<HostIopsMappable>;
+    fn Mappable(&self) -> Result<MMappable>;
 }
 
 // LockCtx is an Inode's lock context and contains different personalities of locks; both
