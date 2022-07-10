@@ -236,7 +236,7 @@ impl InodeOperations for TaskOwnedInodeOps {
         return self.iops.StatFS(task);
     }
 
-    fn Mappable(&self) -> Result<HostIopsMappable> {
+    fn Mappable(&self) -> Result<MMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }
@@ -471,7 +471,7 @@ impl InodeOperations for StaticFileInodeOps {
         });
     }
 
-    fn Mappable(&self) -> Result<HostIopsMappable> {
+    fn Mappable(&self) -> Result<MMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }

@@ -274,7 +274,7 @@ impl InodeOperations for SocketInodeOps {
         return Err(Error::SysError(SysErr::ENOSYS));
     }
 
-    fn Mappable(&self) -> Result<HostIopsMappable> {
+    fn Mappable(&self) -> Result<MMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }
@@ -388,7 +388,7 @@ impl FileOperations for SocketFileOps {
         return (0, Err(Error::SysError(SysErr::ENOTDIR)));
     }
 
-    fn Mappable(&self) -> Result<HostIopsMappable> {
+    fn Mappable(&self) -> Result<MMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }

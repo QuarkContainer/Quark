@@ -143,7 +143,7 @@ impl<T: 'static + DynamicDirFileNode> FileOperations for DynamicDirFileOperation
         return self.node.ReadDir(task, f, offset, serializer);
     }
 
-    fn Mappable(&self) -> Result<HostIopsMappable> {
+    fn Mappable(&self) -> Result<MMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }

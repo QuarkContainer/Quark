@@ -144,7 +144,7 @@ pub struct MMapOpts {
 
     pub Mapping: Option<Arc<Mapping>>,
 
-    pub Mappable: Option<HostIopsMappable>,
+    pub Mappable: MMappable,
 
     pub Hint: String,
 }
@@ -167,7 +167,7 @@ impl MMapOpts {
             MLockMode: MLockMode::default(),
             Kernel: false,
             Mapping: Some(NewAnonMapping(name.to_string())),
-            Mappable: None,
+            Mappable: MMappable::None,
             Hint: name.to_string(),
         });
     }
@@ -189,7 +189,7 @@ impl MMapOpts {
             MLockMode: MLockMode::default(),
             Kernel: false,
             Mapping: Some(Arc::new(file.clone())),
-            Mappable: Some(file.Mappable()?),
+            Mappable: file.Mappable()?,
             Hint: "".to_string(),
         });
     }

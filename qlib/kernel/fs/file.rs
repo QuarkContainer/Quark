@@ -310,7 +310,7 @@ pub trait FileOperations: Sync + Send + Waitable + SockOperations + SpliceOperat
         offset: i32,
     ) -> (i32, Result<i64>);
 
-    fn Mappable(&self) -> Result<HostIopsMappable>;
+    fn Mappable(&self) -> Result<MMappable>;
 }
 
 pub struct FileInternal {
@@ -475,7 +475,7 @@ impl File {
         return !self.flags.lock().0.NonBlocking;
     }
 
-    pub fn Mappable(&self) -> Result<HostIopsMappable> {
+    pub fn Mappable(&self) -> Result<MMappable> {
         return self.FileOp.Mappable();
     }
 

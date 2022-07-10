@@ -51,7 +51,7 @@ impl MemoryManager {
 
         opts.Length = length;
 
-        if opts.Mappable.is_some() {
+        if opts.Mappable.HostIops().is_some() {
             // Offset must be aligned.
             if Addr(opts.Offset).RoundDown()?.0 != opts.Offset {
                 return Err(Error::SysError(SysErr::EINVAL));
@@ -84,7 +84,7 @@ impl MemoryManager {
             return Err(Error::SysError(SysErr::EINVAL));
         }
 
-        if opts.GrowsDown && opts.Mappable.is_some() {
+        if opts.GrowsDown && opts.Mappable.HostIops().is_some() {
             return Err(Error::SysError(SysErr::EINVAL));
         }
 
@@ -152,7 +152,7 @@ impl MemoryManager {
                 MLockMode: MLockMode::default(),
                 Kernel: false,
                 Mapping: None,
-                Mappable: None,
+                Mappable: MMappable::None,
                 Hint: "[stack]".to_string(),
             },
         )?;
@@ -273,7 +273,7 @@ impl MemoryManager {
             // "Grow" the existing vma by creating a new mergeable one.
             let vma = vseg.Value();
             let mut newOffset = 0;
-            if vma.mappable.is_some() {
+            if vma.mappable.HostIops().is_some() {
                 newOffset = vseg.MappableRange().End();
             }
 
@@ -366,16 +366,13 @@ impl MemoryManager {
         }
 
         let vma = vseg.Value();
-        if vma.mappable.is_some() {
-            if core::u64::MAX - vma.offset < newAR.Len() {
-                return Err(Error::SysError(SysErr::EINVAL));
-            }
-
-            // Inform the Mappable, if any, of the new mapping.
-            let mappable = vma.mappable.clone().unwrap();
-            let offsetat = vseg.MappableOffsetAt(oldAR.Start());
-            mappable.HostIops().CopyMapping(self, &oldAR, &newAR, offsetat, vma.CanWriteMappableLocked())?;
+        if core::u64::MAX - vma.offset < newAR.Len() {
+            return Err(Error::SysError(SysErr::EINVAL));
         }
+
+        // Inform the Mappable, if any, of the new mapping.
+        let offsetat = vseg.MappableOffsetAt(oldAR.Start());
+        vma.mappable.CopyMapping(self, &oldAR, &newAR, offsetat, vma.CanWriteMappableLocked())?;
 
         if oldSize == 0 {
             // Handle copying.
@@ -385,7 +382,7 @@ impl MemoryManager {
             // consistent with Linux). Call vseg.Value() (rather than
             // vseg.ValuePtr()) to make a copy of the vma.
             let mut vma = vseg.Value();
-            if vma.mappable.is_some() {
+            if vma.mappable.HostIops().is_some() {
                 vma.offset = vseg.MappableOffsetAt(oldAR.Start());
             }
 
@@ -422,10 +419,7 @@ impl MemoryManager {
 
         // Now that pmas have been moved to newAR, we can notify vma.mappable that
         // oldAR is no longer mapped.
-        if vma.mappable.is_some() {
-            let mappable = vma.mappable.clone().unwrap();
-            mappable.HostIops().RemoveMapping(self, &oldAR, vma.offset, vma.CanWriteMappableLocked())?;
-        }
+        vma.mappable.RemoveMapping(self, &oldAR, vma.offset, vma.CanWriteMappableLocked())?;
 
         self.PopulateVMARemapLocked(task, &vseg, &newAR, &Range::New(oldAddr, oldSize), true)?;
         self.TlbShootdown();
@@ -654,7 +648,7 @@ impl MemoryManager {
                     MLockMode: MLockMode::default(),
                     Kernel: false,
                     Mapping: None,
-                    Mappable: None,
+                    Mappable: MMappable::None,
                     Hint: "[Heap]".to_string(),
                 },
             )?;

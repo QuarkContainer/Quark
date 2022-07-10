@@ -773,7 +773,7 @@ impl FileOperations for FileOptionsUtil {
         return (self.iterateDir)(task, &self.data, d, dirCtx, offset);
     }
 
-    fn Mappable(&self) -> Result<HostIopsMappable> {
+    fn Mappable(&self) -> Result<MMappable> {
         return  (self.mappable)(&self.data);
     }
 }

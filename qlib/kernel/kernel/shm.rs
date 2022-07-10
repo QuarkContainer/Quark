@@ -468,7 +468,7 @@ impl Shm {
             MLockMode: MLockMode::MlockNone,
             Kernel: false,
             Mapping: Some(Arc::new(self.clone())),
-            Mappable: Some(HostIopsMappable::FromShm(self.clone())),
+            Mappable: MMappable::FromShm(self.clone()),
             Hint: format!(""),
         };
 
@@ -501,18 +501,13 @@ impl MemoryManager {
         while vseg.Ok() {
             let vma = vseg.Value();
             match vma.mappable {
-                None => (),
-                Some(mappable) => {
-                    match mappable {
-                        HostIopsMappable::HostIops(_) => (),
-                        HostIopsMappable::Shm(shm) => {
-                            if vseg.Range().Start() - addr == vma.offset {
-                                detached = Some(shm.clone());
-                                break;
-                            }
-                        }
+                MMappable::Shm(shm) => {
+                    if vseg.Range().Start() - addr == vma.offset {
+                        detached = Some(shm.clone());
+                        break;
                     }
                 }
+                _ => ()
             }
             vseg = vseg.NextSeg();
         }
@@ -530,7 +525,7 @@ impl MemoryManager {
         let end = addr + detached.EffectiveSize();
         while vseg.Ok() && vseg.Range().End() <= end {
             let vma = vseg.Value();
-            if vma.mappable == Some(HostIopsMappable::FromShm(detached.clone())) &&
+            if vma.mappable == MMappable::FromShm(detached.clone()) &&
                 vseg.Range().Start() - addr == vma.offset {
                 let r = vseg.Range();
                 mapping.usageAS -= r.Len();
