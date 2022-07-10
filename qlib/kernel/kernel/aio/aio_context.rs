@@ -417,4 +417,17 @@ impl AIOContext {
 
         aio.queue.Notify(READABLE_EVENT);
     }
+
+    pub fn Dead(&self) -> bool {
+        return self.lock().dead;
+    }
+
+    pub fn CancelPendingRequest(&self) {
+        let mut ctx = self.lock();
+        if ctx.outstanding == 0 {
+            panic!("AIOContext outstanding is going negative")
+        }
+
+        ctx.outstanding -= 1;
+    }
 }
