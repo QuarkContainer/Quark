@@ -1144,6 +1144,15 @@ impl MemoryManager {
         return self.V2PLocked(task, &rl, start, len, output, writable, allowPartial);
     }
 
+    pub fn FixPermissionForIovs(&self, task: &Task, iovs: &[IoVec], writable: bool) -> Result<()> {
+        let rl = self.MappingReadLock();
+        for iov in iovs {
+            self.FixPermissionLocked(task, &rl, iov.Start(), iov.Len() as u64, writable, false)?;
+        }
+
+        return Ok(())
+    }
+
     pub fn V2PLocked(
         &self,
         task: &Task,

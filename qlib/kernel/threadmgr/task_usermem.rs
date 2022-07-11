@@ -484,6 +484,10 @@ impl Task {
         return self.mm.CopyInVec(self, addr, size);
     }
 
+    pub fn FixPermissionForIovs(&self, iovs: &[IoVec], writable: bool) -> Result<()> {
+        return self.mm.FixPermissionForIovs(self, iovs, writable);
+    }
+
     //Copy a slice to user memory
     pub fn  CopyOutSlice<T: Sized + Copy>(&self, src: &[T], dst: u64, len: usize) -> Result<()> {
         return self.mm.CopyOutSlice(self, src, dst, len);
