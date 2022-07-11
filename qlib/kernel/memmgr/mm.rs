@@ -1292,6 +1292,10 @@ impl MemoryManager {
                 Ok(ret) => ret,
             };
 
+            if !permission.Read() {
+                return Err(Error::SysError(SysErr::EFAULT));
+            }
+
             let (vma, _) = match self.GetVmaAndRangeLocked(addr) {
                 None => {
                     if !allowPartial || addr < vAddr {
