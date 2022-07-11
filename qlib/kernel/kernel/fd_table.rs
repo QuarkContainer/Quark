@@ -21,7 +21,7 @@ use core::ops::Bound::*;
 
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
-//use super::super::super::limits::*;
+use super::super::super::limits::*;
 use super::super::super::range::*;
 use super::super::task::*;
 use super::super::fs::file::*;
@@ -289,7 +289,7 @@ impl FDTable {
         }
 
         // Default limit.
-        /*let mut end = i32::MAX;
+        let mut end = i32::MAX;
 
         let lim = task.Thread().ThreadGroup().Limits().Get(LimitType::NumberOfFiles).Cur;
         if lim != u64::MAX {
@@ -298,9 +298,24 @@ impl FDTable {
 
         if fd + 1 > end {
             return Err(Error::SysError(SysErr::EMFILE));
-        }*/
+        }
 
-        return self.lock().NewFDFrom(task, fd, file, flags);
+        let mut tbl = self.lock();
+
+        let newfd = match tbl.gaps.AllocAfter(fd as u64) {
+            None => return Err(Error::SysError(SysErr::EMFILE)),
+            Some(newfd) => newfd as i32,
+        };
+
+        if newfd >= end {
+            tbl.gaps.Free(newfd as u64);
+            return Err(Error::SysError(SysErr::EMFILE));
+        }
+
+        tbl.set(newfd, &file, flags);
+
+        //self.Verify();
+        return Ok(newfd);
     }
 
     pub fn NewFDAt(&self, task: &Task, fd: i32, file: &File, flags: &FDFlags) -> Result<()> {
@@ -308,10 +323,10 @@ impl FDTable {
             return Err(Error::SysError(SysErr::EBADF));
         }
 
-        /*let lim = task.Thread().ThreadGroup().Limits().Get(LimitType::NumberOfFiles).Cur;
+        let lim = task.Thread().ThreadGroup().Limits().Get(LimitType::NumberOfFiles).Cur;
         if fd as u64 >= lim {
             return Err(Error::SysError(SysErr::EMFILE));
-        }*/
+        }
 
         return self.lock().NewFDAt(task, fd, file, flags);
     }
@@ -432,18 +447,6 @@ impl FDTableInternal {
             None => (),
             Some(f) => self.Drop(&f.file),
         }
-    }
-
-    fn NewFDFrom(&mut self, _task: &Task, fd: i32, files: &File, flags: &FDFlags) -> Result<i32> {
-        let newfd = match self.gaps.AllocAfter(fd as u64) {
-            None => return Err(Error::SysError(SysErr::EMFILE)),
-            Some(newfd) => newfd as i32,
-        };
-
-        self.set(newfd, &files, flags);
-
-        //self.Verify();
-        return Ok(newfd);
     }
 
     fn NewFDAt(&mut self, _task: &Task, fd: i32, file: &File, flags: &FDFlags) -> Result<()> {
