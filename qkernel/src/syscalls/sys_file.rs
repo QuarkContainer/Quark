@@ -746,7 +746,7 @@ pub fn SysGetcwd(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 pub fn SysChroot(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg0 as u64;
 
-    if task.Creds().HasCapability(Capability::CAP_SYS_CHROOT) {
+    if !task.Creds().HasCapability(Capability::CAP_SYS_CHROOT) {
         return Err(Error::SysError(SysErr::EPERM));
     }
 
