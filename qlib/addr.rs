@@ -49,13 +49,31 @@ impl AccessType {
 
     pub fn NewFromPageFlags(flags: PageTableFlags) -> Self {
         let present = flags & PageTableFlags::PRESENT == PageTableFlags::PRESENT;
-        if !present {
+        let useraccess = flags & PageTableFlags::USER_ACCESSIBLE == PageTableFlags::USER_ACCESSIBLE;
+        if !present || !useraccess {
             return Self::New(false, false, false);
         }
 
         let write = flags & PageTableFlags::WRITABLE == PageTableFlags::WRITABLE;
         let exec = flags & PageTableFlags::NO_EXECUTE != PageTableFlags::NO_EXECUTE;
         return Self::New(present, write, exec);
+    }
+
+    pub fn ToUserPageFlags(&self) -> PageTableFlags {
+        let mut flags = PageTableFlags::NO_EXECUTE;
+        if self.Read() {
+            flags |= PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE;
+        }
+
+        if self.Write() {
+            flags |= PageTableFlags::WRITABLE;
+        }
+
+        if self.Exec() {
+            flags &= PageTableFlags::NO_EXECUTE;
+        }
+
+        return flags
     }
 
     pub fn New(read: bool, write: bool, exec: bool) -> Self {

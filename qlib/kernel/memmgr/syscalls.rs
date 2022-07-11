@@ -516,6 +516,14 @@ impl MemoryManager {
                 .write()
                 .pt
                 .MProtect(Addr(range.Start()), Addr(end), pageopts, false)?;
+
+            /*match self.VirtualToPhyLocked(range.Start()) {
+                Err(_) => (),
+                Ok((addr, permission)) => {
+                    error!("mprotect {:x}/{:?}", range.Start(), permission);
+                }
+            };*/
+
             if ar.End() <= range.End() {
                 break;
             }

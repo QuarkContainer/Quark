@@ -1091,6 +1091,7 @@ impl AIORead {
         let iov = IoVec::NewFromAddr(cb.buf, cb.bytes as usize);
 
         let iovs = vec![iov];
+        task.FixPermissionForIovs(&iovs, true)?;
         let buf = DataBuff::New(cb.bytes as usize);
 
         return Ok(Self {
@@ -1114,6 +1115,7 @@ impl AIORead {
         eventfops: Option<EventOperations>,
     ) -> Result<Self> {
         let iovs = task.IovsFromAddr(cb.buf, cb.bytes as usize)?;
+        task.FixPermissionForIovs(&iovs, true)?;
         let size = IoVec::NumBytes(&iovs);
         let buf = DataBuff::New(size as usize);
 
