@@ -1066,6 +1066,63 @@ pub fn FSetOwner(task: &Task, fd: i32, file: &File, who: i32) -> Result<()> {
     return Ok(());
 }
 
+pub fn PosixLock(task: &Task, flockAddr: u64, file: &File, block: bool) -> Result<()> {
+    let inode = file.Dirent.Inode();
+    // In Linux the file system can choose to provide lock operations for an inode.
+    // Normally pipe and socket types lack lock operations. We diverge and use a heavy
+    // hammer by only allowing locks on files and directories.
+    if !inode.StableAttr().IsFile() && !inode.StableAttr().IsDir() {
+        return Err(Error::SysError(SysErr::EBADF));
+    }
+
+    let flock: Flock = task.CopyInObj(flockAddr)?;
+
+    let rng = file.ComputeLockRange(task, flock.Start, flock.Len, flock.Whence as _)?;
+
+    // The lock uid is that of the fdtble's UniqueId.
+    let lockUniqueID = task.fdTbl.Id();
+
+    // These locks don't block; execute the non-blocking operation using the inode's lock
+    // context directly.
+    let fflags = file.Flags();
+
+    let pid = task.Thread().ThreadGroup().ID();
+    match flock.Type as u64 {
+        LibcConst::F_RDLCK => {
+            if !fflags.Read {
+                return Err(Error::SysError(SysErr::EBADF));
+            }
+
+            let lock = inode.lock().LockCtx.Posix.clone();
+            if !lock.LockRegion(task, lockUniqueID, OwnerInfo::New(pid), LockType::ReadLock, &rng, block)? {
+                return Err(Error::SysError(SysErr::EAGAIN));
+            }
+
+            return Ok(());
+        }
+        LibcConst::F_WRLCK => {
+            if !fflags.Write {
+                return Err(Error::SysError(SysErr::EBADF));
+            }
+
+            let lock = inode.lock().LockCtx.Posix.clone();
+            if !lock.LockRegion(task, lockUniqueID, OwnerInfo::New(pid), LockType::WriteLock, &rng, block)? {
+                return Err(Error::SysError(SysErr::EAGAIN));
+            }
+
+            return Ok(());
+        }
+        LibcConst::F_UNLCK => {
+            let lock = inode.lock().LockCtx.Posix.clone();
+            lock.UnlockRegion(task, lockUniqueID, &rng);
+
+            return Ok(());
+        }
+        _ => return Err(Error::SysError(SysErr::EINVAL)),
+    }
+
+}
+
 pub fn PosixTestLock(task: &Task, flockAddr: u64, file: &File) -> Result<()> {
     let flock: Flock = task.CopyInObj(flockAddr)?;
 
@@ -1129,95 +1186,13 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             file.SetFlags(task, FileFlags::FromFlags(flags).SettableFileFlags());
             Ok(0)
         }
-        Cmd::F_SETLK | Cmd::F_SETLKW => {
-            let inode = file.Dirent.Inode();
-            // In Linux the file system can choose to provide lock operations for an inode.
-            // Normally pipe and socket types lack lock operations. We diverge and use a heavy
-            // hammer by only allowing locks on files and directories.
-            if !inode.StableAttr().IsFile() && !inode.StableAttr().IsDir() {
-                return Err(Error::SysError(SysErr::EBADF));
-            }
-
-            let flockAddr = val;
-            let flock: FlockStruct = task.CopyInObj(flockAddr)?;
-
-            let sw = match flock.l_whence {
-                0 => SeekWhence::SEEK_SET,
-                1 => SeekWhence::SEEK_CUR,
-                2 => SeekWhence::SEEK_END,
-                _ => return Err(Error::SysError(SysErr::EINVAL)),
-            };
-
-            let offset = match sw {
-                SeekWhence::SEEK_SET => 0,
-                SeekWhence::SEEK_CUR => file.Offset(task)?,
-                SeekWhence::SEEK_END => {
-                    let uattr = inode.UnstableAttr(task)?;
-                    uattr.Size
-                }
-                _ => return Err(Error::SysError(SysErr::EINVAL)),
-            };
-
-            // Compute the lock range.
-            let rng = ComputeRange(flock.l_start, flock.l_len, offset)?;
-
-            // The lock uid is that of the fdtble's UniqueId.
-            let lockUniqueID = task.fdTbl.Id();
-
-            // These locks don't block; execute the non-blocking operation using the inode's lock
-            // context directly.
-            let fflags = file.Flags();
-
-            let pid = task.Thread().ThreadGroup().ID();
-            match flock.l_type as u64 {
-                LibcConst::F_RDLCK => {
-                    if !fflags.Read {
-                        return Err(Error::SysError(SysErr::EBADF));
-                    }
-
-                    let lock = inode.lock().LockCtx.Posix.clone();
-                    if cmd == Cmd::F_SETLK {
-                        // Non-blocking lock, provide a nil lock.Blocker.
-                        if !lock.LockRegion(task, lockUniqueID, OwnerInfo::New(pid), LockType::ReadLock, &rng, false)? {
-                            return Err(Error::SysError(SysErr::EAGAIN));
-                        }
-                    } else {
-                        // Blocking lock, pass in the task to satisfy the lock.Blocker interface.
-                        if !lock.LockRegion(task, lockUniqueID, OwnerInfo::New(pid), LockType::ReadLock, &rng, true)? {
-                            return Err(Error::SysError(SysErr::EINTR));
-                        }
-                    }
-
-                    return Ok(0);
-                }
-                LibcConst::F_WRLCK => {
-                    if !fflags.Write {
-                        return Err(Error::SysError(SysErr::EBADF));
-                    }
-
-                    let lock = inode.lock().LockCtx.Posix.clone();
-                    if cmd == Cmd::F_SETLK {
-                        // Non-blocking lock, provide a nil lock.Blocker.
-                        if !lock.LockRegion(task, lockUniqueID, OwnerInfo::New(pid), LockType::WriteLock, &rng, false)? {
-                            return Err(Error::SysError(SysErr::EAGAIN));
-                        }
-                    } else {
-                        // Blocking lock, pass in the task to satisfy the lock.Blocker interface.
-                        if !lock.LockRegion(task, lockUniqueID, OwnerInfo::New(pid), LockType::WriteLock, &rng, true)? {
-                            return Err(Error::SysError(SysErr::EINTR));
-                        }
-                    }
-
-                    return Ok(0);
-                }
-                LibcConst::F_UNLCK => {
-                    let lock = inode.lock().LockCtx.Posix.clone();
-                    lock.UnlockRegion(task, lockUniqueID, &rng);
-
-                    return Ok(0);
-                }
-                _ => return Err(Error::SysError(SysErr::EINVAL)),
-            }
+        Cmd::F_SETLK => {
+            PosixLock(task, val, &file, false)?;
+            return Ok(0)
+        }
+        Cmd::F_SETLKW => {
+            PosixLock(task, val, &file, true)?;
+            return Ok(0)
         }
         Cmd::F_GETLK => {
             PosixTestLock(task, val, &file)?;
