@@ -572,16 +572,6 @@ impl MfdType {
     pub const MFD_ALLOW_SEALING: u32 = 0x0002;
 }
 
-#[repr(C)]
-#[derive(Debug, Default, Copy, Clone)]
-pub struct FlockStruct {
-    pub l_type: i16,
-    pub l_whence: i16,
-    pub l_start: i64,
-    pub l_len: i64,
-    pub l_pid: i32,
-}
-
 pub const MAX_SYMLINK_TRAVERSALS: u32 = 40;
 pub const NAME_MAX: usize = 255;
 pub const PATH_MAX: usize = 4096;
