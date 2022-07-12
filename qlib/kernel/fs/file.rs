@@ -360,9 +360,6 @@ impl Drop for File {
 
             let lockUniqueID = self.UniqueId();
             lockCtx.BSD.UnlockRegion(task, lockUniqueID, &Range::Max());
-            lockCtx
-                .Posix
-                .UnlockRegion(task, lockUniqueID, &Range::Max());
 
             // Only unregister if we are currently registered. There is nothing
             // to register if f.async is nil (this happens when async mode is

@@ -127,7 +127,7 @@ fn WalkDescriptors2(task: &Task, p: &str, msrc: &Arc<QMutex<MountSource>>) -> Re
 }
 
 fn ReadDescriptors(task: &Task, c: &mut DirCtx, offset: i64, typ: InodeType) -> Result<i64> {
-    let fds = task.fdTbl.lock().GetFDs();
+    let fds = task.fdTbl.GetFDs();
 
     let mut fdInts = &fds[..];
     let idx = match fds.binary_search(&(offset as i32)) {

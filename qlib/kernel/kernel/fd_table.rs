@@ -16,7 +16,6 @@ use crate::qlib::mutex::*;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::ops::Deref;
 use core::ops::Bound::*;
 
 use super::super::super::common::*;
@@ -227,19 +226,121 @@ impl GapMgr {
 }
 
 #[derive(Clone, Default)]
-pub struct FDTable((Arc<QMutex<FDTableInternal>>, u64));
-
-impl Deref for FDTable {
-    type Target = Arc<QMutex<FDTableInternal>>;
-
-    fn deref(&self) -> &Arc<QMutex<FDTableInternal>> {
-        &(self.0).0
-    }
+pub struct FDTable {
+    id: u64,
+    data: Arc<QMutex<FDTableInternal>>,
 }
 
 impl FDTable {
-    pub fn ID(&self) -> u64 {
-        return (self.0).1;
+    pub fn New() -> Self {
+        return Self {
+            id: NewUID(),
+            data: Default::default(),
+        }
+    }
+
+    pub fn Id(&self) -> u64 {
+        return self.id;
+    }
+
+    pub fn GetFDs(&self) -> Vec<i32> {
+        let intern = self.data.lock();
+        let mut fds = Vec::with_capacity(intern.descTbl.len());
+
+        for (fd, _) in &intern.descTbl {
+            fds.push(*fd)
+        }
+
+        return fds;
+    }
+
+
+    pub fn Remove(&self, fd: i32) -> Option<File> {
+        return self.data.lock().Remove(self.id, fd);
+    }
+
+    pub fn RemoveRange(&self, startfd: i32, endfd: i32) -> Vec<File> {
+        let mut intern = self.data.lock();
+        let mut ids = Vec::new();
+        for (fd, _) in intern.descTbl.range((Included(&startfd), Excluded(&endfd))) {
+            ids.push(*fd)
+        };
+
+        let mut ret = Vec::new();
+        for fd in ids {
+            match intern.Remove(self.id, fd) {
+                None => error!("impossible in RemoveRange"),
+                Some(f)=> ret.push(f)
+            }
+        }
+
+        return ret;
+    }
+
+    pub fn SetFlagsForRange(&mut self, startfd: i32, endfd: i32, flags: FDFlags) -> Result<()> {
+        let mut intern = self.data.lock();
+        if startfd < 0 || startfd >= endfd {
+            return Err(Error::SysError(SysErr::EINVAL));
+        }
+
+        for (_, d) in intern.descTbl.range_mut((Included(&startfd), Excluded(&endfd))) {
+            d.flags = flags.clone();
+        }
+
+        return Ok(())
+    }
+
+    pub fn RemoveCloseOnExec(&self) {
+        let mut intern = self.data.lock();
+        let mut removed = Vec::new();
+        for (fd, desc) in &intern.descTbl {
+            if desc.flags.CloseOnExec {
+                removed.push(*fd);
+            }
+        }
+
+        for fd in &removed {
+            intern.gaps.Free(*fd as u64);
+            let desc = intern.descTbl.remove(fd).unwrap();
+            intern.Drop(self.id, &desc.file);
+        }
+
+        //self.Verify();
+    }
+
+    pub fn SetFlags(&self, fd: i32, flags: &FDFlags) -> Result<()> {
+        if fd < 0 {
+            return Err(Error::SysError(SysErr::EBADF));
+        }
+
+        let mut intern = self.data.lock();
+        let file = intern.descTbl.get_mut(&fd);
+
+        match file {
+            None => return Err(Error::SysError(SysErr::EBADF)),
+            Some(fdesc) => fdesc.flags = flags.clone(),
+        }
+
+        return Ok(());
+    }
+
+    pub fn GetLastFd(&self) -> i32 {
+        let intern = self.data.lock();
+        for (i, _) in intern.descTbl.iter().rev() {
+            return *i;
+        }
+
+        return 0;
+    }
+
+    pub fn Get(&self, fd: i32) -> Result<(File, FDFlags)> {
+        let intern = self.data.lock();
+
+        let f = intern.descTbl.get(&fd);
+        match f {
+            None => return Err(Error::SysError(SysErr::EBADF)),
+            Some(f) => Ok((f.file.clone(), f.flags.clone())),
+        }
     }
 
     pub fn Dup(&self, task: &Task, fd: i32) -> Result<i32> {
@@ -247,7 +348,7 @@ impl FDTable {
             return Err(Error::SysError(SysErr::EBADF));
         }
 
-        let (f, flags) = self.lock().Get(fd)?;
+        let (f, flags) = self.Get(fd)?;
         return self.NewFDFrom(task, 0, &f, &flags);
     }
 
@@ -260,7 +361,7 @@ impl FDTable {
             return Err(Error::SysError(SysErr::EBADF));
         }
 
-        let (f, flags) = self.lock().Get(oldfd)?;
+        let (f, flags) = self.Get(oldfd)?;
         self.NewFDAt(task, newfd, &f, &flags)?;
         return Ok(newfd);
     }
@@ -276,8 +377,7 @@ impl FDTable {
 
         let closeOnExec = Flags(flags).CloseOnExec();
 
-
-        let (f, mut flags) = self.lock().Get(oldfd)?;
+        let (f, mut flags) = self.Get(oldfd)?;
         flags.CloseOnExec = closeOnExec;
         self.NewFDAt(task, newfd, &f, &flags)?;
         return Ok(newfd);
@@ -300,7 +400,7 @@ impl FDTable {
             return Err(Error::SysError(SysErr::EMFILE));
         }
 
-        let mut tbl = self.lock();
+        let mut tbl = self.data.lock();
 
         let newfd = match tbl.gaps.AllocAfter(fd as u64) {
             None => return Err(Error::SysError(SysErr::EMFILE)),
@@ -312,7 +412,7 @@ impl FDTable {
             return Err(Error::SysError(SysErr::EMFILE));
         }
 
-        tbl.set(newfd, &file, flags);
+        tbl.set(self.id, newfd, &file, flags);
 
         //self.Verify();
         return Ok(newfd);
@@ -328,26 +428,40 @@ impl FDTable {
             return Err(Error::SysError(SysErr::EMFILE));
         }
 
-        return self.lock().NewFDAt(task, fd, file, flags);
+        return self.data.lock().NewFDAt(task, self.id, fd, file, flags);
     }
 
     // Fork returns an independent FDTable, cloning all FDs up to maxFds (non-inclusive).
     pub fn Fork(&self, maxFds: i32) -> FDTable {
-        let internal = self.lock().Fork(maxFds);
+        let intern = self.data.lock();
+        let mut tbl = FDTableInternal {
+            gaps: intern.gaps.clone(),
+            descTbl: BTreeMap::new(),
+        };
 
-        return FDTable((Arc::new(QMutex::new(internal)), NewUID()));
+        for (fd, file) in &intern.descTbl {
+            if *fd >= maxFds {
+                break;
+            }
+            tbl.set(self.id, *fd, &file.file, &file.flags)
+        }
+
+        return Self {
+            id: NewUID(),
+            data: Arc::new(QMutex::new(tbl)),
+        }
     }
 
     pub fn Clear(&self) {
-        self.lock().RemoveAll();
+        self.data.lock().RemoveAll(self.id);
     }
 
     pub fn Count(&self) -> usize {
-        return self.lock().descTbl.len();
+        return self.data.lock().descTbl.len();
     }
 
     pub fn RefCount(&self) -> usize {
-        return Arc::strong_count(&(self.0).0);
+        return Arc::strong_count(&self.data);
     }
 }
 
@@ -385,31 +499,19 @@ impl FDTableInternal {
         }
     }
 
-    pub fn GetLastFd(&self) -> i32 {
-        for (i, _) in self.descTbl.iter().rev() {
-            return *i;
-        }
-
-        return 0;
-    }
-
-    pub fn SetFlagsForRange(&mut self, startfd: i32, endfd: i32, flags: FDFlags) -> Result<()> {
-        if startfd < 0 || startfd >= endfd {
-            return Err(Error::SysError(SysErr::EINVAL));
-        }
-
-        for (_, d) in self.descTbl.range_mut((Included(&startfd), Excluded(&endfd))) {
-            d.flags = flags.clone();
-        }
-
-        return Ok(())
-    }
-
-    pub fn Drop(&self, file: &File) {
+    pub fn Drop(&self, lockUniqueID: u64, file: &File) {
         if Arc::strong_count(&file.0) == 1 {
             let d = file.Dirent.clone();
             let mut ev = 0;
-            if d.Inode().StableAttr().IsDir() {
+            let inode = d.Inode();
+            let lockCtx = inode.lock().LockCtx.clone();
+
+            let task = Task::Current();
+            lockCtx
+                .Posix
+                .UnlockRegion(task, lockUniqueID, &Range::Max());
+
+            if inode.StableAttr().IsDir() {
                 ev |= InotifyEvent::IN_ISDIR;
             }
 
@@ -437,7 +539,7 @@ impl FDTableInternal {
         return self.descTbl.len();
     }
 
-    fn set(&mut self, fd: i32, file: &File, flags: &FDFlags) {
+    fn set(&mut self, uid: u64, fd: i32, file: &File, flags: &FDFlags) {
         let fdesc = Descriptor {
             file: file.clone(),
             flags: flags.clone(),
@@ -445,22 +547,22 @@ impl FDTableInternal {
 
         match self.descTbl.insert(fd, fdesc) {
             None => (),
-            Some(f) => self.Drop(&f.file),
+            Some(f) => self.Drop(uid, &f.file),
         }
     }
 
-    fn NewFDAt(&mut self, _task: &Task, fd: i32, file: &File, flags: &FDFlags) -> Result<()> {
+    fn NewFDAt(&mut self, _task: &Task, uid: u64, fd: i32, file: &File, flags: &FDFlags) -> Result<()> {
         //self.Verify();
         match self.descTbl.remove(&fd) {
             None => {
                 self.gaps.Take(fd as u64);
             },
             Some(desc) => {
-                self.Drop(&desc.file);
+                self.Drop(uid, &desc.file);
             }
         }
 
-        self.set(fd, file, flags);
+        self.set(uid, fd, file, flags);
         return Ok(());
     }
 
@@ -479,16 +581,6 @@ impl FDTableInternal {
         return Ok(());
     }
 
-    pub fn GetFDs(&self) -> Vec<i32> {
-        let mut fds = Vec::with_capacity(self.descTbl.len());
-
-        for (fd, _) in &self.descTbl {
-            fds.push(*fd)
-        }
-
-        return fds;
-    }
-
     pub fn GetFiles(&self) -> Vec<File> {
         let mut files = Vec::with_capacity(self.descTbl.len());
 
@@ -499,50 +591,7 @@ impl FDTableInternal {
         return files;
     }
 
-    pub fn Get(&self, fd: i32) -> Result<(File, FDFlags)> {
-        let f = self.descTbl.get(&fd);
-        match f {
-            None => return Err(Error::SysError(SysErr::EBADF)),
-            Some(f) => Ok((f.file.clone(), f.flags.clone())),
-        }
-    }
-
-    // Fork returns an independent FDTable, cloning all FDs up to maxFds (non-inclusive).
-    pub fn Fork(&self, maxFds: i32) -> FDTableInternal {
-        let mut tbl = FDTableInternal {
-            gaps: self.gaps.clone(),
-            descTbl: BTreeMap::new(),
-        };
-
-        for (fd, file) in &self.descTbl {
-            if *fd >= maxFds {
-                break;
-            }
-            tbl.set(*fd, &file.file, &file.flags)
-        }
-
-        //self.Verify();
-        return tbl;
-    }
-
-    pub fn RemoveRange(&mut self, startfd: i32, endfd: i32) -> Vec<File> {
-        let mut ids = Vec::new();
-        for (fd, _) in self.descTbl.range((Included(&startfd), Excluded(&endfd))) {
-            ids.push(*fd)
-        };
-
-        let mut ret = Vec::new();
-        for fd in ids {
-            match self.Remove(fd) {
-                None => error!("impossible in RemoveRange"),
-                Some(f)=> ret.push(f)
-            }
-        }
-
-        return ret;
-    }
-
-    pub fn Remove(&mut self, fd: i32) -> Option<File> {
+    pub fn Remove(&mut self, uid: u64, fd: i32) -> Option<File> {
         if fd < 0 {
             return None;
         }
@@ -554,30 +603,13 @@ impl FDTableInternal {
             Some(f) => return {
                 self.gaps.Free(fd as u64);
                 //self.Verify();
-                self.Drop(&f.file);
+                self.Drop(uid, &f.file);
                 Some(f.file)
             },
         }
     }
 
-    pub fn RemoveCloseOnExec(&mut self) {
-        let mut removed = Vec::new();
-        for (fd, desc) in &self.descTbl {
-            if desc.flags.CloseOnExec {
-                removed.push(*fd);
-            }
-        }
-
-        for fd in &removed {
-            self.gaps.Free(*fd as u64);
-            let desc = self.descTbl.remove(fd).unwrap();
-            self.Drop(&desc.file);
-        }
-
-        //self.Verify();
-    }
-
-    pub fn RemoveAll(&mut self) {
+    pub fn RemoveAll(&mut self, uid: u64) {
         let mut removed = Vec::new();
         for (fd, _) in &self.descTbl {
             removed.push(*fd);
@@ -586,7 +618,7 @@ impl FDTableInternal {
         for fd in &removed {
             self.gaps.Free(*fd as u64);
             let desc = self.descTbl.remove(fd).unwrap();
-            self.Drop(&desc.file);
+            self.Drop(uid, &desc.file);
         }
 
         //self.Verify();

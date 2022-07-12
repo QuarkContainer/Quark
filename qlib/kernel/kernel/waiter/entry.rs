@@ -54,7 +54,7 @@ impl WaitContext {
         }
     }
 
-    pub fn CallBack(&self) {
+    pub fn CallBack(&self, mask: EventMask) {
         match self {
             WaitContext::EpollContext(p) => {
                 p.CallBack();
@@ -64,7 +64,7 @@ impl WaitContext {
                 context.waiter.Trigger(context.waiterID);
             }
             WaitContext::FileAsync(a) => {
-                a.Callback();
+                a.Callback(mask);
             }
             _ => (),
         }
@@ -179,7 +179,7 @@ impl WaitEntry {
     pub fn Notify(&self, mask: EventMask) -> bool {
         let e = self.lock();
         if mask & e.mask != 0 {
-            e.context.CallBack();
+            e.context.CallBack(mask);
             return true;
         }
 

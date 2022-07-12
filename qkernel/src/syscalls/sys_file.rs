@@ -241,7 +241,8 @@ pub fn openAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
         task.fsContext.WorkDirectory().MyFullName()
     );
 
-    let resolve = (flags & Flags::O_NOFOLLOW as u32) == 0;
+    let mut fileFlags = FileFlags::FromFlags(flags);
+    let resolve = !fileFlags.NoFollow && !fileFlags.Path;
     let mut fd = -1;
 
     fileOpOn(
@@ -251,13 +252,12 @@ pub fn openAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
         resolve,
         &mut |_root: &Dirent, d: &Dirent, _remainingTraversals: u32| -> Result<()> {
             let mut inode = d.Inode();
-            let mut fileFlags = FileFlags::FromFlags(flags);
 
             if !fileFlags.Path {
                 inode.CheckPermission(task, &PermMask::FromFlags(flags))?;
             }
 
-            if inode.StableAttr().IsSymlink() && !resolve {
+            if inode.StableAttr().IsSymlink() && !resolve && !fileFlags.Path {
                 return Err(Error::SysError(SysErr::ELOOP));
             }
 
@@ -704,7 +704,7 @@ pub fn Ioctl(task: &mut Task, fd: i32, request: u64, val: u64) -> Result<()> {
         }
         IoCtlCmd::FIOSETOWN | IoCtlCmd::SIOCSPGRP => {
             let set: i32 = task.CopyInObj(val)?;
-            FSetOwner(task, &file, set)?;
+            FSetOwner(task, fd, &file, set)?;
             return Ok(());
         }
         IoCtlCmd::FIOGETOWN | IoCtlCmd::SIOCGPGRP => {
@@ -875,7 +875,7 @@ pub fn SysCloseRange(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         // be promptly closed and no longer used. So in the case where we know the range extends all
         // the way to the end of the FdTable, we can simply copy the FdTable only up to the start of
         // the range that we are closing.
-        let lastfd = task.fdTbl.lock().GetLastFd();
+        let lastfd = task.fdTbl.GetLastFd();
         if !cloexec && last > lastfd {
             task.UnshareFdTable(first);
         } else {
@@ -888,11 +888,11 @@ pub fn SysCloseRange(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             CloseOnExec: true,
         };
 
-        task.fdTbl.lock().SetFlagsForRange(first, last+1, flagToApply)?;
+        task.fdTbl.SetFlagsForRange(first, last+1, flagToApply)?;
         return Ok(0)
     }
 
-    let files = task.fdTbl.lock().RemoveRange(first, last+1);
+    let files = task.fdTbl.RemoveRange(first, last+1);
     for f in files {
         match f.Flush(task) {
             Ok(_) => (),
@@ -996,38 +996,29 @@ pub fn FGetOwnEx(task: &mut Task, file: &File) -> FOwnerEx {
         Some(a) => a,
     };
 
-    let (ot, otg, opg) = ma.Owner();
-    match ot {
-        None => (),
-        Some(thread) => {
-            return FOwnerEx {
-                Type: F_OWNER_TID,
-                PID: task.Thread().PIDNamespace().IDOfTask(&thread),
-            }
-        }
-    }
-
-    match otg {
-        None => (),
-        Some(threadgroup) => {
-            return FOwnerEx {
-                Type: F_OWNER_PID,
-                PID: task.Thread().PIDNamespace().IDOfThreadGroup(&threadgroup),
-            }
-        }
-    }
-
-    match opg {
-        None => (),
-        Some(processgroup) => {
+    match ma.Owner() {
+        Recipient::PG(processgroup) => {
             return FOwnerEx {
                 Type: F_OWNER_PGRP,
                 PID: task.Thread().PIDNamespace().IDOfProcessGroup(&processgroup),
             }
         }
+        Recipient::TG(threadgroup) => {
+            return FOwnerEx {
+                Type: F_OWNER_PID,
+                PID: task.Thread().PIDNamespace().IDOfThreadGroup(&threadgroup),
+            }
+        }
+        Recipient::Thread(thread) => {
+            return FOwnerEx {
+                Type: F_OWNER_TID,
+                PID: task.Thread().PIDNamespace().IDOfTask(&thread),
+            }
+        }
+        Recipient::None => {
+            return FOwnerEx::default();
+        },
     }
-
-    return FOwnerEx::default();
 }
 
 pub fn FGetOwn(task: &mut Task, file: &File) -> i32 {
@@ -1043,14 +1034,14 @@ pub fn FGetOwn(task: &mut Task, file: &File) -> i32 {
 //
 // If who is positive, it represents a PID. If negative, it represents a PGID.
 // If the PID or PGID is invalid, the owner is silently unset.
-pub fn FSetOwner(task: &Task, file: &File, who: i32) -> Result<()> {
+pub fn FSetOwner(task: &Task, fd: i32, file: &File, who: i32) -> Result<()> {
     // F_SETOWN flips the sign of negative values, an operation that is guarded
     // against overflow.
     if who == core::i32::MIN {
         return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    let a = file.Async(task, Some(FileAsync::default())).unwrap();
+    let a = file.Async(task, Some(FileAsync::New(fd))).unwrap();
     if who == 0 {
         a.Unset(task);
         return Ok(());
@@ -1073,6 +1064,27 @@ pub fn FSetOwner(task: &Task, file: &File, who: i32) -> Result<()> {
 
     a.SetOwnerThreadGroup(task, tg);
     return Ok(());
+}
+
+pub fn PosixTestLock(task: &Task, flockAddr: u64, file: &File) -> Result<()> {
+    let flock: Flock = task.CopyInObj(flockAddr)?;
+
+    let typ = match flock.Type as i32 {
+        F_RDLCK => LockType::ReadLock,
+        F_WRLCK => LockType::WriteLock,
+        _ => return Err(Error::SysError(SysErr::EINVAL))
+    };
+
+    let r = file.ComputeLockRange(task, flock.Start, flock.Len, flock.Whence as _)?;
+
+    // The lock uid is that of the fdtble's UniqueId.
+    let lockUniqueID = task.fdTbl.Id();
+    let inode = file.Dirent.Inode();
+    let lock = inode.lock().LockCtx.Posix.clone();
+    let newFlock = lock.TestRegion(task, lockUniqueID, typ, &r);
+
+    task.CopyOutObj(&newFlock, flockAddr)?;
+    return Ok(())
 }
 
 pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -1122,7 +1134,6 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             // In Linux the file system can choose to provide lock operations for an inode.
             // Normally pipe and socket types lack lock operations. We diverge and use a heavy
             // hammer by only allowing locks on files and directories.
-            //todo: fix this. We can handle if the file is a symbol link fix this
             if !inode.StableAttr().IsFile() && !inode.StableAttr().IsDir() {
                 return Err(Error::SysError(SysErr::EBADF));
             }
@@ -1150,13 +1161,14 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             // Compute the lock range.
             let rng = ComputeRange(flock.l_start, flock.l_len, offset)?;
 
-            // The lock uid is that of the file's UniqueId.
-            let lockUniqueID = file.UniqueId();
+            // The lock uid is that of the fdtble's UniqueId.
+            let lockUniqueID = task.fdTbl.Id();
 
             // These locks don't block; execute the non-blocking operation using the inode's lock
             // context directly.
             let fflags = file.Flags();
 
+            let pid = task.Thread().ThreadGroup().ID();
             match flock.l_type as u64 {
                 LibcConst::F_RDLCK => {
                     if !fflags.Read {
@@ -1166,12 +1178,12 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                     let lock = inode.lock().LockCtx.Posix.clone();
                     if cmd == Cmd::F_SETLK {
                         // Non-blocking lock, provide a nil lock.Blocker.
-                        if !lock.LockRegion(task, lockUniqueID, LockType::ReadLock, &rng, false)? {
+                        if !lock.LockRegion(task, lockUniqueID, OwnerInfo::New(pid), LockType::ReadLock, &rng, false)? {
                             return Err(Error::SysError(SysErr::EAGAIN));
                         }
                     } else {
                         // Blocking lock, pass in the task to satisfy the lock.Blocker interface.
-                        if !lock.LockRegion(task, lockUniqueID, LockType::ReadLock, &rng, true)? {
+                        if !lock.LockRegion(task, lockUniqueID, OwnerInfo::New(pid), LockType::ReadLock, &rng, true)? {
                             return Err(Error::SysError(SysErr::EINTR));
                         }
                     }
@@ -1186,12 +1198,12 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                     let lock = inode.lock().LockCtx.Posix.clone();
                     if cmd == Cmd::F_SETLK {
                         // Non-blocking lock, provide a nil lock.Blocker.
-                        if !lock.LockRegion(task, lockUniqueID, LockType::WriteLock, &rng, false)? {
+                        if !lock.LockRegion(task, lockUniqueID, OwnerInfo::New(pid), LockType::WriteLock, &rng, false)? {
                             return Err(Error::SysError(SysErr::EAGAIN));
                         }
                     } else {
                         // Blocking lock, pass in the task to satisfy the lock.Blocker interface.
-                        if !lock.LockRegion(task, lockUniqueID, LockType::WriteLock, &rng, true)? {
+                        if !lock.LockRegion(task, lockUniqueID, OwnerInfo::New(pid), LockType::WriteLock, &rng, true)? {
                             return Err(Error::SysError(SysErr::EINTR));
                         }
                     }
@@ -1207,6 +1219,10 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 _ => return Err(Error::SysError(SysErr::EINVAL)),
             }
         }
+        Cmd::F_GETLK => {
+            PosixTestLock(task, val, &file)?;
+            return Ok(0)
+        }
         Cmd::F_GETOWN => {
             if file.Flags().Path {
                 return Err(Error::SysError(SysErr::EBADF));
@@ -1217,7 +1233,7 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             if file.Flags().Path {
                 return Err(Error::SysError(SysErr::EBADF));
             }
-            FSetOwner(task, &file, val as i32)?;
+            FSetOwner(task, fd, &file, val as i32)?;
             return Ok(0);
         }
         Cmd::F_GETOWN_EX => {
@@ -1236,7 +1252,7 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             }
             let addr = val;
             let owner: FOwnerEx = task.CopyInObj(addr)?;
-            let a = file.Async(task, Some(FileAsync::default())).unwrap();
+            let a = file.Async(task, Some(FileAsync::New(fd))).unwrap();
 
             match owner.Type {
                 F_OWNER_TID => {
@@ -1324,6 +1340,23 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
             let n = pipe.SetPipeSize(val as i64)?;
             return Ok(n as i64);
+        }
+        Cmd::F_SETSIG => {
+            match file.Async(task, Some(FileAsync::New(fd))) {
+                None => return Ok(0),
+                Some(async) => {
+                    async.SetSignal(val as i32)?;
+                    return Ok(0)
+                }
+            }
+        }
+        Cmd::F_GETSIG => {
+            match file.Async(task, Some(FileAsync::New(fd))) {
+                None => return Ok(0),
+                Some(async) => {
+                    return Ok(async.Signal().0 as i64);
+                }
+            }
         }
         _ => return Err(Error::SysError(SysErr::EINVAL)),
     }
@@ -2363,12 +2396,12 @@ pub fn SysFlock(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         LibcConst::LOCK_EX => {
             if nonblocking {
                 // Since we're nonblocking we pass a nil lock.Blocker implementation.
-                if !bsd.LockRegion(task, lockUniqueId, LockType::WriteLock, &rng, false)? {
+                if !bsd.LockRegion(task, lockUniqueId, OwnerInfo::default(), LockType::WriteLock, &rng, false)? {
                     return Err(Error::SysError(SysErr::EWOULDBLOCK));
                 }
             } else {
                 // Because we're blocking we will pass the task to satisfy the lock.Blocker interface.
-                if !bsd.LockRegion(task, lockUniqueId, LockType::WriteLock, &rng, true)? {
+                if !bsd.LockRegion(task, lockUniqueId, OwnerInfo::default(), LockType::WriteLock, &rng, true)? {
                     return Err(Error::SysError(SysErr::EINTR));
                 }
             }
@@ -2376,12 +2409,12 @@ pub fn SysFlock(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         LibcConst::LOCK_SH => {
             if nonblocking {
                 // Since we're nonblocking we pass a nil lock.Blocker implementation.
-                if !bsd.LockRegion(task, lockUniqueId, LockType::ReadLock, &rng, false)? {
+                if !bsd.LockRegion(task, lockUniqueId, OwnerInfo::default(), LockType::ReadLock, &rng, false)? {
                     return Err(Error::SysError(SysErr::EWOULDBLOCK));
                 }
             } else {
                 // Because we're blocking we will pass the task to satisfy the lock.Blocker interface.
-                if !bsd.LockRegion(task, lockUniqueId, LockType::ReadLock, &rng, true)? {
+                if !bsd.LockRegion(task, lockUniqueId, OwnerInfo::default(), LockType::ReadLock, &rng, true)? {
                     return Err(Error::SysError(SysErr::EINTR));
                 }
             }

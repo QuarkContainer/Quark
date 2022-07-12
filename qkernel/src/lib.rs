@@ -47,6 +47,8 @@ extern crate scopeguard;
 
 //extern crate rusty_asm;
 extern crate bit_field;
+
+#[macro_use]
 extern crate lazy_static;
 extern crate spin;
 extern crate x86_64;
