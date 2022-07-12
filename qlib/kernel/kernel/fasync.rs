@@ -138,18 +138,20 @@ impl FileAsync {
 
         let c = t.Credentials();
 
-        let threadC = c.lock();
-        let reqC = a.requester.lock();
+        {
+            let threadC = c.lock();
+            let reqC = a.requester.lock();
 
-        // Logic from sigio_perm in fs/fcntl.c.
-        let permCheck = reqC.EffectiveKUID.0 == 0
-            || reqC.EffectiveKUID == threadC.SavedKUID
-            || reqC.EffectiveKUID == threadC.RealKUID
-            || reqC.RealKUID == threadC.SavedKUID
-            || reqC.RealKUID == threadC.RealKUID;
+            // Logic from sigio_perm in fs/fcntl.c.
+            let permCheck = reqC.EffectiveKUID.0 == 0
+                || reqC.EffectiveKUID == threadC.SavedKUID
+                || reqC.EffectiveKUID == threadC.RealKUID
+                || reqC.RealKUID == threadC.SavedKUID
+                || reqC.RealKUID == threadC.RealKUID;
 
-        if !permCheck {
-            return
+            if !permCheck {
+                return
+            }
         }
 
         let signalInfo = if a.signal.0 != 0 {
@@ -168,7 +170,8 @@ impl FileAsync {
             SignalInfoPriv(SIGIO.0)
         };
 
-        t.SendSignal(&signalInfo).unwrap();
+        // the thread might be dropped here
+        t.SendSignal(&signalInfo).ok();
     }
 
     // Register sets the file which will be monitored for IO events.

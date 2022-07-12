@@ -385,7 +385,11 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                     //currTask.PerfStop();
                     currTask.SetDummy();
 
+                    let fdtbl = thread.lock().fdTbl.clone();
                     thread.lock().fdTbl = currTask.fdTbl.clone();
+
+                    // we have to clone fdtbl at first to avoid lock the thread when drop fdtbl
+                    drop(fdtbl);
                     let mm = thread.lock().memoryMgr.clone();
                     thread.lock().memoryMgr = currTask.mm.clone();
                     CPULocal::SetPendingFreeStack(currTask.taskId);
