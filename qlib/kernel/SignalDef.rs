@@ -95,6 +95,7 @@ pub struct SigRetInfo {
     pub ret: u64,
 }
 
+/* kill() */
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct Kill {
@@ -102,6 +103,7 @@ pub struct Kill {
     pub uid: i32,
 }
 
+/* POSIX.1b timers */
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct SigTimer {
@@ -111,6 +113,7 @@ pub struct SigTimer {
     pub sysPrivate: i32,
 }
 
+/* POSIX.1b signals */
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct SigRt {
@@ -119,6 +122,7 @@ pub struct SigRt {
     pub sigval: u64,
 }
 
+/* SIGCHLD */
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct SigChld {
@@ -132,11 +136,20 @@ pub struct SigChld {
     pub sTime: i32,
 }
 
+/* SIGILL, SIGFPE, SIGSEGV, SIGBUS */
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct SigFault {
     pub addr: u64,
     pub lsb: u16,
+}
+
+/* SIGPOLL */
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct SigPoll {
+    pub band: u64,
+    pub fd: i32,
 }
 
 #[repr(C)]
@@ -220,6 +233,11 @@ impl SignalInfo {
     pub fn SigFault(&self) -> &mut SigFault {
         let addr = &self.fields[0] as *const _ as u64;
         return unsafe { &mut *(addr as *mut SigFault) };
+    }
+
+    pub fn SigPoll(&self) -> &mut SigPoll {
+        let addr = &self.fields[0] as *const _ as u64;
+        return unsafe { &mut *(addr as *mut SigPoll) };
     }
 
     // SignalInfoUser (properly SI_USER) indicates that a signal was sent from

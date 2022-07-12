@@ -311,7 +311,7 @@ pub fn Execvat(task: &mut Task, dirfd: i32, filenameAddr: u64, argvAddr: u64, en
         }
 
         let fdtbl = t.lock().fdTbl.clone();
-        fdtbl.lock().RemoveCloseOnExec();
+        fdtbl.RemoveCloseOnExec();
 
         t.ExitRobustList(task);
 

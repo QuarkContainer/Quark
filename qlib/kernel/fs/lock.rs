@@ -13,14 +13,16 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
-use alloc::collections::btree_set::BTreeSet;
+use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::sync::Arc;
 use core::ops::Deref;
 
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
+use super::super::super::linux::fcntl::*;
 use super::super::super::mem::areaset::*;
+use super::super::super::kernel::fs::file::*;
 use super::super::super::range::*;
 use super::super::kernel::waiter::*;
 use super::super::task::*;
@@ -39,6 +41,19 @@ pub enum LockType {
     WriteLock,
 }
 
+#[derive(Clone, Copy, Default, Debug)]
+pub struct OwnerInfo {
+    pub pid: i32
+}
+
+impl OwnerInfo {
+    pub fn New(pid: i32) -> Self {
+        return Self {
+            pid: pid
+        }
+    }
+}
+
 type UniqueId = u64;
 
 pub const READ_LOCK: u32 = 0;
@@ -46,8 +61,15 @@ pub const WRITE_LOCK: u32 = 1;
 
 #[derive(Default)]
 pub struct LockInternel {
-    pub Readers: BTreeSet<UniqueId>,
+    // Readers are the set of read lock holders identified by UniqueID.
+    // If len(Readers) > 0 then Writer must be nil.
+    pub Readers: BTreeMap<UniqueId, OwnerInfo>,
+
+    // Writer holds the writer unique ID. It's nil if there are no writers.
     pub Writer: Option<UniqueId>,
+
+    // WriterInfo describes the writer. It is only meaningful if Writer != None.
+    pub WriterInfo: OwnerInfo,
 }
 
 // Lock is a regional file lock.  It consists of either a single writer
@@ -78,18 +100,18 @@ impl Lock {
             return true;
         };
 
-        return l.Readers.contains(&uid);
+        return l.Readers.contains_key(&uid);
     }
 
     // lock sets uid as a holder of a typed lock on Lock.
     //
     // Preconditions: canLock is true for the range containing this Lock.
-    pub fn Lock(&self, uid: UniqueId, t: LockType) {
+    pub fn Lock(&self, uid: UniqueId, owner: OwnerInfo, t: LockType) {
         let mut l = self.lock();
         match t {
             LockType::ReadLock => {
                 // If we are already a reader, then this is a no-op.
-                if l.Readers.contains(&uid) {
+                if l.Readers.contains_key(&uid) {
                     return;
                 }
 
@@ -105,7 +127,7 @@ impl Lock {
                     l.Writer = None;
                 }
 
-                l.Readers.insert(uid);
+                l.Readers.insert(uid, owner);
                 return;
             }
             LockType::WriteLock => {
@@ -123,7 +145,7 @@ impl Lock {
                         panic!("lock: cannot upgrade read lock to write lock for uid {}, too many readers {:?}", uid, l.Readers)
                     }
 
-                    if !l.Readers.contains(&uid) {
+                    if !l.Readers.contains_key(&uid) {
                         panic!("lock: cannot upgrade read lock to write lock for uid {}, conflicting reader {:?}", uid, l.Readers)
                     }
                 }
@@ -131,19 +153,21 @@ impl Lock {
                 // Ensure that there is only a writer.
                 l.Readers.clear();
                 l.Writer = Some(uid);
+                l.WriterInfo = owner;
             }
         }
     }
 }
 
-pub fn MakeLock(uid: UniqueId, t: LockType) -> Lock {
+pub fn MakeLock(uid: UniqueId, t: LockType, owner: OwnerInfo) -> Lock {
     let mut val = LockInternel::default();
     match t {
         LockType::ReadLock => {
-            val.Readers.insert(uid);
+            val.Readers.insert(uid, owner);
         }
         LockType::WriteLock => {
             val.Writer = Some(uid);
+            val.WriterInfo = owner;
         }
     }
 
@@ -160,8 +184,8 @@ impl AreaValue for Lock {
             return None;
         }
 
-        for id in v1.Readers.iter() {
-            if !v2.Readers.contains(id) {
+        for (id, _) in v1.Readers.iter() {
+            if !v2.Readers.contains_key(id) {
                 return None;
             }
         }
@@ -179,11 +203,12 @@ impl AreaValue for Lock {
         let mut v2 = LockInternel::default();
 
         let v1 = self.lock();
-        for r in v1.Readers.iter() {
-            v2.Readers.insert(*r);
+        for (r, o) in v1.Readers.iter() {
+            v2.Readers.insert(*r, *o);
         }
 
         v2.Writer = v1.Writer;
+        v2.WriterInfo = v1.WriterInfo;
 
         return (self.clone(), Self(Arc::new(QMutex::new(v2))));
     }
@@ -207,7 +232,7 @@ impl Default for LocksInternal {
 }
 
 impl LocksInternal {
-    pub fn Lock(&mut self, uid: UniqueId, t: LockType, r: &Range) -> bool {
+    pub fn Lock(&mut self, uid: UniqueId, owner: OwnerInfo, t: LockType, r: &Range) -> bool {
         // Don't attempt to insert anything with a range of 0 and treat this
         // as a successful no-op.
         if r.Len() == 0 {
@@ -227,7 +252,7 @@ impl LocksInternal {
             // Fill in the gap and get the next segment to modify.
             seg = self
                 .locks
-                .Insert(&gap, &gap.Range().Intersect(r), MakeLock(uid, t))
+                .Insert(&gap, &gap.Range().Intersect(r), MakeLock(uid, t, owner))
                 .NextSeg();
         } else if seg.Range().Start() < r.Start() {
             let (_, tmp) = self.locks.Split(&seg, r.Start());
@@ -244,13 +269,13 @@ impl LocksInternal {
             // Set the lock on the segment.  This is guaranteed to
             // always be safe, given canLock above.
             let value = seg.Value();
-            value.Lock(uid, t);
+            value.Lock(uid, owner, t);
 
             // Fill subsequent gaps.
             let gap = seg.NextGap();
             let gr = gap.Range().Intersect(r);
             if gr.Len() > 0 {
-                seg = self.locks.Insert(&gap, &gr, MakeLock(uid, t)).NextSeg();
+                seg = self.locks.Insert(&gap, &gr, MakeLock(uid, t, owner)).NextSeg();
             } else {
                 seg = gap.NextSeg()
             }
@@ -290,7 +315,7 @@ impl LocksInternal {
                 // only ever be one writer and no readers, then this
                 // lock should always be removed from the set.
                 remove = true;
-            } else if value.Readers.contains(&uid) {
+            } else if value.Readers.contains_key(&uid) {
                 // If uid is the last reader, then just remove the entire
                 // segment.
                 if value.Readers.len() == 1 {
@@ -303,9 +328,9 @@ impl LocksInternal {
                     let newValue = Lock::default();
                     {
                         let mut newLock = newValue.lock();
-                        for r in value.Readers.iter() {
+                        for (r, o) in value.Readers.iter() {
                             if *r != uid {
-                                newLock.Readers.insert(*r);
+                                newLock.Readers.insert(*r, *o);
                             }
                         }
                     }
@@ -370,7 +395,7 @@ impl LocksInternal {
                         // Then this uid can only take a write lock if
                         // this is a private upgrade, meaning that the
                         // only reader is uid.
-                        return value.Readers.len() == 1 && value.Readers.contains(&uid);
+                        return value.Readers.len() == 1 && value.Readers.contains_key(&uid);
                     }
 
                     // If the uid is already a writer on this region, then
@@ -404,6 +429,7 @@ impl Locks {
         &self,
         task: &Task,
         uid: UniqueId,
+        owner: OwnerInfo,
         t: LockType,
         r: &Range,
         block: bool,
@@ -414,7 +440,7 @@ impl Locks {
             // Blocking locks must run in a loop because we'll be woken up whenever an unlock event
             // happens for this lock. We will then attempt to take the lock again and if it fails
             // continue blocking.
-            let res = l.Lock(uid, t, r);
+            let res = l.Lock(uid, owner, t, r);
             if !res && block {
                 l.queue
                     .EventRegister(task, &task.blocker.generalEntry, EVENTMASK_ALL);
@@ -452,6 +478,95 @@ impl Locks {
 
         // Now that we've released the lock, we need to wake up any waiters.
         l.queue.Notify(EVENTMASK_ALL)
+    }
+
+    pub fn TestRegion(&self, _task: &Task, uid: UniqueId, t: LockType, r: &Range) -> Flock {
+        let mut f = Flock {
+            Type: F_UNLCK as _,
+            ..Default::default()
+        };
+
+        match t {
+            LockType::ReadLock => {
+                self.testRegion(r, |lock: &Lock, start: u64, len: u64|{
+                    let l = lock.lock();
+                    if l.Writer.is_none() || l.Writer == Some(uid) {
+                        return true
+                    }
+
+                    f.Type = F_WRLCK as _;
+                    f.Pid = l.WriterInfo.pid;
+                    f.Start = start as _;
+                    f.Len = len as _;
+                    return false
+                })
+            }
+            LockType::WriteLock => {
+                self.testRegion(r, |lock: &Lock, start: u64, len: u64|{
+                    let l = lock.lock();
+                    if l.Writer.is_none() {
+                        for (k, v) in &l.Readers {
+                            if *k != uid {
+                                // Stop at the first conflict detected.
+                                f.Type = F_RDLCK as _;
+                                f.Pid = v.pid;
+                                f.Start = start as _;
+                                f.Len = len as _;
+                                return false
+                            }
+                        }
+                        return true;
+                    }
+
+                    if l.Writer == Some(uid) {
+                        return true;
+                    }
+                    f.Type = F_WRLCK as _;
+                    f.Pid = l.WriterInfo.pid;
+                    f.Start = start as _;
+                    f.Len = len as _;
+                    return false
+                })
+            }
+        }
+
+        return f;
+    }
+
+    pub fn testRegion(&self, r: &Range, mut check: impl FnMut(&Lock, u64, u64) -> bool) {
+        let l = self.lock();
+
+        let mut seg = l.locks.LowerBoundSeg(r.Start());
+        while seg.Ok() && seg.Range().Start() < r.End() {
+            let lock = seg.Value();
+            if !check(&lock, seg.Range().Start(), seg.Range().Len()) {
+                // Stop at the first conflict detected.
+                return
+            }
+            seg = seg.NextSeg();
+        }
+    }
+}
+
+impl File {
+    pub fn ComputeLockRange(&self, task: &Task, start: i64, len: i64, whence: i32) -> Result<Range> {
+        let offset;
+        match whence {
+            SeekWhence::SEEK_SET => offset = 0,
+            SeekWhence::SEEK_CUR => {
+                // Note that Linux does not hold any mutexes while retrieving the file
+                // offset, see fs/locks.c:flock_to_posix_lock and fs/locks.c:fcntl_setlk.
+                let curOff = self.Seek(task, whence, 0)?;
+                offset = curOff;
+            }
+            SeekWhence::SEEK_END => {
+                let stat = self.UnstableAttr(task)?;
+                offset = stat.Size as i64;
+            }
+            _ => return Err(Error::SysError(SysErr::EINVAL))
+        }
+
+        return ComputeRange(start, len, offset);
     }
 }
 

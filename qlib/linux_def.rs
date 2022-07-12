@@ -2133,6 +2133,8 @@ impl Cmd {
     pub const F_SETLKW: i32 = 7;
     pub const F_SETOWN: i32 = 8;
     pub const F_GETOWN: i32 = 9;
+    pub const F_SETSIG: i32 = 10;
+    pub const F_GETSIG: i32 = 11;
     pub const F_SETOWN_EX: i32 = 15;
     pub const F_GETOWN_EX: i32 = 16;
     pub const F_DUPFD_CLOEXEC: i32 = 1024 + 6;

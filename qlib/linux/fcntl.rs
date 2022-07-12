@@ -37,6 +37,7 @@ pub const F_UNLCK: i32 = 2;
 pub const FD_CLOEXEC: i32 = 1;
 
 // Flock is the lock structure for F_SETLK.
+#[derive(Default, Clone, Copy)]
 #[repr(C)]
 pub struct Flock {
     pub Type: i16,
