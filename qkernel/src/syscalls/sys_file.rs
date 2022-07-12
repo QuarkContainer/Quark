@@ -1071,9 +1071,9 @@ pub fn PosixLock(task: &Task, flockAddr: u64, file: &File, block: bool) -> Resul
     // In Linux the file system can choose to provide lock operations for an inode.
     // Normally pipe and socket types lack lock operations. We diverge and use a heavy
     // hammer by only allowing locks on files and directories.
-    if !inode.StableAttr().IsFile() && !inode.StableAttr().IsDir() {
+    /*if !inode.StableAttr().IsFile() && !inode.StableAttr().IsDir() {
         return Err(Error::SysError(SysErr::EBADF));
-    }
+    }*/
 
     let flock: Flock = task.CopyInObj(flockAddr)?;
 
@@ -1187,14 +1187,26 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             Ok(0)
         }
         Cmd::F_SETLK => {
+            if file.Flags().Path {
+                return Err(Error::SysError(SysErr::EBADF));
+            }
+
             PosixLock(task, val, &file, false)?;
             return Ok(0)
         }
         Cmd::F_SETLKW => {
+            if file.Flags().Path {
+                return Err(Error::SysError(SysErr::EBADF));
+            }
+
             PosixLock(task, val, &file, true)?;
             return Ok(0)
         }
         Cmd::F_GETLK => {
+            if file.Flags().Path {
+                return Err(Error::SysError(SysErr::EBADF));
+            }
+
             PosixTestLock(task, val, &file)?;
             return Ok(0)
         }
@@ -1317,6 +1329,9 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Ok(n as i64);
         }
         Cmd::F_SETSIG => {
+            if file.Flags().Path {
+                return Err(Error::SysError(SysErr::EBADF));
+            }
             match file.Async(task, Some(FileAsync::New(fd))) {
                 None => return Ok(0),
                 Some(async) => {
@@ -1326,6 +1341,9 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             }
         }
         Cmd::F_GETSIG => {
+            if file.Flags().Path {
+                return Err(Error::SysError(SysErr::EBADF));
+            }
             match file.Async(task, Some(FileAsync::New(fd))) {
                 None => return Ok(0),
                 Some(async) => {
