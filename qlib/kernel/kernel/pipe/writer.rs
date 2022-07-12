@@ -45,7 +45,7 @@ impl Drop for Writer {
         self.pipe.WClose();
 
         // Wake up readers.
-        self.pipe.Notify(EVENT_HUP)
+        self.pipe.Notify(EVENT_HUP);
     }
 }
 

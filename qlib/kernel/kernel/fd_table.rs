@@ -231,6 +231,14 @@ pub struct FDTable {
     data: Arc<QMutex<FDTableInternal>>,
 }
 
+impl Drop for FDTable {
+    fn drop(&mut self) {
+        if self.RefCount() == 1 {
+            self.Clear();
+        }
+    }
+}
+
 impl FDTable {
     pub fn New() -> Self {
         return Self {
@@ -616,7 +624,8 @@ impl FDTableInternal {
         }
 
         for fd in &removed {
-            self.gaps.Free(*fd as u64);
+            // the whole gaps state will be removed. No need update gaps to improve performance
+            //self.gaps.Free(*fd as u64);
             let desc = self.descTbl.remove(fd).unwrap();
             self.Drop(uid, &desc.file);
         }
