@@ -2367,6 +2367,10 @@ pub fn SysFlock(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let file = task.GetFile(fd)?;
 
+    if file.Flags().Path {
+        return Err(Error::SysError(SysErr::EBADF))
+    }
+
     let nonblocking = operation & LibcConst::LOCK_NB as i32 != 0;
     operation &= !(LibcConst::LOCK_NB as i32);
 
