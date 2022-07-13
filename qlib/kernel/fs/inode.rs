@@ -26,6 +26,8 @@ use super::super::super::auth::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::kernel::time::*;
+use super::super::kernel::pipe::node::*;
+use super::super::kernel::pipe::pipe::*;
 use super::super::socket::unix::transport::unix::*;
 use super::super::task::*;
 use super::super::uid::*;
@@ -37,6 +39,7 @@ use super::dirent::*;
 use super::file::*;
 use super::flags::*;
 use super::host::hostinodeop::*;
+use super::host::fifoiops::*;
 use super::host::diriops::*;
 use super::inode_overlay::*;
 use super::lock::*;
@@ -112,6 +115,7 @@ pub enum IopsType {
     DirInodeOperations,
     MasterInodeOperations,
     SlaveInodeOperations,
+    FifoIops,
     PipeIops,
     DirNode,
     SymlinkNode,
@@ -297,6 +301,7 @@ impl Inode {
     }
 
     pub fn NewHostInode(
+        task: &Task,
         msrc: &Arc<QMutex<MountSource>>,
         fd: i32,
         fstat: &LibcStat,
@@ -306,40 +311,71 @@ impl Inode {
 
         //println!("the stable attr is {:?}", &fstat.StableAttr());
         let inodeType = fstat.InodeType();
-        if inodeType == InodeType::Directory || inodeType == InodeType::SpecialDirectory {
-            let iops = HostDirOp::New(
-                &msrc.lock().MountSourceOperations.clone(),
-                fd,
-                &fstat
-            );
+        match inodeType {
+            InodeType::Directory | InodeType::SpecialDirectory => {
+                let iops = HostDirOp::New(
+                    &msrc.lock().MountSourceOperations.clone(),
+                    fd,
+                    &fstat
+                );
 
-            return Ok(Self(Arc::new(QMutex::new(InodeIntern {
-                UniqueId: NewUID(),
-                InodeOp: Arc::new(iops),
-                StableAttr: fstat.StableAttr(),
-                LockCtx: LockCtx::default(),
-                watches: Watches::default(),
-                MountSource: msrc.clone(),
-                Overlay: None,
-            }))));
-        } else {
-            let iops =HostInodeOp::New(
-                &msrc.lock().MountSourceOperations.clone(),
-                fd,
-                fstat.WouldBlock(),
-                &fstat,
-                writeable,
-            );
+                return Ok(Self(Arc::new(QMutex::new(InodeIntern {
+                    UniqueId: NewUID(),
+                    InodeOp: Arc::new(iops),
+                    StableAttr: fstat.StableAttr(),
+                    LockCtx: LockCtx::default(),
+                    watches: Watches::default(),
+                    MountSource: msrc.clone(),
+                    Overlay: None,
+                }))));
+            }
+            InodeType::Pipe => {
+                let pipe = Pipe::New(task, true, DEFAULT_PIPE_SIZE, MemoryDef::PAGE_SIZE as usize);
+                let permission = FileMode(fstat.st_mode as u16).FilePerms();
+                let fifoIops = NewPipeInodeOps(task, &permission, pipe);
 
-            return Ok(Self(Arc::new(QMutex::new(InodeIntern {
-                UniqueId: NewUID(),
-                InodeOp: Arc::new(iops),
-                StableAttr: fstat.StableAttr(),
-                LockCtx: LockCtx::default(),
-                watches: Watches::default(),
-                MountSource: msrc.clone(),
-                Overlay: None,
-            }))));
+                let hostiops = HostInodeOp::New(
+                    &msrc.lock().MountSourceOperations.clone(),
+                    fd,
+                    fstat.WouldBlock(),
+                    &fstat,
+                    writeable,
+                );
+
+                let iops = FifoIops {
+                    fifoiops: fifoIops,
+                    hosttiops: hostiops,
+                };
+
+                return Ok(Self(Arc::new(QMutex::new(InodeIntern {
+                    UniqueId: NewUID(),
+                    InodeOp: Arc::new(iops),
+                    StableAttr: fstat.StableAttr(),
+                    LockCtx: LockCtx::default(),
+                    watches: Watches::default(),
+                    MountSource: msrc.clone(),
+                    Overlay: None,
+                }))));
+            }
+            _ => {
+                let iops = HostInodeOp::New(
+                    &msrc.lock().MountSourceOperations.clone(),
+                    fd,
+                    fstat.WouldBlock(),
+                    &fstat,
+                    writeable,
+                );
+
+                return Ok(Self(Arc::new(QMutex::new(InodeIntern {
+                    UniqueId: NewUID(),
+                    InodeOp: Arc::new(iops),
+                    StableAttr: fstat.StableAttr(),
+                    LockCtx: LockCtx::default(),
+                    watches: Watches::default(),
+                    MountSource: msrc.clone(),
+                    Overlay: None,
+                }))));
+            }
         }
     }
 

@@ -297,8 +297,13 @@ pub fn openAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
             }
 
             let file = match inode.GetFile(task, &d, &fileFlags) {
-                Err(err) => return Err(ConvertIntr(err, Error::ERESTARTSYS)),
                 Ok(f) => f,
+                Err(Error::ErrInterrupted) => {
+                    return Err(Error::SysError(SysErr::ERESTARTSYS));
+                }
+                Err(e) => {
+                    return Err(e);
+                }
             };
 
             let newFd = task.NewFDFrom(
@@ -2361,6 +2366,10 @@ pub fn SysFlock(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let mut operation = args.arg1 as i32;
 
     let file = task.GetFile(fd)?;
+
+    if file.Flags().Path {
+        return Err(Error::SysError(SysErr::EBADF))
+    }
 
     let nonblocking = operation & LibcConst::LOCK_NB as i32 != 0;
     operation &= !(LibcConst::LOCK_NB as i32);

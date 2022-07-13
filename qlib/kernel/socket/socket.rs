@@ -143,7 +143,7 @@ pub fn NewSocketDirent(task: &Task, _d: Arc<QMutex<Device>>, fd: i32) -> Result<
     if ret < 0 {
         return Err(Error::SysError(-ret as i32));
     }
-    let inode = Inode::NewHostInode(&Arc::new(QMutex::new(msrc)), fd, &fstat, true)?;
+    let inode = Inode::NewHostInode(task, &Arc::new(QMutex::new(msrc)), fd, &fstat, true)?;
 
     let name = format!("socket:[{}]", fd);
     return Ok(Dirent::New(&inode, &name.to_string()));

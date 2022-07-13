@@ -37,7 +37,7 @@ use super::super::mount::*;
 use super::tmpfs_dir::*;
 
 pub fn NewTmpfsFileInode(
-    _task: &Task,
+    task: &Task,
     uattr: UnstableAttr,
     msrc: &Arc<QMutex<MountSource>>,
 ) -> Result<Inode> {
@@ -47,7 +47,7 @@ pub fn NewTmpfsFileInode(
         return Err(Error::SysError(-tmpfd));
     }
 
-    let inode = Inode::NewHostInode(msrc, tmpfd, &fstat, true)?;
+    let inode = Inode::NewHostInode(task, msrc, tmpfd, &fstat, true)?;
 
     let inodeops = inode.lock().InodeOp.clone();
     let hostiops = match inodeops.as_any().downcast_ref::<HostInodeOp>() {

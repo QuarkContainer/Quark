@@ -304,6 +304,12 @@ pub fn Mkdirat(fd: i32, name: &str, perm: u32, uid: u32, gid: u32) -> i64 {
     return res;
 }
 
+pub fn Mkfifoat(fd: i32, name: &str, perm: u32, uid: u32, gid: u32) -> i64 {
+    let cstr = CString::New(name);
+    let res = HostSpace::Mkfifoat(fd, cstr.Ptr(), perm, uid, gid);
+    return res;
+}
+
 pub fn SymLinkAt(oldpath: &str, newdirfd: i32, newpath: &str) -> i64 {
     let oldpath = CString::New(oldpath);
     let newpath = CString::New(newpath);

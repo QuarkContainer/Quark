@@ -22,7 +22,7 @@ pub mod tty;
 pub mod util;
 pub mod diriops;
 pub mod hostdirfops;
-//pub mod control;
+pub mod fifoiops;
 
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
