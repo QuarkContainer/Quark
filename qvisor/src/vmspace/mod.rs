@@ -941,6 +941,26 @@ impl VMSpace {
         return Self::GetRet(ret as i64);
     }
 
+    pub fn Mkfifoat(dirfd: i32, name: u64, mode: u32, uid: u32, gid: u32) -> i64 {
+        info!("Mkfifoat: the pathname is {}", Self::GetStr(name));
+        let dirfd = {
+            if dirfd > 0 {
+                match Self::GetOsfd(dirfd) {
+                    Some(dirfd) => dirfd,
+                    None => return -SysErr::EBADF as i64,
+                }
+            } else {
+                dirfd
+            }
+        };
+
+        let ret = unsafe { mkfifoat(dirfd, name as *const c_char, mode as mode_t) };
+
+        Self::ChDirOwnerat(dirfd, name, uid, gid);
+
+        return Self::GetRet(ret as i64);
+    }
+
     pub fn Mkdirat(dirfd: i32, pathname: u64, mode_: u32, uid: u32, gid: u32) -> i64 {
         info!("Mkdirat: the pathname is {}", Self::GetStr(pathname));
 

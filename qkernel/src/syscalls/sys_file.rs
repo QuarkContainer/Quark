@@ -297,8 +297,13 @@ pub fn openAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
             }
 
             let file = match inode.GetFile(task, &d, &fileFlags) {
-                Err(err) => return Err(ConvertIntr(err, Error::ERESTARTSYS)),
                 Ok(f) => f,
+                Err(Error::ErrInterrupted) => {
+                    return Err(Error::SysError(SysErr::ERESTARTSYS));
+                }
+                Err(e) => {
+                    return Err(e);
+                }
             };
 
             let newFd = task.NewFDFrom(

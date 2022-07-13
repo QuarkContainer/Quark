@@ -537,7 +537,7 @@ impl File {
                     false,
                 );
                 let inode =
-                    Inode::NewHostInode(&Arc::new(QMutex::new(msrc)), fd, &fstat, fileFlags.Write)?;
+                    Inode::NewHostInode(task, &Arc::new(QMutex::new(msrc)), fd, &fstat, fileFlags.Write)?;
                 let name = format!("host:[{}]", inode.lock().StableAttr.InodeId);
                 let dirent = Dirent::New(&inode, &name);
 
@@ -579,7 +579,7 @@ impl File {
         );
 
         let inode =
-            Inode::NewHostInode(&Arc::new(QMutex::new(msrc)), fd, &fstat, fileFlags.Write)?;
+            Inode::NewHostInode(task, &Arc::new(QMutex::new(msrc)), fd, &fstat, fileFlags.Write)?;
         let name = format!("memfd:{}", name);
         let dirent = Dirent::New(&inode, &name);
 

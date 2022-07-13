@@ -326,6 +326,18 @@ impl HostSpace {
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
+    pub fn Mkfifoat(dirfd: i32, name: u64, mode: u32, uid: u32, gid: u32) -> i64 {
+        let mut msg = Msg::Mkfifoat(Mkfifoat {
+            dirfd,
+            name,
+            mode,
+            uid,
+            gid,
+        });
+
+        return HostSpace::HCall(&mut msg, false) as i64;
+    }
+
     pub fn SysSync() -> i64 {
         let mut msg = Msg::SysSync(SysSync {});
 

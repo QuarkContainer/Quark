@@ -355,7 +355,7 @@ impl InodeOperations for HostDirOp {
         return false;
     }
 
-    fn Lookup(&self, _task: &Task, parent: &Inode, name: &str) -> Result<Dirent> {
+    fn Lookup(&self, task: &Task, parent: &Inode, name: &str) -> Result<Dirent> {
         let (fd, writeable, fstat) = match TryOpenAt(self.HostFd(), name) {
             Err(Error::SysError(SysErr::ENOENT)) => {
                 let inode = match self.lock().overrides.get(name) {
@@ -370,7 +370,7 @@ impl InodeOperations for HostDirOp {
         };
 
         let ms = parent.lock().MountSource.clone();
-        let inode = Inode::NewHostInode(&ms, fd, &fstat, writeable)?;
+        let inode = Inode::NewHostInode(task, &ms, fd, &fstat, writeable)?;
 
         let ret = Ok(Dirent::New(&inode, name));
         return ret;
@@ -407,7 +407,7 @@ impl InodeOperations for HostDirOp {
 
         let mountSource = dir.lock().MountSource.clone();
 
-        let inode = Inode::NewHostInode(&mountSource, fd, &fstat, true)?;
+        let inode = Inode::NewHostInode(task, &mountSource, fd, &fstat, true)?;
         let dirent = Dirent::New(&inode, name);
 
         let file = inode.GetFile(task, &dirent, flags)?;
@@ -468,12 +468,27 @@ impl InodeOperations for HostDirOp {
 
     fn CreateFifo(
         &self,
-        _task: &Task,
+        task: &Task,
         _dir: &mut Inode,
-        _name: &str,
-        _perm: &FilePermissions,
+        name: &str,
+        perm: &FilePermissions,
     ) -> Result<()> {
-        return Err(Error::SysError(SysErr::EPERM));
+        let owner = task.FileOwner();
+
+        let ret = Mkfifoat(
+            self.HostFd(),
+            name,
+            perm.LinuxMode(),
+            owner.UID.0,
+            owner.GID.0,
+        );
+        if ret < 0 {
+            return Err(Error::SysError(-ret as i32));
+        }
+
+        self.lock().readdirCache = None;
+
+        return Ok(());
     }
 
     fn Remove(&self, _task: &Task, _dir: &mut Inode, name: &str) -> Result<()> {
