@@ -590,7 +590,7 @@ impl Dirent {
             self.children.lock().remove(name);
 
             if SHARESPACE.config.read().EnableInotify {
-                targetInode.Watches().Notify(name,
+                targetInode.Watches().Notify("",
                                              InotifyEvent::IN_ATTRIB,
                                              0);
                 inode.Watches().Notify(name,

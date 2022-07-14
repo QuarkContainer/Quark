@@ -717,7 +717,7 @@ pub fn SysSchedSetaffinity(task: &mut Task, args: &SyscallArguments) -> Result<i
 
     let arr = task.CopyInVec::<u8>(maskAddr, size)?;
     for i in 0..size {
-        mask.0[i] = arr[0];
+        mask.0[i] = arr[i];
     }
 
     t.SetCPUMask(mask)?;

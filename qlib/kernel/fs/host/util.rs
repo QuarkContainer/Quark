@@ -310,6 +310,13 @@ pub fn Mkfifoat(fd: i32, name: &str, perm: u32, uid: u32, gid: u32) -> i64 {
     return res;
 }
 
+pub fn LinkAt(olddirfd: i32, oldpath: &str, newdirfd: i32, newpath: &str, flags: i32) -> i64 {
+    let oldpath = CString::New(oldpath);
+    let newpath = CString::New(newpath);
+
+    return HostSpace::LinkAt(olddirfd, oldpath.Ptr(), newdirfd, newpath.Ptr(), flags);
+}
+
 pub fn SymLinkAt(oldpath: &str, newdirfd: i32, newpath: &str) -> i64 {
     let oldpath = CString::New(oldpath);
     let newpath = CString::New(newpath);

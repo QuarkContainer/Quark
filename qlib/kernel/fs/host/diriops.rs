@@ -460,10 +460,27 @@ impl InodeOperations for HostDirOp {
         &self,
         _task: &Task,
         _dir: &mut Inode,
-        _target: &Inode,
-        _name: &str,
+        target: &Inode,
+        name: &str,
     ) -> Result<()> {
-        return Err(Error::SysError(SysErr::EPERM));
+        let iops = match target
+            .lock()
+            .InodeOp
+            .as_any()
+            .downcast_ref::<HostInodeOp>()
+            {
+                Some(p) => p.clone(),
+                None => return Err(Error::SysError(SysErr::EPERM)),
+            };
+
+        let ret = LinkAt(iops.HostFd(), "", self.HostFd(), name, ATType::AT_EMPTY_PATH,);
+
+        if ret < 0 {
+            return Err(Error::SysError(-ret as i32));
+        }
+
+        self.lock().readdirCache = None;
+        return Ok(());
     }
 
     fn CreateFifo(

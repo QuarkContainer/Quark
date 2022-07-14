@@ -241,6 +241,9 @@ impl KVMVcpu {
             Msg::SymLinkAt(msg) => {
                 ret = super::VMSpace::SymLinkAt(msg.oldpath, msg.newdirfd, msg.newpath) as u64;
             }
+            Msg::LinkAt(msg) => {
+                ret = super::VMSpace::LinkAt(msg.olddirfd, msg.oldpath, msg.newdirfd, msg.newpath, msg.flags) as u64;
+            }
             Msg::Futimens(msg) => {
                 ret = super::VMSpace::Futimens(msg.fd, msg.times) as u64;
             }

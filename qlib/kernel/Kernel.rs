@@ -713,6 +713,18 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
+    pub fn LinkAt(olddirfd: i32, oldpath: u64, newdirfd: i32, newpath: u64, flags: i32) -> i64 {
+        let mut msg = Msg::LinkAt(LinkAt {
+            olddirfd,
+            oldpath,
+            newdirfd,
+            newpath,
+            flags,
+        });
+
+        return HostSpace::HCall(&mut msg, false) as i64;
+    }
+
     pub fn SymLinkAt(oldpath: u64, newdirfd: i32, newpath: u64) -> i64 {
         let mut msg = Msg::SymLinkAt(SymLinkAt {
             oldpath,
