@@ -24,6 +24,7 @@ use super::super::super::limits::*;
 use super::super::super::range::*;
 use super::super::task::*;
 use super::super::fs::file::*;
+use super::super::fs::inotify::*;
 use super::super::uid::*;
 
 #[derive(Clone, Default, Debug)]
@@ -528,7 +529,7 @@ impl FDTableInternal {
             } else {
                 ev |= InotifyEvent::IN_CLOSE_NOWRITE;
             }
-            d.InotifyEvent(ev, 0);
+            d.InotifyEvent(ev, 0, EventType::PathEvent);
         }
     }
 

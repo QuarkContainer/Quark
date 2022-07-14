@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::super::fs::attr::*;
+use super::super::fs::inotify::*;
 use super::super::fs::file::*;
 use super::super::kernel::waiter::qlock::*;
 use super::super::kernel::waiter::*;
@@ -349,8 +350,8 @@ pub fn DoSplice(
                     // On Linux, inotify behavior is not very consistent with splice(2). We try
                     // our best to emulate Linux for very basic calls to splice, where for some
                     // reason, events are generated for output files, but not input files.
-                    srcFile.Dirent.InotifyEvent(InotifyEvent::IN_ACCESS, 0);
-                    dstFile.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0);
+                    srcFile.Dirent.InotifyEvent(InotifyEvent::IN_ACCESS, 0, EventType::InodeEvent);
+                    dstFile.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::InodeEvent);
                 }
                 return Ok(n)
             },
@@ -563,8 +564,8 @@ pub fn SysTee(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         // On Linux, inotify behavior is not very consistent with splice(2). We try
         // our best to emulate Linux for very basic calls to splice, where for some
         // reason, events are generated for output files, but not input files.
-        src.Dirent.InotifyEvent(InotifyEvent::IN_ACCESS, 0);
-        dst.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0);
+        src.Dirent.InotifyEvent(InotifyEvent::IN_ACCESS, 0, EventType::InodeEvent);
+        dst.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::InodeEvent);
     }
     return Ok(count)
 }

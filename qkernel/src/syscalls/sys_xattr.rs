@@ -17,6 +17,7 @@ use alloc::vec::Vec;
 
 use super::super::fs::dirent::*;
 use super::super::fs::inode::*;
+use super::super::fs::inotify::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::path::*;
@@ -198,7 +199,7 @@ pub fn SetXAttr(task: &Task, d: &Dirent, nameAddr: u64, valueAddr: u64, size: us
     }
 
     inode.Setxattr(task, d, &name, &buf, flags)?;
-    d.InotifyEvent(InotifyEvent::IN_ATTRIB, 0);
+    d.InotifyEvent(InotifyEvent::IN_ATTRIB, 0, EventType::InodeEvent);
     return Ok(())
 }
 
@@ -393,7 +394,6 @@ pub fn RemoveXattrFromPath(task: &mut Task, args: &SyscallArguments, resolveSyml
 
 }
 
-
 pub fn RemoveAttr(task: &Task, d: &Dirent, nameAddr: u64) -> Result<()> {
     let name = CopyInXattrName(task, nameAddr)?;
 
@@ -408,6 +408,6 @@ pub fn RemoveAttr(task: &Task, d: &Dirent, nameAddr: u64) -> Result<()> {
     }
 
     inode.Removexattr(task, d, &name)?;
-    d.InotifyEvent(InotifyEvent::IN_ATTRIB, 0);
+    d.InotifyEvent(InotifyEvent::IN_ATTRIB, 0, EventType::InodeEvent);
     return Ok(())
 }

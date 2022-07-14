@@ -32,13 +32,20 @@ use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::uid::*;
 use super::super::kernel::waiter::Queue;
-use super::super::fs::inode::*;
 use super::super::fs::dirent::*;
 use super::file::*;
 
 // inotifyEventBaseSize is the base size of linux's struct inotify_event. This
 // must be a power 2 for rounding below.
 pub const INOTIFY_EVENT_BASE_SIZE: usize = 16;
+
+// PathEvent and InodeEvent correspond to FSNOTIFY_EVENT_PATH and
+// FSNOTIFY_EVENT_INODE in Linux.
+#[derive(PartialEq, Clone, Copy)]
+pub enum EventType {
+    PathEvent,
+    InodeEvent
+}
 
 // Event represents a struct inotify_event from linux.
 #[repr(C)]
@@ -159,7 +166,7 @@ pub struct WatchIntern {
     // The inode being watched. Note that we don't directly hold a reference on
     // this inode. Instead we hold a reference on the dirent(s) containing the
     // inode, which we record in pins.
-    pub target: InodeWeak,
+    pub target: DirentWeak,
 
     // unpinned indicates whether we have a hard reference on target. This field
     // may only be modified through atomic ops.
@@ -201,11 +208,13 @@ impl Watch {
         return output;
     }
 
-    // NotifyParentAfterUnlink indicates whether the parent of the watched object
-    // should continue to be be notified of events after the target has been
-    // unlinked.
-    pub fn NotifyParentAfterUnlink(&self) -> bool {
-        return self.lock().mask & InotifyEvent::IN_EXCL_UNLINK == 0;
+    // ExcludeUnlinked indicates whether the watched object should continue to be
+    // notified of events originating from a path that has been unlinked.
+    //
+    // For example, if "foo/bar" is opened and then unlinked, operations on the
+    // open fd may be ignored by watches on "foo" and "foo/bar" with IN_EXCL_UNLINK.
+    pub fn ExcludeUnlinked(&self) -> bool {
+        return self.lock().mask & InotifyEvent::IN_EXCL_UNLINK != 0;
     }
 
     // Notify queues a new event on this watch.
@@ -338,12 +347,13 @@ impl Watches {
     }
 
     // Notify queues a new event with all watches in this set.
-    pub fn Notify(&self, name: &str, events: u32, cookie: u32) {
+    pub fn Notify(&self, name: &str, events: u32, cookie: u32, et: EventType, unlinked: bool) {
         let mut watchArr = Vec::new();
         {
             let ws = self.read();
-            for (_, w) in &ws.ws {
-                if name.len() != 0 && ws.unlinked && !w.NotifyParentAfterUnlink() {
+            for (_, watch) in &ws.ws {
+                error!("inotify Notify {}/{}/{}/{}", name, name.len() != 0, ws.unlinked, watch.ExcludeUnlinked());
+                if unlinked && watch.ExcludeUnlinked() && et == EventType::PathEvent {
                     // IN_EXCL_UNLINK - By default, when watching events on the children
                     // of a directory, events are generated for children even after they
                     // have been unlinked from the directory. This can result in large
@@ -358,7 +368,7 @@ impl Watches {
                     // isn't empty.
                     continue;
                 }
-                watchArr.push(w.clone());
+                watchArr.push(watch.clone());
 
             }
         }
@@ -493,7 +503,7 @@ impl Inotify {
         let watch = Watch(Arc::new(Mutex::new(WatchIntern {
             owner: self.clone(),
             wd: wd,
-            target: target.Inode().Downgrade(),
+            target: target.Downgrade(),
             unpinned: 0,
             mask: mask,
             pins: BTreeSet::new(),
@@ -505,7 +515,7 @@ impl Inotify {
         // memory. This ref is dropped during either watch removal, target
         // destruction, or inotify instance destruction. See callers of Watch.Unpin.
         watch.Pin(target);
-        target.Inode().Watches().Add(&watch);
+        target.Watches().Add(&watch);
         return watch
     }
 
@@ -534,7 +544,7 @@ impl Inotify {
         // add/remove watches on target.
         let _events = self.events.lock();
 
-        let watch = target.Inode().Watches().Lookup(self.id);
+        let watch = target.Watches().Lookup(self.id);
         match watch {
             None => (),
             Some(w) => {
