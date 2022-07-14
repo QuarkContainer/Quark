@@ -36,6 +36,9 @@ pub enum Msg {
     Ftruncate(Ftruncate),
     Seek(Seek),
     ReadLinkAt(ReadLinkAt),
+    Unlinkat(Unlinkat),
+    SymLinkAt(SymLinkAt),
+    LinkAt(LinkAt),
     GetTimeOfDay(GetTimeOfDay),
     IoCtl(IoCtl),
     Fcntl(Fcntl),
@@ -47,7 +50,6 @@ pub enum Msg {
 
     TryOpenAt(TryOpenAt),
     CreateAt(CreateAt),
-    Unlinkat(Unlinkat),
     Mkdirat(Mkdirat),
     SysSync(SysSync),
     SyncFs(SyncFs),
@@ -80,7 +82,6 @@ pub enum Msg {
     FChown(FChown),
     Chmod(Chmod),
     Fchmod(Fchmod),
-    SymLinkAt(SymLinkAt),
     Futimens(Futimens),
 
     IORead(IORead),
@@ -604,6 +605,15 @@ pub struct SymLinkAt {
     pub oldpath: u64,
     pub newdirfd: i32,
     pub newpath: u64,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct LinkAt {
+    pub olddirfd: i32,
+    pub oldpath: u64,
+    pub newdirfd: i32,
+    pub newpath: u64,
+    pub flags: i32,
 }
 
 #[derive(Clone, Default, Debug)]

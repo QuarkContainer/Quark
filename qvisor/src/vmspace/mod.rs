@@ -1439,6 +1439,23 @@ impl VMSpace {
         return Self::GetRet(ret as i64);
     }
 
+    pub fn LinkAt(olddirfd: i32, oldpath: u64, newdirfd: i32, newpath: u64, flags: i32) -> i64 {
+        let newdirfd = match Self::GetOsfd(newdirfd) {
+            Some(fd) => fd,
+            None => return -SysErr::EBADF as i64,
+        };
+
+        let olddirfd = match Self::GetOsfd(olddirfd) {
+            Some(fd) => fd,
+            None => return -SysErr::EBADF as i64,
+        };
+
+        let ret =
+            unsafe { linkat(olddirfd, oldpath as *const c_char, newdirfd, newpath as *const c_char, flags) };
+
+        return Self::GetRet(ret as i64);
+    }
+
     pub fn Futimens(fd: i32, times: u64) -> i64 {
         let fd = match Self::GetOsfd(fd) {
             Some(fd) => fd,
