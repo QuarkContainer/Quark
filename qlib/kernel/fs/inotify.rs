@@ -47,8 +47,6 @@ pub enum EventType {
     InodeEvent
 }
 
-
-
 // Watch represent a particular inotify watch created by inotify_add_watch.
 //
 // While a watch is active, it ensures the target inode is pinned in memory by
@@ -73,6 +71,10 @@ pub struct WatchIntern {
     // pins is the set of dirents this watch is currently pinning in memory by
     // holding a reference to them. See Pin()/Unpin().
     pub pins: BTreeSet<Dirent>,
+
+    // expired is set to true to indicate that this watch is a one-shot that has
+    // already sent a notification and therefore can be removed.
+    pub expired: bool,
 }
 
 #[derive(Clone)]
@@ -112,12 +114,25 @@ impl Watch {
     }
 
     // Notify queues a new event on this watch.
-    pub fn Notify(&self, name: &str, events: u32, cookie: u32) {
+    pub fn Notify(&self, name: &str, events: u32, cookie: u32) -> bool {
+        let mut expire = false;
         let (owner, wd, matchedEvents) = {
-            let w = self.lock();
+            let mut w = self.lock();
+            if w.expired {
+                // This is a one-shot watch that is already in the process of being
+                // removed. This may happen if a second event reaches the watch target
+                // before this watch has been removed.
+                return false;
+            }
+
             if w.mask & events == 0 {
                 // We weren't watching for this event.
-                return;
+                return false;
+            }
+
+            if w.mask & InotifyEvent::IN_ONESHOT != 0 {
+                w.expired = true;
+                expire = true;
             }
 
             // Event mask should include bits matched from the watch plus all control
@@ -126,9 +141,11 @@ impl Watch {
             let effectiveMask = unmaskableBits | w.mask;
             let matchedEvents = effectiveMask & events;
             (w.owner.clone(), w.wd, matchedEvents)
+
         };
 
         owner.QueueEvent(Event::New(wd, name, matchedEvents, cookie));
+        return expire
     }
 
     // Pin acquires a new ref on dirent, which pins the dirent in memory while
@@ -242,6 +259,7 @@ impl Watches {
 
     // Notify queues a new event with all watches in this set.
     pub fn Notify(&self, name: &str, events: u32, cookie: u32, et: EventType, unlinked: bool) {
+        let mut hasExpired = false;
         let mut watchArr = Vec::new();
         {
             let ws = self.read();
@@ -268,9 +286,35 @@ impl Watches {
         }
 
         for w in &watchArr {
-            w.Notify(name, events, cookie);
+            if w.Notify(name, events, cookie) {
+                hasExpired = true;
+            }
         }
 
+        if hasExpired {
+            self.cleanupExpiredWatches();
+        }
+    }
+
+    // This function is relatively expensive and should only be called where there
+    // are expired watches.
+    pub fn cleanupExpiredWatches(&self) {
+        // Because of lock ordering, we cannot acquire Inotify.mu for each watch
+        // owner while holding w.mu. As a result, store expired watches locally
+        // before removing.
+
+        let mut toRmmove = Vec::new();
+
+        let ws = self.read();
+        for (_, watch) in &ws.ws {
+            if watch.lock().expired {
+                toRmmove.push(watch.clone());
+            }
+        }
+
+        for w in toRmmove {
+            w.TargetDestroyed();
+        }
     }
 
     // Unpin unpins dirent from all watches in this set.
@@ -400,6 +444,7 @@ impl Inotify {
             target: target.Downgrade(),
             mask: mask,
             pins: BTreeSet::new(),
+            expired: false,
         })));
 
         ws.watches.insert(wd, watch.clone());
