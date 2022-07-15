@@ -31,7 +31,6 @@ use super::super::kernel::pipe::pipe::*;
 use super::super::socket::unix::transport::unix::*;
 use super::super::task::*;
 use super::super::uid::*;
-use super::super::SHARESPACE;
 
 use super::attr::*;
 use super::dentry::*;
@@ -45,7 +44,6 @@ use super::inode_overlay::*;
 use super::lock::*;
 use super::mount::*;
 use super::overlay::*;
-use super::inotify::*;
 
 pub fn ContextCanAccessFile(task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {
     let creds = task.creds.clone();
@@ -250,29 +248,6 @@ impl Deref for Inode {
     }
 }
 
-impl Drop for Inode {
-    fn drop(&mut self) {
-        if Arc::strong_count(&self.0) == 1 {
-            if SHARESPACE.config.read().EnableInotify {
-                let watches = self.Watches();
-
-                // If this inode is being destroyed because it was unlinked, queue a
-                // deletion event. This may not be the case for inodes being revalidated.
-                let unlinked = watches.read().unlinked;
-                if unlinked {
-                    watches.Notify("", InotifyEvent::IN_DELETE_SELF, 0);
-                }
-
-                // Remove references from the watch owners to the watches on this inode,
-                // since the watches are about to be GCed. Note that we don't need to worry
-                // about the watch pins since if there were any active pins, this inode
-                // wouldn't be in the destructor.
-                watches.TargetDestroyed();
-            }
-        }
-    }
-}
-
 impl Inode {
     pub fn Downgrade(&self) -> InodeWeak {
         return InodeWeak(Arc::downgrade(&self.0));
@@ -288,7 +263,6 @@ impl Inode {
             InodeOp: InodeOp.clone(),
             StableAttr: StableAttr.clone(),
             LockCtx: LockCtx::default(),
-            watches: Watches::default(),
             MountSource: MountSource.clone(),
             Overlay: None,
         };
@@ -324,7 +298,6 @@ impl Inode {
                     InodeOp: Arc::new(iops),
                     StableAttr: fstat.StableAttr(),
                     LockCtx: LockCtx::default(),
-                    watches: Watches::default(),
                     MountSource: msrc.clone(),
                     Overlay: None,
                 }))));
@@ -352,7 +325,6 @@ impl Inode {
                     InodeOp: Arc::new(iops),
                     StableAttr: fstat.StableAttr(),
                     LockCtx: LockCtx::default(),
-                    watches: Watches::default(),
                     MountSource: msrc.clone(),
                     Overlay: None,
                 }))));
@@ -371,7 +343,6 @@ impl Inode {
                     InodeOp: Arc::new(iops),
                     StableAttr: fstat.StableAttr(),
                     LockCtx: LockCtx::default(),
-                    watches: Watches::default(),
                     MountSource: msrc.clone(),
                     Overlay: None,
                 }))));
@@ -902,10 +873,6 @@ impl Inode {
         let inodeOp = self.lock().InodeOp.clone();
         return inodeOp.StatFS(task);
     }
-
-    pub fn Watches(&self) -> Watches {
-        return self.lock().watches.clone();
-    }
 }
 
 //#[derive(Clone, Default, Debug, Copy)]
@@ -914,7 +881,6 @@ pub struct InodeIntern {
     pub InodeOp: Arc<InodeOperations>,
     pub StableAttr: StableAttr,
     pub LockCtx: LockCtx,
-    pub watches: Watches,
     pub MountSource: Arc<QMutex<MountSource>>,
     pub Overlay: Option<Arc<RwLock<OverlayEntry>>>,
 }
@@ -926,7 +892,6 @@ impl Default for InodeIntern {
             InodeOp: Arc::new(HostInodeOp::default()),
             StableAttr: Default::default(),
             LockCtx: LockCtx::default(),
-            watches: Watches::default(),
             MountSource: Arc::new(QMutex::new(MountSource::default())),
             Overlay: None,
         };
@@ -940,7 +905,6 @@ impl InodeIntern {
             InodeOp: Arc::new(HostInodeOp::default()),
             StableAttr: Default::default(),
             LockCtx: LockCtx::default(),
-            watches: Watches::default(),
             MountSource: Arc::new(QMutex::new(MountSource::default())),
             Overlay: None,
         };

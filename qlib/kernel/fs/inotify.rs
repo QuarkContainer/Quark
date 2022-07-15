@@ -32,7 +32,6 @@ use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::uid::*;
 use super::super::kernel::waiter::Queue;
-use super::super::fs::inode::*;
 use super::super::fs::dirent::*;
 use super::file::*;
 
@@ -40,109 +39,15 @@ use super::file::*;
 // must be a power 2 for rounding below.
 pub const INOTIFY_EVENT_BASE_SIZE: usize = 16;
 
-// Event represents a struct inotify_event from linux.
-#[repr(C)]
-#[derive(Debug)]
-pub struct Event {
-    pub wd: i32,
-    pub mask: u32,
-    pub cookie: u32,
-
-    // len is computed based on the name field is set automatically by
-    // Event.setName. It should be 0 when no name is set; otherwise it is the
-    // length of the name slice.
-    pub len: u32,
-
-    // The name field has special padding requirements and should only be set by
-    // calling Event.setName.
-    pub name: Vec<u8>
+// PathEvent and InodeEvent correspond to FSNOTIFY_EVENT_PATH and
+// FSNOTIFY_EVENT_INODE in Linux.
+#[derive(PartialEq, Clone, Copy)]
+pub enum EventType {
+    PathEvent,
+    InodeEvent
 }
 
-// paddedBytes converts a go string to a null-terminated c-string, padded with
-// null bytes to a total size of 'l'. 'l' must be large enough for all the bytes
-// in the 's' plus at least one null byte.
-pub fn PaddedBytes(s: &str, l: usize) -> Vec<u8> {
-    if l < s.len() + 1 {
-        panic!("Converting string to byte array results in truncation, this can lead to buffer-overflow due to the missing null-byte!")
-    }
 
-    let bytes = s.as_bytes();
-
-    let mut b = Vec::with_capacity(l);
-    b.resize(l, 0);
-    for i in 0..bytes.len() {
-        b[i] = bytes[i];
-    }
-
-    return b;
-
-}
-
-impl PartialEq for Event {
-    fn eq(&self, other: &Self) -> bool {
-        let eq = self.wd == other.wd &&
-            self.mask == other.mask &&
-            self.cookie == other.cookie &&
-            self.len == other.len;
-        if !eq {
-            return false
-        }
-
-        for i in 0..self.name.len() {
-            if self.name[i] != other.name[i] {
-                return false
-            }
-        }
-
-        return true
-    }
-}
-
-impl Event {
-    pub fn New(wd: i32, name: &str, events: u32, cookie: u32) -> Self {
-        let mut e = Event {
-            wd: wd,
-            mask: events,
-            cookie: cookie,
-            len: 0,
-            name: Vec::new(),
-        };
-
-        if name.len() != 0 {
-            e.SetName(name);
-        }
-
-        return e;
-    }
-
-    // setName sets the optional name for this event.
-    pub fn SetName(&mut self, name: &str) {
-        // We need to pad the name such that the entire event length ends up a
-        // multiple of inotifyEventBaseSize.
-        let unpaddedLen = name.len() + 1;
-        // Round up to nearest multiple of inotifyEventBaseSize.
-        self.len = ((unpaddedLen + INOTIFY_EVENT_BASE_SIZE - 1) & !(INOTIFY_EVENT_BASE_SIZE - 1)) as u32;
-        // Make sure we haven't overflowed and wrapped around when rounding.
-        if unpaddedLen > self.len as usize {
-            panic!("Overflow when rounding inotify event size, the 'name' field was too big.")
-        }
-        self.name = PaddedBytes(name, self.len as usize);
-    }
-
-    pub fn Sizeof(&self) -> usize {
-        let s = INOTIFY_EVENT_BASE_SIZE + self.len as usize;
-        assert!(s>=INOTIFY_EVENT_BASE_SIZE);
-        return s;
-    }
-
-    pub fn CopyOut(&self, task: &Task, addr: u64) -> Result<()> {
-        task.CopyDataOut(self as *const _ as u64, addr, INOTIFY_EVENT_BASE_SIZE, false)?;
-        if self.len > 0 {
-            task.CopyOutSlice(&self.name, addr + INOTIFY_EVENT_BASE_SIZE as u64, self.len as usize)?;
-        }
-        return Ok(())
-    }
-}
 
 // Watch represent a particular inotify watch created by inotify_add_watch.
 //
@@ -159,11 +64,7 @@ pub struct WatchIntern {
     // The inode being watched. Note that we don't directly hold a reference on
     // this inode. Instead we hold a reference on the dirent(s) containing the
     // inode, which we record in pins.
-    pub target: InodeWeak,
-
-    // unpinned indicates whether we have a hard reference on target. This field
-    // may only be modified through atomic ops.
-    pub unpinned: u32,
+    pub target: DirentWeak,
 
     // Events being monitored via this watch. Must be accessed atomically,
     // writes are protected by mu.
@@ -201,11 +102,13 @@ impl Watch {
         return output;
     }
 
-    // NotifyParentAfterUnlink indicates whether the parent of the watched object
-    // should continue to be be notified of events after the target has been
-    // unlinked.
-    pub fn NotifyParentAfterUnlink(&self) -> bool {
-        return self.lock().mask & InotifyEvent::IN_EXCL_UNLINK == 0;
+    // ExcludeUnlinked indicates whether the watched object should continue to be
+    // notified of events originating from a path that has been unlinked.
+    //
+    // For example, if "foo/bar" is opened and then unlinked, operations on the
+    // open fd may be ignored by watches on "foo" and "foo/bar" with IN_EXCL_UNLINK.
+    pub fn ExcludeUnlinked(&self) -> bool {
+        return self.lock().mask & InotifyEvent::IN_EXCL_UNLINK != 0;
     }
 
     // Notify queues a new event on this watch.
@@ -338,12 +241,13 @@ impl Watches {
     }
 
     // Notify queues a new event with all watches in this set.
-    pub fn Notify(&self, name: &str, events: u32, cookie: u32) {
+    pub fn Notify(&self, name: &str, events: u32, cookie: u32, et: EventType, unlinked: bool) {
         let mut watchArr = Vec::new();
         {
             let ws = self.read();
-            for (_, w) in &ws.ws {
-                if name.len() != 0 && ws.unlinked && !w.NotifyParentAfterUnlink() {
+            for (_, watch) in &ws.ws {
+                //error!("inotify Notify {}/{}/{}/{}", name, name.len() != 0, ws.unlinked, watch.ExcludeUnlinked());
+                if unlinked && watch.ExcludeUnlinked() && et == EventType::PathEvent {
                     // IN_EXCL_UNLINK - By default, when watching events on the children
                     // of a directory, events are generated for children even after they
                     // have been unlinked from the directory. This can result in large
@@ -358,7 +262,7 @@ impl Watches {
                     // isn't empty.
                     continue;
                 }
-                watchArr.push(w.clone());
+                watchArr.push(watch.clone());
 
             }
         }
@@ -493,8 +397,7 @@ impl Inotify {
         let watch = Watch(Arc::new(Mutex::new(WatchIntern {
             owner: self.clone(),
             wd: wd,
-            target: target.Inode().Downgrade(),
-            unpinned: 0,
+            target: target.Downgrade(),
             mask: mask,
             pins: BTreeSet::new(),
         })));
@@ -505,7 +408,7 @@ impl Inotify {
         // memory. This ref is dropped during either watch removal, target
         // destruction, or inotify instance destruction. See callers of Watch.Unpin.
         watch.Pin(target);
-        target.Inode().Watches().Add(&watch);
+        target.Watches().Add(&watch);
         return watch
     }
 
@@ -534,7 +437,7 @@ impl Inotify {
         // add/remove watches on target.
         let _events = self.events.lock();
 
-        let watch = target.Inode().Watches().Lookup(self.id);
+        let watch = target.Watches().Lookup(self.id);
         match watch {
             None => (),
             Some(w) => {
@@ -762,3 +665,186 @@ impl Waitable for Inotify {
 
 impl SockOperations for Inotify {}
 impl SpliceOperations for Inotify {}
+
+// Event represents a struct inotify_event from linux.
+#[repr(C)]
+#[derive(Debug)]
+pub struct Event {
+    pub wd: i32,
+    pub mask: u32,
+    pub cookie: u32,
+
+    // len is computed based on the name field is set automatically by
+    // Event.setName. It should be 0 when no name is set; otherwise it is the
+    // length of the name slice.
+    pub len: u32,
+
+    // The name field has special padding requirements and should only be set by
+    // calling Event.setName.
+    pub name: Vec<u8>
+}
+
+// paddedBytes converts a go string to a null-terminated c-string, padded with
+// null bytes to a total size of 'l'. 'l' must be large enough for all the bytes
+// in the 's' plus at least one null byte.
+pub fn PaddedBytes(s: &str, l: usize) -> Vec<u8> {
+    if l < s.len() + 1 {
+        panic!("Converting string to byte array results in truncation, this can lead to buffer-overflow due to the missing null-byte!")
+    }
+
+    let bytes = s.as_bytes();
+
+    let mut b = Vec::with_capacity(l);
+    b.resize(l, 0);
+    for i in 0..bytes.len() {
+        b[i] = bytes[i];
+    }
+
+    return b;
+
+}
+
+impl PartialEq for Event {
+    fn eq(&self, other: &Self) -> bool {
+        let eq = self.wd == other.wd &&
+            self.mask == other.mask &&
+            self.cookie == other.cookie &&
+            self.len == other.len;
+        if !eq {
+            return false
+        }
+
+        for i in 0..self.name.len() {
+            if self.name[i] != other.name[i] {
+                return false
+            }
+        }
+
+        return true
+    }
+}
+
+impl Event {
+    pub fn New(wd: i32, name: &str, events: u32, cookie: u32) -> Self {
+        let mut e = Event {
+            wd: wd,
+            mask: events,
+            cookie: cookie,
+            len: 0,
+            name: Vec::new(),
+        };
+
+        if name.len() != 0 {
+            e.SetName(name);
+        }
+
+        return e;
+    }
+
+    // setName sets the optional name for this event.
+    pub fn SetName(&mut self, name: &str) {
+        // We need to pad the name such that the entire event length ends up a
+        // multiple of inotifyEventBaseSize.
+        let unpaddedLen = name.len() + 1;
+        // Round up to nearest multiple of inotifyEventBaseSize.
+        self.len = ((unpaddedLen + INOTIFY_EVENT_BASE_SIZE - 1) & !(INOTIFY_EVENT_BASE_SIZE - 1)) as u32;
+        // Make sure we haven't overflowed and wrapped around when rounding.
+        if unpaddedLen > self.len as usize {
+            panic!("Overflow when rounding inotify event size, the 'name' field was too big.")
+        }
+        self.name = PaddedBytes(name, self.len as usize);
+    }
+
+    pub fn Sizeof(&self) -> usize {
+        let s = INOTIFY_EVENT_BASE_SIZE + self.len as usize;
+        assert!(s>=INOTIFY_EVENT_BASE_SIZE);
+        return s;
+    }
+
+    pub fn CopyOut(&self, task: &Task, addr: u64) -> Result<()> {
+        task.CopyDataOut(self as *const _ as u64, addr, INOTIFY_EVENT_BASE_SIZE, false)?;
+        if self.len > 0 {
+            task.CopyOutSlice(&self.name, addr + INOTIFY_EVENT_BASE_SIZE as u64, self.len as usize)?;
+        }
+        return Ok(())
+    }
+}
+
+// InotifyEventFromStatMask generates the appropriate events for an operation
+// that set the stats specified in mask.
+pub fn InotifyEventFromStatMask(mask: u32) -> u32 {
+    let mut ev = 0;
+    if mask & (StatxMask::STATX_UID | StatxMask::STATX_GID | StatxMask::STATX_MODE) != 0 {
+        ev |= InotifyEvent::IN_ATTRIB;
+    }
+
+    if mask & StatxMask::STATX_SIZE == 0 {
+        ev |= InotifyEvent::IN_MODIFY;
+    }
+
+    if mask & (StatxMask::STATX_ATIME | StatxMask::STATX_MTIME) == (StatxMask::STATX_ATIME | StatxMask::STATX_MTIME) {
+        ev |= InotifyEvent::IN_ATTRIB;
+    } else if mask & StatxMask::STATX_ATIME == 0 {
+        ev |= InotifyEvent::IN_ACCESS;
+    } else if mask & StatxMask::STATX_MTIME == 0 {
+        ev |= InotifyEvent::IN_MODIFY;
+    }
+
+    return ev;
+}
+
+// InotifyRemoveChild sends the appriopriate notifications to the watch sets of
+// the child being removed and its parent. Note that unlike most pairs of
+// parent/child notifications, the child is notified first in this case.
+pub fn InotifyRemoveChild(_task: &Task, me: Option<Watches>, parent: Option<Watches>, name: &str) {
+    match me {
+        None => (),
+        Some(ws) => {
+            ws.Notify("", InotifyEvent::IN_ATTRIB, 0, EventType::InodeEvent, true);
+        }
+    }
+
+    match parent {
+        None => (),
+        Some(ws) => {
+            ws.Notify(name, InotifyEvent::IN_DELETE, 0, EventType::InodeEvent, true);
+        }
+    }
+}
+
+// InotifyRename sends the appriopriate notifications to the watch sets of the
+// file being renamed and its old/new parents.
+pub fn InotifyRename(_task: &Task,
+                     renamed: Option<Watches>,
+                     oldParent: Option<Watches>,
+                     newParent: Option<Watches>,
+                     oldName: &str,
+                     newName: &str,
+                     isDir: bool) {
+    let mut dirEv: u32 = 0;
+    if isDir {
+        dirEv |= InotifyEvent::IN_ISDIR;
+    }
+
+    let cookie = NewInotifyCookie();
+    match oldParent {
+        None => (),
+        Some(ws) => {
+            ws.Notify(oldName, dirEv | InotifyEvent::IN_MOVED_FROM, cookie, EventType::InodeEvent, false);
+        }
+    }
+
+    match newParent {
+        None => (),
+        Some(ws) => {
+            ws.Notify(newName, dirEv | InotifyEvent::IN_MOVED_TO, cookie, EventType::InodeEvent, false);
+        }
+    }
+
+    match renamed {
+        None => (),
+        Some(ws) => {
+            ws.Notify("", dirEv | InotifyEvent::IN_MOVE_SELF, 0, EventType::InodeEvent, false);
+        }
+    }
+}

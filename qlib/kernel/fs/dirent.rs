@@ -37,6 +37,7 @@ use super::file::*;
 use super::flags::*;
 use super::inode::*;
 use super::mount::*;
+use super::inotify::*;
 
 lazy_static! {
     pub static ref NEGATIVE_DIRENT: Dirent = Dirent::default();
@@ -179,6 +180,27 @@ impl Drop for Dirent {
                     parent.RemoveChild(&name);
                 }
             }
+
+            if SHARESPACE.config.read().EnableInotify {
+                let watches = self.Watches();
+
+                // If this inode is being destroyed because it was unlinked, queue a
+                // deletion event. This may not be the case for inodes being revalidated.
+                let unlinked = watches.read().unlinked;
+                if unlinked {
+                    watches.Notify("",
+                                   InotifyEvent::IN_DELETE_SELF,
+                                   0,
+                                   EventType::InodeEvent,
+                                   false);
+                }
+
+                // Remove references from the watch owners to the watches on this inode,
+                // since the watches are about to be GCed. Note that we don't need to worry
+                // about the watch pins since if there were any active pins, this inode
+                // wouldn't be in the destructor.
+                watches.TargetDestroyed();
+            }
         }
     }
 }
@@ -190,17 +212,31 @@ impl Dirent {
             Name: name.to_string(),
             Parent: None,
             mounted: false,
+            deleted: false,
         };
 
         let intern = DirentInternal {
             id: NewUID(),
             inode: inode.clone(),
+            watches: Watches::default(),
             main: QMutex::new(main),
-            dirMutex: QRwLock::new(()),
+            dirMu: QRwLock::new(()),
             children: QMutex::new(BTreeMap::new()),
         };
 
         return Self(Arc::new(intern));
+    }
+
+    pub fn Watches(&self) -> Watches {
+        return self.watches.clone();
+    }
+
+    pub fn SetDeleted(&self) {
+        self.main.lock().deleted = true;
+    }
+
+    pub fn IsDeleted(&self) -> bool {
+        return self.main.lock().deleted;
     }
 
     pub fn NewTransient(inode: &Inode) -> Self {
@@ -406,8 +442,7 @@ impl Dirent {
                     return Ok(dirent);
                 }
 
-                let inode = dirent.Inode();
-                inode.Watches().Unpin(&dirent);
+                dirent.Watches().Unpin(&dirent);
 
                 false
             }
@@ -442,6 +477,7 @@ impl Dirent {
         //error!("Walk 1 {}", name);
         //defer!(error!("Walk 2 {}", name));
         let _a = RENAME.read();
+        let _dm = self.dirMu.read();
 
         return self.walk(task, root, name);
     }
@@ -509,6 +545,7 @@ impl Dirent {
         perms: &FilePermissions,
     ) -> Result<File> {
         let _a = RENAME.read();
+        let _dm = self.dirMu.write();
 
         if self.exists(task, root, name) {
             return Err(Error::SysError(SysErr::EEXIST));
@@ -522,9 +559,11 @@ impl Dirent {
         self.AddChild(String::from(name), &child);
         child.ExtendReference();
         if SHARESPACE.config.read().EnableInotify {
-            inode.Watches().Notify(name,
+            self.Watches().Notify(name,
                                    InotifyEvent::IN_CREATE,
-                                   0);
+                                   0,
+                                   EventType::InodeEvent,
+                                   false);
         }
 
         return Ok(file);
@@ -538,6 +577,7 @@ impl Dirent {
         create: &mut FnMut() -> Result<()>,
     ) -> Result<()> {
         let _a = RENAME.read();
+        let _dm = self.dirMu.write();
 
         if self.exists(task, root, name) {
             return Err(Error::SysError(SysErr::EEXIST));
@@ -558,9 +598,11 @@ impl Dirent {
             let mut inode = self.Inode();
             inode.CreateLink(task, self, oldname, newname)?;
             if SHARESPACE.config.read().EnableInotify {
-                inode.Watches().Notify(newname,
+                self.Watches().Notify(newname,
                                        InotifyEvent::IN_CREATE,
-                                       0);
+                                       0,
+                                       EventType::PathEvent,
+                                       false);
             }
             self.children.lock().remove(oldname);
             self.children.lock().remove(newname);
@@ -590,12 +632,16 @@ impl Dirent {
             self.children.lock().remove(name);
 
             if SHARESPACE.config.read().EnableInotify {
-                targetInode.Watches().Notify("",
+                target.Watches().Notify("",
                                              InotifyEvent::IN_ATTRIB,
-                                             0);
-                inode.Watches().Notify(name,
+                                             0,
+                                             EventType::InodeEvent,
+                                             false);
+                self.Watches().Notify(name,
                                        InotifyEvent::IN_CREATE,
-                                       0);
+                                       0,
+                                       EventType::InodeEvent,
+                                       false);
             }
             return Ok(())
         });
@@ -612,9 +658,11 @@ impl Dirent {
             let mut inode = self.Inode();
             let ret = inode.CreateDirectory(task, self, name, perms);
             if SHARESPACE.config.read().EnableInotify {
-                inode.Watches().Notify(name,
+                self.Watches().Notify(name,
                                        InotifyEvent::IN_ISDIR | InotifyEvent::IN_CREATE,
-                                       0);
+                                       0,
+                                       EventType::PathEvent,
+                                       false);
             }
 
             self.children.lock().remove(name);
@@ -649,9 +697,11 @@ impl Dirent {
         let inode = self.Inode();
         let childDir = inode.Lookup(task, name)?;
         if SHARESPACE.config.read().EnableInotify {
-            inode.Watches().Notify(name,
+            self.Watches().Notify(name,
                                    InotifyEvent::IN_CREATE,
-                                   0);
+                                   0,
+                                   EventType::InodeEvent,
+                                   false);
         }
 
         return Ok(childDir);
@@ -669,9 +719,11 @@ impl Dirent {
             inode.CreateFifo(task, self, name, perms)?;
             self.children.lock().remove(name);
             if SHARESPACE.config.read().EnableInotify {
-                inode.Watches().Notify(name,
+                self.Watches().Notify(name,
                                        InotifyEvent::IN_CREATE,
-                                       0);
+                                       0,
+                                       EventType::InodeEvent,
+                                       false);
             }
             return Ok(())
         });
@@ -752,9 +804,12 @@ impl Dirent {
     }
 
     pub fn Remove(&self, task: &Task, root: &Dirent, name: &str, dirPath: bool) -> Result<()> {
+        let _a = RENAME.read();
+        let _dm = self.dirMu.write();
+
         let mut inode = self.Inode();
 
-        let child = self.Walk(task, root, name)?;
+        let child = self.walk(task, root, name)?;
         let childInode = child.Inode();
         if childInode.StableAttr().IsDir() {
             return Err(Error::SysError(SysErr::EISDIR));
@@ -767,12 +822,6 @@ impl Dirent {
         }
 
         inode.Remove(task, self, &child)?;
-
-        // Link count changed, this only applies to non-directory nodes.
-        if SHARESPACE.config.read().EnableInotify {
-            childInode.Watches().Notify("", InotifyEvent::IN_ATTRIB, 0);
-        }
-
         self.children.lock().remove(name);
         child.DropExtendedReference();
 
@@ -782,22 +831,26 @@ impl Dirent {
         // inode may have other links. If this was the last link, the events for the
         // watch removal will be queued by the inode destructor.
         if SHARESPACE.config.read().EnableInotify {
-            childInode.Watches().MarkUnlinked();
-            childInode.Watches().Unpin(&child);
+            child.Watches().MarkUnlinked();
+            child.Watches().Unpin(&child);
+        }
+
+        child.SetDeleted();
+
+        if SHARESPACE.config.read().EnableInotify {
+            InotifyRemoveChild(task, Some(child.Watches()), Some(self.Watches()), name)
         }
 
         // trigger inode destroy
         drop(child);
         drop(childInode);
-
-        if SHARESPACE.config.read().EnableInotify {
-            inode.Watches().Notify(name, InotifyEvent::IN_DELETE, 0);
-        }
-
         return Ok(());
     }
 
     pub fn RemoveDirectory(&self, task: &Task, root: &Dirent, name: &str) -> Result<()> {
+        let _a = RENAME.read();
+        let _dm = self.dirMu.write();
+
         let mut inode = self.Inode();
         if name == "." {
             return Err(Error::SysError(SysErr::EINVAL));
@@ -807,7 +860,7 @@ impl Dirent {
             return Err(Error::SysError(SysErr::ENOTEMPTY));
         }
 
-        let child = self.Walk(task, root, name)?;
+        let child = self.walk(task, root, name)?;
         let childInode = child.Inode();
 
         if !childInode.StableAttr().IsDir() {
@@ -818,6 +871,8 @@ impl Dirent {
             return Err(Error::SysError(SysErr::EBUSY));
         }
 
+        child.SetDeleted();
+
         inode.Remove(task, self, &child)?;
 
         self.children.lock().remove(name);
@@ -827,11 +882,13 @@ impl Dirent {
         // Finally, let inotify know the child is being unlinked. Drop any extra
         // refs from inotify to this child dirent.
         if SHARESPACE.config.read().EnableInotify {
-            childInode.Watches().MarkUnlinked();
-            childInode.Watches().Unpin(&child);
-            inode.Watches().Notify(name,
+            child.Watches().MarkUnlinked();
+            child.Watches().Unpin(&child);
+            self.Watches().Notify(name,
                                    InotifyEvent::IN_ISDIR | InotifyEvent::IN_DELETE,
-                                   0);
+                                   0,
+                                   EventType::InodeEvent,
+                                   true);
         }
 
         return Ok(());
@@ -958,32 +1015,19 @@ impl Dirent {
             .lock()
             .insert(newName.to_string(), renamed.Downgrade());
 
-        // Queue inotify events for the rename.
-        let mut ev : u32 = 0;
-        if newInode.StableAttr().IsDir() {
-            ev |=  InotifyEvent::IN_ISDIR;
-        }
-
         if SHARESPACE.config.read().EnableInotify {
-            let cookie = NewInotifyCookie();
-            oldParent.Inode().Watches().Notify(
-                oldName,
-                ev | InotifyEvent::IN_MOVED_FROM,
-                cookie);
-            newParent.Inode().Watches().Notify(
-                newName,
-                ev | InotifyEvent::IN_MOVED_TO,
-                cookie);
-
-            // Somewhat surprisingly, self move events do not have a cookie.
-            renamed.Inode().Watches().Notify(
-                "",
-                InotifyEvent::IN_MOVE_SELF,
-                0);
+            let isDir = newInode.StableAttr().IsDir();
+            InotifyRename(task,
+                          Some(renamed.Watches()),
+                          Some(oldParent.Watches()),
+                          Some(newParent.Watches()),
+                          oldName,
+                          newName,
+                          isDir);
         }
 
         renamed.DropExtendedReference();
-        renamed.Inode().Watches().Unpin(&renamed);
+        renamed.Watches().Unpin(&renamed);
         renamed.flush();
 
         return Ok(());
@@ -1049,6 +1093,7 @@ impl Dirent {
 
                 replaced.DropExtendedReference();
                 replaced.flush();
+                replaced.SetDeleted();
 
                 exist = true;
             }
@@ -1070,28 +1115,16 @@ impl Dirent {
         }
 
         // Queue inotify events for the rename.
-        let mut ev : u32 = 0;
-        if newInode.StableAttr().IsDir() {
-            ev |=  InotifyEvent::IN_ISDIR;
-        }
-
         if SHARESPACE.config.read().EnableInotify {
-            let cookie = NewInotifyCookie();
+            let isDir = newInode.StableAttr().IsDir();
+            InotifyRename(task,
+                          Some(renamed.Watches()),
+                          Some(parent.Watches()),
+                          Some(parent.Watches()),
+                          oldName,
+                          newName,
+                          isDir);
 
-            inode.Watches().Notify(
-                oldName,
-                ev | InotifyEvent::IN_MOVED_FROM,
-                cookie);
-            inode.Watches().Notify(
-                newName,
-                ev | InotifyEvent::IN_MOVED_TO,
-                cookie);
-
-            // Somewhat surprisingly, self move events do not have a cookie.
-            newInode.Watches().Notify(
-                "",
-                InotifyEvent::IN_MOVE_SELF,
-                0);
         }
 
         renamed.DropExtendedReference();
@@ -1165,7 +1198,7 @@ impl Dirent {
     // depending on the event masks. InotifyEvent automatically provides the name of
     // the current dirent as the subject of the event as required, and adds the
     // IN_ISDIR flag for dirents that refer to directories.
-    pub fn InotifyEvent(&self, event: u32, cookie: u32) {
+    pub fn InotifyEvent(&self, event: u32, cookie: u32, et: EventType) {
         if SHARESPACE.config.read().EnableInotify {
             let _ = RENAME.read();
 
@@ -1182,11 +1215,19 @@ impl Dirent {
                 None => (),
                 Some(p) => {
                     let name = self.Name();
-                    p.Inode().Watches().Notify(&name, event, cookie);
+                    p.Watches().Notify(&name,
+                                               event,
+                                               cookie,
+                                               et,
+                                               self.IsDeleted());
                 }
             }
 
-            inode.Watches().Notify("", event, cookie);
+            self.Watches().Notify("",
+                                   event,
+                                   cookie,
+                                   et,
+                                   self.IsDeleted());
         }
     }
 
@@ -1212,8 +1253,9 @@ impl Dirent {
 pub struct DirentInternal {
     pub id: u64,
     pub inode: Inode,
+    pub watches: Watches,
     pub main: QMutex<DirentMain>,
-    pub dirMutex: QRwLock<()>,
+    pub dirMu: QRwLock<()>,
     pub children: QMutex<BTreeMap<String, DirentWeak>>,
 }
 
@@ -1222,8 +1264,9 @@ impl Default for DirentInternal {
         return Self {
             id: NewUID(),
             inode: Inode::default(),
+            watches: Watches::default(),
             main: Default::default(),
-            dirMutex: Default::default(),
+            dirMu: Default::default(),
             children: Default::default(),
         }
     }
@@ -1235,6 +1278,7 @@ pub struct DirentMain {
     pub Name: String,
     pub Parent: Option<Dirent>,
     pub mounted: bool,
+    pub deleted: bool,
 }
 
 impl Default for DirentMain {
@@ -1244,6 +1288,7 @@ impl Default for DirentMain {
             Name: "".to_string(),
             Parent: None,
             mounted: false,
+            deleted: false,
         };
     }
 }
@@ -1255,6 +1300,7 @@ impl DirentMain {
             Name: name.to_string(),
             Parent: None,
             mounted: false,
+            deleted: false,
         };
     }
 
@@ -1264,6 +1310,7 @@ impl DirentMain {
             Name: "transient".to_string(),
             Parent: None,
             mounted: false,
+            deleted: false,
         };
     }
 

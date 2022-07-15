@@ -17,6 +17,7 @@ use alloc::string::ToString;
 
 use super::super::fs::dirent::*;
 use super::super::fs::file::*;
+use super::super::fs::inotify::*;
 use super::super::fs::flags::*;
 use super::super::fs::inode::*;
 use super::super::fs::lock::*;
@@ -316,7 +317,7 @@ pub fn openAt(task: &Task, dirFd: i32, addr: u64, flags: u32) -> Result<i32> {
 
             fd = newFd;
 
-            d.InotifyEvent(InotifyEvent::IN_OPEN, 0);
+            d.InotifyEvent(InotifyEvent::IN_OPEN, 0, EventType::InodeEvent);
 
             return Ok(());
         },
@@ -572,7 +573,7 @@ pub fn createAt(task: &Task, dirFd: i32, addr: u64, flags: u32, mode: FileMode) 
         // events are implemented at the syscall layer so we need to
         // manually queue one here.
         let newDirent = newFile.Dirent.clone();
-        newDirent.InotifyEvent(InotifyEvent::IN_OPEN, 0);
+        newDirent.InotifyEvent(InotifyEvent::IN_OPEN, 0, EventType::InodeEvent);
         //found.InotifyEvent(InotifyEvent::IN_OPEN, 0);
 
         return Ok(());
@@ -1891,7 +1892,7 @@ pub fn SysTruncate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             inode.Truncate(task, d, len)?;
 
             // File length modified, generate notification.
-            d.InotifyEvent(InotifyEvent::IN_MODIFY, 0);
+            d.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::InodeEvent);
             return Ok(())
         },
     )?;
@@ -1926,7 +1927,7 @@ pub fn SysFtruncate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     inode.Truncate(task, &dirent, len)?;
 
     // File length modified, generate notification.
-    file.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0);
+    file.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::InodeEvent);
 
     return Ok(0);
 }
@@ -2106,11 +2107,11 @@ fn utime(task: &Task, dirfd: i32, addr: u64, ts: &InterTimeSpec, resolve: bool) 
 
         // File attribute changed, generate notification.
         if ts.ATimeOmit {
-            d.InotifyEvent(InotifyEvent::IN_MODIFY, 0);
+            d.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::InodeEvent);
         } else if ts.MTimeOmit {
-            d.InotifyEvent(InotifyEvent::IN_ACCESS, 0);
+            d.InotifyEvent(InotifyEvent::IN_ACCESS, 0, EventType::InodeEvent);
         } else {
-            d.InotifyEvent(InotifyEvent::IN_ATTRIB, 0);
+            d.InotifyEvent(InotifyEvent::IN_ATTRIB, 0, EventType::InodeEvent);
         }
 
         return Ok(());
@@ -2356,7 +2357,7 @@ pub fn SysFallocate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let dirent = file.Dirent.clone();
     inode.Allocate(task, &dirent, offset, len)?;
 
-    file.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0);
+    file.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::InodeEvent);
 
     Ok(0)
 }

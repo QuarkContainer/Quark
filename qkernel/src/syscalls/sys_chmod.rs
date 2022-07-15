@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::super::fs::dirent::*;
+use super::super::fs::inotify::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
@@ -35,7 +36,7 @@ fn Chmod(task: &Task, d: &Dirent, mode: FileMode) -> Result<()> {
     }
 
     // File attribute changed, generate notification.
-    d.InotifyEvent(InotifyEvent::IN_ATTRIB, 0);
+    d.InotifyEvent(InotifyEvent::IN_ATTRIB, 0, EventType::InodeEvent);
 
     return Ok(());
 }

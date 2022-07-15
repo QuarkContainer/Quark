@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::super::fs::file::*;
+use super::super::fs::inotify::*;
 use super::super::kernel::time::*;
 use super::super::kernel::timer::*;
 use super::super::kernel::waiter::*;
@@ -264,7 +265,7 @@ fn RepWritev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
     }
 
     if count > 0 {
-        f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0)
+        f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::PathEvent)
     }
     return Ok(count);
 }
@@ -362,7 +363,7 @@ pub fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
     }
 
     if count > 0 {
-        f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0)
+        f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::PathEvent)
     }
     return Ok(count);
 }
@@ -395,7 +396,7 @@ fn RepPwritev(task: &Task, f: &File, srcs: &[IoVec], offset: i64) -> Result<i64>
     }
 
     if count > 0 {
-        f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0)
+        f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::PathEvent)
     }
 
     return Ok(count);
@@ -418,7 +419,7 @@ fn pwritev(task: &Task, f: &File, srcs: &[IoVec], offset: i64) -> Result<i64> {
         }
         Ok(n) => {
             if n > 0 {
-                f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0)
+                f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::PathEvent)
             }
             return Ok(n)
         },
@@ -437,7 +438,7 @@ fn pwritev(task: &Task, f: &File, srcs: &[IoVec], offset: i64) -> Result<i64> {
             }
             Ok(n) => {
                 if n > 0 {
-                    f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0)
+                    f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::PathEvent)
                 }
                 return Ok(n);
             }
