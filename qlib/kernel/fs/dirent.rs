@@ -220,7 +220,7 @@ impl Dirent {
             inode: inode.clone(),
             watches: Watches::default(),
             main: QMutex::new(main),
-            dirMutex: QRwLock::new(()),
+            dirMu: QRwLock::new(()),
             children: QMutex::new(BTreeMap::new()),
         };
 
@@ -477,6 +477,7 @@ impl Dirent {
         //error!("Walk 1 {}", name);
         //defer!(error!("Walk 2 {}", name));
         let _a = RENAME.read();
+        let _dm = self.dirMu.read();
 
         return self.walk(task, root, name);
     }
@@ -544,6 +545,7 @@ impl Dirent {
         perms: &FilePermissions,
     ) -> Result<File> {
         let _a = RENAME.read();
+        let _dm = self.dirMu.write();
 
         if self.exists(task, root, name) {
             return Err(Error::SysError(SysErr::EEXIST));
@@ -575,6 +577,7 @@ impl Dirent {
         create: &mut FnMut() -> Result<()>,
     ) -> Result<()> {
         let _a = RENAME.read();
+        let _dm = self.dirMu.write();
 
         if self.exists(task, root, name) {
             return Err(Error::SysError(SysErr::EEXIST));
@@ -801,9 +804,12 @@ impl Dirent {
     }
 
     pub fn Remove(&self, task: &Task, root: &Dirent, name: &str, dirPath: bool) -> Result<()> {
+        let _a = RENAME.read();
+        let _dm = self.dirMu.write();
+
         let mut inode = self.Inode();
 
-        let child = self.Walk(task, root, name)?;
+        let child = self.walk(task, root, name)?;
         let childInode = child.Inode();
         if childInode.StableAttr().IsDir() {
             return Err(Error::SysError(SysErr::EISDIR));
@@ -842,6 +848,9 @@ impl Dirent {
     }
 
     pub fn RemoveDirectory(&self, task: &Task, root: &Dirent, name: &str) -> Result<()> {
+        let _a = RENAME.read();
+        let _dm = self.dirMu.write();
+
         let mut inode = self.Inode();
         if name == "." {
             return Err(Error::SysError(SysErr::EINVAL));
@@ -851,7 +860,7 @@ impl Dirent {
             return Err(Error::SysError(SysErr::ENOTEMPTY));
         }
 
-        let child = self.Walk(task, root, name)?;
+        let child = self.walk(task, root, name)?;
         let childInode = child.Inode();
 
         if !childInode.StableAttr().IsDir() {
@@ -1246,7 +1255,7 @@ pub struct DirentInternal {
     pub inode: Inode,
     pub watches: Watches,
     pub main: QMutex<DirentMain>,
-    pub dirMutex: QRwLock<()>,
+    pub dirMu: QRwLock<()>,
     pub children: QMutex<BTreeMap<String, DirentWeak>>,
 }
 
@@ -1257,7 +1266,7 @@ impl Default for DirentInternal {
             inode: Inode::default(),
             watches: Watches::default(),
             main: Default::default(),
-            dirMutex: Default::default(),
+            dirMu: Default::default(),
             children: Default::default(),
         }
     }

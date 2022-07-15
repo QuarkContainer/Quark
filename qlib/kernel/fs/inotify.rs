@@ -246,7 +246,7 @@ impl Watches {
         {
             let ws = self.read();
             for (_, watch) in &ws.ws {
-                error!("inotify Notify {}/{}/{}/{}", name, name.len() != 0, ws.unlinked, watch.ExcludeUnlinked());
+                //error!("inotify Notify {}/{}/{}/{}", name, name.len() != 0, ws.unlinked, watch.ExcludeUnlinked());
                 if unlinked && watch.ExcludeUnlinked() && et == EventType::PathEvent {
                     // IN_EXCL_UNLINK - By default, when watching events on the children
                     // of a directory, events are generated for children even after they
