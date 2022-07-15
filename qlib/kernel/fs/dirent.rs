@@ -212,6 +212,7 @@ impl Dirent {
             Name: name.to_string(),
             Parent: None,
             mounted: false,
+            deleted: false,
         };
 
         let intern = DirentInternal {
@@ -228,6 +229,14 @@ impl Dirent {
 
     pub fn Watches(&self) -> Watches {
         return self.watches.clone();
+    }
+
+    pub fn SetDeleted(&self) {
+        self.main.lock().deleted = true;
+    }
+
+    pub fn IsDeleted(&self) -> bool {
+        return self.main.lock().deleted;
     }
 
     pub fn NewTransient(inode: &Inode) -> Self {
@@ -807,16 +816,6 @@ impl Dirent {
         }
 
         inode.Remove(task, self, &child)?;
-
-        // Link count changed, this only applies to non-directory nodes.
-        if SHARESPACE.config.read().EnableInotify {
-            child.Watches().Notify("",
-                                        InotifyEvent::IN_ATTRIB,
-                                        0,
-                                        EventType::InodeEvent,
-                                        false);
-        }
-
         self.children.lock().remove(name);
         child.DropExtendedReference();
 
@@ -830,18 +829,15 @@ impl Dirent {
             child.Watches().Unpin(&child);
         }
 
+        child.SetDeleted();
+
+        if SHARESPACE.config.read().EnableInotify {
+            InotifyRemoveChild(task, Some(child.Watches()), Some(self.Watches()), name)
+        }
+
         // trigger inode destroy
         drop(child);
         drop(childInode);
-
-        if SHARESPACE.config.read().EnableInotify {
-            self.Watches().Notify(name,
-                                   InotifyEvent::IN_DELETE,
-                                   0,
-                                   EventType::InodeEvent,
-                                   false);
-        }
-
         return Ok(());
     }
 
@@ -866,6 +862,8 @@ impl Dirent {
             return Err(Error::SysError(SysErr::EBUSY));
         }
 
+        child.SetDeleted();
+
         inode.Remove(task, self, &child)?;
 
         self.children.lock().remove(name);
@@ -880,8 +878,8 @@ impl Dirent {
             self.Watches().Notify(name,
                                    InotifyEvent::IN_ISDIR | InotifyEvent::IN_DELETE,
                                    0,
-                                   EventType::PathEvent,
-                                   false);
+                                   EventType::InodeEvent,
+                                   true);
         }
 
         return Ok(());
@@ -1008,34 +1006,15 @@ impl Dirent {
             .lock()
             .insert(newName.to_string(), renamed.Downgrade());
 
-        // Queue inotify events for the rename.
-        let mut ev : u32 = 0;
-        if newInode.StableAttr().IsDir() {
-            ev |=  InotifyEvent::IN_ISDIR;
-        }
-
         if SHARESPACE.config.read().EnableInotify {
-            let cookie = NewInotifyCookie();
-            oldParent.Watches().Notify(
-                oldName,
-                ev | InotifyEvent::IN_MOVED_FROM,
-                cookie,
-                EventType::InodeEvent,
-                false);
-            newParent.Watches().Notify(
-                newName,
-                ev | InotifyEvent::IN_MOVED_TO,
-                cookie,
-                EventType::InodeEvent,
-                false);
-
-            // Somewhat surprisingly, self move events do not have a cookie.
-            renamed.Watches().Notify(
-                "",
-                InotifyEvent::IN_MOVE_SELF,
-                0,
-                EventType::InodeEvent,
-                false);
+            let isDir = newInode.StableAttr().IsDir();
+            InotifyRename(task,
+                          Some(renamed.Watches()),
+                          Some(oldParent.Watches()),
+                          Some(newParent.Watches()),
+                          oldName,
+                          newName,
+                          isDir);
         }
 
         renamed.DropExtendedReference();
@@ -1105,6 +1084,7 @@ impl Dirent {
 
                 replaced.DropExtendedReference();
                 replaced.flush();
+                replaced.SetDeleted();
 
                 exist = true;
             }
@@ -1126,34 +1106,16 @@ impl Dirent {
         }
 
         // Queue inotify events for the rename.
-        let mut ev : u32 = 0;
-        if newInode.StableAttr().IsDir() {
-            ev |=  InotifyEvent::IN_ISDIR;
-        }
-
         if SHARESPACE.config.read().EnableInotify {
-            let cookie = NewInotifyCookie();
+            let isDir = newInode.StableAttr().IsDir();
+            InotifyRename(task,
+                          Some(renamed.Watches()),
+                          Some(parent.Watches()),
+                          Some(parent.Watches()),
+                          oldName,
+                          newName,
+                          isDir);
 
-            parent.Watches().Notify(
-                oldName,
-                ev | InotifyEvent::IN_MOVED_FROM,
-                cookie,
-                EventType::InodeEvent,
-                false);
-            parent.Watches().Notify(
-                newName,
-                ev | InotifyEvent::IN_MOVED_TO,
-                cookie,
-                EventType::InodeEvent,
-                false);
-
-            // Somewhat surprisingly, self move events do not have a cookie.
-            renamed.Watches().Notify(
-                "",
-                InotifyEvent::IN_MOVE_SELF,
-                0,
-                EventType::InodeEvent,
-                false);
         }
 
         renamed.DropExtendedReference();
@@ -1248,7 +1210,7 @@ impl Dirent {
                                                event,
                                                cookie,
                                                et,
-                                               false);
+                                               self.IsDeleted());
                 }
             }
 
@@ -1256,7 +1218,7 @@ impl Dirent {
                                    event,
                                    cookie,
                                    et,
-                                   false);
+                                   self.IsDeleted());
         }
     }
 
@@ -1307,6 +1269,7 @@ pub struct DirentMain {
     pub Name: String,
     pub Parent: Option<Dirent>,
     pub mounted: bool,
+    pub deleted: bool,
 }
 
 impl Default for DirentMain {
@@ -1316,6 +1279,7 @@ impl Default for DirentMain {
             Name: "".to_string(),
             Parent: None,
             mounted: false,
+            deleted: false,
         };
     }
 }
@@ -1327,6 +1291,7 @@ impl DirentMain {
             Name: name.to_string(),
             Parent: None,
             mounted: false,
+            deleted: false,
         };
     }
 
@@ -1336,6 +1301,7 @@ impl DirentMain {
             Name: "transient".to_string(),
             Parent: None,
             mounted: false,
+            deleted: false,
         };
     }
 
