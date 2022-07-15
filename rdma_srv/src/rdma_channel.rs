@@ -32,11 +32,6 @@ use super::qlib::socket_buf::SocketBuff;
 
 #[derive(Clone, Copy, Debug)]
 pub enum ChannelStatus {
-    // FIN_RECEIVED_FROM_CLIENT, //request from client
-    // FIN_RECEIVED_FROM_PEER,
-    FIN_SENT_TO_PEER = -2,
-    // CLOSE_WAIT,
-    CLOSE_REQUESTED_FROM_CLIENT = -1,
     CLOSED = 0,
     LISTEN = 1,
     SYN_SENT = 2,
@@ -155,15 +150,7 @@ impl RDMAChannelIntern {
             .ConsumeAndGetAvailableWriteBuf(writeCount as usize);
 
         if finSent {
-            if matches!(
-                *self.status.lock(),
-                ChannelStatus::CLOSE_REQUESTED_FROM_CLIENT
-            ) {
-                // println!("ProcessRDMAWriteImmFinish::2");
-                self.ReleaseChannelResource();
-                // println!("ProcessRDMAWriteImmFinish::3, remove channel from RDMA_SRV");
-            } else if matches!(*self.status.lock(), ChannelStatus::FIN_WAIT_1) {
-                println!("ProcessRDMAWriteImmFinish::4");
+            if matches!(*self.status.lock(), ChannelStatus::FIN_WAIT_1) {
                 *self.status.lock() = ChannelStatus::FIN_WAIT_2;
                 // TODO: notify client.
                 // self.agent.SendResponse(RDMAResp {
@@ -177,13 +164,13 @@ impl RDMAChannelIntern {
             } else if matches!(*self.status.lock(), ChannelStatus::LAST_ACK)
                 && availableDataLen == 0
             {
-                println!("ProcessRDMAWriteImmFinish::5");
                 *self.status.lock() = ChannelStatus::CLOSED;
-                //TODO: release resource
                 if *self.closeRequestedByClient.lock() {
                     debug!("finSent, ReleaseChannelResource");
                     self.ReleaseChannelResource();
                 }
+            } else {
+                panic!("TODO: ")
             }
 
             return;
