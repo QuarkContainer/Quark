@@ -576,7 +576,13 @@ fn main() -> io::Result<()> {
         }
 
         let mut enable = 1;
-        let _res = libc::setsockopt(server_fd, libc::SOL_SOCKET, libc::SO_REUSEADDR, &mut enable as *mut _ as  *mut libc::c_void, 4);
+        let _res = libc::setsockopt(
+            server_fd,
+            libc::SOL_SOCKET,
+            libc::SO_REUSEADDR,
+            &mut enable as *mut _ as *mut libc::c_void,
+            4,
+        );
 
         let result = libc::bind(
             server_fd,
@@ -889,7 +895,19 @@ fn main() -> io::Result<()> {
                         let ret = conn_sock.ReadWithFds(buf);
                         match ret {
                             Ok((size, _fds)) => {
+                                debug!("UnixDomainSocketConnect, size: {}", size);
                                 if size == 0 {
+                                    debug!("Disconnect from client");
+                                    let agentIdOption = RDMA_SRV.sockToAgentIds.lock().remove(&conn_sock.as_raw_fd());
+                                    match agentIdOption {
+                                        Some(agentId) => {
+                                            debug!("Remove agent from RDMA_SRV.agents");
+                                            RDMA_SRV.agents.lock().remove(&agentId);
+                                        }
+                                        None => {
+                                            error!("AgentId not found for sockfd: {}", conn_sock.as_raw_fd())
+                                        }
+                                    }
                                     break;
                                 }
                                 if body == 1 {
@@ -961,7 +979,7 @@ fn RDMAProcess() {
         if count > 0 {
             start = TSC.Rdtsc();
         }
-        if TSC.Rdtsc() - start >= (IO_WAIT_CYCLES/100) {
+        if TSC.Rdtsc() - start >= (IO_WAIT_CYCLES / 100) {
             break;
         }
         // if count == 0 {
@@ -978,7 +996,7 @@ fn RDMAProcess() {
 fn RDMAProcessOnce() -> usize {
     let mut count = 0;
     let mut channels: HashMap<u32, HashSet<u32>> = HashMap::new();
-    count += RDMA.PollCompletionQueueAndProcess(& mut channels);
+    count += RDMA.PollCompletionQueueAndProcess(&mut channels);
     // debug!("RDMAProcessOnce, channels: {:?}", channels);
     if channels.len() > 1 {
         debug!("RDMAProcessOnce, channels: {}", channels.len());
@@ -1014,6 +1032,10 @@ fn InitContainer(conn_sock: &UnixSocket) {
         .agents
         .lock()
         .insert(rdmaAgentId, rdmaAgent.clone());
+    RDMA_SRV
+        .sockToAgentIds
+        .lock()
+        .insert(conn_sock.as_raw_fd(), rdmaAgentId);
     let body = [123, rdmaAgentId];
     let ptr = &body as *const _ as *const u8;
     let buf = unsafe { slice::from_raw_parts(ptr, 8) };

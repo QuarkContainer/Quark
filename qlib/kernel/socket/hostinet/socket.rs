@@ -175,6 +175,7 @@ pub struct SocketOperationsIntern {
     pub enableAsyncAccept: AtomicBool,
     pub hostops: HostInodeOp,
     passInq: AtomicBool,
+    pub enableRDMA: bool,
 }
 
 #[derive(Clone)]
@@ -208,6 +209,10 @@ impl SocketOperations {
             _ => (),
         }
 
+        let enableRDMA = SHARESPACE.config.read().EnableRDMA
+            && (family == AFType::AF_INET || family == AFType::AF_INET6)
+            && stype == SockType::SOCK_STREAM;
+
         let ret = SocketOperationsIntern {
             send: AtomicI64::new(0),
             recv: AtomicI64::new(0),
@@ -220,6 +225,7 @@ impl SocketOperations {
             enableAsyncAccept: AtomicBool::new(false),
             hostops: hostops,
             passInq: AtomicBool::new(false),
+            enableRDMA: enableRDMA,
         };
 
         let ret = Self(Arc::new(ret));
@@ -829,16 +835,16 @@ impl SockOperations for SocketOperations {
             defer!(self.EventUnregister(task, &general));
 
             // if self.Readiness(task, WRITEABLE_EVENT) == 0 {
-                match task.blocker.BlockWithMonoTimer(true, None) {
-                    Err(Error::ErrInterrupted) => {
-                        return Err(Error::SysError(SysErr::ERESTARTSYS));
-                    }
-                    Err(e) => {
-                        error!("connect error {:?}", &e);
-                        return Err(e);
-                    }
-                    _ => (),
+            match task.blocker.BlockWithMonoTimer(true, None) {
+                Err(Error::ErrInterrupted) => {
+                    return Err(Error::SysError(SysErr::ERESTARTSYS));
                 }
+                Err(e) => {
+                    error!("connect error {:?}", &e);
+                    return Err(e);
+                }
+                _ => (),
+            }
             // }
         }
 
@@ -1095,9 +1101,15 @@ impl SockOperations for SocketOperations {
         }
 
         if how == LibcConst::SHUT_RD || how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR {
-            let res = Kernel::HostSpace::Shutdown(self.fd, how as i32);
-            if res < 0 {
-                return Err(Error::SysError(-res as i32));
+            let res = 0;
+            if self.enableRDMA && (how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR) {
+                //TODO: 
+                let _res = GlobalRDMASvcCli().shutdown(1, how as u8);
+            } else {
+                let res = Kernel::HostSpace::Shutdown(self.fd, how as i32);
+                if res < 0 {
+                    return Err(Error::SysError(-res as i32));
+                }
             }
 
             if self.stype == SockType::SOCK_STREAM
@@ -1569,7 +1581,7 @@ impl SockOperations for SocketOperations {
     ) -> Result<i64> {
         if self.SocketBufEnabled() {
             if self.SocketBuf().WClosed() {
-                return Err(Error::SysError(SysErr::ESPIPE))
+                return Err(Error::SysError(SysErr::ESPIPE));
             }
 
             if msgHdr.msgName != 0 || msgHdr.msgControl != 0 {

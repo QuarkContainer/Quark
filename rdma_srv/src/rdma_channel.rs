@@ -34,15 +34,20 @@ use super::qlib::socket_buf::SocketBuff;
 pub enum ChannelStatus {
     // FIN_RECEIVED_FROM_CLIENT, //request from client
     // FIN_RECEIVED_FROM_PEER,
-    FIN_SENT_TO_PEER,
+    FIN_SENT_TO_PEER = -2,
     // CLOSE_WAIT,
-    CLOSE_REQUESTED_FROM_CLIENT,
-    ESTABLISHED,
-    // SYN_RECEIVED,
-    // LISTENING,
-    CONNECTING,
-    // BINDED,
-    // ... to simulate TCP status
+    CLOSE_REQUESTED_FROM_CLIENT = -1,
+    CLOSED = 0,
+    LISTEN = 1,
+    SYN_SENT = 2,
+    SYN_RECEIVED = 3,
+    ESTABLISHED = 4,
+    CLOSE_WAIT = 5,
+    FIN_WAIT_1 = 6,
+    CLOSING = 7,
+    LAST_ACK = 8,
+    FIN_WAIT_2 = 9,
+    TIME_WAIT = 10,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -92,6 +97,14 @@ pub struct RDMAChannelIntern {
     pub status: Mutex<ChannelStatus>,
     pub duplexMode: Mutex<DuplexMode>,
     pub ioBufIndex: u32,
+    pub closeRequestedByClient: Mutex<bool>,
+}
+
+impl Drop for RDMAChannelIntern {
+    fn drop(&mut self) {
+        RDMA_SRV.channelIdMgr.lock().Remove(self.localId);
+        self.agent.ioBufIdMgr.lock().Remove(self.ioBufIndex);
+    }
 }
 
 impl RDMAChannelIntern {
@@ -137,7 +150,7 @@ impl RDMAChannelIntern {
         let writeCount = self.writeCount.load(QOrdering::ACQUIRE);
         // debug!("ProcessRDMAWriteImmFinish::1 writeCount: {}", writeCount);
 
-        let (trigger, addr, _len) = self
+        let (trigger, addr, availableDataLen) = self
             .sockBuf
             .ConsumeAndGetAvailableWriteBuf(writeCount as usize);
 
@@ -147,13 +160,11 @@ impl RDMAChannelIntern {
                 ChannelStatus::CLOSE_REQUESTED_FROM_CLIENT
             ) {
                 // println!("ProcessRDMAWriteImmFinish::2");
-                RDMA_SRV.channels.lock().remove(&self.localId);
-                RDMA_SRV.channelIdMgr.lock().Remove(self.localId);
-                self.agent.ioBufIdMgr.lock().Remove(self.ioBufIndex);
+                self.ReleaseChannelResource();
                 // println!("ProcessRDMAWriteImmFinish::3, remove channel from RDMA_SRV");
-            } else {
-                // println!("ProcessRDMAWriteImmFinish::4");
-                *self.status.lock() = ChannelStatus::FIN_SENT_TO_PEER;
+            } else if matches!(*self.status.lock(), ChannelStatus::FIN_WAIT_1) {
+                println!("ProcessRDMAWriteImmFinish::4");
+                *self.status.lock() = ChannelStatus::FIN_WAIT_2;
                 // TODO: notify client.
                 // self.agent.SendResponse(RDMAResp {
                 //     user_data: 0,
@@ -163,6 +174,16 @@ impl RDMAChannelIntern {
                 //         event: FIN_SENT_TO_PEER,
                 //     }),
                 // });
+            } else if matches!(*self.status.lock(), ChannelStatus::LAST_ACK)
+                && availableDataLen == 0
+            {
+                println!("ProcessRDMAWriteImmFinish::5");
+                *self.status.lock() = ChannelStatus::CLOSED;
+                //TODO: release resource
+                if *self.closeRequestedByClient.lock() {
+                    debug!("finSent, ReleaseChannelResource");
+                    self.ReleaseChannelResource();
+                }
             }
 
             return;
@@ -227,32 +248,40 @@ impl RDMAChannelIntern {
         self.SendConsumedDataInternal(self.GetRemoteChannelId());
     }
 
-    pub fn Shutdown(&self, howto: u8) {
-        if howto == 0 {
-            *self.duplexMode.lock() = DuplexMode::SHUTDOWN_RD;
-        } else if howto == 1 {
-            *self.duplexMode.lock() = DuplexMode::SHUTDOWN_WR;
-        } else if howto == 2 {
-            *self.duplexMode.lock() = DuplexMode::SHUTDOWN_RDWR;
+    pub fn Shutdown(&self) {
+        self.HandleUserClose();
+    }
+
+    // handle both shutdown and close
+    fn HandleUserClose(&self) {
+        //TODO: should handle other status too.
+        if matches!(*self.status.lock(), ChannelStatus::ESTABLISHED) {
+            *self.status.lock() = ChannelStatus::FIN_WAIT_1;
+            self.RDMASend();
+        } else if matches!(*self.status.lock(), ChannelStatus::CLOSE_WAIT) {
+            *self.status.lock() = ChannelStatus::LAST_ACK;
+            self.RDMASend();
+        } else {
+            panic!(
+                "UserClose(Close|ShutDown) is not handled for status: {:?}",
+                *self.status.lock()
+            );
         }
-        // println!("RDMAChannel::Shutdown");
-        self.RDMASend();
     }
 
     pub fn Close(&self) {
-        // println!("RDMAChannel::Close 1");
-        // println!("RDMAChannel::Close, channel status: {:?}", *self.status.lock());
-        if matches!(*self.status.lock(), ChannelStatus::FIN_SENT_TO_PEER) {
-            // println!("RDMAChannel::Close 2");
-            RDMA_SRV.channels.lock().remove(&self.localId);
-            RDMA_SRV.channelIdMgr.lock().Remove(self.localId);
-            self.agent.ioBufIdMgr.lock().Remove(self.ioBufIndex);
-            // println!("RDMAChannel::Close 3");
-        } else {
-            // println!("RDMAChannel::Close 4");
-            *self.status.lock() = ChannelStatus::CLOSE_REQUESTED_FROM_CLIENT;
-            // println!("RDMAChannel::Close 5");
+        if *self.closeRequestedByClient.lock() {
+            return;
         }
+        *self.closeRequestedByClient.lock() = true;
+        let channelStatus = *self.status.lock();
+        if matches!(channelStatus, ChannelStatus::TIME_WAIT)
+            || matches!(channelStatus, ChannelStatus::CLOSED)
+        {
+            self.ReleaseChannelResource();
+            return;
+        }
+        self.HandleUserClose();
     }
 
     fn GetRemoteChannelId(&self) -> u32 {
@@ -306,9 +335,16 @@ impl RDMAChannelIntern {
         }
 
         if finReceived {
-            // println!("ProcessRDMARecvWriteImm 5");
-            // *self.status.lock() = ChannelStatus::FIN_RECEIVED_FROM_PEER;
-            // println!("ProcessRDMARecvWriteImm 6");
+            if matches!(*self.status.lock(), ChannelStatus::ESTABLISHED) {
+                *self.status.lock() = ChannelStatus::CLOSE_WAIT;
+            } else if matches!(*self.status.lock(), ChannelStatus::FIN_WAIT_2) {
+                *self.status.lock() = ChannelStatus::TIME_WAIT;
+                if *self.closeRequestedByClient.lock() {
+                    self.ReleaseChannelResource();
+                }
+            }
+
+            debug!("ProcessRDMARecvWriteImm 7");
             self.agent.SendResponse(RDMAResp {
                 user_data: 0,
                 msg: RDMARespMsg::RDMAFinNotify(RDMAFinNotifyResp {
@@ -318,6 +354,10 @@ impl RDMAChannelIntern {
             });
             // println!("ProcessRDMARecvWriteImm 7");
         }
+    }
+
+    fn ReleaseChannelResource(&self) {
+        RDMA_SRV.channels.lock().remove(&self.localId);
     }
 
     pub fn ProcessRemoteConsumedData(&self, consumedCount: u32) {
@@ -335,13 +375,10 @@ impl RDMAChannelIntern {
     }
 
     pub fn RDMASend(&self) {
-        // println!("RDMAChannelIntern::RDMASend 1");
         let remoteInfo = self.remoteChannelRDMAInfo.lock();
-        // println!("RDMAChannelIntern::RDMASend 2");
         if remoteInfo.sending == true {
             return; // the sending is ongoing
         }
-        // println!("RDMAChannelIntern::RDMASend 3");
         //self.RDMASendLockedNew(remoteInfo);
         self.conn.RDMAWrite(self, remoteInfo);
     }
@@ -351,10 +388,10 @@ impl RDMAChannelIntern {
         self.RDMASendLocked(remoteInfo, remoteRecvRequestCount);
     }
 
-    fn Is_WR(&self) -> bool {
-        match *self.duplexMode.lock() {
-            DuplexMode::SHUTDOWN_WR => true,
-            DuplexMode::SHUTDOWN_RDWR => true,
+    fn ShouldSendFIN(&self) -> bool {
+        match *self.status.lock() {
+            ChannelStatus::FIN_WAIT_1 => true,
+            ChannelStatus::LAST_ACK => true,
             _ => false,
         }
     }
@@ -380,7 +417,7 @@ impl RDMAChannelIntern {
             if len > remoteInfo.freespace as usize {
                 len = remoteInfo.freespace as usize;
             } else {
-                if self.Is_WR() {
+                if self.ShouldSendFIN() {
                     immData = immData | 0x80000000;
                     wrId = wrId | 0x80000000;
                 }
@@ -413,10 +450,9 @@ impl RDMAChannelIntern {
                 **remoteRecvRequestCount += 1;
             }
         } else {
-            if self.Is_WR() {
+            if self.ShouldSendFIN() {
                 let immData = remoteInfo.remoteId | 0x80000000;
                 let wrId = self.localId | 0x80000000;
-                // println!("RDMASendLocked::6, immData: {}, wrId: {}", immData, wrId);
                 self.RDMAWriteImm(
                     addr,
                     remoteInfo.raddr + remoteInfo.offset as u64,
@@ -480,6 +516,7 @@ impl RDMAChannel {
             remoteChannelRDMAInfo: Mutex::new(ChannelRDMAInfo::default()),
             writeCount: AtomicUsize::new(0),
             ioBufIndex: 0,
+            closeRequestedByClient: Mutex::new(false),
         }))
     }
 
@@ -522,6 +559,7 @@ impl RDMAChannel {
             }),
             writeCount: AtomicUsize::new(0),
             ioBufIndex,
+            closeRequestedByClient: Mutex::new(false),
         }))
     }
 
@@ -548,7 +586,7 @@ impl RDMAChannel {
             dstIpAddr: connectRequest.dstIpAddr,
             srcPort: connectRequest.srcPort,
             dstPort: connectRequest.dstPort,
-            status: Mutex::new(ChannelStatus::CONNECTING),
+            status: Mutex::new(ChannelStatus::SYN_SENT),
             duplexMode: Mutex::new(DuplexMode::SHUTDOWN_NONE),
             lkey,
             rkey,
@@ -557,6 +595,7 @@ impl RDMAChannel {
             remoteChannelRDMAInfo: Mutex::new(ChannelRDMAInfo::default()),
             writeCount: AtomicUsize::new(0),
             ioBufIndex,
+            closeRequestedByClient: Mutex::new(false),
         }))
     }
 

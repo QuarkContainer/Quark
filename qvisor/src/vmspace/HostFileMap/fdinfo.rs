@@ -22,9 +22,9 @@ use crate::qlib::socket_buf::*;
 
 use super::super::super::util::*;
 use super::super::qlib::common::*;
+use super::super::qlib::rdmasocket::*;
 use super::super::FD_NOTIFIER;
 use super::super::*;
-use super::super::qlib::rdmasocket::*;
 // use super::socket_info::*;
 
 impl FdInfo {
@@ -188,7 +188,6 @@ impl FdInfo {
         let ret = unsafe { libc::fsetxattr(fd, name as _, value as _, size, flags as _) };
         return SysRet(ret as i64);
     }
-
 
     pub fn FGetXattr(fd: i32, name: u64, value: u64, size: usize) -> i64 {
         let ret = unsafe { libc::fgetxattr(fd, name as _, value as _, size) };
@@ -391,7 +390,6 @@ impl FdInfo {
         let fd = self.lock().fd;
         return Self::FSetXattr(fd, name, value, size, flags);
     }
-
 
     pub fn IOFGetXattr(&self, name: u64, value: u64, size: usize) -> i64 {
         let fd = self.lock().fd;

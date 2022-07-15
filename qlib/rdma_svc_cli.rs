@@ -155,6 +155,11 @@ impl RDMASvcClient {
         }
     }
 
+    pub fn close(&self, channelId: u32) -> Result<()> {
+        let res = self.SentMsgToSvc(RDMAReqMsg::RDMAClose(RDMACloseReq { channelId }));
+        res
+    }
+
     pub fn updateBitmapAndWakeUpServerIfNecessary(&self) {
         // println!("updateBitmapAndWakeUpServerIfNecessary 1 ");
         let mut srvShareRegion = self.srvShareRegion.lock();
@@ -288,7 +293,6 @@ impl RDMASvcClient {
                                     response.channelId,
                                 );
 
-                                // GlobalIOMgr().AddSocket(fd);
                                 let fdInfo = GlobalIOMgr().GetByHost(fd as i32).unwrap();
                                 let fdInfoLock1 = fdInfo.lock();
                                 *fdInfoLock1.sockInfo.lock() = SockInfo::RDMADataSocket(dataSock);
@@ -381,13 +385,28 @@ impl RDMASvcClient {
                         }
                     }
                     RDMARespMsg::RDMAFinNotify(response) => {
-                        // debug!("RDMARespMsg::RDMAFinNotify, response: {:?}", response);
-                        // let mut channelToSockInfos = gatewayCli.channelToSockInfos.lock();
-                        // let sockInfo = channelToSockInfos.get_mut(&response.channelId).unwrap();
-                        // if response.event & FIN_RECEIVED_FROM_PEER != 0 {
-                        //     *sockInfo.finReceived.lock() = true;
-                        //     gatewayCli.WriteToSocket(sockInfo, &sockFdMappings);
-                        // }
+                        debug!("RDMARespMsg::RDMAFinNotify, response: {:?}", response);
+                        let mut channelToSocketMappings = self.channelToSocketMappings.lock();
+                        let sockFd = channelToSocketMappings.get_mut(&response.channelId);
+                        match sockFd {
+                            Some(fd) => {
+                                let fdInfo = GlobalIOMgr().GetByHost(*fd).unwrap();
+                                let fdInfoLock = fdInfo.lock();
+                                let sockInfo = fdInfoLock.sockInfo.lock().clone();
+                                match sockInfo {
+                                    SockInfo::RDMADataSocket(dataSock) => {
+                                        dataSock.socketBuf.SetRClosed();
+                                        fdInfoLock.waitInfo.Notify(EVENT_IN);
+                                    }
+                                    _ => {
+                                        panic!("Unexpected sockInfo type: {:?}", sockInfo);
+                                    }
+                                }
+                            }
+                            None => {
+                                info!("channelId: {} is not found", response.channelId);
+                            }
+                        }
                     }
                 },
                 None => {

@@ -127,7 +127,7 @@ pub enum RDMAReqMsg {
     RDMAWrite(RDMAWriteReq),
     RDMARead(RDMAReadReq),
     RDMAShutdown(RDMAShutdownReq),
-    RDMACloseChannel(RDMACloseChannelReq),
+    RDMAClose(RDMACloseReq),
     // RDMAAccept(RDMAAcceptReq), //Put connected socket on client side.
 }
 
@@ -210,7 +210,7 @@ pub struct RDMAShutdownReq {
 }
 
 #[derive(Default, Clone, Copy, Debug)]
-pub struct RDMACloseChannelReq {
+pub struct RDMACloseReq {
     pub channelId: u32,
 }
 
@@ -404,17 +404,20 @@ impl ShareRegion {
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, Debug)]
 pub enum SockStatus {
-    FIN_READ_FROM_BUFFER, //after reading all stuff to above socket, need a better name.
-    FIN_SENT_TO_SVC,      //
+    FIN_READ_FROM_BUFFER  = -2, //after reading all stuff to above socket, need a better name.
+    FIN_SENT_TO_SVC = -1,      //
     // FIN_RECEIVED_FROM_PEER,
-    CLOSE_WAIT,
-    CLOSING,
-    ESTABLISHED,
-    SYN_RECEIVED,
-    LISTENING,
-    CONNECTING,
-    BINDED,
-    // ... to simulate TCP status
+    CLOSED = 0,
+    LISTEN = 1,
+    SYN_SENT = 2,
+    SYN_RECEIVED = 3,
+    ESTABLISHED = 4,
+    CLOSE_WAIT = 5,
+    FIN_WAIT_1 = 6,
+    CLOSING = 7,
+    LAST_ACK = 8,
+    FIN_WAIT_2 = 9,
+    TIME_WAIT = 10,
 }
 
 #[allow(non_camel_case_types)]

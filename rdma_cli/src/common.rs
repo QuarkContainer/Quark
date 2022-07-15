@@ -339,7 +339,7 @@ impl GatewayClient {
             srcPort: port,
             fd: sockfd,
             acceptQueue: AcceptQueue::default(),
-            status: SockStatus::BINDED,
+            status: SockStatus::CLOSED,
         };
 
         self.serverSockFdInfos.lock().insert(sockfd, sockFdInfo);
@@ -352,7 +352,7 @@ impl GatewayClient {
                 Ok(()) => {
                     let mut sockFdInfos = self.serverSockFdInfos.lock();
                     let sockFdInfo = sockFdInfos.get_mut(&sockfd).unwrap();
-                    sockFdInfo.status = SockStatus::LISTENING;
+                    sockFdInfo.status = SockStatus::LISTEN;
                     Ok(())
                 }
                 Err(error) => return Err(error),
@@ -374,7 +374,7 @@ impl GatewayClient {
                     16866u16.to_be(),
                     ipAddr,
                     port,
-                    SockStatus::CONNECTING,
+                    SockStatus::SYN_SENT,
                     0,
                     Arc::new(SocketBuff::NewDummySockBuf()),
                 );
@@ -472,8 +472,8 @@ impl GatewayClient {
                         // println!("ReadFromSocket, cnt == 0 5");
                         self.sockIdMgr.lock().Remove(sockInfo.fd);
                         // Send close to svc
-                        let _ret = self.rdmaSvcCli.SentMsgToSvc(RDMAReqMsg::RDMACloseChannel(
-                            RDMACloseChannelReq {
+                        let _ret = self.rdmaSvcCli.SentMsgToSvc(RDMAReqMsg::RDMAClose(
+                            RDMACloseReq {
                                 channelId: *sockInfo.channelId.lock(),
                             },
                         ));
@@ -521,8 +521,8 @@ impl GatewayClient {
                         self.dataSockFdInfos.lock().remove(&sockInfo.fd);
                         // println!("WriteToSocket, close socket 4");
                         self.sockIdMgr.lock().Remove(sockInfo.fd);
-                        let _ret = self.rdmaSvcCli.SentMsgToSvc(RDMAReqMsg::RDMACloseChannel(
-                            RDMACloseChannelReq {
+                        let _ret = self.rdmaSvcCli.SentMsgToSvc(RDMAReqMsg::RDMAClose(
+                            RDMACloseReq {
                                 channelId: *sockInfo.channelId.lock(),
                             },
                         ));

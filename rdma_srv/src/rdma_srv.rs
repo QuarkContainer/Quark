@@ -94,6 +94,8 @@ pub struct RDMASrv {
     // agents: agentId -> RDMAAgent
     pub agents: Mutex<HashMap<u32, RDMAAgent>>,
 
+    pub sockToAgentIds: Mutex<HashMap<i32, u32>>,
+
     // the bitmap to expedite ready container search
     pub shareRegion: &'static ShareRegion,
 
@@ -109,6 +111,7 @@ pub struct RDMASrv {
     pub controlChannelRegionAddress: MemRegion,
     pub controlBufIdMgr: Mutex<IdMgr>,
     pub keys: Vec<[u32; 2]>,
+    pub memoryRegion: MemoryRegion,
 }
 
 impl Drop for RDMASrv {
@@ -226,6 +229,8 @@ impl RDMASrv {
             keys: vec![[mr.LKey(), mr.RKey()]],
             controlChannels: Mutex::new(HashMap::new()),
             controlChannels2: Mutex::new(HashMap::new()),
+            sockToAgentIds: Mutex::new(HashMap::new()),
+            memoryRegion: mr,
         };
     }
 
@@ -286,7 +291,10 @@ impl RDMASrv {
         //     channelId, finReceived
         // );
         if channelId != 0 {
-            match self.channels.lock().get(&channelId) {
+            let channelOption;
+            let channels = self.channels.lock();
+            channelOption = channels.get(&channelId);
+            match channelOption {
                 None => {
                     panic!(
                         "ProcessRDMARecvWriteImm get unexpected channelId: {}",
@@ -294,7 +302,9 @@ impl RDMASrv {
                     );
                 }
                 Some(channel) => {
-                    channel.ProcessRDMARecvWriteImm(qpNum, recvCount as u64, finReceived);
+                    let channelClone = channel.clone();
+                    drop(channels);
+                    channelClone.ProcessRDMARecvWriteImm(qpNum, recvCount as u64, finReceived);
                 }
             }
         } else {
@@ -346,7 +356,8 @@ impl RDMASrv {
                     if l2idx > 502 {
                         break;
                     }
-                    let mut l2 = self.shareRegion.bitmap.l2bitmap[l2idx as usize].swap(0, Ordering::SeqCst);
+                    let mut l2 =
+                        self.shareRegion.bitmap.l2bitmap[l2idx as usize].swap(0, Ordering::SeqCst);
                     // println!("l2: {:x}", l2);
                     for l2pos in 0..64 {
                         if l2 == 0 {
