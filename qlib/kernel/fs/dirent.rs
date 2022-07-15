@@ -442,7 +442,7 @@ impl Dirent {
                     return Ok(dirent);
                 }
 
-                dirent.Watches().Unpin(&dirent);
+                dirent.Watches().Destroy();
 
                 false
             }
@@ -832,7 +832,7 @@ impl Dirent {
         // watch removal will be queued by the inode destructor.
         if SHARESPACE.config.read().EnableInotify {
             child.Watches().MarkUnlinked();
-            child.Watches().Unpin(&child);
+            child.Watches().Destroy();
         }
 
         child.SetDeleted();
@@ -883,7 +883,7 @@ impl Dirent {
         // refs from inotify to this child dirent.
         if SHARESPACE.config.read().EnableInotify {
             child.Watches().MarkUnlinked();
-            child.Watches().Unpin(&child);
+            child.Watches().Destroy();
             self.Watches().Notify(name,
                                    InotifyEvent::IN_ISDIR | InotifyEvent::IN_DELETE,
                                    0,
@@ -1027,7 +1027,7 @@ impl Dirent {
         }
 
         renamed.DropExtendedReference();
-        renamed.Watches().Unpin(&renamed);
+        renamed.Watches().Destroy();
         renamed.flush();
 
         return Ok(());
