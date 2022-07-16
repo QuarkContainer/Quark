@@ -760,7 +760,7 @@ impl ThreadGroupInternal {
 
         for t in &self.tasks {
             let mut t = t.lock();
-            t.groupStopPending = true;
+            t.groupStopPending = false;
             if t.stop.is_some() && t.stop.clone().unwrap().Type() == TaskStopType::GROUPSTOP {
                 t.endInternalStopLocked();
             }
