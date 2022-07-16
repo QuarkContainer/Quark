@@ -53,7 +53,7 @@ pub fn SysMembarrier(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             }
 
             if cmd == MEMBARRIER_CMD_PRIVATE_EXPEDITED && !task.mm.IsMembarrierPrivateEnabled() {
-                return Err(Error::SysError(SysErr::EINVAL));
+                return Err(Error::SysError(SysErr::EPERM));
             }
 
             let ret = HostSpace::HostMemoryBarrier();
