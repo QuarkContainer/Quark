@@ -16,7 +16,6 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use alloc::collections::linked_list::LinkedList;
 use alloc::collections::btree_map::BTreeMap;
-use alloc::collections::btree_set::BTreeSet;
 use spin::Mutex;
 use core::ops::Deref;
 use core::any::Any;
@@ -47,8 +46,6 @@ pub enum EventType {
     InodeEvent
 }
 
-
-
 // Watch represent a particular inotify watch created by inotify_add_watch.
 //
 // While a watch is active, it ensures the target inode is pinned in memory by
@@ -64,15 +61,15 @@ pub struct WatchIntern {
     // The inode being watched. Note that we don't directly hold a reference on
     // this inode. Instead we hold a reference on the dirent(s) containing the
     // inode, which we record in pins.
-    pub target: DirentWeak,
+    pub target: Option<Dirent>,
 
     // Events being monitored via this watch. Must be accessed atomically,
     // writes are protected by mu.
     pub mask: u32,
 
-    // pins is the set of dirents this watch is currently pinning in memory by
-    // holding a reference to them. See Pin()/Unpin().
-    pub pins: BTreeSet<Dirent>,
+    // expired is set to true to indicate that this watch is a one-shot that has
+    // already sent a notification and therefore can be removed.
+    pub expired: bool,
 }
 
 #[derive(Clone)]
@@ -94,11 +91,7 @@ impl Watch {
 
     pub fn ToString(&self) -> String {
         let w = self.lock();
-        let mut output = format!("watch {}/{}:", w.owner.id, w.wd);
-        for d in &w.pins {
-            output = format!("{} {}", output, d.ID());
-        }
-
+        let output = format!("watch {}/{}:", w.owner.id, w.wd);
         return output;
     }
 
@@ -112,12 +105,25 @@ impl Watch {
     }
 
     // Notify queues a new event on this watch.
-    pub fn Notify(&self, name: &str, events: u32, cookie: u32) {
+    pub fn Notify(&self, name: &str, events: u32, cookie: u32) -> bool {
+        let mut expire = false;
         let (owner, wd, matchedEvents) = {
-            let w = self.lock();
+            let mut w = self.lock();
+            if w.expired {
+                // This is a one-shot watch that is already in the process of being
+                // removed. This may happen if a second event reaches the watch target
+                // before this watch has been removed.
+                return false;
+            }
+
             if w.mask & events == 0 {
                 // We weren't watching for this event.
-                return;
+                return false;
+            }
+
+            if w.mask & InotifyEvent::IN_ONESHOT != 0 {
+                w.expired = true;
+                expire = true;
             }
 
             // Event mask should include bits matched from the watch plus all control
@@ -126,25 +132,11 @@ impl Watch {
             let effectiveMask = unmaskableBits | w.mask;
             let matchedEvents = effectiveMask & events;
             (w.owner.clone(), w.wd, matchedEvents)
+
         };
 
         owner.QueueEvent(Event::New(wd, name, matchedEvents, cookie));
-    }
-
-    // Pin acquires a new ref on dirent, which pins the dirent in memory while
-    // the watch is active. Calling Pin for a second time on the same dirent for
-    // the same watch is a no-op.
-    pub fn Pin(&self, d: &Dirent) {
-        let mut w = self.lock();
-        w.pins.insert(d.clone());
-    }
-
-    // Unpin drops any extra refs held on dirent due to a previous Pin
-    // call. Calling Unpin multiple times for the same dirent, or on a dirent
-    // without a corresponding Pin call is a no-op.
-    pub fn Unpin(&self, d: &Dirent) {
-        let mut w = self.lock();
-        w.pins.remove(d);
+        return expire
     }
 
     pub fn TargetDestroyed(&self) {
@@ -153,7 +145,8 @@ impl Watch {
     }
 
     pub fn Destroy(&self) {
-        self.lock().pins.clear()
+        let tmp = self.lock().target.take();
+        drop(tmp);
     }
 }
 
@@ -242,6 +235,11 @@ impl Watches {
 
     // Notify queues a new event with all watches in this set.
     pub fn Notify(&self, name: &str, events: u32, cookie: u32, et: EventType, unlinked: bool) {
+        if self.read().ws.len() == 0 {
+            return;
+        }
+
+        let mut hasExpired = false;
         let mut watchArr = Vec::new();
         {
             let ws = self.read();
@@ -268,16 +266,42 @@ impl Watches {
         }
 
         for w in &watchArr {
-            w.Notify(name, events, cookie);
+            if w.Notify(name, events, cookie) {
+                hasExpired = true;
+            }
         }
 
+        if hasExpired {
+            self.cleanupExpiredWatches();
+        }
+    }
+
+    // This function is relatively expensive and should only be called where there
+    // are expired watches.
+    pub fn cleanupExpiredWatches(&self) {
+        // Because of lock ordering, we cannot acquire Inotify.mu for each watch
+        // owner while holding w.mu. As a result, store expired watches locally
+        // before removing.
+
+        let mut toRmmove = Vec::new();
+
+        let ws = self.read();
+        for (_, watch) in &ws.ws {
+            if watch.lock().expired {
+                toRmmove.push(watch.clone());
+            }
+        }
+
+        for w in toRmmove {
+            w.TargetDestroyed();
+        }
     }
 
     // Unpin unpins dirent from all watches in this set.
-    pub fn Unpin(&self, d: &Dirent) {
+    pub fn Destroy(&self) {
         let ws = self.read();
         for (_, watch) in &ws.ws {
-            watch.Unpin(d)
+            watch.Destroy()
         }
     }
 
@@ -362,7 +386,7 @@ impl Inotify {
     pub fn Release(&self) {
         let ws = self.watches.lock();
         for (_, w) in &ws.watches {
-            let inode = w.lock().target.Upgrade();
+            let inode = w.lock().target.clone();
             match inode {
                 None => (),
                 Some(i) => i.Watches().Remove(w.Id())
@@ -397,17 +421,13 @@ impl Inotify {
         let watch = Watch(Arc::new(Mutex::new(WatchIntern {
             owner: self.clone(),
             wd: wd,
-            target: target.Downgrade(),
+            target: Some(target.clone()),
             mask: mask,
-            pins: BTreeSet::new(),
+            expired: false,
         })));
 
         ws.watches.insert(wd, watch.clone());
 
-        // Grab an extra reference to target to prevent it from being evicted from
-        // memory. This ref is dropped during either watch removal, target
-        // destruction, or inotify instance destruction. See callers of Watch.Unpin.
-        watch.Pin(target);
         target.Watches().Add(&watch);
         return watch
     }
@@ -416,15 +436,18 @@ impl Inotify {
     // automatically generates a watch removal event.
     pub fn TargetDestroyed(&self, w: &Watch) {
         let found = {
+            let _events = self.events.lock();
+            let wd = w.lock().wd;
             let mut ws = self.watches.lock();
-            match ws.watches.remove(&w.lock().wd) {
+            match ws.watches.remove(&wd) {
                 None => false,
                 Some(_) => true
             }
         };
 
         if found {
-            self.QueueEvent(Event::New(w.lock().wd, "", InotifyEvent::IN_IGNORED, 0))
+            let wd = w.lock().wd;
+            self.QueueEvent(Event::New(wd, "", InotifyEvent::IN_IGNORED, 0))
         }
     }
 
@@ -441,10 +464,6 @@ impl Inotify {
         match watch {
             None => (),
             Some(w) => {
-                // This may be a watch on a different dirent pointing to the
-                // same inode. Obtain an extra reference if necessary.
-
-                w.Pin(target);
                 let mut newmask = mask;
                 if (mask & InotifyEvent::IN_MASK_ADD) != 0 {
                     newmask |= w.lock().mask;
@@ -475,7 +494,7 @@ impl Inotify {
                 Some(w) => w
             };
 
-            let target = watch.lock().target.Upgrade();
+            let target = watch.lock().target.clone();
             if let Some(target) = target {
                 watchId = watch.Id();
                 // Remove the watch from the watch target.
@@ -483,7 +502,8 @@ impl Inotify {
             }
         }
 
-        self.QueueEvent(Event::New(watch.lock().wd, "", InotifyEvent::IN_IGNORED, 0));
+        let wd = watch.lock().wd;
+        self.QueueEvent(Event::New(wd, "", InotifyEvent::IN_IGNORED, 0));
         watch.Destroy();
         return Ok(())
     }
