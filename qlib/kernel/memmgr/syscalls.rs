@@ -243,7 +243,7 @@ impl MemoryManager {
                 let mlockLimit = task.Thread().ThreadGroup().Limits().Get(LimitType::MemoryLocked).Cur;
                 let newLockedAS = self.mapping.lock().lockedAS - oldSize + newSize;
                 if newLockedAS > mlockLimit {
-                    return Err(Error::SysError(SysErr::EPERM))
+                    return Err(Error::SysError(SysErr::EAGAIN))
                 }
             }
         }
