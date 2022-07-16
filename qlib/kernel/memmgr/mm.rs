@@ -303,7 +303,7 @@ impl MemoryManager {
     pub fn EnableMembarrierPrivate(&self) {
         return self
             .membarrierPrivateEnabled
-            .store(false, Ordering::Release);
+            .store(true, Ordering::Release);
     }
 
     pub fn IsMembarrierPrivateEnabled(&self) -> bool {
