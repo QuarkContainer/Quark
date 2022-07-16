@@ -270,7 +270,7 @@ impl MemoryManager {
 
         let limitAS = task.Thread().ThreadGroup().Limits().Get(LimitType::AS).Cur;
         if newUsageAS > limitAS {
-            return Err(Error::SysError(SysErr::EPERM))
+            return Err(Error::SysError(SysErr::ENOMEM))
         }
 
         if opts.MLockMode != MLockMode::MlockNone {

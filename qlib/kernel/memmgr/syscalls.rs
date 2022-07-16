@@ -627,7 +627,8 @@ impl MemoryManager {
         let lim = task.Thread().ThreadGroup().Limits().Get(LimitType::Data).Cur;
         let brkStart = self.mapping.lock().brkInfo.brkStart;
         if (addr - brkStart) as u64 > lim {
-            return Err(Error::SysError(SysErr::ENOMEM));
+            // return current brk end.
+            return Ok(self.mapping.lock().brkInfo.brkEnd)
         }
 
         let oldbrkpg = Addr(self.mapping.lock().brkInfo.brkEnd).RoundUp()?.0;
