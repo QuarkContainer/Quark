@@ -734,9 +734,10 @@ impl MemoryManager {
                     return Err(Error::SysError(SysErr::EPERM))
                 }
 
-                let newLockedAS = self.mapping.lock().lockedAS + ar.Len() + self.mlockedBytesRangeLocked(&ar);
+                let lockedAS = self.mapping.lock().lockedAS;
+                let newLockedAS = lockedAS + ar.Len() + self.mlockedBytesRangeLocked(&ar);
                 if newLockedAS > mlockLimit {
-                    return Err(Error::SysError(SysErr::EPERM))
+                    return Err(Error::SysError(SysErr::ENOMEM))
                 }
             }
         }
