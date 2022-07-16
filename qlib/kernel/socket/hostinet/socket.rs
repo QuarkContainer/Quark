@@ -56,6 +56,10 @@ use super::super::socket::*;
 use super::super::unix::transport::unix::*;
 use super::rdma_socket::*;
 
+lazy_static! {
+    pub static ref DUMMY_HOST_SOCKET : DummyHostSocket = DummyHostSocket::New();
+}
+
 fn newSocketFile(
     task: &Task,
     family: i32,
@@ -482,6 +486,37 @@ impl Waitable for SocketOperations {
     }
 }
 
+pub struct DummyHostSocket {
+    pub socket : QMutex<i32>,
+}
+
+impl DummyHostSocket {
+    pub fn New() -> Self {
+        return Self {
+            socket: QMutex::new(-1),
+        }
+    }
+
+    pub fn Socket(&self) -> i32 {
+        let mut s = self.socket.lock();
+        if *s == -1 {
+            let fd = HostSpace::Socket(AFType::AF_UNIX, SockType::SOCK_DGRAM, 0);
+            if fd < 0 {
+                panic!("HostSocket create socket fail with error {}", fd);
+            }
+
+            *s = fd as i32;
+        };
+
+        return *s;
+    }
+
+    pub fn HostIoctlIFConf(&self, task: &Task, request: u64, addr: u64) -> Result<()> {
+        return HostIoctlIFConf(task, self.Socket(), request, addr)
+    }
+}
+
+
 // pass the ioctl to the shadow hostfd
 pub fn HostIoctlIFReq(task: &Task, hostfd: i32, request: u64, addr: u64) -> Result<()> {
     let mut ifr: IFReq = task.CopyInObj(addr)?;
@@ -522,8 +557,10 @@ pub fn HostIoctlIFConf(task: &Task, hostfd: i32, request: u64, addr: u64) -> Res
         return Err(Error::SysError(-res as i32));
     }
 
-    task.mm
-        .CopyDataOut(task, ifr.Ptr, ifc.Ptr, ifr.Len as usize, false)?;
+    if ifc.Ptr > 0 {
+        task.mm
+            .CopyDataOut(task, ifr.Ptr, ifc.Ptr, ifr.Len as usize, false)?;
+    }
 
     ifc.Len = ifr.Len;
 

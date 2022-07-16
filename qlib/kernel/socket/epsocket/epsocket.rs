@@ -7,6 +7,8 @@ use super::super::super::task::*;
 use super::super::super::tcpip::tcpip::*;
 use super::super::unix::transport::unix::*;
 
+use super::super::hostinet::socket::DUMMY_HOST_SOCKET;
+
 pub fn Ioctl(task: &Task, ep: &BoundEndpoint, _fd: i32, request: u64, val: u64) -> Result<()> {
     let flags = request as i32;
 
@@ -27,14 +29,13 @@ pub fn Ioctl(task: &Task, ep: &BoundEndpoint, _fd: i32, request: u64, val: u64) 
             bep.HostIoctlIFReq(task, request, addr)?;
 
             return Ok(());
-        }
+        }*/
         LibcConst::SIOCGIFCONF => {
             let addr = val;
-            let bep = ep.BaseEndpoint();
-            bep.HostIoctlIFConf(task, request, addr)?;
+            DUMMY_HOST_SOCKET.HostIoctlIFConf(task, request, addr)?;
 
             return Ok(());
-        }*/
+        }
         LibcConst::TIOCINQ => {
             let mut v = SockOpt::ReceiveQueueSizeOption(0);
             ep.GetSockOpt(&mut v)?;
