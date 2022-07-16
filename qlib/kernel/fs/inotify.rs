@@ -436,15 +436,18 @@ impl Inotify {
     // automatically generates a watch removal event.
     pub fn TargetDestroyed(&self, w: &Watch) {
         let found = {
+            let _events = self.events.lock();
+            let wd = w.lock().wd;
             let mut ws = self.watches.lock();
-            match ws.watches.remove(&w.lock().wd) {
+            match ws.watches.remove(&wd) {
                 None => false,
                 Some(_) => true
             }
         };
 
         if found {
-            self.QueueEvent(Event::New(w.lock().wd, "", InotifyEvent::IN_IGNORED, 0))
+            let wd = w.lock().wd;
+            self.QueueEvent(Event::New(wd, "", InotifyEvent::IN_IGNORED, 0))
         }
     }
 
@@ -499,7 +502,8 @@ impl Inotify {
             }
         }
 
-        self.QueueEvent(Event::New(watch.lock().wd, "", InotifyEvent::IN_IGNORED, 0));
+        let wd = watch.lock().wd;
+        self.QueueEvent(Event::New(wd, "", InotifyEvent::IN_IGNORED, 0));
         watch.Destroy();
         return Ok(())
     }
