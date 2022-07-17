@@ -114,7 +114,8 @@ pub fn Pread64(task: &Task, fd: i32, addr: u64, size: i64, offset: i64) -> Resul
 
     let file = task.GetFile(fd)?;
 
-    if offset < 0 {
+    // Check that the offset is legitimate and does not overflow.
+    if offset < 0 || i64::MAX - offset < size {
         return Err(Error::SysError(SysErr::EINVAL));
     }
 
