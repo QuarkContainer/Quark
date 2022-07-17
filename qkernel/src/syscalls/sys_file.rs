@@ -20,6 +20,7 @@ use super::super::fs::file::*;
 use super::super::fs::inotify::*;
 use super::super::fs::flags::*;
 use super::super::fs::inode::*;
+use super::super::fs::file_overlay::*;
 use super::super::fs::lock::*;
 use super::super::kernel::fasync::*;
 use super::super::kernel::fd_table::*;
@@ -1303,7 +1304,15 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             panic!("Fcntl: F_ADD_SEALS not implement")
         }
         Cmd::F_GETPIPE_SZ => {
-            let fops = file.FileOp.clone();
+            let mut fops = file.FileOp.clone();
+
+            if fops.FopsType() == FileOpsType::OverlayFileOperations {
+                fops = if let Some(ops) = fops.as_any().downcast_ref::<OverlayFileOperations>() {
+                    ops.FileOps()
+                } else {
+                    panic!("F_GETPIPE_SZ OverlayFileOperations fail");
+                }
+            };
 
             let pipe = if let Some(ops) = fops.as_any().downcast_ref::<Reader>() {
                 ops.pipe.clone()
@@ -1319,7 +1328,15 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             return Ok(n as i64);
         }
         Cmd::F_SETPIPE_SZ => {
-            let fops = file.FileOp.clone();
+            let mut fops = file.FileOp.clone();
+
+            if fops.FopsType() == FileOpsType::OverlayFileOperations {
+                fops = if let Some(ops) = fops.as_any().downcast_ref::<OverlayFileOperations>() {
+                    ops.FileOps()
+                } else {
+                    panic!("F_SETPIPE_SZ OverlayFileOperations fail");
+                }
+            };
 
             let pipe = if let Some(ops) = fops.as_any().downcast_ref::<Reader>() {
                 ops.pipe.clone()
