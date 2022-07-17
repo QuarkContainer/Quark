@@ -221,6 +221,7 @@ impl Dirent {
             watches: Watches::default(),
             main: QMutex::new(main),
             dirMu: QRwLock::new(()),
+            cacheMu: Default::default(),
             children: QMutex::new(BTreeMap::new()),
         };
 
@@ -423,6 +424,9 @@ impl Dirent {
             }
         }
 
+        // have to lock this as the name pipeline might have race condition
+        // in which 2 pipes are create for one fifo
+        let _cl = self.cacheMu.lock();
         let child = self.GetCacheChild(name);
         let remove = match child {
             Some(dirent) => {
@@ -1256,6 +1260,7 @@ pub struct DirentInternal {
     pub watches: Watches,
     pub main: QMutex<DirentMain>,
     pub dirMu: QRwLock<()>,
+    pub cacheMu: QMutex<()>,
     pub children: QMutex<BTreeMap<String, DirentWeak>>,
 }
 
@@ -1267,6 +1272,7 @@ impl Default for DirentInternal {
             watches: Watches::default(),
             main: Default::default(),
             dirMu: Default::default(),
+            cacheMu: Default::default(),
             children: Default::default(),
         }
     }
