@@ -448,9 +448,9 @@ impl Dirent {
 
                 dirent.Watches().Destroy();
 
-                false
+                true
             }
-            None => true,
+            None => false,
         };
 
         if remove {
