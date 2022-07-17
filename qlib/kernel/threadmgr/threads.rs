@@ -204,7 +204,7 @@ impl TaskSet {
             trapNotifyPending: false,
             allowedCPUMask: cfg.AllowedCPUMask.Copy(),
             cpu: 0,
-            niceness: 0,
+            niceness: cfg.Niceness,
             numaPolicy: 0,
             numaNodeMask: 0,
             netns: false,
