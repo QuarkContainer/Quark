@@ -845,8 +845,8 @@ impl HostInodeOp {
         };
 
         // the iouring fsync fail after ftruncate
-        //let ret = if /*SHARESPACE.config.read().UringIO*/ false && self.InodeType() == InodeType::RegularFile
-        let ret = if SHARESPACE.config.read().UringIO && self.InodeType() == InodeType::RegularFile {
+        let ret = if /*SHARESPACE.config.read().UringIO*/ false && self.InodeType() == InodeType::RegularFile {
+        //let ret = if SHARESPACE.config.read().UringIO && self.InodeType() == InodeType::RegularFile {
             if self.BufWriteEnable() {
                 // try to gain the lock once, release immediately
                 self.BufWriteLock().Lock(task);
