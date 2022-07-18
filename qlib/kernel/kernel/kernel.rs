@@ -57,6 +57,7 @@ use super::timer::timer::*;
 use super::timer::*;
 use super::uts_namespace::*;
 use super::syslog::*;
+use super::socket_store::*;
 
 pub static ASYNC_PROCESS_TIMER: Singleton<Timer> = Singleton::<Timer>::New();
 
@@ -109,6 +110,8 @@ pub struct KernelInternal {
 
     // mounts holds the states of the virtual filesystem, one for each container mountNS.
     pub mounts: QRwLock<BTreeMap<String, MountNs>>,
+
+    pub sockets: SocketStore,
 
     // globalInit is the thread group whose leader has ID 1 in the root PID
     // namespace. globalInit is stored separately so that it is accessible even
@@ -206,6 +209,7 @@ impl Kernel {
             rootIPCNamespace: args.RootIPCNamespace,
             applicationCores: args.ApplicationCores as usize - 1,
             mounts: QRwLock::new(BTreeMap::new()),
+            sockets: SocketStore::default(),
             globalInit: QMutex::new(None),
             cpuClock: AtomicU64::new(0),
             staticInfo: QMutex::new(StaticInfo {

@@ -41,6 +41,7 @@ use super::super::super::fs::host::hostinodeop::*;
 use super::super::super::guestfdnotifier::*;
 use super::super::super::kernel::async_wait::*;
 use super::super::super::kernel::fd_table::*;
+use super::super::super::kernel::kernel::GetKernel;
 use super::super::super::kernel::time::*;
 use super::super::super::kernel::waiter::*;
 use super::super::super::quring::QUring;
@@ -83,7 +84,7 @@ fn newSocketFile(
         addr,
     )?;
 
-    Ok(File::New(
+    let file = File::New(
         &dirent,
         &FileFlags {
             NonBlocking: nonblock,
@@ -92,7 +93,10 @@ fn newSocketFile(
             ..Default::default()
         },
         s,
-    ))
+    );
+
+    GetKernel().sockets.AddSocket(&file);
+    return Ok(file)
 }
 
 #[repr(u64)]
