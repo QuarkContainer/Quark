@@ -40,6 +40,7 @@ use super::super::super::fs::inode::*;
 use super::super::super::fs::fsutil::inode::*;
 use super::super::super::fs::mount::*;
 use super::super::super::kernel::abstract_socket_namespace::*;
+use super::super::super::kernel::kernel::GetKernel;
 use super::super::super::kernel::fd_table::*;
 use super::super::super::kernel::time::*;
 use super::super::super::kernel::waiter::*;
@@ -63,11 +64,15 @@ pub fn NewUnixSocket(task: &Task, ep: BoundEndpoint, stype: i32) -> Result<File>
         ..Default::default()
     };
 
-    return Ok(File::New(
+    let file = File::New(
         &dirent,
         &fileFlags,
         UnixSocketOperations::New(ep, stype),
-    ));
+    );
+
+    GetKernel().sockets.AddSocket(&file);
+
+    return Ok(file);
 }
 
 pub fn NewUnixSocketDummyDirent(task: &Task,

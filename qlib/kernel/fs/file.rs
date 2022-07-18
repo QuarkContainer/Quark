@@ -31,6 +31,7 @@ use super::super::super::range::*;
 use super::super::kernel::time::*;
 use super::super::kernel::waiter::qlock::*;
 use super::super::kernel::waiter::*;
+use super::super::kernel::kernel::GetKernel;
 use super::super::uid::*;
 //use super::super::socket::unix::transport::unix::*;
 use super::super::super::singleton::*;
@@ -351,6 +352,11 @@ pub struct File(pub Arc<FileInternal>);
 
 impl Drop for File {
     fn drop(&mut self) {
+        let fopsType = self.FileOp.FopsType();
+        if fopsType == FileOpsType::SocketOperations || fopsType == FileOpsType::UnixSocketOperations {
+            GetKernel().sockets.DeleteSocket(self);
+        }
+
         //error!("File::Drop {}", Arc::strong_count(&self.0));
         if Arc::strong_count(&self.0) == 1 {
             // Drop BSD style locks.

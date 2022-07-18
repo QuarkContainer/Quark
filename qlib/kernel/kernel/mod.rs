@@ -40,3 +40,4 @@ pub mod signal_handler;
 pub mod signalfd;
 pub mod msgqueue;
 pub mod syslog;
+pub mod socket_store;
