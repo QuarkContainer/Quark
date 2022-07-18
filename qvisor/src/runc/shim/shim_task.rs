@@ -17,6 +17,7 @@ use std::collections::HashMap;
 use std::sync::mpsc::Sender;
 use std::sync::Once;
 use std::sync::{Arc, Mutex};
+use std::process;
 use std::thread;
 //use std::path::Path;
 //use std::path::PathBuf;
@@ -544,6 +545,23 @@ impl Task for ShimTask {
 
         debug!("shim: Shutdown finish");
         Ok(Empty::default())
+    }
+
+    fn connect(&self, _ctx: &TtrpcContext, req: ConnectRequest) -> TtrpcResult<ConnectResponse> {
+        info!("Connect request for {:?}", req);
+    
+        let containers = self.containers.lock().unwrap();
+        let container = containers.get(req.get_id()).ok_or_else(|| {
+            TtrpcError::Other(format!("can not find container by id {}", req.get_id()))
+        })?;
+    
+        let resp = ConnectResponse {
+            shim_pid: process::id() as u32,
+            task_pid: container.pid() as u32,
+            ..Default::default()
+        };
+    
+        Ok(resp)
     }
 }
 
