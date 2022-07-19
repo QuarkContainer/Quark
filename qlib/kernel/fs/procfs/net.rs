@@ -117,19 +117,35 @@ pub fn NewNetDir(
     );
 }
 
+pub fn NetworkToHost16(n: u16) -> u16 {
+    let low = n & 0xff;
+    let high = (n >> 8) & 0xff;
+    return (low << 8) | high;
+}
+
 pub fn WriteInetAddr(addr: &SockAddr) -> String {
     match addr {
         SockAddr::Inet(addr) => {
-            let ipAddr = *&(&addr.Addr[0] as * const _ as u32);
-            return format!("{:08x}:{:04x}", ipAddr, addr.Port)
+            let ipAddr = unsafe {
+                *(&addr.Addr[0] as * const _ as * const u32)
+            };
+            return format!("{:08X}:{:04X} ", ipAddr, NetworkToHost16(addr.Port))
         }
         SockAddr::Inet6(addr) => {
-            let ipAddr0 = *&(&addr.Addr[0] as * const _ as u32);
-            let ipAddr1 = *&(&addr.Addr[4] as * const _ as u32);
-            let ipAddr2 = *&(&addr.Addr[8] as * const _ as u32);
-            let ipAddr3 = *&(&addr.Addr[12] as * const _ as u32);
-            return format!("{:08x}{:08x}{:08x}{:08x}:{:04x}",
-                           ipAddr0, ipAddr1, ipAddr2, ipAddr3, addr.Port)
+            let ipAddr0 = unsafe {
+                *(&addr.Addr[0] as * const _ as * const u32)
+            };
+            let ipAddr1 = unsafe {
+                *(&addr.Addr[4] as * const _ as * const u32)
+            };
+            let ipAddr2 = unsafe {
+                *(&addr.Addr[8] as * const _ as * const u32)
+            };
+            let ipAddr3 = unsafe {
+                *(&addr.Addr[12] as * const _ as * const u32)
+            };
+            return format!("{:08X}{:08X}{:08X}{:08X}:{:04X} ",
+                           ipAddr0, ipAddr1, ipAddr2, ipAddr3, NetworkToHost16(addr.Port))
         }
         _ => panic!("WriteInetAddr doesn't support address {:x?}", addr)
     }
@@ -200,7 +216,7 @@ impl ReadonlyFileNode for NetTCPReadonlyFileNode {
             return Err(Error::SysError(SysErr::EINVAL));
         }
 
-        let header = "  sl  local_address                         remote_address                        st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n";
+        let header = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode                                                     \n";
         let bytes = GetData(task, AFType::AF_INET, header)?;
         if offset as usize > bytes.len() {
             return Ok(0);
@@ -246,7 +262,7 @@ pub fn GetData(task: &Task, fa: i32, header: &str) -> Result<Vec<u8>> {
         // Note that the header doesn't contain labels for all the fields.
 
         // Field: sl; entry number.
-        buf += &format!("{:<4}: ", id);
+        buf += &format!("{:>4}: ", id);
 
         let mut sockBuf = [0; 256];
 
@@ -256,8 +272,21 @@ pub fn GetData(task: &Task, fa: i32, header: &str) -> Result<Vec<u8>> {
         buf += &WriteInetAddr(&addr);
 
         // Field: rem_address.
-        let _ = sockops.GetPeerName(task, &mut sockBuf)?;
-        let addr = GetAddr(AFType::AF_INET as _, &sockBuf)?;
+        let addr = {
+            match sockops.GetPeerName(task, &mut sockBuf) {
+                Err(_) => {
+                    let inetAddr = SockAddrInet {
+                        Family: family as _,
+                        ..Default::default()
+                    };
+                    SockAddr::Inet(inetAddr)
+                }
+                Ok(_) => {
+                    GetAddr(AFType::AF_INET as _, &sockBuf)?
+                }
+            }
+        };
+
         buf += &WriteInetAddr(&addr);
 
         // Field: state; socket state.
@@ -293,7 +322,7 @@ pub fn GetData(task: &Task, fa: i32, header: &str) -> Result<Vec<u8>> {
         buf += &format!("{:>8} ", 0);
 
         // Field: inode.
-        let inodeId = file.Dirent.Inode().StableAttr().DeviceId;
+        let inodeId = file.Dirent.Inode().StableAttr().InodeId;
         buf += &format!("{:>8} ", inodeId);
 
         // Field: ref; reference count on the socket inode. Don't count the ref
@@ -460,7 +489,7 @@ impl NetUDPReadonlyFileNode {
             buf += &format!("{:>8} ", 0);
 
             // Field: inode.
-            let inodeId = file.Dirent.Inode().StableAttr().DeviceId;
+            let inodeId = file.Dirent.Inode().StableAttr().InodeId;
             buf += &format!("{:>8} ", inodeId);
 
             // Field: ref; reference count on the socket inode. Don't count the ref
@@ -615,7 +644,7 @@ impl NetUnixReadonlyFileNode {
                 _ => ()
             }
 
-            let inodeId = file.Dirent.Inode().StableAttr().DeviceId;
+            let inodeId = file.Dirent.Inode().StableAttr().InodeId;
 
             // In the socket entry below, the value for the 'Num' field requires
             // some consideration. Linux prints the address to the struct

@@ -1668,12 +1668,13 @@ impl SockOperations for SocketOperations {
 
     fn State(&self) -> u32 {
         let mut info = TCPInfo::default();
+        let mut len = SocketSize::SIZEOF_TCPINFO;
 
         let ret = HostSpace::GetSockOpt(self.fd,
                               LibcConst::SOL_TCP as _,
                               LibcConst::TCP_INFO as _,
                               &mut info as * mut _ as u64,
-                              SocketSize::SIZEOF_TCPINFO as _) as i32;
+                              &mut len as * mut _ as u64) as i32;
 
         if ret < 0 {
             if ret != -SysErr::ENOPROTOOPT {
@@ -1684,7 +1685,7 @@ impl SockOperations for SocketOperations {
             }
         }
 
-        if ret != SocketSize::SIZEOF_TCPINFO as i32 {
+        if len != SocketSize::SIZEOF_TCPINFO {
             error!("Failed to get TCP socket info getsockopt(2) returned {} bytes, expecting {} bytes.", SocketSize::SIZEOF_TCPINFO, ret);
             return 0;
         }

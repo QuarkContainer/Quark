@@ -364,13 +364,13 @@ pub struct File(pub Arc<FileInternal>);
 
 impl Drop for File {
     fn drop(&mut self) {
-        let fopsType = self.FileOp.FopsType();
-        if fopsType == FileOpsType::SocketOperations || fopsType == FileOpsType::UnixSocketOperations {
-            GetKernel().sockets.DeleteSocket(self);
-        }
-
         //error!("File::Drop {}", Arc::strong_count(&self.0));
         if Arc::strong_count(&self.0) == 1 {
+            let fopsType = self.FileOp.FopsType();
+            if fopsType == FileOpsType::SocketOperations || fopsType == FileOpsType::UnixSocketOperations {
+                GetKernel().sockets.DeleteSocket(self);
+            }
+
             // Drop BSD style locks.
             let inode = self.Dirent.Inode();
             let lockCtx = inode.lock().LockCtx.clone();
