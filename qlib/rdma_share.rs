@@ -156,6 +156,10 @@ pub struct RDMAConnectResp {
     pub sockfd: u32,
     pub ioBufIndex: u32,
     pub channelId: u32,
+    pub dstIpAddr: u32,
+    pub dstPort: u16,
+    pub srcIpAddr: u32,
+    pub srcPort: u16,
 }
 
 #[derive(Default, Clone, Copy, Debug)]
@@ -165,6 +169,8 @@ pub struct RDMAAcceptResp {
     pub channelId: u32,
     pub dstIpAddr: u32,
     pub dstPort: u16,
+    pub srcIpAddr: u32,
+    pub srcPort: u16,
 }
 
 #[derive(Default, Clone, Copy, Debug)]

@@ -366,7 +366,7 @@ impl GatewayClient {
     }
 
     pub fn connect(&self, sockfd: u32, ipAddr: u32, port: u16) -> Result<()> {
-        match self.rdmaSvcCli.connect(sockfd, ipAddr, port) {
+        match self.rdmaSvcCli.connect(sockfd, ipAddr, port, 0, 0) {
             Ok(()) => {
                 let sockInfo = DataSock::New(
                     sockfd,

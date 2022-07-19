@@ -89,13 +89,20 @@ impl RDMASvcClient {
         res
     }
 
-    pub fn connect(&self, sockfd: u32, ipAddr: u32, port: u16) -> Result<()> {
+    pub fn connect(
+        &self,
+        sockfd: u32,
+        dstIpAddr: u32,
+        dstPort: u16,
+        srcIpAddr: u32,
+        srcPort: u16,
+    ) -> Result<()> {
         let res = self.SentMsgToSvc(RDMAReqMsg::RDMAConnect(RDMAConnectReq {
             sockfd,
-            dstIpAddr: ipAddr,
-            dstPort: port,
-            srcIpAddr: 101099712, //u32::from(Ipv4Addr::from_str("192.168.6.6").unwrap()).to_be(),
-            srcPort: 16866u16.to_be(),
+            dstIpAddr,
+            dstPort,
+            srcIpAddr, //101099712, //u32::from(Ipv4Addr::from_str("192.168.6.6").unwrap()).to_be(),
+            srcPort,   //16866u16.to_be(),
         }));
         res
     }
@@ -234,14 +241,12 @@ impl RDMASvcClient {
 
                                 let dataSock = RDMADataSock::New(
                                     response.sockfd as i32, //Allocate fd
-                                    // 0, //TODO: need udpate
-                                    // 0, //TODO: need update
-                                    // response.dstIpAddr,
-                                    // response.dstPort,
-                                    // SockStatus::ESTABLISHED,
-                                    // response.channelId,
                                     sockBuf.clone(),
                                     response.channelId,
+                                    response.srcIpAddr,
+                                    response.srcPort,
+                                    response.dstIpAddr,
+                                    response.dstPort,
                                 );
                                 self.channelToSocketMappings
                                     .lock()
@@ -283,14 +288,12 @@ impl RDMASvcClient {
 
                                 let dataSock = RDMADataSock::New(
                                     fd, //Allocate fd
-                                    // 0, //TODO: need udpate
-                                    // 0, //TODO: need update
-                                    // response.dstIpAddr,
-                                    // response.dstPort,
-                                    // SockStatus::ESTABLISHED,
-                                    // response.channelId,
                                     sockBuf.clone(),
                                     response.channelId,
+                                    response.srcIpAddr,
+                                    response.srcPort,
+                                    response.dstIpAddr,
+                                    response.dstPort,
                                 );
 
                                 let fdInfo = GlobalIOMgr().GetByHost(fd as i32).unwrap();

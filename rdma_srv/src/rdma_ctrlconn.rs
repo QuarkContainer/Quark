@@ -80,7 +80,7 @@ impl Default for CtrlInfo {
             }),
             //134654144 -> 100733100
             podIpInfo: Mutex::new(HashMap::from_iter([(
-                u32::from(Ipv4Addr::from_str("192.168.6.8").unwrap()).to_be(),
+                u32::from(Ipv4Addr::from_str("192.168.6.8").unwrap()).to_le(),
                 (u32::from(Ipv4Addr::from_str("172.16.1.43").unwrap()).to_be()),
             )])),
         }
