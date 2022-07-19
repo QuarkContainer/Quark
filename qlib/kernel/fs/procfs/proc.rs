@@ -52,6 +52,7 @@ use super::meminfo::*;
 use super::mounts::*;
 use super::stat::*;
 use super::uptime::*;
+use super::net::*;
 
 pub struct ProcNodeInternal {
     pub kernel: Kernel,
@@ -126,6 +127,7 @@ pub fn NewProc(
     contents.insert("filesystems".to_string(), NewFileSystem(task, msrc));
     contents.insert("loadavg".to_string(), NewLoadAvg(task, msrc));
     contents.insert("mounts".to_string(), NewMounts(task, msrc));
+    contents.insert("net".to_string(), NewNetDir(task, msrc));
     contents.insert("self".to_string(), NewProcessSelf(task, &pidns, msrc));
     contents.insert("stat".to_string(), NewStatData(task, msrc));
     contents.insert("thread-self".to_string(), NewThreadSelf(task, &pidns, msrc));

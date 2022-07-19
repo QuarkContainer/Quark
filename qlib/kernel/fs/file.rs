@@ -183,8 +183,20 @@ pub trait SockOperations: Sync + Send {
         return;
     }
 
+    // SendTimeout gets the current timeout (in ns) for send operations. Zero
+    // means no timeout, and negative means DONTWAIT.
     fn SendTimeout(&self) -> i64 {
         return 0;
+    }
+
+    // State returns the current state of the socket, as represented by Linux in
+    // procfs. The returned state value is protocol-specific.
+    fn State(&self) -> u32 {
+        return 0
+    }
+
+    fn Type(&self) -> (i32, i32, i32) {
+        return (-1, -1, -1)
     }
 }
 
@@ -445,6 +457,10 @@ impl Mapping for File {
 }
 
 impl File {
+    pub fn ReadRefs(&self) -> usize {
+        return Arc::strong_count(&self.0)
+    }
+
     pub fn Readable(&self) -> bool {
         return self.flags.lock().0.Read;
     }

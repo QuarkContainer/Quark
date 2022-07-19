@@ -51,7 +51,6 @@ use super::super::super::Kernel;
 use super::super::super::Kernel::HostSpace;
 use super::super::super::IOURING;
 use super::super::super::SHARESPACE;
-use super::super::control::ControlMessageTCPInq;
 use super::super::control::*;
 use super::super::socket::*;
 use super::super::unix::transport::unix::*;
@@ -1665,6 +1664,36 @@ impl SockOperations for SocketOperations {
 
     fn SendTimeout(&self) -> i64 {
         return self.send.load(Ordering::Relaxed);
+    }
+
+    fn State(&self) -> u32 {
+        let mut info = TCPInfo::default();
+
+        let ret = HostSpace::GetSockOpt(self.fd,
+                              LibcConst::SOL_TCP as _,
+                              LibcConst::TCP_INFO as _,
+                              &mut info as * mut _ as u64,
+                              SocketSize::SIZEOF_TCPINFO as _) as i32;
+
+        if ret < 0 {
+            if ret != -SysErr::ENOPROTOOPT {
+                error!("fail to Failed to get TCP socket info from {} with error {}", self.fd, ret);
+
+                // For non-TCP sockets, silently ignore the failure.
+                return 0;
+            }
+        }
+
+        if ret != SocketSize::SIZEOF_TCPINFO as i32 {
+            error!("Failed to get TCP socket info getsockopt(2) returned {} bytes, expecting {} bytes.", SocketSize::SIZEOF_TCPINFO, ret);
+            return 0;
+        }
+
+        return info.State as u32;
+    }
+
+    fn Type(&self) -> (i32, i32, i32) {
+        return (self.family, self.stype, -1)
     }
 }
 
