@@ -183,8 +183,20 @@ pub trait SockOperations: Sync + Send {
         return;
     }
 
+    // SendTimeout gets the current timeout (in ns) for send operations. Zero
+    // means no timeout, and negative means DONTWAIT.
     fn SendTimeout(&self) -> i64 {
         return 0;
+    }
+
+    // State returns the current state of the socket, as represented by Linux in
+    // procfs. The returned state value is protocol-specific.
+    fn State(&self) -> u32 {
+        return 0
+    }
+
+    fn Type(&self) -> (i32, i32, i32) {
+        return (-1, -1, -1)
     }
 }
 
@@ -352,13 +364,13 @@ pub struct File(pub Arc<FileInternal>);
 
 impl Drop for File {
     fn drop(&mut self) {
-        let fopsType = self.FileOp.FopsType();
-        if fopsType == FileOpsType::SocketOperations || fopsType == FileOpsType::UnixSocketOperations {
-            GetKernel().sockets.DeleteSocket(self);
-        }
-
         //error!("File::Drop {}", Arc::strong_count(&self.0));
         if Arc::strong_count(&self.0) == 1 {
+            let fopsType = self.FileOp.FopsType();
+            if fopsType == FileOpsType::SocketOperations || fopsType == FileOpsType::UnixSocketOperations {
+                GetKernel().sockets.DeleteSocket(self);
+            }
+
             // Drop BSD style locks.
             let inode = self.Dirent.Inode();
             let lockCtx = inode.lock().LockCtx.clone();
@@ -445,6 +457,10 @@ impl Mapping for File {
 }
 
 impl File {
+    pub fn ReadRefs(&self) -> usize {
+        return Arc::strong_count(&self.0)
+    }
+
     pub fn Readable(&self) -> bool {
         return self.flags.lock().0.Read;
     }

@@ -28,6 +28,7 @@ pub mod mounts;
 pub mod stat;
 pub mod sys;
 pub mod uptime;
+pub mod net;
 
 use crate::qlib::mutex::*;
 use alloc::sync::Arc;

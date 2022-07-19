@@ -172,9 +172,9 @@ impl UnixSocketOperations {
         return ret;
     }
 
-    pub fn State(&self) -> i32 {
+    /*pub fn State(&self) -> i32 {
         return self.ep.State();
-    }
+    }*/
 
     pub fn IsPacket(&self) -> bool {
         if self.stype == SockType::SOCK_DGRAM || self.stype == SockType::SOCK_SEQPACKET {
@@ -989,7 +989,7 @@ impl SockOperations for UnixSocketOperations {
             if self.stype == SockType::SOCK_SEQPACKET {
                 Vec::new()
             } else if self.stype == SockType::SOCK_STREAM {
-                if self.State() == SS_CONNECTED {
+                if self.State() == SS_CONNECTED as u32 {
                     return Err(Error::SysError(SysErr::EISCONN));
                 }
 
@@ -1098,6 +1098,14 @@ impl SockOperations for UnixSocketOperations {
 
     fn SendTimeout(&self) -> i64 {
         return self.send.load(Ordering::Relaxed);
+    }
+
+    fn State(&self) -> u32 {
+        return self.ep.State() as u32
+    }
+
+    fn Type(&self) -> (i32, i32, i32) {
+        return (AFType::AF_UNIX, self.stype, 0)
     }
 }
 

@@ -136,7 +136,7 @@ impl ReadonlyFileNode for AUXVecReadonlyFileNode {
         assert!(buf.len() * 8 >= size);
         let slice = unsafe { slice::from_raw_parts(ptr, size) };
 
-        let n = task.CopyDataOutToIovs(slice, dsts, true)?;
+        let n = task.CopyDataOutToIovs(&slice[offset as usize..], dsts, true)?;
 
         return Ok(n as i64);
     }
