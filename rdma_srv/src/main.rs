@@ -82,6 +82,7 @@ pub mod unix_socket_def;
 pub mod common;
 pub mod constants;
 pub mod node_informer;
+pub mod pod_informer;
 
 use crate::qlib::bytestream::ByteStream;
 use crate::rdma_srv::RDMA_CTLINFO;
@@ -108,6 +109,7 @@ use rdma_agent::*;
 use rdma_channel::RDMAChannel;
 use rdma_conn::*;
 use rdma_ctrlconn::Node;
+use rdma_ctrlconn::Pod;
 use spin::Mutex;
 use std::io::Error;
 use std::str::FromStr;
@@ -115,6 +117,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::{env, mem, ptr, thread, time};
 use node_informer::NodeInformer;
+use pod_informer::PodInformer;
 use common::*;
 
 #[allow(unused_macros)]
@@ -537,6 +540,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut node_informer = NodeInformer::new();
             match node_informer.run().await {
                 Err(e) => println!("Error to handle nodes: {:?}", e),
+                Ok(_) => (),
+            };
+        });
+        tokio::spawn(async {
+            let mut pod_informer = PodInformer::new();
+            match pod_informer.run().await {
+                Err(e) => println!("Error to handle pods: {:?}", e),
                 Ok(_) => (),
             };
         });
