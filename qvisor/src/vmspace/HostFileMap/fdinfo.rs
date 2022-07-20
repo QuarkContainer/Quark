@@ -22,9 +22,9 @@ use crate::qlib::socket_buf::*;
 
 use super::super::super::util::*;
 use super::super::qlib::common::*;
+use super::super::qlib::rdmasocket::*;
 use super::super::FD_NOTIFIER;
 use super::super::*;
-use super::super::qlib::rdmasocket::*;
 // use super::socket_info::*;
 
 impl FdInfo {
@@ -188,7 +188,6 @@ impl FdInfo {
         let ret = unsafe { libc::fsetxattr(fd, name as _, value as _, size, flags as _) };
         return SysRet(ret as i64);
     }
-
 
     pub fn FGetXattr(fd: i32, name: u64, value: u64, size: usize) -> i64 {
         let ret = unsafe { libc::fgetxattr(fd, name as _, value as _, size) };
@@ -392,7 +391,6 @@ impl FdInfo {
         return Self::FSetXattr(fd, name, value, size, flags);
     }
 
-
     pub fn IOFGetXattr(&self, name: u64, value: u64, size: usize) -> i64 {
         let fd = self.lock().fd;
         return Self::FGetXattr(fd, name, value, size);
@@ -468,7 +466,8 @@ impl FdInfo {
 
         match self.SockInfo() {
             SockInfo::Socket(_socketInfo) => {
-                let rdmaSocket = RDMAServerSock::New(sockfd, acceptQueue);
+                //TODO: should double check this is needed or not
+                let rdmaSocket = RDMAServerSock::New(sockfd, acceptQueue, 0, 0);
                 *self.lock().sockInfo.lock() = SockInfo::RDMAServerSocket(rdmaSocket);
                 self.lock()
                     .AddWait(EVENT_READ | EVENT_WRITE)
@@ -553,6 +552,7 @@ impl FdInfo {
     }
 
     pub fn PostRDMAConnect(&self, msg: &mut PostRDMAConnect) {
+        debug!("FdInfo::PostRDMAConnect");
         let sockfd = self.Fd();
         match self.SockInfo() {
             SockInfo::Socket(_) => {
@@ -564,7 +564,7 @@ impl FdInfo {
                     RDMAType::None
                 };
 
-                let rdmaSocket = RDMADataSock::New(sockfd, sockBuf, 1);
+                let rdmaSocket = RDMADataSock::New(sockfd, sockBuf, 1, 0, 0, 0, 0);
                 *self.lock().sockInfo.lock() = SockInfo::RDMADataSocket(rdmaSocket);
                 self.lock()
                     .AddWait(EVENT_READ | EVENT_WRITE)

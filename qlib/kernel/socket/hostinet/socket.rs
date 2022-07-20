@@ -175,6 +175,7 @@ pub struct SocketOperationsIntern {
     pub enableAsyncAccept: AtomicBool,
     pub hostops: HostInodeOp,
     passInq: AtomicBool,
+    pub enableRDMA: bool,
 }
 
 #[derive(Clone)]
@@ -208,6 +209,12 @@ impl SocketOperations {
             _ => (),
         }
 
+        // Only enable RDMA for IPv4 now.
+        let enableRDMA = SHARESPACE.config.read().EnableRDMA
+            // && (family == AFType::AF_INET || family == AFType::AF_INET6)
+            && family == AFType::AF_INET
+            && stype == SockType::SOCK_STREAM;
+
         let ret = SocketOperationsIntern {
             send: AtomicI64::new(0),
             recv: AtomicI64::new(0),
@@ -220,6 +227,7 @@ impl SocketOperations {
             enableAsyncAccept: AtomicBool::new(false),
             hostops: hostops,
             passInq: AtomicBool::new(false),
+            enableRDMA: enableRDMA,
         };
 
         let ret = Self(Arc::new(ret));
@@ -299,12 +307,8 @@ impl SocketOperations {
     }
 
     pub fn PostConnect(&self, _task: &Task) {
-        let enableRDMA = SHARESPACE.config.read().EnableRDMA
-            && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
-            && self.stype == SockType::SOCK_STREAM;
-
         let socketBuf;
-        if enableRDMA {
+        if self.enableRDMA {
             socketBuf = self.socketBuf.lock().clone();
         } else {
             socketBuf = self.SocketBufType().Connect();
@@ -777,15 +781,27 @@ impl SockOperations for SocketOperations {
             socketaddr = &socketaddr[..SIZEOF_SOCKADDR]
         }
 
-        let enableRDMA = SHARESPACE.config.read().EnableRDMA
-            && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
-            && self.stype == SockType::SOCK_STREAM;
         let res;
-        if enableRDMA {
-            let _ret = GlobalRDMASvcCli().connect(self.fd as u32, 134654144, 58433); //192.168.6.8, 58433
-            let socketBuf = self.SocketBufType().Connect();
-            *self.socketBuf.lock() = socketBuf.clone();
-            res = -SysErr::EINPROGRESS;
+        if self.enableRDMA {
+            let sockAddr = GetAddr(sockaddr[0] as i16, &sockaddr[0..sockaddr.len()])?;
+            match sockAddr {
+                SockAddr::Inet(ipv4) => {
+                    let ipAddr = u32::from_be_bytes(ipv4.Addr);
+                    let port = ipv4.Port.to_be();
+                    debug!("SocketOperations::Connect, ipAddr: {}, port: {}", ipAddr, port);
+                    //TODO: get local ip and port
+                    let srcIpAddr = 101099712;//u32::from(Ipv4Addr::from_str("192.168.6.6").unwrap()).to_be();
+                    let srcPort = 16866u16.to_be();
+                    //TODO: should update ipAddr and port in SockInfo??
+                    let _ret = GlobalRDMASvcCli().connect(self.fd as u32, ipAddr, port, srcIpAddr, srcPort); //192.168.6.8:16868
+                    let socketBuf = self.SocketBufType().Connect();
+                    *self.socketBuf.lock() = socketBuf.clone();
+                    res = -SysErr::EINPROGRESS;
+                }
+                _ => {
+                    panic!("sockAddr: {:?} can't enable RDMA!", sockAddr);
+                }
+            }
         } else {
             res = Kernel::HostSpace::IOConnect(
                 self.fd,
@@ -829,16 +845,16 @@ impl SockOperations for SocketOperations {
             defer!(self.EventUnregister(task, &general));
 
             // if self.Readiness(task, WRITEABLE_EVENT) == 0 {
-                match task.blocker.BlockWithMonoTimer(true, None) {
-                    Err(Error::ErrInterrupted) => {
-                        return Err(Error::SysError(SysErr::ERESTARTSYS));
-                    }
-                    Err(e) => {
-                        error!("connect error {:?}", &e);
-                        return Err(e);
-                    }
-                    _ => (),
+            match task.blocker.BlockWithMonoTimer(true, None) {
+                Err(Error::ErrInterrupted) => {
+                    return Err(Error::SysError(SysErr::ERESTARTSYS));
                 }
+                Err(e) => {
+                    error!("connect error {:?}", &e);
+                    return Err(e);
+                }
+                _ => (),
+            }
             // }
         }
 
@@ -930,10 +946,7 @@ impl SockOperations for SocketOperations {
         }
 
         // hard code workaround
-        let enableRDMA = SHARESPACE.config.read().EnableRDMA
-            && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
-            && self.stype == SockType::SOCK_STREAM;
-        if enableRDMA {
+        if self.enableRDMA {
             len = 0;
         }
         let fd = acceptItem.fd;
@@ -987,17 +1000,21 @@ impl SockOperations for SocketOperations {
             return Err(Error::SysError(-res as i32));
         }
 
-        let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
-
-        let enableRDMA = SHARESPACE.config.read().EnableRDMA
-            && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
-            && self.stype == SockType::SOCK_STREAM;
         //TODO: remember ipAddr and port, hardcoded for now.
-        if enableRDMA {
-            *fdInfo.lock().sockInfo.lock() = SockInfo::Socket(SocketInfo {
-                ipAddr: 134654144,
-                port: 58433,
-            }); //192.168.6.8:16868
+        if self.enableRDMA {
+            let sockAddr = GetAddr(sockaddr[0] as i16, &sockaddr[0..sockaddr.len()])?;
+            match sockAddr {
+                SockAddr::Inet(ipv4) => {
+                    let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
+                    *fdInfo.lock().sockInfo.lock() = SockInfo::Socket(SocketInfo {
+                        ipAddr: u32::from_be_bytes([192, 168, 6, 8]), //ipAddr: u32::from_be_bytes(ipv4.Addr), // ipAddr: 3232237064,
+                        port: ipv4.Port.to_be(),               // port: 58433,
+                    }); //192.168.6.8:16868
+                }
+                _ => {
+                    panic!("sockAddr: {:?} can't enable RDMA!", sockAddr);
+                }
+            }
         }
 
         return Ok(res);
@@ -1005,10 +1022,6 @@ impl SockOperations for SocketOperations {
 
     fn Listen(&self, _task: &Task, backlog: i32) -> Result<i64> {
         let asyncAccept = SHARESPACE.config.read().AsyncAccept
-            && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
-            && self.stype == SockType::SOCK_STREAM;
-
-        let enableRDMA = SHARESPACE.config.read().EnableRDMA
             && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
             && self.stype == SockType::SOCK_STREAM;
 
@@ -1030,20 +1043,21 @@ impl SockOperations for SocketOperations {
 
         acceptQueue.lock().SetQueueLen(len as usize);
 
-        let res = if enableRDMA {
+        let res = if self.enableRDMA {
             // Kernel::HostSpace::RDMAListen(self.fd, backlog, asyncAccept, acceptQueue.clone())
             let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
-            let rdmaSocket = RDMAServerSock::New(self.fd, acceptQueue.clone());
             let socketInfo = fdInfo.lock().sockInfo.lock().clone();
-
-            *fdInfo.lock().sockInfo.lock() = SockInfo::RDMAServerSocket(rdmaSocket);
+            
             let endpoint;
             match socketInfo {
-                SockInfo::Socket(socketInfo) => {
+                SockInfo::Socket(info) => {
                     endpoint = Endpoint {
-                        ipAddr: socketInfo.ipAddr,
-                        port: socketInfo.port,
+                        ipAddr: info.ipAddr,
+                        port: info.port,
                     };
+                    //TODO: should handle listen 0.0.0.0
+                    let rdmaSocket = RDMAServerSock::New(self.fd, acceptQueue.clone(), info.ipAddr, info.port);
+                    *fdInfo.lock().sockInfo.lock() = SockInfo::RDMAServerSocket(rdmaSocket);
                 }
                 _ => {
                     panic!("RDMA Listen with wrong state");
@@ -1060,7 +1074,7 @@ impl SockOperations for SocketOperations {
             return Err(Error::SysError(-res as i32));
         }
 
-        *self.socketBuf.lock() = if enableRDMA {
+        *self.socketBuf.lock() = if self.enableRDMA {
             SocketBufType::TCPRDMAServer(acceptQueue)
         } else if asyncAccept {
             if !self.AsyncAcceptEnabled() {
@@ -1095,9 +1109,15 @@ impl SockOperations for SocketOperations {
         }
 
         if how == LibcConst::SHUT_RD || how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR {
-            let res = Kernel::HostSpace::Shutdown(self.fd, how as i32);
-            if res < 0 {
-                return Err(Error::SysError(-res as i32));
+            let res = 0;
+            if self.enableRDMA && (how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR) {
+                //TODO:
+                let _res = GlobalRDMASvcCli().shutdown(1, how as u8);
+            } else {
+                let res = Kernel::HostSpace::Shutdown(self.fd, how as i32);
+                if res < 0 {
+                    return Err(Error::SysError(-res as i32));
+                }
             }
 
             if self.stype == SockType::SOCK_STREAM
@@ -1312,6 +1332,41 @@ impl SockOperations for SocketOperations {
     }
 
     fn GetSockName(&self, _task: &Task, socketaddr: &mut [u8]) -> Result<i64> {
+        if self.enableRDMA {
+            let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
+            let fdInfoLock = fdInfo.lock();
+            let sockInfo = fdInfoLock.sockInfo.lock().clone();
+            let ipAddr;
+            let port;
+            match sockInfo {
+                SockInfo::RDMADataSocket(sock) => {
+                    ipAddr = sock.localIpAddr;
+                    port = sock.localPort;
+                }
+                SockInfo::RDMAServerSocket(sock) => {
+                    ipAddr = sock.ipAddr;
+                    port = sock.port;
+                }
+                SockInfo::Socket(sock) => {
+                    ipAddr = sock.ipAddr;
+                    port = sock.port;
+                }
+                _ => {
+                    panic!("Incorrect sockInfo")
+                }
+            }
+            let sockAddr = SockAddr::Inet(SockAddrInet {
+                Family: AFType::AF_INET as u16,
+                Port: port,
+                Addr: ipAddr.to_be_bytes(),
+                Zero: [0; 8]
+            });
+            let len = socketaddr.len() as usize;
+            sockAddr.Marsh(socketaddr, len)?;
+            debug!("GetSockName, ipAddr: {}, port: {}, len: {}", ipAddr, port, len);
+            //TODO: handle unhappy case
+            return Ok(len as i64);
+        }
         let len = socketaddr.len() as i32;
 
         let res = Kernel::HostSpace::GetSockName(
@@ -1327,6 +1382,38 @@ impl SockOperations for SocketOperations {
     }
 
     fn GetPeerName(&self, _task: &Task, socketaddr: &mut [u8]) -> Result<i64> {
+        if self.enableRDMA {
+            let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
+            let fdInfoLock = fdInfo.lock();
+            let sockInfo = fdInfoLock.sockInfo.lock().clone();
+            let ipAddr;
+            let port;
+            match sockInfo {
+                SockInfo::RDMADataSocket(sock) => {
+                    ipAddr = sock.peerIpAddr;
+                    port = sock.peerPort;
+                }
+                SockInfo::RDMAServerSocket(_sock) => {
+                    return Err(Error::SysError(SysErr::ENOTCONN));
+                }
+                SockInfo::Socket(_sock) => {
+                    return Err(Error::SysError(SysErr::ENOTCONN));
+                }
+                _ => {
+                    panic!("Incorrect sockInfo")
+                }
+            }
+            let sockAddr = SockAddr::Inet(SockAddrInet {
+                Family: AFType::AF_INET as u16,
+                Port: port,
+                Addr: ipAddr.to_be_bytes(),
+                Zero: [0; 8]
+            });
+            let len = 0;
+            sockAddr.Marsh(socketaddr, len)?;
+            //TODO: handle unhappy case
+            return Ok(len as i64);
+        }
         let len = socketaddr.len() as i32;
         let res = Kernel::HostSpace::GetPeerName(
             self.fd,
@@ -1569,7 +1656,7 @@ impl SockOperations for SocketOperations {
     ) -> Result<i64> {
         if self.SocketBufEnabled() {
             if self.SocketBuf().WClosed() {
-                return Err(Error::SysError(SysErr::ESPIPE))
+                return Err(Error::SysError(SysErr::ESPIPE));
             }
 
             if msgHdr.msgName != 0 || msgHdr.msgControl != 0 {

@@ -65,8 +65,26 @@ pub struct RDMAAgentIntern {
     pub keys: Vec<[u32; 2]>,
     // TODO: indexes allocated for io buffer.
 
+    pub memoryRegions: Mutex<Vec<MemoryRegion>>,
+
     //sockfd -> sockInfo
     // pub sockInfos: Mutex<HashMap<u32, SockInfo>>,
+}
+
+impl Drop for RDMAAgentIntern {
+    fn drop(&mut self) {
+        self.memoryRegions.lock().clear();
+        unsafe {
+            if self.sockfd != 0 {
+                libc::close(self.sockfd);
+            }
+
+            if self.shareMemRegion.addr != 0 {
+                libc::munmap(self.shareMemRegion.addr as *mut _, self.shareMemRegion.len as usize);
+            }
+            
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -131,6 +149,7 @@ impl RDMAAgent {
             shareRegion: Mutex::new(shareRegion),
             ioBufIdMgr: Mutex::new(IdMgr::Init(0, 1024)),
             keys: vec![[mr.LKey(), mr.RKey()]],
+            memoryRegions: Mutex::new(vec![mr]),
         }))
     }
 
@@ -148,6 +167,7 @@ impl RDMAAgent {
             },
             ioBufIdMgr: Mutex::new(IdMgr::Init(0, 0)),
             keys: vec![[0, 0]],
+            memoryRegions: Mutex::new(vec![]),
         }))
     }
 
@@ -168,7 +188,6 @@ impl RDMAAgent {
             &shareRegion.iobufs[ioBufIndex].write as *const _ as u64,
             true,
         ));
-        // let readBufAddr = &shareRegion.iobufs[ioBufIndex].read as *const _ as u64;
 
         let rdmaChannel = RDMAChannel::CreateRDMAChannel(
             channelId,
@@ -247,7 +266,7 @@ impl RDMAAgent {
         //         // }
 
         //         i += 5;
-                
+
         //         debug!(
         //             "RDMARespMsg::RDMANotify, readBufHeadTailAddr: {:x}, readHead: {}, readTail: {}, writehead: {}, writeTail: {}, consumedData: {}",
         //             readBufHeadTailAddr,
@@ -324,6 +343,7 @@ impl RDMAAgent {
                         let rdmaConn = conns.get(&nodeIpAddr).unwrap();
                         let rdmaChannel =
                             self.CreateClientRDMAChannel(&msg, rdmaConn.clone());
+
                         RDMA_SRV
                             .channels
                             .lock()
@@ -360,20 +380,19 @@ impl RDMAAgent {
             },
             RDMAReqMsg::RDMAShutdown(msg) => match RDMA_SRV.channels.lock().get(&msg.channelId) {
                 Some(rdmaChannel) => {
-                    rdmaChannel.Shutdown(msg.howto);
+                    rdmaChannel.Shutdown();
                 }
                 None => {
                     panic!("RDMAChannel with id {} does not exist!", msg.channelId);
                 }
             },
-            RDMAReqMsg::RDMACloseChannel(msg) => {
+            RDMAReqMsg::RDMAClose(msg) => {
                 let rdmaChannel = RDMA_SRV
                     .channels
                     .lock()
                     .get(&msg.channelId)
                     .unwrap()
                     .clone();
-
                 rdmaChannel.Close();
             }
         }

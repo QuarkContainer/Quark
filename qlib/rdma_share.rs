@@ -52,11 +52,11 @@ impl<T: 'static + Default + Copy> RingQueue<T> {
         let head = self.head.load(Ordering::Relaxed);
         let tail = self.tail.load(Ordering::Acquire);
         let available = tail.wrapping_sub(head) as usize;
-        // println!("RingQueue::Pop, available: {}", available);
         if available == 0 {
             return None;
         }
 
+        // error!("RingQueue::Pop, available: {}", available);
         let idx = head & self.RingMask();
         let data = self.data[idx as usize];
         self.head.store(head.wrapping_add(1), Ordering::Release);
@@ -83,11 +83,12 @@ impl<T: 'static + Default + Copy> RingQueue<T> {
         let head = self.head.load(Ordering::Acquire);
         let tail = self.tail.load(Ordering::Relaxed);
         let available = tail.wrapping_sub(head) as usize;
-        // println!("RingQueue::Push, available: {}, count: {}", available, self.Count());
+
         if available == self.Count() {
             return false;
         }
 
+        // error!("RingQueue::Push, available: {}, count: {}", available, self.Count());
         let idx = tail & self.RingMask();
         self.data[idx as usize] = data;
         self.tail.store(tail.wrapping_add(1), Ordering::Release);
@@ -126,7 +127,7 @@ pub enum RDMAReqMsg {
     RDMAWrite(RDMAWriteReq),
     RDMARead(RDMAReadReq),
     RDMAShutdown(RDMAShutdownReq),
-    RDMACloseChannel(RDMACloseChannelReq),
+    RDMAClose(RDMACloseReq),
     // RDMAAccept(RDMAAcceptReq), //Put connected socket on client side.
 }
 
@@ -155,6 +156,10 @@ pub struct RDMAConnectResp {
     pub sockfd: u32,
     pub ioBufIndex: u32,
     pub channelId: u32,
+    pub dstIpAddr: u32,
+    pub dstPort: u16,
+    pub srcIpAddr: u32,
+    pub srcPort: u16,
 }
 
 #[derive(Default, Clone, Copy, Debug)]
@@ -164,6 +169,8 @@ pub struct RDMAAcceptResp {
     pub channelId: u32,
     pub dstIpAddr: u32,
     pub dstPort: u16,
+    pub srcIpAddr: u32,
+    pub srcPort: u16,
 }
 
 #[derive(Default, Clone, Copy, Debug)]
@@ -209,7 +216,7 @@ pub struct RDMAShutdownReq {
 }
 
 #[derive(Default, Clone, Copy, Debug)]
-pub struct RDMACloseChannelReq {
+pub struct RDMACloseReq {
     pub channelId: u32,
 }
 
@@ -358,8 +365,8 @@ impl ShareRegion {
         let l1idx = l2idx / 64;
         let l1pos = l2idx % 64;
 
-        self.bitmap.l1bitmap[l1idx].fetch_or(1 << l1pos, Ordering::SeqCst);
         self.bitmap.l2bitmap[l2idx].fetch_or(1 << l2pos, Ordering::SeqCst);
+        self.bitmap.l1bitmap[l1idx].fetch_or(1 << l1pos, Ordering::SeqCst);
     }
 
     pub fn getAgentIds(&self) -> Vec<u32> {
@@ -403,17 +410,20 @@ impl ShareRegion {
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, Debug)]
 pub enum SockStatus {
-    FIN_READ_FROM_BUFFER, //after reading all stuff to above socket, need a better name.
-    FIN_SENT_TO_SVC,      //
+    FIN_READ_FROM_BUFFER  = -2, //after reading all stuff to above socket, need a better name.
+    FIN_SENT_TO_SVC = -1,      //
     // FIN_RECEIVED_FROM_PEER,
-    CLOSE_WAIT,
-    CLOSING,
-    ESTABLISHED,
-    SYN_RECEIVED,
-    LISTENING,
-    CONNECTING,
-    BINDED,
-    // ... to simulate TCP status
+    CLOSED = 0,
+    LISTEN = 1,
+    SYN_SENT = 2,
+    SYN_RECEIVED = 3,
+    ESTABLISHED = 4,
+    CLOSE_WAIT = 5,
+    FIN_WAIT_1 = 6,
+    CLOSING = 7,
+    LAST_ACK = 8,
+    FIN_WAIT_2 = 9,
+    TIME_WAIT = 10,
 }
 
 #[allow(non_camel_case_types)]

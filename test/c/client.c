@@ -17,6 +17,7 @@
 #include <arpa/inet.h> 
 #include <unistd.h> 
 #include <string.h> 
+#include <errno.h>
 #define PORT 8080
 
 int Send() {
@@ -55,7 +56,17 @@ int main(int argc, char const *argv[])
 {
     //printf("xxxxxx\n");
     //return Send();
-
+    char *addr = "127.0.0.1";
+    if (argc > 1)
+    {
+        addr = argv[1];
+    }
+    int port = PORT;
+    if (argc > 2)
+    {
+        port = atoi(argv[2]);
+    }
+    printf("addr: %s, port: %d\n", addr, port);
     int sock = 0, valread;
     struct sockaddr_in serv_addr; 
     char *hello = "Hello from client"; 
@@ -71,6 +82,7 @@ int main(int argc, char const *argv[])
     sa_len = sizeof(sa);
     printf("sa_len: %d\n", sa_len);
     printf("sock is %d\n", sock);
+    printf("after calling socket()******************************\n");
     if (getsockname(sock, &sa, &sa_len) == -1) {
           perror("getsockname() failed");
           return -1;
@@ -78,24 +90,26 @@ int main(int argc, char const *argv[])
     printf("Local IP address is: %s\n", inet_ntoa(sa.sin_addr));
     printf("Local port is: %d\n", (int) ntohs(sa.sin_port));
 
-    int ret = 0;
     if (getpeername(sock, &sa, &sa_len) == -1) {
-              printf("errorno: %d\n", errno);
-              perror("getsockname() failed");
-              return -1;
+        printf("getpeername for server_fd, errorno: %d\n", errno);
+            //   perror("getsockname() failed");
+            //   return -1;
     }
-    printf("Remote IP address is: %s\n", inet_ntoa(sa.sin_addr));
-    printf("Remote port is: %d\n", (int) ntohs(sa.sin_port));
+    else {
+        printf("Remote IP address is: %s\n", inet_ntoa(sa.sin_addr));
+        printf("Remote port is: %d\n", (int) ntohs(sa.sin_port));
+    }
+
 
     printf("start to connect \n");
     sleep(1);
 
     serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(PORT); 
+    serv_addr.sin_port = htons(port); 
        
     // Convert IPv4 and IPv6 addresses from text to binary form 
     //if(inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr)<=0)
-    if(inet_pton(AF_INET, "172.16.1.6", &serv_addr.sin_addr)<=0)
+    if(inet_pton(AF_INET, addr, &serv_addr.sin_addr)<=0)
     { 
         printf("\nInvalid address/ Address not supported \n"); 
         return -1; 
@@ -113,6 +127,7 @@ int main(int argc, char const *argv[])
     // struct sockaddr_in sa;
     // int sa_len;
     // sa_len = sizeof(sa);
+    printf("after calling connect()******************************\n");
     if (getsockname(sock, &sa, &sa_len) == -1) {
           perror("getsockname() failed");
           return -1;
@@ -121,11 +136,14 @@ int main(int argc, char const *argv[])
     printf("Local port is: %d\n", (int) ntohs(sa.sin_port));
 
     if (getpeername(sock, &sa, &sa_len) == -1) {
-              perror("getsockname() failed");
-              return -1;
+        printf("getpeername for server_fd, errorno: %d\n", errno);
+            //   perror("getsockname() failed");
+            //   return -1;
     }
-    printf("Remote IP address is: %s\n", inet_ntoa(sa.sin_addr));
-    printf("Remote port is: %d\n", (int) ntohs(sa.sin_port));
+    else {
+        printf("Remote IP address is: %s\n", inet_ntoa(sa.sin_addr));
+        printf("Remote port is: %d\n", (int) ntohs(sa.sin_port));
+    }
 
     valread = read(sock , buffer, 1024);
     printf("%s\n",buffer );

@@ -65,6 +65,11 @@ void test()
 int main(int argc, char const *argv[]) 
 { 
     //test();
+    int port = PORT;
+    if (argc > 1)
+    {
+        port = atoi(argv[1]);
+    }
     int server_fd=0, new_socket, valread; 
     struct sockaddr_in address; 
     int opt = 1; 
@@ -91,19 +96,24 @@ int main(int argc, char const *argv[])
     memset (&sa, 0, sa_len);
     printf("sa_len: %d\n", sa_len);
     printf("sock is %d\n", server_fd);
+    printf("after calling socket()******************************\n");
     if (getsockname(server_fd, &sa, &sa_len) == -1) {
           perror("getsockname() failed");
           return -1;
     }
-    printf("Local IP address is: %s\n", inet_ntoa(sa.sin_addr));
-    printf("Local port is: %d\n", (int) ntohs(sa.sin_port));
+    printf("Local IP address for server_fd is: %s\n", inet_ntoa(sa.sin_addr));
+    printf("Local port  for server_fd is: %d\n", (int) ntohs(sa.sin_port));
 
-    // if (getpeername(server_fd, &sa, &sa_len) == -1) {
-    //           perror("getsockname() failed");
-    //           return -1;
-    // }
-    // printf("Remote IP address is: %s\n", inet_ntoa(sa.sin_addr));
-    // printf("Remote port is: %d\n", (int) ntohs(sa.sin_port));
+    if (getpeername(server_fd, &sa, &sa_len) == -1) {
+        printf("errorno: %d\n", errno);
+            //   perror("getsockname() failed");
+            //   return -1;
+    }
+    else {
+        printf("Remote IP address for server_fd is: %s\n", inet_ntoa(sa.sin_addr));
+        printf("Remote port for server_fd is: %d\n", (int) ntohs(sa.sin_port));
+    }
+    
        
     // Forcefully attaching socket to the port 8080 
     if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, 
@@ -114,7 +124,7 @@ int main(int argc, char const *argv[])
     } 
     address.sin_family = AF_INET; 
     address.sin_addr.s_addr = INADDR_ANY; 
-    address.sin_port = htons( PORT ); 
+    address.sin_port = htons( port ); 
        
     // Forcefully attaching socket to the port 8080 
     if (bind(server_fd, (struct sockaddr *)&address,  
@@ -122,25 +132,46 @@ int main(int argc, char const *argv[])
     { 
         perror("bind failed"); 
         exit(EXIT_FAILURE); 
-    } 
+    }
+    printf("after calling bind()******************************\n"); 
     if (getsockname(server_fd, &sa, &sa_len) == -1) {
           perror("getsockname() failed");
           return -1;
     }
     printf("Local IP address is: %s\n", inet_ntoa(sa.sin_addr));
     printf("Local port is: %d\n", (int) ntohs(sa.sin_port));
+    if (getpeername(server_fd, &sa, &sa_len) == -1) {
+        printf("getpeername for server_fd, errorno: %d\n", errno);
+            //   perror("getsockname() failed");
+            //   return -1;
+    }
+    else {
+        printf("Remote IP address for server_fd is: %s\n", inet_ntoa(sa.sin_addr));
+        printf("Remote port for server_fd is: %d\n", (int) ntohs(sa.sin_port));
+    }
     if (listen(server_fd, 3) < 0) 
     { 
         perror("listen"); 
         exit(EXIT_FAILURE); 
     } 
-    
+
+    printf("after calling listen()******************************\n");
     if (getsockname(server_fd, &sa, &sa_len) == -1) {
           perror("getsockname() failed");
           return -1;
     }
-    printf("Local IP address is: %s\n", inet_ntoa(sa.sin_addr));
-    printf("Local port is: %d\n", (int) ntohs(sa.sin_port));
+    printf("Local IP address for server_fd is: %s\n", inet_ntoa(sa.sin_addr));
+    printf("Local port for server_fd is: %d\n", (int) ntohs(sa.sin_port));
+
+    if (getpeername(server_fd, &sa, &sa_len) == -1) {
+        printf("getpeername for server_fd, errorno: %d\n", errno);
+            //   perror("getsockname() failed");
+            //   return -1;
+    }
+    else {
+        printf("Remote IP address for server_fd is: %s\n", inet_ntoa(sa.sin_addr));
+        printf("Remote port for server_fd is: %d\n", (int) ntohs(sa.sin_port));
+    }
 
     // if (getpeername(server_fd, &sa, &sa_len) == -1) {
     //           perror("getsockname() failed");
@@ -154,7 +185,24 @@ int main(int argc, char const *argv[])
     }
     printf("get connection\n");
     sleep(1);
+    printf("after calling accept()******************************\n");
+    if (getsockname(server_fd, &sa, &sa_len) == -1) {
+          perror("getsockname() failed");
+          return -1;
+    }
+    
+    printf("Local IP address for server_fd is: %s\n", inet_ntoa(sa.sin_addr));
+    printf("Local port for server_fd is: %d\n", (int) ntohs(sa.sin_port));
 
+    if (getpeername(server_fd, &sa, &sa_len) == -1) {
+        printf("getpeername for server_fd, errorno: %d\n", errno);
+            //   perror("getsockname() failed");
+            //   return -1;
+    }
+    else {
+        printf("Remote IP address for server_fd is: %s\n", inet_ntoa(sa.sin_addr));
+        printf("Remote port for server_fd is: %d\n", (int) ntohs(sa.sin_port));
+    }
     if (getsockname(new_socket, &sa, &sa_len) == -1) {
           perror("getsockname() failed");
           return -1;

@@ -1,6 +1,6 @@
 // Copyright (c) 2021 Quark Container Authors
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
+// Licensed un&der the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
@@ -63,7 +63,8 @@ impl Default for CtrlInfo {
 
         let isK8s = false;
         if !isK8s {
-            let lab1ip = u32::from(Ipv4Addr::from_str("10.218.233.29").unwrap()).to_be();
+            let lab1ip = u32::from(Ipv4Addr::from_str("172.16.1.43").unwrap()).to_be();
+            debug!("CtrlInfo::default, lab1ip: {}", lab1ip);
             let node = Node {
                 hostname: String::from("lab 1"),
                 ipAddr: lab1ip,
@@ -87,8 +88,8 @@ impl Default for CtrlInfo {
             }),
             //134654144 -> 100733100
             podIpInfo: Mutex::new(HashMap::from_iter([(
-                u32::from(Ipv4Addr::from_str("30.0.0.5").unwrap()).to_be(),
-                (u32::from(Ipv4Addr::from_str("10.218.233.29").unwrap()).to_be()),
+                u32::from(Ipv4Addr::from_str("192.168.6.8").unwrap()).to_le(),
+                (u32::from(Ipv4Addr::from_str("172.16.1.43").unwrap()).to_be()),
             )])),
             fds: Mutex::new(HashMap::new()),
             hostname: Mutex::new(String::new()),
@@ -132,7 +133,9 @@ impl CtrlInfo{
         let mut set: HashSet<u32> = HashSet::new();
         let timestamp = self.timestamp_get();
         for (_, node) in self.nodes.lock().iter() {
+            debug!("get_node_ips_for_connecting, node: {:?}", node);
             if node.timestamp < timestamp {
+                debug!("get_node_ips_for_connecting, node.ipAddr: {}", node.ipAddr);
                 set.insert(node.ipAddr);
             }
         }
@@ -161,6 +164,7 @@ impl CtrlInfo{
     }
 
     pub fn node_get(&self, ip: u32) -> Node {
+        debug!("node_get, ip: {}", ip);
         self.nodes.lock().get(&ip).unwrap().clone()
     }
 }

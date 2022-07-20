@@ -1162,7 +1162,11 @@ impl QueuePair {
 
 pub struct MemoryRegion(pub *mut rdmaffi::ibv_mr);
 impl Drop for MemoryRegion {
-    fn drop(&mut self) {}
+    fn drop(&mut self) {
+        unsafe {
+            let _ret = rdmaffi::ibv_dereg_mr(self.0);
+        }
+    }
 }
 
 impl Default for MemoryRegion {

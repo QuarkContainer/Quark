@@ -690,7 +690,6 @@ impl RDMAControlChannel {
     pub fn HandleConsumedDataGroup(&self, consumedDataGroup: &ConsumedDataGroup) {
         let mut i = 0;
         loop {
-            
             if i == 6 || consumedDataGroup.consumeData[i].consumedData == 0 {
                 break;
             }
@@ -698,16 +697,22 @@ impl RDMAControlChannel {
             let consumedData = consumedDataGroup.consumeData[i].consumedData;
 
             let channelId = consumedDataGroup.consumeData[i].remoteChannelId;
-            
+
             if channelId == 0 {
-                self.chan.upgrade().unwrap().ProcessRemoteConsumedData(consumedData);
-            }
-            else {
-                RDMA_SRV.channels.lock().get(&channelId).unwrap().ProcessRemoteConsumedData(consumedData);
+                self.chan
+                    .upgrade()
+                    .unwrap()
+                    .ProcessRemoteConsumedData(consumedData);
+            } else {
+                RDMA_SRV
+                    .channels
+                    .lock()
+                    .get(&channelId)
+                    .unwrap()
+                    .ProcessRemoteConsumedData(consumedData);
             }
 
             i += 1;
-
         }
     }
     pub fn HandleConsumedData(&self, qpNum: u32, consumedData: &ConsumedData) {
@@ -755,6 +760,10 @@ impl RDMAControlChannel {
                         sockfd: connectResponse.remoteSockFd,
                         ioBufIndex: rdmaChannel.ioBufIndex,
                         channelId: rdmaChannel.localId,
+                        dstIpAddr: rdmaChannel.dstIpAddr,
+                        dstPort: rdmaChannel.dstPort,
+                        srcIpAddr: rdmaChannel.srcIpAddr,
+                        srcPort: rdmaChannel.srcPort,
                     }),
                 })
             }
@@ -825,6 +834,8 @@ impl RDMAControlChannel {
                     channelId: rdmaChannel.localId,
                     dstIpAddr: rdmaChannel.dstIpAddr,
                     dstPort: rdmaChannel.dstPort,
+                    srcIpAddr: rdmaChannel.srcIpAddr,
+                    srcPort: rdmaChannel.srcPort,
                 }),
             });
         } else {

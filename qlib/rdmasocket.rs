@@ -21,6 +21,8 @@ use super::socket_buf::*;
 pub struct RDMAServerSockIntern {
     pub fd: i32,
     pub acceptQueue: AcceptQueue,
+    pub ipAddr: u32,
+    pub port: u16,
 }
 
 #[derive(Clone)]
@@ -35,10 +37,12 @@ impl Deref for RDMAServerSock {
 }
 
 impl RDMAServerSock {
-    pub fn New(fd: i32, acceptQueue: AcceptQueue) -> Self {
+    pub fn New(fd: i32, acceptQueue: AcceptQueue, ipAddr: u32, port: u16) -> Self {
         return Self(Arc::new(RDMAServerSockIntern {
             fd: fd,
             acceptQueue: acceptQueue,
+            ipAddr,
+            port,
         }));
     }
 
@@ -65,6 +69,10 @@ pub struct RDMADataSockIntern {
     pub socketBuf: Arc<SocketBuff>,
     // pub rdmaType: RDMAType,
     pub channelId: u32,
+    pub localIpAddr: u32,
+    pub localPort: u16,
+    pub peerIpAddr: u32,
+    pub peerPort: u16,
 }
 
 pub enum RDMAType {
@@ -86,13 +94,25 @@ impl Deref for RDMADataSock {
 
 impl RDMADataSock {
     // pub fn New(fd: i32, socketBuf: Arc<SocketBuff>, rdmaType: RDMAType, channelId: u32) -> Self {
-        pub fn New(fd: i32, socketBuf: Arc<SocketBuff>, channelId: u32) -> Self {
+    pub fn New(
+        fd: i32,
+        socketBuf: Arc<SocketBuff>,
+        channelId: u32,
+        localIpAddr: u32,
+        localPort: u16,
+        peerIpAddr: u32,
+        peerPort: u16,
+    ) -> Self {
         if RDMA_ENABLE {
             return Self(Arc::new(RDMADataSockIntern {
                 fd: fd,
                 socketBuf: socketBuf,
                 // rdmaType: rdmaType,
                 channelId,
+                localIpAddr,
+                localPort,
+                peerIpAddr,
+                peerPort,
             }));
         } else {
             return Self(Arc::new(RDMADataSockIntern {
@@ -100,6 +120,10 @@ impl RDMADataSock {
                 socketBuf: socketBuf,
                 // rdmaType: rdmaType,
                 channelId,
+                localIpAddr,
+                localPort,
+                peerIpAddr,
+                peerPort,
             }));
         }
     }
