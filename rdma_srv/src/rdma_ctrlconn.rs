@@ -31,6 +31,9 @@ pub struct CtrlInfo {
     // nodes: node ipaddr --> Node
     pub nodes: Mutex<HashMap<u32, Node>>,
 
+    // pods: pod ipaddr --> Pod
+    pub pods: Mutex<HashMap<u32, Pod>>,
+
     // subnetmapping: virtual subnet --> node ipaddr
     pub subnetmap: Mutex<HashMap<u32, u32>>,
 
@@ -60,8 +63,9 @@ pub struct CtrlInfo {
 impl Default for CtrlInfo {
     fn default() -> CtrlInfo {        
         let mut nodes: HashMap<u32, Node> = HashMap::new();
+        let pods: HashMap<u32, Pod> = HashMap::new();
 
-        let isK8s = false;
+        let isK8s = true;
         if !isK8s {
             let lab1ip = u32::from(Ipv4Addr::from_str("172.16.1.43").unwrap()).to_be();
             debug!("CtrlInfo::default, lab1ip: {}", lab1ip);
@@ -78,6 +82,7 @@ impl Default for CtrlInfo {
 
         CtrlInfo {
             nodes: Mutex::new(nodes),
+            pods: Mutex::new(pods),
             subnetmap: Mutex::new(HashMap::new()),
             veps: Mutex::new(HashMap::new()),
             clusterSubnetInfo: Mutex::new(ClusterSubnetInfo {
@@ -196,6 +201,14 @@ pub struct Node {
     pub subnet: u32,
     pub netmask: u32,
     //pub nodename: String ....
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct Pod {
+    pub key: String,
+    pub ip: u32,
+    pub node_name: String,
+    pub resource_version: i32,
 }
 
 pub struct VirtualEp {

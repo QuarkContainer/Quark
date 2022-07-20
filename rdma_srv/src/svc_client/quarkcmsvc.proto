@@ -23,9 +23,8 @@ service QuarkCMService {
 
   rpc ListNode (google.protobuf.Empty) returns (NodeListMessage) {}
   rpc WatchNode (MaxResourceVersionMessage) returns (stream NodeMessage) {}
-  // For now, don't need pod data in control plane
-  // rpc ListPod (google.protobuf.Empty) returns (PodListMessage) {}
-  // rpc WatchPod (MaxResourceVersionMessage) returns (stream PodMessage) {}
+  rpc ListPod (google.protobuf.Empty) returns (PodListMessage) {}
+  rpc WatchPod (MaxResourceVersionMessage) returns (stream PodMessage) {}
 }
 
 message TestRequestMessage {
@@ -51,8 +50,6 @@ message NodeListMessage {
     repeated NodeMessage nodes = 1;
 }
 
-// For now, don't need pod data in control plane
-/*
 message PodMessage {
     string key = 1;
     uint32 ip = 2;
@@ -63,7 +60,6 @@ message PodMessage {
 message PodListMessage {
     repeated PodMessage pods = 1;
 }
-*/
 
 message MaxResourceVersionMessage {
     int32 max_resource_version = 1;

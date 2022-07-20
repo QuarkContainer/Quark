@@ -643,6 +643,12 @@ pub struct NodeEvent{
     pub ip: u32,
 }
 
+#[derive(Clone)]
+pub struct PodEvent{
+    pub is_delete: bool,
+    pub ip: u32,
+}
+
 pub fn get_local_ip() -> u32 {
     let _my_local_ip = local_ip().unwrap();
 
