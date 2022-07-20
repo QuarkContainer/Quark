@@ -233,6 +233,7 @@ impl VirtualMachine {
         PerfGoto(PerfType::Other);
 
         *ROOT_CONTAINER_ID.lock() = args.ID.clone();
+        error!("ContainerId: {}", args.ID.clone());
         if QUARK_CONFIG.lock().PerSandboxLog {
             LOG.Reset(&args.ID[0..12]);
         }
