@@ -468,16 +468,16 @@ impl Task {
 
     pub fn NewStdFds(&mut self, stdfds: &[i32], isTTY: bool) -> Result<()> {
         for i in 0..stdfds.len() {
-            let file = self.NewFileFromHostFd(i as i32, stdfds[i], isTTY)?;
+            let file = self.NewFileFromHostStdioFd(i as i32, stdfds[i], isTTY)?;
             file.flags.lock().0.NonBlocking = false; //need to clean the stdio nonblocking
         }
 
         return Ok(());
     }
 
-    pub fn NewFileFromHostFd(&mut self, fd: i32, hostfd: i32, isTTY: bool) -> Result<File> {
+    pub fn NewFileFromHostStdioFd(&mut self, fd: i32, hostfd: i32, isTTY: bool) -> Result<File> {
         let fileOwner = self.FileOwner();
-        let file = File::NewFileFromFd(self, hostfd, &fileOwner, isTTY)?;
+        let file = File::NewFileFromFd(self, hostfd, &fileOwner, true, isTTY)?;
         self.NewFDAt(fd, &Arc::new(file.clone()), &FDFlags::default())?;
         return Ok(file);
     }

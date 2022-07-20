@@ -115,7 +115,7 @@ impl FileOperations for HostFileOp {
     }
 
     fn Seekable(&self) -> bool {
-        return true;
+        return self.InodeOp.InodeType() == InodeType::RegularFile || self.InodeOp.InodeType() == InodeType::SpecialFile;
     }
 
     fn Seek(&self, task: &Task, f: &File, whence: i32, current: i64, offset: i64) -> Result<i64> {

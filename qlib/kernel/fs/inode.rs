@@ -350,6 +350,42 @@ impl Inode {
         }
     }
 
+    pub fn NewStdioInode(
+        _task: &Task,
+        msrc: &Arc<QMutex<MountSource>>,
+        fd: i32,
+        fstat: &LibcStat,
+        writeable: bool,
+    ) -> Result<Self> {
+        //info!("after fstat: {:?}", fstat.StableAttr());
+
+        //println!("the stable attr is {:?}", &fstat.StableAttr());
+        let inodeType = fstat.InodeType();
+        match inodeType {
+            InodeType::Directory | InodeType::SpecialDirectory => {
+                panic!("NewControlTTyInode fail with wrong inode type {:?}", inodeType)
+            }
+            _ => {
+                let iops = HostInodeOp::New(
+                    &msrc.lock().MountSourceOperations.clone(),
+                    fd,
+                    fstat.WouldBlock(),
+                    &fstat,
+                    writeable,
+                );
+
+                return Ok(Self(Arc::new(QMutex::new(InodeIntern {
+                    UniqueId: NewUID(),
+                    InodeOp: Arc::new(iops),
+                    StableAttr: fstat.StableAttr(),
+                    LockCtx: LockCtx::default(),
+                    MountSource: msrc.clone(),
+                    Overlay: None,
+                }))));
+            }
+        }
+    }
+
     pub fn InodeType(&self) -> InodeType {
         return self.lock().InodeOp.InodeType();
     }
