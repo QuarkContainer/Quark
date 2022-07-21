@@ -54,9 +54,11 @@ message PodMessage {
     string key = 1;
     uint32 ip = 2;
     string node_name = 3;
-    int32 resource_version = 4;
-    string event_type = 5;
+    string container_id = 4;
+    int32 resource_version = 5;
+    string event_type = 6;
 }
+
 message PodListMessage {
     repeated PodMessage pods = 1;
 }
