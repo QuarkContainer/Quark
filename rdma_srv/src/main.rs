@@ -721,7 +721,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         RDMAProcess();
         for ev in &events {
             // print!("u64: {}, events: {:x}", ev.U64, ev.Events);
-            let event_data = RDMA_CTLINFO.fds_get(ev.U64 as i32);
+            // let event_data = RDMA_CTLINFO.fds_get(ev.U64 as i32);
+            let mut fds = RDMA_CTLINFO.fds.lock();
+            let event_data = fds.get(&(ev.U64 as i32)).unwrap();
             match event_data {
                 Srv_FdType::TCPSocketServer => {
                     let stream_fd;
@@ -738,7 +740,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("stream_fd is: {}", stream_fd);
 
                     let peerIpAddrU32 = cliaddr.sin_addr.s_addr;
-                    RDMA_CTLINFO.fds_insert(stream_fd, Srv_FdType::TCPSocketConnect(peerIpAddrU32));
+                    // RDMA_CTLINFO.fds_insert(stream_fd, Srv_FdType::TCPSocketConnect(peerIpAddrU32));
+                    fds.insert(stream_fd, Srv_FdType::TCPSocketConnect(peerIpAddrU32));
                     let controlRegionId =
                         RDMA_SRV.controlBufIdMgr.lock().AllocId().unwrap() as usize; // TODO: should handle no space issue.
                     let sockBuf = Arc::new(SocketBuff::InitWithShareMemory(
@@ -814,7 +817,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let conn_sock = UnixSocket::Accept(ev.U64 as i32).unwrap();
                     let conn_sock_fd = conn_sock.as_raw_fd();
                     unblock_fd(conn_sock_fd);
-                    RDMA_CTLINFO.fds_insert(conn_sock_fd, Srv_FdType::UnixDomainSocketConnect(conn_sock));
+                    // RDMA_CTLINFO.fds_insert(conn_sock_fd, Srv_FdType::UnixDomainSocketConnect(conn_sock));
+                    fds.insert(conn_sock_fd, Srv_FdType::UnixDomainSocketConnect(conn_sock));
                     epoll_add(epoll_fd, conn_sock_fd, read_event(conn_sock_fd as u64))?;
                     println!("add unix sock fd: {}", conn_sock_fd);
                 }
@@ -835,6 +839,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         Some(agentId) => {
                                             debug!("Remove agent from RDMA_SRV.agents");
                                             RDMA_SRV.agents.lock().remove(&agentId);
+                                            fds.remove(&(ev.U64 as i32));
                                         }
                                         None => {
                                             error!("AgentId not found for sockfd: {}", conn_sock.as_raw_fd())
@@ -873,7 +878,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // RDMAProcess();
                     let ret = unsafe {
                         libc::read(
-                            srvEventFd,
+                            *srvEventFd,
                             &mut eventdata as *mut _ as *mut libc::c_void,
                             16,
                         )

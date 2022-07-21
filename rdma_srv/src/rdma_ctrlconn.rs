@@ -65,7 +65,7 @@ impl Default for CtrlInfo {
         let mut nodes: HashMap<u32, Node> = HashMap::new();
         let pods: HashMap<u32, Pod> = HashMap::new();
 
-        let isK8s = true;
+        let isK8s = false;
         if !isK8s {
             let lab1ip = u32::from(Ipv4Addr::from_str("172.16.1.43").unwrap()).to_be();
             debug!("CtrlInfo::default, lab1ip: {}", lab1ip);
