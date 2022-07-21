@@ -294,7 +294,12 @@ impl Drop for UnixSocketOperations {
        match *self.name.lock() {
             None => (),
             Some(ref name) => {
-                ABSTRACT_SOCKET.Remove(name, &self.ep);
+                if name[0] == 0 {
+                    ABSTRACT_SOCKET.Remove(name, &self.ep);
+                } else {
+                    UNIX_SOCKET_PINS.Unpin(name);
+                }
+
             }
         }
 
@@ -617,8 +622,7 @@ impl SockOperations for UnixSocketOperations {
             *(self.name.lock()) = Some(p);
         } else {
             let p = String::from_utf8(p).unwrap();
-            info!("bind address is {}", &p);
-
+            
             let cwd = task.fsContext.WorkDirectory();
 
             let d;
@@ -683,7 +687,12 @@ impl SockOperations for UnixSocketOperations {
 
             match d.Bind(task, &root, &name.to_string(), &bep, &permisson) {
                 Err(_) => return Err(Error::SysError(SysErr::EADDRINUSE)),
-                Ok(_) => (),
+                Ok(childDirent) => {
+                    let dir = d.MyFullName();
+                    let fullname = format!("{}/{}", dir, name);
+                    UNIX_SOCKET_PINS.Pin(fullname.as_bytes().to_vec(), &childDirent);
+                    *(self.name.lock()) = Some(fullname.as_bytes().to_vec());
+                },
             }
         }
 

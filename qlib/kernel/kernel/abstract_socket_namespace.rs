@@ -17,17 +17,16 @@ use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::ops::Deref;
+use lazy_static::lazy_static;
 
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
-use super::super::super::singleton::*;
+use super::super::super::kernel::fs::dirent::*;
 use super::super::socket::unix::transport::unix::*;
 
-pub static ABSTRACT_SOCKET: Singleton<AbstractSocketNamespace> =
-    Singleton::<AbstractSocketNamespace>::New();
-
-pub unsafe fn InitSingleton() {
-    ABSTRACT_SOCKET.Init(AbstractSocketNamespace::default());
+lazy_static! {
+    pub static ref ABSTRACT_SOCKET: AbstractSocketNamespace = AbstractSocketNamespace::default();
+    pub static ref UNIX_SOCKET_PINS: UnixSocketPins = UnixSocketPins::default();
 }
 
 #[derive(Clone, Default)]
@@ -108,5 +107,30 @@ impl AbstractSocketNamespace {
         if boundep == *ep {
             a.remove(name);
         }
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct UnixSocketPins(Arc<QMutex<BTreeMap<Vec<u8>, Dirent>>>);
+
+impl Deref for UnixSocketPins {
+    type Target = Arc<QMutex<BTreeMap<Vec<u8>, Dirent>>>;
+
+    fn deref(&self) -> &Arc<QMutex<BTreeMap<Vec<u8>, Dirent>>> {
+        &self.0
+    }
+}
+
+impl UnixSocketPins {
+    pub fn Pin(&self, name: Vec<u8>, dirent: &Dirent) {
+        let mut a = self.lock();
+
+        a.insert(name, dirent.clone());
+    }
+
+    pub fn Unpin(&self, name: &Vec<u8>) {
+        let mut a = self.lock();
+
+        a.remove(name);
     }
 }
