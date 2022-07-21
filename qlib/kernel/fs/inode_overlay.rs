@@ -165,8 +165,8 @@ pub fn OverlayCreate(
     };
 
     //let mut upperDirent = Dirent::NewTransient(&upperFileInode);
-    (*(upperFile.Dirent.0).0.lock()).Inode = upperFileInode;
-    (*(upperFile.Dirent.0).0.lock()).Parent = None;
+    upperFile.Dirent.main.lock().Inode = upperFileInode;
+    upperFile.Dirent.main.lock().Parent = None;
 
     let parentInode = parent.Inode();
     let overlayInode = NewOverlayInode(task, entry, &parentInode.lock().MountSource);
@@ -276,15 +276,15 @@ pub fn overlayRemove(
         let mut oupper = o.read().upper.as_ref().unwrap().clone();
         let oupperOps = oupper.lock().InodeOp.clone();
         if childinode.StableAttr().Type == InodeType::Directory {
-            oupperOps.RemoveDirectory(task, &mut oupper, &(child.0).0.lock().Name)?
+            oupperOps.RemoveDirectory(task, &mut oupper, &child.Name())?
         } else {
-            oupperOps.Remove(task, &mut oupper, &(child.0).0.lock().Name)?
+            oupperOps.Remove(task, &mut oupper, &child.Name())?
         }
     }
 
     if overlaylock.LowerExists {
         let mut oupper = o.read().upper.as_ref().unwrap().clone();
-        return overlayCreateWhiteout(&mut oupper, &(child.0).0.lock().Name);
+        return overlayCreateWhiteout(&mut oupper, &child.Name());
     }
 
     return Ok(());
@@ -338,7 +338,7 @@ pub fn overlayRename(
     CopyUpLockedForRename(task, renamed)?;
     CopyUpLockedForRename(task, newParent)?;
 
-    let oldName = (renamed.0).0.lock().Name.to_string();
+    let oldName = renamed.Name();
 
     let overlayUpper = o.read().upper.as_ref().unwrap().clone();
     let overlayUpperOps = overlayUpper.lock().InodeOp.clone();
@@ -406,6 +406,7 @@ pub fn overlayBind(
     task: &Task,
     o: &Arc<RwLock<OverlayEntry>>,
     name: &str,
+    parent: &Dirent,
     data: &BoundEndpoint,
     perm: &FilePermissions,
 ) -> Result<Dirent> {
@@ -423,7 +424,7 @@ pub fn overlayBind(
 
     let inode = d.Inode();
 
-    let msrc = inode.lock().MountSource.clone();
+    let msrc = parent.Inode().lock().MountSource.clone();
     // Create a new overlay entry and dirent for the socket.
     let entry = OverlayEntry::New(task, Some(inode), None, false)?;
 

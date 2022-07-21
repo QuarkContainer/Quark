@@ -760,7 +760,7 @@ impl ThreadGroupInternal {
 
         for t in &self.tasks {
             let mut t = t.lock();
-            t.groupStopPending = true;
+            t.groupStopPending = false;
             if t.stop.is_some() && t.stop.clone().unwrap().Type() == TaskStopType::GROUPSTOP {
                 t.endInternalStopLocked();
             }
@@ -1067,7 +1067,7 @@ impl Task {
                     Pid: pid,
                     SignalNumber: info.Signo,
                     FaultAddr: 0,
-                };*/
+                };
 
                 match info.Signo {
                     Signal::SIGSEGV
@@ -1078,7 +1078,7 @@ impl Task {
                         //ucs.FaultAddr = info.SigFault().addr;
                     }
                     _ => (),
-                }
+                }*/
                 //Emit(&Event::UncaughtSignal(ucs)).unwrap();
                 self.Thread().PrepareGroupExit(ExitStatus {
                     Code: 0,

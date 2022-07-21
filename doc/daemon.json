@@ -1,7 +1,17 @@
 {
-  "runtimes": {
-    "quark": {
-      "path": "/usr/local/bin/quark"
+    "runtimes": {
+        "quark": {
+            "path": "/usr/local/bin/quark"
+        },
+        "quark_d": {
+            "path": "/usr/local/bin/quark_d"
+        },
+        "runsc": {
+            "path": "/usr/local/bin/runsc"
+        },
+        "kata-runtime": {
+            "path": "/usr/bin/kata-runtime"
+        }
     }
-  }
 }
+ 

@@ -171,9 +171,18 @@ pub fn WaitEpoll(task: &Task, epfd: i32, max: i32, timeout: i64) -> Result<Vec<E
     // Try to read events and return right away if we got them or if the
     // caller requested a non-blocking "wait".
     let r = ep.ReadEvents(task, max);
-    if r.len() != 0 || timeout == 0 {
+    if r.len() != 0 {
+        return Ok(r);
+    }
+
+    if timeout == 0 {
         super::super::taskMgr::Yield(); // yield vcpu to avoid live lock
         return Ok(r);
+    }
+
+    if timeout == 0 {
+        super::super::taskMgr::Yield(); // yield vcpu to avoid live lock
+        return Ok(r)
     }
 
     // We'll have to wait. Set up the timer if a timeout was specified and

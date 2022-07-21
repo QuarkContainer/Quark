@@ -26,10 +26,11 @@ use super::super::super::auth::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::kernel::time::*;
+use super::super::kernel::pipe::node::*;
+use super::super::kernel::pipe::pipe::*;
 use super::super::socket::unix::transport::unix::*;
 use super::super::task::*;
 use super::super::uid::*;
-use super::super::SHARESPACE;
 
 use super::attr::*;
 use super::dentry::*;
@@ -37,11 +38,12 @@ use super::dirent::*;
 use super::file::*;
 use super::flags::*;
 use super::host::hostinodeop::*;
+use super::host::fifoiops::*;
+use super::host::diriops::*;
 use super::inode_overlay::*;
 use super::lock::*;
 use super::mount::*;
 use super::overlay::*;
-use super::inotify::*;
 
 pub fn ContextCanAccessFile(task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {
     let creds = task.creds.clone();
@@ -96,6 +98,7 @@ pub enum IopsType {
     TTYDevice,
     ZeroDevice,
     HostInodeOp,
+    HostDirOp,
     TaskOwnedInodeOps,
     StaticFileInodeOps,
     SeqFile,
@@ -110,6 +113,7 @@ pub enum IopsType {
     DirInodeOperations,
     MasterInodeOperations,
     SlaveInodeOperations,
+    FifoIops,
     PipeIops,
     DirNode,
     SymlinkNode,
@@ -197,7 +201,7 @@ pub trait InodeOperations: Sync + Send {
     fn IsVirtual(&self) -> bool;
     fn Sync(&self) -> Result<()>;
     fn StatFS(&self, task: &Task) -> Result<FsInfo>;
-    fn Mappable(&self) -> Result<HostIopsMappable>;
+    fn Mappable(&self) -> Result<MMappable>;
 }
 
 // LockCtx is an Inode's lock context and contains different personalities of locks; both
@@ -244,29 +248,6 @@ impl Deref for Inode {
     }
 }
 
-impl Drop for Inode {
-    fn drop(&mut self) {
-        if Arc::strong_count(&self.0) == 1 {
-            if SHARESPACE.config.read().EnableInotify {
-                let watches = self.Watches();
-
-                // If this inode is being destroyed because it was unlinked, queue a
-                // deletion event. This may not be the case for inodes being revalidated.
-                let unlinked = watches.read().unlinked;
-                if unlinked {
-                    watches.Notify("", InotifyEvent::IN_DELETE_SELF, 0);
-                }
-
-                // Remove references from the watch owners to the watches on this inode,
-                // since the watches are about to be GCed. Note that we don't need to worry
-                // about the watch pins since if there were any active pins, this inode
-                // wouldn't be in the destructor.
-                watches.TargetDestroyed();
-            }
-        }
-    }
-}
-
 impl Inode {
     pub fn Downgrade(&self) -> InodeWeak {
         return InodeWeak(Arc::downgrade(&self.0));
@@ -282,7 +263,6 @@ impl Inode {
             InodeOp: InodeOp.clone(),
             StableAttr: StableAttr.clone(),
             LockCtx: LockCtx::default(),
-            watches: Watches::default(),
             MountSource: MountSource.clone(),
             Overlay: None,
         };
@@ -295,6 +275,7 @@ impl Inode {
     }
 
     pub fn NewHostInode(
+        task: &Task,
         msrc: &Arc<QMutex<MountSource>>,
         fd: i32,
         fstat: &LibcStat,
@@ -303,23 +284,106 @@ impl Inode {
         //info!("after fstat: {:?}", fstat.StableAttr());
 
         //println!("the stable attr is {:?}", &fstat.StableAttr());
-        let iops = HostInodeOp::New(
-            &msrc.lock().MountSourceOperations.clone(),
-            fd,
-            fstat.WouldBlock(),
-            &fstat,
-            writeable,
-        );
+        let inodeType = fstat.InodeType();
+        match inodeType {
+            InodeType::Directory | InodeType::SpecialDirectory => {
+                let iops = HostDirOp::New(
+                    &msrc.lock().MountSourceOperations.clone(),
+                    fd,
+                    &fstat
+                );
 
-        return Ok(Self(Arc::new(QMutex::new(InodeIntern {
-            UniqueId: NewUID(),
-            InodeOp: Arc::new(iops),
-            StableAttr: fstat.StableAttr(),
-            LockCtx: LockCtx::default(),
-            watches: Watches::default(),
-            MountSource: msrc.clone(),
-            Overlay: None,
-        }))));
+                return Ok(Self(Arc::new(QMutex::new(InodeIntern {
+                    UniqueId: NewUID(),
+                    InodeOp: Arc::new(iops),
+                    StableAttr: fstat.StableAttr(),
+                    LockCtx: LockCtx::default(),
+                    MountSource: msrc.clone(),
+                    Overlay: None,
+                }))));
+            }
+            InodeType::Pipe => {
+                let pipe = Pipe::New(task, true, DEFAULT_PIPE_SIZE, MemoryDef::PAGE_SIZE as usize);
+                let permission = FileMode(fstat.st_mode as u16).FilePerms();
+                let fifoIops = NewPipeInodeOps(task, &permission, pipe);
+
+                let hostiops = HostInodeOp::New(
+                    &msrc.lock().MountSourceOperations.clone(),
+                    fd,
+                    fstat.WouldBlock(),
+                    &fstat,
+                    writeable,
+                );
+
+                let iops = FifoIops {
+                    fifoiops: fifoIops,
+                    hosttiops: hostiops,
+                };
+
+                return Ok(Self(Arc::new(QMutex::new(InodeIntern {
+                    UniqueId: NewUID(),
+                    InodeOp: Arc::new(iops),
+                    StableAttr: fstat.StableAttr(),
+                    LockCtx: LockCtx::default(),
+                    MountSource: msrc.clone(),
+                    Overlay: None,
+                }))));
+            }
+            _ => {
+                let iops = HostInodeOp::New(
+                    &msrc.lock().MountSourceOperations.clone(),
+                    fd,
+                    fstat.WouldBlock(),
+                    &fstat,
+                    writeable,
+                );
+
+                return Ok(Self(Arc::new(QMutex::new(InodeIntern {
+                    UniqueId: NewUID(),
+                    InodeOp: Arc::new(iops),
+                    StableAttr: fstat.StableAttr(),
+                    LockCtx: LockCtx::default(),
+                    MountSource: msrc.clone(),
+                    Overlay: None,
+                }))));
+            }
+        }
+    }
+
+    pub fn NewStdioInode(
+        _task: &Task,
+        msrc: &Arc<QMutex<MountSource>>,
+        fd: i32,
+        fstat: &LibcStat,
+        writeable: bool,
+    ) -> Result<Self> {
+        //info!("after fstat: {:?}", fstat.StableAttr());
+
+        //println!("the stable attr is {:?}", &fstat.StableAttr());
+        let inodeType = fstat.InodeType();
+        match inodeType {
+            InodeType::Directory | InodeType::SpecialDirectory => {
+                panic!("NewControlTTyInode fail with wrong inode type {:?}", inodeType)
+            }
+            _ => {
+                let iops = HostInodeOp::New(
+                    &msrc.lock().MountSourceOperations.clone(),
+                    fd,
+                    fstat.WouldBlock(),
+                    &fstat,
+                    writeable,
+                );
+
+                return Ok(Self(Arc::new(QMutex::new(InodeIntern {
+                    UniqueId: NewUID(),
+                    InodeOp: Arc::new(iops),
+                    StableAttr: fstat.StableAttr(),
+                    LockCtx: LockCtx::default(),
+                    MountSource: msrc.clone(),
+                    Overlay: None,
+                }))));
+            }
+        }
     }
 
     pub fn InodeType(&self) -> InodeType {
@@ -442,7 +506,7 @@ impl Inode {
             return overlayRemove(task, &overlay, d, remove);
         }
 
-        let name = (remove.0).0.lock().Name.clone();
+        let name = remove.Name();
         let removeInode = remove.Inode();
         let typ = removeInode.StableAttr().Type;
         let op = self.lock().InodeOp.clone();
@@ -483,7 +547,7 @@ impl Inode {
         let oldInode = oldParent.Inode();
         let newInode = newParent.Inode();
 
-        let oldname = (renamed.0).0.lock().Name.clone();
+        let oldname = renamed.Name();
 
         let op = self.lock().InodeOp.clone();
         let res = op.Rename(
@@ -501,6 +565,7 @@ impl Inode {
     pub fn Bind(
         &self,
         task: &Task,
+        parent: &Dirent,
         name: &str,
         data: &BoundEndpoint,
         perms: &FilePermissions,
@@ -508,7 +573,7 @@ impl Inode {
         let isOverlay = self.lock().Overlay.is_some();
         if isOverlay {
             let overlay = self.lock().Overlay.as_ref().unwrap().clone();
-            return overlayBind(task, &overlay, name, data, perms);
+            return overlayBind(task, &overlay, name, parent, data, perms);
         }
 
         let op = self.lock().InodeOp.clone();
@@ -844,10 +909,6 @@ impl Inode {
         let inodeOp = self.lock().InodeOp.clone();
         return inodeOp.StatFS(task);
     }
-
-    pub fn Watches(&self) -> Watches {
-        return self.lock().watches.clone();
-    }
 }
 
 //#[derive(Clone, Default, Debug, Copy)]
@@ -856,7 +917,6 @@ pub struct InodeIntern {
     pub InodeOp: Arc<InodeOperations>,
     pub StableAttr: StableAttr,
     pub LockCtx: LockCtx,
-    pub watches: Watches,
     pub MountSource: Arc<QMutex<MountSource>>,
     pub Overlay: Option<Arc<RwLock<OverlayEntry>>>,
 }
@@ -868,7 +928,6 @@ impl Default for InodeIntern {
             InodeOp: Arc::new(HostInodeOp::default()),
             StableAttr: Default::default(),
             LockCtx: LockCtx::default(),
-            watches: Watches::default(),
             MountSource: Arc::new(QMutex::new(MountSource::default())),
             Overlay: None,
         };
@@ -882,7 +941,6 @@ impl InodeIntern {
             InodeOp: Arc::new(HostInodeOp::default()),
             StableAttr: Default::default(),
             LockCtx: LockCtx::default(),
-            watches: Watches::default(),
             MountSource: Arc::new(QMutex::new(MountSource::default())),
             Overlay: None,
         };

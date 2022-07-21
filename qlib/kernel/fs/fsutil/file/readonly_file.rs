@@ -181,7 +181,7 @@ impl<T: 'static + ReadonlyFileNode> FileOperations for ReadonlyFileOperations<T>
         return (0, Err(Error::SysError(SysErr::ENOTDIR)));
     }
 
-    fn Mappable(&self) -> Result<HostIopsMappable> {
+    fn Mappable(&self) -> Result<MMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }

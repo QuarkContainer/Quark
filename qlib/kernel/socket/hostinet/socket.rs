@@ -44,6 +44,7 @@ use super::super::super::fs::host::hostinodeop::*;
 use super::super::super::guestfdnotifier::*;
 use super::super::super::kernel::async_wait::*;
 use super::super::super::kernel::fd_table::*;
+use super::super::super::kernel::kernel::GetKernel;
 use super::super::super::kernel::time::*;
 use super::super::super::kernel::waiter::*;
 use super::super::super::quring::QUring;
@@ -56,11 +57,14 @@ use super::super::super::Kernel;
 use super::super::super::Kernel::HostSpace;
 use super::super::super::IOURING;
 use super::super::super::SHARESPACE;
-use super::super::control::ControlMessageTCPInq;
 use super::super::control::*;
 use super::super::socket::*;
 use super::super::unix::transport::unix::*;
 use super::rdma_socket::*;
+
+lazy_static! {
+    pub static ref DUMMY_HOST_SOCKET : DummyHostSocket = DummyHostSocket::New();
+}
 
 fn newSocketFile(
     task: &Task,
@@ -85,7 +89,7 @@ fn newSocketFile(
         addr,
     )?;
 
-    Ok(File::New(
+    let file = File::New(
         &dirent,
         &FileFlags {
             NonBlocking: nonblock,
@@ -94,7 +98,10 @@ fn newSocketFile(
             ..Default::default()
         },
         s,
-    ))
+    );
+
+    GetKernel().sockets.AddSocket(&file);
+    return Ok(file)
 }
 
 #[repr(u64)]
@@ -515,6 +522,37 @@ impl Waitable for SocketOperations {
     }
 }
 
+pub struct DummyHostSocket {
+    pub socket : QMutex<i32>,
+}
+
+impl DummyHostSocket {
+    pub fn New() -> Self {
+        return Self {
+            socket: QMutex::new(-1),
+        }
+    }
+
+    pub fn Socket(&self) -> i32 {
+        let mut s = self.socket.lock();
+        if *s == -1 {
+            let fd = HostSpace::Socket(AFType::AF_UNIX, SockType::SOCK_DGRAM, 0);
+            if fd < 0 {
+                panic!("HostSocket create socket fail with error {}", fd);
+            }
+
+            *s = fd as i32;
+        };
+
+        return *s;
+    }
+
+    pub fn HostIoctlIFConf(&self, task: &Task, request: u64, addr: u64) -> Result<()> {
+        return HostIoctlIFConf(task, self.Socket(), request, addr)
+    }
+}
+
+
 // pass the ioctl to the shadow hostfd
 pub fn HostIoctlIFReq(task: &Task, hostfd: i32, request: u64, addr: u64) -> Result<()> {
     let mut ifr: IFReq = task.CopyInObj(addr)?;
@@ -555,8 +593,10 @@ pub fn HostIoctlIFConf(task: &Task, hostfd: i32, request: u64, addr: u64) -> Res
         return Err(Error::SysError(-res as i32));
     }
 
-    task.mm
-        .CopyDataOut(task, ifr.Ptr, ifc.Ptr, ifr.Len as usize, false)?;
+    if ifc.Ptr > 0 {
+        task.mm
+            .CopyDataOut(task, ifr.Ptr, ifc.Ptr, ifr.Len as usize, false)?;
+    }
 
     ifc.Len = ifr.Len;
 
@@ -643,6 +683,11 @@ impl FileOperations for SocketOperations {
         _offset: i64,
         _blocking: bool,
     ) -> Result<i64> {
+        let size = IoVec::NumBytes(srcs);
+        if size == 0 {
+            return Ok(0)
+        }
+
         let sockBufType = self.socketBuf.lock().clone();
         match sockBufType {
             SocketBufType::Uring(socketBuf) => {
@@ -762,7 +807,7 @@ impl FileOperations for SocketOperations {
         return (0, Err(Error::SysError(SysErr::ENOTDIR)));
     }
 
-    fn Mappable(&self) -> Result<HostIopsMappable> {
+    fn Mappable(&self) -> Result<MMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }
@@ -1796,6 +1841,37 @@ impl SockOperations for SocketOperations {
 
     fn SendTimeout(&self) -> i64 {
         return self.send.load(Ordering::Relaxed);
+    }
+
+    fn State(&self) -> u32 {
+        let mut info = TCPInfo::default();
+        let mut len = SocketSize::SIZEOF_TCPINFO;
+
+        let ret = HostSpace::GetSockOpt(self.fd,
+                              LibcConst::SOL_TCP as _,
+                              LibcConst::TCP_INFO as _,
+                              &mut info as * mut _ as u64,
+                              &mut len as * mut _ as u64) as i32;
+
+        if ret < 0 {
+            if ret != -SysErr::ENOPROTOOPT {
+                error!("fail to Failed to get TCP socket info from {} with error {}", self.fd, ret);
+
+                // For non-TCP sockets, silently ignore the failure.
+                return 0;
+            }
+        }
+
+        if len != SocketSize::SIZEOF_TCPINFO {
+            error!("Failed to get TCP socket info getsockopt(2) returned {} bytes, expecting {} bytes.", SocketSize::SIZEOF_TCPINFO, ret);
+            return 0;
+        }
+
+        return info.State as u32;
+    }
+
+    fn Type(&self) -> (i32, i32, i32) {
+        return (self.family, self.stype, -1)
     }
 }
 

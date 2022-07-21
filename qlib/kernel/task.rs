@@ -431,25 +431,25 @@ impl Task {
     }
 
     pub fn GetFile(&self, fd: i32) -> Result<File> {
-        match self.fdTbl.lock().Get(fd) {
+        match self.fdTbl.Get(fd) {
             Err(e) => return Err(e),
             Ok(f) => return Ok(f.0),
         }
     }
 
     pub fn GetDescriptor(&self, fd: i32) -> Result<(File, FDFlags)> {
-        match self.fdTbl.lock().Get(fd) {
+        match self.fdTbl.Get(fd) {
             Err(e) => return Err(e),
             Ok(f) => return Ok((f.0, f.1)),
         }
     }
 
     pub fn GetFileAll(&self, fd: i32) -> Result<(File, FDFlags)> {
-        return self.fdTbl.lock().Get(fd);
+        return self.fdTbl.Get(fd);
     }
 
     pub fn SetFlags(&self, fd: i32, flags: &FDFlags) -> Result<()> {
-        return self.fdTbl.lock().SetFlags(fd, flags);
+        return self.fdTbl.SetFlags(fd, flags);
     }
 
     pub fn NewFDAt(&mut self, fd: i32, file: &File, flags: &FDFlags) -> Result<()> {
@@ -468,16 +468,16 @@ impl Task {
 
     pub fn NewStdFds(&mut self, stdfds: &[i32], isTTY: bool) -> Result<()> {
         for i in 0..stdfds.len() {
-            let file = self.NewFileFromHostFd(i as i32, stdfds[i], isTTY)?;
+            let file = self.NewFileFromHostStdioFd(i as i32, stdfds[i], isTTY)?;
             file.flags.lock().0.NonBlocking = false; //need to clean the stdio nonblocking
         }
 
         return Ok(());
     }
 
-    pub fn NewFileFromHostFd(&mut self, fd: i32, hostfd: i32, isTTY: bool) -> Result<File> {
+    pub fn NewFileFromHostStdioFd(&mut self, fd: i32, hostfd: i32, isTTY: bool) -> Result<File> {
         let fileOwner = self.FileOwner();
-        let file = File::NewFileFromFd(self, hostfd, &fileOwner, isTTY)?;
+        let file = File::NewFileFromFd(self, hostfd, &fileOwner, true, isTTY)?;
         self.NewFDAt(fd, &Arc::new(file.clone()), &FDFlags::default())?;
         return Ok(file);
     }
@@ -487,7 +487,7 @@ impl Task {
     }
 
     pub fn RemoveFile(&self, fd: i32) -> Result<File> {
-        match self.fdTbl.lock().Remove(fd) {
+        match self.fdTbl.Remove(fd) {
             None => return Err(Error::SysError(SysErr::EBADF)),
             Some(f) => return Ok(f),
         }

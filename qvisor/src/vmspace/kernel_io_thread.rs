@@ -24,7 +24,6 @@ use super::super::qlib::kernel::IOURING;
 use super::super::qlib::kernel::TSC;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::ShareSpace;
-use super::super::runc::runtime::vm::*;
 use super::super::*;
 
 pub struct KIOThread {
@@ -68,7 +67,7 @@ impl KIOThread {
     pub fn Process(sharespace: &ShareSpace) {
         let mut start = TSC.Rdtsc();
 
-        while IsRunning() {
+        while !sharespace.Shutdown() {
             let count = Self::ProcessOnce(sharespace);
             if count > 0 {
                 start = TSC.Rdtsc()
@@ -166,7 +165,7 @@ impl KIOThread {
         let mut data: u64 = 0;
         loop {
             sharespace.IncrHostProcessor();
-            if !super::super::runc::runtime::vm::IsRunning() {
+            if sharespace.Shutdown() {
                 return Err(Error::Exit);
             }
             if QUARK_CONFIG.lock().EnableRDMA {

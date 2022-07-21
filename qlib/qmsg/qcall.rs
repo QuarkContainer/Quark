@@ -36,6 +36,9 @@ pub enum Msg {
     Ftruncate(Ftruncate),
     Seek(Seek),
     ReadLinkAt(ReadLinkAt),
+    Unlinkat(Unlinkat),
+    SymLinkAt(SymLinkAt),
+    LinkAt(LinkAt),
     GetTimeOfDay(GetTimeOfDay),
     IoCtl(IoCtl),
     Fcntl(Fcntl),
@@ -47,7 +50,6 @@ pub enum Msg {
 
     TryOpenAt(TryOpenAt),
     CreateAt(CreateAt),
-    Unlinkat(Unlinkat),
     Mkdirat(Mkdirat),
     SysSync(SysSync),
     SyncFs(SyncFs),
@@ -80,7 +82,6 @@ pub enum Msg {
     FChown(FChown),
     Chmod(Chmod),
     Fchmod(Fchmod),
-    SymLinkAt(SymLinkAt),
     Futimens(Futimens),
 
     IORead(IORead),
@@ -114,7 +115,8 @@ pub enum Msg {
     FGetXattr(FGetXattr),
     FRemoveXattr(FRemoveXattr),
     FListXattr(FListXattr),
-    HostMemoryBarrier(HostMemoryBarrier)
+    HostMemoryBarrier(HostMemoryBarrier),
+    Mkfifoat(Mkfifoat),
 }
 
 #[derive(Clone, Default, Debug)]
@@ -128,7 +130,6 @@ pub struct FSetXattr {
     pub size: usize,
     pub flags: u32,
 }
-
 
 #[derive(Clone, Default, Debug)]
 pub struct FGetXattr {
@@ -345,6 +346,15 @@ pub struct Mkdirat {
     pub dirfd: i32,
     pub pathname: u64,
     pub mode_: u32,
+    pub uid: u32,
+    pub gid: u32,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct Mkfifoat {
+    pub dirfd: i32,
+    pub name: u64,
+    pub mode: u32,
     pub uid: u32,
     pub gid: u32,
 }
@@ -595,6 +605,15 @@ pub struct SymLinkAt {
     pub oldpath: u64,
     pub newdirfd: i32,
     pub newpath: u64,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct LinkAt {
+    pub olddirfd: i32,
+    pub oldpath: u64,
+    pub newdirfd: i32,
+    pub newpath: u64,
+    pub flags: i32,
 }
 
 #[derive(Clone, Default, Debug)]

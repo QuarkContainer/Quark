@@ -326,6 +326,18 @@ impl HostSpace {
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
+    pub fn Mkfifoat(dirfd: i32, name: u64, mode: u32, uid: u32, gid: u32) -> i64 {
+        let mut msg = Msg::Mkfifoat(Mkfifoat {
+            dirfd,
+            name,
+            mode,
+            uid,
+            gid,
+        });
+
+        return HostSpace::HCall(&mut msg, false) as i64;
+    }
+
     pub fn SysSync() -> i64 {
         let mut msg = Msg::SysSync(SysSync {});
 
@@ -709,6 +721,18 @@ impl HostSpace {
         let mut msg = Msg::Fchmod(Fchmod { fd, mode });
 
         return HostSpace::Call(&mut msg, false) as i64;
+    }
+
+    pub fn LinkAt(olddirfd: i32, oldpath: u64, newdirfd: i32, newpath: u64, flags: i32) -> i64 {
+        let mut msg = Msg::LinkAt(LinkAt {
+            olddirfd,
+            oldpath,
+            newdirfd,
+            newpath,
+            flags,
+        });
+
+        return HostSpace::HCall(&mut msg, false) as i64;
     }
 
     pub fn SymLinkAt(oldpath: u64, newdirfd: i32, newpath: u64) -> i64 {

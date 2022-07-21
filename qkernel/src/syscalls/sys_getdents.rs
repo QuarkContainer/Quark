@@ -15,6 +15,7 @@
 use alloc::vec::Vec;
 
 use super::super::fd::*;
+use super::super::fs::inotify::*;
 use super::super::fs::dentry::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
@@ -71,6 +72,10 @@ fn getDents(
 ) -> Result<i64> {
     let dir = task.GetFile(fd)?;
 
+    if dir.Flags().Path {
+        return Err(Error::SysError(SysErr::EBADF));
+    }
+
     let size = task.CheckPermission(addr, size as u64, true, true)? as i32;
 
     let mut writer: MemBuf = MemBuf::New(size as usize);
@@ -82,7 +87,7 @@ fn getDents(
         Ok(()) => {
             let buf = &writer.data;
             task.CopyOutSlice(buf, addr, size as usize)?;
-            dir.Dirent.InotifyEvent(InotifyEvent::IN_ACCESS, 0);
+            dir.Dirent.InotifyEvent(InotifyEvent::IN_ACCESS, 0, EventType::InodeEvent);
             return Ok(buf.len() as i64);
         }
         Err(Error::EOF) => return Ok(0),

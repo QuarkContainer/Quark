@@ -955,6 +955,26 @@ impl VMSpace {
         return Self::GetRet(ret as i64);
     }
 
+    pub fn Mkfifoat(dirfd: i32, name: u64, mode: u32, uid: u32, gid: u32) -> i64 {
+        info!("Mkfifoat: the pathname is {}", Self::GetStr(name));
+        let dirfd = {
+            if dirfd > 0 {
+                match Self::GetOsfd(dirfd) {
+                    Some(dirfd) => dirfd,
+                    None => return -SysErr::EBADF as i64,
+                }
+            } else {
+                dirfd
+            }
+        };
+
+        let ret = unsafe { mkfifoat(dirfd, name as *const c_char, mode as mode_t) };
+
+        Self::ChDirOwnerat(dirfd, name, uid, gid);
+
+        return Self::GetRet(ret as i64);
+    }
+
     pub fn Mkdirat(dirfd: i32, pathname: u64, mode_: u32, uid: u32, gid: u32) -> i64 {
         info!("Mkdirat: the pathname is {}", Self::GetStr(pathname));
 
@@ -1433,6 +1453,23 @@ impl VMSpace {
         return Self::GetRet(ret as i64);
     }
 
+    pub fn LinkAt(olddirfd: i32, oldpath: u64, newdirfd: i32, newpath: u64, flags: i32) -> i64 {
+        let newdirfd = match Self::GetOsfd(newdirfd) {
+            Some(fd) => fd,
+            None => return -SysErr::EBADF as i64,
+        };
+
+        let olddirfd = match Self::GetOsfd(olddirfd) {
+            Some(fd) => fd,
+            None => return -SysErr::EBADF as i64,
+        };
+
+        let ret =
+            unsafe { linkat(olddirfd, oldpath as *const c_char, newdirfd, newpath as *const c_char, flags) };
+
+        return Self::GetRet(ret as i64);
+    }
+
     pub fn Futimens(fd: i32, times: u64) -> i64 {
         let fd = match Self::GetOsfd(fd) {
             Some(fd) => fd,
@@ -1647,7 +1684,7 @@ impl PostRDMAConnect {
         self.ret = ret;
         SHARE_SPACE
             .scheduler
-            .ScheduleQ(self.taskId, self.taskId.Queue())
+            .ScheduleQ(self.taskId, self.taskId.Queue(), true)
     }
 
     pub fn ToRef(addr: u64) -> &'static mut Self {

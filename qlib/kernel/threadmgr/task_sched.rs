@@ -451,10 +451,10 @@ impl TaskClock {
     pub fn Now(&self) -> Time {
         let stats = self.t.CPUStats();
         if self.includeSys {
-            return Time::FromNs(stats.UserTime + stats.SysTime);
+            return Time::FromNs(Tsc::Scale(stats.UserTime + stats.SysTime) * 1000);
         }
 
-        return Time::FromNs(stats.UserTime);
+        return Time::FromNs(Tsc::Scale(stats.UserTime) * 1000);
     }
 
     pub fn WallTimeUntil(&self, t: Time, now: Time) -> Duration {
@@ -488,10 +488,10 @@ impl ThreadGroupClock {
         let stats = self.tg.CPUStats();
         if self.includeSys {
             //error!("ThreadGroupClock usertime is {:x}, SysTime is {:x}", stats.UserTime, stats.SysTime);
-            return Time::FromNs(stats.UserTime + stats.SysTime);
+            return Time::FromNs(Tsc::Scale(stats.UserTime + stats.SysTime) * 1000);
         }
 
-        return Time::FromNs(stats.UserTime);
+        return Time::FromNs(Tsc::Scale(stats.UserTime) * 1000);
     }
 
     pub fn WallTimeUntil(&self, t: Time, now: Time) -> Duration {
@@ -576,11 +576,8 @@ impl KernelCPUClockTicker {
     pub fn Atomically(&self, f: impl FnMut()) {
         super::super::kernel::kernel::GetKernel().Atomically(f);
     }
-}
 
-// Notify implements ktime.TimerListener.Notify.
-impl TimerListenerTrait for KernelCPUClockTicker {
-    fn Notify(&self, _exp: u64) {
+    pub fn Notify(&self, _exp: u64) {
         // Only increment cpuClock by 1 regardless of the number of expirations.
         // This approximately compensates for cases where thread throttling or bad
         // Go runtime scheduling prevents the kernelCPUClockTicker goroutine, and
@@ -617,8 +614,8 @@ impl TimerListenerTrait for KernelCPUClockTicker {
             let tasks: Vec<Thread> = tg.lock().tasks.iter().cloned().collect();
             for t in &tasks {
                 let tsched = t.lock().TaskSchedInfo();
-                tgUserTime += tsched.userTicksAt(now) as i64 * CLOCK_TICK;
-                tgSysTime += tsched.sysTicksAt(now) as i64 * CLOCK_TICK;
+                tgUserTime += tsched.userTicksAt(now) as i64; // * CLOCK_TICK;
+                tgSysTime += tsched.sysTicksAt(now) as i64; // * CLOCK_TICK;
 
                 if tsched.State == SchedState::RunningApp {
                     // Considered by ITIMER_VIRT, ITIMER_PROF, and RLIMIT_CPU
@@ -640,8 +637,8 @@ impl TimerListenerTrait for KernelCPUClockTicker {
                 }
             }
 
-            let tgVirtNow = Time::FromNs(tgUserTime);
-            let tgProfNow = Time::FromNs(tgUserTime + tgSysTime);
+            let tgVirtNow = Time::FromNs(Tsc::Scale(tgUserTime) * 1000);
+            let tgProfNow = Time::FromNs(Tsc::Scale(tgUserTime + tgSysTime) * 1000);
 
             // All of the following are standard (not real-time) signals, which are
             // automatically deduplicated, so we ignore the number of expirations.
@@ -712,5 +709,5 @@ impl TimerListenerTrait for KernelCPUClockTicker {
         }
     }
 
-    fn Destroy(&self) {}
+    pub fn Destroy(&self) {}
 }

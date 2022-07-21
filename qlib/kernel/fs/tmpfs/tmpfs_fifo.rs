@@ -248,7 +248,7 @@ impl InodeOperations for TmpfsFifoInodeOp {
         return Ok(TMPFS_FSINFO);
     }
 
-    fn Mappable(&self) -> Result<HostIopsMappable> {
+    fn Mappable(&self) -> Result<MMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }

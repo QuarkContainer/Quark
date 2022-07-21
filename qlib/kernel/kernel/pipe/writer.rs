@@ -45,7 +45,7 @@ impl Drop for Writer {
         self.pipe.WClose();
 
         // Wake up readers.
-        self.pipe.Notify(EVENT_HUP)
+        self.pipe.Notify(EVENT_HUP);
     }
 }
 
@@ -200,7 +200,7 @@ impl FileOperations for Writer {
         return (0, Err(Error::SysError(SysErr::ENOTDIR)));
     }
 
-    fn Mappable(&self) -> Result<HostIopsMappable> {
+    fn Mappable(&self) -> Result<MMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }

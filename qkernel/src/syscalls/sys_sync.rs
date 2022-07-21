@@ -15,6 +15,7 @@
 use super::super::fs::file::*;
 use super::super::fs::host::hostinodeop::*;
 use super::super::qlib::common::*;
+use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::*;
 use super::super::Kernel::HostSpace;
@@ -30,6 +31,10 @@ pub fn SysSyncFs(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let fd = args.arg0 as i32;
 
     let file = task.GetFile(fd)?;
+    if file.Flags().Path {
+        return Err(Error::SysError(SysErr::EBADF));
+    }
+
     let inode = file.Dirent.Inode();
     let iops = inode.lock().InodeOp.clone();
     match iops.as_any().downcast_ref::<HostInodeOp>() {
@@ -49,6 +54,10 @@ pub fn SysSyncFileRange(task: &mut Task, args: &SyscallArguments) -> Result<i64>
     let uflags = args.arg3 as u32;
 
     let file = task.GetFile(fd)?;
+    if file.Flags().Path {
+        return Err(Error::SysError(SysErr::EBADF));
+    }
+
     let inode = file.Dirent.Inode();
     let iops = inode.lock().InodeOp.clone();
     match iops.as_any().downcast_ref::<HostInodeOp>() {
@@ -65,6 +74,9 @@ pub fn SysFsync(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let fd = args.arg0 as i32;
 
     let file = task.GetFile(fd)?;
+    if file.Flags().Path {
+        return Err(Error::SysError(SysErr::EBADF));
+    }
 
     file.Fsync(task, 0, FILE_MAX_OFFSET, SyncType::SyncAll)?;
     return Ok(0);
@@ -77,6 +89,9 @@ pub fn SysDatasync(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let fd = args.arg0 as i32;
 
     let file = task.GetFile(fd)?;
+    if file.Flags().Path {
+        return Err(Error::SysError(SysErr::EBADF));
+    }
 
     file.Fsync(task, 0, FILE_MAX_OFFSET, SyncType::SyncData)?;
     return Ok(0);

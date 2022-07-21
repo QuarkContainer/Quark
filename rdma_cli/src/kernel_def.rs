@@ -116,8 +116,8 @@ impl CPULocal {
     pub fn Wakeup(&self) {}
 }
 
-impl PageMgrInternal {
-    pub fn CopyVsysCallPages(&self) {}
+impl PageMgr {
+    pub fn CopyVsysCallPages(&self, _addr: u64) {}
 }
 
 pub fn ClockGetTime(_clockId: i32) -> i64 {

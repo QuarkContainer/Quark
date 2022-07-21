@@ -120,18 +120,11 @@ pub fn WaitFn() {
             None => {
                 SHARESPACE.scheduler.IncreaseHaltVcpuCnt();
 
-                // if there is memory needs free and freed, continue free them
-                // while super::ALLOCATOR.Free() {}
-
-                if SHARESPACE.scheduler.GlobalReadyTaskCnt() == 0 {
-                    //debug!("vcpu sleep");
-                    let addr = HostSpace::VcpuWait();
-                    //debug!("vcpu wakeup {:x}", addr);
-                    assert!(addr >= 0);
-                    task = TaskId::New(addr as u64);
-                } else {
-                    //error!("Waitfd None {}", SHARESPACE.scheduler.Print());
-                }
+                //debug!("vcpu sleep");
+                let addr = HostSpace::VcpuWait();
+                //debug!("vcpu wakeup {:x}", addr);
+                assert!(addr >= 0);
+                task = TaskId::New(addr as u64);
 
                 SHARESPACE.scheduler.DecreaseHaltVcpuCnt();
             }
@@ -193,9 +186,9 @@ pub fn Wait() {
     CPULocal::Myself().ToSearch(&SHARESPACE);
     let start = TSC.Rdtsc();
 
+    let vcpuId = CPULocal::CpuId() as usize;
+    let mut next = SHARESPACE.scheduler.GetNext();
     loop {
-        let next = { SHARESPACE.scheduler.GetNext() };
-
         if let Some(newTask) = next {
             let current = TaskId::New(CPULocal::CurrentTask());
             //let vcpuId = newTask.GetTask().queueId;
@@ -218,14 +211,24 @@ pub fn Wait() {
         if currentTime - start >= WAIT_CYCLES {
             let current = TaskId::New(CPULocal::CurrentTask());
             let waitTask = TaskId::New(CPULocal::WaitTask());
-            switch(current, waitTask);
-            break;
+
+            let oldTask = SHARESPACE.scheduler.queue[vcpuId].ResetWorkingTask();
+
+            match oldTask {
+                None => {
+                    switch(current, waitTask);
+                    break;
+                }
+                Some(t) => next = Some(t),
+            }
         } else {
             if PollAsyncMsg() == 0 {
                 unsafe {
                     llvm_asm!("pause" :::: "volatile");
                 }
             }
+
+            next = SHARESPACE.scheduler.GetNext();
         }
     }
 }
@@ -240,143 +243,96 @@ pub fn SwitchToNewTask() -> ! {
 }
 
 impl Scheduler {
-    // steal scheduling
-    pub fn GetNext(&self) -> Option<TaskId> {
+    pub fn Steal(&self, vcpuId: usize) -> Option<TaskId> {
         if self.GlobalReadyTaskCnt() == 0 {
             return None;
         }
 
-        let vcpuId = CPULocal::CpuId() as usize;
         let vcpuCount = self.vcpuCnt;
-
-        match self.GetNextForCpu(vcpuId, 0) {
-            None => (),
-            Some(t) => return Some(t),
-        }
-
-        /*match self.GetNextForCpu(vcpuId, vcpuId) {
+        match self.queue[0].Steal() {
             None => (),
             Some(t) => {
                 return Some(t)
-            }
-        }*/
+            },
+        }
 
-        for i in vcpuId..vcpuId + vcpuCount {
-            match self.GetNextForCpu(vcpuId, i % vcpuCount) {
+        // skip the current vcpu
+        for i in 1..vcpuCount {
+            let idx = (i + vcpuId) % vcpuCount;
+            match self.queue[idx].Steal() {
                 None => (),
-                Some(t) => return Some(t),
+                Some(t) => {
+                    return Some(t)
+                },
             }
         }
 
         return None;
     }
 
-    pub fn Count(&self) -> u64 {
-        let mut total = 0;
-        let vcpuCount = self.vcpuCnt;
-        for i in 0..vcpuCount {
-            total += self.queue[i].Len();
+    // steal scheduling
+    pub fn GetNext(&self) -> Option<TaskId> {
+        let vcpuId = CPULocal::CpuId() as usize;
+
+        match self.queue[vcpuId].Next() {
+            None => (),
+            Some((t, global)) => {
+                //error!("Next ... {:x?}/{}", t, global);
+                if global {
+                    self.DecReadyTaskCount();
+                }
+                return Some(t)
+            },
         }
 
-        return total;
+        match self.Steal(vcpuId) {
+            None => return None,
+            Some(t) => {
+                self.DecReadyTaskCount();
+                //error!("stealing ... {:x?}", t);
+                let task = match self.queue[vcpuId].SwapWoringTask(t) {
+                    None => {
+                        t.GetTask().SetQueueId(vcpuId);
+                        t
+                    },
+                    Some(task) => {
+                        self.Schedule(t, true); // reschedule the task
+                        task
+                    }
+                };
+                return Some(task)
+            }
+        }
     }
 
     pub fn Print(&self) -> String {
         let mut str = alloc::string::String::new();
         let vcpuCount = self.vcpuCnt;
         for i in 0..vcpuCount {
-            if self.queue[i].Len() > 0 {
-                str += &format!("{}:{}", i, self.queue[i].ToString());
+            let hasWorking = self.queue[i].data.lock().workingTaskReady;
+            if self.queue[i].Len() > 0 || hasWorking {
+                str += &format!("{}:{:x?}", i, &self.queue[i]);
             }
         }
 
         return str;
     }
 
-    #[inline]
-    pub fn GetNextForCpu(&self, currentCpuId: usize, vcpuId: usize) -> Option<TaskId> {
-        // only stealing task from running VCPU
-        if vcpuId != 0
-            && currentCpuId != vcpuId
-            && CPULocal::GetCPUState(vcpuId) != VcpuState::Running
-        {
-            return None;
-        }
 
-        let count = self.queue[vcpuId].lock().len();
-        for _ in 0..count {
-            // hold the queue lock while checking the fields in the task,
-            // to make sure the fields is read from memory but not cache.
-            let mut queue = match self.queue[vcpuId].try_lock() {
-                None => continue,
-                Some(q) => q,
-            };
-            let task = {
-                let task = queue.pop_front();
-                if task.is_none() {
-                    return None;
-                }
-
-                let _cnt = self.DecReadyTaskCount();
-                task
-            };
-
-            let taskId = task.unwrap();
-
-            assert!(
-                vcpuId == taskId.GetTask().QueueId(),
-                "vcpuId is {:x}, taskId.GetTask().QueueId() is {:x}, task {:x?}/{:x?}",
-                vcpuId,
-                taskId.GetTask().QueueId(),
-                taskId,
-                taskId.GetTask().guard
-            );
-            if taskId.GetTask().context.Ready() != 0 || taskId.data == Task::Current().taskId {
-                //the task is in the queue, but the context has not been setup
-                if currentCpuId != vcpuId {
-                    //stealing
-                    //error!("cpu currentCpuId {} stealing task {:x?} from cpu {}", currentCpuId, taskId, vcpuId);
-
-                    taskId.GetTask().SetQueueId(currentCpuId);
-                } else {
-                    if count > 1 {
-                        // current CPU has more task, try to wake other vcpu to handle
-                        core::mem::drop(queue);
-                        self.WakeOne();
-                    }
-                }
-
-                //error!("GetNextForCpu task is {:x?}", taskId);
-                return task;
-            }
-
-            // has to unlock the queue lock, before calling ScheduleQ
-            queue.push_back(taskId);
-            self.IncReadyTaskCount();
-        }
-
-        return None;
-    }
-
-    pub fn Schedule(&self, taskId: TaskId) {
+    pub fn Schedule(&self, taskId: TaskId, cpuAff: bool) {
         let vcpuId = taskId.GetTask().QueueId();
         //assert!(CPULocal::CpuId()==vcpuId, "cpu {}, target cpu {}", CPULocal::CpuId(), vcpuId);
-        self.KScheduleQ(taskId, vcpuId);
-    }
-
-    pub fn KScheduleQ(&self, task: TaskId, vcpuId: usize) {
-        //debug!("KScheduleQ task {:x?}, vcpuId {}", task, vcpuId);
-        self.ScheduleQ(task, vcpuId as u64);
+        self.ScheduleQ(taskId, vcpuId as _, cpuAff);
     }
 
     pub fn NewTask(&self, taskId: TaskId) -> usize {
-        self.ScheduleQ(taskId, 0);
+        self.ScheduleQ(taskId, 0, false);
         return 0;
     }
 }
 
 pub fn Yield() {
-    SHARESPACE.scheduler.Schedule(Task::TaskId());
+    SHARESPACE.scheduler.Schedule(Task::TaskId(), false);
     Wait();
 }
 
@@ -384,8 +340,8 @@ pub fn NewTask(taskId: TaskId) {
     SHARESPACE.scheduler.NewTask(taskId);
 }
 
-pub fn ScheduleQ(taskId: TaskId) {
+pub fn ScheduleQ(taskId: TaskId, cpuAff: bool) {
     SHARESPACE
         .scheduler
-        .KScheduleQ(taskId, taskId.Queue() as usize);
+        .ScheduleQ(taskId, taskId.Queue(), cpuAff);
 }

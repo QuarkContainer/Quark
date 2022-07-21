@@ -407,7 +407,7 @@ impl VirtualMachine {
                         *f.borrow_mut() = Some(cpu.clone());
                     });
                     cpu.run(tgid).expect("vcpu run fail");
-                    info!("cpu#{} finish", 0);
+                    info!("cpu0 finish");
                 })
                 .unwrap(),
         );
@@ -445,8 +445,8 @@ impl VirtualMachine {
         shareSpace.scheduler.WakeAll();
     }
 
-    pub fn Schedule(shareSpace: &ShareSpace, taskId: TaskId) {
-        shareSpace.scheduler.ScheduleQ(taskId, taskId.Queue());
+    pub fn Schedule(shareSpace: &ShareSpace, taskId: TaskId, cpuAff: bool) {
+        shareSpace.scheduler.ScheduleQ(taskId, taskId.Queue(), cpuAff);
     }
 
     pub fn PrintQ(shareSpace: &ShareSpace, vcpuId: u64) -> String {

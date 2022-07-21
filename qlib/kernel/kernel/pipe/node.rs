@@ -62,6 +62,7 @@ pub fn NewPipeInodeOps(task: &Task, perms: &FilePermissions, p: Pipe) -> PipeIop
     return PipeIops(Arc::new(QMutex::new(internal)));
 }
 
+#[derive(Clone)]
 pub struct PipeIops(Arc<QMutex<PipeIopsInternal>>);
 
 impl Deref for PipeIops {
@@ -313,7 +314,7 @@ impl InodeOperations for PipeIops {
         });
     }
 
-    fn Mappable(&self) -> Result<HostIopsMappable> {
+    fn Mappable(&self) -> Result<MMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }

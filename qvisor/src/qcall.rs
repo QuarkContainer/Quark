@@ -135,8 +135,10 @@ impl KVMVcpu {
                 ret = super::VMSpace::Unlinkat(msg.dirfd, msg.pathname, msg.flags) as u64;
             }
             Msg::Mkdirat(msg) => {
-                ret = super::VMSpace::Mkdirat(msg.dirfd, msg.pathname, msg.mode_, msg.uid, msg.gid)
-                    as u64;
+                ret = super::VMSpace::Mkdirat(msg.dirfd, msg.pathname, msg.mode_, msg.uid, msg.gid) as u64;
+            }
+            Msg::Mkfifoat(msg) => {
+                ret = super::VMSpace::Mkfifoat(msg.dirfd, msg.name, msg.mode, msg.uid, msg.gid) as u64;
             }
             Msg::SysSync(_msg) => {
                 ret = super::VMSpace::SysSync() as u64;
@@ -238,6 +240,9 @@ impl KVMVcpu {
             }
             Msg::SymLinkAt(msg) => {
                 ret = super::VMSpace::SymLinkAt(msg.oldpath, msg.newdirfd, msg.newpath) as u64;
+            }
+            Msg::LinkAt(msg) => {
+                ret = super::VMSpace::LinkAt(msg.olddirfd, msg.oldpath, msg.newdirfd, msg.newpath, msg.flags) as u64;
             }
             Msg::Futimens(msg) => {
                 ret = super::VMSpace::Futimens(msg.fd, msg.times) as u64;

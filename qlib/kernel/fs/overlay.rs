@@ -26,7 +26,6 @@ use super::super::uid::NewUID;
 use super::attr::*;
 use super::filesystems::*;
 use super::inode::*;
-use super::inotify::*;
 use super::mount::*;
 use super::mount_overlay::*;
 
@@ -112,7 +111,6 @@ pub fn NewOverlayInode(_task: &Task, o: OverlayEntry, msrc: &Arc<QMutex<MountSou
         InodeOp: inodeOptions,
         StableAttr: inode.StableAttr(),
         LockCtx: LockCtx::default(),
-        watches: Watches::default(),
         MountSource: msrc.clone(),
         Overlay: Overlay,
     };

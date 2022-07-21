@@ -293,7 +293,7 @@ impl<T: 'static + SimpleFileTrait> InodeOperations for SimpleFileInode<T> {
         });
     }
 
-    fn Mappable(&self) -> Result<HostIopsMappable> {
+    fn Mappable(&self) -> Result<MMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }

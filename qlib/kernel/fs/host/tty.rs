@@ -576,6 +576,11 @@ impl FileOperations for TTYFileOps {
             }
         }
 
+        let size = IoVec::NumBytes(srcs);
+        if size == 0 {
+            return Ok(0)
+        }
+
         if SHARESPACE.config.read().UringIO && ENABLE_RINGBUF {
             let fd = self.lock().fd;
             let queue = self.lock().queue.clone();
@@ -766,7 +771,7 @@ impl FileOperations for TTYFileOps {
         return fops.IterateDir(task, d, dirCtx, offset);
     }
 
-    fn Mappable(&self) -> Result<HostIopsMappable> {
+    fn Mappable(&self) -> Result<MMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }

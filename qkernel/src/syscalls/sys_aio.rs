@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::super::fs::attr::*;
 use super::super::fs::file::*;
 use super::super::fs::host::hostinodeop::*;
 use super::super::kernel::aio::aio_context::*;
@@ -247,7 +248,106 @@ pub fn SubmitCallback(task: &Task, id: u64, cb: &IOCallback, cbAddr: u64) -> Res
     return PerformanceCallback(task, &file, cbAddr, cb, &ctx, eventfops);
 }
 
+pub fn PerformFileOp(
+    task: &Task,
+    file: &File,
+    cb: &IOCallback
+) -> Result<i64> {
+    let ret = match cb.opcode {
+        IOCB_CMD_PREAD => {
+            let iov = IoVec::NewFromAddr(cb.buf, cb.bytes as usize);
+            let mut iovs = vec![iov];
+            file.Preadv(task, &mut iovs, cb.offset)
+        }
+        IOCB_CMD_PREADV => {
+            let mut iovs = task.IovsFromAddr(cb.buf, cb.bytes as usize)?;
+            file.Preadv(task, &mut iovs, cb.offset)
+        }
+        IOCB_CMD_PWRITE => {
+            let iov = IoVec::NewFromAddr(cb.buf, cb.bytes as usize);
+            let iovs: [IoVec; 1] = [iov];
+            file.Pwritev(task, &iovs, cb.offset)
+        }
+        IOCB_CMD_PWRITEV => {
+            let iovs = task.IovsFromAddr(cb.buf, cb.bytes as usize)?;
+            file.Pwritev(task, &iovs, cb.offset)
+        }
+        IOCB_CMD_FSYNC => {
+            match file.Fsync(task, 0, FILE_MAX_OFFSET, SyncType::SyncAll) {
+                Ok(()) => Ok(0),
+                Err(e) => Err(e)
+            }
+        }
+        IOCB_CMD_FDSYNC => {
+            match file.Fsync(task, 0, FILE_MAX_OFFSET, SyncType::SyncData) {
+                Ok(()) => Ok(0),
+                Err(e) => Err(e)
+            }
+        }
+        _ => {
+            panic!("PerformanceCallback get unsupported aio {}", cb.opcode)
+            //return Err(Error::SysError(SysErr::EINVAL))
+        }
+    };
+
+    return ret;
+}
+
 pub fn PerformanceCallback(
+    task: &Task,
+    file: &File,
+    cbAddr: u64,
+    cb: &IOCallback,
+    ctx: &AIOContext,
+    eventfops: Option<EventOperations>,
+) -> Result<()> {
+    let inode = file.Dirent.Inode();
+
+    let inodeType = inode.InodeType();
+
+    if inodeType == InodeType::RegularFile {
+        return PerformanceUringCallback(task, file, cbAddr, cb, ctx, eventfops);
+    }
+
+    if ctx.Dead() {
+        ctx.CancelPendingRequest();
+        return Ok(())
+    }
+
+    let ret = PerformFileOp(task, file, cb);
+
+    let result = match ret {
+        Ok(n) => n,
+        Err(Error::SysError(syserr)) => -syserr as i64,
+        Err(e) => {
+            panic!("PerformanceCallback fail {:?}", e);
+        }
+    };
+
+    let ev = IOEvent {
+        data: cb.data,
+        obj: cbAddr,
+        result: result as i64,
+        result2: 0,
+    };
+
+    // Queue the result for delivery.
+    ctx.FinishRequest(ev);
+
+    // Notify the event file if one was specified. This needs to happen
+    // *after* queueing the result to avoid racing with the thread we may
+    // wake up.
+    match eventfops {
+        None => (),
+        Some(ref eventfops) => {
+            eventfops.Signal(1).expect("AIOWrite eventfops signal fail");
+        }
+    }
+
+    return Ok(());
+}
+
+pub fn PerformanceUringCallback(
     task: &Task,
     file: &File,
     cbAddr: u64,

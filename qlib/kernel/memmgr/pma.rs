@@ -12,14 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::qlib::mutex::*;
+use spin::Mutex;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::ops::Deref;
 use x86_64::structures::paging::PageTable;
 use x86_64::structures::paging::PageTableFlags;
 use x86_64::PhysAddr;
 use x86_64::VirtAddr;
+use core::sync::atomic::AtomicU64;
+use core::sync::atomic::Ordering;
 
 use super::super::super::addr::*;
 use super::super::super::common::*;
@@ -34,42 +35,35 @@ use super::pmamgr::*;
 
 pub type PageMgrRef = ObjectRef<PageMgr>;
 
-pub struct PageMgr(QMutex<PageMgrInternal>);
-
-impl Deref for PageMgr {
-    type Target = QMutex<PageMgrInternal>;
-
-    fn deref(&self) -> &QMutex<PageMgrInternal> {
-        &self.0
-    }
+pub struct PageMgr {
+    pub pagepool: PagePool,
+    pub zeroPage: AtomicU64,
+    pub vsyscallPages: Mutex<Arc<Vec<u64>>>,
 }
 
 impl RefMgr for PageMgr {
     fn Ref(&self, addr: u64) -> Result<u64> {
-        let me = self.lock();
-        return me.PagePool().lock().Ref(addr);
+        return self.pagepool.Ref(addr);
     }
 
     fn Deref(&self, addr: u64) -> Result<u64> {
-        let me = self.lock();
-        return me.PagePool().lock().Deref(addr);
+        return self.pagepool.Deref(addr);
     }
 
     fn GetRef(&self, addr: u64) -> Result<u64> {
-        let me = self.lock();
-        return me.PagePool().lock().GetRef(addr);
+        return self.pagepool.GetRef(addr);
     }
 }
 
 impl Allocator for PageMgr {
     fn AllocPage(&self, incrRef: bool) -> Result<u64> {
-        let addr = self.lock().allocator.lock().AllocPage(incrRef)?;
+        let addr = self.pagepool.AllocPage(incrRef)?;
         //error!("PageMgr allocpage ... incrRef is {}, addr is {:x}", incrRef, addr);
         return Ok(addr);
     }
 
     fn FreePage(&self, addr: u64) -> Result<()> {
-        return self.lock().allocator.lock().FreePage(addr);
+        return self.pagepool.FreePage(addr);
     }
 }
 
@@ -85,7 +79,11 @@ impl Default for PageMgr {
 
 impl PageMgr {
     pub fn New() -> Self {
-        return Self(QMutex::new(PageMgrInternal::New()));
+        return Self {
+            pagepool: PagePool::New(),
+            zeroPage: AtomicU64::new(0),
+            vsyscallPages: Mutex::new(Arc::new(Vec::new())),
+        };
     }
 
     pub fn Addr(&self) -> u64 {
@@ -93,61 +91,51 @@ impl PageMgr {
     }
 
     pub fn PrintRefs(&self) {
-        self.lock().allocator.lock().PrintRefs();
+        self.pagepool.PrintRefs();
     }
 
     pub fn DerefPage(&self, addr: u64) {
-        self.lock().allocator.lock().Deref(addr).unwrap();
-    }
-}
-
-pub struct PageMgrInternal {
-    pub allocator: Arc<QMutex<PagePool>>,
-    pub zeroPage: u64,
-    pub vsyscallPages: Vec<u64>,
-}
-
-impl PageMgrInternal {
-    pub fn New() -> Self {
-        return Self {
-            allocator: Arc::new(QMutex::new(PagePool::New())),
-            zeroPage: 0,
-            vsyscallPages: Vec::new(),
-        };
-    }
-
-    fn PagePool(&self) -> Arc<QMutex<PagePool>> {
-        return self.allocator.clone();
+        self.pagepool.Deref(addr).unwrap();
     }
 
     pub fn ZeroPage(&mut self) -> u64 {
-        if self.zeroPage == 0 {
-            self.zeroPage = self.allocator.lock().AllocPage(false).unwrap();
+        let mut zeropage = self.zeroPage.load(Ordering::Relaxed);
+        if zeropage == 0 {
+            zeropage = self.pagepool.AllocPage(false).unwrap();
+            self.zeroPage.store(zeropage, Ordering::SeqCst);
         }
 
-        self.allocator.lock().Ref(self.zeroPage).unwrap();
-        return self.zeroPage;
+        self.pagepool.Ref(zeropage).unwrap();
+        return zeropage;
     }
 
-    pub fn Deref(&self, addr: u64) {
-        self.allocator.lock().Deref(addr).unwrap();
+    pub fn Deref(&self, addr: u64) -> Result<u64> {
+        self.pagepool.Deref(addr)
     }
 
-    pub fn VsyscallPages(&mut self) -> &[u64] {
-        if self.vsyscallPages.len() == 0 {
-            for _i in 0..4 {
-                let addr = self.allocator.lock().AllocPage(true).unwrap();
-                self.vsyscallPages.push(addr);
+    pub fn VsyscallPages(&self) -> Arc<Vec<u64>> {
+        let pages = {
+            let mut pages = self.vsyscallPages.lock();
+            if pages.len() == 0 {
+                let mut vec = Vec::new();
+                for _i in 0..4 {
+                    let addr = self.pagepool.AllocPage(true).unwrap();
+                    vec.push(addr);
+                }
+
+                self.CopyVsysCallPages(vec[0]);
+                *pages = Arc::new(vec);
             }
 
-            self.CopyVsysCallPages();
+            pages.clone()
+        };
+
+
+        for p in pages.iter() {
+            self.pagepool.Ref(*p).unwrap();
         }
 
-        for p in &mut self.vsyscallPages {
-            self.allocator.lock().Ref(*p).unwrap();
-        }
-
-        return &self.vsyscallPages;
+        return pages;
     }
 }
 
@@ -179,7 +167,7 @@ impl PageTables {
         return Ok(pt);
     }
 
-    pub fn InitVsyscall(&self, phyAddrs: &[u64] /*4 pages*/) {
+    pub fn InitVsyscall(&self, phyAddrs: Arc<Vec<u64>> /*4 pages*/) {
         let vaddr = 0xffffffffff600000;
         let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
         unsafe {
@@ -270,8 +258,7 @@ impl PageTables {
         )?;
 
         {
-            let mut lock = pagePool.lock();
-            let vsyscallPages = lock.VsyscallPages();
+            let vsyscallPages = pagePool.VsyscallPages();
             ret.MapVsyscall(vsyscallPages);
         }
 

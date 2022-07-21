@@ -13,6 +13,9 @@
 // limitations under the License.
 
 use alloc::collections::btree_map::BTreeMap;
+use core::sync::atomic::AtomicU64;
+use core::sync::atomic::Ordering;
+use spin::Mutex;
 
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
@@ -43,21 +46,40 @@ pub fn CheckZeroPage(pageStart: u64) {
     }
 }
 
+pub const REF_MAP_PARTITION_CNT : usize = 16;
 pub struct PagePool {
     //refCount for whole pma
-    pub refCount: u64,
-    pub refs: BTreeMap<u64, u32>,
+    pub refCount: AtomicU64,
+    pub refs: [Mutex<BTreeMap<u64, u32>>; 16],
     pub allocator: AlignedAllocator,
 }
 
 impl PagePool {
+    pub fn New() -> Self {
+        return Self {
+            refs: Default::default(),
+            //the PagePool won't be free. fake a always nonzero refcount
+            refCount: AtomicU64::new(1),
+            allocator: AlignedAllocator::New(
+                MemoryDef::PAGE_SIZE as usize,
+                MemoryDef::PAGE_SIZE as usize,
+            ),
+        };
+    }
+
     pub fn PrintRefs(&self) {
         //error!("PagePool left is {:#x?}", self.refs);
     }
 
-    pub fn Ref(&mut self, addr: u64) -> Result<u64> {
+    pub fn PartitionId(addr: u64) -> usize {
+        return (addr as usize >> 12) % REF_MAP_PARTITION_CNT;
+    }
+
+    pub fn Ref(&self, addr: u64) -> Result<u64> {
         assert!(addr & (MemoryDef::PAGE_SIZE - 1) == 0);
-        let refcount = match self.refs.get_mut(&addr) {
+        let idx = Self::PartitionId(addr);
+        let mut refs = self.refs[idx].lock();
+        let refcount = match refs.get_mut(&addr) {
             None => {
                 // the address is not allocated from PagePool
                 return Ok(1);
@@ -68,34 +90,45 @@ impl PagePool {
             }
         };
 
-        self.refCount += 1;
+        self.refCount.fetch_add(1, Ordering::Release);
         return Ok(refcount as u64);
     }
 
-    pub fn Deref(&mut self, addr: u64) -> Result<u64> {
+    pub fn Deref(&self, addr: u64) -> Result<u64> {
         assert!(addr & (MemoryDef::PAGE_SIZE - 1) == 0);
-        let refcount = match self.refs.get_mut(&addr) {
-            None => {
-                // the address is not allocated from PagePool
-                return Ok(1);
+        let refcount = {
+            let idx = Self::PartitionId(addr);
+            let mut refs = self.refs[idx].lock();
+            let refcount = match refs.get_mut(&addr) {
+                None => {
+                    // the address is not allocated from PagePool
+                    return Ok(1);
+                }
+                Some(v) => {
+                    assert!(*v >= 1, "deref fail: addresss is {:x}", addr);
+                    *v -= 1;
+                    *v
+                }
+            };
+
+            if refcount == 0 {
+                refs.remove(&addr);
             }
-            Some(v) => {
-                assert!(*v >= 1, "deref fail: addresss is {:x}", addr);
-                *v -= 1;
-                *v
-            }
+
+            refcount
         };
 
-        self.refCount -= 1;
         if refcount == 0 {
-            self.refs.remove(&addr);
             self.Free(addr)?;
         }
+        self.refCount.fetch_sub(1, Ordering::Release);
         return Ok(refcount as u64);
     }
 
     pub fn GetRef(&self, addr: u64) -> Result<u64> {
-        let refcount = match self.refs.get(&addr) {
+        let idx = Self::PartitionId(addr);
+        let refs = self.refs[idx].lock();
+        let refcount = match refs.get(&addr) {
             None => {
                 // the address is not allocated from PagePool
                 return Ok(0);
@@ -106,36 +139,25 @@ impl PagePool {
         return Ok(refcount as u64);
     }
 
-    pub fn AllocPage(&mut self, incrRef: bool) -> Result<u64> {
+    pub fn AllocPage(&self, incrRef: bool) -> Result<u64> {
         let addr = self.Allocate()?;
+        let idx = Self::PartitionId(addr);
+        let mut  refs = self.refs[idx].lock();
         if incrRef {
-            self.refs.insert(addr, 1);
-            self.refCount += 1;
+            refs.insert(addr, 1);
+            self.refCount.fetch_add(1, Ordering::Release);
         } else {
-            self.refs.insert(addr, 0);
+            refs.insert(addr, 0);
         }
 
         return Ok(addr);
     }
 
-    pub fn FreePage(&mut self, addr: u64) -> Result<()> {
+    pub fn FreePage(&self, addr: u64) -> Result<()> {
         return self.Free(addr);
     }
 
-    //unitSize: how many pages for each unit
-    pub fn New() -> Self {
-        return Self {
-            refs: BTreeMap::new(),
-            //the PagePool won't be free. fake a always nonzero refcount
-            refCount: 1,
-            allocator: AlignedAllocator::New(
-                MemoryDef::PAGE_SIZE as usize,
-                MemoryDef::PAGE_SIZE as usize,
-            ),
-        };
-    }
-
-    pub fn Allocate(&mut self) -> Result<u64> {
+    pub fn Allocate(&self) -> Result<u64> {
         match CPULocal::Myself().pageAllocator.lock().AllocPage() {
             Some(page) => {
                 ZeroPage(page);
@@ -151,7 +173,7 @@ impl PagePool {
         return Ok(addr as u64);
     }
 
-    pub fn Free(&mut self, addr: u64) -> Result<()> {
+    pub fn Free(&self, addr: u64) -> Result<()> {
         CPULocal::Myself().pageAllocator.lock().FreePage(addr);
         return Ok(());
         //return self.allocator.Free(addr);

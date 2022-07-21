@@ -35,7 +35,6 @@ use super::super::dentry::*;
 use super::super::dirent::*;
 use super::super::file::*;
 use super::super::flags::*;
-use super::super::inotify::*;
 use super::super::fsutil::file::*;
 use super::super::host::hostinodeop::*;
 use super::super::inode::*;
@@ -101,7 +100,6 @@ pub fn NewDir(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         InodeOp: Arc::new(d),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
-        watches: Watches::default(),
         MountSource: msrc.clone(),
         Overlay: None,
     };
@@ -372,7 +370,7 @@ impl InodeOperations for DirInodeOperations {
         });
     }
 
-    fn Mappable(&self) -> Result<HostIopsMappable> {
+    fn Mappable(&self) -> Result<MMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }
@@ -497,7 +495,7 @@ impl FileOperations for DirFileOperations {
             .di
             .as_any()
             .downcast_ref::<DirInodeOperations>()
-            .expect("OverlayMountSourceOperations convert fail")
+            .expect("DirInodeOperations convert fail")
             .lock();
 
         return match dirCtx.ReadDir(task, &ops.dentryMap) {
@@ -506,7 +504,7 @@ impl FileOperations for DirFileOperations {
         };
     }
 
-    fn Mappable(&self) -> Result<HostIopsMappable> {
+    fn Mappable(&self) -> Result<MMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }

@@ -147,7 +147,7 @@ impl FileOperations for StaticDirFileOperations {
         return DirentReadDir(task, &f.Dirent, self, &root, &mut dirCtx, f.Offset(task)?);
     }
 
-    fn Mappable(&self) -> Result<HostIopsMappable> {
+    fn Mappable(&self) -> Result<MMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }

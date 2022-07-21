@@ -41,7 +41,7 @@ pub fn ControllerProcessHandler() -> Result<()> {
 }
 
 pub fn HandleSignal(signalArgs: &SignalArgs) {
-    info!("get signal {:?}", &signalArgs);
+    info!("HandleSignal: get signal {:?}", &signalArgs);
 
     // don't know why the winsz adjustment doesn't work
     // todo: fix this

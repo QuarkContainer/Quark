@@ -34,7 +34,6 @@ use super::super::dentry::*;
 use super::super::dirent::*;
 use super::super::file::*;
 use super::super::flags::*;
-use super::super::inotify::*;
 use super::super::host::hostinodeop::*;
 use super::super::inode::*;
 use super::super::mount::*;
@@ -82,7 +81,6 @@ pub fn NewSlaveNode(
         InodeOp: Arc::new(iops),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
-        watches: Watches::default(),
         MountSource: msrc,
         Overlay: None,
     };
@@ -319,7 +317,7 @@ impl InodeOperations for SlaveInodeOperations {
         });
     }
 
-    fn Mappable(&self) -> Result<HostIopsMappable> {
+    fn Mappable(&self) -> Result<MMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }
@@ -415,6 +413,9 @@ impl FileOperations for SlaveFileOperations {
         _blocking: bool,
     ) -> Result<i64> {
         let size = IoVec::NumBytes(srcs);
+        if size == 0 {
+            return Ok(0)
+        }
         let mut buf = DataBuff::New(size);
         let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;
 
@@ -494,7 +495,7 @@ impl FileOperations for SlaveFileOperations {
         return (0, Err(Error::SysError(SysErr::ENOTDIR)));
     }
 
-    fn Mappable(&self) -> Result<HostIopsMappable> {
+    fn Mappable(&self) -> Result<MMappable> {
         return Err(Error::SysError(SysErr::ENODEV));
     }
 }

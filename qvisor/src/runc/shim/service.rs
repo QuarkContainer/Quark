@@ -17,6 +17,7 @@ use std::sync::Arc;
 
 use containerd_shim::api::*;
 use containerd_shim::protos::protobuf::{Message, SingularPtrField};
+use containerd_shim::monitor::{monitor_subscribe, Subject, Subscription, Topic};
 use containerd_shim::protos::ttrpc::context::Context;
 use containerd_shim::publisher::RemotePublisher;
 use containerd_shim::spawn;
@@ -104,6 +105,9 @@ impl Shim for Service {
         let task = ShimTask::New(self.namespace.as_str(), self.exit.clone(), tx);
 
         forward(publisher, self.namespace.clone(), rx);
+
+        let s = monitor_subscribe(Topic::All).expect("monitor subscribe failed");
+        self.process_exits(s, &task);
         task
     }
 }
@@ -116,4 +120,21 @@ fn forward(publisher: RemotePublisher, ns: String, rx: Receiver<(String, Box<dyn
                 .unwrap_or_else(|e| warn!("publish {} to containerd: {}", topic, e));
         }
     });
+}
+
+impl Service {
+    pub fn process_exits(&self, s: Subscription, _task: &ShimTask) {
+        debug!("process_exits start ...");
+        std::thread::spawn(move || {
+            for e in s.rx.iter() {
+                if let Subject::Pid(_pid) = e.subject {
+                    debug!("quark sandbox process_exits receive exit event: {}, quark shim exiting ...", &e);
+                    unsafe {
+                        // ucallServer::HandleSignal SIGKILL all processes
+                        libc::kill(0, 9);
+                    }
+                }
+            }
+        });
+    }
 }

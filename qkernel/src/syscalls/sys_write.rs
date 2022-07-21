@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::super::fs::file::*;
+use super::super::fs::inotify::*;
 use super::super::kernel::time::*;
 use super::super::kernel::timer::*;
 use super::super::kernel::waiter::*;
@@ -53,7 +54,7 @@ pub fn Write(task: &Task, fd: i32, addr: u64, size: i64) -> Result<i64> {
          }
     }*/
 
-    if !file.Flags().Write {
+    if !file.Flags().Write || file.Flags().Path {
         return Err(Error::SysError(SysErr::EBADF));
     }
 
@@ -99,7 +100,7 @@ pub fn Pwrite64(task: &Task, fd: i32, addr: u64, size: i64, offset: i64) -> Resu
         return Err(Error::SysError(SysErr::ESPIPE));
     }
 
-    if !file.Flags().Write {
+    if !file.Flags().Write || file.Flags().Path {
         return Err(Error::SysError(SysErr::EBADF));
     }
 
@@ -182,7 +183,7 @@ pub fn SysWritev(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 pub fn Writev(task: &Task, fd: i32, addr: u64, iovcnt: i32) -> Result<i64> {
     let file = task.GetFile(fd)?;
 
-    if !file.Flags().Write {
+    if !file.Flags().Write || file.Flags().Path {
         return Err(Error::SysError(SysErr::EBADF));
     }
 
@@ -220,7 +221,7 @@ pub fn Pwritev(task: &Task, fd: i32, addr: u64, iovcnt: i32, offset: i64) -> Res
         return Err(Error::SysError(SysErr::ESPIPE));
     }
 
-    if !file.Flags().Write {
+    if !file.Flags().Write || file.Flags().Path {
         return Err(Error::SysError(SysErr::EBADF));
     }
 
@@ -264,7 +265,7 @@ fn RepWritev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
     }
 
     if count > 0 {
-        f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0)
+        f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::PathEvent)
     }
     return Ok(count);
 }
@@ -274,9 +275,6 @@ pub fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
     let srcs = &iovs;
 
     let len = Iovs(srcs).Count();
-    if len == 0 {
-        return Ok(0)
-    }
 
     let wouldBlock = f.WouldBlock();
     if !wouldBlock {
@@ -365,7 +363,7 @@ pub fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
     }
 
     if count > 0 {
-        f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0)
+        f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::PathEvent)
     }
     return Ok(count);
 }
@@ -398,7 +396,7 @@ fn RepPwritev(task: &Task, f: &File, srcs: &[IoVec], offset: i64) -> Result<i64>
     }
 
     if count > 0 {
-        f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0)
+        f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::PathEvent)
     }
 
     return Ok(count);
@@ -421,7 +419,7 @@ fn pwritev(task: &Task, f: &File, srcs: &[IoVec], offset: i64) -> Result<i64> {
         }
         Ok(n) => {
             if n > 0 {
-                f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0)
+                f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::PathEvent)
             }
             return Ok(n)
         },
@@ -440,7 +438,7 @@ fn pwritev(task: &Task, f: &File, srcs: &[IoVec], offset: i64) -> Result<i64> {
             }
             Ok(n) => {
                 if n > 0 {
-                    f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0)
+                    f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::PathEvent)
                 }
                 return Ok(n);
             }

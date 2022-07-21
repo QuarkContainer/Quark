@@ -23,8 +23,10 @@ use core::ops::Deref;
 
 use super::super::super::super::addr::*;
 use super::super::super::super::common::*;
+use super::super::super::super::range::*;
 use super::super::super::super::linux_def::*;
 use super::super::super::memmgr::mm::*;
+use super::super::super::memmgr::vma::*;
 use super::super::super::memmgr::*;
 use super::super::super::task::*;
 use super::super::waiter::*;
@@ -132,7 +134,7 @@ impl MemoryManager {
             MLockMode: MLockMode::default(),
             Kernel: false,
             Mapping: Some(Arc::new(AIOMapping {})),
-            Mappable: None,
+            Mappable: MMappable::AIOMappable,
             Hint: "".to_string(),
         };
 
@@ -185,6 +187,68 @@ impl MemoryManager {
         };
 
         return Some(aioCtx);
+    }
+}
+
+pub struct AIOMappable {}
+
+impl AIOMappable {
+    pub fn AddMapping(
+        _ms: &MemoryManager,
+        ar: &Range,
+        offset: u64,
+        _writeable: bool,
+    ) -> Result<()> {
+        // Don't allow mappings to be expanded (in Linux, fs/aio.c:aio_ring_mmap()
+        // sets VM_DONTEXPAND).
+        if offset != 0 || ar.Len() != AIOContext::AIO_RINGBUF_SIZE {
+            return Err(Error::SysError(SysErr::EFAULT))
+        }
+
+        return Ok(())
+    }
+
+    pub fn RemoveMapping(
+        _ms: &MemoryManager,
+        _ar: &Range,
+        _offset: u64,
+        _writeable: bool,
+    ) -> Result<()> {
+        return Ok(())
+    }
+
+    pub fn CopyMapping(
+        mm: &MemoryManager,
+        srcAr: &Range,
+        dstAR: &Range,
+        offset: u64,
+        _writable: bool,
+    ) -> Result<()> {
+        // Don't allow mappings to be expanded (in Linux, fs/aio.c:aio_ring_mmap()
+        // sets VM_DONTEXPAND).
+        if offset != 0 || dstAR.Len() != AIOContext::AIO_RINGBUF_SIZE {
+            return Err(Error::SysError(SysErr::EFAULT))
+        }
+
+        let am = mm.aioManager.clone();
+        let mut am = am.lock();
+        let oldId = srcAr.Start();
+        let context = match am.contexts.get(&oldId) {
+            None => return Err(Error::SysError(SysErr::EINVAL)),
+            Some(c) => c.clone(),
+        };
+
+        if context.lock().dead {
+            return Err(Error::SysError(SysErr::EINVAL));
+        }
+
+        am.contexts.insert(dstAR.Start(), context);
+        am.contexts.remove(&oldId);
+        return Ok(())
+    }
+
+    pub fn MSync(_fr: &Range, _msyncType: MSyncType) -> Result<()> {
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 }
 
@@ -352,5 +416,18 @@ impl AIOContext {
         }
 
         aio.queue.Notify(READABLE_EVENT);
+    }
+
+    pub fn Dead(&self) -> bool {
+        return self.lock().dead;
+    }
+
+    pub fn CancelPendingRequest(&self) {
+        let mut ctx = self.lock();
+        if ctx.outstanding == 0 {
+            panic!("AIOContext outstanding is going negative")
+        }
+
+        ctx.outstanding -= 1;
     }
 }

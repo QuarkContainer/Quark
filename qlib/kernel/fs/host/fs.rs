@@ -150,8 +150,6 @@ pub fn InstallWhitelist(task: &Task, m: &MountNs, inputPaths: &Vec<String>) -> R
         }
     }
 
-    m.Freeze();
-
     return Ok(());
 }
 
@@ -238,7 +236,7 @@ impl Filesystem for WhitelistFileSystem {
         if ret < 0 {
             return Err(Error::SysError(-ret as i32));
         }
-        let inode = Inode::NewHostInode(&Arc::new(QMutex::new(msrc)), fd, &fstat, writable)?;
+        let inode = Inode::NewHostInode(task, &Arc::new(QMutex::new(msrc)), fd, &fstat, writable)?;
 
         return Ok(inode);
     }

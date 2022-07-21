@@ -572,16 +572,6 @@ impl MfdType {
     pub const MFD_ALLOW_SEALING: u32 = 0x0002;
 }
 
-#[repr(C)]
-#[derive(Debug, Default, Copy, Clone)]
-pub struct FlockStruct {
-    pub l_type: i16,
-    pub l_whence: i16,
-    pub l_start: i64,
-    pub l_len: i64,
-    pub l_pid: i32,
-}
-
 pub const MAX_SYMLINK_TRAVERSALS: u32 = 40;
 pub const NAME_MAX: usize = 255;
 pub const PATH_MAX: usize = 4096;
@@ -2133,6 +2123,8 @@ impl Cmd {
     pub const F_SETLKW: i32 = 7;
     pub const F_SETOWN: i32 = 8;
     pub const F_GETOWN: i32 = 9;
+    pub const F_SETSIG: i32 = 10;
+    pub const F_GETSIG: i32 = 11;
     pub const F_SETOWN_EX: i32 = 15;
     pub const F_GETOWN_EX: i32 = 16;
     pub const F_DUPFD_CLOEXEC: i32 = 1024 + 6;
@@ -2153,6 +2145,14 @@ pub struct PermMask {
 }
 
 impl PermMask {
+    pub fn NewReadWrite() -> Self {
+        return Self {
+            read: true,
+            write: true,
+            execute: false,
+        }
+    }
+
     pub fn FromFlags(mask: u32) -> Self {
         let mut res = PermMask::default();
         if mask & Flags::O_TRUNC as u32 != 0 {
@@ -2243,8 +2243,8 @@ impl Flags {
     pub const O_NOFOLLOW: i32 = 0o00400000; //0x00020000;
     pub const O_NOATIME: i32 = 0o01000000; //0x00040000;
     pub const O_CLOEXEC: i32 = 0o02000000; //0x00080000;
-    pub const O_SYNC: i32 = 0o04000000;
-    pub const O_PATH: i32 = 0o010000000;
+    pub const O_SYNC: i32 = 0o04000000; //0x00100000;
+    pub const O_PATH: i32 = 0o010000000; //0x00200000;
     pub const O_TMPFILE: i32 = 0o020000000;
 
     /* high priority request, poll if possible */

@@ -4,6 +4,7 @@
   "LogType"       : "Sync",
   "LogLevel"      : "Simple",
   "UringIO"       : true,
+  "UringBuf"      : true,
   "EnableAIO"     : true,
   "PrintException": false,
   "KernelPagetable": false,
@@ -17,6 +18,6 @@
   "PerSandboxLog" : false,
   "ReserveCpuCount": 5,
   "ShimMode"      : false,
-  "EnableInotify" : false,
+  "EnableInotify" : true,
   "ReaddirCache"  : true
 }

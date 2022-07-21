@@ -23,6 +23,7 @@ use core::cmp::Eq;
 use core::cmp::PartialEq;
 use core::ops::Deref;
 use spin::*;
+use lazy_static::lazy_static;
 
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
@@ -36,32 +37,121 @@ use super::file::*;
 use super::flags::*;
 use super::inode::*;
 use super::mount::*;
+use super::inotify::*;
+
+lazy_static! {
+    pub static ref NEGATIVE_DIRENT: Dirent = Dirent::default();
+    pub static ref NEGATIVE_DIRENT1: Dirent = Dirent::default();
+}
 
 pub static RENAME: Singleton<RwLock<()>> = Singleton::<RwLock<()>>::New();
 pub unsafe fn InitSingleton() {
     RENAME.Init(RwLock::new(()));
 }
 
-#[derive(Clone)]
-pub struct Dirent(pub Arc<(QMutex<InterDirent>, u64)>);
+pub fn DirentReadDir(
+    task: &Task,
+    d: &Dirent,
+    it: &FileOperations,
+    root: &Dirent,
+    dirCtx: &mut DirCtx,
+    offset: i64,
+) -> Result<i64> {
+    let (offset, err) = direntReadDir(task, d, it, root, dirCtx, offset);
 
-impl Default for Dirent {
-    fn default() -> Self {
-        return Self(Arc::new((QMutex::new(InterDirent::default()), NewUID())));
+    if dirCtx.Serializer.Written() > 0 {
+        return Ok(offset);
+    }
+
+    return err;
+}
+
+fn direntReadDir(
+    task: &Task,
+    d: &Dirent,
+    it: &FileOperations,
+    root: &Dirent,
+    dirCtx: &mut DirCtx,
+    offset: i64,
+) -> (i64, Result<i64>) {
+    let mut offset = offset;
+
+    let inode = d.Inode();
+    if !inode.StableAttr().IsDir() {
+        return (0, Err(Error::SysError(SysErr::ENOTDIR)));
+    }
+
+    if offset == FILE_MAX_OFFSET {
+        return (offset, Ok(0));
+    }
+
+    let (dot, dotdot) = d.GetDotAttrs(root);
+
+    if offset == 0 {
+        match dirCtx.DirEmit(task, &".".to_string(), &dot) {
+            Err(e) => return (offset, Err(e)),
+            Ok(_) => (),
+        }
+
+        offset += 1;
+    }
+
+    if offset == 1 {
+        match dirCtx.DirEmit(task, &"..".to_string(), &dotdot) {
+            Err(e) => return (offset, Err(e)),
+            Ok(_) => (),
+        }
+
+        offset += 1;
+    }
+
+    offset -= 2;
+
+    let (mut newOffset, err) = it.IterateDir(task, d, dirCtx, offset as i32);
+
+    if (newOffset as i64) < offset {
+        //let msg = format!("node.Readdir returned offset {} less than input offset {}", newOffset, offset);
+        panic!("node.Readdir fail");
+    }
+
+    newOffset += 2;
+    return (newOffset as i64, err);
+}
+
+#[derive(Clone)]
+pub struct DirentWeak(pub Weak<DirentInternal>);
+
+impl DirentWeak {
+    pub fn Upgrade(&self) -> Option<Dirent> {
+        let d = match self.0.upgrade() {
+            None => return None,
+            Some(d) => d,
+        };
+
+        return Some(Dirent(d));
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct Dirent (Arc<DirentInternal>);
+
+impl Dirent {
+    pub fn Downgrade(&self) -> DirentWeak {
+        return DirentWeak(Arc::downgrade(&self.0));
     }
 }
 
 impl Deref for Dirent {
-    type Target = Arc<(QMutex<InterDirent>, u64)>;
+    type Target = Arc<DirentInternal>;
 
-    fn deref(&self) -> &Arc<(QMutex<InterDirent>, u64)> {
+    fn deref(&self) -> &Arc<DirentInternal> {
         &self.0
     }
 }
 
 impl Ord for Dirent {
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        self.1.cmp(&other.1)
+        self.id.cmp(&other.id)
     }
 }
 
@@ -82,13 +172,34 @@ impl Eq for Dirent {}
 impl Drop for Dirent {
     fn drop(&mut self) {
         if Arc::strong_count(&self.0) == 1 {
-            let parent = (self.0).0.lock().Parent.take();
+            let parent = self.main.lock().Parent.take();
             match parent {
                 None => (),
                 Some(parent) => {
-                    let name = (self.0).0.lock().Name.clone();
+                    let name = self.main.lock().Name.clone();
                     parent.RemoveChild(&name);
                 }
+            }
+
+            if SHARESPACE.config.read().EnableInotify {
+                let watches = self.Watches();
+
+                // If this inode is being destroyed because it was unlinked, queue a
+                // deletion event. This may not be the case for inodes being revalidated.
+                let unlinked = watches.read().unlinked;
+                if unlinked {
+                    watches.Notify("",
+                                   InotifyEvent::IN_DELETE_SELF,
+                                   0,
+                                   EventType::InodeEvent,
+                                   false);
+                }
+
+                // Remove references from the watch owners to the watches on this inode,
+                // since the watches are about to be GCed. Note that we don't need to worry
+                // about the watch pins since if there were any active pins, this inode
+                // wouldn't be in the destructor.
+                watches.TargetDestroyed();
             }
         }
     }
@@ -96,52 +207,58 @@ impl Drop for Dirent {
 
 impl Dirent {
     pub fn New(inode: &Inode, name: &str) -> Self {
-        return Self(Arc::new((
-            QMutex::new(InterDirent {
-                Inode: inode.clone(),
-                Name: name.to_string(),
-                Parent: None,
-                Children: BTreeMap::new(),
-                frozen: false,
-                mounted: false,
-            }),
-            NewUID(),
-        )));
+        let main = DirentMain {
+            Inode: inode.clone(),
+            Name: name.to_string(),
+            Parent: None,
+            mounted: false,
+            deleted: false,
+        };
+
+        let intern = DirentInternal {
+            id: NewUID(),
+            inode: inode.clone(),
+            watches: Watches::default(),
+            main: QMutex::new(main),
+            dirMu: QRwLock::new(()),
+            cacheMu: Default::default(),
+            children: QMutex::new(BTreeMap::new()),
+        };
+
+        return Self(Arc::new(intern));
+    }
+
+    pub fn Watches(&self) -> Watches {
+        return self.watches.clone();
+    }
+
+    pub fn SetDeleted(&self) {
+        self.main.lock().deleted = true;
+    }
+
+    pub fn IsDeleted(&self) -> bool {
+        return self.main.lock().deleted;
     }
 
     pub fn NewTransient(inode: &Inode) -> Self {
-        let iDirent = QMutex::new(InterDirent {
-            Inode: inode.clone(),
-            Name: "transient".to_string(),
-            Parent: None,
-            Children: BTreeMap::new(),
-            frozen: false,
-            mounted: false,
-        });
-        return Self(Arc::new((iDirent, NewUID())));
+        return Self::New(inode, "transient");
     }
 
     pub fn ID(&self) -> u64 {
-        return self.1;
-    }
-
-    pub fn IsRoot(&self) -> bool {
-        match &(self.0).0.lock().Parent {
-            None => return true,
-            _ => return false,
-        }
+        return self.id;
     }
 
     pub fn Parent(&self) -> Option<Dirent> {
-        match &(self.0).0.lock().Parent {
+        match &self.main.lock().Parent {
             None => None,
             Some(ref d) => Some(d.clone()),
         }
     }
 
     pub fn Inode(&self) -> Inode {
-        return (self.0).0.lock().Inode.clone();
+        return self.inode.clone();
     }
+
 
     pub fn MyFullName(&self) -> String {
         let _a = RENAME.read();
@@ -150,8 +267,8 @@ impl Dirent {
     }
 
     fn myFullName(&self) -> String {
-        let name = (self.0).0.lock().Name.clone();
-        let parent = match &(self.0).0.lock().Parent {
+        let name = self.main.lock().Name.clone();
+        let parent = match &self.main.lock().Parent {
             None => return name,
             Some(ref p) => p.clone(),
         };
@@ -159,10 +276,10 @@ impl Dirent {
         let pName = parent.myFullName();
 
         if pName == "/".to_string() {
-            return "/".to_string() + &(self.0).0.lock().Name;
+            return "/".to_string() + &self.main.lock().Name;
         }
 
-        return pName + &"/".to_string() + &(self.0).0.lock().Name;
+        return pName + &"/".to_string() + &self.main.lock().Name;
     }
 
     pub fn ChildDenAttrs(&self, task: &Task) -> Result<BTreeMap<String, DentAttr>> {
@@ -204,18 +321,18 @@ impl Dirent {
             return ("/".to_string(), true);
         }
 
-        if (self.0).0.lock().IsRoot() {
-            return ((self.0).0.lock().Name.clone(), false);
+        if self.main.lock().IsRoot() {
+            return (self.main.lock().Name.clone(), false);
         }
 
-        let parent = (self.0).0.lock().Parent.as_ref().unwrap().clone();
+        let parent = self.main.lock().Parent.as_ref().unwrap().clone();
         let (pName, reachable) = parent.fullName(root);
 
         if pName == "/".to_string() {
-            return (pName + &(self.0).0.lock().Name, reachable);
+            return (pName + &self.main.lock().Name, reachable);
         }
 
-        let ret = pName + &"/".to_string() + &(self.0).0.lock().Name;
+        let ret = pName + &"/".to_string() + &self.main.lock().Name;
         return (ret, reachable);
     }
 
@@ -224,45 +341,16 @@ impl Dirent {
 
         let mut mountRoot = self.clone();
         loop {
-            if (mountRoot.0).0.lock().mounted {
+            if mountRoot.main.lock().mounted {
                 return mountRoot;
             }
 
-            let parent = (mountRoot.0).0.lock().Parent.clone();
+            let parent = mountRoot.main.lock().Parent.clone();
             match parent {
                 None => return mountRoot,
                 Some(p) => mountRoot = p,
             }
         }
-    }
-
-    pub fn Freeze(&self) {
-        {
-            let mut d = (self.0).0.lock();
-
-            if d.frozen {
-                return;
-            }
-
-            d.frozen = true;
-
-            //add extra refence to avoid free
-            let msrc = d.Inode.lock().MountSource.clone();
-            msrc.lock().Froze(self);
-
-            //self.Froze();
-
-            for (_, w) in &d.Children {
-                match w.upgrade() {
-                    None => {
-                        //println!("in freeze: weak pointer");
-                    }
-                    Some(d) => Dirent(d).Freeze(),
-                }
-            }
-        }
-
-        self.flush();
     }
 
     pub fn DescendantOf(&self, p: &Dirent) -> bool {
@@ -274,7 +362,7 @@ impl Dirent {
                 return true;
             }
 
-            let parent = match &(d.0).0.lock().Parent {
+            let parent = match &d.main.lock().Parent {
                 None => return false,
                 Some(ref parent) => parent.clone(),
             };
@@ -284,9 +372,9 @@ impl Dirent {
     }
 
     fn getChild(&self, name: &str) -> Option<Dirent> {
-        let remove = match (self.0).0.lock().Children.get(name) {
-            Some(subD) => match subD.upgrade() {
-                Some(cd) => return Some(Dirent(cd.clone())),
+        let remove = match self.children.lock().get(name) {
+            Some(subD) => match subD.Upgrade() {
+                Some(cd) => return Some(cd),
                 None => true,
             },
 
@@ -294,16 +382,16 @@ impl Dirent {
         };
 
         if remove {
-            (self.0).0.lock().Children.remove(name);
+            self.children.lock().remove(name);
         }
 
         return None;
     }
 
-    fn GetCacheChild(&self, name: &str) -> Option<Arc<(QMutex<InterDirent>, u64)>> {
-        match (self.0).0.lock().Children.get(name) {
-            Some(subD) => match subD.upgrade() {
-                Some(cd) => return Some(cd.clone()),
+    fn GetCacheChild(&self, name: &str) -> Option<Dirent> {
+        match self.children.lock().get(name) {
+            Some(subD) => match subD.Upgrade() {
+                Some(cd) => return Some(cd),
                 None => (),
             },
 
@@ -311,6 +399,10 @@ impl Dirent {
         };
 
         return None;
+    }
+
+    pub fn IsNegative(&self) -> bool {
+        return Arc::ptr_eq(&self.0, &NEGATIVE_DIRENT1.0)
     }
 
     fn walk(&self, task: &Task, root: &Dirent, name: &str) -> Result<Dirent> {
@@ -326,16 +418,23 @@ impl Dirent {
                 return Ok(self.clone());
             }
 
-            match &(self.0).0.lock().Parent {
+            match &self.main.lock().Parent {
                 None => return Ok(self.clone()),
                 Some(ref p) => return Ok(p.clone()),
             }
         }
 
+        // have to lock this as the name pipeline might have race condition
+        // in which 2 pipes are create for one fifo
+        let _cl = self.cacheMu.lock();
         let child = self.GetCacheChild(name);
         let remove = match child {
-            Some(cd) => {
-                let mounted = cd.0.lock().mounted;
+            Some(dirent) => {
+                if dirent.IsNegative() {
+                    return Err(Error::SysError(SysErr::ENOENT))
+                }
+
+                let mounted = dirent.main.lock().mounted;
                 /*let subInode = cd.0.lock().Inode.clone();
                 let mountSource = subInode.lock().MountSource.clone();
                 let mountsourceOpations = mountSource.lock().MountSourceOperations.clone();*/
@@ -344,32 +443,36 @@ impl Dirent {
                 // work around now. and todo: fix it
                 let revalidate = false; //mountsourceOpations.lock().Revalidate(name, &inode, &subInode);
                 if mounted || !revalidate {
-                    return Ok(Dirent(cd.clone()));
+                    return Ok(dirent);
                 }
 
-                let dirent = Dirent(cd);
-                let inode = dirent.Inode();
-                inode.Watches().Unpin(&dirent);
+                dirent.Watches().Destroy();
 
-                false
+                true
             }
-            None => true,
+            None => false,
         };
 
         if remove {
-            (self.0).0.lock().Children.remove(name);
+            self.children.lock().remove(name);
         }
 
-        let frozen = (self.0).0.lock().frozen;
-        if frozen && !inode.IsVirtual() {
-            return Err(Error::SysError(SysErr::ENOENT));
-        }
+        let c = match inode.Lookup(task, name) {
+            Err(Error::SysError(SysErr::ENOENT)) => {
 
-        let c = inode.Lookup(task, name)?;
+                // why the negative doesn't work? todo: fix this
+                //let negative = Arc::downgrade(&(NEGATIVE_DIRENT.0));
+                //(self.0).0.lock().Children.insert(String::from(name), negative);
 
-        assert!(&(c.0).0.lock().Name == name, "lookup get mismatch name");
+                return Err(Error::SysError(SysErr::ENOENT))
+            }
+            Err(e) => return Err(e),
+            Ok(c) => c,
+        };
 
-        self.AddChild(&c);
+        assert!(c.main.lock().Name == name, "lookup get mismatch name");
+
+        self.AddChild(String::from(name), &c);
 
         return Ok(c);
     }
@@ -378,44 +481,56 @@ impl Dirent {
         //error!("Walk 1 {}", name);
         //defer!(error!("Walk 2 {}", name));
         let _a = RENAME.read();
+        let _dm = self.dirMu.read();
 
         return self.walk(task, root, name);
     }
 
     pub fn RemoveChild(&self, name: &String) {
-        (self.0).0.lock().Children.remove(name);
+        self.children.lock().remove(name);
+    }
+
+    pub fn IsRoot(&self) -> bool {
+        return self.main.lock().IsRoot()
     }
 
     pub fn AddChild(
         &self,
-        child: &Arc<(QMutex<InterDirent>, u64)>,
-    ) -> Option<Weak<(QMutex<InterDirent>, u64)>> {
+        name: String,
+        child: &Dirent,
+    ) -> Option<Dirent> {
         assert!(
-            child.0.lock().IsRoot(),
-            "Add child request the child has no parent"
+        child.IsRoot(),
+        "Add child request the child has no parent"
         );
-        child.0.lock().Parent = Some(self.clone());
-        child.0.lock().frozen = (self.0).0.lock().frozen;
+        child.main.lock().Parent = Some(self.clone());
 
-        return self.addChild(child);
+        return self.addChild(name, child);
+    }
+
+    pub fn Name(&self) -> String {
+        return self.main.lock().Name.clone()
     }
 
     pub fn addChild(
         &self,
-        child: &Arc<(QMutex<InterDirent>, u64)>,
-    ) -> Option<Weak<(QMutex<InterDirent>, u64)>> {
+        name: String,
+        child: &Dirent,
+    ) -> Option<Dirent> {
         assert!(
-            Dirent(child.clone()).Parent().unwrap() == self.clone(),
-            "Dirent addChild assumes the child already belongs to the parent"
+        child.Parent().unwrap() == self.clone(),
+        "Dirent addChild assumes the child already belongs to the parent"
         );
 
-        let name = child.0.lock().Name.clone();
+        //let name = child.0.lock().Name.clone();
         //println!("addChild the name is {}", name);
-        return (self.0)
-            .0
+        match self
+            .children
             .lock()
-            .Children
-            .insert(name, Arc::downgrade(child));
+            .insert(name, child.Downgrade()) {
+            None => return None,
+            Some(c) => return c.Upgrade(),
+        }
     }
 
     fn exists(&self, task: &Task, root: &Dirent, name: &str) -> bool {
@@ -433,29 +548,26 @@ impl Dirent {
         flags: &FileFlags,
         perms: &FilePermissions,
     ) -> Result<File> {
-        let _a = RENAME.write();
+        let _a = RENAME.read();
+        let _dm = self.dirMu.write();
 
         if self.exists(task, root, name) {
             return Err(Error::SysError(SysErr::EEXIST));
         }
 
-        let frozen = (self.0).0.lock().frozen;
-
         let mut inode = self.Inode();
-        if frozen && inode.IsVirtual() {
-            return Err(Error::SysError(SysErr::ENOENT));
-        }
-
         let file = inode.Create(task, self, name, flags, perms)?;
 
         let child = file.Dirent.clone();
 
-        self.AddChild(&child);
+        self.AddChild(String::from(name), &child);
         child.ExtendReference();
         if SHARESPACE.config.read().EnableInotify {
-            inode.Watches().Notify(name,
+            self.Watches().Notify(name,
                                    InotifyEvent::IN_CREATE,
-                                   0);
+                                   0,
+                                   EventType::InodeEvent,
+                                   false);
         }
 
         return Ok(file);
@@ -468,29 +580,14 @@ impl Dirent {
         name: &str,
         create: &mut FnMut() -> Result<()>,
     ) -> Result<()> {
-        let _a = RENAME.write();
+        let _a = RENAME.read();
+        let _dm = self.dirMu.write();
 
         if self.exists(task, root, name) {
             return Err(Error::SysError(SysErr::EEXIST));
         }
 
-        let fronzon = (self.0).0.lock().frozen;
-
-        let inode = self.Inode();
-        if fronzon && inode.IsVirtual() {
-            return Err(Error::SysError(SysErr::ENOENT));
-        }
-
-        let remove = match (self.0).0.lock().Children.get(name) {
-            Some(_) => true,
-
-            None => false,
-        };
-
-        if remove {
-            (self.0).0.lock().Children.remove(name);
-        }
-
+        self.children.lock().remove(name);
         return create();
     }
 
@@ -505,10 +602,14 @@ impl Dirent {
             let mut inode = self.Inode();
             inode.CreateLink(task, self, oldname, newname)?;
             if SHARESPACE.config.read().EnableInotify {
-                inode.Watches().Notify(newname,
-                                            InotifyEvent::IN_CREATE,
-                                            0);
+                self.Watches().Notify(newname,
+                                       InotifyEvent::IN_CREATE,
+                                       0,
+                                       EventType::PathEvent,
+                                       false);
             }
+            self.children.lock().remove(oldname);
+            self.children.lock().remove(newname);
             return Ok(())
         });
     }
@@ -532,15 +633,19 @@ impl Dirent {
 
         return self.genericCreate(task, root, name, &mut || -> Result<()> {
             inode.CreateHardLink(task, self, &target, name)?;
+            self.children.lock().remove(name);
+
             if SHARESPACE.config.read().EnableInotify {
-                targetInode.Watches().Notify(name,
+                target.Watches().Notify("",
                                              InotifyEvent::IN_ATTRIB,
-                                             0);
-            }
-            if SHARESPACE.config.read().EnableInotify {
-                inode.Watches().Notify(name,
+                                             0,
+                                             EventType::InodeEvent,
+                                             false);
+                self.Watches().Notify(name,
                                        InotifyEvent::IN_CREATE,
-                                       0);
+                                       0,
+                                       EventType::InodeEvent,
+                                       false);
             }
             return Ok(())
         });
@@ -557,10 +662,14 @@ impl Dirent {
             let mut inode = self.Inode();
             let ret = inode.CreateDirectory(task, self, name, perms);
             if SHARESPACE.config.read().EnableInotify {
-                inode.Watches().Notify(name,
+                self.Watches().Notify(name,
                                        InotifyEvent::IN_ISDIR | InotifyEvent::IN_CREATE,
-                                       0);
+                                       0,
+                                       EventType::PathEvent,
+                                       false);
             }
+
+            self.children.lock().remove(name);
             return ret;
         });
     }
@@ -575,8 +684,8 @@ impl Dirent {
     ) -> Result<Dirent> {
         let result = self.genericCreate(task, root, name, &mut || -> Result<()> {
             let inode = self.Inode();
-            let childDir = inode.Bind(task, name, data, perms)?;
-            self.AddChild(&childDir);
+            let childDir = inode.Bind(task, self, name, data, perms)?;
+            self.AddChild(String::from(name), &childDir);
             childDir.ExtendReference();
             return Ok(());
         });
@@ -592,9 +701,11 @@ impl Dirent {
         let inode = self.Inode();
         let childDir = inode.Lookup(task, name)?;
         if SHARESPACE.config.read().EnableInotify {
-            inode.Watches().Notify(name,
+            self.Watches().Notify(name,
                                    InotifyEvent::IN_CREATE,
-                                   0);
+                                   0,
+                                   EventType::InodeEvent,
+                                   false);
         }
 
         return Ok(childDir);
@@ -610,10 +721,13 @@ impl Dirent {
         return self.genericCreate(task, root, name, &mut || -> Result<()> {
             let mut inode = self.Inode();
             inode.CreateFifo(task, self, name, perms)?;
+            self.children.lock().remove(name);
             if SHARESPACE.config.read().EnableInotify {
-                inode.Watches().Notify(name,
+                self.Watches().Notify(name,
                                        InotifyEvent::IN_CREATE,
-                                       0);
+                                       0,
+                                       EventType::InodeEvent,
+                                       false);
             }
             return Ok(())
         });
@@ -632,70 +746,35 @@ impl Dirent {
         return (dot, dot);
     }
 
-    fn readdirFrozen(
-        &self,
-        task: &Task,
-        root: &Dirent,
-        offset: i64,
-        dirCtx: &mut DirCtx,
-    ) -> (i64, Result<i64>) {
-        let mut map = BTreeMap::new();
-
-        let (dot, dotdot) = self.GetDotAttrs(root);
-
-        map.insert(".".to_string(), dot);
-        map.insert("..".to_string(), dotdot);
-
-        for (name, d) in &(self.0).0.lock().Children {
-            match d.upgrade() {
-                Some(subd) => {
-                    let inode = subd.0.lock().Inode.clone();
-                    let dentAttr = inode.StableAttr().DentAttr();
-                    map.insert(name.clone(), dentAttr);
-                }
-                None => (),
-            }
-        }
-
-        let mut i = 0;
-        for (name, dent) in &map {
-            if i >= offset {
-                match dirCtx.DirEmit(task, name, dent) {
-                    Err(e) => return (i, Err(e)),
-                    Ok(()) => (),
-                }
-            }
-
-            i += 1;
-        }
-
-        return (i, Ok(0));
-    }
-
     pub fn flush(&self) {
         let mut expired = Vec::new();
-        let mut d = (self.0).0.lock();
+        let mut current = Vec::new();
+        let mut children = self.children.lock();
 
-        for (n, w) in &d.Children {
-            match w.upgrade() {
+        for (n, w) in children.iter() {
+            match w.Upgrade() {
                 None => expired.push(n.clone()),
                 Some(cd) => {
-                    let dirent = Dirent(cd.clone());
+                    let dirent = cd.clone();
                     dirent.flush();
                     dirent.DropExtendedReference();
+                    current.push(dirent);
                 }
             }
         }
 
         for n in &expired {
-            d.Children.remove(n);
+            children.remove(n);
         }
+
+        drop(children);
+        drop(current);
+        drop(expired);
     }
 
     pub fn IsMountPoint(&self) -> bool {
-        let d = (self.0).0.lock();
-
-        return d.mounted || d.IsRoot();
+        let mounted = self.main.lock().mounted;
+        return mounted || self.IsRoot();
     }
 
     pub fn Mount(&self, inode: &Inode) -> Result<Dirent> {
@@ -704,51 +783,37 @@ impl Dirent {
         }
 
         let parent = self.Parent().unwrap();
-        let parentInode = parent.Inode();
-        if (parent.0).0.lock().frozen && !parentInode.IsVirtual() {
-            return Err(Error::SysError(SysErr::ENOENT));
-        }
+        let replacement = Dirent::New(inode, &self.Name());
+        replacement.main.lock().mounted = true;
 
-        let replacement = Arc::new((
-            QMutex::new(InterDirent::New(inode.clone(), &(self.0).0.lock().Name)),
-            NewUID(),
-        ));
-        replacement.0.lock().mounted = true;
+        let name = self.Name();
+        parent.AddChild(name, &replacement);
 
-        parent.AddChild(&replacement);
-
-        return Ok(Dirent(replacement));
+        return Ok(replacement);
     }
 
     pub fn UnMount(&self, replace: &Dirent) -> Result<()> {
         let parent = self
             .Parent()
             .expect("unmount required the parent is not none");
-        let parentInode = parent.Inode();
-        if (parent.0).0.lock().frozen && !parentInode.IsVirtual() {
-            return Err(Error::SysError(SysErr::ENOENT));
-        }
-
-        let old = parent.addChild(&replace.0);
+        let old = parent.AddChild(replace.Name(), replace);
 
         match old {
             None => panic!("mount must mount over an existing dirent"),
             Some(_) => (),
         }
 
-        (self.0).0.lock().mounted = false;
-
+        self.main.lock().mounted = false;
         return Ok(());
     }
 
     pub fn Remove(&self, task: &Task, root: &Dirent, name: &str, dirPath: bool) -> Result<()> {
+        let _a = RENAME.read();
+        let _dm = self.dirMu.write();
+
         let mut inode = self.Inode();
 
-        if (self.0).0.lock().frozen && !inode.IsVirtual() {
-            return Err(Error::SysError(SysErr::ENOENT));
-        }
-
-        let child = self.Walk(task, root, name)?;
+        let child = self.walk(task, root, name)?;
         let childInode = child.Inode();
         if childInode.StableAttr().IsDir() {
             return Err(Error::SysError(SysErr::EISDIR));
@@ -761,13 +826,7 @@ impl Dirent {
         }
 
         inode.Remove(task, self, &child)?;
-
-        // Link count changed, this only applies to non-directory nodes.
-        if SHARESPACE.config.read().EnableInotify {
-            childInode.Watches().Notify("", InotifyEvent::IN_ATTRIB, 0);
-        }
-
-        (self.0).0.lock().Children.remove(name);
+        self.children.lock().remove(name);
         child.DropExtendedReference();
 
         // Finally, let inotify know the child is being unlinked. Drop any extra
@@ -776,27 +835,27 @@ impl Dirent {
         // inode may have other links. If this was the last link, the events for the
         // watch removal will be queued by the inode destructor.
         if SHARESPACE.config.read().EnableInotify {
-            childInode.Watches().MarkUnlinked();
-            childInode.Watches().Unpin(&child);
+            child.Watches().MarkUnlinked();
+            child.Watches().Destroy();
+        }
+
+        child.SetDeleted();
+
+        if SHARESPACE.config.read().EnableInotify {
+            InotifyRemoveChild(task, Some(child.Watches()), Some(self.Watches()), name)
         }
 
         // trigger inode destroy
         drop(child);
         drop(childInode);
-
-        if SHARESPACE.config.read().EnableInotify {
-            inode.Watches().Notify(name, InotifyEvent::IN_DELETE, 0);
-        }
-
         return Ok(());
     }
 
     pub fn RemoveDirectory(&self, task: &Task, root: &Dirent, name: &str) -> Result<()> {
-        let mut inode = self.Inode();
-        if (self.0).0.lock().frozen && !inode.IsVirtual() {
-            return Err(Error::SysError(SysErr::ENOENT));
-        }
+        let _a = RENAME.read();
+        let _dm = self.dirMu.write();
 
+        let mut inode = self.Inode();
         if name == "." {
             return Err(Error::SysError(SysErr::EINVAL));
         }
@@ -805,7 +864,7 @@ impl Dirent {
             return Err(Error::SysError(SysErr::ENOTEMPTY));
         }
 
-        let child = self.Walk(task, root, name)?;
+        let child = self.walk(task, root, name)?;
         let childInode = child.Inode();
 
         if !childInode.StableAttr().IsDir() {
@@ -816,20 +875,24 @@ impl Dirent {
             return Err(Error::SysError(SysErr::EBUSY));
         }
 
+        child.SetDeleted();
+
         inode.Remove(task, self, &child)?;
 
-        (self.0).0.lock().Children.remove(name);
+        self.children.lock().remove(name);
 
         child.DropExtendedReference();
 
         // Finally, let inotify know the child is being unlinked. Drop any extra
         // refs from inotify to this child dirent.
         if SHARESPACE.config.read().EnableInotify {
-            childInode.Watches().MarkUnlinked();
-            childInode.Watches().Unpin(&child);
-            inode.Watches().Notify(name,
+            child.Watches().MarkUnlinked();
+            child.Watches().Destroy();
+            self.Watches().Notify(name,
                                    InotifyEvent::IN_ISDIR | InotifyEvent::IN_DELETE,
-                                   0);
+                                   0,
+                                   EventType::InodeEvent,
+                                   true);
         }
 
         return Ok(());
@@ -856,13 +919,13 @@ impl Dirent {
         let mut child = newParent.clone();
 
         loop {
-            let p = match &(child.0).0.lock().Parent {
+            let p = match child.Parent() {
                 None => break,
-                Some(ref dirent) => dirent.clone(),
+                Some(dirent) => dirent,
             };
 
             if Arc::ptr_eq(&oldParent.0, &p.0) {
-                if &(child.0).0.lock().Name == oldName {
+                if child.main.lock().Name == oldName {
                     return Err(Error::SysError(SysErr::EINVAL));
                 }
             }
@@ -872,14 +935,6 @@ impl Dirent {
 
         let oldInode = oldParent.Inode();
         let newInode = newParent.Inode();
-
-        if (oldParent.0).0.lock().frozen && !oldInode.IsVirtual() {
-            return Err(Error::SysError(SysErr::ENOENT));
-        }
-
-        if (newParent.0).0.lock().frozen && !newInode.IsVirtual() {
-            return Err(Error::SysError(SysErr::ENOENT));
-        }
 
         oldInode.CheckPermission(
             task,
@@ -954,45 +1009,29 @@ impl Dirent {
 
         let mut newInode = renamed.Inode();
         newInode.Rename(task, oldParent, &renamed, newParent, newName, exist)?;
-        (renamed.0).0.lock().Name = newName.to_string();
+        renamed.main.lock().Name = newName.to_string();
 
-        (newParent.0).0.lock().Children.remove(newName);
-        (oldParent.0).0.lock().Children.remove(oldName);
+        newParent.children.lock().remove(newName);
+        oldParent.children.lock().remove(oldName);
 
-        (newParent.0)
-            .0
+        newParent
+            .children
             .lock()
-            .Children
-            .insert(newName.to_string(), Arc::downgrade(&renamed));
-
-        // Queue inotify events for the rename.
-        let mut ev : u32 = 0;
-        if newInode.StableAttr().IsDir() {
-            ev |=  InotifyEvent::IN_ISDIR;
-        }
+            .insert(newName.to_string(), renamed.Downgrade());
 
         if SHARESPACE.config.read().EnableInotify {
-            let cookie = NewInotifyCookie();
-            oldParent.Inode().Watches().Notify(
-                oldName,
-                ev | InotifyEvent::IN_MOVED_FROM,
-                cookie);
-            newParent.Inode().Watches().Notify(
-                newName,
-                ev | InotifyEvent::IN_MOVED_TO,
-                cookie);
-
-            // Somewhat surprisingly, self move events do not have a cookie.
-            renamed.Inode().Watches().Notify(
-                "",
-                InotifyEvent::IN_MOVE_SELF,
-                0);
+            let isDir = newInode.StableAttr().IsDir();
+            InotifyRename(task,
+                          Some(renamed.Watches()),
+                          Some(oldParent.Watches()),
+                          Some(newParent.Watches()),
+                          oldName,
+                          newName,
+                          isDir);
         }
 
         renamed.DropExtendedReference();
-
-        renamed.Inode().Watches().Unpin(&renamed);
-
+        renamed.Watches().Destroy();
         renamed.flush();
 
         return Ok(());
@@ -1006,10 +1045,6 @@ impl Dirent {
         newName: &str,
     ) -> Result<()> {
         let inode = parent.Inode();
-
-        if (parent.0).0.lock().frozen && !inode.IsVirtual() {
-            return Err(Error::SysError(SysErr::ENOENT));
-        }
 
         inode.CheckPermission(
             task,
@@ -1062,6 +1097,7 @@ impl Dirent {
 
                 replaced.DropExtendedReference();
                 replaced.flush();
+                replaced.SetDeleted();
 
                 exist = true;
             }
@@ -1074,36 +1110,25 @@ impl Dirent {
         let mut newInode = renamed.Inode();
         newInode.Rename(task, parent, &renamed, parent, newName, exist)?;
 
-        (renamed.0).0.lock().Name = newName.to_string();
+        renamed.main.lock().Name = newName.to_string();
 
-        let mut p = (parent.0).0.lock();
-        p.Children.remove(oldName);
-        p.Children
-            .insert(newName.to_string(), Arc::downgrade(&renamed.0));
-
-        // Queue inotify events for the rename.
-        let mut ev : u32 = 0;
-        if newInode.StableAttr().IsDir() {
-            ev |=  InotifyEvent::IN_ISDIR;
+        {
+            let mut p = parent.children.lock();
+            p.remove(oldName);
+            p.insert(newName.to_string(), renamed.Downgrade());
         }
 
+        // Queue inotify events for the rename.
         if SHARESPACE.config.read().EnableInotify {
-            let cookie = NewInotifyCookie();
+            let isDir = newInode.StableAttr().IsDir();
+            InotifyRename(task,
+                          Some(renamed.Watches()),
+                          Some(parent.Watches()),
+                          Some(parent.Watches()),
+                          oldName,
+                          newName,
+                          isDir);
 
-            inode.Watches().Notify(
-                oldName,
-                ev | InotifyEvent::IN_MOVED_FROM,
-                cookie);
-            inode.Watches().Notify(
-                newName,
-                ev | InotifyEvent::IN_MOVED_TO,
-                cookie);
-
-            // Somewhat surprisingly, self move events do not have a cookie.
-            newInode.Watches().Notify(
-                "",
-                InotifyEvent::IN_MOVE_SELF,
-                0);
         }
 
         renamed.DropExtendedReference();
@@ -1177,7 +1202,7 @@ impl Dirent {
     // depending on the event masks. InotifyEvent automatically provides the name of
     // the current dirent as the subject of the event as required, and adds the
     // IN_ISDIR flag for dirents that refer to directories.
-    pub fn InotifyEvent(&self, event: u32, cookie: u32) {
+    pub fn InotifyEvent(&self, event: u32, cookie: u32, et: EventType) {
         if SHARESPACE.config.read().EnableInotify {
             let _ = RENAME.read();
 
@@ -1189,16 +1214,24 @@ impl Dirent {
             }
 
             // The ordering below is important, Linux always notifies the parent first.
-            let parent = (self.0).0.lock().Parent.clone();
+            let parent = self.Parent();
             match parent {
                 None => (),
                 Some(p) => {
-                    let name = (self.0).0.lock().Name.clone();
-                    p.Inode().Watches().Notify(&name, event, cookie);
+                    let name = self.Name();
+                    p.Watches().Notify(&name,
+                                               event,
+                                               cookie,
+                                               et,
+                                               self.IsDeleted());
                 }
             }
-            
-            inode.Watches().Notify("", event, cookie);
+
+            self.Watches().Notify("",
+                                   event,
+                                   cookie,
+                                   et,
+                                   self.IsDeleted());
         }
     }
 
@@ -1221,111 +1254,109 @@ impl Dirent {
     }
 }
 
-pub fn DirentReadDir(
-    task: &Task,
-    d: &Dirent,
-    it: &FileOperations,
-    root: &Dirent,
-    dirCtx: &mut DirCtx,
-    offset: i64,
-) -> Result<i64> {
-    let (offset, err) = direntReadDir(task, d, it, root, dirCtx, offset);
-
-    if dirCtx.Serializer.Written() > 0 {
-        return Ok(offset);
-    }
-
-    return err;
+pub struct DirentInternal {
+    pub id: u64,
+    pub inode: Inode,
+    pub watches: Watches,
+    pub main: QMutex<DirentMain>,
+    pub dirMu: QRwLock<()>,
+    pub cacheMu: QMutex<()>,
+    pub children: QMutex<BTreeMap<String, DirentWeak>>,
 }
 
-fn direntReadDir(
-    task: &Task,
-    d: &Dirent,
-    it: &FileOperations,
-    root: &Dirent,
-    dirCtx: &mut DirCtx,
-    offset: i64,
-) -> (i64, Result<i64>) {
-    let mut offset = offset;
-
-    let inode = d.Inode();
-    if !inode.StableAttr().IsDir() {
-        return (0, Err(Error::SysError(SysErr::ENOTDIR)));
-    }
-
-    if offset == FILE_MAX_OFFSET {
-        return (offset, Ok(0));
-    }
-
-    if (d.0).0.lock().frozen {
-        return d.readdirFrozen(task, root, offset, dirCtx);
-    }
-
-    let (dot, dotdot) = d.GetDotAttrs(root);
-
-    if offset == 0 {
-        match dirCtx.DirEmit(task, &".".to_string(), &dot) {
-            Err(e) => return (offset, Err(e)),
-            Ok(_) => (),
+impl Default for DirentInternal {
+    fn default() -> Self {
+        return Self {
+            id: NewUID(),
+            inode: Inode::default(),
+            watches: Watches::default(),
+            main: Default::default(),
+            dirMu: Default::default(),
+            cacheMu: Default::default(),
+            children: Default::default(),
         }
-
-        offset += 1;
     }
-
-    if offset == 1 {
-        match dirCtx.DirEmit(task, &"..".to_string(), &dotdot) {
-            Err(e) => return (offset, Err(e)),
-            Ok(_) => (),
-        }
-
-        offset += 1;
-    }
-
-    offset -= 2;
-
-    let (mut newOffset, err) = it.IterateDir(task, d, dirCtx, offset as i32);
-
-    if (newOffset as i64) < offset {
-        //let msg = format!("node.Readdir returned offset {} less than input offset {}", newOffset, offset);
-        panic!("node.Readdir fail");
-    }
-
-    newOffset += 2;
-    return (newOffset as i64, err);
 }
 
 #[derive(Clone)]
-pub struct InterDirent {
+pub struct DirentMain {
     pub Inode: Inode,
     pub Name: String,
     pub Parent: Option<Dirent>,
-    pub Children: BTreeMap<String, Weak<(QMutex<InterDirent>, u64)>>,
+    pub mounted: bool,
+    pub deleted: bool,
+}
 
-    pub frozen: bool,
+impl Default for DirentMain {
+    fn default() -> Self {
+        return Self {
+            Inode: Inode::default(),
+            Name: "".to_string(),
+            Parent: None,
+            mounted: false,
+            deleted: false,
+        };
+    }
+}
+
+impl DirentMain {
+    pub fn New(inode: Inode, name: &str) -> Self {
+        return Self {
+            Inode: inode.clone(),
+            Name: name.to_string(),
+            Parent: None,
+            mounted: false,
+            deleted: false,
+        };
+    }
+
+    pub fn NewTransient(inode: &Inode) -> Self {
+        return Self {
+            Inode: inode.clone(),
+            Name: "transient".to_string(),
+            Parent: None,
+            mounted: false,
+            deleted: false,
+        };
+    }
+
+    pub fn IsRoot(&self) -> bool {
+        match &self.Parent {
+            None => return true,
+            _ => return false,
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct DirentMain1 {
+    pub Inode: Inode,
+    pub Name: String,
+    pub Parent: Option<Dirent>,
+    pub Children: BTreeMap<String, Weak<(QMutex<DirentMain1>, u64)>>,
+
     pub mounted: bool,
 }
 
-impl Default for InterDirent {
+impl Default for DirentMain1 {
     fn default() -> Self {
         return Self {
             Inode: Inode::default(),
             Name: "".to_string(),
             Parent: None,
             Children: BTreeMap::new(),
-            frozen: false,
             mounted: false,
         };
     }
 }
 
-impl InterDirent {
+impl DirentMain1 {
     pub fn New(inode: Inode, name: &str) -> Self {
         return Self {
             Inode: inode.clone(),
             Name: name.to_string(),
             Parent: None,
             Children: BTreeMap::new(),
-            frozen: false,
             mounted: false,
         };
     }
@@ -1336,7 +1367,6 @@ impl InterDirent {
             Name: "transient".to_string(),
             Parent: None,
             Children: BTreeMap::new(),
-            frozen: false,
             mounted: false,
         };
     }
@@ -1348,3 +1378,4 @@ impl InterDirent {
         }
     }
 }
+

@@ -179,13 +179,6 @@ impl FileOperations for OverlayFileOperations {
         };
 
         let dirent = file.Dirent.clone();
-        let frozen = (dirent.0).0.lock().frozen;
-        if frozen {
-            let res = DirentReadDir(task, &dirent, self, &root, &mut dirCtx, offset)?;
-            *dirCursor = dirCtx.DirCursor;
-            return Ok(res);
-        }
-
         let inode = dirent.Inode();
         let o = inode
             .lock()
@@ -282,7 +275,7 @@ impl FileOperations for OverlayFileOperations {
         return (offset + n as i32, Ok(n as i64));
     }
 
-    fn Mappable(&self) -> Result<HostIopsMappable> {
+    fn Mappable(&self) -> Result<MMappable> {
         let ops = self.FileOps();
         return ops.Mappable();
     }

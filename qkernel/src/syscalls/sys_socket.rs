@@ -254,15 +254,15 @@ pub fn SysBind(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
 pub fn SysListen(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let fd = args.arg0 as i32;
-    let backlog = args.arg1 as i32;
+    let backlog = args.arg1 as u32;
 
     let file = task.GetFile(fd)?;
 
     let sock = file.FileOp.clone();
     let mut backlog = backlog;
 
-    if backlog >= MAX_LISTEN_BACKLOG as i32 {
-        backlog = MAX_LISTEN_BACKLOG as i32;
+    if backlog >= MAX_LISTEN_BACKLOG {
+        backlog = MAX_LISTEN_BACKLOG;
     }
 
     // Accept one more than the configured listen backlog to keep in parity with
@@ -275,7 +275,7 @@ pub fn SysListen(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     // backlog and not >=.
     let backlog = backlog + 1;
 
-    let res = sock.Listen(task, backlog);
+    let res = sock.Listen(task, backlog as i32);
     return res;
 }
 
@@ -784,7 +784,8 @@ pub fn SysRecvFrom(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             task.CopyOutObj(&(senderLen as u32), nameLenPtr)?;
         } else {
             // has only type
-            task.CopyOutObj(&(0 as u32), nameLenPtr)?;
+            let len : u32 = 0;
+            task.CopyOutObj(&len, nameLenPtr)?;
         }
     }
 

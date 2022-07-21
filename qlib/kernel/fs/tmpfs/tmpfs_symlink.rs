@@ -239,7 +239,7 @@ impl InodeOperations for TmpfsSymlink {
         return Ok(TMPFS_FSINFO);
     }
 
-    fn Mappable(&self) -> Result<HostIopsMappable> {
+    fn Mappable(&self) -> Result<MMappable> {
         return self.0.Mappable();
     }
 }
