@@ -82,20 +82,25 @@ impl PodInformer {
     fn handle(&mut self, pod_message: &PodMessage) {
         let ip = pod_message.ip;
         let mut pods_map = RDMA_CTLINFO.pods.lock();
+        let mut containerids_map = RDMA_CTLINFO.containerids.lock();
         if pod_message.event_type == EVENT_TYPE_SET {
             let pod = Pod {
                 key: pod_message.key.clone(),
                 ip: ip,
-                node_name : pod_message.node_name .clone(),
+                node_name : pod_message.node_name.clone(),
+                container_id: pod_message.container_id.clone(),
                 resource_version: pod_message.resource_version,
             };
-            pods_map.insert(ip, pod);
+            containerids_map.insert(pod.container_id.clone(), pod.ip.clone());
+            pods_map.insert(ip, pod);            
             if pod_message.resource_version > self.max_resource_version {
                 self.max_resource_version = pod_message.resource_version;
             }
         } else if pod_message.event_type == EVENT_TYPE_DELETE {
             if pods_map.contains_key(&ip) {
                 if pods_map[&ip].resource_version < pod_message.resource_version {
+                    let container_id = &pods_map[&ip].container_id;
+                    containerids_map.remove(container_id);
                     pods_map.remove(&ip);                    
                 }
             }
@@ -105,5 +110,6 @@ impl PodInformer {
         }
         println!("Handled Pod: {:?}", pod_message);
         println!("Debug: pods_map len:{} {:?}", pods_map.len(), pods_map);
+        println!("Debug: containerids_map len:{} {:?}", containerids_map.len(), containerids_map);
     }
 }
