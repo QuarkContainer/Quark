@@ -76,7 +76,7 @@ fn FdsToFiles(task: &Task, fds: &[i32]) -> Vec<File> {
             break;
         }
 
-        let file = match File::NewFileFromFd(task, *fd, &task.FileOwner(), false) {
+        let file = match File::NewFileFromFd(task, *fd, &task.FileOwner(), false, false) {
             Err(e) => {
                 info!("Error creating file from host FD: {:?}", e);
                 break;

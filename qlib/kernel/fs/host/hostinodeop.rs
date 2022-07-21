@@ -1153,8 +1153,6 @@ impl InodeOperations for HostInodeOp {
         task: &Task,
         _dir: &Inode,
         dirent: &Dirent,
-
-
         flags: FileFlags,
     ) -> Result<File> {
         let fops = self.GetHostFileOp(task);

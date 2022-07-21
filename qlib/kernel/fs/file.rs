@@ -37,6 +37,7 @@ use super::super::uid::*;
 use super::super::super::singleton::*;
 use super::super::fs::flags::*;
 use super::super::fs::host::hostfileop::*;
+use super::super::fs::host::fifoiops::*;
 use super::super::kernel::fasync::*;
 use super::super::memmgr::*;
 use super::super::task::*;
@@ -527,7 +528,7 @@ impl File {
         return File(Arc::new(f));
     }
 
-    pub fn NewFileFromFd(task: &Task, fd: i32, mounter: &FileOwner, isTTY: bool) -> Result<Self> {
+    pub fn NewFileFromFd(task: &Task, fd: i32, mounter: &FileOwner, stdio: bool, isTTY: bool) -> Result<Self> {
         let mut fstat = LibcStat::default();
 
         let ret = Fstat(fd, &mut fstat) as i32;
@@ -558,23 +559,31 @@ impl File {
                     &MountSourceFlags::default(),
                     false,
                 );
-                let inode =
-                    Inode::NewHostInode(task, &Arc::new(QMutex::new(msrc)), fd, &fstat, fileFlags.Write)?;
+                let inode = if stdio {
+                    Inode::NewStdioInode(task, &Arc::new(QMutex::new(msrc)), fd, &fstat, fileFlags.Write)?
+                } else {
+                    Inode::NewHostInode(task, &Arc::new(QMutex::new(msrc)), fd, &fstat, fileFlags.Write)?
+                };
+
                 let name = format!("host:[{}]", inode.lock().StableAttr.InodeId);
                 let dirent = Dirent::New(&inode, &name);
 
                 let iops = inode.lock().InodeOp.clone();
-                let hostiops = iops.as_any().downcast_ref::<HostInodeOp>().unwrap();
+                if !stdio && iops.InodeType() == InodeType::Pipe {
+                    let hostiops = iops.as_any().downcast_ref::<FifoIops>().unwrap();
+                    let file = hostiops.GetFile(task, &inode, &dirent, fileFlags)?;
+                    return Ok(file)
+                } else {
+                    let hostiops = iops.as_any().downcast_ref::<HostInodeOp>().unwrap();
+                    let fops = hostiops.GetHostFileOp(task);
+                    let wouldBlock = inode.lock().InodeOp.WouldBlock();
 
-                //let fops = iops.GetFileOp(task)?;
-                let fops = hostiops.GetHostFileOp(task);
-                let wouldBlock = inode.lock().InodeOp.WouldBlock();
+                    if isTTY {
+                        return Ok(Self::NewTTYFile(&dirent, &fileFlags, fops));
+                    }
 
-                if isTTY {
-                    return Ok(Self::NewTTYFile(&dirent, &fileFlags, fops));
+                    return Ok(Self::NewHostFile(&dirent, &fileFlags, fops, wouldBlock));
                 }
-
-                return Ok(Self::NewHostFile(&dirent, &fileFlags, fops, wouldBlock));
             }
         }
     }
