@@ -121,8 +121,8 @@ int main(int argc, char const *argv[])
         return -1; 
     }
 
-    printf("Accept Remote IP address is: %s\n", inet_ntoa(serv_addr.sin_addr));
-    printf("Accept Remote port is: %d\n", (int) ntohs(serv_addr.sin_port));
+    printf("Remote IP address is: %s\n", inet_ntoa(serv_addr.sin_addr));
+    printf("Remote port is: %d\n", (int) ntohs(serv_addr.sin_port));
 
     // struct sockaddr_in sa;
     // int sa_len;

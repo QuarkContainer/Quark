@@ -832,10 +832,10 @@ impl SockOperations for SocketOperations {
             match sockAddr {
                 SockAddr::Inet(ipv4) => {
                     let ipAddr = u32::from_be_bytes(ipv4.Addr);
-                    let port = ipv4.Port.to_be();
+                    let port = ipv4.Port.to_le();
                     debug!("SocketOperations::Connect, ipAddr: {}, port: {}", ipAddr, port);
                     //TODO: get local ip and port
-                    let srcIpAddr = 101099712;//u32::from(Ipv4Addr::from_str("192.168.6.6").unwrap()).to_be();
+                    let srcIpAddr = 3232237062;//u32::from(Ipv4Addr::from_str("192.168.6.6").unwrap()).to_be();
                     let srcPort = 16866u16.to_be();
                     //TODO: should update ipAddr and port in SockInfo??
                     let _ret = GlobalRDMASvcCli().connect(self.fd as u32, ipAddr, port, srcIpAddr, srcPort); //192.168.6.8:16868
@@ -1053,7 +1053,7 @@ impl SockOperations for SocketOperations {
                     let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
                     *fdInfo.lock().sockInfo.lock() = SockInfo::Socket(SocketInfo {
                         ipAddr: u32::from_be_bytes([192, 168, 6, 8]), //ipAddr: u32::from_be_bytes(ipv4.Addr), // ipAddr: 3232237064,
-                        port: ipv4.Port.to_be(),               // port: 58433,
+                        port: ipv4.Port.to_le(),               // port: 58433,
                     }); //192.168.6.8:16868
                 }
                 _ => {
@@ -1454,7 +1454,7 @@ impl SockOperations for SocketOperations {
                 Addr: ipAddr.to_be_bytes(),
                 Zero: [0; 8]
             });
-            let len = 0;
+            let len = sockAddr.Len();
             sockAddr.Marsh(socketaddr, len)?;
             //TODO: handle unhappy case
             return Ok(len as i64);
