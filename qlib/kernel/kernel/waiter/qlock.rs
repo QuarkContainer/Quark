@@ -19,9 +19,10 @@ use core::ops::Deref;
 use core::ops::DerefMut;
 
 use super::super::super::super::common::*;
+use super::super::super::taskMgr;
 use super::queue::*;
 use super::*;
-
+/*
 #[derive(Default)]
 pub struct QLock<T: ?Sized> {
     pub locked: QMutex<bool>,
@@ -122,7 +123,7 @@ impl<'a, T: ?Sized + 'a> Drop for QLockGuard<'a, T> {
     fn drop(&mut self) {
         self.lock.Unlock();
     }
-}
+}*/
 
 #[derive(Default, Clone)]
 pub struct QAsyncLock {
@@ -387,5 +388,76 @@ impl QAsyncWriteLockGuard {
 impl Drop for QAsyncWriteLockGuard {
     fn drop(&mut self) {
         self.Unlock();
+    }
+}
+
+#[derive(Default)]
+pub struct QLock<T: ?Sized> {
+    pub locked: QMutex<bool>,
+    pub data: UnsafeCell<T>,
+}
+
+pub struct QLockGuard<'a, T: ?Sized + 'a> {
+    pub lock: &'a QLock<T>,
+}
+
+// Same unsafe impls as `std::sync::QMutex`
+unsafe impl<T: ?Sized + Send> Sync for QLock<T> {}
+unsafe impl<T: ?Sized + Send> Send for QLock<T> {}
+
+impl<T> QLock<T> {
+    pub fn New(data: T) -> Self {
+        return Self {
+            locked: QMutex::new(false),
+            data: UnsafeCell::new(data),
+        };
+    }
+}
+
+impl<T: ?Sized> QLock<T> {
+    pub fn Unlock(&self) {
+        let mut l = self.locked.lock();
+        assert!(*l == true, "QLock::Unlock misrun");
+        *l = false;
+    }
+
+    pub fn lock(&self) -> QLockGuard<T> {
+        loop {
+            let mut l = self.locked.lock();
+            if *l == false {
+                *l = true;
+                break;
+            } else {
+                taskMgr::Yield();
+            }
+        }
+
+        return QLockGuard { lock: self };
+    }
+
+    pub fn Lock(&self, _task: &Task) -> Result<QLockGuard<T>> {
+        return Ok(self.lock());
+    }
+}
+
+impl<'a, T: ?Sized + 'a> Deref for QLockGuard<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        let data = unsafe { &mut *self.lock.data.get() };
+        &*data
+    }
+}
+
+impl<'a, T: ?Sized + 'a> DerefMut for QLockGuard<'a, T> {
+    fn deref_mut(&mut self) -> &mut T {
+        let data = unsafe { &mut *self.lock.data.get() };
+        &mut *data
+    }
+}
+
+impl<'a, T: ?Sized + 'a> Drop for QLockGuard<'a, T> {
+    fn drop(&mut self) {
+        self.lock.Unlock();
     }
 }
