@@ -123,6 +123,48 @@ impl<'a, T: ?Sized + 'a> Drop for QLockGuard<'a, T> {
     fn drop(&mut self) {
         self.lock.Unlock();
     }
+}
+
+#[derive(Default, Clone)]
+pub struct QAsyncLock {
+    pub locked: Arc<QMutex<bool>>,
+}
+
+#[derive(Default)]
+pub struct QAsyncLockGuard {
+    pub locked: Arc<QMutex<bool>>,
+}
+
+impl QAsyncLock {
+    pub fn Lock(&self, _task: &Task) -> QAsyncLockGuard {
+        loop {
+            let mut l = self.locked.lock();
+            if *l == false {
+                *l = true;
+                break;
+            }
+
+            taskMgr::Yield();
+        }
+
+        return QAsyncLockGuard {
+            locked: self.locked.clone(),
+        }
+    }
+}
+
+impl QAsyncLockGuard {
+    pub fn Unlock(&self) {
+        let mut l = self.locked.lock();
+        assert!(*l == true, "QLock::Unlock misrun");
+        *l = false;
+    }
+}
+
+impl Drop for QAsyncLockGuard {
+    fn drop(&mut self) {
+        self.Unlock();
+    }
 }*/
 
 #[derive(Default, Clone)]
@@ -199,6 +241,7 @@ impl Drop for QAsyncLockGuard {
         self.Unlock();
     }
 }
+
 
 pub enum RWState {
     NoLock,
