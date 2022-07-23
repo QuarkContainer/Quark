@@ -98,7 +98,7 @@ pub const SS_DISCONNECTING: i32 = 4; // In process of disconnecting.
 // duration for which a socket lingers before returning from Close.
 //
 // +stateify savable
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone, Copy)]
 pub struct LingerOption {
     Enabled: bool,
     Timeout: i64,
