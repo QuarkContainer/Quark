@@ -302,6 +302,7 @@ pub fn ReadAt(task: &Task, f: &File, dsts: &mut [IoVec], offset: i64) -> Result<
     }
 }
 
+pub const MAX_RW_COUNT : i64 = ((i32::MAX as u64) & !(PAGE_SIZE - 1)) as i64;
 
 // doSplice implements a blocking splice operation.
 pub fn DoSplice(
@@ -311,6 +312,22 @@ pub fn DoSplice(
     opts: &mut SpliceOpts,
     nonBlocking: bool,
 ) -> Result<i64> {
+    if opts.Length < 0
+        || opts.SrcStart < 0
+        || opts.DstStart < 0
+        || i64::MAX - opts.SrcStart < opts.Length
+        || i64::MAX - opts.DstStart < opts.Length {
+        return Err(Error::SysError(SysErr::EINVAL))
+    }
+
+    if opts.Length == 0 {
+        return Ok(0)
+    }
+
+    if opts.Length > MAX_RW_COUNT {
+        opts.Length = MAX_RW_COUNT;
+    }
+
     let general = task.blocker.generalEntry.clone();
 
     loop {
@@ -394,14 +411,15 @@ pub fn SysSplice(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    // Only non-blocking is meaningful. Note that unlike in Linux, this
-    // flag is applied consistently. We will have either fully blocking or
-    // non-blocking behavior below, regardless of the underlying files
-    // being spliced to. It's unclear if this is a bug or not yet.
-    let nonBlocking = (flags & SPLICE_F_NONBLOCK) != 0;
-
     let dst = task.GetFile(outFD)?;
     let src = task.GetFile(inFD)?;
+
+    // The operation is non-blocking if anything is non-blocking.
+    //
+    // N.B. This is a rather simplistic heuristic that avoids some
+    // poor edge case behavior since the exact semantics here are
+    // underspecified and vary between versions of Linux itself.
+    let nonBlocking = src.Flags().NonBlocking || dst.Flags().NonBlocking || (flags & SPLICE_F_NONBLOCK) != 0;
 
     // Construct our options.
     //
@@ -428,6 +446,10 @@ pub fn SysSplice(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
         if outOffset != 0 {
             let offset: i64 = if outOffset != 0 {
+                if !dst.Flags().PWrite {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
                 opts.DstOffset = true;
                 task.CopyInObj(outOffset)?
             } else {
@@ -443,6 +465,10 @@ pub fn SysSplice(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
 
         let offset: i64 = if inOffset != 0 {
+            if !src.Flags().Pread {
+                return Err(Error::SysError(SysErr::EINVAL));
+            }
+
             opts.SrcOffset = true;
             task.CopyInObj(inOffset)?
         } else {
@@ -472,8 +498,6 @@ pub fn SysTee(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let outFD = args.arg1 as i32;
     let count = args.arg2 as i64;
     let flags = args.arg3 as i32;
-
-    let MAX_RW_COUNT = Addr(i32::MAX as u64).RoundDown().unwrap().0 as i64;
 
     if count == 0 {
         return Ok(0)

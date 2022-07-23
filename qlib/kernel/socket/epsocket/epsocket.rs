@@ -472,7 +472,7 @@ pub fn clampBufSize(newsz: usize, min: usize, max: usize, ignoreMax: bool) -> us
 
 // setSockOptSocket implements SetSockOpt when level is SOL_SOCKET.
 pub fn SetSockOptSocket(
-    _task: &Task,
+    task: &Task,
     s: &FileOperations,
     ep: &BoundEndpoint,
     name: i32,
@@ -499,6 +499,22 @@ pub fn SetSockOptSocket(
             let val = unsafe { *(&optVal[0] as *const _ as u64 as *const i32) };
             let (min, max) = ReceiveBufferLimits();
             let clamped = clampBufSize(val as usize, min, max, false) as i32;
+
+            return ep.SetSockOpt(&SockOpt::ReceiveBufferSizeOption(clamped));
+        }
+        SO_RCVBUFFORCE => {
+            if optVal.len() < SIZEOF_I32 {
+                return Err(Error::SysError(SysErr::EINVAL));
+            }
+
+            if !task.Thread().HasCapability(Capability::CAP_SYS_ADMIN) {
+                return Err(Error::SysError(SysErr::EPERM));
+            }
+
+            assert!(optVal.len() >= 4);
+            let val = unsafe { *(&optVal[0] as *const _ as u64 as *const i32) };
+            let (min, max) = ReceiveBufferLimits();
+            let clamped = clampBufSize(val as usize, min, max, true) as i32;
 
             return ep.SetSockOpt(&SockOpt::ReceiveBufferSizeOption(clamped));
         }
