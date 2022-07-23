@@ -185,6 +185,8 @@ pub struct HostInodeOpIntern {
     pub mappable: Option<Mappable>,
     pub bufWriteLock: QAsyncLock,
     pub hasMappable: bool,
+
+    pub isMemfd: bool,
 }
 
 impl Default for HostInodeOpIntern {
@@ -201,6 +203,7 @@ impl Default for HostInodeOpIntern {
             size: 0,
             bufWriteLock: QAsyncLock::default(),
             hasMappable: false,
+            isMemfd: false,
         };
     }
 }
@@ -240,6 +243,7 @@ impl HostInodeOpIntern {
         wouldBlock: bool,
         fstat: &LibcStat,
         writeable: bool,
+        isMemfd: bool
     ) -> Self {
         let mut ret = Self {
             mops: mops.clone(),
@@ -253,6 +257,7 @@ impl HostInodeOpIntern {
             size: fstat.st_size,
             bufWriteLock: QAsyncLock::default(),
             hasMappable: false,
+            isMemfd: isMemfd
         };
 
         if ret.CanMap() {
@@ -487,9 +492,10 @@ impl HostInodeOp {
         wouldBlock: bool,
         fstat: &LibcStat,
         writeable: bool,
+        isMemfd: bool
     ) -> Self {
         let intern = Arc::new(QMutex::new(HostInodeOpIntern::New(
-            mops, fd, wouldBlock, fstat, writeable,
+            mops, fd, wouldBlock, fstat, writeable, isMemfd
         )));
 
         let ret = Self(intern);
@@ -523,6 +529,7 @@ impl HostInodeOp {
             false,
             &fstat,
             true,
+            true
         )));
 
         let ret = Self(intern);
@@ -837,6 +844,10 @@ impl HostInodeOp {
         _end: i64,
         syncType: SyncType,
     ) -> Result<()> {
+        if self.lock().isMemfd {
+            return Ok(())
+        }
+
         let fd = self.HostFd();
         let datasync = if syncType == SyncType::SyncData {
             true

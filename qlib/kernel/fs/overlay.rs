@@ -113,6 +113,7 @@ pub fn NewOverlayInode(_task: &Task, o: OverlayEntry, msrc: &Arc<QMutex<MountSou
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: Overlay,
+        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)));

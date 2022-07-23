@@ -62,6 +62,7 @@ fn NewTTYDevice(iops: &Arc<TTYDevice>, msrc: &Arc<QMutex<MountSource>>) -> Inode
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: None,
+        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)));
@@ -87,6 +88,7 @@ fn NewNullDevice(iops: &Arc<NullDevice>, msrc: &Arc<QMutex<MountSource>>) -> Ino
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: None,
+        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)));
@@ -112,6 +114,7 @@ fn NewZeroDevice(iops: &Arc<ZeroDevice>, msrc: &Arc<QMutex<MountSource>>) -> Ino
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: None,
+        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)));
@@ -137,6 +140,7 @@ fn NewFullDevice(iops: &Arc<FullDevice>, msrc: &Arc<QMutex<MountSource>>) -> Ino
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: None,
+        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)));
@@ -162,6 +166,7 @@ fn NewRandomDevice(iops: &Arc<RandomDevice>, msrc: &Arc<QMutex<MountSource>>, mi
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: None,
+        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)));
@@ -194,6 +199,7 @@ fn NewDirectory(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: None,
+        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)));
@@ -221,6 +227,7 @@ fn NewSymlink(task: &Task, target: &str, msrc: &Arc<QMutex<MountSource>>) -> Ino
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: None,
+        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)));
@@ -338,6 +345,7 @@ pub fn NewDev(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: None,
+        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)));

@@ -265,6 +265,7 @@ impl Inode {
             LockCtx: LockCtx::default(),
             MountSource: MountSource.clone(),
             Overlay: None,
+            ..Default::default()
         };
 
         return Self(Arc::new(QMutex::new(inodeInternal)));
@@ -280,6 +281,7 @@ impl Inode {
         fd: i32,
         fstat: &LibcStat,
         writeable: bool,
+        isMemfd: bool,
     ) -> Result<Self> {
         //info!("after fstat: {:?}", fstat.StableAttr());
 
@@ -313,6 +315,7 @@ impl Inode {
                     fstat.WouldBlock(),
                     &fstat,
                     writeable,
+                    false,
                 );
 
                 let iops = FifoIops {
@@ -336,6 +339,7 @@ impl Inode {
                     fstat.WouldBlock(),
                     &fstat,
                     writeable,
+                    isMemfd
                 );
 
                 return Ok(Self(Arc::new(QMutex::new(InodeIntern {
@@ -372,6 +376,7 @@ impl Inode {
                     fstat.WouldBlock(),
                     &fstat,
                     writeable,
+                    false,
                 );
 
                 return Ok(Self(Arc::new(QMutex::new(InodeIntern {
@@ -381,6 +386,7 @@ impl Inode {
                     LockCtx: LockCtx::default(),
                     MountSource: msrc.clone(),
                     Overlay: None,
+                    ..Default::default()
                 }))));
             }
         }
