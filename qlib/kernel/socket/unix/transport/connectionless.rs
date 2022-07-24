@@ -273,14 +273,6 @@ impl Endpoint for ConnectionLessEndPoint {
     fn GetRemoteAddress(&self) -> Result<SockAddrUnix> {
         return self.0.GetRemoteAddress();
     }
-
-    fn SetSockOpt(&self, opt: &SockOpt) -> Result<()> {
-        return self.0.SetSockOpt(opt);
-    }
-
-    fn GetSockOpt(&self, opt: &mut SockOpt) -> Result<()> {
-        return self.0.GetSockOpt(opt);
-    }
 }
 
 impl ConnectedPasscred for ConnectionLessEndPoint {

@@ -630,18 +630,6 @@ impl Endpoint for ConnectionedEndPoint {
         self.TryLock();
         return self.baseEndpoint.GetRemoteAddress();
     }
-
-    fn SetSockOpt(&self, opt: &SockOpt) -> Result<()> {
-        self.TryLock();
-        let e = self;
-        return e.baseEndpoint.SetSockOpt(opt);
-    }
-
-    fn GetSockOpt(&self, opt: &mut SockOpt) -> Result<()> {
-        self.TryLock();
-        let e = self;
-        return e.baseEndpoint.GetSockOpt(opt);
-    }
 }
 
 impl ConnectedPasscred for ConnectionedEndPoint {

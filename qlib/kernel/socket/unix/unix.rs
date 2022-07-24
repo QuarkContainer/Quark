@@ -174,6 +174,15 @@ impl UnixSocketOperations {
         return ret;
     }
 
+    pub fn SetSendBufferSize(&self, v: i64) -> i64 {
+        let bep = self.ep.BaseEndpoint();
+        if bep.Connected() {
+            return bep.SetSendBufferSize(v);
+        }
+
+        return v;
+    }
+
     pub fn SockOps(&self) -> SocketOptions {
         return self.ep.BaseEndpoint().SockOps();
     }
@@ -245,25 +254,22 @@ impl UnixSocketOperations {
         let mut controlVec: Vec<u8> = vec![0; controlDataLen];
         let controlData = &mut controlVec[..];
 
-        let mut opt = SockOpt::PasscredOption(0);
+        let passcred = self.ep.Passcred();
 
-        let controlData = if let Ok(_) = self.ep.GetSockOpt(&mut opt) {
-            match opt {
-                SockOpt::PasscredOption(0) => controlData,
-                _ => match ctrls.Credentials {
-                    // Edge case: user set SO_PASSCRED but the sender didn't set it in control massage
-                    None => {
-                        let (data, flags) =
-                            ControlMessageCredentials::Empty().EncodeInto(controlData, *mflags);
-                        *mflags = flags;
-                        data
-                    }
-                    Some(ref creds) => {
-                        let (data, flags) = creds.Credentials().EncodeInto(controlData, *mflags);
-                        *mflags = flags;
-                        data
-                    }
-                },
+        let controlData = if passcred {
+            match ctrls.Credentials {
+                // Edge case: user set SO_PASSCRED but the sender didn't set it in control massage
+                None => {
+                    let (data, flags) =
+                        ControlMessageCredentials::Empty().EncodeInto(controlData, *mflags);
+                    *mflags = flags;
+                    data
+                }
+                Some(ref creds) => {
+                    let (data, flags) = creds.Credentials().EncodeInto(controlData, *mflags);
+                    *mflags = flags;
+                    data
+                }
             }
         } else {
             controlData
@@ -942,6 +948,7 @@ impl SockOperations for UnixSocketOperations {
                 let sockops = self.SockOps();
                 let (min, max) = sockops.SendBufferLimits();
                 let clamped = clampBufSize(v as _, min as _, max as _, false) as i64;
+                self.SetSendBufferSize(clamped);
                 sockops.SetSendBufferSize(clamped, true);
             }
             LibcConst::SO_RCVBUF => {
