@@ -25,6 +25,7 @@ use super::super::super::super::super::linux_def::*;
 use super::super::super::super::kernel::waiter::*;
 use super::super::super::super::task::*;
 use super::super::super::super::tcpip::tcpip::*;
+use super::super::super::socketopts::*;
 //use super::super::super::control::*;
 use super::connectioned::*;
 use super::queue::*;
@@ -70,6 +71,23 @@ impl Deref for ConnectionLessEndPoint {
 impl ConnectionLessEndPoint {
     pub fn New() -> Self {
         let bep = BaseEndpoint::default();
+        let ops = bep.SockOps();
+        let sendBufferLimits = BufferSizeOption {
+            Min: MINIMUM_BUFFER_SIZE,
+            Default: DEFAULT_BUFFER_SIZE,
+            Max: MAX_BUFFER_SIZE,
+        };
+
+        let receiveBufferLimits = BufferSizeOption {
+            Min: MINIMUM_BUFFER_SIZE,
+            Default: DEFAULT_BUFFER_SIZE,
+            Max: MAX_BUFFER_SIZE,
+        };
+
+        ops.InitLimit(sendBufferLimits, receiveBufferLimits);
+        ops.SetSendBufferSize(DEFAULT_BUFFER_SIZE as _, false);
+        ops.SetReceiveBufferSize(DEFAULT_BUFFER_SIZE as _, false);
+
         let queue = bep.lock().queue.clone();
         let queueReceiver =
             QueueReceiver::New(MsgQueue::New(queue, Queue::default(), INITIAL_LIMIT));

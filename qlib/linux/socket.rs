@@ -100,6 +100,6 @@ pub const SS_DISCONNECTING: i32 = 4; // In process of disconnecting.
 // +stateify savable
 #[derive(Default, Debug, Clone, Copy)]
 pub struct LingerOption {
-    Enabled: bool,
-    Timeout: i64,
+    pub Enabled: bool,
+    pub Timeout: i64,
 }

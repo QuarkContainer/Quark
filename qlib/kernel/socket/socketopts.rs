@@ -22,6 +22,22 @@ use super::super::super::common::*;
 use super::super::super::linux::socket::*;
 use super::super::tcpip::tcpip::*;
 
+// The minimum size of the send/receive buffers.
+pub const MINIMUM_BUFFER_SIZE : usize = 4 << 10; // 4 KiB (match default in linux)
+
+// The default size of the send/receive buffers.
+pub const DEFAULT_BUFFER_SIZE : usize = 208 << 10; // 208 KiB  (default in linux for net.core.wmem_default)
+
+// The maximum permitted size for the send/receive buffers.
+pub const MAX_BUFFER_SIZE : usize = 4 << 20; // 4 MiB 4 MiB (default in linux for net.core.wmem_max)
+
+#[derive(Default, Clone, Copy)]
+pub struct BufferSizeOption {
+    pub Min: usize,
+    pub Default: usize,
+    pub Max: usize
+}
+
 pub trait SocketOptionsHandler {
     // OnReuseAddressSet is invoked when SO_REUSEADDR is set for an endpoint.
     fn OnReuseAddressSet(&self, _v: bool) {}
@@ -72,6 +88,7 @@ pub trait SocketOptionsHandler {
     fn WakeupWriters(&self) {}
 }
 
+#[derive(Default, Clone)]
 pub struct SocketOptions (Arc<QMutex<SocketOptionsInternal>>);
 
 impl Deref for SocketOptions {
@@ -85,6 +102,12 @@ impl Deref for SocketOptions {
 impl SocketOptionsHandler for SocketOptions {}
 
 impl SocketOptions {
+    pub fn InitLimit(&self, SendBufferLimits: BufferSizeOption, ReceiveBufferLimits: BufferSizeOption) {
+        let mut intern = self.lock();
+        intern.SendBufferLimits = SendBufferLimits;
+        intern.ReceiveBufferLimits = ReceiveBufferLimits;
+    }
+
     pub fn Boolval(v: bool) -> u32 {
         if v {
             1
@@ -422,14 +445,12 @@ impl SocketOptions {
         }
     }
 
-    /*
     // SendBufferLimits returns the [min, max) range of allowable send buffer
     // sizes.
-    func (so *SocketOptions) SendBufferLimits() (min, max int64) {
-        limits := so.getSendBufferLimits(so.stackHandler)
-        return int64(limits.Min), int64(limits.Max)
+    pub fn SendBufferLimits(&self) -> (i64, i64) {
+        let limits = self.lock().SendBufferLimits;
+        return (limits.Min as i64, limits.Max as i64)
     }
-    */
 
     // GetReceiveBufferSize gets value for SO_RCVBUF option.
     pub fn GetReceiveBufferSize(&self) -> i64 {
@@ -447,14 +468,12 @@ impl SocketOptions {
         self.lock().receiveBufferSize = receiveBufferSize;
     }
 
-    /*
     // ReceiveBufferLimits returns the [min, max) range of allowable receive buffer
     // sizes.
-    func (so *SocketOptions) ReceiveBufferLimits() (min, max int64) {
-        limits := so.getReceiveBufferLimits(so.stackHandler)
-        return int64(limits.Min), int64(limits.Max)
+    pub fn ReceiveBufferLimits(&self) -> (i64, i64) {
+        let limits = self.lock().ReceiveBufferLimits;
+        return (limits.Min as i64, limits.Max as i64)
     }
-    */
 
     // GetRcvlowat gets value for SO_RCVLOWAT option.
     pub fn GetRcvlowat(&self) -> i32 {
@@ -470,7 +489,11 @@ impl SocketOptions {
     }
 }
 
+#[derive(Default)]
 pub struct SocketOptionsInternal {
+    pub SendBufferLimits: BufferSizeOption,
+    pub ReceiveBufferLimits: BufferSizeOption,
+
     // broadcastEnabled determines whether datagram sockets are allowed to
     // send packets to a broadcast address.
     pub broadcastEnabled : u32,

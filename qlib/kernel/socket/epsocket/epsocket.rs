@@ -145,6 +145,7 @@ pub const SIZEOF_SOCKADDR_UNIX: usize = 0x6e;
 pub const SIZEOF_SOCKADDR_LINKLAYER: usize = 0x14;
 pub const SIZEOF_SOCKADDR_NETLINK: usize = 0xc;
 pub const SIZEOF_LINGER: usize = 0x8;
+pub const SIZEOF_TIMEVAL: usize = 0x10;
 pub const SIZEOF_IPMREQ: usize = 0x8;
 pub const SIZEOF_IPMREQN: usize = 0xc;
 pub const SIZEOF_IPV6_MREQ: usize = 0x14;

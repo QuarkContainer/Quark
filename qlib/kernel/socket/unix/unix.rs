@@ -33,6 +33,7 @@ use super::super::socket::*;
 use super::super::super::super::common::*;
 use super::super::super::super::linux::socket::*;
 use super::super::super::super::linux_def::*;
+use super::super::super::super::linux::time::*;
 use super::super::super::super::device::*;
 use super::super::super::super::auth::*;
 use super::super::super::fs::host::hostinodeop::*;
@@ -51,6 +52,7 @@ use super::super::super::super::path::*;
 use super::super::super::socket::control::*;
 use super::super::super::socket::epsocket::epsocket::*;
 use super::super::super::tcpip::tcpip::*;
+use super::super::socketopts::*;
 use super::transport::connectioned::*;
 use super::transport::connectionless::*;
 use super::transport::unix::*;
@@ -170,6 +172,10 @@ impl UnixSocketOperations {
         };
 
         return ret;
+    }
+
+    pub fn SockOps(&self) -> SocketOptions {
+        return self.ep.BaseEndpoint().SockOps();
     }
 
     /*pub fn State(&self) -> i32 {
@@ -712,22 +718,399 @@ impl SockOperations for UnixSocketOperations {
     }
 
     fn GetSockOpt(&self, task: &Task, level: i32, name: i32, opt: &mut [u8]) -> Result<i64> {
-        let ret = GetSockOpt(
-            task,
-            self,
-            &self.ep,
-            AFType::AF_UNIX,
-            self.ep.Type(),
-            level,
-            name,
-            opt.len(),
-        )?;
+        match level {
+            SOL_SOCKET => (),
+            SOL_TCP | SOL_IPV6 | SOL_IP | SOL_UDP => return Err(Error::SysError(SysErr::ENOPROTOOPT)),
+            _ => return Err(Error::SysError(SysErr::ENOPROTOOPT)),
+        }
+
+        let outlen = opt.len();
+
+        let ret = match name as u64 {
+            LibcConst::SO_TYPE => {
+                if outlen < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                SockOptResult::I32(self.ep.Type())
+            }
+
+            LibcConst::SO_DOMAIN => {
+                if outlen < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+                SockOptResult::I32(AFType::AF_UNIX)
+            }
+            LibcConst::SO_PROTOCOL => {
+                if outlen < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+                // there is only one supported protocol for UNIX socket
+                SockOptResult::I32(0)
+            }
+            LibcConst::SO_ERROR => {
+                if outlen < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let sockops = self.SockOps();
+                let ret = match sockops.GetLastError() {
+                    None => SockOptResult::I32(0),
+                    Some(Error::SysError(i)) => SockOptResult::I32(i),
+                    Some(e) => panic!("GetSockOpts SO_ERROR get unknow error {:?}", e)
+                };
+                ret
+            }
+            LibcConst::SO_PEERCRED => {
+                if outlen < SIZEOF_UCRED {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let tcred = task.Creds();
+
+                let pid = task.Thread().ThreadGroup().ID();
+                let userns = tcred.lock().UserNamespace.clone();
+                let uid = tcred.lock().EffectiveKUID.In(&userns).OrOverflow();
+                let gid = tcred.lock().EffectiveKGID.In(&userns).OrOverflow();
+
+                let ucred = Ucred {
+                    Pid: pid,
+                    Uid: uid.0,
+                    Gid: gid.0,
+                };
+
+                SockOptResult::Ucred(ucred)
+            }
+            LibcConst::SO_PASSCRED => {
+                if outlen < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let v = SocketOptions::Boolval(self.SockOps().GetPassCred());
+                SockOptResult::I32(v as i32)
+            }
+
+            LibcConst::SO_SNDBUF => {
+                if outlen < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let mut size = self.SockOps().GetSendBufferSize();
+                if size > i32::MAX as _ {
+                    size = i32::MAX as _;
+                }
+
+                SockOptResult::I32(size as i32)
+            }
+            LibcConst::SO_RCVBUF => {
+                if outlen < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let mut size = self.SockOps().GetReceiveBufferSize();
+                if size > i32::MAX as _ {
+                    size = i32::MAX as _;
+                }
+
+                SockOptResult::I32(size as i32)
+            }
+            LibcConst::SO_REUSEADDR => {
+                if outlen < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let v = SocketOptions::Boolval(self.SockOps().GetReuseAddress());
+                SockOptResult::I32(v as i32)
+            }
+            LibcConst::SO_REUSEPORT => {
+                if outlen < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let v = SocketOptions::Boolval(self.SockOps().GetReusePort());
+                SockOptResult::I32(v as i32)
+            }
+            LibcConst::SO_BINDTODEVICE => {
+                error!("GetSockOpts doesn't support SO_BINDTODEVICE");
+                return Err(Error::SysError(SysErr::ENOPROTOOPT))
+            }
+            LibcConst::SO_BROADCAST => {
+                if outlen < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let v = SocketOptions::Boolval(self.SockOps().GetBroadcast());
+                SockOptResult::I32(v as i32)
+            }
+            LibcConst::SO_KEEPALIVE => {
+                if outlen < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let v = SocketOptions::Boolval(self.SockOps().GetKeepAlive());
+                SockOptResult::I32(v as i32)
+            }
+            LibcConst::SO_LINGER => {
+                if outlen < SIZEOF_LINGER {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let mut linger = Linger::default();
+                let v = self.SockOps().GetLinger();
+                if v.Enabled {
+                    linger.OnOff = 1;
+                }
+                linger.Linger = Time(v.Timeout).Seconds() as i32;
+                SockOptResult::Linger(linger)
+            }
+            LibcConst::SO_SNDTIMEO => {
+                if outlen < SIZEOF_TIMEVAL {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let timeout = self.SendTimeout();
+                let timeval = Time(timeout).Timeval();
+                SockOptResult::Timeval(timeval)
+            }
+            LibcConst::SO_RCVTIMEO => {
+                if outlen < SIZEOF_TIMEVAL {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let timeout = self.RecvTimeout();
+                let timeval = Time(timeout).Timeval();
+                SockOptResult::Timeval(timeval)
+            }
+            LibcConst::SO_OOBINLINE => {
+                if outlen < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let v = SocketOptions::Boolval(self.SockOps().GetOutOfBandInline());
+                SockOptResult::I32(v as i32)
+            }
+            LibcConst::SO_NO_CHECK => {
+                if outlen < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let v = SocketOptions::Boolval(self.SockOps().GetNoChecksum());
+                SockOptResult::I32(v as i32)
+            }
+            LibcConst::SO_ACCEPTCONN => {
+                if outlen < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let v = SocketOptions::Boolval(false);
+                SockOptResult::I32(v as i32)
+            }
+            LibcConst::SO_RCVLOWAT => {
+                if outlen < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let v = self.SockOps().GetRcvlowat();
+                SockOptResult::I32(v as i32)
+            }
+            _ => {
+                error!("GetSockOpts doesn't support {}", name);
+                return Err(Error::SysError(SysErr::ENOPROTOOPT))
+            }
+        };
+
         let size = ret.Marsh(opt)?;
         return Ok(size as i64);
     }
 
-    fn SetSockOpt(&self, task: &Task, level: i32, name: i32, opt: &[u8]) -> Result<i64> {
-        SetSockOpt(task, self, &self.ep, level, name, opt)?;
+    fn SetSockOpt(&self, _task: &Task, level: i32, name: i32, optVal: &[u8]) -> Result<i64> {
+        match level {
+            SOL_SOCKET => (),
+            SOL_TCP | SOL_IPV6 | SOL_IP | SOL_UDP => return Err(Error::SysError(SysErr::ENOPROTOOPT)),
+            _ => return Err(Error::SysError(SysErr::ENOPROTOOPT)),
+        }
+
+        match name as u64 {
+            LibcConst::SO_SNDBUF => {
+                if optVal.len() < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let v = unsafe {
+                    *(&optVal[0] as * const _ as u64 as * const u32)
+                };
+                let sockops = self.SockOps();
+                let (min, max) = sockops.SendBufferLimits();
+                let clamped = clampBufSize(v as _, min as _, max as _, false) as i64;
+                sockops.SetSendBufferSize(clamped, true);
+            }
+            LibcConst::SO_RCVBUF => {
+                if optVal.len() < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let v = unsafe {
+                    *(&optVal[0] as * const _ as u64 as * const u32)
+                };
+                let sockops = self.SockOps();
+                let (min, max) = sockops.ReceiveBufferLimits();
+                let clamped = clampBufSize(v as _, min as _, max as _, false) as i64;
+                sockops.SetReceiveBufferSize(clamped, true);
+            }
+            LibcConst::SO_RCVBUFFORCE => {
+                if optVal.len() < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let v = unsafe {
+                    *(&optVal[0] as * const _ as u64 as * const u32)
+                };
+                let sockops = self.SockOps();
+                let (min, max) = sockops.ReceiveBufferLimits();
+                let clamped = clampBufSize(v as _, min as _, max as _, true) as i64;
+                sockops.SetReceiveBufferSize(clamped, true);
+            }
+            LibcConst::SO_REUSEADDR => {
+                if optVal.len() < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let v = unsafe {
+                    *(&optVal[0] as * const _ as u64 as * const u32)
+                };
+                let sockops = self.SockOps();
+                sockops.SetReuseAddress(v!=0);
+            }
+            LibcConst::SO_REUSEPORT => {
+                if optVal.len() < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let v = unsafe {
+                    *(&optVal[0] as * const _ as u64 as * const u32)
+                };
+                let sockops = self.SockOps();
+                sockops.SetReusePort(v!=0);
+            }
+            LibcConst::SO_BROADCAST => {
+                if optVal.len() < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let v = unsafe {
+                    *(&optVal[0] as * const _ as u64 as * const u32)
+                };
+                let sockops = self.SockOps();
+                sockops.SetBroadcast(v!=0);
+            }
+            LibcConst::SO_PASSCRED => {
+                if optVal.len() < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let v = unsafe {
+                    *(&optVal[0] as * const _ as u64 as * const u32)
+                };
+                let sockops = self.SockOps();
+                self.ep.BaseEndpoint().setPasscred(v != 0);
+                sockops.SetPassCred(v!=0);
+            }
+            LibcConst::SO_KEEPALIVE => {
+                if optVal.len() < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let v = unsafe {
+                    *(&optVal[0] as * const _ as u64 as * const u32)
+                };
+                let sockops = self.SockOps();
+                sockops.SetKeepAlive(v!=0);
+            }
+            LibcConst::SO_SNDTIMEO => {
+                if optVal.len() < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let v = unsafe {
+                    *(&optVal[0] as * const _ as u64 as * const Timeval)
+                };
+
+                if v.Usec < 0 || v.Usec >= (SECOND / MICROSECOND) {
+                    return Err(Error::SysError(SysErr::EDOM));
+                }
+                self.SetSendTimeout(v.ToDuration())
+            }
+            LibcConst::SO_RCVTIMEO => {
+                if optVal.len() < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let v = unsafe {
+                    *(&optVal[0] as * const _ as u64 as * const Timeval)
+                };
+
+                if v.Usec < 0 || v.Usec >= (SECOND / MICROSECOND) {
+                    return Err(Error::SysError(SysErr::EDOM));
+                }
+                self.SetRecvTimeout(v.ToDuration())
+            }
+            LibcConst::SO_OOBINLINE => {
+                if optVal.len() < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let v = unsafe {
+                    *(&optVal[0] as * const _ as u64 as * const u32)
+                };
+                let sockops = self.SockOps();
+                sockops.SetOutOfBandInline(v!=0);
+            }
+            LibcConst::SO_NO_CHECK => {
+                if optVal.len() < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let v = unsafe {
+                    *(&optVal[0] as * const _ as u64 as * const u32)
+                };
+                let sockops = self.SockOps();
+                sockops.SetNoChecksum(v!=0);
+            }
+            LibcConst::SO_LINGER => {
+                if optVal.len() < SIZEOF_LINGER {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let v = unsafe {
+                    *(&optVal[0] as * const _ as u64 as * const Linger)
+                };
+
+                if v != Linger::default() {
+                    error!("SetSockOpts doesn't support {}", SO_LINGER);
+                }
+                let sockops = self.SockOps();
+                sockops.SetLinger(&LingerOption {
+                    Enabled: v.OnOff != 0,
+                    Timeout: SECOND * v.Linger as i64,
+                });
+            }
+            LibcConst::SO_RCVLOWAT => {
+                if optVal.len() < SIZEOF_I32 {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                let v = unsafe {
+                    *(&optVal[0] as * const _ as u64 as * const u32)
+                };
+                let sockops = self.SockOps();
+                sockops.SetRcvlowat(v as i32)?;
+            }
+            _ => {
+                error!("SetSockOpts doesn't support {}", name);
+                return Err(Error::SysError(SysErr::ENOPROTOOPT))
+            }
+        }
+
         return Ok(0);
     }
 
