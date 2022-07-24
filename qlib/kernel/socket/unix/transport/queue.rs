@@ -295,6 +295,13 @@ impl MsgQueue {
         return self.lock().limit as i64;
     }
 
+    // SetMaxQueueSize sets the maximum number of bytes storable in the queue.
+    pub fn SetMaxQueueSize(&self, v: i64) {
+        self.lock().limit = v as _;
+    }
+
+    // CloseUnread sets flag to indicate that the peer is closed (not shutdown)
+    // with unread data. So if read on this queue shall return ECONNRESET error.
     pub fn CloseUnread(&self) {
         self.lock().unread = true;
     }
