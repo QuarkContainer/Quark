@@ -33,8 +33,6 @@ use super::connectioned::*;
 use super::connectionless::*;
 use super::queue::*;
 
-pub const INITIAL_LIMIT: usize = 16 * 1024;
-
 pub struct SockType;
 
 impl SockType {

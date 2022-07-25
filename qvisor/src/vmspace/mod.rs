@@ -683,6 +683,15 @@ impl VMSpace {
         return fdInfo.IORecvMsg(msghdr, flags);
     }
 
+    pub fn IORecvfrom(fd: i32, buf: u64, size: usize, flags: i32, addr: u64, len: u64) -> i64 {
+        let fdInfo = match Self::GetFdInfo(fd) {
+            Some(info) => info,
+            None => return -SysErr::EBADF as i64,
+        };
+
+        return fdInfo.IORecvfrom(buf, size, flags, addr, len);
+    }
+
     pub fn IOSendMsg(fd: i32, msghdr: u64, flags: i32) -> i64 {
         let fdInfo = match Self::GetFdInfo(fd) {
             Some(info) => info,
@@ -690,6 +699,15 @@ impl VMSpace {
         };
 
         return fdInfo.IOSendMsg(msghdr, flags);
+    }
+
+    pub fn IOSendto(fd: i32, buf: u64, size: usize, flags: i32, addr: u64, len: u32) -> i64 {
+        let fdInfo = match Self::GetFdInfo(fd) {
+            Some(info) => info,
+            None => return -SysErr::EBADF as i64,
+        };
+
+        return fdInfo.IOSendto(buf, size, flags, addr, len);
     }
 
     pub fn Fcntl(fd: i32, cmd: i32, arg: u64) -> i64 {

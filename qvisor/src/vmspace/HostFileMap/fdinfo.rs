@@ -236,9 +236,18 @@ impl FdInfo {
         return SysRet(ret as i64);
     }
 
+    pub fn Recvfrom(sockfd: i32, buf: u64, size: usize, flags: i32, addr: u64, len: u64) -> i64 {
+        let ret = unsafe { recvfrom(sockfd, buf as  _, size, flags, addr as _, len as _) };
+        return SysRet(ret as i64);
+    }
+
     pub fn SendMsg(sockfd: i32, msghdr: u64, flags: i32) -> i64 {
         let ret = unsafe { sendmsg(sockfd, msghdr as *mut msghdr, flags as c_int) };
+        return SysRet(ret as i64);
+    }
 
+    pub fn Sendto(sockfd: i32, buf: u64, size: usize, flags: i32, addr: u64, len: u32) -> i64 {
+        let ret = unsafe { sendto(sockfd, buf as _, size, flags, addr as _, len) };
         return SysRet(ret as i64);
     }
 
@@ -423,9 +432,19 @@ impl FdInfo {
         return Self::RecvMsg(fd, msghdr, flags);
     }
 
+    pub fn IORecvfrom(&self, buf: u64, size: usize, flags: i32, addr: u64, len: u64) -> i64 {
+        let fd = self.lock().fd;
+        return Self::Recvfrom(fd, buf, size, flags, addr, len);
+    }
+
     pub fn IOSendMsg(&self, msghdr: u64, flags: i32) -> i64 {
         let fd = self.lock().fd;
         return Self::SendMsg(fd, msghdr, flags);
+    }
+
+    pub fn IOSendto(&self, buf: u64, size: usize, flags: i32, addr: u64, len: u32) -> i64 {
+        let fd = self.lock().fd;
+        return Self::Sendto(fd, buf, size, flags, addr, len);
     }
 
     pub fn IOGetSockName(&self, addr: u64, addrlen: u64) -> i64 {

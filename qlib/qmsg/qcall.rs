@@ -93,7 +93,9 @@ pub enum Msg {
     IOAccept(IOAccept),
     IOConnect(IOConnect),
     IORecvMsg(IORecvMsg),
+    IORecvfrom(IORecvfrom),
     IOSendMsg(IOSendMsg),
+    IOSendto(IOSendto),
     MMapFile(MMapFile),
     MUnmap(MUnmap),
     NonBlockingPoll(NonBlockingPoll),
@@ -729,12 +731,32 @@ pub struct IORecvMsg {
 }
 
 #[derive(Clone, Default, Debug)]
+pub struct IORecvfrom {
+    pub fd: i32,
+    pub buf: u64,
+    pub size: usize,
+    pub flags: i32,
+    pub addr: u64,
+    pub len: u64,
+}
+
+#[derive(Clone, Default, Debug)]
 pub struct IOSendMsg {
     pub fd: i32,
     pub msghdr: u64,
     //address of MsgHdr
     pub flags: i32,
     pub blocking: bool,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct IOSendto {
+    pub fd: i32,
+    pub buf: u64,
+    pub size: usize,
+    pub flags: i32,
+    pub addr: u64,
+    pub len: u32,
 }
 
 #[derive(Clone, Default, Debug)]
