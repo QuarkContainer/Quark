@@ -276,8 +276,14 @@ impl KVMVcpu {
             Msg::IORecvMsg(msg) => {
                 ret = super::VMSpace::IORecvMsg(msg.fd, msg.msghdr, msg.flags) as u64;
             }
+            Msg::IORecvfrom(msg) => {
+                ret = super::VMSpace::IORecvfrom(msg.fd, msg.buf, msg.size, msg.flags, msg.addr, msg.len) as u64;
+            }
             Msg::IOSendMsg(msg) => {
                 ret = super::VMSpace::IOSendMsg(msg.fd, msg.msghdr, msg.flags) as u64;
+            }
+            Msg::IOSendto(msg) => {
+                ret = super::VMSpace::IOSendto(msg.fd, msg.buf, msg.size, msg.flags, msg.addr, msg.len) as u64;
             }
             Msg::MMapFile(msg) => {
                 ret = match super::PMA_KEEPER.MapFile(msg.len, msg.prot, msg.fd, msg.offset) {

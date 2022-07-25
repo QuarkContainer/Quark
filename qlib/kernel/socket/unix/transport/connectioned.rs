@@ -213,8 +213,8 @@ impl ConnectionedEndPoint {
         let aq = a.baseEndpoint.lock().queue.clone();
         let bq = b.baseEndpoint.lock().queue.clone();
 
-        let q1 = MsgQueue::New(aq.clone(), bq.clone(), INITIAL_LIMIT);
-        let q2 = MsgQueue::New(bq.clone(), aq.clone(), INITIAL_LIMIT);
+        let q1 = MsgQueue::New(aq.clone(), bq.clone(), DEFAULT_BUFFER_SIZE);
+        let q2 = MsgQueue::New(bq.clone(), aq.clone(), DEFAULT_BUFFER_SIZE);
 
         if stype == SockType::SOCK_STREAM {
             a.baseEndpoint.lock().receiver =

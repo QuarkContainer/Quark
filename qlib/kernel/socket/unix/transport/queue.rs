@@ -203,7 +203,11 @@ impl MsgQueue {
             return Err(Error::SysError(SysErr::EPIPE));
         }
 
-        let free = q.limit - q.used;
+        let free = if q.limit >= q.used {
+            q.limit - q.used
+        } else {
+            0
+        };
 
         let mut l = e.Length();
 

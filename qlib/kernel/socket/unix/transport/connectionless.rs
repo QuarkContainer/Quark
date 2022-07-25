@@ -90,7 +90,7 @@ impl ConnectionLessEndPoint {
 
         let queue = bep.lock().queue.clone();
         let queueReceiver =
-            QueueReceiver::New(MsgQueue::New(queue, Queue::default(), INITIAL_LIMIT));
+            QueueReceiver::New(MsgQueue::New(queue, Queue::default(), DEFAULT_BUFFER_SIZE));
         bep.lock().receiver = Some(Arc::new(queueReceiver));
         return Self(bep);
     }

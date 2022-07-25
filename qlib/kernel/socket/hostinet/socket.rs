@@ -962,11 +962,7 @@ impl SockOperations for SocketOperations {
             && socketaddr.len() > SIZEOF_SOCKADDR
         {
             socketaddr = &socketaddr[..SIZEOF_SOCKADDR]
-        } /*else if self.family == AFType::AF_UNIX {
-              use super::super::unix::hostsocket::*;
-              let path = ExtractPath(sockaddr)?;
-              info!("unix socket bind ... path is {:?}", alloc::string::String::from_utf8(path));
-          }*/
+        }
 
         let res = Kernel::HostSpace::Bind(
             self.fd,
@@ -1456,12 +1452,24 @@ impl SockOperations for SocketOperations {
         self.EventRegister(task, &general, EVENT_READ);
         defer!(self.EventUnregister(task, &general));
 
-        let mut res = Kernel::HostSpace::IORecvMsg(
-            self.fd,
-            &mut msgHdr as *mut _ as u64,
-            flags | MsgType::MSG_DONTWAIT,
-            false,
-        ) as i32;
+        let mut res = if msgHdr.msgControlLen != 0 {
+            Kernel::HostSpace::IORecvMsg(
+                self.fd,
+                &mut msgHdr as *mut _ as u64,
+                flags | MsgType::MSG_DONTWAIT,
+                false,
+            ) as i32
+        } else {
+            Kernel::HostSpace::IORecvfrom(
+                self.fd,
+                buf.Ptr(),
+                size,
+                flags  | MsgType::MSG_DONTWAIT,
+                msgHdr.msgName,
+                &msgHdr.nameLen as * const _ as u64,
+
+            ) as i32
+        };
 
         while res == -SysErr::EWOULDBLOCK && flags & MsgType::MSG_DONTWAIT == 0 {
 
@@ -1478,12 +1486,24 @@ impl SockOperations for SocketOperations {
                 _ => (),
             }
 
-            res = Kernel::HostSpace::IORecvMsg(
-                self.fd,
-                &mut msgHdr as *mut _ as u64,
-                flags | MsgType::MSG_DONTWAIT,
-                false,
-            ) as i32;
+            res = if msgHdr.msgControlLen != 0 {
+                Kernel::HostSpace::IORecvMsg(
+                    self.fd,
+                    &mut msgHdr as *mut _ as u64,
+                    flags | MsgType::MSG_DONTWAIT,
+                    false,
+                ) as i32
+            } else {
+                Kernel::HostSpace::IORecvfrom(
+                    self.fd,
+                    buf.Ptr(),
+                    size,
+                    flags  | MsgType::MSG_DONTWAIT,
+                    msgHdr.msgName,
+                    &msgHdr.nameLen as * const _ as u64,
+
+                ) as i32
+            };
         }
 
         if res < 0 {
@@ -1617,12 +1637,24 @@ impl SockOperations for SocketOperations {
         msgHdr.iovLen = iovs.len();
         msgHdr.msgFlags = 0;
 
-        let mut res = Kernel::HostSpace::IOSendMsg(
-            self.fd,
-            msgHdr as *const _ as u64,
-            flags | MsgType::MSG_DONTWAIT,
-            false,
-        ) as i32;
+        let mut res = if msgHdr.msgControlLen > 0 {
+            Kernel::HostSpace::IOSendMsg(
+                self.fd,
+                msgHdr as *const _ as u64,
+                flags | MsgType::MSG_DONTWAIT,
+                false,
+            ) as i32
+        } else {
+            Kernel::HostSpace::IOSendto(
+                self.fd,
+                buf.Ptr(),
+                len,
+                flags | MsgType::MSG_DONTWAIT,
+                msgHdr.msgName,
+                msgHdr.nameLen,
+            ) as i32
+        };
+
         while res == -SysErr::EWOULDBLOCK && flags & MsgType::MSG_DONTWAIT == 0 {
             let general = task.blocker.generalEntry.clone();
 
@@ -1635,12 +1667,23 @@ impl SockOperations for SocketOperations {
                 _ => (),
             }
 
-            res = Kernel::HostSpace::IOSendMsg(
-                self.fd,
-                msgHdr as *const _ as u64,
-                flags | MsgType::MSG_DONTWAIT,
-                false,
-            ) as i32;
+            res = if msgHdr.msgControlLen > 0 {
+                Kernel::HostSpace::IOSendMsg(
+                    self.fd,
+                    msgHdr as *const _ as u64,
+                    flags | MsgType::MSG_DONTWAIT,
+                    false,
+                ) as i32
+            } else {
+                Kernel::HostSpace::IOSendto(
+                    self.fd,
+                    buf.Ptr(),
+                    len,
+                    flags | MsgType::MSG_DONTWAIT,
+                    msgHdr.msgName,
+                    msgHdr.nameLen,
+                ) as i32
+            };
         }
 
         if res < 0 {
