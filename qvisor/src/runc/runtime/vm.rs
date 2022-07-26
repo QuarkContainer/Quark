@@ -437,6 +437,8 @@ impl VirtualMachine {
         for t in threads {
             t.join().expect("the working threads has panicked");
         }
+
+        URING_MGR.lock().Close();
         Ok(GetExitStatus())
     }
 
