@@ -776,12 +776,12 @@ pub struct NonBlockingPoll {
 #[derive(Clone, Debug, Copy)]
 pub enum TmpfsFileType {
     File,
-    Fifo,
+    Dir,
 }
 
 impl Default for TmpfsFileType {
     fn default() -> Self {
-        return Self::Fifo;
+        return Self::File;
     }
 }
 
