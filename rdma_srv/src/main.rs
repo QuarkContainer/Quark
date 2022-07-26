@@ -536,20 +536,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     epoll_add(epoll_fd, server_fd, read_write_event(server_fd as u64))?;
 
     if RDMA_CTLINFO.isK8s {
-        tokio::spawn(async {
-            let mut node_informer = NodeInformer::new();
-            match node_informer.run().await {
-                Err(e) => println!("Error to handle nodes: {:?}", e),
-                Ok(_) => (),
-            };
-        });
-        tokio::spawn(async {
-            let mut pod_informer = PodInformer::new();
-            match pod_informer.run().await {
-                Err(e) => println!("Error to handle pods: {:?}", e),
-                Ok(_) => (),
-            };
-        });
+        while !RDMA_CTLINFO.isCMConnected_get() {
+            tokio::spawn(async {
+                let mut node_informer = NodeInformer::new();
+                match node_informer.run().await {
+                    Err(e) => {
+                        println!("Error to handle nodes: {:?}", e);
+                    },
+                    Ok(_) => (),
+                };
+            });
+
+            tokio::spawn(async {
+                let mut pod_informer = PodInformer::new();
+                match pod_informer.run().await {
+                    Err(e) => {
+                        println!("Error to handle pods: {:?}", e);
+                    },
+                    Ok(_) => {
+                        RDMA_CTLINFO.isCMConnected_set(true);
+                    },                    
+                };
+            });
+            thread::sleep_ms(1000);
+        }
     }
 
     //watch RDMA event
@@ -900,6 +910,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // RDMA_SRV.HandleClientRequest();
                 }
                 Srv_FdType::NodeEventFd(nodeEvent) => {
+                    println!("Got NodeEvent: {:?}", nodeEvent);
                     let node = RDMA_CTLINFO.node_get(nodeEvent.ip);
                     if node.hostname.eq_ignore_ascii_case(&hostname) {
                         RDMA_CTLINFO.timestamp_set(node.timestamp);

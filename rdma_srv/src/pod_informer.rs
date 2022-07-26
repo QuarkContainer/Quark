@@ -64,6 +64,7 @@ impl PodInformer {
     }
 
     async fn run_watch(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        println!("Start pod run_watch. max_resource_version: {}", self.max_resource_version);
         let mut client = QuarkCmServiceClient::connect(GRPC_SERVER_ADDRESS).await?;
         let mut pod_stream = client
             .watch_pod(Request::new(MaxResourceVersionMessage {
