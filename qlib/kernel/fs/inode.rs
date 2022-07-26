@@ -25,6 +25,10 @@ use alloc::sync::Weak;
 use super::super::super::auth::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
+use super::super::super::qmsg::qcall::TmpfsFileType;
+use super::super::super::kernel::Kernel::HostSpace;
+use super::super::super::kernel::fs::filesystems::*;
+use super::super::super::kernel::fs::host::fs::*;
 use super::super::kernel::time::*;
 use super::super::kernel::pipe::node::*;
 use super::super::kernel::pipe::pipe::*;
@@ -273,6 +277,30 @@ impl Inode {
 
     pub fn WouldBlock(&self) -> bool {
         return self.lock().InodeOp.WouldBlock();
+    }
+
+    pub fn NewTmpDirInode(task: &Task, root: &str) -> Result<Self> {
+        let mut fstat = LibcStat::default();
+        let tmpDirfd = HostSpace::NewTmpfsFile(TmpfsFileType::Dir, &mut fstat as *mut _ as u64) as i32;
+        if tmpDirfd < 0 {
+            return Err(Error::SysError(-tmpDirfd));
+        }
+
+        let mf = MountSourceFlags {
+            ReadOnly: false,
+            ..Default::default()
+        };
+
+        let ms = MountSource::NewHostMountSource(
+            root,
+            &ROOT_OWNER,
+            &WhitelistFileSystem::New(),
+            &mf,
+            false,
+        );
+
+        let inode = Inode::NewHostInode(task, &Arc::new(QMutex::new(ms)), tmpDirfd, &fstat, true, false)?;
+        return Ok(inode)
     }
 
     pub fn NewHostInode(

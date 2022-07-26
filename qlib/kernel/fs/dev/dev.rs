@@ -275,11 +275,11 @@ pub fn NewDev(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         ),
     );
 
-    // This is not as good as /dev/random in linux because go
-    // runtime uses sys_random and /dev/urandom internally.
-    // According to 'man 4 random', this will be sufficient unless
-    // application uses this to generate long-lived GPG/SSL/SSH
-    // keys.
+    contents.insert(
+        "shm".to_string(),
+        Inode::NewTmpDirInode(task, "/dev/shm").expect("create /dev/shm fail"),
+    );
+
     contents.insert(
         "random".to_string(),
         NewRandomDevice(

@@ -24,6 +24,8 @@ pub mod syscall;
 pub mod time;
 pub mod uringMgr;
 
+use std::env::temp_dir;
+use uuid::Uuid;
 use core::sync::atomic;
 use core::sync::atomic::AtomicU64;
 use lazy_static::lazy_static;
@@ -34,7 +36,6 @@ use std::marker::Send;
 use std::os::unix::io::IntoRawFd;
 use std::slice;
 use std::str;
-use tempfile::tempfile;
 use x86_64::structures::paging::PageTableFlags;
 
 use crate::qlib::fileinfo::*;
@@ -1358,17 +1359,32 @@ impl VMSpace {
         }
     }
 
-    pub fn NewTmpfile(addr: u64) -> i64 {
-        let file = match tempfile() {
-            Err(e) => {
-                error!("create tempfs file fail with error {:?}", e);
-                return -SysErr::ENOENT as i64;
-            }
-            Ok(f) => f,
-        };
+    pub fn NewTmpfile(dir: bool, addr: u64) -> i64 {
+        let mut td = temp_dir();
 
-        //take the ownership of the fd
-        let fd = file.into_raw_fd();
+        let file_name = format!("{}", Uuid::new_v4());
+        td.push(file_name);
+
+        let fd  = if dir {
+            let folder = td.into_os_string().into_string().unwrap();
+            let cstr = CString::New(&folder);
+            let ret = unsafe {
+                libc::mkdir(cstr.Ptr() as *const c_char, 0o777)
+            };
+
+            if ret != 0 {
+                return Self::GetRet(ret as i64);
+            }
+
+            let fd = unsafe {
+                libc::openat(-100, cstr.Ptr() as *const c_char, libc::O_DIRECTORY | libc::O_RDONLY, 0o777)
+            };
+
+            Self::GetRet(fd as i64) as i32
+        } else {
+            let file = fs::File::create(td).expect("tmp file create fail");
+            file.into_raw_fd()
+        };
 
         let ret = unsafe { fstat(fd, addr as *mut stat) };
 
@@ -1402,11 +1418,8 @@ impl VMSpace {
 
     pub fn NewTmpfsFile(typ: TmpfsFileType, addr: u64) -> i64 {
         match typ {
-            TmpfsFileType::File => Self::NewTmpfile(addr),
-            TmpfsFileType::Fifo => {
-                // Self::NewFifo()
-                panic!("NewTmpfsFile doesn't support fifo");
-            }
+            TmpfsFileType::Dir => Self::NewTmpfile(true, addr),
+            TmpfsFileType::File => Self::NewTmpfile(false, addr),
         }
     }
 
