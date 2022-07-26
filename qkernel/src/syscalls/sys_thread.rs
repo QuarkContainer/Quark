@@ -30,6 +30,7 @@ use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::path::*;
 use super::super::qlib::LoadAddr;
+use super::super::qlib::linux::rusage::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::*;
 use super::super::taskMgr::*;
@@ -41,6 +42,7 @@ use super::super::threadmgr::thread::*;
 use super::super::vcpu::*;
 use super::super::SignalDef::*;
 use super::super::SHARESPACE;
+use super::sys_rusage::*;
 
 #[derive(Default, Debug)]
 pub struct ElfInfo {
@@ -438,7 +440,7 @@ pub fn SysWaitid(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let id = args.arg1 as i32;
     let infop = args.arg2;
     let options = args.arg3 as u32;
-    let _rusageAddr = args.arg4;
+    let rusageAddr = args.arg4;
 
     if options
         & !(WaitOption::WNOHANG
@@ -502,10 +504,10 @@ pub fn SysWaitid(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         Ok(wr) => wr,
     };
 
-    //todo: handle rusageAddr
-    /*if rusageAddr != 0 {
-
-    }*/
+    if rusageAddr != 0 {
+        let ru = GetUsage(task, RUSAGE_BOTH)?;
+        task.CopyOutObj(&ru, rusageAddr)?;
+    }
 
     if infop == 0 {
         return Ok(0);
@@ -554,7 +556,7 @@ pub fn SysWaitid(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     return Ok(0);
 }
 
-pub fn wait4(task: &Task, pid: i32, statusAddr: u64, options: u32, _rusage: u64) -> Result<i64> {
+pub fn wait4(task: &Task, pid: i32, statusAddr: u64, options: u32, rusageAddr: u64) -> Result<i64> {
     if options
         & !(WaitOption::WNOHANG
             | WaitOption::WUNTRACED
@@ -607,10 +609,11 @@ pub fn wait4(task: &Task, pid: i32, statusAddr: u64, options: u32, _rusage: u64)
         //task.CopyInObject(statusAddr, &wr.Status as * const _ as u64, 4)?;
         task.CopyOutObj(&wr.Status, statusAddr)?;
     }
-    //todo: handle rusageAddr
-    /*if rusageAddr != 0 {
 
-    }*/
+    if rusageAddr != 0 {
+        let ru = GetUsage(task, RUSAGE_BOTH)?;
+        task.CopyOutObj(&ru, rusageAddr)?;
+    }
 
     return Ok(wr.TID as i64);
 }
