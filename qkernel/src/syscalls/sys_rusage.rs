@@ -19,7 +19,7 @@ use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::Task;
 
-fn GetUsage(task: &Task, which: i32) -> Result<Rusage> {
+pub fn GetUsage(task: &Task, which: i32) -> Result<Rusage> {
     let cs = match which {
         RUSAGE_SELF => task.Thread().ThreadGroup().CPUStats(),
         RUSAGE_CHILDREN => task.Thread().ThreadGroup().JoinedChildCPUStats(),
