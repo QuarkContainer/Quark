@@ -123,7 +123,9 @@ pub struct RDMAResp {
 #[derive(Clone, Copy, Debug)]
 pub enum RDMAReqMsg {
     RDMAListen(RDMAListenReq),
+    RDMAListenUsingPodId(RDMAListenReqUsingPodId),
     RDMAConnect(RDMAConnectReq),
+    RDMAConnectUsingPodId(RDMAConnectReqUsingPodId),
     RDMAWrite(RDMAWriteReq),
     RDMARead(RDMAReadReq),
     RDMAShutdown(RDMAShutdownReq),
@@ -202,6 +204,14 @@ pub struct RDMAListenReq {
     pub waitingLen: i32,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct RDMAListenReqUsingPodId {
+    pub sockfd: u32,
+    pub podId: [u8; 64],
+    pub port: u16,
+    pub waitingLen: i32,
+}
+
 #[derive(Default, Clone, Copy, Debug)]
 pub struct RDMAWriteReq {
     // pub sockfd: u32,
@@ -235,6 +245,17 @@ pub struct RDMAConnectReq {
     pub srcIpAddr: u32,
     pub srcPort: u16,
 }
+
+#[derive(Clone, Copy, Debug)]
+pub struct RDMAConnectReqUsingPodId {
+    //pub vpcId: u32,
+    pub sockfd: u32,
+    pub dstIpAddr: u32,
+    pub dstPort: u16,
+    pub podId: [u8; 64],
+    pub srcPort: u16,
+}
+
 
 #[derive(Default, Clone, Copy, Debug)]
 pub struct RDMAAcceptReq {
@@ -410,7 +431,7 @@ impl ShareRegion {
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, Debug)]
 pub enum SockStatus {
-    FIN_READ_FROM_BUFFER  = -2, //after reading all stuff to above socket, need a better name.
+    FIN_READ_FROM_BUFFER = -2, //after reading all stuff to above socket, need a better name.
     FIN_SENT_TO_SVC = -1,      //
     // FIN_RECEIVED_FROM_PEER,
     CLOSED = 0,

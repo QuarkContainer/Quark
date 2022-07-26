@@ -704,7 +704,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // RDMA.HandleCQEvent().unwrap();
         // RDMAProcessOnce(&mut HashMap::new());
         RDMAProcessOnce();
-        // println!("Before sleep");
+        println!("Before sleep");
         let res = match syscall!(epoll_wait(
             epoll_fd,
             events.as_mut_ptr() as *mut libc::epoll_event,
@@ -901,9 +901,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 Srv_FdType::NodeEventFd(nodeEvent) => {
                     let node = RDMA_CTLINFO.node_get(nodeEvent.ip);
+                    debug!("Srv_FdType::NodeEventFd, node: {:?}", node);
                     if node.hostname.eq_ignore_ascii_case(&hostname) {
                         RDMA_CTLINFO.timestamp_set(node.timestamp);
                     }
+                    std::mem::drop(fds);
                     SetupConnections();
                 },
             }
@@ -996,13 +998,17 @@ fn InitContainer(conn_sock: &UnixSocket) {
 
 fn SetupConnections() {
     let timestamp = RDMA_CTLINFO.timestamp_get();
+    debug!("SetupConnections, timestamp: {}", timestamp);
     if timestamp == 0 {
         return
     }
 
     let node_ips_set = RDMA_CTLINFO.get_node_ips_for_connecting();
+    debug!("SetupConnections, node_ips_set: {:?}", node_ips_set);
     for ip in node_ips_set.iter() {
+        debug!("SetupConnections, ip: {}", ip);
         if !RDMA_SRV.ExistsConnection(ip) {
+            debug!("SetupConnections, set up connection ip: {}", ip);
             SetupConnection(ip);
         }
     }
@@ -1010,9 +1016,12 @@ fn SetupConnections() {
 
 fn SetupConnection(ip: &u32) {
     let node = RDMA_CTLINFO.node_get(*ip);
+    debug!("SetupConnection, 1 node: {:?}", node);
     let sock_fd = unsafe { libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0) };
     unblock_fd(sock_fd);
+    debug!("SetupConnection, 2 node: {:?}", node);
     RDMA_CTLINFO.fds_insert(sock_fd, Srv_FdType::TCPSocketConnect(node.ipAddr));
+    debug!("SetupConnection, 3 node: {:?}", node);
     let epoll_fd = RDMA_CTLINFO.epoll_fd_get();
     println!("epoll_fd: {}, sock_fd: {}", epoll_fd, sock_fd);
     match epoll_add(epoll_fd, sock_fd, read_write_event(sock_fd as u64)) {

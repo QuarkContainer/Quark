@@ -24,9 +24,7 @@ use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicI64;
 use core::sync::atomic::Ordering;
 
-use crate::qlib::rdma_share::Endpoint;
 use crate::qlib::rdmasocket::RDMAServerSock;
-//use super::super::*;
 use super::super::super::super::common::*;
 use super::super::super::super::fileinfo::*;
 use super::super::super::super::linux::netdevice::*;
@@ -833,12 +831,9 @@ impl SockOperations for SocketOperations {
                 SockAddr::Inet(ipv4) => {
                     let ipAddr = u32::from_be_bytes(ipv4.Addr);
                     let port = ipv4.Port.to_le();
-                    debug!("SocketOperations::Connect, ipAddr: {}, port: {}", ipAddr, port);
                     //TODO: get local ip and port
-                    let srcIpAddr = 3232237062;//u32::from(Ipv4Addr::from_str("192.168.6.6").unwrap()).to_be();
                     let srcPort = 16866u16.to_be();
-                    //TODO: should update ipAddr and port in SockInfo??
-                    let _ret = GlobalRDMASvcCli().connect(self.fd as u32, ipAddr, port, srcIpAddr, srcPort); //192.168.6.8:16868
+                    let _ret = GlobalRDMASvcCli().connectUsingPodId(self.fd as u32, ipAddr, port, srcPort);
                     let socketBuf = self.SocketBufType().Connect();
                     *self.socketBuf.lock() = socketBuf.clone();
                     res = -SysErr::EINPROGRESS;
@@ -1052,7 +1047,7 @@ impl SockOperations for SocketOperations {
                 SockAddr::Inet(ipv4) => {
                     let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
                     *fdInfo.lock().sockInfo.lock() = SockInfo::Socket(SocketInfo {
-                        ipAddr: u32::from_be_bytes([192, 168, 6, 8]), //ipAddr: u32::from_be_bytes(ipv4.Addr), // ipAddr: 3232237064,
+                        ipAddr: u32::from_be_bytes(ipv4.Addr), //u32::from_be_bytes([192, 168, 6, 8]), //ipAddr: u32::from_be_bytes(ipv4.Addr), // ipAddr: 3232237064,
                         port: ipv4.Port.to_le(),               // port: 58433,
                     }); //192.168.6.8:16868
                 }
@@ -1093,13 +1088,11 @@ impl SockOperations for SocketOperations {
             let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
             let socketInfo = fdInfo.lock().sockInfo.lock().clone();
             
-            let endpoint;
+            // let endpoint;
+            let port;
             match socketInfo {
                 SockInfo::Socket(info) => {
-                    endpoint = Endpoint {
-                        ipAddr: info.ipAddr,
-                        port: info.port,
-                    };
+                    port = info.port;
                     //TODO: should handle listen 0.0.0.0
                     let rdmaSocket = RDMAServerSock::New(self.fd, acceptQueue.clone(), info.ipAddr, info.port);
                     *fdInfo.lock().sockInfo.lock() = SockInfo::RDMAServerSocket(rdmaSocket);
@@ -1109,7 +1102,7 @@ impl SockOperations for SocketOperations {
                 }
             }
 
-            let _ret = GlobalRDMASvcCli().listen(self.fd as u32, &endpoint, backlog);
+            let _ret = GlobalRDMASvcCli().listenUsingPodId(self.fd as u32, port, backlog);
             0
         } else {
             Kernel::HostSpace::Listen(self.fd, backlog, asyncAccept)
@@ -1400,6 +1393,7 @@ impl SockOperations for SocketOperations {
                     panic!("Incorrect sockInfo")
                 }
             }
+            debug!("GetSockName, ipAddr: {}, port: {}", ipAddr, port);
             let sockAddr = SockAddr::Inet(SockAddrInet {
                 Family: AFType::AF_INET as u16,
                 Port: port,
@@ -1448,6 +1442,7 @@ impl SockOperations for SocketOperations {
                     panic!("Incorrect sockInfo")
                 }
             }
+            debug!("GetPeerName, ipAddr: {}, port: {}", ipAddr, port);
             let sockAddr = SockAddr::Inet(SockAddrInet {
                 Family: AFType::AF_INET as u16,
                 Port: port,

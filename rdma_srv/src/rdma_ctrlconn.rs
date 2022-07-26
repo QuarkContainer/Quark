@@ -67,7 +67,7 @@ impl Default for CtrlInfo {
     fn default() -> CtrlInfo {        
         let mut nodes: HashMap<u32, Node> = HashMap::new();
         let pods: HashMap<u32, Pod> = HashMap::new();
-        let containerids: HashMap<String, u32> = HashMap::new();
+        let mut containerids: HashMap<String, u32> = HashMap::new();
 
         let isK8s = true;
         if !isK8s {
@@ -82,6 +82,8 @@ impl Default for CtrlInfo {
                 resource_version: 0,
             };
             nodes.insert(lab1ip, node);
+            containerids.insert("server".to_string(), u32::from(Ipv4Addr::from_str("192.168.6.8").unwrap()).to_be());
+            containerids.insert("client".to_string(), u32::from(Ipv4Addr::from_str("192.168.6.6").unwrap()).to_be());
         }
 
         CtrlInfo {
@@ -157,9 +159,9 @@ impl CtrlInfo{
             if !self.isK8s {
                 return Some(node.ipAddr);
             }
-            if node.netmask.to_be() & *ip == node.subnet.to_be() {
+            if node.netmask & *ip == node.subnet {
                 return Some(node.ipAddr);
-            }            
+            }
         }
         None
     }

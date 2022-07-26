@@ -169,10 +169,10 @@ impl VirtualMachine {
     #[cfg(not(debug_assertions))]
     pub const KERNEL_IMAGE: &'static str = "/usr/local/bin/qkernel.bin";
 
-    pub fn InitShareSpace(vmfd: &VmFd, cpuCount: usize, controlSock: i32, rdmaSvcCliSock: i32) {
+    pub fn InitShareSpace(vmfd: &VmFd, cpuCount: usize, controlSock: i32, rdmaSvcCliSock: i32, podId: [u8; 64]) {
         SHARE_SPACE_STRUCT
             .lock()
-            .Init(cpuCount, controlSock, rdmaSvcCliSock);
+            .Init(cpuCount, controlSock, rdmaSvcCliSock, podId);
 
         error!("VM::InitShareSpace, after call init 1");
         let spAddr = &(*SHARE_SPACE_STRUCT.lock()) as *const _ as u64;
@@ -303,7 +303,15 @@ impl VirtualMachine {
         );
 
         let autoStart;
+        let podIdStr = args.ID.clone();
+        let mut podId: [u8; 64] = [0; 64];
+        if podIdStr.len() != podId.len() {
+            panic!("podId len: {} is not equal to podIdStr len: {}", podId.len(), podIdStr.len());
+        }
 
+        podIdStr.bytes()
+            .zip(podId.iter_mut())
+            .for_each(|(b, ptr)| *ptr = b);
         {
             let vms = &mut VMS.lock();
             vms.controlSock = controlSock;
@@ -340,7 +348,7 @@ impl VirtualMachine {
             vms.args = Some(args);
         }
 
-        Self::InitShareSpace(&vm_fd, cpuCount, controlSock, rdmaSvcCliSock);
+        Self::InitShareSpace(&vm_fd, cpuCount, controlSock, rdmaSvcCliSock, podId);
 
         info!("before loadKernel");
 

@@ -64,9 +64,7 @@ pub struct RDMAAgentIntern {
 
     pub keys: Vec<[u32; 2]>,
     // TODO: indexes allocated for io buffer.
-
     pub memoryRegions: Mutex<Vec<MemoryRegion>>,
-
     //sockfd -> sockInfo
     // pub sockInfos: Mutex<HashMap<u32, SockInfo>>,
 }
@@ -80,9 +78,11 @@ impl Drop for RDMAAgentIntern {
             }
 
             if self.shareMemRegion.addr != 0 {
-                libc::munmap(self.shareMemRegion.addr as *mut _, self.shareMemRegion.len as usize);
+                libc::munmap(
+                    self.shareMemRegion.addr as *mut _,
+                    self.shareMemRegion.len as usize,
+                );
             }
-            
         }
     }
 }
@@ -335,14 +335,87 @@ impl RDMAAgent {
                     msg.ipAddr, msg.port
                 );
             }
+            RDMAReqMsg::RDMAListenUsingPodId(msg) => {
+                let podId = String::from_utf8(msg.podId.to_vec()).unwrap();
+                let containerIds = RDMA_CTLINFO.containerids.lock();
+                
+                let ipAddrOption = containerIds.get(&podId);
+                match ipAddrOption {
+                    Some(ipAddr) => {
+                        let ipAddrle = *ipAddr;
+                        let ipAddr = ipAddrle.to_be();
+                        RDMA_SRV.srvEndPoints.lock().insert(
+                            Endpoint {
+                                ipAddr,
+                                port: msg.port,
+                            },
+                            SrvEndpoint {
+                                agentId: self.id,
+                                sockfd: msg.sockfd,
+                                endpoint: Endpoint {
+                                    ipAddr,
+                                    port: msg.port,
+                                },
+                                status: SrvEndPointStatus::Listening,
+                            },
+                        );
+                    }
+                    None => {
+                        debug!(
+                            "RDMAReqMsg::RDMAListenUsingPodId, podId: {} not found!!!",
+                            podId
+                        );
+                    }
+                }
+            }
             RDMAReqMsg::RDMAConnect(msg) => {
                 //TODOCtrlPlane: need get nodeIp from dstIpAddr
                 match RDMA_CTLINFO.get_node_ip_by_pod_ip(&msg.dstIpAddr) {
                     Some(nodeIpAddr) => {
                         let conns = RDMA_SRV.conns.lock();
                         let rdmaConn = conns.get(&nodeIpAddr).unwrap();
-                        let rdmaChannel =
-                            self.CreateClientRDMAChannel(&msg, rdmaConn.clone());
+                        let rdmaChannel = self.CreateClientRDMAChannel(&msg, rdmaConn.clone());
+
+                        RDMA_SRV
+                            .channels
+                            .lock()
+                            .insert(rdmaChannel.localId, rdmaChannel.clone());
+
+                        let connectReqeust = rdmaChannel.CreateConnectRequest(msg.sockfd);
+                        rdmaConn
+                            .ctrlChan
+                            .lock()
+                            .SendControlMsg(ControlMsgBody::ConnectRequest(connectReqeust));
+                        // .expect("fail to send msg");
+                    }
+                    None => {
+                        println!("TODO: return error as no ip to node mapping is found");
+                    }
+                }
+            }
+            RDMAReqMsg::RDMAConnectUsingPodId(msg) => {
+                //TODOCtrlPlane: need get nodeIp from dstIpAddr
+                let podId = String::from_utf8(msg.podId.to_vec()).unwrap();
+                let ipAddr = RDMA_CTLINFO
+                    .containerids
+                    .lock()
+                    .get(&podId)
+                    .unwrap()
+                    .clone();
+                match RDMA_CTLINFO.get_node_ip_by_pod_ip(&msg.dstIpAddr) {
+                    Some(nodeIpAddr) => {
+                        let conns = RDMA_SRV.conns.lock();
+                        let rdmaConn = conns.get(&nodeIpAddr).unwrap();
+                        let rdmaChannel = self.CreateClientRDMAChannel(
+                            &RDMAConnectReq {
+                                sockfd: msg.sockfd,
+                                dstIpAddr: msg.dstIpAddr,
+                                dstPort: msg.dstPort,
+                                srcIpAddr: ipAddr.to_be(),
+                                srcPort: msg.srcPort,
+                            },
+                            rdmaConn.clone(),
+                        );
 
                         RDMA_SRV
                             .channels

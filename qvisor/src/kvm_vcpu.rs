@@ -481,7 +481,7 @@ impl KVMVcpu {
                             .vcpu
                             .get_regs()
                             .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                        error!("vcpu error regs is {:x?}", regs);
+                        error!("vcpu error regs is {:x?}, ioerror: {:?}", regs, e);
                         panic!("kvm virtual cpu[{}] run failed: Error {:?}", self.id, e)
                     }
                 }

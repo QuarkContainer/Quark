@@ -101,7 +101,7 @@ impl PodInformer {
                 if pods_map[&ip].resource_version < pod_message.resource_version {
                     let container_id = &pods_map[&ip].container_id;
                     containerids_map.remove(container_id);
-                    pods_map.remove(&ip);                    
+                    pods_map.remove(&ip);
                 }
             }
         }

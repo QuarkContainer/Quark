@@ -82,6 +82,7 @@ impl RDMASvcClient {
 
         let srvShareRegion = unsafe { &mut (*(srvShareAddr as *mut ShareRegion)) };
         let srvShareRegion = Mutex::new(srvShareRegion);
+        let podId: [u8; 64] = [0; 64];
         RDMASvcClient {
             intern: Arc::new(RDMASvcCliIntern {
                 agentId,
@@ -101,6 +102,7 @@ impl RDMASvcClient {
                 },
                 srvShareRegion,
                 channelToSocketMappings: Mutex::new(BTreeMap::new()),
+                podId,
             }),
         }
     }

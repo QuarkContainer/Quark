@@ -44,6 +44,8 @@ pub struct RDMASvcCliIntern {
     pub srvShareRegion: Mutex<&'static mut ShareRegion>,
 
     pub channelToSocketMappings: Mutex<BTreeMap<u32, i32>>,
+
+    pub podId: [u8; 64],
 }
 
 impl Deref for RDMASvcClient {
@@ -73,6 +75,7 @@ impl Default for RDMASvcClient {
                 srvMemRegion: MemRegion { addr: 0, len: 0 },
                 srvShareRegion: unsafe { Mutex::new(&mut (*(0 as *mut ShareRegion))) },
                 channelToSocketMappings: Mutex::new(BTreeMap::new()),
+                podId: [0; 64],
             }),
         }
     }
@@ -84,6 +87,21 @@ impl RDMASvcClient {
             sockfd: sockfd,
             ipAddr: endpoint.ipAddr,
             port: endpoint.port,
+            waitingLen,
+        }));
+        res
+    }
+
+    pub fn listenUsingPodId(
+        &self,
+        sockfd: u32,
+        port: u16,
+        waitingLen: i32,
+    ) -> Result<()> {
+        let res = self.SentMsgToSvc(RDMAReqMsg::RDMAListenUsingPodId(RDMAListenReqUsingPodId {
+            sockfd: sockfd,
+            podId: self.podId,
+            port,
             waitingLen,
         }));
         res
@@ -104,6 +122,25 @@ impl RDMASvcClient {
             srcIpAddr, //101099712, //u32::from(Ipv4Addr::from_str("192.168.6.6").unwrap()).to_be(),
             srcPort,   //16866u16.to_be(),
         }));
+        res
+    }
+
+    pub fn connectUsingPodId(
+        &self,
+        sockfd: u32,
+        dstIpAddr: u32,
+        dstPort: u16,
+        srcPort: u16,
+    ) -> Result<()> {
+        let res = self.SentMsgToSvc(RDMAReqMsg::RDMAConnectUsingPodId(
+            RDMAConnectReqUsingPodId {
+                sockfd,
+                dstIpAddr,
+                dstPort,
+                podId: self.podId, //101099712, //u32::from(Ipv4Addr::from_str("192.168.6.6").unwrap()).to_be(),
+                srcPort, //16866u16.to_be(),
+            },
+        ));
         res
     }
 
@@ -393,18 +430,26 @@ impl RDMASvcClient {
                         let sockFd = channelToSocketMappings.get_mut(&response.channelId);
                         match sockFd {
                             Some(fd) => {
-                                let fdInfo = GlobalIOMgr().GetByHost(*fd).unwrap();
-                                let fdInfoLock = fdInfo.lock();
-                                let sockInfo = fdInfoLock.sockInfo.lock().clone();
-                                match sockInfo {
-                                    SockInfo::RDMADataSocket(dataSock) => {
-                                        dataSock.socketBuf.SetRClosed();
-                                        fdInfoLock.waitInfo.Notify(EVENT_IN);
+                                let fdInfo = GlobalIOMgr().GetByHost(*fd);
+                                match fdInfo {
+                                    Some(fdInfo) => {
+                                        let fdInfoLock = fdInfo.lock();
+                                        let sockInfo = fdInfoLock.sockInfo.lock().clone();
+                                        match sockInfo {
+                                            SockInfo::RDMADataSocket(dataSock) => {
+                                                dataSock.socketBuf.SetRClosed();
+                                                fdInfoLock.waitInfo.Notify(EVENT_IN);
+                                            }
+                                            _ => {
+                                                panic!("Unexpected sockInfo type: {:?}", sockInfo);
+                                            }
+                                        }
                                     }
-                                    _ => {
-                                        panic!("Unexpected sockInfo type: {:?}", sockInfo);
+                                    None => {
+                                        error!("fd: {} is not found", fd);
                                     }
                                 }
+                                
                             }
                             None => {
                                 info!("channelId: {} is not found", response.channelId);
