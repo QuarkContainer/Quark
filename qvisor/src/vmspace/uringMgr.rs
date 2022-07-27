@@ -17,6 +17,7 @@ use alloc::vec::Vec;
 use super::super::qlib::common::*;
 use super::super::qlib::uring::sys::sys::*;
 use super::super::qlib::uring::*;
+use super::super::print::*;
 
 use super::super::*;
 use super::host_uring::*;
@@ -32,17 +33,7 @@ pub struct UringMgr {
 
 impl Drop for UringMgr {
     fn drop(&mut self) {
-        unsafe {
-            libc::close(self.uringfd);
-        }
-
-        for fd in &self.fds {
-            if *fd >= 0 {
-                unsafe {
-                    libc::close(*fd);
-                }
-            }
-        }
+        self.Close();
     }
 }
 
@@ -64,6 +55,24 @@ impl UringMgr {
         };
 
         return ret;
+    }
+
+    pub fn Close(&mut self) {
+        //error!("UringMgr close1 ...");
+        //self.UnRegisterFile().unwrap();
+
+        unsafe {
+            libc::close(self.uringfd);
+        }
+
+        let logfd = LOG.Logfd();
+        for fd in &self.fds {
+            if *fd >= 0 && *fd != logfd {
+                unsafe {
+                    libc::close(*fd);
+                }
+            }
+        }
     }
 
     pub fn IOUringsAddr(&self) -> u64 {

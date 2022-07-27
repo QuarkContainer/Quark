@@ -605,6 +605,7 @@ pub fn wait4(task: &Task, pid: i32, statusAddr: u64, options: u32, rusageAddr: u
         Ok(wr) => wr,
     };
 
+    //error!("wait4 status is {:x?}", wr.Status);
     if statusAddr != 0 {
         //task.CopyInObject(statusAddr, &wr.Status as * const _ as u64, 4)?;
         task.CopyOutObj(&wr.Status, statusAddr)?;
