@@ -91,10 +91,12 @@ use crate::rdma_srv::RDMA_SRV;
 use self::qlib::ShareSpaceRef;
 use alloc::slice;
 use std::collections::{HashMap, HashSet};
+use std::fs;
 use std::io;
 use std::io::prelude::*;
 use std::net::{IpAddr, Ipv4Addr, TcpListener, TcpStream};
 use std::os::unix::io::{AsRawFd, RawFd};
+use std::path::Path;
 pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
 use crate::qlib::rdma_share::*;
 use crate::rdma::RDMA;
@@ -641,10 +643,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // unix domain socket
 
-    let mut unix_sock_path = "/tmp/rdma_srv";
+    let mut unix_sock_path = "/home/rdma_srv";
     if args.len() > 1 {
         unix_sock_path = args.get(1).unwrap(); //"/tmp/rdma_srv1";
     }
+    println!("unix_sock_path: {}", unix_sock_path);
+    if Path::new(unix_sock_path).exists() {
+        println!("Deleting existing socket file: {}", unix_sock_path);
+        fs::remove_file(unix_sock_path).expect("File delete failed");
+    }
+
     let srv_unix_sock = UnixSocket::NewServer(unix_sock_path).unwrap();
     let srv_unix_sock_fd = srv_unix_sock.as_raw_fd();
     RDMA_CTLINFO.fds_insert(srv_unix_sock_fd, Srv_FdType::UnixDomainSocketServer(srv_unix_sock));

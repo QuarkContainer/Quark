@@ -583,7 +583,7 @@ impl SandboxProcess {
         let controlSock = USocket::CreateServerSocket(&addr).expect("can't create control sock");
         let mut rdmaSvcCliSock = 0;
         if QUARK_CONFIG.lock().EnableRDMA {
-            rdmaSvcCliSock = unix_socket::UnixSocket::NewClient("/tmp/rdma_srv").unwrap();
+            rdmaSvcCliSock = unix_socket::UnixSocket::NewClient("/var/quarkrdma/rdma_srv").unwrap();
         }
         self.MakeSandboxRootDirectory()?;
         self.EnableNamespace()?;
