@@ -49,6 +49,23 @@ pub struct SrvEndpoint {
                                    //pub acceptQueue: [RDMAChannel; 5], // hold rdma channel which can be assigned.
 }
 
+pub struct SrvEndpointUsingPodId {
+    //pub srvEndpointId: u32, // to be returned as bind
+    pub agentId: u32,
+    pub sockfd: u32,
+    pub podId: [u8; 64],
+    pub port: u16,
+    pub status: SrvEndPointStatus, //TODO: double check whether it's needed or not
+                                   //pub acceptQueue: [RDMAChannel; 5], // hold rdma channel which can be assigned.
+}
+
+#[derive(Eq, Hash, PartialEq)]
+pub struct EndpointUsingPodId {
+    // same as vpcId
+    pub podId: [u8; 64],
+    pub port: u16,
+}
+
 pub struct RDMAControlChannelRegion {
     // data buf for sockbuf, it will be mapped in the rdma MR
     pub iobufs: [IOBuf; IO_BUF_COUNT],
@@ -101,6 +118,10 @@ pub struct RDMASrv {
 
     // keep track of server endpoint on current node
     pub srvEndPoints: Mutex<HashMap<Endpoint, SrvEndpoint>>,
+
+    // use pod id to track srvEndpoint
+    pub srvPodIdEndpoints: Mutex<HashMap<EndpointUsingPodId, SrvEndpointUsingPodId>>,
+
     pub currNode: Node,
 
     pub channelIdMgr: Mutex<IdMgr>,
@@ -214,6 +235,7 @@ impl RDMASrv {
                 &mut (*addr)
             },
             srvEndPoints: Mutex::new(HashMap::new()),
+            srvPodIdEndpoints: Mutex::new(HashMap::new()),
             currNode: Node::default(),
             channelIdMgr: Mutex::new(IdMgr::Init(1, 1000)),
             agentIdMgr: Mutex::new(IdMgr::Init(0, 1000)),

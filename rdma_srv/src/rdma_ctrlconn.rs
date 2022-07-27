@@ -37,6 +37,9 @@ pub struct CtrlInfo {
     // containerids: containerid --> ip
     pub containerids: Mutex<HashMap<String, u32>>,
 
+    //ip --> podId
+    pub ipToPodIdMappings: Mutex<HashMap<u32, String>>,
+
     // subnetmapping: virtual subnet --> node ipaddr
     pub subnetmap: Mutex<HashMap<u32, u32>>,
 
@@ -90,6 +93,7 @@ impl Default for CtrlInfo {
             nodes: Mutex::new(nodes),
             pods: Mutex::new(pods),
             containerids: Mutex::new(containerids),
+            ipToPodIdMappings: Mutex::new(HashMap::new()),
             subnetmap: Mutex::new(HashMap::new()),
             veps: Mutex::new(HashMap::new()),
             clusterSubnetInfo: Mutex::new(ClusterSubnetInfo {
