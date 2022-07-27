@@ -536,30 +536,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     epoll_add(epoll_fd, server_fd, read_write_event(server_fd as u64))?;
 
     if RDMA_CTLINFO.isK8s {
-        while !RDMA_CTLINFO.isCMConnected_get() {
-            tokio::spawn(async {
+        tokio::spawn(async {
+            while !RDMA_CTLINFO.isCMConnected_get() {
                 let mut node_informer = NodeInformer::new();
                 match node_informer.run().await {
                     Err(e) => {
                         println!("Error to handle nodes: {:?}", e);
+                        thread::sleep_ms(1000);
                     },
                     Ok(_) => (),
                 };
-            });
+            }
+        });
 
-            tokio::spawn(async {
-                let mut pod_informer = PodInformer::new();
-                match pod_informer.run().await {
-                    Err(e) => {
-                        println!("Error to handle pods: {:?}", e);
-                    },
-                    Ok(_) => {
-                        RDMA_CTLINFO.isCMConnected_set(true);
-                    },                    
-                };
-            });
-            thread::sleep_ms(1000);
-        }
+        tokio::spawn(async {
+            while !RDMA_CTLINFO.isCMConnected_get() {
+                thread::sleep_ms(1000);
+            }
+            let mut pod_informer = PodInformer::new();
+            match pod_informer.run().await {
+                Err(e) => {
+                    println!("Error to handle pods: {:?}", e);
+                },
+                Ok(_) => (),              
+            };
+        });
     }
 
     //watch RDMA event

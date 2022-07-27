@@ -42,6 +42,7 @@ impl NodeInformer {
 impl NodeInformer {
     pub async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let mut client = QuarkCmServiceClient::connect(GRPC_SERVER_ADDRESS).await?;
+        RDMA_CTLINFO.isCMConnected_set(true);
 
         let ref nodes_message = client.list_node(()).await?.into_inner().nodes;
         if nodes_message.len() > 0 {
