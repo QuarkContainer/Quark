@@ -91,10 +91,12 @@ use crate::rdma_srv::RDMA_SRV;
 use self::qlib::ShareSpaceRef;
 use alloc::slice;
 use std::collections::{HashMap, HashSet};
+use std::fs;
 use std::io;
 use std::io::prelude::*;
 use std::net::{IpAddr, Ipv4Addr, TcpListener, TcpStream};
 use std::os::unix::io::{AsRawFd, RawFd};
+use std::path::Path;
 pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
 use crate::qlib::rdma_share::*;
 use crate::rdma::RDMA;
@@ -537,17 +539,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if RDMA_CTLINFO.isK8s {
         tokio::spawn(async {
-            let mut node_informer = NodeInformer::new();
-            match node_informer.run().await {
-                Err(e) => println!("Error to handle nodes: {:?}", e),
-                Ok(_) => (),
-            };
+            while !RDMA_CTLINFO.isCMConnected_get() {
+                let mut node_informer = NodeInformer::new();
+                match node_informer.run().await {
+                    Err(e) => {
+                        println!("Error to handle nodes: {:?}", e);
+                        thread::sleep_ms(1000);
+                    },
+                    Ok(_) => (),
+                };
+            }
         });
+
         tokio::spawn(async {
+            while !RDMA_CTLINFO.isCMConnected_get() {
+                thread::sleep_ms(1000);
+            }
             let mut pod_informer = PodInformer::new();
             match pod_informer.run().await {
-                Err(e) => println!("Error to handle pods: {:?}", e),
-                Ok(_) => (),
+                Err(e) => {
+                    println!("Error to handle pods: {:?}", e);
+                },
+                Ok(_) => (),              
             };
         });
     }
@@ -630,10 +643,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // unix domain socket
 
-    let mut unix_sock_path = "/tmp/rdma_srv";
+    let mut unix_sock_path = "/home/rdma_srv";
     if args.len() > 1 {
         unix_sock_path = args.get(1).unwrap(); //"/tmp/rdma_srv1";
     }
+    println!("unix_sock_path: {}", unix_sock_path);
+    if Path::new(unix_sock_path).exists() {
+        println!("Deleting existing socket file: {}", unix_sock_path);
+        fs::remove_file(unix_sock_path).expect("File delete failed");
+    }
+
     let srv_unix_sock = UnixSocket::NewServer(unix_sock_path).unwrap();
     let srv_unix_sock_fd = srv_unix_sock.as_raw_fd();
     RDMA_CTLINFO.fds_insert(srv_unix_sock_fd, Srv_FdType::UnixDomainSocketServer(srv_unix_sock));
@@ -900,6 +919,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // RDMA_SRV.HandleClientRequest();
                 }
                 Srv_FdType::NodeEventFd(nodeEvent) => {
+                    println!("Got NodeEvent: {:?}", nodeEvent);
                     let node = RDMA_CTLINFO.node_get(nodeEvent.ip);
                     if node.hostname.eq_ignore_ascii_case(&hostname) {
                         RDMA_CTLINFO.timestamp_set(node.timestamp);
