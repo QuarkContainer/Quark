@@ -18,7 +18,7 @@ use super::super::super::super::socket_buf::*;
 use super::super::super::task::Task;
 
 impl SocketBuff {
-    pub fn Readv(&self, task: &Task, iovs: &mut [IoVec]) -> Result<(bool, usize)> {
+    pub fn Readv(&self, task: &Task, iovs: &mut [IoVec], peek: bool) -> Result<(bool, usize)> {
         let mut trigger = false;
         let mut cnt = 0;
 
@@ -26,7 +26,11 @@ impl SocketBuff {
         let srcIovs = buf.GetDataIovsVec();
         if srcIovs.len() > 0 {
             cnt = task.mm.CopyIovsOutFromIovs(task, &srcIovs, iovs, true)?;
-            trigger = buf.Consume(cnt);
+            trigger = if !peek {
+                buf.Consume(cnt)
+            } else {
+                false
+            }
         }
 
         if cnt > 0 {
