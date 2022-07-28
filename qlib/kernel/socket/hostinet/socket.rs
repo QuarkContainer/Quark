@@ -1315,6 +1315,9 @@ impl SockOperations for SocketOperations {
         let waitall = (flags & MsgType::MSG_WAITALL) != 0;
         let dontwait = (flags & MsgType::MSG_DONTWAIT) != 0;
 
+        // todo: handle trunc
+        //let trunc = (flags & MsgType::MSG_TRUNC) != 0;
+
         if self.SocketBufEnabled() {
             let controlDataLen = 0;
 
