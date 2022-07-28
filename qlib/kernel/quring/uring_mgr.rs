@@ -387,8 +387,9 @@ impl QUring {
         buf: Arc<SocketBuff>,
         dsts: &mut [IoVec],
         isSocket: bool,
+        peek: bool,
     ) -> Result<i64> {
-        let (trigger, cnt) = buf.Readv(task, dsts)?;
+        let (trigger, cnt) = buf.Readv(task, dsts, peek)?;
 
         if trigger {
             let (addr, len) = buf.GetFreeReadBuf();

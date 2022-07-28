@@ -72,10 +72,34 @@ impl MemoryManager {
         return Ok(());
     }
 
+    pub fn ZeroDataOutLocked(&self, task: &Task, rl: &QUpgradableLockGuard, vaddr: u64, len: usize, allowPartial: bool) -> Result<usize> {
+        self.V2PLocked(task, rl, vaddr, len as u64, &mut task.GetMut().iovs, true, allowPartial)?;
+        defer!(task.GetMut().iovs.clear());
+
+        let mut len = 0;
+        for iov in &task.GetMut().iovs {
+            let dst = iov.start as *mut u8;
+            let dst = unsafe { slice::from_raw_parts_mut(dst, iov.len) };
+            for i in 0..iov.len {
+                dst[i] = 0;
+            }
+
+            len += iov.len;
+        }
+
+        return Ok(len);
+    }
+
     pub fn CopyDataOut(&self, task: &Task, from: u64, vaddr: u64, len: usize, allowPartial: bool) -> Result<()> {
         let rl = self.MappingReadLock();
 
         return self.CopyDataOutLocked(task, &rl, from, vaddr, len, allowPartial);
+    }
+
+    pub fn ZeroDataOut(&self, task: &Task, vaddr: u64, len: usize, allowPartial: bool) -> Result<usize> {
+        let rl = self.MappingReadLock();
+
+        return self.ZeroDataOutLocked(task, &rl, vaddr, len, allowPartial);
     }
 
     pub fn CopyDataOutToIovsLocked(
@@ -108,10 +132,45 @@ impl MemoryManager {
         return Ok(offset);
     }
 
+    pub fn ZeroDataOutToIovsLocked(
+        &self,
+        task: &Task,
+        rl: &QUpgradableLockGuard,
+        dsts: &[IoVec],
+        size: usize,
+        allowPartial: bool
+    ) -> Result<usize> {
+        let mut offset = 0;
+        for iov in dsts {
+            if offset >= size {
+                break;
+            }
+
+            let mut len = size - offset;
+            if len > iov.len {
+                len = iov.len
+            }
+
+            let cnt = self.ZeroDataOutLocked(task, rl, iov.start, len, allowPartial)?;
+            offset += cnt;
+            if cnt < len {
+                break;
+            }
+        }
+
+        return Ok(offset);
+    }
+
     pub fn CopyDataOutToIovs(&self, task: &Task, buf: &[u8], iovs: &[IoVec], allowPartial: bool) -> Result<usize> {
         let rl = self.MappingReadLock();
 
         return self.CopyDataOutToIovsLocked(task, &rl, buf, iovs, allowPartial);
+    }
+
+    pub fn ZeroDataOutToIovs(&self, task: &Task, iovs: &[IoVec], size: usize, allowPartial: bool) -> Result<usize> {
+        let rl = self.MappingReadLock();
+
+        return self.ZeroDataOutToIovsLocked(task, &rl, iovs, size, allowPartial);
     }
 
     pub fn CopyIovsOutToIovs(
@@ -494,6 +553,10 @@ impl Task {
     }
 
     pub fn CopyDataOutToIovs(&self, src: &[u8], dsts: &[IoVec], allowPartial: bool) -> Result<usize> {
+        return self.mm.CopyDataOutToIovs(self, src, dsts, allowPartial);
+    }
+
+    pub fn ZeroDataOutToIovs(&self, src: &[u8], dsts: &[IoVec], allowPartial: bool) -> Result<usize> {
         return self.mm.CopyDataOutToIovs(self, src, dsts, allowPartial);
     }
 

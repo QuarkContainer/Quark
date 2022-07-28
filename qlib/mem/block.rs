@@ -29,6 +29,16 @@ impl<'a> Iovs<'a> {
         return count;
     }
 
+    pub fn Data(&self) -> Vec<IoVec> {
+        let mut res = Vec::new();
+
+        for i in 0..self.0.len() {
+            res.push(self.0[i]);
+        }
+
+        return res;
+    }
+
     pub fn DropFirst(&self, n: usize) -> Vec<IoVec> {
         let mut n = n;
         let mut res = Vec::new();

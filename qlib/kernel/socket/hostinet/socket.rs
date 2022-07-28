@@ -358,15 +358,16 @@ impl SocketOperations {
         task: &Task,
         sockBufType: SocketBufType,
         dsts: &mut [IoVec],
+        peek: bool,
     ) -> Result<i64> {
         match sockBufType {
             SocketBufType::Uring(socketBuf) => {
                 let ret =
-                    QUring::RingFileRead(task, self.fd, self.queue.clone(), socketBuf, dsts, true)?;
+                    QUring::RingFileRead(task, self.fd, self.queue.clone(), socketBuf, dsts, true, peek)?;
                 return Ok(ret);
             }
             SocketBufType::RDMA(socketBuf) => {
-                let ret = RDMA::Read(task, self.fd, socketBuf, dsts);
+                let ret = RDMA::Read(task, self.fd, socketBuf, dsts, peek);
                 return ret;
             }
             t => {
@@ -623,11 +624,11 @@ impl FileOperations for SocketOperations {
                     return Err(Error::SysError(SysErr::ESPIPE))
                 }*/
                 let ret =
-                    QUring::RingFileRead(task, self.fd, self.queue.clone(), socketBuf, dsts, true)?;
+                    QUring::RingFileRead(task, self.fd, self.queue.clone(), socketBuf, dsts, true, false)?;
                 return Ok(ret);
             }
             SocketBufType::RDMA(socketBuf) => {
-                let ret = RDMA::Read(task, self.fd, socketBuf, dsts);
+                let ret = RDMA::Read(task, self.fd, socketBuf, dsts, false);
                 return ret;
             }
             _ => {
@@ -1314,9 +1315,8 @@ impl SockOperations for SocketOperations {
 
         let waitall = (flags & MsgType::MSG_WAITALL) != 0;
         let dontwait = (flags & MsgType::MSG_DONTWAIT) != 0;
-
-        // todo: handle trunc
-        //let trunc = (flags & MsgType::MSG_TRUNC) != 0;
+        let trunc = (flags & MsgType::MSG_TRUNC) != 0;
+        let peek = (flags & MsgType::MSG_PEEK) != 0;
 
         if self.SocketBufEnabled() {
             let controlDataLen = 0;
@@ -1335,6 +1335,12 @@ impl SockOperations for SocketOperations {
             }
 
             let len = IoVec::NumBytes(dsts);
+            let data = if trunc {
+                Some(Iovs(dsts).Data())
+            } else {
+                None
+            };
+
             let mut iovs = dsts;
 
             let mut count = 0;
@@ -1347,7 +1353,7 @@ impl SockOperations for SocketOperations {
 
             'main: loop {
                 loop {
-                    match self.ReadFromBuf(task, socketType.clone(), iovs) {
+                    match self.ReadFromBuf(task, socketType.clone(), iovs, peek) {
                         Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
                             if count > 0 {
                                 if dontwait || !waitall {
@@ -1377,7 +1383,7 @@ impl SockOperations for SocketOperations {
                             }
 
                             count += n;
-                            if count == len as i64 {
+                            if count == len as i64 || peek {
                                 break 'main;
                             }
 
@@ -1415,6 +1421,10 @@ impl SockOperations for SocketOperations {
             } else {
                 None
             };
+
+            if trunc {
+                task.mm.ZeroDataOutToIovs(task, &data.unwrap(), count as usize, false)?;
+            }
 
             let (retFlags, controlData) = self.prepareControlMessage(controlDataLen);
             return Ok((count as i64, retFlags, senderAddr, controlData));
