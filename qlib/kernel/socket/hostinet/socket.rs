@@ -857,6 +857,9 @@ impl SockOperations for SocketOperations {
         }
 
         if val != 0 {
+            if val == SysErr::ECONNREFUSED {
+                return Err(Error::SysError(SysErr::EINPROGRESS));
+            }
             return Err(Error::SysError(val as i32));
         }
 
@@ -1057,10 +1060,12 @@ impl SockOperations for SocketOperations {
 
             if self.stype == SockType::SOCK_STREAM && (how == LibcConst::SHUT_RD || how == LibcConst::SHUT_RDWR) {
                 self.SocketBuf().SetRClosed();
+                self.queue.Notify(EventMaskFromLinux(EVENT_HUP as u32));
             }
 
             if self.stype == SockType::SOCK_STREAM && (how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR) {
                 self.SocketBuf().SetWClosed();
+                self.queue.Notify(EventMaskFromLinux(EVENT_HUP as u32));
             }
 
             return Ok(res);
@@ -1558,7 +1563,7 @@ impl SockOperations for SocketOperations {
     ) -> Result<i64> {
         if self.SocketBufEnabled() {
             if self.SocketBuf().WClosed() {
-                return Err(Error::SysError(SysErr::ESPIPE))
+                return Err(Error::SysError(SysErr::EPIPE))
             }
 
             if msgHdr.msgName != 0 || msgHdr.msgControl != 0 {
@@ -1764,6 +1769,7 @@ pub struct SocketProvider {
 
 impl Provider for SocketProvider {
     fn Socket(&self, task: &Task, stype: i32, protocol: i32) -> Result<Option<Arc<File>>> {
+        let nonblocking = stype & SocketFlags::SOCK_NONBLOCK != 0;
         let stype = stype & SocketType::SOCK_TYPE_MASK;
 
         let res =
@@ -1785,7 +1791,7 @@ impl Provider for SocketProvider {
                 self.family,
                 fd,
                 stype & SocketType::SOCK_TYPE_MASK,
-                stype & SocketFlags::SOCK_NONBLOCK != 0,
+                nonblocking,
                 socketType,
                 None,
             )?;
@@ -1795,7 +1801,7 @@ impl Provider for SocketProvider {
                 self.family,
                 fd,
                 stype & SocketType::SOCK_TYPE_MASK,
-                stype & SocketFlags::SOCK_NONBLOCK != 0,
+                nonblocking,
                 None,
             )?;
         }
