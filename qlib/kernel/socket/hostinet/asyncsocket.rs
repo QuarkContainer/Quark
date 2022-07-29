@@ -16,6 +16,7 @@ use crate::qlib::mutex::*;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::any::Any;
+use core::fmt;
 use core::ops::Deref;
 use core::ptr;
 use core::sync::atomic::AtomicBool;
@@ -49,24 +50,69 @@ use super::super::control::*;
 use super::super::socket::*;
 use super::socket::*;
 
-pub fn newHostSocketFile(
+#[repr(u64)]
+#[derive(Clone)]
+pub enum SockState {
+    TCPInit,                      // Init TCP Socket, no listen and no connect
+    TCPServer(AcceptQueue),        // Uring TCP Server socket, when socket start to listen
+    TCPData(Arc<SocketBuff>),
+}
+
+impl fmt::Debug for SockState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            SockState::TCPInit => write!(f, "SocketBufType::TCPInit"),
+            SockState::TCPServer(_) => write!(f, "SocketBufType::TCPServer"),
+            SockState::TCPData(_) => write!(f, "SocketBufType::TCPData"),
+        }
+    }
+}
+
+impl SockState {
+    pub fn Accept(&self, socketBuf: Arc<SocketBuff>) -> Self {
+        match self {
+            SockState::TCPServer(_) => return SockState::TCPData(socketBuf),
+            _ => {
+                panic!("SocketBufType::Accept unexpect type {:?}", self)
+            }
+        }
+    }
+
+    pub fn Connect(&self) -> Self {
+        match self {
+            Self::TCPInit => return self.ConnectType(),
+            _ => {
+                panic!("SockState::Connect unexpect type {:?}", self)
+            }
+        }
+    }
+
+    fn ConnectType(&self) -> Self {
+        let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
+        return Self::TCPData(socketBuf);
+    }
+}
+
+pub fn newAsyncSocketFile(
     task: &Task,
     family: i32,
     fd: i32,
     stype: i32,
     nonblock: bool,
+    state: SockState,
     addr: Option<Vec<u8>>,
 ) -> Result<File> {
     let dirent = NewSocketDirent(task, SOCKET_DEVICE.clone(), fd)?;
     let inode = dirent.Inode();
     let iops = inode.lock().InodeOp.clone();
     let hostiops = iops.as_any().downcast_ref::<HostInodeOp>().unwrap();
-    let s = HostSocketOperations::New(
+    let s = AsyncSocketOperations::New(
         family,
         fd,
         stype,
         hostiops.Queue(),
         hostiops.clone(),
+        state,
         addr,
     )?;
 
@@ -85,28 +131,30 @@ pub fn newHostSocketFile(
     return Ok(file)
 }
 
-pub struct HostSocketOperationsIntern {
+pub struct AsyncSocketOperationsIntern {
     pub send: AtomicI64,
     pub recv: AtomicI64,
     pub family: i32,
     pub stype: i32,
     pub fd: i32,
     pub queue: Queue,
+    pub state: QMutex<SockState>,
     pub remoteAddr: QMutex<Option<SockAddr>>,
     pub hostops: HostInodeOp,
     passInq: AtomicBool,
 }
 
 #[derive(Clone)]
-pub struct HostSocketOperations(Arc<HostSocketOperationsIntern>);
+pub struct AsyncSocketOperations(Arc<AsyncSocketOperationsIntern>);
 
-impl HostSocketOperations {
+impl AsyncSocketOperations {
     pub fn New(
         family: i32,
         fd: i32,
         stype: i32,
         queue: Queue,
         hostops: HostInodeOp,
+        state: SockState,
         addr: Option<Vec<u8>>,
     ) -> Result<Self> {
         let addr = match addr {
@@ -120,7 +168,7 @@ impl HostSocketOperations {
             }
         };
 
-        let ret = HostSocketOperationsIntern {
+        let ret = AsyncSocketOperationsIntern {
             send: AtomicI64::new(0),
             recv: AtomicI64::new(0),
             family,
@@ -128,6 +176,7 @@ impl HostSocketOperations {
             fd,
             queue,
             remoteAddr: QMutex::new(addr),
+            state: QMutex::new(state),
             hostops: hostops,
             passInq: AtomicBool::new(false),
         };
@@ -157,15 +206,15 @@ impl HostSocketOperations {
     }
 }
 
-impl Deref for HostSocketOperations {
-    type Target = Arc<HostSocketOperationsIntern>;
+impl Deref for AsyncSocketOperations {
+    type Target = Arc<AsyncSocketOperationsIntern>;
 
-    fn deref(&self) -> &Arc<HostSocketOperationsIntern> {
+    fn deref(&self) -> &Arc<AsyncSocketOperationsIntern> {
         &self.0
     }
 }
 
-impl HostSocketOperations {
+impl AsyncSocketOperations {
     pub fn SetRemoteAddr(&self, addr: Vec<u8>) -> Result<()> {
         let addr = GetAddr(addr[0] as i16, &addr[0..addr.len()])?;
 
@@ -183,7 +232,7 @@ impl HostSocketOperations {
 
 pub const SIZEOF_SOCKADDR: usize = SocketSize::SIZEOF_SOCKADDR_INET6;
 
-impl Waitable for HostSocketOperations {
+impl Waitable for AsyncSocketOperations {
     fn AsyncReadiness(&self, _task: &Task, mask: EventMask, wait: &MultiWait) -> Future<EventMask> {
         let fd = self.fd;
         let future = IOURING.UnblockPollAdd(fd, mask as u32, wait);
@@ -210,9 +259,9 @@ impl Waitable for HostSocketOperations {
     }
 }
 
-impl SpliceOperations for HostSocketOperations {}
+impl SpliceOperations for AsyncSocketOperations {}
 
-impl FileOperations for HostSocketOperations {
+impl FileOperations for AsyncSocketOperations {
     fn as_any(&self) -> &Any {
         return self;
     }
@@ -373,7 +422,7 @@ impl FileOperations for HostSocketOperations {
 }
 
 
-impl SockOperations for HostSocketOperations {
+impl SockOperations for AsyncSocketOperations {
     fn Connect(&self, task: &Task, sockaddr: &[u8], blocking: bool) -> Result<i64> {
         let mut socketaddr = sockaddr;
 
@@ -503,13 +552,15 @@ impl SockOperations for HostSocketOperations {
         let fd = acceptItem.fd;
 
         let remoteAddr = &acceptItem.addr.data[0..len];
+        let state = self.state.lock().Accept(acceptItem.sockBuf.clone());
 
-        let file = newHostSocketFile(
+        let file = newAsyncSocketFile(
             task,
             self.family,
             fd as i32,
             self.stype,
             flags & SocketFlags::SOCK_NONBLOCK != 0,
+            state,
             Some(remoteAddr.to_vec()),
         )?;
 
@@ -1028,4 +1079,6 @@ impl SockOperations for HostSocketOperations {
         return (self.family, self.stype, -1)
     }
 }
+
+
 

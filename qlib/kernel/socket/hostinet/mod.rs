@@ -16,6 +16,7 @@ pub mod rdma_socket;
 pub mod socket;
 pub mod socket_buf;
 pub mod hostsocket;
+pub mod asyncsocket;
 
 pub fn Init() {
     self::socket::Init();
