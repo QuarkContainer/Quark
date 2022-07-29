@@ -985,10 +985,6 @@ impl SockOperations for SocketOperations {
             *addrlen = len as u32;
         }
 
-        // hard code workaround
-        if self.enableRDMA {
-            len = 0;
-        }
         let fd = acceptItem.fd;
 
         let remoteAddr = &acceptItem.addr.data[0..len];
