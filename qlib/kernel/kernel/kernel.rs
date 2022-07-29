@@ -398,6 +398,8 @@ impl Kernel {
         envs: &Vec<String>,
         args: &mut Vec<String>,
     ) -> Result<(u64, u64, u64)> {
+        error!("LoadProcess filename: {:?} envs: {:?}, args: {:?}", fileName, envs, args);
+
         if self.globalInit.lock().is_none() {
             panic!("kernel contains no tasks");
         }

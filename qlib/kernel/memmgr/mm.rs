@@ -1302,8 +1302,15 @@ impl MemoryManager {
                 Ok(ret) => ret,
             };
 
-            if !permission.Read() {
-                return Err(Error::SysError(SysErr::EFAULT));
+            if !permission.Read() { // No read permission
+                if !allowPartial || addr < vAddr {
+                    return Err(Error::SysError(SysErr::EFAULT));
+                }
+
+                if needTLBShootdown {
+                    self.TlbShootdown();
+                }
+                return Ok(addr - vAddr);
             }
 
             let (vma, _) = match self.GetVmaAndRangeLocked(addr) {

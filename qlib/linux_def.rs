@@ -2446,6 +2446,7 @@ pub struct IoVec {
     pub len: usize,
 }
 
+#[derive(Debug)]
 pub struct DataBuff {
     pub buf: Vec<u8>,
 }
@@ -2461,9 +2462,7 @@ impl DataBuff {
             1
         };
         let mut buf = Vec::with_capacity(count);
-        unsafe {
-            buf.set_len(size);
-        }
+        buf.resize(size, 0);
 
         return Self { buf: buf };
     }

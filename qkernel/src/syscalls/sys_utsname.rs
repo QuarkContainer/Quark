@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use alloc::string::String;
+use alloc::string::ToString;
 
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
@@ -157,6 +158,12 @@ pub fn SysSethostname(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         Err(e) => return Err(e),
     };
 
-    utsns.SetHostName(name);
+    let size = size as usize;
+    if size < name.len() {
+        utsns.SetHostName(name[0..size].to_string());
+    } else {
+        utsns.SetHostName(name);
+    }
+
     return Ok(0);
 }

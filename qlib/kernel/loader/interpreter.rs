@@ -40,6 +40,8 @@ pub fn ParseInterpreterScript(
     let n = ReadAll(task, f, &mut buf, 0)?;
     // Allow unexpected EOF, as a valid executable could be only three
     // bytes (e.g., #!a).
+    //error!("ParseInterpreterScript {:?}", String::from_utf8((&buf).to_vec()));
+
     let line = &buf[0..n];
     // Ignore #!.
     let line = &line[2..];

@@ -41,7 +41,6 @@ use super::super::ramfs::dir::*;
 use super::dir_proc::*;
 use super::inode::*;
 
-// taskDir represents a task-level directory.
 pub struct NetDirNode {}
 
 impl DirDataNode for NetDirNode {

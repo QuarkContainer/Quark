@@ -223,12 +223,38 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
+    pub fn IORecvfrom(fd: i32, buf: u64, size: usize, flags: i32, addr: u64, len: u64) -> i64 {
+        let mut msg = Msg::IORecvfrom(IORecvfrom {
+            fd,
+            buf,
+            size,
+            flags,
+            addr,
+            len,
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
     pub fn IOSendMsg(fd: i32, msghdr: u64, flags: i32, blocking: bool) -> i64 {
         let mut msg = Msg::IOSendMsg(IOSendMsg {
             fd,
             msghdr,
             flags,
             blocking,
+        });
+
+        return HostSpace::Call(&mut msg, false) as i64;
+    }
+
+    pub fn IOSendto(fd: i32, buf: u64, size: usize, flags: i32, addr: u64, len: u32) -> i64 {
+        let mut msg = Msg::IOSendto(IOSendto {
+            fd,
+            buf,
+            size,
+            flags,
+            addr,
+            len,
         });
 
         return HostSpace::Call(&mut msg, false) as i64;

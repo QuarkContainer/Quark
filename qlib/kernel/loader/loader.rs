@@ -202,13 +202,38 @@ pub fn LoadExecutable(
                 Ok((p, a)) => (p, a),
             };
 
+            //error!("script is {} {:?}", &newpath, &newargv);
+
             filename = newpath;
             argv = newargv;
 
             //info!("load script filename is {} argv is {:?}", &filename, &argv);
         } else {
+            // it is possible there is shell scrip without "#!" header
+            // this work around todo: check how linux handle this?
             info!("unknow magic: {:?}", hdr);
-            return Err(Error::SysError(SysErr::ENOEXEC));
+            let mut newargv = Vec::new();
+            // Build the new argument list:
+            //
+            // 1. The interpreter.
+            newargv.push("/bin/bash".to_string());
+
+            // 3. The original arguments. The original argv[0] is replaced with the
+            // full script filename.
+            if argv.len() > 0 {
+                argv[0] = filename.to_string();
+            } else {
+                argv.push(filename.to_string());
+            }
+
+            newargv.append(&mut argv);
+
+            filename = "bin/bash".to_string();
+            argv = newargv;
+
+            error!("the interrupt is forced to /bin/sh, argv is {:?}", &argv);
+
+            //return Err(Error::SysError(SysErr::ENOEXEC));
         }
 
     }

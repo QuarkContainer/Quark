@@ -364,6 +364,7 @@ pub enum Error {
     MMampError,
     UnmatchRegion,
     AddressDoesMatch,
+    UnknownDevice,
     Locked,
     ZeroCount,
     QueueFull,

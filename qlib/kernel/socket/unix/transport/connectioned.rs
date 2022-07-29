@@ -28,6 +28,7 @@ use super::super::super::super::kernel::waiter::*;
 use super::super::super::super::task::*;
 use super::super::super::super::tcpip::tcpip::*;
 use super::super::super::super::uid::*;
+use super::super::super::socketopts::*;
 //use super::super::super::control::*;
 use super::queue::*;
 use super::unix::*;
@@ -152,8 +153,26 @@ impl Eq for ConnectionedEndPoint {}
 
 impl ConnectionedEndPoint {
     pub fn New(stype: i32) -> Self {
+        let bep = BaseEndpoint::default();
+        let ops = bep.SockOps();
+        let sendBufferLimits = BufferSizeOption {
+            Min: MINIMUM_BUFFER_SIZE,
+            Default: DEFAULT_BUFFER_SIZE,
+            Max: MAX_BUFFER_SIZE,
+        };
+
+        let receiveBufferLimits = BufferSizeOption {
+            Min: MINIMUM_BUFFER_SIZE,
+            Default: DEFAULT_BUFFER_SIZE,
+            Max: MAX_BUFFER_SIZE,
+        };
+
+        ops.InitLimit(sendBufferLimits, receiveBufferLimits);
+        ops.SetSendBufferSize(DEFAULT_BUFFER_SIZE as _, false);
+        ops.SetReceiveBufferSize(DEFAULT_BUFFER_SIZE as _, false);
+
         let internal = ConnectionedEndPointInternal {
-            baseEndpoint: BaseEndpoint::default(),
+            baseEndpoint: bep,
             id: NewUID(),
             stype: stype,
             backlog: 0,
@@ -194,8 +213,8 @@ impl ConnectionedEndPoint {
         let aq = a.baseEndpoint.lock().queue.clone();
         let bq = b.baseEndpoint.lock().queue.clone();
 
-        let q1 = MsgQueue::New(aq.clone(), bq.clone(), INITIAL_LIMIT);
-        let q2 = MsgQueue::New(bq.clone(), aq.clone(), INITIAL_LIMIT);
+        let q1 = MsgQueue::New(aq.clone(), bq.clone(), DEFAULT_BUFFER_SIZE);
+        let q2 = MsgQueue::New(bq.clone(), aq.clone(), DEFAULT_BUFFER_SIZE);
 
         if stype == SockType::SOCK_STREAM {
             a.baseEndpoint.lock().receiver =
@@ -233,6 +252,22 @@ impl ConnectionedEndPoint {
         connected: Arc<ConnectedEndpoint>,
     ) -> Self {
         let baseEndpoint = BaseEndpoint::New(queue, receiver, connected);
+        let ops = baseEndpoint.SockOps();
+        let sendBufferLimits = BufferSizeOption {
+            Min: MINIMUM_BUFFER_SIZE,
+            Default: DEFAULT_BUFFER_SIZE,
+            Max: MAX_BUFFER_SIZE,
+        };
+
+        let receiveBufferLimits = BufferSizeOption {
+            Min: MINIMUM_BUFFER_SIZE,
+            Default: DEFAULT_BUFFER_SIZE,
+            Max: MAX_BUFFER_SIZE,
+        };
+
+        ops.InitLimit(sendBufferLimits, receiveBufferLimits);
+        ops.SetSendBufferSize(DEFAULT_BUFFER_SIZE as _, false);
+        ops.SetReceiveBufferSize(DEFAULT_BUFFER_SIZE as _, false);
 
         let internal = ConnectionedEndPointInternal {
             baseEndpoint: baseEndpoint,
@@ -301,17 +336,34 @@ impl ConnectionedEndPoint {
         let baseEndPoint = BaseEndpoint::default();
         baseEndPoint.lock().path = self.baseEndpoint.lock().path.to_string();
         let stype = self.stype;
+        let ops = baseEndPoint.SockOps();
         let ne = ConnectionedEndPoint::NewWithBaseEndpoint(baseEndPoint, stype);
+
+        let sendBufferLimits = BufferSizeOption {
+            Min: MINIMUM_BUFFER_SIZE,
+            Default: DEFAULT_BUFFER_SIZE,
+            Max: MAX_BUFFER_SIZE,
+        };
+
+        let receiveBufferLimits = BufferSizeOption {
+            Min: MINIMUM_BUFFER_SIZE,
+            Default: DEFAULT_BUFFER_SIZE,
+            Max: MAX_BUFFER_SIZE,
+        };
+
+        ops.InitLimit(sendBufferLimits, receiveBufferLimits);
+        ops.SetSendBufferSize(DEFAULT_BUFFER_SIZE as _, false);
+        ops.SetReceiveBufferSize(DEFAULT_BUFFER_SIZE as _, false);
 
         let readq = ce.WaiterQueue();
         let writeq = ne.baseEndpoint.lock().queue.clone();
-        let readQueue = MsgQueue::New(readq.clone(), writeq.clone(), INITIAL_LIMIT);
+        let readQueue = MsgQueue::New(readq.clone(), writeq.clone(), ops.GetSendBufferSize() as _);
         ne.baseEndpoint.lock().connected = Some(Arc::new(UnixConnectedEndpoint::New(
             ce.clone(),
             readQueue.clone(),
         )));
 
-        let writeQueue = MsgQueue::New(writeq.clone(), readq.clone(), INITIAL_LIMIT);
+        let writeQueue = MsgQueue::New(writeq.clone(), readq.clone(), ops.GetReceiveBufferSize() as _);
         if self.stype == SockType::SOCK_STREAM {
             ne.baseEndpoint.lock().receiver =
                 Some(Arc::new(StreamQueueReceiver::New(writeQueue.clone())))
@@ -577,18 +629,6 @@ impl Endpoint for ConnectionedEndPoint {
     fn GetRemoteAddress(&self) -> Result<SockAddrUnix> {
         self.TryLock();
         return self.baseEndpoint.GetRemoteAddress();
-    }
-
-    fn SetSockOpt(&self, opt: &SockOpt) -> Result<()> {
-        self.TryLock();
-        let e = self;
-        return e.baseEndpoint.SetSockOpt(opt);
-    }
-
-    fn GetSockOpt(&self, opt: &mut SockOpt) -> Result<()> {
-        self.TryLock();
-        let e = self;
-        return e.baseEndpoint.GetSockOpt(opt);
     }
 }
 

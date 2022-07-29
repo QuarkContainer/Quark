@@ -68,7 +68,7 @@ fn CreateRootMount(
         &mf,
         false,
     );
-    let hostRoot = Inode::NewHostInode(task, &Arc::new(QMutex::new(ms)), fd, &fstat, writeable)?;
+    let hostRoot = Inode::NewHostInode(task, &Arc::new(QMutex::new(ms)), fd, &fstat, writeable, false)?;
 
     let submounts = SubTargets(&"/".to_string(), mounts);
     //submounts.append(&mut vec!["/dev1".to_string(), "/sys".to_string(), "/proc".to_string(), "/tmp".to_string()]);

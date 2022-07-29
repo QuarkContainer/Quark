@@ -28,11 +28,10 @@ use super::super::super::super::tcpip::tcpip::*;
 use super::super::super::super::uid::*;
 use super::super::super::buffer::view::*;
 use super::super::super::control::*;
+use super::super::super::socketopts::*;
 use super::connectioned::*;
 use super::connectionless::*;
 use super::queue::*;
-
-pub const INITIAL_LIMIT: usize = 16 * 1024;
 
 pub struct SockType;
 
@@ -182,14 +181,6 @@ pub trait Endpoint:
     // GetRemoteAddress returns the address to which the endpoint is
     // connected.
     fn GetRemoteAddress(&self) -> Result<SockAddrUnix>;
-
-    // SetSockOpt sets a socket option. opt should be one of the tcpip.*Option
-    // types.
-    fn SetSockOpt(&self, opt: &SockOpt) -> Result<()>;
-
-    // GetSockOpt gets a socket option. opt should be a pointer to one of the
-    // tcpip.*Option types.
-    fn GetSockOpt(&self, opt: &mut SockOpt) -> Result<()>;
 }
 
 #[derive(Clone)]
@@ -272,6 +263,13 @@ impl BoundEndpoint {
         match self {
             BoundEndpoint::Connected(ref c) => return c.State(),
             BoundEndpoint::ConnectLess(ref c) => return c.State(),
+        }
+    }
+
+    pub fn Connected(&self) -> bool {
+        match self {
+            BoundEndpoint::Connected(ref c) => return c.Connected(),
+            BoundEndpoint::ConnectLess(ref c) => return c.Connected(),
         }
     }
 }
@@ -357,20 +355,6 @@ impl Endpoint for BoundEndpoint {
         match self {
             BoundEndpoint::Connected(ref c) => return c.GetRemoteAddress(),
             BoundEndpoint::ConnectLess(ref c) => return c.GetRemoteAddress(),
-        }
-    }
-
-    fn SetSockOpt(&self, opt: &SockOpt) -> Result<()> {
-        match self {
-            BoundEndpoint::Connected(ref c) => return c.SetSockOpt(opt),
-            BoundEndpoint::ConnectLess(ref c) => return c.SetSockOpt(opt),
-        }
-    }
-
-    fn GetSockOpt(&self, opt: &mut SockOpt) -> Result<()> {
-        match self {
-            BoundEndpoint::Connected(ref c) => return c.GetSockOpt(opt),
-            BoundEndpoint::ConnectLess(ref c) => return c.GetSockOpt(opt),
         }
     }
 }
@@ -528,6 +512,10 @@ pub trait ConnectedEndpoint: PartialEndPoint + Sync + Send {
     //fn Release(&self);
 
     fn CloseUnread(&self);
+
+    // SetSendBufferSize is called when the endpoint's send buffer size is
+    // changed.
+    fn SetSendBufferSize(&self, v: i64) -> i64;
 }
 
 pub struct QueueReceiver {
@@ -939,6 +927,11 @@ impl ConnectedEndpoint for UnixConnectedEndpoint {
     fn CloseUnread(&self) {
         self.writeQueue.CloseUnread();
     }
+
+    fn SetSendBufferSize(&self, v: i64) -> i64 {
+        self.writeQueue.SetMaxQueueSize(v);
+        return v;
+    }
 }
 
 // baseEndpoint is an embeddable unix endpoint base used in both the connected and connectionless
@@ -965,8 +958,8 @@ pub struct BaseEndpointInternal {
     // or may be used if the endpoint is connected.
     pub path: String,
 
-    // linger is used for SO_LINGER socket option.
-    //pub linger: LingerOption,
+    // ops is used to get socket level options.
+    pub ops: SocketOptions,
 }
 
 impl Default for BaseEndpointInternal {
@@ -978,6 +971,7 @@ impl Default for BaseEndpointInternal {
             receiver: None,
             connected: None,
             path: String::default(),
+            ops: SocketOptions::default(),
         };
     }
 }
@@ -1065,6 +1059,37 @@ impl BaseEndpoint {
         return Self(Arc::new(QMutex::new(internal)));
     }
 
+    pub fn SockOps(&self) -> SocketOptions {
+        return self.lock().ops.clone();
+    }
+
+    pub fn GetSockSendQueueSize(&self) -> Result<i32> {
+        if !self.Connected() {
+            return Err(Error::SysError(SysErr::ENOTCONN))
+        }
+
+        let e = self.lock();
+        match &e.connected {
+            None => return Err(Error::SysError(SysErr::ENOTCONN)),
+            Some(bep) => {
+                return Ok(bep.SendQueuedSize() as _);
+            }
+        }
+    }
+
+    pub fn GetSockRecvQueueSize(&self) -> Result<i32> {
+        if !self.Connected() {
+            return Err(Error::SysError(SysErr::ENOTCONN))
+        }
+
+        let e = self.lock();
+        match &e.receiver {
+            None => return Err(Error::SysError(SysErr::ENOTCONN)),
+            Some(bep) => {
+                return Ok(bep.RecvQueuedSize() as _);
+            }
+        }
+    }
     /*
     // pass the ioctl to the shadow hostfd
     pub fn HostIoctlIFReq(&self, task: &Task, request: u64, addr: u64) -> Result<()> {
@@ -1090,7 +1115,7 @@ impl BaseEndpoint {
         return connected.is_some() && connected.as_ref().unwrap().Passcred();
     }
 
-    fn setPasscred(&self, pc: bool) {
+    pub fn setPasscred(&self, pc: bool) {
         if pc {
             self.lock().passcred = 1;
         } else {
@@ -1101,6 +1126,14 @@ impl BaseEndpoint {
     pub fn Connected(&self) -> bool {
         let e = self.lock();
         return e.receiver.is_some() && e.connected.is_some();
+    }
+
+    pub fn SetSendBufferSize(&self, v: i64) -> i64 {
+        let e = self.lock();
+        match &e.connected {
+            None => v,
+            Some(ep) => ep.SetSendBufferSize(v),
+        }
     }
 
     // RecvMsg reads data and a control message from the endpoint.
@@ -1157,111 +1190,6 @@ impl BaseEndpoint {
         }
 
         return Ok(n);
-    }
-
-    pub fn SetSockOpt(&self, opt: &SockOpt) -> Result<()> {
-        match opt {
-            SockOpt::PasscredOption(ref v) => {
-                self.setPasscred(*v != 0);
-                return Ok(());
-            }
-            _ => return Ok(()),
-        }
-    }
-
-    pub fn GetSockOpt(&self, opt: &mut SockOpt) -> Result<()> {
-        match *opt {
-            SockOpt::ErrorOption => return Ok(()),
-            SockOpt::SendQueueSizeOption(_) => {
-                let qs = {
-                    let e = self.lock();
-                    if !e.Connected() {
-                        return Err(Error::SysError(TcpipErr::ERR_NOT_CONNECTED.sysErr));
-                    }
-
-                    e.connected.as_ref().unwrap().SendQueuedSize() as i32
-                };
-
-                if qs < 0 {
-                    return Err(Error::SysError(
-                        TcpipErr::ERR_QUEUE_SIZE_NOT_SUPPORTED.sysErr,
-                    ));
-                }
-                *opt = SockOpt::SendQueueSizeOption(qs);
-                return Ok(());
-            }
-            SockOpt::ReceiveQueueSizeOption(_) => {
-                let qs = {
-                    let e = self.lock();
-                    if !e.Connected() {
-                        return Err(Error::SysError(TcpipErr::ERR_NOT_CONNECTED.sysErr));
-                    }
-
-                    e.receiver.as_ref().unwrap().RecvQueuedSize() as i32
-                };
-
-                if qs < 0 {
-                    return Err(Error::SysError(
-                        TcpipErr::ERR_QUEUE_SIZE_NOT_SUPPORTED.sysErr,
-                    ));
-                }
-                *opt = SockOpt::ReceiveQueueSizeOption(qs);
-                return Ok(());
-            }
-            SockOpt::PasscredOption(_) => {
-                let val = if self.Passcred() { 1 } else { 0 };
-
-                *opt = SockOpt::PasscredOption(val);
-                return Ok(());
-            }
-            SockOpt::SendBufferSizeOption(_) => {
-                let qs = {
-                    let e = self.lock();
-                    if !e.Connected() {
-                        return Err(Error::SysError(TcpipErr::ERR_NOT_CONNECTED.sysErr));
-                    }
-
-                    e.connected.as_ref().unwrap().SendMaxQueueSize() as i32
-                };
-
-                if qs < 0 {
-                    return Err(Error::SysError(
-                        TcpipErr::ERR_QUEUE_SIZE_NOT_SUPPORTED.sysErr,
-                    ));
-                }
-
-                *opt = SockOpt::SendBufferSizeOption(qs);
-                return Ok(());
-            }
-            SockOpt::ReceiveBufferSizeOption(_) => {
-                let qs = {
-                    let e = self.lock();
-                    if !e.Connected() {
-                        return Err(Error::SysError(TcpipErr::ERR_NOT_CONNECTED.sysErr));
-                    }
-
-                    e.receiver.as_ref().unwrap().RecvMaxQueueSize() as i32
-                };
-
-                if qs < 0 {
-                    return Err(Error::SysError(
-                        TcpipErr::ERR_QUEUE_SIZE_NOT_SUPPORTED.sysErr,
-                    ));
-                }
-
-                *opt = SockOpt::ReceiveBufferSizeOption(qs);
-                return Ok(());
-            }
-            SockOpt::KeepaliveEnabledOption(_) => {
-                *opt = SockOpt::KeepaliveEnabledOption(0);
-                return Ok(());
-            }
-            _ => {
-                return Err(Error::SysError(
-                    TcpipErr::ERR_UNKNOWN_PROTOCOL_OPTION.sysErr,
-                ))
-            }
-        }
     }
 
     // Shutdown closes the read and/or write end of the endpoint connection to its

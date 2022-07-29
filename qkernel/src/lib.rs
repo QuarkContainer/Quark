@@ -194,7 +194,6 @@ pub fn SingletonInit() {
         fs::file::InitSingleton();
         fs::filesystems::InitSingleton();
         interrupt::InitSingleton();
-        kernel::abstract_socket_namespace::InitSingleton();
         kernel::futex::InitSingleton();
         kernel::semaphore::InitSingleton();
         kernel::epoll::epoll::InitSingleton();
@@ -584,7 +583,15 @@ fn StartRootContainer(_para: *const u8) {
 
     let (_tid, entry, userStackAddr, kernelStackAddr) = {
         let mut processArgs = LOADER.Lock(task).unwrap().Init(process);
-        LOADER.LoadRootProcess(&mut processArgs).unwrap()
+        match LOADER.LoadRootProcess(&mut processArgs) {
+            Err(e) => {
+                error!("load root process failure with error {:?}, shutting down...", e);
+                SHARESPACE.StoreShutdown();
+                Kernel::HostSpace::ExitVM(2);
+                panic!("exiting ...");
+            }
+            Ok(r) => r,
+        }
     };
 
     //CreateTask(StartExecProcess, ptr::null());

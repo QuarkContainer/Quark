@@ -552,7 +552,7 @@ impl FileOperations for TTYFileOps {
             let queue = self.lock().queue.clone();
             let ringBuf = self.lock().buf.clone();
 
-            let ret = QUring::RingFileRead(task, fd, queue, ringBuf, dsts, false)?;
+            let ret = QUring::RingFileRead(task, fd, queue, ringBuf, dsts, false, false)?;
             return Ok(ret);
         }
 

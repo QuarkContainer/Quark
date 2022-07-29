@@ -410,9 +410,9 @@ unsafe impl GlobalAlloc for ListAllocator {
             }
         }
 
-        if size > 1 << 21 {
+        /*if size > 1 << 21 {
             panic!("alloc size is {}", layout.size());
-        }
+        }*/
 
         let ret = self
             .heap

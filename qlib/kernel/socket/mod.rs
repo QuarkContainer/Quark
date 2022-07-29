@@ -18,6 +18,7 @@ pub mod epsocket;
 pub mod hostinet;
 pub mod socket;
 pub mod unix;
+pub mod socketopts;
 
 pub fn Init() {
     self::hostinet::Init();
