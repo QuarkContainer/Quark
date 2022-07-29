@@ -18,47 +18,10 @@ make clean; make
 in a terminal to rebuild quark binary
 
 ### 2. Install Quark binary to each k8s nodes
-An example scripts when running k8s on minikube:
+
 
 ```
-# write binaries to minikube containerd
-# cleanup old binaries if any
-docker exec minikube rm -f /usr/local/bin/qkernel.bin
-docker exec minikube rm -f /usr/local/bin/qkernel_d.bin
-docker exec minikube rm -f /usr/local/bin/quark
-docker exec minikube rm -f /usr/local/bin/quark_d
-docker exec minikube rm -f /usr/bin/containerd-shim-runc-v2
-# copy new binaries to target directory
-minikube cp  ./build/qkernel.bin minikube:/usr/local/bin/qkernel.bin
-minikube cp  ./build/qkernel_d.bin minikube:/usr/local/bin/qkernel_d.bin
-minikube cp  ./target/release/quark minikube:/usr/local/bin/quark
-minikube cp  ./target/debug/quark minikube:/usr/local/bin/quark_d
-minikube cp  ./target/debug/quark minikube:/usr/local/bin/containerd-shim-quarkd-v1
-
-# change permissions
-docker exec minikube chmod 755 /usr/local/bin/qkernel_d.bin
-docker exec minikube chmod 755 /usr/local/bin/qkernel.bin
-docker exec minikube chmod 755 /usr/local/bin/quark
-docker exec minikube chmod 755 /usr/local/bin/quark_d
-docker exec minikube chmod 755 /usr/local/bin/containerd-shim-quarkd-v1
-
-
-# copy config
-docker exec minikube mkdir -p /etc/quark/
-minikube cp ./config.json minikube:/etc/quark/config.json
-
-## create quark log directory if haven't created
-docker exec minikube mkdir -p /var/log/quark
-docker exec minikube touch /var/log/quark/quark.log
-
-
-## copy vdso.so, as qkernel needs it
-# adhoc only
-docker exec minikube rm -f /usr/local/bin/vdso.so
-minikube cp /usr/local/bin/vdso.so minikube:/usr/local/bin/vdso.so
-docker exec minikube chmod 755 /usr/local/bin/vdso.so
-
-
+make install
 ```
 Notice the quark binary is renamed as `containerd-shim-quarkd-v1`, this is to follow containerd's naming convention for shims.
 
@@ -66,25 +29,59 @@ Notice the quark binary is renamed as `containerd-shim-quarkd-v1`, this is to fo
 This step need to happen on every k8s node with kubelet running.
 open `/etc/containerd/config.yaml` and add/modify the following entry in the containerd config
 ```
-
-[plugins]
-...
-  [plugins."io.containerd.grpc.v1.cri"]
-  ...
-      [plugins."io.containerd.grpc.v1.cri".containerd]
-      ...
-        [plugins."io.containerd.grpc.v1.cri".containerd.runtimes]
-        ...
-          [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.quarkd]
-            runtime_type = "io.containerd.quarkd.v1"
+cat <<EOF | sudo tee /etc/containerd/config.toml
+version = 2
+[plugins."io.containerd.runtime.v1.linux"]
+  shim_debug = true
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
+  runtime_type = "io.containerd.runc.v2"
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runsc]
+  runtime_type = "io.containerd.runsc.v1"
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.quarkd]
+  runtime_type = "io.containerd.quarkd.v1"
+EOF
 ```
 And restart the containerd service with `systemctl restart containerd`
 
-### 4. Add quark as a Runtime Resource to K8S
+
+### 4. Start a k8s cluster
+There are multiple ways to start a k8s cluster. We recommend using kubeadm to start a production k8s cluster. Please check [kubeadm](https://kubernetes.io/docs/reference/setup-tools/kubeadm/) on how to install and use kubeadm.
+
+For kubeadm init and join command, need to set parameter "--cri-socket=/var/run/containerd/containerd.sock".
+
+Following is sample kubeadm command to init a cluster.
+```
+# Execute on master node
+sudo kubeadm init --cri-socket=/var/run/containerd/containerd.sock --pod-network-cidr=10.244.0.0/16
+
+sudo rm $HOME/.kube/config
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+# Optional, make master node runable for pod:
+kubectl taint nodes --all node-role.kubernetes.io/master-
+```
+
+```
+# Execute on worker node
+# Need to replace token and cert with the real one in the master node. 
+# The data can be found in master node's kubeadm init log.
+sudo kubeadm join 10.218.233.29:6443 --cri-socket=/var/run/containerd/containerd.sock --token qy2r1j.t0y5ekx71t0tcfiq \
+        --discovery-token-ca-cert-hash sha256:78a23762652befd90bbcd3506ca9309c5243371360d7a66fc131cb1a4b255553
+```
+
+### 5. Add CNI to K8S
+Container Network Interface (CNI) provides networking to k8s. Following example use flannel as CNI for test purpose.
+```
+kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
+```
+
+### 6. Add quark as a Runtime Resource to K8S
 Now we can use Quark as a container runtime in K8S
 first add Quark as a K8S resources, with kubectl:
 ```
-cat <<EOF | minikube kubectl -- apply -f -
+cat <<EOF | kubectl apply -f -
 apiVersion: node.k8s.io/v1
 kind: RuntimeClass
 metadata:
@@ -94,7 +91,7 @@ EOF
 ```
 Then you can use Quark like this
 ```
-cat <<EOF | minikube kubectl -- apply -f -
+cat <<EOF | kubectl apply -f -
 apiVersion: v1
 kind: Pod
 metadata:
@@ -107,6 +104,27 @@ spec:
 EOF
 ```
 
+### 7. Use RDMA networking
 
+In each node, remove previous flannel CNI if there is:
+```
+sudo rm /etc/cni/net.d/10-flannel.conflist
+```
 
+Change the following configuration in config.json
+```
+........
+  "EnableRDMA"      : true,
+......
+```
+and run in each node:
+```
+make; make install
+```
 
+Then use kubectl to install quarkcm CNI:
+```
+kubectl apply -f https://raw.githubusercontent.com/QuarkContainer/quarkcm/main/deploy/deploy-quarkcm.yaml
+```
+
+Now the network communication between pods will be through RDMA.
