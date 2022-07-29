@@ -194,11 +194,11 @@ pub fn Wait() {
             //let vcpuId = newTask.GetTask().queueId;
             //assert!(CPULocal::CpuId()==vcpuId, "cpu {}, target cpu {}", CPULocal::CpuId(), vcpuId);
 
-            if !Task::Current().context.savefpsate {
-                Task::Current().SaveFp();
-            }
             CPULocal::Myself().SwitchToRunning();
             if current.data != newTask.data {
+                if !Task::Current().context.savefpsate {
+                    Task::Current().SaveFp();
+                }
                 switch(current, newTask);
             }
 
@@ -211,11 +211,13 @@ pub fn Wait() {
         if currentTime - start >= WAIT_CYCLES {
             let current = TaskId::New(CPULocal::CurrentTask());
             let waitTask = TaskId::New(CPULocal::WaitTask());
-
             let oldTask = SHARESPACE.scheduler.queue[vcpuId].ResetWorkingTask();
 
             match oldTask {
                 None => {
+                    if !Task::Current().context.savefpsate {
+                        Task::Current().SaveFp();
+                    }
                     switch(current, waitTask);
                     break;
                 }

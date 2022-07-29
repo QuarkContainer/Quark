@@ -7,6 +7,7 @@ use spin::Mutex;
 use super::common::*;
 use super::fileinfo::*;
 use super::kernel::GlobalIOMgr;
+use super::kernel::tcpip::tcpip::*;
 use super::linux_def::*;
 use super::rdma_share::*;
 use super::rdmasocket::*;
@@ -337,10 +338,19 @@ impl RDMASvcClient {
                                 let fdInfoLock1 = fdInfo.lock();
                                 *fdInfoLock1.sockInfo.lock() = SockInfo::RDMADataSocket(dataSock);
 
+                                let sockAddr = SockAddr::Inet(SockAddrInet {
+                                    Family: AFType::AF_INET as u16,
+                                    Port: response.dstPort,
+                                    Addr: response.dstIpAddr.to_be_bytes(),
+                                    Zero: [0; 8]
+                                });
+                                let mut tcpSockAddr = TcpSockAddr::default();
+                                let len = sockAddr.Len();
+                                let _res = sockAddr.Marsh(&mut tcpSockAddr.data, len);
                                 let (trigger, _tmp) = rdmaServerSock.acceptQueue.lock().EnqSocket(
                                     fd,
-                                    TcpSockAddr::default(),
-                                    0, //TCP_ADDR_LEN as _,
+                                    tcpSockAddr,
+                                    len as u32,
                                     sockBuf,
                                 );
                                 self.channelToSocketMappings
@@ -441,7 +451,7 @@ impl RDMASvcClient {
                                                 fdInfoLock.waitInfo.Notify(EVENT_IN);
                                             }
                                             _ => {
-                                                panic!("Unexpected sockInfo type: {:?}", sockInfo);
+                                                error!("Unexpected sockInfo type: {:?}", sockInfo);
                                             }
                                         }
                                     }

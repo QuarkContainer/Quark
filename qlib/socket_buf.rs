@@ -158,7 +158,7 @@ impl SocketBuff {
         if self.readBuf.lock().AvailableDataSize() > 0 {
             event |= READABLE_EVENT;
         } else if self.RClosed() || self.WClosed() {
-            event |= READABLE_EVENT
+            event |= READABLE_EVENT | EVENT_HUP;
         }
 
         if self.writeBuf.lock().AvailableSpace() > 0 {

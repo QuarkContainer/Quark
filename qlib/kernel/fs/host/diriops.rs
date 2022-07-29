@@ -370,7 +370,7 @@ impl InodeOperations for HostDirOp {
         };
 
         let ms = parent.lock().MountSource.clone();
-        let inode = Inode::NewHostInode(task, &ms, fd, &fstat, writeable)?;
+        let inode = Inode::NewHostInode(task, &ms, fd, &fstat, writeable, false)?;
 
         let ret = Ok(Dirent::New(&inode, name));
         return ret;
@@ -407,7 +407,7 @@ impl InodeOperations for HostDirOp {
 
         let mountSource = dir.lock().MountSource.clone();
 
-        let inode = Inode::NewHostInode(task, &mountSource, fd, &fstat, true)?;
+        let inode = Inode::NewHostInode(task, &mountSource, fd, &fstat, true, false)?;
         let dirent = Dirent::New(&inode, name);
 
         let file = inode.GetFile(task, &dirent, flags)?;

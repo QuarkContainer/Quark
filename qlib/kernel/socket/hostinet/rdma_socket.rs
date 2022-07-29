@@ -24,9 +24,8 @@ impl RDMA {
         return ai;
     }
 
-    pub fn Read(task: &Task, fd: i32, buf: Arc<SocketBuff>, dsts: &mut [IoVec]) -> Result<i64> {
-        // let (trigger, cnt) = buf.RDMAReadv(task, dsts)?;
-        let (trigger, cnt) = buf.Readv(task, dsts)?;
+    pub fn Read(task: &Task, fd: i32, buf: Arc<SocketBuff>, dsts: &mut [IoVec], peek: bool) -> Result<i64> {
+        let (trigger, cnt) = buf.Readv(task, dsts,  peek)?;
         if !RDMA_ENABLE {
             if trigger {
                 HostSpace::RDMANotify(fd, RDMANotifyType::Read);
@@ -61,7 +60,6 @@ impl RDMA {
         buf: Arc<SocketBuff>,
         srcs: &[IoVec], /*, ops: &SocketOperations*/
     ) -> Result<i64> {
-        // let (count, writeBuf) = buf.RDMAWritev(task, srcs)?;
         let (count, writeBuf) = buf.Writev(task, srcs)?;
         if writeBuf.is_some() {
             if RDMA_ENABLE {

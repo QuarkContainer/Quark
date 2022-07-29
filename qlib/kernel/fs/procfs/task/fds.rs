@@ -84,6 +84,13 @@ impl ReadLinkNode for FdNode {
             None => return Err(Error::SysError(SysErr::ENOENT)),
             Some(f) => f,
         };
+
+        let fops = file.FileOp.clone();
+        let fopsType = fops.FopsType();
+        if fopsType == FileOpsType::SocketOperations || fopsType == FileOpsType::UnixSocketOperations {
+            return Err(Error::SysError(SysErr::ENXIO));
+        }
+
         return Ok(file);
     }
 }

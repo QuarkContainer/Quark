@@ -68,7 +68,7 @@ pub fn SysSocket(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         return Err(Error::SysError(SysErr::EINVAL));
     }
 
-    let s = NewSocket(task, domain, stype & 0xf, protocol)?;
+    let s = NewSocket(task, domain, stype, protocol)?;
 
     let flags = SettableFileFlags {
         NonBlocking: stype & Flags::O_NONBLOCK != 0,

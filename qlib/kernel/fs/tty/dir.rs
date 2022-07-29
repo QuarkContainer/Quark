@@ -102,6 +102,7 @@ pub fn NewDir(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: None,
+        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)));

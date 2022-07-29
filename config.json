@@ -1,5 +1,5 @@
 {
-  "DebugLevel"    : "Debug",
+  "DebugLevel"    : "Error",
   "KernelMemSize" : 24,
   "LogType"       : "Sync",
   "LogLevel"      : "Simple",
@@ -13,11 +13,11 @@
   "FileBufWrite"  : true,
   "MmapRead"      : false,
   "AsyncAccept"   : true,
-  "EnableRDMA"    : true,
+  "EnableRDMA"    : false,
   "RDMAPort"      : 1,
   "PerSandboxLog" : false,
-  "ReserveCpuCount": 5,
-  "ShimMode"      : true,
+  "ReserveCpuCount": 1,
+  "ShimMode"      : false,
   "EnableInotify" : true,
   "ReaddirCache"  : true
 }

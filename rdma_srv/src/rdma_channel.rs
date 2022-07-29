@@ -170,7 +170,7 @@ impl RDMAChannelIntern {
                     self.ReleaseChannelResource();
                 }
             } else {
-                panic!("TODO: ")
+                panic!("TODO: status: {:?} is not handled after finSent", *self.status.lock());
             }
 
             return;
@@ -249,7 +249,7 @@ impl RDMAChannelIntern {
             *self.status.lock() = ChannelStatus::LAST_ACK;
             self.RDMASend();
         } else {
-            panic!(
+            error!(
                 "UserClose(Close|ShutDown) is not handled for status: {:?}",
                 *self.status.lock()
             );

@@ -698,8 +698,8 @@ impl Dirent {
             _ => (),
         };
 
-        let inode = self.Inode();
-        let childDir = inode.Lookup(task, name)?;
+        let childDir = self.Walk(task, root, name)?;
+
         if SHARESPACE.config.read().EnableInotify {
             self.Watches().Notify(name,
                                    InotifyEvent::IN_CREATE,
@@ -1327,55 +1327,3 @@ impl DirentMain {
         }
     }
 }
-
-#[derive(Clone)]
-pub struct DirentMain1 {
-    pub Inode: Inode,
-    pub Name: String,
-    pub Parent: Option<Dirent>,
-    pub Children: BTreeMap<String, Weak<(QMutex<DirentMain1>, u64)>>,
-
-    pub mounted: bool,
-}
-
-impl Default for DirentMain1 {
-    fn default() -> Self {
-        return Self {
-            Inode: Inode::default(),
-            Name: "".to_string(),
-            Parent: None,
-            Children: BTreeMap::new(),
-            mounted: false,
-        };
-    }
-}
-
-impl DirentMain1 {
-    pub fn New(inode: Inode, name: &str) -> Self {
-        return Self {
-            Inode: inode.clone(),
-            Name: name.to_string(),
-            Parent: None,
-            Children: BTreeMap::new(),
-            mounted: false,
-        };
-    }
-
-    pub fn NewTransient(inode: &Inode) -> Self {
-        return Self {
-            Inode: inode.clone(),
-            Name: "transient".to_string(),
-            Parent: None,
-            Children: BTreeMap::new(),
-            mounted: false,
-        };
-    }
-
-    pub fn IsRoot(&self) -> bool {
-        match &self.Parent {
-            None => return true,
-            _ => return false,
-        }
-    }
-}
-

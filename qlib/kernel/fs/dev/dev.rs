@@ -62,6 +62,7 @@ fn NewTTYDevice(iops: &Arc<TTYDevice>, msrc: &Arc<QMutex<MountSource>>) -> Inode
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: None,
+        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)));
@@ -87,6 +88,7 @@ fn NewNullDevice(iops: &Arc<NullDevice>, msrc: &Arc<QMutex<MountSource>>) -> Ino
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: None,
+        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)));
@@ -112,6 +114,7 @@ fn NewZeroDevice(iops: &Arc<ZeroDevice>, msrc: &Arc<QMutex<MountSource>>) -> Ino
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: None,
+        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)));
@@ -137,6 +140,7 @@ fn NewFullDevice(iops: &Arc<FullDevice>, msrc: &Arc<QMutex<MountSource>>) -> Ino
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: None,
+        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)));
@@ -162,6 +166,7 @@ fn NewRandomDevice(iops: &Arc<RandomDevice>, msrc: &Arc<QMutex<MountSource>>, mi
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: None,
+        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)));
@@ -194,6 +199,7 @@ fn NewDirectory(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: None,
+        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)));
@@ -221,6 +227,7 @@ fn NewSymlink(task: &Task, target: &str, msrc: &Arc<QMutex<MountSource>>) -> Ino
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: None,
+        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)));
@@ -268,11 +275,11 @@ pub fn NewDev(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         ),
     );
 
-    // This is not as good as /dev/random in linux because go
-    // runtime uses sys_random and /dev/urandom internally.
-    // According to 'man 4 random', this will be sufficient unless
-    // application uses this to generate long-lived GPG/SSL/SSH
-    // keys.
+    contents.insert(
+        "shm".to_string(),
+        Inode::NewTmpDirInode(task, "/dev/shm").expect("create /dev/shm fail"),
+    );
+
     contents.insert(
         "random".to_string(),
         NewRandomDevice(
@@ -338,6 +345,7 @@ pub fn NewDev(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
         Overlay: None,
+        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)));

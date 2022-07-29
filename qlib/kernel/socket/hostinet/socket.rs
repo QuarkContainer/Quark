@@ -59,6 +59,7 @@ use super::super::control::*;
 use super::super::socket::*;
 use super::super::unix::transport::unix::*;
 use super::rdma_socket::*;
+use super::hostsocket::*;
 
 lazy_static! {
     pub static ref DUMMY_HOST_SOCKET : DummyHostSocket = DummyHostSocket::New();
@@ -388,15 +389,16 @@ impl SocketOperations {
         task: &Task,
         sockBufType: SocketBufType,
         dsts: &mut [IoVec],
+        peek: bool,
     ) -> Result<i64> {
         match sockBufType {
             SocketBufType::Uring(socketBuf) => {
                 let ret =
-                    QUring::RingFileRead(task, self.fd, self.queue.clone(), socketBuf, dsts, true)?;
+                    QUring::RingFileRead(task, self.fd, self.queue.clone(), socketBuf, dsts, true, peek)?;
                 return Ok(ret);
             }
             SocketBufType::RDMA(socketBuf) => {
-                let ret = RDMA::Read(task, self.fd, socketBuf, dsts);
+                let ret = RDMA::Read(task, self.fd, socketBuf, dsts, peek);
                 return ret;
             }
             t => {
@@ -653,11 +655,11 @@ impl FileOperations for SocketOperations {
                     return Err(Error::SysError(SysErr::ESPIPE))
                 }*/
                 let ret =
-                    QUring::RingFileRead(task, self.fd, self.queue.clone(), socketBuf, dsts, true)?;
+                    QUring::RingFileRead(task, self.fd, self.queue.clone(), socketBuf, dsts, true, false)?;
                 return Ok(ret);
             }
             SocketBufType::RDMA(socketBuf) => {
-                let ret = RDMA::Read(task, self.fd, socketBuf, dsts);
+                let ret = RDMA::Read(task, self.fd, socketBuf, dsts, false);
                 return ret;
             }
             _ => {
@@ -913,6 +915,9 @@ impl SockOperations for SocketOperations {
         }
 
         if val != 0 {
+            if val == SysErr::ECONNREFUSED {
+                return Err(Error::SysError(SysErr::EINPROGRESS));
+            }
             return Err(Error::SysError(val as i32));
         }
 
@@ -985,10 +990,6 @@ impl SockOperations for SocketOperations {
             *addrlen = len as u32;
         }
 
-        // hard code workaround
-        if self.enableRDMA {
-            len = 0;
-        }
         let fd = acceptItem.fd;
 
         let remoteAddr = &acceptItem.addr.data[0..len];
@@ -1024,11 +1025,7 @@ impl SockOperations for SocketOperations {
             && socketaddr.len() > SIZEOF_SOCKADDR
         {
             socketaddr = &socketaddr[..SIZEOF_SOCKADDR]
-        } /*else if self.family == AFType::AF_UNIX {
-              use super::super::unix::hostsocket::*;
-              let path = ExtractPath(sockaddr)?;
-              info!("unix socket bind ... path is {:?}", alloc::string::String::from_utf8(path));
-          }*/
+        }
 
         let res = Kernel::HostSpace::Bind(
             self.fd,
@@ -1162,12 +1159,14 @@ impl SockOperations for SocketOperations {
                 && (how == LibcConst::SHUT_RD || how == LibcConst::SHUT_RDWR)
             {
                 self.SocketBuf().SetRClosed();
+                self.queue.Notify(EventMaskFromLinux(EVENT_HUP as u32));
             }
 
             if self.stype == SockType::SOCK_STREAM
                 && (how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR)
             {
                 self.SocketBuf().SetWClosed();
+                self.queue.Notify(EventMaskFromLinux(EVENT_HUP as u32));
             }
 
             return Ok(res);
@@ -1490,6 +1489,8 @@ impl SockOperations for SocketOperations {
 
         let waitall = (flags & MsgType::MSG_WAITALL) != 0;
         let dontwait = (flags & MsgType::MSG_DONTWAIT) != 0;
+        let trunc = (flags & MsgType::MSG_TRUNC) != 0;
+        let peek = (flags & MsgType::MSG_PEEK) != 0;
 
         if self.SocketBufEnabled() {
             let controlDataLen = 0;
@@ -1508,6 +1509,12 @@ impl SockOperations for SocketOperations {
             }
 
             let len = IoVec::NumBytes(dsts);
+            let data = if trunc {
+                Some(Iovs(dsts).Data())
+            } else {
+                None
+            };
+
             let mut iovs = dsts;
 
             let mut count = 0;
@@ -1520,7 +1527,7 @@ impl SockOperations for SocketOperations {
 
             'main: loop {
                 loop {
-                    match self.ReadFromBuf(task, socketType.clone(), iovs) {
+                    match self.ReadFromBuf(task, socketType.clone(), iovs, peek) {
                         Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
                             if count > 0 {
                                 if dontwait || !waitall {
@@ -1550,7 +1557,7 @@ impl SockOperations for SocketOperations {
                             }
 
                             count += n;
-                            if count == len as i64 {
+                            if count == len as i64 || peek {
                                 break 'main;
                             }
 
@@ -1588,6 +1595,10 @@ impl SockOperations for SocketOperations {
             } else {
                 None
             };
+
+            if trunc {
+                task.mm.ZeroDataOutToIovs(task, &data.unwrap(), count as usize, false)?;
+            }
 
             let (retFlags, controlData) = self.prepareControlMessage(controlDataLen);
             return Ok((count as i64, retFlags, senderAddr, controlData));
@@ -1629,12 +1640,24 @@ impl SockOperations for SocketOperations {
         self.EventRegister(task, &general, EVENT_READ);
         defer!(self.EventUnregister(task, &general));
 
-        let mut res = Kernel::HostSpace::IORecvMsg(
-            self.fd,
-            &mut msgHdr as *mut _ as u64,
-            flags | MsgType::MSG_DONTWAIT,
-            false,
-        ) as i32;
+        let mut res = if msgHdr.msgControlLen != 0 {
+            Kernel::HostSpace::IORecvMsg(
+                self.fd,
+                &mut msgHdr as *mut _ as u64,
+                flags | MsgType::MSG_DONTWAIT,
+                false,
+            ) as i32
+        } else {
+            Kernel::HostSpace::IORecvfrom(
+                self.fd,
+                buf.Ptr(),
+                size,
+                flags  | MsgType::MSG_DONTWAIT,
+                msgHdr.msgName,
+                &msgHdr.nameLen as * const _ as u64,
+
+            ) as i32
+        };
 
         while res == -SysErr::EWOULDBLOCK && flags & MsgType::MSG_DONTWAIT == 0 {
             match task.blocker.BlockWithMonoTimer(true, deadline) {
@@ -1650,12 +1673,24 @@ impl SockOperations for SocketOperations {
                 _ => (),
             }
 
-            res = Kernel::HostSpace::IORecvMsg(
-                self.fd,
-                &mut msgHdr as *mut _ as u64,
-                flags | MsgType::MSG_DONTWAIT,
-                false,
-            ) as i32;
+            res = if msgHdr.msgControlLen != 0 {
+                Kernel::HostSpace::IORecvMsg(
+                    self.fd,
+                    &mut msgHdr as *mut _ as u64,
+                    flags | MsgType::MSG_DONTWAIT,
+                    false,
+                ) as i32
+            } else {
+                Kernel::HostSpace::IORecvfrom(
+                    self.fd,
+                    buf.Ptr(),
+                    size,
+                    flags  | MsgType::MSG_DONTWAIT,
+                    msgHdr.msgName,
+                    &msgHdr.nameLen as * const _ as u64,
+
+                ) as i32
+            };
         }
 
         if res < 0 {
@@ -1696,7 +1731,7 @@ impl SockOperations for SocketOperations {
     ) -> Result<i64> {
         if self.SocketBufEnabled() {
             if self.SocketBuf().WClosed() {
-                return Err(Error::SysError(SysErr::ESPIPE));
+                return Err(Error::SysError(SysErr::EPIPE))
             }
 
             if msgHdr.msgName != 0 || msgHdr.msgControl != 0 {
@@ -1789,30 +1824,56 @@ impl SockOperations for SocketOperations {
         msgHdr.iovLen = iovs.len();
         msgHdr.msgFlags = 0;
 
-        let mut res = Kernel::HostSpace::IOSendMsg(
-            self.fd,
-            msgHdr as *const _ as u64,
-            flags | MsgType::MSG_DONTWAIT,
-            false,
-        ) as i32;
+        let mut res = if msgHdr.msgControlLen > 0 {
+            Kernel::HostSpace::IOSendMsg(
+                self.fd,
+                msgHdr as *const _ as u64,
+                flags | MsgType::MSG_DONTWAIT,
+                false,
+            ) as i32
+        } else {
+            Kernel::HostSpace::IOSendto(
+                self.fd,
+                buf.Ptr(),
+                len,
+                flags | MsgType::MSG_DONTWAIT,
+                msgHdr.msgName,
+                msgHdr.nameLen,
+            ) as i32
+        };
+
         while res == -SysErr::EWOULDBLOCK && flags & MsgType::MSG_DONTWAIT == 0 {
             let general = task.blocker.generalEntry.clone();
 
             self.EventRegister(task, &general, EVENT_WRITE);
             defer!(self.EventUnregister(task, &general));
             match task.blocker.BlockWithMonoTimer(true, deadline) {
+                Err(Error::SysError(SysErr::ETIMEDOUT)) => {
+                    return Err(Error::SysError(SysErr::EAGAIN))
+                }
                 Err(e) => {
                     return Err(e);
                 }
                 _ => (),
             }
 
-            res = Kernel::HostSpace::IOSendMsg(
-                self.fd,
-                msgHdr as *const _ as u64,
-                flags | MsgType::MSG_DONTWAIT,
-                false,
-            ) as i32;
+            res = if msgHdr.msgControlLen > 0 {
+                Kernel::HostSpace::IOSendMsg(
+                    self.fd,
+                    msgHdr as *const _ as u64,
+                    flags | MsgType::MSG_DONTWAIT,
+                    false,
+                ) as i32
+            } else {
+                Kernel::HostSpace::IOSendto(
+                    self.fd,
+                    buf.Ptr(),
+                    len,
+                    flags | MsgType::MSG_DONTWAIT,
+                    msgHdr.msgName,
+                    msgHdr.nameLen,
+                ) as i32
+            };
         }
 
         if res < 0 {
@@ -1876,6 +1937,7 @@ pub struct SocketProvider {
 
 impl Provider for SocketProvider {
     fn Socket(&self, task: &Task, stype: i32, protocol: i32) -> Result<Option<Arc<File>>> {
+        let nonblocking = stype & SocketFlags::SOCK_NONBLOCK != 0;
         let stype = stype & SocketType::SOCK_TYPE_MASK;
 
         let res =
@@ -1886,23 +1948,32 @@ impl Provider for SocketProvider {
 
         let fd = res as i32;
 
-        let socketType = if (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
-            && stype == SockType::SOCK_STREAM
-        {
-            SocketBufType::TCPInit
-        } else {
-            SocketBufType::NoTCP
-        };
+        let file;
+        if SHARESPACE.config.read().UringIO
+            && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
+            && stype == SockType::SOCK_STREAM {
+            let socketType = SocketBufType::TCPInit;
 
-        let file = newSocketFile(
-            task,
-            self.family,
-            fd,
-            stype & SocketType::SOCK_TYPE_MASK,
-            stype & SocketFlags::SOCK_NONBLOCK != 0,
-            socketType,
-            None,
-        )?;
+            file = newSocketFile(
+                task,
+                self.family,
+                fd,
+                stype & SocketType::SOCK_TYPE_MASK,
+                nonblocking,
+                socketType,
+                None,
+            )?;
+        } else {
+            file = newHostSocketFile(
+                task,
+                self.family,
+                fd,
+                stype & SocketType::SOCK_TYPE_MASK,
+                nonblocking,
+                None,
+            )?;
+        }
+
         return Ok(Some(Arc::new(file)));
     }
 

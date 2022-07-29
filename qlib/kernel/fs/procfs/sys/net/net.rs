@@ -17,26 +17,25 @@ use alloc::collections::btree_map::BTreeMap;
 use alloc::string::ToString;
 use alloc::sync::Arc;
 
-use super::super::super::super::super::auth::*;
-use super::super::super::super::super::common::*;
-use super::super::super::super::super::linux_def::*;
-use super::super::super::super::task::*;
-use super::super::super::attr::*;
-use super::super::super::dirent::*;
-use super::super::super::file::*;
-use super::super::super::flags::*;
+use super::super::super::super::super::super::auth::*;
+use super::super::super::super::super::super::common::*;
+use super::super::super::super::super::super::linux_def::*;
+use super::super::super::super::super::task::*;
+use super::super::super::super::attr::*;
+use super::super::super::super::dirent::*;
+use super::super::super::super::file::*;
+use super::super::super::super::flags::*;
+use super::super::super::super::inode::*;
+use super::super::super::super::mount::*;
+use super::super::super::super::ramfs::dir::*;
+use super::super::super::dir_proc::*;
 use super::super::super::inode::*;
-use super::super::super::mount::*;
-use super::super::super::ramfs::dir::*;
-use super::super::dir_proc::*;
-use super::super::inode::*;
-use super::vm::vm::*;
-use super::net::net::*;
+use super::ipv4::*;
 
 // ProcSysDirNode represents a /proc/sys directory.
-pub struct ProcSysDirNode {}
+pub struct NetDirNode {}
 
-impl DirDataNode for ProcSysDirNode {
+impl DirDataNode for NetDirNode {
     fn Lookup(&self, d: &Dir, task: &Task, dir: &Inode, name: &str) -> Result<Dirent> {
         return d.Lookup(task, dir, name);
     }
@@ -53,20 +52,19 @@ impl DirDataNode for ProcSysDirNode {
     }
 }
 
-pub fn NewSys(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
+pub fn NewNet(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let mut contents = BTreeMap::new();
-    contents.insert("vm".to_string(), NewVm(task, msrc));
-    contents.insert("net".to_string(), NewNet(task, msrc));
+    contents.insert("ipv4".to_string(), NewIpv4(task, msrc));
 
-    let taskDir = DirNode {
+    let netDir = DirNode {
         dir: Dir::New(
             task,
             contents,
             &ROOT_OWNER,
             &FilePermissions::FromMode(FileMode(0o0555)),
         ),
-        data: ProcSysDirNode {},
+        data: NetDirNode {},
     };
 
-    return NewProcInode(&Arc::new(taskDir), msrc, InodeType::SpecialDirectory, None);
+    return NewProcInode(&Arc::new(netDir), msrc, InodeType::SpecialDirectory, None);
 }

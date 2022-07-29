@@ -83,6 +83,7 @@ pub fn NewSlaveNode(
         LockCtx: LockCtx::default(),
         MountSource: msrc,
         Overlay: None,
+        ..Default::default()
     };
 
     return Inode(Arc::new(QMutex::new(inodeInternal)));
