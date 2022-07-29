@@ -97,7 +97,7 @@ impl<'a> ShareSpace {
 }
 
 impl ShareSpace {
-    pub fn Init(&mut self, vcpuCount: usize, controlSock: i32, rdmaSvcCliSock: i32) {
+    pub fn Init(&mut self, vcpuCount: usize, controlSock: i32, rdmaSvcCliSock: i32, podId: [u8; 64]) {
         *self.config.write() = *QUARK_CONFIG.lock();
         let mut values = Vec::with_capacity(vcpuCount);
         for _i in 0..vcpuCount {
@@ -109,6 +109,7 @@ impl ShareSpace {
                 rdmaSvcCliSock,
                 MemoryDef::RDMA_LOCAL_SHARE_OFFSET,
                 MemoryDef::RDMA_GLOBAL_SHARE_OFFSET,
+                podId,
             ));
         }
 

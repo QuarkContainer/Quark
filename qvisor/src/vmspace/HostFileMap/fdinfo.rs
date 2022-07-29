@@ -18,13 +18,14 @@ use spin::Mutex;
 
 use crate::qlib::fileinfo::*;
 use crate::qlib::kernel::GlobalIOMgr;
+use crate::qlib::socket_buf::*;
 
-//use super::socket_info::*;
-//use super::rdma_socket::*;
 use super::super::super::util::*;
 use super::super::qlib::common::*;
+use super::super::qlib::rdmasocket::*;
+use super::super::FD_NOTIFIER;
 use super::super::*;
-//use super::super::FD_NOTIFIER;
+// use super::socket_info::*;
 
 impl FdInfo {
     pub fn SockInfo(&self) -> SockInfo {
@@ -187,7 +188,6 @@ impl FdInfo {
         let ret = unsafe { libc::fsetxattr(fd, name as _, value as _, size, flags as _) };
         return SysRet(ret as i64);
     }
-
 
     pub fn FGetXattr(fd: i32, name: u64, value: u64, size: usize) -> i64 {
         let ret = unsafe { libc::fgetxattr(fd, name as _, value as _, size) };
@@ -400,7 +400,6 @@ impl FdInfo {
         return Self::FSetXattr(fd, name, value, size, flags);
     }
 
-
     pub fn IOFGetXattr(&self, name: u64, value: u64, size: usize) -> i64 {
         let fd = self.lock().fd;
         return Self::FGetXattr(fd, name, value, size);
@@ -477,7 +476,7 @@ impl FdInfo {
         return Self::Listen(sockfd, backlog, block);
     }
 
-    /*pub fn RDMAListen(&self, backlog: i32, block: bool, acceptQueue: AcceptQueue) -> i64 {
+    pub fn RDMAListen(&self, backlog: i32, block: bool, acceptQueue: AcceptQueue) -> i64 {
         let sockfd = self.lock().fd;
         let ret = Self::Listen(sockfd, backlog, block);
         if ret < 0 {
@@ -485,16 +484,22 @@ impl FdInfo {
         }
 
         match self.SockInfo() {
-            SockInfo::Socket => {
-                let rdmaSocket = RDMAServerSock::New(sockfd, acceptQueue);
+            SockInfo::Socket(_socketInfo) => {
+                //TODO: should double check this is needed or not
+                let rdmaSocket = RDMAServerSock::New(sockfd, acceptQueue, 0, 0);
                 *self.lock().sockInfo.lock() = SockInfo::RDMAServerSocket(rdmaSocket);
-                self.lock().AddWait(EVENT_READ | EVENT_WRITE).expect("RDMAListen EpollCtlAdd fail");
+                self.lock()
+                    .AddWait(EVENT_READ | EVENT_WRITE)
+                    .expect("RDMAListen EpollCtlAdd fail");
                 // the accept4 with SOCK_NONBLOCK doesn't work, have to fcntl it to unblock
                 super::super::VMSpace::UnblockFd(sockfd);
             }
             _ => {
-                error!("RDMAListen listen fail with wrong state {:?}", self.SockInfo());
-                return -SysErr::EINVAL as i64
+                error!(
+                    "RDMAListen listen fail with wrong state {:?}",
+                    self.SockInfo()
+                );
+                return -SysErr::EINVAL as i64;
             }
         }
         return 0;
@@ -502,11 +507,12 @@ impl FdInfo {
 
     pub fn ProcessRDMAWriteImmFinish(&self) {
         match self.SockInfo() {
-            SockInfo::RDMADataSocket(sock) => {
-                sock.ProcessRDMAWriteImmFinish(self.WaitInfo())
-            }
+            SockInfo::RDMADataSocket(sock) => sock.ProcessRDMAWriteImmFinish(self.WaitInfo()),
             _ => {
-                panic!("ProcessRDMAWriteImmFinish get unexpected socket {:?}", self.SockInfo())
+                panic!(
+                    "ProcessRDMAWriteImmFinish get unexpected socket {:?}",
+                    self.SockInfo()
+                )
             }
         }
     }
@@ -517,7 +523,10 @@ impl FdInfo {
                 sock.ProcessRDMARecvWriteImm(recvCount, writeCount, self.WaitInfo())
             }
             _ => {
-                panic!("ProcessRDMARecvWriteImm get unexpected socket {:?}", self.SockInfo())
+                panic!(
+                    "ProcessRDMARecvWriteImm get unexpected socket {:?}",
+                    self.SockInfo()
+                )
             }
         }
     }
@@ -551,7 +560,10 @@ impl FdInfo {
                 }
             }
             _ => {
-                error!("RDMAListen RDMANotify fail with wrong state {:?}", self.SockInfo());
+                error!(
+                    "RDMAListen RDMANotify fail with wrong state {:?}",
+                    self.SockInfo()
+                );
             }
         }
 
@@ -559,33 +571,39 @@ impl FdInfo {
     }
 
     pub fn PostRDMAConnect(&self, msg: &mut PostRDMAConnect) {
+        debug!("FdInfo::PostRDMAConnect");
         let sockfd = self.Fd();
         match self.SockInfo() {
-            SockInfo::Socket => {
+            SockInfo::Socket(_) => {
                 let sockBuf = msg.socketBuf.clone();
-                let rdmaType = if RDMA_ENABLE {
+                let _rdmaType = if RDMA_ENABLE {
                     let addr = msg as *const _ as u64;
                     RDMAType::Client(addr)
                 } else {
                     RDMAType::None
                 };
 
-                let rdmaSocket = RDMADataSock::New(sockfd, sockBuf, rdmaType);
+                let rdmaSocket = RDMADataSock::New(sockfd, sockBuf, 1, 0, 0, 0, 0);
                 *self.lock().sockInfo.lock() = SockInfo::RDMADataSocket(rdmaSocket);
-                self.lock().AddWait(EVENT_READ | EVENT_WRITE).expect("RDMAListen EpollCtlAdd fail");
+                self.lock()
+                    .AddWait(EVENT_READ | EVENT_WRITE)
+                    .expect("RDMAListen EpollCtlAdd fail");
 
                 // the accept4 with SOCK_NONBLOCK doesn't work, have to fcntl it to unblock
                 super::super::VMSpace::UnblockFd(sockfd);
             }
             _ => {
-                error!("PostRDMAConnect fail with wrong state {:?}", self.SockInfo());
+                error!(
+                    "PostRDMAConnect fail with wrong state {:?}",
+                    self.SockInfo()
+                );
             }
         }
 
         if !RDMA_ENABLE {
             msg.Finish(0)
         }
-    }*/
+    }
 
     pub fn IOShutdown(&self, how: i32) -> i64 {
         let sockfd = self.lock().fd;
@@ -624,7 +642,7 @@ impl FdInfoIntern {
             fd: fd,
             waitInfo: FdWaitInfo::default(),
             flags: Flags(flags),
-            sockInfo: Mutex::new(SockInfo::Socket),
+            sockInfo: Mutex::new(SockInfo::Socket(SocketInfo::default())),
         };
 
         return res;

@@ -12,6 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use core::alloc::{GlobalAlloc, Layout};
+use core::sync::atomic::AtomicBool;
+use core::sync::atomic::AtomicU64;
+use core::sync::atomic::Ordering;
+
+use super::qlib::kernel::quring::uring_async::UringAsyncMgr;
 use crate::qlib::fileinfo::*;
 use super::qlib::*;
 use super::qlib::loader::*;
@@ -168,5 +174,34 @@ pub fn VcpuId() -> usize {
 impl IOMgr {
     pub fn Init() -> Result<Self> {
         return Err(Error::Common(format!("IOMgr can't init in kernel")))
+    }
+}
+
+impl UringAsyncMgr {
+    pub fn FreeSlot(&self, id: usize) {
+        self.freeids.lock().push_back(id as _);
+    }
+}
+
+impl HostAllocator {
+    pub const fn New() -> Self {
+        return Self {
+            listHeapAddr: AtomicU64::new(0),
+            initialized: AtomicBool::new(true),
+        };
+    }
+
+    pub fn Init(&self, heapAddr: u64) {
+        self.listHeapAddr.store(heapAddr, Ordering::SeqCst)
+    }
+}
+
+unsafe impl GlobalAlloc for HostAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        return self.Allocator().alloc(layout);
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        self.Allocator().dealloc(ptr, layout);
     }
 }

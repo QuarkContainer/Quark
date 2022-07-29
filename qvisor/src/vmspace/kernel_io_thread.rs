@@ -13,17 +13,18 @@
 // limitations under the License.
 
 use libc::*;
+use core::sync::atomic::Ordering;
 
 use super::super::kvm_vcpu::*;
 use super::super::qlib::common::*;
+use super::super::qlib::kernel::kernel::timer::TIMER_STORE;
+use super::super::qlib::kernel::GlobalRDMASvcCli;
 use super::super::qlib::kernel::ASYNC_PROCESS;
 use super::super::qlib::kernel::IOURING;
-use super::super::qlib::kernel::kernel::timer::TIMER_STORE;
 use super::super::qlib::kernel::TSC;
 use super::super::qlib::linux_def::*;
 use super::super::qlib::ShareSpace;
 use super::super::*;
-//use super::HostFileMap::rdma::*;
 
 pub struct KIOThread {
     pub eventfd: i32,
@@ -45,9 +46,9 @@ impl KIOThread {
     pub fn ProcessOnce(sharespace: &ShareSpace) -> usize {
         let mut count = 0;
 
-        /*if QUARK_CONFIG.lock().EnableRDMA {
-            count += RDMA.PollCompletionQueueAndProcess();
-        }*/
+        if QUARK_CONFIG.lock().EnableRDMA {
+            count += GlobalRDMASvcCli().ProcessRDMASvcMessage();
+        }
         count += IOURING.IOUring().HostSubmit().unwrap();
         TIMER_STORE.Trigger();
         count += IOURING.IOUring().HostSubmit().unwrap();
@@ -135,6 +136,30 @@ impl KIOThread {
             );
         }
 
+        if QUARK_CONFIG.lock().EnableRDMA {
+            let mut ev = epoll_event {
+                events: EVENT_READ as u32 | EPOLLET as u32,
+                u64: GlobalRDMASvcCli().cliEventFd as u64,
+            };
+
+            let ret = unsafe {
+                epoll_ctl(
+                    epfd,
+                    EPOLL_CTL_ADD,
+                    GlobalRDMASvcCli().cliEventFd,
+                    &mut ev as *mut epoll_event,
+                )
+            };
+
+            if ret == -1 {
+                panic!(
+                    "CPULocal::Init {} add host epollfd fail, error is {}",
+                    0,
+                    errno::errno().0
+                );
+            }
+        }
+
         let mut events = [epoll_event { events: 0, u64: 0 }; 2];
 
         let mut data: u64 = 0;
@@ -142,6 +167,9 @@ impl KIOThread {
             sharespace.IncrHostProcessor();
             if sharespace.Shutdown() {
                 return Err(Error::Exit);
+            }
+            if QUARK_CONFIG.lock().EnableRDMA {
+                GlobalRDMASvcCli().cliShareRegion.lock().clientBitmap.store(0, Ordering::Release);
             }
 
             Self::Process(sharespace);
@@ -157,6 +185,28 @@ impl KIOThread {
                 );
             }
 
+            if QUARK_CONFIG.lock().EnableRDMA {
+                let ret = unsafe {
+                    libc::read(
+                        GlobalRDMASvcCli().cliEventFd,
+                        &mut data as *mut _ as *mut libc::c_void,
+                        8,
+                    )
+                };
+
+                if ret < 0 && errno::errno().0 != SysErr::EAGAIN {
+                    panic!(
+                        "KIOThread::Wakeup fail... cliEventFd is {}, errno is {}",
+                        self.eventfd,
+                        errno::errno().0
+                    );
+                }
+            }
+
+            if QUARK_CONFIG.lock().EnableRDMA {
+                GlobalRDMASvcCli().cliShareRegion.lock().clientBitmap.store(1, Ordering::Release);
+            }
+
             if sharespace.DecrHostProcessor() == 0 {
                 Self::ProcessOnce(sharespace);
             }
@@ -164,7 +214,7 @@ impl KIOThread {
             ASYNC_PROCESS.Process();
             let timeout = TIMER_STORE.Trigger() / 1000 / 1000;
 
-             // when there is ready task, wake up for preemptive schedule
+            // when there is ready task, wake up for preemptive schedule
             let waitTime = if sharespace.scheduler.GlobalReadyTaskCnt() > 0 {
                 if timeout == -1 || timeout > 10 {
                     10
@@ -178,7 +228,7 @@ impl KIOThread {
             /*if QUARK_CONFIG.lock().EnableRDMA {
                 RDMA.HandleCQEvent()?;
             }*/
-            let _nfds = unsafe { epoll_wait(epfd, &mut events[0], 2, waitTime as i32) };
+            let _nfds = unsafe { epoll_wait(epfd, &mut events[0], 3, waitTime as i32) };
         }
     }
 

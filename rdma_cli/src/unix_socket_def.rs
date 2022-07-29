@@ -42,7 +42,6 @@ impl Drop for UnixSocket {
     fn drop(&mut self) {
         unsafe {
             if self.fd != -1 {
-                error!("close unix domain!!!");
                 close(self.fd);
             }
         }
@@ -145,7 +144,7 @@ impl UnixSocket {
         };
 
         if ret < 0 {
-            info!("UCliSocket connect socket fail, path is {}", path);
+            info!("UCliSocket connect socket fail, path is {}, errorno is: {}", path, errno::errno().0 as i32);
             return Err(Error::SysError(-errno::errno().0 as i32));
         }
 

@@ -65,9 +65,13 @@ void * clientThread(void *arg)
 
     for (int i=0; i<config.count; i++)
     {
-        // printf("thread %dth, send %dth data\n", index+1, i+1);
+        // if (i % 10 == 0) {
+        //     printf("thread %dth, send %dth data\n", index+1, i+1);
+        // }
+        
         if (config.log)
         {
+            printf("thread %dth, send %dth data\n", index+1, i+1);
             printf("client sock is: %d 1\n", clientsocks[index]);
         }
 
@@ -305,7 +309,9 @@ int main(int argc, char const *argv[])
     printf("bytes received: %lld, bytes sent: %lld\n", totalbytes, totalbytes);
     printf("time used: %lf\n", ns);
     double speed = (2 * totalbytes) / (ns);
-    printf("speed is %lf\n", speed);
+    printf("throughput is %lf\n", speed);
+    double pps = (2 * totalbytes * 1024 * 1024) / (ns)/config.buffer_size;
+    printf("pps is %lf\n", pps);
     double latency = ns / (readCount * 2 * threadnum);
     printf("latency is %lf\n", latency);
 
@@ -318,7 +324,7 @@ int main(int argc, char const *argv[])
     {
         shutdown(clientsocks[i], 1);
         if (read(clientsocks[i], recv_buffers[i], config.buffer_size) == 0) {
-            printf("read == 0\n");
+            // printf("read == 0\n");
             close(clientsocks[i]);
         }
     }

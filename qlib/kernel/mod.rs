@@ -16,6 +16,7 @@ use core::sync::atomic::Ordering;
 use core::sync::atomic::{AtomicBool, AtomicI32, AtomicI64};
 
 use crate::qlib::fileinfo::*;
+use crate::qlib::rdma_svc_cli::RDMASvcClient;
 
 use super::super::kernel_def::VcpuFreq;
 use super::super::ShareSpaceRef;
@@ -84,6 +85,10 @@ pub fn WaitContainerfd() -> i32 {
 
 pub fn GlobalIOMgr<'a>() -> &'a IOMgr {
     return &SHARESPACE.ioMgr;
+}
+
+pub fn GlobalRDMASvcCli<'a>() -> &'a RDMASvcClient {
+    return &SHARESPACE.rdmaSvcCli;
 }
 
 #[inline]

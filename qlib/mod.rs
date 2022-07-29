@@ -61,6 +61,7 @@ pub mod ringbuf;
 pub mod vcpu_mgr;
 
 pub mod rdma_svc_cli;
+pub mod rdmasocket;
 pub mod unix_socket;
 
 use self::mutex::*;

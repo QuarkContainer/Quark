@@ -1,0 +1,68 @@
+/*
+Copyright 2022 quarkcm Authors.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+package quarkcmsvc;
+import "google/protobuf/empty.proto";
+
+option go_package = "pkg/grpc";
+
+service QuarkCMService {
+  // Test
+  rpc TestPing (TestRequestMessage) returns (TestResponseMessage) {}
+
+  rpc ListNode (google.protobuf.Empty) returns (NodeListMessage) {}
+  rpc WatchNode (MaxResourceVersionMessage) returns (stream NodeMessage) {}
+  rpc ListPod (google.protobuf.Empty) returns (PodListMessage) {}
+  rpc WatchPod (MaxResourceVersionMessage) returns (stream PodMessage) {}
+}
+
+message TestRequestMessage {
+    string client_name = 1;
+}
+
+message TestResponseMessage {
+    string server_name = 1;
+}
+
+message NodeMessage {
+    string name = 1;
+    string hostname = 2;
+    uint32 ip = 3;
+    uint64 creation_timestamp = 4;
+    int32 resource_version = 5;
+    uint32 subnet = 6;
+    uint32 net_mask = 7;
+    string event_type = 8;
+}
+
+message NodeListMessage {
+    repeated NodeMessage nodes = 1;
+}
+
+message PodMessage {
+    string key = 1;
+    uint32 ip = 2;
+    string node_name = 3;
+    string container_id = 4;
+    int32 resource_version = 5;
+    string event_type = 6;
+}
+
+message PodListMessage {
+    repeated PodMessage pods = 1;
+}
+
+message MaxResourceVersionMessage {
+    int32 max_resource_version = 1;
+}

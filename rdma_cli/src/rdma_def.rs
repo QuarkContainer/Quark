@@ -1,3 +1,4 @@
+use alloc::collections::BTreeMap;
 use alloc::slice;
 use alloc::sync::Arc;
 use spin::Mutex;
@@ -25,6 +26,15 @@ impl RDMASvcClient {
         globalShareAddr: u64,
     ) -> Self {
         let cliShareSize = mem::size_of::<ClientShareRegion>();
+        // debug!("RDMASvcClient::New, cli size: {:x}", cliShareSize);
+        // debug!("RDMASvcClient::New, srv size: {:x}", mem::size_of::<ShareRegion>());
+        // debug!("RDMASvcClient::New, ioBuffer: {:x}", mem::size_of::<IOBuf>());
+        // debug!("RDMASvcClient::New, IOMetas: {:x}", mem::size_of::<IOMetas>());
+        // debug!("RDMASvcClient::New, RingQueue<RDMAResp>: {:x}", mem::size_of::<RingQueue<RDMAResp>>());
+        // debug!("RDMASvcClient::New, RingQueue<RDMAResp>: {:x}", mem::size_of::<RingQueue<RDMAReq>>());
+        // debug!("RDMASvcClient::New, RDMAResp: {:x}", mem::size_of::<RDMAResp>());
+        // debug!("RDMASvcClient::New, RDMAReq: {:x}", mem::size_of::<RDMAReq>());
+
         let cliShareAddr = unsafe {
             libc::mmap(
                 if localShareAddr == 0 {
@@ -34,17 +44,17 @@ impl RDMASvcClient {
                 },
                 cliShareSize,
                 libc::PROT_READ | libc::PROT_WRITE,
-                libc::MAP_SHARED,
+                if localShareAddr == 0 {
+                    libc::MAP_SHARED
+                } else {
+                    libc::MAP_SHARED | libc::MAP_FIXED
+                },
                 cliMemFd,
                 0,
             )
         };
-        error!(
-            "RDMASvcClient::New, cliShareAddr: {}, localShareAddr: {}, equal: {}",
-            cliShareAddr as u64,
-            localShareAddr,
-            (cliShareAddr as u64) == localShareAddr
-        );
+        assert!(cliShareAddr as u64 == localShareAddr || localShareAddr == 0);
+
         let cliShareRegion = unsafe { &mut (*(cliShareAddr as *mut ClientShareRegion)) };
 
         let cliShareRegion = Mutex::new(cliShareRegion);
@@ -59,19 +69,20 @@ impl RDMASvcClient {
                 },
                 srvShareSize,
                 libc::PROT_READ | libc::PROT_WRITE,
-                libc::MAP_SHARED,
+                if globalShareAddr == 0 {
+                    libc::MAP_SHARED
+                } else {
+                    libc::MAP_SHARED | libc::MAP_FIXED
+                },
                 srvMemFd,
                 0,
             )
         };
-        error!(
-            "RDMASvcClient::New, srvShareAddr: {}, globalShareAddr: {}, equal: {}",
-            srvShareAddr as u64,
-            globalShareAddr,
-            (srvShareAddr as u64) == globalShareAddr
-        );
+        assert!(srvShareAddr as u64 == globalShareAddr || globalShareAddr == 0);
+
         let srvShareRegion = unsafe { &mut (*(srvShareAddr as *mut ShareRegion)) };
         let srvShareRegion = Mutex::new(srvShareRegion);
+        let podId: [u8; 64] = [0; 64];
         RDMASvcClient {
             intern: Arc::new(RDMASvcCliIntern {
                 agentId,
@@ -90,6 +101,8 @@ impl RDMASvcClient {
                     len: srvShareSize as u64,
                 },
                 srvShareRegion,
+                channelToSocketMappings: Mutex::new(BTreeMap::new()),
+                podId,
             }),
         }
     }
@@ -115,10 +128,7 @@ impl RDMASvcClient {
     // }
 
     pub fn initialize(cliSock: i32, localShareAddr: u64, globalShareAddr: u64) -> Self {
-        error!(
-            "RDMASvcClient::initialize, cliSock: {}, localShareAddr: {}, globalShareAddr: {}",
-            cliSock, localShareAddr, globalShareAddr
-        );
+
         // let cli_sock = UnixSocket::NewClient(path).unwrap();
         let cli_sock = UnixSocket { fd: cliSock };
 
@@ -158,5 +168,9 @@ impl RDMASvcClient {
         if ret < 0 {
             println!("error: {}", std::io::Error::last_os_error());
         }
+    }
+
+    pub fn CreateSocket(&self) -> i64 {
+        1
     }
 }

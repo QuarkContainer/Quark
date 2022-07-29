@@ -192,8 +192,8 @@ pub fn LoadExecutable(
         if SliceCompare(&hdr, ELF_MAGIC.as_bytes()) {
             let loaded = LoadElf(task, &file)?;
             return Ok((loaded, executable, argv));
-        } else if SliceCompare(&hdr[..2], INTERPRETER_SCRIPT_MAGIC.as_bytes()) {
-            info!("start to load script {} argv is {:?}", filename, argv);
+        } else if true || SliceCompare(&hdr[..2], INTERPRETER_SCRIPT_MAGIC.as_bytes()) {
+            info!("start to load script {}", filename);
             let (newpath, newargv) = match ParseInterpreterScript(task, &filename, &file, argv) {
                 Err(e) => {
                     info!("Error loading interpreter script: {:?}", e);

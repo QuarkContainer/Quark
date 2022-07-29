@@ -1,6 +1,6 @@
 // Copyright (c) 2021 Quark Container Authors
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
+// Licensed un&der the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
@@ -13,9 +13,12 @@
 // limitations under the License.
 
 use spin::Mutex;
+use std::cell::RefCell;
 use std::iter::FromIterator;
 use std::net::{IpAddr, Ipv4Addr};
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, collections::HashSet, str::FromStr};
+use super::common::*;
+use std::os::unix::io::{AsRawFd, RawFd};
 
 use super::qlib::rdma_share::*;
 
@@ -28,6 +31,15 @@ pub struct CtrlInfo {
     // nodes: node ipaddr --> Node
     pub nodes: Mutex<HashMap<u32, Node>>,
 
+    // pods: pod ipaddr --> Pod
+    pub pods: Mutex<HashMap<u32, Pod>>,
+
+    // containerids: containerid --> ip
+    pub containerids: Mutex<HashMap<String, u32>>,
+
+    //ip --> podId
+    pub ipToPodIdMappings: Mutex<HashMap<u32, String>>,
+
     // subnetmapping: virtual subnet --> node ipaddr
     pub subnetmap: Mutex<HashMap<u32, u32>>,
 
@@ -39,37 +51,49 @@ pub struct CtrlInfo {
 
     //Pod Ip to Node Ip
     pub podIpInfo: Mutex<HashMap<u32, u32>>,
+
+    // Hashmap for file descriptors so that different handling can be dispatched.
+    pub fds: Mutex<HashMap<i32, Srv_FdType>>,
+
+    // Hostname of the node
+    pub hostname: Mutex<String>,
+
+    // Timestamp of the node
+    pub timestamp: Mutex<u64>,
+
+    pub epoll_fd: Mutex<RawFd>,
+
+    pub isK8s: bool,
 }
 
 impl Default for CtrlInfo {
-    fn default() -> CtrlInfo {
+    fn default() -> CtrlInfo {        
         let mut nodes: HashMap<u32, Node> = HashMap::new();
-        let subnet = u32::from(Ipv4Addr::from_str("172.16.1.0").unwrap());
-        let netmask = u32::from(Ipv4Addr::from_str("255.255.255.0").unwrap());
-        let lab1ip = u32::from(Ipv4Addr::from_str("172.16.1.8").unwrap());
-        let devip = u32::from(Ipv4Addr::from_str("172.16.1.6").unwrap());
-        nodes.insert(
-            lab1ip,
-            Node {
-                ipAddr: lab1ip,
-                timestamp: 1234,
-                subnet: subnet,
-                netmask: netmask,
-            },
-        );
+        let pods: HashMap<u32, Pod> = HashMap::new();
+        let mut containerids: HashMap<String, u32> = HashMap::new();
 
-        nodes.insert(
-            devip,
-            Node {
-                ipAddr: devip,
-                timestamp: 5678,
-                subnet: subnet,
-                netmask: netmask,
-            },
-        );
+        let isK8s = true;
+        if !isK8s {
+            let lab1ip = u32::from(Ipv4Addr::from_str("172.16.1.43").unwrap()).to_be();
+            debug!("CtrlInfo::default, lab1ip: {}", lab1ip);
+            let node = Node {
+                hostname: String::from("lab 1"),
+                ipAddr: lab1ip,
+                timestamp: 0,
+                subnet: u32::from(Ipv4Addr::from_str("172.16.1.0").unwrap()),
+                netmask: u32::from(Ipv4Addr::from_str("255.255.255.0").unwrap()),
+                resource_version: 0,
+            };
+            nodes.insert(lab1ip, node);
+            containerids.insert("server".to_string(), u32::from(Ipv4Addr::from_str("192.168.6.8").unwrap()).to_be());
+            containerids.insert("client".to_string(), u32::from(Ipv4Addr::from_str("192.168.6.6").unwrap()).to_be());
+        }
 
         CtrlInfo {
             nodes: Mutex::new(nodes),
+            pods: Mutex::new(pods),
+            containerids: Mutex::new(containerids),
+            ipToPodIdMappings: Mutex::new(HashMap::new()),
             subnetmap: Mutex::new(HashMap::new()),
             veps: Mutex::new(HashMap::new()),
             clusterSubnetInfo: Mutex::new(ClusterSubnetInfo {
@@ -80,10 +104,84 @@ impl Default for CtrlInfo {
             }),
             //134654144 -> 100733100
             podIpInfo: Mutex::new(HashMap::from_iter([(
-                u32::from(Ipv4Addr::from_str("192.168.6.8").unwrap()).to_be(),
-                (u32::from(Ipv4Addr::from_str("172.16.1.6").unwrap()).to_be()),
+                u32::from(Ipv4Addr::from_str("192.168.6.8").unwrap()).to_le(),
+                (u32::from(Ipv4Addr::from_str("172.16.1.43").unwrap()).to_be()),
             )])),
+            fds: Mutex::new(HashMap::new()),
+            hostname: Mutex::new(String::new()),
+            timestamp: Mutex::new(0),
+            epoll_fd: Mutex::new(0),
+            isK8s: isK8s,
         }
+    }
+}
+
+impl CtrlInfo{
+    pub fn fds_insert(&self, fd: i32, fdType: Srv_FdType){
+        let mut fds = self.fds.lock();
+        fds.insert(fd, fdType);
+    }
+
+    pub fn fds_get(&self, fd: i32) -> Srv_FdType {
+        let fds = self.fds.lock();
+        fds.get(&fd).unwrap().clone()
+    }
+
+    pub fn hostname_set(&self, value: String) {
+        let mut hostname = self.hostname.lock();
+        *hostname = value;
+    }
+
+    pub fn hostname_get(&self) -> String {
+        self.hostname.lock().clone()
+    }
+
+    pub fn timestamp_set(&self, value: u64) {
+        let mut timestamp = self.timestamp.lock();
+        *timestamp = value;
+    }
+
+    pub fn timestamp_get(&self) -> u64 {
+        self.timestamp.lock().clone()
+    }
+
+    pub fn get_node_ips_for_connecting(&self) -> HashSet<u32> {
+        let mut set: HashSet<u32> = HashSet::new();
+        let timestamp = self.timestamp_get();
+        for (_, node) in self.nodes.lock().iter() {
+            debug!("get_node_ips_for_connecting, node: {:?}", node);
+            if node.timestamp < timestamp {
+                debug!("get_node_ips_for_connecting, node.ipAddr: {}", node.ipAddr);
+                set.insert(node.ipAddr);
+            }
+        }
+        set
+    }
+
+    pub fn get_node_ip_by_pod_ip(&self, ip: &u32) -> Option<u32> {
+        for (_, node) in self.nodes.lock().iter() {
+            if !self.isK8s {
+                return Some(node.ipAddr);
+            }
+            if node.netmask & *ip == node.subnet {
+                return Some(node.ipAddr);
+            }
+        }
+        None
+    }
+
+    pub fn epoll_fd_set(&self, value: RawFd) {
+        let mut epoll_fd = self.epoll_fd.lock();
+        *epoll_fd = value;
+    }
+
+    pub fn epoll_fd_get(&self) -> RawFd {
+        self.epoll_fd.lock().clone()
+    }
+
+    pub fn node_get(&self, ip: u32) -> Node {
+        debug!("node_get, ip: {}", ip);
+        self.nodes.lock().get(&ip).unwrap().clone()
     }
 }
 
@@ -103,15 +201,26 @@ pub struct ClusterSubnetInfo {
 // from current design, one node has only one subnet even it can have multiple VPC
 // for one node, different VPC has to use one subnet,
 // todo: support different subnet for different VPC
-#[derive(Default)]
+#[derive(Default, Debug, Clone)]
 pub struct Node {
     pub ipAddr: u32,
     pub timestamp: u64,
+    pub hostname: String,
+    pub resource_version: i32,
 
     // node subnet/mask
     pub subnet: u32,
     pub netmask: u32,
     //pub nodename: String ....
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct Pod {
+    pub key: String,
+    pub ip: u32,
+    pub node_name: String,
+    pub container_id: String,
+    pub resource_version: i32,
 }
 
 pub struct VirtualEp {

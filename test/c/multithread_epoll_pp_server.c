@@ -42,7 +42,7 @@ struct config_t config =
 char *send_buffer;
 char **recv_buffers;
 int *clientsocks;
-// int *readNum;
+int *readNum;
 int *epollfds;
 int *readCountLeft;
 
@@ -129,6 +129,12 @@ void *socketThread(void *arg)
                 continue;
             }
 
+            readNum[idx] += 1;
+            if (config.log)
+            {
+                printf("read %dth: %d \n", readNum[idx], config.buffer_size);
+            }
+
             readCountLeft[idx] = config.buffer_size;
 
             int nwrite = write(fd, send_buffer, config.buffer_size);
@@ -141,7 +147,7 @@ void *socketThread(void *arg)
 
             if (config.log)
             {
-                printf("write %d \n", nwrite);
+                printf("write %dth: %d \n", readNum[idx], nwrite);
             }
         }
     }
@@ -277,7 +283,7 @@ int main(int argc, char const *argv[])
     pthread_t *tid = malloc(sizeof(pthread_t) * coreNum);
     clientsocks = malloc(connectionNum * sizeof(int));
     readCountLeft = malloc(connectionNum * sizeof(int));
-    // readNum = malloc(connectionNum * sizeof(int));
+    readNum = malloc(connectionNum * sizeof(int));
     epollfds = malloc(coreNum * sizeof(int));
     for (int i = 0; i < connectionNum; i++)
     {
@@ -296,7 +302,7 @@ int main(int argc, char const *argv[])
 
         clientsocks[i] = new_socket;
         readCountLeft[i] = config.buffer_size;
-        // readNum[i] = 0;
+        readNum[i] = 0;
     }
 
     for (int i = 0; i < coreNum; i++)

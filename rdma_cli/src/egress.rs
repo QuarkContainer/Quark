@@ -88,18 +88,23 @@ use common::*;
 use local_ip_address::list_afinet_netifas;
 use local_ip_address::local_ip;
 use qlib::linux_def::*;
-use qlib::socket_buf::SocketBuff;
 use qlib::rdma_svc_cli::*;
+use qlib::socket_buf::SocketBuff;
+use qlib::unix_socket::UnixSocket;
 use spin::{Mutex, MutexGuard};
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::{env, mem, ptr, thread, time};
-use qlib::unix_socket::UnixSocket;
 
 fn main() -> io::Result<()> {
     let mut fds: HashMap<i32, FdType> = HashMap::new();
+    let args: Vec<_> = env::args().collect();
     let gatewayCli: GatewayClient;
-    gatewayCli = GatewayClient::initialize("/tmp/rdma_srv");
+    let mut unix_sock_path = "/tmp/rdma_srv";
+    if args.len() > 1 {
+        unix_sock_path = args.get(1).unwrap(); //"/tmp/rdma_srv1";
+    }
+    gatewayCli = GatewayClient::initialize(unix_sock_path); //TODO: add 2 address from quark.
 
     let cliEventFd = gatewayCli.rdmaSvcCli.cliEventFd;
     unblock_fd(cliEventFd);
@@ -115,7 +120,7 @@ fn main() -> io::Result<()> {
     let serverSockFd = gatewayCli.sockIdMgr.lock().AllocId().unwrap();
     let _ret = gatewayCli.bind(
         serverSockFd,
-        u32::from(Ipv4Addr::from_str("192.168.6.8").unwrap()).to_be(),
+        u32::from(Ipv4Addr::from_str("30.0.0.5").unwrap()).to_be(),
         16868u16.to_be(),
     );
 
@@ -213,6 +218,7 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient, fds: &mut HashMap<i32, FdType
                                                     as u64,
                                                 &shareRegion.iobufs[ioBufIndex].write as *const _
                                                     as u64,
+                                                false,
                                             )),
                                         );
                                         sockFdInfos.insert(sockInfo.fd, sockInfo);
@@ -254,6 +260,7 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient, fds: &mut HashMap<i32, FdType
                                             &shareRegion.iobufs[ioBufIndex].read as *const _ as u64,
                                             &shareRegion.iobufs[ioBufIndex].write as *const _
                                                 as u64,
+                                            false,
                                         )),
                                     );
                                     // println!("RDMARespMsg::RDMAAccept, sockfd: {}, channelId: {}", dataSockFd, response.channelId);

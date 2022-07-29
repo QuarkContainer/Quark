@@ -40,30 +40,31 @@ use x86_64::structures::paging::PageTableFlags;
 
 use crate::qlib::fileinfo::*;
 use crate::vmspace::kernel::GlobalIOMgr;
+use crate::vmspace::kernel::GlobalRDMASvcCli;
 
-use super::qlib::addr::Addr;
-use super::qlib::common::{Error, Result};
-use super::qlib::control_msg::*;
-use super::qlib::kernel::util::cstring::*;
-use super::qlib::linux_def::*;
-use super::qlib::pagetable::PageTables;
-use super::qlib::qmsg::*;
-use super::qlib::task_mgr::*;
-use super::qlib::linux::membarrier::*;
-use super::qlib::*;
-use super::runc::container::mounts::*;
-use super::runc::runtime::loader::*;
-use super::runc::specutils::specutils::*;
-//use super::qlib::socket_buf::*;
 use self::limits::*;
 use self::random::*;
 use self::syscall::*;
 use super::kvm_vcpu::HostPageAllocator;
 use super::kvm_vcpu::KVMVcpu;
 use super::namespace::MountNs;
+use super::qlib::addr::Addr;
+use super::qlib::common::{Error, Result};
+use super::qlib::control_msg::*;
+use super::qlib::kernel::util::cstring::*;
 use super::qlib::kernel::SignalProcess;
+use super::qlib::linux::membarrier::*;
+use super::qlib::linux_def::*;
+use super::qlib::pagetable::PageTables;
 use super::qlib::perf_tunning::*;
+use super::qlib::qmsg::*;
+use super::qlib::socket_buf::*;
+use super::qlib::task_mgr::*;
+use super::qlib::*;
+use super::runc::container::mounts::*;
+use super::runc::runtime::loader::*;
 use super::runc::runtime::signal_handle::*;
+use super::runc::specutils::specutils::*;
 use super::ucall::usocket::*;
 use super::*;
 
@@ -281,7 +282,8 @@ impl VMSpace {
         let cstr = CString::New(&path);
 
         let nr = SysCallID::sys_memfd_create as usize;
-        let fd = unsafe { syscall2(nr, cstr.Ptr() as *const c_char as usize, flags as usize) as i32 };
+        let fd =
+            unsafe { syscall2(nr, cstr.Ptr() as *const c_char as usize, flags as usize) as i32 };
 
         if fd < 0 {
             return Self::GetRet(fd as i64);
@@ -551,6 +553,19 @@ impl VMSpace {
 
         URING_MGR.lock().Removefd(fd).unwrap();
         let res = if info.is_some() {
+            let fdInfo = info.unwrap();
+            let fdInfoLock = fdInfo.lock();
+            let sockInfo = fdInfoLock.sockInfo.lock().clone();
+            match sockInfo {
+                SockInfo::RDMADataSocket(dataSock) => {
+                    let _res = GlobalRDMASvcCli().close(dataSock.channelId);
+                }
+                SockInfo::RDMAServerSocket(_serverSock) => {
+                    error!("ServerSock, fd: {}", fd);
+                }
+                _ => {
+                }
+            }
             0
         } else {
             -SysErr::EINVAL as i64
@@ -794,7 +809,6 @@ impl VMSpace {
 
         return fdInfo.IOFSetXattr(name, value, size, flags);
     }
-
 
     pub fn FGetXattr(fd: i32, name: u64, value: u64, size: usize) -> i64 {
         let fdInfo = match Self::GetFdInfo(fd) {
@@ -1116,13 +1130,13 @@ impl VMSpace {
         return fdInfo.IOListen(backlog, block);
     }
 
-    /*pub fn RDMAListen(sockfd: i32, backlog: i32, block: bool, acceptQueue: AcceptQueue) -> i64 {
+    pub fn RDMAListen(sockfd: i32, backlog: i32, block: bool, acceptQueue: AcceptQueue) -> i64 {
         let fdInfo = match Self::GetFdInfo(sockfd) {
             Some(fdInfo) => fdInfo,
             None => return -SysErr::EBADF as i64,
         };
 
-        return fdInfo.RDMAListen(backlog, block, acceptQueue)
+        return fdInfo.RDMAListen(backlog, block, acceptQueue);
     }
 
     pub fn RDMANotify(sockfd: i32, typ: RDMANotifyType) -> i64 {
@@ -1131,7 +1145,7 @@ impl VMSpace {
             None => return -SysErr::EBADF as i64,
         };
 
-        return fdInfo.RDMANotify(typ)
+        return fdInfo.RDMANotify(typ);
     }
 
     pub fn PostRDMAConnect(msg: &'static mut PostRDMAConnect) {
@@ -1144,7 +1158,7 @@ impl VMSpace {
         };
 
         fdInfo.PostRDMAConnect(msg);
-    }*/
+    }
 
     pub fn Shutdown(sockfd: i32, how: i32) -> i64 {
         let fdInfo = match Self::GetFdInfo(sockfd) {
@@ -1620,7 +1634,14 @@ impl VMSpace {
 
     pub fn Membarrier(cmd: i32) -> i32 {
         let nr = SysCallID::sys_membarrier as usize;
-        let ret = unsafe { syscall3(nr, cmd as usize, 0 as usize/*flag*/, 0 as usize/*unused*/) as i32 };
+        let ret = unsafe {
+            syscall3(
+                nr,
+                cmd as usize,
+                0 as usize, /*flag*/
+                0 as usize, /*unused*/
+            ) as i32
+        };
         return ret as _;
     }
 
@@ -1632,14 +1653,14 @@ impl VMSpace {
             MEMBARRIER_CMD_GLOBAL
         };
 
-        return Self::Membarrier(cmd) as _
+        return Self::Membarrier(cmd) as _;
     }
 
     //return (haveMembarrierGlobal, haveMembarrierPrivateExpedited)
     pub fn MembarrierInit() -> (bool, bool) {
         let supported = Self::Membarrier(MEMBARRIER_CMD_QUERY);
         if supported < 0 {
-            return (false, false)
+            return (false, false);
         }
 
         let mut haveMembarrierGlobal = false;
@@ -1663,7 +1684,7 @@ impl VMSpace {
             }
         }
 
-        return (haveMembarrierGlobal, haveMembarrierPrivateExpedited)
+        return (haveMembarrierGlobal, haveMembarrierPrivateExpedited);
     }
 
     pub fn Init() -> Self {

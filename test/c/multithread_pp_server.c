@@ -64,6 +64,7 @@ void * socketThread(void *arg)
     }
 
     // for(int i=0; i<config.count;i++)
+    int i = 0;
     for (;;)
     {
         int readcount = 0;
@@ -104,8 +105,8 @@ void * socketThread(void *arg)
 
         if(config.log)
         {
-            printf("sock: %d, total write %d\n", clientsocks[index], writecount);
-            printf("sock: %d, total read %d\n", clientsocks[index], readcount);
+            printf("sock: %d, nth: %d, total write %d\n", clientsocks[index], ++i, writecount);
+            printf("sock: %d, nth: %d, total read %d\n", clientsocks[index], i, readcount);
         }
     }
 

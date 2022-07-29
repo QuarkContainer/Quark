@@ -103,10 +103,6 @@ void *clientThread(void *arg)
             }
 
             int nread = read(fd, recv_buffers[index], readCountLeft[idx]);
-            if (config.log)
-            {
-                printf("read %d \n", nread);
-            }
 
             if (nread == -1)
             {
@@ -123,6 +119,11 @@ void *clientThread(void *arg)
             readCountLeft[idx] = config.buffer_size;
 
             readNum[idx] += 1;
+            if (config.log)
+            {
+                printf("read %dth: %d \n", readNum[idx], config.buffer_size);
+            }
+
             if (readNum[idx] == config.count)
             {
                 // close(fd);
@@ -140,7 +141,7 @@ void *clientThread(void *arg)
 
             if (config.log)
             {
-                printf("write %d \n", nwrite);
+                printf("write %dth, %d \n", readNum[idx], nwrite);
             }
         }
     }

@@ -339,7 +339,7 @@ impl GatewayClient {
             srcPort: port,
             fd: sockfd,
             acceptQueue: AcceptQueue::default(),
-            status: SockStatus::BINDED,
+            status: SockStatus::CLOSED,
         };
 
         self.serverSockFdInfos.lock().insert(sockfd, sockFdInfo);
@@ -352,7 +352,7 @@ impl GatewayClient {
                 Ok(()) => {
                     let mut sockFdInfos = self.serverSockFdInfos.lock();
                     let sockFdInfo = sockFdInfos.get_mut(&sockfd).unwrap();
-                    sockFdInfo.status = SockStatus::LISTENING;
+                    sockFdInfo.status = SockStatus::LISTEN;
                     Ok(())
                 }
                 Err(error) => return Err(error),
@@ -366,7 +366,7 @@ impl GatewayClient {
     }
 
     pub fn connect(&self, sockfd: u32, ipAddr: u32, port: u16) -> Result<()> {
-        match self.rdmaSvcCli.connect(sockfd, ipAddr, port) {
+        match self.rdmaSvcCli.connect(sockfd, ipAddr, port, 0, 0) {
             Ok(()) => {
                 let sockInfo = DataSock::New(
                     sockfd,
@@ -374,7 +374,7 @@ impl GatewayClient {
                     16866u16.to_be(),
                     ipAddr,
                     port,
-                    SockStatus::CONNECTING,
+                    SockStatus::SYN_SENT,
                     0,
                     Arc::new(SocketBuff::NewDummySockBuf()),
                 );
@@ -442,7 +442,6 @@ impl GatewayClient {
                 )
             };
 
-            // println!("ReadFromSocket, cnt: {}", cnt);
             if cnt > 0 {
                 let trigger = buffer.Produce(cnt as usize);
                 // println!("ReadFromSocket, trigger: {}", trigger);
@@ -473,8 +472,8 @@ impl GatewayClient {
                         // println!("ReadFromSocket, cnt == 0 5");
                         self.sockIdMgr.lock().Remove(sockInfo.fd);
                         // Send close to svc
-                        let _ret = self.rdmaSvcCli.SentMsgToSvc(RDMAReqMsg::RDMACloseChannel(
-                            RDMACloseChannelReq {
+                        let _ret = self.rdmaSvcCli.SentMsgToSvc(RDMAReqMsg::RDMAClose(
+                            RDMACloseReq {
                                 channelId: *sockInfo.channelId.lock(),
                             },
                         ));
@@ -522,8 +521,8 @@ impl GatewayClient {
                         self.dataSockFdInfos.lock().remove(&sockInfo.fd);
                         // println!("WriteToSocket, close socket 4");
                         self.sockIdMgr.lock().Remove(sockInfo.fd);
-                        let _ret = self.rdmaSvcCli.SentMsgToSvc(RDMAReqMsg::RDMACloseChannel(
-                            RDMACloseChannelReq {
+                        let _ret = self.rdmaSvcCli.SentMsgToSvc(RDMAReqMsg::RDMAClose(
+                            RDMACloseReq {
                                 channelId: *sockInfo.channelId.lock(),
                             },
                         ));
@@ -625,6 +624,29 @@ pub enum FdType {
     TCPSocketServer(u16),  //port
     TCPSocketConnect(u32), //sockfd maintained by RDMASvcCli
     ClientEvent,
+}
+
+#[derive(Clone)]
+pub enum Srv_FdType {
+    UnixDomainSocketServer(UnixSocket),
+    UnixDomainSocketConnect(UnixSocket),
+    TCPSocketServer,
+    TCPSocketConnect(u32),
+    RDMACompletionChannel,
+    SrvEventFd(i32),
+    NodeEventFd(NodeEvent),
+}
+
+#[derive(Clone)]
+pub struct NodeEvent{
+    pub is_delete: bool,
+    pub ip: u32,
+}
+
+#[derive(Clone)]
+pub struct PodEvent{
+    pub is_delete: bool,
+    pub ip: u32,
 }
 
 pub fn get_local_ip() -> u32 {

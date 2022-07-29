@@ -50,6 +50,11 @@ core_affinity = "0.5.10"
 cache-padded = "1.1.1"
 rdmaffi = { git = "https://github.com/QuarkContainer/RDMARust.git", package = "rdma-sys", version = "0.1.0" }
 local-ip-address = "0.4.4"
+hostname = "^0.3"
+prost = "0.10"
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
+tokio-stream = { version = "0.1", features = ["net"] }
+tonic = "0.7"
 
 [dependencies.lazy_static]
 version = "1.4"
@@ -69,3 +74,6 @@ debug-assertions = false
 [[bin]]
 name = "rdma_srv"
 path = "src/main.rs"
+
+[build-dependencies]
+tonic-build = "0.7"

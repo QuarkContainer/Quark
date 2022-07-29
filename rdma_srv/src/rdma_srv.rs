@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use spin::Mutex;
-use std::collections::HashMap;
-
 use super::id_mgr::IdMgr;
 use super::qlib::rdma_share::*;
 use super::rdma::*;
@@ -22,7 +19,10 @@ use super::rdma_agent::*;
 use super::rdma_channel::*;
 use super::rdma_conn::*;
 use super::rdma_ctrlconn::*;
+use core::sync::atomic::Ordering;
 use lazy_static::lazy_static;
+use spin::Mutex;
+use std::collections::HashMap;
 use std::ffi::CString;
 use std::mem::MaybeUninit;
 use std::sync::Arc;
@@ -47,6 +47,23 @@ pub struct SrvEndpoint {
     pub endpoint: Endpoint,
     pub status: SrvEndPointStatus, //TODO: double check whether it's needed or not
                                    //pub acceptQueue: [RDMAChannel; 5], // hold rdma channel which can be assigned.
+}
+
+pub struct SrvEndpointUsingPodId {
+    //pub srvEndpointId: u32, // to be returned as bind
+    pub agentId: u32,
+    pub sockfd: u32,
+    pub podId: [u8; 64],
+    pub port: u16,
+    pub status: SrvEndPointStatus, //TODO: double check whether it's needed or not
+                                   //pub acceptQueue: [RDMAChannel; 5], // hold rdma channel which can be assigned.
+}
+
+#[derive(Eq, Hash, PartialEq)]
+pub struct EndpointUsingPodId {
+    // same as vpcId
+    pub podId: [u8; 64],
+    pub port: u16,
 }
 
 pub struct RDMAControlChannelRegion {
@@ -94,11 +111,17 @@ pub struct RDMASrv {
     // agents: agentId -> RDMAAgent
     pub agents: Mutex<HashMap<u32, RDMAAgent>>,
 
+    pub sockToAgentIds: Mutex<HashMap<i32, u32>>,
+
     // the bitmap to expedite ready container search
     pub shareRegion: &'static ShareRegion,
 
     // keep track of server endpoint on current node
     pub srvEndPoints: Mutex<HashMap<Endpoint, SrvEndpoint>>,
+
+    // use pod id to track srvEndpoint
+    pub srvPodIdEndpoints: Mutex<HashMap<EndpointUsingPodId, SrvEndpointUsingPodId>>,
+
     pub currNode: Node,
 
     pub channelIdMgr: Mutex<IdMgr>,
@@ -109,6 +132,7 @@ pub struct RDMASrv {
     pub controlChannelRegionAddress: MemRegion,
     pub controlBufIdMgr: Mutex<IdMgr>,
     pub keys: Vec<[u32; 2]>,
+    pub memoryRegion: MemoryRegion,
 }
 
 impl Drop for RDMASrv {
@@ -211,6 +235,7 @@ impl RDMASrv {
                 &mut (*addr)
             },
             srvEndPoints: Mutex::new(HashMap::new()),
+            srvPodIdEndpoints: Mutex::new(HashMap::new()),
             currNode: Node::default(),
             channelIdMgr: Mutex::new(IdMgr::Init(1, 1000)),
             agentIdMgr: Mutex::new(IdMgr::Init(0, 1000)),
@@ -222,10 +247,12 @@ impl RDMASrv {
                 addr: contrlAddr as u64,
                 len: controlSize as u64,
             },
-            controlBufIdMgr: Mutex::new(IdMgr::Init(0, 16)),
+            controlBufIdMgr: Mutex::new(IdMgr::Init(0, 1024)),
             keys: vec![[mr.LKey(), mr.RKey()]],
             controlChannels: Mutex::new(HashMap::new()),
             controlChannels2: Mutex::new(HashMap::new()),
+            sockToAgentIds: Mutex::new(HashMap::new()),
+            memoryRegion: mr,
         };
     }
 
@@ -286,7 +313,10 @@ impl RDMASrv {
         //     channelId, finReceived
         // );
         if channelId != 0 {
-            match self.channels.lock().get(&channelId) {
+            let channelOption;
+            let channels = self.channels.lock();
+            channelOption = channels.get(&channelId);
+            match channelOption {
                 None => {
                     panic!(
                         "ProcessRDMARecvWriteImm get unexpected channelId: {}",
@@ -294,7 +324,9 @@ impl RDMASrv {
                     );
                 }
                 Some(channel) => {
-                    channel.ProcessRDMARecvWriteImm(qpNum, recvCount as u64, finReceived);
+                    let channelClone = channel.clone();
+                    drop(channels);
+                    channelClone.ProcessRDMARecvWriteImm(qpNum, recvCount as u64, finReceived);
                 }
             }
         } else {
@@ -310,26 +342,81 @@ impl RDMASrv {
         }
     }
 
-    pub fn HandleClientRequest(&self) {
-        let agentIds = self.shareRegion.getAgentIds();
-        // println!("agentIds: {:?}", agentIds);
-        let rdmaAgents = self.agents.lock();
-        for agentId in agentIds.iter() {
-            match rdmaAgents.get(agentId) {
-                Some(rdmaAgent) => {
-                    rdmaAgent.HandleClientRequest();
+    // pub fn HandleClientRequest(&self) -> usize {
+    //     let agentIds = self.shareRegion.getAgentIds();
+    //     // println!("agentIds: {:?}", agentIds);
+    //     let rdmaAgents = self.agents.lock();
+    //     let mut count = 0;
+    //     for agentId in agentIds.iter() {
+    //         match rdmaAgents.get(agentId) {
+    //             Some(rdmaAgent) => {
+    //                 // rdmaAgent
+    //                 count += rdmaAgent.HandleClientRequest();
+    //             }
+    //             None => {
+    //                 println!("RDMA agent with id {} doesn't exist", agentId);
+    //             }
+    //         }
+    //     }
+    //     count
+    // }
+
+    pub fn HandleClientRequest(&self) -> usize {
+        let mut count = 0;
+        for l1idx in 0..8 {
+            // println!("l1idx: {}", l1idx);
+            let mut l1 = self.shareRegion.bitmap.l1bitmap[l1idx].swap(0, Ordering::SeqCst);
+            // println!("l1: {:x}", l1);
+            for l1pos in 0..64 {
+                if l1 == 0 {
+                    // println!("break for l1idx: {}", l1idx);
+                    break;
                 }
-                None => {
-                    println!("RDMA agent with id {} doesn't exist", agentId);
+                if l1 % 2 == 1 {
+                    let l2idx = l1idx * 64 + l1pos;
+                    // println!("l2idx: {}", l2idx);
+                    if l2idx > 502 {
+                        break;
+                    }
+                    let mut l2 =
+                        self.shareRegion.bitmap.l2bitmap[l2idx as usize].swap(0, Ordering::SeqCst);
+                    // println!("l2: {:x}", l2);
+                    for l2pos in 0..64 {
+                        if l2 == 0 {
+                            // println!("before break, l2pos: {}", l2pos);
+                            break;
+                        }
+                        if l2 % 2 == 1 {
+                            let agentId = (l2idx * 64 + l2pos) as u32;
+                            let rdmaAgents = self.agents.lock();
+                            match rdmaAgents.get(&agentId) {
+                                Some(rdmaAgent) => {
+                                    // rdmaAgent
+                                    count += rdmaAgent.HandleClientRequest();
+                                }
+                                None => {
+                                    println!("RDMA agent with id {} doesn't exist", agentId);
+                                }
+                            }
+                        }
+                        l2 >>= 1;
+                    }
                 }
+                l1 >>= 1
             }
         }
+
+        count
     }
 
     // pub fn CreateRDMAChannel(&self, agentId: u32) {
     //     let channelId = self.channelIdMgr.lock().AllocId();
 
     // }
+
+    pub fn ExistsConnection(&self, ip: &u32) -> bool {
+        self.conns.lock().contains_key(ip)
+    }
 }
 
 // scenarios:

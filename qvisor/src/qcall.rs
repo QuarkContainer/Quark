@@ -196,13 +196,13 @@ impl KVMVcpu {
             Msg::IOBind(msg) => {
                 ret = super::VMSpace::Bind(msg.sockfd, msg.addr, msg.addrlen, msg.umask) as u64;
             }
-            Msg::RDMAListen(_msg) => {
-                //ret = super::VMSpace::RDMAListen(msg.sockfd, msg.backlog, msg.block, msg.acceptQueue.clone()) as u64;
-                panic!("RDMAListen qcall not implemented")
+            Msg::RDMAListen(msg) => {
+                ret = super::VMSpace::RDMAListen(msg.sockfd, msg.backlog, msg.block, msg.acceptQueue.clone()) as u64;
+                // panic!("RDMAListen qcall not implemented")
             }
-            Msg::RDMANotify(_msg) => {
-                //ret = super::VMSpace::RDMANotify(msg.sockfd, msg.typ) as u64;
-                panic!("RDMANotify qcall not implemented")
+            Msg::RDMANotify(msg) => {
+                ret = super::VMSpace::RDMANotify(msg.sockfd, msg.typ) as u64;
+                // panic!("RDMANotify qcall not implemented")
             }
             Msg::IOListen(msg) => {
                 ret = super::VMSpace::Listen(msg.sockfd, msg.backlog, msg.block) as u64;

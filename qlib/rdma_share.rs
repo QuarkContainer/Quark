@@ -21,7 +21,7 @@ use super::linux_def::*;
 use alloc::collections::btree_set::BTreeSet;
 use alloc::vec::Vec;
 
-pub const COUNT: usize = 65536;
+pub const COUNT: usize = 1024;
 
 pub struct RingQueue<T: 'static + Default> {
     pub data: [T; COUNT],
@@ -52,11 +52,11 @@ impl<T: 'static + Default + Copy> RingQueue<T> {
         let head = self.head.load(Ordering::Relaxed);
         let tail = self.tail.load(Ordering::Acquire);
         let available = tail.wrapping_sub(head) as usize;
-        // println!("RingQueue::Pop, available: {}", available);
         if available == 0 {
             return None;
         }
 
+        // error!("RingQueue::Pop, available: {}", available);
         let idx = head & self.RingMask();
         let data = self.data[idx as usize];
         self.head.store(head.wrapping_add(1), Ordering::Release);
@@ -83,11 +83,12 @@ impl<T: 'static + Default + Copy> RingQueue<T> {
         let head = self.head.load(Ordering::Acquire);
         let tail = self.tail.load(Ordering::Relaxed);
         let available = tail.wrapping_sub(head) as usize;
-        // println!("RingQueue::Push, available: {}, count: {}", available, self.Count());
+
         if available == self.Count() {
             return false;
         }
 
+        // error!("RingQueue::Push, available: {}, count: {}", available, self.Count());
         let idx = tail & self.RingMask();
         self.data[idx as usize] = data;
         self.tail.store(tail.wrapping_add(1), Ordering::Release);
@@ -122,11 +123,13 @@ pub struct RDMAResp {
 #[derive(Clone, Copy, Debug)]
 pub enum RDMAReqMsg {
     RDMAListen(RDMAListenReq),
+    RDMAListenUsingPodId(RDMAListenReqUsingPodId),
     RDMAConnect(RDMAConnectReq),
+    RDMAConnectUsingPodId(RDMAConnectReqUsingPodId),
     RDMAWrite(RDMAWriteReq),
     RDMARead(RDMAReadReq),
     RDMAShutdown(RDMAShutdownReq),
-    RDMACloseChannel(RDMACloseChannelReq),
+    RDMAClose(RDMACloseReq),
     // RDMAAccept(RDMAAcceptReq), //Put connected socket on client side.
 }
 
@@ -155,6 +158,10 @@ pub struct RDMAConnectResp {
     pub sockfd: u32,
     pub ioBufIndex: u32,
     pub channelId: u32,
+    pub dstIpAddr: u32,
+    pub dstPort: u16,
+    pub srcIpAddr: u32,
+    pub srcPort: u16,
 }
 
 #[derive(Default, Clone, Copy, Debug)]
@@ -164,6 +171,8 @@ pub struct RDMAAcceptResp {
     pub channelId: u32,
     pub dstIpAddr: u32,
     pub dstPort: u16,
+    pub srcIpAddr: u32,
+    pub srcPort: u16,
 }
 
 #[derive(Default, Clone, Copy, Debug)]
@@ -195,6 +204,14 @@ pub struct RDMAListenReq {
     pub waitingLen: i32,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct RDMAListenReqUsingPodId {
+    pub sockfd: u32,
+    pub podId: [u8; 64],
+    pub port: u16,
+    pub waitingLen: i32,
+}
+
 #[derive(Default, Clone, Copy, Debug)]
 pub struct RDMAWriteReq {
     // pub sockfd: u32,
@@ -209,7 +226,7 @@ pub struct RDMAShutdownReq {
 }
 
 #[derive(Default, Clone, Copy, Debug)]
-pub struct RDMACloseChannelReq {
+pub struct RDMACloseReq {
     pub channelId: u32,
 }
 
@@ -228,6 +245,17 @@ pub struct RDMAConnectReq {
     pub srcIpAddr: u32,
     pub srcPort: u16,
 }
+
+#[derive(Clone, Copy, Debug)]
+pub struct RDMAConnectReqUsingPodId {
+    //pub vpcId: u32,
+    pub sockfd: u32,
+    pub dstIpAddr: u32,
+    pub dstPort: u16,
+    pub podId: [u8; 64],
+    pub srcPort: u16,
+}
+
 
 #[derive(Default, Clone, Copy, Debug)]
 pub struct RDMAAcceptReq {
@@ -252,18 +280,21 @@ pub const SOCKET_BUF_SIZE: usize = 64 * 1024; // 64KB
 // todo: caculate this to fit ClientShareRegion in 1GB
 pub const IO_BUF_COUNT: usize = 7 * 1024; //16 * 1024 - 128; // ~16K
 
-#[repr(align(4096))]
+#[repr(align(0x10000))]
+#[repr(C)]
 pub struct IOBuf {
     pub read: [u8; SOCKET_BUF_SIZE],
     pub write: [u8; SOCKET_BUF_SIZE],
 }
 
+#[repr(C)]
 pub struct IOMetas {
     pub readBufAtoms: [AtomicU32; 2],
     pub writeBufAtoms: [AtomicU32; 2],
     pub consumeReadData: AtomicU64,
 }
 
+#[repr(C)]
 pub struct ClientShareRegion {
     pub clientBitmap: AtomicU64, //client sleep bit
 
@@ -355,8 +386,8 @@ impl ShareRegion {
         let l1idx = l2idx / 64;
         let l1pos = l2idx % 64;
 
-        self.bitmap.l1bitmap[l1idx].fetch_or(1 << l1pos, Ordering::SeqCst);
         self.bitmap.l2bitmap[l2idx].fetch_or(1 << l2pos, Ordering::SeqCst);
+        self.bitmap.l1bitmap[l1idx].fetch_or(1 << l1pos, Ordering::SeqCst);
     }
 
     pub fn getAgentIds(&self) -> Vec<u32> {
@@ -400,17 +431,20 @@ impl ShareRegion {
 #[allow(non_camel_case_types)]
 #[derive(Clone, Copy, Debug)]
 pub enum SockStatus {
-    FIN_READ_FROM_BUFFER, //after reading all stuff to above socket, need a better name.
-    FIN_SENT_TO_SVC,      //
+    FIN_READ_FROM_BUFFER = -2, //after reading all stuff to above socket, need a better name.
+    FIN_SENT_TO_SVC = -1,      //
     // FIN_RECEIVED_FROM_PEER,
-    CLOSE_WAIT,
-    CLOSING,
-    ESTABLISHED,
-    SYN_RECEIVED,
-    LISTENING,
-    CONNECTING,
-    BINDED,
-    // ... to simulate TCP status
+    CLOSED = 0,
+    LISTEN = 1,
+    SYN_SENT = 2,
+    SYN_RECEIVED = 3,
+    ESTABLISHED = 4,
+    CLOSE_WAIT = 5,
+    FIN_WAIT_1 = 6,
+    CLOSING = 7,
+    LAST_ACK = 8,
+    FIN_WAIT_2 = 9,
+    TIME_WAIT = 10,
 }
 
 #[allow(non_camel_case_types)]
@@ -422,7 +456,7 @@ pub enum DuplexMode {
     SHUTDOWN_RDWR,
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq, Default)]
 pub struct Endpoint {
     // same as vpcId
     pub ipAddr: u32,

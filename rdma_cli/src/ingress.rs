@@ -86,12 +86,12 @@ use crate::qlib::rdma_share::*;
 use common::EpollEvent;
 use common::*;
 use qlib::linux_def::*;
-use qlib::socket_buf::SocketBuff;
 use qlib::rdma_svc_cli::*;
+use qlib::socket_buf::SocketBuff;
+use qlib::unix_socket::UnixSocket;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::{env, mem, ptr, thread, time};
-use qlib::unix_socket::UnixSocket;
 
 fn main() -> io::Result<()> {
     let mut fds: HashMap<i32, FdType> = HashMap::new();
@@ -193,7 +193,7 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient, fds: &mut HashMap<i32, FdType
                             let sockfd = gatewayCli.sockIdMgr.lock().AllocId().unwrap(); //TODO: rename sockfd
                             let _ret = gatewayCli.connect(
                                 sockfd,
-                                u32::from(Ipv4Addr::from_str("192.168.6.8").unwrap()).to_be(),
+                                u32::from(Ipv4Addr::from_str("30.0.0.5").unwrap()).to_be(),
                                 16868u16.to_be(),
                             );
                             fds.insert(stream_fd, FdType::TCPSocketConnect(sockfd));
@@ -256,6 +256,7 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient, fds: &mut HashMap<i32, FdType
                                                     as u64,
                                                 &shareRegion.iobufs[ioBufIndex].write as *const _
                                                     as u64,
+                                                false,
                                             )),
                                         );
                                         sockFdInfos.insert(sockInfo.fd, sockInfo);
@@ -298,6 +299,7 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient, fds: &mut HashMap<i32, FdType
                                             &shareRegion.iobufs[ioBufIndex].read as *const _ as u64,
                                             &shareRegion.iobufs[ioBufIndex].write as *const _
                                                 as u64,
+                                            false,
                                         )),
                                     );
 
