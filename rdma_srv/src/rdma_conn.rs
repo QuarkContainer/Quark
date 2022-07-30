@@ -788,13 +788,13 @@ impl RDMAControlChannel {
         {
             Some(podIdStr) => {
                 let mut podId: [u8; 64] = [0; 64];
-                if podIdStr.len() != podId.len() {
-                    panic!(
-                        "podId len: {} is not equal to podIdStr len: {}",
-                        podId.len(),
-                        podIdStr.len()
-                    );
-                }
+                // if podIdStr.len() != podId.len() {
+                //     panic!(
+                //         "podId len: {} is not equal to podIdStr len: {}",
+                //         podId.len(),
+                //         podIdStr.len()
+                //     );
+                // }
                 podIdStr
                     .bytes()
                     .zip(podId.iter_mut())
@@ -823,7 +823,7 @@ impl RDMAControlChannel {
             None => {
                 error!(
                     "HandleConnectRequest, podId for ip: {} is not found!!",
-                    connectRequest.dstIpAddr
+                    connectRequest.dstIpAddr.to_be()
                 );
             }
         }

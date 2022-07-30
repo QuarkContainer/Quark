@@ -337,10 +337,27 @@ impl RDMAAgent {
             }
             RDMAReqMsg::RDMAListenUsingPodId(msg) => {
                 let podId = String::from_utf8(msg.podId.to_vec()).unwrap();
-                debug!("RDMAReqMsg::RDMAListenUsingPodId: podId: {}, port: {}", podId, msg.port.to_le());
+                let mut podId: [u8; 64] = [0; 64];
+                if RDMA_CTLINFO.isK8s {
+                    podId = msg.podId;
+                } else {
+                    let podIdStr = "server".to_string();
+                    // if podIdStr.len() != podId.len() {
+                    //     panic!(
+                    //         "podId len: {} is not equal to podIdStr len: {}",
+                    //         podId.len(),
+                    //         podIdStr.len()
+                    //     );
+                    // }
+
+                    podIdStr
+                        .bytes()
+                        .zip(podId.iter_mut())
+                        .for_each(|(b, ptr)| *ptr = b);
+                }
                 RDMA_SRV.srvPodIdEndpoints.lock().insert(
                     EndpointUsingPodId {
-                        podId: msg.podId,
+                        podId,
                         port: msg.port,
                     },
                     SrvEndpointUsingPodId {
@@ -409,8 +426,11 @@ impl RDMAAgent {
             }
             RDMAReqMsg::RDMAConnectUsingPodId(msg) => {
                 //TODOCtrlPlane: need get nodeIp from dstIpAddr
-                debug!("RDMAReqMsg::RDMAConnect, dstIp: {}, port: {}", msg.dstIpAddr, msg.dstPort.to_le());
-                let podId = String::from_utf8(msg.podId.to_vec()).unwrap();
+                let mut podId = String::from_utf8(msg.podId.to_vec()).unwrap();
+                if !RDMA_CTLINFO.isK8s {
+                    podId = "client".to_string();
+                }
+
                 let ipAddr = RDMA_CTLINFO
                     .containerids
                     .lock()
