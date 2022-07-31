@@ -331,7 +331,7 @@ impl RDMAChannelIntern {
                 }
             }
 
-            debug!("ProcessRDMARecvWriteImm 7");
+            // debug!("ProcessRDMARecvWriteImm 7");
             self.agent.SendResponse(RDMAResp {
                 user_data: 0,
                 msg: RDMARespMsg::RDMAFinNotify(RDMAFinNotifyResp {

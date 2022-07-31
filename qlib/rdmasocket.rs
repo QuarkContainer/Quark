@@ -19,7 +19,7 @@ use super::socket_buf::*;
 // use super::socket_info::*;
 
 pub struct RDMAServerSockIntern {
-    pub fd: i32,
+    pub rdmaId: u32,
     pub acceptQueue: AcceptQueue,
     pub ipAddr: u32,
     pub port: u16,
@@ -37,9 +37,9 @@ impl Deref for RDMAServerSock {
 }
 
 impl RDMAServerSock {
-    pub fn New(fd: i32, acceptQueue: AcceptQueue, ipAddr: u32, port: u16) -> Self {
+    pub fn New(rdmaId: u32, acceptQueue: AcceptQueue, ipAddr: u32, port: u16) -> Self {
         return Self(Arc::new(RDMAServerSockIntern {
-            fd: fd,
+            rdmaId,
             acceptQueue: acceptQueue,
             ipAddr,
             port,
@@ -65,7 +65,7 @@ pub struct RDMAServerSocketInfo {
 }
 
 pub struct RDMADataSockIntern {
-    pub fd: i32,
+    pub rdmaId: u32,
     pub socketBuf: Arc<SocketBuff>,
     // pub rdmaType: RDMAType,
     pub channelId: u32,
@@ -95,7 +95,7 @@ impl Deref for RDMADataSock {
 impl RDMADataSock {
     // pub fn New(fd: i32, socketBuf: Arc<SocketBuff>, rdmaType: RDMAType, channelId: u32) -> Self {
     pub fn New(
-        fd: i32,
+        rdmaId: u32,
         socketBuf: Arc<SocketBuff>,
         channelId: u32,
         localIpAddr: u32,
@@ -105,7 +105,7 @@ impl RDMADataSock {
     ) -> Self {
         if RDMA_ENABLE {
             return Self(Arc::new(RDMADataSockIntern {
-                fd: fd,
+                rdmaId,
                 socketBuf: socketBuf,
                 // rdmaType: rdmaType,
                 channelId,
@@ -116,7 +116,7 @@ impl RDMADataSock {
             }));
         } else {
             return Self(Arc::new(RDMADataSockIntern {
-                fd: fd,
+                rdmaId,
                 socketBuf: socketBuf,
                 // rdmaType: rdmaType,
                 channelId,

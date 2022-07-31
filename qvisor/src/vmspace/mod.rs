@@ -558,9 +558,13 @@ impl VMSpace {
             let sockInfo = fdInfoLock.sockInfo.lock().clone();
             match sockInfo {
                 SockInfo::RDMADataSocket(dataSock) => {
+                    GlobalRDMASvcCli().channelToSocketMappings.lock().remove(&dataSock.channelId);
+                    GlobalRDMASvcCli().rdmaIdToSocketMappings.lock().remove(&dataSock.rdmaId);
                     let _res = GlobalRDMASvcCli().close(dataSock.channelId);
                 }
-                SockInfo::RDMAServerSocket(_serverSock) => {
+                SockInfo::RDMAServerSocket(serverSock) => {
+                    GlobalRDMASvcCli().rdmaIdToSocketMappings.lock().remove(&serverSock.rdmaId);
+                    //TODO: handle server close
                     error!("ServerSock, fd: {}", fd);
                 }
                 _ => {
