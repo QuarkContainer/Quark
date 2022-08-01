@@ -106,7 +106,14 @@ EOF
 
 ### 7. Use RDMA networking
 
-In each node, remove previous flannel CNI if there is:
+Quark container now support TCP over RDMA which means if you have RDMA NIC on all the nodes, with proper configration, Quark container can bypass TCP/IP stack and use RDMA NIC to send/receive network traffic without exiting TCP/IP application change. 
+
+In each node, change MTU to 4200 using following command:
+```
+sudo ifconfig [RDMA NIC name] mtu 4200
+```
+
+Remove previous flannel CNI if there is:
 ```
 sudo rm /etc/cni/net.d/10-flannel.conflist
 ```

@@ -109,5 +109,8 @@ Quark Container's debug log is put in /var/log/quark/quark.log. It could enable 
 When log is enabled, e.g. Debug. After run a docker image with Quark Container, the logs will be generated in the /var/log/quark/quark.log.
 doc
 
+## k8s set up and use TCP over RDMA
+Please refer to [this link](doc/k8s_setup.md) to set up k8s using quark container and RDMA support.
+
 ## Communications
 Slack: https://join.slack.com/t/quarksoftgroup/shared_invite/zt-oj7dgqet-6iUXmOnMbqHj4g_XAd_3Mg
