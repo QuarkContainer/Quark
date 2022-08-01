@@ -73,7 +73,7 @@ impl Default for CtrlInfo {
         let mut containerids: HashMap<String, u32> = HashMap::new();
         let mut ipToPodIdMappings: HashMap<u32, String> = HashMap::new();
 
-        let isK8s = false;
+        let isK8s = true;
         if !isK8s {
             let lab1ip = u32::from(Ipv4Addr::from_str("172.16.1.43").unwrap()).to_be();
             let node1 = Node {
