@@ -486,7 +486,7 @@ impl FdInfo {
         match self.SockInfo() {
             SockInfo::Socket(_socketInfo) => {
                 //TODO: should double check this is needed or not
-                let rdmaSocket = RDMAServerSock::New(sockfd, acceptQueue, 0, 0);
+                let rdmaSocket = RDMAServerSock::New(sockfd as u32, acceptQueue, 0, 0);
                 *self.lock().sockInfo.lock() = SockInfo::RDMAServerSocket(rdmaSocket);
                 self.lock()
                     .AddWait(EVENT_READ | EVENT_WRITE)
@@ -583,7 +583,7 @@ impl FdInfo {
                     RDMAType::None
                 };
 
-                let rdmaSocket = RDMADataSock::New(sockfd, sockBuf, 1, 0, 0, 0, 0);
+                let rdmaSocket = RDMADataSock::New(sockfd as u32, sockBuf, 1, 0, 0, 0, 0);
                 *self.lock().sockInfo.lock() = SockInfo::RDMADataSocket(rdmaSocket);
                 self.lock()
                     .AddWait(EVENT_READ | EVENT_WRITE)

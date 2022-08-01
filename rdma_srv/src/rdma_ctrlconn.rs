@@ -71,29 +71,41 @@ impl Default for CtrlInfo {
         let mut nodes: HashMap<u32, Node> = HashMap::new();
         let pods: HashMap<u32, Pod> = HashMap::new();
         let mut containerids: HashMap<String, u32> = HashMap::new();
+        let mut ipToPodIdMappings: HashMap<u32, String> = HashMap::new();
 
-        let isK8s = true;
+        let isK8s = false;
         if !isK8s {
             let lab1ip = u32::from(Ipv4Addr::from_str("172.16.1.43").unwrap()).to_be();
-            debug!("CtrlInfo::default, lab1ip: {}", lab1ip);
-            let node = Node {
+            let node1 = Node {
                 hostname: String::from("lab 1"),
                 ipAddr: lab1ip,
                 timestamp: 0,
-                subnet: u32::from(Ipv4Addr::from_str("172.16.1.0").unwrap()),
+                subnet: u32::from(Ipv4Addr::from_str("192.168.1.0").unwrap()),
                 netmask: u32::from(Ipv4Addr::from_str("255.255.255.0").unwrap()),
                 resource_version: 0,
             };
-            nodes.insert(lab1ip, node);
-            containerids.insert("server".to_string(), u32::from(Ipv4Addr::from_str("192.168.6.8").unwrap()).to_be());
-            containerids.insert("client".to_string(), u32::from(Ipv4Addr::from_str("192.168.6.6").unwrap()).to_be());
+            let lab2ip = u32::from(Ipv4Addr::from_str("172.16.1.99").unwrap()).to_be();
+            let node2 = Node {
+                hostname: String::from("lab 2"),
+                ipAddr: lab2ip,
+                timestamp: 0,
+                subnet: u32::from(Ipv4Addr::from_str("192.168.2.0").unwrap()),
+                netmask: u32::from(Ipv4Addr::from_str("255.255.255.0").unwrap()),
+                resource_version: 0,
+            };
+            nodes.insert(lab1ip, node1);
+            nodes.insert(lab2ip, node2);
+            containerids.insert("server".to_string(), u32::from(Ipv4Addr::from_str("192.168.2.8").unwrap()).to_be());
+            containerids.insert("client".to_string(), u32::from(Ipv4Addr::from_str("192.168.1.8").unwrap()).to_be());
+            ipToPodIdMappings.insert(u32::from(Ipv4Addr::from_str("192.168.2.8").unwrap()).to_be(), "server".to_string());
+            ipToPodIdMappings.insert(u32::from(Ipv4Addr::from_str("192.168.1.8").unwrap()).to_be(), "client".to_string());
         }
 
         CtrlInfo {
             nodes: Mutex::new(nodes),
             pods: Mutex::new(pods),
             containerids: Mutex::new(containerids),
-            ipToPodIdMappings: Mutex::new(HashMap::new()),
+            ipToPodIdMappings: Mutex::new(ipToPodIdMappings),
             subnetmap: Mutex::new(HashMap::new()),
             veps: Mutex::new(HashMap::new()),
             clusterSubnetInfo: Mutex::new(ClusterSubnetInfo {
@@ -160,9 +172,9 @@ impl CtrlInfo{
 
     pub fn get_node_ip_by_pod_ip(&self, ip: &u32) -> Option<u32> {
         for (_, node) in self.nodes.lock().iter() {
-            if !self.isK8s {
-                return Some(node.ipAddr);
-            }
+            // if !self.isK8s {
+            //     return Some(node.ipAddr);
+            // }
             if node.netmask & *ip == node.subnet {
                 return Some(node.ipAddr);
             }

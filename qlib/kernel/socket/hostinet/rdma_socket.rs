@@ -1,3 +1,4 @@
+// use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 
 use crate::qlib::kernel::GlobalIOMgr;
@@ -24,8 +25,33 @@ impl RDMA {
         return ai;
     }
 
-    pub fn Read(task: &Task, fd: i32, buf: Arc<SocketBuff>, dsts: &mut [IoVec], peek: bool) -> Result<i64> {
-        let (trigger, cnt) = buf.Readv(task, dsts,  peek)?;
+    pub fn Read(
+        task: &Task,
+        fd: i32,
+        buf: Arc<SocketBuff>,
+        dsts: &mut [IoVec],
+        peek: bool,
+    ) -> Result<i64> {
+        // let (addr, len) = buf.readBuf.lock().GetDataBuf();
+        // debug!("RDMA::Read, addr: {:x}, len: {}", addr, len);
+        // if addr != 0 && len != 0 {
+        //     let mut data: VecDeque<u8> = VecDeque::new();
+        //     let mut i: usize = 0;
+        //     loop {
+        //         // debug!("RDMA::Read, 1, i: {}", i);
+        //         let x = unsafe { *((addr + i as u64) as *const u8) };
+        //         // debug!("RDMA::Read, 2, addr: {:x}, value: {}", addr + i as u64, x);
+        //         data.push_back(x);
+        //         // debug!("RDMA::Read, 2, after push");
+        //         i += 1;
+        //         if i == len {
+        //             debug!("RDMA::Read, data: {:x?}", data);
+        //             break;
+        //         }
+        //     }
+        // }
+        let (trigger, cnt) = buf.Readv(task, dsts, peek)?;
+
         if !RDMA_ENABLE {
             if trigger {
                 HostSpace::RDMANotify(fd, RDMANotifyType::Read);
@@ -61,6 +87,24 @@ impl RDMA {
         srcs: &[IoVec], /*, ops: &SocketOperations*/
     ) -> Result<i64> {
         let (count, writeBuf) = buf.Writev(task, srcs)?;
+        // let (addr, len) = buf.writeBuf.lock().GetDataBuf();
+        // debug!("RDMA::Write, addr: {:x}, len: {}", addr, len);
+        // if addr != 0 && len != 0 {
+        //     let mut data: VecDeque<u8> = VecDeque::new();
+        //     let mut i: usize = 0;
+        //     loop {
+        //         // debug!("RDMA::Write, 1, i: {}", i);
+        //         let x = unsafe { *((addr + i as u64) as *const u8) };
+        //         // debug!("RDMA::Write, 2, addr: {:x}, value: {}", addr + i as u64, x);
+        //         data.push_back(x);
+        //         // debug!("RDMA::Write, 2, after push");
+        //         i += 1;
+        //         if i == len {
+        //             debug!("RDMA::Write, data: {:x?}", data);
+        //             break;
+        //         }
+        //     }
+        // }
         if writeBuf.is_some() {
             if RDMA_ENABLE {
                 // HostSpace::RDMANotify(fd, RDMANotifyType::RDMAWrite);

@@ -3,6 +3,7 @@ use alloc::slice;
 use alloc::sync::Arc;
 use spin::Mutex;
 use std::{mem, ptr};
+use core::sync::atomic::AtomicU32;
 
 use super::qlib::linux_def::*;
 use super::qlib::rdma_share::*;
@@ -104,6 +105,8 @@ impl RDMASvcClient {
                 },
                 srvShareRegion,
                 channelToSocketMappings: Mutex::new(BTreeMap::new()),
+                rdmaIdToSocketMappings: Mutex::new(BTreeMap::new()),
+                nextRDMAId: AtomicU32::new(0),
                 podId,
             }),
         }

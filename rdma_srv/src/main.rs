@@ -864,7 +864,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 Srv_FdType::RDMACompletionChannel => {
-                    println!("Got RDMA completion event");
+                    // println!("Got RDMA completion event");
                     // let _cnt = RDMA.PollCompletionQueueAndProcess();
                     // RDMAProcess();
                     RDMA.HandleCQEvent().unwrap();
@@ -872,9 +872,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // println!("FdType::RDMACompletionChannel, processed {} wcs", cnt);
                 }
                 Srv_FdType::SrvEventFd(srvEventFd) => {
-                    println!("Got SrvEventFd event {}", srvEventFd);
+                    // println!("Got SrvEventFd event {}", srvEventFd);
                     // print!("u64: {}, events: {:x}", ev.U64, ev.Events);
-                    println!("srvEvent notified ****************1");
+                    // println!("srvEvent notified ****************1");
                     // RDMAProcess();
                     let ret = unsafe {
                         libc::read(
@@ -883,7 +883,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             16,
                         )
                     };
-                    println!("after read srvEventFd, ret is: {}", ret);
 
                     if ret < 0 {
                         println!("error: {}", errno::errno().0);

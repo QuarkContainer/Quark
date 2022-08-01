@@ -336,11 +336,28 @@ impl RDMAAgent {
                 );
             }
             RDMAReqMsg::RDMAListenUsingPodId(msg) => {
-                let podId = String::from_utf8(msg.podId.to_vec()).unwrap();
-                debug!("RDMAReqMsg::RDMAListenUsingPodId: podId: {}, port: {}", podId, msg.port.to_le());
+                // let podId = String::from_utf8(msg.podId.to_vec()).unwrap();
+                let mut podId: [u8; 64] = [0; 64];
+                if RDMA_CTLINFO.isK8s {
+                    podId = msg.podId;
+                } else {
+                    let podIdStr = "server".to_string();
+                    // if podIdStr.len() != podId.len() {
+                    //     panic!(
+                    //         "podId len: {} is not equal to podIdStr len: {}",
+                    //         podId.len(),
+                    //         podIdStr.len()
+                    //     );
+                    // }
+
+                    podIdStr
+                        .bytes()
+                        .zip(podId.iter_mut())
+                        .for_each(|(b, ptr)| *ptr = b);
+                }
                 RDMA_SRV.srvPodIdEndpoints.lock().insert(
                     EndpointUsingPodId {
-                        podId: msg.podId,
+                        podId,
                         port: msg.port,
                     },
                     SrvEndpointUsingPodId {
@@ -409,18 +426,19 @@ impl RDMAAgent {
             }
             RDMAReqMsg::RDMAConnectUsingPodId(msg) => {
                 //TODOCtrlPlane: need get nodeIp from dstIpAddr
-                debug!("RDMAReqMsg::RDMAConnect, dstIp: {}, port: {}", msg.dstIpAddr, msg.dstPort.to_le());
-                let podId = String::from_utf8(msg.podId.to_vec()).unwrap();
+                let mut podId = String::from_utf8(msg.podId.to_vec()).unwrap();
+                if !RDMA_CTLINFO.isK8s {
+                    podId = "client".to_string();
+                }
+
                 let ipAddr = RDMA_CTLINFO
                     .containerids
                     .lock()
                     .get(&podId)
                     .unwrap()
                     .clone();
-                debug!("RDMAReqMsg::RDMAConnect, 1");
                 match RDMA_CTLINFO.get_node_ip_by_pod_ip(&msg.dstIpAddr) {
                     Some(nodeIpAddr) => {
-                        debug!("RDMAReqMsg::RDMAConnect, 2");
                         let conns = RDMA_SRV.conns.lock();
                         let rdmaConn = conns.get(&nodeIpAddr).unwrap();
                         let rdmaChannel = self.CreateClientRDMAChannel(
@@ -434,13 +452,10 @@ impl RDMAAgent {
                             rdmaConn.clone(),
                         );
 
-                        debug!("RDMAReqMsg::RDMAConnect, 3");
-
                         RDMA_SRV
                             .channels
                             .lock()
                             .insert(rdmaChannel.localId, rdmaChannel.clone());
-                        debug!("RDMAReqMsg::RDMAConnect, 4");
 
                         let connectReqeust = rdmaChannel.CreateConnectRequest(msg.sockfd);
                         rdmaConn
@@ -448,7 +463,6 @@ impl RDMAAgent {
                             .lock()
                             .SendControlMsg(ControlMsgBody::ConnectRequest(connectReqeust));
                         // .expect("fail to send msg");
-                        debug!("RDMAReqMsg::RDMAConnect, 5");
                     }
                     None => {
                         println!("TODO: return error as no ip to node mapping is found");

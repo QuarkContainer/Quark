@@ -835,7 +835,9 @@ impl SockOperations for SocketOperations {
                     let port = ipv4.Port.to_le();
                     //TODO: get local ip and port
                     let srcPort = 16866u16.to_be();
-                    let _ret = GlobalRDMASvcCli().connectUsingPodId(self.fd as u32, ipAddr, port, srcPort);
+                    let rdmaId = GlobalRDMASvcCli().nextRDMAId.fetch_add(1, Ordering::Release);
+                    GlobalRDMASvcCli().rdmaIdToSocketMappings.lock().insert(rdmaId, self.fd);
+                    let _ret = GlobalRDMASvcCli().connectUsingPodId(rdmaId, ipAddr, port, srcPort);
                     let socketBuf = self.SocketBufType().Connect();
                     *self.socketBuf.lock() = socketBuf.clone();
                     res = -SysErr::EINPROGRESS;
@@ -1090,16 +1092,17 @@ impl SockOperations for SocketOperations {
             match socketInfo {
                 SockInfo::Socket(info) => {
                     port = info.port;
-                    //TODO: should handle listen 0.0.0.0
-                    let rdmaSocket = RDMAServerSock::New(self.fd, acceptQueue.clone(), info.ipAddr, info.port);
+                    let rdmaId = GlobalRDMASvcCli().nextRDMAId.fetch_add(1, Ordering::Release);
+                    GlobalRDMASvcCli().rdmaIdToSocketMappings.lock().insert(rdmaId, self.fd);
+                    let rdmaSocket = RDMAServerSock::New(rdmaId, acceptQueue.clone(), info.ipAddr, info.port);
                     *fdInfo.lock().sockInfo.lock() = SockInfo::RDMAServerSocket(rdmaSocket);
+                    debug!("Listen, rdmaId: {}, serverSockFd: {}", rdmaId, self.fd);
+                    let _ret = GlobalRDMASvcCli().listenUsingPodId(rdmaId, port, backlog);
                 }
                 _ => {
                     panic!("RDMA Listen with wrong state");
                 }
             }
-
-            let _ret = GlobalRDMASvcCli().listenUsingPodId(self.fd as u32, port, backlog);
             0
         } else {
             Kernel::HostSpace::Listen(self.fd, backlog, asyncAccept)
