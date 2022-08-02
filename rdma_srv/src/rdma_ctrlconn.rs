@@ -64,6 +64,8 @@ pub struct CtrlInfo {
     pub epoll_fd: Mutex<RawFd>,
 
     pub isK8s: bool,
+
+    pub isCMConnected: Mutex<bool>,
 }
 
 impl Default for CtrlInfo {
@@ -82,7 +84,7 @@ impl Default for CtrlInfo {
                 timestamp: 0,
                 subnet: u32::from(Ipv4Addr::from_str("172.16.1.0").unwrap()),
                 netmask: u32::from(Ipv4Addr::from_str("255.255.255.0").unwrap()),
-                resource_version: 0,
+                resource_version: 0,                
             };
             nodes.insert(lab1ip, node);
             containerids.insert("server".to_string(), u32::from(Ipv4Addr::from_str("192.168.6.8").unwrap()).to_be());
@@ -112,6 +114,7 @@ impl Default for CtrlInfo {
             timestamp: Mutex::new(0),
             epoll_fd: Mutex::new(0),
             isK8s: isK8s,
+            isCMConnected: Mutex::new(false),
         }
     }
 }
@@ -145,11 +148,20 @@ impl CtrlInfo{
         self.timestamp.lock().clone()
     }
 
+    pub fn isCMConnected_set(&self, value: bool) {
+        let mut isCMConnected = self.isCMConnected.lock();
+        *isCMConnected = value;
+    }
+
+    pub fn isCMConnected_get(&self) -> bool {
+        self.isCMConnected.lock().clone()
+    }
+
     pub fn get_node_ips_for_connecting(&self) -> HashSet<u32> {
         let mut set: HashSet<u32> = HashSet::new();
         let timestamp = self.timestamp_get();
         for (_, node) in self.nodes.lock().iter() {
-            debug!("get_node_ips_for_connecting, node: {:?}", node);
+            debug!("get_node_ips_for_connecting, node: {:?} node.timestamp: {} timestamp: {}", node, node.timestamp, timestamp);
             if node.timestamp < timestamp {
                 debug!("get_node_ips_for_connecting, node.ipAddr: {}", node.ipAddr);
                 set.insert(node.ipAddr);

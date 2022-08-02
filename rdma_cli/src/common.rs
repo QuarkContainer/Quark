@@ -637,7 +637,7 @@ pub enum Srv_FdType {
     NodeEventFd(NodeEvent),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct NodeEvent{
     pub is_delete: bool,
     pub ip: u32,

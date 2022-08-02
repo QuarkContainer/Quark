@@ -42,6 +42,7 @@ impl NodeInformer {
 impl NodeInformer {
     pub async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let mut client = QuarkCmServiceClient::connect(GRPC_SERVER_ADDRESS).await?;
+        RDMA_CTLINFO.isCMConnected_set(true);
 
         let ref nodes_message = client.list_node(()).await?.into_inner().nodes;
         if nodes_message.len() > 0 {
@@ -65,6 +66,7 @@ impl NodeInformer {
 
     async fn run_watch(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         // todo Hong: shall share client. And be careful to handle when connection is broken and need reconnect. Watch pod, node, service shall using the same client
+        println!("Start node run_watch. max_resource_version: {}", self.max_resource_version);
         let mut client = QuarkCmServiceClient::connect(GRPC_SERVER_ADDRESS).await?;
         let mut node_stream = client
             .watch_node(Request::new(MaxResourceVersionMessage {
@@ -81,6 +83,7 @@ impl NodeInformer {
     }
 
     fn handle(&mut self, node_message: &NodeMessage) {
+        println!("Start to handle Node: {:?}", node_message);
         let ip = node_message.ip;
         let mut nodes_map = RDMA_CTLINFO.nodes.lock();
         let fd = unsafe { libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0) };
