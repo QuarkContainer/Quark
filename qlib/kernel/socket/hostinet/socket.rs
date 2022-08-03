@@ -1487,6 +1487,11 @@ impl SockOperations for SocketOperations {
         controlDataLen: usize,
     ) -> Result<(i64, i32, Option<(SockAddr, usize)>, Vec<u8>)> {
         //todo: we don't support MSG_ERRQUEUE
+        if flags & MsgType::MSG_ERRQUEUE != 0 {
+            // Pretend we have an empty error queue.
+            return Err(Error::SysError(SysErr::EAGAIN));
+        }
+
         if flags
             & !(MsgType::MSG_DONTWAIT
                 | MsgType::MSG_PEEK
