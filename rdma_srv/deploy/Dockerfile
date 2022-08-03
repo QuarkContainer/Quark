@@ -14,7 +14,7 @@
 
 FROM ubuntu
 
-ADD ./target/debug "/rdma"
+ADD ./target/release "/rdma"
 
 RUN apt update
 RUN apt install -y libibverbs-dev
