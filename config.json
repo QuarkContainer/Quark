@@ -13,7 +13,7 @@
   "FileBufWrite"  : true,
   "MmapRead"      : false,
   "AsyncAccept"   : true,
-  "EnableRDMA"    : false,
+  "EnableRDMA"    : true,
   "RDMAPort"      : 1,
   "PerSandboxLog" : false,
   "ReserveCpuCount": 1,

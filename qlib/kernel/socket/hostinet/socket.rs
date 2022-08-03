@@ -339,7 +339,7 @@ impl SocketOperations {
                         *self.socketBuf.lock() = SocketBufType::RDMA(rdmaSocket.socketBuf.clone());
                     }
                     _ => {
-                        panic!("Incorrect sockInfo")
+                        panic!("PostConnect, Incorrect sockInfo: {:?}", sockInfo);
                     }
                 }
             }
@@ -1279,6 +1279,9 @@ impl SockOperations for SocketOperations {
     }
 
     fn SetSockOpt(&self, task: &Task, level: i32, name: i32, opt: &[u8]) -> Result<i64> {
+        if self.enableRDMA {
+            return Ok(0);
+        }
         /*let optlen = match level as u64 {
             LibcConst::SOL_IPV6 => {
                 match name as u64 {
@@ -1315,6 +1318,7 @@ impl SockOperations for SocketOperations {
 
         let opt = &opt[..optlen];*/
 
+        debug!("SocketOperations::SetSockOpt 1");
         if (level as u64) == LibcConst::SOL_SOCKET && (name as u64) == LibcConst::SO_SNDTIMEO {
             if opt.len() >= SocketSize::SIZEOF_TIMEVAL {
                 let timeVal = task.CopyInObj::<Timeval>(&opt[0] as *const _ as u64)?;
@@ -1325,6 +1329,7 @@ impl SockOperations for SocketOperations {
             }
         }
 
+        debug!("SocketOperations::SetSockOpt 2");
         if (level as u64) == LibcConst::SOL_SOCKET && (name as u64) == LibcConst::SO_RCVTIMEO {
             if opt.len() >= SocketSize::SIZEOF_TIMEVAL {
                 let timeVal = task.CopyInObj::<Timeval>(&opt[0] as *const _ as u64)?;
@@ -1335,6 +1340,7 @@ impl SockOperations for SocketOperations {
             }
         }
 
+        debug!("SocketOperations::SetSockOpt 3");
         // TCP_INQ is bound to buffer implementation
         if (level as u64) == LibcConst::SOL_TCP && (name as u64) == LibcConst::TCP_INQ {
             let val = unsafe { *(&opt[0] as *const _ as u64 as *const i32) };
@@ -1363,10 +1369,12 @@ impl SockOperations for SocketOperations {
                 optLen as u32,
             )
         };
+        debug!("SocketOperations::SetSockOpt 4");
 
         if res < 0 {
             return Err(Error::SysError(-res as i32));
         }
+        debug!("SocketOperations::SetSockOpt 5");
 
         return Ok(res);
     }
