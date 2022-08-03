@@ -390,7 +390,11 @@ impl SockOperations for HostSocketOperations {
         ) as i32;
 
         if res == 0 {
-            self.SetRemoteAddr(socketaddr.to_vec())?;
+            let family = unsafe { *(&sockaddr[0] as *const u8 as *const i16) } as i32;
+            if family == AFType::AF_INET || family == AFType::AF_INET6 {
+                self.SetRemoteAddr(socketaddr.to_vec())?;
+            }
+
             return Ok(0);
         }
 
@@ -774,12 +778,11 @@ impl SockOperations for HostSocketOperations {
         senderRequested: bool,
         controlDataLen: usize,
     ) -> Result<(i64, i32, Option<(SockAddr, usize)>, Vec<u8>)> {
-
-        //todo: we don't support MSG_ERRQUEUE
         if flags
             & !(MsgType::MSG_DONTWAIT
             | MsgType::MSG_PEEK
             | MsgType::MSG_TRUNC
+            | MsgType::MSG_ERRQUEUE
             | MsgType::MSG_CTRUNC
             | MsgType::MSG_WAITALL)
             != 0
@@ -832,7 +835,7 @@ impl SockOperations for HostSocketOperations {
             ) as i32
         };
 
-        while res == -SysErr::EWOULDBLOCK && flags & MsgType::MSG_DONTWAIT == 0 {
+        while res == -SysErr::EWOULDBLOCK && flags & (MsgType::MSG_DONTWAIT | MsgType::MSG_ERRQUEUE) == 0 {
 
             match task.blocker.BlockWithMonoTimer(true, deadline) {
                 Err(Error::ErrInterrupted) => {
