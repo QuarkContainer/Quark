@@ -437,11 +437,6 @@ fn recvSingleMsg(
 
     let mut dst = task.IovsFromAddr(msg.iov, msg.iovLen)?;
 
-    if flags & MsgType::MSG_ERRQUEUE != 0 {
-        // Pretend we have an empty error queue.
-        return Err(Error::SysError(SysErr::EAGAIN));
-    }
-
     // Fast path when no control message nor name buffers are provided.
     if msg.msgControlLen == 0 && msg.nameLen == 0 {
         let (n, mut mflags, _, controlMessageBuffer) =
