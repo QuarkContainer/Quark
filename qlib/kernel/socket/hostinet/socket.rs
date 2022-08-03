@@ -339,7 +339,7 @@ impl SocketOperations {
                         *self.socketBuf.lock() = SocketBufType::RDMA(rdmaSocket.socketBuf.clone());
                     }
                     _ => {
-                        panic!("Incorrect sockInfo")
+                        panic!("PostConnect, Incorrect sockInfo: {:?}", sockInfo);
                     }
                 }
             }
@@ -1279,6 +1279,9 @@ impl SockOperations for SocketOperations {
     }
 
     fn SetSockOpt(&self, task: &Task, level: i32, name: i32, opt: &[u8]) -> Result<i64> {
+        if self.enableRDMA {
+            return Ok(0);
+        }
         /*let optlen = match level as u64 {
             LibcConst::SOL_IPV6 => {
                 match name as u64 {

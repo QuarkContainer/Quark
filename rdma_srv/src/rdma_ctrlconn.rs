@@ -82,7 +82,7 @@ impl Default for CtrlInfo {
                 hostname: String::from("lab 1"),
                 ipAddr: lab1ip,
                 timestamp: 0,
-                subnet: u32::from(Ipv4Addr::from_str("192.168.1.0").unwrap()),
+                subnet: u32::from(Ipv4Addr::from_str("192.168.2.0").unwrap()),
                 netmask: u32::from(Ipv4Addr::from_str("255.255.255.0").unwrap()),
                 resource_version: 0,                
             };
@@ -91,7 +91,7 @@ impl Default for CtrlInfo {
                 hostname: String::from("lab 2"),
                 ipAddr: lab2ip,
                 timestamp: 0,
-                subnet: u32::from(Ipv4Addr::from_str("192.168.2.0").unwrap()),
+                subnet: u32::from(Ipv4Addr::from_str("192.168.1.0").unwrap()),
                 netmask: u32::from(Ipv4Addr::from_str("255.255.255.0").unwrap()),
                 resource_version: 0,
             };
