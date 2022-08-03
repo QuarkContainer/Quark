@@ -1748,6 +1748,9 @@ pub struct UnixSocketProvider {}
 
 impl Provider for UnixSocketProvider {
     fn Socket(&self, task: &Task, stype: i32, protocol: i32) -> Result<Option<Arc<File>>> {
+        let _nonblocking = stype & SocketFlags::SOCK_NONBLOCK != 0;
+        let stype = stype & SocketType::SOCK_TYPE_MASK;
+
         if protocol != 0 && protocol != AFType::AF_UNIX {
             return Err(Error::SysError(SysErr::EPROTONOSUPPORT));
         }
