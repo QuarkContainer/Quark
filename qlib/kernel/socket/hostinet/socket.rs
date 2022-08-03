@@ -1340,7 +1340,8 @@ impl SockOperations for SocketOperations {
 
         // TCP_INQ is bound to buffer implementation
         if (level as u64) == LibcConst::SOL_TCP && (name as u64) == LibcConst::TCP_INQ {
-            let val = unsafe { *(&opt[0] as *const _ as u64 as *const i32) };
+            let val : i32 = task.CopyInObj::<i32>(&opt[0] as *const _ as u64)?;
+
             if val == 1 {
                 self.passInq.store(true, Ordering::Relaxed);
             } else {
@@ -1504,8 +1505,6 @@ impl SockOperations for SocketOperations {
         let peek = (flags & MsgType::MSG_PEEK) != 0;
 
         if self.SocketBufEnabled() {
-            let controlDataLen = 0;
-
             if self.SocketBuf().RClosed() {
                 let senderAddr = if senderRequested {
                     let addr = self.remoteAddr.lock().as_ref().unwrap().clone();
