@@ -250,7 +250,12 @@ impl AsyncEventfdWrite {
             &self.addr as *const _ as u64 as *const u8,
             8,
         );
-        return op.build().flags(squeue::Flags::FIXED_FILE);
+
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
@@ -420,7 +425,11 @@ impl AsyncTTYWrite {
     pub fn SEntry(&self) -> squeue::Entry {
         let op = Write::new(types::Fd(self.fd), self.addr as *const _, self.len as u32);
 
-        return op.build().flags(squeue::Flags::FIXED_FILE);
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
     }
 
     pub fn Process(&mut self, _result: i32) -> bool {
@@ -452,7 +461,11 @@ impl AsyncWritev {
         let op =
             Write::new(types::Fd(self.fd), self.addr as *const u8, self.len).offset(self.offset);
 
-        return op.build().flags(squeue::Flags::FIXED_FILE);
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
     }
 
     pub fn Process(&mut self, _result: i32) -> bool {
@@ -479,7 +492,11 @@ impl AsyncBufWrite {
         )
         .offset(self.offset);
 
-        return op.build().flags(squeue::Flags::FIXED_FILE);
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
@@ -510,7 +527,11 @@ impl AsyncLogFlush {
         //let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
         let op = opcode::Write::new(types::Fd(self.fd), self.addr as *const u8, self.len as u32); //.flags(MsgType::MSG_DONTWAIT);
 
-        return op.build().flags(squeue::Flags::FIXED_FILE);
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
@@ -550,7 +571,11 @@ impl AsyncSend {
     pub fn SEntry(&self) -> squeue::Entry {
         //let op = Write::new(types::Fd(self.fd), self.addr as * const u8, self.len as u32);
         let op = opcode::Send::new(types::Fd(self.fd), self.addr as *const u8, self.len as u32);
-        return op.build().flags(squeue::Flags::FIXED_FILE);
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
@@ -625,7 +650,11 @@ impl AsyncFiletWrite {
     pub fn SEntry(&self) -> squeue::Entry {
         let op = opcode::Write::new(types::Fd(self.fd), self.addr as *const u8, self.len as u32);
 
-        return op.build().flags(squeue::Flags::FIXED_FILE);
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
@@ -702,7 +731,11 @@ impl AsyncAccept {
             &self.addr as *const _ as u64 as *mut _,
             &self.len as *const _ as u64 as *mut _,
         );
-        return op.build().flags(squeue::Flags::FIXED_FILE);
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
@@ -751,11 +784,19 @@ impl AsyncFileRead {
     pub fn SEntry(&self) -> squeue::Entry {
         if self.isSocket {
             let op = Recv::new(types::Fd(self.fd), self.addr as *mut u8, self.len as u32);
-            return op.build().flags(squeue::Flags::FIXED_FILE);
+            if SHARESPACE.config.read().UringFixedFile {
+                return op.build().flags(squeue::Flags::FIXED_FILE);
+            } else {
+                return op.build();
+            }
         }
 
         let op = Read::new(types::Fd(self.fd), self.addr as *mut u8, self.len as u32);
-        return op.build().flags(squeue::Flags::FIXED_FILE);
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
@@ -832,7 +873,11 @@ impl AsycnSendMsg {
         let intern = self.lock();
         let op = SendMsg::new(types::Fd(intern.fd), &intern.msg as *const _ as *const u64);
 
-        return op.build().flags(squeue::Flags::FIXED_FILE);
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
@@ -915,7 +960,11 @@ impl AsycnRecvMsg {
         let intern = self.lock();
         let op = RecvMsg::new(types::Fd(intern.fd), &intern.msg as *const _ as *const u64);
 
-        return op.build().flags(squeue::Flags::FIXED_FILE);
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
@@ -1039,7 +1088,11 @@ impl AIOWrite {
         )
         .offset(self.offset);
 
-        return op.build().flags(squeue::Flags::FIXED_FILE);
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
@@ -1140,7 +1193,11 @@ impl AIORead {
         )
         .offset(self.offset);
 
-        return op.build().flags(squeue::Flags::FIXED_FILE);
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
@@ -1212,7 +1269,11 @@ impl AIOFsync {
             Fsync::new(types::Fd(self.fd))
         };
 
-        return op.build().flags(squeue::Flags::FIXED_FILE);
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
@@ -1277,7 +1338,11 @@ impl UnblockBlockPollAdd {
     pub fn SEntry(&self) -> squeue::Entry {
         let op = opcode::PollAdd::new(types::Fd(self.fd), self.flags);
 
-        return op.build().flags(squeue::Flags::FIXED_FILE);
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
@@ -1314,7 +1379,11 @@ impl PollHostEpollWait {
     pub fn SEntry(&self) -> squeue::Entry {
         let op = opcode::PollAdd::new(types::Fd(self.fd), EVENT_READ as u32);
 
-        return op.build().flags(squeue::Flags::FIXED_FILE);
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
     }
 
     pub fn Process(&mut self, result: i32) -> bool {
@@ -1379,8 +1448,11 @@ impl AsyncEpollCtl {
             &self.ev as *const _ as u64 as *const types::epoll_event,
         );
 
-        return op.build();
-        //.flags(squeue::Flags::FIXED_FILE);
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
     }
 
     pub fn Process(&mut self, _result: i32) -> bool {

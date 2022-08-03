@@ -41,8 +41,14 @@ pub const FDS_SIZE: usize = 1024 * 16;
 
 impl UringMgr {
     pub fn New(size: usize) -> Self {
-        let mut fds = Vec::with_capacity(FDS_SIZE);
-        for _i in 0..FDS_SIZE {
+        let fdsSize = if true || QUARK_CONFIG.lock().UringFixedFile {
+            FDS_SIZE
+        } else {
+            0
+        };
+
+        let mut fds = Vec::with_capacity(fdsSize);
+        for _i in 0..fdsSize {
             fds.push(-1);
         }
 
@@ -88,12 +94,14 @@ impl UringMgr {
         self.uringfd = ring.fd.0;
         self.ring = Some(ring);
 
-        self.Register(
-            IORING_REGISTER_FILES,
-            &self.fds[0] as *const _ as u64,
-            self.fds.len() as u32,
-        )
-        .expect("InitUring register files fail");
+        if QUARK_CONFIG.lock().UringFixedFile {
+            self.Register(
+                IORING_REGISTER_FILES,
+                &self.fds[0] as *const _ as u64,
+                self.fds.len() as u32,
+            )
+                .expect("InitUring register files fail");
+        }
     }
 
     pub fn SetupEventfd(&mut self, eventfd: i32) {
@@ -162,6 +170,10 @@ impl UringMgr {
     }
 
     pub fn Addfd(&mut self, fd: i32) -> Result<()> {
+        if !QUARK_CONFIG.lock().UringFixedFile {
+            return Ok(())
+        }
+
         if fd as usize >= self.fds.len() {
             error!("Addfd out of bound fd {}", fd);
             panic!("Addfd out of bound fd {}", fd)
@@ -178,6 +190,10 @@ impl UringMgr {
     }
 
     pub fn Removefd(&mut self, fd: i32) -> Result<()> {
+        if !QUARK_CONFIG.lock().UringFixedFile {
+            return Ok(())
+        }
+
         if fd as usize >= self.fds.len() {
             error!("Removefd out of bound fd {}", fd);
             panic!("Removefd out of bound fd {}", fd)

@@ -16,6 +16,7 @@ use super::super::super::linux_def::EpollEvent;
 use super::super::super::task_mgr::*;
 use super::super::super::uring::opcode::*;
 use super::super::super::uring::squeue;
+use super::super::SHARESPACE;
 
 pub static DEFAULT_MSG: UringOp = UringOp::None;
 
@@ -105,7 +106,11 @@ impl ReadOp {
     pub fn SEntry(&self) -> squeue::Entry {
         let op = Read::new(types::Fd(self.fd), self.addr as *mut _, self.len).offset(self.offset);
 
-        return op.build().flags(squeue::Flags::FIXED_FILE);
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
     }
 }
 
@@ -122,7 +127,11 @@ impl WriteOp {
         let op =
             Write::new(types::Fd(self.fd), self.addr as *const _, self.len).offset(self.offset);
 
-        return op.build().flags(squeue::Flags::FIXED_FILE);
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
     }
 }
 
@@ -145,7 +154,11 @@ impl StatxOp {
         .flags(self.flags)
         .mask(self.mask);
 
-        return op.build().flags(squeue::Flags::FIXED_FILE);
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
     }
 }
 
@@ -163,7 +176,11 @@ impl FsyncOp {
             Fsync::new(types::Fd(self.fd))
         };
 
-        return op.build().flags(squeue::Flags::FIXED_FILE);
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
     }
 }
 
@@ -188,7 +205,11 @@ impl SpliceOp {
         );
 
         error!("SpliceOp {:x?}", self);
-        return op.build().flags(squeue::Flags::FIXED_FILE);
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
     }
 }
 
@@ -209,7 +230,11 @@ impl EpollCtlOp {
             &self.ev as *const _ as u64 as *const types::epoll_event,
         );
 
-        return op.build().flags(squeue::Flags::FIXED_FILE);
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
     }
 }
 
@@ -225,6 +250,10 @@ impl AcceptOp {
             &0 as *const _ as u64 as *mut _,
             &0 as *const _ as u64 as *mut _,
         );
-        return op.build().flags(squeue::Flags::FIXED_FILE);
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
     }
 }
