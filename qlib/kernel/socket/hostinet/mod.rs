@@ -17,6 +17,7 @@ pub mod socket;
 pub mod socket_buf;
 pub mod hostsocket;
 pub mod asyncsocket;
+pub mod uring_socket;
 
 pub fn Init() {
     self::socket::Init();
