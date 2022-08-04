@@ -35,10 +35,11 @@ use super::super::kernel::timer;
 use super::super::kernel::waiter::qlock::*;
 use super::super::kernel::waiter::*;
 use super::super::socket::hostinet::socket::*;
+use super::super::socket::hostinet::uring_socket::*;
 use super::super::task::*;
 use super::super::IOURING;
 use super::super::SHARESPACE;
-//use super::super::guestfdnotifier::GUEST_NOTIFIER;
+
 
 #[repr(align(128))]
 pub enum AsyncOps {
@@ -564,7 +565,7 @@ pub struct AsyncSend {
     pub len: usize,
 
     // keep the socket in the async ops to avoid socket before send finish
-    pub ops: SocketOperations,
+    pub ops: UringSocketOperations,
 }
 
 impl AsyncSend {
@@ -624,7 +625,7 @@ impl AsyncSend {
         buf: Arc<SocketBuff>,
         addr: u64,
         len: usize,
-        ops: &SocketOperations,
+        ops: &UringSocketOperations,
     ) -> Self {
         return Self {
             fd,

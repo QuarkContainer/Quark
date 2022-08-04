@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
-use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::any::Any;
@@ -24,15 +23,11 @@ use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicI64;
 use core::sync::atomic::Ordering;
 
-use crate::qlib::rdmasocket::RDMAServerSock;
 use super::super::super::super::common::*;
-use super::super::super::super::fileinfo::*;
-use super::super::super::super::linux::netdevice::*;
 use super::super::super::super::linux::time::Timeval;
 use super::super::super::super::linux_def::*;
 use super::super::super::super::mem::block::*;
 use super::super::super::super::socket_buf::*;
-use super::super::super::fd::*;
 use super::super::super::fs::attr::*;
 use super::super::super::fs::dentry::*;
 use super::super::super::fs::dirent::*;
@@ -46,11 +41,8 @@ use super::super::super::kernel::kernel::GetKernel;
 use super::super::super::kernel::time::*;
 use super::super::super::kernel::waiter::*;
 use super::super::super::quring::QUring;
-// use super::super::super::rdmasocket::*;
 use super::super::super::task::*;
 use super::super::super::tcpip::tcpip::*;
-use super::super::super::GlobalIOMgr;
-use super::super::super::GlobalRDMASvcCli;
 use super::super::super::Kernel;
 use super::super::super::Kernel::HostSpace;
 use super::super::super::IOURING;
@@ -58,34 +50,29 @@ use super::super::super::SHARESPACE;
 use super::super::control::*;
 use super::super::socket::*;
 use super::super::unix::transport::unix::*;
-use super::rdma_socket::*;
-use super::hostsocket::*;
-use super::uring_socket::*;
+use crate::qlib::kernel::socket::hostinet::socket::HostIoctlIFConf;
+use crate::qlib::kernel::socket::hostinet::socket::HostIoctlIFReq;
 
-lazy_static! {
-    pub static ref DUMMY_HOST_SOCKET : DummyHostSocket = DummyHostSocket::New();
-}
-
-fn newSocketFile(
+pub fn newUringSocketFile(
     task: &Task,
     family: i32,
     fd: i32,
     stype: i32,
     nonblock: bool,
-    socketBuf: SocketBufType,
+    socketType: UringSocketType,
     addr: Option<Vec<u8>>,
 ) -> Result<File> {
     let dirent = NewSocketDirent(task, SOCKET_DEVICE.clone(), fd)?;
     let inode = dirent.Inode();
     let iops = inode.lock().InodeOp.clone();
     let hostiops = iops.as_any().downcast_ref::<HostInodeOp>().unwrap();
-    let s = SocketOperations::New(
+    let s = UringSocketOperations::New(
         family,
         fd,
         stype,
         hostiops.Queue(),
         hostiops.clone(),
-        socketBuf,
+        socketType,
         addr,
     )?;
 
@@ -106,42 +93,28 @@ fn newSocketFile(
 
 #[repr(u64)]
 #[derive(Clone)]
-pub enum SocketBufType {
-    Unknown,
-    NoTCP,                        // Not TCP Socket
+pub enum UringSocketType {
     TCPInit,                      // Init TCP Socket, no listen and no connect
-    TCPNormalServer,              // Common TCP Server socket, when socket start to listen
     TCPUringlServer(AcceptQueue), // Uring TCP Server socket, when socket start to listen
-    TCPRDMAServer(AcceptQueue),   // TCP Server socket over RDMA
-    TCPNormalData,                // Common TCP socket
     Uring(Arc<SocketBuff>),
-    RDMA(Arc<SocketBuff>),
 }
 
-impl fmt::Debug for SocketBufType {
+impl fmt::Debug for UringSocketType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Unknown => write!(f, "SocketBufType::Unknown"),
-            Self::NoTCP => write!(f, "SocketBufType::NoTCP"),
-            Self::TCPInit => write!(f, "SocketBufType::TCPInit"),
-            Self::TCPNormalServer => write!(f, "SocketBufType::TCPNormalServer"),
-            Self::TCPUringlServer(_) => write!(f, "SocketBufType::TCPUringlServer"),
-            Self::TCPRDMAServer(_) => write!(f, "SocketBufType::TCPRDMAServer"),
-            Self::TCPNormalData => write!(f, "SocketBufType::TCPNormalData"),
-            Self::Uring(_) => write!(f, "SocketBufType::Uring"),
-            Self::RDMA(_) => write!(f, "SocketBufType::RDMA"),
+            Self::TCPInit => write!(f, "UringSocketType::TCPInit"),
+            Self::TCPUringlServer(_) => write!(f, "UringSocketType::TCPUringlServer"),
+            Self::Uring(_) => write!(f, "UringSocketType::Uring"),
         }
     }
 }
 
-impl SocketBufType {
+impl UringSocketType {
     pub fn Accept(&self, socketBuf: Arc<SocketBuff>) -> Self {
         match self {
-            SocketBufType::TCPNormalServer => return SocketBufType::TCPNormalData,
-            SocketBufType::TCPUringlServer(_) => return SocketBufType::Uring(socketBuf),
-            SocketBufType::TCPRDMAServer(_) => return SocketBufType::RDMA(socketBuf),
+            UringSocketType::TCPUringlServer(_) => return UringSocketType::Uring(socketBuf),
             _ => {
-                panic!("SocketBufType::Accept unexpect type {:?}", self)
+                panic!("UringSocketType::Accept unexpect type {:?}", self)
             }
         }
     }
@@ -150,27 +123,19 @@ impl SocketBufType {
         match self {
             Self::TCPInit => return self.ConnectType(),
             // in bazel, there is UDP socket also call connect
-            Self::NoTCP => return Self::NoTCP,
             _ => {
-                panic!("SocketBufType::Connect unexpect type {:?}", self)
+                panic!("UringSocketType::Connect unexpect type {:?}", self)
             }
         }
     }
 
     fn ConnectType(&self) -> Self {
-        if SHARESPACE.config.read().EnableRDMA {
-            let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
-            return Self::RDMA(socketBuf);
-        } else if SHARESPACE.config.read().UringIO {
-            let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
-            return Self::Uring(socketBuf);
-        } else {
-            return Self::TCPNormalData;
-        }
+        let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
+        return Self::Uring(socketBuf);
     }
 }
 
-pub struct SocketOperationsIntern {
+pub struct UringSocketOperationsIntern {
     pub send: AtomicI64,
     pub recv: AtomicI64,
     pub family: i32,
@@ -178,24 +143,23 @@ pub struct SocketOperationsIntern {
     pub fd: i32,
     pub queue: Queue,
     pub remoteAddr: QMutex<Option<SockAddr>>,
-    pub socketBuf: QMutex<SocketBufType>,
+    pub socketBuf: QMutex<UringSocketType>,
     pub enableAsyncAccept: AtomicBool,
     pub hostops: HostInodeOp,
     passInq: AtomicBool,
-    pub enableRDMA: bool,
 }
 
 #[derive(Clone)]
-pub struct SocketOperations(Arc<SocketOperationsIntern>);
+pub struct UringSocketOperations(Arc<UringSocketOperationsIntern>);
 
-impl SocketOperations {
+impl UringSocketOperations {
     pub fn New(
         family: i32,
         fd: i32,
         stype: i32,
         queue: Queue,
         hostops: HostInodeOp,
-        socketBuf: SocketBufType,
+        socketBuf: UringSocketType,
         addr: Option<Vec<u8>>,
     ) -> Result<Self> {
         let addr = match addr {
@@ -210,19 +174,13 @@ impl SocketOperations {
         };
 
         match &socketBuf {
-            SocketBufType::Uring(ref buf) => {
+            UringSocketType::Uring(ref buf) => {
                 QUring::BufSockInit(fd, queue.clone(), buf.clone(), true).unwrap();
             }
             _ => (),
         }
 
-        // Only enable RDMA for IPv4 now.
-        let enableRDMA = SHARESPACE.config.read().EnableRDMA
-            // && (family == AFType::AF_INET || family == AFType::AF_INET6)
-            && family == AFType::AF_INET
-            && stype == SockType::SOCK_STREAM;
-
-        let ret = SocketOperationsIntern {
+        let ret = UringSocketOperationsIntern {
             send: AtomicI64::new(0),
             recv: AtomicI64::new(0),
             family,
@@ -234,7 +192,6 @@ impl SocketOperations {
             enableAsyncAccept: AtomicBool::new(false),
             hostops: hostops,
             passInq: AtomicBool::new(false),
-            enableRDMA: enableRDMA,
         };
 
         let ret = Self(Arc::new(ret));
@@ -282,69 +239,41 @@ impl SocketOperations {
         return self.enableAsyncAccept.load(Ordering::Relaxed);
     }
 
-    pub fn SocketBufType(&self) -> SocketBufType {
+    pub fn UringSocketType(&self) -> UringSocketType {
         return self.socketBuf.lock().clone();
     }
 
     pub fn SocketBuf(&self) -> Arc<SocketBuff> {
-        match self.SocketBufType() {
-            SocketBufType::Uring(b) => return b,
-            SocketBufType::RDMA(b) => return b,
+        match self.UringSocketType() {
+            UringSocketType::Uring(b) => return b,
             _ => panic!(
-                "SocketBufType::None has no SockBuff {:?}",
-                self.SocketBufType()
+                "UringSocketType::None has no SockBuff {:?}",
+                self.UringSocketType()
             ),
         }
     }
 
     pub fn SocketBufEnabled(&self) -> bool {
-        match self.SocketBufType() {
-            SocketBufType::Uring(_) => return true,
-            SocketBufType::RDMA(_) => return true,
+        match self.UringSocketType() {
+            UringSocketType::Uring(_) => return true,
             _ => false,
         }
     }
 
     pub fn AcceptQueue(&self) -> Option<AcceptQueue> {
-        match self.SocketBufType() {
-            SocketBufType::TCPUringlServer(q) => return Some(q.clone()),
-            SocketBufType::TCPRDMAServer(q) => return Some(q.clone()),
+        match self.UringSocketType() {
+            UringSocketType::TCPUringlServer(q) => return Some(q.clone()),
             _ => return None,
         }
     }
 
     pub fn PostConnect(&self, _task: &Task) {
         let socketBuf;
-        if self.enableRDMA {
-            socketBuf = self.socketBuf.lock().clone();
-        } else {
-            socketBuf = self.SocketBufType().Connect();
-            *self.socketBuf.lock() = socketBuf.clone();
-        }
+        socketBuf = self.UringSocketType().Connect();
+        *self.socketBuf.lock() = socketBuf.clone();
 
         match socketBuf {
-            SocketBufType::RDMA(_buf) => {
-                assert!(
-                    (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
-                        && self.stype == SockType::SOCK_STREAM,
-                    "family {}, stype {}",
-                    self.family,
-                    self.stype
-                );
-                // HostSpace::PostRDMAConnect(task, self.fd, buf);
-                let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
-                let fdInfoLock = fdInfo.lock();
-                let sockInfo = fdInfoLock.sockInfo.lock().clone();
-                match sockInfo {
-                    SockInfo::RDMADataSocket(rdmaSocket) => {
-                        *self.socketBuf.lock() = SocketBufType::RDMA(rdmaSocket.socketBuf.clone());
-                    }
-                    _ => {
-                        panic!("Incorrect sockInfo")
-                    }
-                }
-            }
-            SocketBufType::Uring(buf) => {
+            UringSocketType::Uring(buf) => {
                 assert!(
                     (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
                         && self.stype == SockType::SOCK_STREAM,
@@ -356,14 +285,6 @@ impl SocketOperations {
             }
             _ => (),
         }
-
-        /*assert!((self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
-            && self.stype == SockType::SOCK_STREAM, "family {}, stype {}", self.family, self.stype);
-
-        let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
-        *self.socketBuf.lock() = Some(socketBuf);
-        self.enableSocketBuf.store(true, Ordering::Relaxed);
-        QUring::BufSockInit(self.fd, self.queue.clone(), self.SocketBuf(), true).unwrap();*/
     }
 
     pub fn Notify(&self, mask: EventMask) {
@@ -373,13 +294,11 @@ impl SocketOperations {
     pub fn AcceptData(&self) -> Result<AcceptItem> {
         let sockBufType = self.socketBuf.lock().clone();
         match sockBufType {
-            SocketBufType::TCPNormalServer => return self.IOAccept(),
-            SocketBufType::TCPUringlServer(ref queue) => {
+            UringSocketType::TCPUringlServer(ref queue) => {
                 return IOURING.Accept(self.fd, &self.queue, queue)
             }
-            SocketBufType::TCPRDMAServer(ref queue) => return RDMA::Accept(self.fd, queue),
             _ => {
-                error!("SocketBufType invalid accept {:?}", sockBufType);
+                error!("UringSocketType invalid accept {:?}", sockBufType);
                 return Err(Error::SysError(SysErr::EINVAL));
             }
         }
@@ -388,19 +307,15 @@ impl SocketOperations {
     pub fn ReadFromBuf(
         &self,
         task: &Task,
-        sockBufType: SocketBufType,
+        sockBufType: UringSocketType,
         dsts: &mut [IoVec],
         peek: bool,
     ) -> Result<i64> {
         match sockBufType {
-            SocketBufType::Uring(socketBuf) => {
+            UringSocketType::Uring(socketBuf) => {
                 let ret =
                     QUring::RingFileRead(task, self.fd, self.queue.clone(), socketBuf, dsts, true, peek)?;
                 return Ok(ret);
-            }
-            SocketBufType::RDMA(socketBuf) => {
-                let ret = RDMA::Read(task, self.fd, socketBuf, dsts, peek);
-                return ret;
             }
             t => {
                 panic!("ReadFromBuf get type {:?}", t);
@@ -411,18 +326,14 @@ impl SocketOperations {
     pub fn WriteToBuf(
         &self,
         task: &Task,
-        sockBufType: SocketBufType,
+        sockBufType: UringSocketType,
         srcs: &[IoVec],
     ) -> Result<i64> {
         match sockBufType {
-            /*SocketBufType::Uring(socketBuf) => {
+            UringSocketType::Uring(socketBuf) => {
                 let ret =
                     QUring::SocketSend(task, self.fd, self.queue.clone(), socketBuf, srcs, self)?;
                 return Ok(ret);
-            }*/
-            SocketBufType::RDMA(socketBuf) => {
-                let ret = RDMA::Write(task, self.fd, socketBuf, srcs);
-                return ret;
             }
             t => {
                 panic!("ReadFromBuf get type {:?}", t);
@@ -431,15 +342,15 @@ impl SocketOperations {
     }
 }
 
-impl Deref for SocketOperations {
-    type Target = Arc<SocketOperationsIntern>;
+impl Deref for UringSocketOperations {
+    type Target = Arc<UringSocketOperationsIntern>;
 
-    fn deref(&self) -> &Arc<SocketOperationsIntern> {
+    fn deref(&self) -> &Arc<UringSocketOperationsIntern> {
         &self.0
     }
 }
 
-impl SocketOperations {
+impl UringSocketOperations {
     pub fn SetRemoteAddr(&self, addr: Vec<u8>) -> Result<()> {
         let addr = GetAddr(addr[0] as i16, &addr[0..addr.len()])?;
 
@@ -457,7 +368,7 @@ impl SocketOperations {
 
 pub const SIZEOF_SOCKADDR: usize = SocketSize::SIZEOF_SOCKADDR_INET6;
 
-impl Waitable for SocketOperations {
+impl Waitable for UringSocketOperations {
     fn AsyncReadiness(&self, _task: &Task, mask: EventMask, wait: &MultiWait) -> Future<EventMask> {
         if self.SocketBufEnabled() {
             let future = Future::New(0 as EventMask);
@@ -484,24 +395,6 @@ impl Waitable for SocketOperations {
 
         let fd = self.fd;
         return NonBlockingPoll(fd, mask);
-
-        /*let mv = MultiWait::New(task.GetTaskIdQ());
-        error!("Readiness 1");
-        let future = self.AsyncReadiness(task, mask, &mv);
-        error!("Readiness 2");
-        mv.Wait();
-        error!("Readiness 3");
-        match future.Wait() {
-            Ok(ret) => {
-                error!("Readiness 4");
-
-                return ret
-            },
-            Err(_) => {
-                error!("Readiness 5");
-                return 0
-            },
-        }*/
     }
 
     fn EventRegister(&self, task: &Task, e: &WaitEntry, mask: EventMask) {
@@ -523,91 +416,9 @@ impl Waitable for SocketOperations {
     }
 }
 
-pub struct DummyHostSocket {
-    pub socket : QMutex<i32>,
-}
+impl SpliceOperations for UringSocketOperations {}
 
-impl DummyHostSocket {
-    pub fn New() -> Self {
-        return Self {
-            socket: QMutex::new(-1),
-        }
-    }
-
-    pub fn Socket(&self) -> i32 {
-        let mut s = self.socket.lock();
-        if *s == -1 {
-            let fd = HostSpace::Socket(AFType::AF_UNIX, SockType::SOCK_DGRAM, 0);
-            if fd < 0 {
-                panic!("HostSocket create socket fail with error {}", fd);
-            }
-
-            *s = fd as i32;
-        };
-
-        return *s;
-    }
-
-    pub fn HostIoctlIFConf(&self, task: &Task, request: u64, addr: u64) -> Result<()> {
-        return HostIoctlIFConf(task, self.Socket(), request, addr)
-    }
-}
-
-
-// pass the ioctl to the shadow hostfd
-pub fn HostIoctlIFReq(task: &Task, hostfd: i32, request: u64, addr: u64) -> Result<()> {
-    let mut ifr: IFReq = task.CopyInObj(addr)?;
-    let res = HostSpace::IoCtl(hostfd, request, &mut ifr as *const _ as u64);
-    if res < 0 {
-        return Err(Error::SysError(-res as i32));
-    }
-
-    task.CopyOutObj(&ifr, addr)?;
-    return Ok(());
-}
-
-pub fn HostIoctlIFConf(task: &Task, hostfd: i32, request: u64, addr: u64) -> Result<()> {
-    let mut ifc: IFConf = task.CopyInObj(addr)?;
-
-    const MAX_LEN: usize = 64 * 0x1000; // 256 KB
-
-    // todo: how to handle very large ifconf?
-    let len = if MAX_LEN > ifc.Len as usize {
-        ifc.Len as usize
-    } else {
-        MAX_LEN
-    };
-
-    let buf = DataBuff::New(len);
-
-    let mut ifr = IFConf {
-        Len: len as i32,
-        ..Default::default()
-    };
-
-    if ifc.Ptr != 0 {
-        ifr.Ptr = buf.Ptr();
-    }
-
-    let res = HostSpace::IoCtl(hostfd, request, &mut ifr as *const _ as u64);
-    if res < 0 {
-        return Err(Error::SysError(-res as i32));
-    }
-
-    if ifc.Ptr > 0 {
-        task.mm
-            .CopyDataOut(task, ifr.Ptr, ifc.Ptr, ifr.Len as usize, false)?;
-    }
-
-    ifc.Len = ifr.Len;
-
-    task.CopyOutObj(&ifc, addr)?;
-    return Ok(());
-}
-
-impl SpliceOperations for SocketOperations {}
-
-impl FileOperations for SocketOperations {
+impl FileOperations for UringSocketOperations {
     fn as_any(&self) -> &Any {
         return self;
     }
@@ -651,7 +462,7 @@ impl FileOperations for SocketOperations {
     ) -> Result<i64> {
         let sockBufType = self.socketBuf.lock().clone();
         match sockBufType {
-            SocketBufType::Uring(socketBuf) => {
+            UringSocketType::Uring(socketBuf) => {
                 /*if self.SocketBuf().RClosed() {
                     return Err(Error::SysError(SysErr::ESPIPE))
                 }*/
@@ -659,19 +470,16 @@ impl FileOperations for SocketOperations {
                     QUring::RingFileRead(task, self.fd, self.queue.clone(), socketBuf, dsts, true, false)?;
                 return Ok(ret);
             }
-            SocketBufType::RDMA(socketBuf) => {
-                let ret = RDMA::Read(task, self.fd, socketBuf, dsts, false);
-                return ret;
-            }
-            _ => {
-                let size = IoVec::NumBytes(dsts);
+            t => {
+                /*let size = IoVec::NumBytes(dsts);
                 let buf = DataBuff::New(size);
                 let iovs = buf.Iovs(size);
                 let ret = IORead(self.fd, &iovs)?;
 
                 // handle partial memcopy
                 task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts, false)?;
-                return Ok(ret);
+                return Ok(ret);*/
+                panic!("UringSocketOperations::ReadAt invalid type {:?}", t)
             }
         }
     }
@@ -691,7 +499,7 @@ impl FileOperations for SocketOperations {
 
         let sockBufType = self.socketBuf.lock().clone();
         match sockBufType {
-            /*SocketBufType::Uring(socketBuf) => {
+            UringSocketType::Uring(socketBuf) => {
                 if self.SocketBuf().WClosed() {
                     return Err(Error::SysError(SysErr::ESPIPE));
                 }
@@ -704,17 +512,14 @@ impl FileOperations for SocketOperations {
                     srcs,
                     self,
                 );
-            }*/
-            SocketBufType::RDMA(socketBuf) => {
-                let ret = RDMA::Write(task, self.fd, socketBuf, srcs)?;
-                return Ok(ret);
             }
-            _ => {
-                let size = IoVec::NumBytes(srcs);
+            t => {
+                /*let size = IoVec::NumBytes(srcs);
                 let mut buf = DataBuff::New(size);
                 let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;
                 let iovs = buf.Iovs(len);
-                return IOWrite(self.fd, &iovs);
+                return IOWrite(self.fd, &iovs);*/
+                panic!("UringSocketOperations::WriteAt invalid type {:?}", t)
             }
         }
     }
@@ -813,12 +618,8 @@ impl FileOperations for SocketOperations {
     }
 }
 
-impl SocketOperations {
-    //pub fn ConnectIntern(fd: i32, addr: u64, addrlen: u32) -> i64 {}
-}
-
-impl SockOperations for SocketOperations {
-    fn Connect(&self, task: &Task, sockaddr: &[u8], blocking: bool) -> Result<i64> {
+impl SockOperations for UringSocketOperations {
+    fn Connect(&self, task: &Task, sockaddr: &[u8], _blocking: bool) -> Result<i64> {
         let mut socketaddr = sockaddr;
 
         if (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
@@ -828,59 +629,25 @@ impl SockOperations for SocketOperations {
         }
 
         let res;
-        if self.enableRDMA {
-            let sockAddr = GetAddr(sockaddr[0] as i16, &sockaddr[0..sockaddr.len()])?;
-            match sockAddr {
-                SockAddr::Inet(ipv4) => {
-                    let ipAddr = u32::from_be_bytes(ipv4.Addr);
-                    let port = ipv4.Port.to_le();
-                    //TODO: get local ip and port
-                    let srcPort = 16866u16.to_be();
-                    let rdmaId = GlobalRDMASvcCli().nextRDMAId.fetch_add(1, Ordering::Release);
-                    GlobalRDMASvcCli().rdmaIdToSocketMappings.lock().insert(rdmaId, self.fd);
-                    let _ret = GlobalRDMASvcCli().connectUsingPodId(rdmaId, ipAddr, port, srcPort);
-                    let socketBuf = self.SocketBufType().Connect();
-                    *self.socketBuf.lock() = socketBuf.clone();
-                    res = -SysErr::EINPROGRESS;
-                }
-                _ => {
-                    panic!("sockAddr: {:?} can't enable RDMA!", sockAddr);
-                }
+        res = Kernel::HostSpace::IOConnect(
+            self.fd,
+            &socketaddr[0] as *const _ as u64,
+            socketaddr.len() as u32,
+        ) as i32;
+        if res == 0 {
+            self.SetRemoteAddr(socketaddr.to_vec())?;
+            if self.stype == SockType::SOCK_STREAM {
+                self.PostConnect(task);
             }
-        } else {
-            res = Kernel::HostSpace::IOConnect(
-                self.fd,
-                &socketaddr[0] as *const _ as u64,
-                socketaddr.len() as u32,
-            ) as i32;
-            if res == 0 {
-                self.SetRemoteAddr(socketaddr.to_vec())?;
-                if self.stype == SockType::SOCK_STREAM {
-                    self.PostConnect(task);
-                }
 
-                return Ok(0);
-            }
+            return Ok(0);
         }
 
-        let blocking = if blocking {
-            true
-        } else {
-            // in order to enable uring buff, have to do block accept
-            if SHARESPACE.config.read().UringIO
-                && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
-                && self.stype == SockType::SOCK_STREAM
-            {
-                true
-            } else {
-                false
-            }
-
-            //false
-        };
+        //let blocking = true;
 
         if res != 0 {
-            if -res != SysErr::EINPROGRESS || !blocking {
+            // when the connect waiting is interrupt, user will rerun connect and the IOConnect will return EALREADY
+            if -res != SysErr::EINPROGRESS && -res != SysErr::EALREADY {
                 return Err(Error::SysError(-res));
             }
 
@@ -889,18 +656,17 @@ impl SockOperations for SocketOperations {
             self.EventRegister(task, &general, EVENT_OUT);
             defer!(self.EventUnregister(task, &general));
 
-            // if self.Readiness(task, WRITEABLE_EVENT) == 0 {
-            match task.blocker.BlockWithMonoTimer(true, None) {
-                Err(Error::ErrInterrupted) => {
-                    return Err(Error::SysError(SysErr::ERESTARTSYS));
+            if self.Readiness(task, WRITEABLE_EVENT) == 0 {
+                match task.blocker.BlockWithMonoTimer(true, None) {
+                    Err(Error::ErrInterrupted) => {
+                        return Err(Error::SysError(SysErr::ERESTARTNOINTR));
+                    }
+                    Err(e) => {
+                        return Err(e);
+                    }
+                    _ => (),
                 }
-                Err(e) => {
-                    error!("connect error {:?}", &e);
-                    return Err(e);
-                }
-                _ => (),
             }
-            // }
         }
 
         let mut val: i32 = 0;
@@ -996,10 +762,10 @@ impl SockOperations for SocketOperations {
         let fd = acceptItem.fd;
 
         let remoteAddr = &acceptItem.addr.data[0..len];
-        //let sockBuf = self.ConfigSocketBufType();
-        let sockBuf = self.SocketBufType().Accept(acceptItem.sockBuf.clone());
+        //let sockBuf = self.ConfigUringSocketType();
+        let sockBuf = self.UringSocketType().Accept(acceptItem.sockBuf.clone());
 
-        let file = newSocketFile(
+        let file = newUringSocketFile(
             task,
             self.family,
             fd as i32,
@@ -1040,23 +806,6 @@ impl SockOperations for SocketOperations {
             return Err(Error::SysError(-res as i32));
         }
 
-        //TODO: remember ipAddr and port, hardcoded for now.
-        if self.enableRDMA {
-            let sockAddr = GetAddr(sockaddr[0] as i16, &sockaddr[0..sockaddr.len()])?;
-            match sockAddr {
-                SockAddr::Inet(ipv4) => {
-                    let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
-                    *fdInfo.lock().sockInfo.lock() = SockInfo::Socket(SocketInfo {
-                        ipAddr: u32::from_be_bytes(ipv4.Addr), //u32::from_be_bytes([192, 168, 6, 8]), //ipAddr: u32::from_be_bytes(ipv4.Addr), // ipAddr: 3232237064,
-                        port: ipv4.Port.to_le(),               // port: 58433,
-                    }); //192.168.6.8:16868
-                }
-                _ => {
-                    panic!("sockAddr: {:?} can't enable RDMA!", sockAddr);
-                }
-            }
-        }
-
         return Ok(res);
     }
 
@@ -1069,61 +818,29 @@ impl SockOperations for SocketOperations {
 
         let socketBuf = self.socketBuf.lock().clone();
         let acceptQueue = match socketBuf {
-            SocketBufType::TCPUringlServer(q) => {
+            UringSocketType::TCPUringlServer(q) => {
                 q.lock().SetQueueLen(len as usize);
                 return Ok(0);
             }
-            SocketBufType::TCPRDMAServer(q) => {
-                q.lock().SetQueueLen(len as usize);
-                return Ok(0);
-            }
-            SocketBufType::TCPInit => AcceptQueue::default(),
+            UringSocketType::TCPInit => AcceptQueue::default(),
             _ => AcceptQueue::default(), // panic?
         };
 
         acceptQueue.lock().SetQueueLen(len as usize);
 
-        let res = if self.enableRDMA {
-            // Kernel::HostSpace::RDMAListen(self.fd, backlog, asyncAccept, acceptQueue.clone())
-            let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
-            let socketInfo = fdInfo.lock().sockInfo.lock().clone();
-            
-            // let endpoint;
-            let port;
-            match socketInfo {
-                SockInfo::Socket(info) => {
-                    port = info.port;
-                    let rdmaId = GlobalRDMASvcCli().nextRDMAId.fetch_add(1, Ordering::Release);
-                    GlobalRDMASvcCli().rdmaIdToSocketMappings.lock().insert(rdmaId, self.fd);
-                    let rdmaSocket = RDMAServerSock::New(rdmaId, acceptQueue.clone(), info.ipAddr, info.port);
-                    *fdInfo.lock().sockInfo.lock() = SockInfo::RDMAServerSocket(rdmaSocket);
-                    debug!("Listen, rdmaId: {}, serverSockFd: {}", rdmaId, self.fd);
-                    let _ret = GlobalRDMASvcCli().listenUsingPodId(rdmaId, port, backlog);
-                }
-                _ => {
-                    panic!("RDMA Listen with wrong state");
-                }
-            }
-            0
-        } else {
-            Kernel::HostSpace::Listen(self.fd, backlog, asyncAccept)
-        };
+        let res = Kernel::HostSpace::Listen(self.fd, backlog, asyncAccept);
 
         if res < 0 {
             return Err(Error::SysError(-res as i32));
         }
 
-        *self.socketBuf.lock() = if self.enableRDMA {
-            SocketBufType::TCPRDMAServer(acceptQueue)
-        } else if asyncAccept {
+        *self.socketBuf.lock() = {
             if !self.AsyncAcceptEnabled() {
                 IOURING.AcceptInit(self.fd, &self.queue, &acceptQueue)?;
                 self.enableAsyncAccept.store(true, Ordering::Relaxed);
             }
 
-            SocketBufType::TCPUringlServer(acceptQueue)
-        } else {
-            SocketBufType::TCPNormalServer
+            UringSocketType::TCPUringlServer(acceptQueue)
         };
 
         return Ok(res);
@@ -1148,15 +865,9 @@ impl SockOperations for SocketOperations {
         }
 
         if how == LibcConst::SHUT_RD || how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR {
-            let res = 0;
-            if self.enableRDMA && (how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR) {
-                //TODO:
-                let _res = GlobalRDMASvcCli().shutdown(1, how as u8);
-            } else {
-                let res = Kernel::HostSpace::Shutdown(self.fd, how as i32);
-                if res < 0 {
-                    return Err(Error::SysError(-res as i32));
-                }
+            let res = Kernel::HostSpace::Shutdown(self.fd, how as i32);
+            if res < 0 {
+                return Err(Error::SysError(-res as i32));
             }
 
             if self.stype == SockType::SOCK_STREAM
@@ -1374,42 +1085,6 @@ impl SockOperations for SocketOperations {
     }
 
     fn GetSockName(&self, _task: &Task, socketaddr: &mut [u8]) -> Result<i64> {
-        if self.enableRDMA {
-            let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
-            let fdInfoLock = fdInfo.lock();
-            let sockInfo = fdInfoLock.sockInfo.lock().clone();
-            let ipAddr;
-            let port;
-            match sockInfo {
-                SockInfo::RDMADataSocket(sock) => {
-                    ipAddr = sock.localIpAddr;
-                    port = sock.localPort;
-                }
-                SockInfo::RDMAServerSocket(sock) => {
-                    ipAddr = sock.ipAddr;
-                    port = sock.port;
-                }
-                SockInfo::Socket(sock) => {
-                    ipAddr = sock.ipAddr;
-                    port = sock.port;
-                }
-                _ => {
-                    panic!("Incorrect sockInfo")
-                }
-            }
-            debug!("GetSockName, ipAddr: {}, port: {}", ipAddr, port);
-            let sockAddr = SockAddr::Inet(SockAddrInet {
-                Family: AFType::AF_INET as u16,
-                Port: port,
-                Addr: ipAddr.to_be_bytes(),
-                Zero: [0; 8]
-            });
-            let len = socketaddr.len() as usize;
-            sockAddr.Marsh(socketaddr, len)?;
-            debug!("GetSockName, ipAddr: {}, port: {}, len: {}", ipAddr, port, len);
-            //TODO: handle unhappy case
-            return Ok(len as i64);
-        }
         let len = socketaddr.len() as i32;
 
         let res = Kernel::HostSpace::GetSockName(
@@ -1425,39 +1100,6 @@ impl SockOperations for SocketOperations {
     }
 
     fn GetPeerName(&self, _task: &Task, socketaddr: &mut [u8]) -> Result<i64> {
-        if self.enableRDMA {
-            let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
-            let fdInfoLock = fdInfo.lock();
-            let sockInfo = fdInfoLock.sockInfo.lock().clone();
-            let ipAddr;
-            let port;
-            match sockInfo {
-                SockInfo::RDMADataSocket(sock) => {
-                    ipAddr = sock.peerIpAddr;
-                    port = sock.peerPort;
-                }
-                SockInfo::RDMAServerSocket(_sock) => {
-                    return Err(Error::SysError(SysErr::ENOTCONN));
-                }
-                SockInfo::Socket(_sock) => {
-                    return Err(Error::SysError(SysErr::ENOTCONN));
-                }
-                _ => {
-                    panic!("Incorrect sockInfo")
-                }
-            }
-            debug!("GetPeerName, ipAddr: {}, port: {}", ipAddr, port);
-            let sockAddr = SockAddr::Inet(SockAddrInet {
-                Family: AFType::AF_INET as u16,
-                Port: port,
-                Addr: ipAddr.to_be_bytes(),
-                Zero: [0; 8]
-            });
-            let len = sockAddr.Len();
-            sockAddr.Marsh(socketaddr, len)?;
-            //TODO: handle unhappy case
-            return Ok(len as i64);
-        }
         let len = socketaddr.len() as i32;
         let res = Kernel::HostSpace::GetPeerName(
             self.fd,
@@ -1502,100 +1144,7 @@ impl SockOperations for SocketOperations {
         let trunc = (flags & MsgType::MSG_TRUNC) != 0;
         let peek = (flags & MsgType::MSG_PEEK) != 0;
 
-        if self.SocketBufEnabled() {
-            if self.SocketBuf().RClosed() {
-                let senderAddr = if senderRequested {
-                    let addr = self.remoteAddr.lock().as_ref().unwrap().clone();
-                    let l = addr.Len();
-                    Some((addr, l))
-                } else {
-                    None
-                };
-
-                let (retFlags, controlData) = self.prepareControlMessage(controlDataLen);
-                return Ok((0 as i64, retFlags, senderAddr, controlData));
-            }
-
-            let len = IoVec::NumBytes(dsts);
-            let data = if trunc {
-                Some(Iovs(dsts).Data())
-            } else {
-                None
-            };
-
-            let mut iovs = dsts;
-
-            let mut count = 0;
-            let mut tmp;
-            let socketType = self.SocketBufType();
-
-            let general = task.blocker.generalEntry.clone();
-            self.EventRegister(task, &general, EVENT_READ);
-            defer!(self.EventUnregister(task, &general));
-
-            'main: loop {
-                loop {
-                    match self.ReadFromBuf(task, socketType.clone(), iovs, peek) {
-                        Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
-                            if count > 0 {
-                                if dontwait || !waitall {
-                                    break 'main;
-                                }
-                            }
-
-                            if count == len as i64 {
-                                break 'main;
-                            }
-
-                            if count == 0 && dontwait {
-                                return Err(Error::SysError(SysErr::EWOULDBLOCK));
-                            }
-
-                            break;
-                        }
-                        Err(e) => {
-                            if count > 0 {
-                                break 'main;
-                            }
-                            return Err(e);
-                        }
-                        Ok(n) => {
-                            if n == 0 {
-                                break 'main;
-                            }
-
-                            count += n;
-                            if count == len as i64 || peek {
-                                break 'main;
-                            }
-
-                            tmp = Iovs(iovs).DropFirst(n as usize);
-                            iovs = &mut tmp;
-                        }
-                    };
-                }
-
-                match task.blocker.BlockWithMonoTimer(true, deadline) {
-                    Err(e) => {
-                        if count > 0 {
-                            break 'main;
-                        }
-                        match e {
-                            Error::SysError(SysErr::ETIMEDOUT) => {
-                                return Err(Error::SysError(SysErr::EAGAIN));
-                            }
-                            Error::ErrInterrupted => {
-                                return Err(Error::SysError(SysErr::ERESTARTSYS));
-                            }
-                            _ => {
-                                return Err(e);
-                            }
-                        }
-                    }
-                    _ => (),
-                }
-            }
-
+        if self.SocketBuf().RClosed() {
             let senderAddr = if senderRequested {
                 let addr = self.remoteAddr.lock().as_ref().unwrap().clone();
                 let l = addr.Len();
@@ -1604,129 +1153,104 @@ impl SockOperations for SocketOperations {
                 None
             };
 
-            if trunc {
-                task.mm.ZeroDataOutToIovs(task, &data.unwrap(), count as usize, false)?;
-            }
-
             let (retFlags, controlData) = self.prepareControlMessage(controlDataLen);
-            return Ok((count as i64, retFlags, senderAddr, controlData));
+            return Ok((0 as i64, retFlags, senderAddr, controlData));
         }
 
-        /*
-        if IoVec::NumBytes(dsts) == 0 {
-            return Ok((0, 0, None, SCMControlMessages::default()))
-        }
-        */
-
-        /*defer!(task.GetMut().iovs.clear());
-        task.V2PIovs(dsts, true, &mut task.GetMut().iovs)?;
-        let iovs = &mut task.GetMut().iovs;*/
-
-        let size = IoVec::NumBytes(dsts);
-        let buf = DataBuff::New(size);
-        let iovs = buf.Iovs(size);
-
-        let mut msgHdr = MsgHdr::default();
-        msgHdr.iov = &iovs[0] as *const _ as u64;
-        msgHdr.iovLen = iovs.len();
-
-        let mut addr: [u8; SIZEOF_SOCKADDR] = [0; SIZEOF_SOCKADDR];
-        if senderRequested {
-            msgHdr.msgName = &mut addr[0] as *mut _ as u64;
-            msgHdr.nameLen = SIZEOF_SOCKADDR as u32;
-        }
-
-        let mut controlVec: Vec<u8> = vec![0; controlDataLen];
-        msgHdr.msgControlLen = controlDataLen;
-        if msgHdr.msgControlLen != 0 {
-            msgHdr.msgControl = &mut controlVec[0] as *mut _ as u64;
+        let len = IoVec::NumBytes(dsts);
+        let data = if trunc {
+            Some(Iovs(dsts).Data())
         } else {
-            msgHdr.msgControl = ptr::null::<u8>() as u64;
-        }
+            None
+        };
+
+        let mut iovs = dsts;
+
+        let mut count = 0;
+        let mut tmp;
+        let socketType = self.UringSocketType();
 
         let general = task.blocker.generalEntry.clone();
         self.EventRegister(task, &general, EVENT_READ);
         defer!(self.EventUnregister(task, &general));
 
-        let mut res = if msgHdr.msgControlLen != 0 {
-            Kernel::HostSpace::IORecvMsg(
-                self.fd,
-                &mut msgHdr as *mut _ as u64,
-                flags | MsgType::MSG_DONTWAIT,
-                false,
-            ) as i32
-        } else {
-            Kernel::HostSpace::IORecvfrom(
-                self.fd,
-                buf.Ptr(),
-                size,
-                flags  | MsgType::MSG_DONTWAIT,
-                msgHdr.msgName,
-                &msgHdr.nameLen as * const _ as u64,
+        'main: loop {
+            loop {
+                match self.ReadFromBuf(task, socketType.clone(), iovs, peek) {
+                    Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
+                        if count > 0 {
+                            if dontwait || !waitall {
+                                break 'main;
+                            }
+                        }
 
-            ) as i32
-        };
+                        if count == len as i64 {
+                            break 'main;
+                        }
 
-        while res == -SysErr::EWOULDBLOCK && flags & MsgType::MSG_DONTWAIT == 0 {
+                        if count == 0 && dontwait {
+                            return Err(Error::SysError(SysErr::EWOULDBLOCK));
+                        }
+
+                        break;
+                    }
+                    Err(e) => {
+                        if count > 0 {
+                            break 'main;
+                        }
+                        return Err(e);
+                    }
+                    Ok(n) => {
+                        if n == 0 {
+                            break 'main;
+                        }
+
+                        count += n;
+                        if count == len as i64 || peek {
+                            break 'main;
+                        }
+
+                        tmp = Iovs(iovs).DropFirst(n as usize);
+                        iovs = &mut tmp;
+                    }
+                };
+            }
+
             match task.blocker.BlockWithMonoTimer(true, deadline) {
-                Err(Error::ErrInterrupted) => {
-                    return Err(Error::SysError(SysErr::ERESTARTSYS));
-                }
-                Err(Error::SysError(SysErr::ETIMEDOUT)) => {
-                    return Err(Error::SysError(SysErr::EAGAIN));
-                }
                 Err(e) => {
-                    return Err(e);
+                    if count > 0 {
+                        break 'main;
+                    }
+                    match e {
+                        Error::SysError(SysErr::ETIMEDOUT) => {
+                            return Err(Error::SysError(SysErr::EAGAIN));
+                        }
+                        Error::ErrInterrupted => {
+                            return Err(Error::SysError(SysErr::ERESTARTSYS));
+                        }
+                        _ => {
+                            return Err(e);
+                        }
+                    }
                 }
                 _ => (),
             }
-
-            res = if msgHdr.msgControlLen != 0 {
-                Kernel::HostSpace::IORecvMsg(
-                    self.fd,
-                    &mut msgHdr as *mut _ as u64,
-                    flags | MsgType::MSG_DONTWAIT,
-                    false,
-                ) as i32
-            } else {
-                Kernel::HostSpace::IORecvfrom(
-                    self.fd,
-                    buf.Ptr(),
-                    size,
-                    flags  | MsgType::MSG_DONTWAIT,
-                    msgHdr.msgName,
-                    &msgHdr.nameLen as * const _ as u64,
-
-                ) as i32
-            };
         }
 
-        if res < 0 {
-            return Err(Error::SysError(-res as i32));
-        }
-
-        let msgFlags = msgHdr.msgFlags & !MsgType::MSG_CTRUNC;
-        let senderAddr = if senderRequested
-            // for tcp connect, recvmsg get nameLen=0 msg
-            && msgHdr.nameLen >= 4
-        {
-            let addr = GetAddr(addr[0] as i16, &addr[0..msgHdr.nameLen as usize])?;
+        let senderAddr = if senderRequested {
+            let addr = self.remoteAddr.lock().as_ref().unwrap().clone();
             let l = addr.Len();
             Some((addr, l))
         } else {
             None
         };
 
-        controlVec.resize(msgHdr.msgControlLen, 0);
+        if trunc {
+            task.mm.ZeroDataOutToIovs(task, &data.unwrap(), count as usize, false)?;
+        }
 
-        // todo: need to handle partial copy
-        let count = if res < buf.buf.len() as i32 {
-            res
-        } else {
-            buf.buf.len() as i32
-        };
-        let _len = task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts, false)?;
-        return Ok((res as i64, msgFlags, senderAddr, controlVec));
+        let (retFlags, controlData) = self.prepareControlMessage(controlDataLen);
+        return Ok((count as i64, retFlags, senderAddr, controlData));
     }
 
     fn SendMsg(
@@ -1737,158 +1261,78 @@ impl SockOperations for SocketOperations {
         msgHdr: &mut MsgHdr,
         deadline: Option<Time>,
     ) -> Result<i64> {
-        if self.SocketBufEnabled() {
-            if self.SocketBuf().WClosed() {
-                return Err(Error::SysError(SysErr::EPIPE))
-            }
+        if self.SocketBuf().WClosed() {
+            return Err(Error::SysError(SysErr::EPIPE))
+        }
 
-            if msgHdr.msgName != 0 || msgHdr.msgControl != 0 {
-                panic!("Hostnet Socketbuf doesn't supprot MsgHdr");
-            }
+        if msgHdr.msgName != 0 || msgHdr.msgControl != 0 {
+            panic!("Hostnet Socketbuf doesn't supprot MsgHdr");
+        }
 
-            let len = Iovs(srcs).Count();
-            let mut count = 0;
-            let mut srcs = srcs;
-            let mut tmp;
-            let socketType = self.SocketBufType();
-            let general = task.blocker.generalEntry.clone();
-            self.EventRegister(task, &general, EVENT_WRITE);
-            defer!(self.EventUnregister(task, &general));
+        let len = Iovs(srcs).Count();
+        let mut count = 0;
+        let mut srcs = srcs;
+        let mut tmp;
+        let socketType = self.UringSocketType();
+        let general = task.blocker.generalEntry.clone();
+        self.EventRegister(task, &general, EVENT_WRITE);
+        defer!(self.EventUnregister(task, &general));
 
+        loop {
             loop {
-                loop {
-                    match self.WriteToBuf(task, socketType.clone(), srcs) {
-                        Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
-                            if flags & MsgType::MSG_DONTWAIT != 0 {
-                                if count > 0 {
-                                    return Ok(count);
-                                }
-                                return Err(Error::SysError(SysErr::EWOULDBLOCK));
-                            }
-
+                match self.WriteToBuf(task, socketType.clone(), srcs) {
+                    Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
+                        if flags & MsgType::MSG_DONTWAIT != 0 {
                             if count > 0 {
                                 return Ok(count);
                             }
-
-                            if flags & MsgType::MSG_DONTWAIT != 0 {
-                                return Err(Error::SysError(SysErr::EWOULDBLOCK));
-                            }
-
-                            break;
+                            return Err(Error::SysError(SysErr::EWOULDBLOCK));
                         }
-                        Err(e) => {
-                            if count > 0 {
-                                return Ok(count);
-                            }
 
-                            return Err(e);
-                        }
-                        Ok(n) => {
-                            count += n;
-                            if count == len as i64 {
-                                return Ok(count);
-                            }
-                            tmp = Iovs(srcs).DropFirst(n as usize);
-                            srcs = &mut tmp;
-                        }
-                    }
-                }
-
-                match task.blocker.BlockWithMonoTimer(true, deadline) {
-                    Err(Error::SysError(SysErr::ETIMEDOUT)) => {
                         if count > 0 {
                             return Ok(count);
                         }
-                        return Err(Error::SysError(SysErr::EWOULDBLOCK));
+
+                        if flags & MsgType::MSG_DONTWAIT != 0 {
+                            return Err(Error::SysError(SysErr::EWOULDBLOCK));
+                        }
+
+                        break;
                     }
                     Err(e) => {
                         if count > 0 {
                             return Ok(count);
                         }
+
                         return Err(e);
                     }
-                    _ => (),
+                    Ok(n) => {
+                        count += n;
+                        if count == len as i64 {
+                            return Ok(count);
+                        }
+                        tmp = Iovs(srcs).DropFirst(n as usize);
+                        srcs = &mut tmp;
+                    }
                 }
             }
-        }
 
-        if flags
-            & !(MsgType::MSG_DONTWAIT
-                | MsgType::MSG_EOR
-                | MsgType::MSG_FASTOPEN
-                | MsgType::MSG_MORE
-                | MsgType::MSG_NOSIGNAL)
-            != 0
-        {
-            return Err(Error::SysError(SysErr::EINVAL));
-        }
-
-        let size = IoVec::NumBytes(srcs);
-        let mut buf = DataBuff::New(size);
-        let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;
-        let iovs = buf.Iovs(len);
-
-        msgHdr.iov = &iovs[0] as *const _ as u64;
-        msgHdr.iovLen = iovs.len();
-        msgHdr.msgFlags = 0;
-
-        let mut res = if msgHdr.msgControlLen > 0 {
-            Kernel::HostSpace::IOSendMsg(
-                self.fd,
-                msgHdr as *const _ as u64,
-                flags | MsgType::MSG_DONTWAIT,
-                false,
-            ) as i32
-        } else {
-            Kernel::HostSpace::IOSendto(
-                self.fd,
-                buf.Ptr(),
-                len,
-                flags | MsgType::MSG_DONTWAIT,
-                msgHdr.msgName,
-                msgHdr.nameLen,
-            ) as i32
-        };
-
-        while res == -SysErr::EWOULDBLOCK && flags & MsgType::MSG_DONTWAIT == 0 {
-            let general = task.blocker.generalEntry.clone();
-
-            self.EventRegister(task, &general, EVENT_WRITE);
-            defer!(self.EventUnregister(task, &general));
             match task.blocker.BlockWithMonoTimer(true, deadline) {
                 Err(Error::SysError(SysErr::ETIMEDOUT)) => {
-                    return Err(Error::SysError(SysErr::EAGAIN))
+                    if count > 0 {
+                        return Ok(count);
+                    }
+                    return Err(Error::SysError(SysErr::EWOULDBLOCK));
                 }
                 Err(e) => {
+                    if count > 0 {
+                        return Ok(count);
+                    }
                     return Err(e);
                 }
                 _ => (),
             }
-
-            res = if msgHdr.msgControlLen > 0 {
-                Kernel::HostSpace::IOSendMsg(
-                    self.fd,
-                    msgHdr as *const _ as u64,
-                    flags | MsgType::MSG_DONTWAIT,
-                    false,
-                ) as i32
-            } else {
-                Kernel::HostSpace::IOSendto(
-                    self.fd,
-                    buf.Ptr(),
-                    len,
-                    flags | MsgType::MSG_DONTWAIT,
-                    msgHdr.msgName,
-                    msgHdr.nameLen,
-                ) as i32
-            };
         }
-
-        if res < 0 {
-            return Err(Error::SysError(-res as i32));
-        }
-
-        return Ok(res as i64);
     }
 
     fn SetRecvTimeout(&self, ns: i64) {
@@ -1936,95 +1380,5 @@ impl SockOperations for SocketOperations {
 
     fn Type(&self) -> (i32, i32, i32) {
         return (self.family, self.stype, -1)
-    }
-}
-
-pub struct SocketProvider {
-    pub family: i32,
-}
-
-impl Provider for SocketProvider {
-    fn Socket(&self, task: &Task, stype: i32, protocol: i32) -> Result<Option<Arc<File>>> {
-        let nonblocking = stype & SocketFlags::SOCK_NONBLOCK != 0;
-        let stype = stype & SocketType::SOCK_TYPE_MASK;
-
-        let res =
-            Kernel::HostSpace::Socket(self.family, stype | SocketFlags::SOCK_CLOEXEC, protocol);
-        if res < 0 {
-            return Err(Error::SysError(-res as i32));
-        }
-
-        let fd = res as i32;
-
-        let file;
-        if SHARESPACE.config.read().EnableRDMA {
-            let socketType = SocketBufType::TCPInit;
-
-            file = newSocketFile(
-                task,
-                self.family,
-                fd,
-                stype & SocketType::SOCK_TYPE_MASK,
-                nonblocking,
-                socketType,
-                None,
-            )?;
-        } else if SHARESPACE.config.read().UringIO
-            && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
-            && stype == SockType::SOCK_STREAM {
-            let socketType = UringSocketType::TCPInit;
-
-            file = newUringSocketFile(
-                task,
-                self.family,
-                fd,
-                stype & SocketType::SOCK_TYPE_MASK,
-                nonblocking,
-                socketType,
-                None,
-            )?;
-        } else {
-            file = newHostSocketFile(
-                task,
-                self.family,
-                fd,
-                stype & SocketType::SOCK_TYPE_MASK,
-                nonblocking,
-                None,
-            )?;
-        }
-
-        return Ok(Some(Arc::new(file)));
-    }
-
-    fn Pair(
-        &self,
-        _task: &Task,
-        _stype: i32,
-        _protocol: i32,
-    ) -> Result<Option<(Arc<File>, Arc<File>)>> {
-        /*if self.family == AFType::AF_UNIX {
-            let fds: [i32; 2] = [0; 2];
-
-            let res = Kernel::HostSpace::SocketPair(self.family, stype | SocketFlags::SOCK_CLOEXEC, protocol, &fds[0] as *const _ as u64);
-            if res < 0 {
-                return Err(Error::SysError(-res as i32))
-            }
-
-            let file0 = newSocketFile(task, self.family, fds[0], stype & SocketFlags::SOCK_NONBLOCK != 0)?;
-            let file1 = newSocketFile(task, self.family, fds[1], stype & SocketFlags::SOCK_NONBLOCK != 0)?;
-
-            return Ok(Some((Arc::new(file0), Arc::new(file1))));
-        }*/
-
-        return Err(Error::SysError(SysErr::EOPNOTSUPP));
-    }
-}
-
-pub fn Init() {
-    for family in [AFType::AF_INET, AFType::AF_INET6, AFType::AF_NETLINK].iter() {
-        FAMILIAES
-            .write()
-            .RegisterProvider(*family, Box::new(SocketProvider { family: *family }))
     }
 }

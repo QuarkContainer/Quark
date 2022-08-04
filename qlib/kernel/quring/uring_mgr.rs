@@ -34,7 +34,7 @@ use super::super::super::vcpu_mgr::*;
 use super::super::kernel::async_wait::*;
 use super::super::kernel::waiter::qlock::*;
 use super::super::kernel::waiter::*;
-use super::super::socket::hostinet::socket::*;
+use super::super::socket::hostinet::uring_socket::*;
 use super::super::Kernel::HostSpace;
 use super::super::IOURING;
 use super::super::SHARESPACE;
@@ -367,7 +367,7 @@ impl QUring {
         queue: Queue,
         buf: Arc<SocketBuff>,
         srcs: &[IoVec],
-        ops: &SocketOperations,
+        ops: &UringSocketOperations,
     ) -> Result<i64> {
         let (count, writeBuf) = buf.Writev(task, srcs)?;
 
