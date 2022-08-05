@@ -121,7 +121,7 @@ impl EventPoll {
             let entry = it.unwrap();
             it = entry.Next();
 
-            let file = entry.lock().id.File.clone();
+            let file = entry.lock().file.clone();
             let file = match file.Upgrade() {
                 None => {
                     // the file has been dropped, just remove it
@@ -159,8 +159,8 @@ impl EventPoll {
             // Check the entry's readiness. It it's not really ready, we
             // just put it back in the waiting list and move on to the next
             // entry.
-            let id = entry.lock().id.clone();
-            let file = match id.File.Upgrade() {
+            let file = entry.lock().file.clone();
+            let file = match file.Upgrade() {
                 None => {
                     lists.readyList.Remove(&entry);
                     continue;
@@ -212,25 +212,20 @@ impl EventPoll {
     // initEntryReadiness initializes the entry's state with regards to its
     // readiness by placing it in the appropriate list and registering for
     // notifications.
-    pub fn InitEntryReadiness(&self, task: &Task, entry: &PollEntry) {
-        let (f, mask) = {
+    pub fn InitEntryReadiness(&self, task: &Task, f: &File, entry: &PollEntry) {
+        let mask = {
             {
                 let mut lists = self.lists.lock();
                 lists.waitingList.PushBack(entry);
                 entry.lock().state = PollEntryState::Waiting;
             }
 
-            let f = match entry.lock().id.File.Upgrade() {
-                None => return,
-                Some(f) => f,
-            };
-
             // Register for event notifications.
             let waiter = entry.lock().waiter.clone();
             let mask = entry.lock().mask;
 
             f.EventRegister(task, &waiter, mask);
-            (f, mask)
+            mask
         };
 
         // Check if the file happens to already be in a ready state.
@@ -250,8 +245,9 @@ impl EventPoll {
         }
 
         let files = self.files.lock();
-        for (id, _) in files.iter() {
-            let file = match id.File.Upgrade() {
+        for (_, entry) in files.iter() {
+            let file = entry.lock().file.Upgrade();
+            let file = match file {
                 None => continue,
                 Some(f) => f,
             };
@@ -275,12 +271,14 @@ impl EventPoll {
         &self,
         task: &Task,
         id: FileIdentifier,
+        fd: i32,
+        addfile: FileWeak,
         flags: EntryFlags,
         mask: EventMask,
         data: [i32; 2],
     ) -> Result<()> {
         // Acquire cycle check lock if another event poll is being added.
-        let file = match id.File.Upgrade() {
+        let file = match addfile.Upgrade() {
             None => return Err(Error::SysError(SysErr::ENOENT)),
             Some(f) => f,
         };
@@ -318,8 +316,8 @@ impl EventPoll {
         let entryInternal = PollEntryInternal {
             next: None,
             prev: None,
-
-            id: id.clone(),
+            id: fd,
+            file: addfile,
             userData: data,
             waiter: WaitEntry::New(),
             mask: mask,
@@ -334,7 +332,7 @@ impl EventPoll {
         files.insert(id, entry.clone());
 
         // Initialize the readiness state of the new entry.
-        self.InitEntryReadiness(task, &entry);
+        self.InitEntryReadiness(task, &file, &entry);
 
         return Ok(());
     }
@@ -342,7 +340,7 @@ impl EventPoll {
     pub fn UpdateEntry(
         &self,
         task: &Task,
-        id: &FileIdentifier,
+        id: FileIdentifier,
         flags: EntryFlags,
         mask: EventMask,
         data: [i32; 2],
@@ -350,24 +348,25 @@ impl EventPoll {
         let files = self.files.lock();
 
         // Fail if the file doesn't have an entry.
-        let entry = match files.get(id) {
+        let entry = match files.get(&id) {
             None => return Err(Error::SysError(SysErr::ENOENT)),
             Some(e) => e.clone(),
         };
 
         // Unregister the old mask and remove entry from the list it's in, so
         // readyCallback is guaranteed to not be called on this entry anymore.
-        let file = entry.lock().id.File.Upgrade();
+        let file = entry.lock().file.Upgrade();
         let waiter = entry.lock().waiter.clone();
-        match file {
+        let file = match file {
             None => {
                 self.RemoveEntry(task, id)?;
                 return Err(Error::SysError(SysErr::ENOENT));
             }
             Some(f) => {
                 f.EventUnregister(task, &waiter);
+                f
             }
-        }
+        };
 
         // Remove entry from whatever list it's in. This ensure that no other
         // threads have access to this entry as the only way left to find it
@@ -388,23 +387,23 @@ impl EventPoll {
         entry.lock().mask = mask;
         entry.lock().userData = data;
 
-        self.InitEntryReadiness(task, &entry);
+        self.InitEntryReadiness(task, &file, &entry);
 
         return Ok(());
     }
 
-    pub fn RemoveEntry(&self, task: &Task, id: &FileIdentifier) -> Result<()> {
+    pub fn RemoveEntry(&self, task: &Task, id: FileIdentifier) -> Result<()> {
         let mut files = self.files.lock();
 
         // Fail if the file doesn't have an entry.
-        let entry = match files.get(id) {
+        let entry = match files.get(&id) {
             None => return Err(Error::SysError(SysErr::ENOENT)),
             Some(e) => e.clone(),
         };
 
         // Unregister the old mask and remove entry from the list it's in, so
         // readyCallback is guaranteed to not be called on this entry anymore.
-        let file = entry.lock().id.File.Upgrade();
+        let file = entry.lock().file.Upgrade();
         let waiter = entry.lock().waiter.clone();
         match file {
             None => (),
@@ -427,7 +426,7 @@ impl EventPoll {
         }
 
         // Remove file from map, and drop weak reference.
-        files.remove(id);
+        files.remove(&id);
 
         return Ok(());
     }
@@ -438,7 +437,7 @@ impl EventPoll {
         let files = self.files.lock();
 
         for (_, entry) in files.iter() {
-            let file = entry.lock().id.File.Upgrade();
+            let file = entry.lock().file.Upgrade();
             let waiter = entry.lock().waiter.clone();
 
             match file {
@@ -451,11 +450,12 @@ impl EventPoll {
 
 impl Drop for EventPollInternal {
     fn drop(&mut self) {
-        for (id, entry) in self.files.lock().iter() {
+        for (_, entry) in self.files.lock().iter() {
             let waiter = entry.lock().waiter.clone();
 
             let task = Task::Current();
-            match id.File.Upgrade() {
+            let file = entry.lock().file.Upgrade();
+            match file {
                 None => (),
                 Some(f) => f.EventUnregister(task, &waiter),
             }
