@@ -2075,7 +2075,9 @@ pub fn SysFchown(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let gid = GID(args.arg2 as u32);
 
     let file = task.GetFile(fd)?;
-
+    if file.Flags().Path {
+        return Err(Error::SysError(SysErr::EBADF))
+    }
     let dirent = file.Dirent.clone();
     return chown(task, &dirent, uid, gid);
 }
