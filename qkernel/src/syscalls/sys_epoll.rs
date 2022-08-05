@@ -76,6 +76,7 @@ pub fn AddEpoll(
     return ep.AddEntry(
         task,
         FileIdentifier {
+            uid: file.UniqueId(),
             File: file.Downgrade(),
             Fd: fd,
         },
@@ -117,6 +118,7 @@ pub fn UpdateEpoll(
     return ep.UpdateEntry(
         task,
         &FileIdentifier {
+            uid: file.UniqueId(),
             File: file.Downgrade(),
             Fd: fd,
         },
@@ -151,6 +153,7 @@ pub fn RemoveEpoll(task: &Task, epfd: i32, fd: i32) -> Result<()> {
     return ep.RemoveEntry(
         task,
         &FileIdentifier {
+            uid: file.UniqueId(),
             File: file.Downgrade(),
             Fd: fd,
         },

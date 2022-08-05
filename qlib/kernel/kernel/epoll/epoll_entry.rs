@@ -28,13 +28,14 @@ pub const EDGE_TRIGGERED: EntryFlags = 1 << 1;
 
 #[derive(Clone)]
 pub struct FileIdentifier {
+    pub uid: u64,
     pub File: FileWeak,
     pub Fd: i32,
 }
 
 impl Ord for FileIdentifier {
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        self.File.Upgrade().cmp(&other.File.Upgrade())
+        self.uid.cmp(&other.uid)
     }
 }
 
@@ -46,7 +47,7 @@ impl PartialOrd for FileIdentifier {
 
 impl PartialEq for FileIdentifier {
     fn eq(&self, other: &Self) -> bool {
-        return self.File.Upgrade() == other.File.Upgrade();
+        return self.uid == other.uid;
     }
 }
 
