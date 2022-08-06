@@ -217,9 +217,10 @@ impl EventPoll {
             {
                 let mut lists = self.lists.lock();
                 lists.waitingList.PushBack(entry);
-                entry.lock().state = PollEntryState::Waiting;
             }
 
+            entry.lock().state = PollEntryState::Waiting;
+            
             // Register for event notifications.
             let waiter = entry.lock().waiter.clone();
             let mask = entry.lock().mask;
@@ -270,19 +271,13 @@ impl EventPoll {
     pub fn AddEntry(
         &self,
         task: &Task,
-        id: FileIdentifier,
         fd: i32,
-        addfile: FileWeak,
+        file: File,
         flags: EntryFlags,
         mask: EventMask,
         data: [i32; 2],
     ) -> Result<()> {
-        // Acquire cycle check lock if another event poll is being added.
-        let file = match addfile.Upgrade() {
-            None => return Err(Error::SysError(SysErr::ENOENT)),
-            Some(f) => f,
-        };
-
+        let id = file.UniqueId();
         let fops = file.FileOp.clone();
         let ep = fops.as_any().downcast_ref::<EventPoll>();
 
@@ -317,7 +312,7 @@ impl EventPoll {
             next: None,
             prev: None,
             id: fd,
-            file: addfile,
+            file: file.Downgrade(),
             userData: data,
             waiter: WaitEntry::New(),
             mask: mask,
@@ -340,11 +335,12 @@ impl EventPoll {
     pub fn UpdateEntry(
         &self,
         task: &Task,
-        id: FileIdentifier,
+        file: File,
         flags: EntryFlags,
         mask: EventMask,
         data: [i32; 2],
     ) -> Result<()> {
+        let id = file.UniqueId();
         let files = self.files.lock();
 
         // Fail if the file doesn't have an entry.
@@ -355,18 +351,8 @@ impl EventPoll {
 
         // Unregister the old mask and remove entry from the list it's in, so
         // readyCallback is guaranteed to not be called on this entry anymore.
-        let file = entry.lock().file.Upgrade();
         let waiter = entry.lock().waiter.clone();
-        let file = match file {
-            None => {
-                self.RemoveEntry(task, id)?;
-                return Err(Error::SysError(SysErr::ENOENT));
-            }
-            Some(f) => {
-                f.EventUnregister(task, &waiter);
-                f
-            }
-        };
+        file.EventUnregister(task, &waiter);
 
         // Remove entry from whatever list it's in. This ensure that no other
         // threads have access to this entry as the only way left to find it
@@ -392,7 +378,8 @@ impl EventPoll {
         return Ok(());
     }
 
-    pub fn RemoveEntry(&self, task: &Task, id: FileIdentifier) -> Result<()> {
+    pub fn RemoveEntry(&self, task: &Task, file: File) -> Result<()> {
+        let id = file.UniqueId();
         let mut files = self.files.lock();
 
         // Fail if the file doesn't have an entry.
@@ -403,12 +390,8 @@ impl EventPoll {
 
         // Unregister the old mask and remove entry from the list it's in, so
         // readyCallback is guaranteed to not be called on this entry anymore.
-        let file = entry.lock().file.Upgrade();
         let waiter = entry.lock().waiter.clone();
-        match file {
-            None => (),
-            Some(f) => f.EventUnregister(task, &waiter),
-        }
+        file.EventUnregister(task, &waiter);
 
         // Remove entry from whatever list it's in. This ensure that no other
         // threads have access to this entry as the only way left to find it

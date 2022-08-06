@@ -75,9 +75,8 @@ pub fn AddEpoll(
 
     return ep.AddEntry(
         task,
-        file.UniqueId(),
         fd,
-        file.Downgrade(),
+        file,
         flags,
         mask,
         userData,
@@ -99,14 +98,6 @@ pub fn UpdateEpoll(
     // Get the target file id.
     let file = task.GetFile(fd)?;
 
-    /*let inode = file.Dirent.Inode();
-
-    //the fd doesn't support epoll
-    let inodeOp = inode.lock().InodeOp.clone();
-    if !inodeOp.WouldBlock() {
-        return Err(Error::SysError(SysErr::EINVAL))
-    }*/
-
     let fops = epollfile.FileOp.clone();
     let ep = match fops.as_any().downcast_ref::<EventPoll>() {
         None => return Err(Error::SysError(SysErr::EBADF)),
@@ -115,7 +106,7 @@ pub fn UpdateEpoll(
 
     return ep.UpdateEntry(
         task,
-        file.UniqueId(),
+        file,
         flags,
         mask,
         userData,
@@ -129,14 +120,6 @@ pub fn RemoveEpoll(task: &Task, epfd: i32, fd: i32) -> Result<()> {
     // Get the target file id.
     let file = task.GetFile(fd)?;
 
-    /*let inode = file.Dirent.Inode();
-
-    //the fd doesn't support epoll
-    let inodeOp = inode.lock().InodeOp.clone();
-    if !inodeOp.WouldBlock() {
-        return Err(Error::SysError(SysErr::EINVAL))
-    }*/
-
     let fops = epollfile.FileOp.clone();
     let ep = match fops.as_any().downcast_ref::<EventPoll>() {
         None => return Err(Error::SysError(SysErr::EBADF)),
@@ -146,7 +129,7 @@ pub fn RemoveEpoll(task: &Task, epfd: i32, fd: i32) -> Result<()> {
     // Try to remove the entry.
     return ep.RemoveEntry(
         task,
-        file.UniqueId(),
+        file,
     );
 }
 
