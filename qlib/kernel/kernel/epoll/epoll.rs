@@ -186,10 +186,8 @@ impl EventPoll {
             lists.readyList.Remove(&entry);
             let flags = entry.lock().flags;
             if flags & ONE_SHOT != 0 {
-                //lists.disabledList.PushBack(&entry);
                 entry.lock().state = PollEntryState::Disabled;
             } else if flags & EDGE_TRIGGERED != 0 {
-                //lists.waitingList.PushBack(&entry);
                 entry.lock().state = PollEntryState::Waiting;
             } else {
                 entry.lock().state = PollEntryState::Ready;
