@@ -5,7 +5,7 @@
   "LogLevel"      : "Simple",
   "UringIO"       : true,
   "UringBuf"      : true,
-  "UringFixedFile": false,
+  "UringFixedFile": true,
   "EnableAIO"     : true,
   "PrintException": false,
   "KernelPagetable": false,

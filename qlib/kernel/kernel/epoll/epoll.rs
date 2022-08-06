@@ -69,18 +69,12 @@ pub struct Event {
 #[derive(Default)]
 pub struct PollLists {
     pub readyList: PollEntryList,
-    pub waitingList: PollEntryList,
-    pub disabledList: PollEntryList,
 }
 
 impl PollLists {
     pub fn ToString(&self) -> String {
         let mut str = "ready: ".to_string();
         str += &self.readyList.GetString();
-        str += "waitingList ";
-        str += &self.waitingList.GetString();
-        str += "disableedList ";
-        str += &self.disabledList.GetString();
         return str;
     }
 }
@@ -138,7 +132,6 @@ impl EventPoll {
             }
 
             lists.readyList.Remove(&entry);
-            lists.waitingList.PushBack(&entry);
             entry.lock().state = PollEntryState::Waiting;
         }
 
@@ -172,7 +165,6 @@ impl EventPoll {
             let ready = file.Readiness(task, mask);
             if ready == 0 {
                 lists.readyList.Remove(&entry);
-                lists.waitingList.PushBack(&entry);
                 entry.lock().state = PollEntryState::Waiting;
                 continue;
             }
@@ -194,10 +186,10 @@ impl EventPoll {
             lists.readyList.Remove(&entry);
             let flags = entry.lock().flags;
             if flags & ONE_SHOT != 0 {
-                lists.disabledList.PushBack(&entry);
+                //lists.disabledList.PushBack(&entry);
                 entry.lock().state = PollEntryState::Disabled;
             } else if flags & EDGE_TRIGGERED != 0 {
-                lists.waitingList.PushBack(&entry);
+                //lists.waitingList.PushBack(&entry);
                 entry.lock().state = PollEntryState::Waiting;
             } else {
                 entry.lock().state = PollEntryState::Ready;
@@ -214,13 +206,6 @@ impl EventPoll {
     // notifications.
     pub fn InitEntryReadiness(&self, task: &Task, f: &File, entry: &PollEntry) {
         let mask = {
-            {
-                let mut lists = self.lists.lock();
-                lists.waitingList.PushBack(entry);
-            }
-
-            entry.lock().state = PollEntryState::Waiting;
-            
             // Register for event notifications.
             let waiter = entry.lock().waiter.clone();
             let mask = entry.lock().mask;
@@ -351,14 +336,7 @@ impl EventPoll {
 
         // Unregister the old mask and remove entry from the list it's in, so
         // readyCallback is guaranteed to not be called on this entry anymore.
-        let waiter = {
-            let mut entryLock = entry.lock();
-            entryLock.flags = flags;
-            entryLock.mask = mask;
-            entryLock.userData = data;
-            entryLock.waiter.clone()
-        };
-
+        let waiter = entry.lock().waiter.clone();
         file.EventUnregister(task, &waiter);
 
         // Remove entry from whatever list it's in. This ensure that no other
@@ -367,15 +345,18 @@ impl EventPoll {
         {
             let mut lists = self.lists.lock();
             let state = entry.lock().state;
-            let list = match state {
-                PollEntryState::Ready => &mut lists.readyList,
-                PollEntryState::Waiting => &mut lists.waitingList,
-                PollEntryState::Disabled => &mut lists.disabledList,
+            match state {
+                PollEntryState::Ready => lists.readyList.Remove(&entry),
+                PollEntryState::Waiting => (),
+                PollEntryState::Disabled => (),
             };
 
-            list.Remove(&entry);
+            let mut entryLock = entry.lock();
+            entryLock.flags = flags;
+            entryLock.mask = mask;
+            entryLock.userData = data;
+            entryLock.state = PollEntryState::Waiting;
         }
-        
 
         self.InitEntryReadiness(task, &file, &entry);
 
@@ -403,13 +384,11 @@ impl EventPoll {
         {
             let mut lists = self.lists.lock();
             let state = entry.lock().state;
-            let list = match state {
-                PollEntryState::Ready => &mut lists.readyList,
-                PollEntryState::Waiting => &mut lists.waitingList,
-                PollEntryState::Disabled => &mut lists.disabledList,
+            match state {
+                PollEntryState::Ready => lists.readyList.Remove(&entry),
+                PollEntryState::Waiting => (),
+                PollEntryState::Disabled => (),
             };
-
-            list.Remove(&entry);
         }
 
         // Remove file from map, and drop weak reference.
