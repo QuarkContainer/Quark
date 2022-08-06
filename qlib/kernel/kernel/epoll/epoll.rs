@@ -230,7 +230,7 @@ impl EventPoll {
         };
 
         // Check if the file happens to already be in a ready state.
-        let ready = f.Readiness(task, mask) & mask;
+        let ready = f.Readiness(task, mask);
         if ready != 0 {
             entry.CallBack();
         }
@@ -351,7 +351,14 @@ impl EventPoll {
 
         // Unregister the old mask and remove entry from the list it's in, so
         // readyCallback is guaranteed to not be called on this entry anymore.
-        let waiter = entry.lock().waiter.clone();
+        let waiter = {
+            let mut entryLock = entry.lock();
+            entryLock.flags = flags;
+            entryLock.mask = mask;
+            entryLock.userData = data;
+            entryLock.waiter.clone()
+        };
+
         file.EventUnregister(task, &waiter);
 
         // Remove entry from whatever list it's in. This ensure that no other
@@ -368,10 +375,7 @@ impl EventPoll {
 
             list.Remove(&entry);
         }
-
-        entry.lock().flags = flags;
-        entry.lock().mask = mask;
-        entry.lock().userData = data;
+        
 
         self.InitEntryReadiness(task, &file, &entry);
 
