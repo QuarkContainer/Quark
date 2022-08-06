@@ -471,14 +471,6 @@ impl FileOperations for UringSocketOperations {
                 return Ok(ret);
             }
             t => {
-                /*let size = IoVec::NumBytes(dsts);
-                let buf = DataBuff::New(size);
-                let iovs = buf.Iovs(size);
-                let ret = IORead(self.fd, &iovs)?;
-
-                // handle partial memcopy
-                task.CopyDataOutToIovs(&buf.buf[0..ret as usize], dsts, false)?;
-                return Ok(ret);*/
                 panic!("UringSocketOperations::ReadAt invalid type {:?}", t)
             }
         }
@@ -1168,7 +1160,25 @@ impl SockOperations for UringSocketOperations {
 
         let mut count = 0;
         let mut tmp;
+     
         let socketType = self.UringSocketType();
+        if dontwait {
+            match self.ReadFromBuf(task, socketType, iovs, peek) {
+                Err(e) => return Err(e),
+                Ok(count) => {
+                    let senderAddr = if senderRequested {
+                        let addr = self.remoteAddr.lock().as_ref().unwrap().clone();
+                        let l = addr.Len();
+                        Some((addr, l))
+                    } else {
+                        None
+                    };
+
+                    let (retFlags, controlData) = self.prepareControlMessage(controlDataLen);
+                    return Ok((count, retFlags, senderAddr, controlData))
+                }
+            }
+        }
 
         let general = task.blocker.generalEntry.clone();
         self.EventRegister(task, &general, EVENT_READ);
@@ -1269,11 +1279,18 @@ impl SockOperations for UringSocketOperations {
             panic!("Hostnet Socketbuf doesn't supprot MsgHdr");
         }
 
+        let dontwait = flags & MsgType::MSG_DONTWAIT != 0;
+
         let len = Iovs(srcs).Count();
         let mut count = 0;
         let mut srcs = srcs;
         let mut tmp;
         let socketType = self.UringSocketType();
+
+        if dontwait {
+            return self.WriteToBuf(task, socketType.clone(), srcs);
+        }
+
         let general = task.blocker.generalEntry.clone();
         self.EventRegister(task, &general, EVENT_WRITE);
         defer!(self.EventUnregister(task, &general));
