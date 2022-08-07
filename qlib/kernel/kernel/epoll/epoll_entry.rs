@@ -66,7 +66,6 @@ impl PollEntry {
         let state = self.lock().state;
         if state == PollEntryState::Waiting {
             self.SetReady();
-            lists.waitingList.Remove(self);
             lists.readyList.PushBack(self);
 
             epoll.queue.Notify(READABLE_EVENT);

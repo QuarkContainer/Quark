@@ -411,4 +411,16 @@ impl UringAsyncMgr {
     pub fn FreeSlot(&self, id: usize) {
         self.freeSlot(id);
     }
+
+    pub fn Clear(&self) {
+        loop {
+            let id = match self.freeids.lock().pop_front() {
+                None => break,
+                Some(id) => id
+            };
+            self.freeSlot(id as _);
+        }
+    }
+
+
 }
