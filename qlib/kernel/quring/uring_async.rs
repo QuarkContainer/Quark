@@ -65,6 +65,7 @@ pub enum AsyncOps {
     AsyncEpollCtl(AsyncEpollCtl),
     AsyncSend(AsyncSend),
     PollHostEpollWait(PollHostEpollWait),
+    AsyncConnect(AsyncConnect),
     None,
 }
 
@@ -93,6 +94,7 @@ impl AsyncOps {
             AsyncOps::AsyncEpollCtl(ref msg) => return msg.SEntry(),
             AsyncOps::AsyncSend(ref msg) => return msg.SEntry(),
             AsyncOps::PollHostEpollWait(ref msg) => return msg.SEntry(),
+            AsyncOps::AsyncConnect(ref msg) => return msg.SEntry(),
             AsyncOps::None => (),
         };
 
@@ -123,6 +125,7 @@ impl AsyncOps {
             AsyncOps::AsyncEpollCtl(ref mut msg) => msg.Process(result),
             AsyncOps::AsyncSend(ref mut msg) => msg.Process(result),
             AsyncOps::PollHostEpollWait(ref mut msg) => msg.Process(result),
+            AsyncOps::AsyncConnect(ref mut msg) => msg.Process(result),
             AsyncOps::None => {
                 //panic!("AsyncOps::None SEntry fail")
                 panic!("AsyncOps::None SEntry fail result {} id {}", result, id);
@@ -161,6 +164,7 @@ impl AsyncOps {
             AsyncOps::AsyncEpollCtl(_) => return 20,
             AsyncOps::AsyncSend(_) => return 21,
             AsyncOps::PollHostEpollWait(_) => return 22,
+            AsyncOps::AsyncConnect(_) => return 23,
             AsyncOps::None => (),
         };
 
@@ -195,16 +199,6 @@ impl UringAsyncMgr {
             ids: QMutex::new(ids),
             freeids: QMutex::new(VecDeque::new()),
         };
-    }
-
-    pub fn Clear(&self) {
-        loop {
-            let id = match self.freeids.lock().pop_front() {
-                None => break,
-                Some(id) => id
-            };
-            self.freeSlot(id as _);
-        }
     }
 
     pub fn Print(&self) {
@@ -1368,6 +1362,71 @@ impl UnblockBlockPollAdd {
             flags,
             wait: wait.clone(),
             data: data.clone(),
+        };
+    }
+}
+
+pub struct AsyncConnect {
+    pub fd: i32,
+    pub addr: TcpSockAddr,
+    pub len: u32,
+    pub socket: UringSocketOperationsWeak,
+}
+
+impl AsyncConnect {
+    pub fn SEntry(&self) -> squeue::Entry {
+        let op = opcode::Connect::new(types::Fd(self.fd), &self.addr as * const _, self.len);
+
+        if SHARESPACE.config.read().UringFixedFile {
+            return op.build().flags(squeue::Flags::FIXED_FILE);
+        } else {
+            return op.build();
+        }
+    }
+
+    pub fn Process(&mut self, result: i32) -> bool {
+        let socket = match self.socket.Upgrade() {
+            None => return false,
+            Some(s) => s,
+        };
+
+        socket.SetConnErrno(result);
+
+        if result == 0 {
+            socket.SetRemoteAddr(self.addr.data[0..self.len as _].to_vec()).expect(&format!("AsyncConnect fail {:?}", &self.addr.data[0..self.len as _]));
+            socket.PostConnect();
+        } else {
+            let socktype = UringSocketType::TCPInit;
+            *socket.socketType.lock() = socktype;
+        }
+
+        socket.queue
+            .Notify(EventMaskFromLinux((EVENT_OUT) as u32));
+
+        drop(socket);
+        return false;
+    }
+
+    pub fn New(fd: i32, socket: &UringSocketOperations, sockAddr: &[u8]) -> Self {
+        let mut addr = TcpSockAddr::default();
+        let len = if sockAddr.len() < addr.data.len() {
+            sockAddr.len()
+        } else {
+            addr.data.len()
+        };
+        
+        for i in 0..len {
+            addr.data[i] = sockAddr[i];
+        } 
+
+        let socktype = UringSocketType::TCPConnecting;
+        *socket.socketType.lock() = socktype;
+        socket.SetConnErrno(-SysErr::EINPROGRESS);
+        return Self {
+            fd,
+            addr: addr,
+            len: len as _,
+            socket: socket.Downgrade()
         };
     }
 }

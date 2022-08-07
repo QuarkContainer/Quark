@@ -311,6 +311,13 @@ impl QUring {
         return self.UCall(task, msg);
     }
 
+    pub fn AsyncConnect(fd: i32, socket: &UringSocketOperations, sockAddr: &[u8]) -> Result<()> {
+        let connectop = AsyncConnect::New(fd, socket, sockAddr);
+        IOURING.AUCall(AsyncOps::AsyncConnect(connectop));
+
+        return Ok(());
+    }
+
     pub fn AcceptInit(&self, fd: i32, queue: &Queue, acceptQueue: &AcceptQueue) -> Result<()> {
         let acceptOp = AsyncAccept::New(fd, queue.clone(), acceptQueue.clone());
         IOURING.AUCall(AsyncOps::AsyncAccept(acceptOp));

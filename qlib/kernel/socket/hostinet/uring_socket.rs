@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors / 2018 The gVisor Authors.
+// Copyright (c) 2021 Quark Container Authors / 2018 The gVisor& Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,7 +21,9 @@ use core::ops::Deref;
 use core::ptr;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicI64;
+use core::sync::atomic::AtomicI32;
 use core::sync::atomic::Ordering;
+use alloc::sync::Weak;
 
 use super::super::super::super::common::*;
 use super::super::super::super::linux::time::Timeval;
@@ -35,7 +37,6 @@ use super::super::super::fs::file::*;
 use super::super::super::fs::flags::*;
 use super::super::super::fs::host::hostinodeop::*;
 use super::super::super::guestfdnotifier::*;
-use super::super::super::kernel::async_wait::*;
 use super::super::super::kernel::fd_table::*;
 use super::super::super::kernel::kernel::GetKernel;
 use super::super::super::kernel::time::*;
@@ -95,6 +96,7 @@ pub fn newUringSocketFile(
 #[derive(Clone)]
 pub enum UringSocketType {
     TCPInit,                      // Init TCP Socket, no listen and no connect
+    TCPConnecting,                // Start connecting, content is connect
     TCPUringlServer(AcceptQueue), // Uring TCP Server socket, when socket start to listen
     Uring(Arc<SocketBuff>),
 }
@@ -103,6 +105,7 @@ impl fmt::Debug for UringSocketType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::TCPInit => write!(f, "UringSocketType::TCPInit"),
+            Self::TCPConnecting => write!(f, "UringSocketType::TCPConnecting"),
             Self::TCPUringlServer(_) => write!(f, "UringSocketType::TCPUringlServer"),
             Self::Uring(_) => write!(f, "UringSocketType::Uring"),
         }
@@ -118,21 +121,6 @@ impl UringSocketType {
             }
         }
     }
-
-    pub fn Connect(&self) -> Self {
-        match self {
-            Self::TCPInit => return self.ConnectType(),
-            // in bazel, there is UDP socket also call connect
-            _ => {
-                panic!("UringSocketType::Connect unexpect type {:?}", self)
-            }
-        }
-    }
-
-    fn ConnectType(&self) -> Self {
-        let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
-        return Self::Uring(socketBuf);
-    }
 }
 
 pub struct UringSocketOperationsIntern {
@@ -141,18 +129,45 @@ pub struct UringSocketOperationsIntern {
     pub family: i32,
     pub stype: i32,
     pub fd: i32,
+    pub connErrNo: AtomicI32,
     pub queue: Queue,
     pub remoteAddr: QMutex<Option<SockAddr>>,
-    pub socketBuf: QMutex<UringSocketType>,
+    pub socketType: QMutex<UringSocketType>,
     pub enableAsyncAccept: AtomicBool,
     pub hostops: HostInodeOp,
     passInq: AtomicBool,
 }
 
 #[derive(Clone)]
+pub struct UringSocketOperationsWeak(pub Weak<UringSocketOperationsIntern>);
+
+impl UringSocketOperationsWeak {
+    pub fn Upgrade(&self) -> Option<UringSocketOperations> {
+        let f = match self.0.upgrade() {
+            None => return None,
+            Some(f) => f,
+        };
+
+        return Some(UringSocketOperations(f));
+    }
+}
+
+#[derive(Clone)]
 pub struct UringSocketOperations(Arc<UringSocketOperationsIntern>);
 
 impl UringSocketOperations {
+    pub fn Downgrade(&self) -> UringSocketOperationsWeak {
+        return UringSocketOperationsWeak(Arc::downgrade(&self.0));
+    }
+
+    pub fn SetConnErrno(&self, errno: i32) {
+        self.connErrNo.store(errno, Ordering::Release);
+    }
+
+    pub fn ConnErrno(&self) -> i32 {
+        return self.connErrNo.load(Ordering::Acquire);
+    }
+
     pub fn New(
         family: i32,
         fd: i32,
@@ -186,9 +201,10 @@ impl UringSocketOperations {
             family,
             stype,
             fd,
+            connErrNo: AtomicI32::new(0),
             queue,
             remoteAddr: QMutex::new(addr),
-            socketBuf: QMutex::new(socketBuf.clone()),
+            socketType: QMutex::new(socketBuf.clone()),
             enableAsyncAccept: AtomicBool::new(false),
             hostops: hostops,
             passInq: AtomicBool::new(false),
@@ -239,52 +255,38 @@ impl UringSocketOperations {
         return self.enableAsyncAccept.load(Ordering::Relaxed);
     }
 
-    pub fn UringSocketType(&self) -> UringSocketType {
-        return self.socketBuf.lock().clone();
+    pub fn SocketType(&self) -> UringSocketType {
+        return self.socketType.lock().clone();
     }
 
     pub fn SocketBuf(&self) -> Arc<SocketBuff> {
-        match self.UringSocketType() {
+        match self.SocketType() {
             UringSocketType::Uring(b) => return b,
             _ => panic!(
                 "UringSocketType::None has no SockBuff {:?}",
-                self.UringSocketType()
+                self.SocketType()
             ),
         }
     }
 
     pub fn SocketBufEnabled(&self) -> bool {
-        match self.UringSocketType() {
+        match self.SocketType() {
             UringSocketType::Uring(_) => return true,
             _ => false,
         }
     }
 
     pub fn AcceptQueue(&self) -> Option<AcceptQueue> {
-        match self.UringSocketType() {
+        match self.SocketType() {
             UringSocketType::TCPUringlServer(q) => return Some(q.clone()),
             _ => return None,
         }
     }
 
-    pub fn PostConnect(&self, _task: &Task) {
-        let socketBuf;
-        socketBuf = self.UringSocketType().Connect();
-        *self.socketBuf.lock() = socketBuf.clone();
-
-        match socketBuf {
-            UringSocketType::Uring(buf) => {
-                assert!(
-                    (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
-                        && self.stype == SockType::SOCK_STREAM,
-                    "family {}, stype {}",
-                    self.family,
-                    self.stype
-                );
-                QUring::BufSockInit(self.fd, self.queue.clone(), buf, true).unwrap();
-            }
-            _ => (),
-        }
+    pub fn PostConnect(&self) {
+        let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
+        *self.socketType.lock() = UringSocketType::Uring(socketBuf.clone());
+        QUring::BufSockInit(self.fd, self.queue.clone(), socketBuf, true).unwrap();
     }
 
     pub fn Notify(&self, mask: EventMask) {
@@ -292,7 +294,7 @@ impl UringSocketOperations {
     }
 
     pub fn AcceptData(&self) -> Result<AcceptItem> {
-        let sockBufType = self.socketBuf.lock().clone();
+        let sockBufType = self.socketType.lock().clone();
         match sockBufType {
             UringSocketType::TCPUringlServer(ref queue) => {
                 return IOURING.Accept(self.fd, &self.queue, queue)
@@ -369,28 +371,22 @@ impl UringSocketOperations {
 pub const SIZEOF_SOCKADDR: usize = SocketSize::SIZEOF_SOCKADDR_INET6;
 
 impl Waitable for UringSocketOperations {
-    fn AsyncReadiness(&self, _task: &Task, mask: EventMask, wait: &MultiWait) -> Future<EventMask> {
-        if self.SocketBufEnabled() {
-            let future = Future::New(0 as EventMask);
-            let ret = self.SocketBuf().Events() & mask;
-            future.Set(Ok(ret));
-            //wait.Done();
-            return future;
-        };
-
-        let fd = self.fd;
-        let future = IOURING.UnblockPollAdd(fd, mask as u32, wait);
-        return future;
-    }
-
     fn Readiness(&self, _task: &Task, mask: EventMask) -> EventMask {
-        if self.SocketBufEnabled() {
-            return self.SocketBuf().Events() & mask;
-        };
-
-        match self.AcceptQueue() {
-            Some(q) => return q.lock().Events() & mask,
-            None => (),
+        match self.SocketType() {
+            UringSocketType::TCPConnecting => {
+                let errno = self.ConnErrno();
+                if errno != -SysErr::EINPROGRESS {
+                    return EVENT_OUT & mask;
+                }
+                return 0;
+            }
+            UringSocketType::TCPUringlServer(q) => {
+                return q.lock().Events() & mask;
+            }
+            UringSocketType::Uring(buf) => {
+                return buf.Events() & mask;
+            }
+            UringSocketType::TCPInit => ()
         }
 
         let fd = self.fd;
@@ -460,7 +456,7 @@ impl FileOperations for UringSocketOperations {
         _offset: i64,
         _blocking: bool,
     ) -> Result<i64> {
-        let sockBufType = self.socketBuf.lock().clone();
+        let sockBufType = self.socketType.lock().clone();
         match sockBufType {
             UringSocketType::Uring(socketBuf) => {
                 /*if self.SocketBuf().RClosed() {
@@ -470,8 +466,8 @@ impl FileOperations for UringSocketOperations {
                     QUring::RingFileRead(task, self.fd, self.queue.clone(), socketBuf, dsts, true, false)?;
                 return Ok(ret);
             }
-            t => {
-                panic!("UringSocketOperations::ReadAt invalid type {:?}", t)
+            _ => {
+                return Ok(0);
             }
         }
     }
@@ -489,10 +485,10 @@ impl FileOperations for UringSocketOperations {
             return Ok(0)
         }
 
-        let sockBufType = self.socketBuf.lock().clone();
+        let sockBufType = self.socketType.lock().clone();
         match sockBufType {
-            UringSocketType::Uring(socketBuf) => {
-                if self.SocketBuf().WClosed() {
+            UringSocketType::Uring(buf) => {
+                if buf.WClosed() {
                     return Err(Error::SysError(SysErr::ESPIPE));
                 }
 
@@ -500,18 +496,13 @@ impl FileOperations for UringSocketOperations {
                     task,
                     self.fd,
                     self.queue.clone(),
-                    socketBuf,
+                    buf,
                     srcs,
                     self,
                 );
             }
-            t => {
-                /*let size = IoVec::NumBytes(srcs);
-                let mut buf = DataBuff::New(size);
-                let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;
-                let iovs = buf.Iovs(len);
-                return IOWrite(self.fd, &iovs);*/
-                panic!("UringSocketOperations::WriteAt invalid type {:?}", t)
+            _ => {
+                return Err(Error::SysError(SysErr::EPIPE)); 
             }
         }
     }
@@ -611,83 +602,45 @@ impl FileOperations for UringSocketOperations {
 }
 
 impl SockOperations for UringSocketOperations {
-    fn Connect(&self, task: &Task, sockaddr: &[u8], _blocking: bool) -> Result<i64> {
-        let mut socketaddr = sockaddr;
-
-        if (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
-            && socketaddr.len() > SIZEOF_SOCKADDR
-        {
-            socketaddr = &socketaddr[..SIZEOF_SOCKADDR]
-        }
-
-        let res;
-        res = Kernel::HostSpace::IOConnect(
-            self.fd,
-            &socketaddr[0] as *const _ as u64,
-            socketaddr.len() as u32,
-        ) as i32;
-        if res == 0 {
-            self.SetRemoteAddr(socketaddr.to_vec())?;
-            if self.stype == SockType::SOCK_STREAM {
-                self.PostConnect(task);
-            }
-
-            return Ok(0);
-        }
-
-        //let blocking = true;
-
-        if res != 0 {
-            // when the connect waiting is interrupt, user will rerun connect and the IOConnect will return EALREADY
-            if -res != SysErr::EINPROGRESS && -res != SysErr::EALREADY {
-                return Err(Error::SysError(-res));
-            }
-
-            //todo: which one is more efficent?
-            let general = task.blocker.generalEntry.clone();
-            self.EventRegister(task, &general, EVENT_OUT);
-            defer!(self.EventUnregister(task, &general));
-
-            if self.Readiness(task, WRITEABLE_EVENT) == 0 {
-                match task.blocker.BlockWithMonoTimer(true, None) {
-                    Err(Error::ErrInterrupted) => {
-                        return Err(Error::SysError(SysErr::ERESTARTNOINTR));
-                    }
-                    Err(e) => {
-                        return Err(e);
-                    }
-                    _ => (),
+    fn Connect(&self, task: &Task, sockaddr: &[u8], blocking: bool) -> Result<i64> {
+        let sockType = self.SocketType();
+        match sockType {
+            UringSocketType::TCPInit => {
+                QUring::AsyncConnect(self.fd, self, sockaddr)?;
+                if !blocking {
+                    return Err(Error::SysError(SysErr::EINPROGRESS))
+                }
+            },
+            UringSocketType::TCPConnecting => {
+                if !blocking {
+                    return Err(Error::SysError(SysErr::EALREADY));
                 }
             }
-        }
-
-        let mut val: i32 = 0;
-        let len: i32 = 4;
-        let res = HostSpace::GetSockOpt(
-            self.fd,
-            LibcConst::SOL_SOCKET as i32,
-            LibcConst::SO_ERROR as i32,
-            &mut val as *mut i32 as u64,
-            &len as *const i32 as u64,
-        ) as i32;
-
-        if res < 0 {
-            return Err(Error::SysError(-res));
-        }
-
-        if val != 0 {
-            if val == SysErr::ECONNREFUSED {
-                return Err(Error::SysError(SysErr::EINPROGRESS));
+            UringSocketType::Uring(_) => {
+                return Err(Error::SysError(SysErr::EISCONN));
             }
-            return Err(Error::SysError(val as i32));
+            _ => {
+                return Err(Error::SysError(SysErr::EBADF));
+            }
         }
 
-        self.SetRemoteAddr(socketaddr.to_vec())?;
-        if self.stype == SockType::SOCK_STREAM {
-            self.PostConnect(task);
+        let general = task.blocker.generalEntry.clone();
+        self.EventRegister(task, &general, EVENT_OUT);
+        defer!(self.EventUnregister(task, &general));
+        if self.Readiness(task, WRITEABLE_EVENT) == 0 {
+            match task.blocker.BlockWithMonoTimer(true, None) {
+                Err(Error::ErrInterrupted) => {
+                    return Err(Error::SysError(SysErr::ERESTARTNOINTR));
+                }
+                Err(e) => {
+                    return Err(e);
+                }
+                _ => (),
+            }
         }
-
-        return Ok(0);
+        
+        let errno = self.ConnErrno();
+        return Err(Error::SysError(-errno));
     }
 
     fn Accept(
@@ -755,7 +708,7 @@ impl SockOperations for UringSocketOperations {
 
         let remoteAddr = &acceptItem.addr.data[0..len];
         //let sockBuf = self.ConfigUringSocketType();
-        let sockBuf = self.UringSocketType().Accept(acceptItem.sockBuf.clone());
+        let sockBuf = self.SocketType().Accept(acceptItem.sockBuf.clone());
 
         let file = newUringSocketFile(
             task,
@@ -808,7 +761,7 @@ impl SockOperations for UringSocketOperations {
 
         let len = if backlog <= 0 { 5 } else { backlog };
 
-        let socketBuf = self.socketBuf.lock().clone();
+        let socketBuf = self.socketType.lock().clone();
         let acceptQueue = match socketBuf {
             UringSocketType::TCPUringlServer(q) => {
                 q.lock().SetQueueLen(len as usize);
@@ -826,7 +779,7 @@ impl SockOperations for UringSocketOperations {
             return Err(Error::SysError(-res as i32));
         }
 
-        *self.socketBuf.lock() = {
+        *self.socketType.lock() = {
             if !self.AsyncAcceptEnabled() {
                 IOURING.AcceptInit(self.fd, &self.queue, &acceptQueue)?;
                 self.enableAsyncAccept.store(true, Ordering::Relaxed);
@@ -841,19 +794,25 @@ impl SockOperations for UringSocketOperations {
     fn Shutdown(&self, task: &Task, how: i32) -> Result<i64> {
         let how = how as u64;
 
-        if self.stype == SockType::SOCK_STREAM
-            && (how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR)
-        {
-            if self.SocketBuf().HasWriteData() {
-                self.SocketBuf().SetPendingWriteShutdown();
-                let general = task.blocker.generalEntry.clone();
-                self.EventRegister(task, &general, EVENT_PENDING_SHUTDOWN);
-                defer!(self.EventUnregister(task, &general));
+        let sockType = self.SocketType();
+        match &sockType {
+            UringSocketType::TCPInit => (),
+            UringSocketType::TCPConnecting => (),
+            UringSocketType::Uring(ref buf) => {
+                if how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR {
+                    if buf.HasWriteData() {
+                        buf.SetPendingWriteShutdown();
+                        let general = task.blocker.generalEntry.clone();
+                        self.EventRegister(task, &general, EVENT_PENDING_SHUTDOWN);
+                        defer!(self.EventUnregister(task, &general));
 
-                while self.SocketBuf().HasWriteData() {
-                    task.blocker.BlockGeneralOnly();
+                        while buf.HasWriteData() {
+                            task.blocker.BlockGeneralOnly();
+                        }
+                    }
                 }
             }
+            UringSocketType::TCPUringlServer(_) => (),
         }
 
         if how == LibcConst::SHUT_RD || how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR {
@@ -862,20 +821,22 @@ impl SockOperations for UringSocketOperations {
                 return Err(Error::SysError(-res as i32));
             }
 
-            if self.stype == SockType::SOCK_STREAM
-                && (how == LibcConst::SHUT_RD || how == LibcConst::SHUT_RDWR)
-            {
-                self.SocketBuf().SetRClosed();
-                self.queue.Notify(EventMaskFromLinux(EVENT_HUP as u32));
+            match &sockType {
+                UringSocketType::TCPInit => (),
+                UringSocketType::TCPConnecting => (),
+                UringSocketType::Uring(ref buf) => {
+                    if how == LibcConst::SHUT_RD || how == LibcConst::SHUT_RDWR {
+                        buf.SetRClosed();
+                    }
+
+                    if how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR {
+                        buf.SetWClosed();
+                    }
+                }
+                UringSocketType::TCPUringlServer(_) => (),
             }
 
-            if self.stype == SockType::SOCK_STREAM
-                && (how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR)
-            {
-                self.SocketBuf().SetWClosed();
-                self.queue.Notify(EventMaskFromLinux(EVENT_HUP as u32));
-            }
-
+            self.queue.Notify(EventMaskFromLinux(EVENT_HUP as u32));
             return Ok(res);
         }
 
@@ -955,6 +916,29 @@ impl SockOperations for UringSocketOperations {
 
         return Ok(optlen as i64)
         */
+
+        match level as u64 {
+            LibcConst::SOL_SOCKET => {
+                match name as u64 {
+                    LibcConst::SO_ERROR => {
+                        if opt.len() < 4{
+                            return Err(Error::SysError(SysErr::EINVAL));
+                        }
+                        error!("erro len is {}", opt.len());
+                        if self.ConnErrno() != 0 {
+                            let errno = self.ConnErrno();
+                            self.SetConnErrno(0);
+                            unsafe{
+                                *(&opt[0] as * const _ as u64 as * mut i32) = -errno;
+                            }
+                            return Ok(4)
+                        }
+                    }
+                    _ => (),
+                }
+            }
+            _ => (),
+        };
 
         let mut optLen = opt.len();
         let res = if optLen == 0 {
@@ -1114,6 +1098,17 @@ impl SockOperations for UringSocketOperations {
         senderRequested: bool,
         controlDataLen: usize,
     ) -> Result<(i64, i32, Option<(SockAddr, usize)>, Vec<u8>)> {
+        let sockBufType = self.socketType.lock().clone();
+        let buf = match sockBufType {
+            UringSocketType::Uring(buf) => {
+                buf
+            }
+            _ => {
+                //return Err(Error::SysError(SysErr::ECONNREFUSED));
+                return Err(Error::SysError(SysErr::ENOTCONN));
+            }
+        };
+
         //todo: we don't support MSG_ERRQUEUE
         if flags & MsgType::MSG_ERRQUEUE != 0 {
             // Pretend we have an empty error queue.
@@ -1136,7 +1131,7 @@ impl SockOperations for UringSocketOperations {
         let trunc = (flags & MsgType::MSG_TRUNC) != 0;
         let peek = (flags & MsgType::MSG_PEEK) != 0;
 
-        if self.SocketBuf().RClosed() {
+        if buf.RClosed() {
             let senderAddr = if senderRequested {
                 let addr = self.remoteAddr.lock().as_ref().unwrap().clone();
                 let l = addr.Len();
@@ -1161,7 +1156,7 @@ impl SockOperations for UringSocketOperations {
         let mut count = 0;
         let mut tmp;
      
-        let socketType = self.UringSocketType();
+        let socketType = self.SocketType();
         if dontwait {
             match self.ReadFromBuf(task, socketType, iovs, peek) {
                 Err(e) => return Err(e),
@@ -1268,16 +1263,23 @@ impl SockOperations for UringSocketOperations {
         task: &Task,
         srcs: &[IoVec],
         flags: i32,
-        msgHdr: &mut MsgHdr,
+        _msgHdr: &mut MsgHdr,
         deadline: Option<Time>,
     ) -> Result<i64> {
+        match self.SocketType() {
+            UringSocketType::Uring(_) => (),
+            _ => {
+                return Err(Error::SysError(SysErr::EPIPE)); 
+            }
+        }
+
         if self.SocketBuf().WClosed() {
             return Err(Error::SysError(SysErr::EPIPE))
         }
 
-        if msgHdr.msgName != 0 || msgHdr.msgControl != 0 {
-            panic!("Hostnet Socketbuf doesn't supprot MsgHdr");
-        }
+        /*if msgHdr.msgName != 0 || msgHdr.msgControl != 0 {
+            error!("Hostnet Socketbuf doesn't support MsgHdr");
+        }*/
 
         let dontwait = flags & MsgType::MSG_DONTWAIT != 0;
 
@@ -1285,7 +1287,7 @@ impl SockOperations for UringSocketOperations {
         let mut count = 0;
         let mut srcs = srcs;
         let mut tmp;
-        let socketType = self.UringSocketType();
+        let socketType = self.SocketType();
 
         if dontwait {
             return self.WriteToBuf(task, socketType.clone(), srcs);

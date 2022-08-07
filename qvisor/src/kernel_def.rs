@@ -313,4 +313,6 @@ impl UringAsyncMgr {
     pub fn FreeSlot(&self, id: usize) {
         self.freeids.lock().push_back(id as _);
     }
+
+    pub fn Clear(&self) {}
 }
