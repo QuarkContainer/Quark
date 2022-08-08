@@ -56,6 +56,7 @@ extern crate xmas_elf;
 #[macro_use]
 extern crate bitflags;
 extern crate x86;
+extern crate hashbrown;
 
 #[macro_use]
 mod print;
@@ -260,7 +261,6 @@ pub extern "C" fn syscall_handler(
     //let tid = currTask.Thread().lock().id;
     let mut tid = 0;
     let mut pid = 0;
-    let startTime = TSC.Rdtsc();
 
     let llevel = SHARESPACE.config.read().LogLevel;
     if llevel == LogLevel::Complex {
@@ -279,6 +279,7 @@ pub extern "C" fn syscall_handler(
 
     //currTask.SaveFp();
 
+    let startTime = TSC.Rdtsc();
     let enterAppTimestamp = CPULocal::Myself().ResetEnterAppTimestamp() as i64;
     let worktime = Tsc::Scale(startTime - enterAppTimestamp) * 1000; // the thread has used up time slot
     if worktime > CLOCK_TICK {
@@ -308,7 +309,8 @@ pub extern "C" fn syscall_handler(
 
     MainRun(currTask, state);
 
-    //error!("syscall_handler: {}", ::AllocatorPrint(10));
+    currTask.RestoreFp();
+   //error!("syscall_handler: {}", ::AllocatorPrint(10));
     if llevel == LogLevel::Simple || llevel == LogLevel::Complex {
         let gap = if self::SHARESPACE.config.read().PerfDebug {
             TSC.Rdtsc() - startTime
@@ -331,8 +333,7 @@ pub extern "C" fn syscall_handler(
     //currTask.PerfGofrom(PerfType::Kernel);
     //currTask.PerfGoto(PerfType::User);
 
-    currTask.RestoreFp();
-    currTask.Check();
+    //currTask.Check();
     if SHARESPACE.config.read().KernelPagetable {
         currTask.SwitchPageTable();
     }

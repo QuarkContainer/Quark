@@ -309,38 +309,22 @@ impl UringSocketOperations {
     pub fn ReadFromBuf(
         &self,
         task: &Task,
-        sockBufType: UringSocketType,
+        buf: Arc<SocketBuff>,
         dsts: &mut [IoVec],
         peek: bool,
     ) -> Result<i64> {
-        match sockBufType {
-            UringSocketType::Uring(socketBuf) => {
-                let ret =
-                    QUring::RingFileRead(task, self.fd, self.queue.clone(), socketBuf, dsts, true, peek)?;
-                return Ok(ret);
-            }
-            t => {
-                panic!("ReadFromBuf get type {:?}", t);
-            }
-        }
+        let ret =QUring::RingFileRead(task, self.fd, self.queue.clone(), buf, dsts, true, peek)?;
+        return Ok(ret);
     }
 
     pub fn WriteToBuf(
         &self,
         task: &Task,
-        sockBufType: UringSocketType,
+        buf: Arc<SocketBuff>,
         srcs: &[IoVec],
     ) -> Result<i64> {
-        match sockBufType {
-            UringSocketType::Uring(socketBuf) => {
-                let ret =
-                    QUring::SocketSend(task, self.fd, self.queue.clone(), socketBuf, srcs, self)?;
-                return Ok(ret);
-            }
-            t => {
-                panic!("ReadFromBuf get type {:?}", t);
-            }
-        }
+        let ret = QUring::SocketSend(task, self.fd, self.queue.clone(), buf, srcs, self)?;
+        return Ok(ret);
     }
 }
 
@@ -1156,9 +1140,8 @@ impl SockOperations for UringSocketOperations {
         let mut count = 0;
         let mut tmp;
      
-        let socketType = self.SocketType();
         if dontwait {
-            match self.ReadFromBuf(task, socketType, iovs, peek) {
+            match self.ReadFromBuf(task, buf, iovs, peek) {
                 Err(e) => return Err(e),
                 Ok(count) => {
                     let senderAddr = if senderRequested {
@@ -1181,7 +1164,7 @@ impl SockOperations for UringSocketOperations {
 
         'main: loop {
             loop {
-                match self.ReadFromBuf(task, socketType.clone(), iovs, peek) {
+                match self.ReadFromBuf(task, buf.clone(), iovs, peek) {
                     Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
                         if count > 0 {
                             if dontwait || !waitall {
@@ -1266,14 +1249,14 @@ impl SockOperations for UringSocketOperations {
         _msgHdr: &mut MsgHdr,
         deadline: Option<Time>,
     ) -> Result<i64> {
-        match self.SocketType() {
-            UringSocketType::Uring(_) => (),
+        let buf = match self.SocketType() {
+            UringSocketType::Uring(buf) => buf,
             _ => {
                 return Err(Error::SysError(SysErr::EPIPE)); 
             }
-        }
+        };
 
-        if self.SocketBuf().WClosed() {
+        if buf.WClosed() {
             return Err(Error::SysError(SysErr::EPIPE))
         }
 
@@ -1287,10 +1270,9 @@ impl SockOperations for UringSocketOperations {
         let mut count = 0;
         let mut srcs = srcs;
         let mut tmp;
-        let socketType = self.SocketType();
-
+        
         if dontwait {
-            return self.WriteToBuf(task, socketType.clone(), srcs);
+            return self.WriteToBuf(task, buf, srcs);
         }
 
         let general = task.blocker.generalEntry.clone();
@@ -1299,7 +1281,7 @@ impl SockOperations for UringSocketOperations {
 
         loop {
             loop {
-                match self.WriteToBuf(task, socketType.clone(), srcs) {
+                match self.WriteToBuf(task, buf.clone(), srcs) {
                     Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
                         if flags & MsgType::MSG_DONTWAIT != 0 {
                             if count > 0 {
