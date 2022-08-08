@@ -66,6 +66,8 @@ pub struct CtrlInfo {
     pub isK8s: bool,
 
     pub isCMConnected: Mutex<bool>,
+
+    pub localIp: Mutex<u32>,
 }
 
 impl Default for CtrlInfo {
@@ -127,6 +129,7 @@ impl Default for CtrlInfo {
             epoll_fd: Mutex::new(0),
             isK8s: isK8s,
             isCMConnected: Mutex::new(false),
+            localIp: Mutex::new(0),
         }
     }
 }
@@ -169,13 +172,23 @@ impl CtrlInfo{
         self.isCMConnected.lock().clone()
     }
 
+    pub fn localIp_set(&self, value: u32) {
+        let mut localIp = self.localIp.lock();
+        *localIp = value;
+    }
+
+    pub fn localIp_get(&self) -> u32 {
+        self.localIp.lock().clone()
+    }
+    
+
     pub fn get_node_ips_for_connecting(&self) -> HashSet<u32> {
         let mut set: HashSet<u32> = HashSet::new();
         let timestamp = self.timestamp_get();
         for (_, node) in self.nodes.lock().iter() {
-            debug!("get_node_ips_for_connecting, node: {:?} node.timestamp: {} timestamp: {}", node, node.timestamp, timestamp);
-            if node.timestamp < timestamp {
-                debug!("get_node_ips_for_connecting, node.ipAddr: {}", node.ipAddr);
+            error!("get_node_ips_for_connecting, node: {:?} node.timestamp: {} timestamp: {}", node, node.timestamp, timestamp);
+            if node.timestamp <= timestamp {
+                error!("get_node_ips_for_connecting, node.ipAddr: {}", node.ipAddr);
                 set.insert(node.ipAddr);
             }
         }

@@ -643,7 +643,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // unix domain socket
 
-    let mut unix_sock_path = "/home/rdma_srv";
+    let mut unix_sock_path = "/var/quarkrdma/rdma_srv";
     if args.len() > 1 {
         unix_sock_path = args.get(1).unwrap(); //"/tmp/rdma_srv1";
     }
@@ -760,7 +760,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     let peerIpAddrU32 = cliaddr.sin_addr.s_addr;
                     // RDMA_CTLINFO.fds_insert(stream_fd, Srv_FdType::TCPSocketConnect(peerIpAddrU32));
-                    fds.insert(stream_fd, Srv_FdType::TCPSocketConnect(peerIpAddrU32));
+                    
                     let controlRegionId =
                         RDMA_SRV.controlBufIdMgr.lock().AllocId().unwrap() as usize; // TODO: should handle no space issue.
                     let sockBuf = Arc::new(SocketBuff::InitWithShareMemory(
@@ -820,7 +820,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             .insert(qp.qpNum(), rdmaChannel.clone());
                     }
 
-                    RDMA_SRV.conns.lock().insert(peerIpAddrU32, rdmaConn);
+                    println!("Server before insert, peerIpAddrU32: {}, fd: {}", peerIpAddrU32, rdmaConn.fd);
+                    if peerIpAddrU32 == RDMA_CTLINFO.localIp_get() {
+                        // RDMA_SRV.localRDMAConn.lock().insert(0, rdmaConn);
+                        RDMA_SRV.conns.lock().insert(0, rdmaConn);
+                        fds.insert(stream_fd, Srv_FdType::TCPSocketConnect(0));
+                    }
+                    else {
+                        RDMA_SRV.conns.lock().insert(peerIpAddrU32, rdmaConn);
+                        fds.insert(stream_fd, Srv_FdType::TCPSocketConnect(peerIpAddrU32));
+                    }
+                    
                     epoll_add(epoll_fd, stream_fd, read_write_event(stream_fd as u64))?;
                     println!("add stream fd");
                 }
@@ -922,6 +932,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let node = RDMA_CTLINFO.node_get(nodeEvent.ip);
                     if node.hostname.eq_ignore_ascii_case(&hostname) {
                         RDMA_CTLINFO.timestamp_set(node.timestamp);
+                        RDMA_CTLINFO.localIp_set(node.ipAddr);
                     }
                     std::mem::drop(fds);
                     SetupConnections();
@@ -1034,13 +1045,13 @@ fn SetupConnection(ip: &u32) {
     unblock_fd(sock_fd);
     RDMA_CTLINFO.fds_insert(sock_fd, Srv_FdType::TCPSocketConnect(node.ipAddr));
     let epoll_fd = RDMA_CTLINFO.epoll_fd_get();
-    println!("epoll_fd: {}, sock_fd: {}", epoll_fd, sock_fd);
+    println!("SetupConnection::epoll_fd: {}, sock_fd: {}, node.ipAddr: {}", epoll_fd, sock_fd, node.ipAddr);
     match epoll_add(epoll_fd, sock_fd, read_write_event(sock_fd as u64)) {
         Err(e) => {
             println!("epoll_add failed: {:?}", e);
         }
         _ => {
-            println!("epoll_add succeed");
+            println!("epoll_add succeed, fd: {}", sock_fd);
         }
     }
 
@@ -1100,9 +1111,9 @@ fn SetupConnection(ip: &u32) {
             .insert(qp.qpNum(), rdmaChannel.clone());
     }
 
-    println!("before insert");
+    println!("Client before insert, node.ipAddr: {}, fd: {}", node.ipAddr, rdmaConn.fd);
     RDMA_SRV.conns.lock().insert(node.ipAddr, rdmaConn.clone());
-    println!("after insert");
+    println!("Client after insert, node.ipAddr: {}, fd: {}", node.ipAddr, rdmaConn.fd);
     unsafe {
         let serv_addr: libc::sockaddr_in = libc::sockaddr_in {
             sin_family: libc::AF_INET as u16,

@@ -128,7 +128,7 @@ impl RDMAChannelIntern {
         remoteId: u32,
         wrId: u64,
     ) -> Result<()> {
-        // println!("RDMAChannelIntern::RDMAWriteImm 1, localAddr: {}, remoteAddr: {}, writeCount: {}, localId: {}, remoteId: {}, lkey: {}, rkey: {}", localAddr, remoteAddr, writeCount, self.localId, remoteId, self.lkey, rkey);
+        println!("RDMAChannelIntern::RDMAWriteImm 1, localAddr: {}, remoteAddr: {}, writeCount: {}, localId: {}, remoteId: {}, lkey: {}, rkey: {}", localAddr, remoteAddr, writeCount, self.localId, remoteId, self.lkey, rkey);
         self.conn.RDMAWriteImm(
             localAddr, remoteAddr, writeCount, wrId, remoteId, self.lkey, rkey,
         )?;
@@ -387,7 +387,7 @@ impl RDMAChannelIntern {
         mut remoteInfo: MutexGuard<ChannelRDMAInfo>,
         remoteRecvRequestCount: &mut MutexGuard<u32>,
     ) {
-        // println!("RDMASendLocked 1");
+        println!("RDMASendLocked 1");
         let buf = self.sockBuf.writeBuf.lock();
         // println!("RDMASendLocked 3");
         let (addr, totalLen) = buf.GetDataBuf();
@@ -409,7 +409,7 @@ impl RDMAChannelIntern {
                 }
             }
 
-            // println!("***********len = {}", totalLen);
+            println!("***********len = {}", totalLen);
 
             if len != 0 {
                 self.RDMAWriteImm(
@@ -430,7 +430,7 @@ impl RDMAChannelIntern {
                 remoteInfo.freespace -= len as u32;
                 remoteInfo.offset = (remoteInfo.offset + len as u32) % remoteInfo.rlen;
                 remoteInfo.sending = true;
-                // println!("RDMASendLocked::5, remoteInfo: {:?}", remoteInfo);
+                println!("RDMASendLocked::5, remoteInfo: {:?}", remoteInfo);
                 //error!("RDMASendLocked::2, writeCount: {}, readCount: {}", len, readCount);
             } else {
                 **remoteRecvRequestCount += 1;

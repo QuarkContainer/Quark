@@ -692,7 +692,7 @@ impl RDMAContext {
             RDMA_SRV.ProcessRDMAWriteImmFinish(wc.wr_id as u32, wc.qp_num);
         } else if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RECV_RDMA_WITH_IMM {
             let imm = unsafe { wc.imm_data_invalidated_rkey_union.imm_data };
-            // println!("ProcessWC. received len: {}", wc.byte_len);
+            error!("ProcessWC. received len: {}, qpNum: {}", wc.byte_len, wc.qp_num);
             let immData = ImmData(imm);
             // debug!(
             //     "ProcessWC::2, recv len:{}, writelen: {}, status: {}, id: 0x{:x}",
