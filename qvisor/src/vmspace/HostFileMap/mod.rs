@@ -19,7 +19,6 @@ pub mod socket_info;
 
 use libc::*;
 use spin::Mutex;
-use std::collections::BTreeMap;
 use core::sync::atomic::AtomicI32;
 
 use crate::qlib::fileinfo::*;
@@ -141,13 +140,11 @@ impl IOMgr {
 
 impl FdTbl {
     pub fn New() -> Self {
-        let mut res = Self {
-            map: BTreeMap::new(),
-        };
+        let mut res = Self::default();
 
-        res.map.insert(0, FdInfo::NewFile(0));
-        res.map.insert(1, FdInfo::NewFile(1));
-        res.map.insert(2, FdInfo::NewFile(2));
+        res.Insert(0, FdInfo::NewFile(0));
+        res.Insert(1, FdInfo::NewFile(1));
+        res.Insert(2, FdInfo::NewFile(2));
 
         return res;
     }
@@ -155,14 +152,14 @@ impl FdTbl {
     pub fn AddFile(&mut self, osfd: i32) -> Result<FdInfo> {
         let fdInfo = FdInfo::NewFile(osfd);
 
-        self.map.insert(osfd, fdInfo.clone());
+        self.Insert(osfd, fdInfo.clone());
         return Ok(fdInfo);
     }
 
     pub fn AddSocket(&mut self, osfd: i32) -> Result<FdInfo> {
         let fdInfo = FdInfo::NewSocket(osfd);
 
-        self.map.insert(osfd, fdInfo.clone());
+        self.Insert(osfd, fdInfo.clone());
         return Ok(fdInfo);
     }
 }

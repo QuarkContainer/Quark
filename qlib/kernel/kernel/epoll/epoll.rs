@@ -13,13 +13,15 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
-use alloc::collections::btree_map::BTreeMap;
+//use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::any::Any;
 use core::ops::Deref;
+use hashbrown::HashMap;
+use core::hash::BuildHasherDefault;
 
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
@@ -79,14 +81,45 @@ impl PollLists {
     }
 }
 
+#[derive(Default)]
+pub struct RawHasher {
+    state: u64,
+}
+
+impl core::hash::Hasher for RawHasher {
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.state = self.state.rotate_left(8) ^ u64::from(byte);
+        }
+    }
+
+    fn write_u64(&mut self, i: u64) {
+        self.state = i;
+    }
+    
+    fn finish(&self) -> u64 {
+        self.state
+    }
+}
+
 // EventPoll holds all the state associated with an event poll object, that is,
 // collection of files to observe and their current state.
-#[derive(Default)]
 pub struct EventPollInternal {
     pub queue: Queue,
-    pub files: QMutex<BTreeMap<FileIdentifier, PollEntry>>,
+    pub files: QMutex<HashMap<FileIdentifier, PollEntry, BuildHasherDefault<RawHasher>>>,
 
     pub lists: QMutex<PollLists>,
+}
+
+impl Default for EventPollInternal {
+    fn default() -> Self {
+        let hash_map = HashMap::<FileIdentifier, PollEntry, BuildHasherDefault<RawHasher>>::default();
+        return Self { 
+            queue: Queue::default(), 
+            files: QMutex::new(hash_map), 
+            lists: Default::default() 
+        }
+    }
 }
 
 // NewEventPoll allocates and initializes a new event poll object.
@@ -142,8 +175,7 @@ impl EventPoll {
     pub fn ReadEvents(&self, task: &Task, max: i32) -> Vec<Event> {
         let mut lists = self.lists.lock();
 
-        let mut local = PollEntryList::default();
-        let mut ret = Vec::new();
+        let mut ret = Vec::with_capacity(16);
         let mut it = lists.readyList.Front();
         while it.is_some() && ret.len() < max as usize {
             let entry = it.unwrap();
@@ -183,19 +215,16 @@ impl EventPoll {
             // list so that its readiness can be checked the next time
             // around; however, we must move it to the end of the list so
             // that other events can be delivered as well.
-            lists.readyList.Remove(&entry);
             let flags = entry.lock().flags;
             if flags & ONE_SHOT != 0 {
+                lists.readyList.Remove(&entry);
                 entry.lock().state = PollEntryState::Disabled;
             } else if flags & EDGE_TRIGGERED != 0 {
+                lists.readyList.Remove(&entry);
                 entry.lock().state = PollEntryState::Waiting;
-            } else {
-                entry.lock().state = PollEntryState::Ready;
-                local.PushBack(&entry);
             }
         }
 
-        lists.readyList.PushBackList(&mut local);
         return ret;
     }
 
@@ -366,9 +395,9 @@ impl EventPoll {
         let mut files = self.files.lock();
 
         // Fail if the file doesn't have an entry.
-        let entry = match files.get(&id) {
+        let entry = match files.remove(&id) {
             None => return Err(Error::SysError(SysErr::ENOENT)),
-            Some(e) => e.clone(),
+            Some(e) => e,
         };
 
         // Unregister the old mask and remove entry from the list it's in, so
@@ -388,9 +417,6 @@ impl EventPoll {
                 PollEntryState::Disabled => (),
             };
         }
-
-        // Remove file from map, and drop weak reference.
-        files.remove(&id);
 
         return Ok(());
     }
