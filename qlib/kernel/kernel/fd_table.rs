@@ -17,6 +17,7 @@ use alloc::collections::btree_map::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::ops::Bound::*;
+use hashbrown::HashMap;
 
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
@@ -61,7 +62,7 @@ pub struct Descriptor {
 pub struct GapMgr {
     pub range: Range,
     pub map: BTreeMap<u64, u64>,
-    //store the gaps, key: gapStart, val: gapLen
+    //store the gaps, key: gapEnd, val: gapLen
 }
 
 impl GapMgr {
@@ -73,6 +74,14 @@ impl GapMgr {
             range: range,
             map,
         };
+    }
+
+    pub fn LastGap(&self) -> Option<Range> {
+        for (end, len) in self.map.iter().rev() {
+            return Some(Range::New(*end - *len + 1, *len));
+        }
+
+        return None;
     }
 
     pub fn Fork(&self) -> Self {
@@ -260,6 +269,8 @@ impl FDTable {
             fds.push(*fd)
         }
 
+        fds.sort();
+
         return fds;
     }
 
@@ -270,15 +281,10 @@ impl FDTable {
 
     pub fn RemoveRange(&self, startfd: i32, endfd: i32) -> Vec<File> {
         let mut intern = self.data.lock();
-        let mut ids = Vec::new();
-        for (fd, _) in intern.descTbl.range((Included(&startfd), Excluded(&endfd))) {
-            ids.push(*fd)
-        };
-
         let mut ret = Vec::new();
-        for fd in ids {
+        for fd in startfd..endfd {
             match intern.Remove(self.id, fd) {
-                None => error!("impossible in RemoveRange"),
+                None => (),
                 Some(f)=> ret.push(f)
             }
         }
@@ -292,8 +298,11 @@ impl FDTable {
             return Err(Error::SysError(SysErr::EINVAL));
         }
 
-        for (_, d) in intern.descTbl.range_mut((Included(&startfd), Excluded(&endfd))) {
-            d.flags = flags.clone();
+        for fd in startfd..endfd {
+            match intern.SetFlags(fd, &flags) {
+                Err(_) => (),
+                Ok(())=> (),
+            }
         }
 
         return Ok(())
@@ -335,11 +344,18 @@ impl FDTable {
 
     pub fn GetLastFd(&self) -> i32 {
         let intern = self.data.lock();
-        for (i, _) in intern.descTbl.iter().rev() {
-            return *i;
-        }
+        
+        let lastGap = intern.gaps.LastGap();
+        match lastGap {
+            None => return 0,
+            Some(r) => {
+                if r.Start() > 0 {
+                    return (r.Start() - 1) as _;
+                }
 
-        return 0;
+                return 0;
+            }
+        }
     }
 
     pub fn Get(&self, fd: i32) -> Result<(File, FDFlags)> {
@@ -445,7 +461,7 @@ impl FDTable {
         let intern = self.data.lock();
         let mut tbl = FDTableInternal {
             gaps: intern.gaps.clone(),
-            descTbl: BTreeMap::new(),
+            descTbl: HashMap::new(),
         };
 
         for (fd, file) in &intern.descTbl {
@@ -476,7 +492,7 @@ impl FDTable {
 
 pub struct FDTableInternal {
     pub gaps: GapMgr,
-    pub descTbl: BTreeMap<i32, Descriptor>,
+    pub descTbl: HashMap<i32, Descriptor>,
 }
 
 impl Default for FDTableInternal {
@@ -489,7 +505,7 @@ impl FDTableInternal {
     pub fn New() -> Self {
         return Self {
             gaps: GapMgr::New(0, i32::MAX as u64),
-            descTbl: BTreeMap::new(),
+            descTbl: HashMap::new(),
         };
     }
 
