@@ -102,17 +102,10 @@ impl FdInfo {
 
 #[derive(Default, Debug, Clone)]
 pub struct FdTbl {
-    pub map: BTreeMap<i32, FdInfo>,
+    map: BTreeMap<i32, FdInfo>,
 }
 
 impl FdTbl {
-    /*pub fn AddRDMAContext(&mut self, osfd: i32) -> Result<FdInfo> {
-        let fdInfo = FdInfo::NewRDMAContext(osfd);
-
-        self.map.insert(osfd, fdInfo.clone());
-        return Ok(fdInfo)
-    }*/
-
     pub fn Get(&self, fd: i32) -> Option<FdInfo> {
         match self.map.get(&fd) {
             None => None,
@@ -127,6 +120,10 @@ impl FdTbl {
 
     pub fn Contains(&self, fd: i32) -> bool {
         return self.map.contains_key(&fd);
+    }
+
+    pub fn Insert(&mut self, fd: i32, fdInfo: FdInfo) {
+        self.map.insert(fd, fdInfo);
     }
 }
 
