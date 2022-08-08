@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use core::fmt;
 use core::ops::Deref;
@@ -100,30 +99,53 @@ impl FdInfo {
     }
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct FdTbl {
-    map: BTreeMap<i32, FdInfo>,
+    map: Vec<Option<FdInfo>>,
+}
+
+impl Default for FdTbl {
+    fn default() -> Self {
+        let mut map = Vec::with_capacity(32);
+        map.resize(32, None);
+        return Self {
+            map: map
+        }
+    }
 }
 
 impl FdTbl {
     pub fn Get(&self, fd: i32) -> Option<FdInfo> {
-        match self.map.get(&fd) {
-            None => None,
-            Some(fdInfo) => Some(fdInfo.clone()),
+        let fd = fd as usize;
+        if fd > self.map.len() {
+            return None;
         }
+        return self.map[fd].clone()
     }
 
     pub fn Remove(&mut self, fd: i32) -> Option<FdInfo> {
-        //self.gaps.Free(fd as u64, 1);
-        self.map.remove(&fd)
+        let fd = fd as usize;
+        if fd > self.map.len() {
+            return None;
+        }
+        return self.map[fd].take();
     }
 
     pub fn Contains(&self, fd: i32) -> bool {
-        return self.map.contains_key(&fd);
+        let fd = fd as usize;
+        if fd > self.map.len() {
+            return false;
+        }
+        return self.map[fd].is_some();
     }
 
     pub fn Insert(&mut self, fd: i32, fdInfo: FdInfo) {
-        self.map.insert(fd, fdInfo);
+        let fd = fd as usize;
+        if fd >= self.map.len() {
+            let count = (fd + 1).next_power_of_two();
+            self.map.resize(count, None);
+        }
+        self.map[fd] = Some(fdInfo)
     }
 }
 
