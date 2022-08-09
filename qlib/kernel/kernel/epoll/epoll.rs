@@ -13,13 +13,15 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
-use alloc::collections::btree_map::BTreeMap;
+//use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::any::Any;
 use core::ops::Deref;
+use hashbrown::HashMap;
+use core::hash::BuildHasherDefault;
 
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
@@ -69,30 +71,55 @@ pub struct Event {
 #[derive(Default)]
 pub struct PollLists {
     pub readyList: PollEntryList,
-    pub waitingList: PollEntryList,
-    pub disabledList: PollEntryList,
 }
 
 impl PollLists {
     pub fn ToString(&self) -> String {
         let mut str = "ready: ".to_string();
         str += &self.readyList.GetString();
-        str += "waitingList ";
-        str += &self.waitingList.GetString();
-        str += "disableedList ";
-        str += &self.disabledList.GetString();
         return str;
+    }
+}
+
+#[derive(Default)]
+pub struct RawHasher {
+    state: u64,
+}
+
+impl core::hash::Hasher for RawHasher {
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.state = self.state.rotate_left(8) ^ u64::from(byte);
+        }
+    }
+
+    fn write_u64(&mut self, i: u64) {
+        self.state = i;
+    }
+    
+    fn finish(&self) -> u64 {
+        self.state
     }
 }
 
 // EventPoll holds all the state associated with an event poll object, that is,
 // collection of files to observe and their current state.
-#[derive(Default)]
 pub struct EventPollInternal {
     pub queue: Queue,
-    pub files: QMutex<BTreeMap<FileIdentifier, PollEntry>>,
+    pub files: QMutex<HashMap<FileIdentifier, PollEntry, BuildHasherDefault<RawHasher>>>,
 
     pub lists: QMutex<PollLists>,
+}
+
+impl Default for EventPollInternal {
+    fn default() -> Self {
+        let hash_map = HashMap::<FileIdentifier, PollEntry, BuildHasherDefault<RawHasher>>::default();
+        return Self { 
+            queue: Queue::default(), 
+            files: QMutex::new(hash_map), 
+            lists: Default::default() 
+        }
+    }
 }
 
 // NewEventPoll allocates and initializes a new event poll object.
@@ -121,7 +148,7 @@ impl EventPoll {
             let entry = it.unwrap();
             it = entry.Next();
 
-            let file = entry.lock().id.File.clone();
+            let file = entry.lock().file.clone();
             let file = match file.Upgrade() {
                 None => {
                     // the file has been dropped, just remove it
@@ -138,7 +165,6 @@ impl EventPoll {
             }
 
             lists.readyList.Remove(&entry);
-            lists.waitingList.PushBack(&entry);
             entry.lock().state = PollEntryState::Waiting;
         }
 
@@ -149,8 +175,7 @@ impl EventPoll {
     pub fn ReadEvents(&self, task: &Task, max: i32) -> Vec<Event> {
         let mut lists = self.lists.lock();
 
-        let mut local = PollEntryList::default();
-        let mut ret = Vec::new();
+        let mut ret = Vec::with_capacity(16);
         let mut it = lists.readyList.Front();
         while it.is_some() && ret.len() < max as usize {
             let entry = it.unwrap();
@@ -159,8 +184,8 @@ impl EventPoll {
             // Check the entry's readiness. It it's not really ready, we
             // just put it back in the waiting list and move on to the next
             // entry.
-            let id = entry.lock().id.clone();
-            let file = match id.File.Upgrade() {
+            let file = entry.lock().file.clone();
+            let file = match file.Upgrade() {
                 None => {
                     lists.readyList.Remove(&entry);
                     continue;
@@ -172,7 +197,6 @@ impl EventPoll {
             let ready = file.Readiness(task, mask);
             if ready == 0 {
                 lists.readyList.Remove(&entry);
-                lists.waitingList.PushBack(&entry);
                 entry.lock().state = PollEntryState::Waiting;
                 continue;
             }
@@ -191,50 +215,34 @@ impl EventPoll {
             // list so that its readiness can be checked the next time
             // around; however, we must move it to the end of the list so
             // that other events can be delivered as well.
-            lists.readyList.Remove(&entry);
             let flags = entry.lock().flags;
             if flags & ONE_SHOT != 0 {
-                lists.disabledList.PushBack(&entry);
+                lists.readyList.Remove(&entry);
                 entry.lock().state = PollEntryState::Disabled;
             } else if flags & EDGE_TRIGGERED != 0 {
-                lists.waitingList.PushBack(&entry);
+                lists.readyList.Remove(&entry);
                 entry.lock().state = PollEntryState::Waiting;
-            } else {
-                entry.lock().state = PollEntryState::Ready;
-                local.PushBack(&entry);
             }
         }
 
-        lists.readyList.PushBackList(&mut local);
         return ret;
     }
 
     // initEntryReadiness initializes the entry's state with regards to its
     // readiness by placing it in the appropriate list and registering for
     // notifications.
-    pub fn InitEntryReadiness(&self, task: &Task, entry: &PollEntry) {
-        let (f, mask) = {
-            {
-                let mut lists = self.lists.lock();
-                lists.waitingList.PushBack(entry);
-                entry.lock().state = PollEntryState::Waiting;
-            }
-
-            let f = match entry.lock().id.File.Upgrade() {
-                None => return,
-                Some(f) => f,
-            };
-
+    pub fn InitEntryReadiness(&self, task: &Task, f: &File, entry: &PollEntry) {
+        let mask = {
             // Register for event notifications.
             let waiter = entry.lock().waiter.clone();
             let mask = entry.lock().mask;
 
             f.EventRegister(task, &waiter, mask);
-            (f, mask)
+            mask
         };
 
         // Check if the file happens to already be in a ready state.
-        let ready = f.Readiness(task, mask) & mask;
+        let ready = f.Readiness(task, mask);
         if ready != 0 {
             entry.CallBack();
         }
@@ -250,8 +258,9 @@ impl EventPoll {
         }
 
         let files = self.files.lock();
-        for (id, _) in files.iter() {
-            let file = match id.File.Upgrade() {
+        for (_, entry) in files.iter() {
+            let file = entry.lock().file.Upgrade();
+            let file = match file {
                 None => continue,
                 Some(f) => f,
             };
@@ -274,17 +283,13 @@ impl EventPoll {
     pub fn AddEntry(
         &self,
         task: &Task,
-        id: FileIdentifier,
+        fd: i32,
+        file: File,
         flags: EntryFlags,
         mask: EventMask,
         data: [i32; 2],
     ) -> Result<()> {
-        // Acquire cycle check lock if another event poll is being added.
-        let file = match id.File.Upgrade() {
-            None => return Err(Error::SysError(SysErr::ENOENT)),
-            Some(f) => f,
-        };
-
+        let id = file.UniqueId();
         let fops = file.FileOp.clone();
         let ep = fops.as_any().downcast_ref::<EventPoll>();
 
@@ -318,8 +323,8 @@ impl EventPoll {
         let entryInternal = PollEntryInternal {
             next: None,
             prev: None,
-
-            id: id.clone(),
+            id: fd,
+            file: file.Downgrade(),
             userData: data,
             waiter: WaitEntry::New(),
             mask: mask,
@@ -334,7 +339,7 @@ impl EventPoll {
         files.insert(id, entry.clone());
 
         // Initialize the readiness state of the new entry.
-        self.InitEntryReadiness(task, &entry);
+        self.InitEntryReadiness(task, &file, &entry);
 
         return Ok(());
     }
@@ -342,32 +347,24 @@ impl EventPoll {
     pub fn UpdateEntry(
         &self,
         task: &Task,
-        id: &FileIdentifier,
+        file: File,
         flags: EntryFlags,
         mask: EventMask,
         data: [i32; 2],
     ) -> Result<()> {
+        let id = file.UniqueId();
         let files = self.files.lock();
 
         // Fail if the file doesn't have an entry.
-        let entry = match files.get(id) {
+        let entry = match files.get(&id) {
             None => return Err(Error::SysError(SysErr::ENOENT)),
             Some(e) => e.clone(),
         };
 
         // Unregister the old mask and remove entry from the list it's in, so
         // readyCallback is guaranteed to not be called on this entry anymore.
-        let file = entry.lock().id.File.Upgrade();
         let waiter = entry.lock().waiter.clone();
-        match file {
-            None => {
-                self.RemoveEntry(task, id)?;
-                return Err(Error::SysError(SysErr::ENOENT));
-            }
-            Some(f) => {
-                f.EventUnregister(task, &waiter);
-            }
-        }
+        file.EventUnregister(task, &waiter);
 
         // Remove entry from whatever list it's in. This ensure that no other
         // threads have access to this entry as the only way left to find it
@@ -375,41 +372,38 @@ impl EventPoll {
         {
             let mut lists = self.lists.lock();
             let state = entry.lock().state;
-            let list = match state {
-                PollEntryState::Ready => &mut lists.readyList,
-                PollEntryState::Waiting => &mut lists.waitingList,
-                PollEntryState::Disabled => &mut lists.disabledList,
+            match state {
+                PollEntryState::Ready => lists.readyList.Remove(&entry),
+                PollEntryState::Waiting => (),
+                PollEntryState::Disabled => (),
             };
 
-            list.Remove(&entry);
+            let mut entryLock = entry.lock();
+            entryLock.flags = flags;
+            entryLock.mask = mask;
+            entryLock.userData = data;
+            entryLock.state = PollEntryState::Waiting;
         }
 
-        entry.lock().flags = flags;
-        entry.lock().mask = mask;
-        entry.lock().userData = data;
-
-        self.InitEntryReadiness(task, &entry);
+        self.InitEntryReadiness(task, &file, &entry);
 
         return Ok(());
     }
 
-    pub fn RemoveEntry(&self, task: &Task, id: &FileIdentifier) -> Result<()> {
+    pub fn RemoveEntry(&self, task: &Task, file: File) -> Result<()> {
+        let id = file.UniqueId();
         let mut files = self.files.lock();
 
         // Fail if the file doesn't have an entry.
-        let entry = match files.get(id) {
+        let entry = match files.remove(&id) {
             None => return Err(Error::SysError(SysErr::ENOENT)),
-            Some(e) => e.clone(),
+            Some(e) => e,
         };
 
         // Unregister the old mask and remove entry from the list it's in, so
         // readyCallback is guaranteed to not be called on this entry anymore.
-        let file = entry.lock().id.File.Upgrade();
         let waiter = entry.lock().waiter.clone();
-        match file {
-            None => (),
-            Some(f) => f.EventUnregister(task, &waiter),
-        }
+        file.EventUnregister(task, &waiter);
 
         // Remove entry from whatever list it's in. This ensure that no other
         // threads have access to this entry as the only way left to find it
@@ -417,17 +411,12 @@ impl EventPoll {
         {
             let mut lists = self.lists.lock();
             let state = entry.lock().state;
-            let list = match state {
-                PollEntryState::Ready => &mut lists.readyList,
-                PollEntryState::Waiting => &mut lists.waitingList,
-                PollEntryState::Disabled => &mut lists.disabledList,
+            match state {
+                PollEntryState::Ready => lists.readyList.Remove(&entry),
+                PollEntryState::Waiting => (),
+                PollEntryState::Disabled => (),
             };
-
-            list.Remove(&entry);
         }
-
-        // Remove file from map, and drop weak reference.
-        files.remove(id);
 
         return Ok(());
     }
@@ -438,7 +427,7 @@ impl EventPoll {
         let files = self.files.lock();
 
         for (_, entry) in files.iter() {
-            let file = entry.lock().id.File.Upgrade();
+            let file = entry.lock().file.Upgrade();
             let waiter = entry.lock().waiter.clone();
 
             match file {
@@ -451,11 +440,12 @@ impl EventPoll {
 
 impl Drop for EventPollInternal {
     fn drop(&mut self) {
-        for (id, entry) in self.files.lock().iter() {
+        for (_, entry) in self.files.lock().iter() {
             let waiter = entry.lock().waiter.clone();
 
             let task = Task::Current();
-            match id.File.Upgrade() {
+            let file = entry.lock().file.Upgrade();
+            match file {
                 None => (),
                 Some(f) => f.EventUnregister(task, &waiter),
             }

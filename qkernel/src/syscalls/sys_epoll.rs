@@ -75,10 +75,8 @@ pub fn AddEpoll(
 
     return ep.AddEntry(
         task,
-        FileIdentifier {
-            File: file.Downgrade(),
-            Fd: fd,
-        },
+        fd,
+        file,
         flags,
         mask,
         userData,
@@ -100,14 +98,6 @@ pub fn UpdateEpoll(
     // Get the target file id.
     let file = task.GetFile(fd)?;
 
-    /*let inode = file.Dirent.Inode();
-
-    //the fd doesn't support epoll
-    let inodeOp = inode.lock().InodeOp.clone();
-    if !inodeOp.WouldBlock() {
-        return Err(Error::SysError(SysErr::EINVAL))
-    }*/
-
     let fops = epollfile.FileOp.clone();
     let ep = match fops.as_any().downcast_ref::<EventPoll>() {
         None => return Err(Error::SysError(SysErr::EBADF)),
@@ -116,10 +106,7 @@ pub fn UpdateEpoll(
 
     return ep.UpdateEntry(
         task,
-        &FileIdentifier {
-            File: file.Downgrade(),
-            Fd: fd,
-        },
+        file,
         flags,
         mask,
         userData,
@@ -133,14 +120,6 @@ pub fn RemoveEpoll(task: &Task, epfd: i32, fd: i32) -> Result<()> {
     // Get the target file id.
     let file = task.GetFile(fd)?;
 
-    /*let inode = file.Dirent.Inode();
-
-    //the fd doesn't support epoll
-    let inodeOp = inode.lock().InodeOp.clone();
-    if !inodeOp.WouldBlock() {
-        return Err(Error::SysError(SysErr::EINVAL))
-    }*/
-
     let fops = epollfile.FileOp.clone();
     let ep = match fops.as_any().downcast_ref::<EventPoll>() {
         None => return Err(Error::SysError(SysErr::EBADF)),
@@ -150,10 +129,7 @@ pub fn RemoveEpoll(task: &Task, epfd: i32, fd: i32) -> Result<()> {
     // Try to remove the entry.
     return ep.RemoveEntry(
         task,
-        &FileIdentifier {
-            File: file.Downgrade(),
-            Fd: fd,
-        },
+        file,
     );
 }
 
@@ -178,11 +154,6 @@ pub fn WaitEpoll(task: &Task, epfd: i32, max: i32, timeout: i64) -> Result<Vec<E
     if timeout == 0 {
         super::super::taskMgr::Yield(); // yield vcpu to avoid live lock
         return Ok(r);
-    }
-
-    if timeout == 0 {
-        super::super::taskMgr::Yield(); // yield vcpu to avoid live lock
-        return Ok(r)
     }
 
     // We'll have to wait. Set up the timer if a timeout was specified and

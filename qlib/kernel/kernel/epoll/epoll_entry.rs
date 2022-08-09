@@ -26,31 +26,7 @@ pub type EntryFlags = i32;
 pub const ONE_SHOT: EntryFlags = 1 << 0;
 pub const EDGE_TRIGGERED: EntryFlags = 1 << 1;
 
-#[derive(Clone)]
-pub struct FileIdentifier {
-    pub File: FileWeak,
-    pub Fd: i32,
-}
-
-impl Ord for FileIdentifier {
-    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        self.File.Upgrade().cmp(&other.File.Upgrade())
-    }
-}
-
-impl PartialOrd for FileIdentifier {
-    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl PartialEq for FileIdentifier {
-    fn eq(&self, other: &Self) -> bool {
-        return self.File.Upgrade() == other.File.Upgrade();
-    }
-}
-
-impl Eq for FileIdentifier {}
+pub type FileIdentifier = u64;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum PollEntryState {
@@ -63,7 +39,8 @@ pub struct PollEntryInternal {
     pub next: Option<PollEntry>,
     pub prev: Option<PollEntry>,
 
-    pub id: FileIdentifier,
+    pub id: i32,
+    pub file: FileWeak,
     pub userData: [i32; 2],
     pub waiter: WaitEntry,
     pub mask: EventMask,
@@ -89,7 +66,6 @@ impl PollEntry {
         let state = self.lock().state;
         if state == PollEntryState::Waiting {
             self.SetReady();
-            lists.waitingList.Remove(self);
             lists.readyList.PushBack(self);
 
             epoll.queue.Notify(READABLE_EVENT);
@@ -108,7 +84,7 @@ impl PollEntry {
     }
 
     pub fn Id(&self) -> i32 {
-        return self.lock().id.Fd;
+        return self.lock().id;
     }
 
     pub fn Reset(&self) {

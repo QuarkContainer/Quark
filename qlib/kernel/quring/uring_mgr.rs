@@ -34,7 +34,7 @@ use super::super::super::vcpu_mgr::*;
 use super::super::kernel::async_wait::*;
 use super::super::kernel::waiter::qlock::*;
 use super::super::kernel::waiter::*;
-use super::super::socket::hostinet::socket::*;
+use super::super::socket::hostinet::uring_socket::*;
 use super::super::Kernel::HostSpace;
 use super::super::IOURING;
 use super::super::SHARESPACE;
@@ -311,6 +311,13 @@ impl QUring {
         return self.UCall(task, msg);
     }
 
+    pub fn AsyncConnect(fd: i32, socket: &UringSocketOperations, sockAddr: &[u8]) -> Result<()> {
+        let connectop = AsyncConnect::New(fd, socket, sockAddr);
+        IOURING.AUCall(AsyncOps::AsyncConnect(connectop));
+
+        return Ok(());
+    }
+
     pub fn AcceptInit(&self, fd: i32, queue: &Queue, acceptQueue: &AcceptQueue) -> Result<()> {
         let acceptOp = AsyncAccept::New(fd, queue.clone(), acceptQueue.clone());
         IOURING.AUCall(AsyncOps::AsyncAccept(acceptOp));
@@ -367,7 +374,7 @@ impl QUring {
         queue: Queue,
         buf: Arc<SocketBuff>,
         srcs: &[IoVec],
-        ops: &SocketOperations,
+        ops: &UringSocketOperations,
     ) -> Result<i64> {
         let (count, writeBuf) = buf.Writev(task, srcs)?;
 

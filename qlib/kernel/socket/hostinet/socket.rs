@@ -60,6 +60,7 @@ use super::super::socket::*;
 use super::super::unix::transport::unix::*;
 use super::hostsocket::*;
 use super::rdma_socket::*;
+use super::uring_socket::*;
 
 lazy_static! {
     pub static ref DUMMY_HOST_SOCKET: DummyHostSocket = DummyHostSocket::New();
@@ -433,11 +434,11 @@ impl SocketOperations {
         srcs: &[IoVec],
     ) -> Result<i64> {
         match sockBufType {
-            SocketBufType::Uring(socketBuf) => {
+            /*SocketBufType::Uring(socketBuf) => {
                 let ret =
                     QUring::SocketSend(task, self.fd, self.queue.clone(), socketBuf, srcs, self)?;
                 return Ok(ret);
-            }
+            }*/
             SocketBufType::RDMA(socketBuf) => {
                 let ret = RDMA::Write(task, self.fd, socketBuf, srcs);
                 return ret;
@@ -734,7 +735,7 @@ impl FileOperations for SocketOperations {
 
         let sockBufType = self.socketBuf.lock().clone();
         match sockBufType {
-            SocketBufType::Uring(socketBuf) => {
+            /*SocketBufType::Uring(socketBuf) => {
                 if self.SocketBuf().WClosed() {
                     return Err(Error::SysError(SysErr::ESPIPE));
                 }
@@ -747,7 +748,7 @@ impl FileOperations for SocketOperations {
                     srcs,
                     self,
                 );
-            }
+            }*/
             SocketBufType::RDMA(socketBuf) => {
                 let ret = RDMA::Write(task, self.fd, socketBuf, srcs)?;
                 return Ok(ret);
@@ -1395,7 +1396,8 @@ impl SockOperations for SocketOperations {
 
         // TCP_INQ is bound to buffer implementation
         if (level as u64) == LibcConst::SOL_TCP && (name as u64) == LibcConst::TCP_INQ {
-            let val = unsafe { *(&opt[0] as *const _ as u64 as *const i32) };
+            let val : i32 = task.CopyInObj::<i32>(&opt[0] as *const _ as u64)?;
+
             if val == 1 {
                 self.passInq.store(true, Ordering::Relaxed);
             } else {
@@ -1559,8 +1561,6 @@ impl SockOperations for SocketOperations {
         let peek = (flags & MsgType::MSG_PEEK) != 0;
 
         if self.SocketBufEnabled() {
-            let controlDataLen = 0;
-
             if self.SocketBuf().RClosed() {
                 let senderAddr = if senderRequested {
                     let addr = self.remoteAddr.lock().as_ref().unwrap().clone();
@@ -2016,13 +2016,24 @@ impl Provider for SocketProvider {
         // error!("SocketProvider::Socket, fd: {}", fd);
 
         let file;
-        if SHARESPACE.config.read().UringIO
-            && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
-            && stype == SockType::SOCK_STREAM
-        {
+        if SHARESPACE.config.read().EnableRDMA {
             let socketType = SocketBufType::TCPInit;
 
             file = newSocketFile(
+                task,
+                self.family,
+                fd,
+                stype & SocketType::SOCK_TYPE_MASK,
+                nonblocking,
+                socketType,
+                None,
+            )?;
+        } else if SHARESPACE.config.read().UringIO
+            && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
+            && stype == SockType::SOCK_STREAM {
+            let socketType = UringSocketType::TCPInit;
+
+            file = newUringSocketFile(
                 task,
                 self.family,
                 fd,
