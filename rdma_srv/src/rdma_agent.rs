@@ -336,7 +336,6 @@ impl RDMAAgent {
                 );
             }
             RDMAReqMsg::RDMAListenUsingPodId(msg) => {
-                // let podId = String::from_utf8(msg.podId.to_vec()).unwrap();
                 let mut podId: [u8; 64] = [0; 64];
                 if RDMA_CTLINFO.isK8s {
                     podId = msg.podId;
@@ -368,36 +367,6 @@ impl RDMAAgent {
                         status: SrvEndPointStatus::Listening,
                     },
                 );
-                // let containerIds = RDMA_CTLINFO.containerids.lock();
-
-                // let ipAddrOption = containerIds.get(&podId);
-                // match ipAddrOption {
-                //     Some(ipAddr) => {
-                //         let ipAddrle = *ipAddr;
-                //         let ipAddr = ipAddrle.to_be();
-                //         RDMA_SRV.srvEndPoints.lock().insert(
-                //             Endpoint {
-                //                 ipAddr,
-                //                 port: msg.port,
-                //             },
-                //             SrvEndpoint {
-                //                 agentId: self.id,
-                //                 sockfd: msg.sockfd,
-                //                 endpoint: Endpoint {
-                //                     ipAddr,
-                //                     port: msg.port,
-                //                 },
-                //                 status: SrvEndPointStatus::Listening,
-                //             },
-                //         );
-                //     }
-                //     None => {
-                //         debug!(
-                //             "RDMAReqMsg::RDMAListenUsingPodId, podId: {} not found!!!",
-                //             podId
-                //         );
-                //     }
-                // }
             }
             RDMAReqMsg::RDMAConnect(msg) => {
                 //TODOCtrlPlane: need get nodeIp from dstIpAddr

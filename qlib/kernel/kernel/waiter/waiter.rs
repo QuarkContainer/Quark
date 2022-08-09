@@ -97,7 +97,7 @@ impl Waiter {
         //    b.taskId, b.state, id, b.mask);
         if b.state == WaitState::Waiting && (b.bitmap & b.mask) != 0 {
             b.state = WaitState::Running;
-            //info!("Waiter::trigger 2 taskid is {:x?}, stat is {:?}, id is {}, bitmap is {:x}",
+            // error!("Waiter::trigger 2 taskid is {:x?}, stat is {:?}, id is {}, bitmap is {:x}",
             //    b.taskId, b.state, id, b.bitmap);
             if id == Self::TIMER_WAITID {
                 SHARESPACE.scheduler.Schedule(b.taskId, false);
