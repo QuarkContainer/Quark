@@ -264,8 +264,6 @@ impl RDMASvcClient {
                         {
                             Some(sockFdVal) => *sockFdVal,
                             None => {
-                                // debug!("RDMARespMsg::RDMAConnect, Can't find sockfd based on rdmaId: {}", response.sockfd);
-                                // break;
                                 panic!("RDMARespMsg::RDMAConnect, Can't find sockfd based on rdmaId: {}", response.sockfd);
                             }
                         };
@@ -310,21 +308,18 @@ impl RDMASvcClient {
                                     .lock()
                                     .insert(response.channelId, response.sockfd);
 
-                                // error!("RDMARespMsg::RDMAConnect, 1 sockfd: {}", sockfd);
                                 *GlobalIOMgr()
                                     .GetByHost(sockfd)
                                     .unwrap()
                                     .lock()
                                     .sockInfo
                                     .lock() = SockInfo::RDMADataSocket(dataSock);
-                                    // error!("RDMARespMsg::RDMAConnect, 2 sockfd: {}", sockfd);
                                 GlobalIOMgr()
                                     .GetByHost(sockfd)
                                     .unwrap()
                                     .lock()
                                     .waitInfo
                                     .Notify(EVENT_OUT);
-                                    // error!("RDMARespMsg::RDMAConnect, 3 sockfd: {}", sockfd);
                             }
                             _ => {
                                 panic!("SockInfo is not correct type: {:?}", sockInfo);

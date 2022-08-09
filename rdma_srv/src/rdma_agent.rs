@@ -176,7 +176,6 @@ impl RDMAAgent {
         connectRequest: &ConnectRequest,
         rdmaConn: RDMAConn,
     ) -> RDMAChannel {
-        error!("CreateServerRDMAChannel, fd: {}", rdmaConn.fd);
         let channelId = RDMA_SRV.channelIdMgr.lock().AllocId().unwrap();
         let ioBufIndex = self.ioBufIdMgr.lock().AllocId().unwrap() as usize;
         let shareRegion = self.shareRegion.lock();
@@ -209,7 +208,6 @@ impl RDMAAgent {
         rdmaConn: RDMAConn,
         // shareRegion: &ClientShareRegion,
     ) -> RDMAChannel {
-        error!("CreateClientRDMAChannel, fd: {}", rdmaConn.fd);
         let channelId = RDMA_SRV.channelIdMgr.lock().AllocId().unwrap();
         let ioBufIndex = self.ioBufIdMgr.lock().AllocId().unwrap() as usize;
         let shareRegion = self.shareRegion.lock();
@@ -338,7 +336,6 @@ impl RDMAAgent {
                 );
             }
             RDMAReqMsg::RDMAListenUsingPodId(msg) => {
-                
                 let mut podId: [u8; 64] = [0; 64];
                 if RDMA_CTLINFO.isK8s {
                     podId = msg.podId;
@@ -370,38 +367,6 @@ impl RDMAAgent {
                         status: SrvEndPointStatus::Listening,
                     },
                 );
-                let podIdStr = String::from_utf8(podId.to_vec()).unwrap();
-                error!("RDMAReqMsg::RDMAListenUsingPodId, listen at podId: {}, port: {}", podIdStr, msg.port);
-                // let containerIds = RDMA_CTLINFO.containerids.lock();
-
-                // let ipAddrOption = containerIds.get(&podId);
-                // match ipAddrOption {
-                //     Some(ipAddr) => {
-                //         let ipAddrle = *ipAddr;
-                //         let ipAddr = ipAddrle.to_be();
-                //         RDMA_SRV.srvEndPoints.lock().insert(
-                //             Endpoint {
-                //                 ipAddr,
-                //                 port: msg.port,
-                //             },
-                //             SrvEndpoint {
-                //                 agentId: self.id,
-                //                 sockfd: msg.sockfd,
-                //                 endpoint: Endpoint {
-                //                     ipAddr,
-                //                     port: msg.port,
-                //                 },
-                //                 status: SrvEndPointStatus::Listening,
-                //             },
-                //         );
-                //     }
-                //     None => {
-                //         debug!(
-                //             "RDMAReqMsg::RDMAListenUsingPodId, podId: {} not found!!!",
-                //             podId
-                //         );
-                //     }
-                // }
             }
             RDMAReqMsg::RDMAConnect(msg) => {
                 //TODOCtrlPlane: need get nodeIp from dstIpAddr
@@ -417,7 +382,6 @@ impl RDMAAgent {
                             .insert(rdmaChannel.localId, rdmaChannel.clone());
 
                         let connectReqeust = rdmaChannel.CreateConnectRequest(msg.sockfd);
-                        error!("RDMAReqMsg::RDMAConnect, rdmaChannelId: {}", rdmaChannel.localId);
                         rdmaConn
                             .ctrlChan
                             .lock()

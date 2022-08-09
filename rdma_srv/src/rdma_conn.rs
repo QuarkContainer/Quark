@@ -104,7 +104,7 @@ impl Deref for RDMAConn {
 
 impl Drop for RDMAConn {
     fn drop(&mut self) {
-        error!("RDMAConn::drop, fd: {}", self.fd);
+        // TODO: need check reousrce release
     }
 }
 
@@ -122,7 +122,6 @@ impl RDMAConn {
             rkey,
             recvRequestCount: RECV_REQUEST_COUNT,
         };
-        error!("RDMAConn::New, qpNum: {}", qp.qpNum());
 
         //TODO: may find a better place to update controlChannels.
         //RDMA_SRV.controlChannels.lock().insert(qp.qpNum(), rdmaChannel.clone());
@@ -192,7 +191,7 @@ impl RDMAConn {
             SocketState::WaitingForRemoteMeta => {
                 match self.RecvRemoteRDMAInfo() {
                     Ok(()) => {
-                        println!("Received remote RDMA Info");
+                        // println!("Received remote RDMA Info");
                     }
                     _ => return,
                 }
@@ -218,7 +217,7 @@ impl RDMAConn {
                 self.SetReady();
             }
             SocketState::Ready => {
-                println!("Read::Ready, fd:{} ", self.fd);
+                // println!("Read::Ready, fd:{} ", self.fd);
             }
             _ => {
                 panic!(
@@ -232,21 +231,19 @@ impl RDMAConn {
     pub fn Write(&self) {
         match self.SocketState() {
             SocketState::Init => {
-                println!("local RDMAInfo 1, fd: {}", self.fd);
                 self.SendLocalRDMAInfo().unwrap();
-                println!("local RDMAInfo sent, fd: {}", self.fd);
                 self.SetSocketState(SocketState::WaitingForRemoteMeta);
             }
             SocketState::WaitingForRemoteMeta => {
-                println!("Write::1, fd:{} ", self.fd);
+                // println!("Write::1, fd:{} ", self.fd);
                 //TODO: server side received 4(W) first and 5 (R|W) afterwards. Need more investigation to see why it's different.
             }
             SocketState::WaitingForRemoteReady => {
-                println!("Write::2, fd:{} ", self.fd);
+                // println!("Write::2, fd:{} ", self.fd);
                 //TODO: server side received 4(W) first and 5 (R|W) afterwards. Need more investigation to see why it's different.
             }
             SocketState::Ready => {
-                println!("Write::Ready, fd:{} ", self.fd);
+                // println!("Write::Ready, fd:{} ", self.fd);
             }
             _ => {
                 panic!(
@@ -285,7 +282,6 @@ impl RDMAConn {
 
         if ret < 0 {
             let errno = errno::errno().0;
-            println!("SendLocalRDMAInfo, err: {}", errno);
             return Err(Error::SysError(errno));
         }
 
@@ -337,7 +333,6 @@ impl RDMAConn {
             .unwrap()
             .UpdateRemoteRDMAInfo(0, data.raddr, data.rlen, data.rkey);
         *self.remoteRecvRequestCount.lock() = data.recvRequestCount;
-        error!("RDMAConn::RecvRemoteRDMAInfo, qpNum: {}, remoteRecvRequestCount: {}", *self.remoteRecvRequestCount.lock(), self.qps[0].qpNum());
         *self.remoteRDMAInfo.lock() = data;
 
         return Ok(());
@@ -388,14 +383,14 @@ impl RDMAConn {
     }
 
     pub fn Notify(&self, eventmask: EventMask) {
-        println!("RDMAConn::Notify 1, fd:{} ", self.fd);
+        // println!("RDMAConn::Notify 1, fd:{} ", self.fd);
         if eventmask & EVENT_WRITE != 0 {
-            println!("RDMAConn::Notify 2, fd:{} ", self.fd);
+            // println!("RDMAConn::Notify 2, fd:{} ", self.fd);
             self.Write();
         }
 
         if eventmask & EVENT_READ != 0 {
-            println!("RDMAConn::Notify 3, fd:{} ", self.fd);
+            // println!("RDMAConn::Notify 3, fd:{} ", self.fd);
             self.Read();
         }
     }
@@ -411,9 +406,7 @@ impl RDMAConn {
         lkey: u32,
         rkey: u32,
     ) -> Result<()> {
-        error!("RDMAConn::RDMAWriteImm, 1 self.qps[0].qpNum(): {}", self.qps[0].qpNum());
         self.qps[0].WriteImm(wrId, localAddr, length as u32, lkey, remoteAddr, rkey, imm)?;
-        error!("RDMAConn::RDMAWriteImm, 2 self.qps[0].qpNum(): {}", self.qps[0].qpNum());
         return Ok(());
     }
 
@@ -423,10 +416,10 @@ impl RDMAConn {
         remoteInfo: MutexGuard<ChannelRDMAInfo>,
     ) {
         let mut remoteRecvRequestCount = self.remoteRecvRequestCount.lock();
-        println!(
-            "RDMAConn::RDMAWrite, channelId: {}, *remoteRecvRequestCount: {}",
-            rdmaChannel.localId, *remoteRecvRequestCount
-        );
+        // println!(
+        //     "RDMAConn::RDMAWrite, channelId: {}, *remoteRecvRequestCount: {}",
+        //     rdmaChannel.localId, *remoteRecvRequestCount
+        // );
         if *remoteRecvRequestCount > 0 {
             *remoteRecvRequestCount -= 1;
             // println!(

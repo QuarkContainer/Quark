@@ -250,7 +250,6 @@ pub fn SysEpollCreate(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
 // EpollCtl implements the epoll_ctl(2) linux syscall.
 pub fn SysEpollCtl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
-    error!("SysEpollCtl, 1, args: {:?}", args);
     let epfd = args.arg0 as i32;
     let op = args.arg1 as i32;
     let fd = args.arg2 as i32;

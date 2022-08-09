@@ -133,8 +133,6 @@ pub struct RDMASrv {
     pub controlBufIdMgr: Mutex<IdMgr>,
     pub keys: Vec<[u32; 2]>,
     pub memoryRegion: MemoryRegion,
-
-    pub localRDMAConn: Mutex<HashMap<u32, RDMAConn>>,
 }
 
 impl Drop for RDMASrv {
@@ -255,7 +253,6 @@ impl RDMASrv {
             controlChannels2: Mutex::new(HashMap::new()),
             sockToAgentIds: Mutex::new(HashMap::new()),
             memoryRegion: mr,
-            localRDMAConn: Mutex::new(HashMap::new()),
         };
     }
 

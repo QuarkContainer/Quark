@@ -186,9 +186,7 @@ impl CtrlInfo{
         let mut set: HashSet<u32> = HashSet::new();
         let timestamp = self.timestamp_get();
         for (_, node) in self.nodes.lock().iter() {
-            error!("get_node_ips_for_connecting, node: {:?} node.timestamp: {} timestamp: {}", node, node.timestamp, timestamp);
             if node.timestamp <= timestamp {
-                error!("get_node_ips_for_connecting, node.ipAddr: {}", node.ipAddr);
                 set.insert(node.ipAddr);
             }
         }

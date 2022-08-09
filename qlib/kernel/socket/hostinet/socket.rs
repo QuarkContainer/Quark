@@ -346,7 +346,6 @@ impl SocketOperations {
                 match sockInfo {
                     SockInfo::RDMADataSocket(rdmaSocket) => {
                         *self.socketBuf.lock() = SocketBufType::RDMA(rdmaSocket.socketBuf.clone());
-                        // error!("PostConnect, after update socketBuf, fd: {}", self.fd)
                     }
                     _ => {
                         panic!(
@@ -492,7 +491,6 @@ impl Waitable for SocketOperations {
     }
 
     fn Readiness(&self, _task: &Task, mask: EventMask) -> EventMask {
-        error!("Readiness, 1");
         if self.SocketBufEnabled() {
             if self.enableRDMA {
                 let sockInfo = GlobalIOMgr()
@@ -520,7 +518,6 @@ impl Waitable for SocketOperations {
         }
 
         let fd = self.fd;
-        error!("Readiness, before NonBlockingPoll");
         return NonBlockingPoll(fd, mask);
 
         /*let mv = MultiWait::New(task.GetTaskIdQ());
@@ -543,12 +540,10 @@ impl Waitable for SocketOperations {
     }
 
     fn EventRegister(&self, task: &Task, e: &WaitEntry, mask: EventMask) {
-        error!("EventRegister, 1");
         let queue = self.queue.clone();
         queue.EventRegister(task, e, mask);
         let fd = self.fd;
         if !self.SocketBufEnabled() && self.AcceptQueue().is_none() {
-            error!("EventRegister, before UpdateFD");
             UpdateFD(fd).unwrap();
         };
     }
@@ -910,7 +905,6 @@ impl SockOperations for SocketOperations {
             if res == 0 {
                 self.SetRemoteAddr(socketaddr.to_vec())?;
                 if self.stype == SockType::SOCK_STREAM {
-                    // error!("SocketOperations::Connect 1, fd: {}", self.fd);
                     self.PostConnect(task);
                 }
 
@@ -945,7 +939,6 @@ impl SockOperations for SocketOperations {
             defer!(self.EventUnregister(task, &general));
 
             if self.Readiness(task, WRITEABLE_EVENT) == 0 {
-                // error!("SocketOperations::Connect 0.1, fd: {}", self.fd);
                 match task.blocker.BlockWithMonoTimer(true, None) {
                     Err(Error::ErrInterrupted) => {
                         return Err(Error::SysError(SysErr::ERESTARTSYS));
@@ -956,7 +949,6 @@ impl SockOperations for SocketOperations {
                     }
                     _ => (),
                 }
-                // error!("SocketOperations::Connect 0.2, fd: {}", self.fd);
             }
         }
 
@@ -983,7 +975,6 @@ impl SockOperations for SocketOperations {
 
         self.SetRemoteAddr(socketaddr.to_vec())?;
         if self.stype == SockType::SOCK_STREAM {
-            // error!("SocketOperations::Connect 2, fd: {}", self.fd);
             self.PostConnect(task);
         }
 
@@ -1055,10 +1046,6 @@ impl SockOperations for SocketOperations {
 
         let remoteAddr = &acceptItem.addr.data[0..len];
         //let sockBuf = self.ConfigSocketBufType();
-        // error!(
-        //     "SocketOperations::Accept, before calling SocketBufType().Accept, fd: {}",
-        //     fd
-        // );
         let sockBuf = self.SocketBufType().Accept(acceptItem.sockBuf.clone());
 
         let file = newSocketFile(
@@ -1150,7 +1137,6 @@ impl SockOperations for SocketOperations {
             let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
             let socketInfo = fdInfo.lock().sockInfo.lock().clone();
 
-            // let endpoint;
             let port;
             match socketInfo {
                 SockInfo::Socket(info) => {
@@ -1476,10 +1462,7 @@ impl SockOperations for SocketOperations {
             });
             let len = socketaddr.len() as usize;
             sockAddr.Marsh(socketaddr, len)?;
-            debug!(
-                "GetSockName, ipAddr: {}, port: {}, len: {}",
-                ipAddr, port, len
-            );
+
             //TODO: handle unhappy case
             return Ok(len as i64);
         }
