@@ -30,7 +30,7 @@ pub fn CopytoMulti(dsts: &mut [IoVec], src: &[u8]) {
             break;
         }
 
-        dst[..count].clone_from_slice(&src[..count]);
+        dst[..count].copy_from_slice(&src[..count]);
         src = &src[count..];
     }
 }
