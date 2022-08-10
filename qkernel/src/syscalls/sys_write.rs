@@ -281,15 +281,20 @@ pub fn writev(task: &Task, f: &File, srcs: &[IoVec]) -> Result<i64> {
         return RepWritev(task, f, srcs);
     }
 
-    /*match f.Writev(task, srcs) {
-        Err(Error::ErrInterrupted) => return Err(Error::SysError(SysErr::ERESTARTSYS)),
-        Err(e) => {
-            if e != Error::SysError(SysErr::EWOULDBLOCK) || f.Flags().NonBlocking {
+    if f.Flags().NonBlocking {
+        match f.Writev(task, srcs) {
+            Err(Error::ErrInterrupted) => return Err(Error::SysError(SysErr::ERESTARTSYS)),
+            Err(e) => {
                 return Err(e);
             }
-        }
-        Ok(n) => return Ok(n),
-    };*/
+            Ok(n) => {
+                if n > 0 {
+                    f.Dirent.InotifyEvent(InotifyEvent::IN_MODIFY, 0, EventType::PathEvent)
+                }
+                return Ok(n);
+            }
+        };
+    }
 
     let mut deadline = None;
 
