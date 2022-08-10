@@ -736,12 +736,24 @@ pub fn SysRecvFrom(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let iov = IoVec::NewFromAddr(bufPtr, buflen as usize);
     let mut iovs: [IoVec; 1] = [iov];
 
-    let mut pMsg = MsgHdr::default();
-
     let mut nameLen: i32 = 0;
     if nameLenPtr != 0 {
         nameLen = task.CopyInObj(nameLenPtr)?;
     }
+
+    if (namePtr == 0 || nameLen == 0) && (file.Flags().NonBlocking || flags & MsgType::MSG_DONTWAIT != 0 ){
+        match file.Readv(task, &mut iovs) {
+            Err(Error::ErrInterrupted) => return Err(Error::SysError(SysErr::ERESTARTSYS)),
+            Err(e) => {
+                return Err(e);
+            }
+            Ok(n) => {
+                return Ok(n);
+            }
+        };
+    }
+
+    let mut pMsg = MsgHdr::default();
 
     //todo: handle the msg.nameLen > 1024
     let _msgVec = if namePtr != 0 {
@@ -909,6 +921,18 @@ pub fn SysSendTo(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     task.CheckPermission(bufPtr, buflen as u64, false, false)?;
     let iov = IoVec::NewFromAddr(bufPtr, buflen as usize);
     let iovs: [IoVec; 1] = [iov];
+
+    if (namePtr == 0 || nameLen == 0) && (file.Flags().NonBlocking || flags & MsgType::MSG_DONTWAIT != 0 ){
+        match file.Writev(task, &iovs) {
+            Err(Error::ErrInterrupted) => return Err(Error::SysError(SysErr::ERESTARTSYS)),
+            Err(e) => {
+                return Err(e);
+            }
+            Ok(n) => {
+                return Ok(n);
+            }
+        };
+    }
 
     let mut pMsg = MsgHdr::default();
 

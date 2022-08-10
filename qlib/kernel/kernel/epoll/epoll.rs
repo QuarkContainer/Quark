@@ -328,6 +328,7 @@ impl EventPoll {
                     }
                 }
 
+                let waiter = WaitEntry::New();
                 // Create new entry and add it to map.
                 let entryInternal = PollEntryInternal {
                     next: None,
@@ -335,7 +336,7 @@ impl EventPoll {
                     id: fd,
                     file: file.Downgrade(),
                     userData: data,
-                    waiter: WaitEntry::New(),
+                    waiter: waiter.clone(),
                     mask: mask,
                     flags: flags,
 
@@ -344,11 +345,16 @@ impl EventPoll {
                 };
 
                 let entry = PollEntry(Arc::new(QMutex::new(entryInternal)));
-                entry.lock().waiter.lock().context = WaitContext::EpollContext(entry.clone());
+                waiter.lock().context = WaitContext::EpollContext(entry.clone());
                 e.insert(entry.clone());
 
-                // Initialize the readiness state of the new entry.
-                self.InitEntryReadiness(task, &file, &entry);
+                file.EventRegister(task, &waiter, mask);
+        
+                // Check if the file happens to already be in a ready state.
+                let ready = file.Readiness(task, mask);
+                if ready != 0 {
+                    entry.CallBack();
+                }
 
                 return Ok(());
             }
@@ -395,8 +401,14 @@ impl EventPoll {
             entryLock.userData = data;
             entryLock.state = PollEntryState::Waiting;
         }
+        
+        file.EventRegister(task, &waiter, mask);
 
-        self.InitEntryReadiness(task, &file, &entry);
+        // Check if the file happens to already be in a ready state.
+        let ready = file.Readiness(task, mask);
+        if ready != 0 {
+            entry.CallBack();
+        }
 
         return Ok(());
     }
