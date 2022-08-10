@@ -113,22 +113,22 @@ impl PollEntryList {
     }
 
     pub fn Remove(&mut self, e: &PollEntry) {
-        if e.lock().prev.is_none() {
+        let mut elock = e.lock();
+        if elock.prev.is_none() {
             //head
-            self.head = e.lock().next.clone();
+            self.head = elock.next.clone();
         } else {
-            let lock = e.lock();
-            lock.prev.clone().unwrap().lock().next = lock.next.clone();
+            elock.prev.clone().unwrap().lock().next = elock.next.clone();
         }
 
-        if e.lock().next.is_none() {
+        if elock.next.is_none() {
             //tail
-            self.tail = e.lock().prev.clone();
+            self.tail = elock.prev.clone();
         } else {
-            let lock = e.lock();
-            lock.next.clone().unwrap().lock().prev = lock.prev.clone();
+            elock.next.clone().unwrap().lock().prev = elock.prev.clone();
         }
 
-        e.Reset();
+        elock.prev = None;
+        elock.next = None;
     }
 }
