@@ -21,6 +21,7 @@ use alloc::vec::Vec;
 use core::any::Any;
 use core::ops::Deref;
 use hashbrown::HashMap;
+use hashbrown::hash_map::Entry;
 use core::hash::BuildHasherDefault;
 
 use super::super::super::super::common::*;
@@ -177,8 +178,12 @@ impl EventPoll {
 
         let mut ret = Vec::with_capacity(16);
         let mut it = lists.readyList.Front();
-        while it.is_some() && ret.len() < max as usize {
-            let entry = it.unwrap();
+        while ret.len() < max as usize {
+            let entry = if let Some(entry) = it {
+                entry
+            } else {
+                break;
+            };
             it = entry.Next();
 
             // Check the entry's readiness. It it's not really ready, we
@@ -300,48 +305,54 @@ impl EventPoll {
         };
 
         let mut files = self.files.lock();
-        if files.contains_key(&id) {
-            return Err(Error::SysError(SysErr::EEXIST));
-        }
 
-        // Check if a cycle would be created. We use 4 as the limit because
-        // that's the value used by linux and we want to emulate it.
-        if ep.is_some() {
-            let ep = ep.unwrap();
-            if *ep == *self {
-                return Err(Error::SysError(SysErr::EINVAL));
+        let entry = files.entry(id);
+        
+        match entry {
+            Entry::Occupied(_) => {
+                return Err(Error::SysError(SysErr::EEXIST));
             }
+            Entry::Vacant(e) => {
+                // Check if a cycle would be created. We use 4 as the limit because
+                // that's the value used by linux and we want to emulate it.
+                if ep.is_some() {
+                    let ep = ep.unwrap();
+                    if *ep == *self {
+                        return Err(Error::SysError(SysErr::EINVAL));
+                    }
 
-            // Check if a cycle would be created. We use 4 as the limit because
-            // that's the value used by linux and we want to emulate it.
-            if ep.Observes(self, 4) {
-                return Err(Error::SysError(SysErr::ELOOP));
+                    // Check if a cycle would be created. We use 4 as the limit because
+                    // that's the value used by linux and we want to emulate it.
+                    if ep.Observes(self, 4) {
+                        return Err(Error::SysError(SysErr::ELOOP));
+                    }
+                }
+
+                // Create new entry and add it to map.
+                let entryInternal = PollEntryInternal {
+                    next: None,
+                    prev: None,
+                    id: fd,
+                    file: file.Downgrade(),
+                    userData: data,
+                    waiter: WaitEntry::New(),
+                    mask: mask,
+                    flags: flags,
+
+                    epoll: self.clone(),
+                    state: PollEntryState::Waiting,
+                };
+
+                let entry = PollEntry(Arc::new(QMutex::new(entryInternal)));
+                entry.lock().waiter.lock().context = WaitContext::EpollContext(entry.clone());
+                e.insert(entry.clone());
+
+                // Initialize the readiness state of the new entry.
+                self.InitEntryReadiness(task, &file, &entry);
+
+                return Ok(());
             }
         }
-
-        // Create new entry and add it to map.
-        let entryInternal = PollEntryInternal {
-            next: None,
-            prev: None,
-            id: fd,
-            file: file.Downgrade(),
-            userData: data,
-            waiter: WaitEntry::New(),
-            mask: mask,
-            flags: flags,
-
-            epoll: self.clone(),
-            state: PollEntryState::Waiting,
-        };
-
-        let entry = PollEntry(Arc::new(QMutex::new(entryInternal)));
-        entry.lock().waiter.lock().context = WaitContext::EpollContext(entry.clone());
-        files.insert(id, entry.clone());
-
-        // Initialize the readiness state of the new entry.
-        self.InitEntryReadiness(task, &file, &entry);
-
-        return Ok(());
     }
 
     pub fn UpdateEntry(

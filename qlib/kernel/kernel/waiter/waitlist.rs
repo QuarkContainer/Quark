@@ -94,26 +94,27 @@ impl WaitList {
     }
 
     pub fn Remove(&mut self, e: &WaitEntry) {
-        if e.lock().prev.is_none() {
+        let mut elock = e.lock();
+
+        if elock.prev.is_none() {
             //head
-            self.head = e.lock().next.clone();
+            self.head = elock.next.clone();
         } else {
-            let lock = e.lock();
-            lock.prev.clone().unwrap().Upgrade().unwrap().lock().next = lock.next.clone();
+            elock.prev.clone().unwrap().Upgrade().unwrap().lock().next = elock.next.clone();
         }
 
-        if e.lock().next.is_none() {
+        if elock.next.is_none() {
             //tail
-            self.tail = match &e.lock().prev {
+            self.tail = match &elock.prev {
                 None => None,
                 Some(ref p) => p.Upgrade(),
             };
         } else {
-            let lock = e.lock();
-            lock.next.clone().unwrap().lock().prev = lock.prev.clone();
+            elock.next.clone().unwrap().lock().prev = elock.prev.clone();
         }
 
-        e.Reset();
+        elock.prev = None;
+        elock.next = None;
     }
 
     // for futex, wakeLocked wakes up to n waiters matching the bitmask at the addr for this
@@ -124,19 +125,16 @@ impl WaitList {
 
         let mut done = 0;
         let mut entry = q.Front();
-        while entry.is_some() && done < n {
-            let tmp = entry.clone().unwrap();
-            entry = tmp.lock().next.clone();
+        while done < n {
+            match entry {
+                None => break,
+                Some(tmp) => {
+                    entry = tmp.lock().next.clone();
 
-            /*let triggered = tmp.Notify(mask);
-            if triggered {
-                done += 1;
-                q.Remove(&tmp)
-            }
-
-            tmp.lock().key = Key::default();*/
-            if q.WakeWaiterLocked(&tmp, mask) {
-                done += 1;
+                    if q.WakeWaiterLocked(&tmp, mask) {
+                        done += 1;
+                    }
+                }
             }
         }
 
