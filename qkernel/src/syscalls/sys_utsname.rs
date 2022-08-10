@@ -84,12 +84,12 @@ pub fn SysUname(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let mut u = UtsName::default();
 
-    u.Sysname[0..version.Sysname.len()].clone_from_slice(version.Sysname.as_bytes());
-    u.Nodename[0..uts.HostName().len()].clone_from_slice(uts.HostName().as_bytes());
-    u.Release[0..version.Release.len()].clone_from_slice(version.Release.as_bytes());
-    u.Version[0..version.Version.len()].clone_from_slice(version.Version.as_bytes());
-    u.Machine[0.."x86_64".len()].clone_from_slice("x86_64".as_bytes());
-    u.Domainname[0..uts.DomainName().len()].clone_from_slice(uts.DomainName().as_bytes());
+    u.Sysname[0..version.Sysname.len()].copy_from_slice(version.Sysname.as_bytes());
+    u.Nodename[0..uts.HostName().len()].copy_from_slice(uts.HostName().as_bytes());
+    u.Release[0..version.Release.len()].copy_from_slice(version.Release.as_bytes());
+    u.Version[0..version.Version.len()].copy_from_slice(version.Version.as_bytes());
+    u.Machine[0.."x86_64".len()].copy_from_slice("x86_64".as_bytes());
+    u.Domainname[0..uts.DomainName().len()].copy_from_slice(uts.DomainName().as_bytes());
 
     //let va : &mut UtsName = task.GetTypeMut(va)?;
     //*va = u;

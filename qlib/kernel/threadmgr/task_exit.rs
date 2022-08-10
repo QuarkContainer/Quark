@@ -1161,8 +1161,7 @@ impl WaitOptions {
             // && self.SpecificTID != *pidns.lock().tids.get(t).unwrap() {
             let id = match pidns.lock().tids.get(t) {
                 None => {
-                    panic!("thread id {} doesn't exist", t.lock().id)
-                    //return false
+                    return false;
                 }
                 Some(id) => *id,
             };

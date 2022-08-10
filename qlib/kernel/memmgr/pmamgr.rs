@@ -13,9 +13,13 @@
 // limitations under the License.
 
 use alloc::collections::btree_map::BTreeMap;
+use alloc::vec::Vec;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use spin::Mutex;
+//use hashbrown::HashMap;
+//use core::hash::BuildHasherDefault;
+//use cache_padded::CachePadded;
 
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
@@ -46,18 +50,52 @@ pub fn CheckZeroPage(pageStart: u64) {
     }
 }
 
-pub const REF_MAP_PARTITION_CNT : usize = 16;
+/*#[derive(Default)]
+pub struct RawHasher {
+    state: u64,
+}
+
+impl core::hash::Hasher for RawHasher {
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.state = self.state.rotate_left(8) ^ u64::from(byte);
+        }
+    }
+
+    fn write_u64(&mut self, i: u64) {
+        self.state = i;
+    }
+
+    fn write_u32(&mut self, i: u32) {
+        self.state = i as u64;
+    }
+
+    fn finish(&self) -> u64 {
+        self.state
+    }
+}*/
+
+pub const REF_MAP_PARTITION_CNT : usize = 64;
 pub struct PagePool {
     //refCount for whole pma
     pub refCount: AtomicU64,
-    pub refs: [Mutex<BTreeMap<u64, u32>>; 16],
+    //pub refs: [Mutex<CachePadded<HashMap<u32, u32, BuildHasherDefault<RawHasher>>>>; REF_MAP_PARTITION_CNT],
+    //pub refs: Vec<CachePadded<Mutex<BTreeMap<u32, u32>>>>,
+    pub refs: Vec<Mutex<BTreeMap<u32, u32>>>,
+    //pub refs: Vec<CachePadded<Mutex<HashMap<u32, u32>>>>,
+    //pub refs: [CachePadded<Mutex<BTreeMap<u32, u32>>>; REF_MAP_PARTITION_CNT],
+    //pub refs: [Mutex<HashMap<u32, u32>>; REF_MAP_PARTITION_CNT],
     pub allocator: AlignedAllocator,
 }
 
 impl PagePool {
     pub fn New() -> Self {
+        let mut refs = Vec::with_capacity(REF_MAP_PARTITION_CNT);
+        for _i in 0..REF_MAP_PARTITION_CNT {
+            refs.push(Default::default());
+        }
         return Self {
-            refs: Default::default(),
+            refs: refs,
             //the PagePool won't be free. fake a always nonzero refcount
             refCount: AtomicU64::new(1),
             allocator: AlignedAllocator::New(
@@ -75,11 +113,16 @@ impl PagePool {
         return (addr as usize >> 12) % REF_MAP_PARTITION_CNT;
     }
 
+    pub fn PageId(addr: u64) -> u32 {
+        return (addr as usize >> 12) as u32;
+    }
+
     pub fn Ref(&self, addr: u64) -> Result<u64> {
         assert!(addr & (MemoryDef::PAGE_SIZE - 1) == 0);
-        let idx = Self::PartitionId(addr);
+        let pageId = Self::PageId(addr);
+        let idx = pageId as usize % REF_MAP_PARTITION_CNT;
         let mut refs = self.refs[idx].lock();
-        let refcount = match refs.get_mut(&addr) {
+        let refcount = match refs.get_mut(&pageId) {
             None => {
                 // the address is not allocated from PagePool
                 return Ok(1);
@@ -97,9 +140,10 @@ impl PagePool {
     pub fn Deref(&self, addr: u64) -> Result<u64> {
         assert!(addr & (MemoryDef::PAGE_SIZE - 1) == 0);
         let refcount = {
-            let idx = Self::PartitionId(addr);
+            let pageId = Self::PageId(addr);
+            let idx = pageId as usize % REF_MAP_PARTITION_CNT;
             let mut refs = self.refs[idx].lock();
-            let refcount = match refs.get_mut(&addr) {
+            let refcount = match refs.get_mut(&pageId) {
                 None => {
                     // the address is not allocated from PagePool
                     return Ok(1);
@@ -112,7 +156,7 @@ impl PagePool {
             };
 
             if refcount == 0 {
-                refs.remove(&addr);
+                refs.remove(&pageId);
             }
 
             refcount
@@ -126,9 +170,10 @@ impl PagePool {
     }
 
     pub fn GetRef(&self, addr: u64) -> Result<u64> {
-        let idx = Self::PartitionId(addr);
+        let pageId = Self::PageId(addr);
+        let idx = pageId as usize % REF_MAP_PARTITION_CNT;
         let refs = self.refs[idx].lock();
-        let refcount = match refs.get(&addr) {
+        let refcount = match refs.get(&pageId) {
             None => {
                 // the address is not allocated from PagePool
                 return Ok(0);
@@ -141,13 +186,14 @@ impl PagePool {
 
     pub fn AllocPage(&self, incrRef: bool) -> Result<u64> {
         let addr = self.Allocate()?;
-        let idx = Self::PartitionId(addr);
+        let pageId = Self::PageId(addr);
+        let idx = pageId as usize % REF_MAP_PARTITION_CNT;
         let mut  refs = self.refs[idx].lock();
         if incrRef {
-            refs.insert(addr, 1);
+            refs.insert(pageId, 1);
             self.refCount.fetch_add(1, Ordering::Release);
         } else {
-            refs.insert(addr, 0);
+            refs.insert(pageId, 0);
         }
 
         return Ok(addr);

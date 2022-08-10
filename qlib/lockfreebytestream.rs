@@ -173,11 +173,11 @@ impl LFByteStream {
             }
         };
 
-        buf[0..firstLen].clone_from_slice(&self.buf[readpos..readpos + firstLen]);
+        buf[0..firstLen].copy_from_slice(&self.buf[readpos..readpos + firstLen]);
 
         if hasSecond {
             let secondLen = readSize - firstLen;
-            buf[firstLen..firstLen + secondLen].clone_from_slice(&self.buf[0..secondLen])
+            buf[firstLen..firstLen + secondLen].copy_from_slice(&self.buf[0..secondLen])
         }
 
         self.head
@@ -208,11 +208,11 @@ impl LFByteStream {
             }
         };
 
-        self.buf[writePos..writePos + firstLen].clone_from_slice(&buf[0..firstLen]);
+        self.buf[writePos..writePos + firstLen].copy_from_slice(&buf[0..firstLen]);
 
         if hasSecond {
             let secondLen = writeSize - firstLen;
-            self.buf[0..secondLen].clone_from_slice(&buf[firstLen..firstLen + secondLen]);
+            self.buf[0..secondLen].copy_from_slice(&buf[firstLen..firstLen + secondLen]);
         }
 
         self.tail.store(tail + writeSize, atomic::Ordering::Release);

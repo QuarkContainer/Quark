@@ -39,16 +39,17 @@ impl MemoryManager {
     pub fn CopyDataInLocked(&self, task: &Task, rl: &QUpgradableLockGuard, vaddr: u64, to: u64, len: usize, allowPartial: bool) -> Result<()> {
         self.V2PLocked(task, rl, vaddr, len as u64, &mut task.GetMut().iovs, false, allowPartial)?;
         defer!(task.GetMut().iovs.clear());
-        let target: *mut u8 = to as *mut u8;
-        let dst = unsafe { slice::from_raw_parts_mut(target, len) };
 
         let mut offset = 0;
         for iov in &task.GetMut().iovs {
-            let src = iov.start as *const u8;
-            let src = unsafe { slice::from_raw_parts(src, iov.len) };
-            dst[offset..offset + iov.len].clone_from_slice(src);
+            unsafe {
+                let dstPtr = (to + offset) as * mut u8;
+                let srcPtr = iov.start as *const u8;
+                core::ptr::copy_nonoverlapping(srcPtr, dstPtr, iov.len);
+            }
+            
 
-            offset += iov.len;
+            offset += iov.len as u64;
         }
 
         return Ok(());
@@ -57,16 +58,16 @@ impl MemoryManager {
     pub fn CopyDataOutLocked(&self, task: &Task, rl: &QUpgradableLockGuard, from: u64, vaddr: u64, len: usize, allowPartial: bool) -> Result<()> {
         self.V2PLocked(task, rl, vaddr, len as u64, &mut task.GetMut().iovs, true, allowPartial)?;
         defer!(task.GetMut().iovs.clear());
-        let from: *const u8 = from as *const u8;
-        let src = unsafe { slice::from_raw_parts(from, len) };
 
         let mut offset = 0;
         for iov in &task.GetMut().iovs {
-            let dst = iov.start as *mut u8;
-            let dst = unsafe { slice::from_raw_parts_mut(dst, iov.len) };
-            
-            dst[0..iov.len].clone_from_slice(&src[offset..offset + iov.len]);
-            offset += iov.len;
+            unsafe {
+                let dstPtr = iov.start as * mut u8;
+                let srcPtr = (from + offset) as *const u8;
+                core::ptr::copy_nonoverlapping(srcPtr, dstPtr, iov.len);
+            }
+
+            offset += iov.len as u64;
         }
 
         return Ok(());

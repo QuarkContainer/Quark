@@ -59,7 +59,7 @@ impl<'a> Lazybuf<'a> {
             for _i in 0..self.s.len() {
                 buf.push(0);
             }
-            buf.clone_from_slice(&self.s);
+            buf.copy_from_slice(&self.s);
             self.buf = Some(buf)
         }
 

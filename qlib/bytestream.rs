@@ -255,11 +255,11 @@ impl RingBuf {
             }
         };
 
-        buf[0..firstLen].clone_from_slice(&self.Buf()[readpos..readpos + firstLen]);
+        buf[0..firstLen].copy_from_slice(&self.Buf()[readpos..readpos + firstLen]);
 
         if hasSecond {
             let secondLen = available - firstLen;
-            buf[firstLen..firstLen + secondLen].clone_from_slice(&self.Buf()[0..secondLen])
+            buf[firstLen..firstLen + secondLen].copy_from_slice(&self.Buf()[0..secondLen])
         }
 
         self.headtail[0].store(head.wrapping_add(available as u32), Ordering::Release);
@@ -467,11 +467,11 @@ impl RingBuf {
             }
         };
 
-        self.Buf()[writePos..writePos + firstLen].clone_from_slice(&buf[0..firstLen]);
+        self.Buf()[writePos..writePos + firstLen].copy_from_slice(&buf[0..firstLen]);
 
         if hasSecond {
             let secondLen = writeSize - firstLen;
-            self.Buf()[0..secondLen].clone_from_slice(&buf[firstLen..firstLen + secondLen]);
+            self.Buf()[0..secondLen].copy_from_slice(&buf[firstLen..firstLen + secondLen]);
         }
 
         self.headtail[1].store(tail.wrapping_add(writeSize as u32), Ordering::Release);

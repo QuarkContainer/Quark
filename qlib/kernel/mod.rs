@@ -158,5 +158,5 @@ impl Tsc {
 
 pub fn SignalProcess(signalArgs: &SignalArgs) {
     *SHARESPACE.signalArgs.lock() = Some(signalArgs.clone());
-    CreateTask(SHARESPACE.SignalHandlerAddr(), 0 as *const u8, false);
+    CreateTask(SHARESPACE.SignalHandlerAddr(), 0 as *const u8, true);
 }

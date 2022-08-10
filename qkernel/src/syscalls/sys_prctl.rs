@@ -250,7 +250,7 @@ pub fn SysPrctl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
                 name.len()
             };
 
-            buf[0..len].clone_from_slice(&name.as_bytes()[0..len]);
+            buf[0..len].copy_from_slice(&name.as_bytes()[0..len]);
             if len < TASK_COMM_LEN {
                 len += 1;
             }

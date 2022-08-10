@@ -151,7 +151,7 @@ impl IoVec {
             len = src.len();
         }
 
-        dst[0..len].clone_from_slice(&src[0..len]);
+        dst[0..len].copy_from_slice(&src[0..len]);
 
         return len as i64;
     }
