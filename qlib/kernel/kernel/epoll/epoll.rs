@@ -189,8 +189,8 @@ impl EventPoll {
             // Check the entry's readiness. It it's not really ready, we
             // just put it back in the waiting list and move on to the next
             // entry.
-            let file = entry.lock().file.clone();
-            let file = match file.Upgrade() {
+            let file = entry.lock().file.Upgrade();
+            let file = match file {
                 None => {
                     lists.readyList.Remove(&entry);
                     continue;
@@ -315,8 +315,7 @@ impl EventPoll {
             Entry::Vacant(e) => {
                 // Check if a cycle would be created. We use 4 as the limit because
                 // that's the value used by linux and we want to emulate it.
-                if ep.is_some() {
-                    let ep = ep.unwrap();
+                if let Some(ep) = ep {
                     if *ep == *self {
                         return Err(Error::SysError(SysErr::EINVAL));
                     }

@@ -53,8 +53,12 @@ impl Queue {
     pub fn Notify(&self, mask: EventMask) {
         let q = self.read();
         let mut entry = q.Front();
-        while entry.is_some() {
-            let tmp = entry.clone().unwrap();
+        loop {
+            let tmp = if let Some(tmp) = entry {
+                tmp
+            } else {
+                break;
+            };
             tmp.Notify(mask);
             entry = tmp.lock().next.clone();
         }
@@ -63,8 +67,12 @@ impl Queue {
     pub fn Clear(&self) {
         let q = self.read();
         let mut entry = q.Front();
-        while entry.is_some() {
-            let tmp = entry.clone().unwrap();
+        loop {
+            let tmp = if let Some(tmp) = entry {
+                tmp
+            } else {
+                break;
+            };
             tmp.Clear();
             entry = tmp.lock().next.clone();
         }
@@ -75,8 +83,12 @@ impl Queue {
 
         let q = self.read();
         let mut entry = q.Front();
-        while entry.is_some() {
-            let tmp = entry.clone().unwrap();
+        loop {
+            let tmp = if let Some(tmp) = entry {
+                tmp
+            } else {
+                break;
+            };
             ret |= tmp.Mask();
             entry = tmp.lock().next.clone();
         }
