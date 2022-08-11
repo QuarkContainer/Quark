@@ -75,7 +75,7 @@ impl core::hash::Hasher for RawHasher {
     }
 }*/
 
-pub const REF_MAP_PARTITION_CNT : usize = 64;
+pub const REF_MAP_PARTITION_CNT : usize = 32;
 pub struct PagePool {
     //refCount for whole pma
     pub refCount: AtomicU64,

@@ -276,13 +276,6 @@ impl UringSocketOperations {
         }
     }
 
-    pub fn AcceptQueue(&self) -> Option<AcceptQueue> {
-        match self.SocketType() {
-            UringSocketType::TCPUringlServer(q) => return Some(q.clone()),
-            _ => return None,
-        }
-    }
-
     pub fn PostConnect(&self) {
         let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
         *self.socketType.lock() = UringSocketType::Uring(socketBuf.clone());
@@ -381,18 +374,33 @@ impl Waitable for UringSocketOperations {
         let queue = self.queue.clone();
         queue.EventRegister(task, e, mask);
         let fd = self.fd;
-        if !self.SocketBufEnabled() && self.AcceptQueue().is_none() {
-            UpdateFD(fd).unwrap();
-        };
+
+        match self.SocketType() {
+            UringSocketType::TCPConnecting => {
+                UpdateFD(fd).unwrap();
+            }
+            UringSocketType::TCPUringlServer(_q) => (),
+            UringSocketType::Uring(_buf) => (),
+            UringSocketType::TCPInit => {
+                UpdateFD(fd).unwrap();
+            }
+        }
     }
 
     fn EventUnregister(&self, task: &Task, e: &WaitEntry) {
         let queue = self.queue.clone();
         queue.EventUnregister(task, e);
         let fd = self.fd;
-        if !self.SocketBufEnabled() && self.AcceptQueue().is_none() {
-            UpdateFD(fd).unwrap();
-        };
+        match self.SocketType() {
+            UringSocketType::TCPConnecting => {
+                UpdateFD(fd).unwrap();
+            }
+            UringSocketType::TCPUringlServer(_q) => (),
+            UringSocketType::Uring(_buf) => (),
+            UringSocketType::TCPInit => {
+                UpdateFD(fd).unwrap();
+            }
+        }
     }
 }
 
