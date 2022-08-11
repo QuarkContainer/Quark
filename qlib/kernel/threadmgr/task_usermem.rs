@@ -37,6 +37,9 @@ impl MemoryManager {
     }
 
     pub fn CopyDataInLocked(&self, task: &Task, rl: &QUpgradableLockGuard, vaddr: u64, to: u64, len: usize, allowPartial: bool) -> Result<()> {
+        if vaddr == 0 && len == 0 {
+            return Ok(())
+        }
         self.V2PLocked(task, rl, vaddr, len as u64, &mut task.GetMut().iovs, false, allowPartial)?;
         defer!(task.GetMut().iovs.clear());
 
@@ -56,6 +59,9 @@ impl MemoryManager {
     }
 
     pub fn CopyDataOutLocked(&self, task: &Task, rl: &QUpgradableLockGuard, from: u64, vaddr: u64, len: usize, allowPartial: bool) -> Result<()> {
+        if vaddr == 0 && len == 0 {
+            return Ok(())
+        }
         self.V2PLocked(task, rl, vaddr, len as u64, &mut task.GetMut().iovs, true, allowPartial)?;
         defer!(task.GetMut().iovs.clear());
 
@@ -339,6 +345,10 @@ impl MemoryManager {
     ) -> Result<Vec<T>> {
         if src == 0 && count == 0 {
             return Ok(Vec::new());
+        }
+
+        if src == 0 {
+            return Err(Error::SysError(SysErr::EFAULT));
         }
 
         let recordLen = core::mem::size_of::<T>();

@@ -579,6 +579,7 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     NotImplementSyscall, //	448 sys_process_mrelease
     NotImplementSyscall, //	449 sys_futex_waitv
     NotImplementSyscall, //	450 sys_set_mempolicy_home_node
+    NotExisting,         // 451 unknow syscall
 ];
 
 pub fn NotImplementSyscall(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {
@@ -587,7 +588,8 @@ pub fn NotImplementSyscall(_task: &mut Task, args: &SyscallArguments) -> Result<
 }
 
 pub fn NotExisting(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {
-    panic!("NotExisting syscall {:x?}", args);
+    error!("NotExisting syscall {:x?}", args);
+    return Err(Error::SysError(SysErr::ENODATA));
  }
 
 pub fn SysNoSupport(_task: &mut Task, args: &SyscallArguments) -> Result<i64> {

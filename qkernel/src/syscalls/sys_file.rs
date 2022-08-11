@@ -42,6 +42,8 @@ use super::super::qlib::range::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::*;
 use super::super::util::cstring::*;
+use fs::host::hostinodeop::HostInodeOp;
+use fs::host::util::Fcntl;
 
 fn fileOpAt(
     task: &Task,
@@ -1298,10 +1300,32 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             }
         }
         Cmd::F_GET_SEALS => {
-            panic!("Fcntl: F_GET_SEALS not implement")
+            let iops = file.Dirent.Inode().lock().InodeOp.clone();
+            if let Some(ops) = iops.as_any().downcast_ref::<HostInodeOp>() {
+                let hostf = ops.HostFd();
+                let ret = Fcntl(hostf, cmd, val);
+                if ret < 0 {
+                    return Err(Error::SysError(-ret as _));
+                }
+
+                return Ok(ret)
+            }
+            
+            return Err(Error::SysError(SysErr::EINVAL));
         }
         Cmd::F_ADD_SEALS => {
-            panic!("Fcntl: F_ADD_SEALS not implement")
+            let iops = file.Dirent.Inode().lock().InodeOp.clone();
+            if let Some(ops) = iops.as_any().downcast_ref::<HostInodeOp>() {
+                let hostf = ops.HostFd();
+                let ret = Fcntl(hostf, cmd, val);
+                if ret < 0 {
+                    return Err(Error::SysError(-ret as _));
+                }
+
+                return Ok(ret)
+            }
+            
+            return Err(Error::SysError(SysErr::EINVAL));
         }
         Cmd::F_GETPIPE_SZ => {
             let mut fops = file.FileOp.clone();
