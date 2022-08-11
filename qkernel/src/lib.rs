@@ -248,15 +248,13 @@ pub extern "C" fn syscall_handler(
     pt.r11 = rflags;
     pt.rip = pt.rcx;
 
-    let nr = pt.orig_rax;
-    assert!(
-        nr < SysCallID::maxsupport as u64,
-        "get unsupported syscall id {:x}",
-        nr
-    );
-
-    //SHARESPACE.SetValue(CPULocal::CpuId(), 0, nr);
-    let callId: SysCallID = unsafe { mem::transmute(nr as u64) };
+    let mut nr = pt.orig_rax;
+    let callId: SysCallID = if nr < SysCallID::UnknowSyscall as u64 {
+        unsafe { mem::transmute(nr as u64) }
+    } else {
+        nr = SysCallID::UnknowSyscall as _;
+        SysCallID::UnknowSyscall
+    };
 
     //let tid = currTask.Thread().lock().id;
     let mut tid = 0;

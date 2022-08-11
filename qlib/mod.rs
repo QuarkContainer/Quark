@@ -619,7 +619,7 @@ pub enum SysCallID {
     sys_process_mrelease,
     sys_futex_waitv,
     sys_set_mempolicy_home_node,
-    maxsupport = 451,
+    UnknowSyscall = 451,
 }
 
 #[derive(Clone, Default, Debug, Copy)]

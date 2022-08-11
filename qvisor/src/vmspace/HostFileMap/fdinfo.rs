@@ -375,9 +375,15 @@ impl FdInfo {
         return Self::WriteAt(fd, iovs, iovcnt, offset);
     }
 
-    pub fn IOFcntl(&self, cmd: i32, _arg: u64) -> i64 {
-        assert!(cmd == Cmd::F_GETFL, "we only support Cmd::F_GETFL in Fcntl");
-        return self.lock().GetFlags() as i64;
+    pub fn IOFcntl(&self, cmd: i32, arg: u64) -> i64 {
+        assert!(cmd == Cmd::F_GETFL || cmd == Cmd::F_GET_SEALS || cmd == Cmd::F_ADD_SEALS, "we only support Cmd::F_GETFL in Fcntl");
+        if cmd == Cmd::F_GETFL {
+            return self.lock().GetFlags() as i64;
+        } else {
+            let fd = self.lock().fd;
+            let ret = unsafe { fcntl(fd, cmd, arg) };
+            return SysRet(ret as i64);
+        }
     }
 
     pub fn IOIoCtl(&self, cmd: u64, argp: u64) -> i64 {
