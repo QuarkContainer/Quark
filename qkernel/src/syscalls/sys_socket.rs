@@ -741,7 +741,9 @@ pub fn SysRecvFrom(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         nameLen = task.CopyInObj(nameLenPtr)?;
     }
 
-    if (namePtr == 0 || nameLen == 0) && (file.Flags().NonBlocking || flags & MsgType::MSG_DONTWAIT != 0 ){
+    if (namePtr == 0 || nameLen == 0) && 
+        (file.Flags().NonBlocking || flags & MsgType::MSG_DONTWAIT != 0) &&
+        flags & !MsgType::MSG_DONTWAIT == 0 {
         match file.Readv(task, &mut iovs) {
             Err(Error::ErrInterrupted) => return Err(Error::SysError(SysErr::ERESTARTSYS)),
             Err(e) => {

@@ -816,24 +816,12 @@ impl SockOperations for HostSocketOperations {
         self.EventRegister(task, &general, EVENT_READ);
         defer!(self.EventUnregister(task, &general));
 
-        let mut res = if msgHdr.msgControlLen != 0 {
-            Kernel::HostSpace::IORecvMsg(
-                self.fd,
-                &mut msgHdr as *mut _ as u64,
-                flags | MsgType::MSG_DONTWAIT,
-                false,
-            ) as i32
-        } else {
-            Kernel::HostSpace::IORecvfrom(
-                self.fd,
-                buf.Ptr(),
-                size,
-                flags  | MsgType::MSG_DONTWAIT,
-                msgHdr.msgName,
-                &msgHdr.nameLen as * const _ as u64,
-
-            ) as i32
-        };
+        let mut res = Kernel::HostSpace::IORecvMsg(
+            self.fd,
+            &mut msgHdr as *mut _ as u64,
+            flags | MsgType::MSG_DONTWAIT,
+            false,
+        ) as i32;
 
         while res == -SysErr::EWOULDBLOCK && flags & (MsgType::MSG_DONTWAIT | MsgType::MSG_ERRQUEUE) == 0 {
 
@@ -850,24 +838,12 @@ impl SockOperations for HostSocketOperations {
                 _ => (),
             }
 
-            res = if msgHdr.msgControlLen != 0 {
-                Kernel::HostSpace::IORecvMsg(
-                    self.fd,
-                    &mut msgHdr as *mut _ as u64,
-                    flags | MsgType::MSG_DONTWAIT,
-                    false,
-                ) as i32
-            } else {
-                Kernel::HostSpace::IORecvfrom(
-                    self.fd,
-                    buf.Ptr(),
-                    size,
-                    flags  | MsgType::MSG_DONTWAIT,
-                    msgHdr.msgName,
-                    &msgHdr.nameLen as * const _ as u64,
-
-                ) as i32
-            };
+            res = Kernel::HostSpace::IORecvMsg(
+                self.fd,
+                &mut msgHdr as *mut _ as u64,
+                flags | MsgType::MSG_DONTWAIT,
+                false,
+            ) as i32;
         }
 
         if res < 0 {
