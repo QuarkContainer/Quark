@@ -550,12 +550,10 @@ impl Waitable for SocketOperations {
     }
 
     fn EventUnregister(&self, task: &Task, e: &WaitEntry) {
-        error!("EventUnregister, 1");
         let queue = self.queue.clone();
         queue.EventUnregister(task, e);
         let fd = self.fd;
         if !self.SocketBufEnabled() && self.AcceptQueue().is_none() {
-            error!("EventUnregister, before UpdateFD");
             UpdateFD(fd).unwrap();
         };
     }
