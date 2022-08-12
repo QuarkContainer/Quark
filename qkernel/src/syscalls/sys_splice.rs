@@ -333,11 +333,10 @@ pub fn DoSplice(
     loop {
         let mut inW = false;
         let mut outW = false;
-        if !inW && srcFile.Readiness(task, EVENT_READ) == 0 && !srcFile.Flags().NonBlocking {
+        if !inW && srcFile.Readiness(task, EVENT_READ) == 0 && srcFile.WouldBlock() {
             srcFile.EventRegister(task, &general, EVENT_READ);
             inW = true;
-        } else if !outW && dstFile.Readiness(task, EVENT_WRITE) == 0 && !dstFile.Flags().NonBlocking
-        {
+        } else if !outW && dstFile.Readiness(task, EVENT_WRITE) == 0 && dstFile.WouldBlock() {
             dstFile.EventRegister(task, &general, EVENT_WRITE);
             outW = true;
         }
@@ -358,7 +357,7 @@ pub fn DoSplice(
                     return Err(e);
                 }
 
-                if e == Error::SysError(SysErr::EWOULDBLOCK) && nonBlocking {
+                if nonBlocking {
                     return Err(e);
                 }
             }

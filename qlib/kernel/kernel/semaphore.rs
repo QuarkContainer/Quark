@@ -124,7 +124,6 @@ impl SemRegistryInternal {
 
             if !me.semaphores.contains_key(&id) {
                 me.lastIDUsed = id;
-                error!("newSet ...");
                 set.lock().id = id;
                 me.semaphores.insert(id, set.clone());
                 return Ok(set);
