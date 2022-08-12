@@ -25,6 +25,7 @@ use super::bytestream::*;
 use super::common::*;
 use super::linux_def::*;
 use super::mutex::*;
+use crate::qlib::kernel::Kernel::HostSpace;
 
 pub struct SocketBuff {
     pub wClosed: AtomicBool,
@@ -264,6 +265,14 @@ pub struct AcceptQueueIntern {
     pub queueLen: usize,
     pub error: i32,
     pub total: u64,
+}
+
+impl Drop for AcceptQueueIntern {
+    fn drop(&mut self) {
+        for ai in &mut self.queue {
+            HostSpace::Close(ai.fd);
+        }
+    }
 }
 
 impl AcceptQueueIntern {

@@ -481,7 +481,7 @@ impl FileOperations for UringSocketOperations {
         match sockBufType {
             UringSocketType::Uring(buf) => {
                 if buf.WClosed() {
-                    return Err(Error::SysError(SysErr::ESPIPE));
+                    return Err(Error::SysError(SysErr::EPIPE));
                 }
 
                 return QUring::SocketSend(

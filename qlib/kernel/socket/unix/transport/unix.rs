@@ -1152,7 +1152,8 @@ impl BaseEndpoint {
         }
 
         let receiver = e.receiver.as_ref().unwrap().clone();
-        let (recvLen, msgLen, cms, cmt, a, notify) = receiver.Recv(data, creds, numRights, peek)?;
+        let (recvLen, msgLen, cms, cmt, a, notify) 
+            = receiver.Recv(data, creds, numRights, peek)?;
 
         if notify {
             receiver.RecvNotify();
