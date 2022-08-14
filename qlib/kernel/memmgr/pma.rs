@@ -61,10 +61,6 @@ impl Allocator for PageMgr {
         //error!("PageMgr allocpage ... incrRef is {}, addr is {:x}", incrRef, addr);
         return Ok(addr);
     }
-
-    fn FreePage(&self, addr: u64) -> Result<()> {
-        return self.pagepool.FreePage(addr);
-    }
 }
 
 extern "C" {

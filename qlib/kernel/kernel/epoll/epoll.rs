@@ -172,11 +172,10 @@ impl EventPoll {
         return false;
     }
 
-
     pub fn ReadEvents(&self, task: &Task, max: i32) -> Vec<Event> {
         let mut lists = self.lists.lock();
 
-        let mut ret = Vec::with_capacity(16);
+        let mut ret = Vec::with_capacity(64);
         let mut it = lists.readyList.Front();
         while ret.len() < max as usize {
             let entry = if let Some(entry) = it {

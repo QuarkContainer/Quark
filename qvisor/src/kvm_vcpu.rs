@@ -99,10 +99,6 @@ impl Allocator for HostPageAllocator {
         ZeroPage(ret);
         return Ok(ret);
     }
-
-    fn FreePage(&self, _addr: u64) -> Result<()> {
-        panic!("HostPageAllocator doesn't support FreePage");
-    }
 }
 
 impl RefMgr for HostPageAllocator {

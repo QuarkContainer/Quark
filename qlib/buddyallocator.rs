@@ -121,11 +121,6 @@ impl Allocator for MemAllocator {
         let res = self.lock().Alloc(1);
         return res;
     }
-
-    fn FreePage(&self, addr: u64) -> Result<()> {
-        ZeroPage(addr);
-        return self.lock().Free(addr, 1);
-    }
 }
 
 impl MemAllocator {
@@ -133,6 +128,11 @@ impl MemAllocator {
         return Self(QMutex::new(MemAllocatorInternal::New()));
     }
 
+    fn FreePage(&self, addr: u64) -> Result<()> {
+        ZeroPage(addr);
+        return self.lock().Free(addr, 1);
+    }
+    
     //baseAddr: is the base memory address
     //ord: the memory size is 2^ord pages
     //memory layout: the Buddy Allocator's memory is also allocated by itself.

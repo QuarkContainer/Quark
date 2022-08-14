@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use alloc::slice;
+
 extern crate alloc;
 
 pub const RDMA_ENABLE: bool = true;
@@ -134,6 +136,15 @@ pub enum TaskRunState {
     // can't reach this state
     RunSyscallRet,
 }
+
+pub fn ZeroPage(pageStart: u64) {
+    unsafe {
+        let arr = slice::from_raw_parts_mut(pageStart as *mut u64, 512);
+        for i in 0..512 {
+            arr[i] = 0
+        }
+    }
+}   
 
 // Error represents an error in the netstack error space. Using a special type
 // ensures that errors outside of this space are not accidentally introduced.
@@ -487,5 +498,4 @@ pub trait RefMgr: Send {
 
 pub trait Allocator: RefMgr {
     fn AllocPage(&self, incrRef: bool) -> Result<u64>;
-    fn FreePage(&self, addr: u64) -> Result<()>;
 }
