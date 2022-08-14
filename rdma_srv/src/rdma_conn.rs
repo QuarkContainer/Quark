@@ -788,7 +788,6 @@ impl RDMAControlChannel {
     }
 
     pub fn HandleConnectRequest(&self, connectRequest: &ConnectRequest) {
-        // println!("HandleConnectRequest: {:?}", connectRequest);
         let mut found = false;
         let mut agentId = 0;
         let mut sockfd = 0;

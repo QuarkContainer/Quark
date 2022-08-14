@@ -446,13 +446,6 @@ impl RDMASvcClient {
                                 }
                             };
 
-                            // if response.event == 5 {
-                            // error!(
-                            //     "RDMARespMsg::RDMANotify, 0 sockfd: {}, event: 0x{:x}",
-                            //     sockFd, response.event
-                            // );
-                            // }
-
                             if response.event & EVENT_IN != 0 {
                                 let waitInfo = GlobalIOMgr()
                                     .GetByHost(sockFd)
@@ -462,14 +455,8 @@ impl RDMASvcClient {
                                     .clone();
 
                                 waitInfo.Notify(EVENT_IN);
-                                // if response.event == 5 {
-                                // error!("RDMARespMsg::RDMANotify, 1 sockfd: {}", sockFd);
-                                // }
                             }
                             if response.event & EVENT_OUT != 0 {
-                                // if response.event == 5 {
-                                // error!("RDMARespMsg::RDMANotify, 1.1 sockfd: {}", sockFd);
-                                // }
                                 let waitInfo = GlobalIOMgr()
                                     .GetByHost(sockFd)
                                     .unwrap()
@@ -477,9 +464,6 @@ impl RDMASvcClient {
                                     .waitInfo
                                     .clone();
                                 waitInfo.Notify(EVENT_OUT);
-                                // if response.event == 5 {
-                                // error!("RDMARespMsg::RDMANotify, 1.2 sockfd: {}", sockFd);
-                                // }
                             }
                         }
                         RDMARespMsg::RDMAFinNotify(response) => {

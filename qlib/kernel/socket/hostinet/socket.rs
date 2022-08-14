@@ -905,7 +905,6 @@ impl SockOperations for SocketOperations {
             if res == 0 {
                 self.SetRemoteAddr(socketaddr.to_vec())?;
                 if self.stype == SockType::SOCK_STREAM {
-                    // error!("SocketOperations::Connect 1, fd: {}", self.fd);
                     self.PostConnect(task);
                 }
 
@@ -976,7 +975,6 @@ impl SockOperations for SocketOperations {
 
         self.SetRemoteAddr(socketaddr.to_vec())?;
         if self.stype == SockType::SOCK_STREAM {
-            // error!("SocketOperations::Connect 2, fd: {}", self.fd);
             self.PostConnect(task);
         }
 
