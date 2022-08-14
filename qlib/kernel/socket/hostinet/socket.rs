@@ -501,6 +501,7 @@ impl Waitable for SocketOperations {
                     .sockInfo
                     .lock()
                     .clone();
+                // error!("Readiness 2");
                 match sockInfo {
                     SockInfo::RDMADataSocket(dataSock) => {
                         return dataSock.socketBuf.Events() & mask;
@@ -1394,7 +1395,7 @@ impl SockOperations for SocketOperations {
 
         // TCP_INQ is bound to buffer implementation
         if (level as u64) == LibcConst::SOL_TCP && (name as u64) == LibcConst::TCP_INQ {
-            let val : i32 = task.CopyInObj::<i32>(&opt[0] as *const _ as u64)?;
+            let val: i32 = task.CopyInObj::<i32>(&opt[0] as *const _ as u64)?;
 
             if val == 1 {
                 self.passInq.store(true, Ordering::Relaxed);
@@ -2028,7 +2029,8 @@ impl Provider for SocketProvider {
             )?;
         } else if SHARESPACE.config.read().UringIO
             && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
-            && stype == SockType::SOCK_STREAM {
+            && stype == SockType::SOCK_STREAM
+        {
             let socketType = UringSocketType::TCPInit;
 
             file = newUringSocketFile(
