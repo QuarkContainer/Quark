@@ -83,6 +83,8 @@ pub mod common;
 pub mod constants;
 pub mod node_informer;
 pub mod pod_informer;
+pub mod service_informer;
+pub mod endpoints_informer;
 
 use crate::qlib::bytestream::ByteStream;
 use crate::rdma_srv::RDMA_CTLINFO;
@@ -120,6 +122,8 @@ use std::sync::Arc;
 use std::{env, mem, ptr, thread, time};
 use node_informer::NodeInformer;
 use pod_informer::PodInformer;
+use service_informer::ServiceInformer;
+use endpoints_informer::EndpointsInformer;
 use common::*;
 
 #[allow(unused_macros)]
@@ -199,6 +203,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             match pod_informer.run().await {
                 Err(e) => {
                     println!("Error to handle pods: {:?}", e);
+                },
+                Ok(_) => (),              
+            };
+        });
+
+        tokio::spawn(async {
+            while !RDMA_CTLINFO.isCMConnected_get() {
+                thread::sleep_ms(1000);
+            }
+            let mut service_informer = ServiceInformer::new();
+            match service_informer.run().await {
+                Err(e) => {
+                    println!("Error to handle services: {:?}", e);
+                },
+                Ok(_) => (),              
+            };
+        });
+
+        tokio::spawn(async {
+            while !RDMA_CTLINFO.isCMConnected_get() {
+                thread::sleep_ms(1000);
+            }
+            let mut endpoints_informer = EndpointsInformer::new();
+            match endpoints_informer.run().await {
+                Err(e) => {
+                    println!("Error to handle endpointses: {:?}", e);
                 },
                 Ok(_) => (),              
             };
@@ -283,7 +313,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // unix domain socket
 
-    let mut unix_sock_path = "/var/quarkrdma/rdma_srv";
+    let mut unix_sock_path = "/var/quarkrdma/rdma_srv_socket";
     if args.len() > 1 {
         unix_sock_path = args.get(1).unwrap(); //"/tmp/rdma_srv1";
     }

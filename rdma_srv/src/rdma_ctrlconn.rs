@@ -34,6 +34,12 @@ pub struct CtrlInfo {
     // pods: pod ipaddr --> Pod
     pub pods: Mutex<HashMap<u32, Pod>>,
 
+    // services: service name --> Service
+    pub services: Mutex<HashMap<String, Service>>,
+
+    // endpointses: endpoints name --> Endpoints
+    pub endpointses: Mutex<HashMap<String, Endpoints>>,
+
     // containerids: containerid --> ip
     pub containerids: Mutex<HashMap<String, u32>>,
 
@@ -74,6 +80,8 @@ impl Default for CtrlInfo {
     fn default() -> CtrlInfo {        
         let mut nodes: HashMap<u32, Node> = HashMap::new();
         let pods: HashMap<u32, Pod> = HashMap::new();
+        let services: HashMap<String, Service> = HashMap::new();
+        let endpointses: HashMap<String, Endpoints> = HashMap::new();
         let mut containerids: HashMap<String, u32> = HashMap::new();
         let mut ipToPodIdMappings: HashMap<u32, String> = HashMap::new();
 
@@ -108,6 +116,8 @@ impl Default for CtrlInfo {
         CtrlInfo {
             nodes: Mutex::new(nodes),
             pods: Mutex::new(pods),
+            services: Mutex::new(services),
+            endpointses: Mutex::new(endpointses),
             containerids: Mutex::new(containerids),
             ipToPodIdMappings: Mutex::new(ipToPodIdMappings),
             subnetmap: Mutex::new(HashMap::new()),
@@ -255,6 +265,34 @@ pub struct Pod {
     pub ip: u32,
     pub node_name: String,
     pub container_id: String,
+    pub resource_version: i32,
+}
+
+
+#[derive(Default, Debug, Clone)]
+pub struct Service {
+    pub key: String,
+    pub cluster_ip: u32,
+    pub ports: HashSet<Port>,
+    pub resource_version: i32,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub struct Port {
+    pub protocal: String,
+    pub port: i32,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub struct IpWithPort {
+    pub ip: u32,
+    pub port: Port,
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct Endpoints {
+    pub key: String,
+    pub ip_with_ports: HashSet<IpWithPort>,
     pub resource_version: i32,
 }
 
