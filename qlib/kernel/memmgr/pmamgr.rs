@@ -162,9 +162,6 @@ impl PagePool {
             refcount
         };
 
-        if refcount == 0 {
-            self.Free(addr)?;
-        }
         self.refCount.fetch_sub(1, Ordering::Release);
         return Ok(refcount as u64);
     }
@@ -199,10 +196,6 @@ impl PagePool {
         return Ok(addr);
     }
 
-    pub fn FreePage(&self, addr: u64) -> Result<()> {
-        return self.Free(addr);
-    }
-
     pub fn Allocate(&self) -> Result<u64> {
         match CPULocal::Myself().pageAllocator.lock().AllocPage() {
             Some(page) => {
@@ -219,10 +212,10 @@ impl PagePool {
         return Ok(addr as u64);
     }
 
-    pub fn Free(&self, addr: u64) -> Result<()> {
-        CPULocal::Myself().pageAllocator.lock().FreePage(addr);
-        return Ok(());
-        //return self.allocator.Free(addr);
+    pub fn FreePage(&self, addr: u64) -> Result<()> {
+        //CPULocal::Myself().pageAllocator.lock().FreePage(addr);
+        //return Ok(());
+        return self.allocator.Free(addr);
     }
 
     pub fn CheckZeroPage(pageStart: u64) {

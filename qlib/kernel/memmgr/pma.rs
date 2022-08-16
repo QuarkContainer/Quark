@@ -108,6 +108,10 @@ impl PageMgr {
         self.pagepool.Deref(addr)
     }
 
+    pub fn FreePage(&self, addr: u64) -> Result<()> {
+        return self.pagepool.FreePage(addr)
+    }
+
     pub fn VsyscallPages(&self) -> Arc<Vec<u64>> {
         let pages = {
             let mut pages = self.vsyscallPages.lock();
@@ -145,6 +149,7 @@ impl PageTables {
     pub fn Drop(&self) {
         self.UnmapAll()
             .expect("FreePageTables::Drop fail at UnmapAll");
+        self.FreePages();
         self.SetRoot(0);
     }
 
