@@ -15,6 +15,8 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
+use crate::qlib::kernel::PAGE_MGR;
+
 use super::super::super::auth::id::*;
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
@@ -1023,6 +1025,7 @@ impl Thread {
         );
         if taskCnt == 0 {
             error!("ExitNotify shutdown");
+            PAGE_MGR.Clear();
             super::super::SHARESPACE.StoreShutdown();
             //PerfStop();
             PerfPrint();

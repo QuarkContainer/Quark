@@ -42,6 +42,13 @@ impl Drop for PageBlockAllocIntern {
 }
 
 impl PageBlockAllocIntern {
+    pub fn PrintPages(&self) {
+        for addr in &self.pageBlocks {
+            let pb = PageBlock::FromAddr(*addr);
+            pb.PrintPages();
+        }
+    }
+
     pub fn UnlinkPageBlock(&mut self, pb: &mut PageBlock) {
         let mut pb = pb.allocator.lock();
         let prev = pb.prev;
@@ -90,6 +97,14 @@ pub struct PageBlockAlloc {
 
 
 impl PageBlockAlloc {
+    pub fn New() -> Self {
+        return Self::default();
+    }
+
+    pub fn PrintPages(&self) {
+        self.data.lock().PrintPages();
+    }
+
     pub fn Alloc(&self) -> Result<u64> {
         let mut al = self.data.lock();
 
@@ -116,18 +131,32 @@ impl PageBlockAlloc {
 }
 
 impl RefMgr for PageBlockAlloc {
-
     // return ref count
     fn Ref(&self, addr: u64) -> Result<u64> {
+        let (heapStart, heapEnd) = GLOBAL_ALLOCATOR.HeapRange();
+        if addr <= heapStart || addr >= heapEnd {
+            return Ok(1)
+        }
+
         let pb = PageBlock::FromPageAddr(addr);
-        assert!(pb.magic == PAGE_BLOCK_MAGIC);
+        if pb.magic!= PAGE_BLOCK_MAGIC {
+            return Ok(1)
+        }
+        //assert!(pb.magic == PAGE_BLOCK_MAGIC);
         return pb.Ref(addr);
     }
 
     // return ref count
     fn Deref(&self, addr: u64) -> Result<u64> {
+        let (heapStart, heapEnd) = GLOBAL_ALLOCATOR.HeapRange();
+        if addr <= heapStart || addr >= heapEnd {
+            return Ok(1)
+        }
+
         let pb = PageBlock::FromPageAddr(addr);
-        assert!(pb.magic == PAGE_BLOCK_MAGIC);
+        if pb.magic!= PAGE_BLOCK_MAGIC {
+            return Ok(1)
+        }
 
         let (refcount, action) = pb.Deref(addr)?;
         match action {
@@ -143,7 +172,7 @@ impl RefMgr for PageBlockAlloc {
                     self.freeCount.fetch_sub(BLOCK_PAGE_COUNT - 1, Ordering::Release);
                     pb.Drop()?;
                 } else {
-                    self.freeCount.fetch_add(1, Ordering::Release);
+                     self.freeCount.fetch_add(1, Ordering::Release);
                 }
             }
             PageBlockAction::AddPageCount => {
@@ -156,8 +185,16 @@ impl RefMgr for PageBlockAlloc {
     }
     
     fn GetRef(&self, addr: u64) -> Result<u64> {
+        let (heapStart, heapEnd) = GLOBAL_ALLOCATOR.HeapRange();
+        if addr <= heapStart || addr >= heapEnd {
+            return Ok(1)
+        }
+
         let pb = PageBlock::FromPageAddr(addr);
-        assert!(pb.magic == PAGE_BLOCK_MAGIC);
+        if pb.magic!= PAGE_BLOCK_MAGIC {
+            return Ok(0)
+        }
+        //assert!(pb.magic == PAGE_BLOCK_MAGIC);
         return pb.GetRef(addr);
     }
 }
@@ -175,7 +212,7 @@ impl Allocator for PageBlockAlloc {
 }
 
 pub const BLOCK_PAGE_COUNT : u64 = 511;
-pub const PAGE_BLOCK_MAGIC : u64 = 0x1234567890;
+pub const PAGE_BLOCK_MAGIC : u64 = 0x1234567890abc;
 
 pub struct PageBlockInternal {
     pub prev: u64,
@@ -194,12 +231,13 @@ impl PageBlockInternal {
         // zero will be init by ZeroPage
         //self.prev = 0;
         //self.next = 0;
-        //self.freePageList = MemList::default();
+        self.freePageList = MemList::New(MemoryDef::PAGE_SIZE_4K as _);
         self.unAllocPageCnt = BLOCK_PAGE_COUNT;
         self.totalFreeCount = BLOCK_PAGE_COUNT;
     }
 }
 
+#[derive(Debug)]
 pub enum PageBlockAction {
     None,
     OkForFree,
@@ -213,13 +251,22 @@ pub struct PageBlock {
     pub allocator: QMutex<PageBlockInternal>,
 
     // for a 2MB pages, the first 4KB page is the Pageblock, there are maximum 511 free pages
-    pub refs: [AtomicU16; BLOCK_PAGE_COUNT as usize], 
+    pub refs: [AtomicU16; BLOCK_PAGE_COUNT as usize + 1], 
 }
 
 impl PageBlock {
     pub fn FromAddr(addr: u64) -> &'static mut Self {
         return unsafe {
             &mut *(addr as * mut Self)
+        }
+    }
+
+    pub fn PrintPages(&self) {
+        for i in 1..self.refs.len() {
+            let cnt = self.refs[i].load(Ordering::Relaxed);
+            if cnt > 0 {
+                error!("PageBlock {:x} pages {:x}/{}", self.ToAddr(), self.IdxToAddr(i as _), cnt)
+            }
         }
     }
 
@@ -277,10 +324,24 @@ impl PageBlock {
         return Ok(refCnt + 1)
     }
 
+    pub fn FreePage(&self, addr: u64) -> Result<PageBlockAction> {
+        let mut allocaor = self.allocator.lock();
+        allocaor.freePageList.Push(addr);
+        allocaor.totalFreeCount += 1;
+        let mut action = PageBlockAction::None;
+        if allocaor.totalFreeCount == 1 {
+            action = PageBlockAction::OkForAlloc;
+        } else if allocaor.totalFreeCount == BLOCK_PAGE_COUNT {
+            action = PageBlockAction::OkForFree;
+        }
+
+        return Ok(action)
+    }
+
     // return (ref count, action need to perform)
     pub fn Deref(&self, addr: u64) -> Result<(u64, PageBlockAction)> {
         let idx = self.Idx(addr);
-        
+
         let refCnt = self.refs[idx].fetch_sub(1, Ordering::SeqCst) as u64;
         let mut action = PageBlockAction::None;
         if refCnt == 1 { // last one
@@ -295,6 +356,7 @@ impl PageBlock {
                 action = PageBlockAction::AddPageCount;
             }
         }
+        assert!(refCnt > 0, "Deref refcnt is {}", refCnt);
         return Ok((refCnt - 1, action))
     }
 
@@ -315,7 +377,6 @@ impl PageBlock {
 
         let addr = self.IdxToAddr(allocaor.unAllocPageCnt);
         allocaor.unAllocPageCnt -= 1;
-        assert!(allocaor.unAllocPageCnt>=1);
         return (addr, allocaor.totalFreeCount)
     }
 

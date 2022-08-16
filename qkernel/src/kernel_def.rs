@@ -219,7 +219,7 @@ pub fn switch(from: TaskId, to: TaskId) {
         toCtx.SwitchPageTable();
     }
     toCtx.SetFS();
-
+    
     fromCtx.mm.VcpuLeave();
     toCtx.mm.VcpuEnter();
 
