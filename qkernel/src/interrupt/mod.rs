@@ -155,10 +155,10 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, ptRegs: &mut PtRegs, errorCode: u
             ptRegs, ev
         );
 
-        for i in 0..super::CPU_LOCAL.len() {
-            print!("CPU#{} is {:#x?}", i, super::CPU_LOCAL[i]);
-        }
-
+        backtracer::trace(ptRegs.rip, ptRegs.rsp, ptRegs.rbp, &mut |frame| {
+            print!("ExceptionHandler frame is {:#x?}", frame);
+            true
+        });
         panic!("Get on page fault exception from kernel");
     };
 

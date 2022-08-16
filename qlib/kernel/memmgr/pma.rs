@@ -19,8 +19,6 @@ use x86_64::structures::paging::PageTable;
 use x86_64::structures::paging::PageTableFlags;
 use x86_64::PhysAddr;
 use x86_64::VirtAddr;
-use core::sync::atomic::AtomicU64;
-use core::sync::atomic::Ordering;
 
 use super::super::super::addr::*;
 use super::super::super::common::*;
@@ -31,14 +29,25 @@ use super::super::super::range::*;
 use super::super::asm::*;
 use super::super::task::*;
 use super::super::PAGE_MGR;
-use super::pmamgr::*;
+//use super::super::super::mem::block_allocator::*;
+use crate::qlib::kernel::memmgr::pmamgr::PagePool;
 
 pub type PageMgrRef = ObjectRef<PageMgr>;
 
 pub struct PageMgr {
     pub pagepool: PagePool,
-    pub zeroPage: AtomicU64,
+    //pub pagepool: PageBlockAlloc,
     pub vsyscallPages: Mutex<Arc<Vec<u64>>>,
+}
+
+impl PageMgr {
+    pub fn Clear(&self) {
+        let mut pages = self.vsyscallPages.lock();
+        for p in pages.iter() {
+            self.pagepool.Deref(*p).unwrap();
+        }
+        *pages = Arc::new(Vec::new());
+    }
 }
 
 impl RefMgr for PageMgr {
@@ -61,10 +70,6 @@ impl Allocator for PageMgr {
         //error!("PageMgr allocpage ... incrRef is {}, addr is {:x}", incrRef, addr);
         return Ok(addr);
     }
-
-    fn FreePage(&self, addr: u64) -> Result<()> {
-        return self.pagepool.FreePage(addr);
-    }
 }
 
 extern "C" {
@@ -80,8 +85,8 @@ impl Default for PageMgr {
 impl PageMgr {
     pub fn New() -> Self {
         return Self {
+            //pagepool: PageBlockAlloc::default(), //PagePool::New(),
             pagepool: PagePool::New(),
-            zeroPage: AtomicU64::new(0),
             vsyscallPages: Mutex::new(Arc::new(Vec::new())),
         };
     }
@@ -91,22 +96,12 @@ impl PageMgr {
     }
 
     pub fn PrintRefs(&self) {
+        //self.pagepool.PrintPages();
         self.pagepool.PrintRefs();
     }
 
     pub fn DerefPage(&self, addr: u64) {
         self.pagepool.Deref(addr).unwrap();
-    }
-
-    pub fn ZeroPage(&mut self) -> u64 {
-        let mut zeropage = self.zeroPage.load(Ordering::Relaxed);
-        if zeropage == 0 {
-            zeropage = self.pagepool.AllocPage(false).unwrap();
-            self.zeroPage.store(zeropage, Ordering::SeqCst);
-        }
-
-        self.pagepool.Ref(zeropage).unwrap();
-        return zeropage;
     }
 
     pub fn Deref(&self, addr: u64) -> Result<u64> {
@@ -129,11 +124,6 @@ impl PageMgr {
 
             pages.clone()
         };
-
-
-        for p in pages.iter() {
-            self.pagepool.Ref(*p).unwrap();
-        }
 
         return pages;
     }

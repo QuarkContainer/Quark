@@ -99,10 +99,6 @@ impl Allocator for HostPageAllocator {
         ZeroPage(ret);
         return Ok(ret);
     }
-
-    fn FreePage(&self, _addr: u64) -> Result<()> {
-        panic!("HostPageAllocator doesn't support FreePage");
-    }
 }
 
 impl RefMgr for HostPageAllocator {
@@ -481,8 +477,14 @@ impl KVMVcpu {
                             .vcpu
                             .get_regs()
                             .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                        error!("vcpu error regs is {:x?}, ioerror: {:?}", regs, e);
-                        panic!("kvm virtual cpu[{}] run failed: Error {:?}", self.id, e)
+                        
+                            error!("vcpu error regs is {:x?}, ioerror: {:?}", regs, e);
+                            backtracer::trace(regs.rip, regs.rsp, regs.rbp, &mut |frame| {
+                                print!("host frame is {:#x?}", frame);
+                                true
+                            });
+                        
+                            panic!("kvm virtual cpu[{}] run failed: Error {:?}", self.id, e)
                     }
                 }
             };
@@ -891,6 +893,11 @@ impl KVMVcpu {
 
                     error!("Panic: CPU[{}] Unexpected exit reason: {:?}, regs is {:#x?}, sregs is {:#x?}",
                         self.id, r, regs, vcpu_sregs);
+
+                    backtracer::trace(regs.rip, regs.rsp, regs.rbp, &mut |frame| {
+                        print!("Unexpected exit frame is {:#x?}", frame);
+                        true
+                    });
                     unsafe {
                         libc::exit(0);
                     }

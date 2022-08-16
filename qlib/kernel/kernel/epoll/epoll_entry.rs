@@ -68,6 +68,7 @@ impl PollEntry {
             self.SetReady();
             lists.readyList.PushBack(self);
 
+            drop(lists);
             epoll.queue.Notify(READABLE_EVENT);
         }
     }

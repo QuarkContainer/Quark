@@ -2968,6 +2968,7 @@ impl MemoryDef {
 
     pub const PAGE_SIZE_4K: u64 = 1 << Self::PAGE_SHIFT; //0x1000;
     pub const PAGE_SIZE_2M: u64 = (2 * Self::ONE_MB);
+    pub const PAGE_SIZE_2M_MASK: u64 = !(Self::PAGE_SIZE_2M-1);
     pub const BLOCK_SIZE: u64 = 64 * Self::ONE_GB;
 
     pub const PHY_LOWER_ADDR: u64 = 256 * Self::ONE_GB; // 256 ~ 512GB is Guest kernal space

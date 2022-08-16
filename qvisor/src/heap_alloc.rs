@@ -45,7 +45,9 @@ impl HostAllocator {
             addr
         );
 
-        *self.Allocator() = ListAllocator::Empty();
+        let heapStart = self.listHeapAddr.load(Ordering::Relaxed);
+        let heapEnd = heapStart + heapSize as u64;
+        *self.Allocator() = ListAllocator::New(heapStart as _, heapEnd);
 
         // reserve first 4KB gor the listAllocator
         let size = core::mem::size_of::<ListAllocator>();

@@ -244,6 +244,12 @@ impl HostAllocator {
     pub fn Allocator(&self) -> &mut ListAllocator {
         return unsafe { &mut *(self.listHeapAddr.load(Ordering::Relaxed) as *mut ListAllocator) };
     }
+
+    #[inline]
+    pub fn HeapRange(&self) -> (u64, u64) {
+        let allocator = self.Allocator();
+        return (allocator.heapStart, allocator.heapEnd)
+    }
 }
 
 #[derive(Debug)]
@@ -253,6 +259,8 @@ pub struct ListAllocator {
     pub total: AtomicUsize,
     pub free: AtomicUsize,
     pub bufSize: AtomicUsize,
+    pub heapStart: u64,
+    pub heapEnd: u64,
     //pub errorHandler: Arc<OOMHandler>
     pub initialized: AtomicBool,
 }
@@ -263,12 +271,12 @@ pub trait OOMHandler {
 
 impl Default for ListAllocator {
     fn default() -> Self {
-        return Self::Empty();
+        return Self::New(0, 0);
     }
 }
 
 impl ListAllocator {
-    pub const fn Empty() -> Self {
+    pub const fn New(heapStart: u64, heapEnd: u64) -> Self {
         let bufs: [CachePadded<QMutex<FreeMemBlockMgr>>; CLASS_CNT] = [
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(0, 0))),
             CachePadded::new(QMutex::new(FreeMemBlockMgr::New(0, 1))),
@@ -294,6 +302,8 @@ impl ListAllocator {
             total: AtomicUsize::new(0),
             free: AtomicUsize::new(0),
             bufSize: AtomicUsize::new(0),
+            heapStart,
+            heapEnd,
             initialized: AtomicBool::new(false),
         };
     }
