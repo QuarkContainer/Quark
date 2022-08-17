@@ -53,7 +53,7 @@ impl PageBlockAllocIntern {
         let mut pb = pb.allocator.lock();
         let prev = pb.prev;
         let next = pb.next;
-        if prev == 0 {
+        if prev == 0 { //head
             self.pageBlockList = next;
         } else {
             PageBlock::FromAddr(prev).allocator.lock().next = next;
@@ -70,6 +70,12 @@ impl PageBlockAllocIntern {
     pub fn LinkPageBlock(&mut self, pb: &mut PageBlock) {
         let pbAddr = pb.ToAddr();
         let mut pb = pb.allocator.lock();
+
+        let next = self.pageBlockList;
+        if next > 0 {
+            PageBlock::FromAddr(next).allocator.lock().prev = pbAddr;
+        }
+
         pb.prev = 0;
         pb.next = self.pageBlockList;
         self.pageBlockList = pbAddr;
@@ -127,6 +133,34 @@ impl PageBlockAlloc {
         return Ok(addr)
     }
 
+    pub fn FreePage(&self, addr: u64) -> Result<()> {
+        let pb = PageBlock::FromPageAddr(addr);
+        let action = pb.FreePage(addr)?;
+        match action {
+            // the pb was empty and get just get one freed page, so it can allocate page now
+            PageBlockAction::OkForAlloc => {
+                self.data.lock().LinkPageBlock(pb);
+                self.freeCount.fetch_add(1, Ordering::Release);
+            }
+            // all pages of pb is freed. So it is possible to free whole pb to heap
+            PageBlockAction::OkForFree => {
+                if self.freeCount.load(Ordering::Acquire) >= 2 * BLOCK_PAGE_COUNT {
+                    self.data.lock().Remove(pb);
+                    self.freeCount.fetch_sub(BLOCK_PAGE_COUNT - 1, Ordering::Release);
+                    pb.Drop()?;
+                } else {
+                     self.freeCount.fetch_add(1, Ordering::Release);
+                }
+            }
+            PageBlockAction::AddPageCount => {
+                self.freeCount.fetch_add(1, Ordering::Release);
+            }
+            _ => ()
+        }
+
+        return Ok(())
+    }
+
     
 }
 
@@ -158,29 +192,7 @@ impl RefMgr for PageBlockAlloc {
             return Ok(1)
         }
 
-        let (refcount, action) = pb.Deref(addr)?;
-        match action {
-            // the pb was empty and get just get one freed page, so it can allocate page now
-            PageBlockAction::OkForAlloc => {
-                self.data.lock().LinkPageBlock(pb);
-                self.freeCount.fetch_add(1, Ordering::Release);
-            }
-            // all pages of pb is freed. So it is possible to free whole pb to heap
-            PageBlockAction::OkForFree => {
-                if self.freeCount.load(Ordering::Acquire) >= 2 * BLOCK_PAGE_COUNT {
-                    self.data.lock().Remove(pb);
-                    self.freeCount.fetch_sub(BLOCK_PAGE_COUNT - 1, Ordering::Release);
-                    pb.Drop()?;
-                } else {
-                     self.freeCount.fetch_add(1, Ordering::Release);
-                }
-            }
-            PageBlockAction::AddPageCount => {
-                self.freeCount.fetch_add(1, Ordering::Release);
-            }
-            _ => ()
-        }
-
+        let refcount = pb.Deref(addr)?;
         return Ok(refcount)
     }
     
@@ -339,25 +351,12 @@ impl PageBlock {
     }
 
     // return (ref count, action need to perform)
-    pub fn Deref(&self, addr: u64) -> Result<(u64, PageBlockAction)> {
+    pub fn Deref(&self, addr: u64) -> Result<u64> {
         let idx = self.Idx(addr);
 
         let refCnt = self.refs[idx].fetch_sub(1, Ordering::SeqCst) as u64;
-        let mut action = PageBlockAction::None;
-        if refCnt == 1 { // last one
-            let mut allocaor = self.allocator.lock();
-            allocaor.freePageList.Push(addr);
-            allocaor.totalFreeCount += 1;
-            if allocaor.totalFreeCount == 1 {
-                action = PageBlockAction::OkForAlloc;
-            } else if allocaor.totalFreeCount == BLOCK_PAGE_COUNT {
-                action = PageBlockAction::OkForFree;
-            } else {
-                action = PageBlockAction::AddPageCount;
-            }
-        }
         assert!(refCnt > 0, "Deref refcnt is {}", refCnt);
-        return Ok((refCnt - 1, action))
+        return Ok(refCnt - 1)
     }
 
     pub fn IdxToAddr(&self, idx: u64) -> u64 {

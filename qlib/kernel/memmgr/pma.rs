@@ -29,14 +29,14 @@ use super::super::super::range::*;
 use super::super::asm::*;
 use super::super::task::*;
 use super::super::PAGE_MGR;
-//use super::super::super::mem::block_allocator::*;
-use crate::qlib::kernel::memmgr::pmamgr::PagePool;
+use super::super::super::mem::block_allocator::*;
+//use crate::qlib::kernel::memmgr::pmamgr::PagePool;
 
 pub type PageMgrRef = ObjectRef<PageMgr>;
 
 pub struct PageMgr {
-    pub pagepool: PagePool,
-    //pub pagepool: PageBlockAlloc,
+    //pub pagepool: PagePool,
+    pub pagepool: PageBlockAlloc,
     pub vsyscallPages: Mutex<Arc<Vec<u64>>>,
 }
 
@@ -85,8 +85,8 @@ impl Default for PageMgr {
 impl PageMgr {
     pub fn New() -> Self {
         return Self {
-            //pagepool: PageBlockAlloc::default(), //PagePool::New(),
-            pagepool: PagePool::New(),
+            pagepool: PageBlockAlloc::default(), //PagePool::New(),
+            //pagepool: PagePool::New(),
             vsyscallPages: Mutex::new(Arc::new(Vec::new())),
         };
     }
@@ -96,8 +96,8 @@ impl PageMgr {
     }
 
     pub fn PrintRefs(&self) {
-        //self.pagepool.PrintPages();
-        self.pagepool.PrintRefs();
+    self.pagepool.PrintPages();
+        //self.pagepool.PrintRefs();
     }
 
     pub fn DerefPage(&self, addr: u64) {
