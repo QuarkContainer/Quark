@@ -27,7 +27,7 @@ Notice the quark binary is renamed as `containerd-shim-quark-v1`, this is to fol
 
 ### 3. Config containerd in k8s cluster
 This step need to happen on every k8s node with kubelet running.
-open `/etc/containerd/config.yaml` and add/modify the following entry in the containerd config
+open `/etc/containerd/config.toml` and add/modify the following entry in the containerd config
 ```
 cat <<EOF | sudo tee /etc/containerd/config.toml
 version = 2
