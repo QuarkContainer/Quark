@@ -25,17 +25,20 @@ use x86_64::structures::paging::PageTableFlags;
 use x86_64::PhysAddr;
 use x86_64::VirtAddr;
 
+use crate::qlib::kernel::PAGE_MGR;
 use super::super::asm::*;
 use super::addr::*;
 use super::common::{Allocator, Error, Result};
 use super::linux_def::*;
 use super::mem::stackvec::*;
+use super::mutex::*;
 
 #[derive(Default)]
 pub struct PageTables {
     //Root page guest physical address
     pub root: AtomicU64,
     pub tlbshootdown: AtomicBool,
+    pub freePages: QMutex<Vec<u64>>,
 }
 
 impl PageTables {
@@ -44,6 +47,7 @@ impl PageTables {
         Ok(Self {
             root: AtomicU64::new(root),
             tlbshootdown: AtomicBool::new(false),
+            freePages: Default::default(),
         })
     }
 
@@ -59,6 +63,7 @@ impl PageTables {
         return Self {
             root: AtomicU64::new(self.GetRoot()),
             tlbshootdown: AtomicBool::new(false),
+            freePages: Default::default(),
         };
     }
 
@@ -66,6 +71,7 @@ impl PageTables {
         return Self {
             root: AtomicU64::new(root),
             tlbshootdown: AtomicBool::new(false),
+            freePages: Default::default(),
         };
     }
 
@@ -374,6 +380,32 @@ impl PageTables {
         return Ok(res);
     }
 
+    pub fn FreePage(&self, page: u64) {
+        self.freePages.lock().push(page);
+    }
+
+    pub fn FreePages(&self) {
+        let mut pages = self.freePages.lock();
+        loop {
+            match pages.pop() {
+                None => break,
+                Some(page) => {
+                    PAGE_MGR.FreePage(page).unwrap();
+
+                    /*let layout = Layout::from_size_align(MemoryDef::PAGE_SIZE_4K as _, MemoryDef::PAGE_SIZE_4K as _);
+                    match layout {
+                        Err(_e) => {
+                            panic!("pagetable free unaligned page {:x}", page);
+                        },
+                        Ok(l) => unsafe {
+                            dealloc(page as *mut u8, l);
+                        },
+                    }*/
+                }
+            }
+        }
+    }
+
     pub fn Remap(
         &self,
         start: Addr,
@@ -417,7 +449,10 @@ impl PageTables {
             match addrs[idx] {
                 Some(phyAddr) => {
                     self.MapPage(Addr(start.0 + offset), Addr(phyAddr), flags, pagePool)?;
-                    pagePool.Deref(phyAddr).unwrap();
+                    let count = pagePool.Deref(phyAddr).unwrap();
+                    if count == 0 {
+                        self.FreePage(phyAddr);
+                    }
                 }
                 None => (),
             }
@@ -699,7 +734,10 @@ impl PageTables {
 
                         if clearPTEEntries == MemoryDef::ENTRY_COUNT {
                             let currAddr = pmdEntry.addr().as_u64();
-                            let _refCnt = pagePool.Deref(currAddr)?;
+                            let refCnt = pagePool.Deref(currAddr)?;
+                            if refCnt == 0 {
+                                self.FreePage(currAddr);
+                            }
                             pmdEntry.set_unused();
                             clearPMDEntries += 1;
 
@@ -711,7 +749,10 @@ impl PageTables {
 
                     if clearPMDEntries == MemoryDef::ENTRY_COUNT {
                         let currAddr = pudEntry.addr().as_u64();
-                        pagePool.Deref(currAddr)?;
+                        let refCnt = pagePool.Deref(currAddr)?;
+                        if refCnt == 0 {
+                            self.FreePage(currAddr);
+                        }
                         pudEntry.set_unused();
                         clearPUDEntries += 1;
 
@@ -723,7 +764,10 @@ impl PageTables {
 
                 if clearPUDEntries == MemoryDef::ENTRY_COUNT {
                     let currAddr = pgdEntry.addr().as_u64();
-                    pagePool.Deref(currAddr)?;
+                    let refCnt = pagePool.Deref(currAddr)?;
+                    if refCnt == 0 {
+                        self.FreePage(currAddr);
+                    }
                     pgdEntry.set_unused();
                     //info!("unmap pgdEntry {:x}", currAddr);
                 }
@@ -943,7 +987,10 @@ impl PageTables {
 
     fn freeEntry(&self, entry: &mut PageTableEntry, pagePool: &Allocator) -> Result<bool> {
         let currAddr = entry.addr().as_u64();
-        pagePool.Deref(currAddr)?;
+        let refCnt = pagePool.Deref(currAddr)?;
+        if refCnt == 0 {
+            self.FreePage(currAddr);
+        }
         entry.set_unused();
         self.EnableTlbShootdown();
         return Ok(true);

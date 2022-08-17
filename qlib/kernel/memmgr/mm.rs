@@ -362,8 +362,11 @@ impl MemoryManager {
                 }
             }
 
-            CPULocal::Myself().pageAllocator.lock().Clean();
+             //CPULocal::Myself().pageAllocator.lock().Clean();
         }
+
+        self.pagetable.read().pt.FreePages();
+
     }
 
     pub fn ClearVcpu(&self, vcpu: usize) {
