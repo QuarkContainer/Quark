@@ -82,7 +82,7 @@ impl EndpointsInformer {
     }
 
     fn handle(&mut self, endpoints_message: &EndpointsMessage) {
-        let key = &endpoints_message.name;
+        let name = &endpoints_message.name;
         let mut endpointses_map = RDMA_CTLINFO.endpointses.lock();
         if endpoints_message.event_type == EVENT_TYPE_SET {
             let mut ip_with_ports = HashSet::new();
@@ -98,18 +98,18 @@ impl EndpointsInformer {
             }
 
             let endpoints = Endpoints {
-                key: key.clone(),
+                name: name.clone(),
                 ip_with_ports: ip_with_ports,
                 resource_version: endpoints_message.resource_version,
             };
-            endpointses_map.insert(key.clone(), endpoints);
+            endpointses_map.insert(name.clone(), endpoints);
             if endpoints_message.resource_version > self.max_resource_version {
                 self.max_resource_version = endpoints_message.resource_version;
             }
         } else if endpoints_message.event_type == EVENT_TYPE_DELETE {
-            if endpointses_map.contains_key(key) {
-                if endpointses_map[&key.clone()].resource_version < endpoints_message.resource_version {
-                    endpointses_map.remove(key);
+            if endpointses_map.contains_key(name) {
+                if endpointses_map[&name.clone()].resource_version < endpoints_message.resource_version {
+                    endpointses_map.remove(name);
                 }
             }
         }

@@ -82,7 +82,8 @@ impl ServiceInformer {
     }
 
     fn handle(&mut self, service_message: &ServiceMessage) {
-        let key = &service_message.name;
+        let name = &service_message.name;
+        let ip = &service_message.cluster_ip;
         let mut services_map = RDMA_CTLINFO.services.lock();        
         if service_message.event_type == EVENT_TYPE_SET {
             let mut ports = HashSet::new();
@@ -95,19 +96,19 @@ impl ServiceInformer {
             }
 
             let service = Service {
-                key: key.clone(),
-                cluster_ip: service_message.cluster_ip.clone(),
+                name: name.clone(),
+                cluster_ip: ip.clone(),
                 ports : ports,
                 resource_version: service_message.resource_version,
             };
-            services_map.insert(key.clone(), service);
+            services_map.insert(ip.clone(), service);
             if service_message.resource_version > self.max_resource_version {
                 self.max_resource_version = service_message.resource_version;
             }
         } else if service_message.event_type == EVENT_TYPE_DELETE {
-            if services_map.contains_key(key) {
-                if services_map[key].resource_version < service_message.resource_version {
-                    services_map.remove(key);
+            if services_map.contains_key(ip) {
+                if services_map[ip].resource_version < service_message.resource_version {
+                    services_map.remove(ip);
                 }
             }
         }

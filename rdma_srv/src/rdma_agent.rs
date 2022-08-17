@@ -370,6 +370,10 @@ impl RDMAAgent {
             }
             RDMAReqMsg::RDMAConnect(msg) => {
                 //TODOCtrlPlane: need get nodeIp from dstIpAddr
+                println!("RDMAConnect: Connect ip {} port {}", msg.dstIpAddr, msg.dstPort);
+                if RDMA_CTLINFO.IsService(&msg.dstIpAddr, &msg.dstPort) {
+
+                }
                 match RDMA_CTLINFO.get_node_ip_by_pod_ip(&msg.dstIpAddr) {
                     Some(nodeIpAddr) => {
                         let conns = RDMA_SRV.conns.lock();
@@ -406,6 +410,11 @@ impl RDMAAgent {
                     .get(&podId)
                     .unwrap()
                     .clone();
+                
+                println!("RDMAConnectUsingPodId: Connect ip {} port {}", msg.dstIpAddr, msg.dstPort);
+                if RDMA_CTLINFO.IsService(&msg.dstIpAddr, &msg.dstPort) {
+
+                }
                 match RDMA_CTLINFO.get_node_ip_by_pod_ip(&msg.dstIpAddr) {
                     Some(nodeIpAddr) => {
                         let conns = RDMA_SRV.conns.lock();
