@@ -160,7 +160,7 @@ impl KIOThread {
             }
         }
 
-        let mut events = [epoll_event { events: 0, u64: 0 }; 2];
+        let mut events = [epoll_event { events: 0, u64: 0 }; 3];
 
         let mut data: u64 = 0;
         loop {

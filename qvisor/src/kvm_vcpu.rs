@@ -359,7 +359,7 @@ impl KVMVcpu {
 
     pub const KVM_SET_SIGNAL_MASK: u64 = 0x4004ae8b;
     pub fn SignalMask(&self) {
-        let boundSignal = Signal::SIGCHLD;
+        let boundSignal = Signal::SIGSEGV; // Signal::SIGCHLD;
         let bounceSignalMask: u64 = 1 << (boundSignal as u64 - 1);
 
         let data = SignalMaskStruct {
@@ -448,6 +448,8 @@ impl KVMVcpu {
         let coreid = core_affinity::CoreId { id: self.cordId };
         // print cpu id
         core_affinity::set_for_current(coreid);
+
+        self.SignalMask();
 
         info!(
             "start enter guest[{}]: entry is {:x}, stack is {:x}",

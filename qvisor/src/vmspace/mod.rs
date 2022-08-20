@@ -23,6 +23,7 @@ pub mod random;
 pub mod syscall;
 pub mod time;
 pub mod uringMgr;
+pub mod hibernate;
 
 use std::env::temp_dir;
 use uuid::Uuid;

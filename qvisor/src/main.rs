@@ -99,6 +99,7 @@ use self::runc::shim::service::*;
 use self::vmspace::host_pma_keeper::*;
 use self::vmspace::hostfdnotifier::*;
 use self::vmspace::kernel_io_thread::*;
+use self::vmspace::hibernate::*;
 
 use self::vmspace::uringMgr::*;
 use crate::kvm_vcpu::KVMVcpu;
@@ -135,6 +136,7 @@ pub fn LocalVcpu() -> Option<Arc<KVMVcpu>> {
 lazy_static! {
     pub static ref SHARE_SPACE_STRUCT: Arc<Mutex<ShareSpace>> =
         Arc::new(Mutex::new(ShareSpace::New()));
+    pub static ref HIBER_MGR: HiberMgr = HiberMgr::New().unwrap();
     pub static ref VMS: Mutex<VMSpace> = Mutex::new(VMSpace::Init());
     pub static ref ROOT_CONTAINER_ID: Mutex<String> = Mutex::new(String::new());
     pub static ref PAGE_ALLOCATOR: MemAllocator = MemAllocator::New();
