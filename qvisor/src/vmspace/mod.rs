@@ -1556,6 +1556,14 @@ impl VMSpace {
         }
     }
 
+    pub fn SwapInPage(addr: u64) -> i64 {
+        match SHARE_SPACE.hiberMgr.SwapIn(addr) {
+            Ok(_) => return 0,
+            Err(Error::SysError(e)) => return e as i64,
+            _ => panic!("imposible")
+        }
+    }
+
     pub fn UnblockFd(fd: i32) {
         unsafe {
             let flags = fcntl(fd, Cmd::F_GETFL, 0);

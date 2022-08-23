@@ -24,7 +24,6 @@ use kvm_ioctls::{Cap, Kvm, VmFd};
 use lazy_static::lazy_static;
 use nix::sys::signal;
 
-use crate::HIBER_MGR;
 use crate::qlib::MAX_VCPU_COUNT;
 //use crate::vmspace::hibernate::HiberMgr;
 
@@ -446,21 +445,6 @@ impl VirtualMachine {
                     .unwrap(),
             );
         }
-
-        // start the hibernate thread
-        threads.push(
-            thread::Builder::new()
-                .name(format!("Hibernate"))
-                .spawn(move || {
-                    THREAD_ID.with(|f| {
-                        *f.borrow_mut() = 123;
-                    });
-                    info!("hibernate thread start");
-                    HIBER_MGR.Process(&SHARESPACE);
-                    info!("hibernate thread finish");
-                })
-                .unwrap(),
-        );
 
         for t in threads {
             t.join().expect("the working threads has panicked");

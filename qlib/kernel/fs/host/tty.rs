@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors / 2018 The gVisor Authors.
+// Copyright (c) 2021 Quark Container Authors / 2018 The gVisor& Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -270,7 +270,7 @@ pub const DEFAULT_SLAVE_TERMIOS: KernelTermios = KernelTermios {
     OutputSpeed: 38400,
 };
 
-#[derive(Clone, Default, Copy)]
+#[derive(Clone, Default, Copy, Debug)]
 #[repr(C)]
 pub struct Termios {
     pub InputFlags: u32,
@@ -647,8 +647,10 @@ impl FileOperations for TTYFileOps {
 
         match ioctl {
             IoCtlCmd::TCGETS => {
+                //error!("TCGETS 1");
                 let mut term = Termios::default();
                 ioctlGetTermios(fd, &mut term)?;
+                //error!("TCGETS 2 {:x?}", term);
                 task.CopyOutObj(&term, val)?;
                 return Ok(());
             }
@@ -676,6 +678,7 @@ impl FileOperations for TTYFileOps {
                 return Ok(());
             }
             IoCtlCmd::TIOCSPGRP => {
+                //error!("TIOCSPGRP 1");
                 let thread = match &task.thread {
                     None => return Err(Error::SysError(SysErr::ENOTTY)),
                     Some(ref t) => t.clone(),
@@ -699,6 +702,7 @@ impl FileOperations for TTYFileOps {
                 }
 
                 let pgid: i32 = task.CopyInObj(val)?;
+                //error!("TIOCSPGRP 2 {}", pgid);
                 if pgid < 0 {
                     return Err(Error::SysError(SysErr::EINVAL));
                 }
@@ -718,8 +722,10 @@ impl FileOperations for TTYFileOps {
                 return Ok(());
             }
             IoCtlCmd::TIOCGWINSZ => {
+                //error!("TIOCGWINSZ 1");
                 let mut win = Winsize::default();
                 ioctlGetWinsize(fd, &mut win)?;
+                //error!("TIOCGWINSZ 2 {:x?}", win);
                 task.CopyOutObj(&win, val)?;
                 return Ok(());
             }

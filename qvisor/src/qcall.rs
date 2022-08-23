@@ -238,6 +238,9 @@ impl KVMVcpu {
             Msg::Fchmod(msg) => {
                 ret = super::VMSpace::Fchmod(msg.fd, msg.mode) as u64;
             }
+            Msg::SwapInPage(msg) => {
+                ret = super::VMSpace::SwapInPage(msg.addr) as u64;
+            }
             Msg::SymLinkAt(msg) => {
                 ret = super::VMSpace::SymLinkAt(msg.oldpath, msg.newdirfd, msg.newpath) as u64;
             }

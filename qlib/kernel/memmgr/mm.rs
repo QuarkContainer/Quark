@@ -186,6 +186,7 @@ impl Deref for MemoryManager {
 impl Drop for MemoryManager {
     fn drop(&mut self) {
         if Arc::strong_count(&self.0) == 1 {
+            SHARESPACE.hiberMgr.RemoveMemMgr(self);
             let _ml = self.MappingWriteLock();
             self.CleanVMAs().unwrap();
         }
@@ -297,7 +298,11 @@ impl MemoryManager {
             membarrierPrivateEnabled: AtomicBool::new(false),
         };
 
-        return Self(Arc::new(internal));
+        let mm = Self(Arc::new(internal));
+
+        SHARESPACE.hiberMgr.AddMemMgr(&mm);
+
+        return mm;
     }
 
     pub fn EnableMembarrierPrivate(&self) {
@@ -1567,6 +1572,7 @@ impl MemoryManager {
 
         self.TlbShootdown();
 
+        SHARESPACE.hiberMgr.AddMemMgr(&mm2);
         return Ok(mm2);
     }
 

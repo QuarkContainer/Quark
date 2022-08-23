@@ -63,6 +63,7 @@ pub mod vcpu_mgr;
 pub mod rdma_svc_cli;
 pub mod rdmasocket;
 pub mod unix_socket;
+pub mod hiber_mgr;
 
 use self::mutex::*;
 use alloc::vec::Vec;
@@ -89,6 +90,7 @@ use self::qmsg::*;
 use self::rdma_svc_cli::*;
 use self::ringbuf::*;
 use self::task_mgr::*;
+use self::hiber_mgr::*;
 use super::asm::*;
 
 pub fn InitSingleton() {
@@ -691,6 +693,7 @@ pub struct ShareSpace {
     pub uid: CachePadded<AtomicU64>,
     pub inotifyCookie: CachePadded<AtomicU32>,
     pub waitMask: CachePadded<AtomicU64>,
+    pub hiberMgr: CachePadded<HiberMgr>,
 
     pub supportMemoryBarrier: bool,
     pub controlSock: i32,

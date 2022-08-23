@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors / 2018 The gVisor Authors.
+// Copyright (c) 2021 Quark Container Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -525,6 +525,16 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
         {
             //error!("InstallPage 1, range is {:x?}, address is {:x}, vma.growsDown is {}",
             //    &range, pageAddr, vma.growsDown);
+            //let startTime = TSC.Rdtsc();
+            let addr = currTask.mm.pagetable.write().pt.SwapInPage(Addr(pageAddr)).unwrap();
+            //let endtime = TSC.Rdtsc();
+            if addr > 0 {
+                //use crate::qlib::kernel::Tsc;
+                //error!("swap in page {:x?}/{:x}/{}", Addr(pageAddr).RoundDown().unwrap(), addr, Tsc::Scale(endtime - startTime));
+                CPULocal::Myself().SetMode(VcpuMode::User);
+                return;
+            }
+            
             match currTask
                 .mm
                 .InstallPageLocked(currTask, &vma, pageAddr, &range)

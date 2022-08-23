@@ -14,8 +14,10 @@
 
 use spin::Mutex;
 use std::collections::HashMap;
+use alloc::collections::BTreeSet;
 use std::collections::hash_map::Entry;
 use std::fs::OpenOptions;
+//use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::IntoRawFd;
 use std::ptr;
 use userfaultfd::UffdBuilder;
@@ -26,21 +28,198 @@ use libc::*;
 use crate::qlib::*;
 use crate::qlib::common::*;
 use crate::qlib::linux_def::*;
+use crate::qlib::hiber_mgr::*;
 use crate::qlib::mem::block_allocator::PageBlockAlloc;
+use crate::SWAP_FILE;
+
+impl HiberMgr {
+    pub fn SwapOut(&self, start: u64, len: u64) -> Result<()> {
+		let mut intern = self.lock();
+		let mut map = BTreeSet::new();
+		for (_, mm) in &intern.memmgrs {
+			let mm = mm.Upgrade();
+			mm.pagetable.write().pt.SwapOutPages(start, len, &mut map).unwrap();
+		}
+
+        for page in map.iter() {
+            let offset = SWAP_FILE.lock().SwapOutPage(*page)?;
+            intern.pageMap.insert(*page, offset);
+        }
+
+        //error!("swapout {} pages", map.len());
+
+        return Ok(())
+	}
+
+    pub fn SwapIn(&self, phyAddr: u64) -> Result<()> {
+		let mut intern = self.lock();
+		match intern.pageMap.remove(&phyAddr) {
+            None => return Err(Error::SysError(SysErr::EINVAL)),
+            Some(offset) => {
+                //error!("swapin page {:x}/{:x}", phyAddr, offset);
+                return SWAP_FILE.lock().SwapInPage(phyAddr, offset)
+            }
+        }
+	}
+}
+
+
+pub struct SwapFile {
+    pub fd: i32,            // the file fd  
+    pub size: u64,              //total allocated file size
+    pub nextAllocOffset: u64, // the last allocated slot
+    pub freeSlots: Vec<u64>, // free page slot
+    pub mmapAddr: u64, // the file mmap start address
+}
+
+pub const SWAP_FILE_NAME : &str = "./swapfile.data";
+pub const INIT_FILE_SIZE: u64 = MemoryDef::PAGE_SIZE_2M;
+pub const EXTEND_FILE_SIZE: u64 = MemoryDef::PAGE_SIZE_2M;
+
+impl SwapFile {
+    pub fn Init() -> Result<Self> {
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            //.custom_flags(O_DIRECT)
+            .create(true)
+            .open(SWAP_FILE_NAME)
+            .unwrap();
+        let fd = file.into_raw_fd();
+
+        let ret = unsafe {
+            libc::ftruncate(fd, INIT_FILE_SIZE as _)
+        };
+        
+        GetRet(ret as _)?;
+        
+        let ret = unsafe {
+            libc::mmap(
+                ptr::null_mut(),
+                INIT_FILE_SIZE as _,
+                libc::PROT_READ | libc::PROT_WRITE,
+                libc::MAP_SHARED,
+                fd,
+                0,
+            )
+        };
+
+        let addr = GetRet(ret as _)?;
+
+        return Ok(Self {
+            fd: fd,
+            size: INIT_FILE_SIZE,
+            nextAllocOffset: 0,
+            freeSlots: Vec::new(),
+            mmapAddr: addr,
+        })
+    }
+
+    pub fn ExtendSize(&mut self) -> Result<()> {
+        let newSize = self.size + EXTEND_FILE_SIZE;
+        let ret = unsafe {
+            libc::ftruncate(self.fd, newSize as _) 
+        };
+
+        GetRet(ret as _)?;
+
+        let ret = unsafe {
+            libc::mmap(
+                (self.mmapAddr + self.size) as _,
+                EXTEND_FILE_SIZE as _,
+                libc::PROT_READ | libc::PROT_WRITE,
+                libc::MAP_SHARED | libc::MAP_FIXED,
+                self.fd,
+                0,
+            )
+        };
+
+        let addr = GetRet(ret as _)?;
+        assert!(addr == self.mmapAddr + self.size);
+        
+        self.size = newSize;
+        return Ok(())
+    }
+
+    pub fn AllocateSlot(&mut self) -> Result<u64> {
+        match self.freeSlots.pop() {
+            Some(offset) => return Ok(offset),
+            None => (),
+        }
+
+        let offset = self.nextAllocOffset;
+        if offset == self.size {
+            self.ExtendSize()?;
+        }
+
+        self.nextAllocOffset += MemoryDef::PAGE_SIZE_4K;
+        return Ok(offset);
+    }
+
+    pub fn FreeSlot(&mut self, offset: u64) -> Result<()> {
+        self.freeSlots.push(offset);
+
+        let ret = unsafe {
+            libc::madvise((self.mmapAddr + offset) as _, MemoryDef::PAGE_SIZE_4K as _, libc::MADV_DONTNEED)
+        };
+
+        GetRet(ret as _)?;
+        return Ok(())
+    } 
+
+    // input: memory page address
+    // ret: file offset
+    pub fn SwapOutPage(&mut self, addr: u64) -> Result<u64> {
+        let offset = self.AllocateSlot()?;
+        let ret = unsafe {
+            libc::pwrite(self.fd, addr as _, MemoryDef::PAGE_SIZE_4K as _, offset as _)
+        };
+
+        let count = GetRet(ret as _)?;
+        assert!(count == MemoryDef::PAGE_SIZE_4K);
+
+        let ret = unsafe {
+            libc::madvise(addr as _, MemoryDef::PAGE_SIZE_4K as _, libc::MADV_DONTNEED)
+        };
+
+        GetRet(ret as _)?;
+        return Ok(offset)
+    }
+
+    // input: memory page address, file offset
+    // ret: file offset
+    pub fn SwapInPage(&mut self, addr: u64, offset: u64) -> Result<()> {
+        let ret = unsafe {
+            libc::pread(self.fd, addr as _, MemoryDef::PAGE_SIZE_4K as _, offset as _)
+        };
+
+        let count = GetRet(ret as _)?;
+        assert!(count == MemoryDef::PAGE_SIZE_4K);
+        self.FreeSlot(offset)?;
+        
+        return Ok(())
+    }
+
+    pub fn OffsetToAddr(&self, offset: u64) -> u64 {
+        assert!(offset < self.size);
+        return self.mmapAddr + offset;
+    }
+}
+
 
 pub struct HiberMap {
     pub blockRef: HashMap<u64, u32>, // blockAddr --> refcnt
     pub pageMap: HashMap<u64, u64>, // pageAddr --> file offset 
 }
-pub struct HiberMgr {
+pub struct HiberMgr1 {
     pub epfd: i32,
     pub eventfd: i32,
-    pub uffd: Uffd,
-    pub swapFile: Mutex<SwapFile>,
     pub map: Mutex<HiberMap>,
+    pub swapFile: Mutex<SwapFile>,
+    pub uffd: Uffd,
 }
 
-impl HiberMgr {
+impl HiberMgr1 {
     pub fn New() -> Result<Self> {
         let epfd = unsafe { epoll_create1(0) };
 
@@ -265,133 +444,6 @@ impl HiberMgr {
     }
 
     
-}
-
-pub struct SwapFile {
-    pub fd: i32,            // the file fd  
-    pub size: u64,              //total allocated file size
-    pub nextAllocOffset: u64, // the last allocated slot
-    pub freeSlots: Vec<u64>, // free page slot
-    pub mmapAddr: u64, // the file mmap start address
-}
-
-pub const SWAP_FILE_NAME : &str = "./swapfile.data";
-pub const INIT_FILE_SIZE: u64 = MemoryDef::PAGE_SIZE_2M;
-pub const EXTEND_FILE_SIZE: u64 = MemoryDef::PAGE_SIZE_2M;
-
-impl SwapFile {
-    pub fn Init() -> Result<Self> {
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(SWAP_FILE_NAME)
-            .unwrap();
-        let fd = file.into_raw_fd();
-
-        let ret = unsafe {
-            libc::ftruncate(fd, INIT_FILE_SIZE as _)
-        };
-        
-        GetRet(ret as _)?;
-        
-        let ret = unsafe {
-            libc::mmap(
-                ptr::null_mut(),
-                INIT_FILE_SIZE as _,
-                libc::PROT_READ | libc::PROT_WRITE,
-                libc::MAP_SHARED,
-                fd,
-                0,
-            )
-        };
-
-        let addr = GetRet(ret as _)?;
-
-        return Ok(Self {
-            fd: fd,
-            size: INIT_FILE_SIZE,
-            nextAllocOffset: 0,
-            freeSlots: Vec::new(),
-            mmapAddr: addr,
-        })
-    }
-
-    pub fn ExtendSize(&mut self) -> Result<()> {
-        let newSize = self.size + EXTEND_FILE_SIZE;
-        let ret = unsafe {
-            libc::ftruncate(self.fd, newSize as _) 
-        };
-
-        GetRet(ret as _)?;
-
-        let ret = unsafe {
-            libc::mmap(
-                (self.mmapAddr + self.size) as _,
-                EXTEND_FILE_SIZE as _,
-                libc::PROT_READ | libc::PROT_WRITE,
-                libc::MAP_SHARED | libc::MAP_FIXED,
-                self.fd,
-                0,
-            )
-        };
-
-        let addr = GetRet(ret as _)?;
-        assert!(addr == self.mmapAddr + self.size);
-        
-        self.size = newSize;
-        return Ok(())
-    }
-
-    pub fn AllocateSlot(&mut self) -> Result<u64> {
-        match self.freeSlots.pop() {
-            Some(offset) => return Ok(offset),
-            None => (),
-        }
-
-        let offset = self.nextAllocOffset;
-        if offset == self.size {
-            self.ExtendSize()?;
-        }
-
-        self.nextAllocOffset += MemoryDef::PAGE_SIZE_4K;
-        return Ok(offset);
-    }
-
-    pub fn FreeSlot(&mut self, offset: u64) -> Result<()> {
-        self.freeSlots.push(offset);
-
-        let ret = unsafe {
-            libc::madvise((self.mmapAddr + offset) as _, MemoryDef::PAGE_SIZE_4K as _, libc::MADV_DONTNEED)
-        };
-
-        GetRet(ret as _)?;
-        return Ok(())
-    } 
-
-    // input: memory page address
-    // ret: file offset
-    pub fn SwapOutPage(&mut self, addr: u64) -> Result<u64> {
-        let offset = self.AllocateSlot()?;
-        let ret = unsafe {
-            libc::pwrite(self.fd, addr as _, MemoryDef::PAGE_SIZE_4K as _, offset as _)
-        };
-
-        let count = GetRet(ret as _)?;
-        assert!(count == MemoryDef::PAGE_SIZE_4K);
-
-        /*let ret = unsafe {
-            libc::madvise(addr as _, MemoryDef::PAGE_SIZE_4K as _, libc::MADV_DONTNEED)
-        };*/
-
-        GetRet(ret as _)?;
-        return Ok(offset)
-    }
-
-    pub fn OffsetToAddr(&self, offset: u64) -> u64 {
-        assert!(offset < self.size);
-        return self.mmapAddr + offset;
-    }
 }
 
 pub fn GetRet(ret: i64) -> Result<u64> {

@@ -364,6 +364,14 @@ impl HostSpace {
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
+    pub fn SwapInPage(addr: u64) -> i64 {
+        let mut msg = Msg::SwapInPage(SwapInPage {
+            addr
+        });
+
+        return HostSpace::HCall(&mut msg, false) as i64;
+    }
+
     pub fn SysSync() -> i64 {
         let mut msg = Msg::SysSync(SysSync {});
 
