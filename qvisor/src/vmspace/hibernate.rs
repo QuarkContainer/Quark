@@ -28,8 +28,9 @@ use crate::qlib::*;
 use crate::qlib::common::*;
 use crate::qlib::linux_def::*;
 use crate::qlib::hiber_mgr::*;
-use crate::qlib::mem::block_allocator::PageBlockAlloc;
+use crate::qlib::mem::block_allocator::*;
 use crate::SWAP_FILE;
+use crate::SHARE_SPACE;
 
 impl HiberMgr {
     pub fn SwapOut(&self, start: u64, len: u64) -> Result<()> {
@@ -50,6 +51,9 @@ impl HiberMgr {
         }
 
         info!("swapout {} pages, new pages {} pages", map.len(), insertCount);
+
+        let cnt = SHARE_SPACE.pageMgr.pagepool.DontneedFreePages()?;
+        info!("free pagepool {} pages", cnt);
 
         return Ok(())
 	}
@@ -183,6 +187,7 @@ impl SwapFile {
         };
 
         GetRet(ret as _)?;
+
         return Ok(offset)
     }
 
@@ -206,6 +211,42 @@ impl SwapFile {
     }
 }
 
+impl PageBlock {
+    // madvise MADV_DONTNEED free pages
+    pub fn DontneedFreePages(&self) -> Result<u64> {
+        let alloc = self.allocator.lock();
+        if alloc.freePageList.totalFreeCount == 0 {
+            return Ok(0)
+        }
+
+        for idx in 1..BLOCK_PAGE_COUNT+1 {
+            if alloc.freePageList.IsFree(idx as _) {
+                let addr = self.IdxToAddr(idx as _)
+;                let ret = unsafe {
+                    libc::madvise(addr as _, MemoryDef::PAGE_SIZE_4K as _, libc::MADV_DONTNEED)
+                };
+        
+                GetRet(ret as _)?;
+            }
+        }
+
+        return Ok(alloc.freePageList.totalFreeCount)
+    }
+}
+
+impl PageBlockAlloc {
+    // madvise MADV_DONTNEED free pages
+    pub fn DontneedFreePages(&self) -> Result<u64> {
+        let mut total = 0;
+        let intern = self.data.lock();
+        for addr in &intern.pageBlocks {
+            let pb = PageBlock::FromAddr(*addr);
+            total = pb.DontneedFreePages()?;
+        }
+
+        return Ok(total)
+    }
+}
 
 pub struct HiberMap {
     pub blockRef: HashMap<u64, u32>, // blockAddr --> refcnt
