@@ -25,6 +25,8 @@ use x86_64::structures::paging::PageTable;
 use x86_64::structures::paging::PageTableFlags;
 use x86_64::PhysAddr;
 use x86_64::VirtAddr;
+use core::sync::atomic::fence;
+use core::hint::spin_loop;
 
 use crate::qlib::kernel::PAGE_MGR;
 use super::super::asm::*;
@@ -32,7 +34,6 @@ use super::addr::*;
 use super::common::{Allocator, Error, Result};
 use super::kernel::Kernel::HostSpace;
 use super::linux_def::*;
-use super::mem::stackvec::*;
 use super::mutex::*;
 
 #[derive(Default)]
@@ -41,6 +42,7 @@ pub struct PageTables {
     pub root: AtomicU64,
     pub tlbshootdown: AtomicBool,
     pub freePages: QMutex<Vec<u64>>,
+    pub hibernateLock: QMutex<()>,
 }
 
 impl PageTables {
@@ -50,6 +52,7 @@ impl PageTables {
             root: AtomicU64::new(root),
             tlbshootdown: AtomicBool::new(false),
             freePages: Default::default(),
+            hibernateLock: Default::default(),
         })
     }
 
@@ -66,6 +69,7 @@ impl PageTables {
             root: AtomicU64::new(self.GetRoot()),
             tlbshootdown: AtomicBool::new(false),
             freePages: Default::default(),
+            hibernateLock: Default::default(),
         };
     }
 
@@ -74,6 +78,7 @@ impl PageTables {
             root: AtomicU64::new(root),
             tlbshootdown: AtomicBool::new(false),
             freePages: Default::default(),
+            hibernateLock: Default::default(),
         };
     }
 
@@ -254,7 +259,7 @@ impl PageTables {
             }
 
             // try to swapin page if it is swapout
-            self.HandlingSwapInPage(pteEntry);
+            self.HandlingSwapInPage(addr, pteEntry);
              
             return Ok(pteEntry);
         }
@@ -1050,7 +1055,7 @@ impl PageTables {
                 pteEntry.set_flags(flags);
             } */
 
-            self.HandlingSwapInPage(pteEntry);
+            self.HandlingSwapInPage(vaddr.0, pteEntry);
 
             // the page might be swapping in by another vcpu
             let addr = pteEntry.addr().as_u64();
@@ -1058,21 +1063,56 @@ impl PageTables {
         }
     }
 
-    pub fn HandlingSwapInPage(&self, pteEntry: &mut PageTableEntry) {
-        let mut flags = pteEntry.flags();
-        //error!("HandlingSwapInPage 1 {:x}", pteEntry.addr().as_u64());
-        if flags & PageTableFlags::BIT_9 == PageTableFlags::BIT_9 {
-            flags |= PageTableFlags::PRESENT;
-            // flags bit9 which indicate the page is swapped out
-            flags &= !PageTableFlags::BIT_9;
-            pteEntry.set_flags(flags);
+    pub fn HandlingSwapInPage(&self, vaddr: u64, pteEntry: &mut PageTableEntry) {
+        let flags = pteEntry.flags();
+        // bit9 : whether the page is swapout
+        // bit10: whether there is thread is working on swapin the page
 
-            let addr = pteEntry.addr().as_u64();
-            //error!("HandlingSwapInPage 2 {:x}", addr);
-            let _ret = HostSpace::SwapInPage(addr);
-            /*if ret != 0 {
-                panic!("HandlingSwapInPage fail with error {}", ret);
-            }*/
+        if flags & PageTableFlags::BIT_9 == PageTableFlags::BIT_9 {
+            let needSwapin = {
+                let _l = crate::GLOBAL_LOCK.lock();
+
+                let mut flags = pteEntry.flags();
+
+                // the page has been swaped in 
+                if flags & PageTableFlags::BIT_9 != PageTableFlags::BIT_9 {
+                    return
+                }
+
+                // is there another thread doing swapin?
+                if flags & PageTableFlags::BIT_10 == PageTableFlags::BIT_10 {
+                    // another thread is swapping in
+                    false
+                } else {
+                    flags |= PageTableFlags::BIT_10;
+                    true
+                }
+            };
+
+            if needSwapin {
+                let addr = pteEntry.addr().as_u64();
+                let _ret = HostSpace::SwapInPage(addr);
+    
+                let mut flags = pteEntry.flags();
+                flags |= PageTableFlags::PRESENT;
+                // flags bit9 which indicate the page is swapped out
+                flags &= !PageTableFlags::BIT_9;
+                flags &= !PageTableFlags::BIT_10;
+                pteEntry.set_flags(flags);
+                Invlpg(vaddr);
+                fence(Ordering::SeqCst);
+            } else {
+                loop {
+                    let flags = pteEntry.flags();
+
+                    // wait bit9 is cleared
+                    if flags & PageTableFlags::BIT_9 != PageTableFlags::BIT_9 {
+                        return
+                    }
+                    
+                    spin_loop();
+                }
+            }
         } 
     }
 
@@ -1089,26 +1129,12 @@ impl PageTables {
             start,
             end,
             |entry, virtualAddr| {
+                self.HandlingSwapInPage(virtualAddr, entry);
                 entry.set_flags(flags);
                 Invlpg(virtualAddr);
             },
             failFast,
         );
-    }
-
-    //get the list for page phyaddress for a virtual address range
-    pub fn GetAddresses(&self, start: Addr, end: Addr, vec: &mut StackVec<u64>) -> Result<()> {
-        self.Traverse(
-            start,
-            end,
-            |entry, _virtualAddr| {
-                let addr = entry.addr().as_u64();
-                vec.Push(addr);
-            },
-            true,
-        )?;
-
-        return Ok(());
     }
 
     fn freeEntry(&self, entry: &mut PageTableEntry, pagePool: &Allocator) -> Result<bool> {
