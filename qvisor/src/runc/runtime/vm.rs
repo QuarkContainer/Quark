@@ -25,6 +25,7 @@ use lazy_static::lazy_static;
 use nix::sys::signal;
 
 use crate::qlib::MAX_VCPU_COUNT;
+//use crate::vmspace::hibernate::HiberMgr;
 
 use super::super::super::elf_loader::*;
 use super::super::super::kvm_vcpu::*;
@@ -400,6 +401,7 @@ impl VirtualMachine {
     }
 
     pub fn run(&mut self) -> Result<i32> {
+        // start the io thread
         let cpu = self.vcpus[0].clone();
         SetSigusr1Handler();
         let mut threads = Vec::new();
@@ -422,6 +424,7 @@ impl VirtualMachine {
 
         syncmgr::SyncMgr::WaitShareSpaceReady();
         info!("shareSpace ready...");
+        // start the vcpu threads
         for i in 1..self.vcpus.len() {
             let cpu = self.vcpus[i].clone();
 

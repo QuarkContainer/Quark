@@ -96,7 +96,7 @@ impl PageMgr {
     }
 
     pub fn PrintRefs(&self) {
-    self.pagepool.PrintPages();
+        self.pagepool.PrintPages();
         //self.pagepool.PrintRefs();
     }
 

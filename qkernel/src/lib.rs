@@ -102,6 +102,7 @@ use core::panic::PanicInfo;
 use core::sync::atomic::{AtomicI32, AtomicUsize, Ordering};
 use core::{mem, ptr};
 use qlib::mutex::*;
+use spin::mutex::Mutex;
 
 //use linked_list_allocator::LockedHeap;
 //use buddy_system_allocator::LockedHeap;
@@ -142,6 +143,10 @@ pub const HEAP_SIZE: usize = 0x1000_0000;
 
 #[global_allocator]
 pub static VCPU_ALLOCATOR: GlobalVcpuAllocator = GlobalVcpuAllocator::New();
+
+lazy_static! {
+    pub static ref GLOBAL_LOCK : Mutex<()> = Mutex::new(());
+}
 
 //static ALLOCATOR: QAllocator = QAllocator::New();
 //static ALLOCATOR: StackHeap = StackHeap::Empty();

@@ -119,6 +119,12 @@ pub enum Msg {
     FListXattr(FListXattr),
     HostMemoryBarrier(HostMemoryBarrier),
     Mkfifoat(Mkfifoat),
+    SwapInPage(SwapInPage),
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct SwapInPage {
+    pub addr: u64,
 }
 
 #[derive(Clone, Default, Debug)]

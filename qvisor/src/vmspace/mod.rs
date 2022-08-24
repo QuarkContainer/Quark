@@ -23,6 +23,7 @@ pub mod random;
 pub mod syscall;
 pub mod time;
 pub mod uringMgr;
+pub mod hibernate;
 
 use std::env::temp_dir;
 use uuid::Uuid;
@@ -1552,6 +1553,14 @@ impl VMSpace {
                     strlen(phAddr as *const i8) + 1
                 ))
             );
+        }
+    }
+
+    pub fn SwapInPage(addr: u64) -> i64 {
+        match SHARE_SPACE.hiberMgr.SwapIn(addr) {
+            Ok(_) => return 0,
+            Err(Error::SysError(e)) => return e as i64,
+            _ => panic!("imposible")
         }
     }
 

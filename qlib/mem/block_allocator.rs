@@ -16,6 +16,7 @@ use core::sync::atomic::AtomicU16;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use alloc::collections::btree_set::BTreeSet;
+use alloc::vec::Vec;
 
 use super::super::linux_def::*;
 use super::super::common::*;
@@ -47,6 +48,16 @@ impl PageBlockAllocIntern {
             let pb = PageBlock::FromAddr(*addr);
             pb.PrintPages();
         }
+    }
+
+    pub fn GetPages(&self) -> Result<Vec<u64>> {
+        let mut output = Vec::new();
+        for addr in &self.pageBlocks {
+            let pb = PageBlock::FromAddr(*addr);
+            pb.GetPages(&mut output)?;
+        }
+
+        return Ok(output);
     }
 
     pub fn UnlinkPageBlock(&mut self, pb: &mut PageBlock) {
@@ -271,6 +282,17 @@ impl PageBlock {
         return unsafe {
             &mut *(addr as * mut Self)
         }
+    }
+
+    pub fn GetPages(&self, output: &mut Vec<u64>) -> Result<()> {
+        for i in 1..self.refs.len() {
+            let cnt = self.refs[i].load(Ordering::Relaxed);
+            if cnt > 0 {
+                output.push(self.IdxToAddr(i as _));
+            }
+        }
+
+        return Ok(())
     }
 
     pub fn PrintPages(&self) {
