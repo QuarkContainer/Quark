@@ -534,7 +534,7 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
                 CPULocal::Myself().SetMode(VcpuMode::User);
                 return;
             }
-            
+
             match currTask
                 .mm
                 .InstallPageLocked(currTask, &vma, pageAddr, &range)

@@ -134,6 +134,7 @@ pub fn LocalVcpu() -> Option<Arc<KVMVcpu>> {
 }
 
 lazy_static! {
+    pub static ref GLOBAL_LOCK : Mutex<()> = Mutex::new(());
     pub static ref SHARE_SPACE_STRUCT: Arc<Mutex<ShareSpace>> =
         Arc::new(Mutex::new(ShareSpace::New()));
     pub static ref SWAP_FILE: Mutex<SwapFile> = Mutex::new(SwapFile::Init().unwrap());

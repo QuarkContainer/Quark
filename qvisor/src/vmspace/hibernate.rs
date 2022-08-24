@@ -19,7 +19,6 @@ use std::collections::hash_map::Entry;
 use std::fs::OpenOptions;
 //use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::IntoRawFd;
-use std::ptr;
 use userfaultfd::UffdBuilder;
 use userfaultfd::Uffd;
 use std::os::unix::io::AsRawFd;
@@ -46,17 +45,19 @@ impl HiberMgr {
             intern.pageMap.insert(*page, offset);
         }
 
-        //error!("swapout {} pages", map.len());
+        info!("swapout {} pages", map.len());
 
         return Ok(())
 	}
 
     pub fn SwapIn(&self, phyAddr: u64) -> Result<()> {
-		let mut intern = self.lock();
+        let mut intern = self.lock();
+
 		match intern.pageMap.remove(&phyAddr) {
-            None => return Err(Error::SysError(SysErr::EINVAL)),
+            None => {
+                return Err(Error::SysError(SysErr::EINVAL))
+            }
             Some(offset) => {
-                //error!("swapin page {:x}/{:x}", phyAddr, offset);
                 return SWAP_FILE.lock().SwapInPage(phyAddr, offset)
             }
         }
@@ -93,7 +94,7 @@ impl SwapFile {
         
         GetRet(ret as _)?;
         
-        let ret = unsafe {
+        /*let ret = unsafe {
             libc::mmap(
                 ptr::null_mut(),
                 INIT_FILE_SIZE as _,
@@ -104,7 +105,8 @@ impl SwapFile {
             )
         };
 
-        let addr = GetRet(ret as _)?;
+        let addr = GetRet(ret as _)?;*/
+        let addr = 0;
 
         return Ok(Self {
             fd: fd,
@@ -158,12 +160,6 @@ impl SwapFile {
 
     pub fn FreeSlot(&mut self, offset: u64) -> Result<()> {
         self.freeSlots.push(offset);
-
-        let ret = unsafe {
-            libc::madvise((self.mmapAddr + offset) as _, MemoryDef::PAGE_SIZE_4K as _, libc::MADV_DONTNEED)
-        };
-
-        GetRet(ret as _)?;
         return Ok(())
     } 
 
@@ -209,7 +205,7 @@ impl SwapFile {
 
 pub struct HiberMap {
     pub blockRef: HashMap<u64, u32>, // blockAddr --> refcnt
-    pub pageMap: HashMap<u64, u64>, // pageAddr --> file offset 
+    pub pageMap: HashMap<u64, u64>, // pageAddr --> file offset
 }
 pub struct HiberMgr1 {
     pub epfd: i32,
@@ -274,15 +270,15 @@ impl HiberMgr1 {
         }
 
         let swapFile = SwapFile::Init()?;
-        
-        return Ok(Self { 
+
+        return Ok(Self {
             epfd: epfd,
             eventfd: eventfd,
-            uffd: uffd, 
-            swapFile: Mutex::new(swapFile), 
+            uffd: uffd,
+            swapFile: Mutex::new(swapFile),
             map: Mutex::new(HiberMap{
                 blockRef: HashMap::new(),
-                pageMap: HashMap::new() 
+                pageMap: HashMap::new()
             })
         })
     }
@@ -348,7 +344,7 @@ impl HiberMgr1 {
             /*let ret = unsafe {
                 libc::madvise(blockAddr as _, MemoryDef::PAGE_SIZE_2M as _, libc::MADV_DONTNEED)
             };
-    
+
             GetRet(ret as _)?;*/
 
             // swapout the block idx page
@@ -374,14 +370,14 @@ impl HiberMgr1 {
 
         return Ok(())
     }
-    
+
     pub fn ProcessUffdEvent(&self) -> Result<()> {
         let mut map = self.map.lock();
         loop {
             match self.uffd.read_event().map_err(|e| Error::Common(format!("read_event {:?}", e)))? {
                 None => break,
                 Some(event) => {
-                    match event { 
+                    match event {
                         userfaultfd::Event::Pagefault { kind: _, rw: _, addr } => {
                             let pageAddr = addr as u64 & !MemoryDef::PAGE_MASK;
                             match map.pageMap.remove(&pageAddr) {
@@ -392,7 +388,7 @@ impl HiberMgr1 {
                                         zeropage(pageAddr as _, MemoryDef::PAGE_SIZE_4K as _, true).
                                         map_err(|e| Error::Common(format!("zeropage {:?}", e)))?;
                                     }
-                                } 
+                                }
                                 Some(offset) => {
                                     unsafe {
                                         self.
@@ -443,7 +439,7 @@ impl HiberMgr1 {
         return Ok(())
     }
 
-    
+
 }
 
 pub fn GetRet(ret: i64) -> Result<u64> {
