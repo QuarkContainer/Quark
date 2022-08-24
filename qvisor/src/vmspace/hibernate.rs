@@ -40,12 +40,16 @@ impl HiberMgr {
 			mm.pagetable.write().pt.SwapOutPages(start, len, &mut map).unwrap();
 		}
 
+        let mut insertCount = 0;
         for page in map.iter() {
             let offset = SWAP_FILE.lock().SwapOutPage(*page)?;
-            intern.pageMap.insert(*page, offset);
+            intern.pageMap.entry(*page).or_insert_with(||{
+                insertCount += 1;
+                offset
+            } );
         }
 
-        info!("swapout {} pages", map.len());
+        info!("swapout {} pages, new pages {} pages", map.len(), insertCount);
 
         return Ok(())
 	}
