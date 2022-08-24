@@ -24,7 +24,7 @@ use super::super::common::*;
 use super::super::mutex::*;
 use super::super::pagetable::*;
 use super::list_allocator::*;
-    
+
 #[derive(Debug, Default)]
 pub struct PageBlockAllocIntern {
     pub pageBlockList: u64,
@@ -111,7 +111,6 @@ pub struct PageBlockAlloc {
     pub freeCount: AtomicU64,
     pub data: QMutex<PageBlockAllocIntern>
 }
-
 
 impl PageBlockAlloc {
     pub fn New() -> Self {
@@ -240,16 +239,62 @@ impl Allocator for PageBlockAlloc {
 pub const BLOCK_PAGE_COUNT : u64 = 511;
 pub const PAGE_BLOCK_MAGIC : u64 = 0x1234567890abc;
 
+pub struct FreePageBitmap {
+    pub bitmap: [u128; 4],
+    pub totalFreeCount: u64,
+}
+
+impl FreePageBitmap {
+    pub fn New() -> Self {
+        return Self {
+            bitmap: [u128::MAX - 1, u128::MAX, u128::MAX, u128::MAX],
+            totalFreeCount: BLOCK_PAGE_COUNT,
+        }
+    }
+
+    pub fn Pop(&mut self) -> usize {
+        if self.totalFreeCount == 0 {
+            return 0;
+        }
+
+        self.totalFreeCount -= 1;
+
+
+        for i in 0..4 {
+            let idx = self.bitmap[i].trailing_zeros() as usize;
+            if idx < 128 {
+                self.bitmap[i] &= !(1<<idx); //
+                return idx + 128 * i
+            }
+        }
+        
+        panic!("FreePageBitmap pop fail");
+    }
+
+    pub fn Push(&mut self, idx: usize) {
+        assert!(idx <= BLOCK_PAGE_COUNT as usize && idx != 0);
+        let segIdx = idx / 128;
+        let offset = idx % 128;
+        assert!(self.bitmap[segIdx] & (1<<offset) == 0, 
+            "idx is {}, freecount is {}", idx, self.totalFreeCount);
+        self.bitmap[segIdx] |= 1<<offset;
+        self.totalFreeCount += 1;
+    }
+
+    pub fn IsFree(&self, idx: usize) -> bool {
+        assert!(idx <= BLOCK_PAGE_COUNT as usize && idx != 0);
+        let segIdx = idx / 128;
+        let offset = idx % 128;
+        return self.bitmap[segIdx] & (1<<offset) != 0;
+    }
+}
+
 pub struct PageBlockInternal {
     pub prev: u64,
     pub next: u64,
 
     // when allocated/deallocated, the page will be page in freePageList
-    pub freePageList: MemList, 
-    // if the pages are not never been allocated, the first page to allocated is page#511, 510... 1, 
-    pub unAllocPageCnt: u64, 
-    
-    pub totalFreeCount: u64,
+    pub freePageList: FreePageBitmap,
 }
 
 impl PageBlockInternal {
@@ -257,9 +302,7 @@ impl PageBlockInternal {
         // zero will be init by ZeroPage
         //self.prev = 0;
         //self.next = 0;
-        self.freePageList = MemList::New(MemoryDef::PAGE_SIZE_4K as _);
-        self.unAllocPageCnt = BLOCK_PAGE_COUNT;
-        self.totalFreeCount = BLOCK_PAGE_COUNT;
+        self.freePageList = FreePageBitmap::New();
     }
 }
 
@@ -363,12 +406,11 @@ impl PageBlock {
 
     pub fn FreePage(&self, addr: u64) -> Result<PageBlockAction> {
         let mut allocaor = self.allocator.lock();
-        allocaor.freePageList.Push(addr);
-        allocaor.totalFreeCount += 1;
+        allocaor.freePageList.Push(self.Idx(addr));
         let mut action = PageBlockAction::None;
-        if allocaor.totalFreeCount == 1 {
+        if allocaor.freePageList.totalFreeCount == 1 {
             action = PageBlockAction::OkForAlloc;
-        } else if allocaor.totalFreeCount == BLOCK_PAGE_COUNT {
+        } else if allocaor.freePageList.totalFreeCount == BLOCK_PAGE_COUNT {
             action = PageBlockAction::OkForFree;
         }
 
@@ -384,24 +426,17 @@ impl PageBlock {
         return Ok(refCnt - 1)
     }
 
-    pub fn IdxToAddr(&self, idx: u64) -> u64 {
-        return self.ToAddr() + idx * MemoryDef::PAGE_SIZE_4K;
+    pub fn IdxToAddr(&self, idx: usize) -> u64 {
+        return self.ToAddr() + (idx as u64) * MemoryDef::PAGE_SIZE_4K;
     }
 
     // return (pageaddr, left page count)
     // unAllocPageCnt must > 0
     pub fn Alloc(&self) -> (u64, u64) {
         let mut allocaor = self.allocator.lock();
-        assert!(allocaor.totalFreeCount > 0);
-        allocaor.totalFreeCount -= 1;
-        let addr = allocaor.freePageList.Pop();
-        if addr > 0 {
-            return (addr, allocaor.totalFreeCount)
-        }
-
-        let addr = self.IdxToAddr(allocaor.unAllocPageCnt);
-        allocaor.unAllocPageCnt -= 1;
-        return (addr, allocaor.totalFreeCount)
+        assert!(allocaor.freePageList.totalFreeCount > 0);
+        let idx = allocaor.freePageList.Pop();
+        return (self.IdxToAddr(idx), allocaor.freePageList.totalFreeCount)
     }
 
     pub fn GetRef(&self, addr: u64) -> Result<u64> {
