@@ -15,6 +15,7 @@
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use alloc::boxed::Box;
 
 pub use xmas_elf::header::HeaderPt2;
 pub use xmas_elf::program::{Flags, ProgramHeader, ProgramHeader64};
@@ -22,6 +23,7 @@ pub use xmas_elf::sections::Rela;
 pub use xmas_elf::symbol_table::{Entry, Entry64};
 pub use xmas_elf::{P32, P64};
 
+use arch::x86_64::arch_x86::X86fpstate;
 use super::super::asm::*;
 use super::super::kernel::cpuset::*;
 use super::super::loader::loader::*;
@@ -323,7 +325,7 @@ pub fn Execvat(task: &mut Task, dirfd: i32, filenameAddr: u64, argvAddr: u64, en
 
         SetFs(0);
         task.context.fs = 0;
-        task.context.X86fpstate = Default::default();
+        task.context.X86fpstate = Some(Box::new(X86fpstate::default()));
 
         let newMM = MemoryManager::Init(false);
         let oldMM = task.mm.clone();
@@ -340,16 +342,18 @@ pub fn Execvat(task: &mut Task, dirfd: i32, filenameAddr: u64, argvAddr: u64, en
         core::mem::drop(oldMM);
     }
 
-    let (entry, usersp, kernelsp) = Load(task, &fileName, &mut argv, &envv, &Vec::new())?;
+    let extraAxv = Vec::new();
+    let (entry, usersp, kernelsp) = Load(task, &fileName, &mut argv, &envv, &extraAxv)?;
+
+    drop(fileName);
+    drop(argv);
+    drop(envv);
+    drop(extraAxv);
 
     //need to clean object on stack before enter_user as the stack will be destroyed
     task.AccountTaskEnter(SchedState::RunningApp);
 
     EnterUser(entry, usersp, kernelsp);
-
-    //won't reach here
-
-    return Ok(0);
 }
 
 // Execveat implements linux syscall execveat(2).

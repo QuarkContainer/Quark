@@ -30,9 +30,9 @@ pub struct Heap<const ORDER: usize> {
     free_list: [LinkedList; ORDER],
 
     // statistics
-    user: usize,
-    allocated: usize,
-    total: usize,
+    pub user: usize,
+    pub allocated: usize,
+    pub total: usize,
 }
 
 impl<const ORDER: usize> Heap<ORDER> {

@@ -15,7 +15,6 @@
 use alloc::boxed::Box;
 use alloc::string::ToString;
 use alloc::sync::Arc;
-use alloc::vec::Vec;
 use core::ptr;
 
 use super::super::super::super::kernel_def::*;
@@ -527,7 +526,6 @@ impl Task {
                     futexMgr: futexMgr,
                     ioUsage: ioUsage,
                     sched: sched,
-                    iovs: Vec::with_capacity(4),
                     perfcounters: Some(THREAD_COUNTS.lock().NewCounters()),
                     guard: Guard::default(),
                 },
@@ -666,7 +664,7 @@ pub fn CreateCloneTask(fromTask: &Task, toTask: &mut Task, userSp: u64) {
         toTask.context.rsp = toTask.GetPtRegs() as *const _ as u64 - 8;
         toTask.context.rdi = userSp;
         toTask.context.savefpsate = true;
-        toTask.context.X86fpstate = Box::new(fromTask.context.X86fpstate.Fork());
+        toTask.context.X86fpstate = Some(Box::new(fromTask.context.X86fpstate.as_ref().unwrap().Fork()));
         toPtRegs.rax = 0;
         toPtRegs.rsp = userSp;
 

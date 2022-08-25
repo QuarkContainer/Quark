@@ -40,11 +40,11 @@ impl MemoryManager {
         if vaddr == 0 && len == 0 {
             return Ok(())
         }
-        self.V2PLocked(task, rl, vaddr, len as u64, &mut task.GetMut().iovs, false, allowPartial)?;
-        defer!(task.GetMut().iovs.clear());
-
+        let mut iovs = Vec::with_capacity(4);
+        self.V2PLocked(task, rl, vaddr, len as u64, &mut iovs, false, allowPartial)?;
+        
         let mut offset = 0;
-        for iov in &task.GetMut().iovs {
+        for iov in &iovs {
             unsafe {
                 let dstPtr = (to + offset) as * mut u8;
                 let srcPtr = iov.start as *const u8;
@@ -62,11 +62,11 @@ impl MemoryManager {
         if vaddr == 0 && len == 0 {
             return Ok(())
         }
-        self.V2PLocked(task, rl, vaddr, len as u64, &mut task.GetMut().iovs, true, allowPartial)?;
-        defer!(task.GetMut().iovs.clear());
-
+        let mut iovs = Vec::with_capacity(4);
+        self.V2PLocked(task, rl, vaddr, len as u64, &mut iovs, true, allowPartial)?;
+        
         let mut offset = 0;
-        for iov in &task.GetMut().iovs {
+        for iov in &iovs {
             unsafe {
                 let dstPtr = iov.start as * mut u8;
                 let srcPtr = (from + offset) as *const u8;
@@ -80,11 +80,11 @@ impl MemoryManager {
     }
 
     pub fn ZeroDataOutLocked(&self, task: &Task, rl: &QUpgradableLockGuard, vaddr: u64, len: usize, allowPartial: bool) -> Result<usize> {
-        self.V2PLocked(task, rl, vaddr, len as u64, &mut task.GetMut().iovs, true, allowPartial)?;
-        defer!(task.GetMut().iovs.clear());
-
+        let mut iovs = Vec::with_capacity(4);
+        self.V2PLocked(task, rl, vaddr, len as u64, &mut iovs, true, allowPartial)?;
+        
         let mut len = 0;
-        for iov in &task.GetMut().iovs {
+        for iov in &iovs {
             let dst = iov.start as *mut u8;
             let dst = unsafe { slice::from_raw_parts_mut(dst, iov.len) };
             for i in 0..iov.len {
@@ -385,11 +385,11 @@ impl MemoryManager {
 
         assert!(vaddr % 4 == 0);
 
-        self.V2PLocked(task, &rl, vaddr, 4, &mut task.GetMut().iovs, false, false)?;
-        defer!(task.GetMut().iovs.clear());
-
-        assert!(task.GetMut().iovs.len() == 1);
-        let addr = task.GetMut().iovs[0].start;
+        let mut iovs = Vec::with_capacity(1);
+        self.V2PLocked(task, &rl, vaddr, 4, &mut iovs, false, false)?;
+        
+        assert!(iovs.len() == 1);
+        let addr = iovs[0].start;
         let val = unsafe { &*(addr as *const AtomicU32) };
 
         val.swap(new, Ordering::SeqCst);
@@ -401,11 +401,11 @@ impl MemoryManager {
 
         assert!(vaddr % 4 == 0);
 
-        self.V2PLocked(task, &rl, vaddr, 4, &mut task.GetMut().iovs, false, false)?;
-        defer!(task.GetMut().iovs.clear());
-
-        assert!(task.GetMut().iovs.len() == 1);
-        let addr = task.GetMut().iovs[0].start;
+        let mut iovs = Vec::with_capacity(1);
+        self.V2PLocked(task, &rl, vaddr, 4, &mut iovs, false, false)?;
+        
+        assert!(iovs.len() == 1);
+        let addr = iovs[0].start;
         let val = unsafe { &*(addr as *const AtomicU32) };
 
         match val.compare_exchange(old, new, Ordering::SeqCst, Ordering::SeqCst) {

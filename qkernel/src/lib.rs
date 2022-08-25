@@ -535,10 +535,12 @@ fn Print() {
     );
 }
 
-fn StartExecProcess(fd: i32, process: Process) {
+fn StartExecProcess(fd: i32, process: Process) -> ! {
     let (tid, entry, userStackAddr, kernelStackAddr) = { LOADER.ExecProcess(process).unwrap() };
 
-    WriteControlMsgResp(fd, &UCallResp::ExecProcessResp(tid), true);
+    {
+        WriteControlMsgResp(fd, &UCallResp::ExecProcessResp(tid), true);
+    }
 
     let currTask = Task::Current();
     currTask.AccountTaskEnter(SchedState::RunningApp);
@@ -546,7 +548,7 @@ fn StartExecProcess(fd: i32, process: Process) {
     EnterUser(entry, userStackAddr, kernelStackAddr);
 }
 
-fn StartSubContainerProcess(elfEntry: u64, userStackAddr: u64, kernelStackAddr: u64) {
+fn StartSubContainerProcess(elfEntry: u64, userStackAddr: u64, kernelStackAddr: u64) -> ! {
     let currTask = Task::Current();
     currTask.AccountTaskEnter(SchedState::RunningApp);
 
@@ -561,7 +563,7 @@ pub fn StartRootProcess() {
     CreateTask(StartRootContainer as u64, ptr::null(), false);
 }
 
-fn StartRootContainer(_para: *const u8) {
+fn StartRootContainer(_para: *const u8) -> ! {
     self::Init();
     info!("StartRootContainer ....");
     let task = Task::Current();
@@ -602,9 +604,6 @@ fn StartRootContainer(_para: *const u8) {
     let currTask = Task::Current();
     currTask.AccountTaskEnter(SchedState::RunningApp);
     EnterUser(entry, userStackAddr, kernelStackAddr);
-
-    //can't reach this
-    WaitFn();
 }
 
 #[panic_handler]

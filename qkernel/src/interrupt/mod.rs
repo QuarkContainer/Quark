@@ -621,47 +621,50 @@ pub fn HandleFault(
     sf: &mut PtRegs,
     signal: i32,
 ) -> ! {
-    if !user {
-        let map = task.mm.GetSnapshotLocked(task, false);
-        print!("unhandle EXCEPTION: page_fault FAULT\n{:#?}, error code is {:?}, cr2 is {:x}, registers is {:#x?}",
-               sf, errorCode, cr2, task.GetPtRegs());
-        print!("the map 3 is {}", &map);
-        panic!();
+    {
+        if !user {
+            let map = task.mm.GetSnapshotLocked(task, false);
+            print!("unhandle EXCEPTION: page_fault FAULT\n{:#?}, error code is {:?}, cr2 is {:x}, registers is {:#x?}",
+                   sf, errorCode, cr2, task.GetPtRegs());
+            print!("the map 3 is {}", &map);
+            panic!();
+        }
+    
+        //task.SaveFp();
+    
+        let mut info = SignalInfo {
+            Signo: signal, //Signal::SIGBUS,
+            ..Default::default()
+        };
+    
+        let sigfault = info.SigFault();
+        sigfault.addr = cr2;
+        //let read = errorCode & (1<<1) == 0;
+        let write = errorCode & (1 << 1) != 0;
+        let execute = errorCode & (1 << 4) != 0;
+    
+        if !write && !execute {
+            info.Code = 1; // SEGV_MAPERR.
+        } else {
+            info.Code = 2; // SEGV_ACCERR.
+        }
+    
+        let thread = task.Thread();
+        // Synchronous signal. Send it to ourselves. Assume the signal is
+        // legitimate and force it (work around the signal being ignored or
+        // blocked) like Linux does. Conveniently, this is even the correct
+        // behavior for SIGTRAP from single-stepping.
+        thread.forceSignal(Signal(Signal::SIGSEGV), false);
+        thread
+            .SendSignal(&info)
+            .expect("PageFaultHandler send signal fail");
+        MainRun(task, TaskRunState::RunApp);
+        CPULocal::Myself().SetMode(VcpuMode::User);
+        task.mm.HandleTlbShootdown();
+    
+        task.RestoreFp();
     }
 
-    //task.SaveFp();
-
-    let mut info = SignalInfo {
-        Signo: signal, //Signal::SIGBUS,
-        ..Default::default()
-    };
-
-    let sigfault = info.SigFault();
-    sigfault.addr = cr2;
-    //let read = errorCode & (1<<1) == 0;
-    let write = errorCode & (1 << 1) != 0;
-    let execute = errorCode & (1 << 4) != 0;
-
-    if !write && !execute {
-        info.Code = 1; // SEGV_MAPERR.
-    } else {
-        info.Code = 2; // SEGV_ACCERR.
-    }
-
-    let thread = task.Thread();
-    // Synchronous signal. Send it to ourselves. Assume the signal is
-    // legitimate and force it (work around the signal being ignored or
-    // blocked) like Linux does. Conveniently, this is even the correct
-    // behavior for SIGTRAP from single-stepping.
-    thread.forceSignal(Signal(Signal::SIGSEGV), false);
-    thread
-        .SendSignal(&info)
-        .expect("PageFaultHandler send signal fail");
-    MainRun(task, TaskRunState::RunApp);
-    CPULocal::Myself().SetMode(VcpuMode::User);
-    task.mm.HandleTlbShootdown();
-
-    task.RestoreFp();
     ReturnToApp(sf);
 }
 
