@@ -77,7 +77,7 @@ pub fn CurrentCr3() -> u64 {
 }
 
 #[inline]
-pub fn EnterUser(entry: u64, userStackAddr: u64, kernelStackAddr: u64) {
+pub fn EnterUser(entry: u64, userStackAddr: u64, kernelStackAddr: u64) -> ! {
     //PerfGoto(PerfType::User);
     unsafe {
         llvm_asm!("

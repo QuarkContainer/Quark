@@ -105,7 +105,7 @@ pub fn IOWait() {
     }
 }
 
-pub fn WaitFn() {
+pub fn WaitFn() -> ! {
     let mut task = TaskId::default();
     loop {
         let next = if task.data == 0 {
@@ -140,6 +140,10 @@ pub fn WaitFn() {
                 let pendingFreeStack = CPULocal::PendingFreeStack();
                 if pendingFreeStack != 0 {
                     //(*PAGE_ALLOCATOR).Free(pendingFreeStack, DEFAULT_STACK_PAGES).unwrap();
+                    let task = TaskId::New(pendingFreeStack).GetTask();
+                    //free X86fpstate
+                    task.context.X86fpstate.take();
+
                     KERNEL_STACK_ALLOCATOR.Free(pendingFreeStack).unwrap();
                     CPULocal::SetPendingFreeStack(0);
                 }

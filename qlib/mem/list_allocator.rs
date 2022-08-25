@@ -261,6 +261,8 @@ pub struct ListAllocator {
     pub bufSize: AtomicUsize,
     pub heapStart: u64,
     pub heapEnd: u64,
+    pub counts: [AtomicUsize; 36],
+    pub maxnum: [AtomicUsize; 36],
     //pub errorHandler: Arc<OOMHandler>
     pub initialized: AtomicBool,
 }
@@ -305,6 +307,28 @@ impl ListAllocator {
             heapStart,
             heapEnd,
             initialized: AtomicBool::new(false),
+            counts: [
+                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), 
+                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), 
+                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), 
+                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), 
+                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), 
+                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0),
+                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0),
+                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0),
+                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0),
+            ],
+            maxnum: [
+                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), 
+                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), 
+                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), 
+                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), 
+                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), 
+                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0),
+                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0),
+                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0),
+                AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0),
+            ],
         };
     }
 
@@ -394,7 +418,24 @@ impl ListAllocator {
 
         return count > 0;
     }
+
+    pub fn FreeAll(&self) -> bool {
+        let mut count = 0;
+        for i in 0..self.bufs.len() {
+            let idx = self.bufs.len() - i - 1; // free from larger size
+            let cnt = self.bufs[idx]
+                .lock()
+                .FreeMultiple(&self.heap, FREE_BATCH - count);
+            self.bufSize
+                .fetch_sub(cnt * self.bufs[idx].lock().size, Ordering::Release);
+            count += cnt;
+        }
+
+        return count > 0;
+    }
 }
+
+pub const PRINT_CLASS : usize = 13;
 
 unsafe impl GlobalAlloc for ListAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
@@ -412,11 +453,17 @@ unsafe impl GlobalAlloc for ListAllocator {
 
         let class = size.trailing_zeros() as usize;
 
+        //self.counts[class].fetch_add(1, Ordering::Release);
+        //self.maxnum[class].fetch_add(1, Ordering::Release);
+
         if 3 <= class && class < self.bufs.len() {
             let ret = self.bufs[class].lock().Alloc();
-            if ret.is_some() {
+            if let Some(addr) = ret {
                 self.bufSize.fetch_sub(size, Ordering::Release);
-                return ret.unwrap();
+                /*if class == PRINT_CLASS {
+                    error!("L#{} alloc {:x?}", class, addr as u64);
+                }*/
+                return addr;
             }
         }
 
@@ -435,6 +482,10 @@ unsafe impl GlobalAlloc for ListAllocator {
             self.handleError(size as u64, layout.align() as u64);
             loop {}
         }
+
+        /*if class == PRINT_CLASS {
+            error!("L#{} alloc {:x}", class, ret as u64);
+        }*/
 
         if ret % size as u64 != 0 {
             raw!(0x236, ret, size as u64);
@@ -456,7 +507,14 @@ unsafe impl GlobalAlloc for ListAllocator {
         );
         let class = size.trailing_zeros() as usize;
 
-        self.free.fetch_add(size, Ordering::Release);
+        /*if class == PRINT_CLASS {
+            error!("L#{} free {:x}", class, ptr as u64);
+        }
+
+        self.maxnum[class].fetch_sub(1, Ordering::Release);
+
+        self.free.fetch_sub(size, Ordering::Release);*/
+        
         self.bufSize.fetch_add(size, Ordering::Release);
         if class < self.bufs.len() {
             return self.bufs[class].lock().Dealloc(ptr, &self.heap);

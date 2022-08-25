@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use core::u64;
+use alloc::vec::Vec;
 
 use super::super::super::addr::*;
 use super::super::super::common::*;
@@ -697,13 +698,13 @@ impl MemoryManager {
             });
         }
 
-        self.V2PLocked(task, &rl, addr, 4, &mut task.GetMut().iovs, true, false)?;
-        defer!(task.GetMut().iovs.clear());
-        assert!(task.GetMut().iovs.len() == 1);
+        let mut iovs = Vec::with_capacity(4);
+        self.V2PLocked(task, &rl, addr, 4, &mut iovs, true, false)?;
+        assert!(iovs.len() == 1);
 
         return Ok(Key {
             Kind: KeyKind::KindSharedMappable,
-            Addr: task.GetMut().iovs[0].start,
+            Addr: iovs[0].start,
         });
     }
 

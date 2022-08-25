@@ -16,7 +16,6 @@ use crate::qlib::mutex::*;
 use alloc::boxed::Box;
 use alloc::string::ToString;
 use alloc::sync::Arc;
-use alloc::vec::Vec;
 use core::mem;
 use core::ops::Deref;
 use core::ptr;
@@ -191,8 +190,7 @@ pub struct Task {
     pub futexMgr: FutexMgr,
     pub ioUsage: IO,
     pub sched: TaskSchedInfo,
-    pub iovs: Vec<IoVec>,
-
+    
     pub perfcounters: Option<Arc<Counters>>,
 
     pub guard: Guard,
@@ -238,13 +236,13 @@ impl Task {
     }
 
     pub fn SaveFp(&mut self) {
-        self.context.X86fpstate.SaveFp();
+        self.context.X86fpstate.as_ref().unwrap().SaveFp();
         self.context.savefpsate = true;
     }
 
     pub fn RestoreFp(&mut self) {
         if self.context.savefpsate {
-            self.context.X86fpstate.RestoreFp();
+            self.context.X86fpstate.as_ref().unwrap().RestoreFp();
             self.context.savefpsate = false;
         }
     }
@@ -306,7 +304,6 @@ impl Task {
             futexMgr: futexMgr,
             ioUsage: IO::default(),
             sched: TaskSchedInfo::default(),
-            iovs: Vec::new(),
             perfcounters: None,
             guard: Guard::default(),
         };
@@ -666,7 +663,6 @@ impl Task {
                     futexMgr: futexMgr,
                     ioUsage: ioUsage,
                     sched: TaskSchedInfo::default(),
-                    iovs: Vec::with_capacity(4),
                     perfcounters: perfcounters,
                     guard: Guard::default(),
                 },
@@ -769,7 +765,6 @@ impl Task {
                     futexMgr: FUTEX_MGR.clone(),
                     ioUsage: dummyTask.ioUsage.clone(),
                     sched: TaskSchedInfo::default(),
-                    iovs: Vec::new(),
                     perfcounters: None,
                     guard: Guard::default(),
                 },
