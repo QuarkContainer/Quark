@@ -855,29 +855,41 @@ impl Inode {
     }
 
     pub fn CheckOwnership(&mut self, task: &Task) -> bool {
-        info!("CheckOwnership 1");
         let uattr = match self.UnstableAttr(task) {
             Err(_) => return false,
             Ok(u) => u,
         };
 
         let creds = task.creds.lock();
-        info!(
-            "CheckOwnership 2, uattr.Owner.UID is {:?}, cred is {:?}",
-            uattr.Owner.UID, &creds
+        /*info!(
+            "CheckOwnership 2, uattr.Owner.UID is {:?}",
+            uid
         );
+
+        let s = format!("{:?}", &creds);
+        info!("CheckOwnership 2.0");
+        info!(
+            "CheckOwnership 2.1, cred is {:?}",
+            &s
+        );
+        info!("CheckOwnership 2.1.1");
+        drop(s);
+        info!("CheckOwnership 2.1.2");*/
+
         if uattr.Owner.UID == creds.EffectiveKUID {
+            /*info!("CheckOwnership 2.2");
+        
+            drop(uattr);
+            info!("CheckOwnership 2.3");*/
             return true;
         }
 
-        info!("CheckOwnership 3");
         if creds.HasCapability(Capability::CAP_FOWNER)
             && creds.UserNamespace.MapFromKUID(uattr.Owner.UID).Ok()
         {
             return true;
         }
 
-        info!("CheckOwnership 4");
         return false;
     }
 

@@ -181,175 +181,171 @@ pub fn ExecvFilleName(task: &mut Task, dirfd: i32, filename: &str, flags: i32) -
 }
 
 pub fn Execvat(task: &mut Task, dirfd: i32, filenameAddr: u64, argvAddr: u64, envvAddr: u64, flags: i32) -> Result<i64> {
-    let (fileName, err) = task.CopyInString(filenameAddr, PATH_MAX);
-    match err {
-        Err(e) => return Err(e),
-        _ => (),
-    }
-
-    info!("SysExecve file name is {}", &fileName);
-    let mut argv = task.CopyInVector(argvAddr, EXEC_MAX_ELEM_SIZE, EXEC_MAX_TOTAL_SIZE as i32)?;
-    let envv = task.CopyInVector(envvAddr, EXEC_MAX_ELEM_SIZE, EXEC_MAX_TOTAL_SIZE as i32)?;
-
-    if argv.len() == 0 {
-        argv.push(fileName.clone())
-    };
-    let mut cmd = format!("");
-    for arg in &argv {
-        cmd += &arg;
-        cmd += " ";
-    }
-
-    let mut envs = format!("");
-    for env in &envv {
-        envs += &env;
-        envs += " ";
-    }
-    info!("in the execve: the cmd is {} \n envs is {:?}", &cmd, &envs);
-
-    let fileName = ExecvFilleName(task, dirfd, &fileName, flags)?;
-
-    {
-        let t = task.Thread().clone();
-        let tg = t.lock().tg.clone();
-        let pidns = tg.PIDNamespace();
-        let owner = pidns.lock().owner.clone();
-        let signallock = tg.lock().signalLock.clone();
-        {
-            let ol = owner.WriteLock();
-            let sl = signallock.lock();
-
-            let exiting = tg.lock().exiting;
-            let execing = tg.lock().execing.Upgrade();
-
-            if exiting || execing.is_some() {
-                // We lost to a racing group-exit, kill, or exec from another thread
-                // and should just exit.
-                return Err(Error::SysError(SysErr::EINTR));
-            }
-
-            // Cancel any racing group stops.
-            tg.lock().endGroupStopLocked(false);
-
-            // If the task has any siblings, they have to exit before the exec can
-            // continue.
-            tg.lock().execing = t.Downgrade();
-
-            let taskCnt = tg.lock().tasks.len();
-            if taskCnt != 1 {
-                // "[All] other threads except the thread group leader report death as
-                // if they exited via _exit(2) with exit code 0." - ptrace(2)
-                let tasks: Vec<_> = tg.lock().tasks.iter().cloned().collect();
-                for sibling in &tasks {
-                    if t != sibling.clone() {
-                        sibling.lock().killLocked();
-                    }
-                }
-                // The last sibling to exit will wake t.
-                t.lock().beginInternalStopLocked(&Arc::new(ExecStop {}));
-
-                core::mem::drop(sl);
-                core::mem::drop(ol);
-                task.DoStop();
-            }
+    let (entry, usersp, kernelsp) = {
+        let (fileName, err) = task.CopyInString(filenameAddr, PATH_MAX);
+        match err {
+            Err(e) => return Err(e),
+            _ => (),
         }
-
-        let mut its = Vec::new();
+    
+        let mut argv = task.CopyInVector(argvAddr, EXEC_MAX_ELEM_SIZE, EXEC_MAX_TOTAL_SIZE as i32)?;
+        let envv = task.CopyInVector(envvAddr, EXEC_MAX_ELEM_SIZE, EXEC_MAX_TOTAL_SIZE as i32)?;
+    
+        if argv.len() == 0 {
+            argv.push(fileName.clone())
+        };
+        let mut cmd = format!("");
+        for arg in &argv {
+            cmd += &arg;
+            cmd += " ";
+        }
+    
+        let mut envs = format!("");
+        for env in &envv {
+            envs += &env;
+            envs += " ";
+        }
+        info!("in the execve: the cmd is {} \n envs is {:?}", &cmd, &envs);
+    
+        let fileName = ExecvFilleName(task, dirfd, &fileName, flags)?;
+    
         {
-            let _l = owner.WriteLock();
-            tg.lock().execing = ThreadWeak::default();
-            if t.lock().killed() {
-                //return (*runInterrupt)(nil)
-                return Err(Error::SysError(SysErr::EINTR));
-            }
-
-            t.promoteLocked();
-
-            // "POSIX timers are not preserved (timer_create(2))." - execve(2). Handle
-            // this first since POSIX timers are protected by the signal mutex, which
-            // we're about to change. Note that we have to stop and destroy timers
-            // without holding any mutexes to avoid circular lock ordering.
+            let t = task.Thread().clone();
+            let tg = t.lock().tg.clone();
+            let pidns = tg.PIDNamespace();
+            let owner = pidns.lock().owner.clone();
+            let signallock = tg.lock().signalLock.clone();
             {
-                let _s = signallock.lock();
-
-                for (_, it) in &tg.lock().timers {
-                    its.push(it.clone());
+                let ol = owner.WriteLock();
+                let sl = signallock.lock();
+    
+                let exiting = tg.lock().exiting;
+                let execing = tg.lock().execing.Upgrade();
+    
+                if exiting || execing.is_some() {
+                    // We lost to a racing group-exit, kill, or exec from another thread
+                    // and should just exit.
+                    return Err(Error::SysError(SysErr::EINTR));
                 }
-
-                tg.lock().timers.clear();
+    
+                // Cancel any racing group stops.
+                tg.lock().endGroupStopLocked(false);
+    
+                // If the task has any siblings, they have to exit before the exec can
+                // continue.
+                tg.lock().execing = t.Downgrade();
+    
+                let taskCnt = tg.lock().tasks.len();
+                if taskCnt != 1 {
+                    // "[All] other threads except the thread group leader report death as
+                    // if they exited via _exit(2) with exit code 0." - ptrace(2)
+                    let tasks: Vec<_> = tg.lock().tasks.iter().cloned().collect();
+                    for sibling in &tasks {
+                        if t != sibling.clone() {
+                            sibling.lock().killLocked();
+                        }
+                    }
+                    // The last sibling to exit will wake t.
+                    t.lock().beginInternalStopLocked(&Arc::new(ExecStop {}));
+    
+                    core::mem::drop(sl);
+                    core::mem::drop(ol);
+                    task.DoStop();
+                }
             }
+    
+            let mut its = Vec::new();
+            {
+                let _l = owner.WriteLock();
+                tg.lock().execing = ThreadWeak::default();
+                if t.lock().killed() {
+                    //return (*runInterrupt)(nil)
+                    return Err(Error::SysError(SysErr::EINTR));
+                }
+    
+                t.promoteLocked();
+    
+                // "POSIX timers are not preserved (timer_create(2))." - execve(2). Handle
+                // this first since POSIX timers are protected by the signal mutex, which
+                // we're about to change. Note that we have to stop and destroy timers
+                // without holding any mutexes to avoid circular lock ordering.
+                {
+                    let _s = signallock.lock();
+    
+                    for (_, it) in &tg.lock().timers {
+                        its.push(it.clone());
+                    }
+    
+                    tg.lock().timers.clear();
+                }
+            }
+    
+            for it in its {
+                it.DestroyTimer();
+            }
+    
+            {
+                let _l = owner.WriteLock();
+                let sh = tg.lock().signalHandlers.clone();
+                // "During an execve(2), the dispositions of handled signals are reset to
+                // the default; the dispositions of ignored signals are left unchanged. ...
+                // [The] signal mask is preserved across execve(2). ... [The] pending
+                // signal set is preserved across an execve(2)." - signal(7)
+                //
+                // Details:
+                //
+                // - If the thread group is sharing its signal handlers with another thread
+                // group via CLONE_SIGHAND, execve forces the signal handlers to be copied
+                // (see Linux's fs/exec.c:de_thread). We're not reference-counting signal
+                // handlers, so we always make a copy.
+                //
+                // - "Disposition" only means sigaction::sa_handler/sa_sigaction; flags,
+                // restorer (if present), and mask are always reset. (See Linux's
+                // fs/exec.c:setup_new_exec => kernel/signal.c:flush_signal_handlers.)
+                tg.lock().signalHandlers = sh.CopyForExec();
+                // "Any alternate signal stack is not preserved (sigaltstack(2))." - execve(2)
+                t.lock().signalStack = SignalStack::default();
+                task.signalStack = SignalStack::default();
+                // "The termination signal is reset to SIGCHLD (see clone(2))."
+                tg.lock().terminationSignal = Signal(Signal::SIGCHLD);
+                // execed indicates that the process can no longer join a process group
+                // in some scenarios (namely, the parent call setpgid(2) on the child).
+                // See the JoinProcessGroup function in sessions.go for more context.
+                tg.lock().execed = true;
+            }
+    
+            let fdtbl = t.lock().fdTbl.clone();
+            fdtbl.RemoveCloseOnExec();
+    
+            t.ExitRobustList(task);
+    
+            t.lock().updateCredsForExecLocked();
+    
+            t.UnstopVforkParent();
+    
+            SetFs(0);
+            task.context.fs = 0;
+            task.context.X86fpstate = Some(Box::new(X86fpstate::default()));
+    
+            let newMM = MemoryManager::Init(false);
+            let oldMM = task.mm.clone();
+            *newMM.metadata.lock() = oldMM.metadata.lock().Fork();
+            newMM.SetVcpu(GetVcpuId());
+            task.mm = newMM.clone();
+            task.futexMgr = task.futexMgr.Fork();
+            task.Thread().lock().memoryMgr = newMM;
+            if !SHARESPACE.config.read().KernelPagetable {
+                task.SwitchPageTable();
+            }
+    
+            // make the old mm exist before switch pagetable
+            core::mem::drop(oldMM);
         }
-
-        for it in its {
-            it.DestroyTimer();
-        }
-
-        {
-            let _l = owner.WriteLock();
-            let sh = tg.lock().signalHandlers.clone();
-            // "During an execve(2), the dispositions of handled signals are reset to
-            // the default; the dispositions of ignored signals are left unchanged. ...
-            // [The] signal mask is preserved across execve(2). ... [The] pending
-            // signal set is preserved across an execve(2)." - signal(7)
-            //
-            // Details:
-            //
-            // - If the thread group is sharing its signal handlers with another thread
-            // group via CLONE_SIGHAND, execve forces the signal handlers to be copied
-            // (see Linux's fs/exec.c:de_thread). We're not reference-counting signal
-            // handlers, so we always make a copy.
-            //
-            // - "Disposition" only means sigaction::sa_handler/sa_sigaction; flags,
-            // restorer (if present), and mask are always reset. (See Linux's
-            // fs/exec.c:setup_new_exec => kernel/signal.c:flush_signal_handlers.)
-            tg.lock().signalHandlers = sh.CopyForExec();
-            // "Any alternate signal stack is not preserved (sigaltstack(2))." - execve(2)
-            t.lock().signalStack = SignalStack::default();
-            task.signalStack = SignalStack::default();
-            // "The termination signal is reset to SIGCHLD (see clone(2))."
-            tg.lock().terminationSignal = Signal(Signal::SIGCHLD);
-            // execed indicates that the process can no longer join a process group
-            // in some scenarios (namely, the parent call setpgid(2) on the child).
-            // See the JoinProcessGroup function in sessions.go for more context.
-            tg.lock().execed = true;
-        }
-
-        let fdtbl = t.lock().fdTbl.clone();
-        fdtbl.RemoveCloseOnExec();
-
-        t.ExitRobustList(task);
-
-        t.lock().updateCredsForExecLocked();
-
-        t.UnstopVforkParent();
-
-        SetFs(0);
-        task.context.fs = 0;
-        task.context.X86fpstate = Some(Box::new(X86fpstate::default()));
-
-        let newMM = MemoryManager::Init(false);
-        let oldMM = task.mm.clone();
-        *newMM.metadata.lock() = oldMM.metadata.lock().Fork();
-        newMM.SetVcpu(GetVcpuId());
-        task.mm = newMM.clone();
-        task.futexMgr = task.futexMgr.Fork();
-        task.Thread().lock().memoryMgr = newMM;
-        if !SHARESPACE.config.read().KernelPagetable {
-            task.SwitchPageTable();
-        }
-
-        // make the old mm exist before switch pagetable
-        core::mem::drop(oldMM);
-    }
-
-    let extraAxv = Vec::new();
-    let (entry, usersp, kernelsp) = Load(task, &fileName, &mut argv, &envv, &extraAxv)?;
-
-    drop(fileName);
-    drop(argv);
-    drop(envv);
-    drop(extraAxv);
-
+    
+        let extraAxv = Vec::new();
+        Load(task, &fileName, &mut argv, &envv, &extraAxv)?
+    };
+    
     //need to clean object on stack before enter_user as the stack will be destroyed
     task.AccountTaskEnter(SchedState::RunningApp);
 

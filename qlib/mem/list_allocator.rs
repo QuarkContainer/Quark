@@ -436,6 +436,7 @@ impl ListAllocator {
 }
 
 pub const PRINT_CLASS : usize = 13;
+pub const MEMORY_CHECKING: bool = false;
 
 unsafe impl GlobalAlloc for ListAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
@@ -453,16 +454,19 @@ unsafe impl GlobalAlloc for ListAllocator {
 
         let class = size.trailing_zeros() as usize;
 
-        //self.counts[class].fetch_add(1, Ordering::Release);
-        //self.maxnum[class].fetch_add(1, Ordering::Release);
+        if MEMORY_CHECKING {
+            self.counts[class].fetch_add(1, Ordering::Release);
+            self.maxnum[class].fetch_add(1, Ordering::Release);
+        }
+
 
         if 3 <= class && class < self.bufs.len() {
             let ret = self.bufs[class].lock().Alloc();
             if let Some(addr) = ret {
                 self.bufSize.fetch_sub(size, Ordering::Release);
-                /*if class == PRINT_CLASS {
+                if MEMORY_CHECKING && class == PRINT_CLASS {
                     error!("L#{} alloc {:x?}", class, addr as u64);
-                }*/
+                }
                 return addr;
             }
         }
@@ -483,9 +487,9 @@ unsafe impl GlobalAlloc for ListAllocator {
             loop {}
         }
 
-        /*if class == PRINT_CLASS {
+        if MEMORY_CHECKING && class == PRINT_CLASS {
             error!("L#{} alloc {:x}", class, ret as u64);
-        }*/
+        }
 
         if ret % size as u64 != 0 {
             raw!(0x236, ret, size as u64);
@@ -507,14 +511,16 @@ unsafe impl GlobalAlloc for ListAllocator {
         );
         let class = size.trailing_zeros() as usize;
 
-        /*if class == PRINT_CLASS {
+        if MEMORY_CHECKING && class == PRINT_CLASS {
             error!("L#{} free {:x}", class, ptr as u64);
         }
 
         self.maxnum[class].fetch_sub(1, Ordering::Release);
 
-        self.free.fetch_sub(size, Ordering::Release);*/
-        
+        if MEMORY_CHECKING {
+            self.free.fetch_sub(size, Ordering::Release);
+        }
+
         self.bufSize.fetch_add(size, Ordering::Release);
         if class < self.bufs.len() {
             return self.bufs[class].lock().Dealloc(ptr, &self.heap);
