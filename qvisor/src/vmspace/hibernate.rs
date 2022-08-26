@@ -31,6 +31,7 @@ use crate::qlib::hiber_mgr::*;
 use crate::qlib::mem::block_allocator::*;
 use crate::SWAP_FILE;
 use crate::SHARE_SPACE;
+use crate::PMA_KEEPER;
 use crate::qlib::mem::list_allocator::GLOBAL_ALLOCATOR;
 
 impl HiberMgr {
@@ -54,6 +55,8 @@ impl HiberMgr {
         info!("swapout {} pages, new pages {} pages", map.len(), insertCount);
 
         let cnt = SHARE_SPACE.pageMgr.pagepool.DontneedFreePages()?;
+
+        PMA_KEEPER.DontNeed()?;
 
         let allocated1 = GLOBAL_ALLOCATOR.Allocator().heap.lock().allocated;
         GLOBAL_ALLOCATOR.Allocator().FreeAll();
@@ -231,8 +234,8 @@ impl PageBlock {
 
         for idx in 1..BLOCK_PAGE_COUNT+1 {
             if alloc.freePageList.IsFree(idx as _) {
-                let addr = self.IdxToAddr(idx as _)
-;                let ret = unsafe {
+                let addr = self.IdxToAddr(idx as _);
+                let ret = unsafe {
                     libc::madvise(addr as _, MemoryDef::PAGE_SIZE_4K as _, libc::MADV_DONTNEED)
                 };
         
