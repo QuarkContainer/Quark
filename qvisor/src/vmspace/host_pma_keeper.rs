@@ -14,6 +14,7 @@
 
 use spin::Mutex;
 use std::collections::VecDeque;
+use alloc::collections::BTreeSet;
 
 use super::super::heap_alloc::ENABLE_HUGEPAGE;
 use super::super::memmgr::*;
@@ -40,6 +41,7 @@ impl AreaValue for HostSegment {
 pub struct HostPMAKeeper {
     pub ranges: Mutex<AreaSet<HostSegment>>,
     pub hugePages: Mutex<VecDeque<u64>>,
+    pub allocPages: Mutex<BTreeSet<u64>>,
 }
 
 impl HostPMAKeeper {
@@ -47,16 +49,40 @@ impl HostPMAKeeper {
         return Self {
             ranges: Mutex::new(AreaSet::New(0, 0)),
             hugePages: Mutex::new(VecDeque::with_capacity(1000)),
+            allocPages: Mutex::new(BTreeSet::new()),
         };
     }
 
     pub fn FreeHugePage(&self, addr: u64) {
         self.hugePages.lock().push_front(addr);
+        self.allocPages.lock().remove(&addr);
     }
 
     pub fn AllocHugePage(&self) -> Option<u64> {
         let ret = self.hugePages.lock().pop_back();
-        return ret;
+        match ret {
+            None => return None,
+            Some(addr) => {
+                self.allocPages.lock().insert(addr);
+                return Some(addr)
+            }
+        }
+    }
+
+    pub fn DontNeed(&self) -> Result<()> {
+        let alloced = self.allocPages.lock();
+        for page in alloced.iter() {
+            let ret = unsafe {
+                libc::madvise((*page) as _, MemoryDef::PAGE_SIZE_2M as _, libc::MADV_DONTNEED)
+            };
+    
+            if ret == -1 {
+                info!("DontNeed get error, address is {:x} errno is {}", *page, errno::errno().0);
+                //return Err(Error::SysError(-errno::errno().0));
+            }
+        }
+
+        return Ok(())
     }
 
     pub fn Init(&self, start: u64, len: u64) {
@@ -133,7 +159,7 @@ impl HostPMAKeeper {
             .MapFixed();
         //mo.MapPrivate();
         mo.MapShare();
-        mo.MapLocked();
+        //mo.MapLocked();
 
         let start = self.Allocate(len, MemoryDef::PMD_SIZE)?;
         mo.Addr(start);
