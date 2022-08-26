@@ -19,6 +19,7 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::{collections::HashMap, collections::HashSet, str::FromStr};
 use super::common::*;
 use std::os::unix::io::{AsRawFd, RawFd};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use super::qlib::rdma_share::*;
 
@@ -34,8 +35,8 @@ pub struct CtrlInfo {
     // pods: pod ipaddr --> Pod
     pub pods: Mutex<HashMap<u32, Pod>>,
 
-    // services: service name --> Service
-    pub services: Mutex<HashMap<String, Service>>,
+    // services: service ip --> Service
+    pub services: Mutex<HashMap<u32, Service>>,
 
     // endpointses: endpoints name --> Endpoints
     pub endpointses: Mutex<HashMap<String, Endpoints>>,
@@ -80,7 +81,7 @@ impl Default for CtrlInfo {
     fn default() -> CtrlInfo {        
         let mut nodes: HashMap<u32, Node> = HashMap::new();
         let pods: HashMap<u32, Pod> = HashMap::new();
-        let services: HashMap<String, Service> = HashMap::new();
+        let services: HashMap<u32, Service> = HashMap::new();
         let endpointses: HashMap<String, Endpoints> = HashMap::new();
         let mut containerids: HashMap<String, u32> = HashMap::new();
         let mut ipToPodIdMappings: HashMap<u32, String> = HashMap::new();
@@ -215,6 +216,33 @@ impl CtrlInfo{
         None
     }
 
+    pub fn IsService(&self, ip:u32, port: &u16) -> Option<IpWithPort> {
+        let services = self.services.lock();
+        if services.contains_key(&ip) {
+            for p in services[&ip].ports.iter() {
+                if p.port == *port {
+                    let endpointses = self.endpointses.lock();
+                    let ipWithPorts = &endpointses[&services[&ip].name].ip_with_ports;
+                    let atomicIndex = &endpointses[&services[&ip].name].index;
+
+                    let mut expectedIndex = atomicIndex.fetch_add(1, Ordering::SeqCst);
+                    if expectedIndex >= ipWithPorts.len() {
+                        expectedIndex = 0;
+                        atomicIndex.store(0, Ordering::SeqCst)
+                    }
+                    let mut currentIndex = 0;
+                    for ipWithPort in ipWithPorts.iter() {
+                        if currentIndex == expectedIndex {
+                            return Some(ipWithPort.clone());
+                        }
+                        currentIndex += 1;
+                    }
+                }
+            }
+        }
+        None
+    }
+
     pub fn epoll_fd_set(&self, value: RawFd) {
         let mut epoll_fd = self.epoll_fd.lock();
         *epoll_fd = value;
@@ -271,7 +299,7 @@ pub struct Pod {
 
 #[derive(Default, Debug, Clone)]
 pub struct Service {
-    pub key: String,
+    pub name: String,
     pub cluster_ip: u32,
     pub ports: HashSet<Port>,
     pub resource_version: i32,
@@ -280,7 +308,7 @@ pub struct Service {
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct Port {
     pub protocal: String,
-    pub port: i32,
+    pub port: u16,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
@@ -289,11 +317,12 @@ pub struct IpWithPort {
     pub port: Port,
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug)]
 pub struct Endpoints {
-    pub key: String,
+    pub name: String,
     pub ip_with_ports: HashSet<IpWithPort>,
     pub resource_version: i32,
+    pub index: AtomicUsize,
 }
 
 pub struct VirtualEp {

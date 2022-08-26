@@ -406,15 +406,27 @@ impl RDMAAgent {
                     .get(&podId)
                     .unwrap()
                     .clone();
-                match RDMA_CTLINFO.get_node_ip_by_pod_ip(&msg.dstIpAddr) {
+                
+                let mut dstIpAddr = msg.dstIpAddr;
+                let mut dstPort = msg.dstPort;
+                println!("RDMAConnectUsingPodId: Connect to ip {} port {}", dstIpAddr, dstPort);
+                match RDMA_CTLINFO.IsService(dstIpAddr, &dstPort) {
+                    None => {},
+                    Some(ipWithPort) => {
+                        println!("The traffic is connecting to a service. Change the connection to {:?}", ipWithPort);
+                        dstIpAddr = ipWithPort.ip;
+                        dstPort = ipWithPort.port.port;
+                    },
+                }
+                match RDMA_CTLINFO.get_node_ip_by_pod_ip(&dstIpAddr) {
                     Some(nodeIpAddr) => {
                         let conns = RDMA_SRV.conns.lock();
                         let rdmaConn = conns.get(&nodeIpAddr).unwrap();
                         let rdmaChannel = self.CreateClientRDMAChannel(
                             &RDMAConnectReq {
                                 sockfd: msg.sockfd,
-                                dstIpAddr: msg.dstIpAddr,
-                                dstPort: msg.dstPort,
+                                dstIpAddr: dstIpAddr,
+                                dstPort: dstPort,
                                 srcIpAddr: ipAddr.to_be(),
                                 srcPort: msg.srcPort,
                             },
