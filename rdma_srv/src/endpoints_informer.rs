@@ -20,6 +20,7 @@ use svc_client::quark_cm_service_client::QuarkCmServiceClient;
 use svc_client::MaxResourceVersionMessage;
 use svc_client::EndpointsMessage;
 use std::collections::HashSet;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::time::*;
 use tonic::Request;
 
@@ -89,10 +90,10 @@ impl EndpointsInformer {
             for ipWithPortStr in &endpoints_message.ip_with_ports {
                 let splitted = ipWithPortStr.split(":").collect::<Vec<_>>();
                 ip_with_ports.insert(IpWithPort {
-                    ip: splitted[0].to_string().parse::<u32>().unwrap(),
+                    ip: splitted[0].to_string().parse::<u32>().unwrap().to_be(),
                     port: Port {
                         protocal: splitted[1].to_string(),
-                        port: splitted[2].to_string().parse::<i32>().unwrap(),
+                        port: splitted[2].to_string().parse::<u16>().unwrap().to_be(),
                     }
                 });
             }
@@ -101,6 +102,7 @@ impl EndpointsInformer {
                 name: name.clone(),
                 ip_with_ports: ip_with_ports,
                 resource_version: endpoints_message.resource_version,
+                index: AtomicUsize::new(0),
             };
             endpointses_map.insert(name.clone(), endpoints);
             if endpoints_message.resource_version > self.max_resource_version {

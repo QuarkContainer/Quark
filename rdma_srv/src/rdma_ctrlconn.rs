@@ -19,6 +19,7 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::{collections::HashMap, collections::HashSet, str::FromStr};
 use super::common::*;
 use std::os::unix::io::{AsRawFd, RawFd};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use super::qlib::rdma_share::*;
 
@@ -215,8 +216,31 @@ impl CtrlInfo{
         None
     }
 
-    pub fn IsService(&self, ip:&u32, port: &u16) -> bool {
-        return true;
+    pub fn IsService(&self, ip:u32, port: &u16) -> Option<IpWithPort> {
+        let services = self.services.lock();
+        if services.contains_key(&ip) {
+            for p in services[&ip].ports.iter() {
+                if p.port == *port {
+                    let endpointses = self.endpointses.lock();
+                    let ipWithPorts = &endpointses[&services[&ip].name].ip_with_ports;
+                    let atomicIndex = &endpointses[&services[&ip].name].index;
+
+                    let mut expectedIndex = atomicIndex.fetch_add(1, Ordering::SeqCst);
+                    if expectedIndex >= ipWithPorts.len() {
+                        expectedIndex = 0;
+                        atomicIndex.store(0, Ordering::SeqCst)
+                    }
+                    let mut currentIndex = 0;
+                    for ipWithPort in ipWithPorts.iter() {
+                        if currentIndex == expectedIndex {
+                            return Some(ipWithPort.clone());
+                        }
+                        currentIndex += 1;
+                    }
+                }
+            }
+        }
+        None
     }
 
     pub fn epoll_fd_set(&self, value: RawFd) {
@@ -284,7 +308,7 @@ pub struct Service {
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct Port {
     pub protocal: String,
-    pub port: i32,
+    pub port: u16,
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
@@ -293,11 +317,12 @@ pub struct IpWithPort {
     pub port: Port,
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug)]
 pub struct Endpoints {
     pub name: String,
     pub ip_with_ports: HashSet<IpWithPort>,
     pub resource_version: i32,
+    pub index: AtomicUsize,
 }
 
 pub struct VirtualEp {

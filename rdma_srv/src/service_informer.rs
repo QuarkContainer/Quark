@@ -83,7 +83,7 @@ impl ServiceInformer {
 
     fn handle(&mut self, service_message: &ServiceMessage) {
         let name = &service_message.name;
-        let ip = &service_message.cluster_ip;
+        let ip = &service_message.cluster_ip.to_be();
         let mut services_map = RDMA_CTLINFO.services.lock();        
         if service_message.event_type == EVENT_TYPE_SET {
             let mut ports = HashSet::new();
@@ -91,7 +91,7 @@ impl ServiceInformer {
                 let splitted = portStr.split(":").collect::<Vec<_>>();
                 ports.insert(Port {
                     protocal: splitted[0].to_string(),
-                    port: splitted[1].to_string().parse::<i32>().unwrap(),
+                    port: splitted[1].to_string().parse::<u16>().unwrap().to_be(),
                 });
             }
 
