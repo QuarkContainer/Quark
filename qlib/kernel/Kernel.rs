@@ -48,10 +48,9 @@ impl HostSpace {
         HyperCall64(HYPERCALL_URING_WAKE, minCompleted, 0, 0);
     }
 
-    pub fn LoadProcessKernel(processAddr: u64, len: usize) -> i64 {
+    pub fn LoadProcessKernel(processAddr: u64) -> i64 {
         let mut msg = Msg::LoadProcessKernel(LoadProcessKernel {
             processAddr: processAddr,
-            len: len,
         });
 
         return HostSpace::Call(&mut msg, false) as i64;

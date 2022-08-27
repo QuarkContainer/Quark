@@ -549,25 +549,8 @@ fn StartRootContainer(_para: *const u8) -> ! {
     self::Init();
     info!("StartRootContainer ....");
     let task = Task::Current();
-
-    let process = {
-        defer!(info!("after process"));
-        let mut buf: [u8; 8192] = [0; 8192];
-        let addr = &mut buf[0] as *mut _ as u64;
-        let size = Kernel::HostSpace::LoadProcessKernel(addr, buf.len()) as usize;
-        let process = serde_json::from_slice(&buf[0..size]);
-        let process = match process {
-            Ok(p) => p,
-            Err(e) => {
-                error!(
-                    "StartRootContainer: failed to LoadProcessKernel, cause: {:?}",
-                    e
-                );
-                panic!("failed to load Process");
-            }
-        };
-        process
-    };
+    let mut process = Process::default();
+    Kernel::HostSpace::LoadProcessKernel(&mut process as * mut _ as u64) as usize;
 
     let (_tid, entry, userStackAddr, kernelStackAddr) = {
         let mut processArgs = LOADER.Lock(task).unwrap().Init(process);

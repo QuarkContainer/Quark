@@ -800,7 +800,6 @@ pub struct NewTmpfsFile {
 #[derive(Clone, Debug)]
 pub struct LoadProcessKernel {
     pub processAddr: u64,
-    pub len: usize,
 }
 
 #[derive(Clone, Debug)]

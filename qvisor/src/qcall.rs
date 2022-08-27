@@ -59,7 +59,7 @@ impl KVMVcpu {
             Msg::LoadProcessKernel(msg) => {
                 ret = super::VMS
                     .lock()
-                    .LoadProcessKernel(msg.processAddr, msg.len) as u64;
+                    .LoadProcessKernel(msg.processAddr) as u64;
             }
             Msg::GetStdfds(msg) => {
                 ret = super::VMSpace::GetStdfds(msg.addr) as u64;
