@@ -46,7 +46,6 @@ extern crate alloc;
 #[macro_use]
 extern crate scopeguard;
 
-//extern crate rusty_asm;
 extern crate bit_field;
 
 #[macro_use]
@@ -56,7 +55,6 @@ extern crate x86_64;
 extern crate xmas_elf;
 #[macro_use]
 extern crate bitflags;
-extern crate x86;
 extern crate hashbrown;
 
 #[macro_use]
