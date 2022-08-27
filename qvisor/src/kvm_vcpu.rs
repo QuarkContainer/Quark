@@ -522,6 +522,14 @@ impl KVMVcpu {
                         panic!("Get VcpuExit::IoOut from guest user space, Abort, vcpu_sregs is {:#x?}", vcpu_sregs)
                     }
 
+                    let regs = self
+                                .vcpu
+                                .get_regs()
+                                .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                    let para1 = regs.rsi;
+                    let para2 = regs.rcx;
+                    let para3  = regs.rdi;
+
                     match addr {
                         qlib::HYPERCALL_IOWAIT => {
                             if !super::runc::runtime::vm::IsRunning() {
@@ -558,11 +566,7 @@ impl KVMVcpu {
                             //error!("HYPERCALL_IOWAIT waking ...");
                         }
                         qlib::HYPERCALL_URING_WAKE => {
-                            let regs = self
-                                .vcpu
-                                .get_regs()
-                                .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                            let minComplete = regs.rbx as usize;
+                            let minComplete = para1 as usize;
 
                             URING_MGR
                                 .lock()
@@ -573,11 +577,7 @@ impl KVMVcpu {
                             SyncMgr::WakeShareSpaceReady();
                         }
                         qlib::HYPERCALL_EXIT_VM => {
-                            let regs = self
-                                .vcpu
-                                .get_regs()
-                                .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                            let exitCode = regs.rbx as i32;
+                            let exitCode = para1 as i32;
 
                             super::print::LOG.Clear();
                             PerfPrint();
@@ -592,8 +592,7 @@ impl KVMVcpu {
                         }
 
                         qlib::HYPERCALL_PANIC => {
-                            let vcpu_regs = self.vcpu.get_regs().unwrap();
-                            let addr = vcpu_regs.rbx;
+                            let addr = para1;
                             let msg = unsafe { &*(addr as *const Print) };
 
                             eprintln!("Application error: {}", msg.str);
@@ -601,39 +600,32 @@ impl KVMVcpu {
                         }
 
                         qlib::HYPERCALL_WAKEUP_VCPU => {
-                            let regs = self
-                                .vcpu
-                                .get_regs()
-                                .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                            let vcpuId = regs.rbx as usize;
+                            let vcpuId = para1 as usize;
 
                             //error!("HYPERCALL_WAKEUP_VCPU vcpu id is {:x}", vcpuId);
                             SyncMgr::WakeVcpu(vcpuId);
                         }
 
                         qlib::HYPERCALL_PRINT => {
-                            let vcpu_regs = self.vcpu.get_regs().unwrap();
-                            let addr = vcpu_regs.rbx;
+                        let addr = para1;
                             let msg = unsafe { &*(addr as *const Print) };
 
                             log!("{}", msg.str);
                         }
 
                         qlib::HYPERCALL_MSG => {
-                            let vcpu_regs = self.vcpu.get_regs().unwrap();
-                            let data1 = vcpu_regs.rbx;
-                            let data2 = vcpu_regs.rcx;
-                            let data3 = vcpu_regs.rdi;
+                            let data1 = para1;
+                            let data2 = para2;
+                            let data3 = para3;
                             info!(
                                 "[{}] get kernel msg [rsp {:x}/rip {:x}]: {:x}, {:x}, {:x}",
-                                self.id, vcpu_regs.rsp, vcpu_regs.rip, data1, data2, data3
+                                self.id, regs.rsp, regs.rip, data1, data2, data3
                             );
                         }
 
                         qlib::HYPERCALL_OOM => {
-                            let vcpu_regs = self.vcpu.get_regs().unwrap();
-                            let data1 = vcpu_regs.rbx;
-                            let data2 = vcpu_regs.rcx;
+                            let data1 = para1;
+                            let data2 = para2;
                             error!(
                                 "OOM!!! cpu [{}], size is {:x}, alignment is {:x}",
                                 self.id, data1, data2
@@ -662,11 +654,7 @@ impl KVMVcpu {
                         },
 
                         qlib::HYPERCALL_GETTIME => {
-                            let regs = self
-                                .vcpu
-                                .get_regs()
-                                .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                            let data = regs.rbx;
+                            let data = para1;
 
                             unsafe {
                                 let call = &mut *(data as *mut GetTimeCall);
@@ -688,11 +676,7 @@ impl KVMVcpu {
                         }
 
                         qlib::HYPERCALL_VCPU_FREQ => {
-                            let regs = self
-                                .vcpu
-                                .get_regs()
-                                .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                            let data = regs.rbx;
+                            let data = para1;
 
                             let freq = self.vcpu.get_tsc_khz().unwrap() * 1000;
                             unsafe {
@@ -742,11 +726,7 @@ impl KVMVcpu {
                         }
 
                         qlib::HYPERCALL_HCALL => {
-                            let regs = self
-                                .vcpu
-                                .get_regs()
-                                .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                            let addr = regs.rbx;
+                            let addr = para1;
 
                             let eventAddr = addr as *mut QMsg; // as &mut qlib::Event;
                             let qmsg = unsafe { &mut (*eventAddr) };
@@ -771,11 +751,7 @@ impl KVMVcpu {
                         }
 
                         qlib::HYPERCALL_VCPU_WAIT => {
-                            let regs = self
-                                .vcpu
-                                .get_regs()
-                                .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                            let retAddr = regs.rdi;
+                            let retAddr = para3;
 
                             let ret = SHARE_SPACE.scheduler.WaitVcpu(&SHARE_SPACE, self.id, true);
                             match ret {

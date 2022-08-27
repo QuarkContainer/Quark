@@ -91,7 +91,6 @@ use self::rdma_svc_cli::*;
 use self::ringbuf::*;
 use self::task_mgr::*;
 use self::hiber_mgr::*;
-use super::asm::*;
 
 pub fn InitSingleton() {
     unsafe {

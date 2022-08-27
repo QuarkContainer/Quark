@@ -28,7 +28,7 @@ pub fn ReadControlMsg(fd: i32) -> Result<ControlMsg> {
     let usock = USocket { socket: fd };
 
     let (mut req, fds) = match usock.GetReq() {
-        Ok((req, fds)) => ((req, fds)),
+        Ok((req, fds)) => (req, fds),
         Err(e) => {
             let err = UCallResp::UCallRespErr(format!("{:?}", e));
             usock.SendResp(&err)?;

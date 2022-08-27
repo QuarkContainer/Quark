@@ -14,6 +14,7 @@
 
 use core::sync::atomic::Ordering;
 use core::sync::atomic::{AtomicBool, AtomicI32, AtomicI64};
+use core::arch::asm;
 
 use crate::qlib::fileinfo::*;
 use crate::qlib::rdma_svc_cli::RDMASvcClient;
@@ -137,11 +138,13 @@ impl Tsc {
         let rax: u64;
         let rdx: u64;
         unsafe {
-            llvm_asm!("\
-        lfence
-        rdtsc
-        " : "={rax}"(rax), "={rdx}"(rdx)
-        : : )
+            asm!("
+                lfence
+                rdtsc
+                ",
+                out("rax") rax,
+                out("rdx") rdx
+            )
         };
 
         return rax as i64 | ((rdx as i64) << 32);

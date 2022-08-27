@@ -24,6 +24,7 @@ use core::sync::atomic::Ordering;
 use x86_64::structures::paging::PageTableFlags;
 
 use crate::qlib::mutex::*;
+use crate::kernel_def::Invlpg;
 
 use super::super::super::addr::*;
 use super::super::super::auxv::*;

@@ -20,12 +20,12 @@
 #![allow(bare_trait_objects)]
 #![feature(map_first_last)]
 #![allow(non_camel_case_types)]
-#![feature(llvm_asm)]
 #![allow(deprecated)]
 #![feature(thread_id_value)]
 #![allow(dead_code)]
 #![allow(non_snake_case)]
 #![feature(core_intrinsics)]
+#![feature(asm)]
 
 extern crate alloc;
 extern crate bit_field;

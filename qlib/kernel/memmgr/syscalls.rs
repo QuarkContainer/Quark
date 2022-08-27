@@ -801,7 +801,7 @@ impl MemoryManager {
 
     pub fn ResidentSetSize(&self) -> u64 {
         let _ml = self.MappingReadLock();
-        return self.ResidentSetSize();
+        return self.ResidentSetSizeLocked();
     }
 
     pub fn MaxResidentSetSizeLocked(&self) -> u64 {

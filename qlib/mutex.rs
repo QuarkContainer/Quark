@@ -21,7 +21,7 @@ use core::ops::{Deref, DerefMut};
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-
+use core::arch::asm;
 use spin::*;
 
 use super::kernel::uid::*;
@@ -56,8 +56,8 @@ pub struct QMutexInternGuard<'a, T: ?Sized + 'a> {
     data: &'a mut T,
 }
 
-unsafe impl<T: ?Sized + Send> Sync for QMutexIntern<T> {}
-unsafe impl<T: ?Sized + Send> Send for QMutexIntern<T> {}
+//unsafe impl<T: ?Sized + Send> Sync for QMutexIntern<T> {}
+//unsafe impl<T: ?Sized + Send> Send for QMutexIntern<T> {}
 
 impl<T, R> QMutexIntern<T, R> {
     #[inline(always)]
@@ -78,12 +78,13 @@ impl<T, R> QMutexIntern<T, R> {
 pub fn CmpExchg(addr: u64, old: u64, new: u64) -> u64 {
     let mut ret: u64;
     unsafe {
-        llvm_asm!("
+        asm!("
               lock cmpxchgq $2, ($3)
-            "
-            : "={rax}"(ret)
-            : "{rax}"(old), "{rdx}"(new), "{rcx}"(addr)
-            : "memory" : "volatile"  );
+            ",
+            inlateout("rax") old as u64 => ret,
+            in("rdx") new,
+            in("rcx") addr
+        );
     };
 
     return ret;
@@ -92,13 +93,13 @@ pub fn CmpExchg(addr: u64, old: u64, new: u64) -> u64 {
 #[inline(always)]
 pub fn WriteOnce(addr: u64, val: u64) {
     unsafe {
-        llvm_asm!("
+        asm!("
                mfence
-               mov $1, ($0)
-            "
-            :
-            : "r"(addr), "r"(val)
-            : "memory" : "volatile"  );
+               mov ({0}), {1} 
+            ",
+            in(reg) addr,
+            in(reg) val
+        );
     };
 }
 
@@ -106,13 +107,13 @@ pub fn WriteOnce(addr: u64, val: u64) {
 pub fn LoadOnce(addr: u64) -> u64 {
     let ret: u64;
     unsafe {
-        llvm_asm!("
-               movq ($1), $0
+        asm!("
+               movq {0}, (rdi) 
                lfence
-            "
-            : "={rax}"(ret)
-            : "{rdi}"(addr)
-            : "memory" : "volatile"  );
+            ",
+            out(reg) ret,
+            in("rdi") addr
+        );
     };
 
     return ret;

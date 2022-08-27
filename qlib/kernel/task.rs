@@ -519,8 +519,6 @@ impl Task {
 
     #[inline(always)]
     pub fn TaskId() -> TaskId {
-        //let rsp: u64;
-        //unsafe { llvm_asm!("mov %rsp, $0" : "=r" (rsp) ) };
         let rsp = GetRsp();
         return TaskId::New(rsp & DEFAULT_STACK_MAST);
     }
@@ -591,8 +589,6 @@ impl Task {
 
     #[inline(always)]
     pub fn Current() -> &'static mut Task {
-        //let rsp: u64;
-        //unsafe { llvm_asm!("mov %rsp, $0" : "=r" (rsp) ) };
         let rsp = GetRsp();
 
         return Self::GetTask(rsp);

@@ -16,13 +16,19 @@
 
 use super::{SUPPORT_XSAVE, SUPPORT_XSAVEOPT};
 use core::sync::atomic::Ordering;
+use core::arch::asm;
 
 #[inline]
 pub fn WriteMsr(msr: u32, value: u64) {
     unsafe {
         let low = value as u32;
         let high = (value >> 32) as u32;
-        llvm_asm!("wrmsr" :: "{ecx}" (msr), "{eax}" (low), "{edx}" (high) : "memory" : "volatile" );
+        asm!(
+            "wrmsr",
+            in("ecx") msr,
+            in("eax") low,
+            in("edx") high
+        );
     }
 }
 
@@ -30,7 +36,12 @@ pub fn WriteMsr(msr: u32, value: u64) {
 pub fn ReadMsr(msr: u32) -> u64 {
     let (high, low): (u32, u32);
     unsafe {
-        llvm_asm!("rdmsr" : "={eax}" (low), "={edx}" (high) : "{ecx}" (msr) : "memory" : "volatile");
+        asm!(
+            "rdmsr",
+            out("eax") low,
+            out("edx") high,
+            in("ecx") msr
+        );
     }
     ((high as u64) << 32) | (low as u64)
 }
@@ -38,41 +49,45 @@ pub fn ReadMsr(msr: u32) -> u64 {
 #[inline]
 pub fn SwapGs() {
     unsafe {
-        llvm_asm!("swapgs":: : "memory" : "volatile");
+        asm!("swapgs");
     }
 }
 
 pub fn GetVcpuId() -> usize {
     let result: usize;
     unsafe {
-        llvm_asm!("mov %gs:16, %rax" : "={rax}" (result): : "memory" : "volatile");
+        asm!(
+            "mov rax, gs:16",
+            out("rax") result
+        );
     }
 
     return result;
 }
 
-#[inline(always)]
-pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64) {
-    unsafe {
-        let data: u8 = 0;
-        llvm_asm!("out $1, $0":: "{dx}"(type_), "{al}"(data), "{rbx}"(para1), "{rcx}"(para2), "{rdi}"(para3): "memory" : "volatile" )
-    }
-}
 
 #[inline]
 pub fn Hlt() {
-    unsafe { llvm_asm!("hlt") }
+    unsafe { asm!("hlt") }
 }
 
 #[inline]
 pub fn LoadCr3(cr3: u64) {
-    unsafe { llvm_asm!("mov $0, %cr3" : : "r" (cr3) : "memory" : "volatile" ) };
+    unsafe { 
+        asm!(
+            "mov cr3, {0}",
+            in(reg) cr3
+        ) };
 }
 
 #[inline]
 pub fn CurrentCr3() -> u64 {
     let cr3: u64;
-    unsafe { llvm_asm!("mov %cr3, $0" : "=r" (cr3) : : "memory" : "volatile" ) };
+    unsafe { 
+        asm!(
+            "mov {0}, cr3",
+            out(reg) cr3
+        )};
     return cr3;
 }
 
@@ -80,7 +95,7 @@ pub fn CurrentCr3() -> u64 {
 pub fn EnterUser(entry: u64, userStackAddr: u64, kernelStackAddr: u64) -> ! {
     //PerfGoto(PerfType::User);
     unsafe {
-        llvm_asm!("
+        asm!("
             fninit
             //mov gs:0, rsp
             mov gs:0, rdx
@@ -109,11 +124,10 @@ pub fn EnterUser(entry: u64, userStackAddr: u64, kernelStackAddr: u64) -> ! {
 
             .byte 0x48
             sysret
-              "
-              :
-              : "{rdi}"(entry), "{rsi}"(userStackAddr), "{rdx}"(kernelStackAddr)
-              : "memory"
-              : "intel", "volatile");
+              ",
+              in("rdi") entry,
+              in("rsi") userStackAddr,
+              in("rdx") kernelStackAddr);
         ::core::intrinsics::unreachable();
     }
 }
@@ -121,40 +135,39 @@ pub fn EnterUser(entry: u64, userStackAddr: u64, kernelStackAddr: u64) -> ! {
 #[inline]
 pub fn SyscallRet(kernelRsp: u64) -> ! {
     unsafe {
-        llvm_asm!("
-            //we have to store callee save registers for signal handling
-            pop r15
-            pop r14
-            pop r13
-            pop r12
-            pop rbp
-            pop rbx
+        asm!("
+                mov rsp, {0}
+                //we have to store callee save registers for signal handling
+                pop r15
+                pop r14
+                pop r13
+                pop r12
+                pop rbp
+                pop rbx
 
-            pop r11
-            pop r10
-            pop r9
-            pop r8
+                pop r11
+                pop r10
+                pop r9
+                pop r8
 
-            pop rax
-            pop rcx
-            pop rdx
-            pop rsi
-            pop rdi
+                pop rax
+                pop rcx
+                pop rdx
+                pop rsi
+                pop rdi
 
-            //the return frame for orig_rax, iretq
-            add rsp, 4 * 8
-            pop rsp
-            //pop gs:8
-            //add rsp, 1 * 8
+                //the return frame for orig_rax, iretq
+                add rsp, 4 * 8
+                pop rsp
+                //pop gs:8
+                //add rsp, 1 * 8
 
-            //mov rsp, gs:8
-            swapgs
-            .byte 0x48
-            sysret
-              "
-              :
-              : "{rsp}"(kernelRsp)
-              : "memory" : "intel", "volatile");
+                //mov rsp, gs:8
+                swapgs
+                .byte 0x48
+                sysret
+              ",
+              in(reg) kernelRsp);
         ::core::intrinsics::unreachable();
     }
 }
@@ -162,33 +175,33 @@ pub fn SyscallRet(kernelRsp: u64) -> ! {
 #[inline]
 pub fn IRet(kernelRsp: u64) -> ! {
     unsafe {
-        llvm_asm!("
-            //we have to store callee save registers for signal handling
-            pop r15
-            pop r14
-            pop r13
-            pop r12
-            pop rbp
-            pop rbx
+        asm!("
+                mov rsp, rax
+                //we have to store callee save registers for signal handling
+                pop r15
+                pop r14
+                pop r13
+                pop r12
+                pop rbp
+                pop rbx
 
-            pop r11
-            pop r10
-            pop r9
-            pop r8
+                pop r11
+                pop r10
+                pop r9
+                pop r8
 
-            pop rax
-            pop rcx
-            pop rdx
-            pop rsi
-            pop rdi
+                pop rax
+                pop rcx
+                pop rdx
+                pop rsi
+                pop rdi
 
-            add rsp, 8
-            swapgs
-            iretq
-              "
-              :
-              : "{rsp}"(kernelRsp)
-              : "memory" : "intel", "volatile");
+                add rsp, 8
+                swapgs
+                iretq
+              ",
+              in("rax") kernelRsp
+              );
         ::core::intrinsics::unreachable();
     }
 }
@@ -196,24 +209,20 @@ pub fn IRet(kernelRsp: u64) -> ! {
 #[inline]
 pub fn GetRsp() -> u64 {
     let rsp: u64;
-    unsafe { llvm_asm!("mov %rsp, $0" : "=r" (rsp) : : "memory" : "volatile" ) };
+    unsafe { 
+        asm!(
+            "mov rax, rsp",
+            out("rax") rsp
+        ) };
     return rsp;
 }
 
 #[inline]
-pub fn Invlpg(addr: u64) {
-    if !super::SHARESPACE.config.read().KernelPagetable {
-        unsafe {
-            llvm_asm!("
-            invlpg ($0)
-            " :: "r" (addr): "memory" : "volatile" )
-        };
-    }
-}
-
-#[inline]
 pub fn Clflush(addr: u64) {
-    unsafe { llvm_asm!("clflush ($0)" :: "r" (addr): "memory" : "volatile" ) }
+    unsafe { asm!(
+        "clflush (rax)",
+        in("rax") addr
+    ) }
 }
 
 // muldiv64 multiplies two 64-bit numbers, then divides the result by another
@@ -238,18 +247,21 @@ pub fn muldiv64(value: u64, multiplier: u64, divisor: u64) -> (u64, bool) {
 // HostID executes a native CPUID instruction.
 // return (ax, bx, cx, dx)
 pub fn AsmHostID(axArg: u32, cxArg: u32) -> (u32, u32, u32, u32) {
-    let ax: u32;
+    let mut ax: u32 = axArg;
     let bx: u32;
-    let cx: u32;
+    let mut cx: u32 = cxArg;
     let dx: u32;
     unsafe {
-        llvm_asm!("
+        asm!("
+              mov {0:r}, rbx 
               CPUID
-            "
-            : "={eax}"(ax), "={ebx}"(bx), "={ecx}"(cx), "={edx}"(dx)
-            : "{eax}"(axArg), "{ecx}"(cxArg)
-            :
-            : );
+              xchg {0:r}, rbx 
+            ",
+            lateout(reg) bx,
+            inout("eax") ax,
+            inout("ecx") cx,
+            out("edx") dx,
+            );
     }
 
     return (ax, bx, cx, dx);
@@ -258,13 +270,9 @@ pub fn AsmHostID(axArg: u32, cxArg: u32) -> (u32, u32, u32, u32) {
 #[inline(always)]
 fn Barrier() {
     unsafe {
-        llvm_asm!("
+        asm!("
                 mfence
-            "
-            :
-            :
-            : "memory"
-            : );
+            ");
     }
 }
 
@@ -282,24 +290,27 @@ pub fn WriteBarrier() {
 pub fn GetCpu() -> u32 {
     let rcx: u64;
     unsafe {
-        llvm_asm!("\
-        rdtscp
-        " : "={rcx}"(rcx)
-        : :  "memory" : "volatile")
+        asm!("\
+            rdtscp
+            ",
+            out("rcx") rcx
+        )
     };
 
     return (rcx & 0xfff) as u32;
 }
 
+
 #[inline(always)]
 pub fn GetRflags() -> u64 {
     let rax: u64;
     unsafe {
-        llvm_asm!("\
-            pushfq                  # push eflags into stack
-            pop rax                 # pop it into rax
-        " : "={rax}"(rax)
-        : : "memory" : "intel", "volatile")
+        asm!("\
+                pushfq                  # push eflags into stack
+                pop rax                 # pop it into rax
+            ",
+            out("rax") rax
+        )
     };
 
     return rax;
@@ -308,11 +319,11 @@ pub fn GetRflags() -> u64 {
 #[inline(always)]
 pub fn SetRflags(val: u64) {
     unsafe {
-        llvm_asm!("\
-            push rax
-            popfq
-        " : : "{rax}"(val)
-        : "memory" : "intel", "volatile")
+        asm!("\
+                push rax
+                popfq
+            ",
+            in("rax") val)
     };
 }
 
@@ -336,130 +347,133 @@ pub fn LoadFloatingPoint(addr: u64) {
 
 pub fn xsave(addr: u64) {
     unsafe {
-        llvm_asm!("\
-            xsave64 [rdi + 0]
-        " : : "{rdi}"(addr)
-        : "memory" : "intel", "volatile")
+        asm!("\
+                xsave64 [rdi + 0]
+            ",
+            in("rdi") addr, )
     };
 }
 
 pub fn xsaveopt(addr: u64) {
     let negtive1: u64 = 0xffffffff;
     unsafe {
-        llvm_asm!("\
-            xsaveopt64 [rdi + 0]
-        " : : "{rdi}"(addr), "{eax}"(negtive1), "{edx}"(negtive1)
-        : "memory" : "intel", "volatile")
+        asm!("\
+                xsaveopt64 [rdi + 0]
+            ",
+            in("rdi") addr, 
+            in("eax") negtive1,
+            in("edx") negtive1)
     };
 }
 
 pub fn xrstor(addr: u64) {
     let negtive1: u64 = 0xffffffff;
     unsafe {
-        llvm_asm!("\
-            xrstor64 [rdi + 0]
-        " : : "{rdi}"(addr), "{eax}"(negtive1), "{edx}"(negtive1)
-        : "memory" : "intel", "volatile")
+        asm!("\
+                xrstor64 [rdi + 0]
+            ",
+            in("rdi") addr,
+            in("eax") negtive1,
+            in("edx") negtive1)
     };
 }
 
 pub fn fxsave(addr: u64) {
     unsafe {
-        llvm_asm!("\
-            fxsave64 [rbx + 0]
-        " : : "{rbx}"(addr)
-        : "memory" : "intel", "volatile")
+        asm!("\
+                fxsave64 [rax + 0]
+            ",
+            in("rax") addr)
     };
 }
 
 pub fn fxrstor(addr: u64) {
     unsafe {
-        llvm_asm!("\
-            fxrstor64 [rbx + 0]
-        " : : "{rbx}"(addr)
-        : "memory" : "intel", "volatile")
+        asm!("\
+                fxrstor64 [rax + 0]
+            ",
+            in("rax") addr)
     };
 }
 
 #[inline(always)]
 pub fn mfence() {
     unsafe {
-        llvm_asm!("
-        sfence
-        lfence
-    " : : : "memory" : "volatile" )
+        asm!("
+            sfence
+            lfence
+        ")
     }
 }
 
 #[inline(always)]
 pub fn sfence() {
     unsafe {
-        llvm_asm!("
-        sfence
-    " : : : "memory" : "volatile" )
+        asm!("
+            sfence
+        ")
     }
 }
 
 #[inline(always)]
 pub fn lfence() {
     unsafe {
-        llvm_asm!("
-        lfence
-    " : : : "memory" : "volatile" )
+        asm!("
+            lfence
+        ")
     }
 }
 
 pub fn stmxcsr(addr: u64) {
     unsafe {
-        llvm_asm!("\
-            STMXCSR [rax]
-        " : : "{rax}"(addr)
-        : "memory" : "intel", "volatile")
+        asm!("\
+                STMXCSR [rax]
+            ",
+            in("rax") addr)
     };
 }
 
 pub fn ldmxcsr(addr: u64) {
     unsafe {
-        llvm_asm!("\
-            LDMXCSR [rax]
-        " : : "{rax}"(addr)
-        : "memory" : "intel", "volatile")
+        asm!("\
+                LDMXCSR [rax]
+            ",
+            in("rax") addr)
     };
 }
 
 pub fn FSTCW(addr: u64) {
     unsafe {
-        llvm_asm!("\
-            FSTCW [rax]
-        " : : "{rax}"(addr)
-        : "memory" : "intel", "volatile")
+        asm!("\
+                FSTCW [rax]
+            ",
+            in("rax") addr
+        )
     };
 }
 
 pub fn FLDCW(addr: u64) {
     unsafe {
-        llvm_asm!("\
-            FLDCW [rax]
-        " : : "{rax}"(addr)
-        : "memory" : "intel", "volatile")
+        asm!("\
+                FLDCW [rax]
+            ",
+            in("rax") addr)
     };
 }
 
 pub fn FNCLEX() {
     unsafe {
-        llvm_asm!("\
+        asm!("\
             FNCLEX
-        " : :
-        : "memory" : "intel", "volatile")
+        ")
     };
 }
 
 pub fn fninit() {
     unsafe {
-        llvm_asm!("\
+        asm!("\
             fninit
-        " : :
-        : "memory" : "intel", "volatile")
+            ")
     };
 }
 
@@ -468,22 +482,28 @@ pub fn xsetbv(val: u64) {
     let val_l = val & 0xffff;
     let val_h = val >> 32;
     unsafe {
-        llvm_asm!("\
-            xsetbv
-        " : : "{rcx}"(reg), "{edx}"(val_h), "{eax}"(val_l)
-        : "memory" : "intel", "volatile")
+        asm!("\
+                xsetbv
+            ",
+            in("rcx") reg,
+            in("edx") val_h,
+            in("eax") val_l,
+        )
     };
 }
 
 pub fn xgetbv() -> u64 {
-    let reg = 0u64;
+    let reg :u64 = 0;
     let val_l: u32;
     let val_h: u32;
     unsafe {
-        llvm_asm!("\
-            xgetbv
-        " : "={edx}"(val_h), "={eax}"(val_l) : "{rcx}"(reg)
-        : "memory" : "intel", "volatile")
+        asm!("\
+                xgetbv
+            ",
+            out("edx") val_h,
+            out("eax") val_l,
+            in("rcx") reg
+        )
     };
     let val = ((val_h as u64) << 32) | ((val_l as u64) & 0xffff);
     return val;

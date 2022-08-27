@@ -22,7 +22,7 @@ use alloc::vec::Vec;
 use super::common::*;
 use super::singleton::*;
 use super::sort_arr::*;
-use super::*;
+use crate::qlib::kernel::asm::AsmHostID;
 
 pub static X86_FEATURES_FROM_STRING: Singleton<QMutex<BTreeMap<String, i32>>> =
     Singleton::<QMutex<BTreeMap<String, i32>>>::New();

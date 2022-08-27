@@ -12,56 +12,45 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use core::arch::asm;
+
 pub fn LoadCr3(_cr3: u64) {}
 pub fn ReadCr3() -> u64 {
     0
 }
 pub fn HyperCall(_type_: u16, _para1: u64) {}
-pub fn Invlpg(_addr: u64) {}
-pub fn AsmHostID(axArg: u32, cxArg: u32) -> (u32, u32, u32, u32) {
-    let ax: u32;
-    let bx: u32;
-    let cx: u32;
-    let dx: u32;
-    unsafe {
-        llvm_asm!("
-              CPUID
-            "
-            : "={eax}"(ax), "={ebx}"(bx), "={ecx}"(cx), "={edx}"(dx)
-            : "{eax}"(axArg), "{ecx}"(cxArg)
-            :
-            : );
-    }
-
-    return (ax, bx, cx, dx);
-}
 
 #[inline]
 pub fn CurrentCr3() -> u64 {
     let cr3: u64;
-    unsafe { llvm_asm!("mov %cr3, $0" : "=r" (cr3) ) };
+    unsafe { 
+        asm!(
+            "mov {0} cr3",
+            out(reg) cr3
+        ) 
+    };
     return cr3;
 }
 
 #[inline(always)]
 pub fn mfence() {
-    unsafe { llvm_asm!("mfence" : : : "memory" : "volatile" ) }
+    unsafe { asm!("mfence" ) }
 }
 
 #[inline(always)]
 pub fn sfence() {
     unsafe {
-        llvm_asm!("
+        asm!("
         sfence
-    " : : : "memory" : "volatile" )
+    ")
     }
 }
 
 #[inline(always)]
 pub fn lfence() {
     unsafe {
-        llvm_asm!("
+        asm!("
         lfence
-    " : : : "memory" : "volatile" )
+    ")
     }
 }
