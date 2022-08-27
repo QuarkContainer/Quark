@@ -18,6 +18,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::cmp::Ordering;
 use core::ops::Deref;
+use core::ops::Bound::Included;
 
 use super::super::super::IOURING;
 use super::timer::*;
@@ -27,6 +28,25 @@ use super::*;
 pub struct TimerUnit {
     pub timerId: u64,
     pub expire: i64,
+}
+
+impl TimerUnit {
+    pub const MAX : Self = Self::Max();
+    pub const MIN : Self = Self::Min();
+
+    pub const fn Max() -> Self {
+        return Self {
+            timerId: u64::MAX,
+            expire: i64::MAX,
+        }
+    }
+
+    pub const fn Min() -> Self {
+        return Self {
+            timerId: u64::MIN,
+            expire: i64::MIN,
+        }
+    }
 }
 
 impl Ord for TimerUnit {
@@ -198,18 +218,30 @@ impl TimerStoreIntern {
             return None;
         }
 
-        let timer = match self.timerSeq.pop_first() {
+        let mut firstKey = None;
+
+        for (&key, _) in self.timerSeq.range((Included(&TimerUnit::MIN), Included(&TimerUnit::MAX))) {
+            firstKey = Some(key);
+            break;
+        }
+
+        let firstKey = match firstKey {
             None => return None,
-            Some((_, timer)) => timer,
+            Some(key) => key,
         };
 
-        match self.timerSeq.first_key_value() {
-            None => {
-                self.nextExpire = 0;
-            }
-            Some((tu, _)) => {
-                self.nextExpire = tu.expire;
-            }
+        let timer = match self.timerSeq.remove(&firstKey) {
+            None => return None,
+            Some(timer) => timer,
+        };
+
+        if self.timerSeq.len() == 0 {
+            self.nextExpire = 0;
+        }
+
+        for (&key, _) in self.timerSeq.range((Included(&TimerUnit::MIN), Included(&TimerUnit::MAX))) {
+            self.nextExpire = key.expire;
+            break;
         }
 
         return Some(timer);
