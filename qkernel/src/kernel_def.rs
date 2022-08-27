@@ -254,6 +254,34 @@ extern "C" {
     pub fn CopyPageUnsafe(to: u64, from: u64);
 }
 
+#[inline]
+pub fn Invlpg(addr: u64) {
+    if !super::SHARESPACE.config.read().KernelPagetable {
+        unsafe {
+            asm!("
+            invlpg [{0}]
+            ",
+            in(reg) addr)
+        };
+    }
+}
+
+#[inline(always)]
+pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64) {
+    unsafe {
+        let data: u8 = 0;
+        asm!("
+            out dx, al
+            ",
+            in("dx") type_,
+            in("al") data,
+            in("rsi") para1,
+            in("rcx") para2,
+            in("rdi") para3
+        )
+    }
+}
+    
 impl CPULocal {
     pub fn CpuId() -> usize {
         return GetVcpuId();

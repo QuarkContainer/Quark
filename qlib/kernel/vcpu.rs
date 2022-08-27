@@ -77,7 +77,6 @@ pub fn SetFs(addr: u64) {
 
 #[inline]
 pub fn GetFs() -> u64 {
-    //unsafe{ llvm_asm!("movw $0, %fs " :: "r" (0) : "memory");}
     return ReadMsr(MSR::MSR_FS_BASE as u32);
 }
 

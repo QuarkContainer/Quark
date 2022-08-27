@@ -28,6 +28,7 @@ use x86_64::VirtAddr;
 use core::sync::atomic::fence;
 use core::hint::spin_loop;
 
+use crate::kernel_def::Invlpg;
 use crate::qlib::kernel::PAGE_MGR;
 use super::super::asm::*;
 use super::addr::*;
@@ -98,7 +99,6 @@ impl PageTables {
 
     //switch pagetable for the cpu, Cr3
     pub fn Switch(cr3: u64) {
-        //unsafe { llvm_asm!("mov $0, %cr3" : : "r" (cr3) ) };
         LoadCr3(cr3)
     }
 
@@ -115,8 +115,6 @@ impl PageTables {
     }
 
     pub fn Print(&self) {
-        //let cr3 : u64;
-        //unsafe { llvm_asm!("mov %cr3, $0" : "=r" (cr3) ) };
         let cr3 = CurrentCr3();
 
         info!(

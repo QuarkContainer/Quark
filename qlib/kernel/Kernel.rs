@@ -14,6 +14,7 @@
 
 use alloc::sync::Arc;
 
+use crate::kernel_def::HyperCall64;
 use super::super::common::*;
 use super::super::config::*;
 use super::super::linux_def::*;
@@ -21,7 +22,6 @@ use super::super::qmsg;
 use super::super::qmsg::*;
 use super::super::socket_buf::*;
 use super::super::*;
-use super::asm::*;
 use super::task::*;
 use super::taskMgr;
 

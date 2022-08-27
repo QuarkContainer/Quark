@@ -26,10 +26,11 @@ use super::super::super::linux_def::*;
 use super::super::super::object_ref::*;
 use super::super::super::pagetable::*;
 use super::super::super::range::*;
-use super::super::asm::*;
 use super::super::task::*;
 use super::super::PAGE_MGR;
 use super::super::super::mem::block_allocator::*;
+
+use crate::kernel_def::Invlpg;
 //use crate::qlib::kernel::memmgr::pmamgr::PagePool;
 
 pub type PageMgrRef = ObjectRef<PageMgr>;

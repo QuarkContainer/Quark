@@ -38,6 +38,7 @@ use std::os::unix::io::IntoRawFd;
 use std::slice;
 use std::str;
 use x86_64::structures::paging::PageTableFlags;
+use core::arch::asm;
 
 use crate::qlib::fileinfo::*;
 use crate::vmspace::kernel::GlobalIOMgr;
@@ -1460,18 +1461,20 @@ impl VMSpace {
     }
 
     pub fn HostID(axArg: u32, cxArg: u32) -> (u32, u32, u32, u32) {
-        let ax: u32;
+        let mut ax: u32 = axArg;
         let bx: u32;
-        let cx: u32;
+        let mut cx: u32 = cxArg;
         let dx: u32;
         unsafe {
-            llvm_asm!("
+            asm!("
               CPUID
-            "
-            : "={eax}"(ax), "={ebx}"(bx), "={ecx}"(cx), "={edx}"(dx)
-            : "{eax}"(axArg), "{ecx}"(cxArg)
-            :
-            : );
+              mov edi, ebx
+            ",
+            inout("eax") ax,
+            out("edi") bx,
+            inout("ecx") cx,
+            out("edx") dx,
+            );
         }
 
         return (ax, bx, cx, dx);

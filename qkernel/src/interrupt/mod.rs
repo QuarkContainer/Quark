@@ -418,14 +418,12 @@ bitflags! {
 #[no_mangle]
 pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
     let cr2: u64;
-    unsafe { llvm_asm!("mov %cr2, $0" : "=r" (cr2) ) };
+    unsafe { asm!("mov {0}, cr2", out(reg) cr2 ) };
     let cr3: u64;
-    unsafe { llvm_asm!("mov %cr3, $0" : "=r" (cr3) ) };
+    unsafe { asm!("mov {0}, cr3", out(reg) cr3 ) };
 
-    let ss: u16 = 16;
-    unsafe {
-        llvm_asm!("movw $0, %ss" :: "r" (ss) : "memory");
-    }
+
+ 
     CPULocal::Myself().SetMode(VcpuMode::Kernel);
     let currTask = Task::Current();
 

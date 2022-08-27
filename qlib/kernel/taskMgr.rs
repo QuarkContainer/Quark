@@ -14,6 +14,7 @@
 
 use alloc::string::String;
 use core::sync::atomic::{AtomicU32, Ordering};
+use core::arch::asm;
 
 use super::super::super::kernel_def::*;
 use super::super::kernel::GlobalRDMASvcCli;
@@ -230,7 +231,7 @@ pub fn Wait() {
         } else {
             if PollAsyncMsg() == 0 {
                 unsafe {
-                    llvm_asm!("pause" :::: "volatile");
+                    asm!("pause");
                 }
             }
 

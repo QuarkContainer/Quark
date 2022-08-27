@@ -452,7 +452,7 @@ impl Kernel {
             let leader = tg.lock().leader.Upgrade();
             match leader.unwrap().sendSignalLocked(info, true) {
                 Err(e) => lastErr = Err(e),
-                Ok(()) => (()),
+                Ok(()) => (),
             }
         }
 
@@ -478,7 +478,7 @@ impl Kernel {
 
             match leader.sendSignalLocked(info, true) {
                 Err(e) => lastErr = Err(e),
-                Ok(()) => (()),
+                Ok(()) => (),
             }
         }
 

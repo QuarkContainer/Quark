@@ -32,6 +32,7 @@
 #![feature(panic_info_message)]
 #![feature(map_first_last)]
 #![allow(deprecated)]
+#![feature(asm)]
 
 #[macro_use]
 extern crate serde_derive;
@@ -72,6 +73,7 @@ pub mod kernel_def;
 pub mod rdma_def;
 mod syscalls;
 
+use self::kernel_def::*;
 use self::interrupt::virtualization_handler;
 use self::qlib::kernel::arch;
 use self::qlib::kernel::asm;
@@ -515,24 +517,6 @@ pub extern "C" fn rust_main(
     }
 
     WaitFn();
-}
-
-fn Print() {
-    let cr2: u64;
-    unsafe { llvm_asm!("mov %cr2, $0" : "=r" (cr2) ) };
-
-    let cr3: u64;
-    unsafe { llvm_asm!("mov %cr3, $0" : "=r" (cr3) ) };
-
-    let cs: u64;
-    unsafe { llvm_asm!("mov %cs, $0" : "=r" (cs) ) };
-    let ss: u64;
-    unsafe { llvm_asm!("mov %ss, $0" : "=r" (ss) ) };
-
-    info!(
-        "cr2 is {:x}, cr3 is {:x}, cs is {}, ss is {}",
-        cr2, cr3, cs, ss
-    );
 }
 
 fn StartExecProcess(fd: i32, process: Process) -> ! {
