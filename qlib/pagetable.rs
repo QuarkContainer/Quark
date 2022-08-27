@@ -968,7 +968,7 @@ impl PageTables {
         self.Traverse(
             Addr(MemoryDef::PAGE_SIZE),
             Addr(MemoryDef::PHY_LOWER_ADDR),
-            |entry, _virtualAddr| {
+            |entry: &mut PageTableEntry , _virtualAddr| {
                 let phyAddr = entry.addr().as_u64();
                 if start <= phyAddr && phyAddr < end {
                     //error!("SwapOutPages 1 {:x?}/{:x}/{:x}/{:x}/{:x}", self.root, phyAddr, _virtualAddr, start, end);

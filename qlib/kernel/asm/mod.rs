@@ -128,7 +128,7 @@ pub fn EnterUser(entry: u64, userStackAddr: u64, kernelStackAddr: u64) -> ! {
               in("rdi") entry,
               in("rsi") userStackAddr,
               in("rdx") kernelStackAddr);
-        ::core::intrinsics::unreachable();
+        panic!("won't reach");
     }
 }
 
@@ -168,7 +168,7 @@ pub fn SyscallRet(kernelRsp: u64) -> ! {
                 sysret
               ",
               in(reg) kernelRsp);
-        ::core::intrinsics::unreachable();
+        panic!("won't reach");
     }
 }
 
@@ -202,7 +202,7 @@ pub fn IRet(kernelRsp: u64) -> ! {
               ",
               in("rax") kernelRsp
               );
-        ::core::intrinsics::unreachable();
+        panic!("won't reach");
     }
 }
 

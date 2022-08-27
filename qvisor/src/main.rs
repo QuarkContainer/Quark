@@ -15,17 +15,11 @@
 #![allow(dead_code)]
 #![allow(non_snake_case)]
 #![allow(deref_nullptr)]
-#![feature(proc_macro_hygiene)]
-#![feature(naked_functions)]
 #![allow(bare_trait_objects)]
-#![feature(map_first_last)]
 #![allow(non_camel_case_types)]
 #![allow(deprecated)]
-#![feature(thread_id_value)]
 #![allow(dead_code)]
 #![allow(non_snake_case)]
-#![feature(core_intrinsics)]
-#![feature(asm)]
 
 extern crate alloc;
 extern crate bit_field;
@@ -55,7 +49,6 @@ extern crate regex;
 extern crate simplelog;
 extern crate spin;
 extern crate tabwriter;
-extern crate x86_64;
 
 #[macro_use]
 pub mod asm;
