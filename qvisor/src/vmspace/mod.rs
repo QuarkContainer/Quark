@@ -194,8 +194,10 @@ impl VMSpace {
         return cpuCount;
     }
 
-    pub fn LoadProcessKernel(&mut self, processAddr: u64, buffLen: usize) -> i64 {
-        let mut process = loader::Process::default();
+    pub fn LoadProcessKernel(&mut self, processAddr: u64) -> i64 {
+        let process = unsafe {
+            &mut *(processAddr as * mut loader::Process)
+        };
         process.ID = self.args.as_ref().unwrap().ID.to_string();
         let spec = &mut self.args.as_mut().unwrap().Spec;
 
@@ -249,27 +251,8 @@ impl VMSpace {
             self.PivotRoot(&rootfs);
         }
 
-        //error!("LoadProcessKernel proces is {:?}", &process);
-
-        let vec: Vec<u8> = serde_json::to_vec(&process).expect("LoadProcessKernel ser fail...");
-        let buff = {
-            let ptr = processAddr as *mut u8;
-            unsafe { slice::from_raw_parts_mut(ptr, buffLen) }
-        };
-
-        assert!(
-            vec.len() <= buff.len(),
-            "LoadProcessKernel not enough space..."
-        );
-        for i in 0..vec.len() {
-            buff[i] = vec[i];
-        }
-
         StartSignalHandle();
-
-        //self.shareSpace.lock().AQHostInputCall(HostMsg::ExecProcess);
-
-        return vec.len() as i64;
+        return 0;
     }
 
     pub fn TgKill(tgid: i32, tid: i32, signal: i32) -> i64 {
@@ -1176,29 +1159,15 @@ impl VMSpace {
     }
 
     ///////////end of network operation//////////////////////////////////////////////////////////////////
-    pub fn ReadControlMsg(fd: i32, addr: u64, len: usize) -> i64 {
+    pub fn ReadControlMsg(fd: i32, addr: u64) -> i64 {
         match super::ucall::ucall_server::ReadControlMsg(fd) {
             Err(_e) => return -1,
             Ok(msg) => {
-                let vec: Vec<u8> = serde_json::to_vec(&msg).expect("SendControlMsg ser fail...");
-                let buff = {
-                    let ptr = addr as *mut u8;
-                    unsafe { slice::from_raw_parts_mut(ptr, len) }
+                let controlMsg = unsafe {
+                    &mut *(addr as * mut ControlMsg)
                 };
-
-                if vec.len() > buff.len() {
-                    panic!(
-                        "ReadControlMsg not enough space..., required len is {}, buff len is {}",
-                        vec.len(),
-                        buff.len()
-                    );
-                }
-
-                for i in 0..vec.len() {
-                    buff[i] = vec[i];
-                }
-
-                return vec.len() as i64;
+                *controlMsg = msg;
+                return 0; 
             }
         }
     }

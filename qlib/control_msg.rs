@@ -29,7 +29,7 @@ pub unsafe fn InitSingleton() {
     MSG_ID.Init(AtomicU64::new(1));
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct ControlMsg {
     pub msgId: u64,
     pub payload: Payload,
@@ -117,6 +117,12 @@ pub enum Payload {
     CreateSubContainer(CreateArgs),
     StartSubContainer(StartArgs),
     WaitAll,
+}
+
+impl Default for Payload {
+    fn default() -> Self {
+        return Self::WaitAll
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]

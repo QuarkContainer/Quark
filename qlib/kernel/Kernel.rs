@@ -48,10 +48,9 @@ impl HostSpace {
         HyperCall64(HYPERCALL_URING_WAKE, minCompleted, 0, 0);
     }
 
-    pub fn LoadProcessKernel(processAddr: u64, len: usize) -> i64 {
+    pub fn LoadProcessKernel(processAddr: u64) -> i64 {
         let mut msg = Msg::LoadProcessKernel(LoadProcessKernel {
             processAddr: processAddr,
-            len: len,
         });
 
         return HostSpace::Call(&mut msg, false) as i64;
@@ -779,8 +778,8 @@ impl HostSpace {
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
-    pub fn ReadControlMsg(fd: i32, addr: u64, len: usize) -> i64 {
-        let mut msg = Msg::ReadControlMsg(ReadControlMsg { fd, addr, len });
+    pub fn ReadControlMsg(fd: i32, addr: u64) -> i64 {
+        let mut msg = Msg::ReadControlMsg(ReadControlMsg { fd, addr });
 
         return HostSpace::Call(&mut msg, false) as i64;
     }
