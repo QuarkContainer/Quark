@@ -806,7 +806,6 @@ pub struct LoadProcessKernel {
 pub struct ReadControlMsg {
     pub fd: i32,
     pub addr: u64,
-    pub len: usize,
 }
 
 #[derive(Clone, Debug)]

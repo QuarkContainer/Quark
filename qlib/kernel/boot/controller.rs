@@ -105,21 +105,8 @@ pub fn ControlMsgHandler(fd: *const u8) {
     let fd = fd as i32;
 
     let task = Task::Current();
-    let msg = {
-        let mut buf: [u8; 8192] = [0; 8192];
-        let addr = &mut buf[0] as *mut _ as u64;
-        let ret = Kernel::HostSpace::ReadControlMsg(fd, addr, buf.len());
-
-        if ret < 0 {
-            return;
-        }
-
-        let size = ret as usize;
-
-        let msg: ControlMsg = serde_json::from_slice(&buf[0..size])
-            .expect(&format!("LoadProcessKernel des fail size is {}", size));
-        msg
-    };
+    let mut msg = ControlMsg::default();
+    Kernel::HostSpace::ReadControlMsg(fd, &mut msg as * mut _ as u64);
 
     //info!("payload: {:?}", &msg.payload);
     //defer!(error!("payload handling ends"));

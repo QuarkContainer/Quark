@@ -1159,29 +1159,15 @@ impl VMSpace {
     }
 
     ///////////end of network operation//////////////////////////////////////////////////////////////////
-    pub fn ReadControlMsg(fd: i32, addr: u64, len: usize) -> i64 {
+    pub fn ReadControlMsg(fd: i32, addr: u64) -> i64 {
         match super::ucall::ucall_server::ReadControlMsg(fd) {
             Err(_e) => return -1,
             Ok(msg) => {
-                let vec: Vec<u8> = serde_json::to_vec(&msg).expect("SendControlMsg ser fail...");
-                let buff = {
-                    let ptr = addr as *mut u8;
-                    unsafe { slice::from_raw_parts_mut(ptr, len) }
+                let controlMsg = unsafe {
+                    &mut *(addr as * mut ControlMsg)
                 };
-
-                if vec.len() > buff.len() {
-                    panic!(
-                        "ReadControlMsg not enough space..., required len is {}, buff len is {}",
-                        vec.len(),
-                        buff.len()
-                    );
-                }
-
-                for i in 0..vec.len() {
-                    buff[i] = vec[i];
-                }
-
-                return vec.len() as i64;
+                *controlMsg = msg;
+                return 0; 
             }
         }
     }
