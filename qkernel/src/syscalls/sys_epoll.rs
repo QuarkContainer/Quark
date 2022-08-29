@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::vec::Vec;
-
+use crate::qlib::mem::stackvec::StackVec;
 use super::super::kernel::epoll::epoll::*;
 use super::super::kernel::epoll::epoll_entry::*;
 use super::super::kernel::fd_table::*;
@@ -134,7 +133,7 @@ pub fn RemoveEpoll(task: &Task, epfd: i32, fd: i32) -> Result<()> {
 }
 
 // WaitEpoll implements the epoll_wait(2) linux syscall.
-pub fn WaitEpoll(task: &Task, epfd: i32, max: i32, timeout: i64) -> Result<Vec<Event>> {
+pub fn WaitEpoll(task: &Task, epfd: i32, max: i32, timeout: i64, events: &mut StackVec::<Event, 64>) -> Result<()> {
     // Get epoll from the file descriptor.
     let epollfile = task.GetFile(epfd)?;
 
@@ -146,14 +145,14 @@ pub fn WaitEpoll(task: &Task, epfd: i32, max: i32, timeout: i64) -> Result<Vec<E
 
     // Try to read events and return right away if we got them or if the
     // caller requested a non-blocking "wait".
-    let r = ep.ReadEvents(task, max);
-    if r.len() != 0 {
-        return Ok(r);
+    ep.ReadEvents(task, max, events);
+    if events.Len() != 0 {
+        return Ok(());
     }
 
     if timeout == 0 {
         super::super::taskMgr::Yield(); // yield vcpu to avoid live lock
-        return Ok(r);
+        return Ok(());
     }
 
     // We'll have to wait. Set up the timer if a timeout was specified and
@@ -172,9 +171,9 @@ pub fn WaitEpoll(task: &Task, epfd: i32, max: i32, timeout: i64) -> Result<Vec<E
     // Try to read the events again until we succeed, timeout or get
     // interrupted.
     loop {
-        let r = ep.ReadEvents(task, max);
-        if r.len() != 0 {
-            return Ok(r);
+        ep.ReadEvents(task, max, events);
+        if events.Len() != 0 {
+            return Ok(());
         }
 
         //let start = super::super::asm::Rdtsc();
@@ -293,17 +292,18 @@ pub fn SysEpollWait(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let maxEvents = args.arg2 as i32;
     let timeout = args.arg3 as i64 * MILLISECOND;
 
-    let r = match WaitEpoll(task, epfd, maxEvents, timeout) {
+    let mut events = StackVec::<Event, 64>::New();
+    match WaitEpoll(task, epfd, maxEvents, timeout, &mut events) {
         Err(Error::SysError(SysErr::ETIMEDOUT)) => return Ok(0),
         Err(e) => return Err(e),
         Ok(r) => r,
     };
 
-    if r.len() != 0 {
-        CopyOutEvents(task, eventAddr, &r)?;
+    if events.Len() != 0 {
+        CopyOutEvents(task, eventAddr, events.Slice())?;
     }
 
-    return Ok(r.len() as i64);
+    return Ok(events.Len() as i64);
 }
 
 // EpollPwait implements the epoll_pwait(2) linux syscall.
@@ -348,15 +348,16 @@ pub fn SysPwait2(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         thread.SetSavedSignalMask(oldmask);
     }
 
-    let r = match WaitEpoll(task, epfd, maxEvents, timeout) {
+    let mut events = StackVec::<Event, 64>::New();
+    match WaitEpoll(task, epfd, maxEvents, timeout, &mut events) {
         Err(Error::SysError(SysErr::ETIMEDOUT)) => return Ok(0),
         Err(e) => return Err(e),
         Ok(r) => r,
     };
 
-    if r.len() != 0 {
-        CopyOutEvents(task, eventAddr, &r)?;
+    if events.Len() != 0 {
+        CopyOutEvents(task, eventAddr, events.Slice())?;
     }
 
-    return Ok(r.len() as i64);
+    return Ok(events.Len() as i64);
 }

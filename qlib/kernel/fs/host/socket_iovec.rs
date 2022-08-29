@@ -60,7 +60,7 @@ pub fn CopyFromMulti(dst: &mut [u8], srcs: &[IoVec]) {
 //ret: Result<totalLength, Option<intermedatebuf>, PartialWrite>
 pub fn BuildIovec(
     bufs: &[IoVec],
-    vecs: &mut StackVec<IoVec>,
+    vecs: &mut StackVec<IoVec, 128>,
     maxlen: usize,
     truncate: bool,
 ) -> Result<(usize, Option<Vec<u8>>, bool)> {

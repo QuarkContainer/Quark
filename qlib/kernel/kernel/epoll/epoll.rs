@@ -13,11 +13,11 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
+use crate::qlib::mem::stackvec::StackVec;
 //use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
-use alloc::vec::Vec;
 use core::any::Any;
 use core::ops::Deref;
 use hashbrown::HashMap;
@@ -172,12 +172,11 @@ impl EventPoll {
         return false;
     }
 
-    pub fn ReadEvents(&self, task: &Task, max: i32) -> Vec<Event> {
+    pub fn ReadEvents(&self, task: &Task, max: i32, events: &mut StackVec<Event, 64>) {
         let mut lists = self.lists.lock();
 
-        let mut ret = Vec::with_capacity(64);
         let mut it = lists.readyList.Front();
-        while ret.len() < max as usize {
+        while events.Len() < max as usize {
             let entry = if let Some(entry) = it {
                 entry
             } else {
@@ -208,7 +207,7 @@ impl EventPoll {
             //let mask = entry.lock().mask;
             //error!("ReadEvents event fd is {}, ready is {:x}, mask is {:x}", entry.lock().id.Fd, ready, mask);
             // Add event to the array that will be returned to caller.
-            ret.push(Event {
+            events.Push(Event {
                 Events: ready as u32,
                 Data: entry.lock().userData,
             });
@@ -228,8 +227,6 @@ impl EventPoll {
                 entry.lock().state = PollEntryState::Waiting;
             }
         }
-
-        return ret;
     }
 
     // initEntryReadiness initializes the entry's state with regards to its
