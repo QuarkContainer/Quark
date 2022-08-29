@@ -17,6 +17,7 @@ use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::sync::Arc;
 use core::cmp::Ordering;
+use core::ops::Deref;
 
 use super::singleton::*;
 
@@ -81,7 +82,8 @@ pub struct Registry {
 impl Registry {
     pub fn New() -> Self {
         return Self {
-            last: 0,
+            // local Minor start with i32::MAX to avoid conflict with host minor
+            last: i32::MAX as u32,
             devices: BTreeMap::new(),
         };
     }
@@ -161,11 +163,34 @@ impl PartialEq for ID {
     }
 }
 
-#[derive(Debug, Clone, Eq)]
-pub struct MultiDeviceKey {
+#[derive(Debug, Clone)]
+pub struct MultiDeviceKeyIntern {
     pub Device: u64,
     pub SecondaryDevice: String,
     pub Inode: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct MultiDeviceKey(Arc<MultiDeviceKeyIntern>);
+
+impl Deref for MultiDeviceKey {
+    type Target = Arc<MultiDeviceKeyIntern>;
+
+    fn deref(&self) -> &Arc<MultiDeviceKeyIntern> {
+        &self.0
+    }
+}
+
+impl MultiDeviceKey {
+    pub fn New(device: u64, secondaryDevice: String, inode: u64) -> Self {
+        let intern = MultiDeviceKeyIntern {
+            Device: device,
+            SecondaryDevice: secondaryDevice,
+            Inode: inode,
+        };
+
+        return Self(Arc::new(intern))
+    }
 }
 
 impl Ord for MultiDeviceKey {
@@ -203,6 +228,7 @@ impl PartialEq for MultiDeviceKey {
     }
 }
 
+impl Eq for MultiDeviceKey {}
 pub struct MultiDevice {
     pub id: ID,
     pub last: u64,

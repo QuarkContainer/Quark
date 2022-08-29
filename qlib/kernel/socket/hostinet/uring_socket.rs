@@ -643,15 +643,13 @@ impl SockOperations for UringSocketOperations {
         flags: i32,
         blocking: bool,
     ) -> Result<i64> {
-        let mut acceptItem = AcceptItem::default();
+        let acceptItem; 
         if !blocking {
             let ai = self.AcceptData();
 
             match ai {
                 Err(Error::SysError(SysErr::EAGAIN)) => {
-                    if !blocking {
-                        return Err(Error::SysError(SysErr::EAGAIN));
-                    }
+                    return Err(Error::SysError(SysErr::EAGAIN));
                 }
                 Err(e) => return Err(e),
                 Ok(item) => {

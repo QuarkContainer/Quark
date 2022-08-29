@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors / 2018 The gVisor Authors.
+// Copyright (c) 2021 Quark Container Authors 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,36 +14,27 @@
 
 use alloc::vec::Vec;
 
-const ON_STACK_COUNT: usize = 128;
+//const ON_STACK_COUNT: usize = 128;
 
-pub struct StackVec<T: Copy + Default> {
+pub struct StackVec<T: Copy + Default, const ON_STACK_COUNT: usize> {
     pub buf: [T; ON_STACK_COUNT],
     pub len: usize,
     pub vec: Vec<T>,
-    pub capacity: usize,
+    pub onStack: bool,
 }
 
-impl<T: Copy + Default> StackVec<T> {
-    pub fn New(cnt: usize) -> Self {
-        if cnt < ON_STACK_COUNT {
-            return Self {
-                buf: [T::default(); ON_STACK_COUNT],
-                len: 0,
-                vec: Vec::with_capacity(0),
-                capacity: cnt,
-            };
-        } else {
-            return Self {
-                buf: [T::default(); ON_STACK_COUNT],
-                len: 0,
-                vec: Vec::with_capacity(cnt),
-                capacity: cnt,
-            };
-        }
+impl<T: Copy + Default, const ON_STACK_COUNT: usize> StackVec<T, ON_STACK_COUNT> {
+    pub fn New() -> Self {
+        return Self {
+            buf: [T::default(); ON_STACK_COUNT],
+            len: 0,
+            vec: Vec::with_capacity(0),
+            onStack: true,
+        };
     }
 
     pub fn OnStack(&self) -> bool {
-        return self.capacity <= ON_STACK_COUNT;
+        return self.onStack;
     }
 
     pub fn Len(&self) -> usize {
@@ -51,8 +42,9 @@ impl<T: Copy + Default> StackVec<T> {
     }
 
     pub fn Push(&mut self, val: T) {
-        if self.len == self.capacity {
-            panic!("StackVec: execeed capacity");
+        if self.len == self.buf.len() {
+            self.vec = self.buf.to_vec();
+            self.onStack = false
         }
 
         if self.OnStack() {

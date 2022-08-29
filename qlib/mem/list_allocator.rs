@@ -435,7 +435,7 @@ impl ListAllocator {
     }
 }
 
-pub const PRINT_CLASS : usize = 10;
+pub const PRINT_CLASS : usize = 0;
 pub const MEMORY_CHECKING: bool = false;
 
 unsafe impl GlobalAlloc for ListAllocator {

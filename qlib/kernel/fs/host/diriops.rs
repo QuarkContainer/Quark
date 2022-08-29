@@ -25,7 +25,7 @@ use crate::qlib::kernel::fs::host::dirent::Dirent64;
 use super::super::super::super::auth::*;
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
-use super::super::super::super::device::*;
+//use super::super::super::super::device::*;
 use super::super::super::util::cstring::*;
 use super::super::super::kernel::time::*;
 pub use super::super::super::memmgr::vma::MMappable;
@@ -102,7 +102,7 @@ impl HostDirOpIntern {
 
         let mut buf: [u8; 4096 * 4] = [0; 4096 * 4]; // 16KB in stack
 
-        let deviceId = self.sattr.DeviceId;
+        //let deviceId = self.sattr.DeviceId;
         let mut entries = BTreeMap::new();
         let mut reset = true;
         loop {
@@ -137,14 +137,8 @@ impl HostDirOpIntern {
                 // and SecondaryDevice as their parent.
                 let dentry = DentAttr {
                     Type: InodeType(DType::ModeType(dType) as u32),
-                    InodeId: HOSTFILE_DEVICE.lock().Map(MultiDeviceKey {
-                        Device: deviceId, //ft.deviceId,
-                        Inode: inode,
-                        SecondaryDevice: "".to_string(),
-                        // todo: do we need this?
-                        //SecondaryDevice: f.inodeOperations.fileState.key.SecondaryDevice,
-
-                    }),
+                    InodeId: inode,
+                    //InodeId: HOSTFILE_DEVICE.lock().Map(MultiDeviceKey::New(deviceId, "".to_string(), inode)),
                 };
 
                 let pathname = CString::FromAddr(&name[0] as *const _ as u64);

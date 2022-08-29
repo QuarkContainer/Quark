@@ -14,7 +14,6 @@
 
 use crate::qlib::mutex::*;
 use alloc::string::String;
-use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
@@ -69,12 +68,15 @@ impl Statx {
             Minor: self.stx_dev_minor,
         };
 
-        let deviceId = HOSTFILE_DEVICE.lock().DeviceID();
-        let InodeId = HOSTFILE_DEVICE.lock().Map(MultiDeviceKey {
-            Device: devId.DeviceID(),
-            SecondaryDevice: "".to_string(),
-            Inode: self.stx_ino,
-        });
+        let deviceId = devId.DeviceID();
+        let InodeId = self.stx_ino;
+        
+        /*let deviceId = HOSTFILE_DEVICE.lock().DeviceID();
+        let InodeId =  HOSTFILE_DEVICE.lock().Map(MultiDeviceKey::New(
+            devId.DeviceID(),
+            "".to_string(),
+            self.stx_ino,
+        ));*/
 
         let major = self.stx_rdev_major;
         let minor = self.stx_rdev_minor;
@@ -172,12 +174,15 @@ impl LibcStat {
     }
 
     pub fn StableAttr(&self) -> StableAttr {
-        let deviceId = HOSTFILE_DEVICE.lock().DeviceID();
-        let InodeId = HOSTFILE_DEVICE.lock().Map(MultiDeviceKey {
-            Device: self.st_dev,
-            SecondaryDevice: "".to_string(),
-            Inode: self.st_ino,
-        });
+        let deviceId = self.st_dev;
+        let InodeId = self.st_ino;
+
+        /*let deviceId = HOSTFILE_DEVICE.lock().DeviceID();
+        let InodeId = HOSTFILE_DEVICE.lock().Map(MultiDeviceKey::New(
+            self.st_dev,
+            "".to_string(),
+            self.st_ino,
+        ));*/
 
         let (major, minor) = DecodeDeviceId(self.st_rdev as u32);
 
