@@ -20,7 +20,7 @@
 #![allow(bare_trait_objects)]
 #![feature(map_first_last)]
 #![allow(non_camel_case_types)]
-#![feature(llvm_asm)]
+#![feature(asm)]
 #![allow(deprecated)]
 #![feature(thread_id_value)]
 #![allow(dead_code)]
@@ -81,10 +81,10 @@ pub mod unix_socket_def;
 
 pub mod common;
 pub mod constants;
+pub mod endpoints_informer;
 pub mod node_informer;
 pub mod pod_informer;
 pub mod service_informer;
-pub mod endpoints_informer;
 
 use crate::qlib::bytestream::ByteStream;
 use crate::rdma_srv::RDMA_CTLINFO;
@@ -102,9 +102,13 @@ use std::path::Path;
 pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
 use crate::qlib::rdma_share::*;
 use crate::rdma::RDMA;
+use common::*;
+use endpoints_informer::EndpointsInformer;
 use id_mgr::IdMgr;
 use local_ip_address::list_afinet_netifas;
 use local_ip_address::local_ip;
+use node_informer::NodeInformer;
+use pod_informer::PodInformer;
 use qlib::kernel::TSC;
 use qlib::linux_def::*;
 use qlib::socket_buf::SocketBuff;
@@ -114,17 +118,17 @@ use rdma_channel::RDMAChannel;
 use rdma_conn::*;
 use rdma_ctrlconn::Node;
 use rdma_ctrlconn::Pod;
+use service_informer::ServiceInformer;
 use spin::Mutex;
 use std::io::Error;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::{env, mem, ptr, thread, time};
-use node_informer::NodeInformer;
-use pod_informer::PodInformer;
-use service_informer::ServiceInformer;
-use endpoints_informer::EndpointsInformer;
-use common::*;
+
+lazy_static! {
+    pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
+}
 
 #[allow(unused_macros)]
 macro_rules! syscall {
@@ -189,7 +193,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Err(e) => {
                         println!("Error to handle nodes: {:?}", e);
                         thread::sleep_ms(1000);
-                    },
+                    }
                     Ok(_) => (),
                 };
             }
@@ -203,8 +207,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             match pod_informer.run().await {
                 Err(e) => {
                     println!("Error to handle pods: {:?}", e);
-                },
-                Ok(_) => (),              
+                }
+                Ok(_) => (),
             };
         });
 
@@ -216,8 +220,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             match service_informer.run().await {
                 Err(e) => {
                     println!("Error to handle services: {:?}", e);
-                },
-                Ok(_) => (),              
+                }
+                Ok(_) => (),
             };
         });
 
@@ -229,8 +233,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             match endpoints_informer.run().await {
                 Err(e) => {
                     println!("Error to handle endpointses: {:?}", e);
-                },
-                Ok(_) => (),              
+                }
+                Ok(_) => (),
             };
         });
     }
@@ -243,7 +247,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //println!("ret1: {}", ret1);
 
     unblock_fd(ccFd);
-    epoll_add(epoll_fd, ccFd, read_write_event(ccFd as u64))?;    
+    epoll_add(epoll_fd, ccFd, read_write_event(ccFd as u64))?;
 
     //RDMA.HandleCQEvent();
     //TOBEDELETE
@@ -325,7 +329,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let srv_unix_sock = UnixSocket::NewServer(unix_sock_path).unwrap();
     let srv_unix_sock_fd = srv_unix_sock.as_raw_fd();
-    RDMA_CTLINFO.fds_insert(srv_unix_sock_fd, Srv_FdType::UnixDomainSocketServer(srv_unix_sock));
+    RDMA_CTLINFO.fds_insert(
+        srv_unix_sock_fd,
+        Srv_FdType::UnixDomainSocketServer(srv_unix_sock),
+    );
 
     println!("srv_unix_sock: {}", srv_unix_sock_fd);
     unblock_fd(srv_unix_sock_fd);
@@ -492,12 +499,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if peerIpAddrU32 == RDMA_CTLINFO.localIp_get() {
                         RDMA_SRV.conns.lock().insert(0, rdmaConn);
                         fds.insert(stream_fd, Srv_FdType::TCPSocketConnect(0));
-                    }
-                    else {
+                    } else {
                         RDMA_SRV.conns.lock().insert(peerIpAddrU32, rdmaConn);
                         fds.insert(stream_fd, Srv_FdType::TCPSocketConnect(peerIpAddrU32));
                     }
-                    
+
                     epoll_add(epoll_fd, stream_fd, read_write_event(stream_fd as u64))?;
                 }
                 Srv_FdType::TCPSocketConnect(ipAddr) => match RDMA_SRV.conns.lock().get(&ipAddr) {
@@ -529,7 +535,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 debug!("UnixDomainSocketConnect, size: {}", size);
                                 if size == 0 {
                                     debug!("Disconnect from client");
-                                    let agentIdOption = RDMA_SRV.sockToAgentIds.lock().remove(&conn_sock.as_raw_fd());
+                                    let agentIdOption = RDMA_SRV
+                                        .sockToAgentIds
+                                        .lock()
+                                        .remove(&conn_sock.as_raw_fd());
                                     match agentIdOption {
                                         Some(agentId) => {
                                             debug!("Remove agent from RDMA_SRV.agents");
@@ -537,7 +546,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             fds.remove(&(ev.U64 as i32));
                                         }
                                         None => {
-                                            error!("AgentId not found for sockfd: {}", conn_sock.as_raw_fd())
+                                            error!(
+                                                "AgentId not found for sockfd: {}",
+                                                conn_sock.as_raw_fd()
+                                            )
                                         }
                                     }
                                     break;
@@ -602,7 +614,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     std::mem::drop(fds);
                     SetupConnections();
-                },
+                }
             }
             //println!("Finish processing fd: {}, event: {}", ev.U64, ev.Events);
         }
@@ -694,7 +706,7 @@ fn InitContainer(conn_sock: &UnixSocket) {
 fn SetupConnections() {
     let timestamp = RDMA_CTLINFO.timestamp_get();
     if timestamp == 0 {
-        return
+        return;
     }
 
     let node_ips_set = RDMA_CTLINFO.get_node_ips_for_connecting();
