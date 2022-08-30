@@ -146,6 +146,12 @@ impl Scheduler {
         };
     }
 
+    pub fn CleanVcpPageCache(&self) {
+        for vcpu in self.VcpuArr.iter() {
+            vcpu.AllocatorMut().Clear();
+        }
+    }
+
     pub fn DecreaseHaltVcpuCnt(&self) {
         self.haltVcpuCnt.fetch_sub(1, Ordering::SeqCst);
     }

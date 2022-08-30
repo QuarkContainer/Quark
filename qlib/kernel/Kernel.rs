@@ -371,6 +371,12 @@ impl HostSpace {
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
+    pub fn SwapOut() -> i64 {
+        let mut msg = Msg::SwapOut(SwapOut {});
+
+        return HostSpace::HCall(&mut msg, false) as i64;
+    }
+
     pub fn SysSync() -> i64 {
         let mut msg = Msg::SysSync(SysSync {});
 

@@ -192,6 +192,22 @@ pub struct VcpuAllocator {
 }
 
 impl VcpuAllocator {
+    pub fn Clear(&mut self) {
+        for idx in 3..self.bufs.len() {
+            let size = 1 << idx;
+            let layout = Layout::from_size_align(size, size)
+                .expect("VcpuAllocator layout alloc fail");
+            while !self.bufs[idx].IsEmpty() {
+                let addr = self.bufs[idx].Pop();
+                unsafe {
+                    GLOBAL_ALLOCATOR.dealloc(addr as _, layout);
+                } 
+            }
+        }
+    }
+}
+
+impl VcpuAllocator {
     #[inline(never)]
     pub fn alloc(&mut self, layout: Layout) -> *mut u8 {
         let size = max(

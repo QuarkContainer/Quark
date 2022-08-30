@@ -236,6 +236,13 @@ impl Kernel {
         return Self(Arc::new(internal));
     }
 
+    pub fn ClearFsCache(&self) {
+        let mounts = self.mounts.read();
+        for (_cid, mn) in mounts.iter() {
+            mn.ClearFsCache();
+        }
+    }
+
     pub fn Syslog(&self) -> SysLog {
         return self.syslog.clone();
     }

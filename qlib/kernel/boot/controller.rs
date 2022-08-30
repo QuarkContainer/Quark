@@ -16,6 +16,10 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::ptr;
 
+use crate::qlib::kernel::Kernel::HostSpace;
+use crate::qlib::kernel::kernel::kernel::GetKernel;
+//use crate::qlib::mem::list_allocator::*;
+use crate::qlib::linux::signal::*;
 use super::super::super::super::kernel_def::{
     StartExecProcess, StartRootContainer, StartSubContainerProcess,
 };
@@ -31,6 +35,7 @@ use super::super::IOURING;
 use super::super::LOADER;
 use super::super::SHARESPACE;
 use super::process::*;
+//use crate::qlib::kernel::vcpu::CPU_LOCAL;
 
 pub fn ControllerProcessHandler() -> Result<()> {
     let task = Task::Current();
@@ -47,6 +52,24 @@ pub fn HandleSignal(signalArgs: &SignalArgs) {
     // todo: fix this
     if signalArgs.Signo == 28 {
         return;
+    }
+
+    // SIGSTOP
+    if signalArgs.Signo == SIGSTOP.0 {
+        //GetKernel().Pause();
+            
+        GetKernel().ClearFsCache();
+        HostSpace::SwapOut();
+        
+        /*for vcpu in CPU_LOCAL.iter() {
+            vcpu.AllocatorMut().Clear();
+        }*/
+
+        return;
+    }
+
+    if signalArgs.Signo == SIGCONT.0 { 
+        GetKernel().Unpause();
     }
 
     let task = Task::Current();

@@ -428,6 +428,11 @@ impl Inode {
         return self.lock().UniqueId;
     }
 
+    pub fn ClearFsCache(&self) {
+        let ms = self.lock().MountSource.clone();
+        ms.lock().fscache.Clear();
+    }
+
     pub fn Lookup(&self, task: &Task, name: &str) -> Result<Dirent> {
         let isOverlay = self.lock().Overlay.is_some();
         if isOverlay {
