@@ -458,6 +458,7 @@ impl EventPoll {
 
 impl Drop for EventPollInternal {
     fn drop(&mut self) {
+        let mut lists = self.lists.lock();
         for (_, entry) in self.files.lock().iter() {
             let waiter = entry.lock().waiter.clone();
 
@@ -467,6 +468,8 @@ impl Drop for EventPollInternal {
                 None => (),
                 Some(f) => f.EventUnregister(task, &waiter),
             }
+
+            lists.readyList.Remove(entry);
         }
     }
 }

@@ -19,6 +19,7 @@ use std::fs::OpenOptions;
 use std::os::unix::io::IntoRawFd;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicI32;
+use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 
 use super::qlib::kernel::Timestamp;
@@ -32,7 +33,10 @@ lazy_static! {
 
 pub struct Log {
     pub fd: AtomicI32,
+    pub rawfd: AtomicI32,
+    pub lineNum: AtomicU64,
     pub syncPrint: AtomicBool,
+    pub processid: AtomicI32,
 }
 
 pub fn SetSyncPrint(syncPrint: bool) {
@@ -40,8 +44,11 @@ pub fn SetSyncPrint(syncPrint: bool) {
 }
 
 pub const LOG_FILE_DEFAULT: &str = "/var/log/quark/quark.log";
+pub const RAWLOG_FILE_DEFAULT: &str = "/var/log/quark/raw.log";
 pub const LOG_FILE_FORMAT: &str = "/var/log/quark/{}.log";
 pub const TIME_FORMAT: &str = "%H:%M:%S%.3f";
+
+pub const MEMORY_LEAK_LOG: bool = false;
 
 impl Drop for Log {
     fn drop(&mut self) {
@@ -58,9 +65,19 @@ impl Log {
             .append(true)
             .open(LOG_FILE_DEFAULT)
             .expect("Log Open fail");
+
+        let rawfile = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(RAWLOG_FILE_DEFAULT)
+            .expect("Log Open fail");
+
         return Self {
             fd: AtomicI32::new(file.into_raw_fd()),
+            rawfd: AtomicI32::new(rawfile.into_raw_fd()),           
+            lineNum: AtomicU64::new(1),
             syncPrint: AtomicBool::new(true),
+            processid: AtomicI32::new(std::process::id() as _),
         };
     }
 
@@ -92,6 +109,11 @@ impl Log {
     }
 
     pub fn RawWrite(&self, str: &str) {
+        let str = if MEMORY_LEAK_LOG {
+            format!("{:?} {:?} {}", self.processid, self.lineNum, str)
+        } else {
+            format!("{}", str)
+        };
         self.WriteAll(str.as_bytes());
     }
 
@@ -124,9 +146,39 @@ impl Log {
     }
 
     pub fn WriteAll(&self, buf: &[u8]) {
+        self.lineNum.fetch_add(1, Ordering::Relaxed);
         let mut count = 0;
         while count < buf.len() {
             let n = self.write(&buf[count..]);
+            count += n as usize;
+        }
+    }
+
+    pub fn RawLog(&self, val1: u64, val2: u64, val3: u64, val4: u64) {
+        let data = [
+                self.processid.load(Ordering::Relaxed) as u64, 
+                self.lineNum.load(Ordering::Relaxed), 
+                val1, 
+                val2, 
+                val3,
+                val4,
+            ];
+
+        let addr = &data[0] as * const _ as u64;
+        let mut count = 0;
+
+        while count < 8 * data.len() {
+            let n = unsafe {
+                libc::write(
+                    self.rawfd.load(Ordering::Relaxed), 
+                    (addr + count as u64) as * const _, 
+                    8 * data.len() - count as usize)
+            };
+
+            if n < 0 {
+                panic!("log write fail ...")
+            }
+
             count += n as usize;
         }
     }
@@ -138,8 +190,12 @@ impl Log {
     pub fn Print(&self, level: &str, str: &str) {
         let now = Timestamp();
         //let now = RawTimestamp();
-        self.Write(&format!("[{}] [{}/{}] {}\n", level, ThreadId(), now, str));
-    }
+        if MEMORY_LEAK_LOG {
+            self.Write(&format!("{:?} [{}/{}] [{}/{}] {}\n", self.processid, level, self.lineNum.load(Ordering::Relaxed), ThreadId(), now, str));
+        } else {
+            self.Write(&format!("[{}] [{}/{}] {}\n", level, ThreadId(), now, str));
+        }
+     }
 
     pub fn RawPrint(&self, level: &str, str: &str) {
         //self.Write(&format!("{} [{}] {}\n", Self::Now(), level, str));
@@ -157,8 +213,9 @@ impl Log {
 #[macro_export]
 macro_rules! raw {
     // macth like arm for macro
-    ($a:expr,$b:expr,$c:expr) => {{
-        error!("raw:: {:x}/{:x}/{:x}", $a, $b, $c);
+    ($a:expr,$b:expr,$c:expr,$d:expr) => {{
+        //error!("raw:: {:x}/{:x}/{:x}", $a, $b, $c);
+        crate::print::LOG.RawLog($a, $b, $c, $d);
     }};
 }
 

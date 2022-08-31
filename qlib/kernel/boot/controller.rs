@@ -55,7 +55,7 @@ pub fn HandleSignal(signalArgs: &SignalArgs) {
     }
 
     // SIGSTOP
-    if signalArgs.Signo == SIGSTOP.0 {
+    if signalArgs.Signo == 12 { //SIGSTOP.0 {
         //GetKernel().Pause();
             
         GetKernel().ClearFsCache();

@@ -33,19 +33,19 @@ pub struct HostSpace {}
 
 impl HostSpace {
     pub fn WakeupVcpu(vcpuId: u64) {
-        HyperCall64(HYPERCALL_WAKEUP_VCPU, vcpuId, 0, 0);
+        HyperCall64(HYPERCALL_WAKEUP_VCPU, vcpuId, 0, 0, 0);
     }
 
     pub fn IOWait() {
-        HyperCall64(HYPERCALL_IOWAIT, 0, 0, 0);
+        HyperCall64(HYPERCALL_IOWAIT, 0, 0, 0, 0);
     }
 
     pub fn Hlt() {
-        HyperCall64(HYPERCALL_HLT, 0, 0, 0);
+        HyperCall64(HYPERCALL_HLT, 0, 0, 0, 0);
     }
 
     pub fn UringWake(minCompleted: u64) {
-        HyperCall64(HYPERCALL_URING_WAKE, minCompleted, 0, 0);
+        HyperCall64(HYPERCALL_URING_WAKE, minCompleted, 0, 0, 0);
     }
 
     pub fn LoadProcessKernel(processAddr: u64) -> i64 {
@@ -609,7 +609,7 @@ impl HostSpace {
     }
 
     pub fn ExitVM(exitCode: i32) {
-        HyperCall64(HYPERCALL_EXIT_VM, exitCode as u64, 0, 0);
+        HyperCall64(HYPERCALL_EXIT_VM, exitCode as u64, 0, 0, 0);
         //Self::AQCall(qmsg::HostOutputMsg::ExitVM(exitCode));
     }
 
@@ -619,7 +619,7 @@ impl HostSpace {
             str: str,
         };
 
-        HyperCall64(HYPERCALL_PANIC, &msg as *const _ as u64, 0, 0);
+        HyperCall64(HYPERCALL_PANIC, &msg as *const _ as u64, 0, 0, 0);
     }
 
     pub fn TryOpenAt(dirfd: i32, name: u64, addr: u64) -> i64 {
@@ -714,7 +714,7 @@ impl HostSpace {
 
     pub fn VcpuWait() -> i64 {
         let mut ret: i64 = 0;
-        HyperCall64(HYPERCALL_VCPU_WAIT, 0, 0, &mut ret as *mut _ as u64);
+        HyperCall64(HYPERCALL_VCPU_WAIT, 0, 0, &mut ret as *mut _ as u64, 0);
         return ret as i64;
     }
 
@@ -874,7 +874,7 @@ impl HostSpace {
     pub fn SyncPrint(level: DebugLevel, str: &str) {
         let msg = Print { level, str };
 
-        HyperCall64(HYPERCALL_PRINT, &msg as *const _ as u64, 0, 0);
+        HyperCall64(HYPERCALL_PRINT, &msg as *const _ as u64, 0, 0, 0);
     }
 
     pub fn Kprint(str: &str) {
@@ -886,12 +886,12 @@ impl HostSpace {
     }
 
     #[inline(always)]
-    pub fn KernelMsg(id: u64, val1: u64, val2: u64) {
-        HyperCall64(HYPERCALL_MSG, id, val1, val2)
+    pub fn KernelMsg(id: u64, val1: u64, val2: u64, val3: u64) {
+        HyperCall64(HYPERCALL_MSG, id, val1, val2, val3)
     }
 
     pub fn KernelOOM(size: u64, alignment: u64) {
-        HyperCall64(HYPERCALL_OOM, size, alignment, 0)
+        HyperCall64(HYPERCALL_OOM, size, alignment, 0, 0)
     }
 
     pub fn KernelGetTime(clockId: i32) -> Result<i64> {
@@ -901,7 +901,7 @@ impl HostSpace {
         };
 
         let addr = &call as *const _ as u64;
-        HyperCall64(HYPERCALL_GETTIME, addr, 0, 0);
+        HyperCall64(HYPERCALL_GETTIME, addr, 0, 0, 0);
 
         use self::common::*;
 
@@ -916,22 +916,22 @@ impl HostSpace {
         let call = VcpuFeq::default();
 
         let addr = &call as *const _ as u64;
-        HyperCall64(HYPERCALL_VCPU_FREQ, addr, 0, 0);
+        HyperCall64(HYPERCALL_VCPU_FREQ, addr, 0, 0, 0);
 
         return call.res;
     }
 
     pub fn VcpuYield() {
-        HyperCall64(HYPERCALL_VCPU_YIELD, 0, 0, 0);
+        HyperCall64(HYPERCALL_VCPU_YIELD, 0, 0, 0, 0);
     }
 
     #[inline]
     pub fn VcpuDebug() {
-        HyperCall64(HYPERCALL_VCPU_DEBUG, 0, 0, 0);
+        HyperCall64(HYPERCALL_VCPU_DEBUG, 0, 0, 0, 0);
     }
 
     pub fn VcpuPrint() {
-        HyperCall64(HYPERCALL_VCPU_PRINT, 0, 0, 0);
+        HyperCall64(HYPERCALL_VCPU_PRINT, 0, 0, 0, 0);
     }
 }
 

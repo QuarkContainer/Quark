@@ -162,13 +162,13 @@ use self::qlib::kernel::*;
 
 pub fn SingletonInit() {
     unsafe {
+        vcpu::VCPU_COUNT.Init(AtomicUsize::new(0));
+        vcpu::CPU_LOCAL.Init(&SHARESPACE.scheduler.VcpuArr);
+        InitGs(0);
         KERNEL_PAGETABLE.Init(PageTables::Init(CurrentCr3()));
         //init fp state with current fp state as it is brand new vcpu
         FP_STATE.Reset();
-        vcpu::VCPU_COUNT.Init(AtomicUsize::new(0));
-        vcpu::CPU_LOCAL.Init(&SHARESPACE.scheduler.VcpuArr);
         SHARESPACE.SetSignalHandlerAddr(SignalHandler as u64);
-        InitGs(0);
         SHARESPACE.SetvirtualizationHandlerAddr(virtualization_handler as u64);
         IOURING.SetValue(SHARESPACE.GetIOUringAddr());
 
@@ -480,7 +480,7 @@ pub extern "C" fn rust_main(
         VDSO.Initialization(vdsoParamAddr);
 
         // release other vcpus
-        HyperCall64(qlib::HYPERCALL_RELEASE_VCPU, 0, 0, 0);
+        HyperCall64(qlib::HYPERCALL_RELEASE_VCPU, 0, 0, 0, 0);
     } else {
         InitGs(id);
         //PerfGoto(PerfType::Kernel);

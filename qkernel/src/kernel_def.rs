@@ -267,7 +267,7 @@ pub fn Invlpg(addr: u64) {
 }
 
 #[inline(always)]
-pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64) {
+pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64, para4: u64) {
     unsafe {
         let data: u8 = 0;
         asm!("
@@ -277,7 +277,8 @@ pub fn HyperCall64(type_: u16, para1: u64, para2: u64, para3: u64) {
             in("al") data,
             in("rsi") para1,
             in("rcx") para2,
-            in("rdi") para3
+            in("rdi") para3,
+            in("r10") para4
         )
     }
 }
@@ -344,7 +345,7 @@ impl HostSpace {
             msg: msg,
         };
 
-        HyperCall64(HYPERCALL_HCALL, &mut event as *const _ as u64, 0, 0);
+        HyperCall64(HYPERCALL_HCALL, &mut event as *const _ as u64, 0, 0, 0);
 
         return event.ret;
     }

@@ -529,6 +529,7 @@ impl KVMVcpu {
                     let para1 = regs.rsi;
                     let para2 = regs.rcx;
                     let para3  = regs.rdi;
+                    let para4  = regs.r10;
 
                     match addr {
                         qlib::HYPERCALL_IOWAIT => {
@@ -607,7 +608,7 @@ impl KVMVcpu {
                         }
 
                         qlib::HYPERCALL_PRINT => {
-                        let addr = para1;
+                            let addr = para1;
                             let msg = unsafe { &*(addr as *const Print) };
 
                             log!("{}", msg.str);
@@ -617,10 +618,12 @@ impl KVMVcpu {
                             let data1 = para1;
                             let data2 = para2;
                             let data3 = para3;
-                            info!(
+                            let data4 = para4;
+                            raw!(data1, data2, data3, data4);
+                            /*info!(
                                 "[{}] get kernel msg [rsp {:x}/rip {:x}]: {:x}, {:x}, {:x}",
                                 self.id, regs.rsp, regs.rip, data1, data2, data3
-                            );
+                            );*/
                         }
 
                         qlib::HYPERCALL_OOM => {
