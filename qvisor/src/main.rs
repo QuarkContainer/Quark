@@ -19,7 +19,6 @@
 #![allow(non_camel_case_types)]
 #![allow(deprecated)]
 #![allow(dead_code)]
-#![allow(non_snake_case)]
 //#![feature(asm)]
 
 extern crate alloc;

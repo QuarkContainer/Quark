@@ -15,6 +15,7 @@
 use crate::qlib::mutex::*;
 use alloc::collections::linked_list::LinkedList;
 use alloc::sync::Arc;
+use alloc::sync::Weak;
 use alloc::vec::Vec;
 use core::ops::Deref;
 use core::sync::atomic::AtomicI64;
@@ -59,7 +60,8 @@ pub const ATOMIC_IO_BYTES: usize = 4096;
 // NewConnectedPipe initializes a pipe and returns a pair of objects
 // representing the read and write ends of the pipe.
 pub fn NewConnectedPipe(task: &Task, sizeBytes: usize, atomicIOBytes: usize) -> (File, File) {
-    let p = Pipe::New(task, false, sizeBytes, atomicIOBytes);
+    // we have to keep dirent to avoid cycle reference  pipe -> dirent -> inode -> pipeiops -> pipe 
+    let (p, _dirent) = Pipe::New(task, false, sizeBytes, atomicIOBytes);
     let r = p.Open(
         task,
         &FileFlags {
@@ -104,7 +106,7 @@ pub struct PipeInternal {
     // The dirent backing this pipe. Shared by all readers and writers.
     //
     // This value is immutable.
-    pub dirent: Option<Dirent>,
+    pub dirent: Option<DirentWeak>,
 }
 
 impl PipeInternal {
@@ -197,6 +199,20 @@ pub struct PipeIn {
 }
 
 #[derive(Clone)]
+pub struct PipeWeak(pub Weak<PipeIn>);
+
+impl PipeWeak {
+    pub fn Upgrade(&self) -> Option<Pipe> {
+        let d = match self.0.upgrade() {
+            None => return None,
+            Some(d) => d,
+        };
+
+        return Some(Pipe(d));
+    }
+}
+
+#[derive(Clone)]
 pub struct Pipe(Arc<PipeIn>);
 
 impl Deref for Pipe {
@@ -215,7 +231,8 @@ impl PartialEq for Pipe {
 
 // NewPipe initializes and returns a pipe.
 impl Pipe {
-    pub fn New(task: &Task, isNamed: bool, sizeBytes: usize, atomicIOBytes: usize) -> Self {
+    // we have to keep dirent to avoid cycle reference  pipe -> dirent -> inode -> pipeiops -> pipe 
+    pub fn New(task: &Task, isNamed: bool, sizeBytes: usize, atomicIOBytes: usize) -> (Self, Dirent) {
         let sizeBytes = if sizeBytes < MINIMUM_PIPE_SIZE {
             MINIMUM_PIPE_SIZE
         } else {
@@ -269,9 +286,13 @@ impl Pipe {
         let ms = Arc::new(QMutex::new(MountSource::NewPseudoMountSource()));
         let inode = Inode::New(&iops, &ms, &attr);
         let dirent = Dirent::New(&inode, &format!("pipe:[{}]", inodeId));
-        p.intern.lock().dirent = Some(dirent);
+        p.intern.lock().dirent = Some(dirent.Downgrade());
 
-        return p;
+        return (p, dirent);
+    }
+
+    pub fn Downgrade(&self) -> PipeWeak {
+        return PipeWeak(Arc::downgrade(&self.0));
     }
 
     pub fn Notify(&self, mask: EventMask) {
@@ -298,17 +319,17 @@ impl Pipe {
             self.ROpen();
             self.WOpen();
             let rw = ReaderWriter { pipe: self.clone() };
-            let dirent = self.intern.lock().dirent.clone().unwrap();
+            let dirent = self.intern.lock().dirent.clone().unwrap().Upgrade().unwrap();
             return File::New(&dirent, flags, rw);
         } else if flags.Read {
             self.ROpen();
             let r = Reader { pipe: self.clone() };
-            let dirent = self.intern.lock().dirent.clone().unwrap();
+            let dirent = self.intern.lock().dirent.clone().unwrap().Upgrade().unwrap();
             return File::New(&dirent, flags, r);
         } else if flags.Write {
             self.WOpen();
             let w = Writer { pipe: self.clone() };
-            let dirent = self.intern.lock().dirent.clone().unwrap();
+            let dirent = self.intern.lock().dirent.clone().unwrap().Upgrade().unwrap();
             return File::New(&dirent, flags, w);
         } else {
             // Precondition violated.

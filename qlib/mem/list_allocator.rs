@@ -482,7 +482,9 @@ unsafe impl GlobalAlloc for ListAllocator {
                 self.bufSize.fetch_sub(size, Ordering::Release);
                 if MEMORY_CHECKING && class == PRINT_CLASS {
                     //error!("L#{} alloc {:x?}", class, addr as u64);
-                    raw!(1, class as u64, addr as u64, CPULocal::CpuId() as u64);
+                    let idx = self.maxnum[class].load(Ordering::Acquire);
+                    let cpuid = (idx << 8) | CPULocal::CpuId();
+                    raw!(1, class as u64, addr as u64, cpuid as u64);
                 }
                 return addr;
             }
@@ -506,7 +508,9 @@ unsafe impl GlobalAlloc for ListAllocator {
 
         if MEMORY_CHECKING && class == PRINT_CLASS {
             //error!("L#{} alloc {:x}", class, ret as u64);
-            raw!(1, class as u64, ret as u64, CPULocal::CpuId() as u64);
+            let idx = self.maxnum[class].load(Ordering::Acquire);
+            let cpuid = (idx << 8) | CPULocal::CpuId();
+            raw!(1, class as u64, ret as u64, cpuid as u64);
         }
 
         if ret % size as u64 != 0 {
@@ -531,15 +535,16 @@ unsafe impl GlobalAlloc for ListAllocator {
 
         if MEMORY_CHECKING && class == PRINT_CLASS {
             //error!("L#{} free {:x}", class, ptr as u64);
-            raw!(2, class as u64, ptr as u64, CPULocal::CpuId() as u64);
+            let idx = self.maxnum[class].load(Ordering::Acquire);
+            let cpuid = (idx << 8) | CPULocal::CpuId();
+            raw!(2, class as u64, ptr as u64, cpuid as u64);
         }
-
-        self.maxnum[class].fetch_sub(1, Ordering::Release);
 
         if MEMORY_CHECKING {
-            self.free.fetch_sub(size, Ordering::Release);
-        }
+            self.maxnum[class].fetch_sub(1, Ordering::Release);
 
+        }
+        self.free.fetch_sub(size, Ordering::Release);
         self.bufSize.fetch_add(size, Ordering::Release);
         if class < self.bufs.len() {
             return self.bufs[class].lock().Dealloc(ptr, &self.heap);

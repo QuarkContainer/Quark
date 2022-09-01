@@ -42,7 +42,7 @@ pub fn NewTmpfsFifoInode(
     msrc: &Arc<QMutex<MountSource>>,
 ) -> Result<Inode> {
     // First create a pipe.
-    let pipe = Pipe::New(task, true, DEFAULT_PIPE_SIZE, MemoryDef::PAGE_SIZE as usize);
+    let (pipe, _drient) = Pipe::New(task, true, DEFAULT_PIPE_SIZE, MemoryDef::PAGE_SIZE as usize);
 
     let iops = NewPipeInodeOps(task, perms, pipe);
     let fifo = TmpfsFifoInodeOp(iops);
