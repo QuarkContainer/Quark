@@ -190,6 +190,7 @@ pub struct Task {
     pub futexMgr: FutexMgr,
     pub ioUsage: IO,
     pub sched: TaskSchedInfo,
+    pub exiting: bool,
     
     pub perfcounters: Option<Arc<Counters>>,
 
@@ -232,6 +233,8 @@ impl Task {
         self.syscallRestartBlock = None;
         self.futexMgr = dummyTask.futexMgr.clone();
         self.perfcounters = None;
+        self.sched = dummyTask.sched.clone();
+        self.exiting = true;
         self.ioUsage = dummyTask.ioUsage.clone();
     }
 
@@ -304,6 +307,7 @@ impl Task {
             futexMgr: futexMgr,
             ioUsage: IO::default(),
             sched: TaskSchedInfo::default(),
+            exiting: false,
             perfcounters: None,
             guard: Guard::default(),
         };
@@ -312,7 +316,7 @@ impl Task {
     }
 
     pub fn AccountTaskEnter(&self, state: SchedState) {
-        if self.taskId == CPULocal::WaitTask() {
+        if self.taskId == CPULocal::WaitTask() || self.exiting == true {
             return;
         }
 
@@ -338,7 +342,7 @@ impl Task {
 
     pub fn AccountTaskLeave(&self, state: SchedState) {
         //print!("AccountTaskLeave current task is {:x}, state is {:?}", self.taskId, state);
-        if self.taskId == CPULocal::WaitTask() {
+        if self.taskId == CPULocal::WaitTask() || self.exiting == true {
             return;
         }
 
@@ -659,6 +663,7 @@ impl Task {
                     futexMgr: futexMgr,
                     ioUsage: ioUsage,
                     sched: TaskSchedInfo::default(),
+                    exiting: false,
                     perfcounters: perfcounters,
                     guard: Guard::default(),
                 },
@@ -761,6 +766,7 @@ impl Task {
                     futexMgr: FUTEX_MGR.clone(),
                     ioUsage: dummyTask.ioUsage.clone(),
                     sched: TaskSchedInfo::default(),
+                    exiting: false,
                     perfcounters: None,
                     guard: Guard::default(),
                 },

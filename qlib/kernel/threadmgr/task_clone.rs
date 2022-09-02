@@ -525,6 +525,7 @@ impl Task {
                     futexMgr: futexMgr,
                     ioUsage: ioUsage,
                     sched: sched,
+                    exiting: false,
                     perfcounters: None, //Some(THREAD_COUNTS.lock().NewCounters()),
                     guard: Guard::default(),
                 },

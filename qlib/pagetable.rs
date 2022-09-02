@@ -1090,7 +1090,7 @@ impl PageTables {
             if needSwapin {
                 let addr = pteEntry.addr().as_u64();
                 let _ret = HostSpace::SwapInPage(addr);
-    
+
                 let mut flags = pteEntry.flags();
                 flags |= PageTableFlags::PRESENT;
                 // flags bit9 which indicate the page is swapped out
