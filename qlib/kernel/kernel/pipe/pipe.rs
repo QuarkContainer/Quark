@@ -60,7 +60,7 @@ pub const ATOMIC_IO_BYTES: usize = 4096;
 // NewConnectedPipe initializes a pipe and returns a pair of objects
 // representing the read and write ends of the pipe.
 pub fn NewConnectedPipe(task: &Task, sizeBytes: usize, atomicIOBytes: usize) -> (File, File) {
-    // we have to keep dirent to avoid cycle reference  pipe -> dirent -> inode -> pipeiops -> pipe 
+    // we have to keep dirent to avoid cycle reference  pipe -> dirent -> inode -> pipeiops -> pipe
     let (p, _dirent) = Pipe::New(task, false, sizeBytes, atomicIOBytes);
     let r = p.Open(
         task,

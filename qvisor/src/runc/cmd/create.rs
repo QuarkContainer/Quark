@@ -58,7 +58,7 @@ impl CreateCmd {
     pub fn Run(&self, gCfg: &GlobalConfig) -> Result<()> {
         let specfile = Join(&self.bundleDir, "config.json");
         let spec = Spec::load(&specfile).unwrap();
-	error!("quark create start");
+	    error!("quark create start");
 
         Container::Create(
             &self.id,
