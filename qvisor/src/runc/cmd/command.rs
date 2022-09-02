@@ -148,6 +148,12 @@ pub fn Parse() -> Result<Arguments> {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("systemd-cgroup")
+                .help("systemd cgroup driver")
+                .long("systemd-cgroup")
+                .takes_value(false),
+        )
+        .arg(
             Arg::with_name("log-format")
                 .help("Compatibility (ignored)")
                 .long("log-format")
