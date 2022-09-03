@@ -14,6 +14,7 @@
 
 use crate::qlib::mutex::*;
 use alloc::sync::Arc;
+use alloc::sync::Weak;
 use core::fmt;
 use core::ops::Deref;
 
@@ -386,6 +387,19 @@ impl TimerInternal {
     }
 }
 
+pub struct TimerWeak(Weak<QMutex<TimerInternal>>);
+
+impl TimerWeak {
+    pub fn Upgrade(&self) -> Option<Timer> {
+        let f = match self.0.upgrade() {
+            None => return None,
+            Some(f) => f,
+        };
+
+        return Some(Timer(f));
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct Timer(Arc<QMutex<TimerInternal>>);
 
@@ -409,6 +423,10 @@ impl Timer {
     pub fn Dummy() -> Self {
         let ret = Self(Arc::new(QMutex::new(TimerInternal::Dummy())));
         return ret;
+    }
+
+    pub fn Downgrade(&self) -> TimerWeak {
+        return TimerWeak(Arc::downgrade(&self.0));
     }
 
     fn Timeout(&self) -> i64 {
