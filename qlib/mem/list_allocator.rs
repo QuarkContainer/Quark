@@ -24,7 +24,7 @@ use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize};
 use alloc::collections::vec_deque::VecDeque;
 
 use super::buddy_allocator::Heap;
-
+use crate::qlib::vcpu_mgr::CPULocal;
 use super::super::super::kernel_def::VcpuId;
 use super::super::kernel::vcpu::CPU_LOCAL;
 use super::super::linux_def::*;
@@ -189,6 +189,22 @@ impl StackAllocator {
 #[derive(Debug, Default)]
 pub struct VcpuAllocator {
     pub bufs: [StackAllocator; 8],
+}
+
+impl VcpuAllocator {
+    pub fn Clear(&mut self) {
+        for idx in 3..self.bufs.len() {
+            let size = 1 << idx;
+            let layout = Layout::from_size_align(size, size)
+                .expect("VcpuAllocator layout alloc fail");
+            while !self.bufs[idx].IsEmpty() {
+                let addr = self.bufs[idx].Pop();
+                unsafe {
+                    GLOBAL_ALLOCATOR.dealloc(addr as _, layout);
+                } 
+            }
+        }
+    }
 }
 
 impl VcpuAllocator {
@@ -465,7 +481,10 @@ unsafe impl GlobalAlloc for ListAllocator {
             if let Some(addr) = ret {
                 self.bufSize.fetch_sub(size, Ordering::Release);
                 if MEMORY_CHECKING && class == PRINT_CLASS {
-                    error!("L#{} alloc {:x?}", class, addr as u64);
+                    //error!("L#{} alloc {:x?}", class, addr as u64);
+                    let idx = self.maxnum[class].load(Ordering::Acquire);
+                    let cpuid = (idx << 8) | CPULocal::CpuId();
+                    raw!(1, class as u64, addr as u64, cpuid as u64);
                 }
                 return addr;
             }
@@ -488,11 +507,14 @@ unsafe impl GlobalAlloc for ListAllocator {
         }
 
         if MEMORY_CHECKING && class == PRINT_CLASS {
-            error!("L#{} alloc {:x}", class, ret as u64);
+            //error!("L#{} alloc {:x}", class, ret as u64);
+            let idx = self.maxnum[class].load(Ordering::Acquire);
+            let cpuid = (idx << 8) | CPULocal::CpuId();
+            raw!(1, class as u64, ret as u64, cpuid as u64);
         }
 
         if ret % size as u64 != 0 {
-            raw!(0x236, ret, size as u64);
+            raw!(0x236, ret, size as u64, 0);
             panic!("alloc next fail");
         }
 
@@ -512,15 +534,17 @@ unsafe impl GlobalAlloc for ListAllocator {
         let class = size.trailing_zeros() as usize;
 
         if MEMORY_CHECKING && class == PRINT_CLASS {
-            error!("L#{} free {:x}", class, ptr as u64);
+            //error!("L#{} free {:x}", class, ptr as u64);
+            let idx = self.maxnum[class].load(Ordering::Acquire);
+            let cpuid = (idx << 8) | CPULocal::CpuId();
+            raw!(2, class as u64, ptr as u64, cpuid as u64);
         }
-
-        self.maxnum[class].fetch_sub(1, Ordering::Release);
 
         if MEMORY_CHECKING {
-            self.free.fetch_sub(size, Ordering::Release);
-        }
+            self.maxnum[class].fetch_sub(1, Ordering::Release);
 
+        }
+        self.free.fetch_sub(size, Ordering::Release);
         self.bufSize.fetch_add(size, Ordering::Release);
         if class < self.bufs.len() {
             return self.bufs[class].lock().Dealloc(ptr, &self.heap);
@@ -648,7 +672,7 @@ impl MemList {
 
     pub fn Push(&mut self, addr: u64) {
         if addr % self.size != 0 {
-            raw!(235, addr, self.size);
+            raw!(235, addr, self.size, 0);
             panic!("Push next fail");
         }
 
@@ -690,7 +714,7 @@ impl MemList {
         next
         );
         if next % self.size != 0 {
-            raw!(0x234, next, self.size as u64);
+            raw!(0x234, next, self.size as u64, 0);
             panic!("Pop next fail");
         }
         //assert!(next % self.size == 0, "Pop next is {:x}/size is {:x}", next, self.size);

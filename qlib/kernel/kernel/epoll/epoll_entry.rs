@@ -39,10 +39,11 @@ pub struct PollEntryInternal {
     pub next: Option<PollEntry>,
     pub prev: Option<PollEntry>,
 
-    pub id: i32,
+    pub fd: i32,
+    pub id: u64,
     pub file: FileWeak,
     pub userData: [i32; 2],
-    pub waiter: WaitEntry,
+    pub waiter: WaitEntryWeak,
     pub mask: EventMask,
     pub flags: EntryFlags,
 
@@ -84,7 +85,7 @@ impl PollEntry {
         return self.lock().mask as u32;
     }
 
-    pub fn Id(&self) -> i32 {
+    pub fn Id(&self) -> u64 {
         return self.lock().id;
     }
 

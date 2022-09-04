@@ -16,6 +16,7 @@ use core::i64;
 use core::sync::atomic::AtomicI64;
 use core::sync::atomic::Ordering;
 
+#[derive(Debug)]
 pub struct AtomicRefCount {
     refCount: AtomicI64,
 }

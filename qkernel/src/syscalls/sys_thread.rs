@@ -846,7 +846,7 @@ pub fn SysSetpgid(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         }
     } else {
         let localtg = task.Thread().ThreadGroup();
-        match tg.JoinProcessGroup(&pidns, pgid, tg != localtg) {
+         match tg.JoinProcessGroup(&pidns, pgid, tg != localtg) {
             Err(e) => {
                 let pg = tg.ProcessGroup().unwrap();
                 if pidns.IDOfProcessGroup(&pg) == pgid {

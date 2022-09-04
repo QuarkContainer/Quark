@@ -22,6 +22,12 @@ pub struct WaitList {
     tail: Option<WaitEntry>,
 }
 
+impl Drop for WaitList {
+    fn drop(&mut self) {
+        self.Reset();
+    }
+}
+
 impl WaitList {
     //remove all of the wait entries
     pub fn Reset(&mut self) {

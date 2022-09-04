@@ -241,6 +241,11 @@ impl KVMVcpu {
             Msg::SwapInPage(msg) => {
                 ret = super::VMSpace::SwapInPage(msg.addr) as u64;
             }
+            Msg::SwapOut(_msg) => {
+                let (heapStart, heapEnd) = GLOBAL_ALLOCATOR.HeapRange();
+                SHARE_SPACE.hiberMgr.SwapOut(heapStart, heapEnd - heapStart).unwrap();
+                ret = 0;
+            }
             Msg::SymLinkAt(msg) => {
                 ret = super::VMSpace::SymLinkAt(msg.oldpath, msg.newdirfd, msg.newpath) as u64;
             }

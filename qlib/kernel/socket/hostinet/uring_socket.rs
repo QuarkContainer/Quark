@@ -643,7 +643,7 @@ impl SockOperations for UringSocketOperations {
         flags: i32,
         blocking: bool,
     ) -> Result<i64> {
-        let acceptItem; 
+        let acceptItem;
         if !blocking {
             let ai = self.AcceptData();
 

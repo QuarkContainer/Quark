@@ -151,7 +151,7 @@ impl Guard {
     pub fn Check(&self) {
         if self.0 != Self::MAGIC_GUILD {
             let task = Task::Current();
-            raw!(0x240, task.taskId, self.0);
+            raw!(0x240, task.taskId, self.0, 0);
             super::Kernel::HostSpace::VcpuDebug();
             loop {}
         }
@@ -190,6 +190,7 @@ pub struct Task {
     pub futexMgr: FutexMgr,
     pub ioUsage: IO,
     pub sched: TaskSchedInfo,
+    pub exiting: bool,
     
     pub perfcounters: Option<Arc<Counters>>,
 
@@ -232,6 +233,8 @@ impl Task {
         self.syscallRestartBlock = None;
         self.futexMgr = dummyTask.futexMgr.clone();
         self.perfcounters = None;
+        self.sched = dummyTask.sched.clone();
+        self.exiting = true;
         self.ioUsage = dummyTask.ioUsage.clone();
     }
 
@@ -260,7 +263,7 @@ impl Task {
         let rsp = GetRsp();
         let task = rsp & DEFAULT_STACK_MAST;
         if rsp - task < 0x2000 {
-            raw!(0x238, rsp, task);
+            raw!(0x238, rsp, task, 0);
             super::Kernel::HostSpace::VcpuDebug();
             loop {}
             //panic!("TaskAddress panic");
@@ -304,6 +307,7 @@ impl Task {
             futexMgr: futexMgr,
             ioUsage: IO::default(),
             sched: TaskSchedInfo::default(),
+            exiting: false,
             perfcounters: None,
             guard: Guard::default(),
         };
@@ -312,7 +316,7 @@ impl Task {
     }
 
     pub fn AccountTaskEnter(&self, state: SchedState) {
-        if self.taskId == CPULocal::WaitTask() {
+        if self.taskId == CPULocal::WaitTask() || self.exiting == true {
             return;
         }
 
@@ -338,7 +342,7 @@ impl Task {
 
     pub fn AccountTaskLeave(&self, state: SchedState) {
         //print!("AccountTaskLeave current task is {:x}, state is {:?}", self.taskId, state);
-        if self.taskId == CPULocal::WaitTask() {
+        if self.taskId == CPULocal::WaitTask() || self.exiting == true {
             return;
         }
 
@@ -372,7 +376,7 @@ impl Task {
         let rsp = GetRsp();
         let task = rsp & DEFAULT_STACK_MAST;
         if rsp - task < 0x2000 {
-            raw!(0x237, rsp, task);
+            raw!(0x237, rsp, task, 0);
             super::Kernel::HostSpace::VcpuDebug();
             loop {}
             //panic!("TaskAddress panic");
@@ -659,6 +663,7 @@ impl Task {
                     futexMgr: futexMgr,
                     ioUsage: ioUsage,
                     sched: TaskSchedInfo::default(),
+                    exiting: false,
                     perfcounters: perfcounters,
                     guard: Guard::default(),
                 },
@@ -761,6 +766,7 @@ impl Task {
                     futexMgr: FUTEX_MGR.clone(),
                     ioUsage: dummyTask.ioUsage.clone(),
                     sched: TaskSchedInfo::default(),
+                    exiting: false,
                     perfcounters: None,
                     guard: Guard::default(),
                 },

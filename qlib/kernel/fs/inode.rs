@@ -30,8 +30,6 @@ use super::super::super::kernel::Kernel::HostSpace;
 use super::super::super::kernel::fs::filesystems::*;
 use super::super::super::kernel::fs::host::fs::*;
 use super::super::kernel::time::*;
-use super::super::kernel::pipe::node::*;
-use super::super::kernel::pipe::pipe::*;
 use super::super::socket::unix::transport::unix::*;
 use super::super::task::*;
 use super::super::uid::*;
@@ -42,7 +40,6 @@ use super::dirent::*;
 use super::file::*;
 use super::flags::*;
 use super::host::hostinodeop::*;
-use super::host::fifoiops::*;
 use super::host::diriops::*;
 use super::inode_overlay::*;
 use super::lock::*;
@@ -304,7 +301,7 @@ impl Inode {
     }
 
     pub fn NewHostInode(
-        task: &Task,
+        _task: &Task,
         msrc: &Arc<QMutex<MountSource>>,
         fd: i32,
         fstat: &LibcStat,
@@ -332,6 +329,9 @@ impl Inode {
                     Overlay: None,
                 }))));
             }
+            // need redesign !!!!
+            // todo: fix this
+            /* 
             InodeType::Pipe => {
                 let pipe = Pipe::New(task, true, DEFAULT_PIPE_SIZE, MemoryDef::PAGE_SIZE as usize);
                 let permission = FileMode(fstat.st_mode as u16).FilePerms();
@@ -360,6 +360,7 @@ impl Inode {
                     Overlay: None,
                 }))));
             }
+            */
             _ => {
                 let iops = HostInodeOp::New(
                     &msrc.lock().MountSourceOperations.clone(),
@@ -426,6 +427,11 @@ impl Inode {
 
     pub fn ID(&self) -> u64 {
         return self.lock().UniqueId;
+    }
+
+    pub fn ClearFsCache(&self) {
+        let ms = self.lock().MountSource.clone();
+        ms.lock().fscache.Clear();
     }
 
     pub fn Lookup(&self, task: &Task, name: &str) -> Result<Dirent> {

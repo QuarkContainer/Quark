@@ -28,7 +28,6 @@ use super::super::threadmgr::thread::*;
 use super::super::SignalDef::*;
 use super::super::*;
 //use super::super::syscalls::sys_tls::*;
-use super::super::perflog::*;
 use super::super::task::*;
 use super::task_block::*;
 use super::task_stop::*;
@@ -526,7 +525,8 @@ impl Task {
                     futexMgr: futexMgr,
                     ioUsage: ioUsage,
                     sched: sched,
-                    perfcounters: Some(THREAD_COUNTS.lock().NewCounters()),
+                    exiting: false,
+                    perfcounters: None, //Some(THREAD_COUNTS.lock().NewCounters()),
                     guard: Guard::default(),
                 },
             );

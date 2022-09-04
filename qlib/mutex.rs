@@ -145,7 +145,7 @@ impl<T: ?Sized> QMutexIntern<T> {
         // when called in a loop.
         let id = Self::GetID();
         /*if id < 0x4040000000 {
-            raw!(0x122, id, &self.lock as * const _ as u64);
+            raw!(0x122, id, &self.lock as * const _ as u64, 0);
         }*/
 
         let mut val = 0;
@@ -163,8 +163,8 @@ impl<T: ?Sized> QMutexIntern<T> {
             spin_loop();
         }
 
-        raw!(0x123, val, &self.lock as *const _ as u64);
-        defer!(raw!(0x122, val, &self.lock as *const _ as u64));
+        raw!(0x123, val, &self.lock as *const _ as u64, 0);
+        defer!(raw!(0x122, val, &self.lock as *const _ as u64, 0));
 
         loop {
             super::super::asm::mfence();

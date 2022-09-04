@@ -14,6 +14,7 @@
 
 use crate::qlib::mutex::*;
 use alloc::sync::Arc;
+use alloc::sync::Weak;
 use alloc::vec::Vec;
 use core::cmp::*;
 use core::ops::Deref;
@@ -40,7 +41,7 @@ pub struct ProcessGroupInternal {
     // See note re: leader in Session. The same applies here.
     //
     // The originator is immutable.
-    pub originator: ThreadGroup,
+    pub originator: ThreadGroupWeak,
 
     // Session is the parent Session.
     //
@@ -55,6 +56,26 @@ pub struct ProcessGroupInternal {
     //
     // ancestors is protected by TaskSet.mu.
     pub ancestors: u32,
+}
+
+#[derive(Clone)]
+pub struct ProcessGroupWeak {
+    pub uid: UniqueID,
+    pub data: Weak<QMutex<ProcessGroupInternal>>,
+}
+
+impl ProcessGroupWeak {
+    pub fn Upgrade(&self) -> Option<ProcessGroup> {
+        let t = match self.data.upgrade() {
+            None => return None,
+            Some(t) => t,
+        };
+
+        return Some(ProcessGroup {
+            uid: self.uid,
+            data: t,
+        });
+    }
 }
 
 #[derive(Clone, Default)]
@@ -98,11 +119,18 @@ impl ProcessGroup {
         return self.uid;
     }
 
+    pub fn Downgrade(&self) -> ProcessGroupWeak {
+        return ProcessGroupWeak {
+            uid: self.uid,
+            data: Arc::downgrade(&self.data),
+        };
+    }
+
     pub fn New(id: ProcessGroupID, orginator: ThreadGroup, session: Session) -> Self {
         let pg = ProcessGroupInternal {
             id: id,
             refs: AtomicRefCount::default(),
-            originator: orginator,
+            originator: orginator.Downgrade(),
             session: session,
             ancestors: 0,
         };
@@ -114,7 +142,7 @@ impl ProcessGroup {
     }
 
     pub fn Originator(&self) -> ThreadGroup {
-        return self.lock().originator.clone();
+        return self.lock().originator.Upgrade().unwrap();
     }
 
     pub fn IsOrphan(&self) -> bool {
@@ -169,7 +197,7 @@ impl ProcessGroup {
         }
 
         let mut alive = true;
-        let originator = self.lock().originator.clone();
+        let originator = self.lock().originator.Upgrade().unwrap();
 
         let mut needRemove = false;
         self.lock().refs.DecRefWithDesctructor(|| {
@@ -219,7 +247,7 @@ impl ProcessGroup {
         }
 
         let mut hasStopped = false;
-        let originator = self.lock().originator.clone();
+        let originator = self.lock().originator.Upgrade().unwrap();
         let pidns = originator.PIDNamespace();
         let tgids: Vec<ThreadGroup> = pidns.lock().tgids.keys().cloned().collect();
         for tg in &tgids {
@@ -323,7 +351,7 @@ impl ProcessGroup {
     }
 
     pub fn SendSignal(&self, info: &SignalInfo) -> Result<()> {
-        let ts = self.lock().originator.TaskSet();
+        let ts = self.lock().originator.Upgrade().unwrap().TaskSet();
         let mut lastError: Result<()> = Ok(());
         let rootns = ts.Root();
 
