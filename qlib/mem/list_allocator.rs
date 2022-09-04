@@ -452,7 +452,7 @@ impl ListAllocator {
 }
 
 pub const PRINT_CLASS : usize = 0;
-pub const MEMORY_CHECKING: bool = true;
+pub const MEMORY_CHECKING: bool = false;
 
 unsafe impl GlobalAlloc for ListAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {

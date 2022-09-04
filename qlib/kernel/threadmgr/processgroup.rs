@@ -14,6 +14,7 @@
 
 use crate::qlib::mutex::*;
 use alloc::sync::Arc;
+use alloc::sync::Weak;
 use alloc::vec::Vec;
 use core::cmp::*;
 use core::ops::Deref;
@@ -57,6 +58,26 @@ pub struct ProcessGroupInternal {
     pub ancestors: u32,
 }
 
+#[derive(Clone)]
+pub struct ProcessGroupWeak {
+    pub uid: UniqueID,
+    pub data: Weak<QMutex<ProcessGroupInternal>>,
+}
+
+impl ProcessGroupWeak {
+    pub fn Upgrade(&self) -> Option<ProcessGroup> {
+        let t = match self.data.upgrade() {
+            None => return None,
+            Some(t) => t,
+        };
+
+        return Some(ProcessGroup {
+            uid: self.uid,
+            data: t,
+        });
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct ProcessGroup {
     pub uid: UniqueID,
@@ -96,6 +117,13 @@ impl Eq for ProcessGroup {}
 impl ProcessGroup {
     pub fn Uid(&self) -> UniqueID {
         return self.uid;
+    }
+
+    pub fn Downgrade(&self) -> ProcessGroupWeak {
+        return ProcessGroupWeak {
+            uid: self.uid,
+            data: Arc::downgrade(&self.data),
+        };
     }
 
     pub fn New(id: ProcessGroupID, orginator: ThreadGroup, session: Session) -> Self {

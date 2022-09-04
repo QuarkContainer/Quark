@@ -437,7 +437,7 @@ impl ThreadGroup {
 // executing. taskClock is primarily used to implement CLOCK_THREAD_CPUTIME_ID.
 #[derive(Clone)]
 pub struct TaskClock {
-    pub t: Thread,
+    pub t: ThreadWeak,
     pub includeSys: bool,
 }
 
@@ -449,7 +449,7 @@ impl Waitable for TaskClock {
 
 impl TaskClock {
     pub fn Now(&self) -> Time {
-        let stats = self.t.CPUStats();
+        let stats = self.t.Upgrade().unwrap().CPUStats();
         if self.includeSys {
             return Time::FromNs(Tsc::Scale(stats.UserTime + stats.SysTime) * 1000);
         }
@@ -464,7 +464,7 @@ impl TaskClock {
 
 #[derive(Clone)]
 pub struct ThreadGroupClock {
-    pub tg: ThreadGroup,
+    pub tg: ThreadGroupWeak,
     pub includeSys: bool,
     pub queue: Queue,
 }
@@ -485,7 +485,7 @@ impl Waitable for ThreadGroupClock {
 
 impl ThreadGroupClock {
     pub fn Now(&self) -> Time {
-        let stats = self.tg.CPUStats();
+        let stats = self.tg.Upgrade().unwrap().CPUStats();
         if self.includeSys {
             //error!("ThreadGroupClock usertime is {:x}, SysTime is {:x}", stats.UserTime, stats.SysTime);
             return Time::FromNs(Tsc::Scale(stats.UserTime + stats.SysTime) * 1000);
@@ -495,10 +495,11 @@ impl ThreadGroupClock {
     }
 
     pub fn WallTimeUntil(&self, t: Time, now: Time) -> Duration {
-        let ts = self.tg.TaskSet();
+        let tg = self.tg.Upgrade().unwrap();
+        let ts = tg.TaskSet();
         let n = {
             let _r = ts.ReadLock();
-            self.tg.lock().liveTasks as i64
+            tg.lock().liveTasks as i64
         };
 
         if n == 0 {
@@ -526,7 +527,7 @@ impl ThreadGroupClock {
 impl Thread {
     pub fn UserCPUClock(&self) -> Clock {
         let c = TaskClock {
-            t: self.clone(),
+            t: self.Downgrade(),
             includeSys: false,
         };
 
@@ -535,7 +536,7 @@ impl Thread {
 
     pub fn CPUClock(&self) -> Clock {
         let c = TaskClock {
-            t: self.clone(),
+            t: self.Downgrade(),
             includeSys: true,
         };
 
@@ -546,7 +547,7 @@ impl Thread {
 impl ThreadGroup {
     pub fn UserCPUClock(&self) -> Clock {
         let c = ThreadGroupClock {
-            tg: self.clone(),
+            tg: self.Downgrade(),
             includeSys: false,
             queue: Queue::default(),
         };
@@ -556,7 +557,7 @@ impl ThreadGroup {
 
     pub fn CPUClock(&self) -> Clock {
         let c = ThreadGroupClock {
-            tg: self.clone(),
+            tg: self.Downgrade(),
             includeSys: true,
             queue: Queue::default(),
         };

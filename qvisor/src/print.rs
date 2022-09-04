@@ -191,7 +191,7 @@ impl Log {
         let now = Timestamp();
         //let now = RawTimestamp();
         if MEMORY_LEAK_LOG {
-            self.Write(&format!("{:?} [{}/{}] [{}/{}] {}\n", self.processid, level, self.lineNum.load(Ordering::Relaxed), ThreadId(), now, str));
+            self.Write(&format!("{:?} [{}] [{}/{}] {}\n", self.processid, level, ThreadId(), now, str));
         } else {
             self.Write(&format!("[{}] [{}/{}] {}\n", level, ThreadId(), now, str));
         }

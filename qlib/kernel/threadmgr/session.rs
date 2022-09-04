@@ -23,11 +23,13 @@ use super::processgroup::*;
 use super::thread::*;
 use super::thread_group::*;
 use crate::qlib::kernel::threadmgr::refcounter::AtomicRefCount;
+use crate::qlib::kernel::threadmgr::pid_namespace::PIDNamespace;
 
 #[derive(Default)]
 pub struct SessionInternal {
     pub id: SessionID,
-    pub leader: ThreadGroup,
+    pub leader: ThreadGroupWeak,
+    pub pidns: PIDNamespace,
     pub refs: AtomicRefCount,
     pub processGroups: BTreeSet<ProcessGroup>,
 }
@@ -72,7 +74,8 @@ impl Session {
     pub fn New(id: SessionID, leader: ThreadGroup) -> Self {
         let internal = SessionInternal {
             id: id,
-            leader: leader,
+            leader: leader.Downgrade(),
+            pidns: leader.PIDNamespace(),
             refs: Default::default(),
             processGroups: BTreeSet::new(),
         };
@@ -89,7 +92,7 @@ impl Session {
             .refs
             .DecRefWithDesctructor(|| needRemove = true);
         let id = self.data.lock().id;
-        let mut pidns = self.data.lock().leader.lock().pidns.clone();
+        let mut pidns = self.data.lock().pidns.clone();
         if needRemove {
             loop {
                 pidns.lock().sids.remove(self);

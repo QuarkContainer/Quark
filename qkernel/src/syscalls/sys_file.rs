@@ -1007,18 +1007,30 @@ pub fn FGetOwnEx(task: &mut Task, file: &File) -> FOwnerEx {
 
     match ma.Owner() {
         Recipient::PG(processgroup) => {
+            let processgroup = match processgroup.Upgrade() {
+                None => return FOwnerEx::default(),
+                Some(pg) => pg,
+            };
             return FOwnerEx {
                 Type: F_OWNER_PGRP,
                 PID: task.Thread().PIDNamespace().IDOfProcessGroup(&processgroup),
             }
         }
         Recipient::TG(threadgroup) => {
+            let threadgroup = match threadgroup.Upgrade() {
+                None => return FOwnerEx::default(),
+                Some(tg) => tg,
+            };
             return FOwnerEx {
                 Type: F_OWNER_PID,
                 PID: task.Thread().PIDNamespace().IDOfThreadGroup(&threadgroup),
             }
         }
         Recipient::Thread(thread) => {
+            let thread = match thread.Upgrade() {
+                None => return FOwnerEx::default(),
+                Some(t) => t,
+            };
             return FOwnerEx {
                 Type: F_OWNER_TID,
                 PID: task.Thread().PIDNamespace().IDOfTask(&thread),
