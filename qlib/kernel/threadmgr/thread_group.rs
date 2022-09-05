@@ -473,16 +473,18 @@ impl ThreadGroup {
             }
         }
 
+        let session = self.lock()
+            .processGroup
+            .clone()
+            .unwrap()
+            .lock()
+            .session
+            .clone();
+
         let pg = ProcessGroup::New(
             id,
             self.clone(),
-            self.lock()
-                .processGroup
-                .clone()
-                .unwrap()
-                .lock()
-                .session
-                .clone(),
+            session,
         );
 
         let leader = self.lock().leader.Upgrade().unwrap();

@@ -110,7 +110,7 @@ impl TimerStore {
 #[derive(Default)]
 pub struct TimerStoreIntern {
     // expire time -> Timer
-    pub timerSeq: BTreeMap<TimerUnit, TimerWeak>, // order by expire time
+    pub timerSeq: BTreeMap<TimerUnit, Timer>, // order by expire time
     pub nextExpire: i64,
     pub uringExpire: i64,
     pub uringId: u64,
@@ -131,12 +131,7 @@ impl TimerStoreIntern {
             let timer = self.GetFirst(now + Self::PROCESS_TIME);
             match timer {
                 Some(timer) => {
-                    match timer.Upgrade() {
-                        None => (),
-                        Some(timer) => {
-                            timer.Fire(self);
-                        }
-                    }
+                    timer.Fire(self);
                 }
                 None => break,
             }
@@ -188,7 +183,7 @@ impl TimerStoreIntern {
             self.nextExpire = tl.Expire;
         }
 
-        self.timerSeq.insert(tl.TimerUnit(), timer.Downgrade());
+        self.timerSeq.insert(tl.TimerUnit(), timer.clone());
     }
 
     pub fn RemoveUringTimer(&mut self) {
@@ -218,7 +213,7 @@ impl TimerStoreIntern {
     }
 
     // return (Expire, Timer)
-    pub fn GetFirst(&mut self, now: i64) -> Option<TimerWeak> {
+    pub fn GetFirst(&mut self, now: i64) -> Option<Timer> {
         if self.nextExpire == 0 || self.nextExpire > now {
             return None;
         }
