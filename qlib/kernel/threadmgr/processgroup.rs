@@ -27,6 +27,7 @@ use super::refcounter::*;
 use super::session::*;
 use super::thread::*;
 use super::thread_group::*;
+use crate::qlib::kernel::threadmgr::pid_namespace::PIDNamespace;
 
 #[derive(Default)]
 pub struct ProcessGroupInternal {
@@ -42,6 +43,8 @@ pub struct ProcessGroupInternal {
     //
     // The originator is immutable.
     pub originator: ThreadGroupWeak,
+
+    pub pidns: PIDNamespace,
 
     // Session is the parent Session.
     //
@@ -131,6 +134,7 @@ impl ProcessGroup {
             id: id,
             refs: AtomicRefCount::default(),
             originator: orginator.Downgrade(),
+            pidns: orginator.PIDNamespace(),
             session: session,
             ancestors: 0,
         };
@@ -197,8 +201,7 @@ impl ProcessGroup {
         }
 
         let mut alive = true;
-        let originator = self.lock().originator.Upgrade().unwrap();
-
+        
         let mut needRemove = false;
         self.lock().refs.DecRefWithDesctructor(|| {
             needRemove = true;
@@ -207,7 +210,7 @@ impl ProcessGroup {
         if needRemove {
             alive = false;
 
-            let mut ns = originator.PIDNamespace();
+            let mut ns = self.lock().pidns.clone();
             loop {
                 {
                     let mut nslock = ns.lock();
@@ -247,8 +250,7 @@ impl ProcessGroup {
         }
 
         let mut hasStopped = false;
-        let originator = self.lock().originator.Upgrade().unwrap();
-        let pidns = originator.PIDNamespace();
+        let pidns = self.lock().pidns.clone(); 
         let tgids: Vec<ThreadGroup> = pidns.lock().tgids.keys().cloned().collect();
         for tg in &tgids {
             match tg.lock().processGroup.clone() {
@@ -351,7 +353,11 @@ impl ProcessGroup {
     }
 
     pub fn SendSignal(&self, info: &SignalInfo) -> Result<()> {
-        let ts = self.lock().originator.Upgrade().unwrap().TaskSet();
+        let original = match self.lock().originator.Upgrade() {
+            None => return Ok(()),
+            Some(tg) => tg,
+        };
+        let ts = original.TaskSet();
         let mut lastError: Result<()> = Ok(());
         let rootns = ts.Root();
 
@@ -360,7 +366,10 @@ impl ProcessGroup {
             if tg.ProcessGroup() == Some(self.clone()) {
                 let lock = tg.lock().signalLock.clone();
                 let _s = lock.lock();
-                let leader = tg.lock().leader.Upgrade().unwrap();
+                let leader = match tg.lock().leader.Upgrade() {
+                    None => continue,
+                    Some(t) => t
+                };
                 let infoCopy = *info;
                 match leader.sendSignalLocked(&infoCopy, true) {
                     Err(e) => lastError = Err(e),
