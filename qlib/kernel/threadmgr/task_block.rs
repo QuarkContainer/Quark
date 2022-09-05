@@ -59,6 +59,12 @@ pub struct Blocker {
     pub generalEntry: WaitEntry,
 }
 
+impl Drop for Blocker {
+    fn drop(&mut self) {
+        self.Drop();
+    }
+}
+
 impl Default for Blocker {
     fn default() -> Self {
         info!("blocker::default");
@@ -122,6 +128,7 @@ impl Blocker {
 
     pub fn Drop(&mut self) {
         self.monoBlockTimer.Destroy();
+        self.realBlockTimer.Destroy();
     }
 
     pub fn New(taskId: u64) -> Self {

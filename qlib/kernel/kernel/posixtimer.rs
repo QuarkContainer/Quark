@@ -132,6 +132,19 @@ impl Deref for IntervalTimer {
     }
 }
 
+impl Drop for IntervalTimer {
+    fn drop(&mut self) {
+        if Arc::strong_count(&self.0) == 1 {
+            match &self.lock().timer {
+                None => (),
+                Some(t) => {
+                    t.Destroy();
+                }
+            }
+        } 
+    }
+}
+
 impl timer::TimerListenerTrait for IntervalTimer {
     fn Notify(&self, exp: u64) {
         let mut it = self.lock();

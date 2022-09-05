@@ -156,6 +156,7 @@ impl HostPMAKeeper {
             .FileOffset(offset)
             .FileId(osfd)
             .Len(len)
+            .MapPrecommit()
             .MapFixed();
         //mo.MapPrivate();
         mo.MapShare();

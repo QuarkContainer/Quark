@@ -411,6 +411,7 @@ impl Deref for Timer {
     }
 }
 
+/* 
 impl Drop for Timer {
     fn drop(&mut self) {
         if Arc::strong_count(&self.0) == 1 {
@@ -418,6 +419,7 @@ impl Drop for Timer {
         }
     }
 }
+*/
 
 impl Timer {
     pub fn Dummy() -> Self {

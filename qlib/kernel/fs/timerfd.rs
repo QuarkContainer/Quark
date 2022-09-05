@@ -113,6 +113,12 @@ pub struct TimerOperations {
     pub timer: Timer,
 }
 
+impl Drop for TimerOperations {
+    fn drop(&mut self) {
+        self.timer.Destroy();
+    }
+}
+
 impl TimerOperations {
     // PauseTimer pauses the associated Timer.
     pub fn PauseTimer(&self) {
