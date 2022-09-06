@@ -128,7 +128,7 @@ impl Thread {
 impl TaskSet {
     // BeginExternalStop indicates the start of an external stop that applies to
     // all current and future tasks in ts. BeginExternalStop does not wait for
-    // task goroutines to stop.
+    // task thread to stop.
     pub fn BeginExternalStop(&self) {
         let _l = self.WriteLock();
         let mut ts = self.write();
@@ -159,14 +159,15 @@ impl TaskSet {
 
     // EndExternalStop indicates the end of an external stop started by a previous
     // call to TaskSet.BeginExternalStop. EndExternalStop does not wait for task
-    // goroutines to resume.
+    // thread to resume.
     pub fn EndExternalStop(&self) {
         let _l = self.WriteLock();
         let mut ts = self.write();
 
         ts.stopCount -= 1;
         if ts.stopCount < 0 {
-            panic!("EndExternalStop: Invalid stopCount: {}", ts.stopCount)
+            return;
+            //panic!("EndExternalStop: Invalid stopCount: {}", ts.stopCount)
         }
 
         if ts.root.is_none() {

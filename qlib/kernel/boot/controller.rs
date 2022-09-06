@@ -50,7 +50,7 @@ pub fn HandleSignal(signalArgs: &SignalArgs) {
 
     // don't know why the winsz adjustment doesn't work
     // todo: fix this
-    if signalArgs.Signo == 28 {
+    if signalArgs.Signo == 28 || signalArgs.Signo == 0 {
         return;
     }
 
@@ -68,8 +68,20 @@ pub fn HandleSignal(signalArgs: &SignalArgs) {
         return;
     }
 
+    if signalArgs.Signo == SIGSTOP.0 {
+        GetKernel().Pause();
+        GetKernel().ClearFsCache();
+        HostSpace::SwapOut();
+        return 
+        
+        /*for vcpu in CPU_LOCAL.iter() {
+            vcpu.AllocatorMut().Clear();
+        }*/
+    }
+
     if signalArgs.Signo == SIGCONT.0 { 
         GetKernel().Unpause();
+        return
     }
 
     let task = Task::Current();

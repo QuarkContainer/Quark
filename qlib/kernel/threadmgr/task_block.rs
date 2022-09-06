@@ -22,7 +22,6 @@ use super::super::kernel::timer::timer::WaitEntryListener;
 use super::super::kernel::timer::timer::*;
 use super::super::kernel::timer::*;
 use super::super::kernel::waiter::*;
-use super::super::task::*;
 use super::super::threadmgr::thread::*;
 
 impl Thread {
@@ -313,7 +312,6 @@ impl Blocker {
         }
 
         let id = self.waiter.Wait(mask);
-        Task::Current().DoStop();
         match id {
             Waiter::GENERAL_WAITID => {
                 self.SleepFinish(true);
