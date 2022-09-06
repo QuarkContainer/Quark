@@ -30,7 +30,7 @@ Quark Container's high level design is as below. It handles Container Applicatio
 ![High Level Design](doc/hld.png)
 
 ## TCP Socket over RDMA (TSoR)
-Quark Container supports to transfer the container application's TCP traffic with RDMA connection, i.e. TSoR. TSoR is a container network provider in K8S cluster and the existing TCP based container application can transfer data through RDMA without any MODIFICATION. As TSoR offline the TCP/IP protocol stack workload to RDMA NIC. It can achieve higher throughput, low latency. The [TSOR test result](doc/RDMA Benchmark (version 1).xlsx) is the tesult result of Redis benchmark with comparison between Quark + TSoR and RunC + Flannel. TSoR shows 5 timese throughput improvement over Flannel. The TSoR architecture is as below. The introduction is here (doc/TCP Socket over RDMA.pptx)
+Quark Container supports to transfer the container application's TCP traffic with RDMA connection, i.e. TSoR. TSoR is a container network provider in K8S cluster and the existing TCP based container application can transfer data through RDMA without any MODIFICATION. As TSoR offline the TCP/IP protocol stack workload to RDMA NIC. It can achieve higher throughput, low latency. The [TSOR test result](doc/TSoR.xlsx) is the Redis benchmark tesult result with comparison between Quark + TSoR and RunC + Flannel. TSoR shows 5 timese throughput improvement over Flannel. The TSoR architecture is as below. The introduction is here (doc/TSoR.pptx)
 
 ![TSOR](doc/TSoR.png)
 
