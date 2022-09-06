@@ -44,6 +44,7 @@ impl Waitable for Queue {
 
     fn EventUnregister(&self, _task: &Task, e: &WaitEntry) {
         let mut q = self.write();
+        e.Clear();
         q.Remove(e)
     }
 }
