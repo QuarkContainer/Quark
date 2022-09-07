@@ -274,6 +274,7 @@ pub struct ListAllocator {
     pub heap: QMutex<Heap<ORDER>>,
     pub total: AtomicUsize,
     pub free: AtomicUsize,
+    pub allocated: AtomicUsize,
     pub bufSize: AtomicUsize,
     pub heapStart: u64,
     pub heapEnd: u64,
@@ -319,6 +320,7 @@ impl ListAllocator {
             heap: QMutex::new(Heap::empty()),
             total: AtomicUsize::new(0),
             free: AtomicUsize::new(0),
+            allocated: AtomicUsize::new(0),
             bufSize: AtomicUsize::new(0),
             heapStart,
             heapEnd,
@@ -473,6 +475,7 @@ unsafe impl GlobalAlloc for ListAllocator {
         if MEMORY_CHECKING {
             self.counts[class].fetch_add(1, Ordering::Release);
             self.maxnum[class].fetch_add(1, Ordering::Release);
+            self.allocated.fetch_add(size, Ordering::Release);
         }
 
 
@@ -542,7 +545,7 @@ unsafe impl GlobalAlloc for ListAllocator {
 
         if MEMORY_CHECKING {
             self.maxnum[class].fetch_sub(1, Ordering::Release);
-
+            self.allocated.fetch_sub(size, Ordering::Release);
         }
         self.free.fetch_sub(size, Ordering::Release);
         self.bufSize.fetch_add(size, Ordering::Release);

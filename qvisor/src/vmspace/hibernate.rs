@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors / 2018 The gVisor Authors.
+// Copyright (c) 2021 Quark Container Authors 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use alloc::collections::BTreeSet;
 use std::collections::hash_map::Entry;
 use std::fs::OpenOptions;
-//use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::IntoRawFd;
 use userfaultfd::UffdBuilder;
 use userfaultfd::Uffd;
@@ -103,7 +103,7 @@ impl SwapFile {
         let file = OpenOptions::new()
             .read(true)
             .write(true)
-            //.custom_flags(O_DIRECT)
+            .custom_flags(O_DIRECT)
             .create(true)
             .open(SWAP_FILE_NAME)
             .unwrap();
@@ -136,6 +136,12 @@ impl SwapFile {
             freeSlots: Vec::new(),
             mmapAddr: addr,
         })
+    }
+
+    pub fn ReadAhead(&self) {
+        let _ret = unsafe {
+            libc::readahead(self.fd, 0, (self.nextAllocOffset * MemoryDef::PAGE_SIZE_4K) as usize)
+        };
     }
 
     pub fn ExtendSize(&mut self) -> Result<()> {
