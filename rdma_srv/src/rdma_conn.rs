@@ -649,7 +649,6 @@ impl RDMAControlChannel {
             }
 
             let msg = unsafe { &*(rAddr as *mut ControlMsgBody) };
-            // println!("RDMAControlChannel::ProcessRDMARecvWriteImm 4, msg: {}", msg);
             match msg {
                 ControlMsgBody::ConnectRequest(msg) => {
                     self.chan
@@ -894,7 +893,7 @@ impl RDMAControlChannel {
     //5. RemoteRecevieReqeustsNum ?? when to send?
     pub fn SendControlMsg(&self, msg: ControlMsgBody) {
         //-> Result<()> {
-        // println!("RDMAControlChannel::SendControlMsg 0");
+        // println!("RDMAControlChannel::SendControlMsg, msg: {:?}", msg);
         let rdmaChannel = self.chan.upgrade().unwrap();
         // println!("RDMAControlChannel::SendControlMsg 1");
         let mut writeBuf = rdmaChannel.sockBuf.writeBuf.lock();
@@ -1029,7 +1028,7 @@ impl RDMAControlChannel {
 
 /* Control channel protocol: payload */
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ControlMsgBody {
     ConnectRequest(ConnectRequest),
     ConnectResponse(ConnectResponse),
