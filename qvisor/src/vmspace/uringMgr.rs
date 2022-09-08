@@ -41,7 +41,7 @@ pub const FDS_SIZE: usize = 1024 * 16;
 
 impl UringMgr {
     pub fn New(size: usize) -> Self {
-        let fdsSize = if true || QUARK_CONFIG.lock().UringFixedFile {
+        let fdsSize = if QUARK_CONFIG.lock().UringFixedFile {
             FDS_SIZE
         } else {
             0

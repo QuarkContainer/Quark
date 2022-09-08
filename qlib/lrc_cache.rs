@@ -73,6 +73,19 @@ struct LinkedList<T: Clone> {
     pub count: u64,
 }
 
+impl <T: Clone> Drop for LinkedList<T> {
+    fn drop(&mut self) {
+        loop  {
+            if self.PopBack().is_none() {
+                break;
+            }
+        }
+
+        self.head.lock().next = None;
+        self.tail.lock().prev = None;
+    }
+}
+
 impl<T: Clone> Default for LinkedList<T> {
     fn default() -> Self {
         let head = Arc::new(QMutex::new(LinkEntry::default()));

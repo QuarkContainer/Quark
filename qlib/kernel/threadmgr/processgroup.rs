@@ -14,6 +14,7 @@
 
 use crate::qlib::mutex::*;
 use alloc::sync::Arc;
+use alloc::sync::Weak;
 use alloc::vec::Vec;
 use core::cmp::*;
 use core::ops::Deref;
@@ -26,6 +27,7 @@ use super::refcounter::*;
 use super::session::*;
 use super::thread::*;
 use super::thread_group::*;
+use crate::qlib::kernel::threadmgr::pid_namespace::PIDNamespace;
 
 #[derive(Default)]
 pub struct ProcessGroupInternal {
@@ -40,7 +42,9 @@ pub struct ProcessGroupInternal {
     // See note re: leader in Session. The same applies here.
     //
     // The originator is immutable.
-    pub originator: ThreadGroup,
+    pub originator: ThreadGroupWeak,
+
+    pub pidns: PIDNamespace,
 
     // Session is the parent Session.
     //
@@ -55,6 +59,26 @@ pub struct ProcessGroupInternal {
     //
     // ancestors is protected by TaskSet.mu.
     pub ancestors: u32,
+}
+
+#[derive(Clone)]
+pub struct ProcessGroupWeak {
+    pub uid: UniqueID,
+    pub data: Weak<QMutex<ProcessGroupInternal>>,
+}
+
+impl ProcessGroupWeak {
+    pub fn Upgrade(&self) -> Option<ProcessGroup> {
+        let t = match self.data.upgrade() {
+            None => return None,
+            Some(t) => t,
+        };
+
+        return Some(ProcessGroup {
+            uid: self.uid,
+            data: t,
+        });
+    }
 }
 
 #[derive(Clone, Default)]
@@ -98,11 +122,19 @@ impl ProcessGroup {
         return self.uid;
     }
 
+    pub fn Downgrade(&self) -> ProcessGroupWeak {
+        return ProcessGroupWeak {
+            uid: self.uid,
+            data: Arc::downgrade(&self.data),
+        };
+    }
+
     pub fn New(id: ProcessGroupID, orginator: ThreadGroup, session: Session) -> Self {
         let pg = ProcessGroupInternal {
             id: id,
             refs: AtomicRefCount::default(),
-            originator: orginator,
+            originator: orginator.Downgrade(),
+            pidns: orginator.PIDNamespace(),
             session: session,
             ancestors: 0,
         };
@@ -114,7 +146,7 @@ impl ProcessGroup {
     }
 
     pub fn Originator(&self) -> ThreadGroup {
-        return self.lock().originator.clone();
+        return self.lock().originator.Upgrade().unwrap();
     }
 
     pub fn IsOrphan(&self) -> bool {
@@ -169,8 +201,7 @@ impl ProcessGroup {
         }
 
         let mut alive = true;
-        let originator = self.lock().originator.clone();
-
+        
         let mut needRemove = false;
         self.lock().refs.DecRefWithDesctructor(|| {
             needRemove = true;
@@ -179,7 +210,7 @@ impl ProcessGroup {
         if needRemove {
             alive = false;
 
-            let mut ns = originator.PIDNamespace();
+            let mut ns = self.lock().pidns.clone();
             loop {
                 {
                     let mut nslock = ns.lock();
@@ -219,8 +250,7 @@ impl ProcessGroup {
         }
 
         let mut hasStopped = false;
-        let originator = self.lock().originator.clone();
-        let pidns = originator.PIDNamespace();
+        let pidns = self.lock().pidns.clone(); 
         let tgids: Vec<ThreadGroup> = pidns.lock().tgids.keys().cloned().collect();
         for tg in &tgids {
             match tg.lock().processGroup.clone() {
@@ -323,7 +353,11 @@ impl ProcessGroup {
     }
 
     pub fn SendSignal(&self, info: &SignalInfo) -> Result<()> {
-        let ts = self.lock().originator.TaskSet();
+        let original = match self.lock().originator.Upgrade() {
+            None => return Ok(()),
+            Some(tg) => tg,
+        };
+        let ts = original.TaskSet();
         let mut lastError: Result<()> = Ok(());
         let rootns = ts.Root();
 
@@ -332,7 +366,10 @@ impl ProcessGroup {
             if tg.ProcessGroup() == Some(self.clone()) {
                 let lock = tg.lock().signalLock.clone();
                 let _s = lock.lock();
-                let leader = tg.lock().leader.Upgrade().unwrap();
+                let leader = match tg.lock().leader.Upgrade() {
+                    None => continue,
+                    Some(t) => t
+                };
                 let infoCopy = *info;
                 match leader.sendSignalLocked(&infoCopy, true) {
                     Err(e) => lastError = Err(e),

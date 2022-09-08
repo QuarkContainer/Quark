@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Quark Container Authors / 2018 The gVisor Authors.
+// Copyright (c) 2021 Quark Container Authors 
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use alloc::collections::BTreeSet;
 use std::collections::hash_map::Entry;
 use std::fs::OpenOptions;
-//use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::IntoRawFd;
 use userfaultfd::UffdBuilder;
 use userfaultfd::Uffd;
@@ -33,6 +33,7 @@ use crate::SWAP_FILE;
 use crate::SHARE_SPACE;
 use crate::PMA_KEEPER;
 use crate::qlib::mem::list_allocator::GLOBAL_ALLOCATOR;
+use crate::vmspace::kernel::SHARESPACE;
 
 impl HiberMgr {
     pub fn SwapOut(&self, start: u64, len: u64) -> Result<()> {
@@ -100,13 +101,24 @@ pub const EXTEND_FILE_SIZE: u64 = MemoryDef::PAGE_SIZE_2M;
 
 impl SwapFile {
     pub fn Init() -> Result<Self> {
-        let file = OpenOptions::new()
+        let direct = SHARESPACE.config.read().HiberODirect;
+
+        let file = if direct {
+            OpenOptions::new()
             .read(true)
             .write(true)
-            //.custom_flags(O_DIRECT)
+            .custom_flags(O_DIRECT)
             .create(true)
             .open(SWAP_FILE_NAME)
-            .unwrap();
+            .unwrap()
+        } else {
+            OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(SWAP_FILE_NAME)
+            .unwrap()
+        } ;
         let fd = file.into_raw_fd();
 
         let ret = unsafe {
@@ -136,6 +148,12 @@ impl SwapFile {
             freeSlots: Vec::new(),
             mmapAddr: addr,
         })
+    }
+
+    pub fn ReadAhead(&self) {
+        let _ret = unsafe {
+            libc::readahead(self.fd, 0, (self.nextAllocOffset * MemoryDef::PAGE_SIZE_4K) as usize)
+        };
     }
 
     pub fn ExtendSize(&mut self) -> Result<()> {

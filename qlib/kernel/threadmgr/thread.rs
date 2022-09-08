@@ -343,7 +343,7 @@ impl ThreadInternal {
     }
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct ThreadWeak {
     pub uid: UniqueID,
     pub data: Weak<QMutex<ThreadInternal>>,

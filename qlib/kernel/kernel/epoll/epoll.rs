@@ -235,7 +235,7 @@ impl EventPoll {
     pub fn InitEntryReadiness(&self, task: &Task, f: &File, entry: &PollEntry) {
         let mask = {
             // Register for event notifications.
-            let waiter = entry.lock().waiter.clone();
+            let waiter = entry.lock().waiter.Upgrade().unwrap();
             let mask = entry.lock().mask;
 
             f.EventRegister(task, &waiter, mask);
@@ -328,10 +328,11 @@ impl EventPoll {
                 let entryInternal = PollEntryInternal {
                     next: None,
                     prev: None,
-                    id: fd,
+                    fd: fd,
+                    id: id,
                     file: file.Downgrade(),
                     userData: data,
-                    waiter: waiter.clone(),
+                    waiter: waiter.Downgrade(),
                     mask: mask,
                     flags: flags,
 
@@ -344,13 +345,14 @@ impl EventPoll {
                 e.insert(entry.clone());
 
                 file.EventRegister(task, &waiter, mask);
-        
+
                 // Check if the file happens to already be in a ready state.
                 let ready = file.Readiness(task, mask);
                 if ready != 0 {
                     entry.CallBack();
                 }
 
+                drop(files);
                 return Ok(());
             }
         }
@@ -375,7 +377,7 @@ impl EventPoll {
 
         // Unregister the old mask and remove entry from the list it's in, so
         // readyCallback is guaranteed to not be called on this entry anymore.
-        let waiter = entry.lock().waiter.clone();
+        let waiter = entry.lock().waiter.Upgrade().unwrap();
         file.EventUnregister(task, &waiter);
 
         // Remove entry from whatever list it's in. This ensure that no other
@@ -396,7 +398,7 @@ impl EventPoll {
             entryLock.userData = data;
             entryLock.state = PollEntryState::Waiting;
         }
-        
+
         file.EventRegister(task, &waiter, mask);
 
         // Check if the file happens to already be in a ready state.
@@ -410,17 +412,16 @@ impl EventPoll {
 
     pub fn RemoveEntry(&self, task: &Task, file: File) -> Result<()> {
         let id = file.UniqueId();
-        let mut files = self.files.lock();
 
         // Fail if the file doesn't have an entry.
-        let entry = match files.remove(&id) {
+        let entry = match self.files.lock().remove(&id) {
             None => return Err(Error::SysError(SysErr::ENOENT)),
             Some(e) => e,
         };
 
         // Unregister the old mask and remove entry from the list it's in, so
         // readyCallback is guaranteed to not be called on this entry anymore.
-        let waiter = entry.lock().waiter.clone();
+        let waiter = entry.lock().waiter.Upgrade().unwrap();
         file.EventUnregister(task, &waiter);
 
         // Remove entry from whatever list it's in. This ensure that no other
@@ -438,35 +439,24 @@ impl EventPoll {
 
         return Ok(());
     }
-
-    // UnregisterEpollWaiters removes the epoll waiter objects from the waiting
-    // queues. This is different from Release() as the file is not dereferenced.
-    pub fn UnregisterEpollWaiters(&self, task: &Task) {
-        let files = self.files.lock();
-
-        for (_, entry) in files.iter() {
-            let file = entry.lock().file.Upgrade();
-            let waiter = entry.lock().waiter.clone();
-
-            match file {
-                None => (),
-                Some(f) => f.EventUnregister(task, &waiter),
-            }
-        }
-    }
 }
 
 impl Drop for EventPollInternal {
     fn drop(&mut self) {
+        let mut lists = self.lists.lock();
         for (_, entry) in self.files.lock().iter() {
-            let waiter = entry.lock().waiter.clone();
-
+            
             let task = Task::Current();
             let file = entry.lock().file.Upgrade();
             match file {
                 None => (),
-                Some(f) => f.EventUnregister(task, &waiter),
+                Some(f) => {
+                    let waiter = entry.lock().waiter.Upgrade().unwrap();
+                    f.EventUnregister(task, &waiter);
+                }
             }
+
+            lists.readyList.Remove(entry);
         }
     }
 }

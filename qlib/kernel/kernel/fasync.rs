@@ -45,9 +45,9 @@ lazy_static! {
 #[derive(Clone)]
 pub enum Recipient {
     None,
-    PG(ProcessGroup),
-    TG(ThreadGroup),
-    Thread(Thread),
+    PG(ProcessGroupWeak),
+    TG(ThreadGroupWeak),
+    Thread(ThreadWeak),
 }
 
 impl Default for Recipient {
@@ -114,13 +114,29 @@ impl FileAsync {
         let mut t = None;
         match &a.recipient {
             Recipient::PG(ref pg) => {
-                tg = Some(pg.Originator());
+                match pg.Upgrade() {
+                    None => (),
+                    Some(pg) => {
+                        tg = Some(pg.Originator());
+                    }
+                }
             }
             Recipient::TG(threadgroup) => {
-                tg = Some(threadgroup.clone());
+                match threadgroup.Upgrade() {
+                    None => (),
+                    Some(threadgroup) => {
+                        tg = Some(threadgroup);
+                    }
+                }
             }
             Recipient::Thread(thread) => {
-                t = Some(thread.clone());
+                match thread.Upgrade() {
+                    None => (),
+                    Some(thread) => {
+                        t = Some(thread);
+                    }
+                }
+                
             }
             Recipient::None => (),
         }
@@ -219,7 +235,7 @@ impl FileAsync {
         a.requester = requester.Creds();
         match recipient {
             None => a.recipient = Recipient::None,
-            Some(thread) => a.recipient = Recipient::Thread(thread)
+            Some(thread) => a.recipient = Recipient::Thread(thread.Downgrade())
         }
     }
 
@@ -231,7 +247,7 @@ impl FileAsync {
         a.requester = requester.Creds();
         match recipient {
             None => a.recipient = Recipient::None,
-            Some(tg) => a.recipient = Recipient::TG(tg)
+            Some(tg) => a.recipient = Recipient::TG(tg.Downgrade())
         }
     }
 
@@ -244,7 +260,7 @@ impl FileAsync {
 
         match recipient {
             None => a.recipient = Recipient::None,
-            Some(pg) => a.recipient = Recipient::PG(pg)
+            Some(pg) => a.recipient = Recipient::PG(pg.Downgrade())
         }
     }
 

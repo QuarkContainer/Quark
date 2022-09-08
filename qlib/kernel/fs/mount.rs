@@ -152,6 +152,11 @@ impl MountNs {
         return Self(Arc::new(internal));
     }
 
+    pub fn ClearFsCache(&self) {
+        let rootDirent = self.root.clone();
+        rootDirent.inode.ClearFsCache();
+    }
+
     pub fn UserNamespace(&self) -> UserNameSpace {
         return self.userns.clone();
     }

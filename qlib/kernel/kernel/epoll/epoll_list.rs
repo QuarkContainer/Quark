@@ -130,5 +130,6 @@ impl PollEntryList {
 
         elock.prev = None;
         elock.next = None;
+        elock.state = PollEntryState::Waiting;
     }
 }

@@ -283,7 +283,7 @@ pub struct ThreadGroupInternal {
     //pub tty: Option<TTY>
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct ThreadGroupWeak {
     pub uid: UniqueID,
     pub data: Weak<QMutex<ThreadGroupInternal>>,
@@ -341,12 +341,13 @@ impl PartialEq for ThreadGroup {
 
 impl Eq for ThreadGroup {}
 
-/*impl Drop for ThreadGroup {
+impl Drop for ThreadGroup {
     fn drop(&mut self) {
-        info!("todo: threadgroup drop**");
-        //self.release();
+        if Arc::strong_count(&self.data) == 1 {
+            self.release();
+        }
     }
-}*/
+}
 
 impl ThreadGroup {
     pub fn Downgrade(&self) -> ThreadGroupWeak {
@@ -454,13 +455,14 @@ impl ThreadGroup {
         };
 
         for s in &ts.sessions {
-            let leader = s.lock().leader.clone();
+            let leader = s.lock().leader.Upgrade();
+            let leadpidns = s.lock().pidns.clone();
 
-            if leader.lock().pidns.clone() != pidns {
+            if leadpidns != pidns {
                 continue;
             }
 
-            if leader == self.clone() {
+            if leader == Some(self.clone()) {
                 return Err(Error::SysError(SysErr::EPERM));
             }
 
@@ -471,16 +473,18 @@ impl ThreadGroup {
             }
         }
 
+        let session = self.lock()
+            .processGroup
+            .clone()
+            .unwrap()
+            .lock()
+            .session
+            .clone();
+
         let pg = ProcessGroup::New(
             id,
             self.clone(),
-            self.lock()
-                .processGroup
-                .clone()
-                .unwrap()
-                .lock()
-                .session
-                .clone(),
+            session,
         );
 
         let leader = self.lock().leader.Upgrade().unwrap();
@@ -630,11 +634,11 @@ impl ThreadGroup {
 
         let sessions: Vec<Session> = ts.read().sessions.iter().cloned().collect();
         for s in &sessions {
-            if s.lock().leader.lock().pidns != pidns {
+            if s.lock().pidns != pidns {
                 continue;
             }
 
-            if s.lock().leader == self.clone() {
+            if s.lock().leader.Upgrade() == Some(self.clone()) {
                 return Err(Error::SysError(SysErr::EPERM));
             }
 

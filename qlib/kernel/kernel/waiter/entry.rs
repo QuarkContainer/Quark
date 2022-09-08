@@ -32,6 +32,24 @@ pub enum WaitContext {
     FileAsync(FileAsync),
 }
 
+impl Drop for WaitContext {
+    fn drop(&mut self) {
+        match self {
+            WaitContext::EpollContext(p) => {
+                let epoll = p.lock().epoll.clone();
+                let id = p.lock().id;
+                epoll.files.lock().remove(&id);
+                let mut lists = epoll.lists.lock();
+                let state = p.lock().state;
+                if state == PollEntryState::Ready {
+                    lists.readyList.Remove(p);
+                }
+            }
+            _ => ()
+        }
+    }
+}
+
 impl Default for WaitContext {
     fn default() -> Self {
         return Self::None;

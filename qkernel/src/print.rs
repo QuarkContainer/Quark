@@ -35,8 +35,8 @@ pub fn PrintPrefix() -> String {
 #[macro_export]
 macro_rules! raw {
     // macth like arm for macro
-    ($a:expr,$b:expr,$c:expr) => {{
-        $crate::Kernel::HostSpace::KernelMsg($a, $b, $c);
+    ($a:expr,$b:expr,$c:expr,$d:expr) => {{
+        $crate::Kernel::HostSpace::KernelMsg($a, $b, $c, $d);
     }};
 }
 

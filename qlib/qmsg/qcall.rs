@@ -120,7 +120,11 @@ pub enum Msg {
     HostMemoryBarrier(HostMemoryBarrier),
     Mkfifoat(Mkfifoat),
     SwapInPage(SwapInPage),
+    SwapOut(SwapOut)
 }
+
+#[derive(Clone, Default, Debug)]
+pub struct SwapOut {}
 
 #[derive(Clone, Default, Debug)]
 pub struct SwapInPage {

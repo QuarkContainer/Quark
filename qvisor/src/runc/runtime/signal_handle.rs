@@ -18,9 +18,6 @@ use core::sync::atomic::Ordering;
 use lazy_static::lazy_static;
 use nix::sys::signal;
 
-use crate::SHARE_SPACE;
-use crate::GLOBAL_ALLOCATOR;
-
 use super::super::super::qlib::common::*;
 use super::super::super::qlib::backtracer;
 use super::super::super::qlib::kernel::SignalDef::*;
@@ -105,13 +102,6 @@ extern "C" fn handle_sigintAct(signal: i32, signInfo: *mut libc::siginfo_t, addr
             });
             error!("get signal context is {:#x?}", ucontext);
             panic!("get signal 11");
-        }
-
-        if signal == 12 {
-            //HIBER_MGR.UpdateBlockAllocation(&SHARE_SPACE.pageMgr.pagepool).unwrap();
-            let (heapStart, heapEnd) = GLOBAL_ALLOCATOR.HeapRange();
-            SHARE_SPACE.hiberMgr.SwapOut(heapStart, heapEnd - heapStart).unwrap();
-            return;
         }
 
         let signal = SignalArgs {

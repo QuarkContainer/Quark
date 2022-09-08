@@ -22,7 +22,6 @@ use super::super::kernel::timer::timer::WaitEntryListener;
 use super::super::kernel::timer::timer::*;
 use super::super::kernel::timer::*;
 use super::super::kernel::waiter::*;
-use super::super::task::*;
 use super::super::threadmgr::thread::*;
 
 impl Thread {
@@ -57,6 +56,12 @@ pub struct Blocker {
 
     pub interruptEntry: WaitEntry,
     pub generalEntry: WaitEntry,
+}
+
+impl Drop for Blocker {
+    fn drop(&mut self) {
+        self.Drop();
+    }
 }
 
 impl Default for Blocker {
@@ -122,6 +127,7 @@ impl Blocker {
 
     pub fn Drop(&mut self) {
         self.monoBlockTimer.Destroy();
+        self.realBlockTimer.Destroy();
     }
 
     pub fn New(taskId: u64) -> Self {
@@ -306,7 +312,6 @@ impl Blocker {
         }
 
         let id = self.waiter.Wait(mask);
-        Task::Current().DoStop();
         match id {
             Waiter::GENERAL_WAITID => {
                 self.SleepFinish(true);
