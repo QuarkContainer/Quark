@@ -36,6 +36,7 @@ pub struct Config {
     pub ShimMode: bool,
     pub EnableInotify: bool,
     pub ReaddirCache: bool,
+    pub HiberODirect: bool,
 }
 
 impl Config {
@@ -75,6 +76,7 @@ impl Default for Config {
             ShimMode: false,
             EnableInotify: false,
             ReaddirCache: true,
+            HiberODirect: true,
         };
     }
 }
