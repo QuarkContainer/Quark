@@ -21,5 +21,5 @@
   "ShimMode"      : false,
   "EnableInotify" : true,
   "ReaddirCache"  : true,
-  "HiberPageCache": false
+  "HiberODirect": false
 }
