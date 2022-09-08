@@ -33,6 +33,7 @@ use crate::SWAP_FILE;
 use crate::SHARE_SPACE;
 use crate::PMA_KEEPER;
 use crate::qlib::mem::list_allocator::GLOBAL_ALLOCATOR;
+use crate::vmspace::kernel::SHARESPACE;
 
 impl HiberMgr {
     pub fn SwapOut(&self, start: u64, len: u64) -> Result<()> {
@@ -100,13 +101,24 @@ pub const EXTEND_FILE_SIZE: u64 = MemoryDef::PAGE_SIZE_2M;
 
 impl SwapFile {
     pub fn Init() -> Result<Self> {
-        let file = OpenOptions::new()
+        let direct = SHARESPACE.config.read().HiberODirect;
+
+        let file = if direct {
+            OpenOptions::new()
             .read(true)
             .write(true)
             .custom_flags(O_DIRECT)
             .create(true)
             .open(SWAP_FILE_NAME)
-            .unwrap();
+            .unwrap()
+        } else {
+            OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(SWAP_FILE_NAME)
+            .unwrap()
+        } ;
         let fd = file.into_raw_fd();
 
         let ret = unsafe {
