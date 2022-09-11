@@ -21,3 +21,4 @@ pub mod pool;
 pub mod seq;
 pub mod stackvec;
 pub mod block_allocator;
+pub mod bitmap_allocator;
