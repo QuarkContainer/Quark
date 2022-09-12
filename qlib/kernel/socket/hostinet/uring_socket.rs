@@ -214,6 +214,52 @@ impl UringSocketOperations {
         return Ok(ret);
     }
 
+    pub fn Produce(&self, task: &Task, count: usize) -> Result<Vec<IoVec>> {
+        let sockBufType = self.socketType.lock().clone();
+        match sockBufType {
+            UringSocketType::Uring(buf) => {
+                if buf.WClosed() {
+                    return Err(Error::SysError(SysErr::EPIPE));
+                }
+
+                return QUring::SocketProduce(
+                    task,
+                    self.fd,
+                    self.queue.clone(),
+                    buf,
+                    count as usize,
+                    self,
+                );
+            }
+            _ => {
+                return Err(Error::SysError(SysErr::EPIPE)); 
+            }
+        }
+    }
+
+    pub fn Consume(&self, task: &Task, count: usize) -> Result<Vec<IoVec>> {
+        let sockBufType = self.socketType.lock().clone();
+        match sockBufType {
+            UringSocketType::Uring(buf) => {
+                if buf.WClosed() {
+                    return Err(Error::SysError(SysErr::EPIPE));
+                }
+
+                return QUring::SocketProduce(
+                    task,
+                    self.fd,
+                    self.queue.clone(),
+                    buf,
+                    count as usize,
+                    self,
+                );
+            }
+            _ => {
+                return Err(Error::SysError(SysErr::EPIPE)); 
+            }
+        }
+    }
+
     pub fn IOAccept(&self) -> Result<AcceptItem> {
         let mut ai = AcceptItem::default();
         ai.len = ai.addr.data.len() as _;

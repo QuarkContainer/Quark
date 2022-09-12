@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::sync::atomic;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
@@ -368,6 +369,25 @@ impl QUring {
         return Ok(count as i64);
     }
 
+    pub fn SocketProduce(
+        task: &Task,
+        fd: i32,
+        queue: Queue,
+        buf: Arc<SocketBuff>,
+        count: usize,
+        ops: &UringSocketOperations,
+    ) -> Result<Vec<IoVec>> {
+        let (iovs, writeBuf) = buf.Produce(task, count)?;
+
+        if let Some((addr, len)) = writeBuf {
+            let writeop = AsyncSend::New(fd, queue, buf, addr, len, ops);
+
+            IOURING.AUCall(AsyncOps::AsyncSend(writeop));
+        }
+
+        return Ok(iovs);
+    }
+
     pub fn SocketSend(
         task: &Task,
         fd: i32,
@@ -385,6 +405,25 @@ impl QUring {
         }
 
         return Ok(count as i64);
+    }
+
+    pub fn SocketConsume(
+        task: &Task,
+        fd: i32,
+        queue: Queue,
+        buf: Arc<SocketBuff>,
+        count: usize,
+    ) -> Result<Vec<IoVec>> {
+        let (iovs, trigger) = buf.Consume(task, count)?;
+
+        if trigger {
+            let (addr, len) = buf.GetFreeReadBuf();
+            let readop = AsyncFileRead::New(fd, queue, buf, addr, len, true);
+
+            IOURING.AUCall(AsyncOps::AsyncFileRead(readop));
+        }
+
+        return Ok(iovs);
     }
 
     pub fn RingFileRead(
