@@ -37,6 +37,7 @@ pub struct Config {
     pub EnableInotify: bool,
     pub ReaddirCache: bool,
     pub HiberODirect: bool,
+    pub DisableCgroup: bool,
 }
 
 impl Config {
@@ -77,6 +78,7 @@ impl Default for Config {
             EnableInotify: false,
             ReaddirCache: true,
             HiberODirect: true,
+            DisableCgroup: true,
         };
     }
 }

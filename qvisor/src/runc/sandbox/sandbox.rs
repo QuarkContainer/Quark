@@ -33,7 +33,7 @@ use super::super::super::ucall::ucall::*;
 use super::super::super::ucall::ucall_client::*;
 use super::super::super::vmspace::limits::CreateLimitSet;
 use super::super::super::vmspace::syscall::*;
-use super::super::cgroup::*;
+use super::super::cgroup::cgroup::*;
 use super::super::cmd::config::*;
 use super::super::container::container::*;
 use super::super::oci;
