@@ -30,6 +30,8 @@ use super::super::super::range::*;
 use super::arch::*;
 use super::mm::*;
 use super::*;
+use crate::qlib::mutex::*;
+use crate::qlib::bytestream::*;
 
 // map32Start/End are the bounds to which MAP_32BIT mappings are constrained,
 // and are equivalent to Linux's MAP32_BASE and MAP32_MAX respectively.
@@ -352,12 +354,47 @@ impl MemoryManager {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone)]
 pub enum MMappable {
     HostIops(HostInodeOp),
     Shm(Shm),
+    Socket(Arc<QMutex<ByteStream>>),
     AIOMappable,
     None,
+}
+
+impl PartialEq for MMappable {
+    fn eq(&self, other: &Self) -> bool {
+        match self {
+            Self::HostIops(me) => {
+                if let Self::HostIops(o) = other {
+                    return me == o
+                } else {
+                    return false;
+                }
+            }
+            Self::Shm(me) => {
+                if let Self::Shm(o) = other {
+                    return me == o
+                } else {
+                    return false;
+                }
+            }
+            Self::Socket(me) => {
+                if let Self::Socket(o) = other {
+                    return Arc::ptr_eq(me, o);
+                } else {
+                    return false;
+                }
+            }
+            Self::AIOMappable => {
+                return other == &Self::AIOMappable;
+            }
+            Self::None => {
+                return other == &Self::None
+            }
+        }
+    }
 }
 
 impl Default for MMappable {
@@ -380,6 +417,7 @@ impl MMappable {
             Self::HostIops(iops) => Some(iops.clone()),
             Self::Shm(shm) => Some(shm.HostIops()),
             Self::AIOMappable => None,
+            Self::Socket(_) => None,
             Self::None => None,
         }
     }
@@ -398,6 +436,9 @@ impl MMappable {
             Self::Shm(shm) => {
                 return shm.HostIops().AddMapping(ms, ar, offset, writable);
             },
+            Self::Socket(_) => { 
+                return Ok(())
+            }
             Self::AIOMappable => {
                 return AIOMappable::AddMapping(ms, ar, offset, writable);
             },
@@ -421,6 +462,9 @@ impl MMappable {
             Self::Shm(shm) => {
                 return shm.HostIops().RemoveMapping(ms, ar, offset, writable);
             },
+            Self::Socket(_) => { 
+                return Ok(())
+            }
             Self::AIOMappable => {
                 return AIOMappable::RemoveMapping(ms, ar, offset, writable);
             },
@@ -445,6 +489,9 @@ impl MMappable {
             Self::Shm(shm) => {
                 return shm.HostIops().CopyMapping(ms, srcAr, dstAR, offset, writable);
             },
+            Self::Socket(_) => { 
+                return Ok(())
+            }
             Self::AIOMappable => {
                 return AIOMappable::CopyMapping(ms, srcAr, dstAR, offset, writable);
             },
@@ -466,6 +513,9 @@ impl MMappable {
             Self::Shm(shm) => {
                 return shm.HostIops().MSync(fr, msyncType);
             },
+            Self::Socket(_) => { 
+                return Ok(())
+            }
             Self::AIOMappable => {
                 return AIOMappable::MSync(fr, msyncType);
             },

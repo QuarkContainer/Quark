@@ -19,7 +19,7 @@ use super::super::super::super::linux_def::*;
 use super::super::super::super::socket_buf::*;
 use super::super::super::task::Task;
 
-impl SocketBuff {
+impl SocketBuffIntern {
     pub fn Consume(&self, _task: &Task, cnt: usize) -> Result<(Vec<IoVec>, bool)> {
         let mut buf = self.readBuf.lock();
         let trigger = if cnt > 0 {

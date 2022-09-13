@@ -341,7 +341,7 @@ impl QUring {
         IOURING.AUCall(AsyncOps::PollHostEpollWait(op));
     }
 
-    pub fn BufSockInit(fd: i32, queue: Queue, buf: Arc<SocketBuff>, isSocket: bool) -> Result<()> {
+    pub fn BufSockInit(fd: i32, queue: Queue, buf: SocketBuff, isSocket: bool) -> Result<()> {
         let (addr, len) = buf.GetFreeReadBuf();
         let readop = AsyncFileRead::New(fd, queue, buf, addr, len, isSocket);
 
@@ -354,7 +354,7 @@ impl QUring {
         task: &Task,
         fd: i32,
         queue: Queue,
-        buf: Arc<SocketBuff>,
+        buf: SocketBuff,
         srcs: &[IoVec],
         fops: Arc<FileOperations>,
     ) -> Result<i64> {
@@ -373,7 +373,7 @@ impl QUring {
         task: &Task,
         fd: i32,
         queue: Queue,
-        buf: Arc<SocketBuff>,
+        buf: SocketBuff,
         count: usize,
         ops: &UringSocketOperations,
     ) -> Result<Vec<IoVec>> {
@@ -392,7 +392,7 @@ impl QUring {
         task: &Task,
         fd: i32,
         queue: Queue,
-        buf: Arc<SocketBuff>,
+        buf: SocketBuff,
         srcs: &[IoVec],
         ops: &UringSocketOperations,
     ) -> Result<i64> {
@@ -411,7 +411,7 @@ impl QUring {
         task: &Task,
         fd: i32,
         queue: Queue,
-        buf: Arc<SocketBuff>,
+        buf: SocketBuff,
         count: usize,
     ) -> Result<Vec<IoVec>> {
         let (iovs, trigger) = buf.Consume(task, count)?;
@@ -430,7 +430,7 @@ impl QUring {
         task: &Task,
         fd: i32,
         queue: Queue,
-        buf: Arc<SocketBuff>,
+        buf: SocketBuff,
         dsts: &mut [IoVec],
         isSocket: bool,
         peek: bool,

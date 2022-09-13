@@ -554,7 +554,7 @@ impl AsyncLogFlush {
 pub struct AsyncSend {
     pub fd: i32,
     pub queue: Queue,
-    pub buf: Arc<SocketBuff>,
+    pub buf: SocketBuff,
     pub addr: u64,
     pub len: usize,
 
@@ -616,7 +616,7 @@ impl AsyncSend {
     pub fn New(
         fd: i32,
         queue: Queue,
-        buf: Arc<SocketBuff>,
+        buf: SocketBuff,
         addr: u64,
         len: usize,
         ops: &UringSocketOperations,
@@ -635,7 +635,7 @@ impl AsyncSend {
 pub struct AsyncFiletWrite {
     pub fd: i32,
     pub queue: Queue,
-    pub buf: Arc<SocketBuff>,
+    pub buf: SocketBuff,
     pub addr: u64,
     pub len: usize,
     pub fops: Arc<FileOperations>,
@@ -695,7 +695,7 @@ impl AsyncFiletWrite {
     pub fn New(
         fd: i32,
         queue: Queue,
-        buf: Arc<SocketBuff>,
+        buf: SocketBuff,
         addr: u64,
         len: usize,
         fops: Arc<FileOperations>,
@@ -742,7 +742,7 @@ impl AsyncAccept {
         }
 
         NewSocket(result);
-        let sockBuf = Arc::new(SocketBuff::default());
+        let sockBuf = SocketBuff(Arc::new(SocketBuffIntern::default()));
         let (trigger, hasSpace) = self
             .acceptQueue
             .lock()
@@ -769,7 +769,7 @@ impl AsyncAccept {
 pub struct AsyncFileRead {
     pub fd: i32,
     pub queue: Queue,
-    pub buf: Arc<SocketBuff>,
+    pub buf: SocketBuff,
     pub addr: u64,
     pub len: usize,
     pub isSocket: bool,
@@ -830,7 +830,7 @@ impl AsyncFileRead {
     pub fn New(
         fd: i32,
         queue: Queue,
-        buf: Arc<SocketBuff>,
+        buf: SocketBuff,
         addr: u64,
         len: usize,
         isSocket: bool,

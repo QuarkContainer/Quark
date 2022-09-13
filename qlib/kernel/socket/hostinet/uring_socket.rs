@@ -98,7 +98,7 @@ pub enum UringSocketType {
     TCPInit,                      // Init TCP Socket, no listen and no connect
     TCPConnecting,                // Start connecting, content is connect
     TCPUringlServer(AcceptQueue), // Uring TCP Server socket, when socket start to listen
-    Uring(Arc<SocketBuff>),
+    Uring(SocketBuff),
 }
 
 impl fmt::Debug for UringSocketType {
@@ -113,7 +113,7 @@ impl fmt::Debug for UringSocketType {
 }
 
 impl UringSocketType {
-    pub fn Accept(&self, socketBuf: Arc<SocketBuff>) -> Self {
+    pub fn Accept(&self, socketBuf: SocketBuff) -> Self {
         match self {
             UringSocketType::TCPUringlServer(_) => return UringSocketType::Uring(socketBuf),
             _ => {
@@ -305,7 +305,7 @@ impl UringSocketOperations {
         return self.socketType.lock().clone();
     }
 
-    pub fn SocketBuf(&self) -> Arc<SocketBuff> {
+    pub fn SocketBuf(&self) -> SocketBuff {
         match self.SocketType() {
             UringSocketType::Uring(b) => return b,
             _ => panic!(
@@ -323,7 +323,7 @@ impl UringSocketOperations {
     }
 
     pub fn PostConnect(&self) {
-        let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
+        let socketBuf = SocketBuff(Arc::new(SocketBuffIntern::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT)));
         *self.socketType.lock() = UringSocketType::Uring(socketBuf.clone());
         QUring::BufSockInit(self.fd, self.queue.clone(), socketBuf, true).unwrap();
     }
@@ -348,7 +348,7 @@ impl UringSocketOperations {
     pub fn ReadFromBuf(
         &self,
         task: &Task,
-        buf: Arc<SocketBuff>,
+        buf: SocketBuff,
         dsts: &mut [IoVec],
         peek: bool,
     ) -> Result<i64> {
@@ -359,7 +359,7 @@ impl UringSocketOperations {
     pub fn WriteToBuf(
         &self,
         task: &Task,
-        buf: Arc<SocketBuff>,
+        buf: SocketBuff,
         srcs: &[IoVec],
     ) -> Result<i64> {
         let ret = QUring::SocketSend(task, self.fd, self.queue.clone(), buf, srcs, self)?;
@@ -635,7 +635,12 @@ impl FileOperations for UringSocketOperations {
     }
 
     fn Mappable(&self) -> Result<MMappable> {
-        return Err(Error::SysError(SysErr::ENODEV));
+        match self.SocketType() {
+            UringSocketType::Uring(b) => {
+                return Err(Error::ErrSocketMap(b));
+            }
+            _ => return Err(Error::SysError(SysErr::ENODEV)),
+        }
     }
 }
 

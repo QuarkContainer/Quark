@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
-
 use crate::qlib::fileinfo::*;
 
 use super::super::config::*;
@@ -696,7 +694,7 @@ pub struct IOAccept {
 pub struct RDMAAcceptStruct {
     pub addr: TcpSockAddr,
     pub addrlen: u32,
-    pub sockBuf: Option<Arc<SocketBuff>>,
+    pub sockBuf: Option<SocketBuff>,
     pub ret: i64,
 }
 
@@ -719,7 +717,7 @@ pub struct RDMAAccept {
 #[derive(Clone, Default, Debug)]
 pub struct PostRDMAConnect {
     pub fd: i32,
-    pub socketBuf: Arc<SocketBuff>,
+    pub socketBuf: SocketBuff,
     pub taskId: TaskId,
     pub ret: i64,
 }
