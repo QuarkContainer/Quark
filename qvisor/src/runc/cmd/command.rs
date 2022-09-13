@@ -167,6 +167,12 @@ pub fn Parse() -> Result<Arguments> {
                 .short("r")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("systemd-cgroup")
+                .default_value("false")
+                .long("systemd-cgroup")
+                .takes_value(false),
+        )
         .subcommand(RunCmd::SubCommand(&common))
         .subcommand(CreateCmd::SubCommand(&common))
         .subcommand(StartCmd::SubCommand(&common))
@@ -189,6 +195,8 @@ pub fn Parse() -> Result<Arguments> {
         _ => DebugLevel::Trace,
     };
 
+    let systemdCgroup = matches.occurrences_of("systemd-cgroup") > 0;
+
     //let _ = log::set_logger(&logger::SIMPLE_LOGGER)
     //    .map(|()| log::set_max_level(level));
 
@@ -206,6 +214,7 @@ pub fn Parse() -> Result<Arguments> {
         DebugLog: logFile.to_string(),
         FileAccess: config::FileAccessType::default(),
         Network: config::NetworkType::default(),
+        SystemdCgroup: systemdCgroup,
     };
 
     let args = match matches.subcommand() {

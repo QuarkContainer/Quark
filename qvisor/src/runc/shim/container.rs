@@ -118,6 +118,7 @@ impl ContainerFactory {
             DebugLog: log_buf.into_os_string().into_string().unwrap(),
             FileAccess: FileAccessType::default(),
             Network: NetworkType::default(),
+            SystemdCgroup: false,
         };
 
         let container = init

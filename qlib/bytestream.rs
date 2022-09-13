@@ -344,6 +344,16 @@ impl RingBuf {
         }
     }
 
+    pub fn ConsumeWithCheck(&self, count: usize) -> Result<bool> {
+        let available = self.AvailableDataSize();
+        if available < count {
+            return Err(Error::SysError(SysErr::EINVAL))
+        }
+        
+        let trigger = self.Consume(count);
+        return Ok(trigger);
+    }
+
     //consume count data
     pub fn Consume(&self, count: usize) -> bool { //2
         let head = self.headtail[0].load(Ordering::Relaxed);
@@ -430,6 +440,16 @@ impl RingBuf {
         } else {
             return (self.buf + writePos as u64, writeSize);
         }
+    }
+
+    pub fn ProduceWithCheck(&self, count: usize) -> Result<bool> {
+        let available = self.AvailableDataSize();
+        if available + count > self.Len() {
+            return Err(Error::SysError(SysErr::EINVAL))
+        }
+        
+        let trigger = self.Produce(count);
+        return Ok(trigger);
     }
 
     pub fn Produce(&self, count: usize) -> bool {
@@ -605,6 +625,10 @@ impl ByteStream {
         return self.dataIovs.Iovs();
     }
 
+    pub fn ConsumeWithCheck(&mut self, count: usize) -> Result<bool> {
+        return self.buf.ConsumeWithCheck(count);
+    }
+
     //consume count data
     pub fn Consume(&mut self, count: usize) -> bool {
         return self.buf.Consume(count);
@@ -632,6 +656,10 @@ impl ByteStream {
 
     pub fn GetSpaceBuf(&mut self) -> (u64, usize) {
         return self.buf.GetSpaceBuf();
+    }
+
+    pub fn ProduceWithCheck(&mut self, count: usize) -> Result<bool> {
+        return self.buf.ProduceWithCheck(count);
     }
 
     pub fn Produce(&mut self, count: usize) -> bool {

@@ -185,7 +185,13 @@ fn main() {
         error!("*********shim mode***************");
         containerd_shim::run::<Service>("io.containerd.empty.v1", None)
     } else {
-        let mut args = Parse().unwrap();
+        let mut args = match Parse() {
+            Ok(args) => args,
+            Err(e) => {
+                error!("the parse error is {:?}", e);
+                panic!("exitting...")
+            }
+        };
         match Run(&mut args) {
             Err(e) => {
                 error!("the error is {:?}", e);
