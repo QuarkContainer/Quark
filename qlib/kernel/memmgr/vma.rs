@@ -30,7 +30,6 @@ use super::super::super::range::*;
 use super::arch::*;
 use super::mm::*;
 use super::*;
-use crate::qlib::mutex::*;
 use crate::qlib::bytestream::*;
 
 // map32Start/End are the bounds to which MAP_32BIT mappings are constrained,
@@ -354,47 +353,13 @@ impl MemoryManager {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum MMappable {
     HostIops(HostInodeOp),
     Shm(Shm),
-    Socket(Arc<QMutex<ByteStream>>),
+    Socket(ByteStream),
     AIOMappable,
     None,
-}
-
-impl PartialEq for MMappable {
-    fn eq(&self, other: &Self) -> bool {
-        match self {
-            Self::HostIops(me) => {
-                if let Self::HostIops(o) = other {
-                    return me == o
-                } else {
-                    return false;
-                }
-            }
-            Self::Shm(me) => {
-                if let Self::Shm(o) = other {
-                    return me == o
-                } else {
-                    return false;
-                }
-            }
-            Self::Socket(me) => {
-                if let Self::Socket(o) = other {
-                    return Arc::ptr_eq(me, o);
-                } else {
-                    return false;
-                }
-            }
-            Self::AIOMappable => {
-                return other == &Self::AIOMappable;
-            }
-            Self::None => {
-                return other == &Self::None
-            }
-        }
-    }
 }
 
 impl Default for MMappable {

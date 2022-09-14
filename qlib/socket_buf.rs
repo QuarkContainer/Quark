@@ -40,7 +40,7 @@ impl Deref for SocketBuff {
 
 impl PartialEq for SocketBuff {
     fn eq(&self, other: &Self) -> bool {
-        return Arc::ptr_eq(&self.0, &other.0) 
+        return Arc::ptr_eq(&self.0, &other.0)
     }
 }
 
@@ -63,8 +63,8 @@ pub struct SocketBuffIntern {
     // to the peer in the rdmawrite packet to save rdmawrite call
     pub consumeReadData: &'static AtomicU64,
 
-    pub readBuf: Arc<QMutex<ByteStream>>,
-    pub writeBuf: Arc<QMutex<ByteStream>>,
+    pub readBuf: ByteStream,
+    pub writeBuf: ByteStream,
 }
 
 impl fmt::Debug for SocketBuffIntern {
@@ -94,8 +94,8 @@ impl SocketBuffIntern {
                 let addr = 0 as *mut AtomicU64;
                 &mut (*addr)
             },
-            readBuf: Arc::new(QMutex::new(ByteStream::Init(pageCount))),
-            writeBuf: Arc::new(QMutex::new(ByteStream::Init(pageCount))),
+            readBuf: ByteStream(Arc::new(QMutex::new(ByteStreamIntern::Init(pageCount)))),
+            writeBuf: ByteStream(Arc::new(QMutex::new(ByteStreamIntern::Init(pageCount)))),
         };
     }
 
@@ -122,18 +122,18 @@ impl SocketBuffIntern {
             pendingWShutdown: AtomicBool::new(false),
             error: AtomicI32::new(0),
             consumeReadData,
-            readBuf: Arc::new(QMutex::new(ByteStream::InitWithShareMemory(
+            readBuf: ByteStream(Arc::new(QMutex::new(ByteStreamIntern::InitWithShareMemory(
                 pageCount,
                 readBufHeadTailAddr,
                 readBufAddr,
                 init,
-            ))),
-            writeBuf: Arc::new(QMutex::new(ByteStream::InitWithShareMemory(
+            )))),
+            writeBuf: ByteStream(Arc::new(QMutex::new(ByteStreamIntern::InitWithShareMemory(
                 pageCount,
                 writeBufHeadTailAddr,
                 writeBufAddr,
                 init,
-            ))),
+            )))),
         };
     }
 

@@ -17,9 +17,12 @@ use alloc::slice;
 use alloc::vec::Vec;
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::Ordering;
+use alloc::sync::Arc;
+use core::ops::Deref;
 
 use super::common::*;
 use super::linux_def::*;
+use super::mutex::*;
 
 #[derive(Default, Debug)]
 pub struct SocketBufIovs {
@@ -525,14 +528,52 @@ impl RingBuf {
 ///
 ///
 
+#[derive(Clone)]
+pub struct ByteStream(pub Arc<QMutex<ByteStreamIntern>>);
+
+impl Deref for ByteStream {
+    type Target = Arc<QMutex<ByteStreamIntern>>;
+
+    fn deref(&self) -> &Arc<QMutex<ByteStreamIntern>> {
+        &self.0
+    }
+}
+
+impl PartialEq for ByteStream {
+    fn eq(&self, other: &Self) -> bool {
+        let ret = Arc::ptr_eq(&self.0, &other.0);
+        return ret;
+    }
+}
+
+impl ByteStream {
+    pub fn Init(pageCount: u64) -> Self {
+        return Self(Arc::new(QMutex::new(ByteStreamIntern::Init(pageCount))))
+    }
+
+    pub fn InitWithShareMemory(
+        pageCount: u64,
+        headTailAddr: u64,
+        bufAddr: u64,
+        init: bool,
+    ) -> Self {
+        return Self(Arc::new(QMutex::new(ByteStreamIntern::InitWithShareMemory(
+            pageCount, 
+            headTailAddr,
+            bufAddr,
+            init
+        ))));
+    }
+}
+
 #[repr(align(128))]
-pub struct ByteStream {
+pub struct ByteStreamIntern {
     pub buf: RingBuf,
     pub dataIovs: SocketBufIovs,
     pub spaceiovs: SocketBufIovs,
 }
 
-impl ByteStream {
+impl ByteStreamIntern {
     pub fn IsPowerOfTwo(x: u64) -> bool {
         return (x & (x - 1)) == 0;
     }

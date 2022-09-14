@@ -861,7 +861,7 @@ impl ShareSpace {
 
     pub fn Log(&self, buf: &[u8]) -> bool {
         for i in 0..3 {
-            let ret = self.logBuf.lock().as_mut().unwrap().writeFull(buf);
+            let ret = self.logBuf.lock().as_mut().unwrap().lock().writeFull(buf);
             match ret {
                 Err(_) => {
                     print!("log is full ... retry {}", i + 1);
@@ -876,19 +876,19 @@ impl ShareSpace {
 
     pub fn ConsumeAndGetAvailableWriteBuf(&self, cnt: usize) -> (u64, usize) {
         let mut lock = self.logBuf.lock();
-        lock.as_mut().unwrap().Consume(cnt);
-        let (addr, len) = lock.as_mut().unwrap().GetDataBuf();
+        lock.as_mut().unwrap().lock().Consume(cnt);
+        let (addr, len) = lock.as_mut().unwrap().lock().GetDataBuf();
         return (addr, len);
     }
 
     pub fn GetDataBuf(&self) -> (u64, usize) {
         let mut lock = self.logBuf.lock();
-        let (addr, len) = lock.as_mut().unwrap().GetDataBuf();
+        let (addr, len) = lock.as_mut().unwrap().lock().GetDataBuf();
         return (addr, len);
     }
 
     pub fn ReadLog(&self, buf: &mut [u8]) -> usize {
-        let (_trigger, cnt) = self.logBuf.lock().as_mut().unwrap().read(buf).unwrap();
+        let (_trigger, cnt) = self.logBuf.lock().as_mut().unwrap().lock().read(buf).unwrap();
         return cnt;
     }
 
