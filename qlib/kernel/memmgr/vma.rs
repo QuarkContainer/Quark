@@ -387,6 +387,16 @@ impl MMappable {
         }
     }
 
+    pub fn ByteStream(&self) -> Option<ByteStream> {
+        match self {
+            Self::HostIops(_) => None,
+            Self::Shm(_) => None,
+            Self::AIOMappable => None,
+            Self::Socket(b) => Some(b.clone()),
+            Self::None => None,
+        }
+    }
+
     pub fn AddMapping(
         &self,
         ms: &MemoryManager,
