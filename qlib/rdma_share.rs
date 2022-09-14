@@ -130,6 +130,7 @@ pub enum RDMAReqMsg {
     RDMARead(RDMAReadReq),
     RDMAShutdown(RDMAShutdownReq),
     RDMAClose(RDMACloseReq),
+    RDMAPendingShutdown(RDMAPendingShutdownReq),
     // RDMAAccept(RDMAAcceptReq), //Put connected socket on client side.
 }
 
@@ -223,6 +224,11 @@ pub struct RDMAShutdownReq {
     // pub sockfd: u32,
     pub channelId: u32,
     pub howto: u8,
+}
+
+#[derive(Default, Clone, Copy, Debug)]
+pub struct RDMAPendingShutdownReq {
+    pub channelId: u32,
 }
 
 #[derive(Default, Clone, Copy, Debug)]

@@ -1208,6 +1208,18 @@ impl SockOperations for SocketOperations {
                 self.EventRegister(task, &general, EVENT_PENDING_SHUTDOWN);
                 defer!(self.EventUnregister(task, &general));
 
+                if self.enableRDMA {
+                    let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
+                    let socketInfo = fdInfo.lock().sockInfo.lock().clone();
+                    match socketInfo {
+                        SockInfo::RDMADataSocket(dataSocket) => {
+                            let _res = GlobalRDMASvcCli().pendingshutdown(dataSocket.channelId);
+                        }
+                        _ => {
+                            panic!("Shutdown with sockInfo: {:?}", socketInfo);
+                        }
+                    }
+                }
                 while self.SocketBuf().HasWriteData() {
                     task.blocker.BlockGeneralOnly();
                 }

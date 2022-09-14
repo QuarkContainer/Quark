@@ -204,6 +204,11 @@ impl RDMASvcClient {
         }
     }
 
+    pub fn pendingshutdown(&self, channelId: u32) -> Result<()> {
+        let res = self.SentMsgToSvc(RDMAReqMsg::RDMAPendingShutdown(RDMAPendingShutdownReq { channelId }));
+        res
+    }
+
     pub fn close(&self, channelId: u32) -> Result<()> {
         let res = self.SentMsgToSvc(RDMAReqMsg::RDMAClose(RDMACloseReq { channelId }));
         res

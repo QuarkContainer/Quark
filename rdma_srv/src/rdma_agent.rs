@@ -483,7 +483,15 @@ impl RDMAAgent {
                     .unwrap()
                     .clone();
                 rdmaChannel.Close();
-            }
+            },
+            RDMAReqMsg::RDMAPendingShutdown(msg) => match RDMA_SRV.channels.lock().get(&msg.channelId) {
+                Some(rdmaChannel) => {
+                    rdmaChannel.PendingShutdown();
+                }
+                None => {
+                    panic!("RDMAChannel with id {} does not exist!", msg.channelId);
+                }
+            },
         }
     }
 }

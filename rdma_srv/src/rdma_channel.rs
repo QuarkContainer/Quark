@@ -94,6 +94,7 @@ pub struct RDMAChannelIntern {
     pub ioBufIndex: u32,
     pub closeRequestedByClient: Mutex<bool>,
     pub pendingShutdown: Mutex<bool>,
+    pub finReceived: Mutex<bool>,
 }
 
 impl Drop for RDMAChannelIntern {
@@ -176,7 +177,7 @@ impl RDMAChannelIntern {
                 );
             }
 
-            return;
+            // return;
         }
         // println!(
         //         "ProcessRDMAWriteImmFinish::3, sockfd: {}, channelId: {}, len: {}, writeCount: {}, trigger: {}",
@@ -251,20 +252,29 @@ impl RDMAChannelIntern {
         self.SendConsumedDataInternal(self.GetRemoteChannelId());
     }
 
-    pub fn Shutdown(&self) {
-        if !self.sockBuf.HasWriteData() {
+    pub fn PendingShutdown(&self) {
+        error!("PendingShutdown, 1, channelId: {}", self.localId);
+        if !self.sockBuf.HasWriteData() {// || *self.finReceived.lock() {
+            // if *self.finReceived.lock() {
+            //     let available = self.sockBuf.WriteBufAvailableDataSize();
+            //     self.sockBuf.ConsumeWriteBuf(available);
+            //     error!("PendingShutdown, available: {}, self.sockBuf.HasWriteData(): {}", available, self.sockBuf.HasWriteData());
+            // }
             self.agent.SendResponse(RDMAResp {
                 user_data: 0,
                 msg: RDMARespMsg::RDMANotify(RDMANotifyResp {
-                    // sockfd: self.sockfd,
                     channelId: self.localId,
                     event: EVENT_PENDING_SHUTDOWN,
                 }),
             });
+            error!("PendingShutdown, 2, EVENT_PENDING_SHUTDOWN, channelId: {}", self.localId);
         }
         else {
             *self.pendingShutdown.lock() = true;
         }
+    }
+
+    pub fn Shutdown(&self) {
         self.HandleUserClose();
     }
 
@@ -302,6 +312,9 @@ impl RDMAChannelIntern {
     }
 
     pub fn ProcessRDMARecvWriteImm(&self, qpNum: u32, recvCount: u64, finReceived: bool) {
+        if finReceived {
+            *self.finReceived.lock() = true;
+        }
         let _res = self
             .conn
             .PostRecv(qpNum, self.localId as u64, self.raddr, self.rkey);
@@ -531,6 +544,7 @@ impl RDMAChannel {
             ioBufIndex: 0,
             closeRequestedByClient: Mutex::new(false),
             pendingShutdown: Mutex::new(false),
+            finReceived: Mutex::new(false),
         }))
     }
 
@@ -575,6 +589,7 @@ impl RDMAChannel {
             ioBufIndex,
             closeRequestedByClient: Mutex::new(false),
             pendingShutdown: Mutex::new(false),
+            finReceived: Mutex::new(false),
         }))
     }
 
@@ -612,6 +627,7 @@ impl RDMAChannel {
             ioBufIndex,
             closeRequestedByClient: Mutex::new(false),
             pendingShutdown: Mutex::new(false),
+            finReceived: Mutex::new(false),
         }))
     }
 
