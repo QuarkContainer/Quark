@@ -20,37 +20,12 @@ use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::task::*;
 use super::super::syscalls::syscalls::*;
-
+use super::super::qlib::bytestream::*;
 
 pub const BLOCK_WRITE : i32 = 1;
 pub const BLOCK_READ : i32 = 2;
 
 pub const BUF_SIZE : usize = 1 << 16; // 64K
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default)]
-pub struct RingBufIovs {
-    pub iovs: [IoVec; 2],
-    pub iovcnt: i32,
-}
-
-impl RingBufIovs {
-    pub fn New(iovs: &[IoVec]) -> Result<Self> {
-        if iovs.len() > 2 {
-            return Err(Error::SysError(SysErr::EINVAL))
-        }
-
-        let mut ret = Self::default();
-
-        for i in 0..iovs.len() {
-            ret.iovs[i] = iovs[i];
-        }
-
-        ret.iovcnt = iovs.len() as _;
-
-        return Ok(ret);
-    }
-}
 
 // arg0: fd
 // arg1: produce byte count
@@ -72,15 +47,16 @@ pub fn SysSocketProduce(task: &mut Task, args: &SyscallArguments) -> Result<i64>
     let file = task.GetFile(fd)?;
     let sockops = file.FileOp.clone();
 
+    let mut iovs = SocketBufIovs::default();
     match sockops.as_any().downcast_ref::<UringSocketOperations>() {
         Some(uringSocket) => {
-            let iovs = uringSocket.Produce(task, count as usize)?;
-            if iovs.len() != 0 || !block || iovsAddr == 0 {
+            uringSocket.Produce(task, count as usize, &mut iovs)?;
+            if iovs.cnt != 0 || !block || iovsAddr == 0 {
                 if iovsAddr !=  0 {
-                    task.CopyOutObj(&RingBufIovs::New(&iovs)?, iovsAddr)?;
+                    task.CopyOutObj(&iovs, iovsAddr)?;
                 }
                 
-                return Ok(0)
+                return Ok(iovs.Count() as _)
             }
             
             let general = task.blocker.generalEntry.clone();
@@ -88,19 +64,19 @@ pub fn SysSocketProduce(task: &mut Task, args: &SyscallArguments) -> Result<i64>
             defer!(uringSocket.EventUnregister(task, &general));
 
             loop {
-                let iovs = uringSocket.Produce(task, 0)?;
-                if iovs.len() != 0 {
+                uringSocket.Produce(task, 0, &mut iovs)?;
+                if iovs.cnt != 0 {
                     if iovsAddr !=  0 {
-                        task.CopyOutObj(&RingBufIovs::New(&iovs)?, iovsAddr)?;
+                        task.CopyOutObj(&iovs, iovsAddr)?;
                     }
-                    return Ok(0)
+                    return Ok(iovs.Count() as _)
                 }
             }
         }
         None => (),
     }
 
-    return Ok(0)
+    return Err(Error::SysError(SysErr::EINVAL))
 }
 
 // arg0: fd
@@ -122,14 +98,15 @@ pub fn SysSocketConsume(task: &mut Task, args: &SyscallArguments) -> Result<i64>
     let file = task.GetFile(fd)?;
     let sockops = file.FileOp.clone();
 
+    let mut iovs = SocketBufIovs::default();
     match sockops.as_any().downcast_ref::<UringSocketOperations>() {
         Some(uringSocket) => {
-            let iovs = uringSocket.Consume(task, count as usize)?;
-            if iovs.len() != 0 || !block || iovsAddr == 0 {
+            uringSocket.Consume(task, count as usize, &mut iovs)?;
+            if iovs.cnt != 0 || !block || iovsAddr == 0 {
                 if iovsAddr != 0 {
-                    task.CopyOutObj(&RingBufIovs::New(&iovs)?, iovsAddr)?;
+                    task.CopyOutObj(&iovs, iovsAddr)?;
                 }               
-                return Ok(0)
+                return Ok(iovs.Count() as _)
             }
             
             let general = task.blocker.generalEntry.clone();
@@ -137,17 +114,17 @@ pub fn SysSocketConsume(task: &mut Task, args: &SyscallArguments) -> Result<i64>
             defer!(uringSocket.EventUnregister(task, &general));
 
             loop {
-                let iovs = uringSocket.Produce(task, 0)?;
-                if iovs.len() != 0 {
+                uringSocket.Consume(task, 0, &mut iovs)?;
+                if iovs.cnt != 0 {
                     if iovsAddr != 0 {
-                        task.CopyOutObj(&RingBufIovs::New(&iovs)?, iovsAddr)?;
+                        task.CopyOutObj(&iovs, iovsAddr)?;
                     } 
-                    return Ok(0)
+                    return Ok(iovs.Count() as _)
                 }
             }
         }
         None => (),
     }
 
-    return Ok(0)
+    return Err(Error::SysError(SysErr::EINVAL))
 }

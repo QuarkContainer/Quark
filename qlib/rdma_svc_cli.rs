@@ -284,7 +284,7 @@ impl RDMASvcClient {
                                 SockInfo::Socket(_) => {
                                     let ioBufIndex = response.ioBufIndex as usize;
                                     let shareRegion = self.cliShareRegion.lock();
-                                    let sockBuf = Arc::new(SocketBuff::InitWithShareMemory(
+                                    let sockBuf = SocketBuff(Arc::new(SocketBuffIntern::InitWithShareMemory(
                                         MemoryDef::DEFAULT_BUF_PAGE_COUNT,
                                         &shareRegion.ioMetas[ioBufIndex].readBufAtoms as *const _
                                             as u64,
@@ -295,7 +295,7 @@ impl RDMASvcClient {
                                         &shareRegion.iobufs[ioBufIndex].read as *const _ as u64,
                                         &shareRegion.iobufs[ioBufIndex].write as *const _ as u64,
                                         false,
-                                    ));
+                                    )));
 
                                     let dataSock = RDMADataSock::New(
                                         response.sockfd,
@@ -359,7 +359,7 @@ impl RDMASvcClient {
                                     self.rdmaIdToSocketMappings.lock().insert(rdmaId, fd);
                                     let ioBufIndex = response.ioBufIndex as usize;
                                     let shareRegion = self.cliShareRegion.lock();
-                                    let sockBuf = Arc::new(SocketBuff::InitWithShareMemory(
+                                    let sockBuf = SocketBuff(Arc::new(SocketBuffIntern::InitWithShareMemory(
                                         MemoryDef::DEFAULT_BUF_PAGE_COUNT,
                                         &shareRegion.ioMetas[ioBufIndex].readBufAtoms as *const _
                                             as u64,
@@ -370,7 +370,7 @@ impl RDMASvcClient {
                                         &shareRegion.iobufs[ioBufIndex].read as *const _ as u64,
                                         &shareRegion.iobufs[ioBufIndex].write as *const _ as u64,
                                         false,
-                                    ));
+                                    )));
 
                                     let dataSock = RDMADataSock::New(
                                         rdmaId,

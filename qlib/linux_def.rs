@@ -3035,6 +3035,8 @@ impl MmapFlags {
     pub const MAP_NONBLOCK: u64 = 1 << 16;
     pub const MAP_STACK: u64 = 1 << 17;
     pub const MAP_HUGETLB: u64 = 1 << 18;
+
+    pub const MAP_SOCKT_READ: u64 = 1 << 31;
 }
 
 //Linux: errors

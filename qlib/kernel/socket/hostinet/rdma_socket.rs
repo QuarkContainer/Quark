@@ -1,5 +1,4 @@
 // use alloc::collections::VecDeque;
-use alloc::sync::Arc;
 
 use crate::qlib::kernel::GlobalIOMgr;
 
@@ -28,7 +27,7 @@ impl RDMA {
     pub fn Read(
         task: &Task,
         fd: i32,
-        buf: Arc<SocketBuff>,
+        buf: SocketBuff,
         dsts: &mut [IoVec],
         peek: bool,
     ) -> Result<i64> {
@@ -80,7 +79,7 @@ impl RDMA {
     pub fn Write(
         task: &Task,
         fd: i32,
-        buf: Arc<SocketBuff>,
+        buf: SocketBuff,
         srcs: &[IoVec], /*, ops: &SocketOperations*/
     ) -> Result<i64> {
         let (count, writeBuf) = buf.Writev(task, srcs)?;

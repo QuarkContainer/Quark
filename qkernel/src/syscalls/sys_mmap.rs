@@ -69,6 +69,8 @@ pub fn SysMmap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
         opts.MLockMode = MLockMode::MlockEager;
     }
 
+    let readBuff = (flags & MmapFlags::MAP_SOCKT_READ) != 0;
+
     if !anon {
         let file = task.GetFile(fd)?;
         let flags = file.Flags();
@@ -93,6 +95,27 @@ pub fn SysMmap(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             Err(Error::ErrDevZeroMap) => {
                 opts.Mappable = MMappable::None;
                 opts.Hint = "/dev/zero".to_string();
+            }
+            Err(Error::ErrSocketMap(b)) => {
+                if opts.Length != 64 * 1024 || opts.Offset != 0 || opts.Private == true {
+                    return Err(Error::SysError(SysErr::EINVAL));
+                }
+
+                if readBuff {
+                    if opts.Perms != AccessType::ReadOnly() {
+                        return Err(Error::SysError(SysErr::EINVAL));
+                    }
+
+                    opts.Mappable = MMappable::Socket(b.readBuf.clone());
+                    opts.Hint = "[socket_read]".to_string();
+                } else {
+                    if opts.Perms != AccessType::ReadWrite() {
+                        return Err(Error::SysError(SysErr::EINVAL));
+                    }
+
+                    opts.Mappable = MMappable::Socket(b.writeBuf.clone());
+                    opts.Hint = "[socket_write]".to_string();
+                }
             }
             Err(e) => return Err(e),
             Ok(m) => opts.Mappable = m,

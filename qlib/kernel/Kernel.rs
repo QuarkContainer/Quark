@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
-
 use crate::kernel_def::HyperCall64;
 use super::super::common::*;
 use super::super::config::*;
@@ -195,7 +193,7 @@ impl HostSpace {
         return HostSpace::Call(&mut msg, false) as i64;
     }
 
-    pub fn PostRDMAConnect(task: &Task, fd: i32, socketBuf: Arc<SocketBuff>) -> i64 {
+    pub fn PostRDMAConnect(task: &Task, fd: i32, socketBuf: SocketBuff) -> i64 {
         let mut msg = PostRDMAConnect {
             fd,
             socketBuf,

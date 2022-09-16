@@ -12,15 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::vec::Vec;
-
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
 use super::super::super::super::socket_buf::*;
 use super::super::super::task::Task;
+use crate::qlib::SocketBufIovs;
 
-impl SocketBuff {
-    pub fn Consume(&self, _task: &Task, cnt: usize) -> Result<(Vec<IoVec>, bool)> {
+impl SocketBuffIntern {
+    pub fn Consume(&self, _task: &Task, cnt: usize, iovs: &mut SocketBufIovs) -> Result<bool> {
         let mut buf = self.readBuf.lock();
         let trigger = if cnt > 0 {
             buf.ConsumeWithCheck(cnt)?
@@ -28,16 +27,16 @@ impl SocketBuff {
             false
         };
 
-        let iovs = buf.GetDataIovsVec();
-        if iovs.len() == 0 {            
+        buf.GetDataIovsVecOffset(iovs);
+        if iovs.cnt == 0 {            
             if self.Error() != 0 {
                 return Err(Error::SysError(self.Error()));
             } else if self.RClosed() {
-                return Ok((iovs, false));
+                return Ok(false);
             }
         }
 
-        return Ok((iovs, trigger));
+        return Ok(trigger);
     }
 
     pub fn Readv(&self, task: &Task, iovs: &mut [IoVec], peek: bool) -> Result<(bool, usize)> {
@@ -80,7 +79,7 @@ impl SocketBuff {
         }
     }
 
-    pub fn Produce(&self, _task: &Task, cnt: usize) -> Result<(Vec<IoVec>, Option<(u64, usize)>)> {
+    pub fn Produce(&self, _task: &Task, cnt: usize, iovs: &mut SocketBufIovs) -> Result<Option<(u64, usize)>> {
         if self.Error() != 0 {
             return Err(Error::SysError(self.Error()));
         }
@@ -95,12 +94,13 @@ impl SocketBuff {
         } else {
             false
         };
-        let iovs = buf.GetSpaceIovsVec();
+        
+        buf.GetSpaceIovsOffset(iovs);
         if !trigger {
-            return Ok((iovs, None));
+            return Ok(None);
         } else {
             let (addr, len) = buf.GetDataBuf();
-            return Ok((iovs, Some((addr, len))));
+            return Ok(Some((addr, len)));
         }
     }
 

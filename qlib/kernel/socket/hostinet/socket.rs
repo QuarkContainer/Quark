@@ -114,8 +114,8 @@ pub enum SocketBufType {
     TCPUringlServer(AcceptQueue), // Uring TCP Server socket, when socket start to listen
     TCPRDMAServer(AcceptQueue),   // TCP Server socket over RDMA
     TCPNormalData,                // Common TCP socket
-    Uring(Arc<SocketBuff>),
-    RDMA(Arc<SocketBuff>),
+    Uring(SocketBuff),
+    RDMA(SocketBuff),
 }
 
 impl fmt::Debug for SocketBufType {
@@ -135,7 +135,7 @@ impl fmt::Debug for SocketBufType {
 }
 
 impl SocketBufType {
-    pub fn Accept(&self, socketBuf: Arc<SocketBuff>) -> Self {
+    pub fn Accept(&self, socketBuf: SocketBuff) -> Self {
         match self {
             SocketBufType::TCPNormalServer => return SocketBufType::TCPNormalData,
             SocketBufType::TCPUringlServer(_) => return SocketBufType::Uring(socketBuf),
@@ -159,10 +159,10 @@ impl SocketBufType {
 
     fn ConnectType(&self) -> Self {
         if SHARESPACE.config.read().EnableRDMA {
-            let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
+            let socketBuf = SocketBuff(Arc::new(SocketBuffIntern::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT)));
             return Self::RDMA(socketBuf);
         } else if SHARESPACE.config.read().UringIO {
-            let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
+            let socketBuf = SocketBuff(Arc::new(SocketBuffIntern::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT)));
             return Self::Uring(socketBuf);
         } else {
             return Self::TCPNormalData;
@@ -286,7 +286,7 @@ impl SocketOperations {
         return self.socketBuf.lock().clone();
     }
 
-    pub fn SocketBuf(&self) -> Arc<SocketBuff> {
+    pub fn SocketBuf(&self) -> SocketBuff {
         match self.SocketBufType() {
             SocketBufType::Uring(b) => return b,
             SocketBufType::RDMA(b) => return b,

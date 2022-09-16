@@ -1060,6 +1060,26 @@ impl MemoryManager {
                 return Ok(());
             }
             None => {
+                // for mmappable socket
+                match vma.mappable.ByteStream() {
+                    Some(b) => {
+                        let vmaOffset = pageAddr - range.Start();
+                        let fileOffset = vmaOffset + vma.offset; // offset in the file
+                        let (phyAddr, len) = b.lock().GetRawBuf();
+                        assert!(len - 4096 >= fileOffset as usize);
+                        let phyAddr = phyAddr + fileOffset;
+                        let writeable = vma.effectivePerms.Write();
+                        if writeable {
+                            self.MapPageWriteLocked(pageAddr, phyAddr, exec);
+                        } else {
+                            self.MapPageWriteLocked(pageAddr, phyAddr, exec);
+                        }
+
+                        return Ok(());
+                    }
+                    None => (),
+                }
+
                 //let vmaOffset = pageAddr - range.Start();
                 //let phyAddr = vmaOffset + vma.offset; // offset in the phyAddr
 

@@ -14,6 +14,8 @@
 
 use alloc::slice;
 
+use crate::qlib::socket_buf::SocketBuff;
+
 extern crate alloc;
 
 pub const RDMA_ENABLE: bool = true;
@@ -396,6 +398,7 @@ pub enum Error {
     // mem map of /dev/zero
     ErrDevZeroMap,
 
+    ErrSocketMap(SocketBuff),
     //todo handle this.
     ErrClosedForReceive,
     ErrConnectionReset,

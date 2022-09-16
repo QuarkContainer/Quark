@@ -17,28 +17,57 @@ use alloc::slice;
 use alloc::vec::Vec;
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::Ordering;
+use alloc::sync::Arc;
+use core::ops::Deref;
 
 use super::common::*;
 use super::linux_def::*;
+use super::mutex::*;
 
-#[derive(Default, Debug)]
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct SocketBufIovs {
     pub iovs: [IoVec; 2],
-    pub cnt: usize,
+    pub cnt: u32,
 }
 
 impl SocketBufIovs {
+    pub fn New(iovs: &[IoVec]) -> Result<Self> {
+        if iovs.len() > 2 {
+            return Err(Error::SysError(SysErr::EINVAL))
+        }
+
+        let mut ret = Self::default();
+
+        for i in 0..iovs.len() {
+            ret.iovs[i] = iovs[i];
+        }
+
+        ret.cnt = iovs.len() as _;
+
+        return Ok(ret);
+    }
+
     pub fn Address(&self) -> (u64, usize) {
-        return (&self.iovs[0] as *const _ as u64, self.cnt);
+        return (&self.iovs[0] as *const _ as u64, self.cnt as usize);
     }
 
     pub fn Iovs(&self) -> Vec<IoVec> {
-        let mut iovs = Vec::with_capacity(self.cnt);
-        for i in 0..self.cnt {
+        let mut iovs = Vec::with_capacity(self.cnt as usize);
+        for i in 0..self.cnt as usize {
             iovs.push(self.iovs[i])
         }
 
         return iovs;
+    }
+
+    pub fn Count(&self) -> usize {
+        let mut count = 0;
+        for i in 0..self.cnt as usize {
+            count += self.iovs[i].len;
+        }
+
+        return count;
     }
 }
 
@@ -525,14 +554,52 @@ impl RingBuf {
 ///
 ///
 
+#[derive(Clone)]
+pub struct ByteStream(pub Arc<QMutex<ByteStreamIntern>>);
+
+impl Deref for ByteStream {
+    type Target = Arc<QMutex<ByteStreamIntern>>;
+
+    fn deref(&self) -> &Arc<QMutex<ByteStreamIntern>> {
+        &self.0
+    }
+}
+
+impl PartialEq for ByteStream {
+    fn eq(&self, other: &Self) -> bool {
+        let ret = Arc::ptr_eq(&self.0, &other.0);
+        return ret;
+    }
+}
+
+impl ByteStream {
+    pub fn Init(pageCount: u64) -> Self {
+        return Self(Arc::new(QMutex::new(ByteStreamIntern::Init(pageCount))))
+    }
+
+    pub fn InitWithShareMemory(
+        pageCount: u64,
+        headTailAddr: u64,
+        bufAddr: u64,
+        init: bool,
+    ) -> Self {
+        return Self(Arc::new(QMutex::new(ByteStreamIntern::InitWithShareMemory(
+            pageCount, 
+            headTailAddr,
+            bufAddr,
+            init
+        ))));
+    }
+}
+
 #[repr(align(128))]
-pub struct ByteStream {
+pub struct ByteStreamIntern {
     pub buf: RingBuf,
     pub dataIovs: SocketBufIovs,
     pub spaceiovs: SocketBufIovs,
 }
 
-impl ByteStream {
+impl ByteStreamIntern {
     pub fn IsPowerOfTwo(x: u64) -> bool {
         return (x & (x - 1)) == 0;
     }
@@ -620,6 +687,14 @@ impl ByteStream {
         return self.dataIovs.Address();
     }
 
+    pub fn GetDataIovsVecOffset(&self, iovs: &mut SocketBufIovs) {
+        let (addr, _) = self.GetRawBuf();
+        self.buf.PrepareDataIovs(iovs);
+        for i in 0..iovs.cnt as usize {
+            iovs.iovs[i].start -= addr;
+        }
+    }
+
     pub fn GetDataIovsVec(&mut self) -> Vec<IoVec> {
         self.PrepareDataIovs();
         return self.dataIovs.Iovs();
@@ -647,6 +722,14 @@ impl ByteStream {
     pub fn GetSpaceIovs(&mut self) -> (u64, usize) {
         self.PrepareSpaceIovs();
         return self.spaceiovs.Address();
+    }
+
+    pub fn GetSpaceIovsOffset(&self, iovs: &mut SocketBufIovs) {
+        let (addr, _) = self.GetRawBuf();
+        self.buf.PrepareSpaceIovs(iovs);
+        for i in 0..iovs.cnt as usize {
+            iovs.iovs[i].start -= addr;
+        }
     }
 
     pub fn GetSpaceIovsVec(&mut self) -> Vec<IoVec> {
