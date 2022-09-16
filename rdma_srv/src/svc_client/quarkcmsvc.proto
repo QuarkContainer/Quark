@@ -1,9 +1,12 @@
 /*
 Copyright 2022 quarkcm Authors.
+
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
+
     http://www.apache.org/licenses/LICENSE-2.0
+
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -25,6 +28,10 @@ service QuarkCMService {
   rpc WatchNode (MaxResourceVersionMessage) returns (stream NodeMessage) {}
   rpc ListPod (google.protobuf.Empty) returns (PodListMessage) {}
   rpc WatchPod (MaxResourceVersionMessage) returns (stream PodMessage) {}
+  rpc ListService (google.protobuf.Empty) returns (ServiceListMessage) {}
+  rpc WatchService (MaxResourceVersionMessage) returns (stream ServiceMessage) {}
+  rpc ListEndpoints (google.protobuf.Empty) returns (EndpointsListMessage) {}
+  rpc WatchEndpoints (MaxResourceVersionMessage) returns (stream EndpointsMessage) {}
 }
 
 message TestRequestMessage {
@@ -61,6 +68,29 @@ message PodMessage {
 
 message PodListMessage {
     repeated PodMessage pods = 1;
+}
+
+message ServiceMessage {
+    string name = 1;
+    uint32 cluster_ip = 2;
+    repeated string ports = 3;
+    int32 resource_version = 4;
+    string event_type = 5;
+}
+
+message ServiceListMessage {
+    repeated ServiceMessage services = 1;
+}
+
+message EndpointsMessage {
+    string name = 1;
+    repeated string ip_with_ports = 2;
+    int32 resource_version = 3;
+    string event_type = 4;
+}
+
+message EndpointsListMessage {
+    repeated EndpointsMessage Endpointses = 1;
 }
 
 message MaxResourceVersionMessage {

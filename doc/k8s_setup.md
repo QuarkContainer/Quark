@@ -23,11 +23,11 @@ in a terminal to rebuild quark binary
 ```
 make install
 ```
-Notice the quark binary is renamed as `containerd-shim-quarkd-v1`, this is to follow containerd's naming convention for shims.
+Notice the quark binary is renamed as `containerd-shim-quark-v1`, this is to follow containerd's naming convention for shims.
 
 ### 3. Config containerd in k8s cluster
 This step need to happen on every k8s node with kubelet running.
-open `/etc/containerd/config.yaml` and add/modify the following entry in the containerd config
+open `/etc/containerd/config.toml` and add/modify the following entry in the containerd config
 ```
 cat <<EOF | sudo tee /etc/containerd/config.toml
 version = 2
@@ -37,11 +37,11 @@ version = 2
   runtime_type = "io.containerd.runc.v2"
 [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runsc]
   runtime_type = "io.containerd.runsc.v1"
-[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.quarkd]
-  runtime_type = "io.containerd.quarkd.v1"
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.quark]
+  runtime_type = "io.containerd.quark.v1"
 EOF
 ```
-And restart the containerd service with `systemctl restart containerd`
+And restart the containerd service with `sudo systemctl restart containerd`
 
 
 ### 4. Start a k8s cluster
@@ -86,7 +86,7 @@ apiVersion: node.k8s.io/v1
 kind: RuntimeClass
 metadata:
   name: quark
-handler: quarkd
+handler: quark
 EOF
 ```
 Then you can use Quark like this

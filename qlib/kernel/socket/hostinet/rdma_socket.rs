@@ -59,17 +59,14 @@ impl RDMA {
             let dataSize = buf.AddConsumeReadData(cnt as u64) as usize;
             let bufSize = buf.readBuf.lock().BufSize();
             if 2 * dataSize >= bufSize {
-                // HostSpace::RDMANotify(fd, RDMANotifyType::RDMARead);
-                let fdInfo = GlobalIOMgr().GetByHost(fd).unwrap();
-                let fdInfoLock = fdInfo.lock();
-                let sockInfo = fdInfoLock.sockInfo.lock().clone();
+                let sockInfo = GlobalIOMgr().GetByHost(fd).unwrap().lock().sockInfo.lock().clone();
 
                 match sockInfo {
                     SockInfo::RDMADataSocket(rdmaDataScoket) => {
                         let _ret = GlobalRDMASvcCli().read(rdmaDataScoket.channelId);
                     }
                     _ => {
-                        panic!("")
+                        panic!("RDMA::Read, incorrect sockInfo: {:?}", sockInfo);
                     }
                 }
             }
@@ -107,16 +104,14 @@ impl RDMA {
         if writeBuf.is_some() {
             if RDMA_ENABLE {
                 // HostSpace::RDMANotify(fd, RDMANotifyType::RDMAWrite);
-                let fdInfo = GlobalIOMgr().GetByHost(fd).unwrap();
-                let fdInfoLock = fdInfo.lock();
-                let sockInfo = fdInfoLock.sockInfo.lock().clone();
+                let sockInfo = GlobalIOMgr().GetByHost(fd).unwrap().lock().sockInfo.lock().clone();
 
                 match sockInfo {
                     SockInfo::RDMADataSocket(rdmaDataScoket) => {
                         let _ret = GlobalRDMASvcCli().write(rdmaDataScoket.channelId);
                     }
                     _ => {
-                        panic!("")
+                        panic!("RDMA::Write, incorrect sockInfo: {:?}", sockInfo);
                     }
                 }
             } else {

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::id_mgr::IdMgr;
+use super::id_mgr::{ChannelIdMgr, IdMgr};
 use super::qlib::rdma_share::*;
 use super::rdma::*;
 use super::rdma_agent::*;
@@ -124,7 +124,7 @@ pub struct RDMASrv {
 
     pub currNode: Node,
 
-    pub channelIdMgr: Mutex<IdMgr>,
+    pub channelIdMgr: Mutex<ChannelIdMgr>,
 
     pub agentIdMgr: Mutex<IdMgr>,
     //TODO: indexes allocated for io buffer.
@@ -237,7 +237,7 @@ impl RDMASrv {
             srvEndPoints: Mutex::new(HashMap::new()),
             srvPodIdEndpoints: Mutex::new(HashMap::new()),
             currNode: Node::default(),
-            channelIdMgr: Mutex::new(IdMgr::Init(1, 1000)),
+            channelIdMgr: Mutex::new(ChannelIdMgr::Init(1, 1000)),
             agentIdMgr: Mutex::new(IdMgr::Init(0, 1000)),
             controlRegion: unsafe {
                 let addr = contrlAddr as *mut RDMAControlChannelRegion;
@@ -247,7 +247,7 @@ impl RDMASrv {
                 addr: contrlAddr as u64,
                 len: controlSize as u64,
             },
-            controlBufIdMgr: Mutex::new(IdMgr::Init(0, 1024)),
+            controlBufIdMgr: Mutex::new(IdMgr::Init(1, 1024)),
             keys: vec![[mr.LKey(), mr.RKey()]],
             controlChannels: Mutex::new(HashMap::new()),
             controlChannels2: Mutex::new(HashMap::new()),

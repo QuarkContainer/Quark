@@ -19,6 +19,7 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::{collections::HashMap, collections::HashSet, str::FromStr};
 use super::common::*;
 use std::os::unix::io::{AsRawFd, RawFd};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use super::qlib::rdma_share::*;
 
@@ -33,6 +34,12 @@ pub struct CtrlInfo {
 
     // pods: pod ipaddr --> Pod
     pub pods: Mutex<HashMap<u32, Pod>>,
+
+    // services: service ip --> Service
+    pub services: Mutex<HashMap<u32, Service>>,
+
+    // endpointses: endpoints name --> Endpoints
+    pub endpointses: Mutex<HashMap<String, Endpoints>>,
 
     // containerids: containerid --> ip
     pub containerids: Mutex<HashMap<String, u32>>,
@@ -64,12 +71,18 @@ pub struct CtrlInfo {
     pub epoll_fd: Mutex<RawFd>,
 
     pub isK8s: bool,
+
+    pub isCMConnected: Mutex<bool>,
+
+    pub localIp: Mutex<u32>,
 }
 
 impl Default for CtrlInfo {
     fn default() -> CtrlInfo {        
         let mut nodes: HashMap<u32, Node> = HashMap::new();
         let pods: HashMap<u32, Pod> = HashMap::new();
+        let services: HashMap<u32, Service> = HashMap::new();
+        let endpointses: HashMap<String, Endpoints> = HashMap::new();
         let mut containerids: HashMap<String, u32> = HashMap::new();
         let mut ipToPodIdMappings: HashMap<u32, String> = HashMap::new();
 
@@ -80,16 +93,16 @@ impl Default for CtrlInfo {
                 hostname: String::from("lab 1"),
                 ipAddr: lab1ip,
                 timestamp: 0,
-                subnet: u32::from(Ipv4Addr::from_str("192.168.1.0").unwrap()),
+                subnet: u32::from(Ipv4Addr::from_str("192.168.2.0").unwrap()),
                 netmask: u32::from(Ipv4Addr::from_str("255.255.255.0").unwrap()),
-                resource_version: 0,
+                resource_version: 0,                
             };
             let lab2ip = u32::from(Ipv4Addr::from_str("172.16.1.99").unwrap()).to_be();
             let node2 = Node {
                 hostname: String::from("lab 2"),
                 ipAddr: lab2ip,
                 timestamp: 0,
-                subnet: u32::from(Ipv4Addr::from_str("192.168.2.0").unwrap()),
+                subnet: u32::from(Ipv4Addr::from_str("192.168.1.0").unwrap()),
                 netmask: u32::from(Ipv4Addr::from_str("255.255.255.0").unwrap()),
                 resource_version: 0,
             };
@@ -104,6 +117,8 @@ impl Default for CtrlInfo {
         CtrlInfo {
             nodes: Mutex::new(nodes),
             pods: Mutex::new(pods),
+            services: Mutex::new(services),
+            endpointses: Mutex::new(endpointses),
             containerids: Mutex::new(containerids),
             ipToPodIdMappings: Mutex::new(ipToPodIdMappings),
             subnetmap: Mutex::new(HashMap::new()),
@@ -124,6 +139,8 @@ impl Default for CtrlInfo {
             timestamp: Mutex::new(0),
             epoll_fd: Mutex::new(0),
             isK8s: isK8s,
+            isCMConnected: Mutex::new(false),
+            localIp: Mutex::new(0),
         }
     }
 }
@@ -157,13 +174,30 @@ impl CtrlInfo{
         self.timestamp.lock().clone()
     }
 
+    pub fn isCMConnected_set(&self, value: bool) {
+        let mut isCMConnected = self.isCMConnected.lock();
+        *isCMConnected = value;
+    }
+
+    pub fn isCMConnected_get(&self) -> bool {
+        self.isCMConnected.lock().clone()
+    }
+
+    pub fn localIp_set(&self, value: u32) {
+        let mut localIp = self.localIp.lock();
+        *localIp = value;
+    }
+
+    pub fn localIp_get(&self) -> u32 {
+        self.localIp.lock().clone()
+    }
+    
+
     pub fn get_node_ips_for_connecting(&self) -> HashSet<u32> {
         let mut set: HashSet<u32> = HashSet::new();
         let timestamp = self.timestamp_get();
         for (_, node) in self.nodes.lock().iter() {
-            debug!("get_node_ips_for_connecting, node: {:?}", node);
-            if node.timestamp < timestamp {
-                debug!("get_node_ips_for_connecting, node.ipAddr: {}", node.ipAddr);
+            if node.timestamp <= timestamp {
                 set.insert(node.ipAddr);
             }
         }
@@ -177,6 +211,33 @@ impl CtrlInfo{
             // }
             if node.netmask & *ip == node.subnet {
                 return Some(node.ipAddr);
+            }
+        }
+        None
+    }
+
+    pub fn IsService(&self, ip:u32, port: &u16) -> Option<IpWithPort> {
+        let services = self.services.lock();
+        if services.contains_key(&ip) {
+            for p in services[&ip].ports.iter() {
+                if p.port == *port {
+                    let endpointses = self.endpointses.lock();
+                    let ipWithPorts = &endpointses[&services[&ip].name].ip_with_ports;
+                    let atomicIndex = &endpointses[&services[&ip].name].index;
+
+                    let mut expectedIndex = atomicIndex.fetch_add(1, Ordering::SeqCst);
+                    if expectedIndex >= ipWithPorts.len() {
+                        expectedIndex = 0;
+                        atomicIndex.store(0, Ordering::SeqCst)
+                    }
+                    let mut currentIndex = 0;
+                    for ipWithPort in ipWithPorts.iter() {
+                        if currentIndex == expectedIndex {
+                            return Some(ipWithPort.clone());
+                        }
+                        currentIndex += 1;
+                    }
+                }
             }
         }
         None
@@ -233,6 +294,35 @@ pub struct Pod {
     pub node_name: String,
     pub container_id: String,
     pub resource_version: i32,
+}
+
+
+#[derive(Default, Debug, Clone)]
+pub struct Service {
+    pub name: String,
+    pub cluster_ip: u32,
+    pub ports: HashSet<Port>,
+    pub resource_version: i32,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub struct Port {
+    pub protocal: String,
+    pub port: u16,
+}
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub struct IpWithPort {
+    pub ip: u32,
+    pub port: Port,
+}
+
+#[derive(Default, Debug)]
+pub struct Endpoints {
+    pub name: String,
+    pub ip_with_ports: HashSet<IpWithPort>,
+    pub resource_version: i32,
+    pub index: AtomicUsize,
 }
 
 pub struct VirtualEp {

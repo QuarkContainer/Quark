@@ -166,7 +166,6 @@ impl RDMAChannelIntern {
             {
                 *self.status.lock() = ChannelStatus::CLOSED;
                 if *self.closeRequestedByClient.lock() {
-                    debug!("finSent, ReleaseChannelResource");
                     self.ReleaseChannelResource();
                 }
             } else {
