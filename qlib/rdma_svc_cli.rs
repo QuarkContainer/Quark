@@ -228,10 +228,10 @@ impl RDMASvcClient {
             .lock()
             .sq
             .Push(RDMAReq { user_data: 0, msg })
-            {
-                self.updateBitmapAndWakeUpServerIfNecessary();
-                Ok(())
-            } else {
+        {
+            self.updateBitmapAndWakeUpServerIfNecessary();
+            Ok(())
+        } else {
             error!("SentMsgToSvc, no space");
             return Err(Error::NoEnoughSpace);
         }
