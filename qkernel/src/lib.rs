@@ -254,6 +254,8 @@ pub extern "C" fn syscall_handler(
     let mut nr = pt.orig_rax;
     let callId: SysCallID = if nr < SysCallID::UnknowSyscall as u64 {
         unsafe { mem::transmute(nr as u64) }
+    } else if SysCallID::SysSocketProduce as u64 <= nr && nr < SysCallID::EXTENSION_MAX as u64 {
+        unsafe { mem::transmute(nr as u64) }
     } else {
         nr = SysCallID::UnknowSyscall as _;
         SysCallID::UnknowSyscall

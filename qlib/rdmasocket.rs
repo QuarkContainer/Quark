@@ -60,13 +60,13 @@ pub struct RDMAServerSocketInfo {
     pub fd: i32,
     pub addr: TcpSockAddr,
     pub len: u32,
-    pub sockBuf: Arc<SocketBuff>,
+    pub sockBuf: SocketBuff,
     pub waitInfo: FdWaitInfo,
 }
 
 pub struct RDMADataSockIntern {
     pub rdmaId: u32,
-    pub socketBuf: Arc<SocketBuff>,
+    pub socketBuf: SocketBuff,
     // pub rdmaType: RDMAType,
     pub channelId: u32,
     pub localIpAddr: u32,
@@ -96,7 +96,7 @@ impl RDMADataSock {
     // pub fn New(fd: i32, socketBuf: Arc<SocketBuff>, rdmaType: RDMAType, channelId: u32) -> Self {
     pub fn New(
         rdmaId: u32,
-        socketBuf: Arc<SocketBuff>,
+        socketBuf: SocketBuff,
         channelId: u32,
         localIpAddr: u32,
         localPort: u16,

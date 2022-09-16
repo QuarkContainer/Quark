@@ -23,7 +23,7 @@ const WAIT_BUF_MAX_BYTES: usize = 131072;
 const WAIT_BUF_DEFAULT_PAGE_COUNT: u64 = 128 / 4;
 
 pub struct Queue {
-    pub buf: ByteStream,
+    pub buf: ByteStreamIntern,
     pub transform: fn(l: &mut LineDiscipline, q: &mut Queue, buf: &mut [u8]) -> usize,
     pub readable: bool,
 }
@@ -31,7 +31,7 @@ pub struct Queue {
 impl Queue {
     pub fn NewInputQueue() -> Self {
         return Self {
-            buf: ByteStream::Init(WAIT_BUF_DEFAULT_PAGE_COUNT),
+            buf: ByteStreamIntern::Init(WAIT_BUF_DEFAULT_PAGE_COUNT),
             transform: inputQTransform,
             readable: false,
         };
@@ -39,7 +39,7 @@ impl Queue {
 
     pub fn NewOutputQueue() -> Self {
         return Self {
-            buf: ByteStream::Init(WAIT_BUF_DEFAULT_PAGE_COUNT),
+            buf: ByteStreamIntern::Init(WAIT_BUF_DEFAULT_PAGE_COUNT),
             transform: outputQTransform,
             readable: false,
         };

@@ -18,6 +18,7 @@ use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 
 use super::super::super::common::*;
+use super::super::super::bytestream::*;
 use super::super::super::object_ref::*;
 pub use super::super::super::uring::cqueue;
 pub use super::super::super::uring::cqueue::CompletionQueue;
@@ -340,7 +341,7 @@ impl QUring {
         IOURING.AUCall(AsyncOps::PollHostEpollWait(op));
     }
 
-    pub fn BufSockInit(fd: i32, queue: Queue, buf: Arc<SocketBuff>, isSocket: bool) -> Result<()> {
+    pub fn BufSockInit(fd: i32, queue: Queue, buf: SocketBuff, isSocket: bool) -> Result<()> {
         let (addr, len) = buf.GetFreeReadBuf();
         let readop = AsyncFileRead::New(fd, queue, buf, addr, len, isSocket);
 
@@ -353,7 +354,7 @@ impl QUring {
         task: &Task,
         fd: i32,
         queue: Queue,
-        buf: Arc<SocketBuff>,
+        buf: SocketBuff,
         srcs: &[IoVec],
         fops: Arc<FileOperations>,
     ) -> Result<i64> {
@@ -368,11 +369,30 @@ impl QUring {
         return Ok(count as i64);
     }
 
+    pub fn SocketProduce(
+        task: &Task,
+        fd: i32,
+        queue: Queue,
+        buf: SocketBuff,
+        count: usize,
+        ops: &UringSocketOperations,
+        iovs: &mut SocketBufIovs
+    ) -> Result<()> {
+        let writeBuf = buf.Produce(task, count, iovs)?;
+        if let Some((addr, len)) = writeBuf {
+            let writeop = AsyncSend::New(fd, queue, buf, addr, len, ops);
+
+            IOURING.AUCall(AsyncOps::AsyncSend(writeop));
+        }
+
+        return Ok(());
+    }
+
     pub fn SocketSend(
         task: &Task,
         fd: i32,
         queue: Queue,
-        buf: Arc<SocketBuff>,
+        buf: SocketBuff,
         srcs: &[IoVec],
         ops: &UringSocketOperations,
     ) -> Result<i64> {
@@ -387,11 +407,31 @@ impl QUring {
         return Ok(count as i64);
     }
 
+    pub fn SocketConsume(
+        task: &Task,
+        fd: i32,
+        queue: Queue,
+        buf: SocketBuff,
+        count: usize,
+        iovs: &mut SocketBufIovs
+    ) -> Result<()> {
+        let trigger = buf.Consume(task, count, iovs)?;
+
+        if trigger {
+            let (addr, len) = buf.GetFreeReadBuf();
+            let readop = AsyncFileRead::New(fd, queue, buf, addr, len, true);
+
+            IOURING.AUCall(AsyncOps::AsyncFileRead(readop));
+        }
+
+        return Ok(());
+    }
+
     pub fn RingFileRead(
         task: &Task,
         fd: i32,
         queue: Queue,
-        buf: Arc<SocketBuff>,
+        buf: SocketBuff,
         dsts: &mut [IoVec],
         isSocket: bool,
         peek: bool,

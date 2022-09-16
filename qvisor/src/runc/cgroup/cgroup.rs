@@ -23,11 +23,11 @@ use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::{thread, time};
 
-use super::super::qlib::common::*;
-use super::super::qlib::linux_def::*;
-use super::super::qlib::path::*;
-use super::oci::*;
-use super::specutils::specutils::MkdirAll;
+use super::super::super::qlib::common::*;
+use super::super::super::qlib::linux_def::*;
+use super::super::super::qlib::path::*;
+use super::super::oci::*;
+use super::super::specutils::specutils::MkdirAll;
 
 pub const CONTROLLERS: [(&str, fn(spec: &LinuxResources, path: &str) -> Result<()>); 11] = [
     ("blkio", BlockIO),
@@ -571,4 +571,14 @@ fn NetworkPrio(spec: &LinuxResources, path: &str) -> Result<()> {
     }
 
     return Ok(());
+}
+
+pub trait Controller {
+    // optional controllers don't fail if not found.
+	fn Optional(&self) -> bool;
+    // set applies resource limits to controller.
+	fn Set(&self, linuxResource: &Option<LinuxResources>, s: &str) -> Result<()>;
+    // skip is called when controller is not found to check if it can be safely
+	// skipped or not based on the spec.
+	fn Skip(&self, linuxResource: &Option<LinuxResources>) -> Result<()>;
 }

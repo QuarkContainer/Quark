@@ -55,7 +55,7 @@ use super::socket::*;
 pub enum SockState {
     TCPInit,                      // Init TCP Socket, no listen and no connect
     TCPServer(AcceptQueue),        // Uring TCP Server socket, when socket start to listen
-    TCPData(Arc<SocketBuff>),
+    TCPData(SocketBuff),
 }
 
 impl fmt::Debug for SockState {
@@ -69,7 +69,7 @@ impl fmt::Debug for SockState {
 }
 
 impl SockState {
-    pub fn Accept(&self, socketBuf: Arc<SocketBuff>) -> Self {
+    pub fn Accept(&self, socketBuf: SocketBuff) -> Self {
         match self {
             SockState::TCPServer(_) => return SockState::TCPData(socketBuf),
             _ => {
@@ -88,7 +88,7 @@ impl SockState {
     }
 
     fn ConnectType(&self) -> Self {
-        let socketBuf = Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT));
+        let socketBuf = SocketBuff(Arc::new(SocketBuffIntern::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT)));
         return Self::TCPData(socketBuf);
     }
 }

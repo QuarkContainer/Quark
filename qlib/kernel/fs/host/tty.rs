@@ -382,7 +382,7 @@ pub struct TTYFileOpsInternal {
     pub session: Option<Session>,
     pub fgProcessgroup: Option<ProcessGroup>,
     pub fd: i32,
-    pub buf: Arc<SocketBuff>,
+    pub buf: SocketBuff,
     pub queue: Queue,
 }
 
@@ -443,7 +443,7 @@ impl TTYFileOps {
             session: None,
             fgProcessgroup: None,
             fd: fd,
-            buf: Arc::new(SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT)),
+            buf: SocketBuff(Arc::new(SocketBuffIntern::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT))),
             queue: queue,
         };
 

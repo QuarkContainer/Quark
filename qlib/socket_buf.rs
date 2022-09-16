@@ -27,7 +27,30 @@ use super::linux_def::*;
 use super::mutex::*;
 use crate::qlib::kernel::Kernel::HostSpace;
 
-pub struct SocketBuff {
+#[derive(Clone, Default)]
+pub struct SocketBuff(pub Arc<SocketBuffIntern>);
+
+impl Deref for SocketBuff {
+    type Target = Arc<SocketBuffIntern>;
+
+    fn deref(&self) -> &Arc<SocketBuffIntern> {
+        &self.0
+    }
+}
+
+impl PartialEq for SocketBuff {
+    fn eq(&self, other: &Self) -> bool {
+        return Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl fmt::Debug for SocketBuff {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        return f.debug_struct("SocketBuff").finish();
+    }
+}
+
+pub struct SocketBuffIntern {
     pub wClosed: AtomicBool,
     pub rClosed: AtomicBool,
     pub pendingWShutdown: AtomicBool,
@@ -40,11 +63,11 @@ pub struct SocketBuff {
     // to the peer in the rdmawrite packet to save rdmawrite call
     pub consumeReadData: &'static AtomicU64,
 
-    pub readBuf: QMutex<ByteStream>,
-    pub writeBuf: QMutex<ByteStream>,
+    pub readBuf: ByteStream,
+    pub writeBuf: ByteStream,
 }
 
-impl fmt::Debug for SocketBuff {
+impl fmt::Debug for SocketBuffIntern {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -54,13 +77,13 @@ impl fmt::Debug for SocketBuff {
     }
 }
 
-impl Default for SocketBuff {
+impl Default for SocketBuffIntern {
     fn default() -> Self {
-        return SocketBuff::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT);
+        return SocketBuffIntern::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT);
     }
 }
 
-impl SocketBuff {
+impl SocketBuffIntern {
     pub fn Init(pageCount: u64) -> Self {
         return Self {
             wClosed: AtomicBool::new(false),
@@ -71,8 +94,8 @@ impl SocketBuff {
                 let addr = 0 as *mut AtomicU64;
                 &mut (*addr)
             },
-            readBuf: QMutex::new(ByteStream::Init(pageCount)),
-            writeBuf: QMutex::new(ByteStream::Init(pageCount)),
+            readBuf: ByteStream(Arc::new(QMutex::new(ByteStreamIntern::Init(pageCount)))),
+            writeBuf: ByteStream(Arc::new(QMutex::new(ByteStreamIntern::Init(pageCount)))),
         };
     }
 
@@ -99,23 +122,23 @@ impl SocketBuff {
             pendingWShutdown: AtomicBool::new(false),
             error: AtomicI32::new(0),
             consumeReadData,
-            readBuf: QMutex::new(ByteStream::InitWithShareMemory(
+            readBuf: ByteStream(Arc::new(QMutex::new(ByteStreamIntern::InitWithShareMemory(
                 pageCount,
                 readBufHeadTailAddr,
                 readBufAddr,
                 init,
-            )),
-            writeBuf: QMutex::new(ByteStream::InitWithShareMemory(
+            )))),
+            writeBuf: ByteStream(Arc::new(QMutex::new(ByteStreamIntern::InitWithShareMemory(
                 pageCount,
                 writeBufHeadTailAddr,
                 writeBufAddr,
                 init,
-            )),
+            )))),
         };
     }
 
     pub fn NewDummySockBuf() -> Self {
-        SocketBuff::Init(2)
+        SocketBuffIntern::Init(2)
     }
 
     pub fn AddConsumeReadData(&self, count: u64) -> u64 {
@@ -245,7 +268,7 @@ pub struct AcceptItem {
     pub fd: i32,
     pub addr: TcpSockAddr,
     pub len: u32,
-    pub sockBuf: Arc<SocketBuff>,
+    pub sockBuf: SocketBuff,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -298,7 +321,7 @@ impl AcceptQueueIntern {
         fd: i32,
         addr: TcpSockAddr,
         len: u32,
-        sockBuf: Arc<SocketBuff>,
+        sockBuf: SocketBuff,
     ) -> (bool, bool) {
         let item = AcceptItem {
             fd: fd,

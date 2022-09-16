@@ -52,6 +52,7 @@ use super::super::syscalls::sys_sem::*;
 use super::super::syscalls::sys_shm::*;
 use super::super::syscalls::sys_msgqueue::*;
 use super::super::syscalls::sys_syslog::*;
+use super::super::syscalls::sys_mmap_socket::*;
 
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
@@ -72,7 +73,13 @@ pub struct SyscallArguments {
 #[inline]
 pub fn SysCall(task: &mut Task, nr: u64, args: &SyscallArguments) -> TaskRunState {
     let idx = nr as usize;
-    let func = SYS_CALL_TABLE.get(idx).unwrap();
+    let func = match SYS_CALL_TABLE.get(idx) {
+        Some(f) => f,
+        None => {
+            EXTENSION_CALL_TABLE.get(idx - EXTENSION_CALL_OFFSET).unwrap()
+        },
+    };
+
     match func(task, args) {
         Err(Error::SysCallRetCtrlWithRet(state, ret)) => {
             task.SetReturn(ret);
@@ -118,6 +125,12 @@ pub fn SysCall(task: &mut Task, nr: u64, args: &SyscallArguments) -> TaskRunStat
 }
 
 pub type SyscallFn = fn(task: &mut Task, args: &SyscallArguments) -> Result<i64>;
+
+pub const EXTENSION_CALL_OFFSET : usize = 10001;
+pub const EXTENSION_CALL_TABLE: &'static [SyscallFn] = &[
+    SysSocketProduce,   // 10001 sys_socket_produce
+    SysSocketConsume,   // 10002 sys_socket_consume
+];
 
 pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
     SysRead,             // 000 sys_read

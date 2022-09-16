@@ -55,6 +55,8 @@ pub struct GlobalConfig {
 
     // Network indicates what type of network to use.
     pub Network: NetworkType,
+
+    pub SystemdCgroup: bool,
 }
 
 impl Default for GlobalConfig {
@@ -65,6 +67,7 @@ impl Default for GlobalConfig {
             DebugLog: String::default(),
             FileAccess: FileAccessType::default(),
             Network: NetworkType::default(),
+            SystemdCgroup: false
         };
     }
 }
@@ -77,6 +80,7 @@ impl GlobalConfig {
             DebugLog: self.DebugLog.to_string(),
             FileAccess: self.FileAccess,
             Network: self.Network,
+            SystemdCgroup: self.SystemdCgroup,
         };
     }
 }

@@ -32,7 +32,7 @@ use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::path::*;
 use super::super::super::ucall::ucall::*;
 //use super::super::super::qlib::util::*;
-use super::super::cgroup::*;
+use super::super::cgroup::cgroup::*;
 use super::super::cmd::config::*;
 use super::super::cmd::exec::*;
 use super::super::oci::serialize::*;
@@ -491,14 +491,18 @@ impl Container {
 
                 // Create and join cgroup before processes are created to ensure they are
                 // part of the cgroup from the start (and all children processes).
-                let mut cg = match Cgroup::New(&c.Spec) {
-                    Err(e) => {
-                        c.Destroy()?;
-                        return Err(e);
+                
+                let mut cg : Option<Cgroup> = if crate::QUARK_CONFIG.lock().DisableCgroup {
+                    None
+                } else {
+                    match Cgroup::New(&c.Spec) {
+                        Err(e) => {
+                            c.Destroy()?;
+                            return Err(e);
+                        }
+                        Ok(cg) => cg,
                     }
-                    Ok(cg) => cg,
                 };
-
                 if cg.is_some() {
                     let ret = cg
                         .as_mut()
@@ -682,14 +686,17 @@ impl Container {
 
                 // Create and join cgroup before processes are created to ensure they are
                 // part of the cgroup from the start (and all children processes).
-                let mut cg = match Cgroup::New(&c.Spec) {
-                    Err(e) => {
-                        c.Destroy()?;
-                        return Err(e);
+                let mut cg : Option<Cgroup> = if crate::QUARK_CONFIG.lock().DisableCgroup {
+                    None
+                } else {
+                    match Cgroup::New(&c.Spec) {
+                        Err(e) => {
+                            c.Destroy()?;
+                            return Err(e);
+                        }
+                        Ok(cg) => cg,
                     }
-                    Ok(cg) => cg,
                 };
-
                 if cg.is_some() {
                     let ret = cg
                         .as_mut()
