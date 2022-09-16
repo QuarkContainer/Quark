@@ -259,7 +259,7 @@ impl RDMASvcClient {
             count += 1;
             match request {
                 Some(cq) => {
-                    match cq.msg {
+                    match cq.msg {   
                         RDMARespMsg::RDMAConnect(response) => {
                             // error!("RDMARespMsg::RDMAConnect, response: {:?}", response);
                             let sockfd = match self
