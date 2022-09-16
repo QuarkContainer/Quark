@@ -253,7 +253,7 @@ impl RDMAChannelIntern {
     }
 
     pub fn PendingShutdown(&self) {
-        error!("PendingShutdown, 1, channelId: {}", self.localId);
+        // error!("PendingShutdown, 1, channelId: {}", self.localId);
         if !self.sockBuf.HasWriteData() {// || *self.finReceived.lock() {
             // if *self.finReceived.lock() {
             //     let available = self.sockBuf.WriteBufAvailableDataSize();
@@ -267,7 +267,7 @@ impl RDMAChannelIntern {
                     event: EVENT_PENDING_SHUTDOWN,
                 }),
             });
-            error!("PendingShutdown, 2, EVENT_PENDING_SHUTDOWN, channelId: {}", self.localId);
+            // error!("PendingShutdown, 2, EVENT_PENDING_SHUTDOWN, channelId: {}", self.localId);
         }
         else {
             *self.pendingShutdown.lock() = true;

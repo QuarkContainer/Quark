@@ -318,7 +318,7 @@ impl RDMASrv {
             channelOption = channels.get(&channelId);
             match channelOption {
                 None => {
-                    panic!(
+                    error!(
                         "ProcessRDMARecvWriteImm get unexpected channelId: {}",
                         channelId
                     );

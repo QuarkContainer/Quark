@@ -432,10 +432,10 @@ impl RDMASvcClient {
                             {
                                 Some(rdmaIdVal) => *rdmaIdVal,
                                 None => {
-                                    debug!(
-                                    "RDMARespMsg::RDMANotify, Can't find rdmaId based on channelId: {}",
-                                    response.channelId
-                                );
+                                //     debug!(
+                                //     "RDMARespMsg::RDMANotify, Can't find rdmaId based on channelId: {}",
+                                //     response.channelId
+                                // );
                                     break;
                                 }
                             };
