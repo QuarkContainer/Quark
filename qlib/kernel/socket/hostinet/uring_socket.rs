@@ -53,6 +53,7 @@ use super::super::socket::*;
 use super::super::unix::transport::unix::*;
 use crate::qlib::kernel::socket::hostinet::socket::HostIoctlIFConf;
 use crate::qlib::kernel::socket::hostinet::socket::HostIoctlIFReq;
+use crate::qlib::bytestream::*;
 
 pub fn newUringSocketFile(
     task: &Task,
@@ -214,7 +215,7 @@ impl UringSocketOperations {
         return Ok(ret);
     }
 
-    pub fn Produce(&self, task: &Task, count: usize) -> Result<Vec<IoVec>> {
+    pub fn Produce(&self, task: &Task, count: usize, iovs: &mut SocketBufIovs) -> Result<()> {
         let sockBufType = self.socketType.lock().clone();
         match sockBufType {
             UringSocketType::Uring(buf) => {
@@ -229,6 +230,7 @@ impl UringSocketOperations {
                     buf,
                     count as usize,
                     self,
+                    iovs,
                 );
             }
             _ => {
@@ -237,7 +239,7 @@ impl UringSocketOperations {
         }
     }
 
-    pub fn Consume(&self, task: &Task, count: usize) -> Result<Vec<IoVec>> {
+    pub fn Consume(&self, task: &Task, count: usize, iovs: &mut SocketBufIovs) -> Result<()> {
         let sockBufType = self.socketType.lock().clone();
         match sockBufType {
             UringSocketType::Uring(buf) => {
@@ -245,13 +247,13 @@ impl UringSocketOperations {
                     return Err(Error::SysError(SysErr::EPIPE));
                 }
 
-                return QUring::SocketProduce(
+                return QUring::SocketConsume(
                     task,
                     self.fd,
                     self.queue.clone(),
                     buf,
                     count as usize,
-                    self,
+                    iovs
                 );
             }
             _ => {

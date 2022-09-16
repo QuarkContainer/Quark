@@ -621,6 +621,9 @@ pub enum SysCallID {
     sys_futex_waitv,
     sys_set_mempolicy_home_node,
     UnknowSyscall = 451,
+    SysSocketProduce = 10001,
+    SysSocketConsume,
+    EXTENSION_MAX,
 }
 
 #[derive(Clone, Default, Debug, Copy)]
