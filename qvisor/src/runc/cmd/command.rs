@@ -167,12 +167,6 @@ pub fn Parse() -> Result<Arguments> {
                 .short("r")
                 .takes_value(true),
         )
-        .arg(
-            Arg::with_name("systemd-cgroup")
-                .default_value("false")
-                .long("systemd-cgroup")
-                .takes_value(false),
-        )
         .subcommand(RunCmd::SubCommand(&common))
         .subcommand(CreateCmd::SubCommand(&common))
         .subcommand(StartCmd::SubCommand(&common))
