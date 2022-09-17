@@ -19,6 +19,7 @@ pub mod null;
 pub mod random;
 pub mod tty;
 pub mod zero;
+pub mod proxyfile;
 
 use crate::qlib::mutex::*;
 use alloc::sync::Arc;

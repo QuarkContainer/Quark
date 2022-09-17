@@ -480,6 +480,41 @@ impl VMSpace {
         return hostfd as i64;
     }
 
+    pub fn OpenAt(dirfd: i32, name: u64, flags: i32, addr: u64) -> i64 {
+        let tryOpenAt = unsafe { &mut *(addr as *mut TryOpenStruct) };
+
+        let ret = unsafe {
+            libc::openat(
+                dirfd,
+                name as *const c_char,
+                flags,
+                0,
+            )
+        };
+
+        let fd = Self::GetRet(ret as i64) as i32;
+        if fd < 0 {
+            return fd as i64;
+        }
+
+        let ret =
+            unsafe { libc::fstat(fd, tryOpenAt.fstat as *const _ as u64 as *mut stat) as i64 };
+
+        if ret < 0 {
+            unsafe {
+                libc::close(fd);
+            }
+        }
+
+        let hostfd = GlobalIOMgr().AddFile(fd);
+
+        if tryOpenAt.fstat.IsRegularFile() {
+            URING_MGR.lock().Addfd(hostfd).unwrap();
+        }
+
+        return Self::GetRet(fd as i64);
+    }
+
     pub fn CreateAt(
         dirfd: i32,
         fileName: u64,
