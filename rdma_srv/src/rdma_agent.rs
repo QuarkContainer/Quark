@@ -336,7 +336,6 @@ impl RDMAAgent {
                 );
             }
             RDMAReqMsg::RDMAListenUsingPodId(msg) => {
-                // let podId = String::from_utf8(msg.podId.to_vec()).unwrap();
                 let mut podId: [u8; 64] = [0; 64];
                 if RDMA_CTLINFO.isK8s {
                     podId = msg.podId;
@@ -368,36 +367,6 @@ impl RDMAAgent {
                         status: SrvEndPointStatus::Listening,
                     },
                 );
-                // let containerIds = RDMA_CTLINFO.containerids.lock();
-
-                // let ipAddrOption = containerIds.get(&podId);
-                // match ipAddrOption {
-                //     Some(ipAddr) => {
-                //         let ipAddrle = *ipAddr;
-                //         let ipAddr = ipAddrle.to_be();
-                //         RDMA_SRV.srvEndPoints.lock().insert(
-                //             Endpoint {
-                //                 ipAddr,
-                //                 port: msg.port,
-                //             },
-                //             SrvEndpoint {
-                //                 agentId: self.id,
-                //                 sockfd: msg.sockfd,
-                //                 endpoint: Endpoint {
-                //                     ipAddr,
-                //                     port: msg.port,
-                //                 },
-                //                 status: SrvEndPointStatus::Listening,
-                //             },
-                //         );
-                //     }
-                //     None => {
-                //         debug!(
-                //             "RDMAReqMsg::RDMAListenUsingPodId, podId: {} not found!!!",
-                //             podId
-                //         );
-                //     }
-                // }
             }
             RDMAReqMsg::RDMAConnect(msg) => {
                 //TODOCtrlPlane: need get nodeIp from dstIpAddr
@@ -437,15 +406,27 @@ impl RDMAAgent {
                     .get(&podId)
                     .unwrap()
                     .clone();
-                match RDMA_CTLINFO.get_node_ip_by_pod_ip(&msg.dstIpAddr) {
+                
+                let mut dstIpAddr = msg.dstIpAddr;
+                let mut dstPort = msg.dstPort;
+                println!("RDMAConnectUsingPodId: Connect to ip {} port {}", dstIpAddr, dstPort);
+                match RDMA_CTLINFO.IsService(dstIpAddr, &dstPort) {
+                    None => {},
+                    Some(ipWithPort) => {
+                        println!("The traffic is connecting to a service. Change the connection to {:?}", ipWithPort);
+                        dstIpAddr = ipWithPort.ip;
+                        dstPort = ipWithPort.port.port;
+                    },
+                }
+                match RDMA_CTLINFO.get_node_ip_by_pod_ip(&dstIpAddr) {
                     Some(nodeIpAddr) => {
                         let conns = RDMA_SRV.conns.lock();
                         let rdmaConn = conns.get(&nodeIpAddr).unwrap();
                         let rdmaChannel = self.CreateClientRDMAChannel(
                             &RDMAConnectReq {
                                 sockfd: msg.sockfd,
-                                dstIpAddr: msg.dstIpAddr,
-                                dstPort: msg.dstPort,
+                                dstIpAddr: dstIpAddr,
+                                dstPort: dstPort,
                                 srcIpAddr: ipAddr.to_be(),
                                 srcPort: msg.srcPort,
                             },

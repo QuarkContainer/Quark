@@ -20,7 +20,7 @@
 #![allow(bare_trait_objects)]
 #![feature(map_first_last)]
 #![allow(non_camel_case_types)]
-#![feature(llvm_asm)]
+#![feature(asm)]
 #![allow(deprecated)]
 #![feature(thread_id_value)]
 #![allow(dead_code)]
@@ -96,11 +96,15 @@ use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::{env, mem, ptr, thread, time};
 
+lazy_static! {
+    pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
+}
+
 fn main() -> io::Result<()> {
     let mut fds: HashMap<i32, FdType> = HashMap::new();
     let args: Vec<_> = env::args().collect();
     let gatewayCli: GatewayClient;
-    let mut unix_sock_path = "/tmp/rdma_srv";
+    let mut unix_sock_path = "/tmp/rdma_srv_socket";
     if args.len() > 1 {
         unix_sock_path = args.get(1).unwrap(); //"/tmp/rdma_srv1";
     }

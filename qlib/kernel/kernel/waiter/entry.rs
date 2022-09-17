@@ -87,6 +87,16 @@ impl WaitContext {
             _ => (),
         }
     }
+
+    pub fn Clear(&self) {
+        match self {
+            WaitContext::ThreadContext(t) => {
+                let context = t.borrow_mut();
+                context.waiter.Clear(context.waiterID);
+            }
+            _ => (),
+        }
+    }
 }
 
 pub struct ThreadContext {
@@ -207,8 +217,7 @@ impl WaitEntry {
     //clear the related bit of the entry in the waiter
     pub fn Clear(&self) {
         let e = self.lock();
-        let context = e.context.ThreadContext();
-        context.waiter.Clear(context.waiterID);
+        e.context.Clear();
     }
 
     pub fn Reset(&self) {

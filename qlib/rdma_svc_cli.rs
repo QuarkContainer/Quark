@@ -266,12 +266,12 @@ impl RDMASvcClient {
                                 .rdmaIdToSocketMappings
                                 .lock()
                                 .get(&response.sockfd)
-                                {
-                                    Some(sockFdVal) => *sockFdVal,
-                                    None => {
-                                        panic!("RDMARespMsg::RDMAConnect, Can't find sockfd based on rdmaId: {}", response.sockfd);
-                                    }
-                                };
+                            {
+                                Some(sockFdVal) => *sockFdVal,
+                                None => {
+                                    panic!("RDMARespMsg::RDMAConnect, Can't find sockfd based on rdmaId: {}", response.sockfd);
+                                }
+                            };
 
                             let sockInfo = GlobalIOMgr()
                                 .GetByHost(sockfd)
@@ -334,13 +334,13 @@ impl RDMASvcClient {
                                 .rdmaIdToSocketMappings
                                 .lock()
                                 .get(&response.sockfd)
-                                {
-                                    Some(sockFdVal) => *sockFdVal,
-                                    None => {
-                                        debug!("RDMARespMsg::RDMAAccept, Can't find sockfd based on rdmaId: {}", response.sockfd);
-                                        break;
-                                    }
-                                };
+                            {
+                                Some(sockFdVal) => *sockFdVal,
+                                None => {
+                                    debug!("RDMARespMsg::RDMAAccept, Can't find sockfd based on rdmaId: {}", response.sockfd);
+                                    break;
+                                }
+                            };
 
                             let sockInfo = GlobalIOMgr()
                                 .GetByHost(sockfd)
@@ -427,16 +427,16 @@ impl RDMASvcClient {
                                 .channelToSocketMappings
                                 .lock()
                                 .get_mut(&response.channelId)
-                                {
-                                    Some(rdmaIdVal) => *rdmaIdVal,
-                                    None => {
-                                        debug!(
-                                        "RDMARespMsg::RDMANotify, Can't find rdmaId based on channelId: {}",
-                                        response.channelId
-                                        );
-                                        break;
-                                    }
-                                };
+                            {
+                                Some(rdmaIdVal) => *rdmaIdVal,
+                                None => {
+                                    debug!(
+                                    "RDMARespMsg::RDMANotify, Can't find rdmaId based on channelId: {}",
+                                    response.channelId
+                                );
+                                    break;
+                                }
+                            };
 
                             let sockFd = match self.rdmaIdToSocketMappings.lock().get(&rdmaId) {
                                 Some(sockFdVal) => *sockFdVal,
@@ -472,16 +472,16 @@ impl RDMASvcClient {
                                 .channelToSocketMappings
                                 .lock()
                                 .get_mut(&response.channelId)
-                                {
-                                    Some(rdmaIdVal) => *rdmaIdVal,
-                                    None => {
-                                        //     debug!(
-                                        //     "RDMARespMsg::RDMAFinNotify, Can't find rdmaId based on channelId: {}",
-                                        //     response.channelId
-                                        // );
-                                        break;
-                                    }
-                                };
+                            {
+                                Some(rdmaIdVal) => *rdmaIdVal,
+                                None => {
+                                //     debug!(
+                                //     "RDMARespMsg::RDMAFinNotify, Can't find rdmaId based on channelId: {}",
+                                //     response.channelId
+                                // );
+                                    break;
+                                }
+                            };
 
                             let sockFd = match self.rdmaIdToSocketMappings.lock().get(&rdmaId) {
                                 Some(sockFdVal) => *sockFdVal,
