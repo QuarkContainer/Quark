@@ -632,6 +632,19 @@ impl HostSpace {
         //return HostSpace::Call(&mut msg, false) as i64;
     }
 
+    pub fn OpenAt(dirfd: i32, name: u64, flags: i32, addr: u64) -> i64 {
+        let mut msg = Msg::OpenAt(OpenAt {
+            dirfd: dirfd,
+            name: name,
+            flags: flags,
+            addr: addr,
+        });
+
+        let ret = Self::HCall(&mut msg, false) as i64;
+        return ret;
+        //return HostSpace::Call(&mut msg, false) as i64;
+    }
+
     pub fn CreateAt(
         dirfd: i32,
         pathName: u64,

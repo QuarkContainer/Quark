@@ -47,6 +47,7 @@ pub enum Msg {
     Fstatfs(Fstatfs),
 
     TryOpenAt(TryOpenAt),
+    OpenAt(OpenAt),
     CreateAt(CreateAt),
     Mkdirat(Mkdirat),
     SysSync(SysSync),
@@ -418,6 +419,14 @@ pub struct TryOpenStruct<'a> {
 pub struct TryOpenAt {
     pub dirfd: i32,
     pub name: u64,
+    pub addr: u64,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct OpenAt {
+    pub dirfd: i32,
+    pub name: u64,
+    pub flags: i32,
     pub addr: u64,
 }
 

@@ -119,6 +119,7 @@ pub enum IopsType {
     DirNode,
     SymlinkNode,
     SimpleFileInode,
+    ProxyDevice,
 }
 
 pub trait InodeOperations: Sync + Send {

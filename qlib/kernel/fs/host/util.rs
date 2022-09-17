@@ -290,6 +290,28 @@ pub fn TryOpenAt(dirfd: i32, name: &str) -> Result<(i32, bool, LibcStat)> {
     return Ok((ret as i32, tryopen.writeable, fstat));
 }
 
+pub fn OpenAt(dirfd: i32, name: &str, flags: i32) -> Result<(i32, LibcStat)> {
+    if dirfd == -100 && !path::IsAbs(name) {
+        return Err(Error::SysError(SysErr::EINVAL));
+    }
+
+    let name = path::Clean(name);
+    let fstat = LibcStat::default();
+    let mut tryopen = TryOpenStruct {
+        fstat: &fstat,
+        writeable: false,
+    };
+    let cstr = CString::New(&name);
+
+    let ret = HostSpace::OpenAt(dirfd, cstr.Ptr(), flags, &mut tryopen as *mut TryOpenStruct as u64);
+
+    if ret < 0 {
+        return Err(Error::SysError(-ret as i32));
+    }
+
+    return Ok((ret as i32, fstat));
+}
+
 pub fn Fstat(fd: i32, fstat: &mut LibcStat) -> i64 {
     return HostSpace::Fstat(fd, fstat as *mut _ as u64);
 }

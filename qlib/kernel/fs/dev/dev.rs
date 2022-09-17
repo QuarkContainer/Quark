@@ -32,6 +32,7 @@ use super::null::*;
 use super::random::*;
 use super::tty::*;
 use super::zero::*;
+use super::proxyfile::*;
 
 const MEM_DEV_MAJOR: u16 = 1;
 
@@ -69,6 +70,32 @@ fn NewTTYDevice(iops: &Arc<TTYDevice>, msrc: &Arc<QMutex<MountSource>>) -> Inode
 }
 
 fn NewNullDevice(iops: &Arc<NullDevice>, msrc: &Arc<QMutex<MountSource>>) -> Inode {
+    let deviceId = DEV_DEVICE.lock().id.DeviceID();
+    let inodeId = DEV_DEVICE.lock().NextIno();
+
+    let stableAttr = StableAttr {
+        Type: InodeType::CharacterDevice,
+        DeviceId: deviceId,
+        InodeId: inodeId,
+        BlockSize: MemoryDef::PAGE_SIZE as i64,
+        DeviceFileMajor: MEM_DEV_MAJOR,
+        DeviceFileMinor: NULL_DEV_MINOR,
+    };
+
+    let inodeInternal = InodeIntern {
+        UniqueId: NewUID(),
+        InodeOp: iops.clone(),
+        StableAttr: stableAttr,
+        LockCtx: LockCtx::default(),
+        MountSource: msrc.clone(),
+        Overlay: None,
+        ..Default::default()
+    };
+
+    return Inode(Arc::new(QMutex::new(inodeInternal)));
+}
+
+fn NewTestProxyDevice(iops: &Arc<ProxyDevice>, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let deviceId = DEV_DEVICE.lock().id.DeviceID();
     let inodeId = DEV_DEVICE.lock().NextIno();
 
@@ -260,6 +287,15 @@ pub fn NewDev(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
             msrc,
         ),
     );
+
+    contents.insert(
+        "proxy".to_string(),
+        NewTestProxyDevice(
+            &Arc::new(ProxyDevice::New(task, &ROOT_OWNER, &FileMode(0o0666))),
+            msrc,
+        ),
+    );
+
     contents.insert(
         "zero".to_string(),
         NewZeroDevice(
