@@ -17,6 +17,7 @@ use core::alloc::{GlobalAlloc, Layout};
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
+use core::arch::asm;
 
 use crate::qlib::fileinfo::*;
 

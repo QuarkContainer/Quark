@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use core::arch::asm;
 mod idt;
 
 use super::asm::*;
