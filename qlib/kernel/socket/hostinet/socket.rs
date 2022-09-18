@@ -97,7 +97,7 @@ fn newSocketFile(
             Write: true,
             ..Default::default()
         },
-        s,
+        s.into(),
     );
 
     GetKernel().sockets.AddSocket(&file);

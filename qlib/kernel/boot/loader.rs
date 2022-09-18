@@ -31,6 +31,7 @@ use super::super::super::limits::*;
 use super::super::super::linux_def::*;
 use super::super::super::loader::*;
 use super::super::fs::host::tty::*;
+use super::super::fs::file::*;
 use super::super::fs::mount::*;
 use super::super::kernel::ipc_namespace::*;
 use super::super::kernel::kernel::*;
@@ -354,11 +355,14 @@ impl Loader {
             assert!(task.Dup2(0, 2) == 2);
 
             let fileops = file.FileOp.clone();
-            let ttyops = fileops
+
+            let ttyops = fileops.TTYFileOps().unwrap();
+
+            /*let ttyops = fileops
                 .as_any()
                 .downcast_ref::<TTYFileOps>()
                 .expect("TTYFileOps convert fail")
-                .clone();
+                .clone();*/
 
             ttyops.InitForegroundProcessGroup(&tg.ProcessGroup().unwrap());
             ttyFileOps = Some(ttyops)

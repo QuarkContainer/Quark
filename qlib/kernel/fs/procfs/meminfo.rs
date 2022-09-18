@@ -34,7 +34,7 @@ use super::inode::*;
 
 pub struct MeminfoFileNode {}
 
-impl ReadonlyFileNode for MeminfoFileNode {
+impl ReadonlyFileNodeTrait for MeminfoFileNode {
     fn ReadAt(
         &self,
         task: &Task,
@@ -128,10 +128,10 @@ impl SimpleFileTrait for MeminfoInode {
         flags: FileFlags,
     ) -> Result<File> {
         let fops = ReadonlyFileOperations {
-            node: MeminfoFileNode {},
+            node: MeminfoFileNode {}.into(),
         };
 
-        let file = File::New(dirent, &flags, fops);
+        let file = File::New(dirent, &flags, fops.into());
         return Ok(file);
     }
 }

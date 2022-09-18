@@ -32,7 +32,7 @@ use super::inode::*;
 
 pub struct UptimeFileNode {}
 
-impl ReadonlyFileNode for UptimeFileNode {
+impl ReadonlyFileNodeTrait for UptimeFileNode {
     fn ReadAt(
         &self,
         task: &Task,
@@ -75,10 +75,10 @@ impl SimpleFileTrait for UptimeInode {
         flags: FileFlags,
     ) -> Result<File> {
         let fops = ReadonlyFileOperations {
-            node: UptimeFileNode {},
+            node: UptimeFileNode {}.into(),
         };
 
-        let file = File::New(dirent, &flags, fops);
+        let file = File::New(dirent, &flags, fops.into());
         return Ok(file);
     }
 }

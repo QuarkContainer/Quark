@@ -69,7 +69,7 @@ pub fn NewUnixSocket(task: &Task, ep: BoundEndpoint, stype: i32) -> Result<File>
     let file = File::New(
         &dirent,
         &fileFlags,
-        UnixSocketOperations::New(ep, stype),
+        UnixSocketOperations::New(ep, stype).into(),
     );
 
     GetKernel().sockets.AddSocket(&file);

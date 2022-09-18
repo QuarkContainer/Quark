@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use super::super::kernel::waiter::*;
-use crate::qlib::kernel::socket::hostinet::uring_socket::*;
 //use crate::qlib::kernel::socket::hostinet::socket::*;
 
 use super::super::qlib::common::*;
@@ -48,7 +47,7 @@ pub fn SysSocketProduce(task: &mut Task, args: &SyscallArguments) -> Result<i64>
     let sockops = file.FileOp.clone();
 
     let mut iovs = SocketBufIovs::default();
-    match sockops.as_any().downcast_ref::<UringSocketOperations>() {
+    match sockops.UringSocketOperations() {
         Some(uringSocket) => {
             uringSocket.Produce(task, count as usize, &mut iovs)?;
             if iovs.cnt != 0 || !block || iovsAddr == 0 {
@@ -99,7 +98,7 @@ pub fn SysSocketConsume(task: &mut Task, args: &SyscallArguments) -> Result<i64>
     let sockops = file.FileOp.clone();
 
     let mut iovs = SocketBufIovs::default();
-    match sockops.as_any().downcast_ref::<UringSocketOperations>() {
+    match sockops.UringSocketOperations() {
         Some(uringSocket) => {
             uringSocket.Consume(task, count as usize, &mut iovs)?;
             if iovs.cnt != 0 || !block || iovsAddr == 0 {

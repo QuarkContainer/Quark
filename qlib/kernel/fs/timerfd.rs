@@ -104,10 +104,11 @@ pub fn NewTimerfd(task: &Task, clockId: i32) -> Result<File> {
             Write: true,
             ..Default::default()
         },
-        tops,
+        tops.into(),
     ));
 }
 
+#[derive(Clone)]
 pub struct TimerOperations {
     pub ops: Arc<TimerOperationsInternal>,
     pub timer: Timer,

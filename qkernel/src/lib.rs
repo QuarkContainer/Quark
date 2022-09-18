@@ -27,12 +27,10 @@
 #![feature(allocator_api)]
 #![feature(associated_type_bounds)]
 #![feature(core_intrinsics)]
-#![feature(llvm_asm, naked_functions)]
 #![feature(maybe_uninit_uninit_array)]
 #![feature(panic_info_message)]
 #![feature(map_first_last)]
 #![allow(deprecated)]
-#![feature(asm)]
 
 #[macro_use]
 extern crate serde_derive;

@@ -86,7 +86,7 @@ pub fn newUringSocketFile(
             Write: true,
             ..Default::default()
         },
-        s,
+        s.into(),
     );
 
     GetKernel().sockets.AddSocket(&file);

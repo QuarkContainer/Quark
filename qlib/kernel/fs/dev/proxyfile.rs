@@ -216,7 +216,7 @@ impl InodeOperations for ProxyDevice {
             Dirent: dirent.clone(),
             flags: QMutex::new((flags, None)),
             offset: QLock::New(0),
-            FileOp: Arc::new(fops),
+            FileOp: Arc::new(fops.into()),
         };
 
         return Ok(File(Arc::new(f)));

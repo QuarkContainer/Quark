@@ -43,7 +43,7 @@ pub fn InotifyInit1(task: &mut Task, flags: i32) -> Result<i64> {
         ..Default::default()
     };
 
-    let file = File::New(&dirent, &fileFlags, Inotify::New());
+    let file = File::New(&dirent, &fileFlags, Inotify::New().into());
     let fd = task.NewFDFrom(
         0,
         &file,

@@ -79,18 +79,18 @@ impl SimpleFileTrait for CommSimpleFileTrait {
         flags: FileFlags,
     ) -> Result<File> {
         let fops = NewCommReadonlyFileOperations(&self.thread);
-        let file = File::New(dirent, &flags, fops);
+        let file = File::New(dirent, &flags, fops.into());
         return Ok(file);
     }
 }
 
 pub fn NewCommReadonlyFileOperations(
     thread: &Thread,
-) -> ReadonlyFileOperations<CommReadonlyFileNode> {
+) -> ReadonlyFileOperations {
     return ReadonlyFileOperations {
         node: CommReadonlyFileNode {
             thread: thread.clone(),
-        },
+        }.into(),
     };
 }
 
@@ -98,7 +98,7 @@ pub struct CommReadonlyFileNode {
     pub thread: Thread,
 }
 
-impl ReadonlyFileNode for CommReadonlyFileNode {
+impl ReadonlyFileNodeTrait for CommReadonlyFileNode {
     fn ReadAt(
         &self,
         task: &Task,

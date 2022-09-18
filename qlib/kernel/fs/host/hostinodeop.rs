@@ -581,13 +581,13 @@ impl HostInodeOp {
         return self.lock().queue.clone();
     }
 
-    pub fn GetHostFileOp(&self, _task: &Task) -> Arc<HostFileOp> {
+    pub fn GetHostFileOp(&self, _task: &Task) -> HostFileOp {
         let hostFileOp = HostFileOp {
             InodeOp: self.clone(),
             DirCursor: QMutex::new("".to_string()),
             //Buf: HostFileBuf::None,
         };
-        return Arc::new(hostFileOp);
+        return hostFileOp;
     }
 
     // return (st_size, st_blocks)
@@ -1171,7 +1171,7 @@ impl InodeOperations for HostInodeOp {
         let inode = dirent.Inode();
         let wouldBlock = inode.lock().InodeOp.WouldBlock();
 
-        return Ok(File::NewHostFile(dirent, &flags, fops, wouldBlock));
+        return Ok(File::NewHostFile(dirent, &flags, Arc::new(fops.into()), wouldBlock));
     }
 
     fn UnstableAttr(&self, task: &Task) -> Result<UnstableAttr> {

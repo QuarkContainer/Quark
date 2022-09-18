@@ -246,7 +246,7 @@ impl InodeOperations for SlaveInodeOperations {
         dirent: &Dirent,
         flags: FileFlags,
     ) -> Result<File> {
-        let fileOp = Arc::new(SlaveFileOperations { d: self.clone() });
+        let fileOp = Arc::new(SlaveFileOperations { d: self.clone() }.into());
 
         let internal = FileInternal {
             UniqueId: NewUID(),

@@ -88,7 +88,7 @@ impl SimpleFileTrait for IdMapSimpleFileTrait {
         flags: FileFlags,
     ) -> Result<File> {
         let fops = NewIdMapReadonlyFileOperations(&self.thread, self.gids);
-        let file = File::New(dirent, &flags, fops);
+        let file = File::New(dirent, &flags, fops.into());
         return Ok(file);
     }
 }
@@ -96,12 +96,12 @@ impl SimpleFileTrait for IdMapSimpleFileTrait {
 pub fn NewIdMapReadonlyFileOperations(
     thread: &Thread,
     gids: bool,
-) -> ReadonlyFileOperations<IdMapReadonlyFileNode> {
+) -> ReadonlyFileOperations {
     return ReadonlyFileOperations {
         node: IdMapReadonlyFileNode {
             thread: thread.clone(),
             gids: gids,
-        },
+        }.into(),
     };
 }
 
@@ -111,7 +111,7 @@ pub struct IdMapReadonlyFileNode {
 }
 
 //todo: shall we support Write?
-impl ReadonlyFileNode for IdMapReadonlyFileNode {
+impl ReadonlyFileNodeTrait for IdMapReadonlyFileNode {
     fn ReadAt(
         &self,
         task: &Task,

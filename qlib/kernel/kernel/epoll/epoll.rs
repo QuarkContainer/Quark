@@ -128,7 +128,7 @@ pub fn NewEventPoll(task: &Task) -> File {
     let inode = NewAnonInode(task);
     let dirent = Dirent::New(&inode, "anon_inode:[eventpoll]");
     let epoll = EventPoll::default();
-    return File::New(&dirent, &FileFlags::default(), epoll);
+    return File::New(&dirent, &FileFlags::default(), epoll.into());
 }
 
 #[derive(Clone, Default)]

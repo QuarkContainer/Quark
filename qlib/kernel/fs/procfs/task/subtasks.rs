@@ -109,7 +109,7 @@ impl DirDataNode for SubTasksNode {
         return Ok(File::New(
             dirent,
             &flags,
-            NewSubTasksFile(&self.thread, &pidns),
+            NewSubTasksFile(&self.thread, &pidns).into(),
         ));
     }
 }
@@ -117,13 +117,13 @@ impl DirDataNode for SubTasksNode {
 pub fn NewSubTasksFile(
     thread: &Thread,
     pidns: &PIDNamespace,
-) -> DynamicDirFileOperations<SubTasksFileNode> {
+) -> DynamicDirFileOperations {
     let subTaskFile = SubTasksFileNode {
         thread: thread.clone(),
         pidns: pidns.clone(),
     };
 
-    return DynamicDirFileOperations { node: subTaskFile };
+    return DynamicDirFileOperations { node: subTaskFile.into() };
 }
 
 pub struct SubTasksFileNode {
@@ -131,7 +131,7 @@ pub struct SubTasksFileNode {
     pub pidns: PIDNamespace,
 }
 
-impl DynamicDirFileNode for SubTasksFileNode {
+impl DynamicDirFileNodeTrait for SubTasksFileNode {
     fn ReadDir(
         &self,
         task: &Task,

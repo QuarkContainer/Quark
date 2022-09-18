@@ -66,7 +66,7 @@ pub fn SysTimerfdSettime(task: &mut Task, args: &SyscallArguments) -> Result<i64
 
     let file = task.GetFile(fd)?;
 
-    let tf = match file.FileOp.as_any().downcast_ref::<TimerOperations>() {
+    let tf = match file.FileOp.TimerOperations() {
         Some(tf) => tf,
         None => return Err(Error::SysError(SysErr::EINVAL)),
     };
@@ -94,7 +94,7 @@ pub fn SysTimerfdGettime(task: &mut Task, args: &SyscallArguments) -> Result<i64
 
     let file = task.GetFile(fd)?;
 
-    let tf = match file.FileOp.as_any().downcast_ref::<TimerOperations>() {
+    let tf = match file.FileOp.TimerOperations() {
         Some(tf) => tf,
         None => return Err(Error::SysError(SysErr::EINVAL)),
     };

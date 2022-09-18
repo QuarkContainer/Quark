@@ -67,7 +67,7 @@ pub fn AddEpoll(
     }
 
     let fops = epollfile.FileOp.clone();
-    let ep = match fops.as_any().downcast_ref::<EventPoll>() {
+    let ep = match fops.EventPoll() {
         None => return Err(Error::SysError(SysErr::EBADF)),
         Some(ep) => ep,
     };
@@ -98,7 +98,7 @@ pub fn UpdateEpoll(
     let file = task.GetFile(fd)?;
 
     let fops = epollfile.FileOp.clone();
-    let ep = match fops.as_any().downcast_ref::<EventPoll>() {
+    let ep = match fops.EventPoll() {
         None => return Err(Error::SysError(SysErr::EBADF)),
         Some(ep) => ep,
     };
@@ -120,7 +120,7 @@ pub fn RemoveEpoll(task: &Task, epfd: i32, fd: i32) -> Result<()> {
     let file = task.GetFile(fd)?;
 
     let fops = epollfile.FileOp.clone();
-    let ep = match fops.as_any().downcast_ref::<EventPoll>() {
+    let ep = match fops.EventPoll() {
         None => return Err(Error::SysError(SysErr::EBADF)),
         Some(ep) => ep,
     };
@@ -138,7 +138,7 @@ pub fn WaitEpoll(task: &Task, epfd: i32, max: i32, timeout: i64, events: &mut St
     let epollfile = task.GetFile(epfd)?;
 
     let fops = epollfile.FileOp.clone();
-    let ep = match fops.as_any().downcast_ref::<EventPoll>() {
+    let ep = match fops.EventPoll() {
         None => return Err(Error::SysError(SysErr::EBADF)),
         Some(ep) => ep,
     };
