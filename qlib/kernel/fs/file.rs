@@ -20,6 +20,7 @@ use alloc::sync::Weak;
 use alloc::vec::Vec;
 use core::any::Any;
 use core::ops::Deref;
+use enum_dispatch::enum_dispatch;
 
 use super::super::super::auth::*;
 use super::super::super::common::*;
@@ -43,6 +44,40 @@ use super::super::memmgr::*;
 use super::super::task::*;
 use super::super::tcpip::tcpip::*;
 use crate::qlib::kernel::Kernel::HostSpace;
+
+use crate::qlib::kernel::fs::file_overlay::OverlayFileOperations;
+use crate::qlib::kernel::fs::inotify::Inotify;
+use crate::qlib::kernel::fs::timerfd::TimerOperations;
+use crate::qlib::kernel::fs::dev::full::FullFileOperations;
+use crate::qlib::kernel::fs::dev::null::NullFileOperations;
+use crate::qlib::kernel::fs::dev::proxyfile::ProxyFileOperations;
+use crate::qlib::kernel::fs::dev::random::RandomFileOperations;
+use crate::qlib::kernel::fs::dev::tty::TTYFileOperations;
+use crate::qlib::kernel::fs::dev::zero::ZeroFileOperations;
+//use crate::qlib::kernel::fs::fsutil::file::dynamic_dir_file_operations::DynamicDirFileOperations;
+use crate::qlib::kernel::fs::fsutil::file::NoReadWriteFile;
+use crate::qlib::kernel::fs::fsutil::file::static_dir_file_operations::StaticDirFileOperations;
+use crate::qlib::kernel::fs::fsutil::file::StaticFile;
+use crate::qlib::kernel::fs::host::hostdirfops::HostDirFops;
+use crate::qlib::kernel::fs::procfs::seqfile::SeqFileOperations;
+use crate::qlib::kernel::fs::ramfs::dir::DirFileOperation;
+use crate::qlib::kernel::fs::ramfs::socket::SocketFileOps;
+use crate::qlib::kernel::fs::ramfs::symlink::SymlinkFileOperations;
+use crate::qlib::kernel::fs::tty::dir::DirFileOperations;
+use crate::qlib::kernel::fs::tty::master::MasterFileOperations;
+use crate::qlib::kernel::fs::tty::slave::SlaveFileOperations;
+use crate::qlib::kernel::kernel::eventfd::EventOperations;
+use crate::qlib::kernel::kernel::signalfd::SignalOperation;
+use crate::qlib::kernel::kernel::epoll::epoll::EventPoll;
+use crate::qlib::kernel::kernel::pipe::reader::Reader;
+use crate::qlib::kernel::kernel::pipe::reader_writer::ReaderWriter;
+use crate::qlib::kernel::kernel::pipe::writer::Writer;
+
+use crate::qlib::kernel::socket::unix::unix::UnixSocketOperations;
+use crate::qlib::kernel::socket::hostinet::uring_socket::UringSocketOperations;
+use crate::qlib::kernel::socket::hostinet::socket::SocketOperations;
+use crate::qlib::kernel::socket::hostinet::hostsocket::HostSocketOperations;
+use crate::qlib::kernel::socket::hostinet::asyncsocket::AsyncSocketOperations;
 
 use super::attr::*;
 use super::dirent::*;
@@ -104,6 +139,7 @@ pub enum SyncType {
     SyncBackingStorage,
 }
 
+#[enum_dispatch(FileOps)]
 pub trait SockOperations: Sync + Send {
     fn Connect(&self, _task: &Task, _socketaddr: &[u8], _blocking: bool) -> Result<i64> {
         return Err(Error::SysError(SysErr::ENOTSOCK));
@@ -201,6 +237,7 @@ pub trait SockOperations: Sync + Send {
     }
 }
 
+#[enum_dispatch(FileOps)]
 pub trait SpliceOperations {
     fn WriteTo(&self, _task: &Task, file: &File, dst: &File, opts: &SpliceOpts) -> Result<i64> {
         if opts.SrcOffset && !file.FileOp.Seekable() {
@@ -266,6 +303,47 @@ pub enum FileOpsType {
     ProxyFileOperations
 }
 
+#[enum_dispatch]
+pub enum FileOps {
+    OverlayFileOperations(OverlayFileOperations),
+    Inotify(Inotify),
+    //MockFileOperations(MockFileOperations),
+    TimerOperations(TimerOperations),
+    FullFileOperations(FullFileOperations),
+    NullFileOperations(NullFileOperations),
+    ProxyFileOperations(ProxyFileOperations),
+    RandomFileOperations(RandomFileOperations),
+    TTYFileOperations(TTYFileOperations),
+    ZeroFileOperations(ZeroFileOperations),
+    //DynamicDirFileOperations(DynamicDirFileOperations),
+    NoReadWriteFile(NoReadWriteFile),
+    //ReadonlyFileOperations(ReadonlyFileOperations),
+    StaticDirFileOperations(StaticDirFileOperations),
+    StaticFile(StaticFile),
+    HostDirFops(HostDirFops),
+    HostFileOp(HostFileOp),
+    TTYFileOps(TTYFileOps),
+    SeqFileOperations(SeqFileOperations),
+    DirFileOperation(DirFileOperation),
+    SocketFileOps(SocketFileOps),
+    SymlinkFileOperations(SymlinkFileOperations),
+    DirFileOperations(DirFileOperations),
+    MasterFileOperations(MasterFileOperations),
+    SlaveFileOperations(SlaveFileOperations),
+    EventOperations(EventOperations),
+    SignalOperation(SignalOperation),
+    EventPoll(EventPoll),
+    Reader(Reader),
+    ReaderWriter(ReaderWriter),
+    Writer(Writer),
+    AsyncSocketOperations(AsyncSocketOperations),
+    HostSocketOperations(HostSocketOperations),
+    SocketOperations(SocketOperations),
+    UringSocketOperations(UringSocketOperations),
+    UnixSocketOperations(UnixSocketOperations),
+}
+
+#[enum_dispatch(FileOps)]
 pub trait FileOperations: Sync + Send + Waitable + SockOperations + SpliceOperations {
     fn as_any(&self) -> &Any;
     fn FopsType(&self) -> FileOpsType;

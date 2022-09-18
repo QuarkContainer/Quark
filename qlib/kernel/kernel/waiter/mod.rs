@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use enum_dispatch::enum_dispatch;
+
 pub mod bufchan;
 pub mod chan;
 pub mod cond;
@@ -31,6 +33,7 @@ use super::super::task::*;
 use super::async_wait::*;
 
 use super::super::fs::file::File;
+use crate::qlib::kernel::fs::file::FileOps;
 
 // EventMaskFromLinux returns an EventMask representing the supported events
 // from the Linux events e, which is in the format used by poll(2).
@@ -46,6 +49,7 @@ pub fn ToLinux(e: EventMask) -> u32 {
 // Waitable contains the methods that need to be implemented by waitable
 // objects.
 // default:: Alway readable
+#[enum_dispatch(FileOps)]
 pub trait Waitable {
     fn AsyncReadiness(&self, task: &Task, mask: EventMask, _wait: &MultiWait) -> Future<EventMask> {
         //wait.AddWait();
