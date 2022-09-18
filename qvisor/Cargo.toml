@@ -55,6 +55,7 @@ time = { version = "0.3.7", features = ["serde", "std"] }
 uuid = { version = "0.8.2", features = ["serde", "v4"] }
 hashbrown = "0.12.3"
 userfaultfd = "0.4.2"
+enum_dispatch = { git = "https://github.com/QuarkContainer/enum_dispatch_clone.git" }
 
 [dependencies.lazy_static]
 version = "1.4"

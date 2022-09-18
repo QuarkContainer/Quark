@@ -482,7 +482,7 @@ impl QUring {
             let rerun = {
                 let mut ops = self.asyncMgr.ops[idx].lock();
                 //error!("uring process2: call is {:?}, idx {}", ops.Type(), idx);
-                ops.Process(ret, idx)
+                ops.ProcessResult(ret, idx)
             };
 
             if super::super::Shutdown() {

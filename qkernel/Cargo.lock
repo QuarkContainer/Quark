@@ -38,6 +38,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
+name = "enum_dispatch"
+version = "0.3.8"
+source = "git+https://github.com/QuarkContainer/enum_dispatch_clone.git#db1abae3247a5ebbc42039dbfc86e9eec330b622"
+dependencies = [
+ "lazy_static",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "getrandom"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -109,6 +120,7 @@ dependencies = [
  "bit_field",
  "bitflags",
  "cache-padded",
+ "enum_dispatch",
  "hashbrown",
  "lazy_static",
  "scopeguard",

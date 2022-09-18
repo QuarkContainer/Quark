@@ -55,6 +55,8 @@ extern crate xmas_elf;
 extern crate bitflags;
 extern crate hashbrown;
 
+extern crate enum_dispatch;
+
 #[macro_use]
 mod print;
 
