@@ -99,7 +99,7 @@ impl SimpleFileTrait for IOData {
         flags: FileFlags,
     ) -> Result<File> {
         let fops = NewSnapshotReadonlyFileOperations(self.GenSnapshot());
-        let file = File::New(dirent, &flags, fops);
+        let file = File::New(dirent, &flags, fops.into());
         return Ok(file);
     }
 }

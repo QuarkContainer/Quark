@@ -455,7 +455,7 @@ impl InodeOperations for Dir {
             Dirent: dirent.clone(),
             flags: QMutex::new((flags, None)),
             offset: QLock::New(0),
-            FileOp: Arc::new(dirOps),
+            FileOp: Arc::new(dirOps.into()),
         };
 
         return Ok(File(Arc::new(file)));

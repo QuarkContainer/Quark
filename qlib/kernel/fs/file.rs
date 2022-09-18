@@ -54,12 +54,14 @@ use crate::qlib::kernel::fs::dev::proxyfile::ProxyFileOperations;
 use crate::qlib::kernel::fs::dev::random::RandomFileOperations;
 use crate::qlib::kernel::fs::dev::tty::TTYFileOperations;
 use crate::qlib::kernel::fs::dev::zero::ZeroFileOperations;
-//use crate::qlib::kernel::fs::fsutil::file::dynamic_dir_file_operations::DynamicDirFileOperations;
+use crate::qlib::kernel::fs::fsutil::file::dynamic_dir_file_operations::DynamicDirFileOperations;
 use crate::qlib::kernel::fs::fsutil::file::NoReadWriteFile;
 use crate::qlib::kernel::fs::fsutil::file::static_dir_file_operations::StaticDirFileOperations;
 use crate::qlib::kernel::fs::fsutil::file::StaticFile;
+use crate::qlib::kernel::fs::fsutil::file::readonly_file::*;
 use crate::qlib::kernel::fs::host::hostdirfops::HostDirFops;
 use crate::qlib::kernel::fs::procfs::seqfile::SeqFileOperations;
+use crate::qlib::kernel::fs::procfs::proc::RootProcFile;
 use crate::qlib::kernel::fs::ramfs::dir::DirFileOperation;
 use crate::qlib::kernel::fs::ramfs::socket::SocketFileOps;
 use crate::qlib::kernel::fs::ramfs::symlink::SymlinkFileOperations;
@@ -72,12 +74,12 @@ use crate::qlib::kernel::kernel::epoll::epoll::EventPoll;
 use crate::qlib::kernel::kernel::pipe::reader::Reader;
 use crate::qlib::kernel::kernel::pipe::reader_writer::ReaderWriter;
 use crate::qlib::kernel::kernel::pipe::writer::Writer;
-
 use crate::qlib::kernel::socket::unix::unix::UnixSocketOperations;
 use crate::qlib::kernel::socket::hostinet::uring_socket::UringSocketOperations;
 use crate::qlib::kernel::socket::hostinet::socket::SocketOperations;
 use crate::qlib::kernel::socket::hostinet::hostsocket::HostSocketOperations;
 use crate::qlib::kernel::socket::hostinet::asyncsocket::AsyncSocketOperations;
+
 
 use super::attr::*;
 use super::dirent::*;
@@ -315,9 +317,9 @@ pub enum FileOps {
     RandomFileOperations(RandomFileOperations),
     TTYFileOperations(TTYFileOperations),
     ZeroFileOperations(ZeroFileOperations),
-    //DynamicDirFileOperations(DynamicDirFileOperations),
+    DynamicDirFileOperations(DynamicDirFileOperations),
     NoReadWriteFile(NoReadWriteFile),
-    //ReadonlyFileOperations(ReadonlyFileOperations),
+    ReadonlyFileOperations(ReadonlyFileOperations),
     StaticDirFileOperations(StaticDirFileOperations),
     StaticFile(StaticFile),
     HostDirFops(HostDirFops),
@@ -341,6 +343,51 @@ pub enum FileOps {
     SocketOperations(SocketOperations),
     UringSocketOperations(UringSocketOperations),
     UnixSocketOperations(UnixSocketOperations),
+    RootProcFile(RootProcFile)
+}
+
+impl FileOps {
+    pub fn TTYFileOps(&self) -> TTYFileOps {
+        match self {
+            Self::TTYFileOps(inner) => inner.clone(),
+            _ => panic!("fail")
+        }
+    }
+
+    pub fn UringSocketOperations(&self) -> Option<UringSocketOperations> {
+        match self {
+            Self::UringSocketOperations(inner) => Some(inner.clone()),
+            _ => None
+        }
+    }
+
+    pub fn TimerOperations(&self) -> Option<TimerOperations> {
+        match self {
+            Self::TimerOperations(inner) => Some(inner.clone()),
+            _ => None
+        }
+    }
+
+    pub fn SignalOperation(&self) -> Option<SignalOperation> {
+        match self {
+            Self::SignalOperation(inner) => Some(inner.clone()),
+            _ => None
+        }
+    }
+    
+    pub fn OverlayFileOperations(&self) -> Option<OverlayFileOperations> {
+        match self {
+            Self::OverlayFileOperations(inner) => Some(inner.clone()),
+            _ => None
+        }
+    }
+
+    pub fn EventPoll(&self) -> Option<EventPoll> {
+        match self {
+            Self::EventPoll(inner) => Some(inner.clone()),
+            _ => None
+        }
+    }
 }
 
 #[enum_dispatch(FileOps)]
@@ -416,7 +463,7 @@ pub struct FileInternal {
     //pub offsetLock: QLock,
     pub offset: QLock<i64>,
 
-    pub FileOp: Arc<FileOperations>,
+    pub FileOp: Arc<FileOps>,
 }
 
 #[derive(Clone)]
@@ -594,7 +641,7 @@ impl File {
         return f.1.clone();
     }
 
-    pub fn New<T: FileOperations + 'static>(dirent: &Dirent, flags: &FileFlags, fops: T) -> Self {
+    pub fn New(dirent: &Dirent, flags: &FileFlags, fops: FileOps) -> Self {
         let f = FileInternal {
             UniqueId: NewUID(),
             Dirent: dirent.clone(),
@@ -658,10 +705,10 @@ impl File {
                     let wouldBlock = inode.lock().InodeOp.WouldBlock();
 
                     if isTTY {
-                        return Ok(Self::NewTTYFile(&dirent, &fileFlags, fops));
+                        return Ok(Self::NewTTYFile(&dirent, &fileFlags, Arc::new(fops)));
                     }
 
-                    return Ok(Self::NewHostFile(&dirent, &fileFlags, fops, wouldBlock));
+                    return Ok(Self::NewHostFile(&dirent, &fileFlags, Arc::new(fops.into()), wouldBlock));
                 }
             }
         }
@@ -699,13 +746,13 @@ impl File {
         //let fops = iops.GetFileOp(task)?;
         let fops = hostiops.GetHostFileOp(task);
         let wouldBlock = inode.lock().InodeOp.WouldBlock();
-        return Ok(Self::NewHostFile(&dirent, &fileFlags, fops, wouldBlock));
+        return Ok(Self::NewHostFile(&dirent, &fileFlags, Arc::new(fops.into()), wouldBlock));
     }
 
     pub fn NewHostFile(
         dirent: &Dirent,
         flags: &FileFlags,
-        fops: Arc<FileOperations>,
+        fops: Arc<FileOps>,
         wouldBlock: bool,
     ) -> Self {
         let mut flags = *flags;
@@ -728,7 +775,7 @@ impl File {
     pub fn NewTTYFile(dirent: &Dirent, flags: &FileFlags, fops: Arc<HostFileOp>) -> Self {
         let ttyfileops = TTYFileOps::New(fops);
 
-        return Self::New(dirent, flags, ttyfileops);
+        return Self::New(dirent, flags, ttyfileops.into());
     }
 
     pub fn UniqueId(&self) -> u64 {

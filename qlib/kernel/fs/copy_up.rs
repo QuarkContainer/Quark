@@ -24,6 +24,7 @@ use super::file_overlay::*;
 use super::flags::*;
 use super::inode::*;
 use super::overlay::*;
+use crate::qlib::kernel::fs::file::FileOperations;
 
 pub fn copyUp(task: &Task, d: &Dirent) -> Result<()> {
     let _a = RENAME.read();

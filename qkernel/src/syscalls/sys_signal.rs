@@ -609,7 +609,7 @@ pub fn SharedSignalfd(
     if fd != -1 {
         let file = task.GetFile(fd)?;
         let fops = file.FileOp.clone();
-        match fops.as_any().downcast_ref::<SignalOperation>() {
+        match fops.SignalOperation() {
             None => return Err(Error::SysError(SysErr::EINVAL)),
             Some(fops) => {
                 fops.SetMask(mask);

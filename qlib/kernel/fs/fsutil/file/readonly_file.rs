@@ -15,6 +15,7 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::any::Any;
+use enum_dispatch::enum_dispatch;
 
 use super::super::super::super::super::common::*;
 use super::super::super::super::super::linux_def::*;
@@ -27,21 +28,31 @@ use super::super::super::file::*;
 use super::super::super::host::hostinodeop::*;
 use super::*;
 
+use crate::qlib::kernel::fs::procfs::meminfo::MeminfoFileNode;
+use crate::qlib::kernel::fs::procfs::net::NetTCPReadonlyFileNode;
+use crate::qlib::kernel::fs::procfs::task::auxvec::AUXVecReadonlyFileNode;
+use crate::qlib::kernel::fs::procfs::task::comm::CommReadonlyFileNode;
+use crate::qlib::kernel::fs::procfs::task::exec_args::ExecArgReadonlyFileNode;
+use crate::qlib::kernel::fs::procfs::uptime::UptimeFileNode;
+use crate::qlib::kernel::fs::procfs::task::uid_pid_map::IdMapReadonlyFileNode;
+use crate::qlib::kernel::fs::procfs::net::NetUnixReadonlyFileNode;
+use crate::qlib::kernel::fs::procfs::net::NetUDPReadonlyFileNode;
+
 pub fn NewSnapshotReadonlyFileOperations(
     data: Vec<u8>,
-) -> ReadonlyFileOperations<SnapshotReadonlyFileNode> {
+) -> ReadonlyFileOperations {
     let node = SnapshotReadonlyFileNode {
         data: Arc::new(data),
     };
 
-    return ReadonlyFileOperations { node: node };
+    return ReadonlyFileOperations { node: node.into() };
 }
 
 pub struct SnapshotReadonlyFileNode {
     pub data: Arc<Vec<u8>>,
 }
 
-impl ReadonlyFileNode for SnapshotReadonlyFileNode {
+impl ReadonlyFileNodeTrait for SnapshotReadonlyFileNode {
     fn ReadAt(
         &self,
         task: &Task,
@@ -64,7 +75,22 @@ impl ReadonlyFileNode for SnapshotReadonlyFileNode {
     }
 }
 
-pub trait ReadonlyFileNode: Send + Sync {
+#[enum_dispatch]
+pub enum ReadonlyFileNode {
+    SnapshotReadonlyFileNode(SnapshotReadonlyFileNode),
+    MeminfoFileNode(MeminfoFileNode),
+    NetTCPReadonlyFileNode(NetTCPReadonlyFileNode),
+    NetUDPReadonlyFileNode(NetUDPReadonlyFileNode),
+    NetUnixReadonlyFileNode(NetUnixReadonlyFileNode),
+    AUXVecReadonlyFileNode(AUXVecReadonlyFileNode),
+    CommReadonlyFileNode(CommReadonlyFileNode),
+    ExecArgReadonlyFileNode(ExecArgReadonlyFileNode),
+    IdMapReadonlyFileNode(IdMapReadonlyFileNode),
+    UptimeFileNode(UptimeFileNode),
+}
+
+#[enum_dispatch(ReadonlyFileNode)]
+pub trait ReadonlyFileNodeTrait: Send + Sync {
     fn ReadAt(
         &self,
         _task: &Task,
@@ -77,11 +103,11 @@ pub trait ReadonlyFileNode: Send + Sync {
     }
 }
 
-pub struct ReadonlyFileOperations<T: 'static + ReadonlyFileNode> {
-    pub node: T,
+pub struct ReadonlyFileOperations {
+    pub node: ReadonlyFileNode,
 }
 
-impl<T: 'static + ReadonlyFileNode> Waitable for ReadonlyFileOperations<T> {
+impl Waitable for ReadonlyFileOperations {
     fn Readiness(&self, _task: &Task, mask: EventMask) -> EventMask {
         return mask;
     }
@@ -91,9 +117,9 @@ impl<T: 'static + ReadonlyFileNode> Waitable for ReadonlyFileOperations<T> {
     fn EventUnregister(&self, _task: &Task, _e: &WaitEntry) {}
 }
 
-impl<T: 'static + ReadonlyFileNode> SpliceOperations for ReadonlyFileOperations<T> {}
+impl SpliceOperations for ReadonlyFileOperations {}
 
-impl<T: 'static + ReadonlyFileNode> FileOperations for ReadonlyFileOperations<T> {
+impl FileOperations for ReadonlyFileOperations {
     fn as_any(&self) -> &Any {
         return self;
     }
@@ -186,4 +212,4 @@ impl<T: 'static + ReadonlyFileNode> FileOperations for ReadonlyFileOperations<T>
     }
 }
 
-impl<T: 'static + ReadonlyFileNode> SockOperations for ReadonlyFileOperations<T> {}
+impl SockOperations for ReadonlyFileOperations {}

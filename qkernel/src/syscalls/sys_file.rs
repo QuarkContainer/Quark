@@ -14,13 +14,13 @@
 
 use alloc::string::String;
 use alloc::string::ToString;
+use alloc::sync::Arc;
 
 use super::super::fs::dirent::*;
 use super::super::fs::file::*;
 use super::super::fs::inotify::*;
 use super::super::fs::flags::*;
 use super::super::fs::inode::*;
-use super::super::fs::file_overlay::*;
 use super::super::fs::lock::*;
 use super::super::kernel::fasync::*;
 use super::super::kernel::fd_table::*;
@@ -1343,8 +1343,8 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             let mut fops = file.FileOp.clone();
 
             if fops.FopsType() == FileOpsType::OverlayFileOperations {
-                fops = if let Some(ops) = fops.as_any().downcast_ref::<OverlayFileOperations>() {
-                    ops.FileOps()
+                fops = if let Some(ops) = fops.OverlayFileOperations() {
+                    Arc::new(ops.into())
                 } else {
                     panic!("F_GETPIPE_SZ OverlayFileOperations fail");
                 }
@@ -1367,8 +1367,8 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             let mut fops = file.FileOp.clone();
 
             if fops.FopsType() == FileOpsType::OverlayFileOperations {
-                fops = if let Some(ops) = fops.as_any().downcast_ref::<OverlayFileOperations>() {
-                    ops.FileOps()
+                fops = if let Some(ops) = fops.OverlayFileOperations() {
+                    Arc::new(ops.into())
                 } else {
                     panic!("F_SETPIPE_SZ OverlayFileOperations fail");
                 }

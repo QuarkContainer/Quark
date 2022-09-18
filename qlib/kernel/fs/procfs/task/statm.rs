@@ -81,7 +81,7 @@ impl SimpleFileTrait for StatmData {
         flags: FileFlags,
     ) -> Result<File> {
         let fops = NewSnapshotReadonlyFileOperations(self.GenSnapshot(task));
-        let file = File::New(dirent, &flags, fops);
+        let file = File::New(dirent, &flags, fops.into());
         return Ok(file);
     }
 }

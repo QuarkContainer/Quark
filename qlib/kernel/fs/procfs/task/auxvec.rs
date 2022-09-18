@@ -80,18 +80,18 @@ impl SimpleFileTrait for AUXVecSimpleFileTrait {
         flags: FileFlags,
     ) -> Result<File> {
         let fops = NewAUXVecReadonlyFileOperations(&self.thread);
-        let file = File::New(dirent, &flags, fops);
+        let file = File::New(dirent, &flags, fops.into());
         return Ok(file);
     }
 }
 
 pub fn NewAUXVecReadonlyFileOperations(
     thread: &Thread,
-) -> ReadonlyFileOperations<AUXVecReadonlyFileNode> {
+) -> ReadonlyFileOperations {
     return ReadonlyFileOperations {
         node: AUXVecReadonlyFileNode {
             thread: thread.clone(),
-        },
+        }.into(),
     };
 }
 
@@ -99,7 +99,7 @@ pub struct AUXVecReadonlyFileNode {
     pub thread: Thread,
 }
 
-impl ReadonlyFileNode for AUXVecReadonlyFileNode {
+impl ReadonlyFileNodeTrait for AUXVecReadonlyFileNode {
     fn ReadAt(
         &self,
         task: &Task,

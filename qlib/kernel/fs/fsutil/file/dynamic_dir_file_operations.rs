@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use core::any::Any;
+use enum_dispatch::enum_dispatch;
 
 use super::super::super::super::super::common::*;
 use super::super::super::super::super::linux_def::*;
@@ -25,7 +26,17 @@ use super::super::super::file::*;
 use super::super::super::host::hostinodeop::*;
 use super::*;
 
-pub trait DynamicDirFileNode: Send + Sync {
+use crate::qlib::kernel::fs::procfs::task::fds::FdDirFile;
+use crate::qlib::kernel::fs::procfs::task::subtasks::SubTasksFileNode;
+
+#[enum_dispatch]
+pub enum DynamicDirFileNode {
+    FdDirFile(FdDirFile),
+    SubTasksFileNode(SubTasksFileNode),
+}
+
+#[enum_dispatch(DynamicDirFileNode)]
+pub trait DynamicDirFileNodeTrait: Send + Sync {
     fn ReadDir(
         &self,
         _task: &Task,
@@ -47,15 +58,15 @@ pub trait DynamicDirFileNode: Send + Sync {
     }
 }
 
-pub struct DynamicDirFileOperations<T: 'static + DynamicDirFileNode> {
-    pub node: T,
+pub struct DynamicDirFileOperations {
+    pub node: DynamicDirFileNode,
 }
 
-impl<T: 'static + DynamicDirFileNode> Waitable for DynamicDirFileOperations<T> {}
+impl Waitable for DynamicDirFileOperations {}
 
-impl<T: 'static + DynamicDirFileNode> SpliceOperations for DynamicDirFileOperations<T> {}
+impl SpliceOperations for DynamicDirFileOperations {}
 
-impl<T: 'static + DynamicDirFileNode> FileOperations for DynamicDirFileOperations<T> {
+impl FileOperations for DynamicDirFileOperations {
     fn as_any(&self) -> &Any {
         return self;
     }
@@ -148,4 +159,4 @@ impl<T: 'static + DynamicDirFileNode> FileOperations for DynamicDirFileOperation
     }
 }
 
-impl<T: 'static + DynamicDirFileNode> SockOperations for DynamicDirFileOperations<T> {}
+impl SockOperations for DynamicDirFileOperations {}

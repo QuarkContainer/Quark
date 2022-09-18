@@ -75,6 +75,7 @@ pub struct SignalOperationInternal {
     pub mask: QMutex<SignalSet>,
 }
 
+#[derive(Clone)]
 pub struct SignalOperation(Arc<SignalOperationInternal>);
 
 impl Deref for SignalOperation {
@@ -104,7 +105,7 @@ impl SignalOperation {
                 Write: true,
                 ..Default::default()
             },
-            fops,
+            fops.into(),
         );
     }
 

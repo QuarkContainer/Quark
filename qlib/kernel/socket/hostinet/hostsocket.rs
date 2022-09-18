@@ -78,7 +78,7 @@ pub fn newHostSocketFile(
             Write: true,
             ..Default::default()
         },
-        s,
+        s.into(),
     );
 
     GetKernel().sockets.AddSocket(&file);

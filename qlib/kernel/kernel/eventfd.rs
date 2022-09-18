@@ -69,7 +69,7 @@ pub fn NewEventfd(task: &Task, initVal: u64, semMode: bool) -> File {
             Write: true,
             ..Default::default()
         },
-        ops,
+        ops.into(),
     );
 }
 

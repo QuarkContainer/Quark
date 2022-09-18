@@ -178,10 +178,10 @@ pub fn OverlayCreate(
     let overlayFile = File::New(
         &overlayDirent,
         &oFlags,
-        OverlayFileOperations {
+        OverlayFileOperations(Arc::new(OverlayFileOperationsInner {
             upper: QMutex::new(Some(upperFile)),
             ..Default::default()
-        },
+        })).into(),
     );
 
     return Ok(overlayFile);
@@ -479,12 +479,12 @@ pub fn overlayGetFile(
         flags.Pread = upper.Flags().Pread;
         flags.PWrite = upper.Flags().PWrite;
 
-        let overlayFileOps = OverlayFileOperations {
+        let overlayFileOps = OverlayFileOperations(Arc::new(OverlayFileOperationsInner {
             upper: QMutex::new(Some(upper)),
             ..Default::default()
-        };
+        }));
 
-        let f = File::New(d, &flags, overlayFileOps);
+        let f = File::New(d, &flags, overlayFileOps.into());
         return Ok(f);
     }
 
@@ -494,12 +494,12 @@ pub fn overlayGetFile(
     flags.Pread = lower.Flags().Pread;
     flags.PWrite = lower.Flags().PWrite;
 
-    let overlayFileOps = OverlayFileOperations {
+    let overlayFileOps = OverlayFileOperations(Arc::new(OverlayFileOperationsInner {
         upper: QMutex::new(Some(lower)),
         ..Default::default()
-    };
+    }));
 
-    let f = File::New(d, &flags, overlayFileOps);
+    let f = File::New(d, &flags, overlayFileOps.into());
     return Ok(f);
 }
 

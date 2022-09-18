@@ -288,7 +288,7 @@ impl InodeOperations for SeqFile {
     ) -> Result<File> {
         let fops = Arc::new(SeqFileOperations {
             seqFile: self.clone(),
-        });
+        }.into());
 
         let internal = FileInternal {
             UniqueId: NewUID(),

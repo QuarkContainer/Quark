@@ -95,7 +95,7 @@ impl SimpleFileTrait for ExecArgSimpleFileTrait {
         flags: FileFlags,
     ) -> Result<File> {
         let fops = NewExecArgReadonlyFileNodeFileOperations(self.typ, &self.thread);
-        let file = File::New(dirent, &flags, fops);
+        let file = File::New(dirent, &flags, fops.into());
         return Ok(file);
     }
 }
@@ -103,12 +103,12 @@ impl SimpleFileTrait for ExecArgSimpleFileTrait {
 pub fn NewExecArgReadonlyFileNodeFileOperations(
     typ: ExecArgType,
     thread: &Thread,
-) -> ReadonlyFileOperations<ExecArgReadonlyFileNode> {
+) -> ReadonlyFileOperations {
     return ReadonlyFileOperations {
         node: ExecArgReadonlyFileNode {
             thread: thread.clone(),
             typ: typ,
-        },
+        }.into(),
     };
 }
 
@@ -117,7 +117,7 @@ pub struct ExecArgReadonlyFileNode {
     pub thread: Thread,
 }
 
-impl ReadonlyFileNode for ExecArgReadonlyFileNode {
+impl ReadonlyFileNodeTrait for ExecArgReadonlyFileNode {
     fn ReadAt(
         &self,
         task: &Task,

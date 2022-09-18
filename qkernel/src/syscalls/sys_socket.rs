@@ -415,7 +415,7 @@ pub fn SysGetPeerName(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
 fn recvSingleMsg(
     task: &Task,
-    sock: &Arc<FileOperations>,
+    sock: &Arc<FileOps>,
     msgPtr: u64,
     flags: i32,
     deadline: Option<Time>,
@@ -545,7 +545,7 @@ fn recvSingleMsg(
 
 fn sendSingleMsg(
     task: &Task,
-    sock: &Arc<FileOperations>,
+    sock: &Arc<FileOps>,
     msgPtr: u64,
     flags: i32,
     deadline: Option<Time>,

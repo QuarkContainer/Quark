@@ -109,7 +109,7 @@ impl DirDataNode for ProcNode {
             data: self.clone(),
         };
 
-        return Ok(File::New(dirent, &flags, RootProcFile { iops: p }));
+        return Ok(File::New(dirent, &flags, RootProcFile { iops: p }.into()));
     }
 }
 

@@ -20,6 +20,7 @@ use alloc::string::ToString;
 use alloc::sync::Arc;
 use core::any::Any;
 use spin::*;
+use core::ops::Deref;
 
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
@@ -41,14 +42,25 @@ pub fn OverlayFile(task: &Task, inode: &Inode, flags: &FileFlags) -> Result<File
     return Ok(f);
 }
 
-pub struct OverlayFileOperations {
+#[derive(Clone, Default)]
+pub struct OverlayFileOperations(pub Arc<OverlayFileOperationsInner>);
+
+impl Deref for OverlayFileOperations {
+    type Target = Arc<OverlayFileOperationsInner>;
+
+    fn deref(&self) -> &Arc<OverlayFileOperationsInner> {
+        &self.0
+    }
+}
+
+pub struct OverlayFileOperationsInner {
     pub upper: QMutex<Option<File>>,
     pub lower: QMutex<Option<File>>,
     pub dirCursor: QMutex<String>,
     pub dirCache: QMutex<DentMap>,
 }
 
-impl Default for OverlayFileOperations {
+impl Default for OverlayFileOperationsInner {
     fn default() -> Self {
         return Self {
             upper: QMutex::new(None),
@@ -59,7 +71,7 @@ impl Default for OverlayFileOperations {
     }
 }
 
-impl OverlayFileOperations {
+impl OverlayFileOperationsInner {
     fn OnTop(
         &self,
         task: &Task,

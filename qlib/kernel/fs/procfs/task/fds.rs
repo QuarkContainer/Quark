@@ -172,7 +172,7 @@ pub struct FdDirFile {
     pub thread: Thread,
 }
 
-impl DynamicDirFileNode for FdDirFile {
+impl DynamicDirFileNodeTrait for FdDirFile {
     fn ReadDir(
         &self,
         task: &Task,
@@ -195,13 +195,13 @@ impl DynamicDirFileNode for FdDirFile {
     }
 }
 
-pub fn NewFdDirFile(IsInfoFile: bool, thread: &Thread) -> DynamicDirFileOperations<FdDirFile> {
+pub fn NewFdDirFile(IsInfoFile: bool, thread: &Thread) -> DynamicDirFileOperations {
     let fdDirFile = FdDirFile {
         IsInfoFile: IsInfoFile,
         thread: thread.clone(),
     };
 
-    return DynamicDirFileOperations { node: fdDirFile };
+    return DynamicDirFileOperations { node: fdDirFile.into() };
 }
 
 pub struct FdDirNode {
@@ -251,7 +251,7 @@ impl DirDataNode for FdDirNode {
     ) -> Result<File> {
         let fops = NewFdDirFile(true, &self.thread);
 
-        return Ok(File::New(dirent, &flags, fops));
+        return Ok(File::New(dirent, &flags, fops.into()));
     }
 }
 
@@ -281,7 +281,7 @@ impl DirDataNode for FdInfoDirNode {
     ) -> Result<File> {
         let fops = NewFdDirFile(true, &self.thread);
 
-        return Ok(File::New(dirent, &flags, fops));
+        return Ok(File::New(dirent, &flags, fops.into()));
     }
 }
 

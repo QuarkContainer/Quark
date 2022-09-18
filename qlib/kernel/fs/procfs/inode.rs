@@ -384,7 +384,7 @@ impl InodeOperations for StaticFileInodeOps {
             offset: QLock::New(0),
             FileOp: Arc::new(StaticFile {
                 content: self.read().content.clone(),
-            }),
+            }.into()),
         })));
     }
 

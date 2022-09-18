@@ -161,10 +161,10 @@ impl SimpleFileTrait for NetTCP {
         flags: FileFlags,
     ) -> Result<File> {
         let fops = ReadonlyFileOperations {
-            node: NetTCPReadonlyFileNode {},
+            node: NetTCPReadonlyFileNode {}.into(),
         };
 
-        let file = File::New(dirent, &flags, fops);
+        let file = File::New(dirent, &flags, fops.into());
         return Ok(file);
     }
 }
@@ -202,7 +202,7 @@ pub fn NewNetTCP(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
 
 pub struct NetTCPReadonlyFileNode {}
 
-impl ReadonlyFileNode for NetTCPReadonlyFileNode {
+impl ReadonlyFileNodeTrait for NetTCPReadonlyFileNode {
     fn ReadAt(
         &self,
         task: &Task,
@@ -366,10 +366,10 @@ impl SimpleFileTrait for NetUDP {
         flags: FileFlags,
     ) -> Result<File> {
         let fops = ReadonlyFileOperations {
-            node: NetUDPReadonlyFileNode {},
+            node: NetUDPReadonlyFileNode {}.into(),
         };
 
-        let file = File::New(dirent, &flags, fops);
+        let file = File::New(dirent, &flags, fops.into());
         return Ok(file);
     }
 }
@@ -509,7 +509,7 @@ impl NetUDPReadonlyFileNode {
     }
 }
 
-impl ReadonlyFileNode for NetUDPReadonlyFileNode {
+impl ReadonlyFileNodeTrait for NetUDPReadonlyFileNode {
     fn ReadAt(
         &self,
         task: &Task,
@@ -545,10 +545,10 @@ impl SimpleFileTrait for NetUnix {
         flags: FileFlags,
     ) -> Result<File> {
         let fops = ReadonlyFileOperations {
-            node: NetUnixReadonlyFileNode {},
+            node: NetUnixReadonlyFileNode {}.into(),
         };
 
-        let file = File::New(dirent, &flags, fops);
+        let file = File::New(dirent, &flags, fops.into());
         return Ok(file);
     }
 }
@@ -687,7 +687,7 @@ impl NetUnixReadonlyFileNode {
     }
 }
 
-impl ReadonlyFileNode for NetUnixReadonlyFileNode {
+impl ReadonlyFileNodeTrait for NetUnixReadonlyFileNode {
     fn ReadAt(
         &self,
         task: &Task,
