@@ -345,6 +345,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "134951f4028bdadb9b84baf4232681efbf277da25144b9b0ad65df75946c422b"
 
 [[package]]
+name = "enum_dispatch"
+version = "0.3.8"
+source = "git+https://github.com/QuarkContainer/enum_dispatch_clone.git#db1abae3247a5ebbc42039dbfc86e9eec330b622"
+dependencies = [
+ "lazy_static",
+ "proc-macro2 1.0.36",
+ "quote 1.0.15",
+ "syn 1.0.86",
+]
+
+[[package]]
 name = "errno"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -863,6 +874,7 @@ dependencies = [
  "clap",
  "containerd-shim",
  "core_affinity",
+ "enum_dispatch",
  "errno",
  "fs2",
  "hashbrown",
