@@ -58,11 +58,11 @@ pub fn NewIOSimpleFileInode(
     owner: &FileOwner,
     perms: &FilePermissions,
     typ: u64,
-) -> SimpleFileInode<IOData> {
+) -> SimpleFileInode {
     let tg = thread.ThreadGroup();
     let io = IOData { tg: tg };
 
-    return SimpleFileInode::New(task, owner, perms, typ, false, io);
+    return SimpleFileInode::New(task, owner, perms, typ, false, io.into());
 }
 
 pub struct IOData {

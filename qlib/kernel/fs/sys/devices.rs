@@ -47,9 +47,9 @@ pub fn NewPossibleSimpleFileInode(
     owner: &FileOwner,
     perms: &FilePermissions,
     typ: u64,
-) -> SimpleFileInode<PossibleData> {
+) -> SimpleFileInode {
     let fs = PossibleData {};
-    return SimpleFileInode::New(task, owner, perms, typ, false, fs);
+    return SimpleFileInode::New(task, owner, perms, typ, false, fs.into());
 }
 
 pub struct PossibleData {}

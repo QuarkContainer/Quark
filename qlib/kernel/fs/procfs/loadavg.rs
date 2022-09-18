@@ -45,9 +45,9 @@ pub fn NewLoadAvgSimpleFileInode(
     owner: &FileOwner,
     perms: &FilePermissions,
     typ: u64,
-) -> SimpleFileInode<LoadAvgData> {
+) -> SimpleFileInode {
     let fs = LoadAvgData {};
-    return SimpleFileInode::New(task, owner, perms, typ, false, fs);
+    return SimpleFileInode::New(task, owner, perms, typ, false, fs.into());
 }
 
 pub struct LoadAvgData {}

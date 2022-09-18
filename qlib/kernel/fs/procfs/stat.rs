@@ -101,9 +101,9 @@ pub fn NewStatDataSimpleFileInode(
     owner: &FileOwner,
     perms: &FilePermissions,
     typ: u64,
-) -> SimpleFileInode<StatData> {
+) -> SimpleFileInode {
     let fs = StatData { k: GetKernel() };
-    return SimpleFileInode::New(task, owner, perms, typ, false, fs);
+    return SimpleFileInode::New(task, owner, perms, typ, false, fs.into());
 }
 
 pub struct StatData {

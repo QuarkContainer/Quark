@@ -193,7 +193,7 @@ pub fn NewNetTCP(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         },
         FSMagic::ANON_INODE_FS_MAGIC,
         false,
-        NetTCP {},
+        NetTCP {}.into(),
     );
 
     return NewProcInode(&Arc::new(node), msrc, InodeType::SpecialFile, None);
@@ -398,7 +398,7 @@ pub fn NewNetUDP(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         },
         FSMagic::ANON_INODE_FS_MAGIC,
         false,
-        NetUDP {},
+        NetUDP {}.into(),
     );
 
     return NewProcInode(&Arc::new(node), msrc, InodeType::SpecialFile, None);
@@ -577,7 +577,7 @@ pub fn NewNetUnix(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         },
         FSMagic::ANON_INODE_FS_MAGIC,
         false,
-        NetUnix {},
+        NetUnix {}.into(),
     );
 
     return NewProcInode(&Arc::new(node), msrc, InodeType::SpecialFile, None);

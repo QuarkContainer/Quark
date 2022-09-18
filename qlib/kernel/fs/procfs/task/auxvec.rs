@@ -54,7 +54,7 @@ pub fn NewAUXVecSimpleFileInode(
     owner: &FileOwner,
     perms: &FilePermissions,
     typ: u64,
-) -> SimpleFileInode<AUXVecSimpleFileTrait> {
+) -> SimpleFileInode {
     return SimpleFileInode::New(
         task,
         owner,
@@ -63,7 +63,7 @@ pub fn NewAUXVecSimpleFileInode(
         false,
         AUXVecSimpleFileTrait {
             thread: thread.clone(),
-        },
+        }.into(),
     );
 }
 

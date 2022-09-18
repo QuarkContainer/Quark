@@ -160,7 +160,7 @@ pub fn NewMeminfo(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         },
         FSMagic::ANON_INODE_FS_MAGIC,
         false,
-        MeminfoInode {},
+        MeminfoInode {}.into(),
     );
 
     return NewProcInode(&Arc::new(node), msrc, InodeType::SpecialFile, None);

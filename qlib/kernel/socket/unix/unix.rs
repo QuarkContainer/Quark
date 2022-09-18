@@ -86,7 +86,7 @@ pub fn NewUnixSocketDummyDirent(task: &Task,
                                     &FilePermissions{User: PermMask::NewReadWrite(), ..Default::default()},
                                     FSMagic::SOCKFS_MAGIC,
                                     true,
-                                    Dummy{});
+                                    Dummy{}.into());
 
     let deviceId = d.lock().DeviceID();
     let inodeId = d.lock().NextIno();

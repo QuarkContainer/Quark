@@ -78,12 +78,12 @@ pub fn NewMountInfoFileSimpleFileInode(
     owner: &FileOwner,
     perms: &FilePermissions,
     typ: u64,
-) -> SimpleFileInode<MountInfoFile> {
+) -> SimpleFileInode {
     let io = MountInfoFile {
         thread: thread.clone(),
     };
 
-    return SimpleFileInode::New(task, owner, perms, typ, false, io);
+    return SimpleFileInode::New(task, owner, perms, typ, false, io.into());
 }
 
 pub struct MountInfoFile {
@@ -207,12 +207,12 @@ pub fn NewMountsFileSimpleFileInode(
     owner: &FileOwner,
     perms: &FilePermissions,
     typ: u64,
-) -> SimpleFileInode<MountsFile> {
+) -> SimpleFileInode {
     let io = MountsFile {
         thread: thread.clone(),
     };
 
-    return SimpleFileInode::New(task, owner, perms, typ, false, io);
+    return SimpleFileInode::New(task, owner, perms, typ, false, io.into());
 }
 
 pub struct MountsFile {

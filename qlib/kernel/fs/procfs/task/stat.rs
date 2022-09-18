@@ -69,17 +69,17 @@ pub fn NewStatSimpleFileInode(
     owner: &FileOwner,
     perms: &FilePermissions,
     typ: u64,
-) -> SimpleFileInode<StatData> {
-    let io = StatData {
+) -> SimpleFileInode {
+    let io = TaskStatData {
         t: thread.clone(),
         tgstats: showSubtasks,
         pidns: pidns,
     };
 
-    return SimpleFileInode::New(task, owner, perms, typ, false, io);
+    return SimpleFileInode::New(task, owner, perms, typ, false, io.into());
 }
 
-pub struct StatData {
+pub struct TaskStatData {
     pub t: Thread,
 
     // If tgstats is true, accumulate fault stats (not implemented) and CPU
@@ -91,7 +91,7 @@ pub struct StatData {
     pub pidns: PIDNamespace,
 }
 
-impl StatData {
+impl TaskStatData {
     pub fn GenSnapshot(&self, _task: &Task) -> Vec<u8> {
         let mut output: String = "".to_string();
         output += &format!("{} ", self.pidns.IDOfTask(&self.t));
@@ -185,7 +185,7 @@ impl StatData {
     }
 }
 
-impl SimpleFileTrait for StatData {
+impl SimpleFileTrait for TaskStatData {
     fn GetFile(
         &self,
         task: &Task,

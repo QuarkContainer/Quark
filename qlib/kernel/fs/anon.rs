@@ -43,7 +43,7 @@ pub fn NewAnonInode(task: &Task) -> Inode {
         &perm,
         FSMagic::ANON_INODE_FS_MAGIC,
         true,
-        SimpleFileNode {},
+        SimpleFileNode {}.into(),
     );
 
     let deviceId = PSEUDO_DEVICE.lock().id.DeviceID();

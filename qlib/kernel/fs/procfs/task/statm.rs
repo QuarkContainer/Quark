@@ -54,12 +54,12 @@ pub fn NewStatmSimpleFileInode(
     owner: &FileOwner,
     perms: &FilePermissions,
     typ: u64,
-) -> SimpleFileInode<StatmData> {
+) -> SimpleFileInode {
     let io = StatmData {
         mm: thread.lock().memoryMgr.clone(),
     };
 
-    return SimpleFileInode::New(task, owner, perms, typ, false, io);
+    return SimpleFileInode::New(task, owner, perms, typ, false, io.into());
 }
 
 pub struct StatmData {

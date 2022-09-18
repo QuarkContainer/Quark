@@ -21,6 +21,7 @@ use alloc::sync::Arc;
 use core::any::Any;
 use core::ops::Deref;
 use alloc::sync::Weak;
+use enum_dispatch::enum_dispatch;
 
 use super::super::super::auth::*;
 use super::super::super::common::*;
@@ -45,6 +46,14 @@ use super::inode_overlay::*;
 use super::lock::*;
 use super::mount::*;
 use super::overlay::*;
+
+
+use crate::qlib::kernel::fs::dev::full::FullDevice;
+use crate::qlib::kernel::fs::dev::null::NullDevice;
+use crate::qlib::kernel::fs::dev::proxyfile::ProxyDevice;
+use crate::qlib::kernel::fs::dev::random::RandomDevice;
+use crate::qlib::kernel::fs::dev::tty::TTYDevice;
+use crate::qlib::kernel::fs::dev::zero::ZeroDevice;
 
 pub fn ContextCanAccessFile(task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {
     let creds = task.creds.clone();
@@ -122,6 +131,17 @@ pub enum IopsType {
     ProxyDevice,
 }
 
+pub enum Iops {
+    FullDevice(FullDevice),
+    NullDevice(NullDevice),
+    ProxyDevice(ProxyDevice),
+    RandomDevice(RandomDevice),
+    TTYDevice(TTYDevice),
+    ZeroDevice(ZeroDevice),
+
+}
+
+#[enum_dispatch]
 pub trait InodeOperations: Sync + Send {
     fn as_any(&self) -> &Any;
     fn IopsType(&self) -> IopsType;
