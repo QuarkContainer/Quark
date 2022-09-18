@@ -356,7 +356,7 @@ impl Loader {
 
             let fileops = file.FileOp.clone();
 
-            let ttyops = fileops.TTYFileOps();
+            let ttyops = fileops.TTYFileOps().unwrap();
 
             /*let ttyops = fileops
                 .as_any()

@@ -347,10 +347,10 @@ pub enum FileOps {
 }
 
 impl FileOps {
-    pub fn TTYFileOps(&self) -> TTYFileOps {
+    pub fn TTYFileOps(&self) -> Option<TTYFileOps> {
         match self {
-            Self::TTYFileOps(inner) => inner.clone(),
-            _ => panic!("fail")
+            Self::TTYFileOps(inner) => Some(inner.clone()),
+            _ => None
         }
     }
 
