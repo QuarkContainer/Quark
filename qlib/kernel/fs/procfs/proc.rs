@@ -71,7 +71,7 @@ impl Deref for ProcNode {
     }
 }
 
-impl DirDataNode for ProcNode {
+impl DirDataNodeTrait for ProcNode {
     fn Lookup(&self, d: &Dir, task: &Task, dir: &Inode, name: &str) -> Result<Dirent> {
         let err = match d.Lookup(task, dir, name) {
             Ok(dirent) => return Ok(dirent),
@@ -106,7 +106,7 @@ impl DirDataNode for ProcNode {
     ) -> Result<File> {
         let p = DirNode {
             dir: d.clone(),
-            data: self.clone(),
+            data: self.clone().into(),
         };
 
         return Ok(File::New(dirent, &flags, RootProcFile { iops: p }.into()));
@@ -153,7 +153,7 @@ pub fn NewProc(
 
     let p = DirNode {
         dir: iops,
-        data: ProcNode(Arc::new(QMutex::new(proc))),
+        data: ProcNode(Arc::new(QMutex::new(proc))).into(),
     };
 
     return NewProcInode(&Arc::new(p), msrc, InodeType::SpecialDirectory, None);
@@ -217,7 +217,7 @@ pub fn NewThreadSelf(task: &Task, pidns: &PIDNamespace, msrc: &Arc<QMutex<MountS
 }
 
 pub struct RootProcFile {
-    pub iops: DirNode<ProcNode>,
+    pub iops: DirNode,
 }
 
 impl Waitable for RootProcFile {}
@@ -316,7 +316,9 @@ impl FileOperations for RootProcFile {
         map.insert(".".to_string(), dot);
         map.insert("..".to_string(), dotdot);
 
-        let pidns = self.iops.data.lock().pidns.clone();
+        let procNode = self.iops.data.ProcNode().unwrap();
+
+        let pidns = procNode.lock().pidns.clone();
         for tg in &pidns.ThreadGroups() {
             if tg.Leader().is_some() {
                 let name = format!("{}", tg.ID());

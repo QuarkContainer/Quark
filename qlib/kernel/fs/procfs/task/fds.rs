@@ -204,11 +204,12 @@ pub fn NewFdDirFile(IsInfoFile: bool, thread: &Thread) -> DynamicDirFileOperatio
     return DynamicDirFileOperations { node: fdDirFile.into() };
 }
 
+#[derive(Clone)]
 pub struct FdDirNode {
     pub thread: Thread,
 }
 
-impl DirDataNode for FdDirNode {
+impl DirDataNodeTrait for FdDirNode {
     // Check implements InodeOperations.Check.
     //
     // This is to match Linux, which uses a special permission handler to guarantee
@@ -255,11 +256,12 @@ impl DirDataNode for FdDirNode {
     }
 }
 
+#[derive(Clone)]
 pub struct FdInfoDirNode {
     pub thread: Thread,
 }
 
-impl DirDataNode for FdInfoDirNode {
+impl DirDataNodeTrait for FdInfoDirNode {
     fn Lookup(&self, _d: &Dir, task: &Task, dir: &Inode, name: &str) -> Result<Dirent> {
         let msrc = dir.lock().MountSource.clone();
         let inode = WalkDescriptors(task, name, &mut |file: &File, fdFlags: &FDFlags| {
@@ -296,7 +298,7 @@ pub fn NewFdDir(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>) -
         ),
         data: FdDirNode {
             thread: thread.clone(),
-        },
+        }.into(),
     };
 
     return NewProcInode(
@@ -318,7 +320,7 @@ pub fn NewFdInfoDir(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>
         ),
         data: FdInfoDirNode {
             thread: thread.clone(),
-        },
+        }.into(),
     };
 
     return NewProcInode(

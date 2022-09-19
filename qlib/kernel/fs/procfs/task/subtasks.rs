@@ -57,7 +57,7 @@ impl ProcNode {
                 &ROOT_OWNER,
                 &FilePermissions::FromMode(FileMode(0o0555)),
             ),
-            data: subTasksNode,
+            data: subTasksNode.into(),
         };
 
         return NewProcInode(
@@ -69,13 +69,14 @@ impl ProcNode {
     }
 }
 
+#[derive(Clone)]
 // subtasks represents a /proc/TID/task directory.\
 pub struct SubTasksNode {
     pub thread: Thread,
     pub procNode: ProcNode,
 }
 
-impl DirDataNode for SubTasksNode {
+impl DirDataNodeTrait for SubTasksNode {
     fn Lookup(&self, _d: &Dir, task: &Task, dir: &Inode, name: &str) -> Result<Dirent> {
         let tid = match name.parse::<i32>() {
             Err(_) => return Err(Error::SysError(SysErr::ENOENT)),

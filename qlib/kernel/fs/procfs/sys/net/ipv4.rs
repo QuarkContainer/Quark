@@ -31,9 +31,10 @@ use super::super::super::super::ramfs::dir::*;
 use super::super::super::dir_proc::*;
 use super::super::super::inode::*;
 
+#[derive(Clone)]
 pub struct Ipv4Node {}
 
-impl DirDataNode for Ipv4Node {
+impl DirDataNodeTrait for Ipv4Node {
     fn Lookup(&self, d: &Dir, task: &Task, dir: &Inode, name: &str) -> Result<Dirent> {
         return d.Lookup(task, dir, name);
     }
@@ -92,7 +93,7 @@ pub fn NewIpv4(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
             &ROOT_OWNER,
             &FilePermissions::FromMode(FileMode(0o0555)),
         ),
-        data: Ipv4Node {},
+        data: Ipv4Node {}.into(),
     };
 
     return NewProcInode(&Arc::new(ipv4Dir), msrc, InodeType::SpecialDirectory, None);

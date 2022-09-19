@@ -15,6 +15,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::any::Any;
+use enum_dispatch::enum_dispatch;
 
 use super::super::super::super::auth::*;
 use super::super::super::super::common::*;
@@ -31,7 +32,19 @@ use super::super::inode::*;
 use super::super::mount::*;
 use super::super::ramfs::dir::*;
 
-pub trait DirDataNode: Send + Sync {
+use crate::qlib::kernel::fs::procfs::sys::net::net::SysNetDirNode;
+use crate::qlib::kernel::fs::procfs::proc::ProcNode;
+use crate::qlib::kernel::fs::procfs::sys::vm::vm::ProcSysVMDirNode;
+use crate::qlib::kernel::fs::procfs::sys::net::ipv4::Ipv4Node;
+use crate::qlib::kernel::fs::procfs::net::NetDirNode;
+use crate::qlib::kernel::fs::procfs::task::fds::FdDirNode;
+use crate::qlib::kernel::fs::procfs::sys::sys::ProcSysDirNode;
+use crate::qlib::kernel::fs::procfs::task::fds::FdInfoDirNode;
+use crate::qlib::kernel::fs::procfs::task::subtasks::SubTasksNode;
+use crate::qlib::kernel::fs::procfs::task::task::TaskDirNode;
+
+#[enum_dispatch(DirDataNode)]
+pub trait DirDataNodeTrait: Send + Sync {
     fn Lookup(&self, d: &Dir, task: &Task, dir: &Inode, name: &str) -> Result<Dirent>;
     fn GetFile(
         &self,
@@ -47,13 +60,40 @@ pub trait DirDataNode: Send + Sync {
     }
 }
 
+#[enum_dispatch]
 #[derive(Clone)]
-pub struct DirNode<T: 'static + DirDataNode> {
-    pub dir: Dir,
-    pub data: T,
+pub enum DirDataNode {
+    SysNetDirNode(SysNetDirNode),
+    ProcNode(ProcNode),
+    ProcSysVMDirNode(ProcSysVMDirNode),
+    Ipv4Node(Ipv4Node),
+    NetDirNode(NetDirNode),
+    ProcSysDirNode(ProcSysDirNode),
+    FdDirNode(FdDirNode),
+    FdInfoDirNode(FdInfoDirNode),
+    SubTasksNode(SubTasksNode),
+    TaskDirNode(TaskDirNode),
 }
 
-impl<T: 'static + DirDataNode> InodeOperations for DirNode<T> {
+impl DirDataNode {
+    pub fn ProcNode(&self) -> Option<ProcNode> {
+        match self {
+            Self::ProcNode(inner) => {
+                return Some(inner.clone())
+            }
+            _ => None,
+        }
+
+    }
+}
+
+#[derive(Clone)]
+pub struct DirNode {
+    pub dir: Dir,
+    pub data: DirDataNode,
+}
+
+impl InodeOperations for DirNode {
     fn as_any(&self) -> &Any {
         return self;
     }

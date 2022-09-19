@@ -34,9 +34,10 @@ use super::mmap_min_addr::*;
 use super::overcommit::*;
 
 // ProcSysDirNode represents a /proc/sys directory.
-pub struct ProcSysDirNode {}
+#[derive(Clone)]
+pub struct ProcSysVMDirNode {}
 
-impl DirDataNode for ProcSysDirNode {
+impl DirDataNodeTrait for ProcSysVMDirNode {
     fn Lookup(&self, d: &Dir, task: &Task, dir: &Inode, name: &str) -> Result<Dirent> {
         return d.Lookup(task, dir, name);
     }
@@ -65,7 +66,7 @@ pub fn NewVm(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
             &ROOT_OWNER,
             &FilePermissions::FromMode(FileMode(0o0555)),
         ),
-        data: ProcSysDirNode {},
+        data: ProcSysVMDirNode {}.into(),
     };
 
     return NewProcInode(&Arc::new(taskDir), msrc, InodeType::SpecialDirectory, None);

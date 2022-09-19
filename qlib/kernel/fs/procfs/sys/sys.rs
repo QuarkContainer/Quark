@@ -33,10 +33,11 @@ use super::super::inode::*;
 use super::vm::vm::*;
 use super::net::net::*;
 
+#[derive(Clone)]
 // ProcSysDirNode represents a /proc/sys directory.
 pub struct ProcSysDirNode {}
 
-impl DirDataNode for ProcSysDirNode {
+impl DirDataNodeTrait for ProcSysDirNode {
     fn Lookup(&self, d: &Dir, task: &Task, dir: &Inode, name: &str) -> Result<Dirent> {
         return d.Lookup(task, dir, name);
     }
@@ -65,7 +66,7 @@ pub fn NewSys(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
             &ROOT_OWNER,
             &FilePermissions::FromMode(FileMode(0o0555)),
         ),
-        data: ProcSysDirNode {},
+        data: ProcSysDirNode {}.into(),
     };
 
     return NewProcInode(&Arc::new(taskDir), msrc, InodeType::SpecialDirectory, None);

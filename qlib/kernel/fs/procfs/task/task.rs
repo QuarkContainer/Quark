@@ -46,13 +46,14 @@ use super::statm::*;
 use super::status::*;
 use super::uid_pid_map::*;
 
+#[derive(Clone)]
 // taskDir represents a task-level directory.
 pub struct TaskDirNode {
     pub pidns: Option<PIDNamespace>,
     pub thread: Thread,
 }
 
-impl DirDataNode for TaskDirNode {
+impl DirDataNodeTrait for TaskDirNode {
     fn Lookup(&self, d: &Dir, task: &Task, dir: &Inode, name: &str) -> Result<Dirent> {
         return d.Lookup(task, dir, name);
     }
@@ -121,7 +122,7 @@ impl ProcNode {
             data: TaskDirNode {
                 pidns: None,
                 thread: thread.clone(),
-            },
+            }.into(),
         };
 
         return NewProcInode(

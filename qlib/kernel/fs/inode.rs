@@ -47,13 +47,14 @@ use super::lock::*;
 use super::mount::*;
 use super::overlay::*;
 
-
 use crate::qlib::kernel::fs::dev::full::FullDevice;
 use crate::qlib::kernel::fs::dev::null::NullDevice;
 use crate::qlib::kernel::fs::dev::proxyfile::ProxyDevice;
 use crate::qlib::kernel::fs::dev::random::RandomDevice;
 use crate::qlib::kernel::fs::dev::tty::TTYDevice;
 use crate::qlib::kernel::fs::dev::zero::ZeroDevice;
+use crate::qlib::kernel::fs::fsutil::inode::SimpleFileInode;
+use crate::qlib::kernel::fs::host::fifoiops::FifoIops;
 
 pub fn ContextCanAccessFile(task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {
     let creds = task.creds.clone();
@@ -138,6 +139,13 @@ pub enum Iops {
     RandomDevice(RandomDevice),
     TTYDevice(TTYDevice),
     ZeroDevice(ZeroDevice),
+    SimpleFileInode(SimpleFileInode),
+    HostDirOp(HostDirOp),
+    FifoIops(FifoIops),
+    HostInodeOp(HostInodeOp),
+
+
+
 
 }
 
