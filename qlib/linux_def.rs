@@ -388,7 +388,7 @@ pub const EVENT_INTERNAL:   EventMask = 0x1000;
 // Quark event, when application shutdown the connection, it is used for wait the uring to drain the writing buffer
 pub const EVENT_PENDING_SHUTDOWN: EventMask = 0x20;
 
-pub const ALL_EVENTS: EventMask = 0x1f | EVENT_RD_NORM | EVENT_WR_NORM;
+pub const ALL_EVENTS: EventMask = 0x1f | EVENT_RD_NORM | EVENT_WR_NORM | EVENT_PENDING_SHUTDOWN;
 pub const EVENT_READ: EventMask = EVENT_IN | EVENT_HUP | EVENT_ERR | EVENT_RD_NORM;
 pub const EVENT_WRITE: EventMask = EVENT_OUT | EVENT_HUP | EVENT_ERR | EVENT_WR_NORM;
 pub const READABLE_EVENT: EventMask = EVENT_IN | EVENT_RD_NORM;

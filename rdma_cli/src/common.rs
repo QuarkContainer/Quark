@@ -62,7 +62,7 @@ pub struct ServerSock {
 
 pub struct DataSockIntern {
     pub fd: u32,
-    pub sockBuff: Arc<SocketBuff>,
+    pub sockBuff: SocketBuff,
     pub srcIpAddr: u32,
     pub srcPort: u16,
     pub dstIpAddr: u32,
@@ -93,7 +93,7 @@ impl DataSock {
         dstPort: u16,
         status: SockStatus,
         channelId: u32,
-        sockBuff: Arc<SocketBuff>,
+        sockBuff: SocketBuff,
     ) -> Self {
         Self(Arc::new(DataSockIntern {
             srcIpAddr,
@@ -376,7 +376,7 @@ impl GatewayClient {
                     port,
                     SockStatus::SYN_SENT,
                     0,
-                    Arc::new(SocketBuff::NewDummySockBuf()),
+                    SocketBuff(Arc::new(SocketBuffIntern::NewDummySockBuf())),
                 );
 
                 self.dataSockFdInfos.lock().insert(sockfd, sockInfo);

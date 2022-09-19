@@ -14,12 +14,10 @@
 
 #[macro_export]
 macro_rules! raw {
- // macth like arm for macro
-    ($a:expr,$b:expr,$c:expr)=>{
-        {
-           error!("raw:: {:x}/{:x}/{:x}", $a, $b, $c);
-        }
-    }
+    // macth like arm for macro
+    ($a:expr,$b:expr,$c:expr,$d:expr) => {{
+        error!("raw:: {:x}/{:x}/{:x}/{:x}", $a, $b, $c, $d);
+    }};
 }
 
 #[macro_export]

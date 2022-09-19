@@ -501,7 +501,7 @@ impl Waitable for SocketOperations {
                     .sockInfo
                     .lock()
                     .clone();
-                // error!("Readiness 2");
+
                 match sockInfo {
                     SockInfo::RDMADataSocket(dataSock) => {
                         return dataSock.socketBuf.Events() & mask;
@@ -1189,12 +1189,37 @@ impl SockOperations for SocketOperations {
         if self.stype == SockType::SOCK_STREAM
             && (how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR)
         {
+            if self.enableRDMA {
+                //TODO:
+                let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
+                let socketInfo = fdInfo.lock().sockInfo.lock().clone();
+                match socketInfo {
+                    SockInfo::RDMADataSocket(dataSocket) => {
+                        let _res = GlobalRDMASvcCli().shutdown(dataSocket.channelId, how as u8);
+                    }
+                    _ => {
+                        error!("Shutdown with sockInfo: {:?}", socketInfo);
+                    }
+                }
+            }
             if self.SocketBuf().HasWriteData() {
                 self.SocketBuf().SetPendingWriteShutdown();
                 let general = task.blocker.generalEntry.clone();
                 self.EventRegister(task, &general, EVENT_PENDING_SHUTDOWN);
                 defer!(self.EventUnregister(task, &general));
 
+                if self.enableRDMA {
+                    let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
+                    let socketInfo = fdInfo.lock().sockInfo.lock().clone();
+                    match socketInfo {
+                        SockInfo::RDMADataSocket(dataSocket) => {
+                            let _res = GlobalRDMASvcCli().pendingshutdown(dataSocket.channelId);
+                        }
+                        _ => {
+                            panic!("Shutdown with sockInfo: {:?}", socketInfo);
+                        }
+                    }
+                }
                 while self.SocketBuf().HasWriteData() {
                     task.blocker.BlockGeneralOnly();
                 }
@@ -1203,10 +1228,8 @@ impl SockOperations for SocketOperations {
 
         if how == LibcConst::SHUT_RD || how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR {
             let res = 0;
-            if self.enableRDMA && (how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR) {
-                //TODO:
-                let _res = GlobalRDMASvcCli().shutdown(1, how as u8);
-            } else {
+
+            if !self.enableRDMA {
                 let res = Kernel::HostSpace::Shutdown(self.fd, how as i32);
                 if res < 0 {
                     return Err(Error::SysError(-res as i32));
@@ -1226,7 +1249,6 @@ impl SockOperations for SocketOperations {
                 self.SocketBuf().SetWClosed();
                 self.queue.Notify(EventMaskFromLinux(EVENT_HUP as u32));
             }
-
             return Ok(res);
         }
 

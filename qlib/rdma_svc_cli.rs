@@ -204,6 +204,11 @@ impl RDMASvcClient {
         }
     }
 
+    pub fn pendingshutdown(&self, channelId: u32) -> Result<()> {
+        let res = self.SentMsgToSvc(RDMAReqMsg::RDMAPendingShutdown(RDMAPendingShutdownReq { channelId }));
+        res
+    }
+
     pub fn close(&self, channelId: u32) -> Result<()> {
         let res = self.SentMsgToSvc(RDMAReqMsg::RDMAClose(RDMACloseReq { channelId }));
         res
@@ -261,7 +266,6 @@ impl RDMASvcClient {
                 Some(cq) => {
                     match cq.msg {
                         RDMARespMsg::RDMAConnect(response) => {
-                            // error!("RDMARespMsg::RDMAConnect, response: {:?}", response);
                             let sockfd = match self
                                 .rdmaIdToSocketMappings
                                 .lock()
@@ -329,7 +333,6 @@ impl RDMASvcClient {
                             }
                         }
                         RDMARespMsg::RDMAAccept(response) => {
-                            // debug!("RDMARespMsg::RDMAAccept, response: {:?}", response);
                             let sockfd = match self
                                 .rdmaIdToSocketMappings
                                 .lock()
@@ -422,7 +425,6 @@ impl RDMASvcClient {
                             }
                         }
                         RDMARespMsg::RDMANotify(response) => {
-                            // debug!("RDMARespMsg::RDMANotify, response: {:?}", response);
                             let rdmaId = match self
                                 .channelToSocketMappings
                                 .lock()
@@ -430,10 +432,10 @@ impl RDMASvcClient {
                             {
                                 Some(rdmaIdVal) => *rdmaIdVal,
                                 None => {
-                                    debug!(
-                                    "RDMARespMsg::RDMANotify, Can't find rdmaId based on channelId: {}",
-                                    response.channelId
-                                );
+                                //     debug!(
+                                //     "RDMARespMsg::RDMANotify, Can't find rdmaId based on channelId: {}",
+                                //     response.channelId
+                                // );
                                     break;
                                 }
                             };
@@ -465,6 +467,31 @@ impl RDMASvcClient {
                                     .clone();
                                 waitInfo.Notify(EVENT_OUT);
                             }
+                            if response.event & EVENT_PENDING_SHUTDOWN != 0 {
+                                let sockInfo = GlobalIOMgr()
+                                    .GetByHost(sockFd)
+                                    .unwrap()
+                                    .lock()
+                                    .sockInfo
+                                    .lock()
+                                    .clone();
+                                match sockInfo {
+                                    SockInfo::RDMADataSocket(dataSock) => {
+                                        if dataSock.socketBuf.PendingWriteShutdown() {
+                                            let waitInfo = GlobalIOMgr()
+                                                .GetByHost(sockFd)
+                                                .unwrap()
+                                                .lock()
+                                                .waitInfo
+                                                .clone();
+                                            waitInfo.Notify(EVENT_PENDING_SHUTDOWN);
+                                        }
+                                    }
+                                    _ => {
+                                        panic!("RDMARespMsg::RDMAFinNotify, Unexpected sockInfo type: {:?}", sockInfo);
+                                    }
+                                }
+                            }
                         }
                         RDMARespMsg::RDMAFinNotify(response) => {
                             // debug!("RDMARespMsg::RDMAFinNotify, response: {:?}", response);
@@ -475,10 +502,6 @@ impl RDMASvcClient {
                             {
                                 Some(rdmaIdVal) => *rdmaIdVal,
                                 None => {
-                                //     debug!(
-                                //     "RDMARespMsg::RDMAFinNotify, Can't find rdmaId based on channelId: {}",
-                                //     response.channelId
-                                // );
                                     break;
                                 }
                             };
@@ -491,26 +514,23 @@ impl RDMASvcClient {
                                 }
                             };
 
-                            let sockInfo = GlobalIOMgr()
-                                .GetByHost(sockFd)
-                                .unwrap()
-                                .lock()
-                                .sockInfo
-                                .lock()
-                                .clone();
-                            match sockInfo {
-                                SockInfo::RDMADataSocket(dataSock) => {
-                                    dataSock.socketBuf.SetRClosed();
-                                    let waitInfo = GlobalIOMgr()
-                                        .GetByHost(sockFd)
-                                        .unwrap()
-                                        .lock()
-                                        .waitInfo
-                                        .clone();
-                                    waitInfo.Notify(EVENT_IN);
-                                }
-                                _ => {
-                                    panic!("RDMARespMsg::RDMAFinNotify, Unexpected sockInfo type: {:?}", sockInfo);
+                            let fdInfo = GlobalIOMgr().GetByHost(sockFd);
+                            if fdInfo.is_some() {
+                                let sockInfo = fdInfo.unwrap().lock().sockInfo.lock().clone();
+                                match sockInfo {
+                                    SockInfo::RDMADataSocket(dataSock) => {
+                                        dataSock.socketBuf.SetRClosed();
+                                        let waitInfo = GlobalIOMgr()
+                                            .GetByHost(sockFd)
+                                            .unwrap()
+                                            .lock()
+                                            .waitInfo
+                                            .clone();
+                                        waitInfo.Notify(EVENT_IN);
+                                    }
+                                    _ => {
+                                        panic!("RDMARespMsg::RDMAFinNotify, Unexpected sockInfo type: {:?}", sockInfo);
+                                    }
                                 }
                             }
                         }

@@ -111,7 +111,7 @@ use node_informer::NodeInformer;
 use pod_informer::PodInformer;
 use qlib::kernel::TSC;
 use qlib::linux_def::*;
-use qlib::socket_buf::SocketBuff;
+use qlib::socket_buf::{SocketBuff, SocketBuffIntern};
 use qlib::unix_socket::UnixSocket;
 use rdma_agent::*;
 use rdma_channel::RDMAChannel;
@@ -439,7 +439,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                     let controlRegionId =
                         RDMA_SRV.controlBufIdMgr.lock().AllocId().unwrap() as usize; // TODO: should handle no space issue.
-                    let sockBuf = Arc::new(SocketBuff::InitWithShareMemory(
+                    let sockBuf = SocketBuff(Arc::new(SocketBuffIntern::InitWithShareMemory(
                         MemoryDef::DEFAULT_BUF_PAGE_COUNT,
                         &RDMA_SRV.controlRegion.ioMetas[controlRegionId].readBufAtoms as *const _
                             as u64,
@@ -450,7 +450,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         &RDMA_SRV.controlRegion.iobufs[controlRegionId].read as *const _ as u64,
                         &RDMA_SRV.controlRegion.iobufs[controlRegionId].write as *const _ as u64,
                         true,
-                    ));
+                    )));
 
                     let rdmaConn = RDMAConn::New(
                         stream_fd,
@@ -734,7 +734,7 @@ fn SetupConnection(ip: &u32) {
 
     println!("new conn");
     let controlRegionId = RDMA_SRV.controlBufIdMgr.lock().AllocId().unwrap() as usize; // TODO: should handle no space issue.
-    let sockBuf = Arc::new(SocketBuff::InitWithShareMemory(
+    let sockBuf = SocketBuff(Arc::new(SocketBuffIntern::InitWithShareMemory(
         MemoryDef::DEFAULT_BUF_PAGE_COUNT,
         &RDMA_SRV.controlRegion.ioMetas[controlRegionId].readBufAtoms as *const _ as u64,
         &RDMA_SRV.controlRegion.ioMetas[controlRegionId].writeBufAtoms as *const _ as u64,
@@ -742,7 +742,7 @@ fn SetupConnection(ip: &u32) {
         &RDMA_SRV.controlRegion.iobufs[controlRegionId].read as *const _ as u64,
         &RDMA_SRV.controlRegion.iobufs[controlRegionId].write as *const _ as u64,
         true,
-    ));
+    )));
 
     let rdmaConn = RDMAConn::New(
         sock_fd,
