@@ -286,6 +286,7 @@ impl InodeOperations for RandomDevice {
     }
 }
 
+#[derive(Clone)]
 pub struct RandomFileOperations {}
 
 impl Waitable for RandomFileOperations {

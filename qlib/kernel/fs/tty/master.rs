@@ -309,6 +309,7 @@ impl InodeOperations for MasterInodeOperations {
     }
 }
 
+#[derive(Clone)]
 pub struct MasterFileOperations {
     pub d: DirInodeOperations,
     pub t: Arc<Terminal>,

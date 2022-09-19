@@ -283,6 +283,7 @@ impl InodeOperations for NullDevice {
     }
 }
 
+#[derive(Clone)]
 pub struct NullFileOperations {}
 
 impl Waitable for NullFileOperations {

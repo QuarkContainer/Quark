@@ -282,6 +282,7 @@ impl InodeOperations for FullDevice {
     }
 }
 
+#[derive(Clone)]
 pub struct FullFileOperations {}
 
 impl Waitable for FullFileOperations {

@@ -48,6 +48,7 @@ pub fn NewSnapshotReadonlyFileOperations(
     return ReadonlyFileOperations { node: node.into() };
 }
 
+#[derive(Clone)]
 pub struct SnapshotReadonlyFileNode {
     pub data: Arc<Vec<u8>>,
 }
@@ -75,6 +76,7 @@ impl ReadonlyFileNodeTrait for SnapshotReadonlyFileNode {
     }
 }
 
+#[derive(Clone)]
 #[enum_dispatch]
 pub enum ReadonlyFileNode {
     SnapshotReadonlyFileNode(SnapshotReadonlyFileNode),
@@ -103,6 +105,7 @@ pub trait ReadonlyFileNodeTrait: Send + Sync {
     }
 }
 
+#[derive(Clone)]
 pub struct ReadonlyFileOperations {
     pub node: ReadonlyFileNode,
 }

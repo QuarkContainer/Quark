@@ -301,6 +301,7 @@ impl InodeOperations for ProxyDevice {
     }
 }
 
+#[derive(Clone)]
 pub struct ProxyFileOperations {
     pub InodeOp: HostInodeOp,
 }

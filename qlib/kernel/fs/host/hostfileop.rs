@@ -16,6 +16,7 @@ use crate::qlib::mutex::*;
 use alloc::string::String;
 use alloc::string::ToString;
 use core::any::Any;
+use alloc::sync::Arc;
 
 use super::super::super::super::addr::*;
 use super::super::super::super::bytestream::*;
@@ -41,9 +42,10 @@ pub enum HostFileBuf {
     TTYOut(ByteStream),
 }
 
+#[derive(Clone)]
 pub struct HostFileOp {
     pub InodeOp: HostInodeOp,
-    pub DirCursor: QMutex<String>,
+    pub DirCursor: Arc<QMutex<String>>,
     //pub Buf: HostFileBuf,
 }
 

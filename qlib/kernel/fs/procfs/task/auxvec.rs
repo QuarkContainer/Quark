@@ -67,6 +67,7 @@ pub fn NewAUXVecSimpleFileInode(
     );
 }
 
+#[derive(Clone)]
 pub struct AUXVecSimpleFileTrait {
     pub thread: Thread,
 }
@@ -95,6 +96,7 @@ pub fn NewAUXVecReadonlyFileOperations(
     };
 }
 
+#[derive(Clone)]
 pub struct AUXVecReadonlyFileNode {
     pub thread: Thread,
 }

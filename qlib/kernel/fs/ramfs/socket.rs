@@ -280,6 +280,7 @@ impl InodeOperations for SocketInodeOps {
     }
 }
 
+#[derive(Clone)]
 pub struct SocketFileOps {}
 
 impl Waitable for SocketFileOps {

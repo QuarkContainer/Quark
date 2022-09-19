@@ -94,6 +94,7 @@ pub fn NewCommReadonlyFileOperations(
     };
 }
 
+#[derive(Clone)]
 pub struct CommReadonlyFileNode {
     pub thread: Thread,
 }

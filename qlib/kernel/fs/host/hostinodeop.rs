@@ -584,7 +584,7 @@ impl HostInodeOp {
     pub fn GetHostFileOp(&self, _task: &Task) -> HostFileOp {
         let hostFileOp = HostFileOp {
             InodeOp: self.clone(),
-            DirCursor: QMutex::new("".to_string()),
+            DirCursor: Arc::new(QMutex::new("".to_string())),
             //Buf: HostFileBuf::None,
         };
         return hostFileOp;

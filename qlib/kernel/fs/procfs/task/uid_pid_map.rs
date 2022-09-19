@@ -105,6 +105,7 @@ pub fn NewIdMapReadonlyFileOperations(
     };
 }
 
+#[derive(Clone)]
 pub struct IdMapReadonlyFileNode {
     pub thread: Thread,
     pub gids: bool,

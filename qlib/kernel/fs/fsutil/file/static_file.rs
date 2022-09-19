@@ -27,6 +27,7 @@ use super::super::super::file::*;
 use super::super::super::host::hostinodeop::*;
 use super::*;
 
+#[derive(Clone)]
 pub struct StaticFile {
     pub content: Arc<Vec<u8>>,
 }

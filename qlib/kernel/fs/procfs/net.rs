@@ -200,7 +200,7 @@ pub fn NewNetTCP(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     return NewProcInode(node.into(), msrc, InodeType::SpecialFile, None);
 }
 
-
+#[derive(Clone)]
 pub struct NetTCPReadonlyFileNode {}
 
 impl ReadonlyFileNodeTrait for NetTCPReadonlyFileNode {
@@ -405,6 +405,7 @@ pub fn NewNetUDP(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     return NewProcInode(node.into(), msrc, InodeType::SpecialFile, None);
 }
 
+#[derive(Clone)]
 pub struct NetUDPReadonlyFileNode {}
 
 impl NetUDPReadonlyFileNode {
@@ -584,7 +585,7 @@ pub fn NewNetUnix(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     return NewProcInode(node.into(), msrc, InodeType::SpecialFile, None);
 }
 
-
+#[derive(Clone)]
 pub struct NetUnixReadonlyFileNode {}
 
 impl NetUnixReadonlyFileNode {

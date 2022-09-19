@@ -283,6 +283,7 @@ impl InodeOperations for ZeroDevice {
     }
 }
 
+#[derive(Clone)]
 pub struct ZeroFileOperations {}
 
 impl Waitable for ZeroFileOperations {}

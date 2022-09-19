@@ -305,6 +305,7 @@ pub enum FileOpsType {
     ProxyFileOperations
 }
 
+#[derive(Clone)]
 #[enum_dispatch]
 pub enum FileOps {
     OverlayFileOperations(OverlayFileOperations),

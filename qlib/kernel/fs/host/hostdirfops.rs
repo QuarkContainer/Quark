@@ -16,6 +16,7 @@ use crate::qlib::mutex::*;
 use alloc::string::String;
 use alloc::string::ToString;
 use core::any::Any;
+use alloc::sync::Arc;
 
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
@@ -29,9 +30,10 @@ use super::super::file::*;
 use super::super::fsutil::file::*;
 use super::super::host::diriops::*;
 
+#[derive(Clone)]
 pub struct HostDirFops {
     pub DirOp: HostDirOp,
-    pub DirCursor: QMutex<String>,
+    pub DirCursor: Arc<QMutex<String>>,
     //pub Buf: HostFileBuf,
 }
 

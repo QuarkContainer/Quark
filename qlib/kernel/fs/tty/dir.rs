@@ -376,7 +376,18 @@ impl InodeOperations for DirInodeOperations {
     }
 }
 
-pub struct DirFileOperations {
+#[derive(Clone)]
+pub struct DirFileOperations(pub Arc<DirFileOperationsInner>);
+
+impl Deref for DirFileOperations {
+    type Target = Arc<DirFileOperationsInner>;
+
+    fn deref(&self) -> &Arc<DirFileOperationsInner> {
+        &self.0
+    }
+}
+
+pub struct DirFileOperationsInner {
     pub di: DirInodeOperations,
     pub DirCursor: QMutex<String>,
 }

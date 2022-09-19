@@ -25,6 +25,7 @@ use super::super::super::file::*;
 use super::super::super::host::hostinodeop::*;
 use super::*;
 
+#[derive(Clone)]
 pub struct NoReadWriteFile {}
 
 impl Waitable for NoReadWriteFile {

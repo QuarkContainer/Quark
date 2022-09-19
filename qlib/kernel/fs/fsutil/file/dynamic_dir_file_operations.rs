@@ -29,6 +29,7 @@ use super::*;
 use crate::qlib::kernel::fs::procfs::task::fds::FdDirFile;
 use crate::qlib::kernel::fs::procfs::task::subtasks::SubTasksFileNode;
 
+#[derive(Clone)]
 #[enum_dispatch]
 pub enum DynamicDirFileNode {
     FdDirFile(FdDirFile),
@@ -58,6 +59,7 @@ pub trait DynamicDirFileNodeTrait: Send + Sync {
     }
 }
 
+#[derive(Clone)]
 pub struct DynamicDirFileOperations {
     pub node: DynamicDirFileNode,
 }

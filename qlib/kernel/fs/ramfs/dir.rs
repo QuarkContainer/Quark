@@ -556,17 +556,31 @@ impl InodeOperations for Dir {
     }
 }
 
-pub struct DirFileOperation {
+#[derive(Clone)]
+pub struct DirFileOperation(pub Arc<DirFileOperationsInner>);
+
+impl Deref for DirFileOperation {
+    type Target = Arc<DirFileOperationsInner>;
+
+    fn deref(&self) -> &Arc<DirFileOperationsInner> {
+        &self.0
+    }
+}
+
+
+pub struct DirFileOperationsInner {
     pub dirCursor: QMutex<String>,
     pub dir: Dir,
 }
 
 impl DirFileOperation {
     pub fn New(dir: &Dir) -> Self {
-        return Self {
+        let inner = DirFileOperationsInner {
             dirCursor: QMutex::new("".to_string()),
             dir: dir.clone(),
         };
+
+        return Self(Arc::new(inner));
     }
 }
 

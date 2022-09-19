@@ -323,6 +323,7 @@ impl InodeOperations for SlaveInodeOperations {
     }
 }
 
+#[derive(Clone)]
 pub struct SlaveFileOperations {
     pub d: SlaveInodeOperations,
 }

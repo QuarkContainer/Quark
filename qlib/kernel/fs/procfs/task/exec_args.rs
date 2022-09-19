@@ -112,6 +112,7 @@ pub fn NewExecArgReadonlyFileNodeFileOperations(
     };
 }
 
+#[derive(Clone)]
 pub struct ExecArgReadonlyFileNode {
     pub typ: ExecArgType,
     pub thread: Thread,

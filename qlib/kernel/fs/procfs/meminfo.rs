@@ -32,6 +32,7 @@ use super::super::fsutil::file::readonly_file::*;
 use super::super::fsutil::inode::simple_file_inode::*;
 use super::inode::*;
 
+#[derive(Clone)]
 pub struct MeminfoFileNode {}
 
 impl ReadonlyFileNodeTrait for MeminfoFileNode {

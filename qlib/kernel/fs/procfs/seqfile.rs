@@ -405,6 +405,7 @@ impl InodeOperations for SeqFile {
     }
 }
 
+#[derive(Clone)]
 pub struct SeqFileOperations {
     pub seqFile: SeqFile,
 }

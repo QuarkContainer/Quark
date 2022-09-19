@@ -308,6 +308,7 @@ impl InodeOperations for Symlink {
     }
 }
 
+#[derive(Clone)]
 pub struct SymlinkFileOperations {}
 
 impl Waitable for SymlinkFileOperations {

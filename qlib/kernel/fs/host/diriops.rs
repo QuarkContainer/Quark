@@ -288,7 +288,7 @@ impl HostDirOp {
     pub fn GetHostFileOp(&self, _task: &Task) -> HostDirFops {
         let hostDirOp = HostDirFops {
             DirOp: self.clone(),
-            DirCursor: QMutex::new("".to_string()),
+            DirCursor: Arc::new(QMutex::new("".to_string())),
             //Buf: HostFileBuf::None,
         };
         return hostDirOp;
@@ -460,8 +460,7 @@ impl InodeOperations for HostDirOp {
         let iops = match target
             .lock()
             .InodeOp
-            .as_any()
-            .downcast_ref::<HostInodeOp>()
+            .HostInodeOp()
             {
                 Some(p) => p.clone(),
                 None => return Err(Error::SysError(SysErr::EPERM)),
