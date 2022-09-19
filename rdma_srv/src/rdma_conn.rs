@@ -109,7 +109,7 @@ impl Drop for RDMAConn {
 }
 
 impl RDMAConn {
-    pub fn New(fd: i32, sockBuf: Arc<SocketBuff>, rkey: u32) -> Self {
+    pub fn New(fd: i32, sockBuf: SocketBuff, rkey: u32) -> Self {
         let qp = RDMA.CreateQueuePair().expect("RDMADataSock create QP fail");
         println!("after create qp");
         let (addr, len) = sockBuf.ReadBuf();

@@ -26,7 +26,7 @@ use super::id_mgr::IdMgr;
 use super::qlib::common::*;
 use super::qlib::linux_def::*;
 use super::qlib::rdma_share::*;
-use super::qlib::socket_buf::SocketBuff;
+use super::qlib::socket_buf::{SocketBuff, SocketBuffIntern};
 use super::qlib::unix_socket::UnixSocket;
 use super::rdma::*;
 use super::rdma_channel::*;
@@ -179,7 +179,7 @@ impl RDMAAgent {
         let channelId = RDMA_SRV.channelIdMgr.lock().AllocId().unwrap();
         let ioBufIndex = self.ioBufIdMgr.lock().AllocId().unwrap() as usize;
         let shareRegion = self.shareRegion.lock();
-        let sockBuf = Arc::new(SocketBuff::InitWithShareMemory(
+        let sockBuf = SocketBuff(Arc::new(SocketBuffIntern::InitWithShareMemory(
             MemoryDef::DEFAULT_BUF_PAGE_COUNT,
             &shareRegion.ioMetas[ioBufIndex].readBufAtoms as *const _ as u64,
             &shareRegion.ioMetas[ioBufIndex].writeBufAtoms as *const _ as u64,
@@ -187,7 +187,7 @@ impl RDMAAgent {
             &shareRegion.iobufs[ioBufIndex].read as *const _ as u64,
             &shareRegion.iobufs[ioBufIndex].write as *const _ as u64,
             true,
-        ));
+        )));
 
         let rdmaChannel = RDMAChannel::CreateRDMAChannel(
             channelId,
@@ -211,7 +211,7 @@ impl RDMAAgent {
         let channelId = RDMA_SRV.channelIdMgr.lock().AllocId().unwrap();
         let ioBufIndex = self.ioBufIdMgr.lock().AllocId().unwrap() as usize;
         let shareRegion = self.shareRegion.lock();
-        let sockBuf = Arc::new(SocketBuff::InitWithShareMemory(
+        let sockBuf = SocketBuff(Arc::new(SocketBuffIntern::InitWithShareMemory(
             MemoryDef::DEFAULT_BUF_PAGE_COUNT,
             &shareRegion.ioMetas[ioBufIndex].readBufAtoms as *const _ as u64,
             &shareRegion.ioMetas[ioBufIndex].writeBufAtoms as *const _ as u64,
@@ -219,7 +219,7 @@ impl RDMAAgent {
             &shareRegion.iobufs[ioBufIndex].read as *const _ as u64,
             &shareRegion.iobufs[ioBufIndex].write as *const _ as u64,
             true,
-        ));
+        )));
 
         let rdmaChannel = RDMAChannel::CreateClientChannel(
             channelId,

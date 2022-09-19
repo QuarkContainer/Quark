@@ -75,20 +75,20 @@ use self::qlib::ShareSpaceRef;
 use alloc::slice;
 use alloc::sync::Arc;
 use fs2::FileExt;
+use spin::Mutex;
 use std::collections::HashMap;
 use std::io;
 use std::io::prelude::*;
 use std::io::Error;
 use std::net::{IpAddr, Ipv4Addr, TcpListener, TcpStream};
 use std::os::unix::io::{AsRawFd, RawFd};
-use spin::Mutex;
 pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
 use crate::qlib::rdma_share::*;
 use common::EpollEvent;
 use common::*;
 use qlib::linux_def::*;
 use qlib::rdma_svc_cli::*;
-use qlib::socket_buf::SocketBuff;
+use qlib::socket_buf::{SocketBuff, SocketBuffIntern};
 use qlib::unix_socket::UnixSocket;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -246,22 +246,25 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient, fds: &mut HashMap<i32, FdType
                                             sockInfo.dstPort,
                                             SockStatus::ESTABLISHED,
                                             response.channelId,
-                                            Arc::new(SocketBuff::InitWithShareMemory(
-                                                MemoryDef::DEFAULT_BUF_PAGE_COUNT,
-                                                &shareRegion.ioMetas[ioBufIndex].readBufAtoms
-                                                    as *const _
-                                                    as u64,
-                                                &shareRegion.ioMetas[ioBufIndex].writeBufAtoms
-                                                    as *const _
-                                                    as u64,
-                                                &shareRegion.ioMetas[ioBufIndex].consumeReadData
-                                                    as *const _
-                                                    as u64,
-                                                &shareRegion.iobufs[ioBufIndex].read as *const _
-                                                    as u64,
-                                                &shareRegion.iobufs[ioBufIndex].write as *const _
-                                                    as u64,
-                                                false,
+                                            SocketBuff(Arc::new(
+                                                SocketBuffIntern::InitWithShareMemory(
+                                                    MemoryDef::DEFAULT_BUF_PAGE_COUNT,
+                                                    &shareRegion.ioMetas[ioBufIndex].readBufAtoms
+                                                        as *const _
+                                                        as u64,
+                                                    &shareRegion.ioMetas[ioBufIndex].writeBufAtoms
+                                                        as *const _
+                                                        as u64,
+                                                    &shareRegion.ioMetas[ioBufIndex].consumeReadData
+                                                        as *const _
+                                                        as u64,
+                                                    &shareRegion.iobufs[ioBufIndex].read as *const _
+                                                        as u64,
+                                                    &shareRegion.iobufs[ioBufIndex].write
+                                                        as *const _
+                                                        as u64,
+                                                    false,
+                                                ),
                                             )),
                                         );
                                         sockFdInfos.insert(sockInfo.fd, sockInfo);
@@ -290,21 +293,24 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient, fds: &mut HashMap<i32, FdType
                                         response.dstPort,
                                         SockStatus::ESTABLISHED,
                                         response.channelId,
-                                        Arc::new(SocketBuff::InitWithShareMemory(
-                                            MemoryDef::DEFAULT_BUF_PAGE_COUNT,
-                                            &shareRegion.ioMetas[ioBufIndex].readBufAtoms
-                                                as *const _
-                                                as u64,
-                                            &shareRegion.ioMetas[ioBufIndex].writeBufAtoms
-                                                as *const _
-                                                as u64,
-                                            &shareRegion.ioMetas[ioBufIndex].consumeReadData
-                                                as *const _
-                                                as u64,
-                                            &shareRegion.iobufs[ioBufIndex].read as *const _ as u64,
-                                            &shareRegion.iobufs[ioBufIndex].write as *const _
-                                                as u64,
-                                            false,
+                                        SocketBuff(Arc::new(
+                                            SocketBuffIntern::InitWithShareMemory(
+                                                MemoryDef::DEFAULT_BUF_PAGE_COUNT,
+                                                &shareRegion.ioMetas[ioBufIndex].readBufAtoms
+                                                    as *const _
+                                                    as u64,
+                                                &shareRegion.ioMetas[ioBufIndex].writeBufAtoms
+                                                    as *const _
+                                                    as u64,
+                                                &shareRegion.ioMetas[ioBufIndex].consumeReadData
+                                                    as *const _
+                                                    as u64,
+                                                &shareRegion.iobufs[ioBufIndex].read as *const _
+                                                    as u64,
+                                                &shareRegion.iobufs[ioBufIndex].write as *const _
+                                                    as u64,
+                                                false,
+                                            ),
                                         )),
                                     );
 

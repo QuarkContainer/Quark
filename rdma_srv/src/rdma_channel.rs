@@ -70,7 +70,7 @@ pub struct RDMAChannelIntern {
     // pub writeBuf: Mutex<ByteStream>,
     // pub consumeReadData: &'static AtomicU64,
     // pub sockfd: u32, //TODO: this is used to associate SQE and CQE, need double check it's a proper way to do it or not
-    pub sockBuf: Arc<SocketBuff>,
+    pub sockBuf: SocketBuff,
     pub lkey: u32,
     pub rkey: u32,
     pub raddr: u64,
@@ -518,7 +518,7 @@ impl RDMAChannel {
         localId: u32,
         lkey: u32,
         rkey: u32,
-        socketBuf: Arc<SocketBuff>,
+        socketBuf: SocketBuff,
         rdmaConn: RDMAConn,
     ) -> Self {
         let (raddr, len) = socketBuf.ReadBuf();
@@ -552,7 +552,7 @@ impl RDMAChannel {
         localId: u32,
         lkey: u32,
         rkey: u32,
-        socketBuf: Arc<SocketBuff>,
+        socketBuf: SocketBuff,
         rdmaConn: RDMAConn,
         connectRequest: &ConnectRequest,
         ioBufIndex: u32,
@@ -598,7 +598,7 @@ impl RDMAChannel {
         // sockfd: u32,
         lkey: u32,
         rkey: u32,
-        socketBuf: Arc<SocketBuff>,
+        socketBuf: SocketBuff,
         rdmaConn: RDMAConn,
         connectRequest: &RDMAConnectReq,
         ioBufIndex: u32,
