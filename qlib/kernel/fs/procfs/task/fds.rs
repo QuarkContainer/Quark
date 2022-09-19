@@ -44,14 +44,14 @@ pub fn NewFd(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>, f: &
         file: f.Downgrade(),
     };
 
-    return SymlinkNode::New(task, msrc, node, Some(thread.clone()));
+    return SymlinkNode::New(task, msrc, node.into(), Some(thread.clone()));
 }
 
 pub struct FdNode {
     file: FileWeak,
 }
 
-impl ReadLinkNode for FdNode {
+impl ReadLinkNodeTrait for FdNode {
     fn ReadLink(&self, _link: &Symlink, task: &Task, _dir: &Inode) -> Result<String> {
         let root = task.Root();
         let file = match self.file.Upgrade() {

@@ -55,6 +55,9 @@ use crate::qlib::kernel::fs::dev::tty::TTYDevice;
 use crate::qlib::kernel::fs::dev::zero::ZeroDevice;
 use crate::qlib::kernel::fs::fsutil::inode::SimpleFileInode;
 use crate::qlib::kernel::fs::host::fifoiops::FifoIops;
+use crate::qlib::kernel::fs::procfs::inode::StaticFileInodeOps;
+use crate::qlib::kernel::fs::procfs::inode::TaskOwnedInodeOps;
+use crate::qlib::kernel::fs::procfs::dir_proc::DirNode;
 
 pub fn ContextCanAccessFile(task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {
     let creds = task.creds.clone();
@@ -143,7 +146,9 @@ pub enum Iops {
     HostDirOp(HostDirOp),
     FifoIops(FifoIops),
     HostInodeOp(HostInodeOp),
-
+    DirNode(DirNode),
+    TaskOwnedInodeOps(TaskOwnedInodeOps),
+    StaticFileInodeOps(StaticFileInodeOps),
 
 
 

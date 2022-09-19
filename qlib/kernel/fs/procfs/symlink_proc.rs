@@ -17,6 +17,7 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::any::Any;
+use enum_dispatch::enum_dispatch;
 
 use super::super::super::super::auth::*;
 use super::super::super::super::common::*;
@@ -35,7 +36,14 @@ use super::super::mount::*;
 use super::super::ramfs::symlink::*;
 use super::inode::*;
 
-pub trait ReadLinkNode: Send + Sync {
+use crate::qlib::kernel::fs::procfs::mounts::MountsNode;
+use crate::qlib::kernel::fs::procfs::task::exe::ExeNode;
+use crate::qlib::kernel::fs::procfs::task::fds::FdNode;
+use crate::qlib::kernel::fs::procfs::proc::ProcessSelfNode;
+use crate::qlib::kernel::fs::procfs::proc::ThreadSelfNode;
+
+#[enum_dispatch(ReadLinkNode)]
+pub trait ReadLinkNodeTrait: Send + Sync {
     fn ReadLink(&self, link: &Symlink, task: &Task, _dir: &Inode) -> Result<String>;
     fn GetLink(&self, link: &Symlink, task: &Task, dir: &Inode) -> Result<Dirent>;
     fn GetFile(
@@ -50,16 +58,25 @@ pub trait ReadLinkNode: Send + Sync {
     }
 }
 
-pub struct SymlinkNode<T: 'static + ReadLinkNode> {
-    pub link: Symlink,
-    pub node: T,
+#[enum_dispatch]
+pub enum ReadLinkNode {
+    MountsNode(MountsNode),
+    ExeNode(ExeNode),
+    FdNode(FdNode),
+    ThreadSelfNode(ThreadSelfNode),
+    ProcessSelfNode(ProcessSelfNode),
 }
 
-impl<T: 'static + ReadLinkNode> SymlinkNode<T> {
+pub struct SymlinkNode {
+    pub link: Symlink,
+    pub node: ReadLinkNode,
+}
+
+impl  SymlinkNode {
     pub fn New(
         task: &Task,
         msrc: &Arc<QMutex<MountSource>>,
-        node: T,
+        node: ReadLinkNode,
         thread: Option<Thread>,
     ) -> Inode {
         let link = Self {
@@ -71,7 +88,7 @@ impl<T: 'static + ReadLinkNode> SymlinkNode<T> {
     }
 }
 
-impl<T: 'static + ReadLinkNode> InodeOperations for SymlinkNode<T> {
+impl  InodeOperations for SymlinkNode {
     fn as_any(&self) -> &Any {
         return self;
     }

@@ -27,7 +27,7 @@ use super::symlink_proc::*;
 
 pub struct MountsNode {}
 
-impl ReadLinkNode for MountsNode {
+impl ReadLinkNodeTrait for MountsNode {
     fn ReadLink(&self, _link: &Symlink, _task: &Task, _dir: &Inode) -> Result<String> {
         return Ok("self/mounts".to_string());
     }
@@ -40,5 +40,5 @@ impl ReadLinkNode for MountsNode {
 pub fn NewMounts(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let node = MountsNode {};
 
-    return SymlinkNode::New(task, msrc, node, None);
+    return SymlinkNode::New(task, msrc, node.into(), None);
 }

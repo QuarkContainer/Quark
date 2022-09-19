@@ -41,7 +41,7 @@ impl ExeNode {
     }
 }
 
-impl ReadLinkNode for ExeNode {
+impl ReadLinkNodeTrait for ExeNode {
     fn ReadLink(&self, _link: &Symlink, task: &Task, _dir: &Inode) -> Result<String> {
         let exe = self.Executable()?;
 
@@ -60,5 +60,5 @@ pub fn NewExe(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>) -> 
         thread: thread.clone(),
     };
 
-    return SymlinkNode::New(task, msrc, node, Some(thread.clone()));
+    return SymlinkNode::New(task, msrc, node.into(), Some(thread.clone()));
 }

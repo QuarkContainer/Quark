@@ -163,7 +163,7 @@ pub struct ProcessSelfNode {
     pub pidns: PIDNamespace,
 }
 
-impl ReadLinkNode for ProcessSelfNode {
+impl ReadLinkNodeTrait for ProcessSelfNode {
     fn ReadLink(&self, _link: &Symlink, task: &Task, _dir: &Inode) -> Result<String> {
         let thread = task.Thread();
         let tg = thread.ThreadGroup();
@@ -184,14 +184,14 @@ pub fn NewProcessSelf(task: &Task, pidns: &PIDNamespace, msrc: &Arc<QMutex<Mount
         pidns: pidns.clone(),
     };
 
-    return SymlinkNode::New(task, msrc, node, None);
+    return SymlinkNode::New(task, msrc, node.into(), None);
 }
 
 pub struct ThreadSelfNode {
     pub pidns: PIDNamespace,
 }
 
-impl ReadLinkNode for ThreadSelfNode {
+impl ReadLinkNodeTrait for ThreadSelfNode {
     fn ReadLink(&self, _link: &Symlink, task: &Task, _dir: &Inode) -> Result<String> {
         let thread = task.Thread();
         let tg = thread.ThreadGroup();
@@ -213,7 +213,7 @@ pub fn NewThreadSelf(task: &Task, pidns: &PIDNamespace, msrc: &Arc<QMutex<MountS
         pidns: pidns.clone(),
     };
 
-    return SymlinkNode::New(task, msrc, node, None);
+    return SymlinkNode::New(task, msrc, node.into(), None);
 }
 
 pub struct RootProcFile {
