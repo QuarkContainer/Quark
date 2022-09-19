@@ -40,7 +40,7 @@ pub fn NewComm(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>) ->
         FSMagic::PROC_SUPER_MAGIC,
     );
     return NewProcInode(
-        &Arc::new(v),
+        v.into(),
         msrc,
         InodeType::SpecialFile,
         Some(thread.clone()),
@@ -53,7 +53,7 @@ pub fn NewCommSimpleFileInode(
     owner: &FileOwner,
     perms: &FilePermissions,
     typ: u64,
-) -> SimpleFileInode<CommSimpleFileTrait> {
+) -> SimpleFileInode {
     return SimpleFileInode::New(
         task,
         owner,
@@ -62,7 +62,7 @@ pub fn NewCommSimpleFileInode(
         false,
         CommSimpleFileTrait {
             thread: thread.clone(),
-        },
+        }.into(),
     );
 }
 

@@ -37,7 +37,7 @@ pub fn NewLoadAvg(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         &FilePermissions::FromMode(FileMode(0o400)),
         FSMagic::PROC_SUPER_MAGIC,
     );
-    return NewProcInode(&Arc::new(v), msrc, InodeType::SpecialFile, None);
+    return NewProcInode(v.into(), msrc, InodeType::SpecialFile, None);
 }
 
 pub fn NewLoadAvgSimpleFileInode(
@@ -45,9 +45,9 @@ pub fn NewLoadAvgSimpleFileInode(
     owner: &FileOwner,
     perms: &FilePermissions,
     typ: u64,
-) -> SimpleFileInode<LoadAvgData> {
+) -> SimpleFileInode {
     let fs = LoadAvgData {};
-    return SimpleFileInode::New(task, owner, perms, typ, false, fs);
+    return SimpleFileInode::New(task, owner, perms, typ, false, fs.into());
 }
 
 pub struct LoadAvgData {}

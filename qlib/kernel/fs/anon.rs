@@ -43,7 +43,7 @@ pub fn NewAnonInode(task: &Task) -> Inode {
         &perm,
         FSMagic::ANON_INODE_FS_MAGIC,
         true,
-        SimpleFileNode {},
+        SimpleFileNode {}.into(),
     );
 
     let deviceId = PSEUDO_DEVICE.lock().id.DeviceID();
@@ -59,7 +59,7 @@ pub fn NewAnonInode(task: &Task) -> Inode {
     };
 
     return Inode::New(
-        &Arc::new(iops),
+        iops.into(),
         &Arc::new(QMutex::new(MountSource::NewPseudoMountSource())),
         &sattr,
     );

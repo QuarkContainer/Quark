@@ -23,7 +23,6 @@ use super::super::qlib::mem::block::*;
 use super::super::qlib::addr::*;
 use super::super::syscalls::syscalls::*;
 use super::super::task::*;
-use kernel::pipe::node::PipeIops;
 use qlib::mem::seq::BlockSeq;
 use kernel::pipe::pipe::Pipe;
 
@@ -543,8 +542,8 @@ pub fn SysTee(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let srcIops = srcInode.lock().InodeOp.clone();
     let dstIops = dstInode.lock().InodeOp.clone();
 
-    let srcIops = srcIops.as_any().downcast_ref::<PipeIops>().unwrap();
-    let dstIops = dstIops.as_any().downcast_ref::<PipeIops>().unwrap();
+    let srcIops = srcIops.PipeIops().unwrap();
+    let dstIops = dstIops.PipeIops().unwrap();
 
     let srcPipe = srcIops.lock().p.clone();
     let dstPipe = dstIops.lock().p.clone();

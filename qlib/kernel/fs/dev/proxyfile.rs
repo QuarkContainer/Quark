@@ -45,18 +45,20 @@ use crate::qlib::kernel::fs::filesystems::*;
 use crate::qlib::kernel::fs::host::fs::*;
 use crate::qlib::kernel::fs::host::diriops::*;
 
-pub struct ProxyDevice(pub QRwLock<InodeSimpleAttributesInternal>);
+
+#[derive(Clone)]
+pub struct ProxyDevice(pub Arc<QRwLock<InodeSimpleAttributesInternal>>);
 
 impl Default for ProxyDevice {
     fn default() -> Self {
-        return Self(QRwLock::new(Default::default()));
+        return Self(Arc::new(QRwLock::new(Default::default())));
     }
 }
 
 impl Deref for ProxyDevice {
-    type Target = QRwLock<InodeSimpleAttributesInternal>;
+    type Target = Arc<QRwLock<InodeSimpleAttributesInternal>>;
 
-    fn deref(&self) -> &QRwLock<InodeSimpleAttributesInternal> {
+    fn deref(&self) -> &Arc<QRwLock<InodeSimpleAttributesInternal>> {
         &self.0
     }
 }
@@ -69,7 +71,7 @@ impl ProxyDevice {
             &FilePermissions::FromMode(*mode),
             FSMagic::TMPFS_MAGIC,
         );
-        return Self(QRwLock::new(attr));
+        return Self(Arc::new(QRwLock::new(attr)));
     }
 }
 

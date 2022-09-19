@@ -14,7 +14,6 @@
 
 use super::super::fs::attr::*;
 use super::super::fs::file::*;
-use super::super::fs::host::hostinodeop::*;
 use super::super::kernel::aio::aio_context::*;
 use super::super::kernel::eventfd::*;
 use super::super::kernel::time::*;
@@ -357,7 +356,7 @@ pub fn PerformanceUringCallback(
 ) -> Result<()> {
     let inode = file.Dirent.Inode();
     let iops = inode.lock().InodeOp.clone();
-    let iops = match iops.as_any().downcast_ref::<HostInodeOp>() {
+    let iops = match iops.HostInodeOp() {
         None => {
             error!("can't do aio on file type {:?}", file.FileType());
             return Err(Error::SysError(SysErr::EINVAL));

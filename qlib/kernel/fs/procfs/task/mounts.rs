@@ -65,7 +65,7 @@ pub fn NewMountInfoFile(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSou
         FSMagic::PROC_SUPER_MAGIC,
     );
     return NewProcInode(
-        &Arc::new(v),
+        v.into(),
         msrc,
         InodeType::SpecialFile,
         Some(thread.clone()),
@@ -78,12 +78,12 @@ pub fn NewMountInfoFileSimpleFileInode(
     owner: &FileOwner,
     perms: &FilePermissions,
     typ: u64,
-) -> SimpleFileInode<MountInfoFile> {
+) -> SimpleFileInode {
     let io = MountInfoFile {
         thread: thread.clone(),
     };
 
-    return SimpleFileInode::New(task, owner, perms, typ, false, io);
+    return SimpleFileInode::New(task, owner, perms, typ, false, io.into());
 }
 
 pub struct MountInfoFile {
@@ -194,7 +194,7 @@ pub fn NewMountsFile(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource
         FSMagic::PROC_SUPER_MAGIC,
     );
     return NewProcInode(
-        &Arc::new(v),
+        v.into(),
         msrc,
         InodeType::SpecialFile,
         Some(thread.clone()),
@@ -207,12 +207,12 @@ pub fn NewMountsFileSimpleFileInode(
     owner: &FileOwner,
     perms: &FilePermissions,
     typ: u64,
-) -> SimpleFileInode<MountsFile> {
+) -> SimpleFileInode {
     let io = MountsFile {
         thread: thread.clone(),
     };
 
-    return SimpleFileInode::New(task, owner, perms, typ, false, io);
+    return SimpleFileInode::New(task, owner, perms, typ, false, io.into());
 }
 
 pub struct MountsFile {

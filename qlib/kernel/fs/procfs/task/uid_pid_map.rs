@@ -46,7 +46,7 @@ pub fn NewIdMap(
         gids,
     );
     return NewProcInode(
-        &Arc::new(v),
+        v.into(),
         msrc,
         InodeType::SpecialFile,
         Some(thread.clone()),
@@ -60,7 +60,7 @@ pub fn NewIdMapSimpleFileInode(
     perms: &FilePermissions,
     typ: u64,
     gids: bool,
-) -> SimpleFileInode<IdMapSimpleFileTrait> {
+) -> SimpleFileInode {
     return SimpleFileInode::New(
         task,
         owner,
@@ -70,7 +70,7 @@ pub fn NewIdMapSimpleFileInode(
         IdMapSimpleFileTrait {
             thread: thread.clone(),
             gids: gids,
-        },
+        }.into(),
     );
 }
 

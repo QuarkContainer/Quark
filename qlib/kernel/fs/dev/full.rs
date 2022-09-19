@@ -40,18 +40,19 @@ use super::super::fsutil::inode::*;
 use super::super::inode::*;
 use super::super::mount::*;
 
-pub struct FullDevice(pub QRwLock<InodeSimpleAttributesInternal>);
+#[derive(Clone)]
+pub struct FullDevice(pub Arc<QRwLock<InodeSimpleAttributesInternal>>);
 
 impl Default for FullDevice {
     fn default() -> Self {
-        return Self(QRwLock::new(Default::default()));
+        return Self(Arc::new(QRwLock::new(Default::default())));
     }
 }
 
 impl Deref for FullDevice {
-    type Target = QRwLock<InodeSimpleAttributesInternal>;
+    type Target = Arc<QRwLock<InodeSimpleAttributesInternal>>;
 
-    fn deref(&self) -> &QRwLock<InodeSimpleAttributesInternal> {
+    fn deref(&self) -> &Arc<QRwLock<InodeSimpleAttributesInternal>> {
         &self.0
     }
 }
@@ -64,7 +65,7 @@ impl FullDevice {
             &FilePermissions::FromMode(*mode),
             FSMagic::TMPFS_MAGIC,
         );
-        return Self(QRwLock::new(attr));
+        return Self(Arc::new(QRwLock::new(attr)));
     }
 }
 

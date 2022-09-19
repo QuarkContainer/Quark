@@ -41,7 +41,7 @@ pub fn NewMaps(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>) ->
         FSMagic::PROC_SUPER_MAGIC,
     );
     return NewProcInode(
-        &Arc::new(v),
+        v.into(),
         msrc,
         InodeType::SpecialFile,
         Some(thread.clone()),
@@ -54,11 +54,11 @@ pub fn NewMapsSimpleFileInode(
     owner: &FileOwner,
     perms: &FilePermissions,
     typ: u64,
-) -> SimpleFileInode<MapsData> {
+) -> SimpleFileInode {
     let io = MapsData {
         mm: thread.lock().memoryMgr.clone(),
     };
-    return SimpleFileInode::New(task, owner, perms, typ, false, io);
+    return SimpleFileInode::New(task, owner, perms, typ, false, io.into());
 }
 
 pub struct MapsData {

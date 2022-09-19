@@ -21,6 +21,7 @@ use alloc::sync::Arc;
 use core::any::Any;
 use core::ops::Deref;
 use alloc::sync::Weak;
+use enum_dispatch::enum_dispatch;
 
 use super::super::super::auth::*;
 use super::super::super::common::*;
@@ -45,6 +46,33 @@ use super::inode_overlay::*;
 use super::lock::*;
 use super::mount::*;
 use super::overlay::*;
+
+use crate::qlib::kernel::fs::dev::full::FullDevice;
+use crate::qlib::kernel::fs::dev::null::NullDevice;
+use crate::qlib::kernel::fs::dev::proxyfile::ProxyDevice;
+use crate::qlib::kernel::fs::dev::random::RandomDevice;
+use crate::qlib::kernel::fs::dev::tty::TTYDevice;
+use crate::qlib::kernel::fs::dev::zero::ZeroDevice;
+use crate::qlib::kernel::fs::fsutil::inode::SimpleFileInode;
+use crate::qlib::kernel::fs::host::fifoiops::FifoIops;
+use crate::qlib::kernel::fs::procfs::inode::StaticFileInodeOps;
+use crate::qlib::kernel::fs::procfs::inode::TaskOwnedInodeOps;
+use crate::qlib::kernel::fs::procfs::dir_proc::DirNode;
+use crate::qlib::kernel::fs::ramfs::socket::SocketInodeOps;
+use crate::qlib::kernel::kernel::pipe::node::PipeIops;
+use crate::qlib::kernel::fs::tty::slave::SlaveInodeOperations;
+use crate::qlib::kernel::fs::tty::master::MasterInodeOperations;
+use crate::qlib::kernel::fs::tty::dir::DirInodeOperations;
+use crate::qlib::kernel::fs::tmpfs::tmpfs_symlink::TmpfsSymlink;
+use crate::qlib::kernel::socket::unix::unix::UnixSocketInodeOps;
+use crate::qlib::kernel::fs::tmpfs::tmpfs_socket::TmpfsSocket;
+use crate::qlib::kernel::fs::tmpfs::tmpfs_fifo::TmpfsFifoInodeOp;
+use crate::qlib::kernel::fs::tmpfs::tmpfs_dir::TmpfsDir;
+use crate::qlib::kernel::fs::ramfs::symlink::Symlink;
+use crate::qlib::kernel::fs::ramfs::dir::Dir;
+use crate::qlib::kernel::fs::procfs::symlink_proc::SymlinkNode;
+use crate::qlib::kernel::fs::procfs::seqfile::SeqFile;
+use crate::qlib::kernel::fs::tmpfs::tmpfs_file::TmpfsFileInodeOp;
 
 pub fn ContextCanAccessFile(task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {
     let creds = task.creds.clone();
@@ -122,6 +150,119 @@ pub enum IopsType {
     ProxyDevice,
 }
 
+#[enum_dispatch]
+#[derive(Clone)]
+pub enum Iops {
+    FullDevice(FullDevice),
+    NullDevice(NullDevice),
+    ProxyDevice(ProxyDevice),
+    RandomDevice(RandomDevice),
+    TTYDevice(TTYDevice),
+    ZeroDevice(ZeroDevice),
+    SimpleFileInode(SimpleFileInode),
+    HostDirOp(HostDirOp),
+    FifoIops(FifoIops),
+    HostInodeOp(HostInodeOp),
+    DirNode(DirNode),
+    TaskOwnedInodeOps(TaskOwnedInodeOps),
+    StaticFileInodeOps(StaticFileInodeOps),
+    SeqFile(SeqFile),
+    SymlinkNode(SymlinkNode),
+    Dir(Dir),
+    SocketInodeOps(SocketInodeOps),
+    Symlink(Symlink),
+    TmpfsDir(TmpfsDir),
+    TmpfsFifoInodeOp(TmpfsFifoInodeOp),
+    TmpfsFileInodeOp(TmpfsFileInodeOp),
+    TmpfsSocket(TmpfsSocket),
+    TmpfsSymlink(TmpfsSymlink),
+    DirInodeOperations(DirInodeOperations),
+    MasterInodeOperations(MasterInodeOperations),
+    SlaveInodeOperations(SlaveInodeOperations),
+    PipeIops(PipeIops),
+    UnixSocketInodeOps(UnixSocketInodeOps),
+}
+
+impl Iops {
+    pub fn UnixSocketInodeOps(&self) -> Option<UnixSocketInodeOps> {
+        match self {
+            Self::UnixSocketInodeOps(inner) => Some(inner.clone()),
+            _ => None,
+        }
+    } 
+
+    pub fn HostInodeOp(&self) -> Option<HostInodeOp> {
+        match self {
+            Self::HostInodeOp(inner) => Some(inner.clone()),
+            _ => None,
+        }
+    } 
+
+    pub fn TTYDevice(&self) -> Option<TTYDevice> {
+        match self {
+            Self::TTYDevice(inner) => Some(inner.clone()),
+            _ => None,
+        }
+    } 
+
+    pub fn ProxyDevice(&self) -> Option<ProxyDevice> {
+        match self {
+            Self::ProxyDevice(inner) => Some(inner.clone()),
+            _ => None,
+        }
+    } 
+
+    pub fn ZeroDevice(&self) -> Option<ZeroDevice> {
+        match self {
+            Self::ZeroDevice(inner) => Some(inner.clone()),
+            _ => None,
+        }
+    } 
+
+    pub fn FullDevice(&self) -> Option<FullDevice> {
+        match self {
+            Self::FullDevice(inner) => Some(inner.clone()),
+            _ => None,
+        }
+    } 
+
+    pub fn RandomDevice(&self) -> Option<RandomDevice> {
+        match self {
+            Self::RandomDevice(inner) => Some(inner.clone()),
+            _ => None,
+        }
+    } 
+
+    pub fn Dir(&self) -> Option<Dir> {
+        match self {
+            Self::Dir(inner) => Some(inner.clone()),
+            _ => None,
+        }
+    } 
+
+    pub fn TmpfsDir(&self) -> Option<TmpfsDir> {
+        match self {
+            Self::TmpfsDir(inner) => Some(inner.clone()),
+            _ => None,
+        }
+    } 
+
+    pub fn SymlinkNode(&self) -> Option<SymlinkNode> {
+        match self {
+            Self::SymlinkNode(inner) => Some(inner.clone()),
+            _ => None,
+        }
+    } 
+
+    pub fn PipeIops(&self) -> Option<PipeIops> {
+        match self {
+            Self::PipeIops(inner) => Some(inner.clone()),
+            _ => None,
+        }
+    }
+}
+
+#[enum_dispatch(Iops)]
 pub trait InodeOperations: Sync + Send {
     fn as_any(&self) -> &Any;
     fn IopsType(&self) -> IopsType;
@@ -255,14 +396,14 @@ impl Inode {
         return InodeWeak(Arc::downgrade(&self.0));
     }
 
-    pub fn New<T: InodeOperations + 'static>(
-        InodeOp: &Arc<T>,
+    pub fn New(
+        InodeOp: Iops,
         MountSource: &Arc<QMutex<MountSource>>,
         StableAttr: &StableAttr,
     ) -> Self {
         let inodeInternal = InodeIntern {
             UniqueId: NewUID(),
-            InodeOp: InodeOp.clone(),
+            InodeOp: InodeOp,
             StableAttr: StableAttr.clone(),
             LockCtx: LockCtx::default(),
             MountSource: MountSource.clone(),
@@ -323,7 +464,7 @@ impl Inode {
 
                 return Ok(Self(Arc::new(QMutex::new(InodeIntern {
                     UniqueId: NewUID(),
-                    InodeOp: Arc::new(iops),
+                    InodeOp: iops.into(),
                     StableAttr: fstat.StableAttr(),
                     LockCtx: LockCtx::default(),
                     MountSource: msrc.clone(),
@@ -374,7 +515,7 @@ impl Inode {
 
                 return Ok(Self(Arc::new(QMutex::new(InodeIntern {
                     UniqueId: NewUID(),
-                    InodeOp: Arc::new(iops),
+                    InodeOp: iops.into(),
                     StableAttr: fstat.StableAttr(),
                     LockCtx: LockCtx::default(),
                     MountSource: msrc.clone(),
@@ -411,7 +552,7 @@ impl Inode {
 
                 return Ok(Self(Arc::new(QMutex::new(InodeIntern {
                     UniqueId: NewUID(),
-                    InodeOp: Arc::new(iops),
+                    InodeOp: iops.into(),
                     StableAttr: fstat.StableAttr(),
                     LockCtx: LockCtx::default(),
                     MountSource: msrc.clone(),
@@ -967,7 +1108,7 @@ impl Inode {
 //#[derive(Clone, Default, Debug, Copy)]
 pub struct InodeIntern {
     pub UniqueId: u64,
-    pub InodeOp: Arc<InodeOperations>,
+    pub InodeOp: Iops,
     pub StableAttr: StableAttr,
     pub LockCtx: LockCtx,
     pub MountSource: Arc<QMutex<MountSource>>,
@@ -978,7 +1119,7 @@ impl Default for InodeIntern {
     fn default() -> Self {
         return Self {
             UniqueId: NewUID(),
-            InodeOp: Arc::new(HostInodeOp::default()),
+            InodeOp: HostInodeOp::default().into(),
             StableAttr: Default::default(),
             LockCtx: LockCtx::default(),
             MountSource: Arc::new(QMutex::new(MountSource::default())),
@@ -991,7 +1132,7 @@ impl InodeIntern {
     pub fn New() -> Self {
         return Self {
             UniqueId: NewUID(),
-            InodeOp: Arc::new(HostInodeOp::default()),
+            InodeOp: HostInodeOp::default().into(),
             StableAttr: Default::default(),
             LockCtx: LockCtx::default(),
             MountSource: Arc::new(QMutex::new(MountSource::default())),

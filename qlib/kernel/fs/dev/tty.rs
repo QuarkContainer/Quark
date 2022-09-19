@@ -17,6 +17,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::any::Any;
 use core::ops::Deref;
+use alloc::sync::Arc;
 
 use super::super::super::super::auth::*;
 use super::super::super::super::common::*;
@@ -36,18 +37,20 @@ use super::super::host::hostinodeop::*;
 use super::super::inode::*;
 use super::super::mount::*;
 
-pub struct TTYDevice(pub QRwLock<InodeSimpleAttributesInternal>);
+
+#[derive(Clone)]
+pub struct TTYDevice(pub Arc<QRwLock<InodeSimpleAttributesInternal>>);
 
 impl Default for TTYDevice {
     fn default() -> Self {
-        return Self(QRwLock::new(Default::default()));
+        return Self(Arc::new(QRwLock::new(Default::default())));
     }
 }
 
 impl Deref for TTYDevice {
-    type Target = QRwLock<InodeSimpleAttributesInternal>;
+    type Target = Arc<QRwLock<InodeSimpleAttributesInternal>>;
 
-    fn deref(&self) -> &QRwLock<InodeSimpleAttributesInternal> {
+    fn deref(&self) -> &Arc<QRwLock<InodeSimpleAttributesInternal>> {
         &self.0
     }
 }
@@ -60,7 +63,7 @@ impl TTYDevice {
             &FilePermissions::FromMode(*mode),
             FSMagic::TMPFS_MAGIC,
         );
-        return Self(QRwLock::new(attr));
+        return Self(Arc::new(QRwLock::new(attr)));
     }
 }
 

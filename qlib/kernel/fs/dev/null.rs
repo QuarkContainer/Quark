@@ -40,18 +40,20 @@ use super::super::fsutil::inode::*;
 use super::super::inode::*;
 use super::super::mount::*;
 
-pub struct NullDevice(pub QRwLock<InodeSimpleAttributesInternal>);
+
+#[derive(Clone)]
+pub struct NullDevice(pub Arc<QRwLock<InodeSimpleAttributesInternal>>);
 
 impl Default for NullDevice {
     fn default() -> Self {
-        return Self(QRwLock::new(Default::default()));
+        return Self(Arc::new(QRwLock::new(Default::default())));
     }
 }
 
 impl Deref for NullDevice {
-    type Target = QRwLock<InodeSimpleAttributesInternal>;
+    type Target = Arc<QRwLock<InodeSimpleAttributesInternal>>;
 
-    fn deref(&self) -> &QRwLock<InodeSimpleAttributesInternal> {
+    fn deref(&self) -> &Arc<QRwLock<InodeSimpleAttributesInternal>> {
         &self.0
     }
 }
@@ -64,7 +66,7 @@ impl NullDevice {
             &FilePermissions::FromMode(*mode),
             FSMagic::TMPFS_MAGIC,
         );
-        return Self(QRwLock::new(attr));
+        return Self(Arc::new(QRwLock::new(attr)));
     }
 }
 

@@ -39,7 +39,7 @@ pub fn NewPossible(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         &FilePermissions::FromMode(FileMode(0o400)),
         FSMagic::PROC_SUPER_MAGIC,
     );
-    return NewFile(&Arc::new(v), msrc);
+    return NewFile(v.into(), msrc);
 }
 
 pub fn NewPossibleSimpleFileInode(
@@ -47,9 +47,9 @@ pub fn NewPossibleSimpleFileInode(
     owner: &FileOwner,
     perms: &FilePermissions,
     typ: u64,
-) -> SimpleFileInode<PossibleData> {
+) -> SimpleFileInode {
     let fs = PossibleData {};
-    return SimpleFileInode::New(task, owner, perms, typ, false, fs);
+    return SimpleFileInode::New(task, owner, perms, typ, false, fs.into());
 }
 
 pub struct PossibleData {}

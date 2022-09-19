@@ -33,9 +33,10 @@ use super::super::super::inode::*;
 use super::ipv4::*;
 
 // ProcSysDirNode represents a /proc/sys directory.
-pub struct NetDirNode {}
+#[derive(Clone)]
+pub struct SysNetDirNode {}
 
-impl DirDataNode for NetDirNode {
+impl DirDataNodeTrait for SysNetDirNode {
     fn Lookup(&self, d: &Dir, task: &Task, dir: &Inode, name: &str) -> Result<Dirent> {
         return d.Lookup(task, dir, name);
     }
@@ -63,8 +64,8 @@ pub fn NewNet(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
             &ROOT_OWNER,
             &FilePermissions::FromMode(FileMode(0o0555)),
         ),
-        data: NetDirNode {},
+        data: SysNetDirNode {}.into(),
     };
 
-    return NewProcInode(&Arc::new(netDir), msrc, InodeType::SpecialDirectory, None);
+    return NewProcInode(netDir.into(), msrc, InodeType::SpecialDirectory, None);
 }

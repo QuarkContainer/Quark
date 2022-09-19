@@ -71,7 +71,7 @@ impl Deref for ProcNode {
     }
 }
 
-impl DirDataNode for ProcNode {
+impl DirDataNodeTrait for ProcNode {
     fn Lookup(&self, d: &Dir, task: &Task, dir: &Inode, name: &str) -> Result<Dirent> {
         let err = match d.Lookup(task, dir, name) {
             Ok(dirent) => return Ok(dirent),
@@ -106,7 +106,7 @@ impl DirDataNode for ProcNode {
     ) -> Result<File> {
         let p = DirNode {
             dir: d.clone(),
-            data: self.clone(),
+            data: self.clone().into(),
         };
 
         return Ok(File::New(dirent, &flags, RootProcFile { iops: p }.into()));
@@ -153,17 +153,18 @@ pub fn NewProc(
 
     let p = DirNode {
         dir: iops,
-        data: ProcNode(Arc::new(QMutex::new(proc))),
+        data: ProcNode(Arc::new(QMutex::new(proc))).into(),
     };
 
-    return NewProcInode(&Arc::new(p), msrc, InodeType::SpecialDirectory, None);
+    return NewProcInode(p.into(), msrc, InodeType::SpecialDirectory, None);
 }
 
+#[derive(Clone)]
 pub struct ProcessSelfNode {
     pub pidns: PIDNamespace,
 }
 
-impl ReadLinkNode for ProcessSelfNode {
+impl ReadLinkNodeTrait for ProcessSelfNode {
     fn ReadLink(&self, _link: &Symlink, task: &Task, _dir: &Inode) -> Result<String> {
         let thread = task.Thread();
         let tg = thread.ThreadGroup();
@@ -184,14 +185,15 @@ pub fn NewProcessSelf(task: &Task, pidns: &PIDNamespace, msrc: &Arc<QMutex<Mount
         pidns: pidns.clone(),
     };
 
-    return SymlinkNode::New(task, msrc, node, None);
+    return SymlinkNode::New(task, msrc, node.into(), None);
 }
 
+#[derive(Clone)]
 pub struct ThreadSelfNode {
     pub pidns: PIDNamespace,
 }
 
-impl ReadLinkNode for ThreadSelfNode {
+impl ReadLinkNodeTrait for ThreadSelfNode {
     fn ReadLink(&self, _link: &Symlink, task: &Task, _dir: &Inode) -> Result<String> {
         let thread = task.Thread();
         let tg = thread.ThreadGroup();
@@ -213,11 +215,11 @@ pub fn NewThreadSelf(task: &Task, pidns: &PIDNamespace, msrc: &Arc<QMutex<MountS
         pidns: pidns.clone(),
     };
 
-    return SymlinkNode::New(task, msrc, node, None);
+    return SymlinkNode::New(task, msrc, node.into(), None);
 }
 
 pub struct RootProcFile {
-    pub iops: DirNode<ProcNode>,
+    pub iops: DirNode,
 }
 
 impl Waitable for RootProcFile {}
@@ -316,7 +318,9 @@ impl FileOperations for RootProcFile {
         map.insert(".".to_string(), dot);
         map.insert("..".to_string(), dotdot);
 
-        let pidns = self.iops.data.lock().pidns.clone();
+        let procNode = self.iops.data.ProcNode().unwrap();
+
+        let pidns = procNode.lock().pidns.clone();
         for tg in &pidns.ThreadGroups() {
             if tg.Leader().is_some() {
                 let name = format!("{}", tg.ID());

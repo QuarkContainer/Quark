@@ -44,14 +44,15 @@ pub fn NewFd(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>, f: &
         file: f.Downgrade(),
     };
 
-    return SymlinkNode::New(task, msrc, node, Some(thread.clone()));
+    return SymlinkNode::New(task, msrc, node.into(), Some(thread.clone()));
 }
 
+#[derive(Clone)]
 pub struct FdNode {
     file: FileWeak,
 }
 
-impl ReadLinkNode for FdNode {
+impl ReadLinkNodeTrait for FdNode {
     fn ReadLink(&self, _link: &Symlink, task: &Task, _dir: &Inode) -> Result<String> {
         let root = task.Root();
         let file = match self.file.Upgrade() {
@@ -204,11 +205,12 @@ pub fn NewFdDirFile(IsInfoFile: bool, thread: &Thread) -> DynamicDirFileOperatio
     return DynamicDirFileOperations { node: fdDirFile.into() };
 }
 
+#[derive(Clone)]
 pub struct FdDirNode {
     pub thread: Thread,
 }
 
-impl DirDataNode for FdDirNode {
+impl DirDataNodeTrait for FdDirNode {
     // Check implements InodeOperations.Check.
     //
     // This is to match Linux, which uses a special permission handler to guarantee
@@ -255,11 +257,12 @@ impl DirDataNode for FdDirNode {
     }
 }
 
+#[derive(Clone)]
 pub struct FdInfoDirNode {
     pub thread: Thread,
 }
 
-impl DirDataNode for FdInfoDirNode {
+impl DirDataNodeTrait for FdInfoDirNode {
     fn Lookup(&self, _d: &Dir, task: &Task, dir: &Inode, name: &str) -> Result<Dirent> {
         let msrc = dir.lock().MountSource.clone();
         let inode = WalkDescriptors(task, name, &mut |file: &File, fdFlags: &FDFlags| {
@@ -296,11 +299,11 @@ pub fn NewFdDir(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>) -
         ),
         data: FdDirNode {
             thread: thread.clone(),
-        },
+        }.into(),
     };
 
     return NewProcInode(
-        &Arc::new(f),
+        f.into(),
         msrc,
         InodeType::SpecialDirectory,
         Some(thread.clone()),
@@ -318,11 +321,11 @@ pub fn NewFdInfoDir(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>
         ),
         data: FdInfoDirNode {
             thread: thread.clone(),
-        },
+        }.into(),
     };
 
     return NewProcInode(
-        &Arc::new(f),
+        f.into(),
         msrc,
         InodeType::SpecialDirectory,
         Some(thread.clone()),

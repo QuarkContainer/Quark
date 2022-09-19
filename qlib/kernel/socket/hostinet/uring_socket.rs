@@ -67,7 +67,7 @@ pub fn newUringSocketFile(
     let dirent = NewSocketDirent(task, SOCKET_DEVICE.clone(), fd)?;
     let inode = dirent.Inode();
     let iops = inode.lock().InodeOp.clone();
-    let hostiops = iops.as_any().downcast_ref::<HostInodeOp>().unwrap();
+    let hostiops = iops.HostInodeOp().unwrap();
     let s = UringSocketOperations::New(
         family,
         fd,

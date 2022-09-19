@@ -43,7 +43,7 @@ pub fn NewStatus(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>) 
         FSMagic::PROC_SUPER_MAGIC,
     );
     return NewProcInode(
-        &Arc::new(v),
+        v.into(),
         msrc,
         InodeType::SpecialFile,
         Some(thread.clone()),
@@ -56,7 +56,7 @@ pub fn NewStatusSimpleFileInode(
     owner: &FileOwner,
     perms: &FilePermissions,
     typ: u64,
-) -> SimpleFileInode<StatusData> {
+) -> SimpleFileInode {
     let kernel = GetKernel();
     let pidns = kernel.RootPIDNamespace();
 
@@ -65,7 +65,7 @@ pub fn NewStatusSimpleFileInode(
         pidns: pidns,
     };
 
-    return SimpleFileInode::New(task, owner, perms, typ, false, status);
+    return SimpleFileInode::New(task, owner, perms, typ, false, status.into());
 }
 
 pub struct StatusData {

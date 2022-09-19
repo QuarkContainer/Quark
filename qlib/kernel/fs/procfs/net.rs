@@ -41,9 +41,10 @@ use super::super::ramfs::dir::*;
 use super::dir_proc::*;
 use super::inode::*;
 
+#[derive(Clone)]
 pub struct NetDirNode {}
 
-impl DirDataNode for NetDirNode {
+impl DirDataNodeTrait for NetDirNode {
     fn Lookup(&self, d: &Dir, task: &Task, dir: &Inode, name: &str) -> Result<Dirent> {
         return d.Lookup(task, dir, name);
     }
@@ -105,11 +106,11 @@ pub fn NewNetDir(
             &ROOT_OWNER,
             &FilePermissions::FromMode(FileMode(0o0555)),
         ),
-        data: NetDirNode {},
+        data: NetDirNode {}.into(),
     };
 
     return NewProcInode(
-        &Arc::new(taskDir),
+        taskDir.into(),
         msrc,
         InodeType::SpecialDirectory,
         None,
@@ -193,10 +194,10 @@ pub fn NewNetTCP(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         },
         FSMagic::ANON_INODE_FS_MAGIC,
         false,
-        NetTCP {},
+        NetTCP {}.into(),
     );
 
-    return NewProcInode(&Arc::new(node), msrc, InodeType::SpecialFile, None);
+    return NewProcInode(node.into(), msrc, InodeType::SpecialFile, None);
 }
 
 
@@ -398,10 +399,10 @@ pub fn NewNetUDP(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         },
         FSMagic::ANON_INODE_FS_MAGIC,
         false,
-        NetUDP {},
+        NetUDP {}.into(),
     );
 
-    return NewProcInode(&Arc::new(node), msrc, InodeType::SpecialFile, None);
+    return NewProcInode(node.into(), msrc, InodeType::SpecialFile, None);
 }
 
 pub struct NetUDPReadonlyFileNode {}
@@ -577,10 +578,10 @@ pub fn NewNetUnix(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         },
         FSMagic::ANON_INODE_FS_MAGIC,
         false,
-        NetUnix {},
+        NetUnix {}.into(),
     );
 
-    return NewProcInode(&Arc::new(node), msrc, InodeType::SpecialFile, None);
+    return NewProcInode(node.into(), msrc, InodeType::SpecialFile, None);
 }
 
 

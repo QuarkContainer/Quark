@@ -55,9 +55,10 @@ pub fn NewTmpfsSymlink(
         DeviceFileMinor: 0,
     };
 
-    return Inode::New(&Arc::new(s), msrc, &attr);
+    return Inode::New(s.into(), msrc, &attr);
 }
 
+#[derive(Clone)]
 pub struct TmpfsSymlink(Symlink);
 
 impl InodeOperations for TmpfsSymlink {

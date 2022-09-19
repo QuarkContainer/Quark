@@ -43,18 +43,20 @@ use super::super::fsutil::inode::*;
 use super::super::inode::*;
 use super::super::mount::*;
 
-pub struct RandomDevice(pub QRwLock<InodeSimpleAttributesInternal>);
+
+#[derive(Clone)]
+pub struct RandomDevice(pub Arc<QRwLock<InodeSimpleAttributesInternal>>);
 
 impl Default for RandomDevice {
     fn default() -> Self {
-        return Self(QRwLock::new(Default::default()));
+        return Self(Arc::new(QRwLock::new(Default::default())));
     }
 }
 
 impl Deref for RandomDevice {
-    type Target = QRwLock<InodeSimpleAttributesInternal>;
+    type Target = Arc<QRwLock<InodeSimpleAttributesInternal>>;
 
-    fn deref(&self) -> &QRwLock<InodeSimpleAttributesInternal> {
+    fn deref(&self) -> &Arc<QRwLock<InodeSimpleAttributesInternal>> {
         &self.0
     }
 }
@@ -67,7 +69,7 @@ impl RandomDevice {
             &FilePermissions::FromMode(*mode),
             FSMagic::TMPFS_MAGIC,
         );
-        return Self(QRwLock::new(attr));
+        return Self(Arc::new(QRwLock::new(attr)));
     }
 }
 

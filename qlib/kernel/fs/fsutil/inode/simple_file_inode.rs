@@ -17,6 +17,8 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::any::Any;
 use core::ops::Deref;
+use enum_dispatch::enum_dispatch;
+use alloc::sync::Arc;
 
 use super::super::super::super::super::auth::*;
 use super::super::super::super::super::common::*;
@@ -32,6 +34,29 @@ use super::super::super::host::hostinodeop::*;
 use super::super::super::inode::*;
 use super::super::super::mount::*;
 
+use crate::qlib::kernel::fs::procfs::task::stat::TaskStatData;
+use crate::qlib::kernel::fs::procfs::filesystems::FileSystemData;
+use crate::qlib::kernel::fs::procfs::loadavg::LoadAvgData;
+use crate::qlib::kernel::fs::procfs::meminfo::MeminfoInode;
+use crate::qlib::kernel::fs::procfs::net::NetTCP;
+use crate::qlib::kernel::fs::procfs::net::NetUDP;
+use crate::qlib::kernel::fs::procfs::net::NetUnix;
+use crate::qlib::kernel::fs::procfs::uptime::UptimeInode;
+use crate::qlib::kernel::fs::procfs::task::auxvec::AUXVecSimpleFileTrait;
+use crate::qlib::kernel::fs::procfs::task::comm::CommSimpleFileTrait;
+use crate::qlib::kernel::fs::procfs::task::exec_args::ExecArgSimpleFileTrait;
+use crate::qlib::kernel::fs::procfs::task::io::IOData;
+use crate::qlib::kernel::fs::procfs::task::maps::MapsData;
+use crate::qlib::kernel::fs::procfs::task::mounts::MountInfoFile;
+use crate::qlib::kernel::fs::procfs::task::mounts::MountsFile;
+use crate::qlib::kernel::fs::procfs::stat::StatData;
+use crate::qlib::kernel::fs::procfs::task::statm::StatmData;
+use crate::qlib::kernel::fs::procfs::task::status::StatusData;
+use crate::qlib::kernel::fs::procfs::task::uid_pid_map::IdMapSimpleFileTrait;
+use crate::qlib::kernel::fs::sys::devices::PossibleData;
+use crate::qlib::kernel::socket::unix::unix::Dummy;
+
+#[enum_dispatch(SimpleFileImpl)]
 pub trait SimpleFileTrait: Send + Sync {
     fn GetFile(
         &self,
@@ -44,35 +69,63 @@ pub trait SimpleFileTrait: Send + Sync {
     }
 }
 
+#[enum_dispatch]
+pub enum SimpleFileImpl {
+    SimpleFileNode(SimpleFileNode),
+    FileSystemData(FileSystemData),
+    LoadAvgData(LoadAvgData),
+    MeminfoInode(MeminfoInode),
+    NetTCP(NetTCP),
+    NetUDP(NetUDP),
+    NetUnix(NetUnix),
+    TaskStatData(TaskStatData),
+    UptimeInode(UptimeInode),
+    AUXVecSimpleFileTrait(AUXVecSimpleFileTrait),
+    CommSimpleFileTrait(CommSimpleFileTrait),
+    ExecArgSimpleFileTrait(ExecArgSimpleFileTrait),
+    IOData(IOData),
+    MapsData(MapsData),
+    MountInfoFile(MountInfoFile),
+    MountsFile(MountsFile),
+    StatData(StatData),
+    StatmData(StatmData),
+    StatusData(StatusData),
+    IdMapSimpleFileTrait(IdMapSimpleFileTrait),
+    PossibleData(PossibleData),
+    Dummy(Dummy),
+}
+
 pub struct SimpleFileNode {}
 
 impl SimpleFileTrait for SimpleFileNode {}
 
-pub struct SimpleFileInodeInternal<T: 'static + SimpleFileTrait> {
+pub struct SimpleFileInodeInternal {
     pub fsType: u64,
     pub unstable: UnstableAttr,
     pub wouldBlock: bool,
-    pub data: T,
+    pub data: SimpleFileImpl,
 }
 
-pub struct SimpleFileInode<T: 'static + SimpleFileTrait>(QRwLock<SimpleFileInodeInternal<T>>);
 
-impl<T: 'static + SimpleFileTrait> Deref for SimpleFileInode<T> {
-    type Target = QRwLock<SimpleFileInodeInternal<T>>;
+#[derive(Clone)]
+pub struct SimpleFileInode(Arc<QRwLock<SimpleFileInodeInternal>>);
 
-    fn deref(&self) -> &QRwLock<SimpleFileInodeInternal<T>> {
+impl Deref for SimpleFileInode {
+    type Target = Arc<QRwLock<SimpleFileInodeInternal>>;
+
+    fn deref(&self) -> &Arc<QRwLock<SimpleFileInodeInternal>> {
         &self.0
     }
 }
 
-impl<T: 'static + SimpleFileTrait> SimpleFileInode<T> {
+impl SimpleFileInode {
     pub fn New(
         task: &Task,
         owner: &FileOwner,
         perms: &FilePermissions,
         typ: u64,
         wouldBlock: bool,
-        data: T,
+        data: SimpleFileImpl,
     ) -> Self {
         let unstable = WithCurrentTime(
             task,
@@ -86,7 +139,7 @@ impl<T: 'static + SimpleFileTrait> SimpleFileInode<T> {
         return Self::NewWithUnstable(&unstable, typ, wouldBlock, data);
     }
 
-    pub fn NewWithUnstable(u: &UnstableAttr, typ: u64, wouldBlock: bool, data: T) -> Self {
+    pub fn NewWithUnstable(u: &UnstableAttr, typ: u64, wouldBlock: bool, data: SimpleFileImpl) -> Self {
         let internal = SimpleFileInodeInternal {
             fsType: typ,
             unstable: *u,
@@ -94,11 +147,11 @@ impl<T: 'static + SimpleFileTrait> SimpleFileInode<T> {
             data: data,
         };
 
-        return Self(QRwLock::new(internal));
+        return Self(Arc::new(QRwLock::new(internal)));
     }
 }
 
-impl<T: 'static + SimpleFileTrait> InodeOperations for SimpleFileInode<T> {
+impl InodeOperations for SimpleFileInode {
     fn as_any(&self) -> &Any {
         self
     }

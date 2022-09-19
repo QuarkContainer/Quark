@@ -86,7 +86,7 @@ pub fn NewUnixSocketDummyDirent(task: &Task,
                                     &FilePermissions{User: PermMask::NewReadWrite(), ..Default::default()},
                                     FSMagic::SOCKFS_MAGIC,
                                     true,
-                                    Dummy{});
+                                    Dummy{}.into());
 
     let deviceId = d.lock().DeviceID();
     let inodeId = d.lock().NextIno();
@@ -100,7 +100,7 @@ pub fn NewUnixSocketDummyDirent(task: &Task,
     };
 
     let msrc = MountSource::NewPseudoMountSource();
-    let inode = Inode::New(&Arc::new(iops), &Arc::new(QMutex::new(msrc)), &attr);
+    let inode = Inode::New(iops.into(), &Arc::new(QMutex::new(msrc)), &attr);
 
     let name = format!("socket:[{}]", ino);
     return Ok(Dirent::New(&inode, &name.to_string()));
@@ -109,7 +109,7 @@ pub fn NewUnixSocketDummyDirent(task: &Task,
 pub fn NewUnixSocketDirent(task: &Task,
                            ep: &BoundEndpoint) -> Result<Dirent> {
     let msrc = MountSource::NewPseudoMountSource();
-    let iops = SocketInodeOps::New(task,
+    let iops = UnixSocketInodeOps::New(task,
                                    ep,
                                    &task.FileOwner(),
                                    &FilePermissions{User: PermMask::NewReadWrite(), ..Default::default()});
@@ -124,7 +124,7 @@ pub fn NewUnixSocketDirent(task: &Task,
         DeviceFileMinor: 0,
     };
 
-    let inode = Inode::New(&Arc::new(iops), &Arc::new(QMutex::new(msrc)), &attr);
+    let inode = Inode::New(iops.into(), &Arc::new(QMutex::new(msrc)), &attr);
 
     let name = format!("socket:[{}]", inodeId);
     return Ok(Dirent::New(&inode, &name.to_string()));
@@ -135,7 +135,7 @@ pub fn NewUnixSocketInode(task: &Task,
                           owner: &FileOwner,
                           perms: &FilePermissions,
                           msrc: &Arc<QMutex<MountSource>>) -> Inode {
-    let iops = SocketInodeOps::New(task, ep, owner, perms);
+    let iops = UnixSocketInodeOps::New(task, ep, owner, perms);
     let deviceId = UNIX_SOCKET_DEVICE.lock().DeviceID();
     let inodeId = UNIX_SOCKET_DEVICE.lock().NextIno();
     let attr = StableAttr {
@@ -147,7 +147,7 @@ pub fn NewUnixSocketInode(task: &Task,
         DeviceFileMinor: 0,
     };
 
-    let inode = Inode::New(&Arc::new(iops), msrc, &attr);
+    let inode = Inode::New(iops.into(), msrc, &attr);
 
     return inode;
 }
@@ -541,7 +541,7 @@ pub fn ExtractEndpoint(task: &Task, sockAddr: &[u8]) -> Result<BoundEndpoint> {
     let inode = d.Inode();
     let iops = inode.lock().InodeOp.clone();
 
-    match iops.as_any().downcast_ref::<SocketInodeOps>() {
+    match iops.UnixSocketInodeOps() {
         None => return Err(Error::SysError(SysErr::ECONNREFUSED)),
         Some(iops) => {
             return Ok(iops.ep.clone());
@@ -1512,14 +1512,14 @@ pub struct Dummy{}
 
 impl SimpleFileTrait for Dummy {}
 
-
-pub struct SocketInodeOps {
+#[derive(Clone)]
+pub struct UnixSocketInodeOps {
     pub ep: BoundEndpoint,
     pub simpleAttributes: Arc<InodeSimpleAttributes>,
     pub simpleExtendedAttribute: Arc<InodeSimpleExtendedAttributes>,
 }
 
-impl SocketInodeOps {
+impl UnixSocketInodeOps {
     pub fn New(
         task: &Task,
         ep: &BoundEndpoint,
@@ -1539,7 +1539,7 @@ impl SocketInodeOps {
     }
 }
 
-impl InodeOperations for SocketInodeOps {
+impl InodeOperations for UnixSocketInodeOps {
     fn as_any(&self) -> &Any {
         return self;
     }

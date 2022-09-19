@@ -58,9 +58,10 @@ pub fn NewTmpfsFifoInode(
         DeviceFileMinor: 0,
     };
 
-    return Ok(Inode::New(&Arc::new(fifo), msrc, &attr));
+    return Ok(Inode::New(fifo.into(), msrc, &attr));
 }
 
+#[derive(Clone)]
 pub struct TmpfsFifoInodeOp(PipeIops);
 
 impl InodeOperations for TmpfsFifoInodeOp {

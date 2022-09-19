@@ -28,8 +28,8 @@ use super::super::mount::*;
 use super::super::ramfs::dir::*;
 use super::devices::*;
 
-pub fn NewFile<T: InodeOperations + 'static>(
-    iops: &Arc<T>,
+pub fn NewFile(
+    iops: Iops,
     msrc: &Arc<QMutex<MountSource>>,
 ) -> Inode {
     let deviceId = SYS_DEVICE.lock().id.DeviceID();
@@ -71,7 +71,7 @@ pub fn NewDir(
         DeviceFileMinor: 0,
     };
 
-    return Inode::New(&Arc::new(d), msrc, &sattr);
+    return Inode::New(d.into(), msrc, &sattr);
 }
 
 pub fn NewSys(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {

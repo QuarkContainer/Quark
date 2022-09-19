@@ -271,7 +271,7 @@ impl Pipe {
             ..Default::default()
         };
 
-        let iops = Arc::new(NewPipeInodeOps(task, &perms, p.clone()));
+        let iops = NewPipeInodeOps(task, &perms, p.clone());
         let deviceId = TMPFS_DEVICE.lock().DeviceID();
         let inodeId = TMPFS_DEVICE.lock().NextIno();
         let attr = StableAttr {
@@ -284,7 +284,7 @@ impl Pipe {
         };
 
         let ms = Arc::new(QMutex::new(MountSource::NewPseudoMountSource()));
-        let inode = Inode::New(&iops, &ms, &attr);
+        let inode = Inode::New(iops.into(), &ms, &attr);
         let dirent = Dirent::New(&inode, &format!("pipe:[{}]", inodeId));
         p.intern.lock().dirent = Some(dirent.Downgrade());
 
