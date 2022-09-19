@@ -59,6 +59,7 @@ pub fn NewTmpfsSocket(
     return Inode::New(&Arc::new(s), msrc, &attr);
 }
 
+#[derive(Clone)]
 pub struct TmpfsSocket(SocketInodeOps);
 
 impl InodeOperations for TmpfsSocket {

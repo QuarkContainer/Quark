@@ -58,6 +58,7 @@ pub fn NewTmpfsSymlink(
     return Inode::New(&Arc::new(s), msrc, &attr);
 }
 
+#[derive(Clone)]
 pub struct TmpfsSymlink(Symlink);
 
 impl InodeOperations for TmpfsSymlink {

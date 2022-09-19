@@ -26,6 +26,7 @@ use super::super::super::mount::*;
 use super::super::super::ramfs::symlink::*;
 use super::super::symlink_proc::*;
 
+#[derive(Clone)]
 pub struct ExeNode {
     pub thread: Thread,
 }

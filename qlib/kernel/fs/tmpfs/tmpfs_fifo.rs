@@ -61,6 +61,7 @@ pub fn NewTmpfsFifoInode(
     return Ok(Inode::New(&Arc::new(fifo), msrc, &attr));
 }
 
+#[derive(Clone)]
 pub struct TmpfsFifoInodeOp(PipeIops);
 
 impl InodeOperations for TmpfsFifoInodeOp {

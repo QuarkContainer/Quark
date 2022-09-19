@@ -109,7 +109,7 @@ pub fn NewUnixSocketDummyDirent(task: &Task,
 pub fn NewUnixSocketDirent(task: &Task,
                            ep: &BoundEndpoint) -> Result<Dirent> {
     let msrc = MountSource::NewPseudoMountSource();
-    let iops = SocketInodeOps::New(task,
+    let iops = UnixSocketInodeOps::New(task,
                                    ep,
                                    &task.FileOwner(),
                                    &FilePermissions{User: PermMask::NewReadWrite(), ..Default::default()});
@@ -135,7 +135,7 @@ pub fn NewUnixSocketInode(task: &Task,
                           owner: &FileOwner,
                           perms: &FilePermissions,
                           msrc: &Arc<QMutex<MountSource>>) -> Inode {
-    let iops = SocketInodeOps::New(task, ep, owner, perms);
+    let iops = UnixSocketInodeOps::New(task, ep, owner, perms);
     let deviceId = UNIX_SOCKET_DEVICE.lock().DeviceID();
     let inodeId = UNIX_SOCKET_DEVICE.lock().NextIno();
     let attr = StableAttr {
@@ -541,7 +541,7 @@ pub fn ExtractEndpoint(task: &Task, sockAddr: &[u8]) -> Result<BoundEndpoint> {
     let inode = d.Inode();
     let iops = inode.lock().InodeOp.clone();
 
-    match iops.as_any().downcast_ref::<SocketInodeOps>() {
+    match iops.as_any().downcast_ref::<UnixSocketInodeOps>() {
         None => return Err(Error::SysError(SysErr::ECONNREFUSED)),
         Some(iops) => {
             return Ok(iops.ep.clone());
@@ -1512,14 +1512,14 @@ pub struct Dummy{}
 
 impl SimpleFileTrait for Dummy {}
 
-
-pub struct SocketInodeOps {
+#[derive(Clone)]
+pub struct UnixSocketInodeOps {
     pub ep: BoundEndpoint,
     pub simpleAttributes: Arc<InodeSimpleAttributes>,
     pub simpleExtendedAttribute: Arc<InodeSimpleExtendedAttributes>,
 }
 
-impl SocketInodeOps {
+impl UnixSocketInodeOps {
     pub fn New(
         task: &Task,
         ep: &BoundEndpoint,
@@ -1539,7 +1539,7 @@ impl SocketInodeOps {
     }
 }
 
-impl InodeOperations for SocketInodeOps {
+impl InodeOperations for UnixSocketInodeOps {
     fn as_any(&self) -> &Any {
         return self;
     }

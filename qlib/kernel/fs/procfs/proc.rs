@@ -159,6 +159,7 @@ pub fn NewProc(
     return NewProcInode(&Arc::new(p), msrc, InodeType::SpecialDirectory, None);
 }
 
+#[derive(Clone)]
 pub struct ProcessSelfNode {
     pub pidns: PIDNamespace,
 }
@@ -187,6 +188,7 @@ pub fn NewProcessSelf(task: &Task, pidns: &PIDNamespace, msrc: &Arc<QMutex<Mount
     return SymlinkNode::New(task, msrc, node.into(), None);
 }
 
+#[derive(Clone)]
 pub struct ThreadSelfNode {
     pub pidns: PIDNamespace,
 }

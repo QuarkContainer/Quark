@@ -18,6 +18,7 @@ use alloc::vec::Vec;
 use core::any::Any;
 use core::ops::Deref;
 use enum_dispatch::enum_dispatch;
+use alloc::sync::Arc;
 
 use super::super::super::super::super::auth::*;
 use super::super::super::super::super::common::*;
@@ -105,12 +106,14 @@ pub struct SimpleFileInodeInternal {
     pub data: SimpleFileImpl,
 }
 
-pub struct SimpleFileInode(QRwLock<SimpleFileInodeInternal>);
+
+#[derive(Clone)]
+pub struct SimpleFileInode(Arc<QRwLock<SimpleFileInodeInternal>>);
 
 impl Deref for SimpleFileInode {
-    type Target = QRwLock<SimpleFileInodeInternal>;
+    type Target = Arc<QRwLock<SimpleFileInodeInternal>>;
 
-    fn deref(&self) -> &QRwLock<SimpleFileInodeInternal> {
+    fn deref(&self) -> &Arc<QRwLock<SimpleFileInodeInternal>> {
         &self.0
     }
 }
@@ -144,7 +147,7 @@ impl SimpleFileInode {
             data: data,
         };
 
-        return Self(QRwLock::new(internal));
+        return Self(Arc::new(QRwLock::new(internal)));
     }
 }
 

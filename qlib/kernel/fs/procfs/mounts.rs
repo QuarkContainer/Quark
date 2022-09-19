@@ -25,6 +25,7 @@ use super::super::mount::*;
 use super::super::ramfs::symlink::*;
 use super::symlink_proc::*;
 
+#[derive(Clone)]
 pub struct MountsNode {}
 
 impl ReadLinkNodeTrait for MountsNode {

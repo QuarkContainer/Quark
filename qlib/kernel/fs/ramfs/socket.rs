@@ -38,6 +38,7 @@ use super::super::fsutil::inode::*;
 use super::super::inode::*;
 use super::super::mount::*;
 
+#[derive(Clone)]
 pub struct SocketInodeOps {
     pub ep: BoundEndpoint,
     pub simpleAttributes: Arc<InodeSimpleAttributes>,

@@ -58,6 +58,7 @@ pub trait ReadLinkNodeTrait: Send + Sync {
     }
 }
 
+#[derive(Clone)]
 #[enum_dispatch]
 pub enum ReadLinkNode {
     MountsNode(MountsNode),
@@ -67,6 +68,7 @@ pub enum ReadLinkNode {
     ProcessSelfNode(ProcessSelfNode),
 }
 
+#[derive(Clone)]
 pub struct SymlinkNode {
     pub link: Symlink,
     pub node: ReadLinkNode,

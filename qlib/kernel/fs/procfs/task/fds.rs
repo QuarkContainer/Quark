@@ -47,6 +47,7 @@ pub fn NewFd(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>, f: &
     return SymlinkNode::New(task, msrc, node.into(), Some(thread.clone()));
 }
 
+#[derive(Clone)]
 pub struct FdNode {
     file: FileWeak,
 }

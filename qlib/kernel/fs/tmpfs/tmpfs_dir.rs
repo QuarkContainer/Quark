@@ -104,6 +104,7 @@ pub fn NewTmpfsDir(
     return Inode::New(&Arc::new(d), &msrc, &attr);
 }
 
+#[derive(Clone)]
 pub struct TmpfsDir(pub Dir);
 
 fn NewDirFn(task: &Task, dir: &Inode, perms: &FilePermissions) -> Result<Inode> {

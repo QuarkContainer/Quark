@@ -58,6 +58,21 @@ use crate::qlib::kernel::fs::host::fifoiops::FifoIops;
 use crate::qlib::kernel::fs::procfs::inode::StaticFileInodeOps;
 use crate::qlib::kernel::fs::procfs::inode::TaskOwnedInodeOps;
 use crate::qlib::kernel::fs::procfs::dir_proc::DirNode;
+use crate::qlib::kernel::fs::ramfs::socket::SocketInodeOps;
+use crate::qlib::kernel::kernel::pipe::node::PipeIops;
+use crate::qlib::kernel::fs::tty::slave::SlaveInodeOperations;
+use crate::qlib::kernel::fs::tty::master::MasterInodeOperations;
+use crate::qlib::kernel::fs::tty::dir::DirInodeOperations;
+use crate::qlib::kernel::fs::tmpfs::tmpfs_symlink::TmpfsSymlink;
+use crate::qlib::kernel::socket::unix::unix::UnixSocketInodeOps;
+use crate::qlib::kernel::fs::tmpfs::tmpfs_socket::TmpfsSocket;
+use crate::qlib::kernel::fs::tmpfs::tmpfs_fifo::TmpfsFifoInodeOp;
+use crate::qlib::kernel::fs::tmpfs::tmpfs_dir::TmpfsDir;
+use crate::qlib::kernel::fs::ramfs::symlink::Symlink;
+use crate::qlib::kernel::fs::ramfs::dir::Dir;
+use crate::qlib::kernel::fs::procfs::symlink_proc::SymlinkNode;
+use crate::qlib::kernel::fs::procfs::seqfile::SeqFile;
+use crate::qlib::kernel::fs::tmpfs::tmpfs_file::TmpfsFileInodeOp;
 
 pub fn ContextCanAccessFile(task: &Task, inode: &Inode, reqPerms: &PermMask) -> Result<bool> {
     let creds = task.creds.clone();
@@ -135,6 +150,7 @@ pub enum IopsType {
     ProxyDevice,
 }
 
+#[derive(Clone)]
 pub enum Iops {
     FullDevice(FullDevice),
     NullDevice(NullDevice),
@@ -149,9 +165,21 @@ pub enum Iops {
     DirNode(DirNode),
     TaskOwnedInodeOps(TaskOwnedInodeOps),
     StaticFileInodeOps(StaticFileInodeOps),
-
-
-
+    SeqFile(SeqFile),
+    SymlinkNode(SymlinkNode),
+    Dir(Dir),
+    SocketInodeOps(SocketInodeOps),
+    Symlink(Symlink),
+    TmpfsDir(TmpfsDir),
+    TmpfsFifoInodeOp(TmpfsFifoInodeOp),
+    TmpfsFileInodeOp(TmpfsFileInodeOp),
+    TmpfsSocket(TmpfsSocket),
+    TmpfsSymlink(TmpfsSymlink),
+    DirInodeOperations(DirInodeOperations),
+    MasterInodeOperations(MasterInodeOperations),
+    SlaveInodeOperations(SlaveInodeOperations),
+    PipeIops(PipeIops),
+    UnixSocketInodeOps(UnixSocketInodeOps),
 }
 
 #[enum_dispatch]

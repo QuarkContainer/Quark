@@ -38,6 +38,8 @@ use super::super::host::hostinodeop::*;
 use super::super::inode::*;
 use super::super::mount::*;
 
+
+#[derive(Clone)]
 pub struct TaskOwnedInodeOps {
     pub iops: Arc<InodeOperations>,
     pub creds: Credentials,
@@ -248,6 +250,7 @@ pub struct StaticFileInodeOpsInternal {
     pub content: Arc<Vec<u8>>,
 }
 
+#[derive(Clone)]
 pub struct StaticFileInodeOps(pub Arc<QRwLock<StaticFileInodeOpsInternal>>);
 
 impl Deref for StaticFileInodeOps {

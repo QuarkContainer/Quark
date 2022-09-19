@@ -74,6 +74,7 @@ pub fn NewTmpfsFileInode(
     return Ok(Inode::New(&Arc::new(ops), msrc, &attr));
 }
 
+#[derive(Clone)]
 pub struct TmpfsFileInodeOp {
     pub inodeops: HostInodeOp,
     pub uattr: Arc<QMutex<UnstableAttr>>,
