@@ -690,18 +690,18 @@ impl SockOperations for DirFileOperation {}
 
 pub fn Rename(
     task: &Task,
-    oldParent: Arc<InodeOperations>,
+    oldParent: Iops,
     oldName: &str,
-    newParent: Arc<InodeOperations>,
+    newParent: Iops,
     newName: &str,
     replacement: bool,
 ) -> Result<()> {
-    let op = match oldParent.as_any().downcast_ref::<Dir>() {
+    let op = match oldParent.Dir() {
         None => return Err(Error::SysError(SysErr::EXDEV)),
         Some(d) => d.clone(),
     };
 
-    let np = match newParent.as_any().downcast_ref::<Dir>() {
+    let np = match newParent.Dir() {
         None => return Err(Error::SysError(SysErr::EXDEV)),
         Some(d) => d.clone(),
     };

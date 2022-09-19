@@ -59,7 +59,7 @@ pub fn NewAnonInode(task: &Task) -> Inode {
     };
 
     return Inode::New(
-        &Arc::new(iops),
+        iops.into(),
         &Arc::new(QMutex::new(MountSource::NewPseudoMountSource())),
         &sattr,
     );

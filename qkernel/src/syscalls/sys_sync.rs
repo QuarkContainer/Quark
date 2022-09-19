@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use super::super::fs::file::*;
-use super::super::fs::host::hostinodeop::*;
 use super::super::qlib::common::*;
 use super::super::qlib::linux_def::*;
 use super::super::syscalls::syscalls::*;
@@ -37,7 +36,7 @@ pub fn SysSyncFs(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
     let inode = file.Dirent.Inode();
     let iops = inode.lock().InodeOp.clone();
-    match iops.as_any().downcast_ref::<HostInodeOp>() {
+    match iops.HostInodeOp() {
         None => return Ok(0),
         Some(h) => {
             h.SyncFs()?;
@@ -60,7 +59,7 @@ pub fn SysSyncFileRange(task: &mut Task, args: &SyscallArguments) -> Result<i64>
 
     let inode = file.Dirent.Inode();
     let iops = inode.lock().InodeOp.clone();
-    match iops.as_any().downcast_ref::<HostInodeOp>() {
+    match iops.HostInodeOp() {
         None => return Ok(0),
         Some(h) => {
             h.SyncFileRange(offset, nbytes, uflags)?;

@@ -163,5 +163,5 @@ pub fn NewMeminfo(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         MeminfoInode {}.into(),
     );
 
-    return NewProcInode(&Arc::new(node), msrc, InodeType::SpecialFile, None);
+    return NewProcInode(node.into(), msrc, InodeType::SpecialFile, None);
 }

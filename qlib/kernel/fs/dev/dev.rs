@@ -43,7 +43,7 @@ const FULL_DEV_MINOR: u32 = 7;
 const RANDOM_DEV_MINOR: u32 = 8;
 const URANDOM_DEV_MINOR: u32 = 9;
 
-fn NewTTYDevice(iops: &Arc<TTYDevice>, msrc: &Arc<QMutex<MountSource>>) -> Inode {
+fn NewTTYDevice(iops: TTYDevice, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let deviceId = DEV_DEVICE.lock().id.DeviceID();
     let inodeId = DEV_DEVICE.lock().NextIno();
 
@@ -58,7 +58,7 @@ fn NewTTYDevice(iops: &Arc<TTYDevice>, msrc: &Arc<QMutex<MountSource>>) -> Inode
 
     let inodeInternal = InodeIntern {
         UniqueId: NewUID(),
-        InodeOp: iops.clone(),
+        InodeOp: iops.into(),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
@@ -69,7 +69,7 @@ fn NewTTYDevice(iops: &Arc<TTYDevice>, msrc: &Arc<QMutex<MountSource>>) -> Inode
     return Inode(Arc::new(QMutex::new(inodeInternal)));
 }
 
-fn NewNullDevice(iops: &Arc<NullDevice>, msrc: &Arc<QMutex<MountSource>>) -> Inode {
+fn NewNullDevice(iops: NullDevice, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let deviceId = DEV_DEVICE.lock().id.DeviceID();
     let inodeId = DEV_DEVICE.lock().NextIno();
 
@@ -84,7 +84,7 @@ fn NewNullDevice(iops: &Arc<NullDevice>, msrc: &Arc<QMutex<MountSource>>) -> Ino
 
     let inodeInternal = InodeIntern {
         UniqueId: NewUID(),
-        InodeOp: iops.clone(),
+        InodeOp: iops.into(),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
@@ -95,7 +95,7 @@ fn NewNullDevice(iops: &Arc<NullDevice>, msrc: &Arc<QMutex<MountSource>>) -> Ino
     return Inode(Arc::new(QMutex::new(inodeInternal)));
 }
 
-fn NewTestProxyDevice(iops: &Arc<ProxyDevice>, msrc: &Arc<QMutex<MountSource>>) -> Inode {
+fn NewTestProxyDevice(iops: ProxyDevice, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let deviceId = DEV_DEVICE.lock().id.DeviceID();
     let inodeId = DEV_DEVICE.lock().NextIno();
 
@@ -110,7 +110,7 @@ fn NewTestProxyDevice(iops: &Arc<ProxyDevice>, msrc: &Arc<QMutex<MountSource>>) 
 
     let inodeInternal = InodeIntern {
         UniqueId: NewUID(),
-        InodeOp: iops.clone(),
+        InodeOp: iops.into(),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
@@ -121,7 +121,7 @@ fn NewTestProxyDevice(iops: &Arc<ProxyDevice>, msrc: &Arc<QMutex<MountSource>>) 
     return Inode(Arc::new(QMutex::new(inodeInternal)));
 }
 
-fn NewZeroDevice(iops: &Arc<ZeroDevice>, msrc: &Arc<QMutex<MountSource>>) -> Inode {
+fn NewZeroDevice(iops: ZeroDevice, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let deviceId = DEV_DEVICE.lock().id.DeviceID();
     let inodeId = DEV_DEVICE.lock().NextIno();
 
@@ -136,7 +136,7 @@ fn NewZeroDevice(iops: &Arc<ZeroDevice>, msrc: &Arc<QMutex<MountSource>>) -> Ino
 
     let inodeInternal = InodeIntern {
         UniqueId: NewUID(),
-        InodeOp: iops.clone(),
+        InodeOp: iops.into(),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
@@ -147,7 +147,7 @@ fn NewZeroDevice(iops: &Arc<ZeroDevice>, msrc: &Arc<QMutex<MountSource>>) -> Ino
     return Inode(Arc::new(QMutex::new(inodeInternal)));
 }
 
-fn NewFullDevice(iops: &Arc<FullDevice>, msrc: &Arc<QMutex<MountSource>>) -> Inode {
+fn NewFullDevice(iops: FullDevice, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     let deviceId = DEV_DEVICE.lock().id.DeviceID();
     let inodeId = DEV_DEVICE.lock().NextIno();
 
@@ -162,7 +162,7 @@ fn NewFullDevice(iops: &Arc<FullDevice>, msrc: &Arc<QMutex<MountSource>>) -> Ino
 
     let inodeInternal = InodeIntern {
         UniqueId: NewUID(),
-        InodeOp: iops.clone(),
+        InodeOp: iops.into(),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
@@ -173,7 +173,7 @@ fn NewFullDevice(iops: &Arc<FullDevice>, msrc: &Arc<QMutex<MountSource>>) -> Ino
     return Inode(Arc::new(QMutex::new(inodeInternal)));
 }
 
-fn NewRandomDevice(iops: &Arc<RandomDevice>, msrc: &Arc<QMutex<MountSource>>, minor: u32) -> Inode {
+fn NewRandomDevice(iops: RandomDevice, msrc: &Arc<QMutex<MountSource>>, minor: u32) -> Inode {
     let deviceId = DEV_DEVICE.lock().id.DeviceID();
     let inodeId = DEV_DEVICE.lock().NextIno();
 
@@ -188,7 +188,7 @@ fn NewRandomDevice(iops: &Arc<RandomDevice>, msrc: &Arc<QMutex<MountSource>>, mi
 
     let inodeInternal = InodeIntern {
         UniqueId: NewUID(),
-        InodeOp: iops.clone(),
+        InodeOp: iops.into(),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
@@ -221,7 +221,7 @@ fn NewDirectory(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
 
     let inodeInternal = InodeIntern {
         UniqueId: NewUID(),
-        InodeOp: Arc::new(iops),
+        InodeOp: iops.into(),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
@@ -249,7 +249,7 @@ fn NewSymlink(task: &Task, target: &str, msrc: &Arc<QMutex<MountSource>>) -> Ino
 
     let inodeInternal = InodeIntern {
         UniqueId: NewUID(),
-        InodeOp: Arc::new(iops),
+        InodeOp: iops.into(),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
@@ -283,7 +283,7 @@ pub fn NewDev(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     contents.insert(
         "null".to_string(),
         NewNullDevice(
-            &Arc::new(NullDevice::New(task, &ROOT_OWNER, &FileMode(0o0666))),
+            NullDevice::New(task, &ROOT_OWNER, &FileMode(0o0666)),
             msrc,
         ),
     );
@@ -291,7 +291,7 @@ pub fn NewDev(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     contents.insert(
         "proxy".to_string(),
         NewTestProxyDevice(
-            &Arc::new(ProxyDevice::New(task, &ROOT_OWNER, &FileMode(0o0666))),
+            ProxyDevice::New(task, &ROOT_OWNER, &FileMode(0o0666)),
             msrc,
         ),
     );
@@ -299,14 +299,14 @@ pub fn NewDev(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     contents.insert(
         "zero".to_string(),
         NewZeroDevice(
-            &Arc::new(ZeroDevice::New(task, &ROOT_OWNER, &FileMode(0o0666))),
+            ZeroDevice::New(task, &ROOT_OWNER, &FileMode(0o0666)),
             msrc,
         ),
     );
     contents.insert(
         "full".to_string(),
         NewFullDevice(
-            &Arc::new(FullDevice::New(task, &ROOT_OWNER, &FileMode(0o0666))),
+            FullDevice::New(task, &ROOT_OWNER, &FileMode(0o0666)),
             msrc,
         ),
     );
@@ -319,7 +319,7 @@ pub fn NewDev(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     contents.insert(
         "random".to_string(),
         NewRandomDevice(
-            &Arc::new(RandomDevice::New(task, &ROOT_OWNER, &FileMode(0o0666))),
+            RandomDevice::New(task, &ROOT_OWNER, &FileMode(0o0666)),
             msrc,
             RANDOM_DEV_MINOR,
         ),
@@ -327,7 +327,7 @@ pub fn NewDev(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     contents.insert(
         "urandom".to_string(),
         NewRandomDevice(
-            &Arc::new(RandomDevice::New(task, &ROOT_OWNER, &FileMode(0o0666))),
+            RandomDevice::New(task, &ROOT_OWNER, &FileMode(0o0666)),
             msrc,
             URANDOM_DEV_MINOR,
         ),
@@ -353,7 +353,7 @@ pub fn NewDev(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
     );
 
     let ttyDevice = TTYDevice::New(task, &ROOT_OWNER, &FileMode(0o0666));
-    contents.insert("tty".to_string(), NewTTYDevice(&Arc::new(ttyDevice), msrc));
+    contents.insert("tty".to_string(), NewTTYDevice(ttyDevice, msrc));
 
     let iops = Dir::New(
         task,
@@ -376,7 +376,7 @@ pub fn NewDev(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
 
     let inodeInternal = InodeIntern {
         UniqueId: NewUID(),
-        InodeOp: Arc::new(iops),
+        InodeOp: iops.into(),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),

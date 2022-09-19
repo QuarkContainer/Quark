@@ -110,7 +110,7 @@ pub fn NewNetDir(
     };
 
     return NewProcInode(
-        &Arc::new(taskDir),
+        taskDir.into(),
         msrc,
         InodeType::SpecialDirectory,
         None,
@@ -197,7 +197,7 @@ pub fn NewNetTCP(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         NetTCP {}.into(),
     );
 
-    return NewProcInode(&Arc::new(node), msrc, InodeType::SpecialFile, None);
+    return NewProcInode(node.into(), msrc, InodeType::SpecialFile, None);
 }
 
 
@@ -402,7 +402,7 @@ pub fn NewNetUDP(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         NetUDP {}.into(),
     );
 
-    return NewProcInode(&Arc::new(node), msrc, InodeType::SpecialFile, None);
+    return NewProcInode(node.into(), msrc, InodeType::SpecialFile, None);
 }
 
 pub struct NetUDPReadonlyFileNode {}
@@ -581,7 +581,7 @@ pub fn NewNetUnix(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         NetUnix {}.into(),
     );
 
-    return NewProcInode(&Arc::new(node), msrc, InodeType::SpecialFile, None);
+    return NewProcInode(node.into(), msrc, InodeType::SpecialFile, None);
 }
 
 

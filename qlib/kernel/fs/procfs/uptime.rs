@@ -110,5 +110,5 @@ pub fn NewUptime(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         UptimeInode {}.into(),
     );
 
-    return NewProcInode(&Arc::new(node), msrc, InodeType::SpecialFile, None);
+    return NewProcInode(node.into(), msrc, InodeType::SpecialFile, None);
 }

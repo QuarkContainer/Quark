@@ -27,6 +27,7 @@ use super::super::syscalls::syscalls::*;
 use super::super::task::*;
 use super::super::SignalDef::*;
 use super::sys_poll::CopyTimespecIntoDuration;
+use crate::qlib::kernel::fs::inode::InodeOperations;
 
 // CreateEpoll implements the epoll_create(2) linux syscall.
 pub fn CreateEpoll(task: &Task, closeOnExec: bool) -> Result<i64> {

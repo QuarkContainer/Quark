@@ -303,7 +303,7 @@ pub fn NewFdDir(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>) -
     };
 
     return NewProcInode(
-        &Arc::new(f),
+        f.into(),
         msrc,
         InodeType::SpecialDirectory,
         Some(thread.clone()),
@@ -325,7 +325,7 @@ pub fn NewFdInfoDir(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>
     };
 
     return NewProcInode(
-        &Arc::new(f),
+        f.into(),
         msrc,
         InodeType::SpecialDirectory,
         Some(thread.clone()),

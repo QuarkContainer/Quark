@@ -96,5 +96,5 @@ pub fn NewIpv4(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         data: Ipv4Node {}.into(),
     };
 
-    return NewProcInode(&Arc::new(ipv4Dir), msrc, InodeType::SpecialDirectory, None);
+    return NewProcInode(ipv4Dir.into(), msrc, InodeType::SpecialDirectory, None);
 }

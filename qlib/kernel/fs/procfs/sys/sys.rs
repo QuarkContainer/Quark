@@ -69,5 +69,5 @@ pub fn NewSys(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         data: ProcSysDirNode {}.into(),
     };
 
-    return NewProcInode(&Arc::new(taskDir), msrc, InodeType::SpecialDirectory, None);
+    return NewProcInode(taskDir.into(), msrc, InodeType::SpecialDirectory, None);
 }

@@ -53,7 +53,7 @@ pub fn NewExecArg(
         typ,
     );
     return NewProcInode(
-        &Arc::new(v),
+        v.into(),
         msrc,
         InodeType::SpecialFile,
         Some(thread.clone()),

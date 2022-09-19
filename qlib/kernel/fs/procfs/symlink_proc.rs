@@ -86,7 +86,7 @@ impl  SymlinkNode {
             node: node,
         };
 
-        return NewProcInode(&Arc::new(link), msrc, InodeType::Symlink, thread);
+        return NewProcInode(link.into(), msrc, InodeType::Symlink, thread);
     }
 }
 

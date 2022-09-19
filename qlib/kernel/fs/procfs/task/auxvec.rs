@@ -41,7 +41,7 @@ pub fn NewAUXVec(task: &Task, thread: &Thread, msrc: &Arc<QMutex<MountSource>>) 
         FSMagic::PROC_SUPER_MAGIC,
     );
     return NewProcInode(
-        &Arc::new(v),
+        v.into(),
         msrc,
         InodeType::SpecialFile,
         Some(thread.clone()),

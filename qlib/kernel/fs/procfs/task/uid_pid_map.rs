@@ -46,7 +46,7 @@ pub fn NewIdMap(
         gids,
     );
     return NewProcInode(
-        &Arc::new(v),
+        v.into(),
         msrc,
         InodeType::SpecialFile,
         Some(thread.clone()),

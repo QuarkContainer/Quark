@@ -75,7 +75,7 @@ pub fn NewMasterNode(
     let msrc = d.lock().msrc.clone();
     let inodeInternal = InodeIntern {
         UniqueId: NewUID(),
-        InodeOp: Arc::new(iops),
+        InodeOp: iops.into(),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
         MountSource: msrc,

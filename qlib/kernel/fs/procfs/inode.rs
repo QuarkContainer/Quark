@@ -41,7 +41,7 @@ use super::super::mount::*;
 
 #[derive(Clone)]
 pub struct TaskOwnedInodeOps {
-    pub iops: Arc<InodeOperations>,
+    pub iops: Arc<Iops>,
     pub creds: Credentials,
 }
 
@@ -479,8 +479,8 @@ impl InodeOperations for StaticFileInodeOps {
     }
 }
 
-pub fn NewProcInode<T: InodeOperations + 'static>(
-    iops: &Arc<T>,
+pub fn NewProcInode(
+    iops: Iops,
     msrc: &Arc<QMutex<MountSource>>,
     typ: InodeType,
     thread: Option<Thread>,
@@ -498,15 +498,15 @@ pub fn NewProcInode<T: InodeOperations + 'static>(
     };
 
     if thread.is_some() {
-        let newiops = Arc::new(TaskOwnedInodeOps {
-            iops: iops.clone(),
+        let newiops = TaskOwnedInodeOps {
+            iops: Arc::new(iops),
             creds: thread.unwrap().lock().creds.clone(),
-        });
+        };
 
-        return Inode::New(&newiops, msrc, &sattr);
+        return Inode::New(newiops.into(), msrc, &sattr);
     }
 
-    return Inode::New(&iops, msrc, &sattr);
+    return Inode::New(iops, msrc, &sattr);
 }
 
 pub fn NewStaticProcInode(
@@ -529,5 +529,5 @@ pub fn NewStaticProcInode(
         content: contents.clone(),
     })));
 
-    return NewProcInode(&Arc::new(iops), msrc, InodeType::SpecialFile, None);
+    return NewProcInode(iops.into(), msrc, InodeType::SpecialFile, None);
 }

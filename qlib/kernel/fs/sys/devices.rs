@@ -39,7 +39,7 @@ pub fn NewPossible(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         &FilePermissions::FromMode(FileMode(0o400)),
         FSMagic::PROC_SUPER_MAGIC,
     );
-    return NewFile(&Arc::new(v), msrc);
+    return NewFile(v.into(), msrc);
 }
 
 pub fn NewPossibleSimpleFileInode(

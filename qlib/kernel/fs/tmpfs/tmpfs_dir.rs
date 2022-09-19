@@ -56,22 +56,22 @@ pub fn TmpfsRename(
     _replacement: bool,
 ) -> Result<()> {
     let oldInode = oldParent.lock().InodeOp.clone();
-    let op = match oldInode.as_any().downcast_ref::<TmpfsDir>() {
+    let op = match oldInode.TmpfsDir() {
         None => return Err(Error::SysError(SysErr::EXDEV)),
-        Some(op) => op.clone(),
+        Some(op) => op,
     };
 
     let newInode = newParent.lock().InodeOp.clone();
-    let np = match newInode.as_any().downcast_ref::<TmpfsDir>() {
+    let np = match newInode.TmpfsDir() {
         None => return Err(Error::SysError(SysErr::EXDEV)),
-        Some(op) => op.clone(),
+        Some(op) => op,
     };
 
     Rename(
         task,
-        Arc::new(op.0.clone()),
+        op.into(),
         oldname,
-        Arc::new(np.0.clone()),
+        np.into(),
         newname,
         _replacement,
     )
@@ -101,7 +101,7 @@ pub fn NewTmpfsDir(
         DeviceFileMinor: 0,
     };
 
-    return Inode::New(&Arc::new(d), &msrc, &attr);
+    return Inode::New(d.into(), &msrc, &attr);
 }
 
 #[derive(Clone)]

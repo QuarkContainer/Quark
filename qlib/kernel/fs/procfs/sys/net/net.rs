@@ -67,5 +67,5 @@ pub fn NewNet(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
         data: SysNetDirNode {}.into(),
     };
 
-    return NewProcInode(&Arc::new(netDir), msrc, InodeType::SpecialDirectory, None);
+    return NewProcInode(netDir.into(), msrc, InodeType::SpecialDirectory, None);
 }

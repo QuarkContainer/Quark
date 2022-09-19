@@ -156,7 +156,7 @@ pub fn NewProc(
         data: ProcNode(Arc::new(QMutex::new(proc))).into(),
     };
 
-    return NewProcInode(&Arc::new(p), msrc, InodeType::SpecialDirectory, None);
+    return NewProcInode(p.into(), msrc, InodeType::SpecialDirectory, None);
 }
 
 #[derive(Clone)]

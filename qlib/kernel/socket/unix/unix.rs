@@ -100,7 +100,7 @@ pub fn NewUnixSocketDummyDirent(task: &Task,
     };
 
     let msrc = MountSource::NewPseudoMountSource();
-    let inode = Inode::New(&Arc::new(iops), &Arc::new(QMutex::new(msrc)), &attr);
+    let inode = Inode::New(iops.into(), &Arc::new(QMutex::new(msrc)), &attr);
 
     let name = format!("socket:[{}]", ino);
     return Ok(Dirent::New(&inode, &name.to_string()));
@@ -124,7 +124,7 @@ pub fn NewUnixSocketDirent(task: &Task,
         DeviceFileMinor: 0,
     };
 
-    let inode = Inode::New(&Arc::new(iops), &Arc::new(QMutex::new(msrc)), &attr);
+    let inode = Inode::New(iops.into(), &Arc::new(QMutex::new(msrc)), &attr);
 
     let name = format!("socket:[{}]", inodeId);
     return Ok(Dirent::New(&inode, &name.to_string()));
@@ -147,7 +147,7 @@ pub fn NewUnixSocketInode(task: &Task,
         DeviceFileMinor: 0,
     };
 
-    let inode = Inode::New(&Arc::new(iops), msrc, &attr);
+    let inode = Inode::New(iops.into(), msrc, &attr);
 
     return inode;
 }
@@ -541,7 +541,7 @@ pub fn ExtractEndpoint(task: &Task, sockAddr: &[u8]) -> Result<BoundEndpoint> {
     let inode = d.Inode();
     let iops = inode.lock().InodeOp.clone();
 
-    match iops.as_any().downcast_ref::<UnixSocketInodeOps>() {
+    match iops.UnixSocketInodeOps() {
         None => return Err(Error::SysError(SysErr::ECONNREFUSED)),
         Some(iops) => {
             return Ok(iops.ep.clone());

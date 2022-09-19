@@ -71,7 +71,7 @@ pub fn NewTmpfsFileInode(
         DeviceFileMinor: 0,
     };
 
-    return Ok(Inode::New(&Arc::new(ops), msrc, &attr));
+    return Ok(Inode::New(ops.into(), msrc, &attr));
 }
 
 #[derive(Clone)]

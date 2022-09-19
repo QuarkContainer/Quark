@@ -97,7 +97,7 @@ pub fn NewDir(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
 
     let inodeInternal = InodeIntern {
         UniqueId: NewUID(),
-        InodeOp: Arc::new(d),
+        InodeOp: d.into(),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),

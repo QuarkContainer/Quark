@@ -126,7 +126,7 @@ impl ProcNode {
         };
 
         return NewProcInode(
-            &Arc::new(taskDir),
+            taskDir.into(),
             msrc,
             InodeType::SpecialDirectory,
             Some(thread.clone()),

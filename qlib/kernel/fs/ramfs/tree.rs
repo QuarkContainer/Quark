@@ -51,7 +51,7 @@ fn emptyDir(task: &Task, msrc: &Arc<QMutex<MountSource>>) -> Inode {
 
     let inodeInternal = InodeIntern {
         UniqueId: NewUID(),
-        InodeOp: Arc::new(dir),
+        InodeOp: dir.into(),
         StableAttr: stableAttr,
         LockCtx: LockCtx::default(),
         MountSource: msrc.clone(),
