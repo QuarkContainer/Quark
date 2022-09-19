@@ -566,9 +566,9 @@ pub const SYS_CALL_TABLE: &'static [SyscallFn] = &[
 
     // Linux skips ahead to syscall 424 to sync numbers between arches.
     NotImplementSyscall, //	424 sys_pidfd_send_signal
-    NotImplementSyscall, //	425 sys_io_uring_setup
-    NotImplementSyscall, //	426 sys_io_uring_enter
-    NotImplementSyscall, //	427 sys_io_uring_register
+    SysNoSys,            //	425 sys_io_uring_setup
+    SysNoSys,            //	426 sys_io_uring_enter
+    SysNoSys,            //	427 sys_io_uring_register
     NotImplementSyscall, //	428 sys_open_tree
     NotImplementSyscall, //	429 sys_move_mount
     NotImplementSyscall, //	430 sys_fsopen
