@@ -312,7 +312,7 @@ impl UnixSocketOperations {
     }
 }
 
-impl Drop for UnixSocketOperations {
+impl Drop for UnixSocketOperationsInner {
     fn drop(&mut self) {
        match *self.name.lock() {
             None => (),

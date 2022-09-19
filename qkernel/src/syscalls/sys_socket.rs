@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use super::super::qlib::common::*;
@@ -415,7 +414,7 @@ pub fn SysGetPeerName(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
 fn recvSingleMsg(
     task: &Task,
-    sock: &Arc<FileOps>,
+    sock: &FileOps,
     msgPtr: u64,
     flags: i32,
     deadline: Option<Time>,
@@ -545,7 +544,7 @@ fn recvSingleMsg(
 
 fn sendSingleMsg(
     task: &Task,
-    sock: &Arc<FileOps>,
+    sock: &FileOps,
     msgPtr: u64,
     flags: i32,
     deadline: Option<Time>,

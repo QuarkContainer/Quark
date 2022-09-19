@@ -14,7 +14,6 @@
 
 use alloc::string::String;
 use alloc::string::ToString;
-use alloc::sync::Arc;
 
 use super::super::fs::dirent::*;
 use super::super::fs::file::*;
@@ -1344,7 +1343,7 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
             if fops.FopsType() == FileOpsType::OverlayFileOperations {
                 fops = if let Some(ops) = fops.OverlayFileOperations() {
-                    Arc::new(ops.into())
+                    ops.into()
                 } else {
                     panic!("F_GETPIPE_SZ OverlayFileOperations fail");
                 }
@@ -1368,7 +1367,7 @@ pub fn SysFcntl(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
 
             if fops.FopsType() == FileOpsType::OverlayFileOperations {
                 fops = if let Some(ops) = fops.OverlayFileOperations() {
-                    Arc::new(ops.into())
+                    ops.into()
                 } else {
                     panic!("F_SETPIPE_SZ OverlayFileOperations fail");
                 }

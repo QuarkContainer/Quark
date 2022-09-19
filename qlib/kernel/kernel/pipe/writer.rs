@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use core::any::Any;
+use alloc::sync::Arc;
 use core::ops::Deref;
 
 use super::super::super::super::common::*;
@@ -28,11 +29,20 @@ use super::super::super::task::*;
 use super::pipe::*;
 
 #[derive(Clone)]
-pub struct Writer {
+pub struct Writer(pub Arc<WriterInner>);
+impl Deref for Writer {
+    type Target = Arc<WriterInner>;
+
+    fn deref(&self) -> &Arc<WriterInner> {
+        &self.0
+    }
+}
+
+pub struct WriterInner {
     pub pipe: Pipe,
 }
 
-impl Deref for Writer {
+impl Deref for WriterInner {
     type Target = Pipe;
 
     fn deref(&self) -> &Pipe {
@@ -40,7 +50,7 @@ impl Deref for Writer {
     }
 }
 
-impl Drop for Writer {
+impl Drop for WriterInner {
     fn drop(&mut self) {
         self.pipe.WClose();
 

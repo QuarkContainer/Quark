@@ -1171,7 +1171,7 @@ impl InodeOperations for HostInodeOp {
         let inode = dirent.Inode();
         let wouldBlock = inode.lock().InodeOp.WouldBlock();
 
-        return Ok(File::NewHostFile(dirent, &flags, Arc::new(fops.into()), wouldBlock));
+        return Ok(File::NewHostFile(dirent, &flags, fops.into(), wouldBlock));
     }
 
     fn UnstableAttr(&self, task: &Task) -> Result<UnstableAttr> {

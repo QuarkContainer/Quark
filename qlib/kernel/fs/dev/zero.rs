@@ -200,7 +200,7 @@ impl InodeOperations for ZeroDevice {
             Dirent: dirent.clone(),
             flags: QMutex::new((flags, None)),
             offset: QLock::New(0),
-            FileOp: Arc::new(fops.into()),
+            FileOp: fops.into(),
         };
 
         return Ok(File(Arc::new(f)));

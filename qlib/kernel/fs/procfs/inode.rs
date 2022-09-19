@@ -385,9 +385,9 @@ impl InodeOperations for StaticFileInodeOps {
             Dirent: dirent.clone(),
             flags: QMutex::new((flags.clone(), None)),
             offset: QLock::New(0),
-            FileOp: Arc::new(StaticFile {
+            FileOp: StaticFile {
                 content: self.read().content.clone(),
-            }.into()),
+            }.into(),
         })));
     }
 

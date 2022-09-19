@@ -377,7 +377,7 @@ impl KernelTermios {
 }
 
 pub struct TTYFileOpsInternal {
-    pub fileOps: Arc<HostFileOp>,
+    pub fileOps: HostFileOp,
     pub termios: KernelTermios,
     pub session: Option<Session>,
     pub fgProcessgroup: Option<ProcessGroup>,
@@ -434,7 +434,7 @@ impl Deref for TTYFileOps {
 pub const ENABLE_RINGBUF: bool = true;
 
 impl TTYFileOps {
-    pub fn New(fops: Arc<HostFileOp>) -> Self {
+    pub fn New(fops: HostFileOp) -> Self {
         let queue = fops.InodeOp.lock().queue.clone();
         let fd = fops.InodeOp.lock().HostFd;
         let internal = TTYFileOpsInternal {
