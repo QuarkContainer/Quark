@@ -38,6 +38,7 @@ nix = "0.23.1"
 num-traits = "^0.2.5"
 scopeguard = { version = "^1.1.0", default-features = false }
 hashbrown = "0.12.3"
+enum_dispatch = { git = "https://github.com/QuarkContainer/enum_dispatch_clone.git" }
 prctl = "1.0.0"
 caps = "0.2.0"
 tabwriter = "1.2.1"
