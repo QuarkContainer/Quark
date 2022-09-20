@@ -20,7 +20,6 @@
 #![allow(bare_trait_objects)]
 #![feature(map_first_last)]
 #![allow(non_camel_case_types)]
-#![feature(asm)]
 #![allow(deprecated)]
 #![feature(thread_id_value)]
 #![allow(dead_code)]

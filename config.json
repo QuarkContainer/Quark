@@ -17,7 +17,7 @@
   "EnableRDMA"    : false,
   "RDMAPort"      : 1,
   "PerSandboxLog" : false,
-  "ReserveCpuCount": 6,
+  "ReserveCpuCount": 1,
   "ShimMode"      : false,
   "EnableInotify" : true,
   "ReaddirCache"  : true,
