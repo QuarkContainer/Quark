@@ -218,6 +218,7 @@ pub fn NewThreadSelf(task: &Task, pidns: &PIDNamespace, msrc: &Arc<QMutex<MountS
     return SymlinkNode::New(task, msrc, node.into(), None);
 }
 
+#[derive(Clone)]
 pub struct RootProcFile {
     pub iops: DirNode,
 }

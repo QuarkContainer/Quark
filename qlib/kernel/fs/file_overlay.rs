@@ -76,7 +76,7 @@ impl OverlayFileOperationsInner {
         &self,
         task: &Task,
         file: &File,
-        mut func: impl FnMut(&File, Arc<FileOperations>) -> Result<()>,
+        mut func: impl FnMut(&File, FileOps) -> Result<()>,
     ) -> Result<()> {
         let inode = file.Dirent.Inode();
         let overlay = inode.lock().Overlay.as_ref().unwrap().clone();
@@ -101,7 +101,7 @@ impl OverlayFileOperationsInner {
         return func(&upper, upperfops);
     }
 
-    pub fn FileOps(&self) -> Arc<FileOperations> {
+    pub fn FileOps(&self) -> FileOps {
         let ops = if self.upper.lock().is_some() {
             self.upper.lock().as_ref().unwrap().FileOp.clone()
         } else if self.lower.lock().is_some() {

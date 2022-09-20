@@ -199,7 +199,7 @@ impl InodeOperations for FullDevice {
             Dirent: dirent.clone(),
             flags: QMutex::new((flags, None)),
             offset: QLock::New(0),
-            FileOp: Arc::new(fops.into()),
+            FileOp: fops.into(),
         };
 
         return Ok(File(Arc::new(f)));
@@ -282,6 +282,7 @@ impl InodeOperations for FullDevice {
     }
 }
 
+#[derive(Clone)]
 pub struct FullFileOperations {}
 
 impl Waitable for FullFileOperations {

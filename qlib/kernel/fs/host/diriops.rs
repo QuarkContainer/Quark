@@ -288,7 +288,7 @@ impl HostDirOp {
     pub fn GetHostFileOp(&self, _task: &Task) -> HostDirFops {
         let hostDirOp = HostDirFops {
             DirOp: self.clone(),
-            DirCursor: QMutex::new("".to_string()),
+            DirCursor: Arc::new(QMutex::new("".to_string())),
             //Buf: HostFileBuf::None,
         };
         return hostDirOp;
@@ -460,8 +460,7 @@ impl InodeOperations for HostDirOp {
         let iops = match target
             .lock()
             .InodeOp
-            .as_any()
-            .downcast_ref::<HostInodeOp>()
+            .HostInodeOp()
             {
                 Some(p) => p.clone(),
                 None => return Err(Error::SysError(SysErr::EPERM)),
@@ -582,7 +581,7 @@ impl InodeOperations for HostDirOp {
         let inode = dirent.Inode();
         let wouldBlock = inode.lock().InodeOp.WouldBlock();
 
-        return Ok(File::NewHostFile(dirent, &flags, Arc::new(fops.into()), wouldBlock));
+        return Ok(File::NewHostFile(dirent, &flags, fops.into(), wouldBlock));
     }
 
     fn UnstableAttr(&self, task: &Task) -> Result<UnstableAttr> {

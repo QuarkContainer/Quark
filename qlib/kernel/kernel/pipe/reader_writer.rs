@@ -14,6 +14,7 @@
 
 use core::any::Any;
 use core::ops::Deref;
+use alloc::sync::Arc;
 
 use super::super::super::super::common::*;
 use super::super::super::super::linux_def::*;
@@ -28,11 +29,20 @@ use super::super::super::task::*;
 use super::pipe::*;
 
 #[derive(Clone)]
-pub struct ReaderWriter {
+pub struct ReaderWriter(pub Arc<ReaderWriterInner>);
+impl Deref for ReaderWriter {
+    type Target = Arc<ReaderWriterInner>;
+
+    fn deref(&self) -> &Arc<ReaderWriterInner> {
+        &self.0
+    }
+}
+
+pub struct ReaderWriterInner {
     pub pipe: Pipe,
 }
 
-impl Deref for ReaderWriter {
+impl Deref for ReaderWriterInner {
     type Target = Pipe;
 
     fn deref(&self) -> &Pipe {
@@ -40,7 +50,7 @@ impl Deref for ReaderWriter {
     }
 }
 
-impl Drop for ReaderWriter {
+impl Drop for ReaderWriterInner {
     fn drop(&mut self) {
         self.pipe.RClose();
         self.pipe.WClose();

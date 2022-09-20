@@ -286,9 +286,9 @@ impl InodeOperations for SeqFile {
         dirent: &Dirent,
         flags: FileFlags,
     ) -> Result<File> {
-        let fops = Arc::new(SeqFileOperations {
+        let fops = SeqFileOperations {
             seqFile: self.clone(),
-        }.into());
+        }.into();
 
         let internal = FileInternal {
             UniqueId: NewUID(),
@@ -405,6 +405,7 @@ impl InodeOperations for SeqFile {
     }
 }
 
+#[derive(Clone)]
 pub struct SeqFileOperations {
     pub seqFile: SeqFile,
 }

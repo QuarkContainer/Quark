@@ -280,6 +280,7 @@ impl InodeOperations for TTYDevice {
     }
 }
 
+#[derive(Clone)]
 pub struct TTYFileOperations {}
 
 impl Waitable for TTYFileOperations {}

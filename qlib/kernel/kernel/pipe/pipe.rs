@@ -318,17 +318,17 @@ impl Pipe {
         if flags.Read && flags.Write {
             self.ROpen();
             self.WOpen();
-            let rw = ReaderWriter { pipe: self.clone() };
+            let rw = ReaderWriter(Arc::new(ReaderWriterInner{ pipe: self.clone() }));
             let dirent = self.intern.lock().dirent.clone().unwrap().Upgrade().unwrap();
             return File::New(&dirent, flags, rw.into());
         } else if flags.Read {
             self.ROpen();
-            let r = Reader { pipe: self.clone() };
+            let r = Reader(Arc::new(ReaderInner { pipe: self.clone() }));
             let dirent = self.intern.lock().dirent.clone().unwrap().Upgrade().unwrap();
             return File::New(&dirent, flags, r.into());
         } else if flags.Write {
             self.WOpen();
-            let w = Writer { pipe: self.clone() };
+            let w = Writer(Arc::new(WriterInner { pipe: self.clone() }));
             let dirent = self.intern.lock().dirent.clone().unwrap().Upgrade().unwrap();
             return File::New(&dirent, flags, w.into());
         } else {

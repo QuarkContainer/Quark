@@ -30,6 +30,7 @@ use super::super::inode::*;
 use super::super::mount::*;
 use super::inode::*;
 
+#[derive(Clone)]
 pub struct UptimeFileNode {}
 
 impl ReadonlyFileNodeTrait for UptimeFileNode {

@@ -14,6 +14,8 @@
 
 use alloc::string::String;
 use core::any::Any;
+use core::ops::Deref;
+use alloc::sync::Arc;
 
 use super::super::super::super::super::common::*;
 use super::super::super::super::super::linux_def::*;
@@ -26,7 +28,18 @@ use super::super::super::file::*;
 use super::super::super::host::hostinodeop::*;
 use super::*;
 
-pub struct StaticDirFileOperations {
+#[derive(Clone)]
+pub struct StaticDirFileOperations(Arc<StaticDirFileOperationsInner>);
+
+impl Deref for StaticDirFileOperations {
+    type Target = Arc<StaticDirFileOperationsInner>;
+
+    fn deref(&self) -> &Arc<StaticDirFileOperationsInner> {
+        &self.0
+    }
+}
+
+pub struct StaticDirFileOperationsInner {
     pub dentryMap: DentMap,
     pub dirCursor: String,
 }

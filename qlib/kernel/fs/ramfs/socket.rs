@@ -191,7 +191,7 @@ impl InodeOperations for SocketInodeOps {
             Dirent: dirent.clone(),
             flags: QMutex::new((flags, None)),
             offset: QLock::New(0),
-            FileOp: Arc::new(fops.into()),
+            FileOp: fops.into(),
         };
 
         return Ok(File(Arc::new(f)));
@@ -280,6 +280,7 @@ impl InodeOperations for SocketInodeOps {
     }
 }
 
+#[derive(Clone)]
 pub struct SocketFileOps {}
 
 impl Waitable for SocketFileOps {

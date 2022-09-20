@@ -22,6 +22,7 @@ use core::any::Any;
 use core::ops::*;
 use core::sync::atomic::AtomicI64;
 use core::sync::atomic::Ordering;
+use core::ops::Deref;
 
 use super::super::super::fs::attr::*;
 use super::super::super::fs::dentry::*;
@@ -152,8 +153,18 @@ pub fn NewUnixSocketInode(task: &Task,
     return inode;
 }
 
+#[derive(Clone)]
+pub struct UnixSocketOperations(pub Arc<UnixSocketOperationsInner>);
 
-pub struct UnixSocketOperations {
+impl Deref for UnixSocketOperations {
+    type Target = Arc<UnixSocketOperationsInner>;
+
+    fn deref(&self) -> &Arc<UnixSocketOperationsInner> {
+        &self.0
+    }
+}
+
+pub struct UnixSocketOperationsInner {
     pub ep: BoundEndpoint,
     pub stype: i32,
     pub send: AtomicI64,
@@ -163,7 +174,7 @@ pub struct UnixSocketOperations {
 
 impl UnixSocketOperations {
     pub fn New(ep: BoundEndpoint, stype: i32) -> Self {
-        let ret = Self {
+        let ret = UnixSocketOperationsInner {
             ep: ep,
             stype: stype,
             send: AtomicI64::new(0),
@@ -171,7 +182,7 @@ impl UnixSocketOperations {
             name: QMutex::new(None),
         };
 
-        return ret;
+        return Self(Arc::new(ret));
     }
 
     pub fn SetSendBufferSize(&self, v: i64) -> i64 {
@@ -301,7 +312,7 @@ impl UnixSocketOperations {
     }
 }
 
-impl Drop for UnixSocketOperations {
+impl Drop for UnixSocketOperationsInner {
     fn drop(&mut self) {
        match *self.name.lock() {
             None => (),

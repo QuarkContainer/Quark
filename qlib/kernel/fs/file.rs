@@ -305,6 +305,7 @@ pub enum FileOpsType {
     ProxyFileOperations
 }
 
+#[derive(Clone)]
 #[enum_dispatch]
 pub enum FileOps {
     OverlayFileOperations(OverlayFileOperations),
@@ -463,7 +464,7 @@ pub struct FileInternal {
     //pub offsetLock: QLock,
     pub offset: QLock<i64>,
 
-    pub FileOp: Arc<FileOps>,
+    pub FileOp: FileOps,
 }
 
 #[derive(Clone)]
@@ -648,7 +649,7 @@ impl File {
             flags: QMutex::new((*flags, None)),
             //offsetLock: QLock::default(),
             offset: QLock::New(0),
-            FileOp: Arc::new(fops),
+            FileOp: fops,
         };
 
         return File(Arc::new(f));
@@ -700,15 +701,15 @@ impl File {
                     let file = hostiops.GetFile(task, &inode, &dirent, fileFlags)?;
                     return Ok(file)
                 } else {
-                    let hostiops = iops.as_any().downcast_ref::<HostInodeOp>().unwrap();
+                    let hostiops = iops.HostInodeOp().unwrap();
                     let fops = hostiops.GetHostFileOp(task);
                     let wouldBlock = inode.lock().InodeOp.WouldBlock();
 
                     if isTTY {
-                        return Ok(Self::NewTTYFile(&dirent, &fileFlags, Arc::new(fops)));
+                        return Ok(Self::NewTTYFile(&dirent, &fileFlags, fops));
                     }
 
-                    return Ok(Self::NewHostFile(&dirent, &fileFlags, Arc::new(fops.into()), wouldBlock));
+                    return Ok(Self::NewHostFile(&dirent, &fileFlags, fops.into(), wouldBlock));
                 }
             }
         }
@@ -746,13 +747,13 @@ impl File {
         //let fops = iops.GetFileOp(task)?;
         let fops = hostiops.GetHostFileOp(task);
         let wouldBlock = inode.lock().InodeOp.WouldBlock();
-        return Ok(Self::NewHostFile(&dirent, &fileFlags, Arc::new(fops.into()), wouldBlock));
+        return Ok(Self::NewHostFile(&dirent, &fileFlags, fops.into(), wouldBlock));
     }
 
     pub fn NewHostFile(
         dirent: &Dirent,
         flags: &FileFlags,
-        fops: Arc<FileOps>,
+        fops: FileOps,
         wouldBlock: bool,
     ) -> Self {
         let mut flags = *flags;
@@ -772,7 +773,7 @@ impl File {
         }));
     }
 
-    pub fn NewTTYFile(dirent: &Dirent, flags: &FileFlags, fops: Arc<HostFileOp>) -> Self {
+    pub fn NewTTYFile(dirent: &Dirent, flags: &FileFlags, fops: HostFileOp) -> Self {
         let ttyfileops = TTYFileOps::New(fops);
 
         return Self::New(dirent, flags, ttyfileops.into());

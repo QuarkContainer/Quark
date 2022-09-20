@@ -168,6 +168,7 @@ fn ReadDescriptors(task: &Task, c: &mut DirCtx, offset: i64, typ: InodeType) -> 
     return Ok((ret + 1) as i64);
 }
 
+#[derive(Clone)]
 pub struct FdDirFile {
     pub IsInfoFile: bool,
     pub thread: Thread,

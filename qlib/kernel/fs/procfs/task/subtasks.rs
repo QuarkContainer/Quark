@@ -127,6 +127,7 @@ pub fn NewSubTasksFile(
     return DynamicDirFileOperations { node: subTaskFile.into() };
 }
 
+#[derive(Clone)]
 pub struct SubTasksFileNode {
     pub thread: Thread,
     pub pidns: PIDNamespace,

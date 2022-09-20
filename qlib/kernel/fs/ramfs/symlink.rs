@@ -205,7 +205,7 @@ impl InodeOperations for Symlink {
             Dirent: dirent.clone(),
             flags: QMutex::new((flags, None)),
             offset: QLock::New(0),
-            FileOp: Arc::new(SymlinkFileOperations {}.into()),
+            FileOp: SymlinkFileOperations {}.into(),
         };
 
         return Ok(File(Arc::new(file)));
@@ -308,6 +308,7 @@ impl InodeOperations for Symlink {
     }
 }
 
+#[derive(Clone)]
 pub struct SymlinkFileOperations {}
 
 impl Waitable for SymlinkFileOperations {
