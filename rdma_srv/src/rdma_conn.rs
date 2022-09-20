@@ -813,6 +813,7 @@ impl RDMAControlChannel {
                     podId,
                     port: connectRequest.dstPort,
                 };
+                // error!("HandleConnectRequest, 1, podId: {:?}, port: {}", podId, connectRequest.dstPort);
                 match RDMA_SRV.srvPodIdEndpoints.lock().get(&endPoint) {
                     Some(srvEndpoint) => match srvEndpoint.status {
                         SrvEndPointStatus::Listening => {

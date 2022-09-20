@@ -367,6 +367,7 @@ impl RDMAAgent {
                         status: SrvEndPointStatus::Listening,
                     },
                 );
+                // error!("RDMAReqMsg::RDMAListenUsingPodId, podId: {:?}, port: {}", podId, msg.port);
             }
             RDMAReqMsg::RDMAConnect(msg) => {
                 //TODOCtrlPlane: need get nodeIp from dstIpAddr
@@ -409,7 +410,7 @@ impl RDMAAgent {
                 
                 let mut dstIpAddr = msg.dstIpAddr;
                 let mut dstPort = msg.dstPort;
-                println!("RDMAConnectUsingPodId: Connect to ip {} port {}", dstIpAddr, dstPort);
+                // error!("RDMAConnectUsingPodId: Connect to ip {} port {}", dstIpAddr, dstPort);
                 match RDMA_CTLINFO.IsService(dstIpAddr, &dstPort) {
                     None => {},
                     Some(ipWithPort) => {
