@@ -218,8 +218,8 @@ impl SocketOperations {
 
         // Only enable RDMA for IPv4 now.
         let enableRDMA = SHARESPACE.config.read().EnableRDMA
-            // && (family == AFType::AF_INET || family == AFType::AF_INET6)
-            && family == AFType::AF_INET
+            && (family == AFType::AF_INET || family == AFType::AF_INET6)
+            //&& family == AFType::AF_INET
             && stype == SockType::SOCK_STREAM;
 
         let ret = SocketOperationsIntern {
@@ -1098,6 +1098,14 @@ impl SockOperations for SocketOperations {
                     *fdInfo.lock().sockInfo.lock() = SockInfo::Socket(SocketInfo {
                         ipAddr: u32::from_be_bytes(ipv4.Addr), //u32::from_be_bytes([192, 168, 6, 8]), //ipAddr: u32::from_be_bytes(ipv4.Addr), // ipAddr: 3232237064,
                         port: ipv4.Port.to_le(),               // port: 58433,
+                    }); //192.168.6.8:16868
+                }
+                SockAddr::Inet6(ipv6) => {
+                    let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
+                    *fdInfo.lock().sockInfo.lock() = SockInfo::Socket(SocketInfo {
+                        //ipAddr: u32::from_be_bytes(ipv6.Addr), //u32::from_be_bytes([192, 168, 6, 8]), //ipAddr: u32::from_be_bytes(ipv4.Addr), // ipAddr: 3232237064,
+                        ipAddr: u32::from_be_bytes([0, 0, 0, 0]),
+                        port: ipv6.Port.to_le(),               // port: 58433,
                     }); //192.168.6.8:16868
                 }
                 _ => {
