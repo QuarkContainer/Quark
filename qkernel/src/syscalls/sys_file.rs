@@ -1808,6 +1808,12 @@ fn readlinkAt(task: &Task, dirFd: i32, addr: u64, bufAddr: u64, size: u32) -> Re
                 Err(Error::SysError(SysErr::ENOLINK)) => {
                     return Err(Error::SysError(SysErr::EINVAL))
                 }
+                Err(Error::SysError(SysErr::ENOENT)) => {
+                    // there is such interesting result happen when running mariadb with "/tmp" folder
+                    // work around this now 
+                    // todo: find better solution later
+                    return Err(Error::SysError(SysErr::EINVAL))
+                }
                 Err(e) => return Err(e),
                 Ok(s) => s,
             };
