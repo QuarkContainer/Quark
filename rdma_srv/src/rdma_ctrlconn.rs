@@ -41,6 +41,9 @@ pub struct CtrlInfo {
     // endpointses: endpoints name --> Endpoints
     pub endpointses: Mutex<HashMap<String, Endpoints>>,
 
+    // configMaps: configMap name --> ConfigMap
+    pub configMaps: Mutex<HashMap<String, ConfigMap>>,
+
     // containerids: containerid --> ip
     pub containerids: Mutex<HashMap<String, u32>>,
 
@@ -83,6 +86,7 @@ impl Default for CtrlInfo {
         let pods: HashMap<u32, Pod> = HashMap::new();
         let services: HashMap<u32, Service> = HashMap::new();
         let endpointses: HashMap<String, Endpoints> = HashMap::new();
+        let configMaps: HashMap<String, ConfigMap> = HashMap::new();
         let mut containerids: HashMap<String, u32> = HashMap::new();
         let mut ipToPodIdMappings: HashMap<u32, String> = HashMap::new();
 
@@ -119,6 +123,7 @@ impl Default for CtrlInfo {
             pods: Mutex::new(pods),
             services: Mutex::new(services),
             endpointses: Mutex::new(endpointses),
+            configMaps: Mutex::new(configMaps),
             containerids: Mutex::new(containerids),
             ipToPodIdMappings: Mutex::new(ipToPodIdMappings),
             subnetmap: Mutex::new(HashMap::new()),
@@ -321,6 +326,14 @@ pub struct IpWithPort {
 pub struct Endpoints {
     pub name: String,
     pub ip_with_ports: HashSet<IpWithPort>,
+    pub resource_version: i32,
+    pub index: AtomicUsize,
+}
+
+#[derive(Default, Debug)]
+pub struct ConfigMap {
+    pub name: String,
+    pub value: String,
     pub resource_version: i32,
     pub index: AtomicUsize,
 }

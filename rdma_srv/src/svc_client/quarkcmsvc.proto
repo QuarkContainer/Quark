@@ -32,6 +32,8 @@ service QuarkCMService {
   rpc WatchService (MaxResourceVersionMessage) returns (stream ServiceMessage) {}
   rpc ListEndpoints (google.protobuf.Empty) returns (EndpointsListMessage) {}
   rpc WatchEndpoints (MaxResourceVersionMessage) returns (stream EndpointsMessage) {}
+  rpc ListConfigMap (google.protobuf.Empty) returns (ConfigMapListMessage) {}
+  rpc WatchConfigMap (MaxResourceVersionMessage) returns (stream ConfigMapMessage) {}
 }
 
 message TestRequestMessage {
@@ -91,6 +93,17 @@ message EndpointsMessage {
 
 message EndpointsListMessage {
     repeated EndpointsMessage Endpointses = 1;
+}
+
+message ConfigMapMessage {
+    string name = 1;
+    string value = 2;
+    int32 resource_version = 3;
+    string event_type = 4;
+}
+
+message ConfigMapListMessage {
+    repeated ConfigMapMessage ConfigMaps = 1;
 }
 
 message MaxResourceVersionMessage {
