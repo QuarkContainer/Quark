@@ -84,6 +84,7 @@ pub mod endpoints_informer;
 pub mod node_informer;
 pub mod pod_informer;
 pub mod service_informer;
+pub mod configmap_informer;
 
 use crate::qlib::bytestream::ByteStream;
 use crate::rdma_srv::RDMA_CTLINFO;
@@ -103,6 +104,7 @@ use crate::qlib::rdma_share::*;
 use crate::rdma::RDMA;
 use common::*;
 use endpoints_informer::EndpointsInformer;
+use configmap_informer::ConfigMapInformer;
 use id_mgr::IdMgr;
 use local_ip_address::list_afinet_netifas;
 use local_ip_address::local_ip;
@@ -232,6 +234,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             match endpoints_informer.run().await {
                 Err(e) => {
                     println!("Error to handle endpointses: {:?}", e);
+                }
+                Ok(_) => (),
+            };
+        });
+
+        tokio::spawn(async {
+            while !RDMA_CTLINFO.isCMConnected_get() {
+                thread::sleep_ms(1000);
+            }
+            let mut configmap_informer = ConfigMapInformer::new();
+            match configmap_informer.run().await {
+                Err(e) => {
+                    println!("Error to handle configmaps: {:?}", e);
                 }
                 Ok(_) => (),
             };

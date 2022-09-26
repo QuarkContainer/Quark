@@ -20,6 +20,7 @@ use std::{collections::HashMap, collections::HashSet, str::FromStr};
 use super::common::*;
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use cidr::{Ipv4Cidr};
 
 use super::qlib::rdma_share::*;
 
@@ -40,6 +41,9 @@ pub struct CtrlInfo {
 
     // endpointses: endpoints name --> Endpoints
     pub endpointses: Mutex<HashMap<String, Endpoints>>,
+
+    // configMaps: configMap name --> ConfigMap
+    pub configMaps: Mutex<HashMap<String, ConfigMap>>,
 
     // containerids: containerid --> ip
     pub containerids: Mutex<HashMap<String, u32>>,
@@ -83,6 +87,7 @@ impl Default for CtrlInfo {
         let pods: HashMap<u32, Pod> = HashMap::new();
         let services: HashMap<u32, Service> = HashMap::new();
         let endpointses: HashMap<String, Endpoints> = HashMap::new();
+        let configMaps: HashMap<String, ConfigMap> = HashMap::new();
         let mut containerids: HashMap<String, u32> = HashMap::new();
         let mut ipToPodIdMappings: HashMap<u32, String> = HashMap::new();
 
@@ -119,6 +124,7 @@ impl Default for CtrlInfo {
             pods: Mutex::new(pods),
             services: Mutex::new(services),
             endpointses: Mutex::new(endpointses),
+            configMaps: Mutex::new(configMaps),
             containerids: Mutex::new(containerids),
             ipToPodIdMappings: Mutex::new(ipToPodIdMappings),
             subnetmap: Mutex::new(HashMap::new()),
@@ -243,6 +249,36 @@ impl CtrlInfo{
         None
     }
 
+    pub fn IsEgress(&self, ip:u32) -> bool {
+        if self.IsInSubnet(ip.clone(), String::from("podSubnet")) {
+            println!("IP {} belongs to cluster's pod subnet", ip);
+            return false;
+        }
+        if self.IsInSubnet(ip.clone(), String::from("serviceSubnet")) {
+            println!("IP {} belongs to cluster's service subnet", ip);
+            return false;
+        }
+
+        println!("IP {} is egress traffic", ip);
+        true
+    }
+
+    pub fn IsInSubnet(&self, ip:u32, cidrName:String) -> bool {
+        let configMaps = self.configMaps.lock();
+        if configMaps.contains_key(&cidrName) {
+            let cidr = &configMaps[&cidrName].value;
+            let ipv4Cidr = Ipv4Cidr::from_str(cidr).unwrap();
+            let mut splitted = cidr.split("/");
+            let ipv4 = Ipv4Addr::from_str(splitted.next().unwrap()).unwrap();
+            let ipv4Mask = Ipv4Addr::from_str(&ipv4Cidr.mask().to_string()).unwrap();
+            let subnet= u32::from(ipv4);
+            let mask = u32::from(ipv4Mask);
+            return mask & ip == subnet;
+        }
+
+        false
+    }
+
     pub fn epoll_fd_set(&self, value: RawFd) {
         let mut epoll_fd = self.epoll_fd.lock();
         *epoll_fd = value;
@@ -321,6 +357,14 @@ pub struct IpWithPort {
 pub struct Endpoints {
     pub name: String,
     pub ip_with_ports: HashSet<IpWithPort>,
+    pub resource_version: i32,
+    pub index: AtomicUsize,
+}
+
+#[derive(Default, Debug)]
+pub struct ConfigMap {
+    pub name: String,
+    pub value: String,
     pub resource_version: i32,
     pub index: AtomicUsize,
 }

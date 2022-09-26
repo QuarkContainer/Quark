@@ -410,6 +410,9 @@ impl RDMAAgent {
                 
                 let mut dstIpAddr = msg.dstIpAddr;
                 let mut dstPort = msg.dstPort;
+                if RDMA_CTLINFO.IsEgress(dstIpAddr) {
+                    // TODO: Handle egress traffic
+                }
                 // error!("RDMAConnectUsingPodId: Connect to ip {} port {}", dstIpAddr, dstPort);
                 match RDMA_CTLINFO.IsService(dstIpAddr, &dstPort) {
                     None => {},
