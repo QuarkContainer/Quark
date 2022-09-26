@@ -791,6 +791,7 @@ impl RDMAControlChannel {
         let mut agentId = 0;
         let mut sockfd = 0;
 
+        //TODO: optimize to remove string
         match RDMA_CTLINFO
             .ipToPodIdMappings
             .lock()
@@ -806,7 +807,7 @@ impl RDMAControlChannel {
                 //     );
                 // }
                 podIdStr
-                    .bytes()
+                    .bytes() //TODO: string -> bytes
                     .zip(podId.iter_mut())
                     .for_each(|(b, ptr)| *ptr = b);
                 let endPoint = EndpointUsingPodId {
