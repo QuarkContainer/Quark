@@ -20,6 +20,7 @@ use std::{collections::HashMap, collections::HashSet, str::FromStr};
 use super::common::*;
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use cidr::{Ipv4Cidr};
 
 use super::qlib::rdma_share::*;
 
@@ -246,6 +247,36 @@ impl CtrlInfo{
             }
         }
         None
+    }
+
+    pub fn IsEgress(&self, ip:u32) -> bool {
+        if self.IsInSubnet(ip.clone(), String::from("podSubnet")) {
+            println!("IP {} belongs to cluster's pod subnet", ip);
+            return false;
+        }
+        if self.IsInSubnet(ip.clone(), String::from("serviceSubnet")) {
+            println!("IP {} belongs to cluster's service subnet", ip);
+            return false;
+        }
+
+        println!("IP {} is egress traffic", ip);
+        true
+    }
+
+    pub fn IsInSubnet(&self, ip:u32, cidrName:String) -> bool {
+        let configMaps = self.configMaps.lock();
+        if configMaps.contains_key(&cidrName) {
+            let cidr = &configMaps[&cidrName].value;
+            let ipv4Cidr = Ipv4Cidr::from_str(cidr).unwrap();
+            let mut splitted = cidr.split("/");
+            let ipv4 = Ipv4Addr::from_str(splitted.next().unwrap()).unwrap();
+            let ipv4Mask = Ipv4Addr::from_str(&ipv4Cidr.mask().to_string()).unwrap();
+            let subnet= u32::from(ipv4);
+            let mask = u32::from(ipv4Mask);
+            return mask & ip == subnet;
+        }
+
+        false
     }
 
     pub fn epoll_fd_set(&self, value: RawFd) {
