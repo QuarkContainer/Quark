@@ -178,6 +178,16 @@ impl TcpSockAddr {
     pub fn Addr(&self) -> u64 {
         return &self.data[0] as *const _ as u64;
     }
+
+    pub fn NewFromInet(addr: SockAddrInet) -> Self {
+        let mut ret = Self::default();
+        let ptr = unsafe {
+            &mut * (&mut ret.data[0] as * mut _ as u64 as * mut SockAddrInet)
+        };
+
+        *ptr = addr;
+        return ret;
+    }
 }
 
 pub struct QOrdering {}
@@ -2451,6 +2461,7 @@ pub struct DataBuff {
     pub buf: Vec<u8>,
 }
 
+use super::kernel::tcpip::tcpip::SockAddrInet;
 use super::mem::seq::BlockSeq;
 
 impl DataBuff {

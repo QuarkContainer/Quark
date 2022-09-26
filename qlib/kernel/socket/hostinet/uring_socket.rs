@@ -22,6 +22,7 @@ use core::ptr;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicI64;
 use core::sync::atomic::AtomicI32;
+use core::sync::atomic::AtomicU16;
 use core::sync::atomic::Ordering;
 use alloc::sync::Weak;
 
@@ -54,6 +55,9 @@ use super::super::unix::transport::unix::*;
 use crate::qlib::kernel::socket::hostinet::socket::HostIoctlIFConf;
 use crate::qlib::kernel::socket::hostinet::socket::HostIoctlIFReq;
 use crate::qlib::bytestream::*;
+use crate::qlib::kernel::socket::hostinet::loopbacksocket::*;
+use crate::qlib::kernel::kernel::abstract_socket_namespace::*;
+use crate::qlib::kernel::kernel::waiter::Queue;
 
 pub fn newUringSocketFile(
     task: &Task,
@@ -61,6 +65,7 @@ pub fn newUringSocketFile(
     fd: i32,
     stype: i32,
     nonblock: bool,
+    queue: Queue,
     socketType: UringSocketType,
     addr: Option<Vec<u8>>,
 ) -> Result<File> {
@@ -72,7 +77,7 @@ pub fn newUringSocketFile(
         family,
         fd,
         stype,
-        hostiops.Queue(),
+        queue, //hostiops.Queue(),
         hostiops.clone(),
         socketType,
         addr,
@@ -100,6 +105,7 @@ pub enum UringSocketType {
     TCPConnecting,                // Start connecting, content is connect
     TCPUringlServer(AcceptQueue), // Uring TCP Server socket, when socket start to listen
     Uring(SocketBuff),
+    Loopback(LoopbackSocket),
 }
 
 impl fmt::Debug for UringSocketType {
@@ -109,18 +115,64 @@ impl fmt::Debug for UringSocketType {
             Self::TCPConnecting => write!(f, "UringSocketType::TCPConnecting"),
             Self::TCPUringlServer(_) => write!(f, "UringSocketType::TCPUringlServer"),
             Self::Uring(_) => write!(f, "UringSocketType::Uring"),
+            Self::Loopback(_) => write!(f, "UringSocketType::Loopback"),
         }
     }
 }
 
 impl UringSocketType {
-    pub fn Accept(&self, socketBuf: SocketBuff) -> Self {
+    pub fn Accept(&self, accept: AcceptSocket) -> Self {
         match self {
-            UringSocketType::TCPUringlServer(_) => return UringSocketType::Uring(socketBuf),
+            UringSocketType::TCPUringlServer(_) => {
+                match accept {
+                    AcceptSocket::SocketBuff(socketBuf) => {
+                        return UringSocketType::Uring(socketBuf)
+                    }
+                    AcceptSocket::LoopbackSocket(loopback) => {
+                        return UringSocketType::Loopback(loopback)
+                    }
+                    AcceptSocket::None => {
+                        panic!("UringSocketType::Accept unexpect AcceptSocket::None")
+                    }
+                }
+                
+            }
             _ => {
                 panic!("UringSocketType::Accept unexpect type {:?}", self)
             }
         }
+    }
+
+    pub fn RClosed(&self) -> bool {
+        let ret = match self {
+            UringSocketType::Uring(buf) => {
+                buf.RClosed()
+            }
+            UringSocketType::Loopback(loopback) => {
+                loopback.sockBuff.RClosed()
+            }
+            _ => {
+                panic!("Uring socket Rclose unexpect type {:?}", self);
+            }
+        };
+
+        return ret;
+    }
+
+    pub fn WClosed(&self) -> bool {
+        let ret = match self {
+            UringSocketType::Uring(buf) => {
+                buf.WClosed()
+            }
+            UringSocketType::Loopback(loopback) => {
+                loopback.sockBuff.WClosed()
+            }
+            _ => {
+                panic!("Uring socket WClosed unexpect type {:?}", self);
+            }
+        };
+
+        return ret;
     }
 }
 
@@ -135,6 +187,7 @@ pub struct UringSocketOperationsIntern {
     pub remoteAddr: QMutex<Option<SockAddr>>,
     pub socketType: QMutex<UringSocketType>,
     pub enableAsyncAccept: AtomicBool,
+    pub loopbackPort: AtomicU16,
     pub hostops: HostInodeOp,
     passInq: AtomicBool,
 }
@@ -156,9 +209,35 @@ impl UringSocketOperationsWeak {
 #[derive(Clone)]
 pub struct UringSocketOperations(Arc<UringSocketOperationsIntern>);
 
+impl Drop for UringSocketOperations {
+    fn drop(&mut self) {
+        if Arc::strong_count(&self.0) == 1 {
+            let loopbackPort = self.loopbackPort.load(Ordering::Acquire);
+            if loopbackPort > 0 {
+                TCP_SOCKET.Remove(loopbackPort).unwrap();
+            }
+        }
+    }
+}
+
 impl UringSocketOperations {
     pub fn Downgrade(&self) -> UringSocketOperationsWeak {
         return UringSocketOperationsWeak(Arc::downgrade(&self.0));
+    }
+
+    pub fn InnerGetSockName(&self) -> Result<SockAddrInet> {
+        let socketAddr = SockAddrInet::default();
+        let len = core::mem::size_of_val(&socketAddr);
+        let res = Kernel::HostSpace::GetSockName(
+            self.fd,
+            &socketAddr as *const _ as u64,
+            &len as *const _ as u64,
+        );
+        if res < 0 {
+            return Err(Error::SysError(-res as i32));
+        }
+
+        return Ok(socketAddr);
     }
 
     pub fn SetConnErrno(&self, errno: i32) {
@@ -207,6 +286,7 @@ impl UringSocketOperations {
             remoteAddr: QMutex::new(addr),
             socketType: QMutex::new(socketBuf.clone()),
             enableAsyncAccept: AtomicBool::new(false),
+            loopbackPort: AtomicU16::new(0),
             hostops: hostops,
             passInq: AtomicBool::new(false),
         };
@@ -350,21 +430,45 @@ impl UringSocketOperations {
     pub fn ReadFromBuf(
         &self,
         task: &Task,
-        buf: SocketBuff,
+        buf: &UringSocketType,
         dsts: &mut [IoVec],
         peek: bool,
     ) -> Result<i64> {
-        let ret =QUring::RingFileRead(task, self.fd, self.queue.clone(), buf, dsts, true, peek)?;
+        let ret = match buf {
+            UringSocketType::Uring(buf) => {
+                QUring::RingFileRead(task, self.fd, self.queue.clone(), buf.clone(), dsts, true, peek)?
+            }
+            UringSocketType::Loopback(loopback) => {
+                loopback.Readv(task, dsts, peek)?
+            }
+            _ => {
+                //return Err(Error::SysError(SysErr::ECONNREFUSED));
+                return Err(Error::SysError(SysErr::ENOTCONN));
+            }
+        };
+
         return Ok(ret);
     }
 
     pub fn WriteToBuf(
         &self,
         task: &Task,
-        buf: SocketBuff,
+        buf: &UringSocketType,
         srcs: &[IoVec],
     ) -> Result<i64> {
-        let ret = QUring::SocketSend(task, self.fd, self.queue.clone(), buf, srcs, self)?;
+        let ret = match buf {
+            UringSocketType::Uring(buf) => {
+                QUring::SocketSend(task, self.fd, self.queue.clone(), buf.clone(), srcs, self)?
+            }
+            UringSocketType::Loopback(loopback) => {
+                loopback.Writev(task, srcs)?
+            }
+            _ => {
+                //return Err(Error::SysError(SysErr::ECONNREFUSED));
+                return Err(Error::SysError(SysErr::ENOTCONN));
+            }
+        };
+
         return Ok(ret);
     }
 }
@@ -411,6 +515,9 @@ impl Waitable for UringSocketOperations {
             UringSocketType::Uring(buf) => {
                 return buf.Events() & mask;
             }
+            UringSocketType::Loopback(loopback) => {
+                return loopback.Events() & mask;
+            }
             UringSocketType::TCPInit => ()
         }
 
@@ -429,6 +536,7 @@ impl Waitable for UringSocketOperations {
             }
             UringSocketType::TCPUringlServer(_q) => (),
             UringSocketType::Uring(_buf) => (),
+            UringSocketType::Loopback(_) => (),
             UringSocketType::TCPInit => {
                 UpdateFD(fd).unwrap();
             }
@@ -445,6 +553,7 @@ impl Waitable for UringSocketOperations {
             }
             UringSocketType::TCPUringlServer(_q) => (),
             UringSocketType::Uring(_buf) => (),
+            UringSocketType::Loopback(_) => (),
             UringSocketType::TCPInit => {
                 UpdateFD(fd).unwrap();
             }
@@ -506,6 +615,10 @@ impl FileOperations for UringSocketOperations {
                     QUring::RingFileRead(task, self.fd, self.queue.clone(), socketBuf, dsts, true, false)?;
                 return Ok(ret);
             }
+            UringSocketType::Loopback(loopback) => {
+                let count = loopback.Readv(task, dsts, false)?;
+                return Ok(count)
+            }
             _ => {
                 return Ok(0);
             }
@@ -540,6 +653,10 @@ impl FileOperations for UringSocketOperations {
                     srcs,
                     self,
                 );
+            }
+            UringSocketType::Loopback(loopback) => {
+                let count = loopback.Writev(task, srcs)?;
+                return Ok(count)
             }
             _ => {
                 return Err(Error::SysError(SysErr::EPIPE)); 
@@ -651,6 +768,40 @@ impl SockOperations for UringSocketOperations {
         let sockType = self.SocketType();
         match sockType {
             UringSocketType::TCPInit => {
+                let addr = unsafe {
+                    &*(&sockaddr[0] as * const _ as u64 as * const SockAddrInet)
+                };
+
+                if addr.Family == AFType::AF_INET as u16 && addr.Addr == [127, 0, 0, 1] {
+                    match TCP_SOCKET.Get(addr.Port) {
+                        None => return Err(Error::SysError(SysErr::ECONNREFUSED)),
+                        Some(q) => {
+                            let serverQueue = Queue::default();
+                            let (clientSock, serverSock) = LoopbackSocketPair(self.queue.clone(), serverQueue.clone());
+                            *self.socketType.lock() = UringSocketType::Loopback(clientSock);
+                            let addr = SockAddrInet {
+                                Family: AFType::AF_INET as u16,
+                                Port: 0,
+                                Addr: [127, 0, 0, 1],
+                                ..Default::default()
+                            };
+
+                            let res =
+                                Kernel::HostSpace::Socket(AFType::AF_INET, SocketType::SOCK_STREAM | SocketFlags::SOCK_CLOEXEC, 0);
+                            if res < 0 {
+                                return Err(Error::SysError(-res as i32));
+                            }
+
+                            let fd = res as i32;
+                            
+                            q.lock().EnqSocket(fd, TcpSockAddr::NewFromInet(addr), 16, serverSock.into(), serverQueue);
+                            return Ok(0)
+                        }
+                    };
+
+
+                }
+
                 QUring::AsyncConnect(self.fd, self, sockaddr)?;
                 if !blocking {
                     return Err(Error::SysError(SysErr::EINPROGRESS))
@@ -759,6 +910,7 @@ impl SockOperations for UringSocketOperations {
             fd as i32,
             self.stype,
             flags & SocketFlags::SOCK_NONBLOCK != 0,
+            acceptItem.queue.clone(),
             sockBuf,
             Some(remoteAddr.to_vec()),
         )?;
@@ -774,9 +926,12 @@ impl SockOperations for UringSocketOperations {
     fn Bind(&self, task: &Task, sockaddr: &[u8]) -> Result<i64> {
         let mut socketaddr = sockaddr;
 
+        let addr = unsafe {
+            &*(&socketaddr[0] as * const _ as u64 as * const SockAddrInet)
+        };
         info!(
-            "hostinet socket bind {:?}, addr is {:?}",
-            self.family, socketaddr
+            "hostinet socket bind {:?}, addr is {:?}/{:?}",
+            self.family, addr, socketaddr 
         );
         if (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
             && socketaddr.len() > SIZEOF_SOCKADDR
@@ -794,6 +949,11 @@ impl SockOperations for UringSocketOperations {
             return Err(Error::SysError(-res as i32));
         }
 
+        if addr.Family == AFType::AF_INET as u16 
+            && (addr.Addr == [0, 0, 0, 0] || addr.Addr == [127, 0, 0, 1]) {
+            self.loopbackPort.store(addr.Port, Ordering::Release);
+        }
+
         return Ok(res);
     }
 
@@ -808,13 +968,15 @@ impl SockOperations for UringSocketOperations {
         let acceptQueue = match socketBuf {
             UringSocketType::TCPUringlServer(q) => {
                 q.lock().SetQueueLen(len as usize);
+                let loopbackPort = self.loopbackPort.load(Ordering::Acquire);
+                if loopbackPort > 0 {
+                    TCP_SOCKET.Add(loopbackPort, q.clone())?;
+                }
                 return Ok(0);
             }
-            UringSocketType::TCPInit => AcceptQueue::default(),
-            _ => AcceptQueue::default(), // panic?
+            UringSocketType::TCPInit => AcceptQueue::New(len as usize, self.queue.clone()),
+            _ => panic!("uring socket listen on wrong type {:?}", socketBuf), // panic?
         };
-
-        acceptQueue.lock().SetQueueLen(len as usize);
 
         let res = Kernel::HostSpace::Listen(self.fd, backlog, asyncAccept);
 
@@ -826,6 +988,11 @@ impl SockOperations for UringSocketOperations {
             if !self.AsyncAcceptEnabled() {
                 IOURING.AcceptInit(self.fd, &self.queue, &acceptQueue)?;
                 self.enableAsyncAccept.store(true, Ordering::Relaxed);
+            }
+
+            let loopbackPort = self.loopbackPort.load(Ordering::Acquire);
+            if loopbackPort > 0 {
+                TCP_SOCKET.Add(loopbackPort, acceptQueue.clone())?;
             }
 
             UringSocketType::TCPUringlServer(acceptQueue)
@@ -855,6 +1022,7 @@ impl SockOperations for UringSocketOperations {
                     }
                 }
             }
+            UringSocketType::Loopback(_) => (),
             UringSocketType::TCPUringlServer(_) => (),
         }
 
@@ -874,6 +1042,15 @@ impl SockOperations for UringSocketOperations {
 
                     if how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR {
                         buf.SetWClosed();
+                    }
+                }
+                UringSocketType::Loopback(ref loopback) => {
+                    if how == LibcConst::SHUT_RD || how == LibcConst::SHUT_RDWR {
+                        loopback.SetRClosed();
+                    }
+
+                    if how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR {
+                        loopback.SetWClosed();
                     }
                 }
                 UringSocketType::TCPUringlServer(_) => (),
@@ -1141,16 +1318,7 @@ impl SockOperations for UringSocketOperations {
         senderRequested: bool,
         controlDataLen: usize,
     ) -> Result<(i64, i32, Option<(SockAddr, usize)>, Vec<u8>)> {
-        let sockBufType = self.socketType.lock().clone();
-        let buf = match sockBufType {
-            UringSocketType::Uring(buf) => {
-                buf
-            }
-            _ => {
-                //return Err(Error::SysError(SysErr::ECONNREFUSED));
-                return Err(Error::SysError(SysErr::ENOTCONN));
-            }
-        };
+        let buf = self.socketType.lock().clone();
 
         //todo: we don't support MSG_ERRQUEUE
         if flags & MsgType::MSG_ERRQUEUE != 0 {
@@ -1200,7 +1368,7 @@ impl SockOperations for UringSocketOperations {
         let mut tmp;
      
         if dontwait {
-            match self.ReadFromBuf(task, buf, iovs, peek) {
+            match self.ReadFromBuf(task, &buf, iovs, peek) {
                 Err(e) => return Err(e),
                 Ok(count) => {
                     let senderAddr = if senderRequested {
@@ -1223,7 +1391,7 @@ impl SockOperations for UringSocketOperations {
 
         'main: loop {
             loop {
-                match self.ReadFromBuf(task, buf.clone(), iovs, peek) {
+                match self.ReadFromBuf(task, &buf, iovs, peek) {
                     Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
                         if count > 0 {
                             if dontwait || !waitall {
@@ -1308,12 +1476,7 @@ impl SockOperations for UringSocketOperations {
         _msgHdr: &mut MsgHdr,
         deadline: Option<Time>,
     ) -> Result<i64> {
-        let buf = match self.SocketType() {
-            UringSocketType::Uring(buf) => buf,
-            _ => {
-                return Err(Error::SysError(SysErr::EPIPE)); 
-            }
-        };
+        let buf = self.SocketType();
 
         if buf.WClosed() {
             return Err(Error::SysError(SysErr::EPIPE))
@@ -1331,7 +1494,7 @@ impl SockOperations for UringSocketOperations {
         let mut tmp;
         
         if dontwait {
-            return self.WriteToBuf(task, buf, srcs);
+            return self.WriteToBuf(task, &buf, srcs);
         }
 
         let general = task.blocker.generalEntry.clone();
@@ -1340,7 +1503,7 @@ impl SockOperations for UringSocketOperations {
 
         loop {
             loop {
-                match self.WriteToBuf(task, buf.clone(), srcs) {
+                match self.WriteToBuf(task, &buf, srcs) {
                     Err(Error::SysError(SysErr::EWOULDBLOCK)) => {
                         if flags & MsgType::MSG_DONTWAIT != 0 {
                             if count > 0 {

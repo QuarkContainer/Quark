@@ -49,6 +49,7 @@ use super::super::super::IOURING;
 use super::super::control::*;
 use super::super::socket::*;
 use super::socket::*;
+use crate::qlib::kernel::socket::hostinet::loopbacksocket::LoopbackSocket;
 
 #[repr(u64)]
 #[derive(Clone)]
@@ -56,6 +57,7 @@ pub enum SockState {
     TCPInit,                      // Init TCP Socket, no listen and no connect
     TCPServer(AcceptQueue),        // Uring TCP Server socket, when socket start to listen
     TCPData(SocketBuff),
+    Loopback(LoopbackSocket)
 }
 
 impl fmt::Debug for SockState {
@@ -64,16 +66,30 @@ impl fmt::Debug for SockState {
             SockState::TCPInit => write!(f, "SocketBufType::TCPInit"),
             SockState::TCPServer(_) => write!(f, "SocketBufType::TCPServer"),
             SockState::TCPData(_) => write!(f, "SocketBufType::TCPData"),
+            SockState::Loopback(_) => write!(f, "SocketBufType::Loopback"),
         }
     }
 }
 
 impl SockState {
-    pub fn Accept(&self, socketBuf: SocketBuff) -> Self {
+    pub fn Accept(&self, accept: AcceptSocket) -> Self {
         match self {
-            SockState::TCPServer(_) => return SockState::TCPData(socketBuf),
+            Self::TCPServer(_) => {
+                match accept {
+                    AcceptSocket::SocketBuff(socketBuf) => {
+                        return Self::TCPData(socketBuf)
+                    }
+                    AcceptSocket::LoopbackSocket(loopback) => {
+                        return Self::Loopback(loopback)
+                    }
+                    AcceptSocket::None => {
+                        panic!("UringSocketType::Accept unexpect AcceptSocket::None")
+                    }
+                }
+                
+            }
             _ => {
-                panic!("SocketBufType::Accept unexpect type {:?}", self)
+                panic!("UringSocketType::Accept unexpect type {:?}", self)
             }
         }
     }

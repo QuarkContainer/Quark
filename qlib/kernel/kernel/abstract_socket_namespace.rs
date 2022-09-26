@@ -18,14 +18,19 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::ops::Deref;
 use lazy_static::lazy_static;
+use hashbrown::HashMap;
 
 use super::super::super::common::*;
 use super::super::super::linux_def::*;
 use super::super::super::kernel::fs::dirent::*;
 use super::super::socket::unix::transport::unix::*;
+use crate::qlib::kernel::kernel::fd_table::GapMgr;
+use crate::qlib::kernel::socket::hostinet::uring_socket::UringSocketOperationsWeak;
+use crate::qlib::socket_buf::AcceptQueue;
 
 lazy_static! {
     pub static ref ABSTRACT_SOCKET: AbstractSocketNamespace = AbstractSocketNamespace::default();
+    pub static ref TCP_SOCKET: TCPSocketNamespace = TCPSocketNamespace::New();
     pub static ref UNIX_SOCKET_PINS: UnixSocketPins = UnixSocketPins::default();
 }
 
@@ -132,5 +137,77 @@ impl UnixSocketPins {
         let mut a = self.lock();
 
         a.remove(name);
+    }
+}
+
+#[derive(Clone)]
+pub enum InnerSocket {
+    UringSocketServer(UringSocketOperationsWeak), 
+}
+
+impl From<UringSocketOperationsWeak> for InnerSocket  {
+    fn from(inner: UringSocketOperationsWeak) -> Self {
+        return Self::UringSocketServer(inner);
+    }
+}
+
+pub struct TCPSocketNamespace(Arc<QMutex<TCPSocketNamespaceInner>>);
+
+impl Deref for TCPSocketNamespace {
+    type Target = Arc<QMutex<TCPSocketNamespaceInner>>;
+
+    fn deref(&self) -> &Arc<QMutex<TCPSocketNamespaceInner>> {
+        &self.0
+    }
+}
+
+impl TCPSocketNamespace {
+    pub fn New() -> Self {
+        return Self(Arc::new(QMutex::new(TCPSocketNamespaceInner::New())))
+    }
+
+    pub fn Add(&self, port: u16, q: AcceptQueue) -> Result<()> {
+        return self.lock().Add(port, q)
+    }
+
+    pub fn Remove(&self, port: u16) -> Result<()> {
+        return self.lock().Remove(port);
+    }
+
+    pub fn Get(&self, port: u16) -> Option<AcceptQueue> {
+        match self.lock().descTbl.get(&port) {
+            None => return None,
+            Some(q) => {
+                return Some(q.clone())
+            }
+        }
+    }
+}
+
+pub struct TCPSocketNamespaceInner {
+    pub gaps: GapMgr,
+    pub descTbl: HashMap<u16, AcceptQueue>,
+}
+
+impl TCPSocketNamespaceInner {
+    pub fn New() -> Self {
+        return Self {
+            gaps: GapMgr::New(0, i16::MAX as u64),
+            descTbl: HashMap::new(),
+        };
+    }
+
+    pub fn Add(&mut self, port: u16, q: AcceptQueue) -> Result<()> {
+        match self.descTbl.insert(port, q) {
+            None => return Ok(()),
+            _ => panic!("TCPSocketNamespaceInner::NewSocketAt for port {}", port)
+        }
+    }
+
+    pub fn Remove(&mut self, port: u16) -> Result<()> {
+        match self.descTbl.remove(&port) {
+            None => return Ok(()), //panic!("TCPSocketNamespaceInner::RemoveSocket for port {}", port),
+            _ => return Ok(())
+        }
     }
 }

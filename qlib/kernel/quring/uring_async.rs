@@ -717,13 +717,11 @@ impl AsyncOpsTrait for AsyncAccept {
 
         NewSocket(result);
         let sockBuf = SocketBuff(Arc::new(SocketBuffIntern::default()));
-        let (trigger, hasSpace) = self
+        let hasSpace = self
             .acceptQueue
             .lock()
-            .EnqSocket(result, self.addr, self.len, sockBuf);
-        if trigger {
-            self.queue.Notify(EventMaskFromLinux(READABLE_EVENT as u32));
-        }
+            .EnqSocket(result, self.addr, self.len, sockBuf.into(), Queue::default());
+
         self.len = 16;
 
         return hasSpace;

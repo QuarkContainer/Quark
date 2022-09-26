@@ -70,7 +70,7 @@ pub fn CreateSocket() {
             let wcnt = unsafe {
                 write(newsocket, &buf[0] as * const _ as u64 as * const c_void, rcnt as _)
             };
-            println!("read result {}/{}", rcnt, wcnt);
+            //println!("read result {}/{}", rcnt, wcnt);
             
         }
         

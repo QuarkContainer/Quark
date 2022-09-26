@@ -31,6 +31,7 @@
 #![feature(panic_info_message)]
 #![feature(map_first_last)]
 #![allow(deprecated)]
+#![recursion_limit = "256"]
 
 #[macro_use]
 extern crate serde_derive;
