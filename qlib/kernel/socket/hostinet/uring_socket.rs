@@ -774,7 +774,8 @@ impl SockOperations for UringSocketOperations {
 
                 if addr.Family == AFType::AF_INET as u16 && addr.Addr == [127, 0, 0, 1] {
                     match TCP_SOCKET.Get(addr.Port) {
-                        None => return Err(Error::SysError(SysErr::ECONNREFUSED)),
+                        // in case for host network, there are process listen localhost outside of the container
+                        None => (), //return Err(Error::SysError(SysErr::ECONNREFUSED)),
                         Some(q) => {
                             let serverQueue = Queue::default();
                             let (clientSock, serverSock) = LoopbackSocketPair(self.queue.clone(), serverQueue.clone());

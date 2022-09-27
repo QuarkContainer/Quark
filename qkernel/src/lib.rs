@@ -367,7 +367,7 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                 currTask.RunExit()
             }
             TaskRunState::RunExitNotify => {
-                info!("RunExitNotify[{:x}] ...", currTask.taskId);
+                info!("RunExitNotify ...");
                 currTask.RunExitNotify();
 
                 // !!! make sure there is no object hold on stack

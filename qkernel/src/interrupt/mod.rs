@@ -450,7 +450,7 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
         panic!("PageFaultHandler full restore wrong...");
     }
 
-    if !fromUser {
+    if !SHARESPACE.config.read().CopyDataWithPf && !fromUser {
         print!(
             "Get pagefault from kernel ... {:#x?}/cr2 is {:x}/cr3 is {:x}",
             ptRegs, cr2, cr3

@@ -20,6 +20,7 @@
 #![allow(deprecated)]
 #![allow(dead_code)]
 //#![feature(asm)]
+#![recursion_limit = "256"]
 
 extern crate alloc;
 extern crate bit_field;
