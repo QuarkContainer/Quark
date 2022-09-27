@@ -54,12 +54,13 @@ pub enum SocketState {
 #[derive(Clone, Default)]
 #[repr(C)]
 pub struct RDMAInfo {
-    raddr: u64,  /* Read Buffer address */
-    rlen: u32,   /* Read Buffer len */
-    rkey: u32,   /* Read Buffer Remote key */
-    qp_num: u32, /* QP number */
-    lid: u16,    /* LID of the IB port */
-    gid: Gid,    /* gid */
+    raddr: u64,       /* Read Buffer address */
+    rlen: u32,        /* Read Buffer len */
+    controlRKey: u32, /* Read Buffer Remote key */
+    rc_qp_num: u32,   /* RC QP number */
+    ud_qp_num: u32,   /* UD QP number */
+    lid: u16,         /* LID of the IB port */
+    gid: Gid,         /* gid */
     recvRequestCount: u32,
 }
 
@@ -82,6 +83,7 @@ pub struct RDMAConnInternal {
     pub localInsertedRecvRequestCount: AtomicU32,
     pub requestsQueue: Mutex<VecDeque<u32>>, //currently using channel id
     pub controlRequestsQueue: Mutex<VecDeque<u32>>, //currently using channel id
+    pub addressHandler: Mutex<AddressHandler>, //used for UD QP
 }
 
 impl Drop for RDMAConnInternal {
@@ -89,7 +91,6 @@ impl Drop for RDMAConnInternal {
         error!("RDMAConnInternal::drop, fd: {}", self.fd);
     }
 }
-
 
 #[derive(Clone)]
 pub struct RDMAConn(Arc<RDMAConnInternal>);
@@ -109,17 +110,18 @@ impl Drop for RDMAConn {
 }
 
 impl RDMAConn {
-    pub fn New(fd: i32, sockBuf: SocketBuff, rkey: u32) -> Self {
-        let qp = RDMA.CreateQueuePair().expect("RDMADataSock create QP fail");
-        println!("after create qp");
+    pub fn New(fd: i32, sockBuf: SocketBuff, controlRKey: u32, udpQPNum: u32) -> Self {
+        let rc_qp = RDMA.CreateRCQueuePair().expect("RDMA create RC QP fail");
+        println!("after create RC qp");
         let (addr, len) = sockBuf.ReadBuf();
         let localRDMAInfo = RDMAInfo {
-            qp_num: qp.qpNum(),
+            rc_qp_num: rc_qp.qpNum(),
+            ud_qp_num: udpQPNum,
             lid: RDMA.Lid(),
             gid: RDMA.Gid(),
             raddr: addr,
             rlen: len as u32,
-            rkey,
+            controlRKey,
             recvRequestCount: RECV_REQUEST_COUNT,
         };
 
@@ -127,7 +129,7 @@ impl RDMAConn {
         //RDMA_SRV.controlChannels.lock().insert(qp.qpNum(), rdmaChannel.clone());
         Self(Arc::new(RDMAConnInternal {
             fd: fd,
-            qps: vec![qp],
+            qps: vec![rc_qp],
             //ctrlChan: Mutex::new(RDMAControlChannel(Weak::new())),
             ctrlChan: Mutex::new(RDMAControlChannel::default()),
             socketState: AtomicU64::new(0),
@@ -137,6 +139,7 @@ impl RDMAConn {
             localInsertedRecvRequestCount: AtomicU32::new(0),
             requestsQueue: Mutex::new(VecDeque::default()),
             controlRequestsQueue: Mutex::new(VecDeque::default()),
+            addressHandler: Mutex::new(AddressHandler::default()),
         }))
     }
     // pub fn New(fd: i32, sockBuf: Arc<SocketBuff>, rdmaChannel: Arc<RDMAChannel>) -> Arc<Self> {
@@ -173,13 +176,16 @@ impl RDMAConn {
     pub fn SetupRDMA(&self) {
         let remoteInfo = self.remoteRDMAInfo.lock();
         self.qps[0]
-            .Setup(&RDMA, remoteInfo.qp_num, remoteInfo.lid, remoteInfo.gid)
-            .expect("SetupRDMA fail...");
+            .SetupRCQP(&RDMA, remoteInfo.rc_qp_num, remoteInfo.lid, remoteInfo.gid)
+            .expect("SetupRCQP fail...");
         for _i in 0..RECV_REQUEST_COUNT {
             self.qps[0]
-                .PostRecv(0, self.localRDMAInfo.raddr, self.localRDMAInfo.rkey)
+                .PostRecv(0, self.localRDMAInfo.raddr, self.localRDMAInfo.controlRKey)
                 .expect("SetupRDMA PostRecv fail");
         }
+        *self.addressHandler.lock() = RDMA
+            .CreateAddressHandler(1, remoteInfo.lid, remoteInfo.gid) //TODO: port_num is local port num, should be configurable in the future
+            .expect("Create AddressHandler fail...");
     }
 
     pub fn GetQueuePairs(&self) -> &Vec<QueuePair> {
@@ -324,14 +330,14 @@ impl RDMAConn {
         }
         println!(
             "RecvRemoteRDMAInfo. raddr: {}, rlen: {}, rkey: {}",
-            data.raddr, data.rlen, data.rkey
+            data.raddr, data.rlen, data.controlRKey
         );
         self.ctrlChan
             .lock()
             .chan
             .upgrade()
             .unwrap()
-            .UpdateRemoteRDMAInfo(0, data.raddr, data.rlen, data.rkey);
+            .UpdateRemoteRDMAInfo(0, data.raddr, data.rlen, data.controlRKey);
         *self.remoteRecvRequestCount.lock() = data.recvRequestCount;
         *self.remoteRDMAInfo.lock() = data;
 

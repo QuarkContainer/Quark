@@ -34,6 +34,8 @@ lazy_static! {
     //pub static ref RDMA_SRV_SHARED_REGION: ShareRegion = ShareRegion::default();
 }
 
+pub const RECV_UDP_COUNT: u32 = 2000;
+
 #[derive(Clone)]
 pub enum SrvEndPointStatus {
     Binded,
@@ -93,6 +95,9 @@ pub struct RDMASrv {
     // srv memory region shared with all RDMAClient
     pub srvMemRegion: MemRegion,
 
+    // glocal udp memory region
+    pub udpMemRegion: MemRegion,
+
     // rdma connects: remote node ipaddr --> RDMAConn
     pub conns: Mutex<HashMap<u32, RDMAConn>>,
 
@@ -132,7 +137,9 @@ pub struct RDMASrv {
     pub controlChannelRegionAddress: MemRegion,
     pub controlBufIdMgr: Mutex<IdMgr>,
     pub keys: Vec<[u32; 2]>,
-    pub memoryRegion: MemoryRegion,
+    pub controlMemoryRegion: MemoryRegion,
+    pub udpMemoryRegion: MemoryRegion,
+    pub udpQP: QueuePair,
 }
 
 impl Drop for RDMASrv {
@@ -140,6 +147,7 @@ impl Drop for RDMASrv {
         //TODO: This is not called because it's global static
         println!("drop RDMASrv");
         unsafe {
+            //TODO: unregister MR
             libc::munmap(
                 self.controlChannelRegionAddress.addr as *mut libc::c_void,
                 self.controlChannelRegionAddress.len as usize,
@@ -148,6 +156,10 @@ impl Drop for RDMASrv {
                 self.srvMemRegion.addr as *mut libc::c_void,
                 self.srvMemRegion.len as usize,
             );
+            libc::munmap(
+                self.udpMemRegion.addr as *mut libc::c_void,
+                self.udpMemRegion.len as usize,
+            );
         }
     }
 }
@@ -155,7 +167,7 @@ impl Drop for RDMASrv {
 impl RDMASrv {
     pub fn New() -> Self {
         println!("RDMASrv::New");
-
+        RDMA.Init("", 1);
         let controlSize = mem::size_of::<RDMAControlChannelRegion>();
         let contrlAddr = unsafe {
             libc::mmap(
@@ -169,7 +181,24 @@ impl RDMASrv {
         };
 
         if contrlAddr == libc::MAP_FAILED {
-            println!("failed to mmap control region");
+            panic!("failed to mmap control region");
+        }
+
+        let udpPacketExtendedSize = mem::size_of::<UDPPacket>() + 40;
+        let udpBufferSize = udpPacketExtendedSize * 2000;
+        let udpBufferAddr = unsafe {
+            libc::mmap(
+                ptr::null_mut(),
+                udpBufferSize,
+                libc::PROT_READ | libc::PROT_WRITE,
+                libc::MAP_ANONYMOUS | libc::MAP_PRIVATE,
+                -1,
+                0,
+            )
+        };
+
+        if udpBufferAddr == libc::MAP_FAILED {
+            panic!("failed to mmap udp buffer");
         }
 
         // println!(
@@ -214,9 +243,26 @@ impl RDMASrv {
         //RDMA.Init("", 1);
 
         //start from 2M registration.
-        let mr = RDMA
+        let controlMR = RDMA
             .CreateMemoryRegion(contrlAddr as u64, 2 * 1024 * 1024)
             .unwrap();
+        let udpMR = RDMA
+            .CreateMemoryRegion(udpBufferAddr as u64, udpBufferSize)
+            .unwrap();
+        let udpQP = RDMA.CreateUDQueuePair().expect("Create UD QP failed...");
+        udpQP.SetupUDQP(&RDMA).expect("SetupUDQP fail...");
+
+        for i in 0..RECV_UDP_COUNT {
+            let addr = udpBufferAddr as u64 + (i * udpPacketExtendedSize as u32) as u64;
+            udpQP
+                .PostRecv(
+                    i as u64,
+                    addr,
+                    udpMR.LKey()
+                )
+                .expect("SetupUDQP PostRecv fail");
+        }
+
         return Self {
             epollFd: 0,
             unixSockfd: 0,
@@ -226,6 +272,10 @@ impl RDMASrv {
             srvMemRegion: MemRegion {
                 addr: shareRegionAddr as u64,
                 len: size as u64,
+            },
+            udpMemRegion: MemRegion {
+                addr: udpBufferAddr as u64,
+                len: udpBufferSize as u64,
             },
             conns: Mutex::new(HashMap::new()),
             channels: Mutex::new(HashMap::new()),
@@ -248,11 +298,13 @@ impl RDMASrv {
                 len: controlSize as u64,
             },
             controlBufIdMgr: Mutex::new(IdMgr::Init(1, 1024)),
-            keys: vec![[mr.LKey(), mr.RKey()]],
+            keys: vec![[controlMR.LKey(), controlMR.RKey()]],
             controlChannels: Mutex::new(HashMap::new()),
             controlChannels2: Mutex::new(HashMap::new()),
             sockToAgentIds: Mutex::new(HashMap::new()),
-            memoryRegion: mr,
+            controlMemoryRegion: controlMR,
+            udpMemoryRegion: udpMR,
+            udpQP,
         };
     }
 

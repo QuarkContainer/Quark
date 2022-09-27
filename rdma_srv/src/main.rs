@@ -166,7 +166,6 @@ pub const IO_WAIT_CYCLES: i64 = 100_000_000; // 1ms
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("RDMA Service is starting!");
-    RDMA.Init("", 1);
 
     let hostname_os = hostname::get()?;
     match hostname_os.into_string() {
@@ -470,6 +469,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         stream_fd,
                         sockBuf.clone(),
                         RDMA_SRV.keys[controlRegionId / 1024][1],
+                        RDMA_SRV.udpQP.qpNum()
                     );
                     let rdmaChannel = RDMAChannel::New(
                         0,
@@ -762,6 +762,7 @@ fn SetupConnection(ip: &u32) {
         sock_fd,
         sockBuf.clone(),
         RDMA_SRV.keys[controlRegionId / 16][1],
+        RDMA_SRV.udpQP.qpNum()
     );
     let rdmaChannel = RDMAChannel::New(
         0,

@@ -96,6 +96,32 @@ impl<T: 'static + Default + Copy> RingQueue<T> {
     }
 }
 
+pub const UDP_BUFF_LEN: usize = 1010; //currently make UDPPacket total size to 1024.
+
+#[derive(Clone, Copy, Debug)]
+pub struct UDPPacket {
+    pub srcIpAddr: u32,
+    pub srcPort: u16,
+    pub dstIpAddr: u32,
+    pub dstPort: u16,
+    pub length: u16,
+    pub buf: [u8; UDP_BUFF_LEN],
+ }
+
+impl Default for UDPPacket {
+    fn default() -> Self {
+        UDPPacket {
+            srcIpAddr: 0,
+            srcPort: 0,
+            dstIpAddr: 0,
+            dstPort: 0,
+            length: 0,
+            buf: [0; UDP_BUFF_LEN],
+        }
+    }
+}
+ 
+
 #[derive(Debug, Default, Clone, Copy)]
 pub struct RDMAReq {
     pub user_data: u64,
@@ -276,6 +302,7 @@ pub struct RDMAListenResp {
     pub waitingLen: i32,
 }
 
+#[derive(Clone, Copy, Debug)]
 pub struct MemRegion {
     pub addr: u64,
     pub len: u64,
@@ -505,3 +532,5 @@ impl IdMgr {
         self.len += i;
     }
 }
+
+
