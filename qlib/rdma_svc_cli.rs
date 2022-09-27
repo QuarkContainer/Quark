@@ -15,6 +15,7 @@ use super::rdma_share::*;
 use super::rdmasocket::*;
 use super::socket_buf::*;
 use super::unix_socket::UnixSocket;
+use crate::qlib::kernel::kernel::waiter::Queue;
 
 pub struct RDMASvcCliIntern {
     // agent id
@@ -401,23 +402,23 @@ impl RDMASvcClient {
                                     let mut tcpSockAddr = TcpSockAddr::default();
                                     let len = sockAddr.Len();
                                     let _res = sockAddr.Marsh(&mut tcpSockAddr.data, len);
-                                    let (trigger, _tmp) = rdmaServerSock
+                                    let _tmp = rdmaServerSock
                                         .acceptQueue
                                         .lock()
-                                        .EnqSocket(fd, tcpSockAddr, len as u32, sockBuf);
+                                        .EnqSocket(fd, tcpSockAddr, len as u32, sockBuf.into(), Queue::default());
 
                                     self.channelToSocketMappings
                                         .lock()
                                         .insert(response.channelId, rdmaId);
 
-                                    if trigger {
+                                    /*if trigger {
                                         GlobalIOMgr()
                                             .GetByHost(sockfd)
                                             .unwrap()
                                             .lock()
                                             .waitInfo
                                             .Notify(EVENT_IN);
-                                    }
+                                    }*/
                                 }
                                 _ => {
                                     panic!("RDMARespMsg::RDMAAccept, SockInfo is not correct type: {:?}", sockInfo);

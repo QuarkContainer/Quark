@@ -1,9 +1,10 @@
 #![allow(non_snake_case)]
-#![feature(asm)]
+//#![feature(asm)]
 
 use libc::*;
 use std::ptr;
 use std::cmp;
+use core::arch::asm;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
@@ -19,7 +20,7 @@ fn main() {
     Client();
 }
 
-pub const MMAP : bool = true;
+pub const MMAP : bool = false;
 pub const MAP_SOCKT_READ : i32 = 1 << 31;
 
 pub fn Client() {
@@ -89,7 +90,8 @@ pub fn Client() {
 
     let mut readCount = 0;
 
-    for _i in 0..100000 {
+    let round = 2;
+    for _i in 0..round {
         let wcnt = if MMAP {
             let count = writeIovs.CopyIn(writeAddr, &bytes);
             SocketProduce(fd, count as i32, &mut writeIovs, 0)
@@ -108,12 +110,14 @@ pub fn Client() {
             }
         };
    
-        //println!("process result {}/{}/{}", i, wcnt, rcnt);
+        //println!("process result {}/{}/{}", _i, wcnt, rcnt);
         
         if wcnt < 0 || rcnt < 0 {
             return 
         } 
     }
+
+    println!("finish write {} round", round);
     
     let ret = unsafe {
         close(fd)

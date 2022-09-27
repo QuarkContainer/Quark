@@ -518,7 +518,7 @@ pub struct IOListen {
     pub block: bool,
 }
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Debug)]
 pub struct RDMAListen {
     pub sockfd: i32,
     pub backlog: i32,

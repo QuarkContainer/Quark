@@ -14,6 +14,7 @@
 
 use alloc::collections::vec_deque::VecDeque;
 use alloc::sync::Arc;
+use alloc::sync::Weak;
 use core::fmt;
 use core::ops::Deref;
 use core::sync::atomic::AtomicBool;
@@ -26,6 +27,22 @@ use super::common::*;
 use super::linux_def::*;
 use super::mutex::*;
 use crate::qlib::kernel::Kernel::HostSpace;
+use crate::qlib::kernel::socket::hostinet::loopbacksocket::LoopbackSocket;
+use crate::qlib::kernel::kernel::waiter::Queue;
+
+#[derive(Clone, Default)]
+pub struct SocketBuffWeak(pub Weak<SocketBuffIntern>);
+
+impl SocketBuffWeak {
+    pub fn Upgrade(&self) -> Option<SocketBuff> {
+        let f = match self.0.upgrade() {
+            None => return None,
+            Some(f) => f,
+        };
+
+        return Some(SocketBuff(f));
+    }
+}
 
 #[derive(Clone, Default)]
 pub struct SocketBuff(pub Arc<SocketBuffIntern>);
@@ -50,6 +67,17 @@ impl fmt::Debug for SocketBuff {
     }
 }
 
+impl SocketBuff {
+    pub fn New(readbuf: ByteStream, writebuf: ByteStream) -> Self {
+        let inner = SocketBuffIntern::New(readbuf, writebuf);
+        return Self(Arc::new(inner))
+    }
+    
+    pub fn Downgrade(&self) -> SocketBuffWeak {
+        return SocketBuffWeak(Arc::downgrade(&self.0));
+    }
+}
+
 pub struct SocketBuffIntern {
     pub wClosed: AtomicBool,
     pub rClosed: AtomicBool,
@@ -71,8 +99,9 @@ impl fmt::Debug for SocketBuffIntern {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "wClosed {:?}, rClosed {:?}, pendingWShutdown {:?}, error {:?}",
-            self.wClosed, self.wClosed, self.pendingWShutdown, self.error
+            "wClosed {:?}, rClosed {:?}, pendingWShutdown {:?}, error {:?} readbuff {:x?}, writebuff {:x?}",
+            self.wClosed, self.wClosed, self.pendingWShutdown, self.error, 
+            self.readBuf, self.writeBuf
         )
     }
 }
@@ -84,6 +113,21 @@ impl Default for SocketBuffIntern {
 }
 
 impl SocketBuffIntern {
+    pub fn New(readbuf: ByteStream, writebuf: ByteStream) -> Self {
+        return Self {
+            wClosed: AtomicBool::new(false),
+            rClosed: AtomicBool::new(false),
+            pendingWShutdown: AtomicBool::new(false),
+            error: AtomicI32::new(0),
+            consumeReadData: unsafe {
+                let addr = 0 as *mut AtomicU64;
+                &mut (*addr)
+            },
+            readBuf: readbuf,
+            writeBuf: writebuf,
+        };
+    }
+
     pub fn Init(pageCount: u64) -> Self {
         return Self {
             wClosed: AtomicBool::new(false),
@@ -263,15 +307,42 @@ impl SocketBuffIntern {
 
 pub const TCP_ADDR_LEN: usize = 128;
 
+#[derive(Clone, Debug)]
+pub enum AcceptSocket {
+    SocketBuff(SocketBuff),
+    LoopbackSocket(LoopbackSocket),
+    None
+}
+
+impl From<LoopbackSocket> for AcceptSocket {
+    fn from(item: LoopbackSocket) -> Self {
+        return Self::LoopbackSocket(item)
+    }
+}
+
+impl From<SocketBuff> for AcceptSocket {
+    fn from(item: SocketBuff) -> Self {
+        return Self::SocketBuff(item)
+    }
+}
+
+
+impl Default for AcceptSocket {
+    fn default() -> Self {
+        return Self::None
+    }
+}
+
 #[derive(Default, Debug)]
 pub struct AcceptItem {
     pub fd: i32,
     pub addr: TcpSockAddr,
     pub len: u32,
-    pub sockBuf: SocketBuff,
+    pub sockBuf: AcceptSocket,
+    pub queue: Queue,
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct AcceptQueue(Arc<QMutex<AcceptQueueIntern>>);
 
 impl Deref for AcceptQueue {
@@ -282,17 +353,41 @@ impl Deref for AcceptQueue {
     }
 }
 
-#[derive(Default, Debug)]
+impl AcceptQueue {
+    pub fn New(len: usize, queue: Queue) -> Self {
+        let inner = AcceptQueueIntern {
+            aiQueue: VecDeque::new(),
+            queueLen: len,
+            error: 0,
+            total: 0,
+            queue: queue,
+        };
+
+        return Self(Arc::new(QMutex::new(inner)))
+    }
+}
+
 pub struct AcceptQueueIntern {
-    pub queue: VecDeque<AcceptItem>,
+    pub aiQueue: VecDeque<AcceptItem>,
     pub queueLen: usize,
     pub error: i32,
     pub total: u64,
+    pub queue: Queue,
+}
+
+impl fmt::Debug for AcceptQueueIntern {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "AcceptQueueIntern aiQueue {:x?}",
+            self.aiQueue
+        )
+    }
 }
 
 impl Drop for AcceptQueueIntern {
     fn drop(&mut self) {
-        for ai in &mut self.queue {
+        for ai in &mut self.aiQueue {
             HostSpace::Close(ai.fd);
         }
     }
@@ -312,7 +407,7 @@ impl AcceptQueueIntern {
     }
 
     pub fn HasSpace(&self) -> bool {
-        return self.queue.len() < self.queueLen;
+        return self.aiQueue.len() < self.queueLen;
     }
 
     //return: (trigger, hasSpace)
@@ -321,25 +416,30 @@ impl AcceptQueueIntern {
         fd: i32,
         addr: TcpSockAddr,
         len: u32,
-        sockBuf: SocketBuff,
-    ) -> (bool, bool) {
+        sockBuf: AcceptSocket,
+        queue: Queue
+    ) -> bool {
         let item = AcceptItem {
             fd: fd,
             addr: addr,
             len: len,
             sockBuf: sockBuf,
+            queue: queue,
         };
 
-        self.queue.push_back(item);
+        self.aiQueue.push_back(item);
         self.total += 1;
-        let trigger = self.queue.len() == 1;
-        return (trigger, self.queue.len() < self.queueLen);
+        let trigger = self.aiQueue.len() == 1;
+        if trigger {
+            self.queue.Notify(READABLE_EVENT)
+        }
+        return self.aiQueue.len() < self.queueLen;
     }
 
     pub fn DeqSocket(&mut self) -> (bool, Result<AcceptItem>) {
-        let trigger = self.queue.len() == self.queueLen;
+        let trigger = self.aiQueue.len() == self.queueLen;
 
-        match self.queue.pop_front() {
+        match self.aiQueue.pop_front() {
             None => {
                 if self.error != 0 {
                     return (false, Err(Error::SysError(self.error)));
@@ -352,7 +452,7 @@ impl AcceptQueueIntern {
 
     pub fn Events(&self) -> EventMask {
         let mut event = EventMask::default();
-        if self.queue.len() > 0 {
+        if self.aiQueue.len() > 0 {
             event |= READABLE_EVENT;
         }
 
