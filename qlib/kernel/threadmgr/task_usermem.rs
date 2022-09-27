@@ -27,13 +27,29 @@ use super::super::super::mem::block::*;
 use super::super::memmgr::mm::*;
 use super::super::task::*;
 use super::super::util::cstring::*;
+use crate::qlib::kernel::SHARESPACE;
 
 impl MemoryManager {
     // copy raw data from user to kernel
     pub fn CopyDataIn(&self, task: &Task, vaddr: u64, to: u64, len: usize, allowPartial: bool) -> Result<()> {
+        if SHARESPACE.config.read().CopyDataWithPf && !allowPartial {
+            return self.CopyDataWithPf(task, vaddr, to, len, allowPartial);
+        }
+
         let rl = self.MappingReadLock();
 
         return self.CopyDataInLocked(task, &rl, vaddr, to, len, allowPartial);
+    }
+
+    pub fn CopyDataWithPf(&self, _task: &Task, from: u64, to: u64, len: usize, allowPartial: bool) -> Result<()> {
+        assert!(allowPartial==false);
+        Self::Memcpy(
+            to, 
+            from, 
+            len
+        );
+
+        return Ok(())
     }
 
     pub fn CopyDataInLocked(&self, task: &Task, rl: &QUpgradableLockGuard, vaddr: u64, to: u64, len: usize, allowPartial: bool) -> Result<()> {
@@ -98,6 +114,10 @@ impl MemoryManager {
     }
 
     pub fn CopyDataOut(&self, task: &Task, from: u64, vaddr: u64, len: usize, allowPartial: bool) -> Result<()> {
+        if SHARESPACE.config.read().CopyDataWithPf && !allowPartial {
+            return self.CopyDataWithPf(task, from, vaddr, len, allowPartial);
+        }
+        
         let rl = self.MappingReadLock();
 
         return self.CopyDataOutLocked(task, &rl, from, vaddr, len, allowPartial);
@@ -168,7 +188,36 @@ impl MemoryManager {
         return Ok(offset);
     }
 
+    pub fn CopyDataOutToIovsWithPf(&self, _task: &Task, buf: &[u8], iovs: &[IoVec], allowPartial: bool) -> Result<usize> {
+        assert!(allowPartial==false);
+
+        let src = buf.as_ptr() as u64; // &buf[0] as * const _ as u64;
+        let mut offset = 0;
+
+        for dst in iovs {
+            let left = buf.len() as u64 - offset;
+            let len = left.min(dst.Len() as u64);
+
+            Self::Memcpy(
+                dst.Start(), 
+                src + offset, 
+                len as usize
+            );
+
+            offset += len;
+            if offset >= buf.len() as u64 {
+                break;
+            }
+        }
+
+        return Ok(offset as usize)
+    }
+
     pub fn CopyDataOutToIovs(&self, task: &Task, buf: &[u8], iovs: &[IoVec], allowPartial: bool) -> Result<usize> {
+        if SHARESPACE.config.read().CopyDataWithPf && !allowPartial {
+            return self.CopyDataOutToIovsWithPf(task, buf, iovs, allowPartial);
+        }
+        
         let rl = self.MappingReadLock();
 
         return self.CopyDataOutToIovsLocked(task, &rl, buf, iovs, allowPartial);
@@ -234,7 +283,36 @@ impl MemoryManager {
         return Ok(offset);
     }
 
+    pub fn CopyDataInFromIovsWithPf(&self, _task: &Task, buf: &mut [u8], iovs: &[IoVec], allowPartial: bool) -> Result<usize> {
+        assert!(allowPartial==false);
+
+        let dst = buf.as_ptr() as u64; // &buf[0] as * const _ as u64;
+        let mut offset = 0;
+
+        for src in iovs {
+            let left = buf.len() as u64 - offset;
+            let len = left.min(src.Len() as u64);
+
+            Self::Memcpy(
+                dst + offset, 
+                src.Start(), 
+                len as usize
+            );
+
+            offset += len;
+            if offset >= buf.len() as u64 {
+                break;
+            }
+        }
+
+        return Ok(offset as usize)
+    }
+
     pub fn CopyDataInFromIovs(&self, task: &Task, buf: &mut [u8], iovs: &[IoVec], allowPartial: bool) -> Result<usize> {
+        if SHARESPACE.config.read().CopyDataWithPf && !allowPartial {
+            return self.CopyDataInFromIovsWithPf(task, buf, iovs, allowPartial);
+        }
+        
         let rl = self.MappingReadLock();
 
         return self.CopyDataInFromIovsLocked(task, &rl, buf, iovs, allowPartial);
@@ -247,6 +325,10 @@ impl MemoryManager {
         dstIovs: &[IoVec],
         allowPartial: bool
     ) -> Result<usize> {
+        if SHARESPACE.config.read().CopyDataWithPf && !allowPartial {
+            return self.CopyBetweenIovsWithPf(task, srcIovs, dstIovs, allowPartial);
+        }
+
         let rl = self.MappingReadLock();
 
         let mut srcs = srcIovs;
@@ -264,6 +346,78 @@ impl MemoryManager {
         return Ok(count);
     }
 
+    pub fn CopyBetweenIovsWithPf(
+        &self,
+        _task: &Task,
+        srcIovs: &[IoVec],
+        dstIovs: &[IoVec],
+        allowPartial: bool
+    ) -> Result<usize> {
+        assert!(allowPartial==false);
+        let mut srcIdx: usize = 0;
+        let mut dstIdx: usize = 0;
+        let mut srcOffset = 0;
+        let mut dstOffset = 0;
+
+        let mut total = 0;
+
+        while srcIdx < srcIovs.len() && dstIdx < dstIovs.len() {
+            let srcLen = srcIovs[srcIdx].Len() - srcOffset as usize;
+            let dstLen = dstIovs[dstIdx].Len() - dstOffset as usize;
+            if srcLen == dstLen {
+                Self::Memcpy(
+                    dstIovs[dstIdx].Start() + dstOffset, 
+                    srcIovs[srcIdx].Start() + srcOffset, 
+                    srcLen
+                );
+                
+                srcIdx += 1;
+                srcOffset = 0;
+
+                dstIdx += 1;
+                dstOffset = 0;
+
+                total += srcLen;
+            } else if srcLen < dstLen {
+                Self::Memcpy(
+                    dstIovs[dstIdx].Start() + dstOffset, 
+                    srcIovs[srcIdx].Start() + srcOffset, 
+                    srcLen
+                );
+
+                srcIdx += 1;
+                srcOffset = 0;
+
+                dstOffset += srcLen as u64;
+
+                total += srcLen;
+            } else { // srcLen > dstLen
+                Self::Memcpy(
+                    dstIovs[dstIdx].Start() + dstOffset, 
+                    srcIovs[srcIdx].Start() + srcOffset, 
+                    dstLen
+                );
+
+                srcOffset += dstLen as u64;
+
+                dstIdx += 1;
+                dstOffset = 0;
+
+                total += dstLen;
+            }
+        }
+
+        return Ok(total)
+    }
+
+    pub fn Memcpy(dst: u64, src: u64, count: usize) {
+        unsafe {
+            let dstPtr = dst as * mut u8;
+            let srcPtr = src as *const u8;
+            core::ptr::copy_nonoverlapping(srcPtr, dstPtr, count);
+        }
+    }
+
     pub fn CopyIovsOutFromIovs(
         &self,
         task: &Task,
@@ -271,6 +425,10 @@ impl MemoryManager {
         dstIovs: &[IoVec],
         allowPartial: bool
     ) -> Result<usize> {
+        if SHARESPACE.config.read().CopyDataWithPf && !allowPartial {
+            return self.CopyBetweenIovsWithPf(task, srcIovs, dstIovs, allowPartial);
+        }
+
         let rl = self.MappingReadLock();
 
         let mut dsts = dstIovs;

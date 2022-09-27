@@ -324,6 +324,7 @@ pub fn Execvat(task: &mut Task, dirfd: i32, filenameAddr: u64, argvAddr: u64, en
             t.UnstopVforkParent();
     
             SetFs(0);
+            task.tidInfo = TidInfo::default();
             task.context.fs = 0;
             task.context.X86fpstate = Some(Box::new(X86fpstate::default()));
     

@@ -164,7 +164,7 @@ pub fn SysWritev(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
     let addr = args.arg1 as u64;
     let iovcnt = args.arg2 as i32;
 
-    if fd < 3 {
+    /*if fd < 3 {
         use super::super::util::cstring::*;
 
         let srcs = task.IovsFromAddr(addr, iovcnt as usize)?;
@@ -173,7 +173,7 @@ pub fn SysWritev(task: &mut Task, args: &SyscallArguments) -> Result<i64> {
             let str = CString::ToStringWithLen(task, srcs[i].start, srcs[i].len as usize)?;
             info!("Write: {}", str);
         }
-    }
+    }*/
 
     let n = Writev(task, fd, addr, iovcnt)?;
     task.ioUsage.AccountWriteSyscall(n);

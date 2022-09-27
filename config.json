@@ -22,5 +22,6 @@
   "EnableInotify" : true,
   "ReaddirCache"  : true,
   "HiberODirect"  : false,
-  "DisableCgroup" : true
+  "DisableCgroup" : true,
+  "CopyDataWithPf": true
 }

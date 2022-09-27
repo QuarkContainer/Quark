@@ -91,7 +91,6 @@ impl Drop for LoopbackSocket {
             self.SetRClosed();
             self.SetWClosed();
             self.peerQueue.Notify(EVENT_HUP);
-            error!("LoopbackSocket drop ...");
         }
     }
 }
@@ -110,7 +109,6 @@ impl LoopbackSocket {
         match databuff {
             None => (),
             Some(_) => {
-                error!("LoopbackSocket writev trigger");
                 self.peerQueue.Notify(READABLE_EVENT)
             }
         };
@@ -119,9 +117,7 @@ impl LoopbackSocket {
     }
 
     pub fn Readv(&self, task: &Task, iovs: &mut [IoVec], peek: bool) -> Result<i64> {
-        error!("loopback read 1");
         let (trigger, count) = self.sockBuff.Readv(task, iovs, peek)?;
-        error!("loopback read 2 {}/{}", trigger, count);
         if trigger {
             self.peerQueue.Notify(WRITEABLE_EVENT);
         }
