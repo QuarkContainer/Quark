@@ -365,6 +365,40 @@ impl AcceptQueue {
 
         return Self(Arc::new(QMutex::new(inner)))
     }
+
+    pub fn EnqSocket(
+        &self,
+        fd: i32,
+        addr: TcpSockAddr,
+        len: u32,
+        sockBuf: AcceptSocket,
+        queue: Queue
+    ) -> bool {
+        let (trigger, hasSpace) = {
+            let mut inner = self.lock();
+            let item = AcceptItem {
+                fd: fd,
+                addr: addr,
+                len: len,
+                sockBuf: sockBuf,
+                queue: queue,
+            };
+    
+            inner.aiQueue.push_back(item);
+            inner.total += 1;
+            let trigger = inner.aiQueue.len() == 1;
+            
+
+            (trigger, inner.aiQueue.len() < inner.queueLen)
+        };
+
+        if trigger {
+            let queue = self.lock().queue.clone();
+            queue.Notify(READABLE_EVENT)
+        }
+        
+        return hasSpace;
+    }
 }
 
 pub struct AcceptQueueIntern {
@@ -407,32 +441,6 @@ impl AcceptQueueIntern {
     }
 
     pub fn HasSpace(&self) -> bool {
-        return self.aiQueue.len() < self.queueLen;
-    }
-
-    //return: (trigger, hasSpace)
-    pub fn EnqSocket(
-        &mut self,
-        fd: i32,
-        addr: TcpSockAddr,
-        len: u32,
-        sockBuf: AcceptSocket,
-        queue: Queue
-    ) -> bool {
-        let item = AcceptItem {
-            fd: fd,
-            addr: addr,
-            len: len,
-            sockBuf: sockBuf,
-            queue: queue,
-        };
-
-        self.aiQueue.push_back(item);
-        self.total += 1;
-        let trigger = self.aiQueue.len() == 1;
-        if trigger {
-            self.queue.Notify(READABLE_EVENT)
-        }
         return self.aiQueue.len() < self.queueLen;
     }
 

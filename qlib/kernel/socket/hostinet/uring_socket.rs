@@ -795,7 +795,7 @@ impl SockOperations for UringSocketOperations {
 
                             let fd = res as i32;
                             
-                            q.lock().EnqSocket(fd, TcpSockAddr::NewFromInet(addr), 16, serverSock.into(), serverQueue);
+                            q.EnqSocket(fd, TcpSockAddr::NewFromInet(addr), 16, serverSock.into(), serverQueue);
                             return Ok(0)
                         }
                     };

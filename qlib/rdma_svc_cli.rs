@@ -404,7 +404,6 @@ impl RDMASvcClient {
                                     let _res = sockAddr.Marsh(&mut tcpSockAddr.data, len);
                                     let _tmp = rdmaServerSock
                                         .acceptQueue
-                                        .lock()
                                         .EnqSocket(fd, tcpSockAddr, len as u32, sockBuf.into(), Queue::default());
 
                                     self.channelToSocketMappings
