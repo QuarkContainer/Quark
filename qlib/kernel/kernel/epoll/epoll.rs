@@ -109,7 +109,7 @@ pub struct EventPollInternal {
     pub queue: Queue,
     pub files: QMutex<HashMap<FileIdentifier, PollEntry, BuildHasherDefault<RawHasher>>>,
 
-    pub lists: QMutex<PollLists>,
+    pub lists: QMutex<PollEntryList>,
 }
 
 impl Default for EventPollInternal {
@@ -144,7 +144,7 @@ impl EventPoll {
     // eventsAvailable determines if 'e' has events available for delivery.
     pub fn EventsAvailable(&self, task: &Task) -> bool {
         let mut lists = self.lists.lock();
-        let mut it = lists.readyList.Front();
+        let mut it = lists.Front();
         while it.is_some() {
             let entry = it.unwrap();
             it = entry.Next();
@@ -153,7 +153,7 @@ impl EventPoll {
             let file = match file.Upgrade() {
                 None => {
                     // the file has been dropped, just remove it
-                    lists.readyList.Remove(&entry);
+                    lists.Remove(&entry);
                     continue;
                 }
                 Some(f) => f,
@@ -165,7 +165,7 @@ impl EventPoll {
                 return true;
             }
 
-            lists.readyList.Remove(&entry);
+            lists.Remove(&entry);
             entry.lock().state = PollEntryState::Waiting;
         }
 
@@ -175,7 +175,7 @@ impl EventPoll {
     pub fn ReadEvents(&self, task: &Task, max: i32, events: &mut StackVec<Event, 64>) {
         let mut lists = self.lists.lock();
 
-        let mut it = lists.readyList.Front();
+        let mut it = lists.Front();
         while events.Len() < max as usize {
             let entry = if let Some(entry) = it {
                 entry
@@ -190,7 +190,7 @@ impl EventPoll {
             let file = entry.lock().file.Upgrade();
             let file = match file {
                 None => {
-                    lists.readyList.Remove(&entry);
+                    lists.Remove(&entry);
                     continue;
                 }
                 Some(f) => f,
@@ -199,7 +199,7 @@ impl EventPoll {
             let mask = entry.lock().mask;
             let ready = file.Readiness(task, mask);
             if ready == 0 {
-                lists.readyList.Remove(&entry);
+                lists.Remove(&entry);
                 entry.lock().state = PollEntryState::Waiting;
                 continue;
             }
@@ -220,10 +220,10 @@ impl EventPoll {
             // that other events can be delivered as well.
             let flags = entry.lock().flags;
             if flags & ONE_SHOT != 0 {
-                lists.readyList.Remove(&entry);
+                lists.Remove(&entry);
                 entry.lock().state = PollEntryState::Disabled;
             } else if flags & EDGE_TRIGGERED != 0 {
-                lists.readyList.Remove(&entry);
+                lists.Remove(&entry);
                 entry.lock().state = PollEntryState::Waiting;
             }
         }
@@ -292,7 +292,7 @@ impl EventPoll {
     ) -> Result<()> {
         let id = file.UniqueId();
         let fops = file.FileOp.clone();
-        let ep = fops.as_any().downcast_ref::<EventPoll>();
+        let ep = fops.EventPoll(); // fops.as_any().downcast_ref::<EventPoll>();
 
         let _lock = if ep.is_some() {
             Some(CYCLE_MU.lock())
@@ -312,7 +312,7 @@ impl EventPoll {
                 // Check if a cycle would be created. We use 4 as the limit because
                 // that's the value used by linux and we want to emulate it.
                 if let Some(ep) = ep {
-                    if *ep == *self {
+                    if ep == *self {
                         return Err(Error::SysError(SysErr::EINVAL));
                     }
 
@@ -387,7 +387,7 @@ impl EventPoll {
             let mut lists = self.lists.lock();
             let state = entry.lock().state;
             match state {
-                PollEntryState::Ready => lists.readyList.Remove(&entry),
+                PollEntryState::Ready => lists.Remove(&entry),
                 PollEntryState::Waiting => (),
                 PollEntryState::Disabled => (),
             };
@@ -431,7 +431,7 @@ impl EventPoll {
             let mut lists = self.lists.lock();
             let state = entry.lock().state;
             match state {
-                PollEntryState::Ready => lists.readyList.Remove(&entry),
+                PollEntryState::Ready => lists.Remove(&entry),
                 PollEntryState::Waiting => (),
                 PollEntryState::Disabled => (),
             };
@@ -456,7 +456,7 @@ impl Drop for EventPollInternal {
                 }
             }
 
-            lists.readyList.Remove(entry);
+            lists.Remove(entry);
         }
     }
 }
