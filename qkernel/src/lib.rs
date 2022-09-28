@@ -237,9 +237,9 @@ pub extern "C" fn syscall_handler(
 
     //currTask.PerfGoto(PerfType::Kernel);
 
-    if SHARESPACE.config.read().KernelPagetable {
+    /*if SHARESPACE.config.read().KernelPagetable {
         Task::SetKernelPageTable();
-    }
+    }*/
 
     currTask.AccountTaskLeave(SchedState::RunningApp);
     let pt = currTask.GetPtRegs();
@@ -338,9 +338,9 @@ pub extern "C" fn syscall_handler(
     //currTask.PerfGoto(PerfType::User);
 
     //currTask.Check();
-    if SHARESPACE.config.read().KernelPagetable {
+    /*if SHARESPACE.config.read().KernelPagetable {
         currTask.SwitchPageTable();
-    }
+    }*/
     CPULocal::Myself().SetMode(VcpuMode::User);
     currTask.mm.HandleTlbShootdown();
     CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
@@ -399,9 +399,9 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                     CPULocal::SetPendingFreeStack(currTask.taskId);
 
                     error!("RunExitDone xxx 2 [{:x}] ...", currTask.taskId);
-                    if !SHARESPACE.config.read().KernelPagetable {
+                    /*if !SHARESPACE.config.read().KernelPagetable {
                         KERNEL_PAGETABLE.SwitchTo();
-                    }
+                    }*/
                     // mm needs to be clean as last function before SwitchToNewTask
                     // after this is called, another vcpu might drop the pagetable
                     core::mem::drop(mm);
