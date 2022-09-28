@@ -719,7 +719,6 @@ impl AsyncOpsTrait for AsyncAccept {
         let sockBuf = SocketBuff(Arc::new(SocketBuffIntern::default()));
         let hasSpace = self
             .acceptQueue
-            .lock()
             .EnqSocket(result, self.addr, self.len, sockBuf.into(), Queue::default());
 
         self.len = 16;

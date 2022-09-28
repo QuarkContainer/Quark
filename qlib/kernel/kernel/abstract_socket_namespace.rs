@@ -200,7 +200,7 @@ impl TCPSocketNamespaceInner {
     pub fn Add(&mut self, port: u16, q: AcceptQueue) -> Result<()> {
         match self.descTbl.insert(port, q) {
             None => return Ok(()),
-            _ => panic!("TCPSocketNamespaceInner::NewSocketAt for port {}", port)
+            _ => return Ok(()), // double listen in nginx panic!("TCPSocketNamespaceInner::NewSocketAt for port {}", port)
         }
     }
 
