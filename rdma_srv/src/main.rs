@@ -537,6 +537,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     epoll_add(epoll_fd, conn_sock_fd, read_event(conn_sock_fd as u64))?;
                     println!("add unix sock fd: {}", conn_sock_fd);
                 }
+                // TODO Hong: in the following part add logic to differ the ingress/egress traffic
                 Srv_FdType::UnixDomainSocketConnect(conn_sock) => {
                     println!("UnixDomainSocketConnect");
                     loop {

@@ -411,48 +411,26 @@ impl RDMAAgent {
                 let mut dstIpAddr = msg.dstIpAddr;
                 let mut dstPort = msg.dstPort;
                 if RDMA_CTLINFO.IsEgress(dstIpAddr) {
-                    // TODO: Handle egress traffic
-                }
-                // error!("RDMAConnectUsingPodId: Connect to ip {} port {}", dstIpAddr, dstPort);
-                match RDMA_CTLINFO.IsService(dstIpAddr, &dstPort) {
-                    None => {},
-                    Some(ipWithPort) => {
-                        println!("The traffic is connecting to a service. Change the connection to {:?}", ipWithPort);
-                        dstIpAddr = ipWithPort.ip;
-                        dstPort = ipWithPort.port.port;
-                    },
-                }
-                match RDMA_CTLINFO.get_node_ip_by_pod_ip(&dstIpAddr) {
-                    Some(nodeIpAddr) => {
-                        let conns = RDMA_SRV.conns.lock();
-                        let rdmaConn = conns.get(&nodeIpAddr).unwrap();
-                        let rdmaChannel = self.CreateClientRDMAChannel(
-                            &RDMAConnectReq {
-                                sockfd: msg.sockfd,
-                                dstIpAddr: dstIpAddr,
-                                dstPort: dstPort,
-                                srcIpAddr: ipAddr.to_be(),
-                                srcPort: msg.srcPort,
-                            },
-                            rdmaConn.clone(),
-                        );
-
-                        RDMA_SRV
-                            .channels
-                            .lock()
-                            .insert(rdmaChannel.localId, rdmaChannel.clone());
-
-                        let connectReqeust = rdmaChannel.CreateConnectRequest(msg.sockfd);
-                        rdmaConn
-                            .ctrlChan
-                            .lock()
-                            .SendControlMsg(ControlMsgBody::ConnectRequest(connectReqeust));
-                        // .expect("fail to send msg");
+                    self.SendControlMsgInternal(msg.sockfd, RDMA_CTLINFO.localIp_get(),ipAddr.to_be(), msg.srcPort, dstIpAddr, dstPort);
+                } else {
+                    // error!("RDMAConnectUsingPodId: Connect to ip {} port {}", dstIpAddr, dstPort);
+                    match RDMA_CTLINFO.IsService(dstIpAddr, &dstPort) {
+                        None => {},
+                        Some(ipWithPort) => {
+                            println!("The traffic is connecting to a service. Change the connection to {:?}", ipWithPort);
+                            dstIpAddr = ipWithPort.ip;
+                            dstPort = ipWithPort.port.port;
+                        },
                     }
-                    None => {
-                        println!("TODO: return error as no ip to node mapping is found");
+                    match RDMA_CTLINFO.get_node_ip_by_pod_ip(&dstIpAddr) {
+                        Some(nodeIpAddr) => {
+                            self.SendControlMsgInternal(msg.sockfd, nodeIpAddr,ipAddr.to_be(), msg.srcPort, dstIpAddr, dstPort);
+                        }
+                        None => {
+                            println!("TODO: return error as no ip to node mapping is found");
+                        }
                     }
-                }
+                }                
             }
             RDMAReqMsg::RDMAWrite(msg) => match RDMA_SRV.channels.lock().get(&msg.channelId) {
                 Some(rdmaChannel) => {
@@ -497,5 +475,33 @@ impl RDMAAgent {
                 }
             },
         }
+    }
+
+    fn SendControlMsgInternal(&self, sockfd: u32, nodeIpAddr: u32, srcIpAddr: u32, srcPort: u16, dstIpAddr: u32, dstPort: u16) {
+        let conns = RDMA_SRV.conns.lock();
+        let rdmaConn = conns.get(&nodeIpAddr).unwrap();
+        
+        let rdmaChannel = self.CreateClientRDMAChannel(
+            &RDMAConnectReq {
+                sockfd: sockfd,
+                dstIpAddr: dstIpAddr,
+                dstPort: dstPort,
+                srcIpAddr: srcIpAddr,
+                srcPort: srcPort,
+            },
+            rdmaConn.clone(),
+        );
+
+        RDMA_SRV
+            .channels
+            .lock()
+            .insert(rdmaChannel.localId, rdmaChannel.clone());
+
+        let connectReqeust = rdmaChannel.CreateConnectRequest(sockfd);
+        rdmaConn
+            .ctrlChan
+            .lock()
+            .SendControlMsg(ControlMsgBody::ConnectRequest(connectReqeust));
+        // .expect("fail to send msg");
     }
 }
