@@ -253,35 +253,6 @@ pub extern "C" fn syscall_handler(
     pt.rip = pt.rcx;
 
     let mut nr = pt.orig_rax;
-    let callId: SysCallID = if nr < SysCallID::UnknowSyscall as u64 {
-        unsafe { mem::transmute(nr as u64) }
-    } else if SysCallID::SysSocketProduce as u64 <= nr && nr < SysCallID::EXTENSION_MAX as u64 {
-        unsafe { mem::transmute(nr as u64) }
-    } else {
-        nr = SysCallID::UnknowSyscall as _;
-        SysCallID::UnknowSyscall
-    };
-
-    //let tid = currTask.Thread().lock().id;
-    let mut tid = 0;
-    let mut pid = 0;
-
-    let llevel = SHARESPACE.config.read().LogLevel;
-    if llevel == LogLevel::Complex {
-        tid = currTask.Thread().lock().id;
-        pid = currTask.Thread().ThreadGroup().ID();
-        info!("({}/{})------get call id {:?} arg0:{:x}, 1:{:x}, 2:{:x}, 3:{:x}, 4:{:x}, 5:{:x}, userstack:{:x}, return address:{:x}, fs:{:x}",
-            tid, pid, callId, arg0, arg1, arg2, arg3, arg4, arg5, currTask.GetPtRegs().rsp, currTask.GetPtRegs().rcx, GetFs());
-    } else if llevel == LogLevel::Simple {
-        tid = currTask.Thread().lock().id;
-        pid = currTask.Thread().ThreadGroup().ID();
-        info!(
-            "({}/{})------get call id {:?} arg0:{:x}",
-            tid, pid, callId, arg0
-        );
-    }
-
-    //currTask.SaveFp();
 
     let startTime = TSC.Rdtsc();
     let enterAppTimestamp = CPULocal::Myself().ResetEnterAppTimestamp() as i64;
@@ -300,22 +271,48 @@ pub extern "C" fn syscall_handler(
         arg5: arg5,
     };
 
+    //let tid = currTask.Thread().lock().id;
+    let mut tid = 0;
+    let mut pid = 0;
+    let mut callId: SysCallID = SysCallID::UnknowSyscall;
+
+    let debugLevel = SHARESPACE.config.read().DebugLevel;
+    
+    if debugLevel > DebugLevel::Error {
+        let llevel = SHARESPACE.config.read().LogLevel;
+        callId = if nr < SysCallID::UnknowSyscall as u64 {
+            unsafe { mem::transmute(nr as u64) }
+        } else if SysCallID::SysSocketProduce as u64 <= nr && nr < SysCallID::EXTENSION_MAX as u64 {
+            unsafe { mem::transmute(nr as u64) }
+        } else {
+            nr = SysCallID::UnknowSyscall as _;
+            SysCallID::UnknowSyscall
+        };
+    
+        if llevel == LogLevel::Complex {
+            tid = currTask.Thread().lock().id;
+            pid = currTask.Thread().ThreadGroup().ID();
+            info!("({}/{})------get call id {:?} arg0:{:x}, 1:{:x}, 2:{:x}, 3:{:x}, 4:{:x}, 5:{:x}, userstack:{:x}, return address:{:x}, fs:{:x}",
+                tid, pid, callId, arg0, arg1, arg2, arg3, arg4, arg5, currTask.GetPtRegs().rsp, currTask.GetPtRegs().rcx, GetFs());
+        } else if llevel == LogLevel::Simple {
+            tid = currTask.Thread().lock().id;
+            pid = currTask.Thread().ThreadGroup().ID();
+            info!(
+                "({}/{})------get call id {:?} arg0:{:x}",
+                tid, pid, callId, arg0
+            );
+        }
+    }
+    
     let currTask = task::Task::Current();
     currTask.DoStop();
 
-    //currTask.PerfGoto(PerfType::SysCall);
     let state = SysCall(currTask, nr, &args);
-    //currTask.PerfGofrom(PerfType::SysCall);
-
     res = currTask.Return();
-    //HostInputProcess();
-    //ProcessOne();
-
     MainRun(currTask, state);
-
     currTask.RestoreFp();
-   //error!("syscall_handler: {}", ::AllocatorPrint(10));
-    if llevel == LogLevel::Simple || llevel == LogLevel::Complex {
+    
+    if debugLevel > DebugLevel::Error {
         let gap = if self::SHARESPACE.config.read().PerfDebug {
             TSC.Rdtsc() - startTime
         } else {
