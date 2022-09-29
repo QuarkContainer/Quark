@@ -284,7 +284,6 @@ impl EventPoll {
     pub fn AddEntry(
         &self,
         task: &Task,
-        fd: i32,
         file: File,
         flags: EntryFlags,
         mask: EventMask,
@@ -328,7 +327,6 @@ impl EventPoll {
                 let entryInternal = PollEntryInternal {
                     next: None,
                     prev: None,
-                    fd: fd,
                     id: id,
                     file: file.Downgrade(),
                     userData: data,
@@ -352,6 +350,7 @@ impl EventPoll {
                     entry.CallBack();
                 }
 
+                // need drop files before return
                 drop(files);
                 return Ok(());
             }

@@ -241,27 +241,27 @@ impl SocketBuffIntern {
     }
 
     pub fn WClosed(&self) -> bool {
-        self.wClosed.load(Ordering::SeqCst)
+        self.wClosed.load(Ordering::Acquire)
     }
 
     pub fn RClosed(&self) -> bool {
-        self.rClosed.load(Ordering::SeqCst)
+        self.rClosed.load(Ordering::Acquire)
     }
 
     pub fn SetWClosed(&self) {
-        self.wClosed.store(true, Ordering::SeqCst)
+        self.wClosed.store(true, Ordering::Release)
     }
 
     pub fn SetRClosed(&self) {
-        self.rClosed.store(true, Ordering::SeqCst)
+        self.rClosed.store(true, Ordering::Release)
     }
 
     pub fn Error(&self) -> i32 {
-        self.error.load(Ordering::SeqCst)
+        self.error.load(Ordering::Acquire)
     }
 
     pub fn SetErr(&self, err: i32) {
-        self.error.store(err, Ordering::SeqCst)
+        self.error.store(err, Ordering::Release)
     }
 
     // get iovs(max 2 iovs) for free read buf space
