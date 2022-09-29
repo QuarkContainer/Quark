@@ -133,6 +133,8 @@ pub struct RDMASrv {
     pub controlBufIdMgr: Mutex<IdMgr>,
     pub keys: Vec<[u32; 2]>,
     pub memoryRegion: MemoryRegion,
+
+    // TODO Hong: add egressAgentId to store the agentId for egress
 }
 
 impl Drop for RDMASrv {
