@@ -26,6 +26,7 @@
 #![allow(non_snake_case)]
 #![allow(unused_imports)]
 #![feature(core_intrinsics)]
+#![recursion_limit = "256"]
 
 extern crate alloc;
 extern crate bit_field;
