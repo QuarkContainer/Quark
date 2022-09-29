@@ -430,7 +430,7 @@ impl RDMAAgent {
                             println!("TODO: return error as no ip to node mapping is found");
                         }
                     }
-                }                
+                }
             }
             RDMAReqMsg::RDMAWrite(msg) => match RDMA_SRV.channels.lock().get(&msg.channelId) {
                 Some(rdmaChannel) => {

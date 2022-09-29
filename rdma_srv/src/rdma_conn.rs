@@ -844,7 +844,6 @@ impl RDMAControlChannel {
             }
         }
 
-        //todo hong: send to egress
         if found {
             // println!("HandleConnectRequest 2");
             let agents = RDMA_SRV.agents.lock();
