@@ -2,14 +2,14 @@
   "DebugLevel"    : "Error",
   "KernelMemSize" : 24,
   "LogType"       : "Sync",
-  "LogLevel"      : "Complex",
+  "LogLevel"      : "Simple",
   "UringIO"       : true,
   "UringBuf"      : true,
   "UringFixedFile": false,
   "EnableAIO"     : true,
   "PrintException": false,
   "KernelPagetable": false,
-  "PerfDebug"     : true,
+  "PerfDebug"     : false,
   "UringStatx"    : false,
   "FileBufWrite"  : true,
   "MmapRead"      : false,
@@ -23,5 +23,5 @@
   "ReaddirCache"  : true,
   "HiberODirect"  : false,
   "DisableCgroup" : true,
-  "CopyDataWithPf": true
+  "CopyDataWithPf": false
 }
