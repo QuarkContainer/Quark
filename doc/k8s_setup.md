@@ -5,7 +5,7 @@ Follow the steps to use quark runtime with kubernates.
 ### 1. Build Quark Runtime with shim mode
 When quark is used as a container runtime, qvisor process will need to serve as the shim for the runtime as specified by containerd [shim-api](https://github.com/containerd/containerd/blob/main/runtime/v2/README.md).
 
-To build Quark with shim mode, change the following configuration in config.json
+To build Quark with shim mode, please open `Quark/config.json`  and change the following configuration: 
 ```
 ........
   "ShimMode"      : true,
