@@ -122,7 +122,6 @@ use self::qlib::linux_def::MemoryDef;
 use self::qlib::loader::*;
 use self::qlib::mem::list_allocator::*;
 use self::qlib::pagetable::*;
-//use self::qlib::perf_tunning::*;
 use self::qlib::vcpu_mgr::*;
 use self::syscalls::syscalls::*;
 use self::task::*;
@@ -277,7 +276,7 @@ pub extern "C" fn syscall_handler(
     let mut callId: SysCallID = SysCallID::UnknowSyscall;
 
     let debugLevel = SHARESPACE.config.read().DebugLevel;
-    
+
     if debugLevel > DebugLevel::Error {
         let llevel = SHARESPACE.config.read().LogLevel;
         callId = if nr < SysCallID::UnknowSyscall as u64 {
@@ -305,11 +304,19 @@ pub extern "C" fn syscall_handler(
     }
     
     let currTask = task::Task::Current();
-    currTask.DoStop();
+    //currTask.DoStop();
 
     let state = SysCall(currTask, nr, &args);
     res = currTask.Return();
     MainRun(currTask, state);
+    currTask.DoStop();
+
+    let pt = currTask.GetPtRegs();
+
+    CPULocal::SetUserStack(pt.rsp);
+    CPULocal::SetKernelStack(currTask.GetKernelSp());
+
+    currTask.AccountTaskEnter(SchedState::RunningApp);
     currTask.RestoreFp();
     
     if debugLevel > DebugLevel::Error {
@@ -330,11 +337,6 @@ pub extern "C" fn syscall_handler(
 
     let kernalRsp = pt as *const _ as u64;
 
-    //PerfGoto(PerfType::User);
-    //currTask.PerfGofrom(PerfType::Kernel);
-    //currTask.PerfGoto(PerfType::User);
-
-    //currTask.Check();
     /*if SHARESPACE.config.read().KernelPagetable {
         currTask.SwitchPageTable();
     }*/
@@ -416,16 +418,6 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
             break;
         }
     }
-
-    currTask.DoStop();
-
-    let pt = currTask.GetPtRegs();
-
-    CPULocal::SetUserStack(pt.rsp);
-    CPULocal::SetKernelStack(currTask.GetKernelSp());
-
-    currTask.AccountTaskEnter(SchedState::RunningApp);
-    //PerfGofrom(PerfType::KernelHandling);
 }
 
 fn InitGs(id: u64) {

@@ -102,6 +102,10 @@ pub fn Scale(tsc: i64) -> i64 {
     (tsc as i128 * 1000_000 / LoadVcpuFreq() as i128) as i64
 }
 
+pub fn Ns2tsc(ns: i64) -> i64 {
+    return (ns as i128 * LoadVcpuFreq() as i128 / 1000_000_000) as i64;
+}
+
 pub fn VcpuFreqInit() {
     VCPU_FREQ.store(VcpuFreq(), Ordering::SeqCst);
 }
