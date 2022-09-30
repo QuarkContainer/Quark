@@ -166,7 +166,7 @@ pub const IO_WAIT_CYCLES: i64 = 100_000_000; // 1ms
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("RDMA Service is starting!");
-
+    RDMA.Init("", 1);
     let hostname_os = hostname::get()?;
     match hostname_os.into_string() {
         Ok(v) => RDMA_CTLINFO.hostname_set(v),
@@ -413,7 +413,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // RDMA.HandleCQEvent().unwrap();
         // RDMAProcessOnce(&mut HashMap::new());
         RDMAProcessOnce();
-        // println!("Before sleep");
+        println!("Before sleep");
         let res = match syscall!(epoll_wait(
             epoll_fd,
             events.as_mut_ptr() as *mut libc::epoll_event,
@@ -426,7 +426,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         unsafe { events.set_len(res as usize) };
         RDMA_SRV.shareRegion.srvBitmap.store(0, Ordering::Release);
-        // println!("res is: {}", res);
+        println!("res is: {}", res);
         RDMAProcess();
         for ev in &events {
             // print!("u64: {}, events: {:x}", ev.U64, ev.Events);
@@ -522,6 +522,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 Srv_FdType::TCPSocketConnect(ipAddr) => match RDMA_SRV.conns.lock().get(&ipAddr) {
                     Some(rdmaConn) => {
+                        println!("TCPSocketConnect, 1");
                         rdmaConn.Notify(ev.Events as u64);
                     }
                     _ => {
@@ -585,15 +586,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 Srv_FdType::RDMACompletionChannel => {
-                    // println!("Got RDMA completion event");
+                    println!("Got RDMA completion event");
                     // let _cnt = RDMA.PollCompletionQueueAndProcess();
                     // RDMAProcess();
                     RDMA.HandleCQEvent().unwrap();
                     // RDMAProcessOnce();
                     // println!("FdType::RDMACompletionChannel, processed {} wcs", cnt);
+
+                    // let mut i = 0;
+                    // let sec = time::Duration::from_secs(1);
+
+                    // loop {
+                    //     let cnt = RDMAProcessOnce();
+                    //     println!("Got RDMA completion event 3.1, cnt {}", cnt);
+                    //     i += 1;
+                    //     if i == 10 || cnt != 0 {
+                    //         break;
+                    //     }
+                    //     thread::sleep(sec);
+                    //     println!("Got RDMA completion event 3.2, sleep {} seconds", i);
+                    // }
+                    // println!("Got RDMA completion event 4");
                 }
                 Srv_FdType::SrvEventFd(srvEventFd) => {
-                    // println!("Got SrvEventFd event {}", srvEventFd);
+                    println!("Got SrvEventFd event {}", srvEventFd);
                     // print!("u64: {}, events: {:x}", ev.U64, ev.Events);
                     // println!("srvEvent notified ****************1");
                     // RDMAProcess();

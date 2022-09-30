@@ -20,6 +20,7 @@ use super::common::*;
 use super::linux_def::*;
 use alloc::collections::btree_set::BTreeSet;
 use alloc::vec::Vec;
+use std::mem;
 
 pub const COUNT: usize = 1024;
 
@@ -327,6 +328,8 @@ pub struct IOMetas {
     pub consumeReadData: AtomicU64,
 }
 
+pub const UDP_PACKET_COUNT: usize = 1024;
+
 #[repr(C)]
 pub struct ClientShareRegion {
     pub clientBitmap: AtomicU64, //client sleep bit
@@ -336,6 +339,10 @@ pub struct ClientShareRegion {
 
     // the submit queue
     pub sq: RingQueue<RDMAReq>,
+
+    pub udpBufSent: [UDPPacket; UDP_PACKET_COUNT],
+
+    pub udpBufRecv: [UDPPacket; UDP_PACKET_COUNT],
 
     // metadata region for the sockbuf
     pub ioMetas: [IOMetas; IO_BUF_COUNT],
@@ -532,5 +539,4 @@ impl IdMgr {
         self.len += i;
     }
 }
-
 

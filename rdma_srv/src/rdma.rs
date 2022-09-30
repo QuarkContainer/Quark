@@ -5,6 +5,7 @@ use rdmaffi;
 use spin::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
+use std::mem::MaybeUninit;
 use std::ptr;
 
 use super::qlib::common::*;
@@ -406,6 +407,12 @@ impl RDMAContext {
             is_global: 1,
             port_num,
         };
+
+        // let mut ah_attr = unsafe { MaybeUninit::<rdmaffi::ibv_ah_attr>::zeroed().assume_init() };
+        // ah_attr.grh.dgid = rdmaffi::ibv_gid::from(gid);
+        // ah_attr.grh.hop_limit = 5;
+        // ah_attr.is_global = 1;
+        // ah_attr.port_num = port_num;
         let context = self.lock();
         let ah = unsafe { rdmaffi::ibv_create_ah(context.protectDomain.0, &mut ah_attr as *mut _) };
         if ah.is_null() {
@@ -704,6 +711,10 @@ impl RDMAContext {
         //         );
         //     }
         // }
+        println!(
+            "ProcessWC: wrid: {}, qp_num: {}, op_code: {}, status: {}",
+            wc.wr_id, wc.qp_num, wc.opcode, wc.status
+        );
         if wc.status != rdmaffi::ibv_wc_status::IBV_WC_SUCCESS {
             error!(
                 "ProcessWC::1, work reqeust failed with status: {}, id: {}",
@@ -751,6 +762,9 @@ impl RDMAContext {
                 }
             }
             RDMA_SRV.ProcessRDMARecvWriteImm(immData.ReadCount() as _, wc.qp_num, wc.byte_len as _);
+        } else if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RECV {
+            error!("ProcessWC::3");
+            RDMA_SRV.ProcessRDMARecv(wc.qp_num, wc.wr_id, wc.byte_len);
         } else {
             // debug!("ProcessWC::4, opcode: {}, wr_id: {}", wc.opcode, wc.wr_id);
         }
@@ -903,12 +917,8 @@ impl QueuePair {
         return Ok(());
     }
 
-    pub fn PostRecv(&self, wrId: u64, addr: u64, lkey: u32) -> Result<()> {
-        let mut sge = rdmaffi::ibv_sge {
-            addr: addr,
-            length: 0,
-            lkey: lkey,
-        };
+    pub fn PostRecv(&self, wrId: u64, addr: u64, lkey: u32, length: u32) -> Result<()> {
+        let mut sge = rdmaffi::ibv_sge { addr, length, lkey };
         let mut rw = rdmaffi::ibv_recv_wr {
             wr_id: wrId,
             next: ptr::null_mut(),
@@ -923,6 +933,80 @@ impl QueuePair {
 
         // println!("QP::PostRecv");
 
+        return Ok(());
+    }
+
+    pub fn PostSendUDQP(
+        &self,
+        ah: &AddressHandler,
+        remote_qpn: u32,
+        wrId: u64,
+        laddr: u64,
+        len: u32,
+        lkey: u32,
+    ) -> Result<()> {
+        error!(
+            "PostSendUDQP, remote_qpn: {}, wrId: {}, laddr: 0x{:x}, len: {}, lkey: {}",
+            remote_qpn, wrId, laddr, len, lkey
+        );
+        let opcode = rdmaffi::ibv_wr_opcode::IBV_WR_SEND;
+        let mut sge = rdmaffi::ibv_sge {
+            addr: laddr,
+            length: len,
+            lkey: lkey,
+        };
+
+        //TODO: delete!
+        let mut sw = rdmaffi::ibv_send_wr {
+            wr_id: wrId,
+            next: ptr::null_mut(),
+            sg_list: &mut sge,
+            num_sge: 1,
+            opcode: opcode,
+            send_flags: rdmaffi::ibv_send_flags::IBV_SEND_SIGNALED.0,
+            imm_data_invalidated_rkey_union: rdmaffi::imm_data_invalidated_rkey_union_t {
+                imm_data: 0,
+            },
+            qp_type: rdmaffi::qp_type_t {
+                xrc: rdmaffi::xrc_t { remote_srqn: 0 },
+            },
+            wr: rdmaffi::wr_t {
+                ud: rdmaffi::ud_t {
+                    ah: ah.Data(),
+                    remote_qpn,
+                    remote_qkey: 0x11111111,
+                },
+            },
+            bind_mw_tso_union: rdmaffi::bind_mw_tso_union_t {
+                tso: rdmaffi::tso_t {
+                    hdr: ptr::null_mut(),
+                    hdr_sz: 0,
+                    mss: 0,
+                },
+            },
+        };
+
+        // let mut sw = unsafe { MaybeUninit::<rdmaffi::ibv_send_wr>::zeroed().assume_init() };
+        // sw.wr_id = wrId;
+        // sw.sg_list = &mut sge;
+        // sw.num_sge = 1;
+        // sw.opcode = opcode;
+        // sw.send_flags = rdmaffi::ibv_send_flags::IBV_SEND_SIGNALED.0;
+        // sw.wr = rdmaffi::wr_t {
+        //     ud: rdmaffi::ud_t {
+        //         ah: ah.Data(),
+        //         remote_qpn,
+        //         remote_qkey: 0x11111111,
+        //     },
+        // };
+
+        let mut bad_wr: *mut rdmaffi::ibv_send_wr = ptr::null_mut();
+
+        let rc = unsafe { rdmaffi::ibv_post_send(self.Data(), &mut sw, &mut bad_wr) };
+        if rc != 0 {
+            error!("PostSendUDQP, rc: {}", rc);
+            return Err(Error::SysError(errno::errno().0));
+        }
         return Ok(());
     }
 
@@ -1035,7 +1119,7 @@ impl QueuePair {
             cur_qp_state: rdmaffi::ibv_qp_state::IBV_QPS_INIT,
             path_mtu: rdmaffi::ibv_mtu::IBV_MTU_1024,
             path_mig_state: rdmaffi::ibv_mig_state::IBV_MIG_ARMED,
-            qkey: 0,
+            qkey: 0x11111111,
             rq_psn: 0,
             sq_psn: 0,
             dest_qp_num: 0,

@@ -167,7 +167,7 @@ impl Drop for RDMASrv {
 impl RDMASrv {
     pub fn New() -> Self {
         println!("RDMASrv::New");
-        RDMA.Init("", 1);
+        // RDMA.Init("", 1);
         let controlSize = mem::size_of::<RDMAControlChannelRegion>();
         let contrlAddr = unsafe {
             libc::mmap(
@@ -185,7 +185,7 @@ impl RDMASrv {
         }
 
         let udpPacketExtendedSize = mem::size_of::<UDPPacket>() + 40;
-        let udpBufferSize = udpPacketExtendedSize * 2000;
+        let udpBufferSize = udpPacketExtendedSize * RECV_UDP_COUNT as usize;
         let udpBufferAddr = unsafe {
             libc::mmap(
                 ptr::null_mut(),
@@ -251,6 +251,7 @@ impl RDMASrv {
             .unwrap();
         let udpQP = RDMA.CreateUDQueuePair().expect("Create UD QP failed...");
         udpQP.SetupUDQP(&RDMA).expect("SetupUDQP fail...");
+        println!("udpQP, qp_num: {}", udpQP.qpNum());
 
         for i in 0..RECV_UDP_COUNT {
             let addr = udpBufferAddr as u64 + (i * udpPacketExtendedSize as u32) as u64;
@@ -258,7 +259,8 @@ impl RDMASrv {
                 .PostRecv(
                     i as u64,
                     addr,
-                    udpMR.LKey()
+                    udpMR.LKey(),
+                    udpPacketExtendedSize as u32
                 )
                 .expect("SetupUDQP PostRecv fail");
         }
@@ -390,6 +392,21 @@ impl RDMASrv {
                 Some(channel) => {
                     channel.ProcessRDMARecvWriteImm(qpNum, recvCount as u64);
                 }
+            }
+        }
+    }
+
+    pub fn ProcessRDMARecv(&self, qpNum: u32, wrId: u64, len: u32) {
+        error!("ProcessRDMARecv, 1, qpNum: {}, wrId: {}, len: {}", qpNum, wrId, len);
+        let _payloadLen = len - 40;
+        let mut i = 0;
+        let laddr = self.udpMemRegion.addr + wrId * (mem::size_of::<UDPPacket>() + 40 ) as u64 + 40;
+        loop {
+            let addr = laddr + i * 8;
+            println!("addr{}: 0x{:x}-> 0x{:x}", i, addr, unsafe { &mut *( addr as *mut u64) });
+            i += 1;
+            if i == 10 {
+                break;
             }
         }
     }

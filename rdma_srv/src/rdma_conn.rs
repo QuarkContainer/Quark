@@ -180,7 +180,7 @@ impl RDMAConn {
             .expect("SetupRCQP fail...");
         for _i in 0..RECV_REQUEST_COUNT {
             self.qps[0]
-                .PostRecv(0, self.localRDMAInfo.raddr, self.localRDMAInfo.controlRKey)
+                .PostRecv(0, self.localRDMAInfo.raddr, self.localRDMAInfo.controlRKey, 0)
                 .expect("SetupRDMA PostRecv fail");
         }
         *self.addressHandler.lock() = RDMA
@@ -273,8 +273,44 @@ impl RDMAConn {
 
     pub fn SetReady(&self) {
         self.SetSocketState(SocketState::Ready);
-        // println!("Ready!!!");
+        println!("Ready!!!");
         //self.ctrlChan.lock().SendData();
+        let laddr = RDMA_SRV.udpMemRegion.addr + 10 * (mem::size_of::<UDPPacket>() + 40) as u64 + 40;
+        let mut i = 0;
+        println!("before updating");
+        loop {
+            let addr = laddr + i * 8;
+            println!("addr: 0x{:x}-> 0x{:x}", addr, unsafe { &mut *( addr as *mut u64) });
+            i += 1;
+            if i > 10 {
+                break;
+            }
+        }
+
+        i = 0;
+        loop {
+            let addr = laddr + i * 8;
+            unsafe { *(addr as *mut u64) = 0xAABBCCDD; }
+            i += 1;
+            if i > 10 {
+                break;
+            }
+        }
+
+        println!("after updating");
+        i = 0;
+        loop {
+            let addr = laddr + i * 8;
+            println!("addr{}: 0x{:x}-> 0x{:x}", i, addr, unsafe { &mut *( addr as *mut u64) });
+            i += 1;
+            if i == 10 {
+                break;
+            }
+        }
+        let _len = mem::size_of::<UDPPacket>();
+        self.RDMAUDQPSend(laddr, 80 as u32, 123, RDMA_SRV.udpMemoryRegion.LKey()).expect("RDMAUDQPSend failed...");
+        // self.RDMAUDQPSend(laddr, 80 as u32, 123, RDMA_SRV.udpMemoryRegion.LKey()).expect("RDMAUDQPSend failed...");
+        // self.RDMAUDQPSend(laddr, 80 as u32, 123, RDMA_SRV.udpMemoryRegion.LKey()).expect("RDMAUDQPSend failed...");
     }
 
     pub fn SendLocalRDMAInfo(&self) -> Result<()> {
@@ -416,6 +452,19 @@ impl RDMAConn {
         return Ok(());
     }
 
+    // Send via unrelabile datagram queue pair
+    pub fn RDMAUDQPSend(&self, laddr: u64, len: u32, wrId: u64, lkey: u32) -> Result<()> {
+        RDMA_SRV.udpQP.PostSendUDQP(
+            &self.addressHandler.lock(),
+            self.remoteRDMAInfo.lock().ud_qp_num,
+            wrId,
+            laddr,
+            len,
+            lkey,
+        )?;
+        return Ok(());
+    }
+
     pub fn RDMAWrite(
         &self,
         rdmaChannel: &RDMAChannelIntern,
@@ -531,7 +580,7 @@ impl RDMAConn {
 
     pub fn PostRecv(&self, _qpNum: u32, wrId: u64, addr: u64, lkey: u32) -> Result<()> {
         //TODO: get right qp when multiple QP are used between two physical machines.
-        self.qps[0].PostRecv(wrId, addr, lkey)?;
+        self.qps[0].PostRecv(wrId, addr, lkey, 0)?;
         let current = self
             .localInsertedRecvRequestCount
             .fetch_add(1, Ordering::SeqCst)
