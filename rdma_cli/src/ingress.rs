@@ -70,6 +70,7 @@ pub mod qlib;
 pub mod common;
 pub mod rdma_def;
 pub mod unix_socket_def;
+pub mod constants;
 
 use self::qlib::ShareSpaceRef;
 use alloc::slice;
@@ -93,6 +94,7 @@ use qlib::unix_socket::UnixSocket;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::{env, mem, ptr, thread, time};
+use crate::constants::*;
 
 lazy_static! {
     pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
@@ -106,7 +108,7 @@ fn main() -> io::Result<()> {
     if args.len() > 1 {
         unix_sock_path = args.get(1).unwrap(); //"/tmp/rdma_srv1";
     }
-    gatewayCli = GatewayClient::initialize(unix_sock_path); //TODO: add 2 address from quark.
+    gatewayCli = GatewayClient::initialize(unix_sock_path, RDMA_SVC_CLIENT_ROLE_INGRESS); //TODO: add 2 address from quark.
 
     let cliEventFd = gatewayCli.rdmaSvcCli.cliEventFd;
     unblock_fd(cliEventFd);

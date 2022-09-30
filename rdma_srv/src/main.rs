@@ -103,6 +103,7 @@ use std::path::Path;
 pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
 use crate::qlib::rdma_share::*;
 use crate::rdma::RDMA;
+use crate::constants::*;
 use common::*;
 use endpoints_informer::EndpointsInformer;
 use configmap_informer::ConfigMapInformer;
@@ -538,7 +539,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     epoll_add(epoll_fd, conn_sock_fd, read_event(conn_sock_fd as u64))?;
                     println!("add unix sock fd: {}", conn_sock_fd);
                 }
-                // TODO Hong: in the following part add logic to differ the ingress/egress traffic
                 Srv_FdType::UnixDomainSocketConnect(conn_sock) => {
                     println!("UnixDomainSocketConnect");
                     loop {
@@ -570,13 +570,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     }
                                     break;
                                 }
-                                if body == 1 {
+                                if body > 0 {
+                                    let clientRole = body;
                                     // init
                                     println!("init!!");
-                                    InitContainer(&conn_sock);
-                                } else if body == 2 {
-                                    // terminate
-                                    println!("terminate!!");
+                                    InitContainer(&conn_sock, clientRole);
                                 }
                             }
                             Err(e) => {
@@ -684,7 +682,7 @@ fn SendConsumedData(channels: &mut HashMap<u32, HashSet<u32>>) {
     }
 }
 
-fn InitContainer(conn_sock: &UnixSocket) {
+fn InitContainer(conn_sock: &UnixSocket, clientRole: i32) {
     let cliEventFd = unsafe { libc::eventfd(0, 0) };
     unblock_fd(cliEventFd);
 
@@ -703,6 +701,10 @@ fn InitContainer(conn_sock: &UnixSocket) {
         .sockToAgentIds
         .lock()
         .insert(conn_sock.as_raw_fd(), rdmaAgentId);
+    if clientRole == RDMA_SVC_CLIENT_ROLE_EGRESS {
+        println!("rdmaAgentId for Egress is {}", rdmaAgentId);
+        *RDMA_SRV.egressAgentId.lock() = rdmaAgentId;
+    }
     let body = [123, rdmaAgentId];
     let ptr = &body as *const _ as *const u8;
     let buf = unsafe { slice::from_raw_parts(ptr, 8) };

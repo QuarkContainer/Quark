@@ -792,8 +792,9 @@ impl RDMAControlChannel {
         let mut sockfd = 0;
 
         if RDMA_CTLINFO.IsEgress(connectRequest.dstIpAddr) {
+            let egressAgentId = RDMA_SRV.egressAgentId.lock();
             // TODO Hong: Handle connect request for egress
-            println!("HandleConnectRequest for egress {}", connectRequest.dstIpAddr);
+            println!("HandleConnectRequest for egress {} egressAgentId {}", connectRequest.dstIpAddr, egressAgentId);
         } else {            
             match RDMA_CTLINFO
                 .ipToPodIdMappings
