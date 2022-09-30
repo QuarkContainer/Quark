@@ -328,7 +328,9 @@ pub struct IOMetas {
     pub consumeReadData: AtomicU64,
 }
 
-pub const UDP_PACKET_COUNT: usize = 1024;
+pub const UDP_SENT_PACKET_COUNT: usize = 1024;
+pub const UDP_RECV_PACKET_COUNT: usize = 1024;
+
 
 #[repr(C)]
 pub struct ClientShareRegion {
@@ -340,9 +342,9 @@ pub struct ClientShareRegion {
     // the submit queue
     pub sq: RingQueue<RDMAReq>,
 
-    pub udpBufSent: [UDPPacket; UDP_PACKET_COUNT],
+    pub udpBufSent: [UDPPacket; UDP_SENT_PACKET_COUNT],
 
-    pub udpBufRecv: [UDPPacket; UDP_PACKET_COUNT],
+    pub udpBufRecv: [UDPPacket; UDP_RECV_PACKET_COUNT],
 
     // metadata region for the sockbuf
     pub ioMetas: [IOMetas; IO_BUF_COUNT],
@@ -539,4 +541,58 @@ impl IdMgr {
         self.len += i;
     }
 }
+
+pub struct UDPBufferAllocator {
+    pub freeList: Vec<u32>,
+    pub startAddr: u64,
+    pub totalCnt: u32,
+    pub curIndex: u32
+}
+
+impl Default for UDPBufferAllocator {
+    fn default() -> Self {
+        UDPBufferAllocator {
+            freeList: Vec::new(),
+            startAddr: 0,
+            totalCnt: 0,
+            curIndex: 0,
+        }
+    }
+}
+
+impl UDPBufferAllocator {
+    pub fn New(startAddr: u64, totalCnt: u32) -> Self {
+        return UDPBufferAllocator {
+            freeList: Vec::new(), //TODO: thread safe??
+            startAddr,
+            totalCnt,
+            curIndex: 0
+        };
+    }
+
+    pub fn GetFreeBuffer(&mut self) -> u64 {
+        let idxOpt = self.freeList.pop();
+        let mut retAddr = 0;
+        match idxOpt {
+            Some(idx) => {
+                retAddr = self.startAddr + (idx * mem::size_of::<UDPPacket>() as u32) as u64
+            }
+            None => {
+                
+            }
+        }
+        if retAddr == 0 {
+            if self.curIndex != self.totalCnt {
+                retAddr = self.startAddr + (self.curIndex * mem::size_of::<UDPPacket>() as u32) as u64;
+                self.curIndex += 1;
+                
+            }
+        }
+        retAddr
+    }
+    pub fn ReturnBuffer(&mut self, idx: u32) {
+        self.freeList.push(idx);
+    }
+}
+
 

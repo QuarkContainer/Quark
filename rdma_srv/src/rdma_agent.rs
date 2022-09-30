@@ -67,6 +67,8 @@ pub struct RDMAAgentIntern {
     pub memoryRegions: Mutex<Vec<MemoryRegion>>,
     //sockfd -> sockInfo
     // pub sockInfos: Mutex<HashMap<u32, SockInfo>>,
+    pub udpMR: MemoryRegion,
+    pub udpRecvBufferAllocator: Mutex<UDPBufferAllocator>,
 }
 
 impl Drop for RDMAAgentIntern {
@@ -121,9 +123,17 @@ impl RDMAAgent {
         };
 
         //start from 2M registration.
-        let mr = RDMA
+        let tcpMR = RDMA
             .CreateMemoryRegion(&shareRegion.iobufs as *const _ as u64, 2 * 64 * 1024 * 1024)
             .unwrap();
+
+        let udpMR = RDMA
+            .CreateMemoryRegion(
+                &shareRegion.udpBufSent as *const _ as u64,
+                mem::size_of::<UDPPacket>() * UDP_RECV_PACKET_COUNT,
+            )
+            .unwrap();
+
         // debug!("RDMAAgent::New shareRegion: size: {}, addr: {:x}, clientBit: {:x}, cq: {:x}, sq: {:x} ioMeta: {:x}, buff: {:x}",
         //  size,
         //  shareRegion as *const _ as u64,
@@ -132,6 +142,10 @@ impl RDMAAgent {
         //  &(shareRegion.sq) as *const _ as u64,
         //  &(shareRegion.ioMetas) as *const _ as u64,
         //  &(shareRegion.iobufs) as *const _ as u64);
+        let udpRecvBufferAllocator = UDPBufferAllocator::New(
+            &shareRegion.udpBufRecv as *const _ as u64,
+            UDP_RECV_PACKET_COUNT as u32,
+        );
 
         shareRegion.sq.Init();
         shareRegion.cq.Init();
@@ -148,8 +162,10 @@ impl RDMAAgent {
             },
             shareRegion: Mutex::new(shareRegion),
             ioBufIdMgr: Mutex::new(IdMgr::Init(0, 1024)),
-            keys: vec![[mr.LKey(), mr.RKey()]],
-            memoryRegions: Mutex::new(vec![mr]),
+            keys: vec![[tcpMR.LKey(), tcpMR.RKey()]],
+            memoryRegions: Mutex::new(vec![tcpMR]),
+            udpMR,
+            udpRecvBufferAllocator: Mutex::new(udpRecvBufferAllocator),
         }))
     }
 
@@ -168,6 +184,8 @@ impl RDMAAgent {
             ioBufIdMgr: Mutex::new(IdMgr::Init(0, 0)),
             keys: vec![[0, 0]],
             memoryRegions: Mutex::new(vec![]),
+            udpMR: MemoryRegion::default(),
+            udpRecvBufferAllocator: Mutex::new(UDPBufferAllocator::default()),
         }))
     }
 
@@ -407,7 +425,7 @@ impl RDMAAgent {
                     .get(&podId)
                     .unwrap()
                     .clone();
-                
+
                 let mut dstIpAddr = msg.dstIpAddr;
                 let mut dstPort = msg.dstPort;
                 if RDMA_CTLINFO.IsEgress(dstIpAddr) {
@@ -415,12 +433,15 @@ impl RDMAAgent {
                 }
                 // error!("RDMAConnectUsingPodId: Connect to ip {} port {}", dstIpAddr, dstPort);
                 match RDMA_CTLINFO.IsService(dstIpAddr, &dstPort) {
-                    None => {},
+                    None => {}
                     Some(ipWithPort) => {
-                        println!("The traffic is connecting to a service. Change the connection to {:?}", ipWithPort);
+                        println!(
+                            "The traffic is connecting to a service. Change the connection to {:?}",
+                            ipWithPort
+                        );
                         dstIpAddr = ipWithPort.ip;
                         dstPort = ipWithPort.port.port;
-                    },
+                    }
                 }
                 match RDMA_CTLINFO.get_node_ip_by_pod_ip(&dstIpAddr) {
                     Some(nodeIpAddr) => {
@@ -487,15 +508,17 @@ impl RDMAAgent {
                     .unwrap()
                     .clone();
                 rdmaChannel.Close();
-            },
-            RDMAReqMsg::RDMAPendingShutdown(msg) => match RDMA_SRV.channels.lock().get(&msg.channelId) {
-                Some(rdmaChannel) => {
-                    rdmaChannel.PendingShutdown();
+            }
+            RDMAReqMsg::RDMAPendingShutdown(msg) => {
+                match RDMA_SRV.channels.lock().get(&msg.channelId) {
+                    Some(rdmaChannel) => {
+                        rdmaChannel.PendingShutdown();
+                    }
+                    None => {
+                        panic!("RDMAChannel with id {} does not exist!", msg.channelId);
+                    }
                 }
-                None => {
-                    panic!("RDMAChannel with id {} does not exist!", msg.channelId);
-                }
-            },
+            }
         }
     }
 }

@@ -57,6 +57,10 @@ impl RDMASvcClient {
         assert!(cliShareAddr as u64 == localShareAddr || localShareAddr == 0);
 
         let cliShareRegion = unsafe { &mut (*(cliShareAddr as *mut ClientShareRegion)) };
+        let udpBufferAllocator = UDPBufferAllocator::New(
+            &cliShareRegion.udpBufSent as *const _ as u64,
+            UDP_RECV_PACKET_COUNT as u32,
+        );
 
         let cliShareRegion = Mutex::new(cliShareRegion);
 
@@ -84,6 +88,7 @@ impl RDMASvcClient {
         let srvShareRegion = unsafe { &mut (*(srvShareAddr as *mut ShareRegion)) };
         let srvShareRegion = Mutex::new(srvShareRegion);
         let podId: [u8; 64] = [0; 64];
+
         RDMASvcClient {
             intern: Arc::new(RDMASvcCliIntern {
                 agentId,
@@ -106,6 +111,7 @@ impl RDMASvcClient {
                 rdmaIdToSocketMappings: Mutex::new(BTreeMap::new()),
                 nextRDMAId: AtomicU32::new(0),
                 podId,
+                udpSentBufferAllocator: Mutex::new(udpBufferAllocator),
             }),
         }
     }
@@ -131,7 +137,6 @@ impl RDMASvcClient {
     // }
 
     pub fn initialize(cliSock: i32, localShareAddr: u64, globalShareAddr: u64) -> Self {
-
         // let cli_sock = UnixSocket::NewClient(path).unwrap();
         let cli_sock = UnixSocket { fd: cliSock };
 

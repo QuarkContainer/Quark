@@ -140,6 +140,7 @@ pub struct RDMASrv {
     pub controlMemoryRegion: MemoryRegion,
     pub udpMemoryRegion: MemoryRegion,
     pub udpQP: QueuePair,
+    pub udpBufferAllocator: Mutex<UDPBufferAllocator>,
 }
 
 impl Drop for RDMASrv {
@@ -256,14 +257,14 @@ impl RDMASrv {
         for i in 0..RECV_UDP_COUNT {
             let addr = udpBufferAddr as u64 + (i * udpPacketExtendedSize as u32) as u64;
             udpQP
-                .PostRecv(
-                    i as u64,
-                    addr,
-                    udpMR.LKey(),
-                    udpPacketExtendedSize as u32
-                )
+                .PostRecv(i as u64, addr, udpMR.LKey(), udpPacketExtendedSize as u32)
                 .expect("SetupUDQP PostRecv fail");
         }
+
+        let udpBufferAllocator = Mutex::new(UDPBufferAllocator::New(
+            udpBufferAddr as u64,
+            UDP_SENT_PACKET_COUNT as u32,
+        ));
 
         return Self {
             epollFd: 0,
@@ -307,6 +308,7 @@ impl RDMASrv {
             controlMemoryRegion: controlMR,
             udpMemoryRegion: udpMR,
             udpQP,
+            udpBufferAllocator,
         };
     }
 
@@ -397,13 +399,18 @@ impl RDMASrv {
     }
 
     pub fn ProcessRDMARecv(&self, qpNum: u32, wrId: u64, len: u32) {
-        error!("ProcessRDMARecv, 1, qpNum: {}, wrId: {}, len: {}", qpNum, wrId, len);
+        error!(
+            "ProcessRDMARecv, 1, qpNum: {}, wrId: {}, len: {}",
+            qpNum, wrId, len
+        );
         let _payloadLen = len - 40;
         let mut i = 0;
-        let laddr = self.udpMemRegion.addr + wrId * (mem::size_of::<UDPPacket>() + 40 ) as u64 + 40;
+        let laddr = self.udpMemRegion.addr + wrId * (mem::size_of::<UDPPacket>() + 40) as u64 + 40;
         loop {
             let addr = laddr + i * 8;
-            println!("addr{}: 0x{:x}-> 0x{:x}", i, addr, unsafe { &mut *( addr as *mut u64) });
+            println!("addr{}: 0x{:x}-> 0x{:x}", i, addr, unsafe {
+                &mut *(addr as *mut u64)
+            });
             i += 1;
             if i == 10 {
                 break;
