@@ -212,6 +212,10 @@ impl Task {
         self.guard.Check();
     }
 
+    pub fn Addr(&self) -> u64 {
+        return self as * const _ as u64;
+    }
+
     pub fn IPCNamespace(&self) -> IPCNamespace {
         return self.ipcns.clone();
     }

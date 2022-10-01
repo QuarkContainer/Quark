@@ -1127,7 +1127,7 @@ impl AsyncOpsTrait for AIORead {
         if result > 0 {
             let task = Task::GetTask(self.taskId);
             let len = task
-                .CopyDataOutToIovs(&self.buf.buf[0..result as usize], &self.iovs, false)
+                .CopyDataOutToIovsManual(&self.buf.buf[0..result as usize], &self.iovs, false)
                 .expect("AIORead Process fail ...");
             assert!(len == result as usize);
         }

@@ -224,8 +224,8 @@ pub fn switch(from: TaskId, to: TaskId) {
     fromCtx.mm.VcpuLeave();
     toCtx.mm.VcpuEnter();
 
-    fromCtx.Check();
-    toCtx.Check();
+    //fromCtx.Check();
+    //toCtx.Check();
     //debug!("switch {:x}->{:x}", from.data, to.data);
 
     unsafe {
@@ -451,6 +451,8 @@ impl UringAsyncMgr {
             self.freeSlot(id as _);
         }
     }
+}
 
-
+pub fn IsKernel() -> bool {
+    return true;
 }

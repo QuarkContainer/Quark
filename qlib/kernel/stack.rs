@@ -49,7 +49,7 @@ impl Stack {
     pub fn PushType<T: Copy>(&mut self, task: &Task, data: &T) -> Result<u64> {
         let size = mem::size_of::<T>();
         self.sp -= size as u64;
-        task.CopyOutObj(data, self.sp).expect(&format!(
+        task.CopyOutObjManual(data, self.sp).expect(&format!(
             "data {:x}, sp {:x}",
             data as *const _ as u64, self.sp
         ));
@@ -94,25 +94,25 @@ impl Stack {
 
     pub fn PushU64(&mut self, task: &Task, val: u64) -> Result<u64> {
         self.sp = self.sp - 8;
-        task.CopyOutObj(&val, self.sp)?;
+        task.CopyOutObjManual(&val, self.sp)?;
         return Ok(self.sp);
     }
 
     pub fn PushU32(&mut self, task: &Task, val: u32) -> Result<u64> {
         self.sp = self.sp - 4;
-        task.CopyOutObj(&val, self.sp)?;
+        task.CopyOutObjManual(&val, self.sp)?;
         return Ok(self.sp);
     }
 
     pub fn PushU16(&mut self, task: &Task, val: u16) -> Result<u64> {
         self.sp = self.sp - 2;
-        task.CopyOutObj(&val, self.sp)?;
+        task.CopyOutObjManual(&val, self.sp)?;
         return Ok(self.sp);
     }
 
     pub fn PushU8(&mut self, task: &Task, val: u8) -> Result<u64> {
         self.sp = self.sp - 1;
-        task.CopyOutObj(&val, self.sp)?;
+        task.CopyOutObjManual(&val, self.sp)?;
         return Ok(self.sp);
     }
 
