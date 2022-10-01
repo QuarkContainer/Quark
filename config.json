@@ -23,5 +23,5 @@
   "ReaddirCache"  : true,
   "HiberODirect"  : false,
   "DisableCgroup" : true,
-  "CopyDataWithPf": false
+  "CopyDataWithPf": true
 }
