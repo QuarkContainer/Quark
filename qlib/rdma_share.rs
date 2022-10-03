@@ -20,7 +20,7 @@ use super::common::*;
 use super::linux_def::*;
 use alloc::collections::btree_set::BTreeSet;
 use alloc::vec::Vec;
-use std::mem;
+use core::mem;
 
 pub const COUNT: usize = 1024;
 
