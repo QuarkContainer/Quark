@@ -20,7 +20,7 @@ The performance slices is [performance.pdf](doc/performance.pdf). The detail tes
 
 Quark Container takes classic Linux Virtual Machine architecture as below. It includes an HyperVisor named QVisor and a guest kernel named QKernel. Unlike the common Linux Virtual Machine design, in which standard OS image such as Linux/Windows can run on Qumu. QVisor and QKernel are tightly coupled. QVisor only supports QKernel.
 
-![Architecture](doc/architecture.png)
+![Architecture](doc/design.png)
 
 Quark Container's high level design is as below. It handles Container Application request with following steps.
  1. Container Application System Call: In Quark Container, Container Application run as a Guest Application. And it sends request to Quark through Guest System Call, e.g. X86-64 SysCall/SysRet.  
