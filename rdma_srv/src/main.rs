@@ -103,7 +103,6 @@ use std::path::Path;
 pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
 use crate::qlib::rdma_share::*;
 use crate::rdma::RDMA;
-use crate::constants::*;
 use common::*;
 use endpoints_informer::EndpointsInformer;
 use configmap_informer::ConfigMapInformer;
