@@ -90,7 +90,7 @@ int main(int argc, char *argv[])
 	int n, len;
 
 	sendto(sockfd, (const char *)hello, strlen(hello),
-		   MSG_CONFIRM, (const struct sockaddr *)&servaddr,
+		   0, (const struct sockaddr *)&servaddr,
 		   sizeof(servaddr));
 	printf("Hello Quark message sent...\n");
 

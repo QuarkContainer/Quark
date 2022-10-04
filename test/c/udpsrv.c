@@ -64,7 +64,7 @@ int main(int argc, char *argv[])
 
     int sockfd;
     char buffer[MAXLINE];
-    char *hello = "Hello Quarkfrom server";
+    char *hello = "Hello Quark from server";
     struct sockaddr_in servaddr, cliaddr;
 
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
@@ -97,7 +97,7 @@ int main(int argc, char *argv[])
     buffer[n] = '\0';
     printf("Client : %s\n", buffer);
     sendto(sockfd, (const char *)hello, strlen(hello),
-           MSG_CONFIRM, (const struct sockaddr *)&cliaddr,
+           0, (const struct sockaddr *)&cliaddr,
            len);
     printf("Hello message sent.\n");
 
