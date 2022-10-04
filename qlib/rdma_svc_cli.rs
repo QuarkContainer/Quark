@@ -56,7 +56,7 @@ pub struct RDMASvcCliIntern {
 
     pub podId: [u8; 64],
 
-    pub clientRole: i32,
+    pub clientRole: ClientRole,
 }
 
 impl Deref for RDMASvcClient {
@@ -89,7 +89,7 @@ impl Default for RDMASvcClient {
                 rdmaIdToSocketMappings: Mutex::new(BTreeMap::new()),
                 nextRDMAId: AtomicU32::new(0), //AtomicU64::new((i32::MAX + 1) as u64), //2147483647 + 1 = 2147483648
                 podId: [0; 64],
-                clientRole: 1,
+                clientRole: ClientRole::NORMAL,
             }),
         }
     }

@@ -16,7 +16,3 @@ pub const EVENT_TYPE_SET: &str = "set";
 pub const EVENT_TYPE_DELETE: &str = "delete";
 
 pub const GRPC_SERVER_ADDRESS: &str = "http://[::1]:51051";
-
-pub const RDMA_SVC_CLIENT_ROLE_NORMAL:i32 = 1;
-pub const RDMA_SVC_CLIENT_ROLE_EGRESS:i32 = 2;
-pub const RDMA_SVC_CLIENT_ROLE_INGRESS:i32 = 3;

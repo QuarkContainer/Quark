@@ -28,7 +28,7 @@ impl RDMASvcClient {
         localShareAddr: u64,
         globalShareAddr: u64,
         podId: [u8; 64],
-        clientRole: i32,
+        clientRole: ClientRole,
     ) -> Self {
         let cliShareSize = mem::size_of::<ClientShareRegion>();
         // debug!("RDMASvcClient::New, cli size: {:x}", cliShareSize);
@@ -134,7 +134,7 @@ impl RDMASvcClient {
     //     rdmaSvcCli
     // }
 
-    pub fn initialize(cliSock: i32, localShareAddr: u64, globalShareAddr: u64, podId:[u8; 64], clientRole: i32) -> Self {
+    pub fn initialize(cliSock: i32, localShareAddr: u64, globalShareAddr: u64, podId:[u8; 64], clientRole: ClientRole) -> Self {
         // let cli_sock = UnixSocket::NewClient(path).unwrap();
         let cli_sock = UnixSocket { fd: cliSock };
 

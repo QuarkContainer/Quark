@@ -110,7 +110,7 @@ impl ShareSpace {
                 MemoryDef::RDMA_LOCAL_SHARE_OFFSET,
                 MemoryDef::RDMA_GLOBAL_SHARE_OFFSET,
                 podId,
-                1,
+                rdma_share::ClientRole::NORMAL,
             ));
         }
 

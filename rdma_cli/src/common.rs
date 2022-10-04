@@ -308,7 +308,7 @@ impl GatewayClient {
         }))
     }
 
-    pub fn initialize(path: &str, clientRole: i32) -> Self {        
+    pub fn initialize(path: &str, clientRole: ClientRole) -> Self {        
         let cli_sock = UnixSocket::NewClient(path).unwrap();
         let rdmaSvcCli =
             RDMASvcClient::initialize(cli_sock, 0, 0, clientRole);

@@ -570,8 +570,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     }
                                     break;
                                 }
-                                if body > 0 {
-                                    let clientRole = body;
+                                if body > 0 {                                    
+                                    let clientRole = ClientRole::Parse(body);
                                     // init
                                     println!("init!!");
                                     InitContainer(&conn_sock, clientRole);
@@ -682,7 +682,7 @@ fn SendConsumedData(channels: &mut HashMap<u32, HashSet<u32>>) {
     }
 }
 
-fn InitContainer(conn_sock: &UnixSocket, clientRole: i32) {
+fn InitContainer(conn_sock: &UnixSocket, clientRole: ClientRole) {
     let cliEventFd = unsafe { libc::eventfd(0, 0) };
     unblock_fd(cliEventFd);
 
@@ -701,7 +701,7 @@ fn InitContainer(conn_sock: &UnixSocket, clientRole: i32) {
         .sockToAgentIds
         .lock()
         .insert(conn_sock.as_raw_fd(), rdmaAgentId);
-    if clientRole == RDMA_SVC_CLIENT_ROLE_EGRESS {
+    if clientRole == ClientRole::EGRESS {
         println!("rdmaAgentId for Egress is {}", rdmaAgentId);
         *RDMA_SRV.egressAgentId.lock() = rdmaAgentId;
     }
