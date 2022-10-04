@@ -104,11 +104,11 @@ fn main() -> io::Result<()> {
     let mut fds: HashMap<i32, FdType> = HashMap::new();
     let args: Vec<_> = env::args().collect();
     let gatewayCli: GatewayClient;
-    let mut unix_sock_path = "/tmp/rdma_srv_socket";
+    let mut unix_sock_path = "/var/quarkrdma/rdma_srv_socket";
     if args.len() > 1 {
         unix_sock_path = args.get(1).unwrap(); //"/tmp/rdma_srv1";
     }
-    gatewayCli = GatewayClient::initialize(unix_sock_path); //TODO: add 2 address from quark.
+    gatewayCli = GatewayClient::initialize(unix_sock_path, ClientRole::EGRESS); //TODO: add 2 address from quark.
 
     let cliEventFd = gatewayCli.rdmaSvcCli.cliEventFd;
     unblock_fd(cliEventFd);
