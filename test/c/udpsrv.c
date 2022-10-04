@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <getopt.h>
+#include <errno.h>
 
 #define PORT 8888
 #define MAXLINE 1024
@@ -55,7 +56,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    printf("optind: %d, argc-1: %d\n", optind, argc -1);
+    printf("optind: %d, argc-1: %d\n", optind, argc - 1);
     if (optind < argc)
     {
         usage(argv[0]);
