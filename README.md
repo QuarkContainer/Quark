@@ -18,7 +18,7 @@ The performance slices is [performance.pdf](doc/performance.pdf). The detail tes
 
 ## Architecture
 
-Quark Container takes classic Linux Virtual Machine architecture as below. It includes an HyperVisor named QVisor and a guest kernel named QKernel. Unlike the common Linux Virtual Machine design, in which standard OS image such as Linux/Windows can run on Qumu. QVisor and QKernel are tightly coupled. QVisor only supports QKernel.
+Quark Container takes classic Linux Virtual Machine architecture as below. It includes an HyperVisor named QVisor and a guest kernel named QKernel. Unlike the common Linux Virtual Machine design, in which standard OS image such as Linux/Windows can run on Qemu. QVisor and QKernel are tightly coupled. QVisor only supports QKernel.
 
 ![Architecture](doc/design.png)
 
