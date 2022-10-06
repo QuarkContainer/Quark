@@ -717,13 +717,10 @@ impl AsyncOpsTrait for AsyncAccept {
 
         NewSocket(result);
         let sockBuf = SocketBuff(Arc::new(SocketBuffIntern::default()));
-        let (trigger, hasSpace) = self
+        let hasSpace = self
             .acceptQueue
-            .lock()
-            .EnqSocket(result, self.addr, self.len, sockBuf);
-        if trigger {
-            self.queue.Notify(EventMaskFromLinux(READABLE_EVENT as u32));
-        }
+            .EnqSocket(result, self.addr, self.len, sockBuf.into(), Queue::default());
+
         self.len = 16;
 
         return hasSpace;
@@ -1130,7 +1127,7 @@ impl AsyncOpsTrait for AIORead {
         if result > 0 {
             let task = Task::GetTask(self.taskId);
             let len = task
-                .CopyDataOutToIovs(&self.buf.buf[0..result as usize], &self.iovs, false)
+                .CopyDataOutToIovsManual(&self.buf.buf[0..result as usize], &self.iovs, false)
                 .expect("AIORead Process fail ...");
             assert!(len == result as usize);
         }

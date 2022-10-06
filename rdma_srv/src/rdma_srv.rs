@@ -141,6 +141,7 @@ pub struct RDMASrv {
     pub udpMemoryRegion: MemoryRegion,
     pub udpQP: QueuePair,
     pub udpBufferAllocator: Mutex<UDPBufferAllocator>,
+    pub egressAgentId: Mutex<u32>,
 }
 
 impl Drop for RDMASrv {
@@ -309,6 +310,7 @@ impl RDMASrv {
             udpMemoryRegion: udpMR,
             udpQP,
             udpBufferAllocator,
+            egressAgentId: Mutex::new(0),
         };
     }
 

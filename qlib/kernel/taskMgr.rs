@@ -339,6 +339,9 @@ impl Scheduler {
 }
 
 pub fn Yield() {
+    if SHARESPACE.scheduler.GlobalReadyTaskCnt() == 0 {
+        return
+    }
     SHARESPACE.scheduler.Schedule(Task::TaskId(), false);
     Wait();
 }

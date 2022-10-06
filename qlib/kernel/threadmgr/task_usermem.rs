@@ -27,13 +27,31 @@ use super::super::super::mem::block::*;
 use super::super::memmgr::mm::*;
 use super::super::task::*;
 use super::super::util::cstring::*;
+use crate::qlib::kernel::SHARESPACE;
+use crate::kernel_def::IsKernel;
 
 impl MemoryManager {
     // copy raw data from user to kernel
     pub fn CopyDataIn(&self, task: &Task, vaddr: u64, to: u64, len: usize, allowPartial: bool) -> Result<()> {
+        if SHARESPACE.config.read().CopyDataWithPf && !allowPartial {
+            return self.CopyDataWithPf(task, vaddr, to, len, allowPartial);
+        }
+
         let rl = self.MappingReadLock();
 
         return self.CopyDataInLocked(task, &rl, vaddr, to, len, allowPartial);
+    }
+
+    pub fn CopyDataWithPf(&self, _task: &Task, from: u64, to: u64, len: usize, allowPartial: bool) -> Result<()> {
+        assert!(allowPartial==false);
+        assert!(IsKernel());
+        Self::Memcpy(
+            to, 
+            from, 
+            len
+        );
+
+        return Ok(())
     }
 
     pub fn CopyDataInLocked(&self, task: &Task, rl: &QUpgradableLockGuard, vaddr: u64, to: u64, len: usize, allowPartial: bool) -> Result<()> {
@@ -98,6 +116,16 @@ impl MemoryManager {
     }
 
     pub fn CopyDataOut(&self, task: &Task, from: u64, vaddr: u64, len: usize, allowPartial: bool) -> Result<()> {
+        if SHARESPACE.config.read().CopyDataWithPf && !allowPartial {
+            return self.CopyDataWithPf(task, from, vaddr, len, allowPartial);
+        }
+        
+        let rl = self.MappingReadLock();
+
+        return self.CopyDataOutLocked(task, &rl, from, vaddr, len, allowPartial);
+    }
+
+    pub fn CopyDataOutManual(&self, task: &Task, from: u64, vaddr: u64, len: usize, allowPartial: bool) -> Result<()> {
         let rl = self.MappingReadLock();
 
         return self.CopyDataOutLocked(task, &rl, from, vaddr, len, allowPartial);
@@ -168,7 +196,41 @@ impl MemoryManager {
         return Ok(offset);
     }
 
+    pub fn CopyDataOutToIovsWithPf(&self, _task: &Task, buf: &[u8], iovs: &[IoVec], allowPartial: bool) -> Result<usize> {
+        assert!(allowPartial==false);
+        assert!(IsKernel());
+        
+        let src = buf.as_ptr() as u64; // &buf[0] as * const _ as u64;
+        let mut offset = 0;
+
+        for dst in iovs {
+            let left = buf.len() as u64 - offset;
+            let len = left.min(dst.Len() as u64);
+
+            Self::Memcpy(
+                dst.Start(), 
+                src + offset, 
+                len as usize
+            );
+
+            offset += len;
+            if offset >= buf.len() as u64 {
+                break;
+            }
+        }
+
+        return Ok(offset as usize)
+    }
+
     pub fn CopyDataOutToIovs(&self, task: &Task, buf: &[u8], iovs: &[IoVec], allowPartial: bool) -> Result<usize> {
+        if SHARESPACE.config.read().CopyDataWithPf && !allowPartial {
+            return self.CopyDataOutToIovsWithPf(task, buf, iovs, allowPartial);
+        }
+
+        return self.CopyDataOutToIovsManual(task, buf, iovs, allowPartial);
+    }
+
+    pub fn CopyDataOutToIovsManual(&self, task: &Task, buf: &[u8], iovs: &[IoVec], allowPartial: bool) -> Result<usize> {
         let rl = self.MappingReadLock();
 
         return self.CopyDataOutToIovsLocked(task, &rl, buf, iovs, allowPartial);
@@ -234,7 +296,37 @@ impl MemoryManager {
         return Ok(offset);
     }
 
+    pub fn CopyDataInFromIovsWithPf(&self, _task: &Task, buf: &mut [u8], iovs: &[IoVec], allowPartial: bool) -> Result<usize> {
+        assert!(allowPartial==false);
+        assert!(IsKernel());
+        
+        let dst = buf.as_ptr() as u64; // &buf[0] as * const _ as u64;
+        let mut offset = 0;
+
+        for src in iovs {
+            let left = buf.len() as u64 - offset;
+            let len = left.min(src.Len() as u64);
+
+            Self::Memcpy(
+                dst + offset, 
+                src.Start(), 
+                len as usize
+            );
+
+            offset += len;
+            if offset >= buf.len() as u64 {
+                break;
+            }
+        }
+
+        return Ok(offset as usize)
+    }
+
     pub fn CopyDataInFromIovs(&self, task: &Task, buf: &mut [u8], iovs: &[IoVec], allowPartial: bool) -> Result<usize> {
+        if SHARESPACE.config.read().CopyDataWithPf && !allowPartial {
+            return self.CopyDataInFromIovsWithPf(task, buf, iovs, allowPartial);
+        }
+        
         let rl = self.MappingReadLock();
 
         return self.CopyDataInFromIovsLocked(task, &rl, buf, iovs, allowPartial);
@@ -247,6 +339,10 @@ impl MemoryManager {
         dstIovs: &[IoVec],
         allowPartial: bool
     ) -> Result<usize> {
+        if SHARESPACE.config.read().CopyDataWithPf && !allowPartial {
+            return self.CopyBetweenIovsWithPf(task, srcIovs, dstIovs, allowPartial);
+        }
+
         let rl = self.MappingReadLock();
 
         let mut srcs = srcIovs;
@@ -264,6 +360,80 @@ impl MemoryManager {
         return Ok(count);
     }
 
+    pub fn CopyBetweenIovsWithPf(
+        &self,
+        _task: &Task,
+        srcIovs: &[IoVec],
+        dstIovs: &[IoVec],
+        allowPartial: bool
+    ) -> Result<usize> {
+        assert!(allowPartial==false);
+        assert!(IsKernel());
+        
+        let mut srcIdx: usize = 0;
+        let mut dstIdx: usize = 0;
+        let mut srcOffset = 0;
+        let mut dstOffset = 0;
+
+        let mut total = 0;
+
+        while srcIdx < srcIovs.len() && dstIdx < dstIovs.len() {
+            let srcLen = srcIovs[srcIdx].Len() - srcOffset as usize;
+            let dstLen = dstIovs[dstIdx].Len() - dstOffset as usize;
+            if srcLen == dstLen {
+                Self::Memcpy(
+                    dstIovs[dstIdx].Start() + dstOffset, 
+                    srcIovs[srcIdx].Start() + srcOffset, 
+                    srcLen
+                );
+                
+                srcIdx += 1;
+                srcOffset = 0;
+
+                dstIdx += 1;
+                dstOffset = 0;
+
+                total += srcLen;
+            } else if srcLen < dstLen {
+                Self::Memcpy(
+                    dstIovs[dstIdx].Start() + dstOffset, 
+                    srcIovs[srcIdx].Start() + srcOffset, 
+                    srcLen
+                );
+
+                srcIdx += 1;
+                srcOffset = 0;
+
+                dstOffset += srcLen as u64;
+
+                total += srcLen;
+            } else { // srcLen > dstLen
+                Self::Memcpy(
+                    dstIovs[dstIdx].Start() + dstOffset, 
+                    srcIovs[srcIdx].Start() + srcOffset, 
+                    dstLen
+                );
+
+                srcOffset += dstLen as u64;
+
+                dstIdx += 1;
+                dstOffset = 0;
+
+                total += dstLen;
+            }
+        }
+
+        return Ok(total)
+    }
+
+    pub fn Memcpy(dst: u64, src: u64, count: usize) {
+        unsafe {
+            let dstPtr = dst as * mut u8;
+            let srcPtr = src as *const u8;
+            core::ptr::copy_nonoverlapping(srcPtr, dstPtr, count);
+        }
+    }
+
     pub fn CopyIovsOutFromIovs(
         &self,
         task: &Task,
@@ -271,6 +441,10 @@ impl MemoryManager {
         dstIovs: &[IoVec],
         allowPartial: bool
     ) -> Result<usize> {
+        if SHARESPACE.config.read().CopyDataWithPf && !allowPartial {
+            return self.CopyBetweenIovsWithPf(task, srcIovs, dstIovs, allowPartial);
+        }
+
         let rl = self.MappingReadLock();
 
         let mut dsts = dstIovs;
@@ -312,6 +486,13 @@ impl MemoryManager {
     pub fn CopyOutObj<T: Sized + Copy>(&self, task: &Task, data: &T, dst: u64) -> Result<()> {
         let size = size_of::<T>();
         self.CopyDataOut(task, data as *const _ as u64, dst, size, false)?;
+
+        return Ok(());
+    }
+
+    pub fn CopyOutObjManual<T: Sized + Copy>(&self, task: &Task, data: &T, dst: u64) -> Result<()> {
+        let size = size_of::<T>();
+        self.CopyDataOutManual(task, data as *const _ as u64, dst, size, false)?;
 
         return Ok(());
     }
@@ -551,50 +732,69 @@ impl MemoryManager {
 impl Task {
     //Copy a vec from user memory
     pub fn CopyInVec<T: Sized + Copy>(&self, addr: u64, size: usize) -> Result<Vec<T>> {
+        assert!(self.Addr() == Task::Current().Addr());
         return self.mm.CopyInVec(self, addr, size);
     }
 
     pub fn FixPermissionForIovs(&self, iovs: &[IoVec], writable: bool) -> Result<()> {
+        assert!(self.Addr() == Task::Current().Addr());
         return self.mm.FixPermissionForIovs(self, iovs, writable);
     }
 
     //Copy a slice to user memory
     pub fn  CopyOutSlice<T: Sized + Copy>(&self, src: &[T], dst: u64, len: usize) -> Result<()> {
+        assert!(self.Addr() == Task::Current().Addr());
         return self.mm.CopyOutSlice(self, src, dst, len);
     }
 
     pub fn CopyDataOutToIovs(&self, src: &[u8], dsts: &[IoVec], allowPartial: bool) -> Result<usize> {
+        assert!(self.Addr() == Task::Current().Addr());
         return self.mm.CopyDataOutToIovs(self, src, dsts, allowPartial);
     }
 
+    pub fn CopyDataOutToIovsManual(&self, src: &[u8], dsts: &[IoVec], allowPartial: bool) -> Result<usize> {
+        return self.mm.CopyDataOutToIovsManual(self, src, dsts, allowPartial);
+    }
+
     pub fn ZeroDataOutToIovs(&self, src: &[u8], dsts: &[IoVec], allowPartial: bool) -> Result<usize> {
+        assert!(self.Addr() == Task::Current().Addr());
         return self.mm.CopyDataOutToIovs(self, src, dsts, allowPartial);
     }
 
     pub fn CopyIovsOutToIovs(&self, srcs: &[IoVec], dsts: &[IoVec], allowPartial: bool) -> Result<usize> {
+        assert!(self.Addr() == Task::Current().Addr());
         return self.mm.CopyIovsOutToIovs(self, srcs, dsts, allowPartial);
     }
 
     pub fn CopyDataInFromIovs(&self, buf: &mut [u8], iovs: &[IoVec], allowPartial: bool) -> Result<usize> {
+        assert!(self.Addr() == Task::Current().Addr());
         return self.mm.CopyDataInFromIovs(&self, buf, iovs, allowPartial);
     }
 
     //Copy an Object from user memory
     pub fn CopyInObj<T: Sized + Copy>(&self, src: u64) -> Result<T> {
+        assert!(self.Addr() == Task::Current().Addr());
         return self.mm.CopyInObj(self, src);
     }
 
     //Copy an Object to user memory
     pub fn CopyOutObj<T: Sized + Copy>(&self, src: &T, dst: u64) -> Result<()> {
+        assert!(self.Addr() == Task::Current().Addr());
         return self.mm.CopyOutObj(self, src, dst);
     }
 
+    pub fn CopyOutObjManual<T: Sized + Copy>(&self, src: &T, dst: u64) -> Result<()> {
+        return self.mm.CopyOutObjManual(self, src, dst);
+    }
+
     pub fn CopyDataOut(&self, from: u64, vaddr: u64, len: usize, allowPartial: bool) -> Result<()> {
+        assert!(self.Addr() == Task::Current().Addr());
         return self.mm.CopyDataOut(self, from, vaddr, len, allowPartial);
     }
 
     //Copy an str to user memory
     pub fn CopyOutString(&self, vAddr: u64, len: usize, s: &str) -> Result<()> {
+        assert!(self.Addr() == Task::Current().Addr());
         let str = CString::New(s);
         self.CopyOutSlice(str.Slice(), vAddr, len)
     }
@@ -605,6 +805,7 @@ impl Task {
     // would exceed maxlen, CopyStringIn returns the string truncated to maxlen and
     // ENAMETOOLONG.
     pub fn CopyInString(&self, addr: u64, maxlen: usize) -> (String, Result<()>) {
+        assert!(self.Addr() == Task::Current().Addr());
         return self.mm.CopyInString(self, addr, maxlen);
     }
 
@@ -614,6 +815,7 @@ impl Task {
         maxElemSize: usize,
         maxTotalSize: i32,
     ) -> Result<Vec<String>> {
+        assert!(self.Addr() == Task::Current().Addr());
         return self.mm.CopyInVector(self, addr, maxElemSize, maxTotalSize);
     }
 

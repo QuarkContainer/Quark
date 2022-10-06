@@ -28,6 +28,7 @@ impl RDMASvcClient {
         localShareAddr: u64,
         globalShareAddr: u64,
         podId: [u8; 64],
+        clientRole: ClientRole,
     ) -> Self {
         let cliShareSize = mem::size_of::<ClientShareRegion>();
         // debug!("RDMASvcClient::New, cli size: {:x}", cliShareSize);
@@ -113,6 +114,7 @@ impl RDMASvcClient {
                 podId,
                 udpSentBufferAllocator: Mutex::new(udpBufferAllocator),
                 portToFdInfoMappings: Mutex::new(BTreeMap::new()),
+                clientRole,
             }),
         }
     }
@@ -137,7 +139,7 @@ impl RDMASvcClient {
     //     rdmaSvcCli
     // }
 
-    pub fn initialize(cliSock: i32, localShareAddr: u64, globalShareAddr: u64, podId:[u8; 64]) -> Self {
+    pub fn initialize(cliSock: i32, localShareAddr: u64, globalShareAddr: u64, podId:[u8; 64], clientRole: ClientRole) -> Self {
         // let cli_sock = UnixSocket::NewClient(path).unwrap();
         let cli_sock = UnixSocket { fd: cliSock };
 
@@ -160,6 +162,7 @@ impl RDMASvcClient {
             localShareAddr,
             globalShareAddr,
             podId,
+            clientRole,
         );
         rdmaSvcCli
     }

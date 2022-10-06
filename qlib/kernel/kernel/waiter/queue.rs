@@ -15,6 +15,7 @@
 use crate::qlib::mutex::*;
 use alloc::sync::Arc;
 use core::ops::Deref;
+use core::fmt;
 
 use super::entry::*;
 use super::waitlist::*;
@@ -22,6 +23,15 @@ use super::*;
 
 #[derive(Default, Clone)]
 pub struct Queue(Arc<QRwLock<WaitList>>);
+
+impl fmt::Debug for Queue {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Queue",
+        )
+    }
+}
 
 impl Deref for Queue {
     type Target = Arc<QRwLock<WaitList>>;

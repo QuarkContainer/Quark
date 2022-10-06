@@ -38,6 +38,7 @@ pub struct Config {
     pub ReaddirCache: bool,
     pub HiberODirect: bool,
     pub DisableCgroup: bool,
+    pub CopyDataWithPf: bool,
 }
 
 impl Config {
@@ -79,6 +80,7 @@ impl Default for Config {
             ReaddirCache: true,
             HiberODirect: true,
             DisableCgroup: true,
+            CopyDataWithPf: false
         };
     }
 }

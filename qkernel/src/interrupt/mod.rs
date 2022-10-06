@@ -437,9 +437,9 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
 
         //PerfGofrom(PerfType::User);
         currTask.AccountTaskLeave(SchedState::RunningApp);
-        if SHARESPACE.config.read().KernelPagetable {
+        /*if SHARESPACE.config.read().KernelPagetable {
             Task::SetKernelPageTable();
-        }
+        }*/
         true
     } else {
         false
@@ -450,7 +450,7 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
         panic!("PageFaultHandler full restore wrong...");
     }
 
-    if !fromUser {
+    if !SHARESPACE.config.read().CopyDataWithPf && !fromUser {
         print!(
             "Get pagefault from kernel ... {:#x?}/cr2 is {:x}/cr3 is {:x}",
             ptRegs, cr2, cr3
@@ -570,9 +570,9 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
             if fromUser {
                 //PerfGoto(PerfType::User);
                 currTask.AccountTaskEnter(SchedState::RunningApp);
-                if SHARESPACE.config.read().KernelPagetable {
+                /*if SHARESPACE.config.read().KernelPagetable {
                     currTask.SwitchPageTable();
-                }
+                }*/
             }
             CPULocal::Myself().SetMode(VcpuMode::User);
             currTask.mm.HandleTlbShootdown();
@@ -596,9 +596,9 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
                 //PerfGoto(PerfType::User);
                 currTask.AccountTaskEnter(SchedState::RunningApp);
 
-                if SHARESPACE.config.read().KernelPagetable {
+                /*if SHARESPACE.config.read().KernelPagetable {
                     currTask.SwitchPageTable();
-                }
+                }*/
             }
         } else {
             signal = Signal::SIGSEGV;
@@ -717,9 +717,9 @@ pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
             rflags |= USER_FLAGS_SET;
             ptRegs.eflags = rflags;
 
-            if SHARESPACE.config.read().KernelPagetable {
+            /*if SHARESPACE.config.read().KernelPagetable {
                 Task::SetKernelPageTable();
-            }
+            }*/
 
             currTask.AccountTaskLeave(SchedState::RunningApp);
             //currTask.SaveFp();

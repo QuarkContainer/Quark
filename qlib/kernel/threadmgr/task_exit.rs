@@ -1254,8 +1254,10 @@ impl Task {
                 }
                 Some(addr) => {
                     let val: u32 = 0;
-                    self.CopyOutObj(&val, addr).unwrap();
-                    self.futexMgr.Wake(self, addr, false, !0, 1).unwrap();
+                    self.CopyOutObj(&val, addr)
+                        .expect(&format!("RunThreadExitNotify clear_child_tid copy fail {:x}", addr));
+                    self.futexMgr.Wake(self, addr, false, !0, 1).ok();
+                        //.expect(&format!("RunThreadExitNotify futexMgrm wake fail {:x}, oldmap is {}", addr, map));
                 }
             }
         }

@@ -446,7 +446,7 @@ impl Task {
             // can't use the GetTypeMut as it is used with current pagetable.
             //*Task::GetTask(cTask.taskId).GetTypeMut(cTid)? = pid;
 
-            cTask.CopyOutObj(&pid, cTid)?;
+            cTask.CopyOutObjManual(&pid, cTid)?;
         }
 
         if opts.SetTLS {

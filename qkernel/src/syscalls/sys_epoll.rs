@@ -75,7 +75,6 @@ pub fn AddEpoll(
 
     return ep.AddEntry(
         task,
-        fd,
         file,
         flags,
         mask,

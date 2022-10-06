@@ -42,7 +42,7 @@ impl Drop for WaitContext {
                 let mut lists = epoll.lists.lock();
                 let state = p.lock().state;
                 if state == PollEntryState::Ready {
-                    lists.readyList.Remove(p);
+                    lists.Remove(p);
                 }
             }
             _ => ()

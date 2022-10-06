@@ -242,7 +242,7 @@ pub fn NansleepUntil(task: &mut Task, clock: Clock, end: i64, rem: u64, needRest
     let timer = task.blocker.GetTimerWithClock(&clock);
 
     let now = clock.Now();
-    let dur = end -now.0;
+    let dur = end - now.0;
 
     if dur < TIMEOUT_PROCESS_TIME {
         Yield();

@@ -26,6 +26,7 @@
 #![allow(non_snake_case)]
 #![allow(unused_imports)]
 #![feature(core_intrinsics)]
+#![recursion_limit = "256"]
 
 extern crate alloc;
 extern crate bit_field;
@@ -569,13 +570,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     }
                                     break;
                                 }
-                                if body == 1 {
+                                if body > 0 {                                    
+                                    let clientRole = ClientRole::Parse(body);
                                     // init
                                     println!("init!!");
-                                    InitContainer(&conn_sock);
-                                } else if body == 2 {
-                                    // terminate
-                                    println!("terminate!!");
+                                    InitContainer(&conn_sock, clientRole);
                                 }
                             }
                             Err(e) => {
@@ -698,7 +697,7 @@ fn SendConsumedData(channels: &mut HashMap<u32, HashSet<u32>>) {
     }
 }
 
-fn InitContainer(conn_sock: &UnixSocket) {
+fn InitContainer(conn_sock: &UnixSocket, clientRole: ClientRole) {
     let cliEventFd = unsafe { libc::eventfd(0, 0) };
     unblock_fd(cliEventFd);
 
@@ -717,6 +716,10 @@ fn InitContainer(conn_sock: &UnixSocket) {
         .sockToAgentIds
         .lock()
         .insert(conn_sock.as_raw_fd(), rdmaAgentId);
+    if clientRole == ClientRole::EGRESS {
+        println!("rdmaAgentId for Egress is {}", rdmaAgentId);
+        *RDMA_SRV.egressAgentId.lock() = rdmaAgentId;
+    }
     let body = [123, rdmaAgentId];
     let ptr = &body as *const _ as *const u8;
     let buf = unsafe { slice::from_raw_parts(ptr, 8) };

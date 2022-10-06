@@ -63,6 +63,7 @@ use super::super::unix::transport::unix::*;
 use super::hostsocket::*;
 use super::rdma_socket::*;
 use super::uring_socket::*;
+use crate::qlib::kernel::socket::hostinet::loopbacksocket::LoopbackSocket;
 
 lazy_static! {
     pub static ref DUMMY_HOST_SOCKET: DummyHostSocket = DummyHostSocket::New();
@@ -118,6 +119,7 @@ pub enum SocketBufType {
     TCPNormalData,                // Common TCP socket
     Uring(SocketBuff),
     RDMA(SocketBuff),
+    Loopback(LoopbackSocket)
 }
 
 impl fmt::Debug for SocketBufType {
@@ -132,16 +134,29 @@ impl fmt::Debug for SocketBufType {
             Self::TCPNormalData => write!(f, "SocketBufType::TCPNormalData"),
             Self::Uring(_) => write!(f, "SocketBufType::Uring"),
             Self::RDMA(_) => write!(f, "SocketBufType::RDMA"),
+            Self::Loopback(_) => write!(f, "SocketBufType::Loopback"),
         }
     }
 }
 
 impl SocketBufType {
-    pub fn Accept(&self, socketBuf: SocketBuff) -> Self {
+    pub fn Accept(&self, accept: AcceptSocket) -> Self {
         match self {
             SocketBufType::TCPNormalServer => return SocketBufType::TCPNormalData,
-            SocketBufType::TCPUringlServer(_) => return SocketBufType::Uring(socketBuf),
-            SocketBufType::TCPRDMAServer(_) => return SocketBufType::RDMA(socketBuf),
+            //SocketBufType::TCPUringlServer(_) => return SocketBufType::Uring(socketBuf),
+            SocketBufType::TCPRDMAServer(_) => {
+                match accept {
+                    AcceptSocket::SocketBuff(socketBuf) => {
+                        return SocketBufType::RDMA(socketBuf)
+                    }
+                    /*AcceptSocket::LoopbackSocket(loopback) => {
+                        return Self::Loopback(loopback)
+                    }*/
+                    _ => {
+                        panic!("UringSocketType::Accept unexpect AcceptSocket::None")
+                    }
+                }
+            }
             _ => {
                 panic!("SocketBufType::Accept unexpect type {:?}", self)
             }
@@ -1161,11 +1176,9 @@ impl SockOperations for SocketOperations {
                 q.lock().SetQueueLen(len as usize);
                 return Ok(0);
             }
-            SocketBufType::TCPInit => AcceptQueue::default(),
-            _ => AcceptQueue::default(), // panic?
+            SocketBufType::TCPInit => AcceptQueue::New(len as usize, self.queue.clone()),
+            _ => panic!("socket::listen unexpect buf type {:?}", socketBuf), // panic?
         };
-
-        acceptQueue.lock().SetQueueLen(len as usize);
 
         let res = if self.tcpRDMA {
             // Kernel::HostSpace::RDMAListen(self.fd, backlog, asyncAccept, acceptQueue.clone())
@@ -2171,6 +2184,7 @@ impl Provider for SocketProvider {
                 fd,
                 stype & SocketType::SOCK_TYPE_MASK,
                 nonblocking,
+                Queue::default(),
                 socketType,
                 None,
             )?;

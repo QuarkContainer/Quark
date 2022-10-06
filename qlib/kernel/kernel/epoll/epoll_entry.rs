@@ -39,7 +39,6 @@ pub struct PollEntryInternal {
     pub next: Option<PollEntry>,
     pub prev: Option<PollEntry>,
 
-    pub fd: i32,
     pub id: u64,
     pub file: FileWeak,
     pub userData: [i32; 2],
@@ -67,18 +66,16 @@ impl PollEntry {
         let state = self.lock().state;
         if state == PollEntryState::Waiting {
             self.SetReady();
-            lists.readyList.PushBack(self);
+            lists.PushBack(self);
 
             drop(lists);
             epoll.queue.Notify(READABLE_EVENT);
         }
     }
 
-    pub fn SetReady(&self) -> PollEntryState {
+    pub fn SetReady(&self) {
         let mut e = self.lock();
-        let oldstate = e.state;
         e.state = PollEntryState::Ready;
-        return oldstate;
     }
 
     pub fn ReadyState(&self) -> u32 {

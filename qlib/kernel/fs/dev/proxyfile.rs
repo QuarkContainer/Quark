@@ -447,7 +447,7 @@ impl FileOperations for ProxyFileOperations {
     }
 
     fn Mappable(&self) -> Result<MMappable> {
-        return Err(Error::SysError(SysErr::ENODEV));
+        return Ok(MMappable::FromHostIops(self.InodeOp.clone()));
     }
 }
 

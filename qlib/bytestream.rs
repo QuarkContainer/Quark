@@ -19,6 +19,7 @@ use core::sync::atomic::AtomicU32;
 use core::sync::atomic::Ordering;
 use alloc::sync::Arc;
 use core::ops::Deref;
+use core::fmt;
 
 use super::common::*;
 use super::linux_def::*;
@@ -195,6 +196,16 @@ pub struct RingBuf {
     pub ringMask: u32,
     pub headtail: &'static [AtomicU32],
     pub allocator: RingeBufAllocator,
+}
+
+impl fmt::Debug for RingBuf {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "RingBuf buf {:x} head/tail {:x?}",
+            self.buf, self.headtail
+        )
+    }
 }
 
 impl Drop for RingBuf {
@@ -557,6 +568,16 @@ impl RingBuf {
 #[derive(Clone)]
 pub struct ByteStream(pub Arc<QMutex<ByteStreamIntern>>);
 
+impl fmt::Debug for ByteStream {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{:x?}",
+            self.lock().buf
+        )
+    }
+}
+
 impl Deref for ByteStream {
     type Target = Arc<QMutex<ByteStreamIntern>>;
 
@@ -597,6 +618,16 @@ pub struct ByteStreamIntern {
     pub buf: RingBuf,
     pub dataIovs: SocketBufIovs,
     pub spaceiovs: SocketBufIovs,
+}
+
+impl fmt::Debug for ByteStreamIntern {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{:x?}",
+            self.buf
+        )
+    }
 }
 
 impl ByteStreamIntern {

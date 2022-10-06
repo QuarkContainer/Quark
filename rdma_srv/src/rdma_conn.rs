@@ -846,52 +846,57 @@ impl RDMAControlChannel {
         let mut agentId = 0;
         let mut sockfd = 0;
 
-        //TODO: optimize to remove string
-        match RDMA_CTLINFO
-            .ipToPodIdMappings
-            .lock()
-            .get(&(connectRequest.dstIpAddr.to_be()))
-        {
-            Some(podIdStr) => {
-                let mut podId: [u8; 64] = [0; 64];
-                // if podIdStr.len() != podId.len() {
-                //     panic!(
-                //         "podId len: {} is not equal to podIdStr len: {}",
-                //         podId.len(),
-                //         podIdStr.len()
-                //     );
-                // }
-                podIdStr
-                    .bytes() //TODO: string -> bytes
-                    .zip(podId.iter_mut())
-                    .for_each(|(b, ptr)| *ptr = b);
-                let endPoint = EndpointUsingPodId {
-                    podId,
-                    port: connectRequest.dstPort,
-                };
-                // error!("HandleConnectRequest, 1, podId: {:?}, port: {}", podId, connectRequest.dstPort);
-                match RDMA_SRV.srvPodIdEndpoints.lock().get(&endPoint) {
-                    Some(srvEndpoint) => match srvEndpoint.status {
-                        SrvEndPointStatus::Listening => {
-                            found = true;
-                            agentId = srvEndpoint.agentId;
-                            sockfd = srvEndpoint.sockfd;
+        if RDMA_CTLINFO.IsEgress(connectRequest.dstIpAddr) {
+            let egressAgentId = RDMA_SRV.egressAgentId.lock();
+            // TODO Hong: Handle connect request for egress
+            println!("HandleConnectRequest for egress {} egressAgentId {}", connectRequest.dstIpAddr, egressAgentId);
+        } else {            
+            match RDMA_CTLINFO
+                .ipToPodIdMappings
+                .lock()
+                .get(&(connectRequest.dstIpAddr.to_be()))
+            {
+                Some(podIdStr) => {
+                    let mut podId: [u8; 64] = [0; 64];
+                    // if podIdStr.len() != podId.len() {
+                    //     panic!(
+                    //         "podId len: {} is not equal to podIdStr len: {}",
+                    //         podId.len(),
+                    //         podIdStr.len()
+                    //     );
+                    // }
+                    podIdStr
+                        .bytes()
+                        .zip(podId.iter_mut())
+                        .for_each(|(b, ptr)| *ptr = b);
+                    let endPoint = EndpointUsingPodId {
+                        podId,
+                        port: connectRequest.dstPort,
+                    };
+                    // error!("HandleConnectRequest, 1, podId: {:?}, port: {}", podId, connectRequest.dstPort);
+                    match RDMA_SRV.srvPodIdEndpoints.lock().get(&endPoint) {
+                        Some(srvEndpoint) => match srvEndpoint.status {
+                            SrvEndPointStatus::Listening => {
+                                found = true;
+                                agentId = srvEndpoint.agentId;
+                                sockfd = srvEndpoint.sockfd;
+                            }
+                            _ => {}
+                        },
+                        None => {
+                            error!(
+                                "HandleConnectRequest, pod: {} is not listening at port: {}",
+                                podIdStr, connectRequest.dstPort
+                            );
                         }
-                        _ => {}
-                    },
-                    None => {
-                        error!(
-                            "HandleConnectRequest, pod: {} is not listening at port: {}",
-                            podIdStr, connectRequest.dstPort
-                        );
                     }
                 }
-            }
-            None => {
-                error!(
-                    "HandleConnectRequest, podId for ip: {} is not found!!",
-                    connectRequest.dstIpAddr.to_be()
-                );
+                None => {
+                    error!(
+                        "HandleConnectRequest, podId for ip: {} is not found!!",
+                        connectRequest.dstIpAddr.to_be()
+                    );
+                }
             }
         }
 

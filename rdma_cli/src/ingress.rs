@@ -26,6 +26,7 @@
 #![allow(non_snake_case)]
 #![allow(unused_imports)]
 #![feature(core_intrinsics)]
+#![recursion_limit = "256"]
 
 extern crate alloc;
 extern crate bit_field;
@@ -105,7 +106,7 @@ fn main() -> io::Result<()> {
     if args.len() > 1 {
         unix_sock_path = args.get(1).unwrap(); //"/tmp/rdma_srv1";
     }
-    gatewayCli = GatewayClient::initialize(unix_sock_path); //TODO: add 2 address from quark.
+    gatewayCli = GatewayClient::initialize(unix_sock_path, ClientRole::INGRESS); //TODO: add 2 address from quark.
 
     let cliEventFd = gatewayCli.rdmaSvcCli.cliEventFd;
     unblock_fd(cliEventFd);

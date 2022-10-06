@@ -31,6 +31,7 @@
 #![feature(panic_info_message)]
 #![feature(map_first_last)]
 #![allow(deprecated)]
+#![recursion_limit = "256"]
 
 #[macro_use]
 extern crate serde_derive;
@@ -121,7 +122,6 @@ use self::qlib::linux_def::MemoryDef;
 use self::qlib::loader::*;
 use self::qlib::mem::list_allocator::*;
 use self::qlib::pagetable::*;
-//use self::qlib::perf_tunning::*;
 use self::qlib::vcpu_mgr::*;
 use self::syscalls::syscalls::*;
 use self::task::*;
@@ -236,9 +236,9 @@ pub extern "C" fn syscall_handler(
 
     //currTask.PerfGoto(PerfType::Kernel);
 
-    if SHARESPACE.config.read().KernelPagetable {
+    /*if SHARESPACE.config.read().KernelPagetable {
         Task::SetKernelPageTable();
-    }
+    }*/
 
     currTask.AccountTaskLeave(SchedState::RunningApp);
     let pt = currTask.GetPtRegs();
@@ -252,35 +252,6 @@ pub extern "C" fn syscall_handler(
     pt.rip = pt.rcx;
 
     let mut nr = pt.orig_rax;
-    let callId: SysCallID = if nr < SysCallID::UnknowSyscall as u64 {
-        unsafe { mem::transmute(nr as u64) }
-    } else if SysCallID::SysSocketProduce as u64 <= nr && nr < SysCallID::EXTENSION_MAX as u64 {
-        unsafe { mem::transmute(nr as u64) }
-    } else {
-        nr = SysCallID::UnknowSyscall as _;
-        SysCallID::UnknowSyscall
-    };
-
-    //let tid = currTask.Thread().lock().id;
-    let mut tid = 0;
-    let mut pid = 0;
-
-    let llevel = SHARESPACE.config.read().LogLevel;
-    if llevel == LogLevel::Complex {
-        tid = currTask.Thread().lock().id;
-        pid = currTask.Thread().ThreadGroup().ID();
-        info!("({}/{})------get call id {:?} arg0:{:x}, 1:{:x}, 2:{:x}, 3:{:x}, 4:{:x}, 5:{:x}, userstack:{:x}, return address:{:x}, fs:{:x}",
-            tid, pid, callId, arg0, arg1, arg2, arg3, arg4, arg5, currTask.GetPtRegs().rsp, currTask.GetPtRegs().rcx, GetFs());
-    } else if llevel == LogLevel::Simple {
-        tid = currTask.Thread().lock().id;
-        pid = currTask.Thread().ThreadGroup().ID();
-        info!(
-            "({}/{})------get call id {:?} arg0:{:x}",
-            tid, pid, callId, arg0
-        );
-    }
-
-    //currTask.SaveFp();
 
     let startTime = TSC.Rdtsc();
     let enterAppTimestamp = CPULocal::Myself().ResetEnterAppTimestamp() as i64;
@@ -299,22 +270,56 @@ pub extern "C" fn syscall_handler(
         arg5: arg5,
     };
 
+    //let tid = currTask.Thread().lock().id;
+    let mut tid = 0;
+    let mut pid = 0;
+    let mut callId: SysCallID = SysCallID::UnknowSyscall;
+
+    let debugLevel = SHARESPACE.config.read().DebugLevel;
+
+    if debugLevel > DebugLevel::Error {
+        let llevel = SHARESPACE.config.read().LogLevel;
+        callId = if nr < SysCallID::UnknowSyscall as u64 {
+            unsafe { mem::transmute(nr as u64) }
+        } else if SysCallID::SysSocketProduce as u64 <= nr && nr < SysCallID::EXTENSION_MAX as u64 {
+            unsafe { mem::transmute(nr as u64) }
+        } else {
+            nr = SysCallID::UnknowSyscall as _;
+            SysCallID::UnknowSyscall
+        };
+    
+        if llevel == LogLevel::Complex {
+            tid = currTask.Thread().lock().id;
+            pid = currTask.Thread().ThreadGroup().ID();
+            info!("({}/{})------get call id {:?} arg0:{:x}, 1:{:x}, 2:{:x}, 3:{:x}, 4:{:x}, 5:{:x}, userstack:{:x}, return address:{:x}, fs:{:x}",
+                tid, pid, callId, arg0, arg1, arg2, arg3, arg4, arg5, currTask.GetPtRegs().rsp, currTask.GetPtRegs().rcx, GetFs());
+        } else if llevel == LogLevel::Simple {
+            tid = currTask.Thread().lock().id;
+            pid = currTask.Thread().ThreadGroup().ID();
+            info!(
+                "({}/{})------get call id {:?} arg0:{:x}",
+                tid, pid, callId, arg0
+            );
+        }
+    }
+    
     let currTask = task::Task::Current();
+    //currTask.DoStop();
+
+    let state = SysCall(currTask, nr, &args);
+    res = currTask.Return();
+    MainRun(currTask, state);
     currTask.DoStop();
 
-    //currTask.PerfGoto(PerfType::SysCall);
-    let state = SysCall(currTask, nr, &args);
-    //currTask.PerfGofrom(PerfType::SysCall);
+    let pt = currTask.GetPtRegs();
 
-    res = currTask.Return();
-    //HostInputProcess();
-    //ProcessOne();
+    CPULocal::SetUserStack(pt.rsp);
+    CPULocal::SetKernelStack(currTask.GetKernelSp());
 
-    MainRun(currTask, state);
-
+    currTask.AccountTaskEnter(SchedState::RunningApp);
     currTask.RestoreFp();
-   //error!("syscall_handler: {}", ::AllocatorPrint(10));
-    if llevel == LogLevel::Simple || llevel == LogLevel::Complex {
+    
+    if debugLevel > DebugLevel::Error {
         let gap = if self::SHARESPACE.config.read().PerfDebug {
             TSC.Rdtsc() - startTime
         } else {
@@ -332,14 +337,9 @@ pub extern "C" fn syscall_handler(
 
     let kernalRsp = pt as *const _ as u64;
 
-    //PerfGoto(PerfType::User);
-    //currTask.PerfGofrom(PerfType::Kernel);
-    //currTask.PerfGoto(PerfType::User);
-
-    //currTask.Check();
-    if SHARESPACE.config.read().KernelPagetable {
+    /*if SHARESPACE.config.read().KernelPagetable {
         currTask.SwitchPageTable();
-    }
+    }*/
     CPULocal::Myself().SetMode(VcpuMode::User);
     currTask.mm.HandleTlbShootdown();
     CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
@@ -366,7 +366,7 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                 currTask.RunExit()
             }
             TaskRunState::RunExitNotify => {
-                info!("RunExitNotify[{:x}] ...", currTask.taskId);
+                info!("RunExitNotify ...");
                 currTask.RunExitNotify();
 
                 // !!! make sure there is no object hold on stack
@@ -398,9 +398,9 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
                     CPULocal::SetPendingFreeStack(currTask.taskId);
 
                     error!("RunExitDone xxx 2 [{:x}] ...", currTask.taskId);
-                    if !SHARESPACE.config.read().KernelPagetable {
+                    /*if !SHARESPACE.config.read().KernelPagetable {
                         KERNEL_PAGETABLE.SwitchTo();
-                    }
+                    }*/
                     // mm needs to be clean as last function before SwitchToNewTask
                     // after this is called, another vcpu might drop the pagetable
                     core::mem::drop(mm);
@@ -418,16 +418,6 @@ pub fn MainRun(currTask: &mut Task, mut state: TaskRunState) {
             break;
         }
     }
-
-    currTask.DoStop();
-
-    let pt = currTask.GetPtRegs();
-
-    CPULocal::SetUserStack(pt.rsp);
-    CPULocal::SetKernelStack(currTask.GetKernelSp());
-
-    currTask.AccountTaskEnter(SchedState::RunningApp);
-    //PerfGofrom(PerfType::KernelHandling);
 }
 
 fn InitGs(id: u64) {
