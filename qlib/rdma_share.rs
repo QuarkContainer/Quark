@@ -20,6 +20,7 @@ use super::common::*;
 use super::linux_def::*;
 use alloc::collections::btree_set::BTreeSet;
 use alloc::vec::Vec;
+use core::mem;
 
 pub const COUNT: usize = 1024;
 
@@ -96,6 +97,33 @@ impl<T: 'static + Default + Copy> RingQueue<T> {
     }
 }
 
+pub const UDP_BUFF_LEN: usize = 1010; //currently make UDPPacket total size to 1024.
+pub const UDP_BUFF_OFFSET: usize = 4 + 2 + 4 + 2 + 2;
+
+#[derive(Clone, Copy, Debug)]
+pub struct UDPPacket {
+    pub srcIpAddr: u32,
+    pub srcPort: u16,
+    pub dstIpAddr: u32,
+    pub dstPort: u16,
+    pub length: u16,
+    pub buf: [u8; UDP_BUFF_LEN],
+ }
+
+impl Default for UDPPacket {
+    fn default() -> Self {
+        UDPPacket {
+            srcIpAddr: 0,
+            srcPort: 0,
+            dstIpAddr: 0,
+            dstPort: 0,
+            length: 0,
+            buf: [0; UDP_BUFF_LEN],
+        }
+    }
+}
+ 
+
 #[derive(Debug, Default, Clone, Copy)]
 pub struct RDMAReq {
     pub user_data: u64,
@@ -131,6 +159,7 @@ pub enum RDMAReqMsg {
     RDMAShutdown(RDMAShutdownReq),
     RDMAClose(RDMACloseReq),
     RDMAPendingShutdown(RDMAPendingShutdownReq),
+    RDMASendUDPPacket(RDMASendUDPPacket),
     // RDMAAccept(RDMAAcceptReq), //Put connected socket on client side.
 }
 
@@ -146,6 +175,7 @@ pub enum RDMARespMsg {
     RDMAAccept(RDMAAcceptResp),
     RDMANotify(RDMANotifyResp),
     RDMAFinNotify(RDMAFinNotifyResp),
+    RDMAReturnUDPBuff(RDMAReturnUDPBuff),
 }
 
 impl Default for RDMARespMsg {
@@ -183,6 +213,11 @@ pub struct RDMANotifyResp {
     pub event: EventMask,
 }
 
+#[derive(Default, Clone, Copy, Debug)]
+pub struct RDMAReturnUDPBuff {
+    pub udpBuffIdx: u32,
+}
+
 pub const FIN_RECEIVED_FROM_PEER: EventMask = 0x01;
 pub const FIN_SENT_TO_PEER: EventMask = 0x02;
 // pub const EVENT_OUT: EventMask = 0x04; // POLLOUT
@@ -211,6 +246,12 @@ pub struct RDMAListenReqUsingPodId {
     pub podId: [u8; 64],
     pub port: u16,
     pub waitingLen: i32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct RDMASendUDPPacket {
+    pub podId: [u8; 64],
+    pub udpBuffIdx: u32,
 }
 
 #[derive(Default, Clone, Copy, Debug)]
@@ -276,6 +317,7 @@ pub struct RDMAListenResp {
     pub waitingLen: i32,
 }
 
+#[derive(Clone, Copy, Debug)]
 pub struct MemRegion {
     pub addr: u64,
     pub len: u64,
@@ -300,6 +342,10 @@ pub struct IOMetas {
     pub consumeReadData: AtomicU64,
 }
 
+pub const UDP_SENT_PACKET_COUNT: usize = 1024;
+pub const UDP_RECV_PACKET_COUNT: usize = 1024;
+
+
 #[repr(C)]
 pub struct ClientShareRegion {
     pub clientBitmap: AtomicU64, //client sleep bit
@@ -309,6 +355,10 @@ pub struct ClientShareRegion {
 
     // the submit queue
     pub sq: RingQueue<RDMAReq>,
+
+    pub udpBufSent: [UDPPacket; UDP_SENT_PACKET_COUNT],
+
+    pub udpBufRecv: [UDPPacket; UDP_RECV_PACKET_COUNT],
 
     // metadata region for the sockbuf
     pub ioMetas: [IOMetas; IO_BUF_COUNT],
@@ -523,3 +573,61 @@ impl IdMgr {
         self.len += i;
     }
 }
+
+pub struct UDPBufferAllocator {
+    pub freeList: Vec<u32>,
+    pub startAddr: u64,
+    pub totalCnt: u32,
+    pub curIndex: u32
+}
+
+impl Default for UDPBufferAllocator {
+    fn default() -> Self {
+        UDPBufferAllocator {
+            freeList: Vec::new(),
+            startAddr: 0,
+            totalCnt: 0,
+            curIndex: 0,
+        }
+    }
+}
+
+impl UDPBufferAllocator {
+    pub fn New(startAddr: u64, totalCnt: u32) -> Self {
+        return UDPBufferAllocator {
+            freeList: Vec::new(), //TODO: thread safe??
+            startAddr,
+            totalCnt,
+            curIndex: 0
+        };
+    }
+
+    pub fn GetFreeBuffer(&mut self) -> (u64, u32) {
+        let idxOpt = self.freeList.pop();
+        let mut retAddr = 0;
+        let mut retIdx = 0;
+        match idxOpt {
+            Some(idx) => {
+                retAddr = self.startAddr + (idx * mem::size_of::<UDPPacket>() as u32) as u64;
+                retIdx = idx;
+            }
+            None => {
+                
+            }
+        }
+        if retAddr == 0 {
+            if self.curIndex != self.totalCnt {
+                retAddr = self.startAddr + (self.curIndex * mem::size_of::<UDPPacket>() as u32) as u64;
+                retIdx = self.curIndex;
+                self.curIndex += 1;
+                
+            }
+        }
+        (retAddr, retIdx)
+    }
+    pub fn ReturnBuffer(&mut self, idx: u32) {
+        self.freeList.push(idx);
+    }
+}
+
+

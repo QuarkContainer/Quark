@@ -67,6 +67,8 @@ pub struct RDMAAgentIntern {
     pub memoryRegions: Mutex<Vec<MemoryRegion>>,
     //sockfd -> sockInfo
     // pub sockInfos: Mutex<HashMap<u32, SockInfo>>,
+    pub udpMR: MemoryRegion,
+    pub udpRecvBufferAllocator: Mutex<UDPBufferAllocator>,
 }
 
 impl Drop for RDMAAgentIntern {
@@ -121,9 +123,19 @@ impl RDMAAgent {
         };
 
         //start from 2M registration.
-        let mr = RDMA
+        let tcpMR = RDMA
             .CreateMemoryRegion(&shareRegion.iobufs as *const _ as u64, 2 * 64 * 1024 * 1024)
             .unwrap();
+
+        let udpBufSent = &shareRegion.udpBufSent as *const _ as u64;
+        debug!("RDMAAgent::New, udpBufSent: {:x}", udpBufSent);
+        let udpMR = RDMA
+            .CreateMemoryRegion(
+                udpBufSent,
+                mem::size_of::<UDPPacket>() * UDP_RECV_PACKET_COUNT,
+            )
+            .unwrap();
+
         // debug!("RDMAAgent::New shareRegion: size: {}, addr: {:x}, clientBit: {:x}, cq: {:x}, sq: {:x} ioMeta: {:x}, buff: {:x}",
         //  size,
         //  shareRegion as *const _ as u64,
@@ -132,6 +144,10 @@ impl RDMAAgent {
         //  &(shareRegion.sq) as *const _ as u64,
         //  &(shareRegion.ioMetas) as *const _ as u64,
         //  &(shareRegion.iobufs) as *const _ as u64);
+        let udpRecvBufferAllocator = UDPBufferAllocator::New(
+            &shareRegion.udpBufRecv as *const _ as u64,
+            UDP_RECV_PACKET_COUNT as u32,
+        );
 
         shareRegion.sq.Init();
         shareRegion.cq.Init();
@@ -148,8 +164,10 @@ impl RDMAAgent {
             },
             shareRegion: Mutex::new(shareRegion),
             ioBufIdMgr: Mutex::new(IdMgr::Init(0, 1024)),
-            keys: vec![[mr.LKey(), mr.RKey()]],
-            memoryRegions: Mutex::new(vec![mr]),
+            keys: vec![[tcpMR.LKey(), tcpMR.RKey()]],
+            memoryRegions: Mutex::new(vec![tcpMR]),
+            udpMR,
+            udpRecvBufferAllocator: Mutex::new(udpRecvBufferAllocator),
         }))
     }
 
@@ -168,6 +186,8 @@ impl RDMAAgent {
             ioBufIdMgr: Mutex::new(IdMgr::Init(0, 0)),
             keys: vec![[0, 0]],
             memoryRegions: Mutex::new(vec![]),
+            udpMR: MemoryRegion::default(),
+            udpRecvBufferAllocator: Mutex::new(UDPBufferAllocator::default()),
         }))
     }
 
@@ -407,7 +427,7 @@ impl RDMAAgent {
                     .get(&podId)
                     .unwrap()
                     .clone();
-                
+
                 let mut dstIpAddr = msg.dstIpAddr;
                 let mut dstPort = msg.dstPort;
                 if RDMA_CTLINFO.IsEgress(dstIpAddr) {
@@ -465,15 +485,64 @@ impl RDMAAgent {
                     .unwrap()
                     .clone();
                 rdmaChannel.Close();
-            },
-            RDMAReqMsg::RDMAPendingShutdown(msg) => match RDMA_SRV.channels.lock().get(&msg.channelId) {
-                Some(rdmaChannel) => {
-                    rdmaChannel.PendingShutdown();
+            }
+            RDMAReqMsg::RDMAPendingShutdown(msg) => {
+                match RDMA_SRV.channels.lock().get(&msg.channelId) {
+                    Some(rdmaChannel) => {
+                        rdmaChannel.PendingShutdown();
+                    }
+                    None => {
+                        panic!("RDMAChannel with id {} does not exist!", msg.channelId);
+                    }
                 }
-                None => {
-                    panic!("RDMAChannel with id {} does not exist!", msg.channelId);
+            }
+            RDMAReqMsg::RDMASendUDPPacket(msg) => {
+                error!("RDMAReqMsg::RDMASendUDPPacket, msg: {:?}", msg);
+                let udpPacket = &mut self.shareRegion.lock().udpBufSent[msg.udpBuffIdx as usize];
+                error!(
+                    "RDMAReqMsg::RDMASendUDPPacket, 1, srcPort: {}, dstIpAddr: {}, dstPort: {}",
+                    udpPacket.srcPort, udpPacket.dstIpAddr, udpPacket.dstPort
+                );
+                let mut podId = String::from_utf8(msg.podId.to_vec()).unwrap();
+                if !RDMA_CTLINFO.isK8s {
+                    podId = "client".to_string();
                 }
-            },
+
+                let mut srcIpAddr = RDMA_CTLINFO
+                    .containerids
+                    .lock()
+                    .get(&podId)
+                    .unwrap()
+                    .clone();
+                if !RDMA_CTLINFO.isK8s {
+                    if srcIpAddr == udpPacket.dstIpAddr {
+                        let podId = "server".to_string();
+                        srcIpAddr = RDMA_CTLINFO
+                            .containerids
+                            .lock()
+                            .get(&podId)
+                            .unwrap()
+                            .clone();
+                    }
+                }
+                udpPacket.srcIpAddr = srcIpAddr;
+
+                match RDMA_CTLINFO.get_node_ip_by_pod_ip(&udpPacket.dstIpAddr) {
+                    Some(nodeIpAddr) => {
+                        let conns = RDMA_SRV.conns.lock();
+                        let rdmaConn = conns.get(&nodeIpAddr).unwrap().clone();
+                        let wrId = (self.id as u64) << 32 | msg.udpBuffIdx as u64;
+                        let laddr = udpPacket as *const _ as u64;
+                        debug!("RDMAReqMsg::RDMASendUDPPacket, 1, agentId: {:x}, udpBuffIdx: {:x}, wrId: {:x}, laddr: {:x}", self.id, msg.udpBuffIdx, wrId, laddr);
+                        rdmaConn
+                            .RDMAUDQPSend(laddr, (udpPacket.length + UDP_BUFF_OFFSET as u16) as u32, wrId, self.udpMR.LKey())
+                            .expect("RDMAUDQPSend failed...");
+                    }
+                    None => {
+                        println!("TODO: return error as no ip to node mapping is found");
+                    }
+                }
+            }
         }
     }
 

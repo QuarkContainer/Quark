@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::qlib::mutex::*;
+use crate::qlib::rdma_share::*;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -20,6 +21,7 @@ use core::any::Any;
 use core::fmt;
 use core::ops::Deref;
 use core::ptr;
+use core::slice;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::AtomicI64;
 use core::sync::atomic::Ordering;
@@ -174,10 +176,14 @@ impl SocketBufType {
 
     fn ConnectType(&self) -> Self {
         if SHARESPACE.config.read().EnableRDMA {
-            let socketBuf = SocketBuff(Arc::new(SocketBuffIntern::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT)));
+            let socketBuf = SocketBuff(Arc::new(SocketBuffIntern::Init(
+                MemoryDef::DEFAULT_BUF_PAGE_COUNT,
+            )));
             return Self::RDMA(socketBuf);
         } else if SHARESPACE.config.read().UringIO {
-            let socketBuf = SocketBuff(Arc::new(SocketBuffIntern::Init(MemoryDef::DEFAULT_BUF_PAGE_COUNT)));
+            let socketBuf = SocketBuff(Arc::new(SocketBuffIntern::Init(
+                MemoryDef::DEFAULT_BUF_PAGE_COUNT,
+            )));
             return Self::Uring(socketBuf);
         } else {
             return Self::TCPNormalData;
@@ -197,7 +203,8 @@ pub struct SocketOperationsIntern {
     pub enableAsyncAccept: AtomicBool,
     pub hostops: HostInodeOp,
     passInq: AtomicBool,
-    pub enableRDMA: bool,
+    pub tcpRDMA: bool,
+    pub udpRDMA: bool,
 }
 
 #[derive(Clone)]
@@ -231,11 +238,15 @@ impl SocketOperations {
             _ => (),
         }
 
-        // Only enable RDMA for IPv4 now.
-        let enableRDMA = SHARESPACE.config.read().EnableRDMA
+        // Only enable RDMA for IPv4 now. (Open IPv6 for nodejs, need a TODO here)
+        let tcpRDMA = SHARESPACE.config.read().EnableRDMA
             && (family == AFType::AF_INET || family == AFType::AF_INET6)
             //&& family == AFType::AF_INET
-            && stype == SockType::SOCK_STREAM;
+            && (stype == SockType::SOCK_STREAM);
+        let udpRDMA = SHARESPACE.config.read().EnableRDMA
+            // && (family == AFType::AF_INET || family == AFType::AF_INET6)
+            && family == AFType::AF_INET
+            && (stype == SockType::SOCK_DGRAM);
 
         let ret = SocketOperationsIntern {
             send: AtomicI64::new(0),
@@ -249,7 +260,8 @@ impl SocketOperations {
             enableAsyncAccept: AtomicBool::new(false),
             hostops: hostops,
             passInq: AtomicBool::new(false),
-            enableRDMA: enableRDMA,
+            tcpRDMA,
+            udpRDMA,
         };
 
         let ret = Self(Arc::new(ret));
@@ -330,7 +342,7 @@ impl SocketOperations {
 
     pub fn PostConnect(&self, _task: &Task) {
         let socketBuf;
-        if self.enableRDMA {
+        if self.tcpRDMA {
             // error!(
             //     "PostConnect 1, fd: {}, socketBuf: {:?}",
             //     self.fd,
@@ -508,7 +520,7 @@ impl Waitable for SocketOperations {
 
     fn Readiness(&self, _task: &Task, mask: EventMask) -> EventMask {
         if self.SocketBufEnabled() {
-            if self.enableRDMA {
+            if self.tcpRDMA {
                 let sockInfo = GlobalIOMgr()
                     .GetByHost(self.fd)
                     .unwrap()
@@ -886,7 +898,7 @@ impl SockOperations for SocketOperations {
         }
 
         let res;
-        if self.enableRDMA {
+        if self.tcpRDMA {
             let sockAddr = GetAddr(sockaddr[0] as i16, &sockaddr[0..sockaddr.len()])?;
             match sockAddr {
                 SockAddr::Inet(ipv4) => {
@@ -1105,23 +1117,38 @@ impl SockOperations for SocketOperations {
         }
 
         //TODO: remember ipAddr and port, hardcoded for now.
-        if self.enableRDMA {
+        if self.tcpRDMA || self.udpRDMA {
             let sockAddr = GetAddr(sockaddr[0] as i16, &sockaddr[0..sockaddr.len()])?;
             match sockAddr {
                 SockAddr::Inet(ipv4) => {
+                    let port = ipv4.Port.to_le();
                     let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
                     *fdInfo.lock().sockInfo.lock() = SockInfo::Socket(SocketInfo {
                         ipAddr: u32::from_be_bytes(ipv4.Addr), //u32::from_be_bytes([192, 168, 6, 8]), //ipAddr: u32::from_be_bytes(ipv4.Addr), // ipAddr: 3232237064,
-                        port: ipv4.Port.to_le(),               // port: 58433,
+                        port,                                  // port: 58433,
                     }); //192.168.6.8:16868
+                    if self.udpRDMA {
+                        debug!("SocketOperations::Bind, port: {}", port);
+                        GlobalRDMASvcCli()
+                            .portToFdInfoMappings
+                            .lock()
+                            .insert(port, fdInfo.clone());
+                    }
                 }
                 SockAddr::Inet6(ipv6) => {
+                    let port = ipv6.Port.to_le();
                     let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
                     *fdInfo.lock().sockInfo.lock() = SockInfo::Socket(SocketInfo {
                         //ipAddr: u32::from_be_bytes(ipv6.Addr), //u32::from_be_bytes([192, 168, 6, 8]), //ipAddr: u32::from_be_bytes(ipv4.Addr), // ipAddr: 3232237064,
-                        ipAddr: u32::from_be_bytes([0, 0, 0, 0]),
-                        port: ipv6.Port.to_le(),               // port: 58433,
+                        ipAddr: u32::from_be_bytes([0, 0, 0, 0]), //TODO: this is a temp workaround for nodejs
+                        port,                                     // port: 58433,
                     }); //192.168.6.8:16868
+                    if self.udpRDMA {
+                        GlobalRDMASvcCli()
+                            .portToFdInfoMappings
+                            .lock()
+                            .insert(port, fdInfo.clone());
+                    }
                 }
                 _ => {
                     panic!("sockAddr: {:?} can't enable RDMA!", sockAddr);
@@ -1153,7 +1180,7 @@ impl SockOperations for SocketOperations {
             _ => panic!("socket::listen unexpect buf type {:?}", socketBuf), // panic?
         };
 
-        let res = if self.enableRDMA {
+        let res = if self.tcpRDMA {
             // Kernel::HostSpace::RDMAListen(self.fd, backlog, asyncAccept, acceptQueue.clone())
             let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
             let socketInfo = fdInfo.lock().sockInfo.lock().clone();
@@ -1188,7 +1215,7 @@ impl SockOperations for SocketOperations {
             return Err(Error::SysError(-res as i32));
         }
 
-        *self.socketBuf.lock() = if self.enableRDMA {
+        *self.socketBuf.lock() = if self.tcpRDMA {
             SocketBufType::TCPRDMAServer(acceptQueue)
         } else if asyncAccept {
             if !self.AsyncAcceptEnabled() {
@@ -1210,7 +1237,7 @@ impl SockOperations for SocketOperations {
         if self.stype == SockType::SOCK_STREAM
             && (how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR)
         {
-            if self.enableRDMA {
+            if self.tcpRDMA {
                 //TODO:
                 let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
                 let socketInfo = fdInfo.lock().sockInfo.lock().clone();
@@ -1229,7 +1256,7 @@ impl SockOperations for SocketOperations {
                 self.EventRegister(task, &general, EVENT_PENDING_SHUTDOWN);
                 defer!(self.EventUnregister(task, &general));
 
-                if self.enableRDMA {
+                if self.tcpRDMA {
                     let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
                     let socketInfo = fdInfo.lock().sockInfo.lock().clone();
                     match socketInfo {
@@ -1250,7 +1277,7 @@ impl SockOperations for SocketOperations {
         if how == LibcConst::SHUT_RD || how == LibcConst::SHUT_WR || how == LibcConst::SHUT_RDWR {
             let res = 0;
 
-            if !self.enableRDMA {
+            if !self.tcpRDMA {
                 let res = Kernel::HostSpace::Shutdown(self.fd, how as i32);
                 if res < 0 {
                     return Err(Error::SysError(-res as i32));
@@ -1377,7 +1404,7 @@ impl SockOperations for SocketOperations {
     }
 
     fn SetSockOpt(&self, task: &Task, level: i32, name: i32, opt: &[u8]) -> Result<i64> {
-        if self.enableRDMA {
+        if self.tcpRDMA {
             return Ok(0);
         }
         /*let optlen = match level as u64 {
@@ -1474,7 +1501,7 @@ impl SockOperations for SocketOperations {
     }
 
     fn GetSockName(&self, _task: &Task, socketaddr: &mut [u8]) -> Result<i64> {
-        if self.enableRDMA {
+        if self.tcpRDMA {
             let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
             let fdInfoLock = fdInfo.lock();
             let sockInfo = fdInfoLock.sockInfo.lock().clone();
@@ -1525,7 +1552,7 @@ impl SockOperations for SocketOperations {
     }
 
     fn GetPeerName(&self, _task: &Task, socketaddr: &mut [u8]) -> Result<i64> {
-        if self.enableRDMA {
+        if self.tcpRDMA {
             let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
             let fdInfoLock = fdInfo.lock();
             let sockInfo = fdInfoLock.sockInfo.lock().clone();
@@ -1918,6 +1945,81 @@ impl SockOperations for SocketOperations {
             return Err(Error::SysError(SysErr::EINVAL));
         }
 
+        // Handle UDP over RDMA
+        if self.udpRDMA {
+            let totalLen = Iovs(srcs).Count();
+            if totalLen > UDP_BUF_COUNT {
+                return Err(Error::SysError(SysErr::EINVAL));
+            }
+            let sockInfo = GlobalIOMgr()
+                .GetByHost(self.fd)
+                .unwrap()
+                .lock()
+                .sockInfo
+                .lock()
+                .clone();
+            let port;
+            match sockInfo {
+                SockInfo::Socket(sockInfo) => {
+                    if sockInfo.port == 0 {
+                        port = 16868u16.to_le(); // TODO: Assign an ephemeral port
+                        *GlobalIOMgr()
+                            .GetByHost(self.fd)
+                            .unwrap()
+                            .lock()
+                            .sockInfo
+                            .lock() = SockInfo::Socket(SocketInfo { ipAddr: 0, port });
+                        GlobalRDMASvcCli()
+                            .portToFdInfoMappings
+                            .lock()
+                            .insert(port, GlobalIOMgr().GetByHost(self.fd).unwrap().clone());
+                    } else {
+                        port = sockInfo.port;
+                    }
+                }
+                _ => {
+                    panic!("SockInfo: {:?} is not allowed for UDP RDMA", sockInfo);
+                }
+            }
+            let (udpBuffAddr, udpBuffIdx) = GlobalRDMASvcCli()
+                .udpSentBufferAllocator
+                .lock()
+                .GetFreeBuffer();
+            if udpBuffAddr == 0 {
+                // TODO: wait for buffer available.
+            }
+
+            let udpPacket = unsafe { &mut (*(udpBuffAddr as *mut UDPPacket)) };
+            udpPacket.srcPort = port;
+            udpPacket.length = totalLen as u16;
+
+            let dstAddr = unsafe {
+                GetAddr(
+                    *(msgHdr.msgName as *const i16),
+                    slice::from_raw_parts(msgHdr.msgName as *const u8, msgHdr.nameLen as usize),
+                )
+            }.unwrap();
+            match dstAddr {
+                SockAddr::Inet(ipv4) => {
+                    udpPacket.dstIpAddr = u32::from_be_bytes(ipv4.Addr);
+                    udpPacket.dstPort = ipv4.Port.to_le();
+                }
+                _ => {
+                    panic!("dstAddr: {:?} can't enable RDMA!", dstAddr);
+                }
+            }
+            
+            let dstIovs = [IoVec{
+                start: udpBuffAddr + UDP_BUFF_OFFSET as u64,
+                len: totalLen
+            }];
+
+            // copy mm
+            let _cnt = task.mm.CopyIovsInFromIovs(task, srcs, &dstIovs, false)?;
+            let _res = GlobalRDMASvcCli().sendUDPPacket(udpBuffIdx);
+        }
+
+        //TODO: Should impelement RDMA for TCP SendMsg
         let size = IoVec::NumBytes(srcs);
         let mut buf = DataBuff::New(size);
         let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;

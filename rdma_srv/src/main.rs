@@ -168,7 +168,6 @@ pub const IO_WAIT_CYCLES: i64 = 100_000_000; // 1ms
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("RDMA Service is starting!");
     RDMA.Init("", 1);
-
     let hostname_os = hostname::get()?;
     match hostname_os.into_string() {
         Ok(v) => RDMA_CTLINFO.hostname_set(v),
@@ -471,6 +470,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         stream_fd,
                         sockBuf.clone(),
                         RDMA_SRV.keys[controlRegionId / 1024][1],
+                        RDMA_SRV.udpQP.qpNum()
                     );
                     let rdmaChannel = RDMAChannel::New(
                         0,
@@ -590,6 +590,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     RDMA.HandleCQEvent().unwrap();
                     // RDMAProcessOnce();
                     // println!("FdType::RDMACompletionChannel, processed {} wcs", cnt);
+
+                    // let mut i = 0;
+                    // let sec = time::Duration::from_secs(1);
+
+                    // loop {
+                    //     let cnt = RDMAProcessOnce();
+                    //     println!("Got RDMA completion event 3.1, cnt {}", cnt);
+                    //     i += 1;
+                    //     if i == 10 || cnt != 0 {
+                    //         break;
+                    //     }
+                    //     thread::sleep(sec);
+                    //     println!("Got RDMA completion event 3.2, sleep {} seconds", i);
+                    // }
+                    // println!("Got RDMA completion event 4");
                 }
                 Srv_FdType::SrvEventFd(srvEventFd) => {
                     // println!("Got SrvEventFd event {}", srvEventFd);
@@ -765,6 +780,7 @@ fn SetupConnection(ip: &u32) {
         sock_fd,
         sockBuf.clone(),
         RDMA_SRV.keys[controlRegionId / 16][1],
+        RDMA_SRV.udpQP.qpNum()
     );
     let rdmaChannel = RDMAChannel::New(
         0,

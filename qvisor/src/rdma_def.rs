@@ -61,7 +61,10 @@ impl RDMASvcClient {
         assert!(cliShareAddr as u64 == localShareAddr || localShareAddr == 0);
 
         let cliShareRegion = unsafe { &mut (*(cliShareAddr as *mut ClientShareRegion)) };
-
+        let udpBufferAllocator = UDPBufferAllocator::New(
+            &cliShareRegion.udpBufSent as *const _ as u64,
+            UDP_RECV_PACKET_COUNT as u32,
+        );
         let cliShareRegion = Mutex::new(cliShareRegion);
 
         let srvShareSize = mem::size_of::<ShareRegion>();
@@ -109,6 +112,8 @@ impl RDMASvcClient {
                 rdmaIdToSocketMappings: Mutex::new(BTreeMap::new()),
                 nextRDMAId: AtomicU32::new(0),
                 podId,
+                udpSentBufferAllocator: Mutex::new(udpBufferAllocator),
+                portToFdInfoMappings: Mutex::new(BTreeMap::new()),
                 clientRole,
             }),
         }

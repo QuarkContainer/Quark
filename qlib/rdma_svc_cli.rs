@@ -56,6 +56,10 @@ pub struct RDMASvcCliIntern {
 
     pub podId: [u8; 64],
 
+    pub udpSentBufferAllocator: Mutex<UDPBufferAllocator>,
+
+    pub portToFdInfoMappings: Mutex<BTreeMap<u16, FdInfo>>,
+
     pub clientRole: ClientRole,
 }
 
@@ -89,6 +93,8 @@ impl Default for RDMASvcClient {
                 rdmaIdToSocketMappings: Mutex::new(BTreeMap::new()),
                 nextRDMAId: AtomicU32::new(0), //AtomicU64::new((i32::MAX + 1) as u64), //2147483647 + 1 = 2147483648
                 podId: [0; 64],
+                udpSentBufferAllocator: Mutex::new(UDPBufferAllocator::default()),
+                portToFdInfoMappings: Mutex::new(BTreeMap::new()),
                 clientRole: ClientRole::NORMAL,
             }),
         }
@@ -209,12 +215,22 @@ impl RDMASvcClient {
     }
 
     pub fn pendingshutdown(&self, channelId: u32) -> Result<()> {
-        let res = self.SentMsgToSvc(RDMAReqMsg::RDMAPendingShutdown(RDMAPendingShutdownReq { channelId }));
+        let res = self.SentMsgToSvc(RDMAReqMsg::RDMAPendingShutdown(RDMAPendingShutdownReq {
+            channelId,
+        }));
         res
     }
 
     pub fn close(&self, channelId: u32) -> Result<()> {
         let res = self.SentMsgToSvc(RDMAReqMsg::RDMAClose(RDMACloseReq { channelId }));
+        res
+    }
+
+    pub fn sendUDPPacket(&self, udpBuffIndex: u32) -> Result<()> {
+        let res = self.SentMsgToSvc(RDMAReqMsg::RDMASendUDPPacket(RDMASendUDPPacket {
+            podId: self.podId,
+            udpBuffIdx: udpBuffIndex,
+        }));
         res
     }
 
@@ -292,18 +308,24 @@ impl RDMASvcClient {
                                 SockInfo::Socket(_) => {
                                     let ioBufIndex = response.ioBufIndex as usize;
                                     let shareRegion = self.cliShareRegion.lock();
-                                    let sockBuf = SocketBuff(Arc::new(SocketBuffIntern::InitWithShareMemory(
-                                        MemoryDef::DEFAULT_BUF_PAGE_COUNT,
-                                        &shareRegion.ioMetas[ioBufIndex].readBufAtoms as *const _
-                                            as u64,
-                                        &shareRegion.ioMetas[ioBufIndex].writeBufAtoms as *const _
-                                            as u64,
-                                        &shareRegion.ioMetas[ioBufIndex].consumeReadData as *const _
-                                            as u64,
-                                        &shareRegion.iobufs[ioBufIndex].read as *const _ as u64,
-                                        &shareRegion.iobufs[ioBufIndex].write as *const _ as u64,
-                                        false,
-                                    )));
+                                    let sockBuf = SocketBuff(Arc::new(
+                                        SocketBuffIntern::InitWithShareMemory(
+                                            MemoryDef::DEFAULT_BUF_PAGE_COUNT,
+                                            &shareRegion.ioMetas[ioBufIndex].readBufAtoms
+                                                as *const _
+                                                as u64,
+                                            &shareRegion.ioMetas[ioBufIndex].writeBufAtoms
+                                                as *const _
+                                                as u64,
+                                            &shareRegion.ioMetas[ioBufIndex].consumeReadData
+                                                as *const _
+                                                as u64,
+                                            &shareRegion.iobufs[ioBufIndex].read as *const _ as u64,
+                                            &shareRegion.iobufs[ioBufIndex].write as *const _
+                                                as u64,
+                                            false,
+                                        ),
+                                    ));
 
                                     let dataSock = RDMADataSock::New(
                                         response.sockfd,
@@ -366,18 +388,24 @@ impl RDMASvcClient {
                                     self.rdmaIdToSocketMappings.lock().insert(rdmaId, fd);
                                     let ioBufIndex = response.ioBufIndex as usize;
                                     let shareRegion = self.cliShareRegion.lock();
-                                    let sockBuf = SocketBuff(Arc::new(SocketBuffIntern::InitWithShareMemory(
-                                        MemoryDef::DEFAULT_BUF_PAGE_COUNT,
-                                        &shareRegion.ioMetas[ioBufIndex].readBufAtoms as *const _
-                                            as u64,
-                                        &shareRegion.ioMetas[ioBufIndex].writeBufAtoms as *const _
-                                            as u64,
-                                        &shareRegion.ioMetas[ioBufIndex].consumeReadData as *const _
-                                            as u64,
-                                        &shareRegion.iobufs[ioBufIndex].read as *const _ as u64,
-                                        &shareRegion.iobufs[ioBufIndex].write as *const _ as u64,
-                                        false,
-                                    )));
+                                    let sockBuf = SocketBuff(Arc::new(
+                                        SocketBuffIntern::InitWithShareMemory(
+                                            MemoryDef::DEFAULT_BUF_PAGE_COUNT,
+                                            &shareRegion.ioMetas[ioBufIndex].readBufAtoms
+                                                as *const _
+                                                as u64,
+                                            &shareRegion.ioMetas[ioBufIndex].writeBufAtoms
+                                                as *const _
+                                                as u64,
+                                            &shareRegion.ioMetas[ioBufIndex].consumeReadData
+                                                as *const _
+                                                as u64,
+                                            &shareRegion.iobufs[ioBufIndex].read as *const _ as u64,
+                                            &shareRegion.iobufs[ioBufIndex].write as *const _
+                                                as u64,
+                                            false,
+                                        ),
+                                    ));
 
                                     let dataSock = RDMADataSock::New(
                                         rdmaId,
@@ -435,10 +463,10 @@ impl RDMASvcClient {
                             {
                                 Some(rdmaIdVal) => *rdmaIdVal,
                                 None => {
-                                //     debug!(
-                                //     "RDMARespMsg::RDMANotify, Can't find rdmaId based on channelId: {}",
-                                //     response.channelId
-                                // );
+                                    //     debug!(
+                                    //     "RDMARespMsg::RDMANotify, Can't find rdmaId based on channelId: {}",
+                                    //     response.channelId
+                                    // );
                                     break;
                                 }
                             };
@@ -536,6 +564,10 @@ impl RDMASvcClient {
                                     }
                                 }
                             }
+                        },
+                        RDMARespMsg::RDMAReturnUDPBuff(response) => {
+                            debug!("RDMARespMsg::RDMAReturnUDPBuff, response: {:?}", response);
+                            GlobalRDMASvcCli().udpSentBufferAllocator.lock().ReturnBuffer(response.udpBuffIdx);
                         }
                     }
                 }
