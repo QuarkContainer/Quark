@@ -98,6 +98,7 @@ impl<T: 'static + Default + Copy> RingQueue<T> {
 }
 
 pub const UDP_BUFF_LEN: usize = 1010; //currently make UDPPacket total size to 1024.
+pub const UDP_BUFF_OFFSET: usize = 4 + 2 + 4 + 2 + 2;
 
 #[derive(Clone, Copy, Debug)]
 pub struct UDPPacket {
@@ -158,6 +159,7 @@ pub enum RDMAReqMsg {
     RDMAShutdown(RDMAShutdownReq),
     RDMAClose(RDMACloseReq),
     RDMAPendingShutdown(RDMAPendingShutdownReq),
+    RDMASendUDPPacket(RDMASendUDPPacket),
     // RDMAAccept(RDMAAcceptReq), //Put connected socket on client side.
 }
 
@@ -173,6 +175,7 @@ pub enum RDMARespMsg {
     RDMAAccept(RDMAAcceptResp),
     RDMANotify(RDMANotifyResp),
     RDMAFinNotify(RDMAFinNotifyResp),
+    RDMAReturnUDPBuff(RDMAReturnUDPBuff),
 }
 
 impl Default for RDMARespMsg {
@@ -210,6 +213,11 @@ pub struct RDMANotifyResp {
     pub event: EventMask,
 }
 
+#[derive(Default, Clone, Copy, Debug)]
+pub struct RDMAReturnUDPBuff {
+    pub udpBuffIdx: u32,
+}
+
 pub const FIN_RECEIVED_FROM_PEER: EventMask = 0x01;
 pub const FIN_SENT_TO_PEER: EventMask = 0x02;
 // pub const EVENT_OUT: EventMask = 0x04; // POLLOUT
@@ -238,6 +246,12 @@ pub struct RDMAListenReqUsingPodId {
     pub podId: [u8; 64],
     pub port: u16,
     pub waitingLen: i32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct RDMASendUDPPacket {
+    pub podId: [u8; 64],
+    pub udpBuffIdx: u32,
 }
 
 #[derive(Default, Clone, Copy, Debug)]
@@ -570,12 +584,14 @@ impl UDPBufferAllocator {
         };
     }
 
-    pub fn GetFreeBuffer(&mut self) -> u64 {
+    pub fn GetFreeBuffer(&mut self) -> (u64, u32) {
         let idxOpt = self.freeList.pop();
         let mut retAddr = 0;
+        let mut retIdx = 0;
         match idxOpt {
             Some(idx) => {
-                retAddr = self.startAddr + (idx * mem::size_of::<UDPPacket>() as u32) as u64
+                retAddr = self.startAddr + (idx * mem::size_of::<UDPPacket>() as u32) as u64;
+                retIdx = idx;
             }
             None => {
                 
@@ -584,11 +600,12 @@ impl UDPBufferAllocator {
         if retAddr == 0 {
             if self.curIndex != self.totalCnt {
                 retAddr = self.startAddr + (self.curIndex * mem::size_of::<UDPPacket>() as u32) as u64;
+                retIdx = self.curIndex;
                 self.curIndex += 1;
                 
             }
         }
-        retAddr
+        (retAddr, retIdx)
     }
     pub fn ReturnBuffer(&mut self, idx: u32) {
         self.freeList.push(idx);

@@ -765,8 +765,11 @@ impl RDMAContext {
         } else if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RECV {
             error!("ProcessWC::3");
             RDMA_SRV.ProcessRDMARecv(wc.qp_num, wc.wr_id, wc.byte_len);
+        }else if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_SEND {
+            error!("ProcessWC::4");
+            RDMA_SRV.ProcessRDMARecv(wc.qp_num, wc.wr_id, wc.byte_len);
         } else {
-            // debug!("ProcessWC::4, opcode: {}, wr_id: {}", wc.opcode, wc.wr_id);
+            // debug!("ProcessWC::5, opcode: {}, wr_id: {}", wc.opcode, wc.wr_id);
         }
     }
 }

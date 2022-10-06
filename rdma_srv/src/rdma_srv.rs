@@ -416,6 +416,27 @@ impl RDMASrv {
                 break;
             }
         }
+        let udpPacket = laddr as *const UDPPacket;
+        debug!("RDMASrv::ProcessRDMARecv, udpPacket: {:?}", unsafe {
+            *udpPacket
+        });
+    }
+
+    pub fn ProcessRDMASend(&self, wrId: u64) {
+        error!("ProcessRDMASend, 1, qwrId: {}", wrId);
+        let agentId = (wrId >> 32) as u32;
+        let udpBuffIdx = (wrId | 0xFFFFFFFF) as u32;
+        match RDMA_SRV.agents.lock().get(&agentId) {
+            Some(rdmaAgent) => {
+                rdmaAgent.SendResponse(RDMAResp {
+                    user_data: 0,
+                    msg: RDMARespMsg::RDMAReturnUDPBuff(RDMAReturnUDPBuff { udpBuffIdx }),
+                });
+            }
+            None => {
+                panic!("ProcessRDMASend, could not find agentId: {}", agentId)
+            }
+        }
     }
 
     // pub fn HandleClientRequest(&self) -> usize {

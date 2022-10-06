@@ -112,6 +112,7 @@ impl RDMASvcClient {
                 nextRDMAId: AtomicU32::new(0),
                 podId,
                 udpSentBufferAllocator: Mutex::new(udpBufferAllocator),
+                portToFdInfoMappings: Mutex::new(BTreeMap::new()),
             }),
         }
     }
