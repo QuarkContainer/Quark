@@ -1846,9 +1846,7 @@ impl SockOperations for SocketOperations {
         msgHdr: &mut MsgHdr,
         deadline: Option<Time>,
     ) -> Result<i64> {
-        debug!("SockOperations::SendMsg, 1");
         if self.SocketBufEnabled() {
-            debug!("SockOperations::SendMsg, 1.1");
             if self.SocketBuf().WClosed() {
                 return Err(Error::SysError(SysErr::EPIPE));
             }
