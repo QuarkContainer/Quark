@@ -252,6 +252,9 @@ impl CtrlInfo{
     }
 
     pub fn IsEgress(&self, ip:u32) -> bool {
+        if !self.isK8s {
+            return false;
+        }
         if self.IsInSubnet(ip.clone(), String::from("podSubnet")) {
             println!("IP {} belongs to cluster's pod subnet", ip);
             return false;
