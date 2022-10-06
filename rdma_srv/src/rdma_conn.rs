@@ -273,42 +273,42 @@ impl RDMAConn {
 
     pub fn SetReady(&self) {
         self.SetSocketState(SocketState::Ready);
-        println!("Ready!!!");
+        // println!("Ready!!!");
         //self.ctrlChan.lock().SendData();
-        let laddr = RDMA_SRV.udpMemRegion.addr + 10 * (mem::size_of::<UDPPacket>() + 40) as u64 + 40;
-        let mut i = 0;
-        println!("before updating");
-        loop {
-            let addr = laddr + i * 8;
-            println!("addr: 0x{:x}-> 0x{:x}", addr, unsafe { &mut *( addr as *mut u64) });
-            i += 1;
-            if i > 10 {
-                break;
-            }
-        }
+        // let laddr = RDMA_SRV.udpMemRegion.addr + 10 * (mem::size_of::<UDPPacket>() + 40) as u64 + 40;
+        // let mut i = 0;
+        // println!("before updating");
+        // loop {
+        //     let addr = laddr + i * 8;
+        //     println!("addr: 0x{:x}-> 0x{:x}", addr, unsafe { &mut *( addr as *mut u64) });
+        //     i += 1;
+        //     if i > 10 {
+        //         break;
+        //     }
+        // }
 
-        i = 0;
-        loop {
-            let addr = laddr + i * 8;
-            unsafe { *(addr as *mut u64) = 0xAABBCCDD; }
-            i += 1;
-            if i > 10 {
-                break;
-            }
-        }
+        // i = 0;
+        // loop {
+        //     let addr = laddr + i * 8;
+        //     unsafe { *(addr as *mut u64) = 0xAABBCCDD; }
+        //     i += 1;
+        //     if i > 10 {
+        //         break;
+        //     }
+        // }
 
-        println!("after updating");
-        i = 0;
-        loop {
-            let addr = laddr + i * 8;
-            println!("addr{}: 0x{:x}-> 0x{:x}", i, addr, unsafe { &mut *( addr as *mut u64) });
-            i += 1;
-            if i == 10 {
-                break;
-            }
-        }
-        let _len = mem::size_of::<UDPPacket>();
-        self.RDMAUDQPSend(laddr, 80 as u32, 123, RDMA_SRV.udpMemoryRegion.LKey()).expect("RDMAUDQPSend failed...");
+        // println!("after updating");
+        // i = 0;
+        // loop {
+        //     let addr = laddr + i * 8;
+        //     println!("addr{}: 0x{:x}-> 0x{:x}", i, addr, unsafe { &mut *( addr as *mut u64) });
+        //     i += 1;
+        //     if i == 10 {
+        //         break;
+        //     }
+        // }
+        // let _len = mem::size_of::<UDPPacket>();
+        // self.RDMAUDQPSend(laddr, 80 as u32, 123, RDMA_SRV.udpMemoryRegion.LKey()).expect("RDMAUDQPSend failed...");
         // self.RDMAUDQPSend(laddr, 80 as u32, 123, RDMA_SRV.udpMemoryRegion.LKey()).expect("RDMAUDQPSend failed...");
         // self.RDMAUDQPSend(laddr, 80 as u32, 123, RDMA_SRV.udpMemoryRegion.LKey()).expect("RDMAUDQPSend failed...");
     }

@@ -414,7 +414,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // RDMA.HandleCQEvent().unwrap();
         // RDMAProcessOnce(&mut HashMap::new());
         RDMAProcessOnce();
-        println!("Before sleep");
+        // println!("Before sleep");
         let res = match syscall!(epoll_wait(
             epoll_fd,
             events.as_mut_ptr() as *mut libc::epoll_event,
@@ -427,7 +427,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         unsafe { events.set_len(res as usize) };
         RDMA_SRV.shareRegion.srvBitmap.store(0, Ordering::Release);
-        println!("res is: {}", res);
+        // println!("res is: {}", res);
         RDMAProcess();
         for ev in &events {
             // print!("u64: {}, events: {:x}", ev.U64, ev.Events);
@@ -523,7 +523,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 Srv_FdType::TCPSocketConnect(ipAddr) => match RDMA_SRV.conns.lock().get(&ipAddr) {
                     Some(rdmaConn) => {
-                        println!("TCPSocketConnect, 1");
                         rdmaConn.Notify(ev.Events as u64);
                     }
                     _ => {
@@ -585,7 +584,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 Srv_FdType::RDMACompletionChannel => {
-                    println!("Got RDMA completion event");
+                    // println!("Got RDMA completion event");
                     // let _cnt = RDMA.PollCompletionQueueAndProcess();
                     // RDMAProcess();
                     RDMA.HandleCQEvent().unwrap();
@@ -608,7 +607,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // println!("Got RDMA completion event 4");
                 }
                 Srv_FdType::SrvEventFd(srvEventFd) => {
-                    println!("Got SrvEventFd event {}", srvEventFd);
+                    // println!("Got SrvEventFd event {}", srvEventFd);
                     // print!("u64: {}, events: {:x}", ev.U64, ev.Events);
                     // println!("srvEvent notified ****************1");
                     // RDMAProcess();

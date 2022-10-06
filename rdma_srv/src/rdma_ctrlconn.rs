@@ -17,6 +17,8 @@ use std::cell::RefCell;
 use std::iter::FromIterator;
 use std::net::{IpAddr, Ipv4Addr};
 use std::{collections::HashMap, collections::HashSet, str::FromStr};
+use crate::rdma_srv::RDMA_CTLINFO;
+
 use super::common::*;
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::sync::atomic::{AtomicUsize, Ordering};

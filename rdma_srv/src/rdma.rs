@@ -711,10 +711,10 @@ impl RDMAContext {
         //         );
         //     }
         // }
-        println!(
-            "ProcessWC: wrid: {}, qp_num: {}, op_code: {}, status: {}",
-            wc.wr_id, wc.qp_num, wc.opcode, wc.status
-        );
+        // println!(
+        //     "ProcessWC: wrid: {}, qp_num: {}, op_code: {}, status: {}",
+        //     wc.wr_id, wc.qp_num, wc.opcode, wc.status
+        // );
         if wc.status != rdmaffi::ibv_wc_status::IBV_WC_SUCCESS {
             error!(
                 "ProcessWC::1, work reqeust failed with status: {}, id: {}",
@@ -763,10 +763,10 @@ impl RDMAContext {
             }
             RDMA_SRV.ProcessRDMARecvWriteImm(immData.ReadCount() as _, wc.qp_num, wc.byte_len as _);
         } else if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RECV {
-            error!("ProcessWC::3");
+            // error!("ProcessWC::3");
             RDMA_SRV.ProcessRDMARecv(wc.qp_num, wc.wr_id, wc.byte_len);
         }else if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_SEND {
-            error!("ProcessWC::4");
+            // error!("ProcessWC::4");
             RDMA_SRV.ProcessRDMARecv(wc.qp_num, wc.wr_id, wc.byte_len);
         } else {
             // debug!("ProcessWC::5, opcode: {}, wr_id: {}", wc.opcode, wc.wr_id);

@@ -237,13 +237,6 @@ impl RDMASrv {
             );
         }
 
-        println!(
-            "shareRegionAddr : 0x{:x}, size is: {}",
-            shareRegionAddr as u64, size
-        );
-
-        //RDMA.Init("", 1);
-
         //start from 2M registration.
         let controlMR = RDMA
             .CreateMemoryRegion(contrlAddr as u64, 2 * 1024 * 1024)
@@ -253,7 +246,6 @@ impl RDMASrv {
             .unwrap();
         let udpQP = RDMA.CreateUDQueuePair().expect("Create UD QP failed...");
         udpQP.SetupUDQP(&RDMA).expect("SetupUDQP fail...");
-        println!("udpQP, qp_num: {}", udpQP.qpNum());
 
         for i in 0..RECV_UDP_COUNT {
             let addr = udpBufferAddr as u64 + (i * udpPacketExtendedSize as u32) as u64;
