@@ -39,6 +39,7 @@ pub struct Config {
     pub HiberODirect: bool,
     pub DisableCgroup: bool,
     pub CopyDataWithPf: bool,
+    pub TlbShootdownWait: bool,
 }
 
 impl Config {
@@ -81,6 +82,7 @@ impl Default for Config {
             HiberODirect: true,
             DisableCgroup: true,
             CopyDataWithPf: false
+            TlbShootdownWait: false,
         };
     }
 }
