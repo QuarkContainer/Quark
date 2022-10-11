@@ -16,6 +16,7 @@ use crate::common::*;
 use super::constants::*;
 use crate::rdma_ctrlconn::*;
 use crate::RDMA_CTLINFO;
+use crate::RDMA_SRV;
 use svc_client::quark_cm_service_client::QuarkCmServiceClient;
 use svc_client::MaxResourceVersionMessage;
 use svc_client::PodMessage;
@@ -95,12 +96,21 @@ impl PodInformer {
             };
             containerids_map.insert(pod.container_id.clone(), pod.ip.clone());
             ip_to_podId_map.insert(pod.ip, pod.container_id.clone());
+            match RDMA_SRV.podIdToAgents.lock().get(pod.container_id.as_bytes()) {
+                Some(rdmaAgent) => {
+                    RDMA_SRV.ipAddrToAgents.lock().insert(pod.ip, rdmaAgent.clone());
+                }
+                None => {
+                    panic!("Could not find agent from podId: {:?}", pod.container_id.as_bytes());
+                }
+            }
             pods_map.insert(ip, pod);
             if pod_message.resource_version > self.max_resource_version {
                 self.max_resource_version = pod_message.resource_version;
             }
         } else if pod_message.event_type == EVENT_TYPE_DELETE {
             ip_to_podId_map.remove(&ip);
+            RDMA_SRV.ipAddrToAgents.lock().remove(&ip);
             if pods_map.contains_key(&ip) {
                 if pods_map[&ip].resource_version < pod_message.resource_version {
                     let container_id = &pods_map[&ip].container_id;

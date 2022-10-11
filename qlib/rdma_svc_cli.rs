@@ -433,9 +433,13 @@ impl RDMASvcClient {
                                     let mut tcpSockAddr = TcpSockAddr::default();
                                     let len = sockAddr.Len();
                                     let _res = sockAddr.Marsh(&mut tcpSockAddr.data, len);
-                                    let _tmp = rdmaServerSock
-                                        .acceptQueue
-                                        .EnqSocket(fd, tcpSockAddr, len as u32, sockBuf.into(), Queue::default());
+                                    let _tmp = rdmaServerSock.acceptQueue.EnqSocket(
+                                        fd,
+                                        tcpSockAddr,
+                                        len as u32,
+                                        sockBuf.into(),
+                                        Queue::default(),
+                                    );
 
                                     self.channelToSocketMappings
                                         .lock()
@@ -564,10 +568,45 @@ impl RDMASvcClient {
                                     }
                                 }
                             }
-                        },
+                        }
                         RDMARespMsg::RDMAReturnUDPBuff(response) => {
                             debug!("RDMARespMsg::RDMAReturnUDPBuff, response: {:?}", response);
-                            GlobalRDMASvcCli().udpSentBufferAllocator.lock().ReturnBuffer(response.udpBuffIdx);
+                            GlobalRDMASvcCli()
+                                .udpSentBufferAllocator
+                                .lock()
+                                .ReturnBuffer(response.udpBuffIdx);
+                        }
+                        RDMARespMsg::RDMARecvUDPPacket(response) => {
+                            debug!("RDMARespMsg::RDMARecvUDPPacket, response: {:?}", response);
+                            let udpPacket = &GlobalRDMASvcCli().cliShareRegion.lock().udpBufRecv
+                                [response.udpBuffIdx as usize];
+                            // + wrId * (mem::size_of::<UDPPacket>() + 40) as u64
+                            // + 40;
+                            debug!(
+                                "RDMARespMsg::RDMARecvUDPPacket, 1 udpPacket: {:?}",
+                                udpPacket
+                            );
+                            match GlobalRDMASvcCli()
+                                .portToFdInfoMappings
+                                .lock()
+                                .get(&udpPacket.dstPort)
+                            {
+                                Some(fdInfo) => {
+                                    let sockInfo = fdInfo.lock().sockInfo.lock().clone();
+                                    match sockInfo {
+                                        SockInfo::RDMAUDPSocket(udpSock) => {
+                                            debug!("RDMARespMsg::RDMARecvUDPPacket, 2");
+                                            udpSock.recvQueue.EnqSocket(response.udpBuffIdx, Queue::default());
+                                        }
+                                        _ => {
+                                            panic!("RDMARespMsg::RDMARecvUDPPacket, sockInfo: {:?} is not expected for UDP over RDMA", sockInfo);
+                                        }
+                                    }
+                                }
+                                None => {
+                                    error!("RDMARespMsg::RDMARecvUDPPacket, no FdInfo found for port: {}", udpPacket.dstPort);
+                                }
+                            }
                         }
                     }
                 }

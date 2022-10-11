@@ -12,17 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::rdma_srv::{RDMA_CTLINFO, RDMA_SRV};
 use spin::Mutex;
 use std::cell::RefCell;
 use std::iter::FromIterator;
 use std::net::{IpAddr, Ipv4Addr};
 use std::{collections::HashMap, collections::HashSet, str::FromStr};
-use crate::rdma_srv::RDMA_CTLINFO;
 
 use super::common::*;
+use cidr::Ipv4Cidr;
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use cidr::{Ipv4Cidr};
 
 use super::qlib::rdma_share::*;
 
@@ -84,7 +84,7 @@ pub struct CtrlInfo {
 }
 
 impl Default for CtrlInfo {
-    fn default() -> CtrlInfo {        
+    fn default() -> CtrlInfo {
         let mut nodes: HashMap<u32, Node> = HashMap::new();
         let pods: HashMap<u32, Pod> = HashMap::new();
         let services: HashMap<u32, Service> = HashMap::new();
@@ -93,7 +93,7 @@ impl Default for CtrlInfo {
         let mut containerids: HashMap<String, u32> = HashMap::new();
         let mut ipToPodIdMappings: HashMap<u32, String> = HashMap::new();
 
-        let isK8s = true;
+        let isK8s = false;
         if !isK8s {
             let lab1ip = u32::from(Ipv4Addr::from_str("172.16.1.43").unwrap()).to_be();
             let node1 = Node {
@@ -102,7 +102,7 @@ impl Default for CtrlInfo {
                 timestamp: 0,
                 subnet: u32::from(Ipv4Addr::from_str("192.168.2.0").unwrap()),
                 netmask: u32::from(Ipv4Addr::from_str("255.255.255.0").unwrap()),
-                resource_version: 0,                
+                resource_version: 0,
             };
             let lab2ip = u32::from(Ipv4Addr::from_str("172.16.1.99").unwrap()).to_be();
             let node2 = Node {
@@ -115,10 +115,23 @@ impl Default for CtrlInfo {
             };
             nodes.insert(lab1ip, node1);
             nodes.insert(lab2ip, node2);
-            containerids.insert("server".to_string(), u32::from(Ipv4Addr::from_str("192.168.2.8").unwrap()).to_be());
-            containerids.insert("client".to_string(), u32::from(Ipv4Addr::from_str("192.168.1.8").unwrap()).to_be());
-            ipToPodIdMappings.insert(u32::from(Ipv4Addr::from_str("192.168.2.8").unwrap()).to_be(), "server".to_string());
-            ipToPodIdMappings.insert(u32::from(Ipv4Addr::from_str("192.168.1.8").unwrap()).to_be(), "client".to_string());
+            error!("u32::from(Ipv4Addr::from_str('192.168.2.8').unwrap()).to_be(): {}, u32::from(Ipv4Addr::from_str('192.168.1.8').unwrap()).to_be(): {}", u32::from(Ipv4Addr::from_str("192.168.2.8").unwrap()).to_be(), u32::from(Ipv4Addr::from_str("192.168.1.8").unwrap()).to_be());
+            containerids.insert(
+                "server".to_string(),
+                u32::from(Ipv4Addr::from_str("192.168.2.8").unwrap()).to_be(),
+            );
+            containerids.insert(
+                "client".to_string(),
+                u32::from(Ipv4Addr::from_str("192.168.1.8").unwrap()).to_be(),
+            );
+            ipToPodIdMappings.insert(
+                u32::from(Ipv4Addr::from_str("192.168.2.8").unwrap()).to_be(),
+                "server".to_string(),
+            );
+            ipToPodIdMappings.insert(
+                u32::from(Ipv4Addr::from_str("192.168.1.8").unwrap()).to_be(),
+                "client".to_string(),
+            );
         }
 
         CtrlInfo {
@@ -153,8 +166,8 @@ impl Default for CtrlInfo {
     }
 }
 
-impl CtrlInfo{
-    pub fn fds_insert(&self, fd: i32, fdType: Srv_FdType){
+impl CtrlInfo {
+    pub fn fds_insert(&self, fd: i32, fdType: Srv_FdType) {
         let mut fds = self.fds.lock();
         fds.insert(fd, fdType);
     }
@@ -199,7 +212,6 @@ impl CtrlInfo{
     pub fn localIp_get(&self) -> u32 {
         self.localIp.lock().clone()
     }
-    
 
     pub fn get_node_ips_for_connecting(&self) -> HashSet<u32> {
         let mut set: HashSet<u32> = HashSet::new();
@@ -217,6 +229,7 @@ impl CtrlInfo{
             // if !self.isK8s {
             //     return Some(node.ipAddr);
             // }
+            error!("get_node_ip_by_pod_ip, node.netmask: {}, *ip: {}, node.subnet: {}", node.netmask, *ip, node.subnet);
             if node.netmask & *ip == node.subnet {
                 return Some(node.ipAddr);
             }
@@ -224,7 +237,7 @@ impl CtrlInfo{
         None
     }
 
-    pub fn IsService(&self, ip:u32, port: &u16) -> Option<IpWithPort> {
+    pub fn IsService(&self, ip: u32, port: &u16) -> Option<IpWithPort> {
         let services = self.services.lock();
         if services.contains_key(&ip) {
             for p in services[&ip].ports.iter() {
@@ -251,7 +264,7 @@ impl CtrlInfo{
         None
     }
 
-    pub fn IsEgress(&self, ip:u32) -> bool {
+    pub fn IsEgress(&self, ip: u32) -> bool {
         if !self.isK8s {
             return false;
         }
@@ -268,7 +281,7 @@ impl CtrlInfo{
         true
     }
 
-    pub fn IsInSubnet(&self, ip:u32, cidrName:String) -> bool {
+    pub fn IsInSubnet(&self, ip: u32, cidrName: String) -> bool {
         let configMaps = self.configMaps.lock();
         if configMaps.contains_key(&cidrName) {
             let cidr = &configMaps[&cidrName].value;
@@ -276,7 +289,7 @@ impl CtrlInfo{
             let mut splitted = cidr.split("/");
             let ipv4 = Ipv4Addr::from_str(splitted.next().unwrap()).unwrap();
             let ipv4Mask = Ipv4Addr::from_str(&ipv4Cidr.mask().to_string()).unwrap();
-            let subnet= u32::from(ipv4);
+            let subnet = u32::from(ipv4);
             let mask = u32::from(ipv4Mask);
             return mask & ip == subnet;
         }
@@ -336,7 +349,6 @@ pub struct Pod {
     pub container_id: String,
     pub resource_version: i32,
 }
-
 
 #[derive(Default, Debug, Clone)]
 pub struct Service {

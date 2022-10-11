@@ -69,6 +69,7 @@ pub struct RDMAAgentIntern {
     // pub sockInfos: Mutex<HashMap<u32, SockInfo>>,
     pub udpMR: MemoryRegion,
     pub udpRecvBufferAllocator: Mutex<UDPBufferAllocator>,
+    pub podId: [u8; 64],
 }
 
 impl Drop for RDMAAgentIntern {
@@ -101,7 +102,13 @@ impl Deref for RDMAAgent {
 }
 
 impl RDMAAgent {
-    pub fn New(id: u32, clientId: String, connSock: i32, clientEventfd: i32) -> Self {
+    pub fn New(
+        id: u32,
+        clientId: String,
+        connSock: i32,
+        clientEventfd: i32,
+        podId: [u8; 64],
+    ) -> Self {
         let memfdname = CString::new("RDMASrvMemFd").expect("CString::new failed for RDMASrvMemFd");
         let memfd = unsafe { libc::memfd_create(memfdname.as_ptr(), libc::MFD_ALLOW_SEALING) };
         let size = mem::size_of::<ClientShareRegion>();
@@ -168,6 +175,7 @@ impl RDMAAgent {
             memoryRegions: Mutex::new(vec![tcpMR]),
             udpMR,
             udpRecvBufferAllocator: Mutex::new(udpRecvBufferAllocator),
+            podId,
         }))
     }
 
@@ -188,6 +196,7 @@ impl RDMAAgent {
             memoryRegions: Mutex::new(vec![]),
             udpMR: MemoryRegion::default(),
             udpRecvBufferAllocator: Mutex::new(UDPBufferAllocator::default()),
+            podId: [0; 64],
         }))
     }
 
@@ -431,20 +440,34 @@ impl RDMAAgent {
                 let mut dstIpAddr = msg.dstIpAddr;
                 let mut dstPort = msg.dstPort;
                 if RDMA_CTLINFO.IsEgress(dstIpAddr) {
-                    self.SendControlMsgInternal(msg.sockfd, RDMA_CTLINFO.localIp_get(),ipAddr.to_be(), msg.srcPort, dstIpAddr, dstPort);
+                    self.SendControlMsgInternal(
+                        msg.sockfd,
+                        RDMA_CTLINFO.localIp_get(),
+                        ipAddr.to_be(),
+                        msg.srcPort,
+                        dstIpAddr,
+                        dstPort,
+                    );
                 } else {
                     // error!("RDMAConnectUsingPodId: Connect to ip {} port {}", dstIpAddr, dstPort);
                     match RDMA_CTLINFO.IsService(dstIpAddr, &dstPort) {
-                        None => {},
+                        None => {}
                         Some(ipWithPort) => {
                             println!("The traffic is connecting to a service. Change the connection to {:?}", ipWithPort);
                             dstIpAddr = ipWithPort.ip;
                             dstPort = ipWithPort.port.port;
-                        },
+                        }
                     }
                     match RDMA_CTLINFO.get_node_ip_by_pod_ip(&dstIpAddr) {
                         Some(nodeIpAddr) => {
-                            self.SendControlMsgInternal(msg.sockfd, nodeIpAddr,ipAddr.to_be(), msg.srcPort, dstIpAddr, dstPort);
+                            self.SendControlMsgInternal(
+                                msg.sockfd,
+                                nodeIpAddr,
+                                ipAddr.to_be(),
+                                msg.srcPort,
+                                dstIpAddr,
+                                dstPort,
+                            );
                         }
                         None => {
                             println!("TODO: return error as no ip to node mapping is found");
@@ -499,10 +522,6 @@ impl RDMAAgent {
             RDMAReqMsg::RDMASendUDPPacket(msg) => {
                 error!("RDMAReqMsg::RDMASendUDPPacket, msg: {:?}", msg);
                 let udpPacket = &mut self.shareRegion.lock().udpBufSent[msg.udpBuffIdx as usize];
-                error!(
-                    "RDMAReqMsg::RDMASendUDPPacket, 1, srcPort: {}, dstIpAddr: {}, dstPort: {}",
-                    udpPacket.srcPort, udpPacket.dstIpAddr, udpPacket.dstPort
-                );
                 let mut podId = String::from_utf8(msg.podId.to_vec()).unwrap();
                 if !RDMA_CTLINFO.isK8s {
                     podId = "client".to_string();
@@ -513,8 +532,12 @@ impl RDMAAgent {
                     .lock()
                     .get(&podId)
                     .unwrap()
-                    .clone();
+                    .clone().to_be();
                 if !RDMA_CTLINFO.isK8s {
+                    error!(
+                        "RDMAReqMsg::RDMASendUDPPacket, 0, srcAddr: {}, dstIpAddr: {}",
+                        srcIpAddr, udpPacket.dstIpAddr
+                    );
                     if srcIpAddr == udpPacket.dstIpAddr {
                         let podId = "server".to_string();
                         srcIpAddr = RDMA_CTLINFO
@@ -527,6 +550,11 @@ impl RDMAAgent {
                 }
                 udpPacket.srcIpAddr = srcIpAddr;
 
+                error!(
+                    "RDMAReqMsg::RDMASendUDPPacket, 1, srcAddr: {}, srcPort: {}, dstIpAddr: {}, dstPort: {}",
+                    udpPacket.srcIpAddr, udpPacket.srcPort, udpPacket.dstIpAddr, udpPacket.dstPort
+                );
+
                 match RDMA_CTLINFO.get_node_ip_by_pod_ip(&udpPacket.dstIpAddr) {
                     Some(nodeIpAddr) => {
                         let conns = RDMA_SRV.conns.lock();
@@ -535,7 +563,12 @@ impl RDMAAgent {
                         let laddr = udpPacket as *const _ as u64;
                         debug!("RDMAReqMsg::RDMASendUDPPacket, 1, agentId: {:x}, udpBuffIdx: {:x}, wrId: {:x}, laddr: {:x}", self.id, msg.udpBuffIdx, wrId, laddr);
                         rdmaConn
-                            .RDMAUDQPSend(laddr, (udpPacket.length + UDP_BUFF_OFFSET as u16) as u32, wrId, self.udpMR.LKey())
+                            .RDMAUDQPSend(
+                                laddr,
+                                (udpPacket.length + UDP_BUFF_OFFSET as u16) as u32,
+                                wrId,
+                                self.udpMR.LKey(),
+                            )
                             .expect("RDMAUDQPSend failed...");
                     }
                     None => {
@@ -546,10 +579,18 @@ impl RDMAAgent {
         }
     }
 
-    fn SendControlMsgInternal(&self, sockfd: u32, nodeIpAddr: u32, srcIpAddr: u32, srcPort: u16, dstIpAddr: u32, dstPort: u16) {
+    fn SendControlMsgInternal(
+        &self,
+        sockfd: u32,
+        nodeIpAddr: u32,
+        srcIpAddr: u32,
+        srcPort: u16,
+        dstIpAddr: u32,
+        dstPort: u16,
+    ) {
         let conns = RDMA_SRV.conns.lock();
         let rdmaConn = conns.get(&nodeIpAddr).unwrap();
-        
+
         let rdmaChannel = self.CreateClientRDMAChannel(
             &RDMAConnectReq {
                 sockfd: sockfd,
@@ -572,5 +613,27 @@ impl RDMAAgent {
             .lock()
             .SendControlMsg(ControlMsgBody::ConnectRequest(connectReqeust));
         // .expect("fail to send msg");
+    }
+
+    pub fn HandleUDPPacketRecv(&self, udpPacket: &UDPPacket) {
+        let (addr, udpBuffIdx) = self.udpRecvBufferAllocator.lock().GetFreeBuffer();
+        if addr != 0 {
+            let srcPtr = udpPacket as *const _ as *const u8;
+            let dstPtr = addr as *mut u8;
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    srcPtr,
+                    dstPtr,
+                    udpPacket.length as usize + UDP_BUFF_OFFSET,
+                );
+            }
+
+            self.SendResponse(RDMAResp {
+                user_data: 0,
+                msg: RDMARespMsg::RDMARecvUDPPacket(RDMARecvUDPPacket { udpBuffIdx }),
+            });
+        } else {
+            error!("No buffer to hold the udp packet, drop!");
+        }
     }
 }

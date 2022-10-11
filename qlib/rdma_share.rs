@@ -18,6 +18,7 @@ use core::sync::atomic::Ordering;
 //use std::sync::atomic::AtomicI64;
 use super::common::*;
 use super::linux_def::*;
+use super::kernel::kernel::waiter::Queue;
 use alloc::collections::btree_set::BTreeSet;
 use alloc::vec::Vec;
 use core::mem;
@@ -176,6 +177,7 @@ pub enum RDMARespMsg {
     RDMANotify(RDMANotifyResp),
     RDMAFinNotify(RDMAFinNotifyResp),
     RDMAReturnUDPBuff(RDMAReturnUDPBuff),
+    RDMARecvUDPPacket(RDMARecvUDPPacket),
 }
 
 impl Default for RDMARespMsg {
@@ -215,6 +217,11 @@ pub struct RDMANotifyResp {
 
 #[derive(Default, Clone, Copy, Debug)]
 pub struct RDMAReturnUDPBuff {
+    pub udpBuffIdx: u32,
+}
+
+#[derive(Default, Clone, Copy, Debug)]
+pub struct RDMARecvUDPPacket {
     pub udpBuffIdx: u32,
 }
 
@@ -578,7 +585,8 @@ pub struct UDPBufferAllocator {
     pub freeList: Vec<u32>,
     pub startAddr: u64,
     pub totalCnt: u32,
-    pub curIndex: u32
+    pub curIndex: u32,
+    pub queue: Queue,
 }
 
 impl Default for UDPBufferAllocator {
@@ -588,6 +596,7 @@ impl Default for UDPBufferAllocator {
             startAddr: 0,
             totalCnt: 0,
             curIndex: 0,
+            queue: Queue::default(),
         }
     }
 }
@@ -598,7 +607,8 @@ impl UDPBufferAllocator {
             freeList: Vec::new(), //TODO: thread safe??
             startAddr,
             totalCnt,
-            curIndex: 0
+            curIndex: 0,
+            queue: Queue::default(),
         };
     }
 
@@ -612,7 +622,7 @@ impl UDPBufferAllocator {
                 retIdx = idx;
             }
             None => {
-                
+                error!("No free buffer!");
             }
         }
         if retAddr == 0 {
@@ -627,6 +637,9 @@ impl UDPBufferAllocator {
     }
     pub fn ReturnBuffer(&mut self, idx: u32) {
         self.freeList.push(idx);
+        if self.freeList.len() == 1 && self.curIndex == self.totalCnt {
+            
+        }
     }
 }
 

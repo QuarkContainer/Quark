@@ -142,6 +142,8 @@ pub struct RDMASrv {
     pub udpQP: QueuePair,
     pub udpBufferAllocator: Mutex<UDPBufferAllocator>,
     pub egressAgentId: Mutex<u32>,
+    pub podIdToAgents: Mutex<HashMap<[u8; 64], RDMAAgent>>,
+    pub ipAddrToAgents: Mutex<HashMap<u32, RDMAAgent>>,
 }
 
 impl Drop for RDMASrv {
@@ -303,6 +305,8 @@ impl RDMASrv {
             udpQP,
             udpBufferAllocator,
             egressAgentId: Mutex::new(0),
+            ipAddrToAgents: Mutex::new(HashMap::new()),
+            podIdToAgents: Mutex::new(HashMap::new()),
         };
     }
 
@@ -397,23 +401,46 @@ impl RDMASrv {
             "ProcessRDMARecv, 1, qpNum: {}, wrId: {}, len: {}",
             qpNum, wrId, len
         );
-        let _payloadLen = len - 40;
-        let mut i = 0;
+
         let laddr = self.udpMemRegion.addr + wrId * (mem::size_of::<UDPPacket>() + 40) as u64 + 40;
-        loop {
-            let addr = laddr + i * 8;
-            println!("addr{}: 0x{:x}-> 0x{:x}", i, addr, unsafe {
-                &mut *(addr as *mut u64)
-            });
-            i += 1;
-            if i == 10 {
-                break;
+        // let _payloadLen = len - 40;
+        // let mut i = 0;
+        // loop {
+        //     let addr = laddr + i * 8;
+        //     println!("addr{}: 0x{:x}-> 0x{:x}", i, addr, unsafe {
+        //         &mut *(addr as *mut u64)
+        //     });
+        //     i += 1;
+        //     if i == 10 {
+        //         break;
+        //     }
+        // }
+        let udpPacket = unsafe { &(*(laddr as *const UDPPacket)) };
+        debug!("RDMASrv::ProcessRDMARecv, udpPacket: {:?}", udpPacket);
+        if RDMA_CTLINFO.isK8s {
+            match self.ipAddrToAgents.lock().get(&udpPacket.dstIpAddr) {
+                Some(rdmaAgent) => {
+                    rdmaAgent.HandleUDPPacketRecv(udpPacket);
+                    self.udpBufferAllocator.lock().ReturnBuffer(wrId as u32);
+                }
+                None => {
+
+                }
             }
         }
-        let udpPacket = laddr as *const UDPPacket;
-        debug!("RDMASrv::ProcessRDMARecv, udpPacket: {:?}", unsafe {
-            *udpPacket
-        });
+        else {
+            // Test hook
+            match self.agents.lock().get(&0) {
+                Some(rdmaAgent) => {
+                    rdmaAgent.HandleUDPPacketRecv(udpPacket);
+                    self.udpBufferAllocator.lock().ReturnBuffer(wrId as u32);
+                }
+                None => {
+
+                }
+            }
+        }
+        
     }
 
     pub fn ProcessRDMASend(&self, wrId: u64) {

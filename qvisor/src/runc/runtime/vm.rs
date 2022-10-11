@@ -305,14 +305,17 @@ impl VirtualMachine {
 
         let autoStart;
         let podIdStr = args.ID.clone();
-        let mut podId: [u8; 64] = [0; 64];
-        if podIdStr.len() != podId.len() {
-            panic!("podId len: {} is not equal to podIdStr len: {}", podId.len(), podIdStr.len());
-        }
+        let mut podId = [0u8; 64];
+        podId.clone_from_slice(podIdStr.as_bytes());
+        // let mut podId: [u8; 64] = [0; 64];
+        // debug!("VM::Initxxxxx, podIdStr: {}", podIdStr);
+        // if podIdStr.len() != podId.len() {
+        //     panic!("podId len: {} is not equal to podIdStr len: {}", podId.len(), podIdStr.len());
+        // }
 
-        podIdStr.bytes()
-            .zip(podId.iter_mut())
-            .for_each(|(b, ptr)| *ptr = b);
+        // podIdStr.bytes()
+        //     .zip(podId.iter_mut())
+        //     .for_each(|(b, ptr)| *ptr = b);
         {
             let vms = &mut VMS.lock();
             vms.controlSock = controlSock;
