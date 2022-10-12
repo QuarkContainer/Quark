@@ -23,7 +23,9 @@ use super::qlib::kernel::memmgr::pma::*;
 use super::qlib::kernel::quring::uring_async::UringAsyncMgr;
 use super::qlib::kernel::task::*;
 use super::qlib::kernel::Kernel::*;
+use super::qlib::linux_def::*;
 use super::qlib::loader::*;
+use super::qlib::mem::bitmap_allocator::*;
 use super::qlib::mem::list_allocator::*;
 use super::qlib::mutex::*;
 use super::qlib::perf_tunning::*;
@@ -219,4 +221,16 @@ pub fn HyperCall64(_type_: u16, _para1: u64, _para2: u64, _para3: u64, _para4: u
 
 pub fn IsKernel() -> bool {
     return false;
+}
+
+impl BitmapAllocatorWrapper {
+    pub const fn New() -> Self {
+        return Self {
+            addr: AtomicU64::new(0),
+        };
+    }
+
+    pub fn Init(&self) {
+        self.addr.store(MemoryDef::HEAP_OFFSET, Ordering::SeqCst);
+    }
 }
