@@ -512,29 +512,20 @@ pub enum DuplexMode {
     SHUTDOWN_RDWR,
 }
 
-#[derive(Clone, Copy, Eq, Hash, PartialEq)]
-pub enum ClientRole {
-    NORMAL = 1,
-    EGRESS = 2,
-    INGRESS = 3,
-}
-
-impl ClientRole {
-    pub fn Parse(v: i32) -> ClientRole {
-        match v {
-            x if x == ClientRole::NORMAL as i32 => ClientRole::NORMAL,
-            x if x == ClientRole::EGRESS as i32 => ClientRole::EGRESS,
-            x if x == ClientRole::INGRESS as i32 => ClientRole::INGRESS,
-            _ => ClientRole::NORMAL,
-        }
-    }
-}
-
 #[derive(Eq, Hash, PartialEq, Default)]
 pub struct Endpoint {
     // same as vpcId
     pub ipAddr: u32,
     pub port: u16,
+}
+
+impl Endpoint {
+    pub fn Egress() -> Endpoint {
+        Endpoint { 
+            ipAddr: 16842752, // u32::from(Ipv4Addr::from_str("0.0.1.1").unwrap()).to_be()
+            port: 58433, // 16868u16.to_be()
+        }
+    }
 }
 
 pub struct IdMgr {
