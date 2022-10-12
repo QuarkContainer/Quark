@@ -36,6 +36,7 @@ use super::qlib::kernel::taskMgr;
 use super::qlib::linux_def::*;
 use super::qlib::loader::*;
 use super::qlib::mem::list_allocator::*;
+use super::qlib::mem::bitmap_allocator::*;
 use super::qlib::mutex::*;
 use super::qlib::perf_tunning::*;
 use super::qlib::qmsg::*;
@@ -373,6 +374,18 @@ extern "C" {
 
 pub fn InitX86FPState(data: u64, useXsave: bool) {
     unsafe { initX86FPState(data, useXsave) }
+}
+
+impl BitmapAllocatorWrapper {
+    pub const fn New() -> Self {
+        return Self {
+            addr: AtomicU64::new(0),
+        }
+    }
+
+    pub fn Init(&self) {
+        self.addr.store(MemoryDef::HEAP_OFFSET, Ordering::SeqCst);
+    }
 }
 
 impl HostAllocator {
