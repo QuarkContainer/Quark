@@ -81,7 +81,7 @@ impl Default for Config {
             ReaddirCache: true,
             HiberODirect: true,
             DisableCgroup: true,
-            CopyDataWithPf: false
+            CopyDataWithPf: false,
             TlbShootdownWait: false,
         };
     }
