@@ -582,10 +582,10 @@ impl RDMASvcClient {
                                 [response.udpBuffIdx as usize];
                             // + wrId * (mem::size_of::<UDPPacket>() + 40) as u64
                             // + 40;
-                            debug!(
-                                "RDMARespMsg::RDMARecvUDPPacket, 1 udpPacket: {:?}",
-                                udpPacket
-                            );
+                            // debug!(
+                            //     "RDMARespMsg::RDMARecvUDPPacket, 1 udpPacket: {:?}",
+                            //     udpPacket
+                            // );
                             match GlobalRDMASvcCli()
                                 .portToFdInfoMappings
                                 .lock()

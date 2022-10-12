@@ -65,7 +65,7 @@ int main(int argc, char *argv[])
 
     int sockfd;
     char buffer[MAXLINE];
-    char *hello = "Hello Quark from server";
+    char *hello = "Hello Quark from Server";
     struct sockaddr_in servaddr, cliaddr;
 
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
@@ -96,11 +96,51 @@ int main(int argc, char *argv[])
                  MSG_WAITALL, (struct sockaddr *)&cliaddr,
                  &len);
     buffer[n] = '\0';
-    printf("Client : %s\n", buffer);
+    printf("Server: %s 1\n", buffer);
+    n = recvfrom(sockfd, (char *)buffer, MAXLINE,
+                 MSG_WAITALL, (struct sockaddr *)&cliaddr,
+                 &len);
+    buffer[n] = '\0';
+    printf("Server: %s 2\n", buffer);
+    n = recvfrom(sockfd, (char *)buffer, MAXLINE,
+                 MSG_WAITALL, (struct sockaddr *)&cliaddr,
+                 &len);
+    buffer[n] = '\0';
+    printf("Server: %s 3\n", buffer);
+    n = recvfrom(sockfd, (char *)buffer, MAXLINE,
+                 MSG_WAITALL, (struct sockaddr *)&cliaddr,
+                 &len);
+    buffer[n] = '\0';
+    printf("Server: %s 4\n", buffer);
+    n = recvfrom(sockfd, (char *)buffer, MAXLINE,
+                 MSG_WAITALL, (struct sockaddr *)&cliaddr,
+                 &len);
+    buffer[n] = '\0';
+    printf("Server: %s 5\n", buffer);
     sendto(sockfd, (const char *)hello, strlen(hello),
            0, (const struct sockaddr *)&cliaddr,
            len);
-    printf("Hello message sent.\n");
+    printf("Hello message sent 1...\n");
+
+    sendto(sockfd, (const char *)hello, strlen(hello),
+           0, (const struct sockaddr *)&cliaddr,
+           len);
+    printf("Hello message sent 2...\n");
+
+    sendto(sockfd, (const char *)hello, strlen(hello),
+           0, (const struct sockaddr *)&cliaddr,
+           len);
+    printf("Hello message sent 3...\n");
+
+    sendto(sockfd, (const char *)hello, strlen(hello),
+           0, (const struct sockaddr *)&cliaddr,
+           len);
+    printf("Hello message sent 4...\n");
+
+    sendto(sockfd, (const char *)hello, strlen(hello),
+           0, (const struct sockaddr *)&cliaddr,
+           len);
+    printf("Hello message sent 5...\n");
 
     return 0;
 }

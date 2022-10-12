@@ -498,6 +498,16 @@ impl SocketOperations {
             Some(ref v) => Some(v.ToVec().unwrap()),
         };
     }
+
+    fn UDPEventRegister(&self, task: &Task, e: &WaitEntry, mask: EventMask) {
+        let queue = GlobalRDMASvcCli().udpSentBufferAllocator.lock().Queue();
+        queue.EventRegister(task, e, mask);
+    }
+
+    fn UDPEventUnregister(&self, task: &Task, e: &WaitEntry) {
+        let queue = GlobalRDMASvcCli().udpSentBufferAllocator.lock().Queue();
+        queue.EventUnregister(task, e);
+    }
 }
 
 pub const SIZEOF_SOCKADDR: usize = SocketSize::SIZEOF_SOCKADDR_INET6;
@@ -1922,8 +1932,6 @@ impl SockOperations for SocketOperations {
                         None
                     };
 
-                    error!("SocketOperations::RecvMsg, 14");
-
                     return Ok((len as i64, 0, senderAddr, controlVec));
                 }
                 _ => {
@@ -2064,12 +2072,31 @@ impl SockOperations for SocketOperations {
                     panic!("SockInfo: {:?} is not allowed for UDP RDMA", sockInfo);
                 }
             }
-            let (udpBuffAddr, udpBuffIdx) = GlobalRDMASvcCli()
-                .udpSentBufferAllocator
-                .lock()
-                .GetFreeBuffer();
-            if udpBuffAddr == 0 {
-                // TODO: wait for buffer available.
+            // wait for buffer available.
+            let general = task.blocker.generalEntry.clone();
+            self.UDPEventRegister(task, &general, EVENT_WRITE);
+            defer!(self.UDPEventUnregister(task, &general));
+
+            let mut udpBuffAddr: u64;
+            let mut udpBuffIdx;
+            loop {
+                (udpBuffAddr, udpBuffIdx) = GlobalRDMASvcCli()
+                    .udpSentBufferAllocator
+                    .lock()
+                    .GetFreeBuffer();
+                if udpBuffAddr == 0 {
+                    match task.blocker.BlockWithMonoTimer(true, None) {
+                        Err(Error::ErrInterrupted) => {
+                            return Err(Error::SysError(SysErr::ERESTARTSYS));
+                        }
+                        Err(e) => {
+                            return Err(e);
+                        }
+                        _ => {}
+                    }
+                } else {
+                    break;
+                }
             }
 
             let udpPacket = unsafe { &mut (*(udpBuffAddr as *mut UDPPacket)) };
