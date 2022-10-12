@@ -361,6 +361,9 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient, fds: &mut HashMap<i32, FdType
                                         gatewayCli.WriteToSocket(&mut sockInfo, &sockFdMappings);
                                     }
                                 }
+                                RDMARespMsg::RDMAReturnUDPBuff(_response) => {
+                                    // TODO Handle UDP
+                                }
                             },
                             None => {
                                 break;
