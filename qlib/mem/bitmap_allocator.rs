@@ -861,7 +861,7 @@ impl BitmapAllocatorWrapper {
             addr = self.addr.load(atomic::Ordering::Relaxed);
             let allocator = unsafe { &mut *(addr as *mut BitmapAllocator) };
             allocator.Bootstrap(addr);
-            eturn allocator
+            return allocator
         }
 
         return unsafe { &mut *(addr as *mut BitmapAllocator) };
