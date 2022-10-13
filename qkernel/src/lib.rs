@@ -281,7 +281,7 @@ pub extern "C" fn syscall_handler(
         let llevel = SHARESPACE.config.read().LogLevel;
         callId = if nr < SysCallID::UnknowSyscall as u64 {
             unsafe { mem::transmute(nr as u64) }
-        } else if SysCallID::SysSocketProduce as u64 <= nr && nr < SysCallID::EXTENSION_MAX as u64 {
+        } else if SysCallID::sys_socket_produce as u64 <= nr && nr < SysCallID::EXTENSION_MAX as u64 {
             unsafe { mem::transmute(nr as u64) }
         } else {
             nr = SysCallID::UnknowSyscall as _;
