@@ -779,7 +779,7 @@ impl BitmapAllocator {
         }
     }
 
-    pub fn Free(order: usize, addr: u64) -> bool {
+    pub fn Free(&self, order: usize, addr: u64) -> bool {
         return BlockType::Free(order, addr);
     } 
 
@@ -844,7 +844,7 @@ unsafe impl GlobalAlloc for BitmapAllocator {
         );
         let class = size.trailing_zeros() as usize;
 
-        Self::Free(class, ptr as _);
+        self.Free(class, ptr as _);
     }
 }
 

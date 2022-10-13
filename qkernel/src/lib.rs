@@ -131,7 +131,7 @@ use self::qlib::kernel::Scale;
 use self::qlib::kernel::VcpuFreqInit;
 use self::quring::*;
 //use self::heap::QAllocator;
-
+//use qlib::mem::bitmap_allocator::BitmapAllocatorWrapper;
 pub const HEAP_START: usize = 0x70_2000_0000;
 pub const HEAP_SIZE: usize = 0x1000_0000;
 
@@ -141,6 +141,7 @@ pub const HEAP_SIZE: usize = 0x1000_0000;
 
 #[global_allocator]
 pub static VCPU_ALLOCATOR: GlobalVcpuAllocator = GlobalVcpuAllocator::New();
+//pub static VCPU_ALLOCATOR1: BitmapAllocatorWrapper = BitmapAllocatorWrapper::New();
 
 lazy_static! {
     pub static ref GLOBAL_LOCK : Mutex<()> = Mutex::new(());

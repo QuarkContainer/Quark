@@ -286,21 +286,20 @@ impl VirtualMachine {
             &vm_fd,
             MemoryDef::PHY_LOWER_ADDR,
             MemoryDef::PHY_LOWER_ADDR,
-            kernelMemRegionSize * MemoryDef::ONE_GB,
+            MemoryDef::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB,
         )?;
 
         let heapStartAddr = MemoryDef::HEAP_OFFSET;
 
         PMA_KEEPER.Init(
             MemoryDef::FILE_MAP_OFFSET,
-            MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB
-                - MemoryDef::FILE_MAP_OFFSET,
+            MemoryDef::FILE_MAP_SIZE,
         );
 
         info!(
             "set map region start={:x}, end={:x}",
             MemoryDef::PHY_LOWER_ADDR,
-            MemoryDef::PHY_LOWER_ADDR + kernelMemRegionSize * MemoryDef::ONE_GB
+            MemoryDef::PHY_LOWER_ADDR + MemoryDef::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB
         );
 
         let autoStart;
