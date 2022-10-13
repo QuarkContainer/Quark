@@ -361,6 +361,16 @@ impl HostSpace {
         return HostSpace::HCall(&mut msg, false) as i64;
     }
 
+    pub fn Proxy(cmd: u64, addrIn: u64, addrOut: u64) -> i64 {
+        let mut msg = Msg::Proxy(Proxy {
+            cmd,
+            addrIn,
+            addrOut
+        });
+
+        return HostSpace::HCall(&mut msg, false) as i64;
+    }
+
     pub fn SwapInPage(addr: u64) -> i64 {
         let mut msg = Msg::SwapInPage(SwapInPage {
             addr

@@ -119,7 +119,15 @@ pub enum Msg {
     HostMemoryBarrier(HostMemoryBarrier),
     Mkfifoat(Mkfifoat),
     SwapInPage(SwapInPage),
-    SwapOut(SwapOut)
+    SwapOut(SwapOut),
+    Proxy(Proxy),
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct Proxy {
+    pub cmd: u64,
+    pub addrIn: u64,
+    pub addrOut: u64,
 }
 
 #[derive(Clone, Default, Debug)]
