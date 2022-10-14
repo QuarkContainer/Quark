@@ -49,6 +49,8 @@ use super::qlib::*;
 use super::syscalls::sys_file::*;
 use super::Kernel::HostSpace;
 
+use crate::GLOBAL_ALLOCATOR;
+
 impl IoUring {
     /// Initiate asynchronous I/O.
     #[inline]
@@ -379,7 +381,7 @@ pub fn InitX86FPState(data: u64, useXsave: bool) {
 impl BitmapAllocatorWrapper {
     pub const fn New() -> Self {
         return Self {
-            addr: AtomicU64::new(0),
+            addr: AtomicU64::new(MemoryDef::HEAP_OFFSET),
         }
     }
 

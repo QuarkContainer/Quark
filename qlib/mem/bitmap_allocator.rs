@@ -18,6 +18,7 @@ use core::mem::size_of;
 use core::cmp::max;
 use core::alloc::{GlobalAlloc, Layout};
 
+use crate::qlib::linux_def::MemoryDef;
 use crate::qlib::mutex::*;
 
 
@@ -25,14 +26,15 @@ use crate::qlib::mutex::*;
 // for 2MB block, (4K x 512B Block ~ 256 x 16 KB block)
 // 
 // total 8 + 64 * 8 = 8 + 512 = 520 bytes
-pub struct BitmapSet<const COUNT_ORDER: usize> {
+#[repr(C)]
+pub struct BitmapSet<const SUB_BLOCK_ORDER: usize, const COUNT_ORDER: usize> {
     pub l1bitmap: u64,           
+    pub l2bitmap: [u64; 64],
     pub total: u16,
     pub free: u16,  
-    pub l2bitmap: [u64; 64],
 }
 
-impl <const COUNT_ORDER: usize> BitmapSet <COUNT_ORDER> {
+impl <const SUB_BLOCK_ORDER: usize, const COUNT_ORDER: usize> BitmapSet <SUB_BLOCK_ORDER, COUNT_ORDER> {
     pub fn Init(&mut self) {
         assert!(8<=COUNT_ORDER && COUNT_ORDER<=12);
         let totalCount = 1 << COUNT_ORDER;
@@ -56,8 +58,9 @@ impl <const COUNT_ORDER: usize> BitmapSet <COUNT_ORDER> {
     pub fn Reserve(&mut self, count: usize) {
         for _i in 0..count {
             self.Alloc();
-            self.total -= count as u16;
         }
+
+        self.total -= count as u16;
     }
 
     // return the free block idx
@@ -230,17 +233,17 @@ impl BlockType {
 
     pub fn Init(&mut self) { 
         match self {
-            Self::Block8s(inner) => return inner.Init(),
-            Self::Block16s(inner) => return inner.Init(),
-            Self::Block32s(inner) => return inner.Init(),
-            Self::Block64s(inner) => return inner.Init(),
-            Self::Block128s(inner) => return inner.Init(),
-            Self::Block256s(inner) => return inner.Init(),
-            Self::Block512s(inner) => return inner.Init(),
-            Self::Block1ks(inner) => return inner.Init(),
-            Self::Block2ks(inner) => return inner.Init(),
-            Self::Block4ks(inner) => return inner.Init(),
-            Self::Block8ks(inner) => return inner.Init(),
+            Self::Block8s(inner) => return inner.Init(4096/8),
+            Self::Block16s(inner) => return inner.Init(4096/16),
+            Self::Block32s(inner) => return inner.Init(4096/32),
+            Self::Block64s(inner) => return inner.Init(4096/64),
+            Self::Block128s(inner) => return inner.Init(4096/128),
+            Self::Block256s(inner) => return inner.Init(4096/256),
+            Self::Block512s(inner) => return inner.Init(4096/512),
+            Self::Block1ks(inner) => return inner.Init(4096/1024),
+            Self::Block2ks(inner) => return inner.Init(4096/2048),
+            Self::Block4ks(inner) => return inner.Init(4096/4096),
+            Self::Block8ks(inner) => return inner.Init(1),
             Self::Block16ks(inner) => return inner.Init(),
             Self::Block32ks(inner) => return inner.Init(),
             Self::Block64ks(inner) => return inner.Init(),
@@ -370,9 +373,10 @@ pub type Block512ks  = BitmapBlock<19>;
 pub type Block1Ms    = BitmapBlock<20>;
 
 // total 8GB/4096 * 2MB blocks
+#[repr(C)]
 pub struct Block2Ms {
     pub bitmaps: BitmapSetBlock<21, 12>,
-    pub bitmap2M: [QMutex<u128>; 4096], // (128 + 8) x 4k = 544KB
+    pub bitmap2M: [QMutex<u128>; 4096], // (16 + 8) x 4k = 96KB
 }
 
 impl Block2Ms {
@@ -389,9 +393,7 @@ impl Block2Ms {
     }
 
     pub fn Init(&mut self) {
-        self.bitmaps.Init();
-        // reserve first 2M for metadata
-        self.bitmaps.Reserve(1); 
+        self.bitmaps.Init(1);
     }
 
     pub fn BlockMask() -> u64 {
@@ -573,7 +575,7 @@ impl <const SUB_BLOCK_ORDER: usize> BitmapBlock <SUB_BLOCK_ORDER> {
 
 pub struct BitmapSetBlock<const SUB_BLOCK_ORDER: usize, const COUNT_ORDER: usize> {
     pub lock: QMutex<()>, // we need lock this before access following fields
-    pub bitmapSet: BitmapSet<COUNT_ORDER>, // < 4KB
+    pub bitmapSet: BitmapSet<SUB_BLOCK_ORDER, COUNT_ORDER>, // < 4KB
 }
 
 impl <const SUB_BLOCK_ORDER: usize, const COUNT_ORDER: usize> 
@@ -583,8 +585,9 @@ impl <const SUB_BLOCK_ORDER: usize, const COUNT_ORDER: usize>
 impl <const SUB_BLOCK_ORDER: usize, const COUNT_ORDER: usize> 
     BitmapSetBlock<SUB_BLOCK_ORDER, COUNT_ORDER> {
     // Preconditions: the block is initalized to zero
-    pub fn Init(&mut self) {
+    pub fn Init(&mut self, count: usize) {
         self.bitmapSet.Init();
+        self.bitmapSet.Reserve(count);
     }
 
     pub fn Reserve(&mut self, count: usize) {
@@ -661,6 +664,7 @@ pub trait InlineStruct<const SUB_BLOCK_ORDER: usize, const COUNT_ORDER: usize> :
     }
 }
 
+#[repr(C)]
 pub struct Block8GAllocatorIntern { // <4KB
     pub availableBlockCnt: u32, // next free 8GB block idx
     pub bitmap: u128, // maximum 128 x 8 GB = 1024 GB 
@@ -708,6 +712,7 @@ impl Block8GAllocator {
     }
 }
 
+#[repr(C)]
 pub struct FreeListNodeAllocatorIntern {
     pub nextIdx: u32,
     pub freeList: u32,
@@ -779,7 +784,11 @@ impl BitmapAllocator {
         }
     }
 
-    pub fn Free(order: usize, addr: u64) -> bool {
+    pub fn Free(&self, order: usize, addr: u64) -> bool {
+        if order < 21 {
+            let mut headnode = self.Lists[order-3].lock();
+            headnode.totalFree += 1;
+        }
         return BlockType::Free(order, addr);
     } 
 
@@ -844,7 +853,7 @@ unsafe impl GlobalAlloc for BitmapAllocator {
         );
         let class = size.trailing_zeros() as usize;
 
-        Self::Free(class, ptr as _);
+        self.Free(class, ptr as _);
     }
 }
 
@@ -869,6 +878,11 @@ impl BitmapAllocatorWrapper {
 
     pub fn Clear(&self) {}
     pub fn Initializated(&self) {}
+
+    #[inline]
+    pub fn HeapRange(&self) -> (u64, u64) {
+        return (MemoryDef::HEAP_OFFSET, MemoryDef::HEAP_OFFSET + MemoryDef::HEAP_SIZE)
+    }
 }
 
 unsafe impl GlobalAlloc for BitmapAllocatorWrapper {

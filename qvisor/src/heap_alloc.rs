@@ -19,8 +19,7 @@ impl BitmapAllocatorWrapper {
 
     pub fn Init(&self) {
         let heapSize = MemoryDef::HEAP_SIZE as usize;
-        let mask = !(8 * MemoryDef::HUGE_PAGE_SIZE_1G - 1);
-        let heapAddr = (MemoryDef::HEAP_OFFSET + 24 * MemoryDef::HUGE_PAGE_SIZE_1G) & mask ;
+        let heapAddr = MemoryDef::HEAP_OFFSET;
         let addr = unsafe {
             let mut flags = libc::MAP_PRIVATE | libc::MAP_ANON | libc::MAP_FIXED;
             if ENABLE_HUGEPAGE {
