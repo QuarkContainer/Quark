@@ -163,9 +163,11 @@ pub fn InitSingleton() {
     self::qlib::InitSingleton();
 }
 
+
+//pub static ALLOCATOR: HostAllocator = HostAllocator::New();
 #[global_allocator]
-pub static ALLOCATOR: HostAllocator = HostAllocator::New();
-//pub static BITMAP_ALLOCATOR: BitmapAllocatorWrapper = BitmapAllocatorWrapper::New();
+//pub static GLOBAL_ALLOCATOR: BitmapAllocatorWrapper = BitmapAllocatorWrapper::New();
+pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
 fn main() {
     InitSingleton();

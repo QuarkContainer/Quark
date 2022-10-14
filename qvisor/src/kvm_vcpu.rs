@@ -1168,7 +1168,7 @@ impl CPULocal {
             Some(newTask) => return Ok(newTask),
         }
 
-        super::ALLOCATOR.Clear();
+        super::GLOBAL_ALLOCATOR.Clear();
         self.ToWaiting(sharespace);
         defer!(self.ToSearch(sharespace););
 
@@ -1189,7 +1189,7 @@ impl CPULocal {
                 //Self::ProcessOnce(sharespace);
             }
 
-            super::ALLOCATOR.Clear();
+            super::GLOBAL_ALLOCATOR.Clear();
 
             let _nfds = unsafe { epoll_wait(self.epollfd, &mut events[0], 2, time) };
 
