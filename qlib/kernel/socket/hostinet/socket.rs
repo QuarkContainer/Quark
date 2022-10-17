@@ -1513,7 +1513,7 @@ impl SockOperations for SocketOperations {
     }
 
     fn GetSockName(&self, _task: &Task, socketaddr: &mut [u8]) -> Result<i64> {
-        if self.tcpRDMA {
+        if self.tcpRDMA || self.udpRDMA {
             let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
             let fdInfoLock = fdInfo.lock();
             let sockInfo = fdInfoLock.sockInfo.lock().clone();
@@ -1532,11 +1532,14 @@ impl SockOperations for SocketOperations {
                     ipAddr = sock.ipAddr;
                     port = sock.port;
                 }
+                SockInfo::RDMAUDPSocket(sock) => {
+                    ipAddr = 0;
+                    port = sock.port;
+                }
                 _ => {
                     panic!("Incorrect sockInfo")
                 }
             }
-            debug!("GetSockName, ipAddr: {}, port: {}", ipAddr, port);
             let sockAddr = SockAddr::Inet(SockAddrInet {
                 Family: AFType::AF_INET as u16,
                 Port: port,
@@ -1597,17 +1600,12 @@ impl SockOperations for SocketOperations {
             //TODO: handle unhappy case
             return Ok(len as i64);
         }
-        let len = socketaddr.len() as i32;
-        let res = Kernel::HostSpace::GetPeerName(
-            self.fd,
-            &socketaddr[0] as *const _ as u64,
-            &len as *const _ as u64,
-        );
-        if res < 0 {
-            return Err(Error::SysError(-res as i32));
+        if self.udpRDMA {
+            return Err(Error::SysError(SysErr::ENOTCONN));
         }
 
-        return Ok(len as i64);
+        // Should not come to this point!
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     fn RecvMsg(
