@@ -14,8 +14,6 @@
 
 use alloc::string::String;
 use alloc::vec::Vec;
-use fs2::FileExt;
-use regex::Regex;
 use std::env;
 use std::fs;
 use std::fs::File;
@@ -24,6 +22,20 @@ use std::io::Write;
 use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use fs2::FileExt;
+use regex::Regex;
+
+use super::hook::*;
+use super::status::*;
+//use super::super::super::qlib::util::*;
+use super::super::cgroup::cgroup::*;
+use super::super::cmd::config::*;
+use super::super::cmd::exec::*;
+use super::super::oci::*;
+use super::super::oci::serialize::*;
+use super::super::sandbox::sandbox::*;
+use super::super::shim::container_io::*;
+use super::super::specutils::specutils::*;
 use super::super::super::qlib::auth::cap_set::*;
 use super::super::super::qlib::auth::id::*;
 use super::super::super::qlib::common::*;
@@ -31,18 +43,6 @@ use super::super::super::qlib::control_msg::*;
 use super::super::super::qlib::linux_def::*;
 use super::super::super::qlib::path::*;
 use super::super::super::ucall::ucall::*;
-//use super::super::super::qlib::util::*;
-use super::super::cgroup::cgroup::*;
-use super::super::cmd::config::*;
-use super::super::cmd::exec::*;
-use super::super::oci::serialize::*;
-use super::super::oci::*;
-use super::super::sandbox::sandbox::*;
-use super::super::specutils::specutils::*;
-use super::hook::*;
-use super::status::*;
-
-use super::super::shim::container_io::*;
 use super::super::runtime::fs::FsImageMounter;
 
 // metadataFilename is the name of the metadata file relative to the
@@ -102,6 +102,9 @@ pub struct Container {
     // root container, this is the same as Root.
     #[serde(default)]
     pub RootContainerDir: String,
+
+    #[serde(default)]
+    pub sandboxed: bool,
 }
 
 // List returns all container ids in the given root directory.
@@ -175,7 +178,7 @@ pub fn maybeLockRootContainer(bundleDir: &str, spec: &Spec, rootDir: &str) -> Re
         None => {
             return Err(Error::Common(
                 "no sandbox ID found when locking root container".to_string(),
-            ))
+            ));
         }
         Some(id) => id,
     };
@@ -481,6 +484,7 @@ impl Container {
                 Owner: user,
                 Sandbox: None,
                 RootContainerDir: conf.RootDir.to_string(),
+                sandboxed: false,
             };
 
             // If the metadata annotations indicate that this container should be
@@ -493,8 +497,8 @@ impl Container {
 
                 // Create and join cgroup before processes are created to ensure they are
                 // part of the cgroup from the start (and all children processes).
-                
-                let mut cg : Option<Cgroup> = if crate::QUARK_CONFIG.lock().DisableCgroup {
+
+                let mut cg: Option<Cgroup> = if crate::QUARK_CONFIG.lock().DisableCgroup {
                     None
                 } else {
                     match Cgroup::New(&c.Spec) {
@@ -634,12 +638,17 @@ impl Container {
         userlog: &str,
         io: &ContainerIO,
         pivot: bool,
+        sandbox: &Sandbox,
     ) -> Result<Self> {
         info!("Create container {} in root dir: {}, bundleDir {}", id, &conf.RootDir, bundleDir);
         //debug!("container spec is {:?}", &spec);
         ValidateID(id)?;
 
-        let _unlockRoot = maybeLockRootContainer(bundleDir, &spec, &conf.RootDir)?;
+        let _unlockRoot = if sandbox.ID.is_empty() {
+            Some(maybeLockRootContainer(bundleDir, &spec, &conf.RootDir)?)
+        } else {
+            None
+        };
 
         // Lock the container metadata file to prevent concurrent creations of
         // containers with the same id.
@@ -676,19 +685,27 @@ impl Container {
                 Owner: user,
                 Sandbox: None,
                 RootContainerDir: conf.RootDir.to_string(),
+                sandboxed: false,
             };
 
-            // If the metadata annotations indicate that this container should be
-            // started in an existing sandbox, we must do so. The metadata will
-            // indicate the ID of the sandbox, which is the same as the ID of the
-            // init container in the sandbox.
-            let isRoot = IsRoot(&c.Spec);
-            if isRoot {
+            if !sandbox.ID.is_empty() {
+                c.Sandbox = Some(Sandbox {
+                    ID: sandbox.ID.to_string(),
+                    Pid: sandbox.Pid,
+                    ..Default::default()
+                });
+                c.sandboxed = true;
+                c.Sandbox.as_ref().unwrap().CreateSubContainer(conf, id, io)?;
+            } else if IsRoot(&c.Spec) {
+                // If the metadata annotations indicate that this container should be
+                // started in an existing sandbox, we must do so. The metadata will
+                // indicate the ID of the sandbox, which is the same as the ID of the
+                // init container in the sandbox.
                 debug!("Creating new sandbox for container {}", id);
 
                 // Create and join cgroup before processes are created to ensure they are
                 // part of the cgroup from the start (and all children processes).
-                let mut cg : Option<Cgroup> = if crate::QUARK_CONFIG.lock().DisableCgroup {
+                let mut cg: Option<Cgroup> = if crate::QUARK_CONFIG.lock().DisableCgroup {
                     None
                 } else {
                     match Cgroup::New(&c.Spec) {
@@ -883,7 +900,11 @@ impl Container {
     pub fn Start(&mut self) -> Result<()> {
         info!("Start container {}", &self.ID);
 
-        let _unlockRoot = maybeLockRootContainer(&self.BundleDir, &self.Spec, &self.RootContainerDir)?;
+        let _unlockRoot = if !self.sandboxed {
+            Some(maybeLockRootContainer(&self.BundleDir, &self.Spec, &self.RootContainerDir)?)
+        } else {
+            None
+        };
 
         let _unlock = self.Lock()?;
 
@@ -944,7 +965,12 @@ impl Container {
         // of errors return their concatenation.
         let mut errs = Vec::new();
 
-        let _unlock = maybeLockRootContainer(&self.BundleDir, &self.Spec, &self.RootContainerDir);
+        let _unlockRoot = if !self.sandboxed {
+            Some(maybeLockRootContainer(&self.BundleDir, &self.Spec, &self.RootContainerDir)?)
+        } else {
+            None
+        };
+
         match self.Stop() {
             Err(e) => {
                 info!(
@@ -1025,9 +1051,9 @@ impl Container {
         if self.Sandbox.is_some() {
             info!("Destroying container {}", &self.ID);
             let sandbox = self.Sandbox.as_mut().unwrap();
-                
+
             sandbox.DestroyContainer(&self.ID)?;
-            
+
             // Only uninstall cgroup for sandbox stop.
             if sandbox.IsRootContainer(&self.ID) {
                 let destroyed = sandbox.Destroy();

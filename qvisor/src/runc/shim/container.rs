@@ -14,37 +14,39 @@
    limitations under the License.
 */
 
-use nix::sys::stat::Mode;
-use nix::unistd::mkdir;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::path::Path;
 use std::path::PathBuf;
-use std::sync::mpsc::sync_channel;
 use std::sync::mpsc::Receiver;
-use time::OffsetDateTime;
+use std::sync::mpsc::sync_channel;
 
-use super::super::super::runc::oci::LinuxResources;
 use containerd_shim::api::*;
 use containerd_shim::mount::*;
 use containerd_shim::protos::cgroups::metrics::Metrics;
-use containerd_shim::protos::protobuf::well_known_types::Timestamp;
 use containerd_shim::protos::protobuf::{CodedInputStream, Message};
-use containerd_shim::util::read_spec_from_file;
+use containerd_shim::protos::protobuf::well_known_types::Timestamp;
 use containerd_shim::util::*;
+use containerd_shim::util::read_spec_from_file;
+use nix::sys::stat::Mode;
+use nix::unistd::mkdir;
 use oci_spec::runtime::LinuxNamespaceType;
+use time::OffsetDateTime;
 
-use super::super::super::qlib::common::*;
-use super::super::cmd::config::*;
-use super::super::container::container::*;
+use crate::runc::sandbox::sandbox::Sandbox;
+
 use super::container_io::*;
 use super::process::*;
+use super::super::cmd::config::*;
+use super::super::container::container::*;
+use super::super::super::qlib::common::*;
+use super::super::super::runc::oci::LinuxResources;
 
 #[derive(Clone, Default)]
 pub struct ContainerFactory {}
 
 impl ContainerFactory {
-    pub fn Create(ns: &str, req: &CreateTaskRequest) -> Result<CommonContainer> {
+    pub fn Create(ns: &str, req: &CreateTaskRequest, sandbox: &Sandbox) -> Result<CommonContainer> {
         let bundle = req.bundle.as_str();
         let mut opts = Options::new();
         if let Some(any) = req.options.as_ref() {
@@ -122,7 +124,7 @@ impl ContainerFactory {
         };
 
         let container = init
-            .Create(&config)
+            .Create(&config, sandbox)
             .map_err(|e| Error::Common(format!("ttrpc error is {:?}", e)))?;
         init.common.pid = container.SandboxPid();
         let container = CommonContainer {

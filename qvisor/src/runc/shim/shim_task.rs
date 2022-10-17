@@ -227,13 +227,13 @@ impl Task for ShimTask {
         let ns = self.namespace.as_str();
         let id = req.id.as_str();
 
-        let container = ContainerFactory::Create(ns, &req)
+        let mut sandboxLock = SANDBOX.lock().unwrap();
+        let container = ContainerFactory::Create(ns, &req, &sandboxLock)
             .map_err(|e| TtrpcError::Other(format!("{:?}", e)))?;
         let mut resp = CreateTaskResponse::new();
         let pid = container.pid() as u32;
         resp.pid = pid;
 
-        let mut sandboxLock = SANDBOX.lock().unwrap();
         sandboxLock.ID = container.SandboxId();
         sandboxLock.Pid = container.Pid();
 
