@@ -1949,6 +1949,20 @@ impl SockOperations for SocketOperations {
         msgHdr: &mut MsgHdr,
         deadline: Option<Time>,
     ) -> Result<i64> {
+        if flags
+            & !(MsgType::MSG_DONTWAIT
+                | MsgType::MSG_EOR
+                | MsgType::MSG_FASTOPEN
+                | MsgType::MSG_MORE
+                | MsgType::MSG_NOSIGNAL)
+            != 0
+        {
+            return Err(Error::SysError(SysErr::EINVAL));
+        }
+
+        if msgHdr.msgControlLen > 0 {
+            panic!("TCP/UDP over RDMA doesn't support SendMsg with ancillary data");
+        }
         if self.SocketBufEnabled() {
             if self.SocketBuf().WClosed() {
                 return Err(Error::SysError(SysErr::EPIPE));
@@ -2022,17 +2036,6 @@ impl SockOperations for SocketOperations {
                     _ => (),
                 }
             }
-        }
-
-        if flags
-            & !(MsgType::MSG_DONTWAIT
-                | MsgType::MSG_EOR
-                | MsgType::MSG_FASTOPEN
-                | MsgType::MSG_MORE
-                | MsgType::MSG_NOSIGNAL)
-            != 0
-        {
-            return Err(Error::SysError(SysErr::EINVAL));
         }
 
         // Handle UDP over RDMA
@@ -2131,73 +2134,75 @@ impl SockOperations for SocketOperations {
             return Ok(cnt as i64);
         }
 
-        //TODO: Should impelement RDMA for TCP SendMsg
-        let size = IoVec::NumBytes(srcs);
-        let mut buf = DataBuff::New(size);
-        let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;
-        let iovs = buf.Iovs(len);
+        panic!("SendMsg should not come to here!");
 
-        msgHdr.iov = &iovs[0] as *const _ as u64;
-        msgHdr.iovLen = iovs.len();
-        msgHdr.msgFlags = 0;
+        // //TODO: Should impelement RDMA for TCP SendMsg
+        // let size = IoVec::NumBytes(srcs);
+        // let mut buf = DataBuff::New(size);
+        // let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;
+        // let iovs = buf.Iovs(len);
 
-        let mut res = if msgHdr.msgControlLen > 0 {
-            Kernel::HostSpace::IOSendMsg(
-                self.fd,
-                msgHdr as *const _ as u64,
-                flags | MsgType::MSG_DONTWAIT,
-                false,
-            ) as i32
-        } else {
-            Kernel::HostSpace::IOSendto(
-                self.fd,
-                buf.Ptr(),
-                len,
-                flags | MsgType::MSG_DONTWAIT,
-                msgHdr.msgName,
-                msgHdr.nameLen,
-            ) as i32
-        };
+        // msgHdr.iov = &iovs[0] as *const _ as u64;
+        // msgHdr.iovLen = iovs.len();
+        // msgHdr.msgFlags = 0;
 
-        while res == -SysErr::EWOULDBLOCK && flags & MsgType::MSG_DONTWAIT == 0 {
-            let general = task.blocker.generalEntry.clone();
+        // let mut res = if msgHdr.msgControlLen > 0 {
+        //     Kernel::HostSpace::IOSendMsg(
+        //         self.fd,
+        //         msgHdr as *const _ as u64,
+        //         flags | MsgType::MSG_DONTWAIT,
+        //         false,
+        //     ) as i32
+        // } else {
+        //     Kernel::HostSpace::IOSendto(
+        //         self.fd,
+        //         buf.Ptr(),
+        //         len,
+        //         flags | MsgType::MSG_DONTWAIT,
+        //         msgHdr.msgName,
+        //         msgHdr.nameLen,
+        //     ) as i32
+        // };
 
-            self.EventRegister(task, &general, EVENT_WRITE);
-            defer!(self.EventUnregister(task, &general));
-            match task.blocker.BlockWithMonoTimer(true, deadline) {
-                Err(Error::SysError(SysErr::ETIMEDOUT)) => {
-                    return Err(Error::SysError(SysErr::EAGAIN))
-                }
-                Err(e) => {
-                    return Err(e);
-                }
-                _ => (),
-            }
+        // while res == -SysErr::EWOULDBLOCK && flags & MsgType::MSG_DONTWAIT == 0 {
+        //     let general = task.blocker.generalEntry.clone();
 
-            res = if msgHdr.msgControlLen > 0 {
-                Kernel::HostSpace::IOSendMsg(
-                    self.fd,
-                    msgHdr as *const _ as u64,
-                    flags | MsgType::MSG_DONTWAIT,
-                    false,
-                ) as i32
-            } else {
-                Kernel::HostSpace::IOSendto(
-                    self.fd,
-                    buf.Ptr(),
-                    len,
-                    flags | MsgType::MSG_DONTWAIT,
-                    msgHdr.msgName,
-                    msgHdr.nameLen,
-                ) as i32
-            };
-        }
+        //     self.EventRegister(task, &general, EVENT_WRITE);
+        //     defer!(self.EventUnregister(task, &general));
+        //     match task.blocker.BlockWithMonoTimer(true, deadline) {
+        //         Err(Error::SysError(SysErr::ETIMEDOUT)) => {
+        //             return Err(Error::SysError(SysErr::EAGAIN))
+        //         }
+        //         Err(e) => {
+        //             return Err(e);
+        //         }
+        //         _ => (),
+        //     }
 
-        if res < 0 {
-            return Err(Error::SysError(-res as i32));
-        }
+        //     res = if msgHdr.msgControlLen > 0 {
+        //         Kernel::HostSpace::IOSendMsg(
+        //             self.fd,
+        //             msgHdr as *const _ as u64,
+        //             flags | MsgType::MSG_DONTWAIT,
+        //             false,
+        //         ) as i32
+        //     } else {
+        //         Kernel::HostSpace::IOSendto(
+        //             self.fd,
+        //             buf.Ptr(),
+        //             len,
+        //             flags | MsgType::MSG_DONTWAIT,
+        //             msgHdr.msgName,
+        //             msgHdr.nameLen,
+        //         ) as i32
+        //     };
+        // }
 
-        return Ok(res as i64);
+        // if res < 0 {
+        //     return Err(Error::SysError(-res as i32));
+        // }
+
+        // return Ok(res as i64);
     }
 
     fn SetRecvTimeout(&self, ns: i64) {
