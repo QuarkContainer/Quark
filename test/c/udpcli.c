@@ -55,7 +55,6 @@ int main(int argc, char *argv[])
         }
     }
 
-    printf("optind: %d, argc-1: %d\n", optind, argc - 1);
     if (optind == argc - 1)
         servername = strdupa(argv[optind]);
     else if (optind < argc)
@@ -91,7 +90,7 @@ int main(int argc, char *argv[])
 
     if (getpeername(sockfd, &sa, &sa_len) == -1)
     {
-        printf("errorno: %d\n", errno);
+        printf("getpeername, errorno: %d\n", errno);
         //   perror("getsockname() failed");
         //   return -1;
     }
@@ -104,7 +103,7 @@ int main(int argc, char *argv[])
     memset(&servaddr, 0, sizeof(servaddr));
 
     servaddr.sin_family = AF_INET;
-    servaddr.sin_port = htons(PORT);
+    servaddr.sin_port = htons(port);
     servaddr.sin_addr.s_addr = INADDR_ANY;
     if (servername)
     {
@@ -121,6 +120,27 @@ int main(int argc, char *argv[])
            0, (const struct sockaddr *)&servaddr,
            sizeof(servaddr));
     printf("Hello Quark message sent 1...\n");
+
+    printf("after calling sendto()******************************\n");
+    memset(&sa, 0, sa_len);
+    if (getsockname(sockfd, &sa, &sa_len) == -1)
+    {
+        perror("getsockname() failed");
+        return -1;
+    }
+    printf("Local IP address for sockfd is: %s\n", inet_ntoa(sa.sin_addr));
+    printf("Local port  for sockfd is: %d\n", (int)ntohs(sa.sin_port));
+
+    memset(&sa, 0, sa_len);
+    if (getpeername(sockfd, &sa, &sa_len) == -1)
+    {
+        printf("getpeername, errorno: %d\n", errno);
+    }
+    else
+    {
+        printf("Remote IP address for sockfd is: %s\n", inet_ntoa(sa.sin_addr));
+        printf("Remote port for sockfd is: %d\n", (int)ntohs(sa.sin_port));
+    }
 
     sendto(sockfd, (const char *)hello, strlen(hello),
            0, (const struct sockaddr *)&servaddr,
@@ -150,7 +170,7 @@ int main(int argc, char *argv[])
 
     if (getpeername(sockfd, &sa, &sa_len) == -1)
     {
-        printf("errorno: %d\n", errno);
+        printf("getpeername, errorno: %d\n", errno);
         //   perror("getsockname() failed");
         //   return -1;
     }
@@ -166,6 +186,27 @@ int main(int argc, char *argv[])
                  &len);
     buffer[n] = '\0';
     printf("Client : %s 1\n", buffer);
+
+    printf("after calling recvfrom()******************************\n");
+    memset(&sa, 0, sa_len);
+    if (getsockname(sockfd, &sa, &sa_len) == -1)
+    {
+        perror("getsockname() failed");
+        return -1;
+    }
+    printf("Local IP address for sockfd is: %s\n", inet_ntoa(sa.sin_addr));
+    printf("Local port  for sockfd is: %d\n", (int)ntohs(sa.sin_port));
+
+    memset(&sa, 0, sa_len);
+    if (getpeername(sockfd, &sa, &sa_len) == -1)
+    {
+        printf("getpeername, errorno: %d\n", errno);
+    }
+    else
+    {
+        printf("Remote IP address for sockfd is: %s\n", inet_ntoa(sa.sin_addr));
+        printf("Remote port for sockfd is: %d\n", (int)ntohs(sa.sin_port));
+    }
 
     n = recvfrom(sockfd, (char *)buffer, MAXLINE,
                  MSG_WAITALL, (struct sockaddr *)&servaddr,
