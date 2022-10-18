@@ -32,6 +32,7 @@ pub enum SockInfo {
     RDMAServerSocket(RDMAServerSock), //
     RDMADataSocket(RDMADataSock),     //
     RDMAContext,
+    RDMAUDPSocket(RDMAUDPSock),
 }
 
 #[derive(Clone, Default)]
@@ -48,6 +49,7 @@ impl fmt::Debug for SockInfo {
             Self::RDMAServerSocket(_) => write!(f, "SockInfo::RDMAServerSocket"),
             Self::RDMADataSocket(_) => write!(f, "SockInfo::RDMADataSocket"),
             Self::RDMAContext => write!(f, "SockInfo::RDMAContext"),
+            Self::RDMAUDPSocket(_) => write!(f, "SockInfo::RDMAUDPSocket"),
         }
     }
 }
@@ -67,6 +69,7 @@ impl SockInfo {
                 //RDMA.PollCompletion().expect("RDMA.PollCompletion fail");
                 //error!("RDMAContextEpoll");
             }
+            Self::RDMAUDPSocket(ref sock) => sock.Notify(eventmask, waitinfo),
         }
     }
 }

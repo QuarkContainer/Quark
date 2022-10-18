@@ -55,7 +55,6 @@ int main(int argc, char *argv[])
         }
     }
 
-    printf("optind: %d, argc-1: %d\n", optind, argc - 1);
     if (optind == argc - 1)
         servername = strdupa(argv[optind]);
     else if (optind < argc)
@@ -65,7 +64,7 @@ int main(int argc, char *argv[])
     }
     int sockfd;
     char buffer[MAXLINE];
-    char *hello = "Hello Quark from client";
+    char *hello = "Hello Quark from Client";
     struct sockaddr_in servaddr;
 
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
@@ -91,7 +90,7 @@ int main(int argc, char *argv[])
 
     if (getpeername(sockfd, &sa, &sa_len) == -1)
     {
-        printf("errorno: %d\n", errno);
+        printf("getpeername, errorno: %d\n", errno);
         //   perror("getsockname() failed");
         //   return -1;
     }
@@ -104,7 +103,7 @@ int main(int argc, char *argv[])
     memset(&servaddr, 0, sizeof(servaddr));
 
     servaddr.sin_family = AF_INET;
-    servaddr.sin_port = htons(PORT);
+    servaddr.sin_port = htons(port);
     servaddr.sin_addr.s_addr = INADDR_ANY;
     if (servername)
     {
@@ -120,7 +119,45 @@ int main(int argc, char *argv[])
     sendto(sockfd, (const char *)hello, strlen(hello),
            0, (const struct sockaddr *)&servaddr,
            sizeof(servaddr));
-    printf("Hello Quark message sent...\n");
+    printf("Hello Quark message sent 1...\n");
+
+    printf("after calling sendto()******************************\n");
+    memset(&sa, 0, sa_len);
+    if (getsockname(sockfd, &sa, &sa_len) == -1)
+    {
+        perror("getsockname() failed");
+        return -1;
+    }
+    printf("Local IP address for sockfd is: %s\n", inet_ntoa(sa.sin_addr));
+    printf("Local port  for sockfd is: %d\n", (int)ntohs(sa.sin_port));
+
+    memset(&sa, 0, sa_len);
+    if (getpeername(sockfd, &sa, &sa_len) == -1)
+    {
+        printf("getpeername, errorno: %d\n", errno);
+    }
+    else
+    {
+        printf("Remote IP address for sockfd is: %s\n", inet_ntoa(sa.sin_addr));
+        printf("Remote port for sockfd is: %d\n", (int)ntohs(sa.sin_port));
+    }
+
+    sendto(sockfd, (const char *)hello, strlen(hello),
+           0, (const struct sockaddr *)&servaddr,
+           sizeof(servaddr));
+    printf("Hello Quark message sent 2...\n");
+    sendto(sockfd, (const char *)hello, strlen(hello),
+           0, (const struct sockaddr *)&servaddr,
+           sizeof(servaddr));
+    printf("Hello Quark message sent 3...\n");
+    sendto(sockfd, (const char *)hello, strlen(hello),
+           0, (const struct sockaddr *)&servaddr,
+           sizeof(servaddr));
+    printf("Hello Quark message sent 4...\n");
+    sendto(sockfd, (const char *)hello, strlen(hello),
+           0, (const struct sockaddr *)&servaddr,
+           sizeof(servaddr));
+    printf("Hello Quark message sent 5...\n");
 
 	printf("after calling sendto()******************************\n");
     if (getsockname(sockfd, &sa, &sa_len) == -1)
@@ -133,9 +170,37 @@ int main(int argc, char *argv[])
 
     if (getpeername(sockfd, &sa, &sa_len) == -1)
     {
-        printf("errorno: %d\n", errno);
+        printf("getpeername, errorno: %d\n", errno);
         //   perror("getsockname() failed");
         //   return -1;
+    }
+    else
+    {
+        printf("Remote IP address for sockfd is: %s\n", inet_ntoa(sa.sin_addr));
+        printf("Remote port for sockfd is: %d\n", (int)ntohs(sa.sin_port));
+    }
+
+    len = sizeof(servaddr);
+    n = recvfrom(sockfd, (char *)buffer, MAXLINE,
+                 MSG_WAITALL, (struct sockaddr *)&servaddr,
+                 &len);
+    buffer[n] = '\0';
+    printf("Client : %s 1\n", buffer);
+
+    printf("after calling recvfrom()******************************\n");
+    memset(&sa, 0, sa_len);
+    if (getsockname(sockfd, &sa, &sa_len) == -1)
+    {
+        perror("getsockname() failed");
+        return -1;
+    }
+    printf("Local IP address for sockfd is: %s\n", inet_ntoa(sa.sin_addr));
+    printf("Local port  for sockfd is: %d\n", (int)ntohs(sa.sin_port));
+
+    memset(&sa, 0, sa_len);
+    if (getpeername(sockfd, &sa, &sa_len) == -1)
+    {
+        printf("getpeername, errorno: %d\n", errno);
     }
     else
     {
@@ -147,7 +212,25 @@ int main(int argc, char *argv[])
                  MSG_WAITALL, (struct sockaddr *)&servaddr,
                  &len);
     buffer[n] = '\0';
-    printf("Server : %s\n", buffer);
+    printf("Client : %s 2\n", buffer);
+
+    n = recvfrom(sockfd, (char *)buffer, MAXLINE,
+                 MSG_WAITALL, (struct sockaddr *)&servaddr,
+                 &len);
+    buffer[n] = '\0';
+    printf("Client : %s 3\n", buffer);
+
+    n = recvfrom(sockfd, (char *)buffer, MAXLINE,
+                 MSG_WAITALL, (struct sockaddr *)&servaddr,
+                 &len);
+    buffer[n] = '\0';
+    printf("Client : %s 4\n", buffer);
+
+    n = recvfrom(sockfd, (char *)buffer, MAXLINE,
+                 MSG_WAITALL, (struct sockaddr *)&servaddr,
+                 &len);
+    buffer[n] = '\0';
+    printf("Client : %s 5\n", buffer);
 
     close(sockfd);
     return 0;

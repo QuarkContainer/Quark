@@ -141,9 +141,10 @@ impl RDMASvcClient {
         // let cli_sock = UnixSocket::NewClient(path).unwrap();
         let cli_sock = UnixSocket { fd: cliSock };
 
-        let body = 1;
-        let ptr = &body as *const _ as *const u8;
-        let buf = unsafe { slice::from_raw_parts(ptr, 4) };
+        // let body = 1;
+        // let ptr = &body as *const _ as *const u8;
+        // let buf = unsafe { slice::from_raw_parts(ptr, 4) };
+        let buf = podId.as_slice();
         cli_sock.WriteWithFds(buf, &[]).unwrap();
 
         let mut body = [0, 0];

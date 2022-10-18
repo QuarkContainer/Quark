@@ -1,6 +1,6 @@
-// use super::super::super::qlib::mutex::*;
+use alloc::collections::vec_deque::VecDeque;
 use alloc::sync::Arc;
-// use core::mem;
+use core::fmt;
 use core::ops::Deref;
 // use core::sync::atomic::AtomicU64;
 // use core::sync::atomic::AtomicUsize;
@@ -9,6 +9,8 @@ use core::ops::Deref;
 
 use super::common::*;
 use super::fileinfo::*;
+use super::mutex::*;
+use crate::qlib::kernel::kernel::waiter::Queue;
 // use super::super::super::qlib::kernel::guestfdnotifier::*;
 // use super::kernel::GlobalIOMgr;
 // use super::super::super::qlib::kernel::TSC;
@@ -212,5 +214,155 @@ impl RDMADataSock {
         if eventmask & EVENT_READ != 0 {
             self.Read(waitinfo);
         }
+    }
+}
+
+pub struct RDMAUDPSockIntern {
+    pub recvQueue: UDPRecvQueue,
+    pub port: u16,
+}
+
+#[derive(Clone)]
+pub struct RDMAUDPSock(Arc<RDMAUDPSockIntern>);
+
+impl Deref for RDMAUDPSock {
+    type Target = Arc<RDMAUDPSockIntern>;
+
+    fn deref(&self) -> &Arc<RDMAUDPSockIntern> {
+        &self.0
+    }
+}
+
+pub const UDP_RECV_QUEUE_LEN: usize = 5;
+
+impl RDMAUDPSock {
+    pub fn New(queue: Queue, port: u16) -> Self {
+        Self(Arc::new(RDMAUDPSockIntern {
+            recvQueue: UDPRecvQueue::New(UDP_RECV_QUEUE_LEN, queue),
+            port,
+        }))
+    }
+    pub fn Notify(&self, eventmask: EventMask, _waitinfo: FdWaitInfo) {
+        error!("RDMAUDPSock::Notify, eventmask: {:x}", eventmask);
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct UDPRecvItem {
+    pub udpBuffIdx: u32,
+    // pub addr: TcpSockAddr,
+    // pub len: u32,
+    // pub sockBuf: AcceptSocket,
+    pub queue: Queue,
+}
+
+#[derive(Clone, Debug)]
+pub struct UDPRecvQueue(Arc<QMutex<UDPRecvQueueIntern>>);
+
+impl Deref for UDPRecvQueue {
+    type Target = Arc<QMutex<UDPRecvQueueIntern>>;
+
+    fn deref(&self) -> &Arc<QMutex<UDPRecvQueueIntern>> {
+        &self.0
+    }
+}
+
+impl UDPRecvQueue {
+    pub fn New(len: usize, queue: Queue) -> Self {
+        let inner = UDPRecvQueueIntern {
+            udpRecvQueue: VecDeque::new(),
+            queueLen: len,
+            error: 0,
+            total: 0,
+            queue: queue,
+        };
+
+        return Self(Arc::new(QMutex::new(inner)));
+    }
+
+    pub fn EnqSocket(&self, udpBuffIdx: u32, queue: Queue) -> bool {
+        let (trigger, hasSpace) = {
+            let mut inner = self.lock();
+            let item = UDPRecvItem {
+                udpBuffIdx,
+                queue: queue,
+            };
+
+            inner.udpRecvQueue.push_back(item);
+            inner.total += 1;
+            let trigger = inner.udpRecvQueue.len() == 1;
+
+            (trigger, inner.udpRecvQueue.len() < inner.queueLen)
+        };
+
+        if trigger {
+            let queue = self.lock().queue.clone();
+            queue.Notify(READABLE_EVENT)
+        }
+
+        return hasSpace;
+    }
+}
+
+pub struct UDPRecvQueueIntern {
+    pub udpRecvQueue: VecDeque<UDPRecvItem>,
+    pub queueLen: usize,
+    pub error: i32,
+    pub total: u64,
+    pub queue: Queue,
+}
+
+impl fmt::Debug for UDPRecvQueueIntern {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "UDPRecvQueueIntern aiQueue {:x?}", self.udpRecvQueue)
+    }
+}
+
+impl Drop for UDPRecvQueueIntern {
+    fn drop(&mut self) {}
+}
+
+impl UDPRecvQueueIntern {
+    pub fn SetErr(&mut self, error: i32) {
+        self.error = error
+    }
+
+    pub fn Err(&self) -> i32 {
+        return self.error;
+    }
+
+    pub fn SetQueueLen(&mut self, len: usize) {
+        self.queueLen = len;
+    }
+
+    pub fn HasSpace(&self) -> bool {
+        return self.udpRecvQueue.len() < self.queueLen;
+    }
+
+    pub fn DeqSocket(&mut self) -> (bool, Result<UDPRecvItem>) {
+        let trigger = self.udpRecvQueue.len() == self.queueLen;
+
+        match self.udpRecvQueue.pop_front() {
+            None => {
+                if self.error != 0 {
+                    return (false, Err(Error::SysError(self.error)));
+                }
+                return (trigger, Err(Error::SysError(SysErr::EAGAIN)));
+            }
+            Some(item) => return (trigger, Ok(item)),
+        }
+    }
+
+    pub fn Events(&self) -> EventMask {
+        let mut event = EventMask::default();
+        if self.udpRecvQueue.len() > 0 {
+            event |= READABLE_EVENT;
+        }
+
+        if self.error != 0 {
+            event |= EVENT_ERR;
+        }
+
+        return event;
     }
 }

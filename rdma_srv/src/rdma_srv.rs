@@ -141,6 +141,8 @@ pub struct RDMASrv {
     pub udpMemoryRegion: MemoryRegion,
     pub udpQP: QueuePair,
     pub udpBufferAllocator: Mutex<UDPBufferAllocator>,
+    pub podIdToAgents: Mutex<HashMap<[u8; 64], RDMAAgent>>,
+    pub ipAddrToAgents: Mutex<HashMap<u32, RDMAAgent>>,
 }
 
 impl Drop for RDMASrv {
@@ -301,6 +303,8 @@ impl RDMASrv {
             udpMemoryRegion: udpMR,
             udpQP,
             udpBufferAllocator,
+            ipAddrToAgents: Mutex::new(HashMap::new()),
+            podIdToAgents: Mutex::new(HashMap::new()),
         };
     }
 
@@ -390,34 +394,53 @@ impl RDMASrv {
         }
     }
 
-    pub fn ProcessRDMARecv(&self, qpNum: u32, wrId: u64, len: u32) {
-        error!(
-            "ProcessRDMARecv, 1, qpNum: {}, wrId: {}, len: {}",
-            qpNum, wrId, len
-        );
-        let _payloadLen = len - 40;
-        let mut i = 0;
+    pub fn ProcessRDMARecv(&self, _qpNum: u32, wrId: u64, _len: u32) {
+        // error!(
+        //     "ProcessRDMARecv, 1, qpNum: {}, wrId: {}, len: {}",
+        //     qpNum, wrId, len
+        // );
+
         let laddr = self.udpMemRegion.addr + wrId * (mem::size_of::<UDPPacket>() + 40) as u64 + 40;
-        loop {
-            let addr = laddr + i * 8;
-            println!("addr{}: 0x{:x}-> 0x{:x}", i, addr, unsafe {
-                &mut *(addr as *mut u64)
-            });
-            i += 1;
-            if i == 10 {
+        // let _payloadLen = len - 40;
+        // let mut i = 0;
+        // loop {
+        //     let addr = laddr + i * 8;
+        //     println!("addr{}: 0x{:x}-> 0x{:x}", i, addr, unsafe {
+        //         &mut *(addr as *mut u64)
+        //     });
+        //     i += 1;
+        //     if i == 10 {
+        //         break;
+        //     }
+        // }
+        let udpPacket = unsafe { &(*(laddr as *const UDPPacket)) };
+        // debug!("RDMASrv::ProcessRDMARecv, udpPacket: {:?}", udpPacket);
+        if RDMA_CTLINFO.isK8s {
+            match self.ipAddrToAgents.lock().get(&udpPacket.dstIpAddr) {
+                Some(rdmaAgent) => {
+                    rdmaAgent.HandleUDPPacketRecv(udpPacket);
+                    self.udpBufferAllocator.lock().ReturnBuffer(wrId as u32);
+                }
+                None => {
+
+                }
+            }
+        }
+        else {
+            // Test hook
+            for (_agentId, rdmaAgent) in self.agents.lock().iter() {
+                rdmaAgent.HandleUDPPacketRecv(udpPacket);
+                self.udpBufferAllocator.lock().ReturnBuffer(wrId as u32);
                 break;
             }
         }
-        let udpPacket = laddr as *const UDPPacket;
-        debug!("RDMASrv::ProcessRDMARecv, udpPacket: {:?}", unsafe {
-            *udpPacket
-        });
+        
     }
 
     pub fn ProcessRDMASend(&self, wrId: u64) {
-        error!("ProcessRDMASend, 1, qwrId: {}", wrId);
         let agentId = (wrId >> 32) as u32;
-        let udpBuffIdx = (wrId | 0xFFFFFFFF) as u32;
+        let udpBuffIdx = (wrId & 0xFFFFFFFF) as u32;
+        // error!("ProcessRDMASend, 1, wrId: {}, agentId: {}, udpBuffIdx: {}", wrId, agentId, udpBuffIdx);
         match RDMA_SRV.agents.lock().get(&agentId) {
             Some(rdmaAgent) => {
                 rdmaAgent.SendResponse(RDMAResp {

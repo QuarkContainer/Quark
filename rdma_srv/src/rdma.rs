@@ -767,7 +767,7 @@ impl RDMAContext {
             RDMA_SRV.ProcessRDMARecv(wc.qp_num, wc.wr_id, wc.byte_len);
         }else if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_SEND {
             // error!("ProcessWC::4");
-            RDMA_SRV.ProcessRDMARecv(wc.qp_num, wc.wr_id, wc.byte_len);
+            RDMA_SRV.ProcessRDMASend(wc.wr_id);
         } else {
             // debug!("ProcessWC::5, opcode: {}, wr_id: {}", wc.opcode, wc.wr_id);
         }
@@ -948,10 +948,10 @@ impl QueuePair {
         len: u32,
         lkey: u32,
     ) -> Result<()> {
-        error!(
-            "PostSendUDQP, remote_qpn: {}, wrId: {}, laddr: 0x{:x}, len: {}, lkey: {}",
-            remote_qpn, wrId, laddr, len, lkey
-        );
+        // error!(
+        //     "PostSendUDQP, remote_qpn: {}, wrId: {}, laddr: 0x{:x}, len: {}, lkey: {}",
+        //     remote_qpn, wrId, laddr, len, lkey
+        // );
         let opcode = rdmaffi::ibv_wr_opcode::IBV_WR_SEND;
         let mut sge = rdmaffi::ibv_sge {
             addr: laddr,
@@ -988,20 +988,6 @@ impl QueuePair {
                 },
             },
         };
-
-        // let mut sw = unsafe { MaybeUninit::<rdmaffi::ibv_send_wr>::zeroed().assume_init() };
-        // sw.wr_id = wrId;
-        // sw.sg_list = &mut sge;
-        // sw.num_sge = 1;
-        // sw.opcode = opcode;
-        // sw.send_flags = rdmaffi::ibv_send_flags::IBV_SEND_SIGNALED.0;
-        // sw.wr = rdmaffi::wr_t {
-        //     ud: rdmaffi::ud_t {
-        //         ah: ah.Data(),
-        //         remote_qpn,
-        //         remote_qkey: 0x11111111,
-        //     },
-        // };
 
         let mut bad_wr: *mut rdmaffi::ibv_send_wr = ptr::null_mut();
 

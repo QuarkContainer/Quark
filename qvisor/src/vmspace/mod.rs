@@ -585,7 +585,9 @@ impl VMSpace {
                 SockInfo::RDMAServerSocket(serverSock) => {
                     GlobalRDMASvcCli().rdmaIdToSocketMappings.lock().remove(&serverSock.rdmaId);
                     //TODO: handle server close
-                    error!("ServerSock, fd: {}", fd);
+                }
+                SockInfo::RDMAUDPSocket(sock) => {
+                    GlobalRDMASvcCli().portToFdInfoMappings.lock().remove(&sock.port);
                 }
                 _ => {
                 }

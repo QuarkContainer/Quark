@@ -95,6 +95,9 @@ use spin::{Mutex, MutexGuard};
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::{env, mem, ptr, thread, time};
+use self::qlib::mem::list_allocator::*;
+
+pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
 lazy_static! {
     pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
@@ -332,6 +335,7 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient, fds: &mut HashMap<i32, FdType
                                 RDMARespMsg::RDMAReturnUDPBuff(_response) => {
                                     // TODO Handle UDP
                                 }
+                                RDMARespMsg::RDMARecvUDPPacket(_udpBuffIdx) => todo!()
                             },
                             None => {
                                 break;

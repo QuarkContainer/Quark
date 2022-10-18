@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::common::*;
 use super::constants::*;
+use crate::common::*;
 use crate::rdma_ctrlconn::*;
 use crate::RDMA_CTLINFO;
+use crate::RDMA_SRV;
 use svc_client::quark_cm_service_client::QuarkCmServiceClient;
 use svc_client::MaxResourceVersionMessage;
 use svc_client::PodMessage;
@@ -33,7 +34,7 @@ pub struct PodInformer {
 
 impl PodInformer {
     pub fn new() -> PodInformer {
-        PodInformer{
+        PodInformer {
             max_resource_version: 0,
         }
     }
@@ -60,11 +61,14 @@ impl PodInformer {
 
             // println!("PodInformer sleeps 1 second for next watch session.");
             sleep(Duration::from_secs(1)).await;
-        }        
+        }
     }
 
     async fn run_watch(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        println!("Start pod run_watch. max_resource_version: {}", self.max_resource_version);
+        println!(
+            "Start pod run_watch. max_resource_version: {}",
+            self.max_resource_version
+        );
         let mut client = QuarkCmServiceClient::connect(GRPC_SERVER_ADDRESS).await?;
         let mut pod_stream = client
             .watch_pod(Request::new(MaxResourceVersionMessage {
@@ -89,18 +93,43 @@ impl PodInformer {
             let pod = Pod {
                 key: pod_message.key.clone(),
                 ip: ip,
-                node_name : pod_message.node_name.clone(),
+                node_name: pod_message.node_name.clone(),
                 container_id: pod_message.container_id.clone(),
                 resource_version: pod_message.resource_version,
             };
             containerids_map.insert(pod.container_id.clone(), pod.ip.clone());
             ip_to_podId_map.insert(pod.ip, pod.container_id.clone());
+            match RDMA_SRV.ipAddrToAgents.lock().get(&pod.ip) {
+                Some(_agent) => {}
+                None => {
+                    match RDMA_SRV
+                        .podIdToAgents
+                        .lock()
+                        .get(pod.container_id.as_bytes())
+                    {
+                        Some(rdmaAgent) => {
+                            RDMA_SRV
+                                .ipAddrToAgents
+                                .lock()
+                                .insert(pod.ip, rdmaAgent.clone());
+                        }
+                        None => {
+                            panic!(
+                                "Could not find agent from podId: {:?}",
+                                pod.container_id.as_bytes()
+                            );
+                        }
+                    }
+                }
+            }
+
             pods_map.insert(ip, pod);
             if pod_message.resource_version > self.max_resource_version {
                 self.max_resource_version = pod_message.resource_version;
             }
         } else if pod_message.event_type == EVENT_TYPE_DELETE {
             ip_to_podId_map.remove(&ip);
+            RDMA_SRV.ipAddrToAgents.lock().remove(&ip);
             if pods_map.contains_key(&ip) {
                 if pods_map[&ip].resource_version < pod_message.resource_version {
                     let container_id = &pods_map[&ip].container_id;
@@ -114,7 +143,15 @@ impl PodInformer {
         }
         println!("Handled Pod: {:?}", pod_message);
         println!("Debug: pods_map len:{} {:?}", pods_map.len(), pods_map);
-        println!("Debug: containerids_map len:{} {:?}", containerids_map.len(), containerids_map);
-        println!("Debug: ip_to_podId_map len:{} {:?}", ip_to_podId_map.len(), ip_to_podId_map);
+        println!(
+            "Debug: containerids_map len:{} {:?}",
+            containerids_map.len(),
+            containerids_map
+        );
+        println!(
+            "Debug: ip_to_podId_map len:{} {:?}",
+            ip_to_podId_map.len(),
+            ip_to_podId_map
+        );
     }
 }

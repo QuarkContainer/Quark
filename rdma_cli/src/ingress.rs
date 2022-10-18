@@ -83,6 +83,7 @@ use std::io::Error;
 use std::net::{IpAddr, Ipv4Addr, TcpListener, TcpStream};
 use std::os::unix::io::{AsRawFd, RawFd};
 pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
+use self::qlib::mem::list_allocator::*;
 use crate::qlib::rdma_share::*;
 use common::EpollEvent;
 use common::*;
@@ -93,6 +94,8 @@ use qlib::unix_socket::UnixSocket;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::{env, mem, ptr, thread, time};
+
+pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
 lazy_static! {
     pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
@@ -322,16 +325,19 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient, fds: &mut HashMap<i32, FdType
                                 }
                                 RDMARespMsg::RDMANotify(response) => {
                                     if response.event & EVENT_IN != 0 {
-                                        let mut sockInfo = gatewayCli.GetChannelSocket(&response.channelId);
+                                        let mut sockInfo =
+                                            gatewayCli.GetChannelSocket(&response.channelId);
                                         gatewayCli.WriteToSocket(&mut sockInfo, &sockFdMappings);
                                     }
                                     if response.event & EVENT_OUT != 0 {
-                                        let mut sockInfo = gatewayCli.GetChannelSocket(&response.channelId);
+                                        let mut sockInfo =
+                                            gatewayCli.GetChannelSocket(&response.channelId);
                                         gatewayCli.ReadFromSocket(&mut sockInfo, &sockFdMappings);
                                     }
                                 }
                                 RDMARespMsg::RDMAFinNotify(response) => {
-                                    let mut sockInfo = gatewayCli.GetChannelSocket(&response.channelId);
+                                    let mut sockInfo =
+                                        gatewayCli.GetChannelSocket(&response.channelId);
                                     if response.event & FIN_RECEIVED_FROM_PEER != 0 {
                                         *sockInfo.finReceived.lock() = true;
                                         gatewayCli.WriteToSocket(&mut sockInfo, &sockFdMappings);
@@ -340,6 +346,7 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient, fds: &mut HashMap<i32, FdType
                                 RDMARespMsg::RDMAReturnUDPBuff(_response) => {
                                     // TODO Handle UDP
                                 }
+                                RDMARespMsg::RDMARecvUDPPacket(_udpBuffIdx) => todo!()
                             },
                             None => {
                                 break;

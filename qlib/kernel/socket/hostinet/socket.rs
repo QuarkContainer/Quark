@@ -14,6 +14,7 @@
 
 use crate::qlib::mutex::*;
 use crate::qlib::rdma_share::*;
+use crate::qlib::rdmasocket::*;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -119,7 +120,7 @@ pub enum SocketBufType {
     TCPNormalData,                // Common TCP socket
     Uring(SocketBuff),
     RDMA(SocketBuff),
-    Loopback(LoopbackSocket)
+    Loopback(LoopbackSocket),
 }
 
 impl fmt::Debug for SocketBufType {
@@ -146,9 +147,7 @@ impl SocketBufType {
             //SocketBufType::TCPUringlServer(_) => return SocketBufType::Uring(socketBuf),
             SocketBufType::TCPRDMAServer(_) => {
                 match accept {
-                    AcceptSocket::SocketBuff(socketBuf) => {
-                        return SocketBufType::RDMA(socketBuf)
-                    }
+                    AcceptSocket::SocketBuff(socketBuf) => return SocketBufType::RDMA(socketBuf),
                     /*AcceptSocket::LoopbackSocket(loopback) => {
                         return Self::Loopback(loopback)
                     }*/
@@ -498,6 +497,16 @@ impl SocketOperations {
             None => None,
             Some(ref v) => Some(v.ToVec().unwrap()),
         };
+    }
+
+    fn UDPEventRegister(&self, task: &Task, e: &WaitEntry, mask: EventMask) {
+        let queue = GlobalRDMASvcCli().udpSentBufferAllocator.lock().Queue();
+        queue.EventRegister(task, e, mask);
+    }
+
+    fn UDPEventUnregister(&self, task: &Task, e: &WaitEntry) {
+        let queue = GlobalRDMASvcCli().udpSentBufferAllocator.lock().Queue();
+        queue.EventUnregister(task, e);
     }
 }
 
@@ -1123,12 +1132,15 @@ impl SockOperations for SocketOperations {
                 SockAddr::Inet(ipv4) => {
                     let port = ipv4.Port.to_le();
                     let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
-                    *fdInfo.lock().sockInfo.lock() = SockInfo::Socket(SocketInfo {
-                        ipAddr: u32::from_be_bytes(ipv4.Addr), //u32::from_be_bytes([192, 168, 6, 8]), //ipAddr: u32::from_be_bytes(ipv4.Addr), // ipAddr: 3232237064,
-                        port,                                  // port: 58433,
-                    }); //192.168.6.8:16868
-                    if self.udpRDMA {
+                    if self.tcpRDMA {
+                        *fdInfo.lock().sockInfo.lock() = SockInfo::Socket(SocketInfo {
+                            ipAddr: u32::from_be_bytes(ipv4.Addr), //u32::from_be_bytes([192, 168, 6, 8]), //ipAddr: u32::from_be_bytes(ipv4.Addr), // ipAddr: 3232237064,
+                            port,                                  // port: 58433,
+                        }); //192.168.6.8:16868
+                    } else if self.udpRDMA {
                         debug!("SocketOperations::Bind, port: {}", port);
+                        *fdInfo.lock().sockInfo.lock() =
+                            SockInfo::RDMAUDPSocket(RDMAUDPSock::New(self.queue.clone(), port));
                         GlobalRDMASvcCli()
                             .portToFdInfoMappings
                             .lock()
@@ -1501,7 +1513,7 @@ impl SockOperations for SocketOperations {
     }
 
     fn GetSockName(&self, _task: &Task, socketaddr: &mut [u8]) -> Result<i64> {
-        if self.tcpRDMA {
+        if self.tcpRDMA || self.udpRDMA {
             let fdInfo = GlobalIOMgr().GetByHost(self.fd).unwrap();
             let fdInfoLock = fdInfo.lock();
             let sockInfo = fdInfoLock.sockInfo.lock().clone();
@@ -1520,11 +1532,14 @@ impl SockOperations for SocketOperations {
                     ipAddr = sock.ipAddr;
                     port = sock.port;
                 }
+                SockInfo::RDMAUDPSocket(sock) => {
+                    ipAddr = 0;
+                    port = sock.port;
+                }
                 _ => {
                     panic!("Incorrect sockInfo")
                 }
             }
-            debug!("GetSockName, ipAddr: {}, port: {}", ipAddr, port);
             let sockAddr = SockAddr::Inet(SockAddrInet {
                 Family: AFType::AF_INET as u16,
                 Port: port,
@@ -1585,17 +1600,12 @@ impl SockOperations for SocketOperations {
             //TODO: handle unhappy case
             return Ok(len as i64);
         }
-        let len = socketaddr.len() as i32;
-        let res = Kernel::HostSpace::GetPeerName(
-            self.fd,
-            &socketaddr[0] as *const _ as u64,
-            &len as *const _ as u64,
-        );
-        if res < 0 {
-            return Err(Error::SysError(-res as i32));
+        if self.udpRDMA {
+            return Err(Error::SysError(SysErr::ENOTCONN));
         }
 
-        return Ok(len as i64);
+        // Should not come to this point!
+        return Err(Error::SysError(SysErr::EINVAL));
     }
 
     fn RecvMsg(
@@ -1772,39 +1782,9 @@ impl SockOperations for SocketOperations {
         self.EventRegister(task, &general, EVENT_READ);
         defer!(self.EventUnregister(task, &general));
 
-        let mut res = if msgHdr.msgControlLen != 0 {
-            Kernel::HostSpace::IORecvMsg(
-                self.fd,
-                &mut msgHdr as *mut _ as u64,
-                flags | MsgType::MSG_DONTWAIT,
-                false,
-            ) as i32
-        } else {
-            Kernel::HostSpace::IORecvfrom(
-                self.fd,
-                buf.Ptr(),
-                size,
-                flags | MsgType::MSG_DONTWAIT,
-                msgHdr.msgName,
-                &msgHdr.nameLen as *const _ as u64,
-            ) as i32
-        };
-
-        while res == -SysErr::EWOULDBLOCK && flags & MsgType::MSG_DONTWAIT == 0 {
-            match task.blocker.BlockWithMonoTimer(true, deadline) {
-                Err(Error::ErrInterrupted) => {
-                    return Err(Error::SysError(SysErr::ERESTARTSYS));
-                }
-                Err(Error::SysError(SysErr::ETIMEDOUT)) => {
-                    return Err(Error::SysError(SysErr::EAGAIN));
-                }
-                Err(e) => {
-                    return Err(e);
-                }
-                _ => (),
-            }
-
-            res = if msgHdr.msgControlLen != 0 {
+        if self.tcpRDMA {
+            //TODO: this needs revisit for TCP over RDMA
+            let mut res = if msgHdr.msgControlLen != 0 {
                 Kernel::HostSpace::IORecvMsg(
                     self.fd,
                     &mut msgHdr as *mut _ as u64,
@@ -1821,34 +1801,145 @@ impl SockOperations for SocketOperations {
                     &msgHdr.nameLen as *const _ as u64,
                 ) as i32
             };
-        }
 
-        if res < 0 {
-            return Err(Error::SysError(-res as i32));
-        }
+            while res == -SysErr::EWOULDBLOCK && flags & MsgType::MSG_DONTWAIT == 0 {
+                match task.blocker.BlockWithMonoTimer(true, deadline) {
+                    Err(Error::ErrInterrupted) => {
+                        return Err(Error::SysError(SysErr::ERESTARTSYS));
+                    }
+                    Err(Error::SysError(SysErr::ETIMEDOUT)) => {
+                        return Err(Error::SysError(SysErr::EAGAIN));
+                    }
+                    Err(e) => {
+                        return Err(e);
+                    }
+                    _ => (),
+                }
 
-        let msgFlags = msgHdr.msgFlags & !MsgType::MSG_CTRUNC;
-        let senderAddr = if senderRequested
-            // for tcp connect, recvmsg get nameLen=0 msg
-            && msgHdr.nameLen >= 4
-        {
-            let addr = GetAddr(addr[0] as i16, &addr[0..msgHdr.nameLen as usize])?;
-            let l = addr.Len();
-            Some((addr, l))
+                res = if msgHdr.msgControlLen != 0 {
+                    Kernel::HostSpace::IORecvMsg(
+                        self.fd,
+                        &mut msgHdr as *mut _ as u64,
+                        flags | MsgType::MSG_DONTWAIT,
+                        false,
+                    ) as i32
+                } else {
+                    Kernel::HostSpace::IORecvfrom(
+                        self.fd,
+                        buf.Ptr(),
+                        size,
+                        flags | MsgType::MSG_DONTWAIT,
+                        msgHdr.msgName,
+                        &msgHdr.nameLen as *const _ as u64,
+                    ) as i32
+                };
+            }
+            if res < 0 {
+                return Err(Error::SysError(-res as i32));
+            }
+
+            let msgFlags = msgHdr.msgFlags & !MsgType::MSG_CTRUNC;
+            let senderAddr = if senderRequested
+                // for tcp connect, recvmsg get nameLen=0 msg
+                && msgHdr.nameLen >= 4
+            {
+                let addr = GetAddr(addr[0] as i16, &addr[0..msgHdr.nameLen as usize])?;
+                let l = addr.Len();
+                Some((addr, l))
+            } else {
+                None
+            };
+
+            controlVec.resize(msgHdr.msgControlLen, 0);
+
+            // todo: need to handle partial copy
+            let count = if res < buf.buf.len() as i32 {
+                res
+            } else {
+                buf.buf.len() as i32
+            };
+            let _len = task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts, false)?;
+            return Ok((res as i64, msgFlags, senderAddr, controlVec));
         } else {
-            None
-        };
+            if msgHdr.msgControlLen != 0 {
+                panic!("TODO: UDP over RDMA doesn't support control msg yet!");
+            }
+            let sockInfo = GlobalIOMgr()
+                .GetByHost(self.fd)
+                .unwrap()
+                .lock()
+                .sockInfo
+                .lock()
+                .clone();
+            match sockInfo {
+                SockInfo::RDMAUDPSocket(udpSock) => {
+                    let mut recvUdpItem = UDPRecvItem::default();
+                    if flags & MsgType::MSG_DONTWAIT != 0 {
+                        let (_trigger, recvItem) = udpSock.recvQueue.lock().DeqSocket();
+                        match recvItem {
+                            Err(Error::SysError(SysErr::EAGAIN)) => {
+                                if flags & MsgType::MSG_DONTWAIT != 0 {
+                                    return Err(Error::SysError(SysErr::EAGAIN));
+                                }
+                            }
+                            Err(e) => return Err(e),
+                            Ok(item) => {
+                                recvUdpItem = item;
+                            }
+                        }
+                    } else {
+                        //blocking
+                        loop {
+                            let (_trigger, recvItem) = udpSock.recvQueue.lock().DeqSocket();
+                            match recvItem {
+                                Err(Error::SysError(SysErr::EAGAIN)) => (),
+                                Err(e) => return Err(e),
+                                Ok(item) => {
+                                    recvUdpItem = item;
+                                    break;
+                                }
+                            }
+                            match task.blocker.BlockWithMonoTimer(true, None) {
+                                Err(e) => {
+                                    return Err(e);
+                                }
+                                _ => (),
+                            }
+                        }
+                    }
 
-        controlVec.resize(msgHdr.msgControlLen, 0);
+                    let srcPort;
+                    let srcIpAddr;
+                    let len;
+                    {
+                        let udpPacket = &GlobalRDMASvcCli().cliShareRegion.lock().udpBufRecv
+                        [recvUdpItem.udpBuffIdx as usize];
+                        let buf = &udpPacket.buf[0..udpPacket.length as usize];
+                        len = task.CopyDataOutToIovs(buf, dsts, false)?;
+                        srcPort = udpPacket.srcPort.clone();
+                        srcIpAddr = udpPacket.srcIpAddr.clone();
+                    }
+                    let _res = GlobalRDMASvcCli().returnUDPBuff(recvUdpItem.udpBuffIdx);
+                    let senderAddr = if senderRequested {
+                        let addr = SockAddr::Inet(SockAddrInet {
+                            Family: AFType::AF_INET as u16,
+                            Port: srcPort,
+                            Addr: srcIpAddr.to_be_bytes(),
+                            Zero: [0; 8],
+                        });
+                        let l = addr.Len();
+                        Some((addr, l))
+                    } else {
+                        None
+                    };
 
-        // todo: need to handle partial copy
-        let count = if res < buf.buf.len() as i32 {
-            res
-        } else {
-            buf.buf.len() as i32
-        };
-        let _len = task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts, false)?;
-        return Ok((res as i64, msgFlags, senderAddr, controlVec));
+                    return Ok((len as i64, 0, senderAddr, controlVec));
+                }
+                _ => {
+                    panic!("SockInfo: {:?} is not expected for UDP", sockInfo);
+                }
+            }
+        }
     }
 
     fn SendMsg(
@@ -1859,6 +1950,20 @@ impl SockOperations for SocketOperations {
         msgHdr: &mut MsgHdr,
         deadline: Option<Time>,
     ) -> Result<i64> {
+        if flags
+            & !(MsgType::MSG_DONTWAIT
+                | MsgType::MSG_EOR
+                | MsgType::MSG_FASTOPEN
+                | MsgType::MSG_MORE
+                | MsgType::MSG_NOSIGNAL)
+            != 0
+        {
+            return Err(Error::SysError(SysErr::EINVAL));
+        }
+
+        if msgHdr.msgControlLen > 0 {
+            panic!("TCP/UDP over RDMA doesn't support SendMsg with ancillary data");
+        }
         if self.SocketBufEnabled() {
             if self.SocketBuf().WClosed() {
                 return Err(Error::SysError(SysErr::EPIPE));
@@ -1934,17 +2039,6 @@ impl SockOperations for SocketOperations {
             }
         }
 
-        if flags
-            & !(MsgType::MSG_DONTWAIT
-                | MsgType::MSG_EOR
-                | MsgType::MSG_FASTOPEN
-                | MsgType::MSG_MORE
-                | MsgType::MSG_NOSIGNAL)
-            != 0
-        {
-            return Err(Error::SysError(SysErr::EINVAL));
-        }
-
         // Handle UDP over RDMA
         if self.udpRDMA {
             let totalLen = Iovs(srcs).Count();
@@ -1960,15 +2054,16 @@ impl SockOperations for SocketOperations {
                 .clone();
             let port;
             match sockInfo {
-                SockInfo::Socket(sockInfo) => {
+                SockInfo::RDMAUDPSocket(sockInfo) => {
                     if sockInfo.port == 0 {
-                        port = 16868u16.to_le(); // TODO: Assign an ephemeral port
+                        port = 16868u16.to_be(); // TODO: Assign an ephemeral port
                         *GlobalIOMgr()
                             .GetByHost(self.fd)
                             .unwrap()
                             .lock()
                             .sockInfo
-                            .lock() = SockInfo::Socket(SocketInfo { ipAddr: 0, port });
+                            .lock() =
+                            SockInfo::RDMAUDPSocket(RDMAUDPSock::New(self.queue.clone(), port));
                         GlobalRDMASvcCli()
                             .portToFdInfoMappings
                             .lock()
@@ -1981,12 +2076,31 @@ impl SockOperations for SocketOperations {
                     panic!("SockInfo: {:?} is not allowed for UDP RDMA", sockInfo);
                 }
             }
-            let (udpBuffAddr, udpBuffIdx) = GlobalRDMASvcCli()
-                .udpSentBufferAllocator
-                .lock()
-                .GetFreeBuffer();
-            if udpBuffAddr == 0 {
-                // TODO: wait for buffer available.
+            // wait for buffer available.
+            let general = task.blocker.generalEntry.clone();
+            self.UDPEventRegister(task, &general, EVENT_WRITE);
+            defer!(self.UDPEventUnregister(task, &general));
+
+            let mut udpBuffAddr: u64;
+            let mut udpBuffIdx;
+            loop {
+                (udpBuffAddr, udpBuffIdx) = GlobalRDMASvcCli()
+                    .udpSentBufferAllocator
+                    .lock()
+                    .GetFreeBuffer();
+                if udpBuffAddr == 0 {
+                    match task.blocker.BlockWithMonoTimer(true, None) {
+                        Err(Error::ErrInterrupted) => {
+                            return Err(Error::SysError(SysErr::ERESTARTSYS));
+                        }
+                        Err(e) => {
+                            return Err(e);
+                        }
+                        _ => {}
+                    }
+                } else {
+                    break;
+                }
             }
 
             let udpPacket = unsafe { &mut (*(udpBuffAddr as *mut UDPPacket)) };
@@ -1998,7 +2112,8 @@ impl SockOperations for SocketOperations {
                     *(msgHdr.msgName as *const i16),
                     slice::from_raw_parts(msgHdr.msgName as *const u8, msgHdr.nameLen as usize),
                 )
-            }.unwrap();
+            }
+            .unwrap();
             match dstAddr {
                 SockAddr::Inet(ipv4) => {
                     udpPacket.dstIpAddr = u32::from_be_bytes(ipv4.Addr);
@@ -2008,84 +2123,87 @@ impl SockOperations for SocketOperations {
                     panic!("dstAddr: {:?} can't enable RDMA!", dstAddr);
                 }
             }
-            
-            let dstIovs = [IoVec{
+
+            let dstIovs = [IoVec {
                 start: udpBuffAddr + UDP_BUFF_OFFSET as u64,
-                len: totalLen
+                len: totalLen,
             }];
 
             // copy mm
-            let _cnt = task.mm.CopyIovsInFromIovs(task, srcs, &dstIovs, false)?;
+            let cnt = task.mm.CopyIovsInFromIovs(task, srcs, &dstIovs, false)?;
             let _res = GlobalRDMASvcCli().sendUDPPacket(udpBuffIdx);
+            return Ok(cnt as i64);
         }
 
-        //TODO: Should impelement RDMA for TCP SendMsg
-        let size = IoVec::NumBytes(srcs);
-        let mut buf = DataBuff::New(size);
-        let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;
-        let iovs = buf.Iovs(len);
+        panic!("SendMsg should not come to here!");
 
-        msgHdr.iov = &iovs[0] as *const _ as u64;
-        msgHdr.iovLen = iovs.len();
-        msgHdr.msgFlags = 0;
+        // //TODO: Should impelement RDMA for TCP SendMsg
+        // let size = IoVec::NumBytes(srcs);
+        // let mut buf = DataBuff::New(size);
+        // let len = task.CopyDataInFromIovs(&mut buf.buf, srcs, true)?;
+        // let iovs = buf.Iovs(len);
 
-        let mut res = if msgHdr.msgControlLen > 0 {
-            Kernel::HostSpace::IOSendMsg(
-                self.fd,
-                msgHdr as *const _ as u64,
-                flags | MsgType::MSG_DONTWAIT,
-                false,
-            ) as i32
-        } else {
-            Kernel::HostSpace::IOSendto(
-                self.fd,
-                buf.Ptr(),
-                len,
-                flags | MsgType::MSG_DONTWAIT,
-                msgHdr.msgName,
-                msgHdr.nameLen,
-            ) as i32
-        };
+        // msgHdr.iov = &iovs[0] as *const _ as u64;
+        // msgHdr.iovLen = iovs.len();
+        // msgHdr.msgFlags = 0;
 
-        while res == -SysErr::EWOULDBLOCK && flags & MsgType::MSG_DONTWAIT == 0 {
-            let general = task.blocker.generalEntry.clone();
+        // let mut res = if msgHdr.msgControlLen > 0 {
+        //     Kernel::HostSpace::IOSendMsg(
+        //         self.fd,
+        //         msgHdr as *const _ as u64,
+        //         flags | MsgType::MSG_DONTWAIT,
+        //         false,
+        //     ) as i32
+        // } else {
+        //     Kernel::HostSpace::IOSendto(
+        //         self.fd,
+        //         buf.Ptr(),
+        //         len,
+        //         flags | MsgType::MSG_DONTWAIT,
+        //         msgHdr.msgName,
+        //         msgHdr.nameLen,
+        //     ) as i32
+        // };
 
-            self.EventRegister(task, &general, EVENT_WRITE);
-            defer!(self.EventUnregister(task, &general));
-            match task.blocker.BlockWithMonoTimer(true, deadline) {
-                Err(Error::SysError(SysErr::ETIMEDOUT)) => {
-                    return Err(Error::SysError(SysErr::EAGAIN))
-                }
-                Err(e) => {
-                    return Err(e);
-                }
-                _ => (),
-            }
+        // while res == -SysErr::EWOULDBLOCK && flags & MsgType::MSG_DONTWAIT == 0 {
+        //     let general = task.blocker.generalEntry.clone();
 
-            res = if msgHdr.msgControlLen > 0 {
-                Kernel::HostSpace::IOSendMsg(
-                    self.fd,
-                    msgHdr as *const _ as u64,
-                    flags | MsgType::MSG_DONTWAIT,
-                    false,
-                ) as i32
-            } else {
-                Kernel::HostSpace::IOSendto(
-                    self.fd,
-                    buf.Ptr(),
-                    len,
-                    flags | MsgType::MSG_DONTWAIT,
-                    msgHdr.msgName,
-                    msgHdr.nameLen,
-                ) as i32
-            };
-        }
+        //     self.EventRegister(task, &general, EVENT_WRITE);
+        //     defer!(self.EventUnregister(task, &general));
+        //     match task.blocker.BlockWithMonoTimer(true, deadline) {
+        //         Err(Error::SysError(SysErr::ETIMEDOUT)) => {
+        //             return Err(Error::SysError(SysErr::EAGAIN))
+        //         }
+        //         Err(e) => {
+        //             return Err(e);
+        //         }
+        //         _ => (),
+        //     }
 
-        if res < 0 {
-            return Err(Error::SysError(-res as i32));
-        }
+        //     res = if msgHdr.msgControlLen > 0 {
+        //         Kernel::HostSpace::IOSendMsg(
+        //             self.fd,
+        //             msgHdr as *const _ as u64,
+        //             flags | MsgType::MSG_DONTWAIT,
+        //             false,
+        //         ) as i32
+        //     } else {
+        //         Kernel::HostSpace::IOSendto(
+        //             self.fd,
+        //             buf.Ptr(),
+        //             len,
+        //             flags | MsgType::MSG_DONTWAIT,
+        //             msgHdr.msgName,
+        //             msgHdr.nameLen,
+        //         ) as i32
+        //     };
+        // }
 
-        return Ok(res as i64);
+        // if res < 0 {
+        //     return Err(Error::SysError(-res as i32));
+        // }
+
+        // return Ok(res as i64);
     }
 
     fn SetRecvTimeout(&self, ns: i64) {
@@ -2172,6 +2290,20 @@ impl Provider for SocketProvider {
                 socketType,
                 None,
             )?;
+            //TODO: UDP
+            if (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
+                && (stype == SockType::SOCK_DGRAM)
+            {
+                match &file.FileOp {
+                    FileOps::SocketOperations(sockOp) => {
+                        *GlobalIOMgr().GetByHost(fd).unwrap().lock().sockInfo.lock() =
+                            SockInfo::RDMAUDPSocket(RDMAUDPSock::New(sockOp.queue.clone(), 0));
+                    }
+                    _ => {
+                        panic!("SocketProvider::Socket, fileOp is not valid for UDP");
+                    }
+                }
+            }
         } else if SHARESPACE.config.read().UringIO
             && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
             && stype == SockType::SOCK_STREAM

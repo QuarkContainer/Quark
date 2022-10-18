@@ -80,12 +80,12 @@ pub mod rdma_srv;
 pub mod unix_socket_def;
 
 pub mod common;
+pub mod configmap_informer;
 pub mod constants;
 pub mod endpoints_informer;
 pub mod node_informer;
 pub mod pod_informer;
 pub mod service_informer;
-pub mod configmap_informer;
 
 use crate::qlib::bytestream::ByteStream;
 use crate::rdma_srv::RDMA_CTLINFO;
@@ -101,11 +101,12 @@ use std::net::{IpAddr, Ipv4Addr, TcpListener, TcpStream};
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::path::Path;
 pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
+use self::qlib::mem::list_allocator::*;
 use crate::qlib::rdma_share::*;
 use crate::rdma::RDMA;
 use common::*;
-use endpoints_informer::EndpointsInformer;
 use configmap_informer::ConfigMapInformer;
+use endpoints_informer::EndpointsInformer;
 use id_mgr::IdMgr;
 use local_ip_address::list_afinet_netifas;
 use local_ip_address::local_ip;
@@ -127,6 +128,8 @@ use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::{env, mem, ptr, thread, time};
+
+pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
 lazy_static! {
     pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
@@ -470,7 +473,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         stream_fd,
                         sockBuf.clone(),
                         RDMA_SRV.keys[controlRegionId / 1024][1],
-                        RDMA_SRV.udpQP.qpNum()
+                        RDMA_SRV.udpQP.qpNum(),
                     );
                     let rdmaChannel = RDMAChannel::New(
                         0,
@@ -541,9 +544,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Srv_FdType::UnixDomainSocketConnect(conn_sock) => {
                     println!("UnixDomainSocketConnect");
                     loop {
-                        let mut body = 0;
-                        let ptr = &mut body as *mut _ as *mut u8;
-                        let buf = unsafe { slice::from_raw_parts_mut(ptr, 4) };
+                        let mut body = [0u8; 64];
+                        // let ptr = &mut body as *mut _ as *mut u8;
+                        // let buf = unsafe { slice::from_raw_parts_mut(ptr, 4) };
+                        let buf = body.as_mut_slice();
                         let ret = conn_sock.ReadWithFds(buf);
                         match ret {
                             Ok((size, _fds)) => {
@@ -568,11 +572,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                         }
                                     }
                                     break;
-                                }
-                                if body == 1 {
+                                } else {
+                                    // let clientRole = ClientRole::Parse(body);
                                     // init
                                     println!("init!!");
-                                    InitContainer(&conn_sock);
+                                    InitContainer(&conn_sock, body);
                                 }
                             }
                             Err(e) => {
@@ -695,7 +699,7 @@ fn SendConsumedData(channels: &mut HashMap<u32, HashSet<u32>>) {
     }
 }
 
-fn InitContainer(conn_sock: &UnixSocket) {
+fn InitContainer(conn_sock: &UnixSocket, podId: [u8; 64]) {
     let cliEventFd = unsafe { libc::eventfd(0, 0) };
     unblock_fd(cliEventFd);
 
@@ -705,11 +709,30 @@ fn InitContainer(conn_sock: &UnixSocket) {
         String::new(),
         conn_sock.as_raw_fd(),
         cliEventFd,
+        podId,
     );
     RDMA_SRV
         .agents
         .lock()
         .insert(rdmaAgentId, rdmaAgent.clone());
+    RDMA_SRV
+        .podIdToAgents
+        .lock()
+        .insert(rdmaAgent.podId, rdmaAgent.clone());
+    match RDMA_CTLINFO
+        .containerids
+        .lock()
+        .get(&String::from_utf8(rdmaAgent.podId.to_vec()).unwrap())
+    {
+        Some(ip) => {
+            RDMA_SRV
+                .ipAddrToAgents
+                .lock()
+                .insert(*ip, rdmaAgent.clone());
+        }
+        None => {}
+    }
+
     RDMA_SRV
         .sockToAgentIds
         .lock()
@@ -775,7 +798,7 @@ fn SetupConnection(ip: &u32) {
         sock_fd,
         sockBuf.clone(),
         RDMA_SRV.keys[controlRegionId / 16][1],
-        RDMA_SRV.udpQP.qpNum()
+        RDMA_SRV.udpQP.qpNum(),
     );
     let rdmaChannel = RDMAChannel::New(
         0,
