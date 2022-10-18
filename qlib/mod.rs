@@ -698,6 +698,8 @@ pub struct ShareSpace {
     pub uid: CachePadded<AtomicU64>,
     pub inotifyCookie: CachePadded<AtomicU32>,
     pub waitMask: CachePadded<AtomicU64>,
+    pub reapFileAvaiable: CachePadded<AtomicBool>,
+    pub hibernatePause: CachePadded<AtomicBool>,
     pub hiberMgr: CachePadded<HiberMgr>,
 
     pub supportMemoryBarrier: bool,

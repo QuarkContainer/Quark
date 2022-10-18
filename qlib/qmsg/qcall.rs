@@ -120,6 +120,7 @@ pub enum Msg {
     Mkfifoat(Mkfifoat),
     SwapInPage(SwapInPage),
     SwapOut(SwapOut),
+    SwapIn(SwapIn),
     Proxy(Proxy),
 }
 
@@ -132,6 +133,9 @@ pub struct Proxy {
 
 #[derive(Clone, Default, Debug)]
 pub struct SwapOut {}
+
+#[derive(Clone, Default, Debug)]
+pub struct SwapIn {}
 
 #[derive(Clone, Default, Debug)]
 pub struct SwapInPage {
