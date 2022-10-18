@@ -1861,7 +1861,6 @@ impl SockOperations for SocketOperations {
             let _len = task.CopyDataOutToIovs(&buf.buf[0..count as usize], dsts, false)?;
             return Ok((res as i64, msgFlags, senderAddr, controlVec));
         } else {
-            error!("SocketOperations::RecvMsg, 10");
             if msgHdr.msgControlLen != 0 {
                 panic!("TODO: UDP over RDMA doesn't support control msg yet!");
             }
@@ -1885,7 +1884,6 @@ impl SockOperations for SocketOperations {
                             }
                             Err(e) => return Err(e),
                             Ok(item) => {
-                                error!("SocketOperations::RecvMsg, 11");
                                 recvUdpItem = item;
                             }
                         }
@@ -1897,7 +1895,6 @@ impl SockOperations for SocketOperations {
                                 Err(Error::SysError(SysErr::EAGAIN)) => (),
                                 Err(e) => return Err(e),
                                 Ok(item) => {
-                                    error!("SocketOperations::RecvMsg, 12");
                                     recvUdpItem = item;
                                     break;
                                 }
@@ -1911,17 +1908,23 @@ impl SockOperations for SocketOperations {
                         }
                     }
 
-                    let udpPacket = &GlobalRDMASvcCli().cliShareRegion.lock().udpBufRecv
+                    let srcPort;
+                    let srcIpAddr;
+                    let len;
+                    {
+                        let udpPacket = &GlobalRDMASvcCli().cliShareRegion.lock().udpBufRecv
                         [recvUdpItem.udpBuffIdx as usize];
-                    let buf = &udpPacket.buf[0..udpPacket.length as usize];
-                    let len = task.CopyDataOutToIovs(buf, dsts, false)?;
-                    //TODO: return UDPRecvBuff
+                        let buf = &udpPacket.buf[0..udpPacket.length as usize];
+                        len = task.CopyDataOutToIovs(buf, dsts, false)?;
+                        srcPort = udpPacket.srcPort.clone();
+                        srcIpAddr = udpPacket.srcIpAddr.clone();
+                    }
+                    let _res = GlobalRDMASvcCli().returnUDPBuff(recvUdpItem.udpBuffIdx);
                     let senderAddr = if senderRequested {
-                        error!("SocketOperations::RecvMsg, 13");
                         let addr = SockAddr::Inet(SockAddrInet {
                             Family: AFType::AF_INET as u16,
-                            Port: udpPacket.srcPort,
-                            Addr: udpPacket.srcIpAddr.to_be_bytes(),
+                            Port: srcPort,
+                            Addr: srcIpAddr.to_be_bytes(),
                             Zero: [0; 8],
                         });
                         let l = addr.Len();

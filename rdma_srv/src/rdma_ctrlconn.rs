@@ -229,7 +229,7 @@ impl CtrlInfo {
             // if !self.isK8s {
             //     return Some(node.ipAddr);
             // }
-            error!("get_node_ip_by_pod_ip, node.netmask: {}, *ip: {}, node.subnet: {}", node.netmask, *ip, node.subnet);
+            // error!("get_node_ip_by_pod_ip, node.netmask: {}, *ip: {}, node.subnet: {}", node.netmask, *ip, node.subnet);
             if node.netmask & *ip == node.subnet {
                 return Some(node.ipAddr);
             }

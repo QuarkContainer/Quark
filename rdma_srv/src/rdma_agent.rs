@@ -135,7 +135,6 @@ impl RDMAAgent {
             .unwrap();
 
         let udpBufSent = &shareRegion.udpBufSent as *const _ as u64;
-        debug!("RDMAAgent::New, udpBufSent: {:x}", udpBufSent);
         let udpMR = RDMA
             .CreateMemoryRegion(
                 udpBufSent,
@@ -520,7 +519,7 @@ impl RDMAAgent {
                 }
             }
             RDMAReqMsg::RDMASendUDPPacket(msg) => {
-                error!("RDMAReqMsg::RDMASendUDPPacket, msg: {:?}", msg);
+                // error!("RDMAReqMsg::RDMASendUDPPacket, msg: {:?}", msg);
                 let udpPacket = &mut self.shareRegion.lock().udpBufSent[msg.udpBuffIdx as usize];
                 let mut podId = String::from_utf8(msg.podId.to_vec()).unwrap();
                 if !RDMA_CTLINFO.isK8s {
@@ -534,10 +533,6 @@ impl RDMAAgent {
                     .unwrap()
                     .clone().to_be();
                 if !RDMA_CTLINFO.isK8s {
-                    error!(
-                        "RDMAReqMsg::RDMASendUDPPacket, 0, srcAddr: {}, dstIpAddr: {}",
-                        srcIpAddr, udpPacket.dstIpAddr
-                    );
                     if srcIpAddr == udpPacket.dstIpAddr {
                         let podId = "server".to_string();
                         srcIpAddr = RDMA_CTLINFO
@@ -550,10 +545,10 @@ impl RDMAAgent {
                 }
                 udpPacket.srcIpAddr = srcIpAddr;
 
-                error!(
-                    "RDMAReqMsg::RDMASendUDPPacket, 1, srcAddr: {}, srcPort: {}, dstIpAddr: {}, dstPort: {}",
-                    udpPacket.srcIpAddr, udpPacket.srcPort, udpPacket.dstIpAddr, udpPacket.dstPort
-                );
+                // error!(
+                //     "RDMAReqMsg::RDMASendUDPPacket, 1, srcAddr: {}, srcPort: {}, dstIpAddr: {}, dstPort: {}",
+                //     udpPacket.srcIpAddr, udpPacket.srcPort, udpPacket.dstIpAddr, udpPacket.dstPort
+                // );
 
                 match RDMA_CTLINFO.get_node_ip_by_pod_ip(&udpPacket.dstIpAddr) {
                     Some(nodeIpAddr) => {
@@ -561,7 +556,7 @@ impl RDMAAgent {
                         let rdmaConn = conns.get(&nodeIpAddr).unwrap().clone();
                         let wrId = (self.id as u64) << 32 | msg.udpBuffIdx as u64;
                         let laddr = udpPacket as *const _ as u64;
-                        debug!("RDMAReqMsg::RDMASendUDPPacket, 1, agentId: {:x}, udpBuffIdx: {:x}, wrId: {:x}, laddr: {:x}", self.id, msg.udpBuffIdx, wrId, laddr);
+                        // debug!("RDMAReqMsg::RDMASendUDPPacket, 1, agentId: {:x}, udpBuffIdx: {:x}, wrId: {:x}, laddr: {:x}", self.id, msg.udpBuffIdx, wrId, laddr);
                         rdmaConn
                             .RDMAUDQPSend(
                                 laddr,

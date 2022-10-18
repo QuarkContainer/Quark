@@ -356,18 +356,18 @@ impl RDMAConn {
             ret,
             RDMAInfo::Size()
         );
-        match self.ctrlChan.lock().chan.upgrade() {
-            None => {
-                println!("ctrlChann is null")
-            }
-            _ => {
-                println!("ctrlChann is not null")
-            }
-        }
-        println!(
-            "RecvRemoteRDMAInfo. raddr: {}, rlen: {}, rkey: {}",
-            data.raddr, data.rlen, data.controlRKey
-        );
+        // match self.ctrlChan.lock().chan.upgrade() {
+        //     None => {
+        //         println!("ctrlChann is null")
+        //     }
+        //     _ => {
+        //         println!("ctrlChann is not null")
+        //     }
+        // }
+        // println!(
+        //     "RecvRemoteRDMAInfo. raddr: {}, rlen: {}, rkey: {}",
+        //     data.raddr, data.rlen, data.controlRKey
+        // );
         self.ctrlChan
             .lock()
             .chan

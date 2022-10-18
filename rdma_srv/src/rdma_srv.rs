@@ -396,11 +396,11 @@ impl RDMASrv {
         }
     }
 
-    pub fn ProcessRDMARecv(&self, qpNum: u32, wrId: u64, len: u32) {
-        error!(
-            "ProcessRDMARecv, 1, qpNum: {}, wrId: {}, len: {}",
-            qpNum, wrId, len
-        );
+    pub fn ProcessRDMARecv(&self, _qpNum: u32, wrId: u64, _len: u32) {
+        // error!(
+        //     "ProcessRDMARecv, 1, qpNum: {}, wrId: {}, len: {}",
+        //     qpNum, wrId, len
+        // );
 
         let laddr = self.udpMemRegion.addr + wrId * (mem::size_of::<UDPPacket>() + 40) as u64 + 40;
         // let _payloadLen = len - 40;
@@ -416,7 +416,7 @@ impl RDMASrv {
         //     }
         // }
         let udpPacket = unsafe { &(*(laddr as *const UDPPacket)) };
-        debug!("RDMASrv::ProcessRDMARecv, udpPacket: {:?}", udpPacket);
+        // debug!("RDMASrv::ProcessRDMARecv, udpPacket: {:?}", udpPacket);
         if RDMA_CTLINFO.isK8s {
             match self.ipAddrToAgents.lock().get(&udpPacket.dstIpAddr) {
                 Some(rdmaAgent) => {
@@ -442,7 +442,7 @@ impl RDMASrv {
     pub fn ProcessRDMASend(&self, wrId: u64) {
         let agentId = (wrId >> 32) as u32;
         let udpBuffIdx = (wrId & 0xFFFFFFFF) as u32;
-        error!("ProcessRDMASend, 1, wrId: {}, agentId: {}, udpBuffIdx: {}", wrId, agentId, udpBuffIdx);
+        // error!("ProcessRDMASend, 1, wrId: {}, agentId: {}, udpBuffIdx: {}", wrId, agentId, udpBuffIdx);
         match RDMA_SRV.agents.lock().get(&agentId) {
             Some(rdmaAgent) => {
                 rdmaAgent.SendResponse(RDMAResp {

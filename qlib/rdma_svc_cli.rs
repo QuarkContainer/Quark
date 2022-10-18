@@ -242,14 +242,14 @@ impl RDMASvcClient {
     }
 
     pub fn updateBitmapAndWakeUpServerIfNecessary(&self) {
-        // println!("updateBitmapAndWakeUpServerIfNecessary 1 ");
+        // error!("updateBitmapAndWakeUpServerIfNecessary 1 ");
         let mut srvShareRegion = self.srvShareRegion.lock();
-        // println!("updateBitmapAndWakeUpServerIfNecessary 2 ");
+        // error!("updateBitmapAndWakeUpServerIfNecessary 2 ");
         srvShareRegion.updateBitmap(self.agentId);
         if srvShareRegion.srvBitmap.load(Ordering::Acquire) == 1 {
             self.wakeupSvc();
         } else {
-            // println!("server is not sleeping");
+            // error!("server is not sleeping");
             // self.updateBitmapAndWakeUpServerIfNecessary();
         }
     }
@@ -577,14 +577,14 @@ impl RDMASvcClient {
                             }
                         }
                         RDMARespMsg::RDMAReturnUDPBuff(response) => {
-                            debug!("RDMARespMsg::RDMAReturnUDPBuff, response: {:?}", response);
+                            // debug!("RDMARespMsg::RDMAReturnUDPBuff, response: {:?}", response);
                             GlobalRDMASvcCli()
                                 .udpSentBufferAllocator
                                 .lock()
                                 .ReturnBuffer(response.udpBuffIdx);
                         }
                         RDMARespMsg::RDMARecvUDPPacket(response) => {
-                            debug!("RDMARespMsg::RDMARecvUDPPacket, response: {:?}", response);
+                            // debug!("RDMARespMsg::RDMARecvUDPPacket, response: {:?}", response);
                             let udpPacket = &GlobalRDMASvcCli().cliShareRegion.lock().udpBufRecv
                                 [response.udpBuffIdx as usize];
                             // + wrId * (mem::size_of::<UDPPacket>() + 40) as u64
@@ -602,7 +602,6 @@ impl RDMASvcClient {
                                     let sockInfo = fdInfo.lock().sockInfo.lock().clone();
                                     match sockInfo {
                                         SockInfo::RDMAUDPSocket(udpSock) => {
-                                            debug!("RDMARespMsg::RDMARecvUDPPacket, 2");
                                             udpSock.recvQueue.EnqSocket(response.udpBuffIdx, Queue::default());
                                         }
                                         _ => {
