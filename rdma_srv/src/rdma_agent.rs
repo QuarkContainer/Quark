@@ -469,14 +469,15 @@ impl RDMAAgent {
                     panic!("RDMAChannel with id {} does not exist!", msg.channelId);
                 }
             },
-            RDMAReqMsg::RDMAShutdown(msg) => match RDMA_SRV.channels.lock().get(&msg.channelId) {
-                Some(rdmaChannel) => {
-                    rdmaChannel.Shutdown();
-                }
-                None => {
-                    panic!("RDMAChannel with id {} does not exist!", msg.channelId);
-                }
-            },
+            RDMAReqMsg::RDMAShutdown(msg) => {
+                match RDMA_SRV.channels.lock().get(&msg.channelId) {
+                    Some(rdmaChannel) => {
+                        rdmaChannel.Shutdown();
+                    }
+                    None => {
+                        panic!("RDMAChannel with id {} does not exist!", msg.channelId);
+                    }
+            }},
             RDMAReqMsg::RDMAClose(msg) => {
                 let rdmaChannel = RDMA_SRV
                     .channels

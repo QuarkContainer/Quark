@@ -106,7 +106,7 @@ fn main() -> io::Result<()> {
     if args.len() > 1 {
         unix_sock_path = args.get(1).unwrap(); //"/tmp/rdma_srv1";
     }
-    gatewayCli = GatewayClient::initialize(unix_sock_path, ClientRole::INGRESS); //TODO: add 2 address from quark.
+    gatewayCli = GatewayClient::initialize(unix_sock_path); //TODO: add 2 address from quark.
 
     let cliEventFd = gatewayCli.rdmaSvcCli.cliEventFd;
     unblock_fd(cliEventFd);
@@ -196,10 +196,11 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient, fds: &mut HashMap<i32, FdType
 
                             //TODO: use port to map to different (ip, port), hardcode for testing purpose, should come from control plane in the future
                             let sockfd = gatewayCli.sockIdMgr.lock().AllocId().unwrap(); //TODO: rename sockfd
+                            let egressEndpoint = Endpoint::Egress();
                             let _ret = gatewayCli.connect(
                                 sockfd,
-                                u32::from(Ipv4Addr::from_str("30.0.0.5").unwrap()).to_be(),
-                                16868u16.to_be(),
+                                egressEndpoint.ipAddr,
+                                egressEndpoint.port,
                             );
                             fds.insert(stream_fd, FdType::TCPSocketConnect(sockfd));
                             sockFdMappings.insert(sockfd, stream_fd);
@@ -209,12 +210,7 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient, fds: &mut HashMap<i32, FdType
                     }
                 }
                 Some(FdType::TCPSocketConnect(sockfd)) => {
-                    let mut sockInfo;
-                    {
-                        let mut sockFdInfos = gatewayCli.dataSockFdInfos.lock();
-                        sockInfo = sockFdInfos.get_mut(sockfd).unwrap().clone();
-                    }
-
+                    let mut sockInfo = gatewayCli.GetDataSocket(sockfd);
                     if !matches!(*sockInfo.status.lock(), SockStatus::ESTABLISHED) {
                         continue;
                     }
@@ -326,36 +322,16 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient, fds: &mut HashMap<i32, FdType
                                 }
                                 RDMARespMsg::RDMANotify(response) => {
                                     if response.event & EVENT_IN != 0 {
-                                        let mut sockInfo;
-                                        {
-                                            let mut channelToSockInfos =
-                                                gatewayCli.channelToSockInfos.lock();
-                                            sockInfo = channelToSockInfos
-                                                .get_mut(&response.channelId)
-                                                .unwrap()
-                                                .clone();
-                                        }
+                                        let mut sockInfo = gatewayCli.GetChannelSocket(&response.channelId);
                                         gatewayCli.WriteToSocket(&mut sockInfo, &sockFdMappings);
                                     }
                                     if response.event & EVENT_OUT != 0 {
-                                        let mut channelToSockInfos =
-                                            gatewayCli.channelToSockInfos.lock();
-                                        let sockInfo = channelToSockInfos
-                                            .get_mut(&response.channelId)
-                                            .unwrap();
-                                        gatewayCli.ReadFromSocket(sockInfo, &sockFdMappings);
+                                        let mut sockInfo = gatewayCli.GetChannelSocket(&response.channelId);
+                                        gatewayCli.ReadFromSocket(&mut sockInfo, &sockFdMappings);
                                     }
                                 }
                                 RDMARespMsg::RDMAFinNotify(response) => {
-                                    let mut sockInfo;
-                                    {
-                                        let mut channelToSockInfos =
-                                            gatewayCli.channelToSockInfos.lock();
-                                        sockInfo = channelToSockInfos
-                                            .get_mut(&response.channelId)
-                                            .unwrap()
-                                            .clone();
-                                    }
+                                    let mut sockInfo = gatewayCli.GetChannelSocket(&response.channelId);
                                     if response.event & FIN_RECEIVED_FROM_PEER != 0 {
                                         *sockInfo.finReceived.lock() = true;
                                         gatewayCli.WriteToSocket(&mut sockInfo, &sockFdMappings);
