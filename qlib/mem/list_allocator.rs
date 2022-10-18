@@ -23,6 +23,7 @@ use core::sync::atomic::Ordering;
 use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize};
 use alloc::collections::vec_deque::VecDeque;
 
+use crate::GLOBAL_ALLOCATOR;
 use super::buddy_allocator::Heap;
 use crate::qlib::vcpu_mgr::CPULocal;
 use super::super::super::kernel_def::VcpuId;
@@ -37,7 +38,7 @@ pub const BUFF_THRESHOLD: usize = 50; // when buff size takes more than 50% of f
 pub const FREE_BATCH: usize = 1024; // free 10 blocks each time.
 pub const ORDER: usize = 33; //1GB
 
-pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
+//pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
 pub fn CheckZeroPage(pageStart: u64) {
     use alloc::slice;

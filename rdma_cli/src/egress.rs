@@ -95,6 +95,9 @@ use spin::{Mutex, MutexGuard};
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::{env, mem, ptr, thread, time};
+use self::qlib::mem::list_allocator::*;
+
+pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
 lazy_static! {
     pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
@@ -108,7 +111,7 @@ fn main() -> io::Result<()> {
     if args.len() > 1 {
         unix_sock_path = args.get(1).unwrap(); //"/tmp/rdma_srv1";
     }
-    gatewayCli = GatewayClient::initialize(unix_sock_path, ClientRole::EGRESS); //TODO: add 2 address from quark.
+    gatewayCli = GatewayClient::initialize(unix_sock_path); //TODO: add 2 address from quark.
 
     let cliEventFd = gatewayCli.rdmaSvcCli.cliEventFd;
     unblock_fd(cliEventFd);
@@ -122,10 +125,11 @@ fn main() -> io::Result<()> {
     //100733100, 58433
     //134654144
     let serverSockFd = gatewayCli.sockIdMgr.lock().AllocId().unwrap();
+    let egressEndpoint = Endpoint::Egress();
     let _ret = gatewayCli.bind(
         serverSockFd,
-        u32::from(Ipv4Addr::from_str("30.0.0.5").unwrap()).to_be(),
-        16868u16.to_be(),
+        egressEndpoint.ipAddr,
+        egressEndpoint.port,
     );
 
     let _ret = gatewayCli.listen(serverSockFd, 5);
@@ -174,12 +178,7 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient, fds: &mut HashMap<i32, FdType
                     println!("Egress gateway doesn't have this type!");
                 }
                 Some(FdType::TCPSocketConnect(sockfd)) => {
-                    let mut sockInfo;
-                    {
-                        let mut sockFdInfos = gatewayCli.dataSockFdInfos.lock();
-                        sockInfo = sockFdInfos.get_mut(sockfd).unwrap().clone();
-                    }
-
+                    let mut sockInfo = gatewayCli.GetDataSocket(sockfd);
                     if ev.Events & EVENT_IN as u32 != 0 {
                         gatewayCli.ReadFromSocket(&mut sockInfo, &sockFdMappings);
                     }
@@ -294,13 +293,9 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient, fds: &mut HashMap<i32, FdType
                                         //TODO: this should be use control plane data: egressPort -> (ipAddr, port)
                                         let serv_addr: libc::sockaddr_in = libc::sockaddr_in {
                                             sin_family: libc::AF_INET as u16,
-                                            sin_port: 25028u16.to_be(),
+                                            sin_port: response.srcPort,
                                             sin_addr: libc::in_addr {
-                                                s_addr: u32::from(
-                                                    // Ipv4Addr::from_str("172.16.1.6").unwrap(),
-                                                    Ipv4Addr::from_str("127.0.0.1").unwrap(),
-                                                )
-                                                .to_be(),
+                                                s_addr: response.srcIpAddr.to_be(),
                                             },
                                             sin_zero: mem::zeroed(),
                                         };
@@ -322,37 +317,25 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient, fds: &mut HashMap<i32, FdType
                                 }
                                 RDMARespMsg::RDMANotify(response) => {
                                     if response.event & EVENT_IN != 0 {
-                                        let mut channelToSockInfos =
-                                            gatewayCli.channelToSockInfos.lock();
-                                        let sockInfo = channelToSockInfos
-                                            .get_mut(&response.channelId)
-                                            .unwrap();
-                                        gatewayCli.WriteToSocket(sockInfo, &sockFdMappings);
+                                        let mut sockInfo = gatewayCli.GetChannelSocket(&response.channelId);
+                                        gatewayCli.WriteToSocket(&mut sockInfo, &sockFdMappings);
                                     }
                                     if response.event & EVENT_OUT != 0 {
-                                        let mut sockInfo;
-                                        {
-                                            let mut channelToSockInfos =
-                                                gatewayCli.channelToSockInfos.lock();
-                                            sockInfo = channelToSockInfos
-                                                .get_mut(&response.channelId)
-                                                .unwrap()
-                                                .clone();
-                                        }
-
+                                        let mut sockInfo = gatewayCli.GetChannelSocket(&response.channelId);
                                         gatewayCli.ReadFromSocket(&mut sockInfo, &sockFdMappings);
                                     }
                                 }
                                 RDMARespMsg::RDMAFinNotify(response) => {
-                                    let mut channelToSockInfos =
-                                        gatewayCli.channelToSockInfos.lock();
-                                    let sockInfo =
-                                        channelToSockInfos.get_mut(&response.channelId).unwrap();
+                                    let mut sockInfo = gatewayCli.GetChannelSocket(&response.channelId);
                                     if response.event & FIN_RECEIVED_FROM_PEER != 0 {
                                         *sockInfo.finReceived.lock() = true;
-                                        gatewayCli.WriteToSocket(sockInfo, &sockFdMappings);
+                                        gatewayCli.WriteToSocket(&mut sockInfo, &sockFdMappings);
                                     }
                                 }
+                                RDMARespMsg::RDMAReturnUDPBuff(_response) => {
+                                    // TODO Handle UDP
+                                }
+                                RDMARespMsg::RDMARecvUDPPacket(_udpBuffIdx) => todo!()
                             },
                             None => {
                                 break;

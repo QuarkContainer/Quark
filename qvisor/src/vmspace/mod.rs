@@ -1565,6 +1565,29 @@ impl VMSpace {
         }
     }
 
+    pub fn Proxy(cmd: u64, addrIn: u64, addrOut: u64) -> i64 {
+        use super::qlib::proxy::*;
+        let cmd : Command = unsafe { core::mem::transmute(cmd as u64) };
+        match cmd {
+            Command::Cmd1 => {
+                let dataIn = unsafe {
+                    &*(addrIn as * const Cmd1In)
+                };
+
+                let dataOut = unsafe {
+                    &mut *(addrOut as * mut Cmd1Out)
+                };
+
+                error!("get proxy cmd1 with val1 {}", dataIn.val);
+                dataOut.val1 = 1;
+                dataOut.val2 = 2;
+            }
+            Command::Cmd2 => {}
+        }
+
+        return 0;
+    }
+
     pub fn SwapInPage(addr: u64) -> i64 {
         match SHARE_SPACE.hiberMgr.SwapIn(addr) {
             Ok(_) => return 0,

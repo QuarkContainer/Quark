@@ -249,6 +249,9 @@ impl KVMVcpu {
                 SHARE_SPACE.hiberMgr.SwapOut(heapStart, heapEnd - heapStart).unwrap();
                 ret = 0;
             }
+            Msg::Proxy(msg) => {
+                ret = super::VMSpace::Proxy(msg.cmd, msg.addrIn, msg.addrOut) as u64;
+            }
             Msg::SymLinkAt(msg) => {
                 ret = super::VMSpace::SymLinkAt(msg.oldpath, msg.newdirfd, msg.newpath) as u64;
             }

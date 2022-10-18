@@ -55,3 +55,4 @@ pub mod sys_shm;
 pub mod sys_msgqueue;
 pub mod sys_syslog;
 pub mod sys_mmap_socket;
+pub mod sys_proxy;

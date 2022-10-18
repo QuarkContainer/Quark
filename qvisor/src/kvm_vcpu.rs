@@ -18,7 +18,8 @@ use core::mem::size_of;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use std::os::unix::io::AsRawFd;
-use std::sync::atomic::{fence, AtomicBool};
+use std::sync::atomic::fence;
+use std::sync::mpsc::Sender;
 
 use kvm_bindings::*;
 use kvm_ioctls::VcpuExit;
@@ -145,8 +146,7 @@ pub struct KVMVcpu {
     pub shareSpaceAddr: u64,
 
     pub autoStart: bool,
-    pub interrupting: AtomicBool,
-    //the pipe id to notify io_mgr
+    pub interrupting: Mutex<(bool, Vec<Sender<()>>)>,
 }
 
 //for pub shareSpace: * mut Mutex<ShareSpace>
@@ -220,7 +220,7 @@ impl KVMVcpu {
             heapStartAddr: pageAllocatorBaseAddr,
             shareSpaceAddr: shareSpaceAddr,
             autoStart: autoStart,
-            interrupting: AtomicBool::new(false),
+            interrupting: Mutex::new((false, vec![])),
         });
     }
 
@@ -467,6 +467,11 @@ impl KVMVcpu {
                 Ok(ret) => ret,
                 Err(e) => {
                     if e.errno() == SysErr::EINTR {
+                        {
+                            let mut interrupting = self.interrupting.lock();
+                            interrupting.0 = false;
+                            interrupting.1.clear();
+                        }
                         self.vcpu.set_kvm_immediate_exit(0);
                         self.dump()?;
                         if self.vcpu.get_ready_for_interrupt_injection() > 0 {
@@ -479,14 +484,14 @@ impl KVMVcpu {
                             .vcpu
                             .get_regs()
                             .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
-                        
-                            error!("vcpu error regs is {:x?}, ioerror: {:?}", regs, e);
-                            backtracer::trace(regs.rip, regs.rsp, regs.rbp, &mut |frame| {
-                                print!("host frame is {:#x?}", frame);
-                                true
-                            });
-                        
-                            panic!("kvm virtual cpu[{}] run failed: Error {:?}", self.id, e)
+
+                        error!("vcpu error regs is {:x?}, ioerror: {:?}", regs, e);
+                        backtracer::trace(regs.rip, regs.rsp, regs.rbp, &mut |frame| {
+                            print!("host frame is {:#x?}", frame);
+                            true
+                        });
+
+                        panic!("kvm virtual cpu[{}] run failed: Error {:?}", self.id, e)
                     }
                 }
             };
@@ -523,13 +528,13 @@ impl KVMVcpu {
                     }
 
                     let regs = self
-                                .vcpu
-                                .get_regs()
-                                .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
+                        .vcpu
+                        .get_regs()
+                        .map_err(|e| Error::IOError(format!("io::error is {:?}", e)))?;
                     let para1 = regs.rsi;
                     let para2 = regs.rcx;
-                    let para3  = regs.rdi;
-                    let para4  = regs.r10;
+                    let para3 = regs.rdi;
+                    let para4 = regs.r10;
 
                     match addr {
                         qlib::HYPERCALL_IOWAIT => {
@@ -797,7 +802,6 @@ impl KVMVcpu {
                     self.InterruptGuest();
                     self.vcpu.set_kvm_request_interrupt_window(0);
                     fence(Ordering::Release);
-                    self.interrupting.store(false, Ordering::Release);
                 }
                 VcpuExit::Intr => {
                     self.vcpu.set_kvm_request_interrupt_window(1);
@@ -971,8 +975,13 @@ impl KVMVcpu {
         Ok(())
     }
 
-    pub fn interrupt(&self) {
-        if self.interrupting.swap(true, Ordering::AcqRel) == false {
+    pub fn interrupt(&self, waitCh: Option<Sender<()>>) {
+        let mut interrupting = self.interrupting.lock();
+        if let Some(w) = waitCh {
+            interrupting.1.push(w);
+        }
+        if !interrupting.0 {
+            interrupting.0 = true;
             self.Signal(Signal::SIGCHLD);
         }
     }
@@ -1168,7 +1177,7 @@ impl CPULocal {
             Some(newTask) => return Ok(newTask),
         }
 
-        super::ALLOCATOR.Clear();
+        super::GLOBAL_ALLOCATOR.Clear();
         self.ToWaiting(sharespace);
         defer!(self.ToSearch(sharespace););
 
@@ -1189,7 +1198,7 @@ impl CPULocal {
                 //Self::ProcessOnce(sharespace);
             }
 
-            super::ALLOCATOR.Clear();
+            super::GLOBAL_ALLOCATOR.Clear();
 
             let _nfds = unsafe { epoll_wait(self.epollfd, &mut events[0], 2, time) };
 

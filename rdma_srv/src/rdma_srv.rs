@@ -141,7 +141,6 @@ pub struct RDMASrv {
     pub udpMemoryRegion: MemoryRegion,
     pub udpQP: QueuePair,
     pub udpBufferAllocator: Mutex<UDPBufferAllocator>,
-    pub egressAgentId: Mutex<u32>,
     pub podIdToAgents: Mutex<HashMap<[u8; 64], RDMAAgent>>,
     pub ipAddrToAgents: Mutex<HashMap<u32, RDMAAgent>>,
 }
@@ -304,7 +303,6 @@ impl RDMASrv {
             udpMemoryRegion: udpMR,
             udpQP,
             udpBufferAllocator,
-            egressAgentId: Mutex::new(0),
             ipAddrToAgents: Mutex::new(HashMap::new()),
             podIdToAgents: Mutex::new(HashMap::new()),
         };

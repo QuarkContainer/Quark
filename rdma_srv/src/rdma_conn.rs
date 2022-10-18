@@ -847,9 +847,19 @@ impl RDMAControlChannel {
         let mut sockfd = 0;
 
         if RDMA_CTLINFO.IsEgress(connectRequest.dstIpAddr) {
-            let egressAgentId = RDMA_SRV.egressAgentId.lock();
-            // TODO Hong: Handle connect request for egress
-            println!("HandleConnectRequest for egress {} egressAgentId {}", connectRequest.dstIpAddr, egressAgentId);
+            match RDMA_SRV.srvEndPoints.lock().get(&Endpoint::Egress()) {
+                Some(srvEndpoint) => match srvEndpoint.status {
+                    SrvEndPointStatus::Listening => {
+                        found = true;
+                        agentId = srvEndpoint.agentId;
+                        sockfd = srvEndpoint.sockfd;
+                    }
+                    _ => {}
+                },
+                None => {
+                    error!("HandleConnectRequest, Egress is not listening");
+                }
+            }
         } else {            
             match RDMA_CTLINFO
                 .ipToPodIdMappings

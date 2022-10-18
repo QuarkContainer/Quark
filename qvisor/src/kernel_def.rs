@@ -1,13 +1,17 @@
-use cache_padded::CachePadded;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
-use libc::*;
 use std::fmt;
+use std::sync::mpsc::channel;
 
-use super::qlib::kernel::quring::uring_async::UringAsyncMgr;
+use cache_padded::CachePadded;
+use libc::*;
+
+use crate::SHARE_SPACE;
+
 use super::qlib::common::*;
 use super::qlib::control_msg::*;
 use super::qlib::kernel::memmgr::pma::*;
+use super::qlib::kernel::quring::uring_async::UringAsyncMgr;
 use super::qlib::kernel::task::*;
 use super::qlib::kernel::Kernel::*;
 use super::qlib::kernel::Tsc;
@@ -28,7 +32,6 @@ use super::FD_NOTIFIER;
 use super::QUARK_CONFIG;
 use super::URING_MGR;
 use super::VMS;
-use crate::SHARE_SPACE;
 
 impl std::error::Error for Error {}
 
@@ -97,7 +100,13 @@ impl<'a> ShareSpace {
 }
 
 impl ShareSpace {
-    pub fn Init(&mut self, vcpuCount: usize, controlSock: i32, rdmaSvcCliSock: i32, podId: [u8; 64]) {
+    pub fn Init(
+        &mut self,
+        vcpuCount: usize,
+        controlSock: i32,
+        rdmaSvcCliSock: i32,
+        podId: [u8; 64],
+    ) {
         *self.config.write() = *QUARK_CONFIG.lock();
         let mut values = Vec::with_capacity(vcpuCount);
         for _i in 0..vcpuCount {
@@ -110,7 +119,6 @@ impl ShareSpace {
                 MemoryDef::RDMA_LOCAL_SHARE_OFFSET,
                 MemoryDef::RDMA_GLOBAL_SHARE_OFFSET,
                 podId,
-                rdma_share::ClientRole::NORMAL,
             ));
         }
 
@@ -133,16 +141,30 @@ impl ShareSpace {
     }
 
     pub fn TlbShootdown(&self, vcpuMask: u64) -> u64 {
+        let start_time = std::time::Instant::now();
         let vcpu_len = self.scheduler.VcpuArr.len();
+        let mut waiters = vec![];
+        let tlbshootdown_wait = QUARK_CONFIG.lock().TlbShootdownWait;
         for i in 1..vcpu_len {
             if ((1 << i) & vcpuMask != 0)
                 && SHARE_SPACE.scheduler.VcpuArr[i].GetMode() == VcpuMode::User
             {
                 let cpu = VMS.lock().vcpus[i].clone();
                 SHARE_SPACE.scheduler.VcpuArr[i].InterruptTlbShootdown();
-                cpu.interrupt();
+                if tlbshootdown_wait {
+                    let (tx, rx) = channel();
+                    cpu.interrupt(Some(tx));
+                    waiters.push(rx);
+                } else {
+                    cpu.interrupt(None);
+                }
             }
         }
+        for w in waiters {
+            let _ = w.recv();
+        }
+        let elapsed_time = start_time.elapsed();
+        debug!("tlbshootdown time delay {:?}", elapsed_time);
         return 0;
     }
 
@@ -169,7 +191,7 @@ impl ShareSpace {
                 self.scheduler.VcpuArr[i].InterruptThreadTimeout();
                 //error!("CheckVcpuTimeout {}/{}/{}/{}", i, enterAppTimestamp, now, Tsc::Scale(now - enterAppTimestamp));
                 let vcpu = VMS.lock().vcpus[i].clone();
-                vcpu.interrupt();
+                vcpu.interrupt(None);
             }
         }
     }

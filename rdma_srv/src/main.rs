@@ -101,6 +101,7 @@ use std::net::{IpAddr, Ipv4Addr, TcpListener, TcpStream};
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::path::Path;
 pub static SHARE_SPACE: ShareSpaceRef = ShareSpaceRef::New();
+use self::qlib::mem::list_allocator::*;
 use crate::qlib::rdma_share::*;
 use crate::rdma::RDMA;
 use common::*;
@@ -127,6 +128,8 @@ use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::{env, mem, ptr, thread, time};
+
+pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
 lazy_static! {
     pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
@@ -573,7 +576,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     // let clientRole = ClientRole::Parse(body);
                                     // init
                                     println!("init!!");
-                                    InitContainer(&conn_sock, ClientRole::NORMAL, body);
+                                    InitContainer(&conn_sock, body);
                                 }
                             }
                             Err(e) => {
@@ -696,7 +699,7 @@ fn SendConsumedData(channels: &mut HashMap<u32, HashSet<u32>>) {
     }
 }
 
-fn InitContainer(conn_sock: &UnixSocket, clientRole: ClientRole, podId: [u8; 64]) {
+fn InitContainer(conn_sock: &UnixSocket, podId: [u8; 64]) {
     let cliEventFd = unsafe { libc::eventfd(0, 0) };
     unblock_fd(cliEventFd);
 
@@ -716,23 +719,24 @@ fn InitContainer(conn_sock: &UnixSocket, clientRole: ClientRole, podId: [u8; 64]
         .podIdToAgents
         .lock()
         .insert(rdmaAgent.podId, rdmaAgent.clone());
-    match RDMA_CTLINFO.containerids.lock().get(&String::from_utf8(rdmaAgent.podId.to_vec()).unwrap()) {
+    match RDMA_CTLINFO
+        .containerids
+        .lock()
+        .get(&String::from_utf8(rdmaAgent.podId.to_vec()).unwrap())
+    {
         Some(ip) => {
-            RDMA_SRV.ipAddrToAgents.lock().insert(*ip, rdmaAgent.clone());
+            RDMA_SRV
+                .ipAddrToAgents
+                .lock()
+                .insert(*ip, rdmaAgent.clone());
         }
-        None => {
-
-        }
+        None => {}
     }
 
     RDMA_SRV
         .sockToAgentIds
         .lock()
         .insert(conn_sock.as_raw_fd(), rdmaAgentId);
-    if clientRole == ClientRole::EGRESS {
-        println!("rdmaAgentId for Egress is {}", rdmaAgentId);
-        *RDMA_SRV.egressAgentId.lock() = rdmaAgentId;
-    }
     let body = [123, rdmaAgentId];
     let ptr = &body as *const _ as *const u8;
     let buf = unsafe { slice::from_raw_parts(ptr, 8) };

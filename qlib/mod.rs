@@ -64,6 +64,7 @@ pub mod rdma_svc_cli;
 pub mod rdmasocket;
 pub mod unix_socket;
 pub mod hiber_mgr;
+pub mod proxy;
 
 use self::mutex::*;
 use alloc::vec::Vec;
@@ -621,8 +622,10 @@ pub enum SysCallID {
     sys_futex_waitv,
     sys_set_mempolicy_home_node,
     UnknowSyscall = 451,
-    SysSocketProduce = 10001,
-    SysSocketConsume,
+    sys_socket_produce = 10001,
+    sys_socket_consume,
+    sys_proxy,
+
     EXTENSION_MAX,
 }
 

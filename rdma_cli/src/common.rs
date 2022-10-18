@@ -308,10 +308,10 @@ impl GatewayClient {
         }))
     }
 
-    pub fn initialize(path: &str, clientRole: ClientRole) -> Self {
+    pub fn initialize(path: &str) -> Self {
         let cli_sock = UnixSocket::NewClient(path).unwrap();
         let rdmaSvcCli =
-            RDMASvcClient::initialize(cli_sock, 0, 0, clientRole);
+            RDMASvcClient::initialize(cli_sock, 0, 0);
         let res = GatewayClient::New(rdmaSvcCli);
         res
     }
@@ -421,6 +421,14 @@ impl GatewayClient {
 
     pub fn close(&self, channelId: u32) {
         println!("rdmaSvcCli::close 1, channelId: {}", channelId);
+    }
+
+    pub fn GetDataSocket(&self, sockfd: &u32) -> DataSock {
+        self.dataSockFdInfos.lock().get_mut(sockfd).unwrap().clone()
+    }
+
+    pub fn GetChannelSocket(&self, channelId: &u32) -> DataSock {
+        self.channelToSockInfos.lock().get_mut(channelId).unwrap().clone()
     }
 
     ///// ReadFromSocket and WriteToSocket are mainly for ingress and egress

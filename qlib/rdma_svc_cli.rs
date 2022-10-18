@@ -59,8 +59,6 @@ pub struct RDMASvcCliIntern {
     pub udpSentBufferAllocator: Mutex<UDPBufferAllocator>,
 
     pub portToFdInfoMappings: Mutex<BTreeMap<u16, FdInfo>>,
-
-    pub clientRole: ClientRole,
 }
 
 impl Deref for RDMASvcClient {
@@ -95,7 +93,6 @@ impl Default for RDMASvcClient {
                 podId: [0; 64],
                 udpSentBufferAllocator: Mutex::new(UDPBufferAllocator::default()),
                 portToFdInfoMappings: Mutex::new(BTreeMap::new()),
-                clientRole: ClientRole::NORMAL,
             }),
         }
     }

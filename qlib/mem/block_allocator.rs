@@ -23,7 +23,8 @@ use super::super::linux_def::*;
 use super::super::common::*;
 use super::super::mutex::*;
 use super::super::pagetable::*;
-use super::list_allocator::*;
+//use super::list_allocator::*;
+use crate::GLOBAL_ALLOCATOR;
 
 #[derive(Debug, Default)]
 pub struct PageBlockAllocIntern {
@@ -181,6 +182,8 @@ impl RefMgr for PageBlockAlloc {
     // return ref count
     fn Ref(&self, addr: u64) -> Result<u64> {
         let (heapStart, heapEnd) = GLOBAL_ALLOCATOR.HeapRange();
+        //let heapStart = MemoryDef::HEAP_OFFSET;
+        //let heapEnd = MemoryDef::HEAP_OFFSET + MemoryDef::HEAP_SIZE;
         if addr <= heapStart || addr >= heapEnd {
             return Ok(1)
         }
@@ -196,6 +199,8 @@ impl RefMgr for PageBlockAlloc {
     // return ref count
     fn Deref(&self, addr: u64) -> Result<u64> {
         let (heapStart, heapEnd) = GLOBAL_ALLOCATOR.HeapRange();
+        //let heapStart = MemoryDef::HEAP_OFFSET;
+        //let heapEnd = MemoryDef::HEAP_OFFSET + MemoryDef::HEAP_SIZE;
         if addr <= heapStart || addr >= heapEnd {
             return Ok(1)
         }
@@ -211,6 +216,9 @@ impl RefMgr for PageBlockAlloc {
     
     fn GetRef(&self, addr: u64) -> Result<u64> {
         let (heapStart, heapEnd) = GLOBAL_ALLOCATOR.HeapRange();
+        //let heapStart = MemoryDef::HEAP_OFFSET;
+        //let heapEnd = MemoryDef::HEAP_OFFSET + MemoryDef::HEAP_SIZE;
+
         if addr <= heapStart || addr >= heapEnd {
             return Ok(1)
         }

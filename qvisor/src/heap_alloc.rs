@@ -6,8 +6,49 @@ use libc;
 
 use super::qlib::linux_def::MemoryDef;
 use super::qlib::mem::list_allocator::*;
+use super::qlib::mem::bitmap_allocator::*;
 
 pub const ENABLE_HUGEPAGE: bool = false;
+
+impl BitmapAllocatorWrapper {
+    pub const fn New() -> Self {
+        return Self {
+            addr: AtomicU64::new(0),
+        }
+    }
+
+    pub fn Init(&self) {
+        let heapSize = MemoryDef::HEAP_SIZE as usize;
+        let heapAddr = MemoryDef::HEAP_OFFSET;
+        let addr = unsafe {
+            let mut flags = libc::MAP_PRIVATE | libc::MAP_ANON | libc::MAP_FIXED;
+            if ENABLE_HUGEPAGE {
+                flags |= libc::MAP_HUGE_2MB;
+            }
+            libc::mmap(
+                heapAddr as _,
+                heapSize,
+                libc::PROT_READ | libc::PROT_WRITE,
+                flags,
+                -1,
+                0,
+            ) as u64
+        };
+
+        if addr == libc::MAP_FAILED as u64 {
+            panic!("mmap: failed to get mapped memory area for heap");
+        }
+
+        assert!(
+            heapAddr == addr,
+            "expect is {:x}, actual is {:x}",
+            heapAddr,
+            addr
+        );
+
+        self.addr.store(heapAddr, Ordering::SeqCst);
+    }
+}
 
 impl HostAllocator {
     pub const fn New() -> Self {

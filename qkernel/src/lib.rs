@@ -95,6 +95,7 @@ use self::qlib::kernel::TSC;
 use crate::qlib::kernel::GlobalIOMgr;
 
 use self::qlib::kernel::vcpu::*;
+//use qlib::kernel::Kernel::HostSpace;
 use vcpu::CPU_LOCAL;
 
 use core::panic::PanicInfo;
@@ -131,16 +132,20 @@ use self::qlib::kernel::Scale;
 use self::qlib::kernel::VcpuFreqInit;
 use self::quring::*;
 //use self::heap::QAllocator;
-
+//use qlib::mem::bitmap_allocator::BitmapAllocatorWrapper;
 pub const HEAP_START: usize = 0x70_2000_0000;
 pub const HEAP_SIZE: usize = 0x1000_0000;
 
 //use buddy_system_allocator::*;
 //#[global_allocator]
-//pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
+
 
 #[global_allocator]
 pub static VCPU_ALLOCATOR: GlobalVcpuAllocator = GlobalVcpuAllocator::New();
+
+pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
+//pub static GLOBAL_ALLOCATOR: BitmapAllocatorWrapper = BitmapAllocatorWrapper::New();
+
 
 lazy_static! {
     pub static ref GLOBAL_LOCK : Mutex<()> = Mutex::new(());
@@ -281,7 +286,7 @@ pub extern "C" fn syscall_handler(
         let llevel = SHARESPACE.config.read().LogLevel;
         callId = if nr < SysCallID::UnknowSyscall as u64 {
             unsafe { mem::transmute(nr as u64) }
-        } else if SysCallID::SysSocketProduce as u64 <= nr && nr < SysCallID::EXTENSION_MAX as u64 {
+        } else if SysCallID::sys_socket_produce as u64 <= nr && nr < SysCallID::EXTENSION_MAX as u64 {
             unsafe { mem::transmute(nr as u64) }
         } else {
             nr = SysCallID::UnknowSyscall as _;

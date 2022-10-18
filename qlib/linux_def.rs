@@ -2994,13 +2994,18 @@ impl MemoryDef {
     // RDMA global share memory
     pub const RDMA_GLOBAL_SHARE_OFFSET: u64 = Self::RDMA_LOCAL_SHARE_OFFSET + Self::RDMA_LOCAL_SHARE_SIZE;
     pub const RDMA_GLOBAL_SHARE_SIZE: u64 = 2 * Self::ONE_MB;
-    // heap
-    pub const HEAP_OFFSET: u64 = Self::RDMA_GLOBAL_SHARE_OFFSET + Self::RDMA_GLOBAL_SHARE_SIZE;
-    pub const HEAP_SIZE: u64 = 8 * Self::ONE_GB;
 
     // file map area
-    pub const FILE_MAP_OFFSET: u64 = Self::HEAP_OFFSET + Self::HEAP_SIZE;
+    pub const FILE_MAP_OFFSET: u64 = Self::RDMA_GLOBAL_SHARE_OFFSET + Self::RDMA_GLOBAL_SHARE_SIZE;
+    pub const FILE_MAP_SIZE: u64 = Self::HEAP_OFFSET - Self::FILE_MAP_OFFSET;
 
+    // heap
+    pub const HEAP_OFFSET: u64 = MemoryDef::PHY_LOWER_ADDR + Self::KERNEL_MEM_INIT_REGION_SIZE * MemoryDef::ONE_GB - Self::HEAP_SIZE;
+    pub const HEAP_SIZE: u64 = 8 * Self::ONE_GB;
+
+
+    // Create 24GB Init memory region for KVM VM
+    pub const KERNEL_MEM_INIT_REGION_SIZE : u64 = 24; // 24 GB
 
     // start address for memmap and dynamic load address space, there is heap address space between PHY_UPPER_ADDR + VIR_MMAP_START
     pub const VIR_MMAP_START: u64 = Self::PHY_UPPER_ADDR + 128 * Self::ONE_GB; // + 1 * Self::ONE_TB; //start from 1.5 TB
