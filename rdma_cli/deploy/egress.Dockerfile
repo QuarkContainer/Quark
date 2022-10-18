@@ -16,7 +16,4 @@ FROM ubuntu
 
 ADD ./target/release "/rdma"
 
-RUN apt update
-RUN apt install -y libibverbs-dev
-
 ENTRYPOINT ["/rdma/rdma_egress"]

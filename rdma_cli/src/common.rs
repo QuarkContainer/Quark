@@ -423,6 +423,14 @@ impl GatewayClient {
         println!("rdmaSvcCli::close 1, channelId: {}", channelId);
     }
 
+    pub fn GetDataSocket(&self, sockfd: &u32) -> DataSock {
+        self.dataSockFdInfos.lock().get_mut(sockfd).unwrap().clone()
+    }
+
+    pub fn GetChannelSocket(&self, channelId: &u32) -> DataSock {
+        self.channelToSockInfos.lock().get_mut(channelId).unwrap().clone()
+    }
+
     ///// ReadFromSocket and WriteToSocket are mainly for ingress and egress
     /// TODO: extract readv and notify
     pub fn ReadFromSocket(&self, sockInfo: &mut DataSock, sockFdMappings: &HashMap<u32, i32>) {

@@ -175,12 +175,7 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient, fds: &mut HashMap<i32, FdType
                     println!("Egress gateway doesn't have this type!");
                 }
                 Some(FdType::TCPSocketConnect(sockfd)) => {
-                    let mut sockInfo;
-                    {
-                        let mut sockFdInfos = gatewayCli.dataSockFdInfos.lock();
-                        sockInfo = sockFdInfos.get_mut(sockfd).unwrap().clone();
-                    }
-
+                    let mut sockInfo = gatewayCli.GetDataSocket(sockfd);
                     if ev.Events & EVENT_IN as u32 != 0 {
                         gatewayCli.ReadFromSocket(&mut sockInfo, &sockFdMappings);
                     }
@@ -319,39 +314,16 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient, fds: &mut HashMap<i32, FdType
                                 }
                                 RDMARespMsg::RDMANotify(response) => {
                                     if response.event & EVENT_IN != 0 {
-                                        let mut sockInfo;
-                                        {
-                                            let mut channelToSockInfos =
-                                                gatewayCli.channelToSockInfos.lock();
-                                            sockInfo = channelToSockInfos
-                                                .get_mut(&response.channelId)
-                                                .unwrap()
-                                                .clone();
-                                        }
+                                        let mut sockInfo = gatewayCli.GetChannelSocket(&response.channelId);
                                         gatewayCli.WriteToSocket(&mut sockInfo, &sockFdMappings);
                                     }
                                     if response.event & EVENT_OUT != 0 {
-                                        let mut sockInfo;
-                                        {
-                                            let mut channelToSockInfos =
-                                                gatewayCli.channelToSockInfos.lock();
-                                            sockInfo = channelToSockInfos
-                                                .get_mut(&response.channelId)
-                                                .unwrap()
-                                                .clone();
-                                        }
-
+                                        let mut sockInfo = gatewayCli.GetChannelSocket(&response.channelId);
                                         gatewayCli.ReadFromSocket(&mut sockInfo, &sockFdMappings);
                                     }
                                 }
                                 RDMARespMsg::RDMAFinNotify(response) => {
-                                    let mut sockInfo;
-                                    {
-                                        let mut channelToSockInfos =
-                                            gatewayCli.channelToSockInfos.lock();
-                                        sockInfo =
-                                            channelToSockInfos.get_mut(&response.channelId).unwrap().clone();
-                                    }
+                                    let mut sockInfo = gatewayCli.GetChannelSocket(&response.channelId);
                                     if response.event & FIN_RECEIVED_FROM_PEER != 0 {
                                         *sockInfo.finReceived.lock() = true;
                                         gatewayCli.WriteToSocket(&mut sockInfo, &sockFdMappings);
