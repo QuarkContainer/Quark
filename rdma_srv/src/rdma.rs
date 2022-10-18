@@ -767,7 +767,7 @@ impl RDMAContext {
             RDMA_SRV.ProcessRDMARecv(wc.qp_num, wc.wr_id, wc.byte_len);
         }else if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_SEND {
             // error!("ProcessWC::4");
-            RDMA_SRV.ProcessRDMARecv(wc.qp_num, wc.wr_id, wc.byte_len);
+            RDMA_SRV.ProcessRDMASend(wc.wr_id);
         } else {
             // debug!("ProcessWC::5, opcode: {}, wr_id: {}", wc.opcode, wc.wr_id);
         }

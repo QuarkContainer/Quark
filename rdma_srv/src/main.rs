@@ -716,6 +716,14 @@ fn InitContainer(conn_sock: &UnixSocket, clientRole: ClientRole, podId: [u8; 64]
         .podIdToAgents
         .lock()
         .insert(rdmaAgent.podId, rdmaAgent.clone());
+    match RDMA_CTLINFO.containerids.lock().get(&String::from_utf8(rdmaAgent.podId.to_vec()).unwrap()) {
+        Some(ip) => {
+            RDMA_SRV.ipAddrToAgents.lock().insert(*ip, rdmaAgent.clone());
+        }
+        None => {
+
+        }
+    }
 
     RDMA_SRV
         .sockToAgentIds

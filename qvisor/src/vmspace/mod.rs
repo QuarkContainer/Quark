@@ -587,6 +587,10 @@ impl VMSpace {
                     //TODO: handle server close
                     error!("ServerSock, fd: {}", fd);
                 }
+                SockInfo::RDMAUDPSocket(sock) => {
+                    GlobalRDMASvcCli().portToFdInfoMappings.lock().remove(&sock.port);
+                    error!("UDPSock close, port: {}", sock.port);
+                }
                 _ => {
                 }
             }

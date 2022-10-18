@@ -163,6 +163,7 @@ pub enum RDMAReqMsg {
     RDMAClose(RDMACloseReq),
     RDMAPendingShutdown(RDMAPendingShutdownReq),
     RDMASendUDPPacket(RDMASendUDPPacket),
+    RDMAReturnUDPBuff(RDMAReturnUDPBuff),
     // RDMAAccept(RDMAAcceptReq), //Put connected socket on client side.
 }
 

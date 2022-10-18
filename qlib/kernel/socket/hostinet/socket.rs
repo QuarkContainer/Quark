@@ -2053,7 +2053,7 @@ impl SockOperations for SocketOperations {
             match sockInfo {
                 SockInfo::RDMAUDPSocket(sockInfo) => {
                     if sockInfo.port == 0 {
-                        port = 16868u16.to_le(); // TODO: Assign an ephemeral port
+                        port = 16868u16.to_be(); // TODO: Assign an ephemeral port
                         *GlobalIOMgr()
                             .GetByHost(self.fd)
                             .unwrap()

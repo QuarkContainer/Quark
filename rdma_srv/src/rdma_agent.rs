@@ -576,6 +576,9 @@ impl RDMAAgent {
                     }
                 }
             }
+            RDMAReqMsg::RDMAReturnUDPBuff(msg) => {
+                RDMA_SRV.udpBufferAllocator.lock().ReturnBuffer(msg.udpBuffIdx);
+            }
         }
     }
 

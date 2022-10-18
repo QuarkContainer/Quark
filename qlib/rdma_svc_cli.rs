@@ -234,6 +234,13 @@ impl RDMASvcClient {
         res
     }
 
+    pub fn returnUDPBuff(&self, udpBuffIndex: u32) -> Result<()> {
+        let res = self.SentMsgToSvc(RDMAReqMsg::RDMAReturnUDPBuff(RDMAReturnUDPBuff {
+            udpBuffIdx: udpBuffIndex,
+        }));
+        res
+    }
+
     pub fn updateBitmapAndWakeUpServerIfNecessary(&self) {
         // println!("updateBitmapAndWakeUpServerIfNecessary 1 ");
         let mut srvShareRegion = self.srvShareRegion.lock();

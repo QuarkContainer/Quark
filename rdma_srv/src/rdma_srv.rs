@@ -430,23 +430,19 @@ impl RDMASrv {
         }
         else {
             // Test hook
-            match self.agents.lock().get(&0) {
-                Some(rdmaAgent) => {
-                    rdmaAgent.HandleUDPPacketRecv(udpPacket);
-                    self.udpBufferAllocator.lock().ReturnBuffer(wrId as u32);
-                }
-                None => {
-
-                }
+            for (_agentId, rdmaAgent) in self.agents.lock().iter() {
+                rdmaAgent.HandleUDPPacketRecv(udpPacket);
+                self.udpBufferAllocator.lock().ReturnBuffer(wrId as u32);
+                break;
             }
         }
         
     }
 
     pub fn ProcessRDMASend(&self, wrId: u64) {
-        error!("ProcessRDMASend, 1, qwrId: {}", wrId);
         let agentId = (wrId >> 32) as u32;
-        let udpBuffIdx = (wrId | 0xFFFFFFFF) as u32;
+        let udpBuffIdx = (wrId & 0xFFFFFFFF) as u32;
+        error!("ProcessRDMASend, 1, wrId: {}, agentId: {}, udpBuffIdx: {}", wrId, agentId, udpBuffIdx);
         match RDMA_SRV.agents.lock().get(&agentId) {
             Some(rdmaAgent) => {
                 rdmaAgent.SendResponse(RDMAResp {
