@@ -142,7 +142,7 @@ impl ShareSpace {
     }
 
     pub fn TlbShootdown(&self, vcpuMask: u64) -> u64 {
-        let start_time = std::time::Instant::now();
+        //let start_time = std::time::Instant::now();
         let vcpu_len = self.scheduler.VcpuArr.len();
         let mut waiters = vec![];
         let tlbshootdown_wait = QUARK_CONFIG.lock().TlbShootdownWait;
@@ -164,8 +164,8 @@ impl ShareSpace {
         for w in waiters {
             let _ = w.recv();
         }
-        let elapsed_time = start_time.elapsed();
-        debug!("tlbshootdown time delay {:?}", elapsed_time);
+        //let elapsed_time = start_time.elapsed();
+        //debug!("tlbshootdown time delay {:?}", elapsed_time);
         return 0;
     }
 
@@ -347,4 +347,8 @@ pub fn HyperCall64(_type_: u16, _para1: u64, _para2: u64, _para3: u64, _para4: u
 
 pub fn IsKernel() -> bool {
     return false;
+}
+
+pub fn ReapSwapIn() {
+    SHARE_SPACE.hiberMgr.ReapSwapIn().unwrap();
 }

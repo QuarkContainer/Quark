@@ -19,6 +19,7 @@ use alloc::vec::Vec;
 use core::marker::Send;
 use core::ops::Deref;
 use enum_dispatch::enum_dispatch;
+use core::sync::atomic::Ordering;
 
 use super::super::super::super::kernel_def::*;
 use super::super::super::common::*;
@@ -40,6 +41,7 @@ use super::super::socket::hostinet::uring_socket::*;
 use super::super::task::*;
 use super::super::IOURING;
 use super::super::SHARESPACE;
+use crate::qlib::kernel::kernel::kernel::GetKernel;
 
 #[enum_dispatch(AsyncOps)]
 pub trait AsyncOpsTrait {
@@ -714,6 +716,20 @@ impl AsyncOpsTrait for AsyncAccept {
                 .Notify(EventMaskFromLinux((EVENT_ERR | READABLE_EVENT) as u32));
             return false;
         }
+
+        /**************************hibernate wakeu **************************/
+        // so far the quark hibernate is wakeup by accept.
+        // todo: find better to handle this
+        if SHARESPACE.reapFileAvaiable.load(Ordering::Relaxed) {
+            ReapSwapIn();
+        }
+
+        if SHARESPACE.hibernatePause.load(Ordering::Relaxed) {
+            GetKernel().Unpause();
+            SHARESPACE.hibernatePause.store(false, Ordering::SeqCst);
+        }
+
+        /**************************hibernate wakeu end **************************/
 
         NewSocket(result);
         let sockBuf = SocketBuff(Arc::new(SocketBuffIntern::default()));

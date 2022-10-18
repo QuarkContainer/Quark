@@ -198,6 +198,7 @@ impl HostPMAKeeper {
                 }
                 Some(addr) => addr,
             };
+            assert!(addr & (MemoryDef::PAGE_SIZE_2M - 1) == 0);
             return Ok(addr);
         }
 

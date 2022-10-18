@@ -623,7 +623,7 @@ pub fn HandleFault(
     {
         if !user {
             let map = task.mm.GetSnapshotLocked(task, false);
-            print!("unhandle EXCEPTION: page_fault FAULT\n{:#?}, error code is {:?}, cr2 is {:x}, registers is {:#x?}",
+            print!("unhandle EXCEPTION: page_fault FAULT\n{:#x?}, error code is {:?}, cr2 is {:x}, registers is {:#x?}",
                    sf, errorCode, cr2, task.GetPtRegs());
             print!("the map 3 is {}", &map);
             panic!();
