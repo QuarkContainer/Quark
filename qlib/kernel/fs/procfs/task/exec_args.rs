@@ -159,7 +159,7 @@ impl ReadonlyFileNodeTrait for ExecArgReadonlyFileNode {
             length = IoVec::NumBytes(dsts) as u64;
         }
 
-        let data: Vec<u8> = task.CopyInVec(start, length as usize)?;
+        let data: Vec<u8> = task.CopyInVecManaul(start, length as usize)?;
         let mut buf = &data[..];
 
         // On Linux, if the NUL byte at the end of the argument vector has been
@@ -184,7 +184,7 @@ impl ReadonlyFileNodeTrait for ExecArgReadonlyFileNode {
                     lengthEnvv = MemoryDef::PAGE_SIZE as usize - buf.len();
                 }
 
-                let envvData = task.CopyInVec(envv.Start(), lengthEnvv as usize)?;
+                let envvData = task.CopyInVecManaul(envv.Start(), lengthEnvv as usize)?;
                 let mut copyNE = envvData.len();
                 for i in 0..envvData.len() {
                     if envvData[i] == 0 {
@@ -202,12 +202,12 @@ impl ReadonlyFileNodeTrait for ExecArgReadonlyFileNode {
                 }
                 buf = &ret[..];
 
-                let n = task.CopyDataOutToIovs(buf, dsts, true)?;
+                let n = task.CopyDataOutToIovsManual(buf, dsts, true)?;
                 return Ok(n as i64);
             }
         }
 
-        let n = task.CopyDataOutToIovs(buf, dsts, true)?;
+        let n = task.CopyDataOutToIovsManual(buf, dsts, true)?;
         return Ok(n as i64);
     }
 }
