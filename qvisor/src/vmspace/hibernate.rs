@@ -32,7 +32,7 @@ use crate::qlib::hiber_mgr::*;
 use crate::qlib::mem::block_allocator::*;
 use crate::SWAP_FILE;
 use crate::SHARE_SPACE;
-use crate::GLOBAL_ALLOCATOR;
+//use crate::GLOBAL_ALLOCATOR;
 use crate::vmspace::kernel::SHARESPACE;
 use crate::qlib::linux_def::IoVec;
 use crate::vmspace::kernel::Timestamp;
@@ -97,19 +97,20 @@ impl HiberMgr {
             self.ReapSwapOut(start, len)?;
         }
 
-        let cnt = SHARE_SPACE.pageMgr.pagepool.DontneedFreePages()?;
+        let _cnt = SHARE_SPACE.pageMgr.pagepool.DontneedFreePages()?;
 
-       // PMA_KEEPER.DontNeed()?;
+        //crate::PMA_KEEPER.DontNeed()?;
 
-        let allocated1 = GLOBAL_ALLOCATOR.Allocator().heap.lock().allocated;
+        /*let allocated1 = GLOBAL_ALLOCATOR.Allocator().heap.lock().allocated;
         GLOBAL_ALLOCATOR.Allocator().FreeAll();
         let allocated2 = GLOBAL_ALLOCATOR.Allocator().heap.lock().allocated;
-        info!("free pagepool {} pages, total allocated1 {} allocated2 {}", cnt, allocated1, allocated2);
+        info!("free pagepool {} pages, total allocated1 {} allocated2 {} free bytes {}", 
+            cnt, allocated1, allocated2, allocated1 - allocated2);
         info!("heap usage1 is {:?}", &GLOBAL_ALLOCATOR.Allocator().counts);
         for i in 3..20 {
             info!("heap usage2 is {}/{:x}/{:?}/{:?}", i, 1<<i, GLOBAL_ALLOCATOR.Allocator().counts[i], GLOBAL_ALLOCATOR.Allocator().maxnum[i]);
         }
-        info!("heap usage3 is {:?}", &GLOBAL_ALLOCATOR.Allocator().maxnum);
+        info!("heap usage3 is {:?}", &GLOBAL_ALLOCATOR.Allocator().maxnum);*/
 
         return Ok(())
 	}
