@@ -14,14 +14,24 @@
 
 use alloc::collections::BTreeMap;
 use core::ops::Deref;
+use alloc::vec::Vec;
 
 use crate::qlib::kernel::memmgr::mm::*;
 use crate::qlib::mutex::*;
+use crate::qlib::linux_def::IoVec;
+
+#[derive(Default)]
+pub struct ReapSwapFile {
+    pub fd: i32,            // the file fd 
+    pub iovs: Vec<IoVec>,
+}
 
 #[derive(Default)]
 pub struct HiberMgrIntern {
 	pub pageMap: BTreeMap<u64, u64>, // pageAddr --> file offset 
 	pub memmgrs: BTreeMap<u64, MemoryManagerWeak>,
+	pub reap: bool,
+	pub reapSwapFile: ReapSwapFile,
 }
 
 #[derive(Default)]

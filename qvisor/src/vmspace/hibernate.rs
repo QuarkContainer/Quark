@@ -14,6 +14,7 @@
 
 use spin::Mutex;
 use std::collections::HashMap;
+use std::sync::atomic::Ordering;
 use alloc::collections::BTreeSet;
 use std::collections::hash_map::Entry;
 use std::fs::OpenOptions;
@@ -30,18 +31,19 @@ use crate::qlib::linux_def::*;
 use crate::qlib::hiber_mgr::*;
 use crate::qlib::mem::block_allocator::*;
 use crate::SWAP_FILE;
-//use crate::SHARE_SPACE;
-use crate::PMA_KEEPER;
+use crate::SHARE_SPACE;
 //use crate::GLOBAL_ALLOCATOR;
 use crate::vmspace::kernel::SHARESPACE;
+use crate::qlib::linux_def::IoVec;
+use crate::vmspace::kernel::Timestamp;
 
 impl HiberMgr {
-    pub fn SwapOut(&self, start: u64, len: u64) -> Result<()> {
-		let mut intern = self.lock();
+    pub fn SwapOutUserPages(&self, start: u64, len: u64) -> Result<()> {
+        let mut intern = self.lock();
 		let mut map = BTreeSet::new();
 		for (_, mm) in &intern.memmgrs {
 			let mm = mm.Upgrade();
-			mm.pagetable.write().pt.SwapOutPages(start, len, &mut map).unwrap();
+			mm.pagetable.write().pt.SwapOutPages(start, len, &mut map, true).unwrap();
 		}
 
         let mut insertCount = 0;
@@ -54,15 +56,56 @@ impl HiberMgr {
         }
 
         info!("swapout {} pages, new pages {} pages", map.len(), insertCount);
+        return Ok(())
+    }
 
-        //let cnt = SHARE_SPACE.pageMgr.pagepool.DontneedFreePages()?;
+    pub fn ReapSwapOut(&self, start: u64, len: u64) -> Result<()> {
+        let mut intern = self.lock();
+		let mut map = BTreeSet::new();
+		for (_, mm) in &intern.memmgrs {
+			let mm = mm.Upgrade();
+			mm.pagetable.write().pt.SwapOutPages(start, len, &mut map, false).unwrap();
+		}
 
-        PMA_KEEPER.DontNeed()?;
+        for page in map.iter() {
+            intern.reapSwapFile.PushAddr(*page);
+        }
+
+        intern.reapSwapFile.SwapOut();
+
+        SHARE_SPACE.reapFileAvaiable.store(true, Ordering::SeqCst);
+        info!("ReapSwapOut {} pages", map.len());
+        return Ok(())
+    }
+
+    pub fn ReapSwapIn(&self)  -> Result<()> { 
+        let mut intern = self.lock();
+        let now = Timestamp();
+        let count = intern.reapSwapFile.iovs.len();
+        intern.reapSwapFile.SwapIn();
+        error!("ReapSwapIn pages {} in {}", count, Timestamp() - now);
+        SHARE_SPACE.reapFileAvaiable.store(false, Ordering::SeqCst);
+        
+        return Ok(())
+    }
+
+    pub fn SwapOut(&self, start: u64, len: u64) -> Result<()> {
+        if !self.lock().reap {
+            self.SwapOutUserPages(start, len)?;
+            self.lock().reap = true
+        } else {
+            self.ReapSwapOut(start, len)?;
+        }
+
+        let _cnt = SHARE_SPACE.pageMgr.pagepool.DontneedFreePages()?;
+
+        //crate::PMA_KEEPER.DontNeed()?;
 
         /*let allocated1 = GLOBAL_ALLOCATOR.Allocator().heap.lock().allocated;
         GLOBAL_ALLOCATOR.Allocator().FreeAll();
         let allocated2 = GLOBAL_ALLOCATOR.Allocator().heap.lock().allocated;
-        info!("free pagepool {} pages, total allocated1 {} allocated2 {}", cnt, allocated1, allocated2);
+        info!("free pagepool {} pages, total allocated1 {} allocated2 {} free bytes {}", 
+            cnt, allocated1, allocated2, allocated1 - allocated2);
         info!("heap usage1 is {:?}", &GLOBAL_ALLOCATOR.Allocator().counts);
         for i in 3..20 {
             info!("heap usage2 is {}/{:x}/{:?}/{:?}", i, 1<<i, GLOBAL_ALLOCATOR.Allocator().counts[i], GLOBAL_ALLOCATOR.Allocator().maxnum[i]);
@@ -86,6 +129,91 @@ impl HiberMgr {
 	}
 }
 
+pub const REAP_SWAP_FILE_NAME : &str = "./reap_swapfile.data";
+
+impl ReapSwapFile {
+    pub fn Init(&mut self) {
+        
+
+        let direct = SHARESPACE.config.read().HiberODirect;
+
+        let file = if direct {
+            OpenOptions::new()
+            .read(true)
+            .write(true)
+            .custom_flags(O_DIRECT)
+            .create(true)
+            .open(REAP_SWAP_FILE_NAME)
+            .unwrap()
+        } else {
+            OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(REAP_SWAP_FILE_NAME)
+            .unwrap()
+        } ;
+        let fd = file.into_raw_fd();
+
+        self.fd = fd;
+    }
+
+    pub fn PushAddr(&mut self, addr: u64) {
+        self.iovs.push(IoVec { start: addr, len: 4096 });
+    }
+
+    pub fn SwapOut(&mut self) {
+        if self.fd == 0 {
+            self.Init();
+        }  
+
+        let mut idx = 0;
+        while idx < self.iovs.len() {
+            let count = if self.iovs.len() - idx <= 1024 {
+                self.iovs.len() - idx
+            } else {
+                1024
+            };
+
+            let ret = unsafe {
+                libc::pwritev(self.fd, &self.iovs[idx] as * const _ as u64 as _, count as _, idx as i64 * 4096)
+            };
+
+            assert!(ret as usize == count * 4096, "ret is {:?}, count is {}", GetRet(ret as _), count);
+
+            idx += count;
+        }
+
+        for iov in &self.iovs {
+            let ret = unsafe {
+                libc::madvise(iov.start as _, MemoryDef::PAGE_SIZE_4K as _, libc::MADV_DONTNEED)
+            };
+
+            assert!(ret == 0);
+        }
+    }    
+
+    pub fn SwapIn(&mut self) {
+        let mut idx = 0;
+        while idx < self.iovs.len() {
+            let count = if self.iovs.len() - idx <= 1024 {
+                self.iovs.len() - idx
+            } else {
+                1024
+            };
+
+            let ret = unsafe {
+                libc::preadv(self.fd, &self.iovs[idx] as * const _ as u64 as _, count as _, idx as i64 * 4096)
+            };
+
+            assert!(ret as usize == count * 4096);
+
+            idx += count;
+        }
+
+        self.iovs.clear();
+    }
+}
 
 pub struct SwapFile {
     pub fd: i32,            // the file fd  

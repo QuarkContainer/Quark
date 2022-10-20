@@ -97,7 +97,8 @@ impl HostAllocator {
     }
 
     pub fn Clear(&self) -> bool {
-        return self.Allocator().Free();
+        //return self.Allocator().Free();
+        return false;
     }
 }
 

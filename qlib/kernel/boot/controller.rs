@@ -15,6 +15,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::ptr;
+use core::sync::atomic;
 
 use crate::qlib::kernel::Kernel::HostSpace;
 use crate::qlib::kernel::kernel::kernel::GetKernel;
@@ -55,7 +56,7 @@ pub fn HandleSignal(signalArgs: &SignalArgs) {
     }
 
     // SIGSTOP
-    if signalArgs.Signo == 12 { //SIGSTOP.0 {
+    /*if signalArgs.Signo == 12 { //SIGSTOP.0 {
         //GetKernel().Pause();
             
         GetKernel().ClearFsCache();
@@ -66,12 +67,17 @@ pub fn HandleSignal(signalArgs: &SignalArgs) {
         }*/
 
         return;
-    }
+    }*/
 
     if signalArgs.Signo == SIGSTOP.0 {
+        if SHARESPACE.hibernatePause.load(atomic::Ordering::Relaxed) {
+            // if the sandbox has been paused, return
+            return
+        }
         GetKernel().Pause();
         GetKernel().ClearFsCache();
         HostSpace::SwapOut();
+        SHARESPACE.hibernatePause.store(true, atomic::Ordering::SeqCst);
         return 
         
         /*for vcpu in CPU_LOCAL.iter() {
@@ -80,7 +86,9 @@ pub fn HandleSignal(signalArgs: &SignalArgs) {
     }
 
     if signalArgs.Signo == SIGCONT.0 { 
+        HostSpace::SwapIn();
         GetKernel().Unpause();
+        SHARESPACE.hibernatePause.store(false, atomic::Ordering::SeqCst);
         return
     }
 

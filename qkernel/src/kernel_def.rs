@@ -471,3 +471,7 @@ impl UringAsyncMgr {
 pub fn IsKernel() -> bool {
     return true;
 }
+
+pub fn ReapSwapIn() {
+    HostSpace::SwapIn();
+}

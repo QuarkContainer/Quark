@@ -959,7 +959,7 @@ impl PageTables {
         }
     }
 
-    pub fn SwapOutPages(&self, start: u64, len: u64, pages: &mut BTreeSet<u64>) -> Result<()> {
+    pub fn SwapOutPages(&self, start: u64, len: u64, pages: &mut BTreeSet<u64>, updatePageEntry: bool) -> Result<()> {
         let end = start + len;
 
         //self.Unmap(MemoryDef::PAGE_SIZE, MemoryDef::PHY_LOWER_ADDR, &*PAGE_MGR)?;
@@ -971,13 +971,19 @@ impl PageTables {
             |entry: &mut PageTableEntry , _virtualAddr| {
                 let phyAddr = entry.addr().as_u64();
                 if start <= phyAddr && phyAddr < end {
-                    //error!("SwapOutPages 1 {:x?}/{:x}/{:x}/{:x}/{:x}", self.root, phyAddr, _virtualAddr, start, end);
                     let mut flags = entry.flags();
-                    flags &= !PageTableFlags::PRESENT;
-                    // flags bit9 which indicate the page is swapped out
-                    flags |= PageTableFlags::BIT_9;
-                    entry.set_flags(flags);
-                    pages.insert(phyAddr);
+                    let needInsert = flags & PageTableFlags::BIT_9 != PageTableFlags::BIT_9;
+                    if updatePageEntry && needInsert {
+                        //error!("SwapOutPages 1 {:x?}/{:x}/{:x}/{:x}/{:x}", self.root, phyAddr, _virtualAddr, start, end);
+                        flags &= !PageTableFlags::PRESENT;
+                        // flags bit9 which indicate the page is swapped out
+                        flags |= PageTableFlags::BIT_9;
+                        entry.set_flags(flags);
+                    }
+                    
+                    if needInsert {
+                        pages.insert(phyAddr);
+                    }                   
                 }
             },
             false,
@@ -989,13 +995,19 @@ impl PageTables {
             |entry, _virtualAddr| {
                 let phyAddr = entry.addr().as_u64();
                 if start <= phyAddr && phyAddr < end {
-                    //error!("SwapOutPages 2 {:x?}/{:x}/{:x}/{:x}/{:x}", self.root, phyAddr, _virtualAddr, start, end);
                     let mut flags = entry.flags();
-                    flags &= !PageTableFlags::PRESENT;
-                    // flags bit9 which indicate the page is swapped out
-                    flags |= PageTableFlags::BIT_9;
-                    entry.set_flags(flags);
-                    pages.insert(phyAddr);
+                    let needInsert = flags & PageTableFlags::BIT_9 != PageTableFlags::BIT_9;
+                    if updatePageEntry && needInsert {
+                        //error!("SwapOutPages 1 {:x?}/{:x}/{:x}/{:x}/{:x}", self.root, phyAddr, _virtualAddr, start, end);
+                        flags &= !PageTableFlags::PRESENT;
+                        // flags bit9 which indicate the page is swapped out
+                        flags |= PageTableFlags::BIT_9;
+                        entry.set_flags(flags);
+                    }
+                    
+                    if needInsert {
+                        pages.insert(phyAddr);
+                    }                   
                 }
             },
             false,

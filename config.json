@@ -21,7 +21,7 @@
   "ShimMode"      : false,
   "EnableInotify" : true,
   "ReaddirCache"  : true,
-  "HiberODirect"  : false,
+  "HiberODirect"  : true,
   "DisableCgroup" : true,
   "CopyDataWithPf": true,
   "TlbShootdownWait": true

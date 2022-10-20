@@ -37,6 +37,10 @@ impl MemoryManager {
             return self.CopyDataWithPf(task, vaddr, to, len, allowPartial);
         }
 
+        return self.CopyDataInManual(task, vaddr, to, len, allowPartial);
+    }
+
+    pub fn CopyDataInManual(&self, task: &Task, vaddr: u64, to: u64, len: usize, allowPartial: bool) -> Result<()> {
         let rl = self.MappingReadLock();
 
         return self.CopyDataInLocked(task, &rl, vaddr, to, len, allowPartial);
@@ -541,6 +545,29 @@ impl MemoryManager {
         return Ok(vec);
     }
 
+    pub fn CopyInVecManaul<T: Sized + Copy>(
+        &self,
+        task: &Task,
+        src: u64,
+        count: usize,
+    ) -> Result<Vec<T>> {
+        if src == 0 && count == 0 {
+            return Ok(Vec::new());
+        }
+
+        if src == 0 {
+            return Err(Error::SysError(SysErr::EFAULT));
+        }
+
+        let recordLen = core::mem::size_of::<T>();
+        let mut vec: Vec<T> = Vec::with_capacity(count);
+        unsafe {
+            vec.set_len(count);
+        }
+        self.CopyDataInManual(task, src, vec.as_ptr() as u64, recordLen * count, false)?;
+        return Ok(vec);
+    }
+
     //Copy a slice to user memory
     pub fn CopyOutSlice<T: Sized + Copy>(
         &self,
@@ -734,6 +761,11 @@ impl Task {
     pub fn CopyInVec<T: Sized + Copy>(&self, addr: u64, size: usize) -> Result<Vec<T>> {
         assert!(self.Addr() == Task::Current().Addr());
         return self.mm.CopyInVec(self, addr, size);
+    }
+
+    pub fn CopyInVecManaul<T: Sized + Copy>(&self, addr: u64, size: usize) -> Result<Vec<T>> {
+        assert!(self.Addr() == Task::Current().Addr());
+        return self.mm.CopyInVecManaul(self, addr, size);
     }
 
     pub fn FixPermissionForIovs(&self, iovs: &[IoVec], writable: bool) -> Result<()> {
