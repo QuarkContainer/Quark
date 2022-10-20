@@ -725,6 +725,8 @@ fn InitContainer(conn_sock: &UnixSocket, podId: [u8; 64]) {
         .get(&String::from_utf8(rdmaAgent.podId.to_vec()).unwrap())
     {
         Some(vpcIpAddr) => {
+            *rdmaAgent.ipAddr.lock() = vpcIpAddr.ipAddr;
+            *rdmaAgent.vpcId.lock() = vpcIpAddr.vpcId;
             RDMA_SRV
                 .vpcIpAddrToAgents
                 .lock()

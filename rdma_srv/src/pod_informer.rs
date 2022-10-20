@@ -123,6 +123,8 @@ impl PodInformer {
                         .get(pod.container_id.as_bytes())
                     {
                         Some(rdmaAgent) => {
+                            *rdmaAgent.ipAddr.lock() = vpcIpAddr.ipAddr;
+                            *rdmaAgent.vpcId.lock() = vpcIpAddr.vpcId;
                             RDMA_SRV.vpcIpAddrToAgents.lock().insert(
                                 vpcIpAddr,
                                 rdmaAgent.clone(),
