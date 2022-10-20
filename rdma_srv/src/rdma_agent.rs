@@ -540,7 +540,7 @@ impl RDMAAgent {
                 let ipAddr;
                 if RDMA_CTLINFO.isK8s {
                     vpcId = *self.vpcId.lock();
-                    ipAddr = self.ipAddr.lock().to_be();                    
+                    ipAddr = self.ipAddr.lock().to_be();
                 } else {
                     let podId = "client".to_string();
                     let mut vpcIpAddr = RDMA_CTLINFO
