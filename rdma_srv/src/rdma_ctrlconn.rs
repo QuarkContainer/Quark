@@ -25,6 +25,7 @@ use std::os::unix::io::{AsRawFd, RawFd};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use super::qlib::rdma_share::*;
+use super::rdma_srv::*;
 
 pub struct CtrlConn {
     // socket fd connect to ConnectionMgr
@@ -35,8 +36,8 @@ pub struct CtrlInfo {
     // nodes: node ipaddr --> Node
     pub nodes: Mutex<HashMap<u32, Node>>,
 
-    // pods: pod ipaddr --> Pod
-    pub pods: Mutex<HashMap<u32, Pod>>,
+    // pods: pod key --> Pod
+    pub pods: Mutex<HashMap<String, Pod>>,
 
     // services: service ip --> Service
     pub services: Mutex<HashMap<u32, Service>>,
@@ -47,11 +48,11 @@ pub struct CtrlInfo {
     // configMaps: configMap name --> ConfigMap
     pub configMaps: Mutex<HashMap<String, ConfigMap>>,
 
-    // containerids: containerid --> ip
-    pub containerids: Mutex<HashMap<String, u32>>,
+    // containerids: containerid --> VpcIpAddr
+    pub podIdToVpcIpAddr: Mutex<HashMap<String, VpcIpAddr>>,
 
-    //ip --> podId
-    pub ipToPodIdMappings: Mutex<HashMap<u32, String>>,
+    // VpcIpAddr --> podId
+    pub vpcIpAddrToPodIdMappings: Mutex<HashMap<VpcIpAddr, String>>,
 
     // subnetmapping: virtual subnet --> node ipaddr
     pub subnetmap: Mutex<HashMap<u32, u32>>,
@@ -86,12 +87,12 @@ pub struct CtrlInfo {
 impl Default for CtrlInfo {
     fn default() -> CtrlInfo {
         let mut nodes: HashMap<u32, Node> = HashMap::new();
-        let pods: HashMap<u32, Pod> = HashMap::new();
+        let pods: HashMap<String, Pod> = HashMap::new();
         let services: HashMap<u32, Service> = HashMap::new();
         let endpointses: HashMap<String, Endpoints> = HashMap::new();
         let configMaps: HashMap<String, ConfigMap> = HashMap::new();
-        let mut containerids: HashMap<String, u32> = HashMap::new();
-        let mut ipToPodIdMappings: HashMap<u32, String> = HashMap::new();
+        let mut podIdToVpcIpAddrMap: HashMap<String, VpcIpAddr> = HashMap::new();
+        let mut vpcIpAddrToPodIdMap: HashMap<VpcIpAddr, String> = HashMap::new();
 
         let isK8s = true;
         if !isK8s {
@@ -116,20 +117,33 @@ impl Default for CtrlInfo {
             nodes.insert(lab1ip, node1);
             nodes.insert(lab2ip, node2);
             error!("u32::from(Ipv4Addr::from_str('192.168.2.8').unwrap()).to_be(): {}, u32::from(Ipv4Addr::from_str('192.168.1.8').unwrap()).to_be(): {}", u32::from(Ipv4Addr::from_str("192.168.2.8").unwrap()).to_be(), u32::from(Ipv4Addr::from_str("192.168.1.8").unwrap()).to_be());
-            containerids.insert(
+            podIdToVpcIpAddrMap.insert(
                 "server".to_string(),
-                u32::from(Ipv4Addr::from_str("192.168.2.8").unwrap()).to_be(),
+                VpcIpAddr {
+                    vpcId: 1,
+                    ipAddr: u32::from(Ipv4Addr::from_str("192.168.2.8").unwrap()).to_be(),
+                }
             );
-            containerids.insert(
+            podIdToVpcIpAddrMap.insert(
                 "client".to_string(),
-                u32::from(Ipv4Addr::from_str("192.168.1.8").unwrap()).to_be(),
+                VpcIpAddr { 
+                    vpcId: 1, 
+                    ipAddr: u32::from(Ipv4Addr::from_str("192.168.1.8").unwrap()).to_be(), 
+                }
+                
             );
-            ipToPodIdMappings.insert(
-                u32::from(Ipv4Addr::from_str("192.168.2.8").unwrap()).to_be(),
+            vpcIpAddrToPodIdMap.insert(
+                VpcIpAddr {
+                    vpcId: 1,
+                    ipAddr: u32::from(Ipv4Addr::from_str("192.168.2.8").unwrap()).to_be(),
+                },
                 "server".to_string(),
             );
-            ipToPodIdMappings.insert(
-                u32::from(Ipv4Addr::from_str("192.168.1.8").unwrap()).to_be(),
+            vpcIpAddrToPodIdMap.insert(
+                VpcIpAddr {
+                    vpcId: 1,
+                    ipAddr: u32::from(Ipv4Addr::from_str("192.168.1.8").unwrap()).to_be(),
+                },
                 "client".to_string(),
             );
         }
@@ -140,8 +154,8 @@ impl Default for CtrlInfo {
             services: Mutex::new(services),
             endpointses: Mutex::new(endpointses),
             configMaps: Mutex::new(configMaps),
-            containerids: Mutex::new(containerids),
-            ipToPodIdMappings: Mutex::new(ipToPodIdMappings),
+            podIdToVpcIpAddr: Mutex::new(podIdToVpcIpAddrMap),
+            vpcIpAddrToPodIdMappings: Mutex::new(vpcIpAddrToPodIdMap),
             subnetmap: Mutex::new(HashMap::new()),
             veps: Mutex::new(HashMap::new()),
             clusterSubnetInfo: Mutex::new(ClusterSubnetInfo {
@@ -344,6 +358,7 @@ pub struct Node {
 #[derive(Default, Debug, Clone)]
 pub struct Pod {
     pub key: String,
+    pub vpcId: u32,
     pub ip: u32,
     pub node_name: String,
     pub container_id: String,

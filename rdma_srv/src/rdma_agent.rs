@@ -70,6 +70,7 @@ pub struct RDMAAgentIntern {
     pub udpMR: MemoryRegion,
     pub udpRecvBufferAllocator: Mutex<UDPBufferAllocator>,
     pub podId: [u8; 64],
+    pub vpcId: Mutex<u32>,
 }
 
 impl Drop for RDMAAgentIntern {
@@ -175,6 +176,7 @@ impl RDMAAgent {
             udpMR,
             udpRecvBufferAllocator: Mutex::new(udpRecvBufferAllocator),
             podId,
+            vpcId: Mutex::new(0),
         }))
     }
 
@@ -196,6 +198,7 @@ impl RDMAAgent {
             udpMR: MemoryRegion::default(),
             udpRecvBufferAllocator: Mutex::new(UDPBufferAllocator::default()),
             podId: [0; 64],
+            vpcId: Mutex::new(0),
         }))
     }
 
@@ -410,7 +413,7 @@ impl RDMAAgent {
                             .lock()
                             .insert(rdmaChannel.localId, rdmaChannel.clone());
 
-                        let connectReqeust = rdmaChannel.CreateConnectRequest(msg.sockfd);
+                        let connectReqeust = rdmaChannel.CreateConnectRequest(msg.sockfd, 1);
                         rdmaConn
                             .ctrlChan
                             .lock()
@@ -429,12 +432,14 @@ impl RDMAAgent {
                     podId = "client".to_string();
                 }
 
-                let ipAddr = RDMA_CTLINFO
-                    .containerids
+                let vpcIpAddr = RDMA_CTLINFO
+                    .podIdToVpcIpAddr
                     .lock()
                     .get(&podId)
                     .unwrap()
                     .clone();
+
+                let srcVpcIpAddr = VpcIpAddr { vpcId: vpcIpAddr.vpcId, ipAddr: vpcIpAddr.ipAddr.to_be() };
 
                 let mut dstIpAddr = msg.dstIpAddr;
                 let mut dstPort = msg.dstPort;
@@ -442,7 +447,8 @@ impl RDMAAgent {
                     self.SendControlMsgInternal(
                         msg.sockfd,
                         RDMA_CTLINFO.localIp_get(),
-                        ipAddr.to_be(),
+                        // ipAddr.to_be(),
+                        srcVpcIpAddr,
                         msg.srcPort,
                         dstIpAddr,
                         dstPort,
@@ -462,7 +468,7 @@ impl RDMAAgent {
                             self.SendControlMsgInternal(
                                 msg.sockfd,
                                 nodeIpAddr,
-                                ipAddr.to_be(),
+                                srcVpcIpAddr,
                                 msg.srcPort,
                                 dstIpAddr,
                                 dstPort,
@@ -527,24 +533,26 @@ impl RDMAAgent {
                     podId = "client".to_string();
                 }
 
-                let mut srcIpAddr = RDMA_CTLINFO
-                    .containerids
+                let mut srcVpcIpAddr = RDMA_CTLINFO
+                    .podIdToVpcIpAddr
                     .lock()
                     .get(&podId)
                     .unwrap()
-                    .clone().to_be();
+                    .clone();
+                    // .clone().to_be();
                 if !RDMA_CTLINFO.isK8s {
-                    if srcIpAddr == udpPacket.dstIpAddr {
+                    if srcVpcIpAddr.ipAddr.to_be() == udpPacket.dstIpAddr {
                         let podId = "server".to_string();
-                        srcIpAddr = RDMA_CTLINFO
-                            .containerids
+                        srcVpcIpAddr = RDMA_CTLINFO
+                            .podIdToVpcIpAddr
                             .lock()
                             .get(&podId)
                             .unwrap()
                             .clone();
                     }
                 }
-                udpPacket.srcIpAddr = srcIpAddr;
+                udpPacket.srcIpAddr = srcVpcIpAddr.ipAddr.to_be();
+                udpPacket.vpcId = srcVpcIpAddr.vpcId;
 
                 // error!(
                 //     "RDMAReqMsg::RDMASendUDPPacket, 1, srcAddr: {}, srcPort: {}, dstIpAddr: {}, dstPort: {}",
@@ -582,7 +590,7 @@ impl RDMAAgent {
         &self,
         sockfd: u32,
         nodeIpAddr: u32,
-        srcIpAddr: u32,
+        srcVpcIpAddr: VpcIpAddr,
         srcPort: u16,
         dstIpAddr: u32,
         dstPort: u16,
@@ -595,7 +603,8 @@ impl RDMAAgent {
                 sockfd: sockfd,
                 dstIpAddr: dstIpAddr,
                 dstPort: dstPort,
-                srcIpAddr: srcIpAddr,
+                srcIpAddr: srcVpcIpAddr.ipAddr,
+                // vpcId: srcVpcIpAddr.vpcId
                 srcPort: srcPort,
             },
             rdmaConn.clone(),
@@ -606,7 +615,7 @@ impl RDMAAgent {
             .lock()
             .insert(rdmaChannel.localId, rdmaChannel.clone());
 
-        let connectReqeust = rdmaChannel.CreateConnectRequest(sockfd);
+        let connectReqeust = rdmaChannel.CreateConnectRequest(sockfd, srcVpcIpAddr.vpcId);
         rdmaConn
             .ctrlChan
             .lock()

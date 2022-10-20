@@ -68,6 +68,12 @@ pub struct EndpointUsingPodId {
     pub port: u16,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct VpcIpAddr {
+    pub vpcId: u32,
+    pub ipAddr: u32,
+}
+
 pub struct RDMAControlChannelRegion {
     // data buf for sockbuf, it will be mapped in the rdma MR
     pub iobufs: [IOBuf; IO_BUF_COUNT],
@@ -142,7 +148,7 @@ pub struct RDMASrv {
     pub udpQP: QueuePair,
     pub udpBufferAllocator: Mutex<UDPBufferAllocator>,
     pub podIdToAgents: Mutex<HashMap<[u8; 64], RDMAAgent>>,
-    pub ipAddrToAgents: Mutex<HashMap<u32, RDMAAgent>>,
+    pub vpcIpAddrToAgents: Mutex<HashMap<VpcIpAddr, RDMAAgent>>,
 }
 
 impl Drop for RDMASrv {
@@ -303,7 +309,7 @@ impl RDMASrv {
             udpMemoryRegion: udpMR,
             udpQP,
             udpBufferAllocator,
-            ipAddrToAgents: Mutex::new(HashMap::new()),
+            vpcIpAddrToAgents: Mutex::new(HashMap::new()),
             podIdToAgents: Mutex::new(HashMap::new()),
         };
     }
@@ -416,17 +422,17 @@ impl RDMASrv {
         let udpPacket = unsafe { &(*(laddr as *const UDPPacket)) };
         // debug!("RDMASrv::ProcessRDMARecv, udpPacket: {:?}", udpPacket);
         if RDMA_CTLINFO.isK8s {
-            match self.ipAddrToAgents.lock().get(&udpPacket.dstIpAddr) {
+            match self.vpcIpAddrToAgents.lock().get(&VpcIpAddr {
+                vpcId: udpPacket.vpcId,
+                ipAddr: udpPacket.dstIpAddr,
+            }) {
                 Some(rdmaAgent) => {
                     rdmaAgent.HandleUDPPacketRecv(udpPacket);
                     self.udpBufferAllocator.lock().ReturnBuffer(wrId as u32);
                 }
-                None => {
-
-                }
+                None => {}
             }
-        }
-        else {
+        } else {
             // Test hook
             for (_agentId, rdmaAgent) in self.agents.lock().iter() {
                 rdmaAgent.HandleUDPPacketRecv(udpPacket);
@@ -434,7 +440,6 @@ impl RDMASrv {
                 break;
             }
         }
-        
     }
 
     pub fn ProcessRDMASend(&self, wrId: u64) {
