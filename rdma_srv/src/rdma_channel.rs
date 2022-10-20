@@ -631,8 +631,9 @@ impl RDMAChannel {
         }))
     }
 
-    pub fn CreateConnectRequest(&self, sockfd: u32) -> ConnectRequest {
+    pub fn CreateConnectRequest(&self, sockfd: u32, vpcId: u32) -> ConnectRequest {
         ConnectRequest {
+            vpcId,
             remoteChannelId: self.localId,
             raddr: self.raddr,
             rkey: self.rkey,

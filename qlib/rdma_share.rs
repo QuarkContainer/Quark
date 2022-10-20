@@ -101,11 +101,12 @@ impl<T: 'static + Default + Copy> RingQueue<T> {
     }
 }
 
-pub const UDP_BUFF_LEN: usize = 1010; //currently make UDPPacket total size to 1024.
-pub const UDP_BUFF_OFFSET: usize = 4 + 2 + 4 + 2 + 2;
+pub const UDP_BUFF_LEN: usize = 1006; //currently make UDPPacket total size to 1024.
+pub const UDP_BUFF_OFFSET: usize = 4 + 2 + 4 + 2 + 2 + 4;
 
 #[derive(Clone, Copy, Debug)]
 pub struct UDPPacket {
+    pub vpcId: u32,
     pub srcIpAddr: u32,
     pub srcPort: u16,
     pub dstIpAddr: u32,
@@ -117,6 +118,7 @@ pub struct UDPPacket {
 impl Default for UDPPacket {
     fn default() -> Self {
         UDPPacket {
+            vpcId: 0,
             srcIpAddr: 0,
             srcPort: 0,
             dstIpAddr: 0,
@@ -295,7 +297,7 @@ pub struct RDMAReadReq {
 
 #[derive(Default, Clone, Copy, Debug)]
 pub struct RDMAConnectReq {
-    //pub vpcId: u32,
+    // pub vpcId: u32,
     pub sockfd: u32,
     pub dstIpAddr: u32,
     pub dstPort: u16,

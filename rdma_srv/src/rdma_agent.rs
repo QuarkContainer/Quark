@@ -70,6 +70,8 @@ pub struct RDMAAgentIntern {
     pub udpMR: MemoryRegion,
     pub udpRecvBufferAllocator: Mutex<UDPBufferAllocator>,
     pub podId: [u8; 64],
+    pub vpcId: Mutex<u32>,
+    pub ipAddr: Mutex<u32>, // currently only support single IPv4 address for each pod.
 }
 
 impl Drop for RDMAAgentIntern {
@@ -175,6 +177,8 @@ impl RDMAAgent {
             udpMR,
             udpRecvBufferAllocator: Mutex::new(udpRecvBufferAllocator),
             podId,
+            vpcId: Mutex::new(0),
+            ipAddr: Mutex::new(0),
         }))
     }
 
@@ -196,6 +200,8 @@ impl RDMAAgent {
             udpMR: MemoryRegion::default(),
             udpRecvBufferAllocator: Mutex::new(UDPBufferAllocator::default()),
             podId: [0; 64],
+            vpcId: Mutex::new(0),
+            ipAddr: Mutex::new(0),
         }))
     }
 
@@ -410,7 +416,7 @@ impl RDMAAgent {
                             .lock()
                             .insert(rdmaChannel.localId, rdmaChannel.clone());
 
-                        let connectReqeust = rdmaChannel.CreateConnectRequest(msg.sockfd);
+                        let connectReqeust = rdmaChannel.CreateConnectRequest(msg.sockfd, 1);
                         rdmaConn
                             .ctrlChan
                             .lock()
@@ -423,26 +429,35 @@ impl RDMAAgent {
                 }
             }
             RDMAReqMsg::RDMAConnectUsingPodId(msg) => {
-                //TODOCtrlPlane: need get nodeIp from dstIpAddr
-                let mut podId = String::from_utf8(msg.podId.to_vec()).unwrap();
-                if !RDMA_CTLINFO.isK8s {
-                    podId = "client".to_string();
+                let vpcId;
+                let ipAddr;
+                if RDMA_CTLINFO.isK8s {
+                    vpcId = *self.vpcId.lock();
+                    ipAddr = self.ipAddr.lock().to_be();
+                } else {
+                    let podId = "client".to_string();
+                    let vpcIpAddr = RDMA_CTLINFO
+                        .podIdToVpcIpAddr
+                        .lock()
+                        .get(&podId)
+                        .unwrap()
+                        .clone();
+                    vpcId = vpcIpAddr.vpcId;
+                    ipAddr = vpcIpAddr.ipAddr.to_be();
+                }
+                if vpcId == 0 {
+                    panic!("TODO: VpcIdIpAddr hasn't been obtained from control plan yet, should handle this in negative case");
                 }
 
-                let ipAddr = RDMA_CTLINFO
-                    .containerids
-                    .lock()
-                    .get(&podId)
-                    .unwrap()
-                    .clone();
-
+                let srcVpcIpAddr = VpcIpAddr { vpcId, ipAddr };
                 let mut dstIpAddr = msg.dstIpAddr;
                 let mut dstPort = msg.dstPort;
                 if RDMA_CTLINFO.IsEgress(dstIpAddr) {
                     self.SendControlMsgInternal(
                         msg.sockfd,
                         RDMA_CTLINFO.localIp_get(),
-                        ipAddr.to_be(),
+                        // ipAddr.to_be(),
+                        srcVpcIpAddr,
                         msg.srcPort,
                         dstIpAddr,
                         dstPort,
@@ -462,7 +477,7 @@ impl RDMAAgent {
                             self.SendControlMsgInternal(
                                 msg.sockfd,
                                 nodeIpAddr,
-                                ipAddr.to_be(),
+                                srcVpcIpAddr,
                                 msg.srcPort,
                                 dstIpAddr,
                                 dstPort,
@@ -491,15 +506,14 @@ impl RDMAAgent {
                     panic!("RDMAChannel with id {} does not exist!", msg.channelId);
                 }
             },
-            RDMAReqMsg::RDMAShutdown(msg) => {
-                match RDMA_SRV.channels.lock().get(&msg.channelId) {
-                    Some(rdmaChannel) => {
-                        rdmaChannel.Shutdown();
-                    }
-                    None => {
-                        panic!("RDMAChannel with id {} does not exist!", msg.channelId);
-                    }
-            }},
+            RDMAReqMsg::RDMAShutdown(msg) => match RDMA_SRV.channels.lock().get(&msg.channelId) {
+                Some(rdmaChannel) => {
+                    rdmaChannel.Shutdown();
+                }
+                None => {
+                    panic!("RDMAChannel with id {} does not exist!", msg.channelId);
+                }
+            },
             RDMAReqMsg::RDMAClose(msg) => {
                 let rdmaChannel = RDMA_SRV
                     .channels
@@ -522,34 +536,37 @@ impl RDMAAgent {
             RDMAReqMsg::RDMASendUDPPacket(msg) => {
                 // error!("RDMAReqMsg::RDMASendUDPPacket, msg: {:?}", msg);
                 let udpPacket = &mut self.shareRegion.lock().udpBufSent[msg.udpBuffIdx as usize];
-                let mut podId = String::from_utf8(msg.podId.to_vec()).unwrap();
-                if !RDMA_CTLINFO.isK8s {
-                    podId = "client".to_string();
-                }
-
-                let mut srcIpAddr = RDMA_CTLINFO
-                    .containerids
-                    .lock()
-                    .get(&podId)
-                    .unwrap()
-                    .clone().to_be();
-                if !RDMA_CTLINFO.isK8s {
-                    if srcIpAddr == udpPacket.dstIpAddr {
-                        let podId = "server".to_string();
-                        srcIpAddr = RDMA_CTLINFO
-                            .containerids
+                let vpcId;
+                let ipAddr;
+                if RDMA_CTLINFO.isK8s {
+                    vpcId = *self.vpcId.lock();
+                    ipAddr = self.ipAddr.lock().to_be();
+                } else {
+                    let podId = "client".to_string();
+                    let mut vpcIpAddr = RDMA_CTLINFO
+                        .podIdToVpcIpAddr
+                        .lock()
+                        .get(&podId)
+                        .unwrap()
+                        .clone();
+                    if vpcIpAddr.ipAddr == udpPacket.dstIpAddr {
+                        vpcIpAddr = RDMA_CTLINFO
+                            .podIdToVpcIpAddr
                             .lock()
-                            .get(&podId)
+                            .get(&"server".to_string())
                             .unwrap()
                             .clone();
                     }
+                    vpcId = vpcIpAddr.vpcId;
+                    ipAddr = vpcIpAddr.ipAddr.to_be();
                 }
-                udpPacket.srcIpAddr = srcIpAddr;
 
-                // error!(
-                //     "RDMAReqMsg::RDMASendUDPPacket, 1, srcAddr: {}, srcPort: {}, dstIpAddr: {}, dstPort: {}",
-                //     udpPacket.srcIpAddr, udpPacket.srcPort, udpPacket.dstIpAddr, udpPacket.dstPort
-                // );
+                if vpcId == 0 {
+                    panic!("TODO: VpcIdIpAddr hasn't been obtained from control plan yet, should handle this in negative case");
+                }
+
+                udpPacket.srcIpAddr = ipAddr;
+                udpPacket.vpcId = vpcId;
 
                 match RDMA_CTLINFO.get_node_ip_by_pod_ip(&udpPacket.dstIpAddr) {
                     Some(nodeIpAddr) => {
@@ -573,7 +590,10 @@ impl RDMAAgent {
                 }
             }
             RDMAReqMsg::RDMAReturnUDPBuff(msg) => {
-                RDMA_SRV.udpBufferAllocator.lock().ReturnBuffer(msg.udpBuffIdx);
+                RDMA_SRV
+                    .udpBufferAllocator
+                    .lock()
+                    .ReturnBuffer(msg.udpBuffIdx);
             }
         }
     }
@@ -582,7 +602,7 @@ impl RDMAAgent {
         &self,
         sockfd: u32,
         nodeIpAddr: u32,
-        srcIpAddr: u32,
+        srcVpcIpAddr: VpcIpAddr,
         srcPort: u16,
         dstIpAddr: u32,
         dstPort: u16,
@@ -595,7 +615,8 @@ impl RDMAAgent {
                 sockfd: sockfd,
                 dstIpAddr: dstIpAddr,
                 dstPort: dstPort,
-                srcIpAddr: srcIpAddr,
+                srcIpAddr: srcVpcIpAddr.ipAddr,
+                // vpcId: srcVpcIpAddr.vpcId
                 srcPort: srcPort,
             },
             rdmaConn.clone(),
@@ -606,7 +627,7 @@ impl RDMAAgent {
             .lock()
             .insert(rdmaChannel.localId, rdmaChannel.clone());
 
-        let connectReqeust = rdmaChannel.CreateConnectRequest(sockfd);
+        let connectReqeust = rdmaChannel.CreateConnectRequest(sockfd, srcVpcIpAddr.vpcId);
         rdmaConn
             .ctrlChan
             .lock()

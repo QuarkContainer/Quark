@@ -15,6 +15,7 @@
 use super::constants::*;
 use crate::common::*;
 use crate::rdma_ctrlconn::*;
+use crate::rdma_srv::*;
 use crate::RDMA_CTLINFO;
 use crate::RDMA_SRV;
 use svc_client::quark_cm_service_client::QuarkCmServiceClient;
@@ -87,19 +88,33 @@ impl PodInformer {
     fn handle(&mut self, pod_message: &PodMessage) {
         let ip = pod_message.ip;
         let mut pods_map = RDMA_CTLINFO.pods.lock();
-        let mut containerids_map = RDMA_CTLINFO.containerids.lock();
-        let mut ip_to_podId_map = RDMA_CTLINFO.ipToPodIdMappings.lock();
+        let mut podIdToVpcIpAddr_map = RDMA_CTLINFO.podIdToVpcIpAddr.lock();
+        let mut vpcIpAddrTopodId_map = RDMA_CTLINFO.vpcIpAddrToPodIdMappings.lock();
         if pod_message.event_type == EVENT_TYPE_SET {
             let pod = Pod {
                 key: pod_message.key.clone(),
+                vpcId: 1, // TODO: vpcId hard coded for now!
                 ip: ip,
                 node_name: pod_message.node_name.clone(),
                 container_id: pod_message.container_id.clone(),
                 resource_version: pod_message.resource_version,
             };
-            containerids_map.insert(pod.container_id.clone(), pod.ip.clone());
-            ip_to_podId_map.insert(pod.ip, pod.container_id.clone());
-            match RDMA_SRV.ipAddrToAgents.lock().get(&pod.ip) {
+            let vpcIpAddr = VpcIpAddr {
+                vpcId: pod.vpcId,
+                ipAddr: pod.ip,
+            };
+            podIdToVpcIpAddr_map.insert(
+                pod.container_id.clone(),
+                vpcIpAddr,
+            );
+            vpcIpAddrTopodId_map.insert(
+                vpcIpAddr,
+                pod.container_id.clone(),
+            );
+            match RDMA_SRV.vpcIpAddrToAgents.lock().get(&VpcIpAddr {
+                vpcId: 1,
+                ipAddr: pod.ip,
+            }) {
                 Some(_agent) => {}
                 None => {
                     match RDMA_SRV
@@ -108,10 +123,12 @@ impl PodInformer {
                         .get(pod.container_id.as_bytes())
                     {
                         Some(rdmaAgent) => {
-                            RDMA_SRV
-                                .ipAddrToAgents
-                                .lock()
-                                .insert(pod.ip, rdmaAgent.clone());
+                            *rdmaAgent.ipAddr.lock() = vpcIpAddr.ipAddr;
+                            *rdmaAgent.vpcId.lock() = vpcIpAddr.vpcId;
+                            RDMA_SRV.vpcIpAddrToAgents.lock().insert(
+                                vpcIpAddr,
+                                rdmaAgent.clone(),
+                            );
                         }
                         None => {
                             panic!(
@@ -123,18 +140,22 @@ impl PodInformer {
                 }
             }
 
-            pods_map.insert(ip, pod);
+            pods_map.insert(pod.key.clone(), pod);
             if pod_message.resource_version > self.max_resource_version {
                 self.max_resource_version = pod_message.resource_version;
             }
         } else if pod_message.event_type == EVENT_TYPE_DELETE {
-            ip_to_podId_map.remove(&ip);
-            RDMA_SRV.ipAddrToAgents.lock().remove(&ip);
-            if pods_map.contains_key(&ip) {
-                if pods_map[&ip].resource_version < pod_message.resource_version {
-                    let container_id = &pods_map[&ip].container_id;
-                    containerids_map.remove(container_id);
-                    pods_map.remove(&ip);
+            let vpcIpAddr = VpcIpAddr {
+                vpcId: 1,
+                ipAddr: ip,
+            };
+            vpcIpAddrTopodId_map.remove(&vpcIpAddr);
+            RDMA_SRV.vpcIpAddrToAgents.lock().remove(&vpcIpAddr);
+            if pods_map.contains_key(&pod_message.key) {
+                if pods_map[&pod_message.key].resource_version < pod_message.resource_version {
+                    let podId = &pods_map[&pod_message.key].container_id;
+                    podIdToVpcIpAddr_map.remove(podId);
+                    pods_map.remove(&pod_message.key);
                 }
             }
         }
@@ -145,13 +166,13 @@ impl PodInformer {
         println!("Debug: pods_map len:{} {:?}", pods_map.len(), pods_map);
         println!(
             "Debug: containerids_map len:{} {:?}",
-            containerids_map.len(),
-            containerids_map
+            podIdToVpcIpAddr_map.len(),
+            podIdToVpcIpAddr_map
         );
         println!(
             "Debug: ip_to_podId_map len:{} {:?}",
-            ip_to_podId_map.len(),
-            ip_to_podId_map
+            vpcIpAddrTopodId_map.len(),
+            vpcIpAddrTopodId_map
         );
     }
 }

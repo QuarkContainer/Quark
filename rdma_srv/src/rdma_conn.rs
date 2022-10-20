@@ -180,7 +180,12 @@ impl RDMAConn {
             .expect("SetupRCQP fail...");
         for _i in 0..RECV_REQUEST_COUNT {
             self.qps[0]
-                .PostRecv(0, self.localRDMAInfo.raddr, self.localRDMAInfo.controlRKey, 0)
+                .PostRecv(
+                    0,
+                    self.localRDMAInfo.raddr,
+                    self.localRDMAInfo.controlRKey,
+                    0,
+                )
                 .expect("SetupRDMA PostRecv fail");
         }
         *self.addressHandler.lock() = RDMA
@@ -860,12 +865,14 @@ impl RDMAControlChannel {
                     error!("HandleConnectRequest, Egress is not listening");
                 }
             }
-        } else {            
+        } else {
             match RDMA_CTLINFO
-                .ipToPodIdMappings
+                .vpcIpAddrToPodIdMappings
                 .lock()
-                .get(&(connectRequest.dstIpAddr.to_be()))
-            {
+                .get(&VpcIpAddr {
+                    vpcId: connectRequest.vpcId,
+                    ipAddr: connectRequest.dstIpAddr.to_be(),
+                }) {
                 Some(podIdStr) => {
                     let mut podId: [u8; 64] = [0; 64];
                     // if podIdStr.len() != podId.len() {
@@ -1067,6 +1074,7 @@ impl RDMAControlChannel {
         //     .lock()
         //     .writeViaAddr(v.as_ptr() as *const _ as u64, 3);
         let connectRequest = ControlMsgBody::ConnectRequest(ConnectRequest {
+            vpcId: 1,
             remoteChannelId: 123,
             raddr: 456,
             rkey: 789,
@@ -1137,6 +1145,7 @@ pub struct RecvRequestCount {
 
 #[derive(Clone, Debug)]
 pub struct ConnectRequest {
+    pub vpcId: u32,
     pub remoteChannelId: u32,
     pub raddr: u64,
     pub rkey: u32,

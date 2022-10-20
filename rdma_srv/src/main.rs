@@ -720,15 +720,17 @@ fn InitContainer(conn_sock: &UnixSocket, podId: [u8; 64]) {
         .lock()
         .insert(rdmaAgent.podId, rdmaAgent.clone());
     match RDMA_CTLINFO
-        .containerids
+        .podIdToVpcIpAddr
         .lock()
         .get(&String::from_utf8(rdmaAgent.podId.to_vec()).unwrap())
     {
-        Some(ip) => {
+        Some(vpcIpAddr) => {
+            *rdmaAgent.ipAddr.lock() = vpcIpAddr.ipAddr;
+            *rdmaAgent.vpcId.lock() = vpcIpAddr.vpcId;
             RDMA_SRV
-                .ipAddrToAgents
+                .vpcIpAddrToAgents
                 .lock()
-                .insert(*ip, rdmaAgent.clone());
+                .insert(*vpcIpAddr, rdmaAgent.clone());
         }
         None => {}
     }
