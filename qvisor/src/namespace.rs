@@ -43,7 +43,7 @@ impl Util {
     }
 
     pub fn Mount(src: &str, target: &str, fstype: &str, flags: u64, data: &str) -> i32 {
-        error!("mount .... src {}, target {}", src, target);
+        //error!("mount .... src {}, target {}", src, target);
         let src = CString::new(src.clone()).expect("CString::new src failed");
         let target = CString::new(target.clone()).expect("CString::new target failed");
         let fstype = CString::new(fstype.clone()).expect("CString::new fstype failed");

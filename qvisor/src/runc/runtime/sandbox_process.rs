@@ -653,7 +653,7 @@ pub fn MountFrom(m: &Mount, rootfs: &str, flags: MsFlags, data: &str, label: &st
         PathBuf::from(&m.source)
     };
 
-    error!("MountFrom ... src {} target {} rootfs {} dst {}", src.as_path().to_str().unwrap(), &dest, rootfs, &m.destination);
+    //error!("MountFrom ... src {} target {} rootfs {} dst {}", src.as_path().to_str().unwrap(), &dest, rootfs, &m.destination);
     let ret = Util::Mount(
         src.as_path().to_str().unwrap(),
         &dest,
