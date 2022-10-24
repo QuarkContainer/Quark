@@ -24,6 +24,7 @@ pub mod common;
 pub mod linux_def;
 pub mod pagetable;
 pub mod range;
+pub mod idallocator;
 //pub mod Process;
 pub mod auth;
 pub mod bytestream;
