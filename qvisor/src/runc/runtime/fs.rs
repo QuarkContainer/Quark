@@ -1,8 +1,26 @@
+// Copyright (c) 2021 Quark Container Authors / 2018 The gVisor Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+use nix::mount::MsFlags;
+use std::fs::create_dir_all;
+
+use super::super::container::mounts::*;
 use super::super::super::namespace::Util;
-use super::super::super::qlib::common::Result;
+use super::super::super::qlib::common::*;
 use super::super::super::qlib::path::{IsAbs, Join};
 use super::super::oci::Spec;
-use std::fs::create_dir_all;
+use super::sandbox_process::*;
 
 const DEFAULT_QUARK_SANDBOX_ROOT_PATH: &str = "/var/lib/quark/";
 
@@ -66,6 +84,37 @@ impl FsImageMounter {
                 ret
             );
         }
+
+        let linux = spec.linux.as_ref().unwrap();
+        for m in &spec.mounts {
+            // TODO: check for nasty destinations involving symlinks and illegal
+            //       locations.
+            // NOTE: this strictly is less permissive than runc, which allows ..
+            //       as long as the resulting path remains in the rootfs. There
+            //       is no good reason to allow this so we just forbid it
+            if !m.destination.starts_with('/') || m.destination.contains("..") {
+                let msg = format!("invalid mount destination: {}", m.destination);
+                return Err(Error::Common(msg));
+            }
+            let (flags, data) = parse_mount(m);
+            if m.typ == "cgroup" {
+                //mount_cgroups(m, rootfs, flags, &data, &linux.mount_label, cpath)?;
+                // won't mount cgroup
+                continue;
+            } else if m.destination == "/dev" {
+                // dev can't be read only yet because we have to mount devices
+                MountFrom(
+                    m,
+                    &containerFsRootTarget,
+                    flags & !MsFlags::MS_RDONLY,
+                    &data,
+                    &linux.mount_label,
+                )?;
+            } else {
+                MountFrom(m, &containerFsRootTarget, flags, &data, &linux.mount_label)?;
+            }
+        }
+        
         return Ok(());
     }
 }

@@ -609,7 +609,7 @@ impl SandboxProcess {
     }
 }
 
-fn MountFrom(m: &Mount, rootfs: &str, flags: MsFlags, data: &str, label: &str) -> Result<()> {
+pub fn MountFrom(m: &Mount, rootfs: &str, flags: MsFlags, data: &str, label: &str) -> Result<()> {
     let d;
     if !label.is_empty() && m.typ != "proc" && m.typ != "sysfs" {
         if data.is_empty() {
@@ -653,6 +653,7 @@ fn MountFrom(m: &Mount, rootfs: &str, flags: MsFlags, data: &str, label: &str) -
         PathBuf::from(&m.source)
     };
 
+    error!("MountFrom ... src {} target {} rootfs {} dst {}", src.as_path().to_str().unwrap(), &dest, rootfs, &m.destination);
     let ret = Util::Mount(
         src.as_path().to_str().unwrap(),
         &dest,
