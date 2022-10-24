@@ -234,3 +234,7 @@ impl BitmapAllocatorWrapper {
         self.addr.store(MemoryDef::HEAP_OFFSET, Ordering::SeqCst);
     }
 }
+
+pub fn ReapSwapIn() {
+    HostSpace::SwapIn();
+}
