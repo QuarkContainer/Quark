@@ -9,6 +9,7 @@ use super::qlib::linux_def::*;
 use super::qlib::rdma_share::*;
 use super::qlib::rdma_svc_cli::*;
 use super::qlib::unix_socket::UnixSocket;
+use super::qlib::idallocator::IdAllocator;
 use super::vmspace::VMSpace;
 
 impl Drop for RDMASvcClient {
@@ -113,6 +114,11 @@ impl RDMASvcClient {
                 podId,
                 udpSentBufferAllocator: Mutex::new(udpBufferAllocator),
                 portToFdInfoMappings: Mutex::new(BTreeMap::new()),
+
+                //refer to: https://www.kernel.org/doc/html/latest//networking/ip-sysctl.html#ip-variables
+                //"The default values are 32768 and 60999 respectively."
+                tcpPortAllocator: Mutex::new(IdAllocator::New(32768, 28232)), // 60999 - 32768 + 1 = 28231 + 1 = 28232
+                udpPortAllocator: Mutex::new(IdAllocator::New(32768, 28232)), // 60999 - 32768 + 1 = 28231 + 1 = 28232
             }),
         }
     }
