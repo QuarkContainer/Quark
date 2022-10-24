@@ -105,13 +105,13 @@ impl FsImageMounter {
                 // dev can't be read only yet because we have to mount devices
                 MountFrom(
                     m,
-                    &self.sandboxRoot(),
+                    &containerFsRootTarget,
                     flags & !MsFlags::MS_RDONLY,
                     &data,
                     &linux.mount_label,
                 )?;
             } else {
-                MountFrom(m, &self.sandboxRoot(), flags, &data, &linux.mount_label)?;
+                MountFrom(m, &containerFsRootTarget, flags, &data, &linux.mount_label)?;
             }
         }
         
