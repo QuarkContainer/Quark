@@ -580,6 +580,7 @@ impl VMSpace {
                 SockInfo::RDMADataSocket(dataSock) => {
                     GlobalRDMASvcCli().channelToSocketMappings.lock().remove(&dataSock.channelId);
                     GlobalRDMASvcCli().rdmaIdToSocketMappings.lock().remove(&dataSock.rdmaId);
+                    GlobalRDMASvcCli().tcpPortAllocator.lock().Free(dataSock.localPort as u64);
                     let _res = GlobalRDMASvcCli().close(dataSock.channelId);
                 }
                 SockInfo::RDMAServerSocket(serverSock) => {
@@ -588,6 +589,7 @@ impl VMSpace {
                 }
                 SockInfo::RDMAUDPSocket(sock) => {
                     GlobalRDMASvcCli().portToFdInfoMappings.lock().remove(&sock.port);
+                    GlobalRDMASvcCli().udpPortAllocator.lock().Free(sock.port as u64);
                 }
                 _ => {
                 }

@@ -914,8 +914,9 @@ impl SockOperations for SocketOperations {
                     // error!("SocketOperations::Connect 0, fd: {}", self.fd);
                     let ipAddr = u32::from_be_bytes(ipv4.Addr);
                     let port = ipv4.Port.to_le();
-                    //TODO: get local ip and port
-                    let srcPort = 16866u16.to_be();
+
+                    // TODO: handle port used up!!
+                    let srcPort = (GlobalRDMASvcCli().tcpPortAllocator.lock().AllocFromCurrent().unwrap() as u16).to_be();
                     let rdmaId = GlobalRDMASvcCli()
                         .nextRDMAId
                         .fetch_add(1, Ordering::Release);
@@ -2056,7 +2057,8 @@ impl SockOperations for SocketOperations {
             match sockInfo {
                 SockInfo::RDMAUDPSocket(sockInfo) => {
                     if sockInfo.port == 0 {
-                        port = 16868u16.to_be(); // TODO: Assign an ephemeral port
+                        // TODO: handle port used up!!
+                        port = (GlobalRDMASvcCli().udpPortAllocator.lock().AllocFromCurrent().unwrap() as u16).to_be();
                         *GlobalIOMgr()
                             .GetByHost(self.fd)
                             .unwrap()

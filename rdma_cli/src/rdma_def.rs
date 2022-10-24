@@ -5,6 +5,7 @@ use spin::Mutex;
 use std::sync::atomic::AtomicU32;
 use std::{mem, ptr};
 
+use super::qlib::idallocator::IdAllocator;
 use super::qlib::rdma_share::*;
 use super::qlib::rdma_svc_cli::*;
 use super::qlib::unix_socket::UnixSocket;
@@ -113,6 +114,8 @@ impl RDMASvcClient {
                 podId,
                 udpSentBufferAllocator: Mutex::new(udpBufferAllocator),
                 portToFdInfoMappings: Mutex::new(BTreeMap::new()),
+                tcpPortAllocator: Mutex::new(IdAllocator::default()),
+                udpPortAllocator: Mutex::new(IdAllocator::default()),
             }),
         }
     }

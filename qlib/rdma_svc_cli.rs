@@ -15,6 +15,7 @@ use super::rdma_share::*;
 use super::rdmasocket::*;
 use super::socket_buf::*;
 use super::unix_socket::UnixSocket;
+use super::idallocator::IdAllocator;
 use crate::qlib::kernel::kernel::waiter::Queue;
 
 pub struct RDMASvcCliIntern {
@@ -59,6 +60,9 @@ pub struct RDMASvcCliIntern {
     pub udpSentBufferAllocator: Mutex<UDPBufferAllocator>,
 
     pub portToFdInfoMappings: Mutex<BTreeMap<u16, FdInfo>>,
+
+    pub tcpPortAllocator: Mutex<IdAllocator>,
+    pub udpPortAllocator: Mutex<IdAllocator>,
 }
 
 impl Deref for RDMASvcClient {
@@ -93,6 +97,8 @@ impl Default for RDMASvcClient {
                 podId: [0; 64],
                 udpSentBufferAllocator: Mutex::new(UDPBufferAllocator::default()),
                 portToFdInfoMappings: Mutex::new(BTreeMap::new()),
+                tcpPortAllocator: Mutex::new(IdAllocator::default()),
+                udpPortAllocator: Mutex::new(IdAllocator::default()),
             }),
         }
     }
