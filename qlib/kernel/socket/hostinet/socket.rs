@@ -2280,7 +2280,15 @@ impl Provider for SocketProvider {
         // error!("SocketProvider::Socket, fd: {}", fd);
 
         let file;
-        if SHARESPACE.config.read().EnableRDMA {
+        let tcpRDMA = SHARESPACE.config.read().EnableRDMA
+            && (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
+            //&& family == AFType::AF_INET
+            && (stype == SockType::SOCK_STREAM);
+        let udpRDMA = SHARESPACE.config.read().EnableRDMA
+            // && (family == AFType::AF_INET || family == AFType::AF_INET6)
+            && self.family == AFType::AF_INET
+            && (stype == SockType::SOCK_DGRAM);
+        if tcpRDMA || udpRDMA {
             let socketType = SocketBufType::TCPInit;
 
             file = newSocketFile(
