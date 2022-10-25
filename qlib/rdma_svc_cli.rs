@@ -7,6 +7,7 @@ use spin::Mutex;
 
 use super::common::*;
 use super::fileinfo::*;
+use super::idallocator::IdAllocator;
 use super::kernel::tcpip::tcpip::*;
 use super::kernel::GlobalIOMgr;
 use super::kernel::GlobalRDMASvcCli;
@@ -15,7 +16,6 @@ use super::rdma_share::*;
 use super::rdmasocket::*;
 use super::socket_buf::*;
 use super::unix_socket::UnixSocket;
-use super::idallocator::IdAllocator;
 use crate::qlib::kernel::kernel::waiter::Queue;
 
 pub struct RDMASvcCliIntern {
@@ -559,18 +559,14 @@ impl RDMASvcClient {
                                 }
                             };
 
-                            let fdInfo = GlobalIOMgr().GetByHost(sockFd);
-                            if fdInfo.is_some() {
-                                let sockInfo = fdInfo.unwrap().lock().sockInfo.lock().clone();
+                            let fdInfoOpt = GlobalIOMgr().GetByHost(sockFd);
+                            if fdInfoOpt.is_some() {
+                                let fdInfo = fdInfoOpt.unwrap().clone();
+                                let sockInfo = fdInfo.lock().sockInfo.lock().clone();
                                 match sockInfo {
                                     SockInfo::RDMADataSocket(dataSock) => {
                                         dataSock.socketBuf.SetRClosed();
-                                        let waitInfo = GlobalIOMgr()
-                                            .GetByHost(sockFd)
-                                            .unwrap()
-                                            .lock()
-                                            .waitInfo
-                                            .clone();
+                                        let waitInfo = fdInfo.lock().waitInfo.clone();
                                         waitInfo.Notify(EVENT_IN);
                                     }
                                     _ => {
@@ -605,7 +601,9 @@ impl RDMASvcClient {
                                     let sockInfo = fdInfo.lock().sockInfo.lock().clone();
                                     match sockInfo {
                                         SockInfo::RDMAUDPSocket(udpSock) => {
-                                            udpSock.recvQueue.EnqSocket(response.udpBuffIdx, Queue::default());
+                                            udpSock
+                                                .recvQueue
+                                                .EnqSocket(response.udpBuffIdx, Queue::default());
                                         }
                                         _ => {
                                             panic!("RDMARespMsg::RDMARecvUDPPacket, sockInfo: {:?} is not expected for UDP over RDMA", sockInfo);
