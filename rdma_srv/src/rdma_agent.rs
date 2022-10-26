@@ -75,9 +75,9 @@ pub struct RDMAAgentIntern {
 }
 
 impl Drop for RDMAAgentIntern {
-    fn drop(&mut self) {
-        self.memoryRegions.lock().clear();
+    fn drop(&mut self) {        
         unsafe {
+            self.memoryRegions.lock().clear();
             if self.sockfd != 0 {
                 libc::close(self.sockfd);
             }

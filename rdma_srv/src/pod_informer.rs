@@ -14,6 +14,8 @@
 
 use super::constants::*;
 use crate::common::*;
+use crate::rdma_agent;
+use crate::rdma_agent::RDMAAgent;
 use crate::rdma_ctrlconn::*;
 use crate::rdma_srv::*;
 use crate::RDMA_CTLINFO;
@@ -111,6 +113,8 @@ impl PodInformer {
                 vpcIpAddr,
                 pod.container_id.clone(),
             );
+            let mut needInsert = false;
+            let mut agent = RDMAAgent::NewDummyAgent();
             match RDMA_SRV.vpcIpAddrToAgents.lock().get(&VpcIpAddr {
                 vpcId: 1,
                 ipAddr: pod.ip,
@@ -125,19 +129,18 @@ impl PodInformer {
                         Some(rdmaAgent) => {
                             *rdmaAgent.ipAddr.lock() = vpcIpAddr.ipAddr;
                             *rdmaAgent.vpcId.lock() = vpcIpAddr.vpcId;
-                            RDMA_SRV.vpcIpAddrToAgents.lock().insert(
-                                vpcIpAddr,
-                                rdmaAgent.clone(),
-                            );
+                            needInsert = true;
+                            agent = rdmaAgent.clone();
                         }
-                        None => {
-                            panic!(
-                                "Could not find agent from podId: {:?}",
-                                pod.container_id.as_bytes()
-                            );
-                        }
+                        None => {}
                     }
                 }
+            }
+            if needInsert {
+                RDMA_SRV.vpcIpAddrToAgents.lock().insert(
+                    vpcIpAddr,
+                    agent,
+                );
             }
 
             pods_map.insert(pod.key.clone(), pod);
