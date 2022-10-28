@@ -183,6 +183,9 @@ pub struct Sandbox {
 
     #[serde(skip_serializing, skip_deserializing)]
     pub console: Console,
+
+    #[serde(skip_serializing, skip_deserializing)]
+    pub kuasar: bool,
 }
 
 impl Sandbox {

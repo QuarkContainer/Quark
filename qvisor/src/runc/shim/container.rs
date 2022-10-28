@@ -47,7 +47,11 @@ pub struct ContainerFactory {}
 
 impl ContainerFactory {
     pub fn Create(ns: &str, req: &CreateTaskRequest, sandbox: &Sandbox) -> Result<CommonContainer> {
-        let bundle = req.bundle.as_str();
+        let mut bundle = req.bundle.clone();
+        if sandbox.kuasar {
+            bundle = format!("/{}", req.id);
+        }
+
         let mut opts = Options::new();
         if let Some(any) = req.options.as_ref() {
             let mut input = CodedInputStream::from_bytes(any.value.as_ref());
@@ -58,14 +62,14 @@ impl ContainerFactory {
             debug!("create options: {:?}", &opts);
         }
         let runtime = opts.binary_name.as_str();
-        write_options(bundle, &opts)
+        write_options(&bundle, &opts)
             .map_err(|e| Error::Common(format!("ContainerFactory {:?}", e)))?;
-        write_runtime(bundle, runtime)
+        write_runtime(&bundle, runtime)
             .map_err(|e| Error::Common(format!("ContainerFactory {:?}", e)))?;
 
         let rootfs_vec = req.get_rootfs().to_vec();
         let rootfs = if !rootfs_vec.is_empty() {
-            let tmp_rootfs = Path::new(bundle).join("rootfs");
+            let tmp_rootfs = Path::new(&bundle).join("rootfs");
             if !tmp_rootfs.as_path().exists() {
                 mkdir(tmp_rootfs.as_path(), Mode::from_bits(0o711).unwrap())
                     .map_err(|e| Error::Common(format!("ttrpc error is {:?}", e)))?;
@@ -86,7 +90,7 @@ impl ContainerFactory {
         }
 
         let root = Path::new(opts.root.as_str()).join(ns);
-        let log_buf = Path::new(bundle).join("log.json");
+        let log_buf = Path::new(&bundle).join("log.json");
 
         let id = req.get_id();
         let stdio = ContainerStdio {
@@ -96,9 +100,9 @@ impl ContainerFactory {
             terminal: req.get_terminal(),
         };
 
-        let mut init = InitProcess::New(id, bundle, stdio);
+        let mut init = InitProcess::New(id, &bundle, stdio);
         init.rootfs = rootfs.to_string();
-        let work_dir = Path::new(bundle).join("work");
+        let work_dir = Path::new(&bundle).join("work");
         let work_dir = work_dir
             .as_path()
             .to_str()

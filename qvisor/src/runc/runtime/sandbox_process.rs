@@ -31,14 +31,14 @@ use kvm_ioctls::Kvm;
 use libc;
 use nix::fcntl::*;
 use nix::mount::MsFlags;
-use nix::sys::stat::Mode;
+use nix::sys::stat::{Mode, SFlag};
 use nix::unistd::getcwd;
 use procfs;
 use serde_json;
 use simplelog::*;
 
-use crate::runc::shim::shim_task::ShimTask;
 use crate::runc::shim::shim_task::SANDBOX;
+use crate::runc::shim::shim_task::ShimTask;
 
 use super::console::*;
 use super::loader::*;
@@ -199,8 +199,7 @@ impl SandboxProcess {
             Ok(mut vm) => {
                 if taskSockFd > 0 {
                     if self.pivot {
-                        debug!("Pivot root {}", self.bundleDir);
-                        crate::VMS.lock().PivotRoot(&self.bundleDir);
+                        crate::VMS.lock().PivotRoot(&self.SandboxRootDir);
                     }
                     self.StartTaskService(taskSockFd as RawFd).unwrap();
                 }
@@ -238,6 +237,18 @@ impl SandboxProcess {
         );
         if ret < 0 {
             panic!("InitRootfs: mount sandboxRootDir fails, error is {}", ret);
+        }
+        if self.TaskSocket.is_some() {
+            let devPath = Join(&self.SandboxRootDir, "dev");
+            create_dir_all(&devPath)
+                .map_err(|e| Error::IOError(format!("failed to create dir {}, {}", devPath, e)))?;
+            // create null device for the null io
+            let devNullPath = Join(&devPath, "null");
+            let ret = Util::MkNod(&devNullPath, SFlag::S_IFCHR, 1, 3, 0666);
+            if ret < 0 {
+                panic!("InitRootfs: failed to mknod of null device {}", ret);
+            }
+            return Ok(());
         }
         let rootContainerPath = Join(&self.SandboxRootDir, &self.containerId);
         match create_dir_all(&rootContainerPath) {
@@ -612,6 +623,7 @@ impl SandboxProcess {
             let mut sandbox = SANDBOX.lock().unwrap();
             sandbox.ID = self.containerId.clone();
             sandbox.Pid = std::process::id() as i32;
+            sandbox.kuasar = true;
         }
         self.MakeSandboxRootDirectory()?;
         self.EnableNamespace()?;

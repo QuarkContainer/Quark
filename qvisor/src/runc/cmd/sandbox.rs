@@ -86,6 +86,7 @@ impl SandboxCmd {
         // TODO get pivot_root config from runtime options
         let mut process = SandboxProcess::New(gCfg, RunAction::Create, &self.id, &bundleDir, true)?;
         process.TaskSocket = Some(self.task_socket.clone());
+        process.SandboxRootDir = bundleDir;
         let pid = process.Execv1(&ContainerIO::None)?;
         let pid_file_fd = Open(&self.pid_file, OFlag::O_CREAT|OFlag::O_WRONLY, Mode::empty())?;
         Write(pid_file_fd, pid.to_string().as_bytes())?;
