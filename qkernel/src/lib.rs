@@ -34,27 +34,86 @@
 #![recursion_limit = "256"]
 
 #[macro_use]
-extern crate serde_derive;
-extern crate cache_padded;
-
-#[macro_use]
 extern crate alloc;
-
-#[macro_use]
-extern crate scopeguard;
-
 extern crate bit_field;
-
+#[macro_use]
+extern crate bitflags;
+extern crate cache_padded;
+extern crate crossbeam_queue;
+extern crate enum_dispatch;
+extern crate hashbrown;
 #[macro_use]
 extern crate lazy_static;
+#[macro_use]
+extern crate scopeguard;
+#[macro_use]
+extern crate serde_derive;
 extern crate spin;
 extern crate x86_64;
 extern crate xmas_elf;
-#[macro_use]
-extern crate bitflags;
-extern crate hashbrown;
-extern crate crossbeam_queue;
-extern crate enum_dispatch;
+
+use core::{mem, ptr};
+use core::panic::PanicInfo;
+use core::sync::atomic::{AtomicI32, AtomicUsize, Ordering};
+
+use spin::mutex::Mutex;
+
+use qlib::mutex::*;
+use taskMgr::{CreateTask, IOWait, WaitFn};
+use vcpu::CPU_LOCAL;
+
+use crate::qlib::kernel::GlobalIOMgr;
+
+//use self::qlib::buddyallocator::*;
+use self::asm::*;
+use self::boot::controller::*;
+use self::boot::loader::*;
+use self::interrupt::virtualization_handler;
+use self::kernel::timer::*;
+use self::kernel_def::*;
+use self::loader::vdso::*;
+//use linked_list_allocator::LockedHeap;
+//use buddy_system_allocator::LockedHeap;
+use self::qlib::{ShareSpaceRef, SysCallID};
+use self::qlib::common::*;
+use self::qlib::config::*;
+use self::qlib::control_msg::*;
+use self::qlib::cpuid::*;
+use self::qlib::kernel::*;
+use self::qlib::kernel::arch;
+use self::qlib::kernel::asm;
+use self::qlib::kernel::boot;
+use self::qlib::kernel::fd;
+use self::qlib::kernel::fs;
+use self::qlib::kernel::kernel;
+use self::qlib::kernel::Kernel;
+use self::qlib::kernel::loader;
+use self::qlib::kernel::memmgr;
+use self::qlib::kernel::perflog;
+use self::qlib::kernel::quring;
+//use self::vcpu::*;
+use self::qlib::kernel::Scale;
+use self::qlib::kernel::SignalDef;
+use self::qlib::kernel::socket;
+use self::qlib::kernel::task;
+use self::qlib::kernel::taskMgr;
+use self::qlib::kernel::threadmgr;
+use self::qlib::kernel::TSC;
+use self::qlib::kernel::util;
+use self::qlib::kernel::vcpu;
+use self::qlib::kernel::vcpu::*;
+use self::qlib::kernel::VcpuFreqInit;
+use self::qlib::kernel::version;
+use self::qlib::linux::time::*;
+use self::qlib::linux_def::MemoryDef;
+use self::qlib::loader::*;
+use self::qlib::mem::list_allocator::*;
+use self::qlib::pagetable::*;
+use self::qlib::vcpu_mgr::*;
+use self::quring::*;
+use self::syscalls::syscalls::*;
+use self::task::*;
+use self::threadmgr::task_sched::*;
 
 #[macro_use]
 mod print;
@@ -70,67 +129,6 @@ pub mod kernel_def;
 pub mod rdma_def;
 mod syscalls;
 
-use self::kernel_def::*;
-use self::interrupt::virtualization_handler;
-use self::qlib::kernel::arch;
-use self::qlib::kernel::asm;
-use self::qlib::kernel::boot;
-use self::qlib::kernel::fd;
-use self::qlib::kernel::fs;
-use self::qlib::kernel::kernel;
-use self::qlib::kernel::loader;
-use self::qlib::kernel::memmgr;
-use self::qlib::kernel::perflog;
-use self::qlib::kernel::quring;
-use self::qlib::kernel::socket;
-use self::qlib::kernel::task;
-use self::qlib::kernel::taskMgr;
-use self::qlib::kernel::threadmgr;
-use self::qlib::kernel::util;
-use self::qlib::kernel::vcpu;
-use self::qlib::kernel::version;
-use self::qlib::kernel::Kernel;
-use self::qlib::kernel::SignalDef;
-use self::qlib::kernel::TSC;
-use crate::qlib::kernel::GlobalIOMgr;
-
-use self::qlib::kernel::vcpu::*;
-//use qlib::kernel::Kernel::HostSpace;
-use vcpu::CPU_LOCAL;
-
-use core::panic::PanicInfo;
-use core::sync::atomic::{AtomicI32, AtomicUsize, Ordering};
-use core::{mem, ptr};
-use qlib::mutex::*;
-use spin::mutex::Mutex;
-
-//use linked_list_allocator::LockedHeap;
-//use buddy_system_allocator::LockedHeap;
-use self::qlib::{ShareSpaceRef, SysCallID};
-use taskMgr::{CreateTask, IOWait, WaitFn};
-//use self::qlib::buddyallocator::*;
-use self::asm::*;
-use self::boot::controller::*;
-use self::boot::loader::*;
-use self::kernel::timer::*;
-use self::loader::vdso::*;
-use self::qlib::common::*;
-use self::qlib::config::*;
-use self::qlib::control_msg::*;
-use self::qlib::cpuid::*;
-use self::qlib::linux::time::*;
-use self::qlib::linux_def::MemoryDef;
-use self::qlib::loader::*;
-use self::qlib::mem::list_allocator::*;
-use self::qlib::pagetable::*;
-use self::qlib::vcpu_mgr::*;
-use self::syscalls::syscalls::*;
-use self::task::*;
-use self::threadmgr::task_sched::*;
-//use self::vcpu::*;
-use self::qlib::kernel::Scale;
-use self::qlib::kernel::VcpuFreqInit;
-use self::quring::*;
 //use self::heap::QAllocator;
 //use qlib::mem::bitmap_allocator::BitmapAllocatorWrapper;
 pub const HEAP_START: usize = 0x70_2000_0000;
@@ -162,8 +160,6 @@ lazy_static! {
     let class = 6;
     return ALLOCATOR.Print(class);
 }*/
-
-use self::qlib::kernel::*;
 
 pub fn SingletonInit() {
     unsafe {
@@ -293,7 +289,7 @@ pub extern "C" fn syscall_handler(
             nr = SysCallID::UnknowSyscall as _;
             SysCallID::UnknowSyscall
         };
-    
+
         if llevel == LogLevel::Complex {
             tid = currTask.Thread().lock().id;
             pid = currTask.Thread().ThreadGroup().ID();
@@ -308,7 +304,7 @@ pub extern "C" fn syscall_handler(
             );
         }
     }
-    
+
     let currTask = task::Task::Current();
     //currTask.DoStop();
 
@@ -324,7 +320,7 @@ pub extern "C" fn syscall_handler(
 
     currTask.AccountTaskEnter(SchedState::RunningApp);
     currTask.RestoreFp();
-    
+
     if debugLevel > DebugLevel::Error {
         let gap = if self::SHARESPACE.config.read().PerfDebug {
             TSC.Rdtsc() - startTime
@@ -504,6 +500,7 @@ pub extern "C" fn rust_main(
 
     if id == 1 {
         error!("heap start is {:x}", heapStart);
+        self::Init();
 
         if autoStart {
             CreateTask(StartRootContainer as u64, ptr::null(), false);
@@ -544,11 +541,10 @@ pub fn StartRootProcess() {
 }
 
 fn StartRootContainer(_para: *const u8) -> ! {
-    self::Init();
     info!("StartRootContainer ....");
     let task = Task::Current();
     let mut process = Process::default();
-    Kernel::HostSpace::LoadProcessKernel(&mut process as * mut _ as u64) as usize;
+    Kernel::HostSpace::LoadProcessKernel(&mut process as *mut _ as u64) as usize;
 
     let (_tid, entry, userStackAddr, kernelStackAddr) = {
         let mut processArgs = LOADER.Lock(task).unwrap().Init(process);
