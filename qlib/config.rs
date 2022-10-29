@@ -40,6 +40,8 @@ pub struct Config {
     pub DisableCgroup: bool,
     pub CopyDataWithPf: bool,
     pub TlbShootdownWait: bool,
+    #[serde(default)]
+    pub Sandboxed: bool,
 }
 
 impl Config {
@@ -83,6 +85,7 @@ impl Default for Config {
             DisableCgroup: true,
             CopyDataWithPf: false,
             TlbShootdownWait: false,
+            Sandboxed: false
         };
     }
 }

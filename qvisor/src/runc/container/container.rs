@@ -924,7 +924,7 @@ impl Container {
                 &self.BundleDir,
             ) {
                 error!("Failed to start subcontainer, error : {:?}", &e);
-                panic!("{:?}", &e);
+                return Err(e);
             }
         }
 

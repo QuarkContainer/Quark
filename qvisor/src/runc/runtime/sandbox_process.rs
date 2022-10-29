@@ -194,6 +194,9 @@ impl SandboxProcess {
         args.Rootfs = Join(QUARK_SANDBOX_ROOT_PATH, id.as_str());
         args.ControlSock = controlSock;
         args.RDMASvcCliSock = rdmaSvcCliSock;
+        if taskSockFd > 0 {
+            args.Pivot = false;
+        }
 
         let exitStatus = match VirtualMachine::Init(args) {
             Ok(mut vm) => {

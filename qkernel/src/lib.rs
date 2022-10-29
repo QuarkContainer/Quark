@@ -445,6 +445,12 @@ pub fn InitTsc() {
     VcpuFreqInit();
 }
 
+fn InitLoader() {
+    let mut process = Process::default();
+    Kernel::HostSpace::LoadProcessKernel(&mut process as *mut _ as u64) as usize;
+    LOADER.InitKernel(process).unwrap();
+}
+
 #[no_mangle]
 pub extern "C" fn rust_main(
     heapStart: u64,
@@ -533,6 +539,9 @@ fn StartSubContainerProcess(elfEntry: u64, userStackAddr: u64, kernelStackAddr: 
 }
 
 fn ControllerProcess(_para: *const u8) {
+    if SHARESPACE.config.read().Sandboxed {
+        self::InitLoader();
+    }
     ControllerProcessHandler().expect("ControllerProcess crash");
 }
 
