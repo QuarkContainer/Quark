@@ -171,10 +171,10 @@ impl RDMAChannelIntern {
                     self.ReleaseChannelResource();
                 }
             } else {
-                error!(
-                    "TODO: status: {:?} is not handled after finSent",
-                    *self.status.lock()
-                );
+                // error!(
+                //     "TODO: status: {:?} is not handled after finSent",
+                //     *self.status.lock()
+                // );
             }
 
             // return;
