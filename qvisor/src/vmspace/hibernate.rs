@@ -99,7 +99,7 @@ impl HiberMgr {
 
         let _cnt = SHARE_SPACE.pageMgr.pagepool.DontneedFreePages()?;
 
-        //crate::PMA_KEEPER.DontNeed()?;
+        crate::PMA_KEEPER.DontNeed()?;
 
         /*let allocated1 = GLOBAL_ALLOCATOR.Allocator().heap.lock().allocated;
         GLOBAL_ALLOCATOR.Allocator().FreeAll();
