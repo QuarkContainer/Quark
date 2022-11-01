@@ -28,7 +28,7 @@ use super::oci::LinuxDevice;
 use super::oci::LinuxDeviceType;
 
 lazy_static! {
-    static ref DEFAULT_DEVICES: Vec<LinuxDevice> = {
+    pub static ref DEFAULT_DEVICES: Vec<LinuxDevice> = {
         let mut v = Vec::new();
         v.push(LinuxDevice {
             path: "/dev/null".to_string(),

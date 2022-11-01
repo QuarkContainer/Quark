@@ -30,9 +30,9 @@ use containerd_shim::protos::ttrpc::Server;
 use kvm_ioctls::Kvm;
 use libc;
 use nix::fcntl::*;
-use nix::mount::MsFlags;
-use nix::sys::stat::{Mode, SFlag};
-use nix::unistd::getcwd;
+use nix::mount::{MsFlags, mount};
+use nix::sys::stat::{Mode, umask};
+use nix::unistd::{getcwd, chdir};
 use procfs;
 use serde_json;
 use simplelog::*;
@@ -44,6 +44,7 @@ use super::console::*;
 use super::loader::*;
 use super::signal_handle::*;
 use super::super::cmd::config::*;
+use super::super::container::*;
 use super::super::container::container::*;
 use super::super::container::mounts::*;
 use super::super::container::nix_ext::*;
@@ -242,15 +243,38 @@ impl SandboxProcess {
             panic!("InitRootfs: mount sandboxRootDir fails, error is {}", ret);
         }
         if self.TaskSocket.is_some() {
+            // create /dev for sandbox process to use
             let devPath = Join(&self.SandboxRootDir, "dev");
             create_dir_all(&devPath)
                 .map_err(|e| Error::IOError(format!("failed to create dir {}, {}", devPath, e)))?;
-            // create null device for the null io
-            let devNullPath = Join(&devPath, "null");
-            let ret = Util::MkNod(&devNullPath, SFlag::S_IFCHR, 1, 3, 0666);
-            if ret < 0 {
-                panic!("InitRootfs: failed to mknod of null device {}", ret);
+            let pts_path = Join(&devPath, "pts");
+            create_dir_all(&pts_path)
+                .map_err(|e| Error::IOError(format!("failed to create dir {}, {}", pts_path, e)))?;
+            mount(
+                None::<&str>,
+                &*pts_path,
+                Some("devpts"),
+                MsFlags::empty(),
+                None::<&str>,
+            )
+                .map_err(|e| Error::IOError(format!("io error is {:?}", e)))?;
+            let olddir = getcwd().map_err(|e| Error::IOError(format!("failed to get cwd {:?}", e)))?;
+            chdir(&*self.SandboxRootDir).map_err(|e| Error::IOError(format!("failed to chdir {:?}", e)))?;
+            let old_mask = umask(Mode::from_bits_truncate(0o000));
+            for dev in DEFAULT_DEVICES.iter() {
+                mknod_dev(dev)?;
             }
+            mknod_dev(&LinuxDevice{
+                path: "/dev/ptmx".to_string(),
+                typ: LinuxDeviceType::c,
+                major: 5,
+                minor: 2,
+                file_mode: Some(0o066),
+                uid: None,
+                gid: None
+            })?;
+            umask(old_mask);
+            chdir(&olddir).map_err(|e| Error::IOError(format!("failed to chdir {:?}", e)))?;
             return Ok(());
         }
         let rootContainerPath = Join(&self.SandboxRootDir, &self.containerId);
@@ -612,13 +636,14 @@ impl SandboxProcess {
             SetRLimit(rlimit.typ as u32, rlimit.soft, rlimit.hard)?;
         }
 
-        let addr = ControlSocketAddr(&self.containerId);
-        let controlSock = USocket::CreateServerSocket(&addr).expect("can't create control sock");
         let mut rdmaSvcCliSock = 0;
         if QUARK_CONFIG.lock().EnableRDMA {
             rdmaSvcCliSock = unix_socket::UnixSocket::NewClient("/var/quarkrdma/rdma_srv_socket").unwrap();
         }
+
+        let addr = ControlSocketAddr(&self.containerId);
         let mut taskSockFd = 0;
+        let mut controlSock = 0;
         if let Some(task_socket) = &self.TaskSocket {
             // TODO add sandbox cgroup support
             taskSockFd = USocket::CreateServerSocket(&task_socket).expect("can't create control sock");
@@ -627,10 +652,16 @@ impl SandboxProcess {
             sandbox.ID = self.containerId.clone();
             sandbox.Pid = std::process::id() as i32;
             sandbox.kuasar = true;
+        } else {
+            // TODO control socket may not be abstract
+            controlSock = USocket::CreateServerSocket(&addr).expect("can't create control sock");
         }
         self.MakeSandboxRootDirectory()?;
         self.EnableNamespace()?;
-
+        if taskSockFd != 0 {
+            // It seems control socket should be created in the same net ns
+            controlSock = USocket::CreateServerSocket(&addr).expect("can't create control sock");
+        }
         self.Run(controlSock, rdmaSvcCliSock, taskSockFd);
         panic!("Child: should never reach here");
     }

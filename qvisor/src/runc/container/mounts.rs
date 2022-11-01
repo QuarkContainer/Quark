@@ -440,7 +440,7 @@ fn to_sflag(t: LinuxDeviceType) -> Result<SFlag> {
     })
 }
 
-fn mknod_dev(dev: &LinuxDevice) -> Result<()> {
+pub fn mknod_dev(dev: &LinuxDevice) -> Result<()> {
     let f = to_sflag(dev.typ)?;
     debug!("mknoding {}", &dev.path);
     mknod(

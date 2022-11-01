@@ -18,7 +18,6 @@ use std::io::prelude::*;
 use std::string::String;
 
 use libc::*;
-use nix::sys::stat::SFlag;
 
 use super::qlib::SysCallID;
 use super::vmspace::syscall::*;
@@ -42,18 +41,6 @@ impl Util {
             .open(&filename)
             .expect("Open file fail");
         file.write_all(str.as_bytes()).expect("write all fail");
-    }
-
-    pub fn MkNod(path: &str, r#type: SFlag, major: u64, minor: u64, mode: u32) -> i32 {
-        let path = CString::new(path.clone()).expect("CString::new src failed");
-        let dev = (minor & 0xff) | ((major & 0xfff) << 8) | ((minor & !0xff) << 12) | ((major & !0xfff) << 32);
-        return unsafe {
-            GetRet(mknod(
-                path.as_ptr(),
-                r#type.bits() | mode,
-                dev,
-            ))
-        };
     }
 
     pub fn Mount(src: &str, target: &str, fstype: &str, flags: u64, data: &str) -> i32 {

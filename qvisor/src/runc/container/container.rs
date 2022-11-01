@@ -692,6 +692,7 @@ impl Container {
                 c.Sandbox = Some(Sandbox {
                     ID: sandbox.ID.to_string(),
                     Pid: sandbox.Pid,
+                    kuasar: true,
                     ..Default::default()
                 });
                 c.sandboxed = true;
