@@ -312,8 +312,8 @@ pub extern "C" fn syscall_handler(
     //currTask.DoStop();
 
     let state = SysCall(currTask, nr, &args);
-    res = currTask.Return();
     MainRun(currTask, state);
+    res = currTask.Return();
     currTask.DoStop();
 
     let pt = currTask.GetPtRegs();
