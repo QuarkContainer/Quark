@@ -43,6 +43,8 @@ use super::hook::*;
 use super::status::*;
 
 use super::super::shim::container_io::*;
+use super::super::super::namespace::*;
+use super::super::runtime::sandbox_process::QUARK_SANDBOX_ROOT_PATH;
 
 // metadataFilename is the name of the metadata file relative to the
 // container root directory that holds sandbox metadata.
@@ -956,6 +958,31 @@ impl Container {
             }
             Ok(_) => {
                 info!("container process stopped");
+            }
+        }
+
+        // Clean up rootfs mounts in the sandbox root directory.
+        // This is a workaround to fix the issue that sandbox directory mounts
+        // were not cleaned up after container removal. Ideally the mounts
+        // should be done in a separate mount namespace, invisible to the host.
+        let sandboxRootDir = Join(QUARK_SANDBOX_ROOT_PATH, &self.ID);
+        let rootContainerPath = Join(&sandboxRootDir, &self.ID);
+        let ret = Util::Umount2(&rootContainerPath, 0);
+        info!("umount {}, result: {}", rootContainerPath, ret);
+        let ret = Util::Umount2(&sandboxRootDir, 0);
+        info!("umount {}, result: {}", sandboxRootDir, ret);
+
+        if Path::new(&sandboxRootDir).exists() {
+            info!("deleting sandbox root directory...");
+            let res = fs::remove_dir_all(&sandboxRootDir);
+            match res {
+                Err(e) => {
+                    errs.push(format!(
+                        "deleting sandbox root directory {} fails: {:?}",
+                        &sandboxRootDir, e
+                    ));
+                }
+                Ok(_) => (),
             }
         }
 
