@@ -142,8 +142,6 @@ pub const REAP_SWAP_FILE_NAME : &str = "./reap_swapfile.data";
 
 impl ReapSwapFile {
     pub fn Init(&mut self) {
-        
-
         let direct = SHARESPACE.config.read().HiberODirect;
 
         let file = if direct {

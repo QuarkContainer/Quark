@@ -215,7 +215,9 @@ impl KIOThread {
             let timeout = TIMER_STORE.Trigger() / 1000 / 1000;
 
             // when there is ready task, wake up for preemptive schedule
-            let waitTime = if sharespace.scheduler.GlobalReadyTaskCnt() > 0 {
+            let waitTime = if sharespace.hibernatePause.load(Ordering::Relaxed) {
+                -1
+            } else if sharespace.scheduler.GlobalReadyTaskCnt() > 0 {
                 if timeout == -1 || timeout > 10 {
                     10
                 } else {
