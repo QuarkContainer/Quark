@@ -248,14 +248,25 @@ pub const BLOCK_PAGE_COUNT : u64 = 511;
 pub const PAGE_BLOCK_MAGIC : u64 = 0x1234567890abc;
 
 pub struct FreePageBitmap {
-    pub bitmap: [u128; 4],
+    pub l1bitmap: u64,
+    pub l2bitmap: [u64; 8],
     pub totalFreeCount: u64,
 }
 
 impl FreePageBitmap {
     pub fn New() -> Self {
         return Self {
-            bitmap: [u128::MAX - 1, u128::MAX, u128::MAX, u128::MAX],
+            l1bitmap: (1 << 8) - 1,
+            l2bitmap: [
+                        u64::MAX - 1, 
+                        u64::MAX, 
+                        u64::MAX, 
+                        u64::MAX, 
+                        u64::MAX, 
+                        u64::MAX, 
+                        u64::MAX, 
+                        u64::MAX
+                    ],
             totalFreeCount: BLOCK_PAGE_COUNT,
         }
     }
@@ -267,33 +278,38 @@ impl FreePageBitmap {
 
         self.totalFreeCount -= 1;
 
+        let l1idx = self.l1bitmap.trailing_zeros() as usize;
+        assert!(l1idx != 64);
+        let l2idx = self.l2bitmap[l1idx].trailing_zeros() as usize;
 
-        for i in 0..4 {
-            let idx = self.bitmap[i].trailing_zeros() as usize;
-            if idx < 128 {
-                self.bitmap[i] &= !(1<<idx); //
-                return idx + 128 * i
-            }
+        assert!(l2idx != 64);
+
+        self.l2bitmap[l1idx] &= !(1<<l2idx);
+        if self.l2bitmap[l1idx] == 0 {
+            self.l1bitmap &= !(1<<l1idx);
         }
-        
-        panic!("FreePageBitmap pop fail");
+
+        return l1idx * 64 + l2idx;
     }
 
     pub fn Push(&mut self, idx: usize) {
-        assert!(idx <= BLOCK_PAGE_COUNT as usize && idx != 0);
-        let segIdx = idx / 128;
-        let offset = idx % 128;
-        assert!(self.bitmap[segIdx] & (1<<offset) == 0, 
-            "idx is {}, freecount is {}", idx, self.totalFreeCount);
-        self.bitmap[segIdx] |= 1<<offset;
+        let l1idx = idx / 64;
+        let l2idx = idx % 64;
+        
+        assert!(self.l2bitmap[l1idx] & (1<<l2idx) == 0);
+        if self.l2bitmap[l1idx] == 0 {
+            self.l1bitmap |= 1<<l1idx;
+        }
+        self.l2bitmap[l1idx] |= 1 <<l2idx;
+
         self.totalFreeCount += 1;
     }
 
     pub fn IsFree(&self, idx: usize) -> bool {
-        assert!(idx <= BLOCK_PAGE_COUNT as usize && idx != 0);
-        let segIdx = idx / 128;
-        let offset = idx % 128;
-        return self.bitmap[segIdx] & (1<<offset) != 0;
+        let l1idx = idx / 64;
+        let l2idx = idx % 64;
+
+        return self.l2bitmap[l1idx] & (1<<l2idx) == 1;
     }
 }
 
