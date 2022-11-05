@@ -20,8 +20,6 @@ use super::super::qmsg;
 use super::super::qmsg::*;
 use super::super::socket_buf::*;
 use super::super::*;
-use super::task::*;
-use super::taskMgr;
 
 extern "C" {
     pub fn rdtsc() -> i64;
@@ -191,22 +189,6 @@ impl HostSpace {
         let mut msg = Msg::IOConnect(IOConnect { fd, addr, addrlen });
 
         return HostSpace::Call(&mut msg, false) as i64;
-    }
-
-    pub fn PostRDMAConnect(task: &Task, fd: i32, socketBuf: SocketBuff) -> i64 {
-        let mut msg = PostRDMAConnect {
-            fd,
-            socketBuf,
-            taskId: task.GetTaskId(),
-            ret: 0,
-        };
-
-        let addr = &mut msg as *mut _ as u64;
-        let om = HostOutputMsg::PostRDMAConnect(addr);
-
-        super::SHARESPACE.AQCall(&om);
-        taskMgr::Wait();
-        return msg.ret;
     }
 
     pub fn IORecvMsg(fd: i32, msghdr: u64, flags: i32, blocking: bool) -> i64 {

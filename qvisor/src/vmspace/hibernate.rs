@@ -49,6 +49,15 @@ impl HiberMgr {
         let mut insertCount = 0;
         for page in map.iter() {
             let offset = SWAP_FILE.lock().SwapOutPage(*page)?;
+            match intern.pageMap.insert(*page, offset) {
+                None => {
+                    insertCount += 1;
+                },
+                Some(offset) => {
+                    // the page has been freed when it is swapped out
+                    SWAP_FILE.lock().DropPage(offset)?;
+                }
+            }
             intern.pageMap.entry(*page).or_insert_with(||{
                 insertCount += 1;
                 offset
@@ -348,6 +357,12 @@ impl SwapFile {
         GetRet(ret as _)?;
 
         return Ok(offset)
+    }
+
+    pub fn DropPage(&mut self, offset: u64) -> Result<()> {
+        self.FreeSlot(offset)?;
+        
+        return Ok(())
     }
 
     // input: memory page address, file offset
