@@ -30,9 +30,9 @@ use containerd_shim::protos::ttrpc::Server;
 use kvm_ioctls::Kvm;
 use libc;
 use nix::fcntl::*;
-use nix::mount::{MsFlags, mount};
+use nix::mount::{mount, MsFlags};
 use nix::sys::stat::{Mode, umask};
-use nix::unistd::{getcwd, chdir};
+use nix::unistd::{chdir, getcwd};
 use procfs;
 use serde_json;
 use simplelog::*;
@@ -630,7 +630,6 @@ impl SandboxProcess {
     }
 
     pub fn Child(&self) -> Result<()> {
-
         // set rlimits (before entering user ns)
         for rlimit in &self.RLimits {
             SetRLimit(rlimit.typ as u32, rlimit.soft, rlimit.hard)?;
