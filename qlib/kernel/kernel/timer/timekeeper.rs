@@ -15,6 +15,8 @@
 use crate::qlib::mutex::*;
 use alloc::sync::Arc;
 use core::ops::Deref;
+use core::sync::atomic::AtomicBool;
+use core::sync::atomic::Ordering;
 
 use super::super::super::super::common::*;
 use super::super::super::super::linux::time::*;
@@ -99,7 +101,7 @@ pub struct TimeKeeperInternal {
     // params manages the parameter page.
     pub params: VDSOParamPage,
 
-    pub inited: bool,
+    pub inited: AtomicBool,
 
     pub timer: Option<Timer>,
 }
@@ -113,7 +115,7 @@ impl Default for TimeKeeperInternal {
             bootTime: Time::default(),
             monotonicOffset: 0,
             params: VDSOParamPage::default(),
-            inited: false,
+            inited: AtomicBool::new(false),
             timer: None,
         };
 
@@ -140,7 +142,7 @@ impl TimeKeeperInternal {
 
         self.monotonicOffset = wantMonotonic - nowMonotonic;
         self.bootTime = Time::FromNs(nowRealtime);
-        self.inited = true;
+        self.inited.store(true, Ordering::SeqCst);
         self.Update();
     }
 
@@ -153,7 +155,7 @@ impl TimeKeeperInternal {
         //super::super::super::perflog::THREAD_COUNTS.lock().Print(true);
         //super::super::super::AllocatorPrint();
 
-        assert!(self.inited, "TimeKeeper not inited");
+        assert!(self.inited.load(Ordering::Relaxed), "TimeKeeper not inited");
         let (monotonicParams, monotonicOk, realtimeParams, realtimeOk) = self.clocks.Update();
 
         let mut p = VdsoParams::default();
@@ -181,7 +183,7 @@ impl TimeKeeperInternal {
 
     // GetTime returns the current time in nanoseconds.
     pub fn GetTime(&self, c: ClockID) -> Result<i64> {
-        assert!(self.inited, "TimeKeeper not inited");
+        assert!(self.inited.load(Ordering::Relaxed), "TimeKeeper not inited");
         match self.clocks.GetTime(c) {
             Err(e) => return Err(e),
             Ok(mut now) => {
@@ -196,7 +198,7 @@ impl TimeKeeperInternal {
 
     // BootTime returns the system boot real time.
     pub fn BootTime(&self) -> Time {
-        assert!(self.inited, "TimeKeeper not inited");
+        assert!(self.inited.load(Ordering::Relaxed), "TimeKeeper not inited");
         return self.bootTime;
     }
 }
