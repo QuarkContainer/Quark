@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::u64;
 use alloc::vec::Vec;
+use core::u64;
 
+use super::*;
+use super::super::kernel::futex::*;
+use super::super::memmgr::mm::*;
+use super::super::memmgr::vma::*;
 use super::super::super::addr::*;
 use super::super::super::common::*;
 use super::super::super::limits::*;
 use super::super::super::linux::limits::*;
 use super::super::super::linux_def::*;
 use super::super::super::range::*;
-use super::super::kernel::futex::*;
-use super::super::memmgr::mm::*;
-use super::super::memmgr::vma::*;
 use super::super::task::*;
-use super::*;
 
 #[derive(Debug)]
 pub struct MSyncOpts {
@@ -244,7 +244,7 @@ impl MemoryManager {
                 let mlockLimit = task.Thread().ThreadGroup().Limits().Get(LimitType::MemoryLocked).Cur;
                 let newLockedAS = self.mapping.lock().lockedAS - oldSize + newSize;
                 if newLockedAS > mlockLimit {
-                    return Err(Error::SysError(SysErr::EAGAIN))
+                    return Err(Error::SysError(SysErr::EAGAIN));
                 }
             }
         }
@@ -629,7 +629,7 @@ impl MemoryManager {
         let brkStart = self.mapping.lock().brkInfo.brkStart;
         if (addr - brkStart) as u64 > lim {
             // return current brk end.
-            return Ok(self.mapping.lock().brkInfo.brkEnd)
+            return Ok(self.mapping.lock().brkInfo.brkEnd);
         }
 
         let oldbrkpg = Addr(self.mapping.lock().brkInfo.brkEnd).RoundUp()?.0;
@@ -640,7 +640,7 @@ impl MemoryManager {
         };
 
         if oldbrkpg < newbrkpg {
-            let (vseg, ar) = self.CreateVMAlocked(
+            let (vseg, ar) = match self.CreateVMAlocked(
                 task,
                 &MMapOpts {
                     Length: newbrkpg - oldbrkpg,
@@ -661,7 +661,12 @@ impl MemoryManager {
                     Mappable: MMappable::None,
                     Hint: "[Heap]".to_string(),
                 },
-            )?;
+            ) {
+                Ok(r) => r,
+                Err(_) => {
+                    return Ok(self.mapping.lock().brkInfo.brkEnd);
+                }
+            };
 
             self.PopulateVMALocked(task, &vseg, &ar, false, false)?;
             self.mapping.lock().brkInfo.brkEnd = addr;

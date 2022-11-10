@@ -55,7 +55,7 @@ use super::signal_handle::*;
 use super::util::*;
 use super::vm::*;
 
-const QUARK_SANDBOX_ROOT_PATH: &str = "/var/lib/quark/";
+pub const QUARK_SANDBOX_ROOT_PATH: &str = "/var/lib/quark/";
 
 pub struct NSRestore {
     pub fd: i32,
