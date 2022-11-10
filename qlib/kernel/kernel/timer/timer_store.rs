@@ -231,9 +231,9 @@ impl TimerStoreIntern {
         };
 
         let timer = match self.timerSeq.remove(&firstKey) {
-            None => return None,
-            Some(timer) => timer,
-        };
+                None => return None,
+                Some(timer) => timer,
+            };
 
         if self.timerSeq.len() == 0 {
             self.nextExpire = 0;

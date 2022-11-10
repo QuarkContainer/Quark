@@ -475,7 +475,7 @@ pub extern "C" fn rust_main(
         GlobalIOMgr().InitPollHostEpoll(SHARESPACE.HostHostEpollfd());
         SetVCPCount(vcpuCnt as usize);
         VDSO.Initialization(vdsoParamAddr);
-
+        
         // release other vcpus
         HyperCall64(qlib::HYPERCALL_RELEASE_VCPU, 0, 0, 0, 0);
     } else {

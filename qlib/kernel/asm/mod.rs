@@ -101,7 +101,7 @@ pub fn EnterUser(entry: u64, userStackAddr: u64, kernelStackAddr: u64) -> ! {
             mov gs:0, rdx
 
             mov rcx, rdi
-            mov r11, 0x2 | 1<<9
+            mov r11, 0x2 | 1<<9 | 1<<12 | 1<<13
 
             mov rsp, rsi
 
