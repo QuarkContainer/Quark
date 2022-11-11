@@ -14,6 +14,8 @@
 
 use nix::mount::MsFlags;
 use std::fs::create_dir_all;
+use std::fs;
+use std::path::Path;
 
 use super::super::container::mounts::*;
 use super::super::super::namespace::Util;
@@ -115,6 +117,78 @@ impl FsImageMounter {
             }
         }
         
+        return Ok(());
+    }
+
+    pub fn UnmountContainerFs(&self, spec: &Spec, containerId: &str) -> Result<()> {
+        let containerFsRootTarget = Join(&self.sandboxRoot(), containerId);
+        for m in &spec.mounts {
+            if !m.destination.starts_with('/') || m.destination.contains("..") {
+                warn!("invalid mount destination: {}", m.destination);
+            }
+            let (_, _) = parse_mount(m);
+            if m.typ == "cgroup" {
+                //mount_cgroups(m, rootfs, flags, &data, &linux.mount_label, cpath)?;
+                // won't mount cgroup
+                continue;
+            } else {
+                let dest = format!("{}{}", containerFsRootTarget, m.destination);
+                if Path::new(&dest).exists() {
+                    info!("unmount destination: {}", dest);
+                    let ret = Util::Umount2(&dest, 0);
+                    if ret < 0 {
+                        warn!("MountContainerFs: unmount container fs {} fail, error is {}", dest, ret);
+                    }
+                }
+            }
+        }
+
+        // unmount dev at last
+        let dest = format!("{}{}", containerFsRootTarget, "/dev");
+        if Path::new(&dest).exists() {
+            info!("unmount destination: {}", dest);
+            let ret = Util::Umount2(&dest, 0);
+            if ret < 0 {
+                warn!("MountContainerFs: unmount container fs {} fail, error is {}", dest, ret);
+            }
+        }
+       
+        if Path::new(&containerFsRootTarget).exists() {
+            info!("unmount container rootfs: {}", containerFsRootTarget);
+            let ret = Util::Umount2(&containerFsRootTarget, 0);
+            if ret < 0 {
+                warn!("MountContainerFs: unmount container rootfs fail, error is {}", ret);
+            }
+
+            info!("deleting container root directory...{}", containerFsRootTarget);
+            let res = fs::remove_dir_all(&containerFsRootTarget);
+            match res {
+                Err(e) => {
+                    warn!("failed to deleting container root directory...{}, error: {}", containerFsRootTarget, e);
+                }
+                Ok(_) => (),
+            }
+        }
+
+        info!("unmount sandbox root: {}", self.sandboxRoot());
+        if Path::new(&self.sandboxRoot()).exists() {
+            let ret = Util::Umount2(&self.sandboxRoot(), 0);
+            if ret < 0 {
+                warn!(
+                    "MountContainerFs: unmount sandbox root fail, error is {}",
+                    ret
+                );
+            }
+
+            info!("deleting sandbox root directory...{}", self.sandboxRoot());
+            let res = fs::remove_dir_all(&self.sandboxRoot());
+            match res {
+                Err(e) => {
+                    warn!("failed to deleting sandbox root directory...{}, error: {}", self.sandboxRoot(), e);
+                }
+                Ok(_) => (),
+            }
+        }
         return Ok(());
     }
 }
