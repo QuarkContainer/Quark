@@ -15,6 +15,10 @@
 use std::sync::mpsc::{channel, Receiver};
 use std::sync::Arc;
 
+use super::super::container::container::*;
+use super::super::container::status::Status;
+use super::shim_task::*;
+
 use containerd_shim::api::*;
 use containerd_shim::protos::protobuf::{Message, SingularPtrField};
 use containerd_shim::monitor::{monitor_subscribe, Subject, Subscription, Topic};
@@ -26,19 +30,17 @@ use containerd_shim::Config;
 use containerd_shim::ExitSignal;
 use containerd_shim::Result;
 use containerd_shim::Shim;
+use containerd_shim::Error;
 use containerd_shim::StartOpts;
 
-//use super::super::super::qlib::common;
-//use super::super::super::qlib::common::*;
-
-use super::shim_task::*;
-
-//pub type ShimResult<T> = std::result::Result<T, containerd_shim::Error>;
+const CRI_SANDBOX_ID: &str = "io.kubernetes.cri.sandbox-id";
+const CONTAINERD_RUNC_V2_GROUP: &str = "io.containerd.runc.v2.group";
 
 const GROUP_LABELS: [&str; 2] = [
-    "io.containerd.runc.v2.group",
-    "io.kubernetes.cri.sandbox-id",
+    CONTAINERD_RUNC_V2_GROUP,
+    CRI_SANDBOX_ID,
 ];
+
 // Implementation for shim service, see https://github.com/containerd/containerd/blob/main/runtime/v2/README.md
 pub struct Service {
     exit: Arc<ExitSignal>,
@@ -62,6 +64,7 @@ impl Shim for Service {
         info!("Shim Service start_shim start");
         let mut grouping = opts.id.clone();
         let spec = read_spec_from_file("")?;
+        debug!("start shim opts is {:?}", &opts);
         debug!("spec is {:?}", &spec);
         match spec.annotations() {
             Some(annotations) => {
@@ -83,8 +86,40 @@ impl Shim for Service {
 
     fn delete_shim(&mut self) -> Result<DeleteResponse> {
         info!("Shim Service delete_shim start");
-        // TODO: revisit this, this should try to read container from pwd and delete
-        //self.task.Destroy()?;
+
+        let spec = read_spec_from_file("")?;
+        let mut sandbox_id = self.id.clone();
+        match spec.annotations() {
+            Some(annotations) => {
+                if let Some(value) = annotations.get(CRI_SANDBOX_ID) {
+                    sandbox_id = value.to_string();
+                }
+            }
+            None => {}
+        }
+
+        // cri put all containers' meta.json file in sandbox directory, have to get sandbox bundle dir
+        let mut root_dir = std::env::current_dir().unwrap();
+        if self.id != sandbox_id {
+            root_dir = std::env::current_dir().unwrap().parent().unwrap().join(&sandbox_id).join(&self.namespace);
+        } else {
+            root_dir = root_dir.join(&self.namespace);
+        }
+
+        let mut container = Container::Load(&root_dir.to_str().unwrap(), &self.id)
+            .or_else( |e| {
+                error!("failed to load container{:?}", &e);
+                return Err(Error::NotFoundError(self.id.to_string()));}
+            ).unwrap();
+
+        if container.Status != Status::Created && container.Status != Status::Stopped {
+            return Err(Error::FailedPreconditionError( "cannot delete container that is not stopped".to_string()));
+        }
+
+        container.Destroy().or_else(|_e| {
+            error!("failed to destroy container{:?}", &_e);
+            return Err(Error::Other("destroy shim failed".to_string()))
+        }).ok();
 
         let mut resp = DeleteResponse::new();
         // sigkill
