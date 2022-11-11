@@ -1023,7 +1023,7 @@ impl Container {
         let mut cgroup: Option<Cgroup> = None;
 
         if self.Sandbox.is_some() {
-            info!("Stopping container {}", &self.ID);
+            info!("Destroying container {}", &self.ID);
             let sandbox = self.Sandbox.as_mut().unwrap();
                 
             sandbox.DestroyContainer(&self.ID)?;
