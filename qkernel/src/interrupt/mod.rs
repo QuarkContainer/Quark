@@ -723,6 +723,7 @@ pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
             rflags &= !USER_FLAGS_CLEAR;
             rflags |= USER_FLAGS_SET;
             ptRegs.eflags = rflags;
+            ptRegs.ss |= 3;
 
             /*if SHARESPACE.config.read().KernelPagetable {
                 Task::SetKernelPageTable();
