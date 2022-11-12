@@ -18,6 +18,9 @@ use super::{SUPPORT_XSAVE, SUPPORT_XSAVEOPT};
 use core::sync::atomic::Ordering;
 use core::arch::asm;
 
+use crate::qlib::kernel::task;
+use crate::qlib::vcpu_mgr::CPULocal;
+
 #[inline]
 pub fn WriteMsr(msr: u32, value: u64) {
     unsafe {
@@ -93,11 +96,33 @@ pub fn CurrentCr3() -> u64 {
 
 #[inline]
 pub fn EnterUser(entry: u64, userStackAddr: u64, kernelStackAddr: u64) -> ! {
+    let currTask = task::Task::Current();
+    let pt = currTask.GetPtRegs();
+    CPULocal::SetKernelStack(kernelStackAddr);
+    CPULocal::SetUserStack(userStackAddr);
+    *pt = Default::default();
+
+    pt.rip = entry;
+    pt.cs = 0x23;
+    pt.eflags = 0x2 | 1<<9 | 1<<12 | 1<<13; //USER_FLAGS_SET;
+    pt.rsp = userStackAddr;
+    pt.ss = 0x1b;
+
+    unsafe {
+        asm!("
+            fninit
+            ");
+    }
+   
+    IRet(pt as *const _ as u64);
+}
+
+#[inline]
+pub fn EnterUser1(entry: u64, userStackAddr: u64, kernelStackAddr: u64) -> ! {
     //PerfGoto(PerfType::User);
     unsafe {
         asm!("
             fninit
-            //mov gs:0, rsp
             mov gs:0, rdx
 
             mov rcx, rdi
