@@ -62,7 +62,7 @@ impl PageTables {
     }
 
     pub fn EnableTlbShootdown(&self) {
-        self.tlbshootdown.store(true, Ordering::Relaxed)
+        self.tlbshootdown.store(true, Ordering::SeqCst)
     }
 
     pub fn Clone(&self) -> Self {
@@ -1134,7 +1134,7 @@ impl PageTables {
         failFast: bool,
     ) -> Result<()> {
         //info!("MProtoc: start={:x}, end={:x}, flag = {:?}", start.0, end.0, flags);
-        self.EnableTlbShootdown();
+        defer!(self.EnableTlbShootdown());
         return self.Traverse(
             start,
             end,
