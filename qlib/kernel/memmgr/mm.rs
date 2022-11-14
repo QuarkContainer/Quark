@@ -336,14 +336,6 @@ impl MemoryManager {
             .fetch_and(!(1 << vcpuId), Ordering::Release);
     }
 
-    pub fn TlbShootdownMask(&self) -> u64 {
-        return self.tlbShootdownMask.load(Ordering::Acquire);
-    }
-
-    pub fn ClearTlbShootdownMask(&self) {
-        self.tlbShootdownMask.store(0, Ordering::Release);
-    }
-
     pub fn SetVcpu(&self, vcpu: usize) {
         assert!(vcpu < 64);
         self.vcpuMapping.fetch_or(1 << vcpu, Ordering::Release);
@@ -1035,7 +1027,7 @@ impl MemoryManager {
                 let phyAddr = iops.MapFilePage(task, fileOffset)?;
                 //error!("fault 2.1, vma.mappable.is_some() is {}, vaddr is {:x}, paddr is {:x}",
                 //      vma.mappable.is_some(), pageAddr, phyAddr);
-
+                
                 if vma.private {
                     //self.MapPageReadLocked(pageAddr, phyAddr, exec);
 

@@ -147,7 +147,12 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, ptRegs: &mut PtRegs, errorCode: u
     ptRegs.eflags = rflags;
 
     // is this call from user
-    if ptRegs.ss & 0x3 != 0 {
+    if ptRegs.cs & 0x3 != 0 {
+        let mut rflags = ptRegs.eflags;
+        rflags &= !USER_FLAGS_CLEAR;
+        rflags |= USER_FLAGS_SET;
+        ptRegs.eflags = rflags;
+        ptRegs.ss |= 3;
         //PerfGofrom(PerfType::User);
         currTask.AccountTaskLeave(SchedState::RunningApp);
     } else {
@@ -424,16 +429,17 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
     unsafe { asm!("mov {0}, cr3", out(reg) cr3 ) };
 
 
- 
+
     CPULocal::Myself().SetMode(VcpuMode::Kernel);
     let currTask = Task::Current();
 
     // is this call from user
-    let fromUser = if ptRegs.ss & 0x3 != 0 {
+    let fromUser = if ptRegs.cs & 0x3 != 0 {
         let mut rflags = ptRegs.eflags;
         rflags &= !USER_FLAGS_CLEAR;
         rflags |= USER_FLAGS_SET;
         ptRegs.eflags = rflags;
+        ptRegs.ss |= 3;
 
         //PerfGofrom(PerfType::User);
         currTask.AccountTaskLeave(SchedState::RunningApp);
@@ -695,27 +701,29 @@ pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
     let currTask = Task::Current();
 
     if CPULocal::InterruptByTlbShootdown(mask) {
-        if ptRegs.ss & 0x3 != 0 {
+        if ptRegs.cs & 0x3 != 0 {
             // from user
             let mut rflags = ptRegs.eflags;
             rflags &= !USER_FLAGS_CLEAR;
             rflags |= USER_FLAGS_SET;
             ptRegs.eflags = rflags;
+            ptRegs.ss |= 3;
         }
 
         CPULocal::SetKernelStack(currTask.GetKernelSp());
-        if ptRegs.ss & 0x3 != 0 {
+        if ptRegs.cs & 0x3 != 0 {
             CPULocal::Myself().SetMode(VcpuMode::User);
         }
         currTask.mm.HandleTlbShootdown();
         return;
     } else if CPULocal::InterruptByThreadTimeout(mask) {
-        if ptRegs.ss & 0x3 != 0 {
+        if ptRegs.cs & 0x3 != 0 {
             // from user
             let mut rflags = ptRegs.eflags;
             rflags &= !USER_FLAGS_CLEAR;
             rflags |= USER_FLAGS_SET;
             ptRegs.eflags = rflags;
+            ptRegs.ss |= 3;
 
             /*if SHARESPACE.config.read().KernelPagetable {
                 Task::SetKernelPageTable();

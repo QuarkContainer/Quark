@@ -35,11 +35,6 @@ pub fn AQHostCall(msg: HostOutputMsg, _shareSpace: &ShareSpace) {
                 panic!("Eventfd write fail with error {}", ret)
             }
         }
-        HostOutputMsg::PostRDMAConnect(_addr) => {
-            //let msgRef = PostRDMAConnect::ToRef(addr);
-            //super::VMSpace::PostRDMAConnect(msgRef);
-            panic!("PostRDMAConnect qcall not implemented")
-        }
     }
 }
 

@@ -729,24 +729,24 @@ impl ShareSpace {
 
     pub fn MaskTlbShootdown(&self, vcpuId: u64) {
         self.tlbShootdownMask
-            .fetch_or(1 << vcpuId, Ordering::Release);
+            .fetch_or(1 << vcpuId, Ordering::SeqCst);
     }
 
     pub fn UnmaskTlbShootdown(&self, vcpuId: u64) {
         self.tlbShootdownMask
-            .fetch_and(!(1 << vcpuId), Ordering::Release);
+            .fetch_and(!(1 << vcpuId), Ordering::SeqCst);
     }
 
     pub fn TlbShootdownMask(&self) -> u64 {
-        return self.tlbShootdownMask.load(Ordering::Acquire);
+        return self.tlbShootdownMask.load(Ordering::SeqCst);
     }
 
     pub fn ClearTlbShootdownMask(&self) {
-        self.tlbShootdownMask.store(0, Ordering::Release);
+        self.tlbShootdownMask.store(0, Ordering::SeqCst);
     }
 
     pub fn SetTlbShootdownMask(&self, mask: u64) {
-        self.tlbShootdownMask.store(mask, Ordering::Release);
+        self.tlbShootdownMask.store(mask, Ordering::SeqCst);
     }
 
     pub fn SetIOUringsAddr(&self, addr: u64) {

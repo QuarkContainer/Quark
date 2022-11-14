@@ -43,6 +43,7 @@ use super::hook::*;
 use super::status::*;
 
 use super::super::shim::container_io::*;
+use super::super::runtime::fs::FsImageMounter;
 
 // metadataFilename is the name of the metadata file relative to the
 // container root directory that holds sandbox metadata.
@@ -165,7 +166,7 @@ pub fn ValidateID(id: &str) -> Result<()> {
 
 // maybeLockRootContainer locks the sandbox root container. It is used to
 // prevent races to create and delete child container sandboxes.
-pub fn maybeLockRootContainer(spec: &Spec, rootDir: &str) -> Result<FileLockCleanup> {
+pub fn maybeLockRootContainer(bundleDir: &str, spec: &Spec, rootDir: &str) -> Result<FileLockCleanup> {
     if IsRoot(spec) {
         return Ok(FileLockCleanup::default());
     }
@@ -179,7 +180,8 @@ pub fn maybeLockRootContainer(spec: &Spec, rootDir: &str) -> Result<FileLockClea
         Some(id) => id,
     };
 
-    let sb = Container::Load(rootDir, &sbid)?;
+    let sandBoxRootDir = std::path::Path::new(bundleDir).parent().unwrap().join(&sbid).join(rootDir).to_str().unwrap().to_string();
+    let sb = Container::Load(&sandBoxRootDir, &sbid)?;
 
     return sb.Lock();
 }
@@ -442,7 +444,7 @@ impl Container {
 
         Self::CheckTerminal(action, spec.process.terminal, consoleSocket, detach)?;
 
-        let _unlockRoot = maybeLockRootContainer(&spec, &conf.RootDir)?;
+        let _unlockRoot = maybeLockRootContainer(bundleDir, &spec, &conf.RootDir)?;
 
         // Lock the container metadata file to prevent concurrent creations of
         // containers with the same id.
@@ -633,11 +635,11 @@ impl Container {
         io: &ContainerIO,
         pivot: bool,
     ) -> Result<Self> {
-        info!("Create container {} in root dir: {}", id, &conf.RootDir);
+        info!("Create container {} in root dir: {}, bundleDir {}", id, &conf.RootDir, bundleDir);
         //debug!("container spec is {:?}", &spec);
         ValidateID(id)?;
 
-        let _unlockRoot = maybeLockRootContainer(&spec, &conf.RootDir)?;
+        let _unlockRoot = maybeLockRootContainer(bundleDir, &spec, &conf.RootDir)?;
 
         // Lock the container metadata file to prevent concurrent creations of
         // containers with the same id.
@@ -881,7 +883,7 @@ impl Container {
     pub fn Start(&mut self) -> Result<()> {
         info!("Start container {}", &self.ID);
 
-        let _unlockRoot = maybeLockRootContainer(&self.Spec, &self.RootContainerDir)?;
+        let _unlockRoot = maybeLockRootContainer(&self.BundleDir, &self.Spec, &self.RootContainerDir)?;
 
         let _unlock = self.Lock()?;
 
@@ -942,7 +944,7 @@ impl Container {
         // of errors return their concatenation.
         let mut errs = Vec::new();
 
-        let _unlock = maybeLockRootContainer(&self.Spec, &self.RootContainerDir)?;
+        let _unlock = maybeLockRootContainer(&self.BundleDir, &self.Spec, &self.RootContainerDir);
         match self.Stop() {
             Err(e) => {
                 info!(
@@ -959,19 +961,20 @@ impl Container {
             }
         }
 
-        if Path::new(&self.Root).exists() {
-            info!("deleting container root directory...");
-            let res = fs::remove_dir_all(&self.Root);
-            //.map_err(|e| Error::Common(format!("deleting container root directory {} fail: {:?}", &self.Root, e)));
-            match res {
-                Err(e) => {
-                    errs.push(format!(
-                        "deleting container root directory {} fails: {:?}",
-                        &self.Root, e
-                    ));
-                }
-                Ok(_) => (),
-            }
+        // Clean up rootfs mounts in the sandbox root directory.
+        // This is a workaround to fix the issue that sandbox directory mounts
+        // were not cleaned up after container removal. Ideally the mounts
+        // should be done in a separate mount namespace, invisible to the host.
+        info!("Find sandbox id for container {}", &self.ID);
+        let mut sandboxId = self.ID.clone();
+        if self.Sandbox.is_some() {
+            sandboxId = self.Sandbox.as_mut().unwrap().ID.clone()
+        }
+
+        let fsMounter = FsImageMounter::New(&sandboxId);
+        let ret = fsMounter.UnmountContainerFs(&self.Spec, &self.ID);
+        if ret.is_err() {
+            info!("umount fs for container {}, err: {}", self.ID, ret.err().unwrap());
         }
 
         self.changeStatus(Status::Stopped);

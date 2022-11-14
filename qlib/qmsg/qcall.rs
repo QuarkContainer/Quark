@@ -857,7 +857,6 @@ pub enum HostOutputMsg {
     Default,
     QCall(u64),
     EventfdWriteAsync(EventfdWriteAsync),
-    PostRDMAConnect(u64),
 }
 
 impl Default for HostOutputMsg {

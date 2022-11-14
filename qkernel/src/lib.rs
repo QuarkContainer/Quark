@@ -312,8 +312,8 @@ pub extern "C" fn syscall_handler(
     //currTask.DoStop();
 
     let state = SysCall(currTask, nr, &args);
-    res = currTask.Return();
     MainRun(currTask, state);
+    res = currTask.Return();
     currTask.DoStop();
 
     let pt = currTask.GetPtRegs();
@@ -475,7 +475,7 @@ pub extern "C" fn rust_main(
         GlobalIOMgr().InitPollHostEpoll(SHARESPACE.HostHostEpollfd());
         SetVCPCount(vcpuCnt as usize);
         VDSO.Initialization(vdsoParamAddr);
-
+        
         // release other vcpus
         HyperCall64(qlib::HYPERCALL_RELEASE_VCPU, 0, 0, 0, 0);
     } else {

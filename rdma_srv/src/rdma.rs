@@ -1603,7 +1603,9 @@ pub struct MemoryRegion(pub *mut rdmaffi::ibv_mr);
 impl Drop for MemoryRegion {
     fn drop(&mut self) {
         unsafe {
-            let _ret = rdmaffi::ibv_dereg_mr(self.0);
+            if self.0 as *const _ as u64 != 0 {
+                let _ret = rdmaffi::ibv_dereg_mr(self.0);
+            }
         }
     }
 }

@@ -49,6 +49,15 @@ impl HiberMgr {
         let mut insertCount = 0;
         for page in map.iter() {
             let offset = SWAP_FILE.lock().SwapOutPage(*page)?;
+            match intern.pageMap.insert(*page, offset) {
+                None => {
+                    insertCount += 1;
+                },
+                Some(offset) => {
+                    // the page has been freed when it is swapped out
+                    SWAP_FILE.lock().DropPage(offset)?;
+                }
+            }
             intern.pageMap.entry(*page).or_insert_with(||{
                 insertCount += 1;
                 offset
@@ -99,7 +108,7 @@ impl HiberMgr {
 
         let _cnt = SHARE_SPACE.pageMgr.pagepool.DontneedFreePages()?;
 
-        //crate::PMA_KEEPER.DontNeed()?;
+        crate::PMA_KEEPER.DontNeed()?;
 
         /*let allocated1 = GLOBAL_ALLOCATOR.Allocator().heap.lock().allocated;
         GLOBAL_ALLOCATOR.Allocator().FreeAll();
@@ -133,8 +142,6 @@ pub const REAP_SWAP_FILE_NAME : &str = "./reap_swapfile.data";
 
 impl ReapSwapFile {
     pub fn Init(&mut self) {
-        
-
         let direct = SHARESPACE.config.read().HiberODirect;
 
         let file = if direct {
@@ -348,6 +355,12 @@ impl SwapFile {
         GetRet(ret as _)?;
 
         return Ok(offset)
+    }
+
+    pub fn DropPage(&mut self, offset: u64) -> Result<()> {
+        self.FreeSlot(offset)?;
+        
+        return Ok(())
     }
 
     // input: memory page address, file offset

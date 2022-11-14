@@ -98,7 +98,7 @@ pub const MISC_FEATURE_CPUID_TRAP: u64 = 0x1;
 pub const KERNEL_FLAGS_SET: u64 = RFLAGS_RESERVED;
 
 // UserFlagsSet are always set in userspace.
-pub const USER_FLAGS_SET: u64 = RFLAGS_RESERVED | RFLAGS_IF;
+pub const USER_FLAGS_SET: u64 = RFLAGS_RESERVED | RFLAGS_IF | RFLAGS_IOPL;
 
 // KernelFlagsClear should always be clear in the kernel.
 pub const KERNEL_FLAGS_CLEAR: u64 = RFLAGS_STEP | RFLAGS_IF | RFLAGS_IOPL | RFLAGS_AC | RFLAGS_NT;
