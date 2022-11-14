@@ -65,6 +65,7 @@ use super::hostsocket::*;
 use super::rdma_socket::*;
 use super::uring_socket::*;
 use crate::qlib::kernel::socket::hostinet::loopbacksocket::LoopbackSocket;
+// use super::super::super::TSC;
 
 lazy_static! {
     pub static ref DUMMY_HOST_SOCKET: DummyHostSocket = DummyHostSocket::New();
@@ -898,6 +899,7 @@ impl SocketOperations {
 
 impl SockOperations for SocketOperations {
     fn Connect(&self, task: &Task, sockaddr: &[u8], blocking: bool) -> Result<i64> {
+        // GlobalRDMASvcCli().timestamp.lock().push(TSC.Rdtsc()); //1
         let mut socketaddr = sockaddr;
 
         if (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
@@ -911,6 +913,7 @@ impl SockOperations for SocketOperations {
             let sockAddr = GetAddr(sockaddr[0] as i16, &sockaddr[0..sockaddr.len()])?;
             match sockAddr {
                 SockAddr::Inet(ipv4) => {
+                    // GlobalRDMASvcCli().timestamp.lock().push(TSC.Rdtsc()); //2 (2)
                     // error!("SocketOperations::Connect 0, fd: {}", self.fd);
                     let ipAddr = u32::from_be_bytes(ipv4.Addr);
                     let port = ipv4.Port.to_le();
@@ -927,6 +930,7 @@ impl SockOperations for SocketOperations {
                     let _ret = GlobalRDMASvcCli().connectUsingPodId(rdmaId, ipAddr, port, srcPort);
                     let socketBuf = self.SocketBufType().Connect();
                     *self.socketBuf.lock() = socketBuf.clone();
+                    // GlobalRDMASvcCli().timestamp.lock().push(TSC.Rdtsc()); // 3 (38)
                     res = -SysErr::EINPROGRESS;
                 }
                 _ => {
@@ -965,6 +969,9 @@ impl SockOperations for SocketOperations {
             //false
         };
 
+        // // let t2 = Timestamp();
+        // GlobalRDMASvcCli().timestamp.lock().push(TSC.Rdtsc()); // 4 (1)
+
         if res != 0 {
             if -res != SysErr::EINPROGRESS || !blocking {
                 return Err(Error::SysError(-res));
@@ -978,7 +985,8 @@ impl SockOperations for SocketOperations {
             if self.Readiness(task, WRITEABLE_EVENT) == 0 {
                 match task.blocker.BlockWithMonoTimer(true, None) {
                     Err(Error::ErrInterrupted) => {
-                        return Err(Error::SysError(SysErr::ERESTARTSYS));
+                        // error!("qq, Connect ERESTARTSYS");
+                        return Err(Error::SysError(SysErr::EINTR));
                     }
                     Err(e) => {
                         error!("connect error {:?}", &e);
@@ -1014,7 +1022,24 @@ impl SockOperations for SocketOperations {
         if self.stype == SockType::SOCK_STREAM {
             self.PostConnect(task);
         }
+        // GlobalRDMASvcCli().timestamp.lock().push(TSC.Rdtsc()); // 7
+        // let mut len = GlobalRDMASvcCli().timestamp.lock().len();
+        // let mut i = 1;
+        // let mut v1 = GlobalRDMASvcCli().timestamp.lock()[0];
+        // let mut v2 = GlobalRDMASvcCli().timestamp.lock()[1];
+        // error!("qq, Connect time is: {}", GlobalRDMASvcCli().timestamp.lock()[len - 1] - v1);
+        // loop {
+        //     error!("{}", v2 - v1);
+        //     i += 1;
+        //     if i == len {
+        //         break;
+        //     }
+        //     v1 = v2;
+        //     v2 = GlobalRDMASvcCli().timestamp.lock()[i];            
+        // }
 
+        // GlobalRDMASvcCli().timestamp.lock().clear();
+        
         return Ok(0);
     }
 

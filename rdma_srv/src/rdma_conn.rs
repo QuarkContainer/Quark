@@ -34,6 +34,7 @@ use super::qlib::linux_def::*;
 use super::qlib::rdma_share::*;
 use super::qlib::socket_buf::*;
 use super::rdma_srv::*;
+// use super::qlib::kernel::TSC;
 
 // RDMA Queue Pair
 pub struct RDMAQueuePair {}
@@ -809,6 +810,8 @@ impl RDMAControlChannel {
 
     pub fn HandleConnectResponse(&self, connectResponse: &ConnectResponse) {
         // println!("handle Connect Response: {:?}", connectResponse);
+        // println!("qq1: HandleConnectResponse::HandleConnectResponse Enter");
+        // RDMA_SRV.timestamps.lock().push(TSC.Rdtsc()); //3
         match RDMA_SRV
             .channels
             .lock()
@@ -847,6 +850,9 @@ impl RDMAControlChannel {
     }
 
     pub fn HandleConnectRequest(&self, connectRequest: &ConnectRequest) {
+        // println!("qq1: HandleConnectResponse::HandleConnectRequest Enter");
+        // RDMA_SRV.timestamps.lock().push(TSC.Rdtsc());
+        // println!("handle Connect Request: {:?}", connectRequest);
         let mut found = false;
         let mut agentId = 0;
         let mut sockfd = 0;
@@ -891,6 +897,10 @@ impl RDMAControlChannel {
                         port: connectRequest.dstPort,
                     };
                     // error!("HandleConnectRequest, 1, podId: {:?}, port: {}", podId, connectRequest.dstPort);
+                    // error!(
+                    //     "HandleConnectRequest, 1, srvPodIdEndpoints: {:?}",
+                    //     RDMA_SRV.srvPodIdEndpoints.lock()
+                    // );
                     match RDMA_SRV.srvPodIdEndpoints.lock().get(&endPoint) {
                         Some(srvEndpoint) => match srvEndpoint.status {
                             SrvEndPointStatus::Listening => {
@@ -909,10 +919,39 @@ impl RDMAControlChannel {
                     }
                 }
                 None => {
-                    error!(
-                        "HandleConnectRequest, podId for ip: {} is not found!!",
-                        connectRequest.dstIpAddr.to_be()
-                    );
+                    if !RDMA_CTLINFO.isK8s && connectRequest.dstIpAddr.to_be() == 0 {
+                        let mut podId: [u8; 64] = [0; 64];
+                        // podId.clone_from_slice("server".as_bytes());
+                        "server"
+                            .bytes()
+                            .zip(podId.iter_mut())
+                            .for_each(|(b, ptr)| *ptr = b);
+                        let endPoint = EndpointUsingPodId {
+                            podId,
+                            port: connectRequest.dstPort,
+                        };
+                        match RDMA_SRV.srvPodIdEndpoints.lock().get(&endPoint) {
+                            Some(srvEndpoint) => match srvEndpoint.status {
+                                SrvEndPointStatus::Listening => {
+                                    found = true;
+                                    agentId = srvEndpoint.agentId;
+                                    sockfd = srvEndpoint.sockfd;
+                                }
+                                _ => {}
+                            },
+                            None => {
+                                error!(
+                                    "HandleConnectRequest, pod: {} is not listening at port: {}",
+                                    "server", connectRequest.dstPort
+                                );
+                            }
+                        }
+                    } else {
+                        error!(
+                            "HandleConnectRequest, podId for ip: {} is not found!!",
+                            connectRequest.dstIpAddr.to_be()
+                        );
+                    }
                 }
             }
         }
@@ -929,6 +968,8 @@ impl RDMAControlChannel {
                 .lock()
                 .insert(rdmaChannel.localId, rdmaChannel.clone());
 
+            // println!("qq1: HandleConnectResponse::HandleConnectRequest before SendControlMsg");
+            // RDMA_SRV.timestamps.lock().push(TSC.Rdtsc());
             self.SendControlMsg(ControlMsgBody::ConnectResponse(ConnectResponse {
                 remoteChannelId: rdmaChannel.remoteChannelRDMAInfo.lock().remoteId,
                 localChannelId: rdmaChannel.localId,
@@ -944,6 +985,10 @@ impl RDMAControlChannel {
                     .swap(0, Ordering::SeqCst),
                 remoteSockFd: connectRequest.sockFd,
             }));
+
+            // println!("qq1: HandleConnectResponse::HandleConnectRequest after SendControlMsg");
+            // RDMA_SRV.timestamps.lock().push(TSC.Rdtsc());
+
             // .unwrap();
             // agent.sockInfos.lock().get_mut(&sockfd).unwrap().acceptQueue.lock().EnqSocket(rdmaChannel.localId);
             agent.SendResponse(RDMAResp {
@@ -958,6 +1003,8 @@ impl RDMAControlChannel {
                     srcPort: rdmaChannel.srcPort,
                 }),
             });
+            // println!("qq1: HandleConnectResponse::HandleConnectRequest after SendResponse");
+            // RDMA_SRV.timestamps.lock().push(TSC.Rdtsc());
         } else {
             println!("TODO: no server listening, need ack error back!");
         }
@@ -972,7 +1019,7 @@ impl RDMAControlChannel {
     //5. RemoteRecevieReqeustsNum ?? when to send?
     pub fn SendControlMsg(&self, msg: ControlMsgBody) {
         //-> Result<()> {
-        // println!("RDMAControlChannel::SendControlMsg, msg: {:?}", msg);
+        // println!("RDMAControlChannel::SendControlMsg, msg: {:?}, size: {}", msg, mem::size_of_val(&msg));
         let rdmaChannel = self.chan.upgrade().unwrap();
         // println!("RDMAControlChannel::SendControlMsg 1");
         let mut writeBuf = rdmaChannel.sockBuf.writeBuf.lock();

@@ -1,5 +1,6 @@
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
+// use alloc::vec::Vec;
 use core::ops::Deref;
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::Ordering;
@@ -17,6 +18,7 @@ use super::rdmasocket::*;
 use super::socket_buf::*;
 use super::unix_socket::UnixSocket;
 use crate::qlib::kernel::kernel::waiter::Queue;
+// use super::kernel::TSC;
 
 pub struct RDMASvcCliIntern {
     // agent id
@@ -63,6 +65,7 @@ pub struct RDMASvcCliIntern {
 
     pub tcpPortAllocator: Mutex<IdAllocator>,
     pub udpPortAllocator: Mutex<IdAllocator>,
+    // pub timestamp: Mutex<Vec<i64>>,
 }
 
 impl Deref for RDMASvcClient {
@@ -99,6 +102,7 @@ impl Default for RDMASvcClient {
                 portToFdInfoMappings: Mutex::new(BTreeMap::new()),
                 tcpPortAllocator: Mutex::new(IdAllocator::default()),
                 udpPortAllocator: Mutex::new(IdAllocator::default()),
+                // timestamp: Mutex::new(Vec::with_capacity(0)),
             }),
         }
     }
@@ -296,6 +300,7 @@ impl RDMASvcClient {
                 Some(cq) => {
                     match cq.msg {
                         RDMARespMsg::RDMAConnect(response) => {
+                            // GlobalRDMASvcCli().timestamp.lock().push(TSC.Rdtsc()); // 5 (219/184)
                             let sockfd = match self
                                 .rdmaIdToSocketMappings
                                 .lock()
@@ -362,6 +367,7 @@ impl RDMASvcClient {
                                         .lock()
                                         .waitInfo
                                         .Notify(EVENT_OUT);
+                                    // GlobalRDMASvcCli().timestamp.lock().push(TSC.Rdtsc()); // 6 (23/6)
                                 }
                                 _ => {
                                     panic!("RDMARespMsg::RDMAConnect, SockInfo is not correct type: {:?}", sockInfo);
@@ -391,7 +397,10 @@ impl RDMASvcClient {
                             match sockInfo {
                                 SockInfo::RDMAServerSocket(rdmaServerSock) => {
                                     // let fd = unsafe { libc::socket(AFType::AF_INET, SOCK_STREAM, 0) };
+                                    // let c1 = TSC.Rdtsc();
                                     let fd = self.CreateSocket() as i32;
+                                    // let c2 = TSC.Rdtsc();
+                                    // error!("Create socket time used: {}", c2 - c1);
                                     let rdmaId = GlobalRDMASvcCli()
                                         .nextRDMAId
                                         .fetch_add(1, Ordering::Release);
