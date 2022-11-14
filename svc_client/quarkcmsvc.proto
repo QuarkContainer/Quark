@@ -34,6 +34,10 @@ service QuarkCMService {
   rpc WatchEndpoints (MaxResourceVersionMessage) returns (stream EndpointsMessage) {}
   rpc ListConfigMap (google.protobuf.Empty) returns (ConfigMapListMessage) {}
   rpc WatchConfigMap (MaxResourceVersionMessage) returns (stream ConfigMapMessage) {}
+  rpc ListIngress (google.protobuf.Empty) returns (IngressListMessage) {}
+  rpc WatchIngress (MaxResourceVersionMessage) returns (stream IngressMessage) {}
+  rpc ListRdmaIngress (google.protobuf.Empty) returns (RdmaIngressListMessage) {}
+  rpc WatchRdmaIngress (MaxResourceVersionMessage) returns (stream RdmaIngressMessage) {}
 }
 
 message TestRequestMessage {
@@ -104,6 +108,30 @@ message ConfigMapMessage {
 
 message ConfigMapListMessage {
     repeated ConfigMapMessage ConfigMaps = 1;
+}
+
+message IngressMessage {
+    string name = 1;
+    string service = 2;
+    uint32 port_number = 3;
+    int32 resource_version = 4;
+    string event_type = 5;
+}
+
+message IngressListMessage {
+    repeated IngressMessage Ingresses = 1;
+}
+
+message RdmaIngressMessage {
+    uint32 port_number = 1;
+    string service = 2;
+    uint32 target_port_number = 3;
+    int32 resource_version = 4;
+    string event_type = 5;
+}
+
+message RdmaIngressListMessage {
+    repeated RdmaIngressMessage RdmaIngresses = 1;
 }
 
 message MaxResourceVersionMessage {

@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// rdma_cli needs same file from rdma_srv. Crating a soft link.
+// cd rdma_cli/src;ln -s ../../rdma_srv/src/constants.rs constants.rs
+
 pub const EVENT_TYPE_SET: &str = "set";
 pub const EVENT_TYPE_DELETE: &str = "delete";
 
