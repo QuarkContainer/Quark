@@ -36,7 +36,7 @@ lazy_static! {
 
 pub const RECV_UDP_COUNT: u32 = 2000;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum SrvEndPointStatus {
     Binded,
     Listening,
@@ -51,6 +51,7 @@ pub struct SrvEndpoint {
                                    //pub acceptQueue: [RDMAChannel; 5], // hold rdma channel which can be assigned.
 }
 
+#[derive(Debug)]
 pub struct SrvEndpointUsingPodId {
     //pub srvEndpointId: u32, // to be returned as bind
     pub agentId: u32,
@@ -61,7 +62,7 @@ pub struct SrvEndpointUsingPodId {
                                    //pub acceptQueue: [RDMAChannel; 5], // hold rdma channel which can be assigned.
 }
 
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Debug, Eq, Hash, PartialEq)]
 pub struct EndpointUsingPodId {
     // same as vpcId
     pub podId: [u8; 64],
@@ -149,6 +150,7 @@ pub struct RDMASrv {
     pub udpBufferAllocator: Mutex<UDPBufferAllocator>,
     pub podIdToAgents: Mutex<HashMap<[u8; 64], RDMAAgent>>,
     pub vpcIpAddrToAgents: Mutex<HashMap<VpcIpAddr, RDMAAgent>>,
+    // pub timestamps: Mutex<Vec<i64>>,
 }
 
 impl Drop for RDMASrv {
@@ -311,6 +313,7 @@ impl RDMASrv {
             udpBufferAllocator,
             vpcIpAddrToAgents: Mutex::new(HashMap::new()),
             podIdToAgents: Mutex::new(HashMap::new()),
+            // timestamps: Mutex::new(Vec::with_capacity(16)),
         };
     }
 

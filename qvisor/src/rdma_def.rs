@@ -119,6 +119,7 @@ impl RDMASvcClient {
                 //"The default values are 32768 and 60999 respectively."
                 tcpPortAllocator: Mutex::new(IdAllocator::New(32768, 28232)), // 60999 - 32768 + 1 = 28231 + 1 = 28232
                 udpPortAllocator: Mutex::new(IdAllocator::New(32768, 28232)), // 60999 - 32768 + 1 = 28231 + 1 = 28232
+                // timestamp: Mutex::new(Vec::with_capacity(16)),
             }),
         }
     }

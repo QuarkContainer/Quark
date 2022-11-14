@@ -18,8 +18,10 @@ use spin::Mutex;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::ffi::CString;
+use std::net::{IpAddr, Ipv4Addr};
 use std::ops::{Deref, DerefMut};
 use std::os::unix::io::{AsRawFd, RawFd};
+use std::str::FromStr;
 use std::{env, mem, ptr, thread, time};
 
 use super::id_mgr::IdMgr;
@@ -33,6 +35,7 @@ use super::rdma_channel::*;
 use super::rdma_conn::*;
 use super::rdma_ctrlconn::*;
 use super::rdma_srv::*;
+// use super::qlib::kernel::TSC;
 
 pub struct SockInfo {
     pub sockfd: u32,
@@ -344,6 +347,26 @@ impl RDMAAgent {
                 println!("error: {}", std::io::Error::last_os_error());
             }
         }
+        // profiling
+        // if matches!(response.msg, RDMARespMsg::RDMAConnect(_)) {
+        //     // println!("qq1: After push RDMAConnect to CQ (SendResponse)");
+        //     RDMA_SRV.timestamps.lock().push(TSC.Rdtsc()); //4
+        //     let len = RDMA_SRV.timestamps.lock().len();
+        //     let mut i = 1;
+        //     let mut v1 = RDMA_SRV.timestamps.lock()[0];
+        //     let mut v2 = RDMA_SRV.timestamps.lock()[1];
+        //     println!("qq, Connect time is: {}", RDMA_SRV.timestamps.lock()[len - 1] - v1);
+        //     loop {
+        //         println!("{}", v2 - v1);
+        //         i += 1;
+        //         if i == len {
+        //             break;
+        //         }
+        //         v1 = v2;
+        //         v2 = RDMA_SRV.timestamps.lock()[i];            
+        //     }
+        //     RDMA_SRV.timestamps.lock().clear();
+        // }
     }
 
     fn HandleClientRequestInternal(&self, rdmaReq: RDMAReq) {
@@ -429,6 +452,8 @@ impl RDMAAgent {
                 }
             }
             RDMAReqMsg::RDMAConnectUsingPodId(msg) => {
+                // println!("qq1: RDMAReqMsg::RDMAConnectUsingPodId Enter");
+                // RDMA_SRV.timestamps.lock().push(TSC.Rdtsc()); //0
                 let vpcId;
                 let ipAddr;
                 if RDMA_CTLINFO.isK8s {
@@ -474,6 +499,8 @@ impl RDMAAgent {
                     }
                     match RDMA_CTLINFO.get_node_ip_by_pod_ip(&dstIpAddr) {
                         Some(nodeIpAddr) => {
+                            // println!("qq1: RDMAReqMsg::RDMAConnectUsingPodId before SendControlMsgInternal");
+                            // RDMA_SRV.timestamps.lock().push(TSC.Rdtsc()); // 1
                             self.SendControlMsgInternal(
                                 msg.sockfd,
                                 nodeIpAddr,
@@ -484,7 +511,21 @@ impl RDMAAgent {
                             );
                         }
                         None => {
-                            println!("TODO: return error as no ip to node mapping is found");
+                            if !RDMA_CTLINFO.isK8s {
+                                if dstIpAddr == 0 {
+                                    self.SendControlMsgInternal(
+                                        msg.sockfd,
+                                        u32::from(Ipv4Addr::from_str("172.16.1.43").unwrap()).to_be(),
+                                        srcVpcIpAddr,
+                                        msg.srcPort,
+                                        dstIpAddr,
+                                        dstPort,
+                                    );
+                                }
+                            }
+                            else {
+                                println!("TODO: return error as no ip to node mapping is found, dstIpAddr: {}, dstPort: {}", dstIpAddr, dstPort);
+                            }
                         }
                     }
                 }
@@ -628,6 +669,8 @@ impl RDMAAgent {
             .insert(rdmaChannel.localId, rdmaChannel.clone());
 
         let connectReqeust = rdmaChannel.CreateConnectRequest(sockfd, srcVpcIpAddr.vpcId);
+        // println!("qq1: SendControlMsgInternal, before rdmaConn::SendControlMsg");
+        // RDMA_SRV.timestamps.lock().push(TSC.Rdtsc()); //2
         rdmaConn
             .ctrlChan
             .lock()

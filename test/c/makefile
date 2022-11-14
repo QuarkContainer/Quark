@@ -1,4 +1,4 @@
-all: std server client unixcli unixsrv socketpair stat dev fork signal futex multithread epoll mkdir fifo timerfd eventfd seek gettimeofday server_benchmark client_benchmark epoll_client epoll_server multithread_client multithread_server multithread_pp_client multithread_pp_server poll udpcli udpsrv
+all: std server client server_conn client_conn unixcli unixsrv socketpair stat dev fork signal futex multithread epoll mkdir fifo timerfd eventfd seek gettimeofday server_benchmark client_benchmark epoll_client epoll_server multithread_client multithread_server multithread_pp_client multithread_pp_server poll udpcli udpsrv
 
 std: std.c
 	gcc -o std std.c
@@ -8,6 +8,10 @@ server: server.c
 	gcc -o server server.c
 client: client.c
 	gcc -o client client.c
+server_conn: server_conn.c
+	gcc -o server_conn server_conn.c
+client_conn: client_conn.c
+	gcc -o client_conn client_conn.c
 epoll_client: epoll_client.c
 	gcc -o epollc epoll_client.c
 epoll_server: epoll_server.c

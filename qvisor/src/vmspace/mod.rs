@@ -578,6 +578,7 @@ impl VMSpace {
             let sockInfo = fdInfoLock.sockInfo.lock().clone();
             match sockInfo {
                 SockInfo::RDMADataSocket(dataSock) => {
+                    // error!("VMSpace::Close, dataSock fd: {}", fd);
                     GlobalRDMASvcCli().channelToSocketMappings.lock().remove(&dataSock.channelId);
                     GlobalRDMASvcCli().rdmaIdToSocketMappings.lock().remove(&dataSock.rdmaId);
                     GlobalRDMASvcCli().tcpPortAllocator.lock().Free(dataSock.localPort as u64);

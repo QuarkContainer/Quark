@@ -284,7 +284,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // }
 
     unsafe {
-        let mut serv_addr: libc::sockaddr_in = libc::sockaddr_in {
+        let serv_addr: libc::sockaddr_in = libc::sockaddr_in {
             sin_family: libc::AF_INET as u16,
             sin_port: 8888u16.to_be(),
             sin_addr: libc::in_addr {
@@ -292,22 +292,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             },
             sin_zero: mem::zeroed(),
         };
-
-        if args.len() > 1 {
-            if !RDMA_CTLINFO.isK8s {
-                let ipAddr = u32::from(Ipv4Addr::from_str("172.16.1.43").unwrap()).to_be();
-                SetupConnection(&ipAddr);
-            }
-
-            serv_addr = libc::sockaddr_in {
-                sin_family: libc::AF_INET as u16,
-                sin_port: 8889u16.to_be(),
-                sin_addr: libc::in_addr {
-                    s_addr: u32::from_be_bytes([0, 0, 0, 0]).to_be(),
-                },
-                sin_zero: mem::zeroed(),
-            };
-        }
 
         let mut enable = 1;
         let _res = libc::setsockopt(
@@ -329,6 +313,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         libc::listen(server_fd, 128);
+
+        if !RDMA_CTLINFO.isK8s {
+            if args.len() > 1 {
+                let peerIpAddr = u32::from(Ipv4Addr::from_str("172.16.1.43").unwrap()).to_be();
+                let localIpAddr = u32::from(Ipv4Addr::from_str("172.16.1.99").unwrap()).to_be();
+                RDMA_CTLINFO.localIp_set(localIpAddr);
+                SetupConnection(&peerIpAddr);
+                SetupConnection(&localIpAddr);
+
+                // serv_addr = libc::sockaddr_in {
+                //     sin_family: libc::AF_INET as u16,
+                //     sin_port: 8889u16.to_be(),
+                //     sin_addr: libc::in_addr {
+                //         s_addr: u32::from_be_bytes([0, 0, 0, 0]).to_be(),
+                //     },
+                //     sin_zero: mem::zeroed(),
+                // };
+            } else {
+                let localIpAddr = u32::from(Ipv4Addr::from_str("172.16.1.43").unwrap()).to_be();
+                RDMA_CTLINFO.localIp_set(localIpAddr);
+                SetupConnection(&localIpAddr);
+            }
+        }
     }
     println!("litener sock fd is {}", server_fd);
 

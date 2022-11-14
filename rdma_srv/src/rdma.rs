@@ -11,6 +11,7 @@ use std::ptr;
 use super::qlib::common::*;
 use super::qlib::linux_def::*;
 use super::rdma_srv::RDMA_SRV;
+// use super::qlib::kernel::TSC;
 //use super::super::super::IO_MGR;
 
 use lazy_static::lazy_static;
@@ -564,6 +565,10 @@ impl RDMAContext {
         }
     }
 
+    // pub fn HandleCQEvent(&self) -> Result<()> {
+    //     Ok(())
+    // }
+
     pub fn HandleCQEvent(&self) -> Result<()> {
         let mut cq_ptr: *mut rdmaffi::ibv_cq = ptr::null_mut();
         let mut cq_context: *mut std::os::raw::c_void = ptr::null_mut();
@@ -737,6 +742,23 @@ impl RDMAContext {
             //         channels.insert(wc.qp_num, vec![channelId].into_iter().collect());
             //     }
             // }
+            // println!("qq1: IBV_WC_RDMA_WRITE");
+            // RDMA_SRV.timestamps.lock().push(TSC.Rdtsc());
+            // let len = RDMA_SRV.timestamps.lock().len();
+            // let mut i = 1;
+            // let mut v1 = RDMA_SRV.timestamps.lock()[0];
+            // let mut v2 = RDMA_SRV.timestamps.lock()[1];
+            // println!("qq, Handle connect request time is: {}", RDMA_SRV.timestamps.lock()[len - 1] - v1);
+            // loop {
+            //     println!("{}", v2 - v1);
+            //     i += 1;
+            //     if i == len {
+            //         break;
+            //     }
+            //     v1 = v2;
+            //     v2 = RDMA_SRV.timestamps.lock()[i];            
+            // }
+            // RDMA_SRV.timestamps.lock().clear();
 
             RDMA_SRV.ProcessRDMAWriteImmFinish(wc.wr_id as u32, wc.qp_num);
         } else if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RECV_RDMA_WITH_IMM {
@@ -761,6 +783,8 @@ impl RDMAContext {
                     channels.insert(wc.qp_num, vec![channelId].into_iter().collect());
                 }
             }
+            // println!("qq1: IBV_WC_RECV_RDMA_WITH_IMM");
+            // RDMA_SRV.timestamps.lock().push(TSC.Rdtsc());
             RDMA_SRV.ProcessRDMARecvWriteImm(immData.ReadCount() as _, wc.qp_num, wc.byte_len as _);
         } else if wc.opcode == rdmaffi::ibv_wc_opcode::IBV_WC_RECV {
             // error!("ProcessWC::3");
@@ -913,7 +937,11 @@ impl QueuePair {
 
         let mut bad_wr: *mut rdmaffi::ibv_send_wr = ptr::null_mut();
 
+        // println!("qq1: WriteImm, before post_send");
+        // RDMA_SRV.timestamps.lock().push(TSC.Rdtsc());
         let rc = unsafe { rdmaffi::ibv_post_send(self.Data(), &mut sw, &mut bad_wr) };
+        // println!("qq1: WriteImm, after post_send");
+        // RDMA_SRV.timestamps.lock().push(TSC.Rdtsc());
         if rc != 0 {
             return Err(Error::SysError(errno::errno().0));
         }

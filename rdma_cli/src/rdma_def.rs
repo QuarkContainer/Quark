@@ -1,6 +1,7 @@
 use alloc::collections::BTreeMap;
 use alloc::slice;
 use alloc::sync::Arc;
+// use alloc::vec::Vec;
 use spin::Mutex;
 use std::sync::atomic::AtomicU32;
 use std::{mem, ptr};
@@ -116,6 +117,7 @@ impl RDMASvcClient {
                 portToFdInfoMappings: Mutex::new(BTreeMap::new()),
                 tcpPortAllocator: Mutex::new(IdAllocator::default()),
                 udpPortAllocator: Mutex::new(IdAllocator::default()),
+                // timestamp: Mutex::new(Vec::with_capacity(16)),
             }),
         }
     }

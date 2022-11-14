@@ -29,6 +29,7 @@ use super::qlib::common::*;
 use super::qlib::linux_def::*;
 use super::qlib::rdma_share::*;
 use super::qlib::socket_buf::SocketBuff;
+// use super::qlib::kernel::TSC;
 
 #[derive(Clone, Copy, Debug)]
 pub enum ChannelStatus {
@@ -140,6 +141,24 @@ impl RDMAChannelIntern {
     }
 
     pub fn ProcessRDMAWriteImmFinish(&self, finSent: bool) {
+        // println!("qq1: RDMAChannel::ProcessRDMAWriteImmFinish enter");
+        // RDMA_SRV.timestamps.lock().push(TSC.Rdtsc());
+        // let len = RDMA_SRV.timestamps.lock().len();
+        // let mut i = 0;
+        // let v1 = RDMA_SRV.timestamps.lock()[0];
+        // // let mut v2 = RDMA_SRV.timestamps.lock()[1];
+        // // println!("qq, Handle connect request time len: {}", len);
+        // println!("{}", RDMA_SRV.timestamps.lock()[len - 1] - v1);
+        // loop {
+        //     println!("{}", RDMA_SRV.timestamps.lock()[i]);
+        //     i += 1;
+        //     if i == len {
+        //         break;
+        //     }
+        //     // v1 = v2;
+        //     // v2 = RDMA_SRV.timestamps.lock()[i];            
+        // }
+        // RDMA_SRV.timestamps.lock().clear();
         // println!("RDMAChannel::ProcessRDMAWriteImmFinish 1");
         let mut remoteInfo = self.remoteChannelRDMAInfo.lock();
         remoteInfo.sending = false;
@@ -171,10 +190,10 @@ impl RDMAChannelIntern {
                     self.ReleaseChannelResource();
                 }
             } else {
-                error!(
-                    "TODO: status: {:?} is not handled after finSent",
-                    *self.status.lock()
-                );
+                // error!(
+                //     "TODO: status: {:?} is not handled after finSent",
+                //     *self.status.lock()
+                // );
             }
 
             // return;
@@ -401,6 +420,8 @@ impl RDMAChannelIntern {
     }
 
     pub fn RDMASend(&self) {
+        // println!("qq1: RDMAChannel::RDMASend enter");
+        // RDMA_SRV.timestamps.lock().push(TSC.Rdtsc());
         let remoteInfo = self.remoteChannelRDMAInfo.lock();
         if remoteInfo.sending == true {
             return; // the sending is ongoing
