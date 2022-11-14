@@ -93,4 +93,12 @@ impl CtrlInfo {
     pub fn epoll_fd_get(&self) -> i32 {
         self.epoll_fd.lock().clone()
     }
+
+    pub fn GetRdmaIngressByPort(&self, portNumber: u16) -> Option<RdmaIngress> {
+        let rdmaIngresses = self.rdma_ingresses.lock();
+        if rdmaIngresses.contains_key(&portNumber) {
+            return Some(rdmaIngresses[&portNumber].clone());
+        }
+        None
+    }
 }

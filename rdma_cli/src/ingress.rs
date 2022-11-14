@@ -232,13 +232,12 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient) {
                             let _ret =
                                 epoll_add(epoll_fd, stream_fd, read_write_event(stream_fd as u64));
 
-                            //TODO: use port to map to different (ip, port), hardcode for testing purpose, should come from control plane in the future
                             let sockfd = gatewayCli.sockIdMgr.lock().AllocId().unwrap(); //TODO: rename sockfd
-                            let egressEndpoint = Endpoint::Egress();
+                            let rdmaIngress = RDMA_CTLINFO.GetRdmaIngressByPort(_port).unwrap();
                             let _ret = gatewayCli.connect(
                                 sockfd,
-                                egressEndpoint.ipAddr,
-                                egressEndpoint.port,
+                                u32::from(Ipv4Addr::from_str("10.244.0.2").unwrap()), // todo rdmaIngress.service -> ip
+                                rdmaIngress.targetPortNumber.to_be(), // todo rdmaIngress.service + targetPortNumber -> port
                             );
                             RDMA_CTLINFO.fds_insert(stream_fd, FdType::TCPSocketConnect(sockfd));
                             sockFdMappings.insert(sockfd, stream_fd);
