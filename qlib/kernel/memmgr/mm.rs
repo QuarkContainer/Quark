@@ -327,25 +327,25 @@ impl MemoryManager {
 
     pub fn MaskTlbShootdown(&self, vcpuId: u64) {
         self.tlbShootdownMask
-            .fetch_or(1 << vcpuId, Ordering::Release);
+            .fetch_or(1 << vcpuId, Ordering::SeqCst);
     }
 
     pub fn UnmaskTlbShootdown(&self, vcpuId: u64) -> u64 {
         return self
             .tlbShootdownMask
-            .fetch_and(!(1 << vcpuId), Ordering::Release);
+            .fetch_and(!(1 << vcpuId), Ordering::SeqCst);
     }
 
     pub fn SetVcpu(&self, vcpu: usize) {
         assert!(vcpu < 64);
-        self.vcpuMapping.fetch_or(1 << vcpu, Ordering::Release);
+        self.vcpuMapping.fetch_or(1 << vcpu, Ordering::SeqCst);
     }
 
     pub fn TlbShootdown(&self) {
         if self.pagetable.read().pt.TlbShootdown() {
             let mask = self.GetVcpuMapping();
             if mask > 0 {
-                self.tlbShootdownMask.fetch_or(mask, Ordering::Release);
+                self.tlbShootdownMask.fetch_or(mask, Ordering::SeqCst);
                 let mut interrupt_mask = 0u64;
                 let vcpu_len = SHARESPACE.scheduler.VcpuArr.len();
                 for i in 0..vcpu_len {
