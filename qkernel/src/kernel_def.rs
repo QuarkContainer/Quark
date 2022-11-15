@@ -224,8 +224,8 @@ pub fn switch(from: TaskId, to: TaskId) {
     }
     toCtx.SetFS();
     
-    fromCtx.mm.VcpuLeave();
-    toCtx.mm.VcpuEnter();
+    //fromCtx.mm.VcpuLeave();
+    //toCtx.mm.VcpuEnter();
 
     //fromCtx.Check();
     //toCtx.Check();
@@ -366,6 +366,7 @@ pub fn child_clone(userSp: u64) {
 
     let kernalRsp = pt as *const _ as u64;
     CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
+    currTask.mm.VcpuEnter();
     currTask.mm.HandleTlbShootdown();
     SyscallRet(kernalRsp)
 }
