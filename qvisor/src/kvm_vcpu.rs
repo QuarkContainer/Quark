@@ -801,11 +801,11 @@ impl KVMVcpu {
                 VcpuExit::IrqWindowOpen => {
                     self.InterruptGuest();
                     self.vcpu.set_kvm_request_interrupt_window(0);
-                    fence(Ordering::Release);
+                    fence(Ordering::SeqCst);
                 }
                 VcpuExit::Intr => {
                     self.vcpu.set_kvm_request_interrupt_window(1);
-                    fence(Ordering::Release);
+                    fence(Ordering::SeqCst);
                     //     SHARE_SPACE.MaskTlbShootdown(self.id as _);
                     //
                     //     let mut regs = self

@@ -63,7 +63,7 @@ pub struct CPULocal {
 
 impl CPULocal {
     pub fn State(&self) -> VcpuState {
-        let state = self.state.load(Ordering::Acquire);
+        let state = self.state.load(Ordering::SeqCst);
         return unsafe { core::mem::transmute(state) };
     }
 
@@ -123,11 +123,11 @@ impl CPULocal {
     }
 
     pub fn SetMode(&self, mode: VcpuMode) {
-        return self.mode.store(mode as u8, Ordering::Release);
+        return self.mode.store(mode as u8, Ordering::SeqCst);
     }
 
     pub fn GetMode(&self) -> VcpuMode {
-        let mode = self.mode.load(Ordering::Acquire);
+        let mode = self.mode.load(Ordering::SeqCst);
         return unsafe { core::mem::transmute(mode) };
     }
 
