@@ -427,19 +427,28 @@ impl RDMAAgent {
                 // error!("RDMAReqMsg::RDMAListenUsingPodId, podId: {:?}, port: {}", podId, msg.port);
             }
             RDMAReqMsg::RDMAConnect(msg) => {
-                //TODOCtrlPlane: need get nodeIp from dstIpAddr
-                match RDMA_CTLINFO.get_node_ip_by_pod_ip(&msg.dstIpAddr) {
+                let mut msgCloned = msg.clone();
+
+                match RDMA_CTLINFO.IsService(msgCloned.dstIpAddr, &msgCloned.dstPort) {
+                    None => {}
+                    Some(ipWithPort) => {
+                        println!("RDMAConnect: The traffic is connecting to a service. Change the connection to {:?}", ipWithPort);
+                        msgCloned.dstIpAddr = ipWithPort.ip;
+                        msgCloned.dstPort = ipWithPort.port.port;
+                    }
+                }
+                match RDMA_CTLINFO.get_node_ip_by_pod_ip(&msgCloned.dstIpAddr) {
                     Some(nodeIpAddr) => {
                         let conns = RDMA_SRV.conns.lock();
                         let rdmaConn = conns.get(&nodeIpAddr).unwrap();
-                        let rdmaChannel = self.CreateClientRDMAChannel(&msg, rdmaConn.clone());
+                        let rdmaChannel = self.CreateClientRDMAChannel(&msgCloned, rdmaConn.clone());
 
                         RDMA_SRV
                             .channels
                             .lock()
                             .insert(rdmaChannel.localId, rdmaChannel.clone());
 
-                        let connectReqeust = rdmaChannel.CreateConnectRequest(msg.sockfd, 1);
+                        let connectReqeust = rdmaChannel.CreateConnectRequest(msgCloned.sockfd, 1);
                         rdmaConn
                             .ctrlChan
                             .lock()
@@ -447,7 +456,7 @@ impl RDMAAgent {
                         // .expect("fail to send msg");
                     }
                     None => {
-                        println!("TODO: return error as no ip to node mapping is found");
+                        println!("TODO: return error as no ip to node mapping is found, dstIpAddr: {}, dstPort: {}", msgCloned.dstIpAddr, msgCloned.dstPort);
                     }
                 }
             }
@@ -492,7 +501,7 @@ impl RDMAAgent {
                     match RDMA_CTLINFO.IsService(dstIpAddr, &dstPort) {
                         None => {}
                         Some(ipWithPort) => {
-                            println!("The traffic is connecting to a service. Change the connection to {:?}", ipWithPort);
+                            println!("RDMAConnectUsingPodId: The traffic is connecting to a service. Change the connection to {:?}", ipWithPort);
                             dstIpAddr = ipWithPort.ip;
                             dstPort = ipWithPort.port.port;
                         }
