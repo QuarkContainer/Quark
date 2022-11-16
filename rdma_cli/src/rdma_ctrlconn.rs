@@ -23,6 +23,9 @@ pub struct CtrlInfo {
     // rdma_ingresses: port number --> RdmaIngress
     pub rdma_ingresses: Mutex<HashMap<u16, RdmaIngress>>,
 
+    // serviceNameToIp: service name --> service ip
+    pub serviceNameToIp: Mutex<HashMap<String, u32>>,
+
     pub fds: Mutex<HashMap<i32, FdType>>,
 
     pub isCMConnected: Mutex<bool>,
@@ -34,10 +37,12 @@ impl Default for CtrlInfo {
     fn default() -> CtrlInfo {
         let ingresses: HashMap<u16, Ingress> = HashMap::new();
         let rdma_ingresses: HashMap<u16, RdmaIngress> = HashMap::new();
+        let serviceNameToIp: HashMap<String, u32> = HashMap::new();
         let fds: HashMap<i32, FdType> = HashMap::new();
         CtrlInfo {
             ingresses: Mutex::new(ingresses),
             rdma_ingresses: Mutex::new(rdma_ingresses),
+            serviceNameToIp: Mutex::new(serviceNameToIp),
             fds: Mutex::new(fds),
             isCMConnected: Mutex::new(false),
             epoll_fd: Mutex::new(0),
@@ -98,6 +103,14 @@ impl CtrlInfo {
         let rdmaIngresses = self.rdma_ingresses.lock();
         if rdmaIngresses.contains_key(&portNumber) {
             return Some(rdmaIngresses[&portNumber].clone());
+        }
+        None
+    }
+
+    pub fn GetServiceIpFromName(&self, name: String) -> Option<u32> {
+        let serviceNameToIp = self.serviceNameToIp.lock();
+        if serviceNameToIp.contains_key(&name) {
+            return Some(serviceNameToIp[&name]);
         }
         None
     }

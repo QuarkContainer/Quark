@@ -88,6 +88,9 @@ impl EndpointsInformer {
         if endpoints_message.event_type == EVENT_TYPE_SET {
             let mut ip_with_ports = HashSet::new();
             for ipWithPortStr in &endpoints_message.ip_with_ports {
+                if !ipWithPortStr.contains(":") {
+                    continue;
+                }
                 let splitted = ipWithPortStr.split(":").collect::<Vec<_>>();
                 ip_with_ports.insert(IpWithPort {
                     ip: splitted[0].to_string().parse::<u32>().unwrap().to_be(),

@@ -73,6 +73,7 @@ pub mod rdma_ctrlconn;
 pub mod rdma_def;
 pub mod ingress_informer;
 pub mod rdma_ingress_informer;
+pub mod service_informer;
 pub mod unix_socket_def;
 
 use self::qlib::ShareSpaceRef;
@@ -101,6 +102,7 @@ use std::{env, mem, ptr, thread, time};
 use rdma_ctrlconn::*;
 use ingress_informer::IngressInformer;
 use rdma_ingress_informer::RdmaIngressInformer;
+use service_informer::ServiceInformer;
 
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
@@ -142,15 +144,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tokio::spawn(async {
         while !RDMA_CTLINFO.isCMConnected_get() {
-            let mut rdma_ingress_informer = RdmaIngressInformer::new();
-            match rdma_ingress_informer.run().await {
-                Err(e) => {
-                    println!("Error to handle rdma ingresses: {:?}", e);
-                    thread::sleep_ms(1000);
-                }
-                Ok(_) => (),
-            };
+            thread::sleep_ms(1000);
         }
+        let mut rdma_ingress_informer = RdmaIngressInformer::new();
+        match rdma_ingress_informer.run().await {
+            Err(e) => {
+                println!("Error to handle rdma ingresses: {:?}", e);
+                thread::sleep_ms(1000);
+            }
+            Ok(_) => (),
+        };
+    });
+
+    tokio::spawn(async {
+        while !RDMA_CTLINFO.isCMConnected_get() {
+            thread::sleep_ms(1000);
+        }
+        let mut service_informer = ServiceInformer::new();
+        match service_informer.run().await {
+            Err(e) => {
+                println!("Error to handle services: {:?}", e);
+            }
+            Ok(_) => (),
+        };
     });
 
     // set up TCP Server to wait for incoming connection
@@ -236,8 +252,8 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient) {
                             let rdmaIngress = RDMA_CTLINFO.GetRdmaIngressByPort(_port).unwrap();
                             let _ret = gatewayCli.connect(
                                 sockfd,
-                                u32::from(Ipv4Addr::from_str("10.244.0.2").unwrap()), // todo rdmaIngress.service -> ip
-                                rdmaIngress.targetPortNumber.to_be(), // todo rdmaIngress.service + targetPortNumber -> port
+                                RDMA_CTLINFO.GetServiceIpFromName(rdmaIngress.service).unwrap().to_be(),
+                                rdmaIngress.targetPortNumber.to_be(),
                             );
                             RDMA_CTLINFO.fds_insert(stream_fd, FdType::TCPSocketConnect(sockfd));
                             sockFdMappings.insert(sockfd, stream_fd);
