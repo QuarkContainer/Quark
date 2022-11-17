@@ -68,7 +68,12 @@ pub mod kernel_def;
 pub mod qlib;
 
 pub mod common;
+pub mod constants;
+pub mod rdma_ctrlconn;
 pub mod rdma_def;
+pub mod ingress_informer;
+pub mod rdma_ingress_informer;
+pub mod service_informer;
 pub mod unix_socket_def;
 
 use self::qlib::ShareSpaceRef;
@@ -94,18 +99,22 @@ use qlib::unix_socket::UnixSocket;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::{env, mem, ptr, thread, time};
+use rdma_ctrlconn::*;
+use ingress_informer::IngressInformer;
+use rdma_ingress_informer::RdmaIngressInformer;
+use service_informer::ServiceInformer;
 
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
 lazy_static! {
     pub static ref GLOBAL_LOCK: Mutex<()> = Mutex::new(());
+    pub static ref RDMA_CTLINFO: CtrlInfo = CtrlInfo::default();
 }
-
-fn main() -> io::Result<()> {
-    let mut fds: HashMap<i32, FdType> = HashMap::new();
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<_> = env::args().collect();
     let gatewayCli: GatewayClient;
-    let mut unix_sock_path = "/tmp/rdma_srv";
+    let mut unix_sock_path = "/var/quarkrdma/rdma_srv_socket";
     if args.len() > 1 {
         unix_sock_path = args.get(1).unwrap(); //"/tmp/rdma_srv1";
     }
@@ -114,16 +123,58 @@ fn main() -> io::Result<()> {
     let cliEventFd = gatewayCli.rdmaSvcCli.cliEventFd;
     unblock_fd(cliEventFd);
     unblock_fd(gatewayCli.rdmaSvcCli.srvEventFd);
-
+    
     let epoll_fd = epoll_create().expect("can create epoll queue");
+    RDMA_CTLINFO.epoll_fd_set(epoll_fd);
     epoll_add(epoll_fd, cliEventFd, read_event(cliEventFd as u64))?;
-    fds.insert(cliEventFd, FdType::ClientEvent);
+    RDMA_CTLINFO.fds_insert(cliEventFd, FdType::ClientEvent);
+
+    tokio::spawn(async {
+        while !RDMA_CTLINFO.isCMConnected_get() {
+            let mut ingress_informer = IngressInformer::new();
+            match ingress_informer.run().await {
+                Err(e) => {
+                    println!("Error to handle ingresses: {:?}", e);
+                    thread::sleep_ms(1000);
+                }
+                Ok(_) => (),
+            };
+        }
+    });
+
+    tokio::spawn(async {
+        while !RDMA_CTLINFO.isCMConnected_get() {
+            thread::sleep_ms(1000);
+        }
+        let mut rdma_ingress_informer = RdmaIngressInformer::new();
+        match rdma_ingress_informer.run().await {
+            Err(e) => {
+                println!("Error to handle rdma ingresses: {:?}", e);
+                thread::sleep_ms(1000);
+            }
+            Ok(_) => (),
+        };
+    });
+
+    tokio::spawn(async {
+        while !RDMA_CTLINFO.isCMConnected_get() {
+            thread::sleep_ms(1000);
+        }
+        let mut service_informer = ServiceInformer::new();
+        match service_informer.run().await {
+            Err(e) => {
+                println!("Error to handle services: {:?}", e);
+            }
+            Ok(_) => (),
+        };
+    });
 
     // set up TCP Server to wait for incoming connection
     let server_fd = unsafe { libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0) };
-    fds.insert(server_fd, FdType::TCPSocketServer(6666));
+    RDMA_CTLINFO.fds_insert(server_fd, FdType::TCPSocketServer(6666));
     unblock_fd(server_fd);
-    epoll_add(epoll_fd, server_fd, read_write_event(server_fd as u64))?;
+    epoll_add(epoll_fd, server_fd, read_write_event(server_fd as u64))?;    
+
     unsafe {
         // TODO: need mapping 6666 -> (172.16.1.6:8888) for testing purpose, late should come from control plane
         let serv_addr: libc::sockaddr_in = libc::sockaddr_in {
@@ -147,12 +198,12 @@ fn main() -> io::Result<()> {
         libc::listen(server_fd, 128);
     }
 
-    wait(epoll_fd, &gatewayCli, &mut fds);
+    wait(epoll_fd, &gatewayCli);
 
     return Ok(());
 }
 
-fn wait(epoll_fd: i32, gatewayCli: &GatewayClient, fds: &mut HashMap<i32, FdType>) {
+fn wait(epoll_fd: i32, gatewayCli: &GatewayClient) {
     let mut events: Vec<EpollEvent> = Vec::with_capacity(1024);
     let mut sockFdMappings: HashMap<u32, i32> = HashMap::new(); // mapping between sockfd maintained by rdmaSvcCli and fd for incoming requests.
     loop {
@@ -178,7 +229,7 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient, fds: &mut HashMap<i32, FdType
         unsafe { events.set_len(res as usize) };
 
         for ev in &events {
-            let event_data = fds.get(&(ev.U64 as i32));
+            let event_data = RDMA_CTLINFO.fds_get(&(ev.U64 as i32));
             match event_data {
                 Some(FdType::TCPSocketServer(_port)) => {
                     let mut stream_fd;
@@ -197,15 +248,14 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient, fds: &mut HashMap<i32, FdType
                             let _ret =
                                 epoll_add(epoll_fd, stream_fd, read_write_event(stream_fd as u64));
 
-                            //TODO: use port to map to different (ip, port), hardcode for testing purpose, should come from control plane in the future
                             let sockfd = gatewayCli.sockIdMgr.lock().AllocId().unwrap(); //TODO: rename sockfd
-                            let egressEndpoint = Endpoint::Egress();
+                            let rdmaIngress = RDMA_CTLINFO.GetRdmaIngressByPort(_port).unwrap();
                             let _ret = gatewayCli.connect(
                                 sockfd,
-                                egressEndpoint.ipAddr,
-                                egressEndpoint.port,
+                                RDMA_CTLINFO.GetServiceIpFromName(rdmaIngress.service).unwrap().to_be(),
+                                rdmaIngress.targetPortNumber.to_be(),
                             );
-                            fds.insert(stream_fd, FdType::TCPSocketConnect(sockfd));
+                            RDMA_CTLINFO.fds_insert(stream_fd, FdType::TCPSocketConnect(sockfd));
                             sockFdMappings.insert(sockfd, stream_fd);
                         } else {
                             break;
@@ -213,7 +263,7 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient, fds: &mut HashMap<i32, FdType
                     }
                 }
                 Some(FdType::TCPSocketConnect(sockfd)) => {
-                    let mut sockInfo = gatewayCli.GetDataSocket(sockfd);
+                    let mut sockInfo = gatewayCli.GetDataSocket(&sockfd);
                     if !matches!(*sockInfo.status.lock(), SockStatus::ESTABLISHED) {
                         continue;
                     }

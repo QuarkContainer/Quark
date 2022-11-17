@@ -628,6 +628,7 @@ pub static WRITE_FLAGS: i32 = libc::EPOLLET | libc::EPOLLOUT;
 
 pub const READ_WRITE_FLAGS: i32 = libc::EPOLLET | libc::EPOLLOUT | libc::EPOLLIN;
 
+#[derive(Clone)]
 pub enum FdType {
     TCPSocketServer(u16),  //port
     TCPSocketConnect(u32), //sockfd maintained by RDMASvcCli

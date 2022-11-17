@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// rdma_cli needs same file from rdma_srv. Crating a soft link.
+// cd rdma_cli;ln -s ../rdma_srv/build.rs build.rs
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tonic_build::compile_protos("src/svc_client/quarkcmsvc.proto")?;
+    tonic_build::compile_protos("../svc_client/quarkcmsvc.proto")?;
     Ok(())
 }
