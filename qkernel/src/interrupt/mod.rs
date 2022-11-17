@@ -704,55 +704,51 @@ pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
     let currTask = Task::Current();
     currTask.mm.VcpuLeave();
 
-    if CPULocal::InterruptByTlbShootdown(mask) {
-        if ptRegs.cs & 0x3 != 0 {
-            // from user
-            let mut rflags = ptRegs.eflags;
-            rflags &= !USER_FLAGS_CLEAR;
-            rflags |= USER_FLAGS_SET;
-            ptRegs.eflags = rflags;
-            ptRegs.ss |= 3;
-        }
-
-        CPULocal::SetKernelStack(currTask.GetKernelSp());
-        if ptRegs.cs & 0x3 != 0 {
-            currTask.mm.VcpuEnter();
-            currTask.mm.HandleTlbShootdown();
-            CPULocal::Myself().SetMode(VcpuMode::User);
-        }
-        return;
-    } else if CPULocal::InterruptByThreadTimeout(mask) {
-        if ptRegs.cs & 0x3 != 0 {
-            // from user
-            let mut rflags = ptRegs.eflags;
-            rflags &= !USER_FLAGS_CLEAR;
-            rflags |= USER_FLAGS_SET;
-            ptRegs.eflags = rflags;
-            ptRegs.ss |= 3;
-
-            /*if SHARESPACE.config.read().KernelPagetable {
-                Task::SetKernelPageTable();
-            }*/
-
-            currTask.AccountTaskLeave(SchedState::RunningApp);
-            //currTask.SaveFp();
-            CPULocal::Myself().ResetEnterAppTimestamp();
-            super::qlib::kernel::taskMgr::Yield();
-            MainRun(currTask, TaskRunState::RunApp);
-            currTask.RestoreFp();
-            CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
-            CPULocal::SetKernelStack(currTask.GetKernelSp());
-            let kernalRsp = ptRegs as *const _ as u64;
-            CPULocal::Myself().SetMode(VcpuMode::User);
-            currTask.mm.VcpuEnter();
-            currTask.mm.HandleTlbShootdown();
-            if !(ptRegs.rip == ptRegs.rcx && ptRegs.r11 == ptRegs.eflags) {
-                IRet(kernalRsp)
-            } else {
-                SyscallRet(kernalRsp)
-            }
-        }
+    if ptRegs.cs & 0x3 == 0 {
+        return
     }
+
+    // from user
+    let mut rflags = ptRegs.eflags;
+    rflags &= !USER_FLAGS_CLEAR;
+    rflags |= USER_FLAGS_SET;
+    ptRegs.eflags = rflags;
+    ptRegs.ss |= 3;
+
+    if CPULocal::InterruptByTlbShootdown(mask) {
+        // no need special operation
+    } 
+    
+    if CPULocal::InterruptByThreadTimeout(mask) {
+        /*if SHARESPACE.config.read().KernelPagetable {
+            Task::SetKernelPageTable();
+        }*/
+
+        currTask.AccountTaskLeave(SchedState::RunningApp);
+        //currTask.SaveFp();
+        CPULocal::Myself().ResetEnterAppTimestamp();
+        super::qlib::kernel::taskMgr::Yield();
+        MainRun(currTask, TaskRunState::RunApp);
+        currTask.RestoreFp();
+        CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
+        CPULocal::SetKernelStack(currTask.GetKernelSp());
+        let kernalRsp = ptRegs as *const _ as u64;
+        CPULocal::Myself().SetMode(VcpuMode::User);
+        currTask.mm.VcpuEnter();
+        currTask.mm.HandleTlbShootdown();
+        if !(ptRegs.rip == ptRegs.rcx && ptRegs.r11 == ptRegs.eflags) {
+            IRet(kernalRsp)
+        } else {
+            SyscallRet(kernalRsp)
+        }
+
+        // won't reach hear
+    }
+
+    CPULocal::SetKernelStack(currTask.GetKernelSp());
+    currTask.mm.VcpuEnter();
+    currTask.mm.HandleTlbShootdown();
+    CPULocal::Myself().SetMode(VcpuMode::User);
 }
 
 #[no_mangle]

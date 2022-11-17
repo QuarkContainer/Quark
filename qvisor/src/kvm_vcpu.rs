@@ -16,6 +16,7 @@ use alloc::alloc::{alloc, Layout};
 use alloc::slice;
 use core::mem::size_of;
 use core::sync::atomic::AtomicU64;
+use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 use std::os::unix::io::AsRawFd;
 use std::sync::atomic::fence;
@@ -134,6 +135,8 @@ pub struct KVMVcpu {
     //index in the cpu arrary
     pub vcpu: kvm_ioctls::VcpuFd,
 
+    pub handlingSigChild: AtomicBool,
+
     pub topStackAddr: u64,
     pub entry: u64,
 
@@ -211,6 +214,7 @@ impl KVMVcpu {
             state: AtomicU64::new(KVMVcpuState::HOST as u64),
             vcpuCnt,
             vcpu,
+            handlingSigChild: AtomicBool::new(false),
             topStackAddr: topStackAddr,
             entry: entry,
             gdtAddr: gdtAddr,
@@ -805,7 +809,7 @@ impl KVMVcpu {
                 }
                 VcpuExit::Intr => {
                     self.vcpu.set_kvm_request_interrupt_window(1);
-                    fence(Ordering::SeqCst);
+                    self.handlingSigChild.store(false, Ordering::SeqCst);
                     //     SHARE_SPACE.MaskTlbShootdown(self.id as _);
                     //
                     //     let mut regs = self
@@ -1247,8 +1251,12 @@ extern "C" fn handleSigChild(signal: i32) {
     if signal == Signal::SIGCHLD {
         // used for tlb shootdown
         if let Some(vcpu) = LocalVcpu() {
+            // one handling is ongoing...
+            if vcpu.handlingSigChild.load(Ordering::SeqCst) {
+                return;
+            }
             vcpu.vcpu.set_kvm_immediate_exit(1);
-            fence(Ordering::Release);
+            vcpu.handlingSigChild.store(true, Ordering::SeqCst);
         }
     }
 }
