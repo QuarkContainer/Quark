@@ -55,6 +55,7 @@ int Send() {
 
 int main(int argc, char const *argv[]) 
 {
+    int wait = 1;
     //printf("xxxxxx\n");
     //return Send();
     char *addr = "127.0.0.1";
@@ -134,122 +135,200 @@ int main(int argc, char const *argv[])
     // int sa_len;
     // sa_len = sizeof(sa);
     printf("after calling connect()******************************\n");
-    sleep(2);
+    if (wait)
+    {
+        sleep(2);
+    }
     int sock1 = socket(AF_INET, SOCK_STREAM, 0);
     clock_gettime(CLOCK_MONOTONIC, &tstart);
     connect(sock1, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
     clock_gettime(CLOCK_MONOTONIC, &tend);
     us = (double)(tend.tv_sec - tstart.tv_sec) * 1.0e6 + (double)(tend.tv_nsec - tstart.tv_nsec)/1.0e3;
     printf("connection time used: %lf micro secs\n", us);
-    sleep(2);
+    if (wait)
+    {
+        sleep(2);
+    }
     int sock2 = socket(AF_INET, SOCK_STREAM, 0);
     clock_gettime(CLOCK_MONOTONIC, &tstart);
     connect(sock2, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
     clock_gettime(CLOCK_MONOTONIC, &tend);
     us = (double)(tend.tv_sec - tstart.tv_sec) * 1.0e6 + (double)(tend.tv_nsec - tstart.tv_nsec)/1.0e3;
     printf("connection time used: %lf micro secs\n", us);
+    if (wait)
+    {
+        sleep(2);
+    }
     int sock3 = socket(AF_INET, SOCK_STREAM, 0);
     clock_gettime(CLOCK_MONOTONIC, &tstart);
     connect(sock3, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
     clock_gettime(CLOCK_MONOTONIC, &tend);
     us = (double)(tend.tv_sec - tstart.tv_sec) * 1.0e6 + (double)(tend.tv_nsec - tstart.tv_nsec)/1.0e3;
     printf("connection time used: %lf micro secs\n", us);
+    if (wait)
+    {
+        sleep(2);
+    }
     int sock4 = socket(AF_INET, SOCK_STREAM, 0);
     clock_gettime(CLOCK_MONOTONIC, &tstart);
     connect(sock4, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
     clock_gettime(CLOCK_MONOTONIC, &tend);
     us = (double)(tend.tv_sec - tstart.tv_sec) * 1.0e6 + (double)(tend.tv_nsec - tstart.tv_nsec)/1.0e3;
     printf("connection time used: %lf micro secs\n", us);
+    if (wait)
+    {
+        sleep(2);
+    }
     int sock5 = socket(AF_INET, SOCK_STREAM, 0);
     clock_gettime(CLOCK_MONOTONIC, &tstart);
     connect(sock5, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
     clock_gettime(CLOCK_MONOTONIC, &tend);
     us = (double)(tend.tv_sec - tstart.tv_sec) * 1.0e6 + (double)(tend.tv_nsec - tstart.tv_nsec)/1.0e3;
     printf("connection time used: %lf micro secs\n", us);
+    if (wait)
+    {
+        sleep(2);
+    }
     int sock6 = socket(AF_INET, SOCK_STREAM, 0);
     clock_gettime(CLOCK_MONOTONIC, &tstart);
     connect(sock6, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
     clock_gettime(CLOCK_MONOTONIC, &tend);
     us = (double)(tend.tv_sec - tstart.tv_sec) * 1.0e6 + (double)(tend.tv_nsec - tstart.tv_nsec)/1.0e3;
     printf("connection time used: %lf micro secs\n", us);
+    if (wait)
+    {
+        sleep(2);
+    }
     int sock7 = socket(AF_INET, SOCK_STREAM, 0);
     clock_gettime(CLOCK_MONOTONIC, &tstart);
     connect(sock7, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
     clock_gettime(CLOCK_MONOTONIC, &tend);
     us = (double)(tend.tv_sec - tstart.tv_sec) * 1.0e6 + (double)(tend.tv_nsec - tstart.tv_nsec)/1.0e3;
     printf("connection time used: %lf micro secs\n", us);
+    if (wait)
+    {
+        sleep(2);
+    }
     int sock8 = socket(AF_INET, SOCK_STREAM, 0);
     clock_gettime(CLOCK_MONOTONIC, &tstart);
     connect(sock8, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
     clock_gettime(CLOCK_MONOTONIC, &tend);
     us = (double)(tend.tv_sec - tstart.tv_sec) * 1.0e6 + (double)(tend.tv_nsec - tstart.tv_nsec)/1.0e3;
     printf("connection time used: %lf micro secs\n", us);
+    if (wait)
+    {
+        sleep(2);
+    }
     int sock9 = socket(AF_INET, SOCK_STREAM, 0);
     clock_gettime(CLOCK_MONOTONIC, &tstart);
     connect(sock9, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
     clock_gettime(CLOCK_MONOTONIC, &tend);
     us = (double)(tend.tv_sec - tstart.tv_sec) * 1.0e6 + (double)(tend.tv_nsec - tstart.tv_nsec)/1.0e3;
     printf("connection time used: %lf micro secs\n", us);
+    if (wait)
+    {
+        sleep(2);
+    }
     int sock10 = socket(AF_INET, SOCK_STREAM, 0);
     clock_gettime(CLOCK_MONOTONIC, &tstart);
     connect(sock10, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
     clock_gettime(CLOCK_MONOTONIC, &tend);
     us = (double)(tend.tv_sec - tstart.tv_sec) * 1.0e6 + (double)(tend.tv_nsec - tstart.tv_nsec)/1.0e3;
     printf("connection time used: %lf micro secs\n", us);
+    if (wait)
+    {
+        sleep(2);
+    }
     int sock11 = socket(AF_INET, SOCK_STREAM, 0);
     clock_gettime(CLOCK_MONOTONIC, &tstart);
     connect(sock11, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
     clock_gettime(CLOCK_MONOTONIC, &tend);
     us = (double)(tend.tv_sec - tstart.tv_sec) * 1.0e6 + (double)(tend.tv_nsec - tstart.tv_nsec)/1.0e3;
     printf("connection time used: %lf micro secs\n", us);
+    if (wait)
+    {
+        sleep(2);
+    }
     int sock12 = socket(AF_INET, SOCK_STREAM, 0);
     clock_gettime(CLOCK_MONOTONIC, &tstart);
     connect(sock12, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
     clock_gettime(CLOCK_MONOTONIC, &tend);
     us = (double)(tend.tv_sec - tstart.tv_sec) * 1.0e6 + (double)(tend.tv_nsec - tstart.tv_nsec)/1.0e3;
     printf("connection time used: %lf micro secs\n", us);
+    if (wait)
+    {
+        sleep(2);
+    }
     int sock13 = socket(AF_INET, SOCK_STREAM, 0);
     clock_gettime(CLOCK_MONOTONIC, &tstart);
     connect(sock13, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
     clock_gettime(CLOCK_MONOTONIC, &tend);
     us = (double)(tend.tv_sec - tstart.tv_sec) * 1.0e6 + (double)(tend.tv_nsec - tstart.tv_nsec)/1.0e3;
     printf("connection time used: %lf micro secs\n", us);
+    if (wait)
+    {
+        sleep(2);
+    }
     int sock14 = socket(AF_INET, SOCK_STREAM, 0);
     clock_gettime(CLOCK_MONOTONIC, &tstart);
     connect(sock14, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
     clock_gettime(CLOCK_MONOTONIC, &tend);
     us = (double)(tend.tv_sec - tstart.tv_sec) * 1.0e6 + (double)(tend.tv_nsec - tstart.tv_nsec)/1.0e3;
     printf("connection time used: %lf micro secs\n", us);
+    if (wait)
+    {
+        sleep(2);
+    }
     int sock15 = socket(AF_INET, SOCK_STREAM, 0);
     clock_gettime(CLOCK_MONOTONIC, &tstart);
     connect(sock15, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
     clock_gettime(CLOCK_MONOTONIC, &tend);
     us = (double)(tend.tv_sec - tstart.tv_sec) * 1.0e6 + (double)(tend.tv_nsec - tstart.tv_nsec)/1.0e3;
     printf("connection time used: %lf micro secs\n", us);
+    if (wait)
+    {
+        sleep(2);
+    }
     int sock16 = socket(AF_INET, SOCK_STREAM, 0);
     clock_gettime(CLOCK_MONOTONIC, &tstart);
     connect(sock16, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
     clock_gettime(CLOCK_MONOTONIC, &tend);
     us = (double)(tend.tv_sec - tstart.tv_sec) * 1.0e6 + (double)(tend.tv_nsec - tstart.tv_nsec)/1.0e3;
     printf("connection time used: %lf micro secs\n", us);
+    if (wait)
+    {
+        sleep(2);
+    }
     int sock17 = socket(AF_INET, SOCK_STREAM, 0);
     clock_gettime(CLOCK_MONOTONIC, &tstart);
     connect(sock17, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
     clock_gettime(CLOCK_MONOTONIC, &tend);
     us = (double)(tend.tv_sec - tstart.tv_sec) * 1.0e6 + (double)(tend.tv_nsec - tstart.tv_nsec)/1.0e3;
     printf("connection time used: %lf micro secs\n", us);
+    if (wait)
+    {
+        sleep(2);
+    }
     int sock18 = socket(AF_INET, SOCK_STREAM, 0);
     clock_gettime(CLOCK_MONOTONIC, &tstart);
     connect(sock18, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
     clock_gettime(CLOCK_MONOTONIC, &tend);
     us = (double)(tend.tv_sec - tstart.tv_sec) * 1.0e6 + (double)(tend.tv_nsec - tstart.tv_nsec)/1.0e3;
     printf("connection time used: %lf micro secs\n", us);
+    if (wait)
+    {
+        sleep(2);
+    }
     int sock19 = socket(AF_INET, SOCK_STREAM, 0);
     clock_gettime(CLOCK_MONOTONIC, &tstart);
     connect(sock19, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
     clock_gettime(CLOCK_MONOTONIC, &tend);
     us = (double)(tend.tv_sec - tstart.tv_sec) * 1.0e6 + (double)(tend.tv_nsec - tstart.tv_nsec)/1.0e3;
     printf("connection time used: %lf micro secs\n", us);
+    if (wait)
+    {
+        sleep(2);
+    }
     // int sock1 = socket(AF_INET, SOCK_STREAM, 0);
     // clock_gettime(CLOCK_MONOTONIC, &tstart);
     // connect(sock1, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
