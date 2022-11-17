@@ -111,15 +111,15 @@ impl CPULocal {
     }
 
     pub fn ResetEnterAppTimestamp(&self) -> i64 {
-        return self.enterAppTimestamp.swap(0, Ordering::Relaxed);
+        return self.enterAppTimestamp.swap(0, Ordering::SeqCst);
     }
 
     pub fn SetEnterAppTimestamp(&self, val: i64) {
-        self.enterAppTimestamp.store(val, Ordering::Relaxed)
+        self.enterAppTimestamp.store(val, Ordering::SeqCst)
     }
 
     pub fn EnterAppTimestamp(&self) -> i64 {
-        return self.enterAppTimestamp.load(Ordering::Relaxed);
+        return self.enterAppTimestamp.load(Ordering::SeqCst);
     }
 
     pub fn SetMode(&self, mode: VcpuMode) {

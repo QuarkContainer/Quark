@@ -715,8 +715,9 @@ pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
         }
 
         CPULocal::SetKernelStack(currTask.GetKernelSp());
-        currTask.mm.HandleTlbShootdown();
         if ptRegs.cs & 0x3 != 0 {
+            currTask.mm.VcpuEnter();
+            currTask.mm.HandleTlbShootdown();
             CPULocal::Myself().SetMode(VcpuMode::User);
         }
         return;
@@ -735,16 +736,16 @@ pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
 
             currTask.AccountTaskLeave(SchedState::RunningApp);
             //currTask.SaveFp();
-
+            CPULocal::Myself().ResetEnterAppTimestamp();
             super::qlib::kernel::taskMgr::Yield();
             MainRun(currTask, TaskRunState::RunApp);
-            currTask.mm.VcpuEnter();
-            currTask.mm.HandleTlbShootdown();
             currTask.RestoreFp();
             CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
             CPULocal::SetKernelStack(currTask.GetKernelSp());
             let kernalRsp = ptRegs as *const _ as u64;
             CPULocal::Myself().SetMode(VcpuMode::User);
+            currTask.mm.VcpuEnter();
+            currTask.mm.HandleTlbShootdown();
             if !(ptRegs.rip == ptRegs.rcx && ptRegs.r11 == ptRegs.eflags) {
                 IRet(kernalRsp)
             } else {
