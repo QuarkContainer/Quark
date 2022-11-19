@@ -245,7 +245,7 @@ pub extern "C" fn syscall_handler(
         Task::SetKernelPageTable();
     }*/
 
-    currTask.mm.VcpuLeave();
+    //currTask.mm.VcpuLeave();
     currTask.AccountTaskLeave(SchedState::RunningApp);
     let pt = currTask.GetPtRegs();
     //pt.rip = 0; // set rip as 0 as the syscall will set cs as ret ipaddr
@@ -346,7 +346,7 @@ pub extern "C" fn syscall_handler(
     /*if SHARESPACE.config.read().KernelPagetable {
         currTask.SwitchPageTable();
     }*/
-    currTask.mm.VcpuEnter();
+    //currTask.mm.VcpuEnter();
     currTask.mm.HandleTlbShootdown();
     CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
     CPULocal::Myself().SetMode(VcpuMode::User);
