@@ -16,7 +16,6 @@ use alloc::alloc::{alloc, Layout};
 use alloc::slice;
 use core::mem::size_of;
 use core::sync::atomic::AtomicU64;
-use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 use std::os::unix::io::AsRawFd;
 use std::sync::atomic::fence;
@@ -135,8 +134,6 @@ pub struct KVMVcpu {
     //index in the cpu arrary
     pub vcpu: kvm_ioctls::VcpuFd,
 
-    pub handlingSigChild: AtomicBool,
-
     pub topStackAddr: u64,
     pub entry: u64,
 
@@ -214,7 +211,6 @@ impl KVMVcpu {
             state: AtomicU64::new(KVMVcpuState::HOST as u64),
             vcpuCnt,
             vcpu,
-            handlingSigChild: AtomicBool::new(false),
             topStackAddr: topStackAddr,
             entry: entry,
             gdtAddr: gdtAddr,
@@ -471,11 +467,6 @@ impl KVMVcpu {
                 Ok(ret) => ret,
                 Err(e) => {
                     if e.errno() == SysErr::EINTR {
-                        {
-                            let mut interrupting = self.interrupting.lock();
-                            interrupting.0 = false;
-                            interrupting.1.clear();
-                        }
                         self.vcpu.set_kvm_immediate_exit(0);
                         self.dump()?;
                         if self.vcpu.get_ready_for_interrupt_injection() > 0 {
@@ -806,10 +797,22 @@ impl KVMVcpu {
                     self.InterruptGuest();
                     self.vcpu.set_kvm_request_interrupt_window(0);
                     fence(Ordering::SeqCst);
+                    {
+                        let mut interrupting = self.interrupting.lock();
+                        interrupting.0 = false;
+                        interrupting.1.clear();
+                    }
+                    
                 }
                 VcpuExit::Intr => {
                     self.vcpu.set_kvm_request_interrupt_window(1);
-                    self.handlingSigChild.store(false, Ordering::SeqCst);
+                    fence(Ordering::SeqCst);
+                    {
+                        let mut interrupting = self.interrupting.lock();
+                        interrupting.0 = false;
+                        interrupting.1.clear();
+                    }
+                    
                     //     SHARE_SPACE.MaskTlbShootdown(self.id as _);
                     //
                     //     let mut regs = self
@@ -1251,12 +1254,8 @@ extern "C" fn handleSigChild(signal: i32) {
     if signal == Signal::SIGCHLD {
         // used for tlb shootdown
         if let Some(vcpu) = LocalVcpu() {
-            // one handling is ongoing...
-            if vcpu.handlingSigChild.load(Ordering::SeqCst) {
-                return;
-            }
             vcpu.vcpu.set_kvm_immediate_exit(1);
-            vcpu.handlingSigChild.store(true, Ordering::SeqCst);
+            fence(Ordering::SeqCst);
         }
     }
 }
