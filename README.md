@@ -36,7 +36,7 @@ Quark Container supports to transfer the container application's TCP traffic wit
 
 ## System Requirement
 1. OS: Linux Kernel > 5.8.0
-2. Processor: X86-64 (Quark only support 64 bit architecture, So far only support Intel CPU)
+2. Processor: X86-64/Amd64 (Quark only support 64 bit architecture)
 3. Docker: > 17.09.0
 4. Enable virtualization technology in BIOS (Usually in Security tab of BIOS)
 
