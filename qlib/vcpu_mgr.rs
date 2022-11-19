@@ -63,7 +63,7 @@ pub struct CPULocal {
 
 impl CPULocal {
     pub fn State(&self) -> VcpuState {
-        let state = self.state.load(Ordering::Acquire);
+        let state = self.state.load(Ordering::SeqCst);
         return unsafe { core::mem::transmute(state) };
     }
 
@@ -111,23 +111,23 @@ impl CPULocal {
     }
 
     pub fn ResetEnterAppTimestamp(&self) -> i64 {
-        return self.enterAppTimestamp.swap(0, Ordering::Relaxed);
+        return self.enterAppTimestamp.swap(0, Ordering::SeqCst);
     }
 
     pub fn SetEnterAppTimestamp(&self, val: i64) {
-        self.enterAppTimestamp.store(val, Ordering::Relaxed)
+        self.enterAppTimestamp.store(val, Ordering::SeqCst)
     }
 
     pub fn EnterAppTimestamp(&self) -> i64 {
-        return self.enterAppTimestamp.load(Ordering::Relaxed);
+        return self.enterAppTimestamp.load(Ordering::SeqCst);
     }
 
     pub fn SetMode(&self, mode: VcpuMode) {
-        return self.mode.store(mode as u8, Ordering::Release);
+        return self.mode.store(mode as u8, Ordering::SeqCst);
     }
 
     pub fn GetMode(&self) -> VcpuMode {
-        let mode = self.mode.load(Ordering::Acquire);
+        let mode = self.mode.load(Ordering::SeqCst);
         return unsafe { core::mem::transmute(mode) };
     }
 

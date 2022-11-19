@@ -184,10 +184,7 @@ impl ShareSpace {
 
             //error!("CheckVcpuTimeout {}/{}/{}/{}", i, enterAppTimestamp, now, Tsc::Scale(now - enterAppTimestamp));
             if Tsc::Scale(now - enterAppTimestamp) * 1000 > 2 * CLOCK_TICK {
-                //self.scheduler.VcpuArr[i].ResetEnterAppTimestamp();
-
-                // retry to send signal for each 2 ms
-                self.scheduler.VcpuArr[i].SetEnterAppTimestamp(enterAppTimestamp + CLOCK_TICK / 5);
+                self.scheduler.VcpuArr[i].SetEnterAppTimestamp(now);
                 self.scheduler.VcpuArr[i].InterruptThreadTimeout();
                 //error!("CheckVcpuTimeout {}/{}/{}/{}", i, enterAppTimestamp, now, Tsc::Scale(now - enterAppTimestamp));
                 let vcpu = VMS.lock().vcpus[i].clone();

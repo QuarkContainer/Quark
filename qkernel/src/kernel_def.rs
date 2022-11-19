@@ -366,6 +366,7 @@ pub fn child_clone(userSp: u64) {
 
     let kernalRsp = pt as *const _ as u64;
     CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
+    //currTask.mm.VcpuEnter();
     currTask.mm.HandleTlbShootdown();
     SyscallRet(kernalRsp)
 }

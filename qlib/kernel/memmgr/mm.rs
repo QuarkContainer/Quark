@@ -369,11 +369,11 @@ impl MemoryManager {
 
     pub fn ClearVcpu(&self, vcpu: usize) {
         assert!(vcpu < 64);
-        self.vcpuMapping.fetch_and(!(1 << vcpu), Ordering::Release);
+        self.vcpuMapping.fetch_and(!(1 << vcpu), Ordering::SeqCst);
     }
 
     pub fn GetVcpuMapping(&self) -> u64 {
-        let mask = self.vcpuMapping.load(Ordering::Acquire);
+        let mask = self.vcpuMapping.load(Ordering::SeqCst);
         let vcpu = GetVcpuId();
         return mask & !(1 << vcpu);
     }

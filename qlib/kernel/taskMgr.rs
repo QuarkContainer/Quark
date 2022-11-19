@@ -63,7 +63,7 @@ fn switch_to(to: TaskId) {
     CPULocal::SetCurrentTask(to.Addr());
     let toCtx = to.GetTask();
 
-    toCtx.mm.VcpuEnter();
+    //toCtx.mm.VcpuEnter();
 
     if !SHARESPACE.config.read().KernelPagetable {
         toCtx.SwitchPageTable();
