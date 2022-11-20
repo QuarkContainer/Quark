@@ -32,10 +32,29 @@ use crate::qlib::hiber_mgr::*;
 use crate::qlib::mem::block_allocator::*;
 use crate::SWAP_FILE;
 use crate::SHARE_SPACE;
-//use crate::GLOBAL_ALLOCATOR;
+use crate::GLOBAL_ALLOCATOR;
 use crate::vmspace::kernel::SHARESPACE;
 use crate::qlib::linux_def::IoVec;
 use crate::vmspace::kernel::Timestamp;
+use crate::qlib::mem::buddy_allocator::*;
+
+impl<const ORDER: usize> Heap<ORDER> {
+    pub fn DontNeed(&self) {
+        let mut arr : [usize; 1024] = [0; 1024];
+        for i in 13..ORDER {
+            let count = self.free_list[i].GetVals(&mut arr);
+            //error!("heap order {} addresses {:x?}", i, &arr[0..count]);
+
+            for addr in &arr[0..count] {
+                let pageCount = 1 << (i - 12);
+                let _ret = unsafe {
+                    libc::madvise((*addr + MemoryDef::PAGE_SIZE_4K as usize) as _, (pageCount - 1) * MemoryDef::PAGE_SIZE_4K as usize, libc::MADV_DONTNEED)
+                };
+            }
+            
+        }
+    }
+}
 
 impl HiberMgr {
     pub fn SwapOutUserPages(&self, start: u64, len: u64) -> Result<()> {
@@ -106,20 +125,22 @@ impl HiberMgr {
             self.ReapSwapOut(start, len)?;
         }
 
-        let _cnt = SHARE_SPACE.pageMgr.pagepool.DontneedFreePages()?;
+        let cnt = SHARE_SPACE.pageMgr.pagepool.DontneedFreePages()?;
 
         crate::PMA_KEEPER.DontNeed()?;
 
-        /*let allocated1 = GLOBAL_ALLOCATOR.Allocator().heap.lock().allocated;
+        let allocated1 = GLOBAL_ALLOCATOR.Allocator().heap.lock().allocated;
         GLOBAL_ALLOCATOR.Allocator().FreeAll();
         let allocated2 = GLOBAL_ALLOCATOR.Allocator().heap.lock().allocated;
         info!("free pagepool {} pages, total allocated1 {} allocated2 {} free bytes {}", 
             cnt, allocated1, allocated2, allocated1 - allocated2);
         info!("heap usage1 is {:?}", &GLOBAL_ALLOCATOR.Allocator().counts);
-        for i in 3..20 {
+        /*for i in 3..20 {
             info!("heap usage2 is {}/{:x}/{:?}/{:?}", i, 1<<i, GLOBAL_ALLOCATOR.Allocator().counts[i], GLOBAL_ALLOCATOR.Allocator().maxnum[i]);
         }
         info!("heap usage3 is {:?}", &GLOBAL_ALLOCATOR.Allocator().maxnum);*/
+
+        GLOBAL_ALLOCATOR.Allocator().heap.lock().DontNeed();
 
         return Ok(())
 	}
@@ -299,7 +320,7 @@ impl SwapFile {
 
         GetRet(ret as _)?;
 
-        let ret = unsafe {
+        /*let ret = unsafe {
             libc::mmap(
                 (self.mmapAddr + self.size) as _,
                 EXTEND_FILE_SIZE as _,
@@ -311,7 +332,7 @@ impl SwapFile {
         };
 
         let addr = GetRet(ret as _)?;
-        assert!(addr == self.mmapAddr + self.size);
+        assert!(addr == self.mmapAddr + self.size);*/
         
         self.size = newSize;
         return Ok(())
