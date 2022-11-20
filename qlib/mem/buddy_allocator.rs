@@ -27,7 +27,7 @@ use core::{fmt, ptr};
 /// ```
 pub struct Heap<const ORDER: usize> {
     // buddy system with max order of `ORDER`
-    free_list: [LinkedList; ORDER],
+    pub free_list: [LinkedList; ORDER],
 
     // statistics
     pub user: usize,
@@ -248,6 +248,43 @@ impl LinkedList {
                 Some(item)
             }
         }
+    }
+
+    pub fn Count(&self) -> usize {
+        let mut count =  0;
+        for _ in self.iter() {
+            count += 1;
+        }
+
+        return count;
+    }
+
+    pub fn GetVals(&self, arr: &mut [usize]) -> usize {
+        /*let mut idx = 0;
+        for item in self.iter() {
+            if idx >= arr.len() {
+                return idx;
+            }
+            let addr = unsafe {*item};
+            arr[idx] = addr;
+            idx += 1;
+        }
+        
+        return idx;
+        */
+
+        let mut addr = self.head as usize;
+        let mut idx = 0;
+        while addr != 0 && idx < arr.len() {
+            arr[idx] = addr;
+            let item : * const usize = addr as * const usize;
+            addr = unsafe { * item};
+
+            idx += 1;
+
+        }
+        
+        return idx;       
     }
 
     /// Return an iterator over the items in the list
