@@ -674,7 +674,15 @@ fn RDMAProcess(epoll_fd: i32, hostname: &String) {
     loop {
         // let count = RDMAProcessOnce(&mut channels);
         events.clear();
-        let count = RDMAProcessOnce();
+        let mut count = 0;
+        loop {
+            count += RDMAProcessOnce();
+            // 1000 can be tuned further based on perf data
+            if count == 0 || count > 1000 {
+                break;
+            }
+        }
+        
         // let res = 0;
         let res = match syscall!(epoll_wait(
             epoll_fd,
