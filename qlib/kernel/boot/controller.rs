@@ -69,7 +69,7 @@ pub fn HandleSignal(signalArgs: &SignalArgs) {
         return;
     }*/
 
-    if signalArgs.Signo == SIGSTOP.0 {
+    if signalArgs.Signo == SIGSTOP.0 || signalArgs.Signo == SIGUSR2.0 {
         if SHARESPACE.hibernatePause.load(atomic::Ordering::Relaxed) {
             // if the sandbox has been paused, return
             return
