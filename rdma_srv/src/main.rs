@@ -424,7 +424,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // RDMA.HandleCQEvent().unwrap();
         // RDMAProcessOnce(&mut HashMap::new());
         RDMAProcessOnce();
-        println!("Before sleep");
+        // println!("Before sleep");
         let res = match syscall!(epoll_wait(
             epoll_fd,
             events.as_mut_ptr() as *mut libc::epoll_event,
