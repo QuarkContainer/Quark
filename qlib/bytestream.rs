@@ -334,8 +334,9 @@ impl RingBuf {
     }
 
     pub fn GetDataBuf(&self) -> (u64, usize) {
-        let head = self.headtail[0].load(Ordering::Relaxed);
-        let tail = self.headtail[1].load(Ordering::Acquire);
+        //TODO: Revisit memory order to loose constraints
+        let head = self.headtail[0].load(Ordering::SeqCst);
+        let tail = self.headtail[1].load(Ordering::SeqCst);
 
         let available = tail.wrapping_sub(head) as usize;
 
@@ -396,8 +397,9 @@ impl RingBuf {
 
     //consume count data
     pub fn Consume(&self, count: usize) -> bool { //2
-        let head = self.headtail[0].load(Ordering::Relaxed);
-        self.headtail[0].store(head.wrapping_add(count as u32), Ordering::Release);
+        //TODO: Revisit memory order to loose constraints
+        let head = self.headtail[0].load(Ordering::SeqCst);
+        self.headtail[0].store(head.wrapping_add(count as u32), Ordering::SeqCst);
 
         let tail = self.headtail[1].load(Ordering::Acquire);
         let available = tail.wrapping_sub(head) as usize;
@@ -493,8 +495,9 @@ impl RingBuf {
     }
 
     pub fn Produce(&self, count: usize) -> bool {
-        let tail = self.headtail[1].load(Ordering::Relaxed);
-        self.headtail[1].store(tail.wrapping_add(count as u32), Ordering::Release);
+        //TODO: Revisit memory order to loose constraints
+        let tail = self.headtail[1].load(Ordering::SeqCst);
+        self.headtail[1].store(tail.wrapping_add(count as u32), Ordering::SeqCst);
 
         let head = self.headtail[0].load(Ordering::Acquire);
         let available = tail.wrapping_sub(head) as usize;
