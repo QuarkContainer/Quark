@@ -85,11 +85,16 @@ pub fn HandleSignal(signalArgs: &SignalArgs) {
         }*/
     }
 
-    if signalArgs.Signo == SIGCONT.0 { 
-        HostSpace::SwapIn();
-        GetKernel().Unpause();
-        SHARESPACE.hibernatePause.store(false, atomic::Ordering::SeqCst);
-        return
+    if signalArgs.Signo == SIGCONT.0 || signalArgs.Signo == SIGKILL.0 || signalArgs.Signo == SIGINT.0 { 
+        if SHARESPACE.hibernatePause.load(atomic::Ordering::Relaxed) {
+            SHARESPACE.hibernatePause.store(false, atomic::Ordering::SeqCst);
+            HostSpace::SwapIn();
+            GetKernel().Unpause();
+        }
+
+        if signalArgs.Signo == SIGCONT.0 {
+            return
+        }
     }
 
     let task = Task::Current();
