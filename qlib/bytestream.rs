@@ -401,7 +401,7 @@ impl RingBuf {
         let head = self.headtail[0].load(Ordering::SeqCst);
         self.headtail[0].store(head.wrapping_add(count as u32), Ordering::SeqCst);
 
-        let tail = self.headtail[1].load(Ordering::Acquire);
+        let tail = self.headtail[1].load(Ordering::SeqCst);
         let available = tail.wrapping_sub(head) as usize;
         let trigger = available == self.Len();
         return trigger
@@ -499,7 +499,7 @@ impl RingBuf {
         let tail = self.headtail[1].load(Ordering::SeqCst);
         self.headtail[1].store(tail.wrapping_add(count as u32), Ordering::SeqCst);
 
-        let head = self.headtail[0].load(Ordering::Acquire);
+        let head = self.headtail[0].load(Ordering::SeqCst);
         let available = tail.wrapping_sub(head) as usize;
         let trigger = available == 0;
         return trigger
