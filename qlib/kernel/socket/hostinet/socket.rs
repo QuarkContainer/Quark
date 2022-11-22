@@ -1132,9 +1132,15 @@ impl SockOperations for SocketOperations {
         let mut socketaddr = sockaddr;
 
         info!(
-            "hostinet socket bind {:?}, addr is {:?}",
-            self.family, socketaddr
+            "hostinet socket bind {:?}, addr is {:?}, addrlen: {}",
+            self.family, socketaddr, sockaddr.len()
         );
+        let sockAddr = GetAddr(sockaddr[0] as i16, &sockaddr[0..sockaddr.len()])?;
+        match sockAddr {
+            SockAddr::Inet(ipv4) => { error!("ip: {:?}, port: {}", ipv4.Addr, ipv4.Port);}
+            SockAddr::Inet6(ipv6) => {error!("ipv6: {:?} port: {}", ipv6.Addr, ipv6.Port); }
+            _ => {error!("not v4 or v6")}
+        }
         if (self.family == AFType::AF_INET || self.family == AFType::AF_INET6)
             && socketaddr.len() > SIZEOF_SOCKADDR
         {
@@ -1147,6 +1153,7 @@ impl SockOperations for SocketOperations {
             socketaddr.len() as u32,
             task.Umask(),
         );
+        error!("bind result, res: {}", res);
         if res < 0 {
             return Err(Error::SysError(-res as i32));
         }
@@ -1442,9 +1449,9 @@ impl SockOperations for SocketOperations {
     }
 
     fn SetSockOpt(&self, task: &Task, level: i32, name: i32, opt: &[u8]) -> Result<i64> {
-        if self.tcpRDMA {
-            return Ok(0);
-        }
+        // if self.tcpRDMA {
+        //     return Ok(0);
+        // }
         /*let optlen = match level as u64 {
             LibcConst::SOL_IPV6 => {
                 match name as u64 {
