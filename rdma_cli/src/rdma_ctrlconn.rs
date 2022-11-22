@@ -64,6 +64,7 @@ pub struct RdmaIngress {
     pub service: String,
     pub targetPortNumber: u16,
     pub resource_version: i32,
+    pub server_fd: i32,
 }
 
 impl CtrlInfo {

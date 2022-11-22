@@ -467,11 +467,6 @@ impl KVMVcpu {
                 Ok(ret) => ret,
                 Err(e) => {
                     if e.errno() == SysErr::EINTR {
-                        {
-                            let mut interrupting = self.interrupting.lock();
-                            interrupting.0 = false;
-                            interrupting.1.clear();
-                        }
                         self.vcpu.set_kvm_immediate_exit(0);
                         self.dump()?;
                         if self.vcpu.get_ready_for_interrupt_injection() > 0 {
@@ -801,11 +796,23 @@ impl KVMVcpu {
                 VcpuExit::IrqWindowOpen => {
                     self.InterruptGuest();
                     self.vcpu.set_kvm_request_interrupt_window(0);
-                    fence(Ordering::Release);
+                    fence(Ordering::SeqCst);
+                    {
+                        let mut interrupting = self.interrupting.lock();
+                        interrupting.0 = false;
+                        interrupting.1.clear();
+                    }
+                    
                 }
                 VcpuExit::Intr => {
                     self.vcpu.set_kvm_request_interrupt_window(1);
-                    fence(Ordering::Release);
+                    fence(Ordering::SeqCst);
+                    {
+                        let mut interrupting = self.interrupting.lock();
+                        interrupting.0 = false;
+                        interrupting.1.clear();
+                    }
+                    
                     //     SHARE_SPACE.MaskTlbShootdown(self.id as _);
                     //
                     //     let mut regs = self
@@ -1248,7 +1255,7 @@ extern "C" fn handleSigChild(signal: i32) {
         // used for tlb shootdown
         if let Some(vcpu) = LocalVcpu() {
             vcpu.vcpu.set_kvm_immediate_exit(1);
-            fence(Ordering::Release);
+            fence(Ordering::SeqCst);
         }
     }
 }
