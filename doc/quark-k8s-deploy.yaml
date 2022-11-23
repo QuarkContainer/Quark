@@ -1,0 +1,119 @@
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: quarkcm-operator
+rules:
+- apiGroups: [""]
+  resources: ["pods", "nodes", "services", "endpoints", "configmaps"]
+  verbs: ["get", "watch", "list"]
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: quarkcm-operator
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: quarkcm-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: quarkcm-operator
+subjects:
+  - kind: ServiceAccount
+    name: quarkcm-operator
+    namespace: default
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: quarkcm-daemon
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      job: quarkcm-daemon
+  template:
+    metadata:
+      labels:
+        job: quarkcm-daemon
+    spec:
+      tolerations:
+        # The daemon shall run on the master node
+        - effect: NoSchedule
+          operator: Exists
+      serviceAccountName: quarkcm-operator
+      terminationGracePeriodSeconds: 0
+      hostNetwork: true
+      hostPID: true
+      volumes:
+        - name: quarkcni
+          hostPath:
+            path: /var
+            type: Directory
+        - name: quarkcm
+          hostPath:
+            path: /var/quarkcm
+            type: DirectoryOrCreate
+      initContainers:
+        - image: quarkcontainer/quarkcni:v0.1.6
+          name: node-init
+          command: [./node-init.sh]
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: quarkcni
+              mountPath: /home
+      containers:
+        - name: quarkcm-daemon
+          image: quarkcontainer/quarkcm:v0.1.6
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: quarkcm
+              mountPath: /home
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: quarkrdma-daemon
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      job: quarkrdma-daemon
+  template:
+    metadata:
+      labels:
+        job: quarkrdma-daemon
+    spec:
+      tolerations:
+        # The daemon shall run on the master node
+        - effect: NoSchedule
+          operator: Exists
+      serviceAccountName: quarkcm-operator
+      terminationGracePeriodSeconds: 0
+      hostNetwork: true
+      hostPID: true
+      volumes:
+        - name: quarkrdma
+          hostPath:
+            path: /var/quarkrdma
+            type: DirectoryOrCreate
+      containers:
+        - name: quarkrdma-daemon
+          image: quarkcontainer/rdma_srv:v0.1.6
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: quarkrdma
+              mountPath: /var/quarkrdma
+---
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: quark
+handler: quark
