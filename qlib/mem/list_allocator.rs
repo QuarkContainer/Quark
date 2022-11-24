@@ -440,11 +440,16 @@ impl ListAllocator {
 
     pub fn FreeAll(&self) -> bool {
         let mut count = 0;
+        //let mut free = 0;
         for i in 0..self.bufs.len() {
             let idx = self.bufs.len() - i - 1; // free from larger size
             let cnt = self.bufs[idx]
                 .lock()
                 .FreeMultiple(&self.heap, FREE_BATCH - count);
+                //.FreeAll(&self.heap);
+            /*free += self.bufs[idx]
+                .lock()
+                .TotalFree();*/
             self.bufSize
                 .fetch_sub(cnt * self.bufs[idx].lock().size, Ordering::Release);
             count += cnt;
@@ -629,7 +634,11 @@ impl FreeMemBlockMgr {
         //self.idx += 1;
     }
 
-    fn Free(&mut self, heap: &QMutex<Heap<ORDER>>) {
+    fn Free(&mut self, heap: &QMutex<Heap<ORDER>>) -> bool {
+        if self.count == 0 {
+            return false;
+        }
+
         if self.count != self.list.count as usize {
             error!("FreeMemBlockMgr::Dealloc {}/{}/{}", self.size, self.count, self.list.count);
         }
@@ -641,6 +650,24 @@ impl FreeMemBlockMgr {
             heap.lock()
                 .dealloc(NonNull::new_unchecked(addr as *mut u8), self.Layout());
         }
+
+        return true;
+    }
+
+    pub fn TotalFree(&self) -> usize {
+        return self.size * self.count;
+    }
+
+    pub fn FreeAll(&mut self, heap: &QMutex<Heap<ORDER>>) -> usize {
+        let mut i = 0;
+        loop {
+            if self.count <= self.reserve {
+                return i;
+            }
+
+            i += 1;
+            self.Free(heap);
+        }
     }
 
     pub fn FreeMultiple(&mut self, heap: &QMutex<Heap<ORDER>>, count: usize) -> usize {
@@ -649,7 +676,7 @@ impl FreeMemBlockMgr {
                 return i;
             }
 
-            self.Free(heap)
+            self.Free(heap);
         }
 
         return count;

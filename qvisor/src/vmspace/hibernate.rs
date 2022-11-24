@@ -41,6 +41,7 @@ use crate::qlib::mem::buddy_allocator::*;
 impl<const ORDER: usize> Heap<ORDER> {
     pub fn DontNeed(&self) {
         let mut arr : [usize; 1024] = [0; 1024];
+        let mut total = 0;
         for i in 13..ORDER {
             let count = self.free_list[i].GetVals(&mut arr);
             //error!("heap order {} addresses {:x?}", i, &arr[0..count]);
@@ -51,12 +52,26 @@ impl<const ORDER: usize> Heap<ORDER> {
                     libc::madvise((*addr + MemoryDef::PAGE_SIZE_4K as usize) as _, (pageCount - 1) * MemoryDef::PAGE_SIZE_4K as usize, libc::MADV_DONTNEED)
                 };
             }
-            
+            total += count;
         }
+
+       error!("DontNeed total {}", total);
     }
 }
 
 impl HiberMgr {
+    pub fn GetAllPagetablePages(&self) -> Result<()> {
+        let intern = self.lock();
+		let mut map = BTreeSet::new();
+		for (_, mm) in &intern.memmgrs {
+			let mm = mm.Upgrade();
+			mm.pagetable.read().pt.GetAllPagetablePages(&mut map).unwrap();
+		}
+
+        //info!("GetAllPagetablePages {} pages, {:x?}", map.len(), map);
+        return Ok(())
+    }
+
     pub fn SwapOutUserPages(&self, start: u64, len: u64) -> Result<()> {
         let mut intern = self.lock();
 		let mut map = BTreeSet::new();
@@ -118,6 +133,7 @@ impl HiberMgr {
     }
 
     pub fn SwapOut(&self, start: u64, len: u64) -> Result<()> {
+        //self.GetAllPagetablePages()?;
         if !self.lock().reap {
             self.SwapOutUserPages(start, len)?;
             self.lock().reap = true
@@ -129,6 +145,7 @@ impl HiberMgr {
 
         crate::PMA_KEEPER.DontNeed()?;
 
+        //SHARE_SPACE.scheduler.CleanVcpPageCache();
         let allocated1 = GLOBAL_ALLOCATOR.Allocator().heap.lock().allocated;
         GLOBAL_ALLOCATOR.Allocator().FreeAll();
         let allocated2 = GLOBAL_ALLOCATOR.Allocator().heap.lock().allocated;
