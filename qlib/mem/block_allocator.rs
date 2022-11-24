@@ -246,29 +246,38 @@ impl Allocator for PageBlockAlloc {
     }
 }
 
-pub const BLOCK_PAGE_COUNT : u64 = 511;
+pub const BLOCK_SIZE : u64 = 2 * MemoryDef::PAGE_SIZE_2M;
+pub const BLOCK_PAGE_COUNT : u64 = 1023;
 pub const PAGE_BLOCK_MAGIC : u64 = 0x1234567890abc;
 
 pub struct FreePageBitmap {
     pub l1bitmap: u64,
-    pub l2bitmap: [u64; 8],
+    pub l2bitmap: [u64; 16],
     pub totalFreeCount: u64,
 }
 
 impl FreePageBitmap {
     pub fn New() -> Self {
         return Self {
-            l1bitmap: (1 << 8) - 1,
+            l1bitmap: (1 << 16) - 1,
             l2bitmap: [
-                        u64::MAX - 1, 
-                        u64::MAX, 
-                        u64::MAX, 
-                        u64::MAX, 
-                        u64::MAX, 
-                        u64::MAX, 
-                        u64::MAX, 
-                        u64::MAX
-                    ],
+                u64::MAX - 1, 
+                u64::MAX, 
+                u64::MAX, 
+                u64::MAX, 
+                u64::MAX, 
+                u64::MAX, 
+                u64::MAX, 
+                u64::MAX,
+                u64::MAX, 
+                u64::MAX, 
+                u64::MAX, 
+                u64::MAX, 
+                u64::MAX, 
+                u64::MAX, 
+                u64::MAX, 
+                u64::MAX,
+    ],
             totalFreeCount: BLOCK_PAGE_COUNT,
         }
     }
@@ -377,7 +386,7 @@ impl PageBlock {
     }
 
     pub fn FromPageAddr(addr: u64)-> &'static mut Self {
-        let addr = addr & MemoryDef::PAGE_SIZE_2M_MASK;
+        let addr = addr & !(BLOCK_SIZE - 1);
         return Self::FromAddr(addr);
     }
 
@@ -398,8 +407,8 @@ impl PageBlock {
 
     pub fn AllocPageBlock() -> Result<&'static mut Self> {
         let alloc = AlignedAllocator::New(
-                MemoryDef::PAGE_SIZE_2M as _, 
-                MemoryDef::PAGE_SIZE_2M as _);
+                BLOCK_SIZE as _, 
+                BLOCK_SIZE as _);
         let addr = alloc.Allocate()?;
 
         let ret = Self::FromAddr(addr);
@@ -409,8 +418,8 @@ impl PageBlock {
 
     pub fn Drop(&self) -> Result<()> {
         let alloc = AlignedAllocator::New(
-            MemoryDef::PAGE_SIZE_2M as _, 
-            MemoryDef::PAGE_SIZE_2M as _);
+            BLOCK_SIZE as _, 
+            BLOCK_SIZE as _);
         return alloc.Free(self.ToAddr());
     }
 

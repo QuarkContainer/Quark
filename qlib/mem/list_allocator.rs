@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use alloc::string::String;
-use alloc::string::ToString;
 use cache_padded::CachePadded;
 use core::alloc::{GlobalAlloc, Layout};
 use core::cmp::max;
@@ -357,7 +356,12 @@ impl ListAllocator {
             print!("ListAllocator[{}] {:x}", i, self.bufs[i].MutexId());
         }*/
 
-        return "".to_string();
+        //return "".to_string();
+        let mut total = 0;
+        for i in 3..24 {
+            total += (1 << i) * self.maxnum[i].load(Ordering::Relaxed);
+        }
+        return format!("total {:?}/{}, {:?}", self.allocated, total, &self.maxnum[3..24]);
     }
 
     pub fn AddToHead(&self, start: usize, end: usize) {
