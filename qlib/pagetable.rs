@@ -805,6 +805,112 @@ impl PageTables {
         return Addr(addr);
     }
 
+    pub fn GetAllPagetablePages(&self, pages: &mut BTreeSet<u64>) -> Result<()> {
+        self.GetAllPagetablePagesWithRange(
+            Addr(MemoryDef::PAGE_SIZE),
+            Addr(MemoryDef::PHY_LOWER_ADDR),
+            pages)?;
+        
+        self.GetAllPagetablePagesWithRange(
+            Addr(MemoryDef::PHY_UPPER_ADDR),
+            Addr(MemoryDef::LOWER_TOP),
+            pages)?;
+
+        return Ok(())
+    }
+
+    pub fn GetAllPagetablePagesWithRange(&self, start: Addr, end: Addr, pages: &mut BTreeSet<u64>) -> Result<()> {
+        //let mut curAddr = start;
+        let pt: *mut PageTable = self.GetRoot() as *mut PageTable;
+        unsafe {
+            let mut p4Idx = VirtAddr::new(start.0).p4_index();
+            let mut p3Idx = VirtAddr::new(start.0).p3_index();
+            let mut p2Idx = VirtAddr::new(start.0).p2_index();
+            let mut p1Idx = VirtAddr::new(start.0).p1_index();
+
+            pages.insert(self.GetRoot());
+            //error!("l1 page {:x}", self.GetRoot());
+            while Self::ToVirtualAddr(p4Idx, p3Idx, p2Idx, p1Idx).0 < end.0 {
+                let pgdEntry = &mut (*pt)[p4Idx];
+                let pudTbl: *mut PageTable;
+
+                if pgdEntry.is_unused() {
+                    p4Idx = PageTableIndex::new(u16::from(p4Idx) + 1);
+                    p3Idx = PageTableIndex::new(0);
+                    p2Idx = PageTableIndex::new(0);
+                    p1Idx = PageTableIndex::new(0);
+
+                    continue;
+                } else {
+                    //error!("l2 page {:x}", pgdEntry.addr().as_u64());
+                    pages.insert(pgdEntry.addr().as_u64());
+                    pudTbl = pgdEntry.addr().as_u64() as *mut PageTable;
+                }
+
+                while Self::ToVirtualAddr(p4Idx, p3Idx, p2Idx, p1Idx).0 < end.0 {
+                    let pudEntry = &mut (*pudTbl)[p3Idx];
+                    let pmdTbl: *mut PageTable;
+                    if pudEntry.is_unused() {
+                        if p3Idx == PageTableIndex::new(MemoryDef::ENTRY_COUNT - 1) {
+                            p3Idx = PageTableIndex::new(0);
+                            break;
+                        } else {
+                            p3Idx = PageTableIndex::new(u16::from(p3Idx) + 1);
+                        }
+
+                        p2Idx = PageTableIndex::new(0);
+                        p1Idx = PageTableIndex::new(0);
+
+                        continue;
+                    } else {
+                        //error!("l3 page {:x}", pudEntry.addr().as_u64());
+                        pages.insert(pudEntry.addr().as_u64());
+                        pmdTbl = pudEntry.addr().as_u64() as *mut PageTable;
+                    }
+
+                    while Self::ToVirtualAddr(p4Idx, p3Idx, p2Idx, p1Idx).0 < end.0 {
+                        let pmdEntry = &mut (*pmdTbl)[p2Idx];
+                        
+                        if pmdEntry.is_unused() {
+                            if p2Idx == PageTableIndex::new(MemoryDef::ENTRY_COUNT - 1) {
+                                p2Idx = PageTableIndex::new(0);
+                                break;
+                            } else {
+                                p2Idx = PageTableIndex::new(u16::from(p2Idx) + 1);
+                            }
+
+                            p1Idx = PageTableIndex::new(0);
+                            continue;
+                        } else {
+                            //error!("l4 page {:x}", pmdEntry.addr().as_u64());
+                            // add l4 pagetable page address
+                            pages.insert(pmdEntry.addr().as_u64());
+                        }
+
+
+                        if p2Idx == PageTableIndex::new(MemoryDef::ENTRY_COUNT - 1) {
+                            p2Idx = PageTableIndex::new(0);
+                            break;
+                        } else {
+                            p2Idx = PageTableIndex::new(u16::from(p2Idx) + 1);
+                        }
+                    }
+
+                    if p3Idx == PageTableIndex::new(MemoryDef::ENTRY_COUNT - 1) {
+                        p3Idx = PageTableIndex::new(0);
+                        break;
+                    } else {
+                        p3Idx = PageTableIndex::new(u16::from(p3Idx) + 1);
+                    }
+                }
+
+                p4Idx = PageTableIndex::new(u16::from(p4Idx) + 1);
+            }
+        }
+
+        return Ok(());
+    }
+
     pub fn Traverse(
         &self,
         start: Addr,
