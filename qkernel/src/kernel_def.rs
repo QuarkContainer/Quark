@@ -154,7 +154,7 @@ impl CPULocal {
 impl<'a> ShareSpace {
     pub fn AQCall(&self, msg: &HostOutputMsg) {
         loop {
-            match self.QOutput.TryPush(msg) {
+            match self.QOutput.Push(msg) {
                 Ok(()) => {
                     break;
                 }

@@ -61,6 +61,11 @@ enum_dispatch = { git = "https://github.com/QuarkContainer/enum_dispatch_clone.g
 version = "1.4"
 features = ["spin_no_std"]
 
+[dependencies.crossbeam-queue]
+version = "0.3.8"
+default-features = false
+features = ["alloc"]
+
 [profile.dev]
 opt-level = 0
 
