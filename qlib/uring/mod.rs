@@ -20,7 +20,8 @@ pub mod squeue;
 pub mod submit;
 pub mod sys;
 
-use alloc::collections::vec_deque::VecDeque;
+use alloc::collections::VecDeque;
+use crossbeam_queue::ArrayQueue;
 pub use self::cqueue::CompletionQueue;
 use self::porting::*;
 pub use self::register::Probe;
@@ -29,6 +30,7 @@ pub use self::submit::Submitter;
 use self::util::{Fd, Mmap};
 use super::common::*;
 use super::mutex::*;
+use super::linux_def::*;
 
 use core::sync::atomic::AtomicU64;
 
@@ -46,7 +48,6 @@ pub struct Completion {
 }
 
 /// IoUring instance
-#[derive(Default)]
 pub struct IoUring {
     pub fd: Fd,
     pub pendingCnt: AtomicU64,
@@ -56,7 +57,23 @@ pub struct IoUring {
     pub sq: QMutex<SubmissionQueue>,
     pub cq: QMutex<CompletionQueue>,
     pub submitq: QMutex<VecDeque<squeue::Entry>>,
-    pub completeq: QMutex<VecDeque<cqueue::Entry>>,
+    pub completeq: ArrayQueue<cqueue::Entry>,
+}
+
+impl Default for IoUring {
+    fn default() -> Self {
+        return Self {
+            fd: Default::default(),
+            pendingCnt: Default::default(),
+            lock: Default::default(),
+            params: Default::default(),
+            memory: Default::default(),
+            sq: Default::default(),
+            cq: Default::default(),
+            submitq: Default::default(),
+            completeq: ArrayQueue::new(MemoryDef::QURING_SIZE),
+        }
+    }
 }
 
 impl IoUring {

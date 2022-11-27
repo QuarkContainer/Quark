@@ -16,6 +16,7 @@ use core::mem;
 use core::sync::atomic::AtomicU64;
 use core::sync::atomic::Ordering;
 use alloc::collections::VecDeque;
+use crossbeam_queue::ArrayQueue;
 
 use crate::vmspace::kernel::GlobalIOMgr;
 use super::super::qlib::common::*;
@@ -124,7 +125,7 @@ impl IoUring {
             sq: QMutex::new(sq),
             cq: QMutex::new(cq),
             submitq: QMutex::new(VecDeque::with_capacity(16)),
-            completeq: QMutex::new(VecDeque::with_capacity(16)),
+            completeq: ArrayQueue::new(MemoryDef::QURING_SIZE),
             params: Parameters(p),
             memory: mm,
         })
@@ -140,15 +141,19 @@ impl IoUring {
         let mut count = 0;
 
         let mut cq = self.cq.lock();
-        let mut completeq = self.completeq.lock();
-
+        
         loop {
             let cqe = cq.next();
             match cqe {
                 None => break,
                 Some(cqe) => {
                     count += 1;
-                    completeq.push_back(cqe);
+                    match self.completeq.push(cqe) {
+                        Err(_) => {
+                            panic!("CopyCompleteEntry fail ...");
+                        }
+                        _ => (),
+                    }
                 }
             }
         }
