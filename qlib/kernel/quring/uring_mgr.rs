@@ -579,7 +579,7 @@ impl QUring {
 
     pub fn NextCompleteEntry(&self) -> Option<cqueue::Entry> {
         if super::super::SHARESPACE.config.read().UringBuf {
-            return self.IOUring().completeq.lock().pop_front();
+            return self.IOUring().completeq.pop();
         } else {
             return self.IOUring().cq.lock().next();
         }
