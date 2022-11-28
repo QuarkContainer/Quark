@@ -49,6 +49,7 @@ pub struct CPULocal {
 
     pub switchCount: AtomicU64,
     pub uringMsgCount: AtomicU64,
+    pub tlbEpoch: AtomicU64,
     pub data: u64, // for eventfd data writing and reading
     pub eventfd: i32,
     pub epollfd: i32,

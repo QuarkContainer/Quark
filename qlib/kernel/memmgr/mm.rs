@@ -503,8 +503,9 @@ impl MemoryManager {
     // SHOULD be called before return to user space,
     // to make sure the tlb flushed
     pub fn HandleTlbShootdown(&self) {
-        let vcpuId = CPULocal::CpuId() as u64;
-        if self.UnmaskTlbShootdown(vcpuId) & (1 << vcpuId) != 0 {
+        let currTLBEpoch = self.TLBEpoch();
+        if localTLBEpoch != currTLBEpoch {
+            CPULocal::Myself().tlbEpoch.store(currTLBEpoch, Ordering::Relaxed);
             let curr = super::super::super::super::asm::CurrentCr3();
             PageTables::Switch(curr);
         }
@@ -953,6 +954,10 @@ impl MemoryManager {
         let layout = Context64::NewMmapLayout(minUserAddr, maxUserAddr, r)?;
         *self.layout.lock() = layout;
         return Ok(layout);
+    }
+
+    pub fn TLBEpoch(&self) -> u64 {
+        return self.pagetable.read().pt.TLBEpoch();
     }
 
     pub fn GetRoot(&self) -> u64 {
