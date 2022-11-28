@@ -513,6 +513,12 @@ impl KVMVcpu {
                     }
                 }
                 VcpuExit::IoOut(addr, data) => {
+                    {
+                        let mut interrupting = self.interrupting.lock();
+                        interrupting.0 = false;
+                        interrupting.1.clear();
+                    }
+
                     let vcpu_sregs = self
                         .vcpu
                         .get_sregs()

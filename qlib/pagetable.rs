@@ -41,6 +41,7 @@ use super::mutex::*;
 pub struct PageTables {
     //Root page guest physical address
     pub root: AtomicU64,
+    pub tlbEpoch: AtomicU64,
     pub tlbshootdown: AtomicBool,
     pub freePages: QMutex<Vec<u64>>,
     pub hibernateLock: QMutex<()>,
@@ -51,6 +52,7 @@ impl PageTables {
         let root = pagePool.AllocPage(true)?;
         Ok(Self {
             root: AtomicU64::new(root),
+            tlbEpoch: AtomicU64::new(0),
             tlbshootdown: AtomicBool::new(false),
             freePages: Default::default(),
             hibernateLock: Default::default(),
@@ -62,12 +64,18 @@ impl PageTables {
     }
 
     pub fn EnableTlbShootdown(&self) {
+        self.tlbEpoch.fetch_add(1, Ordering::SeqCst);
         self.tlbshootdown.store(true, Ordering::SeqCst)
+    }
+
+    pub fn TLBEpoch(&self) -> u64 {
+        return self.tlbEpoch.load(Ordering::SeqCst);
     }
 
     pub fn Clone(&self) -> Self {
         return Self {
             root: AtomicU64::new(self.GetRoot()),
+            tlbEpoch: AtomicU64::new(0),
             tlbshootdown: AtomicBool::new(false),
             freePages: Default::default(),
             hibernateLock: Default::default(),
@@ -77,6 +85,7 @@ impl PageTables {
     pub fn Init(root: u64) -> Self {
         return Self {
             root: AtomicU64::new(root),
+            tlbEpoch: AtomicU64::new(0),
             tlbshootdown: AtomicBool::new(false),
             freePages: Default::default(),
             hibernateLock: Default::default(),

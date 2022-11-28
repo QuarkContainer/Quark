@@ -34,6 +34,7 @@ impl MemoryManager {
     // copy raw data from user to kernel
     pub fn CopyDataIn(&self, task: &Task, vaddr: u64, to: u64, len: usize, allowPartial: bool) -> Result<()> {
         if SHARESPACE.config.read().CopyDataWithPf && !allowPartial {
+            self.HandleTlbShootdown();
             return self.CopyDataWithPf(task, vaddr, to, len, allowPartial);
         }
 
@@ -121,6 +122,7 @@ impl MemoryManager {
 
     pub fn CopyDataOut(&self, task: &Task, from: u64, vaddr: u64, len: usize, allowPartial: bool) -> Result<()> {
         if SHARESPACE.config.read().CopyDataWithPf && !allowPartial {
+            self.HandleTlbShootdown();
             return self.CopyDataWithPf(task, from, vaddr, len, allowPartial);
         }
         
@@ -228,6 +230,7 @@ impl MemoryManager {
 
     pub fn CopyDataOutToIovs(&self, task: &Task, buf: &[u8], iovs: &[IoVec], allowPartial: bool) -> Result<usize> {
         if SHARESPACE.config.read().CopyDataWithPf && !allowPartial {
+            self.HandleTlbShootdown();
             return self.CopyDataOutToIovsWithPf(task, buf, iovs, allowPartial);
         }
 
@@ -328,6 +331,7 @@ impl MemoryManager {
 
     pub fn CopyDataInFromIovs(&self, task: &Task, buf: &mut [u8], iovs: &[IoVec], allowPartial: bool) -> Result<usize> {
         if SHARESPACE.config.read().CopyDataWithPf && !allowPartial {
+            self.HandleTlbShootdown();
             return self.CopyDataInFromIovsWithPf(task, buf, iovs, allowPartial);
         }
         
@@ -344,6 +348,7 @@ impl MemoryManager {
         allowPartial: bool
     ) -> Result<usize> {
         if SHARESPACE.config.read().CopyDataWithPf && !allowPartial {
+            self.HandleTlbShootdown();
             return self.CopyBetweenIovsWithPf(task, srcIovs, dstIovs, allowPartial);
         }
 
@@ -446,6 +451,7 @@ impl MemoryManager {
         allowPartial: bool
     ) -> Result<usize> {
         if SHARESPACE.config.read().CopyDataWithPf && !allowPartial {
+            self.HandleTlbShootdown();
             return self.CopyBetweenIovsWithPf(task, srcIovs, dstIovs, allowPartial);
         }
 

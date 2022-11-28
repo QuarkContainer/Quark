@@ -332,8 +332,8 @@ pub fn ExceptionHandler(ev: ExceptionStackVec, ptRegs: &mut PtRegs, errorCode: u
     }
 
     //currTask.mm.VcpuEnter();
-    currTask.mm.HandleTlbShootdown();
     CPULocal::Myself().SetMode(VcpuMode::User);
+    currTask.mm.HandleTlbShootdown();
     ReturnToApp(ptRegs);
 }
 
@@ -580,8 +580,8 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
                 }*/
             }
             //currTask.mm.VcpuEnter();
-            currTask.mm.HandleTlbShootdown();
             CPULocal::Myself().SetMode(VcpuMode::User);
+            currTask.mm.HandleTlbShootdown();
             return;
         }
 
@@ -612,8 +612,8 @@ pub extern "C" fn PageFaultHandler(ptRegs: &mut PtRegs, errorCode: u64) {
         }
 
         //currTask.mm.VcpuEnter();
-        currTask.mm.HandleTlbShootdown();
         CPULocal::Myself().SetMode(VcpuMode::User);
+        currTask.mm.HandleTlbShootdown();
         return;
     }
 
@@ -667,10 +667,10 @@ pub fn HandleFault(
             .expect("PageFaultHandler send signal fail");
         MainRun(task, TaskRunState::RunApp);
         //task.mm.VcpuEnter();
-        task.mm.HandleTlbShootdown();
-    
+        
         task.RestoreFp();
         CPULocal::Myself().SetMode(VcpuMode::User);
+        task.mm.HandleTlbShootdown();
     }
 
     ReturnToApp(sf);
@@ -699,16 +699,16 @@ pub extern "C" fn SIMDFPHandler(sf: &mut PtRegs) {
 
 #[no_mangle]
 pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
+    if ptRegs.cs & 0x3 == 0 { // kernel mode
+        return
+    }
+
+    // from user
     CPULocal::Myself().SetMode(VcpuMode::Kernel);
     let mask = CPULocal::Myself().ResetInterruptMask();
     let currTask = Task::Current();
     //currTask.mm.VcpuLeave();
 
-    if ptRegs.cs & 0x3 == 0 {
-        return
-    }
-
-    // from user
     let mut rflags = ptRegs.eflags;
     rflags &= !USER_FLAGS_CLEAR;
     rflags |= USER_FLAGS_SET;
@@ -747,8 +747,9 @@ pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
 
     CPULocal::SetKernelStack(currTask.GetKernelSp());
     //currTask.mm.VcpuEnter();
-    currTask.mm.HandleTlbShootdown();
+    
     CPULocal::Myself().SetMode(VcpuMode::User);
+    currTask.mm.HandleTlbShootdown();
 }
 
 #[no_mangle]

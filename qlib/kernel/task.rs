@@ -785,6 +785,7 @@ impl Task {
         let root = self.mm.GetRoot();
         let curr = super::asm::CurrentCr3();
         if curr != root {
+            CPULocal::Myself().tlbEpoch.store(self.mm.TLBEpoch(), Ordering::Relaxed);
             super::super::pagetable::PageTables::Switch(root);
         }
     }

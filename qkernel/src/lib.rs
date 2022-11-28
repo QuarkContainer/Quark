@@ -347,9 +347,10 @@ pub extern "C" fn syscall_handler(
         currTask.SwitchPageTable();
     }*/
     //currTask.mm.VcpuEnter();
-    currTask.mm.HandleTlbShootdown();
+    
     CPULocal::Myself().SetEnterAppTimestamp(TSC.Rdtsc());
     CPULocal::Myself().SetMode(VcpuMode::User);
+    currTask.mm.HandleTlbShootdown();
     if !(pt.rip == pt.rcx && pt.r11 == pt.eflags) {
         //error!("iret *****, pt is {:x?}", pt);
         IRet(kernalRsp)
