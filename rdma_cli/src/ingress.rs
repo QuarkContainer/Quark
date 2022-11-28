@@ -103,6 +103,7 @@ use rdma_ctrlconn::*;
 use ingress_informer::IngressInformer;
 use rdma_ingress_informer::RdmaIngressInformer;
 use service_informer::ServiceInformer;
+use crate::constants::*;
 
 pub static GLOBAL_ALLOCATOR: HostAllocator = HostAllocator::New();
 
@@ -171,15 +172,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // set up TCP Server to wait for incoming connection
     let server_fd = unsafe { libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0) };
-    RDMA_CTLINFO.fds_insert(server_fd, FdType::TCPSocketServer(6666));
+    RDMA_CTLINFO.fds_insert(server_fd, FdType::TCPSocketServer(INCLUSTER_INGRESS_PORT));
     unblock_fd(server_fd);
     epoll_add(epoll_fd, server_fd, read_write_event(server_fd as u64))?;    
 
     unsafe {
-        // TODO: need mapping 6666 -> (172.16.1.6:8888) for testing purpose, late should come from control plane
         let serv_addr: libc::sockaddr_in = libc::sockaddr_in {
             sin_family: libc::AF_INET as u16,
-            sin_port: 6666u16.to_be(),
+            sin_port: INCLUSTER_INGRESS_PORT.to_be(),
             sin_addr: libc::in_addr {
                 s_addr: u32::from_be_bytes([0, 0, 0, 0]).to_be(),
             },
@@ -235,6 +235,8 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient) {
                     let mut stream_fd;
                     let mut cliaddr: libc::sockaddr_in = unsafe { mem::zeroed() };
                     let mut len = mem::size_of_val(&cliaddr) as u32;
+                    let mut oriAddr: libc::sockaddr_in = unsafe { mem::zeroed() };
+                    let mut oriLen = mem::size_of_val(&oriAddr) as u32;
                     loop {
                         unsafe {
                             stream_fd = libc::accept(
@@ -247,16 +249,48 @@ fn wait(epoll_fd: i32, gatewayCli: &GatewayClient) {
                             unblock_fd(stream_fd);
                             let _ret =
                                 epoll_add(epoll_fd, stream_fd, read_write_event(stream_fd as u64));
+                            
+                            let mut ipAddr = 0;
+                            let mut port = 0;
+                            if _port == INCLUSTER_INGRESS_PORT {
+                                unsafe {
+                                    let oriFd = libc::getsockopt(
+                                        stream_fd,
+                                        SOL_IP,
+                                        SO_ORIGINAL_DST,
+                                        &mut oriAddr as *mut libc::sockaddr_in as *mut libc::sockaddr as *mut libc::c_void,
+                                        &mut oriLen);
+                                    if oriFd >= 0 {
+                                        ipAddr = oriAddr.sin_addr.s_addr;
+                                        port = oriAddr.sin_port.to_be();
+                                    } else {
+                                        error!("error to retrieve original destination.");
+                                        break;
+                                    }
+                                }
+                            } else {
+                                match RDMA_CTLINFO.GetRdmaIngressByPort(_port) {
+                                    Some(rdmaIngress) => {
+                                        ipAddr = RDMA_CTLINFO.GetServiceIpFromName(rdmaIngress.service).unwrap();
+                                        port = rdmaIngress.targetPortNumber;
+                                        println!("hochan GetRdmaIngressByPort found _port {} ipAddr {}, port {}", _port, ipAddr, port);
+                                    }
+                                    None => {
+                                        error!("No RdmaIngress defined for port {}.", _port);
+                                    },
+                                }
+                            }
 
-                            let sockfd = gatewayCli.sockIdMgr.lock().AllocId().unwrap(); //TODO: rename sockfd
-                            let rdmaIngress = RDMA_CTLINFO.GetRdmaIngressByPort(_port).unwrap();
-                            let _ret = gatewayCli.connect(
-                                sockfd,
-                                RDMA_CTLINFO.GetServiceIpFromName(rdmaIngress.service).unwrap().to_be(),
-                                rdmaIngress.targetPortNumber.to_be(),
-                            );
-                            RDMA_CTLINFO.fds_insert(stream_fd, FdType::TCPSocketConnect(sockfd));
-                            sockFdMappings.insert(sockfd, stream_fd);
+                            if ipAddr > 0 {
+                                let sockfd = gatewayCli.sockIdMgr.lock().AllocId().unwrap();
+                                let _ret = gatewayCli.connect(
+                                    sockfd,
+                                    ipAddr.to_be(),
+                                    port.to_be(),
+                                );
+                                RDMA_CTLINFO.fds_insert(stream_fd, FdType::TCPSocketConnect(sockfd));
+                                sockFdMappings.insert(sockfd, stream_fd);
+                            }
                         } else {
                             break;
                         }

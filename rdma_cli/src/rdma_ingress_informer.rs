@@ -85,24 +85,24 @@ impl RdmaIngressInformer {
 
     fn handle(&mut self, rdma_ingress_message: &RdmaIngressMessage) -> Result<(), Box<dyn std::error::Error>> {
         println!("Start to handle RdmaIngress: {:?}", rdma_ingress_message);
-        let potNumber = rdma_ingress_message.port_number as u16;
+        let portNumber = rdma_ingress_message.port_number as u16;
         let targetPortNumber = rdma_ingress_message.target_port_number as u16;
         let mut rdma_ingresses_map = RDMA_CTLINFO.rdma_ingresses.lock();
         if rdma_ingress_message.event_type == EVENT_TYPE_SET {
             let server_fd = unsafe { libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0) };
-            RDMA_CTLINFO.fds_insert(server_fd, FdType::TCPSocketServer(potNumber));
+            RDMA_CTLINFO.fds_insert(server_fd, FdType::TCPSocketServer(portNumber));
             unblock_fd(server_fd);
             let epoll_fd = RDMA_CTLINFO.epoll_fd_get();
             epoll_add(epoll_fd, server_fd, read_write_event(server_fd as u64))?;
 
             let rdma_ingress = RdmaIngress {
-                portNumber: potNumber,
+                portNumber: portNumber,
                 service: rdma_ingress_message.service.clone(),
                 targetPortNumber: targetPortNumber,
                 resource_version: rdma_ingress_message.resource_version,
                 server_fd: server_fd,
             };
-            rdma_ingresses_map.insert(potNumber, rdma_ingress);
+            rdma_ingresses_map.insert(portNumber, rdma_ingress);
             if rdma_ingress_message.resource_version > self.max_resource_version {
                 self.max_resource_version = rdma_ingress_message.resource_version;
             }
@@ -110,7 +110,7 @@ impl RdmaIngressInformer {
             unsafe {
                 let serv_addr: libc::sockaddr_in = libc::sockaddr_in {
                     sin_family: libc::AF_INET as u16,
-                    sin_port: potNumber.to_be(),
+                    sin_port: portNumber.to_be(),
                     sin_addr: libc::in_addr {
                         s_addr: u32::from_be_bytes([0, 0, 0, 0]).to_be(),
                     },
@@ -130,12 +130,12 @@ impl RdmaIngressInformer {
             }
 
         } else if rdma_ingress_message.event_type == EVENT_TYPE_DELETE {
-            if rdma_ingresses_map.contains_key(&potNumber) {
-                if rdma_ingresses_map[&potNumber].resource_version < rdma_ingress_message.resource_version {                    
+            if rdma_ingresses_map.contains_key(&portNumber) {
+                if rdma_ingresses_map[&portNumber].resource_version < rdma_ingress_message.resource_version {                    
                     unsafe {
-                        libc::close(rdma_ingresses_map[&potNumber].server_fd);
+                        libc::close(rdma_ingresses_map[&portNumber].server_fd);
                     }
-                    rdma_ingresses_map.remove(&potNumber);
+                    rdma_ingresses_map.remove(&portNumber);
                 }
             }
         }
