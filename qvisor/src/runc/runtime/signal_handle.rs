@@ -92,8 +92,7 @@ extern "C" fn handle_sigintAct(signal: i32, signInfo: *mut libc::siginfo_t, addr
                 print!("panic frame is {:#x?}", frame);
                 true
             });*/
-            
-            
+
             error!("get signal context is {:#x?}", ucontext);
 
             backtracer::trace(ucontext.MContext.rip,

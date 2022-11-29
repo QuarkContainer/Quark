@@ -699,15 +699,16 @@ pub extern "C" fn SIMDFPHandler(sf: &mut PtRegs) {
 
 #[no_mangle]
 pub extern "C" fn VirtualizationHandler(ptRegs: &mut PtRegs) {
-    if ptRegs.cs & 0x3 == 0 { // kernel mode
-        return
-    }
-
     // from user
     CPULocal::Myself().SetMode(VcpuMode::Kernel);
     let mask = CPULocal::Myself().ResetInterruptMask();
     let currTask = Task::Current();
     //currTask.mm.VcpuLeave();
+
+    if ptRegs.cs & 0x3 == 0 { // kernel mode
+        CPULocal::Myself().SetMode(VcpuMode::User);
+        currTask.mm.HandleTlbShootdown();
+    }
 
     let mut rflags = ptRegs.eflags;
     rflags &= !USER_FLAGS_CLEAR;
